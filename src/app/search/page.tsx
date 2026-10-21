@@ -2,7 +2,8 @@ import { cookies, headers } from "next/headers";
 import { getSessionUser } from "@/lib/auth/getSessionUser";
 // eslint-disable-next-line @typescript-eslint/no-restricted-imports -- This server component authorizes the search-only fullscreen behavior.
 import { isFeatureEnabled } from "@/lib/flags";
-import { HTPR_6936_ASK_AI_FULLSCREEN_FLAG } from "@/lib/flags/keys";
+import { HTPR_6936_ASK_AI_FULLSCREEN_FLAG, HTPR_7501_SEARCH_SERVER_START_FLAG } from "@/lib/flags/keys";
+import { startServerSearch } from "./startServerSearch";
 import SearchComp from "./SearchComp";
 import { Metadata } from "next";
 import { Suspense } from "react";
@@ -26,7 +27,8 @@ export default async function Page(
     return redirect("/login");
   }
   const currentUser: IUser = JSON.parse(userObjString.value);
-  const sessionUser = await getSessionUser(new Headers(await headers()));
+  const requestHeaders = await headers();
+  const sessionUser = await getSessionUser(new Headers(requestHeaders));
 
   const searchTerm: string = searchParams?.searchTerm
     ? searchParams.searchTerm.toString()
@@ -58,6 +60,12 @@ export default async function Page(
       ? parsedFromProject
       : null;
 
+  const isFullPageLoad = requestHeaders.get("rsc") !== "1";
+  const serverStartedSearch = sessionUser && sessionUser.userId === currentUser.id && isFullPageLoad &&
+    await isFeatureEnabled(HTPR_7501_SEARCH_SERVER_START_FLAG, sessionUser.userId)
+    ? startServerSearch(sessionUser.userId, searchTerm, includeArchived, fromProject).catch(() => null)
+    : undefined;
+
   return (
     <Suspense fallback={<>Loading...</>}>
       <SearchComp
@@ -66,6 +74,7 @@ export default async function Page(
         _includeArchived={includeArchived}
         _fromProject={fromProject}
         currentUser={currentUser}
+        serverStartedSearch={serverStartedSearch}
         askAiFullscreenEnabled={
           !!sessionUser &&
           sessionUser.userId === currentUser.id &&

@@ -1,7 +1,8 @@
 import { parseSearchQuery } from "@/lib/search/operators";
 import { searchConfig } from "@/lib/configs/search.config";
 import { HTPR_6688_SEARCH_AUTOCOMPLETE_FLAG, HTPR_6865_SEARCH_LAYOUT_FLAG, HTPR_6878_SEARCH_LABEL_SCOPE_FLAG, HTPR_6879_SEARCH_ESC_BACK_FLAG, HTPR_6880_SEARCH_COMMENTER_FLAG, HTPR_6994_SEARCH_ESC_LEAVES_FLAG } from "@/lib/flags/keys";
-import { useFlag } from "@/hooks/useFlag";
+import { useFlag, useFlagReady } from "@/hooks/useFlag";
+import { isServerSearchFor, type ServerStartedSearch } from "@/lib/search/serverStartedSearch";
 import { useDeviceContext } from "@/lib/contexts/deviceContext";
 import { useQueryClient } from "@tanstack/react-query";
 import axios from "axios";
@@ -32,7 +33,8 @@ export function useSearch(
   _searchTerm: string,
   _initialTabIndex?: number,
   _includeArchived = false,
-  _fromProject: number | null = null
+  _fromProject: number | null = null,
+  serverStartedSearch?: Promise<ServerStartedSearch | null>
 ) {
   const commenterFlagEnabled = useFlag(HTPR_6880_SEARCH_COMMENTER_FLAG);
   const { data: searchCache } = useGetSearchCache();
@@ -74,6 +76,7 @@ export function useSearch(
   const searchRequestGate = useRef(new SearchRequestGate()).current;
   const lastSearchKey = useRef<string | null>(null);
   const tabSearchHistory = useRef<string[] | null>(null);
+  const pendingServerSearch = useRef(serverStartedSearch);
   const controller: { [key: number]: { pressed: boolean } } = {
     ...globalConstants.multipleKeys,
   };
@@ -89,6 +92,7 @@ export function useSearch(
   const searchEscBackFlagEnabled = useFlag(HTPR_6879_SEARCH_ESC_BACK_FLAG);
   const searchEscBackEnabled = searchEscBackFlagEnabled && searchLayoutEnabled;
   const searchEscLeavesEnabled = useFlag(HTPR_6994_SEARCH_ESC_LEAVES_FLAG);
+  const searchFlagsReady = useFlagReady(HTPR_6865_SEARCH_LAYOUT_FLAG);
   const isSearchDraft = searchLayoutEnabled && submittedQuery !== inputValue.trim();
 
   function currentSearchKey(searchTerm: string, showArchived: boolean, searchProjects = projects) {
@@ -111,6 +115,11 @@ export function useSearch(
   }
 
   function beginSearch(searchTerm: string, showArchived: boolean) {
+    recordSearch(searchTerm, showArchived);
+    return searchRequestGate.begin();
+  }
+
+  function recordSearch(searchTerm: string, showArchived: boolean) {
     if (searchEscBackEnabled) {
       const history = getTabSearchHistory();
       const term = searchTerm.trim();
@@ -121,7 +130,23 @@ export function useSearch(
     }
     setSubmittedQuery(searchTerm.trim());
     lastSearchKey.current = currentSearchKey(searchTerm, showArchived);
-    return searchRequestGate.begin();
+  }
+
+  async function showServerStartedSearch(started: Promise<ServerStartedSearch | null>, isCurrent: () => boolean) {
+    const requestId = searchRequestGate.begin();
+    const search = await started;
+    if (!isCurrent() || !searchRequestGate.isLatest(requestId) ||
+      !isServerSearchFor(search, _searchTerm, _includeArchived, _fromProject)) return;
+    recordSearch(_searchTerm, _includeArchived);
+    lastSearchKey.current = currentSearchKey(_searchTerm, _includeArchived, search.projectIds.map((id) => ({ id }) as IProject));
+    if (searchLayoutEnabled) tasksInputRef.current?.blur();
+    const processedData = search.data.processedData as Record<string, ITypedTask[]>;
+    if (processedData["All"].length > 0) {
+      applySearchResults(processedData, search.data.tabs);
+      if (!searchAutocompleteEnabled) tasksInputRef.current?.blur();
+    } else {
+      handleStatesOnResponse(searchConfig.responseMessages.fail);
+    }
   }
 
   async function handleSearchOnMount(showArchived = includeArchived) {
@@ -702,6 +727,18 @@ export function useSearch(
   ]);
 
   useEffect(() => setProjects(allProjects), [allProjects]);
+
+  const hasProjects = projects.length > 0;
+  useEffect(() => {
+    const started = pendingServerSearch.current;
+    if (!started || !searchFlagsReady || hasProjects) return;
+    pendingServerSearch.current = undefined;
+    let current = true;
+    void showServerStartedSearch(started, () => current);
+    return () => {
+      current = false;
+    };
+  }, [searchFlagsReady, hasProjects, _searchTerm, _includeArchived, _fromProject]);
 
   useEffect(() => {
     setExplicitTabIndex(_initialTabIndex);

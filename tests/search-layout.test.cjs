@@ -47,10 +47,10 @@ async function withSearch(t, config, check) {
   try {
     source('src/utils/index.ts', { taskBaseUri: '/detail/' })
     source('src/utils/undoActions/helperFuncs.ts', { cn: (...values) => require('tailwind-merge').twMerge(require('clsx').clsx(values)) })
-    source('src/hooks/useFlag.tsx', { useFlag: (key) => flags[key] ?? false })
+    source('src/hooks/useFlag.tsx', { useFlagReady: () => config.flagsReady?.() ?? true, useFlag: (key) => flags[key] ?? false })
     source('src/lib/contexts/deviceContext.tsx', { useDeviceContext: () => false })
     const allProjects = [{ id: 7, title: 'Product Board' }]
-    source('src/hooks/MultiPages/useGetAllProjectsMinimal.ts', { useGetAllProjectsMinimal: () => ({ data: allProjects }) })
+    source('src/hooks/MultiPages/useGetAllProjectsMinimal.ts', { useGetAllProjectsMinimal: () => ({ data: config.projects?.() ?? allProjects }) })
     source('src/hooks/RecoilRoot/useHypertasksRecoilStates.ts', { default: () => ({ toggleShowCommands() {} }) })
     const SearchTaskIndexAtom = {}
     source('src/lib/state.tsx', {
@@ -82,7 +82,7 @@ async function withSearch(t, config, check) {
     let counter = 0
     const render = async (query = config.query ?? '', reset = false) => React.act(async () => {
       if (reset) counter++
-      reactRoot.render(React.createElement(SearchComp, { key: counter, _searchTerm: query, _includeArchived: false, currentUser: {}, askAiFullscreenEnabled: config.askAiFullscreenEnabled }))
+      reactRoot.render(React.createElement(SearchComp, { key: counter, _searchTerm: query, _includeArchived: false, currentUser: {}, askAiFullscreenEnabled: config.askAiFullscreenEnabled, serverStartedSearch: config.serverStartedSearch }))
     })
     await render()
     t.mock.timers.enable({ apis: ['setTimeout'] })
@@ -1252,5 +1252,96 @@ test('layout flag off retains the original desktop row and fixed mobile footer',
     assert.equal(desktop.className, 'hidden @md:block w-full overflow-x-auto scrollbar-none no-scrollbar @md:px-9 mt-4')
     assert.equal(desktop.firstElementChild.className, 'flex flex-wrap grow gap-3')
     assert.ok(document.getElementById('tasks-list').compareDocumentPosition(footer) & 4)
+  })
+})
+
+const serverTasks = [
+  { taskId: 1, projectId: 7, projectTitle: 'Product Board', uniqueIndex: 1, taskTitle: 'Result', highlight: {}, status: 'Normal' },
+  { taskId: 2, projectId: 7, projectTitle: 'Product Board', uniqueIndex: 2, taskTitle: 'Second result', highlight: {}, status: 'Normal' },
+]
+const serverSearch = (overrides = {}) => ({
+  searchQuery: 'Result', includeArchived: false, fromProject: null, projectIds: [7], status: 200,
+  data: { processedData: { All: serverTasks, 'Product Board': serverTasks }, tabs: ['All', 'Product Board'] }, ...overrides,
+})
+const flush = () => React.act(async () => { await new Promise((resolve) => setImmediate(resolve)) })
+
+async function searchPageHtml(t, config, run) {
+  let html
+  await withSearch(t, { query: 'Result', ...config }, async (tools) => {
+    await run(tools)
+    html = document.getElementById('root').innerHTML
+  })
+  return html
+}
+
+test('HTPR-7501 a server-started search shows the same page as the page search, without a search request', async (t) => {
+  const today = await searchPageHtml(t, {}, async ({ requests, complete }) => {
+    assert.equal(requests.length, 1)
+    assert.deepEqual(requests[0].body, { projectIds: [7], searchQuery: 'Result', archive: 'Normal', contextProjectId: null })
+    await complete(requests[0], serverTasks, ['All', 'Product Board'])
+  })
+  let projects = []
+  const started = await searchPageHtml(t, { projects: () => projects, serverStartedSearch: Promise.resolve(serverSearch()) }, async ({ requests, render }) => {
+    await flush()
+    assert.equal(requests.length, 0, 'no search request while the board list is still loading')
+    projects = [{ id: 7, title: 'Product Board' }]
+    await render('Result')
+    await flush()
+    assert.equal(requests.length, 0, 'the board list arriving does not search again')
+  })
+  assert.ok(today.includes('id="task_2"'), 'both results are on the page')
+  assert.equal(started, today)
+})
+
+test('HTPR-7501 the server result waits until feature settings are loaded', async (t) => {
+  let ready = false
+  const projects = []
+  await withSearch(t, { query: 'Result', projects: () => projects, flagsReady: () => ready, serverStartedSearch: Promise.resolve(serverSearch()) }, async ({ render, requests }) => {
+    await flush()
+    assert.equal(document.getElementById('task_2'), null)
+    ready = true
+    await render('Result')
+    await flush()
+    assert.ok(document.getElementById('task_2'))
+    assert.equal(requests.length, 0)
+  })
+})
+
+for (const [name, started] of [
+  ['failed', Promise.resolve(null)],
+  ['rejected by the API', Promise.resolve(serverSearch({ status: 403, data: { message: 'Project access denied' } }))],
+  ['for another query', Promise.resolve(serverSearch({ searchQuery: 'Other' }))],
+  ['for archived results', Promise.resolve(serverSearch({ includeArchived: true }))],
+]) {
+  test(`HTPR-7501 a server search that is ${name} falls back to the page search`, async (t) => {
+    let projects = []
+    await withSearch(t, { query: 'Result', projects: () => projects, serverStartedSearch: started }, async ({ render, requests, complete }) => {
+      await flush()
+      assert.equal(document.getElementById('task_2'), null)
+      assert.equal(requests.length, 0)
+      projects = [{ id: 7, title: 'Product Board' }]
+      await render('Result')
+      assert.equal(requests.length, 1)
+      assert.deepEqual(requests[0].body, { projectIds: [7], searchQuery: 'Result', archive: 'Normal', contextProjectId: null })
+      await complete(requests[0], serverTasks, ['All', 'Product Board'])
+      assert.ok(document.getElementById('task_2'))
+    })
+  })
+}
+
+test('HTPR-7501 the board list arriving first keeps the page search and ignores the late server result', async (t) => {
+  let resolveServer
+  let projects = []
+  await withSearch(t, { query: 'Result', projects: () => projects, serverStartedSearch: new Promise((resolve) => { resolveServer = resolve }) }, async ({ render, requests, complete }) => {
+    await flush()
+    projects = [{ id: 7, title: 'Product Board' }]
+    await render('Result')
+    assert.equal(requests.length, 1)
+    await React.act(async () => resolveServer(serverSearch({ data: { processedData: { All: [serverTasks[0]] }, tabs: ['All'] } })))
+    await flush()
+    assert.equal(document.getElementById('task_2'), null, 'the stale server result is not shown')
+    await complete(requests[0], serverTasks, ['All', 'Product Board'])
+    assert.ok(document.getElementById('task_2'))
+    assert.equal(requests.length, 1)
   })
 })

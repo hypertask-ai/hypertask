@@ -23,6 +23,7 @@ import { useGlobalUIState } from "@/components/ProviderGlobal/useGlobalUIState";
 import AppShellRail from "@/components/PageComponents/Kanban/HeaderComponents/AppShellRail";
 import SearchChipsInput from "./SearchChipsInput";
 import "./search-autocomplete.css";
+import type { ServerStartedSearch } from "@/lib/search/serverStartedSearch";
 
 interface IProps {
   _searchTerm: string;
@@ -31,6 +32,7 @@ interface IProps {
   _fromProject?: number | null;
   currentUser: IUser;
   askAiFullscreenEnabled?: boolean;
+  serverStartedSearch?: Promise<ServerStartedSearch | null>;
 }
 
 const SearchComp = ({
@@ -40,6 +42,7 @@ const SearchComp = ({
   _fromProject = null,
   currentUser,
   askAiFullscreenEnabled = false,
+  serverStartedSearch,
 }: IProps) => {
   const router = useRouter();
   const askAiFullscreenFlagEnabled = useFlag(HTPR_6936_ASK_AI_FULLSCREEN_FLAG);
@@ -86,7 +89,7 @@ const SearchComp = ({
     results,
     includeArchived,
     setIncludeArchivedResults,
-  } = useSearch(searchTerm, _initialTabIndex, _includeArchived, _fromProject);
+  } = useSearch(searchTerm, _initialTabIndex, _includeArchived, _fromProject, serverStartedSearch);
   const matchSnippets = matchHighlightsFlagEnabled && layoutEnabled
     ? typedTasks.map((task) => highlightedSearchSnippet((task.commentId ? task.commentText : task.descriptionText) ?? '', inputValue, commenterFlagEnabled && layoutEnabled))
     : undefined;
