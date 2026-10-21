@@ -220,6 +220,26 @@ https://app.hypertask.ai/detail/project-15/7497.
 
 **Next probe.** Live: rerun the daily harness after deploy and count ticket-cold first bytes over 1 s across at least 50 samples (gate: under 10%, board at 5% or less). Remaining ticket-only start-up: `agentRuns/service` pulls marked, node-html-parser and qstash at import.
 
+### 2026-10-21: daily read complete; search opened from a link waits for two requests after hydration (HTPR-7501)
+
+https://app.hypertask.ai/detail/project-15/7501, PR https://github.com/hypertask-ai/hypertask/pull/1705, flag `htpr-7501-search-server-start`.
+
+**Daily read.** Complete 00:44 UTC on dfe2dae4f (N=5, load 6 to 17; the desktop half ran at 13 to 17). Desktop flags +16 to 44% on board, search, My Tasks and page navigation came with long tasks up on every desktop cohort: a host-load signature, provisional. Phone search 2924 ms (p90 3353) and desktop search 1192 ms (p90 1824) are milestone 1 gaps not owned by another ticket (desktop board is HTPR-7406, open PR 1694).
+
+**Phone My Tasks +41% bytes is not a content regression.** The new 30 KB are five lazy chunks requested at 2.5 s, after content at about 1.0 s (latest 22:01 run vs 19:48). Content time did not move. Note, do not chase.
+
+**What found the cause.** The per-request waterfall in every search sample of three runs: hydration, then `getAllMinimal`, then `search/document` only after it returns (the `useSearch` mount effect waits on `projects`). Phone: search starts 2.1 to 2.8 s, results about 0.4 s later. `/api/flags` resolves at about 0.6 s desktop and 2.2 s phone.
+
+**Idea.** On a full page load (`rsc` header absent) the server runs the same board-list lookup and search the page would send and streams the result as a promise prop. The page adopts it once flags are ready (earlier would flash the pre-flag layout on phone), and its own mount search awaits the same result when the board list lands first. Any mismatch (query, archive, board, project ids, non-200) falls back to today's request.
+
+**Bug the local click caught.** First build: phone still sent one page search. On a throttled phone the board list lands before the flags, so the projects-empty hand-off was cancelled and the mount search posted. Unit tests with a board list that arrives on the next render missed it; a test with the list already loaded on mount reproduced it. Fix: both paths share one server result.
+
+**Local on/off (disposable PR build, flag row switched per sample, 5 pairs, load 12 to 20).** Desktop median 364 ms on vs 401 off; phone 1307 vs 1177. No measurable difference, as expected: on loopback the two removed round trips cost about a millisecond and the local search is a stub. Correctness held in all 20 samples: 0 page search requests on, 1 off, same two rows. Live before/after decides the timing.
+
+**Lessons.** A local build cannot show a round-trip saving; measure network-bound changes live. Test hand-offs with the competing data both late and already present on mount.
+
+**Next probe.** Live after deploy: daily harness N=5 both profiles at load under 12 against this morning's run. If phone gains but stays above 2 s, the remaining limiter is hydration (first API call at about 2.0 s): look at seeding flags on the search page, which would also let the server result render before flags load. Weekly research round is overdue (none since the 2026-10-10 seed); next dispatch without a free ticket should run it.
+
 ## Milliseconds saved scoreboard
 
 Only matched end-to-end before/after evidence earns saved milliseconds; `unproven` is not zero. Do not sum different cohorts or claim forecasts as savings.
@@ -240,6 +260,7 @@ Only matched end-to-end before/after evidence earns saved milliseconds; `unprove
 | https://app.hypertask.ai/detail/project-15/7116 | Phone ticket blanking after open, PR 1360 | 5 of 30 cold, 2 of 20 warm blank → fix pending live proof | n/a (correctness, not ms) | flag `htpr-7116-ticket-stays-open` |
 | https://app.hypertask.ai/detail/project-15/7367 | Cold phone ticket, description visible, PR 1657, local ABAB N=10, load 18 to 58 | 18.3 / 20.2 s → 2.3 / 3.7 s; controls 18.3 / 20.2 s → 21.4 s | unproven live; local about 16,000 ms to text, about -1,000 ms to controls | flag `htpr-7367-server-description-first`; live 5 cold run after deploy decides |
 | https://app.hypertask.ai/detail/project-15/7395 | Phone first tap after fresh board, live ABAB N=5, load 14 to 30 | 10057 ms (OFF) → 9814 ms (ON) | 0, within noise | reverted in PR 1677; board +10.6% with flag on |
+| https://app.hypertask.ai/detail/project-15/7501 | Search hard load, local PR build on/off N=5, load 12 to 20 | desktop 401 → 364 ms, phone 1177 → 1307 ms | unproven, local cannot show round trips | flag `htpr-7501-search-server-start`; live before 2924 ms phone, 1192 ms desktop (daily N=5); live after pending |
 | https://app.hypertask.ai/detail/project-15/7497 | First ticket request on a board-warm server, local production build, interleaved N=5+5, load 5 | 1352 ms → 654 ms | about 700 ms local | lazy sanitizer; live first-byte rate after deploy decides |
 
 Confirmed, comparable saved-ms total in this seed: **not established**. Future entries must link private before/after summaries, commits, N, median/p90/range and QA proof. This deliberately avoids inventing savings absent from the history.
