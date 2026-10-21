@@ -10,10 +10,12 @@ const ts = require('typescript');
 const root = path.resolve(__dirname, '..');
 const flag = 'htpr-7547-search-lazy-closed';
 
-async function withSearch({ enabled, layout = true, mobile = true, delayed = false, loaded = true }, check) {
+async function withSearch({ enabled, layout = true, mobile = true, delayed = false, loaded = true, hydrate = false, apple = false, suspendPanel = false }, check) {
   const dom = new JSDOM('<div id="root"></div>', { url: 'https://example.test/search' });
   const globals = ['window', 'document', 'IS_REACT_ACT_ENVIRONMENT'].map((key) => [key, Object.getOwnPropertyDescriptor(global, key)]);
   Object.assign(global, { window: dom.window, document: dom.window.document, IS_REACT_ACT_ENVIRONMENT: true });
+  dom.window.HTMLElement.prototype.attachEvent = () => {};
+  dom.window.HTMLElement.prototype.detachEvent = () => {};
   let imports = 0;
   let renders = 0;
   let setOpen;
@@ -21,9 +23,18 @@ async function withSearch({ enabled, layout = true, mobile = true, delayed = fal
   let setEnabled;
   let setLoaded;
   let release;
-  const wait = new Promise((resolve) => { release = resolve; });
-  const dynamic = require('next/dist/shared/lib/app-dynamic');
-  const actualDynamic = dynamic.default ?? dynamic;
+  let released = false;
+  const wait = new Promise((resolve) => { release = () => { released = true; resolve(); }; });
+  const hydrationErrors = [];
+  let serverMarkup;
+  let bufferedInput;
+  const showCommandsAtom = {};
+  function realModule(relative) {
+    const filename = path.join(root, relative);
+    const mod = new Module(filename, module);
+    mod._compile(ts.transpileModule(fs.readFileSync(filename, 'utf8'), { compilerOptions: { module: ts.ModuleKind.CommonJS } }).outputText, filename);
+    return mod.exports;
+  }
   const stubs = {
     '@/styles/search.module.scss': { links_modal: 'links_modal', list_container: 'list_container', links_list: 'links_list' },
     '@/utils/generateTime': () => 'today',
@@ -47,20 +58,17 @@ async function withSearch({ enabled, layout = true, mobile = true, delayed = fal
     'next/navigation': { useRouter: () => ({ push() {} }), useSearchParams: () => new URLSearchParams() },
     '@/lib/aiChatDisplayMode': { buildFullScreenChatPath: () => '/chat' },
     '@/lib/flags/keys': new Proxy({}, { get: (_target, key) => String(key) }),
-    '@/lib/flags/definitions/htpr-7547-search-lazy-closed': { HTPR_7547_SEARCH_LAZY_CLOSED_FLAG: flag },
+    '@/lib/flags/definitions/htpr-7547-search-lazy-closed': realModule('src/lib/flags/definitions/htpr-7547-search-lazy-closed.ts'),
+    '@/lib/contexts/deviceContext': { useDeviceContext: () => apple },
     '@/lib/search/autocomplete': { highlightedSearchSnippet: () => [], highlightedTitle: (text) => [{ text, matched: false }] },
     '@/components/Labels/LabelWrapper': ({ children }) => children,
     '@/lib/contexts/mobileContext': { MobileViewContext: React.createContext(mobile) },
-    '@/lib/state': { useRecoilValue: () => false, useSetRecoilState: () => () => {} },
-    '@/store': { aiChatPendingPromptAtom: {}, appShellRailAtom: {} },
+    '@/lib/state': { useRecoilValue: () => false, useSetRecoilState: (atom) => atom === showCommandsAtom ? (update) => setOpen((show) => update({ show }).show) : () => {} },
+    '@/store': { aiChatPendingPromptAtom: {}, appShellRailAtom: {}, showCommandsAtom },
     '@/components/ProviderGlobal/useGlobalUIState': { useGlobalUIState: () => ({ openAIChatInterface() {} }) },
     '@/components/PageComponents/Kanban/HeaderComponents/AppShellRail': () => null,
     './SearchChipsInput': ({ value }) => React.createElement('input', { id: 'search-input', value, readOnly: true }),
     './search-autocomplete.css': {},
-    'next/dynamic': (loader, options) => {
-      assert.equal(options.ssr, false, 'closed commands must not introduce server rendering');
-      return actualDynamic(() => delayed ? wait.then(loader) : loader(), options);
-    },
   };
   const filename = path.join(root, 'src/app/search/SearchComp.tsx');
   const mod = new Module(filename, module);
@@ -69,10 +77,13 @@ async function withSearch({ enabled, layout = true, mobile = true, delayed = fal
   mod.require = (id) => {
     if (id === '@/components/commands') {
       imports++;
-      return { __esModule: true, default: ({ contextOptions, callbackHandler }) => {
+      const commands = { __esModule: true, default: ({ contextOptions, callbackHandler, focusProxy }) => {
         renders++;
+        if (suspendPanel && !released) throw wait;
+        bufferedInput = focusProxy?.current?.value;
         return React.createElement('button', { id: 'commands', onClick: () => callbackHandler(!contextOptions.searchOptions.includeArchived, 'ToggleArchivedSearchResults') }, `Archived: ${contextOptions.searchOptions.includeArchived}`);
       } };
+      return delayed ? { __esModule: true, then: (resolve) => wait.then(() => resolve(commands)) } : commands;
     }
     if (Object.hasOwn(stubs, id)) return stubs[id];
     if (id === 'react' || id === 'react/jsx-runtime') return require(id);
@@ -89,12 +100,27 @@ async function withSearch({ enabled, layout = true, mobile = true, delayed = fal
       const [isLoaded, updateLoaded] = React.useState(loaded);
       loaded = isLoaded;
       setLoaded = updateLoaded;
-      return React.createElement(SearchComp, { _searchTerm: 'QA', _includeArchived: false, currentUser: { id: 2343 } });
+      return React.createElement(React.Suspense, { fallback: React.createElement('div', { id: 'outer-fallback' }, 'Search hidden') },
+        React.createElement(SearchComp, { _searchTerm: 'QA', _includeArchived: false, currentUser: { id: 2343 } }));
     }
-    reactRoot = require('react-dom/client').createRoot(document.getElementById('root'));
-    await React.act(async () => reactRoot.render(React.createElement(Page)));
+    const container = document.getElementById('root');
+    if (hydrate) {
+      serverMarkup = require('react-dom/server').renderToString(React.createElement(Page));
+      container.innerHTML = serverMarkup;
+      assert.equal(imports, 0, 'SSR must not evaluate closed tools');
+      await React.act(async () => {
+        reactRoot = require('react-dom/client').hydrateRoot(container, React.createElement(Page), { onRecoverableError: (error) => hydrationErrors.push(error.message) });
+      });
+    } else {
+      reactRoot = require('react-dom/client').createRoot(container);
+      await React.act(async () => reactRoot.render(React.createElement(Page)));
+    }
     await check({
-      imports: () => imports, renders: () => renders, markup: () => document.getElementById('root').innerHTML,
+      imports: () => imports, renders: () => renders, markup: () => container.innerHTML,
+      resultsMarkup: () => container.querySelector('.search-input').outerHTML,
+      hydrationErrors, serverMarkup, bufferedInput: () => bufferedInput,
+      proxy: () => document.getElementById('search-command-focus-proxy'),
+      pressProxy: (key, extra = {}) => React.act(async () => document.getElementById('search-command-focus-proxy').dispatchEvent(new dom.window.KeyboardEvent('keydown', { key, bubbles: true, cancelable: true, ...extra }))),
       open: () => React.act(async () => setOpen(true)), close: () => React.act(async () => setOpen(false)),
       release: () => React.act(async () => release()),
       loadFlag: () => React.act(async () => setLoaded(true)),
@@ -136,14 +162,19 @@ test('closed commands are not imported with the flag on; search markup matches f
 });
 
 test('opening pending commands preserves results; loaded commands keep context and callbacks', async () => {
-  await withSearch({ enabled: true, delayed: true }, async ({ imports, markup, open, close, release, clickCommand }) => {
+  await withSearch({ enabled: true, delayed: true }, async ({ imports, markup, resultsMarkup, open, close, release, clickCommand, proxy, bufferedInput }) => {
     const baseline = markup();
+    const results = resultsMarkup();
     assert.equal(imports(), 0);
     await open();
-    assert.equal(markup(), baseline, 'the loading boundary must not hide search results');
-    assert.equal(imports(), 0);
+    assert.equal(resultsMarkup(), results, 'the loading boundary must not hide search results');
+    assert.equal(imports(), 1, 'one open starts one pending command import');
+    assert.equal(document.activeElement, proxy(), 'the first open immediately focuses a typing target');
+    proxy().value = 'archived';
+    proxy().setSelectionRange(2, 5);
     await release();
     assert.equal(imports(), 1);
+    assert.equal(bufferedInput(), 'archived', 'the real SearchComp passes buffered typing to the existing palette focusProxy contract');
     assert.match(markup(), /Archived: false/);
     await clickCommand();
     assert.match(markup(), /Archived: true/);
@@ -195,5 +226,50 @@ test('unresolved flags do not accidentally import commands; opening remains avai
     await open();
     assert.equal(imports(), 1, 'opening must not depend on flag API availability');
     assert.match(markup(), /Archived: false/);
+  });
+});
+
+
+test('closed search hydrates without changed markup with flag on, off or unresolved', async () => {
+  for (const enabled of [true, false]) {
+    for (const loaded of [true, false]) {
+      for (const mobile of [true, false]) {
+        await withSearch({ enabled, loaded, mobile, hydrate: true }, async ({ markup, serverMarkup, hydrationErrors, imports }) => {
+          assert.equal(markup(), serverMarkup);
+          assert.deepEqual(hydrationErrors, []);
+          assert.equal(imports(), loaded && !enabled ? 1 : 0);
+        });
+      }
+    }
+  }
+});
+
+test('pending cold opens preserve Escape and platform command shortcut dismissal', async () => {
+  for (const apple of [true, false]) {
+    for (const key of ['Escape', 'k']) {
+      await withSearch({ enabled: true, delayed: true, apple }, async ({ open, proxy, pressProxy, markup, release }) => {
+        await open();
+        assert.equal(document.activeElement, proxy());
+        await pressProxy(key, key === 'k' ? (apple ? { metaKey: true } : { ctrlKey: true }) : {});
+        assert.equal(proxy(), null, 'dismissal cannot wait for the command chunk');
+        await release();
+        assert.doesNotMatch(markup(), /id="commands"/, 'a resolved import must not reopen dismissed commands');
+      });
+    }
+  }
+});
+
+
+test('suspending command panels cannot replace the outer search page', async () => {
+  await withSearch({ enabled: true, suspendPanel: true }, async ({ open, imports, renders, resultsMarkup, markup, release }) => {
+    const baseline = resultsMarkup();
+    await open();
+    assert.equal(imports(), 1);
+    assert.ok(renders() > 0, 'the pending command panel was actually evaluated');
+    assert.equal(resultsMarkup(), baseline);
+    assert.doesNotMatch(markup(), /Search hidden/);
+    await release();
+    assert.match(markup(), /Archived: false/);
+    assert.equal(resultsMarkup(), baseline);
   });
 });

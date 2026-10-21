@@ -1,14 +1,14 @@
 "use client";
 import { ITypedTask, IUser } from "@/models/model";
 import styles from "@/styles/search.module.scss";
-import dynamic from "next/dynamic";
 import formatDateDifference from "@/utils/generateTime";
 import { Check } from "lucide-react";
 import { searchConfig } from "@/lib/configs/search.config";
 import { useSearch } from "@/hooks/Search/useSearch";
 import { cn } from "@/utils/undoActions/helperFuncs";
-import { Fragment, KeyboardEvent, RefObject, useContext, useEffect } from "react";
+import { Fragment, KeyboardEvent, RefObject, Suspense, startTransition, useContext, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { useFlag, useFlagLoaded } from "@/hooks/useFlag";
+import { useDeviceContext } from "@/lib/contexts/deviceContext";
 import { useRouter, useSearchParams } from "next/navigation";
 import { buildFullScreenChatPath } from "@/lib/aiChatDisplayMode";
 import { HTPR_6936_ASK_AI_FULLSCREEN_FLAG } from "@/lib/flags/keys";
@@ -18,15 +18,13 @@ import { HTPR_6882_SEARCH_MATCH_HIGHLIGHTS_FLAG, HTPR_6911_SEARCH_ROW_HIGHLIGHT_
 import LabelWrapper from "@/components/Labels/LabelWrapper";
 import { MobileViewContext } from "@/lib/contexts/mobileContext";
 import { useRecoilValue, useSetRecoilState } from "@/lib/state";
-import { aiChatPendingPromptAtom, appShellRailAtom } from "@/store";
+import { aiChatPendingPromptAtom, appShellRailAtom, showCommandsAtom } from "@/store";
 import { useGlobalUIState } from "@/components/ProviderGlobal/useGlobalUIState";
 import AppShellRail from "@/components/PageComponents/Kanban/HeaderComponents/AppShellRail";
 import SearchChipsInput from "./SearchChipsInput";
 import "./search-autocomplete.css";
 import type { ServerStartedSearch } from "@/lib/search/serverStartedSearch";
 import { HTPR_7547_SEARCH_LAZY_CLOSED_FLAG } from "@/lib/flags/definitions/htpr-7547-search-lazy-closed";
-
-const HypertasksCommands = dynamic(() => import("@/components/commands"), { ssr: false });
 
 interface IProps {
   _searchTerm: string;
@@ -52,9 +50,10 @@ const SearchComp = ({
   const router = useRouter();
   const lazyClosedCommands = useFlag(HTPR_7547_SEARCH_LAZY_CLOSED_FLAG);
   const lazyClosedCommandsLoaded = useFlagLoaded(HTPR_7547_SEARCH_LAZY_CLOSED_FLAG);
-  useEffect(() => {
-    if (lazyClosedCommandsLoaded && !lazyClosedCommands) void import("@/components/commands").catch(() => {});
-  }, [lazyClosedCommands, lazyClosedCommandsLoaded]);
+  const [HypertasksCommands, setCommands] = useState<typeof import("@/components/commands").default>();
+  const commandFocusProxy = useRef<HTMLInputElement>(null);
+  const setShowCommands = useSetRecoilState(showCommandsAtom);
+  const isApple = useDeviceContext();
   const askAiFullscreenFlagEnabled = useFlag(HTPR_6936_ASK_AI_FULLSCREEN_FLAG);
   const searchParams = useSearchParams();
   const searchTerm = askAiFullscreenEnabled && askAiFullscreenFlagEnabled
@@ -97,6 +96,22 @@ const SearchComp = ({
     includeArchived,
     setIncludeArchivedResults,
   } = useSearch(searchTerm, _initialTabIndex, _includeArchived, _fromProject, serverStartedSearch, searchOnce);
+  useEffect(() => {
+    if (HypertasksCommands || (!showCommands.show && (!lazyClosedCommandsLoaded || lazyClosedCommands))) return;
+    let cancelled = false;
+    void import("@/components/commands").then(({ default: Commands }) => {
+      if (!cancelled) startTransition(() => setCommands(() => Commands));
+    }).catch(() => {});
+    return () => { cancelled = true; };
+  }, [HypertasksCommands, showCommands.show, lazyClosedCommands, lazyClosedCommandsLoaded]);
+  useLayoutEffect(() => {
+    if (showCommands.show && !HypertasksCommands) {
+      commandFocusProxy.current?.focus({ preventScroll: true });
+    } else if (!showCommands.show && commandFocusProxy.current) {
+      if (document.activeElement === commandFocusProxy.current) commandFocusProxy.current.blur();
+      commandFocusProxy.current.value = "";
+    }
+  }, [showCommands.show, HypertasksCommands]);
   const matchSnippets = matchHighlightsFlagEnabled && layoutEnabled
     ? typedTasks.map((task) => highlightedSearchSnippet((task.commentId ? task.commentText : task.descriptionText) ?? '', inputValue, commenterFlagEnabled && layoutEnabled))
     : undefined;
@@ -292,13 +307,40 @@ const SearchComp = ({
         </div>
       </div>
       {showCommands.show && (
-        <HypertasksCommands
-          callbackHandler={handleCommand}
-          contextOptions={{
-            context: "Others",
-            searchOptions: { includeArchived },
-          }}
-        />
+        <>
+          <input
+            ref={commandFocusProxy}
+            id="search-command-focus-proxy"
+            type="search"
+            inputMode="search"
+            autoComplete="off"
+            autoCorrect="off"
+            autoCapitalize="none"
+            spellCheck={false}
+            tabIndex={-1}
+            aria-label="Command search"
+            className="fixed left-0 top-0 h-px w-px opacity-0 pointer-events-none text-[16px]"
+            onKeyDown={(event) => {
+              if (event.key === "Escape" || (event.key.toLowerCase() === "k" &&
+                ((isApple && event.metaKey) || (!isApple && event.ctrlKey)))) {
+                event.preventDefault();
+                setShowCommands((prev) => ({ ...prev, show: false }));
+              }
+            }}
+          />
+          {HypertasksCommands && (
+            <Suspense fallback={null}>
+              <HypertasksCommands
+                callbackHandler={handleCommand}
+                focusProxy={commandFocusProxy}
+                contextOptions={{
+                  context: "Others",
+                  searchOptions: { includeArchived },
+                }}
+              />
+            </Suspense>
+          )}
+        </>
       )}
     </>
   );

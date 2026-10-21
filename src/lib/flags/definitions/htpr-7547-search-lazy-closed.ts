@@ -11,6 +11,6 @@ export default {
   related: ["htpr-7502-search-once"],
   releaseRisk: {
     risk: "small",
-    reason: "Same search markup and command callbacks; Off warms the command module during search startup instead of waiting for it to open.",
+    reason: "Same closed search markup and command callbacks; a focus proxy retains typing during cold opens, and Off warms the module during search startup.",
   },
 } as const satisfies FeatureFlagDefinition;
