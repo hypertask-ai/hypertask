@@ -189,7 +189,10 @@ const CommentAndDescriptionContainer = (props: ITaskInfoContainer) => {
               />
             );
           } else if (currentItemIndex === descriptionBottomVirtualIndex) {
-            contentToRender = <div id="bottom-description" className="h-0" />;
+            contentToRender = <>
+              <div id="bottom-description" className="h-0" />
+              {cachedLayout && !_mbl && secondaryPanelsReady !== false && <Suspense fallback={null}><NewCommentComponent /></Suspense>}
+            </>;
           } else if (
             currentItemIndex >= commentsStartVirtualIndex &&
             currentItemIndex < commentsStartVirtualIndex + numberOfComments
@@ -258,11 +261,6 @@ const CommentAndDescriptionContainer = (props: ITaskInfoContainer) => {
       {!cachedLayout && !_mbl && secondaryPanelsReady !== false && (
         <SettledComposerSlot settled={threadSettled} slotRef={composerSlotRef}><Suspense fallback={null}><NewCommentComponent /></Suspense></SettledComposerSlot>
       )}
-      {cachedLayout && !_mbl && (stableLayout ? (
-        <div data-task-composer-slot className="flow-root min-h-[168px]">
-          {secondaryPanelsReady !== false && <Suspense fallback={null}><NewCommentComponent /></Suspense>}
-        </div>
-      ) : secondaryPanelsReady !== false && <Suspense fallback={null}><NewCommentComponent /></Suspense>)}
       {cachedLayout && !uploadingDescription && !hasDraft && <DescriptionPages />}
       {cachedLayout && _mbl && currentTask && (
         <TaskInfoLateDetails currentTask={currentTask} removeRelationHandler={removeRelationHandler} />
