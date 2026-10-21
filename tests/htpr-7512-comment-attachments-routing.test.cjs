@@ -104,6 +104,61 @@ test('MCP add tool forwards attachment intent through its validation boundary', 
   assert.equal(params.has_attachments, true)
 })
 
+for (const attachments of [undefined, [], [{ filename: 'evidence.csv', content_type: 'text/csv', data: Buffer.from('a,b\n').toString('base64') }]]) {
+  for (const has_attachments of [undefined, false, true]) {
+    for (const attachFlag of [false, true]) {
+      test(`MCP tool/service/POST attachment routing: files=${attachments?.length ?? 'missing'}, intent=${has_attachments}, flag=${attachFlag}`, async () => {
+        const route = setup({ attachFlag })
+        const requests = []
+        const client = { makeRequest: async (url, options) => {
+          assert.equal(options.method, 'POST')
+          const body = JSON.parse(options.body)
+          requests.push({ url, body })
+          if (url === '/mcp/comments') return (await route.post(body)).body
+          assert.equal(url, '/mcp/tasks/attachments')
+          return { success: true, attachments: [{ id: 1, fileName: 'evidence.csv', fileType: 'text/csv', fileSize: 4 }] }
+        } }
+        const { CommentService } = load('src/lib/mcp-server/lib/services/comment.service.ts', {
+          '../../utils/logger': { logger: { debug() {}, info() {}, failure() {} } },
+        })
+        const { addCommentTool } = load('src/lib/mcp-server/tools/add-comment.tool.ts', {
+          '../lib/services/comment.service': { CommentService },
+          '../utils/executeWithService': { executeWithService: async (_context, Service, handler) => handler(new Service(client)) },
+        })
+        const resultPromise = addCommentTool.execute({
+          task_id: 99,
+          text: 'Evidence for review',
+          ...(attachments === undefined ? {} : { attachments }),
+          ...(has_attachments === undefined ? {} : { has_attachments }),
+        }, 'test-token')
+        if (attachments?.length === 0) {
+          await assert.rejects(resultPromise, (error) => error.issues.some(({ path }) => path[0] === 'attachments'))
+          assert.equal(requests.length, 0)
+          return
+        }
+        const result = await resultPromise
+        const expectedIntent = attachments?.length ? true : has_attachments
+        assert.deepEqual(requests[0], {
+          url: '/mcp/comments',
+          body: { task_id: 99, text: 'Evidence for review', ...(expectedIntent === undefined ? {} : { has_attachments: expectedIntent }) },
+        })
+        const staysComment = attachFlag && expectedIntent === true
+        assert.equal(result.routedTo, staysComment ? 'comments' : 'log')
+        assert.equal(result.comment?.id, staysComment ? 42 : undefined)
+        assert.equal(route.calls.comments.length, staysComment ? 1 : 0)
+        assert.equal(route.calls.activities.length, staysComment ? 0 : 1)
+        if (attachments?.length) {
+          assert.equal(requests.length, 2)
+          assert.deepEqual(requests[1].body, { task_id: 99, ...(staysComment ? { comment_id: 42 } : {}), files: attachments })
+          assert.equal(result.attachment_status, 'complete')
+        } else {
+          assert.equal(requests.length, 1)
+        }
+      })
+    }
+  }
+}
+
 test('attachment routing bugfix flag is registered with its release metadata', () => {
   const flags = require('./helpers/flag-files.cjs')
   const key = flags.load('src/lib/flags/keys.ts').HTPR_7512_ATTACH_KEEPS_COMMENT_FLAG
