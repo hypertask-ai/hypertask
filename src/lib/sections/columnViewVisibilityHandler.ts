@@ -9,7 +9,6 @@ export type ColumnViewVisibilitySection = {
 
 export type ColumnViewVisibilityDependencies = {
   session: (headers: Headers) => Promise<{ userId: number } | null>;
-  featureEnabled: (userId: number) => Promise<boolean>;
   findSection: (
     userId: number,
     sectionId: number
@@ -30,13 +29,6 @@ export const createColumnViewVisibilityHandler =
       return NextResponse.json(
         { success: false, error: "Unauthorized" },
         { status: 401 }
-      );
-    }
-
-    if (!(await dependencies.featureEnabled(session.userId))) {
-      return NextResponse.json(
-        { success: false, error: "Not available" },
-        { status: 403 }
       );
     }
 
