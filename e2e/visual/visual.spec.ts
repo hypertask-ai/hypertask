@@ -113,10 +113,14 @@ for (const screen of screens) {
       landmarks = [page.locator('#title-input'), lastComment, composer]
     } else if (screen === 'ctrl-j') {
       await board(page)
-      await page.evaluate(() => (document.activeElement as HTMLElement)?.blur())
-      await page.keyboard.press('Control+j')
       const writer = page.locator('[data-compose-task-writer]:visible')
-      await expect(writer).toBeVisible()
+      await expect(async () => {
+        if (await writer.count() === 0) {
+          await page.evaluate(() => (document.activeElement as HTMLElement)?.blur())
+          await page.keyboard.press('Control+j')
+        }
+        await expect(writer, 'Ctrl+J must open the task writer once flags and shortcuts are ready').toBeVisible({ timeout: 2_000 })
+      }).toPass({ timeout: 15_000 })
       await expect(page.getByRole('textbox', { name: 'Describe the task' })).toBeVisible()
       landmarks = [writer, page.getByRole('textbox', { name: 'Describe the task' })]
     } else {
