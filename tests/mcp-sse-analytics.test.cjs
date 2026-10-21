@@ -29,6 +29,7 @@ source('src/lib/mcp-server/legacy-sse.ts', {
 const flagChecks = []
 source('src/lib/flags.ts', {
   HTPR_7203_MCP_FLAT_SCHEMA_FLAG: 'htpr-7203-mcp-flat-schema',
+  HTPR_7529_MCP_ACT_AS_AGENT_FLAG: 'htpr-7529-mcp-act-as-agent',
   isFeatureEnabled: async (key, userId) => {
     flagChecks.push({ key, userId })
     return false
@@ -123,6 +124,7 @@ test('transport analytics evaluates remaining schema flags through an isolated f
     assert.deepEqual(flagChecks, [
       { key: 'htpr-7195-ai-feedback', userId: 2343 },
       { key: 'htpr-7902-team-id', userId: 2343 },
+      { key: 'htpr-7529-mcp-act-as-agent', userId: 2343 },
       { key: 'htpr-7203-mcp-flat-schema', userId: 2343 },
       { key: 'htpr-7863-mcp-page-alias', userId: 2343 },
       { key: 'htpr-7895-task-number-alias', userId: 2343 },

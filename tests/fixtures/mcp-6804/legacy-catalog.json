@@ -35,6 +35,13 @@
     }
   },
   {
+    "name": "hypertask_ensure_agent",
+    "description": "Returns the existing or new agent id.",
+    "inputSchema": {
+      "type": "object"
+    }
+  },
+  {
     "name": "hypertask_revoke_agent",
     "description": "Returns revoke confirmation.",
     "inputSchema": {

@@ -25,6 +25,7 @@ import type { ManagementPermissions } from '@/lib/mcp/managementPermissions'
 import type { McpAuthContext } from '@/lib/mcp/auth/types'
 import { withMcpExecutionContext } from '@/lib/mcp/operationContext'
 import { HTPR_7220_LEGACY_SSE_KEEPALIVE_FLAG } from '@/lib/flags/definitions/htpr-7220-legacy-sse-keepalive'
+import { actAsAgentAvailable, withoutActAsAgentTools } from './utils/actAsAgentCatalog'
 
 export const LEGACY_SSE_LIFETIME_MS = 780 * 1000
 export const LEGACY_SSE_KEEPALIVE_MS = 60 * 1000
@@ -189,14 +190,16 @@ export async function handleLegacySseRequest(
             if (method === 'tools/list' || method === 'tools/call') {
               const feedbackEnabled = await aiFeedbackEnabled(userId)
               const presenceTool = await getAgentPresenceTool(userId)
-              const available = tools
+              const actAsAgent = Boolean(ctx && await actAsAgentAvailable(ctx))
+              const available = withoutActAsAgentTools(tools
                 .filter((tool) => feedbackEnabled || tool.name !== 'hypertask_report_feedback')
-                .map((tool) => tool.name === presenceTool.name ? presenceTool : tool)
+                .map((tool) => tool.name === presenceTool.name ? presenceTool : tool), actAsAgent)
               const catalog = observeFeedbackTools(selectMcpTools(available, true, {
                 managementPermissions: incoming.authInfo.extra?.managementPermissions as ManagementPermissions | undefined,
                 teamScoped: incoming.authInfo.extra?.teamScoped === true,
                 agent: incoming.authInfo.extra?.agent === true,
                 ...(ctx?.agentId ? { agentRole: await getAgentRole(ctx) } : {}),
+                ...(actAsAgent ? { actAsAgent } : {}),
               }, await isFeatureEnabled(HTPR_7203_MCP_FLAT_SCHEMA_FLAG, userId), await isFeatureEnabled(HTPR_7863_MCP_PAGE_ALIAS_FLAG, userId), await isFeatureEnabled(HTPR_7895_TASK_NUMBER_ALIAS_FLAG, userId), Boolean(ctx?.user?.id) && await isFeatureEnabled(HTPR_7893_BOARD_ALIAS_FLAG, userId), await isFeatureEnabled(HTPR_7897_MCP_INPUT_FIELDS_FLAG, userId), await isFeatureEnabled(HTPR_7917_MCP_INPUT_WRAPPERS_FLAG, userId), await isFeatureEnabled(HTPR_7914_TICKET_NUMBER_HINT_FLAG, userId), await isFeatureEnabled(HTPR_7894_TASK_ID_TICKET_REFERENCE_FLAG, userId), false, await isFeatureEnabled(HTPR_7934_NEAREST_FIELD_HINT_FLAG, userId)), userId)
               const rpcResponse = await withMcpExecutionContext(incoming.authInfo.token, incoming.authInfo.extra?.mcpAuthContext as McpAuthContext | undefined, () => handleStatelessMcpRequest(new Request('http://localhost/mcp', {
                 method: 'POST',

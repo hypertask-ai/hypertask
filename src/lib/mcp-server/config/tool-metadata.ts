@@ -49,6 +49,12 @@ const RAW_TOOL_METADATA = {
       'Creates an external agent identity owned by the authenticated human, optionally attaching it to boards. Returns its MCP token once; store it securely. Agent credentials cannot call this tool.',
   },
 
+  ENSURE_AGENT: {
+    name: buildToolName('ensure_agent'),
+    description:
+      'Gets or creates an agent identity owned by the authenticated human by display name, and adds it to any listed boards it is missing. Calling it again with the same name returns the same agent. Never returns a token; act as the agent with as_agent. Agent credentials cannot call this tool.',
+  },
+
   REVOKE_AGENT: {
     name: buildToolName('revoke_agent'),
     description:

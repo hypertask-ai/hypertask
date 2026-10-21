@@ -20,6 +20,11 @@
       "read_only": false,
       "permission": "management_write"
     },
+    "ensure": {
+      "tool": "hypertask_ensure_agent",
+      "read_only": false,
+      "permission": "management_write"
+    },
     "revoke": {
       "tool": "hypertask_revoke_agent",
       "read_only": false,
