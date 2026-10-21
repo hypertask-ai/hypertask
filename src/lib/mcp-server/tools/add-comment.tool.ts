@@ -38,6 +38,7 @@ export const addCommentTool = {
             project_id: validatedInput.project_id,
             unique_index: validatedInput.unique_index,
             kind: validatedInput.kind,
+            has_attachments: validatedInput.has_attachments,
             text: validatedInput.text,
             content_type: validatedInput.content_type,
             mentions: validatedInput.mentions,
