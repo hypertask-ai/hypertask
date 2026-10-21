@@ -2,19 +2,19 @@
 
 import UserAvatar from "@/components/Common/UserAvatar";
 import { MobileViewContext } from "@/lib/contexts/mobileContext";
-import { HTPR_6371_MOBILE_SEARCH_FLAG } from "@/lib/flags/keys";
+import { HTPR_6371_MOBILE_SEARCH_FLAG, HTPR_6368_SEARCH_OPERATOR_LOGIC_FLAG, HTPR_7387_SEARCH_OPERATOR_COLOURS_FLAG } from "@/lib/flags/keys";
 import { isMobileSearchSubmit, mobileSearchPickerBounds } from "@/lib/search/mobile";
 import { useFlag } from "@/hooks/useFlag";
 import { HTPR_6865_SEARCH_LAYOUT_FLAG, HTPR_6911_SEARCH_ROW_HIGHLIGHT_FLAG, HTPR_6878_SEARCH_LABEL_SCOPE_FLAG, HTPR_6879_SEARCH_ESC_BACK_FLAG, HTPR_6880_SEARCH_COMMENTER_FLAG, HTPR_6994_SEARCH_ESC_LEAVES_FLAG } from "@/lib/flags/keys";
 import { MentionListRows } from "@/components/AI_CHAT/MentionListComp";
 import { activeSearchValue, candidateQuery, chipQuery, searchChipText, splitSearchChips } from "@/lib/search/chips";
-import { operatorMatches, parseSearchTokens, SEARCH_OPERATORS, type Names, type SearchOperator, type SearchToken } from "@/lib/search/operators";
+import { operatorMatches, parseSearchTokens, SEARCH_OPERATORS, LOGIC_OPERATORS, type Names, type SearchToken } from "@/lib/search/operators";
 import { localValueSuggestions, operatorSuggestions, searchCompletion, searchFilterColour, highlightedTitle, SEARCH_TIPS, type SearchCandidate } from "@/lib/search/autocomplete";
 import { searchConfig } from "@/lib/configs/search.config";
 import { Hash, UserRound, X } from "lucide-react";
 import React, { type ChangeEvent, type KeyboardEvent, type RefObject, useContext, useEffect, useRef, useState } from "react";
 
-type Candidate = SearchCandidate & { count?: number; byName?: boolean; query?: string; operator?: SearchOperator; kind?: "ai" | "operator" | "value" | "recent" };
+type Candidate = SearchCandidate & { count?: number; byName?: boolean; query?: string; operator?: SearchToken['operator']; tip?: keyof typeof SEARCH_TIPS; kind?: "ai" | "operator" | "value" | "recent" };
 type Props = {
   value: string;
   onChange: (value: string) => void;
@@ -46,6 +46,9 @@ export default function SearchChipsInput({ value, onChange, onRun, boardId, inpu
   const escLeavesEnabled = useFlag(HTPR_6994_SEARCH_ESC_LEAVES_FLAG);
   const commenterFlagEnabled = useFlag(HTPR_6880_SEARCH_COMMENTER_FLAG);
   const commenterEnabled = commenterFlagEnabled && layoutEnabled;
+  const operatorLogicEnabled = useFlag(HTPR_6368_SEARCH_OPERATOR_LOGIC_FLAG);
+  const operatorColoursEnabled = useFlag(HTPR_7387_SEARCH_OPERATOR_COLOURS_FLAG);
+  const logicEnabled = operatorLogicEnabled && operatorColoursEnabled && autocompleteEnabled;
   const [editing, setEditing] = useState(false);
   const [names, setNames] = useState<Names>({});
   const [chipLabels, setChipLabels] = useState<Record<string, string>>({});
@@ -64,7 +67,7 @@ export default function SearchChipsInput({ value, onChange, onRun, boardId, inpu
     in: [...(names.in ?? []), ...availableBoards.map((board) => board.title ?? '')],
     board: [...(names.board ?? []), ...availableBoards.map((board) => board.title ?? '')],
   } : names;
-  const { chips, text } = splitSearchChips(value, editing, queryNames, autocompleteEnabled, commenterFlagEnabled && layoutEnabled);
+  const { chips, text } = splitSearchChips(value, editing, queryNames, autocompleteEnabled, commenterFlagEnabled && layoutEnabled, logicEnabled);
   const pickedBoards = labelScopeEnabled ? [...new Set(parseSearchTokens(value, queryNames)
     .filter((token) => !token.negated && (token.operator === 'in' || token.operator === 'board'))
     .flatMap((token) => {
@@ -73,19 +76,19 @@ export default function SearchChipsInput({ value, onChange, onRun, boardId, inpu
         .filter((board) => board.title?.toLowerCase() === name.toLowerCase()).map((board) => board.id);
     }))].join(',') : '';
   const summary = [...chips.map(chipText), text.trim()].filter(Boolean).join(' ');
-  const completion = autocompleteEnabled ? searchCompletion(text, names, commenterEnabled) : null;
+  const completion = autocompleteEnabled ? searchCompletion(text, names, commenterEnabled, logicEnabled) : null;
   const active = autocompleteEnabled ? completion : activeSearchValue(text, names, commenterEnabled);
   const tips = autocompleteEnabled && (focused || searchEscBackEnabled) && !value.trim();
   const picker = dismissed ? null : active;
   const localRows = completion?.kind === 'operator'
-    ? operatorSuggestions(completion.value, commenterEnabled).map((operator) => ({ id: operator, name: `${operator}:` }))
+    ? operatorSuggestions(completion.value, commenterEnabled, logicEnabled).map((operator) => ({ id: operator, name: `${operator}:` }))
     : completion ? localValueSuggestions(completion.operator, completion.value) : null;
   const genericPrefix = layoutEnabled && !dismissed && showSuggestions && completion?.kind !== 'value' &&
     (text.match(/(?<!\\)"/g)?.length ?? 0) % 2 === 0 ? text.match(/(?:^|\s)([a-z]+)$/i) : null;
   const lookupValue = genericPrefix?.[1] ?? picker?.value;
   const rows: Candidate[] = tips ? [
     ...(layoutEnabled ? [...new Set(recentSearches)] : recentSearches).map((query, index) => ({ id: `recent-${index}`, name: layoutEnabled ? query : `Recent: ${query}`, query, kind: 'recent' as const })),
-    ...SEARCH_OPERATORS.filter((operator) => operator !== 'commenter' || (commenterFlagEnabled && layoutEnabled)).map((operator) => ({ id: operator, name: `${SEARCH_TIPS[operator].example} - ${SEARCH_TIPS[operator].meaning}`, operator, kind: 'operator' as const })),
+    ...[...SEARCH_OPERATORS, ...(logicEnabled ? [...LOGIC_OPERATORS, 'phrase', 'exclude'] as const : [])].filter((tip) => tip !== 'commenter' || commenterEnabled).map((tip) => ({ id: tip, name: `${SEARCH_TIPS[tip].example} - ${SEARCH_TIPS[tip].meaning}`, tip, kind: 'operator' as const })),
   ] : layoutEnabled ? [
     ...(value.trim() ? [{ id: 'ask-ai', name: labelScopeEnabled ? summary : value.trim(), kind: 'ai' as const }] : []),
     ...(localRows ?? []).map((row) => ({ ...row, kind: completion?.kind === 'operator' ? 'operator' as const : 'value' as const })),
@@ -217,7 +220,7 @@ export default function SearchChipsInput({ value, onChange, onRun, boardId, inpu
     setError(false);
     setCandidates([]);
     setSelectedIndex(layoutEnabled ? 1 : 0);
-    const operators = genericPrefix ? ['from', 'label', 'in'] as const : [picker!.operator as SearchOperator];
+    const operators = genericPrefix ? ['from', 'label', 'in'] as const : [picker!.operator as SearchToken['operator']];
     const timer = setTimeout(() => Promise.all(operators.map(async (operator) => {
       const params = new URLSearchParams({ operator, value: lookupValue ?? '' });
       if (boardId) params.set("boardId", String(boardId));
@@ -246,12 +249,12 @@ export default function SearchChipsInput({ value, onChange, onRun, boardId, inpu
         setLoading(false);
       }), 180);
     return () => { clearTimeout(timer); controller.abort(); ++lookup.current; };
-  }, [picker?.operator, picker?.value, dismissed, boardId, autocompleteEnabled, layoutEnabled, genericPrefix?.[1], labelScopeEnabled, pickedBoards, commenterEnabled]);
+  }, [picker?.operator, picker?.value, dismissed, boardId, autocompleteEnabled, layoutEnabled, genericPrefix?.[1], labelScopeEnabled, pickedBoards, commenterEnabled, logicEnabled]);
 
   useEffect(() => {
     if (editing) return;
     const queries = layoutEnabled && !value.trim() ? [value, ...new Set(recentSearches)] : [value];
-    const tokens = queries.flatMap((query) => parseSearchTokens(query, names, commenterEnabled).map((token) => ({ ...token, query })));
+    const tokens = queries.flatMap((query) => parseSearchTokens(query, names, commenterEnabled, logicEnabled).map((token) => ({ ...token, query })));
     const unresolved = tokens.filter((token) =>
       ['from', 'commenter', 'assignee', 'in', 'board', 'label'].includes(token.operator) &&
       !token.raw.includes('"') && !names[token.operator as keyof Names]?.includes(token.value.replace(/^[@#]/, '')));
@@ -283,7 +286,7 @@ export default function SearchChipsInput({ value, onChange, onRun, boardId, inpu
       setHydrationStatus(null);
     }).catch(() => { if (!controller.signal.aborted) setHydrationStatus('error'); });
     return () => controller.abort();
-  }, [value, editing, boardId, layoutEnabled, layoutEnabled ? recentSearches.join('\n') : '', labelScopeEnabled, pickedBoards, commenterEnabled]);
+  }, [value, editing, boardId, layoutEnabled, layoutEnabled ? recentSearches.join('\n') : '', labelScopeEnabled, pickedBoards, commenterEnabled, logicEnabled]);
 
   function change(event: ChangeEvent<HTMLInputElement> | React.CompositionEvent<HTMLInputElement>) {
     setEditing(!autocompleteEnabled || Boolean(event.currentTarget.value.trim()));
@@ -299,7 +302,7 @@ export default function SearchChipsInput({ value, onChange, onRun, boardId, inpu
     if (autocompleteEnabled && !value.trim()) { setDismissed(false); setSelectedIndex(0); }
     if (layoutEnabled && showSuggestions && value.trim()) { setDismissed(false); setSelectedIndex(1); }
     if (autocompleteEnabled && completion?.kind === 'operator' && caret === text.length) setDismissed(false);
-    const atCaret = caret === null ? null : autocompleteEnabled ? searchCompletion(text.slice(0, caret), names, commenterEnabled) : activeSearchValue(text.slice(0, caret), names, commenterEnabled);
+    const atCaret = caret === null ? null : autocompleteEnabled ? searchCompletion(text.slice(0, caret), names, commenterEnabled, logicEnabled) : activeSearchValue(text.slice(0, caret), names, commenterEnabled);
     if (active && caret !== null && caret <= (active.end ?? text.length) && atCaret?.start === active.start) setDismissed(false);
   }
 
@@ -324,7 +327,7 @@ export default function SearchChipsInput({ value, onChange, onRun, boardId, inpu
       return;
     }
     if (autocompleteEnabled && (tips || (completion?.kind === 'operator' && (!layoutEnabled || row.kind === 'operator')))) {
-      const nextText = tips ? `${row.id}:` : text.slice(0, completion?.start) + `${completion?.negated ? '-' : ''}${row.id}:` + text.slice(completion?.end);
+      const nextText = tips ? row.tip === 'phrase' || row.tip === 'exclude' ? SEARCH_TIPS[row.tip].example : `${row.id}:` : text.slice(0, completion?.start) + `${completion?.negated ? '-' : ''}${row.id}:` + text.slice(completion?.end);
       setEditing(true);
       setDismissed(false);
       setSelectedIndex(layoutEnabled ? 1 : 0);
@@ -413,8 +416,8 @@ export default function SearchChipsInput({ value, onChange, onRun, boardId, inpu
   }
 
   function renderRow(row: Candidate, index: number) {
-    const tip = tips && row.kind === 'operator' ? SEARCH_TIPS[row.operator!] : null;
-    const recent = row.query !== undefined ? splitSearchChips(row.query, false, names, false, commenterEnabled) : null;
+    const tip = tips && row.tip ? SEARCH_TIPS[row.tip] : null;
+    const recent = row.query !== undefined ? splitSearchChips(row.query, false, names, false, commenterEnabled, logicEnabled) : null;
     return (
       <button key={`${row.kind}-${row.operator ?? ''}-${row.id}`} id={`mention-button-${index}`} type="button" role="option"
         aria-selected={row === selectedRow} onPointerDown={(event) => { if (mobileEnabled) event.preventDefault(); }} onMouseEnter={() => setSelectedIndex(index)} onClick={() => choose(row)}
