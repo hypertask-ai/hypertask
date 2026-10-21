@@ -52,6 +52,7 @@ function loadToggle() {
     },
   };
   const handler = loadModule('src/pages/api/savedContent/toggleSaved.ts', {
+    '@/lib/auth/agentScope': { withAgentScopeRequest: (_request, run) => run() },
     '@/utils/controllers/savedContent/helper': { includeSavedContentComment: () => true },
     '@/lib/taskCardActions/writeLocks': { withTaskStarWriteLock: async (_id, op) => op(tx) },
     '@/lib/auth/getSessionUser': { getSessionUser: async () => ({ userId: 7 }) },

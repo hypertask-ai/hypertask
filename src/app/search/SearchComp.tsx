@@ -14,7 +14,7 @@ import { buildFullScreenChatPath } from "@/lib/aiChatDisplayMode";
 import { HTPR_6936_ASK_AI_FULLSCREEN_FLAG } from "@/lib/flags/keys";
 import { HTPR_6688_SEARCH_AUTOCOMPLETE_FLAG, HTPR_6865_SEARCH_LAYOUT_FLAG, HTPR_6878_SEARCH_LABEL_SCOPE_FLAG, HTPR_6879_SEARCH_ESC_BACK_FLAG, HTPR_6880_SEARCH_COMMENTER_FLAG } from "@/lib/flags/keys";
 import { highlightedSearchSnippet, highlightedTitle } from "@/lib/search/autocomplete";
-import { HTPR_6882_SEARCH_MATCH_HIGHLIGHTS_FLAG, HTPR_6909_SEARCH_ONE_BOARD_TABS_FLAG, HTPR_6911_SEARCH_ROW_HIGHLIGHT_FLAG } from "@/lib/flags/keys";
+import { HTPR_6882_SEARCH_MATCH_HIGHLIGHTS_FLAG, HTPR_6911_SEARCH_ROW_HIGHLIGHT_FLAG } from "@/lib/flags/keys";
 import LabelWrapper from "@/components/Labels/LabelWrapper";
 import { MobileViewContext } from "@/lib/contexts/mobileContext";
 import { useRecoilValue, useSetRecoilState } from "@/lib/state";
@@ -33,6 +33,7 @@ interface IProps {
   currentUser: IUser;
   askAiFullscreenEnabled?: boolean;
   serverStartedSearch?: Promise<ServerStartedSearch | null>;
+  searchOnce?: boolean;
 }
 
 const SearchComp = ({
@@ -43,6 +44,7 @@ const SearchComp = ({
   currentUser,
   askAiFullscreenEnabled = false,
   serverStartedSearch,
+  searchOnce = false,
 }: IProps) => {
   const router = useRouter();
   const askAiFullscreenFlagEnabled = useFlag(HTPR_6936_ASK_AI_FULLSCREEN_FLAG);
@@ -55,7 +57,6 @@ const SearchComp = ({
   const layoutEnabled = layoutFlagEnabled && autocompleteEnabled;
   const matchHighlightsFlagEnabled = useFlag(HTPR_6882_SEARCH_MATCH_HIGHLIGHTS_FLAG);
   const rowHighlightFlagEnabled = useFlag(HTPR_6911_SEARCH_ROW_HIGHLIGHT_FLAG);
-  const oneBoardTabsFlagEnabled = useFlag(HTPR_6909_SEARCH_ONE_BOARD_TABS_FLAG);
   const commenterFlagEnabled = useFlag(HTPR_6880_SEARCH_COMMENTER_FLAG);
   const labelScopeFlagEnabled = useFlag(HTPR_6878_SEARCH_LABEL_SCOPE_FLAG);
   const searchEscBackFlagEnabled = useFlag(HTPR_6879_SEARCH_ESC_BACK_FLAG);
@@ -89,7 +90,7 @@ const SearchComp = ({
     results,
     includeArchived,
     setIncludeArchivedResults,
-  } = useSearch(searchTerm, _initialTabIndex, _includeArchived, _fromProject, serverStartedSearch);
+  } = useSearch(searchTerm, _initialTabIndex, _includeArchived, _fromProject, serverStartedSearch, searchOnce);
   const matchSnippets = matchHighlightsFlagEnabled && layoutEnabled
     ? typedTasks.map((task) => highlightedSearchSnippet((task.commentId ? task.commentText : task.descriptionText) ?? '', inputValue, commenterFlagEnabled && layoutEnabled))
     : undefined;
@@ -160,7 +161,7 @@ const SearchComp = ({
                 </div>
               ) : (
                 <div>
-                  {results && !(oneBoardTabsFlagEnabled && tabs.length <= 2) && (
+                  {results && tabs.length > 2 && (
                     <div className={cn("hidden @md:block w-full overflow-x-auto scrollbar-none no-scrollbar @md:px-9 mt-4", layoutEnabled && "block px-4")}>
                       <div className={layoutEnabled ? "flex grow gap-3 [flex-wrap:nowrap] md:[flex-wrap:wrap] min-h-[44px] md:min-h-0 [&>div]:shrink-0 md:[&>div]:shrink" : "flex flex-wrap grow gap-3"}>
                         {tabs.map((item, index) => (
@@ -243,7 +244,7 @@ const SearchComp = ({
                         </span>
                       </div>
                     )}
-                  {!layoutEnabled && results && !(oneBoardTabsFlagEnabled && tabs.length <= 2) && (
+                  {!layoutEnabled && results && tabs.length > 2 && (
                     <div className="flex inbox_footer @md:hidden no-scrollbar scrollbar-none gap-3 w-100 bg-hoverCardBackground  h-20 @md:h-8 inbox_title px-4">
                       {tabs.map((item, index) => (
                         <SplitTitle

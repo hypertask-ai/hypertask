@@ -178,7 +178,53 @@ for statuses in \
     && ok "non-skipped/latest-success status still requires deployment" || bad "deployment bypass: $out"
 done
 
-# Only analytics/master may use its exact production publishing push without a release.
+# Bindings keep their repository and base when ledger commands omit the environment.
+binding_tests() {
+  local HOME PATH=$PATH BIND_EXPECT_REPO SHIP_REPO SHIP_BASE
+  unset SHIP_REPO SHIP_BASE
+  export HOME="$E/bind-home" PATH="$E/bind-bin:$PATH" BIND_EXPECT_REPO=hypertask-ai/analytics
+  mkdir -p "$HOME" "$E/bind-bin"
+  cat > "$E/bind-bin/gh" <<'MOCK'
+#!/usr/bin/env bash
+[[ $1 == pr && $2 == view && $3 == 163 && $4 == -R && $5 == "$BIND_EXPECT_REPO" ]] || exit 1
+case "$7" in
+  title) echo 'YPER4-531 [INFRA] Fixture' ;;
+  number,title,state,mergeCommit,baseRefName)
+    printf '{"number":163,"title":"YPER4-531 [INFRA] Fixture","state":"MERGED","mergeCommit":{"oid":"ec45678a2"},"baseRefName":"%s"}\n' "${BIND_PR_BASE:-master}" ;;
+  *) exit 1 ;;
+esac
+MOCK
+  cat > "$E/bind-bin/hypertask" <<'MOCK'
+#!/usr/bin/env bash
+[[ $1 == tasks && $2 == get && $3 == YPER4-531 ]] || exit 1
+echo '{"success":true,"tasks":[{"section":"Done"}]}'
+MOCK
+  chmod +x "$E/bind-bin/gh" "$E/bind-bin/hypertask"
+  B() {
+    local want=$1 expected=$2 out got; shift 2
+    out=$(env "$@" ./ship-check pr YPER4-531); got=$?
+    [ "$got" = "$want" ] && [[ $out == "$expected"* ]] && ok "binding: $*" || bad "binding: want $want $expected got $got $out ($*)"
+  }
+  SHIP_REPO=hypertask-ai/analytics SHIP_BASE=master ./ship-check bind YPER4-531 163 >/dev/null \
+    && ok 'bind analytics PR' || bad 'bind analytics PR'
+  [ "$(cat "$E/YPER4-531/pr")" = 163 ] && [ "$(cat "$E/YPER4-531/repo")" = hypertask-ai/analytics ] && [ "$(cat "$E/YPER4-531/base")" = master ] \
+    && ok 'binding records PR, repo and base' || bad 'binding lost repo/base'
+  B 0 'title ok'
+  ./ship-check merged YPER4-531 | grep -qx 'merged ok' && ok 'merged restores analytics repo/base' || bad 'merged lost analytics binding'
+  B 1 'FAIL:' BIND_EXPECT_REPO=hypertask-ai/docs
+  B 0 'title ok' SHIP_REPO=hypertask-ai/docs BIND_EXPECT_REPO=hypertask-ai/docs
+  B 0 'title ok' SHIP_BASE=main BIND_PR_BASE=main
+  B 1 'FAIL:' SHIP_BASE=main
+  mkdir -p "$E/bind-legacy/YPER4-531"; echo 163 > "$E/bind-legacy/YPER4-531/pr"
+  B 0 'title ok' VCC_EVIDENCE_DIR="$E/bind-legacy" BIND_EXPECT_REPO=hypertask-ai/hypertask BIND_PR_BASE=production
+  B 0 'title ok' VCC_EVIDENCE_DIR="$E/bind-legacy" SHIP_REPO=hypertask-ai/analytics SHIP_BASE=master
+  SHIP_REPO=hypertask-ai/docs SHIP_BASE=main BIND_EXPECT_REPO=hypertask-ai/docs ./ship-check bind YPER4-531 163 >/dev/null \
+    && [ "$(cat "$E/YPER4-531/repo")" = hypertask-ai/docs ] && [ "$(cat "$E/YPER4-531/base")" = main ] \
+    && ok 'rebind replaces saved repo/base' || bad 'rebind lost repo/base'
+}
+binding_tests
+
+# Only analytics/master may use its exact production publishing run without a release.
 cat > "$E/mock-bin/gh" <<'MOCK'
 #!/usr/bin/env bash
 case "$1:$2" in
@@ -187,7 +233,7 @@ case "$1:$2" in
   release:list) [ "${RELEASE_ERROR:-0}" = 0 ] || exit 1; echo "${RELEASES_FIXTURE:-[]}" ;;
   api:*/compare/*) [ "${COMPARE_ERROR:-0}" = 0 ] || exit 1; echo "${COMPARE_FIXTURE:-behind}" ;;
   api:*/actions/workflows/*)
-    [[ "$2" == 'repos/hypertask-ai/analytics/actions/workflows/deploy.yml/runs?head_sha=ec45678a2&event=push&per_page=100' ]] || exit 1
+    [[ "$2" == 'repos/hypertask-ai/analytics/actions/workflows/deploy.yml/runs?head_sha=ec45678a2&per_page=100' ]] || exit 1
     [ "${RUN_ERROR:-0}" = 0 ] || exit 1; echo "$RUNS_FIXTURE" ;;
   api:*/actions/runs/*)
     [[ "$2" == 'repos/hypertask-ai/analytics/actions/runs/123/jobs?per_page=100' ]] || exit 1
@@ -202,14 +248,23 @@ D() {
   [ "$got" = "$want" ] && [[ $out == "$expected"* ]] && ok "$out" || bad "want $want $expected got $got $out"
 }
 D 0 'deployed ok (workflow)'
-D 1 'FAIL: no successful production publishing push' RUNS_FIXTURE='{"workflow_runs":[]}'
+D 0 'deployed ok (workflow)' RUNS_FIXTURE="$(jq '.workflow_runs[0].event = "workflow_dispatch"' <<<"$publish")"
+for change in \
+  '.head_sha = "different"' \
+  '.conclusion = "failure"' \
+  '.conclusion = null | .status = "in_progress"' \
+  '.path = ".github/workflows/other.yml"'; do
+  runs=$(jq ".workflow_runs[0] |= (.event = \"workflow_dispatch\" | $change)" <<<"$publish")
+  D 1 'FAIL: no successful production publishing run' RUNS_FIXTURE="$runs"
+done
+D 1 'FAIL: no successful production publishing run' RUNS_FIXTURE='{"workflow_runs":[]}'
 for change in \
   '.name = "Deploy Preview"' \
   '.name = "Publish validation"' \
   '.path = ".github/workflows/preview.yml"' \
   '.path = ".github/workflows/validation.yml"' \
   '.event = "pull_request"' \
-  '.event = "workflow_dispatch"' \
+  '.event = "schedule"' \
   '.head_branch = "preview"' \
   '.conclusion = "failure"' \
   '.conclusion = null' \
@@ -218,7 +273,7 @@ for change in \
   'del(.path)' \
   'del(.event)'; do
   runs=$(jq ".workflow_runs[0] |= ($change)" <<<"$publish")
-  D 1 'FAIL: no successful production publishing push' RUNS_FIXTURE="$runs"
+  D 1 'FAIL: no successful production publishing run' RUNS_FIXTURE="$runs"
 done
 for jobs in \
   '{"jobs":[]}' \
@@ -252,7 +307,7 @@ case "$1:$2" in
   release:view) exit 1 ;;
   release:list) [ "${RELEASE_ERROR:-0}" = 0 ] || exit 1; echo "${RELEASES_FIXTURE:-[]}" ;;
   api:*/actions/workflows/*)
-    [[ "$2" == 'repos/hypertask-ai/docs/actions/workflows/deploy.yml/runs?head_sha=ec45678a2&event=push&per_page=100' ]] || exit 1
+    [[ "$2" == 'repos/hypertask-ai/docs/actions/workflows/deploy.yml/runs?head_sha=ec45678a2&per_page=100' ]] || exit 1
     [ "${RUN_ERROR:-0}" = 0 ] || exit 1; echo "$RUNS_FIXTURE" ;;
   api:*/actions/runs/*)
     [[ "$2" == 'repos/hypertask-ai/docs/actions/runs/456/jobs?per_page=100' ]] || exit 1
@@ -268,19 +323,28 @@ DD() {
   else bad "docs: want $want $expected got $got $out"; fi
 }
 DD 0 'deployed ok (workflow)'
-DD 1 'FAIL: no successful production publishing push' RUNS_FIXTURE='{"workflow_runs":[]}'
+DD 0 'deployed ok (workflow)' RUNS_FIXTURE="$(jq '.workflow_runs[0].event = "workflow_dispatch"' <<<"$docs_publish")"
+for change in \
+  '.head_sha = "different"' \
+  '.conclusion = "failure"' \
+  '.conclusion = null | .status = "in_progress"' \
+  '.path = ".github/workflows/other.yml"'; do
+  runs=$(jq ".workflow_runs[0] |= (.event = \"workflow_dispatch\" | $change)" <<<"$docs_publish")
+  DD 1 'FAIL: no successful production publishing run' RUNS_FIXTURE="$runs"
+done
+DD 1 'FAIL: no successful production publishing run' RUNS_FIXTURE='{"workflow_runs":[]}'
 for change in \
   '.name = "Publish hypertask.app"' \
   '.path = ".github/workflows/preview.yml"' \
   '.event = "pull_request"' \
-  '.event = "workflow_dispatch"' \
+  '.event = "schedule"' \
   '.head_branch = "master"' \
   '.conclusion = "failure"' \
   '.conclusion = null' \
   '.conclusion = "cancelled"' \
   '.head_sha = "different"'; do
   runs=$(jq ".workflow_runs[0] |= ($change)" <<<"$docs_publish")
-  DD 1 'FAIL: no successful production publishing push' RUNS_FIXTURE="$runs"
+  DD 1 'FAIL: no successful production publishing run' RUNS_FIXTURE="$runs"
 done
 for jobs in \
   '{"jobs":[]}' \
@@ -311,7 +375,7 @@ case "$1:$2" in
     [[ $* == *'-R hypertask-ai/docs --base main --state merged'* && $* == *'YPER4-388 in:title'* ]] || exit 1
     printf '%s\n' "${DOCS_PRS:-[]}" ;;
   api:repos/hypertask-ai/docs/actions/workflows/deploy.yml/runs\?*)
-    [[ $2 == *'head_sha=ec45678a2&event=push&per_page=100' ]] || exit 1
+    [[ $2 == *'head_sha=ec45678a2&per_page=100' ]] || exit 1
     printf '%s\n' "$RUNS_FIXTURE" ;;
   api:repos/hypertask-ai/docs/actions/runs/456/jobs\?*) printf '%s\n' "$JOBS_FIXTURE" ;;
   api:repos/hypertask-ai/hypertask/commits/app-merge/status) echo 'Ignored Build Step' ;;

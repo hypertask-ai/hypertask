@@ -1,3 +1,4 @@
+import { HTPR_7513_WRITER_PROJECT_LABELS_FLAG } from "@/lib/flags/keys";
 import { recordAgentBoardScopeMiss } from "@/lib/auth/agentScope";
 import { HTPR_7471_WRITER_BOARD_FORMAT_FLAG } from "@/lib/flags/keys";
 import { assertParentTaskOnBoard, ParentTaskNotFoundError } from "@/utils/controllers/tasks/parentTaskAccess";
@@ -124,6 +125,15 @@ const route = (requestStartedAt: number) => taskWriteRoute({
       await isFeatureEnabled(HTPR_7054_CTRLJ_DUE_DATE_FLAG, userId);
     const writerDueDate = dueDateEnabled ? taskWriterDueDateForSave(body.writerDueDate, body.writerTimeZone) : undefined;
     const dueDate = writerDueDate ?? requestedDueDate;
+    let writerLabelIds: string[] = [];
+    let boardLabelIds: string[] = [];
+    if (!tags?.length && body.requestKind === "compose-task" && Array.isArray(body.writerLabelIds) && body.writerLabelIds.length &&
+        await isFeatureEnabled(HTPR_7513_WRITER_PROJECT_LABELS_FLAG, userId)) {
+      const { validateTaskWriterLabelIds } = await import("@/app/api/ai/_lib/taskWriterProperties");
+      const boardLabels = await prisma.label.findMany({ where: { projectId }, select: { id: true } });
+      boardLabelIds = boardLabels.map((label) => label.id);
+      writerLabelIds = validateTaskWriterLabelIds(body.writerLabelIds, boardLabelIds);
+    }
     if (body.existingTaskId != null) {
       const taskId = Number(body.existingTaskId);
       if (!Number.isSafeInteger(taskId) || taskId <= 0) {
@@ -145,6 +155,17 @@ const route = (requestStartedAt: number) => taskWriteRoute({
         expectedStatus: target.status,
       });
       if (result.status !== 200) return NextResponse.json(result.json, { status: result.status, headers: responseHeaders });
+      if (writerLabelIds.length) {
+        const { mutateTaskLabels } = await import("@/lib/mcp/tasks/services");
+        const actingAgent = agentId ? await prisma.agent.findUnique({
+          where: { id: agentId },
+          select: { id: true, userId: true, displayName: true, photoURL: true },
+        }) : null;
+        await mutateTaskLabels(taskId, projectId, { add: writerLabelIds, skipIfPresent: boardLabelIds }, {
+          id: userId, email: currentUser.email ?? "", displayName: currentUser.displayName, photoURL: currentUser.photoURL,
+        }, actingAgent);
+        result.json.taskLabels = await prisma.taskLabel.findMany({ where: { taskId }, include: { label: true } });
+      }
       if (customFields.length) {
         const { saveWriterCustomFieldValues } = await import("@/utils/controllers/customFields");
         await saveWriterCustomFieldValues(taskId, customFields);
@@ -181,6 +202,7 @@ const route = (requestStartedAt: number) => taskWriteRoute({
         }, { status: 400, headers: responseHeaders });
       }
     }
+    if (!tagIds.length) tagIds = writerLabelIds;
     let priorityCreated: any = undefined;
     let estimateCreated: any = undefined;
     let relatedTasks: any = { status: 200, json: [] };

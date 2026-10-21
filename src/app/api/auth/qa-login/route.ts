@@ -1,7 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 
-import { isFeatureEnabled } from "@/lib/flags";
-import { HTPR_6536_QA_LOGIN_FLAG } from "@/lib/flags/keys";
+import { isOwnerOrQaUserId } from "@/lib/flags";
 import prisma from "@/lib/prisma";
 import { slimUserForCookie } from "@/lib/auth/slimUserCookie";
 import { seedResponseThemeCookie } from "@/lib/auth/themeCookie";
@@ -41,11 +40,8 @@ export async function POST(request: NextRequest) {
   }
 
   try {
-    const flagged = await isFeatureEnabled(
-      HTPR_6536_QA_LOGIN_FLAG,
-      QA_LOGIN_USER_ID,
-    );
-    if (!flagged) {
+    const allowed = await isOwnerOrQaUserId(QA_LOGIN_USER_ID);
+    if (!allowed) {
       return new NextResponse(null, { status: 404 });
     }
   } catch {

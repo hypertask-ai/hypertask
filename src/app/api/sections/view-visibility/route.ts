@@ -1,6 +1,5 @@
 import { getSessionUser } from "@/lib/auth/getSessionUser";
 import prisma from "@/lib/prisma";
-import { COLUMN_ALL_VIEWS_FLAG, isFeatureEnabled } from "@/lib/flags";
 import { broadcastBoardChange } from "@/lib/realtime/server";
 import { createColumnViewVisibilityHandler } from "@/lib/sections/columnViewVisibilityHandler";
 import { setSectionVisibilityInAllViews } from "@/utils/controllers/section/viewHelpers";
@@ -8,7 +7,6 @@ import { getProjectWhere } from "@/utils/controllers/projects/getAllIncludes";
 
 export const POST = createColumnViewVisibilityHandler({
   session: (headers) => getSessionUser(headers),
-  featureEnabled: (userId) => isFeatureEnabled(COLUMN_ALL_VIEWS_FLAG, userId),
   findSection: (userId, sectionId) =>
     prisma.section.findFirst({
       where: {

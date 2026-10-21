@@ -73,4 +73,4 @@ Bugs it found, all confirmed by hand before filing:
 
 TestSprite (the production API contract suite and logged-out browser smoke suite) is retired as of 2026-09-23: the subscription is cancelled. The `testsprite-production.yml` workflow, the `testsprite/backend/` and `testsprite/frontend/` test sources, and the `TESTSPRITE_API_KEY` GitHub secret are removed. Production QA verification now runs through the app suite above, plus the existing Playwright smoke (`e2e/smoke`).
 
-The QA password login (`/qa/login`, `POST /api/auth/qa-login`, flag `htpr-6536-qa-login`) stays: it is our own code and may be reused by whatever runner replaces TestSprite (https://app.hypertask.ai/detail/project-15/6636).
+The QA password login (`/qa/login`, `POST /api/auth/qa-login`, permanent owner/QA identity check) stays: it is our own code and may be reused by whatever runner replaces TestSprite (https://app.hypertask.ai/detail/project-15/6636).

@@ -67,6 +67,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({
       success: true,
       html: draft.html,
+      ...(draft.labelIds ? { labelIds: draft.labelIds } : {}),
       ...(draft.customFields?.length ? { customFields: draft.customFields } : {}),
       title: draft.title,
       priority: draft.priority,

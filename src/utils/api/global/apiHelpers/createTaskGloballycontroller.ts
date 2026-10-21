@@ -22,6 +22,7 @@ interface IProps {
   requestKind?: "compose-task";
   existingTaskId?: number;
   writerDueDate?: string;
+  writerLabelIds?: string[];
   writerTimeZone?: string;
   customFields?: TaskWriterCustomFieldValue[];
   ranking?: string;

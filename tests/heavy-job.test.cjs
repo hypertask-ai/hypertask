@@ -271,13 +271,16 @@ test('--exclusive lets only one full run or build go at a time, even with free s
   } finally { rmSync(dir, { recursive: true, force: true }); }
 });
 
-test('local heavy jobs run at nice 10 by default and HT_HEAVY_NICE is validated', async () => {
+test('local heavy jobs run at nice 19 and idle IO by default and HT_HEAVY_NICE is validated', async () => {
   const { dir, env } = fixture();
   try {
     const base = require('node:os').getPriority();
     const result = await run(env, 'console.log(require("node:os").getPriority())').done;
     assert.equal(result.status, 0);
-    assert.equal(Number(result.stdout.trim()), Math.min(19, base + 10));
+    assert.equal(Number(result.stdout.trim()), 19);
+    const io = spawnSync('bash', [script, 'sh', '-c', 'ps -o ni= -p $$; ionice -p $$'], { env, encoding: 'utf8' });
+    assert.equal(io.status, 0);
+    assert.match(io.stdout, /^\s*19\nidle\n$/);
     const ci = await run({ ...env, CI: 'true' }, 'console.log(require("node:os").getPriority())').done;
     assert.equal(Number(ci.stdout.trim()), base, 'CI is not reniced');
     const bad = await run({ ...env, HT_HEAVY_NICE: '20' }, 'console.log("must not run")').done;
@@ -290,4 +293,60 @@ test('the full suite uses 2 test workers locally and 4 in CI', () => {
   const runner = readFileSync(path.join(root, 'scripts/run-tests.mjs'), 'utf8');
   assert.match(runner, /TEST_CONCURRENCY = process\.env\.TEST_CONCURRENCY \?\? \(isCi \? 4 : 2\)/);
   assert.match(runner, /--test-concurrency=\$\{TEST_CONCURRENCY\}/);
+});
+
+test('priority tools receive nice 19 then idle IO even when the test runner already has low priority', () => {
+  const { dir, env } = fixture();
+  try {
+    const bin = path.join(dir, 'priority-bin');
+    const log = path.join(dir, 'priority-calls');
+    mkdirSync(bin);
+    for (const tool of ['nice', 'ionice']) {
+      writeFileSync(path.join(bin, tool), `#!/bin/sh\nprintf '%s\\n' '${tool}' "$1" "$2" >> "$PRIORITY_LOG"\nexec /usr/bin/${tool} "$@"\n`, { mode: 0o755 });
+    }
+    const configuration = { ...env, PATH: `${bin}:${env.PATH}`, PRIORITY_LOG: log };
+    const result = spawnSync('bash', [script, 'printf', '%s', 'a b'], { env: configuration, encoding: 'utf8' });
+    assert.equal(result.status, 0, result.stderr);
+    assert.equal(result.stdout, 'a b');
+    assert.equal(readFileSync(log, 'utf8'), 'nice\n-n\n19\nionice\n-c3\nprintf\n');
+    rmSync(log);
+    for (const override of [{ CI: 'true' }, { GITHUB_ACTIONS: '' }]) {
+      const ci = spawnSync('bash', [script, 'true'], { env: { ...configuration, ...override } });
+      assert.equal(ci.status, 0);
+      assert.throws(() => readFileSync(log), { code: 'ENOENT' });
+    }
+  } finally { rmSync(dir, { recursive: true, force: true }); }
+});
+
+test('missing priority tools fall back independently without changing arguments or exit status', () => {
+  for (const missing of [['nice'], ['ionice'], ['nice', 'ionice']]) {
+    const { dir, env } = fixture();
+    try {
+      const bin = path.join(dir, 'minimal-bin');
+      mkdirSync(bin);
+      for (const tool of ['stat', 'date', 'awk', 'nproc', 'mkdir', 'chmod', 'flock', 'nice', 'ionice']) {
+        if (!missing.includes(tool)) symlinkSync(`/usr/bin/${tool}`, path.join(bin, tool));
+      }
+      symlinkSync(path.join(dir, 'disk-bin', 'df'), path.join(bin, 'df'));
+      const result = spawnSync('/bin/bash', [script, '/bin/sh', '-c', 'printf "%s" "$1"; exit 17', 'sh', 'a b'], {
+        env: { ...env, PATH: bin }, encoding: 'utf8',
+      });
+      assert.equal(result.status, 17, result.stderr);
+      assert.equal(result.stdout, 'a b');
+    } finally { rmSync(dir, { recursive: true, force: true }); }
+  }
+});
+
+test('exec preserves termination signals and releases locks', async () => {
+  const { dir, env } = fixture();
+  try {
+    const child = spawn('bash', [script, process.execPath, '-e', 'console.log("ready");setInterval(()=>{},1000)'], { env });
+    await new Promise(resolve => child.stdout.once('data', resolve));
+    const done = new Promise(resolve => child.on('close', (code, signal) => resolve({ code, signal })));
+    child.kill('SIGTERM');
+    assert.deepEqual(await done, { code: null, signal: 'SIGTERM' });
+    const result = await run(env, 'console.log("released")').done;
+    assert.equal(result.status, 0);
+    assert.equal(result.stderr, '');
+  } finally { rmSync(dir, { recursive: true, force: true }); }
 });

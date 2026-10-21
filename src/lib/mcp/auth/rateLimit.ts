@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { HTPR_7133_MCP_RATELIMIT_FAST_FLAG } from '@/lib/flags/keys';
+import { HTPR_7133_MCP_RATELIMIT_FAST_FLAG, HTPR_7462_MCP_RATELIMIT_EXACT_COUNT_FLAG } from '@/lib/flags/keys';
 import { createHash } from 'crypto';
 import { getRedis } from '@/lib/redis';
 import { decideMcpRateLimit, MCP_RATE_LIMIT_WINDOW_SECONDS } from '@/lib/mcp/rateLimitDecision';
@@ -15,6 +15,24 @@ const LEASE = 10
 const localCounts = new Map<string, { count: number; reserved: number; leasing: boolean }>()
 let localWindowStart: number | undefined
 let fastFlagDecision: { enabled: boolean; expiresAt: number } | undefined
+let exactCountFlagDecision: { enabled: boolean; expiresAt: number } | undefined
+let exactCountFlagLookup: Promise<boolean> | undefined
+
+async function shouldUseExactCountRateLimit(): Promise<boolean> {
+  if (exactCountFlagDecision && exactCountFlagDecision.expiresAt > Date.now()) return exactCountFlagDecision.enabled
+  if (!exactCountFlagLookup) {
+    exactCountFlagLookup = (async () => {
+      let enabled = true
+      try {
+        const { featureFlagCandidateUserIds } = await import('@/lib/flags')
+        enabled = await featureFlagCandidateUserIds(HTPR_7462_MCP_RATELIMIT_EXACT_COUNT_FLAG) === null
+      } catch {}
+      exactCountFlagDecision = { enabled, expiresAt: Date.now() + 30_000 }
+      return enabled
+    })().finally(() => { exactCountFlagLookup = undefined })
+  }
+  return exactCountFlagLookup
+}
 
 async function shouldUseFastRateLimit(): Promise<boolean> {
   if (fastFlagDecision && fastFlagDecision.expiresAt > Date.now()) return fastFlagDecision.enabled
@@ -56,7 +74,7 @@ export async function checkMcpRateLimit(
       localCounts.clear()
       localWindowStart = windowStartSeconds
     }
-    const fastEnabled = await shouldUseFastRateLimit()
+    const fastEnabled = !(await shouldUseExactCountRateLimit()) && await shouldUseFastRateLimit()
     if (!fastEnabled) localCounts.clear()
     const redis = await getRedis()
     const prepaid = fastEnabled && localWindowStart === windowStartSeconds ? localCounts.get(key) : undefined

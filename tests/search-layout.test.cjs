@@ -47,7 +47,7 @@ async function withSearch(t, config, check) {
   try {
     source('src/utils/index.ts', { taskBaseUri: '/detail/' })
     source('src/utils/undoActions/helperFuncs.ts', { cn: (...values) => require('tailwind-merge').twMerge(require('clsx').clsx(values)) })
-    source('src/hooks/useFlag.tsx', { useFlagReady: () => config.flagsReady?.() ?? true, useFlag: (key) => flags[key] ?? false })
+    source('src/hooks/useFlag.tsx', { useFlagReady: () => config.flagsReady?.() ?? true, useFlag: (key) => (config.flagsBeforeReady && !(config.flagsReady?.() ?? true) ? config.flagsBeforeReady[key] : flags[key]) ?? false })
     source('src/lib/contexts/deviceContext.tsx', { useDeviceContext: () => false })
     const allProjects = [{ id: 7, title: 'Product Board' }]
     source('src/hooks/MultiPages/useGetAllProjectsMinimal.ts', { useGetAllProjectsMinimal: () => ({ data: config.projects?.() ?? allProjects, refetch: () => config.refetch?.() ?? Promise.resolve({ data: allProjects }) }) })
@@ -82,7 +82,7 @@ async function withSearch(t, config, check) {
     let counter = 0
     const render = async (query = config.query ?? '', reset = false) => React.act(async () => {
       if (reset) counter++
-      reactRoot.render(React.createElement(SearchComp, { key: counter, _searchTerm: query, _includeArchived: false, currentUser: {}, askAiFullscreenEnabled: config.askAiFullscreenEnabled, serverStartedSearch: config.serverStartedSearch }))
+      reactRoot.render(React.createElement(SearchComp, { key: counter, _searchTerm: query, _includeArchived: false, currentUser: {}, askAiFullscreenEnabled: config.askAiFullscreenEnabled, serverStartedSearch: config.serverStartedSearch, searchOnce: config.searchOnce }))
     })
     await render()
     t.mock.timers.enable({ apis: ['setTimeout'] })
@@ -1076,24 +1076,44 @@ test('commenter flag off preserves the baseline rendered HTML byte for byte', as
   assert.deepEqual(snapshots[1], snapshots[0])
 })
 
-test('one-board results hide the tab row only when its flag is on; two boards keep it', async (t) => {
-  const tabNames = () => [...document.querySelectorAll('.footer_tags')].map((node) => node.textContent)
+test('one-board results always hide the tab rows; two boards keep working tabs in either layout on desktop and phone', async (t) => {
   const tasks = [{ taskId: 1, projectId: 7, projectTitle: 'Product Board', uniqueIndex: 1, taskTitle: 'Result', highlight: {} }]
   const both = [...tasks, { taskId: 2, projectId: 8, projectTitle: 'Other Board', uniqueIndex: 2, taskTitle: 'Second', highlight: {} }]
-  for (const enabled of [false, true]) {
-    await withSearch(t, { flags: { 'htpr-6909-search-one-board-tabs': enabled } }, async ({ type, press, complete }) => {
-      await type('login')
-      await press('Enter')
-      await complete(undefined, tasks, ['All', 'Product Board'])
-      assert.equal(tabNames().includes('Product Board'), !enabled)
+  for (const layout of [false, true]) {
+    for (const mobile of [false, true]) {
+      await withSearch(t, { query: 'login', mobile, flags: { [layoutFlag]: layout } }, async ({ complete, render }) => {
+        for (const tabs of [['All'], ['All', 'Product Board']]) {
+          await complete(undefined, tasks, tabs)
+          assert.equal(document.querySelector('.footer_tags, .inbox_footer'), null)
+          assert.ok(document.getElementById('task_1'))
+          await render('login', true)
+        }
+        await complete(undefined, both, ['All', 'Product Board', 'Other Board'])
+        const labels = [...document.querySelectorAll('span.footer_tags')]
+        assert.deepEqual([...new Set(labels.map((node) => node.textContent))], ['All', 'Product Board', 'Other Board'])
+        await React.act(async () => labels.find((node) => node.textContent === 'Other Board').parentElement.parentElement.click())
+        assert.equal(document.getElementById('task_1'), null)
+        assert.ok(document.getElementById('task_2'))
+      })
+    }
+  }
+})
+
+test('one-board results keep open and archived split tabs in either layout', async (t) => {
+  for (const layout of [false, true]) {
+    await withSearch(t, { query: 'login', flags: { [layoutFlag]: layout } }, async ({ complete }) => {
+      const tasks = [
+        { taskId: 1, projectId: 7, projectTitle: 'Product Board', uniqueIndex: 1, taskTitle: 'Open result', highlight: {}, status: 'Normal' },
+        { taskId: 2, projectId: 7, projectTitle: 'Product Board', uniqueIndex: 2, taskTitle: 'Archived result', highlight: {}, status: 'Archive' },
+      ]
+      await complete(undefined, tasks, { All: tasks, Open: [tasks[0]], Archived: [tasks[1]], 'Product Board': tasks })
+      const labels = [...document.querySelectorAll('span.footer_tags')]
+      assert.deepEqual([...new Set(labels.map((node) => node.textContent))], ['All', 'Open', 'Archived', 'Product Board'])
+      await React.act(async () => labels.find((node) => node.textContent === 'Archived').parentElement.parentElement.click())
+      assert.equal(document.getElementById('task_1'), null)
+      assert.ok(document.getElementById('task_2'))
     })
   }
-  await withSearch(t, { flags: { 'htpr-6909-search-one-board-tabs': true } }, async ({ type, press, complete }) => {
-    await type('login')
-    await press('Enter')
-    await complete(undefined, both, ['All', 'Product Board', 'Other Board'])
-    assert.ok(tabNames().includes('Other Board'))
-  })
 })
 
 test('Escape closes retained layout suggestions after focus moved elsewhere, keeping the query', async (t) => {
@@ -1210,7 +1230,7 @@ test('row highlight flag off keeps the previous inset highlight', async (t) => {
 })
 
 test('phone layout keeps board tabs in scrollable flow under the search input and selecting a board filters results', async (t) => {
-  await withSearch(t, { flags: { 'htpr-6909-search-one-board-tabs': true } }, async ({ input, type, press, complete, state, dom }) => {
+  await withSearch(t, {}, async ({ input, type, press, complete, state, dom }) => {
     Object.defineProperties(dom.window, { innerWidth: { value: 390 }, innerHeight: { value: 844 } })
     await type('login')
     await press('Enter')
@@ -1245,7 +1265,11 @@ test('layout flag off retains the original desktop row and fixed mobile footer',
   await withSearch(t, { flags: { [layoutFlag]: false } }, async ({ type, tick, complete }) => {
     await type('login')
     await tick()
-    await complete(undefined, undefined, ['All', 'Product Board'])
+    const tasks = [
+      { taskId: 1, projectId: 7, projectTitle: 'Product Board', uniqueIndex: 1, taskTitle: 'Result', highlight: {} },
+      { taskId: 2, projectId: 8, projectTitle: 'Other Board', uniqueIndex: 2, taskTitle: 'Second', highlight: {} },
+    ]
+    await complete(undefined, tasks, ['All', 'Product Board', 'Other Board'])
     const footer = document.querySelector('.inbox_footer')
     assert.equal(footer.className, 'flex inbox_footer @md:hidden no-scrollbar scrollbar-none gap-3 w-100 bg-hoverCardBackground  h-20 @md:h-8 inbox_title px-4')
     const desktop = [...document.querySelectorAll('span.footer_tags')][0].parentElement.parentElement.parentElement.parentElement
@@ -1371,13 +1395,13 @@ for (const [name, config] of [
   })
 }
 
-test('HTPR-7501 a search the user starts while the server result is pending wins', async (t) => {
+for (const searchOnce of [false, true]) test(`HTPR-7501 a search the user starts while the server result is pending wins (HTPR-7502 ${searchOnce ? 'on' : 'off'})`, async (t) => {
   let resolveServer
   let resolveBoards
   let ready = false
   const projects = []
   const refetch = () => new Promise((resolve) => { resolveBoards = () => resolve({ data: [{ id: 7, title: 'Product Board' }] }) })
-  await withSearch(t, { query: 'Result', projects: () => projects, refetch, flagsReady: () => ready, serverStartedSearch: new Promise((resolve) => { resolveServer = resolve }) }, async ({ type, press, tick, render, requests, complete }) => {
+  await withSearch(t, { query: 'Result', projects: () => projects, refetch, flagsReady: () => ready, searchOnce, serverStartedSearch: new Promise((resolve) => { resolveServer = resolve }) }, async ({ type, press, tick, render, requests, complete }) => {
     await flush()
     await type('Other')
     await press('Enter')
@@ -1399,3 +1423,57 @@ test('HTPR-7501 a search the user starts while the server result is pending wins
     assert.equal(requests.length, 1)
   })
 })
+
+const escBack = { 'htpr-6879-search-esc-back': true }
+
+async function freshTab(t, config, run) {
+  let ready = false
+  await withSearch(t, { query: 'Result', flags: escBack, flagsBeforeReady: {}, flagsReady: () => ready, ...config }, async (tools) => {
+    await flush()
+    const before = tools.requests.length
+    ready = true
+    await tools.render('Result')
+    await flush()
+    await run({ ...tools, before })
+  })
+}
+
+test('HTPR-7502 a fresh tab with the board list loaded waits for feature settings and shows the server result without a request', async (t) => {
+  const today = await searchPageHtml(t, { flags: escBack }, async ({ requests, complete }) => complete(requests[0], serverTasks, ['All', 'Product Board']))
+  let html
+  await freshTab(t, { searchOnce: true, serverStartedSearch: Promise.resolve(serverSearch()) }, async ({ requests, before }) => {
+    assert.equal(before, 0, 'no request before feature settings load')
+    assert.equal(requests.length, 0, 'the server result is used')
+    html = document.getElementById('root').innerHTML
+  })
+  assert.equal(html, today)
+})
+
+test('HTPR-7502 a fresh tab whose server result is for other boards sends the page search once', async (t) => {
+  await freshTab(t, { searchOnce: true, serverStartedSearch: Promise.resolve(serverSearch({ projectIds: [7, 8] })) }, async ({ requests, before, complete }) => {
+    assert.equal(before, 0)
+    assert.equal(requests.length, 1)
+    assert.deepEqual(requests[0].body, { projectIds: [7], searchQuery: 'Result', archive: 'Normal', contextProjectId: null })
+    await complete(requests[0], serverTasks, ['All', 'Product Board'])
+    assert.ok(document.getElementById('task_2'))
+  })
+})
+
+test('HTPR-7502 a fresh tab without a server result searches once', async (t) => {
+  await freshTab(t, { searchOnce: true }, async ({ requests, before, complete }) => {
+    assert.equal(before, 1, 'the page search does not wait for feature settings')
+    assert.equal(requests.length, 1, 'feature settings loading does not resend it')
+    await complete(requests[0], serverTasks, ['All', 'Product Board'])
+    assert.ok(document.getElementById('task_2'))
+  })
+})
+
+for (const [name, config] of [['with a server result', { serverStartedSearch: Promise.resolve(serverSearch()) }], ['without a server result', {}]]) {
+  test(`HTPR-7502 flag off: a fresh tab ${name} keeps today's two requests`, async (t) => {
+    await freshTab(t, { searchOnce: false, ...config }, async ({ requests, complete }) => {
+      assert.equal(requests.length, 2)
+      await complete(requests.at(-1), serverTasks, ['All', 'Product Board'])
+      assert.ok(document.getElementById('task_2'))
+    })
+  })
+}

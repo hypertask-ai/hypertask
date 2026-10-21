@@ -34,7 +34,8 @@ export function useSearch(
   _initialTabIndex?: number,
   _includeArchived = false,
   _fromProject: number | null = null,
-  serverStartedSearch?: Promise<ServerStartedSearch | null>
+  serverStartedSearch?: Promise<ServerStartedSearch | null>,
+  searchOnce = false
 ) {
   const commenterFlagEnabled = useFlag(HTPR_6880_SEARCH_COMMENTER_FLAG);
   const { data: searchCache } = useGetSearchCache();
@@ -77,6 +78,7 @@ export function useSearch(
   const lastSearchKey = useRef<string | null>(null);
   const tabSearchHistory = useRef<string[] | null>(null);
   const pendingServerSearch = useRef(serverStartedSearch);
+  const mountSearchAwaitsFlags = useRef(false);
   const controller: { [key: number]: { pressed: boolean } } = {
     ...globalConstants.multipleKeys,
   };
@@ -761,9 +763,12 @@ export function useSearch(
     setInputValue(_searchTerm);
     if (projects.length > 0 && _searchTerm.length >= 2) {
       const key = currentSearchKey(_searchTerm, _includeArchived);
-      if (lastSearchKey.current !== key || (searchEscBackEnabled && getTabSearchHistory().at(-1) !== _searchTerm.trim())) {
-        void handleSearchOnMount(_includeArchived);
-      }
+      const sameSearchMissingFromHistory = lastSearchKey.current === key && searchEscBackEnabled &&
+        getTabSearchHistory().at(-1) !== _searchTerm.trim();
+      const serverSearchAwaitsFlags = !!pendingServerSearch.current && !searchFlagsReady;
+      if (searchOnce && sameSearchMissingFromHistory) recordSearch(_searchTerm, _includeArchived);
+      else if (searchOnce && serverSearchAwaitsFlags && lastSearchKey.current !== key) mountSearchAwaitsFlags.current = true;
+      else if (lastSearchKey.current !== key || sameSearchMissingFromHistory) void handleSearchOnMount(_includeArchived);
       return;
     }
     if (_searchTerm.length < 2) {
@@ -772,6 +777,12 @@ export function useSearch(
       handleStatesOnResponse(searchConfig.responseMessages.default);
     }
   }, [_searchTerm.length >= 2 ? projects : null, _includeArchived, _searchTerm, _fromProject, searchEscBackEnabled]);
+
+  useEffect(() => {
+    if (!searchFlagsReady || !mountSearchAwaitsFlags.current) return;
+    mountSearchAwaitsFlags.current = false;
+    if (pendingServerSearch.current) void handleSearchOnMount(_includeArchived);
+  }, [searchFlagsReady]);
 
   useEffect(() => {
     if (!searchAutocompleteEnabled || !projects.length) return;

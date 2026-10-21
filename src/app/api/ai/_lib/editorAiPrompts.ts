@@ -11,10 +11,12 @@ export const TASK_AUTHORING_STYLE = renderPrompt("task-authoring-style", (UNSLOP
 
 export const TASK_AUTHORING_WEB_STYLE = renderPrompt("task-authoring-web-style", (WEB_WRITING_SKILL), (UNSLOP_SKILL), "");
 
-export function createTaskAuthoringStyle(webWriting: boolean, boardFormat: boolean) {
+export function createTaskAuthoringStyle(webWriting: boolean, boardFormat: boolean, oldStructure = false) {
   const rule = boardFormat ? renderPrompt("task-writer-board-format-rule") : "";
   return webWriting
-    ? renderPrompt("task-authoring-web-style", WEB_WRITING_SKILL, UNSLOP_SKILL, rule)
+    ? oldStructure
+      ? renderPrompt("task-authoring-web-old-structure-style", WEB_WRITING_SKILL, UNSLOP_SKILL, rule)
+      : renderPrompt("task-authoring-web-style", WEB_WRITING_SKILL, UNSLOP_SKILL, rule)
     : renderPrompt("task-authoring-style", UNSLOP_SKILL, I_HAVE_ADHD_SKILL, rule);
 }
 
