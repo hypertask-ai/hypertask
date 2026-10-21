@@ -4,6 +4,7 @@ import importlib.machinery
 import importlib.util
 import json
 import os
+import subprocess
 from pathlib import Path
 import tempfile
 import unittest
@@ -255,6 +256,133 @@ class DispatchTests(unittest.TestCase):
                 self.dispatch(self.rows[:1], go=True)
         self.assertEqual(list(self.claim_dir.iterdir()), [])
         self.assertFalse((self.loop / "last-dispatch.json").exists())
+
+    def test_speed_go_rechecks_pane_and_load_for_ticket_and_research(self):
+        for research in (False, True):
+            for state in ("typed", "busy", "waiting_bg", "gone", "missing", "wrong_runner", "duplicate", "overload"):
+                with self.subTest(research=research, state=state):
+                    if not research:
+                        self.add_speed_ticket()
+                    else:
+                        self.boards[15] = [t for t in self.boards[15] if t["ticketNumber"] != "HTPR-9"]
+                    row = self.rows[8]
+                    fresh = [dict(row, state=state)]
+                    if state == "missing":
+                        fresh = []
+                    elif state == "wrong_runner":
+                        fresh = [dict(row, runner="RUNNER 1")]
+                    elif state == "duplicate":
+                        fresh = [row, row]
+                    elif state == "overload":
+                        fresh = [row]
+                    self.ready_go(fresh)
+                    if state == "overload":
+                        patch.object(m.os, "getloadavg", return_value=(13, 1, 1)).start()
+                    self.commands.reset_mock()
+                    with patch.object(m, "acquire_claim", wraps=m.acquire_claim) as acquire:
+                        result = self.dispatch([row], go=True)[0]
+                    self.assertEqual(acquire.call_count, 0 if research else 1)
+                    self.assertIsNone(result["ticket"])
+                    self.assertFalse(any("send-keys" in c.args for c in self.commands.call_args_list))
+                    self.assertEqual(list(self.claim_dir.glob("*.json")), [])
+                    self.assertFalse((self.loop / "last-dispatch.json").exists())
+
+    def test_speed_snapshot_failure_releases_unsent_claim(self):
+        self.add_speed_ticket()
+        self.ready_go()
+        with patch.object(m, "snapshots", side_effect=RuntimeError("snapshot failed")):
+            with self.assertRaisesRegex(RuntimeError, "snapshot failed"):
+                self.dispatch(self.rows[8:], go=True)
+        self.assertFalse((self.claim_dir / "HTPR-9.json").exists())
+        self.commands.assert_not_called()
+        self.assertFalse((self.loop / "last-dispatch.json").exists())
+
+    def test_speed_go_accepts_fresh_allowed_states(self):
+        self.add_speed_ticket()
+        for state in ("done", "idle", "waiting_valentin"):
+            with self.subTest(state=state):
+                self.ready_go([dict(self.rows[8], state=state)])
+                result = self.dispatch(self.rows[8:], go=True)[0]
+                self.assertEqual((result["action"], result["ticket"]), ("sent", "HTPR-9"))
+                sent = [c.args for c in self.commands.call_args_list if "send-keys" in c.args]
+                self.assertEqual(sent[-2:], [("tmux", "send-keys", "-t", "%9", "-l", "/ship HTPR-9"),
+                                             ("tmux", "send-keys", "-t", "%9", "Enter")])
+                (self.claim_dir / "HTPR-9.json").unlink()
+                self.now += 600
+
+    def test_first_send_failure_releases_claim_and_ticket_is_free_next_run(self):
+        self.add_speed_ticket()
+        for row, ticket in ((self.rows[0], "HTPR-1"), (self.rows[8], "HTPR-9")):
+            with self.subTest(runner=row["runner"]):
+                self.ready_go()
+                def fail_first(*args):
+                    if "send-keys" in args:
+                        raise RuntimeError("tmux rejected send")
+                    return "status save 123k"
+                self.commands.side_effect = fail_first
+                with self.assertRaisesRegex(RuntimeError, "tmux rejected send"):
+                    self.dispatch([row], go=True)
+                self.assertFalse((self.claim_dir / f"{ticket}.json").exists())
+                self.assertIn(ticket, m.free_tickets(self.boards, self.comments, self.claim_dir))
+                self.ready_go()
+                self.assertEqual(self.dispatch([row], go=True)[0]["ticket"], ticket)
+
+    def test_partial_delivery_keeps_claim_until_expiry_then_retries(self):
+        self.add_speed_ticket()
+        for row, ticket in ((self.rows[0], "HTPR-1"), (self.rows[8], "HTPR-9")):
+            for failed_send in (1, 2, 3, 4):
+                with self.subTest(runner=row["runner"], failed_send=failed_send):
+                    self.ready_go()
+                    attempts = []
+                    def fail_partial(*args):
+                        if "send-keys" in args:
+                            attempts.append(args)
+                            if len(attempts) == failed_send:
+                                if failed_send == 1:
+                                    raise subprocess.TimeoutExpired("tmux", 60)
+                                raise RuntimeError("partial send failed")
+                        return "status save 123k"
+                    self.commands.side_effect = fail_partial
+                    with self.assertRaises((RuntimeError, subprocess.TimeoutExpired)):
+                        self.dispatch([row], go=True)
+                    path = self.claim_dir / f"{ticket}.json"
+                    data = json.loads(path.read_text())
+                    self.assertEqual(data["failed_delivery_until"], self.now + m.FAILED_DELIVERY_TTL)
+                    self.assertEqual(data["owner"], m.OWNER)
+                    self.assertEqual(list(self.claim_dir.glob("*.tmp.*")), [])
+                    self.assertNotIn(ticket, m.free_tickets(self.boards, self.comments, self.claim_dir))
+                    self.now += m.FAILED_DELIVERY_TTL - 1
+                    self.dispatch([], go=True)
+                    self.assertTrue(path.exists())
+                    self.now += 1
+                    before = path.read_bytes()
+                    self.dispatch([], go=False)
+                    self.assertEqual(path.read_bytes(), before)
+                    self.ready_go()
+                    result = self.dispatch([row], go=True)[0]
+                    self.assertEqual((result["action"], result["ticket"]), ("sent", ticket))
+                    self.assertNotIn("failed_delivery_until", json.loads(path.read_text()))
+                    path.unlink()
+                    self.now += 600
+
+    def test_expired_delivery_cleanup_preserves_other_claims_and_board_claims(self):
+        own = self.file_claim("HTPR-1")
+        other = self.file_claim("HTPR-2", "Mini Boss CEO")
+        active = self.file_claim("HTPR-3")
+        for name, raw in (("broken", "not json"), ("empty", "[]")):
+            (self.claim_dir / f"{name}.json").write_text(raw)
+        for path in (own, other):
+            data = json.loads(path.read_text())
+            data["failed_delivery_until"] = self.now
+            path.write_text(json.dumps(data))
+        self.dispatch([], load=13, go=True)
+        self.assertTrue(own.exists())
+        self.comments["HTPR-1"] = [claim("RUNNER 1")]
+        self.ready_go()
+        self.assertEqual(self.dispatch(self.rows[:1], go=True)[0]["ticket"], "YPER4-1")
+        self.assertFalse(own.exists())
+        self.assertTrue(other.exists())
+        self.assertTrue(active.exists())
 
     def test_go_sends_exact_sequence_logs_and_remembers_cooldown(self):
         self.ready_go()

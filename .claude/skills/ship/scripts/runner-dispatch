@@ -22,6 +22,7 @@ COLUMNS = ((15, "Bugs"), (15, "Todo"), (4060, "Backlog"))
 ELIGIBLE = {f"RUNNER {n}" for n in range(1, 8)}
 SPEED = "SPEED RUNNER"
 SPEED_STATES = {"done", "idle", "waiting_valentin"}
+FAILED_DELIVERY_TTL = 3600
 RESEARCH_EVERY = 6 * 3600
 RESEARCH_PROMPT = ("/speed-analyst No free [SPEED] ticket is on the board. Read .claude/skills/speed-analyst/GOALS.md, "
                    "run the daily read, then either file and ship the biggest measured slow spot toward the next milestone "
@@ -176,37 +177,61 @@ def acquire_claim(ticket, row, claim_dir, now):
         temporary.unlink(missing_ok=True)
 
 
-def cleanup_done(boards, claim_dir):
+def cleanup_claims(boards, claim_dir, now):
     done = {task["ticketNumber"] for tasks in boards.values() for task in tasks if task["section"] == "Done"}
-    for ticket in done:
-        path = claim_dir / f"{ticket}.json"
+    for path in claim_dir.glob("*.json"):
         try:
             data = json.loads(path.read_text())
         except (FileNotFoundError, ValueError):
             continue
-        if data.get("owner") == OWNER:
+        if not isinstance(data, dict):
+            continue
+        expires = data.get("failed_delivery_until")
+        if data.get("owner") == OWNER and (path.stem in done or
+                (type(expires) in (int, float) and expires <= now)):
             path.unlink()
+            print(f"runner-dispatch: released claim {path.stem}", file=sys.stderr)
 
 
-def send(pane, text):
-    command("tmux", "send-keys", "-t", pane, "-l", "/clear")
-    command("tmux", "send-keys", "-t", pane, "Enter")
-    time.sleep(3)
-    command("tmux", "send-keys", "-t", pane, "-l", text)
-    time.sleep(1)
-    command("tmux", "send-keys", "-t", pane, "Enter")
+def send(pane, text, claim_path=None):
+    started = False
+    try:
+        command("tmux", "send-keys", "-t", pane, "-l", "/clear")
+        started = True
+        command("tmux", "send-keys", "-t", pane, "Enter")
+        time.sleep(3)
+        command("tmux", "send-keys", "-t", pane, "-l", text)
+        time.sleep(1)
+        command("tmux", "send-keys", "-t", pane, "Enter")
+    except Exception as error:
+        if claim_path is not None:
+            if not started and isinstance(error, (RuntimeError, OSError)):
+                claim_path.unlink()
+                print(f"runner-dispatch: delivery not started, released {claim_path.stem}", file=sys.stderr)
+            else:
+                data = json.loads(claim_path.read_text())
+                data["failed_delivery_until"] = time.time() + FAILED_DELIVERY_TTL
+                temporary = claim_path.with_name(f"{claim_path.name}.tmp.{os.getpid()}")
+                try:
+                    temporary.write_text(json.dumps(data) + "\n")
+                    os.replace(temporary, claim_path)
+                finally:
+                    temporary.unlink(missing_ok=True)
+                print(f"runner-dispatch: delivery uncertain, retained {claim_path.stem} "
+                      f"until {data['failed_delivery_until']}", file=sys.stderr)
+        raise
 
 
 def dispatch(rows, boards, comments, load, now, *, go=False, claim_dir=CLAIMS, loop=LOOP, state=STATE):
     held = held_tickets(boards, comments)
     last = read_last(loop)
     tasks = {task["ticketNumber"]: task for board in boards.values() for task in board}
+    if go and load <= 12:
+        cleanup_claims(boards, claim_dir, now)
     all_free = free_tickets(boards, comments, claim_dir)
     speed_free = [t for t in all_free if is_speed(tasks[t])]
     free = [t for t in all_free if t not in speed_free]
     output = []
-    if go and load <= 12:
-        cleanup_done(boards, claim_dir)
     for row in rows:
         runner, pane = row["runner"], row["pane"]
         holding = held.get(runner.casefold(), [])
@@ -218,19 +243,32 @@ def dispatch(rows, boards, comments, load, now, *, go=False, claim_dir=CLAIMS, l
                 continue
             if speed_free:
                 ticket = speed_free.pop(0)
-                if go:
-                    if not acquire_claim(ticket, row, claim_dir, now):
-                        continue
-                    last[pane] = now
-                    send(pane, f"/ship {ticket}")
-                    result["action"] = "sent"
-                result["ticket"] = ticket
             elif now - last.get("speed-research", 0) >= RESEARCH_EVERY:
-                if go:
-                    last[pane] = last["speed-research"] = now
-                    send(pane, RESEARCH_PROMPT)
-                    result["action"] = "sent"
-                result["ticket"] = "research"
+                ticket = "research"
+            else:
+                continue
+            if go:
+                claim_path = claim_dir / f"{ticket}.json" if ticket != "research" else None
+                if claim_path is not None and not acquire_claim(ticket, row, claim_dir, now):
+                    continue
+                try:
+                    fresh = [r for r in snapshots() if r["pane"] == pane and r["runner"] == runner]
+                    if len(fresh) != 1 or fresh[0]["state"] not in SPEED_STATES or os.getloadavg()[0] > 12:
+                        if claim_path is not None:
+                            claim_path.unlink()
+                        if len(fresh) == 1:
+                            result["state"] = fresh[0]["state"]
+                        continue
+                except Exception:
+                    if claim_path is not None:
+                        claim_path.unlink()
+                    raise
+                send(pane, RESEARCH_PROMPT if ticket == "research" else f"/ship {ticket}", claim_path)
+                last[pane] = now
+                if ticket == "research":
+                    last["speed-research"] = now
+                result["action"] = "sent"
+            result["ticket"] = ticket
             if go and result["action"] == "sent":
                 loop.mkdir(parents=True, exist_ok=True)
                 (loop / "last-dispatch.json").write_text(json.dumps(last) + "\n")
@@ -263,6 +301,7 @@ def dispatch(rows, boards, comments, load, now, *, go=False, claim_dir=CLAIMS, l
                     (claim_dir / f"{ticket}.json").unlink()
                     raise
                 at = time.time()
+                send(pane, f"/ship {ticket}", claim_dir / f"{ticket}.json")
                 last[pane] = at
                 loop.mkdir(parents=True, exist_ok=True)
                 temporary = loop / f"last-dispatch.json.tmp.{os.getpid()}"
@@ -274,12 +313,6 @@ def dispatch(rows, boards, comments, load, now, *, go=False, claim_dir=CLAIMS, l
                     stream.write(json.dumps({"at": datetime.fromtimestamp(at, timezone.utc).isoformat(),
                                              "runner": runner, "pane": pane, "ticket": ticket,
                                              "before": before, "owner": OWNER}) + "\n")
-                command("tmux", "send-keys", "-t", pane, "-l", "/clear")
-                command("tmux", "send-keys", "-t", pane, "Enter")
-                time.sleep(3)
-                command("tmux", "send-keys", "-t", pane, "-l", f"/ship {ticket}")
-                time.sleep(1)
-                command("tmux", "send-keys", "-t", pane, "Enter")
                 result["action"] = "sent"
             result["ticket"] = ticket
             break
