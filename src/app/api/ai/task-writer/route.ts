@@ -13,7 +13,7 @@ import {
   SSE_HEADERS,
 } from "@/app/api/ai/_lib/editorAi";
 import { getAiRequestUser } from "@/app/api/ai/_lib/requestUser";
-import { extractTaskWriterProperties, hasUsableTaskWriterDraft, TASK_WRITER_EMPTY_DRAFT_MESSAGE } from "@/app/api/ai/_lib/taskWriterProperties";
+import { normalizeTaskWriterLabels, validateTaskWriterLabelIds, extractTaskWriterProperties, hasUsableTaskWriterDraft, TASK_WRITER_EMPTY_DRAFT_MESSAGE } from "@/app/api/ai/_lib/taskWriterProperties";
 import {
   AiFeatureDisabledError,
   AutoDescriptionSuggestionsDisabledError,
@@ -70,9 +70,12 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const { selected, instructions, messages, allowedImgSrcs, usageTaskId, splitTasks, validateDraft, dueDateContext, ticketTypeEnabled, customFieldDefinitions, tasksSchema } =
+    const { selected, instructions, messages, allowedImgSrcs, usageTaskId, splitTasks, validateDraft, dueDateContext, ticketTypeEnabled, customFieldDefinitions, tasksSchema, boardLabelIds } =
       await prepareTaskWriterRun(body, userId);
-    const typeHeaders: Record<string, string> = ticketTypeEnabled ? { [TICKET_TYPE_HEADER]: "enabled" } : {};
+    const typeHeaders: Record<string, string> = {
+      ...(ticketTypeEnabled ? { [TICKET_TYPE_HEADER]: "enabled" } : {}),
+      ...(boardLabelIds ? { "X-Task-Writer-Labels": "enabled" } : {}),
+    };
     if (splitTasks) {
       configureAiModelUsage(selected.model, {
         userId, teamId: selected.teamId, projectId: body.projectId,
@@ -86,16 +89,16 @@ export async function POST(request: NextRequest) {
       const fieldTools = customFieldDefinitions?.length ? await import("@/lib/ai/taskWriterCustomFields") : null;
       const { tasks } = tasksSchema.parse({ tasks: result.output.tasks.slice(0, 10) });
       return NextResponse.json({ tasks: tasks.map(({ dueDate: modelDueDate, ...draft }) => {
-        const { customFields: modelCustomFields, ...task } = draft as typeof draft & { customFields?: unknown };
+        const { customFields: modelCustomFields, labelIds: modelLabelIds, ...task } = draft as typeof draft & { customFields?: unknown; labelIds?: unknown };
         const customFields = customFieldDefinitions?.length
           ? fieldTools!.validateTaskWriterCustomFields(customFieldDefinitions, modelCustomFields) : [];
-        const fieldValues = customFields.length ? { customFields } : {};
+        const fieldValues = { ...(customFields.length ? { customFields } : {}), ...(boardLabelIds ? { labelIds: validateTaskWriterLabelIds(modelLabelIds, boardLabelIds) } : {}) };
         const filtered = allowedImgSrcs ? filterOneImagePass(task.description, allowedImgSrcs).emit : task.description;
         const description = ticketTypeEnabled ? normalizeTaskWriterTicketType(filtered) : filtered;
         if (!dueDateContext) return { ...task, description, ...fieldValues };
         const dueDate = validateTaskWriterDueDate(modelDueDate, dueDateContext.today);
         return { ...task, description, ...fieldValues, ...(dueDate ? { dueDate } : {}) };
-      }) }, dueDateContext || ticketTypeEnabled
+      }) }, dueDateContext || ticketTypeEnabled || boardLabelIds
         ? { headers: { ...(dueDateContext ? { "X-Task-Writer-Due-Date": "enabled" } : {}), ...typeHeaders } }
         : undefined);
     }
@@ -111,8 +114,8 @@ export async function POST(request: NextRequest) {
 
         let held = "";
         const enqueueText = (text: string) => {
-          if (validateDraft || dueDateContext || ticketTypeEnabled) draft += text;
-          if (!text || dueDateContext) return;
+          if (validateDraft || dueDateContext || ticketTypeEnabled || boardLabelIds) draft += text;
+          if (!text || dueDateContext || boardLabelIds) return;
           if (!ticketTypeEnabled) {
             controller.enqueue(encoder.encode(text));
             return;
@@ -190,8 +193,9 @@ export async function POST(request: NextRequest) {
             enqueueError("error", TASK_WRITER_EMPTY_DRAFT_MESSAGE, "empty-task-writer-draft");
             return;
           }
-          if (dueDateContext) {
-            const dated = applyTaskWriterDueDate(draft, dueDateContext).html;
+          if (dueDateContext || boardLabelIds) {
+            const labeled = boardLabelIds ? normalizeTaskWriterLabels(draft, boardLabelIds) : draft;
+            const dated = dueDateContext ? applyTaskWriterDueDate(labeled, dueDateContext).html : labeled;
             controller.enqueue(encoder.encode(ticketTypeEnabled ? normalizeTaskWriterTicketType(dated) : dated));
           } else if (ticketTypeEnabled && held) {
             controller.enqueue(encoder.encode(normalizeTaskWriterTicketType(held)));
@@ -217,7 +221,7 @@ export async function POST(request: NextRequest) {
       },
     });
 
-    const headers = dueDateContext || ticketTypeEnabled
+    const headers = dueDateContext || ticketTypeEnabled || boardLabelIds
       ? { ...SSE_HEADERS, ...(dueDateContext ? { "X-Task-Writer-Due-Date": "enabled" } : {}), ...typeHeaders }
       : SSE_HEADERS;
     return new Response(stream, { headers });

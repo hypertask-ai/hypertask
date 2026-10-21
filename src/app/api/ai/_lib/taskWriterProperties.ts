@@ -14,6 +14,7 @@ export type TaskWriterProperties = {
   description: string;
   priority?: number;
   estimate?: number;
+  labelIds?: string[];
 };
 
 export const TASK_WRITER_EMPTY_DRAFT_MESSAGE = "Could not write this task, try again";
@@ -61,9 +62,23 @@ const ESTIMATE_INDEXES = new Set(
   EstimateConstants.map((entry) => entry.estimate_index)
 );
 
+export function validateTaskWriterLabelIds(value: unknown, boardLabelIds: string[]): string[] {
+  const allowed = new Set(boardLabelIds);
+  return Array.isArray(value) ? [...new Set(value.filter((id): id is string => typeof id === "string" && allowed.has(id)))] : [];
+}
+
+export function normalizeTaskWriterLabels(html: string, boardLabelIds: string[]): string {
+  const root = parse(html);
+  for (const marker of root.querySelectorAll("#ai-generated-task-tags")) {
+    const ids = validateTaskWriterLabelIds(marker.textContent.split(",").map((id) => id.trim()), boardLabelIds);
+    marker.set_content(ids.join(","));
+  }
+  return root.toString();
+}
+
 export function extractTaskWriterProperties(
   html: string,
-  options: { fallbackTitle?: string | null } = {}
+  options: { fallbackTitle?: string | null; boardLabelIds?: string[] } = {}
 ): TaskWriterProperties {
   const parsed = parse(repairDuplicateNote(html, options.fallbackTitle));
   const root = parsed.querySelector("body") ?? parsed;
@@ -83,7 +98,9 @@ export function extractTaskWriterProperties(
     "ai-generated-task-estimate",
     ESTIMATE_INDEXES
   );
-  root.querySelector("#ai-generated-task-tags")?.remove();
+  const tags = root.querySelector("#ai-generated-task-tags");
+  const labelIds = options.boardLabelIds ? validateTaskWriterLabelIds(tags?.textContent.split(",").map((id) => id.trim()), options.boardLabelIds) : undefined;
+  tags?.remove();
   root.querySelector("#ai-generated-task-status")?.remove();
   root.querySelector("#ai-generated-task-properties")?.remove();
 
@@ -103,5 +120,5 @@ export function extractTaskWriterProperties(
     else if (text) break;
   }
 
-  return { title, description: root.innerHTML.trim(), priority, estimate };
+  return { title, description: root.innerHTML.trim(), priority, estimate, ...(labelIds ? { labelIds } : {}) };
 }
