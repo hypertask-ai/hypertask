@@ -1,0 +1,11 @@
+import prisma from '@/lib/prisma';
+import { validateMcpRouteAuth } from '@/lib/mcp/routeWrapper';
+import { getProjectWhere, getProjectListingWhere, projectContentAccessWhere, taskWriteAccessWhere, savedViewBoardAccessWhere } from '@/utils/controllers/projects/getAllIncludes';
+export async function GET(request: Request) {
+  const ctx = await validateMcpRouteAuth(request);
+  await prisma.task.findMany({ where: { project: getProjectWhere(ctx.user.id, ctx.agentId) } });
+  await prisma.project.findMany({ where: { AND: [getProjectListingWhere(ctx.user.id, ctx.agentId)] } });
+  await prisma.task.findFirst({ where: { project: projectContentAccessWhere(ctx.user.id, ctx.agentId) } });
+  await prisma.task.update({ where: { id: 1, project: taskWriteAccessWhere(ctx.user.id, ctx.agentId) }, data: {} });
+  return prisma.task.count({ where: { project: savedViewBoardAccessWhere(ctx.user.id, ctx.agentId) } });
+}
