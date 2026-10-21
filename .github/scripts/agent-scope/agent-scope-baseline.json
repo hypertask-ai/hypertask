@@ -126,33 +126,6 @@
     "expires": "2027-01-19"
   },
   {
-    "path": "src/app/api/reports/status-update/route.ts",
-    "call": "prisma.task.findMany({ where: { projectId, deletedAt: null, status: { not: \"Deleted\" }, OR: [ { status: \"Normal\" }, { updatedAt: { gte: priorStart } }, { sectionChangedAt: { gte: priorStart } }, ], }, select: { id: true, createdAt: true, updatedAt: true, sectionChangedAt: true, lastCommentAt: true, section: true, status: true, assignees: { select: { userId: true } }, }, })",
-    "occurrence": 1,
-    "approvedIn": "https://app.hypertask.ai/detail/project-15/7496",
-    "ticket": "https://app.hypertask.ai/detail/project-15/7508",
-    "owner": "HT Product Lead",
-    "expires": "2027-01-19"
-  },
-  {
-    "path": "src/app/api/reports/status-update/route.ts",
-    "call": "prisma.task.findMany({ where: { projectId, deletedAt: null, status: { not: \"Deleted\" }, sectionChangedAt: { gte: windowStart }, }, select: { ticketNumber: true, title: true, section: true, status: true }, orderBy: { sectionChangedAt: \"desc\" }, take: 60, })",
-    "occurrence": 1,
-    "approvedIn": "https://app.hypertask.ai/detail/project-15/7496",
-    "ticket": "https://app.hypertask.ai/detail/project-15/7508",
-    "owner": "HT Product Lead",
-    "expires": "2027-01-19"
-  },
-  {
-    "path": "src/app/api/reports/velocity/route.ts",
-    "call": "prisma.task.findMany({ where: { projectId, deletedAt: null, status: { not: \"Deleted\" }, OR: [ { status: \"Normal\" }, { updatedAt: { gte: priorStart } }, { sectionChangedAt: { gte: priorStart } }, ], }, select: { id: true, createdAt: true, updatedAt: true, sectionChangedAt: true, lastCommentAt: true, section: true, status: true, assignees: { select: { userId: true }, }, }, })",
-    "occurrence": 1,
-    "approvedIn": "https://app.hypertask.ai/detail/project-15/7496",
-    "ticket": "https://app.hypertask.ai/detail/project-15/7508",
-    "owner": "HT Product Lead",
-    "expires": "2027-01-19"
-  },
-  {
     "path": "src/app/api/settings/ai-usage/route.ts",
     "call": "prisma.project.findMany({ where: { id: { in: usageProjectIds } }, select: { id: true, title: true, name: true }, })",
     "occurrence": 1,
