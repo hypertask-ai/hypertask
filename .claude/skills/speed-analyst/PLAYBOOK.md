@@ -273,6 +273,22 @@ https://app.hypertask.ai/detail/project-15/7406, flag `htpr-7406-desktop-server-
 
 **What found the next limiter.** A per-frame probe (card in the DOM, card in view, paint entries) on three returning desktop loads: the HTML with all 28 cards arrives at 0.3 to 0.6 s, the fixture card is in the DOM at 0.36 to 0.63 s, but first-contentful-paint is 835 to 1007 ms. Script evaluation runs before the first paint. Filed as https://app.hypertask.ai/detail/project-15/7507.
 
+### 2026-10-21 afternoon: the returning board's first paint waits on fonts, not app code; one eager import moved off startup (HTPR-7507)
+
+**Premise corrected.** HTPR-7507 was filed on the 2026-10-21 morning probe ("script evaluation runs before the first paint"). Live Chrome traces (3, plus 2 with font categories, QA 2343, board 6859, desktop, cold cache with the saved preference) say otherwise: every `EvaluateScript` starts after the first paint lifecycle. The HTML arrives at about 0.28 s; the first layout then takes 90 to 360 ms, almost all `FontCache::GetFontPlatformData` (97 to 191 calls), `FontDataManager::onMatchFamilyStyle` and `WebSandboxSupportLinux::GetWebFontRenderStyleForStrike` (Linux-sandbox font IPC; much cheaper on Mac and Windows). After the paint, startup JavaScript (React hydration plus module init, 200 to 330 ms tasks) holds `ready()`'s rAF loop, so the harness reads ready 300 to 400 ms after the first paint.
+
+**Field check.** `npm run performance:field` needs a key with `query:read` (the read-only and alert keys lack it). Desktop LCP p75 2555 ms over 7 days (52 samples, not split by route): slow first paint is real for users, not only the VPS.
+
+**Fix shipped (PR 1709, merge ea7aba37a, [REFACTOR], no flag).** `TaskTagsRow` (every board card) imported `formatElapsed` and `useTimerNow` through `TaskDetail/TaskInfoColumn/TaskTime.tsx`, a re-export, which pulled `TaskTime` and `TimeLogModal` into board startup (85 to 175 ms inclusive in live CPU profiles at load 22 to 39, part of it shared Intl setup). It now imports both from their own modules.
+
+**Proof method worth reusing.** Playwright JS coverage stopped one frame after the fixture card is visible: 87 to 88 scripts covered, 0 contain the time log or time panel code (3 of 3), against the pre-fix profile where they ran during startup. Coverage stopped 4 s later shows the same modules running from the ticket-view warm-up (`CachedTaskDetailNavigation` `warmTaskDetail`, idle callback): a second load path that hides an import fix if you only check "is it loaded".
+
+**Traps.** A static import graph overstates startup: TypeScript elides type-only imports even without `import type` (`src/store/index.ts` -> `RemindMeComponent` is a type import only). Deterministic module ids do not match between a local build and a live build of a different commit (live 84287 is `TimeLogModal`; locally it is a comment component), so map a live profile only with a build of the exact live commit. `curl` on chunks needs the `?dpl=` query; live `.map` files answer 403.
+
+**Not measured.** Host load was 20 to 77 from 11:50 to 13:30 UTC. The 11:23 UTC harness run failed on phone ticket-warm readiness; its desktop first-visit board, untouched by the change, read 3.9 to 7.2 s against 2.1 to 2.7 s that morning, a 2x load inflation. Eight failed runs in two days. Measure the returning board only below load about 13.
+
+**Next probe.** The first layout's font work: count the distinct family, weight and size strikes on the first screen (191 platform lookups) and test on a quiet host whether `local()` fallback faces and the monospace stack cost the first paint on Linux only.
+
 ## Milliseconds saved scoreboard
 
 Only matched end-to-end before/after evidence earns saved milliseconds; `unproven` is not zero. Do not sum different cohorts or claim forecasts as savings.
