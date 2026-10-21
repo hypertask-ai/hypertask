@@ -265,6 +265,14 @@ https://app.hypertask.ai/detail/project-15/7406, flag `htpr-7406-desktop-server-
 
 **Lesson.** Before filing or researching, list the runner's own In Progress tickets and open PRs: a cleared session can strand a finished, reviewed win behind a docs conflict. Rebase conflicts in this file are additive; keep both entries.
 
+**Live result (HTPR-7406, merge ee3c49c3c).** Two complete harness runs: desktop board-returning **1079 ms** (p90 1252, 944 to 1252, load 5.5) and **1098 ms** (p90 1221, 900 to 1221, load 12.8), server board 5 of 5 both times, against 2030 ms that morning: about 47% faster, still about 90 ms over the 1 s milestone 1 target. Phone unchanged (board-returning 1926 and 1979 ms).
+
+**False alarm cleared with a matched A/B.** Both runs read desktop first-visit board +22 to 33% and page navigation +48 to 87%. A live A/B with `/api/flags` rewritten per sample (the client flag decides whether the preference is saved; first visit has no server board, so the client flag isolates the change), desktop first-visit board, 5 interleaved pairs, load 6 to 14: off 2157 ms, on 2004 ms. The slow page-navigation samples all wait on `getAllMinimal` (0.4 to 2.0 s), the same spike seen before the deploy (03:58 run, 1.5 s). Both readings sit inside the week's range (board 1926 to 3214, page navigation 503 to 889 ms).
+
+**Measurement trap.** The first run started about 5 minutes after the deploy: its first desktop document took 1210 ms to its first byte against about 130 ms later (cold instance). Wait at least 10 minutes, as `speed-check/measure.md` says; the timer start ignores it.
+
+**What found the next limiter.** A per-frame probe (card in the DOM, card in view, paint entries) on three returning desktop loads: the HTML with all 28 cards arrives at 0.3 to 0.6 s, the fixture card is in the DOM at 0.36 to 0.63 s, but first-contentful-paint is 835 to 1007 ms. Script evaluation runs before the first paint. Filed as https://app.hypertask.ai/detail/project-15/7507.
+
 ## Milliseconds saved scoreboard
 
 Only matched end-to-end before/after evidence earns saved milliseconds; `unproven` is not zero. Do not sum different cohorts or claim forecasts as savings.
@@ -287,7 +295,7 @@ Only matched end-to-end before/after evidence earns saved milliseconds; `unprove
 | https://app.hypertask.ai/detail/project-15/7395 | Phone first tap after fresh board, live ABAB N=5, load 14 to 30 | 10057 ms (OFF) → 9814 ms (ON) | 0, within noise | reverted in PR 1677; board +10.6% with flag on |
 | https://app.hypertask.ai/detail/project-15/7501 | Search hard load, local PR build on/off N=5, load 12 to 20 | desktop 401 → 364 ms, phone 1177 → 1307 ms | unproven, local cannot show round trips | flag `htpr-7501-search-server-start`; live before 2924 ms phone, 1192 ms desktop (daily N=5); live after pending |
 | https://app.hypertask.ai/detail/project-15/7497 | First ticket request on a board-warm server, local production build, interleaved N=5+5, load 5 | 1352 ms → 654 ms | about 700 ms local | lazy sanitizer; live first-byte rate after deploy decides |
-| https://app.hypertask.ai/detail/project-15/7406 | Desktop board-returning, first card, local premerge ABAB N=6, load 8 to 11 | 912 ms (OFF) → 255 ms (ON); chat composer 1364 → 1854 ms | about 650 ms local to the board, about -490 ms to the chat | flag `htpr-7406-desktop-server-board`; live 5-sample run after deploy decides |
+| https://app.hypertask.ai/detail/project-15/7406 | Desktop board-returning, first card, local premerge ABAB N=6, load 8 to 11 | 912 ms (OFF) → 255 ms (ON); chat composer 1364 → 1854 ms | about 650 ms local to the board, about -490 ms to the chat | flag `htpr-7406-desktop-server-board`; live: 2030 → 1079 / 1098 ms (two complete runs, N=5 each, 5 of 5 served), first visit unchanged by flag A/B (off 2157, on 2004 ms) |
 
 Confirmed, comparable saved-ms total in this seed: **not established**. Future entries must link private before/after summaries, commits, N, median/p90/range and QA proof. This deliberately avoids inventing savings absent from the history.
 
