@@ -72,32 +72,13 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          error_file=$(mktemp "$RUNNER_TEMP/required-checks.XXXXXX")
-          trap 'rm -f "$error_file"' EXIT
-          github_read() {
-            local attempt output status
-            for attempt in 1 2 3 4 5 6; do
-              if output=$(gh api "$@" 2>"$error_file"); then
-                printf '%s\n' "$output"
-                return 0
-              else
-                status=$?
-              fi
-              cat "$error_file" >&2
-              if [ "$attempt" -eq 6 ] || ! grep -Eiq 'rate limit|HTTP 429' "$error_file"; then
-                return "$status"
-              fi
-              echo "::warning::GitHub API rate-limited; retrying required-check settings in 60 seconds ($attempt/6)." >&2
-              sleep 60
-            done
-          }
-          default_branch=$(github_read "repos/$REPO" --jq .default_branch)
+          default_branch=$(gh api "repos/$REPO" --jq .default_branch)
           [ "$default_branch" = production ] || {
             echo "::error::Repository default branch is $default_branch, expected production."
             exit 1
           }
 
-          ruleset_id=$(github_read "repos/$REPO/rulesets?per_page=100" --jq '
+          ruleset_id=$(gh api "repos/$REPO/rulesets?per_page=100" --jq '
             [.[] | select(.name == "production-required-checks" and .enforcement == "active")] |
             if length == 1 then .[0].id else empty end
           ')
@@ -106,7 +87,7 @@ jobs:
             exit 1
           }
 
-          ruleset_json=$(github_read "repos/$REPO/rulesets/$ruleset_id")
+          ruleset_json=$(gh api "repos/$REPO/rulesets/$ruleset_id")
           jq -e '
             .target == "branch" and
             (.conditions.ref_name.include | index("refs/heads/production") != null) and

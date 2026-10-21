@@ -53,8 +53,6 @@ Use a trusted identity with dispatch access to the private reviewer repository. 
 - Vercel previews are optional. Merge to `production` deploys production; a failed deploy build keeps the previous deployment live.
 - Do not add another runner host, VPN, required preview, or paid hosted fallback without a recorded decision.
 
-CI Tests verifies live required-check settings before checkout. Read-only API calls retry explicit rate-limit failures up to six attempts, 60 seconds apart (at most five minutes per read); non-rate-limit errors and exhausted retries still fail the job. The default branch, active ruleset and exact required-context checks are never skipped or weakened.
-
 ## Live QA and wireframe capture
 
 [YPER4-544](https://app.hypertask.ai/detail/project-4060/544) adds three non-required workflows on `ubuntu-latest`; no new host, preview deploy, application build or merge gate:
