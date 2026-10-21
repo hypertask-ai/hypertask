@@ -14,7 +14,7 @@ import { createHash } from 'node:crypto'
 import path from 'node:path'
 import type { Box } from './lib/layout-lock'
 import {
-  MATRIX_CHANGE_MESSAGE, MATRIX_STATES, MATRIX_WIDTHS, composerFollowsComments, describeCombo, matrixDifferences,
+  MATRIX_CHANGE_MESSAGE, MATRIX_STATES, MATRIX_WIDTHS, composerFollowsThread, describeCombo, matrixDifferences,
   stateKey, validateMatrixFlagChanges, matrixBaselineLayout, type Anchor, type Anchors, type MatrixFlagChange, type MatrixState,
 } from './lib/layout-lock-matrix'
 import { FEATURE_FLAG_KEYS } from '../../src/lib/flags'
@@ -131,9 +131,18 @@ const describeMissing = (page: Page, targets: Record<string, Target>, actual: Re
     const all = page.locator(targets[name].selector)
     return `${name}: ${await all.count()} found, ${await all.locator('visible=true').count()} visible`
   }))
-const lastCommentBottom = (page: Page) => page.evaluate(() => {
-  const comments = [...document.querySelectorAll('[data-testid="ticket-comment"]')]
-  return comments.length ? Math.round(Math.max(...comments.map(comment => comment.getBoundingClientRect().bottom))) : null
+const threadEdges = (page: Page) => page.evaluate(() => {
+  const rendered = (selector: string) => [...document.querySelectorAll(selector)]
+    .filter(element => getComputedStyle(element).visibility !== 'hidden')
+    .map(element => element.getBoundingClientRect()).filter(box => box.width > 0 && box.height > 0)
+  const comments = rendered('[data-testid="ticket-comment"]')
+  const composers = rendered('[data-testid="comment-composer"]')
+  const descriptions = rendered('[data-testid="ticket-description"]')
+  return {
+    composerTop: composers.length === 1 ? composers[0].top : null,
+    lastCommentBottom: comments.length ? Math.max(...comments.map(box => box.bottom)) : null,
+    descriptionBottom: descriptions.length === 1 ? descriptions[0].bottom : null,
+  }
 })
 
 // Two animation frames, then the same boxes twice in a row: the layout has stopped changing.
@@ -260,7 +269,23 @@ for (const definition of selected) {
         if (width < 768) actual['ai-sidebar'] = null
         measurements.push({ label, actual })
         if (!stable) found.push(`${label}: layout never settled within 8s`)
+        if (definition.thread) {
+          // A fixed phone composer must be checked at the thread's end, not over offscreen comments.
+          if (width < 768) {
+            await page.getByTestId('ticket-thread').evaluate(thread => {
+              for (let parent = thread.parentElement; parent; parent = parent.parentElement) {
+                if (/auto|scroll/.test(getComputedStyle(parent).overflowY)) parent.scrollTop = parent.scrollHeight
+              }
+              document.scrollingElement?.scrollTo(0, document.scrollingElement.scrollHeight)
+            })
+            await page.evaluate(() => new Promise<void>(resolve => requestAnimationFrame(() => requestAnimationFrame(() => resolve()))))
+          }
+          const edges = await threadEdges(page)
+          found.push(...composerFollowsThread(label, edges.composerTop, edges.lastCommentBottom, edges.descriptionBottom))
+          if (width < 768) await scrollToBaselinePosition(page, matrixBaselineLayout(definition.name, width, state))
+        }
         if (update) {
+          expect(found, 'baseline updates must preserve the composer below the thread').toEqual([])
           recorded[stateKey(state)] ??= {}
           recorded[stateKey(state)][String(width)] = Object.fromEntries(Object.entries(actual).filter(([, box]) => box).map(([name, box]) => [name, anchorOf(definition.targets[name], width, state, box!)]))
           await page.screenshot({ path: path.join(outDir, 'before', `${slug(label)}.png`) })
@@ -269,8 +294,6 @@ for (const definition of selected) {
         if (!expected) found.push(`${label}: no baseline recorded. ${MATRIX_CHANGE_MESSAGE}`)
         else {
           found.push(...matrixDifferences(label, definition.name, expected, actual, fixture.allFlagsOn ? { entries: flagChanges, registry: FEATURE_FLAG_KEYS, flags } : undefined))
-          const composer = actual['comment-box']
-          if (definition.thread && width >= 768 && composer && expected['comment-box']) found.push(...composerFollowsComments(label, composer.y, await lastCommentBottom(page)))
         }
         if (found.length) {
           const missing = await describeMissing(page, definition.targets, Object.fromEntries(Object.entries(actual).filter(([name]) => width >= 768 || name !== 'ai-sidebar')))
