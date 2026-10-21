@@ -28,7 +28,8 @@ import ThemeListener from "@/lib/contexts/ThemeListener";
 import { MobileBlockingProvider } from "@/lib/contexts/mobileBlockingContext";
 import { TourProvider } from "@/lib/contexts/TourContext";
 import { shouldDehydratePersistedQuery } from "@/utils/queryPersistence";
-import { FeatureFlagProvider } from "@/hooks/useFlag";
+import { FeatureFlagProvider, featureFlagsQueryKey } from "@/hooks/useFlag";
+import { HTPR_7555_PERSIST_SIZE_ONCE_FLAG } from "@/lib/flags/definitions/htpr-7555-persist-size-once";
 import {
   createQueryPersister,
   type DisposableQueryPersister,
@@ -174,7 +175,12 @@ export default function Provider({
           buster: REACT_QUERY_PERSIST_BUSTER,
           maxAge: 1000 * 60 * 30,
           dehydrateOptions: {
-            shouldDehydrateQuery: shouldDehydratePersistedQuery,
+            shouldDehydrateQuery: (query) => shouldDehydratePersistedQuery(
+              query,
+              queryBoundary.client.getQueryData<Record<string, boolean>>(
+                featureFlagsQueryKey(authenticatedUserId ?? 0),
+              )?.[HTPR_7555_PERSIST_SIZE_ONCE_FLAG] === true,
+            ),
           },
         }}
       >
