@@ -336,10 +336,11 @@ test("auto-merge waits for app smoke and runs when it completes", async () => {
   assert.equal(settingsStep.env.GH_TOKEN, "${{ github.token }}");
   assert.equal(settingsStep.env.REPO, "${{ github.repository }}");
   assert.match(steps[0].uses, /^actions\/checkout@/);
-  assert.equal(steps[0].with["fetch-depth"], 0);
+  assert.equal(steps[0].with["fetch-depth"], 1);
   assert.ok(settingsIndex > 0);
   assert.match(settingsScript, /GITHUB_EVENT_NAME !== "pull_request"/);
-  assert.match(settingsScript, /"--name-only", "--no-renames", "-z", `\$\{base\}\.\.\.\$\{head\}`/);
+  assert.match(settingsScript, /"fetch", "--no-tags", "--depth=1", "origin", base, head/);
+  assert.match(settingsScript, /"diff", "--name-only", "--no-renames", "-z", base, head/);
   assert.match(settingsScript, /file\.startsWith\("\.github\/"\)/);
   assert.match(settingsScript, /file === "docs\/ci-policy\.yml"/);
   assert.match(settingsScript, /file === "docs\/ci\.md"/);

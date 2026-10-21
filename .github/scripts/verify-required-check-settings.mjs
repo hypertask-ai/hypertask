@@ -12,7 +12,11 @@ function needsVerification() {
     const base = pr.base.sha;
     const head = pr.head.sha;
     if (![base, head].every((sha) => /^[0-9a-f]{40}$/.test(sha))) throw new Error();
-    const diff = spawnSync("git", ["diff", "--name-only", "--no-renames", "-z", `${base}...${head}`, "--"], {
+    const fetch = spawnSync("git", ["fetch", "--no-tags", "--depth=1", "origin", base, head], {
+      encoding: "utf8", timeout: 30_000, maxBuffer: 8 * 1024 * 1024,
+    });
+    if (fetch.status !== 0) throw new Error();
+    const diff = spawnSync("git", ["diff", "--name-only", "--no-renames", "-z", base, head], {
       encoding: "utf8", timeout: 30_000, maxBuffer: 8 * 1024 * 1024,
     });
     if (diff.status !== 0 || !diff.stdout.endsWith("\0")) throw new Error();
