@@ -555,7 +555,7 @@ check_cleaned() {
 check_premerge() {
   [ "$REPO" = hypertask-ai/hypertask ] || return 0
   python3 - "$REPO" "$1" "$EVID" "${2:-}" <<'PY'
-import json, os, re, subprocess, sys, time, urllib.parse, urllib.request
+import json, os, re, resource, stat, subprocess, sys, tempfile, time, urllib.parse, urllib.request, zipfile
 from pathlib import Path
 
 repo, pr, evidence, expected_sha = sys.argv[1:]
@@ -666,15 +666,65 @@ try:
     if expected_sha and sha != expected_sha:
         raise ValueError('PR head changed while checking evidence; retry')
     status = gh('api', f'repos/{repo}/commits/{sha}/status?premerge={freshness}')
-    if status.get('sha') == sha and any(
-            item.get('context') == 'premerge-evidence' and item.get('state') == 'success'
-            and item.get('creator', {}).get('login') == 'github-actions[bot]'
-            and item.get('creator', {}).get('type') == 'Bot'
-            and item.get('description') == 'GitHub premerge click'
-            and re.fullmatch(r'https://github\.com/' + re.escape(repo) + r'/actions/runs/[1-9][0-9]*', item.get('target_url') or '')
-            for item in status.get('statuses', [])):
-        print('github premerge ok')
-        sys.exit(0)
+    workflow_fields = None
+    if status.get('sha') == sha:
+        for item in status.get('statuses', []):
+            match = re.fullmatch(r'https://github\.com/' + re.escape(repo) + r'/actions/runs/([1-9][0-9]*)', item.get('target_url') or '')
+            if not (item.get('context') == 'premerge-evidence' and item.get('state') == 'success'
+                    and item.get('creator', {}).get('login') == 'github-actions[bot]'
+                    and item.get('creator', {}).get('type') == 'Bot'
+                    and item.get('description') == 'GitHub premerge click' and match):
+                continue
+            try:
+                run_id = match[1]
+                run = gh('api', f'repos/{repo}/actions/runs/{run_id}')
+                if not (str(run['id']) == run_id and run['repository']['full_name'] == repo
+                        and run['path'] == '.github/workflows/premerge-click.yml'
+                        and run['event'] == 'workflow_dispatch' and run['head_branch'] == 'production'
+                        and run['display_title'] == f'premerge click PR #{pr}'):
+                    continue
+                # The dispatcher runs on production, not the PR SHA, and may still be posting its status.
+                jobs = gh('api', f'repos/{repo}/actions/runs/{run_id}/jobs?per_page=100', '--paginate')
+                clicks = [job for page in jobs for job in page['jobs'] if job['name'] == 'click']
+                if len(clicks) != 1 or clicks[0].get('conclusion') != 'success':
+                    continue
+                pages = gh('api', f'repos/{repo}/actions/runs/{run_id}/artifacts?per_page=100', '--paginate')
+                artifacts = [a for page in pages for a in page['artifacts'] if a['name'] == f'premerge-{sha}']
+                limit = 64 * 1024 * 1024
+                if len(artifacts) != 1 or artifacts[0]['expired'] or not 0 < artifacts[0]['size_in_bytes'] <= limit:
+                    continue
+                artifact_id = artifacts[0]['id']
+                if not isinstance(artifact_id, int) or artifact_id <= 0:
+                    continue
+                # Bound the authenticated download on disk as well as the declared artifact size.
+                with tempfile.TemporaryFile() as archive:
+                    result = subprocess.run(['gh', 'api', f'repos/{repo}/actions/artifacts/{artifact_id}/zip'],
+                                            stdout=archive, stderr=subprocess.DEVNULL, timeout=30,
+                                            preexec_fn=lambda: resource.setrlimit(resource.RLIMIT_FSIZE, (limit, limit)))
+                    if result.returncode or archive.tell() > limit:
+                        continue
+                    archive.seek(0)
+                    with zipfile.ZipFile(archive) as bundle:
+                        entries = bundle.infolist()
+                        if len(entries) > 100 or len({e.filename for e in entries}) != len(entries):
+                            continue
+                        if any(e.file_size > 128 * 1024 * 1024 or e.compress_size > limit
+                               or stat.S_ISLNK(e.external_attr >> 16) for e in entries):
+                            continue
+                        record = bundle.getinfo('premerge.md')
+                        if not 0 < record.file_size <= 262144:
+                            continue
+                        fields = {key: value.strip() for key, value in re.findall(r'^(\w+):([^\n]*)', bundle.read(record).decode(), re.M)}
+                        recording = fields.get('Recording', '')
+                        if not recording or recording.startswith('/') or '..' in recording.split('/'):
+                            continue
+                        video = bundle.getinfo(recording)
+                        if video.is_dir() or not video.file_size or fields.get('Commit') != sha:
+                            continue
+                        workflow_fields = fields
+                        break
+            except Exception:
+                continue
     prepare(pr, sha, base)
     ticket = row['title'].split()[0]
     pages = gh('api', f'repos/{repo}/pulls/{pr}/files?per_page=100&premerge={freshness}', '--paginate')
@@ -829,9 +879,9 @@ try:
     missing_live = touched - modes.keys() - added
     if missing_live:
         raise ValueError(message + ' (live state unknown for ' + ', '.join(sorted(missing_live)) + ')')
-    if not record.is_file():
+    if workflow_fields is None and not record.is_file():
         raise ValueError(message)
-    fields = {key: value.strip() for key, value in re.findall(r'^(\w+):([^\n]*)', record.read_text(), re.M)}
+    fields = workflow_fields if workflow_fields is not None else {key: value.strip() for key, value in re.findall(r'^(\w+):([^\n]*)', record.read_text(), re.M)}
     if fields.get('Commit') != sha:
         raise ValueError(f'{record} must name PR head sha {sha}; repeat the click-through after each push')
     for field in ('Account', 'Flags', 'Board', 'Build'):
@@ -864,33 +914,20 @@ try:
     if not re.match(r'PASS\s+\S', fields.get('Click', '')) or not fields.get('Recording'):
         raise ValueError(message + ' (missing passing click or recording)')
     video = (folder / fields['Recording']).resolve()
-    if not video.is_relative_to(folder.resolve()) or not video.is_file() or not video.stat().st_size:
+    if workflow_fields is None and (not video.is_relative_to(folder.resolve()) or not video.is_file() or not video.stat().st_size):
         raise ValueError(message + ' (recording must be non-empty and inside the ticket evidence folder)')
     if deleted_definitions and all(modes.get(key) == 'EVERYONE' for key in deleted_definitions):
         print('removed-everyone: ' + ','.join(sorted(deleted_definitions)))
-    print('premerge ok')
+    print('github premerge ok' if workflow_fields is not None else 'premerge ok')
 except Exception as error:
     print('FAIL: ' + (str(error) if isinstance(error, ValueError) else 'cannot verify released-flag premerge evidence; retry before merging'))
     sys.exit(1)
 PY
 }
 
-github_premerge_status() {
-  local status
-  status=$(gh api "repos/$REPO/commits/$1/status?premerge=$(date +%s%N)" 2>/dev/null) || return 2
-  jq -e --arg sha "$1" --arg prefix "https://github.com/$REPO/actions/runs/" '
-    .sha == $sha and any(.statuses[];
-      .context == "premerge-evidence" and .state == "success" and
-      .creator.login == "github-actions[bot]" and .creator.type == "Bot" and
-      .description == "GitHub premerge click" and
-      ((.target_url // "") | startswith($prefix)) and
-      ((.target_url // "" | ltrimstr($prefix)) | test("^[1-9][0-9]*$")))
-  ' <<<"$status" >/dev/null
-}
-
 check_premerge_status() (
   [ "$REPO" = hypertask-ai/hypertask ] || return 0
-  local sha current out lock removed state=failure description rc=1
+  local sha current out lock removed state=failure context=premerge-evidence-local description rc=1
   local state_dir=${PREMERGE_STATUS_STATE:-$HOME/.local/state/premerge-evidence}
   mkdir -p "$state_dir" && exec {lock}>"$state_dir/publish.lock" \
     && flock -x -w 600 "$lock" || fail "cannot lock premerge publisher; no success posted"
@@ -902,7 +939,7 @@ check_premerge_status() (
     case "$out" in
       'no released flag touched') state=success; description=$out; rc=0 ;;
       'premerge ok'|*$'\npremerge ok') state=success; description='click record ok'; rc=0 ;;
-      'github premerge ok') state=success; description='GitHub premerge click'; rc=0 ;;
+      'github premerge ok'|*$'\ngithub premerge ok') state=success; description='GitHub premerge click'; rc=0 ;;
       *) description='cannot verify premerge result; retry' ;;
     esac
   else
@@ -923,15 +960,9 @@ check_premerge_status() (
       description+=" | $removed"
     fi
   fi
-  if github_premerge_status "$sha"; then
-    [ "$current" = "$sha" ] || fail "cannot confirm unchanged PR head; retry"
-    echo 'premerge-evidence: success (GitHub premerge click)'
-    return 0
-  else
-    [ "$?" = 1 ] || fail "cannot read GitHub premerge status; no status posted"
-  fi
-  [ "$description" != 'GitHub premerge click' ] || fail "GitHub premerge status changed; retry"
-  gh api "repos/$REPO/statuses/$sha" --method POST -f context=premerge-evidence \
+  # A non-success VPS verdict must never overwrite a workflow success, even across hosts.
+  [ "$state" != success ] || context=premerge-evidence
+  gh api "repos/$REPO/statuses/$sha" --method POST -f "context=$context" \
     -f "state=$state" -f "description=${description:0:140}" >/dev/null 2>&1 \
     || fail "cannot post premerge-evidence for PR $1; retry before merging"
   echo "premerge-evidence: $state ($description)"

@@ -41,7 +41,7 @@ args = sys.argv[1:]
 with (root / 'calls').open('a') as log:
     log.write(json.dumps(args) + '\\n')
 if args[:2] == ['api', 'repos/hypertask-ai/hypertask/statuses/' + 'a' * 40]:
-    assert args[2:] == ['--method', 'POST', '-f', 'context=premerge-evidence', '-f', 'state=failure',
+    assert args[2:] == ['--method', 'POST', '-f', 'context=premerge-evidence-local', '-f', 'state=failure',
                         '-f', 'description=cannot load current premerge rules; retry']
     if (root / 'post-error-once').exists():
         (root / 'post-error-once').unlink()
@@ -235,8 +235,9 @@ print('premerge-evidence: success (fixture)')
         (self.root / 'fetch-error').touch()
         self.assertEqual(self.sweep().returncode, 1)
         self.assertEqual(self.publications(), [])
-        self.assertFalse((self.root / 'statuses').exists())
-        self.assertEqual(sum('/status?' in call[1] for call in self.gh_calls() if call[0] == 'api'), 2)
+        self.assertEqual((self.root / 'statuses').read_text().splitlines(), ['failure', 'failure'])
+        self.assertFalse(any('/status?' in call[1] for call in self.gh_calls() if call[0] == 'api'))
+        self.assertTrue(all('context=premerge-evidence-local' in call for call in self.gh_calls() if '--method' in call))
 
     def test_rules_fetch_failure_does_not_trust_stale_or_other_creator_status(self):
         (self.root / 'fetch-error').touch()
@@ -269,7 +270,131 @@ print('premerge-evidence: success (fixture)')
         (self.root / 'status-error').touch()
         (self.root / 'fetch-error').touch()
         self.assertEqual(self.sweep().returncode, 1)
-        self.assertFalse((self.root / 'statuses').exists())
+        self.assertEqual((self.root / 'statuses').read_text().splitlines(), ['failure', 'failure'])
+        self.assertTrue(all('context=premerge-evidence-local' in call for call in self.gh_calls() if '--method' in call))
+
+    def test_workflow_success_between_get_and_post_cannot_be_overwritten(self):
+        events = []
+        required = {'state': 'failure'}
+        def rows(state):
+            events.append('GET snapshot: no workflow success')
+            required['state'] = 'success'
+            events.append('workflow success')
+            return [{'number': 999, 'headRefOid': 'a' * 40}]
+        def post(args, **kwargs):
+            self.assertIn('context=premerge-evidence-local', args)
+            events.append('VPS advisory failure')
+            return subprocess.CompletedProcess(args, 0)
+        self.state.mkdir()
+        with patch.object(poster, 'open_prs', side_effect=rows), patch.object(poster.subprocess, 'run', side_effect=post):
+            poster.revoke_passing(self.state)
+        self.assertEqual(events, ['GET snapshot: no workflow success', 'workflow success', 'VPS advisory failure'])
+        self.assertEqual(required['state'], 'success')
+
+    def status_verdict(self, verdict, valid=True, required='absent', interleave=False, pending=False, future=False):
+        source = (HERE / 'ship-check').read_text()
+        publisher = source.split('check_premerge_status() (', 1)[1].split('\n)\n', 1)[0]
+        if pending:
+            publisher = publisher.replace('state=failure', 'state=pending')
+        if future:
+            publisher = publisher.replace("'no released flag touched')", "'no screen files changed'|'flag removal on Everyone')")
+        (self.root / 'required-status').write_text(required)
+        (self.bin / 'gh').write_text('''#!/usr/bin/env python3
+import json, os, pathlib, sys
+root = pathlib.Path(os.environ['POSTER_TEST_ROOT'])
+args = sys.argv[1:]
+if args[:2] == ['pr', 'view']:
+    print('a' * 40)
+elif args[:1] == ['api'] and '/commits/' in args[1]:
+    snapshot = (root / 'required-status').read_text()
+    with (root / 'events').open('a') as log:
+        log.write('VPS GET: ' + snapshot + '\\n')
+    if os.environ['STATUS_INTERLEAVE'] == '1':
+        (root / 'required-status').write_text('success')
+        with (root / 'events').open('a') as log:
+            log.write('workflow POST: success\\n')
+    print(json.dumps({'state': snapshot}))
+elif args[:1] == ['api'] and '/statuses/' in args[1]:
+    assert args[1] == 'repos/hypertask-ai/hypertask/statuses/' + 'a' * 40, args
+    assert args[2:4] == ['--method', 'POST'], args
+    fields = dict(args[i + 1].split('=', 1) for i, arg in enumerate(args) if arg == '-f')
+    with (root / 'status-posts').open('a') as log:
+        log.write(json.dumps(fields) + '\\n')
+    with (root / 'events').open('a') as log:
+        log.write('VPS POST: ' + fields['context'] + ' ' + fields['state'] + '\\n')
+    if fields['context'] == 'premerge-evidence':
+        (root / 'required-status').write_text(fields['state'])
+else:
+    raise AssertionError(args)
+''')
+        script = '''REPO=hypertask-ai/hypertask
+fail() { printf 'FAIL: %s\\n' "$*"; exit 1; }
+check_premerge() {
+  gh api "repos/$REPO/commits/$2/status?premerge=fixture" >/dev/null || return 1
+  printf '%s\\n' "$STATUS_VERDICT"
+  return "$STATUS_VALIDATION_RC"
+}
+check_premerge_status() (''' + publisher + '\n)\ncheck_premerge_status 999\n'
+        env = dict(self.env, STATUS_VERDICT=verdict, STATUS_VALIDATION_RC='0' if valid else '1',
+                   STATUS_INTERLEAVE='1' if interleave else '0')
+        result = subprocess.run(['bash', '-c', script], env=env, capture_output=True, text=True, timeout=10)
+        posts_file = self.root / 'status-posts'
+        posts = [json.loads(line) for line in posts_file.read_text().splitlines()] if posts_file.exists() else []
+        for post in posts:
+            self.assertIn(post['context'], ('premerge-evidence', 'premerge-evidence-local'))
+            if post['context'] == 'premerge-evidence':
+                self.assertEqual(post['state'], 'success', post)
+        return result, posts, (self.root / 'required-status').read_text()
+
+    def test_no_flag_pr_publishes_required_success(self):
+        result, posts, required = self.status_verdict('no released flag touched')
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        self.assertEqual([(p['context'], p['state']) for p in posts], [('premerge-evidence', 'success')])
+        self.assertEqual(required, 'success')
+
+    def test_valid_local_verdict_publishes_required_success(self):
+        result, posts, required = self.status_verdict('premerge ok', required='failure')
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        self.assertEqual([(p['context'], p['state']) for p in posts], [('premerge-evidence', 'success')])
+        self.assertEqual(required, 'success')
+
+    def test_workflow_success_stays_success(self):
+        result, posts, required = self.status_verdict('github premerge ok', required='success')
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        self.assertEqual(len(posts), 1)
+        self.assertEqual(required, 'success')
+
+    def test_missing_evidence_leaves_required_context_absent(self):
+        result, posts, required = self.status_verdict('FAIL: record a browser click-through', valid=False)
+        self.assertEqual(result.returncode, 1, result.stdout + result.stderr)
+        self.assertEqual([(p['context'], p['state']) for p in posts], [('premerge-evidence-local', 'failure')])
+        self.assertEqual(required, 'absent')
+
+    def test_workflow_success_between_vps_get_and_post_cannot_end_in_failure(self):
+        result, posts, required = self.status_verdict('FAIL: record a browser click-through', valid=False,
+                                                     required='pending', interleave=True)
+        self.assertEqual(result.returncode, 1, result.stdout + result.stderr)
+        self.assertEqual([(p['context'], p['state']) for p in posts], [('premerge-evidence-local', 'failure')])
+        self.assertEqual((self.root / 'events').read_text().splitlines(), [
+            'VPS GET: pending', 'workflow POST: success', 'VPS POST: premerge-evidence-local failure'])
+        self.assertEqual(required, 'success')
+
+    def test_pending_verdict_never_posts_required_context(self):
+        # Exercise the routing default even if a future validator introduces pending.
+        result, posts, required = self.status_verdict('unknown verdict', pending=True, required='success')
+        self.assertEqual(result.returncode, 1, result.stdout + result.stderr)
+        self.assertEqual([(p['context'], p['state']) for p in posts], [('premerge-evidence-local', 'pending')])
+        self.assertEqual(required, 'success')
+
+    def test_additional_success_verdicts_still_publish_required_success(self):
+        # Model YPER4-549 adding success cases without coupling routing to their wording.
+        for verdict in ('no screen files changed', 'flag removal on Everyone'):
+            with self.subTest(verdict=verdict):
+                (self.root / 'status-posts').unlink(missing_ok=True)
+                result, posts, required = self.status_verdict(verdict, future=True)
+                self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+                self.assertEqual([(p['context'], p['state']) for p in posts], [('premerge-evidence', 'success')])
+                self.assertEqual(required, 'success')
 
     def test_revocation_covers_a_head_missing_from_the_cache(self):
         self.assertEqual(self.sweep().returncode, 0)

@@ -292,12 +292,19 @@ with zipfile.ZipFile(root / 'evidence.zip', 'w', compression=zipfile.ZIP_DEFLATE
   } finally { rmSync(folder, { recursive: true, force: true }); }
 });
 
-test('status contract matches the read-only reconciler source exactly', () => {
+test('every VPS status POST site restricts required writes to success and revocations to local', () => {
   const reconciler = readFileSync(path.join(root, '.claude/skills/ship/scripts/premerge-evidence.py'), 'utf8');
-  assert.ok(reconciler.includes("item.get('context') == 'premerge-evidence'"));
-  assert.ok(reconciler.includes("item.get('description') == 'GitHub premerge click'"));
-  assert.ok(reconciler.includes("item.get('creator', {}).get('login') == 'github-actions[bot]'"));
-  assert.ok(reconciler.includes("item.get('creator', {}).get('type') == 'Bot'"));
+  const checker = readFileSync(path.join(root, '.claude/skills/ship/scripts/ship-check'), 'utf8');
+  const shellPosts = checker.match(/^.*\bPOST\b.*$/gm) || [];
+  const pythonPosts = reconciler.match(/^.*\bPOST\b.*$/gm) || [];
+  assert.equal(shellPosts.length, 1, 'audit every shell POST site');
+  assert.equal(pythonPosts.length, 1, 'audit every Python POST site');
+  assert.match(shellPosts[0], /gh api .*--method POST -f "context=\$context"/);
+  assert.match(checker, /local .*state=failure context=premerge-evidence-local/);
+  assert.match(checker, /\[ "\$state" != success \] \|\| context=premerge-evidence\n  gh api/);
+  assert.match(pythonPosts[0], /subprocess\.run\(\['gh', 'api', .*'--method', 'POST',/);
+  assert.match(reconciler, /'--method', 'POST',\n\s+'-f', 'context=premerge-evidence-local', '-f', 'state=failure'/);
+  assert.doesNotMatch(reconciler, /['"]context=premerge-evidence['"]/);
 });
 
 test('the actual downloader accepts only one bounded current-run artifact via authenticated client', async () => {

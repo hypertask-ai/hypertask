@@ -198,24 +198,12 @@ def revoke_passing(state):
         (state / 'cache.json').unlink(missing_ok=True)
         failed = []
         for row in open_prs(state):
-            # Every open head: a direct ship-check may have published success outside the sweep.
+            # Every open head: a direct ship-check may have published advisory success outside the sweep.
             try:
                 sha = row['headRefOid']
                 STATS['calls'] += 1
-                result = subprocess.run(['gh', 'api', f'repos/{REPO}/commits/{sha}/status?premerge={time.time_ns()}'],
-                                        capture_output=True, text=True, timeout=60, check=True)
-                status = json.loads(result.stdout)
-                if status.get('sha') == sha and any(
-                        item.get('context') == 'premerge-evidence' and item.get('state') == 'success'
-                        and item.get('creator', {}).get('login') == 'github-actions[bot]'
-                        and item.get('creator', {}).get('type') == 'Bot'
-                        and item.get('description') == 'GitHub premerge click'
-                        and re.fullmatch(r'https://github\.com/' + re.escape(REPO) + r'/actions/runs/[1-9][0-9]*', item.get('target_url') or '')
-                        for item in status.get('statuses', [])):
-                    continue
-                STATS['calls'] += 1
                 subprocess.run(['gh', 'api', f'repos/{REPO}/statuses/{row["headRefOid"]}', '--method', 'POST',
-                                '-f', 'context=premerge-evidence', '-f', 'state=failure',
+                                '-f', 'context=premerge-evidence-local', '-f', 'state=failure',
                                 '-f', 'description=cannot load current premerge rules; retry'],
                                capture_output=True, timeout=60, check=True)
             except Exception:
@@ -243,7 +231,7 @@ def sweep():
             fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
         except BlockingIOError:
             return
-        # Never execute a stale checker. Without current rules, passing statuses turn red so merges fail closed.
+        # Never execute a stale checker. Revoke only the advisory context; required VPS writes are success-only.
         try:
             checker_bytes = fetch_checker(state)
         except Exception:

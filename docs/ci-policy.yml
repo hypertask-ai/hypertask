@@ -55,16 +55,20 @@ required_checks:
 
 premerge_evidence:
   context: premerge-evidence
-  publisher: .claude/skills/ship/scripts/ship-check
+  publisher: .github/workflows/premerge-click.yml
+  advisory_publisher: .claude/skills/ship/scripts/ship-check
+  advisory_context: premerge-evidence-local
   command: premerge-status
   discovery: systemd-user-timer
   timer: premerge-evidence.timer
   discovery_interval_seconds: 120
   cache_refresh_seconds: 600
-  evidence: "~/.local/state/vcc-evidence/<TICKET>/premerge.md and its recording"
+  evidence: "premerge-<head sha> workflow artifact, validated via authenticated Actions API"
+  local_guard_evidence: "~/.local/state/vcc-evidence/<TICKET>/premerge.md and its recording"
   exact_head_commit_required: true
   open_production_pull_request_required: true
-  publisher_serialization: shared_user_lock_validation_through_status_post
+  publisher_serialization: workflow_only_required_context_vps_advisory_context
+  live_flag_revalidation: local_guard_and_advisory_status_only
   fail_closed_on: [github_read_error, live_flag_uncertainty, missing_or_failed_click, stale_commit, missing_recording, status_write_error]
   production_enforcement: production-required-checks-ruleset
   activation_prerequisite: statuses_seeded_on_all_open_production_pull_requests

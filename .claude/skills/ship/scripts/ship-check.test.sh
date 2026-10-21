@@ -798,6 +798,37 @@ if '/commits/' in url and '/status?' in url:
             status = {'sha': sha, 'statuses': []}
     print(json.dumps(status))
     sys.exit(0)
+if '/actions/runs/' in url:
+    variant = os.environ.get('FLAG_RUN_VARIANT', 'matching')
+    run_id = url.split('/actions/runs/')[1].split('/')[0].split('?')[0]
+    if variant == 'nonexistent' or run_id != '123':
+        sys.exit(1)
+    if '/jobs?' in url:
+        print(json.dumps({'jobs': [{'name': 'click', 'conclusion': 'failure' if variant == 'failed-click' else 'success'}]}))
+    elif '/artifacts?' in url:
+        artifact = {'id': 456, 'name': 'premerge-' + ('c' * 40 if variant == 'wrong-artifact-head' else 'a' * 40), 'expired': variant == 'expired', 'size_in_bytes': 67108865 if variant == 'oversized' else 1024}
+        print(json.dumps({'artifacts': [artifact, artifact] if variant == 'duplicate' else [artifact]}))
+    else:
+        print(json.dumps({'id': 123, 'repository': {'full_name': 'other/repo' if variant == 'foreign-repo' else 'hypertask-ai/hypertask'},
+            'path': '.github/workflows/ci-tests.yml' if variant == 'wrong-workflow' else '.github/workflows/premerge-click.yml',
+            'event': 'push' if variant == 'wrong-event' else 'workflow_dispatch',
+            'head_branch': 'branch' if variant == 'wrong-ref' else 'production',
+            'display_title': 'premerge click PR #998' if variant == 'wrong-pr' else 'premerge click PR #999',
+            'head_sha': 'b' * 40, 'status': 'in_progress'}))
+    sys.exit(0)
+if '/actions/artifacts/' in url:
+    import io, zipfile
+    record = os.environ.get('FLAG_ARTIFACT_RECORD', 'Commit: ' + 'a' * 40 + '\nAccount: 985 QA\nFlags: htpr-1-released=EVERYONE\nBoard: http://127.0.0.1:3100/project?id=1\nBuild: http://127.0.0.1:3100\nClick: PASS fixture\nRecording: video/click.webm\n')
+    variant = os.environ.get('FLAG_RUN_VARIANT', 'matching')
+    if variant == 'wrong-record-head': record = record.replace('a' * 40, 'c' * 40)
+    if variant == 'large-record': record += 'x' * 262144
+    buffer = io.BytesIO()
+    with zipfile.ZipFile(buffer, 'w', compression=zipfile.ZIP_DEFLATED) as archive:
+        archive.writestr('premerge.md', record)
+        recording = next(line.split(':', 1)[1].strip() for line in record.splitlines() if line.startswith('Recording:'))
+        archive.writestr(recording, b'fixture recording')
+    sys.stdout.buffer.write(buffer.getvalue())
+    sys.exit(0)
 if '/files?' in url:
     file = {'filename': os.environ.get('FLAG_FILE', 'src/card.tsx'), 'status': os.environ.get('FLAG_STATUS', 'modified')}
     if file['status'] == 'renamed':
@@ -1159,7 +1190,8 @@ else:
     call = posts[0]
     assert call[1] == 'repos/hypertask-ai/hypertask/statuses/' + 'a' * 40, call
     assert '--method' in call and call[call.index('--method') + 1] == 'POST'
-    assert 'context=premerge-evidence' in call and 'state=' + sys.argv[2] in call, call
+    context = 'premerge-evidence' if sys.argv[2] == 'success' else 'premerge-evidence-local'
+    assert 'context=' + context in call and 'state=' + sys.argv[2] in call, call
     description = next(c.removeprefix('description=') for c in call if c.startswith('description='))
     assert len(description) <= 140 and sys.argv[3] in description, call
     if 'removed-everyone' in sys.argv[3]:
@@ -1185,7 +1217,7 @@ PY
 }
 API_BUDGET 7 'premerge-status: no contents API call, at most 7 API calls per PR'
 S 1 failure 'cannot read the PR diff' FLAG_FETCH_ERROR=1 SHIP_GIT_CACHE="$E/git-cache-cold"
-S 1 none '' FLAG_GH_ERROR=1
+S 1 failure 'cannot read the PR diff' FLAG_GH_ERROR=1
 S 1 failure 'cannot read the PR diff' FLAG_SOURCE_ERROR=1
 S 1 failure 'complete PR diff' FLAG_COUNT=2
 S 1 failure 'unchanged PR head' FLAG_HEAD_RACE=1
@@ -1206,9 +1238,9 @@ API_BUDGET 8 'premerge-status with a released flag: no contents API call, at mos
 github_status='{"statuses":[{"context":"premerge-evidence","state":"success","creator":{"login":"github-actions[bot]","type":"Bot"},"description":"GitHub premerge click","target_url":"https://github.com/hypertask-ai/hypertask/actions/runs/123"}]}'
 mv "$premerge" "$E/local-premerge"
 F 0 '' FLAG_GITHUB_STATUS="$github_status"
-P 0 premerge 999 FLAG_GITHUB_STATUS="$github_status" FLAG_FETCH_ERROR=1 FLAG_SOURCE_ERROR=1 FLAG_HTTP_ERROR=1
+P 1 premerge 999 FLAG_GITHUB_STATUS="$github_status" FLAG_FETCH_ERROR=1 FLAG_SOURCE_ERROR=1 FLAG_HTTP_ERROR=1
 P 0 pr YPER4-999 FLAG_GITHUB_STATUS="$github_status"
-S 0 none '' FLAG_GITHUB_STATUS="$github_status"
+S 0 success 'GitHub premerge click' FLAG_GITHUB_STATUS="$github_status"
 for state in success failure; do
   guard_status=$(python3 -c 'import json,sys; s=json.loads(sys.argv[1]); s["statuses"][0]["state"]=sys.argv[2]; print(json.dumps(s))' "$github_status" "$state")
   out=$(echo '{"tool_input":{"command":"gh pr merge 999"}}' | env PATH="$E/flag-bin:$PATH" PYTHONPATH="$E/flag-http" FLAG_SOURCE="$E/flag-source" FLAG_GITHUB_STATUS="$guard_status" AGENT_TOKEN=fixture HYPERTASKS_JWT_TOKEN= ./ship-check guard 2>&1); got=$?
@@ -1216,9 +1248,9 @@ for state in success failure; do
     ok "merge guard: GitHub $state returns $got"
   else bad "merge guard: GitHub $state returns $got $out"; fi
 done
-S 0 none '' FLAG_GITHUB_STATUS="$github_status" FLAG_STATUS_LATE=1
-S 1 none '' FLAG_GITHUB_STATUS="$github_status" FLAG_HEAD_RACE=1
-S 1 none '' FLAG_STATUS_ERROR=1
+S 1 failure 'record a browser click-through' FLAG_GITHUB_STATUS="$github_status" FLAG_STATUS_LATE=1
+S 1 failure 'unchanged PR head' FLAG_GITHUB_STATUS="$github_status" FLAG_HEAD_RACE=1
+S 1 failure 'cannot read the PR diff' FLAG_STATUS_ERROR=1
 for change in \
   '"sha":"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",' \
   'creator' 'type' 'state' 'context' 'description' 'target_url' 'url-suffix'; do
@@ -1249,6 +1281,20 @@ PYTEST
   P 1 pr YPER4-999 FLAG_GITHUB_STATUS="$refused"
   S 1 failure 'record a browser click-through' FLAG_GITHUB_STATUS="$refused"
 done
+# Authenticated provenance, bounded artifact data and live modes apply to every acceptance path.
+for variant in wrong-workflow nonexistent failed-click wrong-artifact-head wrong-record-head foreign-repo wrong-event wrong-ref wrong-pr expired oversized duplicate large-record; do
+  F 2 'record a browser click-through' FLAG_GITHUB_STATUS="$github_status" FLAG_RUN_VARIANT="$variant"
+  P 1 premerge 999 FLAG_GITHUB_STATUS="$github_status" FLAG_RUN_VARIANT="$variant"
+  P 1 pr YPER4-999 FLAG_GITHUB_STATUS="$github_status" FLAG_RUN_VARIANT="$variant"
+done
+artifact_record=$(cat "$E/record")
+F 0 '' FLAG_GITHUB_STATUS="$github_status" FLAG_ARTIFACT_RECORD="$artifact_record"
+F 2 'live flag modes unavailable' FLAG_GITHUB_STATUS="$github_status" FLAG_HTTP_ERROR=1
+stale_flags=$(sed 's/=EVERYONE/=OFF/' "$E/record")
+F 2 'expected Flags: htpr-1-released=EVERYONE' FLAG_GITHUB_STATUS="$github_status" FLAG_ARTIFACT_RECORD="$stale_flags"
+P 1 premerge 999 FLAG_GITHUB_STATUS="$github_status" FLAG_ARTIFACT_RECORD="$stale_flags"
+P 1 pr YPER4-999 FLAG_GITHUB_STATUS="$github_status" FLAG_ARTIFACT_RECORD="$stale_flags"
+S 1 failure 'expected Flags: htpr-1-released=EVERYONE' FLAG_GITHUB_STATUS="$github_status" FLAG_ARTIFACT_RECORD="$stale_flags"
 mv "$E/local-premerge" "$premerge"
 S 0 success 'click record ok'
 # YPER4-281: deleting a definition exempts only that absent key from Flags, not the click.
@@ -1264,6 +1310,10 @@ printf 'const other = useFlag("htpr-2-other");\n' > "$E/flag-source/head"
 removal=(FLAG_REMOVED_DEFINITION=src/lib/flags/definitions/htpr-1-released.ts FLAG_COUNT=2 'FLAG_HTTP={"flags":[{"key":"htpr-1-released","mode":"EVERYONE"},{"key":"htpr-2-other","mode":"EVERYONE"}]}')
 sed 's/htpr-1-released=EVERYONE/htpr-2-other=EVERYONE/' "$E/record" > "$premerge"
 S 0 success 'click record ok | removed-everyone: htpr-1-released' "${removal[@]}"
+F 0 '' "${removal[@]}" FLAG_GITHUB_STATUS="$github_status" FLAG_ARTIFACT_RECORD="$(cat "$premerge")"
+mv "$premerge" "$E/removal-premerge"
+F 2 'expected Flags: htpr-2-other=EVERYONE' "${removal[@]}" FLAG_GITHUB_STATUS="$github_status" FLAG_ARTIFACT_RECORD="$(sed 's/=EVERYONE/=OFF/' "$E/removal-premerge")"
+mv "$E/removal-premerge" "$premerge"
 EXPECT_NO_REMOVED_EVERYONE=1 S 0 success 'click record ok' "${removal[@]}" 'FLAG_HTTP={"flags":[{"key":"htpr-1-released","mode":"OFF"},{"key":"htpr-2-other","mode":"EVERYONE"}]}'
 EXPECT_NO_REMOVED_EVERYONE=1 S 0 success 'click record ok' "${removal[@]}" AGENT_TOKEN= 'FLAG_PUBLIC={"flags":{"htpr-1-released":false,"htpr-2-other":true}}'
 S 0 success 'click record ok | removed-everyone: htpr-1-released' "${removal[@]}" AGENT_TOKEN= 'FLAG_PUBLIC={"flags":{"htpr-1-released":true,"htpr-2-other":true}}'
@@ -1327,7 +1377,7 @@ sed -i 's/Click: FAIL/Click: PASS/' "$premerge"
 P 0 pr YPER4-999 FLAG_LOG="$E/status-log"
 python3 - "$E/status-log" <<'PY' && ok 'pr gate posts status' || bad 'pr gate omitted status'
 import json, sys
-assert any('context=premerge-evidence' in json.loads(l) for l in open(sys.argv[1]))
+assert any('context=premerge-evidence-local' in json.loads(l) for l in open(sys.argv[1]))
 PY
 
 # The sweep uses one list call, skips unchanged heads and notices changed/deleted evidence.
@@ -1346,7 +1396,7 @@ PY
 W 0 1
 W 0 0
 sed -i 's/Click: PASS/Click: FAIL/' "$premerge"
-W 0 0 FLAG_GITHUB_STATUS="$github_status"
+W 0 1 FLAG_GITHUB_STATUS="$github_status"
 # Invalidate cached success so a missing GitHub status falls back to the failed local click.
 printf '\n' >> "$premerge"
 W 0 1
