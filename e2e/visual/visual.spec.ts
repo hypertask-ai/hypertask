@@ -49,8 +49,10 @@ async function taskDetail(page: Page) {
   await expect(page.getByTestId('comment-composer'), 'one desktop or phone composer').toHaveCount(1)
   await expect(page.getByTestId('comment-composer'), 'seeded ticket composer must be visible').toBeVisible()
   if (page.viewportSize()!.width === 1440) {
-    for (const comment of await comments.all()) {
-      if (await comment.locator('.comment-body').count() === 0) await comment.click({ timeout: 15_000 })
+    for (const [comment, text] of [[comments.first(), 'First layout lock comment'], [comments.last(), 'Last layout lock comment']] as const) {
+      if (await comment.locator('.comment-body').count() === 0) await comment.getByText(text, { exact: true }).click({ timeout: 15_000 })
+      if (await page.getByRole('dialog').count() > 0) await page.keyboard.press('Escape')
+      await expect(page.getByRole('dialog'), 'no profile card may cover the thread').toHaveCount(0)
     }
     await expect(page.locator('[data-testid="ticket-comment"] .comment-body')).toHaveCount(2)
   }
