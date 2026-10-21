@@ -6,7 +6,7 @@ export default {
   key: HTPR_7472_TASK_TEMPLATES_FLAG,
   kind: "feature",
   shippedOn: "2026-10-21",
-  defaultMode: "OWNER_AND_QA",
+  defaultMode: "EVERYONE",
   description: "Edit saved board task templates and write finished, board-informed ideas in one go.",
   releaseRisk: {
     risk: "small",

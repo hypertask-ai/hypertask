@@ -3,6 +3,7 @@ import { isFeatureEnabled } from "@/lib/flags";
 import { HTPR_7472_TASK_TEMPLATES_FLAG } from "@/lib/flags/keys";
 import prisma from "@/lib/prisma";
 import { getProjectWhere } from "@/utils/controllers/projects/getAllIncludes";
+import { sanitizeRichHtml } from "@/utils/helperFunctions/sanitizeRichHtml";
 import {
   findTaskTemplateTargetSection,
   taskTemplateSectionWhere,
@@ -11,6 +12,8 @@ import { NextRequest, NextResponse } from "next/server";
 
 
 const TEMPLATE_NAME_MAX = 200;
+const TEMPLATE_TITLE_MAX = 500;
+const TEMPLATE_DESCRIPTION_MAX = 100_000;
 
 async function accessibleProject(userId: number, projectId: number) {
   return prisma.project.findFirst({
@@ -145,12 +148,15 @@ export async function PATCH(request: NextRequest) {
       typeof body?.title !== "string" || typeof body?.descriptionHtml !== "string") {
     return NextResponse.json({ success: false, error: "templateId, name, title and descriptionHtml are required" }, { status: 400 });
   }
+  if (body.descriptionHtml.length > TEMPLATE_DESCRIPTION_MAX) {
+    return NextResponse.json({ success: false, error: `descriptionHtml cannot exceed ${TEMPLATE_DESCRIPTION_MAX} characters` }, { status: 400 });
+  }
   const updated = await prisma.taskTemplate.updateMany({
     where: { id: templateId, project: { ...getProjectWhere(session.userId) } },
     data: {
       name: body.name.trim().slice(0, TEMPLATE_NAME_MAX),
-      title: body.title,
-      descriptionHtml: body.descriptionHtml,
+      title: body.title.slice(0, TEMPLATE_TITLE_MAX),
+      descriptionHtml: sanitizeRichHtml(body.descriptionHtml),
     },
   });
   if (updated.count === 0) {

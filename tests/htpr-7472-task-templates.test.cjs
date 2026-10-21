@@ -139,6 +139,7 @@ function patchHarness({ userId = 1, enabled = true } = {}) {
     "@/lib/flags": { isFeatureEnabled: async (key, id) => { assert.equal(key, flag); assert.equal(id, userId); return enabled; } },
     "@/lib/flags/keys": keys, "next/server": { NextResponse: { json: Response.json } },
     "@/lib/taskTemplatePrefill": {},
+    "@/utils/helperFunctions/sanitizeRichHtml": load("src/utils/helperFunctions/sanitizeRichHtml.ts"),
     "@/utils/controllers/projects/getAllIncludes": { getProjectWhere: (id) => { accessCalls.push(id); return { OR: [{ ownerId: id }, { members: { some: { userId: id } } }] }; } },
     "@/lib/prisma": { default: { taskTemplate: {
       updateMany: async (args) => {
@@ -167,6 +168,35 @@ test("PATCH now refuses users without access to the template board and leaves it
   assert.equal((await h.patch()).status, 404);
   assert.deepEqual(h.accessCalls, [3]);
   assert.equal(h.stored(), original);
+});
+test("PATCH now strips script content and event-handler attributes before saving", async () => {
+  const h = patchHarness();
+  const descriptionHtml = '<script>alert("unsafe")</script><h2>Steps</h2><p onerror="alert(1)">Reproduce.</p><img src="https://example.com/image.png" onerror="alert(2)">';
+  assert.equal((await h.patch({ templateId: 7, name: "Bug", title: "Bug", descriptionHtml })).status, 200);
+  assert.equal(h.stored().descriptionHtml, '<h2>Steps</h2><p>Reproduce.</p><img src="https://example.com/image.png">');
+});
+test("PATCH still allows normal headings, paragraphs and lists unchanged", async () => {
+  const h = patchHarness();
+  const descriptionHtml = '<h2>Steps &amp; context</h2><p>Reproduce &lt;this&gt;.</p><ul><li>First step</li><li>Second step</li></ul>';
+  assert.equal((await h.patch({ templateId: 7, name: "Bug", title: "Bug", descriptionHtml })).status, 200);
+  assert.equal(h.stored().descriptionHtml, descriptionHtml);
+});
+test("PATCH caps over-long titles to the task creation limit without changing valid titles", async () => {
+  for (const title of ["T".repeat(500), "T".repeat(501), "T".repeat(2000)]) {
+    const h = patchHarness();
+    assert.equal((await h.patch({ templateId: 7, name: "Bug", title, descriptionHtml: "" })).status, 200);
+    assert.equal(h.stored().title, title.slice(0, 500));
+  }
+});
+test("PATCH refuses oversized descriptions without writing and still allows the size boundary", async () => {
+  const h = patchHarness();
+  const original = h.stored();
+  assert.equal((await h.patch({ templateId: 7, name: "Bug", title: "Bug", descriptionHtml: "D".repeat(100_001) })).status, 400);
+  assert.deepEqual(h.updates, []);
+  assert.equal(h.stored(), original);
+  const descriptionHtml = `<p>${"D".repeat(100_000 - 7)}</p>`;
+  assert.equal((await h.patch({ templateId: 7, name: "Bug", title: "Bug", descriptionHtml })).status, 200);
+  assert.equal(h.stored().descriptionHtml, descriptionHtml);
 });
 test("PATCH flag off, missing session and malformed updates never write", async () => {
   for (const options of [{ enabled: false }, { userId: null }]) {
@@ -277,11 +307,11 @@ test("placeholder matching uses the explicit list, not partial words or HTML att
   assert.equal(taskWriterPlaceholderFeedback('<p title="placeholder">A household keeps its placeholders documented.</p>'), null);
   for (const text of ["to be written", "TBD", "to be defined", "placeholder", "lorem ipsum"]) assert.match(taskWriterPlaceholderFeedback(`<p>${text.toUpperCase()}</p>`), new RegExp(text, "i"));
 });
-test("ticket flag is registered through its definition, with requested Owner + QA rollout", () => {
+test("ticket flag is registered through its definition, with Everyone rollout", () => {
   const definition = load("src/lib/flags/definitions/htpr-7472-task-templates.ts").default;
   assert.equal(definition.key, flag);
   assert.equal(definition.kind, "feature");
-  assert.equal(definition.defaultMode, "OWNER_AND_QA");
+  assert.equal(definition.defaultMode, "EVERYONE");
   assert.equal(definition.releaseRisk.risk, "small");
   assert.equal(keys.HTPR_7472_TASK_TEMPLATES_FLAG, flag);
 });
