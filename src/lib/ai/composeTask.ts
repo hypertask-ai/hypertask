@@ -96,7 +96,7 @@ export async function createComposedTask({
   let description = rawDescription;
   let writerFailed = false;
   let writerFailureReason: string | undefined;
-  let drafts: ({ title: string; description: string; writerDueDate?: string; customFields?: TaskWriterCustomFieldValue[]; ticketType?: TaskWriterTicketType } & Partial<ReturnType<typeof writerProperties>>)[] = [];
+  let drafts: ({ title: string; description: string; writerDueDate?: string; writerLabelIds?: string[]; customFields?: TaskWriterCustomFieldValue[]; ticketType?: TaskWriterTicketType } & Partial<ReturnType<typeof writerProperties>>)[] = [];
   const writerTimeZone = Intl.DateTimeFormat().resolvedOptions().timeZone;
   try {
     onProgress?.("Reading past tickets");
@@ -147,6 +147,7 @@ export async function createComposedTask({
       html = await response.text();
     }
     const typedWriter = response.headers?.get(TICKET_TYPE_HEADER) === "enabled";
+    const writerLabels = response.headers?.get("X-Task-Writer-Labels") === "enabled";
     if (/^event:\s*(?:error|done)\b/m.test(html)) {
       if (explainWriterFailure) writerFailureReason = describeTaskWriterStreamFailure(html) ?? undefined;
       throw new Error("Task writer interrupted");
@@ -154,7 +155,7 @@ export async function createComposedTask({
     if (response.headers?.get("content-type")?.includes("application/json")) {
       const output = JSON.parse(html);
       if (!Array.isArray(output.tasks) || !output.tasks.length) throw new Error("Task writer returned no tickets");
-      drafts = output.tasks.slice(0, 10).map((draft: { title: string; description: string; dueDate?: string; customFields?: TaskWriterCustomFieldValue[] }) => {
+      drafts = output.tasks.slice(0, 10).map((draft: { title: string; description: string; dueDate?: string; labelIds?: string[]; customFields?: TaskWriterCustomFieldValue[] }) => {
         if (typeof draft?.title !== "string" || !draft.title.trim() ||
             typeof draft.description !== "string" || !draft.description.trim()) {
           throw new Error("Task writer returned an incomplete ticket");
@@ -163,6 +164,7 @@ export async function createComposedTask({
         const written = applyWriterProperties ? extractTaskProperties(typed ? typed.html : draft.description) : null;
         const body = written ? written.description : typed ? stripWriterMarkers(typed.html) : draft.description;
         return { title: draft.title, description: body,
+          ...(writerLabels && Array.isArray(draft.labelIds) ? { writerLabelIds: draft.labelIds } : {}),
           ...(draft.customFields?.length ? { customFields: draft.customFields } : {}),
           ...(written ? writerProperties(written) : {}),
           ...(typed?.type ? { ticketType: typed.type } : {}),
@@ -180,6 +182,7 @@ export async function createComposedTask({
         ? new DOMParser().parseFromString(html, "text/html").getElementById("ai-generated-task-due-date")?.textContent?.trim() || undefined
         : undefined;
       drafts = [{ title: written.title, description: written.description,
+        ...(writerLabels ? { writerLabelIds: new DOMParser().parseFromString(html, "text/html").getElementById("ai-generated-task-tags")?.textContent?.split(",").map((id) => id.trim()).filter(Boolean) ?? [] } : {}),
         ...(Array.isArray(fieldDraft?.customFields) && fieldDraft.customFields.length ? { customFields: fieldDraft.customFields } : {}), ...(writerDueDate ? { writerDueDate } : {}), ...(typed?.type ? { ticketType: typed.type } : {}),
         ...(applyWriterProperties ? writerProperties(extractTaskProperties(html)) : {}) }];
     }
@@ -242,6 +245,7 @@ export async function createComposedTask({
         sectionId: placement?.sectionId, section_title: placement?.section,
         ranking: placement?.ranking, ...taskFields, ...writerFields, requestKind: "compose-task",
         ...(fillsExistingTask ? { existingTaskId } : {}),
+        ...(!taskFields.tags?.length && draft.writerLabelIds?.length ? { writerLabelIds: draft.writerLabelIds } : {}),
         ...(draft.customFields?.length ? { customFields: draft.customFields } : {}),
         ...(draft.writerDueDate ? { writerDueDate: draft.writerDueDate, writerTimeZone } : {}),
       });

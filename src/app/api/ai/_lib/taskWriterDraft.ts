@@ -20,6 +20,7 @@ export async function generateTaskWriterDraft(
     usageTaskId,
     validateDraft,
     customFieldDefinitions,
+    boardLabelIds,
   } = await prepareTaskWriterRun(body, userId, agentId);
 
   configureAiModelUsage(selected.model, {
@@ -51,6 +52,7 @@ export async function generateTaskWriterDraft(
   const properties =
     body.aiMode === "AiTaskWriter"
       ? extractTaskWriterProperties(draftHtml, {
+          boardLabelIds,
           fallbackTitle:
             body.taskTitle.trim() || taskTitleFromBrief(body.PROMPT),
         })
@@ -63,6 +65,7 @@ export async function generateTaskWriterDraft(
   return {
     success: true as const,
     ...(fieldDraft && customFieldDefinitions?.length ? { customFields: fieldTools!.validateTaskWriterCustomFields(customFieldDefinitions, fieldDraft.customFields) } : {}),
+    ...("labelIds" in properties && properties.labelIds ? { labelIds: properties.labelIds } : {}),
     html: properties.description,
     title: properties.title,
     priority: "priority" in properties ? properties.priority : undefined,

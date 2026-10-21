@@ -131,6 +131,7 @@ export function formatBoardVocabulary(args: {
   projectDescription?: string | null;
   sectionTitles?: string[];
   labelNames?: string[];
+  labels?: { id: string; name: string }[];
   customFields?: TaskWriterCustomFieldDefinition[];
 }) {
   const sectionTitles = (args.sectionTitles ?? []).slice(0, 40);
@@ -150,7 +151,9 @@ export function formatBoardVocabulary(args: {
     sectionTitles.length
       ? `columns:${escapePlain(sectionTitles.join(" | "))}`
       : "",
-    labelNames.length
+    args.labels?.length
+      ? `labels:${escapePlain(JSON.stringify(args.labels))}`
+      : labelNames.length
       ? `labels:${escapePlain(labelNames.join(" | "))}`
       : "",
   ].filter(Boolean);

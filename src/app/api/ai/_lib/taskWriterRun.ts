@@ -1,3 +1,4 @@
+import { HTPR_7513_WRITER_PROJECT_LABELS_FLAG } from "@/lib/flags/keys";
 import { taskWriterDateContext, taskWriterDueDateInstructions } from "@/lib/ai/taskWriterDueDate";
 import { HTPR_7500_WRITER_OLD_STRUCTURE_FLAG } from "@/lib/flags/keys";
 import { HTPR_7471_WRITER_BOARD_FORMAT_FLAG } from "@/lib/flags/keys";
@@ -196,6 +197,12 @@ export async function prepareTaskWriterRun(
     teamContext,
     taskWriterAgentId: agentId,
   });
+  const projectLabelsEnabled = body.aiMode === "AiTaskWriter" &&
+    await isFeatureEnabled(HTPR_7513_WRITER_PROJECT_LABELS_FLAG, userId);
+  const boardLabels = projectLabelsEnabled ? await prisma.label.findMany({
+    where: { projectId: body.projectId },
+    select: { id: true, value: true },
+  }) : undefined;
   const boardFormatEnabled = body.aiMode === "AiTaskWriter" &&
     await isFeatureEnabled(HTPR_7471_WRITER_BOARD_FORMAT_FLAG, userId);
   const customInstructions = boardFormatEnabled && !body.customInstructions.trim()
@@ -280,7 +287,7 @@ export async function prepareTaskWriterRun(
         })
       : Promise.resolve(""),
     boardResearchEnabled
-      ? loadTaskWriterBoardVocabulary(body.projectId, customFieldDefinitions).catch((error) => {
+      ? loadTaskWriterBoardVocabulary(body.projectId, customFieldDefinitions, boardLabels).catch((error) => {
           console.error("[ai/task-writer] board vocabulary failed", error);
           return "";
         })
@@ -343,6 +350,9 @@ export async function prepareTaskWriterRun(
     await isFeatureEnabled(HTPR_7056_CTRLJ_SPLIT_TASKS_FLAG, userId);
   const fixedInstructions = researchInstructions ?? baseInstructions;
   let suffix = skillResolution.systemPromptAddition ? `\n\n${skillResolution.systemPromptAddition}` : "";
+  if (boardLabels) {
+    suffix += "\n\nChoose the existing label for the project the ticket is about, not a dependency or a project mentioned only as a comparison. Use only the board's provided label IDs; never invent a label, use a name as an ID, or fall back to the first label. If the project is unclear or ambiguous, suggest no project label. Preserve applicable existing generic labels. For HTML put comma-separated IDs in <span id=\"ai-generated-task-tags\" style=\"display:none\">. For structured tasks put each ticket's own IDs in its labelIds array; use an empty array when none apply.";
+  }
   if (customFieldDefinitions?.length) {
     suffix += `\n\n${renderPrompt("task-writer-custom-fields-output")}`;
   }
@@ -387,6 +397,11 @@ export async function prepareTaskWriterRun(
   const allowedImgSrcs =
     body.aiMode === "AiTaskWriter" ? extractImgSrcs(body.taskDescription) : null;
 
+  const baseTasksSchema = customFieldDefinitions?.length ? boardFormatTasksOutputSchema : tasksOutputSchema;
+  const tasksSchema = boardLabels ? baseTasksSchema.extend({
+    tasks: z.array(baseTasksSchema.shape.tasks.element.extend({ labelIds: z.array(z.string()).optional() })).min(1).max(10),
+  }) : baseTasksSchema;
+
   return {
     aiFeature,
     selected,
@@ -400,11 +415,12 @@ export async function prepareTaskWriterRun(
     dueDateContext,
     ticketTypeEnabled,
     customFieldDefinitions,
-    tasksSchema: customFieldDefinitions?.length ? boardFormatTasksOutputSchema : tasksOutputSchema,
+    boardLabelIds: boardLabels?.map((label) => label.id),
+    tasksSchema,
   };
 }
 
-async function loadTaskWriterBoardVocabulary(projectId: number, customFields?: TaskWriterCustomFieldDefinition[]) {
+async function loadTaskWriterBoardVocabulary(projectId: number, customFields?: TaskWriterCustomFieldDefinition[], boardLabels?: { id: string; value: string | null }[]) {
   const project = await prisma.project.findFirst({
     where: { id: projectId },
     select: {
@@ -421,6 +437,7 @@ async function loadTaskWriterBoardVocabulary(projectId: number, customFields?: T
   if (!project) return "";
   return formatBoardVocabulary({
     customFields,
+    labels: boardLabels?.map(({ id, value }) => ({ id, name: value ?? "" })),
     projectTitle: project.title,
     projectDescription: project.description,
     sectionTitles: project.section.map((row) => row.section_title),
