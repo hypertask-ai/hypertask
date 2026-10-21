@@ -1,5 +1,5 @@
 import { isFeatureEnabled } from "@/lib/flags";
-import { HTPR_6688_SEARCH_AUTOCOMPLETE_FLAG, HTPR_6865_SEARCH_LAYOUT_FLAG, HTPR_6878_SEARCH_LABEL_SCOPE_FLAG, HTPR_6881_SEARCH_FUZZY_PERSON_FLAG, HTPR_6880_SEARCH_COMMENTER_FLAG } from "@/lib/flags";
+import { HTPR_6865_SEARCH_LAYOUT_FLAG, HTPR_6878_SEARCH_LABEL_SCOPE_FLAG, HTPR_6881_SEARCH_FUZZY_PERSON_FLAG, HTPR_6880_SEARCH_COMMENTER_FLAG } from "@/lib/flags";
 import { HTPR_6882_SEARCH_MATCH_HIGHLIGHTS_FLAG, HTPR_6368_SEARCH_OPERATOR_LOGIC_FLAG } from "@/lib/flags";
 import { MAX_SEARCH_OPERATOR_CLAUSES, searchOperatorClauseCount, type SearchFilter } from "@/lib/search/operators";
 import { parseSearchWithChipNames } from "@/lib/search/serverOperators";
@@ -38,16 +38,14 @@ export async function searchDocuments(
 
   const fuzzyPersonEnabled = await isFeatureEnabled(HTPR_6881_SEARCH_FUZZY_PERSON_FLAG, userId);
   const matchHighlightsEnabled = await isFeatureEnabled(HTPR_6882_SEARCH_MATCH_HIGHLIGHTS_FLAG, userId) &&
-    await isFeatureEnabled(HTPR_6865_SEARCH_LAYOUT_FLAG, userId) &&
-    await isFeatureEnabled(HTPR_6688_SEARCH_AUTOCOMPLETE_FLAG, userId);
+    await isFeatureEnabled(HTPR_6865_SEARCH_LAYOUT_FLAG, userId);
   const commenterEnabled = await isFeatureEnabled(HTPR_6880_SEARCH_COMMENTER_FLAG, userId);
   const logicEnabled = await isFeatureEnabled(HTPR_6368_SEARCH_OPERATOR_LOGIC_FLAG, userId);
   const parsed = await parseSearchWithChipNames(normalizedSearchQuery, requestedProjectIds, fuzzyPersonEnabled, requestedProjectIds, commenterEnabled, logicEnabled);
   if (parsed.filters.label &&
     ![...(parsed.filters.in ?? []), ...(parsed.filters.board ?? [])].some((filter) => !filter.negated) &&
     await isFeatureEnabled(HTPR_6878_SEARCH_LABEL_SCOPE_FLAG, userId) &&
-    await isFeatureEnabled(HTPR_6865_SEARCH_LAYOUT_FLAG, userId) &&
-    await isFeatureEnabled(HTPR_6688_SEARCH_AUTOCOMPLETE_FLAG, userId)) {
+    await isFeatureEnabled(HTPR_6865_SEARCH_LAYOUT_FLAG, userId)) {
     const labels = await prisma.label.findMany({
       where: { projectId: { in: requestedProjectIds } }, select: { id: true, value: true },
     });
