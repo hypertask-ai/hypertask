@@ -441,3 +441,40 @@ test('search starts only after the opened-before ticket page is idle, and compar
   const source = fs.readFileSync(path.join(__dirname, '../scripts/speed/measure.mjs'), 'utf8');
   assert.match(source, /sample\('ticket-warm'[^\n]*\n[^\n]*\n\s*const previousPage = await settleScripts\([^\n]*\n\s*await page\.waitForTimeout\(SEARCH_IDLE_PAUSE_MS\);\n\s*await sample\('search'/);
 });
+
+test('runner is recorded from GitHub Actions, including failures before browser setup', () => {
+  const root = path.join(__dirname, '..');
+  for (const [value, runner] of [['true', 'github-actions'], ['false', 'vps'], ['', 'vps']]) {
+    const result = spawnSync(process.execPath, ['--input-type=module', '-e', 'import { RUNNER } from "./scripts/speed/measure.mjs"; console.log(RUNNER)'], { cwd: root, env: { ...process.env, GITHUB_ACTIONS: value }, encoding: 'utf8' });
+    assert.equal(result.status, 0);
+    assert.equal(result.stdout.trim(), runner);
+    const home = fs.mkdtempSync(path.join(os.tmpdir(), 'speed-runner-'));
+    try {
+      const failed = spawnSync(process.execPath, ['scripts/speed/measure.mjs', '--samples', '1'], { cwd: root, env: { ...process.env, HOME: home, COMPANY_SKILLS_DIR: path.join(home, 'missing-guard'), GITHUB_ACTIONS: value, GITHUB_RUN_ID: '123', GITHUB_SHA: 'b'.repeat(40) }, encoding: 'utf8' });
+      assert.equal(failed.status, 1);
+      const [saved] = JSON.parse(fs.readFileSync(path.join(home, '.local/state/speed/history.json'), 'utf8'));
+      assert.equal(saved.status, 'failed');
+      assert.equal(saved.conditions.runner, runner);
+      assert.deepEqual(saved.github, value === 'true' ? { runId: 123, sha: 'b'.repeat(40) } : undefined);
+    } finally { fs.rmSync(home, { recursive: true, force: true }); }
+  }
+  const source = fs.readFileSync(path.join(root, 'scripts/speed/measure.mjs'), 'utf8');
+  assert.match(source, /cpus: os.availableParallelism\(\), conditions: \{ runner: RUNNER \}/);
+  assert.match(source, /run.conditions = \{ runner: RUNNER,/);
+  assert.match(source, /github: \{ runId: Number\(process.env.GITHUB_RUN_ID\), sha: process.env.GITHUB_SHA \}/);
+});
+
+test('GitHub and VPS baselines never mix; legacy history is VPS in both comparison directions', async () => {
+  const { compare } = await analyst;
+  const current = await fixture();
+  const prior = { ...await fixture(), started: '2026-10-09T12:00:00Z' };
+  const on = (run, runner) => ({ ...run, conditions: { ...run.conditions, runner } });
+  const matches = (run, history) => compare(run, history).every(row => row.days === 1);
+  const excludes = (run, history) => compare(run, history).every(row => row.baseline === null && !row.regression);
+  assert.ok(matches(on(current, 'vps'), [prior]));
+  assert.ok(matches(current, [on(prior, 'vps')]));
+  assert.ok(matches(on(current, 'github-actions'), [on(prior, 'github-actions')]));
+  assert.ok(excludes(on(current, 'github-actions'), [prior, on(prior, 'vps')]));
+  assert.ok(excludes(on(current, 'vps'), [on(prior, 'github-actions')]));
+  assert.ok(excludes(current, [on(prior, 'github-actions')]));
+});
