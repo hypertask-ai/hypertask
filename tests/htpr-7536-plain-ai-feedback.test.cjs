@@ -9,7 +9,7 @@ const unauthorized = { surface: 'mcp', tool: 'mcp', status: 401, errorCode: 'una
 const serverError = { surface: 'api', status: 500, category: 'call_failed' }
 const bare = { surface: 'cli', category: 'call_failed' }
 
-function setup({ mode = null, name = 'Robin', flagError = false } = {}) {
+function setup({ mode = null, name = 'Robin', flagError = false, auth } = {}) {
   const created = [], comments = [], rows = [], lookups = [], quotas = [], broadcasts = [], userQueries = []
   const enabled = async (flag, userId) => {
     lookups.push({ flag, userId })
@@ -31,6 +31,10 @@ function setup({ mode = null, name = 'Robin', flagError = false } = {}) {
   }
   const load = loader({
     '@/lib/prisma': { __esModule: true, default: db },
+    '@/lib/mcp/auth': { validateMcpAuth: async () => auth },
+    '@/lib/mcp/inProcessClient': { createInProcessMcpClient: async () => ({ auth }) },
+    '@/lib/aiFeedback/clientInfo': { getFeedbackClient: async () => undefined },
+    '../config/tool-metadata': { TOOL_METADATA: { REPORT_FEEDBACK: { name: 'hypertask_report_feedback' } } },
     './enabled': { aiFeedbackEnabled: async () => true },
     '@/lib/flags': {
       isFeatureEnabled: enabled,
@@ -79,7 +83,7 @@ test('flag has one client-safe improvement definition, Everyone default and tele
 for (const input of [unauthorized, { ...serverError, tool: 'tasks', errorCode: 'unavailable', client: 'claude', note: 'private note' }, bare]) {
   test(`flag Off preserves exact legacy title, description and success receipt for ${input.surface}`, async () => {
     const f = setup({ mode: 'OFF' })
-    const result = await f.fileAiFeedback(input, 42)
+    const result = await f.fileAiFeedback(input, 42, { agentName: 'Fable' })
     const fingerprint = f.load('src/lib/aiFeedback/input.ts').feedbackFingerprint(input)
     assert.equal(f.created[0].title, `AI feedback: ${input.surface} ${input.tool ?? input.errorCode ?? input.status ?? 'unexpected-result'}`)
     assert.equal(f.created[0].description, legacyDescription(input, fingerprint))
@@ -100,13 +104,90 @@ test('flag On renders the four plain sections followed by unchanged engineer fie
   await f.fileAiFeedback(input, 42)
   const fingerprint = f.load('src/lib/aiFeedback/input.ts').feedbackFingerprint(input)
   const expected = '<p><strong>What happened</strong>: An agent&#39;s API call to tasks failed because Hypertask returned a server error.</p>' +
-    '<p><strong>Who hit it</strong>: unknown agent (reporting account: Robin).</p>' +
+    '<p><strong>Who hit it</strong>: an agent owned by Robin.</p>' +
     '<p><strong>Is it a real bug?</strong> This is likely a Hypertask bug.</p>' +
     '<p><strong>What to do</strong>: An engineer should look.</p><h2>Details for engineers</h2>' + legacyDescription(input, fingerprint)
   assert.equal(f.created[0].title, "An agent's API call to tasks failed because Hypertask returned a server error (21 Oct)")
   assert.equal(f.created[0].description, expected)
   assert.equal(expected.includes('customer secret'), false)
   assert.deepEqual(f.userQueries[0].select, { displayName: true })
+})
+
+for (const [agentName, ownerName, expected] of [
+  ['Fable', 'Robin', 'Fable, owned by Robin'],
+  [undefined, 'Robin', 'an agent owned by Robin'],
+  [undefined, '', 'unknown agent'],
+]) {
+  test(`Who hit it: ${expected}.`, async t => {
+    const f = setup({ name: ownerName })
+    await f.fileAiFeedback(serverError, 42, { agentName })
+    const fingerprint = f.load('src/lib/aiFeedback/input.ts').feedbackFingerprint(serverError)
+    assert.ok(f.created[0].description.includes(`<p><strong>Who hit it</strong>: ${expected}.</p>`))
+    assert.ok(f.created[0].description.endsWith(legacyDescription(serverError, fingerprint, ownerName)))
+    assert.match(f.comments[0].text, new RegExp(`Reporting display names: ${ownerName}</p>`))
+    t.diagnostic(`Who hit it: ${expected}.`)
+  })
+}
+
+test('reporter names are scrubbed and HTML-escaped without changing reporting display names', async () => {
+  const f = setup({ name: 'Robin & Co' })
+  await f.fileAiFeedback(serverError, 42, { agentName: ' <b>Fable</b> & Team ' })
+  assert.match(f.created[0].description, /Who hit it<\/strong>: Fable &amp; Team, owned by Robin &amp; Co\./)
+  assert.match(f.created[0].description, /Reporting display names: Robin &amp; Co<\/p>/)
+  const rendered = f.plainFeedback(serverError, 'a'.repeat(64), { agentName: '<Fable>', ownerName: '<Robin>' })
+  assert.match(rendered.description, /Who hit it<\/strong>: &lt;Fable&gt;, owned by &lt;Robin&gt;\./)
+})
+
+test('REST feedback passes the authenticated agent display name into the plain report', async () => {
+  const f = setup({ auth: { user: { id: 42 }, agentId: 'agent-1', agentDisplayName: 'Fable' } })
+  const { POST } = f.load('src/app/api/mcp/feedback/route.ts')
+  const response = await POST(new Request('https://app.hypertask.ai/api/mcp/feedback', {
+    method: 'POST', body: JSON.stringify(serverError),
+  }))
+  assert.equal(response.status, 200)
+  assert.match(f.created[0].description, /Who hit it<\/strong>: Fable, owned by Robin\./)
+})
+
+test('MCP feedback tool passes the authenticated agent display name into the plain report', async () => {
+  const f = setup({ auth: { user: { id: 42 }, agentId: 'agent-1', agentDisplayName: 'Fable' } })
+  const { reportFeedbackTool } = f.load('src/lib/mcp-server/tools/report-feedback.tool.ts')
+  const result = JSON.parse(await reportFeedbackTool.execute({ status: 500 }, 'fixture'))
+  assert.equal(result.success, true)
+  assert.match(f.created[0].description, /Who hit it<\/strong>: Fable, owned by Robin\./)
+})
+
+test('JWT auth carries the verified agent display name from its existing scoped lookup', async t => {
+  t.mock.method(console, 'log', () => {})
+  const payload = { userId: 42, agentId: 'agent-1', jti: 'generation', aud: 'mcp-api' }
+  const token = 'fixture'
+  const previous = process.env.JWT_SECRET
+  process.env.JWT_SECRET = 'test-only-unused-key'
+  try {
+    const load = loader({
+      jsonwebtoken: { decode: () => payload, verify: () => payload },
+      '@/lib/prisma': { __esModule: true, default: {
+        user: { findUnique: async () => ({ id: 42, email: '', displayName: 'Robin' }) },
+        revokedToken: { findFirst: async () => null },
+        agent: { findFirst: async query => {
+          assert.deepEqual(query.where, { id: 'agent-1', userId: 42, revokedAt: null })
+          assert.equal(query.select.displayName, true)
+          return { id: 'agent-1', displayName: 'Fable', mcpTokenJti: 'generation', mcpTokenHash: createHash('sha256').update(token).digest('hex'), runtimeGeneration: 1 }
+        } },
+      } },
+      '@/utils/controllers/logs/createLog': { __esModule: true, default: async () => {} },
+      '@prisma/client': { LogType: { Signup: 'Signup' }, Status: { Normal: 'Normal' } },
+      '@/lib/flags': {},
+      '@/lib/mcp/managementKeyTeamScope': {},
+    })
+    const { validateJwtToken } = load('src/lib/mcp/auth/verifyJwt.ts')
+    const ctx = await validateJwtToken(token)
+    assert.equal(ctx.agentId, 'agent-1')
+    assert.equal(ctx.agentDisplayName, 'Fable')
+    assert.equal(ctx.user.displayName, 'Robin')
+  } finally {
+    if (previous === undefined) delete process.env.JWT_SECRET
+    else process.env.JWT_SECRET = previous
+  }
 })
 
 for (const refusal of [{ status: 401 }, { status: 403 }, { status: 404 }, { errorCode: 'unauthorized' }, { errorCode: 'forbidden' }, { errorCode: 'not_found' }, { errorCode: 'UNAUTHORIZED' }, { category: 'auth_failed' }]) {

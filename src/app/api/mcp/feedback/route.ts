@@ -7,7 +7,7 @@ export async function POST(request: NextRequest) {
   if (!ctx) return mcpUnauthorizedResponse(request)
   const body = await request.json().catch(() => null)
   try {
-    return NextResponse.json(await fileAiFeedback(body, ctx.user.id))
+    return NextResponse.json(await fileAiFeedback(body, ctx.user.id, { agentName: ctx.agentDisplayName }))
   } catch (error) {
     if (error instanceof AiFeedbackError) return NextResponse.json({ success: false, error: error.message }, { status: error.status })
     return NextResponse.json({ success: false, error: 'Unable to file AI feedback' }, { status: 503 })

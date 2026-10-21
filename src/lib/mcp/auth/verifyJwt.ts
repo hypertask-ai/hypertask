@@ -316,6 +316,7 @@ export async function validateJwtToken(token: string, options: ValidateMcpAuthOp
     }
 
     let agentId: string | null = null
+    let agentDisplayName: string | undefined
     let agentRuntimeGeneration: number | null = null
     const rawAgentId = decoded.agentId
     if (Object.hasOwn(decoded, "agentId") && (typeof rawAgentId !== "string" || rawAgentId.trim().length === 0)) {
@@ -361,6 +362,7 @@ export async function validateJwtToken(token: string, options: ValidateMcpAuthOp
         },
         select: {
           id: true,
+          displayName: true,
           mcpTokenHash: true,
           mcpTokenJti: true,
           runtimeGeneration: true,
@@ -398,6 +400,7 @@ export async function validateJwtToken(token: string, options: ValidateMcpAuthOp
         return null
       }
       agentId = agent.id
+      agentDisplayName = agent.displayName
       agentRuntimeGeneration = agent.runtimeGeneration
     }
 
@@ -427,6 +430,7 @@ export async function validateJwtToken(token: string, options: ValidateMcpAuthOp
         displayName: user.displayName ?? undefined,
       },
       agentId,
+      ...(agentDisplayName ? { agentDisplayName } : {}),
       agentRuntimeGeneration,
     }
   } catch (error) {

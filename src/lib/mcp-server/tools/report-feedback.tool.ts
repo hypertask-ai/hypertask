@@ -16,6 +16,6 @@ export const reportFeedbackTool = {
       ...aiFeedbackSchema.omit({ surface: true, client: true }).parse(args),
       surface: 'mcp',
       client: feedbackClient(invocation?.clientName) ?? await getFeedbackClient(token),
-    }, auth.user.id))
+    }, auth.user.id, { agentName: auth.agentDisplayName }))
   },
 }

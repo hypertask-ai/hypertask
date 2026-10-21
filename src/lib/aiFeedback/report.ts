@@ -60,7 +60,7 @@ function scopeRefusal(input: AiFeedbackInput): boolean {
     ['unauthorized', 'forbidden', 'not_found'].includes(input.errorCode?.toLowerCase() ?? '') || input.category === 'auth_failed'
 }
 
-export function plainFeedback(input: AiFeedbackInput, fingerprint: string, displayName?: string) {
+export function plainFeedback(input: AiFeedbackInput, fingerprint: string, reporter?: { agentName?: string; ownerName?: string }) {
   const surface = { mcp: 'MCP', cli: 'CLI', api: 'API', agent: 'agent connection' }[input.surface]
   const call = `An agent's ${surface} call${input.tool && input.tool !== input.surface ? ` to ${input.tool}` : ''}`
   const noDetails = !input.tool && input.status === undefined && !input.errorCode && !input.error && !input.note
@@ -86,17 +86,20 @@ export function plainFeedback(input: AiFeedbackInput, fingerprint: string, displ
     action = noDetails ? 'Nothing for now; wait for a report with details.' : 'An engineer should look.'
   }
   const date = new Intl.DateTimeFormat('en-GB', { day: 'numeric', month: 'short', timeZone: 'UTC' }).format(new Date())
+  const who = reporter?.agentName
+    ? `${reporter.agentName}${reporter.ownerName ? `, owned by ${reporter.ownerName}` : ''}`
+    : reporter?.ownerName ? `an agent owned by ${reporter.ownerName}` : 'unknown agent'
   return {
     title: `${happened} (${date})`,
     description: `<p><strong>What happened</strong>: ${escapeHtml(happened)}.</p>` +
-      `<p><strong>Who hit it</strong>: ${escapeHtml(displayName ? `unknown agent (reporting account: ${displayName})` : 'unknown agent')}.</p>` +
+      `<p><strong>Who hit it</strong>: ${escapeHtml(who)}.</p>` +
       `<p><strong>Is it a real bug?</strong> ${escapeHtml(reading)}</p>` +
       `<p><strong>What to do</strong>: ${escapeHtml(action)}</p>` +
-      '<h2>Details for engineers</h2>' + description(input, fingerprint, displayName),
+      '<h2>Details for engineers</h2>' + description(input, fingerprint, reporter?.ownerName),
   }
 }
 
-export async function fileAiFeedback(raw: unknown, userId?: number) {
+export async function fileAiFeedback(raw: unknown, userId?: number, reporter?: { agentName?: string | null }) {
   if (!await aiFeedbackEnabled(userId)) throw new AiFeedbackError(404, 'Not found')
   const parsed = aiFeedbackSchema.safeParse(raw)
   if (!parsed.success) {
@@ -186,7 +189,10 @@ export async function fileAiFeedback(raw: unknown, userId?: number) {
           }
         }
         const count = 1
-        const readable = plain ? plainFeedback(input, fingerprint, displayName) : undefined
+        const readable = plain ? plainFeedback(input, fingerprint, {
+          agentName: scrubFeedbackText(reporter?.agentName ?? '').slice(0, 60) || undefined,
+          ownerName: displayName,
+        }) : undefined
         const { task } = await createTaskCore({
           creationChannel: "agent",
           title: readable?.title ?? `AI feedback: ${input.surface} ${input.tool ?? input.errorCode ?? input.status ?? 'unexpected-result'}`.slice(0, 80),
