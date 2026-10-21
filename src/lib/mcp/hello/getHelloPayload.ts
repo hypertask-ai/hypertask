@@ -10,6 +10,8 @@ import {
 import prisma from '@/lib/prisma'
 import { getProjectListingWhere } from '@/utils/controllers/projects/getAllIncludes'
 
+import { buildGuidedStart } from './guidedStart'
+
 const BOARD_LIMIT = 50
 const PER_BOARD_TEXT_LIMIT = 2000
 const CONVENTIONS_TOTAL_LIMIT = 8 * 1024
@@ -57,6 +59,24 @@ export const HTPR_7122_HELLO_CAPABILITIES = {
   abilities:
     'Use all of Hypertask\'s abilities, not only comments: reactions, pages, evidence, leases, sessions, escalation, task moves and labels.',
 } as const
+
+async function helloGuidedStart(
+  ctx: McpAuthContext,
+  boards: Array<{ id: number; title: string; createdAt: Date }>
+) {
+  const [{ isFeatureEnabled }, { HTPR_7519_LOGIN_GUIDED_START_FLAG }] = await Promise.all([
+    import('@/lib/flags'),
+    import('@/lib/flags/definitions/htpr-7519-login-guided-start'),
+  ])
+  if (!(await isFeatureEnabled(HTPR_7519_LOGIN_GUIDED_START_FLAG, ctx.user.id))) return {}
+  const agent = ctx.agentId
+    ? await prisma.agent.findUnique({
+        where: { id: ctx.agentId },
+        select: { id: true, displayName: true },
+      })
+    : null
+  return { agent, ...buildGuidedStart(boards) }
+}
 
 async function helloCapabilities(userId: number) {
   const [{ isFeatureEnabled }, { HTPR_7122_AGENT_REACTIONS_FLAG }] = await Promise.all([
@@ -126,6 +146,7 @@ export async function getHelloPayload(ctx: McpAuthContext) {
       name: true,
       title: true,
       playbook: true,
+      createdAt: true,
       ai_custom_instructions: {
         select: {
           customInstruction: true,
@@ -194,6 +215,14 @@ export async function getHelloPayload(ctx: McpAuthContext) {
     capabilities: await helloCapabilities(ctx.user.id),
     conventions,
     conventionsTruncated,
+    ...(await helloGuidedStart(
+      ctx,
+      visibleProjects.map((project) => ({
+        id: project.id,
+        title: project.title ?? project.name,
+        createdAt: project.createdAt,
+      }))
+    )),
   }
 }
 
