@@ -80,6 +80,18 @@ premerge_evidence:
   production_enforcement: production-required-checks-ruleset
   activation_prerequisite: statuses_seeded_on_all_open_production_pull_requests
 
+ship_scripts_tests:
+  context: ship-scripts-tests
+  workflow: .github/workflows/ship-scripts-tests.yml
+  runs_on: ubuntu-latest
+  required: false
+  pull_request_base: production
+  paths: [".claude/skills/ship/scripts/**", ".github/workflows/ship-scripts-tests.yml"]
+  commands:
+    - bash .claude/skills/ship/scripts/ship-check.test.sh --premerge-only
+    - python3 .claude/skills/ship/scripts/premerge-evidence.test.py
+  fixtures: offline_with_temporary_home_and_no_secrets
+
 ux_signoff:
   context: ux-signoff
   workflow: .github/workflows/ux-signoff-gate.yml

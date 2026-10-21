@@ -64,6 +64,14 @@ A screen-changing PR touching a released flag without a qualifying definition re
 
 The `premerge-evidence.timer` reconciles all open production PRs every two minutes. Each sweep fetches the production checker and includes its SHA-256 bytes digest in every cached verdict fingerprint, so merged rule changes recheck every waiting PR in the first successful sweep, without waiting for the ten-minute unchanged-verdict refresh. Rule-fetch failures fail closed.
 
+## Ship script regressions
+
+The non-required `ship-scripts-tests` check in [`.github/workflows/ship-scripts-tests.yml`](../.github/workflows/ship-scripts-tests.yml) runs on GitHub-hosted `ubuntu-latest` for pull requests to `production` changing `.claude/skills/ship/scripts/**` or the workflow itself. It does not change the ruleset or auto-merge requirements. No tests run on the VPS.
+
+- Runs `bash .claude/skills/ship/scripts/ship-check.test.sh --premerge-only` and `python3 .claude/skills/ship/scripts/premerge-evidence.test.py`. The full shell suite also contains live authenticated checks and is deliberately excluded.
+- Installs Python 3 for the standard-library test harnesses and fixtures, `jq` for JSON handling in `ship-check`, Git for repository-scope detection, and Node 24 for the premerge-local evidence-output fixture. No npm or pip packages are needed; Bash and standard Unix utilities come with the hosted runner.
+- Uses a temporary HOME and the harnesses' temporary evidence, fake tokens, Git/GitHub/Hypertask fixtures and HTTP interception. A fallback `gh` stub fails unexpected calls outside the fixtures. Tests need no network, real tokens, existing VPS state or systemd service; checkout and dependency installation still use network. Checkout does not persist credentials, and the job requests only `contents: read`, so fork PRs need no secrets.
+
 ## Visual regression gate
 
 `visual-regression` screenshots the five screens a user lands on (board, task detail, search, inbox, and the Ctrl+K palette) at 1440 and 390 wide in the `amoled` and `porcelain` themes, and fails when pixels move without an approved baseline. It catches the change that typechecks, lints and tests green and still puts an unwanted control on screen; [HTPR-5649](https://app.hypertask.ai/detail/project-15/5649) shipped an archived-results checkbox into search that way.
