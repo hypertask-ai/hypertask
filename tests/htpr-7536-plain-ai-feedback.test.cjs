@@ -9,12 +9,12 @@ const unauthorized = { surface: 'mcp', tool: 'mcp', status: 401, errorCode: 'una
 const serverError = { surface: 'api', status: 500, category: 'call_failed' }
 const bare = { surface: 'cli', category: 'call_failed' }
 
-function setup({ mode = null, name = 'Robin', flagError = false, auth } = {}) {
+function setup({ mode = null, name = 'Robin', flagError = false, auth, pending = [], reason = 'invalid_token' } = {}) {
   const created = [], comments = [], rows = [], lookups = [], quotas = [], broadcasts = [], userQueries = []
   const enabled = async (flag, userId) => {
     lookups.push({ flag, userId })
     if (flagError) throw new Error('Flag unavailable')
-    return mode === null || mode === 'EVERYONE' || mode === 'OWNER_ONLY' && userId === 6
+    return flag !== key || mode === null || mode === 'EVERYONE' || mode === 'OWNER_ONLY' && userId === 6
   }
   const db = {
     section: { findMany: async () => [{ id: 2, section_title: 'Done' }] },
@@ -30,6 +30,8 @@ function setup({ mode = null, name = 'Robin', flagError = false, auth } = {}) {
     $transaction: async run => run(db),
   }
   const load = loader({
+    '@vercel/functions': { waitUntil: work => pending.push(work) },
+    '@/lib/mcp/auth/mcpAuthErrors': { classifyMcpAuthFailure: async () => { if (reason instanceof Error) throw reason; return reason } },
     '@/lib/prisma': { __esModule: true, default: db },
     '@/lib/mcp/auth': { validateMcpAuth: async () => auth },
     '@/lib/mcp/inProcessClient': { createInProcessMcpClient: async () => ({ auth }) },
@@ -83,7 +85,7 @@ test('flag has one client-safe improvement definition, Everyone default and tele
 for (const input of [unauthorized, { ...serverError, tool: 'tasks', errorCode: 'unavailable', client: 'claude', note: 'private note' }, bare]) {
   test(`flag Off preserves exact legacy title, description and success receipt for ${input.surface}`, async () => {
     const f = setup({ mode: 'OFF' })
-    const result = await f.fileAiFeedback(input, 42, { agentName: 'Fable' })
+    const result = await f.fileAiFeedback(input, 42, { origin: 'agent', agentName: 'Fable' })
     const fingerprint = f.load('src/lib/aiFeedback/input.ts').feedbackFingerprint(input)
     assert.equal(f.created[0].title, `AI feedback: ${input.surface} ${input.tool ?? input.errorCode ?? input.status ?? 'unexpected-result'}`)
     assert.equal(f.created[0].description, legacyDescription(input, fingerprint))
@@ -120,7 +122,7 @@ for (const [agentName, ownerName, expected] of [
 ]) {
   test(`Who hit it: ${expected}.`, async t => {
     const f = setup({ name: ownerName })
-    await f.fileAiFeedback(serverError, 42, { agentName })
+    await f.fileAiFeedback(serverError, 42, { origin: 'agent', agentName })
     const fingerprint = f.load('src/lib/aiFeedback/input.ts').feedbackFingerprint(serverError)
     assert.ok(f.created[0].description.includes(`<p><strong>Who hit it</strong>: ${expected}.</p>`))
     assert.ok(f.created[0].description.endsWith(legacyDescription(serverError, fingerprint, ownerName)))
@@ -131,7 +133,7 @@ for (const [agentName, ownerName, expected] of [
 
 test('reporter names are scrubbed and HTML-escaped without changing reporting display names', async () => {
   const f = setup({ name: 'Robin & Co' })
-  await f.fileAiFeedback(serverError, 42, { agentName: ' <b>Fable</b> & Team ' })
+  await f.fileAiFeedback(serverError, 42, { origin: 'agent', agentName: ' <b>Fable</b> & Team ' })
   assert.match(f.created[0].description, /Who hit it<\/strong>: Fable &amp; Team, owned by Robin &amp; Co\./)
   assert.match(f.created[0].description, /Reporting display names: Robin &amp; Co<\/p>/)
   const rendered = f.plainFeedback(serverError, 'a'.repeat(64), { agentName: '<Fable>', ownerName: '<Robin>' })
@@ -190,11 +192,22 @@ test('JWT auth carries the verified agent display name from its existing scoped 
   }
 })
 
-for (const refusal of [{ status: 401 }, { status: 403 }, { status: 404 }, { errorCode: 'unauthorized' }, { errorCode: 'forbidden' }, { errorCode: 'not_found' }, { errorCode: 'UNAUTHORIZED' }, { category: 'auth_failed' }]) {
+for (const refusal of [
+  { status: 401, errorCode: 'unauthorized' },
+  { status: 403, errorCode: 'forbidden' },
+  { status: 404, error: 'Task not found' },
+  { status: 404, errorCode: 'not_found', error: 'Board not found' },
+  { status: 404, errorCode: 'task_not_found' },
+  { status: 401, errorCode: 'UNAUTHORIZED' },
+  { status: 401, error: 'Invalid token' },
+  { status: 401, errorCode: 'token_expired' },
+  { status: 403, errorCode: 'insufficient_scope' },
+  { status: 403, error: 'Permission denied' },
+]) {
   test(`now refused: ${JSON.stringify(refusal)} files nothing without an open match`, async t => {
     const log = t.mock.method(console, 'info', () => {})
     const f = setup()
-    const result = await f.fileAiFeedback({ surface: 'mcp', ...refusal }, 42)
+    const result = await f.fileAiFeedback({ surface: 'mcp', ...refusal }, 42, { origin: 'agent' })
     assert.deepEqual(result, { success: false, filed: false, reason: 'access_refused', error: 'Normal access refusal; no new ticket was filed.' })
     assert.equal(result.ticketNumber, undefined)
     assert.equal(f.created.length, 0)
@@ -202,6 +215,45 @@ for (const refusal of [{ status: 401 }, { status: 403 }, { status: 404 }, { erro
     assert.equal(f.quotas.length, 0)
     assert.equal(log.mock.calls.length, 1)
     assert.match(log.mock.calls[0].arguments[0], /normal access refusal/)
+  })
+}
+
+for (const report of [
+  { status: 404, tool: '/api/mcp/tasks', category: 'call_failed' },
+  { status: 404, errorCode: 'route_not_found', error: 'Route /api/mcp/tasks not found' },
+  { status: 404, errorCode: 'not_found', error: 'Cannot GET /api/mcp/tasks' },
+  { status: 404, errorCode: 'not_found' },
+  { status: 401 },
+  { status: 403, category: 'auth_failed' },
+  { errorCode: 'unauthorized', category: 'auth_failed' },
+  { status: 500, errorCode: 'unauthorized', category: 'auth_failed' },
+]) {
+  test(`still filed: agent report ${JSON.stringify(report)}`, async () => {
+    const f = setup()
+    const result = await f.fileAiFeedback({ surface: 'api', ...report }, 42, { origin: 'agent' })
+    assert.equal(result.success, true)
+    assert.equal(f.created.length, 1)
+    if (report.status === 500) assert.match(f.created[0].title, /server error/)
+    else assert.doesNotMatch(f.created[0].description, /usually not a Hypertask bug|usually means the agent used/)
+  })
+}
+
+for (const reason of ['invalid_token', 'insufficient_scope', new Error('Classifier unavailable')]) {
+  test(`still filed: automatic MCP 401 allowed through by 7498 (${String(reason)})`, async () => {
+    const pending = []
+    const previous = process.env.AI_FEEDBACK_AGENT_USER_ID
+    process.env.AI_FEEDBACK_AGENT_USER_ID = '42'
+    try {
+      const f = setup({ pending, reason })
+      f.load('src/lib/aiFeedback/automatic.ts').queueMcpAuthFailure(new Request('https://app.hypertask.ai/mcp'))
+      await Promise.all(pending)
+      assert.equal(f.created.length, 1)
+      assert.match(f.created[0].description, /HTTP status: 401/)
+      assert.doesNotMatch(f.created[0].description, /usually means the agent used/)
+    } finally {
+      if (previous === undefined) delete process.env.AI_FEEDBACK_AGENT_USER_ID
+      else process.env.AI_FEEDBACK_AGENT_USER_ID = previous
+    }
   })
 }
 
@@ -276,7 +328,7 @@ test('plain tickets retain parsable fingerprint and tally markers across repeat 
 test('plain summaries distinguish scope, categories and supplied free text without storing it', () => {
   const { plainFeedback } = setup()
   assert.match(plainFeedback(unauthorized, 'a'.repeat(64)).title, /refused when it signed in through MCP/)
-  assert.match(plainFeedback({ surface: 'mcp', status: 403 }, 'a'.repeat(64)).description, /board or action it is not allowed/)
+  assert.match(plainFeedback({ surface: 'mcp', status: 403, errorCode: 'forbidden' }, 'a'.repeat(64)).description, /board or action it is not allowed/)
   assert.match(plainFeedback({ surface: 'mcp', category: 'empty_result', tool: 'search' }, 'a'.repeat(64)).title, /call to search returned nothing/)
   assert.match(plainFeedback({ surface: 'agent', category: 'slow' }, 'a'.repeat(64)).title, /was slow/)
   const rendered = plainFeedback({ ...bare, error: 'private' }, 'a'.repeat(64)).description
@@ -291,7 +343,7 @@ for (const [mode, expectedPlain] of [['EVERYONE', true], ['OFF', false]]) {
     process.env.AI_FEEDBACK_AGENT_USER_ID = '42'
     try {
       const f = setup({ mode })
-      await f.fileAiFeedback(serverError)
+      await f.fileAiFeedback(serverError, undefined, { origin: 'automatic' })
       assert.equal(f.created[0].title.startsWith('AI feedback:'), !expectedPlain)
       assert.deepEqual(f.lookups, [{ flag: key, userId: undefined }])
     } finally {

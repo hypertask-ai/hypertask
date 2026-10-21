@@ -9,7 +9,7 @@ const stub = (file, exports) => {
   const filename = path.join(root, file)
   require.cache[filename] = { id: filename, filename, loaded: true, exports }
 }
-let mode = 'OWNER_AND_QA', userId = 985, authorized = true, files = [], pending = [], clientNames = new Map(), quotaCount = 0, attemptCount = 0
+let plainMode = 'OFF', mode = 'OWNER_AND_QA', userId = 985, authorized = true, files = [], pending = [], clientNames = new Map(), quotaCount = 0, attemptCount = 0
 let registeredTools = [], coreBlock, coreThrow = false, catalogEnabled = false, lockBlock, transactionError, onLockAttempt
 const enabledFor = (id) => mode === 'EVERYONE' || mode === 'OWNER_AND_QA' && [6, 985].includes(id)
 const auth = () => authorized ? { user: { id: userId, displayName: 'QA', email: 'private@example.test' }, agentId: 'board-agent' } : null
@@ -35,8 +35,11 @@ stub('src/lib/prisma.ts', { default: {
   label: { findFirst: async () => ({ id: 'ai-feedback' }) },
 } })
 stub('src/lib/flags.ts', {
-  isFeatureEnabled: async (key, id) => key === 'htpr-6804-mcp-tools' ? catalogEnabled : key === 'htpr-7195-ai-feedback' && enabledFor(id),
-  featureFlagCandidateUserIds: async () => mode === 'EVERYONE' ? null : mode === 'OFF' ? [] : [6, 985],
+  isFeatureEnabled: async (key, id) => key === 'htpr-7536-plain-ai-feedback' ? plainMode === 'EVERYONE' : key === 'htpr-6804-mcp-tools' ? catalogEnabled : key === 'htpr-7195-ai-feedback' && enabledFor(id),
+  featureFlagCandidateUserIds: async (key) => {
+    const selected = key === 'htpr-7536-plain-ai-feedback' ? plainMode : key === 'htpr-7195-ai-feedback' ? mode : 'OFF'
+    return selected === 'EVERYONE' ? null : selected === 'OFF' ? [] : [6, 985]
+  },
 })
 stub('src/lib/redis.ts', { getRedis: async () => ({
   set: async (key, value) => { if (key.includes(':client:')) clientNames.set(key, value); return 'OK' },
@@ -71,7 +74,7 @@ const restRequest = (body) => new NextRequest('https://app.hypertask.ai/api/mcp/
 const rpcRequest = (method, params) => new Request('https://mcp.hypertask.ai/mcp', { method: 'POST', headers: { Authorization: 'Bearer fixture', 'Content-Type': 'application/json' }, body: JSON.stringify({ jsonrpc: '2.0', id: 1, method, params }) })
 async function drain() { while (pending.length) { const batch = pending.splice(0); await Promise.all(batch) } }
 
-test.beforeEach(() => { mode = 'OWNER_AND_QA'; userId = 985; authorized = true; files = []; pending = []; clientNames = new Map(); quotaCount = 0; attemptCount = 0; registeredTools.splice(0, registeredTools.length, reportFeedbackTool); coreBlock = undefined; coreThrow = false; catalogEnabled = false; lockBlock = undefined; transactionError = undefined; onLockAttempt = undefined; delete process.env.AI_FEEDBACK_AGENT_USER_ID })
+test.beforeEach(() => { plainMode = 'OFF'; mode = 'OWNER_AND_QA'; userId = 985; authorized = true; files = []; pending = []; clientNames = new Map(); quotaCount = 0; attemptCount = 0; registeredTools.splice(0, registeredTools.length, reportFeedbackTool); coreBlock = undefined; coreThrow = false; catalogEnabled = false; lockBlock = undefined; transactionError = undefined; onLockAttempt = undefined; delete process.env.AI_FEEDBACK_AGENT_USER_ID })
 test.afterEach(drain)
 
 test('REST accepts legitimate agent caller and returns the exact contract without private account fields', async () => {
@@ -414,4 +417,33 @@ test('REST explicit transaction timeout returns 503 without filing', async () =>
   assert.equal(response.status, 503)
   assert.match((await response.json()).error, /timed out/)
   assert.equal(files.length, 0)
+})
+
+
+test('plain flag On quiets explicit REST and MCP refusals but keeps missing routes and server failures', async () => {
+  plainMode = 'EVERYONE'
+  const quiet = await POST(restRequest({ surface: 'api', status: 404, error: 'Task not found' }))
+  assert.equal((await quiet.json()).filed, false)
+  const refusal = JSON.parse(await reportFeedbackTool.execute({ status: 403, errorCode: 'forbidden' }, 'fixture'))
+  assert.equal(refusal.filed, false)
+  assert.equal(files.length, 0)
+  const missing = await POST(restRequest({ surface: 'api', status: 404, errorCode: 'not_found', error: 'Cannot GET /api/mcp/tasks' }))
+  assert.equal((await missing.json()).success, true)
+  const server = JSON.parse(await reportFeedbackTool.execute({ status: 500, category: 'auth_failed' }, 'fixture'))
+  assert.equal(server.success, true)
+  assert.equal(files.length, 2)
+  assert.match(files[1].title, /server error/)
+})
+
+test('plain flag On preserves automatic auth-failure and thrown 404 reports', async () => {
+  plainMode = 'EVERYONE'; mode = 'EVERYONE'; authorized = false
+  process.env.AI_FEEDBACK_AGENT_USER_ID = '77'
+  assert.equal((await mcpHandler(rpcRequest('tools/list'))).status, 401)
+  await drain()
+  assert.equal(files.length, 1)
+  assert.match(files[0].description, /HTTP status: 401/)
+  assert.doesNotMatch(files[0].description, /usually means the agent used/)
+  queueAiFeedback({ surface: 'mcp', status: 404, error: 'Task not found' }, 985)
+  await drain()
+  assert.equal(files.length, 2)
 })

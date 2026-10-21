@@ -56,18 +56,21 @@ function description(input: AiFeedbackInput, fingerprint: string, displayName?: 
 }
 
 function scopeRefusal(input: AiFeedbackInput): boolean {
-  return [401, 403, 404].includes(input.status ?? 0) ||
-    ['unauthorized', 'forbidden', 'not_found'].includes(input.errorCode?.toLowerCase() ?? '') || input.category === 'auth_failed'
+  if (![401, 403, 404].includes(input.status ?? 0)) return false
+  const code = input.errorCode?.toLowerCase().replace(/[._-]+/g, ' ') ?? ''
+  if (code === 'route not found' || code === 'not found' && /\/api\//i.test(input.error ?? '')) return false
+  const refusal = `${code} ${input.error ?? ''}`
+  return /\b(?:unauthorized|forbidden|(?:permission|access|scope) (?:denied|refused)|insufficient (?:permissions?|scope)|(?:invalid|expired|revoked) (?:token|key)|(?:token|key) (?:invalid|expired|revoked)|auth(?:entication)? failed|(?:task|board|project) not found)\b/i.test(refusal)
 }
 
-export function plainFeedback(input: AiFeedbackInput, fingerprint: string, reporter?: { agentName?: string; ownerName?: string }) {
+export function plainFeedback(input: AiFeedbackInput, fingerprint: string, reporter?: { agentName?: string; ownerName?: string; origin?: 'agent' | 'automatic' }) {
   const surface = { mcp: 'MCP', cli: 'CLI', api: 'API', agent: 'agent connection' }[input.surface]
   const call = `An agent's ${surface} call${input.tool && input.tool !== input.surface ? ` to ${input.tool}` : ''}`
   const noDetails = !input.tool && input.status === undefined && !input.errorCode && !input.error && !input.note
   let happened: string
   let reading: string
   let action: string
-  if (scopeRefusal(input)) {
+  if (reporter?.origin !== 'automatic' && scopeRefusal(input)) {
     const signIn = input.status === 401 || input.errorCode?.toLowerCase() === 'unauthorized' || input.category === 'auth_failed'
     happened = signIn ? `An agent was refused when it signed in through ${surface}` : `${call} was refused because the agent may not use that board or action`
     reading = signIn ? 'This usually means the agent used a wrong or expired key, not a Hypertask bug.' : 'The agent may have used a board or action it is not allowed to use; this is usually not a Hypertask bug.'
@@ -99,7 +102,7 @@ export function plainFeedback(input: AiFeedbackInput, fingerprint: string, repor
   }
 }
 
-export async function fileAiFeedback(raw: unknown, userId?: number, reporter?: { agentName?: string | null }) {
+export async function fileAiFeedback(raw: unknown, userId?: number, reporter: { origin: 'agent' | 'automatic'; agentName?: string | null } = { origin: 'agent' }) {
   if (!await aiFeedbackEnabled(userId)) throw new AiFeedbackError(404, 'Not found')
   const parsed = aiFeedbackSchema.safeParse(raw)
   if (!parsed.success) {
@@ -151,7 +154,7 @@ export async function fileAiFeedback(raw: unknown, userId?: number, reporter?: {
         const existing = await tx.task.findFirst({
           where, select: { id: true, userId: true, ticketNumber: true, uniqueIndex: true },
         })
-        if (plain && scopeRefusal(input) && !existing) {
+        if (plain && reporter.origin === 'agent' && scopeRefusal(input) && !existing) {
           console.info('AI feedback not filed: normal access refusal', { surface: input.surface, fingerprint: `ai-fb-${fingerprint.slice(0, 12)}` })
           return { success: false as const, filed: false as const, reason: 'access_refused' as const, error: 'Normal access refusal; no new ticket was filed.' }
         }
@@ -192,6 +195,7 @@ export async function fileAiFeedback(raw: unknown, userId?: number, reporter?: {
         const readable = plain ? plainFeedback(input, fingerprint, {
           agentName: scrubFeedbackText(reporter?.agentName ?? '').slice(0, 60) || undefined,
           ownerName: displayName,
+          origin: reporter.origin,
         }) : undefined
         const { task } = await createTaskCore({
           creationChannel: "agent",
