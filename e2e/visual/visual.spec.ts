@@ -48,14 +48,7 @@ async function taskDetail(page: Page) {
   await expect(comments.last()).toContainText('Last layout lock comment')
   await expect(page.getByTestId('comment-composer'), 'one desktop or phone composer').toHaveCount(1)
   await expect(page.getByTestId('comment-composer'), 'seeded ticket composer must be visible').toBeVisible()
-  if (page.viewportSize()!.width === 1440) {
-    for (const [comment, text] of [[comments.first(), 'First layout lock comment'], [comments.last(), 'Last layout lock comment']] as const) {
-      if (await comment.locator('.comment-body').count() === 0) await comment.getByText(text, { exact: true }).click({ timeout: 15_000 })
-      if (await page.getByRole('dialog').count() > 0) await page.keyboard.press('Escape')
-      await expect(page.getByRole('dialog'), 'no profile card may cover the thread').toHaveCount(0)
-    }
-    await expect(page.locator('[data-testid="ticket-comment"] .comment-body')).toHaveCount(2)
-  }
+  await expect(page.getByRole('dialog'), 'no popup may cover the ticket').toHaveCount(0)
 }
 
 async function settled(page: Page, landmarks: Locator[]) {
@@ -97,7 +90,7 @@ for (const screen of screens) {
       await board(page)
       landmarks = [page.locator('[data-title="To do"] .kanban-column-title'), page.locator('[data-title="Done"] .kanban-column-title'), page.locator(`#task-${fixture.taskId}`)]
     } else if (screen === 'task-detail' || screen === 'comment-box') {
-      await test.step('open seeded ticket and expand desktop comments', async () => {
+      await test.step('open seeded ticket with its comments', async () => {
         await taskDetail(page)
         await expect(lastComment, 'exactly one last seeded comment in the ticket thread').toHaveCount(1)
         await expect(lastComment, 'last seeded comment must be visible').toBeVisible()

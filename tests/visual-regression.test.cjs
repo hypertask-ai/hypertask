@@ -170,7 +170,7 @@ test("five full-viewport screens use real theme/time, cached ticket navigation, 
   assert.match(spec, /if \(testInfo\.project\.name === 'desktop'\) \{\s+await composer\.evaluate\(element => element\.scrollIntoView\(\{ behavior: 'instant', block: 'nearest' \}\), undefined, \{ timeout: 15_000 \}\)/);
   assert.match(spec, /expect\(lastComment, 'last seeded comment must remain in viewport after scrolling'\)\.toBeInViewport\(\{ timeout: 15_000 \}\)/);
   assert.match(spec, /expect\(composer, 'comment composer must be in viewport after scrolling'\)\.toBeInViewport\(\{ timeout: 15_000 \}\)/);
-  for (const step of ['open seeded ticket and expand desktop comments', 'scroll last seeded comment and composer into view', 'assets loaded and landmark geometry settled', 'desktop composer follows the last seeded comment']) {
+  for (const step of ['open seeded ticket with its comments', 'scroll last seeded comment and composer into view', 'assets loaded and landmark geometry settled', 'desktop composer follows the last seeded comment']) {
     assert.ok(spec.includes(`test.step('${step}'`));
   }
   assert.equal((spec.match(/\}, \{ timeout: 15_000 \}\)/g) || []).length, 4);
