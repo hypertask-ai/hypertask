@@ -229,6 +229,7 @@ for (const definition of selected) {
     const baseline = update && !existsSync(baselinePath) ? undefined : readBaseline()
     const recorded: Record<string, Record<string, Anchors>> = {}
     const failures: string[] = []
+    const measurements: Array<{ label: string; actual: Record<string, Box | null> }> = []
     let shots = 0
     mkdirSync(outDir, { recursive: true })
 
@@ -257,6 +258,7 @@ for (const definition of selected) {
         const { actual, stable } = await settle(page, definition.targets, required)
         // On a phone the AI chat is an animated sheet over the page, not part of the layout.
         if (width < 768) actual['ai-sidebar'] = null
+        measurements.push({ label, actual })
         if (!stable) found.push(`${label}: layout never settled within 8s`)
         if (update) {
           recorded[stateKey(state)] ??= {}
@@ -281,6 +283,7 @@ for (const definition of selected) {
         }
       }
     }
+    writeFileSync(path.join(outDir, `${definition.name}-${fixture.allFlagsOn ? 'all-flags-on' : 'live-like'}-retry-${testInfo.retry}.json`), JSON.stringify({ page: definition.name, measurements, failures }, null, 2))
     await testInfo.attach('layout-matrix', { body: JSON.stringify({ page: definition.name, failures }), contentType: 'application/json' })
 
     if (update) {
