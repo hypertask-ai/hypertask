@@ -76,7 +76,8 @@ export default async function RootLayout(
   const analyticsIsGuest =
     analyticsSession?.email?.endsWith("@demo.hypertask.ai") ?? false;
   const memoryOnlyTracking = await isFeatureEnabled(HTPR_7278_MEMORY_ONLY_TRACKING_FLAG, analyticsSession?.id ?? -1);
-  const fontAssetQuery = await isFeatureEnabled(HTPR_7554_FONT_ONCE_FLAG, analyticsSession?.id ?? -1) && process.env.NEXT_DEPLOYMENT_ID
+  const fontOnce = await isFeatureEnabled(HTPR_7554_FONT_ONCE_FLAG, analyticsSession?.id ?? -1);
+  const fontAssetQuery = fontOnce && process.env.NEXT_DEPLOYMENT_ID
     ? `?dpl=${process.env.NEXT_DEPLOYMENT_ID}`
     : "";
 
