@@ -8,7 +8,7 @@ import {
   type McpAuthContext,
 } from '@/lib/mcp/auth'
 import prisma from '@/lib/prisma'
-import { DECISIONS_GUIDANCE } from '@/lib/mcp/featureCatalog'
+import { DECISIONS_GUIDANCE } from '@/lib/mcp/decisionsGuidance'
 import { getProjectListingWhere } from '@/utils/controllers/projects/getAllIncludes'
 
 import { buildGuidedStart } from './guidedStart'

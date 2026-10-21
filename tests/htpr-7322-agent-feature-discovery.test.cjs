@@ -7,6 +7,7 @@ const { load } = require('./task-route-loader.cjs')
 
 const root = path.resolve(__dirname, '..')
 const read = (file) => fs.readFileSync(path.join(root, file), 'utf8')
+const { DECISIONS_GUIDANCE } = load('src/lib/mcp/decisionsGuidance.ts', {})
 const decisionsKey = 'htpr-7092-decisions'
 const searchKey = 'htpr-6688-search-autocomplete'
 const definitionKeys = [decisionsKey, 'htpr-7064-inbox-remind-returns', 'htpr-6422-my-tasks-views', 'htpr-6457-my-tasks-scopes', 'htpr-6461-my-tasks-snooze', searchKey]
@@ -48,17 +49,22 @@ test('catalog includes every enabled feature kind without requiring a destinatio
   const rows = await mod.getFeatureCatalog(reader.user.id)
   assert.deepEqual(rows.filter(({ key }) => !key.startsWith('core-')), [
     { key: searchKey, description: definitions.find(({ key }) => key === searchKey).description, shippedOn: definitions.find(({ key }) => key === searchKey).shippedOn, available: true, name: 'Search suggestions', url: 'https://app.hypertask.ai/search' },
-    { key: 'htpr-998-unmapped-product', description: 'No verified destination', shippedOn: '2026-10-11', available: true },
+    { key: 'htpr-998-unmapped-product', name: 'unmapped product', description: 'No verified destination', shippedOn: '2026-10-11', available: true },
   ])
   for (const key of [decisionsKey, 'htpr-7064-inbox-remind-returns', 'htpr-999-improvement', 'core-decisions']) {
     assert.equal(rows.some((row) => row.key === key), false)
   }
+  assert.ok(rows.every(({ name }) => typeof name === 'string' && name.trim().length > 0))
   assert.deepEqual(mod.users, [47])
 })
 
 test('catalog projects live feature descriptions and shipped dates with optional verified destinations', async () => {
   const mod = catalog(Object.fromEntries(definitionKeys.map((key) => [key, true])))
   const rows = await mod.getFeatureCatalog(985)
+  assert.ok(rows.every(({ name }) => typeof name === 'string' && name.trim().length > 0))
+  assert.equal(rows.filter(({ name }) => name === 'Decisions').length, 1)
+  assert.equal(rows.filter(({ url }) => url === 'https://app.hypertask.ai/inbox?split=Decisions').length, 1)
+  assert.equal(rows.some(({ key }) => key === 'core-decisions'), false)
   const features = rows.filter(({ key }) => !key.startsWith('core-'))
   assert.equal(features.length, definitions.filter(({ kind }) => kind === 'feature').length)
   for (const row of features) {
@@ -89,6 +95,7 @@ test('core destinations survive removed definitions and Decisions remains gated 
   assert.deepEqual(rows.map(({ name, url }) => [name, url]), expected)
   for (const row of rows) {
     assert.equal(row.available, true)
+    assert.ok(row.name)
     assert.ok(row.description)
   }
   assert.deepEqual((await catalog({}).getFeatureCatalog(47)).map(({ name, url }) => [name, url]), expected.filter(([name]) => name !== 'Decisions'))
@@ -174,19 +181,29 @@ test('MCP catalog formatting retains unmapped descriptions and dates without pag
   assert.equal(other.pagination.has_more, true)
 })
 
+test('Decisions guidance stays lightweight and hello does not eagerly load the feature catalog', () => {
+  assert.doesNotMatch(read('src/lib/mcp/decisionsGuidance.ts'), /\b(?:import|require)\b/)
+  assert.doesNotMatch(read('src/lib/mcp/hello/getHelloPayload.ts'), /from ['"]@\/lib\/mcp\/featureCatalog['"]/)
+})
+
 test('hello and tool guidance explain the actual Decisions workflow, not structured records', async () => {
-  const mod = catalog()
   const hello = load('src/lib/mcp/hello/getHelloPayload.ts', {
-    '@/lib/mcp/featureCatalog': mod,
     '@/lib/prisma': { default: { project: { findMany: async () => [] } } },
     '@/lib/mcp/auth': {},
     '@/lib/flags': { isFeatureEnabled: async () => false },
     '@/utils/controllers/projects/getAllIncludes': { getProjectListingWhere: () => ({}) },
   })
   const { capabilities } = await hello.getHelloPayload(reader)
-  assert.equal(capabilities.decisions, mod.DECISIONS_GUIDANCE)
-  assert.equal(hello.HTPR_7122_HELLO_CAPABILITIES.decisions, mod.DECISIONS_GUIDANCE)
-  for (const text of [capabilities.decisions, ...['comments', 'decisions'].map((name) => Object.values(JSON.parse(read(`src/lib/mcp-server/config/descriptions/${name}.json`))).filter((value) => typeof value === 'string').join(' '))]) {
+  assert.equal(capabilities.decisions, DECISIONS_GUIDANCE)
+  assert.equal(hello.HTPR_7122_HELLO_CAPABILITIES.decisions, DECISIONS_GUIDANCE)
+  const descriptionMocks = Object.fromEntries(
+    fs.readdirSync(path.join(root, 'src/lib/mcp-server/config/descriptions'))
+      .filter((file) => file.endsWith('.json'))
+      .map((file) => [`./descriptions/${file}`, { default: JSON.parse(read(`src/lib/mcp-server/config/descriptions/${file}`)) }]),
+  )
+  const { CONSOLIDATED_TOOL_DESCRIPTIONS } = load('src/lib/mcp-server/config/consolidated-descriptions.ts', descriptionMocks)
+  const descriptions = CONSOLIDATED_TOOL_DESCRIPTIONS.filter(({ name }) => ['hypertask_comments', 'hypertask_decisions'].includes(name))
+  for (const text of [capabilities.decisions, ...descriptions.map((description) => Object.values(description).filter((value) => typeof value === 'string').join(' '))]) {
     assert.match(text, /Question:/)
     assert.match(text, /@mention/)
     assert.match(text, /https:\/\/app.hypertask.ai\/inbox\?split=Decisions/)
@@ -240,16 +257,19 @@ function pageEndpoint(agentId, warningModule = catalog({ [decisionsKey]: true })
 }
 
 test('agent feature-title warnings are nonblocking and idempotent receipts retain the page shape', async () => {
-  for (const title of ['Inbox', '  dEcIsIoNs  ', 'Decision inbox', 'Valentin decisions dashboard', 'Team inbox overview', 'My   Tasks', 'Weekly my tasks overview', 'Search', 'New search page', 'Dashboard', 'Team dashboard overview', 'Reports']) {
+  for (const title of ['Inbox', '  dEcIsIoNs  ', 'Decision', 'Decision inbox', 'Valentin decisions dashboard', 'Team inbox overview', 'My   Tasks', 'My Tasks page', 'Team my tasks page', 'Search', 'Search page', 'New search page', 'Dashboard', 'Team dashboard', 'Dashboard for engineering', 'Reports', 'Weekly reports', 'Reports for the team', 'Reports page']) {
     const route = pageEndpoint('write-agent')
     const response = await route.post(title, 'repeat-key')
     assert.equal(response.status, 200)
     const receipt = await response.json()
     assert.equal(receipt.warnings[0].code, 'existing_feature')
-    assert.match(receipt.warnings[0].message, /Question:/)
-    assert.match(receipt.warnings[0].message, /@mention/)
-    assert.match(receipt.warnings[0].message, /https:\/\/app.hypertask.ai\/inbox\?split=Decisions/)
-    if (/decision/i.test(title)) assert.equal(receipt.warnings[0].url, 'https://app.hypertask.ai/inbox?split=Decisions')
+    if (/decision/i.test(title)) {
+      assert.ok(receipt.warnings[0].message.endsWith(DECISIONS_GUIDANCE))
+      assert.equal(receipt.warnings[0].url, 'https://app.hypertask.ai/inbox?split=Decisions')
+    } else {
+      assert.equal(receipt.warnings[0].message.includes(DECISIONS_GUIDANCE), false)
+      assert.doesNotMatch(receipt.warnings[0].message, /Question:|@mention|split=Decisions/)
+    }
     assert.deepEqual(receipt.page, { publicId: 'fixture-page', id: 3, title, version: 1, url: 'https://app.hypertask.ai/page/fixture-page' })
     assert.deepEqual(await (await route.post(title, 'repeat-key')).json(), receipt)
     assert.equal(route.creates(), 1)
@@ -261,11 +281,20 @@ test('human callers and unrelated titles or partial words have no warnings', asy
   for (const title of ['Decisions', 'Decision inbox', 'Valentin decisions dashboard']) {
     assert.deepEqual(Object.keys(await (await human.post(title)).json()), ['page'])
   }
-  for (const title of ['Sprint 12 notes', 'QA report', 'Release notes', 'Decisionmaking notes', 'inboxes', 'dashboards', 'my tasksmith', 'search pages', 'Search research', '', 'report']) {
+  for (const title of ['Sprint 12 notes', 'Dashboard design notes', 'Team dashboard overview', 'Reports design notes', 'Weekly my tasks overview', 'My Tasks planning notes', 'My Tasks page notes', 'Search design notes', 'Search page notes', 'QA report', 'Release notes', 'Decisionmaking notes', 'inboxes', 'dashboards', 'my tasksmith', 'search pages', 'Search research', '', 'report']) {
     const route = pageEndpoint('write-agent')
     assert.deepEqual(Object.keys(await (await route.post(title)).json()), ['page'])
     assert.equal(route.creates(), 1)
   }
+})
+
+test('unavailable Decisions falls back to the Inbox warning without Decisions guidance', async () => {
+  const route = pageEndpoint('write-agent', catalog({}))
+  const response = await route.post('Decision inbox')
+  assert.equal(response.status, 200)
+  const receipt = await response.json()
+  assert.equal(receipt.warnings[0].url, 'https://app.hypertask.ai/inbox')
+  assert.doesNotMatch(receipt.warnings[0].message, /Question:|@mention|split=Decisions/)
 })
 
 test('unavailable Decisions and failed advisory lookups never prevent agent page creation', async () => {

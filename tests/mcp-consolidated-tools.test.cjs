@@ -84,6 +84,10 @@ function spyTools() {
 }
 
 test('catalog flag off preserves the entire current deferred list exactly', async () => {
+  const deferred = selectMcpTools(legacy, false)
+  assert.ok(toolNamed(deferred, 'hypertask_list_features'))
+  assert.ok((await rpc(deferred, 'tools/list')).result.tools.some(({ name }) => name === 'hypertask_list_features'))
+  assert.equal(definitions.find(({ name }) => name === 'hypertask_user_context').actions.features.tool, 'hypertask_list_features')
   const originalLegacy = legacy.filter((tool) => !['hypertask_report_feedback', 'hypertask_list_features'].includes(tool.name))
   const selected = selectMcpTools(originalLegacy, false, { managementPermissions: { management: ['read'] } })
   assert.equal(selected, originalLegacy)
@@ -91,6 +95,13 @@ test('catalog flag off preserves the entire current deferred list exactly', asyn
   const baseline = JSON.parse(fs.readFileSync(path.join(__dirname, 'fixtures/mcp-6804/legacy-catalog.json')))
   assert.deepEqual(listed, baseline)
   assert.deepEqual(baseline.filter((tool) => !['hypertask_search_tools', 'hypertask_describe_tool'].includes(tool.name)).map((tool) => tool.name), originalLegacy.map((tool) => tool.name))
+})
+
+test('user_context features dispatches to the deferred feature tool', async () => {
+  const { calls, tools } = spyTools()
+  const result = await rpc(tools, 'tools/call', { name: 'hypertask_user_context', arguments: { action: 'features' } })
+  assert.notEqual(result.result.isError, true)
+  assert.equal(calls.at(-1).name, 'hypertask_list_features')
 })
 
 test('catalog flag on advertises 15 to 25 consolidated tools, with no duplicate names', async () => {
