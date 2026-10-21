@@ -52,7 +52,7 @@ import { AiChatComposerActionRow } from "./AiChatComposerActionRow";
 import { AttachmentButton } from "./AttachmentButton";
 import { AiComposerTextarea } from "./AiComposerTextarea";
 import { useFlag } from "@/hooks/useFlag";
-import { HTPR_6929_COMPOSE_TASK_WRITER_FLAG, HTPR_7053_COMPOSE_BOARD_CHIP_FLAG } from "@/lib/flags/keys";
+import { HTPR_6929_COMPOSE_TASK_WRITER_FLAG, HTPR_7053_COMPOSE_BOARD_CHIP_FLAG, HTPR_7316_CHAT_SCOPE_TICKET_FLAG } from "@/lib/flags/keys";
 import { ChatScopeChip } from "./ChatScopeChip";
 import { SendMessageButton } from "./SendMessageButton";
 export { SendMessageButton } from "./SendMessageButton";
@@ -514,6 +514,7 @@ export function AI_Tiptap_Container({
 }
 
 function ChatScopeDropdown({ mobile = false, reuseChip = false }: { mobile?: boolean; reuseChip?: boolean }) {
+  const ticketScopeEnabled = useFlag(HTPR_7316_CHAT_SCOPE_TICKET_FLAG);
   const pathname = usePathname();
   const currentUser = useRecoilValue(currentUserAtom);
   const currentProject = useRecoilValue(currentProjectAtom);
@@ -547,7 +548,7 @@ function ChatScopeDropdown({ mobile = false, reuseChip = false }: { mobile?: boo
       ? { kind: "boards", label: "All boards", title: "All boards" }
       : typeof dockedScope === "number"
         ? { kind: "board", label: pickedBoardName, title: pickedBoardName }
-        : onTask && inViewObject.taskTicketNumber
+        : onTask && (!ticketScopeEnabled || dockedScope === "ticket") && inViewObject.taskTicketNumber
           ? {
               kind: "task",
               label: inViewObject.taskTicketNumber,
@@ -568,7 +569,7 @@ function ChatScopeDropdown({ mobile = false, reuseChip = false }: { mobile?: boo
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, [isOpen]);
 
-  const selectScope = (projectId: number | "all" | null) => {
+  const selectScope = (projectId: number | "all" | "ticket" | null) => {
     if (typeof projectId === "number") {
       setRecentChatBoardIds((previousIds) =>
         [projectId, ...previousIds.filter((id) => id !== projectId)].slice(
@@ -631,6 +632,13 @@ function ChatScopeDropdown({ mobile = false, reuseChip = false }: { mobile?: boo
           role="menu"
           className="absolute bottom-[calc(100%+6px)] left-0 z-50 max-h-60 w-64 overflow-y-auto rounded-md bg-modalBackground py-1 shadow-lg scrollbar-thin hover:scrollbar-thumb-gray-500 scrollbar-thumb-gray-500 scrollbar-track-kanban-column-scrollbar dark:scrollbar-thumb-[#4F5766]"
         >
+          {ticketScopeEnabled && onTask && (
+            <ScopeMenuRow
+              label="Current ticket"
+              selected={dockedScope === "ticket"}
+              onClick={() => selectScope("ticket")}
+            />
+          )}
           <ScopeMenuRow
             label="Current board"
             selected={dockedScope === null}
