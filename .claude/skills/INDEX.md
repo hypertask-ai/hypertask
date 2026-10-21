@@ -30,6 +30,7 @@ Read the "when to load" column, open that SKILL.md, and follow it, including its
 | design-compliance | Before the PR (UI) | .claude/skills/design-compliance/SKILL.md |
 | update-docs | Before the PR (user-visible change) | .claude/skills/update-docs/SKILL.md |
 | verify-on-phone | Before the PR (UI) | .claude/skills/verify-on-phone/SKILL.md |
+| verify-visual | Before merging a UI PR: did it move a main screen? Read the GitHub Visual Regression result and diff PNGs; no heavy VPS runs | .claude/skills/verify-visual/SKILL.md |
 | verify-qa | After deploy | .claude/skills/verify-qa/SKILL.md |
 
 `prototype` is the `/prototype` slash command, not a `/ship` step. When a change touches auth, billing, or user data, `fix-bug` also reads `.claude/skills/fix-bug/reference/security-findings.md`.
