@@ -68,12 +68,13 @@ for (const aiMode of ["AiTaskWriter", "WriteWithAI"]) {
     const unslop = run.instructions.indexOf("=== SKILL 2: unslop ===");
     assert.ok(webWriting >= 0 && unslop > webWriting);
     assert.doesNotMatch(run.instructions, /# i-have-adhd/);
-    assert.match(run.instructions, /State each fact once where it belongs/);
-    assert.match(run.instructions, /Brevity shortens sections; it never removes them/);
-    assert.match(run.instructions, /Aim for half the words/);
-    assert.match(run.instructions, /one idea per paragraph/);
-    assert.match(run.instructions, /Never invent page copy/);
-    assert.match(run.instructions, /explicitly asks for ideas or finished copy variations/);
+    assert.match(run.instructions, /State every fact in exactly one place/);
+    assert.match(run.instructions, /Never start a line with "Proposed:"/);
+    assert.match(run.instructions, /Questions to people, open questions and status updates belong in comments/);
+    assert.match(run.instructions, /Long tickets stay long when the content needs it/);
+    assert.match(run.instructions, /Never turn a listed change into a check/);
+    assert.match(run.instructions, /A ticket or link appears once in the whole ticket/);
+    assert.match(run.instructions, /Never invent metrics/);
   });
 
   test(`${aiMode} with the flag off keeps today's prompt byte for byte`, async () => {
@@ -86,33 +87,16 @@ for (const aiMode of ["AiTaskWriter", "WriteWithAI"]) {
   });
 }
 
-test("board research with the flag on restores sections, real controls and ICE reasons", async () => {
+test("board research with the flag on drops Proposed: labels and the Open questions section", async () => {
   const { run } = await prepare({ enabled: true });
   assert.ok(run.instructions.includes(research.TASK_WRITER_BOARD_RESEARCH_WEB_RULES));
   assert.ok(!run.instructions.includes(research.TASK_WRITER_BOARD_RESEARCH_RULES));
-  for (const section of ["Problem", "Hypothesis", "Control", "Variations", "Requirements", "ICE assessment", "Suggested metrics", "Related"]) {
-    assert.ok(research.TASK_WRITER_BOARD_RESEARCH_WEB_RULES.includes(section), section);
-  }
-  assert.match(run.instructions, /Impact, Confidence and Ease scores with one brief reason each and Total x\/30/);
-  assert.match(run.instructions, /quote real current page copy from relevant context/);
-  assert.match(run.instructions, /An earlier variation is not automatically today's baseline/);
-  assert.match(run.instructions, /do not invent an experiment/);
-  assert.match(run.instructions, /Label proposed assumptions briefly/);
+  assert.doesNotMatch(run.instructions, /labeled "Proposed:"|Label guesses with "Proposed:"/);
+  assert.doesNotMatch(run.instructions, /End with <h2>Open questions<\/h2>/);
+  assert.match(run.instructions, /<h2>Related<\/h2>/);
   assert.match(run.instructions, /Proposed properties/);
   assert.match(run.instructions, /id="ai-generated-task-priority"/);
 });
-
-// The restored structure must not depend on the newer board-format flag.
-for (const boardFormat of [false, true]) {
-  test(`merged style keeps structure and scoring with board format ${boardFormat}`, () => {
-    const style = editorPrompts.createTaskAuthoringStyle(true, boardFormat);
-    assert.match(style, /Problem, Hypothesis, Control, Variations, Requirements, ICE assessment, Suggested metrics and Related/);
-    assert.match(style, /Impact, Confidence and Ease each a 1-10 score AND one short, specific reason/);
-    assert.match(style, /match the title and ICE custom field/);
-    assert.match(style, /Quote its real copy literally/);
-    assert.match(style, /preserve source quotes and a board-required title separator verbatim/);
-  });
-}
 
 test("web-writing style prompt is shorter than the unslop plus i-have-adhd prompt", () => {
   assert.ok(editorPrompts.TASK_AUTHORING_WEB_STYLE.length < editorPrompts.TASK_AUTHORING_STYLE.length);
