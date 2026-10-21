@@ -1,0 +1,93 @@
+name: Live QA
+run-name: Live QA ${{ inputs.mode }} ${{ inputs.ticket }} ${{ inputs.script }} @ ${{ inputs.expected_deploy_sha }}
+
+on:
+  workflow_dispatch:
+    inputs:
+      ticket:
+        description: Ticket key with a reviewed production script
+        required: true
+        type: string
+      script:
+        description: Exact e2e/live-qa manifest entry
+        required: true
+        type: string
+      expected_deploy_sha:
+        description: Full deployed production commit SHA
+        required: true
+        type: string
+      mode:
+        description: Run QA or prove environment secret presence without logging in
+        type: choice
+        options: [run, probe]
+        default: run
+
+permissions:
+  contents: read
+
+concurrency:
+  group: live-qa-account-985
+  cancel-in-progress: false
+
+jobs:
+  capture:
+    if: github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/production' && github.repository == 'hypertask-ai/hypertask' && inputs.mode == 'run'
+    environment: live-qa
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      LIVE_QA_TICKET: ${{ inputs.ticket }}
+      LIVE_QA_SCRIPT: ${{ inputs.script }}
+      LIVE_QA_EXPECTED_SHA: ${{ inputs.expected_deploy_sha }}
+      LIVE_QA_STATE: ${{ runner.temp }}/live-qa-private/state.json
+      LIVE_QA_RESULTS: ${{ runner.temp }}/live-qa-results
+      LIVE_QA_EVIDENCE: ${{ runner.temp }}/live-qa-evidence
+      DEBUG: ''
+      NODE_DEBUG: ''
+      PWDEBUG: ''
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: 24
+      - name: Install dependencies without lifecycle hooks
+        run: npm ci --ignore-scripts
+      - name: Install Chromium without login credentials
+        run: ./node_modules/.bin/playwright install --with-deps chromium
+      - name: Validate script, deployment and evidence recipient before login
+        run: |
+          node scripts/live-qa/run.mjs validate
+          node scripts/live-qa/evidence.mjs validate
+      - name: Renew QA user 985 session
+        id: login
+        env:
+          QA_LOGIN_EMAIL: ${{ secrets.QA_LOGIN_EMAIL }}
+          QA_LOGIN_PASSWORD: ${{ secrets.QA_LOGIN_PASSWORD }}
+        run: ./node_modules/.bin/tsx scripts/live-qa/login.ts
+      - name: Run the reviewed script without login credentials
+        id: test
+        run: node scripts/live-qa/run.mjs run
+      - name: Install evidence encryption
+        if: ${{ !cancelled() && (steps.test.outcome == 'success' || steps.test.outcome == 'failure') }}
+        run: sudo apt-get update -qq && sudo apt-get install -y age
+      - name: Encrypt clean evidence
+        id: encrypt
+        if: ${{ !cancelled() && (steps.test.outcome == 'success' || steps.test.outcome == 'failure') }}
+        env:
+          LIVE_QA_OUTCOME: ${{ steps.test.outcome }}
+        run: node scripts/live-qa/evidence.mjs encrypt
+      - name: Upload encrypted evidence only
+        if: ${{ !cancelled() && steps.encrypt.outcome == 'success' }}
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: live-qa-${{ inputs.ticket }}-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/live-qa-evidence.tar.age
+          if-no-files-found: error
+          include-hidden-files: false
+          retention-days: 7
+      - name: Remove private session and plaintext evidence
+        if: always()
+        run: rm -rf -- "$RUNNER_TEMP/live-qa-private" "$RUNNER_TEMP/live-qa-results" "$RUNNER_TEMP/live-qa-evidence" "$RUNNER_TEMP/live-qa-evidence.tar"
