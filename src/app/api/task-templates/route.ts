@@ -1,4 +1,6 @@
 import { getSessionUser } from "@/lib/auth/getSessionUser";
+import { isFeatureEnabled } from "@/lib/flags";
+import { HTPR_7472_TASK_TEMPLATES_FLAG } from "@/lib/flags/keys";
 import prisma from "@/lib/prisma";
 import { getProjectWhere } from "@/utils/controllers/projects/getAllIncludes";
 import {
@@ -123,6 +125,35 @@ export async function DELETE(request: NextRequest) {
     where: { id: templateId, project: { ...getProjectWhere(session.userId) } },
   });
   if (deleted.count === 0) {
+    return NextResponse.json({ success: false, error: "Template not found or access denied" }, { status: 404 });
+  }
+  return NextResponse.json({ success: true });
+}
+
+export async function PATCH(request: NextRequest) {
+  const session = await getSessionUser(request.headers);
+  if (!session) {
+    return NextResponse.json({ success: false, error: "Unauthorized" }, { status: 401 });
+  }
+  if (!(await isFeatureEnabled(HTPR_7472_TASK_TEMPLATES_FLAG, session.userId))) {
+    return NextResponse.json({ success: false, error: "Task template editing is turned off" }, { status: 403 });
+  }
+  const body = await request.json().catch(() => null);
+  const templateId = Number(body?.templateId);
+  if (!Number.isInteger(templateId) || templateId <= 0 ||
+      typeof body?.name !== "string" || !body.name.trim() ||
+      typeof body?.title !== "string" || typeof body?.descriptionHtml !== "string") {
+    return NextResponse.json({ success: false, error: "templateId, name, title and descriptionHtml are required" }, { status: 400 });
+  }
+  const updated = await prisma.taskTemplate.updateMany({
+    where: { id: templateId, project: { ...getProjectWhere(session.userId) } },
+    data: {
+      name: body.name.trim().slice(0, TEMPLATE_NAME_MAX),
+      title: body.title,
+      descriptionHtml: body.descriptionHtml,
+    },
+  });
+  if (updated.count === 0) {
     return NextResponse.json({ success: false, error: "Template not found or access denied" }, { status: 404 });
   }
   return NextResponse.json({ success: true });
