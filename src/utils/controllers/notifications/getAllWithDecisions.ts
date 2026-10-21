@@ -3,6 +3,8 @@ import { visibleUserInboxWhere } from "@/utils/controllers/notifications/visible
 import { getDecisionComments } from "@/utils/controllers/notifications/decisionTasks";
 import { getInboxTabs } from "@/utils/helperFunctions/helperFunctions";
 import type { INotification } from "@/models/model";
+import { isFeatureEnabled } from "@/lib/flags";
+import { HTPR_7311_DECISION_COMMENT_LINK_FLAG } from "@/lib/flags/keys";
 
 type InboxResponse = Awaited<ReturnType<typeof notificationGetAll>>;
 
@@ -21,12 +23,14 @@ export default async function notificationGetAllWithDecisions(
   const decisionComments = await getDecisionComments(parsedUserId, visibleUserInboxWhere(parsedUserId));
   if (!decisionComments.size) return response;
 
+  const decisionCommentLinkEnabled = await isFeatureEnabled(HTPR_7311_DECISION_COMMENT_LINK_FLAG, parsedUserId).catch(() => false);
+
   const notifications = json.notifications.map((notification) => {
     const decisionCommentId = notification.taskId != null
       ? decisionComments.get(notification.taskId)?.commentId
       : undefined;
     return decisionCommentId
-      ? { ...notification, isDecision: true, decisionCommentId }
+      ? { ...notification, isDecision: true, ...(decisionCommentLinkEnabled ? { decisionCommentId } : {}) }
       : notification;
   });
   return {

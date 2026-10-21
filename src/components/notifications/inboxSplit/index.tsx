@@ -1,7 +1,12 @@
 "use client";
 
 import { setNotificationSeen } from "@/lib/api/typedClient";
-import { HTPR_6979_TYPED_WRITES_FLAG } from "@/lib/flags/keys";
+import {
+  HTPR_6752_INSTANT_TICKET_OPEN_FLAG,
+  HTPR_6979_TYPED_WRITES_FLAG,
+  HTPR_7311_DECISION_COMMENT_LINK_FLAG,
+  SHORTCUT_NUDGES_FLAG,
+} from "@/lib/flags/keys";
 
 import { useFirstScreenSurface, type FirstScreenSnapshot } from "@/lib/firstScreen/SurfaceContext";
 import { projectInboxDateGroup } from "@/lib/firstScreen/inbox";
@@ -24,7 +29,6 @@ import {
   globalNotificationFocusAtom,
   currentProjectAtom,
 } from "@/store";
-import { SHORTCUT_NUDGES_FLAG } from "@/lib/flags/keys";
 import { useShortcutTipsSetting } from "@/hooks/useShortcutTipsSetting";
 import {
   clearArchiveShortcutNudge,
@@ -52,7 +56,6 @@ import SubtaskLinkingModal from "@/components/Modals/SubtaskLinkingModal/Subtask
 import useCurrentUser from "@/hooks/General/useCurrentUserCheckFromCookies";
 import { useProjectQuery } from "@/hooks/General/useProjectQuery";
 import { useFlag } from "@/hooks/useFlag";
-import { HTPR_6752_INSTANT_TICKET_OPEN_FLAG } from "@/lib/flags/keys";
 import useHypertasksNavigate from "@/hooks/MultiPages/Route/useHypertasksNavigate";
 import { BulkAction, useBulkActions } from "@/hooks/MultiPages/useBulkActions";
 import { KeyCodes, KeyValues } from "@/lib/constants/keyboard-handler";
@@ -61,7 +64,6 @@ import SelectionCheckbox from "@/components/Common/selection-checkbox";
 import { useBulkSelectionContext } from "@/lib/contexts/Inbox/BulkSelectionContext";
 import { decisionsSplitName, inboxConfig } from "@/lib/configs/inbox.config";
 import { withDecisionCommentAnchor } from "@/lib/inboxDecisions";
-import { HTPR_7311_DECISION_COMMENT_LINK_FLAG } from "@/lib/flags/keys";
 import { cn } from "@/utils/undoActions/helperFuncs";
 import InboxZeroState from "@/components/Common/InboxZeroState";
 import { useInboxZero } from "@/lib/contexts/InboxZeroContext";

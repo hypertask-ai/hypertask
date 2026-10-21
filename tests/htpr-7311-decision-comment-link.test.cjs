@@ -116,21 +116,37 @@ test("server scopes mentions to any viewer, ignores agent replies, and uses only
   assert.deepEqual(calls, []);
 });
 
-test("the Decisions response exposes the question id on every row for that task", async () => {
-  const untouched = { id: "3", taskId: 2 };
-  const original = { status: 200, json: { notifications: [{ id: "1", taskId: 1 }, { id: "2", taskId: 1 }, untouched] } };
-  const { default: getAll } = loadTsModule("src/utils/controllers/notifications/getAllWithDecisions.ts", {
-    "@/utils/controllers/notifications/getAll": { __esModule: true, default: async () => original },
-    "@/utils/controllers/notifications/visibleInboxScope": { visibleUserInboxWhere: () => ({ userId: 42 }) },
-    "@/utils/controllers/notifications/decisionTasks": { getDecisionComments: async () => new Map([[1, question(30, 15)]]) },
-    "@/utils/helperFunctions/helperFunctions": { getInboxTabs: (rows) => rows.filter((row) => row.isDecision) },
+for (const enabled of [true, false]) {
+  test(`the Decisions response includes question ids only with the flag on (enabled: ${enabled})`, async () => {
+    const untouched = { id: "3", taskId: 2 };
+    const original = { status: 200, json: { notifications: [{ id: "1", taskId: 1 }, { id: "2", taskId: 1 }, untouched] } };
+    const { default: getAll } = loadTsModule("src/utils/controllers/notifications/getAllWithDecisions.ts", {
+      "@/utils/controllers/notifications/getAll": { __esModule: true, default: async () => original },
+      "@/utils/controllers/notifications/visibleInboxScope": { visibleUserInboxWhere: () => ({ userId: 42 }) },
+      "@/utils/controllers/notifications/decisionTasks": { getDecisionComments: async () => new Map([[1, question(30, 15)]]) },
+      "@/utils/helperFunctions/helperFunctions": { getInboxTabs: (rows) => rows.filter((row) => row.isDecision) },
+      "@/lib/flags": { isFeatureEnabled: async (key, userId) => {
+        assert.equal(key, FLAG);
+        assert.equal(userId, 42);
+        return enabled;
+      } },
+      "@/lib/flags/keys": { HTPR_7311_DECISION_COMMENT_LINK_FLAG: FLAG },
+    });
+    const result = await getAll("42");
+    const expectedDecisions = original.json.notifications.slice(0, 2).map((row) => ({
+      ...row, isDecision: true, ...(enabled ? { decisionCommentId: 30 } : {}),
+    }));
+    assert.deepEqual(result.json.notifications, [...expectedDecisions, untouched]);
+    assert.deepEqual(result.json.structuredData, expectedDecisions);
+    if (!enabled) {
+      for (const row of [...result.json.notifications, ...result.json.structuredData]) {
+        assert.equal(Object.hasOwn(row, "decisionCommentId"), false);
+      }
+    }
+    assert.equal(result.json.notifications[2], untouched);
+    assert.equal(original.json.notifications[0].decisionCommentId, undefined);
   });
-  const result = await getAll("42");
-  assert.deepEqual(result.json.notifications.slice(0, 2).map((row) => [row.isDecision, row.decisionCommentId]), [[true, 30], [true, 30]]);
-  assert.equal(result.json.notifications[2], untouched);
-  assert.equal(result.json.structuredData[0].decisionCommentId, 30);
-  assert.equal(original.json.notifications[0].decisionCommentId, undefined);
-});
+}
 
 const notification = (overrides = {}) => ({
   id: "1", type: "Comment", taskId: 1, projectId: 15, project: { id: 15 },

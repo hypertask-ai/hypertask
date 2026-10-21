@@ -210,6 +210,8 @@ test("wrapper: flag off or no pending Question returns the original response unc
   const run = async (ids) => {
     const mod = loadTsModule("src/utils/controllers/notifications/getAllWithDecisions.ts", {
       "@/utils/controllers/notifications/getAll": { __esModule: true, default: async () => original },
+      "@/lib/flags": { isFeatureEnabled: async () => false },
+      "@/lib/flags/keys": { HTPR_7311_DECISION_COMMENT_LINK_FLAG: "htpr-7311-decision-comment-link" },
       "@/utils/controllers/notifications/visibleInboxScope": { visibleUserInboxWhere: () => ({}) },
       "@/utils/controllers/notifications/decisionTasks": { getDecisionComments: async () => ids },
       "@/utils/helperFunctions/helperFunctions": { getInboxTabs: (rows) => ({ tabs: [{ project: "Decisions" }], data: [rows.map((_, i) => i)] }) },

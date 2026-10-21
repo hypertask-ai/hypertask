@@ -11,8 +11,7 @@ import { MobileViewContext } from "@/lib/contexts/mobileContext";
 import useHypertasksNavigate from '../MultiPages/Route/useHypertasksNavigate';
 import { useSearchParams } from 'next/navigation';
 import { useFlag } from '@/hooks/useFlag';
-import { HTPR_7002_INBOX_E_FIRST_PRESS_FLAG } from '@/lib/flags/keys';
-import { HTPR_7311_DECISION_COMMENT_LINK_FLAG } from '@/lib/flags/keys';
+import { HTPR_7002_INBOX_E_FIRST_PRESS_FLAG, HTPR_7311_DECISION_COMMENT_LINK_FLAG } from '@/lib/flags/keys';
 import { withDecisionCommentAnchor } from '@/lib/inboxDecisions';
 import { inboxDataQueryKey } from '../Inbox/useGetNotifications';
 import {
