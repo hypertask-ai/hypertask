@@ -51,12 +51,6 @@ const  OnboardingPageComponent:React.FC<IProps> = ({isUserNew, teamToInviteTo})=
         }, 200);
     }
 
-    // Invited / allowed-domain members already have a team and a board, so they skip the
-    // team-setup and board-generation steps and get the trimmed sequence. The
-    // keyboard-first tutorial is disabled, so both paths proceed directly to
-    // launch after their remaining setup steps. See
-    // https://app.hypertask.ai/detail/project-15/4189 and
-    // https://app.hypertask.ai/detail/project-15/5424.
     const Screens = [
         ...(isUserNew ? [<CreateTeamOnboardingScreen key={"create-team-screen"} />] : []),
         ...(isUserNew ? [<GenerateBoardOnboardingScreen key={"generate-board-screen"} onNextScreen={onNextScreen} />] : []),
@@ -74,7 +68,6 @@ const  OnboardingPageComponent:React.FC<IProps> = ({isUserNew, teamToInviteTo})=
         }
     }, [screenCount, currIdx])
 
-    // Resume the sequence at a named screen (e.g. returning from the tutorial to finish onboarding).
     useEffect(() => {
         if (resumeAppliedRef.current || !resumeKey) return
         const idx = Screens.findIndex((screen) => screen.key === resumeKey)

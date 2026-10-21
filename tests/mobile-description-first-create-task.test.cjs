@@ -19,7 +19,7 @@ const flags = (read("src/lib/flags.ts") + require("./helpers/flag-files.cjs").so
 
 const mobileBarStart = attachments.indexOf("const MobileBottomBar");
 const mobileBarEnd = attachments.indexOf(
-  "// ====================================",
+  "_mbl && mode !== \"create-task-modal\"",
   mobileBarStart,
 );
 const mobileBar = attachments.slice(mobileBarStart, mobileBarEnd);

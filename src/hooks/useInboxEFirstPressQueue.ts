@@ -7,7 +7,6 @@ import { returnIfModalOrInputActive } from "@/utils/helperFunctions/helperFuncti
 
 export function useInboxEFirstPressQueue(queryClient: QueryClient) {
   const inboxEFirstPress = useFlag(HTPR_7002_INBOX_E_FIRST_PRESS_FLAG);
-  // The phone workspace remounts its children when the detail route commits; keep queued E above it.
   useEffect(() => {
     if (!inboxEFirstPress) return;
     let keyboard: { path: string; ready: boolean; handleKeyDown?: (event: KeyboardEvent) => void } | undefined;
@@ -31,7 +30,6 @@ export function useInboxEFirstPressQueue(queryClient: QueryClient) {
       poll = undefined;
       onNavigation();
       if (!pending) return;
-      // The detail navigator blocks uploads; do not archive until it can also advance.
       if (keyboard?.path === pending.path && keyboard.handleKeyDown && (keyboard.ready || slow) &&
           !queryClient.getQueryData(REACT_QUERY_KEYS.uploadStates)) {
         const event = pending.event;
@@ -51,7 +49,6 @@ export function useInboxEFirstPressQueue(queryClient: QueryClient) {
       const path = window.location.pathname;
       if (!path.startsWith("/detail/project-") || new URLSearchParams(window.location.search).get("inboxFlow") !== "true") return;
       if (keyboard?.path === path && keyboard.ready && !queryClient.getQueryData(REACT_QUERY_KEYS.uploadStates)) return;
-      // The Inbox listener can outlive its URL, or disappear before the detail listener mounts.
       event.preventDefault();
       event.stopImmediatePropagation();
       if (pending?.path === path) return;
@@ -61,7 +58,6 @@ export function useInboxEFirstPressQueue(queryClient: QueryClient) {
         timer = undefined;
         onNavigation();
         if (!pending || keyboard?.path !== pending.path || !keyboard.handleKeyDown) return clearPending();
-        // A mounted slow detail can use its Inbox-cache membership before the fetch resolves.
         slow = true;
         timer = setTimeout(() => { timer = undefined; clearPending(); }, 4000);
         release();

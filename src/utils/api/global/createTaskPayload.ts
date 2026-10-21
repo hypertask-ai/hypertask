@@ -64,13 +64,6 @@ function cloneJsonValue(value: unknown, ancestors: WeakSet<object>): CloneResult
   }
 }
 
-/**
- * Build the browser-to-API task payload from JSON-safe root fields only.
- *
- * React state can accidentally contain DOM events, Window, File, or another
- * cyclic object. Axios stringifies request bodies before sending them, so one
- * such optional field used to prevent the entire task from being created.
- */
 export function createSerializableTaskPayload(
   input: Record<string, unknown>
 ): Record<string, JsonValue> {

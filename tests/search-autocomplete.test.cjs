@@ -91,7 +91,7 @@ test('filter palettes and title highlighting use scoped semantic tokens for ever
   const config = jiti(path.join(root, 'tailwind.config.ts')).default
   const { backgroundColor, borderColor } = config.theme.extend
   const { resolvedThemeDomMetadata } = jiti(path.join(root, 'src/lib/themePreferences.ts'))
-  const themes = ['light', 'dark', ...Object.keys(resolvedThemeDomMetadata)]
+  const themes = [...new Set(['light', 'dark', ...Object.keys(resolvedThemeDomMetadata).map((theme) => theme.replace(/-(light|dark)$/, ''))])]
   assert.equal(new Set(Object.values(SEARCH_FILTER_COLOURS)).size, 6)
   assert.equal(searchFilterType('from'), searchFilterType('assignee'))
   assert.equal(searchFilterType('in'), searchFilterType('board'))
@@ -138,7 +138,7 @@ test('enabled drafting retains a complete value until acceptance; flag off keeps
   assert.match(flags, /key: HTPR_6688_SEARCH_AUTOCOMPLETE_FLAG/)
   assert.match(flags, /DEFAULT_FEATURE_FLAG_MODE: FeatureFlagMode = "OWNER_AND_QA"/)
   assert.match(component, /useFlag\(\s*HTPR_6688_SEARCH_AUTOCOMPLETE_FLAG\s*\)/)
-  assert.match(component, /autocompleteFlagEnabled \? \(\s*<SearchChipsInput[\s\S]*?\sautocompleteEnabled\s*\/>/)
+  assert.match(component, /autocompleteEnabled \? \(\s*<SearchChipsInput[\s\S]*?\sautocompleteEnabled\s*\/>/)
 })
 
 test('title highlights are literal, case insensitive and omit filter values without HTML injection', () => {

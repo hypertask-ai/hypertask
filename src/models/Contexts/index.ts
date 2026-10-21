@@ -1,6 +1,5 @@
 import { Dispatch, ReactNode, SetStateAction } from "react";
 
-// Define the context type
 export interface TCustomPromptContextType extends TReturnUseFileUploadingStates {
   onModalClose: () => void;
   handleChange: (e: any) => void;

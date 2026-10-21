@@ -18,10 +18,6 @@ const AddColumn = (props: Props) => {
         setTitle(e.target.value);
     }
 
-    // HTPR-5527: this used to read every section first just to compute the new
-    // column's rank, off an endpoint that answers 200 with an error body. A bad
-    // read left Enter doing nothing at all. The server appends the column after
-    // the last section when no rank is given, so there is nothing to fetch.
     const onSubmit = () => {
         const trimmed = title.trim()
         if (trimmed.length === 0 || submitting.current) return;

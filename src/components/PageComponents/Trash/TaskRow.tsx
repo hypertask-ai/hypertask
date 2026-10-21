@@ -27,7 +27,7 @@ const TaskRow = (
     return (
       
         <TaskRowComponent.TaskRowContainer
-          key={task.id} // Use task.id as the key for each TaskRowContainer
+          key={task.id}
           index={index}
           selected={selected}
           divId={index}
@@ -42,7 +42,6 @@ const TaskRow = (
         >
            <TaskRowComponent.TaskCreator displayName={task.user?.displayName??""}/>
            <TitleContainer className='flex self-start' task={task}/>
-           {/* <TaskDescription task={task}/> */}
            <TaskRowComponent.CreatedAtRowElement className="flex justify-end grow w-1/4" createdAt={task.permanentlyDeleteAt!} futureDate={true}/>
            <div className={` hidden min-w-[42px] ${selected?"sm:block":"sm:block"} flex items-center`}>
               <div className='flex items-center gap-2'>
@@ -93,8 +92,7 @@ const RecoverTaskButton = ({
                   className="relative group"
                   onClick={(e) => {
                   e.preventDefault();
-                  e.stopPropagation(); // Prevent the click event from propagating to the parent div
-                  // eHandler(false);
+                  e.stopPropagation();
                   deleteHandler("recover")
                   }}
               >
@@ -105,7 +103,6 @@ const RecoverTaskButton = ({
                       keyCombination={["#"]}
                   />
               <RotateCcw size={18} className={`${show ?"visible":"hidden"}`} strokeWidth={1.75}/>
-                  {/* <FiCheck size={15} color={notification.type==="Assigned"? (notification.assignee?.task?.status === 'Archive' ? 'green' : '#8E9093'): (notification.comment?.task?.status === 'Archive' ? 'green' : '#8E9093')} /> */}
               </button>
   </span>
   )
@@ -129,19 +126,11 @@ return (
                     className="relative group"
                     onClick={(e) => {
                     e.preventDefault();
-                    e.stopPropagation(); // Prevent the click event from propagating to the parent div
-                    // eHandler(false);
+                    e.stopPropagation();
                     toggleConfirmation()
                     }}
                 >
-                    {/* <Tooltip
-                        left={-195}
-                        bottom={-48}
-                        text="Delete this task permanently"
-                        keyCombination={["#"]}
-                    /> */}
                     <Trash2 size={18} className={`${show ?"visible":"hidden"}`}   strokeWidth={1.75}/>
-                    {/* <FiCheck size={15} color={notification.type==="Assigned"? (notification.assignee?.task?.status === 'Archive' ? 'green' : '#8E9093'): (notification.comment?.task?.status === 'Archive' ? 'green' : '#8E9093')} /> */}
                 </button>
     </span>
 )
@@ -168,18 +157,15 @@ const TitleContainer: React.FC<ITitleContainer> = ({ className, task }) => {
                 }}
             >
 
-                {/* ================== duedate label ============== */}
                 {task?.dueDate && (
                     <DueDateLabel
                         flexBasis={false}
                         fontSize={10}
-                        // fontWeight={500}
                         dueDate={task.dueDate}
                         className={cn(inboxConfig.bulkSelectionStyling.taskLabels(false))}
 
                     />
                 )}
-                {/* ================== priority label ============== */}
                 {task?.priority && (
                     <PriorityLabelComponent
                         flexBasis={false}
@@ -190,17 +176,14 @@ const TitleContainer: React.FC<ITitleContainer> = ({ className, task }) => {
                     />
                 )}
 
-                {/* ================== estimate label ============== */}
                 {task?.estimate && (
                     <EstimateLabelComponent
                         flexBasis={false}
                         fontSize={10}
-                        // fontWeight={500}
                         estimate={task.estimate}
                         className={cn(inboxConfig.bulkSelectionStyling.taskLabels(false))}
                     />
                 )}
-                {/* ===================== task labels ================= */}
                 {
                     task?.taskLabels?.map((taskLabel, index) =>
 
@@ -226,7 +209,6 @@ const TitleContainer: React.FC<ITitleContainer> = ({ className, task }) => {
                         }
                     </span>
                     <span
-                        // style={{}}
                         className={cn(inboxConfig.bulkSelectionStyling.taskTitle(false), 'xs:whitespace-pre-wrap sm:whitespace-nowrap')}>
                         {
                             task.title ?? ""

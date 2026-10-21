@@ -40,12 +40,10 @@ const route = taskWriteRoute({
           })
         : [];
 
-      // =========== instant search
       const response = await tasksSearchAll(
         accessibleProjects.map((project) => project.id),
         searchQuery
       );
-      // Assuming otherResponse and response are arrays of objects
 
       return NextResponse.json(response.json, { status: response.status });
     } catch (error) {

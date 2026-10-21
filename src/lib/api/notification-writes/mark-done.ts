@@ -11,19 +11,12 @@ const route = taskWriteRoute({
   validationMessage: "Invalid request",
   allowNullBody: true,
   operation: async (body, session, request) => {
-    // HTPR-4772: ignore the query userId and use the signed session.
-
     const { id, taskId, tutorial } = body;
     const userId = session.userId;
-    // Acting tab's socket id — excluded from the broadcast so it doesn't refetch itself (HTPR-3998).
     const excludeSocketId = socketIdFromHeader(request.rawHeaders ? request.rawHeaders["x-socket-id"] : request.headers.get("x-socket-id"));
-    // Need at least a notification id (inbox) or a taskId (task detail page) to act on.
     if (!taskId && !id) {
       return NextResponse.json({ message: "Notification id or taskId is required" }, { status: 400 });
     }
-    // Some notifications legitimately have no task (moved/deleted-task notifications).
-    // parsedTaskId is null in that case so we skip taskId-scoped sibling cleanup and
-    // archive the notification by its own id instead.
     const parsedTaskId = Number.isInteger(Number(taskId)) ? parseInt(taskId as string) : null;
 
     const timeNow = new Date()
@@ -34,7 +27,6 @@ const route = taskWriteRoute({
       }, { status: 400 });
     }
 
-    // ================= archiving from [TASK DETAIL PAGE]. we dont have the id, we just want to assume we are archiving all the notifications of that task.
     if (!id) {
       if (parsedTaskId === null) {
         return NextResponse.json({ message: "taskId is required when no notification id is provided" }, { status: 400 });
@@ -56,8 +48,6 @@ const route = taskWriteRoute({
 
     }
 
-    // ----------------------------------------------------------------------------------------------------------------------------------
-    // ================== archiving from [INBOX PAGE]
     const notification_ = await prisma.notification.findUnique({
       where: {
         id: parseInt(id as string),
@@ -71,9 +61,6 @@ const route = taskWriteRoute({
       return NextResponse.json({ message: "Forbidden" }, { status: 403 });
     }
 
-    // HTPR-4877: an id that matches nothing used to reach the end of
-    // the try with no response sent, so the request hung until the
-    // client timed out. Answer explicitly.
     if (!notification_) {
       return NextResponse.json({ message: "Notification not found" }, { status: 404 });
     }
@@ -125,7 +112,6 @@ const route = taskWriteRoute({
       return NextResponse.json(updatedNotification, { status: 200 });
     }
 
-    // =================== archive all of that task and that userid.
     if (notification_?.status === "Normal") {
       if (notification_.type === "Invited") {
         const updatedNotification = await prisma.notification.update({ where: { id: notification_.id }, data: { status: "Archive", archivedAt: timeNow } })
@@ -134,12 +120,6 @@ const route = taskWriteRoute({
 
       }
 
-      // Only clean up sibling notifications when this notification is tied to a task.
-      // Task-less notifications have no siblings to group, and a NaN taskId here would throw
-      // before the representative gets archived, leaving it stuck in the inbox.
-      // HTPR-5640: siblings are ARCHIVED with the exact same batch timestamp instead of
-      // Deleted. The undo path restores every notification sharing that timestamp, so
-      // Ctrl+Z brings back what the archive removed; a hard delete made undo lossy.
       if (parsedTaskId !== null) {
         await prisma.notification.updateMany({
           where: {
@@ -160,7 +140,6 @@ const route = taskWriteRoute({
 
     }
 
-    // =================== unarchive only single.
     else if (notification_?.status === "Archive") {
       const onlySingleNotificationUpdate = await prisma.notification.update({
         where: {
@@ -171,9 +150,6 @@ const route = taskWriteRoute({
           archivedAt: null
         }
       })
-      // HTPR-5640: bring back the siblings hidden by the same archive action.
-      // They share the representative's exact batch archivedAt, so an unrelated
-      // earlier archive of the same task is never touched.
       if (
         parsedTaskId !== null &&
         notification_.archivedAt !== null &&
@@ -198,9 +174,6 @@ const route = taskWriteRoute({
 
     }
 
-    // Any other status (today: Deleted) has nothing to toggle. Same
-    // reason as the 404 above: falling out of the branches sent no
-    // response at all and the request hung. HTPR-4877.
     return NextResponse.json(notification_, { status: 200 });
   },
 });

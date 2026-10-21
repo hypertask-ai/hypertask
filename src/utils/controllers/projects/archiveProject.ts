@@ -1,4 +1,3 @@
-// Assuming you have already initialized Prisma and have access to the PrismaClient instance.
 
 import prisma from "@/lib/prisma";
 import getFirst from "./getFirst";
@@ -7,8 +6,6 @@ import isProjectAdmin from "./isProjectAdmin";
 
 
 const archiveProject = async(projectId:number, userId:number) =>{
-  // Check if the request is a POST request
-
     try {
 
       if (!userId || !projectId) 
@@ -30,10 +27,7 @@ const archiveProject = async(projectId:number, userId:number) =>{
           })
       }
 
-    //   Now that we are sure that the person making the request is indeed the owner,
-    //   we can move on with the code
 
-    // ==================================== FIRST ARCHIVE ALL THE NOTIFICATIONS. 
     console.log ("--------------------------- Arhciving all the notifications ---------------------")
     await prisma.notification.updateMany({
         where:{
@@ -63,7 +57,7 @@ const archiveProject = async(projectId:number, userId:number) =>{
           projectId: project.id,
         }
       })
-      const firstProject = await getFirst(userId)
+      const firstProject = await getFirst(userId, { withTasks: true })
       console.log("🚀 ~ file: archiveProject.ts:55 ~ archiveProject ~ updated_project:", updated_project)
       return ({
         status:200,

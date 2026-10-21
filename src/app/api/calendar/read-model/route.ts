@@ -23,7 +23,6 @@ export async function GET(request: NextRequest) {
     try {
       restCompat = await isFeatureEnabled(HTPR_6924_REST_COMPAT_FLAG, currentUser.userId);
     } catch {
-      // Flag lookup failure preserves the legacy entry path.
     }
   }
   const { isValid, user } = restCompat && currentUser

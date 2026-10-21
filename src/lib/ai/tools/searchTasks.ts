@@ -69,7 +69,6 @@ export function createSearchTasksTool(context: ToolContext) {
           where.dueDate = input.has_due_date ? { not: null } : null;
         }
 
-        // Recency sort ("latest ticket" style) bypasses relevance search: order by createdAt.
         const recency = input.sort === "newest" || input.sort === "oldest";
 
         const turbopufferIds =

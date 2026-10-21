@@ -23,9 +23,6 @@ function authorized(request: NextRequest) {
   );
 }
 
-// Interactive verification still requires the owner's session and test token.
-// CI may only throw a uniquely named canary on production using the same secret;
-// it cannot select arbitrary messages or perform any other operation.
 const TRIGGERABLE_ENVIRONMENTS = new Set(["preview", "production"]);
 
 export async function POST(request: NextRequest) {
@@ -60,7 +57,5 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  // This string becomes the PostHog issue name and the auto-filed ticket
-  // title, so it is the evidence a human reads. Keep it environment-neutral.
   throw new Error("HTPR-6238 deliberate error tracking verification");
 }

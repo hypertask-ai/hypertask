@@ -15,7 +15,6 @@ const ProjectContainer: React.FC<ITasksContainer> = ({ project,tasks }) => {
 
     const {selectedIndex,  handleMouseMove, showConfirmation, deleteHandler, toggleConfirmation}= useTrashContext()
 
-     // CONFIRM DELETE
      const confirmDelete = async(response:boolean)=>{
 
       if(response)   deleteHandler("delete")

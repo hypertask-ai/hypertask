@@ -1,10 +1,6 @@
 import prisma from "@/lib/prisma";
 import isProjectAdmin from "@/utils/controllers/projects/isProjectAdmin";
 
-// Shared by settings routes that should be visible to the team owner or an
-// admin of a project on that team (billing, AI usage). A project admin may
-// view/edit these settings; only the team owner may mutate anything more
-// sensitive (e.g. the Stripe subscription itself).
 const hasTeamOwnerOrProjectAdminAccess = async (
   userId: number,
   userAccountId: string | undefined,

@@ -20,7 +20,6 @@ export async function POST(request: NextRequest) {
       try {
         restCompat = await isFeatureEnabled(HTPR_6924_REST_COMPAT_FLAG, currentUser.userId);
       } catch {
-        // Flag lookup failure preserves the legacy entry path.
       }
     }
     const { isValid, user } = restCompat && currentUser
@@ -31,11 +30,8 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    // Generate a secure random code
     const code = crypto.randomBytes(32).toString('hex');
     
-    // Store in Redis with a 2-minute expiration (120 seconds)
-    // Key format: cli_auth:{code}, Value: JSON string with userId and email
     const payload = JSON.stringify({
       userId: user.id,
       email: user.email

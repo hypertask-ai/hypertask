@@ -1,4 +1,3 @@
-// Only registered route templates can appear in automatic feedback.
 export const MCP_FEEDBACK_ROUTE_TEMPLATES = [
   '/api/mcp/admin/agents',
   '/api/mcp/admin/connections',
@@ -20,6 +19,7 @@ export const MCP_FEEDBACK_ROUTE_TEMPLATES = [
   '/api/mcp/chat/activity',
   '/api/mcp/chat/pending',
   '/api/mcp/chat/rooms/pending',
+  '/api/mcp/cli-error',
   '/api/mcp/comments',
   '/api/mcp/custom-fields',
   '/api/mcp/custom-fields/value',

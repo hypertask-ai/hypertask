@@ -1,8 +1,5 @@
-/**
- * Service to move a task (and its subtasks) from one board/project to another.
- * Used by Pages API /api/tasks/move-task-to-different-board and MCP API POST /mcp/tasks/move.
- */
 import prisma from "@/lib/prisma";
+import { Prisma, type Task } from "@prisma/client";
 import getMemberAndOwner from "@/utils/controllers/getMemberAndOwnerForBoard";
 import generateRank from "@/utils/generateRank";
 import { getNextUniqueTaskIndex } from "./getNextUniqueTaskIndex";
@@ -19,6 +16,8 @@ import { IUser } from "@/models/model";
 import { toErrorMessage } from "@/lib/api/errorMessage";
 import { autoAssignForSection } from "@/utils/controllers/assignees/autoAssignForSection";
 import { taskWriteAccessWhere } from "@/utils/controllers/projects/getAllIncludes";
+
+import { upsertPageToTurbopuffer } from "../turbopuffer/turbopufferHelper";
 
 const TASK_IDENTITY_ALLOCATION_ATTEMPTS = 3;
 
@@ -79,6 +78,7 @@ async function moveTaskWithDestinationIdentity({
       getNextUniqueTaskIndex(projectId),
       getNewTaskRanking(sectionId, projectId),
     ]);
+    let movedPageIds: number[] = [];
     const result = await updateTaskSingle(
       {
         id: taskId,
@@ -96,13 +96,18 @@ async function moveTaskWithDestinationIdentity({
       agentId,
       {
         allowProjectChange: true,
+        onProjectChangedInTx: async (tx, before, after) => {
+          movedPageIds = await syncTaskPagesInTx(tx, before, after);
+        },
         skipAutoAssign: true,
-        // Relocating a task is not completing it: without this, moving a
-        // recurring task into another board's done column would fork a copy
-        // onto the destination board (HTPR-4885).
         skipRecurrence: true,
       },
     );
+    if (result.status === 200) {
+      await Promise.all(movedPageIds.map((id) => upsertPageToTurbopuffer(id).catch((error) => {
+        console.error("Page indexing failed after task move", error);
+      })));
+    }
     if (
       result.status === 200 ||
       result.json?.code !== TASK_IDENTITY_CONFLICT_CODE ||
@@ -111,6 +116,93 @@ async function moveTaskWithDestinationIdentity({
       return result;
     }
   }
+}
+
+async function syncTaskPagesInTx(
+  tx: Prisma.TransactionClient,
+  before: Task,
+  after: Task,
+) {
+  const affected = await tx.page.findMany({
+    where: { OR: [{ taskId: after.id, links: { none: {} } }, { links: { some: { taskId: after.id, removedAt: null } } }] },
+    select: { id: true, parentPageId: true },
+  });
+  if (affected.length === 0) return [];
+
+  const pageIds = affected.map((page) => page.id);
+  const lockIds = [...new Set([
+    ...pageIds,
+    ...affected.flatMap((page) => page.parentPageId == null ? [] : [page.parentPageId]),
+  ])];
+  await tx.$queryRaw`
+    SELECT id FROM "Page"
+    WHERE id IN (${Prisma.join(lockIds)})
+      OR "parentPageId" IN (${Prisma.join(pageIds)})
+    ORDER BY id
+    FOR UPDATE
+  `;
+  const pages = await tx.page.findMany({
+    where: { id: { in: pageIds } },
+    include: { links: true },
+  });
+  for (const page of pages) {
+    if (page.taskId != null && page.links.length === 0) {
+      const link = await tx.pageTaskLink.upsert({
+        where: { pageId_taskId: { pageId: page.id, taskId: page.taskId } },
+        create: { pageId: page.id, taskId: page.taskId, createdAt: page.createdAt },
+        update: {},
+      });
+      page.links.push(link);
+    }
+  }
+  const movingIds = pages
+    .filter((page) => {
+      const activeLinks = page.links.filter((link) => link.removedAt === null);
+      return page.projectId === before.projectId &&
+        activeLinks.length === 1 && activeLinks[0].taskId === after.id;
+    })
+    .map((page) => page.id);
+  if (movingIds.length === 0) return [];
+
+  await tx.page.updateMany({
+    where: { id: { in: movingIds } },
+    data: { projectId: after.projectId },
+  });
+  return movingIds;
+}
+
+async function detachSplitPageHierarchy(taskIds: number[]) {
+  await prisma.$transaction(async (tx) => {
+    const affected = await tx.page.findMany({
+      where: { OR: [{ taskId: { in: taskIds }, links: { none: {} } }, { links: { some: { taskId: { in: taskIds }, removedAt: null } } }] },
+      select: { id: true, parentPageId: true },
+    });
+    if (affected.length === 0) return;
+    const pageIds = affected.map((page) => page.id);
+    const lockIds = [...new Set([
+      ...pageIds,
+      ...affected.flatMap((page) => page.parentPageId == null ? [] : [page.parentPageId]),
+    ])];
+    await tx.$queryRaw`
+      SELECT id FROM "Page"
+      WHERE id IN (${Prisma.join(lockIds)})
+        OR "parentPageId" IN (${Prisma.join(pageIds)})
+      ORDER BY id
+      FOR UPDATE
+    `;
+    const pages = await tx.page.findMany({
+      where: { OR: [{ id: { in: pageIds } }, { parentPageId: { in: pageIds } }] },
+      include: { parentPage: { select: { projectId: true } } },
+    });
+    const splitIds = pages.filter((page) => page.parentPage && page.parentPage.projectId !== page.projectId)
+      .map((page) => page.id);
+    if (splitIds.length > 0) {
+      await tx.page.updateMany({
+        where: { id: { in: splitIds } },
+        data: { parentPageId: null },
+      });
+    }
+  });
 }
 
 async function moveAllSubtasksRecursively(
@@ -176,7 +268,6 @@ async function updateTaskRelatedData(taskId: number, projectId: number, sectionI
   await Promise.all([
     prisma.estimate.updateMany({ where: { taskId }, data: { projectId, sectionId } }),
     prisma.priority.updateMany({ where: { taskId }, data: { projectId, sectionId } }),
-    prisma.page.updateMany({ where: { taskId }, data: { projectId } }),
   ]);
 }
 
@@ -265,7 +356,6 @@ async function unAssignMembersNotInNewBoard(taskId: number, newProjectId: number
     prisma.assignees.findMany({ where: { taskId } }),
     prisma.follower.findMany({ where: { taskId } }),
   ]);
-  // Batch delete unallowed assignees and followers for better performance
   const unallowedAssigneeIds = assignees
     .filter(a => !allowedMembers.includes(a.userId))
     .map(a => a.id);
@@ -327,27 +417,6 @@ export interface MoveTaskToDifferentBoardResult {
   statusCode?: number;
 }
 
-/**
- * Moves a task to a section, including its nested subtasks when the board changes.
- *
- * 1. **Fetch task** – Load the task with all nested subtasks recursively.
- * 2. **Validate** – Return 404 if the task does not exist.
- * 3. **Load project & section** – Fetch target project, current project (for team check), and target section in parallel.
- * 4. **Validate targets** – Return 404 if target project or section is missing.
- * 5. **Same-board move** – Update only the main task's section and ranking, preserving its identity.
- * 6. **Cross-board placement** – Get a destination task index and ranking, then update the task's project and ticket identity.
- * 7. **Move subtasks** – Recursively move all nested subtasks (kept sequential to preserve unique indices).
- * 8. **Team switch** – If the target board is in a different team, reassign tasks whose assignees are not members.
- * 9. **Update & cleanup (parallel):**
- *    - Update estimates and priorities for the new project/section.
- *    - Refresh due-date queue entries for the new project.
- *    - Update saved content references to the new project.
- *    - Remove notifications, drafts, reminders; unassign users not in the new board; duplicate labels.
- * 10. **Return** – Return the updated main task on success.
- *
- * @param params - Task ID, target project/section, current project, and user.
- * @returns Success with the updated task, or an error with status code.
- */
 export async function moveTaskToDifferentBoard(
   params: MoveTaskToDifferentBoardParams
 ): Promise<MoveTaskToDifferentBoardResult> {
@@ -377,10 +446,6 @@ export async function moveTaskToDifferentBoard(
   if (!section) {
     return { success: false, error: "Target section not found", statusCode: 404 };
   }
-  // HTPR-4982: updateTaskSingle gates the board the task is leaving. Nothing
-  // gated the board it lands on, so a member of one board could park a task on
-  // any board whose id they guessed. The section has to belong to that board
-  // too, or a stray id lands the task in a column of a third board.
   const canWriteTarget = await prisma.project.findFirst({
     where: {
       id: targetProjectId,
@@ -423,11 +488,6 @@ export async function moveTaskToDifferentBoard(
     };
   }
 
-  // Moving a sub-task on its own has to drop the parent link, or the child
-  // would point at a task on another board. But when the parent has ALREADY
-  // moved to the same board, dropping it orphans a family that is being moved
-  // one member at a time, which is exactly how a whole tree gets moved by
-  // hand (HTPR-4580). Keep the link in that case.
   const parentAlreadyInTarget = taskToMove.parentTaskId
     ? await prisma.task.findFirst({
         where: {
@@ -450,9 +510,6 @@ export async function moveTaskToDifferentBoard(
     agentId,
   });
   if (result.status !== 200) {
-    // Preserve the write's own status. Flattening every failure to 500 turned a
-    // 409 lease conflict into a server error, so agent clients retried a
-    // condition that only a lease claim resolves.
     return {
       success: false,
       error: toErrorMessage(result.json, "Failed to update task"),
@@ -474,6 +531,8 @@ export async function moveTaskToDifferentBoard(
     );
   }
 
+  await detachSplitPageHierarchy(getAllTaskIdsRecursively(taskToMove));
+
   const isTeamSwitch = currentProject?.teamId !== newProject?.teamId;
   if (isTeamSwitch) {
     await handleTeamSwitchForTaskRecursively(taskToMove, currentUser.id, newProject);
@@ -494,8 +553,6 @@ export async function moveTaskToDifferentBoard(
       agentAssignerId: agentId,
     });
     if (autoAssigned !== "ready") {
-      // Board moves do not create the task.created handoff marker. Keep the
-      // move successful and let the next explicit assignment attempt retry.
       console.warn(
         "[task-move-board] column auto-assignment remains pending after the move",
         { taskId: movedTaskId },

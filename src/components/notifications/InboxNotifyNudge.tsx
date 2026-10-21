@@ -13,10 +13,6 @@ import { cn } from "@/utils/undoActions/helperFuncs";
 
 const DISMISS_KEY = "ht_inbox_notif_nudge_dismissed";
 
-// Pinned row at the top of the inbox nudging users who have BOTH push and email
-// off to enable either. Replaces the bottom promotion banner (HTPR-4518), which
-// overlaid the composers on every surface; this lives where notifications
-// actually live and never overlays anything. (HTPR-4676)
 const InboxNotifyNudge = () => {
   const { bothOff, pushDenied, pending, enablePush, enableEmail } =
     useNotificationNudge();
@@ -42,7 +38,6 @@ const InboxNotifyNudge = () => {
     try {
       window.localStorage.setItem(DISMISS_KEY, "true");
     } catch {
-      // Storage can be unavailable in restricted browser contexts.
     }
     setDismissed(true);
     window.dispatchEvent(new Event("ht-inbox-display-change"));
@@ -50,14 +45,6 @@ const InboxNotifyNudge = () => {
 
   if (!mounted || !visible) return null;
 
-  // Mobile gets its own shape (HTPR-4721). The desktop row puts the message and
-  // both actions on one line, which crushes the text at 390px, so the message
-  // takes its own line and the actions sit under it at 44px targets. Same
-  // trigger, same words, same green: only the layout differs.
-  //
-  // It was off on mobile because the extra height tipped the inbox into a second
-  // scrollbar. The mobile shell CSS now bounds that container (min-height: 0 plus
-  // a fixed height), so the list is the only scroller and the row is safe.
   if (mbl) {
     return (
       <div className="flex w-full shrink-0 flex-col border-b border-border-light-gray-thin bg-hover-active px-4 pb-1.5 pt-2.5">
@@ -117,8 +104,6 @@ const InboxNotifyNudge = () => {
 
   return (
     <div className="flex w-full shrink-0 flex-wrap items-center gap-x-3 gap-y-2 border-b border-border-light-gray-thin bg-hover-active px-4 py-2.5">
-      {/* Narrow desktop windows still wrap the actions below the message
-          (basis-full) rather than crushing it; inline beside them on sm+. */}
       <div className="flex min-w-0 basis-full flex-1 items-center gap-2.5 sm:basis-auto">
         <Bell
           aria-hidden

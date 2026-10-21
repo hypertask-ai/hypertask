@@ -6,7 +6,6 @@ export interface FileItem {
   file: File;
 }
 
-// Hook version for more flexibility
 export const useFileUpload = (
   initialFiles: FileItem[] = [],
   onFilesSelected?: (files: File[], preparation: Promise<FileItem[]>) => void,

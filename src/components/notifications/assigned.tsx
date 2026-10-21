@@ -42,7 +42,7 @@ const NotificationAssigned = (props: Props) => {
             <div className="group">
                 <button
                  onClick={(e) =>{
-                    e.stopPropagation(); // Prevent the click event from propagating to the parent div
+                    e.stopPropagation();
                     markAsDone()}}
                  
                  >

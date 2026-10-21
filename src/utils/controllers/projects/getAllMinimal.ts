@@ -4,18 +4,6 @@ import prisma from "@/lib/prisma";
 import { teamBillingSnapshotSelect } from "@/lib/ai/teamBillingSnapshotSelect";
 import { sanitizeProjectBoardFilters } from "@/utils/helperFunctions/Views/BoardFilterSanitizer";
 
-/**
- * ExtraMinimal consumers (grep: useGetAllProjectsMinimal / ExtraMinimal):
- * - Search: project.id, project.title
- * - Move task modal: project.id, project.title, column list via returnActiveOrDefaultColumnSections
- * - Create task modal: board filters plus the destination team's AI entitlement
- *   and model default when the user switches boards before creating the task
- * - Board settings lifecycle (Archive / Delete / Leave): ownerId + member
- *   role/status so canManageBoardLifecycle / canLeaveBoard match the server
- *
- * NOT needed here: allViews, full View rows, tasks, full team data,
- * custom AI instructions beyond the selected model
- */
 const minimalViewSelect = {
   userId: true,
   visibility: true,
@@ -36,12 +24,8 @@ export function extraMinimalProjectInclude(
     title: true,
     name: true,
     teamId: true,
-    // Settings Board management reuses this payload; without ownerId the
-    // owner check fails open on Leave and never shows Delete (HTPR-6471).
     ownerId: true,
     members: {
-      // Only the caller's row: lifecycle checks need this user's role,
-      // not the whole board roster.
       where: { userId },
       select: {
         userId: true,
@@ -179,7 +163,6 @@ const getAllMinimal = async (
           };
           for (const view of [pv.default_view, ...pv.user_project_views.flatMap(row => [row.appliedView, row.unsavedView])]) {
             if (!view) continue;
-            // Authorization metadata is internal, not part of ExtraMinimal's wire contract.
             delete (view as Partial<typeof view>).userId;
             delete (view as Partial<typeof view>).visibility;
             delete (view as Partial<typeof view>).project_view_id;

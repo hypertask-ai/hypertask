@@ -56,7 +56,6 @@ const MoveTaskGlobal = (props: IProps) => {
 
     const [redirectingToTask, setRedirectingToTask] = useState<boolean>(false);
 
-    // ==================== initiate Formik
     const formik = useFormik({
         initialValues: {
             projectId: 0,
@@ -69,23 +68,16 @@ const MoveTaskGlobal = (props: IProps) => {
     });
     console.log("🚀 ~ handleFormSubmit ~ body.formik.values:", formik.values)
 
-    // -------------------- ON MODAL LOAD, for focus
     const onOpenHandler = async () => {
-        // setLoading(true)
-        enableKeyboardControls(true) // force focus on input field  
+        enableKeyboardControls(true)
     }
     const handleToggle = () => {
-        // setModal(!modal)
         props.closeHTC()
     }
-    // --------------------- form submittion
     const handleFormSubmit = async (values: ICreateTask) => {
-        // Your complex form submission logic goes here
         try {
-            // Example: Simulating an asynchronous operation
             console.log('Submitting...', values);
             setRedirectingToTask(true)
-            //   console.log("🚀 ~ file: index.tsx:58 ~ handleFormSubmit ~ formik.values:", formik.values)
             const body = {
                 sectionId: formik.values.sectionId,
                 projectId: formik.values.projectId,
@@ -106,15 +98,12 @@ const MoveTaskGlobal = (props: IProps) => {
         } catch (error) {
             console.error('Submission failed:', error);
         } finally {
-            // setRedirectingToTask(false)
             props.closeHTC()
 
         }
     };
 
-    //   ================ on receving data set the current screen data 
     useEffect(() => {
-        // if user is on first screen, set the data as all projects
         setCurrentScreen({
             value: 0,
             next: 1,
@@ -124,7 +113,6 @@ const MoveTaskGlobal = (props: IProps) => {
         })
     }, [data])
 
-    // ========================================== HANDLE ENTER FROM SCREENS FOR CALLBACK ========================
     const handleCallBackFromScreens = (currentScreenValue: number, nextScreenValue: number | null, callbackIndexorString: string | number) => {
 
         if (composeBoardPicker && currentScreenValue === 0) {
@@ -132,14 +120,13 @@ const MoveTaskGlobal = (props: IProps) => {
             if (board) props.onSelectBoard?.(board.id);
             return;
         }
-        // if callback is from first screen 
         if (currentScreenValue === 0) {
             formik.setValues({
-                ...formik.values, // Spread the existing form values
+                ...formik.values,
                 projectId: data[callbackIndexorString].id
             })
             setCurrentScreen({
-                ...currentScreen,  // Copy existing properties from the previous state
+                ...currentScreen,
                 value: 1,
                 next: 2,
                 prev: 0,
@@ -149,8 +136,8 @@ const MoveTaskGlobal = (props: IProps) => {
         }
         else if (currentScreenValue === 1) {
             formik.setValues({
-                ...formik.values, // Spread the existing form values
-                sectionId: callbackIndexorString as number // in this case we'll just send the sectionId
+                ...formik.values,
+                sectionId: callbackIndexorString as number
             }).then(() => {
                 formik.submitForm()
             })
@@ -172,7 +159,6 @@ const MoveTaskGlobal = (props: IProps) => {
             {
                 !isLoading && data && !redirectingToTask &&
                 <>
-                    {/* ===========  based on the selected screen, show the form and results ==================== */}
                     <FilterableMenuScreen
                         screenCallback={handleCallBackFromScreens}
                         composeBoardPicker={composeBoardPicker}
@@ -189,9 +175,6 @@ const MoveTaskGlobal = (props: IProps) => {
 
 export default MoveTaskGlobal;
 
-// this will simply recieve the data and based on that the handlekeydown functios work
-// on callback it will simply set the values. 
-// the input field is just for filtering. 
 
 interface FilterableMenuScreenProps {
     screenCallback: (currentScreenValue: number, nextScreenValue: number | null, indexOfSelectedRow: string | number) => void;
@@ -203,16 +186,13 @@ const FilterableMenuScreen: React.FC<FilterableMenuScreenProps & IScreens> = ({ 
     const boardChipEnabled = useFlag(HTPR_7053_COMPOSE_BOARD_CHIP_FLAG);
     const composePicker = boardChipEnabled && composeBoardPicker;
 
-    // =================== useStates
     const [keyword, setKeyword] = useState<string>("");
     const [selectedIndex, setSelectedIndex] = useState<number>(0)
     const [filteredData, setFilteredData] = useState<typeof data>([])
-    // =================== refs
     const currentHoveredDiv = useRef<number | null>(null);
     const teamRef = useRef<HTMLDivElement>(null);
     const debounceTimeout = useRef<NodeJS.Timeout | null>(null);
 
-    // ========================= key down functions =================
     const handleKeyDown = (e: KeyboardEvent) => {
         if (composePicker) {
             if (e.isComposing) return;
@@ -245,7 +225,6 @@ const FilterableMenuScreen: React.FC<FilterableMenuScreenProps & IScreens> = ({ 
                 const indexof = data.findIndex(item => item.id === filteredData[selectedIndex].id)
                 console.log("🚀 ~ file: index.tsx:204 ~ handleKeyDown ~ indexof:", indexof)
                 if (indexof > -1) submitForCallback(indexof)
-                // screenCallback(value,next, indexof)
             }
             else if (value === 1 && filteredData && filteredData[selectedIndex]) {
                 setKeyword("")
@@ -254,16 +233,12 @@ const FilterableMenuScreen: React.FC<FilterableMenuScreenProps & IScreens> = ({ 
             else if (value === 2 && keyword.length > 0) {
                 submitForCallback(keyword)
                 setKeyword("")
-                // screenCallback(value,next, keyword)
-
             }
 
         }
         else if (e.key === "j" || e.key === "ArrowDown") {
             if (data) {
                 if (selectedIndex === -1 || selectedIndex === (data.length - 1)) {
-                    // setSelectedTeam(filteredTeams[0])
-                    // document.getElementById(`inbox-${_notifications[0].id}`)?.scrollIntoView({ behavior: 'smooth', block: 'center' })
                 } else {
                     setSelectedIndex(prev => prev + 1)
                     document.getElementById(`command-${selectedIndex + 1}`)?.scrollIntoView({ behavior: 'smooth', block: 'center' })
@@ -275,8 +250,6 @@ const FilterableMenuScreen: React.FC<FilterableMenuScreenProps & IScreens> = ({ 
         else if (e.key === "k" || e.key === "ArrowUp") {
             if (data) {
                 if (selectedIndex <= 0) {
-                    // setSelectedTeam(filteredTeams[0])
-                    // document.getElementById(`inbox-${_notifications[0].id}`)?.scrollIntoView({ behavior: 'smooth', block: 'center' })
                 } else {
                     setSelectedIndex(prev => prev - 1)
                     document.getElementById(`command-${selectedIndex - 1}`)?.scrollIntoView({ behavior: 'smooth', block: 'center' })
@@ -286,7 +259,6 @@ const FilterableMenuScreen: React.FC<FilterableMenuScreenProps & IScreens> = ({ 
         }
     }
 
-    // ======================= use for both enter and on click
     const submitForCallback = (callbackData: any, findIndex?: boolean) => {
         if (data && findIndex && filteredData && value === 0) {
             const indexof = data.findIndex(item => item.id === filteredData[callbackData].id)
@@ -296,10 +268,8 @@ const FilterableMenuScreen: React.FC<FilterableMenuScreenProps & IScreens> = ({ 
     }
     const { handleMouseEnter, handleMouseLeave, handleMouseMove, elRef } = useHandleMouseGlobal({ setSelectedIndex })
 
-    // ============================== clear debouncer on mount
     useEffect(() => {
         return () => {
-            // Clear the debounceTimeout when the component unmounts
             if (debounceTimeout.current) {
                 clearTimeout(debounceTimeout.current);
             }
@@ -308,7 +278,6 @@ const FilterableMenuScreen: React.FC<FilterableMenuScreenProps & IScreens> = ({ 
 
     }, []);
 
-    // ============================== handle keydown use effect
     useEffect(() => {
         document.addEventListener('keydown', handleKeyDown, composePicker);
         return () => document.removeEventListener('keydown', handleKeyDown, composePicker);
@@ -318,7 +287,6 @@ const FilterableMenuScreen: React.FC<FilterableMenuScreenProps & IScreens> = ({ 
         if (composePicker) document.getElementById(`command-${selectedIndex}`)?.scrollIntoView({ block: 'nearest' });
     }, [composePicker, selectedIndex]);
 
-    // ============================== onKeyword change
 
     const handleKeyWordChange = (e: any) => {
         setKeyword(e.target.value)
@@ -357,10 +325,8 @@ const FilterableMenuScreen: React.FC<FilterableMenuScreenProps & IScreens> = ({ 
             <ModalBody className='text-white-black p-0 rounded-b-[4px]  '>
                 <ModalInput
                     id='input-addTask'
-                    // autoFocus
                     onChange={handleKeyWordChange}
                     value={keyword}
-                    // autoComplete='off'
                     placeholder={"Search"}
                 />
                 {

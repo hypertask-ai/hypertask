@@ -5,8 +5,6 @@ const id = z.number().int().positive();
 const agentId = z.string().optional();
 const dateInput = z.union([z.date(), z.string()]).nullish();
 
-// The 6923 schemas deliberately accept legacy bodies with z.custom. These
-// browser-safe contracts describe property callers without tightening server policy.
 export const moveTaskBodySchema = z.object({
   taskId: id,
   projectId: id,

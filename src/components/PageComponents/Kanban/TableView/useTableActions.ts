@@ -36,9 +36,6 @@ export function useTableActions(context: Context) {
   } = context;
 
 
-  // Multi-level UI (shift-click adds tie-break columns, up to MAX_SORT_LEVELS), but
-  // only the primary level persists to the view (table_sort_column/_direction are
-  // single-value DB columns, unlike kanban's board_sorting_stack) — see resolveSortState.
   const toggleSort = useCallback(
     (column: SortColumn, shiftKey: boolean) => {
       const initial = initialDirection(column, customFieldBySortColumn);

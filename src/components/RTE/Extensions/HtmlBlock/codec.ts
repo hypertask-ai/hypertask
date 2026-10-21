@@ -1,8 +1,3 @@
-// UTF-8-safe base64 for the HTML-block payload. The raw agent HTML is stored as
-// an opaque base64 attribute value so TipTap's schema never parses (and never
-// strips) it, and so it can never execute if contentHtml is ever rendered
-// outside the sandboxed iframe. Must stay byte-identical to the server codec in
-// src/utils/controllers/pages/htmlCanvas.ts (standard base64 alphabet).
 
 export function encodeHtmlPayload(html: string): string {
   const bytes = new TextEncoder().encode(html);

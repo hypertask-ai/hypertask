@@ -80,12 +80,10 @@ export default function ResetUserTab({ filteredUsers, searchTerm, onSearchChange
 
     return (
         <>
-            {/* Success/Error Messages */}
             {resetState === "success" && <StatusMessage type="success" message={resetMessage} />}
             {resetState === "error" && <StatusMessage type="error" message={resetMessage} />}
 
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-                {/* Step 1: Select User to Reset */}
                 <div className="bg-white rounded-lg shadow-md">
                     <div className="p-6 border-b">
                         <h2 className="text-subheading font-semibold text-gray-900 flex items-center gap-2">
@@ -106,7 +104,6 @@ export default function ResetUserTab({ filteredUsers, searchTerm, onSearchChange
                     </div>
                 </div>
 
-                {/* Step 2: Select Target User */}
                 <div className="bg-white rounded-lg shadow-md">
                     <div className="p-6 border-b">
                         <h2 className="text-subheading font-semibold text-gray-900 flex items-center gap-2">
@@ -127,7 +124,6 @@ export default function ResetUserTab({ filteredUsers, searchTerm, onSearchChange
                     </div>
                 </div>
 
-                {/* Step 3: Execute Reset */}
                 <div className="bg-white rounded-lg shadow-md">
                     <div className="p-6 border-b">
                         <h2 className="text-subheading font-semibold text-gray-900 flex items-center gap-2">
@@ -137,7 +133,6 @@ export default function ResetUserTab({ filteredUsers, searchTerm, onSearchChange
                         <p className="text-gray-600 text-content mt-1">Review and confirm the reset operation</p>
                     </div>
                     <div className="p-6 space-y-6">
-                        {/* Preview */}
                         {sourceUser && targetUser && (
                             <div className="space-y-4">
                                 <div className="p-4 bg-red-50 border border-red-200 rounded-lg">
@@ -172,7 +167,6 @@ export default function ResetUserTab({ filteredUsers, searchTerm, onSearchChange
                             </div>
                         )}
 
-                        {/* What will happen */}
                         <div className="p-4 bg-blue-50 border border-blue-200 rounded-lg">
                             <p className="text-content font-medium text-blue-900 mb-2">What will happen:</p>
                             <ul className="text-content text-blue-800 space-y-1">
@@ -183,7 +177,6 @@ export default function ResetUserTab({ filteredUsers, searchTerm, onSearchChange
                             </ul>
                         </div>
 
-                        {/* Warning */}
                         <div className="flex items-start gap-2 p-3 bg-red-50 border border-red-200 rounded-md">
                             <TriangleAlert className="h-4 w-4 text-red-600 mt-0.5" strokeWidth={1.75} />
                             <div className="text-red-800 text-content">
@@ -192,7 +185,6 @@ export default function ResetUserTab({ filteredUsers, searchTerm, onSearchChange
                             </div>
                         </div>
 
-                        {/* Action Button */}
                         <div className="pt-4">
                             <button
                                 onClick={handleResetClick}
@@ -227,7 +219,6 @@ export default function ResetUserTab({ filteredUsers, searchTerm, onSearchChange
                 </div>
             </div>
 
-            {/* Confirmation Modal */}
             {showConfirmModal && sourceUser && targetUser && (
                 <ResetUserConfirmationModal
                     sourceUser={sourceUser}

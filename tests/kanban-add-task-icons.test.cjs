@@ -92,14 +92,14 @@ test("top and bottom clicks retain task position, section and quick-entry behavi
   });
   const reactRoot = createRoot(document.getElementById("root"));
   try {
-    for (const sharp of [false, true]) for (const quick of [false, true]) {
-      const enabled = new Set([...(sharp ? [sharpPlusFlag] : []), ...(quick ? ["htpr-6175-quick-entry-cards"] : [])]);
+    for (const sharp of [false, true]) {
+      const enabled = new Set(sharp ? [sharpPlusFlag] : []);
       const Button = loadButton(enabled);
       for (const position of ["top", "bottom"]) {
         const calls = [];
         await React.act(async () => reactRoot.render(React.createElement(Button, props(position, (...args) => calls.push(args)))));
         await React.act(async () => document.querySelector("svg").parentElement.dispatchEvent(new dom.window.MouseEvent("click", { bubbles: true })));
-        assert.deepEqual(calls, [[position, payload(position), undefined, quick ? true : undefined]]);
+        assert.deepEqual(calls, [[position, payload(position), undefined, true]]);
       }
       await React.act(async () => reactRoot.render(React.createElement(Button, { ...props("bottom"), snapshot: { isDraggingOver: true } })));
       assert.equal(document.querySelector("svg"), null, "bottom button stays hidden while dragging over the column");

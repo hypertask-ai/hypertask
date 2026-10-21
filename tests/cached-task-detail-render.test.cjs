@@ -203,5 +203,5 @@ test("pending cached details paint property geometry immediately but defer edito
   assert.match(panels, /!_mbl && \(\(stableLayoutFlag && cachedLayout\) \|\| secondaryPanelsReady !== false\) && \(\s*<TaskInfo/);
   assert.match(panels, /_mbl && !embedded && secondaryPanelsReady !== false && <SettledComposerSlot settled=\{threadSettled\} slotRef=\{composerSlotRef\}><Suspense fallback=\{null\}><NewCommentComponent/);
   assert.match(thread, /taskInfoVirtualIndex && _mbl && \(cachedLayout \|\| secondaryPanelsReady !== false\)/);
-  assert.match(thread, /!_mbl && secondaryPanelsReady !== false && \(\s*\/\/[^\n]*\n\s*<SettledComposerSlot settled=\{threadSettled\} slotRef=\{composerSlotRef\}><Suspense fallback=\{null\}><NewCommentComponent/);
+  assert.match(thread, /!_mbl && secondaryPanelsReady !== false && \(\s*<SettledComposerSlot settled=\{threadSettled\} slotRef=\{composerSlotRef\}><Suspense fallback=\{null\}><NewCommentComponent/);
 });

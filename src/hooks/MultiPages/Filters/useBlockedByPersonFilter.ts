@@ -42,7 +42,6 @@ export const useBlockedByPersonFilter = ({
   const myTasksActive = myTasksFilters?.activeFilters.addedFilters.find(
     (filter) => filter.type === "BlockedByPerson"
   );
-  // Calendar excludes this filter from its menu; keep active empty there.
   const activeFilter =
     view === "MyTasks"
       ? myTasksActive

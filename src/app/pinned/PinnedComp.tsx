@@ -1,5 +1,5 @@
-/* eslint-disable react-hooks/exhaustive-deps */
-/* eslint-disable @next/next/no-img-element */
+
+
 "use client";
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
@@ -58,10 +58,8 @@ const Pinned = (props: IProp) => {
 
     if (e.key === "Escape") router.back();
 
-    // press k
     if (e.keyCode === 75 && cmdControl) {
       e.preventDefault();
-      // console.log("1: change commands mode");
       toggleShowCommands();
     }
 
@@ -70,7 +68,6 @@ const Pinned = (props: IProp) => {
       setSelectedScreen(
         selectedScreen.curr === "Your Pins" ? tabs[1] : tabs[0]
       );
-      // else if (selectedScreen.prev) setSelectedScreen(tabs[0])
     } else if (e.key === "Tab" && e.shiftKey) {
       e.preventDefault();
       setSelectedScreen(tabs[0]);

@@ -8,6 +8,7 @@ const root = path.resolve(__dirname, "..");
 const serviceFile = "src/utils/controllers/section/sectionService.ts";
 const read = (file) => fs.readFileSync(path.join(root, file), "utf8");
 function load(file, stubs) {
+  stubs = { "@/lib/mcp/operationCrashReport": { reportMcpOperationCrash: () => {} }, ...stubs };
   const mod = { exports: {} };
   const source = read(file);
   const js = ts.transpileModule(source, {
@@ -116,11 +117,12 @@ function fixture(options = {}) {
   const service = load(serviceFile, {
     "@/lib/prisma": { __esModule: true, default: prisma },
     "@/utils/controllers/notifications/agentFirstTaskEmail": scheduler,
-    "@/lib/telemetry/activationOccurrences": { recordAgentTaskCompletion: () => {} },
+    "@/lib/telemetry/activationOccurrences": { enqueueAgentTaskCompletion: async () => null },
     "@/utils/controllers/projects/getAllIncludes": { getProjectWhere: (id, actor) => {
       assert.equal(id, userId); assert.equal(actor, agentId); return { ownerId: id };
     } },
     "@/utils/generateRank": { default: () => "A0100" },
+    "@/lib/telemetry/savedWork": { enqueueColumnCreated: async () => "column-key", enqueueColumnRenamed: async () => "rename-key", processAnalyticsIntentSoon: () => {} },
     "./viewHelpers": { appendSectionToAllViews: async () => {}, updateSectionInAllViews: async () => {}, removeSectionFromAllViews: async () => {} },
   });
   const services = load("src/lib/mcp/sections/services.ts", {

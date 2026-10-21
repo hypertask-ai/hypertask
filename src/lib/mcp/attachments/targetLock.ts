@@ -40,10 +40,6 @@ function redisLockKey(lockKey: string): string {
   return `mcp:attachment-target-lock:${digest}`;
 }
 
-/**
- * Serialize one attachment target with a renewable, token-owned Redis lease.
- * The ownership assertion fences persistence and cleanup if renewal is lost.
- */
 export const withAttachmentTargetLock: AttachmentTargetLock = async (
   lockKey,
   callback
@@ -105,7 +101,6 @@ export const withAttachmentTargetLock: AttachmentTargetLock = async (
     try {
       await redis.eval(RELEASE_SCRIPT, 1, key, token);
     } catch {
-      // The lease expires on its own. Never delete a lock without matching its token.
     }
   }
 };

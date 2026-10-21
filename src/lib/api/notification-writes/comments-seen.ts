@@ -26,9 +26,6 @@ const route = taskWriteRoute({
 
     await notificationGetByTask(userId, taskId);
 
-    // One UPDATE for the whole task, and only for comments this user has
-    // not seen yet — the previous per-comment update fan-out starved the
-    // Prisma pool (limit 5) on tasks with many comments. See HTPR-4033.
     await prisma.comment.updateMany({
       where: {
         id: { in: commentIds },

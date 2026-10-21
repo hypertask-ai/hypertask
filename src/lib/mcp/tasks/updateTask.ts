@@ -42,7 +42,6 @@ export async function executeTaskUpdate({
     if (identifiers instanceof NextResponse) return identifiers;
     const { priorityIndex, task_id, ticket_number, unique_index, project_id, normalizedRequestBody } = identifiers;
 
-    // Find tasks by identifier
     const tasks = await findTasksByIdentifier(
         user,
         {
@@ -117,7 +116,6 @@ export async function executeTaskUpdate({
 
     console.log('[MCP Update Task] Found tasks:', tasks.map(t => t.id))
 
-    // Get user object for cookie (include photoURL for activity log avatars)
     const userObj = await prisma.user.findUnique({
         where: { id: user.id },
         select: {
@@ -138,7 +136,6 @@ export async function executeTaskUpdate({
         )
     }
 
-    // Prepare base URL and cookie for API calls
     const baseUrl = process.env.NEXT_PUBLIC_BASEURL 
         || (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : 'http://localhost:3000');
     
@@ -148,9 +145,6 @@ export async function executeTaskUpdate({
         displayName: userObj.displayName,
         photoURL: userObj.photoURL ?? undefined
     }));
-    // HTPR-6376: stamp the authenticated MCP agent on the internal session so
-    // legacy routes like (un)archive can attribute the actor without trusting
-    // a forgeable JSON body field alone.
     const sessionToken = signSession({
         id: userObj.id,
         email: userObj.email,
@@ -158,7 +152,6 @@ export async function executeTaskUpdate({
     });
     const authCookieHeader = `nookies_user=${encodeURIComponent(userCookie)}; ${SESSION_COOKIE}=${sessionToken}`;
 
-    // Handle priority/estimate constants
     const priorityConstant = priorityIndex !== undefined
         ? PriorityConstants.find(x => x.priority_index === priorityIndex)
         : null
@@ -167,7 +160,6 @@ export async function executeTaskUpdate({
         ? EstimateConstants.find(x => x.estimate_index === requestBody.estimate)
         : null
 
-    // Handle section update if provided (for moveTask - same board only)
     let sectionInfo: { section_title: string; projectId: number } | undefined
     if (requestBody.sectionId) {
         const newSection = await prisma.section.findUnique({

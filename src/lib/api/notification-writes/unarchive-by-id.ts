@@ -17,8 +17,6 @@ const route = taskWriteRoute({
       return NextResponse.json({ message: "Missing Required Information" }, { status: 400 })
     }
 
-    // Scope the write to the caller's own notification; unknown id or someone
-    // else's returns 0 rows -> 404, never touches another user's data.
     const { count } = await prisma.notification.updateMany({
       where: { id: notificationId, userId },
       data: {
@@ -33,7 +31,6 @@ const route = taskWriteRoute({
       where: { id: notificationId }
     })
 
-    // ============== DELETE all OTHER notifications of that type. so no duplicate types
     await prisma.notification.updateMany({
       where: {
         id: { not: updatedNotification.id },
@@ -45,8 +42,6 @@ const route = taskWriteRoute({
         status: "Deleted"
       }
     })
-    // Live-sync the unarchive to this user's other tabs (e.g. the Inbox Archive
-    // view). Fire-and-forget; exclude the acting tab so it doesn't double-refetch.
     const excludeSocketId = socketIdFromHeader(request.rawHeaders ? request.rawHeaders["x-socket-id"] : request.headers.get("x-socket-id"));
     void broadcastInboxChange(
       updatedNotification.userId,

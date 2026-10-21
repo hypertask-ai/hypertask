@@ -26,7 +26,8 @@ function loadUpdateUniqueIdentifier(prisma) {
     },
   }).outputText;
   const stubs = {
-    "@/lib/telemetry/activationOccurrences": { recordActivationOccurrence: () => {}, recordAgentTaskCompletion: () => {} },
+    "@/lib/telemetry/activationOccurrences": { captureActivationOccurrence: async () => null, enqueueAgentTaskCompletion: async () => null },
+    "@/lib/telemetry/savedWork": { enqueueBoardCreated: async () => "board-key", processAnalyticsIntentSoon: () => {}, enqueueTaskCreated: async () => "task-key", creationChannelFromHeader: () => 'web', CREATION_CHANNEL_HEADER: 'X-Hypertask-Creation-Channel', CREATION_AGENT_HEADER: 'X-Hypertask-Creation-Agent' },
     "@prisma/client": { LogType: {}, Status: {} },
     "../logs/createLog": { __esModule: true, default: () => {} },
     "@/lib/prisma": { __esModule: true, default: prisma },

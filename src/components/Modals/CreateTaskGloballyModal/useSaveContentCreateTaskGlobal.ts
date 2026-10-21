@@ -27,12 +27,9 @@ export function processHtmlForTaskId(
         let imageMention: TImageMention = undefined;
         console.log("🚀 ~ returnnewPromise ~ anchorTags:", anchorTags)
 
-        // convert tasks span tags to achor tags
         const spanElements = doc.querySelectorAll('span[data-label="task"]');
         const relatedTasks :{uniqueIndex: string, projectId: string}[]=[]
 
-        //  console.log("spanelement",spanElements)
-        // Iterate through each <span> element and replace it with an <a> element
         spanElements.forEach((spanElement) => {
           const aElement = doc.createElement("a");
           const projectid = spanElement.getAttribute("projectId");
@@ -40,9 +37,6 @@ export function processHtmlForTaskId(
           const index = spanElement.getAttribute("uniqueIndex");
           console.log("🚀 ~ spanElements.forEach ~ index:", index);
           aElement.innerHTML = spanElement.innerHTML;
-          // const [text, index, projectid] = aElement.innerHTML.split('-')
-          // const index = parts[parts.length - 2];
-          // const projectid = parts[parts.length - 1];
           aElement.setAttribute(
             "href",
             `/detail/project-${projectid}/${index}`
@@ -52,16 +46,11 @@ export function processHtmlForTaskId(
           }
 
           spanElement.replaceWith(aElement);
-          // const modifiedHtmlContent = doc.documentElement.outerHTML;
 
-          // aElement.setAttribute('title', `${aElement.innerHTML}`)
           const url = aElement.getAttribute("href");
           const title = aElement.innerHTML;
-          // console.log("urltopush", url);
           if (url && !urlsArray.includes(url)) {
-            // console.log("TaskId", currentTask?.id, "urlString", url);
             let urlToAdd: any = {
-              // TaskId: taskId,
               urlString: url,
               title: title,
             };
@@ -71,15 +60,12 @@ export function processHtmlForTaskId(
               uniqueIndex: index!,
               projectId: projectid!
             })
-            // console.log("urlssss",url)
             urlsArray.push(url);
             uniqueAnchorUrls.push(urlToAdd);
           }
-          // console.log("elementWithDataLabelinner", modifiedHtmlContent);
         });
 
-        const userspans = doc.querySelectorAll('[data-label^="name"]'); // Use querySelectorAll to select multiple elements
-        // const useridarray = [];
+        const userspans = doc.querySelectorAll('[data-label^="name"]');
 
         userspans.forEach((userspan) => {
           const dataLabelValue = userspan.getAttribute("data-label");
@@ -94,7 +80,6 @@ export function processHtmlForTaskId(
               userId: Number(userid),
             };
   
-            //HyperMention check. Ignore HyperAI if its wrapped in blockquotes
             if (userid === hyperAiId) {
               const hyperMentionSpans = doc.querySelectorAll(
                 `[data-label="name-${hyperAiId}"]`
@@ -125,7 +110,6 @@ export function processHtmlForTaskId(
           }
         });
 
-        // Process agent mentions
         const agentSpans = doc.querySelectorAll('[data-label^="agent"]');
         const seenAgentIds = new Set<string>();
         agentSpans.forEach((agentSpan) => {
@@ -161,22 +145,19 @@ export function processHtmlForTaskId(
             });
         };
 
-        // Convert images sequentially
         async function convertImages() {
           for (const imgTag of imgTags) {
             const src = imgTag.getAttribute("src");
 
             try {
               if (src?.startsWith("data:image")) {
-                var newUrl = await base64ToFile(src, "image.png"); // Replace this with your async function logic
-                // urlsArray.push(newUrl);
+                var newUrl = await base64ToFile(src, "image.png");
 
                 if (src && !urlsArray.includes(src)) {
                   const filename = newUrl.substring(
                     newUrl.lastIndexOf("/") + 1
                   );
                   let urlToAdd: any = {
-                    // TaskId: taskId,
                     urlString: newUrl,
                     title: filename,
                   };
@@ -188,22 +169,17 @@ export function processHtmlForTaskId(
                 await imgTag.setAttribute("src", newUrl);
               } else if (src?.startsWith("blob:")) {
                 try {
-                  // console.log("🚀 ~ file: TaskDetailComp.tsx:1160 ~ convertImages ~ src:", src)
                   const base64FromBlob = await blobToBase64(src);
-                  // console.log("🚀 ~ file: TaskDetailComp.tsx:1161 ~ convertImages ~ base64FromBlob:", base64FromBlob)
                   const newUrl = await base64ToFile(
                     base64FromBlob as string,
                     "image.png"
-                  ); // Replace this with your async function logic
-                  // console.log("🚀 ~ file: TaskDetailComp.tsx:1166 ~ convertImages ~ newUrl:", newUrl)
+                  );
 
                   if (src && !urlsArray.includes(src)) {
                     const filename = newUrl.substring(
                       newUrl.lastIndexOf("/") + 1
                     );
-                    // console.log("🚀 ~ file: TaskDetailComp.tsx:1171 ~ convertImages ~ filename:", filename)
                     let urlToAdd: any = {
-                      // TaskId: taskId,
                       urlString: newUrl,
                       title: filename,
                     };
@@ -212,8 +188,6 @@ export function processHtmlForTaskId(
                     uniqueAnchorUrls.push(urlToAdd);
                   }
                   await imgTag.setAttribute("src", newUrl);
-                  // console.log("🚀 ~ file: TaskDetailComp.tsx:1056 ~ returnnewPromise ~ doc:", doc)
-                  // console.log("🚀 ~ file: TaskDetailComp.tsx:1198 ~ convertImages ~ imgTag:", imgTag)
                 } catch (error) {
                   console.log(error);
                 }
@@ -225,15 +199,12 @@ export function processHtmlForTaskId(
             }
           }
         }
-        // console.log("imagesurl",urlsArray)
         convertImages().then(() => {
           anchorTags.forEach((anchor) => {
-            // console.log("anchor", anchor);
             const title = anchor.innerText;
             const url = anchor.getAttribute("href");
             if (url && !urlsArray.includes(url)) {
               let urlToAdd: any = {
-                // TaskId: taskId,
                 urlString: url,
                 title: title,
               };
@@ -252,13 +223,8 @@ export function processHtmlForTaskId(
           };
 
           resolve(returnHtml);
-
-          // return doc.documentElement.outerHTML
         });
-
-        // Resolve the promise with the modified HTML
       } catch (error) {
-        // Reject the promise if there's an error
         reject(error);
       }
     });
@@ -267,16 +233,7 @@ export function processHtmlForTaskId(
 
 export const uploadAttachmentsDescription = (
     attachments: any[] | undefined,
-    // taskId:number,
-    // descriptionId:any
   ) => {
-    // =========================== handle incoming attachments + already uploaded attachments
-    // missing source means it needs to be uploaded first *WE ARE CHANGING THAT NOW
-    // NEW:
-    //   1: We will append source from the deepest component, send it back in callbacl.
-    //   2: In the parent uploading component, we will then send back the entire array,
-    //   3: if an item doesn't have createdAt, it means its a new attachment.
-
     var AttachmentUrls: ICreateTaskUrl[] = [];
     console.log("🚀 ~ attachments:", attachments)
     
@@ -289,7 +246,6 @@ export const uploadAttachmentsDescription = (
           console.log("🚀 ~ attachments.forEach ~ attch:", attch)
           if (attch?.file?.source && !attch.file.createTaskUploadId) {
             let urlToAdd: ICreateTaskUrl = {
-              // TaskId: taskId,
               urlString: attch.file.source as string,
               Attachment: true,
               fileSize: measuredSizeNumber(attch.file.size),

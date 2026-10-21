@@ -2,7 +2,6 @@ import type { IFilterSettings } from "@/models/Filters/model";
 import type { IAgent, ILabel, IUser } from "@/models/model";
 import { EstimateConstants, PriorityConstants } from "@/lib/constants/constants";
 
-// Labels and agents use UUIDs; filter-only placeholders are not assignable IDs.
 const assignableId = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 export const getNewTaskViewDefaults = (filters?: IFilterSettings) => {

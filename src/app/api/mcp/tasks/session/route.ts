@@ -2,7 +2,7 @@ import { wrapMcpRoute, checkMcpRouteRateLimit as checkMcpRateLimit, validateMcpR
 import { NextRequest, NextResponse } from 'next/server'
 
 import prisma from '@/lib/prisma'
-import { findTaskByIdentifier } from '@/lib/mcp/tasks/resolveTask'
+import { findTaskByIdentifier, taskIdentifierErrorResponse } from '@/lib/mcp/tasks/resolveTask'
 import { normalizeSessionStatus, sessionStatuses } from '@/lib/mcp/tasks/sessionStatus'
 
 function unauthorized() {
@@ -33,12 +33,6 @@ const SESSION_SELECT = {
   lastSeenAt: true,
 } as const
 
-/**
- * POST /api/mcp/tasks/session
- * Attach or refresh an agent work-session on a ticket. Keyed by session_id, so a
- * repeated call from the same session upserts one row (a heartbeat).
- * Body: { task_id | ticket_number, project_id?, session_id, resume_command?, status? }.
- */
 export async function POST(request: NextRequest) {
   return wrapMcpRoute(async (request: NextRequest) => {
   try {
@@ -102,18 +96,11 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // session_id is semi-public (resume strings get posted in comments), so an
-    // upsert keyed only on it would let anyone overwrite another agent's session.
-    // A session may only be written by the user/agent that started it. Existence
-    // is checked first and ownership enforced before any write.
     const existing = await prisma.taskSession.findUnique({
       where: { sessionId },
       select: { startedById: true, agentId: true, taskId: true },
     })
     if (existing) {
-      // The update must target the session's real task — which we just access-
-      // checked via findTaskByIdentifier. This prevents refreshing a session on a
-      // project the caller can no longer see by naming some other reachable task.
       if (existing.taskId !== task.id) {
         return NextResponse.json(
           { success: false, error: 'Session not found or access denied' },
@@ -129,7 +116,6 @@ export async function POST(request: NextRequest) {
           { status: 403 }
         )
       }
-      // A session stays bound to its original task; a heartbeat only refreshes state.
       const session = await prisma.taskSession.update({
         where: { sessionId },
         data: {
@@ -156,9 +142,6 @@ export async function POST(request: NextRequest) {
       })
       return NextResponse.json({ success: true, session })
     } catch (err) {
-      // Same-owner heartbeat race: another concurrent first-POST created the row
-      // between our existence check and this insert (P2002 unique violation).
-      // Re-run the ownership-gated update path rather than 500.
       if (
         err &&
         typeof err === 'object' &&
@@ -197,6 +180,8 @@ export async function POST(request: NextRequest) {
       throw err
     }
   } catch (error) {
+    const identifierResponse = taskIdentifierErrorResponse(error)
+    if (identifierResponse) return identifierResponse
     console.error('[MCP Task Session] POST Error:', error)
     return NextResponse.json({ success: false, error: 'Internal server error' }, { status: 500 })
   }
@@ -204,10 +189,6 @@ export async function POST(request: NextRequest) {
   })(request)
 }
 
-/**
- * GET /api/mcp/tasks/session?task_id|ticket_number&project_id
- * List the work-sessions attached to a task, most-recently-seen first.
- */
 export async function GET(request: NextRequest) {
   return wrapMcpRoute(async (request: NextRequest) => {
   try {
@@ -244,6 +225,8 @@ export async function GET(request: NextRequest) {
 
     return NextResponse.json({ success: true, taskId: task.id, sessions })
   } catch (error) {
+    const identifierResponse = taskIdentifierErrorResponse(error)
+    if (identifierResponse) return identifierResponse
     console.error('[MCP Task Session] GET Error:', error)
     return NextResponse.json({ success: false, error: 'Internal server error' }, { status: 500 })
   }

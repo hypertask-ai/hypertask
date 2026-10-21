@@ -25,7 +25,6 @@ async function fetchAgents(teamId: string): Promise<IAgent[]> {
   return data.agents;
 }
 
-/** Agents explicitly added to the current board via Member.agentId */
 async function fetchBoardAgents(projectId: number): Promise<IAgent[]> {
   const res = await fetch("/api/agents/all?projectId=" + projectId);
   const data = (await res.json()) as {
@@ -78,10 +77,6 @@ function mergeAgentRevocation(
   );
 }
 
-/**
- * Shared TanStack cache for `/api/agents` plus mutations (create, update, revoke).
- * `allAgents` = agents on the current board (board-scoped).
- */
 export function useAgents(
   options: {
     projectId?: number | null;
@@ -202,8 +197,6 @@ export function useAgents(
       return { ...data.agent, token: data.token ?? null };
     },
     onSuccess: (updatedAgent) => {
-      // Reflect the server result before the confirmation closes. Waiting for
-      // invalidation left disabled agents visible long enough to look unchanged.
       if (typeof userId === "number" && teamId) {
         queryClient.setQueryData<IAgent[]>(
           agentsQueryKey(userId, teamId),

@@ -68,10 +68,8 @@ const route = taskWriteRoute({
         return NextResponse.json(reactionsToReturn, { status: 200 });
     }
 
-    // ============== it means for the user, the item does exist, so we  must update it.
     else if (alreadyReacted!==undefined){
         var reaction;
-        // ================= delete all the other reactions just for safety.
         const deleted= await prisma.reaction.deleteMany({
             where:{
                 unified:unified,
@@ -145,7 +143,6 @@ const sendNotification = async(reaction:any,afterAppDomain:string,userId:number)
             user:true
         }
     })
-        // also create notification
         const notification = await checkReminderAndCreateNotification(
             userId,
             reaction.task.projectId,
@@ -179,7 +176,4 @@ const sendNotification = async(reaction:any,afterAppDomain:string,userId:number)
             }
             sendDataNewCommentFCM(body)
         }
-
-        // console.log("🚀 ~ sendNotification ~ notification:", notification)
-
 }

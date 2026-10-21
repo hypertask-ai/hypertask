@@ -68,6 +68,34 @@
         "name": "Build",
         "conclusion": "failure"
       }
+    ],
+    "docsRuns": [
+      {
+        "databaseId": 100,
+        "createdAt": "2026-10-13T09:00:00Z",
+        "updatedAt": "2026-10-14T08:20:00Z",
+        "workflowName": "Build and Deploy",
+        "event": "push",
+        "conclusion": "failure",
+        "headBranch": "main"
+      },
+      {
+        "databaseId": 103,
+        "createdAt": "2026-10-13T09:00:00Z",
+        "updatedAt": "2026-10-14T08:20:00Z",
+        "workflowName": "Scheduled",
+        "event": "schedule",
+        "conclusion": "timed_out",
+        "headBranch": "main"
+      },
+      {
+        "databaseId": 102,
+        "updatedAt": "2026-10-14T08:20:00Z",
+        "workflowName": "Other",
+        "event": "push",
+        "conclusion": "failure",
+        "headBranch": "production"
+      }
     ]
   },
   "journal": [
@@ -164,5 +192,24 @@
         }
       ]
     }
+  },
+  "cli": {
+    "events": [
+      {
+        "timestamp": "2026-10-14T08:20:00.000Z",
+        "requestPath": "/api/mcp/cli-error",
+        "message": "[cli-error] task create: ApiFailure (HTTP 503) v0.2.0 linux"
+      },
+      {
+        "timestamp": "2026-10-14T08:21:00.000Z",
+        "requestPath": "/api/mcp/cli-error",
+        "message": "[cli-error] task create: ApiFailure (HTTP 503) v0.3.1-beta.2+abc macos"
+      },
+      {
+        "timestamp": "2026-10-14T08:22:00.000Z",
+        "requestPath": "/api/mcp/cli-error",
+        "message": "[cli-error] login: NoToken v0.3.1 windows"
+      }
+    ]
   }
 }

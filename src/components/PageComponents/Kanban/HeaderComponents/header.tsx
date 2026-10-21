@@ -1,4 +1,4 @@
-/* eslint-disable @next/next/no-img-element */
+
 import dynamic from "next/dynamic";
 import { IMember, IProject, IUser } from "@/models/model";
 import React, { Suspense, useCallback, useContext, useEffect } from "react";
@@ -68,8 +68,6 @@ const Header = ({
   const [_, setIsOpenByClick] = useRecoilState(openBoardByClickAtom);
   const [runningOnly, setRunningOnly] = useRecoilState(kanbanRunningOnlyAtom);
   const { timers: runningTimers } = useBoardRunningTimers(currentProject.id);
-  // honestly i shouldn't have to handle this logic separately, but i dont have the resources(brain power, and TIME) to think of a better solution
-  // fuck it, create a hook.
   const isApple = useDeviceContext();
   const { setShowTrial, redirectToManageSubscriptions, showTrial } =
     useTrialModal(project);
@@ -81,17 +79,13 @@ const Header = ({
     void prefetchInboxQuery(queryClient, currentUser.id);
   }, [currentUser.id, queryClient]);
 
-  // Determine if user is trial user (trialStatus === false means eligible for trial/free user)
-  // trialStatus === true means user has redeemed trial (paid user)
   const isTrialUser = !currentUser.UserSetting.trialStatus;
 
   useEffect(() => {
     setRunningOnly(false);
   }, [currentProject.id, setRunningOnly]);
 
-  // =============== redirect to manage subscriptions page
 
-  // ================================================= HEADER COMPONENT
   return (
     <>
       <div
@@ -130,7 +124,6 @@ const Header = ({
 
           {project && <TitleKanbanHeader project={project} />}
 
-          {/* ================= invite people ================== */}
           <Suspense
             fallback={<div className="hidden text-white md:block"> loading header...</div>}
           >
@@ -141,7 +134,6 @@ const Header = ({
               />
               <HeaderDivider />
 
-              {/* ======================= BOARD FEATURES ====================== */}
               <div className="flex gap-3">
                 <PriorityHeaderKanban _currentProject={currentProject} />
                 <FilterHeader currentProject={currentProject} />
@@ -171,7 +163,6 @@ const Header = ({
               </div>
 
               <HeaderDivider />
-              {/* ==================== INVITE TEAM BUTTON ============= */}
               <InviteTeamButton
                 isTrialUser={isTrialUser}
                 isMobile={isMbl}
@@ -181,7 +172,6 @@ const Header = ({
           </Suspense>
         </div>
 
-        {/* ==================== inbox ============= */}
         <div
           className={`transition-transform duration-150 ${
             showSearchTasks
@@ -212,7 +202,6 @@ const Header = ({
             onTouchStart={prefetchInbox}
             style={{
               cursor: "pointer",
-              // marginLeft: 16,
               height: 40,
               borderRadius: 20,
               padding: "5.2px 14px",

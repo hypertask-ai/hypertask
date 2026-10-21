@@ -13,6 +13,7 @@ const currentTask = {
 };
 
 function load(relativePath, stubs) {
+  stubs = { "@/lib/auth/agentScope": require("./helpers/agent-board-scope.cjs").enforcedScope, "@/lib/mcp/operationCrashReport": { reportMcpOperationCrash: () => {} }, ...stubs };
   const filename = path.join(root, relativePath);
   const javascript = ts.transpileModule(fs.readFileSync(filename, "utf8"), {
     compilerOptions: {
@@ -26,6 +27,7 @@ function load(relativePath, stubs) {
     if (request === "@/lib/mcp/routeWrapper") return require("./helpers/mcp-route-wrapper.cjs").loadRouteWrapper(stubs);
     if (request === "@/lib/tasks/sameBoardRelations") return load("src/lib/tasks/sameBoardRelations.ts", {});
     if (Object.hasOwn(stubs, request)) return stubs[request];
+    if (request === "@/lib/mcp/listParams") return load("src/lib/mcp/listParams.ts", {});
     if (["@prisma/client", "react", "react/jsx-runtime"].includes(request)) return require(request);
     throw new Error(`Unexpected dependency: ${request}`);
   };
@@ -128,6 +130,7 @@ function fixture({ tasks = [currentTask], visibleProjects = [20], agentId = null
     "@/lib/mcp/listQuery": {},
     "@/lib/mcp/readListQuery": {},
     "@/lib/mcp/priorityFilter": {},
+    "@/lib/mcp/listParams": load("src/lib/mcp/listParams.ts", {}),
   });
   const page = load("src/app/detail/[...slug]/page.tsx", {
     ...base,

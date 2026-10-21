@@ -497,3 +497,22 @@ test("both internal task-to-Page paths record return context", () => {
   assert.match(existingPageSource, /createPageReturnHref\(\{/);
   assert.match(newPageSource, /createPageReturnHref\(\{/);
 });
+
+test("taskless page return rejects the former ticket context and uses its owning board", () => {
+  const storage = makeStorage();
+  const markedHref = recordInternalNavigation(storage);
+  const history = makeHistory();
+  assert.equal(bindInternalEntry(storage, `${origin}${markedHref}`, history), true);
+  const router = makeRouter();
+  const boardHref = "/project?id=15";
+  returnFromPage({
+    router,
+    navigation: navigation([`${origin}${taskHref}?inboxFlow=true#comment-177928`, `${origin}${markedHref}`]),
+    historyState: history.state,
+    currentHref: `${origin}${markedHref}`,
+    taskHref: boardHref,
+    storage,
+    now: now + 1_000,
+  });
+  assert.deepEqual(router.calls, [["replace", boardHref]]);
+});

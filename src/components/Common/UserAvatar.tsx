@@ -14,7 +14,6 @@ interface UserAvatarProps {
   photoURL?: string | null;
   size?: number;
   title?: string;
-  /** Set for agents: generates a distinct robot-face avatar when there is no custom photo. HTPR-6034. */
   agentId?: string | null;
 }
 

@@ -17,14 +17,10 @@ export function createSseErrorResponse(message: string, status?: number) {
 }
 
 export function errorMessage(error: unknown) {
-  // Prisma/driver errors carry schema and query detail, so those stay internal.
   if (error instanceof Error && error.name.startsWith("Prisma")) {
     console.error("[ai/chat/stream] internal error", error);
     return "Sorry, an error occurred while processing your request.";
   }
-  // Tool loops need the provider's real text. The SDK
-  // sometimes hands us a plain object, not an Error; keep its cause available
-  // to the model without persisting a provider's echoed request body.
   return toErrorMessage(
     error,
     "Sorry, an error occurred while processing your request.",
@@ -44,7 +40,6 @@ export function handledErrorExtra(error: unknown) {
   return extra;
 }
 
-/** The allowance stop unwrapped from the SDK's retry chain, or null. */
 export function includedAllowanceError(error: unknown) {
   let current: unknown = error;
   const visited = new Set<unknown>();
@@ -71,21 +66,16 @@ export function includedAllowanceError(error: unknown) {
   return null;
 }
 
-// Tool errors need verbatim detail for the model, but streamed errors are user-visible.
 export function userFacingErrorMessage(error: unknown, stage: string) {
-  console.error(`[ai/chat/stream] ${stage} user-facing error`, error);
   const allowanceError = includedAllowanceError(error);
-  if (allowanceError) return allowanceError.message;
+  if (allowanceError) {
+    console.info(`[ai/chat/stream] ${stage} refused: included AI allowance used up`);
+    return allowanceError.message;
+  }
+  console.error(`[ai/chat/stream] ${stage} user-facing error`, error);
   return "Sorry, something went wrong while generating a response. Please try again.";
 }
 
-/**
- * Extra fields for a streamed error event. The allowance period travels with
- * the stop so a background caller can deduplicate against the period that
- * actually rejected, instead of re-deriving one from its own clock and keying
- * the wrong month at a rollover. The charged team travels with it so the
- * caller can attribute the stop to exactly the team whose allowance is spent.
- */
 export function userFacingErrorDetails(error: unknown, teamId: string | null) {
   const periodKey = includedAllowanceError(error)?.periodKey;
   if (!periodKey) return {};
@@ -125,7 +115,6 @@ export function requestErrorMessage(
     fields.length === 1
       ? fields[0]
       : `${fields.slice(0, -1).join(", ")} and ${fields.at(-1)}`;
-  // A missing value reads as "required"; anything else is "invalid".
   const fieldsAreRequired = fieldIssues.every(
     ({ code }) => code === "too_small" || code === "invalid_type",
   );

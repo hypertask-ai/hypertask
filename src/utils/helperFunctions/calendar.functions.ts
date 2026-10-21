@@ -31,7 +31,6 @@ export const getWeekStartIndex = (
   weekStartsOn: WeekStartsOn = "monday"
 ) => (weekStartsOn === "monday" ? (date.getDay() + 6) % 7 : date.getDay());
 
-// Kept for callers that explicitly need a Monday-first index.
 export const getMondayIndex = (date: Date) => getWeekStartIndex(date);
 
 export const startOfWeek = (

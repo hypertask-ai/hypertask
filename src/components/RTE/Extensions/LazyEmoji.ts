@@ -1,11 +1,3 @@
-// HTPR-6059: local replacement for @tiptap/extension-emoji's Emoji node.
-// The package embeds its emoji dataset in the same module as the node and its
-// default options reference the data, so any static import keeps the full
-// dataset in the editor chunk that loads on every task open. This node reads
-// the dataset exclusively through lazyEmojiData (filled on demand by a dynamic
-// import), so the dataset only ships in an async chunk. Behavior otherwise
-// mirrors the package node (3.29.2) so stored HTML, :shortcode: autocomplete,
-// input/paste rules and commands behave identically.
 import {
   combineTransactionSteps,
   escapeForRegEx,
@@ -66,17 +58,11 @@ function emojiToShortcode(emoji: string): string | undefined {
   )?.shortcodes[0];
 }
 
-// Accepts a parsed span's text as a preserved glyph only when it is entirely
-// emoji characters, so hand-written or foreign HTML cannot smuggle arbitrary
-// text into the pre-load rendering path.
 function isFullEmojiSequence(text: string): boolean {
   if (!text) return false;
   return text.replace(emojiRegex(), "").length === 0;
 }
 
-// The package builds these once at editor creation from its bundled data; we
-// rebuild them lazily from the shared dataset and drop the caches when the
-// data is installed, so empty-dataset editors stay data-independent.
 let emoticonRegex: RegExp | null = null;
 let supportMap: Record<string, boolean> | null = null;
 onEmojiDataInstalled(() => {
@@ -96,8 +82,6 @@ function getEmoticonRegex(): RegExp | null {
   return emoticonRegex;
 }
 
-// Mirrors the package's unicode-version support map, which decides whether an
-// emoji renders as a glyph or as its CDN fallback image on older platforms.
 function getSupportMap(): Record<string, boolean> {
   if (!supportMap) {
     const items = getEmojiItems();
@@ -164,9 +148,6 @@ const LazyEmoji = Node.create<LazyEmojiOptions>({
     };
   },
 
-  // storage.emojis must stay the shared loader array by reference: the
-  // autocomplete reads editor.storage.emoji.emojis and therefore observes the
-  // dataset the moment it is installed.
   addStorage() {
     return {
       emojis: this.options.emojis,
@@ -184,11 +165,6 @@ const LazyEmoji = Node.create<LazyEmojiOptions>({
           "data-name": attributes.name,
         }),
       },
-      // Preserves the rendered glyph of content stored before the dataset is
-      // loaded, so HTML round-trips (draft sync, autosave) cannot degrade
-      // existing emojis to ":name:" text while the data chunk is in flight.
-      // Never serialized: rendering prefers the canonical dataset glyph once
-      // the data is loaded, and falls back to this parsed glyph before that.
       glyph: {
         default: null,
         parseHTML: (element) => {
@@ -227,7 +203,6 @@ const LazyEmoji = Node.create<LazyEmojiOptions>({
     const isSupported = this.storage.isSupported(emojiItem);
     const hasEmoji = !!emojiItem.emoji;
     const hasFallbackImage = !!emojiItem.fallbackImage;
-    // Collapsed form of the package renderer's fallback condition.
     const renderFallbackImage = this.options.forceFallbackImages
       ? hasFallbackImage || !hasEmoji
       : (!isSupported || !hasEmoji) && hasFallbackImage;
@@ -320,8 +295,6 @@ const LazyEmoji = Node.create<LazyEmojiOptions>({
     if (this.options.enableEmoticons) {
       inputRules.push(
         nodeInputRule({
-          // Data-independent find: the regex is derived from the (initially
-          // empty) dataset and rebuilt when the data is installed.
           find: (text: string) => {
             const regex = getEmoticonRegex();
             if (!regex) return null;
@@ -393,12 +366,6 @@ const LazyEmoji = Node.create<LazyEmojiOptions>({
       new Plugin({
         key: new PluginKey("emoji"),
         props: {
-          // Firefox cannot move the cursor past emoji nodes at paragraph
-          // boundaries using arrow keys. We intercept plain (unmodified)
-          // ArrowLeft/ArrowRight and manually resolve the correct position.
-          // Only handles emoji nodes — other inline non-selectable nodes
-          // (mentions, hard breaks) are out of scope for this extension.
-          // See: https://github.com/ProseMirror/prosemirror/issues/1220
           handleKeyDown: (view, event) => {
             if (!isFirefox()) {
               return false;
@@ -445,8 +412,6 @@ const LazyEmoji = Node.create<LazyEmojiOptions>({
             }
             return false;
           },
-          // double click to select emoji doesn't work by default
-          // that's why we simulate this behavior
           handleDoubleClickOn: (view, pos, node) => {
             if (node.type !== this.type) {
               return false;
@@ -457,7 +422,6 @@ const LazyEmoji = Node.create<LazyEmojiOptions>({
             return true;
           },
         },
-        // replace text emojis with emoji node on any change
         appendTransaction: (transactions, oldState, newState) => {
           if (this.editor.view.composing) {
             return;

@@ -14,7 +14,6 @@ type ClaimedStaleTask = {
   userId: number;
 };
 
-/** Claims and notifies one bounded batch, once per task activity episode. */
 export async function sweepStaleNudges(): Promise<number> {
   const claimed = await prisma.$queryRaw<ClaimedStaleTask[]>`
     WITH candidates AS (
@@ -57,7 +56,6 @@ export async function sweepStaleNudges(): Promise<number> {
       t."userId"
   `;
 
-  // Claim commits before fan-out, like sweepDueDates; failed delivery consumes the episode.
   for (const task of claimed) {
     try {
       const userIds = await getUserIdsForNotification(

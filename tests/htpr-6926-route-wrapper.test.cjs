@@ -7,10 +7,14 @@ const ts = require('typescript')
 const jwt = require('jsonwebtoken')
 const { NextRequest, NextResponse } = require('next/server')
 const root = path.resolve(__dirname, '..')
+const agentScope = require('./task-route-loader.cjs').load('src/lib/auth/agentScope.ts', {
+  '@/lib/flags': { isFeatureEnabled: async () => true },
+  '@/lib/telemetry/signupAnalytics': { recordServerCapture: () => {} },
+})
 const dbTiming = require('./task-route-loader.cjs').load('src/lib/mcp/dbTiming.ts', {})
 
 function load(file, stubs, extra = '', env = {}, clock = performance) {
-  stubs = { './dbTiming': dbTiming, '@/lib/aiFeedback/automatic': { queueRestFailure: () => {} }, ...stubs }
+  stubs = { '@/lib/auth/agentScope': agentScope, './operationCrashReport': { reportUnexplainedMcpServerError: () => {} }, './dbTiming': dbTiming, '@/lib/aiFeedback/automatic': { queueRestFailure: () => {} }, ...stubs }
   const source = fs.readFileSync(path.join(root, file), 'utf8')
   const code = ts.transpileModule(source, { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2020, esModuleInterop: true } }).outputText
   const mod = { exports: {} }
@@ -49,7 +53,8 @@ function harness({ enabled = true, count = 1, revoked = false, agent = false, us
   }, 'module.exports.__maps = { boundedJwtLogThrottle, boundedConnectionLogThrottle, mcpConnectionLogThrottle };', { JWT_SECRET: secret })
   const telemetry = load('src/lib/mcp/clientTelemetry.ts', { crypto })
   const session = load('src/lib/mcp/auth/session.ts', {
-    '@/lib/telemetry/activationOccurrences': { recordAuthenticatedConnection: () => {} },
+    '@/lib/telemetry/analyticsIntents': { enqueueAnalyticsIntent: async () => "intent-key", processAnalyticsIntentSoon: () => {}, enqueueOutsideSaveAndProcessSoon: async (enqueue) => { await enqueue() } },
+    '@/lib/telemetry/activationOccurrences': { enqueueAuthenticatedConnection: async () => null },
     'next/server': { NextRequest }, '@/lib/prisma': db, jsonwebtoken: jwt,
     '@/lib/apiKeys': {}, '@/lib/auth/betterAuth': {}, '@/lib/auth/getSessionUser': {},
     '@/lib/mcp/managementPermissions': permissions, '@/lib/mcp/clientTelemetry': telemetry,
@@ -292,7 +297,7 @@ test('bounded auth logs cap unverified strings and arrays, throttle identical JW
       assert.equal(output.length, before + 2)
     } finally { Date.now = now }
     h.verify.verifyMcpJwtToken(invalid)
-    assert.ok(output.some(args => args[1]?.sub?.length === 1000), 'legacy logging must remain uncapped')
+    assert.ok(output.some(args => args[0] === '[MCP Auth] Token has an unsupported audience:' && args[1]?.length === 1000), 'legacy logging must remain uncapped')
   } finally { console.log = original }
 })
 
@@ -377,6 +382,7 @@ test('all adopted REST methods preserve legacy wire results and scaffold order w
             Object.assign(mocks, {
               'next/server': { NextRequest, NextResponse },
               '@/lib/mcp/auth': auth,
+              '@/lib/mcp/operationCrashReport': { reportMcpOperationCrash: () => {} },
               '@/lib/flags': { isFeatureEnabled: async () => false },
               '@/lib/flags/keys': {},
               '@/lib/mcp/agents/scopes': { requireRole: async () => null },

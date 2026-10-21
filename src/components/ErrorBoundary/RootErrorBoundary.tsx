@@ -21,7 +21,6 @@ class RootErrorBoundaryClass extends Component<Props, State> {
   }
 
   static getDerivedStateFromError(error: Error): State {
-    // Update state so the next render will show the fallback UI
     return { hasError: true, error }
   }
 
@@ -44,25 +43,21 @@ class RootErrorBoundaryClass extends Component<Props, State> {
   }
 }
 
-// Functional component for the error fallback UI
 const ErrorFallback: React.FC<{ error?: Error }> = ({ error }) => {
   return <ErrorFallbackContent error={error} />
 }
 
-// Separate component to use hooks
 const ErrorFallbackContent: React.FC<{ error?: Error }> = ({ error }) => {
   const { handleHardReset } = useSignout()
 
   const handleHardResetAndReload = async () => {
     try {
       await handleHardReset()
-      // Force a hard reload after logout
       if (typeof window !== 'undefined') {
         window.location.href = '/login'
       }
     } catch (err) {
       console.error('Error during hard reset:', err)
-      // Fallback: force reload anyway
       if (typeof window !== 'undefined') {
         window.location.reload()
       }

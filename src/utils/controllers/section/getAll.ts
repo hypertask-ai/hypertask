@@ -1,13 +1,10 @@
-// Import PrismaClient from the generated Prisma client
 import { PrismaClient, Section, Prisma } from '@prisma/client';
 import { NextApiHandler, NextApiRequest, NextApiResponse } from 'next';
 
-// Create an instance of PrismaClient
 import prisma from "@/lib/prisma";
 import { projectContentAccessWhere } from "@/utils/controllers/projects/getAllIncludes";
 
 
-// Example usage
 const sectionGetAll = async (userId:number) => {
 
 
@@ -16,21 +13,15 @@ const sectionGetAll = async (userId:number) => {
         status:400,
         json:{ message: "Missing Required Credentials" }
       })
-      // return res.status(400).json({ message: "Missing Required Credentials" });
   }
   try {
-    // Get all sections
     const sections = await prisma.section.findMany({
       where: { project: projectContentAccessWhere(userId) },
     });
-    // console.log('Field Names:', Prisma.SectionScalarFieldEnum);
     return({
       status:200,
       json:sections
     })
-    // return res.status(200).json(sections);
-    // Get field names of the "Section" model
-    
   } catch (error) {
     console.error('Error:', error);
     return({
@@ -41,5 +32,4 @@ const sectionGetAll = async (userId:number) => {
 
 }
 
-// Run the main function
 export default sectionGetAll;

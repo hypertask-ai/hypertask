@@ -1,9 +1,7 @@
 import { cn } from "@/utils/undoActions/helperFuncs";
 
-/** Below the mobile tab bar (z-300); matches mobile AI chat overlay stacking. */
 export const MOBILE_OVERLAY_SHEET_Z = 280;
 
-/** Shared bottom-sheet panel styling for mobile AI overlays (chat, refine, etc.). */
 export const mobileOverlayAppSheetPanelClass = cn(
   "!bg-ai-chat text-white-black p-0 shadow-[0_-12px_40px_rgba(0,0,0,0.45)]",
   "rounded-t-2xl border-t border-border-light-gray-thin",
@@ -23,7 +21,6 @@ export const mobileOverlayAppSheetHandleRowClass =
 export const mobileOverlayAppSheetHandleBarClass =
   "h-1 w-10 rounded-full bg-white-black/25";
 
-/** Darker typing well — fills the sheet body above the action row. */
 export const mobileOverlayAppSheetEditorWellClass = cn(
   "mx-2 mb-2 min-h-[120px] min-w-0 flex-1 overflow-y-auto rounded-lg border border-thin border-border-light-gray-thin",
   "bg-newcomment-well px-3 py-2 text-content",

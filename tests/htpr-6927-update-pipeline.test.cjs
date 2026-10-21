@@ -232,9 +232,11 @@ test('agent lease conflict receipts and cleanup match for single updates and ado
       reset({ ctx: { user, agentId: 'agent-fixture' }, lease: conflict ? { agentId: 'other-agent', token: 'other-lease', adoptionCount: 0 } : null })
       flag = enabled
       const response = await withFetch(() => operation(request({ task_id: 101, title: 'After' })))
-      results.push({ text: await response.text(), status: response.status, events: state.events })
+      const text = await response.text()
+      results.push({ text, status: response.status, events: state.events })
       if (conflict) {
-        assert.equal(response.status, 500)
+        assert.equal(response.status, 409)
+        assert.equal(JSON.parse(text).code, 'agent_mutation_lease_conflict')
         assert.deepEqual(state.events, [['lease_lock', 101]])
       } else {
         assert.equal(state.lease, null)

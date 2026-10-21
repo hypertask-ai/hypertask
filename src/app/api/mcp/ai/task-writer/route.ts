@@ -1,35 +1,21 @@
 import { wrapMcpRoute, validateMcpRouteAuth as validateMcpAuth, checkMcpRouteRateLimit as checkMcpRateLimit } from '@/lib/mcp/routeWrapper'
 import { reportError } from "@/lib/errors/reportError";
-import { configureAiModelUsage } from "@/app/api/ai/_lib/modelProvider";
 import { NextRequest, NextResponse } from "next/server";
-import { generateText } from "ai";
 import { z } from "zod";
 
 import { createUnauthorizedResponse } from '@/lib/mcp/auth'
-import { errorMessage, filterOneImagePass } from "@/app/api/ai/_lib/editorAi";
+import { errorMessage } from "@/app/api/ai/_lib/editorAi";
 import {
   AiFeatureDisabledError,
   ProjectAccessError,
-  prepareTaskWriterRun,
   taskWriterRequestSchema,
 } from "@/app/api/ai/_lib/taskWriterRun";
-import { extractTaskWriterProperties, hasUsableTaskWriterDraft, TASK_WRITER_EMPTY_DRAFT_MESSAGE } from "@/app/api/ai/_lib/taskWriterProperties";
-import { taskTitleFromBrief } from "@/lib/ai/taskWriterDuplicateGuard";
+import { generateTaskWriterDraft } from "@/app/api/ai/_lib/taskWriterDraft";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
-// Vercel default is 10s; a task-writer run with retrieval routinely needs more.
 export const maxDuration = 300;
 
-// Same harness as the in-app AI Task Writer / Write with AI (the browser hits
-// src/app/api/ai/task-writer/route.ts and shares prepareTaskWriterRun), but
-// authenticated with the MCP bearer token and answered as one JSON blob instead
-// of an SSE stream, so the hypertask CLI and MCP tools can call it.
-// `/slug` skill invocation works here exactly as it does in the UI: put the
-// token in the prompt and the resolver injects that skill's body.
-// .strict() on purpose: this endpoint has no attachment fields yet, and silently
-// stripping an images64/pdfs64 payload would run the request without the file the
-// caller was asking about. Better to reject the unknown key.
 const requestSchema = z
   .object({
     project_id: z.coerce.number().int().positive(),
@@ -41,10 +27,6 @@ const requestSchema = z
     custom_instructions: z.string().optional().default(""),
   })
   .strict();
-// No model param on purpose: selectTaskWriterModel derives the model from the
-// team's AI settings and the caller's personal per-feature preference, exactly
-// as it does for the in-app writer. A request-level override would silently
-// diverge from what the same user gets in the UI.
 
 export async function POST(request: NextRequest) {
   return wrapMcpRoute(async (request: NextRequest) => {
@@ -74,71 +56,26 @@ export async function POST(request: NextRequest) {
       taskDescription: input.task_description,
       customInstructions: input.custom_instructions,
     });
-    const {
-      selected,
-      instructions,
-      messages,
-      allowedImgSrcs,
-      skills,
-      usageTaskId,
-      validateDraft,
-    } = await prepareTaskWriterRun(body, userId, ctx.agentId);
-
-    configureAiModelUsage(selected.model, {
-      userId,
-      teamId: selected.teamId,
-      projectId: body.projectId,
-      taskId: usageTaskId,
-      agentId: ctx.agentId,
-      provider: selected.usageProvider,
-      feature: "task-writer",
-    });
-    const { text, usage } = await generateText({
-      model: selected.model,
-      instructions,
-      messages,
-      tools: selected.tools,
-      maxRetries: 2,
-      providerOptions: selected.providerOptions,
-      ...selected.settings,
-    });
-
-    // The streaming route filters invented <img> tags chunk by chunk; one pass
-    // over the finished text is the same filter for a non-streamed response.
-    const filtered = allowedImgSrcs
-      ? filterOneImagePass(text, allowedImgSrcs).emit
-      : text;
-    // Task-writer output carries the title/priority/size markers the UI pulls
-    // out when you accept a response. Split them here so a CLI caller can write
-    // the same fields instead of pasting the markers into the description.
-    // Write-with-AI output is plain comment HTML and has no markers.
-    const properties =
-      input.mode === "task_writer"
-        ? extractTaskWriterProperties(filtered, {
-            // HTPR-6721: if the model answers with a duplicate note, the task
-            // keeps the title the caller asked for, never "Possible duplicate".
-            fallbackTitle:
-              input.task_title.trim() || taskTitleFromBrief(input.prompt),
-          })
-        : { title: null, description: filtered };
-
-    if (validateDraft && !hasUsableTaskWriterDraft(properties.description)) {
+    const draft = await generateTaskWriterDraft(body, userId, ctx.agentId);
+    if (!draft.success) {
       return NextResponse.json(
-        { success: false, error: TASK_WRITER_EMPTY_DRAFT_MESSAGE },
+        { success: false, error: draft.error },
         { status: 500 }
       );
     }
 
     return NextResponse.json({
       success: true,
-      html: properties.description,
-      title: properties.title,
-      priority: "priority" in properties ? properties.priority : undefined,
-      estimate: "estimate" in properties ? properties.estimate : undefined,
+      html: draft.html,
+      ...(draft.labelIds ? { labelIds: draft.labelIds } : {}),
+      ...(draft.customFields?.length ? { customFields: draft.customFields } : {}),
+      title: draft.title,
+      priority: draft.priority,
+      estimate: draft.estimate,
       mode: input.mode,
-      model: selected.modelId,
-      provider: selected.usageProvider,
-      skills: skills.map((skill) => ({ slug: skill.slug, name: skill.name })),
+      model: draft.model,
+      provider: draft.provider,
+      skills: draft.skills,
     });
   } catch (error) {
     if (error instanceof ProjectAccessError) {

@@ -40,15 +40,11 @@ const UndoProvider: React.FC<{ children: React.ReactNode }> = ({
 }) => {
   const isMobile = useContext(MobileViewContext);
   const [data, setData] = useState<any>(null);
-  // console.log("🚀 ~ data:", data)
   const [undoData, setRenderedUndoData] = useState<any[]>([]);
-  // Keyboard events can arrive before React commits the state update that
-  // follows an archive. The ref is authoritative; state is its render snapshot.
   const undoDataRef = useRef<any[]>([]);
   const consumedUndoIds = useRef(new Set<string>());
   const inFlightUndoIds = useRef(new Set<string>());
   const expiryTimers = useRef(new Map<string, ReturnType<typeof setTimeout>>());
-  // console.log("🚀 ~ undoData:", undoData)
 
   const commitUndoData = useCallback((update: (items: any[]) => any[]) => {
     const nextItems = update(undoDataRef.current);
@@ -59,8 +55,6 @@ const UndoProvider: React.FC<{ children: React.ReactNode }> = ({
   const performActionAndStoreUndoData = useCallback(
     (actionData: any, undoText: string, undoHandler: any) => {
       let pendingUndoData: any;
-      // The action window is per viewport (HTPR-5872: mobile 7.5s, desktop
-      // 15s) and every timestamp below must use the same one.
       const undoWindowMs = isMobile
         ? MOBILE_UNDO_ACTION_WINDOW_MS
         : UNDO_ACTION_WINDOW_MS;
@@ -70,8 +64,6 @@ const UndoProvider: React.FC<{ children: React.ReactNode }> = ({
 
         const timer = setTimeout(() => {
           expiryTimers.current.delete(undoId);
-          // The request owns this entry until it settles. Its failure path
-          // reissues a fresh shortcut window instead of losing retryability.
           if (inFlightUndoIds.current.has(undoId)) return;
           commitUndoData((items) =>
             items.filter((item) => String(item.toastId) !== undoId),
@@ -80,13 +72,6 @@ const UndoProvider: React.FC<{ children: React.ReactNode }> = ({
         expiryTimers.current.set(undoId, timer);
       };
 
-      // `source` separates the two ways an undo is triggered. The visible UNDO
-      // button on the toast is explicit intent and must work for as long as the
-      // button is on screen: react-hot-toast pauses its 5s auto-dismiss while
-      // the pointer hovers the toast, so the prompt routinely outlives the 15s
-      // action window and the click was silently swallowed, leaving the task
-      // archived with no error (HTPR-5528). The window still bounds the ambient
-      // Ctrl+Z path, which has no visible affordance to reason about.
       const handleUndo = async (
         _actionData: any,
         toastId: string,
@@ -110,8 +95,6 @@ const UndoProvider: React.FC<{ children: React.ReactNode }> = ({
           return;
         }
 
-        // Mark in-flight synchronously so clicks and key auto-repeat cannot race.
-        // Consume only after success so a transient failure remains retryable.
         inFlightUndoIds.current.add(undoId);
         try {
           await undoHandler(pendingUndoData, toastId);
@@ -159,7 +142,6 @@ const UndoProvider: React.FC<{ children: React.ReactNode }> = ({
         undoHandler: handleUndo,
         expiresAt: Date.now() + undoWindowMs,
       };
-      // console.log("🚀 ~ performActionAndStoreUndoData ~ toasterId:", toasterId)
       setData(pendingUndoData);
       commitUndoData((prevUndoData) => [...prevUndoData, pendingUndoData]);
       scheduleExpiry(undoId, pendingUndoData.expiresAt);
@@ -177,7 +159,6 @@ const UndoProvider: React.FC<{ children: React.ReactNode }> = ({
       ),
     );
 
-    // Call the appropriate undo action based on the mode
     if (mode === "UNDO_REMOVE") {
       const response = await actions.undoTaskDelete(actionData);
       return response;
@@ -229,14 +210,8 @@ const UndoProvider: React.FC<{ children: React.ReactNode }> = ({
           active!.isContentEditable);
       if (inTextEditor) return;
 
-      // No early return on an empty stack: the expiry timer drops the entry the
-      // moment the window closes, so bailing here is exactly the case that has
-      // to speak. Outside a text field there is nothing native to fall through
-      // to anyway.
       event.preventDefault();
       event.stopImmediatePropagation();
-      // Say so when the window has already closed. Silently doing nothing reads
-      // as "undo is broken" (HTPR-5569); the palette entry already says this.
       void undoLatest().then((didUndo) => {
         if (!didUndo) toast("Nothing to undo");
       });

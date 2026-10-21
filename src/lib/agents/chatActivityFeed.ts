@@ -5,7 +5,6 @@ export type AgentChatMessage = {
   role: "human" | "assistant" | "system";
   content: string;
   createdAt: string;
-  /** Set when this reply asks for a ticket instead of doing the work. */
   proposal?: SerializedChatTicketProposal | null;
 };
 
@@ -96,13 +95,6 @@ export function displayAgentChatFeed(
   return grouped;
 }
 
-/**
- * Whether the chat's feed view should auto-follow to the bottom on a feed
- * update. The user's own scroll-up always wins, except for a session's very
- * first content paint: the user cannot have legitimately scrolled away from
- * messages that were never on screen, so that first paint always lands at
- * the bottom regardless of any (possibly mis-measured) scroll state.
- */
 export function shouldAutoScrollToBottom(args: {
   feedChanged: boolean;
   isFirstContent: boolean;
@@ -111,12 +103,6 @@ export function shouldAutoScrollToBottom(args: {
   return args.feedChanged && (args.isFirstContent || !args.userScrolledAway);
 }
 
-/**
- * The queued-follow-up strip and the "is working" typing row render inside
- * the same scroll container as the feed but aren't part of it, so a change
- * here needs to count as a feed change too or the scroll trigger above never
- * fires for them (HTPR-6291).
- */
 export function agentChatExtraRowsRevision(args: {
   queuedMessageIds: string[];
   queuedRowsVisible: boolean;

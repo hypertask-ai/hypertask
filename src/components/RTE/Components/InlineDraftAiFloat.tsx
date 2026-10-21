@@ -166,7 +166,6 @@ function hasMeaningfulEditableContent(node: Node): boolean {
   return Array.from(element.childNodes).some(hasMeaningfulEditableContent);
 }
 
-// Empty structural wrappers are browser placeholders; rich-text atoms still count.
 function sanitizedEditableHtml(event: FormEvent<HTMLDivElement>) {
   const clone = event.currentTarget.cloneNode(true) as HTMLDivElement;
   stripEditablePlaceholderMetadata(clone);
@@ -213,7 +212,6 @@ function insertSanitizedEditableTransfer(
     | ReactClipboardEvent<HTMLDivElement>
     | ReactDragEvent<HTMLDivElement>,
 ) {
-  // Prevent unsupported drops and unsanitized clipboard/drop markup from reaching the live editor.
   event.preventDefault();
   const transfer = "clipboardData" in event ? event.clipboardData : event.dataTransfer;
   const rawHtml = transfer.getData("text/html");
@@ -393,8 +391,6 @@ const InlineDraftAiFloat = ({
       mobileProposalDraftRef.current = "";
     }
 
-    // Only adopt non-collapsed selections. Focusing the prompt blurs the
-    // editor and collapses PM selection — that must not wipe the AI scope.
     const syncScope = () => {
       if (loadingRef.current) return;
       const { from, to } = editor.state.selection;
@@ -436,12 +432,10 @@ const InlineDraftAiFloat = ({
   };
   closeRef.current = close;
 
-  // Esc / Tab work even when focus is in the editor, not the float.
   useEffect(() => {
     const onKeyDown = (event: globalThis.KeyboardEvent) => {
       if (event.key === "Escape") {
         if (recordingRef.current || audioProcessingRef.current) {
-          // Let AudioButton cancel recording; closing here would strand isRecording.
           return;
         }
         event.preventDefault();
@@ -494,8 +488,6 @@ const InlineDraftAiFloat = ({
     return () => window.removeEventListener("keydown", onKeyDown, true);
   }, [editor]);
 
-  // Dismiss when clicking outside the float. Keep open for draft clicks so
-  // users can adjust the selection without the bar disappearing.
   useEffect(() => {
     if (isMobileAiSheet) return;
 
@@ -539,7 +531,6 @@ const InlineDraftAiFloat = ({
     if (!isMobileAiSheet) return;
     const surface = mobileEditableSurfaceRef.current;
     if (!surface) return;
-    // A newer DOM keystroke can exist while React commits an older render.
     if (
       hasPendingNewerMobileInput(
         mobileEditableInputHtmlRef.current,
@@ -686,9 +677,6 @@ const InlineDraftAiFloat = ({
     const mobileSourceSnapshot = isMobileAiSheet
       ? createInlineDraftAiSourceSnapshot(editor.state.doc, range)
       : null;
-    // Media-only / text drafts require content for edits. True empty docs may
-    // WriteContent. The mobile refine path intentionally edits its proposal,
-    // while the opening editor remains untouched.
     if (!content && action.command !== "WriteContent") return;
     if (
       !isMobileAiSheet &&
@@ -827,7 +815,6 @@ const InlineDraftAiFloat = ({
           id: toastId,
         });
       }
-      // Desktop request errors are reported by toast.promise.
     } finally {
       if (requestId === requestIdRef.current) {
         loadingRef.current = false;

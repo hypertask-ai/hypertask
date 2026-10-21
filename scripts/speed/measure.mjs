@@ -18,7 +18,7 @@ export function withPhoneProfile(browser) {
   return { newContext: options => browser.newContext({ ...options, ...PHONE_PROFILE }) };
 }
 
-export const PATHS = ['board', 'ticket-cold', 'ticket-warm', 'search', 'my-tasks', 'ctrl-j', 'page-navigation'];
+export const PATHS = ['board', 'board-returning', 'ticket-cold', 'ticket-warm', 'search', 'my-tasks', 'ctrl-j', 'page-navigation'];
 export const METRICS = ['contentMs', 'requestCount', 'bytes', 'longTaskMs'];
 const BASE = 'https://app.hypertask.ai';
 const BOARD = '/project?id=6859&view=default';
@@ -42,14 +42,34 @@ export function summarize(samples) {
   }]));
 }
 
+// A path whose measurement changed gets a new version; only same-version history is its baseline.
+export const PATH_VERSIONS = { 'ticket-warm': 2, search: 2, 'page-navigation': 2, 'ctrl-j': 2 };
+export const SEARCH_IDLE_PAUSE_MS = 3000;
+
+// Saved by the app after a board visit; with it the server sends a ready-made board (HTPR-6934). The QA login filter drops it.
+export const BOARD_PREFERENCE_COOKIE = 'ht_board_display_v1';
+
+export const servedBoardFromServer = (requests, contentMs) => !requests.some(request => request.path === '/api/projects/boardTasks' && request.startMs <= contentMs);
+
+const pathVersion = (conditions, cohort) => conditions.pathVersions?.[cohort.split(':')[1]] ?? 1;
+
+const sharedConditions = ({ pathVersions, ...conditions }) => conditions;
+
+export function landedBoards(run, profile) {
+  return run.samples.filter(sample => sample.profile === profile && sample.path === 'page-navigation').map(sample => `${sample.landed?.id}|${sample.landed?.view ?? ''}`).sort();
+}
+
+const sameCohort = (old, run, cohort) => pathVersion(old.conditions, cohort) === pathVersion(run.conditions, cohort) &&
+  (!cohort.endsWith(':page-navigation') || isDeepStrictEqual(landedBoards(old, cohort.split(':')[0]), landedBoards(run, cohort.split(':')[0])));
+
 export function compare(run, history) {
   const start = Date.parse(`${run.started.slice(0, 10)}T00:00:00Z`);
-  const previous = history.filter(old => old.status === 'complete' && Date.parse(old.started) < start && Date.parse(old.started) >= start - 7 * 86400000 && isDeepStrictEqual(old.conditions, run.conditions));
+  const previous = history.filter(old => old.status === 'complete' && Date.parse(old.started) < start && Date.parse(old.started) >= start - 7 * 86400000 && isDeepStrictEqual(sharedConditions(old.conditions), sharedConditions(run.conditions)));
   return Object.entries(run.groups).flatMap(([cohort, group]) => METRICS.map(metric => {
     // One vote per UTC day, so an investigator's repeat runs do not outweigh the daily timer.
     const days = new Map();
     for (const old of [...previous].sort((a, b) => Date.parse(a.started) - Date.parse(b.started))) {
-      if (old.groups[cohort]) days.set(old.started.slice(0, 10), old.groups[cohort][metric].median);
+      if (old.groups[cohort] && sameCohort(old, run, cohort)) days.set(old.started.slice(0, 10), old.groups[cohort][metric].median);
     }
     const baseline = days.size ? stats([...days.values()]).median : null;
     const current = group[metric].median;
@@ -86,7 +106,7 @@ export function verifyRun(run) {
 }
 
 export function printSummary(run, history) {
-  if (run.status !== 'complete') return console.log(`${run.started} ${run.status}: ${run.failure?.reason || 'Incomplete live run'}. Partial samples are not verified speed evidence.`);
+  if (run.status !== 'complete') return console.log(`${run.started} ${run.status}: ${run.failure?.reason || 'Incomplete live run'}${run.failure?.error ? ` at ${run.failure.profile}:${run.failure.surface} ${run.failure.index} (${run.failure.error})` : ''}. Partial samples are not verified speed evidence.`);
   console.log(`${run.started} production ${run.productionCommit}; QA 2343; ${run.conditions.samples} samples/path/profile; ${run.status}`);
   console.log(`Host load ${run.hostLoad.map(n => n.toFixed(1)).join('/')}, ${run.cpus} CPUs. Phone: 390x844, 4x CPU, 150ms RTT, 1.6Mbps. Desktop: 1440x900, unthrottled.`);
   const comparisons = compare(run, history);
@@ -107,10 +127,13 @@ export function browserObserver() {
   for (const event of ['click', 'keydown']) document.addEventListener(event, () => { window.__analyst.start = performance.now(); }, { capture: true });
 }
 
-export async function ready(page, surface) {
+// g then b opens the shared QA account's previous board and its saved view, which other QA sessions change.
+export const boardCardPrefix = boardId => `/detail/project-${boardId}/`;
+
+export async function ready(page, surface, landedBoard) {
   // view=default bypasses saved filters; scrolling keeps newer QA cards from hiding task 43 below the viewport.
-  if (surface === 'board' || surface === 'page-navigation') await page.locator(`a[href="${TASK}"]`).first().scrollIntoViewIfNeeded();
-  return page.evaluate(async ({ surface, task, title }) => {
+  if (surface === 'board') await page.locator(`a[href="${TASK}"]`).first().scrollIntoViewIfNeeded();
+  return page.evaluate(async ({ surface, task, title, cardPrefix }) => {
     const visible = element => {
       if (!element) return false;
       const box = element.getBoundingClientRect();
@@ -122,7 +145,18 @@ export async function ready(page, surface) {
       return true;
     };
     const test = () => {
-      if (surface === 'board' || surface === 'page-navigation') return visible(document.querySelector(`a[href="${task}"]`)) && document.body.textContent.includes('QA Sandbox');
+      if (surface === 'page-navigation') {
+        const cards = [...document.querySelectorAll(`a[href^="${cardPrefix}"]`)];
+        // On a phone the first column's cards can start below the fold, as the board path's card does.
+        if (cards.length && !cards.some(visible)) cards[0].scrollIntoView({ block: 'center' });
+        return cards.some(visible);
+      }
+      if (surface === 'board') {
+        const card = document.querySelector(`a[href="${task}"]`);
+        // Late board reflows can push the already-scrolled card below the viewport again.
+        if (card && !visible(card)) card.scrollIntoView({ block: 'center' });
+        return visible(card) && document.body.textContent.includes('QA Sandbox');
+      }
       if (surface.startsWith('ticket-')) return [...document.querySelectorAll('textarea')].some(element => visible(element) && element.value === title) && visible(document.querySelector('[data-testid="ticket-description"]')) && !!document.querySelector('[data-task-detail-primary-actions="true"]');
       if (surface === 'search') return [...document.querySelectorAll('#tasks-list li')].some(element => visible(element) && element.textContent.includes('QASA-43') && [...element.querySelectorAll('span')].some(span => span.textContent.trim() === title));
       if (surface === 'my-tasks') return visible(document.querySelector('[data-testid="my-tasks-title"]')) && visible(document.querySelector('[data-testid="my-tasks-list"] .table-view-header'));
@@ -137,7 +171,7 @@ export async function ready(page, surface) {
       if (test()) return performance.now();
     }
     throw new Error('Readiness unavailable');
-  }, { surface, task: TASK, title: TITLE });
+  }, { surface, task: TASK, title: TITLE, cardPrefix: boardCardPrefix(landedBoard) });
 }
 
 export function collectNetwork(cdp, permitted, safePath, blocked) {
@@ -181,78 +215,197 @@ export function collectNetwork(cdp, permitted, safePath, blocked) {
   return { requests, stop() { for (const [event, handler] of Object.entries(handlers)) cdp.off(event, handler); } };
 }
 
-async function measure(shared, browser, profile, index, run) {
-  const mobile = profile === 'phone';
-  for (const phase of ['board', 'other']) {
-    const context = await shared.setup(mobile ? withPhoneProfile(browser) : browser, mobile);
+export const SCRIPT_SETTLE = { quietMs: 1500, capMs: 30000, pollMs: 250 };
+
+const scripts = requests => [...requests].filter(row => row.type === 'Script' && !row.blocked);
+
+export function pendingScripts(requests) {
+  return scripts(requests).filter(row => row.durationMs === undefined).length;
+}
+
+// A server-rendered page can be visible while its code still downloads, and a throttled phone can sit
+// network-quiet mid-hydration before requesting lazy code. Settled means quiet scripts after an idle main thread.
+export async function settleScripts(requests, wait, idle, { quietMs, capMs, pollMs } = SCRIPT_SETTLE) {
+  let waited = 0;
+  let quiet = 0;
+  let seen = scripts(requests.values()).length;
+  const unchanged = () => pendingScripts(requests.values()) === 0 && scripts(requests.values()).length === seen;
+  while (waited < capMs) {
+    await wait(pollMs);
+    waited += pollMs;
+    quiet = unchanged() ? quiet + pollMs : 0;
+    seen = scripts(requests.values()).length;
+    if (quiet < quietMs) continue;
+    waited += await idle(capMs - waited);
+    if (unchanged()) break;
+    quiet = 0;
+    seen = scripts(requests.values()).length;
+  }
+  return { settleMs: Math.round(waited), pendingScripts: pendingScripts(requests.values()) };
+}
+
+export function idleMs(page, timeoutMs) {
+  return page.evaluate(timeout => new Promise(resolve => {
+    const start = performance.now();
+    requestIdleCallback(() => resolve(performance.now() - start), { timeout: Math.max(1, timeout) });
+  }), timeoutMs);
+}
+
+export function failureDetail(error) {
+  const line = String(error?.message || error || 'unknown').split('\n')[0];
+  return line.replace(/https?:\/\/\S+/g, '<url>').slice(0, 160);
+}
+
+export function safeSearch(url) {
+  const search = new URL(url).searchParams;
+  return Object.fromEntries(['id', 'view'].filter(key => search.has(key)).map(key => [key, search.get(key).slice(0, 40)]));
+}
+
+export class HostNetworkChanged extends Error {
+  constructor() { super('Host network changed'); }
+}
+
+export function hostNetworkChanged(requests) {
+  const failed = requests.filter(requestFailed);
+  return failed.length > 0 && failed.every(request => request.errorCode === 'net::ERR_NETWORK_CHANGED');
+}
+
+export async function measurePhases(measurePhase, run, profile, index) {
+  for (const phase of ['board', 'board-returning', 'other']) {
+    const kept = run.samples.length;
+    try {
+      await measurePhase(phase);
+    } catch (error) {
+      if (!(error instanceof HostNetworkChanged)) throw error;
+      run.samples.length = kept;
+      delete run.failure;
+      (run.networkRetries ||= []).push({ profile, phase, index });
+      console.log(`Retrying ${profile}:${phase} ${index} once in a fresh context: the host network changed mid-sample`);
+      await measurePhase(phase);
+    }
+  }
+}
+
+function measure(shared, browser, profile, index, run) {
+  return measurePhases(phase => measurePhase(shared, browser, profile, index, run, phase), run, profile, index);
+}
+
+// Null when the app declines to save one: on desktop it refuses while AI chat opens by default, which is the default setting.
+export async function savedBoardPreference(context, page, pollMs = 250, capMs = 5000) {
+  for (let waited = 0; waited <= capMs; waited += pollMs) {
+    const preference = (await context.cookies()).find(cookie => cookie.name === BOARD_PREFERENCE_COOKIE);
+    if (preference?.value) return preference;
+    await page.waitForTimeout(pollMs);
+  }
+  return null;
+}
+
+async function boardPreference(shared, browser, mobile) {
+  const context = await shared.setup(mobile ? withPhoneProfile(browser) : browser, mobile);
+  try {
     const page = await context.newPage();
     page.setDefaultTimeout(60000);
-    const cdp = await context.newCDPSession(page);
-    const blocked = [];
-    const net = collectNetwork(cdp, shared.permitted, shared.safePath, blocked);
-    await cdp.send('Network.enable');
-    await cdp.send('Network.setCacheDisabled', { cacheDisabled: false });
-    await cdp.send('Fetch.enable', { patterns: [{ urlPattern: '*', requestStage: 'Request' }] });
-    if (mobile) {
-      await cdp.send('Network.emulateNetworkConditions', { offline: false, latency: 150, downloadThroughput: 1600000 / 8, uploadThroughput: 750000 / 8, connectionType: 'cellular4g' });
-      await cdp.send('Emulation.setCPUThrottlingRate', { rate: 4 });
-    }
-    await page.addInitScript(browserObserver);
+    await page.goto(BASE + BOARD, { waitUntil: 'domcontentloaded' });
+    await ready(page, 'board');
+    return await savedBoardPreference(context, page);
+  } finally { await context.close(); }
+}
 
-    let surface = phase;
-    const navigate = route => shared.action(page, () => page.goto(BASE + route, { waitUntil: 'domcontentloaded' }), run.actions, 'document', route);
-    const sample = async (measuredSurface, operation, document = true) => {
-      surface = measuredSurface;
-      net.requests.clear();
-      blocked.length = 0;
-      await page.evaluate(() => { if (window.__analyst) window.__analyst.start = performance.now(); });
-      await operation();
-      const contentAt = await ready(page, surface);
-      const origin = document ? 0 : await page.evaluate(() => window.__analyst.start);
-      // Same two-second observation tail as speed-check; not part of content-visible timing.
-      await page.waitForTimeout(2000);
-      const metrics = await page.evaluate(({ origin, contentAt }) => {
-        const longTasks = window.__analyst.longTasks.filter(task => task.startMs >= origin && task.startMs <= contentAt + 2000);
-        return { contentMs: contentAt - origin, innerWidth, documentWidth: document.documentElement.scrollWidth, longTasks, longTaskMs: longTasks.reduce((sum, task) => sum + task.durationMs, 0), actionEpoch: performance.timeOrigin + origin };
-      }, { origin, contentAt });
-      const requests = [...net.requests.values()].filter(row => row.wall >= metrics.actionEpoch).map(({ wall, start, ...row }) => ({ ...row, startMs: wall - metrics.actionEpoch }));
-      delete metrics.actionEpoch;
-      const row = { profile, path: surface, index, ...metrics, requestCount: requests.filter(request => !request.blocked).length, bytes: requests.filter(request => !request.blocked).reduce((sum, request) => sum + request.bytes, 0), requests, blocked: [...blocked] };
-      run.samples.push(row);
-      if (mobile && row.innerWidth !== 390) throw new Error(`Phone layout is ${row.innerWidth} wide, expected 390`);
-      if (row.requests.some(requestFailed)) throw new Error('Measured request failed');
-      console.log(`Measured ${profile}:${surface} ${index}: ${Math.round(row.contentMs)}ms`);
-    };
-    try {
-      if (phase === 'board') {
-        await sample('board', () => navigate(BOARD));
-        continue;
-      }
-      // Direct ticket is cold in a fresh context; the board primes only the warm click below.
-      await sample('ticket-cold', () => navigate(TASK));
-      await navigate(BOARD);
-      await ready(page, 'board');
-      await sample('ticket-warm', () => shared.action(page, () => page.locator(`a[href="${TASK}"]`).first().click(), run.actions, 'client', TASK), false);
-      await sample('search', () => navigate(`/search?searchTerm=${encodeURIComponent(TITLE)}`));
-      await sample('my-tasks', () => navigate('/my-tasks'));
-      await page.evaluate(() => document.activeElement?.blur());
-      await sample('page-navigation', () => shared.action(page, async () => {
-        await page.keyboard.press('g'); await page.keyboard.press('b');
-        await page.waitForURL(url => url.pathname === '/project', { waitUntil: 'commit' });
-        await page.evaluate(board => window.history.replaceState(null, '', board), BOARD);
-      }, run.actions, 'client', BOARD), false);
-      // Plain QA uses the existing board Ctrl+J writer, not the Owner + QA palette on My Tasks.
-      await page.locator('.section-container').first().click({ position: { x: 2, y: 2 } });
-      await page.locator('.section-container').first().focus();
-      // The iPhone user agent selects Apple's Cmd modifier for the same writer shortcut.
-      await sample('ctrl-j', () => shared.action(page, () => page.keyboard.press(mobile ? 'Meta+j' : 'Control+j'), run.actions, 'client', BOARD), false);
-      await page.keyboard.press('Escape');
-    } catch {
-      const dom = await page.evaluate(() => ({ searchRows: [...document.querySelectorAll('#tasks-list li')].map(element => ({ fixture: element.textContent.includes('QASA-43'), top: element.getBoundingClientRect().top, height: element.getBoundingClientRect().height })) })).catch(() => null);
-      run.failure = { profile, surface, dom, route: new URL(page.url()).pathname, requests: [...net.requests.values()].map(({ wall, start, ...row }) => row), blocked: [...blocked] };
-      throw new Error('Path unavailable');
-    } finally { net.stop(); await context.close(); }
+async function measurePhase(shared, browser, profile, index, run, phase) {
+  const mobile = profile === 'phone';
+  // Untimed and unthrottled: a returning user saved the preference on an earlier visit. The timed context stays cold otherwise.
+  const preference = phase === 'board-returning' ? await boardPreference(shared, browser, mobile) : null;
+  const context = await shared.setup(mobile ? withPhoneProfile(browser) : browser, mobile);
+  if (preference) await context.addCookies([preference]);
+  const page = await context.newPage();
+  page.setDefaultTimeout(60000);
+  const cdp = await context.newCDPSession(page);
+  const blocked = [];
+  const net = collectNetwork(cdp, shared.permitted, shared.safePath, blocked);
+  await cdp.send('Network.enable');
+  await cdp.send('Network.setCacheDisabled', { cacheDisabled: false });
+  await cdp.send('Fetch.enable', { patterns: [{ urlPattern: '*', requestStage: 'Request' }] });
+  if (mobile) {
+    await cdp.send('Network.emulateNetworkConditions', { offline: false, latency: 150, downloadThroughput: 1600000 / 8, uploadThroughput: 750000 / 8, connectionType: 'cellular4g' });
+    await cdp.send('Emulation.setCPUThrottlingRate', { rate: 4 });
   }
+  await page.addInitScript(browserObserver);
+
+  let surface = phase;
+  let landed = {};
+  const navigate = route => shared.action(page, () => page.goto(BASE + route, { waitUntil: 'domcontentloaded' }), run.actions, 'document', route);
+  const sample = async (measuredSurface, operation, document = true) => {
+    surface = measuredSurface;
+    net.requests.clear();
+    blocked.length = 0;
+    await page.evaluate(() => { if (window.__analyst) window.__analyst.start = performance.now(); });
+    await operation();
+    const contentAt = await ready(page, surface === 'board-returning' ? 'board' : surface, landed.id);
+    const origin = document ? 0 : await page.evaluate(() => window.__analyst.start);
+    // Same two-second observation tail as speed-check; not part of content-visible timing.
+    await page.waitForTimeout(2000);
+    const metrics = await page.evaluate(({ origin, contentAt }) => {
+      const longTasks = window.__analyst.longTasks.filter(task => task.startMs >= origin && task.startMs <= contentAt + 2000);
+      return { contentMs: contentAt - origin, innerWidth, documentWidth: document.documentElement.scrollWidth, longTasks, longTaskMs: longTasks.reduce((sum, task) => sum + task.durationMs, 0), actionEpoch: performance.timeOrigin + origin };
+    }, { origin, contentAt });
+    const requests = [...net.requests.values()].filter(row => row.wall >= metrics.actionEpoch).map(({ wall, start, ...row }) => ({ ...row, startMs: wall - metrics.actionEpoch }));
+    delete metrics.actionEpoch;
+    const row = { profile, path: surface, index, ...metrics, requestCount: requests.filter(request => !request.blocked).length, bytes: requests.filter(request => !request.blocked).reduce((sum, request) => sum + request.bytes, 0), requests, blocked: [...blocked], ...(surface === 'page-navigation' ? { landed } : {}), ...(surface.startsWith('board') ? { serverBoard: servedBoardFromServer(requests, metrics.contentMs) } : {}), ...(surface === 'board-returning' ? { boardPreference: Boolean(preference) } : {}) };
+    run.samples.push(row);
+    if (mobile && row.innerWidth !== 390) throw new Error(`Phone layout is ${row.innerWidth} wide, expected 390`);
+    if (row.requests.some(requestFailed)) throw new Error('Measured request failed');
+    console.log(`Measured ${profile}:${surface} ${index}: ${Math.round(row.contentMs)}ms`);
+  };
+  try {
+    if (phase.startsWith('board')) {
+      await sample(phase, () => navigate(BOARD));
+      return;
+    }
+    // Direct ticket is cold in a fresh context; the board primes only the warm click below.
+    await sample('ticket-cold', () => navigate(TASK));
+    // Outside timing: "opened before" means the ticket code already arrived, as it has for a user who stayed on it.
+    const settled = Object.assign(run.samples.at(-1), await settleScripts(net.requests, ms => page.waitForTimeout(ms), timeout => idleMs(page, timeout)));
+    if (settled.pendingScripts) throw new Error(`Ticket code did not settle: ${settled.pendingScripts} scripts pending`);
+    await navigate(BOARD);
+    await ready(page, 'board');
+    await sample('ticket-warm', () => shared.action(page, () => page.locator(`a[href="${TASK}"]`).first().click(), run.actions, 'client', TASK), false);
+    // Outside timing: a fast opened-before ticket still loads its deferred parts after the tail, which holds the next hard navigation back (YPER4-525).
+    const previousPage = await settleScripts(net.requests, ms => page.waitForTimeout(ms), timeout => idleMs(page, timeout));
+    await page.waitForTimeout(SEARCH_IDLE_PAUSE_MS);
+    await sample('search', () => navigate(`/search?searchTerm=${encodeURIComponent(TITLE)}`));
+    Object.assign(run.samples.at(-1), { previousPageSettleMs: previousPage.settleMs, previousPagePendingScripts: previousPage.pendingScripts });
+    await sample('my-tasks', () => navigate('/my-tasks'));
+    await page.evaluate(() => document.activeElement?.blur());
+    await sample('page-navigation', () => shared.action(page, async () => {
+      await page.keyboard.press('g'); await page.keyboard.press('b');
+      await page.waitForURL(url => url.pathname === '/project' && url.searchParams.has('id'), { waitUntil: 'commit' });
+      landed = safeSearch(page.url());
+      await page.evaluate(board => window.history.replaceState(null, '', board), BOARD);
+    }, run.actions, 'client', BOARD), false);
+    // Since 2026-10-20 plain QA opens the Compose writer inside the Commands sheet (ctrl-j path version 2).
+    await page.locator('.section-container').first().click({ position: { x: 2, y: 2 } });
+    await page.locator('.section-container').first().focus();
+    // The iPhone user agent selects Apple's Cmd modifier for the same writer shortcut.
+    await sample('ctrl-j', () => shared.action(page, () => page.keyboard.press(mobile ? 'Meta+j' : 'Control+j'), run.actions, 'client', BOARD), false);
+    await page.keyboard.press('Escape');
+  } catch (error) {
+    const dom = await page.evaluate(task => ({
+      searchRows: [...document.querySelectorAll('#tasks-list li')].map(element => ({ fixture: element.textContent.includes('QASA-43'), top: element.getBoundingClientRect().top, height: element.getBoundingClientRect().height })),
+      fixtureLink: !!document.querySelector(`a[href="${task}"]`),
+      fixtureBox: (box => box && { top: Math.round(box.top), height: Math.round(box.height), viewport: innerHeight })(document.querySelector(`a[href="${task}"]`)?.getBoundingClientRect()),
+      fixtureHiddenBy: (() => {
+        for (let parent = document.querySelector(`a[href="${task}"]`); parent; parent = parent.parentElement) {
+          const style = getComputedStyle(parent);
+          if (style.display === 'none' || style.visibility === 'hidden' || Number(style.opacity) === 0) return parent.tagName.toLowerCase() + (parent.hidden ? '[hidden]' : '');
+        }
+        return null;
+      })(),
+      qaBoard: document.body.textContent.includes('QA Sandbox'),
+    }), TASK).catch(() => null);
+    run.failure = { profile, surface, index, error: failureDetail(error), dom, route: new URL(page.url()).pathname, search: safeSearch(page.url()), requests: [...net.requests.values()].map(({ wall, start, ...row }) => row), blocked: [...blocked] };
+    console.error(`Failed ${profile}:${surface} ${index}: ${run.failure.error}`);
+    throw hostNetworkChanged(run.failure.requests) ? new HostNetworkChanged() : new Error('Path unavailable');
+  } finally { net.stop(); await context.close(); }
 }
 
 async function main() {
@@ -282,7 +435,7 @@ async function main() {
     shared.readPosts.add('/api/search/document');
     shared.readGets.add('/api/search/values');
     browser = await shared.playwright().chromium.launch({ headless: true });
-    run.conditions = { protocol: PROTOCOL, node: process.version, browser: browser.version(), samples, fixture: 'qa-normal-2343-project-6859-task-43', profiles: ['desktop-unthrottled-1440x900', PHONE_PROFILE_KEY], observationTailMs: 2000, serviceWorkers: 'blocked' };
+    run.conditions = { protocol: PROTOCOL, node: process.version, browser: browser.version(), samples, fixture: 'qa-normal-2343-project-6859-task-43', profiles: ['desktop-unthrottled-1440x900', PHONE_PROFILE_KEY], observationTailMs: 2000, serviceWorkers: 'blocked', pathVersions: PATH_VERSIONS };
     const doctor = await shared.setup(browser, false);
     try {
       const identity = await doctor.request.post(BASE + '/api/app-shell/bootstrap');
@@ -301,7 +454,7 @@ async function main() {
     verifyRun(run);
   } catch (error) {
     run.status = 'failed';
-    const reasons = ['Incomplete live run', 'Missing live path', 'Invalid live metric', 'Incorrect metric totals', 'Invalid live summary', 'Production changed during run', 'Production identity unavailable', 'QA doctor failed', 'Path unavailable'];
+    const reasons = ['Incomplete live run', 'Missing live path', 'Invalid live metric', 'Incorrect metric totals', 'Invalid live summary', 'Production changed during run', 'Production identity unavailable', 'QA doctor failed', 'Path unavailable', 'Host network changed'];
     const reason = reasons.includes(error.message) ? error.message : 'Tool, auth or selector unavailable';
     run.failure = { ...run.failure, reason };
     console.error(`Cannot verify: ${reason}`);

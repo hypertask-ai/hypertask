@@ -76,10 +76,6 @@ const fitMinimalIdentity = (userData: CookieRecord): CookieRecord => {
   return identity;
 };
 
-/**
- * Removes unbounded preferences from the legacy user cookie and guarantees the
- * URL-encoded JSON remains safely below browser cookie limits.
- */
 export const slimUserForCookie = (userData: unknown): CookieRecord => {
   const user = isRecord(userData) ? userData : {};
   const candidate: CookieRecord = { ...user };

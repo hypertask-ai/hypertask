@@ -62,8 +62,6 @@ export interface SettingsNavItem {
   label: string;
 }
 
-// An external destination (docs, legal) that lives in the nav next to the
-// real sections instead of a pinned footer, so it scrolls with the list.
 export interface SettingsNavLink {
   href: string;
   label: string;
@@ -232,8 +230,6 @@ export const SETTINGS_TABS: SettingsTab[] = [
   },
 ];
 
-// About's external links live inside the Help tab: a dedicated About tab
-// would have no content pane behind it (all three entries leave the app).
 export const SETTINGS_CROSS_TAB_GROUPS: SettingsNavGroup[] = [];
 
 export const SETTINGS_NAV_GROUPS: SettingsNavGroup[] = [
@@ -351,9 +347,6 @@ export const useSettingsNavigation = () => {
 
   const openSettings = useCallback(
     async (section?: SettingsSectionId) => {
-      // HTPR-4890: guests get no settings — every entry point (rail, floating
-      // gear, Ctrl+K, the "\" shortcut) routes through here, so this one guard
-      // turns them all into a sign-in prompt.
       if (isGuestCookieUser()) {
         setShowGuestLogin(true);
         return;

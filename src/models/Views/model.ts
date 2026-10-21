@@ -33,8 +33,6 @@ const sortingModeLabels: Record<SortingMode, string> = {
 
 export const sortingModeLabel = (mode: SortingMode): string => sortingModeLabels[mode]
 
-// Derived from the enum so a new sorting mode reaches the MCP + AI-chat schemas on its own. The
-// hand-written lists they used before had already drifted two modes behind the enum.
 export const SORTING_MODES = Object.values(SortingMode) as [SortingMode, ...SortingMode[]]
 export const SUBTASK_SETTINGS = Object.values(SubtaskSetting) as [SubtaskSetting, ...SubtaskSetting[]]
 

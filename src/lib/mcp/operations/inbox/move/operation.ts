@@ -1,7 +1,9 @@
+import { findIdParamOutOfRange, idOutOfRangeMessage } from '@/lib/mcp/listParams'
+import { reportMcpOperationCrash } from '@/lib/mcp/operationCrashReport'
 import { wrapMcpRoute } from '@/lib/mcp/routeWrapper'
 import { NextRequest, NextResponse } from 'next/server'
 import { validateMcpAuth } from '@/lib/mcp/auth'
-import { findTaskByIdentifier } from '@/lib/mcp/tasks/resolveTask'
+import { findTaskByIdentifier, taskIdentifierErrorResponse } from '@/lib/mcp/tasks/resolveTask'
 import { validateProjectMemberIds } from '@/lib/mcp/tasks/services'
 import { ensureTaskMovedToInbox } from '@/lib/taskCardActions/inboxState'
 
@@ -13,13 +15,6 @@ interface MoveToInboxBody {
   user_id?: number
 }
 
-/**
- * POST /api/mcp/inbox/move
- *
- * Agent-accessible equivalent of the "Move task to inbox" command-palette action.
- * Routes a task into a specific project member's inbox by creating the same
- * TaskMovedToInbox notification the UI creates. See HTPR-4553.
- */
 export async function POST(request: NextRequest) {
   return wrapMcpRoute(async (request: NextRequest) => {
   try {
@@ -70,7 +65,14 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // Caller must have access to the task; findTaskByIdentifier scopes by owner/member/agent.
+    const outOfRange = findIdParamOutOfRange({ user_id })
+    if (outOfRange) {
+      return NextResponse.json(
+        { success: false, error: idOutOfRangeMessage(outOfRange), code: 'invalid_field' },
+        { status: 400 }
+      )
+    }
+
     const task = await findTaskByIdentifier(
       ctx.user,
       {
@@ -88,8 +90,6 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // The recipient must be a member of the task's project. Without this, any caller
-    // could push a task (and its title/link) into an arbitrary internal user's inbox.
     const memberCheck = await validateProjectMemberIds(task.projectId, [user_id])
     if (memberCheck.error) {
       return NextResponse.json(
@@ -104,7 +104,6 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // Mirror the palette payload exactly so the notification renders identically.
     const payload = {
       taskId: task.id,
       userId: user_id,
@@ -124,7 +123,10 @@ export async function POST(request: NextRequest) {
       userId: user_id,
     })
   } catch (error) {
+    const identifierResponse = taskIdentifierErrorResponse(error)
+    if (identifierResponse) return identifierResponse
     console.error('[MCP] inbox/move', error)
+    reportMcpOperationCrash(request, error)
     return NextResponse.json(
       { success: false, error: 'Internal server error' },
       { status: 500 }

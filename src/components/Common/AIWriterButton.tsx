@@ -4,44 +4,19 @@ import { useDeviceContext } from "@/lib/contexts/deviceContext";
 import { cn } from "@/utils/undoActions/helperFuncs";
 
 interface AIWriterButtonProps {
-  /** Function to toggle the AI Task Writer */
   onToggle?: () => void;
-  /** Unique identifier for the button element */
   id?: string;
-  /** Additional CSS classes */
   className?: string;
-  /** Button text - defaults to "ai" */
   text?: React.ReactNode;
-  /** Whether the button is disabled */
   disabled?: boolean;
-  /** Custom tooltip text - defaults to "Ai Task Writer" */
   tooltipText?: string;
-  /** Custom keyboard shortcut - defaults to Ctrl/Cmd + J */
   customKeyCombination?: string[];
-  /** Tooltip position adjustments */
   tooltipPosition?: {
     left?: number;
     bottom?: number;
   };
 }
 
-/**
- * Reusable AI Writer Button component
- * 
- * Features:
- * - Responsive keyboard shortcut (Ctrl+J on Windows/Linux, Cmd+J on Mac)
- * - Hover tooltip with keyboard shortcut display
- * - Customizable styling and behavior
- * - Disabled state support
- * 
- * @example
- * ```tsx
- * <AIWriterButton 
- *   onToggle={() => toggleAiTaskWriter()} 
- *   id="create-task-ai-writer" 
- * />
- * ```
- */
 const AIWriterButton: React.FC<AIWriterButtonProps> = ({
   onToggle,
   id,

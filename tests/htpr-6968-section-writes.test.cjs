@@ -43,6 +43,7 @@ function fixture(name, scenario = {}, controllerFactory) {
   };
   const body = Object.hasOwn(scenario, "body") ? scenario.body : endpoints[name].body;
   const mocks = {
+    "@/lib/auth/agentScope": require("./helpers/agent-board-scope.cjs").enforcedScope,
     "@/lib/auth/getSessionUser": { getSessionUser: async headers => {
       auth.push(headers.get("cookie"));
       if (scenario.authThrows) throw new Error("Auth unavailable");
@@ -200,7 +201,10 @@ for (const scenario of [
 function serviceController(name, effects, options = {}) {
   const record = (label, value) => async (...args) => { effects.push([label, ...structuredClone(args)]); return value; };
   const tx = {
-    section: { update: async args => { effects.push(["write-section", structuredClone(args)]); return { ...section, ...args.data }; } },
+    section: {
+      create: async args => { effects.push(["write-section", structuredClone(args)]); return { ...section, ...args.data }; },
+      update: async args => { effects.push(["write-section", structuredClone(args)]); return { ...section, ...args.data }; },
+    },
     task: { updateManyAndReturn: record("rename-tasks", [{ id: 42 }]) },
     taskSectionEvent: { createMany: async args => { effects.push(["history", args.data.map(({ timestamp, ...rest }) => rest)]); } },
   };
@@ -216,7 +220,8 @@ function serviceController(name, effects, options = {}) {
   const mocks = {
     "@/lib/prisma": { default: prisma },
     "@/lib/flags": { isFeatureEnabled: async () => false },
-    "@/lib/telemetry/activationOccurrences": { recordAgentTaskCompletion: () => {} },
+    "@/lib/telemetry/activationOccurrences": { enqueueAgentTaskCompletion: async () => null },
+    "@/lib/telemetry/savedWork": { enqueueColumnCreated: async () => "column-key", enqueueColumnRenamed: async () => "rename-key", processAnalyticsIntentSoon: () => {} },
     "@/utils/controllers/notifications/agentFirstTaskEmail": { scheduleAgentFirstTaskEmail: () => assert.fail("human section writes must not schedule agent email") },
     "@/utils/controllers/projects/getAllIncludes": { getProjectWhere: id => ({ ownerId: id }), savedViewBoardAccessWhere },
     "@/utils/generateRank": load("src/utils/generateRank.ts", {}),

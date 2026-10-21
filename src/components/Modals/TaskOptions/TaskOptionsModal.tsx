@@ -97,7 +97,6 @@ const TaskOptionsModal = (props: ITaskOptionsModal) => {
       ),
     [currentTask]
   );
-  //   const { toggleCreateTaskGlobally } = useHypertasksRecoilStates();
   const { setSelectedIndex, selectedIndex, handleKeydown } =
     useHandleKeydownBasic(enterHandler);
   const { handleMouseEnter, handleMouseLeave, handleMouseMove, elRef } =

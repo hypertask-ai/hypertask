@@ -15,7 +15,6 @@ interface IProps {
   comment: IComment;
 }
 
-//CommentReactions and CommentOptions removed
 const CommentContainer = ({ index, comment }: IProps) => {
   const [stack, _] = useState<boolean>(false);
   return (

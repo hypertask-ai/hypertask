@@ -19,7 +19,6 @@ export default async function checkoutsSessionHandler(
       .json({ error: "Unauthorized", code: "SESSION_REQUIRED" });
   }
 
-  // HTPR-4303: anonymous demo guests must never reach Stripe.
   if (await isGuestRequest(req)) {
     return res.status(403).json({ message: GUEST_FORBIDDEN_MESSAGE });
   }

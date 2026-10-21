@@ -22,14 +22,12 @@ export function useCommandCenterShortcut(
       if (showTrialModal || showEmailVerificationModal) return;
       if (composeEnabled && isComposePaletteShortcut(e, isApple, pathname)) {
         e.preventDefault();
-        // Supersede the legacy board Ctrl+J before its handler can create a task.
         e.stopImmediatePropagation();
         setShowCommands({ show: true, mode: CommandMode.Command, paletteTab: e.code === "KeyJ" ? "compose" : "search" });
         return;
       }
       if (!isCommandCenterShortcut(e, isApple, pathname)) return;
       e.preventDefault();
-      // Capture before route/input handlers so one keypress cannot toggle twice.
       e.stopImmediatePropagation();
       toggleShowCommands();
     };

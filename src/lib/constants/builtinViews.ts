@@ -22,7 +22,6 @@ export interface BuiltinViewContext {
   currentCycleId?: number | null;
   nextCycleId?: number | null;
   cyclesEnabled?: boolean;
-  /** Names the current user's "<name> Review" column can carry (HTPR-7092). */
   currentUserNames?: string[];
 }
 
@@ -31,9 +30,7 @@ export interface BuiltinView {
   title: string;
   builtin: true;
   predicate: (task: ITask, context: BuiltinViewContext) => boolean;
-  /** When set, columns failing it are dropped from the board while this view is active. */
   sectionPredicate?: (sectionTitle: string, context: BuiltinViewContext) => boolean;
-  /** Drop columns left with no tickets by the predicate. */
   hideEmptySections?: boolean;
   available?: (context: BuiltinViewContext) => boolean;
 }
@@ -74,8 +71,6 @@ export const nextCyclePredicate: BuiltinView["predicate"] = (task, context) =>
 
 export const UX_SIGN_OFF_COLUMN = "UX Sign-off";
 
-// HTPR-7092: the columns where a ticket waits on this person's yes or no: their own
-// "<name> Review" column (full or first name, as the review lanes are named) and UX Sign-off.
 export const decisionsSectionPredicate: NonNullable<BuiltinView["sectionPredicate"]> = (
   sectionTitle,
   context,
@@ -149,8 +144,6 @@ export const isBuiltinViewId = (id: string | undefined): id is BuiltinViewId =>
 export const isBuiltinView = (view: BoardView): view is BuiltinView =>
   isBuiltinViewId(view.id);
 
-// Saved view ids are unique per board, built-in ids are the same everywhere, so
-// per-board preferences (hide from the tab bar) key built-ins by board.
 export const viewTabPreferenceKey = (
   projectId: number | undefined,
   viewId: string,
@@ -166,7 +159,6 @@ export const buildBuiltinViewContext = (
   currentUserDisplayName?: string | null,
 ): BuiltinViewContext => {
   const cycleWindow = resolveCycleWindow(project?.cycles ?? [], now);
-  // HTPR-7092: the signed-in user's own name comes first; a board owner has no row in members.
   const displayName = currentUserDisplayName?.trim() || (currentUserId == null
     ? undefined
     : (project?.members ?? []).find(

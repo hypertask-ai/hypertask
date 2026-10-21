@@ -10,8 +10,6 @@ import {
 import { generalConfig } from "@/lib/configs/general.config";
 import type { IUser } from "@/models/model";
 
-// Bounded like the other sweep sources; the next tick drains the rest. Small on
-// purpose: every archive fans out to activity + follower notifications.
 export const AUTO_ARCHIVE_BATCH = 50;
 
 type CandidateRow = {
@@ -19,16 +17,6 @@ type CandidateRow = {
   projectId: number;
 };
 
-/**
- * AUTO-ARCHIVE: on boards that opted in (Project.autoArchiveAfterDays set),
- * archive root tasks nobody has touched — no edit, no comment — for that many
- * days. Linear-parity guards: a future due date keeps a task alive, and
- * subtasks are never collected on their own (they follow their parent).
- * Archive is Status.Archive, fully reversible from the archived view.
- *
- * The cutoff is per project, so candidates are selected in SQL with a join;
- * overlap is prevented by the sweep's Redis lease (same as sweepReminders).
- */
 export async function sweepAutoArchives(): Promise<number> {
   const candidates = await prisma.$queryRaw<CandidateRow[]>`
     SELECT t.id, t."projectId"
@@ -50,8 +38,6 @@ export async function sweepAutoArchives(): Promise<number> {
 
   if (candidates.length === 0) return 0;
 
-  // System actor: archives are attributed to HyperAI in activity and
-  // notifications, never to a human who did not act.
   const hyperAi = await prisma.user.findUnique({
     where: { id: generalConfig.hyperAiId },
   });
@@ -66,8 +52,6 @@ export async function sweepAutoArchives(): Promise<number> {
 
   for (const task of candidates) {
     try {
-      // Same building blocks as /api/tasks/(un)archive, so the archive carries
-      // the normal activity entry and follower/assignee notifications.
       const { status } = await updateTaskSingle(
         {
           id: task.id,
@@ -78,13 +62,6 @@ export async function sweepAutoArchives(): Promise<number> {
         },
         actor,
         null,
-        // trustedCaller: a cron, not a request. The actor is a stand-in for
-        // activity attribution and is not necessarily on the board.
-        // Auto-archive fires because nobody touched the task, which is
-        // abandonment rather than completion. Spawning the next occurrence
-        // here would put a neglected recurring task on a treadmill: the copy
-        // goes stale, gets archived, spawns again, forever. A person
-        // completing it still repeats it (HTPR-4885).
         { skipRecurrence: true, trustedCaller: true }
       );
       if (status !== 200) continue;
@@ -102,7 +79,6 @@ export async function sweepAutoArchives(): Promise<number> {
       touchedProjects.add(task.projectId);
       archived += 1;
     } catch (error) {
-      // Isolate a bad row so it does not drop the rest of the batch.
       console.log("🚀 ~ sweepAutoArchives ~ row error:", error);
     }
   }

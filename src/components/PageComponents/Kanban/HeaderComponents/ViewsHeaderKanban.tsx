@@ -60,6 +60,3 @@ const ViewsHeaderIcon = ({
 
   )
 }
-
-// blue: #2383e2
-// gray: #76777a

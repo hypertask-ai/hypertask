@@ -164,9 +164,6 @@ export function AgentBoardAccess({
               </ConfirmDialog>
             )}
 
-            {/* Collapsed by default: archiving and deleting are the two things
-                on this page you cannot undo with the switch next to the name,
-                so they do not sit open next to the everyday controls. */}
             <div className="mt-6 bg-cardBackground rounded-[4px] shadow-md">
               <button
                 type="button"

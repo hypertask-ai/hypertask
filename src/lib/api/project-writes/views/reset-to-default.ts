@@ -26,10 +26,6 @@ export async function resetUserProjectViewState(
     project_view_id: projectViewId,
   };
 
-  // Ensure the row exists, then lock it before reading the transient view.
-  // A concurrent editor's update must now complete before this read or wait
-  // until the reset commits, so we never clear a newer unsaved view while
-  // deleting the stale one captured earlier.
   await tx.user_Project_View.upsert({
     where: { user_project: key },
     create: {
@@ -46,9 +42,6 @@ export async function resetUserProjectViewState(
   );
   if (!existing) throw new Error("Unable to lock user view state");
 
-  // Detach the transient view before deleting it. The previous route left
-  // unsavedViewId pointing at the row and then deleted that row, which can
-  // fail with a foreign-key violation.
   await tx.user_Project_View.update({
     where: { user_project: key },
     data: {

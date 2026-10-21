@@ -87,7 +87,6 @@ const TaskDraggableContainer: React.FC<ITaskDraggableContainer> = ({
       {selectionControl}
       <Link
         prefetch={false}
-        // style={{pointerEvents:showBoardManager?"none":"auto"}}
         className={cn(`flex items-center p-2 gap-1.5 flex-wrap`, linkClassName)}
         href={taskHref}
         onClick={(event) => {
@@ -95,7 +94,6 @@ const TaskDraggableContainer: React.FC<ITaskDraggableContainer> = ({
             event.stopPropagation();
             return;
           }
-          // The parent owns navigation; don't also start Next's RSC route.
           event.preventDefault();
         }}
       >

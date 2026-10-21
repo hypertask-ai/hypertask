@@ -9,8 +9,6 @@ export function createChatStream(options: StreamOptions) {
       await runChatStream(controller, state);
     },
     cancel() {
-      // Do not abort the model request. The server owns completion and
-      // persistence so a mobile tab can be suspended or evicted safely.
       state.clientConnected = false;
     },
   });

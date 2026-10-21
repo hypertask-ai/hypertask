@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { checkMcpRateLimit, validateMcpAuth } from '@/lib/mcp/auth'
 import prisma from '@/lib/prisma'
-import { findTaskByIdentifier } from '@/lib/mcp/tasks/resolveTask'
+import { findTaskByIdentifier, taskIdentifierErrorResponse } from '@/lib/mcp/tasks/resolveTask'
 import { setTaskMovedToInboxState } from '@/lib/taskCardActions/inboxState'
 import { withTaskStarWriteLock } from '@/lib/taskCardActions/writeLocks'
 
@@ -142,7 +142,14 @@ export function createTaskCardActionHandler(
       )
     }
 
-    const task = await dependencies.findTask(ctx, taskId)
+    let task
+    try {
+      task = await dependencies.findTask(ctx, taskId)
+    } catch (error) {
+      const identifierResponse = taskIdentifierErrorResponse(error)
+      if (identifierResponse) return identifierResponse
+      throw error
+    }
     if (!task || task.projectId !== projectId) {
       return NextResponse.json(
         { success: false, error: 'Task not found or access denied' },

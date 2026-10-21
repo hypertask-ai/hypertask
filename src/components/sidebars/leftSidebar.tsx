@@ -57,10 +57,6 @@ import { useSettingsNavigation } from "@/components/Modals/Settings/settingsNavi
 import { prefetchBoard } from "@/utils/api/Homepage";
 import UserAvatar from "@/components/Common/UserAvatar";
 
-// Favorites are 10 numbered slots: index 1-9, then 0 for the tenth (Ctrl on
-// Apple, Alt elsewhere).
-// Slot 0 therefore sorts LAST, and the Nth favorite (position, 0-based) lives in
-// slot 1..9 then 0.
 const favoriteSlotOrder = (index: number) => (index === 0 ? 10 : index);
 const slotForPosition = (pos: number) => (pos >= 9 ? 0 : pos + 1);
 
@@ -94,11 +90,7 @@ function LeftSidebar({ toggleLeftSidebar }: { toggleLeftSidebar: () => void }) {
   const { goToProjectShortcut, hyperAI } = useProjectQuery();
   const queryClient = useQueryClient();
 
-  // ================== favorites drag-and-drop
   const favPersistRef = useRef<Promise<unknown>>(Promise.resolve());
-  // Persist a new favorites order/set. The client sends the desired order; the
-  // server assigns slots (= Ctrl on Apple / Alt elsewhere) by position and derives the user
-  // from the session, so no userSettingId is sent.
   const persistFavorites = (orderedProjects: IProject[]) => {
     const capped = orderedProjects.slice(0, 10);
     const optimistic = capped.map((project, pos) => ({
@@ -111,8 +103,6 @@ function LeftSidebar({ toggleLeftSidebar }: { toggleLeftSidebar: () => void }) {
       favoritesQueryKey(currentUser.UserSettingId),
       optimistic,
     );
-    // Serialize writes: each PUT replaces the whole set, so an out-of-order
-    // resolve of two quick reorders would otherwise clobber the newer one.
     favPersistRef.current = favPersistRef.current
       .catch(() => {})
       .then(() =>
@@ -128,13 +118,11 @@ function LeftSidebar({ toggleLeftSidebar }: { toggleLeftSidebar: () => void }) {
   const onFavoritesDragEnd = (result: DropResult) => {
     const { source, destination, draggableId } = result;
     if (!destination) return;
-    // Drag is disabled while searching, but guard anyway (filtered indexes
-    // wouldn't map to the full favorites list).
     if (keyword) return;
 
     const src = source.droppableId;
     const dst = destination.droppableId;
-    if (src !== "favorites" && dst !== "favorites") return; // board <-> board: ignore
+    if (src !== "favorites" && dst !== "favorites") return;
     const projectId = Number(draggableId.replace(/^(fav|board)-/, ""));
 
     let favProjects: IProject[] = (favoritesTQ ?? [])
@@ -150,15 +138,14 @@ function LeftSidebar({ toggleLeftSidebar }: { toggleLeftSidebar: () => void }) {
       const [moved] = favProjects.splice(source.index, 1);
       favProjects.splice(destination.index, 0, moved);
     } else if (src !== "favorites" && dst === "favorites") {
-      if (favProjects.some((p) => p.id === projectId)) return; // already favorited
-      if (favProjects.length >= 10) return; // all 10 slots full
+      if (favProjects.some((p) => p.id === projectId)) return;
+      if (favProjects.length >= 10) return;
       const project = (allTeamsTQ ?? [])
         .flatMap((t: any) => t.projects as IProject[])
         .find((p: IProject) => p.id === projectId);
       if (!project) return;
       favProjects.splice(destination.index, 0, project);
     } else {
-      // favorites -> board list: unfavorite
       favProjects = favProjects.filter((p) => p.id !== projectId);
     }
 
@@ -188,7 +175,6 @@ function LeftSidebar({ toggleLeftSidebar }: { toggleLeftSidebar: () => void }) {
     if (e.keyCode === KeyCodes.ESCAPE) {
       setShowBoardManager(false);
     }
-    // switch between different boards
     if (favoritesTQ) {
       if (
         e.keyCode >= KeyCodes.ZERO &&
@@ -224,7 +210,6 @@ function LeftSidebar({ toggleLeftSidebar }: { toggleLeftSidebar: () => void }) {
         if (index < 0 || !filterdFavorites?.projects) return;
         handleDownFavs(index);
       }
-      // handle down for teams
       else {
         let index = filteredAllProjects.findIndex(
           (item) => item.id === selectedProject.id
@@ -245,7 +230,6 @@ function LeftSidebar({ toggleLeftSidebar }: { toggleLeftSidebar: () => void }) {
 
         handleUpFavs(index);
       }
-      // handle down for teams
       else {
         let index =
           filteredAllProjects.findIndex(
@@ -258,19 +242,16 @@ function LeftSidebar({ toggleLeftSidebar }: { toggleLeftSidebar: () => void }) {
     }
   };
 
-  // ============ helper for upward scrolling
   const scrollTopHandler = (id: number) => {
     let projectElement = document.getElementById(`project-${id}`);
     projectElement && scrollToCenterIfNearTop(projectElement);
   };
 
-  // ============ helper for downward scrolling
   const scrollBottomHandler = (id: number) => {
     let projectElement = document.getElementById(`project-${id}`);
     projectElement && scrollToCenterIfNearBottom(projectElement, 30);
   };
 
-  // ============== handle up in favs
   function handleUpFavs(index: number) {
     if (!filterdFavorites?.projects) return;
     if (index > 0) {
@@ -280,7 +261,6 @@ function LeftSidebar({ toggleLeftSidebar }: { toggleLeftSidebar: () => void }) {
     }
   }
 
-  // ============== handle up in teams
   function handleUpTeams(index: number) {
     if (index === 0 && filterdFavorites && isFavoritesExpanded) {
       let projectToSelect =
@@ -295,10 +275,8 @@ function LeftSidebar({ toggleLeftSidebar }: { toggleLeftSidebar: () => void }) {
       scrollTopHandler(projectToSelect.id);
       setSelectedProject(projectToSelect);
     }
-    // If index === 0 and favorites are collapsed, do nothing (can't go up)
   }
 
-  // ============== handle down in favs
   function handleDownFavs(index: number) {
     if (!filterdFavorites) return;
     if (index >= 0 && index === filterdFavorites.projects.length - 1) {
@@ -309,7 +287,6 @@ function LeftSidebar({ toggleLeftSidebar }: { toggleLeftSidebar: () => void }) {
     }
   }
 
-  // ============== handle down in teams
   function handleDownTeams(index: number) {
     if (index >= 0 && index === filteredAllProjects.length - 1) {
     } else {
@@ -319,7 +296,6 @@ function LeftSidebar({ toggleLeftSidebar }: { toggleLeftSidebar: () => void }) {
     }
   }
 
-  // =============== handle onclick board
   const handleBoardClick = (key: number) => {
     const index = favoritesTQ?.findIndex(
       (favorite: IFavorites) => favorite.index === key
@@ -338,46 +314,35 @@ function LeftSidebar({ toggleLeftSidebar }: { toggleLeftSidebar: () => void }) {
     toggleLeftSidebar();
   }
 
-  // =================== Function to filter based on search term
   const filterData = (searchTerm: string) => {
     const filteredData = favsAndTeams
       .map((group) => {
-        // Check if the group has a 'projects' property
         if (group.projects) {
-          // Filter projects based on the search term in the 'title' property
           console.log("🚀 ~ filteredData ~ filteredProjects:", group.projects);
           const filteredProjects = group.projects.filter(
             (project: { title: string }) =>
               project.title?.toLowerCase().includes(searchTerm?.toLowerCase())
           );
 
-          // Check if there are projects after filtering
           if (filteredProjects.length > 0) {
-            // Return the group with filtered projects
             return { ...group, projects: filteredProjects };
           }
 
-          // If no projects after filtering, return null
           return null;
         }
 
-        // If the group doesn't have 'projects', return as is
         return group;
       })
-      .filter(Boolean); // Remove null values from the array
+      .filter(Boolean);
 
-    // Set the filtered array in the state
     setFilteredFavsandTeams(filteredData);
 
-    // Set selectedProject and currentGroup from filtered data
     if (filteredData.length > 0) {
       setSelectedProject(filteredData[0]?.projects[0]);
       setCurrentGroup(filteredData[0]?.group);
 
-      // if the first group is filteredFavorites, set favorites and teams separately
       if (filteredData[0].group === "Favs") {
         setFilterdFavorutes(filteredData[0]);
-        // reset all filtered projects (everything except the first group)
         setFitleredAllProjects(
           filteredData
             .slice(1)
@@ -385,7 +350,6 @@ function LeftSidebar({ toggleLeftSidebar }: { toggleLeftSidebar: () => void }) {
             .flat() ?? []
         );
       } else {
-        // if it's teams, set filtered favs as null and all projects as ALL
         setFilterdFavorutes(null);
         setFitleredAllProjects(
           filteredData
@@ -394,13 +358,11 @@ function LeftSidebar({ toggleLeftSidebar }: { toggleLeftSidebar: () => void }) {
         );
       }
     } else {
-      // Handle empty filtered data
       setFilterdFavorutes(null);
       setFitleredAllProjects([]);
     }
   };
 
-  // ================== close when click outside
   const handleOutSideClick = (event: any) => {
     if (sidebarRef.current && !sidebarRef.current?.contains(event.target)) {
       setShowBoardManager(false);
@@ -408,14 +370,12 @@ function LeftSidebar({ toggleLeftSidebar }: { toggleLeftSidebar: () => void }) {
     }
   };
 
-  // ====================== ON INPUT KEY CHANGE
   const onKeyChange = (e: ChangeEvent<HTMLInputElement>) => {
     setKeyword(e.target.value);
     filterData(e.target.value);
   };
 
   function onCacheUpdate() {
-    // Slot 0 is the tenth favorite (Ctrl+0 on Apple / Alt+0 elsewhere), so it sorts last.
     const sortedFavorites =
       favoritesTQ?.length > 0
         ? [...favoritesTQ].sort(
@@ -437,36 +397,27 @@ function LeftSidebar({ toggleLeftSidebar }: { toggleLeftSidebar: () => void }) {
           }
         : null;
 
-    // Process teams with sorting
     let teams =
       allTeamsTQ?.map((team: any) => ({ ...team, group: "Teams" })) || [];
 
     let newState = [];
     newState.push(favs);
 
-    // Team grouping is the fallback, not a matched case: boardSortMode is persisted
-    // to localStorage, so a value written by an older build (or hand-edited) used to
-    // match neither branch and left the sidebar showing favorites and nothing else.
     if (boardSortMode !== "lastUsed") {
-      // Most-used team first, boards within it by id: same order the
-      // Alt+Shift+Arrow team-cycle shortcut walks (src/lib/teamSwitcherOrder.ts).
       teams = orderTeamsForSwitcher(teams, lastUsedBoards);
 
       newState = [...newState, ...teams].filter(Boolean);
     } else {
-      // Flatten all teams into a single list of boards
       const allBoards: IProject[] = teams
         .map((team: any) => team.projects || [])
         .flat();
 
-      // Sort all boards by last used (most recent first)
       const sortedBoards = allBoards.sort((a: IProject, b: IProject) => {
         const timeA = lastUsedBoards[a.id] || 0;
         const timeB = lastUsedBoards[b.id] || 0;
-        return timeB - timeA; // Most recent first
+        return timeB - timeA;
       });
 
-      // Create a single group for all boards (no team grouping)
       if (sortedBoards.length > 0) {
         newState.push({
           title: "All Boards",
@@ -479,8 +430,6 @@ function LeftSidebar({ toggleLeftSidebar }: { toggleLeftSidebar: () => void }) {
 
     setFavsAndTeams(newState);
 
-    // Use filterData to handle all derived state updates in one place
-    // Pass current keyword to maintain any active search filtering
     const tempFilteredData = newState
       .map((group) => {
         if (group.projects) {
@@ -499,9 +448,7 @@ function LeftSidebar({ toggleLeftSidebar }: { toggleLeftSidebar: () => void }) {
 
     setFilteredFavsandTeams(tempFilteredData);
 
-    // Set selectedProject and currentGroup from filtered data
     if (tempFilteredData.length > 0) {
-      // Find the first group that contains the currentProject and set both selectedProject and currentGroup accordingly
       let selectedProjectValue: IProject | null = null;
       let foundGroup: Tgroup | undefined = undefined;
 
@@ -520,7 +467,6 @@ function LeftSidebar({ toggleLeftSidebar }: { toggleLeftSidebar: () => void }) {
         }
       }
 
-      // If not found, fallback to first project in first group (if exists)
       if (
         !selectedProjectValue &&
         tempFilteredData.length > 0 &&
@@ -572,7 +518,6 @@ function LeftSidebar({ toggleLeftSidebar }: { toggleLeftSidebar: () => void }) {
     favoritesTQ,
   ]);
 
-  // ------- on favorites update from server
   useEffect(() => {
     onCacheUpdate();
   }, [favoritesTQ, allTeamsTQ, boardSortMode, lastUsedBoards]);
@@ -586,9 +531,6 @@ function LeftSidebar({ toggleLeftSidebar }: { toggleLeftSidebar: () => void }) {
     };
   }, []);
 
-  // Warm only the board the user is actively considering. Query prefetching
-  // deduplicates repeated hover/focus events and replaces the previous
-  // account-wide background fetch of every board.
   useEffect(() => {
     if (!_showBoardManager || !selectedProject || selectedProject.id === currentProject?.id) return;
     void prefetchBoard(queryClient, selectedProject.id, currentUser.id);
@@ -610,7 +552,6 @@ function LeftSidebar({ toggleLeftSidebar }: { toggleLeftSidebar: () => void }) {
           currentUser={currentUser}
         />
 
-        {/* ===================== favorites and teams ============ */}
         <div
           style={{
             flex: 1,
@@ -642,7 +583,6 @@ function LeftSidebar({ toggleLeftSidebar }: { toggleLeftSidebar: () => void }) {
               {filteredFavsandTeams?.map(
                 (item: ISidebarFavs, favidx: number) => (
                   <>
-                    {/* the toggle only regroups the boards below favorites, so it sits directly above them */}
                     {item.group !== "Favs" &&
                       favidx === firstBoardGroupIndex && (
                         <div
@@ -662,7 +602,6 @@ function LeftSidebar({ toggleLeftSidebar }: { toggleLeftSidebar: () => void }) {
                       key={`favs-and-teams-left-sidebar-${favidx}`}
                       className=""
                     >
-                      {/* ========================= TEAM TITLE ====================== */}
                       <GroupTitle
                         item={item}
                         toggleBoard={setShowBoardManager}
@@ -671,7 +610,6 @@ function LeftSidebar({ toggleLeftSidebar }: { toggleLeftSidebar: () => void }) {
                         currentSortMode={boardSortMode}
                       />
 
-                      {/* ========================= TEAM allProjects ====================== */}
                       <Droppable
                         droppableId={
                           item.group === "Favs"
@@ -716,7 +654,6 @@ function LeftSidebar({ toggleLeftSidebar }: { toggleLeftSidebar: () => void }) {
                                             : "transparent"
                                         }`}
                                         onClick={() => {
-                                          // Track board usage
                                           setLastUsedBoards((prev) => ({
                                             ...prev,
                                             [project.id]: Date.now(),
@@ -829,9 +766,6 @@ const GroupTitle = ({
           {item.projects?.length ?? 0}
         </span>
       )}
-      {/* chevron and gear stay hidden until the row is hovered — the header itself is the toggle.
-          NOTE: opacity-[0], not opacity-0 — bootstrap (imported globally in layout.tsx) ships
-          .opacity-0 {opacity: 0 !important}, which no group-hover class can override. */}
       {item.group === "Favs" && setIsFavoritesExpanded && (
         <ChevronRight size={14}
           onClick={handleFavoritesToggle}
@@ -889,7 +823,6 @@ const CTRL_INDEX = ({
   );
 };
 
-// ==================================== CURRENT USER COMPONENT
 const HypertaskUser = ({
   currentUser,
   toggleBoard,
@@ -898,9 +831,6 @@ const HypertaskUser = ({
   toggleBoard: SetterOrUpdater<boolean>;
 }) => {
   const { openSettings } = useSettingsNavigation();
-  // Hosted by GloablProviders via this atom: mounting the modal inside the
-  // sidebar would fight its click-away/Escape handling, and the commands host
-  // is not mounted on every route this sidebar opens on (/inbox, /drafts…).
   const setShowAccountSwitcher = useSetRecoilState(showAccountSwitcherAtom);
 
   const closHandler = () => {
@@ -942,7 +872,6 @@ const HypertaskUser = ({
   );
 };
 
-// ==================================== TITLE AND MEMBERS
 const TitleAndMembers = ({
   project,
   hyperAI,
@@ -951,15 +880,11 @@ const TitleAndMembers = ({
   hyperAI: IUser | undefined;
 }) => {
   const humanMembers = project.members.filter((member) => !member.agent);
-  // Prefer the server-side agent count (accurate even when the members list is
-  // capped for avatars, e.g. the Teams/Recent query's take:8). Fall back to
-  // counting the array for queries that return every member (favorites).
   const agentCount =
     project._count?.members ?? project.members.length - humanMembers.length;
 
   return (
     <>
-      {/* --------------------- PROJECT TITLE ------------------ */}
 
       <span className="text-content mr-4 font-normal text-white-black">
         {project.title ? project.title : `${project.name}`}
@@ -974,9 +899,6 @@ const TitleAndMembers = ({
           size={16}
           title={project.owner.displayName || project.owner.email}
         />
-        {/* Only human members get a face. Agents all share the owner's photo,
-            so instead of repeating the owner's face per agent we show one
-            "+ robot N" indicator (the same agent icon used elsewhere). */}
         {humanMembers.map((member, idx) => (
           <UserAvatar
             key={`member-avatar-left-sidebar-${idx}`}

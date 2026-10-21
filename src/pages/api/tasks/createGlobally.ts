@@ -5,13 +5,10 @@ import { getSessionUser } from "@/lib/auth/getSessionUser";
 import { taskWriteAccessWhere } from "@/utils/controllers/projects/getAllIncludes";
 import { taskWriteHandler } from "@/lib/api/task-writes/route";
 
-// GET returns the section and rank defaults for quick add and the AI composer.
-// It has no shared route yet, so it stays here; POST uses the shared create.
 const getDefaults: NextApiHandler = async (
   req: NextApiRequest,
   res: NextApiResponse
 ) => {
-  // ========== we also get some relevant info in the GET request.
   if (req.method === "GET") {
     const requestStartedAt = performance.now();
     try {

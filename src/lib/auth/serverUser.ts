@@ -59,7 +59,6 @@ export async function getServerCookieUser(): Promise<IUser | null> {
   return user as IUser | null;
 }
 
-// Transitional guard for pages that still depend on nookies_user before HTPR-3979 moves them to signed session auth.
 export async function requireServerCookieUser(redirectTo = "/login"): Promise<IUser> {
   const user = await getServerCookieUser();
 

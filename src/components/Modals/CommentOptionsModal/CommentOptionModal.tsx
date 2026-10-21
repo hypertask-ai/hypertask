@@ -136,7 +136,6 @@ const CommentOptionsModal = ({
   };
 
   const toggleCreateSubTask = () => {
-    // SECURITY: Use the shared task-detail templates so staging sanitization and the PR's mention/link escaping both apply.
     const linkhtml = taskDetailConfig.urls.templates.commentLink(
       currentTask?.projectId!,
       String(currentTask?.uniqueIndex),

@@ -84,9 +84,6 @@ const hiddenCommentAgent = (
   )
 `;
 
-// HTPR-7122: a reactor inside a reaction group (alias r). An agent's reaction shows the
-// agent as "<name> (agent)", never its owner, with id null so it never reads as the
-// viewer's own reaction. The name follows the agent-comment visibility rule above.
 const reactionAgentJoins = Prisma.sql`
   LEFT JOIN "Agent" agent ON r."agentId" IS NOT NULL AND agent.id = r."agentId"
   LEFT JOIN "Task" reaction_task ON r."agentId" IS NOT NULL AND reaction_task.id = r."taskId"
@@ -130,9 +127,6 @@ const publicCommentAgent = Prisma.sql`
   ) END
 `;
 
-// Assignment activity stores a user snapshot for durable names, but older
-// snapshots omitted photoURL. Resolve the current photo at read time so
-// historical rows follow the same image-first avatar contract as new rows.
 const assignmentActivityWithCurrentAvatars = Prisma.sql`
   CASE
     WHEN c.activity->>'type' = 'TaskAssigned' THEN
@@ -176,12 +170,6 @@ export function parseProjectSlug(projectSlug: string): number {
   return parseInt(projectSlug.split("-")[1], 10);
 }
 
-/**
- * A detail URL always carries a ticket number. Without one (`/detail/project-15`)
- * `parseInt` yields NaN, and Prisma rejects NaN as a filter value rather than
- * matching nothing, so the page 500'd instead of showing anything (HTPR-4838).
- * Returns null when the slug cannot address a task.
- */
 export function parseDetailSlug(
   slug: string[] | undefined
 ): { projectId: number; uniqueIndex: number } | null {
@@ -248,7 +236,6 @@ export async function findTaskByTicketNumber(ticketNumber: string, userId: numbe
   }
 }
 
-/** Task detail SSR — fields used by TaskDetailComp + hooks (see taskDetail benchmark parity). */
 export function taskDetailInclude(userId: number, projectId: number, cachedRelations = false) {
   return {
     user: { select: userSelect },
@@ -273,9 +260,6 @@ export function taskDetailInclude(userId: number, projectId: number, cachedRelat
     estimate: true,
     cycle: true,
     drafts: { where: { userId, saved: false } },
-    // Same predicate as the Inbox screen. A looser _count (any Normal row for
-    // this user) made mobile show the blue remove-from-inbox icon on tasks that
-    // are snoozed, agent-owned, or otherwise hidden from Inbox (HTPR-6365).
     notifications: {
       where: visibleUserInboxWhere(userId),
       take: 1,
@@ -317,13 +301,6 @@ export function taskDetailInclude(userId: number, projectId: number, cachedRelat
           orderBy: { startDate: "asc" },
           take: CYCLE_WINDOW_SIZE,
         },
-        // The detail page sets `currentProjectAtom` from this payload, and the
-        // AI model picker derives the board's plan from it. Without the
-        // subscription rows and BYOK flags a paid board reads as Free, so a
-        // ticket opened from a board-agnostic view (All views, inbox, search)
-        // locked every premium model and fell back to GPT-5.4 mini
-        // (HTPR-5541). Same fields the board list already sends
-        // (`teamBillingSnapshotSelect`).
         team: {
           include: {
             googleAccount: true,
@@ -385,7 +362,6 @@ export function taskDetailInclude(userId: number, projectId: number, cachedRelat
         sectionId: true,
         createdAt: true,
         ...(cachedRelations ? {
-          // Only the source board has been authorized by taskWhere.
           description_: { where: { task: { projectId } }, select: { content: true } },
         } : {}),
       },
@@ -417,7 +393,6 @@ export function taskDetailInclude(userId: number, projectId: number, cachedRelat
       where: { commentId: null, userId },
       select: { id: true, type: true },
     },
-    // HTPR-7186: links may cross boards, so show only those the reader can still open.
     relatedToTasks: {
       where: { sourceTask: { project: projectContentAccessWhere(userId) } },
       include: {
@@ -487,8 +462,6 @@ export async function fetchTaskDetail(
   uniqueIndex: string | number,
   userId: number
 ) {
-  // Guard here, not just at the page: getTask() takes `uniqueIndex: any` from
-  // the API layer and would otherwise send NaN into Prisma too (HTPR-4838).
   const ticketNumber = typeof uniqueIndex === "string" && /^[A-Za-z0-9][A-Za-z0-9_-]*-\d+$/.test(uniqueIndex)
     ? uniqueIndex : null;
   if (ticketNumber && !(await isFeatureEnabled(HTPR_6868_TICKET_PREFIX_FLAG, userId))) return null;
@@ -507,7 +480,6 @@ export async function fetchTaskDetail(
   if (!task) return null;
 
   if (task.pullRequests.length > 0) {
-    // Keep GitHub off the render path without losing work when Vercel sends the response.
     waitUntil(
       refreshTaskPullRequests(task.id, task.pullRequests)
         .then(async (refreshed) => {
@@ -764,7 +736,6 @@ export async function fetchCommentsForSlug(slug: TaskDetailSlug, userId: number)
   ) as IComment[];
 }
 
-// ── Benchmark-only legacy queries ───────────────────────────────────────────
 
 export function legacyCommentsQuery(db: Db, taskId: number, userId: number) {
   return db.$queryRaw`

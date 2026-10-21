@@ -62,8 +62,8 @@ test("mobile comment composer text uses the app's content size", () => {
   // ...and the mobile create-comment branch is the one place that omits it,
   // which is why the rule never applied to the composer.
   const mobileBranch = mainContainer.slice(
-    mainContainer.indexOf("// FOR: New comment on mobile"),
-    mainContainer.indexOf("// FOR: Description and old comment."),
+    mainContainer.indexOf("if (mode === \"create-comment\""),
+    mainContainer.indexOf("else {\n      return (\n        <div\n          style={{\n            borderLeftWidth: mode === \"read-edit-description\" ? 0 : 0 }}\n          className={`\n            w-full min-h-[64px]\n            scrollbar-none\n            bg-comment-description\n            ${"),
   );
   assert.ok(mobileBranch.length > 0, "mobile create-comment branch not found");
   // Whitespace-normalised so reformatting cannot break this: inside the mobile
@@ -99,8 +99,8 @@ test("mobile send arrow inherits the button colour instead of hardcoding white",
 
 test("an unfocused saved mobile draft keeps the editor beside its toolbar", () => {
   const mobileBranch = mainContainer.slice(
-    mainContainer.indexOf("// FOR: New comment on mobile"),
-    mainContainer.indexOf("// FOR: Description and old comment."),
+    mainContainer.indexOf("if (mode === \"create-comment\""),
+    mainContainer.indexOf("else {\n      return (\n        <div\n          style={{\n            borderLeftWidth: mode === \"read-edit-description\" ? 0 : 0 }}\n          className={`\n            w-full min-h-[64px]\n            scrollbar-none\n            bg-comment-description\n            ${"),
   );
   assert.match(
     mobileBranch,
@@ -114,8 +114,8 @@ test("an unfocused saved mobile draft keeps the editor beside its toolbar", () =
 
 test("mobile create-comment uses AppSheet for both refine and compose", () => {
   const mobileBranch = mainContainer.slice(
-    mainContainer.indexOf("// FOR: New comment on mobile"),
-    mainContainer.indexOf("// FOR: Description and old comment."),
+    mainContainer.indexOf("if (mode === \"create-comment\""),
+    mainContainer.indexOf("else {\n      return (\n        <div\n          style={{\n            borderLeftWidth: mode === \"read-edit-description\" ? 0 : 0 }}\n          className={`\n            w-full min-h-[64px]\n            scrollbar-none\n            bg-comment-description\n            ${"),
   );
   const inlineDraftAi = read("src/components/RTE/Components/InlineDraftAiFloat.tsx");
   assert.match(mobileBranch, /aiRefineOpen/);
@@ -189,7 +189,7 @@ test("mobile recording confirmation uses the same 48 by 44 action", () => {
 
 test("mobile composer uses the card sheet and borderless recessed well", () => {
   const mobileBranch = newComment.slice(
-    newComment.indexOf("// {/* ====================== MOBILE"),
+    newComment.indexOf(": (\n                  <div\n                    tabIndex"),
     newComment.indexOf("const NewCommentPlaceholder"),
   );
   assert.match(

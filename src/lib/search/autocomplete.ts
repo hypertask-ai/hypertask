@@ -62,7 +62,6 @@ export function searchCompletion(text: string, names: Names = {}, commenterEnabl
   }
   const active = activeSearchValue(text, names, commenterEnabled)
   if (active) return { ...active, kind: 'value', operator: active.operator as SearchOperator, end: active.end ?? text.length }
-  // Do not offer operators inside quoted text or a value already being typed.
   if ((text.match(/(?<!\\)"/g)?.length ?? 0) % 2) return null
   const prefix = text.match(/(?:^|\s)(-?)([a-z]+)$/i)
   const operators = operatorSuggestions(prefix?.[2] ?? '', commenterEnabled)

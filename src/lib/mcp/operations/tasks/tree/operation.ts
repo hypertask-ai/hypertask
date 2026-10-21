@@ -1,13 +1,11 @@
+import { reportMcpOperationCrash } from "@/lib/mcp/operationCrashReport";
 import { wrapMcpRoute, validateMcpRouteAuth as validateMcpAuth, checkMcpRouteRateLimit as checkMcpRateLimit } from '@/lib/mcp/routeWrapper'
 import { NextRequest, NextResponse } from "next/server";
 
 import prisma from "@/lib/prisma";
-import { findTaskByIdentifier } from "@/lib/mcp/tasks/resolveTask";
+import { findTaskByIdentifier, taskIdentifierErrorResponse } from "@/lib/mcp/tasks/resolveTask";
 import { getProjectWhere } from "@/utils/controllers/projects/getAllIncludes";
 
-/**
- * Recursive task node for parent/subtask hierarchy.
- */
 export interface TaskTreeNode {
   id: number;
   ticketNumber?: string;
@@ -21,19 +19,9 @@ export interface TaskTreeResponse {
   tree: TaskTreeNode;
 }
 
-/** Max parent hops when walking to root (guards against cycles / bad data). */
 const MAX_ANCESTOR_HOPS = 256;
 
 
-/**
- * Parse and validate query params for GET /api/mcp/tasks/tree.
- * Exactly one of task_id or ticket_number is required.
- *
- * `depth` (optional): number of descendant levels to include below the root.
- * - Omit → full subtree (non-deleted children only).
- * - 0 → root only (no `children` on the root).
- * - D ≥ 1 → root expands children; each level decrements D until 0, then that node has no `children`.
- */
 function parseTreeQuery(searchParams: URLSearchParams):
   | {
       ok: true;
@@ -128,10 +116,6 @@ async function findRootTaskId(
   return { error: "Parent chain exceeds maximum depth" };
 }
 
-/**
- * `remainingDepth`: undefined = full subtree; 0 = do not attach children; n > 0 = recurse with n - 1 per child.
- * When truncated by depth, `children` is omitted on that node. When there are no subtasks, `children` is [].
- */
 async function buildTreeNode(
   taskId: number,
   userId: number,
@@ -193,13 +177,6 @@ async function buildTreeNode(
   return { ...node, children };
 }
 
-/**
- * GET /api/mcp/tasks/tree
- *
- * Returns the full family tree for a task: the topmost ancestor as `tree`, with nested subtasks.
- * Query: exactly one of `task_id` (positive int) or `ticket_number` (non-empty string).
- * Optional `depth` (non-negative int) limits how many descendant levels are expanded below the root.
- */
 export async function GET(request: NextRequest) {
   return wrapMcpRoute(async (request: NextRequest) => {
   try {
@@ -268,7 +245,10 @@ export async function GET(request: NextRequest) {
     };
     return NextResponse.json(body);
   } catch (error) {
+    const identifierResponse = taskIdentifierErrorResponse(error);
+    if (identifierResponse) return identifierResponse;
     console.error("Error building task tree:", error);
+    reportMcpOperationCrash(request, error);
     return NextResponse.json(
       {
         success: false,

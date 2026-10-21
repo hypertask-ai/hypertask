@@ -45,7 +45,7 @@ test("an inbox URL without a split initializes the default only once", () => {
 
 test("inbox startup cannot replace a cold cached ticket URL", () => {
   const source = require("node:fs").readFileSync(path.join(process.cwd(), "src/app/inbox/Inbox.tsx"), "utf8");
-  const start = source.indexOf("// Set active split on initial render");
+  const start = source.indexOf("useEffect(() => {\n    if (window");
   const end = source.indexOf("const handleBulkArchive", start);
   assert.ok(start >= 0 && end > start);
   const block = source.slice(start, end);

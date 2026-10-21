@@ -62,9 +62,6 @@ export function useAgentDetailSubscriptions({
       onApplied: bootstrapAgent,
     });
 
-    // Canonical runtime and membership fields are merged rather than replacing
-    // the agent: a poll landing between an edit and its save would otherwise
-    // throw the edit away.
     const poll = setInterval(() => {
       void fetchAgentRefresh({
         requestRef: agentId,
@@ -80,9 +77,6 @@ export function useAgentDetailSubscriptions({
     };
   }, [agentId, bootstrapAgent, fetchAgentRefresh]);
 
-  // The poll above bounds staleness at 30s, but an assignment broadcasts a
-  // board change event, so the assigned-ticket count can move the moment it
-  // happens instead of on the next tick.
   const subscribedAgentId = agent?.id;
   const boardIdsKey = (agent?.boards ?? []).map((b) => b.id).join(",");
   const boardRefreshTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -102,9 +96,6 @@ export function useAgentDetailSubscriptions({
         return;
       }
 
-      // Trailing debounce: bulk edits fire one event per ticket, so wait for
-      // the burst to settle and fetch once. A failed fetch is left to the
-      // poll above rather than retried into a loop.
       const scheduleRefresh = () => {
         if (boardRefreshTimer.current) clearTimeout(boardRefreshTimer.current);
         boardRefreshTimer.current = setTimeout(() => {

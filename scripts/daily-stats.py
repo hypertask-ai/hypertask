@@ -2,7 +2,7 @@
 """Daily stats page for Hypertask (YPER4-341).
 
 A plain script, no AI calls, read-only everywhere. It reads the boards, GitHub, the token-ladder status
-file, /proc and PostHog, renders one static HTML page and (with --publish) uploads it with htmlshare to a
+file and /proc, renders one static HTML page and (with --publish) uploads it with htmlshare to a
 fixed hypertask.app URL. A systemd user timer runs it every 30 minutes.
 
 Usage:
@@ -46,8 +46,7 @@ TYPE_NAMES = {'bug': 'Bugs', 'feature': 'Features', 'improvement': 'Improvements
               'security': 'Security', 'infra': 'Infra', 'other': 'Other'}
 COMMENT_CAP_DONE = 10
 COMMENT_CAP_RUNNERS = 6
-PH_PROJECT = '236160'
-PH_HOST = 'https://eu.posthog.com'
+RANGES = {'1h': 1, '3h': 3, '6h': 6, '12h': 12, '24h': 24, '2d': 48, '6d': 144, '7d': 168}
 
 API_CALLS = {'ht': 0, 'gh': 0, 'other': 0}
 
@@ -277,22 +276,29 @@ def fetch_comments(task):
 
 def fetch_prs(repo, since_date):
     rows = gh_json(['pr', 'list', '-R', repo, '--state', 'merged', '--search', f'merged:>={since_date}',
-                    '--limit', '100', '--json', 'number,title,url,mergedAt'])
+                    '--limit', '1000', '--json', 'number,title,url,mergedAt'])
+    if len(rows) >= 1000:
+        raise RuntimeError('PR history reached the 1000 row limit')
     return rows
 
 
-def fetch_deploys(now, today_start, yesterday_start):
-    rows = gh_json(['api', 'repos/hypertask-ai/hypertask/deployments?environment=Production&per_page=40'])
-    stamps = [(parse_ts(r['created_at']), r['id']) for r in rows]
-    today = sum(1 for ts, _ in stamps if ts >= today_start)
-    yesterday = sum(1 for ts, _ in stamps if yesterday_start <= ts < today_start)
+def fetch_deploys(now, since):
+    # Stop at the requested history boundary, with a cap inside the shared collection budget.
+    rows = []
+    for page in range(1, 11):
+        batch = gh_json(['api', f'repos/hypertask-ai/hypertask/deployments?environment=Production&per_page=100&page={page}'])
+        rows.extend(batch)
+        if len(batch) < 100 or parse_ts(batch[-1]['created_at']) < since:
+            break
+    else:
+        raise RuntimeError('deployment history reached the 1000 row limit')
     last_state, last_at = None, None
-    if stamps:
-        ts, did = max(stamps)
-        sts = gh_json(['api', f'repos/hypertask-ai/hypertask/deployments/{did}/statuses?per_page=1'])
+    if rows:
+        latest = max(rows, key=lambda r: r['created_at'])
+        sts = gh_json(['api', f'repos/hypertask-ai/hypertask/deployments/{latest["id"]}/statuses?per_page=1'])
         last_state = sts[0]['state'] if sts else 'pending'
-        last_at = ts.isoformat()
-    return {'today': today, 'yesterday': yesterday, 'last_state': last_state, 'last_at': last_at}
+        last_at = latest['created_at']
+    return {'events': [{'at': r['created_at']} for r in rows], 'last_state': last_state, 'last_at': last_at}
 
 
 def fetch_smoke():
@@ -315,8 +321,11 @@ def fetch_smoke():
 
 
 def fetch_ci_failures(since_date):
-    return gh_json(['run', 'list', '-R', 'hypertask-ai/hypertask', '--branch', 'production', '--status', 'failure',
-                    '--created', f'>={since_date}', '--limit', '30', '--json', 'displayTitle,url,createdAt,name'])
+    rows = gh_json(['run', 'list', '-R', 'hypertask-ai/hypertask', '--branch', 'production', '--status', 'failure',
+                    '--created', f'>={since_date}', '--limit', '1000', '--json', 'displayTitle,url,createdAt,name'])
+    if len(rows) >= 1000:
+        raise RuntimeError('CI history reached the 1000 row limit')
+    return rows
 
 
 def fetch_tokens():
@@ -335,30 +344,15 @@ def fetch_load():
     return {'load': [float(x) for x in load], 'mem_gb': mem, 'cpus': os.cpu_count() or 1}
 
 
-def fetch_posthog(today_start):
-    key = run(['stack-key', 'posthog', 'POSTHOG_READONLY_API_KEY'], timeout=20).strip()
-    if not key:
-        raise RuntimeError('key not available')
-    API_CALLS['other'] += 1
-    url = (f'{PH_HOST}/api/projects/{PH_PROJECT}/error_tracking/issues/'
-           '?limit=100&order_by=first_seen&order_direction=DESC&date_from=-2d')
-    req = urllib.request.Request(url, headers={'Authorization': 'Bearer ' + key})
-    with urllib.request.urlopen(req, timeout=25) as r:
-        d = json.load(r)
-    fresh = [i for i in d['results'] if parse_ts(i['first_seen']) >= today_start]
-    return {'new_today': len(fresh), 'sample': [i.get('description') or i.get('name') or '' for i in fresh[:3]]}
-
-
 def collect(now):
-    today_start, yesterday_start = day_bounds(now)
-    since = berlin(yesterday_start, '%Y-%m-%d')
-    today_date = berlin(today_start, '%Y-%m-%d')
+    since_at = now - timedelta(days=14)
+    since = since_at.strftime('%Y-%m-%d')
     data = {'now': now, 'boards': {}, 'comments': {}, 'prs': {}}
     for pid in BOARDS:
         data['boards'][pid] = safe(fetch_board, pid)
     tasks, _ = all_tasks(data)
-    done_today = done_between(tasks, today_start, now + timedelta(days=1))
-    for t in done_today[:COMMENT_CAP_DONE]:
+    done_recent = done_between(tasks, since_at, now)
+    for t in done_recent[:COMMENT_CAP_DONE]:
         data['comments'][t['id']] = safe(fetch_comments, t)
     active = [t for t in tasks if runner_name(t) and t.get('section') in ('In Progress', 'AI Review', 'QA')]
     active.sort(key=lambda t: t['updatedAt'])
@@ -371,20 +365,20 @@ def collect(now):
             fetched += 1
     for repo in REPOS:
         data['prs'][repo] = safe(fetch_prs, repo, since)
-    data['deploys'] = safe(fetch_deploys, now, today_start, yesterday_start)
+    data['deploys'] = safe(fetch_deploys, now, since_at)
     data['smoke'] = safe(fetch_smoke)
-    data['ci'] = safe(fetch_ci_failures, today_date)
+    data['ci'] = safe(fetch_ci_failures, since)
     data['tokens'] = safe(fetch_tokens)
     data['load'] = safe(fetch_load)
-    data['posthog'] = safe(fetch_posthog, today_start)
+    data['history_start'] = since_at.isoformat()
     return data
 
 
 # ---------------------------------------------------------------- rendering
 
 CSS = """
-:root{--bg-pageBackground:#ffffff;--bg-cardBackground:#ffffff;--color-white-black:#18181b;--color-text-light-gray:#727279;--border-light-gray-thin:#e2e2e6;--color-rich-text-link:#1365a3;--color-pull-request-green:#1a7f37;--color-pull-request-checks-red:#cf222e;--warn:#8e6a00;--tile:#f4f4f5}
-@media (prefers-color-scheme:dark){:root{--bg-pageBackground:#0e0e0e;--bg-cardBackground:#262a30;--color-white-black:#ffffff;--color-text-light-gray:#8e9093;--border-light-gray-thin:#33373e;--color-rich-text-link:#5896f1;--color-pull-request-green:#4ade80;--color-pull-request-checks-red:#f87171;--warn:#f1c21b;--tile:#0e0e0e}}
+:root{--stats-range-selected-bg:#1365a3;--stats-range-selected-fg:#ffffff;--bg-pageBackground:#ffffff;--bg-cardBackground:#ffffff;--color-white-black:#18181b;--color-text-light-gray:#727279;--border-light-gray-thin:#e2e2e6;--color-rich-text-link:#1365a3;--color-pull-request-green:#1a7f37;--color-pull-request-checks-red:#cf222e;--warn:#8e6a00;--tile:#f4f4f5}
+@media (prefers-color-scheme:dark){:root{--stats-range-selected-bg:#5896f1;--stats-range-selected-fg:#0e0e0e;--bg-pageBackground:#0e0e0e;--bg-cardBackground:#262a30;--color-white-black:#ffffff;--color-text-light-gray:#8e9093;--border-light-gray-thin:#33373e;--color-rich-text-link:#5896f1;--color-pull-request-green:#4ade80;--color-pull-request-checks-red:#f87171;--warn:#f1c21b;--tile:#0e0e0e}}
 *{box-sizing:border-box}
 body{margin:0;background:var(--bg-pageBackground);color:var(--color-white-black);font:16px/1.5 'IBM Plex Sans',system-ui,-apple-system,Segoe UI,sans-serif;overflow-x:hidden}
 main{max-width:1056px;margin:0 auto;padding:16px}
@@ -409,6 +403,13 @@ li{margin:4px 0}
 .ok{color:var(--color-pull-request-green)}
 .bad{color:var(--color-pull-request-checks-red)}
 .tag{display:inline-block;font-size:12px;padding:0 8px;background:var(--tile);border-radius:4px;margin-left:6px;white-space:nowrap}
+[hidden]{display:none!important}
+.ranges{display:flex;flex-wrap:wrap;gap:6px;margin:12px 0}
+.ranges button{font:inherit;font-size:14px;color:inherit;background:var(--tile);border:1px solid var(--border-light-gray-thin);border-radius:4px;padding:6px 10px;cursor:pointer}
+@media (max-width:640px){.ranges button{min-width:44px;min-height:44px}}
+.ranges button[aria-pressed="true"]{background:var(--stats-range-selected-bg)!important;border-color:var(--stats-range-selected-bg)!important;color:var(--stats-range-selected-fg)!important;font-weight:600}
+.ranges button:focus-visible{outline:2px solid var(--color-rich-text-link);outline-offset:2px}
+.delta{font-size:13px;color:var(--color-text-light-gray);margin-top:6px}
 h3{font-size:16px;margin:16px 0 4px}
 .scroll{overflow-x:auto}
 """
@@ -448,7 +449,7 @@ def updated_line(now, bad_msg=None):
 def sec_waiting(data, tasks, missing, now):
     rows = [t for t in tasks if t.get('section') in WAITING_COLUMNS]
     rows.sort(key=lambda t: t['updatedAt'])
-    out = ['<section id="waiting"><h2>Waiting on Valentin</h2>']
+    out = ['<section id="waiting"><h2>Waiting on Valentin (now)</h2>']
     if missing:
         out.append(f'<p>Board {", ".join(str(m) for m in missing)}: {na()}</p>')
     if not rows:
@@ -463,103 +464,8 @@ def sec_waiting(data, tasks, missing, now):
     return ''.join(out)
 
 
-def pr_stats(data, today_start, yesterday_start):
-    """{repo: (today_list, yesterday_list) or None}"""
-    res = {}
-    for repo in REPOS:
-        src = data.get('prs', {}).get(repo)
-        if not src or not src.get('ok'):
-            res[repo] = (None, src['error'] if src else 'no data')
-            continue
-        today, yest = [], []
-        for pr in src['data']:
-            ts = parse_ts(pr['mergedAt'])
-            if ts >= today_start:
-                today.append(pr)
-            elif ts >= yesterday_start:
-                yest.append(pr)
-        res[repo] = ((today, yest), None)
-    return res
-
-
-def sec_today(data, tasks, missing, now):
-    ts, ys = day_bounds(now)
-    d_today = done_between(tasks, ts, now + timedelta(days=1))
-    d_yest = done_between(tasks, ys, ts)
-    ct, cy = count_types(d_today), count_types(d_yest)
-    out = ['<section id="today"><h2>Today so far</h2>',
-           f'<p class="muted">Since 00:00 Europe/Berlin. Yesterday is the full previous day.</p>']
-    if missing:
-        out.append(f'<p>Done counts miss board {", ".join(str(m) for m in missing)}: {na()}</p>')
-    out.append('<div class="scroll"><table><tr><th>Tickets moved to Done</th><th class="num">Today</th><th class="num">Yesterday</th></tr>')
-    out.append(f'<tr><td><strong>All</strong></td><td class="num"><strong>{len(d_today)}</strong></td><td class="num"><strong>{len(d_yest)}</strong></td></tr>')
-    for k in TYPES:
-        out.append(f'<tr><td>{TYPE_NAMES[k]}</td><td class="num">{ct[k]}</td><td class="num">{cy[k]}</td></tr>')
-    out.append('</table></div>')
-
-    out.append('<h3>Pull requests merged</h3><div class="scroll"><table><tr><th>Repo</th><th class="num">Today</th><th class="num">Yesterday</th></tr>')
-    prs = pr_stats(data, ts, ys)
-    for repo in REPOS:
-        val, err = prs[repo]
-        if val is None:
-            out.append(f'<tr><td>{esc(repo.split("/")[1])}</td><td colspan="2">{na(err)}</td></tr>')
-        else:
-            out.append(f'<tr><td>{esc(repo.split("/")[1])}</td><td class="num">{len(val[0])}</td><td class="num">{len(val[1])}</td></tr>')
-    out.append('</table></div>')
-    listed = [(repo, pr) for repo in REPOS if prs[repo][0] for pr in prs[repo][0][0]]
-    if listed:
-        out.append('<h3>Merged today</h3><ul>')
-        for repo, pr in listed:
-            out.append(f'<li>{link(pr["url"], pr["title"])} <span class="tag">{esc(repo.split("/")[1])}</span></li>')
-        out.append('</ul>')
-
-    out.append('<h3>Production</h3>')
-    dep = data.get('deploys')
-    if dep and dep.get('ok'):
-        d = dep['data']
-        state = d['last_state'] or 'none'
-        cls = 'ok' if state == 'success' else 'bad'
-        when = berlin(parse_ts(d['last_at'])) if d['last_at'] else ''
-        out.append(f'<p>Deploys to production: <strong>{d["today"]}</strong> today, {d["yesterday"]} yesterday. '
-                   f'Last one: <span class="{cls}">{esc(state)}</span> {esc(when)}.</p>')
-    else:
-        out.append(f'<p>Deploys: {na(dep["error"] if dep else None)}</p>')
-    sm = data.get('smoke')
-    if sm and sm.get('ok'):
-        d = sm['data']
-        cls = 'ok' if d['http'] == 200 else 'bad'
-        line = f'Live check of {esc(APP)}: <span class="{cls}">HTTP {d["http"]}</span>.'
-        if d.get('workflow'):
-            w = d['workflow']
-            wc = 'ok' if w['conclusion'] == 'success' else 'bad'
-            line += f' Latest App Smoke run: <span class="{wc}">{esc(w["conclusion"])}</span> at {esc(berlin(parse_ts(w["at"])))}.'
-        out.append(f'<p>{line}</p>')
-    else:
-        out.append(f'<p>Live check: {na(sm["error"] if sm else None)}</p>')
-    out.append('</section>')
-    return ''.join(out)
-
-
-def sec_done(data, tasks, missing, now):
-    ts, _ = day_bounds(now)
-    done = done_between(tasks, ts, now + timedelta(days=1))
-    out = [f'<section id="done"><h2>Done today ({len(done)})</h2>']
-    if missing:
-        out.append(f'<p>Board {", ".join(str(m) for m in missing)}: {na()}</p>')
-    if not done:
-        out.append('<p class="muted">Nothing is done yet today.</p>')
-    else:
-        out.append('<ul>')
-        for t in done:
-            tag = TYPE_NAMES[classify(t)]
-            out.append(f'<li>{ticket_link(t)} <span class="tag">{esc(tag)}</span> <span class="muted">{esc(berlin(parse_ts(t["updatedAt"])))}</span></li>')
-        out.append('</ul>')
-    out.append('</section>')
-    return ''.join(out)
-
-
 def sec_flight(data, tasks, missing, now):
-    out = ['<section id="flight"><h2>In flight</h2>']
+    out = ['<section id="flight"><h2>In flight (now)</h2>']
     if missing:
         out.append(f'<p>Board {", ".join(str(m) for m in missing)}: {na()}</p>')
     by = {c: [t for t in tasks if t.get('section') == c] for c in FLIGHT_COLUMNS}
@@ -590,7 +496,7 @@ def sec_flight(data, tasks, missing, now):
 
 def sec_runners(data, tasks, missing, now):
     holding, order = runners_view(tasks, data.get('comments', {}), now)
-    out = ['<section id="runners"><h2>Runners</h2>']
+    out = ['<section id="runners"><h2>Runners (now)</h2>']
     if missing:
         out.append(f'<p>Board {", ".join(str(m) for m in missing)}: {na()}</p>')
     if not order:
@@ -611,63 +517,256 @@ def sec_runners(data, tasks, missing, now):
     return ''.join(out)
 
 
-def sec_health(data, now):
-    out = ['<section id="health"><h2>Health</h2>']
-    cells = []
-    tk = data.get('tokens')
-    if tk and tk.get('ok'):
-        cells.append(tile(f'{tk["data"]["claude"]:.0f}%', 'Claude weekly usage'))
-        cells.append(tile(f'{tk["data"]["codex"]:.0f}%', 'Codex weekly usage'))
-    else:
-        cells.append(f'<div class="tile"><div class="l">Claude and Codex weekly usage</div>{na(tk["error"] if tk else None)}</div>')
-    ld = data.get('load')
-    if ld and ld.get('ok'):
-        l1 = ld['data']['load'][0]
-        cells.append(tile(f'{l1:.1f}', f'VPS load (1 min), {ld["data"]["cpus"]} CPUs'))
-        cells.append(tile(f'{ld["data"]["mem_gb"]:.1f} GB', 'Free memory'))
-    else:
-        cells.append(f'<div class="tile"><div class="l">VPS load and memory</div>{na(ld["error"] if ld else None)}</div>')
-    ph = data.get('posthog')
-    if ph and ph.get('ok'):
-        cells.append(tile(ph['data']['new_today'], 'New PostHog error issues today'))
-    else:
-        cells.append(f'<div class="tile"><div class="l">New PostHog error issues today</div>{na(ph["error"] if ph else None)}</div>')
-    ci = data.get('ci')
-    if ci and ci.get('ok'):
-        cells.append(tile(len(ci['data']), 'Failed CI runs on production today'))
-    else:
-        cells.append(f'<div class="tile"><div class="l">Failed CI runs on production today</div>{na(ci["error"] if ci else None)}</div>')
-    out.append('<div class="grid">' + ''.join(cells) + '</div>')
-    if ci and ci.get('ok') and ci['data']:
-        ts, _ = day_bounds(now)
-        out.append('<h3>Failed runs</h3><ul>')
-        for r in ci['data']:
-            out.append(f'<li>{link(r["url"], r.get("displayTitle") or r.get("name") or "run")} <span class="muted">{esc(berlin(parse_ts(r["createdAt"])))}</span></li>')
-        out.append('</ul>')
-    out.append('</section>')
+def build_events(data):
+    """Only timestamped facts, bounded to 14 days. Done uses the board's last-change timestamp."""
+    now = data['now']
+    since = now - timedelta(days=14)
+    events = []
+
+    def add(metric, at, **fields):
+        ts = parse_ts(at)
+        if ts and since <= ts < now:
+            events.append(dict(metric=metric, at=ts.isoformat(), **fields))
+
+    tasks, _ = all_tasks(data)
+    for t in tasks:
+        fields = dict(title=t.get('title') or '(untitled)', url=ticket_url(t), type=classify(t))
+        if t.get('section') == 'Done':
+            mins = speed_minutes([t], data.get('comments', {}))
+            add('done', t.get('updatedAt'), minutes=mins[0] if mins else None, **fields)
+        names = {n.lower() for n in label_names(t)}
+        if classify(t) == 'bug' or 'bug' in names or t.get('section') == 'Bugs':
+            add('bugs', t.get('createdAt'), **fields)
+        if t.get('projectId') == 15 and 'prod-error' in names:
+            add('errors', t.get('createdAt'), **fields)
+    for repo, src in data.get('prs', {}).items():
+        if src.get('ok'):
+            for pr in src['data']:
+                add('prs', pr['mergedAt'], repo=repo, title=pr['title'], url=pr['url'])
+    for metric, source in [('deploys', 'deploys'), ('ci', 'ci')]:
+        src = data.get(source, {})
+        if src.get('ok'):
+            rows = src['data'].get('events', []) if metric == 'deploys' else src['data']
+            for row in rows:
+                add(metric, row.get('at') or row.get('createdAt'),
+                    title=row.get('displayTitle') or row.get('name') or 'run', url=row.get('url') or '')
+    return events
+
+
+def range_snapshot(events, now, range_key='24h', history_start=None, unavailable=()):
+    """Pure reference for the browser: half-open current and equal-length previous periods."""
+    key = range_key if range_key in RANGES else '24h'
+    start = now - timedelta(hours=RANGES[key])
+    previous_start = start - timedelta(hours=RANGES[key])
+    current = [e for e in events if start <= parse_ts(e['at']) < now]
+    previous = [e for e in events if previous_start <= parse_ts(e['at']) < start]
+    counts, previous_counts, deltas = {}, {}, {}
+    keys = ['done', 'bugs', 'errors', 'prs', 'deploys', 'ci']
+    keys += ['done:' + t for t in TYPES] + ['prs:' + r for r in REPOS]
+    for name in keys:
+        metric, _, group = name.partition(':')
+        field = 'type' if metric == 'done' else 'repo'
+        count = lambda rows: sum(e['metric'] == metric and (not group or e.get(field) == group) for e in rows)
+        available = name not in unavailable and (metric not in unavailable or (metric == 'prs' and group))
+        complete = not history_start or parse_ts(history_start) <= previous_start
+        counts[name] = count(current) if available else None
+        previous_counts[name] = count(previous) if available and complete else None
+        deltas[name] = counts[name] - previous_counts[name] if available and complete else None
+    return dict(key=key, current=current, counts=counts, previous=previous_counts, deltas=deltas)
+
+
+def event_config(data):
+    tasks, missing = all_tasks(data)
+    unavailable = []
+    if missing:
+        unavailable += ['done', 'bugs']
+    if 15 in missing:
+        unavailable.append('errors')
+    for repo in REPOS:
+        if not data.get('prs', {}).get(repo, {}).get('ok'):
+            unavailable += ['prs:' + repo, 'prs']
+    for source in ('deploys', 'ci'):
+        if not data.get(source, {}).get('ok'):
+            unavailable.append(source)
+    holding, _ = runners_view(tasks, data.get('comments', {}), data['now'])
+    return dict(now=data['now'].isoformat(), ranges=RANGES, events=build_events(data),
+                history_start=data.get('history_start', (data['now'] - timedelta(days=14)).isoformat()),
+                unavailable=sorted(set(unavailable)),
+                waiting=None if missing else sum(t.get('section') in WAITING_COLUMNS for t in tasks),
+                runners=None if missing else len(holding))
+
+
+def embedded_json(value):
+    return scrub(json.dumps(value, ensure_ascii=False).replace('</', r'<\/').replace('<', r'\u003c'))
+
+
+def stat(snapshot, name, attr='count'):
+    value = snapshot['previous' if attr == 'previous' else 'counts'][name]
+    return f'<span data-{attr}="{esc(name)}">{value if value is not None else "n/a"}</span>'
+
+
+def event_list(config, metric, snapshot):
+    out = ['<ul>']
+    for i, e in sorted(enumerate(config['events']), key=lambda pair: pair[1]['at'], reverse=True):
+        if e['metric'] != metric:
+            continue
+        hidden = '' if e in snapshot['current'] else ' hidden'
+        out.append(f'<li data-event="{i}"{hidden}>{link(e["url"], e["title"])} '
+                   f'<span class="muted">{esc(berlin(parse_ts(e["at"]), "%d %b %H:%M"))}</span></li>')
+    out.append('</ul>')
+    if metric in config['unavailable']:
+        out.append('<p class="na">Source unavailable; any listed events are partial.</p>')
+    empty = not any(e['metric'] == metric for e in snapshot['current'])
+    out.append(f'<p class="muted" data-empty="{metric}"{"" if empty else " hidden"}>No events in this range.</p>')
     return ''.join(out)
 
 
-def sec_speed(data, tasks, missing, now):
-    ts, _ = day_bounds(now)
-    done = done_between(tasks, ts, now + timedelta(days=1))
-    vals = speed_minutes(done, data.get('comments', {}))
-    out = ['<section id="speed"><h2>Speed</h2>']
-    if vals:
-        med = statistics.median(vals)
-        out.append(f'<p>Median time from "Claimed." to Done: <strong>{esc(human_span(timedelta(minutes=med)))}</strong> '
-                   f'<span class="muted">(based on {len(vals)} of {len(done)} tickets done today)</span></p>')
-    elif not done:
-        out.append('<p class="muted">No ticket is done yet today.</p>')
-    else:
-        out.append(f'<p>Median claim to Done: {na("no claim comment found on the tickets checked")}</p>')
-    out.append('</section>')
+def sec_vital(config, snapshot):
+    out = ['<section id="vital" aria-label="Vital numbers"><div class="grid">']
+    labels = {'done': 'Tickets Done', 'bugs': 'New bugs filed', 'errors': 'Production error tickets', 'prs': 'PRs merged'}
+    for metric, label in labels.items():
+        delta = snapshot['deltas'][metric]
+        text = f'{delta:+d} vs previous 24h' if delta is not None else 'n/a vs previous 24h'
+        out.append(f'<div class="tile"><div class="l">{label}</div><div class="n">{stat(snapshot, metric)}</div>'
+                   f'<div class="delta" data-delta="{metric}">{text}</div></div>')
+    out.extend(tile(config[key] if config[key] is not None else 'n/a', label + ' (now)')
+               for key, label in [('waiting', 'Waiting on Valentin'), ('runners', 'Active runners')])
+    out.append('</div><p class="muted">Done: current Done tickets by last change (not a transition log). '
+               'New bugs: ticket creation on boards 15 and 4060. Production errors: board 15 tickets labeled prod-error, '
+               'by creation time, not exception occurrences. PRs: GitHub mergedAt across the three repos below. '
+               'n/a means a source or complete previous period is unavailable.</p></section>')
     return ''.join(out)
+
+
+def sec_period(data, config, snapshot):
+    out = ['<section id="today"><h2>Selected period</h2><p class="muted">Rolling range ending at the data update, '
+           'compared with the preceding period of exactly the same length.</p>',
+           '<div class="scroll"><table><tr><th>Tickets Done</th><th class="num">Selected</th><th class="num">Previous</th></tr>']
+    for key, label in [('done', 'All')] + [('done:' + k, TYPE_NAMES[k]) for k in TYPES]:
+        out.append(f'<tr><td>{label}</td><td class="num">{stat(snapshot, key)}</td><td class="num">{stat(snapshot, key, "previous")}</td></tr>')
+    out.append('</table></div><h3>Pull requests merged</h3><div class="scroll"><table><tr><th>Repo</th><th class="num">Selected</th><th class="num">Previous</th></tr>')
+    for repo in REPOS:
+        key = 'prs:' + repo
+        out.append(f'<tr><td>{esc(repo.split("/")[1])}</td><td class="num">{stat(snapshot, key)}</td><td class="num">{stat(snapshot, key, "previous")}</td></tr>')
+    out.append('</table></div>' + event_list(config, 'prs', snapshot))
+    out.append(f'<h3>Production</h3><p>Deploys in selected range: <strong>{stat(snapshot, "deploys")}</strong>; '
+               f'previous: {stat(snapshot, "deploys", "previous")}.</p>')
+    dep = data.get('deploys', {})
+    if dep.get('ok'):
+        d = dep['data']
+        state = d.get('last_state') or 'none'
+        cls = 'ok' if state == 'success' else 'bad'
+        when = berlin(parse_ts(d['last_at']), '%Y-%m-%d %H:%M') if d.get('last_at') else ''
+        out.append(f'<p>Latest deploy (now): <span class="{cls}">{esc(state)}</span> {esc(when)} Berlin.</p>')
+    else:
+        out.append(f'<p>Latest deploy (now): {na()}</p>')
+    sm = data.get('smoke', {})
+    if sm.get('ok'):
+        d = sm['data']
+        cls = 'ok' if d['http'] == 200 else 'bad'
+        line = f'Live check of {esc(APP)} (now): <span class="{cls}">HTTP {d["http"]}</span>.'
+        if d.get('workflow'):
+            w = d['workflow']
+            wc = 'ok' if w['conclusion'] == 'success' else 'bad'
+            line += f' Latest App Smoke (now): <span class="{wc}">{esc(w["conclusion"])}</span> at {esc(berlin(parse_ts(w["at"])))} Berlin.'
+        out.append(f'<p>{line}</p>')
+    else:
+        out.append(f'<p>Live check (now): {na()}</p>')
+    out.append('</section>')
+    for metric, title in [('done', 'Done'), ('bugs', 'New bugs filed'), ('errors', 'Production error tickets')]:
+        out.append(f'<section id="{metric}"><h2>{title} in selected range ({stat(snapshot, metric)})</h2>'
+                   + event_list(config, metric, snapshot) + '</section>')
+    return ''.join(out)
+
+
+def sec_health(data, config, snapshot):
+    out = ['<section id="health"><h2>Health</h2><div class="grid">']
+    tk = data.get('tokens', {})
+    if tk.get('ok'):
+        out += [tile(f'{tk["data"][key]:.0f}%', label + ' weekly usage (now)') for key, label in [('claude', 'Claude'), ('codex', 'Codex')]]
+    else:
+        out.append(tile('n/a', 'Claude and Codex weekly usage (now)'))
+    ld = data.get('load', {})
+    if ld.get('ok'):
+        out += [tile(f'{ld["data"]["load"][0]:.1f}', f'VPS load (now, 1 min), {ld["data"]["cpus"]} CPUs'),
+                tile(f'{ld["data"]["mem_gb"]:.1f} GB', 'Free memory (now)')]
+    else:
+        out.append(tile('n/a', 'VPS load and memory (now)'))
+    out.append(f'</div><p>Failed CI runs on production in selected range: {stat(snapshot, "ci")}</p>'
+               + event_list(config, 'ci', snapshot) + '</section>')
+    return ''.join(out)
+
+
+def sec_speed(config, snapshot):
+    vals = [e['minutes'] for e in snapshot['current'] if e['metric'] == 'done' and e.get('minutes') is not None]
+    med = f'{statistics.median(vals):.0f} min' if vals else 'n/a'
+    return (f'<section id="speed"><h2>Speed in selected range</h2><p>Median time from "Claimed." to Done: '
+            f'<strong data-speed="median">{med}</strong> <span class="muted">(based on '
+            f'<span data-speed="sample">{len(vals)}</span> of {stat(snapshot, "done")} tickets)</span></p>'
+            '<p class="muted">Sample limited to the 10 most recently done tickets with fetched claim comments.</p></section>')
+
+
+BROWSER_JS = r"""
+const config = JSON.parse(document.getElementById('stats-events').textContent);
+function validRange(value) { return Object.hasOwn(config.ranges, value) ? value : '24h'; }
+function snapshot(value) {
+  const key = validRange(value), end = Date.parse(config.now), hours = config.ranges[key];
+  const start = end - hours * 3600000, previousStart = start - hours * 3600000;
+  const current = config.events.filter(e => Date.parse(e.at) >= start && Date.parse(e.at) < end);
+  const previous = config.events.filter(e => Date.parse(e.at) >= previousStart && Date.parse(e.at) < start);
+  const counts = {}, before = {}, deltas = {};
+  const keys = ['done', 'bugs', 'errors', 'prs', 'deploys', 'ci',
+    ...['bug', 'feature', 'improvement', 'security', 'infra', 'other'].map(t => 'done:' + t),
+    ...['hypertask-ai/hypertask', 'hypertask-ai/cli', 'hypertask-ai/agent-fleet'].map(r => 'prs:' + r)];
+  for (const name of keys) {
+    const [metric, group] = name.split(':');
+    const count = rows => rows.filter(e => e.metric === metric && (!group || e[metric === 'done' ? 'type' : 'repo'] === group)).length;
+    const available = !config.unavailable.includes(name) && (!config.unavailable.includes(metric) || (metric === 'prs' && group));
+    const complete = Date.parse(config.history_start) <= previousStart;
+    counts[name] = available ? count(current) : null;
+    before[name] = available && complete ? count(previous) : null;
+    deltas[name] = available && complete ? counts[name] - before[name] : null;
+  }
+  return {key, current, counts, previous: before, deltas};
+}
+function applyRange(value) {
+  const s = snapshot(value), show = n => n === null ? 'n/a' : String(n);
+  document.querySelectorAll('[data-count]').forEach(el => { el.textContent = show(s.counts[el.dataset.count]); });
+  document.querySelectorAll('[data-previous]').forEach(el => { el.textContent = show(s.previous[el.dataset.previous]); });
+  const label = s.key.endsWith('d') ? s.key.slice(0, -1) + ' days' : s.key;
+  document.getElementById('selected-range').textContent = 'Last ' + label + ' (ending at last update)';
+  document.querySelectorAll('[data-delta]').forEach(el => {
+    const n = s.deltas[el.dataset.delta];
+    el.textContent = (n === null ? 'n/a' : (n >= 0 ? '+' : '') + n) + ' vs previous ' + label;
+  });
+  const active = new Set(s.current);
+  document.querySelectorAll('[data-event]').forEach(el => { el.hidden = !active.has(config.events[Number(el.dataset.event)]); });
+  document.querySelectorAll('[data-empty]').forEach(el => {
+    const metric = el.dataset.empty;
+    el.hidden = s.current.some(e => e.metric === metric);
+    el.textContent = 'No events in this range.';
+  });
+  const minutes = s.current.filter(e => e.metric === 'done' && e.minutes !== null).map(e => e.minutes).sort((a,b) => a-b);
+  const mid = Math.floor(minutes.length / 2);
+  const median = minutes.length ? (minutes.length % 2 ? minutes[mid] : (minutes[mid - 1] + minutes[mid]) / 2) : null;
+  document.querySelector('[data-speed="median"]').textContent = median === null ? 'n/a' : Math.round(median) + ' min';
+  document.querySelector('[data-speed="sample"]').textContent = String(minutes.length);
+  document.querySelectorAll('[data-range]').forEach(el => { el.setAttribute('aria-pressed', String(el.dataset.range === s.key)); });
+  const url = new URL(location.href);
+  url.searchParams.set('range', s.key);
+  history.replaceState(null, '', url);
+}
+document.querySelectorAll('[data-range]').forEach(el => { el.addEventListener('click', () => applyRange(el.dataset.range)); });
+applyRange(new URL(location.href).searchParams.get('range'));
+"""
 
 
 def render(data, now=None):
     now = now or data['now']
     tasks, missing = all_tasks(data)
+    config = event_config(data)
+    snapshot = range_snapshot(config['events'], data['now'], history_start=config['history_start'], unavailable=config['unavailable'])
+    buttons = ''.join(f'<button type="button" data-range="{key}" aria-pressed="{str(key == "24h").lower()}">{key[:-1] + " days" if key.endswith("d") else key}</button>' for key in RANGES)
     parts = [
         '<!doctype html><html lang="en"><head><meta charset="utf-8">',
         '<meta name="viewport" content="width=device-width,initial-scale=1">',
@@ -675,16 +774,19 @@ def render(data, now=None):
         '<title>Hypertask daily stats</title>',
         '<link rel="preconnect" href="https://fonts.googleapis.com">',
         '<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@300;400;600&display=swap" rel="stylesheet">',
-        f'<style>{CSS}</style></head><body><main>',
-        '<h1>Hypertask daily stats</h1>',
+        f'<style>{CSS}</style></head><body><main><h1>Hypertask daily stats</h1>',
         updated_line(now),
+        '<p id="selected-range" class="muted" aria-live="polite">Last 24h (ending at last update)</p>',
+        f'<nav class="ranges" aria-label="Time range">{buttons}</nav>',
+        sec_vital(config, snapshot),
         sec_waiting(data, tasks, missing, now),
-        sec_today(data, tasks, missing, now),
-        sec_done(data, tasks, missing, now),
+        sec_period(data, config, snapshot),
         sec_flight(data, tasks, missing, now),
         sec_runners(data, tasks, missing, now),
-        sec_health(data, now),
-        sec_speed(data, tasks, missing, now),
+        sec_health(data, config, snapshot),
+        sec_speed(config, snapshot),
+        f'<script id="stats-events" type="application/json">{embedded_json(config)}</script>',
+        f'<script>{BROWSER_JS}</script>',
         '</main></body></html>',
     ]
     return scrub(''.join(parts))

@@ -25,17 +25,13 @@ export const TourProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   
   const setSelectedTourId = useCallback((tourId: TourId) => {
     setSelectedTourIdState(tourId);
-    // Also update the tour hook's current tour ID
-    // This is handled via the tourId prop which useTour watches
   }, []);
   
   const contextValue: TourContextType = {
     startTour: tourHook.startTour,
     startComponentTour: tourHook.startComponentTour,
     endTour: tourHook.endTour,
-    // @ts-ignore - TS cache issue, function signature is correct
     isTourActive: tourHook.isTourActive,
-    // @ts-ignore - TS cache issue, property exists in useTour return
     continueTourInModal: tourHook.continueTourInModal,
     selectedTourId,
     setSelectedTourId,
@@ -44,7 +40,6 @@ export const TourProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   return (
     <TourContext.Provider value={contextValue}>
       {children}
-      {/* @ts-ignore - TS cache issue, property exists in useTour return */}
       {tourHook.TourComponent()}
     </TourContext.Provider>
   );

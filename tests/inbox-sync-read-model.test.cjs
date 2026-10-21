@@ -1237,7 +1237,7 @@ test("the Inbox integration hydrates, reconciles, persists confirmed data, measu
   assert.doesNotMatch(indexedDb, /objectStore\(STORE_NAME\)\.delete/);
   assert.match(indexedDb, /isInboxReadModelSnapshotV1\(existing, accountId\)/);
   assert.match(optimistic, /updateInboxOptimistically/);
-  assert.match(optimistic, /Agent and legacy Inbox queries/);
+  assert.match(optimistic, /if \(!currentPayload\) \{[\s\S]*const legacyBase =[\s\S]*applyInboxReadModelMutation\(/);
   assert.match(optimistic, /reserveInboxReadModelRevision\(accountId\)/);
   assert.match(optimistic, /persistRevisionFence\(accountId, revision\)/);
   assert.doesNotMatch(optimistic, /mutateInboxReadModel/);

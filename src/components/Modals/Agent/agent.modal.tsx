@@ -52,16 +52,13 @@ const AgentModal: React.FC<AgentModalProps> = ({ closeHandler }) => {
   const isEditMode = Boolean(agent?.id);
 
   const [displayName, setDisplayName] = useState("");
-  /** Uploaded S3 URL; null means use the initials fallback. */
   const [customPhotoURL, setCustomPhotoURL] = useState<string | null>(null);
   const [postsToImportant, setPostsToImportant] = useState(true);
-  /** Only meaningful in create mode; a native agent's runtime never changes after creation. */
   const [runtimeType, setRuntimeType] = useState<"EXTERNAL" | "NATIVE">(
     "EXTERNAL",
   );
   const [presetId, setPresetId] = useState<string>(AGENT_PRESETS[0].id);
   const [prompt, setPrompt] = useState<string>(AGENT_PRESETS[0].prompt);
-  /** Blob URL while cropping/uploading for instant preview. */
   const [objectUrl, setObjectUrl] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);

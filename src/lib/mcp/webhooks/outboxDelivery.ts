@@ -7,9 +7,6 @@ import {
 import { queueBoardWebhookDelivery } from './queue'
 
 export { BOARD_WEBHOOK_MAX_ATTEMPTS } from './events'
-// Sixty times the sender's own 5s AbortSignal.timeout in delivery.ts, so a slow
-// POST cannot outlive its claim and let a second worker send the same delivery.
-// Keep this above DELIVERY_TIMEOUT_MS if that timeout is ever raised.
 const PROCESSING_LEASE_MS = 5 * 60 * 1000
 const RETENTION_MS = 30 * 24 * 60 * 60 * 1000
 
@@ -29,14 +26,6 @@ export type BoardWebhookAttemptResult =
       error: string | null
     }
 
-/**
- * Attempt one board webhook delivery (HTPR-4530).
- *
- * The row is claimed with a conditional updateMany, so two overlapping QStash
- * messages for the same id cannot both POST. Retries are scheduled explicitly
- * rather than relying on QStash's own retry, which keeps one attempt in flight
- * at a time and keeps the backoff visible in the delivery row.
- */
 export async function deliverBoardWebhook(
   deliveryId: string
 ): Promise<BoardWebhookAttemptResult> {
@@ -54,9 +43,6 @@ export async function deliverBoardWebhook(
   })
   if (claimed.count === 0) return { status: 'skipped' }
 
-  // Re-read through the lease token as well as the id: a sweep can reclaim a
-  // stale claim between the update above and this read, and a worker that no
-  // longer owns the row must not go on to POST it.
   const delivery = await prisma.boardWebhookDelivery.findFirst({
     where: { id: deliveryId, processingAt: now },
     include: { subscription: true },
@@ -83,9 +69,6 @@ export async function deliverBoardWebhook(
   if (result.ok) {
     const deliveredAt = new Date()
     await prisma.$transaction(async (tx) => {
-      // processingAt is this worker's lease token: if a sweep reclaimed the
-      // row mid-flight, the timestamp no longer matches and this write is a
-      // no-op instead of overwriting the current attempt.
       const fenced = await tx.boardWebhookDelivery.updateMany({
         where: { id: delivery.id, processingAt: now },
         data: {
@@ -98,9 +81,6 @@ export async function deliverBoardWebhook(
           deliveredAt,
         },
       })
-      // The subscription health follows the same fence. A reclaimed worker
-      // reporting its own outcome would otherwise overwrite the result of the
-      // attempt that actually owns the row.
       if (fenced.count === 0) return
       await tx.boardWebhookAttempt.create({
         data: {
@@ -151,7 +131,11 @@ export async function deliverBoardWebhook(
     })
   })
 
-  if (!failedPermanently) {
+  if (failedPermanently) {
+    console.error(
+      `[board-webhook] delivery failed after ${attemptCount} attempts (${result.statusCode ? `HTTP ${result.statusCode}` : 'no response'})`
+    )
+  } else {
     await queueBoardWebhookDelivery(
       delivery.id,
       Math.floor(nextAttemptAt.getTime() / 1000)
@@ -170,7 +154,6 @@ export async function deliverBoardWebhook(
   }
 }
 
-/** Republish due rows stranded by a QStash publish failure, and prune history. */
 export async function sweepBoardWebhookDeliveries(limit = 100): Promise<number> {
   const now = new Date()
   const staleBefore = new Date(now.getTime() - PROCESSING_LEASE_MS)
@@ -180,9 +163,6 @@ export async function sweepBoardWebhookDeliveries(limit = 100): Promise<number> 
       createdAt: { lt: new Date(now.getTime() - RETENTION_MS) },
     },
   })
-  // A worker that claimed a row may have POSTed before dying, so the abandoned
-  // attempt still counts against the limit. Without this increment, a crash
-  // loop after a successful POST would redeliver the same event forever.
   await prisma.boardWebhookDelivery.updateMany({
     where: { status: 'processing', processingAt: { lt: staleBefore } },
     data: {
@@ -192,13 +172,16 @@ export async function sweepBoardWebhookDeliveries(limit = 100): Promise<number> 
       attemptCount: { increment: 1 },
     },
   })
-  await prisma.boardWebhookDelivery.updateMany({
+  const exhausted = await prisma.boardWebhookDelivery.updateMany({
     where: {
       status: { in: ['pending', 'retrying'] },
       attemptCount: { gte: BOARD_WEBHOOK_MAX_ATTEMPTS },
     },
     data: { status: 'failed', processingAt: null },
   })
+  for (let i = 0; i < exhausted.count; i++) {
+    console.error('[board-webhook] delivery failed after its worker stopped (no response)')
+  }
 
   const due = await prisma.boardWebhookDelivery.findMany({
     where: {

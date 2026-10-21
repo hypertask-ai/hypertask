@@ -78,7 +78,6 @@ export async function maybeSendWelcomeEmail(userId: number, opts?: { boardId?: n
       }
       return "sent";
     } catch (error) {
-      // An accepted email must keep its claim even if the audit write fails.
       if (!sent) await redis.del(claimKey);
       await prisma.logs.create({ data: { log: "welcome_email_failed", type: LogType.Error, status: Status.Normal, LoggedById: userId } });
       throw error;

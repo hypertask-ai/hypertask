@@ -1,12 +1,16 @@
 #!/usr/bin/env python3
 """Tests for daily-stats.py (YPER4-341). Renders from fixture data; no network, no boards touched."""
 import importlib.util
+import json
+import shutil
+import subprocess
 import os
 import re
 import tempfile
 import unittest
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
+from unittest.mock import patch
 
 HERE = Path(__file__).resolve().parent
 spec = importlib.util.spec_from_file_location('daily_stats', HERE / 'daily-stats.py')
@@ -21,7 +25,7 @@ NOW = datetime(2026, 10, 13, 8, 0, tzinfo=timezone.utc)
 def task(i, title, section, updated, pid=15, labels=(), assignee=None):
     return {
         'id': 1000 + i, 'uniqueIndex': i, 'projectId': pid, 'title': title, 'section': section,
-        'updatedAt': updated, 'labels': [{'name': n} for n in labels],
+        'updatedAt': updated, 'createdAt': updated, 'labels': [{'name': n} for n in labels],
         'assignees': [{'displayName': 'x', 'agent': {'displayName': assignee}}] if assignee else [],
     }
 
@@ -66,7 +70,7 @@ def fixture():
             'hypertask-ai/cli': {'ok': True, 'data': []},
             'hypertask-ai/agent-fleet': {'ok': False, 'error': 'repo not found'},
         },
-        'deploys': {'ok': True, 'data': {'today': 4, 'yesterday': 7, 'last_state': 'success', 'last_at': '2026-10-13T07:03:30Z'}},
+        'deploys': {'ok': True, 'data': {'today': 4, 'yesterday': 7, 'last_state': 'success', 'last_at': '2026-10-13T07:03:30Z', 'events': [{'at': '2026-10-13T07:03:30Z'}]}},
         'smoke': {'ok': True, 'data': {'http': 200, 'workflow': {'conclusion': 'success', 'at': '2026-10-13T06:58:13Z'}}},
         'ci': {'ok': True, 'data': [{'displayTitle': 'Broken build ' + EM + ' ouch', 'url': 'https://github.com/hypertask-ai/hypertask/actions/runs/9', 'createdAt': '2026-10-13T06:00:00Z'}]},
         'tokens': {'ok': True, 'data': {'claude': 20.0, 'codex': 1.0}},
@@ -98,7 +102,7 @@ class RenderTests(unittest.TestCase):
 
     def test_section_order(self):
         ids = re.findall(r'<section id="(\w+)"', self.page)
-        self.assertEqual(ids, ['waiting', 'today', 'done', 'flight', 'runners', 'health', 'speed'])
+        self.assertEqual(ids, ['vital', 'waiting', 'today', 'done', 'bugs', 'errors', 'flight', 'runners', 'health', 'speed'])
 
     def test_waiting_first_and_oldest_first_with_wait_time(self):
         w = self.page.split('id="waiting"')[1].split('</section>')[0]
@@ -133,14 +137,16 @@ class RenderTests(unittest.TestCase):
         self.assertEqual(y['infra'], 1)
         # The rendered table shows the same numbers.
         today = self.page.split('id="today"')[1]
-        self.assertIn('<td>Bugs</td><td class="num">2</td><td class="num">1</td>', today)
-        self.assertIn('<td>Infra</td><td class="num">1</td><td class="num">1</td>', today)
+        self.assertIn('<td>Bugs</td><td class="num"><span data-count="done:bug">3</span></td><td class="num"><span data-previous="done:bug">1</span></td>', today)
+        self.assertIn('<td>Infra</td><td class="num"><span data-count="done:infra">2</span></td><td class="num"><span data-previous="done:infra">0</span></td>', today)
 
     def test_pr_counts_and_missing_repo_isolated(self):
-        today = self.page.split('id="today"')[1]
-        self.assertIn('<td>hypertask</td><td class="num">1</td><td class="num">1</td>', today)
-        self.assertIn('<td>agent-fleet</td><td colspan="2"><span class="na">not available</span>', today)
-        self.assertIn('Deploys to production: <strong>4</strong> today, 7 yesterday', today)
+        config = ds.event_config(self.data)
+        snap = ds.range_snapshot(config['events'], NOW, unavailable=config['unavailable'])
+        self.assertEqual(snap['counts']['prs:hypertask-ai/hypertask'], 2)
+        self.assertIsNone(snap['counts']['prs:hypertask-ai/agent-fleet'])
+        self.assertIsNone(snap['counts']['prs'])
+        self.assertEqual(snap['counts']['deploys'], 1)
 
     def test_in_flight_priorities_and_security_marked(self):
         f = self.page.split('id="flight"')[1].split('</section>')[0]
@@ -156,11 +162,12 @@ class RenderTests(unittest.TestCase):
 
     def test_speed_median(self):
         s = self.page.split('id="speed"')[1]
-        self.assertIn('2 h 0 min', s)  # median of 60, 120, 180
-        self.assertIn('based on 3 of', s)
+        self.assertIn('120 min', s)  # median of 60, 120, 180
+        self.assertIn('data-speed="sample">3</span> of', s)
 
     def test_failed_source_shows_not_available_and_rest_renders(self):
-        self.assertIn('New PostHog error issues today</div><span class="na">not available</span>', self.page)
+        self.assertIn('Production error tickets', self.page)
+        self.assertIn('not exception occurrences', self.page)
         self.assertIn('Claude weekly usage', self.page)
         self.data['boards'][4060] = {'ok': False, 'error': 'boom'}
         page = ds.render(self.data)
@@ -171,8 +178,9 @@ class RenderTests(unittest.TestCase):
         self.assertIn('<meta name="viewport" content="width=device-width,initial-scale=1">', self.page)
         self.assertIn('prefers-color-scheme:dark', self.page)
         self.assertIn('<meta http-equiv="refresh" content="900">', self.page)
-        self.assertIn('IBM+Plex+Sans', self.page)
-        self.assertNotIn('<script', self.page)
+        self.assertIn('family=IBM+Plex+Sans', self.page)
+        self.assertIn('type="application/json"', self.page)
+        self.assertIn('history.replaceState', self.page)
 
 
 class FailureTests(unittest.TestCase):
@@ -212,14 +220,14 @@ class FailureTests(unittest.TestCase):
 
 
 class InstallTests(unittest.TestCase):
-    def test_install_copies_script_and_units_outside_the_worktree(self):
-        with tempfile.TemporaryDirectory() as tmp:
-            env = dict(os.environ, HOME=tmp, DAILY_STATS_NO_SYSTEMD='1')
-            import subprocess
-            subprocess.run(['python3', str(HERE / 'daily-stats.py'), '--install'], env=env, check=True, capture_output=True)
-            for p in ('.local/share/daily-stats/daily-stats.py', '.config/systemd/user/daily-stats.service',
-                      '.config/systemd/user/daily-stats.timer'):
-                self.assertTrue((Path(tmp) / p).is_file(), p)
+    def test_install_contract_without_installing_or_touching_units(self):
+        # Inspect calls only: this local verification must never install or alter deployed files.
+        with patch.object(Path, 'mkdir'), patch.object(Path, 'resolve', lambda p: p), \
+                patch.object(ds.shutil, 'copy2') as copy, patch.object(ds.os, 'chmod'), \
+                patch.object(ds.subprocess, 'run') as run, patch.dict(os.environ, DAILY_STATS_NO_SYSTEMD='1'):
+            ds.install()
+            self.assertEqual(copy.call_count, 5)
+            run.assert_not_called()
         timer = (HERE / 'daily-stats.timer').read_text()
         self.assertIn('OnCalendar=*:00/30', timer)
         self.assertIn('Persistent=true', timer)
@@ -257,6 +265,122 @@ class BoardPagingTests(unittest.TestCase):
                 ds.fetch_board(15)
         finally:
             ds.ht_get = real
+
+
+class RangeTests(unittest.TestCase):
+    def config(self):
+        data = fixture()
+        data['boards'][15]['data'] = [
+            task(1, 'Current recent', 'Done', '2026-10-13T07:30:00Z', labels=['Bug', 'prod-error']),
+            task(2, 'At 1h start', 'Done', '2026-10-13T07:00:00Z'),
+            task(3, 'Previous hour', 'Done', '2026-10-13T06:30:00Z'),
+            task(4, 'At 24h start', 'Done', '2026-10-12T08:00:00Z'),
+            task(5, 'Previous day', 'Done', '2026-10-11T09:00:00Z'),
+            task(6, 'At 48h start', 'Done', '2026-10-11T08:00:00Z'),
+            task(7, 'At now, excluded', 'Done', '2026-10-13T08:00:00Z'),
+            task(8, 'Older than history', 'Done', '2026-09-28T07:00:00Z'),
+        ]
+        data['boards'][4060]['data'] = []
+        data['prs'] = {r: {'ok': True, 'data': []} for r in ds.REPOS}
+        data['prs'][ds.REPOS[0]]['data'] = [
+            dict(number=i, title='PR ' + str(i), url='https://github.com/hypertask-ai/hypertask/pull/' + str(i), mergedAt=at)
+            for i, at in enumerate(['2026-10-13T07:45:00Z', '2026-10-13T06:45:00Z', '2026-10-11T10:00:00Z'], 1)]
+        return ds.event_config(data)
+
+    def test_hand_counted_1h_and_24h_and_boundaries(self):
+        c = self.config()
+        self.assertEqual(len([e for e in c['events'] if e['metric'] == 'done']), 6)
+        for key, counts, previous, deltas in [
+                ('1h', [2, 1, 1, 1], [1, 0, 0, 1], [1, 1, 1, 0]),
+                ('24h', [4, 1, 1, 2], [2, 0, 0, 1], [2, 1, 1, 1])]:
+            snap = ds.range_snapshot(c['events'], NOW, key, c['history_start'])
+            for field, values in [('counts', counts), ('previous', previous), ('deltas', deltas)]:
+                self.assertEqual([snap[field][m] for m in ['done', 'bugs', 'errors', 'prs']], values)
+
+    def test_all_ranges_and_invalid_fallback(self):
+        c = self.config()
+        for key in ds.RANGES:
+            self.assertEqual(ds.range_snapshot(c['events'], NOW, key)['key'], key)
+        for key in ['', None, '8h', 'toString', '__proto__']:
+            self.assertEqual(ds.range_snapshot(c['events'], NOW, key)['key'], '24h')
+
+    def test_short_history_only_disables_comparison(self):
+        c = self.config()
+        s = ds.range_snapshot(c['events'], NOW, '24h', (NOW - timedelta(hours=24)).isoformat())
+        self.assertEqual(s['counts']['done'], 4)
+        self.assertIsNone(s['previous']['done'])
+        self.assertIsNone(s['deltas']['done'])
+
+    def test_json_cannot_close_script_or_execute_title(self):
+        data = fixture()
+        title = '</script><script>alert("x")</script> & <img src=x onerror=alert(1)><!--<script>'
+        data['boards'][15]['data'][0]['title'] = title
+        page = ds.render(data)
+        raw = re.search(r'<script id="stats-events" type="application/json">(.*?)</script>', page, re.S).group(1)
+        self.assertNotIn('</', raw)
+        self.assertIn(r'\u003c\/script>', raw)
+        self.assertEqual(json.loads(raw)['events'][0]['title'], title)
+        self.assertIn('&lt;script&gt;', page)
+        self.assertEqual(page.count('</script>'), 2)
+
+    @unittest.skipUnless(shutil.which('node'), 'node unavailable')
+    def test_browser_counts_match_python_and_url_fallback(self):
+        c = self.config()
+        js = ds.BROWSER_JS.split('function applyRange')[0]
+        cases = list(ds.RANGES) + ['', None, '8h', '__proto__', 'toString']
+        prefix = 'const document = {getElementById: () => ({textContent: ' + json.dumps(json.dumps(c)) + '})};\n'
+        suffix = '\nconsole.log(JSON.stringify(' + json.dumps(cases) + '.map(k => snapshot(new URL("file:///stats.html?range=" + (k ?? "")).searchParams.get("range")))));'
+        result = subprocess.run(['node', '-e', prefix + js + suffix], capture_output=True, text=True, check=True)
+        values = json.loads(result.stdout)
+        for key, actual in zip(cases, values):
+            expected = ds.range_snapshot(c['events'], NOW, key, c['history_start'], c['unavailable'])
+            self.assertEqual(actual, expected)
+
+    def test_missing_board_does_not_become_zero(self):
+        data = fixture()
+        data['boards'][15] = {'ok': False, 'error': 'down'}
+        c = ds.event_config(data)
+        snap = ds.range_snapshot(c['events'], NOW, unavailable=c['unavailable'])
+        for metric in ['done', 'bugs', 'errors']:
+            self.assertIsNone(snap['counts'][metric])
+        self.assertIsNone(c['waiting'])
+        self.assertIsNone(c['runners'])
+
+
+class BudgetTests(unittest.TestCase):
+    def test_spent_collection_budget_does_not_start_command(self):
+        with patch.object(ds, 'COLLECT_DEADLINE', 0), patch.object(ds.subprocess, 'run') as run:
+            with self.assertRaisesRegex(RuntimeError, 'budget used up'):
+                ds.run(['unreachable'])
+            run.assert_not_called()
+
+    def test_run_timeout_is_limited_by_remaining_budget(self):
+        with patch.object(ds.time, 'monotonic', return_value=100), patch.object(ds, 'COLLECT_DEADLINE', 103), \
+                patch.object(ds.subprocess, 'run') as run:
+            run.return_value.returncode = 0
+            run.return_value.stdout = 'ok'
+            ds.run(['safe'], timeout=20)
+            self.assertEqual(run.call_args.kwargs['timeout'], 3)
+
+    def test_pr_cap_is_failure_not_a_short_count(self):
+        with patch.object(ds, 'gh_json', return_value=[{}] * 1000):
+            with self.assertRaisesRegex(RuntimeError, 'limit'):
+                ds.fetch_prs(ds.REPOS[0], '2026-10-01')
+
+    def test_collect_requests_14_days_and_caps_comments(self):
+        data = fixture()
+        with patch.object(ds, 'fetch_board', side_effect=lambda pid: data['boards'][pid]['data']), \
+                patch.object(ds, 'fetch_comments', return_value=[]) as comments, \
+                patch.object(ds, 'fetch_prs', return_value=[]) as prs, \
+                patch.object(ds, 'fetch_deploys', return_value={}) as deploys, \
+                patch.object(ds, 'fetch_ci_failures', return_value=[]) as ci, \
+                patch.object(ds, 'fetch_smoke'), patch.object(ds, 'fetch_tokens'), patch.object(ds, 'fetch_load'):
+            result = ds.collect(NOW)
+        self.assertEqual(result['history_start'], (NOW - timedelta(days=14)).isoformat())
+        self.assertEqual(prs.call_args.args[1], '2026-09-29')
+        self.assertEqual(ci.call_args.args[0], '2026-09-29')
+        self.assertEqual(deploys.call_args.args[1], NOW - timedelta(days=14))
+        self.assertLessEqual(comments.call_count, ds.COMMENT_CAP_DONE + ds.COMMENT_CAP_RUNNERS)
 
 
 if __name__ == '__main__':

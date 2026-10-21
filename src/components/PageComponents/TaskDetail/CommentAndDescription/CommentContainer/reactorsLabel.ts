@@ -1,8 +1,3 @@
-/**
- * Tooltip text for who reacted with one emoji. HTPR-7122: an agent's reaction
- * arrives with id null and a name like "Runner 5 (agent)", so it is never
- * counted as the viewer's own reaction, even when the viewer owns that agent.
- */
 export function reactorsLabel(
   users: ReadonlyArray<{ id?: number | null; displayName?: string | null }> | null | undefined,
   currentUserId: number | null | undefined
@@ -27,7 +22,6 @@ export function reactorsLabel(
   } else if (otherUsers.length === 1) {
     temp = includesCurrentUser ? `${otherUsers[0]} and you` : otherUsers[0];
   } else {
-    // Handle cases with more than 5 total users
     if (users.length > 5) {
       const displayUsers = otherUsers.slice(0, includesCurrentUser ? 4 : 5);
       const remainingCount =
@@ -39,7 +33,6 @@ export function reactorsLabel(
         ? `${displayUsers.join(", ")}, you and +${remainingCount}`
         : `${displayUsers.join(", ")} and +${remainingCount}`;
     } else {
-      // Original logic for 5 or fewer users
       const lastUser = otherUsers.pop();
       temp = includesCurrentUser
         ? `${otherUsers.join(", ")}, ${lastUser} and you`

@@ -129,7 +129,6 @@ const useHypertasksNavigate = () => {
           const target = new URL(payload, window.location.origin);
           const inboxFlow = target.searchParams.get("inboxFlow") ?? new URLSearchParams(window.location.search).get("inboxFlow");
           if (inboxFlow) {
-            // Arrow callers omit inboxFlow; retain it for the next playlist move.
             target.searchParams.set("inboxFlow", inboxFlow);
             const projectId = Number(route[1]), uniqueIndex = Number(route[2]);
             const inbox = queryClient.getQueryData<InboxQueryPayload>(inboxDataQueryKey(currentUser?.id));

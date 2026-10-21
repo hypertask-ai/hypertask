@@ -1,3 +1,4 @@
+import { reportMcpOperationCrash } from "@/lib/mcp/operationCrashReport";
 import { wrapMcpRoute, checkMcpRouteRateLimit as checkMcpRateLimit, validateMcpRouteAuth as validateMcpAuth } from '@/lib/mcp/routeWrapper'
 import { CustomFieldType } from "@prisma/client";
 import { NextRequest, NextResponse } from "next/server";
@@ -24,7 +25,6 @@ function isPositiveInteger(value: unknown): value is number {
   return typeof value === "number" && Number.isSafeInteger(value) && value > 0;
 }
 
-/** POST /api/mcp/custom-fields/value */
 export async function POST(request: NextRequest) {
   return wrapMcpRoute(async (request: NextRequest) => {
   try {
@@ -190,6 +190,7 @@ export async function POST(request: NextRequest) {
       return validationError(error.message, error.field, "invalid_value");
     }
     console.error("[MCP Custom Fields] Set value error:", error);
+    reportMcpOperationCrash(request, error);
     return NextResponse.json(
       { success: false, error: "Internal server error" },
       { status: 500 }

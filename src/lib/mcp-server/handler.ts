@@ -1,5 +1,5 @@
 import { aiFeedbackEnabled } from '@/lib/aiFeedback/enabled'
-import { observeFeedbackTools, queueAiFeedback } from '@/lib/aiFeedback/automatic'
+import { observeFeedbackTools, queueAiFeedback, queueMcpAuthFailure } from '@/lib/aiFeedback/automatic'
 import type { AuthInfo } from '@modelcontextprotocol/sdk/server/auth/types.js'
 import jwt from 'jsonwebtoken'
 import { MCP_TOOLS } from './tools'
@@ -16,7 +16,8 @@ import { resolvePortableTools } from './listQueryContract'
 import { selectMcpTools } from './consolidated-tools'
 import { isMcpV2Enabled } from '@/lib/mcp/mcpV2'
 import { getAgentRole } from '@/lib/mcp/agents/scopes'
-import { isFeatureEnabled, HTPR_6804_MCP_TOOLS_FLAG, HTPR_7203_MCP_FLAT_SCHEMA_FLAG } from '@/lib/flags'
+import { featureFlagCandidateUserIds, isFeatureEnabled, HTPR_6804_MCP_TOOLS_FLAG, HTPR_7203_MCP_FLAT_SCHEMA_FLAG } from '@/lib/flags'
+import { HTPR_7390_MCP_HANDSHAKE_FEEDBACK_FLAG } from '@/lib/flags/definitions/htpr-7390-mcp-handshake-feedback'
 import type { ManagementPermissions } from '@/lib/mcp/managementPermissions'
 import { NextRequest } from 'next/server'
 import { withMcpExecutionContext } from '@/lib/mcp/operationContext'
@@ -72,9 +73,6 @@ async function boundMcpRequest(request: Request): Promise<Request> {
     request,
     MCP_ATTACHMENT_MAX_REQUEST_BYTES
   )
-  // Rebuild from the URL instead of using the now-consumed request as the
-  // constructor input. The latter works in Undici locally but throws in the
-  // Vercel runtime after readRequestBytesWithCap has drained the body.
   return new Request(request.url, {
     method: request.method,
     headers: request.headers,
@@ -89,7 +87,14 @@ function optionsPortableTools() {
   return portableTools
 }
 
-/** Bound JSON-RPC transport bytes before the MCP handler parses tool arguments. */
+async function keylessHandshakeFeedbackIsQuiet(): Promise<boolean> {
+  try {
+    return await featureFlagCandidateUserIds(HTPR_7390_MCP_HANDSHAKE_FEEDBACK_FLAG) === null
+  } catch {
+    return false
+  }
+}
+
 export async function mcpHandler(request: Request): Promise<Response> {
   const timestamp = new Date()
   let telemetryUserId: number | undefined
@@ -116,7 +121,10 @@ export async function mcpHandler(request: Request): Promise<Response> {
     const bearer = extractBearerToken(working.headers.get('Authorization'))
     const authInfo = await verifyToken(working, bearer ?? undefined)
     if (!authInfo) {
-      queueAiFeedback({ surface: 'mcp', tool: 'mcp', status: 401, errorCode: 'unauthorized' })
+      if (bearer) queueMcpAuthFailure(working)
+      else if (!(await keylessHandshakeFeedbackIsQuiet())) {
+        queueAiFeedback({ surface: 'mcp', tool: 'mcp', status: 401, errorCode: 'unauthorized' })
+      }
       return mcpUnauthorizedResponse(working)
     }
 

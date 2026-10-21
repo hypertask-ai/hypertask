@@ -37,7 +37,6 @@ const handler: NextApiHandler = async (
       String(parsedProjectId),
       { id: userId },
       teamMembers,
-      // HTPR-7170: only the board's own team, never a teamId from the query.
       board.teamId ?? undefined,
     );
     return res.status(response.status).json(response.json);

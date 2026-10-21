@@ -8,7 +8,6 @@ import type { AgentScopes } from "@/lib/mcp/agents/scopes";
 import { getSessionUser } from "@/lib/auth/getSessionUser";
 
 
-/** Returns agents explicitly added to the board via Member.agentId. */
 export async function GET(request: NextRequest) {
   const userId = (await getSessionUser(request.headers))?.userId;
   if (!userId) {

@@ -77,9 +77,9 @@ test.after(() => {
 
 test("the previous 700-token cap reproduces an actual SDK JSON parsing failure", async () => {
   await assert.rejects(
-    ai.generateObject({
+    ai.generateText({
       model,
-      schema: require("zod").z.object({ name: require("zod").z.string() }),
+      output: ai.Output.object({ schema: require("zod").z.object({ name: require("zod").z.string() }) }),
       prompt: "Build a SaaS MVP",
       maxOutputTokens: 700,
     }),

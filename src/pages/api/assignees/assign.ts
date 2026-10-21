@@ -17,13 +17,6 @@ const handler: NextApiHandler = async (
   }
   try {
     const { userId, taskId, mode, userIds, agentId, intent } = req.body;
-    // HTPR-5090: an agent request carries no userId, and it does not need to.
-    // The board payload selects only { id, displayName, photoURL } for an
-    // assignee's agent, so the modal has no userId to send for an agent that
-    // is ALREADY assigned, and every removal 400'd here. Assigning worked
-    // because an unassigned agent comes from boardAgents, which is the full
-    // row. assigneesAssign resolves the agent's own userId from agentId, so
-    // requiring it from the caller was never load-bearing.
     if ((!userId && !agentId) || !taskId)
       return res.status(400).json({ message: "Bad request" });
     if (
@@ -60,13 +53,11 @@ const handler: NextApiHandler = async (
     }
 
     if (mode && mode === "multiple" && userIds.length > 0) {
-      // Map through the array and create a promise for each async function call
       const assignTasks = userIds.map((userId_: number) =>
         assigneesAssign(currentUser, userId_, taskId, agentId)
       );
       await Promise.all(assignTasks);
       void broadcastBoardChange(task?.projectId, { originUserId: currentUser.id });
-      // HTPR-6281: the open task detail view listens only on the task channel.
       void broadcastTaskChange(Number(taskId), { originUserId: currentUser.id });
       return res.status(200).json({ message: "Success" });
     } else if (mode && !userIds) {
@@ -84,7 +75,6 @@ const handler: NextApiHandler = async (
       );
       if (response.status === 200) {
         void broadcastBoardChange(task?.projectId, { originUserId: currentUser.id });
-        // HTPR-6281: the open task detail view listens only on the task channel.
         void broadcastTaskChange(Number(taskId), { originUserId: currentUser.id });
       }
       return res.status(response.status).json(response.json);

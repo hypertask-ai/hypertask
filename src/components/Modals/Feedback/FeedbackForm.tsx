@@ -20,9 +20,6 @@ import { selectFeedbackKind } from "./feedbackKindSelection";
 
 const feedbackKinds: FeedbackKind[] = ["Bug", "Idea", "Question", "Praise"];
 
-// Tiptap serializes an empty editor as "<p></p>"; treat that (and runs of
-// empty paragraphs left behind by clearing content) as no text, the same way
-// an empty plain-text field would be.
 export const isFeedbackTextEmpty = (html: string) =>
   html.replace(/<p>\s*<\/p>/gi, "").trim().length === 0;
 
@@ -104,15 +101,8 @@ type FeedbackFieldsProps = {
 };
 
 const MAX_SCREENSHOT_BYTES = 10 * 1024 * 1024;
-// Kept in step with IMAGE_EXTENSIONS in src/app/api/feedback/route.ts: a format the
-// picker offers but the route rejects fails only after the upload, as a bare toast.
 const SCREENSHOT_ACCEPT = ".png,.jpg,.jpeg,.gif,.webp,.avif";
 
-// The upload URL is not encoded, and the route parses it with `new URL`. A file
-// named "screen#1.jpg" turns everything after the # into a fragment, so the path
-// stops ending in .jpg and the attachment is rejected; a very long name blows the
-// 300-char URL limit the same way. Neither is the user's problem: rename to a
-// fixed name and keep only the extension.
 const safeScreenshotName = (name: string) => {
   const extension = name.toLowerCase().match(/\.[a-z0-9]+$/)?.[0] ?? ".png";
   return `feedback-screenshot${extension}`;
@@ -136,9 +126,6 @@ export const FeedbackFields = ({
     editor?.commands.focus("end");
   }, [editor]);
 
-  // Mobile file pickers background the WebView. Restore the editor when the
-  // picker returns so adding or cancelling a screenshot does not strand the
-  // composer without a keyboard.
   useEffect(() => {
     const restoreAfterPicker = () => {
       if (
@@ -177,15 +164,13 @@ export const FeedbackFields = ({
     return () => {
       editor.off("update", onUpdate);
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+
   }, [editor]);
 
   useEffect(() => {
     if (autoFocus) editor?.commands.focus("end");
   }, [autoFocus, editor]);
 
-  // A cleared draft (post-submit reset, or a fresh mount) must clear the
-  // editor's own document too — draft.text is just a mirror of it.
   useEffect(() => {
     if (draft.text === "" && editor && !editor.isEmpty) {
       editor.commands.clearContent();
@@ -207,9 +192,6 @@ export const FeedbackFields = ({
               restoreEditorFocus,
             )
           }
-          // Selected uses label-span, not active-modal-element: in the light theme
-          // the latter is darker than the panel but LIGHTER than an unselected
-          // chip, so the picked kind read as the only unpicked one.
           className={`flex-1 rounded-sm px-3 py-2 text-dense text-white-black hover:bg-label-span ${
             draft.kind === feedbackKind
               ? "bg-label-span font-medium"
@@ -225,15 +207,10 @@ export const FeedbackFields = ({
         aria-label="Feedback"
         onKeyDown={onKeyDown}
         editor={editor}
-        // editorContainer carries the placeholder ::before styling shared with
-        // the comment/description editors (tiptap.module.scss).
         className={`${tiptapStyles.editorContainer} min-h-[180px] w-full cursor-text bg-inherit px-4 py-3 text-content text-white-black`}
       />
     </div>
     <div className="flex min-h-14 items-center gap-3 px-4 py-1.5 text-dense">
-      {/* A file, not getDisplayMedia: the share picker captures the screen with
-          this modal open on top of it, so the live capture only ever showed the
-          person writing the feedback, never the thing they are reporting. */}
       <input
         ref={fileInput}
         type="file"
@@ -241,7 +218,6 @@ export const FeedbackFields = ({
         className="hidden"
         onChange={(event) => {
           const file = event.target.files?.[0];
-          // Reset first: picking the same file twice must still fire onChange.
           event.target.value = "";
           shouldRestoreEditorFocus.current = false;
           if (!file) {

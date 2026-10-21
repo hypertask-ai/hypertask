@@ -33,11 +33,9 @@ const DescriptionContainer = (
   const isGuest = isGuestUser(currentUser);
   const doubleClickToEdit = useFlag(HTPR_7044_DOUBLE_CLICK_TO_EDIT_FLAG);
   const { editMode, setCurrentId, currentId, setEditMode, focusOn, hasDraft, hasDraftInit, currentTask } = useTaskContext();
-  // const [description, setDescription] = useState<string>(_parsedTask?.description_.content);
 
   const enterDescriptionEditMode = useCallback(() => {
     setEditMode("description");
-    // descriptionRef.current?.focus()
     focusOn(GUEST_DESCRIPTION_EDITOR_ID, false);
     !_mbl && document.getElementById(descriptionContainerId)?.scrollIntoView({ behavior: "smooth", block: "end" })
   }, [_mbl, focusOn, setEditMode]);
@@ -56,11 +54,8 @@ const DescriptionContainer = (
       taskId: currentTask.id,
       editorId: GUEST_DESCRIPTION_EDITOR_ID,
     });
-    // React flushes this discrete-event state update before the next keyboard
-    // event, so the guest does not inherit the established 100ms delay.
     enterDescriptionEditMode();
   }, [currentTask?.id, editMode, enterDescriptionEditMode]);
-  // const [descriptionAttachments, setDescriptionAttachments] = useState<IAttachment[]>(_parsedTask?.description_?.attachments??[]);
   const handleDoubleTap = useCallback(
     () => {
       editDescriptionHandler();
@@ -74,8 +69,6 @@ const DescriptionContainer = (
       : undefined,
   });
 
-  // HTPR-4659: same edit trigger as a comment. One detector, not two: a plain
-  // click selects, and only a deliberate double click opens the editor.
   const pressStartRef = useRef(0);
   const pressEditableRef = useRef(true);
   const rememberPressStart = useCallback((event: React.MouseEvent) => {
@@ -88,7 +81,6 @@ const DescriptionContainer = (
     (event: React.MouseEvent) => {
       if (isGuest) return;
       if (doubleClickToEdit && (!pressEditableRef.current || !isTaskDetailEditTarget(event.target, event.currentTarget))) return;
-      // Two unhurried clicks are two single clicks, whatever the OS says.
       if (event.timeStamp - pressStartRef.current > DELIBERATE_DOUBLE_CLICK_MS)
         return;
       editDescriptionHandler();

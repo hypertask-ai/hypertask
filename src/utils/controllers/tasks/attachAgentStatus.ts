@@ -10,10 +10,6 @@ export { AGENT_STATUS_MAX_AGE_MS };
 
 type TaskWithId = { id: number };
 
-/**
- * HTPR-7071: one batched AgentRun read for the whole board (index
- * [taskId, status]), never a query per card.
- */
 export const attachAgentStatus = async <T extends TaskWithId>(
   tasks: T[],
   now: number = Date.now(),

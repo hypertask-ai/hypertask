@@ -63,8 +63,8 @@ const authCode = {
 }
 
 stubModule('src/lib/telemetry/activationOccurrences.ts', {
-  recordAgentConnection: () => {},
-  recordAuthenticatedConnection: () => {},
+  enqueueAgentConnection: async () => null,
+  enqueueAuthenticatedConnection: async () => null,
 })
 
 stubModule('src/lib/flags.ts', {

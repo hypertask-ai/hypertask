@@ -16,8 +16,6 @@ const PROMPT_EXAMPLES = [
   "Open a coffee roastery",
 ];
 
-// Guests regenerate their single demo board through the demo route; signed-in
-// users get a new board in their current team from the onboarding generator.
 async function generateBoard(
   purpose: string,
   isGuest: boolean,
@@ -75,8 +73,6 @@ const BoardCreationAssistant = ({ onClose }: { onClose: () => void }) => {
       try {
         router.push(await generateBoard(trimmed, isGuest, idempotencyKey));
         pendingRequestRef.current = null;
-        // The palette owns this modal's lifetime, so it survives the route
-        // change unless the command mode is cleared.
         onClose();
       } catch (caught) {
         setError(
@@ -171,8 +167,6 @@ const BoardCreationAssistant = ({ onClose }: { onClose: () => void }) => {
                 : "Press Enter to create your board.")}
           </p>
           {isGuest && (
-            // Full navigation (not next/link): the reset route clears the guest
-            // session cookies and 307-redirects, which client-side routing skips.
             // eslint-disable-next-line @next/next/no-html-link-for-pages
             <a
               href="/api/demo/reset"

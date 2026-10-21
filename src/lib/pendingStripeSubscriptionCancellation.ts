@@ -95,13 +95,6 @@ function withoutPendingCancellation(
   return cleaned as Prisma.InputJsonObject;
 }
 
-/**
- * Finish the external half of a committed subscription replacement.
- *
- * The pending subscription id lives on the new plan before the database
- * transaction commits. A failed Stripe call or process exit leaves that marker
- * for the webhook replay and nightly seat reconciliation to retry.
- */
 export async function completePendingStripeCancellation(
   plan: PendingStripeCancellationPlan,
   assertHeld: () => void,

@@ -5,12 +5,8 @@ import { getRedis } from "@/lib/redis";
 const BOARD_MEMORY_RATE_LIMIT = 10;
 const BOARD_MEMORY_RATE_WINDOW_SECONDS = 60;
 const BOARD_MEMORY_SIGNAL_DEDUPE_SECONDS = 5 * 60;
-// The route is capped at 60 seconds. This small buffer lets a live request
-// finish, while a terminated request becomes retryable almost immediately.
 const BOARD_MEMORY_SIGNAL_IN_FLIGHT_SECONDS = 65;
 const BOARD_MEMORY_SIGNAL_IN_FLIGHT_RETRY_SECONDS = 5;
-// The only callers run in a route capped at 60 seconds. A five-minute lease
-// cannot expire while that request or one of its storage calls is still live.
 const BOARD_MEMORY_LOCK_SECONDS = 5 * 60;
 const BOARD_MEMORY_LOCK_RETRY_COUNT = 20;
 const BOARD_MEMORY_LOCK_RETRY_DELAY_MS = 100;

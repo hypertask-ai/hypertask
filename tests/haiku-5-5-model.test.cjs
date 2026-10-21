@@ -150,7 +150,7 @@ test("web, settings and agent pickers use the flag filter; Android hides it whil
   const on = composer.buildComposerConfig({ ...input, haiku55Enabled: true });
   assert.equal(off.models.some((entry) => entry.id === option.id), false);
   assert.equal(on.models.some((entry) => entry.id === option.id), true);
-  assert.equal(on.selectedModelId, input.storePlanId === "Free" ? (input.lunaFree ? "gpt-6-luna" : "gemini-3.5-flash-lite") : "claude-haiku-5-5");
+  assert.equal(on.selectedModelId, input.storePlanId === "Free" ? "gpt-6-luna" : "claude-haiku-5-5");
   assert.equal(on.models.some((entry) => entry.id === "claude-haiku-4.5"), false);
   const mentions = fs.readFileSync(path.join(root, "src/utils/controllers/tasks/taskSearchByParam.ts"), "utf8");
   assert.match(mentions, /haiku55Enabled\s*\? model.key !== "claude-haiku-4.5"\s*: model.key !== "claude-haiku-5-5"/);
@@ -276,7 +276,7 @@ test("real SDK returns structured and short text output rather than exhausting t
   const { createAnthropic } = require("@ai-sdk/anthropic");
   const { z } = require("zod");
   const schema = z.object({ questions: z.array(z.string()) });
-  for (const mode of ["object", "legacy-object", "text"]) {
+  for (const mode of ["object", "text"]) {
     let body;
     const h = harness({ anthropicFactory: (config) => createAnthropic({
       ...config,
@@ -294,14 +294,9 @@ test("real SDK returns structured and short text output rather than exhausting t
       },
     }) });
     const input = { model: h.makeModel(), prompt: "fixture", maxOutputTokens: mode === "text" ? 160 : 500, maxRetries: 0 };
-    if (mode === "legacy-object") {
-      const result = await ai.generateObject({ ...input, schema });
-      assert.deepEqual(result.object.questions, ["What is next?"]);
-    } else {
-      const result = await ai.generateText({ ...input, ...(mode === "object" ? { output: ai.Output.object({ schema }) } : {}) });
-      if (mode === "object") assert.deepEqual(result.output.questions, ["What is next?"]);
-      else assert.equal(result.text, "A short summary");
-    }
+    const result = await ai.generateText({ ...input, ...(mode === "object" ? { output: ai.Output.object({ schema }) } : {}) });
+    if (mode === "object") assert.deepEqual(result.output.questions, ["What is next?"]);
+    else assert.equal(result.text, "A short summary");
     assert.equal(body.thinking.type, "disabled");
     assert.equal(body.output_config.effort, "low");
     assert.equal(body.max_tokens, input.maxOutputTokens);
@@ -406,11 +401,11 @@ test("plan defaults, automatic replacements, fast ladder and stream fallbacks re
   assert.equal(catalog.defaultAiModelOption.id, "gemini-3.5-flash-lite");
   assert.equal(catalog.preferredAiModelOption.id, "gpt-6-luna");
   for (const plan of ["Free", "Pro", "AI", "BYOK", null]) {
-    const expected = plan === "Pro" || plan === "AI" ? "gpt-6-luna" : "gemini-3.5-flash-lite";
+    const expected = ["Free", "Pro", "AI"].includes(plan) ? "gpt-6-luna" : "gemini-3.5-flash-lite";
     assert.equal(catalog.getDefaultAiModelOptionForPlan(plan).id, expected);
   }
   assert.equal(catalog.getDefaultAiModelOptionForPlan("BYOK", true).id, "gpt-6-luna");
-  assert.equal(catalog.getDefaultAiModelOptionForPlan("Free", false, true).id, "gpt-6-luna");
+  assert.equal(catalog.getDefaultAiModelOptionForPlan("Free", false).id, "gpt-6-luna");
   assert.deepEqual(ladder.SYSTEM_MODEL_LADDERS.fast.map((entry) => entry.model), [
     "google/gemini-3.5-flash-lite", "openai/gpt-6-luna", "anthropic/claude-haiku-4.5",
     "deepseek/deepseek-v4.1-flash", "moonshotai/kimi-k2.5", "alibaba/qwen3.7-plus", "zai/glm-5.3-flash",
@@ -527,7 +522,7 @@ function editorWithFallback(h, credentialPicks, enabled = true, credential = "fi
     "@/lib/aiProviders": load(path.join(root, "src/lib/aiProviders.ts")),
     "@/lib/aiModelPreferences": load(path.join(root, "src/lib/aiModelPreferences.ts")),
     "@/lib/prisma": { userSetting: { findUnique: async () => null } },
-    "@/app/api/ai/_lib/planGate": { storePlanIdForProject: async () => plan, lunaFreePlanEnabled: async () => true, haikuDefaultModelEnabled: async () => false, haiku55ModelEnabled: async () => enabled, assertModelAllowedForPlan: async () => {} },
+    "@/app/api/ai/_lib/planGate": { storePlanIdForProject: async () => plan, haikuDefaultModelEnabled: async () => false, haiku55ModelEnabled: async () => enabled, assertModelAllowedForPlan: async () => {} },
     "@/app/api/ai/_lib/byokKeys": {
       getAiDefaultModelContext: async () => ({ haiku55Enabled: enabled, plan, hasByok: plan !== "Free" && Boolean(byokProvider), byok: enabled && plan !== "Free" && byokProvider ? { provider: byokProvider, credential } : undefined }),
       getByokOrTeamGatewayApiKeyForModelOption: async (entry) => { credentialPicks.push(entry.id); return entry.id === "gpt-6-luna" ? typeof lunaCredential === "object" ? "fixture-openai" : lunaCredential : credential; },
@@ -847,7 +842,7 @@ test("board memory automatic fallback learns on Luna when Haiku is unavailable, 
       "@/app/api/ai/_lib/byokKeys": { ...api, getAiDefaultModelContext: async () => ({ haiku55Enabled: enabled, plan: "Pro", hasByok: true, byok: enabled ? { provider: "claude", credential: "fixture-claude" } : undefined }) },
       "@/app/api/ai/_lib/modelProvider": h.api,
       "@/lib/ai/prompts/registry": { renderPrompt: () => "fixture prompt" },
-      ai: { generateObject: async ({ model, providerOptions }) => { await model.doGenerate({ ...params, providerOptions }); return { object: { facts: ["Keep ticket titles concise"] } }; } },
+      ai: { Output: ai.Output, generateText: async ({ model, providerOptions }) => { await model.doGenerate({ ...params, providerOptions }); return { output: { facts: ["Keep ticket titles concise"] } }; } },
       "@/app/api/ai/_lib/customInstructions": { assertProjectAccess: async () => ({ id: 15, teamId: "fixture-team" }), ProjectAccessError: class extends Error {} },
       "@/app/api/ai/_lib/boardMemoryContract": contract,
       "@/app/api/ai/_lib/boardMemoryGuards": {
@@ -891,7 +886,7 @@ test("chat default sites use plan-aware server context and upgrade saved Haiku o
           "@/lib/aiProviders": load(path.join(root, "src/lib/aiProviders.ts")),
           "@/lib/aiModelPreferences": load(path.join(root, "src/lib/aiModelPreferences.ts")),
           "@/app/api/ai/_lib/modelProvider": h.api,
-          "@/app/api/ai/_lib/planGate": { storePlanIdForProject: async () => plan, haikuDefaultModelEnabled: async () => false, haiku55ModelEnabled: async () => enabled, lunaFreePlanEnabled: async () => true, assertModelAllowedForPlan: async () => {} },
+          "@/app/api/ai/_lib/planGate": { storePlanIdForProject: async () => plan, haikuDefaultModelEnabled: async () => false, haiku55ModelEnabled: async () => enabled, assertModelAllowedForPlan: async () => {} },
           "@/app/api/ai/_lib/byokKeys": {
             getAiDefaultModelContext: async () => ({ haiku55Enabled: enabled, plan, hasByok: plan !== "Free" && Boolean(provider), byok: enabled && plan !== "Free" && provider ? { provider, credential } : undefined }),
             getByokOrTeamGatewayApiKeyForModelOption: async () => credential,

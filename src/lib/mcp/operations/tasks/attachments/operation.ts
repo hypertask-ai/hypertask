@@ -1,9 +1,11 @@
+import { findIdParamOutOfRange, idOutOfRangeMessage } from '@/lib/mcp/listParams';
+import { reportMcpOperationCrash } from '@/lib/mcp/operationCrashReport';
 import { wrapMcpRoute } from '@/lib/mcp/routeWrapper'
 import { NextRequest, NextResponse } from 'next/server';
 import { validateMcpAuth, checkMcpRateLimit } from '@/lib/mcp/auth';
 import prisma from '@/lib/prisma';
 import { requireRole } from '@/lib/mcp/agents/scopes';
-import { findTaskByIdentifier } from '@/lib/mcp/tasks/resolveTask';
+import { findTaskByIdentifier, taskIdentifierErrorResponse } from '@/lib/mcp/tasks/resolveTask';
 import { parseAndValidateAttachmentsBody } from '@/lib/mcp/attachments/validateBody';
 import {
   McpAttachmentRequestBodyError,
@@ -26,8 +28,6 @@ import {
 
 export const maxDuration = 700;
 
-// Native clients receive bytes only after both task access and attachment
-// ownership are checked; the durable storage URL never crosses this API boundary.
 export const GET = wrapMcpRoute(createAttachmentDownloadHandler({
   checkRateLimit: checkMcpRateLimit,
   validateAuth: validateMcpAuth,
@@ -44,8 +44,6 @@ export const GET = wrapMcpRoute(createAttachmentDownloadHandler({
   fetchAttachment: safeFetchAttachmentUrl,
   normalizeMime,
   isStorageFetchError: (error) => error instanceof McpAttachmentFetchError,
-  // Only rows that are still unmeasured are repaired, so a concurrent download
-  // or a real upload that recorded a size in the meantime is never overwritten.
   recordMeasuredSize: async (attachmentId, size) => {
     await prisma.attachment.updateMany({
       where: { id: attachmentId, OR: [{ fileSize: null }, { fileSize: '1' }] },
@@ -100,16 +98,31 @@ export async function POST(request: NextRequest) {
     );
   }
 
-  const task = await findTaskByIdentifier(
-    user,
-    {
-      task_id: parsed.task_id ?? null,
-      ticket_number: parsed.ticket_number ?? null,
-      unique_index: parsed.unique_index ?? null,
-      project_id: parsed.project_id ?? null,
-    },
-    ctx.agentId
-  );
+  const outOfRange = findIdParamOutOfRange({ comment_id: parsed.comment_id });
+  if (outOfRange) {
+    return NextResponse.json(
+      { success: false, error: idOutOfRangeMessage(outOfRange), code: 'invalid_field' },
+      { status: 400 }
+    );
+  }
+
+  let task;
+  try {
+    task = await findTaskByIdentifier(
+      user,
+      {
+        task_id: parsed.task_id ?? null,
+        ticket_number: parsed.ticket_number ?? null,
+        unique_index: parsed.unique_index ?? null,
+        project_id: parsed.project_id ?? null,
+      },
+      ctx.agentId
+    );
+  } catch (error) {
+    const response = taskIdentifierErrorResponse(error);
+    if (response) return response;
+    throw error;
+  }
 
   if (!task) {
     return NextResponse.json(
@@ -189,6 +202,9 @@ export async function POST(request: NextRequest) {
         void broadcastTaskChange(task.id);
       }
     }
+    if (status === 500) {
+      reportMcpOperationCrash(request, e);
+    }
     return NextResponse.json(
       {
         success: false,
@@ -214,8 +230,6 @@ export async function POST(request: NextRequest) {
             }
           : {}),
       },
-      // Partial rows must reach MCP callers so they do not retry already-linked
-      // objects. A logical failure is still represented by success: false.
       { status: partialAttachments.length > 0 ? 200 : status }
     );
   }

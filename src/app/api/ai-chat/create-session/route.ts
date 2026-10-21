@@ -22,7 +22,6 @@ export const runtime = "nodejs";
 const createSessionSchema = z.object({
   taskId: z.coerce.number().int().positive().optional(),
   agentId: z.string().uuid().optional(),
-  // HTPR-7052: only used to name the chat after the board; never stored.
   projectId: z.coerce.number().int().positive().optional(),
 });
 
@@ -37,7 +36,6 @@ export async function POST(request: NextRequest) {
     try {
       restCompat = await isFeatureEnabled(HTPR_6924_REST_COMPAT_FLAG, userId);
     } catch {
-      // Flag lookup failure preserves the legacy route.
     }
     if (restCompat) {
       const limited = await checkRestRateLimit(userId, "write");
@@ -46,7 +44,6 @@ export async function POST(request: NextRequest) {
 
     let body: Awaited<ReturnType<typeof request.json>>;
     if (restCompat) {
-      // Capture once: preserve accepted non-objects and the original parse error/fallback.
       let jsonError: unknown;
       const result = await readJsonBody<typeof body>({
         json: async () => {
@@ -90,26 +87,11 @@ export async function POST(request: NextRequest) {
         );
       }
 
-      // One ongoing conversation per agent, shared by everyone that agent is
-      // shared with, rather than a private copy each. The row is keyed on the
-      // agent's OWNER, not on whoever is opening it, so every authorized caller
-      // resolves to the same thread -- and to the same one the native heartbeat
-      // already writes to (src/app/api/cron/native-agent-heartbeat/route.ts),
-      // which keyed on the owner while this route keyed on the caller. The
-      // existing `(userId, agentId)` unique still backs the upsert, so two
-      // concurrent "open this agent's chat" requests converge on one row
-      // instead of forking two.
       const [agentTeamIds, sharedConversationEnabled] = await Promise.all([
         getAgentTeamIds([agent.id]),
         isFeatureEnabled(SHARED_AGENT_CHAT_FLAG, agent.userId),
       ]);
       const teamId = agentTeamIds.get(agent.id) ?? null;
-      // The same question the shared rule asks below, asked before anything is
-      // written: a conversation with no team of its own belongs to whoever
-      // opened it, and one with a team belongs to that team's members. Seeing
-      // the agent across a shared board is not the same as being in its team.
-      // Refused here, or this writes a session row and then 404s the caller who
-      // asked for it.
       const teamIds =
         sharedConversationEnabled && agent.userId !== userId
           ? await userTeamIds(userId)
@@ -133,9 +115,6 @@ export async function POST(request: NextRequest) {
         },
         select: { id: true, teamId: true },
       });
-      // Written once, the first time the agent has a team to record. Never
-      // rewritten: the stored team is the conversation's scope, and letting it
-      // follow the agent would hand an old team's transcript to a new one.
       if (session.teamId === null && teamId !== null) {
         await prisma.chatSession.updateMany({
           where: { id: session.id, teamId: null },
@@ -143,9 +122,6 @@ export async function POST(request: NextRequest) {
         });
       }
 
-      // Re-read through the one shared rule rather than trusting the upsert:
-      // an agent that has since moved teams keeps a thread this caller must
-      // not open, and that judgement lives in exactly one place.
       const access = await loadUserAgentChatSession({
         sessionId: session.id,
         userId,
@@ -161,7 +137,6 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // HTPR-7052: a chat with no message yet takes the ticket title, else the board name.
     let initialTitle: string | null = null;
     try {
       const chatNames = await isFeatureEnabled(HTPR_7052_CHAT_NAMES_FLAG, userId);

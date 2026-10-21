@@ -44,7 +44,6 @@ export async function GET(request: NextRequest) {
     where: {
       lastMessageTs: { lte: slackIdleCutoffTs(nowMs) },
       summaryBatchId: null,
-      // Slack ts values are fixed-width digit strings, so string order is time order.
       ...(onlyUnsummarized
         ? {
             OR: [
@@ -114,8 +113,6 @@ export async function GET(request: NextRequest) {
         threadTs: thread.threadTs,
         userNameCache,
       };
-      // HTPR-7098: with the flag on, the summary waits in a half-price batch instead of running now.
-      // Teams on their own AI key get `instant` back and keep the existing path.
       let source: SlackThreadSource | undefined;
       if (await batchBackgroundAiEnabled(thread.install.installedByUserId)) {
         const prepared = await prepareSlackSummaryForBatch(summaryContext, thread, tasks.map((task) => task.id));

@@ -20,9 +20,6 @@ export function useAiChatSessions(context: Context) {
   sessionPagingEnabled,
   } = context;
 
-  // User intent wins over transient automatic board setup. Clearing this ref
-  // here means an explicit session click cannot be routed back to the session
-  // that happened to be selected while React Query was propagating.
   const selectSession = useCallback((sessionId: string) => {
     sessionIntentGenerationRef.current += 1;
     sessionSetupRef.current = null;
@@ -40,15 +37,13 @@ export function useAiChatSessions(context: Context) {
       () => sessionIntentGenerationRef.current === generation
     );
     if (sessionIntentGenerationRef.current !== generation) return;
-    // Reset an explicit docked scope only after the new session has committed.
-    // Doing it before the request resolves changes the context generation and
-    // makes this deliberate action invalidate its own result.
     if (!isFullScreenChat) setDockedChatScope(null);
     const projectId = currentProject?.id;
     if (createdSession && typeof projectId === "number") {
       resolvedBoardSessionRef.current = { projectId, session: createdSession };
       previousProjectIdRef.current = projectId;
     }
+    return createdSession;
   }, [
     clearMessageQueue,
     createSession,
@@ -102,28 +97,15 @@ export function useAiChatSessions(context: Context) {
   const billing = modelBilling;
   const isApple = useDeviceContext();
   const isByokBlocked = shouldBlockAiDueToByokProvider(billing, currentAiOption?.source);
-  // HTPR-4303: guests live on the real board, not /demo, so the cheap-key
-  // routing keys off the guest cookie identity as the source of truth.
   const isDemo = (pathname?.startsWith("/demo") ?? false) || isGuestCookieUser();
-  // ponytail: demo chat is anonymous and must only reach the dedicated-key
-  // route. The same value also derives both existing cancellation URLs.
   const chatRoute = isDemo
     ? "/api/demo/chat/stream"
     : globalConstants.sendAiChatMessageRoute;
 
-  // Resolve the exact session for the current board in one shared operation.
-  // This is called both by the open-chat effect and by every send, so a shortcut
-  // that opens and sends in the same event cannot beat a later setup effect and
-  // accidentally write into the previous board's cached session.
   const ensureSessionForCurrentBoard = useCallback(async (timeoutMs = 5000) => {
     const projectId = currentProject?.id;
     const userId = currentUser?.id;
 
-    // A task-scoped surface (the ticket detail page) already owns session
-    // selection via useSessionAndChatHistory's per-task init effect, which
-    // finds-or-creates that exact ticket's session. Falling through to the
-    // project-wide board session map below would let a session another
-    // ticket in the same project last sent from win here too (HTPR-6100).
     if (taskId !== undefined) {
       if (sessionPagingEnabled) {
         const generation = sessionIntentGenerationRef.current;
@@ -136,14 +118,7 @@ export function useAiChatSessions(context: Context) {
         const selected = getDisplayedSession();
         return selected?.userId === userId ? selected : undefined;
       }
-      // Match on taskId alone, same as the find-or-create init effect in
-      // useSessionAndChatHistory - sessions are already scoped to the
-      // signed-in user server-side, so requiring userId here too just adds
-      // a second, easy-to-drift copy of that rule.
       const matchesTask = (session: IChatSession) => session.taskId === taskId;
-      // Ticket switches and explicit session picks bump this generation, so
-      // a send that outlives the user's navigation away from this ticket
-      // doesn't land in a conversation they can no longer see (HTPR-6100).
       const generation = sessionIntentGenerationRef.current;
       const deadline = Date.now() + timeoutMs;
       while (
@@ -181,9 +156,6 @@ export function useAiChatSessions(context: Context) {
       }
       if (!isCurrentIntent() || (sessionPagingEnabled && !chatHistoryReadyRef.current)) return undefined;
 
-      // React Query changes cache keys with the account, but a render can still
-      // momentarily expose the previous array. Never resolve a send through a
-      // session owned by another authenticated user.
       const currentSessions = sessionsRef.current.filter(
         (session) => session.userId === userId
       );
@@ -202,9 +174,6 @@ export function useAiChatSessions(context: Context) {
       }
       if (!isCurrentIntent()) return undefined;
 
-      // This board has already been initialized during the current visit. The
-      // user may have deliberately selected another session since then, so the
-      // currently selected/front session is the correct one.
       if (previousProjectIdRef.current === projectId) {
         if (sessionPagingEnabled) {
           resolvedBoardSessionRef.current = null;
@@ -289,7 +258,6 @@ export function useAiChatSessions(context: Context) {
         return sessionPagingEnabled ? getDisplayedSession() : emptySession;
       }
 
-      // Reuse empty sessions above to avoid creating one on every board visit.
       const createdSession = await createSession(isCurrentIntent);
       if (!isCurrentIntent()) return undefined;
       if (createdSession) {

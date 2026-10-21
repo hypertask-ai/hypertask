@@ -1,25 +1,10 @@
-/**
- * Validation schemas index
- * 
- * Central re-export point for all validation schemas.
- * Provides backward compatibility with old import paths.
- * 
- * @example
- * // Old way (still works)
- * import { getAddCommentInputSchema } from '../utils/validation';
- * 
- * // New way (preferred)
- * import { getAddCommentInputSchema } from '../validations/comment.validation';
- */
 
-// Agent validations
 export {
   getListAgentsInputSchema,
   ListAgentsInputSchema,
   type ListAgentsInput,
 } from './agent.validation';
 
-// Task validations
 export {
   getGetTasksInputSchema,
   getGetTasksBaseSchema,
@@ -44,7 +29,6 @@ export {
   type AssignUserInput,
 } from './task.validation';
 
-// Comment validations
 export {
   getAddCommentInputSchema,
   getAddCommentBaseSchema,
@@ -65,7 +49,6 @@ export {
   type MentionInput,
 } from './comment.validation';
 
-// Skill validations
 export {
   getListSkillsBaseSchema,
   getGetSkillBaseSchema,
@@ -97,7 +80,6 @@ export {
   type ImportSkillsInput,
 } from './skill.validation';
 
-// Project validations
 export {
   getListProjectsInputSchema,
   getListSectionsInputSchema,
@@ -110,7 +92,6 @@ export {
   type ListProjectMembersInput,
 } from './project.validation';
 
-// Inbox validations
 export {
   getInboxListInputSchema,
   getInboxArchiveInputSchema,
@@ -123,7 +104,6 @@ export {
   type InboxUnarchiveInput,
 } from './inbox.validation';
 
-// Common schemas (exported for advanced use cases)
 export {
   ticketNumberSchema,
   createTaskIdentificationSchema,
@@ -138,7 +118,6 @@ export {
   sortBySchema,
 } from './common/pagination';
 
-// Report validations
 export {
   getReportCrudBaseSchema,
   getReportCrudInputSchema,

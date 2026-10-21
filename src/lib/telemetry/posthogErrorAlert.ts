@@ -184,10 +184,6 @@ export function parsePostHogIssueAlert(payload: unknown) {
   };
 }
 
-// KEYS are the event dedupe key, rolling-window sorted set, first-fingerprint
-// claim, and one-spike-per-release claim. ARGV are receive time, claim TTL,
-// event nonce, window length, window TTL, and threshold. One Lua call keeps the
-// count and both alert claims atomic when several server errors arrive together.
 const CLAIM_SCRIPT = `
 if not redis.call('SET', KEYS[1], ARGV[7], 'NX', 'EX', ARGV[2]) then
   local ttl = redis.call('TTL', KEYS[1])

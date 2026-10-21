@@ -13,7 +13,7 @@ import {
   SSE_HEADERS,
 } from "@/app/api/ai/_lib/editorAi";
 import { getAiRequestUser } from "@/app/api/ai/_lib/requestUser";
-import { extractTaskWriterProperties, hasUsableTaskWriterDraft, TASK_WRITER_EMPTY_DRAFT_MESSAGE } from "@/app/api/ai/_lib/taskWriterProperties";
+import { normalizeTaskWriterLabels, validateTaskWriterLabelIds, extractTaskWriterProperties, hasUsableTaskWriterDraft, TASK_WRITER_EMPTY_DRAFT_MESSAGE } from "@/app/api/ai/_lib/taskWriterProperties";
 import {
   AiFeatureDisabledError,
   AutoDescriptionSuggestionsDisabledError,
@@ -21,7 +21,6 @@ import {
   missingRequiredFields,
   prepareTaskWriterRun,
   taskWriterRequestSchema,
-  tasksOutputSchema,
   type TaskWriterRequest,
 } from "@/app/api/ai/_lib/taskWriterRun";
 
@@ -33,9 +32,7 @@ async function isRealErrorEnabled(userId: number) {
   return isFeatureEnabled(HTPR_7077_TASK_WRITER_REAL_ERROR_FLAG, userId);
 }
 
-// HTPR-7086: a team using up its monthly AI allowance is a plan limit the user already sees, not a production error.
 async function isAllowanceLimitMessage(message: string) {
-  // Cheap pre-check first so ordinary errors never load the policy module.
   if (!message.includes("AI allowance")) return false;
   const { SHARED_AI_ALLOWANCE_EXCEEDED_MESSAGE } = await import("@/lib/aiAllowancePolicy");
   return message === SHARED_AI_ALLOWANCE_EXCEEDED_MESSAGE;
@@ -47,7 +44,6 @@ export async function POST(request: NextRequest) {
     return createSseErrorResponse("Unauthorized", 401);
   }
   const userId = requestUser.id;
-  // Same call shape as reportError; the allowance limit is skipped, every other error is reported.
   const reportError = async (payload: Parameters<typeof reportErrorToBoard>[0]) => {
     if (await isAllowanceLimitMessage(payload.message)) {
       const { HTPR_7086_SKIP_ALLOWANCE_REPORT_FLAG, isFeatureEnabled } = await import("@/lib/flags");
@@ -74,9 +70,12 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const { selected, instructions, messages, allowedImgSrcs, usageTaskId, splitTasks, validateDraft, dueDateContext, ticketTypeEnabled } =
+    const { selected, instructions, messages, allowedImgSrcs, usageTaskId, splitTasks, validateDraft, dueDateContext, ticketTypeEnabled, customFieldDefinitions, tasksSchema, boardLabelIds } =
       await prepareTaskWriterRun(body, userId);
-    const typeHeaders: Record<string, string> = ticketTypeEnabled ? { [TICKET_TYPE_HEADER]: "enabled" } : {};
+    const typeHeaders: Record<string, string> = {
+      ...(ticketTypeEnabled ? { [TICKET_TYPE_HEADER]: "enabled" } : {}),
+      ...(boardLabelIds ? { "X-Task-Writer-Labels": "enabled" } : {}),
+    };
     if (splitTasks) {
       configureAiModelUsage(selected.model, {
         userId, teamId: selected.teamId, projectId: body.projectId,
@@ -85,16 +84,21 @@ export async function POST(request: NextRequest) {
       const result = await generateText({
         model: selected.model, instructions, messages, tools: selected.tools,
         maxRetries: 2, providerOptions: selected.providerOptions, ...selected.settings,
-        output: Output.object({ schema: tasksOutputSchema }),
+        output: Output.object({ schema: tasksSchema }),
       });
-      const { tasks } = tasksOutputSchema.parse({ tasks: result.output.tasks.slice(0, 10) });
-      return NextResponse.json({ tasks: tasks.map(({ dueDate: modelDueDate, ...task }) => {
+      const fieldTools = customFieldDefinitions?.length ? await import("@/lib/ai/taskWriterCustomFields") : null;
+      const { tasks } = tasksSchema.parse({ tasks: result.output.tasks.slice(0, 10) });
+      return NextResponse.json({ tasks: tasks.map(({ dueDate: modelDueDate, ...draft }) => {
+        const { customFields: modelCustomFields, labelIds: modelLabelIds, ...task } = draft as typeof draft & { customFields?: unknown; labelIds?: unknown };
+        const customFields = customFieldDefinitions?.length
+          ? fieldTools!.validateTaskWriterCustomFields(customFieldDefinitions, modelCustomFields) : [];
+        const fieldValues = { ...(customFields.length ? { customFields } : {}), ...(boardLabelIds ? { labelIds: validateTaskWriterLabelIds(modelLabelIds, boardLabelIds) } : {}) };
         const filtered = allowedImgSrcs ? filterOneImagePass(task.description, allowedImgSrcs).emit : task.description;
         const description = ticketTypeEnabled ? normalizeTaskWriterTicketType(filtered) : filtered;
-        if (!dueDateContext) return { ...task, description };
+        if (!dueDateContext) return { ...task, description, ...fieldValues };
         const dueDate = validateTaskWriterDueDate(modelDueDate, dueDateContext.today);
-        return { ...task, description, ...(dueDate ? { dueDate } : {}) };
-      }) }, dueDateContext || ticketTypeEnabled
+        return { ...task, description, ...fieldValues, ...(dueDate ? { dueDate } : {}) };
+      }) }, dueDateContext || ticketTypeEnabled || boardLabelIds
         ? { headers: { ...(dueDateContext ? { "X-Task-Writer-Due-Date": "enabled" } : {}), ...typeHeaders } }
         : undefined);
     }
@@ -108,12 +112,10 @@ export async function POST(request: NextRequest) {
         let streamError: unknown;
         let producedText = false;
 
-        // HTPR-7123: with the ticket type on, text still streams as before; only the possible trailing marker is held back.
         let held = "";
         const enqueueText = (text: string) => {
-          if (validateDraft || dueDateContext || ticketTypeEnabled) draft += text;
-          // Compose consumes completed HTML, so a due-date request is validated before it is sent.
-          if (!text || dueDateContext) return;
+          if (validateDraft || dueDateContext || ticketTypeEnabled || boardLabelIds) draft += text;
+          if (!text || dueDateContext || boardLabelIds) return;
           if (!ticketTypeEnabled) {
             controller.enqueue(encoder.encode(text));
             return;
@@ -149,7 +151,6 @@ export async function POST(request: NextRequest) {
             maxRetries: 2,
             providerOptions: selected.providerOptions,
             ...selected.settings,
-            // Without this, provider and allowance errors vanish from textStream and the draft ends empty.
             onError: ({ error }: { error: unknown }) => {
               streamError ??= error;
             },
@@ -172,7 +173,6 @@ export async function POST(request: NextRequest) {
             const filtered = filterOneImagePass(buffer, allowedImgSrcs);
             enqueueText(filtered.emit);
           }
-          // Loaded only on the empty-stream path, so ordinary streams never touch the flags module.
           if (!producedText && streamError !== undefined && await isRealErrorEnabled(userId)) {
             const error = streamError;
             await reportError({
@@ -193,8 +193,9 @@ export async function POST(request: NextRequest) {
             enqueueError("error", TASK_WRITER_EMPTY_DRAFT_MESSAGE, "empty-task-writer-draft");
             return;
           }
-          if (dueDateContext) {
-            const dated = applyTaskWriterDueDate(draft, dueDateContext).html;
+          if (dueDateContext || boardLabelIds) {
+            const labeled = boardLabelIds ? normalizeTaskWriterLabels(draft, boardLabelIds) : draft;
+            const dated = dueDateContext ? applyTaskWriterDueDate(labeled, dueDateContext).html : labeled;
             controller.enqueue(encoder.encode(ticketTypeEnabled ? normalizeTaskWriterTicketType(dated) : dated));
           } else if (ticketTypeEnabled && held) {
             controller.enqueue(encoder.encode(normalizeTaskWriterTicketType(held)));
@@ -212,17 +213,15 @@ export async function POST(request: NextRequest) {
           enqueueError("error", errorMessage(error));
         } finally {
           if (!streamCompleted) {
-            // Flask only sends done on error/interruption; successful streams end raw.
           }
           controller.close();
         }
       },
       cancel() {
-        // Client disconnects are expected for cancelled generations.
       },
     });
 
-    const headers = dueDateContext || ticketTypeEnabled
+    const headers = dueDateContext || ticketTypeEnabled || boardLabelIds
       ? { ...SSE_HEADERS, ...(dueDateContext ? { "X-Task-Writer-Due-Date": "enabled" } : {}), ...typeHeaders }
       : SSE_HEADERS;
     return new Response(stream, { headers });

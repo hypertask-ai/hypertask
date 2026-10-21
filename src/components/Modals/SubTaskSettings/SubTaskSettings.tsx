@@ -80,7 +80,6 @@ const SubtaskSettings: React.FC<ISubTaskSettings> = ({ toggle }) => {
           handleMouseMove={handleMouseMove}
           id="subtask-settings-modal-container"
         >
-          {/* ============== ALL Project View Elements ============ */}
           {subTaskOptions?.map((option, index) => (
             <ModalRowElementContainer
               key={`el-${index}`}

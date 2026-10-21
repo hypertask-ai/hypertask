@@ -85,6 +85,13 @@ function harness({ enabled = true, output = "", finishReason = "stop", mode = "t
     "@/lib/mcp/auth": {}, "@/lib/ai/taskWriterDuplicateGuard": { taskTitleFromBrief: () => "Research Paperclip" },
     "@/lib/errors/reportError": { reportError: async () => {} },
   };
+  stubs["@/app/api/ai/_lib/taskWriterDraft"] = moduleWithStubs("src/app/api/ai/_lib/taskWriterDraft.ts", {
+    ...stubs,
+    "./modelProvider": stubs["@/app/api/ai/_lib/modelProvider"],
+    "./editorAi": editor,
+    "./taskWriterRun": run,
+    "./taskWriterProperties": properties,
+  });
   async function post(kind) {
     const route = moduleWithStubs(kind === "app" ? "src/app/api/ai/task-writer/route.ts" : "src/app/api/mcp/ai/task-writer/route.ts", stubs);
     const body = kind === "mcp" ? { project_id: 7060, prompt: "Analyze Paperclip", mode }

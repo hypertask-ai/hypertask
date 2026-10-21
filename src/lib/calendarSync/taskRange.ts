@@ -27,8 +27,6 @@ export const calendarTaskOverlapsRange = (
     return false;
   }
 
-  // Missing or invalid intervals retain the calendar's existing one-day due
-  // behavior, so due-date membership takes precedence over span validation.
   if (dueAt >= rangeStart && dueAt < rangeEnd) return true;
 
   const startAt = timestamp(task.startDate);
@@ -40,9 +38,6 @@ export const calendarTaskOverlapsRange = (
   );
 };
 
-// Prisma cannot compare startDate with dueDate. This predicate is a safe
-// superset; calendarTaskOverlapsRange removes invalid intervals after the
-// authorized query without risking false negatives.
 export const buildCalendarTaskOverlapWhere = (
   start: Date,
   endExclusive: Date,

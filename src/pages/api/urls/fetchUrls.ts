@@ -1,4 +1,3 @@
-// Import PrismaClient from the generated Prisma client
 import fetchUrls from '@/utils/controllers/urls/fetchUrls';
 import prisma from "@/lib/prisma";
 import { getSessionUser } from "@/lib/auth/getSessionUser";
@@ -7,7 +6,6 @@ import { projectContentAccessWhere } from "@/utils/controllers/projects/getAllIn
 import { NextApiHandler, NextApiRequest, NextApiResponse } from 'next';
 
 
-// Example usage
 const handler: NextApiHandler = async (req: NextApiRequest, res: NextApiResponse) => {
     if (req.method === "GET") {
         try {
@@ -26,7 +24,6 @@ const handler: NextApiHandler = async (req: NextApiRequest, res: NextApiResponse
             const response = await fetchUrls(taskId, commentId as string, includeSavedSources);
          
             return res.status(response.status).json(response.json);
-            // console.log(comments);
         } catch (error) {
             console.log(error);
             return res.status(500).json({ message: "Internal server error" });
@@ -36,7 +33,6 @@ const handler: NextApiHandler = async (req: NextApiRequest, res: NextApiResponse
     }
 }
 
-// Run the main function
 export default handler;
 
 

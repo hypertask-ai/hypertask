@@ -700,8 +700,6 @@ export const parseLearnTutorialState = (
 
     return {
       ...(value as LearnTutorialState),
-      // The foundation release ended after scene 2. Resume those sessions at
-      // the first newly available act instead of falsely marking Act 1 done.
       scene:
         storedScene === "complete"
           ? "aiWriter"

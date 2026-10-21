@@ -19,14 +19,6 @@ export { createBoardRealtimeEventHandler } from "@/lib/realtime/boardRealtimeEve
 
 export const BOARD_RECONCILE_INTERVAL_MS = 10_000;
 
-// Subscribes the open board to its realtime channel. On any change event
-// (from another user, another tab, or the CLI/MCP acting as you) it immediately
-// reconciles the ["projectsAll"] cache that the whole board renders from: for a
-// change event, only the changed board's tasks are fetched and patched into the
-// list; a reconnect still refetches the whole list, because that is also when
-// account-wide access is re-proved. See HTPR-6166.
-// No echo suppression on purpose: the CLI acts as the same user, so your own
-// CLI edits must still refresh your own open board.
 export function useBoardRealtime(
   projectId: number | null | undefined,
   options?: { accountId?: number },
@@ -89,8 +81,6 @@ export function useBoardRealtime(
           surface: "board",
           trigger,
           reconcile,
-          // HTPR-6166: the endpoints this reconcile actually calls, so
-          // network_ms only counts this reconciliation's own fetches.
           networkUrlPatterns: [
             "/api/projects/boardTasks",
             "/api/projects/getAll",
@@ -109,12 +99,8 @@ export function useBoardRealtime(
     const runFallbackCycle = () => {
       if (!fallbackActive || !canReconcile()) return;
       const userId = options?.accountId;
-      // Poll the board side cache, never projectsAll: its fetching state hides
-      // the rendered board. Recovery still re-proves account-wide access.
       if (userId !== undefined && !fallbackInFlight) {
         fallbackInFlight = true;
-        // allSettled waits for both calls. Promise.all clears the guard as
-        // soon as planning fails, and the next poll then cancels the board fetch.
         void Promise.allSettled([
           reconcileActiveBoardTasks(queryClient, projectId, userId, {
             background: true,
@@ -137,8 +123,6 @@ export function useBoardRealtime(
     const startFallback = () => {
       if (cancelled || fallbackActive) return;
       fallbackActive = true;
-      // The initial query already loads the board. Retry the connection now,
-      // but wait for the polling interval before downloading the board again.
       void connectAndSubscribe();
       fallbackTimer = setInterval(runFallbackCycle, BOARD_RECONCILE_INTERVAL_MS);
     };
@@ -169,8 +153,6 @@ export function useBoardRealtime(
       const channel = client.subscribe(channelName);
       const onBoardEvent = createBoardRealtimeEventHandler(refetch);
       let initialCatchUpComplete = false;
-      // The initial board query can settle before Pusher finishes subscribing.
-      // Pull once after server confirmation to recover events from that gap.
       const onSubscriptionSucceeded = () => {
         if (cancelled) return;
         stopFallback();
@@ -211,10 +193,6 @@ export function useBoardRealtime(
       channel.bind("pusher:subscription_succeeded", onSubscriptionSucceeded);
       channel.bind("pusher:subscription_error", onSubscriptionError);
       client.connection.bind("state_change", onConnectionStateChange);
-      // Reconnect safety-net: pull once after a dropped connection recovers.
-      // The initial connection is covered by the subscription catch-up above.
-      // Mounted while already connected (e.g. view opened later in the session):
-      // count that as connected so a real drop+recover still refetches.
       if (client.connection.state === "connected") wasConnected.current = true;
       const onConnected = () => {
         if (wasConnected.current && !fallbackActive) refetch("reconnect");

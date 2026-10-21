@@ -1,3 +1,5 @@
+import { recordAgentBoardScopeMiss } from "@/lib/auth/agentScope";
+import { findIdParamOutOfRange, idOutOfRangeMessage } from '@/lib/mcp/listParams';
 import type { Prisma } from '@prisma/client';
 import prisma from '@/lib/prisma';
 import { HTPR_6868_TICKET_PREFIX_FLAG, isFeatureEnabled } from '@/lib/flags';
@@ -5,16 +7,38 @@ import { findPrefixAliasTasks } from '@/utils/controllers/projects/findPrefixAli
 import { getProjectWhere } from '@/utils/controllers/projects/getAllIncludes';
 
 export class TaskIdentifierAmbiguityError extends Error {
+  readonly status = 400;
+  readonly code = 'ambiguous_ticket_number';
+
   constructor(ticketNumber: string) {
     super(`Ticket number ${ticketNumber} is ambiguous across accessible projects; provide project_id.`);
     this.name = 'TaskIdentifierAmbiguityError';
   }
 }
 
-/**
- * Resolve a task by MCP identifier with project access rules
- * (human owner/member or agent board membership).
- */
+export class TaskIdentifierOutOfRangeError extends Error {
+  readonly status = 400;
+  readonly code = 'invalid_field';
+
+  constructor(readonly field: string) {
+    super(idOutOfRangeMessage(field));
+    this.name = 'TaskIdentifierOutOfRangeError';
+  }
+}
+
+export function taskIdentifierErrorResponse(error: unknown, field?: string): Response | null {
+  if (!(error instanceof TaskIdentifierAmbiguityError) && !(error instanceof TaskIdentifierOutOfRangeError)) return null;
+  return Response.json(
+    {
+      success: false,
+      error: error.message,
+      code: error.code,
+      ...(field ? { field: error instanceof TaskIdentifierOutOfRangeError ? error.field : field } : {}),
+    },
+    { status: error.status }
+  );
+}
+
 export async function findTaskByIdentifier(
   user: { id: number },
   options: {
@@ -27,10 +51,12 @@ export async function findTaskByIdentifier(
   projectAccess?: Prisma.ProjectWhereInput,
 ) {
   const { task_id, ticket_number, unique_index, project_id } = options;
+  const outOfRange = findIdParamOutOfRange({ task_id, unique_index, project_id });
+  if (outOfRange) throw new TaskIdentifierOutOfRangeError(outOfRange);
   const projectFilter = projectAccess ?? getProjectWhere(user.id, agentId);
 
   if (task_id) {
-    return await prisma.task.findFirst({
+    const task = await prisma.task.findFirst({
       where: {
         id: task_id,
         ...(project_id ? { projectId: project_id } : {}),
@@ -39,6 +65,8 @@ export async function findTaskByIdentifier(
       },
       select: { id: true, projectId: true },
     });
+    if (task) recordAgentBoardScopeMiss(task.projectId);
+    return task;
   }
 
   if (!ticket_number && (unique_index == null || project_id == null)) return null;
@@ -55,9 +83,11 @@ export async function findTaskByIdentifier(
   if (!project_id && matches.length > 1) {
     throw new TaskIdentifierAmbiguityError(ticket_number!);
   }
-  if (matches.length) return matches[0];
+  if (matches.length) {
+    recordAgentBoardScopeMiss(matches[0].projectId);
+    return matches[0];
+  }
 
-  // A real ticket wins even when it is inaccessible to this caller.
   const liveTask = await prisma.task.findFirst({
     where: { ...identityWhere, status: { not: 'Deleted' } },
     select: { id: true },
@@ -93,17 +123,10 @@ export async function findTaskByIdentifier(
   if (!project_id && tasks.length > 1) {
     throw new TaskIdentifierAmbiguityError(ticket_number!);
   }
+  if (tasks[0]) recordAgentBoardScopeMiss(tasks[0].projectId);
   return tasks[0] ?? null;
 }
 
-/**
- * Turn any MCP task identifier into a numeric id, applying NO project scope.
- *
- * For routes that already run their own access check and only need to accept a
- * ticket number in addition to a raw id. Resolving here and leaving the check
- * where it is means adding the friendlier identifiers cannot quietly widen or
- * narrow who is allowed to read the task.
- */
 export async function resolveTaskIdOnly(options: {
   task_id?: number | null;
   ticket_number?: string | null;
@@ -111,6 +134,8 @@ export async function resolveTaskIdOnly(options: {
   project_id?: number | null;
 }): Promise<number | null> {
   const { task_id, ticket_number, unique_index, project_id } = options;
+  const outOfRange = findIdParamOutOfRange({ task_id, unique_index, project_id });
+  if (outOfRange) throw new TaskIdentifierOutOfRangeError(outOfRange);
 
   if (task_id) {
     if (!project_id) return task_id;
@@ -170,6 +195,7 @@ export async function findTaskByStringIdentifier(
   }
 
   const numericIdentifier = Number(task);
+  if (findIdParamOutOfRange({ task: numericIdentifier })) throw new TaskIdentifierOutOfRangeError('task');
   if (!Number.isInteger(numericIdentifier) || numericIdentifier <= 0) return null;
 
   const matches = await prisma.task.findMany({
@@ -184,8 +210,9 @@ export async function findTaskByStringIdentifier(
     (match) => match.uniqueIndex === numericIdentifier
   );
 
-  if (uniqueIndexMatches.length === 1) return uniqueIndexMatches[0];
-  return matches.find((match) => match.id === numericIdentifier) ?? null;
+  const resolved = uniqueIndexMatches.length === 1 ? uniqueIndexMatches[0] : matches.find((match) => match.id === numericIdentifier);
+  if (resolved) recordAgentBoardScopeMiss(resolved.projectId);
+  return resolved ?? null;
 }
 
 export function validateTaskIdentifier(params: {

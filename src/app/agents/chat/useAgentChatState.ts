@@ -23,8 +23,6 @@ export function useAgentChatState(props: IProp) {
   const mobileFullscreenFlag = useFlag(HTPR_6476_MOBILE_AGENT_CHAT_FULLSCREEN_FLAG);
   const activityRowsEnabled = useFlag("htpr-6094-agent-activity-rows");
   const rosterStatusEnabled = useFlag("htpr-6287-agent-chat-roster-status");
-  // Idle durations and the idle-to-inactive flip have to move while the chat
-  // sits open, so the roster re-renders on a clock; no refetch involved.
   const [rosterNow, setRosterNow] = useState(() => Date.now());
   useEffect(() => {
     if (!rosterStatusEnabled) return;
@@ -51,34 +49,20 @@ export function useAgentChatState(props: IProp) {
   const [feedFilter, setFeedFilter] = useState<AgentChatFilter>("all");
   const [messagesError, setMessagesError] = useState<string | null>(null);
   const [draft, setDraft] = useState("");
-  // Mic dictation (AudioButton), same component and editor={null} pattern as
-  // the plain-text title field in TaskTitleModal.tsx.
   const [isRecording, setIsRecording] = useState(false);
   const [isDictationProcessing, setIsDictationProcessing] = useState(false);
   const [sending, setSending] = useState(false);
   const [awaiting, setAwaiting] = useState(false);
   const [stopping, setStopping] = useState(false);
-  // FIFO follow-ups typed while the agent is working (HTPR-6038), same
-  // pattern as useAiChat.ts's messageQueueRef/drainQueuedMessage: the
-  // composer never locks, a send while awaiting enqueues instead of
-  // double-firing, and the oldest queued message auto-sends once the
-  // agent's reply lands.
   const [queuedMessages, setQueuedMessages] = useState<
     { id: string; content: string }[]
   >([]);
   const messageQueueRef = useRef<{ id: string; content: string }[]>([]);
-  // Set to a queued item's id when its drained send fails, so the item goes
-  // back to the front of the queue instead of vanishing into the draft, and
-  // draining stops until that same item is removed (the failure would
-  // otherwise flip `awaiting` back to false and fire the next item out of
-  // order).
   const blockedQueueIdRef = useRef<string | null>(null);
   const [deliveryNotice, setDeliveryNotice] = useState(false);
   const [deliveryMode, setDeliveryMode] = useState<
     "webhook" | "polling" | null
   >(null);
-  // When the current wait for this session's reply began (last send, or the
-  // stored human message time after a reload).
   const [awaitingSince, setAwaitingSince] = useState<{
     sessionId: string;
     at: number;
@@ -89,25 +73,16 @@ export function useAgentChatState(props: IProp) {
   const detailsDialogRef = useRef<HTMLDialogElement>(null);
   const [isNarrow, setIsNarrow] = useState(false);
   const [openingFullChat, setOpeningFullChat] = useState(false);
-  // Auto-scroll + "scroll to bottom" indicator, same pattern as AI Chat's
-  // MessageList.tsx / useAiChat.ts (handleMessageListScroll,
-  // scrollMessagesToBottom), ported directly since both are a handful of
-  // plain DOM-ref lines with no AI-chat-specific coupling.
   const messageListRef = useRef<HTMLDivElement>(null);
   const [showScrollToBottom, setShowScrollToBottom] = useState(false);
 
-  // "+" in the roster header: a minimal name-only create flow over the same
-  // endpoint the admin API and CLI use, since no create-agent page exists yet.
   const [showCreateAgent, setShowCreateAgent] = useState(false);
   const [newAgentName, setNewAgentName] = useState("");
   const [creatingAgent, setCreatingAgent] = useState(false);
   const [createAgentError, setCreateAgentError] = useState<string | null>(null);
-  // Shown once right after creation; the create endpoint never returns it again.
   const [newAgentToken, setNewAgentToken] = useState<string | null>(null);
   const [tokenCopied, setTokenCopied] = useState(false);
 
-  // "@" in the composer: a small task-search popover reusing the same
-  // endpoint the Ctrl+K task search modal calls.
   const [mentionQuery, setMentionQuery] = useState<string | null>(null);
   const [mentionStart, setMentionStart] = useState(0);
   const [mentionResults, setMentionResults] = useState<ITask[]>([]);
@@ -116,32 +91,14 @@ export function useAgentChatState(props: IProp) {
   const [mentionLoadError, setMentionLoadError] = useState(false);
   const mentionOpen = mentionQuery !== null;
 
-  // Refs mirror the state that async callbacks and event handlers must read
-  // without going stale (which chat is on screen, which POST is in flight).
   const selectedIdRef = useRef<string | null>(null);
   const sessionIdRef = useRef<string | null>(null);
   const sendingRef = useRef(false);
-  // Mirrors `awaiting` (computed below, after `messages` is known) for
-  // drainQueuedMessage, a useRef-stable callback that can't otherwise read a
-  // fresh value of a plain render-time const.
   const awaitingRef = useRef(false);
-  // Mirrors `draft` for the global keydown handler below, so that handler
-  // doesn't need `draft` in its dependency array (which would tear down and
-  // re-add the window listener on every keystroke).
   const draftRef = useRef("");
-  // What selectAgent last restored into the composer. Text equal to this was
-  // not typed in this visit, so the agent-cycle guard below can ignore it.
   const restoredDraftRef = useRef("");
-  // Monotonic request generation for loadMessages, so a late response can be
-  // recognized as superseded by a newer one for the same session.
   const loadGenRef = useRef(0);
-  // The session whose server-side draft has already been folded in. The draft
-  // is taken from the server once per thread and never again, or every refetch
-  // would overwrite what is being typed right now.
   const draftHydratedRef = useRef<string | null>(null);
-  // Mobile keyboards only open for a focus() that lands synchronously inside
-  // the tap's event handler, so selectAgent needs the composer's DOM node
-  // before that handler returns (see the flushSync call there).
   const composerRef = useRef<HTMLTextAreaElement>(null);
   const composerEditorRef = useRef<Editor | null>(null);
   const focusComposer = () => {
@@ -151,12 +108,7 @@ export function useAgentChatState(props: IProp) {
     }
     composerRef.current?.focus();
   };
-  // Same pattern as loadGenRef: the mount-time roster fetch and the
-  // post-create-agent refresh both call loadAgents/setAgents, so a slower
-  // mount fetch resolving after a refresh must not clobber it.
   const rosterGenRef = useRef(0);
-  // A project refetch or a new query can start before the previous task search
-  // settles. Only the newest generation may update the popover.
   const mentionSearchGenRef = useRef(0);
 
 

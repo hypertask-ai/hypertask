@@ -1,17 +1,9 @@
-/**
- * Project-related validation schemas
- * 
- * Validations for: list_projects, list_sections
- */
 
 import { z } from 'zod';
 import { paginationSchema, sortBySchema, sortOrderSchema } from './common/pagination';
 import { withListQuerySchema } from './common/listQuery';
 import { estimateIndexOptionalSchema, statusFilterSchema } from './common/filters';
 
-/**
- * Schema for list_projects tool input
- */
 export function getListProjectsInputSchema() {
   return withListQuerySchema(
     z
@@ -31,9 +23,6 @@ export function getListProjectsInputSchema() {
 export const ListProjectsInputSchema = getListProjectsInputSchema();
 export type ListProjectsInput = z.infer<typeof ListProjectsInputSchema>;
 
-/**
- * Schema for board_manifest tool input
- */
 export function getBoardManifestInputSchema() {
   return z
     .object({
@@ -51,9 +40,6 @@ export const RenameBoardInputSchema = z.object({
 }).strict();
 export type RenameBoardInput = z.infer<typeof RenameBoardInputSchema>;
 
-/**
- * Schema for get_board_playbook tool input
- */
 export function getBoardPlaybookInputSchema() {
   return z
     .object({
@@ -65,10 +51,6 @@ export function getBoardPlaybookInputSchema() {
 export const BoardPlaybookInputSchema = getBoardPlaybookInputSchema();
 export type BoardPlaybookInput = z.infer<typeof BoardPlaybookInputSchema>;
 
-/**
- * Base schema for board_config tool input.
- * FastMCP requires a plain Zod object for tool parameters.
- */
 export function getBoardConfigBaseSchema() {
   return z
     .object({
@@ -115,10 +97,6 @@ export type BoardConfigInput = z.infer<typeof BoardConfigInputSchema>;
 const PROJECT_MEMBER_UUID_PATTERN =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
-/**
- * Base schema for project_admin tool input.
- * FastMCP requires a plain Zod object for tool parameters.
- */
 export function getProjectAdminBaseSchema() {
   return z
     .object({
@@ -156,10 +134,6 @@ export function getProjectAdminInputSchema() {
 export const ProjectAdminInputSchema = getProjectAdminInputSchema();
 export type ProjectAdminInput = z.infer<typeof ProjectAdminInputSchema>;
 
-/**
- * Base schema for list_sections tool (without refine validation)
- * Used for FastMCP parameter validation
- */
 export function getListSectionsBaseSchema() {
   return withListQuerySchema(
     z.object({
@@ -172,10 +146,6 @@ export function getListSectionsBaseSchema() {
     .strict();
 }
 
-/**
- * Schema for list_sections tool input (with refine validation)
- * Either project_id or board_id must be provided
- */
 export function getListSectionsInputSchema() {
   return getListSectionsBaseSchema().refine(
     (data) => data.project_id !== undefined || data.board_id !== undefined,
@@ -189,9 +159,6 @@ export function getListSectionsInputSchema() {
 export const ListSectionsInputSchema = getListSectionsInputSchema();
 export type ListSectionsInput = z.infer<typeof ListSectionsInputSchema>;
 
-/**
- * Schema for create_section tool input (legacy, used internally)
- */
 export function getCreateSectionInputSchema() {
   return z
     .object({
@@ -205,10 +172,6 @@ export function getCreateSectionInputSchema() {
 export const CreateSectionInputSchema = getCreateSectionInputSchema();
 export type CreateSectionInput = z.infer<typeof CreateSectionInputSchema>;
 
-/**
- * Schema for list_project_members tool input
- * Returns project/team members for resolving @mentions in comments
- */
 export const ListProjectMembersInputSchema = z
   .object({
     project_id: z.coerce.number().int().positive('project_id must be a positive integer'),
@@ -217,10 +180,6 @@ export const ListProjectMembersInputSchema = z
 
 export type ListProjectMembersInput = z.infer<typeof ListProjectMembersInputSchema>;
 
-/**
- * Schema for add_project_members tool input
- * Returns member added to project
- */
 export const AddProjectMembersInputSchema = z
   .object({
     project_id: z.coerce.number().int().positive('project_id must be a positive integer'),
@@ -233,9 +192,6 @@ export const AddProjectMembersInputSchema = z
 
 export type AddProjectMembersInput = z.infer<typeof AddProjectMembersInputSchema>;
 
-/**
- * Schema for create_label tool input (HTPR-3054)
- */
 export const CreateLabelInputSchema = z
   .object({
     project_id: z.number().int().positive().describe('Project/board ID'),
@@ -245,9 +201,6 @@ export const CreateLabelInputSchema = z
 
 export type CreateLabelInput = z.infer<typeof CreateLabelInputSchema>;
 
-/**
- * Schema for list_labels tool input.
- */
 export function getListLabelsBaseSchema() {
   return withListQuerySchema(
     z.object({
@@ -264,9 +217,6 @@ export function getListLabelsBaseSchema() {
 export const ListLabelsInputSchema = getListLabelsBaseSchema();
 export type ListLabelsInput = z.infer<typeof ListLabelsInputSchema>;
 
-/**
- * Manifest task for create_board (HTPR-3142). Exactly one of section_index or section_title.
- */
 export const CreateBoardTaskManifestSchema = z
   .object({
     title: z.string().min(1).max(500),
@@ -314,9 +264,6 @@ export const CreateBoardTaskManifestSchema = z
 
 export type CreateBoardTaskManifest = z.infer<typeof CreateBoardTaskManifestSchema>;
 
-/**
- * Schema for create_board tool (HTPR-3142). Agent supplies structure; backend persists atomically.
- */
 export function getCreateBoardInputSchema() {
   return z
     .object({
@@ -361,10 +308,6 @@ export function getCreateBoardInputSchema() {
 export const CreateBoardInputSchema = getCreateBoardInputSchema();
 export type CreateBoardInput = z.infer<typeof CreateBoardInputSchema>;
 
-/**
- * Base schema for section CRUD tool - single tool for Create, Read, Update, Delete
- * Action determines which params are required.
- */
 export function getSectionCrudBaseSchema() {
   return withListQuerySchema(
     z.object({
@@ -428,9 +371,6 @@ export function getSectionCrudBaseSchema() {
   ).strict();
 }
 
-/**
- * Section CRUD input with action-based validation
- */
 export function getSectionCrudInputSchema() {
   return getSectionCrudBaseSchema().superRefine((data, ctx) => {
     const { action, project_id, section_id, title, move_after_section_id, is_done, auto_assign } = data;
@@ -444,7 +384,6 @@ export function getSectionCrudInputSchema() {
     if (action === 'create' && !title) {
       ctx.addIssue({ code: z.ZodIssueCode.custom, message: 'title is required for create', path: ['title'] });
     }
-    // is_done can legitimately be null (clear the flag), so check presence, not truthiness.
     if (action === 'update' && !title && !move_after_section_id && is_done === undefined && auto_assign === undefined) {
       ctx.addIssue({
         code: z.ZodIssueCode.custom,

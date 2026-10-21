@@ -1,14 +1,8 @@
-/**
- * @fileoverview
- * AI Task Writer Config
- * Centralized configuration for AI Task Writer settings, UI, and behavior.
- */
 
 export const aiTaskWriterConfig = {
-  // Response history settings
   history: {
     maxHistoryItems: 10,
-    contextWindowSize: 3, // Number of previous messages to include in context
+    contextWindowSize: 3,
     autoClearOnAccept: true,
     autoClearOnDiscard: true,
   },
@@ -21,35 +15,24 @@ export const aiTaskWriterConfig = {
     placeholder: "37px",
   },
 
-  // Navigation UI settings
   navigation: {
     showNavigator: true,
     showAcceptButton: true,
     showResponseCounter: true,
   },
 
-  // AI request settings
   ai: {
     defaultLoadingText: "Thinking...",
-    maxContextLength: 2000, // characters
+    maxContextLength: 2000,
   },
 
-  // UI behavior
   ui: {
     autoFocus: true,
     showModeToggle: true,
     enableKeyboardShortcuts: true,
   },
 
-  // Keyboard shortcuts
-  // shortcuts: {
-  //   submit: "ENTER",
-  //   toggleMode: "CMD/CTRL+J",
-  //   audioRecord: "SHIFT+CMD/CTRL+D",
-  //   audioImprove: "SHIFT+CMD/CTRL+F",
-  // },
 
-  //shortcuts and tooltips
   shortcutsAndTooltips: {
     submit: "ENTER",
     toggleMode: "CMD/CTRL+J",
@@ -121,7 +104,6 @@ export const aiTaskWriterConfig = {
     },
   },
 
-  // Placeholder text
   placeholders: {
     taskWriter: {
       default: "What is this task about?",
@@ -131,14 +113,12 @@ export const aiTaskWriterConfig = {
     },
   },
 
-  // Modal settings
   modal: {
     showConfirmationOnEscape: true,
     confirmationText: "Discard AI Response?",
     confirmationSubtext: "The AI Response will not be saved",
   },
 
-  // Element IDs
   elementIds: {
     createTaskModalTrigger: "create-task-modal-ai-writer-trigger-internal",
   },

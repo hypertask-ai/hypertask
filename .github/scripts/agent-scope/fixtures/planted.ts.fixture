@@ -1,0 +1,4 @@
+
+export async function planted(id: number) {
+  return prisma.task.findFirst({ where: { id } });
+}

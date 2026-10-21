@@ -64,7 +64,6 @@ export function createTableRowRenderer(context: Context) {
           return (
             <span
               key="ticket"
-              // Frozen on desktop only. Mobile scrolls every column as one row.
               style={{ left: frozenColumnOffset("ticket") }}
               className={`md:sticky md:z-[1] font-bold text-icon-dark-gray whitespace-nowrap ${stickyBackground}`}
             >

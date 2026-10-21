@@ -98,7 +98,6 @@ export function useFlagsPageFilters(enabled: boolean, multipleRisks = false) {
     if (!base) return;
     pending.current = null;
     const nextUrl = urlFor(current.current);
-    // Typing replaces the current entry. Restore its original URL before pushing the finished search.
     window.history.replaceState(base.state, "", base.url);
     if (nextUrl !== base.url) window.history.pushState(base.state, "", nextUrl);
   }

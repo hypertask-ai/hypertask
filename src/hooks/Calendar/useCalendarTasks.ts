@@ -141,26 +141,22 @@ export function useCalendarTasks({
     const weeksArray = [];
 
     if (currentView === "month") {
-      // Add days from previous month
       for (let i = startDay - 1; i >= 0; i--) {
         const date = new Date(monthStart);
         date.setDate(date.getDate() - (i + 1));
         daysArray.push(date);
       }
-      // Add days of current month
       for (let i = 1; i <= monthEnd.getDate(); i++) {
         daysArray.push(
           new Date(currentDate.getFullYear(), currentDate.getMonth(), i)
         );
       }
-      // Add days from next month
       for (let i = 1; i < 7 - endDay; i++) {
         daysArray.push(
           new Date(monthEnd.getFullYear(), monthEnd.getMonth() + 1, i)
         );
       }
 
-      // Group days into weeks
 
       for (let i = 0; i < daysArray.length; i += 7) {
         weeksArray.push(daysArray.slice(i, i + 7));

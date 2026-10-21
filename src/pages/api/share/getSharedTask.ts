@@ -6,8 +6,6 @@ import {
   isShareLinkLive,
 } from "@/utils/controllers/tasks/getSharedTask";
 
-// HTPR-7174: callers only route to the ticket, so the response carries ids, never
-// task content. A Domain link also needs a verified member of the task's board.
 const handler: NextApiHandler = async (
   req: NextApiRequest,
   res: NextApiResponse

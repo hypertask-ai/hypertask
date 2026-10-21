@@ -76,8 +76,6 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // Expired keys cannot authenticate, so they must not consume a slot —
-    // otherwise ten lapsed keys would permanently block creating a new one.
     const activeCount = await prisma.apiKey.count({
       where: {
         userId: user.id,

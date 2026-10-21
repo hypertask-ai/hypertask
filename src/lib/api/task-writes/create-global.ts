@@ -1,3 +1,6 @@
+import { HTPR_7513_WRITER_PROJECT_LABELS_FLAG } from "@/lib/flags/keys";
+import { recordAgentBoardScopeMiss } from "@/lib/auth/agentScope";
+import { HTPR_7471_WRITER_BOARD_FORMAT_FLAG } from "@/lib/flags/keys";
 import { assertParentTaskOnBoard, ParentTaskNotFoundError } from "@/utils/controllers/tasks/parentTaskAccess";
 import { taskWriterDueDateForSave } from "@/lib/ai/taskWriterDueDate";
 import { HTPR_7054_CTRLJ_DUE_DATE_FLAG } from "@/lib/flags/keys";
@@ -14,6 +17,7 @@ import generateRank from "@/utils/generateRank";
 import { createTaskWithBoardWebhookOutbox } from "@/lib/mcp/webhooks/taskEvents";
 import { publishBoardWebhookDeliveries } from "@/lib/mcp/webhooks/outbox";
 import { persistAgentTaskCreatedPending } from "@/lib/agentWebhooks/outbox";
+import { CREATION_AGENT_HEADER, CREATION_CHANNEL_HEADER, creationChannelFromHeader } from "@/lib/telemetry/savedWork";
 import { resolveActingAgent } from "@/lib/auth/resolveActingAgent";
 import { SESSION_COOKIE, verifySession } from "@/lib/auth/session";
 import { taskWriteAccessWhere } from "@/utils/controllers/projects/getAllIncludes";
@@ -47,7 +51,7 @@ const route = (requestStartedAt: number) => taskWriteRoute({
       urlsToAdd,
       assignees,
       createTaskFromComment,
-      agentId: requestedAgentId, //Determines if task is created by an agent. If task created by an agent then everything in here is created by an agent
+      agentId: requestedAgentId,
     } = body;
     console.log("🤔 ~ creating task ~ body:", body);
     if (
@@ -109,10 +113,27 @@ const route = (requestStartedAt: number) => taskWriteRoute({
     if (!authorizedProject) {
       return NextResponse.json({ message: "Forbidden" }, { status: 403, headers: responseHeaders });
     }
+    recordAgentBoardScopeMiss(authorizedProject.id, "write");
+    let customFields: import("@/lib/ai/taskWriterCustomFields").TaskWriterCustomFieldValue[] = [];
+    if (body.requestKind === "compose-task" && Array.isArray(body.customFields) && body.customFields.length &&
+        await isFeatureEnabled(HTPR_7471_WRITER_BOARD_FORMAT_FLAG, userId)) {
+      const { validateTaskWriterCustomFields } = await import("@/lib/ai/taskWriterCustomFields");
+      const { getCustomFieldsForProject } = await import("@/utils/controllers/customFields");
+      customFields = validateTaskWriterCustomFields(await getCustomFieldsForProject(projectId), body.customFields);
+    }
     const dueDateEnabled = body.requestKind === "compose-task" && body.writerDueDate != null &&
       await isFeatureEnabled(HTPR_7054_CTRLJ_DUE_DATE_FLAG, userId);
     const writerDueDate = dueDateEnabled ? taskWriterDueDateForSave(body.writerDueDate, body.writerTimeZone) : undefined;
     const dueDate = writerDueDate ?? requestedDueDate;
+    let writerLabelIds: string[] = [];
+    let boardLabelIds: string[] = [];
+    if (!tags?.length && body.requestKind === "compose-task" && Array.isArray(body.writerLabelIds) && body.writerLabelIds.length &&
+        await isFeatureEnabled(HTPR_7513_WRITER_PROJECT_LABELS_FLAG, userId)) {
+      const { validateTaskWriterLabelIds } = await import("@/app/api/ai/_lib/taskWriterProperties");
+      const boardLabels = await prisma.label.findMany({ where: { projectId }, select: { id: true } });
+      boardLabelIds = boardLabels.map((label) => label.id);
+      writerLabelIds = validateTaskWriterLabelIds(body.writerLabelIds, boardLabelIds);
+    }
     if (body.existingTaskId != null) {
       const taskId = Number(body.existingTaskId);
       if (!Number.isSafeInteger(taskId) || taskId <= 0) {
@@ -134,6 +155,21 @@ const route = (requestStartedAt: number) => taskWriteRoute({
         expectedStatus: target.status,
       });
       if (result.status !== 200) return NextResponse.json(result.json, { status: result.status, headers: responseHeaders });
+      if (writerLabelIds.length) {
+        const { mutateTaskLabels } = await import("@/lib/mcp/tasks/services");
+        const actingAgent = agentId ? await prisma.agent.findUnique({
+          where: { id: agentId },
+          select: { id: true, userId: true, displayName: true, photoURL: true },
+        }) : null;
+        await mutateTaskLabels(taskId, projectId, { add: writerLabelIds, skipIfPresent: boardLabelIds }, {
+          id: userId, email: currentUser.email ?? "", displayName: currentUser.displayName, photoURL: currentUser.photoURL,
+        }, actingAgent);
+        result.json.taskLabels = await prisma.taskLabel.findMany({ where: { taskId }, include: { label: true } });
+      }
+      if (customFields.length) {
+        const { saveWriterCustomFieldValues } = await import("@/utils/controllers/customFields");
+        await saveWriterCustomFieldValues(taskId, customFields);
+      }
       if (writerDueDate) {
         const { cancelDueDateJob, scheduleDueDateJob } = await import("@/pages/api/queues/duedateQueue");
         await cancelDueDateJob(taskId, projectId);
@@ -166,6 +202,7 @@ const route = (requestStartedAt: number) => taskWriteRoute({
         }, { status: 400, headers: responseHeaders });
       }
     }
+    if (!tagIds.length) tagIds = writerLabelIds;
     let priorityCreated: any = undefined;
     let estimateCreated: any = undefined;
     let relatedTasks: any = { status: 200, json: [] };
@@ -298,6 +335,10 @@ const route = (requestStartedAt: number) => taskWriteRoute({
       userId: currentUser.id,
       agentId: agentId ?? null,
     };
+    const requestedAnalyticsAgentId = agentId ? null : request.headers.get(CREATION_AGENT_HEADER);
+    const analyticsAgentId = requestedAnalyticsAgentId && (await getActiveAgentOwnerId(requestedAnalyticsAgentId)) === session.userId
+      ? requestedAnalyticsAgentId
+      : null;
     try {
       const created = await createTaskWithBoardWebhookOutbox(prisma, taskCreatedActor, async (tx) => {
         await tx.$executeRaw`SELECT pg_advisory_xact_lock(${TASK_UNIQUE_INDEX_ADVISORY_LOCK_CLASS}::int, ${projectId}::int)`;
@@ -310,7 +351,6 @@ const route = (requestStartedAt: number) => taskWriteRoute({
         const currentProject = await tx.project.findUnique({ where: { id: projectId }, select: { uniqueIdentifier: true } });
         const nextUniqueIndex = await getNextUniqueTaskIndex(projectId, tx);
         const currentDate = new Date();
-        // Callers sometimes send a number; Task.ranking is a string, so place the task last instead of crashing (HTPR-7217).
         const taskRanking = ranking == null || typeof ranking === "string"
           ? ranking
           : generateRank((await tx.task.findFirst({
@@ -425,7 +465,7 @@ const route = (requestStartedAt: number) => taskWriteRoute({
               : null,
           },
         };
-      });
+      }, creationChannelFromHeader(request.headers.get(CREATION_CHANNEL_HEADER)), analyticsAgentId);
       newTask = created.result.task as TaskCreatedGlobally;
       boardWebhookDeliveryIds = created.boardWebhookDeliveryIds;
       priorityCreated = created.result.priority;
@@ -451,6 +491,10 @@ const route = (requestStartedAt: number) => taskWriteRoute({
     }
     if (!newTask) {
       return NextResponse.json({ message: "Failed to create task" }, { status: 400, headers: responseHeaders });
+    }
+    if (customFields.length) {
+      const { saveWriterCustomFieldValues } = await import("@/utils/controllers/customFields");
+      await saveWriterCustomFieldValues(newTask.id, customFields);
     }
     const taskCreatedAt = performance.now();
     const description_ = newTask.description_;
@@ -541,7 +585,6 @@ const route = (requestStartedAt: number) => taskWriteRoute({
 export const POST: TaskWriteRoute = async (request, session) => {
   const requestStartedAt = performance.now();
   const body = await request.json();
-  // Preserve the legacy pre-auth exception, including its req.body error text.
   const req = { body };
   const { title } = req.body;
   void title;

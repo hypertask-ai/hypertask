@@ -24,7 +24,6 @@ const BulkActionsInbox: FC<IProps> = ({ selectedIds, clearSelection, handleBulkA
                                     className="flex items-center gap-2 px-3 py-1 border rounded bg-transparent hover:bg-gray-100 text-content"
                                     title="Add reminder (H)"
                                 >
-                                    {/* Replace with your Clock icon */}
                                     <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                         <circle cx="12" cy="12" r="10" strokeWidth="2" />
                                         <path strokeWidth="2" d="M12 6v6l4 2" />
@@ -37,7 +36,6 @@ const BulkActionsInbox: FC<IProps> = ({ selectedIds, clearSelection, handleBulkA
                                     className="flex items-center gap-2 px-3 py-1 border rounded bg-transparent hover:bg-gray-100 text-content"
                                     title="Archive messages (E)"
                                 >
-                                    {/* Replace with your Archive icon */}
                                     <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                         <rect x="3" y="8" width="18" height="13" rx="2" strokeWidth="2" />
                                         <path strokeWidth="2" d="M16 3v5M8 3v5" />

@@ -45,7 +45,6 @@ export const useTutorialLifecycle = (context: TutorialContext & ReturnType<typeo
     handleKeyUp,
   } = context;
 
-  //these useeffects need to be changed. Its absurd that I did this.
   useEffect(() => {
     const filtered = sidebarInfo.filter((option) =>
       option.title.toLowerCase().includes(sideBarInput.toLowerCase())
@@ -95,8 +94,6 @@ export const useTutorialLifecycle = (context: TutorialContext & ReturnType<typeo
       setShowExit(true);
     }
 
-    // Launched from the onboarding sequence: return there to finish it (Launch step)
-    // instead of dumping the user on "/" (which the middleware bounces to /onboarding step 0).
     const onboardingReturn = parseCookies()?.onboarding_return;
     if (onboardingReturn) {
       return onboardingReturn;
@@ -121,27 +118,23 @@ export const useTutorialLifecycle = (context: TutorialContext & ReturnType<typeo
   }, [params]);
 
   const onMountOperation = useCallback(async () => {
-    // If not logged in and not a funnel user, redirect home
     if (!isLoggedIn && !isFunnelUser) {
       router.push("/");
       return;
     }
 
-    // Funnel user flow
     if (!isLoggedIn && isFunnelUser) {
       setShowExit(true);
       return;
     }
 
-    // Logged in user flow
     if (isLoggedIn) {
-      // If already on tutorial page, just set up the state and don't redirect
       if (pathname?.startsWith("/interactive-onboarding")) {
         resetActiveScene();
         setShowExit(!!currentUser.UserSetting.onboardingTutorialStatus);
         const exit = await getURLString();
         setExitURL(exit);
-        return; // Don't redirect if already on tutorial page
+        return;
       }
 
       resetActiveScene();
@@ -182,7 +175,6 @@ export const useTutorialLifecycle = (context: TutorialContext & ReturnType<typeo
       markTutorialCompleted();
       router.push("/login");
     } else {
-      // For logged-in users, update tutorial status if not already updated
       if (isLoggedIn && !currentUser.UserSetting.onboardingTutorialStatus) {
         try {
           const newSetting: any = await updateUserSettingTutorial(
@@ -197,7 +189,7 @@ export const useTutorialLifecycle = (context: TutorialContext & ReturnType<typeo
               "nookies_user",
               JSON.stringify(slimUserForCookie(updatedUser)),
               {
-                maxAge: 600 * 60 * 24 * 7, // 1 week
+                maxAge: 600 * 60 * 24 * 7,
                 path: "/",
               },
             );

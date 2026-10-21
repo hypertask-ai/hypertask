@@ -8,23 +8,12 @@ const STREAM_RATE_WINDOW_SECONDS = 60;
 const STREAM_RATE_LIMIT = 12;
 const CANCELLATION_RATE_LIMIT = 30;
 
-/** Why a turn aborted itself when it ran out of time (distinct from user Stop). */
 export const AI_CHAT_TURN_DEADLINE_REASON =
   "AI chat turn exceeded its time budget";
 export const AI_CHAT_TURN_DEADLINE_USER_MESSAGE =
   "This reply took too long to generate and was stopped. Try again.";
-/** Seconds kept for graceful cleanup between our deadline and the platform kill. */
 export const AI_CHAT_TURN_DEADLINE_RESERVE_SECONDS = 15;
 
-/**
- * Aborts the provider request just before the platform kills the whole server
- * function (HTPR-6278). A hard kill skips every finally: the reply is never
- * persisted, the tool never runs, no error is reported, and the stream lease
- * keeps other turns out until its TTL lapses. Ending the turn a few seconds
- * early turns that into a graceful, reported failure. The budget counts from
- * route entry, not from stream start, because auth and validation already
- * consumed part of the platform window.
- */
 export function createTurnDeadline(
   abort: (reason: string) => void,
   budgetSeconds: number,
@@ -113,8 +102,6 @@ export async function acquireAiChatStreamLease(
         cancellationIdentity.streamId,
       ));
     }
-    // An isolated agent reply still waits for any user-key reply (the owner's,
-    // or an agent reply started before this deploy) but never holds that key.
     const guardKeys = agentId && isolateAgentLease ? [activeStreamKey(userId)] : [];
     const token = randomUUID();
     if (keys.length + guardKeys.length > 1) {
@@ -233,7 +220,6 @@ redis.call("expire", KEYS[2], ARGV[1])
 return count
 `;
 
-/** Records Stop outside the streaming invocation so every runtime sees it. */
 export async function requestAiChatCancellation(
   userId: number,
   sessionId: string,
@@ -275,16 +261,12 @@ export async function requestAiChatCancellation(
     if (outcome === 1) return "cancelling" as const;
     if (outcome === 4) return "unknown" as const;
     if (outcome === 2) {
-      // The tool fence won before Stop. The marker above prevents every later
-      // tool, while acknowledgement waits for the already-started operation.
       const activeTools = Number((await redis.get(activeToolKey)) ?? "0");
       if (!Number.isFinite(activeTools)) {
         throw new Error("Invalid in-flight AI tool state");
       }
       if (activeTools <= 0) return "cancelling" as const;
     } else if (outcome === 3) {
-      // Persistence won the fence first. It will finalize durable completion
-      // or release its lease; retry this atomic decision after either outcome.
       const completion = await redis.get(completedKey);
       if (completion === "complete") return "completed" as const;
     }
@@ -293,7 +275,6 @@ export async function requestAiChatCancellation(
   throw new Error("Timed out waiting for the active AI operation");
 }
 
-/** True when a Stop has been recorded for this exact stream attempt. */
 export function isAiChatCancellationRequested(
   redis: StreamRedis,
   userId: number,
@@ -305,7 +286,6 @@ export function isAiChatCancellationRequested(
     .then((value) => value === "1");
 }
 
-/** Polls Redis while a provider stream is alive and aborts it cooperatively. */
 export function watchAiChatCancellation(
   redis: StreamRedis,
   userId: number,
@@ -344,11 +324,6 @@ export function assertAiChatToolCanStart(cancelled: boolean, signal: AbortSignal
   }
 }
 
-/**
- * Defines the authoritative tool-start boundary in Redis. Redis serializes this
- * script against Stop's SET: a tool either starts first and owns a fence, or it
- * observes cancellation and never invokes its implementation.
- */
 export async function acquireAiChatToolFence(
   redis: StreamRedis,
   userId: number,
@@ -383,7 +358,6 @@ export async function acquireAiChatToolFence(
   };
 }
 
-/** Atomically orders final persistence against Stop for the same assistant UUID. */
 export async function acquireAiChatCompletionFence(
   redis: StreamRedis,
   userId: number,
@@ -438,7 +412,6 @@ export async function releaseAiChatCompletionFence(
   );
 }
 
-/** Keeps the short crash-recovery lease alive only while persistence is live. */
 export function keepAiChatCompletionFenceAlive(
   redis: StreamRedis,
   userId: number,

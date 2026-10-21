@@ -23,7 +23,6 @@ const ReadOnlyKanban = ({ project, inviteKey }: { project: IProject, inviteKey: 
   const kanbanContainerRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    // Board name first, bullet separator; re-run on board switch.
     const title = `${project?.title} • Hypertask`;
     document.title = title;
   }, [project?.title]);
@@ -56,7 +55,6 @@ const ReadOnlyKanban = ({ project, inviteKey }: { project: IProject, inviteKey: 
     };
   }, []);
 
-  // Filter sections based on search keyword
   const filteredSections = useMemo(() => {
     if (searchKeyword && searchKeyword.length > 0) {
       return getAppliedSearchedTasks(project.sections || [], searchKeyword);

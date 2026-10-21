@@ -652,8 +652,6 @@ export const useLearnTutorialMovementObservers = (context: LearnTutorialContext)
   ]);
 
   useEffect(() => {
-    // Add Column navigates away while its input owns focus. Keep retrying so
-    // the exact tutorial task regains focus as soon as the board remounts.
     if (
       !tutorialState.active ||
       (tutorialState.scene !== "moveAcross" &&

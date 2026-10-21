@@ -6,7 +6,6 @@ import { useSearchParams } from "next/navigation";
 import toast from "react-hot-toast";
 import SignOutModal from "@/components/Modals/SignOut/SignOutModal";
 import { useSignout } from "@/hooks/MultiPages/HTC/useSignout";
-import { useFlag } from "@/hooks/useFlag";
 import { authClient } from "@/lib/auth/betterAuthClient";
 import {
   figmaConnectErrorMessage,
@@ -41,7 +40,6 @@ const FIGMA_CONNECT_URL = `${FIGMA_OAUTH_START_PATH}?returnTo=${encodeURICompone
 
 const AccountsSection = () => {
   const { handleHardReset } = useSignout();
-  const figmaEnabled = useFlag("htpr-6136-figma-connect");
   const searchParams = useSearchParams();
   const [accounts, setAccounts] = useState<SwitchAccount[]>([]);
   const [error, setError] = useState<string | null>(null);
@@ -69,7 +67,6 @@ const AccountsSection = () => {
   const activeId = getActiveAccountId();
 
   const refreshFigmaConnection = useCallback(async () => {
-    if (!figmaEnabled) return;
     setFigmaError(null);
     try {
       const response = await fetch(FIGMA_CONNECTION_PATH, {
@@ -89,7 +86,7 @@ const AccountsSection = () => {
     } finally {
       setFigmaLoading(false);
     }
-  }, [figmaEnabled]);
+  }, []);
 
   const refreshAccounts = useCallback(async () => {
     const nextAccounts = await listAccounts();
@@ -244,10 +241,6 @@ const AccountsSection = () => {
     }
   };
 
-  // A failed connect returns here as ?figma_error=<code>. The message sits
-  // inside the Connected apps card, under the row that was clicked, because the
-  // page is otherwise identical after the bounce and a note below the card
-  // reads as unrelated.
   const figmaMessage =
     figmaError ?? (!figmaLoading && !figmaConfigured
       ? "Figma is not set up on this server yet."
@@ -373,19 +366,17 @@ const AccountsSection = () => {
         </p>
       )}
 
-      {figmaEnabled && (
-        <SettingsCard title="Connected apps">
-          <BillingActionRow label="Figma account" action={figmaAction} />
-          {figmaMessage && (
-            <p
-              className="px-2 text-dense font-medium text-red-400"
-              role="alert"
-            >
-              {figmaMessage}
-            </p>
-          )}
-        </SettingsCard>
-      )}
+      <SettingsCard title="Connected apps">
+        <BillingActionRow label="Figma account" action={figmaAction} />
+        {figmaMessage && (
+          <p
+            className="px-2 text-dense font-medium text-red-400"
+            role="alert"
+          >
+            {figmaMessage}
+          </p>
+        )}
+      </SettingsCard>
 
       <SettingsCard title="Passkeys">
         <div className="flex flex-col">

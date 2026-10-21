@@ -27,7 +27,6 @@ export type TableCreateTaskControlProps = {
   selectedIndex: number;
   sections: readonly TableCreateTaskSection[];
   toggleCreateTaskGlobally: ToggleCreateTaskGlobally;
-  quickEntryEnabled?: boolean;
   quickCreateTask?: QuickCreateTask;
 };
 
@@ -42,7 +41,6 @@ export const getTableCreateTaskControlProps = ({
   selectedIndex,
   sections,
   toggleCreateTaskGlobally,
-  quickEntryEnabled,
   quickCreateTask,
 }: TableCreateTaskControlInput): TableCreateTaskControlProps => ({
   hasCurrentProject: Boolean(currentProject),
@@ -51,7 +49,6 @@ export const getTableCreateTaskControlProps = ({
   selectedIndex,
   sections,
   toggleCreateTaskGlobally,
-  quickEntryEnabled,
   quickCreateTask,
 });
 
@@ -62,7 +59,6 @@ export const TableCreateTaskControl = ({
   selectedIndex,
   sections,
   toggleCreateTaskGlobally,
-  quickEntryEnabled,
   quickCreateTask,
 }: TableCreateTaskControlProps) => {
   const nQuickAddEnabled = useFlag(HTPR_6902_N_QUICK_ADD_FLAG);
@@ -78,7 +74,7 @@ export const TableCreateTaskControl = ({
     sections,
   );
   const labels = getTableCreateTaskButtonLabelsForSelection(selectedRow, sections);
-  const quickEntry = Boolean(quickEntryEnabled && quickCreateTask && projectId);
+  const quickEntry = Boolean(quickCreateTask && projectId);
   const activeTarget = openTarget?.projectId === projectId ? openTarget : null;
 
   useEffect(nQuickAddEnabled ? () => {

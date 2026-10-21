@@ -19,6 +19,7 @@ setup() {
   export RUNNER_SELFUPDATE_STATE=$C/state RUNNER_SELFUPDATE_SYSTEMCTL=$C/systemctl
   export FAKE_SYSTEMCTL_LOG=$C/systemctl.log FAKE_EVENTS=$C/events FAKE_DELIVER_CALLS=$C/deliver-calls
   export FAKE_SYSTEMCTL_FAIL_MARKER=$C/failure-used
+  export RUNNER_SELFUPDATE_RETRY_DELAY=0
   unset RUNNER_SELFUPDATE_GIT FAKE_SYSTEMCTL_FAIL FAKE_NO_RUNNERS FAKE_UPDATER_PID
   export TMPDIR=$C/backups
   mkdir -p "$TMPDIR"
@@ -153,6 +154,34 @@ run_bad 'case 6: HEAD not production rejected'
 restored wrong-head
 eq 'wrong HEAD never installs' "$(cat "$FAKE_SYSTEMCTL_LOG")" ''
 eq 'wrong HEAD alerts' "$(events)" 1
+
+eq 'wrong HEAD is retried once before alerting' "$(grep -c 'retrying in 0s' "$C/output")" 1
+
+setup fetch-race
+merge runner-deliver '# production moved while another fetch held the ref'
+cat > "$C/git" <<'EOF'
+#!/usr/bin/env bash
+if [ "${3:-}" = fetch ] && [ ! -e "$FAKE_EVENTS.raced" ]; then
+  touch "$FAKE_EVENTS.raced"
+  echo "error: cannot lock ref 'refs/remotes/origin/production'" >&2; exit 1
+fi
+exec git "$@"
+EOF
+chmod +x "$C/git"; export RUNNER_SELFUPDATE_GIT=$C/git
+run_ok 'case 6b: one lost fetch race is retried and installs'
+if cmp -s "$S/runner-deliver" "$C/lib/runner-deliver"; then ok 'retried update installs production'; else bad 'retried update did not install'; fi
+eq 'recovered race raises no alert' "$(events)|$(wc -l < "$FAKE_DELIVER_CALLS" | tr -d ' ')" '0|0'
+
+setup fetch-down
+cat > "$C/git" <<'EOF'
+#!/usr/bin/env bash
+if [ "${3:-}" = fetch ]; then echo fetch >> "$FAKE_EVENTS.fetches"; exit 1; fi
+exec git "$@"
+EOF
+chmod +x "$C/git"; export RUNNER_SELFUPDATE_GIT=$C/git
+run_bad 'case 6c: fetch failing twice alerts'
+eq 'fetch tried exactly twice' "$(wc -l < "$FAKE_EVENTS.fetches" | tr -d ' ')" 2
+if grep -qE '^runner-selfupdate-fetch-[0-9a-f]{12}\|ht-product-lead\|Could not fetch' "$FAKE_EVENTS"; then ok 'persistent fetch failure alerts once'; else bad 'fetch alert missing'; cat "$FAKE_EVENTS"; fi
 
 setup install-timer
 rm "$C/units/runner-selfupdate.service" "$C/units/runner-selfupdate.timer" "$C/lib/runner-selfupdate"

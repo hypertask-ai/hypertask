@@ -1,6 +1,8 @@
-import { LogType, Status } from "@prisma/client";
+import { processAnalyticsIntentSoon } from "@/lib/telemetry/analyticsIntents";
+import { LogType, Status, type Prisma } from "@prisma/client";
 
 import prisma from "@/lib/prisma";
+import { enqueueMemberJoined } from "@/lib/telemetry/inviteAnalytics";
 import { withTeamSeatBillingLock } from "@/lib/seatBillingLock";
 import { mutateAndSyncSeatBilling } from "@/lib/syncSeatBilling";
 import { ensureTeamMembership } from "@/lib/teamMembership";
@@ -8,7 +10,6 @@ import createLog from "@/utils/controllers/logs/createLog";
 import { updateTrial } from "@/utils/controllers/members/updateTrial";
 
 export type AddedProjectMember = {
-  /** Project Member row id, or null when the user is the board owner (no Member row). */
   id: number | null;
   userId: number;
   displayName: string | null;
@@ -33,17 +34,10 @@ type JoinMutationResult = {
   error?: string;
 };
 
-/**
- * Add an existing Hypertask user to a project board, creating team membership
- * and syncing seat billing the same way task-share join and invite accept do.
- * Does not send email invites. Idempotent when the user is already a member.
- *
- * Team seat creation and board Member creation run in one billing lock so a
- * failed board add cannot leave a billed seat without project access.
- */
 export async function addExistingUserToProject(
   projectId: number,
   userId: number,
+  inviterUserId: number | null = null,
 ): Promise<AddExistingUserToProjectResult> {
   const targetUser = await prisma.user.findUnique({
     where: { id: userId },
@@ -135,9 +129,6 @@ export async function addExistingUserToProject(
     Boolean(team.stripe_customer_id) && !memberTeamCheck && !ownsTheTeam;
 
   if (needsNewTeamSeat) {
-    // Seat billing runs once after both team and board membership exist
-    // (HTPR-4216). All local membership writes share one Prisma transaction so
-    // a failed board row cannot leave an accepted team seat or stale seat count.
     const { value } = await mutateAndSyncSeatBilling<JoinMutationResult>(
       teamId,
       async (assertHeld) => {
@@ -203,16 +194,16 @@ export async function addExistingUserToProject(
               });
             }
 
+            const analyticsKey = await enqueueMemberJoined(tx, member.id, userId, projectId, null, inviterUserId);
             return {
+              analyticsKey,
               memberId: member.id,
               outcome: "added" as const,
               created,
             };
           });
 
-          // Membership already committed inside the transaction. Do not call
-          // assertHeld() here: a lease assertion failure would be caught below
-          // and falsely report that no member was created.
+          if (joined.analyticsKey) processAnalyticsIntentSoon(joined.analyticsKey);
           return {
             value: {
               memberId: joined.memberId,
@@ -290,13 +281,20 @@ export async function addExistingUserToProject(
   };
 
   await withTeamSeatBillingLock(teamId, async (assertHeld) => {
-    join = await ensureProjectMemberRow({
-      assertHeld,
-      projectId,
-      userId,
-      ownsTheTeam,
-      teamId,
+    const joined = await prisma.$transaction(async (tx) => {
+      const result = await ensureProjectMemberRow(tx, {
+        assertHeld,
+        projectId,
+        userId,
+        ownsTheTeam,
+        teamId,
+      });
+      const analyticsKey = result.outcome === "added" && result.memberId !== null
+        ? await enqueueMemberJoined(tx, result.memberId, userId, projectId, null, inviterUserId) : null;
+      return { result, analyticsKey };
     });
+    join = joined.result;
+    if (joined.analyticsKey) processAnalyticsIntentSoon(joined.analyticsKey);
   });
 
   if (join.memberId == null) {
@@ -335,7 +333,7 @@ export async function addExistingUserToProject(
   };
 }
 
-async function ensureProjectMemberRow(input: {
+async function ensureProjectMemberRow(db: Prisma.TransactionClient, input: {
   assertHeld: () => void;
   projectId: number;
   userId: number;
@@ -344,7 +342,7 @@ async function ensureProjectMemberRow(input: {
 }): Promise<JoinMutationResult> {
   const { assertHeld, projectId, userId, ownsTheTeam, teamId } = input;
   assertHeld();
-  const acceptedTeamMember = await prisma.member_Team.findUnique({
+  const acceptedTeamMember = await db.member_Team.findUnique({
     where: { userId_teamId: { userId, teamId } },
     select: { status: true },
   });
@@ -358,7 +356,7 @@ async function ensureProjectMemberRow(input: {
     };
   }
 
-  const alreadyMember = await prisma.member.findFirst({
+  const alreadyMember = await db.member.findFirst({
     where: {
       projectId,
       userId,
@@ -370,7 +368,7 @@ async function ensureProjectMemberRow(input: {
   }
 
   assertHeld();
-  const member = await prisma.member.create({
+  const member = await db.member.create({
     data: {
       userId,
       projectId,

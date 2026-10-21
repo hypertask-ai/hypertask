@@ -8,6 +8,8 @@ const { Webhook } = require("svix");
 const root = path.resolve(__dirname, "..");
 const calls = [];
 const claims = [];
+const delays = [];
+const errors = [];
 const webhookSecret = `whsec_${Buffer.from("test-webhook-secret").toString("base64")}`;
 const alert = {
   environment: "preview",
@@ -56,8 +58,13 @@ async function dispatch(overrides = {}, status = 204) {
   };
   const previous = Object.fromEntries(Object.keys(environment).map((key) => [key, process.env[key]]));
   const originalFetch = global.fetch;
+  const originalSetTimeout = global.setTimeout;
+  const originalConsoleError = console.error;
+  const responses = Array.isArray(status) ? status : [status];
   calls.length = 0;
   claims.length = 0;
+  delays.length = 0;
+  errors.length = 0;
   try {
     for (const [key, value] of Object.entries(environment)) {
       if (value === undefined) delete process.env[key];
@@ -65,8 +72,15 @@ async function dispatch(overrides = {}, status = 204) {
     }
     global.fetch = async (url, options) => {
       calls.push({ url, body: JSON.parse(options.body) });
-      return { status };
+      const response = responses[Math.min(calls.length - 1, responses.length - 1)];
+      if (response instanceof Error) throw response;
+      return { status: response };
     };
+    global.setTimeout = (callback, ms) => {
+      delays.push(ms);
+      callback();
+    };
+    console.error = (...args) => errors.push(args);
     const body = "{}";
     const timestamp = new Date();
     return await POST(new NextRequest("https://app.hypertask.ai/api/integrations/posthog/error-alert", {
@@ -80,6 +94,8 @@ async function dispatch(overrides = {}, status = 204) {
     }));
   } finally {
     global.fetch = originalFetch;
+    global.setTimeout = originalSetTimeout;
+    console.error = originalConsoleError;
     for (const [key, value] of Object.entries(previous)) {
       if (value === undefined) delete process.env[key];
       else process.env[key] = value;
@@ -113,5 +129,32 @@ test("invalid workflow refs are rejected before GitHub dispatch", async () => {
 
 test("failed GitHub dispatch releases the claim for retry", async () => {
   assert.equal((await dispatch({}, 422)).status, 503);
+  assert.equal(calls.length, 1);
   assert.deepEqual(claims, ["release"]);
+  assert.deepEqual(delays, []);
+});
+
+test("transient GitHub 5xx is retried until dispatch succeeds", async () => {
+  assert.equal((await dispatch({}, [500, 502, 204])).status, 204);
+  assert.equal(calls.length, 3);
+  assert.deepEqual(claims, ["commit"]);
+  assert.deepEqual(errors, []);
+  assert.deepEqual(delays, [1000, 2000]);
+});
+
+test("transient GitHub outage that outlasts the retries still fails and releases the claim", async () => {
+  assert.equal((await dispatch({}, 500)).status, 503);
+  assert.equal(calls.length, 4);
+  assert.deepEqual(claims, ["release"]);
+  assert.deepEqual(delays, [1000, 2000, 4000]);
+  assert.equal(errors.length, 1);
+  assert.equal(errors[0][1].message, "GitHub workflow dispatch returned HTTP 500");
+});
+
+test("transient GitHub network error is retried", async () => {
+  assert.equal((await dispatch({}, [new Error("Network error"), 204])).status, 204);
+  assert.equal(calls.length, 2);
+  assert.deepEqual(claims, ["commit"]);
+  assert.deepEqual(errors, []);
+  assert.deepEqual(delays, [1000]);
 });

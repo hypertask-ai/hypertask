@@ -23,10 +23,6 @@ type SetLoomVideoOptions = {
   gifThumbnail?: boolean;
 };
 
-// Loom's own Copy Link button produces `?sid=<uuid>`, and adding a start time or
-// arriving from an app adds `&t=` / `?source=`. The old pattern only tolerated a
-// bare URL or exactly `?sid=<uuid>`, so any of those paste as plain text and no
-// video ever appears (HTPR-3940). Accept anything after the id.
 const loom_REGEX =
   /^(https?:\/\/)?(www\.)?loom\.com\/share\/([a-f0-9]{32})(?:[/?#].*)?$/i;
 
@@ -50,8 +46,6 @@ export const getEmbedUrlFromloomUrl = (options: GetEmbedUrlOptions) => {
   }
 
   if (url.includes("loom.com/share")) {
-    // The captured id, not `split("/").pop()`: the tail of a share link carries
-    // the query string, so the old code built `.../embed/<id>?sid=...`.
     const id = match[3];
 
     if (!id) {
@@ -94,14 +88,6 @@ export const Loom = Node.create<loomOptions>({
     };
   },
 
-  // parseHTML() {
-  //   console.log("🚀 ~ loomEmbed parseHTML called");
-  //   return [
-  //     {
-  //       tag: 'iframe[src*="loom.com"]',
-  //     },
-  //   ];
-  // },
 
   parseHTML() {
     return [
@@ -116,7 +102,6 @@ export const Loom = Node.create<loomOptions>({
           };
         },
       },
-      // Fallback for direct iframes (in case they exist in content)
       {
         tag: 'iframe[src*="loom.com"]',
         getAttrs: (node) => {
@@ -180,7 +165,7 @@ export const Loom = Node.create<loomOptions>({
   },
 
   addProseMirrorPlugins() {
-    let isShiftPressed = false; // Track if Shift is pressed during paste
+    let isShiftPressed = false;
     return [
       new Plugin({
         key: new PluginKey("loomEmbedPlugin"),
@@ -193,20 +178,20 @@ export const Loom = Node.create<loomOptions>({
                 console.log("🚀 ~ addProseMirrorPlugins ~ embedSrc:", embedSrc);
 
                 this.editor.commands.setloomVideo({ src: text });
-                event.preventDefault(); // Prevent default paste behavior
-                return true; // Indicate that we handled the paste event
+                event.preventDefault();
+                return true;
               }
             }
 
-            isShiftPressed = false; // Reset flag after handling paste
-            return false; // Allow default behavior for Ctrl+Shift+V or invalid Figma URLs
+            isShiftPressed = false;
+            return false;
           },
           handleKeyDown: (view, event) => {
             if (event.shiftKey) {
-              isShiftPressed = true; // Set flag for Shift + Ctrl + V
+              isShiftPressed = true;
             }
 
-            return false; // Allow default behavior for other key presses
+            return false;
           },
 
           handleDOMEvents: {

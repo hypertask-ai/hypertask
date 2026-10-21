@@ -2,7 +2,6 @@ import type { FeatureFlagDefinition } from "../definitions";
 
 export const HTPR_7076_PROMPT_CACHE_FLAG = "htpr-7076-prompt-cache";
 
-// HTPR-7076 (https://app.hypertask.ai/detail/project-15/7076): cheaper AI calls with identical answers.
 export default {
   key: HTPR_7076_PROMPT_CACHE_FLAG,
   kind: "feature",

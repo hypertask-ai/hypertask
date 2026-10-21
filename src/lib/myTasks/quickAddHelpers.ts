@@ -17,14 +17,12 @@ import {
 export const MY_TASKS_QUICK_ADD_DEFAULT_BOARD_KEY =
   "htpr-6460-my-tasks-default-board";
 
-/** Prefer a saved default board that is still in the writable board list. */
 export function resolveMyTasksQuickAddBoardId(
   defaultBoardId: unknown,
   writableBoardIds: ReadonlySet<number> | readonly number[] | undefined,
 ): number | null {
   const parsed = parseMyTasksDefaultBoardId(defaultBoardId);
   if (parsed === null) return null;
-  // undefined = access list not loaded yet; keep the saved id for create to authorize.
   if (writableBoardIds === undefined) return parsed;
   const writable =
     writableBoardIds instanceof Set
@@ -34,10 +32,6 @@ export function resolveMyTasksQuickAddBoardId(
   return writable.has(parsed) ? parsed : null;
 }
 
-/**
- * A task created by and assigned to the current user is visible under the
- * default assigned/created scopes. Watching-only views hide it until followed.
- */
 export function myTasksQuickAddLikelyVisible(
   scopes: readonly MyTasksScope[],
 ): boolean {
@@ -57,10 +51,6 @@ type QuickAddVisibilityOptions = {
   runtimeContext?: IFilterRuntimeContext;
 };
 
-/**
- * Same board / filter / active-tab narrowing as the My Tasks table, so a toast
- * is not suppressed when the row exists in the payload but is hidden on screen.
- */
 export function myTasksQuickAddTaskVisibleInPayload(
   payload: MyTasksListPayload,
   taskId: number,

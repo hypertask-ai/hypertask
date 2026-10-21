@@ -23,7 +23,7 @@ SUBCOMMANDS = {
     'hypertask': 'tasks get list search comment status capabilities activity last',
     'vcc': 'activity last list task tasks get comment add update move assign',
     'zsb': 'open screenshot click snapshot',
-    'openwiki': '', 'stack-key': '',
+    'stack-key': '',
     'systemctl': 'status show list-timers is-active',
     'curl': '', 'rg': '', 'cat': '', 'sed': '', 'find': '', 'ls': '',
     'bash': '', 'sh': '', 'mp-eta': '', 'ht': 'GET',

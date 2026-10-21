@@ -14,7 +14,6 @@ interface IProps {
   RAGFiles: IAttachment[]
 }
 const AiCustomInstructionsFileContainer: FC<IProps> = ({ RAGFiles = [] }) => {
-  // Track file IDs that are currently being deleted
   const [deletingFileIds, setDeletingFileIds] = useState<Set<number>>(new Set());
   const [_currentProject, setCurrentProject] = useRecoilState(currentProjectAtom)
   const { setLoading } = useCustomAiInstructions()
@@ -23,13 +22,12 @@ const AiCustomInstructionsFileContainer: FC<IProps> = ({ RAGFiles = [] }) => {
     setCurrentProject((prev: any) => {
       if (!prev) return prev;
 
-      // Create a proper IAiCustomInstructions object by preserving all existing fields
       const existingInstructions = prev.ai_custom_instructions?.[0] || undefined;
 
       return {
         ...prev,
         ai_custom_instructions: [{
-          ...existingInstructions, // Keep all existing properties (id, visibility, projectId, customInstruction, etc.)
+          ...existingInstructions,
           attachments: [...(existingInstructions?.attachments || []), ...newFiles]
         }]
       };
@@ -37,7 +35,6 @@ const AiCustomInstructionsFileContainer: FC<IProps> = ({ RAGFiles = [] }) => {
   }
 
   const handleFileRemove = (fileId: any) => {
-    // Check if the file is already being deleted
     if (deletingFileIds.has(fileId)) {
       toast.error("File deletion already in progress");
       return;
@@ -48,7 +45,6 @@ const AiCustomInstructionsFileContainer: FC<IProps> = ({ RAGFiles = [] }) => {
 
   const updateAICustomInstruction = (fileId: number) => {
     try {
-      // Add file ID to the deleting set
       const fileFound = RAGFiles.find(x => x.id === fileId)
       if (!fileFound) return
       setDeletingFileIds(prev => new Set(prev).add(fileId));
@@ -84,7 +80,6 @@ const AiCustomInstructionsFileContainer: FC<IProps> = ({ RAGFiles = [] }) => {
             };
           });
 
-          // Remove file ID from the deleting set
           setDeletingFileIds(prev => {
             const newSet = new Set(prev);
             newSet.delete(fileId);
@@ -96,7 +91,6 @@ const AiCustomInstructionsFileContainer: FC<IProps> = ({ RAGFiles = [] }) => {
         error: (error) => {
           console.log("🚀 ~ toast.promise ~ error:", error);
 
-          // Remove file ID from the deleting set on error
           setDeletingFileIds(prev => {
             const newSet = new Set(prev);
             newSet.delete(fileId);
@@ -107,7 +101,6 @@ const AiCustomInstructionsFileContainer: FC<IProps> = ({ RAGFiles = [] }) => {
         },
       });
     } catch (error) {
-      // Remove file ID from the deleting set on exception
       setDeletingFileIds(prev => {
         const newSet = new Set(prev);
         newSet.delete(fileId);

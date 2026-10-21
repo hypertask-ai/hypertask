@@ -15,7 +15,6 @@ type PendingChatMessage = {
   userName: string | null;
 };
 
-/** GET /api/mcp/chat/pending */
 export async function GET(request: NextRequest) {
   return wrapMcpRoute(async (request: NextRequest) => {
   try {
@@ -39,13 +38,7 @@ export async function GET(request: NextRequest) {
       );
     }
 
-    // Runtime APIs stay independent of browser rollout flags. Queue insertion
-    // is server-gated on the human send path, while this route must keep
-    // draining work accepted before a rollout mode changes.
     const result = await prisma.$transaction(async (tx) => {
-      // The send path takes this lock before deciding between webhook,
-      // polling, and parked delivery. A poll can therefore never miss a send
-      // that was committed as polling work.
       const agents = await tx.$queryRaw<Array<{ id: string }>>`
         SELECT "id"
         FROM "Agent"
@@ -55,16 +48,12 @@ export async function GET(request: NextRequest) {
       `;
       if (agents.length !== 1) return { found: false, messages: [] };
 
-      // Existing webhook agents stay entirely on the webhook path.
       const subscription = await tx.agentWebhookSubscription.findUnique({
         where: { agentId: agentId },
         select: { active: true },
       });
       if (subscription?.active) return { found: true, messages: [] };
 
-      // This endpoint is the daemon's dequeue acknowledgement: returning a row
-      // and setting isDelivered are one atomic operation. The protocol is
-      // intentionally at-most-once; it has no separate acknowledgement call.
       const messages = await tx.$queryRaw<PendingChatMessage[]>`
         WITH pending AS (
           SELECT

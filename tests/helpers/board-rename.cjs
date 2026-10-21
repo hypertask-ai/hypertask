@@ -17,7 +17,9 @@ function loadTs(file, stubs) {
   const mod = { exports: {} };
   new Function("module", "exports", "require", source)(
     mod, mod.exports, (request) => {
+      if (request === "@/lib/auth/agentScope") return require("./agent-board-scope.cjs").enforcedScope;
       if (request === "@/lib/mcp/routeWrapper") return require("./mcp-route-wrapper.cjs").loadRouteWrapper(stubs);
+      if (request === "@/lib/mcp/operationCrashReport") return { reportMcpOperationCrash: () => {} };
       assert.ok(request in stubs, `Unexpected import: ${request}`);
       return stubs[request];
     },
@@ -100,6 +102,7 @@ const humanMember = (role = "Member", overrides = {}) => ({ userId: 6, agentId: 
 const agentMember = (overrides = {}) => ({
   userId: 6,
   agentId: "agent-owned",
+  status: "Accepted",
   role: "Member",
   agent: { userId: 6, revokedAt: null },
   ...overrides,

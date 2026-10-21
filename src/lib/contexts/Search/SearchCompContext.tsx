@@ -4,7 +4,7 @@ import React, { createContext, ReactNode, useContext } from 'react';
 
 interface SearchContextProps {
   selectedIndex: number;
-  listItemRef: React.RefObject<any> // Replace 'any' with the actual type of your taskRef
+  listItemRef: React.RefObject<any>
   handleMouseEnter: (index: number) => void;
   handleMouseLeave: () => void;
   handleMouseMove: () => void;
@@ -13,8 +13,8 @@ interface SearchContextProps {
   toggleConfirmation:()=>void;
   EnterHandler: (task: ITask) => Promise<void>;
   setSelectedIndex: React.Dispatch<React.SetStateAction<number>>
-  filteredTasks: ITask[]; // Added filteredTasks
-  _parsedProjects: IProject[]; // Added _parsedProjects
+  filteredTasks: ITask[];
+  _parsedProjects: IProject[];
 }
 
 export const SearchListContext = createContext<SearchContextProps | undefined>(undefined);
@@ -22,14 +22,14 @@ export const SearchListContext = createContext<SearchContextProps | undefined>(u
 interface SearchContextProviderProps {
   children: ReactNode;
   _parsedProjects: any;
-  filteredTasks: ITask[]; // Replace with your actual type
+  filteredTasks: ITask[];
 }
 
 export const SearchContextProvider: React.FC<SearchContextProviderProps> = ({ children, filteredTasks, _parsedProjects }) => {
   const contextValues = {
     ...HandleKeyboardFunctions(filteredTasks ?? []),
-    filteredTasks, // Pass filteredTasks to the context
-    _parsedProjects, // Pass _parsedProjects to the context
+    filteredTasks,
+    _parsedProjects,
  };
 
 

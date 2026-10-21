@@ -43,14 +43,12 @@ type InboxRowLookup = (id: string) => ScrollableInboxRow | null;
 
 type ClosestElement = Pick<Element, "closest">;
 
-/** Keeps native Tab traversal only after the user has entered draft controls. */
 export function shouldPreserveNativeInboxTab(
   activeElement: ClosestElement | null,
 ): boolean {
   return activeElement?.closest('[data-inbox-draft-control="true"]') != null;
 }
 
-/** Moves a keyboard jump to the first/last inbox row and keeps it visible. */
 export function jumpToInboxBoundary(
   items: InboxBoundaryItem[],
   toEnd: boolean,

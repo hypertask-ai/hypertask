@@ -220,13 +220,11 @@ export type AgentWebhookChatBrief = {
   }>;
 };
 
-/** Board-free chat context, present only on chat.message deliveries. */
 export type AgentWebhookChat = {
   sessionId: string;
   messageId: string;
   text: string;
   userName: string | null;
-  /** Optional reply-style hint for the agent runtime (HTPR-6407). */
   replyGuidance?: string;
 };
 
@@ -246,7 +244,6 @@ export type AgentWebhookRun = {
 export type AgentWebhookEventInput = {
   event: AgentWebhookEventType;
   agentId: string;
-  // A chat.message is not board scoped, so its board and task fields are null.
   projectId: number | null;
   taskId: number | null;
   ticketNumber: string | null;

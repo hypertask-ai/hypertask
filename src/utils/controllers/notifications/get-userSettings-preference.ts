@@ -8,10 +8,6 @@ export const getUserPreferenceFromUserId = async (userId: number, type: Notifica
     if (!userSetting) return false;
     const preference = userSetting.notificationPreference ?? "direct";
 
-    // Decide whether to send based on preference:
-    // - "all": send all emails (followers + mentions)
-    // - "direct": only send direct @mention emails
-    // - "nothing": never send
 
     let shouldSend = false;
     if (preference==="all"){

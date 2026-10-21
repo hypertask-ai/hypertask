@@ -21,11 +21,6 @@ interface TourUpdatePayload {
   started?: boolean;
 }
 
-/**
- * Hook to check and update tour status
- * @param tourId - The ID of the tour to check
- * @param currentUser - Optional current user object (uses internal hook if not provided)
- */
 export function useTourStatus({ tourId }: UseTourStatusParams) {
   const queryClient = useQueryClient();
   const currentUser = useCurrentUser();
@@ -34,10 +29,6 @@ export function useTourStatus({ tourId }: UseTourStatusParams) {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  /**
-   * Update both cookie and Recoil atom with new tour data
-   * This ensures useCurrentUser() picks up changes immediately
-   */
   const updateUserData = (updatedProductTours: ProductToursData) => {
     if (!currentUser) return;
     
@@ -49,7 +40,6 @@ export function useTourStatus({ tourId }: UseTourStatusParams) {
       },
     };
     
-    // Update cookie immediately
     nookies.set(
       null,
       authConfig.cookies.user,
@@ -60,13 +50,9 @@ export function useTourStatus({ tourId }: UseTourStatusParams) {
       },
     );
     
-    // Update Recoil atom immediately so useCurrentUser() can pick it up
     setRecoilUser(updatedUser);
   };
 
-  /**
-   * Generic function to update tour status
-   */
   const updateTourStatus = async (payload: Omit<TourUpdatePayload, 'userId' | 'tourId'>) => {
     if (!currentUser?.id) {
       const errorMsg = 'No user ID available';
@@ -96,12 +82,10 @@ export function useTourStatus({ tourId }: UseTourStatusParams) {
 
       const data = await response.json();
 
-      // Update cookie and Recoil atom immediately with fresh data from API
       if (data.tours) {
         updateUserData(data.tours);
       }
 
-      // Invalidate and refetch user query (for any other components that use it)
       await queryClient.invalidateQueries({ queryKey: ['fetchUser'] });
       await queryClient.refetchQueries({ queryKey: ['fetchUser'] });
 
@@ -116,21 +100,15 @@ export function useTourStatus({ tourId }: UseTourStatusParams) {
     }
   };
 
-  /**
-   * Check if this specific tour should be shown
-   */
   const shouldShowTour = (): boolean => {
     if (!currentUser) return false;
     
     const productTours = currentUser?.UserSetting?.productTours as ProductToursData;
     
-    // If no tour data exists, show the tour
     if (!productTours) return true;
     
-    // If user has seen any tour, don't auto-show
     if (productTours._hasSeenAnyTour) return false;
     
-    // Check if this specific tour was completed or skipped
     const tourData = productTours[tourId];
     if (tourData && typeof tourData !== 'boolean') {
       if (tourData.completed || tourData.skipped) return false;
@@ -139,10 +117,6 @@ export function useTourStatus({ tourId }: UseTourStatusParams) {
     return true;
   };
 
-  /**
-   * Check if user has seen ANY tour before
-   * This is used to determine if we should auto-start the first tour
-   */
   const hasSeenAnyTour = (): boolean => {
     if (!currentUser?.UserSetting?.productTours) return false;
     
@@ -150,9 +124,6 @@ export function useTourStatus({ tourId }: UseTourStatusParams) {
     return tours._hasSeenAnyTour === true;
   };
 
-  /**
-   * Check if a specific tour is completed
-   */
   const isTourCompleted = (): boolean => {
     if (!currentUser?.UserSetting?.productTours) return false;
     
@@ -161,9 +132,6 @@ export function useTourStatus({ tourId }: UseTourStatusParams) {
     return tourData && typeof tourData !== 'boolean' ? tourData.completed === true : false;
   };
 
-  /**
-   * Check if a specific tour is skipped
-   */
   const isTourSkipped = (): boolean => {
     if (!currentUser?.UserSetting?.productTours) return false;
     
@@ -172,9 +140,6 @@ export function useTourStatus({ tourId }: UseTourStatusParams) {
     return tourData && typeof tourData !== 'boolean' ? tourData.skipped === true : false;
   };
 
-  /**
-   * Mark tour as completed
-   */
   const markComplete = async () => {
     const result = await updateTourStatus({ completed: true });
     if (result) {
@@ -183,9 +148,6 @@ export function useTourStatus({ tourId }: UseTourStatusParams) {
     return result;
   };
 
-  /**
-   * Mark tour as skipped
-   */
   const markSkipped = async () => {
     const result = await updateTourStatus({ skipped: true });
     if (result) {
@@ -194,10 +156,6 @@ export function useTourStatus({ tourId }: UseTourStatusParams) {
     return result;
   };
 
-  /**
-   * Mark that user has started viewing a tour (but not completed)
-   * This sets the _hasSeenAnyTour flag to prevent auto-showing tours in the future
-   */
   const markTourStarted = async () => {
     const result = await updateTourStatus({ started: true });
     if (result) {
@@ -206,10 +164,6 @@ export function useTourStatus({ tourId }: UseTourStatusParams) {
     return result;
   };
 
-  /**
-   * Reset a tour (mark as not completed and not skipped)
-   * Useful for allowing users to replay tours
-   */
   const resetTour = async () => {
     const result = await updateTourStatus({ 
       completed: false, 
@@ -222,7 +176,6 @@ export function useTourStatus({ tourId }: UseTourStatusParams) {
   };
 
   return {
-    // State
     shouldShowTour: shouldShowTour(),
     hasSeenAnyTour: hasSeenAnyTour(),
     isTourCompleted: isTourCompleted(),
@@ -230,7 +183,6 @@ export function useTourStatus({ tourId }: UseTourStatusParams) {
     isLoading,
     error,
     
-    // Actions
     markComplete,
     markSkipped,
     markTourStarted,

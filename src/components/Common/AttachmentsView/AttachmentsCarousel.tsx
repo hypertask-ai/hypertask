@@ -50,7 +50,6 @@ const AttachmentCarousel: React.FC<AttachmentCarouselProps> = ({
         console.error("Error fetching download URL");
         return;
       }
-      // Create an anchor tag with the download URL
       const anchor = document.createElement("a");
       anchor.href = data.downloadUrl;
       anchor.download = fileName;
@@ -62,36 +61,11 @@ const AttachmentCarousel: React.FC<AttachmentCarouselProps> = ({
 
   const filesToCheck = ["xlsx", "docx", "doc", "pptx", "ppt"];
 
-  // HTPR-6254: a HEIC is an "image/" the lightbox cannot paint.
   const renderableImage = (fileType?: string | null, fileName?: string | null) =>
     isBrowserRenderableImage(fileType, fileName);
 
-  /**
-   * Which HEIC previews actually exist (HTPR-6264).
-   *
-   * A preview URL is derived arithmetically, so it is a claim rather than a
-   * fact: a photo attached before this shipped, or one whose conversion failed,
-   * has no copy and the URL 404s. The tile in AttachmentsView finds that out
-   * with an `onError`, but the lightbox renders through the library's own image
-   * slide, which gives us no error hook to hang a fallback on. So the copy is
-   * probed once, and only a preview that has really loaded is shown as a
-   * picture. Anything else keeps the download panel it shows today.
-   *
-   * The probe is close to free: the tile has already requested the same URL, so
-   * this is a cache hit in every case where the lightbox was opened by clicking
-   * a thumbnail.
-   */
   const [previewLoaded, setPreviewLoaded] = useState<Record<string, boolean>>({});
 
-  /**
-   * Optimistic while the probe is in flight, exactly like the tile.
-   *
-   * A carousel does not always open from a tile that has already loaded the
-   * copy (the AI chat and the links modal both mount one directly), so an
-   * unanswered probe is a state a user really reaches. Assuming the copy is
-   * there matches what the tile does and keeps the common case flicker-free;
-   * only a probe that has actually come back empty falls to the download panel.
-   */
   const previewIsShowable = (url: string) => previewLoaded[url] !== false;
 
   useEffect(() => {
@@ -120,7 +94,6 @@ const AttachmentCarousel: React.FC<AttachmentCarouselProps> = ({
 
     return () => {
       cancelled = true;
-      // Drop the handlers so a late response cannot set state after unmount.
       images.forEach((image) => {
         image.onload = null;
         image.onerror = null;
@@ -129,18 +102,9 @@ const AttachmentCarousel: React.FC<AttachmentCarouselProps> = ({
   }, [attachments]);
 
 
-  // Transform attachments to lightbox slides format
   const slides: Slide[] = attachments.map((attachment) => {
     const attachmentUpdated = attachment.fileSource;
 
-    // HTPR-6264: a HEIC now has a JPEG copy stored beside it, so the lightbox
-    // and its thumbnail strip get an ordinary image slide again. It stays an
-    // image slide rather than a custom one on purpose: that is what keeps zoom,
-    // the thumbnail strip and the toolbar working.
-    //
-    // Both download paths below resolve the file from `attachments[index]`
-    // rather than from the slide, so they already hand back the original HEIC
-    // and need no change here.
     const previewUrl = heicPreviewUrl(
       attachment.fileSource,
       attachment.fileType,
@@ -155,9 +119,6 @@ const AttachmentCarousel: React.FC<AttachmentCarouselProps> = ({
       } as Slide;
     }
 
-    // HTPR-6254: HEIC is an "image/" the lightbox cannot paint. Send it down
-    // the same route as a PDF, where the slide keeps its download button,
-    // instead of leaving the viewer on a broken image.
     if (renderableImage(attachment.fileType, attachment.fileName)) {
       return {
         src: attachmentUpdated,
@@ -167,27 +128,20 @@ const AttachmentCarousel: React.FC<AttachmentCarouselProps> = ({
       };
     } else if (attachment.fileType.startsWith("video/")) {
       return {
-        type: "video" as const, // Explicitly mark as video type
+        type: "video" as const,
         sources: [
           {
             src: attachmentUpdated,
             type: attachment.fileType,
           },
         ],
-        // You might want to remove width/height here if you control with CSS
-        // width: 1200,
-        // height: 800,
-        // controls: true, // Not a slide prop, handled in custom render
-        // Add additional data if needed for custom rendering
-        fileName: attachment.fileName, // Keep filename for the custom renderer if needed
+        fileName: attachment.fileName,
       };
     } else {
-      // For documents and other file types, we'll create a custom slide
       return {
-        src: attachmentUpdated, // Keep src for consistent access, though not directly used for non-image/video by YARL
+        src: attachmentUpdated,
         title: attachment.fileName,
         alt: attachment.fileName,
-        // Store additional data for custom rendering
         fileType: attachment.fileType,
         fileName: attachment.fileName,
         fileSource: attachment.fileSource,
@@ -195,11 +149,8 @@ const AttachmentCarousel: React.FC<AttachmentCarouselProps> = ({
     }
   });
 
-  // Custom render function for all content types
   const renderSlide = ({ slide, rect }: { slide: Slide; rect: any }) => {
-    // --- Handle Video Slides ---
     if (slide.type === "video" && slide.sources) {
-      // Find the original attachment for additional data if needed
       const originalAttachment = attachments.find(
         (att) => att.fileName === (slide as any).fileName
       );
@@ -207,17 +158,14 @@ const AttachmentCarousel: React.FC<AttachmentCarouselProps> = ({
       return (
         <div className="flex items-center justify-center h-full w-full">
           <video
-            controls // Show video controls
-            autoPlay={false} // Auto-play is generally disruptive, set to false
-            preload="auto" // Preload metadata for faster start
+            controls
+            autoPlay={false}
+            preload="auto"
             style={{
               maxWidth: "100%",
               maxHeight: "100%",
               objectFit: "contain",
             }}
-            // You can also use YARL's rect.width/height if you want to size dynamically
-            // width={rect.width}
-            // height={rect.height}
           >
             {slide.sources.map((source, idx) => (
               <source key={idx} src={source.src} type={source.type} />
@@ -227,14 +175,11 @@ const AttachmentCarousel: React.FC<AttachmentCarouselProps> = ({
         </div>
       );
     }
-    // --- Handle Document Slides (DocViewer) ---
     else if (
       (slide as any).fileType &&
       filesToCheck.some((x) => (slide as any).fileName.endsWith(x))
     ) {
       const customSlide = slide as any;
-      // You should ensure attachment.fileSource is correctly passed,
-      // or derive it from customSlide.fileSource if you stored it there.
       return (
         <div className="flex items-center justify-center h-full w-full">
           <DocViewer
@@ -242,7 +187,7 @@ const AttachmentCarousel: React.FC<AttachmentCarouselProps> = ({
             pluginRenderers={DocViewerRenderers}
             documents={[
               {
-                uri: customSlide.fileSource, // Use fileSource stored in custom slide
+                uri: customSlide.fileSource,
                 fileType: customSlide.fileType,
               },
             ]}
@@ -250,17 +195,12 @@ const AttachmentCarousel: React.FC<AttachmentCarouselProps> = ({
               header: {
                 disableHeader: true,
                 disableFileName: true,
-                // disableDownload: true,
               },
             }}
           />
         </div>
       );
     }
-    // --- Handle Images No Browser Can Decode (HEIC/HEIF/TIFF) ---
-    // An <embed> cannot show these either, and the file often arrives with no
-    // MIME at all, so the document branch below would miss it and the lightbox
-    // would fall through to a blank slide (HTPR-6254). Offer the download.
     else if (
       (slide as any).fileSource &&
       isUnrenderableImage((slide as any).fileType, (slide as any).fileName)
@@ -286,7 +226,6 @@ const AttachmentCarousel: React.FC<AttachmentCarouselProps> = ({
         </div>
       );
     }
-    // --- Handle Generic Embed Slides (PDFs, etc.) ---
     else if (
       (slide as any).fileType &&
       !renderableImage((slide as any).fileType, (slide as any).fileName) &&
@@ -296,27 +235,17 @@ const AttachmentCarousel: React.FC<AttachmentCarouselProps> = ({
       return (
         <div className="flex items-center justify-center h-full w-full">
           <embed
-            className="sm:min-h-[70svh] carousel-document" // Keep your styles
+            className="sm:min-h-[70svh] carousel-document"
             type={customSlide.fileType}
             width="100%"
-            src={customSlide.src} // Use src property from the slide
+            src={customSlide.src}
           />
         </div>
       );
     }
-    // For images, return null as YARL handles them by default
     return null;
   };
 
-  // HTPR-6269: the strip's default renderer paints `slide.src` in an <img> for
-  // any slide without an explicit type, and our custom slides keep `src`
-  // pointing at the original file — a HEIC with no preview copy, a PDF, a
-  // docx — which the strip cannot decode, so it showed a broken-image glyph
-  // next to a slide that handles the same file correctly. Give those the
-  // plugin's own unknown-file icon (its class carries the size/position), and
-  // return nothing for the rest so the default image thumbnail still renders.
-  // The predicate mirrors the main slide: the strip paints an <img> exactly
-  // when the slide area would, never just because `fileType` exists.
   const renderThumbnail = ({ slide }: { slide: Slide }) => {
     const customSlide = slide as any;
     if (
@@ -344,34 +273,28 @@ const AttachmentCarousel: React.FC<AttachmentCarouselProps> = ({
     closeCallback();
   };
 
-  // Custom toolbar with download button
   const customToolbar = ({ toolbar }: any) => {
     const currentAttachment = attachments[index];
 
     return (
       <div className="yarl__toolbar">
         <div className="yarl__toolbar_left">
-          {/* File type badge */}
           <span className="text-black bg-white text-content rounded-[2px] p-1 h-fit mr-2">
             {currentAttachment?.fileType.split("/")?.pop()?.toUpperCase()}
           </span>
-          {/* File name */}
           <span className="text-content text-white font-bold">
             {currentAttachment?.fileName}
           </span>
         </div>
 
         <div className="yarl__toolbar_right">
-          {/* Standard YARL toolbar items (e.g., zoom, fullscreen) */}
           {toolbar.items.map((item: any, i: number) => {
-            // Filter out the default download button if you have a custom one
             if (item.key === "download") return null;
             return <React.Fragment key={i}>{item}</React.Fragment>;
           })}
 
-          {/* Custom Download button */}
           <button
-            className="yarl__button" // Use YARL's button class for consistent styling
+            className="yarl__button"
             onClick={() =>
               handleDownload(
                 currentAttachment.fileSource,
@@ -396,7 +319,6 @@ const AttachmentCarousel: React.FC<AttachmentCarouselProps> = ({
       on={{
         view: ({ index: newIndex }: { index: number }) => setIndex(newIndex),
       }}
-      // Include the necessary plugins
       plugins={[Zoom, Download, Fullscreen, ...(isMbl ? [] : [Thumbnails])]}
       zoom={{
         maxZoomPixelRatio: 3,
@@ -431,7 +353,6 @@ const AttachmentCarousel: React.FC<AttachmentCarouselProps> = ({
       render={{
         slide: renderSlide,
         thumbnail: renderThumbnail,
-        // toolbar: customToolbar, // Use your custom toolbar
       }}
       controller={{
         closeOnBackdropClick: true,
@@ -449,11 +370,6 @@ const AttachmentCarousel: React.FC<AttachmentCarouselProps> = ({
         container: {
           backgroundColor: "rgba(0, 0, 0, 0.9)",
         },
-        // Remove toolbar style here as it's now handled in customToolbar's JSX
-        // toolbar: {
-        //   backgroundColor: "rgba(0, 0, 0, 0.8)",
-        //   padding: isMbl ? "8px 16px" : "16px 32px",
-        // },
       }}
       animation={{
         fade: 0,

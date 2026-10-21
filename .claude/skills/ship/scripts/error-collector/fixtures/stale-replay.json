@@ -1,0 +1,306 @@
+[
+  {
+    "service": "vercel",
+    "board": 15,
+    "route": "/api/mcp/time/resume",
+    "message": "MCP time operation failed",
+    "ts": "2026-10-20T07:31:01.790Z",
+    "count": 1
+  },
+  {
+    "service": "vercel",
+    "board": 15,
+    "route": "/api/mcp/time/pause",
+    "message": "MCP time operation failed",
+    "ts": "2026-10-20T07:31:01.790Z",
+    "count": 1
+  },
+  {
+    "service": "vercel",
+    "board": 15,
+    "route": "/api/mcp/tasks/update",
+    "message": "MCP time operation failed",
+    "ts": "2026-10-20T07:31:01.790Z",
+    "count": 1
+  },
+  {
+    "service": "vercel",
+    "board": 15,
+    "route": "/api/mcp/time/stop",
+    "message": "MCP time operation failed",
+    "ts": "2026-10-20T07:31:01.790Z",
+    "count": 1
+  },
+  {
+    "service": "vercel",
+    "board": 15,
+    "route": "/api/mcp/time/status",
+    "message": "MCP time operation failed",
+    "ts": "2026-10-20T07:31:01.790Z",
+    "count": 1
+  },
+  {
+    "service": "vercel",
+    "board": 15,
+    "route": "/api/mcp/time/start",
+    "message": "MCP time operation failed",
+    "ts": "2026-10-20T07:31:01.790Z",
+    "count": 1
+  },
+  {
+    "service": "vercel",
+    "board": 15,
+    "route": "/api/mcp/time/log",
+    "message": "MCP time operation failed",
+    "ts": "2026-10-20T07:31:01.790Z",
+    "count": 1
+  },
+  {
+    "service": "vercel",
+    "board": 15,
+    "route": "/api/mcp/time/report",
+    "message": "MCP time operation failed",
+    "ts": "2026-10-20T07:52:51.382Z",
+    "count": 23
+  },
+  {
+    "service": "vercel",
+    "board": 15,
+    "route": "/api/mcp/tasks/session",
+    "message": "MCP session lookup failed",
+    "ts": "2026-10-20T07:30:23.115Z",
+    "count": 1
+  },
+  {
+    "service": "vercel",
+    "board": 15,
+    "route": "/api/mcp/tasks/session",
+    "message": "MCP session lookup failed",
+    "ts": "2026-10-20T07:48:49.319Z",
+    "count": 5
+  },
+  {
+    "service": "vercel",
+    "board": 15,
+    "route": "/api/mcp/tasks/session",
+    "message": "MCP session update failed",
+    "ts": "2026-10-20T07:30:20.562Z",
+    "count": 1
+  },
+  {
+    "service": "vercel",
+    "board": 15,
+    "route": "/api/mcp/tasks/session",
+    "message": "MCP session update failed",
+    "ts": "2026-10-20T07:48:42.460Z",
+    "count": 5
+  },
+  {
+    "service": "vercel",
+    "board": 15,
+    "route": "/api/mcp/tasks/session",
+    "message": "MCP session validation failed",
+    "ts": "2026-10-20T07:30:18.202Z",
+    "count": 1
+  },
+  {
+    "service": "vercel",
+    "board": 15,
+    "route": "/api/mcp/tasks/session",
+    "message": "MCP session validation failed",
+    "ts": "2026-10-20T07:48:37.992Z",
+    "count": 5
+  },
+  {
+    "service": "vercel",
+    "board": 15,
+    "route": "/api/mcp/tasks/evidence",
+    "message": "MCP evidence lookup failed",
+    "ts": "2026-10-20T07:30:15.685Z",
+    "count": 1
+  },
+  {
+    "service": "vercel",
+    "board": 15,
+    "route": "/api/mcp/tasks/evidence",
+    "message": "MCP evidence lookup failed",
+    "ts": "2026-10-20T07:48:31.448Z",
+    "count": 5
+  },
+  {
+    "service": "vercel",
+    "board": 15,
+    "route": "/api/mcp/time/status",
+    "message": "MCP time query failed",
+    "ts": "2026-10-20T07:30:03.434Z",
+    "count": 1
+  },
+  {
+    "service": "vercel",
+    "board": 15,
+    "route": "/api/mcp/time/resume",
+    "message": "MCP time query failed",
+    "ts": "2026-10-20T07:30:03.434Z",
+    "count": 1
+  },
+  {
+    "service": "vercel",
+    "board": 15,
+    "route": "/api/mcp/time/pause",
+    "message": "MCP time query failed",
+    "ts": "2026-10-20T07:30:03.434Z",
+    "count": 1
+  },
+  {
+    "service": "vercel",
+    "board": 15,
+    "route": "/api/mcp/tasks/attachments",
+    "message": "MCP time query failed",
+    "ts": "2026-10-20T07:30:03.434Z",
+    "count": 1
+  },
+  {
+    "service": "vercel",
+    "board": 15,
+    "route": "/api/mcp/time/stop",
+    "message": "MCP time query failed",
+    "ts": "2026-10-20T07:30:03.434Z",
+    "count": 1
+  },
+  {
+    "service": "vercel",
+    "board": 15,
+    "route": "/api/mcp/time/start",
+    "message": "MCP time query failed",
+    "ts": "2026-10-20T07:30:03.434Z",
+    "count": 1
+  },
+  {
+    "service": "vercel",
+    "board": 15,
+    "route": "/api/mcp/time/log",
+    "message": "MCP time query failed",
+    "ts": "2026-10-20T07:30:03.434Z",
+    "count": 1
+  },
+  {
+    "service": "vercel",
+    "board": 15,
+    "route": "/api/mcp/time/report",
+    "message": "MCP time query failed",
+    "ts": "2026-10-20T08:00:18.151Z",
+    "count": 35
+  },
+  {
+    "service": "vercel",
+    "board": 15,
+    "route": "/api/mcp/tasks/evidence",
+    "message": "MCP evidence update failed",
+    "ts": "2026-10-20T07:30:13.316Z",
+    "count": 1
+  },
+  {
+    "service": "vercel",
+    "board": 15,
+    "route": "/api/mcp/tasks/evidence",
+    "message": "MCP evidence update failed",
+    "ts": "2026-10-20T07:48:27.053Z",
+    "count": 5
+  },
+  {
+    "service": "vercel",
+    "board": 15,
+    "route": "/api/mcp/tasks/move",
+    "message": "MCP move failed",
+    "ts": "2026-10-20T07:52:58.140Z",
+    "count": 1
+  },
+  {
+    "service": "vercel",
+    "board": 15,
+    "route": "/api/mcp/tasks/move",
+    "message": "MCP move failed",
+    "ts": "2026-10-20T07:53:00.288Z",
+    "count": 2
+  },
+  {
+    "service": "vercel",
+    "board": 15,
+    "route": "/api/mcp/tasks/escalate",
+    "message": "MCP escalation lookup failed",
+    "ts": "2026-10-20T07:49:02.546Z",
+    "count": 1
+  },
+  {
+    "service": "vercel",
+    "board": 15,
+    "route": "/api/mcp/tasks/escalate",
+    "message": "MCP escalation lookup failed",
+    "ts": "2026-10-20T07:49:04.700Z",
+    "count": 2
+  },
+  {
+    "service": "vercel",
+    "board": 15,
+    "route": "/api/mcp/tasks/escalate",
+    "message": "MCP escalation update failed",
+    "ts": "2026-10-20T07:48:58.149Z",
+    "count": 1
+  },
+  {
+    "service": "vercel",
+    "board": 15,
+    "route": "/api/mcp/tasks/escalate",
+    "message": "MCP escalation update failed",
+    "ts": "2026-10-20T07:49:00.376Z",
+    "count": 2
+  },
+  {
+    "service": "vercel",
+    "board": 15,
+    "route": "/api/mcp/drafts",
+    "message": "MCP drafts ambiguous ticket",
+    "ts": "2026-10-20T07:29:15.555Z",
+    "count": 1
+  },
+  {
+    "service": "vercel",
+    "board": 15,
+    "route": "/api/mcp/drafts",
+    "message": "MCP drafts ambiguous ticket",
+    "ts": "2026-10-20T07:58:43.505Z",
+    "count": 8
+  },
+  {
+    "service": "vercel",
+    "board": 15,
+    "route": "/api/mcp/tasks/session",
+    "message": "MCP session integer out of range",
+    "ts": "2026-10-20T07:48:51.597Z",
+    "count": 1
+  },
+  {
+    "service": "vercel",
+    "board": 15,
+    "route": "/api/mcp/tasks/session",
+    "message": "MCP session integer out of range",
+    "ts": "2026-10-20T07:48:53.768Z",
+    "count": 2
+  },
+  {
+    "service": "vercel",
+    "board": 15,
+    "route": "/api/mcp/tasks/context",
+    "message": "MCP context task id out of range",
+    "ts": "2026-10-20T09:50:30.593Z",
+    "count": 1
+  },
+  {
+    "service": "vercel",
+    "board": 15,
+    "route": "/api/mcp/tasks/context",
+    "message": "MCP context task id out of range",
+    "ts": "2026-10-20T09:53:17.607Z",
+    "count": 8
+  }
+]

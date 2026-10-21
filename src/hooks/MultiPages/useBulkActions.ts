@@ -1,4 +1,3 @@
-// hooks/useBulkActions.ts
 import { useState, useCallback, useEffect, useRef, ReactNode } from 'react'
 import { useDeviceContext } from '@/lib/contexts/deviceContext'
 import { KeyCodes } from '@/lib/constants/keyboard-handler'
@@ -39,24 +38,15 @@ export function useBulkActions<T extends BulkActionItem>({
   const isApple = useDeviceContext()
   const itemsRef = useRef(items)
 
-  // Update items ref when items change
   useEffect(() => {
     itemsRef.current = items
   }, [items])
 
-  // Clear selection when items change (unless persistSelection is true)
-  // useEffect(() => {
-  //   if (!persistSelection) {
-  //     setSelectedIds(new Set())
-  //   }
-  // }, [items, persistSelection])
 
-  // Convert selectedIds Set to array and notify parent of selection changes
   useEffect(() => {
     onSelectionChange?.(Array.from(selectedIds))
   }, [selectedIds, onSelectionChange])
 
-  // Toggle single item selection
   const toggleSelection = useCallback((id: number) => {
     setSelectedIds(prev => {
       const newSet = new Set(prev)
@@ -69,12 +59,10 @@ export function useBulkActions<T extends BulkActionItem>({
     })
   }, [])
 
-  // Select all items
   const selectAll = useCallback(() => {
     setSelectedIds(new Set(itemsRef.current.map(item => item.id)))
   }, [])
 
-  // Clear selection
   const clearSelection = useCallback(() => {
 
     setTimeout(() => {
@@ -82,7 +70,6 @@ export function useBulkActions<T extends BulkActionItem>({
     }, 2);
   }, [])
 
-  // Select single item (clear others)
   const selectSingle = useCallback((index: number) => {
     if (index >= 0 && index < itemsRef.current.length) {
       const item = itemsRef.current[index]
@@ -90,17 +77,14 @@ export function useBulkActions<T extends BulkActionItem>({
     }
   }, [])
 
-  // Check if item is selected
   const isSelected = useCallback((id: number) => {
     return selectedIds.has(id)
   }, [selectedIds])
 
-  // Get selected items
   const getSelectedItems = useCallback((): T[] => {
     return itemsRef.current.filter(item => selectedIds.has(item.id))
   }, [selectedIds])
 
-  // Execute bulk action
   const executeBulkAction = useCallback(async (actionKey: string) => {
     const action = actions.find(a => a.key === actionKey)
     if (!action || selectedIds.size === 0 || isProcessing) return
@@ -120,14 +104,12 @@ export function useBulkActions<T extends BulkActionItem>({
     }
   }, [actions, selectedIds, getSelectedItems, clearSelection, persistSelection, isProcessing])
 
-  // Keyboard event handler
   const handleKeyDown = useCallback((e: KeyboardEvent, currentFocusIndex?: number) => {
     if (returnIfModalOrInputActive()) return
     if (!enableKeyboardShortcuts || currentFocusIndex === undefined) return
 
     const cmdControl = (isApple && e.metaKey) || (!isApple && e.ctrlKey)
 
-    // Ctrl/Cmd + A: Select all
     if (cmdControl && e.keyCode === KeyCodes.A) {
       e.preventDefault()
       selectAll()
@@ -137,9 +119,7 @@ export function useBulkActions<T extends BulkActionItem>({
       selectAllFromAllTabs()
     }
 
-    // X: Toggle selection of current item
     if (e.keyCode === KeyCodes.X && !e.shiftKey && !cmdControl) {
-      // e.preventDefault()
       const currentItem = itemsRef.current[currentFocusIndex]
       if (currentItem) {
         toggleSelection(currentItem.id)
@@ -149,12 +129,10 @@ export function useBulkActions<T extends BulkActionItem>({
 
     }
 
-    // Shift + Arrow/J/K: Range selection (Windows-style)
     if (e.shiftKey && [KeyCodes.J, KeyCodes.K, KeyCodes.ARROW_DOWN, KeyCodes.ARROW_UP].includes(e.keyCode as any)) {
       e.preventDefault()
       const from = currentFocusIndex
 
-      // Determine the new focus index based on the key
       const maxIndex = itemsRef.current.length - 1;
       let newFocusIndex: number | null = null;
 
@@ -162,59 +140,48 @@ export function useBulkActions<T extends BulkActionItem>({
         if (from < maxIndex) {
           newFocusIndex = from + 1;
         } else {
-          newFocusIndex = null; // Already at bottom
+          newFocusIndex = null;
         }
       } else if (e.key === 'k' || e.key === 'ArrowUp') {
         if (from > 0) {
           newFocusIndex = from - 1;
-          // 
         } else {
-          newFocusIndex = null; // Already at top
+          newFocusIndex = null;
         }
       }
 
-      // first check is current active or not
       const isCurrentItemActive = selectedIds.has(itemsRef.current[from].id);
 
-      // if the current item is not active, we have to select it first and not move to the next item
       if (!isCurrentItemActive) {
         toggleSelection(itemsRef.current[from].id)
-        newFocusIndex = currentFocusIndex // because we are not moving to the next item
+        newFocusIndex = currentFocusIndex
       }
       else {
         if (newFocusIndex === null) return
-        // since current one is active, we check status of next item
         const isNextItemActive = selectedIds.has(itemsRef.current[newFocusIndex].id);
 
-        // if inactive, then that item gets added to the selection
         if (!isNextItemActive) {
           toggleSelection(itemsRef.current[newFocusIndex].id)
         }
         else {
-          // if it was already active and our current item is also active, then we deactive the current one.
           toggleSelection(itemsRef.current[from].id)
         }
       }
 
-      // Don't update anchor during shift selection
       return { newFocusIndex }
     }
 
 
-    // Check for action shortcuts
     if (selectedIds.size > 0) {
       for (const action of actions) {
         if (action.keyboardShortcut && action.keyboardShortcut.length > 0) {
-          // Check if this is a multi-key shortcut
           if (action.keyboardShortcut.length === 1) {
-            // Single key shortcut
             if (action.keyboardShortcut[0] === e.keyCode) {
               e.preventDefault()
               executeBulkAction(action.key)
               return
             }
           } else {
-            // Multi-key shortcut - check all keys are pressed
             const isShortcutPressed = action.keyboardShortcut.every(keyCode => {
               switch (keyCode) {
                 case KeyCodes.SHIFT:
@@ -242,9 +209,6 @@ export function useBulkActions<T extends BulkActionItem>({
       }
     }
 
-
-
-    // Escape: Clear selection
     if (e.key === 'Escape' && selectedIds.size > 0) {
       e.preventDefault()
       clearSelection()
@@ -252,12 +216,10 @@ export function useBulkActions<T extends BulkActionItem>({
   }, [enableKeyboardShortcuts, isApple, selectedIds, selectAll, toggleSelection, actions, executeBulkAction, clearSelection])
 
   return {
-    // State - selectedIds now returned as number array
     selectedIds: Array.from(selectedIds),
     selectedCount: selectedIds.size,
     isProcessing,
 
-    // Selection methods
     toggleSelection,
     selectAll,
     clearSelection,
@@ -265,10 +227,8 @@ export function useBulkActions<T extends BulkActionItem>({
     getSelectedItems,
     selectSingle,
 
-    // Action methods
     executeBulkAction,
 
-    // Event handlers
     handleKeyDown,
   }
 }

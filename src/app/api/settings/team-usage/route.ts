@@ -6,10 +6,6 @@ import { gatewayBillingPeriodRange } from "../ai-usage/gatewayUsage";
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
 
-// Per-team AI token usage for the current billing period, used to sort the
-// Settings team switcher (most active team on top). Read straight from the
-// AiUsage metering table via a single grouped query — cheap and indexed on
-// [teamId, createdAt]. Scoped to the teams the caller can actually see.
 export async function GET() {
   const user = await getServerCookieUser();
 
@@ -59,7 +55,6 @@ export async function GET() {
 
     return NextResponse.json({ usage });
   } catch (error) {
-    // Metering is best-effort; a failure here must never break the switcher.
     console.error("Error loading team usage:", error);
     return NextResponse.json({ usage: {} });
   }

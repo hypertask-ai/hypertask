@@ -1,5 +1,3 @@
-// Node's built-in test runner — this repository has no Vitest setup.
-// Run after installing dependencies: node --test --import tsx src/lib/mcp/webhooks/__tests__/delivery.test.ts
 import assert from 'node:assert/strict'
 import test from 'node:test'
 import crypto from 'crypto'
@@ -12,9 +10,6 @@ test('signWebhookBody produces an HMAC a receiver can independently recompute', 
 
   const sig = signWebhookBody(secret, body)
 
-  // The whole point: a receiver holding the shared secret recomputes the same
-  // value over the exact signed string. If this diverges, verification breaks
-  // and every delivery looks forged — so the test must fail if it changes.
   const expected =
     'sha256=' + crypto.createHmac('sha256', secret).update(body).digest('hex')
   assert.equal(sig, expected)
@@ -37,28 +32,25 @@ test('signWebhookBody changes when the secret changes (wrong key cannot forge)',
 })
 
 test('isPrivateIp blocks every non-global range (byte/CIDR classification)', () => {
-  // The string-prefix bugs this replaces: fe90.. is link-local (fe80::/10) but
-  // does not literally start with "fe80"; NAT64 and IPv4-mapped hide an internal
-  // v4 address inside a v6 literal.
   const blocked = [
     '0.0.0.0',
     '10.1.2.3',
-    '100.64.0.1', // CGNAT
+    '100.64.0.1',
     '127.0.0.1',
-    '169.254.169.254', // cloud metadata
+    '169.254.169.254',
     '172.20.5.5',
     '192.168.1.1',
-    '198.18.0.1', // benchmarking
-    '198.51.100.7', // TEST-NET-2
+    '198.18.0.1',
+    '198.51.100.7',
     '255.255.255.255',
     '::1',
     'fe80::1',
-    'fe90::1', // still fe80::/10
-    'febf::1', // still fe80::/10
-    'fc00::1', // unique-local
-    'fd12::1', // unique-local
-    '::ffff:127.0.0.1', // IPv4-mapped loopback
-    '64:ff9b::7f00:1', // NAT64 → 127.0.0.1
+    'fe90::1',
+    'febf::1',
+    'fc00::1',
+    'fd12::1',
+    '::ffff:127.0.0.1',
+    '64:ff9b::7f00:1',
   ]
   for (const ip of blocked) {
     assert.equal(isPrivateIp(ip), true, `expected ${ip} to be classified private`)
@@ -73,12 +65,12 @@ test('isPrivateIp allows genuinely public addresses', () => {
 
 test('assertSafeWebhookTarget rejects internal / non-https targets', async () => {
   const blocked = [
-    'http://example.com/hook', // not https
-    'https://127.0.0.1/hook', // loopback
-    'https://169.254.169.254/latest/meta-data', // cloud metadata
-    'https://[::1]/hook', // ipv6 loopback
-    'https://localhost/hook', // internal name
-    'https://db.internal/hook', // internal name
+    'http://example.com/hook',
+    'https://127.0.0.1/hook',
+    'https://169.254.169.254/latest/meta-data',
+    'https://[::1]/hook',
+    'https://localhost/hook',
+    'https://db.internal/hook',
   ]
   for (const url of blocked) {
     const r = await assertSafeWebhookTarget(url)

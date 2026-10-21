@@ -43,7 +43,7 @@ export const HypertaskLoginCarousel = () => {
 	useEffect(() => {
 		const timer = setInterval(() => {
 			setCurrentSlide((prev) => (prev + 1) % carouselData.length);
-		}, 5000); // Auto-advance every 5 seconds
+		}, 5000);
 
 		return () => clearInterval(timer);
 	}, []);
@@ -57,15 +57,11 @@ export const HypertaskLoginCarousel = () => {
 			className="relative w-full h-full max-h-[92vh]"
 			style={{
 				marginRight: '0px !important',
-				// Use Tailwind's max-w-[clamp()] utility for responsive clamping
-				// Clamp between 420px and 84vh for max width
 				maxWidth: 'clamp(420px, 90vh, 100vw)',
 				maxHeight: '92vh !important'
 			}}
 		>
-			{/* Carousel Container */}
 			<div className="relative overflow-hidden rounded-tl-2xl h-full w-full">
-				{/* Slides */}
 				<div 
 					className="flex h-full transition-transform duration-500 ease-in-out"
 					style={{ transform: `translateX(-${currentSlide * 100}%)` }}
@@ -82,14 +78,12 @@ export const HypertaskLoginCarousel = () => {
 									"[filter:_saturate(1.05)_brightness(1.03)_drop-shadow(0_0_2px_rgba(255,255,255,0.05))_drop-shadow(0_0_1.5px_rgba(0,0,0,0.10))_contrast(1.08)_blur(0.2px)]"
 								)}								
 							/>
-							{/* Dark blur/shadow transition at bottom half */}
 							<div className="absolute bottom-0 left-0 right-0 h-1/2 bg-gradient-to-t from-black/80 via-black/40 to-transparent pointer-events-none" />
 						</div>
 					))}
 				</div>
 			</div>
 
-			{/* Bottom Navigation Bars */}
 			<div className="absolute bottom-6 left-1/2 transform -translate-x-1/2 flex justify-center items-center gap-2 z-30">
 				{carouselData.map((_, index) => (
 					<button

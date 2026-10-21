@@ -25,7 +25,6 @@ export async function POST(req: NextRequest) {
       })
     }
   } catch {
-    // Crash beacons must never affect the client response.
   }
   return new NextResponse(null, { status: 204 })
 }

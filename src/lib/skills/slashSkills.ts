@@ -1,9 +1,6 @@
 import { Sparkles } from "lucide-react";
 import type { Editor } from "@tiptap/react";
 
-// Skills shown in the "/" menu: the current board's skills plus the user's
-// personal skills, resolved server-side from a "/slug" token in the message
-// (AI chat) or an "@hyperai /slug" comment. See src/app/api/ai/_lib/skills.ts.
 export type SlashSkill = {
   slug: string;
   name: string;
@@ -11,8 +8,6 @@ export type SlashSkill = {
   isProject: boolean;
 };
 
-// Marks the open "/" command popup in the DOM so send-on-Enter handlers can
-// reliably tell the menu is open (defaultPrevented is unreliable on iOS).
 export const SLASH_MENU_DOM_ID = "ht-slash-command-menu";
 
 export type SkillSlashItem = {
@@ -24,9 +19,6 @@ export type SkillSlashItem = {
   command: (args: { editor: Editor; range: any }) => void;
 };
 
-// A personal and a project skill can share a slug. The server resolver always
-// picks the project one, so collapse duplicates to a single entry (project
-// wins) instead of rendering a dead personal duplicate.
 export function dedupeSkillsBySlug(skills: SlashSkill[]): SlashSkill[] {
   const bySlug = new Map<string, SlashSkill>();
   for (const skill of skills) {
@@ -38,15 +30,10 @@ export function dedupeSkillsBySlug(skills: SlashSkill[]): SlashSkill[] {
   return [...bySlug.values()].sort((a, b) => a.name.localeCompare(b.name));
 }
 
-// The server resolver only matches "/slug" at line start or after whitespace or
-// "(". A mid-text trigger ("foo/rev") would insert an unresolvable token, so
-// return a leading space when the char before the "/" isn't one of those.
 export function slashTokenPrefix(charBefore: string): string {
   return charBefore.length > 0 && !/[\s(]/.test(charBefore) ? " " : "";
 }
 
-// The "/" menu re-queries on every keystroke; a short cache keeps that from
-// hammering /api/ai/skills while the user types. Keyed by board (or "personal").
 const CACHE_TTL_MS = 60_000;
 const cache = new Map<string, { at: number; skills: SlashSkill[] }>();
 const inflight = new Map<string, Promise<SlashSkill[]>>();
@@ -91,8 +78,6 @@ export async function fetchSlashSkills(
   return request;
 }
 
-// Selecting a skill drops "/slug " where the "/" was typed. The server resolver
-// strips the token and injects the skill body, so plain text is all we insert.
 export function buildSkillSlashItems(skills: SlashSkill[]): SkillSlashItem[] {
   return skills.map((skill) => ({
     title: `/${skill.slug}`,
@@ -101,11 +86,6 @@ export function buildSkillSlashItems(skills: SlashSkill[]): SkillSlashItem[] {
     aliases: [skill.slug, skill.name],
     icon: Sparkles,
     command: ({ editor, range }) => {
-      // "/" triggers mid-text (allowedPrefixes: null), so range.from can sit
-      // right after a word char, e.g. "foo/rev". The server resolver only
-      // matches "/slug" at line start or after whitespace/"(", so prepend a
-      // space when the preceding char isn't one of those, otherwise the token
-      // silently fails to resolve.
       const before =
         range.from > 0
           ? editor.state.doc.textBetween(range.from - 1, range.from, "\n", "\n")

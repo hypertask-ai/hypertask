@@ -2,7 +2,6 @@ import { parse } from "node-html-parser";
 
 export function projectCommentPreview(html: string, userId?: string | number) {
   const root = parse(html);
-  // Browser textContent does not insert a newline for a br element.
   root.querySelectorAll("br").forEach((node) => node.remove());
   const fullText = root.textContent;
   root.querySelectorAll("blockquote").forEach((node) => node.remove());

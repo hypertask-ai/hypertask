@@ -1,6 +1,3 @@
-// Pure helpers for the table view's visible-column order (picker + drag-to-reorder).
-// Kept free of Recoil/atom imports so this module (and its test) can be
-// imported on its own instead of pulling in the whole store graph.
 
 export const TABLE_COLUMN_KEYS = [
     "ticket",
@@ -29,7 +26,6 @@ export const DEFAULT_TABLE_COLUMNS: TableColumnKey[] = [
     "updated",
 ];
 
-/** My Tasks picker keys. Includes board/labels; omits board-only staleness/time. */
 export const MY_TASKS_TABLE_COLUMN_KEYS = [
     "ticket",
     "title",
@@ -45,7 +41,6 @@ export const MY_TASKS_TABLE_COLUMN_KEYS = [
 ] as const;
 export type MyTasksTableColumnKey = (typeof MY_TASKS_TABLE_COLUMN_KEYS)[number];
 
-/** Snapshot of today's My Tasks defaults. Board/labels stay opt-in. */
 export const DEFAULT_MY_TASKS_TABLE_COLUMNS: MyTasksTableColumnKey[] = [
     "ticket",
     "title",
@@ -76,25 +71,13 @@ export const TABLE_STALENESS_COLUMNS: TableColumnKey[] = [
     "onBoard",
 ];
 
-// Custom-field table columns use the same "customField:<id>" key format as
-// the table's sort-column state (see TableView's CustomFieldSortColumn), so
-// a dragged field's position and its active sort column line up on one key.
 const CUSTOM_FIELD_COLUMN_PREFIX = "customField:";
 export const customFieldColumnKey = (fieldId: string) => `${CUSTOM_FIELD_COLUMN_PREFIX}${fieldId}`;
 export const isCustomFieldColumnKey = (key: string): boolean => key.startsWith(CUSTOM_FIELD_COLUMN_PREFIX);
 export const customFieldIdFromColumnKey = (key: string) => key.slice(CUSTOM_FIELD_COLUMN_PREFIX.length);
 
-// Ticket/title always lead the table (title needs to be flex-width and predictable in
-// position), so neither drag-reorder (header) nor the picker's drag list lets them move.
 export const LOCKED_TABLE_COLUMNS = new Set<string>(["ticket", "title"]);
 
-// Order-preserving: 'ticket'/'title' are locked to the front, the rest keep
-// whatever order the user last dragged them into (TableColumnsPicker).
-// Accepts both built-in keys and 'customField:<id>' entries, so custom
-// fields share the exact same toggle + reorder + persistence as the
-// built-in columns: presence in the array means visible, same as any
-// built-in. A key simply absent from the array is hidden — deliberately,
-// no different from a user having unchecked "Status".
 const normalizeLockedFrontColumns = (
     value: unknown,
     isValidKey: (key: unknown) => key is string,
@@ -127,7 +110,6 @@ export const normalizeMyTasksTableVisibleColumns = (value: unknown): string[] =>
     return normalizeLockedFrontColumns(value, isValidKey, DEFAULT_MY_TASKS_TABLE_COLUMNS);
 };
 
-/** Board table injects status while sorted; My Tasks picker must not. */
 export const withForcedStatusWhileSorted = (
     normalized: string[],
     sortActive: boolean,
@@ -153,13 +135,6 @@ export const setTableStalenessColumns = (visible: string[], enabled: boolean): s
     return missing.length ? [...normalized, ...missing] : normalized;
 };
 
-// Unlike built-ins (a fixed, compile-time-known set that DEFAULT_TABLE_COLUMNS
-// seeds once), custom fields are created at runtime — a field a user has never
-// seen needs seeding into the stored order exactly once, same as
-// DEFAULT_TABLE_COLUMNS seeds the built-ins for a first-time user. After that
-// one seed, presence/absence is purely the user's own toggle choice. Callers
-// seed once per newly-discovered field (see TableView's seeding effect) and
-// on "Reset to default" (which re-seeds all of them, visible again).
 export const seedMissingCustomFieldColumns = (visible: string[], customFieldKeys: string[]): string[] => {
     const present = new Set(visible);
     const missing = customFieldKeys.filter((key) => !present.has(key));

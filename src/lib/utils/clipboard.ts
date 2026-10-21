@@ -1,5 +1,3 @@
-// Plain-text clipboard writes can be unavailable or blocked in mobile and in-app
-// browsers, so use the legacy browser path before reporting failure.
 export const writeTextToClipboard = async (text: string): Promise<boolean> => {
   if (!text) return false;
   try {

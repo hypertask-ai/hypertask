@@ -3,10 +3,6 @@ import { executeWithService } from '../utils/executeWithService';
 import { TOOL_METADATA } from '../config/tool-metadata';
 import { getSearchHelpDocsBaseSchema } from '../validations/help-docs.validation';
 
-/**
- * Tool: search_help_docs
- * Searches public Hypertask help-center articles for product documentation.
- */
 export const searchHelpDocsTool = {
   name: TOOL_METADATA.SEARCH_HELP_DOCS.name,
   description: TOOL_METADATA.SEARCH_HELP_DOCS.description,

@@ -213,7 +213,7 @@ test("description and comment failures leave edit mode open", () => {
   assert.match(save, /response\.status === 200[\s\S]*?Could not update comment\. Your changes are still here/);
   assert.match(save, /if \(saved\) setEditMode\(null\)/);
   assert.match(save, /setEditState\(null\);[\s\S]*?setEditMode\(null\);[\s\S]*?return true/);
-  assert.match(save, /return false;[\s\S]*?\};[\s\S]*?\/\/ ---------------------- CREATE COMMENT/);
+  assert.match(save, /return false;[\s\S]*?\};[\s\S]*?const createComment =/);
 });
 
 test("comment updates authorize against stored ownership and sync attachments atomically", () => {

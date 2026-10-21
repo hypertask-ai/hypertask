@@ -32,11 +32,11 @@ stubModule("src/lib/flags.ts", {
     reads += 1;
     return [
       {
-        key: "htpr-6136-figma-connect",
+        key: "htpr-3533-google-calendar",
         mode: "OWNER_ONLY",
         updatedAt: null,
         description: "Connects Figma files to boards.",
-        ticketUrl: "https://app.hypertask.ai/detail/project-15/6136",
+        ticketUrl: "https://app.hypertask.ai/detail/project-15/3533",
       },
     ];
   },
@@ -48,7 +48,7 @@ stubModule("src/lib/flags.ts", {
       mode,
       updatedAt: new Date(),
       description: "Connects Figma files to boards.",
-      ticketUrl: "https://app.hypertask.ai/detail/project-15/6136",
+      ticketUrl: "https://app.hypertask.ai/detail/project-15/3533",
     };
   },
   setFeatureFlagKeep: async (key, keep) => {
@@ -59,7 +59,7 @@ stubModule("src/lib/flags.ts", {
       keep,
       updatedAt: new Date(),
       description: "Connects Figma files to boards.",
-      ticketUrl: "https://app.hypertask.ai/detail/project-15/6136",
+      ticketUrl: "https://app.hypertask.ai/detail/project-15/3533",
     };
   },
   featureFlagsForUser: async (id) => ({ example: id === 6 }),
@@ -120,7 +120,7 @@ test("non-owners receive 404 before flag metadata is read or changed", async () 
   assert.deepEqual(
     await json(
       await admin.PATCH(
-        request("PATCH", { key: "htpr-6136-figma-connect", mode: "EVERYONE" }),
+        request("PATCH", { key: "htpr-3533-google-calendar", mode: "EVERYONE" }),
       ),
     ),
     { status: 404, body: { error: "Not found" } },
@@ -146,16 +146,16 @@ test("the owner can list and change a declared flag with server-owned metadata",
   assert.equal(listed.status, 200);
   assert.equal(listed.body.detailsEnabled, true);
   assert.deepEqual(listed.body.flags[0], {
-    key: "htpr-6136-figma-connect",
+    key: "htpr-3533-google-calendar",
     mode: "OWNER_ONLY",
     updatedAt: null,
     description: "Connects Figma files to boards.",
-    ticketUrl: "https://app.hypertask.ai/detail/project-15/6136",
+    ticketUrl: "https://app.hypertask.ai/detail/project-15/3533",
   });
   const result = await json(
     await admin.PATCH(
       request("PATCH", {
-        key: "htpr-6136-figma-connect",
+        key: "htpr-3533-google-calendar",
         mode: "OWNER_AND_QA",
         description: "attacker copy",
         ticketUrl: "https://evil.test",
@@ -165,7 +165,7 @@ test("the owner can list and change a declared flag with server-owned metadata",
   assert.equal(result.status, 200);
   assert.equal(result.body.flag.mode, "OWNER_AND_QA");
   assert.equal(result.body.flag.description, "Connects Figma files to boards.");
-  assert.equal(result.body.flag.ticketUrl, "https://app.hypertask.ai/detail/project-15/6136");
+  assert.equal(result.body.flag.ticketUrl, "https://app.hypertask.ai/detail/project-15/3533");
   assert.deepEqual(lastActor, { userId: 6, source: "page" });
   assert.equal(writes, 1);
   assert.equal(broadcasts, 1);
@@ -177,7 +177,7 @@ test("committed updates still succeed when realtime delivery fails", async (t) =
   userId = 6;
   broadcastFails = true;
   const result = await admin.PATCH(
-    request("PATCH", { key: "htpr-6136-figma-connect", mode: "EVERYONE" }),
+    request("PATCH", { key: "htpr-3533-google-calendar", mode: "EVERYONE" }),
   );
   assert.equal(result.status, 200);
   assert.equal(writes, 1);
@@ -187,11 +187,11 @@ test("committed updates still succeed when realtime delivery fails", async (t) =
 test("owner writes reject cross-origin and invalid modes", async () => {
   userId = 6;
   assert.equal(
-    (await admin.PATCH(request("PATCH", { key: "htpr-6136-figma-connect", mode: "OFF" }, "https://evil.test"))).status,
+    (await admin.PATCH(request("PATCH", { key: "htpr-3533-google-calendar", mode: "OFF" }, "https://evil.test"))).status,
     403,
   );
   assert.equal(
-    (await admin.PATCH(request("PATCH", { key: "htpr-6136-figma-connect", mode: "MAYBE" }))).status,
+    (await admin.PATCH(request("PATCH", { key: "htpr-3533-google-calendar", mode: "MAYBE" }))).status,
     400,
   );
   assert.equal(writes, 0);
@@ -200,7 +200,7 @@ test("owner writes reject cross-origin and invalid modes", async () => {
 test("the owner can pause removal with Keep without touching the mode", async () => {
   userId = 6;
   const result = await json(
-    await admin.PATCH(request("PATCH", { key: "htpr-6136-figma-connect", keep: true })),
+    await admin.PATCH(request("PATCH", { key: "htpr-3533-google-calendar", keep: true })),
   );
   assert.equal(result.status, 200);
   assert.equal(result.body.flag.keep, true);
@@ -214,11 +214,11 @@ test("a Keep write must say exactly one thing", async () => {
   userId = 6;
   const bodies = [
     // Both fields: which change was meant is ambiguous, so neither is applied.
-    { key: "htpr-6136-figma-connect", mode: "EVERYONE", keep: true },
+    { key: "htpr-3533-google-calendar", mode: "EVERYONE", keep: true },
     // Neither field: nothing to change.
-    { key: "htpr-6136-figma-connect" },
+    { key: "htpr-3533-google-calendar" },
     // Keep must be a boolean, not a truthy string.
-    { key: "htpr-6136-figma-connect", keep: "yes" },
+    { key: "htpr-3533-google-calendar", keep: "yes" },
   ];
   for (const body of bodies) {
     assert.equal((await admin.PATCH(request("PATCH", body))).status, 400);

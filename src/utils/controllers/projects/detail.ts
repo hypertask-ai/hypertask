@@ -1,10 +1,10 @@
+import { recordAgentBoardScopeMiss } from "@/lib/auth/agentScope";
 import { NextApiHandler, NextApiRequest, NextApiResponse } from "next";
 
 
 import prisma from "@/lib/prisma";
 import { projectContentAccessWhere } from "@/utils/controllers/projects/getAllIncludes";
 
-// HTPR-7183: members see only public profile fields of the owner and assignees.
 const publicUserSelect = { id: true, displayName: true, photoURL: true } as const;
 
 
@@ -15,7 +15,6 @@ const projectDetail = async (projectId:number, userId:number, agentId?:string) =
                     status:400,
                     json:{ message: "Project id is required" }
                 })
-                // return res.status(400).json({ message: "Project id is required" });
             }
             let project = await prisma.project.findFirst({
                 relationLoadStrategy: "join",
@@ -61,6 +60,7 @@ const projectDetail = async (projectId:number, userId:number, agentId?:string) =
                 })
             }
             
+            recordAgentBoardScopeMiss(project.id, "read");
             return({
                 status:200,
                 json:project

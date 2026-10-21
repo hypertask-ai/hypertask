@@ -1,19 +1,14 @@
-// EditorButtons.tsx
 import type { Editor } from "@tiptap/react";
 import React from "react";
 import { Code, CodeXml, Link, List, ListOrdered, Unlink } from "lucide-react";
 import { useSetRecoilState } from "@/lib/state";
 import { showSetLinkModalAtom } from "@/store";
 
-// Function to unset a link
 const unsetLink = (editor: Editor) => {
   editor.chain().focus().unsetLink().run();
 };
 
-// ... Define other button actions here
 
-// I know this code is ancient when an image is being used to display an icon. {._.}
-// Component for the Set Link button
 const SetLinkButton = ({ editor }: { editor: Editor }) => {
   const setShowSetLinkModal = useSetRecoilState(showSetLinkModalAtom);
   const isActive = editor.isActive("link");
@@ -72,7 +67,6 @@ const setCode = (editor: Editor, block: boolean = false) => {
   }
 };
 
-// Component for the Unset Link button
 const UnsetLinkButton = ({ editor }: { editor: Editor }) => {
   return (
     <button
@@ -84,7 +78,6 @@ const UnsetLinkButton = ({ editor }: { editor: Editor }) => {
   );
 };
 
-// Component for the Toggle Highlight button
 const ToggleHighlightButton = ({
   editor,
   setToggleHighlightbutton,
@@ -101,7 +94,6 @@ const ToggleHighlightButton = ({
   );
 };
 
-// Button components
 const BoldButton = ({ editor }: { editor: Editor }) => {
   const isActive = editor.isActive("bold");
   return (
@@ -204,49 +196,49 @@ const SetCodeBlockButton = ({ editor }: { editor: Editor }) => {
 const buttonConfigs = [
   {
     component: SetLinkButton,
-    props: {}, // Any additional props for SetLinkButton
+    props: {},
   },
   {
     component: SetOrderedListButton,
-    props: {}, // Any additional props for SetLinkButton
+    props: {},
   },
   {
     component: SetBulletListButton,
-    props: {}, // Any additional props for SetLinkButton
+    props: {},
   },
   {
     component: UnsetLinkButton,
-    props: {}, // Any additional props for UnsetLinkButton
+    props: {},
   },
   {
     component: ToggleHighlightButton,
-    props: {}, // Any additional props for ToggleHighlightButton,
+    props: {},
     id: "HighlightButton",
   },
 
   {
     component: BoldButton,
-    props: {}, // Any additional props for BoldButton
+    props: {},
   },
   {
     component: ItalicButton,
-    props: {}, // Any additional props for ItalicButton
+    props: {},
   },
   {
     component: UnderlineButton,
-    props: {}, // Any additional props for UnderlineButton
+    props: {},
   },
   {
     component: HeadingButton,
-    props: { level: 1 }, // Props for HeadingButton with level 1
+    props: { level: 1 },
   },
   {
     component: HeadingButton,
-    props: { level: 2 }, // Props for HeadingButton with level 2
+    props: { level: 2 },
   },
   {
     component: ParagraphButton,
-    props: {}, // Any additional props for ParagraphButton
+    props: {},
   },
   {
     component: SetCodeButton,
@@ -256,10 +248,7 @@ const buttonConfigs = [
     component: SetCodeBlockButton,
     props: {},
   },
-  // ... Add other button configurations here
 ];
 
-// ... (other button components and exports)
 
-// Export the button configurations
 export { buttonConfigs };

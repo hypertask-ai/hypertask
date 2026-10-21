@@ -146,8 +146,6 @@ export type RealtimeLatencyPerformanceEvent = {
     receipt_to_render_ms: number | null;
     receipt_to_request_p75_ms: number | null;
     receipt_to_request_budget_met: boolean | null;
-    // HTPR-6166: fetch time vs main-thread blocking, split out of
-    // receipt_to_render_ms. null means unmeasurable (API unsupported), not 0.
     network_ms: number | null;
     long_task_ms: number | null;
     realtime_project_id: number | null;
@@ -177,9 +175,6 @@ export type TaskDetailReadinessPerformanceEvent = {
       | "usable_state_timeout";
     readiness_measurement_version: 1;
     readiness_measurement_scope: "task_detail_open_to_usable";
-    // HTPR-6047: phase attribution, null whenever that phase couldn't be
-    // measured (mark never fired, or fired before this mount and was
-    // discarded as stale) - never a fabricated number.
     phase_suspense_commit_ms: number | null;
     phase_comp_mount_ms: number | null;
     phase_comments_request_ms: number | null;
@@ -293,8 +288,6 @@ export const emitProductPerformanceEvent = (
     }
   }
 
-  // Authenticated analytics can wait until useful product content is ready.
-  // Dispatch only after queueing so a late-loading sink cannot miss the event.
   if (isProductReadinessEvent(event)) {
     window.dispatchEvent(new Event(PRODUCT_PERFORMANCE_READY_EVENT));
   }

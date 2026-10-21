@@ -4,7 +4,6 @@ import { getSessionUser } from "@/lib/auth/getSessionUser";
 import { isFeatureEnabled } from "@/lib/flags";
 import { HTPR_7184_NOT_FOUND_THEMED_FLAG } from "@/lib/flags/definitions/htpr-7184-not-found-themed";
 
-// Same text as Next's built-in 404, in the active theme's colours (HTPR-7184).
 export default async function NotFound() {
   const sessionUser = await getSessionUser(new Headers(await headers())).catch(() => null);
   const themed = await isFeatureEnabled(HTPR_7184_NOT_FOUND_THEMED_FLAG, sessionUser?.userId ?? 0).catch(() => true);

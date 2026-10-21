@@ -11,12 +11,8 @@ export const asViewOrder = (value: unknown): string[] | undefined =>
     ? value
     : undefined;
 
-// Views the user has never dragged fall back to creation order. Built-ins have
-// no createdAt, so they rank after every saved view, in declaration order --
-// their first-run home at the end of the bar, until the user moves them.
 const BUILTIN_RANK_BASE = Number.MAX_SAFE_INTEGER - BUILTIN_VIEWS.length;
 
-// HTPR-7092: Decisions sits right after the home tab until the user places it.
 const fallbackRank = (view: BoardView) => {
   if (view.id === BUILTIN_VIEW_IDS.decisions) return -1;
   if (isBuiltinView(view)) {

@@ -12,7 +12,6 @@ const handler: NextApiHandler = async (req: NextApiRequest, res: NextApiResponse
   if (!adminPassword || req.headers["x-admin-password"] !== adminPassword) {
     return res.status(401).json({ message: "Unauthorized" });
   }
-  // if (req.method === "POST") {
     try {
       const { lastXdays, lastXmonths, lastXweeks } = req.body;
       const response = await getTaskCounts(lastXdays, lastXweeks, lastXmonths)
@@ -24,14 +23,11 @@ const handler: NextApiHandler = async (req: NextApiRequest, res: NextApiResponse
       console.log("🚀 ~ consthandler:NextApiHandler= ~ error:", error)
       return res.status(500)
     }
-
-  // }
 }
 export default handler;
 
 
 async function getTaskCounts(lastXdays: number = 7, lastXweeks: number = 4, lastXmonths: number = 12) {
-  // Monthly aggregation
   const monthlyCounts: ICommentMonthly[] = await prisma.$queryRaw`
     SELECT 
       TO_CHAR(c."createdAt", 'Month,YYYY') AS month,
@@ -49,7 +45,6 @@ async function getTaskCounts(lastXdays: number = 7, lastXweeks: number = 4, last
       TO_DATE(TO_CHAR(c."createdAt", 'Month,YYYY'), 'Month, YYYY');
   `;
 
-  // Weekly aggregation
   const weeklyCounts: ICommentWeekly[] = await prisma.$queryRaw`
     SELECT 
       EXTRACT(YEAR FROM c."createdAt") AS year,
@@ -68,7 +63,6 @@ async function getTaskCounts(lastXdays: number = 7, lastXweeks: number = 4, last
       year, week;
   `;
 
-  // Daily aggregation
   const dailyCounts: ICommentDaily[] = await prisma.$queryRaw`
     SELECT 
       DATE(c."createdAt") AS day,
