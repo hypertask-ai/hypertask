@@ -114,6 +114,8 @@ function harness(options = {}) {
     "@/lib/ai/chatStream/errors": errors,
   });
   const create = moduleWithStubs("src/lib/ai/tools/createTask.ts", {
+    "@/lib/flags/keys": keys,
+    "@/lib/flags": { isFeatureEnabled: async () => false },
     ai,
     "@/app/api/ai/chat/stream/bulkTools": { buildBulkOperationKey: (kind, tasks) => JSON.stringify([kind, tasks]) },
     "@/lib/ai/bulkConfirmation": { requireCrossMessageConfirmation: async (args) => { confirmations.push(args); return options.confirmed ? "execute" : "preview"; } },

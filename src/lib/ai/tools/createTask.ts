@@ -1,3 +1,5 @@
+import { HTPR_7513_WRITER_PROJECT_LABELS_FLAG } from "@/lib/flags/keys";
+import { isFeatureEnabled } from "@/lib/flags";
 import type { TaskWriterCustomFieldValue } from "@/lib/ai/taskWriterCustomFields";
 import { tool } from "ai";
 import { z } from "zod";
@@ -106,6 +108,7 @@ export function createCreateTaskTool(context: ToolContext) {
           let title = "title" in input ? input.title : "";
           let description = "description" in input ? input.description : undefined;
           let estimateIndex = 0;
+          let labels = input.labels || [];
           const projectCheck = await validateProjectAccess(input.project_id, user.id);
           if (projectCheck.error) {
             return { success: false, error: projectCheck.error.message };
@@ -190,6 +193,10 @@ export function createCreateTaskTool(context: ToolContext) {
               }), user.id, actingAgentId, abortSignal);
               if (!draft.success) return { success: false, error: draft.error };
               if (!draft.title?.trim()) return { success: false, error: "Task Writer returned an empty title. Try again." };
+              if (!labels.length && draft.labelIds?.length &&
+                  await isFeatureEnabled(HTPR_7513_WRITER_PROJECT_LABELS_FLAG, user.id)) {
+                labels = draft.labelIds;
+              }
               customFields = draft.customFields;
               title = draft.title;
               description = draft.html;
@@ -210,7 +217,7 @@ export function createCreateTaskTool(context: ToolContext) {
               dueDate: input.due_date ? new Date(input.due_date) : undefined,
               projectUniqueIdentifier: projectCheck.project.uniqueIdentifier,
               teamId: projectCheck.project.teamId,
-              labels: input.labels || [],
+              labels,
               assigneeIds: input.assignee_ids,
               parentTaskId: input.parent_task_id ?? undefined,
               agentId: actingAgentId,

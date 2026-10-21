@@ -44,14 +44,18 @@ def fingerprint(row, evidence, checker_sha):
     digest = hashlib.sha256(json.dumps([row['headRefOid'], row['title'], checker_sha], sort_keys=True).encode())
     if record.is_file():
         text = record.read_bytes()
+        digest.update(str(record.stat().st_mtime_ns).encode())
         digest.update(text)
         match = re.search(rb'^Recording:\s*([^\r\n]+)', text, re.M)
         if match:
             video = (folder / match[1].decode().strip()).resolve()
             if video.is_relative_to(folder.resolve()) and video.is_file():
-                with video.open('rb') as stream:
-                    for chunk in iter(lambda: stream.read(1024 * 1024), b''):
-                        digest.update(chunk)
+                stat = video.stat()
+                digest.update(json.dumps([str(video), stat.st_ino, stat.st_size, stat.st_mtime_ns, stat.st_ctime_ns]).encode())
+    binding = folder / 'pr'
+    if binding.is_file():
+        digest.update(str(binding.stat().st_mtime_ns).encode())
+        digest.update(binding.read_bytes())
     return digest.hexdigest()
 
 
@@ -92,47 +96,32 @@ STATS = {'calls': 0, 'remaining': '?', 'list': '-'}
 STALE_LOOP_SECONDS = 2 * 3600
 
 
-def gh_page(page, etag=None):
-    cmd = ['gh', 'api', '-i', f'repos/{REPO}/pulls?state=open&base=production&per_page=100&page={page}']
-    if etag:
-        cmd += ['-H', f'If-None-Match: {etag}']
-    result = subprocess.run(cmd, capture_output=True, text=True, timeout=60)
-    STATS['calls'] += 1
-    head, _, body = result.stdout.replace('\r\n', '\n').partition('\n\n')
-    lines = head.split('\n')
-    status = lines[0].split()[1] if len(lines[0].split()) > 1 else ''
-    headers = {k.strip().lower(): v.strip() for k, _, v in (l.partition(':') for l in lines[1:])}
-    STATS['remaining'] = headers.get('x-ratelimit-remaining', '?')
-    return status, headers, body
-
-
 def open_prs(state):
-    # Page 1 is conditional: an unchanged list is a 304, which does not count against the rate limit.
-    saved = state / 'list.json'
-    try:
-        cached = json.loads(saved.read_text())
-    except (OSError, ValueError):
-        cached = {}
-    usable = cached.get('etag') and cached.get('rows') is not None
-    status, headers, body = gh_page(1, cached['etag'] if usable else None)
-    STATS['list'] = status
-    if status == '304' and usable:
-        return cached['rows']
-    if status != '200':
-        raise ValueError('open PR list failed')
-    raw, page, more = json.loads(body), 1, 'rel="next"' in headers.get('link', '')
-    while more:
-        page += 1
-        status, next_headers, body = gh_page(page)
-        if status != '200':
-            raise ValueError('open PR list page failed; refusing an incomplete sweep')
-        raw += json.loads(body)
-        more = 'rel="next"' in next_headers.get('link', '')
-    rows = [{'number': r['number'], 'title': r['title'], 'headRefOid': r['head']['sha']} for r in raw]
-    temporary = state / 'list.tmp'
-    # With several pages no ETag is stored, so the next sweep refetches every page.
-    temporary.write_text(json.dumps({'etag': None if page > 1 else headers.get('etag'), 'rows': rows}))
-    temporary.replace(saved)
+    query = """query($endCursor: String) {
+      repository(owner: "hypertask-ai", name: "hypertask") {
+        pullRequests(first: 100, after: $endCursor, states: OPEN, baseRefName: "production") {
+          nodes { number headRefOid title updatedAt }
+          pageInfo { hasNextPage endCursor }
+        }
+      }
+      rateLimit { remaining }
+    }"""
+    result = subprocess.run(['gh', 'api', 'graphql', '--paginate', '--jq', '@json', '-f', 'query=' + query],
+                            capture_output=True, text=True, timeout=60, check=True)
+    pages = [json.loads(line) for line in result.stdout.splitlines() if line.strip()]
+    if not pages:
+        raise ValueError('open PR list failed; refusing an incomplete sweep')
+    rows = []
+    for page in pages:
+        if page.get('errors'):
+            raise ValueError('open PR list failed; refusing an incomplete sweep')
+        connection = page['data']['repository']['pullRequests']
+        rows.extend(connection['nodes'])
+    if connection['pageInfo']['hasNextPage']:
+        raise ValueError('open PR list incomplete')
+    STATS['calls'] += len(pages)
+    STATS['list'] = 'graphql'
+    STATS['remaining'] = pages[-1]['data']['rateLimit']['remaining']
     return rows
 
 
@@ -219,11 +208,14 @@ def missed(updated, previous, key):
     return misses >= MISSES_BEFORE_FAILURE
 
 
-def sweep():
+def sweep(dry_run=False):
+    STATS.update(calls=0, remaining="?", list="-")
     if paused():
         return
     state = Path(os.environ.get('PREMERGE_STATUS_STATE', Path.home() / '.local/state/premerge-evidence'))
     evidence = Path(os.environ.get('VCC_EVIDENCE_DIR', Path.home() / '.local/state/vcc-evidence'))
+    if dry_run:
+        state = state / 'dry-run'
     state.mkdir(parents=True, exist_ok=True)
     with (state / 'lock').open('w') as lock:
         try:
@@ -234,7 +226,8 @@ def sweep():
         try:
             checker_bytes = fetch_checker(state)
         except Exception:
-            revoke_passing(state)
+            if not dry_run:
+                revoke_passing(state)
             raise
         checker_sha = hashlib.sha256(checker_bytes).hexdigest()
         checker = state / 'ship-check'
@@ -264,11 +257,13 @@ def sweep():
                     continue
                 rechecks += 1
                 env = dict(os.environ, SHIP_REPO=REPO, SHIP_BASE='production', SHIP_GIT_CACHE=str(cache_dir(state)))
-                result = subprocess.run([str(checker), 'premerge-status', key],
+                result = subprocess.run([str(checker), 'premerge' if dry_run else 'premerge-status', key],
                                         capture_output=True, text=True, timeout=600, env=env)
                 print(f'PR #{key}: {result.stdout.strip()}', flush=True)
                 match = re.search(r'^premerge-evidence: (success|failure) ', result.stdout, re.M)
-                if match and result.returncode == (0 if match[1] == 'success' else 1):
+                if dry_run and (result.returncode == 0 or result.returncode == 1 and 'FAIL:' in result.stdout):
+                    updated[key] = {'fingerprint': signature, 'state': 'DRY_RUN', 'checked': time.time()}
+                elif match and result.returncode == (0 if match[1] == 'success' else 1):
                     updated[key] = {'fingerprint': signature, 'state': match[1].upper(), 'checked': time.time()}
                 else:
                     failed |= missed(updated, previous, key)
@@ -278,6 +273,7 @@ def sweep():
         temporary = state / 'cache.tmp'
         temporary.write_text(json.dumps(updated))
         temporary.replace(cache_file)
+        print(f'sweep: prs={len(rows)} skipped={len(rows) - rechecks} dry_run={dry_run}', flush=True)
         record_calls(state, rechecks)
         if failed:
             raise ValueError('one or more statuses could not be published')
@@ -289,10 +285,12 @@ if __name__ == '__main__':
             install()
         elif sys.argv[1:] == ['--kill-stale-gh-loops']:
             kill_stale_gh_loops()
+        elif sys.argv[1:] == ['--dry-run']:
+            sweep(dry_run=True)
         elif not sys.argv[1:]:
             sweep()
         else:
-            raise ValueError('usage: premerge-evidence.py [--install | --kill-stale-gh-loops]')
+            raise ValueError('usage: premerge-evidence.py [--install | --kill-stale-gh-loops | --dry-run]')
     except Exception:
         print('FAIL: premerge-evidence operation failed; inspect service logs and retry', file=sys.stderr)
         sys.exit(1)

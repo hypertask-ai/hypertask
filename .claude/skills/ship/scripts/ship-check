@@ -187,7 +187,7 @@ check_branch() {
 check_bind() {
   local t; t=$(gh pr view "$2" -R "$REPO" --json title --jq .title 2>/dev/null) || fail "PR $2 not found in $REPO"
   [[ $t == "$1 "* ]] || fail "PR $2 is titled \"$t\", not $1"
-  mkdir -p "$EVID/$1" && echo "$2" > "$EVID/$1/pr" && rm -f "$EVID/$1/duplicate-of" "$EVID/$1/dropped" "$EVID/$1/branch" "$EVID/$1/nochange" && echo "bound $1 to PR $2"
+  mkdir -p "$EVID/$1" && echo "$2" > "$EVID/$1/pr" && echo "$REPO" > "$EVID/$1/repo" && echo "$BASE" > "$EVID/$1/base" && rm -f "$EVID/$1/duplicate-of" "$EVID/$1/dropped" "$EVID/$1/branch" "$EVID/$1/nochange" && echo "bound $1 to PR $2"
 }
 
 check_duplicate() {
@@ -317,13 +317,13 @@ check_merged() { dropped_ok merged "$1" && return 0; nochange_ok merged "$1" && 
 
 docs_deploy_ok() {
   local sha=$1 runs id jobs
-  runs=$(gh api "repos/hypertask-ai/docs/actions/workflows/deploy.yml/runs?head_sha=$sha&event=push&per_page=100" 2>/dev/null) \
+  runs=$(gh api "repos/hypertask-ai/docs/actions/workflows/deploy.yml/runs?head_sha=$sha&per_page=100" 2>/dev/null) \
     || fail "could not read workflow runs for $sha"
   id=$(jq -r --arg sha "$sha" '[.workflow_runs[] | select(.path == ".github/workflows/deploy.yml"
-    and .name == "Build and Deploy" and .event == "push" and .head_branch == "main"
+    and .name == "Build and Deploy" and (.event == "push" or .event == "workflow_dispatch") and .head_branch == "main"
     and .head_sha == $sha and .conclusion == "success")] | first | .id // empty' <<<"$runs") \
     || fail "could not read publishing workflow identity for $sha"
-  [ -n "$id" ] || fail "no successful production publishing push for $sha"
+  [ -n "$id" ] || fail "no successful production publishing run for $sha"
   jobs=$(gh api "repos/hypertask-ai/docs/actions/runs/$id/jobs?per_page=100" 2>/dev/null) || fail "could not read publishing jobs for $sha"
   jq -e 'any(.jobs[]; .name == "Build and deploy to Cloudflare Pages" and .conclusion == "success")' <<<"$jobs" >/dev/null \
     || fail "no successful production deploy job for $sha"
@@ -397,13 +397,13 @@ check_deployed() {
       [[ $REPO == hypertask-ai/analytics && $BASE == master ]] || fail "no release found in $REPO"
       releases=$(gh release list -R "$REPO" --limit 1 --json tagName 2>/dev/null) || fail "could not read releases in $REPO"
       jq -e 'length == 0' <<<"$releases" >/dev/null || fail "no release found in $REPO"
-      runs=$(gh api "repos/$REPO/actions/workflows/deploy.yml/runs?head_sha=$sha&event=push&per_page=100" 2>/dev/null) \
+      runs=$(gh api "repos/$REPO/actions/workflows/deploy.yml/runs?head_sha=$sha&per_page=100" 2>/dev/null) \
         || fail "could not read workflow runs for $sha"
       id=$(jq -r --arg sha "$sha" '[.workflow_runs[] | select(.path == ".github/workflows/deploy.yml"
-        and .name == "Publish hypertask.app" and .event == "push" and .head_branch == "master"
+        and .name == "Publish hypertask.app" and (.event == "push" or .event == "workflow_dispatch") and .head_branch == "master"
         and .head_sha == $sha and .conclusion == "success")] | first | .id // empty' <<<"$runs") \
         || fail "could not read publishing workflow identity for $sha"
-      [ -n "$id" ] || fail "no successful production publishing push for $sha"
+      [ -n "$id" ] || fail "no successful production publishing run for $sha"
       # This workflow can succeed with its production deploy job disabled.
       jobs=$(gh api "repos/$REPO/actions/runs/$id/jobs?per_page=100" 2>/dev/null) || fail "could not read publishing jobs for $sha"
       jq -e 'any(.jobs[]; .name == "deploy" and .conclusion == "success")' <<<"$jobs" >/dev/null \
@@ -1025,6 +1025,16 @@ PY
   done < <(sed -E 's/(&&|\|\||;|\||&|\(|\))/\n/g' <<<"$cmd")
   exit 0
 }
+
+case "${1:-}" in
+  pr|merged|deployed|docs|proof|done|cleaned)
+    if [ "${SHIP_REPO+x}" != x ] && [ -s "$EVID/${2:-}/repo" ]; then
+      REPO=$(cat "$EVID/$2/repo") || fail "could not read bound repo for $2"
+    fi
+    if [ "${SHIP_BASE+x}" != x ] && [ -s "$EVID/${2:-}/base" ]; then
+      BASE=$(cat "$EVID/$2/base") || fail "could not read bound base for $2"
+    fi ;;
+esac
 
 case "${1:-}" in
   bind) check_bind "$2" "$3" ;;

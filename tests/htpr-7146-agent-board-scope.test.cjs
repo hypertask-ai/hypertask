@@ -94,19 +94,17 @@ test('real JWT auth rejects present malformed agent claims and revoked agents, a
   assert.equal(await auth.validateJwtToken(agentToken), null);
 });
 
-test('timer services scope running/report even with empty boardIds and the report flag both ways', async () => {
+test('timer services scope running/report with and without administered boards', async () => {
   const f = fixture();
   const entries = f.tasks.map(task => ({ id: task.id, taskId: task.id, userId: f.user.id, task, user: f.user, startedAt: new Date(), endedAt: null, pausedAt: null }));
   f.prisma.timeEntry = { findMany: async args => entries.filter(row => matches(row, args.where)) };
-  let reportsEnabled = false;
   const service = f.load('src/lib/timeTracking.ts', {
-    '@/lib/flags': { isFeatureEnabled: async () => reportsEnabled },
     '@/lib/timeTrackingPersistence': {},
   });
   assert.deepEqual((await service.listRunning(f.user.id, f.agent.id)).map(row => row.task.projectId), [15, 4060]);
   assert.equal((await service.listRunning(f.user.id)).length, 3);
-  for (reportsEnabled of [false, true]) {
-    assert.deepEqual((await service.listReport(f.user.id, { agentId: f.agent.id, adminProjectIds: reportsEnabled ? [15, 4060, 2128] : [] })).map(row => row.task.projectId), [15, 4060]);
+  for (const adminProjectIds of [[], [15, 4060, 2128]]) {
+    assert.deepEqual((await service.listReport(f.user.id, { agentId: f.agent.id, adminProjectIds })).map(row => row.task.projectId), [15, 4060]);
     assert.deepEqual(await service.listReport(f.user.id, { agentId: f.agent.id, boardId: 2128, adminProjectIds: [] }), []);
     assert.deepEqual((await service.listReport(f.user.id, { agentId: f.agent.id, boardIds: [], adminProjectIds: [] })).map(row => row.task.projectId), [15, 4060]);
     assert.equal((await service.listReport(f.user.id, { adminProjectIds: [] })).length, 3);

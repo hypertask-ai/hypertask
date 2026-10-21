@@ -143,7 +143,7 @@ for (const [mode, kind] of cases) {
     f.prisma.member_Team = { findFirst: async () => ({ id: 1 }) };
     const route = f.load('src/lib/mcp/operations/teams/[teamId]/boards/operation.ts', {
       '@/lib/mcp/idempotency/idempotencyStore': store,
-      '@/lib/mcp/agents/scopes': { requireRole: async () => null },
+      '@/lib/mcp/agents/scopes': { requireRole: async () => null, getAgentRole: async () => 'admin' },
     }).POST;
     const dependencies = { createBoardFromManifest: async () => { f.writes.push('create'); return { board: { id: 15 }, sections: [], labels: [], tasks: [] }; } };
     const invoke = () => route(request('/api/mcp/teams/team/boards', 'POST', body, { 'Idempotency-Key': 'scope-key' }), { params: Promise.resolve({ teamId: 'team' }) }, dependencies);

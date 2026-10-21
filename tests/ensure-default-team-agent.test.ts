@@ -532,7 +532,7 @@ test("covers a team the caller can use without an accepted board row", async () 
   assert.equal(created, 1);
 });
 
-test("agent list routes seed behind the HTPR-6512 flag", () => {
+test("agent list routes seed only for the permanent owner and QA identities", () => {
   const root = path.resolve(__dirname, "..");
   const teamRoute = readFileSync(
     path.join(root, "src/app/api/agents/route.ts"),
@@ -542,15 +542,6 @@ test("agent list routes seed behind the HTPR-6512 flag", () => {
     path.join(root, "src/app/api/agents/owned/route.ts"),
     "utf8",
   );
-  const keys = readFileSync(path.join(root, "src/lib/flags/definitions/htpr-6512-seed-team-agent.ts"), "utf8");
-  const flags = readFileSync(path.join(root, "src/lib/flags.ts"), "utf8") + keys;
-
-  assert.match(keys, /HTPR_6512_SEED_TEAM_AGENT_FLAG/);
-  assert.match(keys, /htpr-6512-seed-team-agent/);
-  assert.match(
-    flags,
-    /key:\s*HTPR_6512_SEED_TEAM_AGENT_FLAG[\s\S]*?seed a Hyper AI agent/,
-  );
   const mcpCreate = readFileSync(
     path.join(root, "src/lib/mcp/agents/create.ts"),
     "utf8",
@@ -558,8 +549,8 @@ test("agent list routes seed behind the HTPR-6512 flag", () => {
 
   assert.match(teamRoute, /ensureDefaultTeamAgent\(/);
   assert.match(ownedRoute, /ensureDefaultAgentsOnAccessibleTeams\(/);
-  assert.match(teamRoute, /HTPR_6512_SEED_TEAM_AGENT_FLAG/);
-  assert.match(ownedRoute, /HTPR_6512_SEED_TEAM_AGENT_FLAG/);
+  assert.match(teamRoute, /if \(await isOwnerOrQaUserId\(/);
+  assert.match(ownedRoute, /if \(await isOwnerOrQaUserId\(/);
   assert.match(teamRoute, /lockTeamAgentSeed\(/);
   assert.match(mcpCreate, /lockTeamAgentSeed\(/);
   assert.doesNotMatch(teamRoute, /as unknown as TeamAgentStore/);

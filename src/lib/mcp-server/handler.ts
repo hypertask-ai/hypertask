@@ -1,5 +1,5 @@
 import { aiFeedbackEnabled } from '@/lib/aiFeedback/enabled'
-import { observeFeedbackTools, queueAiFeedback } from '@/lib/aiFeedback/automatic'
+import { observeFeedbackTools, queueAiFeedback, queueMcpAuthFailure } from '@/lib/aiFeedback/automatic'
 import type { AuthInfo } from '@modelcontextprotocol/sdk/server/auth/types.js'
 import jwt from 'jsonwebtoken'
 import { MCP_TOOLS } from './tools'
@@ -121,7 +121,8 @@ export async function mcpHandler(request: Request): Promise<Response> {
     const bearer = extractBearerToken(working.headers.get('Authorization'))
     const authInfo = await verifyToken(working, bearer ?? undefined)
     if (!authInfo) {
-      if (bearer || !(await keylessHandshakeFeedbackIsQuiet())) {
+      if (bearer) queueMcpAuthFailure(working)
+      else if (!(await keylessHandshakeFeedbackIsQuiet())) {
         queueAiFeedback({ surface: 'mcp', tool: 'mcp', status: 401, errorCode: 'unauthorized' })
       }
       return mcpUnauthorizedResponse(working)

@@ -273,6 +273,46 @@ https://app.hypertask.ai/detail/project-15/7406, flag `htpr-7406-desktop-server-
 
 **What found the next limiter.** A per-frame probe (card in the DOM, card in view, paint entries) on three returning desktop loads: the HTML with all 28 cards arrives at 0.3 to 0.6 s, the fixture card is in the DOM at 0.36 to 0.63 s, but first-contentful-paint is 835 to 1007 ms. Script evaluation runs before the first paint. Filed as https://app.hypertask.ai/detail/project-15/7507.
 
+### 2026-10-21 afternoon: the returning board's first paint waits on fonts, not app code; one eager import moved off startup (HTPR-7507)
+
+**Premise corrected.** HTPR-7507 was filed on the 2026-10-21 morning probe ("script evaluation runs before the first paint"). Live Chrome traces (3, plus 2 with font categories, QA 2343, board 6859, desktop, cold cache with the saved preference) say otherwise: every `EvaluateScript` starts after the first paint lifecycle. The HTML arrives at about 0.28 s; the first layout then takes 90 to 360 ms, almost all `FontCache::GetFontPlatformData` (97 to 191 calls), `FontDataManager::onMatchFamilyStyle` and `WebSandboxSupportLinux::GetWebFontRenderStyleForStrike` (Linux-sandbox font IPC; much cheaper on Mac and Windows). After the paint, startup JavaScript (React hydration plus module init, 200 to 330 ms tasks) holds `ready()`'s rAF loop, so the harness reads ready 300 to 400 ms after the first paint.
+
+**Field check.** `npm run performance:field` needs a key with `query:read` (the read-only and alert keys lack it). Desktop LCP p75 2555 ms over 7 days (52 samples, not split by route): slow first paint is real for users, not only the VPS.
+
+**Fix shipped (PR 1709, merge ea7aba37a, [REFACTOR], no flag).** `TaskTagsRow` (every board card) imported `formatElapsed` and `useTimerNow` through `TaskDetail/TaskInfoColumn/TaskTime.tsx`, a re-export, which pulled `TaskTime` and `TimeLogModal` into board startup (85 to 175 ms inclusive in live CPU profiles at load 22 to 39, part of it shared Intl setup). It now imports both from their own modules.
+
+**Proof method worth reusing.** Playwright JS coverage stopped one frame after the fixture card is visible: 87 to 88 scripts covered, 0 contain the time log or time panel code (3 of 3), against the pre-fix profile where they ran during startup. Coverage stopped 4 s later shows the same modules running from the ticket-view warm-up (`CachedTaskDetailNavigation` `warmTaskDetail`, idle callback): a second load path that hides an import fix if you only check "is it loaded".
+
+**Traps.** A static import graph overstates startup: TypeScript elides type-only imports even without `import type` (`src/store/index.ts` -> `RemindMeComponent` is a type import only). Deterministic module ids do not match between a local build and a live build of a different commit (live 84287 is `TimeLogModal`; locally it is a comment component), so map a live profile only with a build of the exact live commit. `curl` on chunks needs the `?dpl=` query; live `.map` files answer 403.
+
+**Not measured.** Host load was 20 to 77 from 11:50 to 13:30 UTC. The 11:23 UTC harness run failed on phone ticket-warm readiness; its desktop first-visit board, untouched by the change, read 3.9 to 7.2 s against 2.1 to 2.7 s that morning, a 2x load inflation. Eight failed runs in two days. Measure the returning board only below load about 13.
+
+**Next probe.** The first layout's font work: count the distinct family, weight and size strikes on the first screen (191 platform lookups) and test on a quiet host whether `local()` fallback faces and the monospace stack cost the first paint on Linux only.
+
+### 2026-10-21 evening: no-cookie server board is a no-go; a search link sends its search once (HTPR-7502)
+
+https://app.hypertask.ai/detail/project-15/7502, flag `htpr-7502-search-once`.
+
+**Daily read.** Can't verify the current deploy: the 11:23 UTC run failed and production moved past ee3c49c3c. Last complete run 07:42 UTC (load 13). Milestone 1 misses: phone board first visit 11802 ms (target 4000), desktop board first visit 2448 ms and board-returning 1098 ms (target 1000), phone page navigation 2370 and search 2124 ms (target 2000). No >15% seven-day regression in content time.
+
+**The 11:23 failure.** Phone ticket-warm: the tap left the page on `/project` with the fixture card at top 1447 px in an 844 px viewport, and `boardTasks` fetched six times, at load 27 to 34. Second such failure this week (the first at load about 50). Watch for one at normal load before changing the harness.
+
+**Free ticket the dispatcher missed again.** HTPR-7502 sat unassigned in Improvements. Read the board for `[SPEED]` tickets in every column before researching.
+
+**No-go: server board on a first visit without the preference cookie.** The server render reads `timeZone` (card dates), `boardLayout`, rail, view tabs, table columns and chat state from the cookie. Only theme (cookie) and phone (user agent) are knowable without it. A device whose cookie expired (7-day `Max-Age`; Safari caps script cookies at 7 days anyway) still holds other choices in localStorage, so a default render would flip after hydration: not identical output. Scored gain 5 / cost 3 / risk 5 = 0.33, rejected. Queued instead: write the cookie at login before the first `/project` load (real users only; the harness never logs in, so it needs its own measurement plan), and the client render limiter (react-dom 4.8 s, HTPR-7395 probe).
+
+**Cause (HTPR-7502).** A fresh tab with the board list already loaded runs the mount search before feature settings arrive, so it skips the server-started result and posts; when settings arrive, the Esc-back flag flips, the term is missing from the tab history and the effect posts again. Live before, QA 2343, 10 fresh tabs at load 42 to 67: 2 posts in 9 of 10, identical result list in all.
+
+**Fix.** Behind a server-evaluated flag (the client flag is false until settings load, so it cannot gate the first effect): wait for settings only while a server result is pending, in a separate effect that runs only if nothing searched meanwhile (a rerun of the main effect resets the typed input), and record a search already shown in the history instead of resending it.
+
+**Trap.** Adding `searchFlagsReady` to the main mount effect looked harmless but re-ran `setInputValue(_searchTerm)`, wiping a query the user typed before settings loaded. The existing "user search wins" test caught it with the flag off.
+
+**Live result (PR 1731, merge 76b1498a2, flag Everyone).** Same fresh-tab probe, 5 desktop and 5 phone: 0 search requests in 10 of 10 (before 2 in 9 of 10), same result-list hash in all 20. Content visible: desktop 5234 ms (3890 to 9541, load 42 to 67) to 1773 ms (1314 to 3131, load 18 to 22); phone 14774 (13006 to 21212) to 9940 ms (9528 to 10750). Load differs, so the milliseconds are unproven; the request count is the proof. The daily harness search path opens search in a tab that already used the app (0 extra requests before), so it should not move.
+
+**Harness trap.** A click script that waits for the first `#tasks-list li` returns on the "Ask AI" row before any result; wait for a known result row. On a throttled phone a typed search can start more than 2 s after Enter; wait for the request, not a fixed delay.
+
+**Next probe.** Phone search in the daily harness is 2.1 s against the 2.0 s milestone 1 target, with long tasks of about 1 s; profile its main thread at load below 13.
+
 ## Milliseconds saved scoreboard
 
 Only matched end-to-end before/after evidence earns saved milliseconds; `unproven` is not zero. Do not sum different cohorts or claim forecasts as savings.
@@ -296,6 +336,7 @@ Only matched end-to-end before/after evidence earns saved milliseconds; `unprove
 | https://app.hypertask.ai/detail/project-15/7501 | Search hard load, local PR build on/off N=5, load 12 to 20 | desktop 401 → 364 ms, phone 1177 → 1307 ms | unproven, local cannot show round trips | flag `htpr-7501-search-server-start`; live before 2924 ms phone, 1192 ms desktop (daily N=5); live after pending |
 | https://app.hypertask.ai/detail/project-15/7497 | First ticket request on a board-warm server, local production build, interleaved N=5+5, load 5 | 1352 ms → 654 ms | about 700 ms local | lazy sanitizer; live first-byte rate after deploy decides |
 | https://app.hypertask.ai/detail/project-15/7406 | Desktop board-returning, first card, local premerge ABAB N=6, load 8 to 11 | 912 ms (OFF) → 255 ms (ON); chat composer 1364 → 1854 ms | about 650 ms local to the board, about -490 ms to the chat | flag `htpr-7406-desktop-server-board`; live: 2030 → 1079 / 1098 ms (two complete runs, N=5 each, 5 of 5 served), first visit unchanged by flag A/B (off 2157, on 2004 ms) |
+| https://app.hypertask.ai/detail/project-15/7502 | Search link in a fresh tab, live probe, desktop and phone N=5 each | search requests 2 (9 of 10) → 0 (10 of 10); content desktop 5234 → 1773 ms, phone 14774 → 9940 ms | unproven ms (load 42 to 67 before, 18 to 22 after); 2 requests saved per open | flag `htpr-7502-search-once`, PR 1731, identical results |
 
 Confirmed, comparable saved-ms total in this seed: **not established**. Future entries must link private before/after summaries, commits, N, median/p90/range and QA proof. This deliberately avoids inventing savings absent from the history.
 

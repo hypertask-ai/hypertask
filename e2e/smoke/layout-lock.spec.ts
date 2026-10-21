@@ -354,15 +354,20 @@ test('layout lock: ticket page first load stays under the CLS budget', async ({ 
   await expect.poll(() => page.getByTestId('ticket-comment').count(), { message: 'the long thread must render its comments', timeout: 30_000 }).toBeGreaterThanOrEqual(6)
   // Sample the box's own place for a while once it is visible: it may not move more than 24px (phone and desktop).
   const tops: number[] = []
+  const positions: unknown[] = []
   for (let sample = 0; sample < 15; sample += 1) {
-    tops.push(await page.getByTestId('comment-composer').evaluate((el) => Math.round(el.getBoundingClientRect().top + window.scrollY)))
+    const position = await page.getByTestId('comment-composer').evaluate((el) => ({ time: performance.now(), top: el.getBoundingClientRect().top, scrollY: window.scrollY, position: getComputedStyle(el).position, comments: document.querySelectorAll('[data-testid="ticket-comment"]').length }))
+    positions.push(position)
+    // A fixed phone box stays in viewport coordinates while the thread scrolls underneath it.
+    tops.push(Math.round(position.top + (position.position === 'fixed' ? 0 : position.scrollY)))
     await page.waitForTimeout(100)
   }
-  expect(Math.max(...tops) - Math.min(...tops), `layout lock: the comment box moved after it was visible (${testInfo.project.name}), tops ${tops.join(',')}`).toBeLessThanOrEqual(24)
   const shifts = await page.evaluate(() => (window as unknown as { __shifts: ShiftEntry[] }).__shifts)
   const worst = largestSessionWindow(shifts)
   const detail = worst.shifts.map((shift) => `  ${shift.value.toFixed(4)} at ${Math.round(shift.startTime)}ms\n${shift.sources.map((s) => `    ${s.node} [x,y,w,h] ${s.previous.join(',')} -> ${s.current.join(',')}`).join('\n')}`).join('\n')
   await testInfo.attach('cls-shifts', { body: JSON.stringify(shifts, null, 2), contentType: 'application/json' })
+  await testInfo.attach('composer-positions', { body: JSON.stringify(positions, null, 2), contentType: 'application/json' })
+  expect(Math.max(...tops) - Math.min(...tops), `layout lock: the comment box moved after it was visible (${testInfo.project.name}), tops ${tops.join(',')}`).toBeLessThanOrEqual(24)
   // The score alone is small for a short comment box in a tall window, so also pin the box itself:
   // once visible it may not move more than the 24px layout lock tolerance.
   const composerJumps = shifts.flatMap((shift) => shift.sources.filter((s) => s.node.includes('[data-testid=comment-composer]') && Math.abs(s.current[1] - s.previous[1]) > 24).map((s) => `top ${s.previous[1]} -> ${s.current[1]}`))

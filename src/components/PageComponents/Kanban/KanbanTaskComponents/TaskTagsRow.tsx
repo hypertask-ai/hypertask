@@ -5,8 +5,8 @@ import TaskLabelComponent from '@/components/Modals/CreateLabel/TaskLabelCompone
 import EstimateLabelComponent from '@/components/Modals/TaskEstimate/EstimateLabelComponent';
 import PriorityLabelComponent from '@/components/Modals/TaskPriority/PriorityLabelComponent';
 import { IAgent, IEstimate, IPriority, IProject, ITaskLabel, ITask } from '@/models/model';
-import { formatElapsed, useTimerNow } from '@/components/PageComponents/TaskDetail/TaskInfoColumn/TaskTime';
-import { useBoardRunningTimers } from '@/hooks/Task Detail/useTimeTracking';
+import { formatElapsed } from '@/lib/timeDuration';
+import { useBoardRunningTimers, useTimerNow } from '@/hooks/Task Detail/useTimeTracking';
 import { displayedBoardTimeSeconds, type BoardTimeTotal } from '@/lib/boardTimeTotals';
 import { useQuery } from '@tanstack/react-query';
 import type { CustomFieldType } from '@prisma/client';
