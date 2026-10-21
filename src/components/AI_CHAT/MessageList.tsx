@@ -89,12 +89,12 @@ export const MessageList: React.FC<MessageListProps> = () => {
       )}
       {showTicketQuestions && newTicketQuestions.length > 0 && (
         <div className="flex flex-col gap-2 px-2">
-          <p className="px-2 text-[11px] text-text-light-gray">Questions and ideas for this ticket</p>
+          <p className="px-2 text-micro text-text-light-gray">Questions and ideas for this ticket</p>
           {newTicketQuestions.map((question) => (
             <button
               key={question}
               data-compose-question
-              className="bg-kanban-active-cardbg hover:bg-hover-active rounded p-2 text-xs text-left w-full"
+              className="bg-kanban-active-cardbg hover:bg-hover-active rounded p-2 text-meta text-left w-full"
               onClick={() => handleSendMessage(question)}
             >
               {question}

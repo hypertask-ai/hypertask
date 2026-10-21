@@ -70,7 +70,7 @@ test("Ctrl+J intro gets ticket-specific chips from the new-ticket questions requ
   try {
     assert.deepEqual(view.requests, [{ url: "/api/ai/task-questions", body: { taskId: 43, kind: "new-ticket" } }]);
     assert.deepEqual(view.chips.map((chip) => chip.textContent), ["Which boards get the sidebar first?", "Add steps for the empty sidebar"]);
-    assert.equal(view.chips[0].className, "bg-kanban-active-cardbg hover:bg-hover-active rounded p-2 text-xs text-left w-full");
+    assert.equal(view.chips[0].className, "bg-kanban-active-cardbg hover:bg-hover-active rounded p-2 text-meta text-left w-full");
     await React.act(async () => view.chips[1].click());
     assert.deepEqual(sent, ["Add steps for the empty sidebar"]);
   } finally { await view.cleanup(); }
