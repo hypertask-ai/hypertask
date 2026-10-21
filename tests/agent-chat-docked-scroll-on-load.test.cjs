@@ -22,6 +22,8 @@ const path = require("node:path");
 const test = require("node:test");
 const { JSDOM } = require("jsdom");
 const React = require("react");
+const { QueryClient, QueryClientProvider } = require("@tanstack/react-query");
+const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
 const { createRoot } = require("react-dom/client");
 const { createJiti } = require("jiti");
 
@@ -178,13 +180,13 @@ async function renderReloadAndMeasure({ historyOnFirstPaint = false } = {}) {
     // the panel is restored open first and the history arrives after.
     if (historyOnFirstPaint) showHistory();
     await React.act(async () => {
-      reactRoot.render(React.createElement(MessageList));
+      reactRoot.render(React.createElement(QueryClientProvider, { client: queryClient }, React.createElement(MessageList)));
     });
 
     if (!historyOnFirstPaint) {
       showHistory();
       await React.act(async () => {
-        reactRoot.render(React.createElement(MessageList));
+        reactRoot.render(React.createElement(QueryClientProvider, { client: queryClient }, React.createElement(MessageList)));
       });
     }
 

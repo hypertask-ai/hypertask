@@ -362,5 +362,19 @@
     "version": "1",
     "partsHash": "cf72bc1102e777032ef19bdcc62508e58ff417b8e3039bf3d3d9d2f9c6eb4bd1",
     "expressionsHash": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945"
+  },
+  {
+    "file": "src/app/api/ai/task-questions/route.ts",
+    "id": "task-questions-new-ticket-1",
+    "version": "1",
+    "partsHash": "256f167f91ad93cfd0fb02ba9c0713fa326cb788006d69e618f5c9326777cd43",
+    "expressionsHash": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945"
+  },
+  {
+    "file": "src/app/api/ai/task-questions/route.ts",
+    "id": "task-questions-new-ticket-prompt-1",
+    "version": "1",
+    "partsHash": "c9e12c925d6961c8c838d5501704bf7dc78f6af2acf88ae16ac9025cc745bf5c",
+    "expressionsHash": "8b687990f5f2a4543861dfb4fd6c6d3a405b99c244ba03da8478f793f5711d3a"
   }
 ]
