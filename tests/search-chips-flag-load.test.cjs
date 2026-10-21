@@ -32,7 +32,7 @@ test('URL searches preserve operators and chip keyboard ownership', async (t) =>
   try {
     stub('src/lib/configs/search.config.ts', { searchConfig: { responseMessages: { default: '', fail: 'No results', error: 'Error' }, elementIds: { input: { id: 'search-input' }, history: { id: 'search-history' } }, handleKeyDown: { classNamesToReturnFrom: [] } } })
     stub('src/lib/flags/keys.ts', { HTPR_6688_SEARCH_AUTOCOMPLETE_FLAG: 'htpr-6688-search-autocomplete' })
-    stub('src/hooks/useFlag.tsx', { useFlag: () => false })
+    stub('src/hooks/useFlag.tsx', { useFlagReady: () => true, useFlag: () => false })
     stub('src/lib/contexts/deviceContext.tsx', { useDeviceContext: () => false })
     const allProjects = [{ id: 7, title: 'Visible' }]
     stub('src/hooks/MultiPages/useGetAllProjectsMinimal.ts', { useGetAllProjectsMinimal: () => ({ data: allProjects }) })

@@ -51,7 +51,7 @@ async function withSearch(t, config, check) {
   try {
     source('src/utils/index.ts', { taskBaseUri: '/detail/' })
     source('src/utils/undoActions/helperFuncs.ts', { cn: (...values) => require('tailwind-merge').twMerge(require('clsx').clsx(values)) })
-    source('src/hooks/useFlag.tsx', { useFlag: (key) => flags[key] ?? false })
+    source('src/hooks/useFlag.tsx', { useFlagReady: () => true, useFlag: (key) => flags[key] ?? false })
     source('src/lib/contexts/deviceContext.tsx', { useDeviceContext: () => false })
     const allProjects = [{ id: 7, title: 'Product Board' }]
     source('src/hooks/MultiPages/useGetAllProjectsMinimal.ts', { useGetAllProjectsMinimal: () => ({ data: allProjects }) })

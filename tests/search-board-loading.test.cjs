@@ -45,7 +45,7 @@ for (const scenario of [
     try {
       source("src/utils/index.ts", { taskBaseUri: "/detail/" });
       source("src/utils/undoActions/helperFuncs.ts", { cn: (...values) => values.filter(Boolean).join(" ") });
-      source("src/hooks/useFlag.tsx", { useFlag: (key) => scenario.modern && ["htpr-6688-search-autocomplete", "htpr-6865-search-layout"].includes(key) });
+      source("src/hooks/useFlag.tsx", { useFlagReady: () => true, useFlag: (key) => scenario.modern && ["htpr-6688-search-autocomplete", "htpr-6865-search-layout"].includes(key) });
       source("src/lib/contexts/deviceContext.tsx", { useDeviceContext: () => false });
       source("src/hooks/MultiPages/useGetAllProjectsMinimal.ts", { useGetAllProjectsMinimal: (queryKey) => useQuery({ queryKey, initialData: [], queryFn: () => boardsPromise }) });
       source("src/hooks/RecoilRoot/useHypertasksRecoilStates.ts", { default: () => ({ toggleShowCommands() {} }) });
