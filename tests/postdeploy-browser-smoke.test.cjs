@@ -148,9 +148,9 @@ test('smoke setup generates Prisma after npm ci and fails closed if generation f
   }
 });
 
-test('branch smoke proof skips all board-writing jobs with the documented dispatch input', () => {
+test('non-production dispatch skips QA smoke and all board-writing jobs', () => {
   const context = {
-    github: { event_name: 'workflow_dispatch', ref: 'refs/heads/yper4-181-postdeploy-login' },
+    github: { event_name: 'workflow_dispatch', ref: 'refs/heads/yper4-181-postdeploy-login', repository: 'hypertask-ai/hypertask' },
     inputs: { provision_core_actions: true },
     needs: { health: { result: 'skipped', outputs: {} }, smoke: { outputs: {} }, 'core-actions': { outputs: {} } },
     cancelled: () => false,
@@ -159,7 +159,7 @@ test('branch smoke proof skips all board-writing jobs with the documented dispat
     const expression = workflow.jobs[name].if.slice(3, -2);
     assert.equal(vm.runInNewContext(expression, context), false, name);
   }
-  assert.equal(vm.runInNewContext(workflow.jobs.smoke.if.slice(3, -2), context), true);
+  assert.equal(vm.runInNewContext(workflow.jobs.smoke.if.slice(3, -2), context), false);
 });
 
 test('post-deploy config cannot silently skip an unconfigured board or task', () => {

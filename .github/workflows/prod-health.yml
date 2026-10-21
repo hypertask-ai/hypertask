@@ -430,7 +430,8 @@ jobs:
   # verification. Only push failures can request guarded rollback.
   smoke:
     needs: health
-    if: ${{ !cancelled() && ((github.event_name == 'push' && needs.health.outputs.live == 'true' && needs.health.result == 'success') || github.event_name == 'workflow_dispatch') }}
+    if: ${{ !cancelled() && github.ref == 'refs/heads/production' && github.repository == 'hypertask-ai/hypertask' && ((github.event_name == 'push' && needs.health.outputs.live == 'true' && needs.health.result == 'success') || github.event_name == 'workflow_dispatch') }}
+    environment: live-qa
     permissions:
       contents: read
       statuses: write

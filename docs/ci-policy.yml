@@ -1,5 +1,5 @@
-version: 7
-last_updated: 2026-10-12
+version: 8
+last_updated: 2026-10-21
 purpose: "Fixed-cost CI with fast releases and a provider-neutral AI review gate. App CI runs on GitHub-hosted runners; the repo is public, so hosted minutes are free. The canonical reader-facing contract is docs/ci.md; this file is the machine-readable companion."
 
 topology:
@@ -202,6 +202,62 @@ schema_drift_monitor:
   shadow: disposable_postgres_service
   failure_action: failed_workflow_with_named_schema_differences
   repair_automatically: false
+
+live_qa:
+  workflow: .github/workflows/live-qa.yml
+  trigger: workflow_dispatch_only
+  modes: [run, probe]
+  trusted_repository: hypertask-ai/hypertask
+  trusted_ref: refs/heads/production
+  environment: live-qa
+  branch_policy: production_branch_only_no_tags
+  per_run_human_approval: false
+  reviewed_production_code_required: true
+  permissions: { contents: read }
+  runs_on: ubuntu-latest
+  timeout_minutes: 20
+  account: 985
+  concurrency: { group: live-qa-account-985, cancel_in_progress: false }
+  concurrency_shared_with_production_smoke: false
+  pending_runs_may_be_replaced: true
+  login_secrets: environment_only_step_scoped_email_and_password
+  broad_scope_login_copies_must_be_removed: true
+  install_lifecycle_scripts: false
+  scripts: scripts/live-qa/allowed-scripts.json
+  mutation_boundary: browser_non_GET_requires_exact_manifest_allowedWrites_method_and_pathname
+  unguarded_api_clients_or_contexts: prohibited_by_review
+  deployment_doctor: exact_live_sha_and_successful_public_Production_deployment_before_and_after
+  media: [desktop_1440x900, phone_390x844, video_on, traces_off, HAR_off]
+  evidence: clean_allowlisted_media_and_sanitized_metadata_age_encrypted_only
+  public_recipient: scripts/live-qa/evidence-recipient.txt
+  placeholder_recipient: fail_before_login
+  artifact_retention_days: 7
+  download: scripts/live-qa/download.sh
+  identity_transport: stdin_only_never_GitHub
+  secret_absence_workflow: .github/workflows/live-qa-secret-scope.yml
+  probe_output: boolean_only
+  required_check: false
+  production_smoke_and_rollback_preserved: true
+  admin_setup_and_live_proof: required_not_automated
+
+wireframe_capture:
+  workflow: .github/workflows/wireframe-capture.yml
+  triggers: [workflow_dispatch, path_filtered_pull_request_to_production]
+  permissions: { contents: read }
+  runs_on: ubuntu-latest
+  timeout_minutes: 10
+  secrets: none
+  environment: none
+  source: realpath_checked_docs_wireframes_ticket_index_html
+  allowlist: scripts/wireframe-capture-allowed.json
+  server: loopback_static_only
+  external_browser_network: refused
+  themes: [porcelain, graphite, amoled, dia]
+  viewports: [desktop_1440x900, phone_390x844]
+  png_limit_bytes_exclusive: 3145728
+  artifact_retention_days: 7
+  publishing_and_board_writes: outside_actions
+  required_check: false
 
 agent_rules:
   - "Read docs/ci.md before changing workflows, runner labels, rulesets, or deployment checks."
