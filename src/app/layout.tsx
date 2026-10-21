@@ -77,9 +77,6 @@ export default async function RootLayout(
     analyticsSession?.email?.endsWith("@demo.hypertask.ai") ?? false;
   const memoryOnlyTracking = await isFeatureEnabled(HTPR_7278_MEMORY_ONLY_TRACKING_FLAG, analyticsSession?.id ?? -1);
   const fontOnce = await isFeatureEnabled(HTPR_7554_FONT_ONCE_FLAG, analyticsSession?.id ?? -1);
-  const fontAssetQuery = fontOnce && process.env.NEXT_DEPLOYMENT_ID
-    ? `?dpl=${process.env.NEXT_DEPLOYMENT_ID}`
-    : "";
 
   const theme = cookieStore.get(authConfig.cookies.theme) ?? {
     value: authConfig.cookies.defaultTheme,
@@ -108,7 +105,7 @@ export default async function RootLayout(
     >
       <head>
         {!deferUnusedBoardFonts && [INTER_LATIN_FONT_HREF, ...NEWSREADER_LATIN_FONT_HREFS].map(href => (
-          <link key={href} rel="preload" href={`${href}${fontAssetQuery}`} as="font" type="font/woff2" crossOrigin="anonymous" />
+          <link key={href} rel="preload" href={fontOnce && process.env.NEXT_DEPLOYMENT_ID ? `${href}?dpl=${process.env.NEXT_DEPLOYMENT_ID}` : href} as="font" type="font/woff2" crossOrigin="anonymous" />
         ))}
         <script
           id="ht-cached-task-history"
@@ -117,7 +114,7 @@ export default async function RootLayout(
           }}
         />
         {firstScreen && ["amoled", "graphite", "porcelain"].includes(firstScreen.display.theme) && (
-          <link rel="preload" href={`${IBM_PLEX_SANS_LATIN_FONT_HREF}${fontAssetQuery}`} as="font" type="font/woff2" crossOrigin="anonymous" />
+          <link rel="preload" href={fontOnce && process.env.NEXT_DEPLOYMENT_ID ? `${IBM_PLEX_SANS_LATIN_FONT_HREF}?dpl=${process.env.NEXT_DEPLOYMENT_ID}` : IBM_PLEX_SANS_LATIN_FONT_HREF} as="font" type="font/woff2" crossOrigin="anonymous" />
         )}
         <meta
           name="theme-color"
