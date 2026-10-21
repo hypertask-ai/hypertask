@@ -1,14 +1,14 @@
 "use client";
 import { ITypedTask, IUser } from "@/models/model";
 import styles from "@/styles/search.module.scss";
-import HypertasksCommands from "@/components/commands";
+import dynamic from "next/dynamic";
 import formatDateDifference from "@/utils/generateTime";
 import { Check } from "lucide-react";
 import { searchConfig } from "@/lib/configs/search.config";
 import { useSearch } from "@/hooks/Search/useSearch";
 import { cn } from "@/utils/undoActions/helperFuncs";
-import { Fragment, KeyboardEvent, RefObject, useContext } from "react";
-import { useFlag } from "@/hooks/useFlag";
+import { Fragment, KeyboardEvent, RefObject, useContext, useEffect } from "react";
+import { useFlag, useFlagLoaded } from "@/hooks/useFlag";
 import { useRouter, useSearchParams } from "next/navigation";
 import { buildFullScreenChatPath } from "@/lib/aiChatDisplayMode";
 import { HTPR_6936_ASK_AI_FULLSCREEN_FLAG } from "@/lib/flags/keys";
@@ -24,6 +24,9 @@ import AppShellRail from "@/components/PageComponents/Kanban/HeaderComponents/Ap
 import SearchChipsInput from "./SearchChipsInput";
 import "./search-autocomplete.css";
 import type { ServerStartedSearch } from "@/lib/search/serverStartedSearch";
+import { HTPR_7547_SEARCH_LAZY_CLOSED_FLAG } from "@/lib/flags/definitions/htpr-7547-search-lazy-closed";
+
+const HypertasksCommands = dynamic(() => import("@/components/commands"), { ssr: false });
 
 interface IProps {
   _searchTerm: string;
@@ -47,6 +50,11 @@ const SearchComp = ({
   searchOnce = false,
 }: IProps) => {
   const router = useRouter();
+  const lazyClosedCommands = useFlag(HTPR_7547_SEARCH_LAZY_CLOSED_FLAG);
+  const lazyClosedCommandsLoaded = useFlagLoaded(HTPR_7547_SEARCH_LAZY_CLOSED_FLAG);
+  useEffect(() => {
+    if (lazyClosedCommandsLoaded && !lazyClosedCommands) void import("@/components/commands").catch(() => {});
+  }, [lazyClosedCommands, lazyClosedCommandsLoaded]);
   const askAiFullscreenFlagEnabled = useFlag(HTPR_6936_ASK_AI_FULLSCREEN_FLAG);
   const searchParams = useSearchParams();
   const searchTerm = askAiFullscreenEnabled && askAiFullscreenFlagEnabled
