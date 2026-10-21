@@ -3,7 +3,7 @@ import { DraggableProvided, DraggableStateSnapshot } from "@hello-pangea/dnd";
 import React, { useContext } from "react";
 import { useFirstScreenSurface } from "@/lib/firstScreen/SurfaceContext";
 import { useFlag } from "@/hooks/useFlag";
-import { HTPR_7263_PHONE_HOLD_SELECT_FLAG, HTPR_7350_CARD_TITLE_WRAP_FLAG } from "@/lib/flags/keys";
+import { HTPR_7350_CARD_TITLE_WRAP_FLAG } from "@/lib/flags/keys";
 
 import { IAgent, IProject, ITask, IUser } from "@/models/model";
 import { TBoardSubtaskSetting } from "@/models/Views/model";
@@ -62,6 +62,7 @@ interface KanbanTaskCardProps {
     event?: React.MouseEvent<HTMLButtonElement>,
   ) => void;
   selectionMode?: boolean;
+  phoneHoldSelect?: boolean;
 }
 
 const KanbanTaskCard = ({
@@ -100,9 +101,9 @@ const KanbanTaskCard = ({
   onSubtaskClick,
   onSelectionClick,
   selectionMode = false,
+  phoneHoldSelect = false,
 }: KanbanTaskCardProps) => {
   const isMobile = useContext(MobileViewContext);
-  const phoneHoldSelect = useFlag(HTPR_7263_PHONE_HOLD_SELECT_FLAG);
   return (
   <div
     ref={cardRef}

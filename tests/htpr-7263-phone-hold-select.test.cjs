@@ -78,6 +78,7 @@ function fixture(t, { enabled = true, mobile = true, selectAll = true, overview 
           key: task.id, task, project: { name: "Board", sorting_mode: "Manual" },
           assignedUsers: [], agentAssignees: [], currentSetting: "None",
           selected: selection.isSelected(task.id), selectionMode: selection.selectedCount > 0,
+          phoneHoldSelect: currentEnabled,
           onSelectionClick: (id, event) => selection.toggleTaskSelection(id, task.sectionId, Boolean(event?.shiftKey)),
           openDetail: () => opened.push(task.id),
           provided,
