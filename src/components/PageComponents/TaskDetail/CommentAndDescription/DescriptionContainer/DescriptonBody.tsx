@@ -28,6 +28,7 @@ const DescriptonBody = ({ draftTQ }: any) => {
   const {
     secondaryPanelsReady,
     cachedLayout,
+    cachedEditorAfterPaint,
     parsedTask,
     currentTask,
     editMode,
@@ -78,6 +79,7 @@ const DescriptonBody = ({ draftTQ }: any) => {
     <>
       {secondaryPanelsReady !== false && (!cachedLayout || isEditing) ? <DescriptionEditorSlot
         key={task.id}
+        afterPaint={!!cachedEditorAfterPaint && !isEditing && isPlainDescriptionHtml(linkedContent, true)}
         lazy={staticFirstFlag ? instantTicketOpen && !isEditing && (appSavedStatic
           ? isPlainDescriptionHtml(linkedContent, true)
           : isPlainDescriptionHtml(linkedContent)) : false}

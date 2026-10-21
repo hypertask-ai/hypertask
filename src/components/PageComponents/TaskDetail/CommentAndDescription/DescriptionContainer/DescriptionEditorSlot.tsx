@@ -1,7 +1,7 @@
 "use client";
 
 import dynamic from "next/dynamic";
-import { useCallback, useEffect, useMemo, useRef, useState, type ComponentType } from "react";
+import { startTransition, useCallback, useEffect, useMemo, useRef, useState, type ComponentType } from "react";
 import type { TiptapProps } from "@/components/RTE/useTaskDetailEditorState";
 import StaticDescriptionShell, { StaticDescriptionBody, type DescriptionIntentProps } from "./StaticDescriptionShell";
 import { StaticDescriptionPlaceholderContext } from "./StaticDescriptionPlaceholder";
@@ -28,10 +28,12 @@ export function preloadDescriptionEditor(): Promise<EditorComponent> {
 
 export default function DescriptionEditorSlot({
   lazy: lazyRequested,
+  afterPaint: afterPaintRequested = false,
   ...editorProps
-}: TiptapProps & { lazy: boolean }) {
-  const [lazy] = useState(lazyRequested);
-  const [Editor, setEditor] = useState<EditorComponent | null>(() => loadedEditor);
+}: TiptapProps & { lazy: boolean; afterPaint?: boolean }) {
+  const [lazy] = useState(lazyRequested || afterPaintRequested);
+  const [afterPaint] = useState(afterPaintRequested);
+  const [Editor, setEditor] = useState<EditorComponent | null>(() => afterPaint ? null : loadedEditor);
   const { defaultContent, isMbl } = editorProps;
   const placeholder = useMemo(
     () => <StaticDescriptionBody html={defaultContent ?? ""} isMbl={!!isMbl} />,
@@ -42,11 +44,13 @@ export default function DescriptionEditorSlot({
   const load = useCallback(() => {
     preloadDescriptionEditor().then(
       (component) => {
-        if (liveRef.current) setEditor(() => component);
+        if (!liveRef.current) return;
+        if (afterPaint) startTransition(() => setEditor(() => component));
+        else setEditor(() => component);
       },
       () => {},
     );
-  }, []);
+  }, [afterPaint]);
   const intentProps = useMemo<DescriptionIntentProps>(
     () => ({ onPointerDownCapture: load, onFocusCapture: load, onKeyDownCapture: load }),
     [load],
@@ -55,11 +59,17 @@ export default function DescriptionEditorSlot({
   useEffect(() => {
     if (!lazy) return;
     liveRef.current = true;
-    load();
+    let frame: number | undefined;
+    if (afterPaint) {
+      frame = window.requestAnimationFrame(() => {
+        frame = window.requestAnimationFrame(load);
+      });
+    } else load();
     return () => {
       liveRef.current = false;
+      if (frame !== undefined) window.cancelAnimationFrame(frame);
     };
-  }, [lazy, load]);
+  }, [lazy, afterPaint, load]);
 
   if (!lazy) return <EagerEditor {...editorProps} />;
   if (!Editor) {
