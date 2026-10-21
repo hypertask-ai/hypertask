@@ -50,10 +50,10 @@ const BoardTaskTemplatesSection = () => {
     onError: () => toast.error("Unable to save template"),
   });
 
-  if (!enabled || !project) return null;
+  if (!project) return null;
 
   const editor = editing?.projectId === project.id ? editing : null;
-  if (editor) {
+  if (enabled && editor) {
     const description = readTaskTemplateDescription(editor.descriptionHtml);
     return (
       <SettingsSectionShell title={`${editor.name} template`}>
@@ -107,7 +107,7 @@ const BoardTaskTemplatesSection = () => {
     );
   }
 
-  return (
+  return enabled ? (
     <SettingsSectionShell title="Task templates">
       <SettingsCard>
         {isLoading && <p className="px-2 text-dense text-text-light-gray">Loading templates…</p>}
@@ -138,7 +138,7 @@ const BoardTaskTemplatesSection = () => {
         Board knowledge stays in Custom instructions, Memory and Files. You do not need to paste it into each template.
       </p>
     </SettingsSectionShell>
-  );
+  ) : null;
 };
 
 export default BoardTaskTemplatesSection;

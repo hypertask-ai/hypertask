@@ -360,10 +360,12 @@ test("settings render saved rows with heading summaries, shared actions and boar
   assert.match(document.body.textContent, /Board knowledge stays in Custom instructions, Memory and Files\. You do not need to paste it into each template\./);
   assert.match(renderSettings().html, /Save a ticket as a template with Ctrl\+K/);
 });
-test("flag off renders no section and disables its template query", () => {
-  const result = renderSettings({ enabled: false });
-  assert.equal(result.html, "");
-  assert.equal(result.queries[0].enabled, false);
+test("flag off renders no list or editor and disables its template query", () => {
+  for (const editing of [null, { id: 7, projectId: 15, name: "A/B test", title: "[TAG] {idea}", descriptionHtml: "<h2>Ideas</h2>", text: "Ideas" }]) {
+    const result = renderSettings({ enabled: false, editing });
+    assert.equal(result.html, "");
+    assert.equal(result.queries[0].enabled, false);
+  }
 });
 test("editor renders approved fields and saves plain-text edits through PATCH", async () => {
   const writes = [];
