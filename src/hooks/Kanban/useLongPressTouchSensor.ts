@@ -12,7 +12,7 @@ import {
 import { MobileViewContext } from "@/lib/contexts/mobileContext";
 import { useKanbanBulkSelection } from "@/lib/contexts/Kanban/BulkSelectionContext";
 import { useFlag } from "@/hooks/useFlag";
-import { HTPR_7263_PHONE_HOLD_SELECT_FLAG } from "@/lib/flags/definitions/htpr-7263-phone-hold-select";
+import { HTPR_7263_PHONE_HOLD_SELECT_FLAG } from "@/lib/flags/keys";
 
 type Point = { x: number; y: number };
 type PhoneSelection = { taskId: number; startedAt: number; movedPx: number };
@@ -40,7 +40,8 @@ export const useLongPressTouchSensor: Sensor = (api) => {
   const phaseRef = useRef<Phase>(idle);
   const isMobile = useContext(MobileViewContext);
   const enabled = useFlag(HTPR_7263_PHONE_HOLD_SELECT_FLAG);
-  const phoneHoldSelect = enabled && isMobile;
+  let phoneHoldSelect = false;
+  if (enabled) phoneHoldSelect = isMobile;
   const { selectedCount, toggleTaskSelection } = useKanbanBulkSelection();
   const selectionRef = useRef({ selectedCount, toggleTaskSelection });
   selectionRef.current = { selectedCount, toggleTaskSelection };

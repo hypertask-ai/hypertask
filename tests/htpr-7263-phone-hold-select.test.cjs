@@ -24,7 +24,10 @@ function fixture(t, { enabled = true, mobile = true, selectAll = true, overview 
   let currentEnabled = enabled;
   const load = loader({
     "@/hooks/useFlag": { useFlag: key => key === flag ? currentEnabled : key === selectAllFlag && selectAll },
-    "@/lib/flags/keys": { HTPR_7260_KANBAN_SELECT_ALL_FLAG: selectAllFlag },
+    "@/lib/flags/keys": {
+      HTPR_7260_KANBAN_SELECT_ALL_FLAG: selectAllFlag,
+      HTPR_7263_PHONE_HOLD_SELECT_FLAG: flag,
+    },
     "@/lib/state": { useSetRecoilState: () => noop, useRecoilValue: () => null },
     "@/store": {},
     "@/lib/contexts/mobileContext": { MobileViewContext },

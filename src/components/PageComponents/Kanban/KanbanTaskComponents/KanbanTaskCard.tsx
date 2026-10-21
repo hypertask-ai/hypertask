@@ -1,10 +1,9 @@
 import { MobileViewContext } from "@/lib/contexts/mobileContext";
-import { HTPR_7263_PHONE_HOLD_SELECT_FLAG } from "@/lib/flags/definitions/htpr-7263-phone-hold-select";
 import { DraggableProvided, DraggableStateSnapshot } from "@hello-pangea/dnd";
 import React, { useContext } from "react";
 import { useFirstScreenSurface } from "@/lib/firstScreen/SurfaceContext";
 import { useFlag } from "@/hooks/useFlag";
-import { HTPR_7350_CARD_TITLE_WRAP_FLAG } from "@/lib/flags/keys";
+import { HTPR_7263_PHONE_HOLD_SELECT_FLAG, HTPR_7350_CARD_TITLE_WRAP_FLAG } from "@/lib/flags/keys";
 
 import { IAgent, IProject, ITask, IUser } from "@/models/model";
 import { TBoardSubtaskSetting } from "@/models/Views/model";
@@ -103,7 +102,7 @@ const KanbanTaskCard = ({
   selectionMode = false,
 }: KanbanTaskCardProps) => {
   const isMobile = useContext(MobileViewContext);
-  const phoneHoldSelect = useFlag(HTPR_7263_PHONE_HOLD_SELECT_FLAG) && isMobile;
+  const phoneHoldSelect = useFlag(HTPR_7263_PHONE_HOLD_SELECT_FLAG);
   return (
   <div
     ref={cardRef}
@@ -130,7 +129,7 @@ const KanbanTaskCard = ({
             groupName="kanban-selection"
             className={cn(
               "absolute left-2 top-2 z-20 bg-cardBackground",
-              phoneHoldSelect && (selectionMode || selected) && "!flex",
+              phoneHoldSelect && isMobile && (selectionMode || selected) && "!flex",
               selected
                 ? "!border-hypertasks-purple !bg-hypertasks-purple"
                 : "border-light-black-border-1 hover:border-text-light-gray",
