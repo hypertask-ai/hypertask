@@ -41,11 +41,19 @@ async function withPalette(t, config, check) {
     if (this.tagName === 'TEXTAREA' && focusFailures-- > 0) return;
     return focus.apply(this, args);
   };
+  const focusProxy = { current: null };
+  if (config.bufferedText !== undefined) {
+    focusProxy.current = document.createElement('input');
+    focusProxy.current.value = config.bufferedText;
+    document.body.appendChild(focusProxy.current);
+    focusProxy.current.focus();
+    focusProxy.current.setSelectionRange(2, 5);
+  }
   const cached = new Map(Object.entries(require.cache));
   const stubbed = new Set();
   const stub = (filename, exports) => { stubbed.add(filename); require.cache[filename] = { id: filename, filename, loaded: true, exports }; };
   const source = (file, exports) => stub(path.join(root, file), exports);
-  const flags = { [keepClosedFlag]: config.keepClosedFlag ?? false, [flag]: config.enabled ?? true, [newFlag]: config.newWindow ?? false, 'htpr-6951-task-writing-progress': config.progress ?? config.newWindow ?? false, [tooltipFlag]: config.topLayer ?? false, [boardChipFlag]: config.boardChip ?? false };
+  const flags = { 'htpr-7547-search-lazy-closed': config.preserveColdCommandInput ?? false, [keepClosedFlag]: config.keepClosedFlag ?? false, [flag]: config.enabled ?? true, [newFlag]: config.newWindow ?? false, 'htpr-6951-task-writing-progress': config.progress ?? config.newWindow ?? false, [tooltipFlag]: config.topLayer ?? false, [boardChipFlag]: config.boardChip ?? false };
   const TaskContext = React.createContext(undefined);
   const atomNames = ['keepAiChatClosedAtom', 'boardLayoutAtom', 'calendarSettingsAtom', 'currentProjectAtom', 'currentUserAtom', 'frequentlyUsedHTCAton', 'tableTitleWrapAtom', 'showCommandsAtom', 'lastUsedBoardsAtom', 'composeTaskChatIntroAtom', 'showAIChatInterfaceAtom', 'isAiChatSidebarModeAtom', 'aiChatAutoOpenSuppressedAtom', 'aiChatExplicitOpenAtAtom', 'dockedChatScopeAtom', 'showCreateTaskModalAtom', 'showShortcutsAtom', 'showSidebarAtom', 'showBoardManagerAtom', 'inViewObjectAtom', 'uploadingStateCreateTaskModalAtom'];
   const atoms = Object.fromEntries(atomNames.map((name) => [name, name]));
@@ -143,7 +151,7 @@ async function withPalette(t, config, check) {
       useCommandCenterShortcut(Object.hasOwn(config, 'userId') ? config.userId : 985, config.apple ?? false, dom.window.location.pathname, config.trial ?? false, false, toggleShowCommands);
       return React.createElement(query.QueryClientProvider, { client: queryClient },
         React.createElement(TaskContext.Provider, { value: config.headerTask ? headerState : undefined },
-          shown.show ? React.createElement(React.Suspense, { fallback: React.createElement('div', { 'data-palette-suspended': true }) }, React.createElement(Palette, { isOpen: true })) : null,
+          shown.show ? React.createElement(React.Suspense, { fallback: React.createElement('div', { 'data-palette-suspended': true }) }, React.createElement(Palette, { isOpen: true, focusProxy: config.bufferedText !== undefined ? focusProxy : undefined })) : null,
           React.createElement(Probe)));
     }
     reactRoot = require('react-dom/client').createRoot(document.getElementById('root'));
@@ -183,7 +191,7 @@ async function withPalette(t, config, check) {
       await React.act(async () => reactRoot.render(React.createElement(config.strict ? React.StrictMode : React.Fragment, null, React.createElement(Harness))));
       assert.equal(document.getElementById('root').innerHTML, current);
     };
-    await check({ dom, input, type, press, clickTab, finish, fail, rerender, flags, values, set, requests, navigations, cacheAdds, cacheUpdates, queryClient, viewedTasks, loadedBoards, shells, capture, baseline, source, stub, jiti, mountProbe, headerState: () => headerState, legacyJ: () => legacyJ });
+    await check({ dom, focusProxy, input, type, press, clickTab, finish, fail, rerender, flags, values, set, requests, navigations, cacheAdds, cacheUpdates, queryClient, viewedTasks, loadedBoards, shells, capture, baseline, source, stub, jiti, mountProbe, headerState: () => headerState, legacyJ: () => legacyJ });
   } finally {
     document.removeEventListener('keydown', legacy);
     try {
@@ -1540,4 +1548,25 @@ test('Ctrl+J uses the latest saved veto if it changes while task creation is pen
     assert.equal(values.get('showAIChatInterfaceAtom'), false);
     assert.equal(values.get('aiChatAutoOpenSuppressedAtom'), true);
   });
+
+test('HTPR-7547 cold Compose receives text and selection from the command focus proxy', async (t) => {
+  for (const mobile of [false, true]) {
+    await withPalette(t, { tab: 'compose', mobile, preserveColdCommandInput: true, bufferedText: 'draft from cold open' }, async ({ input, focusProxy }) => {
+      assert.equal(input().value, 'draft from cold open');
+      assert.equal(document.activeElement, input());
+      assert.equal(input().selectionStart, 2);
+      assert.equal(input().selectionEnd, 5);
+      assert.equal(focusProxy.current.value, '', 'the handoff consumes the buffer');
+    });
+  }
+});
+
+
+test('HTPR-7547 flag off keeps the previous Compose focus behavior', async (t) => {
+  for (const mobile of [false, true]) {
+    await withPalette(t, { tab: 'compose', mobile, preserveColdCommandInput: false, bufferedText: 'unconsumed legacy proxy' }, async ({ input, focusProxy }) => {
+      assert.equal(input().value, '');
+      assert.equal(focusProxy.current.value, 'unconsumed legacy proxy');
+    });
+  }
 });
