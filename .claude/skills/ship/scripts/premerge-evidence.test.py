@@ -65,6 +65,13 @@ elif args[:2] == ['api', '-i'] and args[2].startswith('repos/hypertask-ai/hypert
     print('HTTP/2.0 200 OK\\r\\nEtag: ' + etag + '\\r\\nX-Ratelimit-Remaining: 4001\\r\\n\\r\\n'
           + json.dumps([{'number': n, 'title': f'YPER4-{n} [INFRA] Fixture', 'head': {'sha': sha}}
                         for n in (998, 999)]))
+elif args[:1] == ['api'] and '/commits/' in args[1] and '/status?' in args[1]:
+    if (root / 'status-error').exists():
+        sys.exit(1)
+    fixture = root / 'github-status'
+    status = json.loads(fixture.read_text()) if fixture.exists() else {'statuses': []}
+    status.setdefault('sha', args[1].split('/commits/')[1].split('/')[0])
+    print(json.dumps(status))
 elif args[:1] == ['api']:
     raise AssertionError('the contents API must not be called: ' + repr(args))
 else:
@@ -216,6 +223,53 @@ print('premerge-evidence: success (fixture)')
         with patch.dict(os.environ, self.env, clear=True), patch.object(os, 'kill') as kill:
             poster.kill_stale_gh_loops()
         kill.assert_called_once_with(4242, poster.signal.SIGTERM)
+
+    def github_status(self):
+        return {'statuses': [{'context': 'premerge-evidence', 'state': 'success',
+                              'creator': {'login': 'github-actions[bot]', 'type': 'Bot'},
+                              'description': 'GitHub premerge click',
+                              'target_url': f'https://github.com/{poster.REPO}/actions/runs/123'}]}
+
+    def test_rules_fetch_failure_preserves_trusted_github_success(self):
+        (self.root / 'github-status').write_text(json.dumps(self.github_status()))
+        (self.root / 'fetch-error').touch()
+        self.assertEqual(self.sweep().returncode, 1)
+        self.assertEqual(self.publications(), [])
+        self.assertFalse((self.root / 'statuses').exists())
+        self.assertEqual(sum('/status?' in call[1] for call in self.gh_calls() if call[0] == 'api'), 2)
+
+    def test_rules_fetch_failure_does_not_trust_stale_or_other_creator_status(self):
+        (self.root / 'fetch-error').touch()
+        for change in ('sha', 'creator', 'type', 'state', 'context', 'description', 'target_url', 'url-suffix'):
+            with self.subTest(change=change):
+                status = self.github_status()
+                item = status['statuses'][0]
+                if change == 'sha':
+                    status['sha'] = 'b' * 40
+                elif change == 'creator':
+                    item['creator']['login'] = 'someone-else'
+                elif change == 'type':
+                    item['creator']['type'] = 'User'
+                elif change == 'state':
+                    item['state'] = 'failure'
+                elif change == 'context':
+                    item['context'] = 'ci-tests'
+                elif change == 'description':
+                    item['description'] = 'click record ok'
+                elif change == 'target_url':
+                    item['target_url'] = 'https://github.com/other/repo/actions/runs/123'
+                else:
+                    item['target_url'] += '/jobs/456'
+                (self.root / 'github-status').write_text(json.dumps(status))
+                self.assertEqual(self.sweep().returncode, 1)
+                self.assertEqual((self.root / 'statuses').read_text().splitlines(), ['failure', 'failure'])
+                (self.root / 'statuses').unlink()
+
+    def test_unreadable_github_status_never_overwrites_potential_github_success(self):
+        (self.root / 'status-error').touch()
+        (self.root / 'fetch-error').touch()
+        self.assertEqual(self.sweep().returncode, 1)
+        self.assertFalse((self.root / 'statuses').exists())
 
     def test_revocation_covers_a_head_missing_from_the_cache(self):
         self.assertEqual(self.sweep().returncode, 0)

@@ -13,7 +13,7 @@ Proof bar follows Lauren Tan's verification skills: [create-verification-skill](
 
 When live QA FAILs on code behind a flag, switch that flag Off on /admin/flags first (seconds, no deploy), then repair. Only Valentin's login can open that page: a runner sends the flag key and the failure to the HT Product Lead session with SendMessage at once, and it switches the flag Off. A revert PR is the second step, not the first. (Valentin, 2026-10-03)
 
-Any change to code inside a flag that is already on for Everyone, whatever its PR type ([BUGFIX] included), needs one recorded browser click-through of the changed path on a real board before merge, on the preview or locally against the PR build, with the live flag states. Record commit, account and flag state in ~/.local/state/vcc-evidence/<TICKET>/premerge.md.
+Any change to code inside a flag that is already on for Everyone, whatever its PR type ([BUGFIX] included), needs one recorded browser click-through of the changed path on a real board before merge, against the GitHub-hosted PR build (or an optional preview), with the live flag states. The workflow artifact contains `premerge.md` with commit, account and flag state. Existing local evidence at `~/.local/state/vcc-evidence/<TICKET>/premerge.md` remains accepted during the switch.
 
 Use this premerge record. The recording must show the changed path working, not just the board loading. For ticket opening, click a real card and check its title and body appear and stay open without reloading. Use a QA account, never Valentin's login. This does not replace live QA after deploy.
 
@@ -22,7 +22,7 @@ Commit: <full PR head sha>
 Account: <user id and role, never credentials>
 Flags: <released key>=EVERYONE
 Board: <real board URL, not /demo>
-Build: <preview or local PR build URL>
+Build: <GitHub-hosted disposable PR build URL or preview URL>
 Click: PASS <changed path and result>
 Recording: <video file next to premerge.md>
 ```
@@ -31,9 +31,11 @@ List every touched Everyone flag as `key=EVERYONE`, separated by commas. A touch
 
 ### Disposable local PR build
 
-From the PR worktree, run `scripts/premerge-local.sh up` as a managed background task (Docker and Node 24 required). It runs the CI browser-smoke migrations, seed and webpack build against fresh local Postgres, Redis, Soketi and MinIO, then prints the build URL, seeded board URL, Playwright storage-state path and premerge record lines. Use the printed state in a Playwright context, click a seeded card, and record the changed path, screenshot and video in the ticket's evidence folder. Never print the state or private credentials/log files. Run `scripts/premerge-local.sh down` in the same worktree when finished; it stops the server and removes the disposable containers and credentials. If Docker is unavailable, local cleanup still runs; rerun `down` when Docker returns to remove the containers.
+From the PR worktree, use `scripts/premerge-remote.sh <pr> <click-script-path>` first. Push the current PR head and click script before dispatching. `premerge-click.yml` runs the disposable build and services on free GitHub-hosted `ubuntu-latest`, seeds the signed-in board, runs the changed-path click script and uploads `premerge-<head sha>` with `premerge.md`, screenshots and recording. Check the linked run and download its artifact to inspect the click. A successful workflow posts `premerge-evidence` on that exact head as `github-actions[bot]`, with description `GitHub premerge click` and the run URL. `ship-check premerge`, `ship-check pr` and the merge guard accept that status without a VPS recording or build. A status from another creator or an older head does not count. Repeat after every push.
 
-The command refuses worktrees containing `.env` files and ignores inherited service credentials. It installs dependencies with `npm ci` when `node_modules` is absent and refuses a symlinked `node_modules`. To reuse the main checkout's install, run `scripts/worktree-node-modules.sh <main checkout> <worktree>` (a hardlinked copy); never symlink `node_modules`, because `npm ci` through a symlink empties the shared install. It reads `/api/flags` with the plain QA storage state at `~/.config/hypertask-videos/storageState-qa-normal.json`, preserving Everyone flags and setting every other registry flag to Owner + QA in the disposable database. The seeded account has the QA identity only in that database. Repeat `--flag key=MODE` to override local modes; never count an overridden released mode as live-state proof. `Flags:` prints the resulting modes. The real app board route is `/project?id=N`; ship-check also accepts older `/projects/project-N` records.
+**Runner compute rule** (Valentin, 2026-10-21, https://app.hypertask.ai/detail/project-4060/535): no local `next build`, premerge build, full test suites or full lint on the VPS. Push and let GitHub run them; only single targeted test files and syntax checks run locally. Do not fall back to a VPS build when GitHub is red. Existing local `premerge.md` evidence stays readable during the switch. Before this lands, the temporary local click allowance is one at a time; it ends when this ships.
+
+The runner takes the live flag snapshot without printing the plain QA storage state or cookies, and passes only flag data to GitHub. The seeded board, account and flag snapshot must match the click record. Never replace the live snapshot with registry defaults when live reads fail. To test a newly added flag, list it in the record with the mode used in the PR build; every touched Everyone flag needs its own `key=EVERYONE` entry. The retained `scripts/premerge-local.sh` launcher is the disposable harness used on GitHub, not an instruction to build on this VPS. Its legacy local record path remains supported until runners switch.
 
 MinIO uses a random loopback port, throwaway local credentials, a tmpfs `premerge-attachments` bucket and browser CORS for the build origin. All five `R2_*` settings point uploads, public previews and downloads at it before build/start; `down` removes its container and any anonymous volumes.
 

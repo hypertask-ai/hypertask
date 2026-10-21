@@ -53,6 +53,14 @@ Use a trusted identity with dispatch access to the private reviewer repository. 
 - Vercel previews are optional. Merge to `production` deploys production; a failed deploy build keeps the previous deployment live.
 - Do not add another runner host, VPN, required preview, or paid hosted fallback without a recorded decision.
 
+## Premerge click evidence (YPER4-535)
+
+- Runner command: `scripts/premerge-remote.sh <pr> <click-script-path>`, after pushing the PR head and click script. `premerge-click.yml` uses free GitHub-hosted `ubuntu-latest` for the disposable build, services, seeded signed-in board and recorded changed-path click. The artifact is `premerge-<head sha>` with `premerge.md`, screenshots and recording. The live flag snapshot is data only; never upload QA cookies or storage state.
+- The workflow posts commit status context `premerge-evidence` on the exact PR head using `GITHUB_TOKEN`, creator `github-actions[bot]`, description `GitHub premerge click` and target URL equal to its Actions run. This is the existing required commit-status context, not a second job named `premerge-evidence`. CI Tests already checks that context in the live ruleset; no new required job or ruleset change is needed.
+- `ship-check premerge`, `ship-check pr` and the merge guard accept a current-head success with that creator, Bot type, description and repository Actions run URL. An older head, another creator, a failure or a different run URL does not satisfy this GitHub evidence path. Existing local `~/.local/state/vcc-evidence/<TICKET>/premerge.md` and recording validation stays available during the switch.
+- The VPS poster delegates normal reconciliation to the current production `ship-check`. Publication rechecks the GitHub status before writing, so it does not overwrite a GitHub success that arrives during local validation. If fetching current rules fails, revocation preserves a verified current-head GitHub click success. Unreadable status data prevents writing rather than overwriting potential GitHub evidence.
+- **Runner compute rule:** no local `next build`, premerge build, full test suites or full lint on the VPS. Push and let GitHub run them; only single targeted test files and syntax checks run locally. A red GitHub run is not permission to start a VPS build. Before this lands, the temporary local click allowance is one at a time; it ends when this ships. See https://app.hypertask.ai/detail/project-4060/535.
+
 ## Visual regression gate
 
 `visual-regression` screenshots the five screens a user lands on (board, task detail, search, inbox, and the Ctrl+K palette) at 1440 and 390 wide in the `amoled` and `porcelain` themes, and fails when pixels move without an approved baseline. It catches the change that typechecks, lints and tests green and still puts an unwanted control on screen; [HTPR-5649](https://app.hypertask.ai/detail/project-15/5649) shipped an archived-results checkbox into search that way.

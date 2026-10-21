@@ -1,0 +1,267 @@
+name: Premerge Click
+run-name: "premerge click PR #${{ inputs.pr }}"
+
+on:
+  workflow_dispatch:
+    inputs:
+      pr:
+        description: Production PR number
+        required: true
+        type: string
+      click:
+        description: Repository-relative .mjs exporting default async ({ page, context, baseURL, boardURL, storageState, outputDir })
+        required: true
+        type: string
+      flags:
+        description: Base64 JSON snapshot with modes and plain live view, never cookies
+        required: true
+        type: string
+  pull_request:
+    branches: [production]
+    paths:
+      - .github/workflows/premerge-click.yml
+      - scripts/premerge-*.sh
+      - scripts/premerge-click-guard.mjs
+      - scripts/seed-browser-smoke.mjs
+      - tests/yper4-535-*
+
+concurrency:
+  group: premerge-click-${{ github.event_name }}-${{ inputs.pr || github.event.pull_request.number }}
+  cancel-in-progress: true
+
+permissions: {}
+
+jobs:
+  validate-workflow:
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+      - name: Targeted contracts and syntax, before the first production dispatch
+        shell: bash
+        run: |
+          set -euo pipefail
+          node --test tests/yper4-535-guard.test.cjs
+          node --test tests/yper4-535-workflow.test.cjs
+          bash -n scripts/premerge-local.sh scripts/premerge-remote.sh
+          node --check scripts/premerge-click-guard.mjs
+          node --check scripts/seed-browser-smoke.mjs
+          curl -fsSL https://github.com/rhysd/actionlint/releases/download/v1.7.11/actionlint_1.7.11_linux_amd64.tar.gz -o "$RUNNER_TEMP/actionlint.tgz"
+          echo "900919a84f2229bac68ca9cd4103ea297abc35e9689ebb842c6e34a3d1b01b0a  $RUNNER_TEMP/actionlint.tgz" | sha256sum -c -
+          tar -xzf "$RUNNER_TEMP/actionlint.tgz" -C "$RUNNER_TEMP" actionlint
+          "$RUNNER_TEMP/actionlint" -shellcheck= .github/workflows/premerge-click.yml
+
+  click:
+    if: github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/production'
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    permissions:
+      contents: read
+      pull-requests: read
+    outputs:
+      head_sha: ${{ steps.resolve.outputs.head_sha }}
+    steps:
+      - name: Checkout trusted dispatcher
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          ref: ${{ github.workflow_sha }}
+          path: trusted
+          persist-credentials: false
+      - name: Resolve once and refuse forks or non-production PRs
+        id: resolve
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR: ${{ inputs.pr }}
+          CLICK: ${{ inputs.click }}
+          FLAGS: ${{ inputs.flags }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          [[ "$PR" =~ ^[1-9][0-9]*$ ]]
+          gh api "repos/$GITHUB_REPOSITORY/pulls/$PR" > "$RUNNER_TEMP/pr.json"
+          sha=$(jq -r .head.sha "$RUNNER_TEMP/pr.json")
+          [[ "$sha" =~ ^[0-9a-f]{40}$ ]]
+          echo "head_sha=$sha" >> "$GITHUB_OUTPUT"
+          node trusted/scripts/premerge-click-guard.mjs pull "$RUNNER_TEMP/pr.json" "$GITHUB_REPOSITORY"
+          node trusted/scripts/premerge-click-guard.mjs path "$CLICK"
+          node trusted/scripts/premerge-click-guard.mjs decode-flags > "$RUNNER_TEMP/live-flags.json"
+          node trusted/scripts/premerge-click-guard.mjs flags "$RUNNER_TEMP/live-flags.json"
+      - name: Checkout exact PR head without credentials
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          ref: ${{ steps.resolve.outputs.head_sha }}
+          path: pr
+          persist-credentials: false
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: 24
+      - name: Install dependencies and Chromium without shared caches
+        working-directory: pr
+        run: |
+          npm ci --prefer-offline --no-audit --no-fund
+          npx --no-install playwright install --with-deps chromium
+      - name: Build disposable app and record the changed-path click
+        working-directory: pr
+        env:
+          PREMERGE_FLAGS_FILE: ${{ runner.temp }}/live-flags.json
+          CLICK_SCRIPT: ${{ inputs.click }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/evidence/screenshots" "$RUNNER_TEMP/evidence/video"
+          bash scripts/premerge-local.sh up --ci > "$RUNNER_TEMP/local-ready.log" 2> "$RUNNER_TEMP/local-progress.log" &
+          setup=$!
+          trap 'bash scripts/premerge-local.sh down >/dev/null 2>&1; wait "$setup" || true' EXIT
+          ready=false
+          for ((attempt=0; attempt<1500; attempt++)); do
+            if grep -q '^Local QA is ready\.' "$RUNNER_TEMP/local-ready.log"; then ready=true; break; fi
+            kill -0 "$setup" 2>/dev/null || { echo '::error::Disposable setup failed; private service logs are not uploaded.'; exit 1; }
+            sleep 1
+          done
+          [ "$ready" = true ]
+          node --input-type=module <<'NODE'
+          import { readFile, writeFile } from 'node:fs/promises';
+          import { resolveClickPath } from '../trusted/scripts/premerge-click-guard.mjs';
+          import { pathToFileURL } from 'node:url';
+          import { chromium } from 'playwright';
+          const text = await readFile(`${process.env.RUNNER_TEMP}/local-ready.log`, 'utf8');
+          const field = key => text.split('\n').find(line => line.startsWith(`${key}: `))?.slice(key.length + 2);
+          const baseURL = field('Build URL'), boardURL = field('Board URL'), storageState = field('Storage state');
+          if (!baseURL || !boardURL || !storageState) throw new Error('Missing disposable fixture URLs/state');
+          const script = await resolveClickPath(`${process.env.GITHUB_WORKSPACE}/pr`, process.env.CLICK_SCRIPT);
+          const { default: click } = await import(pathToFileURL(script));
+          if (typeof click !== 'function') throw new Error('Click module must export a default async function');
+          const outputDir = `${process.env.RUNNER_TEMP}/evidence`;
+          const browser = await chromium.launch({ headless: true });
+          const context = await browser.newContext({ storageState, viewport: { width: 1440, height: 900 }, recordVideo: { dir: `${outputDir}/video` } });
+          const page = await context.newPage();
+          const video = page.video();
+          try {
+            await page.goto(boardURL);
+            await page.screenshot({ path: `${outputDir}/screenshots/before.png` });
+            await click({ page, context, baseURL, boardURL, storageState, outputDir });
+            await page.screenshot({ path: `${outputDir}/screenshots/after.png` });
+          } finally {
+            await context.close();
+            try {
+              await video.saveAs(`${outputDir}/video/click.webm`);
+            } finally {
+              await browser.close();
+            }
+          }
+          const record = ['Commit', 'Account', 'Flags', 'Board', 'Build'].map(key => `${key}: ${field(key)}`).join('\n');
+          await writeFile(`${outputDir}/premerge.md`, `${record}\nClick: PASS ${process.env.CLICK_SCRIPT}\nRecording: video/click.webm\n`);
+          NODE
+      - name: Upload click record, screenshots and recording only
+        if: always() && steps.resolve.outputs.head_sha != ''
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: premerge-${{ steps.resolve.outputs.head_sha }}
+          path: |
+            ${{ runner.temp }}/evidence/premerge.md
+            ${{ runner.temp }}/evidence/screenshots/*.png
+            ${{ runner.temp }}/evidence/video/*.webm
+          if-no-files-found: warn
+          retention-days: 14
+
+  post-status:
+    needs: click
+    if: always() && github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/production' && needs.click.outputs.head_sha != ''
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      statuses: write
+      actions: read
+      pull-requests: read
+    steps:
+      # No checkout and no execution of anything from the PR or its artifact.
+      - name: Load immutable trusted validator as data from the dispatcher commit
+        env:
+          TRUSTED_SHA: ${{ github.workflow_sha }}
+        run: |
+          curl -fsSL "https://raw.githubusercontent.com/$GITHUB_REPOSITORY/$TRUSTED_SHA/scripts/premerge-click-guard.mjs" -o "$RUNNER_TEMP/trusted-guard.mjs"
+      - name: Download bounded evidence archive as data
+        uses: actions/github-script@60a0d83039c74a4aee543508d2ffcb1c3799cdea # v7.0.1
+        env:
+          HEAD_SHA: ${{ needs.click.outputs.head_sha }}
+        with:
+          script: |
+            const { writeFile } = require('node:fs/promises');
+            const artifacts = await github.paginate(github.rest.actions.listWorkflowRunArtifacts, { ...context.repo, run_id: context.runId });
+            const matches = artifacts.filter(a => a.name === `premerge-${process.env.HEAD_SHA}` && !a.expired);
+            if (matches.length !== 1 || matches[0].size_in_bytes > 67108864) throw new Error('Missing, duplicate or oversized evidence archive');
+            const { data } = await github.rest.actions.downloadArtifact({ ...context.repo, artifact_id: matches[0].id, archive_format: 'zip' });
+            const bytes = Buffer.from(data);
+            if (bytes.length > 67108864) throw new Error('Oversized evidence archive');
+            await writeFile(`${process.env.RUNNER_TEMP}/evidence.zip`, bytes);
+      - name: Extract only bounded evidence data, never code or links
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          import os, pathlib, re, stat, zipfile
+          root = pathlib.Path(os.environ['RUNNER_TEMP'])
+          with zipfile.ZipFile(root / 'evidence.zip') as archive:
+              files = archive.infolist()
+              if len(files) > 100 or sum(f.file_size for f in files) > 134217728:
+                  raise ValueError('Oversized expanded evidence')
+              seen = set()
+              for f in files:
+                  name = f.filename
+                  if name in seen or not re.fullmatch(r'premerge\.md|screenshots/[A-Za-z0-9_-]+\.png|video/[A-Za-z0-9_-]+\.webm', name):
+                      raise ValueError('Unexpected evidence path')
+                  seen.add(name)
+                  kind = stat.S_IFMT(f.external_attr >> 16)
+                  if kind not in (0, stat.S_IFREG) or f.flag_bits & 1 or f.file_size > (262144 if name == 'premerge.md' else 134217728):
+                      raise ValueError('Unsafe evidence entry')
+              for f in files:
+                  target = root / 'incoming' / f.filename
+                  target.parent.mkdir(parents=True, exist_ok=True)
+                  with archive.open(f) as source, target.open('xb') as dest:
+                      remaining = f.file_size
+                      while remaining:
+                          chunk = source.read(min(65536, remaining))
+                          if not chunk:
+                              raise ValueError('Truncated evidence entry')
+                          dest.write(chunk)
+                          remaining -= len(chunk)
+                      if source.read(1):
+                          raise ValueError('Oversized evidence entry')
+          PY
+      - name: Validate record and current head, then post exact-SHA status
+        if: always()
+        uses: actions/github-script@60a0d83039c74a4aee543508d2ffcb1c3799cdea # v7.0.1
+        env:
+          HEAD_SHA: ${{ needs.click.outputs.head_sha }}
+          CLICK_RESULT: ${{ needs.click.result }}
+          EVIDENCE_RESULT: ${{ job.status }}
+          PR: ${{ inputs.pr }}
+          FLAGS: ${{ inputs.flags }}
+          CLICK: ${{ inputs.click }}
+        with:
+          script: |
+            const sha = process.env.HEAD_SHA;
+            if (!/^[0-9a-f]{40}$/.test(sha)) { core.setFailed('Invalid resolved head'); return; }
+            let state = 'failure';
+            try {
+              if (process.env.CLICK_RESULT !== 'success') throw new Error('Click job failed');
+              if (process.env.EVIDENCE_RESULT !== 'success') throw new Error('Evidence download or extraction failed');
+              const { pathToFileURL } = require('node:url');
+              const { guardPull, validateEvidence, decodeSnapshot } = await import(pathToFileURL(`${process.env.RUNNER_TEMP}/trusted-guard.mjs`));
+              const snapshot = decodeSnapshot(process.env.FLAGS);
+              await validateEvidence(`${process.env.RUNNER_TEMP}/incoming`, sha, snapshot, process.env.CLICK);
+              if (!/^[1-9][0-9]*$/.test(process.env.PR)) throw new Error('Invalid PR number');
+              const { data: pr } = await github.rest.pulls.get({ ...context.repo, pull_number: Number(process.env.PR) });
+              guardPull(pr, `${context.repo.owner}/${context.repo.repo}`, sha);
+              state = 'success';
+            } catch (error) {
+              core.error(`Premerge evidence rejected: ${error.message}`);
+            }
+            await github.rest.repos.createCommitStatus({ ...context.repo, sha, state,
+              context: 'premerge-evidence', description: 'GitHub premerge click',
+              target_url: `${process.env.GITHUB_SERVER_URL}/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}` });
+            if (state !== 'success') core.setFailed('Premerge click did not produce valid current-head evidence');

@@ -3,13 +3,19 @@ set -euo pipefail
 # Never allow caller tracing to reveal disposable credentials.
 set +x
 
-usage() { echo 'Usage: scripts/premerge-local.sh [up|down|sweep|--install] [--flag key=MODE ...]' >&2; }
+usage() { echo 'Usage: scripts/premerge-local.sh [up|down|sweep|--install] [--flag key=MODE ...] [--ci]' >&2; }
 action=up
 if [ "$#" -gt 0 ]; then
   case "$1" in up|down|sweep|--install) action=$1; shift ;; --flag) ;; *) usage; exit 2 ;; esac
 fi
 flag_overrides=()
+ci_args=()
 while [ "$#" -gt 0 ]; do
+  if [ "$action" = up ] && [ "$1" = --ci ] && [ "${#ci_args[@]}" -eq 0 ]; then
+    ci_args=(--ci)
+    shift
+    continue
+  fi
   if [ "$action" != up ] || [ "$1" != --flag ] || [ "$#" -lt 2 ] ||
      [[ ! $2 =~ ^[a-z0-9]+(-[a-z0-9]+)*=(OFF|OWNER_ONLY|OWNER_AND_QA|EVERYONE)$ ]]; then
     usage; exit 2
@@ -17,7 +23,21 @@ while [ "$#" -gt 0 ]; do
   flag_overrides+=(--flag "$2")
   shift 2
 done
+if [ "${#ci_args[@]}" -ne 0 ]; then
+  if [ "${GITHUB_ACTIONS:-}" != true ] || [ "${RUNNER_ENVIRONMENT:-}" != github-hosted ] || [ "${CI:-}" != true ] || [ "${#flag_overrides[@]}" -ne 0 ]; then
+    echo 'premerge-local: --ci requires GitHub-hosted Actions and cannot override live flags.' >&2
+    exit 2
+  fi
+  if [ -z "${PREMERGE_FLAGS_FILE:-}" ] || [ ! -f "$PREMERGE_FLAGS_FILE" ]; then
+    echo 'premerge-local: --ci requires PREMERGE_FLAGS_FILE.' >&2
+    exit 2
+  fi
+  PREMERGE_FLAGS_FILE=$(realpath "$PREMERGE_FLAGS_FILE")
+fi
 root=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd -P)
+if [ "${#ci_args[@]}" -ne 0 ]; then
+  node "$root/scripts/premerge-click-guard.mjs" flags "$PREMERGE_FLAGS_FILE"
+fi
 # A symlinked node_modules lets npm ci empty the shared install (YPER4-247). Backstop: refuse it.
 if [ "$action" = up ] && [ -L "$root/node_modules" ]; then
   echo "premerge-local: $root/node_modules is a symlink. Replace it with a hardlinked copy: scripts/worktree-node-modules.sh <main checkout> $root" >&2
@@ -28,7 +48,7 @@ if [ "${PREMERGE_CLEAN_ENV:-}" != "$root" ]; then
   launcher=()
   # Group setup and its foreground jobs so down also cancels a queued build.
   if [ "$action" = up ]; then launcher=(setsid --wait); fi
-  exec "${launcher[@]}" env -i PATH="$PATH" HOME="$HOME" XDG_RUNTIME_DIR="${XDG_RUNTIME_DIR:-}" HT_HEAVY_SLOTS="${HT_HEAVY_SLOTS:-}" PREMERGE_NODE_OPTIONS="${PREMERGE_NODE_OPTIONS:-}" CI="${CI:-}" ${GITHUB_ACTIONS+GITHUB_ACTIONS="$GITHUB_ACTIONS"} PREMERGE_CLEAN_ENV="$root" bash "$root/scripts/premerge-local.sh" "$action" "${flag_overrides[@]}"
+  exec "${launcher[@]}" env -i PATH="$PATH" HOME="$HOME" XDG_RUNTIME_DIR="${XDG_RUNTIME_DIR:-}" HT_HEAVY_SLOTS="${HT_HEAVY_SLOTS:-}" PREMERGE_NODE_OPTIONS="${PREMERGE_NODE_OPTIONS:-}" CI="${CI:-}" RUNNER_ENVIRONMENT="${RUNNER_ENVIRONMENT:-}" PREMERGE_FLAGS_FILE="${PREMERGE_FLAGS_FILE:-}" ${GITHUB_ACTIONS+GITHUB_ACTIONS="$GITHUB_ACTIONS"} PREMERGE_CLEAN_ENV="$root" bash "$root/scripts/premerge-local.sh" "$action" "${flag_overrides[@]}" "${ci_args[@]}"
 fi
 # A 4 GiB heap completed earlier builds; the build-only watchdog limit is 8 GiB (YPER4-318).
 # Set PREMERGE_NODE_OPTIONS to override.
@@ -191,6 +211,7 @@ source "$state/credentials.env"
 set +a
 export BROWSER_SMOKE_STATE_FILE="$state/smoke-state.json" GITHUB_OUTPUT="$state/fixtures.out" NEXT_TELEMETRY_DISABLED=1 PREMERGE_LOCAL=1
 export HT_PREMERGE_AI_STUB=1 HT_PREMERGE_QUEUE_STUB=1
+if [ "${#ci_args[@]}" -ne 0 ]; then export PREMERGE_FLAGS_FILE; else unset PREMERGE_FLAGS_FILE; fi
 node scripts/premerge-local-storage.mjs
 npx --no-install prisma migrate deploy
 node scripts/seed-browser-smoke.mjs "${flag_overrides[@]}"
@@ -203,7 +224,11 @@ for ((attempt=0; attempt<30; attempt++)); do
   sleep 1
 done
 curl -fsS --max-time 2 -o /dev/null "$TURBOPUFFER_BASE_URL/health"
-PREMERGE_NEXT_BUILD=1 HT_HEAVY_WAIT_FD=4 bash "$root/scripts/heavy-job.sh" --exclusive npx --no-install next build --webpack
+if [ "${#ci_args[@]}" -ne 0 ]; then
+  PREMERGE_NEXT_BUILD=1 npx --no-install next build --webpack
+else
+  PREMERGE_NEXT_BUILD=1 HT_HEAVY_WAIT_FD=4 bash "$root/scripts/heavy-job.sh" --exclusive npx --no-install next build --webpack
+fi
 setsid node "$root/node_modules/next/dist/bin/next" start -H 127.0.0.1 -p "$app_port" >"$state/server.log" 2>&1 9>&- 3>&- 4>&- < /dev/null &
 pid=$!
 printf '%s %s\n' "$pid" "$(sed 's/.*) //' "/proc/$pid/stat" | awk '{print $20}')" >"$state/server.pid"

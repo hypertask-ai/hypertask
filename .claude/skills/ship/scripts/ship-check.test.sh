@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # Live tests for ship-check against real tickets (needs gh and hypertask auth).
 cd "$(dirname "$0")"; fails=0; passes=0
+premerge_only=false; [[ ${1:-} != --premerge-only ]] || premerge_only=true
 ok() { echo "ok   $*"; passes=$((passes+1)); }; bad() { echo "FAIL $*"; fails=$((fails+1)); }
 E=$(mktemp -d); export VCC_EVIDENCE_DIR=$E
 trap 'rm -rf "$E"' EXIT
@@ -13,6 +14,7 @@ G() { local want=$1; shift; echo "{\"tool_input\":{\"command\":$(jq -Rn --arg c 
 DONE='--section "Done"'
 M='gh pr merge'
 
+if [[ ${1:-} != --premerge-only ]]; then
 # Concatenated assignment fragments cannot bypass missing Done evidence.
 for prefix in 'FOO=pre"fix"' "FOO='a'b\"c\""; do
   G 2 "$prefix vcc task move YPER4-999 $DONE"
@@ -708,6 +710,8 @@ T fail "evidence outside the current run rejected"
 sed -i '$d' "$E/HTPR-6570/proof.md"; mkdir -p "$E/x"; printf 'png' > "$E/x/a.png"; sed -i 's/^Run: .*/Run: ..\/..\/x/' "$E/HTPR-6570/proof.md"
 T fail "run folder outside the ticket rejected"
 
+fi
+
 # Released-flag premerge guard: deterministic GitHub and live-mode boundaries.
 mkdir -p "$E/flag-bin" "$E/flag-source" "$E/flag-http" "$E/YPER4-999"
 cat > "$E/flag-bin/gh" <<'MOCK'
@@ -782,6 +786,18 @@ if '/statuses/' in url:
     sys.exit(1 if os.environ.get('FLAG_POST_ERROR') else 0)
 if os.environ.get('FLAG_GH_ERROR'):
     sys.exit(1)
+if '/commits/' in url and '/status?' in url:
+    if os.environ.get('FLAG_STATUS_ERROR'):
+        sys.exit(1)
+    sha = url.split('/commits/')[1].split('/')[0]
+    status = json.loads(os.environ.get('FLAG_GITHUB_STATUS', '{"statuses":[]}'))
+    status.setdefault('sha', sha)
+    if os.environ.get('FLAG_STATUS_LATE'):
+        calls = sum('/status?' in line for line in open(os.environ['FLAG_LOG']))
+        if calls == 1:
+            status = {'sha': sha, 'statuses': []}
+    print(json.dumps(status))
+    sys.exit(0)
 if '/files?' in url:
     file = {'filename': os.environ.get('FLAG_FILE', 'src/card.tsx'), 'status': os.environ.get('FLAG_STATUS', 'modified')}
     if file['status'] == 'renamed':
@@ -878,7 +894,12 @@ printf 'const released = useFlag(RELEASED_FLAG);\n' > "$E/flag-source/base"
 cp "$E/flag-source/base" "$E/flag-source/head"
 F() {
   local want=$1 expected=$2 out got; shift 2
-  out=$(echo '{"tool_input":{"command":"gh pr merge 999"}}' | env PATH="$E/flag-bin:$PATH" PYTHONPATH="$E/flag-http" FLAG_SOURCE="$E/flag-source" SHIP_CHECK_PLAIN_QA_STATE="$E/plain-state.json" AGENT_TOKEN=fixture HYPERTASKS_JWT_TOKEN= "$@" ./ship-check guard 2>&1); got=$?
+  if [[ $premerge_only == true ]]; then
+    [ "$want" != 2 ] || want=1
+    out=$(env PATH="$E/flag-bin:$PATH" PYTHONPATH="$E/flag-http" FLAG_SOURCE="$E/flag-source" SHIP_CHECK_PLAIN_QA_STATE="$E/plain-state.json" AGENT_TOKEN=fixture HYPERTASKS_JWT_TOKEN= "$@" ./ship-check premerge-status 999 2>&1); got=$?
+  else
+    out=$(echo '{"tool_input":{"command":"gh pr merge 999"}}' | env PATH="$E/flag-bin:$PATH" PYTHONPATH="$E/flag-http" FLAG_SOURCE="$E/flag-source" SHIP_CHECK_PLAIN_QA_STATE="$E/plain-state.json" AGENT_TOKEN=fixture HYPERTASKS_JWT_TOKEN= "$@" ./ship-check guard 2>&1); got=$?
+  fi
   if [ "$got" = "$want" ] && [[ $out == *"$expected"* ]]; then ok "released flag: $want $expected $*"
   else bad "released flag: want $want $expected got $got $out"; fi
 }
@@ -1162,9 +1183,9 @@ assert any(c[0] == 'git' and 'show' in c for c in calls), 'source was not read t
 assert sum(c[0] == 'git' and 'fetch' in c for c in calls) <= 1, 'more than one git fetch per run'
 PY
 }
-API_BUDGET 6 'premerge-status: no contents API call, at most 6 API calls per PR'
+API_BUDGET 7 'premerge-status: no contents API call, at most 7 API calls per PR'
 S 1 failure 'cannot read the PR diff' FLAG_FETCH_ERROR=1 SHIP_GIT_CACHE="$E/git-cache-cold"
-S 1 failure 'cannot read the PR diff' FLAG_GH_ERROR=1
+S 1 none '' FLAG_GH_ERROR=1
 S 1 failure 'cannot read the PR diff' FLAG_SOURCE_ERROR=1
 S 1 failure 'complete PR diff' FLAG_COUNT=2
 S 1 failure 'unchanged PR head' FLAG_HEAD_RACE=1
@@ -1180,7 +1201,56 @@ printf 'const released = useFlag(RELEASED_FLAG);\n' > "$E/flag-source/base"; cp 
 S 1 failure 'htpr-1-released: record'
 cp "$E/record" "$premerge"
 EXPECT_NO_REMOVED_EVERYONE=1 S 0 success 'click record ok' # No definition deleted: no removed-everyone.
-API_BUDGET 6 'premerge-status with a released flag: no contents API call, at most 6 API calls'
+API_BUDGET 8 'premerge-status with a released flag: no contents API call, at most 8 API calls'
+# GitHub evidence uses the exact current head and trusted workflow status, never a runner's local file.
+github_status='{"statuses":[{"context":"premerge-evidence","state":"success","creator":{"login":"github-actions[bot]","type":"Bot"},"description":"GitHub premerge click","target_url":"https://github.com/hypertask-ai/hypertask/actions/runs/123"}]}'
+mv "$premerge" "$E/local-premerge"
+F 0 '' FLAG_GITHUB_STATUS="$github_status"
+P 0 premerge 999 FLAG_GITHUB_STATUS="$github_status" FLAG_FETCH_ERROR=1 FLAG_SOURCE_ERROR=1 FLAG_HTTP_ERROR=1
+P 0 pr YPER4-999 FLAG_GITHUB_STATUS="$github_status"
+S 0 none '' FLAG_GITHUB_STATUS="$github_status"
+for state in success failure; do
+  guard_status=$(python3 -c 'import json,sys; s=json.loads(sys.argv[1]); s["statuses"][0]["state"]=sys.argv[2]; print(json.dumps(s))' "$github_status" "$state")
+  out=$(echo '{"tool_input":{"command":"gh pr merge 999"}}' | env PATH="$E/flag-bin:$PATH" PYTHONPATH="$E/flag-http" FLAG_SOURCE="$E/flag-source" FLAG_GITHUB_STATUS="$guard_status" AGENT_TOKEN=fixture HYPERTASKS_JWT_TOKEN= ./ship-check guard 2>&1); got=$?
+  if [[ $state == success && $got == 0 || $state == failure && $got == 2 ]]; then
+    ok "merge guard: GitHub $state returns $got"
+  else bad "merge guard: GitHub $state returns $got $out"; fi
+done
+S 0 none '' FLAG_GITHUB_STATUS="$github_status" FLAG_STATUS_LATE=1
+S 1 none '' FLAG_GITHUB_STATUS="$github_status" FLAG_HEAD_RACE=1
+S 1 none '' FLAG_STATUS_ERROR=1
+for change in \
+  '"sha":"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",' \
+  'creator' 'type' 'state' 'context' 'description' 'target_url' 'url-suffix'; do
+  refused=$(python3 - "$github_status" "$change" <<'PYTEST'
+import json, sys
+status = json.loads(sys.argv[1]); item = status['statuses'][0]; change = sys.argv[2]
+if change.startswith('"sha"'):
+    status['sha'] = 'b' * 40
+elif change == 'creator':
+    item['creator']['login'] = 'someone-else'
+elif change == 'type':
+    item['creator']['type'] = 'User'
+elif change == 'state':
+    item['state'] = 'failure'
+elif change == 'context':
+    item['context'] = 'ci-tests'
+elif change == 'description':
+    item['description'] = 'click record ok'
+elif change == 'target_url':
+    item['target_url'] = 'https://github.com/other/repo/actions/runs/123'
+else:
+    item['target_url'] += '/jobs/456'
+print(json.dumps(status))
+PYTEST
+)
+  F 2 'record a browser click-through' FLAG_GITHUB_STATUS="$refused"
+  P 1 premerge 999 FLAG_GITHUB_STATUS="$refused"
+  P 1 pr YPER4-999 FLAG_GITHUB_STATUS="$refused"
+  S 1 failure 'record a browser click-through' FLAG_GITHUB_STATUS="$refused"
+done
+mv "$E/local-premerge" "$premerge"
+S 0 success 'click record ok'
 # YPER4-281: deleting a definition exempts only that absent key from Flags, not the click.
 printf 'export * from "./definitions/index.generated";\n' > "$E/flag-source/keys"
 printf 'const DEFAULT_FEATURE_FLAG_MODE = "OWNER_AND_QA";\n' > "$E/flag-source/registry"
@@ -1276,6 +1346,9 @@ PY
 W 0 1
 W 0 0
 sed -i 's/Click: PASS/Click: FAIL/' "$premerge"
+W 0 0 FLAG_GITHUB_STATUS="$github_status"
+# Invalidate cached success so a missing GitHub status falls back to the failed local click.
+printf '\n' >> "$premerge"
 W 0 1
 W 0 0 FLAG_ROLLUP=FAILURE
 sed -i 's/Click: FAIL/Click: PASS/' "$premerge"
@@ -1363,6 +1436,12 @@ try:
 except ValueError:
     pass
 PY
+
+if [[ ${1:-} == --premerge-only ]]; then
+  echo "$passes passed, $fails failed"
+  [ "$fails" = 0 ] && echo 'ALL PASS: All ship-check tests passed'
+  exit "$fails"
+fi
 
 # Dropped path (YPER4-257): Valentin decided against a ticket, its PR is closed unmerged. Fakes: PR state and comments.
 mkdir -p "$E/drop-bin"
@@ -1565,6 +1644,7 @@ gh() {
     api:*/pulls/1392/files\?*) echo '[]' ;;
     api:*/pulls/1392\?*)
       jq -n --arg sha "$CI_HEAD" '{head:{sha:$sha},base:{sha:$sha},title:"HTPR-6971 [FEATURE] Fixture",changed_files:0}' ;;
+    api:*/commits/*/status\?*) jq -n --arg sha "$CI_HEAD" '{sha:$sha,statuses:[]}' ;;
     api:*/statuses/*) return 0 ;;
     *) return 1 ;;
   esac

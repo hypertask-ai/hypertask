@@ -665,6 +665,16 @@ try:
         raise ValueError('cannot read the full PR head sha')
     if expected_sha and sha != expected_sha:
         raise ValueError('PR head changed while checking evidence; retry')
+    status = gh('api', f'repos/{repo}/commits/{sha}/status?premerge={freshness}')
+    if status.get('sha') == sha and any(
+            item.get('context') == 'premerge-evidence' and item.get('state') == 'success'
+            and item.get('creator', {}).get('login') == 'github-actions[bot]'
+            and item.get('creator', {}).get('type') == 'Bot'
+            and item.get('description') == 'GitHub premerge click'
+            and re.fullmatch(r'https://github\.com/' + re.escape(repo) + r'/actions/runs/[1-9][0-9]*', item.get('target_url') or '')
+            for item in status.get('statuses', [])):
+        print('github premerge ok')
+        sys.exit(0)
     prepare(pr, sha, base)
     ticket = row['title'].split()[0]
     pages = gh('api', f'repos/{repo}/pulls/{pr}/files?per_page=100&premerge={freshness}', '--paginate')
@@ -865,6 +875,19 @@ except Exception as error:
 PY
 }
 
+github_premerge_status() {
+  local status
+  status=$(gh api "repos/$REPO/commits/$1/status?premerge=$(date +%s%N)" 2>/dev/null) || return 2
+  jq -e --arg sha "$1" --arg prefix "https://github.com/$REPO/actions/runs/" '
+    .sha == $sha and any(.statuses[];
+      .context == "premerge-evidence" and .state == "success" and
+      .creator.login == "github-actions[bot]" and .creator.type == "Bot" and
+      .description == "GitHub premerge click" and
+      ((.target_url // "") | startswith($prefix)) and
+      ((.target_url // "" | ltrimstr($prefix)) | test("^[1-9][0-9]*$")))
+  ' <<<"$status" >/dev/null
+}
+
 check_premerge_status() (
   [ "$REPO" = hypertask-ai/hypertask ] || return 0
   local sha current out lock removed state=failure description rc=1
@@ -879,6 +902,7 @@ check_premerge_status() (
     case "$out" in
       'no released flag touched') state=success; description=$out; rc=0 ;;
       'premerge ok'|*$'\npremerge ok') state=success; description='click record ok'; rc=0 ;;
+      'github premerge ok') state=success; description='GitHub premerge click'; rc=0 ;;
       *) description='cannot verify premerge result; retry' ;;
     esac
   else
@@ -899,6 +923,14 @@ check_premerge_status() (
       description+=" | $removed"
     fi
   fi
+  if github_premerge_status "$sha"; then
+    [ "$current" = "$sha" ] || fail "cannot confirm unchanged PR head; retry"
+    echo 'premerge-evidence: success (GitHub premerge click)'
+    return 0
+  else
+    [ "$?" = 1 ] || fail "cannot read GitHub premerge status; no status posted"
+  fi
+  [ "$description" != 'GitHub premerge click' ] || fail "GitHub premerge status changed; retry"
   gh api "repos/$REPO/statuses/$sha" --method POST -f context=premerge-evidence \
     -f "state=$state" -f "description=${description:0:140}" >/dev/null 2>&1 \
     || fail "cannot post premerge-evidence for PR $1; retry before merging"
