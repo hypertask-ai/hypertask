@@ -1,4 +1,4 @@
-import { HTPR_7513_WRITER_PROJECT_LABELS_FLAG } from "@/lib/flags/keys";
+import { HTPR_7312_CTRLJ_SKILLS_FLAG, HTPR_7513_WRITER_PROJECT_LABELS_FLAG } from "@/lib/flags/keys";
 import { taskWriterDateContext, taskWriterDueDateInstructions } from "@/lib/ai/taskWriterDueDate";
 import { HTPR_7500_WRITER_OLD_STRUCTURE_FLAG } from "@/lib/flags/keys";
 import { HTPR_7471_WRITER_BOARD_FORMAT_FLAG } from "@/lib/flags/keys";
@@ -93,6 +93,7 @@ export const taskWriterRequestSchema = z.object({
   userRetrievalTexts: z.array(z.string()).max(20).optional().default([]),
   byokProviderFlags: z.array(byokProviderFlagSchema).optional().default([]),
   existingTaskId: z.number().int().positive().optional(),
+  invokeSkills: z.boolean().optional().default(false),
   requestKind: z.enum(["manual", "auto-description", "compose-task"]).optional().default("manual"),
 });
 
@@ -221,7 +222,19 @@ export async function prepareTaskWriterRun(
     userId,
     projectId: body.projectId,
   });
-  const effectivePrompt = skillResolution.cleanedText || body.PROMPT;
+  const composeSkillsEnabled = body.requestKind === "compose-task" && body.invokeSkills &&
+    await isFeatureEnabled(HTPR_7312_CTRLJ_SKILLS_FLAG, userId);
+  if (composeSkillsEnabled) {
+    const [description, ...retrievalTexts] = await Promise.all(
+      [body.taskDescription, ...body.userRetrievalTexts].map((text) => resolveSkills(
+        text,
+        { userId, projectId: body.projectId },
+        async () => skillResolution.skills,
+      )),
+    );
+    body = { ...body, taskDescription: description.cleanedText, userRetrievalTexts: retrievalTexts.map((result) => result.cleanedText) };
+  }
+  const effectivePrompt = composeSkillsEnabled ? skillResolution.cleanedText : skillResolution.cleanedText || body.PROMPT;
   const boardResearchEnabled = body.aiMode === "AiTaskWriter";
   const retrievalQuery = boardResearchEnabled
     ? buildTaskWriterRetrievalQuery({

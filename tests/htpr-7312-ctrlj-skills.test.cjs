@@ -1,0 +1,247 @@
+const test = require('node:test');
+const assert = require('node:assert/strict');
+const fs = require('node:fs');
+const path = require('node:path');
+const ts = require('typescript');
+const { createJiti } = require('jiti');
+const { JSDOM } = require('jsdom');
+const root = path.resolve(__dirname, '..');
+const load = createJiti(__filename, { alias: { '@': path.join(root, 'src') }, interopDefault: true, fsCache: false });
+const keys = load(path.join(root, 'src/lib/flags/keys.ts'));
+const flag = 'htpr-7312-ctrlj-skills';
+const { resolveSkills } = load(path.join(root, 'src/app/api/ai/_lib/skills.ts'));
+const prompts = load(path.join(root, 'src/app/api/ai/_lib/editorAiPrompts.ts'));
+const research = load(path.join(root, 'src/app/api/ai/_lib/taskWriterBoardResearch.ts'));
+const skill = (id, slug, scope) => ({
+  id, slug, name: slug, body: `Instructions for ${slug}.`, enabled: true,
+  projectId: null, userId: null, ...scope,
+});
+const available = [skill(1, 'deeper', { projectId: 15 }), skill(2, 'review', { userId: 985 })];
+
+function moduleWithStubs(file, stubs) {
+  const code = ts.transpileModule(fs.readFileSync(path.join(root, file), 'utf8'), {
+    compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022, esModuleInterop: true },
+  }).outputText;
+  const mod = { exports: {} };
+  new Function('module', 'exports', 'require', code)(mod, mod.exports, (id) => {
+    if (Object.hasOwn(stubs, id)) return stubs[id];
+    if (!id.startsWith('@/') && !id.startsWith('.')) return require(id);
+    throw new Error(`Unexpected dependency: ${id}`);
+  });
+  return mod.exports;
+}
+
+function harness({ enabled = true, skills = available } = {}) {
+  const checks = [], resolutions = [], lookups = [], retrieval = [], parts = [];
+  const run = moduleWithStubs('src/app/api/ai/_lib/taskWriterRun.ts', {
+    '@/lib/flags/keys': keys,
+    '@/lib/flags': { ...keys, isFeatureEnabled: async (key, userId) => {
+      checks.push([key, userId]);
+      return key === keys.HTPR_6929_COMPOSE_TASK_WRITER_FLAG || (key === flag && enabled);
+    } },
+    '@/lib/ai/taskWriterDueDate': {},
+    '@/lib/ai/composeTaskTarget': {},
+    '@/lib/ai/prompts/registry': { renderPrompt: () => '' },
+    '@/lib/systemModelLadder': { isAiFeatureEnabled: () => true },
+    '@/lib/doneColumns': { doneColumnTitles: () => new Set() },
+    '@/lib/prisma': { __esModule: true, default: {
+      project: { findFirst: async () => ({ id: 15, title: 'Board', section: [], labels: [] }) },
+      section: { findMany: async () => [] }, taskTemplate: { findMany: async () => [] },
+    } },
+    '@/utils/controllers/projects/getAllIncludes': { projectContentAccessWhere: () => ({}) },
+    '@/utils/controllers/turbopuffer/turbopufferHelper': { searchTasks: async () => [] },
+    '@/app/api/ai/_lib/editorAi': {
+      ...prompts,
+      createTaskWriterPromptParts: (args) => { parts.push(args); return prompts.createTaskWriterPromptParts(args); },
+      createTaskWriterUserContent: (input) => input,
+      retrieveTaskWriterContext: async (args) => { retrieval.push(args.prompt); return ''; },
+      selectTaskWriterModel: async () => ({ modelId: 'fixture', settings: {} }),
+      createDocumentAttachmentSummary: () => '', extractImgSrcs: () => new Set(),
+    },
+    '@/app/api/ai/_lib/currentTaskContext': { loadCurrentTaskContext: async () => '', resolveAiUsageTaskId: async () => null },
+    '@/app/api/ai/_lib/taskWriterPrompt': {
+      formatTaskWriterRetrievedContext: () => '', createTaskWriterSystemPromptTemplate: () => 'Writer rules',
+    },
+    '@/app/api/ai/_lib/taskWriterBoardResearch': research,
+    '@/app/api/ai/_lib/boardTemplateContext': { BOARD_TEMPLATE_LIMIT: 10 },
+    '@/app/api/ai/_lib/providerGate': { getProjectTeamProviderContext: async () => ({ settings: {} }) },
+    '@/app/api/ai/_lib/promptCache': { cachedInstructionsForUser: async (_userId, args) => args.fixed + args.suffix },
+    '@/app/api/ai/_lib/skills': { resolveSkills: async (text, context, lookup) => {
+      resolutions.push({ text, context });
+      return resolveSkills(text, context, lookup ?? (async (slugs, scope) => {
+        lookups.push({ slugs, scope });
+        return skills.filter((entry) => slugs.includes(entry.slug));
+      }));
+    } },
+  });
+  const prepare = (text, extra = {}) => run.prepareTaskWriterRun(run.taskWriterRequestSchema.parse({
+    projectId: 15, PROMPT: `Write a task title and description from this note in the board's style.\n\n<p>${text}</p>`,
+    taskDescription: `<p>${text}</p>`, userRetrievalTexts: [text], requestKind: 'compose-task', invokeSkills: true,
+    ...extra,
+  }), 985);
+  return { prepare, checks, resolutions, lookups, retrieval, parts };
+}
+
+for (const [slug, note, cleaned] of [
+  ['deeper', '/deeper Fix checkout', 'Fix checkout'],
+  ['review', '/review Audit checkout', 'Audit checkout'],
+  ['deeper', 'Please /deeper fix checkout', 'Please fix checkout'],
+]) {
+  test(`Ctrl+J invokes /${slug} and strips the token from every note copy: ${note}`, async () => {
+    const h = harness();
+    const result = await h.prepare(note);
+    assert.ok(result.instructions.includes(`Instructions for ${slug}.`));
+    assert.deepEqual(result.skills.map((entry) => entry.slug), [slug]);
+    assert.ok(!result.messages[0].content.includes(`/${slug}`));
+    assert.ok(!h.parts[0].taskDescription.includes(`/${slug}`));
+    assert.ok(h.parts[0].taskDescription.includes(cleaned));
+    assert.deepEqual(h.retrieval, [cleaned]);
+    assert.ok(h.checks.some(([key, userId]) => key === flag && userId === 985));
+    assert.equal(h.lookups.length, 1, 'secondary note copies reuse the authorized lookup result');
+    for (const { context } of h.resolutions) assert.deepEqual(context, { userId: 985, projectId: 15 });
+  });
+}
+
+test('unknown /slugs remain literal in the prompt, note and retrieval text', async () => {
+  const h = harness();
+  const result = await h.prepare('/unknown Fix checkout');
+  assert.deepEqual(result.skills, []);
+  assert.ok(result.messages[0].content.includes('/unknown Fix checkout'));
+  assert.equal(h.parts[0].taskDescription, '<p>/unknown Fix checkout</p>');
+  assert.deepEqual(h.retrieval, ['/unknown Fix checkout']);
+  assert.ok(!result.instructions.includes('<skill'));
+});
+
+test('known and unknown skills can be mixed without removing unknown text', async () => {
+  const h = harness();
+  const result = await h.prepare('/unknown Please /deeper fix checkout');
+  assert.ok(result.messages[0].content.includes('/unknown Please fix checkout'));
+  assert.deepEqual(h.retrieval, ['/unknown Please fix checkout']);
+  assert.ok(result.instructions.includes(available[0].body));
+});
+
+test('multiple and repeated skills share popup ordering and deduplication', async () => {
+  const h = harness();
+  const result = await h.prepare('/deeper Please /review fix checkout /deeper');
+  assert.deepEqual(result.skills.map((entry) => entry.slug), ['deeper', 'review']);
+  assert.deepEqual(h.retrieval, ['Please fix checkout']);
+  assert.equal(result.instructions.split('Instructions for deeper.').length - 1, 1);
+  assert.equal(result.instructions.split('Instructions for review.').length - 1, 1);
+});
+
+test('built-in /i works without a database skill', async () => {
+  const h = harness({ skills: [] });
+  const result = await h.prepare('/i Fix checkout');
+  assert.deepEqual(result.skills.map((entry) => entry.slug), ['i']);
+  assert.ok(result.instructions.includes('built-in formatting template'));
+  assert.deepEqual(h.retrieval, ['Fix checkout']);
+  assert.equal(h.lookups.length, 0);
+});
+
+test('recognized tokens cannot leak back through the task context', async () => {
+  const h = harness();
+  const result = await h.prepare('/deeper Fix checkout', { taskTitle: 'Original note' });
+  assert.ok(result.messages[0].content.includes('Original note'));
+  assert.ok(!result.messages[0].content.includes('/deeper'));
+  assert.equal(h.parts[0].taskDescription, '<p> Fix checkout</p>');
+});
+
+test('skills from another user or board are not invoked', async () => {
+  const h = harness({ skills: [skill(3, 'private', { userId: 22 }), skill(4, 'foreign', { projectId: 99 })] });
+  const result = await h.prepare('/private /foreign Fix checkout');
+  assert.deepEqual(result.skills, []);
+  assert.ok(result.messages[0].content.includes('/private /foreign'));
+  assert.deepEqual(h.retrieval, ['/private /foreign Fix checkout']);
+});
+
+test('server flag off preserves the existing popup resolution and untouched secondary note copies', async () => {
+  const h = harness({ enabled: false });
+  const result = await h.prepare('/deeper Fix checkout');
+  assert.ok(result.instructions.includes(available[0].body));
+  assert.ok(!result.messages[0].content.includes('/deeper'));
+  assert.equal(h.parts[0].taskDescription, '<p>/deeper Fix checkout</p>');
+  assert.deepEqual(h.retrieval, ['/deeper Fix checkout']);
+  assert.equal(h.resolutions.length, 1);
+  assert.ok(h.checks.some(([key, userId]) => key === flag && userId === 985));
+});
+
+test('missing client opt-in leaves today\'s behavior unchanged even when the server flag is on', async () => {
+  const h = harness();
+  await h.prepare('/deeper Fix checkout', { invokeSkills: undefined });
+  assert.equal(h.parts[0].taskDescription, '<p>/deeper Fix checkout</p>');
+  assert.deepEqual(h.retrieval, ['/deeper Fix checkout']);
+  assert.equal(h.resolutions.length, 1);
+});
+
+test('Ctrl+J and the older popup use the same resolver, scope and instruction body', async () => {
+  const h = harness();
+  const compose = await h.prepare('/deeper Fix checkout');
+  const popup = await h.prepare('/deeper Fix checkout', { requestKind: 'manual', invokeSkills: false });
+  assert.deepEqual(compose.skills, popup.skills);
+  assert.equal(compose.instructions, popup.instructions);
+  assert.equal(compose.messages[0].content, popup.messages[0].content);
+  assert.equal(h.resolutions.length, 4);
+});
+
+test('a skill-only prompt is not reintroduced after stripping', async () => {
+  const h = harness();
+  const result = await h.prepare('/deeper', { PROMPT: '/deeper', taskDescription: '/deeper' });
+  assert.equal(h.parts[0].input, '');
+  assert.equal(h.parts[0].taskDescription, '');
+  assert.deepEqual(h.retrieval, ['']);
+  assert.ok(result.instructions.includes(available[0].body));
+});
+
+test('the feature definition and UI entry explicitly gate Ctrl+J skills', () => {
+  const definition = load(path.join(root, 'src/lib/flags/definitions/htpr-7312-ctrlj-skills.ts')).default;
+  assert.equal(definition.key, flag);
+  assert.equal(definition.kind, 'feature');
+  assert.equal(definition.defaultMode, 'EVERYONE');
+  assert.equal(definition.releaseRisk.risk, 'small');
+  assert.ok(definition.releaseRisk.reason.trim());
+  const ui = fs.readFileSync(path.join(root, 'src/components/Modals/commands/HTC/ComposeTaskWriter.tsx'), 'utf8');
+  assert.match(ui, /const invokeSkills = useFlag\(HTPR_7312_CTRLJ_SKILLS_FLAG\)/);
+  assert.match(ui, /\.\.\.\(invokeSkills \? \{ invokeSkills \} : \{\}\)/);
+});
+
+test('compose requests opt in only when enabled and keep unknown text for server resolution', async () => {
+  const cached = new Map(Object.entries(require.cache));
+  const dom = new JSDOM('');
+  const saved = ['DOMParser', 'fetch'].map((key) => [key, Object.getOwnPropertyDescriptor(global, key)]);
+  const source = (file, exports) => {
+    const filename = path.join(root, file);
+    require.cache[filename] = { id: filename, filename, loaded: true, exports };
+  };
+  const writes = [];
+  global.DOMParser = dom.window.DOMParser;
+  global.fetch = async (_url, options) => {
+    writes.push(JSON.parse(options.body));
+    return { ok: true, headers: { get: () => 'application/json' }, text: async () => JSON.stringify({ tasks: [{ title: 'Fix checkout', description: '<p>Fix checkout</p>' }] }) };
+  };
+  try {
+    source('src/lib/deriveCurrentBoardBilling.ts', { deriveCurrentBoardBilling: () => ({ byokProviderFlags: [] }) });
+    source('src/lib/createTaskAttachmentUploads.ts', { bindCreateTaskUploads() {} });
+    source('src/utils/api/global/apiHelpers/createTaskGloballycontroller.ts', { default: async (body) => ({ resposne: { newTask: { id: 91, projectId: body.projectId, sectionId: body.sectionId } } }) });
+    const axiosPath = require.resolve('axios');
+    require.cache[axiosPath] = { id: axiosPath, filename: axiosPath, loaded: true, exports: { default: { get: async () => ({ data: { sectionId: 12, section: 'Todo', ranking: 'a' } }) } } };
+    const compose = createJiti(__filename, { alias: { '@': path.join(root, 'src') }, interopDefault: true, fsCache: false })(path.join(root, 'src/lib/ai/composeTask.ts')).createComposedTask;
+    const input = { text: '/deeper /unknown Fix checkout', files: [], project: { id: 15, uniqueIdentifier: 'HTPR' }, userId: 985 };
+    for (const invokeSkills of [true, false, undefined]) {
+      const result = await compose({ ...input, invokeSkills });
+      assert.equal(result.writerFailed, false);
+    }
+    assert.equal(writes[0].invokeSkills, true);
+    assert.equal('invokeSkills' in writes[1], false);
+    assert.equal('invokeSkills' in writes[2], false);
+    const { invokeSkills, ...on } = writes[0];
+    assert.deepEqual(on, writes[1]);
+    assert.deepEqual(writes[1], writes[2]);
+    assert.deepEqual(writes[0].userRetrievalTexts, [input.text]);
+    assert.ok(writes[0].PROMPT.includes(input.text));
+  } finally {
+    for (const key of Object.keys(require.cache)) if (!cached.has(key)) delete require.cache[key];
+    for (const [key, value] of cached) require.cache[key] = value;
+    for (const [key, descriptor] of saved) descriptor ? Object.defineProperty(global, key, descriptor) : delete global[key];
+    dom.window.close();
+  }
+});

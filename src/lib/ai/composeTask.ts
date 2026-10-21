@@ -60,9 +60,10 @@ export type ComposeTaskStage = "Reading past tickets" | "Understanding the conte
 
 export async function createComposedTask({
   text, files, project, userId, existingTaskId, onProgress, viewProject, fields, explainWriterFailure, unfurlImageUrls = false,
-  applyWriterProperties = false,
+  applyWriterProperties = false, invokeSkills = false,
 }: {
   text: string; files: File[]; project: IProject; userId: number; existingTaskId?: number;
+  invokeSkills?: boolean;
   unfurlImageUrls?: boolean;
   applyWriterProperties?: boolean;
   onProgress?: (stage: ComposeTaskStage) => void;
@@ -112,6 +113,7 @@ export async function createComposedTask({
         modelSelected: project.ai_custom_instructions?.[0]?.model_selected ?? undefined,
         aiMode: "AiTaskWriter",
         requestKind: "compose-task",
+        ...(invokeSkills ? { invokeSkills } : {}),
         timeZone: writerTimeZone,
         ...(existingTaskId ? { existingTaskId } : {}),
         images64: uploads.filter((file) => isBrowserRenderableImage(file.mimeType, file.fileName)),
