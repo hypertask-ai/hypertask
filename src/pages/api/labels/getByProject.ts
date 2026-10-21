@@ -1,10 +1,11 @@
 
-import type { NextApiRequest, NextApiResponse } from "next";
+import { withAgentScopeRequest } from "@/lib/auth/agentScope";
+import type { NextApiHandler, NextApiRequest, NextApiResponse } from "next";
 import prisma from "@/lib/prisma";
 import { getSessionUser } from "@/lib/auth/getSessionUser";
 import { projectContentAccessWhere } from "@/utils/controllers/projects/getAllIncludes";
 
-export default async function handler(
+async function handler(
   req: NextApiRequest,
   res: NextApiResponse
 ) {
@@ -15,9 +16,12 @@ export default async function handler(
   if (!projectId || Number.isNaN(id))
     return res.status(400).json({ message: "Missing Required Information" });
 
-  const access = projectContentAccessWhere(session.userId);
+  const access = {
+    ...projectContentAccessWhere(session.userId),
+    AND: [projectContentAccessWhere(session.userId, session.agentId)],
+  };
   const project = await prisma.project.findFirst({
-    where: { AND: [{ id }, access] },
+    where: { AND: [{ id }, projectContentAccessWhere(session.userId), projectContentAccessWhere(session.userId, session.agentId)] },
     select: { id: true },
   });
   if (!project) return res.status(404).json({ message: "Project not found" });
@@ -72,3 +76,5 @@ export default async function handler(
     },
   })));
 }
+
+export default ((req, res) => withAgentScopeRequest(req, () => handler(req, res))) satisfies NextApiHandler;
