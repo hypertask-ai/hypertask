@@ -23,7 +23,8 @@ function load(relativePath, aliases = {}) {
   return module_.exports;
 }
 
-const identities = load("src/lib/auth/ownerOrQa.ts");
+const ids = load("src/lib/auth/ownerOrQaIds.ts");
+const identities = load("src/lib/auth/ownerOrQa.ts", { "@/lib/auth/ownerOrQaIds": ids });
 const users = [
   { id: 6, email: "valentin.yeo@gmail.com" },
   { id: 985, email: "valentin@hypertask.ai" },
@@ -194,7 +195,7 @@ test("MCP eval still refuses customers and anonymous callers with identical bodi
 
 function renderPanel(currentUser) {
   const panel = load("src/app/agents/McpClientEvalPanel.tsx", {
-    "@/lib/auth/ownerOrQa": identities,
+    "@/lib/auth/ownerOrQaIds": ids,
     react: { useState: () => [{ rows: [], summary: {} }, () => {}], useEffect: () => {} },
   });
   return panel.default({ currentUser });
@@ -240,4 +241,12 @@ test("QA login never issues a session for a different database account", async (
   assert.equal(response.status, 401);
   assert.equal(await response.text(), '{"success":false,"error":"Invalid email or password"}');
   assert.equal(response.cookies.get("test-session"), undefined);
+});
+
+test("the browser panel decides by user id only, so owner and QA emails stay out of client code", () => {
+  for (const file of ["src/app/agents/McpClientEvalPanel.tsx", "src/lib/auth/ownerOrQaIds.ts"]) {
+    const source = fs.readFileSync(path.join(root, file), "utf8");
+    assert.doesNotMatch(source, /@lib\/auth\/ownerOrQa"/, `${file} must not import the email allowlist`);
+    assert.doesNotMatch(source, /[\w.+-]+@[\w-]+\.[a-z]{2,}/i, `${file} must not contain an email address`);
+  }
 });

@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { isOwnerOrQaUser } from "@/lib/auth/ownerOrQa";
+import { hasOwnerOrQaUserId } from "@/lib/auth/ownerOrQaIds";
 import type { IUser } from "@/models/model";
 import type {
   McpClientEvalClient,
@@ -34,7 +34,7 @@ function calls(value: number | null): string {
 }
 
 function McpClientEvalPanel({ currentUser }: { currentUser: IUser }) {
-  const enabled = isOwnerOrQaUser(currentUser);
+  const enabled = hasOwnerOrQaUserId(currentUser);
   const [report, setReport] = useState<McpClientEvalReport | null>(null);
   const [error, setError] = useState<string | null>(null);
 

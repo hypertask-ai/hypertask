@@ -1,9 +1,10 @@
-export const FEATURE_FLAG_OWNER_USER_ID = 6;
+import { FEATURE_FLAG_OWNER_USER_ID, FEATURE_FLAG_QA_USER_ID } from "@/lib/auth/ownerOrQaIds";
+
+export { FEATURE_FLAG_OWNER_USER_ID, FEATURE_FLAG_QA_USER_ID };
 export const FEATURE_FLAG_OWNER = {
   userId: FEATURE_FLAG_OWNER_USER_ID,
   email: "valentin.yeo@gmail.com",
 } as const;
-export const FEATURE_FLAG_QA_USER_ID = 985;
 export const FEATURE_FLAG_QA_USER = {
   userId: FEATURE_FLAG_QA_USER_ID,
   email: "valentin@hypertask.ai",
