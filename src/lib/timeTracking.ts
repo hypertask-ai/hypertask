@@ -7,10 +7,6 @@ import { getProjectWhere } from "@/utils/controllers/projects/getAllIncludes";
 import { manualEntryTimes } from "@/lib/timeManualEntry";
 import isProjectAdmin from "@/utils/controllers/projects/isProjectAdmin";
 import {
-  HTPR_4228_ADMIN_ONLY_TIME_REPORTS_FLAG,
-  isFeatureEnabled,
-} from "@/lib/flags";
-import {
   createTimeEntryOnActiveBoard,
   deleteTimeEntryOnActiveBoard,
   pauseTimerOnActiveBoard,
@@ -363,17 +359,11 @@ export async function listReport(
     adminProjectIds?: number[];
   } = {}
 ) {
-  const reportsEnabled = await isFeatureEnabled(
-    HTPR_4228_ADMIN_ONLY_TIME_REPORTS_FLAG,
-    userId
-  );
-  const adminProjectIds = reportsEnabled
-    ? (options.adminProjectIds ??
-      (await administeredProjectIds(userId, {
-        teamId: options.teamId,
-        boardIds: options.boardIds ?? (options.boardId ? [options.boardId] : undefined),
-      })))
-    : [];
+  const adminProjectIds = options.adminProjectIds ??
+    (await administeredProjectIds(userId, {
+      teamId: options.teamId,
+      boardIds: options.boardIds ?? (options.boardId ? [options.boardId] : undefined),
+    }));
   const adminSet = new Set(adminProjectIds);
   const seesOthers = adminProjectIds.length > 0;
 
