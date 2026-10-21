@@ -19,6 +19,7 @@ export function usePageLoadReservations({
   authenticatedUserId,
   currentUserId,
   showAiChatInterface,
+  reserveBoardChat,
   aiChatAutoOpenSuppressed,
   commentComposerOpen,
   agentChatHidesMobileShell,
@@ -28,6 +29,7 @@ export function usePageLoadReservations({
   authenticatedUserId: number | null;
   currentUserId: number | undefined;
   showAiChatInterface: boolean;
+  reserveBoardChat: boolean;
   aiChatAutoOpenSuppressed: boolean;
   commentComposerOpen: boolean;
   agentChatHidesMobileShell: boolean;
@@ -38,7 +40,7 @@ export function usePageLoadReservations({
   const isAiChatSidebarMode = useRecoilValue(isAiChatSidebarModeAtom);
   const aiChatSidebarWidthPx = useRecoilValue(aiChatSidebarWidthPxAtom);
   const reserveAiSidebar = !mbl && isAiChatSidebarMode && (
-    showAiChatInterface || (
+    showAiChatInterface || reserveBoardChat || (
       isTaskDetailPage && authenticatedUserId !== null &&
       (aiChatPinned || (openAiChatByDefault && !aiChatAutoOpenSuppressed))
     )
