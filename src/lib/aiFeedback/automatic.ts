@@ -1,18 +1,41 @@
 import { waitUntil } from '@vercel/functions'
 import { ZodError } from 'zod'
+import { HTPR_7498_EXPIRED_KEY_FEEDBACK_FLAG } from '@/lib/flags/definitions/htpr-7498-expired-key-feedback'
 import { aiFeedbackSchema, type AiFeedbackInput } from './input'
 import type { McpAuthContext } from '@/lib/mcp/auth/types'
 import type { PortableTool } from '@/lib/mcp-server/stateless-http'
 
+function fileAutomaticFeedback(input: AiFeedbackInput, userId?: number) {
+  const report = { ...input, category: input.category ?? (input.status === 401 ? 'auth_failed' : input.errorCode === 'empty-tools-list' ? 'empty_result' : 'call_failed') }
+  for (const field of ['tool', 'client', 'errorCode'] as const) {
+    if (!aiFeedbackSchema.shape[field].safeParse(report[field]).success) delete report[field]
+  }
+  return import('./report').then(({ fileAiFeedback }) => fileAiFeedback(report, userId)).catch(() => {})
+}
+
 export function queueAiFeedback(input: AiFeedbackInput, userId?: number): void {
   try {
-    const report = { ...input, category: input.category ?? (input.status === 401 ? 'auth_failed' : input.errorCode === 'empty-tools-list' ? 'empty_result' : 'call_failed') }
-    for (const field of ['tool', 'client', 'errorCode'] as const) {
-      if (!aiFeedbackSchema.shape[field].safeParse(report[field]).success) delete report[field]
-    }
-    waitUntil(import('./report').then(({ fileAiFeedback }) => fileAiFeedback(report, userId)).catch(() => {}))
+    waitUntil(fileAutomaticFeedback(input, userId))
   } catch {
   }
+}
+
+export function queueMcpAuthFailure(request: Request): void {
+  const input: AiFeedbackInput = { surface: 'mcp', tool: 'mcp', status: 401, errorCode: 'unauthorized' }
+  try {
+    waitUntil((async () => {
+      try {
+        const { featureFlagCandidateUserIds } = await import('@/lib/flags')
+        if (await featureFlagCandidateUserIds(HTPR_7498_EXPIRED_KEY_FEEDBACK_FLAG) === null) {
+          const { classifyMcpAuthFailure } = await import('@/lib/mcp/auth/mcpAuthErrors')
+          const { NextRequest } = await import('next/server')
+          const reason = await classifyMcpAuthFailure(new NextRequest(request.url, { headers: request.headers }))
+          if (['token_expired', 'token_revoked', 'agent_revoked', 'agent_token_superseded'].includes(reason)) return
+        }
+      } catch {}
+      await fileAutomaticFeedback(input)
+    })().catch(() => {}))
+  } catch {}
 }
 
 export function feedbackRouteTemplate(pathname: string): string {
