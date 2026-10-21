@@ -12,7 +12,7 @@ name: CI Tests
 # itself a checked artifact.
 on:
   pull_request:
-    types: [opened, synchronize, reopened, ready_for_review, edited, labeled]
+    types: [opened, synchronize, reopened, ready_for_review]
   push:
     branches: [production]
 
@@ -39,7 +39,7 @@ jobs:
     # review-first `full-ci` label (owner, 2026-08-26) left ci-tests SKIPPED
     # until the label arrived, and GitHub's ruleset counts SKIPPED as passing:
     # PRs 782, 798 and 799 went live that way, and 782 broke the suite. Every
-    # non-draft PR now runs the gate on every event; superseded runs are
+    # non-draft PR now runs the gate on code/lifecycle events; superseded runs are
     # cancelled by the concurrency group above, so only the newest one costs
     # runner time. A job-level skip is never used here, because a skipped run
     # newer than a failed one would read as passing again.
@@ -344,12 +344,11 @@ jobs:
           HT_REQUIRE_PG_TESTS: ${{ steps.select.outputs.require_pg }}
         run: npm test -- ${{ steps.select.outputs.files }}
 
-      - name: Test with coverage collection
+      - name: Test full suite
         id: push-test
         if: github.event_name == 'push'
         shell: bash
         env:
-          NODE_V8_COVERAGE: coverage/raw
           HT_REQUIRE_PG_TESTS: "1"
         run: npm test 2>&1 | tee "$RUNNER_TEMP/push-test.log"
 
@@ -365,23 +364,6 @@ jobs:
               | awk 'BEGIN { ORS="" } NR <= 3 { if (NR > 1) printf "; "; printf "%s", $0 }')
           fi
           echo "failed_tests=${failures:-test command failed before naming a test}" >> "$GITHUB_OUTPUT"
-
-      - name: Build report-only coverage baseline
-        if: github.event_name == 'push'
-        continue-on-error: true
-        run: npm run coverage:report
-
-      - name: Upload coverage baseline
-        if: always() && github.event_name == 'push'
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
-        with:
-          name: automated-test-coverage-${{ github.sha }}
-          path: |
-            coverage/report/
-            coverage/critical-domains.json
-            coverage/critical-domains.md
-          if-no-files-found: warn
-          retention-days: 30
 
   browser-smoke:
     name: browser-smoke
