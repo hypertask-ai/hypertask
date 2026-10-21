@@ -83,7 +83,6 @@ export function billingDesiredMatches(
   return (
     left.checkoutMode === right.checkoutMode &&
     effectiveTrialDays(left) === effectiveTrialDays(right) &&
-    left.checkoutIntent === right.checkoutIntent &&
     left.customerId === right.customerId &&
     left.googleAccountId === right.googleAccountId &&
     left.priceId === right.priceId &&

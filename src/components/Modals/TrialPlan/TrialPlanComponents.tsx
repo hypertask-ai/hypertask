@@ -4,7 +4,7 @@ import { storeSubscriptionPlans } from "@/lib/subscriptionPlans";
 import { CreateCheckoutParams, IPricingSearchParams } from "@/models/model";
 import { StartPlanButton, requestCheckout } from "@/components/PageComponents/Kanban/HeaderComponents/StartPlanButton";
 import { useFlag, useFlagReady } from "@/hooks/useFlag";
-import { HTPR_7511_SIGNUP_STRAIGHT_TO_BOARD_FLAG } from "@/lib/flags/definitions/htpr-7511-signup-straight-to-board";
+import { HTPR_7551_START_PLAN_CHECKOUT_FLAG } from "@/lib/flags/definitions/htpr-7551-start-plan-checkout";
 import { useRouter } from "next/navigation";
 import React, { useEffect, useState } from "react";
 
@@ -43,8 +43,8 @@ export const RowContent: React.FC<IRowPerkTitle> = ({ AIPrefix, content, checkVa
 
 
 export const TrialsButton = ({teamId}:{teamId:string}) => {
-    const startPlanEnabled = useFlag(HTPR_7511_SIGNUP_STRAIGHT_TO_BOARD_FLAG);
-    const flagReady = useFlagReady(HTPR_7511_SIGNUP_STRAIGHT_TO_BOARD_FLAG);
+    const startPlanEnabled = useFlag(HTPR_7551_START_PLAN_CHECKOUT_FLAG);
+    const flagReady = useFlagReady(HTPR_7551_START_PLAN_CHECKOUT_FLAG);
     const [pending, setPending] = useState(false);
     const [error, setError] = useState<string | null>(null);
     const [teamInfo, setTeamInfo] = useState<IPricingSearchParams|undefined>(undefined);
@@ -132,8 +132,8 @@ export const TrialsButton = ({teamId}:{teamId:string}) => {
 }
 
 export const PlansTable = ()=>{
-    const startPlanEnabled = useFlag(HTPR_7511_SIGNUP_STRAIGHT_TO_BOARD_FLAG);
-    const flagReady = useFlagReady(HTPR_7511_SIGNUP_STRAIGHT_TO_BOARD_FLAG);
+    const startPlanEnabled = useFlag(HTPR_7551_START_PLAN_CHECKOUT_FLAG);
+    const flagReady = useFlagReady(HTPR_7551_START_PLAN_CHECKOUT_FLAG);
     return(
         <>
         <h2 className="text-4xl text-center sm:text-4xl font-semibold mb-2 sm:mb-0 lg:w-3/5 ">{!flagReady ? "Checking plan access…" : startPlanEnabled ? "Start a Hypertask plan" : "Try the Pro plan for free for 14 days"}</h2>

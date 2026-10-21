@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import { useRecoilValue } from "@/lib/state";
 import { currentProjectAtom, currentUserAtom } from "@/store";
 import { useFlag } from "@/hooks/useFlag";
-import { HTPR_7511_SIGNUP_STRAIGHT_TO_BOARD_FLAG } from "@/lib/flags/definitions/htpr-7511-signup-straight-to-board";
+import { HTPR_7551_START_PLAN_CHECKOUT_FLAG } from "@/lib/flags/definitions/htpr-7551-start-plan-checkout";
 import { deriveCurrentBoardBilling } from "@/lib/deriveCurrentBoardBilling";
 import type { IProject } from "@/models/model";
 
@@ -36,7 +36,7 @@ export function StartPlanButton({ project, teamId, compact = false }: {
   const currentUser = useRecoilValue(currentUserAtom);
   const board = project ?? selectedProject;
   const billing = deriveCurrentBoardBilling(board ?? null);
-  const enabled = useFlag(HTPR_7511_SIGNUP_STRAIGHT_TO_BOARD_FLAG);
+  const enabled = useFlag(HTPR_7551_START_PLAN_CHECKOUT_FLAG);
   const eligibleBoard = Boolean(currentUser?.id && board?.id && Array.isArray(board.team?.subscriptionPlan) && billing?.storePlanId === "Free" &&
     (!teamId || billing.teamId === teamId));
   const [pending, setPending] = useState(false);

@@ -148,17 +148,17 @@ test("trial fingerprints refuse seven versus fourteen days but still match histo
     assert.equal(compare(fourteen, old), true);
     assert.equal(compare(seven, { ...seven }), true);
     assert.equal(compare(old, seven), false);
-    assert.equal(compare(seven, { ...seven, checkoutIntent: "signup-straight-to-board" }), false);
+    assert.equal(compare(seven, { ...seven, checkoutIntent: "signup-straight-to-board" }), compare === reservation.billingDesiredMatches);
   }
   assert.equal(old.trialDays, undefined);
   assert.equal(reservation.effectiveTrialDays(old), 14);
 });
 
-test("frozen intent and seat count participate in equality, while billing equality still tolerates redirect changes", () => {
+test("OPEN equality separates intents; completed billing still matches across intents and redirects but not changed seats", () => {
   const frozen = { ...desired, checkoutMode: "Trial", trialDays: 7, checkoutIntent: "signup-straight-to-board", ownerUserId: 6 };
   for (const compare of [reservation.desiredMatches, reservation.billingDesiredMatches]) {
     assert.equal(compare(frozen, { ...frozen, quantity: 8 }), false);
-    assert.equal(compare(frozen, { ...frozen, checkoutIntent: undefined }), false);
+    assert.equal(compare(frozen, { ...frozen, checkoutIntent: undefined }), compare === reservation.billingDesiredMatches);
     assert.equal(compare(frozen, structuredClone(frozen)), true);
   }
   const redirected = { ...frozen, returnUrl: "https://app.hypertask.ai/project?id=7" };

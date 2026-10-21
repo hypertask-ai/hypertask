@@ -17,7 +17,7 @@ import { useMcpToken } from "@/components/Modals/McpToken/hooks/useMcpToken";
 import type { IntegrationId } from "@/components/Modals/McpToken/utils";
 import { cn } from "@/utils/undoActions/helperFuncs";
 import { useFlag, useFlagReady } from "@/hooks/useFlag";
-import { HTPR_7511_SIGNUP_STRAIGHT_TO_BOARD_FLAG } from "@/lib/flags/definitions/htpr-7511-signup-straight-to-board";
+import { HTPR_7551_START_PLAN_CHECKOUT_FLAG } from "@/lib/flags/definitions/htpr-7551-start-plan-checkout";
 import { HTPR_7026_AGENT_CONNECT_CHECK_FLAG } from "@/lib/flags/keys";
 import { GetStartedButton } from "../GetStartedButton";
 
@@ -195,8 +195,8 @@ const ConnectAISetup: React.FC<IConnectAIOnboardingScreen> = ({
   visible = true,
   serverEligible = false,
 }) => {
-  const startPlanEnabled = useFlag(HTPR_7511_SIGNUP_STRAIGHT_TO_BOARD_FLAG);
-  const planFlagReady = useFlagReady(HTPR_7511_SIGNUP_STRAIGHT_TO_BOARD_FLAG);
+  const startPlanEnabled = useFlag(HTPR_7551_START_PLAN_CHECKOUT_FLAG);
+  const planFlagReady = useFlagReady(HTPR_7551_START_PLAN_CHECKOUT_FLAG);
   const [phase, setPhase] = useState<"choose" | "connect">("choose");
   const [chosenTool, setChosenTool] = useState<ToolChoice | null>(null);
   const [method, setMethod] = useState<ConnectMethod>("mcp");

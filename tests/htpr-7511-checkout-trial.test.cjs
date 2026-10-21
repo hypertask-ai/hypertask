@@ -18,7 +18,7 @@ const jiti = require("jiti")(__filename, {
 });
 const plans = jiti(path.join(root, "src/lib/subscriptionPlans.ts"));
 const billing = jiti(path.join(root, "src/lib/deriveCurrentBoardBilling.ts"));
-const flag = load("src/lib/flags/definitions/htpr-7511-signup-straight-to-board.ts");
+const flag = load("src/lib/flags/definitions/htpr-7551-start-plan-checkout.ts");
 const boardUrl = "https://app.hypertask.ai/project?id=7&view=default#board";
 const startBody = (extra = {}) => ({ intent: "signup-straight-to-board", teamId: "team-owned", boardUrl, ...extra });
 const legacyBody = (extra = {}) => ({
@@ -48,7 +48,6 @@ function harness() {
     },
   };
   const stripe = {
-    customers: { retrieve: async () => ({ id: "cus_owned", email: h.customerEmail ?? null }) },
     prices: { retrieve: async (id) => { assert.equal(id, "price_pro_month"); if (h.priceFailure) throw new Error("price lookup unavailable"); return h.price; } },
     subscriptions: { list: async (request) => {
       assert.equal(request.customer, "cus_owned");
@@ -112,14 +111,14 @@ function harness() {
   const controller = load("src/utils/controllers/stripe/createAuthorizedCheckoutSession.ts", {
     "@/lib/prisma": prisma,
     "@/lib/deriveCurrentBoardBilling": billing,
-    "@/lib/flags": { isFeatureEnabled: async (key, id) => { assert.equal(key, flag.HTPR_7511_SIGNUP_STRAIGHT_TO_BOARD_FLAG); assert.equal(id, h.team.googleAccount.userId); return h.enabled; } },
-    "@/lib/flags/definitions/htpr-7511-signup-straight-to-board": flag,
+    "@/lib/flags": { isFeatureEnabled: async (key, id) => { assert.equal(key, flag.HTPR_7551_START_PLAN_CHECKOUT_FLAG); assert.equal(id, h.team.googleAccount.userId); return h.enabled; } },
+    "@/lib/flags/definitions/htpr-7551-start-plan-checkout": flag,
     "@/lib/resolveSeatQuantity": { resolveSeatQuantity: async () => h.seats },
     "@/lib/stripe": stripeModule,
     "@/lib/subscriptionPlans": plans,
     "@/utils/controllers/stripe/checkoutReservation": reservations,
   });
-  h.checkout = (body = startBody(), userId = 6, principal = {}) => controller.createAuthorizedCheckoutSession(userId, body, principal);
+  h.checkout = (body = startBody(), userId = 6) => controller.createAuthorizedCheckoutSession(userId, body);
   h.reservations = reservations;
   return h;
 }
@@ -133,7 +132,8 @@ for (const enabled of [true, false]) {
     assert.equal(payload.line_items[0].price, "price_legacy_trial");
     assert.equal(payload.line_items[0].quantity, 3);
     assert.deepEqual(payload.line_items[0].adjustable_quantity, { enabled: true, minimum: 3 });
-    assert.equal(h.record.desired.trialDays, enabled ? 7 : 14);
+    assert.equal(h.record.desired.trialDays, enabled ? 7 : undefined);
+    assert.equal(payload.metadata.trialDays, enabled ? "7" : undefined);
   });
 }
 
@@ -360,6 +360,68 @@ test("ambiguous recovery remains 409 with original key; lock loss cannot settle 
   assert.equal(lost.sessions.size, 1);
 });
 
+for (const hidden of [false, true]) {
+  for (const listing of ["empty", "stale"]) {
+    for (const enabledAfterCancellation of [true, false]) {
+      test(`completed Start-plan Normal refuses legacy Normal with ${listing} subscriptions and session listing hidden=${hidden}; reconciled cancellation still allows a new purchase (flag ${enabledAfterCancellation})`, async () => {
+        const h = harness(); h.team.team_activity.hasCompletedTrial = true;
+        assert.equal((await h.checkout()).status, 200);
+        assert.equal(h.calls[0].payload.subscription_data, undefined);
+        const key = h.record.idempotencyKey;
+        const completed = h.sessions.get("cs_1");
+        completed.status = "complete"; completed.subscription = "sub_started";
+        h.hidden = hidden;
+        h.subscriptions = listing === "empty" ? [] : [subscription("canceled", { id: "sub_unrelated" })];
+        const normal = legacyBody({ mode: "Normal", priceId: "price_pro_month" });
+        for (const enabled of [true, false]) {
+          h.enabled = enabled;
+          const refused = await h.checkout(normal);
+          assert.equal(refused.status, 409);
+          assert.equal(refused.body.finishing, true);
+          assert.equal(h.record.idempotencyKey, key);
+          assert.equal(h.calls.length, 1);
+          assert.deepEqual(h.expired, []);
+        }
+        h.subscriptions = [subscription("canceled", { id: "sub_started" })];
+        h.enabled = enabledAfterCancellation;
+        const allowed = await h.checkout(normal);
+        assert.equal(allowed.status, 200);
+        assert.equal(allowed.body.alreadySubscribed, undefined);
+        assert.equal(h.calls.length, 2);
+        assert.notEqual(h.record.idempotencyKey, key);
+        assert.deepEqual(h.expired, []);
+      });
+    }
+  }
+}
+
+test("completed orphan Start-plan Normal is refused through legacy Normal until cancellation is reconciled", async () => {
+  const h = harness(); h.team.team_activity.hasCompletedTrial = true;
+  await h.checkout(); h.record = null;
+  const completed = h.sessions.get("cs_1");
+  completed.status = "complete"; completed.subscription = "sub_started";
+  const normal = legacyBody({ mode: "Normal", priceId: "price_pro_month" });
+  const refused = await h.checkout(normal);
+  assert.equal(refused.status, 409); assert.equal(refused.body.finishing, true);
+  assert.equal(h.calls.length, 1); assert.equal(h.record, null);
+  h.subscriptions = [subscription("canceled", { id: "sub_started" })];
+  assert.equal((await h.checkout(normal)).status, 200);
+  assert.equal(h.calls.length, 2);
+});
+
+test("OPEN Normal checkout reuse stays intent-separated; same-intent retry remains allowed", async () => {
+  const h = harness(); h.team.team_activity.hasCompletedTrial = true;
+  const first = await h.checkout();
+  assert.equal((await h.checkout()).body.url, first.body.url);
+  assert.equal(h.calls.length, 1);
+  const legacy = await h.checkout(legacyBody({ mode: "Normal", priceId: "price_pro_month" }));
+  assert.equal(legacy.status, 200);
+  assert.notEqual(legacy.body.url, first.body.url);
+  assert.equal(h.calls.length, 2);
+  assert.deepEqual(h.expired, ["cs_1"]);
+  assert.equal(h.calls[1].payload.metadata.checkoutIntent, undefined);
+});
+
 test("completed trials are never shortened/replaced, even with stale subscription listings or changed desired terms", async () => {
   const h = harness(); await h.checkout();
   const original = h.record.attemptId;
@@ -378,8 +440,10 @@ test("agent and cross-origin requests are refused at the signed-session boundary
   const h = harness();
   let session = { id: 6, agentId: "agent" };
   const route = load("src/pages/api/stripe/session/checkout.ts", {
+    "@/lib/flags": { isFeatureEnabled: async (key, id) => { assert.equal(key, flag.HTPR_7551_START_PLAN_CHECKOUT_FLAG); assert.equal(id, 6); return h.enabled; } },
+    "@/lib/flags/definitions/htpr-7551-start-plan-checkout": flag,
     "@/lib/demo/guestGuard": { isGuestRequest: async () => false },
-    "@/lib/auth/session": { SESSION_COOKIE: "ht_session", verifySession: () => session, verifyProvisionalCheckoutSession: () => null },
+    "@/lib/auth/session": { SESSION_COOKIE: "ht_session", verifySession: () => session },
     "@/utils/controllers/stripe/createAuthorizedCheckoutSession": { createAuthorizedCheckoutSession: (_id, body) => h.checkout(body) },
   }).default;
   const invoke = async (origin) => {
@@ -393,58 +457,6 @@ test("agent and cross-origin requests are refused at the signed-session boundary
   assert.equal((await invoke(undefined)).code, 403);
   assert.equal(h.calls.length, 0);
   assert.equal((await invoke("https://app.hypertask.ai")).code, 200);
-});
-
-
-test("restricted provisional checkout refuses other teams, legacy intent and unproven customer email; its own email-free team stays allowed", async () => {
-  const h = harness();
-  const principal = { provisionalTeamId: "team-owned" };
-  assert.equal((await h.checkout(startBody({ teamId: "another-team" }), 6, principal)).status, 403);
-  assert.equal((await h.checkout(legacyBody(), 6, principal)).status, 403);
-  h.customerEmail = "unproven@example.test";
-  assert.equal((await h.checkout(startBody(), 6, principal)).status, 409);
-  assert.equal(h.calls.length, 0);
-  h.customerEmail = null;
-  assert.equal((await h.checkout(startBody(), 6, principal)).status, 200);
-  assert.equal(h.calls[0].payload.customer_email, undefined);
-  assert.equal(h.writes, 0);
-});
-
-test("restricted checkout tokens cannot authenticate as full web sessions, but remain allowed on their own checkout route", async () => {
-  const previous = process.env.SESSION_SECRET;
-  process.env.SESSION_SECRET = "checkout-scope-fixture-secret";
-  try {
-    const sessions = load("src/lib/auth/session.ts");
-    const edge = load("src/lib/auth/sessionEdge.ts");
-    const token = sessions.signProvisionalCheckoutSession(6, "team-owned");
-    assert.equal(sessions.verifySession(token), null);
-    assert.equal(await edge.verifySessionEdge(token), null);
-    assert.deepEqual(sessions.verifyProvisionalCheckoutSession(token), { id: 6, provisionalTeamId: "team-owned" });
-    const full = sessions.signSession({ id: 6 });
-    assert.deepEqual(sessions.verifySession(full), { id: 6 });
-    assert.deepEqual(await edge.verifySessionEdge(full), { id: 6 });
-    assert.equal(sessions.verifyProvisionalCheckoutSession(full), null);
-    const h = harness();
-    const route = load("src/pages/api/stripe/session/checkout.ts", {
-      "@/lib/auth/session": sessions,
-      "@/lib/demo/guestGuard": { isGuestRequest: async () => false },
-      "@/utils/controllers/stripe/createAuthorizedCheckoutSession": { createAuthorizedCheckoutSession: (id, body, principal) => h.checkout(body, id, principal) },
-    }).default;
-    const invoke = async (body, cookies) => {
-      const res = { status(code) { this.code = code; return this; }, json(value) { this.body = value; return this; } };
-      await route({ method: "POST", headers: { origin: "https://app.hypertask.ai" }, cookies, body }, res);
-      return res;
-    };
-    const cookies = { [sessions.PROVISIONAL_CHECKOUT_COOKIE]: token };
-    assert.equal((await invoke(legacyBody(), cookies)).code, 403);
-    assert.equal((await invoke(startBody({ teamId: "other" }), cookies)).code, 403);
-    assert.equal((await invoke(startBody(), { [sessions.SESSION_COOKIE]: token })).code, 401);
-    assert.equal(h.calls.length, 0);
-    assert.equal((await invoke(startBody(), cookies)).code, 200);
-  } finally {
-    if (previous === undefined) delete process.env.SESSION_SECRET;
-    else process.env.SESSION_SECRET = previous;
-  }
 });
 
 
@@ -499,7 +511,9 @@ test("a canceled completed trial offers monthly checkout, and a stale non-entitl
 test("unsigned and guest requests remain refused while a signed non-guest owner remains allowed", async () => {
   const h = harness(); let session = null; let guest = false;
   const route = load("src/pages/api/stripe/session/checkout.ts", {
-    "@/lib/auth/session": { SESSION_COOKIE: "ht_session", verifySession: () => session, verifyProvisionalCheckoutSession: () => null },
+    "@/lib/auth/session": { SESSION_COOKIE: "ht_session", verifySession: () => session },
+    "@/lib/flags": { isFeatureEnabled: async (key, id) => { assert.equal(key, flag.HTPR_7551_START_PLAN_CHECKOUT_FLAG); assert.equal(id, 6); return h.enabled; } },
+    "@/lib/flags/definitions/htpr-7551-start-plan-checkout": flag,
     "@/lib/demo/guestGuard": { GUEST_FORBIDDEN_MESSAGE: "Guests cannot buy plans", isGuestRequest: async () => guest },
     "@/utils/controllers/stripe/createAuthorizedCheckoutSession": { createAuthorizedCheckoutSession: (_id, body) => h.checkout(body) },
   }).default;
@@ -530,4 +544,55 @@ test("already-admitted past-trial monthly intent also recovers its frozen non-ad
   assert.equal((await h.checkout(startBody({ action: "preview" }))).body.trialDays, 0);
   assert.equal((await h.checkout(legacyBody({ mode: "Normal", priceId: "price_pro_month" }))).status, 409);
   assert.deepEqual(h.expired, []);
+});
+
+
+test("route refuses the new intent with its own flag OFF while production legacy checkout remains allowed", async () => {
+  const h = harness(); h.enabled = false;
+  let forwarded = 0;
+  const route = load("src/pages/api/stripe/session/checkout.ts", {
+    "@/lib/auth/session": { SESSION_COOKIE: "ht_session", verifySession: () => ({ id: 6 }) },
+    "@/lib/flags": { isFeatureEnabled: async (key, id) => {
+      assert.equal(key, "htpr-7551-start-plan-checkout"); assert.equal(id, 6); return h.enabled;
+    } },
+    "@/lib/flags/definitions/htpr-7551-start-plan-checkout": flag,
+    "@/lib/demo/guestGuard": { isGuestRequest: async () => false },
+    "@/utils/controllers/stripe/createAuthorizedCheckoutSession": { createAuthorizedCheckoutSession: (_id, body) => { forwarded++; return h.checkout(body); } },
+  }).default;
+  const invoke = async (body) => {
+    const res = { status(code) { this.code = code; return this; }, json(value) { this.body = value; return this; } };
+    await route({ method: "POST", cookies: {}, headers: {}, body }, res);
+    return res;
+  };
+  assert.equal((await invoke(startBody())).code, 403);
+  assert.equal(forwarded, 0); assert.equal(h.calls.length, 0);
+  assert.equal((await invoke(legacyBody())).code, 200);
+  assert.equal(forwarded, 1);
+  assert.equal(h.calls[0].payload.subscription_data.trial_period_days, 14);
+  assert.equal(h.calls[0].payload.metadata.trialDays, undefined);
+  assert.equal(h.calls[0].payload.metadata.checkoutIntent, undefined);
+});
+
+test("checkout flag independently defaults to Owner-only money risk; QA and ordinary users remain refused", async () => {
+  const registry = load("src/lib/flags.ts", {
+    "@/lib/prisma": { default: {} },
+    "@/lib/flags/definitions": { FEATURE_FLAG_DEFINITIONS: [flag.default] },
+    "@/lib/flags/keys": { HTPR_7042_NEON_WORK_AVOIDANCE_FLAG: "htpr-7042-neon-work-avoidance" },
+  });
+  const key = flag.HTPR_7551_START_PLAN_CHECKOUT_FLAG;
+  assert.equal(key, "htpr-7551-start-plan-checkout");
+  assert.equal(registry.defaultFeatureFlagMode(key), "OWNER_ONLY");
+  assert.equal(flag.default.releaseRisk.highRisk, "money");
+  assert.deepEqual(flag.default.releaseRisk.ownerRequest, {
+    quote: "this one goes behind a feature flag that is only on for me at first pls. Don't release to everyone right away.",
+    ticketUrl: "https://app.hypertask.ai/detail/project-15/7511",
+  });
+  for (const [id, email, expected] of [[6, "valentin.yeo@gmail.com", true],
+    [985, "valentin@hypertask.ai", false], [2343, "normal@example.test", false]]) {
+    const db = { featureFlag: { findUnique: async ({ where }) => { assert.equal(where.key, key); return null; } },
+      user: { findUnique: async () => ({ id, email }) } };
+    assert.equal(await registry.isFeatureEnabled(key, id, db), expected);
+    db.featureFlag.findUnique = async () => ({ mode: "OFF" });
+    assert.equal(await registry.isFeatureEnabled(key, id, db), false);
+  }
 });

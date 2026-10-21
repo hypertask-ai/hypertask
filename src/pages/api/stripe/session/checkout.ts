@@ -1,6 +1,8 @@
 import { NextApiRequest, NextApiResponse } from "next";
 import { GUEST_FORBIDDEN_MESSAGE, isGuestRequest } from "@/lib/demo/guestGuard";
-import { PROVISIONAL_CHECKOUT_COOKIE, SESSION_COOKIE, verifyProvisionalCheckoutSession, verifySession } from "@/lib/auth/session";
+import { SESSION_COOKIE, verifySession } from "@/lib/auth/session";
+import { isFeatureEnabled } from "@/lib/flags";
+import { HTPR_7551_START_PLAN_CHECKOUT_FLAG } from "@/lib/flags/definitions/htpr-7551-start-plan-checkout";
 import { createAuthorizedCheckoutSession } from "@/utils/controllers/stripe/createAuthorizedCheckoutSession";
 
 export default async function checkoutsSessionHandler(
@@ -12,8 +14,7 @@ export default async function checkoutsSessionHandler(
     return res.status(405).json({ message: "Method not allowed" });
   }
 
-  const session = verifySession(req.cookies[SESSION_COOKIE]) ??
-    verifyProvisionalCheckoutSession(req.cookies[PROVISIONAL_CHECKOUT_COOKIE]);
+  const session = verifySession(req.cookies[SESSION_COOKIE]);
   if (!session) {
     return res
       .status(401)
@@ -24,12 +25,10 @@ export default async function checkoutsSessionHandler(
     return res.status(403).json({ message: "Only human team owners can update billing" });
   }
 
-  const provisionalTeamId = "provisionalTeamId" in session ? session.provisionalTeamId : undefined;
-  if (provisionalTeamId && (req.body?.intent !== "signup-straight-to-board" || req.body?.teamId !== provisionalTeamId)) {
-    return res.status(403).json({ message: "Provisional checkout is limited to its own team" });
-  }
-
   if (req.body?.intent === "signup-straight-to-board") {
+    if (!(await isFeatureEnabled(HTPR_7551_START_PLAN_CHECKOUT_FLAG, session.id))) {
+      return res.status(403).json({ message: "Start plan is not available" });
+    }
     const baseUrl = process.env.NEXT_PUBLIC_BASEURL || process.env.NEXT_PUBLIC_APP_URL;
     let appOrigin: string;
     try {
@@ -47,7 +46,7 @@ export default async function checkoutsSessionHandler(
   }
 
   try {
-    const result = await createAuthorizedCheckoutSession(session.id, req.body, { provisionalTeamId });
+    const result = await createAuthorizedCheckoutSession(session.id, req.body);
     return res.status(result.status).json(result.body);
   } catch (e) {
     console.error(e, `Stripe Checkout error`);

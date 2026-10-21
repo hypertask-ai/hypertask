@@ -4,15 +4,15 @@ const React = require("react");
 const { JSDOM } = require("jsdom");
 const { load } = require("./helpers/agent-connection.cjs");
 const FLAG = "htpr-7026-agent-connect-check";
-const planFlag = load("src/lib/flags/definitions/htpr-7511-signup-straight-to-board.ts");
+const planFlag = load("src/lib/flags/definitions/htpr-7551-start-plan-checkout.ts");
 
 function loadScreen(enabled = true, startPlanEnabled = false, planFlagReady = true) {
   return load("src/components/PageComponents/Onboarding/Screens/ConnectAIOnboardingScreen.tsx", {
     "@/hooks/useFlag": {
-      useFlag: (key) => key === planFlag.HTPR_7511_SIGNUP_STRAIGHT_TO_BOARD_FLAG ? startPlanEnabled : (assert.equal(key, FLAG), enabled),
+      useFlag: (key) => key === planFlag.HTPR_7551_START_PLAN_CHECKOUT_FLAG ? startPlanEnabled : (assert.equal(key, FLAG), enabled),
       useFlagReady: () => planFlagReady,
     },
-    "@/lib/flags/definitions/htpr-7511-signup-straight-to-board": planFlag,
+    "@/lib/flags/definitions/htpr-7551-start-plan-checkout": planFlag,
     "@/lib/flags/keys": { HTPR_7026_AGENT_CONNECT_CHECK_FLAG: FLAG },
     "@/components/Modals/CliInstall/constants": { INSTALL_COMMAND: "install fixture", LOGIN_COMMAND: "hypertask login" },
     "@/components/Modals/McpToken/components": {

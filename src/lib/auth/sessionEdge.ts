@@ -79,7 +79,6 @@ export async function verifySessionEdge(
 
     const payload = JSON.parse(new TextDecoder().decode(payloadBytes)) as SignedSessionPayload
     if (
-      'provisionalTeamId' in payload ||
       typeof payload.id !== 'number' ||
       !Number.isFinite(payload.id) ||
       (payload.email !== undefined && typeof payload.email !== 'string') ||

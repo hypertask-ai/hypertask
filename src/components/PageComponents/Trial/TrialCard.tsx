@@ -1,6 +1,8 @@
+import { useRecoilValue } from "@/lib/state";
+import { currentProjectAtom } from "@/store";
 import { StartPlanButton } from "@/components/PageComponents/Kanban/HeaderComponents/StartPlanButton";
 import { useFlag, useFlagReady } from "@/hooks/useFlag";
-import { HTPR_7511_SIGNUP_STRAIGHT_TO_BOARD_FLAG } from "@/lib/flags/definitions/htpr-7511-signup-straight-to-board";
+import { HTPR_7551_START_PLAN_CHECKOUT_FLAG } from "@/lib/flags/definitions/htpr-7551-start-plan-checkout";
 import useTrial from "@/hooks/General/useTrial";
 import { ISubscriptionPlan } from "@/lib/subscriptionPlans";
 import { IHasSubscriptionCheck, IPricingSearchParams } from "@/models/model";
@@ -15,8 +17,9 @@ interface IProps {
 }
 
 const TrialCard = ({ teamInfo, manageLink, plan, hasSubscription }: IProps) => {
-  const startPlanEnabled = useFlag(HTPR_7511_SIGNUP_STRAIGHT_TO_BOARD_FLAG);
-  const flagReady = useFlagReady(HTPR_7511_SIGNUP_STRAIGHT_TO_BOARD_FLAG);
+  const currentProject = useRecoilValue(currentProjectAtom);
+  const startPlanEnabled = useFlag(HTPR_7551_START_PLAN_CHECKOUT_FLAG);
+  const flagReady = useFlagReady(HTPR_7551_START_PLAN_CHECKOUT_FLAG);
   const { selectedTime, createCheckout, handleDurationChange } = useTrial({
     teamInfo,
     manageLink,
@@ -25,7 +28,9 @@ const TrialCard = ({ teamInfo, manageLink, plan, hasSubscription }: IProps) => {
   });
 
   if (!flagReady) return null;
-  if (startPlanEnabled) return <StartPlanButton teamId={teamInfo.teamId} />;
+  if (startPlanEnabled && currentProject?.id && currentProject.team?.id === teamInfo.teamId) {
+    return <StartPlanButton project={currentProject} teamId={teamInfo.teamId} />;
+  }
 
   return (
     <>

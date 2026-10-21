@@ -1,7 +1,7 @@
 import prisma from "@/lib/prisma";
 import { deriveTeamBilling } from "@/lib/deriveCurrentBoardBilling";
 import { isFeatureEnabled } from "@/lib/flags";
-import { HTPR_7511_SIGNUP_STRAIGHT_TO_BOARD_FLAG } from "@/lib/flags/definitions/htpr-7511-signup-straight-to-board";
+import { HTPR_7551_START_PLAN_CHECKOUT_FLAG } from "@/lib/flags/definitions/htpr-7551-start-plan-checkout";
 import { resolveSeatQuantity } from "@/lib/resolveSeatQuantity";
 import {
   createStripeCheckout,
@@ -198,7 +198,6 @@ function sessionBillingMatchesDesired(
     session.metadata?.priceId === desired.priceId &&
     session.metadata?.checkoutMode === desired.checkoutMode &&
     Number(session.metadata?.trialDays ?? (desired.checkoutMode === "Trial" ? 14 : 0)) === effectiveTrialDays(desired) &&
-    (session.metadata?.checkoutIntent || undefined) === desired.checkoutIntent &&
     session.metadata?.checkoutQuantity === String(desired.quantity)
   );
 }
@@ -211,6 +210,7 @@ function sessionMatchesDesired(
     Boolean(session.url) &&
     session.success_url === desired.returnUrl &&
     session.cancel_url === desired.cancelUrl &&
+    (session.metadata?.checkoutIntent || undefined) === desired.checkoutIntent &&
     sessionBillingMatchesDesired(session, desired)
   );
 }
@@ -287,7 +287,6 @@ function checkoutParams(
 export async function createAuthorizedCheckoutSession(
   userId: number,
   rawBody: unknown,
-  principal: { provisionalTeamId?: string } = {},
 ): Promise<CheckoutResult> {
   if (!rawBody || typeof rawBody !== "object" || Array.isArray(rawBody)) {
     return { status: 400, body: { message: "Invalid request" } };
@@ -296,9 +295,6 @@ export async function createAuthorizedCheckoutSession(
   const body = rawBody as CheckoutRequestBody;
   const signupIntent = body.intent === "signup-straight-to-board";
   const preview = signupIntent && body.action === "preview";
-  if (principal.provisionalTeamId && (!signupIntent || body.teamId !== principal.provisionalTeamId)) {
-    return { status: 403, body: { message: "Provisional checkout is limited to its own team" } };
-  }
   if (signupIntent && body.action !== undefined && body.action !== "preview") {
     return { status: 400, body: { message: "Unsupported checkout action" } };
   }
@@ -389,7 +385,7 @@ export async function createAuthorizedCheckoutSession(
       return { status: 400, body: { message: "Team account mismatch" } };
     }
 
-    const enabled = await isFeatureEnabled(HTPR_7511_SIGNUP_STRAIGHT_TO_BOARD_FLAG, userId);
+    const enabled = await isFeatureEnabled(HTPR_7551_START_PLAN_CHECKOUT_FLAG, userId);
     const billedQuantity = await resolveSeatQuantity(team.id, team.totalSeats);
     const subscriptions = await listAllCustomerSubscriptions(
       stripe,
@@ -457,6 +453,18 @@ export async function createAuthorizedCheckoutSession(
 
     const reservedSession = attempt && await reconcileAttemptSession(stripe, attempt, teamSessions);
     const knownSessions = reservedSession ? [...teamSessions, reservedSession] : teamSessions;
+    // A completed offer cannot be replaced through another entry while Stripe listings lag.
+    const awaitingPlanSubscription = knownSessions.some((session) => {
+      if (session.status !== "complete" ||
+        (session.metadata?.checkoutIntent !== "signup-straight-to-board" && session.metadata?.trialDays !== "7")) return false;
+      const subscriptionId = checkoutSubscriptionId(session);
+      return !subscriptionId || !subscriptions.some((subscription) => subscription.id === subscriptionId);
+    });
+    if (awaitingPlanSubscription) {
+      return { status: preview ? 200 : 409, body: {
+        canStartPlan: false, finishing: true, message: "Finishing plan setup",
+      } };
+    }
     const hasCompletedTrialCheckout = knownSessions.some((session) =>
       session.status === "complete" && session.metadata?.checkoutMode === "Trial");
     if (mode === "Trial" && hasCompletedTrialCheckout) {
@@ -464,8 +472,12 @@ export async function createAuthorizedCheckoutSession(
     }
     const rolloutAttempt = attempt && (effectiveTrialDays(attempt.desired) === 7 ||
       attempt.desired.checkoutIntent === "signup-straight-to-board");
+    const reservedSubscription = reservedSession && subscriptions.find((subscription) =>
+      subscription.id === checkoutSubscriptionId(reservedSession));
     if (!enabled && attempt && rolloutAttempt &&
-      (reservedSession?.status === "expired" || (attempt.state === "prepared" && !reservedSession))) {
+      (reservedSession?.status === "expired" || (attempt.state === "prepared" && !reservedSession) ||
+        (reservedSession?.status === "complete" &&
+          (reservedSubscription?.status === "canceled" || reservedSubscription?.status === "incomplete_expired")))) {
       await reservation.clear();
       attempt = null;
     }
@@ -516,12 +528,6 @@ export async function createAuthorizedCheckoutSession(
       if (liveSubscription) {
         return { status: 409, body: { message: "An existing subscription needs billing recovery" } };
       }
-      if (principal.provisionalTeamId && (!attempt || attempt.state === "prepared")) {
-        const customer = await stripe.customers.retrieve(customerId);
-        if (customer.deleted || customer.email) {
-          return { status: 409, body: { message: "Provisional billing must collect email in Checkout" } };
-        }
-      }
       priceId = storeSubscriptionPlans.find((plan) => plan.id === "Pro")
         ?.types.find((type) => type.title === "Monthly")?.stripePriceId ?? null;
       const expectedProduct = process.env.STRIPE_PRO_PRODUCT_ID;
@@ -554,8 +560,7 @@ export async function createAuthorizedCheckoutSession(
       quantity: billedQuantity,
       returnUrl: returnUrl!,
       teamId: team.id,
-      ownerUserId: userId,
-      trialDays: mode === "Trial" ? (enabled ? 7 : 14) : 0,
+      ...(enabled ? { ownerUserId: userId, trialDays: mode === "Trial" ? 7 : 0 } : {}),
       ...(signupIntent ? { checkoutIntent: "signup-straight-to-board" as const } : {}),
     };
     if (attempt?.state === "prepared" && !desiredMatches(attempt.desired, desired)) {
@@ -628,8 +633,11 @@ export async function createAuthorizedCheckoutSession(
       );
       if (attemptSession?.status === "complete") {
         const completedSubscriptionId = checkoutSubscriptionId(attemptSession);
+        const completedSubscription = subscriptions.find((subscription) => subscription.id === completedSubscriptionId);
         if (
           completedSubscriptionId &&
+          completedSubscription?.status !== "canceled" &&
+          completedSubscription?.status !== "incomplete_expired" &&
           billingDesiredMatches(attempt.desired, desired) &&
           sessionBillingMatchesDesired(attemptSession, desired)
         ) {

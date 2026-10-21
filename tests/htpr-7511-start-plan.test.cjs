@@ -6,10 +6,11 @@ const React = require("react");
 const { JSDOM } = require("jsdom");
 const { load, root } = require("./helpers/agent-connection.cjs");
 process.env.NEXT_PUBLIC_STRIPE_MONTHLY_PRICE_ID_PRO = "price_pro_month";
+process.env.NEXT_PUBLIC_BASEURL = "https://app.hypertask.ai";
 const jiti = require("jiti")(__filename, { interopDefault: true, alias: { "@": path.join(root, "src") } });
 const billing = jiti(path.join(root, "src/lib/deriveCurrentBoardBilling.ts"));
-const flag = load("src/lib/flags/definitions/htpr-7511-signup-straight-to-board.ts");
-const key = flag.HTPR_7511_SIGNUP_STRAIGHT_TO_BOARD_FLAG;
+const flag = load("src/lib/flags/definitions/htpr-7551-start-plan-checkout.ts");
+const key = flag.HTPR_7551_START_PLAN_CHECKOUT_FLAG;
 const read = (file) => fs.readFileSync(path.join(root, file), "utf8");
 const freeBoard = () => ({ id: 7, teamId: "team-owned", team: {
   id: "team-owned", stripe_customer_id: "cus_owned", subscriptionPlan: [],
@@ -18,7 +19,7 @@ const freeBoard = () => ({ id: 7, teamId: "team-owned", team: {
 
 async function withButton(fn) {
   const dom = new JSDOM("<!doctype html><div id='root'></div>", { url: "https://app.hypertask.ai/project?id=7&view=default#board" });
-  const previous = { React: global.React, window: global.window, document: global.document, IS_REACT_ACT_ENVIRONMENT: global.IS_REACT_ACT_ENVIRONMENT };
+  const previous = { React: global.React, window: global.window, document: global.document, IS_REACT_ACT_ENVIRONMENT: global.IS_REACT_ACT_ENVIRONMENT, fetch: global.fetch };
   Object.assign(global, { React, window: dom.window, document: dom.window.document, IS_REACT_ACT_ENVIRONMENT: true });
   const { createRoot } = require("react-dom/client");
   const container = dom.window.document.getElementById("root");
@@ -46,7 +47,7 @@ async function withButton(fn) {
     },
     "@/lib/state": { useRecoilValue: (atom) => atom === "user" ? { id: state.userId } : state.board }, "@/store": { currentProjectAtom: "project", currentUserAtom: "user" },
     "@/hooks/useFlag": flagMock,
-    "@/lib/flags/definitions/htpr-7511-signup-straight-to-board": flag,
+    "@/lib/flags/definitions/htpr-7551-start-plan-checkout": flag,
     "@/lib/deriveCurrentBoardBilling": billing,
   });
   const legacy = load("src/components/Modals/TrialPlan/TrialPlanComponents.tsx", {
@@ -55,18 +56,32 @@ async function withButton(fn) {
     "@/lib/subscriptionPlans": { storeSubscriptionPlans: [{ perks: [] }, { perks: [] }] },
     "@/components/PageComponents/Kanban/HeaderComponents/StartPlanButton": buttonModule,
     "@/hooks/useFlag": flagMock,
-    "@/lib/flags/definitions/htpr-7511-signup-straight-to-board": flag,
+    "@/lib/flags/definitions/htpr-7551-start-plan-checkout": flag,
     "next/navigation": { useRouter: () => router },
   });
+  const trialHook = load("src/hooks/General/useTrial.ts", {
+    axios, "next/navigation": { useRouter: () => router },
+    "@/lib/constants/APIRouteConstants": { CHECKOUT_SESSION_API_ENDPOINT: "/api/stripe/session/checkout" },
+    "@/lib/constants/constants": { createCheckoutParam: (teamInfo, plan, selectedTime, mode, returnUrl, cancelUrl) => ({
+      teamId: teamInfo.teamId, stripe_customer_id: teamInfo.stripe_customer_id, googleAccountId: teamInfo.googleAccountId,
+      quantity: teamInfo.totalSeats, priceId: plan.types[selectedTime].stripePriceId, mode, returnUrl, cancelUrl,
+    }) },
+    "@/lib/state": { useRecoilState: (atom) => [atom === "user" ? { id: state.userId } : state.board, () => {}] },
+    "@/store": { currentProjectAtom: "project", currentUserAtom: "user" },
+    "@/utils/helperFunctions/helperFunctions": { constructTrialPageURL: () => "https://app.hypertask.ai/trial-plan-confirmation" },
+  }).default;
+  global.fetch = async () => ({ ok: true, json: async () => [freeBoard()] });
   const TrialCard = load("src/components/PageComponents/Trial/TrialCard.tsx", {
     "@/components/PageComponents/Kanban/HeaderComponents/StartPlanButton": buttonModule,
     "@/hooks/useFlag": flagMock,
-    "@/lib/flags/definitions/htpr-7511-signup-straight-to-board": flag,
-    "@/hooks/General/useTrial": () => ({ selectedTime: 0, createCheckout() {}, handleDurationChange() {} }),
+    "@/lib/flags/definitions/htpr-7551-start-plan-checkout": flag,
+    "@/hooks/General/useTrial": trialHook,
+    "@/lib/state": { useRecoilValue: () => state.board },
+    "@/store": { currentProjectAtom: "project" },
     "@/assets/AILogo.png": { src: "fixture.png" }, "next/image": () => null,
   }).default;
   const renderCard = async () => React.act(async () => reactRoot.render(React.createElement(TrialCard, {
-    teamInfo: { teamId: "team-owned" }, manageLink: "/manage", plan: { id: "BYOK", name: "BYOK", types: [{ price: "$10", description: "per user/month" }] },
+    teamInfo: { teamId: "team-owned", stripe_customer_id: "cus_owned", googleAccountId: "account-owned", totalSeats: 3 }, manageLink: "/manage", plan: { id: "BYOK", name: "BYOK", types: [{ price: "$10", description: "per user/month", stripePriceId: "price_legacy_trial" }] },
     hasSubscription: { activeStorePlan: "Free" },
   })));
   const render = async (props = {}) => React.act(async () => reactRoot.render(React.createElement(buttonModule.StartPlanButton, { project: state.board, compact: true, ...props })));
@@ -216,12 +231,12 @@ test("legacy labels wait for flags, flagged legacy buttons reuse StartPlanButton
 test("header mounts action beside title under the ticket flag; alternate trial entry uses the same owner capability", () => {
   const header = read("src/components/PageComponents/Kanban/HeaderComponents/header.tsx");
   assert.match(header, /TitleKanbanHeader project=\{project\}[\s\S]*?startPlanEnabled && <StartPlanButton project=\{currentProject\} compact/);
-  assert.match(header, /useFlag\(HTPR_7511_SIGNUP_STRAIGHT_TO_BOARD_FLAG\)/);
+  assert.match(header, /useFlag\(HTPR_7551_START_PLAN_CHECKOUT_FLAG\)/);
   const alternate = read("src/components/Modals/TrialPlan/TrialModalV2.tsx");
   assert.match(alternate, /if \(!flagReady\) return null/);
   assert.match(alternate, /if \(startPlanEnabled\) return team\?\.id \? <StartPlanButton teamId=\{team\.id\}/);
   const settings = read("src/components/Modals/Settings/PlansSection.tsx");
-  assert.match(settings, /useFlag\(HTPR_7511_SIGNUP_STRAIGHT_TO_BOARD_FLAG\)/);
+  assert.match(settings, /useFlag\(HTPR_7551_START_PLAN_CHECKOUT_FLAG\)/);
   assert.match(settings, /plan.id === "Free"[\s\S]*?!planFlagReady \? "Checking plan access…" : startPlanEnabled \? "Free plan" : selectedType.description/);
   assert.doesNotMatch(read("src/components/PageComponents/Kanban/HeaderComponents/StartPlanButton.tsx"), /trialStatus|hasSubscription/);
 });
@@ -241,3 +256,25 @@ test("the standalone legacy trial card also refuses flagged members and still al
     await renderCard(); assert.match(container.textContent, /Begin Hypertask Trial/);
   });
 });
+
+
+for (const selection of ["none", "different team"]) {
+  test(`standalone trial card still checks out its explicit team with ${selection} selected`, async () => {
+    await withButton(async ({ state, dom, renderCard, container, requests, pushes }) => {
+      dom.reconfigure({ url: "https://app.hypertask.ai/trial-plan-confirmation?teamId=team-owned" });
+      state.data = { canStartPlan: true, trialDays: 7 };
+      state.board = selection === "none" ? null : { ...freeBoard(), teamId: "other-team", team: { ...freeBoard().team, id: "other-team" } };
+      await renderCard();
+      const action = [...container.querySelectorAll("div")].find((node) => node.textContent === "Begin Hypertask Trial");
+      assert.ok(action);
+      await React.act(async () => action.dispatchEvent(new dom.window.MouseEvent("click", { bubbles: true })));
+      assert.equal(requests.length, 1);
+      assert.equal(requests[0].body.teamId, "team-owned");
+      assert.equal(requests[0].body.stripe_customer_id, "cus_owned");
+      assert.equal(requests[0].body.mode, "Trial");
+      assert.deepEqual(pushes, ["https://checkout.stripe.test/session"]);
+      state.board = freeBoard(); await renderCard();
+      assert.equal(container.querySelector("button").textContent, "Start a Hypertask plan");
+    });
+  });
+}

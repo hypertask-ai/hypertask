@@ -1,7 +1,7 @@
 
 import dynamic from "next/dynamic";
 import { useFlag } from "@/hooks/useFlag";
-import { HTPR_7511_SIGNUP_STRAIGHT_TO_BOARD_FLAG } from "@/lib/flags/definitions/htpr-7511-signup-straight-to-board";
+import { HTPR_7551_START_PLAN_CHECKOUT_FLAG } from "@/lib/flags/definitions/htpr-7551-start-plan-checkout";
 import { StartPlanButton } from "./StartPlanButton";
 import { IMember, IProject, IUser } from "@/models/model";
 import React, { Suspense, useCallback, useContext, useEffect } from "react";
@@ -82,7 +82,7 @@ const Header = ({
     void prefetchInboxQuery(queryClient, currentUser.id);
   }, [currentUser.id, queryClient]);
 
-  const startPlanEnabled = useFlag(HTPR_7511_SIGNUP_STRAIGHT_TO_BOARD_FLAG);
+  const startPlanEnabled = useFlag(HTPR_7551_START_PLAN_CHECKOUT_FLAG);
   const isTrialUser = !currentUser.UserSetting.trialStatus;
 
   useEffect(() => {

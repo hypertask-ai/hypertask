@@ -1,7 +1,7 @@
 "use client";
 
 import { useFlag, useFlagReady } from "@/hooks/useFlag";
-import { HTPR_7511_SIGNUP_STRAIGHT_TO_BOARD_FLAG } from "@/lib/flags/definitions/htpr-7511-signup-straight-to-board";
+import { HTPR_7551_START_PLAN_CHECKOUT_FLAG } from "@/lib/flags/definitions/htpr-7551-start-plan-checkout";
 import { useRecoilState } from "@/lib/state";
 import { currentProjectAtom } from "@/store";
 import { useRouter } from "next/navigation";
@@ -10,8 +10,8 @@ import { parseCookies } from "nookies";
 const Success = () => {
   const [_currentProject, _] = useRecoilState(currentProjectAtom);
   const router = useRouter();
-  const startPlanEnabled = useFlag(HTPR_7511_SIGNUP_STRAIGHT_TO_BOARD_FLAG);
-  const flagReady = useFlagReady(HTPR_7511_SIGNUP_STRAIGHT_TO_BOARD_FLAG);
+  const startPlanEnabled = useFlag(HTPR_7551_START_PLAN_CHECKOUT_FLAG);
+  const flagReady = useFlagReady(HTPR_7551_START_PLAN_CHECKOUT_FLAG);
 
   const onClickHandler = () => {
     if (_currentProject?.id) {

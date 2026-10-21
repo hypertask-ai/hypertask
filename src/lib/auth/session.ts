@@ -1,7 +1,6 @@
 import { createHmac, randomBytes, timingSafeEqual } from 'crypto'
 
 export const SESSION_COOKIE = 'ht_session'
-export const PROVISIONAL_CHECKOUT_COOKIE = 'ht_provisional_checkout'
 export const SESSION_TTL_SECONDS = 600 * 60 * 24 * 7
 const TOKEN_PART_PATTERN = /^[A-Za-z0-9_-]+$/
 
@@ -12,7 +11,6 @@ type SessionPayload = {
 }
 
 type SignedSessionPayload = SessionPayload & {
-  provisionalTeamId?: string
   iat: number
   jti?: string
   exp: number
@@ -48,14 +46,13 @@ function hmacSha256(value: string): Buffer {
   return createHmac('sha256', getSessionSecret()).update(value).digest()
 }
 
-function createSignedSession(
-  payload: SessionPayload & { provisionalTeamId?: string },
+export function signSession(
+  payload: SessionPayload,
   ttlSeconds: number = SESSION_TTL_SECONDS
 ): string {
   const now = Math.floor(Date.now() / 1000)
   const signedPayload: SignedSessionPayload = {
     id: payload.id,
-    ...(payload.provisionalTeamId !== undefined ? { provisionalTeamId: payload.provisionalTeamId } : {}),
     ...(payload.email !== undefined ? { email: payload.email } : {}),
     ...(payload.agentId !== undefined ? { agentId: payload.agentId } : {}),
     iat: now,
@@ -66,21 +63,6 @@ function createSignedSession(
   const encodedSignature = base64UrlEncode(hmacSha256(encodedPayload))
 
   return `${encodedPayload}.${encodedSignature}`
-}
-
-export function signSession(payload: SessionPayload, ttlSeconds: number = SESSION_TTL_SECONDS): string {
-  return createSignedSession(payload, ttlSeconds)
-}
-
-export function signProvisionalCheckoutSession(id: number, teamId: string, ttlSeconds: number = 60 * 60): string {
-  if (!teamId.trim()) throw new Error('A provisional checkout requires a team')
-  return createSignedSession({ id, provisionalTeamId: teamId }, ttlSeconds)
-}
-
-export function verifyProvisionalCheckoutSession(token: string | undefined): { id: number; provisionalTeamId: string } | null {
-  const payload = verifiedSessionPayload(token)
-  if (!payload?.provisionalTeamId || payload.agentId || payload.email !== undefined) return null
-  return { id: payload.id, provisionalTeamId: payload.provisionalTeamId }
 }
 
 function verifiedSessionPayload(token: string | undefined): SignedSessionPayload | null {
@@ -117,8 +99,6 @@ function verifiedSessionPayload(token: string | undefined): SignedSessionPayload
     if (
       typeof payload.id !== 'number' ||
       !Number.isFinite(payload.id) ||
-      (payload.provisionalTeamId !== undefined &&
-        (typeof payload.provisionalTeamId !== 'string' || !payload.provisionalTeamId.trim())) ||
       (payload.email !== undefined && typeof payload.email !== 'string') ||
       (payload.agentId !== undefined &&
         (typeof payload.agentId !== 'string' || payload.agentId.length === 0)) ||
@@ -137,7 +117,7 @@ function verifiedSessionPayload(token: string | undefined): SignedSessionPayload
 
 export function verifySession(token: string | undefined): SessionPayload | null {
   const payload = verifiedSessionPayload(token)
-  if (!payload || payload.provisionalTeamId !== undefined) return null
+  if (!payload) return null
 
   return {
     id: payload.id,
