@@ -70,6 +70,7 @@ function makeHarness({ existing = true, membershipOnly = false, flagMode = 'EVER
     assignees: { updateMany: async () => {} },
     $transaction: async (callback) => callback(prisma),
     featureFlag: { findUnique: async ({ where }) => {
+      if (where.key === 'htpr-7511-signup-straight-to-board') return { mode: 'OFF' }
       calls.flags.push(where.key)
       if (failFlag && where.key === flagKey) throw new Error('test flag read failure')
       return where.key === flagKey && flagMode !== null ? { mode: flagMode } : null

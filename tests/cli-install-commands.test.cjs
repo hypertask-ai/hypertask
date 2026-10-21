@@ -35,7 +35,9 @@ const flagReads = [];
 let enabled = true;
 const flagsMock = {
   HTPR_7033_CLI_INSTALL_COMMAND_FLAG: key,
+  HTPR_7511_SIGNUP_STRAIGHT_TO_BOARD_FLAG: "htpr-7511-signup-straight-to-board",
   isFeatureEnabled: async (flag, userId) => {
+    if (flag !== key) return false;
     flagReads.push([flag, userId]);
     return enabled;
   },

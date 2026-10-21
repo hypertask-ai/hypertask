@@ -53,6 +53,10 @@ export async function createTaskWithBoardWebhookOutbox<T>(
       actor.userId,
       actor.agentId
     )
+    await tx.project.updateMany({
+      where: { id: created.webhookTask.projectId, firstTaskPointerTaskId: { not: null }, firstRealTaskCreatedAt: null },
+      data: { firstRealTaskCreatedAt: new Date() },
+    })
     const analyticsKey = await enqueueTaskCreated(tx, created.taskId, { userId: actor.userId, agentId: actor.agentId ?? analyticsAgentId }, channel)
     return { analyticsKey, result: created.result, boardWebhookDeliveryIds }
   })

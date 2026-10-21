@@ -1,6 +1,7 @@
 import { useFlag } from "@/hooks/useFlag";
 import { updateSection as writeSection } from "@/lib/api/typedClient";
 import { HTPR_6979_TYPED_WRITES_FLAG } from "@/lib/flags/keys";
+import { HTPR_7511_SIGNUP_STRAIGHT_TO_BOARD_FLAG } from "@/lib/flags/definitions/htpr-7511-signup-straight-to-board";
 
 import React, { useCallback, useContext, useMemo, useRef, useState } from "react";
 import { useRecoilValue } from "@/lib/state";
@@ -39,6 +40,7 @@ import ConfirmTaskDelete from "@/components/Modals/confirmDeleteModals/confirmtT
 import { TBoardSortingViewMode } from "@/models/Views/model";
 import { useDeviceContext } from "@/lib/contexts/deviceContext";
 import BoardEmptyState from "./BoardEmptyState";
+import FirstTaskPointer from "../KanbanSectionComponents/FirstTaskPointer";
 import { detectEmptyBoardState } from "@/utils/helperFunctions/Views/BoardEmptyStateHelper";
 import { getAppliedSearchedTasks } from "@/utils/helperFunctions/Views/SearchFilterHelperFunction";
 import { boardSearchAtom } from "@/store";
@@ -50,7 +52,7 @@ import axios from "axios";
 import useKanbanViews from "@/hooks/Homepage/Views/useKanbanViews";
 import useRevealFocusOnViewSwitch from "@/hooks/Homepage/Views/useRevealFocusOnViewSwitch";
 import { getActiveBoardViewId } from "@/lib/constants/builtinViews";
-import { getActiveColumnsViewFromProject } from "@/utils/helperFunctions/Views/ViewsHelperFunctions";
+import { getActiveFiltersFromProject, getActiveColumnsViewFromProject } from "@/utils/helperFunctions/Views/ViewsHelperFunctions";
 import {
   applyVisibleSectionOrder,
   getSectionId,
@@ -790,6 +792,18 @@ const HomePage = ({
     ? detectEmptyBoardState(_sections, filteredSections, _currentProject)
     : null;
 
+  const firstTaskPointerEnabled = useFlag(HTPR_7511_SIGNUP_STRAIGHT_TO_BOARD_FLAG);
+  const pointerTaskIds = useMemo(() => firstTaskPointerEnabled ? Array.from(new Set([
+    ...(_currentProject.tasks ?? []).map((task) => task.id),
+    ...sections.flatMap((section) => (section.items ?? []).map((task) => task.id)),
+  ])).sort((a, b) => a - b) : [], [firstTaskPointerEnabled, _currentProject.tasks, sections]);
+  const pointerFiltered = !firstTaskPointerEnabled || Boolean(
+    getActiveFiltersFromProject(_currentProject).addedFilters?.length ||
+    (searchProjectId === _currentProject.id && searchKeyword.trim()) ||
+    runningOnly ||
+    getActiveBoardViewId(_currentProject, activeBuiltinViews)?.startsWith("builtin:")
+  );
+
   const renderSections = (archivedTasks?: ITask[]) =>
     displaySections && displaySections.map((sec, index) => (
               <Draggable
@@ -821,6 +835,18 @@ const HomePage = ({
                 renderAllTasks={renderAllTasks}
                 dragDisabled={mobileBoardZoomedOut}
                 project={_currentProject}
+                firstTaskPointer={firstTaskPointerEnabled ? (
+                  <FirstTaskPointer
+                    projectId={_currentProject.id}
+                    sectionId={sec.sectionId ?? sec.id!}
+                    sectionIndex={index}
+                    taskIds={pointerTaskIds}
+                    ready={tasksHydrated && secondaryStartupEnabled}
+                    writable={Number(_currentProject.ownerId) === currentUser.id}
+                    filtered={pointerFiltered || hiddenSectionIndexes.has(index)}
+                    kanban
+                  />
+                ) : null}
               />)}
               </Draggable>
             ));
