@@ -6,6 +6,7 @@ const root = path.resolve(__dirname, "..");
 const jiti = require("jiti")(__filename, { interopDefault: true, alias: { "@": path.join(root, "src") } });
 const schemas = jiti(path.join(root, "src/lib/mcp-server/validations/project.validation.ts"));
 const { TOOL_METADATA } = loadTs("src/lib/mcp-server/config/tool-metadata.ts", {
+  "@/lib/mcp/decisionsGuidance": loadTs("src/lib/mcp/decisionsGuidance.ts", {}),
   "./mcp-standards": jiti(path.join(root, "src/lib/mcp-server/config/mcp-standards.ts")),
   "@/utils/controllers/reports/reportService": { REPORT_CAPABILITIES: "" },
   "./tool-summaries": jiti(path.join(root, "src/lib/mcp-server/config/tool-summaries.ts")),
