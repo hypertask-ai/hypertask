@@ -5,6 +5,10 @@ import { randomUUID } from "node:crypto";
 import { fileURLToPath } from "node:url";
 import { QA_ACCOUNT_STATE, localFlagModes, readPlainQaFlags } from "./premerge-local-flags.mjs";
 
+const visual = process.argv.includes("--visual");
+const VISUAL_NOW = "2026-10-01T12:00:00Z";
+const visualFlags = ["htpr-6752-instant-ticket-open", "htpr-6899-stable-layout", "htpr-6929-compose-task-writer", "htpr-6937-new-task-window", "htpr-6891-phone-task-writer-sheet"];
+
 const stateFile = process.env.BROWSER_SMOKE_STATE_FILE;
 if (!stateFile) throw new Error("BROWSER_SMOKE_STATE_FILE is required");
 if (!process.env.GITHUB_OUTPUT) throw new Error("GITHUB_OUTPUT is required");
@@ -24,7 +28,9 @@ const localPremerge = process.env.PREMERGE_LOCAL === "1";
 const instantOpenControl = process.argv.includes("--instant-open-control");
 const allFlagsOn = process.argv.includes("--all-flags-on");
 const liveLikeControl = process.argv.includes("--live-like-control");
-if ([instantOpenControl, allFlagsOn, liveLikeControl].filter(Boolean).length > 1) throw new Error("Choose one browser smoke flag control");
+if (visual && (localPremerge || contractEnabled)) throw new Error("Visual fixtures require a fresh disposable CI database");
+if ([visual, instantOpenControl, allFlagsOn, liveLikeControl].filter(Boolean).length > 1) throw new Error("Choose one browser smoke flag control");
+if (visual) for (const key of visualFlags) modes[key] = "EVERYONE";
 if (instantOpenControl) modes["htpr-6752-instant-ticket-open"] = "EVERYONE";
 for (const [key, mode] of Object.entries(modes)) {
   if (!/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(key) || !["OFF", "OWNER_ONLY", "OWNER_AND_QA", "EVERYONE"].includes(mode)) {
@@ -50,7 +56,8 @@ async function createBoard({ ownerId, teamId, googleAccountId, title, suffix, lo
   const sectionTitles = ["To do", "Done"];
   const project = await prisma.project.create({
     data: {
-      name: `browser-smoke-${suffix}-${runKey}`,
+      name: visual ? `visual-${suffix}` : `browser-smoke-${suffix}-${runKey}`,
+      ...(visual ? { createdAt: new Date(VISUAL_NOW) } : {}),
       title,
       ownerId,
       teamId,
@@ -79,7 +86,8 @@ async function createBoard({ ownerId, teamId, googleAccountId, title, suffix, lo
       uniqueIndex: 1,
       ticketNumber: `${suffix.toUpperCase()}-1`,
       title: `${title} fixture`,
-      updatedAt: new Date(),
+      updatedAt: new Date(visual ? VISUAL_NOW : Date.now()),
+      ...(visual ? { createdAt: new Date(VISUAL_NOW), sectionChangedAt: new Date(VISUAL_NOW) } : {}),
       description: "",
       description_: {
         create: { content: "<p>This seeded ticket must open from its board card.</p>", creatorId: ownerId },
@@ -97,7 +105,7 @@ async function createBoard({ ownerId, teamId, googleAccountId, title, suffix, lo
       creatorId: ownerId,
       text: `<p>${text}</p>`,
       commentText: text,
-      createdAt: new Date(Date.now() - (2 - index) * 60_000),
+      createdAt: new Date((visual ? Date.parse(VISUAL_NOW) : Date.now()) - (2 - index) * 60_000),
     })),
   });
   // HTPR-7074: the CLS test gets its own board, so the layout-lock fixture ticket stays exactly as it was.
@@ -108,7 +116,7 @@ async function createBoard({ ownerId, teamId, googleAccountId, title, suffix, lo
         creatorId: ownerId,
         text: [1, 2].map((paragraph) => `<p>Long thread comment ${index + 1}, paragraph ${paragraph}. The quick brown fox jumps over the lazy dog, then keeps going so this paragraph wraps onto several lines in the thread.</p>`).join(""),
         commentText: `Long thread comment ${index + 1}`,
-        createdAt: new Date(Date.now() - (9 - index) * 60_000),
+        createdAt: new Date((visual ? Date.parse(VISUAL_NOW) : Date.now()) - (9 - index) * 60_000),
       })),
     });
   }
@@ -118,10 +126,11 @@ async function createBoard({ ownerId, teamId, googleAccountId, title, suffix, lo
 async function seedSessionFixtures(flags) {
   const user = await prisma.user.create({
     data: {
-      uid: `browser-smoke-${runKey}`,
+      uid: visual ? "visual-regression-user" : `browser-smoke-${runKey}`,
+      ...(visual ? { photoURL: null, joinedAt: new Date(VISUAL_NOW), updatedAt: new Date(VISUAL_NOW) } : {}),
       ...(localPremerge ? { id: 985 } : {}),
-      email: localPremerge ? "valentin@hypertask.ai" : `browser-smoke-${runKey}@example.invalid`,
-      displayName: "Browser smoke user",
+      email: visual ? "visual-user@example.invalid" : localPremerge ? "valentin@hypertask.ai" : `browser-smoke-${runKey}@example.invalid`,
+      displayName: visual ? "Visual regression user" : "Browser smoke user",
       UserSetting: {
         create: {
           notification: false,
@@ -150,7 +159,7 @@ async function seedSessionFixtures(flags) {
       data: {
         userId: user.id,
         totalTeamsOwned: 1,
-        lastActiveAt: new Date(),
+        lastActiveAt: new Date(visual ? VISUAL_NOW : Date.now()),
       },
     }),
   ]);
@@ -172,7 +181,7 @@ async function seedSessionFixtures(flags) {
     prisma.team_Activity.create({
       data: {
         teamId: team.id,
-        lastActiviyAt: new Date(),
+        lastActiviyAt: new Date(visual ? VISUAL_NOW : Date.now()),
       },
     }),
     prisma.member_Team.create({
@@ -181,7 +190,7 @@ async function seedSessionFixtures(flags) {
         teamId: team.id,
         googleAccountId: googleAccount.id,
         status: "Accepted",
-        acceptedAt: new Date(),
+        acceptedAt: new Date(visual ? VISUAL_NOW : Date.now()),
       },
     }),
     prisma.user.update({
@@ -189,6 +198,7 @@ async function seedSessionFixtures(flags) {
       data: {
         accountId: googleAccount.id,
         UserSettingId: user.UserSetting.id,
+        ...(visual ? { updatedAt: new Date(VISUAL_NOW) } : {}),
       },
     }),
   ]);
@@ -339,13 +349,14 @@ async function seedSessionFixtures(flags) {
     await writeFile(path.join(path.dirname(stateFile), "contract-fixture.json"), JSON.stringify(contract), { flag: "wx", mode: 0o600 });
   }
   await writeFile(fixtureFile, JSON.stringify({
+    ...(visual ? { visualNow: VISUAL_NOW, boardPath: `/project?id=${board.id}&surface=board` } : {}),
     taskId: board.task.id,
     title: board.task.title,
     description: "This seeded ticket must open from its board card.",
     detailPath: `/detail/project-${board.id}/${board.task.uniqueIndex}`,
     longThreadDetailPath: `/detail/project-${threadBoard.id}/${threadBoard.task.uniqueIndex}`,
     flags,
-    ...((localPremerge || contractEnabled) ? { searchRows: [board, demoBoard, ...(contract?.boards ?? [])].map(project => ({
+    ...((localPremerge || contractEnabled || visual) ? { searchRows: [board, demoBoard, ...(contract?.boards ?? [])].map(project => ({
       id: String(project.task.id),
       ticketNumber: project.task.ticketNumber,
       title: project.task.title,
