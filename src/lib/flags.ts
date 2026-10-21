@@ -144,6 +144,13 @@ const isFeatureFlagQaUser = (
 
 export const isFeatureFlagOwnerUserId = isFeatureFlagOwnerUser;
 
+export async function isOwnerOrQaUserId(
+  userId: number,
+  db: FeatureFlagDatabase = prisma,
+): Promise<boolean> {
+  return (await isFeatureFlagOwnerUser(userId, db)) || (await isFeatureFlagQaUser(userId, db));
+}
+
 export async function isFeatureFlagOwner(headers: Headers): Promise<boolean> {
   const { getSessionUser } = await import("@/lib/auth/getSessionUser");
   const session = await getSessionUser(headers);
