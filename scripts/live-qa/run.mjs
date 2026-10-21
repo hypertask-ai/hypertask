@@ -13,7 +13,7 @@ export function selectScript(ticket, script, sha, directory = root) {
   const manifest = JSON.parse(readFileSync(path.join(directory, 'scripts/live-qa/allowed-scripts.json'), 'utf8'))
   const entry = manifest[script]
   if (!entry || entry.ticket !== ticket || !Array.isArray(entry.boardIds) || !entry.boardIds.every(id => Number.isSafeInteger(id) && id > 0)) throw new Error('Script not approved')
-  const boundary = realpathSync(path.join(directory, 'e2e/live-qa')) + path.sep
+  const boundary = path.join(realpathSync(directory), 'e2e/live-qa') + path.sep
   const resolved = realpathSync(path.join(directory, script))
   if (!resolved.startsWith(boundary) || !statSync(resolved).isFile()) throw new Error('Script escaped its directory')
   return { ...entry, script: resolved }

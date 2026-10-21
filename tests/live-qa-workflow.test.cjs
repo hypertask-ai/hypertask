@@ -238,6 +238,22 @@ test('launcher refuses unknown ticket, bad SHA, invalid manifest and symlink esc
   assert.throws(() => selectScript('YPER4-544', script, sha, directory), /escaped/);
 });
 
+test('launchers refuse symlinked allowlist roots, not only symlinked files', async t => {
+  const { selectScript } = await load('scripts/live-qa/run.mjs');
+  const { selectWireframe } = await load('scripts/wireframe-capture.mjs');
+  const { directory, put } = fixture(t);
+  put('outside-qa/YPER4-544.spec.ts', 'export {}');
+  rmSync(path.join(directory, 'e2e/live-qa'), { recursive: true });
+  symlinkSync(path.join(directory, 'outside-qa'), path.join(directory, 'e2e/live-qa'));
+  assert.throws(() => selectScript('YPER4-544', script, sha, directory), /escaped/);
+  const input = 'docs/wireframes/YPER4-544/index.html';
+  put('scripts/wireframe-capture-allowed.json', JSON.stringify({ [input]: { ticket: 'YPER4-544' } }));
+  put('outside-wireframes/YPER4-544/index.html', '<html>public fixture</html>');
+  mkdirSync(path.join(directory, 'docs'));
+  symlinkSync(path.join(directory, 'outside-wireframes'), path.join(directory, 'docs/wireframes'));
+  assert.throws(() => selectWireframe('YPER4-544', input, directory), /escaped/);
+});
+
 test('mutation guard allows listed board and refuses unrelated, conflicting and external writes', async () => {
   const { allowsRequest } = await load('scripts/live-qa/run.mjs');
   const url = 'https://app.hypertask.ai/api/tasks/create';

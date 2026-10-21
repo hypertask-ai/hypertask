@@ -47,6 +47,7 @@ export function collectEvidence(results, evidence, outcome, metadata) {
 }
 
 function main() {
+  process.umask(0o077)
   const mode = process.argv[2]
   if (!['validate', 'encrypt'].includes(mode) || process.argv.length !== 3) throw new Error('Invalid mode')
   selectScript(process.env.LIVE_QA_TICKET, process.env.LIVE_QA_SCRIPT, process.env.LIVE_QA_EXPECTED_SHA)

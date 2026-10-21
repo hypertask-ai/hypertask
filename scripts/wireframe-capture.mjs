@@ -13,7 +13,7 @@ export function selectWireframe(ticket, input, directory = root) {
   if (typeof ticket !== 'string' || ticket !== ticket.trim() || !ticketPattern.test(ticket) || input !== `docs/wireframes/${ticket}/index.html`) throw new Error('Invalid wireframe')
   const manifest = JSON.parse(readFileSync(path.join(directory, 'scripts/wireframe-capture-allowed.json'), 'utf8'))
   if (!Object.hasOwn(manifest, input) || manifest[input].ticket !== ticket) throw new Error('Wireframe not approved')
-  const boundary = realpathSync(path.join(directory, 'docs/wireframes')) + path.sep
+  const boundary = path.join(realpathSync(directory), 'docs/wireframes') + path.sep
   const file = realpathSync(path.join(directory, input))
   if (!file.startsWith(boundary) || !statSync(file).isFile()) throw new Error('Wireframe escaped its directory')
   return { ticket, file, directory: path.dirname(file) }
