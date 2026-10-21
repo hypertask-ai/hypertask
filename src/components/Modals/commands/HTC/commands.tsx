@@ -54,7 +54,6 @@ import {
   GOOGLE_CALENDAR_FLAG,
   HTPR_7260_KANBAN_SELECT_ALL_FLAG,
   HTPR_6891_PHONE_TASK_WRITER_SHEET_FLAG,
-  HTPR_6892_CMDK_VERSION_FLAG,
   HTPR_6929_COMPOSE_TASK_WRITER_FLAG,
   HTPR_6937_NEW_TASK_WINDOW_FLAG,
   HTPR_7053_COMPOSE_BOARD_CHIP_FLAG,
@@ -142,7 +141,6 @@ const Commands = (props: Props) => {
   const onCalendar = !!pathname?.startsWith("/calendar");
   const onAgentChat = !!pathname?.startsWith("/agents/chat");
   const onMyTasks = !!pathname?.startsWith(myTasksRoute);
-  const cmdkVersionEnabled = useFlag(HTPR_6892_CMDK_VERSION_FLAG);
   const ticketPrefixEnabled = useFlag(HTPR_6868_TICKET_PREFIX_FLAG);
   const agentLogNameEnabled = useFlag(HTPR_6662_AGENT_LOG_NAME_FLAG);
   const roundedEnabled = useFlag(HTPR_7328_ROUNDED_THEME_FLAG);
@@ -813,11 +811,9 @@ const Commands = (props: Props) => {
           </div>
           {commandGroups}
           <ModalHintBar />
-          {cmdkVersionEnabled && (
-            <div data-cmdk-version className="px-4 pb-2 text-micro text-text-light-gray">
-              v {buildId}{buildTimeLabel && ` · ${buildTimeLabel}`}
-            </div>
-          )}
+          <div data-cmdk-version className="px-4 pb-2 text-micro text-text-light-gray">
+            v {buildId}{buildTimeLabel && ` · ${buildTimeLabel}`}
+          </div>
           </>}
         </ModalBody>
       </ModalContainerCustom>
