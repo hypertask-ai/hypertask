@@ -348,5 +348,19 @@
     "version": "1",
     "partsHash": "9d335829982f8a733311836748c8be91fd55301dda14475dd251a60ca84879ea",
     "expressionsHash": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945"
+  },
+  {
+    "file": "src/app/api/ai/_lib/editorAiPrompts.ts",
+    "id": "task-authoring-web-old-structure-style",
+    "version": "1",
+    "partsHash": "ead72cb11838c4e21c95c4dd11be6a7ab936e9db0eee85db79e87836176fe738",
+    "expressionsHash": "624812f6beb14e2e573fe546cdae7e709b56aca27234029abbf7de98dff2f854"
+  },
+  {
+    "file": "src/app/api/ai/_lib/taskWriterRun.ts",
+    "id": "task-writer-board-research-web-old-structure-rules",
+    "version": "1",
+    "partsHash": "cf72bc1102e777032ef19bdcc62508e58ff417b8e3039bf3d3d9d2f9c6eb4bd1",
+    "expressionsHash": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945"
   }
 ]

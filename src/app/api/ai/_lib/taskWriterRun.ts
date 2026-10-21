@@ -1,4 +1,5 @@
 import { taskWriterDateContext, taskWriterDueDateInstructions } from "@/lib/ai/taskWriterDueDate";
+import { HTPR_7500_WRITER_OLD_STRUCTURE_FLAG } from "@/lib/flags/keys";
 import { HTPR_7471_WRITER_BOARD_FORMAT_FLAG } from "@/lib/flags/keys";
 import type { TaskWriterCustomFieldDefinition } from "@/lib/ai/taskWriterCustomFields";
 import { HTPR_7054_CTRLJ_DUE_DATE_FLAG } from "@/lib/flags/keys";
@@ -310,10 +311,15 @@ export async function prepareTaskWriterRun(
     boardVocabulary,
   });
   const webWriting = await isFeatureEnabled(HTPR_7342_WEB_WRITING_TASK_WRITER_FLAG, userId);
-  const authoringStyle = boardFormatEnabled
-    ? createTaskAuthoringStyle(webWriting, true)
+  const oldStructure = await isFeatureEnabled(HTPR_7500_WRITER_OLD_STRUCTURE_FLAG, userId);
+  const authoringStyle = boardFormatEnabled || oldStructure
+    ? createTaskAuthoringStyle(webWriting, boardFormatEnabled, oldStructure)
     : webWriting ? TASK_AUTHORING_WEB_STYLE : TASK_AUTHORING_STYLE;
-  const boardResearchRules = webWriting ? TASK_WRITER_BOARD_RESEARCH_WEB_RULES : TASK_WRITER_BOARD_RESEARCH_RULES;
+  const boardResearchRules = webWriting
+    ? oldStructure
+      ? renderPrompt("task-writer-board-research-web-old-structure-rules")
+      : TASK_WRITER_BOARD_RESEARCH_WEB_RULES
+    : TASK_WRITER_BOARD_RESEARCH_RULES;
   const { instructions: baseInstructions, input } = createTaskWriterPromptParts({
     aiMode: body.aiMode,
     customInstructions,
