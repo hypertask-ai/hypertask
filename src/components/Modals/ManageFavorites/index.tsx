@@ -1,5 +1,7 @@
 "use client"
 
+import { useFlag } from "@/hooks/useFlag";
+import { HTPR_7510_FAVORITES_MENU_CONTRAST_FLAG } from "@/lib/flags/keys";
 import { useGetAllTeamsMinimal } from "@/hooks/MultiPages/useGetAllTeamsMinimal";
 import { ITeam } from "@/models/model";
 import { currentUserAtom } from "@/store";
@@ -19,6 +21,7 @@ interface IProps {
 
   
   const ManageFavorites = ({onClose}:IProps) => {
+    const favoritesMenuContrast = useFlag(HTPR_7510_FAVORITES_MENU_CONTRAST_FLAG);
     const isApple = useDeviceContext()
       
     const queryClient = useQueryClient();   
@@ -151,7 +154,7 @@ interface IProps {
                                 <div 
                                     
                                     id="dropdownSelectors"
-                                    className="dropdown border-[1px] border-black items-center relative flex rounded cursor-pointer">
+                                    className={`dropdown border-[1px] ${favoritesMenuContrast ? "border-border-light-gray-thin" : "border-black"} items-center relative flex rounded cursor-pointer`}>
                                     <span
                                         onClick={()=>toggleDropdown(index === 9 ? 0 : index + 1)}
                                         className="min-w-[210px] py-1 px-2 text-start">
@@ -162,7 +165,7 @@ interface IProps {
                                     </span>
                                     <div 
                                         onClick={()=>toggleDropdown(index === 9 ? 0 : index + 1)}
-                                        className="border-l-[1px]  px-2 py-[2px] h-full grid place-items-center border-black">
+                                        className={`border-l-[1px]  px-2 py-[2px] h-full grid place-items-center ${favoritesMenuContrast ? "border-border-light-gray-thin" : "border-black"}`}>
                                         <svg className="dropdown" width="15" height="8" viewBox="0 0 15 8" fill="none" xmlns="http://www.w3.org/2000/svg">
                                             <path d="M7.5 8L0 0H15L7.5 8Z" fill="currentColor"/>
                                         </svg>
@@ -174,6 +177,7 @@ interface IProps {
                                             setNewFavorite={setNewFavorite}
                                             indexKey={index === 9 ? 0 : index + 1}
                                             teams={teams}
+                                            favoritesMenuContrast={favoritesMenuContrast}
                                             dropdownRef={dropdownRef}
                                             />
                                     }
@@ -195,11 +199,13 @@ interface IProps {
 const TeamsDropDown = (
     {
         dropdownRef,
+        favoritesMenuContrast,
         teams,
         indexKey,
         setNewFavorite
     }:{
         dropdownRef:any,
+        favoritesMenuContrast:boolean,
         setNewFavorite: (projectId: any, projectTitle?: string, index?: number) => Promise<void>,
         indexKey:number,
         teams:ITeam[]})=>{
@@ -221,9 +227,9 @@ const TeamsDropDown = (
             
 
             useEffect(()=>{
-                    dropdownRef.current?.scrollIntoView({behavior:"smooth",block:"center",inline:"start"})
+                    dropdownRef.current?.scrollIntoView({behavior:"smooth",block:favoritesMenuContrast ? "nearest" : "center",inline:"start"})
                 
-            },[])
+            },[dropdownRef, favoritesMenuContrast])
 
     return (
         <ul
@@ -232,13 +238,14 @@ const TeamsDropDown = (
             style={{
                 top: '100%',
                 bottom: 'auto' }} 
-            className="dropdown-menu absolute flex max-h-[364px] w-[244px] cursor-auto flex-col overflow-y-scroll rounded-sm bg-modalBackground shadow-customshadow-2 p-4">
+            className={`dropdown-menu absolute flex max-h-[364px] w-[244px] cursor-auto flex-col overflow-y-scroll rounded-sm bg-modalBackground shadow-customshadow-2 p-4${favoritesMenuContrast ? " text-white-black" : ""}`}>
                 <li
                     onClick={reset}
-                    className="cursor-pointer font-medium pb-[1px] mb-[8px] ">
+                    className={`cursor-pointer font-medium pb-[1px] mb-[8px] ${favoritesMenuContrast ? "text-white-black hover:bg-hover-active" : ""}`}>
                     Do Nothing
                 </li>
             <TeamsRow
+                favoritesMenuContrast={favoritesMenuContrast}
                 indexKey={indexKey}
                 teams={teams}
                 setNewFavorite={setNewFavorite}
@@ -278,11 +285,13 @@ const KeyElement = (
 }
 const TeamsRow = (
     {
+        favoritesMenuContrast,
         teams,
         indexKey,
         setNewFavorite
     }:
     {
+        favoritesMenuContrast:boolean,
         teams:ITeam[],
         indexKey:number,
         setNewFavorite: (projectId: any, projectTitle?: string, index?: number) => Promise<void>
@@ -302,7 +311,7 @@ const TeamsRow = (
                                 <>
                                     <li 
                                         onClick={()=>setNewFavorite(project.id,project.title, indexKey)} 
-                                        className="flex h-[36px] cursor-pointer items-center rounded-sm px-3 text-dense font-medium hover:bg-hover-active">
+                                        className={`flex h-[36px] cursor-pointer items-center rounded-sm px-3 text-dense font-medium hover:bg-hover-active${favoritesMenuContrast ? " text-white-black" : ""}`}>
                                         {project.title}
                                     </li>
                                 </>
