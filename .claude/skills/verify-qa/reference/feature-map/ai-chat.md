@@ -12,6 +12,14 @@ and check which model actually answered if the ticket names one (the model
 picker sends a stable `modelOptionId`; see
 `src/lib/aiModelOptions.ts` for the current option list).
 
+Ctrl+J new ticket ([HTPR-7317](https://app.hypertask.ai/detail/project-15/7317)):
+press Ctrl+J on a board, type a note, create. The ticket opens with the
+sidebar intro "I created X from your note. Want me to refine it?" and, under
+"Questions and ideas for this ticket", 2 to 4 chips from
+`POST /api/ai/task-questions` with `kind: "new-ticket"`
+(`[data-compose-question]`). Wait for the chips (about 10 s), click one and
+check it is sent and answered in the same chat.
+
 ## What usually breaks
 
 - Provider/gateway slug drift breaking a specific model entirely: Grok chat
@@ -25,6 +33,9 @@ picker sends a stable `modelOptionId`; see
   once, watch for a recurrence).
 - Mobile Agent Chat chrome showing on the wrong path, or the wrong composer
   rendering ([HTPR-6476](https://app.hypertask.ai/detail/project-15/6476), two rounds).
+- Ctrl+J chips vanishing once the intro reloads from the server under a new
+  id ([HTPR-7317](https://app.hypertask.ai/detail/project-15/7317)): wait a
+  few seconds after they appear and check they are still there.
 
 ## What proof to collect
 
