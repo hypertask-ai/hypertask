@@ -12,7 +12,7 @@ import { PriorityConstants } from "@/lib/constants/constants";
 import getMemberAndOwner from "@/utils/controllers/getMemberAndOwnerForBoard";
 import { toStoredHtml } from "@/utils/helperFunctions/toStoredHtml";
 import { buildMcpTaskUrl } from "@/lib/mcp/boards/links";
-import { createTaskItemSchema, CreateTaskItemInput } from "@/lib/ai/tools/schemas";
+import { getCreateTaskItemSchema, CreateTaskItemInput } from "@/lib/ai/tools/schemas";
 import { MAX_BULK_TOOL_TARGETS } from "@/lib/ai/tools/constants";
 import { withToolErrors, dropEmptyPadding } from "@/lib/ai/tools/execution";
 import { sanitizeForJson, mapTaskToDetail } from "@/lib/ai/tools/helpers";
@@ -27,6 +27,7 @@ import type { ToolContext } from "./context";
 export function createCreateTaskTool(context: ToolContext) {
   const { sendStatus, user, confirmationSessionId, bulkPreviewsIssued, actingAgentId, body } = context;
   const { chatTaskWriterEnabled = false, abortSignal } = context;
+  const createTaskItemSchema = getCreateTaskItemSchema(context.inlineAgentImagesEnabled);
   const writerItemSchema = createTaskItemSchema.omit({ title: true, description: true, priority: true }).extend({
     brief: z.string().min(1).refine((value) => value.trim().length > 0, "Brief cannot be empty").describe("The user's request in their own words, unabridged, including relevant refinements. Do not pre-write a title or description."),
   });
@@ -209,7 +210,7 @@ export function createCreateTaskTool(context: ToolContext) {
               creationChannel: "agent",
               projectId: input.project_id,
               title,
-              description: await inlineAgentImagesForUser(description ? toStoredHtml(description) : "", user.id, { instructions: [body?.message, "brief" in input ? input.brief : undefined].filter(Boolean).join("\n"), inlineImages: input.inline_images, attachments: [...(body?.images64 ?? []), ...(body?.attachments ?? [])].flatMap((file) => file.url ? [{ url: file.url, fileName: file.fileName, mimeType: file.mimeType }] : []) }),
+              description: await inlineAgentImagesForUser(description ? toStoredHtml(description) : "", user.id, { instructions: body?.message, inlineImages: input.inline_images, attachments: [...(input.image_urls?.map((url) => ({ url })) ?? []), ...[...(body?.images64 ?? []), ...(body?.attachments ?? [])].flatMap((file) => file.url && (input.image_urls?.includes(file.url) || description?.includes(file.url)) ? [{ url: file.url, fileName: file.fileName, mimeType: file.mimeType }] : [])] }),
               sectionId: sectionCheck.section.id,
               sectionTitle: sectionCheck.section.section_title,
               userId: user.id,

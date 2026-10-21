@@ -1,3 +1,6 @@
+import { isFeatureEnabled } from "@/lib/flags";
+import { HTPR_7514_INLINE_AGENT_IMAGES_FLAG } from "@/lib/flags/keys";
+import { getMcpExecutionContext } from "@/lib/mcp/operationContext";
 import {
   validateAndSanitizeAddCommentCrudInput,
   getAddCommentCrudBaseSchema,
@@ -47,7 +50,9 @@ export const addCommentTool = {
             reply_to_comment_id: validatedInput.reply_to_comment_id,
             reply_to_invocation_id: validatedInput.reply_to_invocation_id,
           });
-          const result = await service.addComment(addParams, invocation);
+          const userId = typeof context === "string" ? getMcpExecutionContext(context)?.user.id : undefined;
+          const inlineAgentImages = userId ? await isFeatureEnabled(HTPR_7514_INLINE_AGENT_IMAGES_FLAG, userId) : false;
+          const result = await service.addComment(addParams, invocation, { inlineAgentImages });
           return result;
         }
 

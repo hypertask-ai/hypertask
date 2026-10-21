@@ -1,5 +1,3 @@
-import { isFeatureEnabled } from "@/lib/flags";
-import { HTPR_7514_INLINE_AGENT_IMAGES_FLAG } from "@/lib/flags/keys";
 import { Prisma } from "@prisma/client";
 import prisma from "@/lib/prisma";
 import { persistAttachmentRows } from "@/lib/mcp/attachments/persistBatch";
@@ -45,7 +43,6 @@ export async function linkTaskAttachment(
   taskId: number,
   userId: number,
   receipt: TaskAttachmentLinkReceipt,
-  options: { agentId?: string; inlineImages?: boolean } = {},
 ) {
   if (receipt.userId !== userId) {
     throw new TaskAttachmentLinkError("This upload cannot be linked", 403);
@@ -57,7 +54,6 @@ export async function linkTaskAttachment(
     throw new TaskAttachmentLinkError("Invalid attachment receipt", 400);
   }
 
-  const inlineImages = !!options.agentId && options.inlineImages !== false && await isFeatureEnabled(HTPR_7514_INLINE_AGENT_IMAGES_FLAG, userId);
   return prisma.$transaction(
     async (tx) => {
       await lockAttachmentReceipt(tx, receipt.key);
@@ -99,7 +95,6 @@ export async function linkTaskAttachment(
           existing.descriptionId === task.description_.id &&
           existing.commentId === null
         ) {
-          if (inlineImages) await persistAttachmentRows(tx, [{ filename: receipt.fileName, contentType: receipt.contentType, fileSize: receipt.fileSize, url: fileSource }], { taskId, commentId: null, descriptionId: task.description_.id, inlineImages });
           return existing;
         }
         throw new TaskAttachmentLinkError("This upload is already linked", 409);
@@ -130,7 +125,6 @@ export async function linkTaskAttachment(
           taskId,
           commentId: null,
           descriptionId: task.description_.id,
-          inlineImages,
         },
       );
 

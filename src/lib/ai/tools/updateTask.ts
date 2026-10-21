@@ -1,4 +1,4 @@
-import { updateTaskSchema } from "./updateTaskSchema";
+import { getUpdateTaskSchema } from "./updateTaskSchema";
 import { createTaskUpdater } from "./updateOneTask";
 import { tool } from "ai";
 
@@ -20,7 +20,7 @@ export function createUpdateTaskTool(context: ToolContext) {
     hypertask_update_task: tool({
       description:
         "Update one or many tasks' titles, descriptions, priorities, estimates, due dates, labels, parents, or statuses (Normal/Archive/Deleted), or move them within their own boards. Use task_ids or ticket_numbers to update up to 50 tasks in one call instead of looping. Provide whichever task identifier you know; extra identifiers are tolerated.",
-      inputSchema: updateTaskSchema,
+      inputSchema: getUpdateTaskSchema(context.inlineAgentImagesEnabled),
       execute: withToolErrors(async (rawInput) => {
         sendStatus("hypertask_update_task");
         const input = dropEmptyPadding(rawInput, [

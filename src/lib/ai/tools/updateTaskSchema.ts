@@ -1,9 +1,10 @@
 
 import { z } from "zod";
+import { inlineAgentImageFields } from "./schemas";
 
 import { TOOL_TASK_ID_DESCRIPTION, MAX_BULK_TOOL_TARGETS, bulkTaskTargetCount } from "@/lib/ai/tools/constants";
 
-export const updateTaskSchema = z
+export const getUpdateTaskSchema = (inlineImages = false) => z
   .object({
     task_id: z.coerce
       .number()
@@ -24,7 +25,7 @@ export const updateTaskSchema = z
     project_id: z.coerce.number().int().positive().optional(),
     title: z.string().min(1).max(500).optional(),
     description: z.string().max(20000).optional(),
-    inline_images: z.boolean().optional().describe("Set false only when the user explicitly requests attachment only or link only; images are embedded inline by default."),
+    ...inlineAgentImageFields(inlineImages),
     priority: z
       .enum(["No Priority", "Urgent", "High", "Medium", "Low"])
       .optional(),
@@ -79,3 +80,5 @@ export const updateTaskSchema = z
       path: ["task_ids"],
     }
   );
+
+export const updateTaskSchema = getUpdateTaskSchema();

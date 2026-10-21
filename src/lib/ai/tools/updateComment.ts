@@ -1,5 +1,6 @@
 import { inlineAgentImagesForUser } from "@/lib/media/inlineAgentImages.server";
 import { tool } from "ai";
+import { inlineAgentImageFields } from "./schemas";
 import { z } from "zod";
 import prisma from "@/lib/prisma";
 import { convertPlainTextMentionsToHtml } from "@/utils/controllers/comments/processMentions";
@@ -25,7 +26,7 @@ export function createUpdateCommentTool(context: ToolContext) {
       inputSchema: z.object({
         comment_id: z.coerce.number().int().positive(),
         text: z.string().min(1).max(5000),
-        inline_images: z.boolean().optional().describe("Set false only when the user explicitly requests attachment only or link only; images are embedded inline by default."),
+        ...inlineAgentImageFields(context.inlineAgentImagesEnabled),
         mentions: z
           .array(
             z.object({
@@ -91,7 +92,7 @@ export function createUpdateCommentTool(context: ToolContext) {
             input.mentions
           );
         }
-        sanitizedText = await inlineAgentImagesForUser(toStoredHtml(sanitizedText), user.id, { instructions: body?.message, inlineImages: input.inline_images, attachments: [...(body?.images64 ?? []), ...(body?.attachments ?? [])].flatMap((file) => file.url ? [{ url: file.url, fileName: file.fileName, mimeType: file.mimeType }] : []) });
+        sanitizedText = await inlineAgentImagesForUser(toStoredHtml(sanitizedText), user.id, { instructions: body?.message, inlineImages: input.inline_images, attachments: [...(input.image_urls?.map((url) => ({ url })) ?? []), ...[...(body?.images64 ?? []), ...(body?.attachments ?? [])].flatMap((file) => file.url && (input.image_urls?.includes(file.url) || input.text?.includes(file.url)) ? [{ url: file.url, fileName: file.fileName, mimeType: file.mimeType }] : [])] });
         sanitizedText = await linkifyTicketRefs(
           sanitizedText,
           user.id,

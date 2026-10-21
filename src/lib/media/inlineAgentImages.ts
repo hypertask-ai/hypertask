@@ -18,21 +18,20 @@ export interface InlineAgentImageOptions {
 }
 
 export function imageEmbeddingOptOut(text: string): boolean {
-  return /\b(?:attachments?|links?)[\s-]+only\b|\bonly\s+(?:attach|link)\b|\b(?:do\s+not|don['’]t|never)\s+(?:embed|inline)\b/i.test(parse(text).textContent);
+  return /\b(?:attachments?|links?)[\s-]+only\b|\bonly\s+(?:attach|link)\b|\b(?:do\s+not|don['’]t|never)\s+(?:embed|inline)\b|\bas\s+(?:an?\s+)?attachment\b|\bjust\s+(?:attach|link)\b|\bnot\s+inline\b|\battach\s+it\s+as\s+a\s+file\b/i.test(parse(text).textContent);
 }
 
 export function inlineAgentImages(html: string, options: InlineAgentImageOptions): string {
-  if (!options.enabled || options.inlineImages === false || imageEmbeddingOptOut(options.instructions ?? "") || imageEmbeddingOptOut(html)) return html;
+  if (!options.enabled || options.inlineImages === false || imageEmbeddingOptOut(options.instructions ?? "")) return html;
 
   const root = parse(html);
-  const source = parse(html + (options.instructions ?? ""));
   const seen = new Set(root.querySelectorAll("img").map((node) => node.getAttribute("src")));
   const candidates: AgentImageAttachment[] = [...(options.attachments ?? [])];
-  for (const anchor of source.querySelectorAll("a")) {
+  for (const anchor of root.querySelectorAll("a")) {
     const url = anchor.getAttribute("href");
     if (url && isImageUrl(url)) candidates.push({ url });
   }
-  const text = parse((html + " " + (options.instructions ?? "")).replace(/<[^>]*>/g, " ")).textContent;
+  const text = parse(html.replace(/<[^>]*>/g, " ")).textContent;
   for (const match of text.matchAll(/https?:\/\/[^\s<>"']+/gi)) {
     const url = match[0].replace(/[.,;!?)\]}]+$/, "");
     if (isImageUrl(url)) candidates.push({ url });

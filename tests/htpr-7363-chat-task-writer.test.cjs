@@ -363,4 +363,5 @@ test("chat turn resolves the server flag once for the authenticated user and for
   assert.equal(toolArgs.length, 1);
   assert.equal(toolArgs[0][7], true);
   assert.equal(toolArgs[0][8], providerAbort.signal);
+  assert.equal(toolArgs[0][9], true);
 });

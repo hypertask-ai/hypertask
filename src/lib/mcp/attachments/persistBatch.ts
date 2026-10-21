@@ -67,15 +67,13 @@ export async function persistAttachmentRows(
       const comment = await db.comment.findUniqueOrThrow({ where: { id: target.commentId }, select: { text: true } });
       const text = inlineAgentImages(comment.text, { enabled: true, attachments });
       if (text !== comment.text) {
-        const result = await db.comment.updateMany({ where: { id: target.commentId, text: comment.text }, data: { text } });
-        if (result.count !== 1) throw new Error("Comment changed while embedding images; retry the upload");
+        await db.comment.updateMany({ where: { id: target.commentId, text: comment.text }, data: { text } });
       }
     } else if (target.descriptionId !== null) {
       const description = await db.description.findUniqueOrThrow({ where: { id: target.descriptionId }, select: { content: true } });
       const content = inlineAgentImages(description.content ?? "", { enabled: true, attachments });
       if (content !== description.content) {
-        const result = await db.description.updateMany({ where: { id: target.descriptionId, content: description.content }, data: { content } });
-        if (result.count !== 1) throw new Error("Description changed while embedding images; retry the upload");
+        await db.description.updateMany({ where: { id: target.descriptionId, content: description.content }, data: { content } });
       }
     }
   }

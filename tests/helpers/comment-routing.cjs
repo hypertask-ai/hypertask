@@ -68,7 +68,8 @@ function setup(options = {}) {
     '@/lib/flags': { isFeatureEnabled: async (key, userId) => {
       calls.flags.push({ key, userId })
       return (key === 'htpr-7341-agent-chatter-to-log' && options.flag !== false) ||
-        (key === 'htpr-7512-attach-keeps-comment' && options.attachFlag !== false)
+        (key === 'htpr-7512-attach-keeps-comment' && options.attachFlag !== false) ||
+        (key === 'htpr-7514-inline-agent-images' && options.inlineImages === true)
     } },
     '@/lib/mcp/listQuery': {},
     '@/lib/mcp/readListQuery': {},

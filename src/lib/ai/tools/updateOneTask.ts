@@ -96,7 +96,7 @@ export function createTaskUpdater(context: ToolContext, input: z.infer<typeof up
     const patch: Record<string, unknown> = { id: task.id };
     if (input.title !== undefined) patch.title = input.title;
     if (input.description !== undefined)
-      patch.description = await inlineAgentImagesForUser(toStoredHtml(input.description), user.id, { instructions: body?.message, inlineImages: input.inline_images, attachments: [...(body?.images64 ?? []), ...(body?.attachments ?? [])].flatMap((file) => file.url ? [{ url: file.url, fileName: file.fileName, mimeType: file.mimeType }] : []) });
+      patch.description = await inlineAgentImagesForUser(toStoredHtml(input.description), user.id, { instructions: body?.message, inlineImages: input.inline_images, attachments: [...(input.image_urls?.map((url) => ({ url })) ?? []), ...[...(body?.images64 ?? []), ...(body?.attachments ?? [])].flatMap((file) => file.url && (input.image_urls?.includes(file.url) || input.description?.includes(file.url)) ? [{ url: file.url, fileName: file.fileName, mimeType: file.mimeType }] : [])] });
     if (input.parent_task_id !== undefined) patch.parentTaskId = input.parent_task_id;
     const dueDateValue =
       input.due_date === undefined

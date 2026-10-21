@@ -1,3 +1,4 @@
+import type { AttachmentFileInput } from "@/lib/mcp-server/validations/attachment.validation";
 import { HTPR_7514_INLINE_AGENT_IMAGES_FLAG } from "@/lib/flags/keys";
 import { inlineAgentImagesForUser } from "@/lib/media/inlineAgentImages.server";
 import { reportMcpOperationCrash } from '@/lib/mcp/operationCrashReport'
@@ -100,7 +101,7 @@ export interface AddCommentRequest {
   ticket_number?: string
   unique_index?: number
   text: string
-  has_image_attachments?: boolean
+  attachments?: AttachmentFileInput[]
   inline_images?: boolean
   content_type?: 'html' | 'markdown'
   project_id?: number
@@ -464,6 +465,16 @@ export async function POST(request: NextRequest) {
     const body = parsedBody.body
     if (body.inline_images !== undefined && typeof body.inline_images !== "boolean") {
       return NextResponse.json(buildFieldError("invalid_field", "inline_images", "inline_images must be a boolean"), { status: 400 });
+    }
+    let hasImageAttachments = false;
+    if (body.attachments !== undefined && await isFeatureEnabled(HTPR_7514_INLINE_AGENT_IMAGES_FLAG, user.id)) {
+      const { inlineAttachmentsSchema } = await import("@/lib/mcp-server/validations/attachment.validation");
+      const attachmentInput = inlineAttachmentsSchema.safeParse(body.attachments);
+      if (!attachmentInput.success) {
+        return NextResponse.json(buildFieldError("invalid_field", "attachments", attachmentInput.error.issues[0]?.message ?? "Invalid attachments"), { status: 400 });
+      }
+      const { isBrowserRenderableImage } = await import("@/lib/media/browserRenderableImage");
+      hasImageAttachments = attachmentInput.data?.some((file) => isBrowserRenderableImage(file.content_type, file.filename)) ?? false;
     }
     const { dry_run, task_id, ticket_number, unique_index, text, content_type, project_id, images, has_attachments, mentions, reply_to_comment_id, reply_to_invocation_id } = body
     if (dry_run !== undefined && typeof dry_run !== 'boolean') {
@@ -880,9 +891,8 @@ export async function POST(request: NextRequest) {
       replyToCommentId: reply_to_comment_id,
       replyToInvocationId: reply_to_invocation_id,
       mentionsPerson: textMentionIds.length > 0 || (mentions?.length ?? 0) > 0,
-      hasImages: (images?.length ?? 0) > 0 || /<img\b/i.test(sanitizedText) ||
-        (has_attachments === true && await isFeatureEnabled(HTPR_7512_ATTACH_KEEPS_COMMENT_FLAG, user.id)) ||
-        (body.has_image_attachments === true && await isFeatureEnabled(HTPR_7514_INLINE_AGENT_IMAGES_FLAG, user.id)),
+      hasImages: (images?.length ?? 0) > 0 || /<img\b/i.test(sanitizedText) || hasImageAttachments ||
+        (has_attachments === true && await isFeatureEnabled(HTPR_7512_ATTACH_KEEPS_COMMENT_FLAG, user.id)),
       flagEnabled: await isFeatureEnabled(HTPR_7341_AGENT_CHATTER_TO_LOG_FLAG, user.id),
     }) === 'log' && agentLogPrincipal
       ? await prepareAgentLogEntry(agentLogPrincipal, sanitizedText)

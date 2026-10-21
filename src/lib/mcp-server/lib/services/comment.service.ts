@@ -1,4 +1,3 @@
-import { isBrowserRenderableImage } from "@/lib/media/browserRenderableImage";
 import type { IApiClient } from '../../types/index';
 import {
   DeleteCommentInputSchema,
@@ -94,7 +93,8 @@ export class CommentService {
 
   async addComment(
     params: unknown,
-    invocation?: McpInvocationIdentity
+    invocation?: McpInvocationIdentity,
+    options: { inlineAgentImages?: boolean } = {}
   ): Promise<CommentResponse | LoggedCommentResponse> {
     const correlationId = generateCorrelationId();
 
@@ -123,7 +123,7 @@ export class CommentService {
         '/mcp/comments',
         {
           method: 'POST',
-          body: JSON.stringify({ ...commentInput, ...(attachments?.some((file) => isBrowserRenderableImage(file.content_type, file.filename)) ? { has_image_attachments: true } : {}) }),
+          body: JSON.stringify({ ...commentInput, ...(options.inlineAgentImages && attachments?.length ? { attachments } : {}) }),
           ...(idempotencyKey
             ? { headers: { 'Idempotency-Key': idempotencyKey } }
             : {}),

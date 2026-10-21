@@ -40,9 +40,10 @@ export async function runModelTurn(state: StreamState, resolvedBody: ChatRequest
     `agent, not the human you're talking to.` +
     (actingAgent.prompt ? ` Follow these instructions:\n${actingAgent.prompt}` : "")
     : null;
+  const inlineAgentImagesEnabled = await isFeatureEnabled(HTPR_7514_INLINE_AGENT_IMAGES_FLAG, dbUser.id);
   const instructions = [
     AGENT_SYSTEM_PROMPT,
-    await isFeatureEnabled(HTPR_7514_INLINE_AGENT_IMAGES_FLAG, dbUser.id) ? renderPrompt("inline-agent-images") : null,
+    inlineAgentImagesEnabled ? renderPrompt("inline-agent-images") : null,
     skillResolution.systemPromptAddition,
     agentPromptAddition,
   ]
@@ -91,7 +92,8 @@ export async function runModelTurn(state: StreamState, resolvedBody: ChatRequest
     },
     heartbeatTurn?.metadata,
     await isFeatureEnabled(HTPR_7363_CHAT_TASK_WRITER_FLAG, dbUser.id),
-    state.providerAbort.signal
+    state.providerAbort.signal,
+    inlineAgentImagesEnabled
   );
   if (
     heartbeatExecutionId &&
