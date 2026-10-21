@@ -24,6 +24,7 @@ import styles from "@/styles/linksModal.module.scss";
 import { ICommandList } from "./HTCTypes";
 import CommandGroups from "./CommandGroup";
 import useHTC from "@/hooks/MultiPages/HTC/useHTC";
+import type { CommandFocusProxy } from "@/components/commandTypes";
 import { ModalContainerCustom, ModalHintBar, ModalInput } from "@/components/Common/CommonModalComponents";
 import useHypertasksRecoilStates from "@/hooks/RecoilRoot/useHypertasksRecoilStates";
 import {
@@ -83,7 +84,7 @@ type Props = {
   showByokApiKeys?: boolean;
   appShellRailOn?: boolean;
   scope?: "board";
-  focusProxy?: { current: HTMLInputElement | null };
+  focusProxy?: CommandFocusProxy;
 };
 
 const DESTRUCTIVE_COMMAND_MODES = [CommandMode.DeleteBoard, CommandMode.DeleteColumn];
@@ -460,7 +461,7 @@ const Commands = (props: Props) => {
         const selectionEnd = proxy?.selectionEnd ?? null;
         if (transferring) {
           el.value = proxy.value;
-          onKeyChangeRef.current({ target: proxy } as React.ChangeEvent<HTMLInputElement>);
+          onKeyChangeRef.current({ target: { value: proxy.value } } as React.ChangeEvent<HTMLInputElement>);
         }
         el.focus({ preventScroll: true });
         if (document.activeElement === el) {
@@ -640,6 +641,14 @@ const Commands = (props: Props) => {
                   );
                 }, 1);
     }
+
+  useEffect(() => {
+    if (isCompose || !focusProxy || focusProxy.pendingEnter === undefined ||
+        keyword !== focusProxy.pendingEnter || document.activeElement !== inputRef.current ||
+        selectedCommand !== (filterCommands[0]?.commandLists[0] ?? null)) return;
+    delete focusProxy.pendingEnter;
+    if (selectedCommand) updateCommandFrequency(selectedCommand);
+  }, [isCompose, keyword, selectedCommand, filterCommands, focusProxy]);
 
   const toggle = () => {
     if (writing) return;

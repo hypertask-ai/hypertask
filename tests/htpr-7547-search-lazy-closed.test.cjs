@@ -10,7 +10,7 @@ const ts = require('typescript');
 const root = path.resolve(__dirname, '..');
 const flag = 'htpr-7547-search-lazy-closed';
 
-async function withSearch({ enabled, layout = true, mobile = true, delayed = false, loaded = true, hydrate = false, apple = false, suspendPanel = false }, check) {
+async function withSearch({ enabled, layout = true, mobile = true, delayed = false, loaded = true, hydrate = false, apple = false, suspendPanel = false, tab = 'search' }, check) {
   const dom = new JSDOM('<div id="root"></div>', { url: 'https://example.test/search' });
   const globals = ['window', 'document', 'IS_REACT_ACT_ENVIRONMENT'].map((key) => [key, Object.getOwnPropertyDescriptor(global, key)]);
   Object.assign(global, { window: dom.window, document: dom.window.document, IS_REACT_ACT_ENVIRONMENT: true });
@@ -28,6 +28,7 @@ async function withSearch({ enabled, layout = true, mobile = true, delayed = fal
   const hydrationErrors = [];
   let serverMarkup;
   let bufferedInput;
+  let pendingEnter;
   const showCommandsAtom = {};
   function realModule(relative) {
     const filename = path.join(root, relative);
@@ -49,7 +50,7 @@ async function withSearch({ enabled, layout = true, mobile = true, delayed = fal
         availableSearchBoards: [], setSelectedIndex() {}, selectedIndex: 0, tasksInputRef: React.useRef(null),
         inputValue: 'QA', responseMessage: 'None', typedTasks: [{ taskId: 43, projectId: 6859, projectTitle: 'QA Sandbox', ticketNumber: 'QASA-43', taskTitle: 'Fixture result', highlight: {} }],
         isSearchDraft: false, ulRef: React.useRef(null), handleLinkClick() {}, handleMouseEnter() {}, handleMouseLeave() {}, handleMouseMove() {},
-        searchCache: { history: [] }, selectedHistory: null, updateSearchHistory() {}, showCommands: { show }, setInputValue() {}, liSelectedRef: React.useRef(null),
+        searchCache: { history: [] }, selectedHistory: null, updateSearchHistory() {}, showCommands: { show, paletteTab: tab }, setInputValue() {}, liSelectedRef: React.useRef(null),
         tabs: ['All'], activeSplit: 0, updateSplitAndTasks() {}, results: { All: [{}] }, includeArchived, setIncludeArchivedResults: updateArchived,
       };
     } },
@@ -81,6 +82,7 @@ async function withSearch({ enabled, layout = true, mobile = true, delayed = fal
         renders++;
         if (suspendPanel && !released) throw wait;
         bufferedInput = focusProxy?.current?.value;
+        pendingEnter = focusProxy?.pendingEnter;
         return React.createElement('button', { id: 'commands', onClick: () => callbackHandler(!contextOptions.searchOptions.includeArchived, 'ToggleArchivedSearchResults') }, `Archived: ${contextOptions.searchOptions.includeArchived}`);
       } };
       return delayed ? { __esModule: true, then: (resolve) => wait.then(() => resolve(commands)) } : commands;
@@ -118,7 +120,7 @@ async function withSearch({ enabled, layout = true, mobile = true, delayed = fal
     await check({
       imports: () => imports, renders: () => renders, markup: () => container.innerHTML,
       resultsMarkup: () => container.querySelector('.search-input').outerHTML,
-      hydrationErrors, serverMarkup, bufferedInput: () => bufferedInput,
+      hydrationErrors, serverMarkup, bufferedInput: () => bufferedInput, pendingEnter: () => pendingEnter,
       proxy: () => document.getElementById('search-command-focus-proxy'),
       pressProxy: (key, extra = {}) => React.act(async () => document.getElementById('search-command-focus-proxy').dispatchEvent(new dom.window.KeyboardEvent('keydown', { key, bubbles: true, cancelable: true, ...extra }))),
       open: () => React.act(async () => setOpen(true)), close: () => React.act(async () => setOpen(false)),
@@ -272,4 +274,49 @@ test('suspending command panels cannot replace the outer search page', async () 
     assert.match(markup(), /Archived: false/);
     assert.equal(resultsMarkup(), baseline);
   });
+});
+
+
+test('HTPR-7547 pending Enter survives command loading in Search and Compose for every flag state', async () => {
+  for (const enabled of [true, false]) {
+    for (const loaded of [true, false]) {
+      for (const tab of ['search', 'compose']) {
+        await withSearch({ enabled, loaded, tab, delayed: true }, async ({ open, proxy, pressProxy, release, pendingEnter, bufferedInput }) => {
+          await open();
+          const text = tab === 'compose' ? 'first line\nsecond line' : 'archived';
+          proxy().value = text;
+          await pressProxy('Enter', { code: 'Enter' });
+          await release();
+          assert.equal(bufferedInput(), text, 'multiline Compose text must survive the proxy');
+          assert.equal(pendingEnter(), text, 'the mounted palette receives the Enter intent with its text');
+        });
+      }
+    }
+  }
+});
+
+
+test('HTPR-7547 closing a pending Enter cancels it before the next open', async () => {
+  await withSearch({ enabled: true, delayed: true }, async ({ open, close, proxy, pressProxy, release, pendingEnter }) => {
+    await open();
+    proxy().value = 'archived';
+    await pressProxy('Enter', { code: 'Enter' });
+    await close();
+    await open();
+    await release();
+    assert.equal(pendingEnter(), undefined);
+  });
+});
+
+
+test('HTPR-7547 Shift+Enter and IME confirmation do not queue a submit', async () => {
+  for (const extra of [{ shiftKey: true }, { isComposing: true }]) {
+    await withSearch({ enabled: true, tab: 'compose', delayed: true }, async ({ open, proxy, pressProxy, release, pendingEnter }) => {
+      await open();
+      proxy().value = 'draft';
+      await pressProxy('Enter', { code: 'Enter', ...extra });
+      await release();
+      assert.equal(pendingEnter(), undefined);
+    });
+  }
 });

@@ -41,9 +41,9 @@ async function withPalette(t, config, check) {
     if (this.tagName === 'TEXTAREA' && focusFailures-- > 0) return;
     return focus.apply(this, args);
   };
-  const focusProxy = { current: null };
+  const focusProxy = { current: null, compose: !config.legacyProxy, pendingEnter: config.pendingEnter };
   if (config.bufferedText !== undefined) {
-    focusProxy.current = document.createElement('input');
+    focusProxy.current = document.createElement('textarea');
     focusProxy.current.value = config.bufferedText;
     document.body.appendChild(focusProxy.current);
     focusProxy.current.focus();
@@ -1564,9 +1564,53 @@ test('HTPR-7547 cold Compose receives text and selection from the command focus 
 
 test('HTPR-7547 flag off keeps the previous Compose focus behavior', async (t) => {
   for (const mobile of [false, true]) {
-    await withPalette(t, { tab: 'compose', mobile, preserveColdCommandInput: false, bufferedText: 'unconsumed legacy proxy' }, async ({ input, focusProxy }) => {
+    await withPalette(t, { tab: 'compose', mobile, preserveColdCommandInput: false, legacyProxy: true, bufferedText: 'unconsumed legacy proxy' }, async ({ input, focusProxy }) => {
       assert.equal(input().value, '');
       assert.equal(focusProxy.current.value, 'unconsumed legacy proxy');
+    });
+  }
+});
+
+
+test('HTPR-7547 cold Search Compose handoff preserves drafts with the optimization On, Off or unresolved', async (t) => {
+  for (const preserveColdCommandInput of [true, false, undefined]) {
+    for (const mobile of [false, true]) {
+      const bufferedText = 'first line\nsecond line';
+      await withPalette(t, { tab: 'compose', mobile, preserveColdCommandInput, bufferedText }, async ({ input, focusProxy, requests }) => {
+        assert.equal(input().value, bufferedText);
+        assert.equal(document.activeElement, input());
+        assert.equal(input().selectionStart, 2);
+        assert.equal(input().selectionEnd, 5);
+        assert.equal(focusProxy.current.value, '');
+        assert.equal(requests.length, 0, 'transferring a draft does not submit it');
+      });
+    }
+  }
+});
+
+
+test('HTPR-7547 buffered Compose Enter submits the transferred draft once after state commits', async (t) => {
+  for (const preserveColdCommandInput of [true, false, undefined]) {
+    for (const mobile of [false, true]) {
+      const bufferedText = 'first line\nsecond line';
+      await withPalette(t, { tab: 'compose', mobile, strict: true, preserveColdCommandInput, bufferedText, pendingEnter: bufferedText }, async ({ requests, rerender, focusProxy }) => {
+        assert.equal(requests.length, 1);
+        assert.equal(requests[0].body.text, bufferedText);
+        assert.equal(focusProxy.pendingEnter, undefined);
+        await rerender();
+        assert.equal(requests.length, 1, 'rerenders and StrictMode must not resubmit');
+      });
+    }
+  }
+});
+
+
+test('HTPR-7547 buffered Search Enter selects the matching command once after filtering', async (t) => {
+  for (const mobile of [false, true]) {
+    await withPalette(t, { mobile, bufferedText: 'AI Task Writer', pendingEnter: 'AI Task Writer' }, async ({ values, focusProxy, requests }) => {
+      assert.equal(values.get('showCommandsAtom').paletteTab, 'compose');
+      assert.equal(focusProxy.pendingEnter, undefined);
+      assert.equal(requests.length, 0, 'selecting Compose is not a second Enter in Compose');
     });
   }
 });

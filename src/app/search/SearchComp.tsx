@@ -23,6 +23,7 @@ import { useGlobalUIState } from "@/components/ProviderGlobal/useGlobalUIState";
 import AppShellRail from "@/components/PageComponents/Kanban/HeaderComponents/AppShellRail";
 import SearchChipsInput from "./SearchChipsInput";
 import "./search-autocomplete.css";
+import type { CommandFocusProxy } from "@/components/commandTypes";
 import type { ServerStartedSearch } from "@/lib/search/serverStartedSearch";
 import { HTPR_7547_SEARCH_LAZY_CLOSED_FLAG } from "@/lib/flags/definitions/htpr-7547-search-lazy-closed";
 
@@ -51,7 +52,8 @@ const SearchComp = ({
   const lazyClosedCommands = useFlag(HTPR_7547_SEARCH_LAZY_CLOSED_FLAG);
   const lazyClosedCommandsLoaded = useFlagLoaded(HTPR_7547_SEARCH_LAZY_CLOSED_FLAG);
   const [HypertasksCommands, setCommands] = useState<typeof import("@/components/commands").default>();
-  const commandFocusProxy = useRef<HTMLInputElement>(null);
+  const commandFocusProxy: CommandFocusProxy = useRef<HTMLTextAreaElement>(null);
+  commandFocusProxy.compose = true;
   const setShowCommands = useSetRecoilState(showCommandsAtom);
   const isApple = useDeviceContext();
   const askAiFullscreenFlagEnabled = useFlag(HTPR_6936_ASK_AI_FULLSCREEN_FLAG);
@@ -107,9 +109,12 @@ const SearchComp = ({
   useLayoutEffect(() => {
     if (showCommands.show && !HypertasksCommands) {
       commandFocusProxy.current?.focus({ preventScroll: true });
-    } else if (!showCommands.show && commandFocusProxy.current) {
-      if (document.activeElement === commandFocusProxy.current) commandFocusProxy.current.blur();
-      commandFocusProxy.current.value = "";
+    } else if (!showCommands.show) {
+      delete commandFocusProxy.pendingEnter;
+      if (commandFocusProxy.current) {
+        if (document.activeElement === commandFocusProxy.current) commandFocusProxy.current.blur();
+        commandFocusProxy.current.value = "";
+      }
     }
   }, [showCommands.show, HypertasksCommands]);
   const matchSnippets = matchHighlightsFlagEnabled && layoutEnabled
@@ -308,10 +313,9 @@ const SearchComp = ({
       </div>
       {showCommands.show && (
         <>
-          <input
-            ref={commandFocusProxy}
+          <textarea
+            ref={(input) => { commandFocusProxy.current = input; }}
             id="search-command-focus-proxy"
-            type="search"
             inputMode="search"
             autoComplete="off"
             autoCorrect="off"
@@ -321,6 +325,11 @@ const SearchComp = ({
             aria-label="Command search"
             className="fixed left-0 top-0 h-px w-px opacity-0 pointer-events-none text-[16px]"
             onKeyDown={(event) => {
+              if (event.key === "Enter" && !event.shiftKey && !event.nativeEvent.isComposing) {
+                event.preventDefault();
+                event.stopPropagation();
+                if (!event.repeat) commandFocusProxy.pendingEnter = event.currentTarget.value;
+              }
               if (event.key === "Escape" || (event.key.toLowerCase() === "k" &&
                 ((isApple && event.metaKey) || (!isApple && event.ctrlKey)))) {
                 event.preventDefault();
