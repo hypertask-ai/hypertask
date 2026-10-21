@@ -26,6 +26,7 @@ function setup(mode = null) {
     '@/lib/aiFeedback/automatic': {
       observeFeedbackTools: (tools) => tools,
       queueAiFeedback: (input) => feedback.push(input),
+      queueMcpAuthFailure: () => feedback.push(unauthorized),
     },
     '@/lib/aiFeedback/clientInfo': { rememberFeedbackClient: () => {} },
     '@/lib/telemetry/mcpSseAnalytics': { recordLegacyMcpRequest: () => {} },
