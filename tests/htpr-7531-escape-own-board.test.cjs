@@ -103,7 +103,7 @@ test("unavailable history inspection and cross-origin entries retain existing be
 test("Escape dispatches the same corrected back-arrow handler", (t) => {
   const f = fixture("https://app.hypertask.ai/project");
   const previousDocument = global.document;
-  const config = require("./helpers/flag-files.cjs").load("src/lib/configs/taskDetail.config.ts");
+  const config = require("jiti").createJiti(__filename, { alias: { "@": path.join(root, "src") }, interopDefault: true })(path.join(root, "src/lib/configs/taskDetail.config.ts"));
   const document = {
     activeElement: { tagName: "BODY", className: "", closest: () => null },
     querySelector: () => null,
