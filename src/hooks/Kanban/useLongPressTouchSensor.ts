@@ -20,14 +20,14 @@ type Phase =
   | { type: "idle" }
   | {
       type: "pending";
-      actions: PreDragActions;
+      actions: PreDragActions | null;
       point: Point;
       timer: ReturnType<typeof setTimeout>;
       selection?: PhoneSelection;
     }
   | {
       type: "holding";
-      actions: PreDragActions;
+      actions: PreDragActions | null;
       point: Point;
       selection: PhoneSelection;
     }
@@ -52,21 +52,27 @@ export const useLongPressTouchSensor: Sensor = (api) => {
     const onTouchStart = (event: TouchEvent) => {
       if (event.defaultPrevented || event.touches.length !== 1) return;
 
-      const draggableId = api.findClosestDraggableId(event);
+      const target = event.target instanceof window.Element ? event.target : null;
+      const draggableId = api.findClosestDraggableId(event) ?? (phoneHoldSelect
+        ? target?.closest(".kanban-task-card[data-rfd-draggable-id]")?.getAttribute("data-rfd-draggable-id")
+        : null);
       if (!draggableId) return;
+      const taskId = phoneHoldSelect && /^task-\d+$/.test(draggableId)
+        ? Number(draggableId.slice(5))
+        : null;
+      if (taskId !== null && target?.closest(
+        'button, input, textarea, select, option, optgroup, video, audio, [contenteditable="true"], [contenteditable=""]',
+      )) return;
       const actions = api.tryGetLock(
         draggableId,
         () => finish("cancel"),
         { sourceEvent: event },
       );
-      if (!actions) return;
+      if (!actions && taskId === null) return;
 
       stopListeningForStart();
       const touch = event.touches[0];
       const point = { x: touch.clientX, y: touch.clientY };
-      const taskId = phoneHoldSelect && /^task-\d+$/.test(draggableId)
-        ? Number(draggableId.slice(5))
-        : null;
       const selection = taskId === null
         ? undefined
         : { taskId, startedAt: Date.now(), movedPx: 0 };
@@ -82,11 +88,13 @@ export const useLongPressTouchSensor: Sensor = (api) => {
           };
           return;
         }
-        phaseRef.current = {
-          type: "dragging",
-          actions: phase.actions.fluidLift(phase.point),
-          hasMoved: false,
-        };
+        if (phase.actions) {
+          phaseRef.current = {
+            type: "dragging",
+            actions: phase.actions.fluidLift(phase.point),
+            hasMoved: false,
+          };
+        }
       }, getMobileDragDelay(draggableId));
       phaseRef.current = { type: "pending", actions, point, timer, selection };
       listenForDrag();
@@ -113,7 +121,7 @@ export const useLongPressTouchSensor: Sensor = (api) => {
           if (phase.type === "holding") event.preventDefault();
           return;
         }
-        if (phase.type === "holding") {
+        if (phase.type === "holding" && phase.actions) {
           event.preventDefault();
           const actions = phase.actions.fluidLift(phase.point);
           phaseRef.current = { type: "dragging", actions, hasMoved: true };
@@ -179,7 +187,7 @@ export const useLongPressTouchSensor: Sensor = (api) => {
       const touch = event.touches[0] as (Touch & { force?: number }) | undefined;
       if (!touch || (touch.force ?? 0) < 0.15) return;
 
-      const shouldRespect = phase.actions.shouldRespectForcePress();
+      const shouldRespect = phase.actions?.shouldRespectForcePress() ?? false;
       if (phase.type === "pending" || phase.type === "holding") {
         if (shouldRespect) finish("cancel");
         return;
@@ -248,9 +256,9 @@ export const useLongPressTouchSensor: Sensor = (api) => {
       stopListeningForDrag();
       if (phase.type === "pending") {
         clearTimeout(phase.timer);
-        phase.actions.abort();
+        phase.actions?.abort();
       } else if (phase.type === "holding") {
-        phase.actions.abort();
+        phase.actions?.abort();
       } else {
         phase.actions[kind]({ shouldBlockNextClick: true });
       }
@@ -272,9 +280,9 @@ export const useLongPressTouchSensor: Sensor = (api) => {
       phaseRef.current = idle;
       if (phase.type === "pending") {
         clearTimeout(phase.timer);
-        phase.actions.abort();
+        phase.actions?.abort();
       } else if (phase.type === "holding") {
-        phase.actions.abort();
+        phase.actions?.abort();
       } else if (phase.type === "dragging") {
         phase.actions.cancel({ shouldBlockNextClick: true });
       }
