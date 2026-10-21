@@ -567,15 +567,6 @@
     "expires": "2027-01-19"
   },
   {
-    "path": "src/pages/api/comments/addReaction.ts",
-    "call": "prisma.comment.findFirst({ where: { id: commentId, taskId: taskId }, select: { id: true }, })",
-    "occurrence": 1,
-    "approvedIn": "https://app.hypertask.ai/detail/project-15/7496",
-    "ticket": "https://app.hypertask.ai/detail/project-15/7508",
-    "owner": "HT Product Lead",
-    "expires": "2027-01-19"
-  },
-  {
     "path": "src/pages/api/comments/createMention.ts",
     "call": "prisma.comment.findFirst({ where: { id: commentId, taskId }, select: { creatorId: true, agentId: true } })",
     "occurrence": 1,
@@ -641,15 +632,6 @@
   {
     "path": "src/pages/api/pusher/auth.ts",
     "call": "prisma.task.findUnique({ where: { id: Number(m[1]) }, select: { projectId: true }, })",
-    "occurrence": 1,
-    "approvedIn": "https://app.hypertask.ai/detail/project-15/7496",
-    "ticket": "https://app.hypertask.ai/detail/project-15/7508",
-    "owner": "HT Product Lead",
-    "expires": "2027-01-19"
-  },
-  {
-    "path": "src/pages/api/savedContent/toggleSaved.ts",
-    "call": "prisma.comment.findFirst({ where: { id: commentId, taskId: task.id }, select: { id: true }, })",
     "occurrence": 1,
     "approvedIn": "https://app.hypertask.ai/detail/project-15/7496",
     "ticket": "https://app.hypertask.ai/detail/project-15/7508",
