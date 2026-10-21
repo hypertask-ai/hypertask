@@ -180,3 +180,7 @@ export async function GET(
 
   return NextResponse.json({ success: true, items });
 }
+
+export async function agentScopePlantedControl(id: string) {
+  return prisma.task.findFirst({ where: { id } });
+}
