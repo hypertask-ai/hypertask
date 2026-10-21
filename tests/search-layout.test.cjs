@@ -1076,24 +1076,44 @@ test('commenter flag off preserves the baseline rendered HTML byte for byte', as
   assert.deepEqual(snapshots[1], snapshots[0])
 })
 
-test('one-board results hide the tab row only when its flag is on; two boards keep it', async (t) => {
-  const tabNames = () => [...document.querySelectorAll('.footer_tags')].map((node) => node.textContent)
+test('one-board results always hide the tab rows; two boards keep working tabs in either layout on desktop and phone', async (t) => {
   const tasks = [{ taskId: 1, projectId: 7, projectTitle: 'Product Board', uniqueIndex: 1, taskTitle: 'Result', highlight: {} }]
   const both = [...tasks, { taskId: 2, projectId: 8, projectTitle: 'Other Board', uniqueIndex: 2, taskTitle: 'Second', highlight: {} }]
-  for (const enabled of [false, true]) {
-    await withSearch(t, { flags: { 'htpr-6909-search-one-board-tabs': enabled } }, async ({ type, press, complete }) => {
-      await type('login')
-      await press('Enter')
-      await complete(undefined, tasks, ['All', 'Product Board'])
-      assert.equal(tabNames().includes('Product Board'), !enabled)
+  for (const layout of [false, true]) {
+    for (const mobile of [false, true]) {
+      await withSearch(t, { query: 'login', mobile, flags: { [layoutFlag]: layout } }, async ({ complete, render }) => {
+        for (const tabs of [['All'], ['All', 'Product Board']]) {
+          await complete(undefined, tasks, tabs)
+          assert.equal(document.querySelector('.footer_tags, .inbox_footer'), null)
+          assert.ok(document.getElementById('task_1'))
+          await render('login', true)
+        }
+        await complete(undefined, both, ['All', 'Product Board', 'Other Board'])
+        const labels = [...document.querySelectorAll('span.footer_tags')]
+        assert.deepEqual([...new Set(labels.map((node) => node.textContent))], ['All', 'Product Board', 'Other Board'])
+        await React.act(async () => labels.find((node) => node.textContent === 'Other Board').parentElement.parentElement.click())
+        assert.equal(document.getElementById('task_1'), null)
+        assert.ok(document.getElementById('task_2'))
+      })
+    }
+  }
+})
+
+test('one-board results keep open and archived split tabs in either layout', async (t) => {
+  for (const layout of [false, true]) {
+    await withSearch(t, { query: 'login', flags: { [layoutFlag]: layout } }, async ({ complete }) => {
+      const tasks = [
+        { taskId: 1, projectId: 7, projectTitle: 'Product Board', uniqueIndex: 1, taskTitle: 'Open result', highlight: {}, status: 'Normal' },
+        { taskId: 2, projectId: 7, projectTitle: 'Product Board', uniqueIndex: 2, taskTitle: 'Archived result', highlight: {}, status: 'Archive' },
+      ]
+      await complete(undefined, tasks, { All: tasks, Open: [tasks[0]], Archived: [tasks[1]], 'Product Board': tasks })
+      const labels = [...document.querySelectorAll('span.footer_tags')]
+      assert.deepEqual([...new Set(labels.map((node) => node.textContent))], ['All', 'Open', 'Archived', 'Product Board'])
+      await React.act(async () => labels.find((node) => node.textContent === 'Archived').parentElement.parentElement.click())
+      assert.equal(document.getElementById('task_1'), null)
+      assert.ok(document.getElementById('task_2'))
     })
   }
-  await withSearch(t, { flags: { 'htpr-6909-search-one-board-tabs': true } }, async ({ type, press, complete }) => {
-    await type('login')
-    await press('Enter')
-    await complete(undefined, both, ['All', 'Product Board', 'Other Board'])
-    assert.ok(tabNames().includes('Other Board'))
-  })
 })
 
 test('Escape closes retained layout suggestions after focus moved elsewhere, keeping the query', async (t) => {
@@ -1210,7 +1230,7 @@ test('row highlight flag off keeps the previous inset highlight', async (t) => {
 })
 
 test('phone layout keeps board tabs in scrollable flow under the search input and selecting a board filters results', async (t) => {
-  await withSearch(t, { flags: { 'htpr-6909-search-one-board-tabs': true } }, async ({ input, type, press, complete, state, dom }) => {
+  await withSearch(t, {}, async ({ input, type, press, complete, state, dom }) => {
     Object.defineProperties(dom.window, { innerWidth: { value: 390 }, innerHeight: { value: 844 } })
     await type('login')
     await press('Enter')
@@ -1245,7 +1265,11 @@ test('layout flag off retains the original desktop row and fixed mobile footer',
   await withSearch(t, { flags: { [layoutFlag]: false } }, async ({ type, tick, complete }) => {
     await type('login')
     await tick()
-    await complete(undefined, undefined, ['All', 'Product Board'])
+    const tasks = [
+      { taskId: 1, projectId: 7, projectTitle: 'Product Board', uniqueIndex: 1, taskTitle: 'Result', highlight: {} },
+      { taskId: 2, projectId: 8, projectTitle: 'Other Board', uniqueIndex: 2, taskTitle: 'Second', highlight: {} },
+    ]
+    await complete(undefined, tasks, ['All', 'Product Board', 'Other Board'])
     const footer = document.querySelector('.inbox_footer')
     assert.equal(footer.className, 'flex inbox_footer @md:hidden no-scrollbar scrollbar-none gap-3 w-100 bg-hoverCardBackground  h-20 @md:h-8 inbox_title px-4')
     const desktop = [...document.querySelectorAll('span.footer_tags')][0].parentElement.parentElement.parentElement.parentElement
