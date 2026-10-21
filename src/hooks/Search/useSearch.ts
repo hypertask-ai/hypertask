@@ -115,6 +115,7 @@ export function useSearch(
   }
 
   function beginSearch(searchTerm: string, showArchived: boolean) {
+    pendingServerSearch.current = undefined;
     recordSearch(searchTerm, showArchived);
     return searchRequestGate.begin();
   }
@@ -133,14 +134,15 @@ export function useSearch(
   }
 
   async function showServerStartedSearch(started: Promise<ServerStartedSearch | null>, isCurrent: () => boolean) {
-    const requestId = searchRequestGate.begin();
+    const searchesBeforeWait = searchRequestGate.latestRequest();
+    if (searchLayoutEnabled) tasksInputRef.current?.blur();
     const search = await started;
-    if (!isCurrent() || !searchRequestGate.isLatest(requestId) ||
+    if (!isCurrent() || pendingServerSearch.current !== started || !searchRequestGate.isLatest(searchesBeforeWait) ||
       !isServerSearchFor(search, _searchTerm, _includeArchived, _fromProject)) return;
     pendingServerSearch.current = undefined;
+    searchRequestGate.begin();
     recordSearch(_searchTerm, _includeArchived);
     lastSearchKey.current = currentSearchKey(_searchTerm, _includeArchived, search.projectIds.map((id) => ({ id }) as IProject));
-    if (searchLayoutEnabled) tasksInputRef.current?.blur();
     const processedData = search.data.processedData as Record<string, ITypedTask[]>;
     if (processedData["All"].length > 0) {
       applySearchResults(processedData, search.data.tabs);
@@ -150,9 +152,7 @@ export function useSearch(
     }
   }
 
-  async function mountSearchResponse(showArchived: boolean) {
-    const started = searchFlagsReady ? pendingServerSearch.current : undefined;
-    pendingServerSearch.current = undefined;
+  async function mountSearchResponse(showArchived: boolean, started: Promise<ServerStartedSearch | null> | undefined) {
     const search = started ? await started : null;
     if (isServerSearchFor(search, _searchTerm, showArchived, _fromProject) &&
       search.projectIds.join() === projects.map((item) => item.id).join()) {
@@ -168,10 +168,11 @@ export function useSearch(
 
   async function handleSearchOnMount(showArchived = includeArchived) {
     if (_searchTerm && _searchTerm.length >= 2) {
+      const serverSearch = searchFlagsReady ? pendingServerSearch.current : undefined;
       const requestId = beginSearch(_searchTerm, showArchived);
       if (searchLayoutEnabled) tasksInputRef.current?.blur();
       try {
-        const response = await mountSearchResponse(showArchived);
+        const response = await mountSearchResponse(showArchived, serverSearch);
 
         if (!searchRequestGate.isLatest(requestId)) return;
 

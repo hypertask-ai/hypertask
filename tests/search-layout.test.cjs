@@ -50,7 +50,7 @@ async function withSearch(t, config, check) {
     source('src/hooks/useFlag.tsx', { useFlagReady: () => config.flagsReady?.() ?? true, useFlag: (key) => flags[key] ?? false })
     source('src/lib/contexts/deviceContext.tsx', { useDeviceContext: () => false })
     const allProjects = [{ id: 7, title: 'Product Board' }]
-    source('src/hooks/MultiPages/useGetAllProjectsMinimal.ts', { useGetAllProjectsMinimal: () => ({ data: config.projects?.() ?? allProjects }) })
+    source('src/hooks/MultiPages/useGetAllProjectsMinimal.ts', { useGetAllProjectsMinimal: () => ({ data: config.projects?.() ?? allProjects, refetch: () => config.refetch?.() ?? Promise.resolve({ data: allProjects }) }) })
     source('src/hooks/RecoilRoot/useHypertasksRecoilStates.ts', { default: () => ({ toggleShowCommands() {} }) })
     const SearchTaskIndexAtom = {}
     source('src/lib/state.tsx', {
@@ -1370,3 +1370,32 @@ for (const [name, config] of [
     })
   })
 }
+
+test('HTPR-7501 a search the user starts while the server result is pending wins', async (t) => {
+  let resolveServer
+  let resolveBoards
+  let ready = false
+  const projects = []
+  const refetch = () => new Promise((resolve) => { resolveBoards = () => resolve({ data: [{ id: 7, title: 'Product Board' }] }) })
+  await withSearch(t, { query: 'Result', projects: () => projects, refetch, flagsReady: () => ready, serverStartedSearch: new Promise((resolve) => { resolveServer = resolve }) }, async ({ type, press, tick, render, requests, complete }) => {
+    await flush()
+    await type('Other')
+    await press('Enter')
+    await tick()
+    await flush()
+    assert.equal(requests.length, 0, 'the user search waits for the board list')
+    ready = true
+    await render('Result')
+    await React.act(async () => resolveServer(serverSearch()))
+    await flush()
+    assert.equal(document.getElementById('task_2'), null, 'the server result does not replace the user search')
+    await React.act(async () => resolveBoards())
+    await flush()
+    assert.equal(requests.length, 1)
+    assert.equal(requests[0].body.searchQuery, 'Other')
+    await complete(requests[0], [serverTasks[0]], ['All'])
+    assert.ok(document.getElementById('task_1'))
+    assert.equal(document.getElementById('task_2'), null, 'the server result for the old query is not shown')
+    assert.equal(requests.length, 1)
+  })
+})

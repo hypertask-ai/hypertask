@@ -70,4 +70,8 @@ export class SearchRequestGate {
   isLatest(requestId: number) {
     return requestId === this.latest;
   }
+
+  latestRequest() {
+    return this.latest;
+  }
 }
