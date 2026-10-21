@@ -78,6 +78,16 @@ async function settled(page: Page, landmarks: Locator[]) {
 test.beforeEach(async ({ page, context }) => {
   expect(fixture.visualNow).toBe('2026-10-01T12:00:00Z')
   await page.clock.setFixedTime(new Date(fixture.visualNow))
+  await page.addInitScript(() => {
+    let seed = 0x7a5e1550
+    Math.random = () => {
+      seed = (seed + 0x6d2b79f5) | 0
+      let t = Math.imul(seed ^ (seed >>> 15), 1 | seed)
+      t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t
+      return ((t ^ (t >>> 14)) >>> 0) / 4294967296
+    }
+    window.localStorage.setItem('ht_inbox_notif_nudge_dismissed', 'true')
+  })
   await context.addCookies([{ name: 'theme', value: 'porcelain', domain: '127.0.0.1', path: '/', sameSite: 'Lax' }])
 })
 
