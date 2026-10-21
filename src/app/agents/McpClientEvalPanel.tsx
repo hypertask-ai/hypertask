@@ -1,8 +1,8 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { useFlag } from "@/hooks/useFlag";
-import { HTPR_6533_MCP_CLIENT_EVAL_FLAG } from "@/lib/flags/keys";
+import { isOwnerOrQaUser } from "@/lib/auth/ownerOrQa";
+import type { IUser } from "@/models/model";
 import type {
   McpClientEvalClient,
   McpClientEvalReport,
@@ -33,8 +33,8 @@ function calls(value: number | null): string {
   return value == null || !Number.isFinite(value) ? "—" : String(value);
 }
 
-function McpClientEvalPanel() {
-  const enabled = useFlag(HTPR_6533_MCP_CLIENT_EVAL_FLAG);
+function McpClientEvalPanel({ currentUser }: { currentUser: IUser }) {
+  const enabled = isOwnerOrQaUser(currentUser);
   const [report, setReport] = useState<McpClientEvalReport | null>(null);
   const [error, setError] = useState<string | null>(null);
 

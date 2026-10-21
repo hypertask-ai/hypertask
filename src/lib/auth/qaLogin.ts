@@ -1,12 +1,12 @@
 import { scrypt, timingSafeEqual } from "node:crypto";
 import { promisify } from "node:util";
 
-import { FEATURE_FLAG_QA_USER_ID } from "@/lib/flags";
+import { FEATURE_FLAG_QA_USER_ID } from "@/lib/auth/ownerOrQa";
 
 export const QA_LOGIN_USER_ID = FEATURE_FLAG_QA_USER_ID;
 export const QA_LOGIN_PASSWORD_MIN_BYTES = 32;
 const QA_LOGIN_SCRYPT_KEYLEN = 64;
-const QA_LOGIN_SCRYPT_SALT = Buffer.from("htpr-6536-qa-login");
+const QA_LOGIN_SCRYPT_SALT = Buffer.from("687470722d363533362d71612d6c6f67696e", "hex");
 const scryptAsync = promisify(scrypt);
 
 export type QaLoginConfig = {

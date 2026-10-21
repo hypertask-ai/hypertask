@@ -11,7 +11,7 @@ import { hasTeamMembershipAccess } from "@/utils/controllers/teams/hasTeamMember
 import type { AgentScopes } from "@/lib/mcp/agents/scopes";
 import { boardAgentVisibilityWhere } from "@/lib/agents/visibility";
 import { getSessionUser } from "@/lib/auth/getSessionUser";
-import { isFeatureEnabled, HTPR_6512_SEED_TEAM_AGENT_FLAG } from "@/lib/flags";
+import { isOwnerOrQaUserId } from "@/lib/flags";
 import {
   ensureDefaultTeamAgent,
   lockTeamAgentSeed,
@@ -47,7 +47,7 @@ export async function GET(request: NextRequest) {
     );
   }
 
-  if (await isFeatureEnabled(HTPR_6512_SEED_TEAM_AGENT_FLAG, currentUserId)) {
+  if (await isOwnerOrQaUserId(currentUserId)) {
     await ensureDefaultTeamAgent(currentUserId, teamId, prisma);
   }
 

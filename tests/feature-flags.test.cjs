@@ -934,11 +934,11 @@ test("the retired mobile Agent Chat viewport flag is hidden, immutable and enabl
   for (const mode of flags.FEATURE_FLAG_MODES) {
     listedRows = [
       { key, mode, updatedAt: new Date() },
-      { key: "htpr-6536-qa-login", mode: "OWNER_AND_QA", updatedAt: null },
+      { key: "htpr-7069-flags-dropdown-filters", mode: "OWNER_AND_QA", updatedAt: null },
     ];
     row = { mode, updatedAt: new Date() };
     const listedKeys = new Set((await flags.listFeatureFlagModes()).map((flag) => flag.key));
-    assert.ok(listedKeys.has("htpr-6536-qa-login"), "positive control remains listed");
+    assert.ok(listedKeys.has("htpr-7069-flags-dropdown-filters"), "positive control remains listed");
     assert.equal(listedKeys.has(key), false);
     for (const userId of [6, 985, 2343]) {
       assert.equal((await flags.featureFlagsForUser(userId))[key], true);
@@ -958,11 +958,11 @@ test("the retired lazy emoji list flag is hidden, immutable and enabled for old 
   for (const mode of flags.FEATURE_FLAG_MODES) {
     listedRows = [
       { key, mode, updatedAt: new Date() },
-      { key: "htpr-6536-qa-login", mode: "OWNER_AND_QA", updatedAt: null },
+      { key: "htpr-7069-flags-dropdown-filters", mode: "OWNER_AND_QA", updatedAt: null },
     ];
     row = { mode, updatedAt: new Date() };
     const listedKeys = new Set((await flags.listFeatureFlagModes()).map((flag) => flag.key));
-    assert.ok(listedKeys.has("htpr-6536-qa-login"), "positive control remains listed");
+    assert.ok(listedKeys.has("htpr-7069-flags-dropdown-filters"), "positive control remains listed");
     assert.equal(listedKeys.has(key), false);
     for (const userId of [6, 985, 2343]) {
       assert.equal((await flags.featureFlagsForUser(userId))[key], true);
@@ -982,11 +982,11 @@ test("the retired comment shortcuts flag is hidden, immutable and enabled for ol
   for (const mode of flags.FEATURE_FLAG_MODES) {
     listedRows = [
       { key, mode, updatedAt: new Date() },
-      { key: "htpr-6536-qa-login", mode: "OWNER_AND_QA", updatedAt: null },
+      { key: "htpr-7069-flags-dropdown-filters", mode: "OWNER_AND_QA", updatedAt: null },
     ];
     row = { mode, updatedAt: new Date() };
     const listedKeys = new Set((await flags.listFeatureFlagModes()).map((flag) => flag.key));
-    assert.ok(listedKeys.has("htpr-6536-qa-login"), "positive control remains listed");
+    assert.ok(listedKeys.has("htpr-7069-flags-dropdown-filters"), "positive control remains listed");
     assert.equal(listedKeys.has(key), false);
     for (const userId of [6, 985, 2343]) {
       assert.equal((await flags.featureFlagsForUser(userId))[key], true);
@@ -1046,10 +1046,10 @@ const retiredInfraKeys = [
 
 test("the 19 retired infra flags are hidden, immutable and enabled for old tabs", async () => {
   listedRows = retiredInfraKeys.map((key) => ({ key, mode: "OFF", updatedAt: new Date() }));
-  listedRows.push({ key: "htpr-6536-qa-login", mode: "OWNER_AND_QA", updatedAt: null });
+  listedRows.push({ key: "htpr-7069-flags-dropdown-filters", mode: "OWNER_AND_QA", updatedAt: null });
   const listed = await flags.listFeatureFlagModes();
   const listedKeys = new Set(listed.map(({ key }) => key));
-  assert.ok(listedKeys.has("htpr-6536-qa-login"), "positive control remains listed");
+  assert.ok(listedKeys.has("htpr-7069-flags-dropdown-filters"), "positive control remains listed");
   for (const key of retiredInfraKeys) {
     assert.equal(flags.FEATURE_FLAG_KEYS.includes(key), false, key);
     assert.equal(listedKeys.has(key), false, key);
@@ -1066,10 +1066,10 @@ test("the retired scoped refetch flag is hidden, immutable and enabled for old t
   const key = "htpr-6166-scoped-board-refetch";
   listedRows = [
     { key, mode: "OFF", updatedAt: new Date() },
-    { key: "htpr-6536-qa-login", mode: "OWNER_AND_QA", updatedAt: null },
+    { key: "htpr-7069-flags-dropdown-filters", mode: "OWNER_AND_QA", updatedAt: null },
   ];
   const listedKeys = new Set((await flags.listFeatureFlagModes()).map(({ key }) => key));
-  assert.ok(listedKeys.has("htpr-6536-qa-login"), "positive control remains listed");
+  assert.ok(listedKeys.has("htpr-7069-flags-dropdown-filters"), "positive control remains listed");
   assert.equal(flags.FEATURE_FLAG_KEYS.includes(key), false);
   assert.equal(listedKeys.has(key), false);
   for (const userId of [985, 42]) {
