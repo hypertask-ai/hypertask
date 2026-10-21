@@ -460,6 +460,7 @@ const Commands = (props: Props) => {
         const selectionStart = proxy?.selectionStart ?? null;
         const selectionEnd = proxy?.selectionEnd ?? null;
         if (transferring) {
+          if (focusProxy.pendingEnter !== proxy.value) delete focusProxy.pendingEnter;
           el.value = proxy.value;
           onKeyChangeRef.current({ target: { value: proxy.value } } as React.ChangeEvent<HTMLInputElement>);
         }
@@ -719,7 +720,10 @@ const Commands = (props: Props) => {
         autoFocus={!isMobile}
         id="htc-mobile-search"
         placeholder={isDemo ? "Press Enter to select" : "Type a command or search..."}
-        onChange={onKeyChange}
+        onChange={(event) => {
+          if (focusProxy) delete focusProxy.pendingEnter;
+          onKeyChange(event);
+        }}
         value={keyword}
         onKeyDown={(e) => {
           if (e.key === "Enter" && selectedCommand) {
@@ -808,7 +812,10 @@ const Commands = (props: Props) => {
                autoFocus
                id={newTaskWindow ? "htc-search" : "htc"}
                placeholder={isDemo ? "Press Enter to select" : "Type a command or search..."}
-               onChange={onKeyChange}
+               onChange={(event) => {
+          if (focusProxy) delete focusProxy.pendingEnter;
+          onKeyChange(event);
+        }}
                value={keyword}
                onKeyDown={(e) => {
                  if (e.key === "Enter" && selectedCommand) {

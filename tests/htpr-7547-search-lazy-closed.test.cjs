@@ -58,7 +58,7 @@ async function withSearch({ enabled, layout = true, mobile = true, delayed = fal
     '@/hooks/useFlag': { useFlag: (key) => key === flag ? loaded && enabled : layout, useFlagLoaded: () => loaded },
     'next/navigation': { useRouter: () => ({ push() {} }), useSearchParams: () => new URLSearchParams() },
     '@/lib/aiChatDisplayMode': { buildFullScreenChatPath: () => '/chat' },
-    '@/lib/flags/keys': new Proxy({}, { get: (_target, key) => String(key) }),
+    '@/lib/flags/keys': new Proxy({}, { get: (_target, key) => key === 'HTPR_7547_SEARCH_LAZY_CLOSED_FLAG' ? flag : String(key) }),
     '@/lib/flags/definitions/htpr-7547-search-lazy-closed': realModule('src/lib/flags/definitions/htpr-7547-search-lazy-closed.ts'),
     '@/lib/contexts/deviceContext': { useDeviceContext: () => apple },
     '@/lib/search/autocomplete': { highlightedSearchSnippet: () => [], highlightedTitle: (text) => [{ text, matched: false }] },
@@ -316,6 +316,26 @@ test('HTPR-7547 Shift+Enter and IME confirmation do not queue a submit', async (
       proxy().value = 'draft';
       await pressProxy('Enter', { code: 'Enter', ...extra });
       await release();
+      assert.equal(pendingEnter(), undefined);
+    });
+  }
+});
+
+
+test('HTPR-7547 editing pending proxy text cancels the queued Enter even when the original text returns', async () => {
+  for (const tab of ['search', 'compose']) {
+    await withSearch({ enabled: true, tab, delayed: true }, async ({ open, proxy, pressProxy, release, pendingEnter, bufferedInput }) => {
+      await open();
+      proxy().value = 'draft';
+      await pressProxy('Enter', { code: 'Enter' });
+      await React.act(async () => {
+        proxy().value = 'draft2';
+        proxy().dispatchEvent(new window.Event('input', { bubbles: true }));
+        proxy().value = 'draft';
+        proxy().dispatchEvent(new window.Event('input', { bubbles: true }));
+      });
+      await release();
+      assert.equal(bufferedInput(), 'draft');
       assert.equal(pendingEnter(), undefined);
     });
   }

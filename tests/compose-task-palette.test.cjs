@@ -1614,3 +1614,26 @@ test('HTPR-7547 buffered Search Enter selects the matching command once after fi
     });
   }
 });
+
+
+test('HTPR-7547 a mismatched queued Compose Enter is discarded at handoff, not retained for a later edit', async (t) => {
+  for (const mobile of [false, true]) {
+    await withPalette(t, { tab: 'compose', mobile, bufferedText: 'draft2', pendingEnter: 'draft' }, async ({ input, type, requests, focusProxy }) => {
+      assert.equal(input().value, 'draft2');
+      assert.equal(focusProxy.pendingEnter, undefined);
+      assert.equal(requests.length, 0);
+      await type('draft');
+      assert.equal(requests.length, 0, 'editing back to an old Enter snapshot must not submit');
+    });
+  }
+});
+
+
+test('HTPR-7547 a mismatched queued Search Enter is discarded rather than executed after editing', async (t) => {
+  for (const mobile of [false, true]) {
+    await withPalette(t, { mobile, bufferedText: 'AI Task Writer2', pendingEnter: 'AI Task Writer' }, async ({ values, focusProxy }) => {
+      assert.equal(values.get('showCommandsAtom').paletteTab, 'search');
+      assert.equal(focusProxy.pendingEnter, undefined);
+    });
+  }
+});

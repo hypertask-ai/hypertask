@@ -25,7 +25,7 @@ import SearchChipsInput from "./SearchChipsInput";
 import "./search-autocomplete.css";
 import type { CommandFocusProxy } from "@/components/commandTypes";
 import type { ServerStartedSearch } from "@/lib/search/serverStartedSearch";
-import { HTPR_7547_SEARCH_LAZY_CLOSED_FLAG } from "@/lib/flags/definitions/htpr-7547-search-lazy-closed";
+import { HTPR_7547_SEARCH_LAZY_CLOSED_FLAG } from "@/lib/flags/keys";
 
 interface IProps {
   _searchTerm: string;
@@ -324,6 +324,7 @@ const SearchComp = ({
             tabIndex={-1}
             aria-label="Command search"
             className="fixed left-0 top-0 h-px w-px opacity-0 pointer-events-none text-[16px]"
+            onInput={() => { delete commandFocusProxy.pendingEnter; }}
             onKeyDown={(event) => {
               if (event.key === "Enter" && !event.shiftKey && !event.nativeEvent.isComposing) {
                 event.preventDefault();

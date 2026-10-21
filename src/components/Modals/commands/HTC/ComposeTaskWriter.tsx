@@ -184,6 +184,7 @@ export default function ComposeTaskWriter({ active, focusProxy, destinationProje
       const selectionStart = proxy?.selectionStart ?? null;
       const selectionEnd = proxy?.selectionEnd ?? null;
       if (transferring) {
+        if (focusProxy.pendingEnter !== proxy.value) delete focusProxy.pendingEnter;
         field.value = proxy.value;
         setText(proxy.value);
       }
@@ -383,7 +384,10 @@ export default function ComposeTaskWriter({ active, focusProxy, destinationProje
             <AiComposerTextarea
               ref={input}
               value={text}
-              onChange={(event) => setText(event.target.value)}
+              onChange={(event) => {
+                if (focusProxy) delete focusProxy.pendingEnter;
+                setText(event.target.value);
+              }}
               rows={mobile ? 3 : 2}
               placeholder="Describe the task"
               aria-label="Describe the task"
