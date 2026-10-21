@@ -127,7 +127,7 @@ contract(globalGroup, "Move task to a different board", "SHIFT|M", "edit", 'acti
 
 contract("Board", "Add task", "C", "section", "e.keyCode === KeyCodes.C", "!(e.altKey || e.shiftKey || e.ctrlKey || e.metaKey)", 'createTaskAt("top"');
 contract("Board", "Add task with AI Task Writer", "MOD|J", "section", "e.keyCode === KeyCodes.J", "((isApple && e.metaKey) || (!isApple && e.ctrlKey))", 'defaultEditMode: "Description-ai"');
-contract("Board", "Add sub-task", "MOD|SHIFT|+", "edit", "e.keyCode === KeyCodes.EQUALS && e.shiftKey && cmdControl", "toggleSubtaskLinkingModal()");
+ambiguous("Board", "Add sub-task", "MOD|SHIFT|+", "Mod+Shift+= links subtasks in task detail, but no board-level handler exists; creating versus linking also needs clarification.");
 contract("Board", "Add task at top", "MOD|SHIFT|C", "section", "e.keyCode === KeyCodes.C", "e.shiftKey && (e.ctrlKey || e.metaKey)", 'createTaskAt("top"');
 ambiguous("Board", "Add task at bottom", "SHIFT|C", "Legacy Shift+C creates at bottom; quick-add flags intercept it and open a modal instead.");
 contract("Board", "Open task", "ENTER", "row", "e.keyCode === KeyCodes.ENTER", "navigateToTask(task.projectId");
