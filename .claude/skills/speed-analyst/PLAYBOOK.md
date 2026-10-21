@@ -289,6 +289,24 @@ https://app.hypertask.ai/detail/project-15/7406, flag `htpr-7406-desktop-server-
 
 **Next probe.** The first layout's font work: count the distinct family, weight and size strikes on the first screen (191 platform lookups) and test on a quiet host whether `local()` fallback faces and the monospace stack cost the first paint on Linux only.
 
+### 2026-10-21 evening: no-cookie server board is a no-go; a search link sends its search once (HTPR-7502)
+
+https://app.hypertask.ai/detail/project-15/7502, flag `htpr-7502-search-once`.
+
+**Daily read.** Can't verify the current deploy: the 11:23 UTC run failed and production moved past ee3c49c3c. Last complete run 07:42 UTC (load 13). Milestone 1 misses: phone board first visit 11802 ms (target 4000), desktop board first visit 2448 ms and board-returning 1098 ms (target 1000), phone page navigation 2370 and search 2124 ms (target 2000). No >15% seven-day regression in content time.
+
+**The 11:23 failure.** Phone ticket-warm: the tap left the page on `/project` with the fixture card at top 1447 px in an 844 px viewport, and `boardTasks` fetched six times, at load 27 to 34. Second such failure this week (the first at load about 50). Watch for one at normal load before changing the harness.
+
+**Free ticket the dispatcher missed again.** HTPR-7502 sat unassigned in Improvements. Read the board for `[SPEED]` tickets in every column before researching.
+
+**No-go: server board on a first visit without the preference cookie.** The server render reads `timeZone` (card dates), `boardLayout`, rail, view tabs, table columns and chat state from the cookie. Only theme (cookie) and phone (user agent) are knowable without it. A device whose cookie expired (7-day `Max-Age`; Safari caps script cookies at 7 days anyway) still holds other choices in localStorage, so a default render would flip after hydration: not identical output. Scored gain 5 / cost 3 / risk 5 = 0.33, rejected. Queued instead: write the cookie at login before the first `/project` load (real users only; the harness never logs in, so it needs its own measurement plan), and the client render limiter (react-dom 4.8 s, HTPR-7395 probe).
+
+**Cause (HTPR-7502).** A fresh tab with the board list already loaded runs the mount search before feature settings arrive, so it skips the server-started result and posts; when settings arrive, the Esc-back flag flips, the term is missing from the tab history and the effect posts again. Live before, QA 2343, 10 fresh tabs at load 42 to 67: 2 posts in 9 of 10, identical result list in all.
+
+**Fix.** Behind a server-evaluated flag (the client flag is false until settings load, so it cannot gate the first effect): wait for settings only while a server result is pending, in a separate effect that runs only if nothing searched meanwhile (a rerun of the main effect resets the typed input), and record a search already shown in the history instead of resending it.
+
+**Trap.** Adding `searchFlagsReady` to the main mount effect looked harmless but re-ran `setInputValue(_searchTerm)`, wiping a query the user typed before settings loaded. The existing "user search wins" test caught it with the flag off.
+
 ## Milliseconds saved scoreboard
 
 Only matched end-to-end before/after evidence earns saved milliseconds; `unproven` is not zero. Do not sum different cohorts or claim forecasts as savings.
