@@ -84,12 +84,7 @@ export function verifyMcpJwtToken(token: string, options: ValidateMcpAuthOptions
     decodedWithoutVerify = jwt.decode(token, { complete: false }) as jwt.JwtPayload
     if (decodedWithoutVerify) {
       log('[MCP Auth] Token decoded (unverified):', {
-        userId: decodedWithoutVerify.userId,
-        sub: decodedWithoutVerify.sub,
-        iss: decodedWithoutVerify.iss,
-        aud: decodedWithoutVerify.aud,
-        exp: decodedWithoutVerify.exp ? new Date(decodedWithoutVerify.exp * 1000).toISOString() : null,
-        iat: decodedWithoutVerify.iat ? new Date(decodedWithoutVerify.iat * 1000).toISOString() : null
+        userId: decodedWithoutVerify.userId
       })
     }
   } catch (err) {
