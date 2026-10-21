@@ -12,7 +12,12 @@ const discoveryKey = 'htpr-7322-agent-feature-discovery'
 const decisionsKey = 'htpr-7092-decisions'
 const searchKey = 'htpr-6688-search-autocomplete'
 const definitionKeys = [decisionsKey, 'htpr-7064-inbox-remind-returns', 'htpr-6422-my-tasks-views', 'htpr-6457-my-tasks-scopes', 'htpr-6461-my-tasks-snooze', searchKey]
-const definitions = definitionKeys.map((key) => load(`src/lib/flags/definitions/${key}.ts`, {}).default)
+const definitions = definitionKeys.map((key) => ({
+  key,
+  kind: key === 'htpr-7064-inbox-remind-returns' ? 'bugfix' : 'feature',
+  description: `Registry description for ${key}`,
+  shippedOn: '2026-10-11',
+}))
 const reader = { user: { id: 47, email: 'reader@example.test' }, agentId: 'read-agent' }
 
 function catalog(availability = {}, registryDefinitions = definitions, discoveryEnabled = true) {
@@ -72,7 +77,7 @@ test('catalog includes every enabled feature kind without requiring a destinatio
   assert.deepEqual(mod.users, [47])
 })
 
-test('catalog projects live feature descriptions and shipped dates with optional verified destinations', async () => {
+test('catalog projects registry descriptions and shipped dates with optional verified destinations', async () => {
   const mod = catalog(Object.fromEntries(definitionKeys.map((key) => [key, true])))
   const rows = await mod.getFeatureCatalog(985)
   assert.ok(rows.every(({ name }) => typeof name === 'string' && name.trim().length > 0))
