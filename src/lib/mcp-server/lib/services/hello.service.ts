@@ -35,6 +35,14 @@ export interface HelloResponse {
     instructions: string | null;
   }>;
   conventionsTruncated: boolean;
+  agent?: { id: string; displayName: string } | null;
+  startBoard?: { id: number; title: string; boardUrl: string } | null;
+  nextSteps?: Array<{
+    step: string;
+    command: string;
+    tool: string;
+    arguments: Record<string, unknown>;
+  }>;
 }
 
 export class HelloService {
