@@ -4,7 +4,7 @@ import type { Metadata } from "next";
 
 import { markdownToHtml } from "@/utils/helperFunctions/markdownToHtml";
 
-export const dynamic = "force-static";
+export const dynamic = "force-dynamic";
 
 export const metadata: Metadata = {
   title: "Universal agent onboarding",
