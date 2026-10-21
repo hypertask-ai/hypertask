@@ -180,7 +180,7 @@ export default function ComposeTaskWriter({ active, focusProxy, destinationProje
       const field = input.current;
       if (cancelled || !field || (document.activeElement === field && !(boardChipEnabled && caret.current))) return;
       const proxy = focusProxy?.current;
-      const transferring = focusProxy?.compose && proxy && (document.activeElement === proxy || (tries === 0 && proxy.value));
+      const transferring = proxy && (document.activeElement === proxy || (tries === 0 && proxy.value));
       const selectionStart = proxy?.selectionStart ?? null;
       const selectionEnd = proxy?.selectionEnd ?? null;
       if (transferring) {
@@ -345,7 +345,7 @@ export default function ComposeTaskWriter({ active, focusProxy, destinationProje
   };
 
   useEffect(() => {
-    if (!active || !focusProxy?.compose || focusProxy.pendingEnter === undefined ||
+    if (!active || !focusProxy || focusProxy.pendingEnter === undefined ||
         text !== focusProxy.pendingEnter || document.activeElement !== input.current) return;
     delete focusProxy.pendingEnter;
     void send();

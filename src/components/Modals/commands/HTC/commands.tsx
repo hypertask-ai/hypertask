@@ -25,6 +25,7 @@ import { ICommandList } from "./HTCTypes";
 import CommandGroups from "./CommandGroup";
 import useHTC from "@/hooks/MultiPages/HTC/useHTC";
 import type { CommandFocusProxy } from "@/components/commandTypes";
+import { HTPR_7547_SEARCH_LAZY_CLOSED_FLAG } from "@/lib/flags/keys";
 import { ModalContainerCustom, ModalHintBar, ModalInput } from "@/components/Common/CommonModalComponents";
 import useHypertasksRecoilStates from "@/hooks/RecoilRoot/useHypertasksRecoilStates";
 import {
@@ -116,6 +117,7 @@ const Commands = (props: Props) => {
   let newTaskWindow = false;
   if (composeTaskWriterEnabled && newTaskWindowFlag && !props.isDemo && !props.isInteractive) newTaskWindow = true;
   const isApple = useDeviceContext();
+  const lazyClosedCommands = useFlag(HTPR_7547_SEARCH_LAZY_CLOSED_FLAG);
   const composeEnabled = composeTaskWriterEnabled && !props.isDemo && !props.isInteractive;
   const [showCommands, setShowCommands] = useRecoilState(showCommandsAtom);
   const isCompose = composeEnabled && showCommands.paletteTab === "compose";
@@ -706,7 +708,7 @@ const Commands = (props: Props) => {
       />
     </div>
   ) : null;
-  const compose = composeEnabled ? <ComposeTaskWriter active={isCompose} focusProxy={focusProxy} destinationProject={newTaskWindow ? composeProjectRef.current : undefined} onBusyChange={setWriting} onSearch={clickableComposeFooter ? () => setShowCommands((previous) => ({ ...previous, paletteTab: "search" })) : undefined} onClose={clickableComposeFooter ? toggle : undefined} onCreated={async () => {
+  const compose = composeEnabled ? <ComposeTaskWriter active={isCompose} focusProxy={lazyClosedCommands || focusProxy?.compose ? focusProxy : undefined} destinationProject={newTaskWindow ? composeProjectRef.current : undefined} onBusyChange={setWriting} onSearch={clickableComposeFooter ? () => setShowCommands((previous) => ({ ...previous, paletteTab: "search" })) : undefined} onClose={clickableComposeFooter ? toggle : undefined} onCreated={async () => {
     if (newTaskWindow && isMobile) await composeOnCreatedRef.current?.();
     else if (newTaskWindow) composeOnCreatedRef.current?.();
     resetShowCommands();
@@ -813,9 +815,9 @@ const Commands = (props: Props) => {
                id={newTaskWindow ? "htc-search" : "htc"}
                placeholder={isDemo ? "Press Enter to select" : "Type a command or search..."}
                onChange={(event) => {
-          if (focusProxy) delete focusProxy.pendingEnter;
-          onKeyChange(event);
-        }}
+                 if (focusProxy) delete focusProxy.pendingEnter;
+                 onKeyChange(event);
+               }}
                value={keyword}
                onKeyDown={(e) => {
                  if (e.key === "Enter" && selectedCommand) {

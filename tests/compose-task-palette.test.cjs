@@ -1637,3 +1637,13 @@ test('HTPR-7547 a mismatched queued Search Enter is discarded rather than execut
     });
   }
 });
+
+
+test('HTPR-7547 flag On preserves the opted-in Compose handoff for existing proxy hosts', async (t) => {
+  for (const mobile of [false, true]) {
+    await withPalette(t, { tab: 'compose', mobile, preserveColdCommandInput: true, legacyProxy: true, bufferedText: 'existing host draft' }, async ({ input, focusProxy }) => {
+      assert.equal(input().value, 'existing host draft');
+      assert.equal(focusProxy.current.value, '');
+    });
+  }
+});
