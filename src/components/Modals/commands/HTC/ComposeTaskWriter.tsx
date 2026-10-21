@@ -113,10 +113,10 @@ export default function ComposeTaskWriter({ active, destinationProject, onCreate
       lastUsedBoardId: composeTaskBoardId("/", parseCookies().previousBoard, lastUsedBoards),
       destinationBoardId: destinationProject?.id,
       selectedBoardId,
-      alwaysShowChip: alwaysShowBoardChip,
     });
     targetBoardId = target.boardId;
     showBoardChip = target.showChip;
+    if (alwaysShowBoardChip) showBoardChip = true;
   } else {
     targetBoardId = undefined;
     showBoardChip = false;

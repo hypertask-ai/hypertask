@@ -4,14 +4,12 @@ export function resolveComposeBoardTarget({
   lastUsedBoardId,
   destinationBoardId,
   selectedBoardId,
-  alwaysShowChip = false,
 }: {
   url: string;
   focusedTicketBoardId?: number | null;
   lastUsedBoardId?: number;
   destinationBoardId?: number;
   selectedBoardId?: number;
-  alwaysShowChip?: boolean;
 }): { boardId: number | undefined; showChip: boolean } {
   const location = new URL(url, "https://hypertask.local");
   const validId = (value: string | number | null | undefined) => {
@@ -32,5 +30,5 @@ export function resolveComposeBoardTarget({
     inboxBoardId = validId(focusedTicketBoardId) ?? splitBoardId;
   }
   const boardId = validId(selectedBoardId) ?? validId(destinationBoardId) ?? contextualBoardId ?? inboxBoardId ?? validId(lastUsedBoardId);
-  return { boardId, showChip: alwaysShowChip || validId(selectedBoardId) !== undefined || !contextualBoardId || boardId !== contextualBoardId };
+  return { boardId, showChip: validId(selectedBoardId) !== undefined || !contextualBoardId || boardId !== contextualBoardId };
 }
