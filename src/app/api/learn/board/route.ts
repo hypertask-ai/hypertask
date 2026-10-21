@@ -1,3 +1,4 @@
+import { prepareAgentScope, withAgentScopeRequest } from "@/lib/auth/agentScope";
 import { randomUUID } from "node:crypto";
 
 import { NextRequest, NextResponse } from "next/server";
@@ -5,7 +6,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { SESSION_COOKIE, verifySession } from "@/lib/auth/session";
 import { provisionLearnBoard } from "@/lib/demo/provisionGuest";
 import prisma from "@/lib/prisma";
-import { getProjectWhere } from "@/utils/controllers/projects/getAllIncludes";
+import { getProjectWhere, projectContentAccessWhere } from "@/utils/controllers/projects/getAllIncludes";
 import {
   ensureLearnTutorialInbox,
   type LearnTutorialInboxTarget,
@@ -44,6 +45,10 @@ const nextTutorialColumnTitle = (titles: string[]) => {
 };
 
 export async function POST(request: NextRequest) {
+  return withAgentScopeRequest(request, () => learnBoard(request));
+}
+
+async function learnBoard(request: NextRequest) {
   if (!KEYBOARD_SHORTCUT_TUTORIAL_ENABLED) {
     return NextResponse.json(
       { error: "The keyboard shortcuts tutorial is temporarily unavailable" },
@@ -58,6 +63,8 @@ export async function POST(request: NextRequest) {
       { status: 401 },
     );
   }
+
+  await prepareAgentScope(session.id, session.agentId);
 
   const parsedBody: unknown = await request.json().catch(() => ({}));
   if (
@@ -147,6 +154,7 @@ export async function POST(request: NextRequest) {
       ownerId: session.id,
       status: "Normal",
       title: BOARD_TITLE,
+      AND: [projectContentAccessWhere(session.id, session.agentId)],
     },
     orderBy: { createdAt: "asc" },
     select: { id: true },
@@ -180,6 +188,7 @@ export async function POST(request: NextRequest) {
               id: requestedReturnBoardId,
               status: "Normal",
               ...getProjectWhere(session.id),
+              AND: [getProjectWhere(session.id, session.agentId)],
             },
             select: { id: true },
           })
