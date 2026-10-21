@@ -322,7 +322,7 @@ test("auto-merge waits for app smoke and runs when it completes", async () => {
   assert.match(ciWorkflow, /name: Verify live required-check settings/);
   assert.doesNotMatch(ciWorkflow, /if \. == "claude-review" then "ai-review" else \. end/);
   assert.match(ciWorkflow, /unique \| sort \| \.\[\]/);
-  assert.match(ciWorkflow, /default_branch.*gh api "repos\/\$REPO"/);
+  assert.match(ciWorkflow, /default_branch.*github_read "repos\/\$REPO"/);
   assert.match(ciWorkflow, /name == "production-required-checks"/);
   assert.match(ciWorkflow, /\.target == "branch"/);
   assert.match(ciWorkflow, /index\("refs\/heads\/production"\)/);
