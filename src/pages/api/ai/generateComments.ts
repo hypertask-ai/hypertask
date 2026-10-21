@@ -1,5 +1,6 @@
+import { withAgentScopeRequest } from "@/lib/auth/agentScope";
 import { reportError } from "@/lib/errors/reportError";
-import type { NextApiRequest, NextApiResponse } from 'next'
+import type { NextApiHandler, NextApiRequest, NextApiResponse } from 'next'
 import prisma from "@/lib/prisma";
 import { getSessionUser } from "@/lib/auth/getSessionUser";
 import { projectContentAccessWhere } from "@/utils/controllers/projects/getAllIncludes";
@@ -11,7 +12,7 @@ import { buildTaskPayloadForAI } from '@/utils/controllers/ai/task/buildTaskPayl
 
 
 
-export default async function handler(
+async function handler(
   req: NextApiRequest,
   res: NextApiResponse
 ) {
@@ -23,11 +24,15 @@ export default async function handler(
     const { taskId, commentIds } = req.body;
     if (!taskId) return res.status(400).json({ message: "Missing task id" })
     const accessibleTask = await prisma.task.findFirst({
-      where: { id: Number(taskId), project: projectContentAccessWhere(session.userId) },
+      where: {
+        id: Number(taskId),
+        project: projectContentAccessWhere(session.userId),
+        AND: [{ project: projectContentAccessWhere(session.userId, session.agentId) }],
+      },
       select: { id: true },
     });
     if (!accessibleTask) return res.status(404).json({ message: "Task not found" });
-    const result = await generateCommentsHandler(accessibleTask.id, commentIds ?? []);
+    const result = await generateCommentsHandler(accessibleTask.id, commentIds ?? [], session.userId, session.agentId);
     if (!result) {
       return res.status(404).json({ message: "Task not found" });
     }
@@ -45,9 +50,9 @@ export default async function handler(
     return res.status(500).json(error)
   }
 }
-export const generateCommentsHandler = async (taskId: number, commentIds: number[]) => {
+export const generateCommentsHandler = async (taskId: number, commentIds: number[], userId: number, actingAgentId?: string) => {
   const taskFromDB = await prisma.task.findUnique({
-    where: { id: taskId },
+    where: { id: taskId, project: projectContentAccessWhere(userId, actingAgentId) },
     select: {
       id: true,
       user: true,
@@ -128,7 +133,7 @@ export const generateCommentsHandler = async (taskId: number, commentIds: number
   })
   if (!taskFromDB) return 
   const body = buildTaskPayloadForAI(taskFromDB)
-  const comments = await getComments(taskId, commentIds)
+  const comments = await getComments(taskId, commentIds, userId, actingAgentId)
   const response = comments.map((comment) => {
     let comment_text = '';
     let comment_created_by;
@@ -164,11 +169,11 @@ export const generateCommentsHandler = async (taskId: number, commentIds: number
   return { task:body, response }
 
 }
-async function getComments(taskId: number, commentIdsToGet: number[]) {
+async function getComments(taskId: number, commentIdsToGet: number[], userId: number, actingAgentId?: string) {
 
   if (commentIdsToGet.length === 0) {
     const comments = await prisma.comment.findMany({
-      where: { taskId },
+      where: { taskId, task: { project: projectContentAccessWhere(userId, actingAgentId) } },
       orderBy: {
         createdAt: "desc"
       },
@@ -195,7 +200,7 @@ async function getComments(taskId: number, commentIdsToGet: number[]) {
   }
   else {
     const comments = await prisma.comment.findMany({
-      where: { taskId, id: { in: commentIdsToGet } },
+      where: { taskId, id: { in: commentIdsToGet }, task: { project: projectContentAccessWhere(userId, actingAgentId) } },
       orderBy: {
         createdAt: "desc"
       },
@@ -388,3 +393,5 @@ export const getTaskPayloadForFAST = async (taskId: number) => {
   const body = buildTaskPayloadForAI(taskFromDB)
   return body
 }
+
+export default ((req, res) => withAgentScopeRequest(req, () => handler(req, res))) satisfies NextApiHandler;
