@@ -30,6 +30,23 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
+  probe:
+    if: github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/production' && github.repository == 'hypertask-ai/hypertask' && inputs.mode == 'probe'
+    environment: live-qa
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    steps:
+      - name: Prove environment login is present without using it
+        env:
+          QA_SECRET_PRESENT: ${{ secrets.QA_LOGIN_EMAIL != '' && secrets.QA_LOGIN_PASSWORD != '' }}
+        run: |
+          if [ "$QA_SECRET_PRESENT" = true ]; then
+            echo 'secret-present=true'
+          else
+            echo 'secret-present=false'
+            exit 1
+          fi
+
   capture:
     if: github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/production' && github.repository == 'hypertask-ai/hypertask' && inputs.mode == 'run'
     environment: live-qa
