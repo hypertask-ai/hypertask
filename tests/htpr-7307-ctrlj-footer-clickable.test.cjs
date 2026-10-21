@@ -78,9 +78,9 @@ test('Send click and Enter call the same existing send, preserving empty-input a
     await click(button('Send'));
     assert.equal(ui.requests.length, 1);
     const clicked = ui.requests[0].body;
-    for (const name of ['Send', 'Attach files', 'Search', 'Board', 'Close']) assert.equal(button(name).disabled, true);
+    for (const name of ['Send', 'Attach files', 'Board', 'Close']) assert.equal(button(name).disabled, true);
+    assert.equal(button('Search').disabled, false, 'Search stays available while writing, like Ctrl+K');
     await click(button('Close'));
-    await click(button('Search'));
     assert.equal(ui.values.get('showCommandsAtom').show, true);
     assert.equal(ui.values.get('showCommandsAtom').paletteTab, 'compose');
     await ui.fail();
@@ -89,6 +89,18 @@ test('Send click and Enter call the same existing send, preserving empty-input a
     assert.equal(typeof clicked.onProgress, 'function');
     assert.deepEqual({ ...ui.requests[1].body, onProgress: undefined }, { ...clicked, onProgress: undefined });
     await ui.fail();
+  });
+});
+
+test('pressing a footer button with the mouse keeps the caret in the textbox', async (t) => {
+  await withPalette(t, config, async (ui) => {
+    await enable(ui);
+    await ui.type('Keep typing');
+    for (const name of ['Send', 'Attach files', 'Search', 'Board', 'Close']) {
+      const press = new ui.dom.window.MouseEvent('mousedown', { bubbles: true, cancelable: true });
+      button(name).dispatchEvent(press);
+      assert.equal(press.defaultPrevented, true, `${name} does not take focus from the textbox`);
+    }
   });
 });
 
