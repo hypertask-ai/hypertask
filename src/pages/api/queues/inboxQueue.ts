@@ -27,9 +27,6 @@ export async function scheduleInboxReminderJob(reminder: IReminder, runAt: Date)
 }
 
 export async function cancelInboxReminderJob(userId: number, taskId: number) {
-  // Cancel only the pre-revision per-user ID. Revisioned jobs are immutable;
-  // stale and legacy task-only jobs are harmless because invokeDueReminder
-  // atomically claims the current active, due database row before delivery.
   return cancelJobById(`notifications-for-user-${userId}-task-${taskId}`, INBOX_QUEUE_PATH);
 }
 
@@ -51,7 +48,6 @@ export async function cancelLegacyInboxReminderJobIfSafe(userId: number, taskId:
 async function handler(req: NextApiRequest, res: NextApiResponse) {
     const job = req.body as any;
     console.log("🚀 ~ job:", job)
-    // ================== job execution time *-*, you finally recieve the notification
 
     try {
       const result = await invokeDueReminder(job)

@@ -98,8 +98,6 @@ const SYSTEM = [
 ].join(" ");
 
 function sseFrame(event: SseEvent, data: Record<string, unknown>) {
-  // ponytail: use the authenticated chat's exact named-event contract. The
-  // client parses one JSON object from each `data:` line and switches on event.
   return `event: ${event}\ndata: ${JSON.stringify(data)}\n\n`;
 }
 
@@ -118,8 +116,6 @@ function sseErrorResponse(message: string, status = 200) {
 }
 
 function sseSignupRequired() {
-  // Guest has spent their free AI allowance. `code` lets the client swap the
-  // generic error bubble for a signup CTA.
   return new Response(
     sseFrame("error", {
       content:
@@ -144,8 +140,6 @@ function fallbackTitle(message: string) {
 export async function POST(request: NextRequest) {
   const apiKey = process.env.DEMO_AI_GATEWAY_API_KEY?.trim();
   if (!apiKey) {
-    // ponytail: fail closed. Anonymous chat spend must never fall back to a
-    // shared team or platform key.
     return sseErrorResponse("Demo chat is unavailable.", 503);
   }
 
@@ -182,19 +176,12 @@ export async function POST(request: NextRequest) {
     },
   ];
 
-  // Resolve the model through the guest allowlist. The picker only offers cheap
-  // Chinese models to guests, but that's UX — this is the real boundary: never
-  // honor an arbitrary body.model on the shared demo key. Anything not on the
-  // allowlist falls back to the fast default.
   const requestedOption = getAiModelOptionById(body.modelOptionId);
   const gatewayModel =
     requestedOption && GUEST_ALLOWED_GATEWAY_MODELS.has(requestedOption.model)
       ? requestedOption.model
       : GUEST_DEFAULT_GATEWAY_MODEL;
 
-  // Meter + cap against the guest's own team. Fail-open on lookup errors: a
-  // metering hiccup must never take down demo chat (worst case is a little
-  // overspend on a cheap model, bounded per call by maxOutputTokens).
   const guest = await resolveGuestSession(
     request.cookies.get(SESSION_COOKIE)?.value,
   ).catch(() => null);
@@ -241,9 +228,6 @@ export async function POST(request: NextRequest) {
           maxRetries: 1,
           providerOptions: { gateway: { tags: ["demo-chat"] } },
           onFinish: async ({ usage }) => {
-            // Meter this turn against the guest's allowance. This is what the
-            // budget cap above reads on the next request. logAiUsage swallows
-            // its own errors, so a metering hiccup never fails the reply.
             if (!guest) return;
             const inputTokens = usage.inputTokens ?? 0;
             const outputTokens = usage.outputTokens ?? 0;

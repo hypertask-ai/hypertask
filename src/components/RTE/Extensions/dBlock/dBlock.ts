@@ -10,9 +10,6 @@ export interface DBlockOptions {
 declare module "@tiptap/core" {
   interface Commands<ReturnType> {
     dBlock: {
-      /**
-       * Toggle a dBlock
-       */
       setDBlock: (position?: number) => ReturnType;
     };
   }
@@ -99,7 +96,7 @@ export const DBlock = Node.create<DBlockOptions>({
 
         doc.descendants((node, pos) => {
           if (currentActiveNodeTo !== -1) return false;
-          // eslint-disable-next-line consistent-return
+
           if (node.type.name === this.name) return;
 
           const [nodeFrom, nodeTo] = [pos, pos + node.nodeSize];

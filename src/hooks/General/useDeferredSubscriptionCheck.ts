@@ -4,13 +4,13 @@ import axios from 'axios';
 interface UseDeferredSubscriptionCheckProps {
   teamId?: number;
   enabled?: boolean;
-  delay?: number; // Delay in milliseconds before checking
+  delay?: number;
 }
 
 export const useDeferredSubscriptionCheck = ({ 
   teamId, 
   enabled = true, 
-  delay = 2000 // Default 2 second delay after page load
+  delay = 2000
 }: UseDeferredSubscriptionCheckProps) => {
   
   const checkSubscription = useCallback(async (teamId: number) => {
@@ -32,7 +32,6 @@ export const useDeferredSubscriptionCheck = ({
   useEffect(() => {
     if (!enabled || !teamId) return;
 
-    // Defer the subscription check to not impact initial render
     const timeoutId = setTimeout(() => {
       checkSubscription(teamId);
     }, delay);

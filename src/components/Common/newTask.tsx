@@ -1,10 +1,8 @@
-/* eslint-disable react-hooks/exhaustive-deps */
+
 import React, { RefObject, useEffect, useLayoutEffect, useRef, useState } from "react";
 
 import toast from "react-hot-toast";
 import { X } from "lucide-react";
-import { useFlag } from "@/hooks/useFlag";
-import { HTPR_6873_QUICK_ENTRY_GROW_FLAG } from "@/lib/flags/keys";
 import { MOBILE_TARGET } from "@/lib/configs/general.config";
 
 type Props = {
@@ -24,12 +22,11 @@ const NewTask = ({
 }: Props) => {
     const [isSubmitting, setIsSubmitting] = useState(false)
     const submittingRef = useRef(false)
-    const quickEntryGrow = useFlag(HTPR_6873_QUICK_ENTRY_GROW_FLAG)
     const textareaRef = useRef<HTMLTextAreaElement | null>(null)
 
     useLayoutEffect(() => {
       const textarea = textareaRef.current
-      if (!quickEntryGrow || !textarea) return
+      if (!textarea) return
       const resize = () => {
         const maxHeight = parseFloat(getComputedStyle(textarea).lineHeight) * 8
         textarea.style.maxHeight = `${maxHeight}px`
@@ -37,7 +34,6 @@ const NewTask = ({
         textarea.style.height = `${Math.min(textarea.scrollHeight, maxHeight)}px`
       }
       resize()
-      // Wrapping also changes when the column or viewport width changes.
       if (typeof ResizeObserver === 'undefined') return
       let width = textarea.clientWidth
       const observer = new ResizeObserver(() => {
@@ -47,7 +43,7 @@ const NewTask = ({
       })
       observer.observe(textarea)
       return () => observer.disconnect()
-    }, [title, quickEntryGrow])
+    }, [title])
 
     const createItem = async () => {
         const res = schemaCheck()
@@ -74,7 +70,6 @@ const NewTask = ({
     const schemaCheck = ()=>{
       const trimmedTitle = title.trim();
   
-      // Check if the trimmed title is not empty
       
       if (trimmedTitle.length > 0) {
         return trimmedTitle;
@@ -85,7 +80,7 @@ const NewTask = ({
   useEffect(()=>{
     document.getElementById("newTask")?.scrollIntoView({behavior:"smooth",block:"center"})
   },[])
-    const onKeyDown = (e: React.KeyboardEvent<HTMLInputElement | HTMLTextAreaElement>) => {
+    const onKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
       if (e.nativeEvent.isComposing || isSubmitting) return;
       if (e.key === "Enter") {
         e.preventDefault();
@@ -98,7 +93,7 @@ const NewTask = ({
       }
     }
 
-  return quickEntryGrow ? (
+  return (
     <div
       onBlur={(e) => {
         if (!e.currentTarget.contains(e.relatedTarget) && !submittingRef.current) onCancelCreate()
@@ -150,24 +145,6 @@ const NewTask = ({
         </button>
       </div>
     </div>
-  ) : (
-        <div id="newTask" className="rounded-md bg-cardBackground px-3 py-[10px]"  style={{ cursor: 'pointer', width: '100%'}}>
-          <input
-            ref={(element) => { inputRef.current = element }}
-            value={title}
-            readOnly={isSubmitting}
-            aria-busy={isSubmitting}
-            autoFocus
-            onBlur={() => {
-              if (!submittingRef.current) onCancelCreate()
-            }}
-            onChange={(e) => onTitleChange(e.target.value)}
-            onKeyDown={onKeyDown}
-            style={{ resize: 'none', background: 'transparent', width: '100%', outline: 'none' }}
-            placeholder="Title"
-            className="sm:text-content xs:text-emphasis text-white-black font-bold"
-          />
-        </div>
   );
 };
 

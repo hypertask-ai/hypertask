@@ -4,13 +4,6 @@ import { executeWithService } from '../utils/executeWithService';
 import { TaskService } from '../lib/services/task.service';
 import { normalizeTaskInput } from '../utils/normalize-task-input';
 
-/**
- * Tool: update_task
- * Updates a task with new values for title, description, priority, estimate, etc.
- * 
- * The base schema describes protocol parameters; TaskService validates
- * task identification and requires at least one update field.
- */
 const UpdateTaskBaseSchema = getUpdateTaskBaseSchema();
 
 export const updateTaskTool = {
@@ -22,7 +15,6 @@ export const updateTaskTool = {
     context: any,
     invocation?: { requestId: string; clientFingerprint: string }
   ) => {
-    // Normalize input to handle URLs (extract project_id + unique_index from URLs)
     const normalizedArgs = normalizeTaskInput(args as Record<string, any>);
     
     const validatedInput = normalizedArgs;

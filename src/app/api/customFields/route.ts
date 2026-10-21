@@ -16,10 +16,6 @@ import {
 } from "@/utils/controllers/customFields";
 import { CustomFieldType } from "@prisma/client";
 
-/**
- * GET /api/customFields?projectId=<id>
- * Lists custom fields for a board (ordered by ranking).
- */
 export async function GET(request: NextRequest) {
   try {
     const cookieStore = await cookies();
@@ -30,7 +26,6 @@ export async function GET(request: NextRequest) {
       try {
         restCompat = await isFeatureEnabled(HTPR_6924_REST_COMPAT_FLAG, currentUser.userId);
       } catch {
-        // Flag lookup failure preserves the legacy entry path.
       }
     }
     const { isValid, user } = restCompat && currentUser
@@ -48,8 +43,6 @@ export async function GET(request: NextRequest) {
 
     const projectId = parseInt(projectIdStr);
 
-    // Owner-or-member, same predicate as the MCP twin route — a bare Member
-    // lookup 403s a board OWNER who has no Member row (HTPR-3805).
     const project = await prisma.project.findFirst({
       where: { id: projectId, ...getProjectWhere(user.id) },
       select: { id: true },
@@ -66,11 +59,6 @@ export async function GET(request: NextRequest) {
   }
 }
 
-/**
- * POST /api/customFields
- * Creates a custom field for a board.
- * Body: { projectId, name, type, options? }
- */
 export async function POST(request: NextRequest) {
   try {
     const cookieStore = await cookies();
@@ -81,7 +69,6 @@ export async function POST(request: NextRequest) {
       try {
         restCompat = await isFeatureEnabled(HTPR_6924_REST_COMPAT_FLAG, currentUser.userId);
       } catch {
-        // Flag lookup failure preserves the legacy entry path.
       }
     }
     const { isValid, user } = restCompat && currentUser
@@ -94,7 +81,6 @@ export async function POST(request: NextRequest) {
 
     let body: Awaited<ReturnType<typeof request.json>>;
     if (restCompat) {
-      // Capture once: preserve accepted non-objects and the original parse error/fallback.
       let jsonError: unknown;
       const result = await readJsonBody<typeof body>({
         json: async () => {
@@ -127,8 +113,6 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "Invalid type" }, { status: 400 });
     }
 
-    // Owner-or-member, same predicate as the MCP twin route — a bare Member
-    // lookup 403s a board OWNER who has no Member row (HTPR-3805).
     const project = await prisma.project.findFirst({
       where: { id: parseInt(projectId), ...getProjectWhere(user.id) },
       select: { id: true },
@@ -153,11 +137,6 @@ export async function POST(request: NextRequest) {
   }
 }
 
-/**
- * PATCH /api/customFields
- * Renames a field and/or flips its rail/table visibility.
- * Body: { fieldId, name?, showInRail?, showInTable? }
- */
 export async function PATCH(request: NextRequest) {
   try {
     const cookieStore = await cookies();
@@ -168,7 +147,6 @@ export async function PATCH(request: NextRequest) {
       try {
         restCompat = await isFeatureEnabled(HTPR_6924_REST_COMPAT_FLAG, currentUser.userId);
       } catch {
-        // Flag lookup failure preserves the legacy entry path.
       }
     }
     const { isValid, user } = restCompat && currentUser
@@ -181,7 +159,6 @@ export async function PATCH(request: NextRequest) {
 
     let body: Awaited<ReturnType<typeof request.json>>;
     if (restCompat) {
-      // Capture once: preserve accepted non-objects and the original parse error/fallback.
       let jsonError: unknown;
       const result = await readJsonBody<typeof body>({
         json: async () => {
@@ -211,8 +188,6 @@ export async function PATCH(request: NextRequest) {
       return NextResponse.json({ error: "Custom field not found" }, { status: 404 });
     }
 
-    // Owner-or-member, same predicate as the sibling customFields routes —
-    // a bare Member lookup 403s a board OWNER who has no Member row (HTPR-3805).
     const project = await prisma.project.findFirst({
       where: { id: field.projectId, ...getProjectWhere(user.id) },
       select: { id: true },
@@ -240,10 +215,6 @@ export async function PATCH(request: NextRequest) {
   }
 }
 
-/**
- * DELETE /api/customFields?fieldId=<id>
- * Deletes a custom field and its values (cascade via schema onDelete).
- */
 export async function DELETE(request: NextRequest) {
   try {
     const cookieStore = await cookies();
@@ -254,7 +225,6 @@ export async function DELETE(request: NextRequest) {
       try {
         restCompat = await isFeatureEnabled(HTPR_6924_REST_COMPAT_FLAG, currentUser.userId);
       } catch {
-        // Flag lookup failure preserves the legacy entry path.
       }
     }
     const { isValid, user } = restCompat && currentUser
@@ -275,8 +245,6 @@ export async function DELETE(request: NextRequest) {
       return NextResponse.json({ error: "Custom field not found" }, { status: 404 });
     }
 
-    // Owner-or-member, same predicate as the MCP twin route — a bare Member
-    // lookup 403s a board OWNER who has no Member row (HTPR-3805).
     const project = await prisma.project.findFirst({
       where: { id: field.projectId, ...getProjectWhere(user.id) },
       select: { id: true },

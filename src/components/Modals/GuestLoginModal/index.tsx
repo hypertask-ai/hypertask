@@ -8,14 +8,6 @@ import { authClient } from "@/lib/auth/betterAuthClient";
 
 type Pending = "google" | "passkey" | "email" | "code" | null;
 
-/**
- * HTPR-4883: guests can't leave the board to /login (that drops the guest
- * session), so the CTA bar opens this in place. Auth methods mirror /login:
- * Google via useAuth().loginWithGoogle, passkey via authClient.signIn.passkey
- * + the legacy-session bridge, email via send-email-link -> verify-code.
- * Both server routes set the real cookies, so a hard navigation is all that's
- * needed to reboot the app as the new user (router.push races the cookies).
- */
 export default function GuestLoginModal({ onClose }: { onClose: () => void }) {
   const { loginWithGoogle } = useAuth();
   const [step, setStep] = useState<"email" | "code">("email");

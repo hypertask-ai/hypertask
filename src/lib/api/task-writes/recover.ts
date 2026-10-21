@@ -45,8 +45,6 @@ const route = taskWriteRoute({
       return NextResponse.json({ message: "Forbidden" }, { status: 403 })
     }
     if (!allowedTask) return NextResponse.json({message:"Task not found or access denied"}, { status: 404 })
-    // Restore the root and every descendant under the same deterministic
-    // mutation fences used by deletion.
     const updatedTask = await updateTaskAndSubtasks(
       { id: Number(taskId) },
       "Normal",
@@ -55,9 +53,6 @@ const route = taskWriteRoute({
       session.userId,
       actingAgentId
     )
-    // The durable hard-delete claim re-checks status='Deleted' and due time,
-    // so a restored task is safe even if best-effort queue cancellation is
-    // temporarily unavailable. Never turn a committed restore into a 500.
     try {
       await cancelTaskDeleteJob(Number(taskId))
     } catch (cancelError) {

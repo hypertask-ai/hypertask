@@ -1,5 +1,5 @@
-/* eslint-disable react-hooks/exhaustive-deps */
-/* eslint-disable @next/next/no-img-element */
+
+
 "use client";
 import { FC, ReactNode, useContext, useEffect, useRef, useState } from "react";
 
@@ -22,8 +22,6 @@ import { useGetAgentNotifications } from "@/hooks/Inbox/useGetAgentNotifications
 import dynamic from "next/dynamic";
 import { useRecoilState, useRecoilValue } from "@/lib/state";
 import { showCommandsAtom, globalNotificationFocusAtom } from "@/store";
-// Keep the command center in the page bundle: a pull-down must mount and focus
-// its input during the committing touchend, before mobile user activation ends.
 import HypertasksCommands from "@/components/commands";
 import { useQueryClient } from "@tanstack/react-query";
 import Image from "next/image";
@@ -109,8 +107,6 @@ const AgentInbox = ({
     )
       return;
 
-    // Mobile exposes the split dock as real tabs. Preserve native Tab and
-    // Shift+Tab traversal there; Arrow/Home/End switch splits inside the dock.
     if (isMbl && e.keyCode === KeyCodes.TAB) return;
 
     if (e.keyCode === KeyCodes.ESCAPE && !shouldPreventEscape) {
@@ -256,7 +252,6 @@ const AgentInbox = ({
     }
   };
 
-  //I dont understand what this is for and it even exists in
   const newCommentsHandler = () => {
     try {
       if (

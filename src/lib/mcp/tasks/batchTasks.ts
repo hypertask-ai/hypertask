@@ -86,8 +86,6 @@ async function assignBatchTaskUsers(input: {
   }
   agentId: string | null
 }) {
-  // Removals skip the membership check: a user who has left the board must
-  // still be removable from the task (HTPR-4187).
   const allowedMemberIds =
     input.intent === 'unassign' ? [] : await getMemberAndOwner(input.projectId)
   if (typeof allowedMemberIds === 'string') {
@@ -161,13 +159,13 @@ async function handleBatchGet(
       id: { in: taskIds },
       project: getProjectWhere(ctx.user.id, ctx.agentId),
     },
-    include: taskMcpGetInclude(ctx.user.id),
+    include: taskMcpGetInclude(ctx.user.id, ctx.agentId),
   })
 
   const tasksById = new Map(
     tasks.map((task) => [
       task.id,
-      mapTaskToMcpGetResponse(task, ctx.user.id),
+      mapTaskToMcpGetResponse(task, ctx.user.id, ctx.agentId),
     ])
   )
 

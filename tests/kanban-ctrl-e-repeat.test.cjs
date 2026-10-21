@@ -15,9 +15,9 @@ const taskCard = fs.readFileSync(
   "utf8",
 );
 
-const shortcutStart = taskCard.indexOf("// [ctrl]+[e]");
+const shortcutStart = taskCard.indexOf("if (\n      taskShortcutAction === \"archive\"");
 const nextShortcut = taskCard.indexOf(
-  "// [s] for size / estimate",
+  "if (\n      (taskShortcutAction === \"size\"",
   shortcutStart,
 );
 const ctrlEBranch = taskCard.slice(shortcutStart, nextShortcut);

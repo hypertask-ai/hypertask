@@ -29,10 +29,9 @@ export const translates: any = {
   "TaskUpdateDescription": "Important",
   "TaskOverdue": "Important",
   "TaskDueDate": "Updates",
-  "Mentioned": "@Mentions" // Primary category for Mentioned
+  "Mentioned": "@Mentions"
 }
 
-// Define which notification types should also go into Important
 
 export type InboxTabMeta = {
   idx: number;
@@ -43,14 +42,12 @@ export type InboxTabMeta = {
 };
 
 
-/** Tab layout with indices into the canonical `notifications` array (wire format). */
 export type InboxStructuredDataCompact = {
   tabs: InboxTabMeta[];
   data: number[][];
 };
 
 
-/** Tab layout with full notification rows (React Query / UI cache). */
 export type InboxStructuredDataExpanded = {
   tabs: InboxTabMeta[];
   data: INotification[][];
@@ -79,7 +76,6 @@ export function isInboxStructuredDataCompact(
 }
 
 
-/** Expand compact tab indices into per-tab notification arrays for the inbox UI. */
 export function resolveInboxStructuredData(
   notifications: INotification[],
   structuredData: InboxStructuredDataCompact
@@ -93,7 +89,6 @@ export function resolveInboxStructuredData(
 }
 
 
-/** Build React Query cache shape from a flat notification list. */
 export function buildInboxQueryCache(
   notifications: INotification[],
   splitsNoImportant: readonly InboxSplitKey[] = [],
@@ -121,7 +116,6 @@ export function buildInboxQueryCache(
 }
 
 
-/** Normalize API payload (compact or legacy) into expanded cache shape. */
 export function expandInboxApiResponse(raw: {
   notifications: INotification[];
   splitsNoImportant?: InboxSplitKey[];
@@ -194,32 +188,22 @@ export const getInboxTabs = (
       }
 
       const activeTypes = notification.activeNotificationTypes ?? [notification.type];
-      // Only the user inbox enriches this. A single row cannot prove a type is
-      // agent-only, so callers without it (the agent inbox) demote nothing.
       const agentOnlyTypes = notification.agentOnlyTypes ?? [];
       const mutedTypes = notification.mutedTypes ?? [];
       const directReplyTypes =
         notification.directReplyTypes ??
         (notification.directReply ? [notification.type] : []);
-      // Agent housekeeping and routine output belong in Agents. A normal agent can
-      // still reach Important by mentioning you; muted agents route every type here.
       const isChore = (type: NotificationType) =>
         !directReplyTypes.includes(type) &&
         ((agentOnlyTypes.includes(type) &&
           inboxConfig.agentSplitTypes.includes(type as any)) ||
           mutedTypes.includes(type));
-      // HTPR-4236: bucket by the strongest active event so later updates cannot bury
-      // mentions. Agent chores are skipped in the first pass so an agent comment cannot
-      // drag a real human event into the Agent split with it.
       const effectiveType =
         autoSplitsAllowed.find((type) => activeTypes.includes(type) && !isChore(type))
         ?? autoSplitsAllowed.find((type) => activeTypes.includes(type));
       if (effectiveType) {
         const directReply = directReplyTypes.includes(effectiveType);
         const isAgentChore = !directReply && isChore(effectiveType);
-        // HTPR-4769: Important = names you, on a task still alive. Computed at read
-        // time from the task carried on the row, so state changes re-classify on the
-        // next load and rows never leave the inbox (Inbox Zero stays the only drain).
         const task = notification.task as
           | {
               status?: string;
@@ -227,21 +211,13 @@ export const getInboxTabs = (
               updatedAt?: string | Date;
               createdAt?: string | Date;
               lastCommentAt?: string | Date;
-              /** Newest human comment only (agent comments excluded at query time). */
               comments?: { createdAt: string | Date }[];
               sectionChangedAt?: string | Date;
               assignees?: { userId: number; agentId?: string | null }[];
             }
           | undefined;
-        // Gates apply to the user inbox only: agent-inbox rows (agentId set) keep
-        // their old behavior, as do rows without task data (old client caches).
         const gated = notification.agentId == null && !!task;
         const staleCutoff = (nowMs ?? Date.now()) - inboxConfig.staleDays * 24 * 60 * 60 * 1000;
-        // The staleness clock ticks on HUMAN activity (comments, column moves,
-        // creation), not on updatedAt: the inne due-date bot bumps updatedAt every
-        // morning, which would keep its tasks "alive" forever and their old mentions
-        // stuck in Important. ponytail: edits-only activity (title/description) does
-        // not reset the clock; wire a humanActivityAt column if that ever matters.
         const activityTimes = [
           task?.comments?.[0]?.createdAt ?? task?.lastCommentAt,
           task?.sectionChangedAt,
@@ -254,9 +230,6 @@ export const getInboxTabs = (
           : task?.updatedAt
             ? new Date(task.updatedAt).getTime()
             : (nowMs ?? Date.now());
-        // Inbox rows and client cache rebuilds do not carry board sections or
-        // isDone flags. The payload and every cache-rebuild caller would need a
-        // per-project done-title map before replacing this name fallback.
         const liveness: "alive" | "done" | "archived" | "stale" = !gated
           ? "alive"
           : task!.status === "Archive"
@@ -270,16 +243,12 @@ export const getInboxTabs = (
                 )
                 ? "done"
                 : "alive";
-        // Stale rows get their own shelf, but only on boards that opted into
-        // staleness tracking; everywhere else they stay in Updates.
         const staleHome =
           liveness === "stale" &&
           (notification.project as { stalenessEnabled?: boolean } | undefined)
             ?.stalenessEnabled === true
             ? staleSplitName
             : "Updates";
-        // Assigned to YOU personally; a row for your agent's assignment carries the
-        // owner's userId with agentId set and must not count.
         const assignedToMe =
           !gated ||
           !task!.assignees ||
@@ -289,7 +258,6 @@ export const getInboxTabs = (
           );
         const addressedToMe = (type: NotificationType) =>
           directReply ||
-          // A row you snoozed and got back is your own reminder, whatever its type.
           notification.returnedFromReminders === true ||
           inboxConfig.importantAddressedAlways.includes(type as any) ||
           (inboxConfig.importantAddressedIfAssigned.includes(type as any) &&
@@ -331,23 +299,15 @@ export const getInboxTabs = (
           notificationsByStatus[primaryCategory].push(i);
         }
 
-        // Mentions survive a move to Done when the mention is newer than the move
-        // ("why did we close this?" is a real ask); archive and staleness kill them.
-        // The timestamp check only means anything when the representative row IS the
-        // mention; when a later move is representative, the mention predates it and
-        // correctly dies with the task.
         const mentionSurvives =
           liveness === "alive" ||
           (liveness === "done" &&
             notification.type === "Mentioned" &&
             (!task?.sectionChangedAt ||
-              // earnedAt: a display-swapped row keeps the representative's createdAt
-              // (a newer bot bump), which must not vouch for an older mention.
               new Date(notification.earnedAt ?? notification.createdAt).getTime() >
                 new Date(task.sectionChangedAt).getTime()));
         if (
           !isAgentChore &&
-          // HTPR-7096: set on the server only when the flag is on for the viewer.
           (directReply || !notification.quietImportant) &&
           (directReply || inboxConfig.alsoImportant.includes(effectiveType as any)) &&
           (directReply || mentionSurvives) &&
@@ -366,8 +326,6 @@ export const getInboxTabs = (
           notificationsByStatus["Important"].push(i);
         }
       }
-      // HTPR-7092: the server marks rows with an unanswered Question that @mentions
-      // you (only while the flag is on). They keep their normal split too.
       if (notification.isDecision === true) {
         if (!notificationsByStatus[decisionsSplitName]) {
           notificationsByStatus[decisionsSplitName] = [];
@@ -378,8 +336,6 @@ export const getInboxTabs = (
     }
   }
 
-  // Blocked-by-you tasks always show in Important too, pinned on top. Skip
-  // tasks that already have a real Important row (that row carries the flag).
   if (blockedByYouIndices.length > 0) {
     const importantTaskIds = new Set(
       (notificationsByStatus.Important ?? []).map(
@@ -423,8 +379,6 @@ export const getInboxTabs = (
         if (name === "Important") return 0;
         if (name === decisionsSplitName) return 0.5;
         if (name === "@Mentions") return 1;
-        // Agent housekeeping sits after everything a person did; stale last, it is
-        // a shelf for review, not a queue.
         if (name === agentSplitName) return 3;
         if (name === staleSplitName) return 4;
         return 2;
@@ -452,8 +406,6 @@ export const getInboxTabs = (
     projectId: null,
   };
 
-  // Project splits show even when only one project is present. Hiding them made the
-  // board split vanish the moment the inbox happened to hold a single project.
   const autoSplitsWithBlocked = [...autoSplits];
   if (blockedByYouIndices.length > 0) {
     const importantIndex = autoSplitsWithBlocked.findIndex(

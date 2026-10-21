@@ -1,16 +1,16 @@
 {
- "archive": "5d5f8dd37ba6b1d4",
- "boardTasks": "e5bb7d33d409dce9",
+ "archive": "0ade368ea15bec51",
+ "boardTasks": "e6aa0e47f2ffd364",
  "create": "8fac6f30a493f0b0",
- "delete": "96837ad563a1e0c7",
+ "delete": "5ed3a6a18d8c3284",
  "getAll": "7eb1d89e3f461c63",
  "getAllMinimal": "3b504d59b5346b81",
  "getArchived": "60cfa941aa44cb6e",
  "getFavorites": "e127787ec136f8db",
  "getFirst": "3783d06cc57027aa",
  "lastActivity": "2e46e70403039188",
- "leave": "dc5c3c2fc925b9ee",
+ "leave": "1f7f0568adfd6483",
  "removeMember": "1edf371c06f4c42a",
  "setMemberRole": "768851bcb949e5c7",
- "update": "56772b998a186308"
+ "update": "22cc82a95957ef5d"
 }

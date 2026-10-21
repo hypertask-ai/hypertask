@@ -32,12 +32,8 @@ const EXPIRY_OPTIONS = [
   { label: "365 days", value: 365 },
 ] as const;
 
-// Lifetime given to a renewed key when the one being rotated has already
-// expired and has no lifetime worth carrying over.
 const ROTATE_RENEWAL_DAYS = 90;
 
-// Matches the management-key form: a filled, rounded field so it reads as
-// writable (HTPR-4340).
 const inputClass =
   "h-10 w-full rounded-lg border-0 bg-comment-description px-3 text-dense font-medium text-white-black outline-none transition placeholder:text-text-light-gray focus:bg-modalBackground";
 
@@ -203,8 +199,6 @@ const DeveloperAccessSection = () => {
           method: "POST",
           credentials: "include",
           headers: { "Content-Type": "application/json" },
-          // An expired key carries a past expiry, so the API refuses to copy it
-          // onto the replacement. Give the renewed key a fresh lifetime.
           body: JSON.stringify(
             keyToRotate.expired ? { expiresInDays: ROTATE_RENEWAL_DAYS } : {},
           ),
@@ -262,8 +256,6 @@ const DeveloperAccessSection = () => {
         method: "PATCH",
         credentials: "include",
         headers: { "Content-Type": "application/json" },
-        // The API distinguishes omission from an explicit null, so always send
-        // the field: null is what clears the expiry.
         body: JSON.stringify({ expiresInDays: expiresInDays ?? null }),
       });
       const data = await response.json();

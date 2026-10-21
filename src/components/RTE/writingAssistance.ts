@@ -14,14 +14,9 @@ export const writingAssistanceEditorProps = Object.freeze({
 
 const lowerCaseLetter = /^\p{Ll}$/u;
 const sentenceStart = /(?:^|[.!?]["'”’)\]}]*\s+)[\s"'“‘(\[{]*$/u;
-// ponytail: This list blocks common English false positives. Add another entry
-// if production shows a recurring abbreviation that users type mid-sentence.
 const abbreviationBeforeCursor =
   /(?:\b(?:vs|etc|fig|no|mr|mrs|ms|dr|prof|sr|jr|st)\.|(?:\p{L}\.){2,})["'”’)\]}]*\s+[\s"'“‘(\[{]*$/iu;
 
-// HTPR-6906: remembers the last automatic capital so Backspace or Ctrl/Cmd+Z
-// right after it can bring the lowercase letter back. Cleared by any other edit
-// or cursor move; `hint` (the brief underline) also clears on a timer.
 type AutoCapital = { pos: number; original: string; capital: string; hint: boolean };
 const autoCapitalKey = new PluginKey<AutoCapital | null>("autoCapitalUndo");
 const AUTO_CAPITAL_HINT_MS = 1800;
@@ -112,7 +107,6 @@ export const LocalWritingAssistance = Extension.create<{
     };
   },
 
-  // Run before the history keymap so Ctrl/Cmd+Z can restore the lowercase letter.
   priority: 1000,
 
   addProseMirrorPlugins() {

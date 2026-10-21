@@ -43,3 +43,12 @@ test("release-risk metadata uses declared keys, the three labels and plain one-l
     assert.doesNotMatch(entry.reason, /[\r\n\u2014]/, key);
   }
 });
+
+test("high-risk categories expose the fixed values and human labels", () => {
+  const { HIGH_RISK_CATEGORIES, HIGH_RISK_LABELS } = jiti(path.join(root, "src/lib/flags/releaseRisk.ts"));
+  assert.deepEqual(HIGH_RISK_CATEGORIES, ["money", "access", "data-deletion", "customer-email"]);
+  assert.deepEqual(HIGH_RISK_LABELS, {
+    money: "Money", access: "Login and access", "data-deletion": "Data deletion", "customer-email": "Customer emails",
+  });
+  assert.deepEqual(Object.keys(HIGH_RISK_LABELS), HIGH_RISK_CATEGORIES);
+});

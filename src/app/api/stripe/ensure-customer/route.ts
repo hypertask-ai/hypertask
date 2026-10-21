@@ -7,14 +7,6 @@ import hasTeamOwnerOrProjectAdminAccess from "@/utils/controllers/teams/hasTeamO
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
 
-/**
- * Provisions the team's Stripe customer when it doesn't have one yet.
- *
- * The old `/pricing` page did this on every page load. Teams created through
- * `/api/teams/create` are inserted without a `stripe_customer_id` (only the
- * onboarding path sets one), so without this the Plans section has no billing
- * account to check out against and upgrading is impossible for those teams.
- */
 export async function POST(request: Request) {
   const user = await getServerCookieUser();
   if (!user?.id || !user.email) {
@@ -59,9 +51,6 @@ export async function POST(request: Request) {
     return NextResponse.json({ stripe_customer_id: team.stripe_customer_id });
   }
 
-  // HTPR-4358: provisioning failures used to come back as 200 with a null
-  // customer, so the client only saw a vague "No billing account" toast. Report
-  // the real failure instead.
   let stripeCustomerId: string | undefined;
   try {
     stripeCustomerId = await createCustomerIfNull(user.email, teamId);

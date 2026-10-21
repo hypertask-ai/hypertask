@@ -20,19 +20,15 @@ interface INewTaskButton{
 }
 
 const NewTaskButton:React.FC<INewTaskButton> = ({buttonPosition, createTaskAt, snapshot, sectionPayload}) => {
-    const quickEntryCardsEnabled = useFlag("htpr-6175-quick-entry-cards");
     const nQuickAddEnabled = useFlag(HTPR_6902_N_QUICK_ADD_FLAG);
     const shiftCQuickAddEnabled = useFlag(HTPR_6914_SHIFT_C_QUICK_ADD_FLAG);
-    let quickEntryRequested: true | undefined;
-    if (quickEntryCardsEnabled) quickEntryRequested = true;
     
-    // ============= for top of section on section title. 
     if (buttonPosition == "top"){
         const  left= -160;
         const bottom = -15
         return(
             <div     
-                onClick={()=>createTaskAt("top", sectionPayload, undefined, quickEntryRequested)}
+                onClick={()=>createTaskAt("top", sectionPayload, undefined, true)}
                 className="
                 group create-new-task-button
                 scale-100  relative group-hover/main:scale-100 cursor-pointer">
@@ -41,18 +37,17 @@ const NewTaskButton:React.FC<INewTaskButton> = ({buttonPosition, createTaskAt, s
         )
     }
 
-    // =============== for bottom of section
     else if (buttonPosition ==="bottom" && !snapshot?.isDraggingOver){
         return (
             <div 
-            onClick={()=>createTaskAt("bottom", sectionPayload, undefined, quickEntryRequested)}
+            onClick={()=>createTaskAt("bottom", sectionPayload, undefined, true)}
             className="
                 group
                 scale-100 sm:scale-0 hover:bg-hover-active cursor-pointer
                 group-hover/main:scale-100 w-full mt-[16px] py-2
                 rounded flex justify-center"
                 >
-                <TooltipAndIcon text='Create task' keyCombination={nQuickAddEnabled && quickEntryCardsEnabled ? (shiftCQuickAddEnabled ? ["N / Shift+C"] : ["N"]) : ["C"]} left={20} bottom={-40} size={14} className='text-text-light-gray'/>
+                <TooltipAndIcon text='Create task' keyCombination={nQuickAddEnabled ? (shiftCQuickAddEnabled ? ["N / Shift+C"] : ["N"]) : ["C"]} left={20} bottom={-40} size={14} className='text-text-light-gray'/>
             </div>
         )
     }
@@ -66,7 +61,6 @@ const TooltipAndIcon = (
         text:string,keyCombination:string[], left:number, bottom:number, size?:number, className?:string
     })=>{
     const sharpPlusEnabled = useFlag(HTPR_7047_SHARP_PLUS_SIGNS_FLAG);
-    // Keep 2px strokes despite theme thinning; snap painted edges without moving the button.
     return (
         <>
         <Plus

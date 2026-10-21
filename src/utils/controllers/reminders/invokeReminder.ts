@@ -32,8 +32,6 @@ const invokeReminderWithClient = async (
   const currentDate = new Date();
   console.log("🚀 ~ currentDate:", currentDate)
 
-  // A queued or stale caller must not resurrect an Inbox item after an
-  // explicit removal archived its reminder under the same task lock.
   const claimed = await client.reminder.updateMany({
     where: {
       id: reminder.id,
@@ -72,9 +70,6 @@ export const invokeDueReminder = async (reminder: IReminder) => {
     : null;
   if (!expectedRemindAt || Number.isNaN(expectedRemindAt.getTime())) return "skipped";
   return prisma.$transaction(async (tx) => {
-    // Delivery and both reminder writers use the same task-scoped transaction
-    // lock. A reschedule therefore cannot archive notifications between this
-    // claim and restore, and a failed restore rolls the claim back atomically.
     await tx.$executeRaw`
       SELECT pg_advisory_xact_lock(${TASK_INBOX_REMINDER_LOCK_CLASS}::int, ${reminder.taskId}::int)
     `;
@@ -157,7 +152,6 @@ const restoreReminderNotifications = async (
   }
 
   if (notifications.length === 0 && await isFeatureEnabled(HTPR_7061_REMIND_WITHOUT_INBOX_FLAG, reminder.userId)) {
-    // Reuse delivery's access/mute filter and check absence under the task lock.
     const task = await client.task.findFirst({
       where: {
         id: reminder.taskId,

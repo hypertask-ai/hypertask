@@ -11,7 +11,6 @@ export function withFeatureFlagSnapshot<T>(run: () => T): T {
   return flagModeScope.run({}, run);
 }
 
-// Do not wait through Redis reconnect retries on an otherwise optional read cache.
 export async function flagCacheCommand<T>(operation: Promise<T>, timeoutMs = 100): Promise<T> {
   let timer: ReturnType<typeof setTimeout> | undefined;
   try {
@@ -29,7 +28,6 @@ export async function withFlagModeInvalidation<T>(write: () => Promise<T>): Prom
   if (scope) scope.modes = undefined;
   if (process.env.REDIS_URL) {
     try {
-      // Commit the emergency Off switch first; Redis can only delay the response by 500 ms.
       await flagCacheCommand((async () => {
         const { getRedis } = await import("@/lib/redis");
         const redis = await getRedis();

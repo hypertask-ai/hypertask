@@ -1,4 +1,5 @@
-import { recordActivationOccurrence } from "@/lib/telemetry/activationOccurrences";
+import { processAnalyticsIntentSoon } from "@/lib/telemetry/analyticsIntents";
+import { enqueueInviteSent } from "@/lib/telemetry/inviteAnalytics";
 import prisma from "@/lib/prisma"
 import { generateInviteLink, setViewSlug } from "@/pages/api/invite/createInviteLink"
 import { getProjectViewInclude } from "@/utils/controllers/projects/getAll"
@@ -14,7 +15,6 @@ export const getInviteFromProjectId = async(projectId:number, userId: number)=>{
             }
         })
         if (!project) return 
-       // ============ check if the invite link already exists.
        const invite = await prisma.invite.findFirst({
         where:{
             projectId,
@@ -30,24 +30,26 @@ export const getInviteFromProjectId = async(projectId:number, userId: number)=>{
     console.log("🚀 ~ invite:", invite)
     
 
-    // ======================== let's check for the active view if any
     const activeView = getViewFromProject(project)
     let viewSlug: string | undefined;
     viewSlug = setViewSlug(activeView)
     if (invite) return {inviteLink:await generateInviteLink(invite.id, projectId, invite.project.name, viewSlug, userId), amountUsed:(invite.uses*-1)-1}
 
-    // ============ create a new invite link
-    const newInvite = await prisma.invite.create({
-        data:{
-            key:"public",
-            projectId,
-            uses:-1,
-            expired:false,
-            userId:project?.ownerId
-        },
-        include:{project:{select:{name:true}}},
-    })
-    recordActivationOccurrence(newInvite.userId, "teammate_invited", newInvite.id, { method: "link" });
+    const { newInvite, analyticsKey } = await prisma.$transaction(async (tx) => {
+        const newInvite = await tx.invite.create({
+            data:{
+                key:"public",
+                projectId,
+                uses:-1,
+                expired:false,
+                userId:project?.ownerId
+            },
+            include:{project:{select:{name:true}}},
+        })
+        const analyticsKey = await enqueueInviteSent(tx, newInvite, "link", userId, newInvite.userId);
+        return { newInvite, analyticsKey };
+    });
+    processAnalyticsIntentSoon(analyticsKey);
     return {inviteLink:await generateInviteLink(newInvite.id, projectId, newInvite.project.name, viewSlug, userId), amountUsed:(newInvite.uses*-1)-1}
 
 }

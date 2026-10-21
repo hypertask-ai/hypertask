@@ -131,7 +131,7 @@ test("mention and assignment outbox rows share their domain transactions", () =>
   assert.match(outbox, /agentTaskCreatedEmittedAt/);
   assert.match(outbox, /FOR UPDATE/);
   assert.match(outbox, /persistAgentWebhookEvents\(tx,[\s\S]*?agentTaskCreatedEmittedAt/);
-  assert.match(outbox, /Publish only after the transaction commits/);
+  assert.match(outbox, /publishAgentWebhookDeliveries[\s\S]*queueAgentWebhookDelivery\(deliveryId\)\.catch/);
 });
 
 test("agent endpoints require HTTPS and deleted board filters cannot widen", () => {

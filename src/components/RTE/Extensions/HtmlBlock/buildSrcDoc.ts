@@ -1,13 +1,4 @@
-// Build the iframe srcdoc for an HTML block. Two safety layers wrap the agent's
-// raw HTML:
-//   1. The iframe is sandboxed with allow-scripts but NOT allow-same-origin, so
-//      it runs on a unique opaque origin: no access to the app's cookies,
-//      ht_session, localStorage, or parent DOM. Even hostile JS is trapped.
-//   2. A Content-Security-Policy meta blocks network exfiltration (connect-src
-//      'none'), remote/nested frames, external scripts, form posts, and base-uri
-//      tricks. It is emitted FIRST so any CSP the agent adds can only tighten it.
-// A tiny resize script postMessages the content height back to the parent (the
-// only channel that survives the sandbox) so the block auto-sizes.
+import { LINK_PORT_MESSAGE, LINK_READY_MESSAGE } from "./canvasLinks";
 
 const CSP = [
   "default-src 'none'",
@@ -39,20 +30,65 @@ document.addEventListener('click', function(event) {
 });
 </script>`;
 
-export function buildHtmlBlockSrcDoc(raw: string, imageGalleryEnabled = false): string {
+const LINK_CLICK_SCRIPT = `<script>
+(function() {
+  var apply = Reflect.apply;
+  var send = MessagePort.prototype.postMessage;
+  var closest = Element.prototype.closest;
+  var getAttribute = Element.prototype.getAttribute;
+  var preventDefault = Event.prototype.preventDefault;
+  var stopImmediatePropagation = Event.prototype.stopImmediatePropagation;
+  var getter = function(proto, name) { return Object.getOwnPropertyDescriptor(proto, name).get; };
+  var hrefOf = getter(HTMLAnchorElement.prototype, 'href');
+  var protocolOf = getter(HTMLAnchorElement.prototype, 'protocol');
+  var dataOf = getter(MessageEvent.prototype, 'data');
+  var portsOf = getter(MessageEvent.prototype, 'ports');
+  var sourceOf = getter(MessageEvent.prototype, 'source');
+  var targetOf = getter(Event.prototype, 'target');
+  var defaultPreventedOf = getter(Event.prototype, 'defaultPrevented');
+  var parentWindow = window.parent;
+  var port = null;
+  window.addEventListener('message', function(event) {
+    if (!event.isTrusted || apply(sourceOf, event, []) !== parentWindow) return;
+    var data = apply(dataOf, event, []);
+    if (!data || data.${LINK_PORT_MESSAGE} !== 1) return;
+    apply(stopImmediatePropagation, event, []);
+    var ports = apply(portsOf, event, []);
+    if (!port && ports[0]) port = ports[0];
+  }, true);
+  parentWindow.postMessage({ ${LINK_READY_MESSAGE}: 1 }, '*');
+  window.addEventListener('click', function(event) {
+    if (!event.isTrusted || apply(defaultPreventedOf, event, [])) return;
+    var a = null;
+    try { a = apply(closest, apply(targetOf, event, []), ['a[href]']); } catch (e) { return; }
+    if (!a) return;
+    var raw = apply(getAttribute, a, ['href']) || '';
+    if (raw.charAt(0) === '#') {
+      apply(preventDefault, event, []);
+      var fragment = raw.slice(1);
+      try { fragment = decodeURIComponent(fragment); } catch (e) {}
+      var target = document.getElementById(fragment) || document.getElementsByName(fragment)[0];
+      if (target) target.scrollIntoView();
+      return;
+    }
+    var protocol = apply(protocolOf, a, []);
+    if (protocol !== 'http:' && protocol !== 'https:') return;
+    apply(preventDefault, event, []);
+    if (port) apply(send, port, [{ href: apply(hrefOf, a, []) }]);
+  });
+})();
+</script>`;
+
+export function buildHtmlBlockSrcDoc(raw: string, imageGalleryEnabled = false, linksOpenInNewTab = false): string {
   let headExtra = "";
   let body = raw;
 
-  // If the agent pasted a full HTML document, flatten it: move its <head> into
-  // our controlled head (our CSP still wins, appearing first) and take its
-  // <body> as the content, so nested <html>/<body> tags don't corrupt render.
   if (/<html[\s>]/i.test(raw) || /<!doctype/i.test(raw)) {
     try {
       const doc = new DOMParser().parseFromString(raw, "text/html");
       headExtra = doc.head ? doc.head.innerHTML : "";
       body = doc.body ? doc.body.innerHTML : raw;
     } catch {
-      // fall back to treating raw as a body fragment
     }
   }
 
@@ -62,6 +98,7 @@ export function buildHtmlBlockSrcDoc(raw: string, imageGalleryEnabled = false): 
     '<meta name="viewport" content="width=device-width,initial-scale=1">' +
     `<meta http-equiv="Content-Security-Policy" content="${CSP}">` +
     "<style>html,body{margin:0;padding:0}body{overflow-x:hidden;word-break:break-word}</style>" +
+    (linksOpenInNewTab ? LINK_CLICK_SCRIPT : "") +
     headExtra +
     "</head><body>" +
     body +

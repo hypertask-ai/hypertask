@@ -41,7 +41,6 @@ export type CalendarSavedView = LegacyCalendarSavedView & {
   visibility: ViewVisibility;
 };
 
-/** Overwritten state of the built-in Everything split (no id). */
 export type CalendarEverythingOverride = Omit<
   LegacyCalendarSavedView,
   "id" | "title"
@@ -212,14 +211,9 @@ export const isCalendarViewsPreference = (
     return false;
   }
 
-  // The applied pointer may reference a shared view stored in Calendar_View,
-  // not the legacy per-user array being validated here.
   return true;
 };
 
-/** Shared body checks for saved views and the Everything override.
- * Deliberately not a type predicate: narrowing the views-loop variable to
- * the id-less override type would break the id/title checks around it. */
 const isViewBody = (value: unknown): boolean => {
   if (!value || typeof value !== "object" || Array.isArray(value)) return false;
   const view = value as Record<string, unknown>;
@@ -396,8 +390,6 @@ export const isCalendarViewCreateInput = (
     isTitle(input.title) &&
     isVisibility(input.visibility) &&
     isProjectIds(input.projectIds) &&
-    // A public view must name at least one board. Empty private views retain
-    // the existing "all visible boards" behavior for their owner.
     (input.visibility !== "Public" || input.projectIds.length > 0) &&
     isTaskFilters(input.taskFilters, true) &&
     isCalendarSettings(input.settings) &&

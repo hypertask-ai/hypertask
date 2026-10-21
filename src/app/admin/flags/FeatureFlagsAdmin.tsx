@@ -52,7 +52,6 @@ type FlagFilterDropdown = {
   onChange: (selected: string[]) => void;
 };
 
-// Trigger button plus the shared OptionPickerModal. Single selects close on pick; multi selects stay open.
 function FlagFilterPicker({ label, multiple, selected, allCount, options, onChange }: FlagFilterDropdown) {
   const [open, setOpen] = useState(false);
   const trigger = useRef<HTMLButtonElement>(null);
@@ -210,7 +209,6 @@ export default function FeatureFlagsAdmin({
   const shownCount = clusters.reduce((total, [, rows]) => total + rows.length, 0);
   const allRows = flags.data?.flags ?? [];
   const selectedRisks = risk === null ? [] : Array.isArray(risk) ? risk : [risk];
-  // Each dropdown counts what its options would show with every other filter and the search applied.
   const searchedRows = allRows.filter((flag) => matchesFeatureFlagSearch(flag, search));
   const inAudience = (flag: FeatureFlagRow) => audienceFilter === "ALL" ? true
     : audienceFilter === "UNRELEASED" ? (urlFiltersEnabled ? isUnreleasedFeatureFlag(flag) : flag.mode !== "EVERYONE")

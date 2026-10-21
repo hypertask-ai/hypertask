@@ -155,7 +155,7 @@ const InviteMember = (props: Props) => {
         setFilteredMembersAndInvites(newState);
       }
     });
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+
   }, [ownedAgents, currentProject?.id]);
 
   const handleKeydownRef = useRef<(e: KeyboardEvent) => void>(undefined);
@@ -329,7 +329,6 @@ const InviteMember = (props: Props) => {
         const url = new URL(inviteURL.inviteLink);
         key = url.searchParams.get("key");
       } catch {
-        // malformed URL — key stays null
       }
     }
     navigator.clipboard.writeText(`${baseURL}/share/project?id=${key}`);

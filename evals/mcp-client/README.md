@@ -57,4 +57,4 @@ client summary, label, and capture time. Run live mode from an authenticated
 client environment to replace those client rows. The agents dashboard reads
 the published report, then falls back to the last committed report.
 
-Results show on `/agents` when the `htpr-6533-mcp-client-eval` flag is on.
+Results show on `/agents` for the owner and QA identities.

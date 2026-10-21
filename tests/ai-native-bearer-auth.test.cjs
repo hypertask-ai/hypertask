@@ -45,7 +45,7 @@ const state = {
   agent: null,
 };
 
-stubModule("src/lib/telemetry/activationOccurrences.ts", { recordAuthenticatedConnection: () => {} });
+stubModule("src/lib/telemetry/activationOccurrences.ts", { enqueueAuthenticatedConnection: async () => null });
 
 stubModule("src/app/api/ai/_lib/editorAi.ts", {
   getCurrentUserFromCookies: async () => state.cookieUser,

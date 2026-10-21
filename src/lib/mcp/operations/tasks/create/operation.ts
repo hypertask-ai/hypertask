@@ -1,7 +1,9 @@
+import { reportMcpOperationCrash } from '@/lib/mcp/operationCrashReport';
 import { wrapMcpRoute, validateMcpRouteAuth as validateMcpAuth, checkMcpRouteRateLimit as checkMcpRateLimit, readMcpRouteJsonBody as readJsonBody } from '@/lib/mcp/routeWrapper'
 
 import type { McpAgentSummary } from '@/lib/mcp/agents';
 import { getMcpSessionAgentSummary } from '@/lib/mcp/agents';
+import { getMcpOperationContext } from '@/lib/mcp/operationContext';
 import { NextRequest, NextResponse } from 'next/server';
 import { validateCreateTaskBody } from '@/lib/mcp/tasks/validators';
 import { validateProjectAccess, getSectionForTask, createTask, validateParentTask, validateProjectMemberIds, matchLabelIds } from '@/lib/mcp/tasks/services';
@@ -11,6 +13,7 @@ import { sanitizeRichHtml } from '@/utils/helperFunctions/sanitizeRichHtml';
 import { IdempotencyInProgressError, normalizeIdempotencyKey, withIdempotency } from '@/lib/mcp/idempotency/idempotencyStore';
 import { buildFieldError } from '@/lib/mcp/fieldError';
 import { requireRole } from '@/lib/mcp/agents/scopes';
+import { isAgentOnBoard } from '@/utils/controllers/agents/boardMembers';
 import { isFeatureEnabled } from '@/lib/flags';
 import { HTPR_7121_MCP_NOT_FOUND_DETAIL_FLAG } from '@/lib/flags/definitions/htpr-7121-mcp-not-found-detail';
 import prisma from '@/lib/prisma';
@@ -19,7 +22,6 @@ export interface CreateTaskResponse {
     success: boolean;
     idempotent_replayed?: true;
     task: TaskDetail;
-    /** MCP session agent that performed this action */
     agent?: McpAgentSummary;
     message?: string;
 }
@@ -29,7 +31,6 @@ export async function POST(request: NextRequest) {
     const correlationId = request.headers.get('X-Correlation-ID');
 
     try {
-        // Authenticate
         const rateLimited = await checkMcpRateLimit(request);
         if (rateLimited) return rateLimited;
         const ctx = await validateMcpAuth(request);
@@ -49,7 +50,6 @@ export async function POST(request: NextRequest) {
             if (scopeError) return scopeError;
         }
         const user = ctx.user;
-        // Parse and validate request body
         const parsedBody = await readJsonBody<CreateTaskBody>(request);
         if (!parsedBody.ok) return parsedBody.response;
         const body = parsedBody.body;
@@ -91,7 +91,7 @@ export async function POST(request: NextRequest) {
             return validation.response;
         }
 
-        if (body.description !== undefined && body.description.trim().length === 0) {
+        if (typeof body.description === 'string' && body.description.trim().length === 0) {
             return NextResponse.json(
                 {
                     ...buildFieldError('invalid_field', 'description', 'Description cannot be empty'),
@@ -104,7 +104,6 @@ export async function POST(request: NextRequest) {
 
         const { project_id, title, description, section_id, priority, estimate, due_date, images, labels, parent_task_id, assignee_ids } = validation.data;
 
-        // Validate project access
         const projectCheck = await validateProjectAccess(project_id, user.id, ctx.agentId);
         if (projectCheck.error) {
             return NextResponse.json(
@@ -122,7 +121,18 @@ export async function POST(request: NextRequest) {
             );
         }
 
-        // Get section
+        if (ctx.agentId && !(await isAgentOnBoard(project_id, ctx.agentId))) {
+            return NextResponse.json(
+                {
+                    ...buildFieldError('forbidden', 'project_id', 'Permission error'),
+                    message: 'This agent is not a member of this board. Ask the board owner to add it.',
+                    ...(dryRun && { valid: false }),
+                    ...(correlationId && { correlationId })
+                },
+                { status: 403 }
+            );
+        }
+
         const sectionCheck = await getSectionForTask(project_id, section_id);
         if (sectionCheck.error) {
             return NextResponse.json(
@@ -136,7 +146,6 @@ export async function POST(request: NextRequest) {
             );
         }
 
-        // HTPR-7121: name unknown labels, and pass label names on as ids
         let labelIds = labels;
         if (labels && labels.length > 0 && await isFeatureEnabled(HTPR_7121_MCP_NOT_FOUND_DETAIL_FLAG, user.id)) {
             const projectLabels = await prisma.label.findMany({
@@ -159,7 +168,6 @@ export async function POST(request: NextRequest) {
             }
         }
 
-        // Validate parent task exists (a bad client-supplied id must 404, not 500)
         const parentCheck = await validateParentTask(project_id, parent_task_id);
         if (parentCheck.error) {
             return NextResponse.json(
@@ -252,7 +260,8 @@ export async function POST(request: NextRequest) {
                     labels: labelIds || [],
                     parentTaskId: parent_task_id || undefined,
                     assigneeIds: assignee_ids && assignee_ids.length > 0 ? assignee_ids : undefined,
-                    agentId: ctx.agentId || undefined
+                    agentId: ctx.agentId || undefined,
+                    creationChannel: getMcpOperationContext(request) ? 'mcp' : 'api',
                 });
 
                 const sessionAgent = await getMcpSessionAgentSummary(ctx.agentId, user.id);
@@ -276,6 +285,7 @@ export async function POST(request: NextRequest) {
         }
         console.error('[MCP Create Task] Error:', error);
 
+        reportMcpOperationCrash(request, error);
         return NextResponse.json(
             {
                 success: false,

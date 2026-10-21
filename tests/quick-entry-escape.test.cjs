@@ -8,7 +8,7 @@ const ts = require("typescript");
 
 const root = path.resolve(__dirname, "..");
 
-for (const growEnabled of [false, true]) test(`quick-entry Escape cancels only the card, discards its text, and never submits (grow ${growEnabled ? "on" : "off"})`, async (t) => {
+test("quick-entry Escape cancels only the card, discards its text, and never submits", async (t) => {
   const dom = new JSDOM("<!doctype html><div id='root'></div>", {
     url: "https://app.hypertask.ai/project?id=15",
   });
@@ -42,8 +42,8 @@ for (const growEnabled of [false, true]) test(`quick-entry Escape cancels only t
     "@/lib/constants/keyboard-handler": { KeyCodes: {} },
     "../MultiPages/Route/useHypertasksNavigate": { default: () => ({ navigate: () => {} }) },
     "@/lib/contexts/mobileContext": { MobileViewContext: React.createContext(false) },
-    "@/hooks/useFlag": { useFlag: (key) => key === "htpr-6175-quick-entry-cards" || (growEnabled && key === "htpr-6873-quick-entry-grow") },
-    "@/lib/flags/keys": { HTPR_6873_QUICK_ENTRY_GROW_FLAG: "htpr-6873-quick-entry-grow" },
+    "@/hooks/useFlag": { useFlag: () => false },
+    "@/lib/flags/keys": {},
     "@/lib/configs/general.config": { MOBILE_TARGET: "min-h-[44px] min-w-[44px] shrink-0 flex items-center justify-center" },
     "react-hot-toast": { default: () => {} },
     "axios": { default: { post: () => assert.fail("cancellation must not write") } },
@@ -99,7 +99,7 @@ for (const growEnabled of [false, true]) test(`quick-entry Escape cancels only t
         await t.test(`${position}: ${text ? "typed" : "empty"} Escape and Escape twice`, async () => {
           await React.act(async () => section.createTaskAt(position, undefined, undefined, true));
           await React.act(async () => section.setNewTaskDraftTitle(text));
-          const input = document.querySelector("#newTask input, #newTask textarea");
+          const input = document.querySelector("#newTask textarea");
           assert.equal(input.value, text);
           const before = globalEscapes;
           await press(input);
@@ -111,8 +111,8 @@ for (const growEnabled of [false, true]) test(`quick-entry Escape cancels only t
           await press(document.activeElement);
           assert.equal(globalEscapes, before + 1, "a subsequent board Escape remains available globally");
           await React.act(async () => section.createTaskAt(position, undefined, undefined, true));
-          assert.equal(document.querySelector("#newTask input, #newTask textarea").value, "", "reopening must not restore a cancelled draft");
-          await press(document.querySelector("#newTask input, #newTask textarea"));
+          assert.equal(document.querySelector("#newTask textarea").value, "", "reopening must not restore a cancelled draft");
+          await press(document.querySelector("#newTask textarea"));
         });
       }
     }
@@ -120,7 +120,7 @@ for (const growEnabled of [false, true]) test(`quick-entry Escape cancels only t
       await React.act(async () => reactRoot.render(React.createElement(Harness, { items: [] })));
       for (const position of ["top", "bottom"]) {
         await React.act(async () => section.createTaskAt(position, undefined, undefined, true));
-        await press(document.querySelector("#newTask input, #newTask textarea"));
+        await press(document.querySelector("#newTask textarea"));
         assert.equal(activeItems.at(-1), null);
         assert.equal(document.activeElement, section.sectionRef.current);
         assert.equal(section.showAddItem, false);

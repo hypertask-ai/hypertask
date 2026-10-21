@@ -41,8 +41,6 @@ const MembersSection = () => {
     useState<IUser | null>(null);
   const [removingMemberId, setRemovingMemberId] = useState<number | null>(null);
   const [title, setTitle] = useState(team?.title ?? "");
-  // Board-level admin role (Member.role) is scoped to the current project, not
-  // the team — fetched separately from the team member list above.
   const [projectMemberRoles, setProjectMemberRoles] = useState<
     Record<number, "Admin" | "Member">
   >({});

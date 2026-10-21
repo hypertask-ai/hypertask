@@ -64,9 +64,6 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ ok: true });
   }
 
-  // HTPR-4857: the app left the workspace (or its bot token was revoked).
-  // delete everything stored for that install. Retries stay harmless because
-  // the second pass finds no install. A failure surfaces as 500 so Slack retries.
   if (
     payload.event?.type === "app_uninstalled" ||
     payload.event?.type === "tokens_revoked"
@@ -101,10 +98,8 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ ok: true });
     }
     const event = payload.event!;
-    // Email resolution can call Slack, so keep it after the acknowledgement.
     waitUntil(
       (async () => {
-        // Routing can auto-link users, so charge once before resolving the flag.
         const capacityAllowed = isGeneralChatEvent(event)
           ? await claimSlackActionCapacity(slackTeamId, event.user)
           : undefined;
@@ -195,8 +190,6 @@ export async function POST(request: NextRequest) {
       },
       select: { id: true, project: { select: { teamId: true } } },
     });
-    // Defense in depth: never persist a task id whose resolved project belongs
-    // to a different team, even if the query above changes later.
     matchedTaskIds = filterSlackTaskIdsForTeam(matches, install.teamId);
   }
 

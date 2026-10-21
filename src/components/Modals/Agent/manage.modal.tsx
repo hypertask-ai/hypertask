@@ -41,11 +41,6 @@ const ROW_ACTION_CLASS =
 const TEXT_ACTION_CLASS =
   "inline-flex min-h-7 items-center gap-1.5 rounded-[4px] border-0 px-2 py-1 text-meta font-medium text-white-black transition-colors hover:bg-hover-active focus-visible:bg-hover-active focus-visible:outline-none disabled:cursor-not-allowed disabled:text-text-light-gray";
 
-/**
- * OAuth sign-in when we have one; otherwise the creation date. Agents on
- * static MCP tokens never OAuth, so "never connected" would wrongly mark
- * daily-active agents as dead.
- */
 function agentActivityLine(agent: IAgent): string {
   if (agent.runtimeType === "NATIVE") {
     if (agent.heartbeatAt) {
@@ -322,7 +317,6 @@ const ManageAgentsModal: React.FC<ManageModalProps> = ({
     [agents],
   );
 
-  // `name` is the slug ("project-15"); `title` is the board's real name.
   const currentBoardName = currentProject
     ? (currentProject.title ?? currentProject.name)
     : "";
@@ -415,9 +409,6 @@ const ManageAgentsModal: React.FC<ManageModalProps> = ({
       setShowConfirm(false);
       toast.success("Agent disabled");
 
-      // These dependent caches can refresh in the background. The agent cache
-      // is already updated synchronously by the mutation, so a secondary
-      // refetch failure must not make a successful disable look unsuccessful.
       void Promise.all([
         queryClient.refetchQueries({ queryKey: ["projectsAll"] }),
         ...(currentProject
@@ -573,8 +564,6 @@ const ManageAgentsModal: React.FC<ManageModalProps> = ({
                                 ) : null}
                               </div>
 
-                              {/* Board metadata and actions share the right slot so
-                                hover actions never squeeze the agent name. */}
                               {additionalBoards.length > 0 && (
                                 <span
                                   className="max-w-36 shrink-0 truncate text-[10px] font-medium leading-4 text-text-light-gray group-hover/agent:hidden group-focus-within/agent:hidden"

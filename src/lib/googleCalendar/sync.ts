@@ -23,8 +23,6 @@ import {
   withGoogleCalendarUserLock,
 } from "./connection";
 
-// ponytail: one connection keeps the shared minute sweep within its lease while
-// this flag serves Owner + QA. Move calendar work to its own queue before Everyone.
 const CONNECTIONS_PER_SWEEP = 1;
 const CONNECTION_CANDIDATES_PER_SWEEP = 20;
 const MAX_TASKS_PER_CALENDAR = 10_000;

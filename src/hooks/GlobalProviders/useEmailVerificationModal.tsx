@@ -9,15 +9,12 @@ const useEmailVerificationModal = () => {
     const [currentUser, ___] = useRecoilState(currentUserAtom)
     const pathname = usePathname()
   useEffect(() => {
-    // Check if user needs email verification
-    // HTPR-4303: anonymous demo guests have a throwaway email and no trial to
-    // activate — the verify-email wall must never block their board.
     if (currentUser && isGuestUser(currentUser)) {
       setShowEmailVerificationModal(false);
       return;
     }
     if (currentUser && currentUser.UserSetting) {
-      const isVerified = currentUser.UserSetting.isVerified ?? true; // Default to true for backward compatibility
+      const isVerified = currentUser.UserSetting.isVerified ?? true;
       const excludedPaths = [
         "/login",
         "/unauthorized",
@@ -34,7 +31,6 @@ const useEmailVerificationModal = () => {
         (path) => pathname === path || pathname?.startsWith(path)
       );
       
-      // Show verification modal if user is not verified and not on excluded paths
       if (!isVerified && !isExcludedPath ) {
         setShowEmailVerificationModal(true);
       } else {

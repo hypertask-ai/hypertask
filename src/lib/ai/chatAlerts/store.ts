@@ -13,8 +13,6 @@ import {
 
 export type AlertSample = { latencyMs: number; statusCode: number };
 
-// Raw, parameterized queries keep this additive migration independent of the
-// generated client's version during rolling deployments.
 export async function evaluateAlerts(
   db: PrismaClient,
   environment: AlertEnvironment,
@@ -25,9 +23,6 @@ export async function evaluateAlerts(
     const [clock] = await tx.$queryRaw<Array<{ now: Date }>>`SELECT clock_timestamp() AS "now"`;
     const now = clock.now;
     const cutoff = new Date(now.getTime() - AI_CHAT_ALERT_WINDOW_MS);
-    // Expiry can breach a healthy window without a new sample. Check each
-    // timestamp group before pruning so a later empty window cannot hide it.
-    // Nearest-rank p95 exceeds 20s exactly when more than 5% of samples do.
     await tx.$executeRaw`WITH expiry_windows AS (
       SELECT "happenedAt" + ${AI_CHAT_ALERT_WINDOW_MS} * interval '1 millisecond' AS "expiresAt",
         count(*) OVER remaining AS "requestCount",
@@ -70,7 +65,6 @@ export async function evaluateAlerts(
         await tx.$executeRaw`UPDATE "AiChatAlertIncident" SET "healthySince" = ${now} WHERE "id" = ${incident.id}`;
       }
     }
-    // Closed incidents and their delivery rows are diagnostic metadata, not history.
     const retention = new Date(now.getTime() - 7 * 24 * 60 * 60_000);
     await tx.$executeRaw`DELETE FROM "AiChatAlertIncident" WHERE "environment" = ${environment} AND "closedAt" < ${retention}`;
   }, { timeout: 10_000 });
@@ -93,8 +87,6 @@ export async function claimDelivery(db: PrismaClient, environment: AlertEnvironm
     FROM "AiChatAlertIncident" i WHERE i."id" = d."incidentId" AND i."environment" = ${environment}
       AND d."status" = 'pending' AND d."attemptCount" >= ${AI_CHAT_ALERT_MAX_ATTEMPTS}
       AND d."nextAttemptAt" <= clock_timestamp()`;
-  // Reserve the attempt before sending. A killed worker consumes an attempt,
-  // and a lease-expired worker cannot overwrite a newer worker's result.
   const [delivery] = await db.$queryRaw<AlertDelivery[]>`WITH candidate AS (
     SELECT d."id" FROM "AiChatAlertDelivery" d
     JOIN "AiChatAlertIncident" i ON i."id" = d."incidentId"

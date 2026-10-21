@@ -12,22 +12,17 @@ export function processComments(
   const initialMap: any = {};
   let hashCommentIndex: number | null = null;
   const newCommentIdSet = new Set(newCommentIds);
-  // Activity rows are compact by design. The newest actual comment is the
-  // fallback reader context whenever there are no unread comments to open.
   const lastCommentIndex = comments.reduce(
     (latestIndex, comment, index) =>
       comment.activity ? latestIndex : index,
     -1
   );
 
-  // Extract the numeric part from the hash
   const match = hash.match(/comment-(\d+)/);
   if (match && match[1]) {
     hashCommentIndex = parseInt(match[1], 10);
   }
 
-  // Process each comment. Always keep the newest actual comment open so a task
-  // never lands in an all-collapsed state when every comment has been seen.
   comments.map((item: IComment, index: number) => {
     let pinned: boolean | undefined = undefined;
     if (item.savedContent && item.savedContent.length > 0) {
@@ -42,7 +37,6 @@ export function processComments(
         : false;
   });
 
-  // Handle the specific comment from the hash
   if (hashCommentIndex !== null && comments[hashCommentIndex]) {
     initialMap[hashCommentIndex] = false;
   }
@@ -106,13 +100,11 @@ export function wrapBlockQuote(
     : hyperAiId === quoter.id
       ? ""
       : `name-${quoter.id}`;
-  // SECURITY: Preserve staging display/data escaping and add label escaping for the generated mention wrapper.
   const escapedDataLabel = escapeHtml(dataLabel);
   const extraAttr = isAi ? ` text="${escapedDisplayName}"` : "";
   const replyQuoteAttribute = isAi
     ? ""
     : ` ${REPLY_QUOTE_DATA_ATTRIBUTE}="true"`;
   const mention = `<span data-type="mention" class="mention" data-id="${escapedDataId}" data-label="${escapedDataLabel}" uniqueindex="" projectid=""${extraAttr} contenteditable="false">${escapedDisplayName}</span> said <blockquote${replyQuoteAttribute}>${content}</blockquote>`;
-  // Add a <p></p> at the end for additional space if aiMention is true
   return isAi ? `${mention}<p></p>` : mention;
 }

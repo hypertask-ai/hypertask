@@ -13,8 +13,6 @@ async function handler(req: NextApiRequest, res: NextApiResponse) {
 
   try {
     const result = await deliverAgentWebhook(deliveryId);
-    // Retry scheduling is explicit and durable, so QStash should not also retry
-    // this internal message and create overlapping attempts.
     return res.status(200).json({ ok: true, result });
   } catch (error) {
     console.error("[agent-webhook] delivery queue failed", error);

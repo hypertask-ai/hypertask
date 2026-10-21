@@ -20,7 +20,6 @@ const SharedTaskPageFooter = ({
   return (
     <>
       {children}
-      {/* translate="no": same Chrome-Translate #418 guard as <main> (HTPR-4980). */}
       <div className="relative" translate="no">
         <div
           style={{

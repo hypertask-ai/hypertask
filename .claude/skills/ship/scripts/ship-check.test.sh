@@ -178,7 +178,53 @@ for statuses in \
     && ok "non-skipped/latest-success status still requires deployment" || bad "deployment bypass: $out"
 done
 
-# Only analytics/master may use its exact production publishing push without a release.
+# Bindings keep their repository and base when ledger commands omit the environment.
+binding_tests() {
+  local HOME PATH=$PATH BIND_EXPECT_REPO SHIP_REPO SHIP_BASE
+  unset SHIP_REPO SHIP_BASE
+  export HOME="$E/bind-home" PATH="$E/bind-bin:$PATH" BIND_EXPECT_REPO=hypertask-ai/analytics
+  mkdir -p "$HOME" "$E/bind-bin"
+  cat > "$E/bind-bin/gh" <<'MOCK'
+#!/usr/bin/env bash
+[[ $1 == pr && $2 == view && $3 == 163 && $4 == -R && $5 == "$BIND_EXPECT_REPO" ]] || exit 1
+case "$7" in
+  title) echo 'YPER4-531 [INFRA] Fixture' ;;
+  number,title,state,mergeCommit,baseRefName)
+    printf '{"number":163,"title":"YPER4-531 [INFRA] Fixture","state":"MERGED","mergeCommit":{"oid":"ec45678a2"},"baseRefName":"%s"}\n' "${BIND_PR_BASE:-master}" ;;
+  *) exit 1 ;;
+esac
+MOCK
+  cat > "$E/bind-bin/hypertask" <<'MOCK'
+#!/usr/bin/env bash
+[[ $1 == tasks && $2 == get && $3 == YPER4-531 ]] || exit 1
+echo '{"success":true,"tasks":[{"section":"Done"}]}'
+MOCK
+  chmod +x "$E/bind-bin/gh" "$E/bind-bin/hypertask"
+  B() {
+    local want=$1 expected=$2 out got; shift 2
+    out=$(env "$@" ./ship-check pr YPER4-531); got=$?
+    [ "$got" = "$want" ] && [[ $out == "$expected"* ]] && ok "binding: $*" || bad "binding: want $want $expected got $got $out ($*)"
+  }
+  SHIP_REPO=hypertask-ai/analytics SHIP_BASE=master ./ship-check bind YPER4-531 163 >/dev/null \
+    && ok 'bind analytics PR' || bad 'bind analytics PR'
+  [ "$(cat "$E/YPER4-531/pr")" = 163 ] && [ "$(cat "$E/YPER4-531/repo")" = hypertask-ai/analytics ] && [ "$(cat "$E/YPER4-531/base")" = master ] \
+    && ok 'binding records PR, repo and base' || bad 'binding lost repo/base'
+  B 0 'title ok'
+  ./ship-check merged YPER4-531 | grep -qx 'merged ok' && ok 'merged restores analytics repo/base' || bad 'merged lost analytics binding'
+  B 1 'FAIL:' BIND_EXPECT_REPO=hypertask-ai/docs
+  B 0 'title ok' SHIP_REPO=hypertask-ai/docs BIND_EXPECT_REPO=hypertask-ai/docs
+  B 0 'title ok' SHIP_BASE=main BIND_PR_BASE=main
+  B 1 'FAIL:' SHIP_BASE=main
+  mkdir -p "$E/bind-legacy/YPER4-531"; echo 163 > "$E/bind-legacy/YPER4-531/pr"
+  B 0 'title ok' VCC_EVIDENCE_DIR="$E/bind-legacy" BIND_EXPECT_REPO=hypertask-ai/hypertask BIND_PR_BASE=production
+  B 0 'title ok' VCC_EVIDENCE_DIR="$E/bind-legacy" SHIP_REPO=hypertask-ai/analytics SHIP_BASE=master
+  SHIP_REPO=hypertask-ai/docs SHIP_BASE=main BIND_EXPECT_REPO=hypertask-ai/docs ./ship-check bind YPER4-531 163 >/dev/null \
+    && [ "$(cat "$E/YPER4-531/repo")" = hypertask-ai/docs ] && [ "$(cat "$E/YPER4-531/base")" = main ] \
+    && ok 'rebind replaces saved repo/base' || bad 'rebind lost repo/base'
+}
+binding_tests
+
+# Only analytics/master may use its exact production publishing run without a release.
 cat > "$E/mock-bin/gh" <<'MOCK'
 #!/usr/bin/env bash
 case "$1:$2" in
@@ -187,7 +233,7 @@ case "$1:$2" in
   release:list) [ "${RELEASE_ERROR:-0}" = 0 ] || exit 1; echo "${RELEASES_FIXTURE:-[]}" ;;
   api:*/compare/*) [ "${COMPARE_ERROR:-0}" = 0 ] || exit 1; echo "${COMPARE_FIXTURE:-behind}" ;;
   api:*/actions/workflows/*)
-    [[ "$2" == 'repos/hypertask-ai/analytics/actions/workflows/deploy.yml/runs?head_sha=ec45678a2&event=push&per_page=100' ]] || exit 1
+    [[ "$2" == 'repos/hypertask-ai/analytics/actions/workflows/deploy.yml/runs?head_sha=ec45678a2&per_page=100' ]] || exit 1
     [ "${RUN_ERROR:-0}" = 0 ] || exit 1; echo "$RUNS_FIXTURE" ;;
   api:*/actions/runs/*)
     [[ "$2" == 'repos/hypertask-ai/analytics/actions/runs/123/jobs?per_page=100' ]] || exit 1
@@ -202,14 +248,23 @@ D() {
   [ "$got" = "$want" ] && [[ $out == "$expected"* ]] && ok "$out" || bad "want $want $expected got $got $out"
 }
 D 0 'deployed ok (workflow)'
-D 1 'FAIL: no successful production publishing push' RUNS_FIXTURE='{"workflow_runs":[]}'
+D 0 'deployed ok (workflow)' RUNS_FIXTURE="$(jq '.workflow_runs[0].event = "workflow_dispatch"' <<<"$publish")"
+for change in \
+  '.head_sha = "different"' \
+  '.conclusion = "failure"' \
+  '.conclusion = null | .status = "in_progress"' \
+  '.path = ".github/workflows/other.yml"'; do
+  runs=$(jq ".workflow_runs[0] |= (.event = \"workflow_dispatch\" | $change)" <<<"$publish")
+  D 1 'FAIL: no successful production publishing run' RUNS_FIXTURE="$runs"
+done
+D 1 'FAIL: no successful production publishing run' RUNS_FIXTURE='{"workflow_runs":[]}'
 for change in \
   '.name = "Deploy Preview"' \
   '.name = "Publish validation"' \
   '.path = ".github/workflows/preview.yml"' \
   '.path = ".github/workflows/validation.yml"' \
   '.event = "pull_request"' \
-  '.event = "workflow_dispatch"' \
+  '.event = "schedule"' \
   '.head_branch = "preview"' \
   '.conclusion = "failure"' \
   '.conclusion = null' \
@@ -218,7 +273,7 @@ for change in \
   'del(.path)' \
   'del(.event)'; do
   runs=$(jq ".workflow_runs[0] |= ($change)" <<<"$publish")
-  D 1 'FAIL: no successful production publishing push' RUNS_FIXTURE="$runs"
+  D 1 'FAIL: no successful production publishing run' RUNS_FIXTURE="$runs"
 done
 for jobs in \
   '{"jobs":[]}' \
@@ -252,7 +307,7 @@ case "$1:$2" in
   release:view) exit 1 ;;
   release:list) [ "${RELEASE_ERROR:-0}" = 0 ] || exit 1; echo "${RELEASES_FIXTURE:-[]}" ;;
   api:*/actions/workflows/*)
-    [[ "$2" == 'repos/hypertask-ai/docs/actions/workflows/deploy.yml/runs?head_sha=ec45678a2&event=push&per_page=100' ]] || exit 1
+    [[ "$2" == 'repos/hypertask-ai/docs/actions/workflows/deploy.yml/runs?head_sha=ec45678a2&per_page=100' ]] || exit 1
     [ "${RUN_ERROR:-0}" = 0 ] || exit 1; echo "$RUNS_FIXTURE" ;;
   api:*/actions/runs/*)
     [[ "$2" == 'repos/hypertask-ai/docs/actions/runs/456/jobs?per_page=100' ]] || exit 1
@@ -268,19 +323,28 @@ DD() {
   else bad "docs: want $want $expected got $got $out"; fi
 }
 DD 0 'deployed ok (workflow)'
-DD 1 'FAIL: no successful production publishing push' RUNS_FIXTURE='{"workflow_runs":[]}'
+DD 0 'deployed ok (workflow)' RUNS_FIXTURE="$(jq '.workflow_runs[0].event = "workflow_dispatch"' <<<"$docs_publish")"
+for change in \
+  '.head_sha = "different"' \
+  '.conclusion = "failure"' \
+  '.conclusion = null | .status = "in_progress"' \
+  '.path = ".github/workflows/other.yml"'; do
+  runs=$(jq ".workflow_runs[0] |= (.event = \"workflow_dispatch\" | $change)" <<<"$docs_publish")
+  DD 1 'FAIL: no successful production publishing run' RUNS_FIXTURE="$runs"
+done
+DD 1 'FAIL: no successful production publishing run' RUNS_FIXTURE='{"workflow_runs":[]}'
 for change in \
   '.name = "Publish hypertask.app"' \
   '.path = ".github/workflows/preview.yml"' \
   '.event = "pull_request"' \
-  '.event = "workflow_dispatch"' \
+  '.event = "schedule"' \
   '.head_branch = "master"' \
   '.conclusion = "failure"' \
   '.conclusion = null' \
   '.conclusion = "cancelled"' \
   '.head_sha = "different"'; do
   runs=$(jq ".workflow_runs[0] |= ($change)" <<<"$docs_publish")
-  DD 1 'FAIL: no successful production publishing push' RUNS_FIXTURE="$runs"
+  DD 1 'FAIL: no successful production publishing run' RUNS_FIXTURE="$runs"
 done
 for jobs in \
   '{"jobs":[]}' \
@@ -298,12 +362,78 @@ DD 1 'FAIL: no release found' RELEASES_FIXTURE='[{"tagName":"v1"}]'
 DD 1 'FAIL: no release found' SHIP_BASE=master
 DD 1 'FAIL: no release found' SHIP_REPO=hypertask-ai/other
 
+# Docs completion gate: isolated bound PR, docs PR and comments, never board-state dependent.
+mkdir -p "$E/docs-bin"
+cat > "$E/docs-bin/gh" <<'MOCK'
+#!/usr/bin/env bash
+case "$1:$2" in
+  pr:view)
+    [[ $* == *'-R hypertask-ai/hypertask'* ]] || exit 1
+    if [[ $* == *'--json title --jq'* ]]; then echo "YPER4-388 [${DOCS_TYPE:-FEATURE}] Fixture"
+    else printf '{"number":888,"title":"YPER4-388 [%s] Fixture","state":"MERGED","mergeCommit":{"oid":"app-merge"},"baseRefName":"production"}\n' "${DOCS_TYPE:-FEATURE}"; fi ;;
+  pr:list)
+    [[ $* == *'-R hypertask-ai/docs --base main --state merged'* && $* == *'YPER4-388 in:title'* ]] || exit 1
+    printf '%s\n' "${DOCS_PRS:-[]}" ;;
+  api:repos/hypertask-ai/docs/actions/workflows/deploy.yml/runs\?*)
+    [[ $2 == *'head_sha=ec45678a2&per_page=100' ]] || exit 1
+    printf '%s\n' "$RUNS_FIXTURE" ;;
+  api:repos/hypertask-ai/docs/actions/runs/456/jobs\?*) printf '%s\n' "$JOBS_FIXTURE" ;;
+  api:repos/hypertask-ai/hypertask/commits/app-merge/status) echo 'Ignored Build Step' ;;
+  *) exit 1 ;;
+esac
+MOCK
+cat > "$E/docs-bin/hypertask" <<'MOCK'
+#!/usr/bin/env bash
+[[ $1 == comment && $2 == list && $3 == "${DOCS_TICKET:-YPER4-388}" ]] || exit 1
+if [ -n "${DOCS_COMMENTS:-}" ]; then printf '%s\n' "$DOCS_COMMENTS"
+else echo '{"comments":[]}'; fi
+MOCK
+chmod +x "$E/docs-bin/gh" "$E/docs-bin/hypertask"
+mkdir -p "$E/YPER4-388"; echo 888 > "$E/YPER4-388/pr"
+docs_pr='[{"number":42,"title":"YPER4-388 [FEATURE] Fixture docs","state":"MERGED","baseRefName":"main","mergeCommit":{"oid":"ec45678a2"}}]'
+DC() {
+  local want=$1 expected=$2 mode=$3 out got; shift 3
+  if [ "$mode" = guard ]; then
+    out=$(echo '{"tool_input":{"command":"vcc task move YPER4-388 --section \"Done\""}}' | env PATH="$E/docs-bin:$PATH" RUNS_FIXTURE="$docs_publish" JOBS_FIXTURE='{"jobs":[{"name":"Build and deploy to Cloudflare Pages","conclusion":"success"}]}' "$@" ./ship-check guard 2>&1); got=$?
+  else
+    out=$(env PATH="$E/docs-bin:$PATH" RUNS_FIXTURE="$docs_publish" JOBS_FIXTURE='{"jobs":[{"name":"Build and deploy to Cloudflare Pages","conclusion":"success"}]}' "$@" ./ship-check docs "${DOCS_TICKET:-YPER4-388}" 2>&1); got=$?
+  fi
+  if [ "$got" = "$want" ] && [[ $out == *"$expected"* ]]; then ok "docs gate $mode: $expected"
+  else bad "docs gate $mode: want $want $expected got $got $out"; fi
+}
+DC 1 'FAIL: [FEATURE] ticket YPER4-388 has no merged and deployed docs PR' docs
+DC 0 'docs ok (docs PR 42)' docs DOCS_PRS="$docs_pr"
+DC 0 'docs ok (not needed for [BUGFIX])' docs DOCS_TYPE=BUGFIX
+DC 1 'FAIL: [IMPROVE]' docs DOCS_TYPE=IMPROVE
+DC 0 'docs ok (docs PR 42)' docs DOCS_TYPE=IMPROVE DOCS_PRS="$docs_pr"
+DC 1 'FAIL: [FEATURE]' docs DOCS_PRS="$docs_pr" RUNS_FIXTURE='{"workflow_runs":[]}'
+DC 1 'FAIL: [FEATURE]' docs DOCS_PRS="$docs_pr" JOBS_FIXTURE='{"jobs":[{"name":"Build and deploy to Cloudflare Pages","conclusion":"skipped"}]}'
+for change in '.title = "YPER4-3880 [FEATURE] Other"' '.baseRefName = "preview"' '.state = "OPEN"'; do
+  DC 1 'FAIL: [FEATURE]' docs DOCS_PRS="$(jq ".[0] |= ($change)" <<<"$docs_pr")"
+done
+DC 0 'docs ok (no user-visible change)' docs DOCS_COMMENTS='{"comments":[{"text":"<p><strong>No user-visible change:</strong> internal tooling only.</p>"}]}'
+for text in 'No user-visible change: ' '<p>No user-visible change: &nbsp;</p>' 'Note: No user-visible change: internal tooling'; do
+  DC 1 'FAIL: [FEATURE]' docs DOCS_COMMENTS="$(jq -n --arg text "$text" '{comments:[{text:$text}]}')"
+done
+DC 2 'Merge a docs PR titled with YPER4-388 or post a No user-visible change:' guard
+DC 0 '' guard DOCS_PRS="$docs_pr"
+DC 0 '' guard DOCS_TYPE=BUGFIX
+DC 0 '' guard DOCS_COMMENTS='{"comments":[{"text":"No user-visible change: internal tooling only."}]}'
+DC 2 'Merge a docs PR titled with YPER4-388' guard DOCS_TYPE=IMPROVE
+# Duplicate path: the docs PR is titled with the fixing ticket; the comment exemption stays on the duplicate.
+mkdir -p "$E/YPER4-390"; echo 888 > "$E/YPER4-390/pr"; echo YPER4-388 > "$E/YPER4-390/duplicate-of"
+DOCS_TICKET=YPER4-390 DC 0 'docs ok (docs PR 42)' docs DOCS_PRS="$docs_pr"
+DOCS_TICKET=YPER4-390 DC 1 'titled with YPER4-388' docs
+DOCS_TICKET=YPER4-390 DC 0 'docs ok (no user-visible change)' docs DOCS_COMMENTS='{"comments":[{"text":"No user-visible change: duplicate of a docs-free fix."}]}'
+
 # Manual worker deployments must bind the only active version to the full merge SHA.
 mkdir -p "$E/worker-bin" "$E/worker-checkout/workers/docs-agent"
 cat > "$E/worker-bin/gh" <<'MOCK'
 #!/usr/bin/env bash
 case "$1:$2" in
-  pr:view) printf '{"number":838,"title":"YPER4-999 [INFRA] Fixture","state":"MERGED","mergeCommit":{"oid":"%s"},"baseRefName":"%s"}\n' "$WORKER_SHA" "$SHIP_BASE" ;;
+  pr:view)
+    if [[ $* == *'--json title --jq'* ]]; then echo 'YPER4-999 [INFRA] Fixture'; exit; fi
+    printf '{"number":838,"title":"YPER4-999 [INFRA] Fixture","state":"MERGED","mergeCommit":{"oid":"%s"},"baseRefName":"%s"}\n' "$WORKER_SHA" "$SHIP_BASE" ;;
   release:view) [ -n "${RELEASE_TAG:-}" ] && echo "$RELEASE_TAG" ;;
   release:list) [ "${RELEASE_ERROR:-0}" = 0 ] || exit 1; echo "${RELEASES_FIXTURE:-[]}" ;;
   api:*/compare/*) echo identical ;;
@@ -494,8 +624,8 @@ assert os.environ['SHIP_REPO'] == 'valentinyeo/agent-fleet'
 assert os.environ['SHIP_BASE'] == 'htpr-5009-mdx-write-guard-v2'
 assert os.environ['SHIP_CHECKOUT'] == '/tmp/worker checkout'
 assert os.environ['SHIP_WORKER'] == 'workers/docs agent'
-print(dict(ticket='ticket ok', pr='title ok', merged='merged ok',
-           deployed='deployed ok (worker fixture)', done='done ok', cleaned='cleaned ok')[sys.argv[1]])
+print(dict(ticket='ticket ok', deeper='deeper ok', pr='title ok', merged='merged ok',
+           deployed='deployed ok (worker fixture)', docs='docs ok', done='done ok', cleaned='cleaned ok')[sys.argv[1]])
 ''')
 check.chmod(0o755)
 repo = p / 'gate-repo'
@@ -512,8 +642,9 @@ for _ in range(2):
 ledger = repo / '.unlazy/s-worker-g/GATES.md'
 text = ledger.read_text()
 prefix = "SHIP_REPO=valentinyeo/agent-fleet SHIP_BASE=htpr-5009-mdx-write-guard-v2 SHIP_CHECKOUT='/tmp/worker checkout' SHIP_WORKER='workers/docs agent' "
-assert text.count('  CHECK: ' + prefix) == 6
-assert text.count('automatic-evidence=v1') == 6
+assert text.count('  CHECK: ' + prefix) == 8
+assert text.count('automatic-evidence=v1') == 8
+assert 'YPER4-999.docs:' in text
 for worker in ['/absolute', '../outside', "workers/a';touch bad"]:
     r = subprocess.run(['bash', script, 'YPER4-999'], cwd=repo,
                        env=dict(env, SHIP_WORKER=worker), text=True, capture_output=True)
@@ -656,8 +787,8 @@ if '/files?' in url:
     if file['status'] == 'renamed':
         file['previous_filename'] = 'src/old-card.tsx'
     files = [file]
-    if os.environ.get('FLAG_REMOVED_DEFINITION'):
-        files.append({'filename': os.environ['FLAG_REMOVED_DEFINITION'], 'status': 'removed'})
+    for path in filter(None, os.environ.get('FLAG_REMOVED_DEFINITION', '').split(',')):
+        files.append({'filename': path, 'status': 'removed'})
     print(json.dumps(files))
     if os.environ.get('FLAG_PAGE2'):
         print(json.dumps([{'filename': 'AGENTS.md', 'status': 'modified'}]))
@@ -705,6 +836,12 @@ if cmd == 'show':
         name = 'flags-' + ('base' if ref == os.environ.get('FLAG_BASE_SHA', 'b' * 40) else 'head') + '/' + path.rsplit('/', 1)[1]
         sys.stdout.write(open(os.environ['FLAG_SOURCE'] + '/' + name).read())
         sys.exit(0)
+    if path == 'src/lib/flags/releaseRisk.ts':
+        risk = os.environ['FLAG_SOURCE'] + '/risk-' + ('base' if ref == os.environ.get('FLAG_BASE_SHA', 'b' * 40) else 'head')
+        if not os.path.exists(risk):
+            sys.exit(128)
+        sys.stdout.write(open(risk).read())
+        sys.exit(0)
     name = {'src/lib/flags.ts': 'registry', 'src/lib/flags/definitions.ts': 'definitions', 'src/lib/flags/keys.ts': 'keys'}.get(path, 'base' if ref == 'b' * 40 else 'head')
     if name == 'keys' and ref == 'a' * 40 and os.path.exists(os.environ['FLAG_SOURCE'] + '/keys-head'):
         name = 'keys-head'
@@ -734,6 +871,7 @@ MOCK
 chmod +x "$E/flag-bin/gh" "$E/flag-bin/hypertask" "$E/flag-bin/fakegit"
 export SHIP_GIT="$E/flag-bin/fakegit" SHIP_GIT_CACHE="$E/git-cache" GH_PAUSE_FILE="$E/no-pause"
 printf '{"cookies":[{"name":"session","value":"plain","domain":"app.hypertask.ai"}]}' > "$E/plain-state.json"
+export SHIP_CHECK_PLAIN_QA_STATE="$E/plain-state.json"
 printf 'export const RELEASED_FLAG = "htpr-1-released";\n' > "$E/flag-source/keys"
 printf 'const FEATURE_FLAG_DEFINITIONS = [{ key: RELEASED_FLAG } ] as const;\nconst DEFAULT_FEATURE_FLAG_MODE = "OWNER_AND_QA";\n' > "$E/flag-source/registry"
 printf 'const released = useFlag(RELEASED_FLAG);\n' > "$E/flag-source/base"
@@ -855,6 +993,33 @@ printf 'export const NEW_FIX_FLAG = "htpr-9-newfix";\nexport default { key: NEW_
 F 2 'expected Flags: htpr-9-newfix=EVERYONE' FLAG_FILE=src/lib/flags/definitions/htpr-9-newfix.ts FLAG_STATUS=added
 sed 's/^Flags:.*/&, htpr-9-newfix=EVERYONE/' "$E/record" > "$premerge"
 F 0 '' FLAG_FILE=src/lib/flags/definitions/htpr-9-newfix.ts FLAG_STATUS=added
+# New eligible definitions must explicitly declare Everyone; existing definitions keep their modes.
+for kind in feature improvement ''; do
+  printf 'export const NEW_FEATURE_FLAG = "htpr-8-newfeature";\nexport default { key: NEW_FEATURE_FLAG, %s shippedOn: "2026-10-20", description: "Fixture" } as const;\n' "${kind:+kind: \"$kind\",}" > "$E/flag-source/flags-head/htpr-8-newfeature.ts"
+  F 2 'new flag htpr-8-newfeature must set defaultMode: "EVERYONE"' FLAG_FILE=src/lib/flags/definitions/htpr-8-newfeature.ts FLAG_STATUS=added
+done
+printf 'export const NEW_FEATURE_FLAG = "htpr-8-newfeature";\nexport default { key: NEW_FEATURE_FLAG, kind: "feature", shippedOn: "2026-10-20", description: "Fixture", releaseRisk: { risk: "new", reason: "No highRisk: category applies" } } as const;\n' > "$E/flag-source/flags-head/htpr-8-newfeature.ts"
+F 2 'must set defaultMode: "EVERYONE"' FLAG_FILE=src/lib/flags/definitions/htpr-8-newfeature.ts FLAG_STATUS=added
+printf 'export const NEW_FEATURE_FLAG = "htpr-8-newfeature";\n/* highRisk: access */\nexport default { key: NEW_FEATURE_FLAG, kind: "feature", // kind: "internal"\n shippedOn: "2026-10-20", description: "Fixture" } as const;\n' > "$E/flag-source/flags-head/htpr-8-newfeature.ts"
+F 2 'must set defaultMode: "EVERYONE"' FLAG_FILE=src/lib/flags/definitions/htpr-8-newfeature.ts FLAG_STATUS=added
+printf 'export const NEW_FEATURE_FLAG = "htpr-8-newfeature";\nexport default { key: NEW_FEATURE_FLAG, kind: "feature", defaultMode: "EVERYONE", shippedOn: "2026-10-20", description: "Fixture" } as const;\n' > "$E/flag-source/flags-head/htpr-8-newfeature.ts"
+F 2 'expected Flags: htpr-8-newfeature=EVERYONE' FLAG_FILE=src/lib/flags/definitions/htpr-8-newfeature.ts FLAG_STATUS=added
+sed 's/^Flags:.*/&, htpr-8-newfeature=EVERYONE/' "$premerge" > "$E/feature-record"
+cp "$premerge" "$E/before-feature-record"; cp "$E/feature-record" "$premerge"
+F 0 '' FLAG_FILE=src/lib/flags/definitions/htpr-8-newfeature.ts FLAG_STATUS=added
+cp "$E/before-feature-record" "$premerge"
+printf 'export const NEW_FEATURE_FLAG = "htpr-8-newfeature";\nexport default { key: NEW_FEATURE_FLAG, kind: "feature", defaultMode: "OWNER_AND_QA", shippedOn: "2026-10-20", description: "Fixture", releaseRisk: { risk: "new", reason: "Fixture", highRisk: "access" } } as const;\n' > "$E/flag-source/flags-head/htpr-8-newfeature.ts"
+F 0 '' FLAG_FILE=src/lib/flags/definitions/htpr-8-newfeature.ts FLAG_STATUS=added
+sed -i 's/OWNER_AND_QA/EVERYONE/' "$E/flag-source/flags-head/htpr-8-newfeature.ts"
+F 2 'may not default to Everyone' FLAG_FILE=src/lib/flags/definitions/htpr-8-newfeature.ts FLAG_STATUS=added
+printf 'export const NEW_FEATURE_FLAG = "htpr-8-newfeature";\nexport default { key: NEW_FEATURE_FLAG, kind: "internal", shippedOn: "2026-10-20", description: "Fixture" } as const;\n' > "$E/flag-source/flags-head/htpr-8-newfeature.ts"
+F 0 '' FLAG_FILE=src/lib/flags/definitions/htpr-8-newfeature.ts FLAG_STATUS=added
+sed -i 's/kind: "internal"/kind: "internal", defaultMode: "EVERYONE"/' "$E/flag-source/flags-head/htpr-8-newfeature.ts"
+F 2 'may not default to Everyone' FLAG_FILE=src/lib/flags/definitions/htpr-8-newfeature.ts FLAG_STATUS=added
+rm "$E/flag-source/flags-head/htpr-8-newfeature.ts"
+printf 'export const RELEASED_FLAG = "htpr-1-released";\nexport default { key: RELEASED_FLAG, kind: "feature", shippedOn: "2026-10-10", description: "Fixture" } as const;\n' > "$E/flag-source/flags-base/htpr-1-released.ts"
+cp "$E/flag-source/flags-base/htpr-1-released.ts" "$E/flag-source/flags-head/htpr-1-released.ts"
+F 0 ''
 # YPER4-251: a registry of several per-flag files is listed and read through local git, with 0 contents API calls.
 for d in base head; do printf 'export const OTHER_FLAG = "htpr-2-other";\nexport default { key: OTHER_FLAG, kind: "bugfix", shippedOn: "2026-10-10", description: "Fixture" } as const;\n' > "$E/flag-source/flags-$d/htpr-2-other.ts"; done
 : > "$E/status-log"
@@ -963,7 +1128,7 @@ S() {
   : > "$E/status-log"
   out=$(env PATH="$E/flag-bin:$PATH" PYTHONPATH="$E/flag-http" FLAG_SOURCE="$E/flag-source" FLAG_LOG="$E/status-log" FLAG_ASSERT_LOCK=1 FLAG_ASSERT_FRESH=1 AGENT_TOKEN=fixture HYPERTASKS_JWT_TOKEN= "$@" ./ship-check premerge-status 999 2>&1); got=$?
   if [ "$got" = "$want" ] && python3 - "$E/status-log" "$state" "$description" <<'PY'
-import json, sys
+import json, os, sys
 calls = [json.loads(line) for line in open(sys.argv[1])]
 posts = [c for c in calls if c[0] == 'api' and '/statuses/' in c[1]]
 if sys.argv[2] == 'none':
@@ -976,6 +1141,10 @@ else:
     assert 'context=premerge-evidence' in call and 'state=' + sys.argv[2] in call, call
     description = next(c.removeprefix('description=') for c in call if c.startswith('description='))
     assert len(description) <= 140 and sys.argv[3] in description, call
+    if 'removed-everyone' in sys.argv[3]:
+        assert description == sys.argv[3], call
+    if sys.argv[2] != 'success' or os.environ.get('EXPECT_NO_REMOVED_EVERYONE'):
+        assert 'removed-everyone' not in description, call
 PY
   then ok "status: $state $description"; else bad "status: $state got $got $out"; fi
 }
@@ -1010,7 +1179,7 @@ F 2 'cannot post premerge-evidence' FLAG_POST_ERROR=1
 printf 'const released = useFlag(RELEASED_FLAG);\n' > "$E/flag-source/base"; cp "$E/flag-source/base" "$E/flag-source/head"
 S 1 failure 'htpr-1-released: record'
 cp "$E/record" "$premerge"
-S 0 success 'click record ok'
+EXPECT_NO_REMOVED_EVERYONE=1 S 0 success 'click record ok' # No definition deleted: no removed-everyone.
 API_BUDGET 6 'premerge-status with a released flag: no contents API call, at most 6 API calls'
 # YPER4-281: deleting a definition exempts only that absent key from Flags, not the click.
 printf 'export * from "./definitions/index.generated";\n' > "$E/flag-source/keys"
@@ -1024,9 +1193,38 @@ printf 'const removed = useFlag("htpr-1-released");\nconst other = useFlag("htpr
 printf 'const other = useFlag("htpr-2-other");\n' > "$E/flag-source/head"
 removal=(FLAG_REMOVED_DEFINITION=src/lib/flags/definitions/htpr-1-released.ts FLAG_COUNT=2 'FLAG_HTTP={"flags":[{"key":"htpr-1-released","mode":"EVERYONE"},{"key":"htpr-2-other","mode":"EVERYONE"}]}')
 sed 's/htpr-1-released=EVERYONE/htpr-2-other=EVERYONE/' "$E/record" > "$premerge"
-S 0 success 'click record ok' "${removal[@]}"
+S 0 success 'click record ok | removed-everyone: htpr-1-released' "${removal[@]}"
+EXPECT_NO_REMOVED_EVERYONE=1 S 0 success 'click record ok' "${removal[@]}" 'FLAG_HTTP={"flags":[{"key":"htpr-1-released","mode":"OFF"},{"key":"htpr-2-other","mode":"EVERYONE"}]}'
+EXPECT_NO_REMOVED_EVERYONE=1 S 0 success 'click record ok' "${removal[@]}" AGENT_TOKEN= 'FLAG_PUBLIC={"flags":{"htpr-1-released":false,"htpr-2-other":true}}'
+S 0 success 'click record ok | removed-everyone: htpr-1-released' "${removal[@]}" AGENT_TOKEN= 'FLAG_PUBLIC={"flags":{"htpr-1-released":true,"htpr-2-other":true}}'
+S 1 failure 'unchanged PR head' "${removal[@]}" FLAG_HEAD_RACE=1
 P 0 premerge 999 "${removal[@]}"
 F 0 '' "${removal[@]}"
+# removed-everyone requires every deleted key, sorted, not merely one released key.
+for d in base head; do
+  printf 'export const UNTOUCHED_FLAG = "htpr-4-untouched";\nexport default { key: UNTOUCHED_FLAG, kind: "bugfix" } as const;\n' > "$E/flag-source/flags-$d/htpr-4-untouched.ts"
+done
+mv "$E/flag-source/flags-head/htpr-2-other.ts" "$E/other-definition"
+multiple=(FLAG_REMOVED_DEFINITION=src/lib/flags/definitions/htpr-2-other.ts,src/lib/flags/definitions/htpr-1-released.ts FLAG_COUNT=3)
+S 0 success 'click record ok | removed-everyone: htpr-1-released,htpr-2-other' "${removal[@]}" "${multiple[@]}"
+EXPECT_NO_REMOVED_EVERYONE=1 S 0 success 'click record ok' "${removal[@]}" "${multiple[@]}" 'FLAG_HTTP={"flags":[{"key":"htpr-1-released","mode":"EVERYONE"},{"key":"htpr-2-other","mode":"OFF"}]}'
+EXPECT_NO_REMOVED_EVERYONE=1 S 0 success 'click record ok' "${removal[@]}" "${multiple[@]}" AGENT_TOKEN= 'FLAG_PUBLIC={"flags":{"htpr-1-released":true,"htpr-2-other":false}}'
+S 1 failure 'live state unknown' "${multiple[@]}"
+mv "$E/other-definition" "$E/flag-source/flags-head/htpr-2-other.ts"
+rm "$E/flag-source/flags-"{base,head}/htpr-4-untouched.ts
+# removed-everyone is omitted, never truncated, when the entire description exceeds 140.
+for length in 140 141; do
+  prefix='click record ok | removed-everyone: '
+  key="htpr-3-$(printf '%*s' "$((length - ${#prefix} - 7))" '' | tr ' ' x)"
+  path="src/lib/flags/definitions/$key.ts"
+  printf 'export const LONG_FLAG = "%s";\nexport default { key: LONG_FLAG, kind: "bugfix" } as const;\n' "$key" > "$E/flag-source/flags-base/$key.ts"
+  if [ "$length" = 140 ]; then
+    S 0 success "$prefix$key" FLAG_FILE="$path" FLAG_STATUS=removed "FLAG_HTTP={\"flags\":[{\"key\":\"$key\",\"mode\":\"EVERYONE\"}]}"
+  else
+    EXPECT_NO_REMOVED_EVERYONE=1 S 0 success 'click record ok' FLAG_FILE="$path" FLAG_STATUS=removed "FLAG_HTTP={\"flags\":[{\"key\":\"$key\",\"mode\":\"EVERYONE\"}]}"
+  fi
+  rm "$E/flag-source/flags-base/$key.ts"
+done
 sed -i 's/htpr-2-other=EVERYONE/htpr-2-other=OFF/' "$premerge"
 S 1 failure 'expected Flags: htpr-2-other=EVERYONE' "${removal[@]}"
 cp "$E/record" "$premerge"
@@ -1099,6 +1297,8 @@ import json, sys
 path = sys.argv[1]; cache = json.load(open(path)); cache['999']['checked'] = 0
 json.dump(cache, open(path, 'w'))
 PY
+W 0 1 FLAG_POST_ERROR=1
+W 0 1 FLAG_POST_ERROR=1
 W 1 1 FLAG_POST_ERROR=1
 W 0 1
 
@@ -1211,7 +1411,7 @@ D dropped YPER4-777 903 >/dev/null && bad "dropped accepted a merged PR" || ok "
 [ ! -e "$E/YPER4-777/dropped" ] && ok "refused dropped writes no record" || bad "refused dropped wrote a record"
 out=$(D dropped YPER4-777 901); [ "$out" = 'recorded YPER4-777 as dropped (PR 901 closed unmerged)' ] && ok "dropped records a closed unmerged PR" || bad "dropped: $out"
 [ "$(cat "$E/YPER4-777/pr")" = 901 ] && [ "$(cat "$E/YPER4-777/dropped")" = 901 ] && ok "dropped binds the PR" || bad "dropped record"
-for x in merged deployed proof; do
+for x in merged deployed proof docs; do
   D $x YPER4-777 | grep -q "$x ok (dropped: PR 901 closed unmerged)" && ok "dropped passes $x" || bad "dropped $x"
 done
 D pr YPER4-777 | grep -q 'title ok' && ok "dropped passes pr" || bad "dropped pr"
@@ -1261,6 +1461,31 @@ N nochange YPER4-901 >/dev/null && bad "nochange accepted an open PR" || ok "noc
 echo '[{"number":6,"title":"YPER4-9010 [INFRA] other ticket"}]' > "$NC/prs"
 git -C "$NC/work" push -q origin HEAD:refs/heads/r3/yper4-901-fix 2>/dev/null; echo 2 > "$NC/ahead"
 N nochange YPER4-901 >/dev/null && bad "nochange accepted an unmerged remote branch" || ok "nochange refuses an origin branch ahead of base"
+
+# deeper gate (YPER4-435): a Deeper: activity with the four parts and a runnable proof gate in the session scope.
+DP="$E/deeper"; mkdir -p "$DP/bin" "$DP/repo/.unlazy/s-abcd1234/gates"
+printf '#!/usr/bin/env bash\n[[ $1 == GET && $2 == /mcp/tasks/YPER4-902/agent-activity* ]] && cat "$DP/acts" || exit 1\n' > "$DP/bin/ht"
+chmod +x "$DP/bin/ht"; export DP
+DE() { (cd "$DP/repo" && env -u CODEX_SESSION_ID -u CODEX_THREAD_ID CLAUDE_CODE_SESSION_ID="${DSID-abcd1234-full}" PATH="$DP/bin:$PATH" "$OLDPWD/ship-check" deeper "$@"); }
+act() { jq -nc --arg t "$1" '{success:true,activities:[{type:"thought",text:"Claimed.",createdAt:"2026-10-17T10:00:00Z"},{type:"thought",text:$t,createdAt:"2026-10-17T11:00:00Z"}]}' > "$DP/acts"; }
+full='Deeper: field: release engineering | raw source: ship-check source | method: stub tests | outside proof: CI run | breaks if: another suite turns red | proof gate: YPER4-902.deeper-ci'
+gate=$'- [ ] YPER4-902.deeper-ci: CI is green\n  CHECK: gh run list --limit 1\n  EXPECT: success\n'
+printf '%s' "$gate" > "$DP/repo/.unlazy/s-abcd1234/gates/extra.md"
+act "$full"; DE YPER4-902 | grep -qx 'deeper ok' && ok "deeper passes with all parts and a runnable proof gate" || bad "deeper pass: $(DE YPER4-902)"
+DSID=otherses-full DE YPER4-902 | grep -q 'a manual note does not count' && ok "deeper ignores another session's proof gate" || bad "deeper used another session's scope"
+DSID= DE YPER4-902 | grep -q "needs this session's id" && ok "deeper refuses without a session id" || bad "deeper without session id"
+echo '{"success":true,"activities":[]}' > "$DP/acts"
+DE YPER4-902 | grep -q 'no agent activity starting with "Deeper:"' && ok "deeper refuses a ticket with no Deeper: activity" || bad "deeper no activity"
+act "${full/ | method: stub tests/}"; DE YPER4-902 | grep -q 'no "method:" part' && ok "deeper refuses a missing part" || bad "deeper missing part"
+act "${full/ | breaks if: another suite turns red/}"; DE YPER4-902 | grep -q 'no "breaks if:" part' && ok "deeper refuses a Deeper: activity without breaks if" || bad "deeper missing breaks if"
+act "${full/YPER4-902.deeper-ci/YPER4-903.deeper-ci}"; DE YPER4-902 | grep -q 'must name its proof gate' && ok "deeper refuses another ticket's proof gate" || bad "deeper wrong ticket gate"
+act "$full"; printf -- '- [ ] YPER4-902.deeper-ci: CI is green\n  EVIDENCE: I looked at it\n' > "$DP/repo/.unlazy/s-abcd1234/gates/extra.md"
+DE YPER4-902 | grep -q 'a manual note does not count' && ok "deeper refuses a manual proof gate" || bad "deeper manual gate"
+printf -- '- [ ] YPER4-902.deeper-cix: other\n  CHECK: true\n  EXPECT: x\n- [ ] YPER4-902.deeper-ci: CI is green\n  EVIDENCE: manual\n' > "$DP/repo/.unlazy/s-abcd1234/gates/extra.md"
+DE YPER4-902 | grep -q 'a manual note does not count' && ok "deeper does not borrow another gate's CHECK" || bad "deeper borrowed CHECK"
+printf '%s' "$gate" > "$DP/repo/.unlazy/s-abcd1234/GATES.md"; rm "$DP/repo/.unlazy/s-abcd1234/gates/extra.md"
+DE YPER4-902 | grep -q 'a manual note does not count' && ok "deeper needs the proof gate outside the generated GATES.md" || bad "deeper read GATES.md"
+DE 'YPER4-902;x' | grep -q 'needs a ticket id' && ok "deeper refuses a malformed ticket id" || bad "deeper malformed id"
 echo 0 > "$NC/ahead"
 G 2 vcc task move YPER4-901 $DONE
 echo '[{"number":6,"title":"YPER4-9010 [INFRA] other ticket"}]' > "$NC/prs"
@@ -1268,7 +1493,7 @@ N nochange YPER4-901 | grep -q 'nochange ok' && ok "nochange passes (bold opener
 echo '{"success":true,"comments":[{"text":"<p>Resolved without a change: <pre>curl -s x</pre></p>"}]}' > "$NC/comments"
 N nochange YPER4-901 | grep -q 'nochange ok' && ok "nochange passes with a pre block" || bad "nochange pre case"
 # Each must print what its ship-gates EXPECT line matches (pr expects "title ok").
-for x in merged:merged deployed:deployed proof:proof pr:title; do
+for x in merged:merged deployed:deployed proof:proof pr:title docs:docs; do
   N ${x%%:*} YPER4-901 | grep -q "^${x#*:} ok" && ok "nochange passes ${x%%:*}" || bad "nochange ${x%%:*}"
 done
 N cleaned YPER4-901 >/dev/null && bad "nochange cleaned ignored an origin branch" || ok "nochange cleaned fails while an origin branch exists"

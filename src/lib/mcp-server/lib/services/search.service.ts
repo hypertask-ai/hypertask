@@ -36,10 +36,6 @@ export interface SearchTasksResponse {
   nextCursor?: string | null;
 }
 
-/**
- * Service for searching tasks within user's accessible boards.
- * Validates search parameters and queries the API.
- */
 export class SearchService {
   constructor(private readonly apiClient: IApiClient) {}
 
@@ -47,7 +43,6 @@ export class SearchService {
     const correlationId = generateCorrelationId();
 
     try {
-      // Validate input
       const validatedInput = EnhancedSearchTasksInputSchema.parse(params);
 
       logger.debug('Searching tasks', {
@@ -61,7 +56,6 @@ export class SearchService {
         limit: validatedInput.limit,
       });
 
-      // Build query string
       const config = getConfig();
       // @ts-expect-error query is required at runtime; list-query merge types it optional
       const queryParams = new URLSearchParams({
@@ -155,9 +149,8 @@ export class SearchService {
         ...paginationMetadata,
       };
     } catch (error) {
-      logger.error('Failed to search tasks', {
+      logger.failure('Failed to search tasks', error, {
         correlationId,
-        error: error instanceof Error ? error.message : String(error),
       });
       throw error;
     }

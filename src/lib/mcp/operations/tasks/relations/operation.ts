@@ -1,3 +1,4 @@
+import { reportMcpOperationCrash } from '@/lib/mcp/operationCrashReport'
 import { wrapMcpRoute, checkMcpRouteRateLimit as checkMcpRateLimit, validateMcpRouteAuth as validateMcpAuth } from '@/lib/mcp/routeWrapper'
 import type { Prisma } from '@prisma/client'
 import { NextRequest, NextResponse } from 'next/server'
@@ -7,7 +8,7 @@ import { buildMcpTaskUrl } from '@/lib/mcp/boards/links'
 import { normalizeTaskRelationType } from '@/lib/mcp/tasks/relationType'
 import {
   findTaskByIdentifier,
-  TaskIdentifierAmbiguityError,
+  taskIdentifierErrorResponse,
   validateTaskIdentifier,
 } from '@/lib/mcp/tasks/resolveTask'
 import { getProjectWhere } from '@/utils/controllers/projects/getAllIncludes'
@@ -36,9 +37,7 @@ function parsePositiveInteger(value: unknown): number | null {
     : null
 }
 
-/** Coerce a body value to a positive int task id, or null if not one. */
 const idFor = (v: unknown): number | null => parsePositiveInteger(v)
-/** Coerce a body value to a non-empty ticket_number string, or null. */
 const ticketFor = (v: unknown): string | null =>
   typeof v === 'string' && v.trim() !== '' ? v.trim() : null
 
@@ -137,9 +136,8 @@ export async function POST(request: NextRequest) {
       ctx.agentId
     )
   } catch (error) {
-    if (error instanceof TaskIdentifierAmbiguityError) {
-      return validationError(`source_ticket_number: ${error.message}`)
-    }
+    const identifierResponse = taskIdentifierErrorResponse(error, 'source_ticket_number')
+    if (identifierResponse) return identifierResponse
     throw error
   }
 
@@ -151,9 +149,8 @@ export async function POST(request: NextRequest) {
       ctx.agentId
     )
   } catch (error) {
-    if (error instanceof TaskIdentifierAmbiguityError) {
-      return validationError(`target_ticket_number: ${error.message}`)
-    }
+    const identifierResponse = taskIdentifierErrorResponse(error, 'target_ticket_number')
+    if (identifierResponse) return identifierResponse
     throw error
   }
 
@@ -181,8 +178,6 @@ export async function POST(request: NextRequest) {
         targetTaskId: targetTask.id,
         relationType,
       },
-      // On an existing pair, update the type so a caller "fixing" a RelatedTo to
-      // BlockedBy actually takes effect, rather than silently keeping the old type.
       update: { relationType },
       select: {
         id: true,
@@ -195,6 +190,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ success: true, relation })
   } catch (error) {
     console.error('[MCP Task Relations] POST Error:', error)
+    reportMcpOperationCrash(request, error)
     return NextResponse.json(
       { success: false, error: 'Failed to create task relation' },
       { status: 500 }
@@ -240,9 +236,8 @@ export async function GET(request: NextRequest) {
   try {
     task = await findTaskByIdentifier(ctx.user, identifier, ctx.agentId)
   } catch (error) {
-    if (error instanceof TaskIdentifierAmbiguityError) {
-      return validationError(`ticket_number: ${error.message}`)
-    }
+    const identifierResponse = taskIdentifierErrorResponse(error, 'ticket_number')
+    if (identifierResponse) return identifierResponse
     throw error
   }
   if (!task) {
@@ -288,8 +283,6 @@ export async function GET(request: NextRequest) {
         return {
           relationType: relation.relationType,
           direction: outgoing ? 'outgoing' : 'incoming',
-          // Sibling endpoint /mcp/tasks/related returns a url; without one a
-          // client has no way to link the task and falls back to a search URL.
           otherTask: {
             ...otherTask,
             url: buildMcpTaskUrl(otherTask.projectId, otherTask.uniqueIndex),
@@ -299,6 +292,7 @@ export async function GET(request: NextRequest) {
     })
   } catch (error) {
     console.error('[MCP Task Relations] GET Error:', error)
+    reportMcpOperationCrash(request, error)
     return NextResponse.json(
       { success: false, error: 'Failed to list task relations' },
       { status: 500 }
@@ -308,8 +302,6 @@ export async function GET(request: NextRequest) {
   })(request)
 }
 
-// Remove a relation between two tasks, so a mistakenly-declared dependency can be
-// cleared (not just retyped). Idempotent: deleting a non-existent relation is 200.
 export async function DELETE(request: NextRequest) {
   return wrapMcpRoute(async (request: NextRequest) => {
   const rateLimited = await checkMcpRateLimit(request)
@@ -385,9 +377,8 @@ export async function DELETE(request: NextRequest) {
       ctx.agentId
     )
   } catch (error) {
-    if (error instanceof TaskIdentifierAmbiguityError) {
-      return validationError(`source_ticket_number: ${error.message}`)
-    }
+    const identifierResponse = taskIdentifierErrorResponse(error, 'source_ticket_number')
+    if (identifierResponse) return identifierResponse
     throw error
   }
 
@@ -399,9 +390,8 @@ export async function DELETE(request: NextRequest) {
       ctx.agentId
     )
   } catch (error) {
-    if (error instanceof TaskIdentifierAmbiguityError) {
-      return validationError(`target_ticket_number: ${error.message}`)
-    }
+    const identifierResponse = taskIdentifierErrorResponse(error, 'target_ticket_number')
+    if (identifierResponse) return identifierResponse
     throw error
   }
   if (!sourceTask || !targetTask) {
@@ -418,6 +408,7 @@ export async function DELETE(request: NextRequest) {
     return NextResponse.json({ success: true, deleted: result.count })
   } catch (error) {
     console.error('[MCP Task Relations] DELETE Error:', error)
+    reportMcpOperationCrash(request, error)
     return NextResponse.json(
       { success: false, error: 'Failed to delete task relation' },
       { status: 500 }

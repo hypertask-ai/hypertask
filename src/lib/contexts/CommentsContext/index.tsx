@@ -17,13 +17,13 @@ import { useDescriptionAndCommentsContext } from "../TaskDetail/DescriptionProvi
 import { LIKESHORTCUTEVENT, thumbsUpEmoji } from "@/lib/constants/constants";
 
 interface CommentProviderProps {
-  children?: ReactNode; // Add this line to include children
+  children?: ReactNode;
   comment: IComment;
   isStacked: boolean;
   i: number;
 }
 interface CommentsContextProps {
-  children?: ReactNode; // Add this line to include children
+  children?: ReactNode;
   returnFocusToComment: () => void;
   updateCommentsOnReaction: (
     response: AxiosResponse<any, any>,
@@ -111,9 +111,7 @@ const useHook = (comment: IComment, i: number) => {
           );
 
           if (response.status === 200) {
-            // Handling 200 status - update or add reaction
             if (unifiedExists) {
-              // Update existing reaction
               const newReactions = comment?.reactions?.map((reaction) => {
                 if (reaction.unified === response.data.unified) {
                   return {
@@ -127,7 +125,6 @@ const useHook = (comment: IComment, i: number) => {
 
               return { ...comment, reactions: newReactions };
             } else {
-              // Add new reaction
               const newReaction = {
                 id: response.data.id,
                 emoji: response.data.emoji,
@@ -142,7 +139,6 @@ const useHook = (comment: IComment, i: number) => {
               };
             }
           } else if (response.status === 202) {
-            // Handling 204 status - reduce count or remove reaction
             const newReactions: IReaction[] | undefined = (
               comment?.reactions ?? []
             )
@@ -164,11 +160,11 @@ const useHook = (comment: IComment, i: number) => {
               })
               .filter((reaction): reaction is IReaction => reaction !== null);
 
-            return { ...comment, reactions: newReactions?.filter(Boolean) }; // Filter out null or undefined
+            return { ...comment, reactions: newReactions?.filter(Boolean) };
           }
         }
 
-        return comment; // Keep other comments unchanged
+        return comment;
       });
 
       setComments(updatedComments);
@@ -176,13 +172,11 @@ const useHook = (comment: IComment, i: number) => {
     setEmojiBreak(false);
   };
 
-  // ---------------------- return focus to comment
   const returnFocusToComment = () => {
-    const extractedId = currentId.replace("-input", ""); // Remove the "-input" part
+    const extractedId = currentId.replace("-input", "");
     focusOn(extractedId);
   };
 
-  // ------------------ onEmojiClick Handler
   const emojiClickHandler = async (
     emojiData: any,
     event: any,
@@ -192,10 +186,6 @@ const useHook = (comment: IComment, i: number) => {
     setShowEmojiPickerAtCount(undefined);
     if (emojiBreak) return;
     setEmojiBreak(true);
-    // Only return focus to the comment input in the emoji-picker flow (no
-    // target passed). On a direct fast-like (mouse or keyboard, which pass a
-    // commentId/fastLikeId) skip it: returnFocusToComment focuses currentId and
-    // scrollIntoView-centers it, yanking the view away from the clicked comment.
     if (!_mbl && !commentId && !fastLikeId) returnFocusToComment();
     let commentId_ = null;
     if (fastLikeId)

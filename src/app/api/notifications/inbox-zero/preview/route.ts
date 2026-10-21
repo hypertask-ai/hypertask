@@ -3,7 +3,7 @@ import { NextResponse } from "next/server";
 import { getSessionUser } from "@/lib/auth/getSessionUser";
 import {
   evaluateInboxZero,
-  loadActiveInboxZeroNotifications,
+  loadActiveInboxZeroNotifications, // trufflehog:ignore
   loadInboxZeroDoneTitlesByProject,
   parseInboxZeroRules,
 } from "@/utils/controllers/notifications/inboxZero";

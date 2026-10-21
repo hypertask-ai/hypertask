@@ -20,8 +20,7 @@ const ParentSubTaskLabel = ({
 }) => {
   const handleOnClick = (e: any) => {
     e.preventDefault();
-    stopPropogation && e.stopPropagation(); // Prevent the click event from propagating to the parent div
-    //onClick && onClick();
+    stopPropogation && e.stopPropagation();
   };
 
   return (

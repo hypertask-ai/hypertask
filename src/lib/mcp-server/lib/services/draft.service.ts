@@ -86,9 +86,8 @@ export class DraftService {
 
       return response;
     } catch (error) {
-      logger.error('Failed to create draft', {
+      logger.failure('Failed to create draft', error, {
         correlationId,
-        error: error instanceof Error ? error.message : String(error),
       });
       throw error;
     }
@@ -138,9 +137,8 @@ export class DraftService {
 
       return response;
     } catch (error) {
-      logger.error('Failed to list drafts', {
+      logger.failure('Failed to list drafts', error, {
         correlationId,
-        error: error instanceof Error ? error.message : String(error),
       });
       throw error;
     }
@@ -172,10 +170,9 @@ export class DraftService {
 
       return response;
     } catch (error) {
-      logger.error('Failed to update draft', {
+      logger.failure('Failed to update draft', error, {
         correlationId,
         draftId: params.draft_id,
-        error: error instanceof Error ? error.message : String(error),
       });
       throw error;
     }
@@ -205,10 +202,9 @@ export class DraftService {
 
       return response;
     } catch (error) {
-      logger.error('Failed to publish draft', {
+      logger.failure('Failed to publish draft', error, {
         correlationId,
         draftId: params.draft_id,
-        error: error instanceof Error ? error.message : String(error),
       });
       throw error;
     }
@@ -238,10 +234,9 @@ export class DraftService {
 
       return response;
     } catch (error) {
-      logger.error('Failed to delete draft', {
+      logger.failure('Failed to delete draft', error, {
         correlationId,
         draftId: params.draft_id,
-        error: error instanceof Error ? error.message : String(error),
       });
       throw error;
     }

@@ -21,6 +21,7 @@ function transactionHarness({ failOutbox = false } = {}) {
       const stagedTasks = [];
       const stagedDeliveries = [];
       const tx = {
+        analyticsIntent: { createMany: async () => ({ count: 1 }) },
         task: {
           create: async ({ data }) => {
             const task = {

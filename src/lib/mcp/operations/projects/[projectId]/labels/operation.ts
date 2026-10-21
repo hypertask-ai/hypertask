@@ -1,3 +1,4 @@
+import { reportMcpOperationCrash } from '@/lib/mcp/operationCrashReport'
 import { wrapMcpRoute, validateMcpRouteAuth as validateMcpAuth, checkMcpRouteRateLimit as checkMcpRateLimit, readMcpRouteJsonBody as readJsonBody } from '@/lib/mcp/routeWrapper'
 import { NextRequest, NextResponse } from 'next/server'
 import { createUnauthorizedResponse } from '@/lib/mcp/auth'
@@ -7,14 +8,6 @@ import { broadcastBoardChange } from '@/lib/realtime/server'
 
 import { readListQuery, tryApplyCollectionQuery } from '@/lib/mcp/readListQuery'
 
-/**
- * GET /api/mcp/projects/:projectId/labels
- *
- * Lists the labels defined on a project.
- * Backs the CLI/MCP list_labels tool (parity with the AI-chat tool).
- *
- * Auth: MCP JWT (Bearer token)
- */
 export async function GET(request: NextRequest, props: { params: Promise<{ projectId: string }> }) {
   return wrapMcpRoute(async (request: NextRequest) => {
   const params = await props.params;
@@ -73,6 +66,7 @@ export async function GET(request: NextRequest, props: { params: Promise<{ proje
       nextCursor: projected?.value.nextCursor ?? null,
     })
   } catch (error) {
+    reportMcpOperationCrash(request, error)
     return NextResponse.json(
       {
         success: false,
@@ -85,17 +79,6 @@ export async function GET(request: NextRequest, props: { params: Promise<{ proje
   })(request)
 }
 
-/**
- * POST /api/mcp/projects/:projectId/labels
- *
- * Creates a new label in a project.
- * Required for CLI and MCP create_label tool.
- *
- * Request body:
- * - name: string (required, 1-100 chars)
- *
- * Auth: MCP JWT (Bearer token)
- */
 export async function POST(request: NextRequest, props: { params: Promise<{ projectId: string }> }) {
   return wrapMcpRoute(async (request: NextRequest) => {
   const params = await props.params;
@@ -212,6 +195,7 @@ export async function POST(request: NextRequest, props: { params: Promise<{ proj
     )
   } catch (error) {
     console.error('[MCP Create Label] Error:', error)
+    reportMcpOperationCrash(request, error)
     return NextResponse.json(
       {
         success: false,

@@ -1,3 +1,4 @@
+import { agentScopeEnforced, recordAgentBoardScopeMiss } from "@/lib/auth/agentScope";
 import crypto from "crypto";
 import {
   AgentRunActivityType,
@@ -109,7 +110,13 @@ function accessibleRunWhere(principal: AgentRunPrincipal, id: string) {
   return {
     id,
     ...(principal.agentId
-      ? { agentId: principal.agentId }
+      ? {
+          agentId: principal.agentId,
+          ...(agentScopeEnforced() ? { OR: [
+            { taskId: null },
+            { task: { project: projectContentAccessWhere(principal.userId, principal.agentId) } },
+          ] } : {}),
+        }
       : { agent: { userId: principal.userId } }),
   };
 }
@@ -225,7 +232,6 @@ export async function createRuntimeAgentRun(
     }).catch((error) =>
       console.warn("[agent-run] runtime run agent broadcast failed", error),
     );
-    // Run start decides whether a chip appears: never throttled.
     void refreshBoardForAgentRun(result.projectId, principal.userId, { lifecycle: true }).catch(
       (error) => console.warn("[agent-run] runtime run board broadcast failed", error),
     );
@@ -351,7 +357,6 @@ export async function stopAgentRun(
 
   if (result) await publishAgentWebhookDeliveries(result.deliveryIds);
   if (result && "stoppedProjectId" in result && result.stoppedProjectId != null) {
-    // Run stop decides whether the chip disappears: never throttled.
     void refreshBoardForAgentRun(result.stoppedProjectId, principal.userId, { lifecycle: true }).catch(
       (error) => console.warn("[agent-run] stopped run board broadcast failed", error),
     );
@@ -385,14 +390,8 @@ async function reconcileAgentChatTurn(
     });
     if (!session) return null;
     const message = session.messages[0];
-    // Heartbeat prompts are undelivered human messages in the agent's own
-    // session; they are not a user turn and must never time out as one.
     if (message?.role !== "human" || !message.isDelivered) return stop ? null : { awaiting: false };
     const [candidateRun] = session.agentRuns;
-    // A timeout may only end the run that owns this exact turn. Two exceptions:
-    // an explicit Stop ends whatever is still running in the session, and a run
-    // from before this deploy carries no binding at all, so there is no newer
-    // turn to protect and leaving it nonterminal forever is the stuck state.
     const unbound = !candidateRun?.chatPromptMessageId;
     const run =
       candidateRun && (stop || unbound || candidateRun.chatPromptMessageId === message.id)
@@ -413,8 +412,6 @@ async function reconcileAgentChatTurn(
       }],
       skipDuplicates: true,
     });
-    // Only the marker insert is idempotent. A run left nonterminal by an earlier
-    // timeout still has to be stopped, so Stop falls through when it has one.
     if (marker.count === 0 && !(stop && run)) return stop ? null : { awaiting: false };
     let deliveryId: string | null = null;
     if (run) {
@@ -452,9 +449,6 @@ async function reconcileAgentChatTurn(
 
 export async function readAgentChatTurn(principal: AgentRunPrincipal, sessionId: string, now = new Date()) {
   if (principal.source !== "browser") return null;
-  // The client polls this every few seconds per open tab. Only an expired turn
-  // can change anything, so decide that with a plain read rather than taking
-  // the session row lock every tick.
   const latest = await prisma.chatMessage.findFirst({
     where: { sessionId, session: { userId: principal.userId, agentId: { not: null } } },
     orderBy: [{ createdAt: "desc" }, { id: "desc" }],
@@ -577,7 +571,6 @@ async function replayCreatedActivity(
     const reply = await prisma.chatMessage.findUnique({ where: { replyToMessageId: input.replyToMessageId } });
     if (reply?.sessionId !== run.chatSession.id || reply.content !== input.text || !reply.isDelivered || reply.createdAt.getTime() !== activity.createdAt.getTime()) throw new AgentRunActivityConflictError("Idempotency-Key was already used for another chat turn");
   }
-  // Older activities have no comment link, so they retain duplicate-only replay.
   if (input.type === "RESPONSE" && run.task && activity.responseCommentId) {
     const { createCommentService } = await import(
       "@/utils/controllers/comments/createCommentService",
@@ -621,8 +614,6 @@ async function broadcastActivityChange(
       console.warn("[agent-run] Agent Chat activity broadcast failed", error),
     );
   } else if (run.chatSession) {
-    // A shared thread has more than one watcher, and what the agent is doing
-    // is the part they are staring at while they wait.
     await broadcastChatSession(run.chatSession.id, [run.chatSession.userId]);
   }
 }
@@ -634,12 +625,14 @@ export async function listAgentRunActivities(
   const run = await prisma.agentRun.findFirst({
     where: accessibleRunWhere(principal, id),
     select: {
+      task: { select: { projectId: true } },
       activities: {
         orderBy: [{ createdAt: "desc" }, { id: "desc" }],
         take: AGENT_RUN_ACTIVITY_LIST_LIMIT,
       },
     },
   });
+  if (run?.task) recordAgentBoardScopeMiss(run.task.projectId, "read");
   return run?.activities.reverse().map(serializeAgentRunActivity) ?? null;
 }
 
@@ -686,6 +679,7 @@ export async function createAgentRunActivity(
   if (!principal.agentId) return null;
   const run = await findActivityRun(principal, id);
   if (!run) return null;
+  if (run.task) recordAgentBoardScopeMiss(run.task.projectId, "write");
   const exactChatReply = input.type === "RESPONSE" && Boolean(run.chatSession);
   if (exactChatReply && !input.replyToMessageId) throw new AgentRunActivityInputError("replyToMessageId is required for chat responses");
 
@@ -725,14 +719,8 @@ export async function createAgentRunActivity(
     } else if (input.type === "RESPONSE" && run.chatSession) {
       activity = await prisma.$transaction(async (tx) => {
         await tx.$queryRaw`SELECT id FROM "ChatSession" WHERE id = ${run.chatSession!.id} FOR UPDATE`;
-        // Everything in this block is new refusal logic, so all of it stays
-        // behind the flag: without it a chat RESPONSE stores exactly as before.
         let replyToMessageId: string | null = null;
         if (exactChatReply) {
-          // NOTE: a run created by the previous deploy has a null
-          // chatPromptMessageId, so its reply is refused until the five-minute
-          // sweep stops the turn. The flag is owner-only, so that window is one
-          // person for one turn.
           const boundRun = await tx.agentRun.findFirst({ where: { id: run.id, status: { in: NONTERMINAL_AGENT_RUN_STATUSES }, chatPromptMessageId: input.replyToMessageId }, select: { id: true } });
           const target = await tx.chatMessage.findFirst({
             where: { sessionId: run.chatSession!.id },
@@ -772,8 +760,6 @@ export async function createAgentRunActivity(
       const existing = await findIdempotentActivity(run.id, idempotencyKey);
       if (existing) return replayCreatedActivity(run, principal, existing, input);
     }
-    // Only the flagged path can hit the replyToMessageId unique index; without
-    // the flag a duplicate must surface as it did before this ticket.
     if (exactChatReply && run.chatSession && isUniqueConstraintError(error)) {
       throw new AgentRunNotActiveError("Run is no longer active");
     }
@@ -821,7 +807,6 @@ export async function selectAgentRunActivity(
         "This elicitation already has a different selection",
       );
     }
-    // Older selections have no comment link, so they retain duplicate-only replay.
     if (run.task && activity.selectionCommentId) {
       if (!activity.selectedById) {
         throw new Error("Agent run selection creator was not persisted");
@@ -896,8 +881,6 @@ export async function selectAgentRunActivity(
           authorUserId: principal.userId,
         },
       });
-      // Without the rebind the agent's reply to this choice is refused and the
-      // user waits out the full timeout, so a lost race has to fail loudly.
       const rebound = await tx.agentRun.updateMany({ where: { id: run.id, status: { in: NONTERMINAL_AGENT_RUN_STATUSES } }, data: { chatPromptMessageId: message.id } });
       if (rebound.count === 0) throw new AgentRunNotActiveError("Run is no longer active");
       await tx.chatSession.update({

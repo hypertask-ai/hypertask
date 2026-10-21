@@ -5,10 +5,6 @@ import { cookies } from "next/headers";
 import { isValidUser } from "@/utils/edgeHelpers";
 import prisma from "@/lib/prisma";
 
-/**
- * GET /api/connections/list
- * Returns all OAuth clients that have been authorized by the current user
- */
 export async function GET(request: NextRequest) {
   try {
     const cookieStore = await cookies();
@@ -19,7 +15,6 @@ export async function GET(request: NextRequest) {
       try {
         restCompat = await isFeatureEnabled(HTPR_6924_REST_COMPAT_FLAG, currentUser.userId);
       } catch {
-        // Flag lookup failure preserves the legacy entry path.
       }
     }
     const { isValid, user } = restCompat && currentUser
@@ -33,12 +28,10 @@ export async function GET(request: NextRequest) {
       );
     }
 
-    // Find all OAuth clients that have been authorized by this user
-    // We check for authorization codes that have been used (meaning tokens were issued)
     const authorizedCodes = await prisma.oAuthAuthorizationCode.findMany({
       where: {
         user_id: user.id,
-        used: true, // Only show clients that have successfully completed OAuth flow
+        used: true,
       },
       include: {
         client: true,
@@ -49,8 +42,6 @@ export async function GET(request: NextRequest) {
       },
     });
 
-    // Group by client_id and get the most recent authorization
-    // Now mapping agent connection as well
     const clientMap = new Map<
       string,
       {

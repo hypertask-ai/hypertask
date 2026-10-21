@@ -164,21 +164,6 @@ const productionAdapter: SeatBillingAdapter = {
     }),
 };
 
-/**
- * Stripe is inconsistent about how it says "that subscription item is gone".
- * Retrieving a well-formed-but-unknown id answers `No such subscription_item:`
- * with `code: "resource_missing"`, while a malformed id answers
- * `Invalid subscription_item id:` with a bare `invalid_request_error` and no
- * `code` and no `param` at all. Stripe Node keeps that API value in `rawType`
- * and exposes `StripeInvalidRequestError` as `type`. Requiring
- * `resource_missing` therefore missed
- * the second shape entirely, so HTPR-5571's orphan skip never ran and the
- * nightly reconcile cron kept refiling the same ticket (HTPR-5620/HTPR-5621).
- *
- * The message regex is load-bearing: it, not the code, is what proves this is a
- * missing item rather than some other invalid request. If Stripe ever rewords
- * either sentence this predicate silently stops matching.
- */
 function isMissingSubscriptionItem(error: unknown): boolean {
   if (!error || typeof error !== "object") return false;
   const candidate = error as {
@@ -211,13 +196,6 @@ function isStripeResourceMissing(error: unknown): boolean {
   );
 }
 
-/**
- * The stored Stripe item is gone AND Stripe holds no replacement for the active
- * price, so there is no quantity anywhere left to correct. Unbillable and
- * unrepairable is a team to skip, not a failure to report: the nightly reconcile
- * cron would otherwise refile an identical ticket every night forever, which is
- * exactly what two abandoned 2023 test teams did to the bug board (HTPR-5571).
- */
 class OrphanedSubscriptionItemError extends Error {
   constructor(itemId: string, subscriptionId: string) {
     super(
@@ -269,7 +247,6 @@ async function retrieveCurrentSubscriptionItem(
   try {
     items = await adapter.listSubscriptionItems(subscriptionId);
   } catch (error) {
-    // The subscription itself is gone, so it cannot hold a replacement item.
     if (!isStripeResourceMissing(error)) throw error;
     throw new OrphanedSubscriptionItemError(itemId, subscriptionId);
   }
@@ -281,9 +258,6 @@ async function retrieveCurrentSubscriptionItem(
   );
   const currentItem = priceMatches.length === 1 ? priceMatches[0] : undefined;
   if (!currentItem) {
-    // Orphaned only when the stored item is absent AND the subscription carries no
-    // items at all. A subscription holding items at other prices is a genuine
-    // mismatch: real money on the wrong price, and it stays loud.
     if (items.length === 0 && isMissingSubscriptionItem(retrievalError)) {
       throw new OrphanedSubscriptionItemError(itemId, subscriptionId);
     }
@@ -303,17 +277,6 @@ async function retrieveCurrentSubscriptionItem(
   return currentItem;
 }
 
-/**
- * Bring a team's Stripe seat quantity in line with reality after someone joins.
- *
- * Replaces the old two-step "pay a one-off invoice, then also bump the quantity",
- * which billed the same seat twice and used hard-coded amounts that mischarged
- * custom-priced plans (HTPR-4216). One quantity change, prorated at the
- * subscription's real price, is the whole charge.
- *
- * Returns SEATED when Stripe was charged, OK when the seat was already paid for,
- * SKIPPED for comped or unsubscribed teams, and Error when Stripe rejected the change.
- */
 async function syncSeatBilling(
   teamId: string | undefined | null,
   adapter: SeatBillingAdapter,
@@ -332,8 +295,6 @@ async function syncSeatBilling(
       }
     }
 
-    // Comped teams are flat-fee with unlimited members; member churn must never
-    // rewrite their Stripe quantity (HTPR-4831).
     if (isTeamComped(team)) return "SKIPPED";
 
     if (!team.activeSubscriptionPlanId) return "SKIPPED";
@@ -346,9 +307,6 @@ async function syncSeatBilling(
     const itemId = activePlan.subscriptionItemId;
     if (!itemId) return "SKIPPED";
 
-    // Counts accepted members AND people invited but not yet accepted, whose seats
-    // are already reserved. Comparing against bare totalSeats let a new joiner
-    // silently consume a reserved seat and leave Stripe under-billed by one.
     const desiredQuantity = await adapter.resolveQuantity(
       teamId,
       team.totalSeats,
@@ -371,12 +329,8 @@ async function syncSeatBilling(
       return "OK";
     }
 
-    // A trial has nothing to invoice yet; Stripe bills the new quantity when it converts.
     const isTrialing = activePlan?.subscriptionStatus === "trialing";
 
-    // The lease retains at least 30 seconds here, while Stripe is bounded to 15.
-    // That prevents another writer acquiring the team lock while this request can
-    // still complete. An operation key also makes Stripe retries idempotent.
     assertHeld();
     await adapter.updateSubscriptionItem(
       currentItemId,
@@ -396,10 +350,6 @@ async function syncSeatBilling(
     assertHeld();
     return exact ? "RECONCILED" : "SEATED";
   } catch (error) {
-    // Nothing to bill and nothing to fix: skip instead of refiling the same
-    // ticket on every nightly reconcile. Quiet on the board, not invisible: if a
-    // paying team's subscription is ever deleted by hand this is the only trace,
-    // so it stays in the logs.
     if (error instanceof OrphanedSubscriptionItemError) {
       console.warn("[seat-billing] orphaned subscription, skipping", {
         teamId,
@@ -407,9 +357,6 @@ async function syncSeatBilling(
       });
       return "SKIPPED";
     }
-    // Callers deliberately don't block the join on this, so a failure here is
-    // silent revenue loss unless it raises a ticket. Report it rather than
-    // leaving it in the logs for nobody to read.
     const normalized =
       error instanceof Error ? error : new Error(String(error));
     await adapter.reportFailure(normalized, teamId).catch(() => {});
@@ -435,7 +382,6 @@ export async function syncSeatBillingOnJoin(
   }
 }
 
-// Compatibility name for callers migrated while the serialized API was introduced.
 export const syncSeatBillingOnJoinSerialized = syncSeatBillingOnJoin;
 
 export async function reconcileSeatBillingForTeam(
@@ -460,7 +406,6 @@ export type SeatBillingMutation<T> = {
   sync: boolean;
 };
 
-/** Hold the team lease across the membership mutation and the Stripe write. */
 export async function mutateAndSyncSeatBilling<T>(
   teamId: string,
   mutate: (assertHeld: () => void) => Promise<SeatBillingMutation<T>>,

@@ -19,7 +19,6 @@ const ShortcutsSection = () => {
   const isMbl = useContext(MobileViewContext);
   const appShellRailOn = useRecoilValue(appShellRailAtom) && !isMbl;
   const composeTaskWriterEnabled = useFlag(HTPR_6929_COMPOSE_TASK_WRITER_FLAG);
-  // Keep the runtime branch local so CI can trace shortcut UI coverage.
   let includeComposeTaskShortcut = false;
   if (composeTaskWriterEnabled) includeComposeTaskShortcut = true;
   const newTaskWindowFlag = useFlag(HTPR_6937_NEW_TASK_WINDOW_FLAG);

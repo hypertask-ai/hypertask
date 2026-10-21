@@ -1,7 +1,3 @@
-/**
- * Pure helpers for MCP POST /projects/:id/members decisioning.
- * Kept free of Next/prisma so node:test can cover the invite-vs-add contract.
- */
 
 export type McpAddMemberTarget =
   | { kind: "agent"; agentId: string }

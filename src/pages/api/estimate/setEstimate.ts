@@ -1,3 +1,6 @@
+import { withAgentScopeRequest, prepareAgentScope, agentScopeEnforced, recordAgentBoardScopeMiss } from "@/lib/auth/agentScope";
+import { resolveActingAgent } from "@/lib/auth/resolveActingAgent";
+import { userCanAccessTask } from "@/utils/controllers/tasks/assertTaskAccess";
 import prisma from "@/lib/prisma";
 import createEstimateActivity from "@/utils/controllers/activities/createEstimateActivity";
 import { NextApiHandler } from "next";
@@ -20,12 +23,24 @@ const handler: NextApiHandler = async (req, res) => {
   const user = await loadSessionUserRecord(session.userId);
 
   try {
-    const { taskId, estimate_index, estimate_value, agentId } = req.body;
+    const { taskId, estimate_index, estimate_value, agentId: requestedAgentId } = req.body;
     if (!taskId || !estimate_value) {
       return res.status(400).json({ message: "Missing Required Task ID" });
     }
 
-    // Only fetch agent if provided
+    if (session.agentId && requestedAgentId !== session.agentId) {
+      return res.status(403).json({ message: "Agent id must match authenticated session" });
+    }
+    const agentId = typeof requestedAgentId === "string" ? requestedAgentId : null;
+    await prepareAgentScope(session.userId, agentId);
+    if (agentId && agentScopeEnforced()) {
+      const actingAgent = resolveActingAgent({ sessionAgentId: session.agentId, bodyAgentId: requestedAgentId });
+      if (!actingAgent.ok) return res.status(actingAgent.status).json({ message: actingAgent.message });
+      if (!(await userCanAccessTask(session.userId, taskId, agentId))) {
+        return res.status(403).json({ message: "Forbidden" });
+      }
+    }
+
     const agent = agentId
       ? await prisma.agent.findUnique({
           where: { id: agentId },
@@ -38,8 +53,6 @@ const handler: NextApiHandler = async (req, res) => {
         })
       : null;
 
-    // HTPR-7163: only someone who may write to the task's board may change
-    // its estimate, and every branch below works on this checked task.
     const task = await prisma.task.findFirst({
       where: {
         id: taskId,
@@ -54,8 +67,8 @@ const handler: NextApiHandler = async (req, res) => {
     if (!task) {
       return res.status(404).json({ message: "Task not found" });
     }
+    recordAgentBoardScopeMiss(task.projectId, "write");
 
-    // Delete estimate if required
     if (estimate_index === 0) {
       await prisma.estimate.deleteMany({
         where: { taskId: task.id },
@@ -63,7 +76,6 @@ const handler: NextApiHandler = async (req, res) => {
       return res.status(200).json({ message: "Successfully deleted" });
     }
 
-    // CREATE or UPDATE estimate
     if (!task.estimate) {
       const estimate = await prisma.estimate.create({
         data: {
@@ -117,4 +129,4 @@ const handler: NextApiHandler = async (req, res) => {
   }
 };
 
-export default handler;
+export default ((req, res) => withAgentScopeRequest(req, () => handler(req, res))) satisfies NextApiHandler;

@@ -13,9 +13,10 @@ import MobileTaskDueDate from "./MobileTaskDueDate";
 interface TaskDetailTitleContainerProps {
   containerRef?: React.RefObject<HTMLDivElement | null>;
   toggleDueDate: () => void;
+  clearDesktopNavigation?: boolean;
 }
 
-const TaskDetailTitleContainer = ({ containerRef, toggleDueDate }: TaskDetailTitleContainerProps) => {
+const TaskDetailTitleContainer = ({ containerRef, toggleDueDate, clearDesktopNavigation = false }: TaskDetailTitleContainerProps) => {
   const { currentTask, parsedTask, cachedLayout } = useTaskContext();
   const _mbl = useContext(MobileViewContext);
   const [isScrolled, setIsScrolled] = useState(false);
@@ -27,7 +28,6 @@ const TaskDetailTitleContainer = ({ containerRef, toggleDueDate }: TaskDetailTit
     };
 
     window.addEventListener('scroll', handleScroll, { passive: true });
-    // Check initial scroll position
     handleScroll();
 
     return () => {
@@ -49,6 +49,7 @@ const TaskDetailTitleContainer = ({ containerRef, toggleDueDate }: TaskDetailTit
       <BaseTitleContainer
         dataAttribute="task-detail"
         containerRef={containerRef}
+        clearDesktopNavigation={clearDesktopNavigation}
         showScrollShadow={isScrolled}
         hasSummary={(_mbl && cachedLayout) || hasSummary}
         titleRowContent={
@@ -58,8 +59,6 @@ const TaskDetailTitleContainer = ({ containerRef, toggleDueDate }: TaskDetailTit
           </>
         }
       >
-        {/* --------------------------- TASK SUMMARY --------------------------- */}
-        {/* Mobile reserves its summary slot; desktop must not add space for an absent summary. */}
         {cachedLayout && (_mbl || hasSummary) ? (
           <div data-task-summary-slot className={_mbl ? "h-10 w-full shrink-0" : "h-[21px] w-full shrink-0"}>
             {summary}
@@ -72,7 +71,6 @@ const TaskDetailTitleContainer = ({ containerRef, toggleDueDate }: TaskDetailTit
           onClick={toggleDueDate}
         />
 
-        {/* --------------------------- PARENT TASK INFO ------------------------------ */}
         {
           !_mbl && <SubTaskLink parentTask={currentTask?.parentTask} projectId={currentTask?.projectId} />
         }

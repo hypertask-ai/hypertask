@@ -13,7 +13,6 @@ export function recordLegacyMcpRequest(
     const client = postHogClient()
     if (!client) return
 
-    // Keep ingestion alive after the response without delaying the SSE stream.
     const capture = client.captureImmediate({
       distinctId: userId === undefined ? `mcp-sse-anonymous:${randomUUID()}` : String(userId),
       event: 'mcp_legacy_sse_request',

@@ -21,7 +21,6 @@ const TaskCommentsAndDescriptionContainer = ({ task }: IProp) => {
         width: "100%" }}
     >
       <BaseCommentAndDescriptionContainer>
-        {/**----------------------------------DESCRIPTION EDITOR */}
         <DescriptionContainer>
           <DescriptionBody
             creatorImg={task.creatorImg}
@@ -30,11 +29,9 @@ const TaskCommentsAndDescriptionContainer = ({ task }: IProp) => {
           />
         </DescriptionContainer>
 
-        {/**----------------------------------COMMENTS */}
         <TaskCommentsContainer comments={task.comments} />
       </BaseCommentAndDescriptionContainer>
 
-      {/* ====================================== RIGHT HALF ================================ */}
       <TaskInfoContainer task={task.taskInfo} />
     </div>
   );

@@ -3,10 +3,6 @@ import { executeWithService } from '../utils/executeWithService';
 import { TOOL_METADATA } from '../config/tool-metadata';
 import { getDeleteCommentBaseSchema } from '../validations/comment.validation';
 
-/**
- * Tool: delete_comment
- * Deletes one of the authenticated user's comments.
- */
 export const deleteCommentTool = {
   name: TOOL_METADATA.DELETE_COMMENT.name,
   description: TOOL_METADATA.DELETE_COMMENT.description,

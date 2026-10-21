@@ -1,11 +1,3 @@
-/**
- * Bind actor identity (create, archive, delete) to a signed session agent claim.
- *
- * Body `agentId` is only a confirmation of that claim. It cannot introduce an
- * agent when the session has none, and it cannot disagree with the session.
- * A process that already holds a human session can still act as that human;
- * this helper does not close that gap.
- */
 export type ActingAgentResolution =
   | { ok: true; agentId: string | null }
   | { ok: false; status: 400 | 403; message: string }

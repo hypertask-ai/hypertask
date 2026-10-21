@@ -139,6 +139,7 @@ const prisma = {
     }),
 };
 
+stub("src/lib/auth/agentScope.ts", require("./helpers/agent-board-scope.cjs").enforcedScope);
 stub("src/lib/prisma.ts", { default: prisma });
 stub("src/lib/auth/getSessionUser.ts", {
   getSessionUser: async () => ({ userId: 6 }),

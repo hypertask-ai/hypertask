@@ -1,9 +1,3 @@
-/**
- * Skill-related validation schemas
- *
- * Validations for: list_skills, get_skill, create_skill, update_skill,
- * delete_skill, import_skills
- */
 
 import { z } from 'zod';
 

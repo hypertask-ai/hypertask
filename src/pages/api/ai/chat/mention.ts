@@ -116,10 +116,10 @@ const handler: NextApiHandler = async (
 
         const updatedtask = task?.map((item: any) => ({
           id: item?.id,
-          name: item?.title, // Change the property name here
+          name: item?.title,
           type: "task",
           index: item.uniqueIndex,
-          project_id: item?.projectId, // Keep other properties unchanged
+          project_id: item?.projectId,
           ticketNumber: item?.ticketNumber,
           status: item?.status,
         }));

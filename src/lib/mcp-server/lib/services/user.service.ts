@@ -15,9 +15,6 @@ export interface UpdateUserProfileResponse {
   user: UserProfile;
 }
 
-/**
- * Service for user profile operations.
- */
 export class UserService {
   constructor(private readonly apiClient: IApiClient) {}
 
@@ -46,9 +43,8 @@ export class UserService {
 
       return response;
     } catch (error) {
-      logger.error('Failed to update user profile', {
+      logger.failure('Failed to update user profile', error, {
         correlationId,
-        error: error instanceof Error ? error.message : String(error),
       });
       throw error;
     }

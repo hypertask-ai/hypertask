@@ -19,7 +19,6 @@ const currentProjectAtom = {};
 const currentUserAtom = {};
 let project = null;
 let boardBilling = null;
-let lunaFree = true;
 let preferences = {};
 let teams = [{ id: "team-free" }];
 let lastTeamId = null;
@@ -45,7 +44,7 @@ stub("src/hooks/MultiPages/useGetAllTeamsMinimal.ts", {
 });
 stub("src/lib/lastBoardTeam.ts", { getLastBoardTeam: () => lastTeamId });
 stub("src/hooks/useFlag.tsx", {
-  useFlag: (key) => key === "htpr-6722-latest-models" && lunaFree,
+  useFlag: () => false,
   useFlagLoaded: () => true,
 });
 stub("src/hooks/General/useGetUserPreferences.tsx", {
@@ -152,14 +151,13 @@ async function withChat(run) {
 test.beforeEach(() => {
   project = null;
   boardBilling = null;
-  lunaFree = true;
   preferences = {};
   teams = [{ id: "team-free" }];
   lastTeamId = null;
   writes.length = 0;
 });
 
-test("boardless Free chat defaults to Luna with the flag on", async () => {
+test("boardless Free chat defaults to Luna", async () => {
   await withChat((read, readBeforeFix) => {
     assert.equal(readBeforeFix().currentAiOption.modelKey, "gemini-3.5-flash-lite");
     assert.equal(read().currentAiOption.modelKey, "gpt-6-luna");
@@ -167,14 +165,6 @@ test("boardless Free chat defaults to Luna with the flag on", async () => {
     assert.equal(read().modelBilling.storePlanId, "Free");
     assert.match(document.querySelector("button").textContent, /6 Luna/);
     assert.equal(writes.length, 0);
-  });
-});
-
-test("boardless Free chat keeps Gemini with the flag off", async () => {
-  lunaFree = false;
-  await withChat((read) => {
-    assert.equal(read().currentAiOption.modelKey, "gemini-3.5-flash-lite");
-    assert.match(document.querySelector("button").textContent, /Gemini 3.5 Flash Lite/);
   });
 });
 

@@ -8,13 +8,6 @@ import { IProject, ITask } from '@/models/model';
 
 
 const SearchList = (
-    // {
-    //     filteredTasks,
-    //     _parsedProjects
-    // }:{
-    //     filteredTasks: ITask[];
-    //     _parsedProjects:IProject[]
-    // }
 ) => {
 
     const {listItemRef, filteredTasks, _parsedProjects, handleMouseMove, handleMouseEnter, handleMouseLeave, selectedIndex, EnterHandler} = useSearchListContext()
@@ -63,7 +56,6 @@ const SearchList = (
                                 {task.status==="Normal"&& <Check size={16} color="white" strokeWidth={1.75}/>}
                                 {task.status==="Archive"&& <Check size={16} color="green" strokeWidth={1.75}/>}
   
-                                  {/* <AiOutlineCheck color="#5896F1" strokeWidth={90}/>} */}
                               </span>
 
                               <span className="text-[#8E9093] justify-self-end">
@@ -73,7 +65,6 @@ const SearchList = (
                                   :
                                   formatDateDifference(task.archivedAt!)}
                               </span>                         
-                              {/* {section.visibility===false && <AiFillEyeInvisible/>} */}
                           </li>
                           )
                                 })

@@ -7,7 +7,6 @@ interface SendEmailOptions {
   subject: string;
   html?: string;
   text?: string;
-  /** Extra RFC headers, e.g. List-Unsubscribe (HTPR-4164). Resend passes these through. */
   headers?: Record<string, string>;
   idempotencyKey?: string;
 }

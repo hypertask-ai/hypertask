@@ -206,8 +206,6 @@ export async function refreshTaskPullRequests(
   }: Pick<LinkTaskPullRequestInput, "db" | "fetchMetadata"> & { now?: Date } = {},
 ) {
   return Promise.all(pullRequests.map(async (pullRequest) => {
-    // Webhook delivery is configured per repository, so a linked repo may
-    // never send its merge. Successful observations stay fresh for a minute.
     if (
       pullRequest.lifecycle === "merged" ||
       now.getTime() - pullRequest.updatedAt.getTime() < 60_000
@@ -235,7 +233,6 @@ export async function refreshTaskPullRequests(
         sourceUpdatedAt: metadata.sourceUpdatedAt,
         updatedAt: now,
       };
-      // A webhook or check-suite update that raced the fetch must win.
       const updated = await db.taskPullRequest.updateMany({
         where: {
           id: pullRequest.id,

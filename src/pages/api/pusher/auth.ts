@@ -5,13 +5,6 @@ import { featureFlagsChannel } from "@/lib/realtime/shared";
 import { getSessionUser } from "@/lib/auth/getSessionUser";
 import prisma from "@/lib/prisma";
 
-// Authorizes a client to subscribe to a private realtime channel.
-// Three channel shapes, each with its own access check:
-//   private-project-<id> : user must have access to the board
-//   private-task-<id>    : user must have access to the task's board
-//   private-time-task-<id> / private-time-project-<id> : same checks, timer feed
-//   private-user-<id>    : must be that user's own channel
-//   private-feature-flags: any signed-in user; events contain no flag values
 async function userMayAccess(
   channel: string,
   userId: number

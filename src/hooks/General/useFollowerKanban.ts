@@ -95,7 +95,6 @@ const useFollowerKanban = () => {
           })
           .then((response) => {
             if (response.status === 200) {
-              // getFollowerById();
               toast("Removed as follower");
               queryClient.refetchQueries({
                 queryKey: ["followersFor:", taskId],

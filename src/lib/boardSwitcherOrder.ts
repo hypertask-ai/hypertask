@@ -12,15 +12,6 @@ const activityTime = (
   return Number.isNaN(parsed) ? 0 : parsed;
 };
 
-/**
- * Order for the Change Board switcher (HTPR-5476).
- *
- * The current board stays pinned at the top so the list opens on where you
- * already are. Everything else is most-recently-active first, because the
- * board you want next is nearly always one that just moved. Boards with no
- * task activity fall to the end, alphabetically, instead of landing in
- * creation order.
- */
 export const orderBoardsForSwitcher = (
   projects: IProject[],
   lastActivity: BoardLastActivity,

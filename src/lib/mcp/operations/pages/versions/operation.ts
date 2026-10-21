@@ -1,3 +1,5 @@
+import { reportMcpOperationCrash } from '@/lib/mcp/operationCrashReport'
+import { standalonePagesEnabled } from '@/utils/controllers/pages/standalonePagesEnabled'
 import { wrapMcpRoute } from '@/lib/mcp/routeWrapper'
 import { NextRequest, NextResponse } from 'next/server'
 
@@ -34,8 +36,8 @@ export async function GET(request: NextRequest) {
     }
     const { identifier, field: identifierField } = identifierResult
 
-    const page = await getPage(identifier)
-    if (!page || !(await canAccessProject(page.task.projectId, ctx))) {
+    const page = await getPage({ ...identifier, userId: ctx.user.id, standalonePagesEnabled: await standalonePagesEnabled(ctx.user.id), agentId: ctx.agentId })
+    if (!page || !(await canAccessProject(page.projectId, ctx))) {
       return NextResponse.json(
         buildFieldError('not_found', identifierField, 'Page not found'),
         { status: 404 }
@@ -57,6 +59,7 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ versions })
   } catch (error) {
     console.error('[MCP List Page Versions] Error:', error)
+    reportMcpOperationCrash(request, error)
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
   }
 

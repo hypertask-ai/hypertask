@@ -26,7 +26,6 @@ function acceptedHumanBoardWhere(userId: number): Prisma.ProjectWhereInput {
   };
 }
 
-/** Same access GET /api/agents already granted before it calls seed. */
 function accessibleTeamWhere(userId: number): Prisma.TeamWhereInput {
   return {
     OR: [
@@ -98,11 +97,6 @@ export async function lockTeamAgentSeed(
   );
 }
 
-/**
- * If this person can use a team board but owns no live agent there, create
- * one native agent on that board so Agent Chat and GET /api/agents are not
- * empty. Guest boards already seed "Hyper AI"; regular team boards did not.
- */
 export async function ensureDefaultTeamAgent(
   userId: number,
   teamId: string,

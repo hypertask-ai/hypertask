@@ -32,7 +32,6 @@ const createLog = async (data: CreateLogInput): Promise<any> => {
                 status:200,
                 json:allLogs
             })
-            // res.status(200).json(comments);
         } catch (error) {
             console.log(error);
             return ({
@@ -40,7 +39,6 @@ const createLog = async (data: CreateLogInput): Promise<any> => {
                 json:[],
                 error:error
             })
-            // res.status(500).json({ message: "Internal server error" });
         }
 
 };

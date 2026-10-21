@@ -15,12 +15,11 @@ export function createToolContext(
   body: ChatRequest,
   send: SendSse,
   recordToolExecution: ToolExecutionRecorder,
-  // Set when this ChatSession targets a native agent: mutations the model
-  // makes (comments, assignments, moves, task creation) are attributed to
-  // this agent instead of the human user driving the conversation.
   actingAgentId: string | null = null,
   recordToolStart?: ToolStartRecorder,
-  heartbeatTurn?: HeartbeatTurnMetadata
+  heartbeatTurn?: HeartbeatTurnMetadata,
+  chatTaskWriterEnabled = false,
+  abortSignal?: AbortSignal
 ) {
   const requestingUserId = user.id;
   const sendStatus = (toolName: string) => {
@@ -28,10 +27,6 @@ export function createToolContext(
     if (content) send("status", { content });
   };
 
-  // HTPR-4218: a wide or destructive write must be shown to the user before it
-  // runs. Keys of previews issued during THIS request, so the model cannot
-  // preview and then confirm itself in the same turn -- confirmation has to
-  // come back from the user in a new message.
   const bulkPreviewsIssued = new Set<string>();
   const confirmationSessionId = body.session_id ?? "no-session";
   const invokeAgentManagementHandler = async (
@@ -77,7 +72,7 @@ export function createToolContext(
       : null;
   };
   const mutateTaskAssignees = createTaskAssigneeMutation({ user, actingAgentId, requestingUserId, confirmationSessionId, bulkPreviewsIssued });
-  return { user, body, send, recordToolExecution, actingAgentId, recordToolStart, heartbeatTurn, requestingUserId, sendStatus, bulkPreviewsIssued, confirmationSessionId, invokeAgentManagementHandler, requireAccountManagementConfirmation, mutateTaskAssignees };
+  return { chatTaskWriterEnabled, abortSignal, user, body, send, recordToolExecution, actingAgentId, recordToolStart, heartbeatTurn, requestingUserId, sendStatus, bulkPreviewsIssued, confirmationSessionId, invokeAgentManagementHandler, requireAccountManagementConfirmation, mutateTaskAssignees };
 }
 
 export type ToolContext = ReturnType<typeof createToolContext>;

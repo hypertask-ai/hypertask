@@ -44,12 +44,11 @@ function stubModule(relativePath, exports) {
   };
 }
 
-function stubPlan(plan = "Pro", lunaFree = false) {
+function stubPlan(plan = "Pro") {
   stubModule("src/app/api/ai/_lib/planGate.ts", {
     assertImageModelAllowedForPlan: async () => {},
     assertModelAllowedForPlan: async () => {},
     haikuDefaultModelEnabled: async () => false, haiku55ModelEnabled: async () => false,
-    lunaFreePlanEnabled: async () => lunaFree,
     storePlanIdForProject: async () =>
       typeof plan === "function" ? plan() : plan,
   });
@@ -864,7 +863,7 @@ test("task writer option ids map to provider options and legacy model strings fa
   });
 });
 
-async function selectFreeTeamDefault({ lunaFreeFlag }) {
+async function selectFreeTeamDefault() {
   resetModules();
   const teamId = "team_free_default";
   process.env.AI_GATEWAY_API_KEY = "vck_shared_allowance";
@@ -884,11 +883,7 @@ async function selectFreeTeamDefault({ lunaFreeFlag }) {
     },
   });
   stubModule("src/lib/flags.ts", {
-    isFeatureEnabled: async (key, userId) => {
-      assert.equal(key, "htpr-6722-latest-models");
-      assert.equal(userId, 1000);
-      return lunaFreeFlag;
-    },
+    isFeatureEnabled: async () => false,
   });
   stubModule("src/lib/crypto/byokCipher.ts", {
     decryptByokSecret: (ciphertext) => ciphertext,
@@ -906,18 +901,13 @@ async function selectFreeTeamDefault({ lunaFreeFlag }) {
   });
 }
 
-test("a Free team defaults to the tier-1 fallback while the Luna flag is off", async () => {
-  const selected = await selectFreeTeamDefault({ lunaFreeFlag: false });
-  assert.equal(selected.modelId, "google/gemini-3.5-flash-lite");
-});
-
-test("a Free team defaults to Luna and may use it once the Luna flag is on", async () => {
-  const selected = await selectFreeTeamDefault({ lunaFreeFlag: true });
+test("a Free team defaults to Luna and may use it", async () => {
+  const selected = await selectFreeTeamDefault();
   assert.equal(selected.provider, "openai");
   assert.equal(selected.modelId, "gpt-6-luna");
 });
 
-test("a saved GPT 5.4 Mini on a Free team drops to the default while the Luna flag is off", async () => {
+test("a saved GPT 5.4 Mini on a Free team resolves to Luna", async () => {
   resetModules();
   process.env.AI_GATEWAY_API_KEY = "vck_shared_allowance";
   stubModule("src/lib/prisma.ts", {
@@ -942,7 +932,7 @@ test("a saved GPT 5.4 Mini on a Free team drops to the default while the Luna fl
     teamContext: { teamId: "team_free_default", settings: {}, userId: 1000 },
     userId: 1000,
   });
-  assert.equal(selected.modelId, "google/gemini-3.5-flash-lite");
+  assert.equal(selected.modelId, "gpt-6-luna");
 });
 
 test("retired model options keep their saved variant and price tier", () => {

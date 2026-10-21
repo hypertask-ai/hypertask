@@ -1,4 +1,3 @@
-// import { useAuth } from '@/hooks/General/useAuth';
 import { useCommentsContext } from "@/lib/contexts/CommentsContext";
 import { currentUserAtom } from "@/store";
 import RelativeTime from "@/components/Common/RelativeTime";
@@ -35,7 +34,6 @@ const CommentCreatedBy = () => {
     subject = { kind: "user", id: comment.creator.id };
   }
 
-  // -------------------- MOBILE
   if (_mbl) {
     return (
       <div
@@ -61,7 +59,6 @@ const CommentCreatedBy = () => {
     );
   }
 
-  // -------------------- DESKTOP
   else
     return (
       <div className={`flex items-center gap-1 ${styles.unstacked_grid_row1}`}>

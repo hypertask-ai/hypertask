@@ -35,7 +35,6 @@ const warmTaskDetail = () => Promise.all([
   import("@/components/PageComponents/TaskDetail/CommentAndDescription/DescriptionContainer/BottomRow/DescriptionReactions"),
   import("@/components/PageComponents/TaskDetail/CommentAndDescription/CommentContainer/CommentReactions"),
   import("@/components/PageComponents/TaskDetail/TaskMovement"),
-  // These nested imports otherwise start when the first comments/provider mount.
   import("@/components/PageComponents/TaskDetail/CommentAndDescription/CommentContainer/EmojiOptionsComp"),
   import("@/lib/constants/emojiData"),
   import("@/firebase"),
@@ -57,7 +56,6 @@ export default function CachedTaskDetailNavigation({ children, accountId }: {
   const [protectedSource, setProtectedSource] = useState<HTMLDivElement | null>(null);
   const [historyDestination, setHistoryDestination] = useState<{ pathname: string } | null>(null);
   const boardCardFresh = useFlag(HTPR_7129_BOARD_CARD_FRESH_AFTER_ESCAPE_FLAG);
-  // Once a board was revealed after Back, keep rendering it inside the same shell.
   const [boardShell, setBoardShell] = useState(false);
   const pathname = usePathname();
   const router = useRouter();
@@ -65,13 +63,10 @@ export default function CachedTaskDetailNavigation({ children, accountId }: {
   const previousLocation = useRef<CachedTaskDetailLocation | undefined>(undefined);
   const [taskDetail, setTaskDetail] = useState(() => loadedTaskDetail);
   const EmbeddedTaskDetail = taskDetail ?? loadedTaskDetail;
-  // Cached opens retain Next's source tree, so popstate must update the view independently.
   const nativePathname = useSyncExternalStore(subscribeToLocation, browserPathname, serverPathname);
   useEffect(() => {
-    // Next commits router push/replace in an insertion effect without a native location event.
     if (inboxNextOpen) window.dispatchEvent(new window.Event("cached-task-detail-navigation"));
   }, [inboxNextOpen, pathname]);
-  // Next can replace custom history state while refreshing the same route.
   const location = cachedTaskDetailLocation(
     nativePathname ?? pathname,
     instantTicketOpen && currentUser?.id === accountId ? accountId : null,
@@ -83,7 +78,6 @@ export default function CachedTaskDetailNavigation({ children, accountId }: {
   useEffect(() => {
     if ((!subtaskLink && !backFirstOpen && !boardBack) || !instantTicketOpen || accountId === null || currentUser?.id !== accountId) return;
     const restoreCachedTask = (event: Event) => {
-      // Next can update a nested native detail while this layout still holds the source pathname.
       const sourcePath = backFirstOpen || boardBack
         ? [...document.querySelectorAll<HTMLElement>("#title-input")]
           .find((title) => title.getClientRects().length > 0)
@@ -91,7 +85,6 @@ export default function CachedTaskDetailNavigation({ children, accountId }: {
         : location ? `/detail/project-${location.projectId}/${location.uniqueIndex}` : pathname;
       if (boardBack && window.location.pathname === "/project" &&
           /^\/detail\/project-\d+\/\d+$/.test(sourcePath ?? "")) {
-        // The background refresh can leave ticket RSC in the board's source slot.
         (event as CustomEvent<PopStateEvent>).detail.stopImmediatePropagation();
         router.replace(window.location.pathname + window.location.search + window.location.hash);
         flushSync(() => setHistoryDestination({ pathname: window.location.pathname }));
@@ -104,7 +97,6 @@ export default function CachedTaskDetailNavigation({ children, accountId }: {
         if (backFirstOpen && route) flushSync(() => setHistoryDestination({ pathname: window.location.pathname }));
         return;
       }
-      // The root relay runs before Next's native listener, which otherwise replays a stale route tree.
       (event as CustomEvent<PopStateEvent>).detail.stopImmediatePropagation();
       flushSync(() => {
         if (backFirstOpen) setHistoryDestination({ pathname: window.location.pathname });
@@ -120,16 +112,11 @@ export default function CachedTaskDetailNavigation({ children, accountId }: {
   useEffect(() => {
     if (!location) return;
     const restoreSourceRoute = (event: PopStateEvent) => {
-      // Native detail traversal publishes the destination URL while its RSC is pending.
       if (backFirstOpen && /^\/detail\/project-\d+\/\d+$/.test(window.location.pathname)) return;
       if (!event.state?.__NA || !event.state?.__PRIVATE_NEXTJS_INTERNALS_TREE ||
-          // Same-task modal Back must reach its dismiss listener even if Next
-          // stripped the cached marker, just as rendering retains that location.
           cachedTaskDetailLocation(window.location.pathname, accountId, {
             cachedTaskDetail: event.state?.cachedTaskDetail ?? previousLocation.current,
           })) return;
-      // Next's native-history restore can cache detail RSC in the source route's slot.
-      // Revalidate the source URL instead of traversing that stale route payload.
       event.stopImmediatePropagation();
       router.replace(window.location.pathname + window.location.search + window.location.hash);
       router.refresh();
@@ -151,11 +138,9 @@ export default function CachedTaskDetailNavigation({ children, accountId }: {
     const warm = () => {
       if (warming) return;
       warming = true;
-      // Import only: no ticket requests, editor mounts or permission prompts.
       void warmTaskDetail().catch(() => { warming = false; });
     };
     document.addEventListener("pointerdown", warm, { capture: true, passive: true });
-    // A paint or idle callback can precede real content on a throttled phone.
     const deferPhoneWarm = phoneFirstPaint && window.innerWidth < 768 && ["/project", "/inbox"].includes(pathname);
     if (!deferPhoneWarm && !connection?.saveData && !["slow-2g", "2g", "3g"].includes(connection?.effectiveType ?? "")) {
       frame = window.requestAnimationFrame(() => {
@@ -200,13 +185,11 @@ export default function CachedTaskDetailNavigation({ children, accountId }: {
       const route = historyDestination.pathname.match(/^\/detail\/project-(\d+)\/(\d+)$/);
       const destination = route && findCachedTaskDetail(queryClient, accountId, Number(route[1]), Number(route[2]));
       if (!destination) return;
-      // Native detail seeds its authorized task after RSC renders, even when Next retains the children element.
       restored = true;
       openCachedTaskDetail({
         queryClient, accountId, projectId: destination.projectId, uniqueIndex: destination.uniqueIndex,
         task: destination, href: window.location.pathname + window.location.search + window.location.hash, replace: true,
       });
-      // Seeding the same URL does not change the external location snapshot.
       setHistoryDestination({ pathname: historyDestination.pathname });
     };
     const unsubscribe = queryClient.getQueryCache().subscribe(restoreDestination);
@@ -215,7 +198,6 @@ export default function CachedTaskDetailNavigation({ children, accountId }: {
   }, [historyDestination, accountId, currentUser?.id, queryClient, showDetail]);
   useEffect(() => {
     if (!historyDestination || (boardBack && historyDestination.pathname === "/project")) return;
-    // Error/unavailable routes may never seed the task cache. Let their children surface.
     const timer = window.setTimeout(() => setHistoryDestination(null), 4000);
     return () => window.clearTimeout(timer);
   }, [boardBack, historyDestination]);
@@ -238,19 +220,16 @@ export default function CachedTaskDetailNavigation({ children, accountId }: {
     if (!boardBack || historyDestination?.pathname !== "/project" || !protectedSource) return;
     const source = protectedSource;
     const boardUrl = window.location.pathname + window.location.search + window.location.hash;
-    // A failed board response must never uncover the stale ticket children.
     const timer = window.setTimeout(() => {
       if (window.location.pathname + window.location.search + window.location.hash === boardUrl) window.location.replace(boardUrl);
     }, 6000);
     const revealBoard = () => {
       if (window.location.pathname === historyDestination.pathname &&
           source.querySelector("#kanban-page-container") && !source.querySelector("#title-input")) {
-        // Same render: the board can stay in the shell it was loaded in (HTPR-7129).
         setBoardShell(true);
         setHistoryDestination(null);
       }
     };
-    // Next may resolve nested RSC without changing this layout's children element.
     const observer = new window.MutationObserver(revealBoard);
     observer.observe(source, { childList: true, subtree: true });
     revealBoard();
@@ -264,7 +243,6 @@ export default function CachedTaskDetailNavigation({ children, accountId }: {
   if (!showDetail && suppressPreviousTask) {
     return (
       <>
-        {/* Pending native RSC must not suspend the visible protection. */}
         <div hidden ref={setProtectedSource}><Suspense fallback={null}>{children}</Suspense></div>
         {historyDestination.pathname !== "/project" && <div role="status" data-task-path={historyDestination.pathname} className="flex min-h-full items-center justify-center px-6 text-content text-text-light-gray">
           Loading task…
@@ -273,9 +251,6 @@ export default function CachedTaskDetailNavigation({ children, accountId }: {
     );
   }
   if (boardCardFresh && boardShell && !showDetail) {
-    // Revealing the board keeps the exact element tree of the hidden load
-    // above. Returning bare children here remounted the board, which aborted
-    // its own load and could throw away the fresh card (HTPR-7129).
     return (
       <>
         <div style={{ display: "contents" }} ref={setProtectedSource}><Suspense fallback={null}>{children}</Suspense></div>
@@ -295,6 +270,5 @@ export default function CachedTaskDetailNavigation({ children, accountId }: {
       embedded={false}
     />
   );
-  // Only cross-task history traversal must hide the previous route during suspension.
   return backFirstOpen ? <Suspense key={`${location.accountId}:${location.taskId}`} fallback={suppressPreviousTask ? null : children}>{detail}</Suspense> : detail;
 }

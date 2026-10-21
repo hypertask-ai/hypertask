@@ -1,5 +1,4 @@
 import React, { useContext, useMemo } from "react";
-// import Tooltip from '@/components/Common/Tooltip';
 const Tooltip = dynamic(() => import("@/components/Common/Tooltip"), {
   ssr: false,
 });
@@ -84,7 +83,6 @@ const TaskTopRow: React.FC<ITaskTopRow> = ({
           <p className="task-ticket-id font-medium text-content sm:text-meta text-text-light-gray uppercase text-left">{`${ticketNumber}`}</p>
         </span>
 
-        {/* ====================== in inbox? ================== */}
         {isMbl ? (
           <></>
         ) : (

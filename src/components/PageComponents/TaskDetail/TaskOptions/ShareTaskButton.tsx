@@ -39,7 +39,6 @@ const ShareTaskButton = () => {
       id="share-task-button"
       className="h-8 w-8 flex items-center justify-center bg-back-button rounded-full group"
     >
-      {/* Fill the circle: a button sized to the icon leaves the visible ring dead to the thumb. */}
       <button
         tabIndex={-1}
         aria-label="Share task"

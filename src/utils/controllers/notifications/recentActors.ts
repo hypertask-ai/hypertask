@@ -26,11 +26,6 @@ export type InboxRecentActor = {
   photoURL: string | null;
 };
 
-/**
- * Adapt rows already reduced by the database to the shape used by the actor
- * builder. The query returns one newest row per task/type/actor pair, so this only
- * wraps the timestamp and does not scan or collapse notification history.
- */
 export const normalizeInboxActorActivityRows = (
   rows: readonly InboxActorActivityRow[],
 ): InboxActorActivity[] => {
@@ -43,11 +38,6 @@ export const normalizeInboxActorActivityRows = (
   }));
 };
 
-/**
- * Keep the two newest distinct actors for each task from grouped notification
- * activity. The read query collapses each task/type/actor pair in the database;
- * `_max.createdAt` preserves the newest-actor order.
- */
 export const buildRecentInboxActors = ({
   activity,
   agentsById,
@@ -79,9 +69,6 @@ export const buildRecentInboxActors = ({
     const userProfile = row.fromUserId != null
       ? usersById.get(row.fromUserId)
       : null;
-    // Agent-authored rows routinely retain the token owner's user id too. If
-    // the agent is deleted between the grouped activity read and profile read,
-    // preserve the old relation-query fallback to that human profile.
     const profile = agentProfile ?? userProfile;
     const actorKey = agentProfile && row.fromAgentId
       ? `a:${row.fromAgentId}`

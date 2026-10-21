@@ -11,7 +11,6 @@ function verifiedToken(token: string | undefined) {
   const exp = verifiedSessionExpiry(token)
   if (exp === null || !token) return null
 
-  // The signed payload is stable across equivalent base64url signature encodings.
   const fingerprint = createHash('sha256').update(token.split('.')[0]).digest('hex')
   return { fingerprint, exp }
 }

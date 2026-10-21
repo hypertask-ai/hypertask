@@ -63,9 +63,6 @@ const CommentReactions = () => {
   const calculatePickerPosition = () => {
     if (emojiTrigger2.current) {
       const rect = emojiTrigger2.current.getBoundingClientRect();
-      // Viewport-fixed coords (HTPR-6404): document-absolute placement loses to
-      // the new comment composer stacking context. Mobile still clamps height
-      // to the emojipicker.scss max (HTPR-4584).
       setPickerPosition(
         getFixedOverlayPosition(rect, {
           height: _mbl ? 250 : 370,
@@ -78,9 +75,6 @@ const CommentReactions = () => {
   };
 
   useEffect(() => {
-    // Desktop only: the mobile picker is now the fixed MobileEmojiReactionSheet,
-    // which needs no scroll/resize repositioning (and dismisses via its own
-    // backdrop), so no window listeners are attached on mobile.
     if (_mbl) return;
 
     const debouncedUpdatePosition = debounce(calculatePickerPosition, 100);
@@ -96,7 +90,6 @@ const CommentReactions = () => {
   }, [_mbl]);
 
   useEffect(() => {
-    // Desktop only: the mobile sheet is docked and ignores pickerPosition.
     if (_mbl) return;
     if (
       showEmojiPickerAtComment?.show &&
@@ -108,8 +101,6 @@ const CommentReactions = () => {
     }
   }, [showEmojiPickerAtComment?.show, showEmojiPickerAtComment?.commentId, i, _mbl]);
 
-  //This can be severely improved. SEVERELY
-  // ============================== MOBILE
   if (_mbl) {
     if (editState === i) return <></>;
     return (
@@ -131,7 +122,7 @@ const CommentReactions = () => {
             </>
           )
 
-          // eslint-disable-next-line react/jsx-key
+
         )}
         <div
           className="relative flex items-center gap-1"
@@ -155,10 +146,6 @@ const CommentReactions = () => {
            strokeWidth={1.75}/>
           {showEmojiPickerAtComment?.show &&
             showEmojiPickerAtComment?.commentId === i && (
-              // Keyboard-docked, search-first bottom sheet (HTPR-4589) — the old
-              // fixed popup could not raise the keyboard, so type-to-search was
-              // dead. The sheet portals itself; emojiClickHandler applies the
-              // reaction and closes.
               <MobileEmojiReactionSheet
                 onEmojiSelect={debounce(emojiClickHandler, 10)}
                 onClose={() => handleClickOutside(undefined)}
@@ -169,7 +156,6 @@ const CommentReactions = () => {
     );
   }
 
-  // ============================ DESKTOP
   else if (comment?.reactions && comment?.reactions?.length > 0)
     return (
       <div
@@ -190,7 +176,7 @@ const CommentReactions = () => {
             </>
           )
 
-          // eslint-disable-next-line react/jsx-key
+
         )}
         {comment?.reactions && comment?.reactions?.length > 0 && (
           <div

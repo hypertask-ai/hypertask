@@ -2,11 +2,11 @@ import type { TaskUpdateFieldContext, TaskUpdateTarget } from './types';
 
 export async function updateTaskPriority(context: TaskUpdateFieldContext, task: TaskUpdateTarget) {
     const { priorityConstant, baseUrl, authCookieHeader, ctx, strictSideEffectFailures } = context;
-    // Handle priority/estimate updates using their dedicated APIs
     if (priorityConstant) {
         const priorityApiUrl = `${baseUrl}/api/priority/setPriority`
         const priorityResponse = await fetch(priorityApiUrl, {
             method: 'POST',
+            redirect: 'manual',
             headers: {
                 'Content-Type': 'application/json',
                 'Cookie': authCookieHeader

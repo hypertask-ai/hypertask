@@ -58,13 +58,6 @@ const ResponseNavigator: FC<ResponseNavigatorProps> = ({
                     <ChevronRight size={18}  strokeWidth={1.75}/>
                 </button>
             </div>
-            {/*       
-      <button 
-        onClick={onAccept}
-        className="px-3 py-1 bg-green-600 hover:bg-green-700 rounded text-meta text-white transition-colors"
-      >
-        Accept
-      </button> */}
         </div>
     );
 };

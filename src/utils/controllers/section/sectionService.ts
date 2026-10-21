@@ -1,14 +1,10 @@
-/**
- * Centralized Section CRUD service.
- * Both Pages API and MCP endpoints should use this service.
- * All view updates (default, applied, unsaved) are handled here.
- */
 import type { Task } from '@prisma/client'
 import prisma from '@/lib/prisma'
 import { scheduleAgentFirstTaskEmailBatch } from '@/utils/controllers/notifications/agentFirstTaskEmail'
-import { recordAgentTaskCompletion } from '@/lib/telemetry/activationOccurrences'
+import { enqueueAgentTaskCompletion } from '@/lib/telemetry/activationOccurrences'
 import { getProjectWhere, savedViewBoardAccessWhere } from '@/utils/controllers/projects/getAllIncludes'
 import generateRank from '@/utils/generateRank'
+import { enqueueColumnCreated, enqueueColumnRenamed, processAnalyticsIntentSoon } from '@/lib/telemetry/savedWork'
 import {
   appendSectionToAllViews,
   updateSectionInAllViews,
@@ -20,7 +16,6 @@ export interface CreateSectionInput {
   title: string
   ranking?: string
   afterSectionId?: number
-  /** The acting user; must own or belong to the board. Visibility is ON only in their views. */
   userId: number
   agentId?: string | null
 }
@@ -29,9 +24,6 @@ export type CreateSectionResult =
   | { status: 200; json: { id: number; section_title: string; projectId: number; visibility: boolean; deleted: boolean; ranking: string; isDone: boolean | null } }
   | { status: 400 | 403 | 404 | 500; json: { message: string } | unknown }
 
-/**
- * Create a new section. Updates all project views.
- */
 export async function createSection(input: CreateSectionInput): Promise<CreateSectionResult> {
   const { projectId, title, ranking: explicitRanking, afterSectionId, userId, agentId } = input
 
@@ -69,16 +61,21 @@ export async function createSection(input: CreateSectionInput): Promise<CreateSe
   }
 
   try {
-    const section = await prisma.section.create({
-      data: {
-        project: { connect: { id: projectId } },
-        section_title: title,
-        visibility: true,
-        deleted: false,
-        ranking: ranking as string
-      }
-    })
+    const { section, analyticsKey } = await prisma.$transaction(async (tx) => {
+      const section = await tx.section.create({
+        data: {
+          project: { connect: { id: projectId } },
+          section_title: title,
+          visibility: true,
+          deleted: false,
+          ranking: ranking as string
+        }
+      })
 
+      const analyticsKey = await enqueueColumnCreated(tx, section.id, { userId, agentId })
+      return { section, analyticsKey }
+    })
+    processAnalyticsIntentSoon(analyticsKey)
     await appendSectionToAllViews(projectId, section, userId)
 
     return {
@@ -108,7 +105,6 @@ export interface UpdateSectionInput {
   isDone?: boolean | null
   autoAssignUserId?: number | null
   autoAssignAgentId?: string | null
-  /** Place section after this section ID; ranking is computed. Use with projectId. */
   moveAfterSectionId?: number
   projectId?: number
   userId: number
@@ -136,10 +132,6 @@ async function canAccessProject(
   return Boolean(project)
 }
 
-/**
- * Update a section (rename, move, delete, visibility).
- * Updates Section record, tasks when title changes, and all views.
- */
 export async function updateSection(input: UpdateSectionInput): Promise<UpdateSectionResult> {
   const { sectionId, section_title, ranking, deleted, visibility, isDone, autoAssignUserId, autoAssignAgentId, moveAfterSectionId, projectId, userId, agentId } = input
 
@@ -180,7 +172,7 @@ export async function updateSection(input: UpdateSectionInput): Promise<UpdateSe
     }
 
     const finalRanking = resolvedRanking ?? ranking
-    const toUpdate = await prisma.$transaction(async (tx) => {
+    const { toUpdate, analyticsKey } = await prisma.$transaction(async (tx) => {
       const updated = await tx.section.update({
         where: { id: sectionId },
         data: {
@@ -194,7 +186,6 @@ export async function updateSection(input: UpdateSectionInput): Promise<UpdateSe
         }
       })
 
-      // Keep the task name update and its history row in one transaction.
       if (titleChanged) {
         const tasks = await tx.task.updateManyAndReturn({
           where: { sectionId },
@@ -215,10 +206,14 @@ export async function updateSection(input: UpdateSectionInput): Promise<UpdateSe
         }
       }
 
-      return updated
+      const analyticsKey = titleChanged && !updated.deleted
+        ? await enqueueColumnRenamed(tx, sectionId, { userId, agentId })
+        : null
+      return { toUpdate: updated, analyticsKey }
     })
 
-    // View updates based on operation
+    if (analyticsKey) processAnalyticsIntentSoon(analyticsKey)
+
     if (toUpdate.deleted) {
       await removeSectionFromAllViews(sectionId, toUpdate.projectId)
     } else if (titleChanged || finalRanking != null || isDone !== undefined) {
@@ -263,9 +258,6 @@ export interface DeleteSectionResult {
   destinationSection?: { id: number; title: string } | null
 }
 
-/**
- * Delete a section (soft delete). Moves tasks to first section, updates all views.
- */
 export async function deleteSection(input: DeleteSectionInput): Promise<DeleteSectionResult> {
   const { sectionId, projectId, userId, agentId } = input
 
@@ -308,8 +300,6 @@ export async function deleteSection(input: DeleteSectionInput): Promise<DeleteSe
   let movedTaskCount = 0
   if (firstSection) {
     const moved = await prisma.$transaction(async (tx) => {
-      // Lock the actual pre-move rows, including legacy title matches, so a
-      // concurrent move cannot turn an already-done task into a first completion.
       const beforeTasks = agentId ? await tx.$queryRaw<Pick<Task, 'id' | 'projectId' | 'uniqueIndex' | 'title' | 'sectionId' | 'section' | 'status'>[]>`
         SELECT id, "projectId", "uniqueIndex", title, "sectionId", section, status FROM "Task"
         WHERE "projectId" = ${projectId}
@@ -343,15 +333,22 @@ export async function deleteSection(input: DeleteSectionInput): Promise<DeleteSe
           }))
         })
       }
-      return { tasks, beforeTasks, timestamp }
+      const analyticsKeys: string[] = []
+      for (const before of beforeTasks) {
+        const after = tasks.find((task) => task.id === before.id)
+        if (!after) continue
+        const key = await enqueueAgentTaskCompletion(tx, before, { ...after, updatedAt: timestamp }, agentId)
+        if (key) analyticsKeys.push(key)
+      }
+      return { tasks, beforeTasks, timestamp, analyticsKeys }
     })
+    moved.analyticsKeys.forEach(processAnalyticsIntentSoon)
     movedTaskCount = moved.tasks.length
     if (agentId && moved.beforeTasks.length) {
       const afterTasks = new Map(moved.tasks.map((task) => [task.id, task]))
       scheduleAgentFirstTaskEmailBatch(moved.beforeTasks.flatMap((before) => {
         const after = afterTasks.get(before.id)
         if (!after) return []
-        recordAgentTaskCompletion(before, { ...after, updatedAt: moved.timestamp }, agentId)
         return [{ before, after }]
       }), userId, agentId)
     }

@@ -3,17 +3,6 @@
 import { ChevronDown } from "lucide-react";
 import { cn } from "@/utils/undoActions/helperFuncs";
 
-/**
- * The one dropdown used across the agents pages.
- *
- * Same shape as the Settings model pickers: `appearance-none` so the control
- * is ours rather than the platform's, with a chevron sitting over it.
- *
- * `color-scheme` is what fixes the open list. The browser draws that popup
- * itself and paints it light under a light scheme however the options are
- * styled, which is why the closed control looked right on a dark theme while
- * the list came up white.
- */
 export default function AgentSelect({
   value,
   onChange,
@@ -56,7 +45,6 @@ export default function AgentSelect({
   );
 }
 
-/** Options carry the colours too: the popup list is drawn by the platform. */
 export function AgentOption({
   value,
   children,

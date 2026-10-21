@@ -76,7 +76,6 @@ export const searchConfig = {
           per_page: 50,
         };
       },
-      /** MCP / API search: includes descriptionText, configurable per_page */
       taskForMcp: (
         searchQuery: string,
         filters: string,

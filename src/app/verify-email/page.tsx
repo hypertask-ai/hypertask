@@ -11,11 +11,9 @@ const VerifyEmailContent = () => {
   const [email, setEmail] = useState<string>('')
   const { isResending, errorMessage: resendErrorMessage, handleResend } = useResendVerificationEmail()
 
-  // Get token from URL
   const token = searchParams?.get('token')
   const emailParam = searchParams?.get('email')
 
-  // Use unified verification status hook
   const { status, errorMessage, verifyWithToken } = useEmailVerificationStatus({
     token: token || null,
     enablePolling: false,

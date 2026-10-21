@@ -1,7 +1,6 @@
 import dynamic from "next/dynamic";
 
 
-// ─── Dynamic Imports ────────────────────────────────────────────────────────────
 export const InviteMember = dynamic(() => import("./Modals/commands/inviteMember"));
 
 export const EditBoard = dynamic(() => import("./Modals/commands/editBoard"));

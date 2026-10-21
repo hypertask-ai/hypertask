@@ -22,10 +22,11 @@ class FixedDate extends RealDate {
 
 function fixture(kind, scenario) {
   const effects = [];
-  const session = scenario.noAuth ? null : { userId: 985, source: "better-auth" };
+  const session = scenario.noAuth ? null : { userId: 985, source: "better-auth", ...(typeof scenario.body?.agentId === "string" && scenario.body.agentId ? { agentId: scenario.body.agentId } : {}) };
   const actor = { id: 985, displayName: "QA", photoURL: "qa.png", email: "qa@example.invalid" };
   const task = { id: 42, projectId: 15, title: "Changed", nested: { retained: true } };
   const mocks = {
+    "@/lib/auth/agentScope": require("./helpers/agent-board-scope.cjs").enforcedScope,
     "@/lib/auth/getSessionUser": { getSessionUser: async () => {
       if (scenario.authThrows) throw new Error("Auth lookup unavailable");
       return session;

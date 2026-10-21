@@ -1182,6 +1182,8 @@ test('chat orchestration passes the live ticket flag into resolution and send gu
   for (const enabled of [false, true]) for (const available of [false, true]) {
     let resolution, sending;
     const { useAiChat } = load('src/hooks/MultiPages/AIChat/useAiChat.ts', {
+      '@/lib/state': { useRecoilState: () => [null, () => {}] },
+      '@/store': {},
       '@/hooks/useFlag': { useFlag: (key) => key === flag && enabled },
       './useAiChatState': { useAiChatState: () => ({ sessionPagingEnabled: available }) },
       './useAiChatSessions': { useAiChatSessions: (context) => { resolution = context; return {}; } },

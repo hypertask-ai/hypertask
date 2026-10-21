@@ -9,7 +9,7 @@ const mock = (name, exports) => {
   const id = name.startsWith('src/') ? path.join(root, name) : require.resolve(name);
   require.cache[id] = { id, filename: id, loaded: true, exports };
 };
-let cookieValues = {}, enabled = true, response, calls = [], delay = 0, failRead = false;
+let cookieValues = {}, enabled = true, desktopChat = false, response, calls = [], delay = 0, failRead = false;
 const user = { id: 985, uid: 'qa', displayName: 'QA', email: 'qa@example.invalid', stripe_customer_id: 'billing-secret',
   UserSetting: { id: 1, onboardingTourStatus: true, snippets: 'private-settings' } };
 const Module = require('node:module');
@@ -18,7 +18,7 @@ Module._load = function (id, ...args) { return id === 'server-only' ? {} : origi
 mock('next/headers', { cookies: async () => ({ get: key => cookieValues[key] ? { value: cookieValues[key] } : undefined }),
   headers: async () => new Headers({ 'x-ht-board-document-route': '/project?id=15&view=default' }) });
 mock('src/lib/prisma.ts', { __esModule: true, default: { user: { findUnique: async ({ where }) => where.id === user.id ? user : null } } });
-mock('src/lib/flags.ts', { featureFlagsForUser: async id => { assert.equal(id, 985); return { 'htpr-6934-server-first-screen': enabled, 'other-flag': true }; } });
+mock('src/lib/flags.ts', { featureFlagsForUser: async id => { assert.equal(id, 985); return { 'htpr-6934-server-first-screen': enabled, 'other-flag': true, 'htpr-7406-desktop-server-board': desktopChat }; } });
 mock('src/utils/controllers/projects/getBoardTasks.ts', { __esModule: true, default: async (...args) => {
   calls.push(args); if (failRead) throw Error('Disposable read failure');
   if (delay) await new Promise(resolve => setTimeout(resolve, delay)); return response;
@@ -42,7 +42,7 @@ const fixture = { project: { id: 15, title: 'Authorized board', section: [{ id: 
   tasks: [{ id: 1, title: 'Authorized card', projectId: 15, sectionId: 1, ranking: 'A0100', status: 'Normal',
     taskLabels: [], assignees: [], notifications: [], subTasks: [], description_: { content: '<p>API-flagged instant open</p>' } }], allViews: [] };
 function reset() {
-  enabled = true; calls = []; delay = 0; failRead = false; response = { status: 200, json: structuredClone(fixture) };
+  enabled = true; desktopChat = false; calls = []; delay = 0; failRead = false; response = { status: 200, json: structuredClone(fixture) };
   cookieValues = { nookies_user: JSON.stringify({ id: 985 }), ht_session: signSession({ id: 985, email: user.email }), [BOARD_DISPLAY_COOKIE]: JSON.stringify(display) };
 }
 
@@ -153,4 +153,21 @@ test('personalized HTML and Flight are dynamic and explicitly private no-store; 
   const page = fs.readFileSync(path.join(root, 'src/app/[...boardURL]/page.tsx'), 'utf8');
   assert.match(page, /export const dynamic = "force-dynamic"/);
   assert.match(page, /export const revalidate = 0/);
+});
+
+
+test('desktop default-open and pinned chat board documents require the desktop server-board flag', async () => {
+  for (const chat of [{ openChat: true, chatPinned: false }, { openChat: false, chatPinned: true, chatSuppressed: true }]) {
+    reset();
+    const value = JSON.stringify({ ...display, isMobile: false,
+      board: { ...display.board, ...chat, chatWidth: 517, chatSidebarMode: true } });
+    assert.equal(await readBoardDocument('/project?id=15', value), null);
+    assert.deepEqual(calls, []);
+    desktopChat = true;
+    const snapshot = await readBoardDocument('/project?id=15', value);
+    assert.ok(snapshot);
+    assert.equal(snapshot.display.board.chatWidth, 517);
+    assert.equal(snapshot.display.board.chatSidebarMode, true);
+    assert.deepEqual(calls, [[15, 985, 985]]);
+  }
 });

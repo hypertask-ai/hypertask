@@ -30,7 +30,7 @@ function loadTs(relativePath) {
 }
 
 const telemetryPath = path.join(root, "src/lib/telemetry/activationOccurrences.ts");
-require.cache[telemetryPath] = { id: telemetryPath, filename: telemetryPath, loaded: true, exports: { recordActivationOccurrence: () => {} } };
+require.cache[telemetryPath] = { id: telemetryPath, filename: telemetryPath, loaded: true, exports: { captureActivationOccurrence: async () => null } };
 
 const { shouldAdoptGuest } = loadTs(
   "src/utils/controllers/demo/adoptGuestBoards.ts"

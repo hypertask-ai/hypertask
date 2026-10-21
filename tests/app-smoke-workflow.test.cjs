@@ -117,7 +117,7 @@ test("app smoke validates the head before isolated build and route checks", asyn
   );
   assert.equal(
     parsedWorkflow.jobs.report.if,
-    "always() && github.event_name == 'workflow_run' && github.event.workflow_run.conclusion != 'cancelled'",
+    "always() && github.event_name == 'workflow_run' && github.event.workflow_run.conclusion != 'cancelled' && needs.validate.outputs.superseded != 'true'",
   );
   assert.match(
     workflow,

@@ -865,7 +865,7 @@ test("extractTicketId ignores flag keys in the body of another board's PR (PR 11
       boardPrefix: "HTPR",
       title: "YPER4-220 [INFRA] One AI model per class, enforced by a test",
       headRef: "yper4-220-model-class",
-      body: "Covers the htpr-7010 and htpr-6722 flag combinations, flag htpr-7010-haiku-5-5. Fixes HTPR-7010.",
+      body: "Covers the htpr-7010 flag combinations, flag htpr-7010-haiku-5-5. Fixes HTPR-7010.",
     }),
     null
   );

@@ -19,7 +19,6 @@ const SearchTasksHeader = ({
   icon?: ReactNode;
   className?: string;
   keyCombination?: (string | null)[];
-  /** Defaults to the board header's below-left tooltip; the rail places it right. */
   tooltipPosition?: { left: number; bottom: number };
   fromProject?: number | null;
 }) => {

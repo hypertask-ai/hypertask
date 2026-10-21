@@ -44,21 +44,12 @@ export function useTaskDetailState({
   _currentUser,
   embedded = false,
 }: TaskDetailProps) {
-
-  // ================== DATA FROM SERVER
   const currentUser = _currentUser;
-  // HTPR-6047: mark the first render of the component the shared Suspense
-  // boundary is gating - this is as close as a render-phase mark can get to
-  // "the boundary committed" without a fake second data point. Guarded by a
-  // ref (not state) so it fires exactly once and never triggers a re-render.
   const suspenseCommitMarkedRef = useRef(false);
   if (!suspenseCommitMarkedRef.current) {
     suspenseCommitMarkedRef.current = true;
     markTaskDetailPhase(TASK_DETAIL_SUSPENSE_COMMIT_MARK);
   }
-  // Effects run after commit, so this timestamp is always at or after the
-  // suspense-commit mark above - the gap between them is React's own commit
-  // and effect-scheduling cost, not app code.
   useEffect(() => {
     markTaskDetailPhase(TASK_DETAIL_COMP_MOUNT_MARK);
   }, []);
@@ -125,8 +116,6 @@ export function useTaskDetailState({
   const { authenticatedUserId } = useAuth();
   useEffect(() => {
     if ((!subtaskLink && !backFirstOpen) || embedded || authenticatedUserId !== currentUser?.id || !(_parsedTask.id > 0)) return;
-    // An authorized Next route must remain available to native Back/Forward,
-    // even when Next later drops its custom history marker or waits for RSC.
     const key = cachedTaskDetailKey(currentUser.id, _parsedTask.id);
     if (!queryClient.getQueryState(key)) queryClient.setQueryData(key, _parsedTask);
   }, [subtaskLink, backFirstOpen, embedded, authenticatedUserId, currentUser?.id, _parsedTask, queryClient]);
@@ -143,16 +132,10 @@ export function useTaskDetailState({
 
   const { navigate } = useHypertasksNavigate();
   const searchParams = useSearchParams();
-  // =================== REF OBJECTS
   const lastGPress = useRef<number | null>(null);
   const hasScrolledToUnreadRef = useRef(false);
   const readinessTaskRef = useRef("");
-  // One-shot guard for the no-unread bottom scroll, kept separate from the unread
-  // "landed" ref so a later refetch that surfaces unread can still jump to it.
   const hasBottomScrolledRef = useRef(false);
-  // Cancel handle for the in-flight bottom-settling scroll. Held in a ref (not
-  // returned from the deciding effect) so a dependency change mid-settle doesn't
-  // kill the ~2.5s loop and land short; task changes or user input cancel it.
   const bottomScrollCancelRef = useRef<null | (() => void)>(null);
   const initialScrollGuard = useMemo(
     () =>
@@ -163,11 +146,8 @@ export function useTaskDetailState({
     []
   );
   const initialScrollGenerationRef = useRef(0);
-  // const assignInputRef = useRef<HTMLInputElement>(null);
   const lastM_APress = useRef<number | null>(null);
   const [movingItem, setMovingItem] = useState(false);
-  // ======================= constants
-  // get current task keys
   const currentItemInTasksPlaylist = {
     projectId: parseInt(_parsedTask.projectId),
     uniqueIndex: _parsedTask.uniqueIndex,
@@ -191,15 +171,6 @@ export function useTaskDetailState({
   const { removeRelation } = useTaskRelations();
   const router = useRouter();
 
-  // =================== React Query Hooks
-  // Comments are already fetched once by DescriptionAndCommentsProvider's
-  // useCommentAndDescriptions (same query key, [CommentsTQPrefixKey, taskId]).
-  // A second useGetAllComments call here used to fire its own request on
-  // every task-detail open (HTPR-6047); the refetch below reaches that same
-  // query instance instead of holding a redundant observer.
-  // Only prefetches the Move-task dropdown, which can't open before ready
-  // anyway; moveToColumn.tsx fetches its own copy (same query key) the moment
-  // it's actually opened, so deferring this prefetch drops nothing (HTPR-6047).
   const { data: sectionsForProjectTQ = [] } = useGetSectionsMoveTask(
     [taskDetailConfig.queryKeys.moveTaskModal, currentProject?.id],
     currentProject?.id!,
@@ -216,9 +187,6 @@ export function useTaskDetailState({
     _parsedTask.id,
     _parsedTask?.estimate
   );
-  // ShareTaskButton (inside the primary-actions readiness marker) only opens
-  // the share modal on click; it doesn't need the link pre-created. The write
-  // that creates it can wait until ready (HTPR-6047).
   const { data: sharedLink } = useGetTaskShareLinks(
     _parsedTask.id,
     _parsedTask.projectId,

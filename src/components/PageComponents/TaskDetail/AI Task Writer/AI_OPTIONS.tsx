@@ -57,7 +57,6 @@ const writeWithAiOptions = [{
   loadingText: "",
 },...normalOptions];
 
-/** Short label for the always-visible primary button on mobile */
 function primaryActionLabel(option: IOption): string {
   switch (option.action) {
     case "AcceptAll":
@@ -71,7 +70,6 @@ function primaryActionLabel(option: IOption): string {
   }
 }
 
-/** Nested sheet: force theme surface (library defaults to light). */
 const nestedSheetContainerClass =
   "!bg-comment-description text-white-black rounded-t-2xl border-thin border-hypertasks-ai-purple/60 shadow-lg";
 
@@ -88,11 +86,8 @@ const AI_Options = ({
   callback: (optionPrompt: string, loadingText?: string) => void;
   inputValue: string;
   mode: TAiMode;
-  /** Mobile: tap opens a dedicated action sheet with large rows (HTPR-3061). */
   presentation?: Presentation;
-  /** Mobile: send the user's currently editable prompt as a new request. */
   onResend?: () => void;
-  /** Resend is unavailable until its prompt and request prerequisites are ready. */
   isResendDisabled?: boolean;
 }) => {
   const allOptions = useMemo(
@@ -173,7 +168,6 @@ const AI_Options = ({
   };
 
   if (presentation === "mobileActionSheet") {
-    // Always use full option list for mobile so the primary action stays predictable (fast path).
     const primaryOption = allOptions[0];
     const secondaryOptions = allOptions.slice(1);
 

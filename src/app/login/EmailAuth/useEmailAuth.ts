@@ -4,6 +4,7 @@ import authConfig from '@/lib/configs/auth.config'
 import { useUTM } from '@/hooks/General/useUTMs'
 import { useSearchParams } from 'next/navigation'
 import { parseSafeReturnTo, POST_LOGIN_REDIRECT_STORAGE_KEY } from '@/lib/auth/safeReturnTo'
+import { getSignupContextInput } from '@/lib/analytics/signupIdentityClient'
 import { authClient } from '@/lib/auth/betterAuthClient'
 
 export type EmailAuthStep = 'form' | 'link-sent' | 'signing-in' | 'code-input'
@@ -28,17 +29,11 @@ export interface EmailAuthHandlers {
   resetForm: () => void
 }
 
-// Module-level flag to prevent multiple token processing across component remounts
 let globalTokenProcessed = false
 let globalAccountRecoveryProcessed = false
 const PROCESSED_TOKEN_KEY = 'email_token_processed'
 
 export function useEmailAuth(initialEmail = '') {
-  // HTPR-4175: the Better Auth magic-link email regressed email login (no code
-  // fallback, 5-min expiry, single-use so mail scanners prefetch and burn it).
-  // Email login/signup uses the legacy link+code email (links redeem by JS POST); this
-  // gate is separate from NEXT_PUBLIC_BETTER_AUTH_ENABLED so Google + the session
-  // bridge stay on Better Auth. Unset => off => legacy flow (the working path).
   const isBetterAuthEnabled = process.env.NEXT_PUBLIC_BETTER_AUTH_EMAIL === '1'
   const [email, setEmail] = useState(initialEmail)
   const [isLoading, setIsLoading] = useState(false)
@@ -79,8 +74,6 @@ export function useEmailAuth(initialEmail = '') {
         })
         if (!bridge.ok) return
 
-        // Route projectless users to /onboarding, not the black /project page,
-        // and honor a stored return path — same as the reverse bridge.
         const { hasProjects } = await bridge
           .json()
           .catch(() => ({ hasProjects: true }))
@@ -91,14 +84,12 @@ export function useEmailAuth(initialEmail = '') {
             (hasProjects === false ? '/onboarding' : authConfig.redirect.afterLogin),
         )
       } catch {
-        // Conditional UI is progressive enhancement; email sign-in stays available.
       }
     }
 
     void signInWithPasskeyAutofill()
   }, [])
 
-  // Check if this page was loaded from a JWT email token or has AB test variant
   useEffect(() => {
     if (typeof window === 'undefined') return
     
@@ -109,7 +100,6 @@ export function useEmailAuth(initialEmail = '') {
     
     if (!token) return
     
-    // Check both module-level flag and sessionStorage to prevent multiple calls
     const sessionProcessed = sessionStorage.getItem(PROCESSED_TOKEN_KEY) === token
     if (globalTokenProcessed || sessionProcessed) {
       console.log('⚠️ Token already processed (module or session), skipping', { 
@@ -122,14 +112,12 @@ export function useEmailAuth(initialEmail = '') {
     }
     
     console.log('🔗 JWT email token detected in URL - starting processing')
-    // Mark as processed in both places before async call
     globalTokenProcessed = true
     sessionStorage.setItem(PROCESSED_TOKEN_KEY, token)
     
     const abTestParam = (authConfig as any).abTest?.urlParam || 'variant'
     const variant = urlParams.get(abTestParam)
     
-    // Store AB test variant if present
     if (variant) {
       console.log('🧪 AB Test Variant detected:', variant)
       setAbTestVariant(variant)
@@ -138,7 +126,7 @@ export function useEmailAuth(initialEmail = '') {
     setIsProcessingToken(true)
     setStep('signing-in')
     completeSignInWithJWT(token, variant)
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+
   }, [])
 
   useEffect(() => {
@@ -170,6 +158,7 @@ export function useEmailAuth(initialEmail = '') {
           body: JSON.stringify({
             email: pendingEmail,
             utmData: getUTMData() || {},
+            signupContext: await getSignupContextInput(),
           }),
         })
         const data = await response.json()
@@ -187,7 +176,7 @@ export function useEmailAuth(initialEmail = '') {
     }
 
     recoverAccount()
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+
   }, [])
 
   const validateEmail = () => {
@@ -205,14 +194,12 @@ export function useEmailAuth(initialEmail = '') {
 
   const completeSignInWithJWT = async (token: string, variant: string | null) => {
     try {
-      // Don't check isProcessingToken here since we already set it in useEffect
       console.log('🔍 Starting JWT token verification...')
       console.log('🔍 Token (first 50 chars):', token.substring(0, 50) + '...')
       console.log('🔍 Verifying JWT token')
       console.log('🧪 AB Test Variant:', variant)
       console.log('🔍 API endpoint:', authConfig.emailLink.verifyTokenApi)
       
-      // Call our API to verify the JWT and get the post-auth user data
       const response = await fetch(authConfig.emailLink.verifyTokenApi, {
         method: 'POST',
         headers: {
@@ -220,8 +207,8 @@ export function useEmailAuth(initialEmail = '') {
         },
         body: JSON.stringify({ 
           token,
-          abTestVariant: variant, // Pass AB test variant
-          shouldSkipInteractive: authConfig.onboarding.shouldSkipInteractive // Pass skip interactive flag
+          abTestVariant: variant,
+          shouldSkipInteractive: authConfig.onboarding.shouldSkipInteractive
         }),
       })
 
@@ -238,13 +225,12 @@ export function useEmailAuth(initialEmail = '') {
       console.log('👤 isNewUser from API:', data.isNewUser)
       console.log('👤 User data from API:', data.user)
 
-      // Complete sign-in using the pre-processed data and cookies from the API
       await loginWithEmail({
         shouldSkipInteractive: authConfig.onboarding.shouldSkipInteractive, 
         skipOnboarding: authConfig.onboarding.skipOnboarding,
         userData: data.user,
         prevBoard: data.prevBoard,
-        isNewUser: data.isNewUser, // Use isNewUser from the FIRST API call
+        isNewUser: data.isNewUser,
         skipDatabaseUpdate: true
       })
 
@@ -257,9 +243,8 @@ export function useEmailAuth(initialEmail = '') {
         stack: error.stack,
         name: error.name
       })
-      setIsProcessingToken(false) // Reset on error so user can retry
+      setIsProcessingToken(false)
       
-      // Clear the processed flag on error so user can retry
       globalTokenProcessed = false
       if (typeof window !== 'undefined') {
         sessionStorage.removeItem(PROCESSED_TOKEN_KEY)
@@ -312,7 +297,6 @@ export function useEmailAuth(initialEmail = '') {
 
         window.location.assign(authConfig.redirect.afterLogin)
       } else {
-        // Call our API to verify the code and get the post-auth user data
         const response = await fetch('/api/auth/verify-code', {
           method: 'POST',
           headers: {
@@ -323,7 +307,7 @@ export function useEmailAuth(initialEmail = '') {
             email,
             currentBrowserUrl: window.location.href,
             shouldSkipInteractive: false,
-            abTestVariant: abTestVariant // Pass AB test variant
+            abTestVariant: abTestVariant
           }),
         })
 
@@ -384,11 +368,9 @@ export function useEmailAuth(initialEmail = '') {
         const key = searchParams?.get("key");
         const projectId = searchParams?.get("projectId");
 
-        // Get UTM data from cookies
         const utmData = getUTMData()
         const safeReturnTo = parseSafeReturnTo(searchParams?.get('returnTo'))
 
-        // Call our custom email sending API
         const response = await fetch('/api/auth/send-email-link', {
           method: 'POST',
           headers: {
@@ -397,6 +379,7 @@ export function useEmailAuth(initialEmail = '') {
           body: JSON.stringify({
             email,
             utmData: utmData || {},
+            signupContext: await getSignupContextInput(),
             inviteData: {
               project,
               key,
@@ -414,7 +397,6 @@ export function useEmailAuth(initialEmail = '') {
 
         console.log('✅ Sign-in link sent successfully')
 
-        // In development, show the link for easy testing
         if (process.env.NODE_ENV === 'development' && data.devLink) {
           console.log('🔗 Dev link:', data.devLink)
         }
@@ -461,7 +443,6 @@ export function useEmailAuth(initialEmail = '') {
           throw new Error(error.message || 'Failed to resend link')
         }
       } else {
-        // Get UTM data from cookies
         const utmData = getUTMData()
         const project = searchParams?.get("project");
         const key = searchParams?.get("key");
@@ -475,7 +456,8 @@ export function useEmailAuth(initialEmail = '') {
           },
           body: JSON.stringify({
             email,
-          utmData: utmData || {},
+            utmData: utmData || {},
+            signupContext: await getSignupContextInput(),
             inviteData: {
               project,
               key,

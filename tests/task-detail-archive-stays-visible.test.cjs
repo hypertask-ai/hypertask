@@ -28,8 +28,8 @@ test("the task-detail E shortcut uses the inbox-flow navigation decision", () =>
     path.join(root, "src/app/detail/[...slug]/TaskDetailComp.tsx"),
     "utf8",
   );
-  const shortcutStart = taskDetail.indexOf("// press [e]");
-  const shortcutEnd = taskDetail.indexOf("// press [j]", shortcutStart);
+  const shortcutStart = taskDetail.indexOf("{\n      action: \"nextAfterArchive\",");
+  const shortcutEnd = taskDetail.indexOf("{\n      action: \"nextTask\",", shortcutStart);
   const shortcut = taskDetail.slice(shortcutStart, shortcutEnd);
 
   assert.ok(shortcutStart >= 0 && shortcutEnd > shortcutStart);

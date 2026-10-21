@@ -1,24 +1,19 @@
 import { useFlag } from "@/hooks/useFlag";
 import { HTPR_6975_TYPED_WRITES_FLAG } from "@/lib/flags/keys";
 import { setTaskDueDate } from "@/lib/api/typedClient";
-/* eslint-disable react-hooks/exhaustive-deps */
+
 import { Calendar } from "@/components/Common/Calendar"
 import { ModalContainerCustom, ModalHeaderComp, ModalInput, ModalListContainer, ModalRowElementContainer } from "@/components/Common/CommonModalComponents"
 import useHandleMouseGlobal from "@/hooks/General/useHandleMouse"
 import {  format,  } from "date-fns"
 import { ChangeEvent,  useEffect, useMemo, useState } from "react"
-// import { DateRange } from "react-day-picker"
 import { ModalBody } from "reactstrap"
-// import { DisplayDate } from "../../RemindMe/RemindMeComponent"
 import { inputChange } from "@/utils/helperFunctions/dateParse"
 import formatDateDifference from "@/utils/generateTime"
-// import { IValuePropUpdatedAt, TFilter } from "@/models/Filters/model"
 import { useRecoilState } from "@/lib/state"
 import {  inViewObjectAtom, lastUsedDueDateAtom } from "@/store"
-// import { Button } from "@/components/Buttons/ShadcnButton"
 import toast from "react-hot-toast"
 import Tooltip from "@/components/Common/Tooltip"
-// import { useGetPriorityForTask } from "@/hooks/MultiPages/useGetPriorityForTask"
 import { useGetSingleTask } from "@/hooks/MultiPages/Tasks/useGetTask"
 import { setDueDateApiHandler } from "@/utils/api/Task Detail"
 import { defaultHour, defaultMinutes } from "@/lib/constants/constants"
@@ -51,7 +46,6 @@ interface Props {
   closeHandler: (callback: Date|null, reset?:boolean) => void;
   dueDate?: Date ;
   mode: TMode;
-  // isActive?:Date|undefined;
 }
 
 interface IScreenProps {
@@ -79,7 +73,6 @@ const DueDateModal:React.FC<Props> = ({closeHandler, dueDate, mode}) => {
     else if (selectedScreen === "Sugar") {
     console.log("🚀 ~ closebackHandler ~ payload:", payload)
       if (!payload.data&& payload.display==="Reset")closeHandler(null,true)
-      // meaning we want to switch screens  
       else if (!payload.date) {
         callbackToSwitchScreen("Custom")
       }
@@ -97,11 +90,8 @@ const DueDateModal:React.FC<Props> = ({closeHandler, dueDate, mode}) => {
     }
   }
     useEffect(() => {
-
-        // Add event listeners when the component mounts
         document.addEventListener('keydown', handleKeyDown);
 
-        // Remove event listeners when the component unmounts
         return () => {
             document.removeEventListener('keydown', handleKeyDown);
         };
@@ -111,11 +101,9 @@ const DueDateModal:React.FC<Props> = ({closeHandler, dueDate, mode}) => {
   return (
     <>
       <ModalContainerCustom
-        // fade={false}
         key={currentDate?.toString()}
         id="calendar-picker"
         isOpen={true}
-        // fullScreen={true}
         toggle={() => closeHandler(currentDate)}
         keyboard={false}
         shouldCloseOnClickOutside={true}
@@ -260,12 +248,10 @@ const SugarDateScreen: React.FC<IScreenProps> = ({ closebackHandler,isActive, mo
 }
 
 const useCustomSugar = (closebackHandler: (payload: any) => void, isActive:Date|undefined, mode?: TMode, typedWrite?: typeof setTaskDueDate) => {
-  // const [currentProject, _] = useRecoilState(currentProjectAtom);
   const [inViewObject,__] = useRecoilState(inViewObjectAtom);
   const [lastUsedDueDate, setLastUsedDueDate] = useRecoilState(lastUsedDueDateAtom)
   const { getDueDateOptions } = useGetTimeOptions()
   const customDateRangeOption = { display: "Pick a custom date", date: undefined }
-  //okay so if the time is greater than 12AM but less than 9PM, i want it to be
   const defaultOptions: any[] = useMemo(()=>getDueDateOptions(isActive, lastUsedDueDate),[])
 
   const [keyword, setKeyword] = useState("");
@@ -285,7 +271,7 @@ const useCustomSugar = (closebackHandler: (payload: any) => void, isActive:Date|
     const final: any = inputChange(input, { past: false, future:true })
     console.log("🚀 ~ handleInputChange ~ final:", final)
     final.push(customDateRangeOption)
-    const setToThis = (input.length === 0) ? defaultOptions : final// not my proudest
+    const setToThis = (input.length === 0) ? defaultOptions : final
     console.log("🚀 ~ handleInputChange ~ defaultOptions:", defaultOptions)
     console.log("🚀 ~ handleInputChange ~ setToThis:", setToThis)
     setFilteredOptions(setToThis);

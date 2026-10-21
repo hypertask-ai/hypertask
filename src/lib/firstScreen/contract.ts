@@ -22,7 +22,6 @@ export type FirstScreenScope = {
   generation: string;
 };
 
-// Unknown browser-only preferences must keep using the existing client path.
 export function hasFirstScreenDisplayPreferences(
   value: unknown,
   accountId: number,
@@ -57,7 +56,6 @@ export type FirstScreenInitialModel<T extends FirstScreenWireValue> = {
   display: FirstScreenDisplayPreferences;
   flags: FirstScreenFlags;
   completeness: "complete" | "display-only";
-  // An active board is never a complete projectsAll authorization response.
   projectsCompleteness: "active-board-only" | "all-authorized";
   selection: { view: string | null; surface: "board" | "table" | null; split: number | null; focus: string | null };
   data: T;

@@ -1,3 +1,5 @@
+import { findIdParamOutOfRange, idOutOfRangeMessage } from '@/lib/mcp/listParams'
+import { taskIdentifierErrorResponse } from '@/lib/mcp/tasks/resolveTask'
 import { wrapMcpRoute } from '@/lib/mcp/routeWrapper'
 import { NextRequest, NextResponse } from 'next/server'
 import { checkMcpRateLimit, validateMcpAuth } from '@/lib/mcp/auth'
@@ -51,6 +53,13 @@ export async function POST(request: NextRequest) {
       { status: 400 }
     )
   }
+  const outOfRange = findIdParamOutOfRange({ sectionId: requestBody.sectionId, assignee: requestBody.assignee, parent_task_id: requestBody.parent_task_id })
+  if (outOfRange) {
+    return NextResponse.json(
+      buildFieldError('invalid_field', outOfRange, idOutOfRangeMessage(outOfRange)),
+      { status: 400 }
+    )
+  }
   const dryRun = requestBody.dry_run ?? false
   const { dry_run: _dryRun, ...requestBodyForHashing } = requestBody
 
@@ -76,11 +85,6 @@ export async function POST(request: NextRequest) {
   }
 
   try {
-    // Same request-boundary adoption as assignees/assign and tasks/move
-    // (HTPR-6388 / HTPR-6391): take a lease for this request's first fenced
-    // write, then release it so the next worker can claim immediately instead
-    // of waiting for TTL expiry. Native CLI column moves POST here, not
-    // /mcp/tasks/move (HTPR-6394).
     const result = await withAdoptedAgentMutationLease(
       prisma,
       { agentId: ctx.agentId, userId: ctx.user.id },
@@ -103,6 +107,8 @@ export async function POST(request: NextRequest) {
 
     return result.response
   } catch (error) {
+    const identifierResponse = taskIdentifierErrorResponse(error)
+    if (identifierResponse) return identifierResponse
     if (error instanceof IdempotencyInProgressError) {
       return NextResponse.json(
         { success: false, error: error.message },

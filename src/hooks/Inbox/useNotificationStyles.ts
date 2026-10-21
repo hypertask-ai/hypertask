@@ -1,6 +1,5 @@
 import { useNotificationContext } from "@/lib/contexts/NotificationContext";
 
-// 4. Most practical refactored version combining approaches:
 const useNotificationStyles = () => {
   const { isIbxSlctd } = useNotificationContext();
   

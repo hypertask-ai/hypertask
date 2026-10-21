@@ -1,8 +1,9 @@
+import { recordAgentBoardScopeMiss } from "@/lib/auth/agentScope";
 import type { NextRequest } from 'next/server'
 import { NextResponse } from 'next/server'
 import type { McpAuthContext } from '@/lib/mcp/auth'
 import prisma from '@/lib/prisma'
-import { findTaskByIdentifier } from '@/lib/mcp/tasks/resolveTask'
+import { findTaskByIdentifier, taskIdentifierErrorResponse } from '@/lib/mcp/tasks/resolveTask'
 import { getProjectWhere } from '@/utils/controllers/projects/getAllIncludes'
 import {
   convertToPlain,
@@ -53,7 +54,25 @@ async function getAccessibleProjectIds(ctx: McpAuthContext) {
   return accessibleProjects.map((project) => project.id)
 }
 
+async function scopeRelatedRows(ctx: McpAuthContext, rows: TurbopufferTaskRow[]) {
+  if (!ctx.agentId) return rows;
+  const tasks = await prisma.task.findMany({
+    where: {
+      id: { in: rows.map(row => Number(row.id)) },
+      status: 'Normal',
+      project: getProjectWhere(ctx.user.id, ctx.agentId),
+    },
+    select: { id: true, projectId: true, ticketNumber: true, title: true, uniqueIndex: true },
+  });
+  const byId = new Map(tasks.map(task => [String(task.id), task]));
+  return rows.flatMap(row => {
+    const task = byId.get(row.id);
+    return task ? [{ ...row, ...task, id: row.id, ticketNumber: task.ticketNumber ?? '' }] : [];
+  });
+}
+
 function mapRelatedTask(row: TurbopufferTaskRow): RelatedTask {
+  recordAgentBoardScopeMiss(row.projectId, "read");
   return {
     ticketNumber: row.ticketNumber,
     title: row.title,
@@ -68,7 +87,7 @@ export async function handleRelatedTasksGet(
   ctx: McpAuthContext,
   input: RelatedTasksGetInput,
   dependencies: RelatedTasksDependencies = { searchTasks }
-): Promise<NextResponse> {
+): Promise<Response> {
   if (
     input.taskId === null ||
     !Number.isInteger(input.taskId) ||
@@ -93,7 +112,7 @@ export async function handleRelatedTasksGet(
     }
 
     const task = await prisma.task.findFirst({
-      where: { id: resolved.id },
+      where: { id: resolved.id, ...(ctx.agentId ? { project: getProjectWhere(ctx.user.id, ctx.agentId) } : {}) },
       select: {
         title: true,
         description_: {
@@ -124,13 +143,15 @@ export async function handleRelatedTasksGet(
       topK: limit + 5,
       keywordOnly: false,
     })
-    const related = rows
+    const related = (await scopeRelatedRows(ctx, rows))
       .filter((row) => row.id !== String(resolved.id))
       .slice(0, limit)
       .map(mapRelatedTask)
 
     return NextResponse.json({ success: true, related })
   } catch (error) {
+    const identifierResponse = taskIdentifierErrorResponse(error)
+    if (identifierResponse) return identifierResponse
     console.error('[MCP Related Tasks] GET failed:', error)
     return errorResponse('Internal server error', 500)
   }
@@ -185,7 +206,7 @@ export async function handleRelatedTasksPost(
 
     return NextResponse.json({
       success: true,
-      related: rows.slice(0, limit).map(mapRelatedTask),
+      related: (await scopeRelatedRows(ctx, rows)).slice(0, limit).map(mapRelatedTask),
     })
   } catch (error) {
     console.error('[MCP Related Tasks] POST failed:', error)

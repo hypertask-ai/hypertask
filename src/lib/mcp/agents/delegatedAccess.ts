@@ -1,9 +1,3 @@
-/**
- * HTPR-6348: an agent with the admin role may add or remove its owner's other
- * agents on boards, but only on boards it is itself a member of (enforced inside
- * updateOwnedAgentBoards). The acting agent keeps its own identity; nobody
- * switches to the owner or shares a token.
- */
 import type { McpAuthContext } from '@/lib/mcp/auth'
 import { requireRole } from '@/lib/mcp/agents/scopes'
 import { NextResponse } from 'next/server'

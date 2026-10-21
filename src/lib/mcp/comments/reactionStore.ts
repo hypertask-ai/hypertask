@@ -1,6 +1,5 @@
 import type { Prisma } from '@prisma/client';
 
-/** HTPR-7122: the agent behind an agent-token reaction, or null for a person. */
 export type ReactionAgent = { id: string; displayName: string | null };
 
 export type StoredCommentReaction = {
@@ -27,12 +26,6 @@ export function unifiedEmoji(emoji: string): string {
     .join('-');
 }
 
-/**
- * Sets one reactor's emoji on a comment, inside the caller's transaction.
- * The reactor is the person (agentId null) or one agent of that person. Their rows
- * are kept apart, so an agent removing its reaction never removes its owner's,
- * and the owner never toggles the agent's.
- */
 export async function writeCommentReaction(
   tx: Prisma.TransactionClient,
   input: {

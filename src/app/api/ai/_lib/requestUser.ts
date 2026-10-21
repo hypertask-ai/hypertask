@@ -10,10 +10,6 @@ export type AiRequestUser = {
   displayName?: string | null;
 };
 
-/**
- * Web AI continues to use its first-party cookie. Native Android may fall back
- * to the user OAuth access token issued by the existing PKCE flow.
- */
 export async function getAiRequestUser(
   request: NextRequest
 ): Promise<AiRequestUser | null> {

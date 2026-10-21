@@ -15,9 +15,6 @@ export const createCalendarRealtimeEventHandler = (
   return () => refresh("event");
 };
 
-// Subscribes to every project channel the calendar currently displays.
-// On any BOARD_EVENT (task created/updated/moved/deleted on any of those boards)
-// it reconciles the active range through the authoritative Calendar endpoint.
 export function useCalendarRealtime(
   accountId: number,
   projectIds: number[],
@@ -66,11 +63,6 @@ export function useCalendarRealtime(
         return { channelName, channel, onBoardEvent };
       });
 
-      // Reconnect safety-net: re-fetch once after a dropped connection recovers.
-      // Skipped on the INITIAL connection (HTPR-3998) — the page just rendered,
-      // so refreshing there just doubled every page load.
-      // Mounted while already connected (e.g. view opened later in the session):
-      // count that as connected so a real drop+recover still refetches.
       if (client.connection.state === "connected") wasConnected.current = true;
       const onConnected = () => {
         if (wasConnected.current) refresh("reconnect");
@@ -92,6 +84,6 @@ export function useCalendarRealtime(
       cancelled = true;
       unsubscribe?.();
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+
   }, [accountId, projectIds.map((id) => id).join(",")]);
 }

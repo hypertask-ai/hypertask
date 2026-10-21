@@ -88,10 +88,6 @@ export function normalizeOwnProfileUpdate(
   return { displayName, photoURL };
 }
 
-/**
- * Updates the signed-in human profile and the matching explicit-set flags in
- * one transaction. MCP and native AI Chat both use this write path.
- */
 export async function updateOwnProfile(
   userId: number,
   input: OwnProfileUpdate

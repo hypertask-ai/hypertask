@@ -47,10 +47,6 @@ export interface DeleteSkillResponse {
   success: boolean;
 }
 
-/**
- * Service for listing, retrieving, creating, updating, deleting, and importing skills.
- * Validates input and makes API requests.
- */
 export class SkillService {
   constructor(private readonly apiClient: IApiClient) {}
 
@@ -87,9 +83,8 @@ export class SkillService {
 
       return response;
     } catch (error) {
-      logger.error('Failed to list skills', {
+      logger.failure('Failed to list skills', error, {
         correlationId,
-        error: error instanceof Error ? error.message : String(error),
       });
       throw error;
     }
@@ -121,9 +116,8 @@ export class SkillService {
 
       return response;
     } catch (error) {
-      logger.error('Failed to get skill', {
+      logger.failure('Failed to get skill', error, {
         correlationId,
-        error: error instanceof Error ? error.message : String(error),
       });
       throw error;
     }
@@ -160,9 +154,8 @@ export class SkillService {
 
       return response;
     } catch (error) {
-      logger.error('Failed to create skill', {
+      logger.failure('Failed to create skill', error, {
         correlationId,
-        error: error instanceof Error ? error.message : String(error),
       });
       throw error;
     }
@@ -197,9 +190,8 @@ export class SkillService {
 
       return response;
     } catch (error) {
-      logger.error('Failed to update skill', {
+      logger.failure('Failed to update skill', error, {
         correlationId,
-        error: error instanceof Error ? error.message : String(error),
       });
       throw error;
     }
@@ -231,9 +223,8 @@ export class SkillService {
 
       return response;
     } catch (error) {
-      logger.error('Failed to delete skill', {
+      logger.failure('Failed to delete skill', error, {
         correlationId,
-        error: error instanceof Error ? error.message : String(error),
       });
       throw error;
     }
@@ -272,9 +263,8 @@ export class SkillService {
 
       return response;
     } catch (error) {
-      logger.error('Failed to import skills', {
+      logger.failure('Failed to import skills', error, {
         correlationId,
-        error: error instanceof Error ? error.message : String(error),
       });
       throw error;
     }

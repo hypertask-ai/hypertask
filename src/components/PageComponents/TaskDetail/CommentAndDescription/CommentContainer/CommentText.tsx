@@ -69,8 +69,6 @@ const PersistentFigmaComment = ({
       <Tiptap
         key={comment.id}
         allowPerks={allowPerks}
-        // CommentsContainer suppresses its standalone AttachmentView while this
-        // comment is editing, so the editor owns the attachment gallery here.
         carouselAttachments={comment.attachments}
         attachments={isMobile && isEditing ? comment.attachments : undefined}
         handleSave={redirectAPI}

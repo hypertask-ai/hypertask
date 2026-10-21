@@ -25,9 +25,6 @@ export const TutorialOnboardingScreen: React.FC<ITutorialOnboardingScreen> = ({
     const teamTitle = params?.get("teamTitle") || "";
     const teamId = params?.get("id") || "";
 
-    // Don't complete onboarding here: the tutorial is launched mid-sequence.
-    // Drop a cookie so exiting/finishing the tutorial returns to onboarding at the
-    // Launch step, letting the user finish the sequence instead of restarting it.
     const returnParams = new URLSearchParams({
       projectId,
       teamTitle,
@@ -35,7 +32,7 @@ export const TutorialOnboardingScreen: React.FC<ITutorialOnboardingScreen> = ({
       resumeKey: "launch-screen",
     });
     nookies.set(null, "onboarding_return", `/onboarding?${returnParams.toString()}`, {
-      maxAge: 60 * 60, // 1 hour
+      maxAge: 60 * 60,
       path: "/",
     });
 
@@ -44,7 +41,7 @@ export const TutorialOnboardingScreen: React.FC<ITutorialOnboardingScreen> = ({
       projectId,
       teamTitle,
       id: teamId,
-      launch: "true", // show the "Exit Tutorial" affordance so early exit is possible
+      launch: "true",
     });
     router.push(`/interactive-onboarding/landing?${searchParams.toString()}`);
   };

@@ -39,6 +39,7 @@ const MODELS = ["user", "userSetting", "profilePicture", "googleAccount", "team"
 
 function stubDatabase() {
   const writes = [];
+  prisma.featureFlag.findUnique = async () => ({ mode: "OFF" });
   for (const model of MODELS) {
     const delegate = prisma[model];
     if (!delegate) continue;

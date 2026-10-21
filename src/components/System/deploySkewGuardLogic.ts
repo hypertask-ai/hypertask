@@ -1,11 +1,6 @@
 export type ReloadDecision = "reload" | "retry" | "skip";
 
-// Boards are collaborative, continuously updating workspaces. Reloading one
-// underneath the user after every deploy looks like a navigation loop and
-// tears down its realtime subscription, so board tabs update only in place.
 export const isDeploySkewReloadEligiblePath = (pathname: string | null): boolean =>
-  // usePathname() is null before the router hydrates; treat that as a board
-  // until proven otherwise, so an unknown route is never hard-reloaded.
   pathname !== null && pathname !== "/project" && !pathname.startsWith("/project/");
 
 type SharedReloadState = {
@@ -26,8 +21,6 @@ export async function decideHiddenReload(
 
   const reachable = await state.canReachOrigin();
 
-  // A preflight result belongs only to the visibility cycle that started it.
-  // visible -> hidden is a new cycle even if the final state is hidden.
   if (
     state.isCancelled() ||
     state.getVisibilityCycle() !== state.expectedVisibilityCycle ||

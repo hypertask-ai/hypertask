@@ -25,8 +25,6 @@ function describeNode(node: DiagnosticNode | undefined) {
   if (node.nodeType === 3) return "#text";
 
   const name = (node.nodeName || "unknown").toLowerCase();
-  // Record that an ID exists, never its value: task titles and emails can
-  // legally appear in DOM attributes supplied by third-party content.
   const id = node.id ? "#id" : "";
   const classes = node.classList
     ? Array.from(node.classList).slice(0, 2).join(".")

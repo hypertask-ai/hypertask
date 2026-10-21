@@ -1412,7 +1412,7 @@ test("price tiers two and three are premium while tier one stays included", () =
   assert.equal(isPremiumAiModelKey("gpt-6.1-sol"), true);
 });
 
-test("Luna is included on Free plans only with the htpr-6722 flag", async () => {
+test("Luna is included on Free plans while other premium models stay gated", async () => {
   const {
     getDefaultAiModelOptionForPlan,
     getAiModelOptionById,
@@ -1425,36 +1425,21 @@ test("Luna is included on Free plans only with the htpr-6722 flag", async () => 
   const luna = getAiModelOptionById("gpt-6-luna");
   const sol = getAiModelOptionById("gpt-6.1-sol");
 
-  // Flag off: Free defaults to the cheapest tier-1 model and Luna is locked.
-  assert.equal(getDefaultAiModelOptionForPlan("Free").id, "gemini-3.5-flash-lite");
-  assert.equal(getDefaultAiModelOptionForPlan("Free", false, false).id, "gemini-3.5-flash-lite");
-  assert.equal(isPremiumAiModelDefinition(getAiModelDefinition("gpt-6-luna")), true);
-  // No project or team context is treated as Free.
-  await assert.rejects(
-    assertModelAllowedForPlan(null, luna, null),
-    /paid plan or your own API key/,
-  );
-
-  // Flag on: Luna is the Free default and passes the gate; Sol stays locked.
-  assert.equal(getDefaultAiModelOptionForPlan("Free", false, true).id, "gpt-6-luna");
+  assert.equal(getDefaultAiModelOptionForPlan("Free", false).id, "gpt-6-luna");
   assert.equal(isPremiumAiModelDefinition(getAiModelDefinition("gpt-6-luna"), true), false);
-  await assertModelAllowedForPlan(null, luna, null, undefined, true);
+  await assertModelAllowedForPlan(null, luna, null, undefined);
   await assert.rejects(
-    assertModelAllowedForPlan(null, sol, null, undefined, true),
+    assertModelAllowedForPlan(null, sol, null, undefined),
     /paid plan or your own API key/,
   );
 
-  // The flag never unlocks Luna for BYOK plans without their own key, and a
-  // saved Luna choice (for example an old GPT 5.4 Mini) drops to the default.
   const { isLunaBlockedForPlan } = loadTs("src/lib/aiModelOptions.ts");
-  assert.equal(isLunaBlockedForPlan(luna, "Free", false, false), true);
-  assert.equal(isLunaBlockedForPlan(luna, "Free", true, false), false);
-  assert.equal(isLunaBlockedForPlan(luna, "BYOK", true, false), true);
-  assert.equal(isLunaBlockedForPlan(luna, "BYOK", true, true), false);
-  assert.equal(isLunaBlockedForPlan(luna, "Pro", false, false), false);
-  assert.equal(isLunaBlockedForPlan(sol, "Free", false, false), false);
+  assert.equal(isLunaBlockedForPlan(luna, "Free", false), false);
+  assert.equal(isLunaBlockedForPlan(luna, "BYOK", false), true);
+  assert.equal(isLunaBlockedForPlan(luna, "BYOK", true), false);
+  assert.equal(isLunaBlockedForPlan(luna, "Pro", false), false);
+  assert.equal(isLunaBlockedForPlan(sol, "Free", false), false);
 
-  // Paid plans default to Luna either way.
   assert.equal(getDefaultAiModelOptionForPlan("Pro").id, "gpt-6-luna");
 });
 

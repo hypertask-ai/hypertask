@@ -1,9 +1,9 @@
-// Fire-and-forget crash beacon. The collector dedupes reports and creates a bug
-// ticket for the first occurrence.
 let sent = 0
 
+const CHUNK_LOAD_TIMEOUT_MS = 120_000
+
 export type ClientErrorPayload = {
-  source: string // where it came from: window.onerror, unhandledrejection, RootErrorBoundary, global-error
+  source: string
   message?: string
   stack?: string
   componentStack?: string
@@ -19,16 +19,7 @@ export function reportClientError(payload: ClientErrorPayload) {
     payload.componentStack,
   ].filter(Boolean).join('\n')
   if (payload.message?.trim().toLowerCase() === 'script error.') return
-  // TanStack Query throws this when an in-flight query is cancelled (e.g. a
-  // refetch superseded by navigation) — expected behavior, not an app bug.
   if (payload.message === 'CancelledError') return
-  // React Fizz's inline $RS helper can arrive after navigation or hydration
-  // has already discarded its streamed segment markers. React treats the
-  // equivalent missing-boundary race as safe to ignore; do not turn this
-  // framework cleanup race into an auto-created product bug. Keep the match
-  // tied to the exact runtime helper so real parentNode errors still report.
-  // Firefox 136 also reports the same $RS race as a bare "TypeError: b is
-  // null" without naming parentNode (HTPR-6423).
   if (
     payload.source === 'window.onerror' &&
     /^(?:(?:Uncaught TypeError: )?Cannot read properties of null \(reading 'parentNode'\)|(?:TypeError: )?can't access property "parentNode", [A-Za-z_$][\w$]* is null|(?:Uncaught )?(?:TypeError: )?[A-Za-z_$][\w$]* is null)$/.test(
@@ -38,44 +29,36 @@ export function reportClientError(payload: ClientErrorPayload) {
       payload.stack || ''
     )
   ) return
-  // Chromium can reject a cancelled fetch with this exact AbortError when a
-  // task-detail effect is torn down during navigation. It is an expected
-  // request cancellation, not a crash (HTPR-5018). Keep the stack/name check
-  // narrow so unrelated errors with similar prose are still reported.
   if (
     payload.source === 'unhandledrejection' &&
     payload.message === 'signal is aborted without reason' &&
     /^AbortError\b/.test(payload.stack || '')
   ) return
-  // The Android shell reports a dropped/offline native fetch as this bare
-  // TypeError. With no HTTP response, it is transport noise equivalent to the
-  // Axios "Network Error" below, not a server-side bug (HTPR-5078).
   if (
     payload.source === 'unhandledrejection' &&
     payload.message === 'Failed to fetch' &&
     /^TypeError\b/.test(payload.stack || '') &&
     /\bHypertaskApp\b/.test(navigator.userAgent)
   ) return
-  // Android WebView uses this lowercase form when the native transport drops.
-  // The root boundary already reloads the page, so only suppress its bug report.
   if (
     payload.source === 'global-error' &&
     payload.message === 'network error' &&
     /^TypeError: network error(?:\n|$)/.test(payload.stack || '') &&
     /\bHypertaskApp\b/.test(navigator.userAgent)
   ) return
-  // Bare axios network failure (offline, dropped connection, aborted on
-  // navigation) — no status code, nothing the app can act on.
   if (payload.message === 'Network Error') return
-  // Expired session: nookies_user outlives ht_session, so the app renders as
-  // logged in and every call 401s. axiosClient already recovers by clearing the
-  // cookie and sending the user to /login (HTPR-4182), so the rejection is
-  // expected auth recovery, not an app bug. Other status codes still report.
+  if (
+    payload.source === 'unhandledrejection' &&
+    payload.message === 'Request aborted' &&
+    payload.extra?.axiosCode === 'ECONNABORTED'
+  ) return
   if (/\bRequest failed with status code 401\b/.test(payload.message || '')) return
-  // Headless Chrome root-crashes this app with React #310 in ways real browsers
-  // never do (HTPR-4085), and our own automated QA is what runs headless. Those
-  // reports cost real triage time without describing a user-visible fault.
   if (navigator.webdriver === true || /HeadlessChrome/i.test(navigator.userAgent)) return
+  if (
+    /^Loading chunk \S+ failed\.\n\(timeout: /.test(payload.message || '') &&
+    typeof performance !== 'undefined' &&
+    performance.now() < CHUNK_LOAD_TIMEOUT_MS
+  ) return
   if (/(?:chrome|moz|safari|ms-browser)-extension:\/\//i.test(diagnostic)) return
   if (sent >= 3) return
   sent++
@@ -107,7 +90,6 @@ export function reportClientError(payload: ClientErrorPayload) {
       },
     })
     if (navigator.sendBeacon) {
-      // sendBeacon survives the tab crashing/navigating away.
       navigator.sendBeacon(
         '/api/errors',
         new Blob([body], { type: 'application/json' })
@@ -121,6 +103,5 @@ export function reportClientError(payload: ClientErrorPayload) {
       })
     }
   } catch {
-    // Telemetry must never break the app.
   }
 }

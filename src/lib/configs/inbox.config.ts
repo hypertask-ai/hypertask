@@ -2,20 +2,10 @@ import { NotificationType } from "@prisma/client";
 
 export const systemDefinedSplits = ["Important", "Decisions", "Updates", "Reactions", "@Mentions", "Agents", "Stale"]
 
-/**
- * HTPR-7092: Question comments that @mention you and still wait for your answer.
- * Rows also stay in their normal split; the flag-gated server marks them isDecision.
- */
 export const decisionsSplitName = "Decisions"
 
-/** Split holding agent housekeeping and routine output. */
 export const agentSplitName = "Agents"
 
-/**
- * Split holding rows whose task has been idle for staleDays+. Only exists on boards
- * with staleness tracking switched on (Project.stalenessEnabled); everywhere else
- * those rows stay in Updates. Appears when non-empty, like every split.
- */
 export const staleSplitName = "Stale"
 
 type PartialInboxNotificationConfig = {
@@ -38,12 +28,6 @@ export const inboxConfig = {
     reactionSplit: ["Reacted"],
     importantSplit: ["Comment", "Assigned", "TaskMovedToInbox", "TaskReminder", "TaskOverdue", "TaskUpdateDescription"],
 
-    /**
-     * Important is only for things waiting on you. When an agent performs one of these
-     * it is housekeeping (property change) or routine output (docs entry, review note),
-     * so it moves to the Agent split. An agent that needs an answer mentions you, and
-     * "Mentioned" is deliberately absent here so it still reaches Important.
-     */
     agentSplitTypes: [
         "Comment",
         "Assigned",
@@ -53,24 +37,10 @@ export const inboxConfig = {
         "TaskUpdateDescription",
     ],
 
-    /**
-     * HTPR-4769: Important = names you, on a task still alive.
-     * addressedAlways reach Important by themselves; addressedIfAssigned only when
-     * you are an assignee of the task. A dead task (archived, Done column, or stale
-     * for staleDays) demotes its rows to Updates; mentions survive a move to Done
-     * when the mention is newer than the move, and nothing survives archive/stale.
-     * Demotion re-classifies only; rows never leave the inbox without a manual drain.
-     */
     importantAddressedAlways: ["Assigned", "TaskReminder", "TaskMovedToInbox"],
     importantAddressedIfAssigned: ["Comment", "TaskOverdue", "TaskUpdateDescription"],
     staleDays: 21,
 
-    /**
-     * Events you performed yourself, on your own task. You already know they happened,
-     * so they never enter the inbox; the task stays findable via Ctrl+K.
-     * TaskMovedToInbox / TaskReminder / TaskOverdue are excluded on purpose: putting a
-     * task in your own inbox or snoozing it is exactly a self-action you want back.
-     */
     selfTriggeredHidden: [
         "Comment",
         "Assigned",
@@ -126,9 +96,7 @@ export const inboxConfig = {
         defaultSplitIndex: 0,
     },
 
-    // Expanded styling configuration
     colors: {
-        // Selection colors
         bulkSelected: {
             background: "#2178ca",
             text: "white",
@@ -136,7 +104,6 @@ export const inboxConfig = {
 
         },
 
-        // Text colors
         text: {
             primary: "text-white-black",
             secondary: "text-[#8E9093]",
@@ -144,7 +111,6 @@ export const inboxConfig = {
             darkGray: "text-icon-dark-gray",
         },
 
-        // Label colors
         labels: {
             default: "border-border-labelComponent text-label-component",
             selected: "text-white border-white",
@@ -152,7 +118,6 @@ export const inboxConfig = {
     },
 
 
-    // Responsive classes
     responsive: {
         padding: {
             horizontal: "sm:p-inbox-horizontal",
@@ -169,10 +134,7 @@ export const inboxConfig = {
         },
     },
 
-    // State-based styling functions
     bulkSelectionStyling: {
-
-        // Text styling
         notificationTag: (isBulkSelected: boolean) => ({
             border_color:isBulkSelected?"white":"black",
             text:isBulkSelected ? "text-white" : "text-white-black",
@@ -180,7 +142,6 @@ export const inboxConfig = {
         text: (isBulkSelected: boolean) =>
             isBulkSelected ? inboxConfig.colors.bulkSelected.text : inboxConfig.colors.text.secondary,
 
-        // Specific element styling
         timestamp: (isBulkSelected: boolean) =>
             isBulkSelected ? inboxConfig.colors.bulkSelected.text : inboxConfig.colors.text.secondary,
 
@@ -209,38 +170,29 @@ export const inboxConfig = {
             isBulkSelected ? "white" : "#696b6e",
     },
 
-    // Animation and interaction settings
     interactions: {
         hover: {
             debounceMs: 100,
         },
 
         keyboard: {
-            gKeyDelayMs: 5000, // from globalConstants.gThenKeyDelay
+            gKeyDelayMs: 5000,
         },
     },
 
-    // Modal and dialog settings
     modals: {
         subtaskLinking: {
             toggleKey: "CMD/CTRL+SHIFT+O",
         },
     },
 
-    // Visibility states
     visibility: {
         hidden: (value: number, index: number) => value !== index,
-        // HTPR-5515: the split wrapper carries an inline `display` value, and an
-        // inline style beats the UA stylesheet rule that the `hidden` attribute
-        // relies on. So `hidden` alone left every inactive split laid out as an
-        // empty `flex: 1` box, and those empty boxes ate the inbox height.
-        // Resolve display from the same predicate instead.
         display: (value: number, index: number) =>
             value !== index ? "none" : "flex",
         showBulkActions: (selectedCount: number) => selectedCount > 0,
     },
 
-    // URL and navigation patterns
     urls: {
         taskDetail: (projectId: number, uniqueIndex: number, mentionedQueryParam: string = "") =>
             `/detail/project-${projectId}/${uniqueIndex}?inboxFlow=true${mentionedQueryParam}`,
@@ -254,7 +206,6 @@ export const inboxConfig = {
         },
     },
 
-    // Date grouping configuration
     dateGrouping: {
         labels: {
             today: "Today",
@@ -268,7 +219,7 @@ export const inboxConfig = {
             "July", "August", "September", "October", "November", "December"
         ],
 
-        order: ["today", "yesterday", "thisWeek", "lastWeek"], // predefined groups come first
+        order: ["today", "yesterday", "thisWeek", "lastWeek"],
     },
 
 } satisfies PartialInboxNotificationConfig & Record<string, unknown>;

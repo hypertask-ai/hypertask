@@ -88,7 +88,7 @@ Use the eight named sizes from `tailwind.config.ts`:
 | `text-heading` | 24px | page headings |
 | `text-display` | 32px | rare display text |
 
-Prefer the named utilities over arbitrary `text-[Npx]`. Keep font weight quiet: regular for content, medium or semibold for controls and hierarchy, and bold only when the existing pattern calls for it. See `openwiki/typography.md` for surface-specific conventions.
+Prefer the named utilities over arbitrary `text-[Npx]`. Keep font weight quiet: regular for content, medium or semibold for controls and hierarchy, and bold only when the existing pattern calls for it. See `.claude/skills/reuse-existing-ui/reference/typography.md` for surface-specific conventions.
 
 ## Icons
 
@@ -138,7 +138,7 @@ Relevant markup lives in `NewCommentComponent.tsx`; action ordering lives in `At
 
 For changed user-facing UI, review the changed lines against this guide.
 
-A style finding gates only when the diff itself proves that the pull request introduced or materially extended a violation. Cite the changed file and line, name the violated rule, and point to the conforming token or nearby reference pattern. Report that concrete violation as `major` so `claude-review` blocks it.
+A style finding gates only when the diff itself proves that the pull request introduced or materially extended a violation. Cite the changed file and line, name the violated rule, and point to the conforming token or nearby reference pattern. Report that concrete violation as `major` so GitHub AI Review (`ai-review`) blocks it.
 
 Do not gate on:
 

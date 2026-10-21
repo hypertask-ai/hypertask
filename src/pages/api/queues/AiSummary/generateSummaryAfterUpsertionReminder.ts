@@ -1,5 +1,3 @@
-// pages/api/setupReminder.js
-// id:`notifications-for-task-${taskId}`
 import { scheduleJobById } from "@/lib/qstash";
 
 const QUEUE_PATH = "/api/queues/AiSummary/generateSummaryAfterUpsertionQueue";

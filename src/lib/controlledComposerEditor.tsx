@@ -10,8 +10,6 @@ import {
 } from "react";
 import { SafeSplitBlock } from "@/components/RTE/Extensions/SafeSplitBlock";
 
-// Dedicated editor for Agent Chat. useTiptapForAI also mounts AI-chat
-// mentions and slash commands, which send to the AI chat thread, not this one.
 export function ControlledComposerEditor({
   value,
   onChange,

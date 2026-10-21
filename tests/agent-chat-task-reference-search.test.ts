@@ -67,7 +67,7 @@ assert.match(
 
 const source = readAgentChatSource();
 const searchEffect = source.slice(
-  source.indexOf("// Same endpoint and request shape"),
+  source.indexOf("useEffect(() =>"),
   source.indexOf("const pickMention"),
 );
 const popover = source.slice(

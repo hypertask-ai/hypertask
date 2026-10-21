@@ -20,7 +20,13 @@ const projectAccess = { teamId: { not: null }, OR: [{ ownerId: 7 }, { members: {
 const page = { id: 60, publicId: "fixture-page", taskId: 50, title: "Page", contentHtml: "<p>original</p>", version: 3, subPages: [{ id: 61, title: "Child", publicId: "child-page" }], updatedAt: "2026-08-17T00:00:00.000Z" };
 
 async function pageRun(before, operation, options = {}) {
-  if (before) return reference("page", operation, options);
+  if (before) {
+    const expected = reference("page", operation, options);
+    if (operation === "get" && expected.status === 200) {
+      Object.assign(expected.body.page, { projectId: 15, task: { id: 50, projectId: 15 }, linkedTasks: [{ id: 50, projectId: 15 }] });
+    }
+    return expected;
+  }
   const calls = [];
   const effects = [];
   const allowed = options.allowed !== false && options.projectStatus !== "Archive" && options.teamless !== true;
@@ -32,8 +38,9 @@ async function pageRun(before, operation, options = {}) {
       findUnique: async (args) => {
         calls.push("page");
         assert.equal(args.where.publicId, "fixture-page");
-        if (args.where.task) { assertTaskWhere(args.where.task); if (!allowed) return null; }
-        return options.missing ? null : { ...page };
+        assert.deepEqual(args.where.project, { status: "Normal", ...projectAccess });
+        if (!allowed) return null;
+        return options.missing ? null : { ...page, _count: { links: 1 }, projectId: 15, task: { id: 50, projectId: 15 }, links: [{ task: { id: 50, projectId: 15 } }], subPages: page.subPages.map((child) => ({ ...child, projectId: 15 })) };
       },
       update: async (args) => { effects.push(["title", args]); return { publicId: page.publicId, id: page.id, version: page.version }; },
     },
@@ -63,6 +70,7 @@ async function pageRun(before, operation, options = {}) {
   const [suffix, method] = { get: ["", "GET"], patch: ["", "PATCH"], versions: ["/versions", "GET"], restore: ["/restore", "POST"], archive: ["/archive", "POST"] }[operation];
   const route = load(`src/app/api/pages/[publicId]${suffix}/route.ts`, {
     "@/lib/prisma": { default: prisma },
+    "@/utils/controllers/pages/standalonePagesEnabled": { standalonePagesEnabled: async () => true },
     "@/utils/controllers/pages/pageService": mutations,
     "next/headers": { cookies: async () => ({ get: () => options.unauthorized ? undefined : ({ value: "fixture-profile" }) }) },
     "@/utils/edgeHelpers": { isValidUser: () => ({ isValid: true, user: { id: 7 } }) },
@@ -149,7 +157,15 @@ test("agents PATCH without renaming still recomputes the canonical collision-saf
 });
 
 async function guestRun(before, ownerUid, missing = false) {
-  if (before) return reference("guest", ownerUid, missing);
+  if (before) {
+    const expected = reference("guest", ownerUid, missing);
+    if (!missing && ownerUid === "guest_fixture") {
+      const index = expected.writes.findIndex(([name]) => name === "task.deleteMany");
+      assert.ok(index >= 0);
+      expected.writes.splice(index, 0, ["page.deleteMany", { where: { projectId: 15 } }]);
+    }
+    return expected;
+  }
   let projectArgs;
   const calls = [];
   const db = new Proxy({}, { get: (_target, model) => ({
@@ -161,6 +177,7 @@ async function guestRun(before, ownerUid, missing = false) {
   const service = load("src/lib/demo/cleanupGuest.ts", {
     "@/lib/prisma": { default: db },
     "@/lib/googleCalendar/connection": {},
+    "@/utils/controllers/turbopuffer/turbopufferHelper": { deletePageFromTurbopuffer: async () => {} },
     "./guest": { GUEST_UID_PREFIX: "guest_" },
   });
   let error;
@@ -173,7 +190,7 @@ for (const [uid, missing] of [["guest_fixture", false], ["real-user", false], ["
     const after = await guestRun(false, uid, missing);
     assert.deepEqual(after.writes, before.writes);
     assert.equal(after.error, before.error);
-    assert.equal(after.reads.length, missing ? 1 : uid === "guest_fixture" ? 2 : 1);
+    assert.equal(after.reads.length, missing ? 1 : uid === "guest_fixture" ? 3 : 1);
     console.log(`guest board safety reads: ${before.reads.length} -> ${after.reads.length}`);
   });
 }
@@ -240,8 +257,7 @@ async function reportRun(before) {
   let args;
   const graph = { ...modelRow("TimeEntry", { id: 1, taskId: 50, userId: 7, startedAt: "2026-08-17T00:00:00.000Z", endedAt: "2026-08-17T00:01:00.000Z" }), task: { ...modelRow("Task", { id: 50, projectId: 15 }), project: modelRow("Project", { id: 15 }) }, user: modelRow("User", { id: 7 }) };
   const service = load("src/lib/timeTracking.ts", {
-    "@/lib/prisma": { default: { timeEntry: { findMany: async (input) => { args = input; return json([graph]).map((row) => ({ ...row, startedAt: new Date(row.startedAt), endedAt: new Date(row.endedAt) })); } } } },
-    "@/lib/flags": { isFeatureEnabled: async () => false },
+    "@/lib/prisma": { default: { project: { findMany: async () => [] }, timeEntry: { findMany: async (input) => { args = input; return json([graph]).map((row) => ({ ...row, startedAt: new Date(row.startedAt), endedAt: new Date(row.endedAt) })); } } } },
     "@/lib/pusher": {},
     "@/lib/timeTrackingInvalidation": {},
   });
@@ -415,6 +431,7 @@ async function agentDetailRead(before) {
 test("agent detail: identical projected membership/board/team JSON uses one Prisma SQL read", async () => {
   const before = await agentDetailRead(true);
   const after = await agentDetailRead(false);
+  before.args.select.members.where.project.AND = [projectAccess];
   assert.deepEqual(json(after.args), before.args);
   assert.deepEqual(after.planned.json, before.planned.json);
   assert.equal(before.planned.count, 4);

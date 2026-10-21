@@ -8,13 +8,15 @@ import { readJsonBody } from '@/lib/mcp/readJsonBody'
 import { parsePositiveInt } from '@/lib/parsePositiveInt'
 import { loadCurrentUser } from '@/lib/auth/currentUser'
 import { HTPR_6924_REST_COMPAT_FLAG, isFeatureEnabled } from '@/lib/flags'
-import { getProjectWhere } from '@/utils/controllers/projects/getAllIncludes'
+import { HTPR_7298_STANDALONE_PAGES_FLAG } from '@/lib/flags/definitions/htpr-7298-standalone-pages'
+import { getProjectWhere, taskWriteAccessWhere } from '@/utils/controllers/projects/getAllIncludes'
 import {
   createPage,
   type PageContentType,
 } from '@/utils/controllers/pages/pageService'
 
 type CreatePageBody = {
+  project_id?: unknown
   task_id?: unknown
   title?: unknown
   content?: unknown
@@ -42,7 +44,6 @@ export async function POST(request: NextRequest) {
       try {
         restCompat = await isFeatureEnabled(HTPR_6924_REST_COMPAT_FLAG, currentUser.userId)
       } catch {
-        // A failed flag probe must leave the legacy HTTP contract unchanged.
       }
     }
 
@@ -85,7 +86,15 @@ export async function POST(request: NextRequest) {
     const taskId = restCompat
       ? (typeof body.task_id === 'number' ? parsePositiveInt(body.task_id, { safe: false, max: Infinity }) : null)
       : positiveInteger(body.task_id)
-    if (taskId === null) {
+    const standalone = body.task_id === undefined && body.project_id !== undefined
+    if (standalone && !(await isFeatureEnabled(HTPR_7298_STANDALONE_PAGES_FLAG, userId))) {
+      return NextResponse.json({ error: 'Not found' }, { status: 404 })
+    }
+    const projectId = standalone ? positiveInteger(body.project_id) : null
+    if (standalone && projectId === null) {
+      return NextResponse.json({ error: 'project_id must be a positive integer' }, { status: 400 })
+    }
+    if (!standalone && taskId === null) {
       return NextResponse.json({ error: 'task_id must be a positive integer' }, { status: 400 })
     }
     if (typeof body.content !== 'string') {
@@ -117,20 +126,28 @@ export async function POST(request: NextRequest) {
       parentPageId = parsedParentPageId
     }
 
-    const task = await prisma.task.findFirst({
-      where: {
-        id: taskId,
-        project: {
-          status: 'Normal',
-          ...getProjectWhere(userId, null),
+    if (standalone) {
+      const project = await prisma.project.findFirst({
+        where: { id: projectId!, status: 'Normal', ...taskWriteAccessWhere(userId, null) },
+        select: { id: true },
+      })
+      if (!project) return NextResponse.json({ error: 'Board not found' }, { status: 404 })
+    } else {
+      const task = await prisma.task.findFirst({
+        where: {
+          id: taskId!,
+          project: {
+            status: 'Normal',
+            ...getProjectWhere(userId, null),
+          },
         },
-      },
-      select: { id: true },
-    })
-    if (!task) return NextResponse.json({ error: 'Task not found' }, { status: 404 })
+        select: { id: true },
+      })
+      if (!task) return NextResponse.json({ error: 'Task not found' }, { status: 404 })
+    }
 
     const page = await createPage({
-      taskId,
+      ...(standalone ? { projectId: projectId! } : { taskId: taskId! }),
       title: body.title as string | undefined,
       content: body.content,
       contentType: contentType as PageContentType,

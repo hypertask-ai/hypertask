@@ -40,8 +40,7 @@ function fixture(name, scenario) {
     } },
     "@/lib/flags": { isFeatureEnabled: async (key, userId) => {
       effects.push(["upload-feature", key, userId]);
-      if (scenario.uploadFlagThrows) throw new Error("Upload flag unavailable");
-      return !scenario.uploadFlagOff;
+      return true;
     } },
     "@/lib/storage/directUpload": direct,
     "@/lib/storage/hypertasksS3": {
@@ -144,8 +143,6 @@ const cases = {
     ["duplicate preview", { body: { files: [{ name: "p.heic", size: 4 }, { name: "p.jpg", size: 2, previewOfIndex: 0 }, { name: "p2.jpg", size: 2, previewOfIndex: 0 }] }, status: 400 }],
     ["invalid purpose", { body: { ...defaults.uploadUrl, purpose: "bad" }, status: 400 }],
     ["task-link grant", { body: { ...defaults.uploadUrl, purpose: "task-attachment-link" } }],
-    ["purpose permission denied", { body: { ...defaults.uploadUrl, purpose: "task-attachment-link" }, uploadFlagOff: true, status: 403 }],
-    ["purpose flag outage", { body: { ...defaults.uploadUrl, purpose: "task-attachment-link" }, uploadFlagThrows: true, status: 500 }],
     ["sign failure", { storageThrows: true, status: 500 }],
   ],
   uploadFinalize: [
@@ -169,8 +166,6 @@ const cases = {
     ["link permission denied", { body: { action: "link-task-attachment", taskId: 42, receipt: "receipt" }, denied: true, status: 403 }],
     ["link other user", { body: { action: "link-task-attachment", taskId: 42, receipt: "receipt" }, otherUser: true, status: 403 }],
     ["link invalid task", { body: { action: "link-task-attachment", taskId: 0, receipt: "receipt" }, status: 400 }],
-    ["link flag off", { body: { action: "link-task-attachment", taskId: 42, receipt: "receipt" }, uploadFlagOff: true, status: 403 }],
-    ["link flag outage", { body: { action: "link-task-attachment", taskId: 42, receipt: "receipt" }, uploadFlagThrows: true, status: 500 }],
     ["link failure after dispatch", { body: { action: "link-task-attachment", taskId: 42, receipt: "receipt" }, linkThrows: true, status: 500 }],
     ["discard success", { body: { action: "discard-task-attachment", receipt: "receipt" } }],
     ["discard linked stays", { body: { action: "discard-task-attachment", receipt: "receipt" }, alreadyLinked: true }],

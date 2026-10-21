@@ -261,7 +261,10 @@ for (const initialIsMobile of [false, true]) {
     await hydrateStreamedConsumer(
       (children) => React.createElement(MobileViewProvider, { initialIsMobile }, children),
       useMobileView, initialIsMobile, !initialIsMobile,
-      () => { window.innerWidth = initialIsMobile ? 1440 : 390; },
+      () => {
+        window.innerWidth = initialIsMobile ? 1440 : 390;
+        window.matchMedia = (query) => ({ matches: query === "(min-width: 768px)" && window.innerWidth >= 768, addEventListener() {}, removeEventListener() {} });
+      },
     );
   });
 }

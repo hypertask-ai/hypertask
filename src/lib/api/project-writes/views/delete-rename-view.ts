@@ -44,7 +44,6 @@ const route = (method: string) => taskWriteRoute({
       const newSlug = method === "POST" ? await getUniqueSlug(target.project_view_id, title) : null;
       const result = await prisma.$transaction(async tx => {
         await acquireBoardFilterWriteLock(tx, viewProjectId);
-        // Membership and visibility may have changed while waiting for the lock.
         const current = await tx.view.findFirst({ where: { ...where, project_view_id: target.project_view_id }, select });
         if (!current) return null;
         await assertViewIsNotManagedSmartSplit(tx, viewProjectId, current.id);

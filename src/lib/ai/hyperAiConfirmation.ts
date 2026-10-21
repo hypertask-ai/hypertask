@@ -44,11 +44,6 @@ function commentOriginKey(commentId: number) {
   return `hyperai_comment_origin:${commentId}`;
 }
 
-/**
- * A comment that has entered any edit path can never be immutable again. The
- * receipt is removed before the database write, so edit-and-restore cannot
- * recreate approval eligibility by returning to the original text.
- */
 export async function invalidateHyperAiCommentOrigin(
   commentId: number,
   getRedisClient: () => Promise<ConfirmationRedis> = getRedis,
@@ -61,11 +56,6 @@ function commentTextHash(text: string) {
   return createHash("sha256").update(text).digest("hex");
 }
 
-/**
- * Record the immutable creation payload while the shared comment-create
- * controller still owns it. Comment rows do not have updatedAt, so approval
- * later compares the live row against this short-lived server-side receipt.
- */
 export async function recordHyperAiCommentOrigin({
   commentId,
   userId,
@@ -154,11 +144,6 @@ function parsePreview(value: string | null) {
   }
 }
 
-/**
- * HyperAI write confirmation is tied to server-validated message identity.
- * A distinct later message must explicitly approve the stored proposal before
- * GETDEL consumes it, so replays and same-message model calls stay read-only.
- */
 export async function requireHyperAiCommentConfirmation({
   userId,
   sessionId,
@@ -185,9 +170,6 @@ export async function requireHyperAiCommentConfirmation({
     const recordPreview = async () => {
       previewsIssuedThisRequest.add(operationKey);
       await redis.set(tokenKey, previewValue, "EX", PREVIEW_TTL_SECONDS);
-      // A plain human approval can only refer to one proposal. Publishing a
-      // new proposal replaces the session pointer, so older operation tokens
-      // cannot also consume the same later approval comment.
       await redis.set(
         sessionProposalKey,
         activeProposalValue,

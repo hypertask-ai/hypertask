@@ -7,6 +7,7 @@ const ts = require("typescript");
 const root = path.resolve(__dirname, "..");
 const read = (file) => fs.readFileSync(path.join(root, file), "utf8");
 function load(file, stubs = {}) {
+  stubs = { "@/lib/auth/agentScope": require("./helpers/agent-board-scope.cjs").enforcedScope, ...stubs };
   const javascript = ts.transpileModule(read(file), {
     compilerOptions: { esModuleInterop: true, module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2020 },
   }).outputText;
@@ -50,7 +51,8 @@ function updateHarness(initial = {}, parents = []) {
     "@/utils/controllers/tasks/parentTaskAccess": parentAccess,
     "@/lib/prisma": { __esModule: true, default: prisma },
     "@prisma/client": client,
-    "@/lib/telemetry/activationOccurrences": { recordAgentTaskCompletion: noop },
+    "@/lib/telemetry/analyticsIntents": { enqueueAnalyticsIntent: async () => "intent-key", processAnalyticsIntentSoon: () => {}, enqueueOutsideSaveAndProcessSoon: async (enqueue) => { await enqueue() } },
+    "@/lib/telemetry/activationOccurrences": { enqueueAgentTaskCompletion: noop },
     "../activities/createActivity": { __esModule: true, default: noop },
     "../activities/createTaskMovedActivity": { createTaskMovedActivityInTransaction: noop },
     "../activities/sendTaskMoveNotification": { sendTaskMoveNotificationIfNeeded: noop },
@@ -67,6 +69,7 @@ function updateHarness(initial = {}, parents = []) {
     "./invokeTaskDelete": {},
     "@/lib/mcp/webhooks/outbox": { persistBoardWebhookEvent: async () => [], publishBoardWebhookDeliveries: noop },
     "@/lib/agentWebhooks/outbox": { persistAgentTaskUpdatedWebhook: async () => [], publishAgentWebhookDeliveries: noop },
+    "@/lib/telemetry/savedWork": { enqueueBoardCreated: async () => "board-key", processAnalyticsIntentSoon: () => {}, enqueueTaskCreated: async () => "task-key", creationChannelFromHeader: () => 'web', CREATION_CHANNEL_HEADER: 'X-Hypertask-Creation-Channel', CREATION_AGENT_HEADER: 'X-Hypertask-Creation-Agent' },
     "@/lib/mcp/tasks/humanMutationOverride": mutation,
     "@/lib/mcp/tasks/agentDoneLifecycle": { assertAgentMayLeaveDone: noop, AgentDoneLifecycleDeniedError: class extends Error {} },
     "@/lib/cycleService": { assertCycleAssignable: noop, CycleAssignmentError: class extends Error {} },
@@ -165,6 +168,7 @@ function createHarness(parents) {
     "@/lib/mcp/webhooks/taskEvents": { createTaskWithBoardWebhookOutbox: async (_prisma, _actor, callback) => ({ ...await callback(tx), boardWebhookDeliveryIds: [] }) },
     "@/lib/mcp/webhooks/outbox": { publishBoardWebhookDeliveries: noop },
     "@/lib/agentWebhooks/outbox": { persistAgentTaskCreatedPending: noop },
+    "@/lib/telemetry/savedWork": { enqueueBoardCreated: async () => "board-key", processAnalyticsIntentSoon: () => {}, enqueueTaskCreated: async () => "task-key", creationChannelFromHeader: () => 'web', CREATION_CHANNEL_HEADER: 'X-Hypertask-Creation-Channel', CREATION_AGENT_HEADER: 'X-Hypertask-Creation-Agent' },
     "@/lib/auth/resolveActingAgent": { resolveActingAgent: () => ({ ok: true, agentId: null }) },
     "@/lib/auth/session": { verifySession: () => null },
     "@/utils/controllers/projects/getAllIncludes": { taskWriteAccessWhere: () => ({}) },
@@ -228,7 +232,7 @@ const readerWiring = [
   ["src/utils/controllers/tasks/getAll.ts", /json:tasks\.map\(stripForeignTaskRelations\)/],
   ["src/utils/controllers/tasks/getArchivedTasksByProject.ts", /attachWaitingOnUsers\(tasks\.map\(stripForeignTaskRelations\)\)/],
   ["src/lib/mcp/tasks/mappers.ts", /mapTaskToMcpGetResponse[\s\S]*task = stripForeignTaskRelations\(task\)/],
-  ["src/lib/mcp/operations/tasks/operation.ts", /tasks\.map\(task => \{\s*task = stripForeignTaskRelations\(task\)/],
+  ["src/lib/mcp/operations/tasks/operation.ts", /tasks\.map\(task => \{\s*(?:recordAgentBoardScopeMiss\(task\.projectId, "read"\);\s*)?task = stripForeignTaskRelations\(task\)/],
   ["src/lib/ai/tools/listTasks.ts", /tasks\.map\(\(task\) => \{\s*task = stripForeignTaskRelations\(task\)/],
   ["src/utils/controllers/tasks/getSharedTask.ts", /shared\.task = stripForeignTaskRelations\(shared\.task\)/],
   ["src/utils/controllers/share/getProject.ts", /project\.tasks = project\.tasks\.map\(stripForeignTaskRelations\)/],

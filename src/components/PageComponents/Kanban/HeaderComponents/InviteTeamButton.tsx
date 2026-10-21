@@ -21,11 +21,9 @@ export const InviteTeamButton: React.FC<InviteTeamButtonProps> = ({
   const toggleInviteModal = () =>
     setShowCommands({ show: true, mode: CommandMode.InviteMember });
 
-  // For trial users: show prominent button
   return (
     <>
       <HeaderIconWrapper
-        // id={DIV_ID_CONSTANTS.inviteTeamButton}
         className={cn(
           " hover:text-icon-hover-gray text-white-black",
           CLASS_NAME_CONSTANTS.inviteTeamButton,

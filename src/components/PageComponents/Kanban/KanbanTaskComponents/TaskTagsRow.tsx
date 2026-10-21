@@ -5,8 +5,8 @@ import TaskLabelComponent from '@/components/Modals/CreateLabel/TaskLabelCompone
 import EstimateLabelComponent from '@/components/Modals/TaskEstimate/EstimateLabelComponent';
 import PriorityLabelComponent from '@/components/Modals/TaskPriority/PriorityLabelComponent';
 import { IAgent, IEstimate, IPriority, IProject, ITaskLabel, ITask } from '@/models/model';
-import { formatElapsed, useTimerNow } from '@/components/PageComponents/TaskDetail/TaskInfoColumn/TaskTime';
-import { useBoardRunningTimers } from '@/hooks/Task Detail/useTimeTracking';
+import { formatElapsed } from '@/lib/timeDuration';
+import { useBoardRunningTimers, useTimerNow } from '@/hooks/Task Detail/useTimeTracking';
 import { displayedBoardTimeSeconds, type BoardTimeTotal } from '@/lib/boardTimeTotals';
 import { useQuery } from '@tanstack/react-query';
 import type { CustomFieldType } from '@prisma/client';
@@ -65,16 +65,11 @@ const TaskTagsRow:React.FC<ITaskTopRow>  = ({
         : null
       const runningTimer = runningTimers.get(task.id)
       const timeTotal = timeTotals.get(task.id)
-      // ponytail: ITask has no customFieldValues in the shared model yet (HTPR-3805 is
-      // still landing in pieces); board payload includes it, so cast locally like
-      // TableView.tsx's getCustomFieldValue does, rather than widen the shared type.
       const customFieldValues = (task as ITask & { customFieldValues?: CustomFieldValue[] }).customFieldValues
 
 
       const handleClick = async(modal:"Priority"|"Estimate"|"TaskLabels"|"DueDate"|"Assignees") => {
         updateTaskFocus(task)
-        // task.sectionId && await Learn more about JS/TS refactorings
-    // updateActiveItemAndItemInView(task.id, task.projectId, task.sectionId)
         
         if (modal==="Assignees") setShowAssignModal(true)
         else if (modal==="Estimate") setShowEstimateModal(true)
@@ -119,7 +114,6 @@ const TaskTagsRow:React.FC<ITaskTopRow>  = ({
         Draft
       </span>
     )}
-    {/* ============ priorty and labels section  ==============*/}
     {
       dueDate ?
       <>
@@ -135,7 +129,6 @@ const TaskTagsRow:React.FC<ITaskTopRow>  = ({
           
     }
     {priority?
-              // {/* ---------- priority label */}
               <>
                 <PriorityLabelComponent 
                   stopPropogation={true}
@@ -149,7 +142,6 @@ const TaskTagsRow:React.FC<ITaskTopRow>  = ({
             <></>
           }
           {estimate?
-              // {/* ---------- Estimate label */}
               <>
                 <EstimateLabelComponent 
                   flexBasis={false}
@@ -163,9 +155,7 @@ const TaskTagsRow:React.FC<ITaskTopRow>  = ({
           }
 
 
-          {/* ===================== task labels (capped, +N overflow) ================= */}
           {(() => {
-            // ponytail: cap visible tags at 3 so the title stays readable; rest collapse to +N
             const MAX_LABELS = 3;
             const labels = (taskLabels ?? []).filter(l => l.label?.value);
             const extra = labels.length - MAX_LABELS;
@@ -193,10 +183,8 @@ const TaskTagsRow:React.FC<ITaskTopRow>  = ({
             );
           })()}
 
-          {/* ===================== custom field chips (cap 3, quiet overflow) ================= */}
           <CustomFieldChips projectId={task.projectId} values={customFieldValues} />
 
-          {/* ===================== sub task count ================= */}
     </div>
     :<></>
   )
@@ -205,10 +193,6 @@ const TaskTagsRow:React.FC<ITaskTopRow>  = ({
 type TCustomField = { id: string; name: string; type: CustomFieldType };
 type CustomFieldValue = { fieldId: string; value: string; numericValue: number | null };
 
-// An agent chip has to be tellable apart from a tag chip at a glance, or the
-// whole point of splitting agents out is lost. It reuses the label pill's fill
-// and geometry and adds the robot the sidebar already uses for agent counts,
-// rather than inventing a marker (HTPR-5054).
 const AgentChip = ({ agent, onClick }: { agent: IAgent; onClick: () => void }) => (
   <LabelWrapper
     onClick={(e) => {
@@ -223,8 +207,6 @@ const AgentChip = ({ agent, onClick }: { agent: IAgent; onClick: () => void }) =
   </LabelWrapper>
 );
 
-// ponytail: reuses the same ["customFields", projectId] query key as TableView —
-// react-query dedupes the fetch across every card, no per-card network call.
 const CustomFieldChips = ({ projectId, values }: { projectId: number; values?: CustomFieldValue[] }) => {
   const { data: customFields = [] } = useQuery<TCustomField[]>({
     queryKey: ["customFields", projectId],
@@ -236,7 +218,6 @@ const CustomFieldChips = ({ projectId, values }: { projectId: number; values?: C
 
   const valueByFieldId = new Map(values.map((v) => [v.fieldId, v]));
 
-  // ponytail: cap at 3 field chips, no "+N" overflow — stays quiet per no-new-chrome rule
   const MAX_FIELD_CHIPS = 3;
   const chips = customFields
     .map((field) => {

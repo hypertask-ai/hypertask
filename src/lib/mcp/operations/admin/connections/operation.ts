@@ -1,3 +1,4 @@
+import { reportMcpOperationCrash } from "@/lib/mcp/operationCrashReport";
 import { wrapMcpRoute } from '@/lib/mcp/routeWrapper'
 import { NextRequest, NextResponse } from "next/server";
 
@@ -35,6 +36,7 @@ export async function GET(request: NextRequest) {
     });
   } catch (error) {
     console.error("[Admin Connections] Failed to list connections:", error);
+    reportMcpOperationCrash(request, error);
     return NextResponse.json(
       { success: false, error: "Failed to list connections" },
       { status: 500 },

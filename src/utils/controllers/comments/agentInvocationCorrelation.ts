@@ -1,20 +1,7 @@
 import type { Prisma } from "@prisma/client";
 
-/**
- * Correlating an agent's answer back to the request that invoked it.
- *
- * An agent-targeted `Mentioned` notification is the durable invocation record.
- * A comment mention stores the invoking comment on that row, so callers that
- * know the comment can point at it. A description mention has no comment at
- * all, so its only stable handle is the notification id itself (HTPR-5437).
- *
- * Both pointers address the same row. Accepting them together would let a
- * reply claim a request it was not answering, so exactly one is allowed.
- */
 export interface AgentInvocationCorrelationInput {
-  /** Invoking comment id, for a comment mention. */
   sourceCommentId?: number | null;
-  /** Agent `Mentioned` notification id, for any mention including a description. */
   invocationId?: number | null;
 }
 
@@ -54,11 +41,6 @@ type AgentInvocationNotificationStore = Pick<
   "findFirst" | "updateMany" | "findUnique"
 >;
 
-/**
- * Returns the Prisma predicate that identifies the invoked request, or null
- * when the caller supplied no correlation. Routine agent comments carry none
- * and must never infer intent.
- */
 export function buildAgentInvocationSelector({
   sourceCommentId,
   invocationId,
@@ -71,17 +53,12 @@ export function buildAgentInvocationSelector({
   return null;
 }
 
-/** True when the reply names the exact request it answers. */
 export function hasAgentInvocationCorrelation(
   input: AgentInvocationCorrelationInput
 ): boolean {
   return isPresent(input.sourceCommentId) || isPresent(input.invocationId);
 }
 
-/**
- * Atomically consumes one persisted request and returns its human requester.
- * A concurrent retry reuses the winning comment instead of posting twice.
- */
 export async function claimPendingAgentInvocation({
   notifications,
   taskId,

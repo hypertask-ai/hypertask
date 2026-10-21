@@ -29,7 +29,6 @@ const SCOPE_PURPOSES: Record<string, string> = {
 
 export default async function AddToSlackPage() {
   const user = await getServerCookieUser();
-  // Anonymous visitors pass -1: only an EVERYONE flag passes the mode check.
   if (!(await isFeatureEnabled(HTPR_4857_ADD_TO_SLACK_FLAG, user?.id ?? -1))) {
     notFound();
   }
@@ -39,8 +38,6 @@ export default async function AddToSlackPage() {
     user?.id ?? -1,
   );
   const headerList = await headers();
-  // Allowlist-validated host; falls back to the canonical app origin, so a
-  // poisoned forwarded-host header cannot steer the Slack redirect_uri.
   const authorizeUrl = buildSlackAuthorizeUrl(
     getRequestBaseUrl(
       new Request("https://hypertask.internal", { headers: headerList }),

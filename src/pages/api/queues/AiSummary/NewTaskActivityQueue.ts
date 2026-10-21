@@ -19,10 +19,6 @@ async function handler(req: NextApiRequest, res: NextApiResponse) {
       return res.status(200).json({ skipped: true });
     }
 
-    // Drop the ids we just handled from the accumulator so the next debounce window
-    // starts fresh. SREM (not del) preserves ids a concurrent activity added after
-    // this job was scheduled. Only runs on the non-throw path - if summary
-    // generation threw we keep the ids so the next activity retries them.
     if (job.listOfCommentsToUpsertById?.length) {
       try {
         const redis = await getRedis();
@@ -41,7 +37,6 @@ async function handler(req: NextApiRequest, res: NextApiResponse) {
     if (error instanceof SummaryRetryableError) {
       return res.status(503).json({ ok: false, retry: true });
     }
-    // Return 200 so QStash does not retry an error we have already handled/logged.
     return res.status(200).json({ ok: false });
   }
 }

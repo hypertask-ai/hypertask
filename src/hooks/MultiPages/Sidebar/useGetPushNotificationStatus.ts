@@ -8,7 +8,6 @@ export const useGetPushNotificationStatus = (fcmToken:string|undefined|null, ini
     return useQuery({
         queryKey:[prefixKeyUseGetPushStatus,fcmToken?"found":"not-found"], 
         queryFn:() => fetchPushNotificationStatus(fcmToken),
-        // Only run the query when we have a valid token
         enabled: !!fcmToken,
         initialData:initialData??[]
 

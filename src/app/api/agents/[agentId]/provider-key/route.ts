@@ -12,24 +12,12 @@ import {
   upsertOwnedAgentProviderKey,
 } from "@/lib/agents/visibility";
 
-/**
- * Per-agent provider keys (HTPR-5389). An agent with its own key runs on that
- * provider account, so its spend is a real invoice on that account instead of
- * a share of the team pot.
- *
- * Custom endpoints stay team-only: they carry a base URL and GDPR flag that
- * belong to team settings, not to a single agent.
- */
 const UNSUPPORTED_AGENT_PROVIDERS = new Set<string>(["custom"]);
 
 function isAgentProviderKey(value: unknown): value is TByokProviderKey {
   return isByokProviderKey(value) && !UNSUPPORTED_AGENT_PROVIDERS.has(value);
 }
 
-/**
- * nookies_user is client-writable, so its id is only a claim. Identity is the
- * signed ht_session agreeing with that claim, or a Better Auth session.
- */
 async function authenticatedUserId(request: NextRequest) {
   const [identity, sessionUser] = await Promise.all([
     verifyCookieIdentity(
@@ -43,7 +31,6 @@ async function authenticatedUserId(request: NextRequest) {
   return sessionUser?.userId ?? null;
 }
 
-/** Resolves the agent only when the caller owns it; null means 401/404. */
 async function requireOwnedAgent(request: NextRequest, ref: string) {
   const userId = await authenticatedUserId(request);
   if (!userId) return { error: "Unauthorized" as const, status: 401 };

@@ -7,6 +7,7 @@ const ts = require("typescript");
 const root = path.resolve(__dirname, "..");
 
 function load(relativePath, stubs) {
+  stubs = { "@/lib/auth/agentScope": require("./helpers/agent-board-scope.cjs").enforcedScope, ...stubs };
   const javascript = ts.transpileModule(
     fs.readFileSync(path.join(root, relativePath), "utf8"),
     {
@@ -102,6 +103,7 @@ function harness() {
     "@/lib/prisma": { __esModule: true, default: prisma },
   });
   const webhookModule = load("src/lib/mcp/webhooks/taskEvents.ts", {
+    "../../telemetry/savedWork": { enqueueTaskCreated: async () => "task-key", processAnalyticsIntentSoon: () => undefined },
     "./outbox": {
       persistBoardWebhookEvent: async (_tx, _projectId, event) => {
         deliveries.push(event);
@@ -115,7 +117,7 @@ function harness() {
     "@/lib/flags/definitions/htpr-7131-index-new-tickets": load("src/lib/flags/definitions/htpr-7131-index-new-tickets.ts", {}),
     "../description/common-description-create": { __esModule: true, default: async () => undefined },
     "@/lib/prisma": { __esModule: true, default: prisma },
-    "@/lib/ai/labelClassifier": { scheduleClassifyTaskAiLabels: () => undefined },
+    "@/lib/ai/labelClassifier": { scheduleClassifyNewTaskAiLabels: () => undefined },
     "./getNextUniqueTaskIndex": indexModule,
     "@/utils/controllers/projects/getAllIncludes": { taskWriteAccessWhere: () => ({}) },
     "@/utils/controllers/assignees/autoAssignForSection": { autoAssignForSection: async () => "ready" },

@@ -1,3 +1,4 @@
+import { reportMcpOperationCrash } from '@/lib/mcp/operationCrashReport'
 import { wrapMcpRoute, validateMcpRouteAuth as validateMcpAuth, checkMcpRouteRateLimit as checkMcpRateLimit, readMcpRouteJsonBody as readJsonBody } from '@/lib/mcp/routeWrapper'
 import { NextRequest, NextResponse } from 'next/server'
 
@@ -11,9 +12,6 @@ import { isSubtaskSetting } from '@/models/Views/model'
 import { sanitizeBoardFilters, projectVisibleViewRelations } from '@/utils/helperFunctions/Views/BoardFilterSanitizer'
 
 
-// The create-view payload as it arrives over the wire. Everything past
-// project_id/title is validated by createView, so it stays at the input type
-// rather than being re-declared here.
 type CreateViewRequestBody = Partial<
   Pick<
     CreateViewInput,
@@ -76,23 +74,6 @@ export interface CreateViewResponse {
   view: Awaited<ReturnType<typeof createView>>
 }
 
-/**
- * GET /api/mcp/view
- *
- * - No params: per project, returns the view the user applied or the board's default view.
- * - projectId provided: returns all views (public + user's private) for that project.
- *
- * Query Parameters:
- * - projectId: If set, fetch all views for this project (public + user's private)
- * - visibility: Filter by visibility ('Public' | 'Private')
- * - limit: Maximum number of results (default: 50, max: 100)
- * - offset: Number of results to skip (default: 0)
- * - sort_by: Field to sort by ('title' | 'createdAt' | 'lastUsedAt')
- * - sort_order: Sort order ('asc' | 'desc', default: 'desc')
- * - include_settings: Include each view's filters, sorting, columns, and applied marker
- *
- * Authentication: Bearer token (JWT or API key) in Authorization header
- */
 export async function GET(request: NextRequest) {
   return wrapMcpRoute(async (request: NextRequest) => {
   try {
@@ -159,7 +140,6 @@ export async function GET(request: NextRequest) {
         select: { id: true },
       })
       if (!board) return NextResponse.json({ success: false, error: 'Project not found' }, { status: 404 })
-      // Return all views (public + user's own private) for the given project
       const viewWhere: any = {
         project_view: { projectId, project: savedViewBoardAccessWhere(user.id, ctx.agentId) },
         OR: [
@@ -200,7 +180,6 @@ export async function GET(request: NextRequest) {
         return toViewItem(v, v.project_view, includeSettings, appliedViewId)
       })
     } else {
-      // Per project: return the view the user applied, or fall back to the board's default view
       const userProjects = await prisma.project.findMany({
         where: { status: 'Normal', ...savedViewBoardAccessWhere(user.id, ctx.agentId) },
         select: { id: true },
@@ -260,6 +239,7 @@ export async function GET(request: NextRequest) {
     } satisfies ListViewsResponse)
   } catch (error) {
     console.error('Error listing views:', error)
+    reportMcpOperationCrash(request, error)
     return NextResponse.json(
       { success: false, error: 'Internal server error' },
       { status: 500 }
@@ -269,15 +249,6 @@ export async function GET(request: NextRequest) {
   })(request)
 }
 
-/**
- * POST /api/mcp/view - create a saved board view.
- *
- * Body: { project_id, title, visibility?, filters?: { label_names?, assignee_ids?, match? },
- *         sorting_mode?, sorting_order?, sorting_stack?, board_filters?, visible_section_ids?,
- *         subtask_setting?, board_empty_sections?, set_as_default? }
- *
- * Was a stub that returned `{ success: true }` and created nothing (HTPR-4218).
- */
 export async function POST(request: NextRequest) {
   return wrapMcpRoute(async (request: NextRequest) => {
   try {

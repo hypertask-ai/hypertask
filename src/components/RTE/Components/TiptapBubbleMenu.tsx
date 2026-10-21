@@ -61,7 +61,6 @@ const TiptapBubbleMenu = ({
         >
           {!hideMenu && <div className={` ${styles.floatingmenu}`}>
             {!toggleHighlight ? (
-              // ===================== format buttons
               <>
                 {buttonConfigs.map((config, index) => {
                   const ButtonComponent = config.component;
@@ -80,18 +79,16 @@ const TiptapBubbleMenu = ({
                         key={index}
                         editor={editor}
                         {...config.props}
-                        // setToggleHighlightbutton={toggleHighlightHandler}
                       />
                     );
                   }
                 })}
 
-                {/* ========================= AI DROPDOWN ===========================  */}
                 {allowPerks && (
                   <div className="relative inline-block text-left">
                     <button
                       onMouseDown={(e) => e.preventDefault()}
-                      onClick={toggleDropdown} // Call toggleDropdown on button click
+                      onClick={toggleDropdown}
                       className="bg-white t hover:bg-gray-100  font-bold  rounded inline-flex items-center"
                     >
                       <p className="text-[#C668FF]">Ai</p>
@@ -109,7 +106,6 @@ const TiptapBubbleMenu = ({
                 )}
               </>
             ) : (
-              // ============================= HIGHLIGHT BUTTONS ==========================
               <>
                 <div className="flex items-center">
                   <button onClick={() => toggleHighlightHandler(false)}>

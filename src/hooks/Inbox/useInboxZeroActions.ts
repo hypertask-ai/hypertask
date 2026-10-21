@@ -50,13 +50,6 @@ const useInboxZeroActions = () => {
     [queryClient, undoAction]
   );
 
-  /**
-   * previewVersion is required on purpose. It used to be optional, and the caller
-   * that omitted it made this fetch its own preview and immediately confirm it —
-   * so the command palette archived the whole inbox with nobody having seen what
-   * was about to go (HTPR-5613). Only a preview a person looked at can authorise
-   * the archive, so the only way to call this is to hold that version.
-   */
   const executeInboxZero = useCallback(
     async (
       rules: InboxZeroRules,

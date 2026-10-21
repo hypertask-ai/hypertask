@@ -30,39 +30,21 @@ interface IProp {
   defaultContent?: string;
   id: string;
   visualizerClassName?: string;
-  // True while ANY recorder in this composer is capturing, so a peer mic (the
-  // comment mic while the description records) is not shown as a purple CTA
-  // next to the live visualizer.
   globalRecording?: boolean;
   hasText?: boolean;
   onProcessingChange?: (processing: boolean) => void;
-  /** Extra classes on the mic container, for callers that need a bigger touch target. */
   className?: string;
-  /** Classes on the root .audio-recorder element — the flex-row child. Flex
-      `order` must land HERE, not on className: the inner mic div is not a
-      direct flex child, so order there is silently ignored. */
   wrapperClassName?: string;
-  /** Optional visible copy for standalone composer actions such as feedback. */
   idleLabel?: string;
-  /** Makes non-task-writer instances keyboard accessible with a specific name. */
   ariaLabel?: string;
-  /** Explicit mobile hierarchy for field-level mics that must not become a primary CTA. */
   mobilePresentation?: MobileMicPresentation;
-  /** Optional color for the filled mobile recorder action. */
   mobilePrimaryTone?: MobileMicPrimaryTone;
-  /** Serializes recorder instances that write into the same draft. */
   dictationCoordinator?: DictationCoordinator;
   disabled?: boolean;
-  /**
-   * Board for the transcript request. `undefined` keeps the Recoil current
-   * board (existing callers). `null` means no board: do not fall back.
-   */
   projectId?: number | null;
 }
 
 const DEVICE_STORAGE_KEY = "ht-dictation-deviceId";
-// Below this the blob is empty/garbage (silence or a dropped stream); posting it
-// makes the transcribe route 500. Cancel silently instead.
 const MIN_BLOB_BYTES = 1200;
 
 type AudioCtor = typeof AudioContext;
@@ -93,10 +75,6 @@ export const AudioButton = ({
 }: IProp) => {
   const [recording, setRecording] = useState(false);
   const [isProcessing, setIsProcessing] = useState(false);
-  // Only a deliberate tap that starts AND ends on the mic may open the recorder.
-  // Sending a comment collapses the composer and the mic slides into the slot the
-  // send button just vacated, so the click from that tap lands on the mic and
-  // started recording. A click with no touch of its own is that stray, not a tap.
   const micTap = useRef(createTapGuard()).current;
   const onMicTouchStart = (event: React.TouchEvent) => {
     const touch = event.touches[0];
@@ -119,8 +97,6 @@ export const AudioButton = ({
   });
 
   const isApple = useDeviceContext();
-  // Picking an input device is a desktop-only affordance; mobile has no mic
-  // selector, so hide the caret + popover on the mobile viewport.
   const isMobileView = useContext(MobileViewContext);
   const isMobileCreateComment =
     isMobileView && id === "create-comment-audio-button";
@@ -134,9 +110,6 @@ export const AudioButton = ({
   const dictationAriaLabel = isKeyboardAccessible
     ? ariaLabel || idleLabel || "Start dictation"
     : undefined;
-  // Desktop AI composers: emphasise dictation with a filled mic in a pill.
-  // Scoped to the comment composer, AI Task Writer, and AI chat; other mics
-  // (description, task modal) keep the plain outline icon.
   const isDesktopAiMic =
     !isMobileView &&
     [
@@ -149,7 +122,6 @@ export const AudioButton = ({
   const resolvedProjectId =
     projectIdProp === undefined ? currentProject?.id : projectIdProp ?? undefined;
 
-  // Audio graph + capture, all kept out of render so the rAF loop reads live values.
   const audioContextRef = useRef<AudioContext | null>(null);
   const analyserRef = useRef<AnalyserNode | null>(null);
   const streamRef = useRef<MediaStream | null>(null);
@@ -165,14 +137,11 @@ export const AudioButton = ({
   const menuWrapRef = useRef<HTMLDivElement | null>(null);
   const dictationLeaseRef = useRef<DictationLease | null>(null);
 
-  // Refs mirror state so the rAF closure and getUserMedia callbacks read fresh values.
   const recordingRef = useRef(false);
   const menuOpenRef = useRef(false);
   const selectedDeviceIdRef = useRef<string | null>(selectedDeviceId);
   selectedDeviceIdRef.current = selectedDeviceId;
 
-  // Open a fresh stream on the chosen device and (re)build the analyser. The
-  // AudioContext is reused across recordings; only the stream/source churns.
   const ensureStream = async (
     deviceId: string | null,
   ): Promise<MediaStream> => {
@@ -187,17 +156,12 @@ export const AudioButton = ({
       });
     } catch (error) {
       if (!deviceId) throw error;
-      // The persisted mic is gone (unplugged, or the browser rotated its id):
-      // an `exact` constraint then rejects instantly and every mic entry point
-      // goes silently dead. Fall back to the default device and forget the
-      // stale selection (HTPR-4583).
       stream = await navigator.mediaDevices.getUserMedia({ audio: true });
       setSelectedDeviceId(null);
       selectedDeviceIdRef.current = null;
       try {
         localStorage.removeItem(DEVICE_STORAGE_KEY);
       } catch {
-        // localStorage can be unavailable (private mode); in-memory reset is enough.
       }
     }
     streamRef.current = stream;
@@ -224,10 +188,6 @@ export const AudioButton = ({
       streamRef.current.getTracks().forEach((t) => t.stop());
       streamRef.current = null;
     }
-    // Close the AudioContext too, not just the tracks: on the mobile WebView a
-    // running context keeps the OS audio session (and the mic) captured after
-    // dictation ends, blocking dictation in other apps (HTPR-4948).
-    // ensureStream recreates a closed context on the next recording.
     analyserRef.current = null;
     const ac = audioContextRef.current;
     if (ac && ac.state !== "closed") {
@@ -236,8 +196,6 @@ export const AudioButton = ({
     audioContextRef.current = null;
   };
 
-  // RMS of the time-domain frame with a rolling auto-gain so normal speech fills
-  // the bars (no shouting). Ported from the approved prototype.
   const computeLevel = (): number => {
     const analyser = analyserRef.current;
     if (!analyser) return 0;
@@ -269,7 +227,6 @@ export const AudioButton = ({
     }
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     ctx.clearRect(0, 0, rect.width, rect.height);
-    // Theme-aware: the canvas inherits a muted foreground text color via its class.
     ctx.fillStyle = getComputedStyle(canvas).color || "#999a9d";
 
     const bw = 3;
@@ -278,10 +235,6 @@ export const AudioButton = ({
     const n = Math.max(1, Math.floor(rect.width / step));
     const mid = rect.height / 2;
     const arr = barsRef.current;
-    // Right-anchor: the newest sample sits at the right edge and history scrolls
-    // left. Before the buffer fills, the missing history is on the LEFT (negative
-    // idx -> 0), so the wave reads as live-at-the-right immediately instead of
-    // filling in left-to-right (which looked like the bar sliding out slowly).
     for (let i = 0; i < n; i++) {
       const idx = arr.length - n + i;
       const val = idx >= 0 ? arr[idx] || 0 : 0;
@@ -359,14 +312,9 @@ export const AudioButton = ({
       mediaRecorder.addEventListener("dataavailable", (event) => {
         if (event.data.size > 0) audioChunksRef.current.push(event.data);
       });
-      // No timeslice: start(200) produced a fragmented container Android could
-      // not decode. Let the final blob come from the stop-time dataavailable.
       mediaRecorder.start();
 
       barsRef.current = [];
-      // Seed the auto-gain mid-range so the first frames already show visible
-      // bars (speech-level RMS converges to ~6). Starting at 1 left the wave flat
-      // for ~a second while it ramped, which read as a slow reveal.
       gainRef.current = 3;
       menuOpenRef.current = false;
       setMenuOpen(false);
@@ -392,10 +340,6 @@ export const AudioButton = ({
       releaseDictationLease();
       return;
     }
-    // Hide Send and show the processing spinner the instant the user confirms,
-    // before the async stop/transcribe begins: a partial/old transcript can't be
-    // sent in the gap, and there is no dead window where the mic looks idle while
-    // the recorder is still flushing (HTPR-4677).
     if (send) {
       onProcessingChange?.(true);
       setIsProcessing(true);
@@ -408,7 +352,6 @@ export const AudioButton = ({
       stopStream();
 
       if (!send || audioBlob.size < MIN_BLOB_BYTES) {
-        // Empty/garbage audio: silently drop it, never POST, never prompt.
         onProcessingChange?.(false);
         setIsProcessing(false);
         audioChunksRef.current = [];
@@ -424,7 +367,6 @@ export const AudioButton = ({
     try {
       mediaRecorder.requestData();
     } catch {
-      // requestData can throw if already inactive; the stop event still flushes.
     }
     mediaRecorder.stop();
   };
@@ -528,20 +470,12 @@ export const AudioButton = ({
       e.preventDefault();
       stopRecording(false);
     }
-    // Enter sends the recording.
     if (e.keyCode === 13 && recordingRef.current) {
       e.preventDefault();
       stopRecording(true);
     }
   };
 
-  // The document listener registers once, but it must dispatch to the LATEST
-  // render's handleKeydown. The send path (stopRecording -> sendAudioToServer
-  // -> callbackHandler) closes over the editor prop, which is null on first
-  // render (useEditor with immediatelyRender: false). With the first render's
-  // closure, Enter stopped the recording and transcribed fine, but every
-  // transcript chunk hit a null editor and was silently dropped — the Check
-  // button worked because its onClick is always a fresh closure.
   const handleKeydownRef = useRef(handleKeydown);
   handleKeydownRef.current = handleKeydown;
 
@@ -553,26 +487,20 @@ export const AudioButton = ({
 
   useEffect(() => {
     if (!isMobileCreateComment || !editor) return;
-    // emitUpdate:false — see TipTapTaskDetail: a setEditable "update" is not an edit.
     editor.setEditable(!isProcessing, false);
     return () => editor.setEditable(true, false);
   }, [editor, isMobileCreateComment, isProcessing]);
 
-  // Mirror processing state up so the composer can hide Send while the
-  // transcript is still streaming in (prevents sending a partial transcript).
   useEffect(() => {
     onProcessingChange?.(isProcessing);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+
   }, [isProcessing]);
 
-  // Safety: if this mic unmounts mid-transcription, release the Send lock so
-  // the parent never gets stuck hiding Send.
   useEffect(() => {
     return () => onProcessingChange?.(false);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+
   }, []);
 
-  // Cleanup on unmount: kill the loop, the stream, and the shared AudioContext.
   useEffect(() => {
     return () => {
       if (rafRef.current != null) cancelAnimationFrame(rafRef.current);
@@ -585,7 +513,7 @@ export const AudioButton = ({
       }
       audioContextRef.current = null;
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+
   }, []);
 
   const listDevices = async () => {
@@ -625,7 +553,6 @@ export const AudioButton = ({
     try {
       localStorage.setItem(DEVICE_STORAGE_KEY, deviceId);
     } catch {
-      // localStorage can be unavailable (private mode); selection still applies in-memory.
     }
     try {
       await ensureStream(deviceId);
@@ -635,7 +562,6 @@ export const AudioButton = ({
     }
   };
 
-  // Close the mic menu on an outside click.
   useEffect(() => {
     if (!menuOpen) return;
     const onDocClick = (e: MouseEvent) => {
@@ -645,12 +571,9 @@ export const AudioButton = ({
     };
     document.addEventListener("mousedown", onDocClick);
     return () => document.removeEventListener("mousedown", onDocClick);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+
   }, [menuOpen]);
 
-  // The Agent Chat composer sits on the viewport's bottom edge, so tooltips
-  // that open downward are clipped below the fold (HTPR-6292); open them
-  // upward there instead.
   const tooltipsOpenUpward = id === "agent-chat-audio-button";
 
   let recordingSubmitClassName =
@@ -673,23 +596,14 @@ export const AudioButton = ({
           ref={menuWrapRef}
           className={cn(
             "relative flex items-center",
-            // Desktop composer: mic + device chevron grouped, no backdrop,
-            // matching the de-chromed input bar (HTPR-5004).
             isDesktopAiMic && "gap-0.5",
           )}
         >
-          {/* Hidden anchor: keyboard shortcut + audioInputHandler click this by id to dictate-and-improve. */}
           <div
             id={id + "-improve"}
             className="h-0 w-0"
             onClick={() => startRecording(true)}
           />
-          {/* Primary anchor: click() by id starts normal dictation. The filled
-              slot belongs to whatever you would do next: the mic on an empty
-              composer, Send once there is text. So `hasText` demotes the mic to
-              a bare glyph in every prominent mode, the comment composer
-              included (HTPR-5684, reversing the earlier carve-out that kept it
-              filled and left two competing primaries side by side). */}
           {(() => {
             const { prominent, className: prominentClassName } =
               mobileMicPresentation({
@@ -745,8 +659,6 @@ export const AudioButton = ({
                 }}
               >
                 {isProcessing ? (
-                  // Transcribing: replace the mic with a spinner everywhere so the
-                  // few-second wait reads as "working", not frozen (HTPR-4677).
                   <>
                     <Loader2
                       size={18}
@@ -770,7 +682,6 @@ export const AudioButton = ({
                     )}
                   </>
                 ) : isDesktopAiMic ? (
-                  // Desktop comment composer: filled mic so it reads as the primary action in the pill.
                   <svg
                     width="18"
                     height="18"

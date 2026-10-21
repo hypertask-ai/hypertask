@@ -14,18 +14,14 @@ export function useTableColumns(context: Context) {
   columnWidths, setColumnWidths, titleHeaderRef, enableMyTasksBulkSelection,
   } = context;
 
-  // Resolves a stored column key (built-in or 'customField:<id>') to its render
-  // spec. Number-type custom fields right-align like "updated" does, so a
-  // value doesn't visually run into whatever column sits to its right
-  // (HTPR-3805: an appended, unaligned custom column read as glued to Updated).
   const toTableColumn = useCallback(
     (key: string): TableColumn | undefined => {
       if (key === "time" && !_currentProject?.showTimeTotals) return undefined;
       if (isCustomFieldColumnKey(key)) {
         if (myTasksColumnsControlled) return undefined;
         const field = customFieldById.get(customFieldIdFromColumnKey(key));
-        if (!field) return undefined; // stored id for a field that's since been deleted
-        if (field.showInTable === false) return undefined; // hidden board-wide via manage-custom-fields
+        if (!field) return undefined;
+        if (field.showInTable === false) return undefined;
         return {
           key: customFieldSortColumn(field.id),
           label: field.name,
@@ -42,15 +38,8 @@ export function useTableColumns(context: Context) {
     },
     [customFieldById, _currentProject?.showTimeTotals, myTasksColumnsControlled]
   );
-  // Custom fields, unlike the fixed built-in columns, are created at runtime and
-  // need seeding into the stored order once (like DEFAULT_TABLE_COLUMNS seeds the
-  // built-ins) so they show up by default. After that one seed, a field's
-  // presence/absence is the user's own toggle choice via TableColumnsPicker,
-  // same as any built-in column.
   useEffect(() => {
     if (myTasksColumnsControlled || !customFields.length) return;
-    // Fields hidden board-wide (showInTable: false) never get seeded as a
-    // visible column — same rule toTableColumn enforces at render time.
     const customFieldKeys = customFields
       .filter((field) => field.showInTable !== false)
       .map((field) => customFieldColumnKey(field.id));
@@ -86,8 +75,6 @@ export function useTableColumns(context: Context) {
   ]);
   const visibleColumns = useMemo(() => {
     const normalized = normalizeVisibleColumns(storedVisibleColumns);
-    // Board table: while sorted, force 'status' visible so the sorted-by
-    // column stays on screen. My Tasks controlled picker must win (HTPR-6456).
     const keys = withForcedStatusWhileSorted(
       normalized,
       sortState.length > 0,
@@ -101,19 +88,10 @@ export function useTableColumns(context: Context) {
     sortState,
     toTableColumn,
   ]);
-  // A drag-resized column (feature 3) overrides its default base width; that
-  // override becomes the column's minimum, same as the unresized default did.
   const getColumnWidth = useCallback(
     (column: TableColumn) => columnWidths[column.key] ?? baseColumnWidthPx(column.width),
     [columnWidths]
   );
-  // HTPR-4643: Excel frozen panes. Ticket and Title keep the row's identity on
-  // screen while the data columns slide underneath, so a wide table never
-  // scrolls away the one thing that says which row you are reading.
-  //
-  // Offsets are computed, not hardcoded: Ticket sits flush left, Title starts
-  // after Ticket's CURRENT width plus the grid's 8px gutter, so a resized
-  // Ticket column moves Title with it.
   const frozenColumnOffset = useCallback(
     (key: string): number | undefined => {
       if (key === "ticket") return 0;
@@ -131,11 +109,6 @@ export function useTableColumns(context: Context) {
     },
     [setColumnWidths]
   );
-  // Excel model (HTPR-4993): called at the start of every resize drag. If title
-  // still has no stored override (still auto-flexing), measure its real rendered
-  // width and freeze it via setColumnWidth — after this every track is fixed px,
-  // so the column actually being dragged moves 1:1 with the pointer instead of
-  // title silently absorbing the delta. No-op (returns undefined) once frozen.
   const freezeTitleWidth = useCallback((): number | undefined => {
     if (columnWidths.title !== undefined) return undefined;
     const measured = titleHeaderRef.current?.getBoundingClientRect().width;
@@ -143,11 +116,6 @@ export function useTableColumns(context: Context) {
     setColumnWidth("title", measured);
     return measured;
   }, [columnWidths.title, setColumnWidth]);
-  // Excel model (HTPR-4993): title flexes to fill leftover width (minmax(...,1fr))
-  // ONLY until it has a stored width override — the first resize anywhere freezes
-  // it (see ColumnResizeHandle's onPointerDown), after which it's a fixed track
-  // like every other column and the whole table's width becomes the sum of its
-  // columns (horizontal scroll takes over via tableMinWidth below).
   const gridTemplateColumns = useMemo(() => {
     const columns = visibleColumns
       .map((column) =>
@@ -158,10 +126,6 @@ export function useTableColumns(context: Context) {
       .join(" ");
     return enableMyTasksBulkSelection ? `24px ${columns}` : columns;
   }, [visibleColumns, getColumnWidth, columnWidths, enableMyTasksBulkSelection]);
-  // The grid tracks are fixed/min px, so the rows only paint as wide as their
-  // box. Without a min-width matching the columns, the section cards stop at
-  // the viewport edge and everything scrolled past it is blank. gap 8px per
-  // gutter + 40px row padding.
   const tableMinWidth = useMemo(() => {
     const columnsWidth =
       visibleColumns.reduce((total, column) => total + getColumnWidth(column), 0) +
@@ -169,11 +133,6 @@ export function useTableColumns(context: Context) {
       40;
     return enableMyTasksBulkSelection ? columnsWidth + 24 + 8 : columnsWidth;
   }, [visibleColumns, getColumnWidth, enableMyTasksBulkSelection]);
-  // Reorders storedVisibleColumns in place when a header cell is dropped on
-  // another (feature 2) — the SAME atom the "Configure table columns" picker
-  // reads/writes, so drag-reordering the header and the picker stay in sync.
-  // Locked columns (ticket/title) can't move; normalizeTableVisibleColumns
-  // would just snap them back to the front anyway.
   const reorderColumn = useCallback(
     (fromKey: string, toKey: string) => {
       if (fromKey === toKey || LOCKED_TABLE_COLUMNS.has(fromKey) || LOCKED_TABLE_COLUMNS.has(toKey)) return;
@@ -190,9 +149,6 @@ export function useTableColumns(context: Context) {
     },
     [normalizeVisibleColumns, setStoredVisibleColumns]
   );
-  // The 'status' column can appear in visibleColumns while sorted without being
-  // in storedVisibleColumns (forced-visible injection above) — only columns
-  // actually in the stored order are valid drag sources/targets.
   const normalizedColumnOrder = useMemo(
     () => normalizeVisibleColumns(storedVisibleColumns),
     [normalizeVisibleColumns, storedVisibleColumns],

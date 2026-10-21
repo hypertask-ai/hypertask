@@ -4,7 +4,6 @@ import React, {useContext, useState} from 'react'
 import dynamic from "next/dynamic";
 const DescriptionEmojiButton = dynamic(()=>import("./DescriptionEmojiButton"))
 
-// import DescriptionEmojiButton from './DescriptionEmojiButton'
 import { useDescriptionAndCommentsContext } from '@/lib/contexts/TaskDetail/DescriptionProvider'
 import { MobileViewContext } from '@/lib/contexts/mobileContext';
 import AIWriterButton from '@/components/Common/AIWriterButton';
@@ -21,8 +20,6 @@ const DescriptionTopRight = () => {
     const {toggleEmojiPickerDescription, emojiClickHandlerDescriptionr, showEmojiPickerDescription, handleClickOutside}= useDescriptionAndCommentsContext()
     
     const toggleAiTaskWriter = () => {
-        // Trigger the TipTapTaskDetail's toggleAiTaskWriter by clicking the hidden button
-        // The button ID is "popover-button-description" based on the divIds pattern
         document.getElementById("popover-button-description")?.click();
     }
   const shouldShowAiWriterButton = isMbl && (editMode === "description" || editMode === "description-ai")
@@ -35,7 +32,6 @@ const DescriptionTopRight = () => {
   />;
   return (
     <div data-task-detail-actions className='flex gap-1 items-center'>
-      {/* A cold reaction control must not suspend the cached title and body. */}
       {!isMbl && (instantTicketOpen ? (
         <span className="inline-flex h-[14px] w-[14px]">
           <React.Suspense fallback={null}>{emojiButton}</React.Suspense>
@@ -51,8 +47,8 @@ const DescriptionTopRight = () => {
             />
             :
           <span className='text-meta text-text-light-gray relative group cursor-default'
-          onMouseEnter={() => setIsHovered(true)} // Set isHovered to true on mouse enter
-          onMouseLeave={() => setIsHovered(false)} // Set isHovered to false on mouse leave
+          onMouseEnter={() => setIsHovered(true)}
+          onMouseLeave={() => setIsHovered(false)}
           >
                   <RelativeTime date={currentTask?.createdAt} />
                   {isHovered && <TimeTooltip time={date} left={55} bottom={-5} />}

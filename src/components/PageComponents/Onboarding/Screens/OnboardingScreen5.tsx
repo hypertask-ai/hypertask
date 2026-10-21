@@ -30,7 +30,6 @@ export const OnboardingScreen5: React.FC<IOnboardingScreen5> = ({
   const { inviteNewMembersToBoard } = useInviteCallbackHandlers();
 
   const api = useCallback(async () => {
-    // HTPR-7094: a normal signup reaches this step with no team, so there is no invite link to fetch.
     if (!currentUser || !teamToInviteTo?.id) return;
     const response = await getTeamInviteUrl(currentUser.id, teamToInviteTo.id);
     if (response && response !== "Error") {
@@ -89,7 +88,6 @@ export const OnboardingScreen5: React.FC<IOnboardingScreen5> = ({
       return;
     }
 
-    // If there are valid emails, send invites
     if (emails.trim()) {
       const emailList = emails
         .split(",")

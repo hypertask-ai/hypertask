@@ -25,7 +25,6 @@ const MentionList = forwardRef((props, ref) => {
   const [shouldHide, setShouldHide] = useState(false);
   const touchGestureRef = useRef(null);
 
-  // --- HELPER FUNCTIONS ---
   const selectItem = (index) => {
     const item = props.items[index];
     if (item && !ignoreItems.includes(item.type)) {
@@ -41,7 +40,6 @@ const MentionList = forwardRef((props, ref) => {
     });
   };
 
-  // --- KEYDOWN HANDLERS ---
   const upHandler = () => {
     const nextIndex = nextSelectableMentionIndex(
       props.items,
@@ -68,8 +66,6 @@ const MentionList = forwardRef((props, ref) => {
   const pointerSelectHandler = (event, index) => {
     event.preventDefault();
     event.stopPropagation();
-    // Touch selection waits for touchend so the popup still owns the full
-    // gesture and can suppress its compatibility click before unmounting.
     if (event.pointerType !== "touch") selectItem(index);
   };
   const touchStartHandler = (event) => {
@@ -102,9 +98,7 @@ const MentionList = forwardRef((props, ref) => {
     touchGestureRef.current = null;
   };
 
-  // --- CONSOLIDATED USEEFFECT ---
   useEffect(() => {
-    // Check if we should hide the mention list
     if(shouldHide) {
       setIsLoading(false)
       setShowMentionList(false)
@@ -122,30 +116,26 @@ const MentionList = forwardRef((props, ref) => {
 
     setShowMentionList(true);
 
-    // On small screens, prevent background page scroll while the mention list is open
     const isMobile = typeof window !== "undefined" && window.matchMedia("(max-width: 640px)").matches;
     const previousOverflow = typeof document !== "undefined" ? document.body.style.overflow : undefined;
     if (isMobile && typeof document !== "undefined") {
       document.body.style.overflow = "hidden";
     }
 
-    // If items haven't arrived yet for the current query, stay in a loading state.
     if (!props.items || props.items.length === 0) {
       setIsLoading(true);
     } else {
-      // Once items arrive, stop loading.
       setIsLoading(false);
       setSelectedIndex(firstSelectableMentionIndex(props.items));
     }
 
-    // Cleanup function to hide the list when the component unmounts or query changes.
     return () => {
       if (isMobile && typeof document !== "undefined") {
         document.body.style.overflow = previousOverflow || "";
       }
       setTimeout(() => setShowMentionList(false), 100);
     };
-  }, [props.items, props.query, shouldHide]); // Effect runs when items OR query change.
+  }, [props.items, props.query, shouldHide]);
 
   useImperativeHandle(ref, () => ({
     onKeyDown: ({ event }) => {
@@ -175,7 +165,6 @@ const MentionList = forwardRef((props, ref) => {
 
   const hasItems = props.items?.length > 4;
   const noResults = hasItems && props.items[0]?.type === "no-results";
-  // If the API returns [{ type: "hide", name: "hiding mention list" }], do NOT render anything (empty fragment)
   if(shouldHide) return <></>;
 
   return (

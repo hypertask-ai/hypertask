@@ -1,6 +1,5 @@
 import assert from "node:assert/strict";
 import fs from "node:fs";
-import os from "node:os";
 import path from "node:path";
 import test from "node:test";
 import { activationHarness } from "./helpers/activation-harness";
@@ -13,6 +12,7 @@ const productionSource = (file: string) =>
 process.env.POSTHOG_SERVER_PROJECT_TOKEN = "mock-local-only";
 const localCaptures: any[] = [];
 const save = (h: ReturnType<typeof activationHarness>) => { localCaptures.push(...h.captures); };
+const timed = (captures: any[]) => captures.map(({ timestamp, ...capture }) => { assert.ok(timestamp instanceof Date); return capture; });
 
 function taskController(h: ReturnType<typeof activationHarness>) {
   const noop = async () => undefined;
@@ -72,7 +72,7 @@ test("adopting guest boards emits once for the new owner; repeat adoption is ign
   assert.equal(await adoptGuestBoards("mock-session", 123), 1);
   assert.equal(await adoptGuestBoards("mock-session", 123), 0);
   await h.drain();
-  assert.deepEqual(h.captures, [{ distinctId: "123", event: "board_created", properties: { source: "adopted_demo" } }]);
+  assert.deepEqual(timed(h.captures), [{ distinctId: "123", event: "board_created", properties: { source: "adopted_demo" } }]);
   save(h);
 });
 
@@ -85,10 +85,9 @@ test("CLI code exchange is consumed atomically and emits once, not on credential
   const request = () => new Request("http://localhost/api/cli/token-exchange", { method: "POST", body: JSON.stringify({ code: "mock-code" }), headers: { "user-agent": "hypertask-cli/0.2.0" } });
   assert.equal((await POST(request())).status, 200);
   assert.equal((await POST(request())).status, 401);
-  const { recordAuthenticatedConnection } = h.load("src/lib/telemetry/activationOccurrences.ts");
-  recordAuthenticatedConnection(request(), 123, "mock-cli-credential");
+    await h.authenticate(request(), 123, "mock-cli-credential");
   await h.drain();
-  assert.deepEqual(h.captures, [{ distinctId: "123", event: "agent_connected", properties: { client: "other", transport: "cli", is_first: true } }]);
+  assert.deepEqual(timed(h.captures), [{ distinctId: "123", event: "agent_connected", properties: { client: "other", transport: "cli", is_first: true } }]);
   save(h);
 });
 
@@ -168,28 +167,27 @@ test("connection-status reads stay free of analytics markers", () => {
 test("durable connection claims survive cold starts and honor historical Logs", async () => {
   const h = activationHarness();
   h.logs.push({ LoggedById: 123, log: "mcp_connected", id: 1 });
-  const { recordAgentConnection, activationClient } = h.load("src/lib/telemetry/activationOccurrences.ts");
+  const { activationClient } = h.load("src/lib/telemetry/activationOccurrences.ts");
   for (const [name, expected] of [["Claude Code", "claude_code"], ["claude-code", "claude_code"], ["Cursor", "cursor"], ["codex/1", "codex"], ["hypertask-cli/0.2.0", "other"]]) assert.equal(activationClient(name), expected);
-  recordAgentConnection(123, "mock-mcp-credential", "mcp", "Claude Code");
-  recordAgentConnection(123, "mock-mcp-credential", "mcp", "Claude Code");
+  await h.connect(123, "mock-mcp-credential", "mcp", "Claude Code");
+  await h.connect(123, "mock-mcp-credential", "mcp", "Claude Code");
   await h.drain();
   assert.deepEqual(h.captures[0].properties, { client: "claude_code", transport: "mcp", is_first: false });
   const cold = activationHarness();
   cold.logs.push(...h.logs);
-  cold.load("src/lib/telemetry/activationOccurrences.ts").recordAgentConnection(123, "mock-mcp-credential", "mcp", "Claude Code");
+  await cold.connect(123, "mock-mcp-credential", "mcp", "Claude Code");
   await cold.drain();
   assert.equal(cold.captures.length, 0);
 });
 
 test("direct authenticated credentials classify MCP/API and ignore OAuth refresh/use", async () => {
   const h = activationHarness();
-  const { recordAuthenticatedConnection } = h.load("src/lib/telemetry/activationOccurrences.ts");
-  recordAuthenticatedConnection(new Request("http://localhost/mcp", { headers: { "user-agent": "Cursor" } }), 123, "mock-cursor-token");
-  recordAuthenticatedConnection(new Request("http://localhost/api/mcp/tasks", { headers: { "user-agent": "Codex" } }), 123, "mock-codex-token");
+    await h.authenticate(new Request("http://localhost/mcp", { headers: { "user-agent": "Cursor" } }), 123, "mock-cursor-token");
+  await h.authenticate(new Request("http://localhost/api/mcp/tasks", { headers: { "user-agent": "Codex" } }), 123, "mock-codex-token");
   const jwt = require("jsonwebtoken");
   const contract = h.load("src/lib/mcp/oauthTokenContract.ts");
   const oauth = jwt.sign({ iss: contract.JWT_OAUTH_ISSUER, aud: contract.JWT_OAUTH_AUDIENCE }, "mock-local-signing");
-  recordAuthenticatedConnection(new Request("http://localhost/mcp"), 123, oauth);
+  await h.authenticate(new Request("http://localhost/mcp"), 123, oauth);
   await h.drain();
   assert.deepEqual(h.captures.map((event) => event.properties), [
     { client: "cursor", transport: "mcp", is_first: true },
@@ -203,7 +201,7 @@ test("managed agent completion passes through the task controller and repeat upd
   assert.equal((await update({ id: 9, sectionId: 2 }, h.users.get(123), "managed")).status, 200);
   assert.equal((await update({ id: 9, sectionId: 2 }, h.users.get(123), "managed")).status, 200);
   await h.drain();
-  assert.deepEqual(h.captures, [{ distinctId: "123", event: "agent_task_completed", properties: { taskId: 9, projectId: 15, is_first: true } }]);
+  assert.deepEqual(timed(h.captures), [{ distinctId: "123", event: "agent_task_completed", properties: { taskId: 9, projectId: 15, is_first: true } }]);
   h.tasks.set(10, { ...h.tasks.get(9), id: 10, sectionId: 1, section: "Doing" });
   await update({ id: 10, status: "Archive" }, h.users.get(123), "managed");
   await h.drain();
@@ -224,11 +222,10 @@ test("a delegated managed agent completion belongs to the board owner, not the t
 
 test("human updates do not count, custom Done roles do count, explicit non-Done roles do not", async () => {
   const h = activationHarness();
-  const { recordAgentTaskCompletion } = h.load("src/lib/telemetry/activationOccurrences.ts");
-  const before = h.tasks.get(9);
-  recordAgentTaskCompletion(before, { ...before, sectionId: 2, section: "Done" }, null);
-  recordAgentTaskCompletion(before, { ...before, sectionId: 4, section: "Done" }, "managed");
-  recordAgentTaskCompletion(before, { ...before, sectionId: 3, section: "Delivered" }, "managed");
+    const before = h.tasks.get(9);
+  h.capture.completion(before, { ...before, sectionId: 2, section: "Done" }, null);
+  h.capture.completion(before, { ...before, sectionId: 4, section: "Done" }, "managed");
+  h.capture.completion(before, { ...before, sectionId: 3, section: "Delivered" }, "managed");
   await h.drain();
   assert.equal(h.captures.length, 1);
   assert.equal(h.captures[0].distinctId, "123");
@@ -241,25 +238,23 @@ test("pre-existing agent moves and archives prevent a false first-completion cla
   ]) {
     const h = activationHarness();
     h.history.push({ activity });
-    const { recordAgentTaskCompletion } = h.load("src/lib/telemetry/activationOccurrences.ts");
-    const before = h.tasks.get(9);
-    recordAgentTaskCompletion(before, { ...before, sectionId: 2, section: "Done" }, "managed");
+        const before = h.tasks.get(9);
+    h.capture.completion(before, { ...before, sectionId: 2, section: "Done" }, "managed");
     await h.drain();
     assert.equal(h.captures[0].properties.is_first, false);
   }
   const h = activationHarness();
   h.history.push({ activity: { type: "TaskMove", data: { toSection: { sectionId: 2 } } } });
-  h.load("src/lib/telemetry/activationOccurrences.ts").recordActivationOccurrence(123, "agent_task_completed", "9", { taskId: 9, projectId: 15 });
+  h.capture.activation(123, "agent_task_completed", "9", { taskId: 9, projectId: 15 });
   await h.drain();
   assert.equal(h.captures[0].properties.is_first, true, "a human's historic completion is not agent activation");
 });
 
 test("parallel duplicate occurrences cannot double capture or both claim first", async () => {
   const h = activationHarness();
-  const { recordActivationOccurrence } = h.load("src/lib/telemetry/activationOccurrences.ts");
-  recordActivationOccurrence(123, "agent_task_completed", "9", { taskId: 9, projectId: 15 }, new Date(1000));
-  recordActivationOccurrence(123, "agent_task_completed", "9", { taskId: 9, projectId: 15 }, new Date(1000));
-  recordActivationOccurrence(123, "agent_task_completed", "10", { taskId: 10, projectId: 15 }, new Date(2000));
+    h.capture.activation(123, "agent_task_completed", "9", { taskId: 9, projectId: 15 }, new Date(1000));
+  h.capture.activation(123, "agent_task_completed", "9", { taskId: 9, projectId: 15 }, new Date(1000));
+  h.capture.activation(123, "agent_task_completed", "10", { taskId: 10, projectId: 15 }, new Date(2000));
   await h.drain();
   assert.deepEqual(h.captures.map((capture) => capture.properties.is_first), [true, false]);
 });
@@ -271,7 +266,9 @@ test("public invitation link creation records method link and reuse does not fir
   await getInviteFromProjectId(15, 123);
   await getInviteFromProjectId(15, 123);
   await h.drain();
-  assert.deepEqual(h.captures, [{ distinctId: "123", event: "teammate_invited", properties: { method: "link" } }]);
+  assert.equal(h.captures.length, 1);
+  assert.equal(h.captures[0].event, "invite_sent");
+  assert.equal(h.captures[0].properties.invite_method, "link");
   save(h);
 });
 
@@ -283,7 +280,9 @@ test("email invite controller only emits after successful sending and skips exis
   assert.equal((await addMemberController(123, 15, ["invited@example.test"])).status, 200);
   await addMemberController(123, 15, ["invited@example.test"]);
   await h.drain();
-  assert.deepEqual(h.captures, [{ distinctId: "123", event: "teammate_invited", properties: { method: "email" } }]);
+  assert.equal(h.captures.length, 1);
+  assert.equal(h.captures[0].event, "invite_sent");
+  assert.equal(h.captures[0].properties.invite_method, "email");
   save(h);
   const failed = activationHarness();
   failed.projects.get(15).members = [];
@@ -294,7 +293,7 @@ test("email invite controller only emits after successful sending and skips exis
   assert.equal(failed.captures.length, 0);
 });
 
-test("invite acceptance emits for the inviter, includes invitee id and ignores repeated acceptance", async () => {
+test("invite acceptance emits for the joiner, includes membership id and ignores repeated acceptance", async () => {
   const h = activationHarness();
   h.users.set(234, { id: 234, uid: "real_invitee", email: "invitee@example.test" });
   h.projects.get(15).ownerId = 789;
@@ -303,7 +302,10 @@ test("invite acceptance emits for the inviter, includes invitee id and ignores r
   assert.equal((await accept(234, 15, "invitation")).status, 200);
   await accept(234, 15, "invitation");
   await h.drain();
-  assert.deepEqual(h.captures, [{ distinctId: "123", event: "invite_accepted", properties: { inviteeId: 234 } }]);
+  assert.equal(h.captures.length, 1);
+  assert.equal(h.captures[0].distinctId, "234");
+  assert.equal(h.captures[0].event, "member_joined");
+  assert.equal(h.captures[0].properties.membership_id, String(h.members[0].id));
   save(h);
 });
 
@@ -352,8 +354,12 @@ function bulkSectionController(h: ReturnType<typeof activationHarness>, rollback
   h.prisma.taskSectionEvent.createMany = noop;
   const transaction = h.prisma.$transaction;
   h.prisma.$transaction = async (callback: any) => {
+    const oldIntents = structuredClone(h.intentRows);
     const result = await transaction(callback);
-    if (!committed && rollback) throw Error("bulk move rolled back");
+    if (!committed && rollback) {
+      h.intentRows.splice(0, h.intentRows.length, ...oldIntents);
+      throw Error("bulk move rolled back");
+    }
     committed = true;
     return result;
   };
@@ -404,7 +410,7 @@ for (const native of [false, true]) {
       { taskId: 10, projectId: 15, is_first: true },
     ]);
     const api = h.load("src/lib/telemetry/activationOccurrences.ts");
-    for (const { before, after } of bulk.batches[0].tasks) api.recordAgentTaskCompletion(before, after, "managed");
+    for (const { before, after } of bulk.batches[0].tasks) h.capture.completion(before, after, "managed");
     await h.drain();
     assert.equal(h.captures.length, 2, "duplicate scheduling does not double count a moved task");
     save(h);
@@ -499,10 +505,10 @@ for (const scenario of ["sent", "send-failure", "flag-off", "connected"] as cons
 test("every additional server boundary is wired and lifecycle emails are owned by their sender", () => {
   const checks = [
     ["src/lib/onboarding/emails/agentNudge.ts", /await sendEmail\([\s\S]*?sent = true;\s*void trackActivation\(userId, "lifecycle_email_sent", \{ type: "agent_nudge" \}\)/],
-    ["src/app/oauth/token/route.ts", /recordAgentConnection\(authCode.user.id, session.accessToken, "mcp", client.client_name\)/],
-    ["src/lib/mcp/auth/session.ts", /recordAuthenticatedConnection\(request, ctx.user.id, token\)/],
-    ["src/pages/api/invite/generatePublicInvite.ts", /recordActivationOccurrence\(newInvite.userId, "teammate_invited", newInvite.id, \{ method: "link" \}\)/],
-    ["src/pages/api/invite/reSendInvite.ts", /if \(sent\) recordActivationOccurrence\(user.id, "teammate_invited", invite.id, \{ method: "email" \}\)/],
+    ["src/app/oauth/token/route.ts", /await enqueueAgentConnection\(tx, authCode.user.id, accessToken, "mcp", client.client_name\)/],
+    ["src/lib/mcp/auth/session.ts", /await enqueueOutsideSaveAndProcessSoon\(\(\) => enqueueAuthenticatedConnection\(prisma, request, ctx\.user\.id, token(?:, [^;\n]+)?\)\)/],
+    ["src/pages/api/invite/generatePublicInvite.ts", /await enqueueInviteSent\(tx, newInvite, "link", session.userId, newInvite.userId\)/],
+    ["src/pages/api/invite/reSendInvite.ts", /if \(sent\) await enqueueOutsideSaveAndProcessSoon\(\(\) => enqueueInviteSent\(prisma, invite, "email", invite.userId, user.id\)\)/],
   ] as const;
   for (const [file, pattern] of checks) assert.match(fs.readFileSync(file, "utf8"), pattern);
   assert.doesNotMatch(fs.readFileSync("src/lib/telemetry/activationOccurrences.ts", "utf8"), /"lifecycle_email_sent"/);
@@ -524,17 +530,18 @@ test("ineligible users never start activation transactions or write markers in a
         h.projects.get(15).ownerId = userId;
         const api = h.load("src/lib/telemetry/activationOccurrences.ts");
         const before = h.tasks.get(9);
-        if (job === "occurrence") api.recordActivationOccurrence(userId, "invite_accepted", "invite", { inviteeId: 234 });
-        if (job === "connection") api.recordAgentConnection(userId, "mock-ineligible-connection", "mcp");
-        if (job === "authenticated") api.recordAuthenticatedConnection(new Request("http://localhost/mcp"), userId, "mock-ineligible-direct");
-        if (job === "completion") api.recordAgentTaskCompletion(before, { ...before, sectionId: 2, section: "Done" }, "managed");
+        if (job === "occurrence") h.capture.activation(userId, "board_created", "invite", { inviteeId: 234 });
+        if (job === "connection") h.capture.connection(userId, "mock-ineligible-connection", "mcp");
+        if (job === "authenticated") h.capture.connection(userId, "mock-ineligible-direct", "mcp");
+        if (job === "completion") h.capture.completion(before, { ...before, sectionId: 2, section: "Done" }, "managed");
         await h.drain();
         const expectedCalls = job === "completion" ? ["project.findUnique"] : [];
         if (!["off", "qa-id", "invalid"].includes(scenario)) expectedCalls.push("user.findUnique");
         assert.deepEqual(h.prismaCalls, expectedCalls, `${scenario}/${job}: only owner and eligibility reads allowed, no writes or transactions`);
         assert.deepEqual(h.logs, []);
         assert.deepEqual(h.captures, []);
-        if (!["qa-id", "invalid"].includes(scenario)) assert.deepEqual(h.flagChecks, [{ key: "htpr-7034-activation-analytics", userId }]);
+        const categoryCheck = scenario === "off" ? [] : [{ key: "htpr-7292-shared-account-category", userId }];
+        if (!["qa-id", "invalid"].includes(scenario)) assert.deepEqual(h.flagChecks, [{ key: "htpr-7034-activation-analytics", userId }, ...categoryCheck]);
       }
     }
   } finally {
@@ -548,13 +555,13 @@ test("when the flag turns on, skipped credentials and occurrences remain eligibl
   const api = h.load("src/lib/telemetry/activationOccurrences.ts");
   const before = h.tasks.get(9);
   const after = { ...before, sectionId: 2, section: "Done", updatedAt: new Date(1000) };
-  const record = () => {
-    api.recordAgentConnection(123, "mock-later-enabled", "mcp", "Cursor");
-    api.recordAgentTaskCompletion(before, after, "managed");
-    api.recordActivationOccurrence(123, "teammate_invited", "invite", { method: "link" });
+  const record = async () => {
+    h.capture.connection(123, "mock-later-enabled", "mcp", "Cursor");
+    h.capture.completion(before, after, "managed");
+    h.capture.activation(123, "board_created", "invite", { method: "link" });
   };
   h.setEnabled(false);
-  record();
+  await record();
   await h.drain();
   assert.deepEqual(h.prismaCalls, ["project.findUnique"]);
   assert.equal(h.logs.length, 0);
@@ -562,13 +569,13 @@ test("when the flag turns on, skipped credentials and occurrences remain eligibl
   h.logs.push({ LoggedById: 123, log: "cli_token_exchange", id: 1 });
   h.history.push({ activity: { type: "TaskMove", data: { fromAgent: { id: "managed" }, toSection: { sectionId: 3, sectionTitle: "Delivered" } } } });
   h.setEnabled(true);
-  record();
+  await record();
   await h.drain();
   assert.ok(h.prismaCalls.includes("$transaction"), "enabled positive control starts transactions");
   assert.ok(h.prismaCalls.includes("logs.create"), "enabled positive control writes markers");
   assert.equal(h.captures.length, 3);
   for (const event of ["agent_connected", "agent_task_completed"]) assert.equal(h.captures.find((capture) => capture.event === event).properties.is_first, false);
-  record();
+  await record();
   await h.drain();
   assert.equal(h.captures.length, 3, "later enabled events still deduplicate");
 });
@@ -582,9 +589,9 @@ test("scheduled occurrence callers return before a pending eligibility check", a
     h.mocks["@/lib/flags"].isFeatureEnabled = () => new Promise((resolve) => { release = resolve; checkStarted(); });
     const api = h.load("src/lib/telemetry/activationOccurrences.ts");
     const before = h.tasks.get(9);
-    const result = job === "occurrence" ? api.recordActivationOccurrence(123, "teammate_invited", "invite", { method: "link" })
-      : job === "connection" ? api.recordAgentConnection(123, "mock-pending-eligibility", "mcp")
-      : api.recordAgentTaskCompletion(before, { ...before, sectionId: 2, section: "Done" }, "managed");
+    const result = job === "occurrence" ? h.capture.activation(123, "board_created", "invite", { method: "link" })
+      : job === "connection" ? h.capture.connection(123, "mock-pending-eligibility", "mcp")
+      : h.capture.completion(before, { ...before, sectionId: 2, section: "Done" }, "managed");
     assert.equal(result, undefined);
     await started;
     assert.deepEqual(h.prismaCalls, job === "completion" ? ["project.findUnique"] : []);
@@ -595,7 +602,7 @@ test("scheduled occurrence callers return before a pending eligibility check", a
 });
 
 test.after(() => {
-  const folder = path.join(os.homedir(), ".local/state/vcc-evidence/HTPR-7034");
+  const folder = path.join(process.cwd(), ".unlazy/helper");
   fs.mkdirSync(folder, { recursive: true });
   fs.writeFileSync(path.join(folder, "local-events.json"), JSON.stringify(localCaptures, null, 2) + "\n");
 });

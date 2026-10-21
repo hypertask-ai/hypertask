@@ -21,7 +21,6 @@ import {
 
 type InboxZeroSheetProps = {
   onClose: () => void;
-  /** Which rules the sheet opens on. The palette has a command per preset. */
   initialRules?: InboxZeroRules;
 };
 

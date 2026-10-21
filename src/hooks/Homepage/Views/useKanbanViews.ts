@@ -67,7 +67,6 @@ import { HTPR_7097_DELETED_VIEW_LEAVES_TABS_FLAG } from "@/lib/flags/keys";
 import { reconcileActiveBoardQuery } from "@/lib/boardSync/reconcileActiveBoardQuery";
 
 let emptySectionMutationId = 0
-// Keep rapid toggles layered so one request settling cannot remove a newer choice.
 const emptySectionMutations = new Map<string, TEmptySectionMutationState>()
 
 const useKanbanViews = (project: IProject | null) => {
@@ -168,18 +167,11 @@ const useKanbanViews = (project: IProject | null) => {
         ...current,
         [project.id]: view.id,
       }));
-      // Built-ins do not carry saved-view settings. Restore the browser's
-      // persisted preference without creating an unsaved view, and keep the
-      // explicit URL surface aligned so later snapshots cannot read stale intent.
       replaceCurrentSurface(boardLayoutPreference);
       setBoardLayout(boardLayoutPreference);
       return;
     }
 
-    // Leave the built-in BEFORE the switch call. The cache rebuild inside
-    // apiAndCacheHandler re-filters the board with whatever built-in is active,
-    // so clearing afterwards baked the built-in's filter into the saved view:
-    // the pill moved but the board kept showing e.g. only Blocked tasks.
     setActiveBuiltinViews((current: Record<number, string>) => {
       if (!(project.id in current)) return current;
       const next = { ...current };
@@ -258,13 +250,10 @@ const useKanbanViews = (project: IProject | null) => {
     (queuedProject) => buildUnsavedBody(queuedProject, {
       board_sorting_mode: mode,
       board_sorting_order: order,
-      // Manual has nothing to tie-break, so never leave a stack stored behind it: it would stay
-      // dormant and then resurface the next time a primary sort is picked.
       board_sorting_stack: mode === "Manual" ? [] : stack,
     }),
     project,
   );
-  // ======= set a new value and return it
   const setBoardColumnsViewAPI = async (
     project: IProject,
     columnsToUpdate: ISection[]
@@ -370,11 +359,6 @@ const useKanbanViews = (project: IProject | null) => {
     })
   };
 
-  // Persist the per-view staleness override into the ACTIVE SAVED view (applied,
-  // else the board's default view), so it survives navigation. Writing the
-  // unsaved view instead is pointless here: switch-view deletes it on the next
-  // view change. Returns "none" when the board has no saved view to attach it
-  // to; the caller then falls back to the board-level setting.
   const saveStalenessToViewAPI = async (
     project: IProject,
     stalenessOverride: boolean | null
@@ -400,10 +384,6 @@ const useKanbanViews = (project: IProject | null) => {
       return "view";
     });
 
-  // "Show archived tasks" is a view setting like filters and sorting, so it
-  // goes through the unsaved view: the board updates immediately and the Save
-  // View affordance appears, letting the choice be pinned to the view instead
-  // of lasting only until navigation (HTPR-5540).
   const saveShowArchivedAPI = async (
     project: IProject,
     showArchived: boolean
@@ -414,9 +394,6 @@ const useKanbanViews = (project: IProject | null) => {
     project,
   );
 
-  // Table-view sort. Same shape as setBoardSortingViewAndReturn (kanban's board
-  // sort), except this is table-only state so it goes through the unsaved-view
-  // API carrying every other current setting to avoid isDeepEqual thrashing them.
   const setTableSortViewAndReturn = async (
     project: IProject,
     tableSort: TTableSort
@@ -438,10 +415,6 @@ const useKanbanViews = (project: IProject | null) => {
     project,
   );
 
-  // Board/Table controls are surface navigation, not saved-view editing.
-  // Persist the browser preference and explicit URL intent, but leave the
-  // active view untouched. A saved view's opening layout is configured in
-  // Manage Views, alongside its other durable metadata.
   const changeBoardLayout = (nextLayout: BoardLayout) => {
     setBoardLayoutPreference(nextLayout);
     if (boardLayout !== nextLayout) setBoardLayout(nextLayout);
@@ -453,7 +426,6 @@ const useKanbanViews = (project: IProject | null) => {
 
   const setBoardLayoutForNavigation = changeBoardLayout;
 
-  // ============ reset view
   const resetView = async (mode: "ResetCurrent" | "ResetToDefault") => {
     if (!project) return;
     const body = {
@@ -472,7 +444,6 @@ const useKanbanViews = (project: IProject | null) => {
     applyBoardLayoutPreference(restored?.board_layout);
   };
 
-  // ============ update view
   const updateView = async (body: TUpdate_view_body) => {
     await apiAndCacheHandler(updateViewAPIRoute, body, { call: "update" });
     toast.success("View successfully updated!");
@@ -511,7 +482,6 @@ const useKanbanViews = (project: IProject | null) => {
     toast.success("View layout successfully updated!");
   };
 
-  // ============ rename view
   const renameView = async (
     viewId: string,
     title: string,
@@ -529,7 +499,6 @@ const useKanbanViews = (project: IProject | null) => {
     cacheUpdateHandler(response, { call: "rename", view: updatedView });
   };
 
-  // ============ delete view
   const deleteView = async (
     viewId: string,
     projectId: number,
@@ -547,10 +516,6 @@ const useKanbanViews = (project: IProject | null) => {
 
     if (deletingAppliedView) updateCookieAndURL(projectId);
     cacheUpdateHandler(response, { call: "update" });
-    // HTPR-7097: projectsAll re-hydrates the open board's saved views from the
-    // five-minute boardTasks side cache, which still lists the deleted view.
-    // Expire it first so the refetch cannot put the deleted view back.
-    // The cache patch no-ops when projectsAll is not loaded on this page.
     if (deletedViewLeavesTabs) {
       void reconcileActiveBoardQuery(queryClient, projectId);
     } else {
@@ -562,9 +527,6 @@ const useKanbanViews = (project: IProject | null) => {
     const response = await axios.post("/api/projects/views/create-view", body);
     console.log("🚀 ~ saveAsDefaultHandler ~ response:", response);
     const view: string | undefined = response.data.view;
-    // Patch the saved/default view before changing the URL. Otherwise the
-    // surface initializer can resolve the new slug against stale cache once,
-    // then keep that wrong layout for the rest of the navigation key.
     if (response.data.project_view_updated) {
       cacheUpdateHandler(
         { data: response.data.project_view_updated },

@@ -100,17 +100,9 @@ const CommentsContainer = () => {
     setCurrentId(`comment-${i}`);
   }
 
-  // HTPR-4659: on desktop the native dblclick is the ONLY edit trigger. The
-  // useDoubleTap emulator above (mobile) uses a 200ms window, shorter than the
-  // browser's, so on desktop it committed the first click as a single tap and
-  // the still-live native sequence then opened the editor, reading as "a
-  // single click starts edit mode".
   const pressStartRef = useRef({ id: comment.id, collapsed: isStacked, at: 0, editable: true });
 
   function rememberPressStart(event: React.MouseEvent) {
-    // Capture phase on mousedown: detail <= 1 is the opening press of a
-    // sequence, and children that stopPropagation on click (reply, react, the
-    // three-dot menu) never stop mousedown, so this snapshot is never stale.
     if (event.detail <= 1)
       pressStartRef.current = {
         id: comment.id,
@@ -122,14 +114,8 @@ const CommentsContainer = () => {
   function handleDesktopDoubleClick(event: React.MouseEvent) {
     const pressStart = pressStartRef.current;
     if (doubleClickToEdit && (!pressStart.editable || !isTaskDetailEditTarget(event.target, event.currentTarget))) return;
-    // The virtualized row can be handed a different comment between the two
-    // presses; that sequence belongs to the comment that is gone, not this one.
     if (pressStart.id !== comment.id) return;
-    // A double click that began on a collapsed comment only expands it: the
-    // first click grew the card, so the second one landed on text the user
-    // never aimed at.
     if (pressStart.collapsed) return;
-    // Two unhurried clicks are two single clicks, whatever the OS says.
     if (event.timeStamp - pressStart.at > DELIBERATE_DOUBLE_CLICK_MS) return;
     handleDoubleTap();
   }
@@ -169,7 +155,7 @@ const CommentsContainer = () => {
             : `${
                 comment.activity
                   ? "border-transparent hover:bg-active-elementBg"
-                  : // not an activity element
+                  :
                   !isStacked
                   ? `${
                       pinned
@@ -191,6 +177,7 @@ const CommentsContainer = () => {
         id={`comment-${i}`}
         data-testid="ticket-comment"
         data-task-comment-box={!comment.activity || undefined}
+        data-task-comment-collapsed={isStacked || undefined}
         data-task-comment-state={
           comment.activity
             ? undefined
@@ -208,16 +195,12 @@ const CommentsContainer = () => {
           {!comment.activity ? (
             <>
               <CommentBodyDesktop>
-                {/* -------------------------- CREATED BY --------------------------- */}
                 <CommentCreatedBy />
 
-                {/* -------------------------- COMMENT TEXT -------------------------- */}
                 <CommentText />
 
-                {/* -------------------------- COMMENT OPTIONS (reactions + createdAt) --------------------------- */}
                 <CommentOptions isCurrentUserCreator={isCurrentUserCreator} />
 
-                {/* ================================= reactions ==================== */}
                 {!isStacked && <CommentReactions />}
                 {!isStacked && <CommentReadReceipts />}
               </CommentBodyDesktop>
@@ -243,10 +226,6 @@ const CommentsContainer = () => {
     );
   } else {
     const openCommentCommands = () => {
-      // Select the comment first: the menu labels come from commentIndex,
-      // but the action handlers resolve their target from currentId.
-      // Without this, actions (incl. delete) would hit the previously
-      // selected comment.
       setCurrentId(`comment-${i}`);
       setShowCommands({
         show: true,
@@ -264,7 +243,7 @@ const CommentsContainer = () => {
                         ${
                           isCommentCreatedByUser(comment, currentUser?.id)
                             ? "bg-self-comment"
-                            : // they look the same now but wasn't always t
+                            :
                               "bg-comment-description"
                         }`}
       >

@@ -13,10 +13,6 @@ type AssigneeIntent = "assign" | "unassign" | "toggle";
 export const assigneeIntentForOption = (user: IUser | IAgent): AssigneeIntent =>
   user.assigned ? "unassign" : "assign";
 
-// Shape a picked-people list like the assignee rows this endpoint returns, so a
-// caller can repaint the task before the request comes back. Consumers read
-// `row.agent ?? row.user`, and an empty list is what clears the panel when the
-// last person is removed.
 export const toAssigneeRows = (
   list: (IUser | IAgent)[],
   taskId?: number

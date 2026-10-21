@@ -10,9 +10,6 @@ import {
   withSplitsNoImportant,
 } from "@/lib/inboxSplitSettings";
 
-// Invites are transactional and deliberately not configurable: nothing routes
-// them through shouldNotify, so accepting an "invites" key would store a
-// setting that never takes effect.
 const notificationCategories = [
   "mentions",
   "comments",

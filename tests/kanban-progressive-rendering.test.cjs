@@ -111,7 +111,7 @@ test("drag capture mounts every card before dimensions are collected", () => {
   assert.match(placeholder, /provided\.draggableProps/);
   assert.match(task, /dragProvided \? \(/);
   assert.match(homepage, /onBeforeCapture={handleBeforeCapture}/);
-  assert.match(homepage, /wraps this responder in ReactDOM\.flushSync/);
+  assert.match(fs.readFileSync(require.resolve("@hello-pangea/dnd"), "utf8"), /ReactDOM\.flushSync\(onBeforeCapureCallback\)/);
   assert.match(homepage, /draggableId\.startsWith\("task-"\)/);
   assert.match(homepage, /setRenderAllTasks\(true\)/);
   assert.match(homepage, /setRenderAllTasks\(false\)/);

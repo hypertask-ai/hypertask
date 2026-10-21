@@ -47,11 +47,6 @@ export const getLabelReferences = (boardFilters: unknown): string[] =>
       : []
   );
 
-/**
- * New smart splits have a stable, schema-free pairing: the view and smart label
- * share an id. Legacy splits are still inferred when exactly one saved
- * view references exactly one smart label.
- */
 export const getSmartSplitLabel = <T extends SmartSplitLabel>(
   view: SmartSplitView,
   labels: ReadonlyArray<T>,

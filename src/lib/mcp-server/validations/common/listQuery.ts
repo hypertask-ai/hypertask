@@ -1,7 +1,3 @@
-/**
- * Shared MCP tool input fields for list/search (HTPR-6530).
- * Same names on every list tool: query, filter, sort, fields, limit, cursor.
- */
 
 import { z } from 'zod'
 import { HAS_PR_VALUES, type HasPrValue } from '@/lib/mcp/listQuery'

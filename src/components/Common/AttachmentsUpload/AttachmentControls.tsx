@@ -12,9 +12,6 @@ import { MOBILE_TARGET } from "@/lib/configs/general.config";
 import { SendArrow } from "@/components/Common/SendArrow";
 import type { DictationCoordinator } from "@/lib/dictationCoordinator";
 
-
-
-// ================================ MOBILE save button
 export interface IPropsSaveButtonMobile {
   sendOnClick: any;
   mode: RedirectMode;
@@ -93,9 +90,6 @@ export const MobileBottomBar: React.FC<IMobileBottomBar> = ({
   if (isDictating) recorderWrapperClassName = "flex min-h-[62px] w-full items-center";
   const barRef = useRef<HTMLDivElement>(null);
   const wasAiTaskWriterOpen = useRef(false);
-  // Dictation is the likeliest way a task gets written on a phone, and Save is
-  // what you want next. The row scrolls, so Save can be sitting past the right
-  // edge exactly when dictation finishes (HTPR-5147). Bring it back into view.
   useEffect(() => {
     if (wasDictating.current && !isDictating) {
       saveRef.current?.scrollIntoView({ block: "nearest", inline: "nearest" });
@@ -103,9 +97,6 @@ export const MobileBottomBar: React.FC<IMobileBottomBar> = ({
     wasDictating.current = isDictating;
   }, [isDictating]);
 
-  // Returning from Task Writer focuses the editor and commonly reopens the
-  // keyboard. Restore the action bar vertically; primary controls no longer
-  // depend on the row's previous horizontal scroll position.
   useEffect(() => {
     if (wasAiTaskWriterOpen.current && !isAiTaskWriterOpen) {
       barRef.current?.scrollIntoView({ block: "nearest" });
@@ -114,16 +105,7 @@ export const MobileBottomBar: React.FC<IMobileBottomBar> = ({
   }, [isAiTaskWriterOpen]);
 
   return (
-    // HTPR-5332 supersedes only the scroll dependency: AI, dictation, the
-    // full-width waveform, and Save-after-dictation behavior below stay intact.
-    // w-full + min-w-0: the row already asked to scroll, but a flex child sizes to
-    // its content unless it is bounded, so the actions ran off the screen edge
-    // instead (HTPR-5040).
     <div ref={barRef} data-mobile-new-task-actions className="relative flex w-full min-w-0 items-center gap-1.5 overflow-visible pb-[env(safe-area-inset-bottom)] scroll-mb-[calc(env(safe-area-inset-bottom)_+_0.5rem)] text-meta font-semibold text-icon-hover-gray">
-      {/* The AI writer used to be a 16px "ai" link floating in the description
-          card corner. It belongs where the other actions live, and first: the row
-          scrolls, so the control reached for most is the one never scrolled to
-          (HTPR-5098). */}
       {!isDictating && (
         <button
           type="button"
@@ -140,9 +122,6 @@ export const MobileBottomBar: React.FC<IMobileBottomBar> = ({
           <Paperclip size={20} strokeWidth={1.75} />
         </button>
       )}
-      {/* Dictation is how tasks get created on a phone: it went missing when this
-          bar stopped reusing the desktop row. Keep this instance mounted while
-          recording so the first tap's MediaRecorder is not discarded (#2666). */}
       {toggleRecording && audioTiptapCallback && (
         <AudioButton
           key="new-task-dictation"
@@ -156,12 +135,8 @@ export const MobileBottomBar: React.FC<IMobileBottomBar> = ({
           dictationCoordinator={dictationCoordinator}
           ariaLabel="Dictate description"
           mobilePresentation="prominent"
-          // Canonical exception: openwiki/style-guide.md approves the white buttons for
-          // https://app.hypertask.ai/detail/project-15/5995.
           mobilePrimaryTone="default"
           className={isDictating ? undefined : MOBILE_TARGET}
-          // order lives on the wrapper: only the .audio-recorder root is a
-          // direct child of this flex row, so order on className is a no-op.
           wrapperClassName={recorderWrapperClassName}
           visualizerClassName="!mb-0 w-full"
         />
@@ -183,9 +158,6 @@ export const MobileBottomBar: React.FC<IMobileBottomBar> = ({
           <PencilSparkles size={20} strokeWidth={1.75} aria-hidden="true" />
         </button>
       )}
-      {/* Dictation is how tasks get created on a phone: it went missing when this
-          bar stopped reusing the desktop row. Keep this instance mounted while
-          recording so the first tap's MediaRecorder is not discarded. */}
       {!isDictating && !descriptionFirst && hasText && (
         <div
           data-mobile-primary-save
@@ -223,7 +195,6 @@ export const MobileBottomBar: React.FC<IMobileBottomBar> = ({
   );
 };
 
-// ====================================
 export const SaveButtonMobile: React.FC<IPropsSaveButtonMobile> = ({
   sendOnClick,
   mode,
@@ -371,9 +342,6 @@ export const DesktopAttachment = ({
           status={status}
         />
       )}
-      {/* While recording, the waveform bar takes over the whole toolbar row:
-          the send/attach/ai/improve/trash siblings collapse and the recorder
-          flexes to full width (mirrors the mobile branch). */}
       <div
         className={`flex gap-2 items-center ${
           isRecording ? "flex-1 w-full" : ""
@@ -502,7 +470,6 @@ export const BottomButtons = ({
 }: IBottomButtonProps) => {
   const spanClassName =
     "text-content text-icon-dark-gray hover:text-white-black  cursor-pointer font-semibold relative group whitespace-nowrap";
-  // Settings > Profile > Inbox. Was gated on ?inboxFlow=true before.
   const advanceOnSend = useGetUserPreferences().data.inboxAdvanceOnSend ?? true;
 
   const DescriptionOptions: IDescriptionOption[] = [
@@ -550,8 +517,6 @@ export const BottomButtons = ({
       : "Save description";
 
   const getKeyCombinationForSend = () => {
-    // On an inbox task, plain send is the archive button, so the bare "Send"
-    // beside it is the shift variant.
     if (presentInInbox) return [`${ctrlCmd}`, "SHIFT", "Enter"];
     return [`${ctrlCmd}`, "Enter"];
   };
@@ -611,7 +576,6 @@ export const BottomButtons = ({
     );
   } else
     return (
-      // Comment Send Buttons
       <div className="flex gap-6">
         {presentInInbox && mode !== "read-edit-comments" ? (
           <span
@@ -672,7 +636,7 @@ export const CustomArchiveIcon = ({ markAndMove }: { markAndMove?: boolean }) =>
       <svg
         className={`text-[#696b6e] group-hover:fill-white-black`}
         width={14}
-        fill={"#696b6e"} // Change fill color based on hover state
+        fill={"#696b6e"}
         height={14}
         viewBox={`0 0 18 18`}
         xmlns="http://www.w3.org/2000/svg"

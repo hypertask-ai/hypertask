@@ -1592,7 +1592,9 @@ test("per-flag registry handles legacy inline and extracted base refs without a 
     }
     const base = commit(git, "old layout");
     perFlagLayout(dir);
-    writeFile(dir, "src/lib/flags/definitions/htpr-5-widget.ts", `export const WIDGET_FLAG = "htpr-5-widget";\nexport default { key: WIDGET_FLAG, description: "Widget", shippedOn: "${RELEASE_RISK_REQUIRED_FROM}", releaseRisk: { risk: "new", reason: "Adds a widget." } } as const;\n`);
+    const existingFile = "src/lib/flags/definitions/htpr-1-other.ts";
+    writeFile(dir, existingFile, fs.readFileSync(path.join(dir, existingFile), "utf8").replace("key: OTHER_FLAG", 'key: OTHER_FLAG, defaultMode: "EVERYONE"'));
+    writeFile(dir, "src/lib/flags/definitions/htpr-5-widget.ts", `export const WIDGET_FLAG = "htpr-5-widget";\nexport default { key: WIDGET_FLAG, defaultMode: "EVERYONE", description: "Widget", shippedOn: "${RELEASE_RISK_REQUIRED_FROM}", releaseRisk: { risk: "new", reason: "Adds a widget." } } as const;\n`);
     writeFile(dir, "src/components/Widget.tsx", 'import { WIDGET_FLAG } from "@/lib/flags/keys";\nimport { useFlag } from "@/hooks/useFlag";\nexport const Widget = () => useFlag(WIDGET_FLAG) ? <div>Widget</div> : null;\n');
     const head = commit(git, "new layout and widget");
     const result = await evaluate("HTPR-5 [FEATURE] Widget", base, head, dir);
@@ -1606,13 +1608,13 @@ test("per-flag additions enforce the release-risk cutoff and registry defaults e
   const base = commit(git, "per flag base");
   const filename = "src/lib/flags/definitions/htpr-2-new.ts";
   const source = `export const NEW_FLAG = "htpr-2-new";\nexport default { key: NEW_FLAG, shippedOn: "${RELEASE_RISK_REQUIRED_FROM}", description: "New flag" EXTRA } as const;`;
-  for (const [extra, pass] of [["", false], [', releaseRisk: { risk: "none", reason: "Records events." }', true], [', defaultMode: "EVERYONE"', false], [', releaseRisk: { risk: "large", reason: "Invalid." }', false]]) {
+  for (const [extra, pass] of [["", false], [', releaseRisk: { risk: "none", reason: "Records events." }', false], [', defaultMode: "EVERYONE", releaseRisk: { risk: "none", reason: "Records events." }', true], [', defaultMode: "EVERYONE"', false], [', releaseRisk: { risk: "large", reason: "Invalid." }', false]]) {
     writeFile(dir, filename, source.replace(" EXTRA", extra));
     const head = commit(git, "add flag " + extra);
     const result = await evaluate("YPER4-2 [INFRA] Fixture", base, head, dir);
     assert.equal(result.pass, pass, result.reason);
   }
-  writeFile(dir, filename, source.replace(RELEASE_RISK_REQUIRED_FROM, "2026-10-10").replace(" EXTRA", ""));
+  writeFile(dir, filename, source.replace(RELEASE_RISK_REQUIRED_FROM, "2026-10-10").replace(" EXTRA", ', defaultMode: "EVERYONE"'));
   assert.equal((await evaluate("YPER4-2 [INFRA] Fixture", base, commit(git, "pre cutoff"), dir)).pass, true);
 });
 
@@ -1726,4 +1728,266 @@ test('only the real React useCallback binds a callback', async (t) => {
     const sha = commit(fixture.git, name);
     assert.equal((await evaluate('HTPR-1 [FEATURE] preview widget', base, sha, fixture.dir)).pass, expected, name);
   }
+});
+
+test("BUGFIX and INFRA cannot drop an existing banner condition (PR 1580)", async (t) => {
+  const { dir, git } = makeRepo(t);
+  writeFile(dir, "src/components/Global/Banner.tsx", "export const Banner = () => <div>Consent</div>;\n");
+  writeFile(dir, "src/components/Providers.tsx", 'import { Banner } from "./Global/Banner";\nexport const Providers = () => <>{!currentUser && <Banner />}</>;\n');
+  const base = commit(git, "guest banner");
+  writeFile(dir, "src/components/Providers.tsx", 'import { Banner } from "./Global/Banner";\nexport const Providers = () => <Banner />;\n');
+  const head = commit(git, "banner for everyone");
+  for (const tag of ["BUGFIX", "INFRA"]) {
+    const result = await evaluate(`HTPR-7274 [${tag}] consent`, base, head, dir);
+    assert.equal(result.pass, false);
+    assert.match(result.reason, /Providers.tsx:Banner condition removed\) without a flag/);
+    assert.match(result.reason, /Legal, privacy, compliance and urgent work still need a flag/);
+    assert.match(result.reason, /definitions\/htpr-7274-<name>\.ts/);
+  }
+  assert.equal((await evaluate("HTPR-7274 [FEATURE] consent", base, head, dir)).pass, false);
+  for (const title of ["YPER4-418 [INFRA] consent", "HTPR-7274 [AI CHAT] consent"]) {
+    assert.equal((await evaluate(title, base, head, dir)).pass, true);
+  }
+  assert.equal((await evaluate("HTPR-7274 [BUGFIX] consent", base, head, dir, ["AI CHAT 💬"])).pass, true);
+});
+
+test("ticket flag gates widened banner exposure through the shared feature check", async (t) => {
+  const { dir, git } = makeRepo(t);
+  perFlagLayout(dir);
+  writeFile(dir, "src/components/Global/Banner.tsx", "export const Banner = () => <div>Consent</div>;\n");
+  writeFile(dir, "src/components/Providers.tsx", 'import { Banner } from "./Global/Banner";\nexport const Providers = () => <>{!currentUser && <Banner />}</>;\n');
+  const base = commit(git, "guest banner");
+  writeFile(dir, "src/lib/flags/definitions/htpr-7274-banner.ts", `export const HTPR_7274_BANNER_FLAG = "htpr-7274-banner";\nexport default { key: HTPR_7274_BANNER_FLAG, kind: "bugfix", shippedOn: "${RELEASE_RISK_REQUIRED_FROM}", description: "Consent banner", releaseRisk: { risk: "small", reason: "Shows the banner to signed-in users." } } as const;\n`);
+  writeFile(dir, "src/components/Providers.tsx", 'import { Banner } from "./Global/Banner";\nimport { useFlag } from "@/hooks/useFlag";\nimport { HTPR_7274_BANNER_FLAG } from "@/lib/flags/keys";\nexport const Providers = () => <>{useFlag(HTPR_7274_BANNER_FLAG) && <aside><Banner /></aside>}{!currentUser && <Banner />}</>;\n');
+  const head = commit(git, "gate wider banner");
+  for (const tag of ["BUGFIX", "INFRA", "FEATURE"]) {
+    const result = await evaluate(`HTPR-7274 [${tag}] consent`, base, head, dir);
+    assert.equal(result.pass, true, result.reason);
+    assert.equal(result.ownerReview, "feature-gated-ui");
+  }
+  writeFile(dir, "src/components/Unrelated.tsx", 'export const Unrelated = () => <div>Ungated</div>;\n');
+  const uncovered = await evaluate("HTPR-7274 [BUGFIX] consent", base, commit(git, "ungated sibling file"), dir);
+  assert.equal(uncovered.pass, false);
+  assert.match(uncovered.reason, /without a flag/);
+});
+
+test("removing a named JSX function's nullish early return widens exposure", async (t) => {
+  for (const binding of ["function Banner()", "const Banner = () =>"]) {
+    const { dir, git } = makeRepo(t);
+    writeFile(dir, "src/components/Banner.tsx", `export ${binding} { if ((user)) { return null; } return <div>Consent</div>; }\n`);
+    const base = commit(git, "guarded banner");
+    writeFile(dir, "src/components/Banner.tsx", `export ${binding} { return <div>Consent</div>; }\n`);
+    const result = await evaluate("HTPR-7274 [BUGFIX] consent", base, commit(git, "remove return"), dir);
+    assert.equal(result.pass, false);
+    assert.match(result.reason, /Banner.tsx:Banner early return removed/);
+  }
+});
+
+test("broadening a nullish early return narrows exposure and stays exempt", async (t) => {
+  const { dir, git } = makeRepo(t);
+  writeFile(dir, "src/components/Banner.tsx", "export function Banner() { if (guest) return null; return <div>Consent</div>; }\n");
+  const base = commit(git, "guarded banner");
+  writeFile(dir, "src/components/Banner.tsx", "export function Banner() { if (guest || loading) return null; return <div>Consent</div>; }\n");
+  const narrowed = await evaluate("HTPR-7274 [BUGFIX] consent", base, commit(git, "hide while loading"), dir);
+  assert.equal(narrowed.pass, true, narrowed.reason);
+  writeFile(dir, "src/components/Banner.tsx", "export function Banner() { if (loading) return null; return <div>Consent</div>; }\n");
+  const swapped = await evaluate("HTPR-7274 [BUGFIX] consent", base, commit(git, "drop guest guard"), dir);
+  assert.equal(swapped.pass, false);
+  assert.match(swapped.reason, /Banner.tsx:Banner early return removed/);
+  for (const rewrite of [
+    "export function Banner() { return guest ? null : <div>Consent</div>; }\n",
+    "export const Banner = () => (guest ? null : <div>Consent</div>);\n",
+  ]) {
+    writeFile(dir, "src/components/Banner.tsx", rewrite);
+    const ternary = await evaluate("HTPR-7274 [BUGFIX] consent", base, commit(git, "ternary rewrite"), dir);
+    assert.equal(ternary.pass, true, ternary.reason);
+  }
+  for (const rewrite of [
+    "export function Banner() { return !guest && <div>Consent</div>; }\n",
+    "export function Banner() { return !guest ? <div>Consent</div> : null; }\n",
+  ]) {
+    writeFile(dir, "src/components/Banner.tsx", rewrite);
+    const shortCircuit = await evaluate("HTPR-7274 [BUGFIX] consent", base, commit(git, "short-circuit rewrite"), dir);
+    assert.equal(shortCircuit.pass, true, shortCircuit.reason);
+  }
+});
+
+test("mutually exclusive branches of one placement do not count as extra renders", async (t) => {
+  const { dir, git } = makeRepo(t);
+  writeFile(dir, "src/components/Banner.tsx", "export const Banner = (props) => <div>{props.title}</div>;\n");
+  writeFile(dir, "src/components/Page.tsx", 'import { Banner } from "./Banner";\nexport const Page = () => <Banner />;\n');
+  const base = commit(git, "one banner");
+  writeFile(dir, "src/components/Page.tsx", 'import { Banner } from "./Banner";\nexport const Page = () => (wide ? <Banner title="A" /> : <Banner title="B" />);\n');
+  const exclusive = await evaluate("HTPR-7274 [BUGFIX] consent", base, commit(git, "conditional props"), dir);
+  assert.equal(exclusive.pass, true, exclusive.reason);
+  writeFile(dir, "src/components/Page.tsx", 'import { Banner } from "./Banner";\nexport const Page = () => (<><Banner title="A" /><Banner title="B" /></>);\n');
+  const doubled = await evaluate("HTPR-7274 [BUGFIX] consent", base, commit(git, "two banners"), dir);
+  assert.equal(doubled.pass, false);
+  assert.match(doubled.reason, /Banner rendered 1 more times/);
+});
+
+test("branch order and positive if-returns keep the same exposure", async (t) => {
+  const { dir, git } = makeRepo(t);
+  writeFile(dir, "src/components/Banner.tsx", "export const Banner = () => <div />;\n");
+  writeFile(dir, "src/components/Page.tsx", 'import { Banner } from "./Banner";\nexport const Page = () => (wide ? <Banner /> : <><Banner /><Banner /></>);\n');
+  writeFile(dir, "src/components/Card.tsx", "export function Card() { return ready && <div>Card</div>; }\n");
+  const base = commit(git, "base");
+  writeFile(dir, "src/components/Page.tsx", 'import { Banner } from "./Banner";\nexport const Page = () => (!wide ? <><Banner /><Banner /></> : <Banner />);\n');
+  writeFile(dir, "src/components/Card.tsx", "export function Card() { if (ready) return <div>Card</div>; return null; }\n");
+  const rewritten = await evaluate("HTPR-7274 [BUGFIX] consent", base, commit(git, "equivalent rewrites"), dir);
+  assert.equal(rewritten.pass, true, rewritten.reason);
+  for (const elseForm of ["else return null;", "else { return null; }"]) {
+    writeFile(dir, "src/components/Card.tsx", `export function Card() { if (ready) return <div>Card</div>; ${elseForm} }\n`);
+    const withElse = await evaluate("HTPR-7274 [BUGFIX] consent", base, commit(git, "else form"), dir);
+    assert.equal(withElse.pass, true, withElse.reason);
+  }
+  writeFile(dir, "src/components/Page.tsx", 'import { Banner } from "./Banner";\nexport const Page = () => (wide ? <Banner /> : <Banner />);\n');
+  const split = commit(git, "same banner in both branches");
+  writeFile(dir, "src/components/Page.tsx", 'import { Banner } from "./Banner";\nexport const Page = () => <Banner />;\n');
+  const collapsed = await evaluate("HTPR-7274 [BUGFIX] consent", split, commit(git, "collapse branches"), dir);
+  assert.equal(collapsed.pass, true, collapsed.reason);
+  writeFile(dir, "src/components/Card.tsx", "export function Card() { return <div>Card</div>; }\n");
+  const dropped = await evaluate("HTPR-7274 [BUGFIX] consent", base, commit(git, "drop ready"), dir);
+  assert.equal(dropped.pass, false);
+  assert.match(dropped.reason, /Card.tsx:Card early return removed/);
+});
+
+test("existing banner added in another file fails, but moving it between files passes", async (t) => {
+  for (const moving of [false, true]) {
+    const { dir, git } = makeRepo(t);
+    writeFile(dir, "src/components/A.tsx", 'export const A = () => <Banner />;\n');
+    writeFile(dir, "src/components/B.tsx", 'export const B = () => <div />;\n');
+    const base = commit(git, "first placement");
+    writeFile(dir, "src/components/A.tsx", moving ? 'export const A = () => <div />;\n' : 'export const A = () => <Banner title="Consent" />;\n');
+    writeFile(dir, "src/components/B.tsx", 'export const B = () => <Banner />;\n');
+    const result = await evaluate("HTPR-7274 [BUGFIX] consent", base, commit(git, "second placement"), dir);
+    assert.equal(result.pass, moving, result.reason);
+    assert.match(result.reason, moving ? /is exempt/ : /Banner rendered 1 more times/);
+  }
+});
+
+test("new placements recognize unchanged imported UI but not brand-new components", async (t) => {
+  for (const moduleName of ["@/components/Global/Banner", "./Global/Banner", "./Global", "../../ui/Banner"]) {
+    for (const existing of [false, true]) {
+      const { dir, git } = makeRepo(t);
+      const bannerPath = moduleName === "../../ui/Banner" ? "ui/Banner.jsx" :
+        moduleName === "./Global" ? "src/components/Global/index.tsx" : "src/components/Global/Banner.tsx";
+      if (existing) writeFile(dir, bannerPath, 'export default () => <div>Consent</div>;\n');
+      const base = commit(git, "base");
+      if (!existing) writeFile(dir, bannerPath, 'export default () => <div>Consent</div>;\n');
+      writeFile(dir, "src/components/Providers.tsx", `import Banner from "${moduleName}";\nexport const Providers = () => <Banner />;\n`);
+      const result = await evaluate("HTPR-7274 [BUGFIX] consent", base, commit(git, "placement"), dir);
+      assert.equal(result.pass, !existing, result.reason);
+      if (existing) assert.match(result.reason, /Providers.tsx:Banner rendered 1 more times/);
+    }
+  }
+});
+
+test("guard removal handles conjuncts, ternaries, if branches and member tags", async (t) => {
+  for (const [before, after] of [
+    ['return <>{((guest) && (consent)) && <Banner />}</>;', 'return <>{guest && <Banner />}</>;'],
+    ['return guest ? <Banner /> : null;', 'return <Banner />;'],
+    ['return guest ? null : <Banner />;', 'return <Banner />;'],
+    ['if (guest) { return <Banner />; } return null;', 'return <Banner />;'],
+    ['if (guest) { return null; } else { return <Banner />; }', 'return <Banner />;'],
+    ['return <>{guest && <UI.Banner />}</>;', 'return <UI.Banner />;'],
+  ]) {
+    const { dir, git } = makeRepo(t);
+    writeFile(dir, "src/components/Providers.jsx", `export function Providers() { ${before} }\n`);
+    const base = commit(git, "guarded");
+    writeFile(dir, "src/components/Providers.jsx", `export function Providers() { ${after} }\n`);
+    const result = await evaluate("HTPR-7274 [BUGFIX] consent", base, commit(git, "widened"), dir);
+    assert.equal(result.pass, false, before);
+    assert.match(result.reason, /condition removed/);
+  }
+});
+
+test("text edits, narrowed or normalized guards, and matched multiset occurrences stay exempt", async (t) => {
+  for (const [before, after] of [
+    ['return <div className="old">Old</div>;', 'return <div className="new">New</div>;'],
+    ['return <>{guest && <Banner />}</>;', 'return <>{guest && isGuest && <Banner />}</>;'],
+    ['return <>{(guest && consent) && <Banner />}</>;', 'return <>{guest && (consent && <Banner />)}</>;'],
+    ['return <>{guest ? <Banner /> : null}</>;', 'return <>{((guest)) ? <Banner /> : null}</>;'],
+    ['return <><Banner />{guest && <Banner />}</>;', 'return <Banner />;'],
+    ['if (guest) {} return <Banner />;', 'return <Banner />;'],
+    ['if (guest) return "wait"; return <Banner />;', 'return <Banner />;'],
+    ['if ((guest)) return null; return <Banner />;', 'if (guest) { return null; } return <Banner title="Consent" />;'],
+    ['return <>{guest && <div />}</>;', 'return <div />;'],
+  ]) {
+    const { dir, git } = makeRepo(t);
+    writeFile(dir, "src/components/Providers.tsx", `export function Providers() { ${before} }\n`);
+    const base = commit(git, "base");
+    writeFile(dir, "src/components/Providers.tsx", `export function Providers() { ${after} }\n`);
+    const result = await evaluate("HTPR-7274 [BUGFIX] consent", base, commit(git, "edit"), dir);
+    assert.equal(result.pass, true, `${before}: ${result.reason}`);
+    assert.equal(result.ownerReview, "exempt-ui");
+  }
+});
+
+test("widening still hits the exempt line budget before ticket gates", async (t) => {
+  const { dir, git } = makeRepo(t);
+  writeFile(dir, "src/components/Providers.tsx", 'export const Providers = () => <>{guest && <Banner />}</>;\n');
+  const base = commit(git, "guarded");
+  writeFile(dir, "src/components/Providers.tsx", 'export const Providers = () => <Banner />;\n' + Array.from({ length: 151 }, (_, index) => `const value${index} = ${index};`).join("\n"));
+  const result = await evaluate("HTPR-7274 [BUGFIX] consent", base, commit(git, "large widening"), dir);
+  assert.equal(result.pass, false);
+  assert.match(result.reason, /over the 150-line budget/);
+});
+
+test("verified auto-reverts remain exempt when restoring wider exposure", async (t) => {
+  const { dir, git } = makeRepo(t);
+  writeFile(dir, "src/components/Providers.tsx", 'export const Providers = () => <Banner />;\n');
+  commit(git, "unrestricted banner");
+  writeFile(dir, "src/components/Providers.tsx", 'export const Providers = () => <>{guest && <Banner />}</>;\n');
+  const base = commit(git, "HTPR-7274 [BUGFIX] narrow banner");
+  git(["revert", "--no-edit", base]);
+  const head = git(["rev-parse", "HEAD"]).trim();
+  const result = await evaluate('Revert "HTPR-7274 [BUGFIX] narrow banner"', base, head, dir);
+  assert.equal(result.pass, true);
+  assert.match(result.reason, /Verified auto-revert/);
+});
+
+test("first placement of an existing local component needs a flag", async (t) => {
+  const { dir, git } = makeRepo(t);
+  writeFile(dir, "src/components/Providers.tsx", 'const Banner = () => <div>Consent</div>;\nexport const Providers = () => <div />;\n');
+  const base = commit(git, "existing local banner");
+  writeFile(dir, "src/components/Providers.tsx", 'const Banner = () => <div>Consent</div>;\nexport const Providers = () => <Banner />;\n');
+  const result = await evaluate("HTPR-7274 [BUGFIX] consent", base, commit(git, "place local banner"), dir);
+  assert.equal(result.pass, false);
+  assert.match(result.reason, /Providers.tsx:Banner rendered 1 more times/);
+});
+
+
+test("added-file default policy preserves existing flags and requires explicit Everyone only for new eligible definitions", async (t) => {
+  const risk = 'releaseRisk: { risk: "new", reason: "Fixture" }';
+  const sensitive = 'releaseRisk: { risk: "new", reason: "Fixture", highRisk: "access" }';
+  for (const [extra, pass, message] of [
+    [risk, false, /new flag htpr-2-new must set defaultMode: "EVERYONE"/],
+    [`kind: "feature", ${risk}`, false],
+    [`kind: "improvement", ${risk}`, false],
+    [`kind: "feature", defaultMode: "EVERYONE", ${risk}`, true],
+    [`kind: "improvement", defaultMode: "EVERYONE", ${risk}`, true],
+    [`kind: "bugfix", ${risk}`, true],
+    [`kind: "feature", defaultMode: "OWNER_AND_QA", ${sensitive}`, true],
+    [`kind: "feature", defaultMode: "EVERYONE", ${sensitive}`, false],
+    [`kind: "bugfix", ${sensitive}`, false],
+    [`kind: "bugfix", defaultMode: "OWNER_AND_QA", ${sensitive}`, true],
+    [`kind: "internal", ${risk}`, true],
+    [`kind: "internal", defaultMode: "EVERYONE", ${risk}`, false],
+  ]) {
+    const { dir, git } = makeRepo(t);
+    perFlagLayout(dir);
+    const base = commit(git, "existing feature without defaultMode");
+    writeFile(dir, "src/lib/flags/definitions/htpr-2-new.ts", `export const NEW_FLAG = "htpr-2-new";
+export default { key: NEW_FLAG, shippedOn: "2026-10-20", description: "Fixture", ${extra} } as const;`);
+    const result = await evaluate("YPER4-2 [INFRA] Fixture", base, commit(git, "added definition"), dir);
+    assert.equal(result.pass, pass, extra + ": " + result.reason);
+    if (message) assert.match(result.reason, message);
+  }
+  const { dir, git } = makeRepo(t);
+  perFlagLayout(dir);
+  const base = commit(git, "existing feature without defaultMode");
+  writeFile(dir, "src/components/Widget.tsx", 'import { OTHER_FLAG } from "@/lib/flags/keys";\nimport { useFlag } from "@/hooks/useFlag";\nexport const Widget = () => useFlag(OTHER_FLAG) ? <div /> : null;\n');
+  const result = await evaluate("HTPR-1 [FEATURE] Existing flag", base, commit(git, "unchanged definition"), dir);
+  assert.equal(result.pass, true, result.reason);
 });

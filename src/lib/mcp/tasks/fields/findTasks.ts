@@ -1,7 +1,8 @@
+import { findIdParamOutOfRange } from '@/lib/mcp/listParams';
+import { TaskIdentifierOutOfRangeError } from '@/lib/mcp/tasks/resolveTask';
 import prisma from '@/lib/prisma';
 import { getProjectWhere } from '@/utils/controllers/projects/getAllIncludes';
 
-// Helper function to find tasks by different identification methods
 export async function findTasksByIdentifier(
     user: { id: number },
     options: {
@@ -14,11 +15,15 @@ export async function findTasksByIdentifier(
 ) {
     const { task_id, ticket_number, unique_index, project_id } = options
 
+    const outOfRange = findIdParamOutOfRange({ task_id, unique_index, project_id })
+    if (outOfRange) throw new TaskIdentifierOutOfRangeError(outOfRange)
+
     const orConditions: any[] = []
 
     if (task_id) {
         const taskIds = Array.isArray(task_id) ? task_id : [task_id]
         const validTaskIds = taskIds.filter(id => id && !isNaN(Number(id))).map(id => Number(id))
+        if (findIdParamOutOfRange({ task_id: validTaskIds })) throw new TaskIdentifierOutOfRangeError('task_id')
         if (validTaskIds.length > 0) {
             orConditions.push({ id: { in: validTaskIds } })
         }
@@ -48,12 +53,6 @@ export async function findTasksByIdentifier(
         return []
     }
 
-    // Resolve tasks the same way move/get do (see resolveTask.ts): explicit
-    // task_id / ticket_number lookups must reach Deleted-status tasks too, so a
-    // soft-deleted ticket can still be archived/restored. Only the unique_index
-    // arm excludes Deleted (its own condition above). Without this, a Deleted
-    // task resolved to no rows, the response omitted `task`, and the CLI/MCP
-    // null-deref'd on `.ticketNumber` (HTPR-3801).
     const tasks = await prisma.task.findMany({
         where: {
             OR: orConditions,

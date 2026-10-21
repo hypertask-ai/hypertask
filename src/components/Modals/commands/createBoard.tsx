@@ -32,7 +32,6 @@ type Props = {
     teamTitle?: string,
     ticketPrefix?: string
   ) => void;
-  //payload is only for creating team
   payload?: {
     teamId: string;
     googleAccountId: string;
@@ -105,7 +104,6 @@ const CreateBoard = (props: Props) => {
     if (!editingBoardFields && (e.keyCode === KeyCodes.J || e.keyCode === KeyCodes.ARROW_DOWN)) {
       if (selectedTeam) {
         if (index === -1 || index === filteredTeams.length - 1) {
-          // No action needed
         } else {
           setSelectedTeam(filteredTeams[index + 1]);
           document
@@ -118,7 +116,6 @@ const CreateBoard = (props: Props) => {
     if (!editingBoardFields && (e.keyCode === KeyCodes.K || e.keyCode === KeyCodes.ARROW_UP)) {
       if (selectedTeam) {
         if (index <= 0) {
-          // No action needed
         } else {
           setSelectedTeam(filteredTeams[index - 1]);
           document
@@ -164,13 +161,11 @@ const CreateBoard = (props: Props) => {
     (currentHoveredDiv.current = index);
 
   const handleMouseLeave = () => {
-    // Clear any existing debounceTimeout
     if (debounceTimeout.current) {
       clearTimeout(debounceTimeout.current);
       debounceTimeout.current = null;
     }
 
-    // Start a new debounceTimeout to remove focus after a short delay (e.g., 100ms)
     debounceTimeout.current = setTimeout(() => {
       if (currentHoveredDiv.current !== null && teamRef.current) {
         (teamRef.current as HTMLDivElement)?.blur();
@@ -180,7 +175,6 @@ const CreateBoard = (props: Props) => {
   };
 
   const handleMouseMove = () => {
-    // Clear any existing debounceTimeout
     if (debounceTimeout.current) {
       setSelectedTeam(
         filteredTeams[currentHoveredDiv.current ? currentHoveredDiv.current : 0]
@@ -192,7 +186,6 @@ const CreateBoard = (props: Props) => {
 
   useEffect(() => {
     return () => {
-      // Clear the debounceTimeout when the component unmounts
       if (debounceTimeout.current) {
         clearTimeout(debounceTimeout.current);
       }
@@ -227,7 +220,6 @@ const CreateBoard = (props: Props) => {
         }
       />
 
-      {/* ---------------------- CREATE BOARD ----------------*/}
       {creatingBoard ? (
         <></>
       ) : currentScreen === "Create Board" ? (
@@ -253,7 +245,6 @@ const CreateBoard = (props: Props) => {
           )}
         </div>
       ) : (
-        //{/* ---------------------- SELECT TEAM ----------------*/}
 
         <div className="w-full overflow-hidden rounded-[5px] p-0">
           <ModalInput

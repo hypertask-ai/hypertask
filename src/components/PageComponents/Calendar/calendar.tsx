@@ -158,8 +158,6 @@ export function Calendar() {
                   optionCallback={(item) => setCurrentView(item)}
                 />
 
-                {/* The panel holds the month date-picker, so the date range is
-                    the obvious way in: same target as the panel icon. */}
                 <div className="relative group min-w-0 shrink">
                   <button
                     type="button"
@@ -327,8 +325,6 @@ export function Calendar() {
                 />
               </div>
 
-              {/* Guest CTAs end this row; the floating copy skips /calendar so
-                  they cannot land on top of the filter and sort controls. */}
               <GuestAuthLinks />
             </div>
           </CardHeader>
@@ -341,8 +337,6 @@ export function Calendar() {
               }
             >
               {currentView === "month" && <MonthView />}
-              {/* Day view reuses WeekView: the weeks memo returns a single-day
-                  row when currentView is "day". */}
               {currentView !== "month" && <WeekView />}
             </CardContent>
           </DragDropContext>
@@ -377,11 +371,9 @@ const DropDownButton = ({
   const [isDropDown, setIsDropDown] = useState<boolean>(false);
   const [hover, setHover] = useState<boolean>(false);
 
-  // Determine the opposite view and its keyboard shortcut
   const getOtherView = () => {
     if (selectedView === "month") return { view: "week", key: "W" };
     if (selectedView === "week") return { view: "month", key: "M" };
-    // If day view, default to week
     return { view: "week", key: "W" };
   };
 

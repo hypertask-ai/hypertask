@@ -71,7 +71,6 @@ const TaskMovedActivity = ({ currentUser }: { currentUser: any }) => {
   );
 };
 
-//This is tweaked a little to only handle assignments. Check OG Comment
 const TaskAssignedActivity = ({ currentUser }: { currentUser: any }) => {
   return (
     <>
@@ -86,7 +85,6 @@ const TaskAssignedActivity = ({ currentUser }: { currentUser: any }) => {
   );
 };
 
-// ======================= Priority Element
 const TaskPriorityActivity = ({ currentUser }: { currentUser: any }) => {
   return (
     <>

@@ -14,9 +14,8 @@ import { buildFullScreenChatPath } from "@/lib/aiChatDisplayMode";
 import { HTPR_6936_ASK_AI_FULLSCREEN_FLAG } from "@/lib/flags/keys";
 import { HTPR_6688_SEARCH_AUTOCOMPLETE_FLAG, HTPR_6865_SEARCH_LAYOUT_FLAG, HTPR_6878_SEARCH_LABEL_SCOPE_FLAG, HTPR_6879_SEARCH_ESC_BACK_FLAG, HTPR_6880_SEARCH_COMMENTER_FLAG } from "@/lib/flags/keys";
 import { highlightedSearchSnippet, highlightedTitle } from "@/lib/search/autocomplete";
-import { HTPR_6882_SEARCH_MATCH_HIGHLIGHTS_FLAG, HTPR_6909_SEARCH_ONE_BOARD_TABS_FLAG, HTPR_6911_SEARCH_ROW_HIGHLIGHT_FLAG } from "@/lib/flags/keys";
+import { HTPR_6882_SEARCH_MATCH_HIGHLIGHTS_FLAG, HTPR_6911_SEARCH_ROW_HIGHLIGHT_FLAG } from "@/lib/flags/keys";
 import LabelWrapper from "@/components/Labels/LabelWrapper";
-import { HTPR_6370_SEARCH_CHIPS_FLAG, HTPR_6369_SEARCH_OPERATORS_FLAG } from "@/lib/flags/keys";
 import { MobileViewContext } from "@/lib/contexts/mobileContext";
 import { useRecoilValue, useSetRecoilState } from "@/lib/state";
 import { aiChatPendingPromptAtom, appShellRailAtom } from "@/store";
@@ -24,6 +23,7 @@ import { useGlobalUIState } from "@/components/ProviderGlobal/useGlobalUIState";
 import AppShellRail from "@/components/PageComponents/Kanban/HeaderComponents/AppShellRail";
 import SearchChipsInput from "./SearchChipsInput";
 import "./search-autocomplete.css";
+import type { ServerStartedSearch } from "@/lib/search/serverStartedSearch";
 
 interface IProps {
   _searchTerm: string;
@@ -32,6 +32,8 @@ interface IProps {
   _fromProject?: number | null;
   currentUser: IUser;
   askAiFullscreenEnabled?: boolean;
+  serverStartedSearch?: Promise<ServerStartedSearch | null>;
+  searchOnce?: boolean;
 }
 
 const SearchComp = ({
@@ -41,24 +43,20 @@ const SearchComp = ({
   _fromProject = null,
   currentUser,
   askAiFullscreenEnabled = false,
+  serverStartedSearch,
+  searchOnce = false,
 }: IProps) => {
   const router = useRouter();
   const askAiFullscreenFlagEnabled = useFlag(HTPR_6936_ASK_AI_FULLSCREEN_FLAG);
   const searchParams = useSearchParams();
-  // Native replaceState preserves the draft URL, but Back can reuse older server props.
   const searchTerm = askAiFullscreenEnabled && askAiFullscreenFlagEnabled
     ? searchParams?.get("searchTerm") ?? _searchTerm
     : _searchTerm;
-  const chipsFlagEnabled = useFlag(HTPR_6370_SEARCH_CHIPS_FLAG);
-  const operatorsFlagEnabled = useFlag(HTPR_6369_SEARCH_OPERATORS_FLAG);
-  const autocompleteFlagEnabled = useFlag(HTPR_6688_SEARCH_AUTOCOMPLETE_FLAG);
-  const autocompleteEnabled = autocompleteFlagEnabled && chipsFlagEnabled && operatorsFlagEnabled;
+  const autocompleteEnabled = useFlag(HTPR_6688_SEARCH_AUTOCOMPLETE_FLAG);
   const layoutFlagEnabled = useFlag(HTPR_6865_SEARCH_LAYOUT_FLAG);
   const layoutEnabled = layoutFlagEnabled && autocompleteEnabled;
   const matchHighlightsFlagEnabled = useFlag(HTPR_6882_SEARCH_MATCH_HIGHLIGHTS_FLAG);
   const rowHighlightFlagEnabled = useFlag(HTPR_6911_SEARCH_ROW_HIGHLIGHT_FLAG);
-  // Hides the tab row when the tabs are only "All" plus one board.
-  const oneBoardTabsFlagEnabled = useFlag(HTPR_6909_SEARCH_ONE_BOARD_TABS_FLAG);
   const commenterFlagEnabled = useFlag(HTPR_6880_SEARCH_COMMENTER_FLAG);
   const labelScopeFlagEnabled = useFlag(HTPR_6878_SEARCH_LABEL_SCOPE_FLAG);
   const searchEscBackFlagEnabled = useFlag(HTPR_6879_SEARCH_ESC_BACK_FLAG);
@@ -72,7 +70,6 @@ const SearchComp = ({
     selectedIndex,
     tasksInputRef,
     inputValue,
-    handleChange,
     responseMessage,
     typedTasks,
     isSearchDraft,
@@ -86,26 +83,20 @@ const SearchComp = ({
     updateSearchHistory,
     showCommands,
     setInputValue,
-    searchChipsEnabled,
     liSelectedRef,
     tabs,
     activeSplit,
     updateSplitAndTasks,
     results,
-    suggestedValue,
     includeArchived,
     setIncludeArchivedResults,
-  } = useSearch(searchTerm, _initialTabIndex, _includeArchived, _fromProject);
+  } = useSearch(searchTerm, _initialTabIndex, _includeArchived, _fromProject, serverStartedSearch, searchOnce);
   const matchSnippets = matchHighlightsFlagEnabled && layoutEnabled
     ? typedTasks.map((task) => highlightedSearchSnippet((task.commentId ? task.commentText : task.descriptionText) ?? '', inputValue, commenterFlagEnabled && layoutEnabled))
     : undefined;
   const showAskAiRow =
     !layoutEnabled && inputValue.trim().length >= 2 && typedTasks.length === 0;
-  const searchTextClassName =
-    "w-full px-4 @md:!px-9 text-subheading font-medium leading-normal rounded-b-[4px] bg-inherit outline-none";
 
-  // Ask AI hands the query to the single general AI chat (auto-sent there via
-  // aiChatPendingPromptAtom) instead of a separate in-search panel.
   function openAskAi(readableQuery?: string) {
     const query = labelScopeFlagEnabled && layoutEnabled && readableQuery !== undefined ? readableQuery : inputValue.trim();
     if (!query || (!layoutEnabled && query.length < 2)) return;
@@ -113,7 +104,6 @@ const SearchComp = ({
       const searchUrl = new URL(window.location.href);
       searchUrl.searchParams.set("searchTerm", inputValue);
       const returnPath = `${searchUrl.pathname}${searchUrl.search}${searchUrl.hash}`;
-      // Draft queries are not in the URL yet; preserve this history entry for Back.
       window.history.replaceState(window.history.state, "", returnPath);
       setAiChatPendingPrompt({ query, fullScreen: true });
       router.push(buildFullScreenChatPath(returnPath));
@@ -137,65 +127,29 @@ const SearchComp = ({
         autoFocus={false}
         className={cn(`py-9 min-h-screen bg-containerBackground flex-col rounded-[4px] my-0 global-view-width flex items-center  search-input  ${styles.links_modal}`, autocompleteEnabled && 'search-autocomplete')}
       >
-        {/* Below @xl the container is full-width, so clear the fixed back button (ends at x≈96) */}
         <div className={cn('w-full px-0', appShellRailOn && 'pl-[64px] @xl:pl-0')}>
-          {chipsFlagEnabled && operatorsFlagEnabled && searchChipsEnabled ? (
-            autocompleteFlagEnabled ? (
-              <SearchChipsInput
-                value={inputValue}
-                onChange={setInputValue}
-                onRun={updateSearchHistory}
-                boardId={_fromProject}
-                inputRef={tasksInputRef}
-                recentSearches={searchCache.history}
-                layoutEnabled={layoutEnabled}
-                availableBoards={labelScopeFlagEnabled && layoutEnabled ? availableSearchBoards : undefined}
-                onAskAi={openAskAi}
-                showSuggestions={isSearchDraft || (searchEscBackFlagEnabled && layoutEnabled && !inputValue.trim())}
-                autocompleteEnabled
-              />
-            ) : (
-              <SearchChipsInput
-                value={inputValue}
-                onChange={setInputValue}
-                onRun={updateSearchHistory}
-                boardId={_fromProject}
-                inputRef={tasksInputRef}
-              />
-            )
+          {autocompleteEnabled ? (
+            <SearchChipsInput
+              value={inputValue}
+              onChange={setInputValue}
+              onRun={updateSearchHistory}
+              boardId={_fromProject}
+              inputRef={tasksInputRef}
+              recentSearches={searchCache.history}
+              layoutEnabled={layoutEnabled}
+              availableBoards={labelScopeFlagEnabled && layoutEnabled ? availableSearchBoards : undefined}
+              onAskAi={openAskAi}
+              showSuggestions={isSearchDraft || (searchEscBackFlagEnabled && layoutEnabled && !inputValue.trim())}
+              autocompleteEnabled
+            />
           ) : (
-          <div className="relative w-full">
-              <span
-                className={`${searchTextClassName} text-icon-hover-gray`}
-                aria-hidden="true"
-              >
-                {suggestedValue}
-              </span>
-
-              <input
-                id={searchConfig.elementIds.input.id}
-                placeholder={searchConfig.elementIds.input.placeholder}
-                tabIndex={0}
-                type="search"
-                inputMode="search"
-                enterKeyHint="search"
-                autoComplete="off"
-                ref={tasksInputRef}
-                className={`${searchTextClassName} absolute left-0 top-0 z-10 text-white-black [&::-webkit-search-cancel-button]:appearance-none [&::-webkit-search-decoration]:appearance-none`}
-                value={inputValue}
-                onChange={handleChange}
-                onKeyDown={(e) => {
-                  // ArrowDown moves focus from writing mode into the Ask AI row
-                  if (e.key === "ArrowDown" && showAskAiRow) {
-                    e.preventDefault();
-                    e.stopPropagation();
-                    document
-                      .getElementById(searchConfig.elementIds.askAiRow.id)
-                      ?.focus();
-                  }
-                }}
-              />
-            </div>
+            <SearchChipsInput
+              value={inputValue}
+              onChange={setInputValue}
+              onRun={updateSearchHistory}
+              boardId={_fromProject}
+              inputRef={tasksInputRef}
+            />
           )}
 
           <>
@@ -207,7 +161,7 @@ const SearchComp = ({
                 </div>
               ) : (
                 <div>
-                  {results && !(oneBoardTabsFlagEnabled && tabs.length <= 2) && (
+                  {results && tabs.length > 2 && (
                     <div className={cn("hidden @md:block w-full overflow-x-auto scrollbar-none no-scrollbar @md:px-9 mt-4", layoutEnabled && "block px-4")}>
                       <div className={layoutEnabled ? "flex grow gap-3 [flex-wrap:nowrap] md:[flex-wrap:wrap] min-h-[44px] md:min-h-0 [&>div]:shrink-0 md:[&>div]:shrink" : "flex flex-wrap grow gap-3"}>
                         {tabs.map((item, index) => (
@@ -290,7 +244,7 @@ const SearchComp = ({
                         </span>
                       </div>
                     )}
-                  {!layoutEnabled && results && !(oneBoardTabsFlagEnabled && tabs.length <= 2) && (
+                  {!layoutEnabled && results && tabs.length > 2 && (
                     <div className="flex inbox_footer @md:hidden no-scrollbar scrollbar-none gap-3 w-100 bg-hoverCardBackground  h-20 @md:h-8 inbox_title px-4">
                       {tabs.map((item, index) => (
                         <SplitTitle
@@ -378,7 +332,6 @@ interface IAskAiRow {
 
 const AskAiRow = ({ query, onSelect }: IAskAiRow) => {
   function handleKeyDown(event: KeyboardEvent<HTMLButtonElement>) {
-    // ArrowUp returns to the search input (writing mode)
     if (event.key === "ArrowUp") {
       event.preventDefault();
       event.stopPropagation();

@@ -1,10 +1,7 @@
-// Runnable check for the HTPR-3777 seat math.
-// Run: node --experimental-strip-types src/lib/seatQuantity.check.ts
 import assert from "node:assert";
-// @ts-ignore -- explicit .ts extension is required by `node --experimental-strip-types`
+// @ts-expect-error Node strip-types checks require .ts imports without allowImportingTsExtensions.
 import { computeSeatQuantity } from "./seatQuantity.ts";
 
-// Onboarding: owner alone (totalSeats=1) invites 5 → bill 6 (owner + 5 invited).
 assert.strictEqual(
   computeSeatQuantity({
     totalSeats: 1,
@@ -15,7 +12,6 @@ assert.strictEqual(
   "owner + 5 pending invites",
 );
 
-// Same person invited to two boards counts once (case-insensitive).
 assert.strictEqual(
   computeSeatQuantity({
     totalSeats: 1,
@@ -26,7 +22,6 @@ assert.strictEqual(
   "dedup pending invites",
 );
 
-// Pending invite to someone already on the team is excluded (already in totalSeats).
 assert.strictEqual(
   computeSeatQuantity({
     totalSeats: 2,
@@ -37,7 +32,6 @@ assert.strictEqual(
   "exclude already-member invites",
 );
 
-// Existing upgrade, no pending invites → unchanged (no regression).
 assert.strictEqual(
   computeSeatQuantity({
     totalSeats: 4,
@@ -48,7 +42,6 @@ assert.strictEqual(
   "no pending invites leaves quantity untouched",
 );
 
-// Null/undefined invitee emails (e.g. malformed rows) are ignored, not counted.
 assert.strictEqual(
   computeSeatQuantity({
     totalSeats: 1,

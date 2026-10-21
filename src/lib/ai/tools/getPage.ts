@@ -1,3 +1,4 @@
+import { standalonePagesEnabled } from "@/utils/controllers/pages/standalonePagesEnabled";
 import { tool } from "ai";
 import { z } from "zod";
 import { getPage } from "@/utils/controllers/pages/pageService";
@@ -25,14 +26,14 @@ export function createGetPageTool(context: ToolContext) {
         sendStatus("hypertask_get_page");
         const page = await getPage(
           typeof input.id === "number"
-            ? { id: input.id }
-            : { publicId: input.id }
+            ? { id: input.id, userId: user.id, standalonePagesEnabled: await standalonePagesEnabled(user.id), agentId: null }
+            : { publicId: input.id, userId: user.id, standalonePagesEnabled: await standalonePagesEnabled(user.id), agentId: null }
         );
         if (!page) {
           return { success: false, error: "Page not found" };
         }
 
-        const access = await validateProjectAccess(page.task.projectId, user.id);
+        const access = await validateProjectAccess(page.projectId, user.id);
         if (access.error) {
           return { success: false, error: access.error.message };
         }
@@ -50,13 +51,15 @@ export function createGetPageTool(context: ToolContext) {
                 ? page.contentHtml
                 : htmlToMarkdown(page.contentHtml),
             content_type: format,
-            task: {
+            taskId: page.taskId,
+            task: page.task ? {
               id: page.task.id,
               ticketNumber: page.task.ticketNumber,
               title: page.task.title,
               projectId: page.task.projectId,
               uniqueIndex: page.task.uniqueIndex,
-            },
+            } : null,
+            linkedTasks: page.linkedTasks,
             subPages: page.subPages,
             updatedAt: page.updatedAt,
           },

@@ -1,3 +1,4 @@
+import { reportMcpOperationCrash } from '@/lib/mcp/operationCrashReport';
 import { wrapMcpRoute, checkMcpRouteRateLimit as checkMcpRateLimit, validateMcpRouteAuth as validateMcpAuth } from '@/lib/mcp/routeWrapper'
 import { NextRequest, NextResponse } from 'next/server';
 import { Prisma } from '@prisma/client';
@@ -14,7 +15,7 @@ import {
   mapTaskToMcpGetResponse,
   taskMcpGetInclude,
 } from '@/lib/mcp/tasks/mappers';
-import { findTaskByIdentifier } from '@/lib/mcp/tasks/resolveTask';
+import { findTaskByIdentifier, taskIdentifierErrorResponse } from '@/lib/mcp/tasks/resolveTask';
 import { mapVisibleMcpAgent, mcpVisibleAgentSelect } from '@/lib/mcp/agents';
 import { resolvePublicAgentDisplayName } from '@/lib/agents/publicAgent';
 import { HTPR_6516_AGENT_ATTRIBUTION_FLAG, isFeatureEnabled } from '@/lib/flags';
@@ -22,7 +23,6 @@ import { getProjectWhere } from '@/utils/controllers/projects/getAllIncludes';
 
 const FULL_COMMENT_LIMIT = 20;
 const SUMMARY_COMMENT_LIMIT = 3;
-// Upper bound on comments scanned for PR links, so a huge thread stays cheap.
 const PR_LINK_SCAN_LIMIT = 200;
 
 const relatedTaskSelect = {
@@ -66,11 +66,6 @@ function parseRequiredPositiveInteger(
   return { ok: true, value };
 }
 
-/**
- * GET /api/mcp/tasks/context
- *
- * Returns a read-only context pack for one accessible task.
- */
 export async function GET(request: NextRequest) {
   return wrapMcpRoute(async (request: NextRequest) => {
   try {
@@ -144,7 +139,7 @@ export async function GET(request: NextRequest) {
             status: { not: 'Deleted' },
           },
           include: {
-            ...taskMcpGetInclude(ctx.user.id),
+            ...taskMcpGetInclude(ctx.user.id, ctx.agentId),
             pullRequests: {
               orderBy: { createdAt: 'asc' },
               select: {
@@ -194,8 +189,6 @@ export async function GET(request: NextRequest) {
             commentText: true,
           },
           orderBy: { createdAt: 'asc' },
-          // Cap the PR-link scan so a long comment thread can't turn this
-          // pre-session endpoint into an unbounded full-history fetch.
           take: PR_LINK_SCAN_LIMIT,
         }),
         prisma.taskRelations.findMany({
@@ -229,7 +222,7 @@ export async function GET(request: NextRequest) {
       );
     }
 
-    const mappedTask = mapTaskToMcpGetResponse(task, ctx.user.id);
+    const mappedTask = mapTaskToMcpGetResponse(task, ctx.user.id, ctx.agentId);
     const attributionEnabled = await isFeatureEnabled(
       HTPR_6516_AGENT_ATTRIBUTION_FLAG,
       ctx.user.id
@@ -322,7 +315,10 @@ export async function GET(request: NextRequest) {
       truncated: commentCount > commentLimit,
     });
   } catch (error) {
+    const identifierResponse = taskIdentifierErrorResponse(error);
+    if (identifierResponse) return identifierResponse;
     console.error('[MCP Task Context] Error:', error);
+    reportMcpOperationCrash(request, error);
     return NextResponse.json(
       { success: false, error: 'Internal server error' },
       { status: 500 }

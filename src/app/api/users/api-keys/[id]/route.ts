@@ -64,14 +64,6 @@ export async function DELETE(
   }
 }
 
-/**
- * PATCH /api/users/api-keys/:id
- *
- * Changes the expiry of an existing key without reissuing its secret. Passing
- * `expiresInDays: null` clears the expiry; passing a day count moves the expiry
- * to that many days from now. Use this to expire a key on a schedule; use
- * DELETE to kill it immediately.
- */
 export async function PATCH(
   request: NextRequest,
   props: { params: Promise<{ id: string }> }
@@ -96,8 +88,6 @@ export async function PATCH(
       )
     }
 
-    // A bare `null` or a primitive is valid JSON but not a valid patch body, so
-    // reject it rather than reading a property off it and returning a 500.
     if (typeof parsed !== 'object' || parsed === null || Array.isArray(parsed)) {
       return NextResponse.json(
         { success: false, error: 'Body must be a JSON object' },
@@ -107,8 +97,6 @@ export async function PATCH(
 
     const body = parsed as { expiresInDays?: unknown }
 
-    // Omitting the field means "no change"; only an explicit null clears the
-    // expiry, so an empty patch cannot silently make a key live forever.
     if (!('expiresInDays' in body)) {
       return NextResponse.json(
         { success: false, error: 'expiresInDays is required' },
@@ -143,8 +131,6 @@ export async function PATCH(
       )
     }
 
-    // Constrain the write to still-active keys so a revoke landing between the
-    // read above and this update is not quietly overwritten.
     const claimed = await prisma.apiKey.updateMany({
       where: { id: apiKey.id, revokedAt: null },
       data: { expiresAt: expiry.expiresAt },

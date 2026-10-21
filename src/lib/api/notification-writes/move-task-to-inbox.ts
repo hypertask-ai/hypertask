@@ -9,8 +9,6 @@ const route = taskWriteRoute({
   validationMessage: "Invalid request",
   allowNullBody: true,
   operation: async (body, session) => {
-    // HTPR-4772: ignore the body userId and use the signed session.
-
     const { taskId, projectId } = body;
     const userId = session.userId;
     if (!taskId || !projectId)

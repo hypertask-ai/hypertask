@@ -4,7 +4,6 @@ const readOnly: ToolAnnotations = { readOnlyHint: true, destructiveHint: false, 
 const additive: ToolAnnotations = { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: false }
 const destructive: ToolAnnotations = { readOnlyHint: false, destructiveHint: true, idempotentHint: false, openWorldHint: false }
 
-// Classify legacy operations once; mixed catalogs aggregate only permitted actions.
 export const TOOL_ANNOTATIONS: Record<string, ToolAnnotations> = Object.fromEntries([
   ...'agent_presence board_manifest find_related_tasks get_board_playbook get_comments_for_task get_page get_skill get_task_tree get_tasks get_user_context get_view hello inbox_list list_agents list_connections list_custom_fields list_labels list_pages list_project_members list_projects list_skills list_tasks list_views next_tasks rag_retrieval search_help_docs search_pages search_tasks task_context search_tools describe_tool'.split(' ').map((name) => [`hypertask_${name}`, readOnly]),
   ...'report_feedback attach_files create_agent create_board create_label create_page create_skill create_task create_view mint_token move_task_to_inbox'.split(' ').map((name) => [`hypertask_${name}`, additive]),

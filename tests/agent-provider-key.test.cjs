@@ -32,7 +32,6 @@ function stubPlan(plan = "Pro") {
     assertImageModelAllowedForPlan: async () => {},
     assertModelAllowedForPlan: async () => {},
     haikuDefaultModelEnabled: async () => false, haiku55ModelEnabled: async () => false,
-    lunaFreePlanEnabled: async () => false,
     storePlanIdForProject: async () => plan,
   });
 }

@@ -63,7 +63,6 @@ export async function isAgentConnectCheckEnabledFor(userId: number): Promise<boo
     try {
       armed = await isOnboardingQaArmed(user.email, await getRedis());
     } catch {
-      // A Redis outage must not grant QA eligibility or disable a user's own flag.
     }
   }
   return isFeatureEnabled(HTPR_7026_AGENT_CONNECT_CHECK_FLAG, armed ? FEATURE_FLAG_QA_USER_ID : userId);
@@ -84,8 +83,6 @@ export async function sendFirstAgentConnectedEmail(userId: number, logId: number
     });
     const sharedLayout = await isFeatureEnabled(HTPR_7037_SHARED_EMAIL_LAYOUT_FLAG, userId).catch(() => false);
     const email = (sharedLayout ? renderAgentConnectedEmail : renderLegacyAgentConnectedEmail)(client, board?.id);
-    // This existing unique (userId, eventType) key claims the send across instances.
-    // Keep the claim on failure: an uncertain provider response must not duplicate mail.
     try {
       await prisma.webhookEvent.create({ data: { userId, eventType: "agent_connected_email" } });
     } catch (error) {

@@ -23,7 +23,6 @@ async function reportAlertFailure(environment: AlertEnvironment, step: string, a
 async function runAlertCycle(environment: AlertEnvironment, sample?: AlertSample) {
   try {
     await evaluateAlerts(prisma, environment, sample);
-    // Bound work per invocation even when many past incidents are retryable.
     for (let index = 0; index < 8; index += 1) {
       const delivery = await claimDelivery(prisma, environment);
       if (!delivery) break;
@@ -64,7 +63,6 @@ export async function sweepAiChatAlerts() {
   if (process.env.VERCEL_ENV !== "production") return;
   try {
     if (!(await isFeatureEnabled(HTPR_6354_AI_CHAT_ALERTS_FLAG, FEATURE_FLAG_OWNER_USER_ID))) return;
-    // Preview deployments share this DB but do not receive scheduled cron ticks.
     for (const environment of ["production", "preview"] as const) {
       await runAlertCycle(environment);
     }

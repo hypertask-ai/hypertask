@@ -13,7 +13,7 @@ export const turbopufferNamespaces = {
     legacyName: searchConfig.collections.comment.name,
   },
   page: {
-    name: "pages",
+    name: "pages-v2",
   },
   customInstructionFile: {
     name: "custom-instruction-files",

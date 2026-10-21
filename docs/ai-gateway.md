@@ -114,10 +114,10 @@ Live table: https://analytics.hypertask.app/ai-features
 Not every gateway key maps to a customer team. Two internal keys exist; never
 repurpose a team key for tooling:
 
-- **OpenWiki Internal Tooling** ($10/mo quota) — used by the `openwiki` docs
-  refresher (`~/.openwiki/.env` on the VPS). Before this key existed, OpenWiki
-  ran untagged on the "Team Valentin Yeo Boards" key and showed up as the
-  mystery untagged traffic in tag reports.
+- **Archived wiki internal tooling** ($10/mo quota), retired since 2026-10-14.
+  Before its dedicated key existed, the docs refresher ran untagged on the
+  "Team Valentin Yeo Boards" key and showed up as the mystery untagged traffic
+  in tag reports.
 - **Reporting Bot** ($1/mo quota) — read-only `/v1/report` queries for usage
   analysis. Stored in the repo's gitignored `.env.report.local` on the VPS.
   Report data is org-wide regardless of which key authenticates.

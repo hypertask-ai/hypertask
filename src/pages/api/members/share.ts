@@ -8,7 +8,6 @@ const handler: NextApiHandler = async (
 ) => {
   if (req.method === "POST") {
     try {
-      // HTPR-7178: the joining user is the signed-in user, never a userId from the body.
       const session = await getSessionUser(new Headers(req.headers as Record<string, string>));
       if (!session) {
         return res.status(401).json({ message: "Unauthorized" });

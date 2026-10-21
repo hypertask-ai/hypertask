@@ -239,7 +239,6 @@ export const checkIfBoardMember = async (userId: number, projectId: number) => {
   }
 };
 
-// HTPR-7174: a share link stops working once it is expired or its task is deleted.
 export const isShareLinkLive = (
   share: { expired: boolean; expiredAt: Date | null; task: { status: string } },
   now = new Date()

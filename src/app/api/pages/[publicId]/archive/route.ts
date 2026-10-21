@@ -1,3 +1,4 @@
+import { standalonePagesEnabled } from '@/utils/controllers/pages/standalonePagesEnabled'
 import { checkRestRateLimit } from '@/lib/api/rateLimit'
 import { cookies } from 'next/headers'
 import { NextRequest, NextResponse } from 'next/server'
@@ -17,7 +18,6 @@ export async function POST(request: NextRequest, { params }: RouteContext) {
       try {
         restCompat = await isFeatureEnabled(HTPR_6924_REST_COMPAT_FLAG, currentUser.userId)
       } catch {
-        // A failed flag probe must leave the legacy HTTP contract unchanged.
       }
     }
 
@@ -38,7 +38,7 @@ export async function POST(request: NextRequest, { params }: RouteContext) {
     }
 
     const { publicId } = await params
-    const page = await getPage({ publicId, userId })
+    const page = await getPage({ publicId, userId, standalonePagesEnabled: await standalonePagesEnabled(userId) })
     if (!page) return NextResponse.json({ error: 'Page not found' }, { status: 404 })
 
     await archivePage({ id: page.id, userId, agentId: null })

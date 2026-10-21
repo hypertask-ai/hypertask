@@ -1,7 +1,7 @@
 import { ensureHtpr7038ModelReset } from "@/lib/ai/htpr7038ModelReset";
 export { escapeHtml } from "./editorAiPrompts";
 
-export { NVC_STYLE_RULE, HOUSE_OUTPUT_STYLE, TASK_AUTHORING_STYLE, createPromptForTiptapForwardSlash, createKanbanSystemPrompt, createTaskAndModelContext, createUploadedDocumentsContext, createTaskWriterPromptParts } from "./editorAiPrompts";
+export { NVC_STYLE_RULE, HOUSE_OUTPUT_STYLE, TASK_AUTHORING_STYLE, TASK_AUTHORING_WEB_STYLE, createTaskAuthoringStyle, createPromptForTiptapForwardSlash, createKanbanSystemPrompt, createTaskAndModelContext, createUploadedDocumentsContext, createTaskWriterPromptParts } from "./editorAiPrompts";
 import { cookies } from "next/headers";
 
 import { createAnthropic } from "@ai-sdk/anthropic";
@@ -20,7 +20,7 @@ import { defaultAiModelOption, getDefaultAiModelOptionForPlan, getAiModelOptionB
 import { resolveTeamProviderEnabled } from "@/lib/aiProviders";
 import { resolveUserFacingModelOption, type UserFacingModelFeature } from "@/lib/systemModelLadder";
 import { getAiModelPreferenceIds, type TAiModelPreferenceSurface, type TAiModelPreferences } from "@/lib/aiModelPreferences";
-import { assertModelAllowedForPlan, haiku55ModelEnabled, lunaFreePlanEnabled, storePlanIdForProject } from "@/app/api/ai/_lib/planGate";
+import { assertModelAllowedForPlan, haiku55ModelEnabled, storePlanIdForProject } from "@/app/api/ai/_lib/planGate";
 import { excludeLoadedTaskRows } from "@/app/api/ai/_lib/taskWriterPrompt";
 import { mergeTaskWriterContextBudget } from "@/app/api/ai/_lib/taskWriterBoardResearch";
 
@@ -189,10 +189,6 @@ export function normalizeTiptapOutput(inputHtml: string, outputHtml: string) {
   return reinjectMissingImages(inputHtml, stripCodeFences(outputHtml));
 }
 
-// HTML-canvas blocks (Pages) are opaque base64 islands rendered only in a
-// sandboxed iframe. Their payload is useless to the language model and would be
-// dropped or corrupted by an AI edit, so we pull them out before the model runs
-// and splice them back afterwards. Mirrors the image-preservation approach above.
 const HTML_BLOCK_RE = /<div\b[^>]*\bdata-html-block\b[^>]*><\/div>/gi;
 const HTML_BLOCK_PLACEHOLDER_RE = /<!--HTMLBLOCK_(\d+)-->/g;
 
@@ -220,8 +216,6 @@ export function reattachHtmlBlocks(html: string, blocks: string[]): string {
     }
     return "";
   });
-  // Append any block whose marker the model dropped, so a canvas block is never
-  // lost to an AI edit (worst case it moves to the end, never disappears).
   const lost = blocks.filter((_, index) => !used.has(index));
   if (lost.length > 0) out += lost.join("");
   return out;
@@ -614,13 +608,7 @@ export async function selectTaskWriterModel(args: {
   feature?: AiGatewayFeature;
   aiFeature?: UserFacingModelFeature;
   teamContext?: { teamId: string | null; settings: unknown };
-  /**
-   * The native agent this call runs as, when there is one. An agent carrying
-   * its own provider credential runs on that account instead of the team's
-   * (HTPR-5389). Server-derived only, never request input.
-   */
   agentId?: string | null;
-  /** Preserve legacy task-writer credential routing when the Sonnet flag is off. */
   taskWriterAgentId?: string | null;
 }) {
   let taskWriterSonnet = false;
@@ -629,7 +617,6 @@ export async function selectTaskWriterModel(args: {
       const { isFeatureEnabled } = await import("@/lib/flags");
       taskWriterSonnet = await isFeatureEnabled(HTPR_7038_TASK_WRITER_SONNET_FLAG, args.userId);
     } catch {
-      // A flag read failure must keep the existing task-writer selection.
     }
   }
   const agentId = args.agentId ?? (taskWriterSonnet ? args.taskWriterAgentId : null);
@@ -666,7 +653,6 @@ export async function selectTaskWriterModel(args: {
         credential.trim() !== sharedKey) ||
       (credential !== null && typeof credential === "object");
   }
-  const lunaFree = await lunaFreePlanEnabled(args.userId);
   const haiku55Enabled = await haiku55ModelEnabled?.(args.userId) ?? false;
   const defaultContext = haiku55Enabled
     ? await getAiDefaultModelContext(keyLookup, true, storePlanId)
@@ -674,7 +660,6 @@ export async function selectTaskWriterModel(args: {
   const requestDefaultModelOption = getDefaultAiModelOptionForPlan(
     storePlanId,
     haiku55Enabled ? defaultContext.hasByok : hasEligibleByokCredential,
-    lunaFree,
     haiku55Enabled,
     defaultContext.haikuDefaultEnabled,
   );
@@ -712,7 +697,6 @@ export async function selectTaskWriterModel(args: {
     isLunaBlockedForPlan(
       selection.modelOption,
       storePlanId,
-      lunaFree,
       hasEligibleByokCredential,
     )
   ) {
@@ -785,7 +769,6 @@ export async function selectTaskWriterModel(args: {
 
   const pinnedSonnet = taskWriterSonnet && selection.modelOption?.modelKey === "claude-sonnet-5-5";
   if (pinnedSonnet && selection.modelOption) {
-    // Apply after provider filtering, which restores the catalog option by id.
     selection.modelOption = {
       ...selection.modelOption,
       effort: "standard",
@@ -794,14 +777,12 @@ export async function selectTaskWriterModel(args: {
       },
     };
   }
-  // Free and keyless BYOK keep their existing capped shared allowance for this pin.
   if (!(pinnedSonnet && (storePlanId === "Free" || storePlanId === "BYOK"))) {
     await assertModelAllowedForPlan(
       args.projectId,
       selection.modelOption,
       teamContext.teamId,
       byokApiKey,
-      lunaFree,
     );
   }
 
@@ -836,7 +817,6 @@ export async function selectTaskWriterModel(args: {
       selected.modelId, error, hasOutput, false, haiku55Enabled, sameModelRetry,
     );
     if (previous && previous.model === selected.modelId) {
-      // HTPR-7075: retry the same Claude 5.5 model once, then fail visibly.
       fellBack = true;
       console.warn(`[ai-model-fallback] ${selected.modelId} retry on the same model: ${previous.status}`);
       return {
@@ -1092,7 +1072,6 @@ export async function retrieveTaskWriterContext(args: {
   prompt: string;
   aiMode?: string | null;
   taskIds?: number[];
-  /** HTPR-6363: keep comment rows when a busy board fills the task budget. */
   reserveCommentBudget?: boolean;
 }) {
   const taskIds = (args.taskIds ?? []).filter((id) => Number.isInteger(id));
@@ -1119,9 +1098,6 @@ export async function retrieveTaskWriterContext(args: {
       }),
     ]);
 
-  // Full content for every supplied ticket is loaded separately. Exclude those
-  // tickets from semantic results so a prompt-similar comment is not repeated
-  // and accidentally weighted more heavily than the rest of its thread.
   const excluded = excludeLoadedTaskRows({
     taskRows: taskRowsRaw,
     commentRows: commentRowsRaw,

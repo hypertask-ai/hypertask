@@ -31,8 +31,6 @@ type FigmaPreviewData = {
   width?: number;
 };
 
-// ProseMirror can recreate a node view several times together, so share only
-// requests made under the same Figma authorization state and only in flight.
 const oembedRequests = new Map<string, Promise<FigmaPreviewData>>();
 
 const getFigmaConnectionVersion = () => {
@@ -165,14 +163,11 @@ const createEmbedSrc = (url: string) => {
 };
 
 function extractFigmaName(url:string) {
-  // Extract the design name portion from the URL
   const match = url.match(/\/design\/[^/]+\/([^?]+)/);
   if (!match) return null;
   
-  // Get the encoded name and decode it
   const encodedName = match[1];
   
-  // Replace hyphens with spaces
   return encodedName
 }
 
@@ -228,7 +223,6 @@ export const Figma = Node.create({
       'iframe',
       mergeAttributes(this.options.HTMLAttributes, HTMLAttributes, {
         allowfullscreen: 'true',
-        // maxWidth:"100%"
       }),
     ];
   },
@@ -249,8 +243,6 @@ export const Figma = Node.create({
 
       preview.type = 'button';
       preview.dataset.figmaEmbedPreview = 'true';
-      // The preview takes its height from the thumbnail, so a wide flat design
-      // does not sit in a tall letterboxed well.
       preview.className =
         'relative block aspect-[16/9] max-h-[500px] w-[95%] cursor-pointer overflow-hidden rounded-[4px] bg-cardBackground outline-none hover:opacity-95';
       preview.setAttribute('aria-label', 'Load live Figma embed');
@@ -268,8 +260,6 @@ export const Figma = Node.create({
         abortController.abort();
         iframe = document.createElement('iframe');
         Object.entries(attributes).forEach(([name, value]) => {
-          // Match ProseMirror's renderSpec: a null/undefined attr is omitted, not
-          // stringified into src="null".
           if (value !== null && value !== undefined) {
             iframe?.setAttribute(name, value);
           }
@@ -315,7 +305,6 @@ export const Figma = Node.create({
             .catch(() => {});
         }
       } catch {
-        // The placeholder remains clickable when the stored embed URL is invalid.
       }
 
       return {
@@ -324,10 +313,7 @@ export const Figma = Node.create({
           updatedNode.type === node.type &&
           updatedNode.attrs.src === node.attrs.src,
         ignoreMutation: (mutation) => dom.contains(mutation.target),
-        // Without this ProseMirror handles the mousedown first and leaves the
-        // atomic node selected, so the next keystroke replaces the embed.
         stopEvent: (event) => {
-          // `Node` here is Tiptap's, so reach for the DOM one explicitly.
           const target = event.target as globalThis.Node | null;
           if (connectLink?.contains(target)) return true;
           return (
@@ -342,22 +328,8 @@ export const Figma = Node.create({
     };
   },
 
-  // addInputRules() {
-  //   return [
-  //     new InputRule({
-  //       find: figmaRegex,
-  //       handler: ({ match, commands }) => {
-  //         const url = match[0];
-  //         const embedSrc = createEmbedSrc(url);
-
-  //         commands.setFigma({ src: embedSrc });
-  //       },
-  //     }),
-  //   ];
-  // },
-
   addProseMirrorPlugins() {
-    let isShiftPressed = false; // Track if Shift is pressed during paste
+    let isShiftPressed = false;
     return [
       new Plugin({
         key: new PluginKey('figmaEmbedPlugin'),
@@ -373,20 +345,20 @@ export const Figma = Node.create({
                     this.type.create({ src: embedSrc })
                   )
                 );
-                event.preventDefault(); // Prevent default paste behavior
-                return true; // Indicate that we handled the paste event
+                event.preventDefault();
+                return true;
               }
             }
 
-            isShiftPressed = false; // Reset flag after handling paste
-            return false; // Allow default behavior for Ctrl+Shift+V or invalid Figma URLs
+            isShiftPressed = false;
+            return false;
           },
           handleKeyDown: (view, event) => {
             if (event.shiftKey) {
-              isShiftPressed = true; // Set flag for Shift + Ctrl + V
+              isShiftPressed = true;
             }
            
-            return false; // Allow default behavior for other key presses
+            return false;
           },
           // biome-ignore lint/style/useNamingConvention: "This is a TipTap extension property"
           handleDOMEvents: {
