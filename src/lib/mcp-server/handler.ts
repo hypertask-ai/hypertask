@@ -17,6 +17,7 @@ import { selectMcpTools } from './consolidated-tools'
 import { isMcpV2Enabled } from '@/lib/mcp/mcpV2'
 import { getAgentRole } from '@/lib/mcp/agents/scopes'
 import { featureFlagCandidateUserIds, isFeatureEnabled, HTPR_6804_MCP_TOOLS_FLAG, HTPR_7203_MCP_FLAT_SCHEMA_FLAG } from '@/lib/flags'
+import { actAsAgentAvailable, withoutActAsAgentTools } from './utils/actAsAgentCatalog'
 import { HTPR_7390_MCP_HANDSHAKE_FEEDBACK_FLAG } from '@/lib/flags/definitions/htpr-7390-mcp-handshake-feedback'
 import type { ManagementPermissions } from '@/lib/mcp/managementPermissions'
 import { NextRequest } from 'next/server'
@@ -134,7 +135,8 @@ export async function mcpHandler(request: Request): Promise<Response> {
     const v2 = await isMcpV2Enabled(ctx.user.id)
     const feedbackEnabled = await aiFeedbackEnabled(ctx.user.id)
     const resolvedTools = resolvePortableTools(MCP_TOOLS as PortableTool[])
-    const availableTools = resolvedTools.filter((tool) => feedbackEnabled || tool.name !== 'hypertask_report_feedback')
+    const actAsAgent = await actAsAgentAvailable(ctx)
+    const availableTools = withoutActAsAgentTools(resolvedTools.filter((tool) => feedbackEnabled || tool.name !== 'hypertask_report_feedback'), actAsAgent)
     const consolidated = Number.isFinite(userId) && await isFeatureEnabled(HTPR_6804_MCP_TOOLS_FLAG, userId)
     const portableTools = observeFeedbackTools(selectMcpTools(
       availableTools,
@@ -144,6 +146,7 @@ export async function mcpHandler(request: Request): Promise<Response> {
         teamScoped: authInfo.extra?.teamScoped === true,
         agent: authInfo.extra?.agent === true,
         ...(v2 && ctx.agentId ? { agentRole: await getAgentRole(ctx) } : {}),
+        ...(actAsAgent ? { actAsAgent } : {}),
       },
       v2,
       consolidated && await isFeatureEnabled(HTPR_7203_MCP_FLAT_SCHEMA_FLAG, ctx.user.id),

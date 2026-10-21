@@ -7,6 +7,7 @@ export const TOOL_SUMMARIES: Record<string, string> = {
   LIST_AGENTS: 'Returns owned agents.',
   AGENT_WEBHOOK: 'Returns webhook settings.',
   CREATE_AGENT: 'Returns the new agent token.',
+  ENSURE_AGENT: 'Returns the existing or new agent id.',
   REVOKE_AGENT: 'Returns revoke confirmation.',
   ARCHIVE_AGENT: 'Returns the archived agent.',
   DELETE_AGENT: 'Returns delete confirmation.',

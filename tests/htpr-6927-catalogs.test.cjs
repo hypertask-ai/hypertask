@@ -14,8 +14,9 @@ const { MCP_TOOLS } = jiti(path.join(root, 'src/lib/mcp-server/tools/index.ts'))
 const { resolvePortableTools } = jiti(path.join(root, 'src/lib/mcp-server/listQueryContract.ts'))
 const definitions = jiti(path.join(root, 'src/lib/mcp-server/config/consolidated-descriptions.ts')).CONSOLIDATED_TOOL_DESCRIPTIONS
 const legacy = resolvePortableTools(MCP_TOOLS).map((tool) => ({ ...tool, execute: async (args, token, invocation) => JSON.stringify({ name: tool.name, args, token, invocation }) }))
-const baselineLegacy = legacy.filter((tool) => tool.name !== 'hypertask_report_feedback')
-const baselineDefinitions = definitions.filter((definition) => definition.name !== 'hypertask_report_feedback')
+const baselineLegacy = legacy.filter((tool) => !['hypertask_report_feedback', 'hypertask_ensure_agent'].includes(tool.name))
+const withoutEnsure = (definition) => ({ ...definition, actions: Object.fromEntries(Object.entries(definition.actions).filter(([, action]) => action.tool !== 'hypertask_ensure_agent')) })
+const baselineDefinitions = definitions.filter((definition) => definition.name !== 'hypertask_report_feedback').map(withoutEnsure)
 const overrides = { '@/lib/mcp/auth': { extractBearerToken: (header) => header?.replace(/^Bearer /, '') } }
 const load = loader(overrides)
 const old = loader({ ...overrides, './config/consolidated-descriptions': { CONSOLIDATED_TOOL_DESCRIPTIONS: baselineDefinitions } }, true)
@@ -56,8 +57,9 @@ for (const consolidated of [false, true]) {
     if (consolidated) {
       for (const definition of baselineDefinitions) {
         const tool = before.find((tool) => tool.name === definition.name)
-        for (const [index, action] of Object.keys(definition.actions).entries()) {
-          const args = { action, input: sample(tool.inputSchema.oneOf[index].properties.input), response_format: 'detailed' }
+        for (const variant of tool.inputSchema.oneOf) {
+          const action = variant.properties.action.const
+          const args = { action, input: sample(variant.properties.input), response_format: 'detailed' }
           assert.equal(await rpc(load, after, 'tools/call', { name: tool.name, arguments: args }), await rpc(old, before, 'tools/call', { name: tool.name, arguments: args }), `${tool.name}/${action}`)
         }
       }

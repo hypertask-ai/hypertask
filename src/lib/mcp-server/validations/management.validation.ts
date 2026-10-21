@@ -8,6 +8,8 @@ export const CreateAgentInputSchema = z
   })
   .strict();
 
+export const EnsureAgentInputSchema = CreateAgentInputSchema;
+
 export const RevokeAgentInputSchema = z
   .object({
     agent_id: z.string().trim().min(1),
