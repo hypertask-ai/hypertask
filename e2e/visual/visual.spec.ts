@@ -37,6 +37,7 @@ async function board(page: Page) {
 async function taskDetail(page: Page) {
   const card = await board(page)
   await card.click()
+  await page.mouse.move(1, 1)
   await expect(page).toHaveURL(url => url.pathname === fixture.detailPath)
   await expect(page.locator('#title-input')).toHaveValue(fixture.title)
   await expect(page.getByTestId('ticket-description')).toContainText(fixture.description)
