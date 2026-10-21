@@ -26,10 +26,6 @@ export function stripChunkRecoveryParam(href: string) {
   return url.toString();
 }
 
-// Reloading the native Android WebView is a one-way door: if the network is
-// sleeping, Chromium can replace the app with an error interstitial that has no
-// useful navigation controls. Web browsers retain their own retry controls, so
-// do not let a second network timeout prevent their cache-busted recovery.
 export async function canReachPage(
   url: string,
   timeoutMs = RELOAD_PREFLIGHT_TIMEOUT_MS

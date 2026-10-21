@@ -6,7 +6,6 @@ import { persistAgentWebhookEvents, resolveAgentWebhookActor } from "./outbox";
 
 const EXCERPT_LIMIT = 200;
 
-/** Plain text start of a comment, at most 200 characters. */
 export function commentExcerpt(html: string | null | undefined): string {
   const text = String(html ?? "")
     .slice(0, 20000)
@@ -23,10 +22,6 @@ export function commentExcerpt(html: string | null | undefined): string {
   return text.length <= EXCERPT_LIMIT ? text : `${text.slice(0, EXCERPT_LIMIT - 3)}...`;
 }
 
-/**
- * Rules: only an ADDED reaction, only by a person, only on an agent's comment.
- * Returns the agent to tell, or null.
- */
 export function reactionWebhookTarget(input: {
   added: boolean;
   reactorIsAgent: boolean;
@@ -59,9 +54,7 @@ export function buildCommentReactionEvent(input: {
 export type CommentReactionWebhookInput = {
   commentId: number;
   reactorUserId: number;
-  /** From the request auth: true only when an agent made the call. An agent's owner reacting as a person is false. */
   reactorIsAgent: boolean;
-  /** HTPR-7122: the agent that reacted, so an event actor is never mistaken for its owner. */
   reactorAgentId?: string | null;
   emoji: string;
   added: boolean;
@@ -72,10 +65,6 @@ type PreparedCommentReactionWebhook = {
   comment: { id: number; text: string | null; task: { id: number; projectId: number; ticketNumber: string | null; title: string } };
 };
 
-/**
- * Read-only part, run before the reaction is written: flag, comment author agent and target.
- * Returns null when no agent should hear about this reaction.
- */
 export async function prepareCommentReactionWebhook(
   input: CommentReactionWebhookInput,
 ): Promise<PreparedCommentReactionWebhook | null> {
@@ -100,10 +89,6 @@ export async function prepareCommentReactionWebhook(
   return agentId ? { agentId, comment } : null;
 }
 
-/**
- * Write the outbox row inside the caller's reaction transaction, so a stored reaction always has its event.
- * Publish the returned delivery ids after the transaction commits.
- */
 export async function persistCommentReactionWebhook(
   tx: Prisma.TransactionClient,
   prepared: PreparedCommentReactionWebhook,

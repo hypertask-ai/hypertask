@@ -1,9 +1,3 @@
-/**
- * Emergency kill switch for both keyboard-first tutorial implementations.
- *
- * Keep this server/client-safe: the proxy, API bootstrap, onboarding, command
- * palette, settings, and persisted-state cleanup all rely on the same value.
- */
 export const KEYBOARD_SHORTCUT_TUTORIAL_ENABLED = false;
 
 const KEYBOARD_SHORTCUT_TUTORIAL_PATHS = [

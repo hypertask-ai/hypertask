@@ -64,8 +64,6 @@ export const useGetUserPreferences = (
     initialData: initialData ?? DEFAULT_USER_PREFERENCES,
     initialDataUpdatedAt: initialData ? undefined : 0,
     refetchOnWindowFocus: false,
-    // Preferences barely change; staleTime 0 made every consumer remount
-    // refetch them — measured one fetch per J/E keystroke in the inbox (HTPR-3998).
     staleTime: 5 * 60 * 1000,
   });
 };
@@ -81,17 +79,15 @@ export const useAnnouncementMute = () => {
     );
 
   const toggleMute = async () => {
-    // Read the latest cached value (not the closed-over one) so rapid clicks flip
-    // from the current state; the final invalidate reconciles with the server.
     const current =
       queryClient.getQueryData<IUserPreferences>(USER_PREFERENCES_QUERY_KEY)
         ?.muteAnnouncements ?? muted;
     const next = !current;
-    setMutedOptimistic(next); // update the rocket indicator immediately
+    setMutedOptimistic(next);
     try {
       await axios.post("/api/users/preferences", { muteAnnouncements: next });
     } catch {
-      setMutedOptimistic(current); // roll back on failure
+      setMutedOptimistic(current);
     } finally {
       queryClient.invalidateQueries({ queryKey: USER_PREFERENCES_QUERY_KEY });
     }

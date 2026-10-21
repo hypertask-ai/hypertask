@@ -18,6 +18,13 @@ for (const role of ["Member", "Admin"]) {
   });
 }
 
+test("renaming a board does not load every task row (YPER4-388)", async () => {
+  const h = harness({ ownerId: 6 });
+  assert.equal((await h.patch("Renamed")).status, 200);
+  assert.equal(h.updates.length, 1);
+  assert.equal(h.updates[0].include?.tasks, undefined, "rename must not include the board's tasks");
+});
+
 test("board owner can rename a legacy teamless board", async () => {
   const h = harness({ ownerId: 6 });
   assert.equal((await h.patch("Owner rename")).status, 200);
@@ -35,7 +42,7 @@ for (const role of ["Member", "Admin"]) {
 }
 
 for (const scope of ["owner", "member"]) {
-  test(`an active managed agent delegates its human's board ${scope} permission`, async () => {
+  test(`an active managed agent cannot borrow its human's board ${scope} permission`, async () => {
     const agent = { id: "agent-owned", userId: 6, revokedAt: null };
     const h = harness({
       ...(scope === "owner"
@@ -43,8 +50,8 @@ for (const scope of ["owner", "member"]) {
         : { members: [humanMember("Member", { user: { agents: [agent] } })] }),
       auth: { user: { id: 6 }, agentId: agent.id },
     });
-    assert.equal((await h.patch("Delegated rename")).status, 200);
-    assert.equal(h.updates.length, 1);
+    assert.equal((await h.patch("Delegated rename")).status, 403);
+    assert.equal(h.updates.length, 0);
   });
 }
 

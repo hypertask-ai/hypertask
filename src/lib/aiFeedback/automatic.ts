@@ -1,24 +1,44 @@
 import { waitUntil } from '@vercel/functions'
 import { ZodError } from 'zod'
+import { HTPR_7498_EXPIRED_KEY_FEEDBACK_FLAG } from '@/lib/flags/definitions/htpr-7498-expired-key-feedback'
 import { aiFeedbackSchema, type AiFeedbackInput } from './input'
 import type { McpAuthContext } from '@/lib/mcp/auth/types'
 import type { PortableTool } from '@/lib/mcp-server/stateless-http'
 
+function fileAutomaticFeedback(input: AiFeedbackInput, userId?: number) {
+  const report = { ...input, category: input.category ?? (input.status === 401 ? 'auth_failed' : input.errorCode === 'empty-tools-list' ? 'empty_result' : 'call_failed') }
+  for (const field of ['tool', 'client', 'errorCode'] as const) {
+    if (!aiFeedbackSchema.shape[field].safeParse(report[field]).success) delete report[field]
+  }
+  return import('./report').then(({ fileAiFeedback }) => fileAiFeedback(report, userId)).catch(() => {})
+}
+
 export function queueAiFeedback(input: AiFeedbackInput, userId?: number): void {
-  // Keep imports, flag evaluation and storage entirely off the response path.
   try {
-    const report = { ...input, category: input.category ?? (input.status === 401 ? 'auth_failed' : input.errorCode === 'empty-tools-list' ? 'empty_result' : 'call_failed') }
-    for (const field of ['tool', 'client', 'errorCode'] as const) {
-      if (!aiFeedbackSchema.shape[field].safeParse(report[field]).success) delete report[field]
-    }
-    waitUntil(import('./report').then(({ fileAiFeedback }) => fileAiFeedback(report, userId)).catch(() => {}))
+    waitUntil(fileAutomaticFeedback(input, userId))
   } catch {
-    // Background scheduling is best effort outside Vercel too.
   }
 }
 
+export function queueMcpAuthFailure(request: Request): void {
+  const input: AiFeedbackInput = { surface: 'mcp', tool: 'mcp', status: 401, errorCode: 'unauthorized' }
+  try {
+    waitUntil((async () => {
+      try {
+        const { featureFlagCandidateUserIds } = await import('@/lib/flags')
+        if (await featureFlagCandidateUserIds(HTPR_7498_EXPIRED_KEY_FEEDBACK_FLAG) === null) {
+          const { classifyMcpAuthFailure } = await import('@/lib/mcp/auth/mcpAuthErrors')
+          const { NextRequest } = await import('next/server')
+          const reason = await classifyMcpAuthFailure(new NextRequest(request.url, { headers: request.headers }))
+          if (['token_expired', 'token_revoked', 'agent_revoked', 'agent_token_superseded'].includes(reason)) return
+        }
+      } catch {}
+      await fileAutomaticFeedback(input)
+    })().catch(() => {}))
+  } catch {}
+}
+
 export function feedbackRouteTemplate(pathname: string): string {
-  // Route names come from a build-time registry, never caller-provided path segments.
   const { MCP_FEEDBACK_ROUTE_TEMPLATES } = require('./routes') as typeof import('./routes')
   for (const template of MCP_FEEDBACK_ROUTE_TEMPLATES) {
     const parts = template.split('/')
@@ -48,11 +68,10 @@ export function queueRestFailure(request: Request, status: number, auth?: McpAut
           if (session) queueAiFeedback(input, session.userId)
         }
       }).catch(() => {}))
-    } catch { /* Scheduling must never change the original response. */ }
+    } catch {}
   }
 }
 
-// McpError subclasses for caller mistakes carry a JSON-RPC code but no HTTP status (HTPR-7202).
 const MCP_ERROR_STATUS: Record<number, number> = { [-32001]: 401, [-32003]: 403, [-32004]: 404, [-32602]: 400 }
 
 function feedbackStatus(value: unknown, depth = 0): number | undefined {
@@ -79,14 +98,13 @@ export function observeFeedbackTools(tools: readonly PortableTool[], userId: num
       try {
         const text = await tool.execute(args, token, invocation)
         let result: unknown
-        try { result = JSON.parse(text) } catch { /* Legacy responses can be plain text. */ }
+        try { result = JSON.parse(text) } catch {}
         const status = feedbackStatus(result)
         if (status && status >= 500) queueAiFeedback({ surface: 'mcp', tool: tool.name, status, errorCode: 'tool-server-error' }, userId)
         return text
       } catch (error) {
-        // Schema rejections inside a tool are the caller's input mistake, not a crash (HTPR-7207).
         const status = error instanceof ZodError ? 400 : feedbackStatus(error) ?? 500
-        queueAiFeedback({ surface: 'mcp', tool: tool.name, status, errorCode: 'tool-exception' }, userId)
+        if (status !== 403) queueAiFeedback({ surface: 'mcp', tool: tool.name, status, errorCode: 'tool-exception' }, userId)
         throw error
       }
     },

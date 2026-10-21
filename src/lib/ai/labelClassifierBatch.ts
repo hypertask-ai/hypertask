@@ -1,8 +1,3 @@
-/**
- * HTPR-7098: smart label backfill as one half-price gateway batch instead of many instant calls.
- * The collector (collectBatches.ts) applies each verdict later with the stored snapshot time, so a
- * task edited while the batch ran is left alone exactly as on the instant path.
- */
 import {
   buildSmartLabelBatchRequest,
   chunkForBatch,
@@ -15,7 +10,6 @@ export type SmartLabelBatchTask = {
   id: number;
   projectId: number;
   title: string;
-  /** Plain text, as the instant path sends it. */
   description: string;
   updatedAt: Date;
 };
@@ -25,7 +19,6 @@ export async function submitSmartLabelBatch(args: {
   model: string;
   gatewayKey: string;
   teamId: string;
-  /** User the usage rows are attributed to (same as the instant path). */
   usageUserId: number;
   tasks: SmartLabelBatchTask[];
 }): Promise<void> {

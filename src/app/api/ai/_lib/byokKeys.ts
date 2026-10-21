@@ -45,15 +45,9 @@ export type ByokProviderFlag = {
 
 export type ByokLookupContext = {
   teamId?: unknown;
-  /** Server-derived team identity. Never populate this from request input. */
   trustedTeamId?: unknown;
   projectId?: number | null;
   userId?: number | null;
-  /**
-   * The native agent running this turn. When that agent carries its own
-   * provider key, the call is billed to its provider account instead of the
-   * team's shared key (HTPR-5389). Server-derived only, never request input.
-   */
   agentId?: string | null;
 };
 
@@ -147,11 +141,6 @@ async function resolveTeamByokSecret(
   return undefined;
 }
 
-/**
- * The acting agent's own provider key, when it has one for this provider.
- * Returns undefined when the agent has no key, so every caller falls back to
- * the team key exactly as before.
- */
 async function resolveAgentByokSecret(
   provider: TByokProviderKey,
   lookup?: ByokLookupContext
@@ -263,8 +252,6 @@ export async function getByokApiKeyForProvider(
     resolveWithoutFlag?: boolean;
   }
 ) {
-  // An agent carrying its own key spends on that provider account, so it wins
-  // over both request flags and the team key (HTPR-5389).
   if (lookup?.agentId && provider !== "custom") {
     const agentKey = await resolveAgentByokApiKey(provider, lookup);
     if (agentKey && (await isByokProviderAllowedForLookup(provider, lookup))) {
@@ -312,13 +299,10 @@ export async function getTeamGatewayApiKeyForProvider(
   const plan = await resolveLookupPlan(lookup);
   if (!plan) return undefined;
 
-  // A customer-supplied gateway key takes precedence over the team's funded key.
   if (plan !== "Free") {
     const gatewayKey = await resolveTeamByokApiKey("gateway", lookup);
     if (isVercelAiGatewayKey(gatewayKey)) return gatewayKey;
 
-    // Legacy provider slots may contain a customer vck_. Exact known platform
-    // values are removed by managed-key provisioning; any remainder is BYOK.
     const providerGatewayKey = await resolveTeamByokApiKey(provider, lookup);
     if (isVercelAiGatewayKey(providerGatewayKey)) return providerGatewayKey;
   }
@@ -345,15 +329,12 @@ export async function getTeamGatewayFunding(
   const plan = await resolveLookupPlan(lookup);
   if (!plan) return undefined;
 
-  // A customer-supplied gateway key takes precedence over the team's funded key.
   if (plan !== "Free") {
     const gatewayKey = await resolveTeamByokApiKey("gateway", lookup);
     if (isVercelAiGatewayKey(gatewayKey)) {
       return { apiKey: gatewayKey, source: "customer" };
     }
 
-    // Legacy provider slots may contain customer gateway credentials. Check
-    // both before funded keys so background/system routes honor BYOK too.
     const openAiGatewayKey = await resolveTeamByokApiKey("openai", lookup);
     if (isVercelAiGatewayKey(openAiGatewayKey)) {
       return { apiKey: openAiGatewayKey, source: "customer" };
@@ -424,8 +405,6 @@ export async function getByokOrTeamGatewayApiKey(
 
   if (provider === "openrouter" || provider === "custom") return undefined;
 
-  // A customer vck_ supplied through legacy provider flags also wins over the
-  // funded team allowance. OpenRouter remains direct-key-only above.
   if (isVercelAiGatewayKey(byokApiKey)) return byokApiKey;
 
   return getTeamGatewayApiKey(lookup);
@@ -459,7 +438,6 @@ export async function getByokOrTeamGatewayApiKeyForModelOption(
   return getTeamGatewayApiKey(lookup);
 }
 
-// HTPR-7075: Claude 5.5 mode never overrides a team that turned Anthropic off.
 async function isAnthropicDisabledForLookup(lookup: ByokLookupContext) {
   const teamId = await resolveLookupTeamId(lookup);
   if (!teamId) return false;
@@ -506,7 +484,6 @@ export function resolveAutomaticAiModel(
           const sameModelRetry = !params.abortSignal?.aborted && Boolean(await backgroundClaudeModelEnabled?.(context.lookup.userId));
           if (params.abortSignal?.aborted || !previousModelForFailedStream(modelId, error, false, false, true, sameModelRetry)) throw error;
           if (sameModelRetry) {
-            // HTPR-7075: retry the same Claude 5.5 model once, then fail visibly.
             console.warn(`[ai-model-fallback] ${modelId} retry on the same model`);
             try {
               return await doGenerate();

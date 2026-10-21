@@ -8,11 +8,8 @@ const ts = require("typescript");
 
 const root = path.resolve(__dirname, "..");
 const read = (file) => fs.readFileSync(path.join(root, file), "utf8");
-const key = "htpr-6873-quick-entry-grow";
 
-test("quick-entry growth uses its own registered flag and the shared board/table component", () => {
-  assert.match(require("./helpers/flag-files.cjs").source(), /HTPR_6873_QUICK_ENTRY_GROW_FLAG = "htpr-6873-quick-entry-grow"/);
-  assert.match((read("src/lib/flags.ts") + require("./helpers/flag-files.cjs").source()), /key: HTPR_6873_QUICK_ENTRY_GROW_FLAG,\s*shippedOn: "2026-10-03"/);
+test("quick-entry growth uses the shared board/table component", () => {
   for (const file of [
     "src/components/PageComponents/Kanban/KanbanSectionComponents/section.tsx",
     "src/components/PageComponents/Kanban/TableView/TableCreateTaskControl.tsx",
@@ -39,7 +36,6 @@ test("quick-entry growth preserves single-line titles and existing create/cancel
   Object.defineProperty(dom.window.HTMLTextAreaElement.prototype, "scrollHeight", {
     get() { return Math.max(1, Math.ceil(this.value.length / (width / 8))) * 20; },
   });
-  let enabled = true;
   let title = "";
   let setTitle;
   let cancels = 0;
@@ -50,8 +46,6 @@ test("quick-entry growth preserves single-line titles and existing create/cancel
   const inputRef = { current: null };
   const toasts = [];
   const mocks = {
-    "@/hooks/useFlag": { useFlag: (flag) => { assert.equal(flag, key); return enabled; } },
-    "@/lib/flags/keys": { HTPR_6873_QUICK_ENTRY_GROW_FLAG: key },
     "@/lib/configs/general.config": { MOBILE_TARGET: read("src/lib/configs/general.config.ts").match(/export const MOBILE_TARGET =\s*"([^"]+)"/)[1] },
     "react-hot-toast": { default: (message) => toasts.push(message) },
   };
@@ -208,23 +202,6 @@ test("quick-entry growth preserves single-line titles and existing create/cancel
       assert.equal(globalEscapes, 0);
       document.removeEventListener("keydown", globalEscape);
       assert.ok(disconnected > 0);
-    });
-    await t.test("flag off keeps the original input, styles, Enter and blur behavior", async () => {
-      enabled = false;
-      await mount();
-      const input = document.querySelector("#newTask input");
-      assert.ok(input);
-      assert.equal(area(), null);
-      assert.equal(buttons().length, 0);
-      assert.equal(input.className, "sm:text-content xs:text-emphasis text-white-black font-bold");
-      assert.equal(inputRef.current, input);
-      await React.act(async () => setTitle("Old input"));
-      await event(input, "keydown", { key: "Enter" });
-      assert.deepEqual(creates.at(-1), ["Old input", true]);
-      const before = cancels;
-      await React.act(async () => input.focus());
-      await React.act(async () => document.getElementById("outside").focus());
-      assert.equal(cancels, before + 1);
     });
   } finally {
     await React.act(async () => reactRoot.unmount());

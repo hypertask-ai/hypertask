@@ -46,12 +46,15 @@ function stubPackage(name, exports) {
 }
 
 stubPackage("ai", {
-  generateObject: async () => {
+  Output: require("ai").Output,
+  generateText: async (request) => {
+    assert.equal(request.output.name, "object");
+    assert.equal(request.schema, undefined);
     generateCalls += 1;
     if (generateError) throw generateError;
     if (mutateRevisionDuringInference) revision += 1;
     return {
-      object: {
+      output: {
         facts: [
           "Use member instead of customer.",
           "Dates use ISO format.",

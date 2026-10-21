@@ -1,12 +1,3 @@
-/**
- * Tool Metadata Configuration
- * 
- * Single source of truth for all MCP tool names and descriptions.
- * Import these constants in tool definitions to maintain consistency.
- * 
- * Following MCP best practice: Name Tools for Discovery
- * All tool names are prefixed with service name for better discovery.
- */
 
 import { buildToolName } from './mcp-standards';
 import { REPORT_CAPABILITIES } from '@/utils/controllers/reports/reportService';
@@ -18,10 +9,6 @@ export interface ToolMetadata {
 }
 
   
-/**
- * All tool metadata in one place
- * Tool names are automatically prefixed with service prefix following MCP best practices
- */
 const RAW_TOOL_METADATA = {
   REPORT_FEEDBACK: {
     name: buildToolName('report_feedback'),
@@ -30,7 +17,7 @@ const RAW_TOOL_METADATA = {
   HELLO: {
     name: buildToolName('hello'),
     description:
-      "Call this tool FIRST, immediately after connecting and before calling anything else. It returns a welcome map of the current user, their accessible boards, Hypertask capabilities, task-link templates, and board-specific house conventions so you can orient before taking action.",
+      "Call this tool FIRST, immediately after connecting and before calling anything else. It returns a welcome map of the current user, their accessible boards, Hypertask capabilities, task-link templates, and board-specific house conventions so you can orient before taking action. It also returns urlFormats for canonical app links.",
   },
 
   AGENT_PRESENCE: {
@@ -278,7 +265,7 @@ Technical: Requires team_id from get_user_context.teams (UUID string or number).
   ADD_COMMENT: {
     name: buildToolName('add_comment_to_task'),
     description:
-      'Add, update, or delete a comment. Use action: add (create comment, requires task_id or ticket_number + text), update (edit comment, requires comment_id + text), delete (remove comment, requires comment_id only). For update/delete, call get_comments_for_task first to obtain comment_id. For add or update, text may be HTML or structural markdown; content_type can explicitly select either format. When an agent answers a request, pass the invoking comment ID as reply_to_comment_id so the requester receives the answer in Important. When the mention was in the task description (no comment ID), pass the agent Mentioned notification ID as reply_to_invocation_id instead; never pass both. For @mentions: use @DisplayName in text, then call list_project_members to resolve each name to { user_id, display_name } and pass in the mentions array. For action=add, optional attachments[] uploads files to the new comment; each file needs filename, content_type, and exactly one of data=base64 bytes or url=https. The comment keeps success=true if only attachments fail; inspect attachment_status and the task before retrying attachments, and never repeat the add operation.',
+      'Add, update, or delete a comment. Optional kind: question for a decision by a person, qa for a QA verdict, done for the closing summary; leave out for progress notes, which go to the agent log. Use action: add (create comment, requires task_id or ticket_number + text), update (edit comment, requires comment_id + text), delete (remove comment, requires comment_id only). For update/delete, call get_comments_for_task first to obtain comment_id. For add or update, text may be HTML or structural markdown; content_type can explicitly select either format. When an agent answers a request, pass the invoking comment ID as reply_to_comment_id so the requester receives the answer in Important. When the mention was in the task description (no comment ID), pass the agent Mentioned notification ID as reply_to_invocation_id instead; never pass both. For @mentions: use @DisplayName in text, then call list_project_members to resolve each name to { user_id, display_name } and pass in the mentions array. For action=add, optional attachments[] uploads files to the new comment; each file needs filename, content_type, and exactly one of data=base64 bytes or url=https. The comment keeps success=true if only attachments fail; inspect attachment_status and the task before retrying attachments, and never repeat the add operation.',
   },
 
   UPDATE_COMMENT: {
@@ -491,14 +478,8 @@ assertToolSummaries(RAW_TOOL_METADATA as Record<string, ToolMetadata>)
 
 export const TOOL_METADATA = RAW_TOOL_METADATA;
 
-/**
- * Extract just the names for easy iteration
- */
 export const TOOL_NAMES: string[] = Object.values(TOOL_METADATA).map((tool) => tool.name);
 
-/**
- * Helper to get tool metadata by name
- */
 export function getToolMetadata(name: string): ToolMetadata | undefined {
   return Object.values(TOOL_METADATA).find((tool) => tool.name === name);
 }

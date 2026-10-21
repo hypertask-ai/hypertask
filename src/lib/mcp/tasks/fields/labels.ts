@@ -3,7 +3,6 @@ import type { TaskUpdateFieldContext, TaskUpdateTarget, TaskUpdateActingAgent } 
 
 export async function updateTaskLabels(context: TaskUpdateFieldContext, task: TaskUpdateTarget, actingAgent: TaskUpdateActingAgent) {
     const { requestBody, hasLabels, hasLabelMutation, userObj } = context;
-    // Handle labels (replace all)
     if (hasLabels) {
         try {
             await setTaskLabels(
@@ -19,7 +18,6 @@ export async function updateTaskLabels(context: TaskUpdateFieldContext, task: Ta
         }
     }
 
-    // Handle additive/subtractive label changes (leaves other labels intact)
     if (hasLabelMutation) {
         try {
             await mutateTaskLabels(

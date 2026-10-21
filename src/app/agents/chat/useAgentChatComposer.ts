@@ -46,9 +46,6 @@ export function useAgentChatComposer({
   mentionQuery, mentionSearchGenRef, mentionProjects, mentionProjectsLoading,
   mentionProjectsLoadError, draft, mentionStart, mentionResults, mentionIndex, handleSend,
 }: Props) {
-  // AudioButton's dictation callback. There is no Tiptap editor here, so this
-  // mirrors appendDictationToTitle (TaskTitleModal.tsx): append transcript
-  // text to the plain-string draft, same append helper.
   const insertDictation = useCallback((transcript: string) => {
     const editor = composerEditorRef.current;
     if (editor) {
@@ -60,14 +57,8 @@ export function useAgentChatComposer({
     composerRef.current?.focus();
   }, []);
 
-  // Detects an in-progress "@mention" ending at the cursor (must start at the
-  // beginning of the text or after whitespace, same rule as the composer's
-  // other autocomplete-style features).
   const handleComposerChange = (value: string, cursor: number) => {
     setDraft(value);
-    // Typing is the one path fast enough to outrun the passive effect that
-    // normally mirrors `draft`, and selectAgent reads this ref to decide what
-    // to save for the agent being left.
     draftRef.current = value;
     const beforeCursor = value.slice(0, cursor);
     const match = beforeCursor.match(/(?:^|\s)@([^\s@]*)$/);
@@ -83,8 +74,6 @@ export function useAgentChatComposer({
     setMentionQuery(match[1]);
   };
 
-  // Same endpoint and request shape as the Ctrl+K task search modal
-  // (src/components/Modals/commands/searchTasks.tsx).
   useEffect(() => {
     if (mentionQuery === null) return;
     const myGen = ++mentionSearchGenRef.current;
@@ -188,8 +177,6 @@ export function useAgentChatComposer({
         return;
       }
     }
-    // Plain Enter already sends (unless Shift+Enter, which stays a newline);
-    // Ctrl/Cmd+Enter is the same action, so no extra branch is needed for it.
     if (e.key === "Enter" && !e.shiftKey) {
       e.preventDefault();
       void handleSend();

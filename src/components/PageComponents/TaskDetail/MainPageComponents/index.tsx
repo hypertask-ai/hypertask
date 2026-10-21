@@ -24,8 +24,6 @@ export const AssigneeCard = ({ user, i, _mbl, projectId }: { user: IUser | IAgen
       className={cn(
         _mbl
           ? `${MOBILE_CHIP_CLASS} gap-1.5 overflow-hidden`
-          // Desktop: no font-size here — the properties rail sets it (14px), and a
-          // local override made assignees the only row at 13px (HTPR-5465).
           : "flex items-center space-x-2 font-medium overflow-hidden",
         "max-w-full min-w-0"
       )}
@@ -50,8 +48,6 @@ export const TaskInfoRow: React.FC<{ children: React.ReactNode; alignTop?: boole
   return (
     <div className={cn(
       "flex w-full shrink-0 text-[#8E9093]",
-      // Labels top-align with the first line of their value on every row
-      // (alignTop kept for call-site compat; it is now the only behavior).
       "items-start",
       _mbl ? "min-h-[24px] gap-2 text-meta" : "min-h-[24px]"
     )}>

@@ -17,11 +17,6 @@ interface BlockquoteArrowContext extends ReplyBlockquoteEnterContext {
   endOfTextblock: (direction: VerticalArrowDirection) => boolean;
 }
 
-/**
- * Replies saved before replyQuote existed can only be identified by the exact
- * attribution structure emitted by wrapBlockQuote: a generated mention and
- * the word "said" in the paragraph immediately before the blockquote.
- */
 export function isLegacyGeneratedReplyBlockquote(
   element: HTMLElement,
 ): boolean {
@@ -43,8 +38,6 @@ export function isLegacyGeneratedReplyBlockquote(
     return false;
   }
 
-  // AI-generated quote context used a distinct mention signature and should
-  // retain ordinary blockquote behavior.
   if (
     mention.getAttribute("data-label") === "name" &&
     mention.hasAttribute("text")
@@ -61,12 +54,6 @@ export function isLegacyGeneratedReplyBlockquote(
   return attributionText === "said";
 }
 
-/**
- * A quoted reply is read-only source material from another comment. Its first
- * Enter should move the author into a normal paragraph after the whole quote,
- * without splitting or changing the quoted content. Untagged/manual quotes
- * return false so ProseMirror keeps its standard blockquote behavior.
- */
 export function exitReplyBlockquoteOnEnter({
   state,
   dispatch,
@@ -130,11 +117,6 @@ function selectionEndsBlockquoteBranch(
   return true;
 }
 
-/**
- * Some browsers leave vertical arrow movement inside a blockquote when the
- * caret reaches its visual edge. Handle only that boundary and let native
- * movement continue everywhere else.
- */
 export function moveAcrossBlockquoteOnArrow({
   state,
   dispatch,

@@ -1,16 +1,3 @@
-/**
- * @fileoverview Authentication module that manages user authentication,
- * handles user data persistence, and manages redirections based on user state.
- *
- * This module provides:
- * - Better Auth Google authentication integration
- * - User data persistence using Recoil state and nookies
- * - Context provider for authentication-related operations
- * - Redirection logic based on user onboarding status
- * - Project invitation and sharing functionality
- *
- * @module Authentication
- */
 
 import { createContext, useContext, useState, useEffect, useRef } from "react";
 import nookies from "nookies";
@@ -54,10 +41,10 @@ import {
 type TLoginWithEmail = {
   shouldSkipInteractive?: boolean;
   skipOnboarding?: boolean;
-  userData?: any; // Pre-processed user data from API
-  prevBoard?: any; // Pre-processed project data from API
-  isNewUser: boolean; // Flag indicating if this is a new user
-  skipDatabaseUpdate: boolean; // Flag to skip calling updateUsers again
+  userData?: any;
+  prevBoard?: any;
+  isNewUser: boolean;
+  skipDatabaseUpdate: boolean;
 };
 
 /**
@@ -82,7 +69,6 @@ interface IAuth {
   isAuthenticating: boolean;
 }
 
-// Create auth context
 const AuthContext = createContext<IAuth>({
   authenticatedUserId: null,
   currentUser: null,
@@ -99,14 +85,6 @@ const AuthContext = createContext<IAuth>({
   isAuthenticating: false,
 });
 
-/**
- * Authentication Provider component that wraps the application to provide authentication context
- *
- * @component
- * @param {Object} props - Component props
- * @param {React.ReactNode} props.children - Child components
- * @returns {JSX.Element} AuthContext Provider with children
- */
 export const AuthProvider = ({
   children,
   authenticatedUserId,
@@ -131,23 +109,11 @@ export const AuthProvider = ({
     (typeof process !== "undefined" && process.env.development === "true") ||
     process.env.NODE_ENV !== "production";
 
-  /**
-   * Query to fetch user data when user cookie is available
-   */
   const { data } = useQuery({
     ...getUserProfileQueryOptions(authenticatedAccountId),
     queryFn: fetchUserById,
   });
 
-  
-
-  /**
-   * Initiates Google signup process
-   *
-   * @async
-   * @function signupWithGoogle
-   * @returns {Promise<void>}
-   */
   const signupWithGoogle = async () => {
     try {
       setIsAuthenticating(true);
@@ -166,15 +132,6 @@ export const AuthProvider = ({
     }
   };
 
-  /**
-   * Initiates Google login process with optional view and share parameters
-   *
-   * @async
-   * @function loginWithGoogle
-   * @param {string} [view] - Optional view identifier to redirect to after login
-   * @param {string} [shareId] - Optional share identifier for shared resources
-   * @returns {Promise<void>}
-   */
   const loginWithGoogle = async (
     _view?: string | undefined,
     _shouldSkipInteractive: boolean = false,
@@ -197,16 +154,6 @@ export const AuthProvider = ({
     }
   };
 
-  /**
-   * Completes email login/signup after the backend has verified the email or code.
-   *
-   * @async
-   * @function loginWithEmail
-   * @param {Object} params - Parameters for email login
-   * @param {boolean} params.shouldSkipInteractive - Whether to skip interactive onboarding
-   * @param {boolean} params.skipOnboarding - Whether to skip onboarding flow
-   * @returns {Promise<void>}
-   */
   const loginWithEmail = async ({
     skipOnboarding = authConfig.onboarding.skipOnboarding,
     userData,
@@ -226,7 +173,6 @@ export const AuthProvider = ({
       } catch (e) {
         console.error("Error parsing URL params:", e);
       }
-      // Invalidate projects cache to ensure fresh data (especially for instant signup users)
       queryClient.invalidateQueries({ queryKey: ["projectsAll"] });
       queryClient.invalidateQueries({ queryKey: ["projectsAllMinimal"] });
 
@@ -271,11 +217,9 @@ export const AuthProvider = ({
         });
       })
       .catch(() => {
-        // Bridge failures are swallowed so legacy ht_session/nookies_user auth keeps working.
       });
   }, [authenticatedAccountId]);
 
-  // HTPR-4146: reverse of the bridge-session effect above — recovers legacy cookies after a Better Auth magic-link click lands the browser on a fresh page with only a BA session.
   useEffect(() => {
     if (
       typeof window === 'undefined' ||
@@ -285,11 +229,6 @@ export const AuthProvider = ({
       return;
     }
 
-    // currentUserCookie is always null on the first render (useCurrentUser only
-    // reads the cookie in a layout effect), so gating on it made every
-    // logged-in page load reverse-bridge and hard-navigate in an endless
-    // reload loop. Read the cookie synchronously instead, and treat a
-    // malformed cookie as absent so the bridge can repair it (HTPR-4146).
     if (isValidUser(nookies.get(null)[authConfig.cookies.user]).isValid) {
       return;
     }
@@ -305,33 +244,15 @@ export const AuthProvider = ({
 
       const { hasProjects } = await response.json();
 
-      // Navigate only if the legacy cookie actually landed; if the browser
-      // rejected it (e.g. oversized), reloading would just loop again.
       if (isValidUser(nookies.get(null)[authConfig.cookies.user]).isValid) {
         window.location.assign(
           hasProjects === false ? '/onboarding' : authConfig.redirect.afterLogin
         );
       }
     }).catch(() => {
-      // Anonymous page loads are expected to have no Better Auth session to bridge.
     });
   }, []);
 
-  /**
-   * Handles post-authentication user logic for both new and existing users.
-   * This function is used in loginWithEmail to process user data,
-   * handle onboarding, invitations, analytics, and redirection.
-   *
-   * @async
-   * @function handlePostAuthUser
-   * @param {Object} params - Parameters for post-auth logic
-   * @param {IUser} params.user - The authenticated user object
-   * @param {boolean} params.isNewUser - Whether the user is new
-   * @param {string | undefined} params.view - Optional view slug for redirect
-   * @param {string | undefined} params.shareId - Optional share identifier
-   * @param {boolean} params.skipOnboarding - Whether to skip onboarding
-   * @returns {Promise<void>}
-   */
   const handlePostAuthUser = async ({
     user,
     preloadedPrevBoard,
@@ -360,7 +281,6 @@ export const AuthProvider = ({
       deleteFunnelCookies();
       clearAddAccountFlag();
   
-      // Handle project invitation from URL parameters
       if (projectName && projectInvite && inviteKey) {
         const inviteResponse = await joinProject(
           user.id,
@@ -385,7 +305,6 @@ export const AuthProvider = ({
         };
   
       } else {
-        // Get user's projects if no invitation parameters
         prevBoard = preloadedPrevBoard ?? await getProjects(user.id);
         const activeView = getViewFromProject(prevBoard);
         newView =
@@ -394,7 +313,6 @@ export const AuthProvider = ({
             : undefined;
       }
   
-      // Handle joining from a share link
       if (shareKey) {
         try {
           const shareResponse = await joinProjectFromShareURL(user.id, shareKey);
@@ -411,20 +329,15 @@ export const AuthProvider = ({
         }
       }
   
-      // New users go through /onboarding (team naming + AI board generation);
-      // the old auto-create MyTeam/MyBoard shortcut left Google signups boardless
-      // and getFirst fabricated an empty project (black board). HTPR-4066
 
       await setCookies_user_theme_prevBoard(
         prevBoard?.id ?? -1,
         user,
         view ?? newView
       );
-      // Check if this is a new mobile user - if so, show the blocking overlay
       if (isNewUser && isMbl) {
         console.log('🚫 Mobile signup detected - showing desktop redirect overlay');
         showMobileOverlay(user.email ?? '');
-        // Still calculate the URL for when they dismiss the overlay
         const url = getRedirectUrl(
           user,
           prevBoard,
@@ -434,9 +347,8 @@ export const AuthProvider = ({
           abTestVariant,
           isNewUser
         );
-        // Store the intended redirect URL for later
         sessionStorage.setItem('postSignupRedirect', url);
-        return; // Don't redirect yet
+        return;
       }
 
       const hasOAuthMcp = searchParams?.has("client_id") && searchParams?.has("redirect_uri");
@@ -490,15 +402,6 @@ export const AuthProvider = ({
     }
     
   };
-  /**
-   * Adds a user to a team from a share URL
-   *
-   * @async
-   * @function joinProjectFromShareURL
-   * @param {number} userId - User ID to add to the team
-   * @param {string} shareId - Share identifier
-   * @returns {Promise<any>} API response
-   */
   const joinProjectFromShareURL = async (userId: number, shareId: string) => {
     const response = await axios.post(addUserToTeamFromShareRoute, {
       userId,
@@ -507,16 +410,13 @@ export const AuthProvider = ({
     return response;
   };
 
-  // Import transformUserObject from utils
   const transformUserObject = (user: any): IUser => {
     if (!user) return user;
     
-    // If notificationPreference already exists at top level, return as is
     if (user.notificationPreference !== undefined) {
       return user as IUser;
     }
     
-    // Flatten notificationPreference from UserSetting to top level
     const transformedUser = {
       ...user,
       notificationPreference: user.UserSetting?.notificationPreference || "direct",
@@ -525,13 +425,6 @@ export const AuthProvider = ({
     return transformedUser as IUser;
   };
 
-  /**
-   * Updates user data in cookies and Recoil atom
-   *
-   * @async
-   * @function setUserCookieAndAtom
-   * @param {IUser} user - User data to store
-   */
   const setUserCookieAndAtom = async (user: IUser) => {
     const transformedUser = transformUserObject(user);
     nookies.set(
@@ -546,16 +439,6 @@ export const AuthProvider = ({
     _setCurrentUser(transformedUser);
   };
 
-  /**
-   * Sets multiple cookies for user session, theme preferences, and board selection
-   *
-   * @async
-   * @function setCookies_user_theme_prevBoard
-   * @param {number} prevBoardId - Previous board ID
-   * @param {IUser} user - User data
-   * @param {string} [view] - Optional view identifier
-   * @returns {Promise<void>}
-   */
   const setCookies_user_theme_prevBoard = async (
     prevBoardId: number,
     user: IUser,
@@ -593,14 +476,6 @@ export const AuthProvider = ({
     return;
   };
 
-  /**
-   * Retrieves all projects for a given user
-   *
-   * @async
-   * @function getProjects
-   * @param {number} userId - User ID
-   * @returns {Promise<IProject|undefined>} First project of the user or undefined
-   */
   const getProjects = async (userId: number) => {
     const response = await fetch(`/api/projects/getAll`, {
       method: "POST",
@@ -613,16 +488,6 @@ export const AuthProvider = ({
     }
   };
 
-  /**
-   * Adds a user to a project using an invite key
-   *
-   * @async
-   * @function joinProject
-   * @param {number} userId - User ID to add to the project
-   * @param {string} projectId - Project ID to join
-   * @param {string} inviteKey - Invitation key
-   * @returns {Promise<any|null>} API response or null if parameters are missing
-   */
   const joinProject = async (
     userId: number,
     projectId: string,
@@ -642,13 +507,6 @@ export const AuthProvider = ({
     return response;
   };
 
-  /**
-   * Fetches user data by ID from the API
-   *
-   * @async
-   * @function fetchUserById
-   * @returns {Promise<void>}
-   */
   async function fetchUserById() {
     try {
       const bootstrappedUser =
@@ -681,19 +539,6 @@ export const AuthProvider = ({
   );
 };
 
-/**
- * Determines the appropriate redirect URL based on user state and parameters
- *
- * @function getRedirectUrl
- * @param {any} user - User object with settings
- * @param {any} prevBoard - Previous board object
- * @param {boolean} isMobile - Whether the device is mobile
- * @param {string|undefined} view - Optional view identifier
- * @param {ITaskShare|undefined} sharedTask - Optional shared task
- * @param {string|undefined} abTestVariant - Optional AB test variant
- * @param {boolean|undefined} isNewUser - Whether this is a new user
- * @returns {string} URL to redirect to
- */
 const getRedirectUrl = (
   user: any,
   prevBoard: any,
@@ -712,47 +557,24 @@ const getRedirectUrl = (
   console.log("👤 ~ getRedirectUrl ~ isNewUser:", isNewUser);
   console.log("✅ ~ getRedirectUrl ~ isVerified:", isVerified);
 
-  // Shared task URL generation helper
   const getSharedTaskUrl = () =>
     sharedTask
       ? `/detail/project-${sharedTask.projectId}/${sharedTask.task?.uniqueIndex}`
       : "";
 
-  // Project URL with optional view parameter
   const getProjectUrl = () =>
     `/project?id=${prevBoard?.id}${view ? `&view=${view}` : ""}`;
 
-  // // For instant signup users (isVerified: false), skip onboarding and go straight to app
-  // // They will see the verification modal instead
-  // if (isVerified === false) {
-  //   console.log("🔐 Instant signup user - skipping onboarding, going to app");
-  //   return sharedTask ? getSharedTaskUrl() : getProjectUrl();
-  // }
 
-  // New users go through the /onboarding flow only when skipOnboarding is off.
-  // With it on (2026-08-02), a boardless signup lands on NoBoardsEmptyState.
-  // Invited/shared users already have a board to land on. HTPR-4066
   if (isNewUser && !authConfig.onboarding.skipOnboarding) {
     if (sharedTask) return getSharedTaskUrl();
     if (prevBoard?.id) return getProjectUrl();
     return authConfig.redirect.afterOnboarding;
   }
 
-  // User has completed all onboarding steps
   return sharedTask ? getSharedTaskUrl() : getProjectUrl();
-
-  // // User has not completed onboarding
-  // return `/onboarding?projectId=${prevBoard?.id}&teamTitle=${
-  //   prevBoard?.team.title
-  // }&id=${prevBoard?.team.id}${sharedTask ? `&shareId=${sharedTask.id}` : ""}`;
 };
 
-/**
- * Custom hook to access authentication context
- *
- * @function useAuth
- * @returns {IAuth} Authentication context
- */
 export const useAuth = () => {
   return useContext(AuthContext);
 };

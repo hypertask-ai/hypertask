@@ -11,7 +11,6 @@ const getAllLogs = async () => {
                 status:200,
                 json:allLogs
             })
-            // res.status(200).json(comments);
         } catch (error) {
             console.log(error);
             return ({
@@ -19,7 +18,6 @@ const getAllLogs = async () => {
                 json:[],
                 error:error
             })
-            // res.status(500).json({ message: "Internal server error" });
         }
 
 };

@@ -3,46 +3,31 @@ import { isSubscriptionActive } from '@/lib/constants/constants';
 import prisma from '@/lib/prisma';
 import { NextRequest, NextResponse } from 'next/server';
 
-// Support callers: the same server-only password the /reset tool gate checks.
 function isAdminCaller(request: NextRequest): boolean {
     const adminPassword = process.env.ADMIN_USER_RESET_PW;
 
     return Boolean(adminPassword) && request.headers.get('x-admin-password') === adminPassword;
 }
 
-/**
- * Reset user's trial period by:
- * 1. Setting trialStatus to false (makes them eligible for trial again)
- * 2. Resetting joinedAt to current date (restarts the 14-day countdown)
- * 
- * Note: This only resets the freemium trial period (before subscription).
- * If the user has an active Stripe subscription, resetting the trial period
- * doesn't make sense since they've already moved past the freemium trial stage.
- * 
- * @param userId - The user ID to reset trial for
- * @param force - If true, resets even if user has active subscriptions. Default: false
- */
 async function resetUserTrialPeriod(
     userId: number,
     force: boolean = false
 ) {
     const now = new Date();
 
-    // Find all teams the user is associated with (as owner or member)
     const userTeams = await prisma.team.findMany({
         where: {
             OR: [
-                { googleAccount: { userId } }, // User owns the team
-                { members: { some: { userId } } } // User is a member
+                { googleAccount: { userId } },
+                { members: { some: { userId } } }
             ]
         },
         include: {
-            subscriptionPlan: true, // Get all subscription plans, we'll filter in code
+            subscriptionPlan: true,
             googleAccount: true
         }
     });
 
-    // Check for active subscriptions
     const activeSubscriptions: Array<{
         teamId: string;
         teamTitle: string | null;
@@ -51,14 +36,11 @@ async function resetUserTrialPeriod(
     }> = [];
 
     for (const team of userTeams) {
-        // Check if team has an active subscription plan ID
         if (team.activeSubscriptionPlanId) {
-            // Find the subscription plan that matches the active subscription ID
             const matchingPlan = team.subscriptionPlan.find(plan =>
                 plan.subscriptionId === team.activeSubscriptionPlanId
             );
 
-            // If we found a matching plan, check if it's active
             if (matchingPlan && isSubscriptionActive(matchingPlan.subscriptionStatus)) {
                 activeSubscriptions.push({
                     teamId: team.id,
@@ -73,7 +55,6 @@ async function resetUserTrialPeriod(
     console.log("🚀 ~ resetUserTrialPeriod ~ userTeams:", userTeams.length);
     console.log("🚀 ~ resetUserTrialPeriod ~ activeSubscriptions:", activeSubscriptions.length);
 
-    // Prevent reset if user has active subscriptions (unless forced)
     if (activeSubscriptions.length > 0 && !force) {
         return {
             error: "Cannot reset trial period: user has active subscription(s)",
@@ -82,7 +63,6 @@ async function resetUserTrialPeriod(
         };
     }
 
-    // Check if user exists
     const userExists = await prisma.user.findUnique({
         where: { id: userId }
     });
@@ -93,7 +73,6 @@ async function resetUserTrialPeriod(
         };
     }
 
-    // Ensure UserSetting exists, then update both UserSetting.trialStatus and User.joinedAt in a transaction
     const [userSetting, user] = await prisma.$transaction([
         prisma.userSetting.upsert({
             where: { userId },
@@ -119,14 +98,6 @@ async function resetUserTrialPeriod(
     };
 }
 
-/**
- * API endpoint to reset a user's trial period
- * POST /api/users/reset-trial
- * 
- * Body:
- * - userId: number (required) - The user ID to reset trial for
- * - force?: boolean (optional) - If true, resets even if user has active subscriptions. Default: false
- */
 export async function POST(request: NextRequest) {
     try {
         let body;
@@ -141,7 +112,6 @@ export async function POST(request: NextRequest) {
         
         const { userId, force=false } = body;
 
-        // Validate input
         if (!userId || typeof userId !== 'number') {
             return NextResponse.json(
                 { error: 'userId (number) is required' },
@@ -149,7 +119,6 @@ export async function POST(request: NextRequest) {
             );
         }
 
-        // Auth: admins may reset anyone, everyone else only themselves (HTPR-4802).
         if (!isAdminCaller(request)) {
             const session = await getSessionUser(request.headers);
 
@@ -162,10 +131,8 @@ export async function POST(request: NextRequest) {
             }
         }
 
-        // Reset trial period
         const result = await resetUserTrialPeriod(userId, force || false);
 
-        // Check if there was an error (e.g., active subscriptions)
         if ('error' in result) {
             return NextResponse.json(
                 {

@@ -1,13 +1,13 @@
 version: 7
 last_updated: 2026-10-12
-purpose: "Fixed-cost CI with fast releases and a provider-neutral AI review gate. App CI runs on GitHub-hosted runners; the repo is public, so hosted minutes are free. The canonical reader-facing contract is https://hypertask.app/wiki/deployment; this file is the machine-readable companion."
+purpose: "Fixed-cost CI with fast releases and a provider-neutral AI review gate. App CI runs on GitHub-hosted runners; the repo is public, so hosted minutes are free. The canonical reader-facing contract is docs/ci.md; this file is the machine-readable companion."
 
 topology:
   orchestrator: github-actions
   compute: github-hosted-ubuntu-latest
   # The 2026-08-30 org switch to public hypertask-ai/hypertask retired the app
   # repo's self-hosted Contabo lanes (owner decision recorded 2026-09-02 in the
-  # canonical wiki). The only self-hosted runners on the Contabo host belong to
+  # CI contract). The only self-hosted runners on the Contabo host belong to
   # the private reviewer and analytics repositories; app workflows cannot
   # schedule them.
   additional_runner_hosts: false
@@ -19,7 +19,7 @@ topology:
     repository: valentinyeo/hypertask-reviewer
     dedicated_runners: [contabo-1]
     os_user: htreviewrunner
-    # contabo-2 is not currently registered; the wiki's alerting treats a single
+    # contabo-2 is not currently registered; the live CI alerting treats a single
     # offline review lane as an incident rather than a capacity change.
   production_branch: production
   # An administrator applied this setting through GitHub's repository API on

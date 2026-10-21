@@ -38,7 +38,6 @@ const HiddenColumns = (
               fill="none"
               className={shouldShowBlue ? "text-[#51A4F1]" : "group-hover:text-header-hover-text"}
             />
-            {/* <p className='text-content text-header-text group-hover:text-header-hover-text'>{currentProject._count.section}</p> */}
             <Tooltip  
               left={-10}
               bottom={-40}

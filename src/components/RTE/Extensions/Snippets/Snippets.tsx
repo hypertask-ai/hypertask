@@ -3,9 +3,6 @@ import { PluginKey } from "@tiptap/pm/state";
 import Suggestion from "@tiptap/suggestion";
 import { isForcedSnippetPicker } from "@/lib/snippets";
 
-// @tiptap/suggestion defaults every instance to PluginKey("suggestion"), which
-// collides with the slash-command suggestion already on the editor and makes
-// ProseMirror throw "Adding different instances of a keyed plugin".
 const SnippetsPluginKey = new PluginKey("snippets");
 import getSuggestionItems from "./items";
 import renderItems from "./RenderSnippets";

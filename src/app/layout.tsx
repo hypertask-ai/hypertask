@@ -1,4 +1,5 @@
 import "@/styles/globals.scss";
+import "@/styles/tailwindThemes/rounded.css";
 import "../../tokens.css";
 import { cookies } from "next/headers";
 import Provider from "@/utils/Providers";
@@ -12,14 +13,17 @@ import authConfig from "@/lib/configs/auth.config";
 import { DIV_ID_CONSTANTS } from "@/lib/configs/general.config";
 import { inter, INTER_LATIN_FONT_HREF } from "@/lib/fonts/inter";
 import { newsreader, NEWSREADER_LATIN_FONT_HREFS } from "@/lib/fonts/newsreader";
-import { HTPR_7016_PHONE_BOARD_COLD_START_FLAG } from "@/lib/flags/keys";
+import { HTPR_7016_PHONE_BOARD_COLD_START_FLAG, HTPR_7272_PAYMENT_LOGIN_AGENT_EVENTS_FLAG, HTPR_7278_MEMORY_ONLY_TRACKING_FLAG } from "@/lib/flags/keys";
+import { isFeatureEnabled } from "@/lib/flags";
 import { ibmPlexSans, IBM_PLEX_SANS_LATIN_FONT_HREF } from "@/lib/fonts/ibmPlexSans";
 import { SESSION_COOKIE, verifySession } from "@/lib/auth/session";
 import {
   normalizeThemePreference,
+  resolvedThemeDomMetadata,
   resolveInitialThemeColor,
   resolveThemePreference,
 } from "@/lib/themePreferences";
+import { HTPR_7328_ROUNDED_THEME_FLAG } from "@/lib/flags/keys";
 import { buildThemeBootScript } from "@/lib/themeBootScript";
 import { buildEarlyAppShellBootstrapScript } from "@/lib/appShellBootstrap/client";
 import { getServerBoardDocument } from "@/lib/firstScreen/serverBoardDocument";
@@ -27,7 +31,7 @@ import { getServerInboxDocument } from "@/lib/firstScreen/serverInboxDocument";
 import type { BoardDisplay } from "@/lib/firstScreen/boardDisplay";
 
 export async function generateViewport() {
-  const device = await isMobileDevice(); // execute the function
+  const device = await isMobileDevice();
 
   return {
     width: "device-width",
@@ -37,76 +41,69 @@ export async function generateViewport() {
     minimumScale: device.isMobile ? 1 : 0.5,
     viewportFit: "cover",
     height: "device-height",
-    // Lift page content above the on-screen keyboard instead of letting it overlay
-    // (fixes the comment field hiding behind the keyboard on mobile web + the app shell).
     interactiveWidget: "resizes-content",
   };
 }
 
 export default async function RootLayout(
   {
-    // Layouts must accept a children prop.
-    // This will be populated with nested layouts or pages
     children,
   }: {
     children: React.ReactNode;
   }
 ) {
   const cookieStore = await cookies();
-  // Seed device contexts from the request so mobile hydration starts in the
-  // correct state. The old client-side correction rerendered the complete app
-  // provider subtree immediately after hydration and made a server-action
-  // round trip solely to identify Apple devices.
-  const [device, boardDocument, inboxDocument] = await Promise.all([isMobileDevice(), getServerBoardDocument(), getServerInboxDocument()]);
+  const analyticsSession = verifySession(
+    cookieStore.get(SESSION_COOKIE)?.value,
+  );
+  const firstScreenPromise = Promise.all([isMobileDevice(), getServerBoardDocument(), getServerInboxDocument()]);
+  let identifyEventIds = false;
+  if (analyticsSession) {
+    try {
+      const [enabled] = await Promise.all([
+        isFeatureEnabled(HTPR_7272_PAYMENT_LOGIN_AGENT_EVENTS_FLAG, analyticsSession.id),
+        firstScreenPromise,
+      ]);
+      if (enabled) identifyEventIds = true;
+    } catch {}
+  }
+  const [device, boardDocument, inboxDocument] = await firstScreenPromise;
   const firstScreen = boardDocument ?? inboxDocument;
   const deferUnusedBoardFonts = boardDocument?.flags.values[HTPR_7016_PHONE_BOARD_COLD_START_FLAG] === true &&
     (boardDocument.display as BoardDisplay).isMobile &&
     ["amoled", "graphite", "porcelain"].includes(boardDocument.display.theme);
-  // Performance identity comes from the HTTP-only, HMAC-signed session. The
-  // client-writable nookies_user cookie is a claim, not authentication.
-  const analyticsSession = verifySession(
-    cookieStore.get(SESSION_COOKIE)?.value,
-  );
   const analyticsIsGuest =
     analyticsSession?.email?.endsWith("@demo.hypertask.ai") ?? false;
+  const memoryOnlyTracking = await isFeatureEnabled(HTPR_7278_MEMORY_ONLY_TRACKING_FLAG, analyticsSession?.id ?? -1);
 
   const theme = cookieStore.get(authConfig.cookies.theme) ?? {
     value: authConfig.cookies.defaultTheme,
     name: authConfig.cookies.theme,
   };
-  // Legacy "dark"/"light" cookies map onto the standard graphite/porcelain pair.
-  const themeValue = normalizeThemePreference(theme.value) ?? "system";
+  const roundedEnabled = await isFeatureEnabled(HTPR_7328_ROUNDED_THEME_FLAG, analyticsSession?.id ?? -1);
+  const savedTheme = roundedEnabled
+    ? normalizeThemePreference(theme.value, true)
+    : normalizeThemePreference(theme.value);
+  const themeValue = savedTheme ?? "system";
   const systemLightTheme = resolveThemePreference("system", "light");
   const systemDarkTheme = resolveThemePreference("system", "dark");
   const initialThemeColor = resolveInitialThemeColor(themeValue);
-  const themeClassName =
-    themeValue === "amoled"
-      ? "dark amoled"
-      : themeValue === "dia"
-        ? "light dia"
-        : themeValue === "graphite"
-          ? "dark graphite"
-          : themeValue === "porcelain"
-            ? "light porcelain"
-            : themeValue;
+  const initialResolvedTheme = resolveThemePreference(themeValue, "dark");
+  const themeClassName = themeValue === "system"
+    ? "system"
+    : resolvedThemeDomMetadata[initialResolvedTheme].classes.join(" ");
 
   return (
     <html
       lang="en"
-      // The theme boot script below rewrites <html> class + data-theme to the
-      // resolved theme (e.g. "system" -> "amoled") before React hydrates, so the
-      // server markup intentionally differs from the client. Suppress the
-      // hydration warning for this element's own attributes only.
       suppressHydrationWarning
       className={`${themeClassName} ${inter.variable} ${newsreader.variable} ${ibmPlexSans.variable} ${inter.className}`}
-      data-theme={themeValue}
+      data-theme={themeValue === "rounded" ? initialResolvedTheme : themeValue}
     >
       <head>
-        {/* Only Plex is used by these seeded phone boards. Keep legacy preloads elsewhere. */}
         {!deferUnusedBoardFonts && [INTER_LATIN_FONT_HREF, ...NEWSREADER_LATIN_FONT_HREFS].map(href => (
           <link key={href} rel="preload" href={href} as="font" type="font/woff2" crossOrigin="anonymous" />
         ))}
-        {/* Window popstate follows registration order even for capture listeners. */}
         <script
           id="ht-cached-task-history"
           dangerouslySetInnerHTML={{
@@ -121,43 +118,22 @@ export default async function RootLayout(
           content={initialThemeColor}
           suppressHydrationWarning
         />
-        {/*
-          Theme boot: the server applies explicit light/dark from the cookie,
-          but cannot resolve "system" (prefers-color-scheme is client-only), so
-          system users flashed light-then-dark before ThemeListener's effect ran.
-          This blocking script resolves it before first paint. Mirrors ThemeListener.
-        */}
         <script
           dangerouslySetInnerHTML={{
             __html: buildThemeBootScript(
               authConfig.cookies.theme,
               systemLightTheme,
               systemDarkTheme,
+              roundedEnabled,
             ),
           }}
         />
-        {/*
-          Rail-width boot: --app-shell-rail-w only exists once AppShellRail's
-          effect sets it, so a cold load paints every rail-padded container at
-          the CSS fallback (48px, collapsed) first. Users with the rail
-          expanded (130px) or turned off saw that mount animate into place
-          (HTPR-5725). For rail-off, it also seeds data-rail="off" so CSS hides
-          the default-true SSR rail before hydration removes it (HTPR-5749).
-          This reads the same localStorage the appShellRail(Expanded) atoms
-          persist to and sets the var before first paint; AppShellRail's own
-          effect then confirms the width and clears data-rail if the rail
-          actually renders, or leaves the width unread where the rail isn't
-          rendered (mobile, rail off). Rail-off is checked first: the two
-          persisted flags are independent, so a user who expanded the rail
-          and then turned it off entirely must not get 130px.
-        */}
         <script
           dangerouslySetInnerHTML={{
             __html:
               "(function(){try{var s=JSON.parse(localStorage.getItem('recoil-persist')||'{}');var el=document.documentElement;if(s.appShellRail===false){el.style.setProperty('--app-shell-rail-w','0px');el.setAttribute('data-rail','off');}else if(s.appShellRailExpanded===true){el.style.setProperty('--app-shell-rail-w','130px');}}catch(e){}})();",
           }}
         />
-        {/* <meta name="viewport" content="width=device-width,height=device-height,initial-scale=1,maximum-scale=1,user-scalable=no,shrink-to-fit=no,viewport-fit=cover"/> */}
         <meta
           name="description"
           content="Hypertask - AI-powered Project Boards"
@@ -181,6 +157,8 @@ export default async function RootLayout(
         <PostHogAnalytics
           authenticatedUserId={analyticsSession?.id ?? null}
           authenticatedIsGuest={analyticsIsGuest}
+          identifyEventIds={identifyEventIds}
+          trackingPersistence={memoryOnlyTracking ? "memory" : "localStorage+cookie"}
         />
         <DeploySkewGuard />
         <SpeedInsights />

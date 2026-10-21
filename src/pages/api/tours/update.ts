@@ -4,11 +4,6 @@ import prisma from '@/lib/prisma';
 import { ProductToursData } from '@/lib/tours';
 import { SESSION_COOKIE, verifySession } from '@/lib/auth/session';
 
-/**
- * API endpoint to update tour completion status
- * POST /api/tours/update
- * Body: { tourId: string, completed?: boolean, skipped?: boolean }
- */
 export default async function handler(
   req: NextApiRequest,
   res: NextApiResponse
@@ -31,7 +26,6 @@ export default async function handler(
       return res.status(400).json({ message: 'tourId is required' });
     }
 
-    // Get current tours data
     const userSetting = await prisma.userSetting.findUnique({
       where: { userId: userId },
       select: { productTours: true },
@@ -39,17 +33,15 @@ export default async function handler(
 
     const currentTours = (userSetting?.productTours || {}) as ProductToursData;
 
-    // Get existing tour data safely
     const existingTourData = currentTours[tourId];
     const existingCompletedAt = 
       existingTourData && typeof existingTourData !== 'boolean' 
         ? existingTourData.completedAt 
         : undefined;
 
-    // Update specific tour and mark that user has seen ANY tour
     const updatedTours: ProductToursData = {
       ...currentTours,
-      _hasSeenAnyTour: true, // Once any tour is seen, set this flag
+      _hasSeenAnyTour: true,
       [tourId]: {
         completed: completed || false,
         skipped: skipped || false,
@@ -58,7 +50,6 @@ export default async function handler(
       },
     };
 
-    // Save back to database
     await prisma.userSetting.update({
       where: { userId: userId },
       data: { productTours: updatedTours },

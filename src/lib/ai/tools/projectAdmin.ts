@@ -110,8 +110,6 @@ export function createProjectAdminTool(context: ToolContext) {
               previewsIssuedThisRequest: bulkPreviewsIssued,
             }) === "preview"
           ) {
-            // success:false matches the bulk-assign preview, so a model cannot
-            // read the preview as "done" and tell the user the board is archived.
             return sanitizeForJson({
               success: false,
               confirmation_required: true,

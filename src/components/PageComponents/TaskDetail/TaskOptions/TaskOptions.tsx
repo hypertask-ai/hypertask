@@ -12,9 +12,6 @@ import { getTaskDetailHeaderActions } from "@/lib/taskDetailArchiveActions";
 const TaskOptions = () => {
   const { currentTask } = useTaskContext();
   const { markAsDone, navigateToNextTask } = useArchiveAndNavigate();
-  // Read the reactive currentTask, not the static server parse, so the inbox
-  // icon reflects removal/undo: the archive flow zeroes this count (and undo
-  // restores it), which the frozen server payload never saw.
   const hasNotifications = !!(
     currentTask?._count?.notifications && currentTask?._count?.notifications > 0
   );
@@ -24,7 +21,6 @@ const TaskOptions = () => {
     isMobile: _mbl,
   });
 
-  // ===================================== for mobile
   if (_mbl) {
     return (
       <div className="flex gap-2" data-task-detail-primary-actions="true">
@@ -32,12 +28,10 @@ const TaskOptions = () => {
         {headerActions.includes("archive") && (
           <MarkTaskAsDone markAsDone={markAsDone} />
         )}
-        {/* Ctrl+K header button removed on mobile: pull-down is the entry point. */}
       </div>
     );
   }
 
-  // ===================================== for desktop
   else
     return (
       <div

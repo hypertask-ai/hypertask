@@ -1,5 +1,5 @@
 import { useFlag, useFlagLoaded } from "@/hooks/useFlag";
-import { HTPR_7010_HAIKU_5_5_FLAG, LUNA_FREE_PLAN_FLAG } from "@/lib/flags/keys";
+import { HTPR_7010_HAIKU_5_5_FLAG } from "@/lib/flags/keys";
 import { useHaikuDefaultFlag, useHaikuDefaultFlagLoaded } from "@/hooks/useHaikuDefaultFlag";
 import type { TeamBillingSnapshot } from "@/lib/deriveCurrentBoardBilling";
 import { useCurrentBoardBilling } from "@/hooks/General/useCurrentBoardBilling";
@@ -56,8 +56,6 @@ type SubmenuPlacement =
   | "right-up"
   | "left-up";
 
-// Kept in step with the menu's `w-[250px]`: the open handler has to know how
-// wide the menu will be before it renders.
 const MENU_WIDTH_PX = 250;
 const MOBILE_MENU_WIDTH_PX = 210;
 const VIEWPORT_GUTTER_PX = 8;
@@ -80,7 +78,6 @@ const AIModelDropDownList = ({
   modelBilling,
   effortLabelClassName,
   mobileQuickPicker = false,
-  lunaFree,
   visibleModelOptions,
   haiku55Enabled,
   haikuDefaultEnabled,
@@ -94,20 +91,15 @@ const AIModelDropDownList = ({
   respectTeamAvailability?: boolean;
   modelTeamId?: string | null;
   modelBilling?: TeamBillingSnapshot | null;
-  // Extra classes for the effort word on the trigger (e.g. `hidden` to drop it
-  // in the narrow docked chat rail; effort stays selectable in-menu). HTPR-4548.
   effortLabelClassName?: ClassNameValue;
   mobileQuickPicker?: boolean;
-  // htpr-6722-latest-models: Luna is included on Free plans.
-  lunaFree: boolean;
   visibleModelOptions: TAiModelOption[];
   haiku55Enabled: boolean;
   haikuDefaultEnabled: boolean;
 }) => {
   const haiku55Loaded = useFlagLoaded(HTPR_7010_HAIKU_5_5_FLAG);
   const haikuDefaultLoaded = useHaikuDefaultFlagLoaded();
-  const lunaFreeLoaded = useFlagLoaded(LUNA_FREE_PLAN_FLAG);
-  const modelFlagsLoaded = haiku55Loaded && haikuDefaultLoaded && lunaFreeLoaded;
+  const modelFlagsLoaded = haiku55Loaded && haikuDefaultLoaded;
   const quickModelIds = haiku55Enabled
     ? ["claude-haiku-5-5", ...MOBILE_AI_CHAT_QUICK_MODEL_IDS]
     : MOBILE_AI_CHAT_QUICK_MODEL_IDS;
@@ -137,10 +129,6 @@ const AIModelDropDownList = ({
     [enabledProviders]
   );
   const router = useRouter();
-  // HTPR-4303: anonymous demo guests may only select the cheap Chinese models.
-  // Premium models still render (greyed + "Sign up to unlock"), but the picker
-  // treats only the allowlisted ones as selectable. Read on mount to avoid an
-  // SSR hydration mismatch on the cookie.
   const [isGuest, setIsGuest] = useState(false);
   useEffect(() => setIsGuest(isGuestCookieUser()), []);
 
@@ -148,8 +136,6 @@ const AIModelDropDownList = ({
     () => new Set(currentOptions.map((option) => option.id)),
     [currentOptions]
   );
-  // Every model key the caller offered (guests show all of these, locking the
-  // non-allowlisted ones instead of hiding them).
   const listedModelKeys = useMemo(
     () =>
       new Set(
@@ -163,8 +149,6 @@ const AIModelDropDownList = ({
     () =>
       visibleModelOptions.filter((option) => {
         if (!listedIds.has(option.id)) return false;
-        // Guests: allowlist is the only availability gate, ignore team providers
-        // and custom endpoints.
         if (isGuest) return isGuestAllowedModelKey(option.modelKey);
         if (option.source === "custom") return customEndpoint.configured;
         if (!respectTeamAvailability) return true;
@@ -184,14 +168,12 @@ const AIModelDropDownList = ({
       isGuest,
     ]
   );
-  // Luna is included for Free plans only; BYOK still needs its own key.
-  const lunaFreeOnPlan = lunaFree && scopedBilling?.storePlanId === "Free";
+  const freePlan = scopedBilling?.storePlanId === "Free";
   const planDefaultOption = getDefaultAiModelOptionForPlan(
     scopedBilling?.storePlanId,
     haiku55Enabled
       ? hasHaikuByokProviderFlags(scopedBilling?.byokProviderFlags)
       : isByokProviderEnabledForSource(scopedBilling?.byokProviderFlags, preferredAiModelOption.source),
-    lunaFree,
     haiku55Enabled,
     haikuDefaultEnabled,
   );
@@ -227,7 +209,7 @@ const AIModelDropDownList = ({
       (option) =>
         !isPremiumAiModelDefinition(
           getAiModelDefinition(option.modelKey),
-          lunaFreeOnPlan,
+          freePlan,
         ) || isProviderEnabled(option.source),
     );
 
@@ -318,8 +300,6 @@ const AIModelDropDownList = ({
       } else {
         const side =
           window.innerWidth - menuRect.right >= 226 ? "right" : "left";
-        // The submenu is anchored to the menu top and grows down (max-h 360px).
-        // Near the viewport bottom, anchor it to the menu bottom so it grows up.
         const openUp = window.innerHeight - menuRect.top < 380;
         setSubmenuPlacement(openUp ? `${side}-up` : side);
       }
@@ -434,7 +414,7 @@ const AIModelDropDownList = ({
               const isPremiumLocked =
                 !isGuest &&
                 respectTeamAvailability &&
-                isPremiumAiModelDefinition(definition, lunaFreeOnPlan) &&
+                isPremiumAiModelDefinition(definition, freePlan) &&
                 (scopedBilling?.storePlanId === "Free" ||
                   (scopedBilling?.storePlanId === "BYOK" && !hasCustomerKey));
               const locked = isGuestLocked || isPremiumLocked;
@@ -507,10 +487,6 @@ const AIModelDropDownList = ({
           dropDownClassName
         )}
         onClick={() => {
-          // A 250px menu pinned to the trigger's left edge runs off the right
-          // of a phone whenever the trigger sits past the middle, which is
-          // where the task-writer picker lives (HTPR-5100). Pin it to the
-          // right edge instead when the left edge would not fit.
           if (!isOpen) {
             const rect = rootRef.current?.getBoundingClientRect();
             if (rect) {
@@ -617,7 +593,7 @@ const AIModelDropDownList = ({
                       const isPremiumLocked =
                         !isGuest &&
                         respectTeamAvailability &&
-                        isPremiumAiModelDefinition(model, lunaFreeOnPlan) &&
+                        isPremiumAiModelDefinition(model, freePlan) &&
                         (scopedBilling?.storePlanId === "Free" ||
                           (scopedBilling?.storePlanId === "BYOK" &&
                             !hasCustomerKey));
@@ -718,7 +694,7 @@ const AIModelDropDownList = ({
               (isByokPlan &&
                 isPremiumAiModelDefinition(
                   getAiModelDefinition(fallbackOption.modelKey),
-                  lunaFreeOnPlan,
+                  freePlan,
                 ) &&
                 !isProviderEnabled(fallbackOption.source))
             }
@@ -791,8 +767,6 @@ function SubmenuRow({
       )}
       onClick={onClick}
     >
-      {/* min-w-0 so a long model name clips instead of widening the row past
-          the menu, which is what pushed options off a phone screen. */}
       <span className="min-w-0 truncate">
         {label}
         {note ? (
@@ -821,20 +795,18 @@ function SubmenuRow({
 
 type AIModelDropDownButtonProps = Omit<
   Parameters<typeof AIModelDropDownList>[0],
-  "lunaFree" | "visibleModelOptions" | "haiku55Enabled" | "haikuDefaultEnabled"
+  "visibleModelOptions" | "haiku55Enabled" | "haikuDefaultEnabled"
 >;
 
 const AIModelDropDownButton = (props: AIModelDropDownButtonProps) => {
   const haikuDefaultEnabled = useHaikuDefaultFlag();
-  const lunaFree = useFlag(LUNA_FREE_PLAN_FLAG) || haikuDefaultEnabled;
   const haiku55Enabled = useFlag(
     HTPR_7010_HAIKU_5_5_FLAG,
   ) || haikuDefaultEnabled;
   const visibleModelOptions = haikuDefaultEnabled || haiku55Enabled
     ? aiModelOptions.filter((option) => isAiModelOptionVisible(option, true))
     : aiModelOptions.filter((option) => isAiModelOptionVisible(option, false));
-  if (lunaFree) return <AIModelDropDownList {...props} haikuDefaultEnabled={haikuDefaultEnabled} haiku55Enabled={haiku55Enabled} visibleModelOptions={visibleModelOptions} lunaFree />;
-  return <AIModelDropDownList {...props} haikuDefaultEnabled={haikuDefaultEnabled} haiku55Enabled={haiku55Enabled} visibleModelOptions={visibleModelOptions} lunaFree={false} />;
+  return <AIModelDropDownList {...props} haikuDefaultEnabled={haikuDefaultEnabled} haiku55Enabled={haiku55Enabled} visibleModelOptions={visibleModelOptions} />;
 };
 
 export default AIModelDropDownButton;

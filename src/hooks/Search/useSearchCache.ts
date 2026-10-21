@@ -21,6 +21,5 @@ export const useGetSearchCache = (initialData?: any) => {
     refetchOnWindowFocus: false,
   });
 
-  // Restored query data can also differ from the server's search history.
   return { ...query, data: hydrated ? query.data : fallback };
 };

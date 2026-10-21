@@ -61,7 +61,6 @@ for (const [filename, cached] of originalCache) require.cache[filename] = cached
 const flagValues = (haiku) => ({
   "htpr-7010-haiku-5-5": haiku,
   "htpr-7038-haiku-default": haiku,
-  "htpr-6722-latest-models": false,
 });
 
 async function withPicker(run, { preferenceHook = false, initialFlags, mobile = false } = {}) {
@@ -145,13 +144,13 @@ test("the composer preference hook never posts a team override during flag initi
 test("loaded Off flags still persist a genuinely unavailable model fallback", async () => {
   await withPicker(async ({ chosen, update }) => {
     await update(flagValues(false));
-    assert.deepEqual(chosen, ["gemini-3.5-flash-lite"]);
+    assert.deepEqual(chosen, ["gpt-6-luna"]);
   });
 });
 
 test("missing model flags and failed flag fetches are not proof of unavailability", async () => {
   await withPicker(async ({ chosen, update, client }) => {
-    await update({ "htpr-6722-latest-models": false });
+    await update({});
     assert.deepEqual(chosen, []);
     await act(async () => {
       client.getQueryCache().find({ queryKey: featureFlagsQueryKey(42) }).setState({ status: "error", error: new Error("fixture flag failure") });

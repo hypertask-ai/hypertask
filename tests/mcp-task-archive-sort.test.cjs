@@ -29,6 +29,8 @@ function loadRoute() {
     },
   };
   const stubs = {
+    "@/lib/auth/agentScope": require("./helpers/agent-board-scope.cjs").enforcedScope,
+    "@/lib/mcp/operationCrashReport": { reportMcpOperationCrash: () => {} },
     "@/lib/tasks/sameBoardRelations": require("./task-route-loader.cjs").load("src/lib/tasks/sameBoardRelations.ts", {}),
     "next/server": {
       NextResponse: {
@@ -78,6 +80,7 @@ function loadRoute() {
     "@/lib/mcp/listQuery": {
       hasPrWhere: () => null,
       normalizeTaskStatus: (status) => status,
+      parseTaskStatusParam: (status) => status || "Normal",
       parseAssigneeFilter: () => ({ ok: true, value: null }),
       parseNumericCursor: () => null,
       projectRows: (rows) => rows,
@@ -90,6 +93,7 @@ function loadRoute() {
     "@/lib/mcp/priorityFilter": {
       parsePriorityFilter: () => [],
     },
+    "@/lib/mcp/listParams": require("./task-route-loader.cjs").load("src/lib/mcp/listParams.ts", {}),
   };
   const routeModule = { exports: {} };
 
@@ -130,4 +134,58 @@ test("archived task lists sort missing update timestamps after recent tasks", as
     { updatedAt: { sort: "desc", nulls: "last" } },
     { id: "asc" },
   ]);
+});
+
+test("HTPR-7344: uppercase sort_order lists like lowercase instead of answering 500", async () => {
+  const route = loadRoute();
+  const response = await route.GET({
+    nextUrl: { searchParams: new URLSearchParams({ project_id: "15", sort_order: "DESC" }) },
+  });
+
+  assert.equal(response.status, 200);
+  assert.deepEqual(route.taskQueries[0].orderBy, [
+    { updatedAt: { sort: "desc", nulls: "last" } },
+    { id: "asc" },
+  ]);
+});
+
+test("HTPR-7344: unknown sort_order and NUL bytes answer 400 before any task query", async () => {
+  for (const params of [{ sort_order: "ascending" }, { search: "a\0b" }, { section: "\0" }]) {
+    const route = loadRoute();
+    const response = await route.GET({
+      nextUrl: { searchParams: new URLSearchParams({ project_id: "15", ...params }) },
+    });
+
+    assert.equal(response.status, 400, JSON.stringify(params));
+    assert.equal(route.taskQueries.length, 0);
+  }
+});
+
+test("HTPR-7344: ids too large for the database answer 400 before any task query", async () => {
+  for (const params of [
+    { task_id: "99999999999" },
+    { unique_index: "99999999999" },
+    { section_id: "99999999999" },
+    { created_by: "99999999999" },
+    { assigned_to: "6,99999999999" },
+  ]) {
+    const route = loadRoute();
+    const response = await route.GET({
+      nextUrl: { searchParams: new URLSearchParams({ project_id: "15", ...params }) },
+    });
+
+    assert.equal(response.status, 400, JSON.stringify(params));
+    assert.match(response.body.message, /too large/, JSON.stringify(params));
+    assert.equal(route.taskQueries.length, 0);
+  }
+});
+
+test("HTPR-7344: ids at the database maximum still list", async () => {
+  const route = loadRoute();
+  const response = await route.GET({
+    nextUrl: { searchParams: new URLSearchParams({ project_id: "15", created_by: "2147483647", assigned_to: "6" }) },
+  });
+
+  assert.equal(response.status, 200);
+  assert.equal(route.taskQueries[0].where.userId, 2147483647);
 });

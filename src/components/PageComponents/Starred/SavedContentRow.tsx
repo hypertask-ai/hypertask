@@ -75,7 +75,6 @@ export const SavedContentRow = ({
         />
       )}
 
-      {/* -------------- task title ----------------- */}
       <TaskTitleUniqueIndex
         title={task.title}
         ticketNumber={task.ticketNumber!}
@@ -321,7 +320,6 @@ const TaskTitleUniqueIndex = ({
         {ticketNumber.toUpperCase() + " "}
       </span>
       <span
-        //
         className="font-medium xs:whitespace-pre-wrap sm:whitespace-nowrap text-white-black text-dense"
       >
         {title ?? ""}

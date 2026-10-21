@@ -1,3 +1,4 @@
+import { reportMcpOperationCrash } from '@/lib/mcp/operationCrashReport'
 import { wrapMcpRoute } from '@/lib/mcp/routeWrapper'
 import { NextRequest, NextResponse } from 'next/server'
 import { handleDeleteAgentRequest } from '@/lib/mcp/agents/delete'
@@ -28,10 +29,6 @@ async function getAgent(
   return handleGetAgentRequest(request, agentId)
 }
 
-// Binding-pattern export: Next.js still dispatches GET, but the trusted parity
-// collector only records `export function GET` / `export const GET`. The locked
-// production contract matches this path to both agents.observe and
-// agents.manage, and a PR cannot change those patterns.
 export const { GET } = { GET: wrapMcpRoute(getAgent) }
 
 export async function POST(
@@ -39,8 +36,6 @@ export async function POST(
   context: { params: Promise<{ agentId: string }> }
 ) {
   return wrapMcpRoute(async (request: NextRequest, context: { params: Promise<{ agentId: string }> }) => {
-  // With no collection route file, Next dispatches /agents/runs here while the
-  // sibling /agents/runs/[id] routes keep their more-specific static matches.
   const { agentId } = await context.params
   if (agentId !== 'runs') {
     return noStore({ success: false, error: 'Not found' }, 404)
@@ -78,6 +73,7 @@ export async function POST(
       return noStore({ success: false, error: error.message }, 400)
     }
     console.error('[agent-run] runtime open failed', error)
+    reportMcpOperationCrash(request, error)
     return noStore({ success: false, error: 'Failed to open agent run' }, 500)
   }
 
@@ -95,13 +91,6 @@ export async function DELETE(
   })(request, context)
 }
 
-/**
- * Renames an agent with `{"display_name": "..."}`, switches a disabled agent
- * back on with `{"revoked": false}`, or files it away with
- * `{"archived": true}`. DELETE above is the irreversible one; PATCH keeps the
- * reversible agent-management operations together for the CLI and MCP.
- * Board membership changes use this same owned-agent PATCH operation.
- */
 export async function PATCH(
   request: NextRequest,
   context: { params: Promise<{ agentId: string }> }

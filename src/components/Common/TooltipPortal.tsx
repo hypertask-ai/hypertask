@@ -76,7 +76,6 @@ const TooltipPortal = ({
       setRect(nextRect);
       const portal = portalRef.current;
       if (!portal) return;
-      // A body portal alone still loses to showModal(), regardless of z-index.
       portal.showPopover?.();
       let left = placement === "fixed" ? 0 : nextRect.left;
       let top = placement === "below" ? nextRect.bottom + 8 : placement === "fixed" ? 0 : nextRect.top;
@@ -116,7 +115,6 @@ const TooltipPortal = ({
   useLayoutEffect(() => {
     const portal = portalRef.current;
     if (!portal || !open || !portal.showPopover) return;
-    // Top-layer order, not z-index, decides which native dialog/popover wins.
     const raise = () => {
       if (!portal.matches(":popover-open")) return;
       portal.hidePopover();

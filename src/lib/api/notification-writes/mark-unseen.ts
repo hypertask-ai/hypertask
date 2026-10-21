@@ -14,13 +14,11 @@ const route = taskWriteRoute({
     if (!notificationId && !taskId && !seen) {
       return NextResponse.json({ message: "Notification id and type are required" }, { status: 400 });
     }
-    // if user wants to mark unread by taskid.
     if (taskId) {
       const parsedTaskId = parseInt(taskId as string)
       if (!Number.isInteger(parsedTaskId)) {
         return NextResponse.json({ message: "Notification id and type are required" }, { status: 400 });
       }
-      // get latest notification from that tsak
       const notification_ = await prisma.notification.findFirst({
         where: {
           taskId: parsedTaskId,
@@ -47,7 +45,6 @@ const route = taskWriteRoute({
       return NextResponse.json(updatedNotification, { status: 200 });
 
     }
-    // if by notification id
     else {
       const parsedNotificationId = parseInt(notificationId as string)
       if (!Number.isInteger(parsedNotificationId)) {

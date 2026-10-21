@@ -39,6 +39,7 @@ test("AI welcome suggestions hydrate before using browser board data", async () 
     actEnvironment: global.IS_REACT_ACT_ENVIRONMENT,
   };
   const stubbedModules = new Map([
+    [path.join(root, "src/hooks/useFlag.tsx"), { useFlag: () => false }],
     [
       path.join(
         root,

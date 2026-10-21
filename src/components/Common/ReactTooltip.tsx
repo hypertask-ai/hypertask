@@ -34,7 +34,7 @@ const LegacyReactTooltip = ({
         const xOffset = (parentRect.width - tooltipRect.width) / 2;
         setOffset({
           x: xOffset,
-          y: -tooltipRect.height - 10, // 10px gap above parent
+          y: -tooltipRect.height - 10,
         });
       }
     }
@@ -48,7 +48,6 @@ const LegacyReactTooltip = ({
       const tooltipRect = tooltipElement.getBoundingClientRect();
       const viewportWidth = window.innerWidth;
 
-      // Adjust left position if tooltip is going beyond the viewport
       if (tooltipRect.right > viewportWidth) {
         const newLeft = offset.x - (tooltipRect.right - viewportWidth);
         tooltipElement.style.left = `${newLeft}px`;

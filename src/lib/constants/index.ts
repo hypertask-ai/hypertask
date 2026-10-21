@@ -1,4 +1,3 @@
-// globalConstants.ts
 
 import * as APIRoutes from "./APIRouteConstants";
 import * as TQKeys from "./TQKeys";

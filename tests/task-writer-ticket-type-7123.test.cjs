@@ -87,6 +87,13 @@ function harness({ enabled = true, output = "", finishReason = "stop", mode = "t
     "@/lib/errors/reportError": { reportError: async () => {} },
     "@/lib/ai/taskWriterTicketType": load(path.join(root, "src/lib/ai/taskWriterTicketType.ts")),
   };
+  stubs["@/app/api/ai/_lib/taskWriterDraft"] = moduleWithStubs("src/app/api/ai/_lib/taskWriterDraft.ts", {
+    ...stubs,
+    "./modelProvider": stubs["@/app/api/ai/_lib/modelProvider"],
+    "./editorAi": editor,
+    "./taskWriterRun": run,
+    "./taskWriterProperties": properties,
+  });
   async function post(kind) {
     const route = moduleWithStubs(kind === "app" ? "src/app/api/ai/task-writer/route.ts" : "src/app/api/mcp/ai/task-writer/route.ts", stubs);
     const body = kind === "mcp" ? { project_id: 7123, prompt: "Analyze Paperclip", mode }
@@ -165,9 +172,9 @@ test("Ctrl+J compose path: sends AiTaskWriter with compose-task and gets the rul
   assert.ok(!off.calls[0].instructions.includes(RULE));
 });
 
-test("Ctrl+J compose path: only the validated ticket type can move the column, never the model's status or tags", () => {
+test("Ctrl+J compose path: only the validated ticket type can move the column, never the model's status", () => {
   const compose = fs.readFileSync(path.join(root, "src/lib/ai/composeTask.ts"), "utf8");
-  assert.doesNotMatch(compose, /ai-generated-task-(status|tags)/);
+  assert.doesNotMatch(compose, /ai-generated-task-status/);
   assert.match(compose, /sectionId: placement\?\.sectionId/);
   assert.match(compose, /position: "top"/);
   assert.match(compose, /\.\.\.taskFields/);

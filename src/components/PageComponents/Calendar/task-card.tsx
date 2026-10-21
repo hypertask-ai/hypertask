@@ -25,8 +25,6 @@ import { useCalendarContext } from "@/lib/contexts/Calendar/calendar.context";
 import BlockerChip, { BlockerTaskChip } from "@/components/PageComponents/Kanban/KanbanTaskComponents/BlockerChip";
 import type { CalendarUserSummary } from "@/lib/calendarSync/contract";
 
-// Day view renders tasks as table rows matching the board table view
-// (TableView.tsx) — same grid, header, and cell styling.
 const DAY_TABLE_COLUMNS = "90px minmax(200px,1fr) 140px 64px 100px 80px";
 const DAY_TABLE_LABEL_CLASS = "border-border-labelComponent text-label-component";
 const isTaskBlocked = (task: ITask) =>
@@ -42,7 +40,7 @@ export function TaskCard({
   view,
 }: {
   task: ITask;
-  index: number; //this for dnd context. Not the index for keys thingy
+  index: number;
   active: boolean;
   taskDay: Date;
   handleTaskClick: (taskDay: Date, task: ITask) => void;
@@ -55,7 +53,6 @@ export function TaskCard({
   const assignees = useMemo<(IUser | IAgent)[]>(() => {
     if (!task.assignees?.length) return [];
 
-    // Mirror Kanban behavior: each assignee row contributes agent first, then user.
     return task.assignees
       .map((item) => {
         if (item.agent) return item.agent;
@@ -205,14 +202,6 @@ const TaskTagsRow = ({
       {blockingTasks.map((blockingTask) => (
         <BlockerTaskChip key={blockingTask.id} task={blockingTask} />
       ))}
-      {/* {dueDate && (
-        <DueDateLabel
-          stopPropogation={true}
-          flexBasis={false}
-          fontWeight={500}
-          dueDate={dueDate}
-        />
-      )} */}
       {priority && (
         <PriorityLabelComponent
           stopPropogation={true}
@@ -233,12 +222,7 @@ const TaskTagsRow = ({
         />
       )}
 
-      {/* ===================== task labels (capped, +N overflow) ================= */}
       {(() => {
-        // HTPR-4113: calendar cards drowned in label chips. The kanban and
-        // inbox rows already cap at 3 with a +N chip, but the calendar defines
-        // its own TaskTagsRow locally, so it never picked that up. Same cap,
-        // same overflow, sized for the month/week card variants.
         const MAX_LABELS = 3;
         const labels = (taskLabels ?? []).filter((l) => l.label?.value);
         const extra = labels.length - MAX_LABELS;
@@ -320,8 +304,6 @@ export function DaySection({
       id={calendarConfig.element_ids.day_section(day)}
       key={calendarConfig.element_ids.day_section(day)}
       className={`flex-1 flex flex-col ${
-        // Day view scrolls horizontally when squeezed below the table's
-        // min-width; week/month keep the original clipping behavior.
         view === "day"
           ? "h-full overflow-x-auto overflow-y-hidden"
           : view === "week"
@@ -335,8 +317,6 @@ export function DaySection({
       )}`}
     >
       <div className="flex items-center justify-between flex-shrink-0">
-        {/* Day view's toolbar already names the date, so the number is hidden,
-            but the row stays so mouse users keep the hover add-task control. */}
         <span
           className={`text-content font-medium text-muted-foreground mb-0.5 ${
             view === "day" ? "invisible" : ""
@@ -386,9 +366,6 @@ export function DaySection({
       >
         {view === "day"
           ? tasksToShow.map((task) => {
-              // Prefer the context project: the task loader's project only
-              // carries {id, title} and title is nullable; context has the
-              // name slug to fall back on.
               const calendarProject = projects.find(
                 (item) => item.id === task.projectId,
               );
@@ -401,8 +378,6 @@ export function DaySection({
               else if (selected) borderClass = "border-l-selected-item-border";
               const openTask = () => handleTaskClick(day, task);
               return (
-                // The row carries the task-<id> focus target the calendar's
-                // keyboard navigation expects.
                 <div
                   key={calendarConfig.element_ids.task_card(task.id)}
                   id={calendarConfig.element_ids.task_card(task.id)}
@@ -415,8 +390,6 @@ export function DaySection({
                   } ${borderClass}`}
                 >
                   <span className="font-bold text-icon-dark-gray whitespace-nowrap">
-                    {/* Calendar payloads don't select the project prefix;
-                        ticketNumber is server-formatted on real tasks. */}
                     {task.ticketNumber || `#${task.uniqueIndex}`}
                   </span>
                   <span className="min-w-0 flex items-center gap-1">

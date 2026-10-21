@@ -1,4 +1,3 @@
-// Import PrismaClient from the generated Prisma client
 
 
 import { descriptionContainerId } from "@/lib/constants/TaskDetail";
@@ -7,7 +6,6 @@ import { IUrl } from "@/models/model";
 import { extractUrlsFromContent, mergeUrls } from "@/utils/controllers/urls/extractUrlsFromContent";
 
 
-// Example usage
 const fetchUrls = async (taskId:string | string[], commentId?:string, includeSavedSources = false) => {
   
         try {
@@ -16,7 +14,6 @@ const fetchUrls = async (taskId:string | string[], commentId?:string, includeSav
                     status:400,
                     json:{ message: "User id is required" }
                 })
-                // return res.status(400).json({ message: "User id is required" });
             }
             if (includeSavedSources) {
                 const id = parseInt(taskId as string);
@@ -37,7 +34,6 @@ const fetchUrls = async (taskId:string | string[], commentId?:string, includeSav
                         extractUrlsFromContent(comment.text, id).map(url => ({ ...url, commentId: comment.id }))
                     ) ?? []),
                 ];
-                // Attachments can exist without a legacy Url row, including uploads from MCP.
                 const attachments = [
                     ...(task?.attachments ?? []),
                     ...(task?.description_?.attachments ?? []),
@@ -70,8 +66,6 @@ const fetchUrls = async (taskId:string | string[], commentId?:string, includeSav
                 })
             }
             else{
-
-                // ================= focus on description
                 if (commentId===descriptionContainerId){
                     const allUrls: any = await prisma.$queryRaw`
                     SELECT *
@@ -91,7 +85,6 @@ const fetchUrls = async (taskId:string | string[], commentId?:string, includeSav
                     })
                 }
 
-                // ================= focus on comments
                 else{
                     const allUrls: any = await prisma.$queryRaw`
                     SELECT *
@@ -112,19 +105,14 @@ const fetchUrls = async (taskId:string | string[], commentId?:string, includeSav
                 }
             
             }
-   
-            // return res.status(200).json(comments);
-            // console.log(comments);
         } catch (error) {
             console.log(error);
             return ({
                 status:500,
                 json:{ message: "Internal server error", error:error }
             })
-            // return res.status(500).json({ message: "Internal server error" });
         }
    
 }
 
-// Run the main function
 export default fetchUrls;

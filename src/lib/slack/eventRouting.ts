@@ -7,8 +7,6 @@ export type SlackEvent = {
     user_id?: string;
     context?: { channel_id?: string; team_id?: string; enterprise_id?: string };
   };
-  // tokens_revoked payload fields (HTPR-4857): Slack sends user IDs, split
-  // by OAuth kind.
   event_ts?: string;
   tokens?: {
     oauth?: string[];

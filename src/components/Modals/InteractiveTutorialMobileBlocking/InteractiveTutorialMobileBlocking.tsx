@@ -13,12 +13,6 @@ interface InteractiveTutorialMobileBlockingProps {
   onDismiss: () => void;
 }
 
-/**
- * Interactive Tutorial Mobile Blocking Overlay
- * 
- * Displays when mobile users attempt to access the interactive tutorial.
- * Guides them to desktop where the tutorial works properly.
- */
 export const InteractiveTutorialMobileBlocking: React.FC<InteractiveTutorialMobileBlockingProps> = ({
   onDismiss,
 }) => {
@@ -54,7 +48,6 @@ export const InteractiveTutorialMobileBlocking: React.FC<InteractiveTutorialMobi
 
   const handleDismiss = () => {
     onDismiss();
-    // Redirect back to the board
     router.push("/");
   };
 
@@ -78,7 +71,6 @@ export const InteractiveTutorialMobileBlocking: React.FC<InteractiveTutorialMobi
           "relative"
         )}
       >
-        {/* Logo */}
         <div className="mb-6">
           <Image
             src={logo}
@@ -89,7 +81,6 @@ export const InteractiveTutorialMobileBlocking: React.FC<InteractiveTutorialMobi
           />
         </div>
 
-        {/* Headline */}
         <h1
           className={cn(
             "text-heading sm:text-display font-bold",
@@ -100,7 +91,6 @@ export const InteractiveTutorialMobileBlocking: React.FC<InteractiveTutorialMobi
           This Tutorial Works Best on Desktop
         </h1>
 
-        {/* Body */}
         <div className="text-gray-300 text-emphasis sm:text-subheading mb-8 space-y-4">
           <p className="leading-relaxed">
             The interactive tutorial requires a desktop browser for the full experience.
@@ -132,7 +122,6 @@ export const InteractiveTutorialMobileBlocking: React.FC<InteractiveTutorialMobi
           </ul>
         </div>
 
-        {/* Primary CTA */}
         {userEmail ? (
           <>
             {!emailSent ? (
@@ -178,7 +167,6 @@ export const InteractiveTutorialMobileBlocking: React.FC<InteractiveTutorialMobi
           </p>
         )}
 
-        {/* Subtle Secondary CTA */}
         <button
           onClick={handleDismiss}
           className={cn(
@@ -191,7 +179,6 @@ export const InteractiveTutorialMobileBlocking: React.FC<InteractiveTutorialMobi
           Go back to board
         </button>
 
-        {/* Additional context */}
         <p className="text-meta text-gray-500 mt-6">
           The interactive tutorial is designed for desktop browsers only.
         </p>

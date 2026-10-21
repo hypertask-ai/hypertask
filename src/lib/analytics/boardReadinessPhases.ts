@@ -266,13 +266,6 @@ const clearBoardReadinessMarks = (): void => {
   });
 };
 
-/**
- * Start a distinct trace for an account/project entry in this document.
- *
- * App Router navigation can reuse this module and component tree. Resetting at
- * that boundary prevents an old completion or mark set from being attributed
- * to the next account or project while preserving one trace per entry.
- */
 export const prepareBoardReadinessTrace = ({
   accountId,
   projectId,
@@ -305,8 +298,6 @@ export const prepareBoardReadinessTrace = ({
     runtime.routeEntryId === undefined &&
     !hasInFlightOrCompletedTrace
   ) {
-    // Adopt parser-time marks for the initial route entry. The bootstrap
-    // script cannot know React's route-entry id before hydration.
     runtime.routeEntryId = routeEntryId;
     runtime.generation ??= 0;
     return;
@@ -452,11 +443,6 @@ export const emitBoardReadinessAfterPaint = (
   return true;
 };
 
-/**
- * Finish the trace after the first Board commit has reached a browser frame.
- * Prefer the reconciled network publication, but never hold the trace forever
- * when a fresh React Query snapshot means the query function does not run.
- */
 export const completeBoardReadinessTrace = (
   completion: BoardReadinessCompletion,
   expectedScope?: BoardReadinessTraceScope | null,

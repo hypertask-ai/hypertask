@@ -5,7 +5,6 @@ import styles from '@/styles/linksModal.module.scss'
 import { useRouter } from "next/navigation";
 
 import { Link, Search } from "lucide-react";
-// import AttachmentCarousel from "@/components/Common/AttachmentsView/AttachmentsCarousel";
 import dynamic from 'next/dynamic';
 import { ModalContainerCustom, ModalHintBar, ModalInput, ModalListContainer, ModalRowElementContainer } from "@/components/Common/CommonModalComponents";
 import useHandleMouseGlobal from "@/hooks/General/useHandleMouse";
@@ -15,7 +14,7 @@ import { HTPR_7050_CTRL_O_LINKS_FLAG } from "@/lib/flags/keys";
 const AttachmentCarousel = dynamic(() => import("@/components/Common/AttachmentsView/AttachmentsCarousel"), { ssr: false })
 interface IProps {
   display: boolean;
-  onClose: any; // Change 'any' to the specific function type if possible
+  onClose: any;
   currentTaskId: number;
   commentId: string;
   subTasks?: ITask[];
@@ -24,14 +23,11 @@ interface IProps {
 }
 const LinksModal = ({ display, onClose, currentTaskId, commentId, subTasks, parentTask, relatedTasks = [] }: IProps) => {
   const savedLinksEnabled = useFlag(HTPR_7050_CTRL_O_LINKS_FLAG);
-  // --------------- Refs
   const linksInputRef = useRef<HTMLInputElement>(null)
 
-  // ---------------- state handlers
   const [modal, setModal] = useState<boolean>(display);
   const [keyboardControls, enableKeyboardControls] = useState<boolean>(false)
   const [loading, setLoading] = useState<boolean>(true)
-  // const [_selectedUrl, setSelectedUrl] = useState<IUrl | null>(null);
   const [isModalOpen, setModalOpen] = useState(false);
   const [currentIndex, setCurrentIndex] = useState(0);
   const [selectedIndex, setSelectedIndex] = useState(0)
@@ -39,12 +35,10 @@ const LinksModal = ({ display, onClose, currentTaskId, commentId, subTasks, pare
 
   const router = useRouter();
 
-  // ---------------- linksToDisplay 
   const [filteredLinks, setFilteredLinks] = useState<IUrl[]>([])
   const [links, setLinks] = useState<IUrl[]>([])
   const [galleryAttachments, setGalleryAttachments] = useState<any>([]);
 
-  // -------------------- input handlers
   const [inputValue, setInputValue] = useState<string>("");
   const handleChange = (e: any) => {
 
@@ -53,11 +47,6 @@ const LinksModal = ({ display, onClose, currentTaskId, commentId, subTasks, pare
       item.title?.toLowerCase().includes(e.target.value.toLowerCase())
     )
     setFilteredLinks(filteredResults)
-    // setFilteredLinks((prev)=> links.filter((link: IUrl) =>
-    //     e.target.value
-    //       ? link.title?.toLowerCase().includes(e.target.value.toLowerCase())
-    //       : true
-    //   ))
   }
 
   const addSubAndParentTasks = (): IUrl[] => {
@@ -84,27 +73,14 @@ const LinksModal = ({ display, onClose, currentTaskId, commentId, subTasks, pare
         });
       });
     }
-    // if(relatedTasks && relatedTasks.length > 0) {
-    //   relatedTasks.forEach((task) => {
-    //     responseArray.push({
-    //       title: task.title,
-    //       projectId: task.projectId,
-    //       urlString: `/detail/project-${task.projectId}/${task.uniqueIndex}`,
-    //       TaskId: task.id,
-    //       id: task.id,
-    //       ticketNumber: task.ticketNumber,
-    //     });
-    //   });
-    // }
     return responseArray;
   };
 
-  // -------------------- ON MODAL LOAD
   const onOpenHandler = async () => {
     setLoading(true)
-    enableKeyboardControls(true) // force focus on input field
+    enableKeyboardControls(true)
 
-    const response = await fetch(`/api/urls/fetchUrls?taskId=${currentTaskId}&commentId=${commentId}`) // fetch all links
+    const response = await fetch(`/api/urls/fetchUrls?taskId=${currentTaskId}&commentId=${commentId}`)
     if (response.ok) {
       let responseArray: IUrl[] = []
       const res: IUrl[] = await response.json();
@@ -114,13 +90,12 @@ const LinksModal = ({ display, onClose, currentTaskId, commentId, subTasks, pare
       }else{
         responseArray = [...res, ...addSubAndParentTasks()]
       }
-      // console.log("🚀 ~ file: index.tsx:65 ~ onOpenHandler ~ responseArray:", responseArray)
 
       const legacyGalleryLinks = res.filter(item => /\.(pdf|png|webp|jpg|jpeg|txt|code|mp4|docx|mov|xlsx|pptx|webm|)$/i.test(item.urlString) && item.urlString.startsWith("https://files.hypertask.app/"));
       const galleryLinks = savedLinksEnabled ? res.filter(item => item.Attachment || legacyGalleryLinks.includes(item)) : legacyGalleryLinks;
       const filteredGalleryAttachment = galleryLinks
         .map(({ urlString, title, attachmentType }) => {
-          const extension = urlString.toLowerCase().match(/\.\w+$/) || ['']; // Extract file extension
+          const extension = urlString.toLowerCase().match(/\.\w+$/) || [''];
           const legacyFileType = /\.(png|webp|jpg|jpeg)$/i.test(extension[0]) ?
             `image/${extension[0].split(".")[1]}` :
             `${extension[0].split(".")[1] === "mp4" || extension[0].split(".")[1] === "mov" || extension[0].split(".")[1] === "webm" ? "video/quicktime" : ""}${extension[0].split(".")[1]}`;
@@ -144,11 +119,8 @@ const LinksModal = ({ display, onClose, currentTaskId, commentId, subTasks, pare
   
 
     setLoading(false)
-    // console.log("🚀 ~ file: LinksModal.tsx:35 ~ onOpenHandler ~ links:", links)
-
   }
 
-  // ---------------------- LINK CLICK HANDLER ------------------
   const handleLinkClick = (link: IUrl) => {
     const isAttachment = savedLinksEnabled ? galleryAttachments.some((attachment: { fileSource: string }) => attachment.fileSource === link.urlString) : link.urlString.startsWith("https://files.hypertask.app/");
     if (isAttachment) {
@@ -159,47 +131,35 @@ const LinksModal = ({ display, onClose, currentTaskId, commentId, subTasks, pare
     }
     else {
       var href = link.urlString;
-      // Check if the href contains the domain 'app.hypertask.ai'
       if (href && href.includes('app.hypertask') || href.startsWith("/detail")) {
-        // Call your custom function here
         router.push(href)
 
       }
-      else window.open(href, '_blank'); // Open the URL in a new tab
+      else window.open(href, '_blank');
 
       toggle()
     }
   }
-  // ---------------------- MODAL CLOSE HANDLER -----------------
   const toggle = () => {
     setModal(!modal)
-    // setAssignKeyword("")
     onClose()
   };
 
-  // ----------------------- close gallery modal
   const toggleModal = () => {
     setModalOpen(!isModalOpen);
 
   };
 
-  //  ============================= KEYBOARD NAVIGATION HANDLER =============================
   const handleKeyDown = (event: KeyboardEvent) => {
-    // console.log('im working at least')
     const selectedUrl = filteredLinks[selectedIndex]
     if (!selectedUrl) return 
-    // ------------------------------ DOWN MOVEMENT ------------------------------
     if (event.key === "Escape") {
       setModal(false)
       onClose()
     }
     if (event.key === "ArrowDown") {
-      // down
       if (selectedUrl) {
-        // ------ at bottom of list
         if (selectedIndex === -1 || selectedIndex === (filteredLinks.length - 1)) {
-          // setSelectedUrl(links[0])
-          // document.getElementById(`task-${links[0].id}`)?.scrollIntoView({ behavior: 'smooth', block: 'center' })
         } else {
           setSelectedIndex(prev=>prev+1)
           document.getElementById(`task_${selectedIndex+1}`)?.scrollIntoView({ behavior: 'smooth', block: 'center' })
@@ -210,16 +170,10 @@ const LinksModal = ({ display, onClose, currentTaskId, commentId, subTasks, pare
           document.getElementById(`task_${0}`)?.scrollIntoView({ behavior: 'smooth', block: 'center' })
         }
       }
-
-      // ------------------------------ UP MOVEMENT ------------------------------
     }
     else if (event.key === "ArrowUp") {
-      // up
       if (selectedUrl) {
-        // ------ at top of list
         if (selectedIndex <= 0) {
-          // setSelectedUrl(links[links.length - 1])
-          // document.getElementById(`task-${links[links.length - 1].id}`)?.scrollIntoView({ behavior: 'smooth', block: 'center' })
         } else {
           setSelectedIndex(prev=>prev-1)
           document.getElementById(`task_${selectedIndex - 1}`)?.scrollIntoView({ behavior: 'smooth', block: 'center' })
@@ -243,7 +197,6 @@ const LinksModal = ({ display, onClose, currentTaskId, commentId, subTasks, pare
     };
   }, [keyboardControls, filteredLinks, links, selectedIndex]);
 
-  // whenever filteredLinks Update, set current url as first
   useEffect(() => {
     setSelectedIndex(0)
   }, [filteredLinks]);

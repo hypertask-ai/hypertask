@@ -12,7 +12,6 @@ const GuestSignupOverlay = ({
   onSignup,
 }: {
   children: ReactNode;
-  /** Close the host modal; the login modal is global so it survives. */
   onSignup?: () => void;
 }) => {
   const setShowGuestLogin = useSetRecoilState(showGuestLoginAtom);
@@ -21,9 +20,6 @@ const GuestSignupOverlay = ({
   useEffect(() => setIsGuest(isGuestCookieUser()), []);
 
   return (
-    // The host modals lay their header/body/footer out as a flex column, so the
-    // wrapper has to be that column itself — as a plain block it clipped the
-    // modal. No flex-1: the modal sizes to its content, growing here collapses it.
     <div className="relative flex min-h-0 flex-col">
       <div
         className={`flex min-h-0 flex-col ${isGuest ? "pointer-events-none select-none" : ""}`}

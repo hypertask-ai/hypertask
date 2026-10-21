@@ -1,10 +1,9 @@
-// pages/api/setupReminder.js
-// id:`notifications-for-task-${taskId}`
 
+import { withAgentScopeRequest, prepareAgentScope } from "@/lib/auth/agentScope";
 import { subMinutes } from "date-fns"
 
 
-import type { NextApiRequest, NextApiResponse } from 'next'
+import type { NextApiHandler, NextApiRequest, NextApiResponse } from 'next'
 import { scheduleTaskDeleteJob } from "../taskDeleteQueue";
 import Sugar from "sugar";
 import prisma from "@/lib/prisma";
@@ -33,7 +32,7 @@ export class TaskHardDeleteInProgressError extends Error {
 }
 
 
-export default async function handler(
+async function handler(
   req: NextApiRequest,
   res: NextApiResponse
 ) {
@@ -43,8 +42,6 @@ export default async function handler(
   );
   if (!session) return res.status(401).json({ message: "Unauthorized" });
 
-  // HTPR-6376: same auth-bound actor rule as (un)archive. Body agentId may
-  // confirm the signed session claim but cannot forge or omit away an agent.
   const signedSession = verifySession(req.cookies[SESSION_COOKIE]);
   const actingAgent = resolveActingAgent({
     sessionAgentId: signedSession?.agentId ?? null,
@@ -54,12 +51,12 @@ export default async function handler(
     return res.status(actingAgent.status).json({ message: actingAgent.message });
   }
   const actingAgentId = actingAgent.agentId;
+  await prepareAgentScope(session.userId, actingAgentId);
 
   const remindAtDate = Sugar.Date.create("30 Days from now")
   if (!taskId || !remindAtDate) return res.status(400).json({ message: "Missing Required Information" })
 
   try {
-    // =============== notification sent into reminders
     const [allowedTask, ownedAgent] = await Promise.all([
       prisma.task.findFirst({
         where: {
@@ -118,6 +115,8 @@ export default async function handler(
 
 };
 
+export default ((req, res) => withAgentScopeRequest(req, () => handler(req, res))) satisfies NextApiHandler;
+
 export async function updateTaskAndSubtasks(
   taskUpdated: { id: number },
   shouldDeleteOrRecover: "Deleted" | "Normal",
@@ -170,16 +169,11 @@ async function updateTaskTreeStatus(
     const taskIds = [...new Set(rows.map(({ id }) => id))].sort((a, b) => a - b)
     if (taskIds.length === 0) throw new Error("Task not found")
 
-    // One deterministic lock order prevents parent/child delete races and
-    // deadlocks. Every descendant lease is checked before any status changes.
     for (const id of taskIds) {
       await assertAgentAssignmentChangeAllowed(tx, id, actingAgentId, actingUserId, {
         allowHumanOverride: actingAgentId == null && actingUserId != null,
       })
     }
-    // Coordinate restore with the hard-delete claim. If recovery locks first,
-    // the claim rechecks status after commit and skips. If deletion claimed
-    // first, recovery observes processing state and leaves the task Deleted.
     const lockedRows = await tx.$queryRaw<LockedTaskTreeRow[]>`
       SELECT id, status, "sectionId", "hardDeleteProcessingAt"
       FROM "Task"
@@ -188,10 +182,6 @@ async function updateTaskTreeStatus(
       FOR UPDATE
     `
     if (lockedRows.length !== taskIds.length) throw new Error("Task not found")
-    // Once the destructive worker claims any row, every competing tree status
-    // change must fail. This includes repeated soft-delete requests: allowing
-    // one to reset the deadline while deletion is running would acknowledge a
-    // state the claimed worker can still permanently remove.
     const hardDeleteInProgress = lockedRows.some(
       ({ hardDeleteProcessingAt }) => hardDeleteProcessingAt != null,
     )
@@ -218,9 +208,6 @@ async function updateTaskTreeStatus(
         await cancelAgentMutationLeaseForHumanOverride(tx, id, actingUserId)
       }
     }
-    // Soft-delete shares the Done→Deleted denial with updateTaskSingle. Check
-    // every locked row (root and descendants) before any status write so a
-    // non-Done parent cannot hide a Done child.
     if (status === "Deleted") {
       await assertAgentMayLeaveDoneForTasks(
         tx,

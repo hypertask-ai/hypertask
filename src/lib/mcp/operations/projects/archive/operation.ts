@@ -1,3 +1,6 @@
+import { recordAgentBoardScopeMiss } from "@/lib/auth/agentScope";
+import { reportMcpOperationCrash } from '@/lib/mcp/operationCrashReport'
+import { taskWriteAccessWhere } from "@/utils/controllers/projects/getAllIncludes"
 import { wrapMcpRoute, validateMcpRouteAuth as validateMcpAuth, checkMcpRouteRateLimit as checkMcpRateLimit } from '@/lib/mcp/routeWrapper'
 import { NextRequest, NextResponse } from 'next/server'
 
@@ -8,12 +11,6 @@ import {
 } from '@/lib/flags'
 import deleteProject from '@/utils/controllers/projects/delete'
 
-/**
- * Archive, restore, or explicitly delete a board.
- *
- * Archive and restore remain owner-only and reversible. Delete reuses the web
- * app's owner-or-admin lifecycle path and is separately feature-gated.
- */
 export async function POST(request: NextRequest) {
   return wrapMcpRoute(async (request: NextRequest) => {
   try {
@@ -54,6 +51,14 @@ export async function POST(request: NextRequest) {
       )
     }
 
+    if (ctx.agentId && !(await prisma.project.findFirst({
+      where: { id: projectId, ...taskWriteAccessWhere(ctx.user.id, ctx.agentId) },
+      select: { id: true },
+    }))) {
+      return NextResponse.json({ success: false, error: 'Board not found' }, { status: 404 })
+    }
+
+    if (ctx.agentId) recordAgentBoardScopeMiss(projectId, "write");
     if (status === 'Deleted') {
       if (!(await isFeatureEnabled(HTPR_6470_PROJECT_DELETE_FLAG, ctx.user.id))) {
         return NextResponse.json({ success: false, error: 'Not found' }, { status: 404 })
@@ -62,10 +67,8 @@ export async function POST(request: NextRequest) {
       return NextResponse.json(response.json, { status: response.status })
     }
 
-    // Owner only. A member archiving a shared board would take it away from
-    // everyone else on it.
     const project = await prisma.project.findFirst({
-      where: { id: projectId, ownerId: ctx.user.id, status: { not: 'Deleted' } },
+      where: { id: projectId, ownerId: ctx.user.id, status: { not: 'Deleted' }, ...(ctx.agentId ? taskWriteAccessWhere(ctx.user.id, ctx.agentId) : {}) },
       select: { id: true, name: true, title: true, status: true },
     })
 
@@ -85,6 +88,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ success: true, project: updated })
   } catch (error) {
     console.error('[MCP Archive Board] Error:', error)
+    reportMcpOperationCrash(request, error)
     return NextResponse.json({ success: false, error: 'Internal server error' }, { status: 500 })
   }
 

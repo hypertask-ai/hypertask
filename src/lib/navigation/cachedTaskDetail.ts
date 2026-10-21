@@ -59,7 +59,6 @@ export function openCachedTaskDetail({
   if (!cached) return false;
   queryClient.setQueryData(cachedTaskDetailKey(accountId, cached.id), cached);
   const location: CachedTaskDetailLocation = { accountId, taskId: cached.id, projectId, uniqueIndex };
-  // Native history publishes the cached view before any background route refresh.
   const state = {
     ...getNextRouterAwareHistoryState(window.history.state),
     cachedTaskDetail: location,

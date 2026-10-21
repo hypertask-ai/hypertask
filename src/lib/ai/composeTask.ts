@@ -1,10 +1,11 @@
+import type { TaskWriterCustomFieldValue } from "@/lib/ai/taskWriterCustomFields";
 import { isBrowserRenderableImage } from "@/lib/media/browserRenderableImage";
 import type { IProject, ITask } from "@/models/model";
 import axios from "axios";
 import { taskWriterRoute } from "@/lib/constants/APIRouteConstants";
 import { buildTaskWriterRequestScope } from "./taskWriterBoardContext";
 import { deriveCurrentBoardBilling } from "@/lib/deriveCurrentBoardBilling";
-import { extractTitleAndDescription } from "@/utils/aiWriterUtils";
+import { extractTaskProperties, extractTitleAndDescription } from "@/utils/aiWriterUtils";
 import { escapeHtml } from "@/utils/htmlEscape";
 import { extractTaskWriterMedia, extractTaskWriterPromptMedia, createTaskWriterMediaTokenFactory, restoreTaskWriterMedia, stripTaskWriterMediaTokens } from "./taskWriterMedia";
 import { startCreateTaskUpload, bindCreateTaskUploads, createTaskUploadById, retryCreateTaskUpload } from "@/lib/createTaskAttachmentUploads";
@@ -51,21 +52,24 @@ function stripWriterMarkers(html: string): string {
   return doc.body.innerHTML;
 }
 
+function writerProperties({ priority, estimate }: Pick<ReturnType<typeof extractTaskProperties>, "priority" | "estimate">) {
+  return { ...(priority?.priority_index ? { writerPriority: priority } : {}), ...(estimate?.estimate_index ? { writerEstimate: estimate } : {}) };
+}
+
 export type ComposeTaskStage = "Reading past tickets" | "Understanding the context" | "Writing the ticket" | "Saving the ticket";
 
 export async function createComposedTask({
   text, files, project, userId, existingTaskId, onProgress, viewProject, fields, explainWriterFailure, unfurlImageUrls = false,
+  applyWriterProperties = false,
 }: {
   text: string; files: File[]; project: IProject; userId: number; existingTaskId?: number;
-  /** HTPR-7051: pasted image URLs keep their link and show the image, like a manual paste. */
   unfurlImageUrls?: boolean;
+  applyWriterProperties?: boolean;
   onProgress?: (stage: ComposeTaskStage) => void;
   viewProject?: IProject;
   explainWriterFailure?: boolean;
   fields?: Partial<Pick<Parameters<typeof createNewTaskGloballyAPIHandler>[0], "tags" | "assignees" | "priority" | "estimate">>;
 }): Promise<{ task: ITask; writerFailed: boolean; writerFailureReason?: string; tasks: ITask[]; failedTitles: string[] }> {
-  // Resolve the destination before spending AI credits; omitting sectionId uses
-  // the same first active column as the regular create-task form.
   let defaults = existingTaskId ? null : await axios.get("/api/tasks/createGlobally", {
     params: { projectId: project.id, position: "top" },
   });
@@ -92,7 +96,7 @@ export async function createComposedTask({
   let description = rawDescription;
   let writerFailed = false;
   let writerFailureReason: string | undefined;
-  let drafts: { title: string; description: string; writerDueDate?: string; ticketType?: TaskWriterTicketType }[] = [];
+  let drafts: ({ title: string; description: string; writerDueDate?: string; writerLabelIds?: string[]; customFields?: TaskWriterCustomFieldValue[]; ticketType?: TaskWriterTicketType } & Partial<ReturnType<typeof writerProperties>>)[] = [];
   const writerTimeZone = Intl.DateTimeFormat().resolvedOptions().timeZone;
   try {
     onProgress?.("Reading past tickets");
@@ -115,14 +119,11 @@ export async function createComposedTask({
       }),
     });
     if (!response.ok) {
-      // Same extraction as the AI Task Writer panel (HTPR-7077).
       if (explainWriterFailure) writerFailureReason = await describeTaskWriterFailure(response);
       throw new Error("Task writer unavailable");
     }
     let html = "";
     if (onProgress && response.body) {
-      // Headers arrive after server retrieval and prompt preparation. The model
-      // can use that context while we wait for its first visible output.
       onProgress("Understanding the context");
       const reader = response.body.getReader();
       const decoder = new TextDecoder();
@@ -145,10 +146,8 @@ export async function createComposedTask({
     } else {
       html = await response.text();
     }
-    // HTPR-7123: only a server that announced the ticket type is read for it.
     const typedWriter = response.headers?.get(TICKET_TYPE_HEADER) === "enabled";
-    // This endpoint streams raw HTML on success, but SSE error frames can arrive
-    // after a 200. A partial answer must not be mistaken for a completed ticket.
+    const writerLabels = response.headers?.get("X-Task-Writer-Labels") === "enabled";
     if (/^event:\s*(?:error|done)\b/m.test(html)) {
       if (explainWriterFailure) writerFailureReason = describeTaskWriterStreamFailure(html) ?? undefined;
       throw new Error("Task writer interrupted");
@@ -156,26 +155,36 @@ export async function createComposedTask({
     if (response.headers?.get("content-type")?.includes("application/json")) {
       const output = JSON.parse(html);
       if (!Array.isArray(output.tasks) || !output.tasks.length) throw new Error("Task writer returned no tickets");
-      drafts = output.tasks.slice(0, 10).map((draft: { title: string; description: string; dueDate?: string }) => {
+      drafts = output.tasks.slice(0, 10).map((draft: { title: string; description: string; dueDate?: string; labelIds?: string[]; customFields?: TaskWriterCustomFieldValue[] }) => {
         if (typeof draft?.title !== "string" || !draft.title.trim() ||
             typeof draft.description !== "string" || !draft.description.trim()) {
           throw new Error("Task writer returned an incomplete ticket");
         }
         const typed = typedWriter ? readTaskWriterTicketType(draft.description) : null;
-        // Same DOM removal of writer markers that the single-task path does in extractTitleAndDescription.
-        return { title: draft.title, description: typed ? stripWriterMarkers(typed.html) : draft.description,
+        const written = applyWriterProperties ? extractTaskProperties(typed ? typed.html : draft.description) : null;
+        const body = written ? written.description : typed ? stripWriterMarkers(typed.html) : draft.description;
+        return { title: draft.title, description: body,
+          ...(writerLabels && Array.isArray(draft.labelIds) ? { writerLabelIds: draft.labelIds } : {}),
+          ...(draft.customFields?.length ? { customFields: draft.customFields } : {}),
+          ...(written ? writerProperties(written) : {}),
           ...(typed?.type ? { ticketType: typed.type } : {}),
           ...(response.headers?.get("X-Task-Writer-Due-Date") === "enabled" && draft.dueDate ? { writerDueDate: draft.dueDate } : {}),
         };
       });
     } else {
-      const typed = typedWriter ? readTaskWriterTicketType(html) : null;
-      const written = extractTitleAndDescription(typed ? typed.html : html);
+      const fieldDraft = html.includes("ai-generated-task-custom-fields")
+        ? (await import("@/lib/ai/taskWriterCustomFields")).readTaskWriterCustomFields(html) : null;
+      const fieldHtml = fieldDraft?.html ?? html;
+      const typed = typedWriter ? readTaskWriterTicketType(fieldHtml) : null;
+      const written = extractTitleAndDescription(typed ? typed.html : fieldHtml);
       if (!written.title || !written.description.trim()) throw new Error("Task writer returned an incomplete ticket");
       const writerDueDate = response.headers?.get("X-Task-Writer-Due-Date") === "enabled"
         ? new DOMParser().parseFromString(html, "text/html").getElementById("ai-generated-task-due-date")?.textContent?.trim() || undefined
         : undefined;
-      drafts = [{ title: written.title, description: written.description, ...(writerDueDate ? { writerDueDate } : {}), ...(typed?.type ? { ticketType: typed.type } : {}) }];
+      drafts = [{ title: written.title, description: written.description,
+        ...(writerLabels ? { writerLabelIds: new DOMParser().parseFromString(html, "text/html").getElementById("ai-generated-task-tags")?.textContent?.split(",").map((id) => id.trim()).filter(Boolean) ?? [] } : {}),
+        ...(Array.isArray(fieldDraft?.customFields) && fieldDraft.customFields.length ? { customFields: fieldDraft.customFields } : {}), ...(writerDueDate ? { writerDueDate } : {}), ...(typed?.type ? { ticketType: typed.type } : {}),
+        ...(applyWriterProperties ? writerProperties(extractTaskProperties(html)) : {}) }];
     }
     drafts = drafts.map((draft) => {
       let body = restoreTaskWriterMedia(draft.description, media.media);
@@ -213,10 +222,12 @@ export async function createComposedTask({
   const tasks: ITask[] = [];
   const failedTitles: string[] = [];
   for (const [index, draft] of drafts.entries()) {
-    // HTPR-7123: the ticket type picks the column and the task goes to its top, like the default column.
-    // No view setting chooses a column for a new task, so only an existing task or a missing match keeps the default.
+    const fillsExistingTask = Boolean(existingTaskId && index === 0);
+    const writerFields = fillsExistingTask ? {} : {
+      ...(taskFields.priority == null && draft.writerPriority ? { priority: draft.writerPriority } : {}),
+      ...(taskFields.estimate == null && draft.writerEstimate ? { estimate: draft.writerEstimate } : {}),
+    };
     let placement = defaults?.data;
-    // Only a board whose default column is the Bugs column is rerouted; any other first column keeps today's behaviour.
     const typedSection = !existingTaskId && isBugsColumn(defaults?.data, project.section ?? project.sections)
       ? ticketTypeSection(draft.ticketType, project.section ?? project.sections) : null;
     if (typedSection) {
@@ -225,15 +236,17 @@ export async function createComposedTask({
           params: { projectId: project.id, sectionId: typedSection.id, position: "top" },
         });
         if (top?.data?.sectionId === typedSection.id && top.data.ranking) placement = { ...top.data, section: typedSection.title };
-      } catch { /* keep the default column */ }
+      } catch {}
     }
     try {
       const created = await createNewTaskGloballyAPIHandler({
         userId, projectId: project.id, projectIdentifier: project.uniqueIdentifier ?? "TASK",
         title: draft.title, ...{ description: draft.description },
         sectionId: placement?.sectionId, section_title: placement?.section,
-        ranking: placement?.ranking, ...taskFields, requestKind: "compose-task",
-        ...(existingTaskId && index === 0 ? { existingTaskId } : {}),
+        ranking: placement?.ranking, ...taskFields, ...writerFields, requestKind: "compose-task",
+        ...(fillsExistingTask ? { existingTaskId } : {}),
+        ...(!taskFields.tags?.length && draft.writerLabelIds?.length ? { writerLabelIds: draft.writerLabelIds } : {}),
+        ...(draft.customFields?.length ? { customFields: draft.customFields } : {}),
         ...(draft.writerDueDate ? { writerDueDate: draft.writerDueDate, writerTimeZone } : {}),
       });
       const task = created?.resposne?.newTask;
@@ -241,7 +254,7 @@ export async function createComposedTask({
       tasks.push(task);
       bindCreateTaskUploads(task.id, files);
     } catch (error) {
-      if (drafts.length === 1 || (existingTaskId && index === 0)) throw error;
+      if (drafts.length === 1 || fillsExistingTask) throw error;
       failedTitles.push(draft.title);
     }
   }

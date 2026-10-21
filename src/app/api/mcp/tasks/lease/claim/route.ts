@@ -2,7 +2,7 @@ import { wrapMcpRoute, checkMcpRouteRateLimit as checkMcpRateLimit, validateMcpR
 import { NextRequest, NextResponse } from 'next/server';
 
 import prisma from '@/lib/prisma';
-import { findTaskByIdentifier } from '@/lib/mcp/tasks/resolveTask';
+import { findTaskByIdentifier, taskIdentifierErrorResponse } from '@/lib/mcp/tasks/resolveTask';
 import {
   canManageLease,
   clampLeaseTtlSeconds,
@@ -114,22 +114,22 @@ export async function POST(request: NextRequest) {
       { status: 400 }
     );
   }
-  const task = await findTaskByIdentifier(
-    ctx.user,
-    { task_id },
-    ctx.agentId
-  );
-  if (!task) {
-    return NextResponse.json(
-      { success: false, error: 'Task not found or access denied' },
-      { status: 404 }
-    );
-  }
-
-  const ttlSeconds = clampLeaseTtlSeconds(ttl_seconds as number | undefined);
-  const leaseToken = lease_token ?? null;
-
   try {
+    const task = await findTaskByIdentifier(
+      ctx.user,
+      { task_id },
+      ctx.agentId
+    );
+    if (!task) {
+      return NextResponse.json(
+        { success: false, error: 'Task not found or access denied' },
+        { status: 404 }
+      );
+    }
+
+    const ttlSeconds = clampLeaseTtlSeconds(ttl_seconds as number | undefined);
+    const leaseToken = lease_token ?? null;
+
     const leases = await prisma.$transaction(async (tx) => {
       await lockAgentMutationFence(tx, task.id);
 
@@ -137,8 +137,6 @@ export async function POST(request: NextRequest) {
         where: { id: task.id },
         select: { status: true },
       });
-      // Archived tasks may still be leased so an agent can restore them to
-      // Normal; only deletion closes the lifecycle for good.
       if (!liveTask || liveTask.status === 'Deleted') return [];
 
       if (require_assignment) {
@@ -267,6 +265,8 @@ export async function POST(request: NextRequest) {
       { status: 200 }
     );
   } catch (error) {
+    const identifierResponse = taskIdentifierErrorResponse(error);
+    if (identifierResponse) return identifierResponse;
     console.error('[MCP Task Lease Claim] Error:', error);
     return NextResponse.json(
       { success: false, error: 'Failed to claim task lease' },

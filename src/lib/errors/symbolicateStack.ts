@@ -32,7 +32,7 @@ async function withMapSlot<T>(work: () => Promise<T>) {
 export function decodeSourceMap(raw: string): TraceMap | null {
   try {
     const map = new TraceMap(JSON.parse(raw));
-    decodedMappings(map); // Validate lazy VLQ mappings before caching them.
+    decodedMappings(map);
     return map;
   } catch {
     return null;
@@ -63,7 +63,6 @@ function allowedOrigins() {
     try {
       origins.add(new URL(value).origin);
     } catch {
-      // A malformed configured origin is not trusted.
     }
   }
   return origins;

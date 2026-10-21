@@ -12,7 +12,10 @@ printf 'fixture-token\n' > "$HOME/.config/hypertask-agents/credentials/valentins
 cat > "$T/bin/hypertask" <<'STUB'
 #!/usr/bin/env bash
 [ "${HT_TOKEN:-}" = fixture-token ] || exit 91
-printf 'hypertask\n' >> "$VCC_TEST_TRACE"
+printf 'hypertask %s %s\n' "${1:-}" "${2:-}" >> "$VCC_TEST_TRACE"
+if [ "${1:-} ${2:-}" = 'comments list' ]; then
+  exec /bin/cat "${VCC_TEST_COMMENTS:-/missing-comments-fixture}"
+fi
 printf 'stub:'; printf ' <%s>' "$@"; printf '\n'
 STUB
 cat > "$T/bin/cat" <<'STUB'
@@ -133,4 +136,71 @@ for args in "activity" "activity --help" "activity list X-1"; do
 done
 allowed bash "$vcc" tasks get X-1
 printf 'ok unknown activity subcommands fail in vcc\n'
+question='<p><span data-type="mention" class="mention" data-id="Valentin Yeo" data-label="name-6">Valentin Yeo</span> Question: <strong>Remove the board tab row from My Tasks?</strong></p><p>Why: two rows of tabs confuse you.</p><p>Yes: a runner builds it behind a flag.</p><p>No: both rows stay.</p>'
+export VCC_TEST_COMMENTS="$T/comments.json"
+fixture() {
+  jq -n --arg text "$1" '{comments:[{id:"new",text:$text,createdAt:"2026-10-20T12:00:00Z"}]}' > "$VCC_TEST_COMMENTS"
+}
+review_refused() {
+  local reason=$1; shift
+  run bash "$vcc" "$@"
+  [ "$status" = 5 ] || fail "expected exit 5, got $status: $*"
+  printf 'vcc: Valentin Review needs one plain Question comment first: "Question: <strong>yes/no question?</strong>", one line of why, then "Yes:" and "No:" lines. Post it with vcc comment add %s --kind question, then move.%s\n' "$3" "${reason:+ ($reason)}" > "$T/review-refusal"
+  cmp -s "$T/review-refusal" "$T/err" || fail "wrong review refusal: $*"
+  [ ! -s "$T/out" ] || fail "review refusal produced stdout: $*"
+  [[ $(< "$VCC_TEST_TRACE") == *'hypertask comments list'* ]] || fail 'comments were not read'
+  [[ $(< "$VCC_TEST_TRACE") != *'hypertask task move'* && $(< "$VCC_TEST_TRACE") != *'hypertask tasks move'* ]] || fail 'refused move reached CLI'
+}
+
+fixture "$question"
+jq '.comments += [{id:"old",text:"<p>Older status note.</p>",createdAt:"2026-10-19T12:00:00Z"}]' "$VCC_TEST_COMMENTS" > "$T/newest.json"
+mv "$T/newest.json" "$VCC_TEST_COMMENTS"
+allowed bash "$vcc" task move YPER4-512 --section 'Valentin Review'
+[[ $(< "$T/out") == 'stub: <task> <move> <YPER4-512> <--section> <Valentin Review>' ]] || fail 'review move arguments changed'
+[[ $(< "$VCC_TEST_TRACE") == *'hypertask comments list'* ]] || fail 'review move skipped comments'
+allowed bash "$vcc" tasks move YPER4-512 '--section=  vAlEnTiN ReViEw  '
+[[ $(< "$T/out") == 'stub: <tasks> <move> <YPER4-512> <--section=  vAlEnTiN ReViEw  >' ]] || fail 'equals section arguments changed'
+fixture '<p>Question: <strong>Keep it?</strong></p><p>Why: less work.</p><p>Yes: keep it.</p><p>No: remove it.</p>'
+allowed bash "$vcc" task move YPER4-512 --section 'Valentin Review'
+allowed bash "$vcc" task move --section 'Valentin Review' YPER4-512
+[[ $(< "$VCC_TEST_TRACE") == *'hypertask comments list'* ]] || fail 'section before ticket skipped comments'
+printf 'ok newest Question with or without mention allows both section forms\n'
+
+rm "$VCC_TEST_COMMENTS"
+allowed bash "$vcc" task move YPER4-512 --section 'In Progress'
+[[ $(< "$VCC_TEST_TRACE") != *'hypertask comments list'* ]] || fail 'unrelated move read comments'
+allowed bash "$vcc" task get YPER4-512 --section 'Valentin Review'
+[[ $(< "$VCC_TEST_TRACE") != *'hypertask comments list'* ]] || fail 'unrelated call read comments'
+printf 'ok other moves and non-move calls never read comments\n'
+
+fixture '<p>A plain status note.</p>'
+review_refused '' task move YPER4-512 --section 'Valentin Review'
+review_refused '' tasks move YPER4-512 '--section=Valentin Review'
+jq --arg text "$question" '.comments += [{id:"old",text:$text,createdAt:"2026-10-19T12:00:00Z"}]' "$VCC_TEST_COMMENTS" > "$T/older.json"
+mv "$T/older.json" "$VCC_TEST_COMMENTS"
+review_refused '' task move YPER4-512 --section 'Valentin Review'
+printf 'ok newest status note refuses even with an older Question\n'
+
+for text in \
+  '<p>Question: <strong>Keep it?</strong></p><p>Why: less work.</p>' \
+  '<p>Question: <strong>Keep it?</strong></p><p>Yes: keep it.</p>' \
+  '<p>Question: <strong>Keep it?</strong></p><p>No: remove it.</p>' \
+  '<p>Question: Keep it?</p><p>Yes: keep it.</p><p>No: remove it.</p>' \
+  '<p>Question: <strong>Keep it.</strong></p><p>Yes: keep it.</p><p>No: remove it.</p>' \
+  '<p>Status: Question: <strong>Keep it?</strong></p><p>Yes: keep it.</p><p>No: remove it.</p>' \
+  '<p>Question: note. Question: <strong>Keep it?</strong></p><p>Yes: keep it.</p><p>No: remove it.</p>'; do
+  fixture "$text"
+  review_refused '' task move YPER4-512 --section 'Valentin Review'
+done
+printf 'ok malformed Questions refuse without both choice paragraphs and an immediate bold question\n'
+printf '{"comments":[]}\n' > "$VCC_TEST_COMMENTS"
+review_refused '' task move YPER4-512 --section 'Valentin Review'
+
+rm "$VCC_TEST_COMMENTS"
+review_refused 'cannot read comments' task move YPER4-512 --section 'Valentin Review'
+for json in '' 'not json' '{}' '{"comments":{}}' '{"comments":[{"text":"Question:","createdAt":null}]}'; do
+  printf '%s\n' "$json" > "$VCC_TEST_COMMENTS"
+  review_refused 'cannot parse comments' task move YPER4-512 --section 'Valentin Review'
+done
+printf 'ok unreadable or malformed comments fail closed\n'
 printf 'vcc helper guard tests passed\n'

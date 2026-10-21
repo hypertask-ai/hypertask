@@ -1,12 +1,6 @@
-/**
- * HTPR-6284: an @<agent> mention in the chat composer arrives in context_list
- * (the client collects tiptap mention nodes). Extracting and deciding here
- * keeps the routed-turn guard pure and testable; the route only runs the I/O.
- */
 
 export type MentionAgentItem = { type?: unknown; id?: unknown };
 
-/** Unique agent ids from context_list "agent" items, in first-mention order. */
 export function extractMentionedAgentIds(contextList: unknown): string[] {
   if (!Array.isArray(contextList)) return [];
   const seen = new Set<string>();
@@ -28,11 +22,6 @@ export type AgentMentionDecision =
   | { route: true; agentId: string }
   | { route: false; reason: string };
 
-/**
- * Route only a clean single-agent mention. Everything else — no mention,
- * several agents, attachments the bridge cannot carry, no board context, a
- * native agent's own session — takes the normal assistant turn unchanged.
- */
 export function decideAgentMentionRouting(input: {
   routingEnabled: boolean;
   mentionedAgentIds: string[];

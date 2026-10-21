@@ -28,7 +28,6 @@ const LandingHomeContainer = () => {
           id="kanban-sections-container"
           className="bg-pageBackground homepage-container-tag flex-col gap-4 flex items-center"
         >
-          {/*------------------------------------------SECTION CONTAINER */}
           <div
             id="sectionsContainer"
             className={`gap-[16px] w-[97%] scrollbar-none  m-auto grid grid-flow-col auto-cols-[minmax(404px,535px)] ${
@@ -50,7 +49,6 @@ const LandingHomeContainer = () => {
           </div>
         </div>
       </div>
-      {/*------------------------------------------KANBAN MODALS */}
       {activeScene.index === 22 && (
         <Commands
           key={"modal-active-key"}

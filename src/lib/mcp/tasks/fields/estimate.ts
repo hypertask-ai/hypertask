@@ -6,6 +6,7 @@ export async function updateTaskEstimate(context: TaskUpdateFieldContext, task: 
         const estimateApiUrl = `${baseUrl}/api/estimate/setEstimate`
         const estimateResponse = await fetch(estimateApiUrl, {
             method: 'POST',
+            redirect: 'manual',
             headers: {
                 'Content-Type': 'application/json',
                 'Cookie': authCookieHeader

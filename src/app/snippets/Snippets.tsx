@@ -28,11 +28,7 @@ const Snippets = () => {
   const [title, setTitle] = useState("");
   const draftHandoffTakenRef = useRef(false);
 
-  // "Create snippet from draft" navigates here and leaves the editor's content
-  // behind for us to pick up, once, as soon as the editor exists.
   useEffect(() => {
-    // Wait for the account too: consuming the handoff before it is known would
-    // drop the draft on the floor, and this effect only ever runs once.
     if (!editor || !currentUser?.id || draftHandoffTakenRef.current) return;
     draftHandoffTakenRef.current = true;
     const handedOverHtml = takeSnippetDraftHandoff(currentUser?.id);

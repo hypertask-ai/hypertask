@@ -72,10 +72,6 @@ export function resolveTaskDetailWriterOpening(
   };
 }
 
-/**
- * Build the first Task Writer request for a ticket that already has content.
- * Properties add context, but only a title or description starts the request.
- */
 export function buildTaskWriterAutoDraftPrompt(
   source: TaskWriterAutoDraftSource,
 ): string | null {

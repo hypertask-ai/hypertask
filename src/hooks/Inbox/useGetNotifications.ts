@@ -39,14 +39,6 @@ export const inboxDataQueryKey = (userId: number | null | undefined) =>
 export const inboxAccessQueryKey = (userId: number | null | undefined) =>
   [...INBOX_QUERY_KEY, "access", userId] as const;
 
-// HTPR-6063: useGetNotifications mounts independently in the app shell and
-// the inbox page, so each mount's own effect used to fire its own
-// /api/notifications/access request - 2-3x per load, competing for
-// connections in the window that gates the inbox GET's start time.
-// staleTime 0 means this never serves cached/stale access data - it only
-// collapses truly concurrent calls onto React Query's own in-flight promise
-// for this queryKey. A fresh mount after the prior call settles always hits
-// the server again, exactly as before.
 export const fetchInboxAccessibleProjectIds = (
   queryClient: QueryClient,
   userId: number,
@@ -71,9 +63,6 @@ const isInboxRoute = (): boolean =>
   typeof window !== "undefined" &&
   window.location.pathname.startsWith("/inbox");
 
-// A per-mount latch: first caller to claim wins, every later caller is
-// silenced. The old per-source dedupe marks let hydration and network each
-// emit for one page load (HTPR-5583: 54% of network samples were redundant).
 export const createInboxReadinessLatch = (): { claim: () => boolean } => {
   let claimed = false;
   return {
@@ -219,9 +208,6 @@ const fetchInboxPayload = async (
   const revision = reserveInboxReadModelRevision(userId);
   latestNetworkRequestRevisionByAccount.set(userId, revision);
   const enabled = localReadModelEnabled();
-  // Start the revision snapshot read with the request. The mount hydration
-  // effect shares and publishes this in-flight read independently; network
-  // reconciliation awaits it only when IndexedDB is the durable revision fence.
   const sharedHydrationReadPromise = enabled
     ? (async () => {
         const { readInboxReadModel } =
@@ -229,10 +215,6 @@ const fetchInboxPayload = async (
         return readInboxReadModel(userId);
       })().catch(() => null)
     : Promise.resolve(null);
-  // HTPR-5847: open the fence's own connection in parallel too (alongside,
-  // not instead of, the payload read above) so readInboxReadModelRevisionFence
-  // below skips its own indexedDB.open() round trip. The fence read keeps its
-  // exact position as the last read before the response-staleness check.
   const fenceConnectionPromise = enabled
     ? (async () => {
         const { openInboxReadModelConnection } =
@@ -252,16 +234,11 @@ const fetchInboxPayload = async (
   } catch (error) {
     if (isInboxAuthorizationError(error)) {
       latestAuthorizationFailureRevisionByAccount.set(userId, revision);
-      // An expired or revoked session must hide both hydrated and optimistic
-      // rows immediately. A later authorized request can repopulate the cache.
       queryClient.setQueryData(
         inboxDataQueryKey(userId),
         emptyInboxPayload(userId),
       );
     }
-    // HTPR-5847: the fence read below never runs on this path, so nothing
-    // else will close the connection opened alongside this request -- close
-    // it here or it leaks (and a retry opens one more on top of it).
     void fenceConnectionPromise.then(async (database) => {
       if (!database) return;
       const { closeInboxReadModelConnection } = await import(
@@ -277,8 +254,6 @@ const fetchInboxPayload = async (
     latestAuthorizationFailure != null &&
     compareInboxReadModelRevisions(revision, latestAuthorizationFailure) > 0
   ) {
-    // A newer successful authoritative response proves the session is allowed
-    // to render local rows again.
     latestAuthorizationFailureRevisionByAccount.delete(userId);
   }
   let fallbackPersistedPayload:
@@ -296,9 +271,6 @@ const fetchInboxPayload = async (
     if (fallbackPersistedPayload) {
       observeInboxReadModelRevision(userId, fallbackPersistedPayload.revision);
     }
-    // Browsers without synchronous revision storage need the durable fence as
-    // their final stale-response check. Other browsers can publish the network
-    // response without waiting for IndexedDB.
     persistedRevisionFence = await readInboxReadModelRevisionFence(
       userId,
       await fenceConnectionPromise,
@@ -308,8 +280,6 @@ const fetchInboxPayload = async (
     }
   }
   if (!persistentFenceRequired && enabled) {
-    // Read after the request so an IndexedDB-only revision committed while it
-    // was in flight cannot be overwritten by the network response.
     try {
       const { readInboxReadModelRevisionFence } =
         await import("@/lib/inboxSync/indexedDbReadModel");
@@ -398,10 +368,6 @@ const fetchInboxPayload = async (
         },
       );
     }
-    // A newer cross-tab operation was observed but its IndexedDB transaction
-    // may still be committing. Fail this attempt closed; React Query retries
-    // with a revision newer than the observed operation. Never report local or
-    // optimistic cache data as a completed authoritative network request.
     throw new Error("Ignored stale cross-tab Inbox response");
   }
   const finalRevision = currentInboxReadModelRevision(userId);
@@ -485,8 +451,6 @@ export const useGetNotifications = (userId: number) => {
     return startedAtRef.current;
   }, [userId]);
   const queryKey = useMemo(() => inboxDataQueryKey(userId), [userId]);
-  // Start the existing fenced read on the first client commit, not the extra
-  // hydrated render. The observer still isolates pre-hydration publication.
   useEffect(() => {
     if (hydrated || document) return;
     void queryClient.prefetchQuery({
@@ -501,7 +465,6 @@ export const useGetNotifications = (userId: number) => {
           requireProjectAccess,
         ),
       staleTime: INBOX_QUERY_STALE_TIME_MS,
-      // Prefetch defaults to no retries; keep the client observer's three.
       retry: 3,
     });
   }, [hydrated, document, userId, queryClient, queryKey, getStartedAt, requireProjectAccess]);
@@ -523,8 +486,6 @@ export const useGetNotifications = (userId: number) => {
         requireProjectAccess,
       ),
     initialData: () => emptyInboxPayload(userId),
-    // The empty initialData is only a render placeholder. Age 0 keeps the
-    // authoritative request active while IndexedDB is read in parallel.
     initialDataUpdatedAt: 0,
     staleTime: INBOX_QUERY_STALE_TIME_MS,
   });
@@ -556,8 +517,6 @@ export const useGetNotifications = (userId: number) => {
       try {
         const { readInboxReadModel } =
           await import("@/lib/inboxSync/indexedDbReadModel");
-        // The signed access request and IndexedDB read run together. Local
-        // content is never rendered until current board access is confirmed.
         const [storedPayload, access] = await Promise.all([
           readInboxReadModel(userId),
           fetchInboxAccessibleProjectIds(queryClient, userId),
@@ -579,10 +538,6 @@ export const useGetNotifications = (userId: number) => {
           access.projectIds,
         );
 
-        // A cross-tab mutation can reserve a newer revision while the access
-        // request is in flight. Revalidate immediately before hydration so an
-        // older IndexedDB snapshot cannot replace that mutation (or a newer
-        // query payload) and then suppress the authoritative response.
         const latestObservedRevision = currentInboxReadModelRevision(userId);
         const latestNetworkRequestRevision =
           latestNetworkRequestRevisionByAccount.get(userId) ?? null;
@@ -635,8 +590,6 @@ export const useGetNotifications = (userId: number) => {
         });
       } catch {
         if (cancelled) return;
-        // Authorization validation fails closed. The full signed Inbox request
-        // remains active and will populate the page when it succeeds.
         readinessLocalOutcome.current = "error";
       }
     })();

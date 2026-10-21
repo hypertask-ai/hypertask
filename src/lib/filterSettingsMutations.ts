@@ -16,7 +16,6 @@ import type {
 } from "@/models/MyTasksView";
 import { defaultFilterSettings } from "@/utils/helperFunctions/Views/FilterHelperFunctions";
 
-/** Serializable board/My Tasks filter settings (no condition functions). */
 export type SerializableFilterSettings = {
   matchFilters: TMatchFilters;
   addedFilters: Array<{
@@ -169,7 +168,6 @@ const dynamicDatePayload = (
   dynamicRange,
 });
 
-/** Flat fields that Kanban filterSettings can represent (starred:false cannot). */
 export function hasMigratableFlatFilters(
   filters: MyTasksViewConfig["filters"],
 ): boolean {
@@ -184,12 +182,6 @@ export function hasMigratableFlatFilters(
   );
 }
 
-/**
- * Move overlapping flat My Tasks filters into Kanban filterSettings.
- * Leaves board/column/showDone flat. Keeps starred:false flat (Kanban Starred
- * only means "is starred"). Flat values win when the same type already exists
- * so flag-off legacy edits are not discarded when parity turns back on.
- */
 export function migrateFlatFiltersToFilterSettings(
   config: MyTasksViewConfig,
   labelNames?: ReadonlyMap<string, string>,
@@ -272,7 +264,6 @@ export function migrateFlatFiltersToFilterSettings(
       priorityIds: [],
       labelIds: [],
       sizeIds: [],
-      // Keep "not starred" in flat filters; Kanban Starred cannot express it.
       starred: filters.starred === false ? false : null,
       dueDate: null,
       createdRange: null,
@@ -285,7 +276,6 @@ export function migrateFlatFiltersToFilterSettings(
   };
 }
 
-/** Count on the parity Filters button: settings entries plus leftover not-starred. */
 export function myTasksParityFilterCount(config: MyTasksViewConfig): number {
   const migrated = migrateFlatFiltersToFilterSettings(config);
   const settingsCount = migrated.filterSettings?.addedFilters?.length ?? 0;

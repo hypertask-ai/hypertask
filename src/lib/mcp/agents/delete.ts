@@ -49,7 +49,6 @@ export async function handleDeleteAgentRequest(
       { status: 403 }
     )
   }
-  // Hard deletion rewrites historical references across boards, which a team key cannot authorize.
   if (ctx.management?.teamId) {
     return NextResponse.json(
       {

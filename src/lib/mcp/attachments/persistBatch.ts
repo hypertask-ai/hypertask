@@ -9,10 +9,6 @@ export type AttachmentPersistenceClient = Pick<
   'attachment'
 >;
 
-/**
- * A deterministic fileSource is the persisted retry identity. Sequential retries
- * return the committed row rather than creating another visible attachment.
- */
 export async function persistAttachmentRows(
   db: AttachmentPersistenceClient,
   uploads: UploadedAttachmentSpec[],

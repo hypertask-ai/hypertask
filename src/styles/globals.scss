@@ -865,6 +865,10 @@ svg.lucide.fill-current {
     outline-color: var(--border-active) !important;
   }
 
+  html[data-task-box-outlines] [data-task-detail-path] [data-task-comment-collapsed]:not([data-task-comment-state="active"]) {
+    outline-color: transparent !important;
+  }
+
   /* A pinned comment keeps its pin colour, now on the full outline. */
   html[data-task-box-outlines] [data-task-detail-path] [data-task-comment-state="pinned"] {
     outline-color: var(--border-pinned) !important;

@@ -111,12 +111,12 @@ Never use Valentin's account, password, or cookies. If the shot is a login page,
 8. **Report on the ticket with `vcc`, then move it with `vcc`.** One comment. Never assign anyone. Never assign userId 6 (Valentin) for any reason, including escalation. Only Valentin assigns himself. If he assigned himself or moved the ticket by hand, leave assignees and column as he left them.
    - **PASS** (no FAIL bullets): attach `proof.md` and the key screenshots, say what changed in plain language, then move to Done.
      ```
-     vcc comment add HTPR-NNNN --attach ~/.local/state/vcc-evidence/HTPR-NNNN/proof.md --attach ~/.local/state/vcc-evidence/HTPR-NNNN/<shot>.png --text "<p><strong>PASS: verified on production.</strong></p><p>What you checked, in plain language, and what the user will notice.</p>"
+     vcc comment add HTPR-NNNN --kind qa --attach ~/.local/state/vcc-evidence/HTPR-NNNN/proof.md --attach ~/.local/state/vcc-evidence/HTPR-NNNN/<shot>.png --text "<p><strong>PASS: verified on production.</strong></p><p>What you checked, in plain language, and what the user will notice.</p>"
      vcc task move HTPR-NNNN --section "Done"
      ```
    - **FAIL:** name the failing case, attach the evidence, move back to In Progress, fix, and ship again. Then run this skill from step 1.
      ```
-     vcc comment add HTPR-NNNN --attach ~/.local/state/vcc-evidence/HTPR-NNNN/proof.md --text "<p><strong>FAIL: <exact case>.</strong></p><p>What you expected, what you saw, and where.</p>"
+     vcc comment add HTPR-NNNN --kind qa --attach ~/.local/state/vcc-evidence/HTPR-NNNN/proof.md --text "<p><strong>FAIL: <exact case>.</strong></p><p>What you expected, what you saw, and where.</p>"
      vcc task move HTPR-NNNN --section "In Progress"
      ```
    Read the ticket back with `hypertask tasks get HTPR-NNNN` and confirm the column and the comment author.

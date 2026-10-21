@@ -1,49 +1,32 @@
 ---
 name: update-docs
-description: Any ticket that changes what a user sees or how a feature works, before opening the PR
+description: Document live user-facing changes; FEATURE and IMPROVE tickets need the docs gate before Done
 ---
 
 # update-docs
 
-Public product docs live in a **separate repo from the app**: `~/projects/HypertaskDocs` (remote `hypertask-ai/docs`), built with Astro Starlight and published at `https://docs.hypertask.ai`. They are not the same thing as `openwiki/` inside `~/projects/hypertasks` — that is the internal engineering wiki for agents working the codebase, covered by the separate `openwiki-refresh` skill. This skill is about the pages a Hypertask user reads.
-
-This skill absorbs the standing job of the retired "Hypertask Docs" board agent. Its rules below come from that repo's own `CLAUDE.md`, carried over verbatim rather than paraphrased.
+Public product docs: `~/projects/HypertaskDocs` (`hypertask-ai/docs`, public), Astro Starlight, live at https://docs.hypertask.ai. Internal engineering references live with the code in `docs/` and `.claude/skills/`; this skill is about the pages a Hypertask user reads.
 
 ## Steps
 
-1. **Find the page for the touched feature.** Grep the docs repo for the feature's name or the UI copy you changed:
-   ```
-   grep -ril "<feature keyword>" ~/projects/HypertaskDocs/src/content/docs/
-   ```
-   Pages are grouped by area: `getting-started/`, `features/`, `mcp/`, `api/`, `cli/`, `design-system/`, `changelog/`. If nothing matches an existing page, decide whether the change belongs on an existing page or needs a new one — don't create a page for something one sentence on an existing page already covers.
-2. **Edit or create the `.mdx` file** in `src/content/docs/`. Every file needs frontmatter (`title`, `description`). If the page uses an `import` (Starlight components: `Aside`, `Tabs`, `TabItem`, `Steps`, `Card`, `CardGrid`, `LinkCard`), it must be `.mdx`, not `.md`. Descriptions and code examples use **HTML**, matching Hypertask's own API convention, not Markdown.
-3. **Adding a new page:** also add it to the sidebar in `astro.config.mjs`, or it exists but nobody can navigate to it.
-4. **If the ticket also needs a changelog entry**, edit `src/content/docs/changelog/index.mdx` following the rules under "Hypertask Docs mission" below. Not every ticket needs one — only a user-facing fix, improvement, or feature that shipped.
-5. **Open a PR in `hypertask-ai/docs`** (base `main`) alongside the app PR. The two repos are independent; there is no shared PR. Link both PRs in the ticket comment with real `<a href>` URLs, never bare text. (The docs repo's own CI tolerates a direct push to `main` too — `build-check.yml` runs on push as well as PR, because agents have historically pushed straight to main — but opening a PR keeps the doc change reviewable alongside the code change, so do that by default.)
-6. **Deploy.** The Cloudflare Pages project `hypertask-docs` is direct-upload only: merging the PR does **not** deploy it. After merge, run:
-   ```
-   cd ~/projects/HypertaskDocs && npm run build
-   CLOUDFLARE_ACCOUNT_ID=6031a7dff0d4a6469414cfa8a6dedddf npx wrangler pages deploy dist --project-name hypertask-docs --branch main
-   ```
-   A daily cron (`scripts/daily-changelog.sh`) does this automatically for changelog-only updates, but a feature-page edit needs the manual deploy above — don't wait for the cron to notice it.
+1. **Check what is live for Everyone.** Read `e2e/smoke/production-flag-modes.json` and `src/lib/flags` in the app repo. Document only behaviour live for Everyone, not Owner + QA features. If there is no user-facing change, post a ticket comment opening `No user-visible change: <reason>`.
+2. **Work off `origin/main` in a docs worktree.** Find the feature's page under `src/content/docs/` with `rg`. Prefer a sentence on an existing page over a new page. Generated MCP tool reference and CLI reference pages are refreshed by the docs repo's scripts and the `docs-refs` timer; never hand-edit them.
+3. **Edit the page.** Every page needs `title` and `description` frontmatter. Quote titles with colons. Use `.mdx` for imports and Starlight components (`Aside`, `Tabs`, `TabItem`, `Steps`, `Card`, `CardGrid`, `LinkCard`). Add new pages to the sidebar in `astro.config.mjs`. Check links, anchors, screenshots and examples against the live UI.
+4. **Build before the PR:** `npm run build`. It first runs `scripts/check-mdx.mjs`, which names `file:line` for bare `{braces}`, unknown components, invalid frontmatter YAML and unparseable MDX. One broken page stops every deploy.
+5. **Open a PR to `main`**, titled `<TICKET> [TYPE] ...`. Merging automatically runs `.github/workflows/deploy.yml`, **Build and Deploy**: build, upload to Cloudflare Pages project `hypertask-docs`, purge cache. No manual wrangler deploy and no cron; the daily changelog cron is retired.
+6. **Verify live.** The docs PR must be merged and Build and Deploy green for its merge sha; check the page on https://docs.hypertask.ai. Done means `ship-check docs <T>` prints `docs ok` (or the no-user-visible-change reason is recorded).
 
-## Check before hand-off
+## Writing rules
 
-- `npm run build` in `~/projects/HypertaskDocs` exits clean. This is the same command `build-check.yml` runs in CI — if it fails locally, it fails there too, and per that workflow's own comment, a broken build means `docs.hypertask.ai` silently serves whatever was published last until someone notices.
-- Any link you added (to another page, an anchor, or the sidebar) actually resolves.
-- If the UI changed, the doc page's screenshot or embedded example reflects the new UI, not the old one.
-- If you touched the changelog, it names only `HTPR-*` tickets, contains no privacy-sensitive or test-ticket content, and links to the real ticket URL.
+- User-facing language: what users gained, not internal implementation. No ticket numbers, PR numbers, flag keys or internal links in page text.
+- Technical but approachable. Code examples before explanations; tables for parameters and comparisons; `<Aside>` for notes and warnings; `<Tabs>` for multi-client examples. Keep the dark purple theme matching hypertask.ai.
+- Descriptions and API code examples use HTML, matching Hypertask's API. MCP examples use `https://mcp.hypertask.ai`.
 
-## Hypertask Docs mission (source: `hypertask-ai/docs` `CLAUDE.md`, carried over from the retired Hypertask Docs board agent)
+## Changelog
 
-- Every `.mdx` file needs frontmatter (`title`, `description`); use Starlight components for rich content; a page with an `import` must be `.mdx`.
-- Descriptions and code examples use HTML format, matching Hypertask's API.
-- The CF Pages project is direct-upload only — `git push` does not deploy; deploy explicitly with the `wrangler pages deploy` command above.
-- **Changelog source is the Hypertask Product board (project 15) only.** Only `HTPR-*` tickets — ignore every other prefix (`ANAL-`, `BBAB-`, `VETS-`, `IKNO-`, `INNE-`, etc.).
-- **No privacy-sensitive content.** Never mention bugs about user data leaking between boards or accounts, or similar cross-tenant issues, in the changelog. Internal bugs, not public changelog items.
-- **No test tasks.** Skip tickets titled like "test", "testtask", or similar.
-- **Reframe bugs as fixes:** "Fixed: X", never "Bug: X was broken."
-- **User-facing language only** — what users gained, not what was broken internally.
-- **Categories:** Bug Fixes, Improvements, New Features, Infrastructure (only if user-relevant, e.g. the MCP server — not internal tooling).
-- **Format:** each day gets a `## {Month} {Day}, {Year}` heading, newest at the top. Each item links to its ticket: `[HTPR-XXXX](https://app.hypertask.ai/detail/project-15/{numericId})`.
-- **Style guide:** dark purple theme matching hypertask.ai; technical but approachable tone; code examples before explanations; tables for parameter lists and comparisons; `<Aside>` for notes/warnings; `<Tabs>` for multi-client examples (Claude Desktop, Claude Code, Cursor); API examples use `https://mcp.hypertask.ai` as the base URL.
+Edit `src/content/docs/changelog/index.mdx` only for shipped, user-facing changes. Source: Product board (project 15), HTPR only. Each item links to its ticket: `[HTPR-XXXX](https://app.hypertask.ai/detail/project-15/{number})`. Feature pages carry no ticket identifiers.
+
+- No privacy-sensitive items, cross-tenant data bugs, internal-only work or test tickets (including "testtask").
+- Frame fixes as **Fixed: X**, never "Bug: X was broken."
+- Categories: Bug Fixes, Improvements, New Features, Infrastructure (only user-relevant items such as MCP).
+- Newest day first, `## Month Day, Year` headings.

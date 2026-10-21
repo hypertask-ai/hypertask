@@ -14,7 +14,7 @@ export function rememberFeedbackClient(token: string, name: unknown, userId: num
     waitUntil(import('./enabled').then(async ({ aiFeedbackEnabled }) => {
       if (await aiFeedbackEnabled(userId)) await (await getRedis()).set(clientKey(token), client, 'EX', 3600)
     }).catch(() => {}))
-  } catch { /* Metadata capture must not delay initialization. */ }
+  } catch {}
 }
 
 export async function getFeedbackClient(token: string): Promise<string | undefined> {

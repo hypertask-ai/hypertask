@@ -28,7 +28,6 @@ const HeaderOptions = ({ title, ownerImg, memberImgs }: Props) => {
         {title}
       </span>
 
-      {/**----------------MEMBERS */}
       <div
         style={{
           flexDirection: "row",
@@ -50,17 +49,14 @@ const HeaderOptions = ({ title, ownerImg, memberImgs }: Props) => {
           ))}
       </div>
 
-      {/* ======================= SET PRIORITY BUTTON ====================== */}
 
       <div className="mx-3 group flex gap-1 items-center relative group">
         <PrioirtyLogo className={"fill-white-black"} />
       </div>
-      {/* ======================= HIDDEN COLUMNS BUTTON ====================== */}
       <span className="flex relative group gap-1 items-center">
         <HiddenColumnLogo className={`fill-white-black`} />
       </span>
 
-      {/* ======================= FILTER HEADER ====================== */}
       <div className="mx-3 flex text-white-black  gap-1 items-center relative group">
         <Filter className={`text-white-black`}  strokeWidth={1.75}/>
       </div>

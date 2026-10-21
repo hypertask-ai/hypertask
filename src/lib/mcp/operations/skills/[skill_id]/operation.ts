@@ -17,10 +17,6 @@ import prisma from "@/lib/prisma";
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-// MCP mirror of src/app/api/ai/skills/[id]/route.ts (get / update / delete a
-// single skill), plus a GET the web route doesn't expose. getAccessibleSkill
-// enforces that the caller owns the personal skill or is a member of the
-// project the skill belongs to.
 const updateSchema = z.object({
   markdown: z.string().optional(),
   raw_markdown: z.string().optional(),

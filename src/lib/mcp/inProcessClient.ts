@@ -37,7 +37,6 @@ export async function createInProcessMcpClient(token: string): Promise<{
       const request = new NextRequest(url, { ...options, headers, signal: options.signal ?? undefined })
       bindMcpOperationContext(request, auth, false)
 
-      // A compound tool can invoke several operations, but consumes one rate-limit slot.
       rateLimitCheck ??= checkMcpRateLimit(request)
       const limited = await rateLimitCheck
       bindMcpOperationContext(request, auth, true)
@@ -45,12 +44,11 @@ export async function createInProcessMcpClient(token: string): Promise<{
       try {
         response = limited ? limited.clone() : await executeMcpOperation(request)
       } catch {
-        // Next's REST boundary masked uncaught handler errors. Keep internal details private.
         throw mapHttpErrorToMcpError(500, 'HTTP 500: Internal Server Error', requestCorrelationId)
       }
       const text = await response.text()
       let data: unknown = text
-      try { data = JSON.parse(text) } catch { /* Match the previous client's non-JSON response handling. */ }
+      try { data = JSON.parse(text) } catch {}
       if (!response.ok) {
         const body = typeof data === 'object' && data !== null ? data as Record<string, unknown> : {}
         const message = typeof body.message === 'string' && body.message ? body.message

@@ -1,20 +1,4 @@
-/**
- * Whether a browser can actually decode an image and paint it in an `<img>` tag.
- *
- * HTPR-6254: a Mac attaches photos as HEIC/HEIF. That MIME type starts with
- * "image/", so every `fileType.startsWith("image/")` check in the app treated it
- * as displayable and rendered an `<img>`. No desktop browser except Safari
- * decodes HEIF, so the user got a broken-image icon in the comment body and in
- * the attachment tile, on a file that had uploaded perfectly well. The same
- * happens with TIFF.
- *
- * "image/*" answers "is this a picture", which is not the question the render
- * sites are asking. This answers theirs: can Chrome/Firefox/Safari paint it.
- * Anything outside the allowlist still uploads and still downloads, it just gets
- * the paperclip file tile instead of a dead `<img>`.
- */
 
-/** Image subtypes every current browser decodes. */
 const RENDERABLE_IMAGE_MIME = new Set([
   "image/png",
   "image/apng",
@@ -29,7 +13,6 @@ const RENDERABLE_IMAGE_MIME = new Set([
   "image/svg+xml",
 ]);
 
-/** Extensions matching the set above, for files that arrive without a usable MIME. */
 const RENDERABLE_IMAGE_EXTENSION = new Set([
   "png",
   "apng",
@@ -45,11 +28,6 @@ const RENDERABLE_IMAGE_EXTENSION = new Set([
   "svg",
 ]);
 
-/**
- * MIME types a browser file picker or drag-and-drop hands over when it has no
- * opinion. macOS Finder drags in particular can produce an empty `type`, so the
- * file name is the only signal left.
- */
 const UNINFORMATIVE_MIME = new Set(["", "application/octet-stream", "binary/octet-stream"]);
 
 function extensionOf(fileName?: string | null): string {
@@ -57,18 +35,10 @@ function extensionOf(fileName?: string | null): string {
   const path = fileName.split(/[?#]/)[0];
   const lastDot = path.lastIndexOf(".");
   const lastSlash = path.lastIndexOf("/");
-  // A dot in a parent directory ("/v1.2/photo") is not an extension.
   if (lastDot < 0 || lastDot < lastSlash) return "";
   return path.slice(lastDot + 1).toLowerCase();
 }
 
-/**
- * True when an `<img src>` will actually paint this file.
- *
- * Pass the file name too whenever you have it: an unknown or missing MIME falls
- * back to the extension, and a HEIC named `.heic` is caught even when the
- * browser declared no type at all.
- */
 export function isBrowserRenderableImage(
   mimeType?: string | null,
   fileName?: string | null,
@@ -77,8 +47,6 @@ export function isBrowserRenderableImage(
 
   if (RENDERABLE_IMAGE_MIME.has(mime)) return true;
 
-  // A known-but-unrenderable image subtype (heic, heif, tiff, ...) is a no,
-  // whatever the file happens to be named.
   if (mime.startsWith("image/")) return false;
 
   if (UNINFORMATIVE_MIME.has(mime)) {
@@ -88,7 +56,6 @@ export function isBrowserRenderableImage(
   return false;
 }
 
-/** Image subtypes and extensions that exist but no browser paints. */
 const UNRENDERABLE_IMAGE_EXTENSION = new Set([
   "heic",
   "heics",
@@ -99,15 +66,6 @@ const UNRENDERABLE_IMAGE_EXTENSION = new Set([
   "tiff",
 ]);
 
-/**
- * True for a file that is an image yet cannot be shown as one.
- *
- * The render sites need this as well as `isBrowserRenderableImage`, because
- * "not renderable" alone also covers PDFs and zips, which already have their
- * own treatment. This is specifically the HEIC/HEIF/TIFF case that needs a
- * download affordance instead. An uninformative MIME is only counted when the
- * file name says image, so an extensionless upload is not swept in.
- */
 export function isUnrenderableImage(
   mimeType?: string | null,
   fileName?: string | null,

@@ -32,16 +32,11 @@ export function stalenessLevel(
 }
 
 export interface TaskStaleness {
-  /** Whole days since the task was created. */
   daysOnBoard: number | null;
-  /** Whole days since the task last changed column. */
   daysInColumn: number | null;
-  /** Whole days since the last comment (falls back to creation when never commented). */
   daysSinceLastComment: number | null;
-  /** Worst of the column and comment ages under the board thresholds. */
   level: StalenessLevel;
   sectionChangedAt?: string;
-  /** Absent when the task has never been commented on. */
   lastCommentAt?: string;
 }
 
@@ -69,9 +64,6 @@ export function formatKanbanStalenessLine(
 const toIso = (date: Date | string | null | undefined): string | undefined =>
   date ? new Date(date).toISOString() : undefined;
 
-// The staleness payload agent surfaces (MCP / CLI / API / AI chat) attach to a
-// task, computed at read time from the same timestamps and thresholds the board
-// UI uses, so a card and an MCP fetch never disagree about what is stale.
 export function taskStaleness(task: {
   createdAt: Date | string;
   sectionChangedAt?: Date | string | null;

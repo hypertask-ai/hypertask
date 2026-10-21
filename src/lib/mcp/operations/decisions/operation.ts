@@ -1,9 +1,10 @@
+import { reportMcpOperationCrash } from '@/lib/mcp/operationCrashReport'
 import { wrapMcpRoute, checkMcpRouteRateLimit as checkMcpRateLimit, validateMcpRouteAuth as validateMcpAuth } from '@/lib/mcp/routeWrapper'
 import type { DecisionRequest } from '@prisma/client'
 import { DecisionRequestStatus } from '@prisma/client'
 import { NextRequest, NextResponse } from 'next/server'
 
-import { findTaskByIdentifier, validateTaskIdentifier } from '@/lib/mcp/tasks/resolveTask'
+import { findTaskByIdentifier, validateTaskIdentifier, taskIdentifierErrorResponse } from '@/lib/mcp/tasks/resolveTask'
 import prisma from '@/lib/prisma'
 import { createCommentService } from '@/utils/controllers/comments/createCommentService'
 import { sanitizeRichHtml } from '@/utils/helperFunctions/sanitizeRichHtml'
@@ -209,7 +210,10 @@ export async function POST(request: NextRequest) {
       { status: 201 }
     )
   } catch (error) {
+    const identifierResponse = taskIdentifierErrorResponse(error)
+    if (identifierResponse) return identifierResponse
     console.error('[MCP Decision Request POST] Error:', error)
+    reportMcpOperationCrash(request, error)
     return NextResponse.json(
       { success: false, error: 'Internal server error' },
       { status: 500 }
@@ -297,7 +301,10 @@ export async function GET(request: NextRequest) {
       decision_requests: decisionRequests.map(mapDecisionRequest),
     })
   } catch (error) {
+    const identifierResponse = taskIdentifierErrorResponse(error)
+    if (identifierResponse) return identifierResponse
     console.error('[MCP Decision Request GET] Error:', error)
+    reportMcpOperationCrash(request, error)
     return NextResponse.json(
       { success: false, error: 'Internal server error' },
       { status: 500 }

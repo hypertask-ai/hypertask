@@ -13,8 +13,6 @@ export const ChatWindow = () => {
   const { currentSession, showWelcomeScreen, minimized, restoreChat, togglePopover } =
     useAiChatContext();
 
-  // Minimized: collapse to a small tab pinned bottom-right (the parent wrapper
-  // is fixed bottom-right). Click the tab to reopen, the X to close for good.
   if (minimized)
     return (
       <button
@@ -55,9 +53,6 @@ export const ChatWindow = () => {
       }}
     >
       <ChatHeader />
-      {/* Scroll region takes the remaining height so the composer below always
-          stays visible. Without min-h-0/flex-1 the welcome screen forced full
-          height and pushed the input out of the overflow-hidden window. */}
       <div className="min-h-0 min-w-0 flex-1 overflow-x-hidden overflow-y-auto">
         {showWelcomeScreen ? <WelcomeScreen /> : <MessageList />}
       </div>

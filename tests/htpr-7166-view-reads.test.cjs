@@ -100,7 +100,7 @@ for (const [name, options, allowed] of [
   const h = fixture(options);
   const result = await h.load('src/utils/controllers/section/sectionService.ts').createSection({ projectId: 17, title: 'New', userId: 42, agentId: options.agent ? 'owned-agent' : undefined });
   assert.equal(result.status, allowed ? 200 : 403);
-  assert.deepEqual(h.effects, allowed ? ['section-create', 'fanout'] : []);
+  assert.deepEqual(h.effects, allowed ? ['transaction', 'section-create', 'fanout'] : []);
 });
 test('unused identity-trusting server actions are absent from the actual module exports', () => {
   const source = fs.readFileSync('src/app/[...boardURL]/serverActions.tsx', 'utf8');
@@ -157,7 +157,7 @@ for (const status of ['Normal', 'Archive', 'Deleted']) {
         assert.equal(result.message, 'Project with ID 17 not found');
         assert.ok(!h.queries.some(([name]) => ['section', 'sections'].includes(name)));
       }
-      assert.deepEqual(h.effects, status === 'Normal' ? ['section-create', 'fanout'] : []);
+      assert.deepEqual(h.effects, status === 'Normal' ? ['transaction', 'section-create', 'fanout'] : []);
     });
   }
   for (const [name, options] of Object.entries({ owner: { owner: true }, Accepted: { member: 'Accepted' } })) {
@@ -165,7 +165,7 @@ for (const status of ['Normal', 'Archive', 'Deleted']) {
       const h = fixture({ ...options, status });
       const result = await h.load('src/lib/api/section-writes/create.ts').POST(h.request({ projectId: 17, title: 'New' }));
       assert.equal(result.status, status === 'Normal' ? 200 : 403);
-      assert.deepEqual(h.effects, status === 'Normal' ? ['section-create', 'fanout', 'broadcast'] : []);
+      assert.deepEqual(h.effects, status === 'Normal' ? ['transaction', 'section-create', 'fanout', 'broadcast'] : []);
     });
   }
 }
@@ -175,5 +175,5 @@ test('MCP section create passes the owned agent to the same accepted-only guard'
   h.mocks['@/utils/controllers/agents/boardMembers'] = {};
   const result = await h.load('src/lib/mcp/sections/services.ts').createSection({ projectId: 17, title: 'New', userId: 42 }, 'owned-agent');
   assert.equal(result.success, true);
-  assert.deepEqual(h.effects, ['section-create', 'fanout']);
+  assert.deepEqual(h.effects, ['transaction', 'section-create', 'fanout']);
 });

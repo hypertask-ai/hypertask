@@ -7,9 +7,7 @@ const notificationGetCount = async (userId: number) => {
       where: {
         status: "Normal",
         userId,
-        agentId: null, //We are only getting user notifications here
-        // Keep this in step with inboxWhere in getAll.ts, or the rail counts rows the
-        // inbox does not show.
+        agentId: null,
         NOT: {
           fromUserId: userId,
           fromAgentId: null,
@@ -19,8 +17,6 @@ const notificationGetCount = async (userId: number) => {
           {
             OR: [
               { task: { status: "Normal" } },
-              // Mirrors visibleUserInboxWhere: a returned reminder still counts even
-              // if its task archived after the reminder was set (HTPR-5683).
               { task: { status: "Archive" }, returnedFromReminders: true },
             ],
           },
@@ -63,7 +59,6 @@ const notificationGetCount = async (userId: number) => {
       status: 500,
       json: { message: "Internal server error" },
     };
-    // res.status(500).json({ message: "Internal server error" });
   }
 };
 

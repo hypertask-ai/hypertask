@@ -22,8 +22,6 @@ import { ModalBody, ModalFooter } from "reactstrap";
 import ConfirmModal from "../Common Modals/ConfirmActionModal";
 import { cn } from "@/utils/undoActions/helperFuncs";
 
-// Mirrors CUSTOM_FIELDS_PER_PROJECT_MAX in src/utils/controllers/customFields
-// (a server-only module — importing it here would pull prisma into the client bundle).
 const CUSTOM_FIELDS_PER_PROJECT_MAX = 50;
 
 type FieldRow = {
@@ -130,7 +128,7 @@ const ManageCustomFieldsModal = ({ closeHandler, projectId }: Props) => {
       });
       queryClient.setQueryData(queryKey, updated);
     } catch {
-      queryClient.setQueryData(queryKey, previous); // rollback to pre-drag order
+      queryClient.setQueryData(queryKey, previous);
       toast.error("Couldn't reorder fields");
     }
   };

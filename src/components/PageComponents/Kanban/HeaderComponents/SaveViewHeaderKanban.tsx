@@ -115,7 +115,6 @@ const BoardSaveView = ({
       isDirty &&
       <>
       <HeaderDivider />
-      {/* could refactor it, the change came later */}
       <div  className=' gap-3 flex lg:hidden  text-content items-center font-medium'>
         <span onClick={toggleSaveViewsModal} className="group relative" >
           <Save size={18} className="text-white-black hover:text-header-hover-text cursor-pointer"  strokeWidth={1.75}/>

@@ -229,7 +229,6 @@ export function AgentChatPane({
                 />
               ),
             )}
-            {/* A queued message is a cancellable bubble in the thread, not a strip above the composer. */}
             {activeFeedFilter !== "activity" &&
               queuedMessages.map((item) => (
                 <div key={item.id} className="flex flex-col items-end">

@@ -65,10 +65,6 @@ const SetProjectsModal: React.FC<ISetProjects> = ({
     else toggle();
   };
 
-  // Activity is fetched when the switcher opens rather than carried on the
-  // board payload, so a heavier board list never slows down board loads.
-  // Until it lands the list keeps its previous order, so the modal is usable
-  // from the first frame.
   useEffect(() => {
     const ordered = orderBoardsForSwitcher(
       allProjects,
@@ -83,7 +79,7 @@ const SetProjectsModal: React.FC<ISetProjects> = ({
           )
         : ordered,
     );
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+
   }, [allProjects, currentProject?.id, lastActivity]);
 
   useEffect(() => {
@@ -144,7 +140,6 @@ const SetProjectsModal: React.FC<ISetProjects> = ({
               isSelected={selectedIndex === index}
             >
               <ProjectTile title={project.title} />
-              {/* {must check here if the current value of the scroll is you know, marked} */}
               {project.id === currentProject?.id && <Check strokeWidth={1.75} size={14} />}
             </ModalRowElementContainer>
           ))}

@@ -63,7 +63,7 @@ const CreateTeamOnboardingScreen = () => {
 
                 if (prevBoard?.id) {
                     nookies.set(null, 'previousBoard', `project-${prevBoard.id}|&|${undefined}`,{
-                        maxAge: 600 * 60 * 24 * 7, // 1 week
+                        maxAge: 600 * 60 * 24 * 7,
                         path: '/',
                     })
                 }
@@ -83,7 +83,6 @@ const CreateTeamOnboardingScreen = () => {
         });
         if (response.ok) {
             const data: IProject[] = await response.json()
-            // setAllProjects(data)
           return data[0]
     
           }

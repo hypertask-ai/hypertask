@@ -2,8 +2,6 @@ import type { FeatureFlagDefinition } from "../definitions";
 
 export const HTPR_7075_BACKGROUND_CLAUDE_FLAG = "htpr-7075-background-claude";
 
-// HTPR-7075 (https://app.hypertask.ai/detail/project-15/7075): Valentin decided on 2026-10-10 that every
-// background AI job runs on the Anthropic key, so this bug fix is on for Everyone.
 export default {
   key: HTPR_7075_BACKGROUND_CLAUDE_FLAG,
   kind: "bugfix",

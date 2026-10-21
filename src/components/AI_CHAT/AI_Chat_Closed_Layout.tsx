@@ -7,11 +7,6 @@ import Tooltip from "@/components/Common/Tooltip";
 import { MobileViewContext } from "@/lib/contexts/mobileContext";
 import { cn } from "@/utils/undoActions/helperFuncs";
 
-/**
- * Narrowest a ticket page can be before its properties panel clips (HTPR-7055): 112 rail and padding
- * + 500 thread min (BaseCommentAndDescriptionContainer.tsx:24) + 8 gap + 260 properties min
- * (TaskInfoColumnContainer.tsx:8) + 64 right padding.
- */
 const DETAIL_PAGE_MIN_WIDTH = 944;
 
 interface AIChatClosedLayoutProps {
@@ -20,19 +15,11 @@ interface AIChatClosedLayoutProps {
   mobileTabBarVisible?: boolean;
   mobilePullCommandEnabled?: boolean;
   onOpenAIChat: () => void;
-  /** Chat UI rendered beside the page once the chat runtime is mounted. */
   panels?: React.ReactNode;
   chatOpen?: boolean;
   sidebarWidthPx?: number;
 }
 
-/**
- * The workspace frame around every page, before and after AI chat loads. It
- * deliberately has no ChatProvider dependency, so the full chat hook graph
- * stays out of board hydration. The chat arrives later as `panels`, beside the
- * page: swapping this frame for another one remounted the whole route and made
- * an open board drop its columns (HTPR-6751).
- */
 export default function AIChatClosedLayout({
   children,
   mobileTopBarVisible = false,
@@ -49,7 +36,6 @@ export default function AIChatClosedLayout({
   const narrowSidebarWidth = useFlag(HTPR_6990_NARROW_SIDEBAR_WIDTH_FLAG);
   const chatOverlaysTicket = useFlag(HTPR_7055_CHAT_OVERLAYS_TICKET_FLAG);
   const overlayDetailPage = chatOverlaysTicket && isDetailPage;
-  // Until flags arrive the fix is on (its default), so first paint never squeezes the page; a loaded Off restores the old class.
   const phoneFlagOn = useFlag(HTPR_7074_PHONE_WORKSPACE_WIDTH_FLAG);
   const phoneFlagKnown = useFlagLoaded(HTPR_7074_PHONE_WORKSPACE_WIDTH_FLAG);
   const phoneWorkspaceWidth = phoneFlagOn || !phoneFlagKnown;
@@ -58,8 +44,6 @@ export default function AIChatClosedLayout({
   const [viewportKey, setViewportKey] = useState(0);
 
   useLayoutEffect(() => {
-    // The old phone-detail branch reinitialized thread scrolling on breakpoint
-    // changes. Preserve that lifecycle, but never restart it for a late pathname.
     if (previousIsMobile.current !== isMobile && isDetailPage && !chatOpen) {
       setViewportKey((key) => key + 1);
     }
@@ -68,7 +52,6 @@ export default function AIChatClosedLayout({
 
   useLayoutEffect(() => {
     if (!narrowSidebarWidth || isMobile || sidebarWidthPx <= 0) return;
-    // Match the sidebar's md breakpoint and leave at least 340px for the page.
     const update = () => setSidebarOverlays(
       window.innerWidth < Math.max(768, sidebarWidthPx + (overlayDetailPage ? DETAIL_PAGE_MIN_WIDTH : 340))
     );
@@ -85,9 +68,6 @@ export default function AIChatClosedLayout({
     mobilePullCommandEnabled && "mobile-pull-command-enabled"
   );
 
-  // Match AI_Chat_Layout: /agents/chat owns its own top-bar and dock insets
-  // (AgentChatClient). Padding here doubles the chrome and pushes the composer
-  // under the tab bar (HTPR-6407 phone FAIL).
   if (
     pathname?.startsWith("/settings") ||
     pathname?.startsWith("/agents/chat")
@@ -95,8 +75,6 @@ export default function AIChatClosedLayout({
     return <>{children}</>;
   }
 
-  // Cached tickets render before Next publishes their pathname. Keep the same
-  // ancestors when it catches up so the phone composer retains its draft and focus.
   const phoneDetailWithoutChat = isDetailPage && isMobile && !chatOpen;
 
   return (
@@ -112,7 +90,6 @@ export default function AIChatClosedLayout({
       >
         {children}
       </div>
-      {/* Keep the page width stable while the open sidebar's chunks load. */}
       {!phoneDetailWithoutChat && <div
         data-ai-chat-slot
         className={sidebarWidthPx > 0 && !isMobile
@@ -121,7 +98,6 @@ export default function AIChatClosedLayout({
               ? "fixed right-0 top-0 z-[51]"
               : "shrink-0 max-md:fixed max-md:right-0 max-md:top-0 max-md:z-[51]"
             : phoneWorkspaceWidth
-              // Below md the reserved space never takes in-flow width, even before the app knows it is on a phone (HTPR-7074).
               ? "shrink-0 max-md:fixed max-md:right-0 max-md:top-0 max-md:z-[51]"
               : "shrink-0"
           : "contents"}
@@ -129,7 +105,6 @@ export default function AIChatClosedLayout({
       >
         {panels}
       </div>}
-      {/* /agents/chat has its own details-pane chevron; keep this one off there. */}
       {panels === undefined && !isMobile && !pathname?.startsWith("/agents/chat") && (
         <button
           tabIndex={-1}

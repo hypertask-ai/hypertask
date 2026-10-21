@@ -1,6 +1,6 @@
 # Hypertask Design System
 
-The canonical visual contract is [`openwiki/style-guide.md`](../openwiki/style-guide.md). This page keeps longer component and workflow examples. If an example here disagrees with the canonical guide or production code, follow the guide and update this page.
+The canonical visual contract is [`.claude/skills/reuse-existing-ui/reference/style-guide.md`](../.claude/skills/reuse-existing-ui/reference/style-guide.md). This page keeps longer component and workflow examples. If an example here disagrees with the canonical guide or production code, follow the guide and update this page.
 
 ## The one rule
 

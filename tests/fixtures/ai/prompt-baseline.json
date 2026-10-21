@@ -128,8 +128,8 @@
   {
     "file": "src/app/api/ai/_lib/taskWriterPrompt.ts",
     "id": "task-writer-prompt-context-2",
-    "version": "1",
-    "partsHash": "bd1938208c115dbefd387be36593c03230449bbe6e45d81cde4b053982cb90ab",
+    "version": "2",
+    "partsHash": "dd3f8978363bc303f6485bd8aff9612ec3c0cc71d1e356da04ce7bf165a75d45",
     "expressionsHash": "21f4e1ce3358e7b9b8f6059f034788fe43aa8bfad8cdcf844689cd4260bc9eea"
   },
   {
@@ -164,8 +164,8 @@
     "file": "src/app/api/ai/_lib/editorAiPrompts.ts",
     "id": "task-authoring-style",
     "version": "1",
-    "partsHash": "24d7464e4f824a7f5891d8a590f964163a3771e67d95b7266bb4c20755b1a415",
-    "expressionsHash": "ae9f477d6d6fbc615c0ad46886ee58e7a6048baa92b7466a42d5a6c88ed544b4"
+    "partsHash": "af602708199f489cc75edad6fb755ccfaffd7ddf13270df89bb91db1e2c40dc6",
+    "expressionsHash": "9149898cd2eb8237d41a97af75e7d451677d166a936630b5e18ee3dce529d9a6"
   },
   {
     "file": "src/app/api/ai/_lib/editorAiPrompts.ts",
@@ -242,7 +242,7 @@
     "id": "editor-ai-prompts-context-14",
     "version": "1",
     "partsHash": "f20ffbf8db4d449b68ed66aed3a8dbf1a4a5db6dff22e48ede9eea9827f31efd",
-    "expressionsHash": "1df490e6672f3d95cf91448140ae86983fdf174b7c45f3eb2920ade2c93e2349"
+    "expressionsHash": "a9d92b2d3d7890fd21ce3c9afc5a10c98c7db906c18ffd1ae8849d0f9d65ae93"
   },
   {
     "file": "src/app/api/ai/_lib/editorAiPrompts.ts",
@@ -313,5 +313,68 @@
     "version": "1",
     "partsHash": "2da46bf540f49169e8406d99b90d3d977fa6dc057e4c643b424499889b2bdae5",
     "expressionsHash": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945"
+  },
+  {
+    "file": "src/app/api/ai/_lib/writingSkills.ts",
+    "id": "web-writing-skill",
+    "version": "1",
+    "partsHash": "c3a004564cacb18a8c3ea5c5ccd82140d4eaf75ab510e501d50f66e36e3ea07a",
+    "expressionsHash": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945"
+  },
+  {
+    "file": "src/app/api/ai/_lib/editorAiPrompts.ts",
+    "id": "task-authoring-web-style",
+    "version": "2",
+    "partsHash": "c42eeb47023620e8d2365e9e4c00baf42586c4f6858df463b32a38cb743f3699",
+    "expressionsHash": "624812f6beb14e2e573fe546cdae7e709b56aca27234029abbf7de98dff2f854"
+  },
+  {
+    "file": "src/app/api/ai/_lib/taskWriterBoardResearch.ts",
+    "id": "task-writer-board-research-web-rules",
+    "version": "2",
+    "partsHash": "36266a8c3a0be5646da12990a9e1263a0c75c4073b024124f205d5273312405a",
+    "expressionsHash": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945"
+  },
+  {
+    "file": "src/app/api/ai/_lib/editorAiPrompts.ts",
+    "id": "task-writer-board-format-rule",
+    "version": "1",
+    "partsHash": "15116e8c87567e09a64b8554858e3c2d67ed40ed5568cd30df436c82a90773ee",
+    "expressionsHash": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945"
+  },
+  {
+    "file": "src/app/api/ai/_lib/taskWriterRun.ts",
+    "id": "task-writer-custom-fields-output",
+    "version": "1",
+    "partsHash": "9d335829982f8a733311836748c8be91fd55301dda14475dd251a60ca84879ea",
+    "expressionsHash": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945"
+  },
+  {
+    "file": "src/app/api/ai/_lib/editorAiPrompts.ts",
+    "id": "task-authoring-web-old-structure-style",
+    "version": "1",
+    "partsHash": "ead72cb11838c4e21c95c4dd11be6a7ab936e9db0eee85db79e87836176fe738",
+    "expressionsHash": "624812f6beb14e2e573fe546cdae7e709b56aca27234029abbf7de98dff2f854"
+  },
+  {
+    "file": "src/app/api/ai/_lib/taskWriterRun.ts",
+    "id": "task-writer-board-research-web-old-structure-rules",
+    "version": "1",
+    "partsHash": "cf72bc1102e777032ef19bdcc62508e58ff417b8e3039bf3d3d9d2f9c6eb4bd1",
+    "expressionsHash": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945"
+  },
+  {
+    "file": "src/app/api/ai/task-questions/route.ts",
+    "id": "task-questions-new-ticket-1",
+    "version": "1",
+    "partsHash": "256f167f91ad93cfd0fb02ba9c0713fa326cb788006d69e618f5c9326777cd43",
+    "expressionsHash": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945"
+  },
+  {
+    "file": "src/app/api/ai/task-questions/route.ts",
+    "id": "task-questions-new-ticket-prompt-1",
+    "version": "1",
+    "partsHash": "c9e12c925d6961c8c838d5501704bf7dc78f6af2acf88ae16ac9025cc745bf5c",
+    "expressionsHash": "8b687990f5f2a4543861dfb4fd6c6d3a405b99c244ba03da8478f793f5711d3a"
   }
 ]

@@ -29,12 +29,12 @@ A pre-PR gate for any ticket whose change is visible on screen. Run it before `o
    **Closed or idle surfaces count.** When the ticket asks for a control on a closed, collapsed, or idle bar, screenshot that closed state. A shot of the opened or focused state does not prove the ticket.
 6. **Attach the screenshot to the ticket:**
    ```
-   vcc comment add <ticket> --attach <out.png> --text "<p><strong>Pre-PR phone check at 390x844, local dev server.</strong> verify-qa checks production after the deploy.</p>"
+   vcc comment add <ticket> --kind qa --attach <out.png> --text "<p><strong>Pre-PR phone check at 390x844, local dev server.</strong> verify-qa checks production after the deploy.</p>"
    ```
    Attach the file; never embed it as a markdown image, which crashes the ticket UI.
 7. **Never print the auth-state file's contents, any cookie, or any token** into a comment, a log, or the terminal. Reference the path only.
 
 ## Notes
 
-- If the state file is missing or stale the script fails loud and points at `~/projects/hypertasks/AGENTS.md` and `openwiki/auth.md`. Do not invent a login flow to work around it.
+- If the state file is missing or stale the script fails loud and points at `~/projects/hypertasks/AGENTS.md` and the `verify-qa` skill's "Logins" section. Do not invent a login flow to work around it.
 - This is a pre-PR gate. `verify-qa` is the production check after the deploy, and you run that too. For a mobile or responsive ticket, reading code or checking a desktop-width window is never verification. Anything short of a real 390x844 screenshot on production with the flag on is not a pass (Valentin, 2026-09-11, after a mobile ticket passed on desktop width and was broken on his phone).

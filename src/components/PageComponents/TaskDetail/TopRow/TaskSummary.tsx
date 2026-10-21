@@ -12,15 +12,8 @@ interface Props{
     taskSummary:string
 }
 const  TaskSummary:React.FC<Props> = ({taskSummary:markdown})=> {
- 
-  // const markdown = `
-  // - Task involves developing AI-generated summaries for each task. 
-  // - Initial drafts and testing are being conducted using GPT-4 model.
-  // `
   const { setIsSummaryExpand, isSummaryExpanded:open } = useTaskContext();
 
-  // Collapsed pill shows a plain one-line teaser: the first real bullet, not the
-  // "## What this is" header (which react-markdown would render as a heading).
   const teaser = summaryTeaser(markdown);
 
   const toggle = ()=>setIsSummaryExpand(prev=>!prev)
@@ -50,10 +43,6 @@ const  TaskSummary:React.FC<Props> = ({taskSummary:markdown})=> {
         }
       </div>
       
-      {/* The panel bleeds out of the padded title column and re-applies the
-          same padding, so its text lands on the title's left edge. The bleed
-          must mirror `task-detail-horizontal-title-container` exactly: same
-          container-query breakpoints, same values. */}
       {open && (
         <div className={`markdown pt-2 pb-[44px] z-10
           text-white-black absolute bg-taskDetal-container task-detail-horizontal-title-container
@@ -71,8 +60,6 @@ const  TaskSummary:React.FC<Props> = ({taskSummary:markdown})=> {
 
 export default TaskSummary;
 
-// Moved to src/utils/summaryTeaser.ts so it can be unit-tested without
-// this component's scss import; re-exported for existing importers.
 export { summaryTeaser } from "@/utils/summaryTeaser";
 
 const ArrowDown = (

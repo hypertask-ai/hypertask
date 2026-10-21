@@ -60,7 +60,6 @@ function boundedLogValue(value: unknown, depth = 0): unknown {
 
 export function boundedMcpAuthLog(...args: unknown[]): void {
   const bounded = args.map(value => boundedLogValue(value))
-  // The bounded rendering itself is the dedupe key (capped), so no hash is needed.
   const key = JSON.stringify(bounded).slice(0, 1000)
   const now = Date.now()
   const previous = boundedJwtLogThrottle.get(key)
@@ -77,21 +76,15 @@ export function verifyMcpJwtToken(token: string, options: ValidateMcpAuthOptions
   const log = options.boundedLogging ? boundedMcpAuthLog : console.log
   if (!JWT_SECRET) {
     log('[MCP Auth] JWT_SECRET not configured')
-    return null // JWT not configured
+    return null
   }
 
-  // First decode without verification to inspect token structure
   let decodedWithoutVerify: jwt.JwtPayload | null = null
   try {
     decodedWithoutVerify = jwt.decode(token, { complete: false }) as jwt.JwtPayload
     if (decodedWithoutVerify) {
       log('[MCP Auth] Token decoded (unverified):', {
-        userId: decodedWithoutVerify.userId,
-        sub: decodedWithoutVerify.sub,
-        iss: decodedWithoutVerify.iss,
-        aud: decodedWithoutVerify.aud,
-        exp: decodedWithoutVerify.exp ? new Date(decodedWithoutVerify.exp * 1000).toISOString() : null,
-        iat: decodedWithoutVerify.iat ? new Date(decodedWithoutVerify.iat * 1000).toISOString() : null
+        userId: decodedWithoutVerify.userId
       })
     }
   } catch (err) {
@@ -105,10 +98,8 @@ export function verifyMcpJwtToken(token: string, options: ValidateMcpAuthOptions
   }
 
   try {
-    // Verify JWT token - try multiple audience/issuer combinations for compatibility
     let decoded: jwt.JwtPayload
 
-    // Try current format first (mcp-api audience)
     try {
       decoded = jwt.verify(token, JWT_SECRET, {
         issuer: JWT_ISSUER,
@@ -117,10 +108,9 @@ export function verifyMcpJwtToken(token: string, options: ValidateMcpAuthOptions
       log('[MCP Auth] JWT verified with current format (mcp-api)')
     } catch (err: any) {
       log('[MCP Auth] Current format failed:', err?.message)
-      // Try legacy format (hypertasks-mcp audience, hypertasks issuer)
       try {
         decoded = jwt.verify(token, JWT_SECRET, {
-          issuer: 'hypertasks', // Legacy issuer
+          issuer: 'hypertasks',
           audience: JWT_LEGACY_MCP_AUDIENCE,
         }) as jwt.JwtPayload
         log('[MCP Auth] JWT verified with legacy format (hypertasks-mcp)')
@@ -134,8 +124,6 @@ export function verifyMcpJwtToken(token: string, options: ValidateMcpAuthOptions
           log('[MCP Auth] JWT verified as OAuth access token')
         } catch (errOAuth: any) {
           log('[MCP Auth] OAuth format failed:', errOAuth?.message)
-          // Only tokens minted before MCP audiences were introduced may use the
-          // compatibility path. A present audience belongs to another token contract.
           if (decodedWithoutVerify.aud !== undefined) {
             log('[MCP Auth] Token has an unsupported audience:', decodedWithoutVerify.aud)
             return null
@@ -163,25 +151,10 @@ export function verifyMcpJwtToken(token: string, options: ValidateMcpAuthOptions
   }
 }
 
-/**
- * Digest stored in place of an agent's bearer token.
- *
- * The plaintext credential is never written to the database, so a leaked dump
- * hands out a hash instead of a live key. Callers still present the real token,
- * which is verified against JWT_SECRET on its own before this comparison runs.
- */
 export function hashAgentToken(token: string): string {
   return createHash('sha256').update(token).digest('hex')
 }
 
-/**
- * The credential columns an Agent row stores for a freshly issued token.
- *
- * Pass null when the credential is being destroyed. Every write site goes
- * through here so a new one cannot reintroduce a plaintext column, and so a
- * token minted without a jti fails loudly instead of being stored as something
- * revocation can never match.
- */
 export function agentTokenCredentialFields(token: string | null): {
   mcpTokenHash: string | null
   mcpTokenJti: string | null
@@ -197,12 +170,6 @@ export function agentTokenCredentialFields(token: string | null): {
   return { mcpTokenHash: hashAgentToken(token), mcpTokenJti: generation }
 }
 
-/**
- * True when a presented token is the exact credential stored for an agent.
- *
- * Used where a caller has to prove it holds the current bearer token rather
- * than merely naming its generation.
- */
 export function agentTokenMatchesStored(
   token: string | null | undefined,
   agent: { mcpTokenHash: string | null } | null | undefined
@@ -211,15 +178,6 @@ export function agentTokenMatchesStored(
   return hashAgentToken(token) === agent.mcpTokenHash
 }
 
-/**
- * The revocation generation an agent's stored credential represents.
- *
- * This used to re-verify a plaintext JWT read back out of the database. The
- * generation is now stored directly, and the guarantee that replaced it is
- * ownership at the query: every caller looks the agent up by id AND userId, so
- * a generation belonging to another owner's agent is never read in the first
- * place.
- */
 export function storedAgentTokenGeneration(
   agent: { mcpTokenJti: string | null } | null | undefined
 ): string | null {
@@ -229,25 +187,18 @@ export function storedAgentTokenGeneration(
     : null
 }
 
-/** Current managed-token generation represented by a verified agent JWT. */
 export function presentedAgentTokenGeneration(decoded: jwt.JwtPayload): string | null {
   const privateGeneration = decoded[AGENT_TOKEN_GENERATION_CLAIM]
   if (typeof privateGeneration === 'string' && privateGeneration.length > 0) {
     return privateGeneration
   }
 
-  // Direct managed tokens predate the private OAuth claim; their own jti is
-  // also their generation identifier.
   const directGeneration = decoded.jti ?? decoded.jwtid
   return typeof directGeneration === 'string' && directGeneration.length > 0
     ? directGeneration
     : null
 }
 
-/**
- * Validates JWT token for MCP API access
- */
-// Adds the wait of one auth database read to options.timings.dbMs (HTPR-6965). Measurement only.
 async function timeDbRead<T>(options: ValidateMcpAuthOptions, read: () => PromiseLike<T>): Promise<T> {
   const timings = options.timings
   if (!timings) return read()
@@ -273,7 +224,6 @@ export async function validateJwtToken(token: string, options: ValidateMcpAuthOp
     : undefined
 
   try {
-    // Extract user identifier from token
     let userId: number | null = null
     let email: string | null = null
 
@@ -285,7 +235,6 @@ export async function validateJwtToken(token: string, options: ValidateMcpAuthOp
       return null
     }
 
-    // Fetch user from database (including revocation timestamp)
     let user
     if (userId) {
       user = await timeDbRead(options, () => prisma.user.findUnique({
@@ -348,10 +297,7 @@ export async function validateJwtToken(token: string, options: ValidateMcpAuthOp
       return null
     }
 
-    // Check user-level token revocation (for old tokens without jti)
-    // If user has revoked all tokens, check if this token was issued before revocation
     if (user.mcpTokensRevokedAt) {
-      // Token was issued before revocation - check if it's older than revocation time
       const issuedAtMs = decoded[MCP_TOKEN_ISSUED_AT_MS_CLAIM]
       const tokenIssuedAt =
         typeof issuedAtMs === 'number' && Number.isFinite(issuedAtMs)
@@ -372,6 +318,9 @@ export async function validateJwtToken(token: string, options: ValidateMcpAuthOp
     let agentId: string | null = null
     let agentRuntimeGeneration: number | null = null
     const rawAgentId = decoded.agentId
+    if (Object.hasOwn(decoded, "agentId") && (typeof rawAgentId !== "string" || rawAgentId.trim().length === 0)) {
+      return null
+    }
     const rawAgentTeamId = decoded[AGENT_TEAM_ID_CLAIM]
     const rawAgentTeamAccessBinding = decoded[AGENT_TEAM_ACCESS_BINDING_CLAIM]
     const hasAgentTeamScope =
@@ -433,16 +382,6 @@ export async function validateJwtToken(token: string, options: ValidateMcpAuthOp
         log('[MCP Auth] Agent token generation does not match \u2014 rotated or revoked')
         return null
       }
-      // An OAuth access token carries the generation instead of the bearer
-      // token, so only a directly presented managed token can be bound to the
-      // stored digest. When it can be, it is: the generation alone would accept
-      // any token sharing that jti.
-      //
-      // The audience is checked alongside the claim so the digest is skipped
-      // only for something the OAuth exchange actually minted. Signature
-      // verification falls back to an audience-free pass for old tokens, so the
-      // private claim on its own would let any other JWT_SECRET-signed flow
-      // opt out of the digest binding.
       const audiences = Array.isArray(decoded.aud)
         ? decoded.aud
         : decoded.aud
@@ -495,15 +434,6 @@ export async function validateJwtToken(token: string, options: ValidateMcpAuthOp
   }
 }
 
-/**
- * Creates a JWT token for MCP API access
- *
- * @param userId User ID
- * @param email User email
- * @param expiresIn Expiration time (default: 30 days). Ignored when agentId is set (no JWT exp).
- * @param agentId Optional agent UUID; when set, token has no expiry (revoked via Agent.mcpToken / jti).
- * @returns JWT token string
- */
 export function createMcpToken(
   userId: number,
   email: string,
@@ -537,7 +467,6 @@ export function createMcpToken(
     payload[AGENT_TEAM_ACCESS_BINDING_CLAIM] = agentTeamScope.accessBinding
   }
 
-  // If agentId is specified, generate a token *without* expiry (no expiresIn)
   const signOptions: jwt.SignOptions = {
     issuer: JWT_ISSUER,
     audience: JWT_MCP_AUDIENCE,
@@ -547,20 +476,7 @@ export function createMcpToken(
   return jwt.sign(payload as jwt.JwtPayload, JWT_SECRET, signOptions)
 }
 
-/**
- * Creates a JWT token for OAuth 2.1 access (MCP client authentication)
- *
- * @param subject Firebase UID, or database user ID string when no UID exists
- * @param userId Database user ID
- * @param email User email
- * @param clientId OAuth client registration bound to this credential
- * @param expiresIn Expiration in seconds (default: 90 days). Ignored when agentId is set (no JWT exp).
- * @param agentId Optional agent UUID; when set, token has no expiry.
- * @param agentTokenJti Current agent credential generation.
- * @param agentTeamScope Optional team grant carried by a team-bound agent.
- * @returns JWT token string
- */
-const MCP_OAUTH_TOKEN_EXPIRY = 90 * 24 * 60 * 60; // 90 days
+const MCP_OAUTH_TOKEN_EXPIRY = 90 * 24 * 60 * 60;
 
 export function createOAuthToken(
   subject: string,
@@ -582,7 +498,6 @@ export function createOAuthToken(
   const oauthIssuer = JWT_OAUTH_ISSUER
   const oauthAudience = JWT_OAUTH_AUDIENCE
 
-  // Don't include 'iss' and 'aud' in payload - jwt.sign() will add them via options
   const issuedAt = Date.now()
   const payload: Record<string, unknown> = {
     sub: subject,
@@ -598,8 +513,6 @@ export function createOAuthToken(
       throw new Error('Agent OAuth tokens require the current agent token jti')
     }
     payload.agentId = agentId
-    // Every OAuth credential keeps a unique jti. A separate private claim ties
-    // it to the managed agent's revocable generation.
     payload[AGENT_TOKEN_GENERATION_CLAIM] = agentTokenJti
   }
   if (agentTeamScope) {
@@ -620,13 +533,6 @@ export function createOAuthToken(
   } as jwt.SignOptions)
 }
 
-/**
- * Revokes a specific token by its jti
- * 
- * @param jti JWT ID of the token to revoke
- * @param userId User ID (for validation)
- * @param expiresAt Token expiration time (for cleanup)
- */
 export async function revokeTokenByJti(jti: string, userId: number, expiresAt: Date): Promise<void> {
   try {
     await prisma.revokedToken.upsert({
@@ -638,7 +544,7 @@ export async function revokeTokenByJti(jti: string, userId: number, expiresAt: D
         expires_at: expiresAt,
       },
       update: {
-        revoked_at: new Date(), // Update if already exists
+        revoked_at: new Date(),
       },
     })
   } catch (error) {
@@ -673,11 +579,6 @@ export async function claimTokenRotation(
   }
 }
 
-/**
- * Revokes a user-owned token identifier supplied through an administrative
- * surface. Namespacing prevents a caller who learns another account's jti
- * from reserving or revoking that account's token globally.
- */
 export async function revokeOwnedTokenByJti(
   jti: string,
   userId: number,

@@ -1,8 +1,5 @@
 import { createHash, randomBytes } from 'crypto'
 
-// The pure lifecycle rules live in `@/lib/apiKeyExpiry` so the Prisma client
-// singleton can import them without pulling `crypto` into every bundle that
-// touches the database. Re-exported here so callers have one import site.
 export {
   API_KEY_AUTH_LOOKUP_OPERATIONS,
   API_KEY_EXPIRY_DAY_OPTIONS,

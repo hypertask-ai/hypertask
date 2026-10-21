@@ -221,7 +221,8 @@ test('all REST handlers adopt the shared failure boundary or are constant 404/no
   const walk = (dir) => fs.readdirSync(dir, { withFileTypes: true }).flatMap((entry) => entry.isDirectory() ? walk(path.join(dir, entry.name)) : [path.join(dir, entry.name)])
   for (const file of walk(path.join(root, 'src/app/api/mcp')).filter((file) => file.endsWith('route.ts'))) {
     const source = fs.readFileSync(file, 'utf8')
-    if (file.includes('/feedback/') || file.includes('/factory/')) continue
+    // Reporting endpoints must not report their own failures through AI feedback.
+    if (file.includes('/feedback/') || file.includes('/cli-error/') || file.includes('/factory/')) continue
     if (source.includes('wrapMcpRoute')) continue
     const match = source.match(/from ['"](@\/lib\/mcp\/operations\/[^'"]+)['"]/) ?? source.match(/export \{ [^}]+ \} from ['"](@\/lib\/mcp\/[^'"]+)['"]/)
     assert.ok(match, path.relative(root, file))
@@ -261,6 +262,40 @@ test('thrown MCP caller errors keep their HTTP meaning instead of filing as 500 
   assert.equal(files.length, 2)
   assert.match(files[0].description, /HTTP status: 404/)
   assert.match(files[1].description, /HTTP status: 400/)
+})
+
+test('deliberate thrown 403 refusals are rethrown unchanged without AI feedback (HTPR-7251)', async () => {
+  const { McpError, AuthorizationError } = jiti('../src/lib/mcp-server/utils/errors.ts')
+  const { AgentDoneLifecycleDeniedError } = jiti('../src/lib/mcp/tasks/agentDoneLifecycle.ts')
+  for (const original of [
+    Object.assign(new Error('Access denied'), { httpStatus: 403 }),
+    new McpError(-32003, 'Access denied'),
+    new AuthorizationError(),
+    new AgentDoneLifecycleDeniedError(),
+  ]) {
+    const [tool] = observeFeedbackTools([
+      { name: 'hypertask_update_task', description: 'permission refusal', parameters: z.object({}), execute: async () => { throw original } },
+    ], 985)
+    await assert.rejects(tool.execute({}, 'fixture'), (error) => error === original)
+    assert.equal(pending.length, 0)
+    await drain()
+    assert.equal(files.length, 0)
+  }
+})
+
+test('thrown 400, 404 and 500 errors still file AI feedback and are rethrown unchanged (HTPR-7251)', async () => {
+  for (const status of [400, 404, 500]) {
+    const original = Object.assign(new Error('Tool failed'), { httpStatus: status })
+    const [tool] = observeFeedbackTools([
+      { name: 'hypertask_update_task', description: 'tool failure', parameters: z.object({}), execute: async () => { throw original } },
+    ], 985)
+    const count = files.length
+    await assert.rejects(tool.execute({}, 'fixture'), (error) => error === original)
+    await drain()
+    assert.equal(files.length, count + 1)
+    assert.match(files.at(-1).description, new RegExp(`HTTP status: ${status}`))
+    assert.match(files.at(-1).description, /Error code: tool-exception/)
+  }
 })
 
 test('schema rejections thrown inside a tool file as 400, not a 500 crash (HTPR-7207)', async () => {

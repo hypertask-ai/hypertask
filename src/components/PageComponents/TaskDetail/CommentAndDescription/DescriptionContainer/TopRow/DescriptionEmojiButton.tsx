@@ -11,7 +11,6 @@ import CommentEmojiTooltip from "../../CommentContainer/CommentEmojiTooltip";
 import MobileEmojiReactionSheet from "../../Common/MobileEmojiReactionSheet";
 import { createPortal } from "react-dom";
 import { getFixedOverlayPosition } from "@/lib/emojiPickerPosition";
-// ===================================== COMMENT OPTIONS COMPONENTS =======================
 const DescriptionEmojiButton = ({
   handleClickOutside,
   emojiClickHandler,
@@ -26,7 +25,7 @@ const DescriptionEmojiButton = ({
   const pickerRef = useRef<HTMLDivElement>(null);
   const [positionClass, setPositionClass] = useState<
     "top-auto bottom-[16px]" | "bottom-auto top-[16px]"
-  >("bottom-auto top-[16px]"); // Default position class for emojis
+  >("bottom-auto top-[16px]");
   const { currentId } = useTaskContext();
   const isMbl = useContext(MobileViewContext);
 
@@ -41,8 +40,6 @@ const DescriptionEmojiButton = ({
   const calculatePickerPosition = () => {
     if (buttonTrigger.current) {
       const rect = buttonTrigger.current.getBoundingClientRect();
-      // Escape the comment column stacking context via #portal-root + fixed
-      // coords so the picker clears the new comment field (HTPR-6404).
       setPickerPosition(
         getFixedOverlayPosition(rect, {
           height: 370,
@@ -54,7 +51,6 @@ const DescriptionEmojiButton = ({
     }
   };
 
-  // =========================== adjust position of the emoji component
   useEffect(() => {
     const debouncedUpdatePosition = debounce(calculatePickerPosition, 20);
     const containerElement = document.getElementById(
@@ -74,14 +70,10 @@ const DescriptionEmojiButton = ({
       }
       window.removeEventListener("resize", debouncedUpdatePosition);
     };
-  }, []); // Run only once on mount
+  }, []);
 
   useEffect(() => {
     return () => {
-      // When THIS Comment component unmounts, ensure its emoji picker is hidden.
-      // This prevents the portal from lingering in the DOM.
-      // We check if the currently shown picker belongs to this commentId
-      // before attempting to hide it.
       handleClickOutside(undefined);
     };
   }, []);
@@ -91,9 +83,6 @@ const DescriptionEmojiButton = ({
       ? createPortal(
           <div
             className="emoji-picker-portal-container"
-            // Picker lives on #portal-root (HTPR-6404). Still stop clicks so a
-            // stray bubble cannot count as a description double-tap edit
-            // (HTPR-4663).
             onClick={(e) => e.stopPropagation()}
             style={{
               position: "fixed",
@@ -124,9 +113,6 @@ const DescriptionEmojiButton = ({
   return (
     <>
       {showEmojiPickerDescription && isMbl && (
-        // Keyboard-docked, search-first bottom sheet on mobile (HTPR-4589);
-        // the floating popup could not raise the keyboard. emojiClickHandler
-        // applies the reaction and closes the picker.
         <MobileEmojiReactionSheet
           onEmojiSelect={debounce(emojiClickHandler, 10)}
           onClose={() => handleClickOutside(undefined)}
@@ -148,8 +134,6 @@ const DescriptionEmojiButton = ({
               sm:group-hover/descriptionContainer:scale-100  
               rounded-lg `}
           onClick={(e) => {
-            // Keep the emoji open gesture out of the description double-tap
-            // edit counter (HTPR-4663).
             e.stopPropagation();
             toggleEmojiPicker();
             calculatePickerPosition();

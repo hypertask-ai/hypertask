@@ -63,9 +63,7 @@ const InnerHTMLComment = memo(
 
     const divRef = useRef<HTMLDivElement>(null);
     const gifContainerRef = useRef<HTMLDivElement>(null);
-    // const { } = useDescriptionAndCommentsContext()
 
-    // HTPR-3779: turn bare URLs (e.g. CLI-posted comments) into clickable links.
     const renderedHtml = useMemo(
       () =>
         sanitizeAiHtml(
@@ -82,13 +80,11 @@ const InnerHTMLComment = memo(
       renderedHtml,
     );
 
-    // ----------------------- close gallery modal
     const toggleModal = () => {
       setIsModalOpen(!isModalOpen);
     };
     const handleClick = (event: React.MouseEvent<HTMLDivElement>) => {
       const target = event.target as any;
-      //
       if (target && target.tagName === "IMG") {
         const images = Array.from(
           divRef.current?.querySelectorAll("img") || []
@@ -96,8 +92,6 @@ const InnerHTMLComment = memo(
         const clickedImageIndex = images.findIndex((img) => img === target);
 
         setcurrentIdx(clickedImageIndex);
-        // toggleModal()
-        // Set the attachments with the clicked image's details
         const inlineImages = images.map((img, idx) =>
           generateAttachmentFromImgEl(img, idx)
         );
@@ -112,7 +106,6 @@ const InnerHTMLComment = memo(
         if (href && isInternalTaskDetailHref(href)) {
           if (shouldFollowLinkNatively(event)) return;
           event.preventDefault();
-          // Call your custom function here
           router.push(preserveInboxFlowOnTaskHref(href, inboxFlow));
         } else target.setAttribute("target", "_blank");
       }
@@ -120,8 +113,6 @@ const InnerHTMLComment = memo(
 
     return (
       <>
-        {/* stackedStyle carries grid-row/column placement, so it must sit on
-            this wrapper — the card grid's direct child — not the inner div. */}
         <div ref={gifContainerRef} className={cn("relative", !mbl && stackedStyle)}>
           {!isStacked && summary && <CommentTldr summary={summary} />}
           <div
@@ -155,13 +146,6 @@ const InnerHTMLComment = memo(
             )}
           />
         )}
-        {/* {
-          isModalOpen && 
-          <AttachmentCarousel 
-            closeCallback={() => setIsModalOpen(false)}
-            attachments={attachments} 
-            currentIndex={currIdx} />
-        } */}
       </>
     );
   }

@@ -123,14 +123,13 @@ export const ModalHeaderComp: React.FC<IModalHeaderProps> = ({
   )
 }
 
-// ======================== modal input
 export const ModalInput = forwardRef<HTMLInputElement, IModalInputProps>(({
   value,
   onKeyDown,
   id,
   autofocus=true,
   className,
-  ...props // Spread the rest of the props
+  ...props
 }, ref) => {
   return (
     <input
@@ -141,10 +140,6 @@ export const ModalInput = forwardRef<HTMLInputElement, IModalInputProps>(({
       onBlur={() => id && document.getElementById(id)?.focus()}
       className={cn("h-[44px] py-2 px-6 text-content xs:text-content sm:text-content w-full bg-inherit border-0 outline-none font-normal min-w-0 text-white-black placeholder:text-text-light-gray", className)}
       value={value}
-      // A command/search box, never a credential field. type=search plus these
-      // stops the mobile keyboard's password / credit-card / contact autofill
-      // strip (autoComplete="off" alone is ignored by iOS); the data-* opt-outs
-      // silence desktop password-manager extensions.
       type="search"
       inputMode="search"
       autoComplete="off"
@@ -163,7 +158,6 @@ export const ModalInput = forwardRef<HTMLInputElement, IModalInputProps>(({
 
 ModalInput.displayName = "ModalInput";
 
-// ==================== model list container
 export const ModalListContainer: React.FC<IModalListContainerProps> = ({
   children,
   id,
@@ -182,7 +176,6 @@ export const ModalListContainer: React.FC<IModalListContainerProps> = ({
   )
 }
 
-// ================ modal list element
 export const ModalRowElementContainer: React.FC<IModalRowProps> = ({
   children,
   commandRef,
@@ -201,13 +194,11 @@ export const ModalRowElementContainer: React.FC<IModalRowProps> = ({
       {...props}
       ref={commandRef}
       onMouseLeave={handleMouseLeave}
-      // onMouseEnter={() => handleMouseEnter(index)}
       className={
         cn(`h-[36px] mx-1.5 rounded-sm px-3 text-dense cursor-pointer transition-all gap-3 duration-75 flex justify-between items-center ${isSelected ? "bg-active-modal-element" : ""}`
         , className)
       }
       id={id}
-      // key={command.key}
       onClick={() => {
         if (typeof onClick === "function") onClick?.(index);
       }}
@@ -217,14 +208,12 @@ export const ModalRowElementContainer: React.FC<IModalRowProps> = ({
   )
 }
 
-/** Keycap used in the ↑↓ / ↵ / esc hint bar at the bottom of the command-palette modals. */
 export const HintKey = ({ children }: { children: React.ReactNode }) => (
   <kbd className="mr-1 rounded-sm bg-label-span px-[5px] py-[2px] font-sans text-micro font-medium leading-none text-white-black">
     {children}
   </kbd>
 );
 
-/** Shared footer for command-palette modals (Ctrl+K, links, remind-me). */
 export const ModalHintBar = () => (
   <div className="flex items-center gap-4 border-t border-light-black-border-1 px-4 py-2 text-micro text-text-light-gray">
     <span><HintKey>↑↓</HintKey> navigate</span>

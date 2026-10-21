@@ -1,13 +1,14 @@
 import type { Prisma, PrismaClient } from '@prisma/client'
 import { persistBoardWebhookEvent } from './outbox'
 import type { WebhookDelivery, WebhookTaskStatus } from './events'
+import { enqueueTaskCreated, processAnalyticsIntentSoon, type CreationChannel } from '../../telemetry/savedWork'
 
-/* eslint-disable @typescript-eslint/no-explicit-any */
+
 type TaskCreatedDb = {
   webhookSubscription: { findMany: (args: any) => Promise<any> }
   boardWebhookDelivery: { create: (args: any) => Promise<any> }
 }
-/* eslint-enable @typescript-eslint/no-explicit-any */
+
 
 type TaskCreatedRootDb = Pick<PrismaClient, '$transaction'>
 
@@ -16,12 +17,6 @@ interface TaskCreatedActor {
   agentId: string | null
 }
 
-/**
- * Exactly what task.created needs, taken from the row the caller's own
- * tx.task.create already returned/built (HTPR-5928) instead of re-reading it
- * from the database. `section` is Task's own denormalized title field, so no
- * separate Section lookup is needed either.
- */
 export interface WebhookTaskSnapshot {
   id: number
   ticketNumber: string | null
@@ -41,19 +36,16 @@ interface CreatedTaskResult<T> {
   webhookTask: WebhookTaskSnapshot
 }
 
-/**
- * Keep the task mutation and task.created outbox rows in one transaction.
- * Callers can add priority, labels, assignments, or recovery markers in the
- * callback before the public creation payload is frozen.
- */
 export async function createTaskWithBoardWebhookOutbox<T>(
   db: TaskCreatedRootDb,
   actor: TaskCreatedActor,
   createTask: (
     tx: Prisma.TransactionClient
-  ) => Promise<CreatedTaskResult<T>>
+  ) => Promise<CreatedTaskResult<T>>,
+  channel: CreationChannel,
+  analyticsAgentId: string | null = null
 ): Promise<{ result: T; boardWebhookDeliveryIds: string[] }> {
-  return db.$transaction(async (tx) => {
+  const committed = await db.$transaction(async (tx) => {
     const created = await createTask(tx)
     const boardWebhookDeliveryIds = await persistTaskCreatedWebhook(
       tx,
@@ -61,21 +53,13 @@ export async function createTaskWithBoardWebhookOutbox<T>(
       actor.userId,
       actor.agentId
     )
-    return { result: created.result, boardWebhookDeliveryIds }
+    const analyticsKey = await enqueueTaskCreated(tx, created.taskId, { userId: actor.userId, agentId: actor.agentId ?? analyticsAgentId }, channel)
+    return { analyticsKey, result: created.result, boardWebhookDeliveryIds }
   })
+  processAnalyticsIntentSoon(committed.analyticsKey)
+  return { result: committed.result, boardWebhookDeliveryIds: committed.boardWebhookDeliveryIds }
 }
 
-/**
- * Persist task.created for board subscribers inside the caller's creation
- * transaction (HTPR-4530). Returns the delivery ids to publish once that
- * transaction commits, so the event either exists with the task or neither
- * does.
- *
- * `task` is built by the caller from the row its own tx.task.create already
- * returned (HTPR-5928) — this used to re-read the task and its section here,
- * which cost two extra round trips while the caller's per-project advisory
- * lock (createGlobally.ts) was held.
- */
 export async function persistTaskCreatedWebhook(
   tx: TaskCreatedDb,
   task: WebhookTaskSnapshot,

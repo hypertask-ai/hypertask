@@ -39,8 +39,8 @@ const moveTaskHandler = readRefactoredSource(
 );
 
 test("Ctrl+D owns the browser shortcut and enters description edit mode", () => {
-  const shortcutStart = taskDetail.indexOf("// [ctrl] + [d]");
-  const shortcutEnd = taskDetail.indexOf("// [shift][m]", shortcutStart);
+  const shortcutStart = taskDetail.indexOf("{\n      action: \"description\",");
+  const shortcutEnd = taskDetail.indexOf("{\n      action: \"moveToBoard\",", shortcutStart);
   const shortcut = taskDetail.slice(shortcutStart, shortcutEnd);
 
   assert.ok(shortcutStart >= 0 && shortcutEnd > shortcutStart);
@@ -81,7 +81,7 @@ test("only a pending Ctrl+D request focuses the editable description", () => {
 
 test("legacy Ctrl+J opens the inline writer only when the New Task window is off", () => {
   const syncStart = tiptap.indexOf(
-    "// Ctrl/Cmd+J changes the parent edit mode",
+    "setShouldShowAITaskWriter(shouldTriggerAiTaskWriter && !",
   );
   const syncEnd = tiptap.indexOf(
     "}, [mode, shouldTriggerAiTaskWriter, newTaskWindow]);",
@@ -99,10 +99,10 @@ test("legacy Ctrl+J opens the inline writer only when the New Task window is off
 
 test("Ctrl/Cmd+M opens comments on both platforms", () => {
   const shortcutStart = taskDetail.indexOf(
-    "// [ctrl] + [m] [comment edit mode]",
+    "{\n      action: \"comment\",",
   );
   const shortcutEnd = taskDetail.indexOf(
-    "// moving task to next/previous column logic",
+    "{\n      action: \"history\",",
     shortcutStart,
   );
   const shortcut = taskDetail.slice(shortcutStart, shortcutEnd);
@@ -138,7 +138,7 @@ test("the tutorial comment does not consume its seeded inbox notification", () =
 });
 
 test("comment shortcuts use the save-then-move path", () => {
-  const shortcutStart = tiptap.indexOf("// Enter key combinations");
+  const shortcutStart = tiptap.indexOf("const enterAction = resolveCommentEnterShortcutAction(");
   const shortcutEnd = tiptap.indexOf(
     "if (e.altKey && e.keyCode === 86",
     shortcutStart,

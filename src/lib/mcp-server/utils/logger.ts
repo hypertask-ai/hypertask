@@ -1,9 +1,13 @@
-/**
- * Structured logging utility
- * Logs to stderr only (MCP requirement - stdout reserved for JSON-RPC)
- */
-
 export type LogLevel = 'error' | 'warn' | 'info' | 'debug';
+
+const CALLER_ERROR_CODES = new Set([-32001, -32003, -32004, -32602]);
+
+function isCallerError(error: unknown): boolean {
+  if (!error || typeof error !== 'object') return false;
+  const { code, httpStatus } = error as { code?: unknown; httpStatus?: unknown };
+  if (typeof httpStatus === 'number') return httpStatus >= 400 && httpStatus < 500;
+  return typeof code === 'number' && CALLER_ERROR_CODES.has(code);
+}
 
 interface LogEntry {
   timestamp: string;
@@ -12,6 +16,13 @@ interface LogEntry {
   correlationId?: string;
   [key: string]: unknown;
 }
+
+const consoleWriters: Record<LogLevel, (line: string) => void> = {
+  error: (line) => console.error(line),
+  warn: (line) => console.warn(line),
+  info: (line) => console.info(line),
+  debug: (line) => console.debug(line),
+};
 
 class Logger {
   private logLevel: LogLevel = 'info';
@@ -42,13 +53,18 @@ class Logger {
       ...meta,
     };
 
-    // Log to stderr as JSON (structured logging)
-    const logLine = JSON.stringify(entry);
-    console.error(logLine);
+    consoleWriters[level](JSON.stringify(entry));
   }
 
   error(message: string, meta?: Record<string, unknown>): void {
     this.log('error', message, meta);
+  }
+
+  failure(message: string, error: unknown, meta?: Record<string, unknown>): void {
+    this.log(isCallerError(error) ? 'warn' : 'error', message, {
+      ...meta,
+      error: error instanceof Error ? error.message : String(error),
+    });
   }
 
   warn(message: string, meta?: Record<string, unknown>): void {
@@ -63,9 +79,6 @@ class Logger {
     this.log('debug', message, meta);
   }
 
-  /**
-   * Log tool invocation for audit trail
-   */
   logToolInvocation(
     toolName: string,
     correlationId: string,
@@ -82,9 +95,6 @@ class Logger {
     });
   }
 
-  /**
-   * Log authentication/authorization events
-   */
   logAuthEvent(event: 'auth_success' | 'auth_failure' | 'authz_denied', correlationId?: string, details?: Record<string, unknown>): void {
     this.warn(`Auth event: ${event}`, {
       correlationId,
@@ -92,9 +102,6 @@ class Logger {
     });
   }
 
-  /**
-   * Sanitize inputs to remove sensitive data before logging
-   */
   private sanitizeInputs(inputs: Record<string, unknown>): Record<string, unknown> {
     const sanitized: Record<string, unknown> = {};
     const sensitiveKeys = ['jwtToken', 'token', 'password', 'secret', 'authorization', 'apiKey'];
@@ -111,5 +118,4 @@ class Logger {
   }
 }
 
-// Export singleton logger instance
 export const logger = new Logger();

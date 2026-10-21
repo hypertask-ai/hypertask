@@ -43,6 +43,14 @@ On a disposable new-user fixture, confirm Claude Code, Cursor, Codex appear firs
 
 Capture waiting and connected states at 1440x900 and 390x844. Confirm only the first connection gets Your agent is connected email, naming the client with one Open your board button. The existing unique `WebhookEvent(userId, eventType)` record, with type `agent_connected_email`, durably claims one send attempt, including concurrent connects. An uncertain or failed delivery retains that claim rather than risking duplicates; it never fails agent authentication. No schema migration is required.
 
+## Calendar loading
+
+https://app.hypertask.ai/detail/project-15/7397: Calendar is its own route (`/calendar`, rail button "Go to calendar"), so a view switch remounts the page. Behind `htpr-7397-calendar-loading-shell` (bugfix, Everyone) the hydration guard from HTPR-6664 shows the app rail and a muted "Loading calendar…" line instead of a bare full-page "Loading...". A screenshot timed by hand misses this window; install a `MutationObserver` before clicking the rail and record the rail count and position on every mutation, with an Inbox switch as the control. Also fetch the `/calendar` HTML (the server render must contain the rail) and watch the console for React hydration errors (#418, #423, #425), which is how a timezone mismatch from HTPR-6664 would come back. On a phone the server draws the rail and the client swaps to the mobile Calendar; check for no hydration errors there too. The reusable script is `~/.local/state/vcc-evidence/HTPR-7397/calendar-shell-check.mjs` (`BASE`, `STATE`, `OUT` env vars).
+
+## Bulk selection on the board
+
+https://app.hypertask.ai/detail/project-15/7260 adds board select all behind `htpr-7260-kanban-select-all`. With nothing editable focused, Ctrl/Cmd+A selects every visible card; X toggles the focused card and Shift-click selects a range inside one column. The bottom bar shows the count, Archive, Assign, Tags and Move icons (44px targets on phones), Open actions and Esc. Ctrl+K with a selection lists the "N selected tasks" group first: Move to column, Assign, Set tags, Archive, Select all on board, Select all in this column, Clear selection; no Frequently used group, and Delete board or Delete column never appear under Frequently used. Ctrl+A inside a text field must keep native text selection. Move a few cards on a disposable board and reload to prove the move saved; check the flag-off account still sees the old bar ("Open actions", "Esc to clear").
+
 ## Cleanup
 
 None if you only viewed and switched. If you changed a saved filter or view

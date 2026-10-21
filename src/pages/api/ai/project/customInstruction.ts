@@ -1,6 +1,6 @@
 import { getAiDefaultModelContext } from "@/app/api/ai/_lib/byokKeys";
 import { getDefaultAiModelOptionForPlan } from "@/lib/aiModelOptions";
-import { haiku55ModelEnabled, lunaFreePlanEnabled } from "@/app/api/ai/_lib/planGate";
+import { haiku55ModelEnabled } from "@/app/api/ai/_lib/planGate";
 import { reportError } from "@/lib/errors/reportError";
 import type { NextApiRequest, NextApiResponse } from 'next'
 import prisma from "@/lib/prisma";
@@ -65,12 +65,9 @@ export default async function handler(
         if (!session) {
           return res.status(401).json({ message: "Unauthorized" });
         }
-        // delete an attachment
         const fileId = validateIntegerParam(req.query.fileIdToRemove, 'fileIdToRemove', res);
         const projectId = validateIntegerParam(req.query.projectId, 'projectId', res);
-        // const fileId = validateIntegerParam(req.query.fileIdToRemove, 'fileIdToRemove', res);
 
-        // Early return if validation failed
         if (fileId === null || projectId === null) {
             return res.status(422).json({message:"Must be an integer"});
         }
@@ -105,7 +102,6 @@ export default async function handler(
           return res.status(401).json({ message: "Unauthorized" });
         }
 
-        // lets create a fuckin view shall we. and now lets lets lets add a view
         try {
 
             const { projectId, customInstruction, modelSelected, modelOptionId } = req.body
@@ -127,18 +123,16 @@ export default async function handler(
             const selectedModelOption = hasModelSelection
                 ? getAiModelOptionById(modelOptionId, haiku55Enabled) ??
                   getAiModelOptionById(modelSelected, haiku55Enabled) ??
-                  (haiku55Enabled ? getDefaultAiModelOptionForPlan(defaultContext?.plan, defaultContext?.hasByok, await lunaFreePlanEnabled(session.userId), true, defaultContext?.haikuDefaultEnabled) : defaultAiModelOption)
+                  (haiku55Enabled ? getDefaultAiModelOptionForPlan(defaultContext?.plan, defaultContext?.hasByok, true, defaultContext?.haikuDefaultEnabled) : defaultAiModelOption)
                 : undefined;
 
             var customInstructions;
-            // lets first find out if the customInstruction exists or not.
             customInstructions = await prisma.aI_Custom_Instructions.findFirst({
                 where: {
                     projectId,
                     project: getProjectWhere(session.userId),
                 }
             })
-            // ============ if doesn't exist, create it
             if (!customInstructions) {
                 customInstructions = await prisma.aI_Custom_Instructions.create({
                     data: {
@@ -151,7 +145,6 @@ export default async function handler(
                 })
             }
 
-            // =========== if exists, then update it.
             else {
                 const currentTime = new Date()
                 customInstructions = await prisma.aI_Custom_Instructions.update({

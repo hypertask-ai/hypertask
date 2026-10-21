@@ -3,10 +3,6 @@ import prisma from '@/lib/prisma';
 
 export async function GET(request: NextRequest) {
     try {
-        // HTPR-4808: /reset admin tool only. This enumerates the whole user
-        // table with no team or board scoping, so accepting any signed-in
-        // session would let a fresh trial account read every user on the
-        // platform. Same gate as resetUser and reset-trial.
         const adminPassword = process.env.ADMIN_USER_RESET_PW;
         if (
             !adminPassword ||
@@ -28,9 +24,6 @@ export async function GET(request: NextRequest) {
 
         const searchTerm = query.trim().toLowerCase();
 
-        // Prisma's case-insensitive search depends on the database provider
-        // For PostgreSQL, we can use mode: 'insensitive'
-        // For MySQL/SQLite, we'll use toLowerCase in the query
         const users = await prisma.user.findMany({
             where: {
                 OR: [
@@ -64,7 +57,6 @@ export async function GET(request: NextRequest) {
             },
         });
 
-        // Filter case-insensitively in memory for better compatibility
         const filteredUsers = users.filter(
             (user) =>
                 user.email?.toLowerCase().includes(searchTerm) ||

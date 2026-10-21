@@ -1,13 +1,10 @@
-// Import PrismaClient from the generated Prisma client
 import { IUrl } from '@/models/model';
 import addIntoTask from '@/utils/controllers/urls/addIntoTask';
 import { NextApiHandler, NextApiRequest, NextApiResponse } from 'next';
 import prisma from "@/lib/prisma";
 import { getSessionUser } from "@/lib/auth/getSessionUser";
 import { taskWriteAccessWhere } from "@/utils/controllers/projects/getAllIncludes";
-// Create an instance of PrismaClient
 
-// Example usage
 const handler: NextApiHandler = async (req: NextApiRequest, res: NextApiResponse) => {
   const session = await getSessionUser(new Headers(req.headers as Record<string, string>));
   if (!session) return res.status(401).json({ message: "Unauthorized" });
@@ -38,5 +35,4 @@ const handler: NextApiHandler = async (req: NextApiRequest, res: NextApiResponse
 
 }
 
-// Run the main function
 export default handler;

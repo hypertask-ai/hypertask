@@ -3,7 +3,6 @@ import prisma from "@/lib/prisma";
 
 const boardSelect = { id: true, team: { select: { id: true, title: true } } } as const;
 
-// undefined retains legacy behavior when Off; null means no accessible board exists.
 export async function resolveLoginBoard(userId: number, previousBoard?: string | null) {
   if (!await isFeatureEnabled(HTPR_7035_DEMO_LOGIN_OWN_BOARD_FLAG, userId).catch(() => false)) {
     return undefined;
@@ -24,7 +23,6 @@ export async function resolveLoginBoard(userId: number, previousBoard?: string |
     if (board) return board;
   }
 
-  // Adoption has already run: the demo remains eligible only if this account can access it.
   return await prisma.project.findFirst({
     where: { ownerId: userId, status: "Normal", teamId: { not: null } },
     orderBy: { id: "asc" },

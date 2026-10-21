@@ -44,10 +44,6 @@ export async function POST(request: NextRequest) {
   }
 
   try {
-    // Same authorization gap prepareTaskWriterRun guards against:
-    // getProjectTeamProviderContext returns an empty context (no team, no
-    // settings) for a project the caller can't see, which would otherwise
-    // sail through the feature gate below as "no restrictions configured".
     const project = await prisma.project.findFirst({
       where: {
         id: input.project_id,
@@ -86,13 +82,8 @@ export async function POST(request: NextRequest) {
     }
 
     const inputHtml = toEditableHtml(input.text);
-    // HTML-canvas blocks are opaque to the model and get mangled by an AI
-    // edit, same reason the cookie route strips/reattaches them.
     const { stripped, blocks } = extractHtmlBlocks(inputHtml);
 
-    // selectTiptapModel wraps the model with usage-logging middleware
-    // (editorUsageMiddleware), so generateText below already calls logAiUsage
-    // for us - a second manual call here would double-count tokens.
     const selected = await selectTiptapModel({
       projectId: input.project_id,
       taskId: usageTaskId,
@@ -116,8 +107,6 @@ export async function POST(request: NextRequest) {
       model: selected.modelId,
     });
   } catch (error) {
-    // Log the real error server-side, but never echo raw exception text back
-    // to the caller - same as the cookie route (tiptap-forwardslash/route.ts).
     await reportError({
       message: error instanceof Error ? error.message : "AI request failed",
       stack: error instanceof Error ? error.stack : undefined,

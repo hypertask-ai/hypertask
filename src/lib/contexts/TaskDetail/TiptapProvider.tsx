@@ -1,9 +1,8 @@
-/* eslint-disable react-hooks/exhaustive-deps */
+
 import { IStatus, IUser, RedirectMode } from "@/models/model";
 import type { Editor } from "@tiptap/react";
 import { useContext, createContext, ReactNode, useState } from "react";
 
-// ======================= Type Definitions =======================
 interface TiptapProviderProps {
   children?: ReactNode;
   id: string;
@@ -20,8 +19,6 @@ interface TiptapProviderProps {
     inbox?: boolean,
     markAsDone?: boolean
   ) => Promise<boolean | undefined>;
-  // Default send action: archives the inbox notification and, per the user's
-  // inbox setting, advances to the next task.
   sendComment: () => Promise<boolean | undefined>;
   createdAt: string | undefined;
   getAttachments: (files: File[]) => Promise<void>;
@@ -44,7 +41,6 @@ interface TiptapProviderProps {
   discardDraft: (discard: "Description" | "Comment") => void;
   showDeleteComment: boolean;
   toggleAiTaskWriter: () => void;
-  /** Desktop WriteWithAI inline float (Superhuman-style). */
   shouldShowInlineDraftAi?: boolean;
   closeInlineDraftAi?: () => void;
   aiProjectId?: number | null;
@@ -59,10 +55,8 @@ interface ContextProps extends TiptapProviderProps {
   isExpanded: boolean;
 }
 
-// ======================= Context Creation =======================
 const TiptapContext = createContext<ContextProps | undefined>(undefined);
 
-// ======================= Provider Component =======================
 const TiptapProvider: React.FC<TiptapProviderProps> = ({
   children,
   ...props
@@ -73,7 +67,6 @@ const TiptapProvider: React.FC<TiptapProviderProps> = ({
   const toggleExpansion = (e: any) => {
     setIsExpanded(!isExpanded);
     setBgColor(bgColor === "black" ? "transparent" : "");
-    // props.editor?.commands.focus
   };
 
   const contextValue: ContextProps = {
@@ -89,7 +82,6 @@ const TiptapProvider: React.FC<TiptapProviderProps> = ({
   );
 };
 
-// ======================= Context Hook =======================
 export const useTiptapGlobalContext = () => {
   const context = useContext(TiptapContext);
   if (!context) {

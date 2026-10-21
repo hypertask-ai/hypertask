@@ -44,7 +44,7 @@ function loadDropEmptyPadding() {
   );
   const start = source.indexOf("function dropEmptyPadding");
   assert.notEqual(start, -1, "dropEmptyPadding must exist in the chat route");
-  const end = source.indexOf("/** Wraps a tool's execute", start);
+  const end = source.indexOf("function withToolErrors<T", start);
   const js = ts.transpileModule(source.slice(start, end), {
     compilerOptions: { target: ts.ScriptTarget.ES2020 },
   }).outputText;

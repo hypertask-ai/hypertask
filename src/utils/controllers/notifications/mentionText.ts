@@ -6,12 +6,6 @@ const spanPattern = /<span\b([^>]*)>([\s\S]*?)<\/span\s*>/gi;
 const attributePattern =
   /([a-zA-Z_:][-\w:.]*)\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s>]+))/g;
 
-/**
- * True only when `data-type="mention"` is a real attribute of the tag. Testing
- * the raw tag text with one regex instead would also match the string
- * `data-type="mention"` sitting inside some other attribute's value (a title,
- * say), letting a crafted comment render ordinary text as a highlighted mention.
- */
 function isMentionTag(attributes: string): boolean {
   attributePattern.lastIndex = 0;
   let attribute: RegExpExecArray | null;
@@ -28,9 +22,6 @@ function isMentionTag(attributes: string): boolean {
 function markMentions(html: string): string {
   return (
     String(html ?? "")
-      // A comment containing the sentinel itself would otherwise open or close a
-      // highlight region that no mention put there. It is a private-use
-      // codepoint with nothing to render, so dropping it costs nothing.
       .replaceAll(mentionSentinel, "")
       .replace(spanPattern, (match, attributes: string, label: string) => {
         if (!isMentionTag(attributes)) return match;
@@ -61,9 +52,6 @@ export function mentionQuoteHtml(html: string, maxChars?: number): string {
   for (const char of marked) {
     if (char !== mentionSentinel && visibleChars >= visibleLength) break;
     markedPreview += char;
-    // Count UTF-16 units, matching how `preview.length` was measured: iterating
-    // by code point and counting 1 per emoji would let the quote run to roughly
-    // twice `maxChars`.
     if (char !== mentionSentinel) visibleChars += char.length;
   }
   if (wasTruncated) markedPreview += "…";

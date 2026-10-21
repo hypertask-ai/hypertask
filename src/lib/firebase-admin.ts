@@ -2,7 +2,6 @@ import { cert, getApp, initializeApp, type App } from 'firebase-admin/app'
 import { getAuth as getFirebaseAuth } from 'firebase-admin/auth'
 import { getFirebaseServiceAccount } from '@/lib/firebaseServiceAccount'
 
-// Centralized Firebase Admin initialization to avoid conflicts
 let firebaseAdminApp: App | undefined
 
 export function getFirebaseAdmin(): App {
@@ -12,7 +11,6 @@ export function getFirebaseAdmin(): App {
     firebaseAdminApp = getApp()
     return firebaseAdminApp
   } catch {
-    // Default app is missing.
   }
 
   const serviceAccount = getFirebaseServiceAccount()
@@ -30,7 +28,6 @@ export function getFirebaseAdmin(): App {
     })
   } catch (initializationError) {
     try {
-      // A second bundle copy may have created the default app first.
       firebaseAdminApp = getApp()
     } catch {
       throw initializationError
@@ -45,7 +42,6 @@ export function getAuth() {
   return getFirebaseAuth(getFirebaseAdmin())
 }
 
-// Debug function to check Firebase configuration
 export function debugFirebaseAdmin() {
   const app = getFirebaseAdmin()
   return {

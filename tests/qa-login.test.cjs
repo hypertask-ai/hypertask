@@ -145,15 +145,15 @@ test("the QA login page and route stay hidden without the secrets", () => {
   );
 
   assert.match(page, /isQaLoginConfigured/);
-  assert.match(page, /const flagged = await isFeatureEnabled/);
-  assert.match(page, /HTPR_6536_QA_LOGIN_FLAG/);
+  assert.match(page, /const allowed = await isOwnerOrQaUserId/);
+  assert.match(page, /isOwnerOrQaUserId\(QA_LOGIN_USER_ID\)/);
   assert.match(page, /notFound\(\)/);
   assert.match(page, /shouldShowMobileTabBar\("\/qa\/login"\)/);
   assert.match(page, /bg-pageBackground/);
   assert.match(page, /text-heading/);
-  assert.doesNotMatch(page, /flagged = true/);
+  assert.doesNotMatch(page, /allowed = true/);
   assert.match(route, /if \(!isQaLoginConfigured\(\)\)/);
-  assert.match(route, /const flagged = await isFeatureEnabled/);
+  assert.match(route, /const allowed = await isOwnerOrQaUserId/);
   assert.match(route, /status: 404/);
   assert.match(route, /await qaLoginCredentialsMatch/);
   assert.match(route, /QA_LOGIN_USER_ID/);

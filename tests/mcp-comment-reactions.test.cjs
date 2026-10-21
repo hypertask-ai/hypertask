@@ -177,6 +177,7 @@ function loadCommentsRoute({
   }
   const routeModule = { exports: {} }
   const modules = {
+    '@/lib/mcp/operationCrashReport': { reportMcpOperationCrash: () => {} },
     'next/server': { NextResponse: { json: (body, init = {}) => ({ body, status: init.status ?? 200 }) } },
     '@prisma/client': { Prisma: { DbNull: Symbol('DbNull') } },
     '@/lib/mcp/auth': {
@@ -288,6 +289,7 @@ function loadCommentsRoute({
     },
   }
   const mockRequire = (request) => {
+    if (request === './agentChatterRouting') return jiti(path.join(root, 'src/lib/mcp/operations/comments/agentChatterRouting.ts'))
     if (request === "@/lib/mcp/routeWrapper") return require("./helpers/mcp-route-wrapper.cjs").loadRouteWrapper(modules)
     if (modules[request]) return modules[request]
     throw new Error(`Unexpected import: ${request}`)

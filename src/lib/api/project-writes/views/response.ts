@@ -5,7 +5,6 @@ export function viewWriteJson(body: unknown, status: number): TaskWriteResponse 
   if (status !== 101) {
     return body === undefined ? new NextResponse(null, { status }) : NextResponse.json(body, { status });
   }
-  // Preserve the Pages contract without constructing an invalid Web Response.
   const text = JSON.stringify(body);
   return {
     status,

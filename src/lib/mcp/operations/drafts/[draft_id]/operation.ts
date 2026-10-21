@@ -1,3 +1,6 @@
+import { agentScopeEnforced, recordAgentBoardScopeMiss } from "@/lib/auth/agentScope";
+import { reportMcpOperationCrash } from '@/lib/mcp/operationCrashReport'
+import { userCanAccessTask } from "@/utils/controllers/tasks/assertTaskAccess"
 import { wrapMcpRoute, validateMcpRouteAuth as validateMcpAuth, checkMcpRouteRateLimit as checkMcpRateLimit } from '@/lib/mcp/routeWrapper'
 import { NextRequest, NextResponse } from 'next/server'
 
@@ -123,7 +126,9 @@ export async function PATCH(request: NextRequest, props: { params: Promise<{ dra
     }
 
     const project = draft.task.project
-    const hasAccess = project.ownerId === user.id || project.members.some((m) => m.userId === user.id)
+    const hasAccess = ctx.agentId && agentScopeEnforced()
+      ? await userCanAccessTask(user.id, draft.taskId, ctx.agentId)
+      : project.ownerId === user.id || project.members.some((m) => m.userId === user.id)
 
     if (!hasAccess) {
       return NextResponse.json(
@@ -131,6 +136,7 @@ export async function PATCH(request: NextRequest, props: { params: Promise<{ dra
         { status: 403 }
       )
     }
+    recordAgentBoardScopeMiss(draft.task.projectId, "write");
 
     if (draft.userId !== user.id) {
       return NextResponse.json(
@@ -160,6 +166,7 @@ export async function PATCH(request: NextRequest, props: { params: Promise<{ dra
     return NextResponse.json(response)
   } catch (error) {
     console.error('[MCP PATCH Draft] Error:', error)
+    reportMcpOperationCrash(request, error)
     return NextResponse.json(
       { success: false, error: 'Internal server error' },
       { status: 500 }
@@ -209,7 +216,9 @@ export async function DELETE(request: NextRequest, props: { params: Promise<{ dr
     }
 
     const project = draft.task.project
-    const hasAccess = project.ownerId === user.id || project.members.some((m) => m.userId === user.id)
+    const hasAccess = ctx.agentId && agentScopeEnforced()
+      ? await userCanAccessTask(user.id, draft.taskId, ctx.agentId)
+      : project.ownerId === user.id || project.members.some((m) => m.userId === user.id)
 
     if (!hasAccess) {
       return NextResponse.json(
@@ -217,6 +226,7 @@ export async function DELETE(request: NextRequest, props: { params: Promise<{ dr
         { status: 403 }
       )
     }
+    recordAgentBoardScopeMiss(draft.task.projectId, "write");
 
     if (draft.userId !== user.id) {
       return NextResponse.json(
@@ -235,6 +245,7 @@ export async function DELETE(request: NextRequest, props: { params: Promise<{ dr
     return NextResponse.json(response)
   } catch (error) {
     console.error('[MCP DELETE Draft] Error:', error)
+    reportMcpOperationCrash(request, error)
     return NextResponse.json(
       { success: false, error: 'Internal server error' },
       { status: 500 }

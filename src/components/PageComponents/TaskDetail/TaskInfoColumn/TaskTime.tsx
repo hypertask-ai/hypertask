@@ -39,14 +39,9 @@ const TaskTime = ({
     (timer.data?.taskTotalSeconds ?? 0) +
     activeRunningEntryCount *
       Math.max(0, Math.floor((now - timer.dataUpdatedAt) / 1000));
-  // Server-computed: everything on the ticket except this run. Showing the
-  // total when there is none just repeats the running timer (HTPR-4701).
   const hasHistory = (timer.data?.otherEntriesSeconds ?? 0) > 0;
   const timerRef = useRef(timer);
   timerRef.current = timer;
-  // G-chord guard: [g] then [b] is "go to board" (GloablProviders), so a
-  // pending g must keep plain [b] from opening the time log (DBAC-13). Same
-  // pattern as RemindMeTaskDetail's g-then-h guard.
   const lastgClick = useRef<number | null>(null);
 
   const toggle = useCallback(async () => {
@@ -106,7 +101,7 @@ const TaskTime = ({
       }
 
       if (!enabled) return;
-      if (lastgClick.current !== null) return; // g pending: [g][b] navigates
+      if (lastgClick.current !== null) return;
       event.preventDefault();
       setShowTimeLog(true);
     };
@@ -119,7 +114,6 @@ const TaskTime = ({
     };
   }, [runningEntry, enabled, timer.isToggling, toggle]);
 
-  // The task already knows the board setting; do not paint a row the summary will remove.
   const hideTimeRow =
     !enabled &&
     (timer.data?.taskTotalSeconds ?? 0) === 0 &&
@@ -145,8 +139,6 @@ const TaskTime = ({
                     {formatElapsed(runningSeconds)}
                   </span>
                 )}
-                {/* Total only once earlier time exists: with no history it just
-                    repeats the running timer's own number (HTPR-4701). */}
                 {hasHistory && (
                   <span className="relative group inline-flex">
                     <button

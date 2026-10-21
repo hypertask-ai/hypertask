@@ -13,9 +13,6 @@ import { generateCorrelationId } from "../../utils/correlation";
 export class ManagementService {
   constructor(private readonly apiClient: IApiClient) {}
 
-  // HTPR-7118: /mcp/admin/agents accepts only a management key or browser
-  // session. /mcp/agents/create accepts a person's own bearer and runs the
-  // same board access check.
   async createAgent(params: unknown, options: { useBearerRoute?: boolean } = {}) {
     const input = CreateAgentInputSchema.parse(params);
     return this.apiClient.makeRequest(

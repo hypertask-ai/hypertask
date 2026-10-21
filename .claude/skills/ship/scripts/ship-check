@@ -14,8 +14,11 @@
 #   ship-check title <pr>        PR title is "PREFIX-NNNN [TYPE] ..." and that ticket exists
 #   ship-check ci-tests <pr>     latest ci-tests on the PR head passes; failures name tests and production status
 #   ship-check ticket <T>        ticket exists on the board
+#   ship-check deeper <T>        newest "Deeper:" agent activity names field, raw source, method, outside proof, breaks if and a
+#                                proof gate <T>.deeper-<name> with CHECK: and EXPECT: in this session's .unlazy/s-<id>/gates/*.md
 #   ship-check merged <T>        the ticket's newest PR is merged into the base branch
 #   ship-check deployed <T>      the Production deployment for that merge is success (app repo only)
+#   ship-check docs <T>          FEATURE/IMPROVE: docs PR merged and deployed, or a No user-visible change: reason
 #   ship-check proof <T>         ~/.local/state/vcc-evidence/<T>/proof.md follows the verify-qa contract for that merge
 #   ship-check done <T>          ticket is in Done
 #   ship-check cleaned <T>       no worktree, local branch or GitHub branch is left for the ticket's PR
@@ -35,6 +38,42 @@ check_ticket() {
   hypertask tasks get "$1" --json 2>/dev/null | jq -e '.success == true and (.tasks | length) > 0' >/dev/null \
     || fail "ticket $1 not found on the board"
   echo "ticket ok"
+}
+
+deeper_gate_runnable() {
+  local f id=${CLAUDE_CODE_SESSION_ID:-${CODEX_SESSION_ID:-${CODEX_THREAD_ID:-}}}
+  [[ ${id:0:8} =~ ^[A-Za-z0-9._-]{1,8}$ ]] || return 1
+  for f in "$PWD/.unlazy/s-${id:0:8}"/gates/*.md; do
+    [ -f "$f" ] || continue
+    awk -v id="$1" '
+      /^- \[[ xX]\] / { inside = substr($0, 7, length(id) + 1) == id ":"; next }
+      /^[^ ]/ { inside = 0 }
+      inside && /^  CHECK: *[^ ]/ { check = 1 }
+      inside && /^  EXPECT: *[^ ]/ { expect = 1 }
+      END { exit !(check && expect) }' "$f" && return 0
+  done
+  return 2
+}
+
+check_deeper() {
+  local t=${1:-} acts text label id
+  [[ $t =~ ^(HTPR|YPER4|HYFA)-[0-9]+$ ]] || fail "deeper needs a ticket id like HTPR-123, YPER4-123 or HYFA-123; ${t:-<none>} is not one"
+  acts=$(ht GET "/mcp/tasks/$t/agent-activity?limit=100" 2>/dev/null) || fail "cannot read agent activity of $t"
+  text=$(jq -er '[.activities[] | select(.type == "thought" and ((.text // "") | test("^\\s*Deeper:")))]
+    | max_by(.createdAt) | .text' <<<"$acts" 2>/dev/null) \
+    || fail "$t has no agent activity starting with \"Deeper:\"; write it right after ship-gates (/ship step 3a)"
+  for label in field 'raw source' method 'outside proof' 'breaks if' 'proof gate'; do
+    grep -qi "$label:" <<<"$text" || fail "the Deeper: activity on $t has no \"$label:\" part"
+  done
+  id=$(grep -oE "proof gate: *$t\.deeper-[a-z0-9-]+" <<<"$text" | head -1 | sed -E 's/^proof gate: *//')
+  [ -n "$id" ] || fail "the Deeper: activity on $t must name its proof gate as \"proof gate: $t.deeper-<name>\""
+  deeper_gate_runnable "$id"
+  case $? in
+    0) ;;
+    1) fail "deeper needs this session's id (CLAUDE_CODE_SESSION_ID, CODEX_SESSION_ID or CODEX_THREAD_ID) to find its scope" ;;
+    *) fail "$id has no gate with CHECK: and EXPECT: in this session's $PWD/.unlazy/s-<id>/gates/*.md; a manual note does not count" ;;
+  esac
+  echo "deeper ok"
 }
 
 check_title() {
@@ -148,7 +187,7 @@ check_branch() {
 check_bind() {
   local t; t=$(gh pr view "$2" -R "$REPO" --json title --jq .title 2>/dev/null) || fail "PR $2 not found in $REPO"
   [[ $t == "$1 "* ]] || fail "PR $2 is titled \"$t\", not $1"
-  mkdir -p "$EVID/$1" && echo "$2" > "$EVID/$1/pr" && rm -f "$EVID/$1/duplicate-of" "$EVID/$1/dropped" "$EVID/$1/branch" "$EVID/$1/nochange" && echo "bound $1 to PR $2"
+  mkdir -p "$EVID/$1" && echo "$2" > "$EVID/$1/pr" && echo "$REPO" > "$EVID/$1/repo" && echo "$BASE" > "$EVID/$1/base" && rm -f "$EVID/$1/duplicate-of" "$EVID/$1/dropped" "$EVID/$1/branch" "$EVID/$1/nochange" && echo "bound $1 to PR $2"
 }
 
 check_duplicate() {
@@ -276,6 +315,20 @@ check_pr() {
 
 check_merged() { dropped_ok merged "$1" && return 0; nochange_ok merged "$1" && return 0; local s; s=$(merge_sha "$1") || { echo "$s"; exit 1; }; echo "merged ok"; }
 
+docs_deploy_ok() {
+  local sha=$1 runs id jobs
+  runs=$(gh api "repos/hypertask-ai/docs/actions/workflows/deploy.yml/runs?head_sha=$sha&per_page=100" 2>/dev/null) \
+    || fail "could not read workflow runs for $sha"
+  id=$(jq -r --arg sha "$sha" '[.workflow_runs[] | select(.path == ".github/workflows/deploy.yml"
+    and .name == "Build and Deploy" and (.event == "push" or .event == "workflow_dispatch") and .head_branch == "main"
+    and .head_sha == $sha and .conclusion == "success")] | first | .id // empty' <<<"$runs") \
+    || fail "could not read publishing workflow identity for $sha"
+  [ -n "$id" ] || fail "no successful production publishing run for $sha"
+  jobs=$(gh api "repos/hypertask-ai/docs/actions/runs/$id/jobs?per_page=100" 2>/dev/null) || fail "could not read publishing jobs for $sha"
+  jq -e 'any(.jobs[]; .name == "Build and deploy to Cloudflare Pages" and .conclusion == "success")' <<<"$jobs" >/dev/null \
+    || fail "no successful production deploy job for $sha"
+}
+
 check_deployed() {
   dropped_ok deployed "$1" && return 0
   nochange_ok deployed "$1" && return 0
@@ -338,28 +391,19 @@ check_deployed() {
       if [[ $REPO == hypertask-ai/docs && $BASE == main ]]; then
         releases=$(gh release list -R "$REPO" --limit 1 --json tagName 2>/dev/null) || fail "could not read releases in $REPO"
         jq -e 'length == 0' <<<"$releases" >/dev/null || fail "no release found in $REPO"
-        runs=$(gh api "repos/$REPO/actions/workflows/deploy.yml/runs?head_sha=$sha&event=push&per_page=100" 2>/dev/null) \
-          || fail "could not read workflow runs for $sha"
-        id=$(jq -r --arg sha "$sha" '[.workflow_runs[] | select(.path == ".github/workflows/deploy.yml"
-          and .name == "Build and Deploy" and .event == "push" and .head_branch == "main"
-          and .head_sha == $sha and .conclusion == "success")] | first | .id // empty' <<<"$runs") \
-          || fail "could not read publishing workflow identity for $sha"
-        [ -n "$id" ] || fail "no successful production publishing push for $sha"
-        jobs=$(gh api "repos/$REPO/actions/runs/$id/jobs?per_page=100" 2>/dev/null) || fail "could not read publishing jobs for $sha"
-        jq -e 'any(.jobs[]; .name == "Build and deploy to Cloudflare Pages" and .conclusion == "success")' <<<"$jobs" >/dev/null \
-          || fail "no successful production deploy job for $sha"
+        docs_deploy_ok "$sha"
         echo "deployed ok (workflow)"; return
       fi
       [[ $REPO == hypertask-ai/analytics && $BASE == master ]] || fail "no release found in $REPO"
       releases=$(gh release list -R "$REPO" --limit 1 --json tagName 2>/dev/null) || fail "could not read releases in $REPO"
       jq -e 'length == 0' <<<"$releases" >/dev/null || fail "no release found in $REPO"
-      runs=$(gh api "repos/$REPO/actions/workflows/deploy.yml/runs?head_sha=$sha&event=push&per_page=100" 2>/dev/null) \
+      runs=$(gh api "repos/$REPO/actions/workflows/deploy.yml/runs?head_sha=$sha&per_page=100" 2>/dev/null) \
         || fail "could not read workflow runs for $sha"
       id=$(jq -r --arg sha "$sha" '[.workflow_runs[] | select(.path == ".github/workflows/deploy.yml"
-        and .name == "Publish hypertask.app" and .event == "push" and .head_branch == "master"
+        and .name == "Publish hypertask.app" and (.event == "push" or .event == "workflow_dispatch") and .head_branch == "master"
         and .head_sha == $sha and .conclusion == "success")] | first | .id // empty' <<<"$runs") \
         || fail "could not read publishing workflow identity for $sha"
-      [ -n "$id" ] || fail "no successful production publishing push for $sha"
+      [ -n "$id" ] || fail "no successful production publishing run for $sha"
       # This workflow can succeed with its production deploy job disabled.
       jobs=$(gh api "repos/$REPO/actions/runs/$id/jobs?per_page=100" 2>/dev/null) || fail "could not read publishing jobs for $sha"
       jq -e 'any(.jobs[]; .name == "deploy" and .conclusion == "success")' <<<"$jobs" >/dev/null \
@@ -391,6 +435,36 @@ check_deployed() {
     echo "deployed ok (live in ${live:0:9})"; return
   fi
   echo "deployed ok"
+}
+
+check_docs() {
+  dropped_ok docs "$1" && return 0
+  nochange_ok docs "$1" && return 0
+  local n title type prs sha cmts owner
+  # On the duplicate path the docs PR belongs to the ticket that shipped the fix.
+  owner=$(pr_owner "$1")
+  n=$(bound_pr "$1")
+  [ -n "$n" ] || fail "no PR bound for $1; run ship-check bind $1 <pr number> right after opening it"
+  title=$(gh pr view "$n" -R "$REPO" --json title --jq .title 2>/dev/null) || fail "cannot read PR $n title"
+  [[ $title =~ $TITLE_RE || $title =~ $OLD_TITLE_RE ]] || fail "PR $n title must be PREFIX-NNNN [TYPE] description"
+  [[ $title =~ \[([^]]+)\] ]]; type=${BASH_REMATCH[1]}
+  if [[ $type != FEATURE && $type != IMPROVE ]]; then
+    echo "docs ok (not needed for [$type])"; return
+  fi
+  prs=$(gh pr list -R hypertask-ai/docs --base main --state merged --search "$owner in:title" --limit 100 --json number,title,mergeCommit,baseRefName,state 2>/dev/null) \
+    || fail "could not read docs PRs"
+  while read -r n sha; do
+    [ -n "$n" ] || continue
+    if ( docs_deploy_ok "$sha" ) >/dev/null 2>&1; then echo "docs ok (docs PR $n)"; return; fi
+  done < <(jq -r --arg t "$owner" '.[] | select(.state == "MERGED" and .baseRefName == "main"
+    and (.title | test("(^|[^A-Z0-9])" + $t + "([^A-Z0-9]|$)")))
+    | select(.mergeCommit.oid != null) | "\(.number) \(.mergeCommit.oid)"' <<<"$prs")
+  cmts=$(hypertask comment list "$1" --limit 100 --json 2>/dev/null) || fail "cannot read comments of $1"
+  if jq -e '.comments | any(.[]; (.text // "") | gsub("<[^>]*>|&nbsp;|&#160;|&#xa0;"; "")
+      | test("^\\s*No user-visible change:\\s*\\S"))' >/dev/null <<<"$cmts"; then
+    echo "docs ok (no user-visible change)"; return
+  fi
+  fail "[$type] ticket $1 has no merged and deployed docs PR in hypertask-ai/docs titled with $owner, and no \"No user-visible change:\" comment"
 }
 
 newest_successful_production_sha() {
@@ -678,18 +752,33 @@ try:
         definitions = re.search(definitions_pattern, source('src/lib/flags/definitions.ts', base))
     if not default or not (definitions or flag_rows):
         raise ValueError('cannot resolve flag registry defaults; record premerge evidence before merging')
+    def definition_properties(block):
+        # Comments and strings are consumed whole, so "highRisk:" inside a reason or a comment never counts as a property.
+        pattern = r'//[^\n]*|/\*[\s\S]*?\*/|"(?:\\.|[^"\\])*"|\'(?:\\.|[^\'\\])*\'|`(?:\\.|[^`\\])*`|[A-Za-z_$][\w$]*|:'
+        tokens = [token[0] for token in re.finditer(pattern, block) if not token[0].startswith(('//', '/*'))]
+        properties = {}
+        for index in range(len(tokens) - 1):
+            name, colon = tokens[index], tokens[index + 1]
+            if colon != ':' or name == ':':
+                continue
+            name = name[1:-1] if name[0] in '"\'`' else name
+            value = tokens[index + 2] if index + 2 < len(tokens) else ''
+            properties.setdefault(name, value[1:-1] if value[:1] in ('"', "'", '`') else None)
+        return properties
+    def registry_default(block, fallback):
+        properties = definition_properties(block)
+        if properties.get('defaultMode'):
+            return properties['defaultMode']
+        return 'EVERYONE' if properties.get('kind') == 'bugfix' else fallback
     defaults = {}
     for block in (flag_rows or re.findall(r'\{([^{}]*)\}', definitions[1])):
         key = re.search(r'\bkey:\s*([\'\"][^\'\"]+[\'\"]|\w+)', block)
         if key:
-            kind = re.search(r'\bkind:\s*[\'"]bugfix[\'"]', block)
-            explicit = re.search(r'\bdefaultMode:\s*[\'"](\w+)[\'"]', block)
-            defaults[resolve(key[1], keys)] = explicit[1] if explicit else ('EVERYONE' if kind else default[1])
+            defaults[resolve(key[1], keys)] = registry_default(block, default[1])
     live = modes is not None
     if not live:
         print('note: live flag modes unavailable; registry defaults cannot prove a flag is not released')
         modes = defaults
-    # A flag this PR defines (in head keys.ts, not in base keys.ts or registry, not read before) starts at Owner + QA.
     base_values = set(keys.values()) | set(defaults)
     head_keys, head_rows = flag_registry(sha)
     head_values = set(head_keys.values())
@@ -697,13 +786,23 @@ try:
     # a current-head click when released; only their recorded mode is exempt, unless the key survives.
     recorded_flags = touched - (deleted_definitions - head_values)
     added = {key for key in touched if key in head_values and key not in base_values and key not in base_touched}
+    added_files = {f['filename'] for f in files if f['status'] == 'added' and
+                   f['filename'].startswith('src/lib/flags/definitions/') and f['filename'].endswith('.ts')}
+    for path in added_files:
+        block = source(path, sha)
+        properties = definition_properties(block)
+        key = next(iter(constants(block).values()), path)
+        mode = registry_default(block, 'OWNER_AND_QA')
+        if properties.get('kind') == 'internal' or 'highRisk' in properties:
+            if mode == 'EVERYONE':
+                raise ValueError(f'new flag {key} with highRisk or internal kind may not default to Everyone')
+        elif properties.get('kind') != 'bugfix' and properties.get('defaultMode') != 'EVERYONE':
+            raise ValueError(f'new flag {key} must set defaultMode: "EVERYONE" (or releaseRisk.highRisk for money, access, data-deletion or customer-email)')
     for block in head_rows:
         key = re.search(r'\bkey:\s*(\w+)', block)
-        explicit = re.search(r'\bdefaultMode:\s*[\'"](\w+)[\'"]', block)
-        bugfix = re.search(r'\bkind:\s*[\'"]bugfix[\'"]', block)
         key = key and resolve(key[1], head_keys)
         # A new flag that defaults to Everyone is released on merge, so it needs its own click state.
-        if key in added and (explicit[1] if explicit else ('EVERYONE' if bugfix else 'OWNER_AND_QA')) == 'EVERYONE':
+        if key in added and registry_default(block, 'OWNER_AND_QA') == 'EVERYONE':
             added.discard(key)
             modes[key] = 'EVERYONE'
     released = {key for key in touched if modes.get(key) == 'EVERYONE'}
@@ -757,6 +856,8 @@ try:
     video = (folder / fields['Recording']).resolve()
     if not video.is_relative_to(folder.resolve()) or not video.is_file() or not video.stat().st_size:
         raise ValueError(message + ' (recording must be non-empty and inside the ticket evidence folder)')
+    if deleted_definitions and all(modes.get(key) == 'EVERYONE' for key in deleted_definitions):
+        print('removed-everyone: ' + ','.join(sorted(deleted_definitions)))
     print('premerge ok')
 except Exception as error:
     print('FAIL: ' + (str(error) if isinstance(error, ValueError) else 'cannot verify released-flag premerge evidence; retry before merging'))
@@ -766,7 +867,7 @@ PY
 
 check_premerge_status() (
   [ "$REPO" = hypertask-ai/hypertask ] || return 0
-  local sha current out lock state=failure description rc=1
+  local sha current out lock removed state=failure description rc=1
   local state_dir=${PREMERGE_STATUS_STATE:-$HOME/.local/state/premerge-evidence}
   mkdir -p "$state_dir" && exec {lock}>"$state_dir/publish.lock" \
     && flock -x -w 600 "$lock" || fail "cannot lock premerge publisher; no success posted"
@@ -792,6 +893,12 @@ check_premerge_status() (
     state=failure; description='cannot confirm unchanged PR head; retry'; rc=1
   fi
   description=${description:-cannot verify premerge evidence; retry}
+  if [ "$state" = success ]; then
+    removed=$(grep '^removed-everyone: ' <<<"$out") || removed=''
+    if [ -n "$removed" ] && [ $(( ${#description} + 3 + ${#removed} )) -le 140 ]; then
+      description+=" | $removed"
+    fi
+  fi
   gh api "repos/$REPO/statuses/$sha" --method POST -f context=premerge-evidence \
     -f "state=$state" -f "description=${description:0:140}" >/dev/null 2>&1 \
     || fail "cannot post premerge-evidence for PR $1; retry before merging"
@@ -903,17 +1010,31 @@ PY
       out=$(check_ci_tests "$pr") || { echo "ship-check blocked the merge: ${out#FAIL: }.$unresolved" >&2; exit 2; }
       out=$(check_premerge_status "$pr") || { echo "ship-check blocked the merge: ${out#FAIL: }. Follow .claude/skills/verify-qa/SKILL.md before merging.$unresolved" >&2; exit 2; }
     fi
-    # Move to Done: needs the merge and the deploy; app tickets also need proof.md.
+    # Move to Done: needs merge, deploy and docs (FEATURE/IMPROVE); app tickets also need proof.md.
     if [[ $rest =~ ^$done ]]; then
       [[ $rest =~ (HTPR|HYFA|YPER4)-[0-9]+ ]]; t=${BASH_REMATCH[0]}
-      checks="merged deployed"; [[ $t == HTPR-* ]] && checks="merged deployed proof"
+      checks="merged deployed docs"; [[ $t == HTPR-* ]] && checks="merged deployed proof docs"
       for c in $checks; do
+        if [ "$c" = docs ]; then
+          out=$(check_docs "$t") || { echo "ship-check blocked moving $t to Done: ${out#FAIL: }. Merge a docs PR titled with $t or post a No user-visible change: <reason> ticket comment." >&2; exit 2; }
+          continue
+        fi
         out=$("check_$c" "$t") || { echo "ship-check blocked moving $t to Done: ${out#FAIL: }. Follow .claude/skills/verify-qa/SKILL.md first." >&2; exit 2; }
       done
     fi
   done < <(sed -E 's/(&&|\|\||;|\||&|\(|\))/\n/g' <<<"$cmd")
   exit 0
 }
+
+case "${1:-}" in
+  pr|merged|deployed|docs|proof|done|cleaned)
+    if [ "${SHIP_REPO+x}" != x ] && [ -s "$EVID/${2:-}/repo" ]; then
+      REPO=$(cat "$EVID/$2/repo") || fail "could not read bound repo for $2"
+    fi
+    if [ "${SHIP_BASE+x}" != x ] && [ -s "$EVID/${2:-}/base" ]; then
+      BASE=$(cat "$EVID/$2/base") || fail "could not read bound base for $2"
+    fi ;;
+esac
 
 case "${1:-}" in
   bind) check_bind "$2" "$3" ;;
@@ -926,12 +1047,14 @@ case "${1:-}" in
   title) check_title "$2" ;;
   ci-tests) check_ci_tests "$2" ;;
   ticket) check_ticket "$2" ;;
+  deeper) check_deeper "${2:-}" ;;
   pr) check_pr "$2" ;;
   merged) check_merged "$2" ;;
   deployed) check_deployed "$2" ;;
+  docs) check_docs "$2" ;;
   proof) check_proof "$2" ;;
   done) check_done "$2" ;;
   cleaned) check_cleaned "$2" ;;
   guard) guard ;;
-  *) sed -n '2,23p' "$0"; exit 1 ;;
+  *) sed -n '2,25p' "$0"; exit 1 ;;
 esac

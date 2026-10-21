@@ -39,7 +39,6 @@ const DescriptonBody = ({ draftTQ }: any) => {
   } = useTaskContext();
   const task = useMemo(() => JSON.parse(parsedTask), [parsedTask]);
   const instantTicketOpen = useFlag(HTPR_6752_INSTANT_TICKET_OPEN_FLAG);
-  // HTPR-7091: keep the editor code out of the first load; show the static description meanwhile.
   const staticFirstFlag = useFlag(HTPR_7091_STATIC_DESCRIPTION_FIRST_FLAG);
   const appSavedStatic = useFlag(HTPR_7110_APP_SAVED_STATIC_DESCRIPTION_FLAG);
   const creator = instantTicketOpen ? currentTask?.user : task.user;
@@ -53,15 +52,12 @@ const DescriptonBody = ({ draftTQ }: any) => {
   const isEditing =
     editMode === "description" ||
     editMode === "description-ai" ||
-    // Restoring a draft must not open the phone modal or arm its Back guard.
     (!isMbl && (hasDraft || hasDraftInit));
   const content =
     uploadingDescription?.content ??
     draftTQ?.find((draft: IDraft) => isMeaningfulDescriptionDraft(draft))
       ?.content ??
     description;
-  // HTPR-6802: the editor only linkifies typed or pasted URLs, so bare URLs
-  // in CLI/API-written descriptions stayed plain text here.
   const linkedContent = useMemo(() => (content ? linkifyHtml(content) : content), [content]);
   const addLinkedAttachment = useCallback(
     (attachment: IAttachment) => {
@@ -80,7 +76,6 @@ const DescriptonBody = ({ draftTQ }: any) => {
 
   return (
     <>
-      {/* A passive editor swap reflows already-painted cached HTML. Mount it only for editing. */}
       {secondaryPanelsReady !== false && (!cachedLayout || isEditing) ? <DescriptionEditorSlot
         key={task.id}
         lazy={staticFirstFlag ? instantTicketOpen && !isEditing && (appSavedStatic

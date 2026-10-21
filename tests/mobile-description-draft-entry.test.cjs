@@ -66,6 +66,7 @@ async function fixture(t, { mobile = true, hasDraft = false, hasDraftInit = fals
     "@/lib/constants/TaskDetail": { descriptionContainerId: "description-container" },
   });
   const { useTaskDetailEditorSave } = load("src/components/RTE/useTaskDetailEditorSave.tsx", {
+    "@/hooks/MultiPages/AIChat/useCommentToAiChat": { useCommentToAiChat: () => ({}) },
     "@/hooks/useFlag": { useFlag: () => false },
     "@/lib/flags/keys": {},
     "@/lib/state": { useSetRecoilState: () => () => {} },

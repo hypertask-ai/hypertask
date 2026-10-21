@@ -7,6 +7,7 @@ const path = require('node:path');
 const vm = require('node:vm');
 const ts = require('typescript');
 const root = path.resolve(__dirname, '..');
+const { load } = require('./task-route-loader.cjs');
 
 const WRITE_ACCESS = { writeAccessFor: 7 };
 
@@ -35,6 +36,11 @@ function loadSetter(file, field) {
     agent: { findUnique: async () => null },
     [field]: model,
   };
+  const scope = load('src/lib/auth/agentScope.ts', {
+    '@/lib/flags': { isFeatureEnabled: async () => false },
+    '@/lib/prisma': { default: { member: { findMany: async () => [] } } },
+    '@/lib/telemetry/signupAnalytics': { recordServerCapture: () => {} },
+  });
   const filename = path.join(root, file);
   const code = ts.transpileModule(fs.readFileSync(filename, 'utf8'), {
     compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022, esModuleInterop: true },
@@ -42,6 +48,9 @@ function loadSetter(file, field) {
   const loaded = { exports: {} };
   const activity = { __esModule: true, default: () => {} };
   const stubs = {
+    '@/lib/auth/agentScope': scope,
+    '@/lib/auth/resolveActingAgent': load('src/lib/auth/resolveActingAgent.ts', {}),
+    '@/utils/controllers/tasks/assertTaskAccess': { userCanAccessTask: async () => { throw new Error('WATCH must use the existing content access query'); } },
     '@/lib/prisma': { __esModule: true, default: prisma },
     '@/utils/controllers/activities/CreatePriorityActivity': activity,
     '@/utils/controllers/activities/createEstimateActivity': activity,

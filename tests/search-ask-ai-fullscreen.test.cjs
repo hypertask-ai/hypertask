@@ -260,6 +260,7 @@ test('search server gate uses the authenticated identity, fails closed and passe
     source('src/lib/auth/getSessionUser.ts', { getSessionUser: async () => userId === null ? null : { userId } })
     source('src/lib/flags.ts', { isFeatureEnabled: async (...args) => { calls.push(args); return enabled } })
     source('src/app/search/SearchComp.tsx', { default: () => null })
+    source('src/app/search/startServerSearch.ts', { startServerSearch: async () => null })
     const Page = createJiti(__filename, { alias: { '@': path.join(root, 'src') }, interopDefault: true, fsCache: false, jsx: { runtime: 'automatic' } })(path.join(root, 'src/app/search/page.tsx')).default
     for (const value of [true, false]) {
       enabled = value

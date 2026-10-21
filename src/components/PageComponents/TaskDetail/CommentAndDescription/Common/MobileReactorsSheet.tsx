@@ -5,28 +5,13 @@ import NativeEmoji from "./NativeEmoji";
 import UserAvatar from "@/components/Common/UserAvatar";
 
 interface MobileReactorsSheetProps {
-  /** The reaction whose users we list. */
   reaction: IReaction;
-  /** Signed-in user, so their own row reads "You" and can remove the reaction. */
   currentUser: IUser;
-  /** Human label for the emoji, e.g. "thumbs up" — shown in the header. */
   semantic: string;
-  /** Removes the current user's own reaction. Omitted in read-only views. */
   onRemoveOwn?: () => void;
-  /** Dismiss (backdrop tap / Escape). */
   onClose: () => void;
 }
 
-/**
- * Bottom sheet listing WHO reacted with a given emoji, for mobile.
- *
- * On desktop the reactors surface via a hover tooltip (EmojiTooltip); touch has
- * no hover, so tapping a reaction pill on mobile opens this instead.
- * Same bottom-sheet chrome as MobileEmojiReactionSheet — portal, dim backdrop,
- * drag handle, shadow-only (no border, per the house no-outlines rule). The
- * current user's own row offers "Tap to remove", preserving the tap-to-toggle
- * that the desktop pill has.
- */
 const MobileReactorsSheet = ({
   reaction,
   currentUser,
@@ -57,7 +42,6 @@ const MobileReactorsSheet = ({
 
   return createPortal(
     <>
-      {/* Dim the feed behind the sheet and swallow background taps/scroll. */}
       <div
         aria-hidden="true"
         className="fixed inset-0 z-[9998] bg-black/40"
@@ -73,7 +57,6 @@ const MobileReactorsSheet = ({
           <span className="h-1 w-9 rounded-full bg-[#4F5766]" />
         </div>
 
-        {/* Header: the emoji + label. */}
         <div className="flex shrink-0 items-center gap-2 px-4 pb-3 pt-1">
           <NativeEmoji unified={reaction.unified} size={22} />
           <span className="text-content text-text-light-gray">
@@ -81,10 +64,8 @@ const MobileReactorsSheet = ({
           </span>
         </div>
 
-        {/* Who reacted. */}
         <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-2 pb-2">
           {users.map((user, index) => {
-            // HTPR-7122: an agent reactor has id null and its own "(agent)" name.
             const isCurrentUser = user.id != null && user.id === currentUser?.id;
             return (
               <div

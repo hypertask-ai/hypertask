@@ -19,6 +19,9 @@ function loadRoute({ authenticated = true, enabled = true, result } = {}) {
     },
   }).outputText;
   const stubs = {
+    "@/lib/auth/agentScope": require("./helpers/agent-board-scope.cjs").enforcedScope,
+    "@/lib/mcp/operationCrashReport": { reportMcpOperationCrash: () => {} },
+    "@/utils/controllers/projects/getAllIncludes": require("./helpers/agent-board-scope.cjs").access,
     "next/server": {
       NextResponse: {
         json: (body, init = {}) => ({ body, status: init.status ?? 200 }),
@@ -31,7 +34,7 @@ function loadRoute({ authenticated = true, enabled = true, result } = {}) {
     },
     "@/lib/prisma": {
       __esModule: true,
-      default: { project: {} },
+      default: { project: { findFirst: async () => ({ id: 15 }) } },
     },
     "@/lib/flags": {
       HTPR_6470_PROJECT_DELETE_FLAG: "htpr-6470-project-delete",

@@ -5,10 +5,6 @@ import { logger } from '../../utils/logger';
 
 type ReportApiResponse = Record<string, unknown>;
 
-/**
- * Service for creating, reading, updating, listing, and deleting reports.
- * Validates input and makes API requests.
- */
 export class ReportService {
   constructor(private readonly apiClient: IApiClient) {}
 
@@ -51,9 +47,8 @@ export class ReportService {
         correlationId
       );
     } catch (error) {
-      logger.error('Failed to manage report', {
+      logger.failure('Failed to manage report', error, {
         correlationId,
-        error: error instanceof Error ? error.message : String(error),
       });
       throw error;
     }

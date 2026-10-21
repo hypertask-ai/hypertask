@@ -1,11 +1,5 @@
 import { CLI_INSTALL_COMMAND, CLI_LOGIN_COMMAND, CLI_WINDOWS_NOTE, MCP_ADD_COMMAND } from "@/lib/onboarding/installCommands";
 
-/**
- * The selling-point tasks seeded onto a fresh guest's skeleton board.
- * Shared between the server (provisionGuest seeds them) and the client
- * (isGuestBoardBuild must still treat a board holding only these as "empty",
- * so the AI chat keeps offering to build the real board).
- */
 export const GUEST_SEED_TASKS = [
   {
     title: "Press Ctrl+K: every action is one keystroke away",

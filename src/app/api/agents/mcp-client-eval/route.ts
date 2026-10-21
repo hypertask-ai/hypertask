@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getSessionUser } from "@/lib/auth/getSessionUser";
-import { HTPR_6533_MCP_CLIENT_EVAL_FLAG, isFeatureEnabled } from "@/lib/flags";
+import { isOwnerOrQaUserId } from "@/lib/flags";
 import type { McpClientEvalReport } from "@/lib/mcpClientEval/types";
 import latest from "@/lib/mcpClientEval/latest.json";
 
@@ -19,7 +19,6 @@ async function loadPublishedReport(): Promise<McpClientEvalReport> {
       return (await response.json()) as McpClientEvalReport;
     }
   } catch {
-    // Fall back to the last committed report when the published branch is empty.
   }
   return latest as McpClientEvalReport;
 }
@@ -33,7 +32,7 @@ export async function GET(request: NextRequest) {
     );
   }
 
-  if (!(await isFeatureEnabled(HTPR_6533_MCP_CLIENT_EVAL_FLAG, session.userId))) {
+  if (!(await isOwnerOrQaUserId(session.userId))) {
     return NextResponse.json(
       { success: false, error: "Not found" },
       { status: 404 },

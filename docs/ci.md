@@ -2,7 +2,7 @@
 
 _Last updated: 2026-09-17._
 
-**Hypertask app CI runs on GitHub-hosted `ubuntu-latest` runners (the repository is public, so hosted minutes are free), uses a provider-neutral AI review gate, and deploys production directly from the `production` branch.** The only self-hosted runners on the Contabo host belong to the private reviewer and analytics repositories. The human-readable source is [https://hypertask.app/wiki/deployment](https://hypertask.app/wiki/deployment); the machine-readable companion is [`docs/ci-policy.yml`](ci-policy.yml).
+**Hypertask app CI runs on GitHub-hosted `ubuntu-latest` runners (the repository is public, so hosted minutes are free), uses a provider-neutral AI review gate, and deploys production directly from the `production` branch.** The only self-hosted runners on the Contabo host belong to the private reviewer and analytics repositories. This file is the human-readable contract; the machine-readable companion is [`docs/ci-policy.yml`](ci-policy.yml).
 
 ## Review gate
 
@@ -22,7 +22,22 @@ _Last updated: 2026-09-17._
 - DeepSeek-produced PRs keep the `hold` label. The automated verdict is evidence, but a trusted release session must still remove the hold before merge.
 - Subscription credentials belong only to the isolated `aireviewer` OS account. Only the private repository's `htreviewrunner` identity may invoke the root-owned wrappers. The broker runs only as `reviewdispatch`; the general `ghrunner` identity used by application jobs can invoke neither boundary.
 - The broker's cross-repository credential is supplied through a `reviewdispatch`-only curl config file, never a command argument or application workflow environment.
-- The safe manual retry command is documented in `openwiki/deployment.md`; it sends `repository_dispatch` with a numeric PR and exact 40-character head SHA. The private workflow and reviewer validate both before using credentials.
+- The safe manual retry command below sends `repository_dispatch` with a numeric PR and exact 40-character head SHA. The private workflow and reviewer validate both before using credentials.
+
+### Trusted manual review retry
+
+Use this only for an infrastructure failure, not to rerun a valid negative verdict. Confirm the PR is open, targets `production`, comes from this repository, and still has the exact head SHA. This payload follows `.github/scripts/subscription-review/dispatch-review` and runs the private repository's default-branch workflow, never a PR-selected ref.
+
+```bash
+PR=1234
+HEAD_SHA=$(gh pr view "$PR" --repo hypertask-ai/hypertask --json headRefOid --jq .headRefOid)
+[[ "$PR" =~ ^[1-9][0-9]*$ && "$HEAD_SHA" =~ ^[0-9a-f]{40}$ ]] || exit 1
+jq -n --arg pr "$PR" --arg sha "$HEAD_SHA" \
+  '{event_type:"review_pr",client_payload:{pr:$pr,head_sha:$sha}}' \
+  | gh api --method POST repos/hypertask-ai/reviewer/dispatches --input -
+```
+
+Use a trusted identity with dispatch access to the private reviewer repository. The private workflow and reviewer revalidate the PR and head before using credentials.
 
 ## Release contract
 
@@ -80,11 +95,11 @@ The cache prototype for https://app.hypertask.ai/detail/project-15/5191 complete
 
 The first Contabo run completed cold in 6:02. Repeating the exact commit on the same runner completed in 3:45: install took 55 seconds, TypeScript 74 seconds, lint 4 seconds, and tests 35 seconds. Restoring the separate setup-node npm archive cost 32 seconds, so that redundant remote cache was removed in favour of the persistent runner-local npm cache. A later run on a different runner exposed ESLint's absolute cache paths; the workflow now relocates those paths before linting.
 
-Keep this file, [`docs/ci-policy.yml`](ci-policy.yml), and [https://hypertask.app/pipeline](https://hypertask.app/pipeline) synchronized with the canonical wiki page.
+Keep this file, [`docs/ci-policy.yml`](ci-policy.yml), and [https://hypertask.app/pipeline](https://hypertask.app/pipeline) synchronized with the live workflows.
 
 ## Review-lane baseline
 
-Before the second dedicated runner was restored, the latest 100 AI-review workflow runs had **0 seconds p50 queue time, 398 seconds p95, and 1,019 seconds maximum**. Review execution was 124 seconds at p50. The review lane currently runs as a single runner (`contabo-1`) under the separate `htreviewrunner` OS identity; the wiki's live `/ci` page alerts when that lane goes offline.
+Before the second dedicated runner was restored, the latest 100 AI-review workflow runs had **0 seconds p50 queue time, 398 seconds p95, and 1,019 seconds maximum**. Review execution was 124 seconds at p50. The review lane currently runs as a single runner (`contabo-1`) under the separate `htreviewrunner` OS identity; the live `/ci` page alerts when that lane goes offline.
 
 ## MCP, CLI and API contract
 
@@ -104,3 +119,24 @@ local app. Missing output, failed, skipped or cancelled browser smoke fails the 
 Activate the new production ruleset context in coordination with this policy update:
 CI Tests' `Verify live required-check settings` step compares the live ruleset's exact
 context set against the workflow expectation. This change does not modify that ruleset.
+
+## Agent board scope guard (HTPR-7496)
+
+`ci-tests` runs `.github/scripts/agent-scope/run.py --self-test` and then the real
+scan after dependency installation or cache restore, before Prisma generation.
+Python 3.12 from the runner tool cache (asserted, so an image change fails loudly)
+creates a venv in `RUNNER_TEMP`; pip requires the committed hashes for Semgrep 1.140.0 and Pydantic
+2.11.9. Pip downloads are cached, metrics and version checks are disabled.
+
+The inventory is regenerated every run. Coverage is direct `prisma.project/task/comment`
+findMany/findFirst/findUnique/update/delete/count calls in agent-capable entry files
+only (files without such a delegate are skipped before Semgrep), not transitive controllers or whole-program authorization proof. Strict parse
+errors and unscanned targets fail. Source-bound reviewed exceptions are separate
+from visible, expiring call-bound debt. New findings and stale entries fail.
+
+On PRs, additions or changes to existing debt/exception lists require each entry's
+full `approvedIn` ticket URL and the matching PR body line, respectively
+`Agent scope debt approved: <URL>` or `Agent scope exception approved: <URL>`.
+First creation and removals are free. See [the guard README](../.github/scripts/agent-scope/README.md).
+This adds no job, required check or ruleset change. Today's 81 debt entries are
+tracked in https://app.hypertask.ai/detail/project-15/7508.

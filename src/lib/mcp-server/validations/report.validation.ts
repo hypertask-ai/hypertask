@@ -1,8 +1,3 @@
-/**
- * Report-related validation schemas
- *
- * Validations for the multi-action report CRUD tool.
- */
 
 import { z } from 'zod';
 
@@ -42,10 +37,6 @@ const bodyHtmlSchema = z.string().max(
   `body_html cannot exceed ${REPORT_BODY_MAX} characters. ${REPORT_CAPABILITIES}`
 );
 
-/**
- * Base schema for report CRUD without action-specific validation.
- * FastMCP requires a plain Zod object for tool parameters.
- */
 export function getReportCrudBaseSchema() {
   return z
     .object({

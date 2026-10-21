@@ -75,11 +75,6 @@ export function decideEmailCodeAttempt(
   }
 }
 
-/**
- * Atomically reserves verification capacity before the code is compared.
- * Reserving first prevents a burst of parallel guesses from all reaching the
- * database while the counters still look unused.
- */
 export async function claimEmailCodeAttempt(
   email: string,
   clientIp: string,

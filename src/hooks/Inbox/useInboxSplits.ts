@@ -13,11 +13,6 @@ export interface IInboxSplitTab {
   hasUnseen: boolean;
 }
 
-/**
- * Which inbox split is active and how to switch, shared by the inbox page and
- * the mobile header strip. globalNotificationFocusAtom is the single source of
- * truth, so switching from the strip re-renders the page's active split.
- */
 export const useInboxSplits = (userId: number) => {
   const router = useRouter();
   const { data: notificationsTQ } = useGetNotifications(userId);

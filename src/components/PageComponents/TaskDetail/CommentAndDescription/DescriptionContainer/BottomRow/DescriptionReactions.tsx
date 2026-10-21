@@ -32,7 +32,6 @@ const DescriptionReactions = ()=>{
         setShowHere(false)
         handleClickOutside(event)
     }
-// ============================== MOBILE
     if (_mbl && editMode!=="description"){
         return (
             <div
@@ -51,7 +50,7 @@ const DescriptionReactions = ()=>{
                     />
                 </>
             
-                // eslint-disable-next-line react/jsx-key
+
             )}
             
                 <DescriptionEmojiButton 
@@ -67,7 +66,6 @@ const DescriptionReactions = ()=>{
         )
     }
 
-// ============================ DESKTOP 
     else return (
         <div
             data-task-detail-actions
@@ -85,7 +83,7 @@ const DescriptionReactions = ()=>{
                     />
                 </>
             
-                // eslint-disable-next-line react/jsx-key
+
             )}
             {
                 currentTask?.description_?.reactions&&currentTask?.description_?.reactions.length>0&&

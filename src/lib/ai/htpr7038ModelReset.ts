@@ -6,7 +6,6 @@ import { getRedis } from "@/lib/redis";
 
 export type Htpr7038ModelResetResult = "disabled" | "done" | "reset" | "failed";
 
-// Only "reset" requires bypassing a pre-reset preferences cache entry.
 export const ensureHtpr7038ModelReset = cache(async (userId: number): Promise<Htpr7038ModelResetResult> => {
   try {
     if (!(await isFeatureEnabled(HTPR_7038_RESET_SAVED_MODEL_CHOICES_FLAG, userId))) {
@@ -19,14 +18,12 @@ export const ensureHtpr7038ModelReset = cache(async (userId: number): Promise<Ht
     if (done) return "done";
 
     const changed = await prisma.$transaction(async (tx) => {
-      // Same-user resets serialize, including users without a settings row.
       await tx.$executeRaw`SELECT pg_advisory_xact_lock(7038, ${userId})`;
       const marker = await tx.htpr7038ModelChoiceResetDone.createMany({
         data: { userId },
         skipDuplicates: true,
       });
       if (!marker.count) return false;
-      // Lock before reading JSON, so preference saves cannot be overwritten.
       await tx.$queryRaw`SELECT "userId" FROM "UserSetting" WHERE "userId" = ${userId} FOR UPDATE`;
       const updated = await tx.$executeRaw`
         WITH RECURSIVE setting AS (
@@ -67,14 +64,12 @@ export const ensureHtpr7038ModelReset = cache(async (userId: number): Promise<Ht
       `;
       if (updated > 0) {
         const redis = await getRedis();
-        // Roll back on invalidation failure rather than leave cached pre-reset picks.
         await redis.setex(`user:${userId}:user-preferences`, 10, "__invalidated__");
       }
       return updated > 0;
     });
     return changed ? "reset" : "done";
   } catch {
-    // Database errors can contain connection details or saved data.
     console.warn("[HTPR-7038] Saved-choice reset failed; continuing with existing preferences");
     return "failed";
   }

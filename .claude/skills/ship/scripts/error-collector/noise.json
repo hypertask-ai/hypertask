@@ -6,11 +6,13 @@
   },
   {
     "id": "aborted-client",
+    "excludeServices": ["realtime"],
     "match": "(?:AbortError|client (?:request )?abort(?:ed)?|request aborted|\\bclient (?:request|closed|disconnected)\\b[^\\n]*(?:ECONNRESET|socket hang up))",
     "reason": "Clients disconnecting before their response completes"
   },
   {
     "id": "expected-http",
+    "excludeServices": ["realtime"],
     "match": "(?:\\b(?:HTTP(?: status)?|status(?: code)?|response(?: status)?)\\s*[:=]?\\s*(?:401|403|404)\\b|\\b(?:401 Unauthorized|403 Forbidden|404 Not Found)\\b)",
     "reason": "Expected unauthorized, forbidden or missing-resource responses"
   },
@@ -18,43 +20,57 @@
     "id": "ssl-mode-warning",
     "service": "vercel",
     "match": "Warning: SECURITY WARNING: The SSL modes",
-    "reason": "Node/dependency warning emitted on stderr, not a thrown product exception; track upgrades separately."
+    "reason": "Node/dependency warning emitted on stderr, not a thrown product exception; high volumes need a fix at the source.",
+    "alert": true,
+    "name": "SSL configuration warning"
   },
   {
     "id": "ai-sdk-warning",
     "service": "vercel",
     "match": "(?:Warning: AI SDK Warning|\\[AISDK_DEP_[A-Z_]+\\] DeprecationWarning:)",
-    "reason": "Node/dependency warning emitted on stderr, not a thrown product exception; track upgrades separately."
+    "reason": "Node/dependency warning emitted on stderr, not a thrown product exception; high volumes need a fix at the source.",
+    "alert": true,
+    "name": "AI SDK warning"
   },
   {
     "id": "pg-query-deprecation",
     "service": "vercel",
     "match": "DeprecationWarning: Calling client\\.query\\(\\) when the client is already executing a query",
-    "reason": "Node/dependency warning emitted on stderr, not a thrown product exception; track upgrades separately."
+    "reason": "Node/dependency warning emitted on stderr, not a thrown product exception; high volumes need a fix at the source.",
+    "alert": true,
+    "name": "Postgres query deprecation warning"
   },
   {
     "id": "url-parse-deprecation",
     "service": "vercel",
     "match": "DeprecationWarning: `url\\.parse\\(\\)` behavior is not standardized",
-    "reason": "Node/dependency warning emitted on stderr, not a thrown product exception; track upgrades separately."
+    "reason": "Node/dependency warning emitted on stderr, not a thrown product exception; high volumes need a fix at the source.",
+    "alert": true,
+    "name": "URL parsing deprecation warning"
   },
   {
     "id": "aws-sdk-v2-note",
     "service": "vercel",
     "match": "NOTE: The AWS SDK for JavaScript \\(v2\\) has reached (?:end-of-support|maintenance mode)",
-    "reason": "Node/dependency warning emitted on stderr, not a thrown product exception; track upgrades separately."
+    "reason": "Node/dependency warning emitted on stderr, not a thrown product exception; high volumes need a fix at the source.",
+    "alert": true,
+    "name": "AWS SDK v2 support warning"
   },
   {
     "id": "console-time-warning",
     "service": "vercel",
     "match": "Warning: Label '[^']+' already exists for console\\.time\\(\\)",
-    "reason": "Node/dependency warning emitted on stderr, not a thrown product exception; track upgrades separately."
+    "reason": "Node/dependency warning emitted on stderr, not a thrown product exception; high volumes need a fix at the source.",
+    "alert": true,
+    "name": "Console timer warning"
   },
   {
     "id": "qstash-cancel-404",
     "service": "vercel",
     "match": "^\\[Upstash QStash\\] DELETE https://qstash[^\\s]+/messages/[^\\s]+ failed with status 404\\b",
-    "reason": "Cancel of an already-delivered/absent queued message; existing code deliberately absorbs cancellation failure."
+    "reason": "Cancel of an already-delivered/absent queued message; existing code deliberately absorbs cancellation failure.",
+    "alert": true,
+    "name": "QStash cancellation warning"
   },
   {
     "id": "agent-done-refusal",
@@ -81,6 +97,11 @@
     "reason": "Successful structured info message goes through console.error; Vercel assigns the outer record level error."
   },
   {
+    "id": "forced-test",
+    "match": "\\[ht-forced-test\\]|^\\[cli-error\\] [a-z0-9 -]+: HtForcedTest(?:\\s|$)",
+    "reason": "A test threw this error on purpose and marked it [ht-forced-test] (YPER4-384), or sent a CLI report with error name HtForcedTest (YPER4-396); every source skips it."
+  },
+  {
     "id": "posthog-canary",
     "service": "vercel",
     "match": "^(?:Error: )?PostHog pipeline canary\\b",
@@ -91,6 +112,12 @@
     "service": "vps-journal",
     "match": "^tmux-spawn-[^:]*\\.scope:",
     "reason": "Output of an interactive terminal session on the VPS, not a service failure."
+  },
+  {
+    "id": "ssh-client-hung-up",
+    "service": "vps-journal",
+    "match": "^ssh\\.service: fatal: ssh_packet_send_debug: send DEBUG: Broken pipe\\n",
+    "reason": "An SSH client closed its connection while the server was still sending it a debug notice; the client went away, the server is fine (YPER4-406)."
   },
   {
     "id": "outside-pr-guard-dry-run",

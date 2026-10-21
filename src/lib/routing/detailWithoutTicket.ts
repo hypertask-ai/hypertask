@@ -1,8 +1,3 @@
-/**
- * HTPR-6818: where a /detail URL without a ticket number (/detail/project-15)
- * should go, or null when the URL addresses a task. Prefixed IDs must reach
- * the page, where the feature flag and board access are checked.
- */
 export function detailWithoutTicketRedirect(pathname: string): string | null {
   if (!pathname.startsWith("/detail/")) return null;
   const [projectSlug = "", ticketNumber = ""] = pathname.split("/").slice(2);

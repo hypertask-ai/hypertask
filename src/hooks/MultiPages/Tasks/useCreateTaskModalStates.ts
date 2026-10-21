@@ -1,7 +1,7 @@
 import { hasHaikuByokProviderFlags } from "@/lib/byokSelectedProviderGate";
-import { HTPR_7010_HAIKU_5_5_FLAG, LUNA_FREE_PLAN_FLAG } from "@/lib/flags/keys";
+import { HTPR_7010_HAIKU_5_5_FLAG } from "@/lib/flags/keys";
 import { useHaikuDefaultFlag } from "@/hooks/useHaikuDefaultFlag";
-/* eslint-disable react-hooks/exhaustive-deps */
+
 import {
   processHtmlForTaskId,
   uploadAttachmentsDescription,
@@ -99,10 +99,6 @@ const useCreateTaskModalGlobalStates = () => {
   >(createTaskModal.column_payload?.createTaskFromComment);
   const [_currentProject, setCurrentProject] =
     useRecoilState(currentProjectAtom);
-  // A guest's first create-task opening lands on the AI writer so the demo's
-  // second beat happens inside a modal they opened themselves (HTPR-4937).
-  // Only a plain opening: duplicates, create-from-comment and prefilled
-  // payloads carry content the writer must not talk over.
   const guestWriterIntro =
     !createTaskModal.defaultEditFocus?.defaultEditMode &&
     !createTaskModal.duplicate &&
@@ -130,9 +126,6 @@ const useCreateTaskModalGlobalStates = () => {
   }
   const dictationCoordinator = dictationCoordinatorRef.current;
   const [isGeneratingTitle, setIsGeneratingTitle] = useState(false);
-  // Bumped whenever the composer is reset (discard, close, post-create). A
-  // save that awaited title generation checks it before creating, so a task
-  // can't materialize after the user already discarded the draft.
   const saveEpochRef = useRef(0);
   const generatedTitleTrackerRef = useRef(createAiTitleEditTracker());
   const autoTitleCoordinatorRef = useRef<ReturnType<
@@ -160,10 +153,9 @@ const useCreateTaskModalGlobalStates = () => {
   const { data: userPreferences } = useGetUserPreferences();
   const haikuDefaultEnabled = useHaikuDefaultFlag();
   const haiku55Enabled = useFlag(HTPR_7010_HAIKU_5_5_FLAG) || haikuDefaultEnabled;
-  const lunaFree = useFlag(LUNA_FREE_PLAN_FLAG) || haikuDefaultEnabled;
   const defaultBilling = deriveCurrentBoardBilling(_currentProject);
   const defaultModelOption = haikuDefaultEnabled || haiku55Enabled
-    ? getDefaultAiModelOptionForPlan(defaultBilling?.storePlanId, hasHaikuByokProviderFlags(defaultBilling?.byokProviderFlags), lunaFree, true, haikuDefaultEnabled)
+    ? getDefaultAiModelOptionForPlan(defaultBilling?.storePlanId, hasHaikuByokProviderFlags(defaultBilling?.byokProviderFlags), true, haikuDefaultEnabled)
     : defaultAiModelOption;
   const improveWritingOptionIds = getAiModelPreferenceIds(
     userPreferences.aiModelPreferences,
@@ -247,9 +239,9 @@ const useCreateTaskModalGlobalStates = () => {
       };
     },
     [
-      createTaskModal.duplicate, // Added missing dependency
-      createTaskModal.column_payload, // Existing dependency
-      _currentProject, // Added missing dependency
+      createTaskModal.duplicate,
+      createTaskModal.column_payload,
+      _currentProject,
       quickAddViewContextEnabled,
       newTaskWindowViewContextEnabled,
     ]
@@ -262,7 +254,6 @@ const useCreateTaskModalGlobalStates = () => {
   const [formValues, setFormValues] = useState<IForm>(defaultFormValues);
   const formValuesRef = useRef(formValues);
   formValuesRef.current = formValues;
-  // Caller and user selections, including empty ones, are not inherited defaults.
   const defaultViewFieldOwnership = newTaskWindowViewContextEnabled ? {
     assignees: !!createTaskModal.duplicate || createTaskModal.column_payload?.assignees !== undefined,
     priority: !!createTaskModal.duplicate || createTaskModal.column_payload?.priority !== undefined,
@@ -270,7 +261,6 @@ const useCreateTaskModalGlobalStates = () => {
     tags: !!createTaskModal.duplicate,
   } : {};
   const editedViewFieldsRef = useRef<Partial<Record<TFormKey, boolean>>>({ ...defaultViewFieldOwnership });
-  // Some pickers mutate arrays in place; keep the opening baseline independent.
   const openingViewDefaultsRef = useRef<IForm>(newTaskWindowViewContextEnabled ? {
     ...defaultFormValues,
     assignees: [...defaultFormValues.assignees],
@@ -368,9 +358,6 @@ const useCreateTaskModalGlobalStates = () => {
     const plainDescription = descriptionText(description);
     if (!plainDescription) throw new Error("Add a description or enter a title");
 
-    // Derive the AI model from the board this request is for. The hook-level
-    // improveWriting* values follow _currentProject, which lags behind
-    // formValues.currentProject after a board switch in the composer.
     const titleOptionIds = getAiModelPreferenceIds(
       aiModelPreferencesRef.current,
       "improveWriting",
@@ -382,7 +369,7 @@ const useCreateTaskModalGlobalStates = () => {
       (haiku55Enabled ? getAiModelOptionById(project.ai_custom_instructions?.[0]?.model_selected, true) : undefined);
     const titleBilling = deriveCurrentBoardBilling(project);
     const titleDefaultOption = haiku55Enabled
-      ? getDefaultAiModelOptionForPlan(titleBilling?.storePlanId, hasHaikuByokProviderFlags(titleBilling?.byokProviderFlags), lunaFree, true, haikuDefaultEnabled)
+      ? getDefaultAiModelOptionForPlan(titleBilling?.storePlanId, hasHaikuByokProviderFlags(titleBilling?.byokProviderFlags), true, haikuDefaultEnabled)
       : defaultModelOption;
     const titleModel =
       titleOption?.id ??
@@ -399,8 +386,6 @@ const useCreateTaskModalGlobalStates = () => {
       signal,
       body: JSON.stringify({
         ...buildTaskWriterRequestScope(project, deriveCurrentBoardBilling(project)),
-        // The description must live inside the prompt. A bare instruction gets
-        // echoed as the title instead of improving the user's task wording.
         PROMPT:
           "Write a title for the task described below. Use only details from the description, do not invent any. Keep the title under 80 characters.\n\nTask description:\n" +
           plainDescription,
@@ -426,7 +411,7 @@ const useCreateTaskModalGlobalStates = () => {
       .trim();
     if (!generatedTitle) throw new Error("No title was generated");
     return generatedTitle.slice(0, 80);
-  }, [haiku55Enabled, haikuDefaultEnabled, defaultModelOption, lunaFree]);
+  }, [haiku55Enabled, haikuDefaultEnabled, defaultModelOption]);
 
   const scheduleTitleGeneration = useCallback((description: string) => {
     const plainDescription = descriptionText(description);
@@ -479,8 +464,6 @@ const useCreateTaskModalGlobalStates = () => {
   );
 
   const handleProjectChange = (project: IProject) => {
-    // Generated titles carry the previous board's AI context. Manual titles do
-    // not, so a board switch invalidates only generated title ownership.
     saveEpochRef.current += 1;
     setIsGeneratingTitle(false);
     generatedTitleTrackerRef.current.reset();
@@ -518,7 +501,6 @@ const useCreateTaskModalGlobalStates = () => {
       status: undefined,
     };
     if (newTaskWindowViewContextEnabled) {
-      // Automatically resolved defaults are the baseline, never a user edit.
       for (const key of ["assignees", "priority", "estimate", "tags"] as const) {
         if (!editedViewFieldsRef.current[key]) {
           const value = formValuesRef.current[key];
@@ -541,7 +523,6 @@ const useCreateTaskModalGlobalStates = () => {
       router.replace(`/new?id=${project.id}&board=${project.title}`);
     };
 
-    //Setting a projectId in localStorage for @mentions.
     localStorage.setItem("MENTION_PROJECT_ID", project.id.toString());
   };
 
@@ -603,8 +584,6 @@ const useCreateTaskModalGlobalStates = () => {
     return !areFormValuesEqualToDefault;
   }, [defaultFormValues, newTaskWindowViewContextEnabled]);
 
-  // Any draft written by the old persistence behaviour is dropped once, so a
-  // returning user never sees a stale entry in a fresh composer (HTPR-5537).
   useEffect(() => {
     purgeLegacyCreateTaskDrafts();
   }, []);
@@ -637,7 +616,6 @@ const useCreateTaskModalGlobalStates = () => {
   );
 
 
-  // ================================  Create task handler
   const CreateNewTask = useCallback(
     async (
       processed: IProccessed,
@@ -647,7 +625,6 @@ const useCreateTaskModalGlobalStates = () => {
     ) => {
       const formValuesAtSave = formValuesOverride ?? formValues;
       if (!currentUser?.id || !formValuesAtSave.currentProject) return;
-      // const inViewObjectId = inViewObject.taskProjectId
       const res = await createNewTaskGloballyAPIHandler(
         {
           userId: currentUser.id,
@@ -703,12 +680,7 @@ const useCreateTaskModalGlobalStates = () => {
             projectId: formValuesAtSave.currentProject.id,
           })
         : null;
-    //Why do we have a seperate processHTML for create task modal when we can use the same one from useSaveContent.ts?
-    //Im not changing the function right now but we should have the same one.
 
-    // [Reply]
-    // - Because the one in useSaveContent is where the task already exists, the taskId is already present as well, here its not,
-    // - it would be better yeah to combine them both, it is technical debt indeed, good catch.
     const descriptionAtSave = descriptionOverride ?? formValuesAtSave.description;
     const result = await processHtmlForTaskId(descriptionAtSave);
     const { AttachmentUrls } = uploadAttachmentsDescription(
@@ -730,8 +702,6 @@ const useCreateTaskModalGlobalStates = () => {
       traceScope,
       formValuesAtSave,
     );
-    // Reject missing task results so every save mode uses its error path and
-    // keeps the typed form instead of reporting a false success.
     if (!task) throw new Error("Task could not be created");
     bindCreateTaskUploads(task.id, formValuesAtSave.attachments);
     const savedTitle = (titleOverride ?? formValuesAtSave.title).trim();
@@ -808,7 +778,6 @@ const useCreateTaskModalGlobalStates = () => {
     task: ITask,
     assignees: IForm["assignees"] = formValues.assignees,
   ) => {
-    //remove duplicates
     const uniquePostFollowerBody = result.PostFollowerBody.filter(
       (x: any, index: number, self: any[]) =>
         index === self.findIndex((y: any) => y.userId === x.userId)
@@ -904,7 +873,6 @@ const useCreateTaskModalGlobalStates = () => {
           sectionTitle: response.data.section,
           ranking: response.data.ranking,
         });
-        // initDefault ensures the opening payload is only set once.
         if (initializeDefaults) {
           setInitializeDefaults(false);
           setCreateTaskModal((prev) => ({
@@ -939,7 +907,6 @@ const useCreateTaskModalGlobalStates = () => {
     [autoTitleCoordinator]
   );
 
-  //set All projects to be given to SetProjects Modal.
   const getAllProjects = async () => {
     const projectsData: IProject[] = projectsFromTQ ?? [];
     setAllProjects(projectsData);

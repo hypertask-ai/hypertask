@@ -25,33 +25,29 @@ const RemindMeInbox: React.FC<ArchiveTaskNotificationProps> = ({ children, show,
     const router = useRouter()
     const [showRemindMeModal, setShowRemindMeModal] = useState(false);
     const lastgClick = useRef<number | null>(null);
-    // ============ toggle remind me modal
     const toggleRemindMeModal = async (refresh?: boolean) => {
 
         setShowRemindMeModal(prev => !prev)
         if (refresh) {
-            // await queryClient.refetchQueries({queryKey:["inbox"]})
             await router.refresh()
         }
     };
     const tipTapClassName: string = "tiptap ProseMirror ProseMirror-focused";
 
 
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+
     const handleKeyDown = (e: any) => {
         if (
             !show || e.defaultPrevented || showRemindMeModal || returnIfModalOrInputActive()) return;
 
-        // =========== press [g]
         if (e.keyCode === 71) {
             const now = new Date().getTime();
             lastgClick.current = now;
             setTimeout(() => {
                 lastgClick.current = null;
-            }, globalConstants.gThenKeyDelay); // 1000 milliseconds = 1 second
+            }, globalConstants.gThenKeyDelay);
         }
 
-        // [h]
         if (e.keyCode === 72) {
             e.preventDefault()
             if (lastgClick.current === null) toggleRemindMeModal()
@@ -61,10 +57,8 @@ const RemindMeInbox: React.FC<ArchiveTaskNotificationProps> = ({ children, show,
 
 
     useEffect(() => {
-        // Add event listeners when the component mounts
         document.addEventListener('keydown', handleKeyDown);
 
-        // Remove event listeners when the component unmounts
         return () => {
             document.removeEventListener('keydown', handleKeyDown);
         };
@@ -79,7 +73,7 @@ const RemindMeInbox: React.FC<ArchiveTaskNotificationProps> = ({ children, show,
             <button
                 onClick={(e) => {
                     e.preventDefault();
-                    e.stopPropagation(); // Prevent the click event from propagating to the parent div
+                    e.stopPropagation();
                     toggleRemindMeModal()
                 }
                 }
@@ -94,12 +88,10 @@ const RemindMeInbox: React.FC<ArchiveTaskNotificationProps> = ({ children, show,
                             keyCombination={["H"]}
                         />
                 }
-                {/* Tailwind can't compile template-literal classes (text-[${color}]) — inline style is the working path */}
                 <Clock className="hover:!text-[#95999e]" style={{ color, height, width }} strokeWidth={1.75} />
                 {children}
             </button>
             {showRemindMeModal &&
-                // Portal clicks still bubble through the React tree to the Inbox row.
                 <div onClick={(e) => e.stopPropagation()}>
                     <RemindMeComponent
                         closeHandler={toggleRemindMeModal}

@@ -50,11 +50,6 @@ function mutationValuesEqual(current: unknown, requested: unknown): boolean {
   return false;
 }
 
-/**
- * Returns true only when a caller-requested task field differs from the task
- * state read while holding the mutation fence. Server-generated timestamps do
- * not turn a duplicate/no-op request into a human override.
- */
 export function hasRequestedTaskStateChange(
   currentTask: Record<string, unknown>,
   requestedTask: Record<string, unknown>,
@@ -66,12 +61,6 @@ export function hasRequestedTaskStateChange(
   });
 }
 
-/**
- * Converts a possibly full task snapshot into the fields the person actually
- * changed. This is calculated before waiting on the mutation fence, so a
- * later agent write cannot be restored accidentally when the human wins the
- * lease race.
- */
 export function requestedTaskStateChanges(
   taskAtRequestTime: Record<string, unknown>,
   requestedTask: Record<string, unknown>,

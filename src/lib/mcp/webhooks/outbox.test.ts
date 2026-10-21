@@ -88,7 +88,6 @@ test('board webhook outbox writes one durable row per matching subscription', as
     tx.rows.map((row: Row) => row.subscriptionId),
     ['sub-all', 'sub-match']
   )
-  // The row id IS the delivery id every retry re-sends.
   assert.deepEqual(
     tx.rows.map((row: Row) => row.id),
     ids
@@ -168,7 +167,6 @@ test('webhook payload hashing rejects values without a JSON representation', () 
 test('board webhook payload is the frozen public envelope', async () => {
   const tx = fakeTx([{ id: 'sub-all', events: [] }])
 
-  // Internal fields a caller may carry must never reach the receiver.
   const withExtras = {
     event: 'task.escalated',
     data: {
@@ -207,8 +205,6 @@ test('board webhook retries use bounded exponential backoff', () => {
 })
 
 test('a delivery contract change is visible: task.updated declares no priority', () => {
-  // Priority is written from several controllers with no single choke point,
-  // so declaring it would advertise an event that never fires (HTPR-4530).
   const fields: Record<string, string | undefined> =
     WEBHOOK_EVENT_DEFINITIONS['task.updated'].dataFields
   assert.equal(fields['changes.priority'], undefined)
@@ -217,15 +213,11 @@ test('a delivery contract change is visible: task.updated declares no priority',
 })
 
 test('task.created rows are written through the caller transaction, not the root client', async () => {
-  // The whole point of HTPR-4530's rework: if the task row and its event do not
-  // share a transaction, a crash between them loses the event with no outbox
-  // row left for the sweep to retry.
   const source = readFileSync(
     new URL('./taskEvents.ts', import.meta.url),
     'utf8'
   )
   assert.ok(source.includes('const created = await createTask(tx)'))
   assert.ok(source.includes('persistTaskCreatedWebhook(\n      tx,'))
-  // No root-client import means no path that can run outside the caller's tx.
   assert.equal(source.includes("from '@/lib/prisma'"), false)
 })

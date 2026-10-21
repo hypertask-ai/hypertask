@@ -3,8 +3,6 @@ type CommandCenterKeyboardEvent = Pick<
   "altKey" | "code" | "ctrlKey" | "metaKey" | "shiftKey"
 >;
 
-// These surfaces already mount the palette, sometimes with task/board context.
-// The shell owns it everywhere else, including settings and new app routes.
 export const COMMAND_MENU_ROUTE_HOSTS = [
   "/project",
   "/detail",

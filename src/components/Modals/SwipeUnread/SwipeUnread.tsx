@@ -79,7 +79,6 @@ const SwipeUnread = ({ userId, onClose }: SwipeUnreadProps) => {
     ) {
       return;
     }
-    // Match the inbox's unread count exactly: an unread notification is !seen.
     setNotifications(
       inbox.notifications.filter((notification) => !notification.seen)
     );
@@ -109,7 +108,6 @@ const SwipeUnread = ({ userId, onClose }: SwipeUnreadProps) => {
 
     try {
       if (markedRead.length > 0 && notifications) {
-        // ponytail: defer all writes until exit so local Undo never needs an API reversal.
         await bulkArchiveHandler(
           markedRead.map((decision) => {
             const notification = notifications.find(

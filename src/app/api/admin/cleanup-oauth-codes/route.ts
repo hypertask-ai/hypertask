@@ -1,14 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { cleanupAllOAuthCodes } from '@/lib/oauth/cleanup'
 
-/**
- * POST /api/admin/cleanup-oauth-codes
- * 
- * Administrative endpoint to clean up expired and used OAuth authorization codes
- * Should be called periodically (e.g., via cron job or scheduled task)
- * 
- * Security: protected by the server-only ADMIN_SECRET bearer token
- */
 export async function POST(request: NextRequest) {
   try {
     const adminSecret = process.env.ADMIN_SECRET

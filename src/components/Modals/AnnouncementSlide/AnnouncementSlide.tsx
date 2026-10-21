@@ -28,8 +28,6 @@ const AnnouncementSlideModal: React.FC<IProps> = ({
   const [currentIndex, setCurrentIndex] = useState<number>(0);
   const router = useRouter();
 
-  // Every render below dereferences slides[currentIndex], so an announcement
-  // published without slides would crash this globally-mounted modal.
   const slide = slides[currentIndex];
   if (!slide) return null;
 

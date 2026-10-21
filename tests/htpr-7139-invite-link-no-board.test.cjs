@@ -18,7 +18,7 @@ stub("src/lib/prisma.ts", { default: { project: { findUnique: async ({ where }) 
   if (!Number.isInteger(where.id)) throw new Error("PrismaClientValidationError");
   return null;
 } } } });
-stub("src/lib/telemetry/activationOccurrences.ts", { recordActivationOccurrence: () => {} });
+stub("src/lib/telemetry/activationOccurrences.ts", { captureActivationOccurrence: async () => null });
 stub("src/pages/api/invite/createInviteLink.ts", { generateInviteLink: async () => "", setViewSlug: () => undefined });
 stub("src/utils/api/invite/generatePublicInviteController.ts", { getInviteFromProjectId: async () => ({}) });
 stub("src/utils/controllers/projects/getAll.ts", { getProjectViewInclude: () => ({}) });

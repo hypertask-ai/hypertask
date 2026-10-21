@@ -171,7 +171,7 @@ must actually be visible.
 ## Session renewal and alert policy
 
 Post-deploy login is self-renewing through the existing QA-only password flow.
-The server checks the fixed QA identity and the `htpr-6536-qa-login` flag.
+The server checks the fixed QA identity and a permanent owner/QA identity check.
 If login is unavailable, check that flag and the existing QA secrets; never
 replace them with Valentin's credentials or extend a signed cookie manually.
 Local post-deploy runs also require these two QA environment variables.

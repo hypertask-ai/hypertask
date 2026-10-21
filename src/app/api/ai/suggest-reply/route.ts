@@ -44,9 +44,6 @@ function clamp(text: string, max: number): string {
   return `${text.slice(0, max)}\n…(truncated)`;
 }
 
-// The comment renderer supports only a small tag set; strip everything else
-// and drop all attributes except vetted http(s) links so model output can't
-// inject scripts or event handlers into the composer.
 const ALLOWED_REPLY_TAGS = new Set([
   "p", "ul", "ol", "li", "strong", "em", "code", "br", "a",
 ]);
@@ -76,13 +73,10 @@ function sanitizeReplyHtml(html: string): string {
 
 type ReplyContext = Awaited<ReturnType<typeof fetchReplyContext>>;
 
-// Membership is enforced through the project filter — users outside the
-// board simply get a 404.
 async function fetchReplyContext(taskId: number, userId: number) {
   return prisma.task.findFirst({
     where: {
       id: taskId,
-      // Suggesting a reply on a closed/archived ticket is a valid flow.
       status: { in: [Status.Normal, Status.Archive] },
       project: getProjectWhere(userId),
     },
@@ -148,14 +142,11 @@ async function generateSuggestion(task: NonNullable<ReplyContext>, userId: numbe
   });
   const { text } = await generateText({
     model: selected.model,
-    // Gateway tags (incl. the owning team) ride in providerOptions; without
-    // them the shared-allowance middleware rejects the request.
     providerOptions: selected.providerOptions,
     ...selected.settings,
     prompt,
   });
 
-  // Models occasionally wrap output in markdown fences even when told not to.
   const rawHtml = text
     .trim()
     .replace(/^```(?:html)?\s*/i, "")

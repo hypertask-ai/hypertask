@@ -6,6 +6,7 @@ const ts = require('typescript')
 const { NextRequest, NextResponse } = require('next/server')
 const root = path.resolve(__dirname, '..')
 const flagKey = 'htpr-7133-mcp-ratelimit-fast'
+const exactCountFlagKey = 'htpr-7462-mcp-ratelimit-exact-count'
 const tick = () => new Promise(resolve => setImmediate(resolve))
 
 function load(file, stubs, extras = {}, append = '') {
@@ -66,8 +67,15 @@ function harness({ mode = 'EVERYONE', initial = 0, env = {}, agent = true, store
   const rate = load('src/lib/mcp/auth/rateLimit.ts', {
     'next/server': { NextRequest, NextResponse },
     crypto: require('node:crypto'),
-    '@/lib/flags/keys': { HTPR_7133_MCP_RATELIMIT_FAST_FLAG: flagKey },
+    '@/lib/flags/keys': {
+      HTPR_7133_MCP_RATELIMIT_FAST_FLAG: flagKey,
+      HTPR_7462_MCP_RATELIMIT_EXACT_COUNT_FLAG: exactCountFlagKey,
+    },
     '@/lib/flags': { featureFlagCandidateUserIds: async (...args) => {
+      if (args[0] === exactCountFlagKey) {
+        assert.deepEqual(args, [exactCountFlagKey], 'flag selection must not use an identity')
+        return []
+      }
       assert.deepEqual(args, [flagKey], 'flag selection must not use an identity')
       flagCalls++
       if (flagFails) throw new Error('Flag lookup unavailable')

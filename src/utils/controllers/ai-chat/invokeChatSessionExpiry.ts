@@ -48,12 +48,6 @@ export async function invokeChatSessionExpiry(job: ChatSessionExpiryJobPayload) 
   return "deleted";
 }
 
-/**
- * Ensures a user always has at least one chat session: creates a fresh empty one
- * if none remain. Factored out so the sweep (src/pages/api/queues/sweep.ts) can
- * call it once per affected user after a batch delete, instead of once per
- * deleted session row.
- */
 export async function recreateSessionIfEmpty(userId: number) {
   const remainingSessions = await prisma.chatSession.count({
     where: { userId },

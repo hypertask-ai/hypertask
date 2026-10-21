@@ -32,6 +32,22 @@ function chatTools() {
   return Object.fromEntries(Object.entries(toolFiles).map(([name, file]) => {
     const filename = path.join(root, `src/lib/ai/tools/${file}.ts`);
     const source = ts.createSourceFile(filename, fs.readFileSync(filename, 'utf8'), ts.ScriptTarget.Latest, true);
+    if (name === 'hypertask_create_task') {
+      const factory = source.statements.find((node) => ts.isFunctionDeclaration(node) && node.name?.text === 'createCreateTaskTool');
+      assert.ok(factory, 'Missing create-task factory');
+      const code = ts.transpileModule(factory.getText(source), {
+        compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 },
+      }).outputText;
+      const tools = vm.runInNewContext(`${code}\ncreateCreateTaskTool({ chatTaskWriterEnabled: false });`, {
+        ...scope,
+        exports: {},
+        tool: (definition) => definition,
+        withToolErrors: () => () => { throw new Error('Eval tools cannot execute'); },
+      }, { timeout: 1000 });
+      const { inputSchema: schema, description } = tools[name];
+      assert.ok(schema && description, `Missing chat schema: ${name}`);
+      return [name, { schema, description }];
+    }
     let schema;
     let description;
     const visit = (node) => {

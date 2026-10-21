@@ -28,7 +28,6 @@ export const markTaskRead = async (taskId: number, userId: number) => {
         select,
       })
       .catch((error: unknown) => {
-        // Two opens of the same task can race to create the row (HTPR-6821).
         if (!isPrismaError(error, "P2002")) throw error;
         return prisma.taskReadState.update({
           where,

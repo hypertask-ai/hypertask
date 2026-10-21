@@ -78,7 +78,6 @@ const GeneralSection = () => {
       return;
     }
 
-    // handleHardReset clears local state/cookies and sends the browser to /login.
     await handleHardReset();
   };
 

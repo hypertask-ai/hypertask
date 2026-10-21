@@ -1,3 +1,5 @@
+import { useFlag } from "@/hooks/useFlag";
+import { HTPR_7337_EDIT_WITH_AI_FLAG, HTPR_7349_TITLE_CLEAR_OF_NAV_FLAG, HTPR_7367_SERVER_DESCRIPTION_FIRST_FLAG } from "@/lib/flags/keys";
 import { useTaskContext } from "@/lib/contexts/TaskDetail/TaskProvider";
 import { useEffect, useRef, useState } from "react";
 import { updateTask } from "@/utils/api/Task Detail";
@@ -7,6 +9,7 @@ import { useContext } from "react";
 import { descriptionContainerId } from "@/lib/constants/TaskDetail";
 import {
   currentUserAtom,
+  showCommandsAtom,
   showAIChatInterfaceAtom,
   aiChatSidebarWidthPxAtom,
 } from "@/store";
@@ -18,6 +21,7 @@ import useAutosizeTextArea from "@/hooks/General/useAutosizeTextarea";
 import { useDeviceContext } from "@/lib/contexts/deviceContext";
 import useDebounce from "@/hooks/General/useDebounce";
 import Tooltip from "@/components/Common/Tooltip";
+import { CommandMode } from "@/models/enums";
 import { Circle } from "lucide-react";
 import UpdateKanban from "@/hooks/MultiPages/useUpdateTaskInBoards";
 import RunningTimerIndicator from "./RunningTimerIndicator";
@@ -29,10 +33,22 @@ const TaskTitle = () => {
     focusOn,
     currentTask,
     setCurrentTask,
+    descriptionStart,
   } = useTaskContext();
+  const descriptionFirstFlag = useFlag(HTPR_7367_SERVER_DESCRIPTION_FIRST_FLAG);
+  const editWithAiEnabled = useFlag(HTPR_7337_EDIT_WITH_AI_FLAG);
+  const titleClearOfNavFlag = useFlag(HTPR_7349_TITLE_CLEAR_OF_NAV_FLAG);
   const _parsedTask = JSON.parse(parsed_task);
   const _mbl = useContext(MobileViewContext);
+  const titleStyle: React.CSSProperties = {
+    resize: "none",
+    background: "transparent",
+    fontSize: !_mbl ? 24 : 16,
+    width: "100%",
+    outline: "none",
+  };
   const [__, _setCurrentUser] = useRecoilState(currentUserAtom);
+  const [, setCommands] = useRecoilState(showCommandsAtom);
   const { navigate } = useHypertasksNavigate();
   const { updateTaskInCache } = UpdateKanban();
   const [confirm, setConfirm] = useState<boolean>(false);
@@ -51,19 +67,15 @@ const TaskTitle = () => {
   };
 
   useClickOutside(null, shouldConfirmAction, "title");
-  // Opening/closing (or resizing) the AI chat sidebar changes the title's wrap
-  // width; feed that as a resize trigger so the textarea height recomputes and
-  // doesn't stay stuck at the old width, overlapping the body (HTPR-4321).
   const showAiChatInterface = useRecoilValue(showAIChatInterfaceAtom);
   const aiChatSidebarWidthPx = useRecoilValue(aiChatSidebarWidthPxAtom);
   useAutosizeTextArea(
     textAreaRef,
     value,
     undefined,
-    `${showAiChatInterface}:${aiChatSidebarWidthPx}`
+    `${showAiChatInterface}:${aiChatSidebarWidthPx}:${titleClearOfNavFlag}`
   );
 
-  // ---------------------- SAVE TITLE -------------------
   const handleTitleSave = (cmdCtrlEnterPressed?: boolean) => {
     const previousTitle = currentTask?.title ?? _parsedTask.title;
     const taskId = currentTask?.id ?? null;
@@ -92,9 +104,6 @@ const TaskTitle = () => {
         setEditMode(null);
       }
 
-      // Unsaved draft (id -1): the task doesn't exist server-side yet, so a PUT
-      // would 404. Skip the network save + rollback — the create flow persists
-      // it; here we only keep the local/optimistic title.
       if (!taskId || taskId === -1) return;
 
       updateTask(newTask)
@@ -125,10 +134,8 @@ const TaskTitle = () => {
       setConfirm(false);
       if (shouldNavigateBack) navigate("Back");
       else if (!shouldNavigateBack) {
-        // setTimeout(() => {
         focusOn("title-input");
         setEditMode("title");
-        // }, 100);
       }
     } else {
       setEditMode(null);
@@ -141,11 +148,8 @@ const TaskTitle = () => {
       textAreaRef.current.focus();
   }, [editMode]);
 
-  // Neccessary Evil
   useEffect(() => {
     setValue(currentTask?.title ?? _parsedTask.title);
-    // Hydration resets a textarea's DOM value before its ref attaches. Only
-    // accept edits once handlers and this initial title sync are ready.
     setReady(true);
   }, [currentTask?.title, _parsedTask.title]);
 
@@ -170,7 +174,6 @@ const TaskTitle = () => {
         value={value ?? ""}
         onFocus={(e) => {
           e.target.selectionStart = e.target.value.length;
-          //setTrigger(prev=>!prev)
         }}
         onDoubleClick={() => {
           focusOn("title");
@@ -185,9 +188,12 @@ const TaskTitle = () => {
             return;
           }
           if (!_mbl) {
-            // [cmd/ctrl][j]
             if (e.keyCode === 74 && cmdControl) {
               e.preventDefault();
+              if (editWithAiEnabled) {
+                setCommands({ show: true, mode: CommandMode.Command, paletteTab: "compose" });
+                return;
+              }
               focusOn("description");
               document
                 .getElementById("popover-wrapper-" + "description")
@@ -201,13 +207,7 @@ const TaskTitle = () => {
             return shouldConfirmAction();
         }}
         className="font-bold"
-        style={{
-          resize: "none",
-          background: "transparent",
-          fontSize: !_mbl ? 24 : 16,
-          width: "100%",
-          outline: "none",
-        }}
+        style={descriptionFirstFlag || descriptionStart === "server" ? { ...titleStyle, fieldSizing: "content", minHeight: 37 } : titleStyle}
       />
       {currentTask?.id && currentTask.id > 0 && currentTask.project?.timeTrackingEnabled ? (
         <RunningTimerIndicator taskId={currentTask.id} />

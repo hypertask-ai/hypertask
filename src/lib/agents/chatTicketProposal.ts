@@ -1,8 +1,6 @@
 import { escapeHtml } from "@/utils/htmlEscape";
 
-/** VarChar(255) on ChatTicketProposal.ticketTitle. */
 export const CHAT_PROPOSAL_MAX_TITLE = 255;
-/** Bounded so one proposal cannot become an unbounded task description. */
 export const CHAT_PROPOSAL_MAX_OUTCOME = 4000;
 
 export type ChatTicketProposalInput = {
@@ -12,11 +10,6 @@ export type ChatTicketProposalInput = {
   targetSectionId: number;
 };
 
-/**
- * Parse the optional `proposal` field of an agent reply. Returns `{ proposal: null,
- * error: null }` when the field is absent, and an error message when it is present
- * but malformed, so a bad shape is a 400 rather than a Prisma failure at insert.
- */
 export function parseChatTicketProposal(raw: unknown): {
   proposal: ChatTicketProposalInput | null;
   error: string | null;
@@ -55,7 +48,6 @@ export function parseChatTicketProposal(raw: unknown): {
   };
 }
 
-/** Everything the chat client needs to draw the card, in one select. */
 export const chatTicketProposalSelect = {
   id: true,
   status: true,
@@ -108,8 +100,6 @@ export function serializeChatTicketProposal(
   row: ProposalRow | null | undefined,
 ): SerializedChatTicketProposal | null {
   if (!row) return null;
-  // A deleted ticket keeps its number and loses its link: the card must say
-  // the ticket is gone rather than sit on "creating" forever.
   const task = row.task?.ticketNumber
     ? {
         ticketNumber: row.task.ticketNumber,
@@ -134,11 +124,6 @@ export function serializeChatTicketProposal(
 export const PROPOSAL_HEADING_PENDING = "Ticket proposed, nothing done yet";
 export const PROPOSAL_HEADING_CREATED = "Ticket created";
 
-/**
- * Heading on the Agent Chat proposal card. The ticket number can already be
- * on the card while this line still claims nothing happened, so the wording
- * follows the ticket, not the confirm click.
- */
 export function proposalCardHeading(proposal: {
   status: string;
   task: { ticketNumber: string } | null;
@@ -149,11 +134,6 @@ export function proposalCardHeading(proposal: {
   return PROPOSAL_HEADING_PENDING;
 }
 
-/**
- * Description for the confirmed ticket. `outcome` is agent text, so it is escaped
- * and only ever wrapped in paragraphs; the link closes the conversation-to-ticket
- * half of the two-way link.
- */
 export function chatProposalDescriptionHtml(options: {
   outcome: string;
   agentName: string;

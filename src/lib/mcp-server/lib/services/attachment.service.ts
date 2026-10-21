@@ -33,9 +33,6 @@ export interface InlineAttachmentOutcome {
   retry_note?: string;
 }
 
-/**
- * Upload task attachments (JSON + base64) per POST /mcp/tasks/attachments.
- */
 export class AttachmentService {
   constructor(private readonly apiClient: IApiClient) {}
 
@@ -78,20 +75,14 @@ export class AttachmentService {
 
       return response;
     } catch (error) {
-      logger.error('Failed to attach files', {
+      logger.failure('Failed to attach files', error, {
         correlationId,
-        error: error instanceof Error ? error.message : String(error),
       });
       throw error;
     }
   }
 }
 
-/**
- * Attach files after another mutation without hiding partial success. Create and
- * comment callers must know not to repeat the original operation when only the
- * upload failed, or an automatic retry can create duplicates.
- */
 export async function attachFilesAfterMutation(
   apiClient: IApiClient,
   params: AttachFilesInput,

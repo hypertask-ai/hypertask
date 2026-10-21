@@ -21,20 +21,17 @@ function dateCondition(operator: 'before' | 'after' | 'on', raw: string): Prisma
       : { gte: day, lt: next } }
 }
 
-// HTPR-6368: result kinds search returns are tickets (title or description) and comments.
 export const SEARCH_RESULT_TYPES = { ticket: 'ticket', tickets: 'ticket', task: 'ticket', tasks: 'ticket', comment: 'comment', comments: 'comment' } as const
 export const searchResultType = (value: string) => SEARCH_RESULT_TYPES[value.trim().toLowerCase() as keyof typeof SEARCH_RESULT_TYPES]
 const PRIORITY_NAMES = ['urgent', 'high', 'medium', 'low']
 const NO_MATCH: Prisma.TaskWhereInput = { id: -1 }
 
-// type: only chooses which kind of hit is returned (tickets or comments); it never filters tickets by their comments.
 export function resultKinds(parsed: ParsedSearch) {
   const kinds = (parsed.filters.type ?? []).map(({ value, negated }) => ({ kind: searchResultType(value), negated }))
   const only = kinds.filter(({ kind, negated }) => kind && !negated).map(({ kind }) => kind)
   const allowTasks = !kinds.some(({ kind, negated }) => kind === 'ticket' && negated) && (!only.length || only.includes('ticket'))
   const allowComments = !kinds.some(({ kind, negated }) => kind === 'comment' && negated) && (!only.length || only.includes('comment'))
   const commenterGiven = (parsed.filters.commenter ?? []).some(({ negated }) => !negated)
-  // Where an exact phrase must appear: in the returned comment, in the ticket text, or anywhere on the ticket.
   const phraseScope = !allowComments ? 'ticket' as const : (!allowTasks || commenterGiven) ? 'comment' as const : 'any' as const
   return { allowTasks, allowComments, phraseScope, commentOnly: allowComments && !allowTasks, none: !allowTasks && !allowComments, invalid: kinds.some(({ kind, negated }) => !kind && !negated) }
 }
@@ -56,7 +53,6 @@ function containsPhrase(phrase: string, scope: 'ticket' | 'any' | 'comment' = 'a
   ] }
 }
 
-// The phrase clauses a single comment must satisfy (positive: contains it, negated: does not).
 export function commentPhraseWhere(phrases: SearchFilter[] = []): Prisma.CommentWhereInput[] {
   return phrases.map(({ value, negated }) => {
     const hit = { OR: [{ commentText: { contains: value, mode: 'insensitive' as const } }, { text: { contains: value, mode: 'insensitive' as const } }] }
@@ -71,7 +67,6 @@ export function commentHasPhrases(commentText: string, phrases: SearchFilter[] =
 
 export function commenterWhere(filters: SearchFilter[], text = '', phrases: SearchFilter[] = []): Prisma.CommentWhereInput {
   const words = text.trim() ? text.trim().split(/\s+/).map((word) => ({ OR: [
-    // API and CLI comments only fill the HTML text column.
     { commentText: { contains: word, mode: 'insensitive' as const } },
     { text: { contains: word, mode: 'insensitive' as const } },
   ] })) : []
@@ -118,7 +113,7 @@ function filterWhere(operator: SearchFilterKey, { value, userIds }: SearchFilter
         case 'due-date': return { dueDate: { not: null } }
         default: return { id: -1 }
       }
-    case 'type': return NO_MATCH // never reached: searchFilterWhere handles type separately
+    case 'type': return NO_MATCH
     case 'priority': return priorityWhere(name)
     case 'phrase': return containsPhrase(name)
     case 'before':
@@ -147,7 +142,7 @@ export async function searchFilterWhere(
   for (const [key, values] of Object.entries(parsed.filters) as [SearchFilterKey, SearchFilter[]][]) {
     if (key === 'type') continue
     const included = values.filter(({ negated }) => !negated)
-    if (key === 'phrase' && kinds.phraseScope === 'comment') continue // enforced on the comment itself
+    if (key === 'phrase' && kinds.phraseScope === 'comment') continue
     if (key === 'phrase') groups.push(...included.map((filter) => containsPhrase(filter.value, kinds.phraseScope)))
     else if (included.length) groups.push({ OR: included.map((filter) => filterWhere(key, filter, done, parsed.text)) })
     for (const filter of values.filter(({ negated }) => negated)) {

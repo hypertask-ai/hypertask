@@ -138,30 +138,17 @@ function useCalendarState({
   const lastGClickRef = useRef<number | null>(null);
   const currentProjectCycleIndexRef = useRef<number>(-1);
   const urlStateAppliedRef = useRef<boolean>(false);
-  // A deep link's view/date must survive hydration, but it must not suppress
-  // hydration: the address bar always carries these params once the sync
-  // effect has written them, so treating their presence as "the user already
-  // interacted" blocked every session-draft restore on a history return
-  // (HTPR-5391). Remember them instead, and re-apply them afterwards.
-  // Set when the mount effect applies view/date from the address bar. The next
-  // baseline comparison re-baselines instead of reading that render as the user
-  // touching the calendar.
   const urlBaselineSyncPending = useRef<boolean>(false);
   const urlDeepLinkRef = useRef<{
     view: "month" | "week" | "day" | null;
     date: Date | null;
   }>({ view: null, date: null });
 
-  // Shareable URLs: /calendar?view=day&date=2026-07-31 (HTPR-4759).
-  // Read once on mount; a valid query wins over the persisted view atom.
   useEffect(() => {
     if (!window.location.pathname.startsWith("/calendar")) return;
     const params = new URLSearchParams(window.location.search);
     const view = params.get("view");
     const date = params.get("date");
-    // changeQueued: a re-render is coming, so the sync effect will get a
-    // second run with the applied values. A valid-but-equal param queues
-    // nothing, and the mount write (same values) must then go through.
     let validParam = false;
     let changeQueued = false;
     let viewChangeQueued = false;
@@ -171,18 +158,12 @@ function useCalendarState({
       if (view !== currentView) {
         setCurrentView(view);
         changeQueued = true;
-        // currentView is the only URL-driven value inside the baseline JSON, so
-        // it is the only one that can make the comparison effect fire. Arming
-        // the flag for a date-only link would leave it set, and the next real
-        // user change would be swallowed as "the URL talking".
         viewChangeQueued = true;
       }
     }
     if (date && /^\d{4}-\d{2}-\d{2}$/.test(date)) {
       const [year, month, day] = date.split("-").map(Number);
       const parsed = new Date(year, month - 1, day);
-      // Reject impossible dates instead of letting Date roll them over
-      // (2026-02-31 would otherwise open March 3).
       if (
         parsed.getFullYear() === year &&
         parsed.getMonth() === month - 1 &&
@@ -205,21 +186,13 @@ function useCalendarState({
       }
     }
     if (changeQueued) {
-      // Skip the sync effect's mount run, which still sees pre-URL
-      // state and would clobber the very params being shared.
       urlStateAppliedRef.current = true;
     }
     if (viewChangeQueued) {
       urlBaselineSyncPending.current = true;
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // Keep the address bar current so copying it always shares what you see.
-  // Serializes currentDate (the anchor that decides what is displayed;
-  // currentDay can sit in an adjacent month's filler cells). replaceState
-  // only: a Next router navigation here would re-render the app and can
-  // cancel in-flight navigation (see openwiki on router.refresh).
   useEffect(() => {
     if (urlStateAppliedRef.current) {
       urlStateAppliedRef.current = false;
@@ -435,8 +408,6 @@ function useCalendarSync({
   const applyCalendarViewState = useCallback(
     (
       view: CalendarViewState | null,
-      // Overwritten state of the Everything split: applied when no saved
-      // view is (HTPR-4766).
       everything: CalendarEverythingOverride | null = null,
     ) => {
       const state = view ?? everything;
@@ -459,7 +430,6 @@ function useCalendarSync({
         weekStartsOn: state.settings.weekStartsOn,
         showWeekends: state.settings.showWeekends,
       });
-      // Same anchor carry-over as setCurrentViewFromInteraction.
       if (state.settings.view === "day") setCurrentDate(currentDay);
       setCurrentView(state.settings.view);
       setCalendarSort(state.sort);
@@ -505,9 +475,6 @@ function useCalendarSync({
     });
     if (initialCalendarViewState.current === nextState) return;
     if (urlBaselineSyncPending.current) {
-      // This render is the address bar being applied, not the user changing
-      // anything. Re-baseline so it cannot masquerade as prior interaction and
-      // suppress the session-draft restore that has not run yet (HTPR-5391).
       urlBaselineSyncPending.current = false;
       initialCalendarViewState.current = nextState;
       return;
@@ -521,9 +488,6 @@ function useCalendarSync({
     taskFilters,
   ]);
 
-  // A saved view or session draft carries its own view (and, for "day", its own
-  // anchor date). Put the deep link's values back on top so a shared URL still
-  // opens what it points at.
   const restoreUrlDeepLink = useCallback(() => {
     const { view, date } = urlDeepLinkRef.current;
     if (view) setCurrentView(view);
@@ -639,8 +603,6 @@ function useCalendarSync({
   const setCurrentViewFromInteraction: typeof setCurrentView = useCallback(
     (value) => {
       hasInteractedWithCalendarState.current = true;
-      // Day view anchors on currentDate; carry the focused day over so
-      // switching to Day opens the day the user is on, not the old anchor.
       if (value === "day") setCurrentDate(currentDay);
       setCurrentView(value);
     },
@@ -1001,7 +963,6 @@ function useCalendarFilters({
   accountId,
   taskFilters,
 }: { accountId: number } & Pick<CalendarState, "taskFilters">) {
-  // Filter tasks using calendarTaskFiltersAtom (taskFilters). Priority: empty = no filter; non-empty = task must match one of the priority indices.
   const isPriorityFilter = useCallback((task: ITask, priorityIndices: ReadonlySet<number>): boolean => {
     if (priorityIndices.size === 0) return false;
     return priorityIndices.has(task.priority?.priority_index ?? 0);
@@ -1034,7 +995,6 @@ function useCalendarFilters({
 
   const isLabelsFilter = useCallback((task: ITask, labels: ReadonlySet<string>): boolean => {
     if (labels.size === 0) return false;
-    // Calendar has no per-label value match mode, so labels keep ANY semantics.
     return task.taskLabels?.some((tl) => tl.label?.id != null && labels.has(tl.label.id)) ?? false;
   }, []);
 
@@ -1120,7 +1080,6 @@ function useCalendarTaskUpdates({
 
 export type CalendarTaskUpdatesState = ReturnType<typeof useCalendarTaskUpdates>;
 
-// Keep these calls in the original hook order so hydration and focus effects stay ordered.
 export function useCalendarView(accountId: number) {
   const state = useCalendarState({ accountId });
   const sync = useCalendarSync({ accountId, ...state });

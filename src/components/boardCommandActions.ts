@@ -212,9 +212,6 @@ export function createBoardCommandActions(context: Context) {
 
     const next = !getActiveStalenessFromProject(_currentProject);
     try {
-      // Persist into the active saved view so it survives navigation. When the
-      // board has no saved view, the primary view IS the board, so fall back to
-      // the board-level setting.
       const persisted = await saveStalenessToViewAPI(_currentProject, next);
       if (persisted === "none") {
         await axios.post("/api/projects/staleness", {
@@ -241,8 +238,6 @@ export function createBoardCommandActions(context: Context) {
     if (!_currentProject) return boardCloseHandler();
 
     try {
-      // Keep any tie-break levels: this command changes the primary sort, it is not a request to
-      // clear the rest of the stack. A duplicate of the new primary is dropped on read.
       await setBoardSortingViewAndReturn(
         _currentProject,
         mode,
@@ -291,10 +286,6 @@ export function createBoardCommandActions(context: Context) {
           section_title: destinationSection.section_title,
           sectionId: destinationSectionId,
         });
-        // Match the established move pattern: a hidden destination column is
-        // synced by removing from the source list, a visible one by moving the
-        // item. Accept can land on a hidden column since getAcceptDestination
-        // reads the unfiltered section list.
         if (!destinationSection.visibility) {
           await removeFromListWithStatus(
             sourceSectionId,

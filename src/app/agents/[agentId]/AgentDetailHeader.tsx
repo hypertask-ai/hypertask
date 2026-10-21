@@ -41,8 +41,6 @@ export function AgentDetailHeader({
 }: Props) {
   return (
             <div
-              // Wraps at every width: on a phone the actions drop to a second
-              // line instead of squeezing the name to one letter (HTPR-6836).
               className="mt-4 flex flex-wrap items-center gap-3"
             >
               <AgentAvatar agentId={agent.id} name={agent.displayName} photoURL={agent.photoURL} size={34} className="text-[13px]" />
@@ -68,8 +66,6 @@ export function AgentDetailHeader({
                   }}
                   disabled={savingName}
                   aria-label="Agent name"
-                  // Borderless, like every other input here: the house style is
-                  // no boxes, and the field already reads as the title it edits.
                   className="text-[20px] font-semibold bg-transparent outline-none min-w-0 flex-1"
                 />
               ) : (
@@ -85,9 +81,6 @@ export function AgentDetailHeader({
                 </h1>
               )}
               <span className="flex-1" />
-              {/* The two actions the manage modal used to carry: a native
-                  agent is talked to in chat, an external one reports through
-                  its inbox. Same split as the modal's row buttons. */}
               {agent.runtimeType === "NATIVE" ? (
                 <button
                   type="button"

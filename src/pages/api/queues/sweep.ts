@@ -24,20 +24,11 @@ import { sweepBoardWebhookDeliveries } from "@/lib/mcp/webhooks/outboxDelivery";
 import { sweepExpiredAgentChatTurns } from "@/lib/agentRuns/service";
 import { sweepGoogleCalendarConnections } from "@/lib/googleCalendar/sync";
 
-// Overlap guard: a Redis NX lease with a TTL just under the 1-min cron interval,
-// so an overlapping tick no-ops instead of double-processing the findMany-then-act
-// sources (task-delete, chat-expiry) the atomic claims don't already protect. A TTL
-// self-heals a crashed tick, unlike a Postgres session advisory lock, which can leak
-// on a pooled connection (the unlock may land on a different connection) and wedge
-// the sweep permanently.
 const SWEEP_LEASE_KEY = "sweep:lock";
 const SWEEP_LEASE_TTL_SECONDS = 55;
 
-// Cap work per tick so a backlog (first run after the migration, or after downtime)
-// can't run past the request timeout; the next minute's tick drains the rest. Atomic
-// claims make bounded, resumable batches safe.
 const SWEEP_BATCH = 500;
-const SWEEP_DELETE_BATCH = 100; // deletes recurse + fan out to ~14 child deletes each
+const SWEEP_DELETE_BATCH = 100;
 
 interface SweepSummary {
   reminders: number;
@@ -75,12 +66,6 @@ type ClaimedTaskDeleteRow = {
   id: number;
 };
 
-/**
- * REMINDERS: collect a bounded batch of due reminders, then let invokeDueReminder
- * atomically claim each row with current DB-state guards before unarchiving the
- * notification. A reminder changed to a future remindAt, canceled, or attached to
- * a deleted task becomes a no-op.
- */
 async function sweepReminders(): Promise<number> {
   const dueReminders = await prisma.reminder.findMany({
     where: {
@@ -104,13 +89,6 @@ async function sweepReminders(): Promise<number> {
   return invoked;
 }
 
-/**
- * DUE DATES: atomically claim a bounded batch of overdue, un-notified tasks by
- * setting dueDateNotifiedAt in one UPDATE ... RETURNING. Calls the factored
- * createDueDateOverdueNotifications helper directly (not invokeDueDate) - both
- * atomically claim the marker before firing, so neither the delayed job nor an
- * overlapping tick can double-fire the same TaskOverdue.
- */
 async function sweepDueDates(): Promise<number> {
   const claimed = await prisma.$queryRaw<ClaimedDueDateRow[]>`
     UPDATE "Task"
@@ -135,8 +113,6 @@ async function sweepDueDates(): Promise<number> {
         task.userId,
       );
     } catch (error) {
-      // Rows are already claimed (dueDateNotifiedAt set); isolate a bad one so it
-      // doesn't drop the rest of the batch.
       console.log("🚀 ~ sweepDueDates ~ row error:", error);
     }
   }
@@ -144,14 +120,6 @@ async function sweepDueDates(): Promise<number> {
   return claimed.length;
 }
 
-/**
- * TASK DELETE: hard-delete a bounded batch of tasks past permanentlyDeleteAt.
- * invokeTaskDelete recurses into subtasks, so a deleted root also clears its
- * children; collecting a child again here is a harmless idempotent no-op (deleteMany
- * finds nothing). We deliberately do NOT filter to parentTaskId: null - a subtask
- * deleted on its own (parent still alive) must still be collected, otherwise it
- * lingers as a Deleted row forever.
- */
 async function sweepTaskDeletes(): Promise<number> {
   const tasks = await prisma.$queryRaw<ClaimedTaskDeleteRow[]>`
     SELECT id FROM "Task"
@@ -176,10 +144,6 @@ async function sweepTaskDeletes(): Promise<number> {
   return tasks.length;
 }
 
-/**
- * CHAT EXPIRY: batch-delete stale sessions, then run the "recreate if empty" step
- * ONCE per affected user (not once per deleted session row).
- */
 async function sweepChatExpiries(): Promise<number> {
   const expiryThreshold = subDays(new Date(), CHAT_SESSION_EXPIRY_DAYS);
 
@@ -194,9 +158,6 @@ async function sweepChatExpiries(): Promise<number> {
   const deleted = await prisma.chatSession.deleteMany({
     where: {
       id: { in: staleSessions.map((s) => s.id) },
-      // Re-check staleness at delete time: a session bumped between the findMany
-      // above and here (user sent a message in that gap) must not be deleted along
-      // with its just-created messages (ChatMessage cascades on session delete).
       updatedAt: { lte: expiryThreshold },
     },
   });
@@ -214,9 +175,6 @@ async function sweepChatExpiries(): Promise<number> {
 }
 
 async function handler(req: NextApiRequest, res: NextApiResponse) {
-  // Take the overlap lease. If Redis is down, proceed lockless rather than skip
-  // the whole tick: the atomic claims still prevent double-fire, worst case is
-  // redundant work on a rare overlap.
   let haveLease = true;
   let redis: Awaited<ReturnType<typeof getRedis>> | undefined;
   const leaseStartedAt = Date.now();
@@ -238,7 +196,6 @@ async function handler(req: NextApiRequest, res: NextApiResponse) {
   }
 
   if (!haveLease) {
-    // Another tick still holds the lease - no-op instead of double-processing.
     return res.status(200).json({ skipped: "locked" });
   }
 
@@ -258,7 +215,6 @@ async function handler(req: NextApiRequest, res: NextApiResponse) {
 
   try {
     const avoidRepeatedWork = await isFeatureEnabled(HTPR_7042_NEON_WORK_AVOIDANCE_FLAG, 0).catch(() => false);
-    // Each source is independent: one failing must not block the others.
     try {
       summary.reminders = await sweepReminders();
     } catch (error) {
@@ -341,7 +297,6 @@ async function handler(req: NextApiRequest, res: NextApiResponse) {
     try {
       await redis?.del(SWEEP_LEASE_KEY);
     } catch {
-      // lease TTL will expire it anyway
     }
   }
 }

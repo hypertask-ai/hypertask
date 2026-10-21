@@ -1,3 +1,4 @@
+import { standalonePagesEnabled } from "@/utils/controllers/pages/standalonePagesEnabled";
 import { haiku55ModelEnabled } from "@/app/api/ai/_lib/planGate";
 import { projectContentAccessWhere } from "@/utils/controllers/projects/getAllIncludes";
 import prisma from "@/lib/prisma";
@@ -7,7 +8,6 @@ import {
 } from "@/lib/aiModelOptions";
 import { getBoardAgentMembers } from "@/utils/controllers/agents/boardMembers";
 import { turbopufferFetchMentionTasks } from "../search/document";
-import { isFeatureEnabled, PAGE_MENTIONS_FLAG } from "@/lib/flags";
 import {
   matchesMentionName,
   selectMentionAgents,
@@ -20,11 +20,7 @@ const taskSearchByParam = async (
 ) => {
   try {
     const hyperAiId = parseInt(process.env.NEXT_PUBLIC_HYPERAI_ID || "332");
-    // HTPR-4478: this route fires on every @-mention keystroke. projectIds
-    // (needs only userid), owner_members (only projectId) and hyperAI (a
-    // constant id) are mutually independent, so fetch them concurrently
-    // instead of in three sequential round trips.
-    const [projectIds, owner_members, hyperAI, pageMentionsEnabled, haiku55Enabled] = await Promise.all([
+    const [projectIds, owner_members, hyperAI, haiku55Enabled, standaloneEnabled] = await Promise.all([
       fetchidlist(userid),
       prisma.project.findFirst({
         where: {
@@ -47,11 +43,8 @@ const taskSearchByParam = async (
           id: hyperAiId,
         },
       }),
-      // Fail open on the gate, never on the menu: this route had no dependency
-      // on the flag table before, and a read failure there must not blank the
-      // whole @ list (people, agents, tasks, boards) for everyone.
-      isFeatureEnabled(PAGE_MENTIONS_FLAG, userid).catch(() => false),
       haiku55ModelEnabled(userid),
+      standalonePagesEnabled(userid),
     ]);
 
     if (!projectIds.includes(projectId)) {
@@ -60,13 +53,8 @@ const taskSearchByParam = async (
 
     let hyperAIObject = { ...hyperAI, displayName: "HyperAI" };
 
-    // Pages are only offered for a board the caller is actually a member of.
-    const canMentionPages = pageMentionsEnabled && projectIds.includes(projectId);
-
     const param = cleanQuery(rawParam);
     const wordsInQuery = getQueryWords(param);
-    // ponytail: this search path does not load plan/provider settings; the
-    // hyper-mentioned route enforces both gates and falls back server-side.
     const normalizedModelQuery = normalizeModelMentionSearch(rawParam);
     const modelMentionArray =
       param === "all" || !normalizedModelQuery
@@ -116,8 +104,6 @@ const taskSearchByParam = async (
     if (param == "all") {
       console.log("🤔 ~ taskSearchByParam ~ FETCHING ALL");
 
-      // HTPR-4478: projects, recent tasks and board agents are independent
-      // reads; run them concurrently instead of three sequential round trips.
       const [projects, task, boardAgentRows, pages] = await Promise.all([
         prisma.project.findMany({
           take: 5,
@@ -141,15 +127,15 @@ const taskSearchByParam = async (
           },
         }),
         getBoardAgentMembers(projectId, userid),
-        fetchMentionPages(canMentionPages, projectId, ""),
+        fetchMentionPages(projectId, "", standaloneEnabled),
       ]);
 
       const updatedtask = task?.map((item: any) => ({
         id: item?.id,
-        name: item?.title, // Change the property name here
+        name: item?.title,
         type: "task",
         index: item.uniqueIndex,
-        project_id: item?.projectId, // Keep other properties unchanged
+        project_id: item?.projectId,
         ticketNumber: item?.ticketNumber,
       }));
 
@@ -203,10 +189,6 @@ const taskSearchByParam = async (
           type: "name",
         }));
 
-      // HTPR-4478: the Turbopuffer task search, the project search and the
-      // board-agent lookup are independent; run them concurrently instead of
-      // three sequential round trips (Turbopuffer is the slow one, so this
-      // matters most on this branch).
       const [updatedtask, projects, boardAgentRows, pages] = await Promise.all([
         turbopufferFetchMentionTasks(rawParam, projectIds, projectId),
         prisma.project.findMany({
@@ -246,7 +228,7 @@ const taskSearchByParam = async (
           },
         }),
         getBoardAgentMembers(projectId, userid),
-        fetchMentionPages(canMentionPages, projectId, param),
+        fetchMentionPages(projectId, param, standaloneEnabled),
       ]);
 
       const updatedProjects = projects?.map((item: any) => ({
@@ -298,11 +280,6 @@ const taskSearchByParam = async (
 
 export default taskSearchByParam;
 
-/**
- * The Pages group, or nothing at all when there are no pages to offer. Omitting
- * the heading keeps the response byte-identical to the pre-feature one for a
- * user the flag is off for.
- */
 const pageGroup = (pages: MentionPage[]) =>
   pages.length
     ? [{ name: "Pages", type: "pageHeading", count: pages.length }, ...pages]
@@ -312,29 +289,24 @@ interface MentionPage {
   id: string;
   name: string;
   type: string;
-  ticketNumber: string;
 }
 
-/**
- * Canvas pages of the current board, offered as a "Pages" group in the @ menu
- * (HTPR-5898). `id` carries the page publicId because that is what
- * buildRichTextMentionHref turns into /page/<id>; `name` is the chip's text.
- * An empty `titleQuery` means the caller typed nothing yet, so return the newest.
- * Page.task is a required relation, so every page has a parent task; only
- * Task.ticketNumber itself is nullable, hence the fallback on the label.
- */
 const fetchMentionPages = async (
-  enabled: boolean,
   projectId: number,
   titleQuery: string,
+  standaloneEnabled: boolean,
 ): Promise<MentionPage[]> => {
-  if (!enabled) return [];
   try {
     const pages = await prisma.page.findMany({
       take: 5,
       where: {
         archived: false,
-        task: { projectId, deletedAt: null },
+        ...(standaloneEnabled ? {} : {
+          taskId: { not: null },
+          task: { projectId, deletedAt: null },
+        }),
+        projectId,
+        project: { status: "Normal" },
         ...(titleQuery
           ? { title: { contains: titleQuery, mode: "insensitive" as const } }
           : {}),
@@ -343,19 +315,14 @@ const fetchMentionPages = async (
       select: {
         publicId: true,
         title: true,
-        task: { select: { ticketNumber: true } },
       },
     });
     return pages.map((page) => ({
       id: page.publicId,
       name: page.title,
       type: "page",
-      ticketNumber: page.task.ticketNumber ?? "",
     }));
   } catch (error) {
-    // Degrade to "no Pages group" rather than losing the whole @ menu, but make
-    // the reason loud: a silent empty group is indistinguishable from a board
-    // that genuinely has no pages.
     console.error("🤔 ~ fetchMentionPages ~ error:", error);
     return [];
   }

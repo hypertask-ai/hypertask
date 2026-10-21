@@ -20,12 +20,10 @@ test("only ticket page routes count as ticket pages", () => {
   }
 });
 
-test("the bottom bar and its inset hide on ticket pages only behind the HTPR-6860 flag", () => {
-  const keys = require("./helpers/flag-files.cjs").source();
-  assert.match(keys, /HTPR_6860_MOBILE_PAGE_HIDE_DOCK_FLAG =\s*"htpr-6860-mobile-page-hide-dock"/);
+test("the bottom bar hides on ticket pages without a flag", () => {
   const shell = read("src/components/ProviderGlobal/GloablProviders.tsx");
   const reservations = read("src/hooks/General/usePageLoadReservations.ts");
-  assert.match(reservations, /!\(mobilePageHideDockFlag && isTicketPagePath\(pathname\)\) &&/);
-  assert.match(shell, /mobilePageHideDockFlag && isTicketPagePath\(pathname\) \? null : \(\s*<MobileTabBar/);
-  assert.match(shell, /useFlag\(HTPR_6860_MOBILE_PAGE_HIDE_DOCK_FLAG\)/);
+  assert.match(reservations, /!isTicketPagePath\(pathname\) &&/);
+  assert.doesNotMatch(reservations + shell, /mobilePageHideDock/);
+  assert.equal(fs.existsSync(path.join(root, "src/lib/flags/definitions/htpr-6860-mobile-page-hide-dock.ts")), false);
 });

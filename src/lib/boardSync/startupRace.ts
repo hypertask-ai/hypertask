@@ -1,8 +1,3 @@
-/**
- * A successful authorized network payload never inherits IndexedDB latency.
- * Only an unavailable network payload waits to learn whether local data can
- * preserve the already-authorized Board.
- */
 export const resolveAuthorizedLocalFallback = async ({
   boardPayload,
   localBoardPublication,

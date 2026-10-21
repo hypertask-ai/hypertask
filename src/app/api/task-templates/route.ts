@@ -7,9 +7,6 @@ import {
 } from "@/lib/taskTemplatePrefill";
 import { NextRequest, NextResponse } from "next/server";
 
-// HTPR-4886: task templates. GET lists a board's templates; POST saves an
-// existing task as a template (name defaults to the task title); DELETE
-// removes one. Instantiation lives in ./apply/route.ts.
 
 const TEMPLATE_NAME_MAX = 200;
 

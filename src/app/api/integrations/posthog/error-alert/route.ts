@@ -20,6 +20,7 @@ export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 const MAX_BODY_BYTES = 32 * 1024;
+const GITHUB_DISPATCH_RETRY_DELAYS_MS = [1000, 2000, 4000];
 
 function requiredEnv(name: string) {
   const value = process.env[name]?.trim();
@@ -40,13 +41,6 @@ function verifyWebhook(rawBody: string, request: NextRequest) {
 }
 
 function workflowRef() {
-  // Pinned rather than read from the deployment's own VERCEL_GIT_COMMIT_REF:
-  // whichever deployment happens to receive the PostHog webhook dispatches
-  // the rollback workflow, and workflow_dispatch runs the workflow file as
-  // it exists on the given ref. An ambient, request-time ref would let a
-  // misrouted webhook (or a preview deployment processing it) execute
-  // whatever workflow file lives on an untrusted branch, with production
-  // secrets. A fixed, operator-controlled ref removes that dependency.
   const ref = process.env.POSTHOG_ROLLBACK_GITHUB_REF || "production";
   if (!/^[A-Za-z0-9._/-]{1,200}$/.test(ref)) {
     throw new Error("POSTHOG_ROLLBACK_GITHUB_REF is invalid");
@@ -105,23 +99,34 @@ async function dispatchWorkflow(
   ref: string,
   githubToken: string,
 ) {
-  const response = await fetch(workflowUrl, {
-    method: "POST",
-    headers: {
-      Accept: "application/vnd.github+json",
-      Authorization: `Bearer ${githubToken}`,
-      "Content-Type": "application/json",
-      "User-Agent": "hypertask-posthog-error-alert",
-      "X-GitHub-Api-Version": "2022-11-28",
-    },
-    body: JSON.stringify({
-      ref,
-      inputs: { posthog_payload: JSON.stringify(payload) },
-    }),
-    cache: "no-store",
-  });
-  if (response.status !== 204) {
-    throw new Error(`GitHub workflow dispatch returned HTTP ${response.status}`);
+  for (let attempt = 0; attempt <= GITHUB_DISPATCH_RETRY_DELAYS_MS.length; attempt++) {
+    let response: Response | undefined;
+    try {
+      response = await fetch(workflowUrl, {
+        method: "POST",
+        headers: {
+          Accept: "application/vnd.github+json",
+          Authorization: `Bearer ${githubToken}`,
+          "Content-Type": "application/json",
+          "User-Agent": "hypertask-posthog-error-alert",
+          "X-GitHub-Api-Version": "2022-11-28",
+        },
+        body: JSON.stringify({
+          ref,
+          inputs: { posthog_payload: JSON.stringify(payload) },
+        }),
+        cache: "no-store",
+      });
+    } catch (error) {
+      if (attempt === GITHUB_DISPATCH_RETRY_DELAYS_MS.length) throw error;
+    }
+    if (response) {
+      if (response.status === 204) return;
+      if (response.status < 500 || attempt === GITHUB_DISPATCH_RETRY_DELAYS_MS.length) {
+        throw new Error(`GitHub workflow dispatch returned HTTP ${response.status}`);
+      }
+    }
+    await new Promise((resolve) => setTimeout(resolve, GITHUB_DISPATCH_RETRY_DELAYS_MS[attempt]));
   }
 }
 
@@ -168,7 +173,6 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "Invalid webhook" }, { status: 401 });
   }
 
-  // Native lifecycle alerts are signed by PostHog, not by the originating SDK.
   const issueAlert = parsePostHogIssueAlert(verified);
   if (issueAlert) {
     const configuration = dispatchConfiguration();
@@ -268,8 +272,6 @@ export async function POST(request: NextRequest) {
   try {
     await commitPostHogAlertClaim(redis, alert, claim);
   } catch (error) {
-    // GitHub accepted the workflow. Returning 503 here would invite PostHog
-    // to send the same rollback dispatch again.
     console.error("[posthog-error-alert] claim commit failed", error);
   }
 

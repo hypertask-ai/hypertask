@@ -45,6 +45,7 @@ const { signSession, SESSION_COOKIE } = realSessionModule;
 function loadGetSessionUser(getSession) {
   const mod = { exports: {} };
   const mockRequire = (request) => {
+    if (request === "@/lib/auth/agentScope") return jiti(path.join(root, "src/lib/auth/agentScope.ts"));
     if (request === "better-auth/cookies") return realCookiesModule;
     if (request === "@/lib/auth/betterAuth") {
       return { auth: { api: { getSession } } };

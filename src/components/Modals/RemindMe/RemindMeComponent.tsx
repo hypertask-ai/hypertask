@@ -7,7 +7,6 @@ import { IRemindAll, IUser } from "@/models/model";
 
 import formatDateDifference from "@/utils/generateTime";
 import toast from "react-hot-toast";
-// const Sugar:any = dynamic(()=>import("sugar").then(x=>x.default()))
 import useGlobalFocusHandler from "@/hooks/Inbox/useGlobalFocusHandler";
 import { ModalContainerCustom, ModalHintBar, ModalInput, ModalRowElementContainer } from "@/components/Common/CommonModalComponents";
 import { inputChange } from "@/utils/helperFunctions/dateParse";
@@ -21,20 +20,16 @@ import { useFlag } from "@/hooks/useFlag";
 import { MY_TASKS_SNOOZE_FLAG } from "@/lib/flags/keys";
 import { MobileBottomSheet } from "@/components/Modals/Sheets";
 
-// Bulk action interface for better type safety
 export interface BulkActionInbox {
   taskId: number;
   projectId?: number;
-  // Add any other properties you need for bulk actions
 }
 
 type Props = {
   closeHandler: (refresh?: boolean) => void;
   remindTask?: boolean;
-  // New props for bulk actions
   isBulkMode?: boolean;
   bulkItems?: BulkActionInbox[];
-  /** True when the current user has a person assignment, so Remind Me also hides My Tasks. */
   returnsToMyTasks?: boolean;
 }
 
@@ -53,7 +48,6 @@ const RemindMeComponent = (props: Props) => {
   const [lastUsedReminder, setLastUsedReminder] = useRecoilState(lastUsedReminderAtom)
   const [reminderOptionSelected, setReminderOptionSelected] = useQueryState<IRemindAll>(["reminder option [userId]:", currentUser?.id.toString()], reminderDropOptions[0]);  
   const { getRemindMeOptions } = useGetTimeOptions()
-  // const blurTimeout = useRef<NodeJS.Timeout | null>(null);
   const defaultOptions: any[] = useMemo(()=>getRemindMeOptions(lastUsedReminder),[])
 
   const debounceTimeout = useRef<NodeJS.Timeout | null>(null);
@@ -61,8 +55,6 @@ const RemindMeComponent = (props: Props) => {
 
   const [selectedIndex, setSelectedIndex] = useState(0);
   const [userInput, setUserInput] = useState('');
-  // const [label, setLabel] = useState('')
-  // const [currentScreen, _] = useState<"Remind Me">("Remind Me")
   const [modal, ___] = useState<boolean>(true);
   const [filteredOptions, setFilteredOptions] = useState<(DisplayDate | undefined)[]>(defaultOptions);
   const _mbl = useContext(MobileViewContext);
@@ -84,17 +76,13 @@ const RemindMeComponent = (props: Props) => {
   const handleDropDownCallback = (option: IRemindAll) => setReminderOptionSelected(option)
 
   const handleToggle = () => {
-    // setModal(!modal)
     closeHandler()
   }
   
-  // -------------------- ON MODAL LOAD, for focus
   const onOpenHandler = async () => {
-    // setLoading(true)
     setSelectedIndex(0)
   }
 
-  // =================== create label and assign - Updated for bulk actions
   const createReminder = async (index: number, click = false) => {
     let fIndex = click ? index : selectedIndex
     if (index >= filteredOptions.length || !filteredOptions[fIndex] || !filteredOptions[fIndex]?.date) {
@@ -104,13 +92,8 @@ const RemindMeComponent = (props: Props) => {
     const reminderDate = filteredOptions[fIndex]?.date;
     const reminderType = reminderOptionSelected.type;
 
-    // Handle bulk actions
     if (isBulkMode && bulkItems.length > 0) {
       const bulkPromises = bulkItems.map((action) => {
-        // Each bulk/snooze item carries its own task + project; do NOT gate on
-        // inViewObject (it points at the keyboard-focused row, which is null or a
-        // different task when snoozing via swipe or a non-focused row — that made
-        // the reminder silently no-op, leaving the task in the inbox). HTPR bug.
         const projectId = action.projectId ?? inViewObject.taskProjectId;
         if (!action.taskId || !projectId) {
           console.error("Invalid bulk reminder action (missing task or project):", action);
@@ -144,7 +127,6 @@ const RemindMeComponent = (props: Props) => {
         toast.error("Failed to create some reminders. Please try again.");
       }
     } else {
-      // Handle single task reminder (original logic)
       const body = {
         type: "Reminder",
         taskId: inViewObject.taskId,
@@ -168,7 +150,6 @@ const RemindMeComponent = (props: Props) => {
     }
   }
 
-  // -============================ handle keydown functions
   const handleKeyDown = (e: KeyboardEvent) => {
     if (e.key === "Enter") {
       e.preventDefault()
@@ -209,13 +190,11 @@ const RemindMeComponent = (props: Props) => {
   };
 
   const handleMouseLeave = () => {
-    // Clear any existing debounceTimeout
     if (debounceTimeout.current) {
       clearTimeout(debounceTimeout.current);
       debounceTimeout.current = null;
     }
 
-    // Start a new debounceTimeout to remove focus after a short delay (e.g., 100ms)
     debounceTimeout.current = setTimeout(() => {
       if (currentHoveredDiv.current !== null && taskRef.current) {
         (taskRef.current as HTMLDivElement)?.blur();
@@ -229,7 +208,6 @@ const RemindMeComponent = (props: Props) => {
     return () => document.removeEventListener('keydown', handleKeyDown);
   }, [selectedIndex, filteredOptions, reminderOptionSelected]);
 
-  // Dynamic header text based on mode
   const getHeaderText = () => {
     if (isBulkMode && bulkItems.length > 0) {
       const taskCount = bulkItems.length;
@@ -303,10 +281,8 @@ const RemindMeComponent = (props: Props) => {
     );
   }
 
-  // =========================================================== FRONTEND COMPONENT ==================================
   return (
     <ModalContainerCustom
-      // fade={false}
       id="assignModal"
       isOpen={modal}
       onOpened={onOpenHandler}

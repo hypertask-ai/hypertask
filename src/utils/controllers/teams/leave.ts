@@ -12,8 +12,6 @@ export async function leaveTeam(
   try {
     console.log("🤔 ~ Starting team exit operations.");
 
-    // Keep authorization and every related database mutation atomic, then retain
-    // the team lease until Stripe reflects the committed membership count.
     const { value: mutationStatus } = await mutateAndSyncSeatBilling(
       teamId,
       async (assertHeld) => {
@@ -96,7 +94,6 @@ export async function leaveTeam(
             data: { totalSeats: { decrement: 1 } },
           });
           if (updatedTeam.count !== 1) {
-            // Throwing from the interactive transaction rolls every deletion back.
             throw new Error("Team ownership changed during member removal");
           }
 
@@ -123,7 +120,7 @@ export async function leaveTeam(
 
     console.log("🤔 ~ Team exit status: TEAM SEATS DECREMENTED.");
 
-    const firstProject = await getFirst(userId);
+    const firstProject = await getFirst(userId, { withTasks: true });
     return {
       status: 200,
       json: { message: "Success", firstProject },

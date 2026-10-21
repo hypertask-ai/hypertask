@@ -1,5 +1,5 @@
 "use client";
-/* eslint-disable @next/next/no-img-element */
+
 import { useEffect } from "react";
 import { useRecoilState } from "@/lib/state";
 import { currentProjectAtom, currentUserAtom } from "@/store";
@@ -21,7 +21,6 @@ const Success = ({
     if (_currentProject?.id) {
       router.push(`/project?id=${_currentProject?.id}`);
     } else {
-      // Check for previousBoard cookie
       const cookies = parseCookies();
       const previousBoard = cookies.previousBoard;
 
@@ -36,7 +35,6 @@ const Success = ({
 
         router.push(redirectUrl);
       } else {
-        // Fallback to onboarding if no project found
         router.push("/onboarding");
       }
     }
@@ -65,7 +63,6 @@ const Success = ({
       <div className={`wlcm-page text-white h-[100svh] grid bg-[#27292D]`}>
         <main className="flex items-center min-w-[90vw] sm:min-w-[350px] max-w-[350px] sm:max-w-[520px] mx-auto my-auto">
           <div className="flex flex-col w-full items-center rounded-lg py-4 px-[28px] gap-5  sm:py-7 sm:px-20 justify-center  bg-inherit ">
-            {/* <img src="/loginLogoMain.png" alt="logo" /> */}
             <div className="flex flex-col gap-3">
               <h1 className="text-subheading sm:text-display max-w-[500px] whitespace-nowrap  font-semibold">
                 Thank You for Upgrading!

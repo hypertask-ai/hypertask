@@ -149,14 +149,13 @@ test("team default beats the user-facing product default", () => {
   );
 });
 
-test("Luna is the paid default; Free gets it only with the htpr-6722 flag", () => {
+test("Luna is the paid and Free default", () => {
   assert.equal(preferredAiModelOption.id, "gpt-6-luna");
   assert.equal(preferredAiModelOption.effort, "standard");
   assert.equal(defaultAiModelOption.id, "gemini-3.5-flash-lite");
   assert.equal(getDefaultAiModelOptionForPlan("Pro").id, "gpt-6-luna");
   assert.equal(getDefaultAiModelOptionForPlan("AI").id, "gpt-6-luna");
-  assert.equal(getDefaultAiModelOptionForPlan("Free").id, "gemini-3.5-flash-lite");
-  assert.equal(getDefaultAiModelOptionForPlan("Free", false, true).id, "gpt-6-luna");
+  assert.equal(getDefaultAiModelOptionForPlan("Free").id, "gpt-6-luna");
   assert.equal(getDefaultAiModelOptionForPlan("BYOK").id, "gemini-3.5-flash-lite");
   assert.equal(
     getDefaultAiModelOptionForPlan("BYOK", true).id,
@@ -379,21 +378,11 @@ test("legacy flat provider settings still control the ladder", () => {
   );
 });
 
-test("model picker: Free with no saved choice gets Luna only when the flag is on; saved choice wins", () => {
-  const pick = (saved, lunaFree) =>
-    resolveAiModelOption(saved, getDefaultAiModelOptionForPlan("Free", false, lunaFree)).id;
-  assert.equal(pick([undefined, null], true), "gpt-6-luna");
-  assert.equal(pick([undefined, null], false), "gemini-3.5-flash-lite");
-  assert.equal(pick(["gemini-3.5-flash-lite"], true), "gemini-3.5-flash-lite");
-  assert.equal(pick([null, "gpt-6-luna"], false), "gpt-6-luna");
-  assert.equal(pick(["not-a-model"], true), "gpt-6-luna");
-});
-
-test("useAiModelPreference passes the htpr-6722 flag into the plan default", () => {
-  const src = require("node:fs").readFileSync(
-    path.join(root, "src/hooks/General/useAiModelPreference.ts"),
-    "utf8",
-  );
-  assert.match(src, /useFlag\(LUNA_FREE_PLAN_FLAG\)/);
-  assert.match(src, /getDefaultAiModelOptionForPlan\([\s\S]*?lunaFree,\s*\)/);
+test("model picker: Free with no saved choice gets Luna; saved choice wins", () => {
+  const pick = (saved) =>
+    resolveAiModelOption(saved, getDefaultAiModelOptionForPlan("Free", false)).id;
+  assert.equal(pick([undefined, null]), "gpt-6-luna");
+  assert.equal(pick(["gemini-3.5-flash-lite"]), "gemini-3.5-flash-lite");
+  assert.equal(pick([null, "gpt-6-luna"]), "gpt-6-luna");
+  assert.equal(pick(["not-a-model"]), "gpt-6-luna");
 });

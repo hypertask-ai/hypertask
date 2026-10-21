@@ -40,9 +40,6 @@ export function useAgentChatStream({
   loadMessages, activityRowsEnabled, currentUser, sessionIdRef, selectedIdRef,
   setAgents, rosterGenRef, loadAgents, liveSortEnabled,
 }: Props) {
-  // Record when the current wait began so the poll below can time out; a new
-  // wait for the same session (a fresh send) restarts the clock. On reload the
-  // stored message time prevents an old unanswered turn looking fresh again.
   useEffect(() => {
     if (!awaiting || !session) {
       setAwaitingSince(null);
@@ -62,8 +59,6 @@ export function useAgentChatStream({
 
   useEffect(() => {
     if (!awaiting || !session) return;
-    // The runtime has not enabled chat, so the message will never be
-    // delivered and polling cannot help.
     if (deliveryNotice) return;
     const sinceAt =
       awaitingSince?.sessionId === session.id ? awaitingSince.at : Date.now();
@@ -96,11 +91,6 @@ export function useAgentChatStream({
     loadMessages,
   ]);
 
-  // Activity rows arrive without a chat reply, so they are not covered by the
-  // reply poll above. loadMessages drops stale responses by generation, so an
-  // overlap with that poll is harmless. Nobody is reading a hidden tab, and the
-  // query behind each tick is not cheap, so pause while the tab is hidden and
-  // refetch once on the way back.
   useEffect(() => {
     if (!session || !activityRowsEnabled) return;
     let id: ReturnType<typeof setInterval> | undefined;
@@ -115,7 +105,6 @@ export function useAgentChatStream({
     };
     const onVisibility = () => {
       if (document.visibilityState !== "visible") return stop();
-      // Catch up on whatever happened while hidden instead of waiting 5s.
       void loadMessages(session.id);
       start();
     };
@@ -127,8 +116,6 @@ export function useAgentChatStream({
     };
   }, [session, activityRowsEnabled, loadMessages]);
 
-  // Poll delivery availability while an idle chat has no faster reply or
-  // activity poll, including a catch-up as soon as a hidden tab returns.
   useEffect(() => {
     if (!session || awaiting || activityRowsEnabled) return;
     let id: ReturnType<typeof setInterval> | undefined;
@@ -162,8 +149,6 @@ export function useAgentChatStream({
     session,
   ]);
 
-  // Realtime nudge: the send route broadcasts agent-chat:changed on this
-  // user's private channel; refetch instead of waiting for the next poll.
   useEffect(() => {
     let cancelled = false;
     let unsubscribe: (() => void) | undefined;
@@ -190,8 +175,6 @@ export function useAgentChatStream({
               payload.agentId === selectedIdRef.current));
         if (isOpenSessionEvent) {
           void loadMessages(currentSessionId);
-          // Open-chat recency: always bump locally; the flag only controls
-          // sort display. Avoids a second /api/agents/owned fetch per message.
           const agentId = selectedIdRef.current;
           if (agentId) {
             const now = new Date().toISOString();
@@ -199,15 +182,12 @@ export function useAgentChatStream({
           }
           return;
         }
-        // A message in a thread this person is not looking at: the roster
-        // carries the unread count, so it is the roster that has to refresh.
         const myGen = ++rosterGenRef.current;
         void loadAgents()
           .then((loaded) => {
             if (myGen === rosterGenRef.current) setAgents(loaded);
           })
           .catch(() => {
-            // A missed refresh only delays the badge to the next visit.
           });
       };
       channel.bind(AGENT_CHAT_EVENT, onChatEvent);

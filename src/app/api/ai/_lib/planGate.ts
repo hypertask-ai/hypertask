@@ -6,7 +6,7 @@ import {
   pickEntitlingSubscriptionRow,
   subscriptionStatusGrantsAccess,
 } from "@/lib/subscriptionAccess";
-import { HTPR_7010_HAIKU_5_5_FLAG, HTPR_7038_HAIKU_DEFAULT_FLAG, HTPR_7075_BACKGROUND_CLAUDE_FLAG, HTPR_7076_PROMPT_CACHE_FLAG, HTPR_7098_BATCH_BACKGROUND_AI_FLAG, LUNA_FREE_PLAN_FLAG } from "@/lib/flags/keys";
+import { HTPR_7010_HAIKU_5_5_FLAG, HTPR_7038_HAIKU_DEFAULT_FLAG, HTPR_7075_BACKGROUND_CLAUDE_FLAG, HTPR_7076_PROMPT_CACHE_FLAG, HTPR_7098_BATCH_BACKGROUND_AI_FLAG } from "@/lib/flags/keys";
 import {
   getAiModelDefinition,
   isPremiumAiModelDefinition,
@@ -34,7 +34,6 @@ export type TeamPlanSource = {
   }> | null;
 };
 
-/** Resolves the current store plan from one already-loaded team row. */
 export function storePlanIdForTeam(team: TeamPlanSource | null | undefined) {
   if (!team) return "Free" as const;
   if (isInternalCompTeam(team.id)) return "Pro" as const;
@@ -42,17 +41,13 @@ export function storePlanIdForTeam(team: TeamPlanSource | null | undefined) {
     team.subscriptionPlan,
     team.activeSubscriptionPlanId,
   );
-  // A dead subscription row keeps its priceId, so the status has to gate the
-  // plan itself (HTPR-4863) — otherwise a failed card still resolves to Pro.
   const paidPlan =
     row && subscriptionStatusGrantsAccess(row.subscriptionStatus)
       ? planKindFromStripePriceId(row.priceId ?? null).storePlanId
       : ("Free" as const);
-  // A comp (HTPR-6653) grants its plan, Pro when unset, unless the team pays for more.
   return applyTeamComp(team, paidPlan);
 }
 
-/** Server-side mirror of deriveCurrentBoardBilling's plan pick — trusts the DB, not the client payload. */
 export async function storePlanIdForProject(
   projectId: number | null | undefined,
   teamId?: string | null
@@ -101,32 +96,6 @@ export async function storePlanIdForProject(
   return storePlanIdForTeam(team);
 }
 
-/** Throws when a Free-plan (or teamless) request asks for a premium model. Free teams without any
- * team/project context are treated as Free, not exempted. */
-/**
- * HTPR-6722: whether GPT 6 Luna is an included model for this user's Free plan.
- * Enforced on the server; fails closed when the flag cannot be read.
- */
-export async function lunaFreePlanEnabled(
-  userId: number | null | undefined,
-): Promise<boolean> {
-  if (!userId) return false;
-  if (await haikuDefaultModelEnabled(userId)) return true;
-  try {
-    // Loaded on demand: @/lib/flags reaches the auth stack, which the many
-    // callers that only need the plan checks below should not pay for.
-    const { isFeatureEnabled } = await import("@/lib/flags");
-    return await isFeatureEnabled(LUNA_FREE_PLAN_FLAG, userId);
-  } catch {
-    return false;
-  }
-}
-
-/**
- * HTPR-7075: background AI jobs run on Claude 5.5. Jobs with no user (demo board,
- * crons) evaluate the flag as user 0, which only an Everyone rollout enables.
- * A failed read counts as Off, so the old model ladders keep working.
- */
 export async function backgroundClaudeModelEnabled(userId: number | null | undefined): Promise<boolean> {
   try {
     const { isFeatureEnabled } = await import("@/lib/flags");
@@ -136,7 +105,6 @@ export async function backgroundClaudeModelEnabled(userId: number | null | undef
   }
 }
 
-/** HTPR-7076: cache fixed AI instructions. Failed read counts as Off; no user evaluates as user 0. */
 export async function promptCacheEnabled(userId: number | null | undefined): Promise<boolean> {
   try {
     const { isFeatureEnabled } = await import("@/lib/flags");
@@ -146,7 +114,6 @@ export async function promptCacheEnabled(userId: number | null | undefined): Pro
   }
 }
 
-/** HTPR-7098: send waiting background AI jobs through the Batch API. Failed read counts as Off; no user evaluates as user 0. */
 export async function batchBackgroundAiEnabled(userId: number | null | undefined): Promise<boolean> {
   try {
     const { isFeatureEnabled } = await import("@/lib/flags");
@@ -182,7 +149,6 @@ export async function assertModelAllowedForPlan(
   modelOption: TAiModelOption | undefined,
   teamId?: string | null,
   credential?: unknown,
-  lunaFree = false,
 ) {
   if (
     !modelOption ||
@@ -190,15 +156,10 @@ export async function assertModelAllowedForPlan(
   ) {
     return;
   }
-  // HTPR-6722: with the flag on, Luna is an included model on Free plans only.
-  const lunaIncludedOnFree =
-    lunaFree && modelOption.modelKey === LUNA_FREE_MODEL_KEY;
+  const lunaIncludedOnFree = modelOption.modelKey === LUNA_FREE_MODEL_KEY;
   const sharedKey = process.env.AI_GATEWAY_API_KEY?.trim();
   const resolvedCredential =
     typeof credential === "string" ? credential.trim() : credential;
-  // Customer BYOK and platform-managed dedicated keys are already authorized
-  // by the plan-aware key resolver. Only the shared platform key needs the
-  // Free/BYOK premium-model gate here.
   if (
     (typeof resolvedCredential === "string" &&
       resolvedCredential.length > 0 &&
@@ -207,9 +168,6 @@ export async function assertModelAllowedForPlan(
   ) {
     return;
   }
-  // Missing credentials fail closed in modelProvider with the more useful
-  // dedicated-key error. A request with no team/project context is explicitly
-  // Free, so retain the plan error instead of treating it as exempt.
   if (!resolvedCredential) {
     if (!projectId && !teamId) {
       if (lunaIncludedOnFree) return;

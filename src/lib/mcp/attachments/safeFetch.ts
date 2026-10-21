@@ -32,7 +32,6 @@ function ipv4ToNumber(ip: string): number | null {
   return n >>> 0;
 }
 
-/** True if IPv4 is RFC1918, loopback, link-local, CGNAT, or reserved. */
 function isPrivateOrReservedIPv4(ip: string): boolean {
   const n = ipv4ToNumber(ip);
   if (n === null) return true;
@@ -105,10 +104,7 @@ function isPrivateOrReservedIPv6(ip: string): boolean {
   const segments = parseIPv6Segments(x);
   if (!segments) return true;
 
-  // Only global-unicast 2000::/3 is eligible. This rejects unspecified,
-  // loopback, link-local, ULA, site-local, multicast, and transition ranges.
   if ((segments[0] & 0xe000) !== 0x2000) return true;
-  // Documentation, benchmarking, ORCHID, Teredo, and 6to4 are not origins.
   if (segments[0] === 0x2002) return true;
   if (
     segments[0] === 0x2001 &&
@@ -269,9 +265,6 @@ function assertHttpUrlString(urlString: string): URL {
   return u;
 }
 
-/**
- * Fetch remote bytes with SSRF protections, size cap, and redirect limit.
- */
 export async function safeFetchAttachmentUrl(
   urlString: string,
   externalSignal?: AbortSignal

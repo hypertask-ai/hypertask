@@ -1,5 +1,4 @@
 import { reportError } from "@/lib/errors/reportError";
-// Next.js API route support: https://nextjs.org/docs/api-routes/introduction
 import type { NextApiRequest, NextApiResponse } from 'next'
 import prisma from "@/lib/prisma";
 import { getSessionUser } from "@/lib/auth/getSessionUser";
@@ -33,8 +32,6 @@ export default async function handler(
       return res.status(404).json({ message: "Task not found" });
     }
     const { task, response } = result;
-    // console.log("🚀 ~ task:", task)
-    // console.log("🚀 ~ response:", response)
     return res.status(200).json({ task, comments: response })
   } catch (error) {
     await reportError({
@@ -130,13 +127,6 @@ export const generateCommentsHandler = async (taskId: number, commentIds: number
     }
   })
   if (!taskFromDB) return 
-  // const task = {
-  //   ...task_,
-  //   teamId: task_?.project.team?.id,
-  //   projectId: task_?.projectId,
-  //   description: task_?.description_?.content.replaceAll(/\"/g, "'") ?? task_?.description ?? "",
-  //   description_: "",
-  // }
   const body = buildTaskPayloadForAI(taskFromDB)
   const comments = await getComments(taskId, commentIds)
   const response = comments.map((comment) => {
@@ -168,7 +158,6 @@ export const generateCommentsHandler = async (taskId: number, commentIds: number
       creatorId: comment.creatorId??-1,
       projectId: taskFromDB.projectId,
       taskUniqueIndex: taskFromDB.uniqueIndex
-      // reactionData
     }
   })
 
@@ -288,7 +277,6 @@ const generateTextForTaskPriority = (activity: ITaskPriorityActivity) => {
 
 
 const generateTextForTaskLabelActivity = (activity: ITaskLabelActivity) => {
-  // if priority was created, from would be missing
   const user = `${activity.data.fromUser?.displayName ?? ""}`
   const label = `${activity?.data.toLabel.label?.value}`
   if (activity.status === "Created") {
@@ -300,7 +288,6 @@ const generateTextForTaskLabelActivity = (activity: ITaskLabelActivity) => {
 
   }
 
-  // --------------- label removed 
   else return `${user} removed label ${label} from this task.`
 
 }
@@ -308,23 +295,17 @@ const generateTextForTaskLabelActivity = (activity: ITaskLabelActivity) => {
 const generateTextForTaskAssignedActivity = (activity: ITaskAssignedActivity) => {
   const fromUser = `${activity.data.fromUser?.displayName ?? ""}`
   const toUser = `${activity.data.toUser.displayName}`
-  // --------------- if self dealing with the task
   if (activity.data.toUser.userId === activity.data.fromUser.userId) {
-
-    // for unassignment
     if (activity.data.updatedStatus === "Unassigned") {
       return `${fromUser} unassigned themself from this task.`
     }
 
-    // for assignmend
     else {
       return `${fromUser} assigned themself from this task.`
     }
   }
 
-  // ---------------- if different user interacting with different user
   else {
-    // for unassignment
     if (activity.data.updatedStatus === "Unassigned") {
       return `${fromUser} unassigned ${toUser}.`
 
@@ -338,7 +319,6 @@ const generateTextForTaskAssignedActivity = (activity: ITaskAssignedActivity) =>
 
 
 const generateTextForTaskEstimateActivity = (activity: ITaskEstimateActivity) => {
-  // if priority was created, from would be missing
   const user = activity.data.fromUser?.displayName ?? ""
   const toEstimate = activity?.data.toEstimate.estimate_value
   const fromEstimate = activity?.data.fromEstimate?.estimate_value

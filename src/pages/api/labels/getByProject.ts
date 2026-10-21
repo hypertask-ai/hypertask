@@ -1,31 +1,31 @@
-// Next.js API route support: https://nextjs.org/docs/api-routes/introduction
 
-import type { NextApiRequest, NextApiResponse } from "next";
+import { withAgentScopeRequest } from "@/lib/auth/agentScope";
+import type { NextApiHandler, NextApiRequest, NextApiResponse } from "next";
 import prisma from "@/lib/prisma";
 import { getSessionUser } from "@/lib/auth/getSessionUser";
 import { projectContentAccessWhere } from "@/utils/controllers/projects/getAllIncludes";
 
-export default async function handler(
+async function handler(
   req: NextApiRequest,
   res: NextApiResponse
 ) {
   const session = await getSessionUser(new Headers(req.headers as Record<string, string>));
   if (!session) return res.status(401).json({ message: "Unauthorized" });
-  // ================== get request body
   const { projectId } = req.query;
   const id = parseInt(projectId as string);
   if (!projectId || Number.isNaN(id))
     return res.status(400).json({ message: "Missing Required Information" });
 
-  // HTPR-7169: only boards the caller owns or is a member of.
-  const access = projectContentAccessWhere(session.userId);
+  const access = {
+    ...projectContentAccessWhere(session.userId),
+    AND: [projectContentAccessWhere(session.userId, session.agentId)],
+  };
   const project = await prisma.project.findFirst({
-    where: { AND: [{ id }, access] },
+    where: { AND: [{ id }, projectContentAccessWhere(session.userId), projectContentAccessWhere(session.userId, session.agentId)] },
     select: { id: true },
   });
   if (!project) return res.status(404).json({ message: "Project not found" });
 
-  // ================== find all labels associated with that projectId
 
   const labels = await prisma.label.findMany({
     where: {
@@ -33,7 +33,6 @@ export default async function handler(
     },
     include: {
       task: {
-        // Never list a task from a board the caller cannot read.
         where: { task: { project: access } },
         include: {
           task: {
@@ -77,3 +76,5 @@ export default async function handler(
     },
   })));
 }
+
+export default ((req, res) => withAgentScopeRequest(req, () => handler(req, res))) satisfies NextApiHandler;

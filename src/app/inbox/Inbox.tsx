@@ -1,5 +1,5 @@
-/* eslint-disable react-hooks/exhaustive-deps */
-/* eslint-disable @next/next/no-img-element */
+
+
 "use client";
 import {
   FC,
@@ -30,7 +30,6 @@ import { useFirstScreenSurface } from "@/lib/firstScreen/SurfaceContext";
 import FirstScreenMobileChrome from "@/components/Global/FirstScreenMobileChrome";
 
 import Link from "next/link";
-import DecisionInboxPanel from "@/components/notifications/DecisionInboxPanel";
 import { useRouter, useSearchParams } from "next/navigation";
 import {
   inboxDataQueryKey,
@@ -54,7 +53,6 @@ const loadCommands = () => import("@/components/commands").then((module) => {
 import { useQueryClient } from "@tanstack/react-query";
 import Image from "next/image";
 import toast from "react-hot-toast";
-import { undoToastSettings } from "@/components/undoToast";
 import useGlobalFocusHandler from "@/hooks/Inbox/useGlobalFocusHandler";
 import { useDeviceContext } from "@/lib/contexts/deviceContext";
 import { type InboxQueryPayload, type InboxTabMeta } from "@/utils/helperFunctions/helperFunctions";
@@ -113,8 +111,6 @@ const Inbox = ({
   const [inboxDocument] = useState(() => {
     const candidate = getInboxDocument(snapshot, currentUser.id);
     const cached = queryClient.getQueryData<InboxQueryPayload>(inboxDataQueryKey(currentUser.id));
-    // A later client navigation must use its live cache, not replay this root's
-    // original document. Optimistic/network publications remove the marker.
     return cached?.serverDocumentGeneration === candidate?.scope.generation ? candidate : null;
   });
   const [seeded] = useState(() => Boolean(inboxDocument));
@@ -159,8 +155,6 @@ const Inbox = ({
     }).catch(() => {});
   }, []);
   useLayoutEffect(() => {
-    // iOS needs a focused input during the pull-down's committing touchend.
-    // The mounted proxy keeps that keyboard session alive until the chunk loads.
     if (showCommands.show && !HypertasksCommands) {
       commandFocusProxy.current?.focus({ preventScroll: true });
     } else if (!showCommands.show && commandFocusProxy.current) {
@@ -171,7 +165,6 @@ const Inbox = ({
     }
   }, [showCommands.show, HypertasksCommands]);
   useEffect(() => {
-    // Fetch the visible split in parallel with the first client-commit read.
     void loadInboxSplit().catch(() => {});
     document.addEventListener("pointerdown", warmCommands, { capture: true, passive: true });
     document.addEventListener("touchstart", warmCommands, { capture: true, passive: true });
@@ -276,7 +269,6 @@ const Inbox = ({
   const { navigate } = useHypertasksNavigate();
   const isApple = useDeviceContext();
 
-  // =============================== KEY EVENT HANDLERS
   const handleKeyDown = async (e: KeyboardEvent) => {
     var cmdControl = (isApple && e.metaKey) || (!isApple && e.ctrlKey);
     const shouldPreventEscape = document.querySelector(".bulk-active");
@@ -290,9 +282,6 @@ const Inbox = ({
     const searchInputFocused =
       document.activeElement?.id === "search-inbox-filter-input";
 
-    // Keys inside the reduced-search input must not fall through to the
-    // shortcuts below: Escape closes the search (instead of the "Escape
-    // leaves the inbox" branch), Ctrl+F keeps focus where it is.
     if (searchInputFocused) {
       if (e.keyCode === KeyCodes.ESCAPE) {
         (document.activeElement as HTMLElement).blur();
@@ -303,8 +292,6 @@ const Inbox = ({
       return;
     }
 
-    // Once focus enters a draft row, leave Tab to the browser so keyboard users
-    // can move between its controls. A visible draft must not disable split cycling.
     if (
       e.keyCode === KeyCodes.TAB &&
       shouldPreserveNativeInboxTab(document.activeElement)
@@ -312,8 +299,6 @@ const Inbox = ({
       return;
     }
 
-    // Mobile exposes the split dock as real tabs. Preserve native Tab and
-    // Shift+Tab traversal there; Arrow/Home/End switch splits inside the dock.
     if (isMbl && e.keyCode === KeyCodes.TAB) return;
 
     if (
@@ -329,8 +314,6 @@ const Inbox = ({
     )
       return;
 
-    // After the guards so it never steals focus from the palette, modals or
-    // another input.
     if (!isMbl && e.keyCode === 70 && cmdControl) {
       e.preventDefault();
       setShowInboxSearch(true);
@@ -347,13 +330,11 @@ const Inbox = ({
       });
     }
 
-    // [Z] FOR UNDO
     if (e.keyCode === KeyCodes.Z && undoData.length > 0) {
       const firstUndoData = undoData[undoData.length - 1];
       undoHandler(firstUndoData, firstUndoData.id);
     }
 
-    // press k
     if (e.keyCode === KeyCodes.K && cmdControl) {
       e.preventDefault();
       toggleShowCommands();
@@ -364,7 +345,6 @@ const Inbox = ({
       lastgClick.current = now;
     }
 
-    // ========== [g] then  [i]
     if (e.keyCode === KeyCodes.I) {
       const now = new Date().getTime();
       if (
@@ -376,7 +356,6 @@ const Inbox = ({
       }
     }
 
-    //Going to calender view
     if (e.keyCode === KeyCodes.C) {
       const now = new Date().getTime();
       if (
@@ -414,7 +393,6 @@ const Inbox = ({
     }
 
     if (e.keyCode === KeyCodes.C && !e.ctrlKey && !e.metaKey && !e.shiftKey) {
-      //we need to basically check if the AI Chat tiptap is focused or not
       e.preventDefault();
       toggleCreateTask();
     }
@@ -424,13 +402,11 @@ const Inbox = ({
 
       let newValue;
       if (e.shiftKey) {
-        // Navigate to the previous tab
         newValue =
           globalFocus.currSplit !== 0
             ? globalFocus.currSplit - 1
             : _notificationsTQ?.structuredData?.data.length - 1;
       } else {
-        // Navigate to the next tab
         newValue =
           globalFocus.currSplit !==
           _notificationsTQ?.structuredData?.data.length - 1
@@ -462,7 +438,6 @@ const Inbox = ({
     setInitialIndexReset(0);
   };
 
-  // =============================== mark as unread function
   const updateUnseenNotification = async (notificationId: string) => {
     const notification = _notificationsTQ?.notifications.find(
       (item) => item.id === notificationId,
@@ -483,7 +458,6 @@ const Inbox = ({
     _setNotifications(cachePayload.structuredData.data);
   };
 
-  // =============================== mark as unread function
   const starTaskUpdateInCache = async (notification: INotification) => {
     const response = await starTask(
       notification.taskId,
@@ -513,7 +487,6 @@ const Inbox = ({
     });
   };
 
-  // =============================== archive function
   const markAsDone = async (
     notification: INotification,
     index: number,
@@ -522,7 +495,6 @@ const Inbox = ({
     return archiveNotificationGetter(notification, mode, undoHandler);
   };
 
-  // undoHandler function
   const undoHandler = async (data: any, toastId: string) => {
     await undoAction("UNDO_INBOX_ARCHIVE", data);
     const undoQueryKey = data.queryKey ?? inboxDataQueryKey(currentUser.id);
@@ -535,7 +507,6 @@ const Inbox = ({
       afterNotificationId: data.afterNotificationId,
     });
     toast.dismiss(toastId);
-    if (!undoToastSettings.single) toast("Undo notification archive");
   };
 
   const toggleCreateTask = useCallback(() => {
@@ -596,10 +567,6 @@ const Inbox = ({
     toggleCreateTask,
   ]);
 
-  // One effect on purpose: a keyword change resets focus to the top, and only
-  // a same-keyword shrink (archive while filtered) clamps it. Split in two,
-  // the clamp reads the pre-reset index and wins the race, landing focus on
-  // the last match instead of the first.
   const prevInboxSearchRef = useRef(inboxSearch);
   useEffect(() => {
     if (prevInboxSearchRef.current !== inboxSearch) {
@@ -645,12 +612,6 @@ const Inbox = ({
 
   const newCommentsHandler = () => {
     try {
-      // HTPR-4877: setGlobalFocus does not apply until the next render, so the
-      // rest of this pass still saw the old currSplit. Splits appear and vanish
-      // as their counts hit zero, so indexing a split that is already gone threw
-      // on data[gone][idx] and the surrounding catch swallowed it: no crash, just
-      // a silently skipped focus and scroll. Resolve the index once, up front,
-      // and use that everywhere below.
       const splits = _notificationsTQ?.structuredData?.data;
       let effectiveSplit = globalFocus?.currSplit ?? 0;
 
@@ -692,16 +653,12 @@ const Inbox = ({
 
   const initialDocumentRows = useRef(inboxDocument?.data.payload.structuredData.data);
   useEffect(() => {
-    // The first split is already painted and focused. Do not scroll it again
-    // while hydration attaches; live changes retain the existing handler.
     if (initialDocumentRows.current === _notificationsTQ?.structuredData?.data && inboxDocument) return;
     initialDocumentRows.current = undefined;
     newCommentsHandler();
   }, [_notificationsTQ?.structuredData?.data, trigger]);
 
-  // Set active split on initial render when notifications first load: URL-selected split, or the first tab.
   useEffect(() => {
-    // Do not replace a cold cached ticket URL while its source inbox is still mounted.
     if (window.location.pathname.startsWith("/detail/") && window.history.state?.cachedTaskDetail) return;
     const tabs = _notificationsTQ?.structuredData?.tabs ?? [];
     const initialSplitIndex = getInitialInboxSplitIndex({
@@ -728,12 +685,11 @@ const Inbox = ({
   const handleBulkArchive = async (selectedNotifications: INotification[]) => {
     await bulkArchiveNotifications(
       selectedNotifications,
-      "Notification", // or "Task" based on your logic
+      "Notification",
       bulkUndoHandler,
     );
   };
 
-  // Bulk undo handler
   const bulkUndoHandler = async (data: any, toastId: string) => {
     await undoAction("UNDO_INBOX_ARCHIVE", data);
     queryClient.refetchQueries({ queryKey: inboxConfig.undo.queryKey });
@@ -785,7 +741,6 @@ const Inbox = ({
           }
         />
       )}
-      {/* Conditional background - only show when inbox is zero */}
       <div
         className={`fixed inset-0 z-0 transition-all duration-700 ease-in-out ${
           isInboxZero ? "opacity-100" : "opacity-0 pointer-events-none"
@@ -827,9 +782,6 @@ const Inbox = ({
           <div
             data-testid="inbox-panel"
             className={`search_inbox_container min-h-screen inbox_tag_mobile_view ${
-              // Rail mode: hug the bottom (12px, matching the card's mx-[12px]
-              // gutters) and rise with the quick-tips bar via --quick-tips-h,
-              // which the bar publishes while mounted. Legacy mode keeps pb-9.
               appShellRailOn
                 ? "pb-[calc(var(--quick-tips-h,0px)+12px)]"
                 : "pb-9"
@@ -839,7 +791,6 @@ const Inbox = ({
                 : "bg-containerBackground"
             }`}
           >
-            <DecisionInboxPanel userId={currentUser.id} />
             <SplitTitlesContainer
               contentGap={appShellRailOn && !isInboxZero}
               SelectedCount={showSelectedCount ? InboxSelectedCount : null}
@@ -896,9 +847,6 @@ const Inbox = ({
                     placeholder="Find in view..."
                     onChange={(e) => setInboxSearch(e.target.value)}
                     onKeyDown={(e) => {
-                      // Escape is handled in the document-level handleKeyDown:
-                      // it must win the race against the "Escape leaves the
-                      // inbox" branch that lives in the same listener.
                       if (e.key === "Escape") e.preventDefault();
                     }}
                   />
@@ -946,9 +894,6 @@ const Inbox = ({
                 </>
               ))}
             </div>
-            {/* Mobile splits live in the docked splits row above the tab bar,
-                and the tab bar is the escape hatch, so the old in-page footer
-                and floating Back button are both gone on mobile. */}
             {!isMbl && (
               <div
                 className={`flex inbox_footer @md:hidden no-scrollbar scrollbar-none  @md:gap-8 w-100 ${
@@ -983,8 +928,6 @@ const Inbox = ({
               />
             )}
           </div>
-          {/* Mobile Inbox uses the split dock in the bottom thumb zone. The
-              top-bar board switcher remains its route-level escape hatch. */}
           {!isMbl && (
             <Link
               href={homepageRouter}
@@ -1096,12 +1039,11 @@ const ButtonGroup = ({
             width={inboxConfig.bulkSelectIconSize}
             show={true}
             mode="Bulk"
-            shouldShowToolTip={false} // No tooltip for bulk remind
+            shouldShowToolTip={false}
           />
         </div>
       </div>
 
-      {/* The full-width guest CTAs stay in the header row on the inbox. */}
       <GuestAuthLinks />
     </div>
   );

@@ -1,3 +1,4 @@
+import { reportMcpOperationCrash } from "@/lib/mcp/operationCrashReport";
 import { wrapMcpRoute, checkMcpRouteRateLimit as checkMcpRateLimit, validateMcpRouteAuth as validateMcpAuth } from '@/lib/mcp/routeWrapper'
 import { CustomFieldType } from "@prisma/client";
 import { NextRequest, NextResponse } from "next/server";
@@ -77,7 +78,6 @@ async function authenticate(request: NextRequest) {
   return { response: null, ctx };
 }
 
-/** GET /api/mcp/custom-fields?project_id=123 */
 export async function GET(request: NextRequest) {
   return wrapMcpRoute(async (request: NextRequest) => {
   try {
@@ -110,6 +110,7 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ success: true, projectId, customFields });
   } catch (error) {
     console.error("[MCP Custom Fields] List error:", error);
+    reportMcpOperationCrash(request, error);
     return NextResponse.json(
       { success: false, error: "Internal server error" },
       { status: 500 }
@@ -119,7 +120,6 @@ export async function GET(request: NextRequest) {
   })(request)
 }
 
-/** POST /api/mcp/custom-fields */
 export async function POST(request: NextRequest) {
   return wrapMcpRoute(async (request: NextRequest) => {
   try {
@@ -213,6 +213,7 @@ export async function POST(request: NextRequest) {
       return validationError(error.message, error.field, "invalid_value");
     }
     console.error("[MCP Custom Fields] Create error:", error);
+    reportMcpOperationCrash(request, error);
     return NextResponse.json(
       { success: false, error: "Internal server error" },
       { status: 500 }

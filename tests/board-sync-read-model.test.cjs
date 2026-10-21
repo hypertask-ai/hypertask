@@ -1327,7 +1327,7 @@ test("the product integration restores, reconciles, measures, and clears", () =>
   );
   assert.match(
     hook,
-    /Deliberately exclude viewSurface[\s\S]*const activeKey =[\s\S]*`\$\{accountId\}:\$\{projectId\}`/,
+    /const activeKey =[\s\S]*`\$\{accountId\}:\$\{projectId\}`/,
   );
   assert.match(hook, /requestId: `indexeddb:\$\{activeKey\}:\$\{generation\}`/);
   assert.match(hook, /void authorizeAndPublishLocalBoard\(proof\)/);

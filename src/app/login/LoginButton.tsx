@@ -29,18 +29,14 @@ const LoginButton = ({
   const { isFunnelUserAndTutorialCompleted } = useFunnelCookies();
 
   const googleLogin = () => {
-    // Check if this is an OAuth flow
     const hasOAuthParams = searchParams?.has('client_id') && searchParams?.has('redirect_uri');
     
-    // If the user is coming from funnel and has completed the tutorial, skip interactive onboarding
-    // Also skip for OAuth flows
     const shouldSkipInteractive =
       hasOAuthParams ||
       isFunnelUserAndTutorialCompleted || 
       authConfig.onboarding.shouldSkipInteractive ||
       searchParams?.get("shouldSkipInteractive") === "true";
 
-    // Skip onboarding for OAuth flows
     const skipOnboarding = hasOAuthParams || authConfig.onboarding.skipOnboarding;
 
     if (process.env.NEXT_PUBLIC_BETTER_AUTH_ENABLED === "1") {
@@ -59,7 +55,6 @@ const LoginButton = ({
     );
   };
 
-  // Adjust styles based on size
   const paddingY = size === "small" ? "py-1.5" : "py-2";
   const paddingX = size === "small" ? "px-7 sm:px-4" : "px-14 sm:px-7";
   const fontSize =

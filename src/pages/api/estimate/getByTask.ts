@@ -26,7 +26,6 @@ const handler: NextApiHandler = async (req: NextApiRequest, res: NextApiResponse
             });
             if (!task) return res.status(404).json({ message: "Task not found" });
 
-            // get the estimate if any for that task
             const estimate=  await prisma.estimate.findFirst({
                 where:{
                     taskId:parseInt(taskId as string) 

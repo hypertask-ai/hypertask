@@ -21,8 +21,6 @@ interface DueDateLabelProps {
 }
 
 const DueDateLabel: React.FC<DueDateLabelProps> = ({ dueDate, flexBasis, fontSize, py, px, onClick, stopPropogation, fontWeight, className, isTaskInfo, overdue = false }) => {
-  // dueDate is typed as Date but arrives as an ISO string from JSON responses
-  // (e.g. getAll), so coerce before calling Date methods / date-fns.
   const dueDateObj = useMemo(
     () => (dueDate instanceof Date ? dueDate : new Date(dueDate)),
     [dueDate]
@@ -50,7 +48,7 @@ const DueDateLabel: React.FC<DueDateLabelProps> = ({ dueDate, flexBasis, fontSiz
 
   const handleOnClick = (e: any) => {
     e.preventDefault();
-    stopPropogation && e.stopPropagation(); // Prevent the click event from propagating to the parent div
+    stopPropogation && e.stopPropagation();
     onClick?.();
   }
 

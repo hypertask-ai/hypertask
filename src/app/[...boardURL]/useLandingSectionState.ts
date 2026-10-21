@@ -32,7 +32,6 @@ const {
   releaseSecondaryStartup,
   secondaryStartupEnabled,
 } = useBoardStartup();
-// const _allProjects = JSON.parse(_allStringifiedProjects)
 const [projects, setProjects]= useState<IProject[]>(_allProjects)
 const [showBoardManager, setShowBoardManager] = useRecoilState(showBoardManagerAtom);
 const boardLayout = _boardLayout;
@@ -43,9 +42,6 @@ const [_currentProject,setCurrentProject] = useState( _allProjects && _projectIn
 const setRecoilCurrentProject = useSetRecoilState(currentProjectAtom)
 const [sections, setSections] = useState<ISection[]>(deepCopy(_allProjects && _projectIndex >= 0 ? _allProjects[_projectIndex]?.sections : []));
 const [currentIndex, setCurrentIndex] = useState<number>(_projectIndex);
-// Adjusting state during render makes React restart SectionComp before it
-// reconciles descendants, instead of rendering the old board tree and then
-// forcing the whole tree through a synchronous layout-effect render.
 const [syncedBoardInput, setSyncedBoardInput] = useState({
   projects: _allProjects,
   projectIndex: _projectIndex,
@@ -67,9 +63,6 @@ const { timers: runningTimers, timerDataReady } = useBoardRunningTimers(
   { enabled: secondaryStartupEnabled },
 );
 const filterRuntimeContext = useMemo(() => ({
-  // A running-only saved view must not render as empty while its deferred timer
-  // data is unavailable. Treat every task as a match until cached/network data
-  // can answer the filter accurately.
   runningTaskIds: timerDataReady
     ? new Set(runningTimers.keys())
     : new Set(sections.flatMap((section) =>
@@ -87,12 +80,6 @@ const filteredSectionsForActiveView = useMemo(() => {
   const persistedFilteredSections = _allProjects?.[_projectIndex]?.filteredSections ?? [];
   if (!_currentProject) return persistedFilteredSections;
 
-  // HTPR-5021: filteredSections is baked by the server for whichever view was
-  // applied when getAll ran. Switching a saved view updates project_view in the
-  // cache but never regenerates that array, so the board kept rendering the
-  // PREVIOUS view's tasks until a refetch. Built-in views were unaffected only
-  // because they already recomputed here. Recompute for saved views too, so the
-  // rendered set always matches the view that is actually applied.
   const activeViewId = getActiveBoardViewId(_currentProject, activeBuiltinViews);
   const filtered = getFilteredSections(
     sections,
@@ -132,12 +119,6 @@ const readinessCompletionRef = useRef({
   readinessSource: _readinessSource,
   viewSurface: boardLayout,
 });
-// HTPR-6072: SectionComp no longer remounts on a board switch, so this ref's
-// one-time useRef initializer would otherwise stay pinned to the first
-// board forever. Recreate it whenever the readiness entry changes, but
-// leave it untouched (frozen) for re-renders within the same entry. A
-// layout effect (not a render-time write) so it runs once per entry,
-// before the readiness completion effect below reads it.
 useLayoutEffect(() => {
   if (readinessCompletionRef.current.entryKey === readinessEntryKey) return;
   readinessCompletionRef.current = {
@@ -149,7 +130,7 @@ useLayoutEffect(() => {
     readinessSource: _readinessSource,
     viewSurface: boardLayout,
   };
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+
 }, [readinessEntryKey]);
   return {
   markBoardUsable, releaseSecondaryStartup, secondaryStartupEnabled, projects, setShowBoardManager,

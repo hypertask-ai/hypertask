@@ -16,16 +16,12 @@ import { cn } from "@/utils/undoActions/helperFuncs";
 export const AI_Chat_Sidebar = ({
   inOffcanvas = false,
 }: {
-  /** When true, parent mobile sheet (e.g. AppSheet) fills height; skip fixed layout. */
   inOffcanvas?: boolean;
 }) => {
   const { showWelcomeScreen, minimized } = useAiChatContext();
   const isMbl = useContext(MobileViewContext);
   const [sidebarWidthPx] = useRecoilState(aiChatSidebarWidthPxAtom);
 
-  // The stored width predates the current minimum, so anyone who had dragged the panel
-  // down to the old 280 floor would stay there. Apply the floor on read rather than
-  // migrating the persisted value.
   const desktopWidthStyle =
     !inOffcanvas && !isMbl
       ? {
@@ -34,10 +30,6 @@ export const AI_Chat_Sidebar = ({
         }
       : undefined;
 
-  // Publish the panel width so fixed-position overlays can centre themselves in the space
-  // that is actually left over. The command palette in particular is a reactstrap modal:
-  // its outer .modal element takes a className but no inline style, so a CSS variable is
-  // the only way to hand it a width that changes at runtime.
   const publishedWidthPx = desktopWidthStyle?.width ?? 0;
   useEffect(() => {
     const root = document.documentElement;

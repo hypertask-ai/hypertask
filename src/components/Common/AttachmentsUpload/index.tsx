@@ -68,13 +68,7 @@ const AttachmentsUpload = (props: IProps) => {
       )}
 
       {
-        // ========================================================== MOBILE ==============================
         _mbl && mode !== "create-task-modal" ? (
-          // One flex row, not two nested spans: the mic has to sit between the
-          // attach glyph and Send once text exists, and moving it across span
-          // boundaries would re-parent it in the React tree and tear down an
-          // in-flight MediaRecorder (#2666). Flex `order` moves it visually
-          // while the element stays put. HTPR-5684.
           <div className="attachment-button p-0 flex flex-row rounded-sm items-center w-full gap-2">
             {(fileItems.length > 0 || editor?.isFocused || isRecording || audioProcessing) &&
               !(mode === "create-comment" && isRecording) && (
@@ -86,10 +80,6 @@ const AttachmentsUpload = (props: IProps) => {
                       id={mode + "-audio-button"}
                       toggleRecording={toggleRecording!}
                       globalRecording={isRecording}
-                      // Keeps this row mounted while the transcript streams
-                      // back: stopping capture clears isRecording before the
-                      // request finishes, and a blur with no files attached
-                      // would otherwise unmount the mic mid-transcription.
                       onProcessingChange={setAudioProcessing}
                       wrapperClassName="order-3"
                     />
@@ -260,11 +250,6 @@ const AttachmentsUpload = (props: IProps) => {
                 ) : null}
               </>
             ) : (
-              // Description / existing-comment editing shares this row. Its
-              // Save button used to be pushed right by the old flex-grow
-              // spacer; in a flat ordered row an unordered child is order 0 and
-              // would sort AHEAD of the mic and Improve. Same trailing slot as
-              // Send.
               <span className="order-6 ml-auto flex items-center">
                 <SaveButtonMobile
                   sendOnClick={props.sendOnClick}
@@ -295,7 +280,6 @@ const AttachmentsUpload = (props: IProps) => {
             descriptionFirst={descriptionFirstEnabled}
           />
         ) : (
-          // ========================================================== DESKTOP ==============================
           <DesktopAttachment
             mode={mode}
             sendOnClick={sendOnClick}
@@ -318,7 +302,6 @@ const AttachmentsUpload = (props: IProps) => {
         )
       }
 
-      {/* ======================'================================= ATTACHMENTS ================================ */}
 
       <div
         className={`sm:block w-full ${
@@ -330,7 +313,6 @@ const AttachmentsUpload = (props: IProps) => {
             : ""
         }`}
       >
-        {/* ============================= map all the files =================== */}
         <div className={`flex flex-wrap gap-2 py-2`}>
           {mode === "create-task-modal" && returnUploadedAttachments ? (
             <ImageGallery

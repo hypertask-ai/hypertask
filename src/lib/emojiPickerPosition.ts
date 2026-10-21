@@ -1,8 +1,3 @@
-/**
- * Viewport-fixed coordinates for emoji pickers portaled to #portal-root.
- * Document-absolute + scrollY placement sits under the new comment composer
- * when that field owns a higher stacking context (HTPR-6404).
- */
 export type FixedOverlayPosition = {
   top: number;
   left: number;

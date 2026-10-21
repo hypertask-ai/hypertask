@@ -1,6 +1,5 @@
 import type { NotificationType } from "@prisma/client";
 
-/** Phrasing for each event line, subject "<actor> ". */
 export const verbByType: Record<NotificationType, string> = {
   Comment: "commented",
   Reacted: "reacted to a comment",
@@ -18,22 +17,12 @@ export const verbByType: Record<NotificationType, string> = {
   AgentMessage: "sent you a message",
 };
 
-// Higher wins when several rows describe the same comment.
 const specificity: Partial<Record<NotificationType, number>> = {
   Mentioned: 3,
   AddedToFollowerInTask: 2,
   Comment: 1,
 };
 
-/**
- * One comment can produce several rows for the same person: a follower who is
- * also mentioned gets Comment + Mentioned, a newly mentioned user gets
- * AddedToFollowerInTask + Mentioned. Listing both reads as two updates for one
- * action, so the most specific row wins.
- *
- * Rows with no comment (moves, assignments) are independent events and all pass
- * through.
- */
 export function dedupePerComment<
   T extends { type: NotificationType; commentId: number | null },
 >(notifications: T[]): T[] {

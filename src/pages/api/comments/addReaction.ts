@@ -1,3 +1,4 @@
+import { withAgentScopeRequest } from "@/lib/auth/agentScope";
 import prisma from "@/lib/prisma";
 import { IComment } from "@/models/model";
 import { sendDataNewCommentFCM } from "@/utils/controllers/FCM";
@@ -9,12 +10,8 @@ import { publishAgentWebhookDeliveries } from "@/lib/agentWebhooks/outbox";
 import { NextApiHandler, NextApiRequest, NextApiResponse } from "next";
 import { getSessionUser } from "@/lib/auth/getSessionUser";
 import { userCanAccessTaskContent } from "@/utils/controllers/tasks/assertTaskAccess";
+import { taskWriteAccessWhere } from "@/utils/controllers/projects/getAllIncludes";
 
-// HTPR-5522: every failure here used to answer with the same bare 500, so a
-// missing id, a comment that no longer exists, and a failed push notification
-// were indistinguishable to the client. Worse, the notification ran after the
-// reaction was already stored, so a notification error reported failure for
-// work that had succeeded.
 const isId = (value: any) => Number.isInteger(value) && value > 0;
 const isText = (value: any) => typeof value === "string" && value.trim().length > 0;
 
@@ -37,10 +34,12 @@ const handler: NextApiHandler = async (req: NextApiRequest, res: NextApiResponse
             if (!(await userCanAccessTaskContent(userId, taskId))) {
                 return res.status(403).json({ message: "Forbidden" });
             }
-            // A reaction on a deleted or moved comment would otherwise fail as a
-            // foreign key violation, which reads as a server fault, not stale UI.
             const commentExists = await prisma.comment.findFirst({
-                where: { id: commentId, taskId: taskId },
+                where: {
+                    id: commentId,
+                    taskId: taskId,
+                    task: { project: taskWriteAccessWhere(userId, session.agentId) },
+                },
                 select: { id: true },
             });
             if (!commentExists) {
@@ -52,14 +51,11 @@ const handler: NextApiHandler = async (req: NextApiRequest, res: NextApiResponse
                     unified:unified,
                     commentId:commentId,
                     userId:userId,
-                    // HTPR-7122: a person's click never touches their agents' reactions.
                     agentId:null,
                 },
             })
             if (findReaction.length===0 ){
-                // HTPR-7095: the reaction and its agent webhook outbox row are written together, then published after commit.
                 const webhookInput = { commentId, reactorUserId: userId, reactorIsAgent: false, emoji, added: true };
-                // A failed lookup fails the request before anything is stored, so the client retry keeps the event.
                 const preparedWebhook = await prepareCommentReactionWebhook(webhookInput);
                 const { reaction, deliveryIds } = await prisma.$transaction(async (tx) => {
                     const reaction = await tx.reaction.create({
@@ -93,7 +89,6 @@ const handler: NextApiHandler = async (req: NextApiRequest, res: NextApiResponse
                      )
                 }
                 await publishAgentWebhookDeliveries(deliveryIds).catch((error) => {
-                    // The outbox row is stored; the outbox retry delivers it later.
                     console.error("[comment-reaction] agent webhook publish failed", error);
                 });
                 void broadcastTaskComment(taskId, { originUserId: userId });
@@ -105,10 +100,8 @@ const handler: NextApiHandler = async (req: NextApiRequest, res: NextApiResponse
                 });
             }
 
-            // ============== it means for the user, the item does exist, so we  must update it.
             else if (alreadyReacted!==undefined){
                 var reaction;
-                // ================= delete all the other reactions just for safety.
                 const deleted= await prisma.reaction.deleteMany({
                     where:{
                         unified:unified,
@@ -178,8 +171,6 @@ const handler: NextApiHandler = async (req: NextApiRequest, res: NextApiResponse
     }
 };
 
-// The reaction is already stored by the time this runs, so a notification
-// failure must not hand the user an error for work that succeeded.
 const notifySafely = async(reaction:any,afterAppDomain:string,userId:number)=>{
     try {
         await sendNotification(reaction, afterAppDomain, userId)
@@ -232,4 +223,4 @@ const sendNotification = async(reaction:any,afterAppDomain:string,userId:number)
         }
 }
 
-export default handler;
+export default ((req, res) => withAgentScopeRequest(req, () => handler(req, res))) satisfies NextApiHandler;

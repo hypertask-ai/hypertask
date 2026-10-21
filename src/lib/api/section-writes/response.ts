@@ -5,7 +5,6 @@ export function sectionWriteJson(body: unknown, status: number): TaskWriteRespon
   if (status !== 204) {
     return body === undefined ? new NextResponse(null, { status }) : NextResponse.json(body, { status });
   }
-  // Pages accepts a JSON body with 204 and strips it only at the HTTP boundary.
   const text = JSON.stringify(body);
   return {
     status,

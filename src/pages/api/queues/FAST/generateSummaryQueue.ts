@@ -24,7 +24,6 @@ async function handler(req: NextApiRequest, res: NextApiResponse) {
     if (error instanceof SummaryRetryableError) {
       return res.status(503).json({ ok: false, retry: true });
     }
-    // Return 200 so QStash does not retry an error we have already handled/logged.
     return res.status(200).json({ ok: false });
   }
 }

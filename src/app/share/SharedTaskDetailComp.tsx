@@ -1,8 +1,6 @@
-/* eslint-disable react-hooks/exhaustive-deps */
-/* eslint-disable react/jsx-key */
-/* eslint-disable react/no-danger-with-children */
-// /* eslint-disable react-hooks/exhaustive-deps */
-// /* eslint-disable @next/next/no-img-element */
+
+
+
 "use client";
 import "@/styles/taskDetail.scss";
 import { currentProjectAtom } from "@/store";
@@ -28,7 +26,6 @@ const AttachmentCarousel = dynamic(
 );
 
 const SharedTaskDetailComp: React.FC<{ _slugs: string[] }> = ({ _slugs }) => {
-  // =================== CONVERT STRINGS TO OBJECTS
   const { currentTask: ct, carousalItems, setCarousalItems } = useTaskContext();
   const parsedTask = ct as unknown as ITask;
   const { dynamicTopValue, dynamicElementRef } = useSetStickyHeight();
@@ -65,7 +62,6 @@ const SharedTaskDetailComp: React.FC<{ _slugs: string[] }> = ({ _slugs }) => {
         <TaskDetailMainContainer bodyClassName="">
           <SharedTaskTitleContainer containerRef={dynamicElementRef} />
 
-          {/* --------------------------- COMMENTS + DESCRIPTION CONTAINER ------------------------------ */}
           <div
             id="taskInfo_comments_description_container"
             className={`task-detail-horizontal-padding  ${
@@ -83,7 +79,6 @@ const SharedTaskDetailComp: React.FC<{ _slugs: string[] }> = ({ _slugs }) => {
               <SharedCommentAndDescriptionContainer />
             </Suspense>
 
-            {/* ====================================== RIGHT HALF ================================ */}
 
             <SharedTaskInfo
               dynamicTopValue={dynamicTopValue}

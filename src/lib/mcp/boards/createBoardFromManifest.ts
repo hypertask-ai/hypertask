@@ -5,6 +5,7 @@ import {
   createProjectViewAndCreateDefault,
   updateUniqueIdentifier
 } from '@/utils/controllers/projects/create'
+import { enqueueBoardCreated, processAnalyticsIntentSoon, type CreationChannel } from '@/lib/telemetry/savedWork'
 import { createProjectWithStableName } from '@/utils/controllers/projects/createProjectWithStableName'
 import { assertBoardQuota } from '@/utils/controllers/projects/boardQuota'
 import createLog from '@/utils/controllers/logs/createLog'
@@ -20,6 +21,13 @@ export interface CreateBoardFromManifestParams {
   userId: number
   userEmail: string
   userDisplayName?: string | null
+  creation: ManifestBoardCreation
+}
+
+export interface ManifestBoardCreation {
+  method: 'api' | 'agent'
+  channel: CreationChannel
+  agentId?: string | null
 }
 
 export interface CreateBoardSectionResult {
@@ -70,17 +78,11 @@ async function compensateFailedBoard(projectId: number): Promise<void> {
   })
 }
 
-/**
- * Creates a project (board) from a validated manifest: custom columns, labels, starter tasks.
- * On failure after the project exists, soft-deletes tasks and project (no DB schema changes).
- */
 export async function createBoardFromManifest(
   params: CreateBoardFromManifestParams
 ): Promise<CreateBoardFromManifestResult> {
-  const { teamId, googleAccountId, manifest, userId, userEmail, userDisplayName } = params
+  const { teamId, googleAccountId, manifest, userId, userEmail, userDisplayName, creation } = params
 
-  // HTPR-4894: MCP, the CLI and the AI chat tool all create boards through here,
-  // so the free-plan cap lives here rather than in each of them.
   await assertBoardQuota(userId)
 
   let prevRank: string | undefined
@@ -106,7 +108,8 @@ export async function createBoardFromManifest(
     sections: sectionTitles,
     section: {
       create: sectionCreates
-    }
+    },
+    ...(creation.agentId ? { members: { create: { userId, agentId: creation.agentId, status: 'Accepted' } } } : {})
   })
 
   const projectId = projectCore.id
@@ -195,7 +198,9 @@ export async function createBoardFromManifest(
         dueDate: task.dueDate ? new Date(task.dueDate) : undefined,
         projectUniqueIdentifier: projectRow.uniqueIdentifier,
         teamId,
-        labels: labelIds
+        labels: labelIds,
+        creationChannel: creation.channel,
+        analyticsAgentId: creation.agentId
       })
 
       const uniqueIndex = createdTask.uniqueIndex
@@ -263,6 +268,11 @@ export async function createBoardFromManifest(
       console.error('[MCP Create Board] log after success:', sideEffectErr)
     }
 
+    try {
+      processAnalyticsIntentSoon(await enqueueBoardCreated(prisma, projectId, creation.method, { userId, agentId: creation.agentId }, project.createdAt))
+    } catch {
+      console.error('[saved-work-analytics] intent enqueue failed')
+    }
     return result
   } catch (err) {
     await compensateFailedBoard(projectId)

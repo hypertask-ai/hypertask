@@ -7,13 +7,6 @@ import { MCP_TOKEN_ISSUED_AT_MS_CLAIM, presentedAgentTokenGeneration, storedAgen
 import { extractBearerToken, isManagementKeyToken, validateManagementApiKey } from './session';
 import type { McpAuthContext, McpAuthFailureSnapshot } from './types';
 
-/**
- * Creates a standardized 401 Unauthorized response for MCP routes
- * Includes WWW-Authenticate header to trigger Cursor's CONNECT button
- * 
- * @param message Optional error message
- * @param reason Optional reason code (e.g., 'token_revoked', 'token_expired', 'invalid_token')
- */
 export type McpUnauthorizedReason =
   | 'token_revoked'
   | 'token_expired'
@@ -54,9 +47,6 @@ export function createUnauthorizedResponse(message?: string, reason?: McpUnautho
       : 'Authentication required. Please check your token and try again.',
   }
   
-  // Create NextResponse with WWW-Authenticate header
-  // This header signals to clients (like Cursor) that authentication is needed
-  // The WWW-Authenticate header is the standard way to prompt for authentication
   return NextResponse.json(response, {
     status: 401,
     headers: {
@@ -81,23 +71,9 @@ export type McpAuthFailureLookup = {
       args: unknown
     ) => Promise<{ id: string; mcpTokenJti: string | null; revokedAt: Date | null } | null>
   }
-  /** Management-key verification, injectable because it is not a table read. */
   verifyManagementKey?: (token: string) => Promise<McpAuthContext | null>
 }
 
-/**
- * Names why a request that already failed authentication was rejected.
- *
- * `validateMcpAuth` collapses every rejection to `null`, so the MCP routes
- * answered a revoked token with the same "Invalid or missing authentication
- * token" as a typo. A CLI session whose saved token had been revoked could not
- * tell a dead session from a bad request, and the recovery step differs
- * (HTPR-4814). The clients already parse this `reason`; the server just never
- * sent a useful one.
- *
- * Runs only on the failure path, so the extra lookup never touches a served
- * request. It classifies; it never grants, so it cannot widen access.
- */
 export async function classifyMcpAuthFailure(
   request: NextRequest,
   db?: McpAuthFailureLookup,
@@ -106,17 +82,10 @@ export async function classifyMcpAuthFailure(
   const token = extractBearerToken(request.headers.get('Authorization'))
   if (!token) return 'missing_token'
 
-  // A data key is opaque: there is nothing to decode, and naming why a hash
-  // missed would answer "does this key exist".
   if (token.startsWith('htk_')) return 'invalid_token'
 
-  // A missing token returns above, before this binds the client. Evaluating
-  // prisma as a default argument touched the database on every 401.
   const lookup = db ?? (prisma as unknown as McpAuthFailureLookup)
 
-  // A management key that verifies but carries no data permission is a
-  // different recovery step: widen the key's scope rather than replace it.
-  // Saying so tells the holder of a working key nothing it does not know.
   if (isManagementKeyToken(token)) {
     const verifyManagementKey = lookup.verifyManagementKey ?? validateManagementApiKey
     const managementCtx = await verifyManagementKey(token)
@@ -126,14 +95,8 @@ export async function classifyMcpAuthFailure(
       : 'insufficient_scope'
   }
 
-  // Revocation state is disclosed only after signature verification, the same
-  // rule the token refresh route follows, so a forged token cannot probe
-  // whether some jti has been revoked.
   const verified = snapshot?.verifiedJwt !== undefined ? snapshot.verifiedJwt : verifyMcpJwtToken(token)
   if (!verified) {
-    // Verification also fails on expiry. `exp` is inside the token the caller
-    // already holds, so naming expiry discloses nothing new, and it is the one
-    // rejection the caller can fix without help.
     const decoded = jwt.decode(token) as jwt.JwtPayload | null
     const expiresAtMs = typeof decoded?.exp === 'number' ? decoded.exp * 1000 : null
     return expiresAtMs !== null && expiresAtMs <= Date.now()
@@ -182,11 +145,7 @@ export async function classifyMcpAuthFailure(
       if (!client) return 'token_revoked'
     }
 
-    // "Revoke every token" is recorded on the user, not per token, so a token
-    // minted before that moment is revoked even with no row of its own.
     if (user.mcpTokensRevokedAt) {
-      // Older tokens carry only a second-resolution `iat`; newer ones also
-      // carry the millisecond claim, which is the more precise of the two.
       const issuedAtMs = verified[MCP_TOKEN_ISSUED_AT_MS_CLAIM]
       let issuedAt: Date | null = null
       if (typeof issuedAtMs === 'number' && Number.isFinite(issuedAtMs)) {
@@ -197,18 +156,12 @@ export async function classifyMcpAuthFailure(
       if (issuedAt && issuedAt < user.mcpTokensRevokedAt) return 'token_revoked'
     }
 
-    // A managed agent's token never expires; it dies when the agent is revoked
-    // or when a newer token supersedes it. Those need different recoveries
-    // (get a new agent, versus reconnect with the current token), so neither
-    // may come back as a bad request.
     const agentId = verified.agentId
     if (typeof agentId === 'string' && agentId.length > 0) {
       const agent = snapshot?.agent ?? await lookup.agent.findFirst({
         where: { id: agentId, userId: user.id },
         select: { id: true, mcpTokenJti: true, revokedAt: true },
       })
-      // An agent belonging to somebody else must not be distinguishable from
-      // one that does not exist.
       if (!agent) return 'invalid_token'
       if (agent.revokedAt || !agent.mcpTokenJti) return 'agent_revoked'
 
@@ -229,12 +182,6 @@ export async function classifyMcpAuthFailure(
   }
 }
 
-/**
- * The 401 an MCP route should return once `validateMcpAuth` has said no.
- *
- * Keeps the `error` string every existing client already matches on and adds
- * the accurate `reason`, so nothing that reads the old field changes.
- */
 export async function mcpUnauthorizedResponse(
   request: NextRequest,
   db?: McpAuthFailureLookup,

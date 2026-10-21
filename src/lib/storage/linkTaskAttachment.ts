@@ -24,7 +24,6 @@ async function lockAttachmentReceipt(
   tx: Prisma.TransactionClient,
   key: string,
 ) {
-  // Prisma cannot deserialize PostgreSQL's void lock result.
   await tx.$queryRaw(
     Prisma.sql`SELECT pg_advisory_xact_lock(hashtextextended(${key}, ${5993}))::text AS lock_result`,
   );
@@ -57,12 +56,7 @@ export async function linkTaskAttachment(
 
   return prisma.$transaction(
     async (tx) => {
-      // Linking and cancellation share this key lock, so cancellation cannot
-      // delete the object between this transaction's storage check and insert.
       await lockAttachmentReceipt(tx, receipt.key);
-      // The task row lock keeps a move/delete from changing authorization between
-      // the access check and the attachment write. It also serializes lost-response
-      // retries so persistAttachmentRows can return the first committed row.
       await tx.$queryRaw(
         Prisma.sql`SELECT "id" FROM "Task" WHERE "id" = ${taskId} FOR UPDATE`,
       );

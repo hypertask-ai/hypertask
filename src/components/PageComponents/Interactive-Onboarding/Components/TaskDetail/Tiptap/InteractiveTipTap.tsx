@@ -18,10 +18,8 @@ export const InteractiveTiptap = ({ type, editor }: IProps) => {
     targetDiv: HTMLElement,
     popover: HTMLElement
   ) => {
-    // Get the current height of the popover
     const popoverHeight = popover.offsetHeight;
     console.log("Size ===> new min height", popoverHeight + 30);
-    // Set the min-height of the target div to be popover height + 30px
     targetDiv.style.minHeight = `${popoverHeight + 30}px`;
   };
 
@@ -57,7 +55,6 @@ export const InteractiveTiptap = ({ type, editor }: IProps) => {
       ?.scrollIntoView({ behavior: "smooth", block: "start" });
   }, []);
 
-  // CTRL+M (or CMD+M) focuses the TipTap when user has focused out - same as main task detail
   useEffect(() => {
     if (!editor) return;
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -66,10 +63,6 @@ export const InteractiveTiptap = ({ type, editor }: IProps) => {
         e.preventDefault();
         editor.commands.focus("end");
       }
-      // if (cmdControl && e.keyCode === KeyCodes.D && type === "description") {
-      //   e.preventDefault();
-      //   editor.commands.focus("end");
-      // }
     };
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
@@ -80,7 +73,6 @@ export const InteractiveTiptap = ({ type, editor }: IProps) => {
       id={"main-tiptap-interactive"}
       className="col-start-1 col-end-3 relative text-white-black"
     >
-      {/* ============================ BUBBLE MENU ============================ */}
       <TiptapBubbleMenu
         currentProjectId={undefined}
         toggleHighlightHandler={() => {}}

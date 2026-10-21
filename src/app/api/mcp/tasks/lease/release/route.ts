@@ -2,7 +2,7 @@ import { wrapMcpRoute, checkMcpRouteRateLimit as checkMcpRateLimit, validateMcpR
 import { NextRequest, NextResponse } from 'next/server';
 
 import prisma from '@/lib/prisma';
-import { findTaskByIdentifier } from '@/lib/mcp/tasks/resolveTask';
+import { findTaskByIdentifier, taskIdentifierErrorResponse } from '@/lib/mcp/tasks/resolveTask';
 import { isValidLeaseToken, isValidTaskId } from '@/lib/mcp/tasks/lease';
 
 export async function POST(request: NextRequest) {
@@ -54,20 +54,20 @@ export async function POST(request: NextRequest) {
     );
   }
 
-  const task = await findTaskByIdentifier(
-    ctx.user,
-    { task_id },
-    ctx.agentId
-  );
-  if (!task) {
-    return NextResponse.json(
-      { success: false, error: 'Task not found or access denied' },
-      { status: 404 }
-    );
-  }
-  const leaseToken = lease_token ?? null;
-
   try {
+    const task = await findTaskByIdentifier(
+      ctx.user,
+      { task_id },
+      ctx.agentId
+    );
+    if (!task) {
+      return NextResponse.json(
+        { success: false, error: 'Task not found or access denied' },
+        { status: 404 }
+      );
+    }
+    const leaseToken = lease_token ?? null;
+
     const deleted = await prisma.$executeRaw`
       DELETE FROM "TaskLease"
       WHERE "taskId" = ${task.id}
@@ -96,6 +96,8 @@ export async function POST(request: NextRequest) {
       { status: 200 }
     );
   } catch (error) {
+    const identifierResponse = taskIdentifierErrorResponse(error);
+    if (identifierResponse) return identifierResponse;
     console.error('[MCP Task Lease Release] Error:', error);
     return NextResponse.json(
       { success: false, error: 'Failed to release task lease' },

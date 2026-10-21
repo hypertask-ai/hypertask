@@ -1,13 +1,6 @@
 import { IProject } from "@/models/model";
 import { NextApiResponse } from "next";
 
-/**
- * returns the default board's columns from DEFAULT view. or project.sections as complete fallback
- *
- * @export
- * @param {IProject} project
- * @return {*} 
- */
 export function returnActiveOrDefaultColumnSections(project: IProject) {
     var sections:any = [];
 
@@ -36,32 +29,20 @@ export function formatFileSize(bytes: number): string {
   }
   
 
-/**
- * Validates that a query parameter can be converted to a valid integer
- * 
- * @param param The parameter to validate (from req.query)
- * @param paramName The name of the parameter (for error messages)
- * @param res The response object to return errors
- * @returns The validated integer or null if validation failed
- */
 export function validateIntegerParam(
     param: string | string[] | undefined,
     paramName: string,
     res: NextApiResponse
 ): number | null {
-    // Check if parameter exists
     if (!param) {
         res.status(400).json({ error: `Missing required parameter: ${paramName}` });
         return null;
     }
     
-    // Handle potential array from query parameters
     const value = Array.isArray(param) ? param[0] : param;
     
-    // Convert to number and validate
     const parsedValue = Number(value);
     
-    // Ensure it's a valid integer
     if (!Number.isInteger(parsedValue) || isNaN(parsedValue)) {
         res.status(400).json({ error: `${paramName} must be a valid integer` });
         return null;
@@ -69,22 +50,12 @@ export function validateIntegerParam(
     
     return parsedValue;
 }
-// types.ts (if you'd like to split types later)
 export interface ExtractedContent {
   mentions: string[];
   agentMentions: string[];
   src: string[];
 }
 
-/**
- * Removes the contents of every <blockquote> (nested ones included) from HTML.
- * Mentions living inside a quoted reply must NOT re-notify the mentioned user or
- * re-trigger a mentioned agent: otherwise the agent replies quoting the mention,
- * which re-triggers it, looping forever. Callers strip blockquotes before
- * extracting mentions for triggering. Depth-aware so multiple and nested
- * blockquotes, and real mentions interleaved between them, are handled
- * correctly. Server-safe (regex only, no DOM).
- */
 export function stripBlockquoteContent(htmlContent: string): string {
   let out = "";
   let depth = 0;
@@ -104,7 +75,6 @@ export function stripBlockquoteContent(htmlContent: string): string {
   return out;
 }
 
-// extractTipTapContent.ts
 export function extractTipTapContent(htmlContent: string): ExtractedContent {
   const mentions: string[] = [];
   const agentMentions: string[] = [];

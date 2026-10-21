@@ -9,8 +9,6 @@ export const evidenceTypes = [
 
 export type EvidenceTypeValue = (typeof evidenceTypes)[number]
 
-// Accept the enum name ("TestRun") or a snake/loose form ("test_run", "test run")
-// agents are likely to send. Absent -> Other. Unknown string -> null (rejected).
 const LOOSE_TO_ENUM: Record<string, EvidenceTypeValue> = {
   testrun: 'TestRun',
   test_run: 'TestRun',
@@ -49,8 +47,6 @@ export type EvidenceParseResult =
   | { ok: true; value: EvidenceInput }
   | { ok: false; error: string; field: string }
 
-/** Validate an evidence payload: normalized type, http(s) url, size caps, and
- *  at least one of title/url/summary so a piece of evidence isn't empty. */
 export function parseEvidenceInput(body: {
   type?: unknown
   title?: unknown

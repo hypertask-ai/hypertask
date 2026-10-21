@@ -12,8 +12,7 @@ export interface UpdateTaskResponse {
     success: boolean;
     tasks: TaskDetail[];
     idempotent_replayed?: true;
-    task?: TaskDetail; // Backward compatibility - included when updating a single task
-    /** MCP session agent that performed this action */
+    task?: TaskDetail;
     agent?: McpAgentSummary;
     message?: string;
     failed_tasks?: Array<{ taskId: number; error: string; status?: number; code?: string }>;
@@ -65,7 +64,7 @@ export interface UpdateTaskBody {
     add_labels?: (string | number)[];
     remove_labels?: (string | number)[];
     skip_if_labels_present?: (string | number)[];
-    due_date?: string | null; // ISO 8601 date or datetime; null to clear
+    due_date?: string | null;
     assignee?: number[];
     parent_task_id?: number | null;
     risk_level?: string;

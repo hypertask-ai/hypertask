@@ -319,8 +319,6 @@ const SettingsShell: React.FC<SettingsShellProps> = ({ section }) => {
     }
   }, [activeSection, router, section]);
 
-  // The shell is a fixed full-viewport surface; stray overflow (portals,
-  // top-layer elements) must never let the document itself scroll under it.
   useEffect(() => {
     const html = document.documentElement;
     const previousHtmlOverflow = html.style.overflow;
@@ -591,9 +589,6 @@ const SettingsShell: React.FC<SettingsShellProps> = ({ section }) => {
                     ))}
                   </div>
                 )}
-                {/* The Profile tab is user-global ("only affects you"), so the
-                    team picker is a no-op there and misleadingly implies
-                    per-project scoping — hide it. (HTPR notification-scope fix) */}
                 {activeTab.id !== "profile" && <SettingsTeamPicker />}
               </div>
             </div>

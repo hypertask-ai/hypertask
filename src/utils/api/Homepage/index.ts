@@ -17,7 +17,6 @@ import {
     markBoardReadinessPhase,
 } from "@/lib/analytics/boardReadinessPhases";
 
-// =================== GET ALL TEAMS FOR SIDEBAR
 export const getAllTeamsForLSidebar = async(body:any| null) => {
     if (body&&body.userId){
         try {
@@ -27,13 +26,7 @@ export const getAllTeamsForLSidebar = async(body:any| null) => {
             );
             if (Array.isArray(bootstrapped)) return requireSidebarTeams(bootstrapped);
         } catch {
-            // Optional bootstrap failures fall through to the established request.
         }
-        // axiosClient, not bare axios: this route is one of the few gated on ht_session,
-        // so a stale session 401s here while every userId-in-body route still succeeds.
-        // Bare axios skips the SESSION_REQUIRED interceptor (HTPR-4182), the rejection is
-        // swallowed by react-query's initialData, and the sidebar silently renders
-        // favorites and nothing else, which reads as "all my boards are gone".
         const response = await axiosClient.post(SIDEBAR_TEAMS_PATH, body)
         return requireSidebarTeams(response.data);
     }
@@ -43,49 +36,39 @@ export const getAllTeamsForLSidebar = async(body:any| null) => {
     
 }
 
-// =================== GET ALL TEAMS FOR SIDEBAR
-// HTPR-6065: /api/users/getById always returns the session user; it no
-// longer reads a userId query param, so the `id` argument here is unused.
 export const getCurrentUserById = async(_id:number)=>{
     const response = axios.get(`/api/users/getById`, )
     return response;
 }
 
 
-// =================== GET ALL TEAMS MINIMAL
 export const getAllTeamsMinimal = async(body:any)=>{
     const response = axios.post(`/api/teams/getAllMinimal`, body)
     return response;
 }
 
-// ================== UPDATE BOARD NAME
 export const updateBoardName = async(body:any)=>{
     return axios.post ("/api/projects/update", body)
 }
 
 
-// ================== ARCHIVE PROJECT
 export const archiveProjectById = async(body:any)=>{
     return axios.post ("/api/projects/archive", body)
 }
 
-// ================== LEAVE PROJECT
 export const leaveProject = async(body:any)=>{
     return axios.post ("/api/projects/leave", body)
 }
 
 
-// ================== CREATE TEAM
 export const createTeam = async(body:any)=>{
     return axios.post(`/api/teams/create`,body)
 }
 
-// ================== DELETE project
 export const deleteProject = async(body:any)=>{
     return axios.post(`/api/projects/delete`,body)
 }
 
-// =================== GET FIRST PROJECT
 export const getFirstProject = async() =>{
     return axios.get("/api/projects/getFirst")
 }
@@ -112,8 +95,6 @@ export const isBoardTasksPayload = (value: unknown): value is BoardTasksPayload 
     return Array.isArray(payload.tasks) && Array.isArray(payload.allViews)
 }
 
-// HTPR-3811: getAll no longer ships every board's tasks. Fetch one board's tasks
-// (same shape getAll used to nest) plus its saved views on demand.
 export const fetchBoardTasks = async (
     projectId:number,
     userId:number,
@@ -157,8 +138,6 @@ export const fetchBoardTasks = async (
     }
 }
 
-// Warm one board's tasks/views into the side cache (background, non-blocking). No-op
-// if already warm or already hydrated in the main blob.
 export const prefetchBoard = async (queryClient:any, projectId:number, userId:number):Promise<void> => {
     if (isBoardTasksPayload(queryClient.getQueryData(BOARD_TASKS_KEY(projectId, userId)))) return
     try {
@@ -168,15 +147,9 @@ export const prefetchBoard = async (queryClient:any, projectId:number, userId:nu
             staleTime: 1000 * 60 * 5,
         })
     } catch {
-        // background warm-up; failures are retried lazily on actual open
     }
 }
 
-// Merge a freshly-fetched board payload into just this project's ["projectsAll"]
-// cache entry, leaving every other project object untouched (same identity, so
-// their subtrees cannot re-render). Returns the patched project, or null when
-// the cache holds no such project to patch. Shared by loadBoardIntoCache (below)
-// and the board realtime reconcile (HTPR-6166).
 export const patchProjectIntoCache = (
     queryClient:any,
     projectId:number,
@@ -202,16 +175,13 @@ export const patchProjectIntoCache = (
     return loaded
 }
 
-// Lazy-load one board's tasks/views into the ["projectsAll"] cache and compute its
-// sections. Uses the prefetched side cache when warm (no network). Returns the
-// hydrated project (or the existing one if already loaded).
 export const loadBoardIntoCache = async (queryClient:any, projectId:number, userId:number):Promise<IProject|null> => {
     const allData:any = queryClient.getQueryData(["projectsAll"])
     if (!allData?.updatedProjects) return null
     const idx = allData.updatedProjects.findIndex((p:IProject)=>p.id===projectId)
     if (idx < 0) return null
     const existing = allData.updatedProjects[idx]
-    if (isBoardPayloadHydrated(existing)) return existing // already hydrated
+    if (isBoardPayloadHydrated(existing)) return existing
 
     const warm = queryClient.getQueryData(BOARD_TASKS_KEY(projectId, userId))
     const boardPayload = isBoardTasksPayload(warm) ? warm : await fetchBoardTasks(projectId, userId)
@@ -232,9 +202,6 @@ export const getAllProjects = async(
 )=>{
     const readinessTraceScope = getBoardReadinessTraceScope()
     const targetId = parseInt(slugs ? slugs : "")
-    // The active board is the visible content. Start it in the same turn as the
-    // lightweight authorization metadata instead of serializing it behind
-    // /getAll. The boardTasks route enforces its own membership check.
     const boardPayloadPromise = (Number.isFinite(targetId)
       ? (options?.boardPayloadPromise ??
           fetchBoardTasks(targetId, user.id, options?.signal)).catch((error) => {
@@ -273,9 +240,6 @@ export const getAllProjects = async(
     if (!Array.isArray(projects)) {
       throw new Error("Invalid projects response")
     }
-    // This response remains the account-wide authorization boundary. A keyed
-    // IndexedDB snapshot may already be visible while it is in flight. Await
-    // revocation cleanup, but never add local-read latency to a network winner.
     const authorizationDecision = await options?.onProjectsAuthorized?.(
       projects.map((project) => project.id),
     )
@@ -291,11 +255,7 @@ export const getAllProjects = async(
 
     const updatedProjects = [...projects];
 
-    // Hydrate ONLY the active board's tasks/views for fast first paint. Other boards
-    // load lazily when first opened (loadBoardIntoCache).
     const boardPayload = await boardPayloadPromise
-    // Only an unavailable network payload needs to wait for the local fallback
-    // decision. A successful network winner must never inherit IndexedDB time.
     const authorizedLocalBoardPublished = await resolveAuthorizedLocalFallback({
       boardPayload,
       localBoardPublication,
@@ -304,10 +264,6 @@ export const getAllProjects = async(
       updatedProjects[index] = hydrateBoardWithPayload(updatedProjects[index], boardPayload)
     }
 
-    // Compute sections for every board. Active board has tasks -> real columns;
-    // unopened boards have no tasks yet -> empty until hydrated on open. The
-    // active board was already hydrated above, so do not process its full task
-    // list a second time on the startup path.
     for (let projectIndex = 0; projectIndex < updatedProjects.length; projectIndex += 1) {
       if (projectIndex === index && boardPayload) continue
       hydrateBoardSections(updatedProjects[projectIndex])
@@ -324,9 +280,6 @@ export const getAllProjects = async(
       authorizedLocalBoardPublished,
       index:index,
       updatedProjects:updatedProjects,
-      // Notification badges own a separate, account-scoped React Query. The
-      // board payload keeps this legacy field for mutation consumers, but must
-      // not wait for an unrelated request before publishing usable board data.
       notificationsCount:{ all: 0, unseen: 0 }
     })
 
@@ -334,25 +287,9 @@ export const getAllProjects = async(
 
 }
 
-// get all notifications for a user 
 export const getAllNotifications = async (userId:number)=>{
     const response = await axios.get(`/api/notifications/getAll?userId=${userId}`)
-    // const tabs = (response.data as ISplit[]).map((item: string | any[], index: number) => ({ 
-    //     idx: index, 
-    //     project: index==0?"All":(item[0].project?.title??item[0].project?.name), 
-    //     length:item.length }));
-    // const tabs:any = [];
-    // const data:any = [];
-    // (response.data as ISplit[]).forEach(((x,index)=>{
-    //   tabs.push({
-    //     idx:index,
-    //     project:x.splitName,
-    //     length:x.notifications.length
-    //     })
-    //     data.push(x.notifications)
 
-    // }));
-        // console.log("🚀 ~ getAllNotifications ~  {data:response.data,tabs:tabs }:",  {data:response.data,tabs:tabs })
  
     return expandInboxApiResponse(response.data)
 }

@@ -12,11 +12,6 @@ function hasOwnerCliCredential(authorization: string): boolean {
   );
 }
 
-/**
- * Authorizes announcement administrators. The owner CLI uses its dedicated
- * server-side credential; signed-in administrators use a non-revoked Firebase
- * ID token carrying the server-issued Boolean `admin` custom claim.
- */
 export async function requireAnnouncementAdmin(
   req: NextApiRequest,
   res: NextApiResponse,
@@ -36,8 +31,6 @@ export async function requireAnnouncementAdmin(
   }
 
   try {
-    // HTPR-7126: load Firebase Admin only for Firebase tokens, so the owner CLI
-    // and unauthenticated requests never depend on it loading.
     const { getAuth } = await import("@/lib/firebase-admin");
     const claims = await getAuth().verifyIdToken(match[1], true);
     if (claims.admin !== true) {

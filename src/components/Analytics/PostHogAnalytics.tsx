@@ -4,7 +4,7 @@ import { useCallback, useEffect, useLayoutEffect, useRef } from "react";
 import { usePathname } from "next/navigation";
 import type { PostHogInterface } from "posthog-js/dist/module.slim";
 
-import { getCookieConsent } from "@/lib/cookieConsent";
+import { getCookieConsent, onCookieConsentChange } from "@/lib/cookieConsent";
 import {
   installProductPerformanceSink,
   isProductReadinessEvent,
@@ -20,6 +20,8 @@ import {
   shouldInstallAuthenticatedProjectWebVitals,
   type AppWebVitalMetric,
 } from "@/lib/analytics/appWebVitals";
+import { dropResizeObserverLoopException } from "@/lib/analytics/browserNoise";
+import { installBrowserCaptureSink } from "@/lib/analytics/browserCapture";
 
 const AUTHENTICATED_ANALYTICS_PAINT_SETTLE_MS = 2_500;
 const AUTHENTICATED_ANALYTICS_MAX_WAIT_MS = 8_000;
@@ -34,14 +36,20 @@ type AnalyticsScheduleController = {
   setAuthenticated: (authenticated: boolean) => void;
 };
 
+export type TrackingPersistence = "memory" | "localStorage+cookie";
+
 type WebVitalsInstallState = "idle" | "installing" | "installed";
 
 const identityKey = ({ userId, isGuest }: AnalyticsIdentity) =>
   `${userId ?? "anonymous"}:${isGuest ? "guest" : "standard"}`;
 
+const recordsSessions = (identity: AnalyticsIdentity, persistence: TrackingPersistence) =>
+  identity.isGuest && persistence !== "memory";
+
 const reconcilePersistedIdentity = (
   posthog: PostHogInterface,
   identity: AnalyticsIdentity,
+  persistence: TrackingPersistence,
   markIdentitySafe: () => void,
 ) => {
   const expectedAccountId =
@@ -57,9 +65,6 @@ const reconcilePersistedIdentity = (
 
   posthog.stopSessionRecording();
 
-  // Persistence is shared with hypertask.ai so anonymous acquisition survives
-  // signup. An identified account is different: it must be cleared on logout
-  // or account switching before PostHog emits the initial pageview.
   if (
     persistedAccountId !== null &&
     persistedAccountId !== expectedAccountId
@@ -67,23 +72,26 @@ const reconcilePersistedIdentity = (
     posthog.reset();
   }
 
-  posthog.set_config({ disable_session_recording: !identity.isGuest });
-  // reset() (when needed) has completed, so captures now belong either to the
-  // safe anonymous acquisition identity or to a clean device identity. Open
-  // the gate before identify() so its anonymous-to-user link is retained.
+  posthog.set_config({ disable_session_recording: !recordsSessions(identity, persistence) });
   markIdentitySafe();
   if (expectedAccountId !== null) posthog.identify(expectedAccountId);
-  if (identity.isGuest) posthog.startSessionRecording();
+  if (recordsSessions(identity, persistence)) posthog.startSessionRecording();
 };
 
 export default function PostHogAnalytics({
   authenticatedUserId,
   authenticatedIsGuest,
+  identifyEventIds = false,
+  trackingPersistence,
 }: {
   authenticatedUserId: number | null;
   authenticatedIsGuest: boolean;
+  identifyEventIds?: boolean;
+  trackingPersistence: TrackingPersistence;
 }) {
+  const persistenceRef = useRef(trackingPersistence);
   const currentPathname = usePathname();
+  const identifyEventIdsRef = useRef(identifyEventIds);
   const latestIdentityRef = useRef<AnalyticsIdentity>({
     userId: authenticatedUserId,
     isGuest: authenticatedIsGuest,
@@ -95,10 +103,6 @@ export default function PostHogAnalytics({
     identityKey(latestIdentityRef.current),
   );
   const performanceIdentityStartedAtRef = useRef(0);
-  // Next Web Vitals are document-scoped, not reset by SPA navigation. Once a
-  // document crosses identities, its navigation metrics can never describe
-  // the new account. Keep this true for the document lifetime; route-specific
-  // Board/Inbox/Calendar readiness is measured by the product event pipeline.
   const documentIdentityTransitionedRef = useRef(false);
   const posthogRef = useRef<PostHogInterface | null>(null);
   const identityReadyRef = useRef(false);
@@ -133,12 +137,11 @@ export default function PostHogAnalytics({
     const committedIdentityKey = identityKey(committedIdentity);
 
     latestIdentityRef.current = committedIdentity;
+    identifyEventIdsRef.current = identifyEventIds;
     if (
       posthogRef.current &&
       identityKey(appliedIdentityRef.current) !== committedIdentityKey
     ) {
-      // The new identity is now committed. Close capture until the passive
-      // reconciliation effect has removed or identified PostHog state.
       identityReadyRef.current = false;
     }
 
@@ -149,9 +152,6 @@ export default function PostHogAnalytics({
         title: document.title,
       };
     } else if (currentPathname !== initialPageviewRef.current.pathname) {
-      // Web Vitals describe the document entry, not whichever SPA route is
-      // visible when a late callback fires. Only a committed route transition
-      // may permanently close this document-scoped metric window.
       documentRouteTransitionedRef.current = true;
     }
 
@@ -161,7 +161,7 @@ export default function PostHogAnalytics({
       performanceIdentityStartedAtRef.current = Number.POSITIVE_INFINITY;
       pendingWebVitalsRef.current = [];
     }
-  }, [authenticatedIsGuest, authenticatedUserId, currentPathname]);
+  }, [authenticatedIsGuest, authenticatedUserId, currentPathname, identifyEventIds]);
 
   const sendProjectWebVital = useCallback(
     (
@@ -214,8 +214,6 @@ export default function PostHogAnalytics({
         identityTransitioned: documentIdentityTransitionedRef.current,
         identityStartedAt: performanceIdentityStartedAtRef.current,
         observedAt: performance.now(),
-        // Bind the document-scoped metric to the document entry. Query-string
-        // identifiers are sanitized by buildAuthenticatedProjectWebVital.
         observedUrl: documentEntry.href,
       };
       const posthog = posthogRef.current;
@@ -249,10 +247,6 @@ export default function PostHogAnalytics({
       return;
     }
 
-    // Keep this a separate identity-aware installation gate. Analytics can
-    // initialize anonymously and then receive an authenticated server session
-    // without re-running the SDK initializer. The dependency's buffered
-    // PerformanceObservers retain supported entries from before this import.
     const installAttempt = ++webVitalsInstallAttemptRef.current;
     webVitalsInstallStateRef.current = "installing";
     try {
@@ -275,9 +269,6 @@ export default function PostHogAnalytics({
         return;
       }
 
-      // Mark installed before registering callbacks because buffered entries
-      // may invoke a callback synchronously. No later identity effect may add a
-      // duplicate set of document observers.
       webVitalsInstallStateRef.current = "installed";
       onCLS(reportWebVital);
       onFCP(reportWebVital);
@@ -309,19 +300,13 @@ export default function PostHogAnalytics({
     const previousIdentity = appliedIdentityRef.current;
     if (!posthog || identityKey(previousIdentity) === nextIdentityKey) return;
 
-    // Login refreshes the server tree; logout and account switching hard
-    // navigate. If identity still changes within this document, remove every
-    // trace of the previous user before applying the newly verified session.
     identityReadyRef.current = false;
     posthog.stopSessionRecording();
-    // Preserve anonymous -> identified linkage for the marketing-to-app
-    // funnel. Reset only when an already identified guest/user changes or
-    // signs out, so two real identities can never share PostHog state.
     if (previousIdentity.userId !== null) posthog.reset();
-    posthog.set_config({ disable_session_recording: !identity.isGuest });
+    posthog.set_config({ disable_session_recording: !recordsSessions(identity, persistenceRef.current) });
     identityReadyRef.current = true;
     if (identity.userId !== null) posthog.identify(String(identity.userId));
-    if (identity.isGuest) posthog.startSessionRecording();
+    if (recordsSessions(identity, persistenceRef.current)) posthog.startSessionRecording();
     appliedIdentityRef.current = identity;
     void installAuthenticatedProjectWebVitals().catch((error) => {
       console.error("[posthog] web vitals initialization failed", error);
@@ -343,6 +328,7 @@ export default function PostHogAnalytics({
     let cancelled = false;
     let initializationStarted = false;
     let uninstallSink: () => void = () => undefined;
+    let uninstallBrowserSink: () => void = () => undefined;
     let idleId: number | null = null;
     let paintSettleTimer: ReturnType<typeof setTimeout> | null = null;
     let fallbackTimer: ReturnType<typeof setTimeout> | null = null;
@@ -370,66 +356,51 @@ export default function PostHogAnalytics({
       initializationStarted = true;
       clearSchedule();
       try {
-        // HTPR-4883: a guest who rejected optional cookies skips analytics
-        // entirely. Unset (not yet asked, or a signed-in user who never sees
-        // the banner) keeps the existing capture-by-default behavior.
         if (getCookieConsent() === "essential") return;
 
-        // The app does not use surveys, feature flags, toolbar helpers, or the
-        // other optional integrations bundled by the default entrypoint. The
-        // supported slim build keeps capture, identity, web vitals, and guest
-        // session recording while removing those dormant modules.
-        const { default: posthog } = await import(
-          "posthog-js/dist/module.slim"
-        );
+        const [{ default: posthog }, { ErrorTrackingExtensions }] =
+          await Promise.all([
+            import("posthog-js/dist/module.slim"),
+            import("posthog-js/dist/extension-bundles"),
+          ]);
         if (cancelled) return;
         const identity = latestIdentityRef.current;
         posthog.init(key, {
           api_host:
             process.env.NEXT_PUBLIC_POSTHOG_HOST || "https://eu.i.posthog.com",
-          // api_host is our own proxy domain, which posthog-js cannot map back to a
-          // region, so it would send toolbar/survey links to the US app without this.
           ui_host: "https://eu.posthog.com",
           defaults: "2025-05-24",
-          // Same cookie name and scope as the marketing site's snippet, so a visitor
-          // who lands on hypertask.ai keeps one identity through signup. Diverge and
-          // every signup looks like a brand-new stranger with no acquisition source.
-          persistence: "localStorage+cookie",
+          persistence: persistenceRef.current,
           persistence_name: "posthog_hypertask",
           cross_subdomain_cookie: true,
           autocapture: true,
-          // Replay is for watching what demo guests do with the product; a
-          // signed-in user's real work is never recorded.
-          disable_session_recording: !identity.isGuest,
-          // The app installs one identity-aware observer set below. Keep the
-          // SDK's generic observer off so marketing/shared traffic cannot mix
-          // with the authenticated app series or double count its metrics.
+          __extensionClasses: ErrorTrackingExtensions,
+          capture_exceptions: true,
+          disable_session_recording: !recordsSessions(identity, persistenceRef.current),
           capture_performance: false,
-          // Give signed-in project vitals a dedicated, exact-host event. The
-          // marketing site keeps `$web_vitals`, so its traffic cannot enter the
-          // app series even though both surfaces share a PostHog project.
           before_send: (event) => {
-            // Fail closed while shared persistence still might belong to a
-            // previous account. This also covers SDK captures that happen
-            // before the loaded hook, regardless of internal init ordering.
             if (!identityReadyRef.current) return null;
-            return scopeProjectWebVitalsEvent(event, {
-              userId: latestIdentityRef.current.userId,
-              isGuest: latestIdentityRef.current.isGuest,
-            });
+            if (
+              event?.event === "$identify" &&
+              latestIdentityRef.current.userId !== null &&
+              identifyEventIdsRef.current
+            ) {
+              event.properties.event_id = event.uuid;
+              event.properties.source = "web";
+            }
+            return scopeProjectWebVitalsEvent(
+              dropResizeObserverLoopException(event),
+              {
+                userId: latestIdentityRef.current.userId,
+                isGuest: latestIdentityRef.current.isGuest,
+              },
+            );
           },
-          // This runs synchronously before PostHog starts its request queue and
-          // schedules the initial pageview. Reconcile shared persistence here so
-          // a hard logout/account switch cannot emit under the previous account.
           loaded: (loadedPostHog) => {
             const loadedIdentity = latestIdentityRef.current;
-            reconcilePersistedIdentity(loadedPostHog, loadedIdentity, () => {
+            reconcilePersistedIdentity(loadedPostHog, loadedIdentity, persistenceRef.current, () => {
               identityReadyRef.current = true;
             });
-            // With authenticated startup intentionally delayed, a fast SPA
-            // navigation can happen before PostHog installs history capture.
-            // Preserve the true entry route; PostHog will capture the current
-            // route immediately after this callback and future history changes.
             if (window.location.href !== initialPageview.href) {
               loadedPostHog.capture("$pageview", {
                 $current_url: initialPageview.href,
@@ -439,20 +410,22 @@ export default function PostHogAnalytics({
             }
             posthogRef.current = loadedPostHog;
             appliedIdentityRef.current = loadedIdentity;
+            uninstallBrowserSink = installBrowserCaptureSink(({ event, properties }) => {
+              if (
+                getCookieConsent() === "essential" ||
+                !identityReadyRef.current ||
+                properties.user_id !== (latestIdentityRef.current.userId === null ? null : String(latestIdentityRef.current.userId))
+              ) return;
+              loadedPostHog.capture(event, properties, { uuid: properties.event_id });
+            });
             pendingWebVitalsRef.current
               .splice(0)
               .forEach((queued) =>
                 sendProjectWebVital(loadedPostHog, queued),
               );
           },
-          // We do not run PostHog surveys, but posthog-js loads its surveys
-          // bundle anyway: 97 KiB, ~80% unused, the single largest script on the
-          // board page. Turning surveys off drops that request entirely.
           disable_surveys: true,
         });
-        // Product readiness events are independent of the optional Web Vitals
-        // chunk. Install their sink first so a failed delayed chunk request
-        // cannot leave Board, Inbox, Calendar, or task telemetry queued.
         uninstallSink = installProductPerformanceSink(
           ({ event, properties }, accountId) => {
             const latestIdentity = latestIdentityRef.current;
@@ -524,9 +497,6 @@ export default function PostHogAnalytics({
       if (cancelled || initializationStarted) return;
       clearSchedule();
       if (!authenticated) {
-        // Keep anonymous acquisition and login-funnel pageviews on their
-        // current idle schedule. Only the authenticated app pays the
-        // paint-first delay.
         scheduleInIdlePeriod(ANONYMOUS_ANALYTICS_FALLBACK_MS);
         return;
       }
@@ -540,9 +510,6 @@ export default function PostHogAnalytics({
         AUTHENTICATED_ANALYTICS_MAX_WAIT_MS,
       );
 
-      // A fast IndexedDB restore can beat this component's passive effect.
-      // The bounded queue is authoritative, so handle that race without
-      // requiring another product event.
       if (
         window.__hypertaskProductPerformanceQueue?.some(
           isProductReadinessEvent,
@@ -564,12 +531,24 @@ export default function PostHogAnalytics({
       }
       clearSchedule();
       uninstallSink();
+      uninstallBrowserSink();
       posthogRef.current = null;
       if (scheduleControllerRef.current === scheduleController) {
         scheduleControllerRef.current = null;
       }
     };
   }, [installAuthenticatedProjectWebVitals, sendProjectWebVital]);
+
+  useEffect(
+    () =>
+      onCookieConsentChange((consent) => {
+        const posthog = posthogRef.current;
+        if (!posthog || consent !== "essential") return;
+        posthog.stopSessionRecording();
+        posthog.opt_out_capturing();
+      }),
+    [],
+  );
 
   useEffect(() => {
     scheduleControllerRef.current?.setAuthenticated(

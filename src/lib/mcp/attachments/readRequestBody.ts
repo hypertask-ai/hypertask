@@ -7,7 +7,6 @@ export class McpAttachmentRequestBodyError extends Error {
   }
 }
 
-/** Read request bytes without allowing an unbounded body into memory. */
 export async function readRequestBytesWithCap(
   request: Pick<Request, 'headers' | 'body'>,
   maxBytes = MCP_ATTACHMENT_MAX_REQUEST_BYTES
@@ -54,7 +53,6 @@ export async function readRequestBytesWithCap(
   return Buffer.concat(chunks, total);
 }
 
-/** Read and parse JSON without allowing an unbounded request body into memory. */
 export async function readMcpAttachmentJsonBody(
   request: Pick<Request, 'headers' | 'body'>
 ): Promise<unknown> {

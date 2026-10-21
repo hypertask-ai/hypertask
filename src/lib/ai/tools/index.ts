@@ -95,14 +95,13 @@ export function buildTools(
   body: ChatRequest,
   send: SendSse,
   recordToolExecution: ToolExecutionRecorder,
-  // Set when this ChatSession targets a native agent: mutations the model
-  // makes (comments, assignments, moves, task creation) are attributed to
-  // this agent instead of the human user driving the conversation.
   actingAgentId: string | null = null,
   recordToolStart?: ToolStartRecorder,
-  heartbeatTurn?: HeartbeatTurnMetadata
+  heartbeatTurn?: HeartbeatTurnMetadata,
+  chatTaskWriterEnabled = false,
+  abortSignal?: AbortSignal
 ): ToolSet {
-  const context = createToolContext(user, body, send, recordToolExecution, actingAgentId, recordToolStart, heartbeatTurn);
+  const context = createToolContext(user, body, send, recordToolExecution, actingAgentId, recordToolStart, heartbeatTurn, chatTaskWriterEnabled, abortSignal);
   const tools: ToolSet = {
     hypertask_list_agents: createListAgentsTool(context).hypertask_list_agents,
     hypertask_agent_webhook: createAgentWebhookTool(context).hypertask_agent_webhook,
@@ -190,8 +189,6 @@ export function buildTools(
     search_help_docs: createSearchHelpDocsTool(context).search_help_docs,
   };
 
-  // The parity inventory is defined by the object literal above. Seal it
-  // immediately so aliases and helper calls cannot add or remove runtime tools.
   Object.seal(tools);
 
   return trackToolSetExecutions(

@@ -10,10 +10,6 @@ const getUserById= async (userId:number):Promise<any> => {
                 where: {
                     id:userId 
                 },
-                // HTPR-6509: the fields the client reads from the current
-                // user. useAuth writes this response into the nookies_user
-                // cookie, and trial-plan-confirmation reads stripe_customer_id
-                // back from it. Token-revocation columns stay server-side.
                 select:{
                     id:true,
                     uid:true,

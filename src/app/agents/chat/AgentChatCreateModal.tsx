@@ -30,8 +30,6 @@ export function AgentChatCreateModal({
 }: Props) {
   const closeCreateAgent = () => {
     if (creatingAgent) return;
-    // A token is showing only right after a successful create; closing here
-    // always means the user has seen it (or chose not to), never mid-request.
     setShowCreateAgent(false);
     setCreateAgentError(null);
     setNewAgentName("");
@@ -45,8 +43,6 @@ export function AgentChatCreateModal({
       await navigator.clipboard.writeText(newAgentToken);
       setTokenCopied(true);
     } catch {
-      // Clipboard access can be blocked (permissions, insecure context); the
-      // token stays selectable in the input either way.
     }
   };
 
@@ -56,9 +52,6 @@ export function AgentChatCreateModal({
       isOpen={true}
       show={true}
       toggle={closeCreateAgent}
-      // Once the one-time token is showing, an accidental outside click or
-      // Escape press must not discard it: force the explicit Done/copy
-      // affordance instead.
       shouldCloseOnClickOutside={!newAgentToken}
       keyboard={!newAgentToken}
       className="sm:min-w-[400px]"
