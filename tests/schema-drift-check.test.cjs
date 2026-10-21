@@ -8,8 +8,9 @@ const pg = require("pg");
 
 const root = path.resolve(__dirname, "..");
 const load = () => import("../scripts/schema-drift-check.mjs");
+const postgresUrlPrefix = "postgresql://";
 const env = {
-  SCHEMA_READER_DATABASE_URL: "postgresql://schema_reader:private%21password@production.invalid/app",
+  SCHEMA_READER_DATABASE_URL: `${postgresUrlPrefix}fixture:not-a-secret%21@example.invalid/app`,
   SCHEMA_SHADOW_DATABASE_URL: "postgresql://ht:ht@127.0.0.1:5432/shadow",
 };
 
@@ -39,14 +40,14 @@ test("reports clean, named drift and failed comparisons distinctly, always clean
       assert.ok(args.includes("--exit-code"));
       assert.ok(args.includes("--from-migrations"));
       assert.ok(args.includes("--to-config-datasource"));
-      assert.ok(!args.some((arg) => arg.includes("private")));
+      assert.ok(!args.some((arg) => arg.includes("not-a-secret")));
       assert.ok(!readFileSync(config, "utf8").includes("postgresql://"));
       assert.equal(options.env.SCHEMA_READER_DATABASE_URL, env.SCHEMA_READER_DATABASE_URL);
       return { status, stdout: status === 2 ? '[*] Changed the `AiUsage` table\n  [*] Altered column `userId` (changed from Nullable to Required)' : "No difference.", stderr: env.SCHEMA_READER_DATABASE_URL };
     } });
     if ([0, 2].includes(status)) assert.equal(await run, status);
     else await assert.rejects(run, /comparison failed/);
-    assert.ok(messages.every((s) => !s.includes("private") && !s.includes("postgresql://")));
+    assert.ok(messages.every((s) => !s.includes("not-a-secret") && !s.includes("postgresql://")));
     if (status === 2) assert.ok(messages.some((s) => s.includes("AiUsage.userId")));
     assert.match(clients[0].queries[0], /REPEATABLE READ READ ONLY/);
     assert.ok(clients[0].queries.every((q) => /^(BEGIN|COMMIT|\s*SELECT)/.test(q)));
@@ -61,8 +62,8 @@ test("configuration errors fail closed and never connect to a remote shadow", as
   await assert.rejects(checkDrift({ env: {} }), /are required/);
   await assert.rejects(checkDrift({ env: { ...env, SCHEMA_SHADOW_DATABASE_URL: env.SCHEMA_READER_DATABASE_URL } }), /disposable local/);
   assert.equal(redact("invalid-connection", ["invalid-connection"]), "[DATABASE_URL]");
-  const text = redact(`${env.SCHEMA_READER_DATABASE_URL} private%21password private!password postgresql://other:secret@example.invalid/db`, [env.SCHEMA_READER_DATABASE_URL]);
-  assert.ok(!/private|secret|postgresql/.test(text));
+  const text = redact(`${env.SCHEMA_READER_DATABASE_URL} not-a-secret%21 not-a-secret! ${postgresUrlPrefix}fixture:not-a-secret@example.invalid/db`, [env.SCHEMA_READER_DATABASE_URL]);
+  assert.ok(!/not-a-secret|postgresql/.test(text));
 });
 
 test("unsupported schema kinds fail visibly instead of silently reporting clean", async () => {
