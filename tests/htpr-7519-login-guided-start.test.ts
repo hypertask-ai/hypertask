@@ -6,7 +6,7 @@ import { TOOL_METADATA } from '@/lib/mcp-server/config/tool-metadata'
 import { getCreateTaskInputSchema, getListTasksInputSchema } from '@/lib/mcp-server/validations/task.validation'
 import { getBoardPlaybookInputSchema } from '@/lib/mcp-server/validations/project.validation'
 
-const newestBoard = { id: 9142, title: 'Product Launch', createdAt: new Date('2026-10-21') }
+const newestBoard = { id: 9142, title: 'Product Launch', name: 'launch' }
 
 test('starts on the newest board with 3 steps for the CLI and for MCP', () => {
   const { startBoard, nextSteps } = buildGuidedStart(newestBoard)

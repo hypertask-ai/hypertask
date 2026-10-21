@@ -72,7 +72,7 @@ async function helloGuidedStart(
   const newestBoard = await prisma.project.findFirst({
     where,
     orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
-    select: { id: true, title: true, createdAt: true },
+    select: { id: true, title: true, name: true },
   })
   const agent = ctx.agentId
     ? await prisma.agent.findUnique({

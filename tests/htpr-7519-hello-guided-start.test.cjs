@@ -58,6 +58,12 @@ test("flag on, agent token: hello names the agent, starts on the newest board an
   assert.deepEqual(lookups, ["agent-1"]);
 });
 
+test("newest board with no title falls back to its name", async () => {
+  const newestBoard = { id: 9142, title: null, name: "launch" };
+  const payload = await loadHello(true, [], { newestBoard }).getHelloPayload({ user, agentId: "agent-1" });
+  assert.equal(payload.startBoard.title, "launch");
+});
+
 test("flag on, user token: no agent lookup, agent is null", async () => {
   const lookups = [];
   const payload = await loadHello(true, lookups).getHelloPayload({ user, agentId: null });
@@ -98,7 +104,7 @@ test("newest board outside the 50-board listing is the start board with the same
     id: i + 1, name: `old-${i}`, title: `Old ${i}`, playbook: null,
     createdAt: new Date("2026-01-01"), ai_custom_instructions: [],
   }));
-  const newestBoard = { id: 9142, title: "Zulu Launch", createdAt: new Date("2026-10-21") };
+  const newestBoard = { id: 9142, title: "Zulu Launch", name: "launch" };
   const projectLookups = { findMany: [], findFirst: [] };
   const payload = await loadHello(true, [], { projects, newestBoard, projectLookups })
     .getHelloPayload({ user, agentId: "agent-1" });
@@ -117,7 +123,7 @@ test("newest board outside the 50-board listing is the start board with the same
   assert.equal(projectLookups.findFirst.length, 1);
   assert.deepEqual(projectLookups.findFirst[0].where, projectLookups.findMany[0].where);
   assert.deepEqual(projectLookups.findFirst[0].orderBy, [{ createdAt: "desc" }, { id: "desc" }]);
-  assert.deepEqual(projectLookups.findFirst[0].select, { id: true, title: true, createdAt: true });
+  assert.deepEqual(projectLookups.findFirst[0].select, { id: true, title: true, name: true });
 });
 
 test("flag ships on Everyone as a feature", () => {
