@@ -16,7 +16,7 @@ const RAW_TOOL_METADATA = {
   },
   LIST_FEATURES: {
     name: buildToolName('list_features'),
-    description: 'List product features available to the authenticated user, with live flag descriptions and verified destination URLs. Internal switches and unavailable features are omitted. This is a curated destination map, not an exhaustive capability list; it does not report availability for another person.',
+    description: 'List every enabled feature-kind flag and core product destinations for the authenticated user, with live descriptions, shipped dates and verified URLs where known. Non-feature kinds and unavailable features are omitted; availability for another person is not reported.',
   },
   HELLO: {
     name: buildToolName('hello'),

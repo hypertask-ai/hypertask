@@ -31,7 +31,7 @@ export const HELLO_URL_FORMATS = {
 export const HELLO_CAPABILITIES = {
   decisions: DECISIONS_GUIDANCE,
   features:
-    'List product features available to the authenticated user, with registry descriptions and verified destinations, through hypertask_list_features (hypertask_user_context action features) or GET /api/mcp/features. Internal switches and unavailable features are omitted; this is a curated destination map, not every capability.',
+    'List every enabled feature-kind flag and core product destinations for the authenticated user, with registry descriptions, shipped dates and verified URLs where known, through hypertask_list_features (hypertask_user_context action features) or GET /api/mcp/features. Non-feature kinds and unavailable features are omitted.',
   tasks:
     'Create, read, update, search, move, archive, and relate tasks with MCP tools or /api/mcp/tasks/*, including risk level, acceptance criteria, and verify command for structured contracts.',
   batch:

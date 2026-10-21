@@ -9,18 +9,17 @@ const root = path.resolve(__dirname, '..')
 const read = (file) => fs.readFileSync(path.join(root, file), 'utf8')
 const decisionsKey = 'htpr-7092-decisions'
 const searchKey = 'htpr-6688-search-autocomplete'
-const productKeys = [decisionsKey, 'htpr-7064-inbox-remind-returns', 'htpr-6422-my-tasks-views', 'htpr-6457-my-tasks-scopes', 'htpr-6461-my-tasks-snooze', searchKey]
-const definitions = productKeys.map((key) => load(`src/lib/flags/definitions/${key}.ts`, {}).default)
+const definitionKeys = [decisionsKey, 'htpr-7064-inbox-remind-returns', 'htpr-6422-my-tasks-views', 'htpr-6457-my-tasks-scopes', 'htpr-6461-my-tasks-snooze', searchKey]
+const definitions = definitionKeys.map((key) => load(`src/lib/flags/definitions/${key}.ts`, {}).default)
 const reader = { user: { id: 47, email: 'reader@example.test' }, agentId: 'read-agent' }
 
-function catalog(availability = {}) {
+function catalog(availability = {}, registryDefinitions = definitions) {
   const users = []
   const mod = load('src/lib/mcp/featureCatalog.ts', {
     '@/lib/flags/definitions': { FEATURE_FLAG_DEFINITIONS: [
-      ...definitions,
-      { key: 'yper4-999-infra', kind: 'feature', description: 'Internal deployment switch' },
-      { key: 'htpr-999-internal', kind: 'internal', description: 'Internal probe' },
-      { key: 'htpr-998-unmapped-product', kind: 'feature', description: 'No verified destination' },
+      ...registryDefinitions,
+      { key: 'htpr-999-improvement', kind: 'improvement', description: 'An improvement', shippedOn: '2026-10-10' },
+      { key: 'htpr-998-unmapped-product', kind: 'feature', description: 'No verified destination', shippedOn: '2026-10-11' },
     ] },
     '@/lib/flags': { featureFlagsForUser: async (userId) => { users.push(userId); return availability } },
   })
@@ -44,28 +43,55 @@ function endpoint(ctx, mod, limited = null) {
 
 const request = () => new NextRequest('https://app.hypertask.ai/api/mcp/features')
 
-test('catalog hides unavailable, internal, infra and unverified destinations even when switches are enabled', async () => {
-  const mod = catalog({ [decisionsKey]: false, [searchKey]: true, 'yper4-999-infra': true, 'htpr-999-internal': true, 'htpr-998-unmapped-product': true })
+test('catalog includes every enabled feature kind without requiring a destination and excludes off and non-feature kinds', async () => {
+  const mod = catalog({ [decisionsKey]: false, [searchKey]: true, 'htpr-7064-inbox-remind-returns': true, 'htpr-999-improvement': true, 'htpr-998-unmapped-product': true })
   const rows = await mod.getFeatureCatalog(reader.user.id)
-  assert.deepEqual(rows, [{ key: searchKey, description: definitions.find(({ key }) => key === searchKey).description, available: true, name: 'Search suggestions', url: 'https://app.hypertask.ai/search' }])
+  assert.deepEqual(rows.filter(({ key }) => !key.startsWith('core-')), [
+    { key: searchKey, description: definitions.find(({ key }) => key === searchKey).description, shippedOn: definitions.find(({ key }) => key === searchKey).shippedOn, available: true, name: 'Search suggestions', url: 'https://app.hypertask.ai/search' },
+    { key: 'htpr-998-unmapped-product', description: 'No verified destination', shippedOn: '2026-10-11', available: true },
+  ])
+  for (const key of [decisionsKey, 'htpr-7064-inbox-remind-returns', 'htpr-999-improvement', 'core-decisions']) {
+    assert.equal(rows.some((row) => row.key === key), false)
+  }
   assert.deepEqual(mod.users, [47])
 })
 
-test('catalog projects live descriptions and effective caller availability with only verified URLs', async () => {
-  const mod = catalog(Object.fromEntries(productKeys.map((key) => [key, true])))
+test('catalog projects live feature descriptions and shipped dates with optional verified destinations', async () => {
+  const mod = catalog(Object.fromEntries(definitionKeys.map((key) => [key, true])))
   const rows = await mod.getFeatureCatalog(985)
-  assert.equal(rows.length, definitions.length)
-  const destinations = new Set(['/inbox', '/inbox?split=Decisions', '/my-tasks', '/search'])
-  for (const row of rows) {
-    const url = new URL(row.url)
-    assert.equal(url.origin, 'https://app.hypertask.ai')
-    assert.ok(destinations.has(url.pathname + url.search))
-    assert.ok(fs.existsSync(path.join(root, 'src/app', url.pathname, 'page.tsx')))
-    assert.equal(row.description, definitions.find(({ key }) => key === row.key).description)
+  const features = rows.filter(({ key }) => !key.startsWith('core-'))
+  assert.equal(features.length, definitions.filter(({ kind }) => kind === 'feature').length)
+  for (const row of features) {
+    const definition = definitions.find(({ key }) => key === row.key)
+    assert.equal(definition.kind, 'feature')
+    assert.equal(row.description, definition.description)
+    assert.equal(row.shippedOn, definition.shippedOn)
     assert.equal(row.available, true)
   }
+  for (const row of rows.filter(({ url }) => url)) {
+    const url = new URL(row.url)
+    assert.equal(url.origin, 'https://app.hypertask.ai')
+    assert.ok(new Set(['/inbox', '/inbox?split=Decisions', '/my-tasks', '/search', '/report']).has(url.pathname + url.search))
+    assert.ok(fs.existsSync(path.join(root, 'src/app', url.pathname, 'page.tsx')))
+  }
   assert.deepEqual(mod.users, [985])
-  assert.deepEqual(await catalog({}).getFeatureCatalog(47), [])
+})
+
+test('core destinations survive removed definitions and Decisions remains gated on effective availability', async () => {
+  const expected = [
+    ['Inbox', 'https://app.hypertask.ai/inbox'],
+    ['Decisions', 'https://app.hypertask.ai/inbox?split=Decisions'],
+    ['My Tasks', 'https://app.hypertask.ai/my-tasks'],
+    ['Search', 'https://app.hypertask.ai/search'],
+    ['Reports', 'https://app.hypertask.ai/report'],
+  ]
+  const rows = await catalog({ [decisionsKey]: true }, []).getFeatureCatalog(47)
+  assert.deepEqual(rows.map(({ name, url }) => [name, url]), expected)
+  for (const row of rows) {
+    assert.equal(row.available, true)
+    assert.ok(row.description)
+  }
+  assert.deepEqual((await catalog({}).getFeatureCatalog(47)).map(({ name, url }) => [name, url]), expected.filter(([name]) => name !== 'Decisions'))
 })
 
 test('unauthorized catalog reads are now refused without loading feature data', async () => {
@@ -108,7 +134,7 @@ test('HTTP route and in-process GET operation share the authenticated implementa
 })
 
 test('MCP feature tool calls the shared operation and concise output retains descriptions', async () => {
-  const mod = catalog({ [decisionsKey]: true })
+  const mod = catalog({ [decisionsKey]: true, 'htpr-998-unmapped-product': true })
   const features = await mod.getFeatureCatalog(47)
   let called
   const { listFeaturesTool } = load('src/lib/mcp-server/tools/list-features.tool.ts', {
@@ -125,10 +151,27 @@ test('MCP feature tool calls the shared operation and concise output retains des
   assert.deepEqual(called, { url: '/mcp/features', options: { method: 'GET' } })
   const { formatToolResponse } = load('src/lib/mcp-server/tool-response.ts', {})
   const concise = JSON.parse(formatToolResponse(text, 'concise', true, 20, 0, false))
-  assert.equal(concise.data.features[0].description, features[0].description)
+  assert.deepEqual(concise.data.features, features)
   assert.match(read('src/lib/mcp-server/tools/index.ts'), /  listFeaturesTool,/)
   const context = JSON.parse(read('src/lib/mcp-server/config/descriptions/user_context.json'))
   assert.deepEqual(context.actions.features, { tool: 'hypertask_list_features', read_only: true, permission: 'data' })
+})
+
+test('MCP catalog formatting retains unmapped descriptions and dates without paging up to 300 entries', () => {
+  const { formatToolResponse } = load('src/lib/mcp-server/tool-response.ts', {})
+  const features = Array.from({ length: 300 }, (_, index) => ({ key: `feature-${index}`, description: `Feature ${index}`, shippedOn: '2026-10-11', available: true }))
+  for (const format of ['concise', 'detailed']) {
+    const result = JSON.parse(formatToolResponse(JSON.stringify({ features }), format, true, 20, 0, false))
+    assert.deepEqual(result.data.features, features)
+    assert.equal(result.pagination.has_more, false)
+  }
+  const large = JSON.parse(formatToolResponse(JSON.stringify({ features: [...features, features[0]] }), 'concise', true, 20, 0, false))
+  assert.deepEqual(large.data.features, features.slice(0, 20))
+  assert.equal(large.pagination.has_more, true)
+  const tasks = Array.from({ length: 21 }, (_, id) => ({ id }))
+  const other = JSON.parse(formatToolResponse(JSON.stringify({ tasks }), 'concise', true, 20, 0, false))
+  assert.deepEqual(other.data.tasks, tasks.slice(0, 20))
+  assert.equal(other.pagination.has_more, true)
 })
 
 test('hello and tool guidance explain the actual Decisions workflow, not structured records', async () => {
@@ -197,22 +240,28 @@ function pageEndpoint(agentId, warningModule = catalog({ [decisionsKey]: true })
 }
 
 test('agent feature-title warnings are nonblocking and idempotent receipts retain the page shape', async () => {
-  for (const title of ['Inbox', '  dEcIsIoNs  ', 'My   Tasks', 'Search', 'Dashboard', 'Reports']) {
+  for (const title of ['Inbox', '  dEcIsIoNs  ', 'Decision inbox', 'Valentin decisions dashboard', 'Team inbox overview', 'My   Tasks', 'Weekly my tasks overview', 'Search', 'New search page', 'Dashboard', 'Team dashboard overview', 'Reports']) {
     const route = pageEndpoint('write-agent')
     const response = await route.post(title, 'repeat-key')
     assert.equal(response.status, 200)
     const receipt = await response.json()
     assert.equal(receipt.warnings[0].code, 'existing_feature')
+    assert.match(receipt.warnings[0].message, /Question:/)
+    assert.match(receipt.warnings[0].message, /@mention/)
+    assert.match(receipt.warnings[0].message, /https:\/\/app.hypertask.ai\/inbox\?split=Decisions/)
+    if (/decision/i.test(title)) assert.equal(receipt.warnings[0].url, 'https://app.hypertask.ai/inbox?split=Decisions')
     assert.deepEqual(receipt.page, { publicId: 'fixture-page', id: 3, title, version: 1, url: 'https://app.hypertask.ai/page/fixture-page' })
     assert.deepEqual(await (await route.post(title, 'repeat-key')).json(), receipt)
     assert.equal(route.creates(), 1)
   }
 })
 
-test('human callers and normal report, QA and feature-containing titles have no warnings', async () => {
+test('human callers and unrelated titles or partial words have no warnings', async () => {
   const human = pageEndpoint(null, { getFeaturePageWarnings: () => { throw new Error('Human must not call warning lookup') } })
-  assert.deepEqual(Object.keys(await (await human.post('Decisions')).json()), ['page'])
-  for (const title of ['QA report', 'Decisions research', 'Inbox migration report', 'Release notes', '', 'report']) {
+  for (const title of ['Decisions', 'Decision inbox', 'Valentin decisions dashboard']) {
+    assert.deepEqual(Object.keys(await (await human.post(title)).json()), ['page'])
+  }
+  for (const title of ['Sprint 12 notes', 'QA report', 'Release notes', 'Decisionmaking notes', 'inboxes', 'dashboards', 'my tasksmith', 'search pages', 'Search research', '', 'report']) {
     const route = pageEndpoint('write-agent')
     assert.deepEqual(Object.keys(await (await route.post(title)).json()), ['page'])
     assert.equal(route.creates(), 1)

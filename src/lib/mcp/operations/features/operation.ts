@@ -17,7 +17,7 @@ export const GET = wrapMcpRoute(async (request: NextRequest) => {
 
     return NextResponse.json({
       success: true,
-      scope: 'Available product features with verified destinations; not an exhaustive list of capabilities. Availability is for the authenticated user, not a mentioned recipient.',
+      scope: 'Every enabled feature-kind flag plus core product destinations, with verified URLs where known. Availability is for the authenticated user, not a mentioned recipient.',
       features: await getFeatureCatalog(ctx.user.id),
     }, { headers: { 'Cache-Control': 'private, no-store' } })
   } catch (error) {
