@@ -2,13 +2,19 @@
 
 import dynamic from "next/dynamic";
 import { startTransition, useCallback, useEffect, useMemo, useRef, useState, type ComponentType } from "react";
+import { useFlag } from "@/hooks/useFlag";
+import { HTPR_7395_CACHED_STATIC_FIRST_FLAG } from "@/lib/flags/keys";
 import type { TiptapProps } from "@/components/RTE/useTaskDetailEditorState";
 import StaticDescriptionShell, { StaticDescriptionBody, type DescriptionIntentProps } from "./StaticDescriptionShell";
 import { StaticDescriptionPlaceholderContext } from "./StaticDescriptionPlaceholder";
 
 type EditorComponent = ComponentType<TiptapProps>;
 
-const importEditor = () => import("@/components/RTE/TipTapTaskDetail");
+let editorModuleWarm = false;
+const importEditor = () => import("@/components/RTE/TipTapTaskDetail").then((module) => {
+  editorModuleWarm = true;
+  return module;
+});
 
 const EagerEditor = dynamic(importEditor);
 
@@ -31,8 +37,9 @@ export default function DescriptionEditorSlot({
   afterPaint: afterPaintRequested = false,
   ...editorProps
 }: TiptapProps & { lazy: boolean; afterPaint?: boolean }) {
-  const [lazy] = useState(lazyRequested || afterPaintRequested);
-  const [afterPaint] = useState(afterPaintRequested);
+  const cachedStaticFirst = useFlag(HTPR_7395_CACHED_STATIC_FIRST_FLAG);
+  const [afterPaint] = useState(afterPaintRequested && cachedStaticFirst && !editorModuleWarm);
+  const [lazy] = useState(lazyRequested || afterPaint);
   const [Editor, setEditor] = useState<EditorComponent | null>(() => afterPaint ? null : loadedEditor);
   const { defaultContent, isMbl } = editorProps;
   const placeholder = useMemo(

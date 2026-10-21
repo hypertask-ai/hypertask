@@ -95,6 +95,8 @@ async function fixture(t, { enabled = true, stable = false, legacyStatic = false
   new Function("require", "exports", compiledSlot)(name => {
     if (name === "@/components/RTE/TipTapTaskDetail") { imports++; return editorModule; }
     if (name === "next/dynamic") return { __esModule: true, default: importer => React.lazy(importer) };
+    if (name === "@/hooks/useFlag") return flagHooks;
+    if (name === "@/lib/flags/keys") return flags;
     if (name === "./StaticDescriptionShell") return { __esModule: true, ...shell };
     if (name === "./StaticDescriptionPlaceholder") return load(dir + "StaticDescriptionPlaceholder.ts", {}, baseline);
     return require(name);
@@ -203,16 +205,16 @@ test("already-static cached stable layout stays unchanged without loading an edi
   assert.equal(f.container.innerHTML, expected);
 });
 
-test("a warm editor still waits for paint and a suspending descendant cannot blank the ticket", async t => {
+test("a cold editor waits for paint and a suspending descendant cannot blank the ticket", async t => {
   const expected = await settled(t, { enabled: false, legacyStatic: true });
   const f = await fixture(t, { legacyStatic: true });
-  await f.prime();
   await f.render();
-  assert.equal(f.mounts(), 0, "warm module must not construct an editor in the first commit");
+  assert.equal(f.mounts(), 0, "cold module must not construct an editor in the first commit");
   assert.match(f.container.textContent, /Cached title.*Cached description/);
   f.suspendChild();
   await f.frame();
   await f.frame();
+  await f.resolve();
   assert.match(f.container.textContent, /Cached title.*Cached description/);
   assert.doesNotMatch(f.container.textContent, /Board fallback/);
   assert.notEqual(f.container.querySelector("article")?.style.display, "none");
@@ -324,7 +326,7 @@ test("the ticket-specific improvement flag defaults to Everyone with release ris
 });
 
 
-test("highlighted saved descriptions paint before a cold or warm editor, then retain identical marks", async t => {
+test("highlighted saved descriptions paint before a cold editor and use the existing warm path", async t => {
   for (const warm of [false, true]) {
     const f = await fixture(t, { content: highlightedContent });
     if (warm) await f.prime();
@@ -333,10 +335,10 @@ test("highlighted saved descriptions paint before a cold or warm editor, then re
     const mark = f.container.querySelector("#description-input mark");
     assert.ok(mark, "highlight is present before editor initialization");
     const first = mark.outerHTML;
-    assert.equal(f.mounts(), 0);
-    assert.equal(f.imports(), warm ? 1 : 0);
+    assert.equal(f.mounts(), warm ? 1 : 0);
+    assert.equal(f.imports(), warm ? 2 : 0);
     await f.frame();
-    assert.equal(f.mounts(), 0);
+    assert.equal(f.mounts(), warm ? 1 : 0);
     await f.frame();
     await f.resolve();
     assert.equal(f.mounts(), 1);
@@ -446,5 +448,100 @@ test("highlight support does not change flag-off behavior even with legacy stati
     assert.equal(f.mounts(), 1);
     assert.match(f.container.querySelector("mark").textContent, /highlight/);
     await f.unmount();
+  }
+});
+
+
+test("highlighted bare list items use the existing editor path instead of inserting a line break", async t => {
+  const { isPlainDescriptionHtml } = require("jiti").createJiti(__filename, { fsCache: false, alias: { "@": path.join(root, "src") } })(path.join(root, dir, "staticDescriptionHtml.ts"));
+  for (const body of [
+    "<ul><li>One <mark>two</mark> three</li></ul>",
+    "<ol><li><strong>One <mark>two</mark> three</strong></li></ol>",
+  ]) {
+    for (const content of [body, `<html><head></head><body>${body}</body></html>`]) {
+      assert.equal(isPlainDescriptionHtml(content, true, true), false, content);
+      for (const enabled of [false, true]) {
+        const f = await fixture(t, { content, enabled });
+        await f.render();
+        assert.equal(f.imports(), 1, "unsafe list markup must use the pre-existing editor path");
+        assert.equal(f.frames(), 0);
+        assert.equal(f.container.querySelector("#title-input"), null);
+        await f.unmount();
+      }
+    }
+  }
+  assert.equal(isPlainDescriptionHtml("<ul><li><p>One <mark>two</mark> three</p></li></ul>", true, true), true);
+});
+
+test("warm modules never swap out focused links, activated links or selected description text", async t => {
+  for (const legacyStatic of [false, true]) {
+    const f = await fixture(t, { legacyStatic, content: '<p>One <a href="https://example.com/">two</a> three</p>' });
+    await f.prime();
+    await f.render();
+    const description = f.container.querySelector("#description-input");
+    const link = description.querySelector("a");
+    let activated = 0;
+    link.addEventListener("click", event => { event.preventDefault(); activated++; });
+    await React.act(async () => link.focus());
+    assert.equal(document.activeElement, link);
+    await f.frame();
+    await f.frame();
+    assert.equal(f.container.querySelector("#description-input"), description);
+    assert.equal(document.activeElement, link, "no warm static-to-editor swap may drop link focus");
+    await React.act(async () => link.dispatchEvent(new window.KeyboardEvent("keydown", { key: "Enter", bubbles: true })));
+    await React.act(async () => link.click());
+    assert.equal(activated, 1);
+    const selection = window.getSelection();
+    const range = document.createRange();
+    range.selectNodeContents(description.querySelector("p"));
+    await React.act(async () => {
+      description.dispatchEvent(new window.MouseEvent("pointerdown", { bubbles: true }));
+      selection.removeAllRanges();
+      selection.addRange(range);
+      document.dispatchEvent(new window.Event("selectionchange"));
+    });
+    await f.frame();
+    assert.equal(selection.toString(), "One two three");
+    assert.equal(selection.anchorNode, range.startContainer);
+    assert.equal(f.container.querySelector("#description-input"), description);
+    assert.equal(f.mounts(), 1);
+    await f.unmount();
+  }
+});
+
+test("empty saved descriptions keep the existing editor path and real phone and desktop editing hints", async t => {
+  const content = "<html><head></head><body><p></p></body></html>";
+  for (const enabled of [false, true]) {
+    const f = await fixture(t, { content, enabled });
+    await f.render();
+    assert.equal(f.imports(), 1, "empty content must not enter the static-first path");
+    assert.equal(f.frames(), 0);
+    assert.equal(f.container.querySelector("#title-input"), null);
+    await f.unmount();
+  }
+  await fixture(t);
+  const { renderToStaticMarkup } = require("react-dom/server");
+  const { Editor } = require("@tiptap/core");
+  const StarterKit = require("@tiptap/starter-kit").default;
+  const editor = new Editor({ extensions: [StarterKit], content, editable: false });
+  t.after(() => editor.destroy());
+  assert.equal(editor.isEmpty, true);
+  const MobileViewContext = React.createContext(true);
+  const styles = new Proxy({}, { get: (_, key) => String(key) });
+  for (const enabled of [false, true]) {
+    const TiptapEditor = load("src/components/RTE/Components/TiptapEditor.tsx", {
+      "@/lib/contexts/TaskDetail/TiptapProvider": { useTiptapGlobalContext: () => ({ mode: "read-edit-description", id: "description", editor, isEditable: false }) },
+      "@/styles/tiptap.module.scss": { default: styles },
+      "@tiptap/react": require("@tiptap/react"),
+      "@/lib/contexts/mobileContext": { MobileViewContext },
+      "./DragHandleTiptap": { default: () => null },
+      "@/hooks/useFlag": { useFlag: () => enabled },
+      "@/lib/flags/keys": {},
+    }).default;
+    for (const isMbl of [true, false]) {
+      const html = renderToStaticMarkup(React.createElement(MobileViewContext.Provider, { value: isMbl }, React.createElement(TiptapEditor)));
+      assert.match(html, /Add Description/);
+      assert.ok(html.includes(isMbl ? "Tip: Double tap to edit" : "Tip: Hit ENTER to edit mode or CTRL+D to jump here"));
+    }
   }
 });

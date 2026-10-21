@@ -169,7 +169,7 @@ const EmbeddedTaskDetail = ({
       scrollSetting={preferences.scrollSetting}
       embedded={embedded}
       cachedNavigation={!embedded && stableLayoutFlag}
-      cachedEditorAfterPaint={!embedded && cachedStaticFirst}
+      cachedEditorAfterPaint={cachedStaticFirst ? !embedded : false}
       scrollElementRef={scrollElementRef}
     >
       {embedded ? detail : (

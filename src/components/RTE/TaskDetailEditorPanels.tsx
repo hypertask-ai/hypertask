@@ -48,10 +48,9 @@ export function TaskDetailEditorPanels(context: TaskDetailEditorPresentation) {
   const instantTicketOpen = useFlag(HTPR_6752_INSTANT_TICKET_OPEN_FLAG);
   const legacyStaticFirst = useFlag(HTPR_7091_STATIC_DESCRIPTION_FIRST_FLAG);
   const cachedStaticFirst = useFlag(HTPR_7395_CACHED_STATIC_FIRST_FLAG);
-  const staticFirst = legacyStaticFirst || cachedStaticFirst;
   const staticPlaceholder = useContext(StaticDescriptionPlaceholderContext);
   const mainContainer = instantTicketOpen && !editor && mode === "read-edit-description" ? (
-    staticFirst && staticPlaceholder ? staticPlaceholder : <InnerHTMLDescription
+    (legacyStaticFirst || cachedStaticFirst) && staticPlaceholder ? staticPlaceholder : <InnerHTMLDescription
       id={`${id}-input`}
       descriptionText={context.defaultContent}
       attachmentsFromProps={context.attachments ?? []}

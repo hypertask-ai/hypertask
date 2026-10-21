@@ -22,6 +22,7 @@ export function isPlainDescriptionHtml(raw: string | null | undefined, appSaved 
   if (!raw || !raw.trim()) return false;
   const html = appSaved ? unwrapBareDocument(raw.trim()) : raw.trim();
   if (!html) return false;
+  if (allowHighlight && !html.replace(/<[^>]*>/g, "").trim()) return false;
   if (LOOSE_WHITESPACE.test(html)) return false;
   const stack: string[] = [];
   let cursor = 0;
@@ -38,6 +39,7 @@ export function isPlainDescriptionHtml(raw: string | null | undefined, appSaved 
       if (!closing && !LINK_ATTRS.test(attrs)) return false;
     } else if (tag === "mark") {
       if (!allowHighlight || (!closing && stack.includes("mark"))) return false;
+      if (stack.includes("li") && !stack.includes("p")) return false;
       if (attrs.trim()) {
         const highlight = MARK_ATTRS.exec(attrs);
         if (closing || !highlight) return false;
