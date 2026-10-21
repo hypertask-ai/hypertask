@@ -22,9 +22,9 @@ export function isPlainDescriptionHtml(raw: string | null | undefined, appSaved 
   if (!raw || !raw.trim()) return false;
   const html = appSaved ? unwrapBareDocument(raw.trim()) : raw.trim();
   if (!html) return false;
-  if (allowHighlight && !html.replace(/<[^>]*>/g, "").trim()) return false;
   if (LOOSE_WHITESPACE.test(html)) return false;
   const stack: string[] = [];
+  let hasText = false;
   let cursor = 0;
   TAG.lastIndex = 0;
   for (let match = TAG.exec(html); match; match = TAG.exec(html)) {
@@ -34,6 +34,7 @@ export function isPlainDescriptionHtml(raw: string | null | undefined, appSaved 
     const tag = name.toLowerCase();
     if (RAW_BRACKET.test(text)) return false;
     if (stack.length === 0 && text.trim()) return false;
+    if (text.trim()) hasText = true;
     if (!BLOCKS.has(tag) && !INLINE.has(tag)) return false;
     if (tag === "a") {
       if (!closing && !LINK_ATTRS.test(attrs)) return false;
@@ -63,7 +64,8 @@ export function isPlainDescriptionHtml(raw: string | null | undefined, appSaved 
       stack.push(tag);
     }
   }
-  if (stack.length || html.slice(cursor).trim()) return false;  return true;
+  if (stack.length || html.slice(cursor).trim()) return false;
+  return !allowHighlight || hasText;
 }
 
 const EMPTY_PARAGRAPH = '<p><br class="ProseMirror-trailingBreak"></p>';

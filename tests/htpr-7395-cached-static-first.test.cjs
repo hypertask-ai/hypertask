@@ -545,3 +545,21 @@ test("empty saved descriptions keep the existing editor path and real phone and 
     }
   }
 });
+
+
+test("static eligibility requires validated text while flag off retains empty markup eligibility", async t => {
+  await fixture(t);
+  const { isPlainDescriptionHtml } = require("jiti").createJiti(__filename, { fsCache: false, alias: { "@": path.join(root, "src") } })(path.join(root, dir, "staticDescriptionHtml.ts"));
+  for (const body of ["<p></p>", "<p><strong></strong></p>"]) {
+    for (const content of [body, `<html><head></head><body>${body}</body></html>`]) {
+      assert.equal(isPlainDescriptionHtml(content, true, false), true, "legacy eligibility is unchanged");
+      assert.equal(isPlainDescriptionHtml(content, true, true), false, "empty markup must use the existing editor path");
+    }
+  }
+  for (const content of ["<p>Text</p>", "<p><strong>Text</strong></p>", '<p><a href="https://example.com/">Text</a></p>']) {
+    for (const enabled of [false, true]) assert.equal(isPlainDescriptionHtml(content, true, enabled), true, content);
+  }
+  for (const content of ["<p><mark></mark></p>", "<p><<strong>Text</strong></p>", "<p><strong>Text</strong>></p>", '<p><img src="x.png">Text</p>']) {
+    assert.equal(isPlainDescriptionHtml(content, true, true), false, content);
+  }
+});
