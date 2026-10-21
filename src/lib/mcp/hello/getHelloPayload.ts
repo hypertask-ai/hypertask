@@ -8,6 +8,7 @@ import {
   type McpAuthContext,
 } from '@/lib/mcp/auth'
 import prisma from '@/lib/prisma'
+import { DECISIONS_GUIDANCE } from '@/lib/mcp/featureCatalog'
 import { getProjectListingWhere } from '@/utils/controllers/projects/getAllIncludes'
 
 import { buildGuidedStart } from './guidedStart'
@@ -28,6 +29,9 @@ export const HELLO_URL_FORMATS = {
 } as const
 
 export const HELLO_CAPABILITIES = {
+  decisions: DECISIONS_GUIDANCE,
+  features:
+    'List product features available to the authenticated user, with registry descriptions and verified destinations, through hypertask_list_features (hypertask_user_context action features) or GET /api/mcp/features. Internal switches and unavailable features are omitted; this is a curated destination map, not every capability.',
   tasks:
     'Create, read, update, search, move, archive, and relate tasks with MCP tools or /api/mcp/tasks/*, including risk level, acceptance criteria, and verify command for structured contracts.',
   batch:

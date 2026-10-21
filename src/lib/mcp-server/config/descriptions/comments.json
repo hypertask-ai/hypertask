@@ -1,7 +1,7 @@
 {
   "name": "hypertask_comments",
   "does": "List ticket comments and activity, add replies, and edit or delete comments allowed by the current credential.",
-  "use_when": "Use to discuss a ticket or inspect its conversation; list with include_activity also retrieves work history.",
+  "use_when": "Use to discuss a ticket or inspect its conversation; list with include_activity also retrieves work history. To ask a person to decide, post a ticket comment with a line starting Question: and @mention them with a real mention. The mention notification appears in their Inbox; when Decisions is enabled for that person and the notification is visible, the unanswered ticket appears in Inbox, split Decisions: https://app.hypertask.ai/inbox?split=Decisions. A later non-agent comment by that person on the ticket removes it from Decisions. Ordinary mentions are not Decisions. Use a comment, not a page; structured decision records are separate.",
   "do_not_use_when": "Do not use for ticket descriptions or unpublished drafts; use hypertask_tasks or hypertask_drafts instead.",
   "parameters_and_caveats": "action selects an operation; input contains only that operation’s documented fields. response_format defaults to concise for reads; detailed retains full fields. limit defaults to 20 (maximum 50) and offset defaults to 0 for bounded read results; use returned pagination or narrower filters. text is HTML unless content_type=markdown; comment_id is required to edit or delete, and ticket identifiers locate list/add targets. Ownership and board membership still apply.",
   "actions": {

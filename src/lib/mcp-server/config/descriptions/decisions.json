@@ -2,7 +2,7 @@
   "name": "hypertask_decisions",
   "does": "Create, list, read, answer or cancel structured decision requests attached to tickets.",
   "use_when": "Use when a ticket needs a recorded question with explicit options and a selected answer.",
-  "do_not_use_when": "Do not use for ordinary discussion; use hypertask_comments instead.",
+  "do_not_use_when": "Do not use for ordinary discussion; use hypertask_comments instead. Structured records do not by themselves enter Inbox Decisions. For that workflow, use hypertask_comments: a line starting Question: plus a real @mention creates a mention notification in the person's Inbox; when Decisions is enabled for them and the notification is visible, the unanswered ticket appears at https://app.hypertask.ai/inbox?split=Decisions until their later non-agent comment on that ticket.",
   "parameters_and_caveats": "action selects an operation; input contains only that operation’s documented fields. response_format defaults to concise for reads; detailed retains full fields. limit defaults to 20 (maximum 50) and offset defaults to 0 for bounded read results; use returned pagination or narrower filters. Identifiers and required fields depend on the selected action; writes keep existing authorization and confirmation rules.",
   "actions": {
     "create": {

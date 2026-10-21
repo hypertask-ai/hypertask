@@ -84,7 +84,7 @@ function spyTools() {
 }
 
 test('catalog flag off preserves the entire current deferred list exactly', async () => {
-  const originalLegacy = legacy.filter((tool) => tool.name !== 'hypertask_report_feedback')
+  const originalLegacy = legacy.filter((tool) => !['hypertask_report_feedback', 'hypertask_list_features'].includes(tool.name))
   const selected = selectMcpTools(originalLegacy, false, { managementPermissions: { management: ['read'] } })
   assert.equal(selected, originalLegacy)
   const listed = (await rpc(selected, 'tools/list')).result.tools

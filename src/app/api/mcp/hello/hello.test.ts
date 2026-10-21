@@ -147,6 +147,8 @@ async function demo() {
     assert.equal(happyBody.boardsTotal, 3)
     assert.equal(happyBody.boardsTruncated, false)
     assert.deepEqual(Object.keys(happyBody.capabilities), [
+      'decisions',
+      'features',
       'tasks',
       'batch',
       'comments',

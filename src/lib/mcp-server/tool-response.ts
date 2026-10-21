@@ -116,6 +116,9 @@ function conciseValue(value: unknown): unknown {
   if (Array.isArray(value)) return value.map(conciseValue)
   if (!value || typeof value !== 'object') return value
   const row = value as Record<string, unknown>
+  if (typeof row.key === 'string' && row.available === true && typeof row.description === 'string' && typeof row.url === 'string') {
+    return { key: row.key, name: row.name, description: row.description, available: true, url: row.url }
+  }
   if ('content' in row && (row.type === 'task' || row.type === 'comment')) {
     return { type: row.type, task_id: row.taskId, comment_id: row.commentId, project_id: row.projectId, ticket: row.ticketNumber, title: row.title, text: row.content, updated_at: row.updatedAt, created_at: row.createdAt }
   }
@@ -142,7 +145,7 @@ function conciseValue(value: unknown): unknown {
 }
 
 const RESOURCE_COLLECTION_KEYS = new Set([
-  'items', 'tasks', 'projects', 'boards', 'sections', 'columns', 'members', 'labels', 'customFields',
+  'features', 'items', 'tasks', 'projects', 'boards', 'sections', 'columns', 'members', 'labels', 'customFields',
   'views', 'pages', 'subPages', 'versions', 'skills', 'agents', 'connections', 'comments',
   'documents', 'articles', 'related', 'relatedTasks', 'relations', 'subtasks', 'sub_tasks', 'children',
   'assignees', 'attachments', 'timers', 'entries', 'reports', 'decision_requests', 'drafts',
