@@ -42,8 +42,8 @@ for (const enabled of [false, true]) {
       const triggers = [...ui.container.querySelectorAll('[id="dropdownSelectors"]')];
       assert.equal(triggers.length, 10);
       for (const trigger of triggers) {
-        assert.equal(trigger.className, enabled ? triggerClass.replace("border-black", "border-border-light-gray-thin") : triggerClass);
-        assert.equal(trigger.children[1].className, enabled ? dividerClass.replace("border-black", "border-border-light-gray-thin") : dividerClass);
+        assert.equal(trigger.className, enabled ? triggerClass.replace("border-black", "border-text-light-gray") : triggerClass);
+        assert.equal(trigger.children[1].className, enabled ? dividerClass.replace("border-black", "border-text-light-gray") : dividerClass);
         React.act(() => trigger.firstElementChild.click());
         const list = ui.container.querySelector("#listContainer");
         assert.equal(list.parentElement, trigger);

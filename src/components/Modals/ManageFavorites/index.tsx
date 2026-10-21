@@ -24,7 +24,7 @@ interface IProps {
     const favoritesMenuContrast = useFlag(HTPR_7510_FAVORITES_MENU_CONTRAST_FLAG);
     let favoritesMenuBorder = "border-black";
     if (favoritesMenuContrast) {
-        favoritesMenuBorder = "border-border-light-gray-thin";
+        favoritesMenuBorder = "border-text-light-gray";
     }
     const isApple = useDeviceContext()
       
