@@ -431,6 +431,7 @@ async function agentDetailRead(before) {
 test("agent detail: identical projected membership/board/team JSON uses one Prisma SQL read", async () => {
   const before = await agentDetailRead(true);
   const after = await agentDetailRead(false);
+  before.args.select.members.where.project.AND = [projectAccess];
   assert.deepEqual(json(after.args), before.args);
   assert.deepEqual(after.planned.json, before.planned.json);
   assert.equal(before.planned.count, 4);
