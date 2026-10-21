@@ -6,7 +6,7 @@ const { JSDOM } = require('jsdom')
 const { createJiti } = require('jiti')
 const root = path.resolve(__dirname, '..')
 
-test('real search input and reused list work keyboard-only, with an unchanged flag-off path', async (t) => {
+test('real search input and reused list work keyboard-only', async (t) => {
   const dom = new JSDOM('<div id="root"></div>', { url: 'https://example.test/search' })
   const previous = ['window', 'document', 'navigator', 'HTMLElement', 'IS_REACT_ACT_ENVIRONMENT', 'fetch'].map((key) => [key, Object.getOwnPropertyDescriptor(global, key)])
   Object.assign(global, { window: dom.window, document: dom.window.document, HTMLElement: dom.window.HTMLElement, IS_REACT_ACT_ENVIRONMENT: true })
@@ -36,15 +36,15 @@ test('real search input and reused list work keyboard-only, with an unchanged fl
     stub('src/utils/undoActions/helperFuncs.ts', { cn: (...values) => values.filter(Boolean).join(' ') })
     const SearchChipsInput = createJiti(__filename, { alias: { '@': path.join(root, 'src') }, interopDefault: true, jsx: true })(path.join(root, 'src/app/search/SearchChipsInput.tsx')).default
     const runs = []
-    const Harness = ({ enabled }) => {
+    const Harness = () => {
       const [value, onChange] = React.useState('')
-      return React.createElement(SearchChipsInput, { value, onChange, onRun: (query) => runs.push(query), boardId: 7, inputRef: React.useRef(null), autocompleteEnabled: enabled, layoutEnabled: true })
+      return React.createElement(SearchChipsInput, { value, onChange, onRun: (query) => runs.push(query), boardId: 7, inputRef: React.useRef(null), layoutEnabled: true })
     }
     reactRoot = require('react-dom/client').createRoot(document.getElementById('root'))
     let input
     let counter = 0
-    const reset = async (enabled = true) => {
-      await React.act(async () => reactRoot.render(React.createElement(Harness, { key: ++counter, enabled })))
+    const reset = async () => {
+      await React.act(async () => reactRoot.render(React.createElement(Harness, { key: ++counter })))
       input = document.getElementById('search-input')
       await React.act(async () => input.focus())
       assert.equal(document.querySelector('[data-search-layout]'), null, 'the layout prop cannot bypass the disabled runtime flag')
@@ -111,10 +111,6 @@ test('real search input and reused list work keyboard-only, with an unchanged fl
       }
       await type('aj')
       assert.equal(input.value, 'aj')
-      await reset(false)
-      const event = new dom.window.KeyboardEvent('keydown', { key: 'j', bubbles: true, cancelable: true })
-      await React.act(async () => input.dispatchEvent(event))
-      assert.equal(event.defaultPrevented, false, 'flag-off keyboard behavior is unchanged')
     })
     await t.test('Escape closes only the operator/value/tips list, leaving the query and focus intact', async () => {
       let escaped = 0
@@ -197,24 +193,6 @@ test('real search input and reused list work keyboard-only, with an unchanged fl
       await press('Backspace')
       assert.equal(chip(), null, 'Backspace on an empty draft still removes the last chip')
       assert.equal(runs.at(-1), '')
-    })
-    await t.test('flag off has no operator list, ghost, tips, new frame or colour, and retains old value selection', async () => {
-      await reset(false)
-      assert.equal(input.getAttribute('aria-expanded'), 'false')
-      assert.doesNotMatch(document.body.textContent, /Search tips/)
-      await type('fr')
-      assert.equal(options().length, 0)
-      assert.equal(document.querySelector('[data-search-ghost]'), null)
-      await type('is:o')
-      assert.equal(options().length, 0)
-      assert.equal(document.querySelector('[data-search-filter-frame]'), null)
-      await type('from:ka')
-      await settle()
-      await press('Tab')
-      assert.equal(runs.at(-1), 'from:7')
-      const chip = document.querySelector('[aria-label="Remove from:Kamil filter"]')
-      assert.match(chip.className, /text-mention-highlight/)
-      assert.doesNotMatch(chip.className, /search-filter-/)
     })
     await t.test('IME Enter and Shift+Tab do not accidentally accept suggestions', async () => {
       await reset()

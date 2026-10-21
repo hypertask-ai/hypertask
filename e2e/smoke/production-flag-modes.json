@@ -45,7 +45,6 @@
     "htpr-6557-agent-rooms": "EVERYONE",
     "htpr-6567-command-scope-picker": "EVERYONE",
     "htpr-6662-agent-log-name": "EVERYONE",
-    "htpr-6688-search-autocomplete": "EVERYONE",
     "htpr-6752-instant-ticket-open": "EVERYONE",
     "htpr-6804-mcp-tools": "EVERYONE",
     "htpr-6817-slack-app": "OWNER_AND_QA",

@@ -133,10 +133,10 @@ test('ticket bugfix flag defaults to Everyone and also requires the original log
   const input = readFileSync(path.join(root, 'src/app/search/SearchChipsInput.tsx'), 'utf8')
   assert.match(input, /useFlag\(HTPR_6368_SEARCH_OPERATOR_LOGIC_FLAG\)/)
   assert.match(input, /useFlag\(HTPR_7387_SEARCH_OPERATOR_COLOURS_FLAG\)/)
-  assert.match(input, /const logicEnabled = operatorLogicEnabled && operatorColoursEnabled && autocompleteEnabled/)
+  assert.match(input, /const logicEnabled = operatorLogicEnabled && operatorColoursEnabled;/)
 })
 
-test('existing input renders gated tips, frames and chips and accepts priority/type suggestions', async () => {
+test('existing input keeps autocomplete on across all four logic/colour flag combinations and accepts priority/type suggestions', async () => {
   const React = require('react')
   const { JSDOM } = require('jsdom')
   const { createJiti } = require('jiti')
@@ -169,7 +169,7 @@ test('existing input renders gated tips, frames and chips and accepts priority/t
     const Component = createJiti(__filename, { alias: { '@': path.join(root, 'src') }, interopDefault: true, fsCache: false, jsx: { runtime: 'automatic' } })(path.join(root, 'src/app/search/SearchChipsInput.tsx')).default
     const Harness = ({ initial }) => {
       const [value, setValue] = React.useState(initial)
-      return React.createElement(Component, { value, onChange: setValue, onRun: (query) => runs.push(query), boardId: 7, autocompleteEnabled: true, layoutEnabled: true, inputRef: React.useRef(null) })
+      return React.createElement(Component, { value, onChange: setValue, onRun: (query) => runs.push(query), boardId: 7, layoutEnabled: true, inputRef: React.useRef(null) })
     }
     reactRoot = require('react-dom/client').createRoot(document.getElementById('root'))
     let sequence = 0

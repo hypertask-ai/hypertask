@@ -19,9 +19,9 @@ let commentRows: any[] = []
 let databaseRows: any[] = []
 let highlights = false
 const flags = {
-  HTPR_6688_SEARCH_AUTOCOMPLETE_FLAG: 'autocomplete', HTPR_6865_SEARCH_LAYOUT_FLAG: 'layout',
+  HTPR_6865_SEARCH_LAYOUT_FLAG: 'layout',
   HTPR_6882_SEARCH_MATCH_HIGHLIGHTS_FLAG: 'highlights',
-  isFeatureEnabled: async (flag: string) => flag === 'highlights' ? highlights : ['autocomplete', 'layout'].includes(flag),
+  isFeatureEnabled: async (flag: string) => flag === 'highlights' ? highlights : flag === 'layout',
 }
 for (const [file, exports] of [
   ['src/lib/prisma.ts', { default: {
