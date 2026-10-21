@@ -571,6 +571,9 @@ test('flag registry defaults to Owner + QA (off for this global gate) and the gl
     '@/lib/auth/getSessionUser': {},
     '@/lib/flags/definitions': { FEATURE_FLAG_DEFINITIONS: [definition] },
     '@/lib/flags/keys': {},
+    '@/lib/auth/ownerOrQa': load('src/lib/auth/ownerOrQa.ts', {
+      '@/lib/auth/ownerOrQaIds': load('src/lib/auth/ownerOrQaIds.ts', {}),
+    }),
   })
   assert.equal(definition.key, flagKey)
   assert.equal(definition.kind, 'feature')
