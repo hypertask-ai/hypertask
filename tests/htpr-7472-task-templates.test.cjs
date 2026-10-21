@@ -194,6 +194,7 @@ for (const oldStructure of [false, true]) for (const boardFormat of [false, true
     assert.equal((result.html.match(/<li>/g) ?? []).length, 5);
     assert.equal(result.title, "[TAG] Welcome ICE 21/30");
     assert.ok(h.checks.some(([key, id]) => key === flag && id === 985));
+    assert.ok(h.checks.some(([key, id]) => key === keys.HTPR_7500_WRITER_OLD_STRUCTURE_FLAG && id === 985));
   });
 }
 test("placeholder drafts retry exactly once, naming each placeholder and retaining request/context", async () => {
@@ -264,6 +265,7 @@ for (const oldStructure of [false, true]) for (const web of [false, true]) for (
     assert.equal(styles.createTaskAuthoringStyle(false, false, false, false), styles.TASK_AUTHORING_STYLE);
     const digest = crypto.createHash("sha256").update(prompt).digest("hex");
     assert.equal(digest, productionPromptHashes[`${oldStructure}/${web}/${boardFormat}`]);
+    assert.ok(h.checks.some(([key, id]) => key === keys.HTPR_7500_WRITER_OLD_STRUCTURE_FLAG && id === 985));
     const stream = writerHarness(options);
     assert.equal(await (await stream.web()).text(), "<p>TBD</p>");
     assert.equal(stream.calls.length, 1);
