@@ -1329,19 +1329,44 @@ for (const [name, started] of [
   })
 }
 
-test('HTPR-7501 the board list arriving first keeps the page search and ignores the late server result', async (t) => {
-  let resolveServer
-  let projects = []
-  await withSearch(t, { query: 'Result', projects: () => projects, serverStartedSearch: new Promise((resolve) => { resolveServer = resolve }) }, async ({ render, requests, complete }) => {
-    await flush()
-    projects = [{ id: 7, title: 'Product Board' }]
-    await render('Result')
-    assert.equal(requests.length, 1)
-    await React.act(async () => resolveServer(serverSearch({ data: { processedData: { All: [serverTasks[0]] }, tabs: ['All'] } })))
-    await flush()
-    assert.equal(document.getElementById('task_2'), null, 'the stale server result is not shown')
-    await complete(requests[0], serverTasks, ['All', 'Product Board'])
-    assert.ok(document.getElementById('task_2'))
-    assert.equal(requests.length, 1)
+for (const [name, result, requestCount] of [['for the same boards', serverSearch(), 0], ['that failed', null, 1]]) {
+  test(`HTPR-7501 the board list arriving before a server result ${name} waits for it once`, async (t) => {
+    let resolveServer
+    let projects = []
+    await withSearch(t, { query: 'Result', projects: () => projects, serverStartedSearch: new Promise((resolve) => { resolveServer = resolve }) }, async ({ render, requests, complete }) => {
+      await flush()
+      projects = [{ id: 7, title: 'Product Board' }]
+      await render('Result')
+      assert.equal(requests.length, 0, 'no request while the server result is on its way')
+      await React.act(async () => resolveServer(result))
+      await flush()
+      assert.equal(requests.length, requestCount)
+      if (requestCount) await complete(requests[0], serverTasks, ['All', 'Product Board'])
+      assert.ok(document.getElementById('task_2'))
+    })
   })
+}
+
+test('HTPR-7501 with the board list already loaded, a server result for the same boards replaces the page request', async (t) => {
+  const today = await searchPageHtml(t, {}, async ({ requests, complete }) => complete(requests[0], serverTasks, ['All', 'Product Board']))
+  const started = await searchPageHtml(t, { serverStartedSearch: Promise.resolve(serverSearch()) }, async ({ requests }) => {
+    await flush()
+    assert.equal(requests.length, 0)
+  })
+  assert.equal(started, today)
 })
+
+for (const [name, config] of [
+  ['for other boards', { serverStartedSearch: Promise.resolve(serverSearch({ projectIds: [7, 8] })) }],
+  ['before feature settings load', { flagsReady: () => false, serverStartedSearch: Promise.resolve(serverSearch()) }],
+]) {
+  test(`HTPR-7501 with the board list already loaded, a server result ${name} keeps the page request`, async (t) => {
+    await withSearch(t, { query: 'Result', ...config }, async ({ requests, complete }) => {
+      await flush()
+      assert.equal(requests.length, 1)
+      assert.deepEqual(requests[0].body, { projectIds: [7], searchQuery: 'Result', archive: 'Normal', contextProjectId: null })
+      await complete(requests[0], serverTasks, ['All', 'Product Board'])
+      assert.ok(document.getElementById('task_2'))
+    })
+  })
+}

@@ -137,6 +137,7 @@ export function useSearch(
     const search = await started;
     if (!isCurrent() || !searchRequestGate.isLatest(requestId) ||
       !isServerSearchFor(search, _searchTerm, _includeArchived, _fromProject)) return;
+    pendingServerSearch.current = undefined;
     recordSearch(_searchTerm, _includeArchived);
     lastSearchKey.current = currentSearchKey(_searchTerm, _includeArchived, search.projectIds.map((id) => ({ id }) as IProject));
     if (searchLayoutEnabled) tasksInputRef.current?.blur();
@@ -149,17 +150,28 @@ export function useSearch(
     }
   }
 
+  async function mountSearchResponse(showArchived: boolean) {
+    const started = searchFlagsReady ? pendingServerSearch.current : undefined;
+    pendingServerSearch.current = undefined;
+    const search = started ? await started : null;
+    if (isServerSearchFor(search, _searchTerm, showArchived, _fromProject) &&
+      search.projectIds.join() === projects.map((item) => item.id).join()) {
+      return { status: 200, data: search.data };
+    }
+    return axios.post(searchDocumentsRoute, {
+      projectIds: projects.map((item) => item.id),
+      searchQuery: _searchTerm,
+      archive: defaultSearchArchiveStatus(showArchived),
+      contextProjectId: _fromProject,
+    });
+  }
+
   async function handleSearchOnMount(showArchived = includeArchived) {
     if (_searchTerm && _searchTerm.length >= 2) {
       const requestId = beginSearch(_searchTerm, showArchived);
       if (searchLayoutEnabled) tasksInputRef.current?.blur();
       try {
-        const response = await axios.post(searchDocumentsRoute, {
-          projectIds: projects.map((item) => item.id),
-          searchQuery: _searchTerm,
-          archive: defaultSearchArchiveStatus(showArchived),
-          contextProjectId: _fromProject,
-        });
+        const response = await mountSearchResponse(showArchived);
 
         if (!searchRequestGate.isLatest(requestId)) return;
 
@@ -732,7 +744,6 @@ export function useSearch(
   useEffect(() => {
     const started = pendingServerSearch.current;
     if (!started || !searchFlagsReady || hasProjects) return;
-    pendingServerSearch.current = undefined;
     let current = true;
     void showServerStartedSearch(started, () => current);
     return () => {
