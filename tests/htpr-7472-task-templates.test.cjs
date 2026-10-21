@@ -81,6 +81,7 @@ function writerHarness(options = {}) {
     "@/lib/flags": { ...keys, isFeatureEnabled: async (key, userId) => {
       checks.push([key, userId]);
       if (key === flag) return options.enabled !== false;
+      if (key === keys.HTPR_7513_WRITER_PROJECT_LABELS_FLAG) return Boolean(options.labels);
       if (key === keys.HTPR_7500_WRITER_OLD_STRUCTURE_FLAG) return Boolean(options.oldStructure);
       if (key === keys.HTPR_6929_COMPOSE_TASK_WRITER_FLAG) return true;
       if (key === keys.HTPR_7471_WRITER_BOARD_FORMAT_FLAG) return options.boardFormat !== false;
@@ -92,6 +93,7 @@ function writerHarness(options = {}) {
     "@/lib/prisma": { default: {
       project: { findFirst: async () => ({ id: 15, title: "Kitchen", section: [], labels: [] }) },
       customField: { findMany: async () => [] }, section: { findMany: async () => [] },
+      label: { findMany: async () => [{ id: "board-label", value: "Kitchen" }] },
       taskTemplate: { findMany: async () => [{ name: "A/B test", title: "[TAG] {idea} ICE {score}/30", descriptionHtml: "<h2>Variations</h2>" }] },
     } },
     "@/app/api/ai/_lib/boardTemplateContext": load("src/app/api/ai/_lib/boardTemplateContext.ts"),
@@ -336,6 +338,33 @@ test("structured Ctrl+J retries once with the same output schema", async () => {
   const response = await h.web();
   assert.equal(response.status, 200);
   const body = await response.json();
+  assert.equal(body.tasks[0].description, "<p>Finished ideas.</p>");
+  assert.equal(h.calls.length, 2);
+  assert.deepEqual(h.calls[0].responseFormat, h.calls[1].responseFormat);
+});
+test("Ctrl+J normalizes board labels after the template placeholder retry", async () => {
+  const labeled = finished + '<span id="ai-generated-task-tags" style="display:none">board-label,foreign-label,board-label</span>';
+  const h = writerHarness({ labels: true, outputs: ["<p>TBD</p>", labeled] });
+  const response = await h.web();
+  const text = await response.text();
+  assert.equal(response.status, 200);
+  assert.equal(response.headers.get("X-Task-Writer-Labels"), "enabled");
+  assert.equal(h.calls.length, 2);
+  assert.doesNotMatch(text, /TBD|foreign-label/);
+  assert.match(text, /Finished headline 5/);
+  assert.match(text, /id="ai-generated-task-tags" style="display:none">board-label<\/span>/);
+  assert.equal((text.match(/Finished headline 5/g) ?? []).length, 1);
+});
+test("structured Ctrl+J validates board labels after the template placeholder retry", async () => {
+  const outputs = ["<p>TBD</p>", "<p>Finished ideas.</p>"].map((description) => JSON.stringify({
+    tasks: [{ title: "A/B test", description, labelIds: ["board-label", "foreign-label", "board-label"] }],
+  }));
+  const h = writerHarness({ split: true, labels: true, outputs });
+  const response = await h.web();
+  assert.equal(response.status, 200);
+  assert.equal(response.headers.get("X-Task-Writer-Labels"), "enabled");
+  const body = await response.json();
+  assert.deepEqual(body.tasks[0].labelIds, ["board-label"]);
   assert.equal(body.tasks[0].description, "<p>Finished ideas.</p>");
   assert.equal(h.calls.length, 2);
   assert.deepEqual(h.calls[0].responseFormat, h.calls[1].responseFormat);
