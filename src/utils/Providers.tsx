@@ -28,7 +28,7 @@ import ThemeListener from "@/lib/contexts/ThemeListener";
 import { MobileBlockingProvider } from "@/lib/contexts/mobileBlockingContext";
 import { TourProvider } from "@/lib/contexts/TourContext";
 import { shouldDehydratePersistedQuery } from "@/utils/queryPersistence";
-import { FeatureFlagProvider } from "@/hooks/useFlag";
+import { FeatureFlagProvider, SubscribedFeatureFlagProvider } from "@/hooks/useFlag";
 import {
   createQueryPersister,
   type DisposableQueryPersister,
@@ -118,14 +118,17 @@ export default function Provider({
   initialIsApple,
   authenticatedUserId,
   firstScreen,
+  flagReaderSubscribe = false,
 }: {
   children: ReactNode;
   initialIsMobile: boolean;
   initialIsApple: boolean;
   authenticatedUserId: number | null;
   firstScreen?: BoardDocument | InboxDocument | null;
+  flagReaderSubscribe?: boolean;
 }) {
   const pathname = usePathname();
+  const FlagProvider = flagReaderSubscribe ? SubscribedFeatureFlagProvider : FeatureFlagProvider;
   const publicShare = isPublicSharePath(pathname);
   const [initialDocument] = useState(() => getBoardDocument(firstScreen ?? null, authenticatedUserId ?? 0) ?? getInboxDocument(firstScreen ?? null, authenticatedUserId ?? 0));
   const snapshot = initialDocument?.scope.accountId === authenticatedUserId ? initialDocument : null;
@@ -186,14 +189,14 @@ export default function Provider({
                       {publicShare ? (
                         <PublicShell><ThemeListener />{children}</PublicShell>
                       ) : (
-                        <FeatureFlagProvider userId={authenticatedUserId} initialFlags={snapshot?.flags}>
+                        <FlagProvider userId={authenticatedUserId} initialFlags={snapshot?.flags}>
                           <ThemeListener />
                           <BoardDisplayMirror accountId={authenticatedUserId} />
                           <MobileViewFlagBridge />
                           <GlobalProvider authenticatedUserId={authenticatedUserId}>
                             {children}
                           </GlobalProvider>
-                        </FeatureFlagProvider>
+                        </FlagProvider>
                       )}
                     </TourProvider>
                   </AuthProvider>

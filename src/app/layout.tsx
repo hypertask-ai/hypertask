@@ -23,7 +23,7 @@ import {
   resolveInitialThemeColor,
   resolveThemePreference,
 } from "@/lib/themePreferences";
-import { HTPR_7328_ROUNDED_THEME_FLAG } from "@/lib/flags/keys";
+import { HTPR_7328_ROUNDED_THEME_FLAG, HTPR_7560_FLAG_READER_SUBSCRIBE_FLAG } from "@/lib/flags/keys";
 import { buildThemeBootScript } from "@/lib/themeBootScript";
 import { buildEarlyAppShellBootstrapScript } from "@/lib/appShellBootstrap/client";
 import { getServerBoardDocument } from "@/lib/firstScreen/serverBoardDocument";
@@ -80,7 +80,10 @@ export default async function RootLayout(
     value: authConfig.cookies.defaultTheme,
     name: authConfig.cookies.theme,
   };
-  const roundedEnabled = await isFeatureEnabled(HTPR_7328_ROUNDED_THEME_FLAG, analyticsSession?.id ?? -1);
+  const [roundedEnabled, flagReaderSubscribe] = await Promise.all([
+    isFeatureEnabled(HTPR_7328_ROUNDED_THEME_FLAG, analyticsSession?.id ?? -1),
+    isFeatureEnabled(HTPR_7560_FLAG_READER_SUBSCRIBE_FLAG, analyticsSession?.id ?? -1),
+  ]);
   const savedTheme = roundedEnabled
     ? normalizeThemePreference(theme.value, true)
     : normalizeThemePreference(theme.value);
@@ -167,6 +170,7 @@ export default async function RootLayout(
           initialIsApple={device.isApple}
           authenticatedUserId={analyticsSession?.id ?? null}
           firstScreen={firstScreen}
+          flagReaderSubscribe={flagReaderSubscribe}
         >
           {children}
         </Provider>
