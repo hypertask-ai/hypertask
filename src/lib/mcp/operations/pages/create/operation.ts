@@ -246,12 +246,7 @@ export async function POST(request: NextRequest) {
           agentId: ctx.agentId,
         })
 
-        const warnings = ctx.agentId
-          ? await getFeaturePageWarnings(page.title, ctx.user.id).catch(() => [])
-          : []
-
         return {
-          ...(warnings.length ? { warnings } : {}),
           page: {
             publicId: page.publicId,
             id: page.id,
@@ -263,7 +258,11 @@ export async function POST(request: NextRequest) {
       }
     )
 
-    return NextResponse.json(response)
+    const warnings = ctx.agentId
+      ? await getFeaturePageWarnings(response.page.title, ctx.user.id).catch(() => [])
+      : []
+
+    return NextResponse.json({ ...response, ...(warnings.length ? { warnings } : {}) })
   } catch (error) {
     const identifierResponse = taskIdentifierErrorResponse(error, 'ticket_number')
     if (identifierResponse) return identifierResponse

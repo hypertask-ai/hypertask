@@ -8,13 +8,14 @@ const { load } = require('./task-route-loader.cjs')
 const root = path.resolve(__dirname, '..')
 const read = (file) => fs.readFileSync(path.join(root, file), 'utf8')
 const { DECISIONS_GUIDANCE } = load('src/lib/mcp/decisionsGuidance.ts', {})
+const discoveryKey = 'htpr-7322-agent-feature-discovery'
 const decisionsKey = 'htpr-7092-decisions'
 const searchKey = 'htpr-6688-search-autocomplete'
 const definitionKeys = [decisionsKey, 'htpr-7064-inbox-remind-returns', 'htpr-6422-my-tasks-views', 'htpr-6457-my-tasks-scopes', 'htpr-6461-my-tasks-snooze', searchKey]
 const definitions = definitionKeys.map((key) => load(`src/lib/flags/definitions/${key}.ts`, {}).default)
 const reader = { user: { id: 47, email: 'reader@example.test' }, agentId: 'read-agent' }
 
-function catalog(availability = {}, registryDefinitions = definitions) {
+function catalog(availability = {}, registryDefinitions = definitions, discoveryEnabled = true) {
   const users = []
   const mod = load('src/lib/mcp/featureCatalog.ts', {
     '@/lib/flags/definitions': { FEATURE_FLAG_DEFINITIONS: [
@@ -22,12 +23,19 @@ function catalog(availability = {}, registryDefinitions = definitions) {
       { key: 'htpr-999-improvement', kind: 'improvement', description: 'An improvement', shippedOn: '2026-10-10' },
       { key: 'htpr-998-unmapped-product', kind: 'feature', description: 'No verified destination', shippedOn: '2026-10-11' },
     ] },
-    '@/lib/flags': { featureFlagsForUser: async (userId) => { users.push(userId); return availability } },
+    '@/lib/flags': {
+      featureFlagsForUser: async (userId) => { users.push(userId); return availability },
+      isFeatureEnabled: async (key, userId) => {
+        assert.equal(key, discoveryKey)
+        assert.equal(userId, reader.user.id)
+        return discoveryEnabled
+      },
+    },
   })
   return { ...mod, users }
 }
 
-function endpoint(ctx, mod, limited = null) {
+function endpoint(ctx, mod, limited = null, discoveryEnabled = true) {
   let reads = 0
   const GET = load('src/lib/mcp/operations/features/operation.ts', {
     '@/lib/mcp/routeWrapper': {
@@ -35,6 +43,12 @@ function endpoint(ctx, mod, limited = null) {
       validateMcpRouteAuth: async () => ctx,
       checkMcpRouteRateLimit: async () => limited,
     },
+    '@/lib/flags': { isFeatureEnabled: async (key, userId) => {
+      assert.ok(ctx)
+      assert.equal(key, discoveryKey)
+      assert.equal(userId, ctx.user.id)
+      return discoveryEnabled
+    } },
     '@/lib/mcp/auth': { createUnauthorizedResponse: () => NextResponse.json({ error: 'Unauthorized' }, { status: 401 }) },
     '@/lib/mcp/featureCatalog': { getFeatureCatalog: async (userId) => { reads++; return mod.getFeatureCatalog(userId) } },
     '@/lib/mcp/operationCrashReport': { reportMcpOperationCrash: () => {} },
@@ -104,6 +118,20 @@ test('core destinations survive removed definitions and Decisions remains gated 
 test('unauthorized catalog reads are now refused without loading feature data', async () => {
   const route = endpoint(null, catalog({ [decisionsKey]: true }))
   assert.equal((await route.GET(request())).status, 401)
+  assert.equal(route.reads(), 0)
+})
+
+test('disabled discovery refuses authenticated HTTP and in-process reads without loading the catalog', async () => {
+  const route = endpoint(reader, catalog(), null, false)
+  const response = await route.GET(request())
+  assert.equal(response.status, 404)
+  assert.equal(response.headers.get('Cache-Control'), 'private, no-store')
+  assert.equal((await response.json()).success, false)
+  const { executeMcpOperation } = load('src/lib/mcp/operations/index.ts', {
+    './features/operation': route,
+    '@/lib/mcp-server/utils/errors': { ApiError: class extends Error {} },
+  })
+  assert.equal((await executeMcpOperation(new NextRequest('http://mcp.internal/mcp/features'))).status, 404)
   assert.equal(route.reads(), 0)
 })
 
@@ -190,7 +218,7 @@ test('hello and tool guidance explain the actual Decisions workflow, not structu
   const hello = load('src/lib/mcp/hello/getHelloPayload.ts', {
     '@/lib/prisma': { default: { project: { findMany: async () => [] } } },
     '@/lib/mcp/auth': {},
-    '@/lib/flags': { isFeatureEnabled: async () => false },
+    '@/lib/flags': { isFeatureEnabled: async (key) => key === discoveryKey },
     '@/utils/controllers/projects/getAllIncludes': { getProjectListingWhere: () => ({}) },
   })
   const { capabilities } = await hello.getHelloPayload(reader)
@@ -212,6 +240,26 @@ test('hello and tool guidance explain the actual Decisions workflow, not structu
     assert.match(text, /[Ss]tructured/)
   }
   assert.match(capabilities.features, /GET \/api\/mcp\/features/)
+})
+
+test('hello advertises feature discovery only when its flag is enabled, independently of reaction guidance', async () => {
+  for (const discoveryEnabled of [false, true]) {
+    for (const reactionsEnabled of [false, true]) {
+      const hello = load('src/lib/mcp/hello/getHelloPayload.ts', {
+        '@/lib/prisma': { default: { project: { findMany: async () => [] } } },
+        '@/lib/mcp/auth': {},
+        '@/lib/flags': { isFeatureEnabled: async (key, userId) => {
+          assert.equal(userId, reader.user.id)
+          return key === discoveryKey ? discoveryEnabled : reactionsEnabled
+        } },
+        '@/utils/controllers/projects/getAllIncludes': { getProjectListingWhere: () => ({}) },
+      })
+      const { capabilities } = await hello.getHelloPayload(reader)
+      assert.equal('features' in capabilities, discoveryEnabled)
+      assert.equal('reactions' in capabilities, reactionsEnabled)
+      assert.equal(capabilities.decisions, DECISIONS_GUIDANCE)
+    }
+  }
 })
 
 test('Question lines qualify; ordinary mentions and questions answered later by the viewer do not', () => {
@@ -305,4 +353,25 @@ test('unavailable Decisions and failed advisory lookups never prevent agent page
     assert.deepEqual(Object.keys(await response.json()), ['page'])
     assert.equal(route.creates(), 1)
   }
+})
+
+test('disabling discovery suppresses all page warnings, including an idempotent replay, without blocking creation', async () => {
+  const enabled = catalog({ [decisionsKey]: true })
+  const disabled = catalog({ [decisionsKey]: true }, definitions, false)
+  for (const title of ['Decisions', 'Inbox', 'My Tasks', 'Search', 'Reports', 'Dashboard']) {
+    const route = pageEndpoint('write-agent', disabled)
+    assert.deepEqual(Object.keys(await (await route.post(title)).json()), ['page'])
+    assert.equal(route.creates(), 1)
+  }
+  assert.deepEqual(disabled.users, [])
+  let discoveryEnabled = true
+  const route = pageEndpoint('write-agent', {
+    getFeaturePageWarnings: (...args) => (discoveryEnabled ? enabled : disabled).getFeaturePageWarnings(...args),
+  })
+  const receipt = await (await route.post('Decisions', 'toggle-key')).json()
+  assert.equal(receipt.warnings[0].code, 'existing_feature')
+  discoveryEnabled = false
+  const replay = await (await route.post('Decisions', 'toggle-key')).json()
+  assert.deepEqual(replay, { page: receipt.page })
+  assert.equal(route.creates(), 1)
 })

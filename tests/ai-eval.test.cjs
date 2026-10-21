@@ -43,6 +43,12 @@ test('mocked LLM calls validate every top-ten schema for both surfaces', () => {
   assert.throws(() => validateCall({ id: 'bad', name: 'unknown', arguments: {} }, catalogs.chat), /Unknown tool/);
 });
 
+test('isolated MCP metadata includes the shared Decisions guidance in the recorded comment contract', () => {
+  const load = require('jiti')(__filename, { fsCache: false });
+  const { DECISIONS_GUIDANCE } = load(path.join(__dirname, '../src/lib/mcp/decisionsGuidance.ts'));
+  assert.ok(mcpTools().hypertask_add_comment_to_task.description.startsWith(DECISIONS_GUIDANCE + ' '));
+});
+
 test('chat create-task eval preserves the exact flag-off schema and validation', () => {
   const { z } = require('zod');
   const load = require('jiti')(__filename, { fsCache: false });

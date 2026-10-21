@@ -1,0 +1,15 @@
+const test = require('node:test')
+const assert = require('node:assert/strict')
+const { load } = require('./task-route-loader.cjs')
+
+test('feature discovery has its own Everyone-default feature flag with a release risk', () => {
+  const { default: definition, HTPR_7322_AGENT_FEATURE_DISCOVERY_FLAG } = load('src/lib/flags/definitions/htpr-7322-agent-feature-discovery.ts', {})
+  assert.equal(HTPR_7322_AGENT_FEATURE_DISCOVERY_FLAG, 'htpr-7322-agent-feature-discovery')
+  assert.equal(definition.key, HTPR_7322_AGENT_FEATURE_DISCOVERY_FLAG)
+  assert.equal(definition.kind, 'feature')
+  assert.equal(definition.defaultMode, 'EVERYONE')
+  assert.equal(definition.shippedOn, '2026-10-21')
+  assert.equal(definition.releaseRisk.risk, 'small')
+  assert.ok(definition.releaseRisk.reason)
+  assert.equal(definition.releaseRisk.highRisk, undefined)
+})

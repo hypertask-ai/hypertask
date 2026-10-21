@@ -1,4 +1,5 @@
-import { featureFlagsForUser } from '@/lib/flags'
+import { featureFlagsForUser, isFeatureEnabled } from '@/lib/flags'
+import { HTPR_7322_AGENT_FEATURE_DISCOVERY_FLAG } from '@/lib/flags/definitions/htpr-7322-agent-feature-discovery'
 import { DECISIONS_GUIDANCE } from '@/lib/mcp/decisionsGuidance'
 import { FEATURE_FLAG_DEFINITIONS } from '@/lib/flags/definitions'
 
@@ -34,6 +35,7 @@ export async function getFeatureCatalog(userId: number) {
 }
 
 export async function getFeaturePageWarnings(title: string, userId: number) {
+  if (!(await isFeatureEnabled(HTPR_7322_AGENT_FEATURE_DISCOVERY_FLAG, userId))) return []
   const normalizedTitle = title.trim().replace(/\s+/g, ' ').toLowerCase()
   const destinations = [
     { name: 'Inbox', url: 'https://app.hypertask.ai/inbox', titles: /\binbox\b/ },

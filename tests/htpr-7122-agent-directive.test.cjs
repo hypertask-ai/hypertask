@@ -21,7 +21,7 @@ function loadHello(flagOn) {
   stubModule("src/lib/flags.ts", {
     isFeatureEnabled: async (key, userId) => {
       flagCalls.push([key, userId]);
-      return flagOn;
+      return key === FLAG && flagOn;
     },
   });
   stubModule("src/lib/mcp/auth.ts", {

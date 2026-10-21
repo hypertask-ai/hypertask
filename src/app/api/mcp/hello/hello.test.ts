@@ -148,7 +148,6 @@ async function demo() {
     assert.equal(happyBody.boardsTruncated, false)
     assert.deepEqual(Object.keys(happyBody.capabilities), [
       'decisions',
-      'features',
       'tasks',
       'batch',
       'comments',
@@ -159,6 +158,7 @@ async function demo() {
       'escalate',
       'nextTask',
       'webhooks',
+      'features',
     ])
     assert.deepEqual(
       happyBody.conventions.map(

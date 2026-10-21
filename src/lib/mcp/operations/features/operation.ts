@@ -1,4 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { isFeatureEnabled } from '@/lib/flags'
+import { HTPR_7322_AGENT_FEATURE_DISCOVERY_FLAG } from '@/lib/flags/definitions/htpr-7322-agent-feature-discovery'
 import { createUnauthorizedResponse } from '@/lib/mcp/auth'
 import { getFeatureCatalog } from '@/lib/mcp/featureCatalog'
 import { reportMcpOperationCrash } from '@/lib/mcp/operationCrashReport'
@@ -14,6 +16,10 @@ export const GET = wrapMcpRoute(async (request: NextRequest) => {
     if (rateLimited) return rateLimited
     const ctx = await validateMcpAuth(request)
     if (!ctx) return createUnauthorizedResponse('Invalid or missing authentication token.', 'invalid_token')
+
+    if (!(await isFeatureEnabled(HTPR_7322_AGENT_FEATURE_DISCOVERY_FLAG, ctx.user.id))) {
+      return NextResponse.json({ success: false, error: 'Feature discovery is not enabled' }, { status: 404, headers: { 'Cache-Control': 'private, no-store' } })
+    }
 
     return NextResponse.json({
       success: true,
