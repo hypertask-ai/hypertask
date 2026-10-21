@@ -1,0 +1,60 @@
+name: Wireframe Capture
+
+on:
+  workflow_dispatch:
+    inputs:
+      ticket:
+        description: Ticket with a checked-in allowlisted wireframe
+        required: true
+        type: string
+      wireframe:
+        description: Exact docs/wireframes/<TICKET>/index.html manifest entry
+        required: true
+        type: string
+  pull_request:
+    branches: [production]
+    paths:
+      - 'docs/wireframes/**'
+      - 'scripts/wireframe-capture.mjs'
+      - 'scripts/wireframe-capture-allowed.json'
+      - '.github/workflows/wireframe-capture.yml'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: wireframe-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  capture:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: 24
+      - name: Install dependencies without lifecycle hooks
+        run: npm ci --ignore-scripts
+      - name: Install Chromium
+        run: ./node_modules/.bin/playwright install --with-deps chromium
+      - name: Capture allowlisted static wireframes
+        id: capture
+        env:
+          WIREFRAME_TICKET: ${{ inputs.ticket }}
+          WIREFRAME_PATH: ${{ inputs.wireframe }}
+          WIREFRAME_BASE_SHA: ${{ github.event.pull_request.base.sha }}
+        run: node scripts/wireframe-capture.mjs
+      - name: Upload public wireframe PNGs only
+        if: steps.capture.outputs.captured == 'true'
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: wireframe-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/wireframe-captures/*.png
+          if-no-files-found: error
+          include-hidden-files: false
+          retention-days: 7
