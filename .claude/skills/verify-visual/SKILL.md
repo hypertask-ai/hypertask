@@ -31,20 +31,20 @@ The workflow runs `e2e/visual/visual.spec.ts` with `e2e/visual/playwright.visual
 |---|---|
 | `board` | Seeded board, To do/Done columns and the fixture card visible |
 | `task-detail` | Click that board card, title/description, two comments and one composer visible |
-| `comment-box` | Cached-open task scrolled to the last comment and composer; desktop composer follows comments |
+| `comment-box` | Cached-open task scrolls the uniquely matched last seeded comment into view, then the desktop composer only (phone composer is fixed); both stay in viewport and desktop composer follows comments |
 | `ctrl-j` | Board, Control+j, empty writer with Describe the task textbox; never submit |
 | `inbox` | /inbox loaded, inbox panel and list visible |
 
 ## Evidence and triage
 
-Read the run's failed screen and viewport in the GitHub step summary. On failure, download the PNG-only artifact within its 7-day retention; set `TICKET` to the ticket key:
+Read the run's failed screen and viewport in the GitHub step summary. On failure, download the PNGs and error-context.md artifact within its 7-day retention; set `TICKET` to the ticket key:
 
 ```bash
 gh run view "$RUN_ID"
 gh run download "$RUN_ID" --name visual-regression-diffs --dir "$HOME/.local/state/vcc-evidence/$TICKET/visual/$RUN_ID"
 ```
 
-For that screen/viewport, compare expected (base), actual (head) and diff PNGs together. Check moved, missing, covered or resized UI, especially composer order. Missing PNGs or build/auth/readiness errors mean incomplete/setup failure, not a pixel match. The artifact uploads only on failure and may be absent before capture.
+For that screen/viewport, read error-context.md for the named failing step and page snapshot, then compare expected (base), actual (head) and diff PNGs together. Comment-box navigation, scrolling, asset/geometry settling and desktop order checks have 15-second step limits. Check moved, missing, covered or resized UI, especially composer order. Missing PNGs or build/auth/readiness errors mean incomplete/setup failure, not a pixel match. The artifact uploads only on failure and may be absent before capture.
 
 A real regression is an unintended difference: fix it, never regenerate expected images from head, mask the change or loosen thresholds. An intended change needs human approval in the PR description: `Visual change approved: <ticket URL>`. Confirm approval covers the observed screen change; it does not turn the job green or waive unrelated regressions.
 

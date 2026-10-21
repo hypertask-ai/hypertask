@@ -97,7 +97,7 @@ async function summarize(workspace, temp) {
     lines.push(`- **${phase}**: ${failures.length ? "failed screens" : complete ? "all 10 screens passed" : "capture incomplete or setup failed"}`);
     for (const screen of failures) lines.push(`  - ${screen.replace(/[\r\n`<>]/g, " ")}`);
   }
-  lines.push("", "On failure, download **visual-regression-diffs** for expected/actual/diff PNGs (7 days). Storage state is never uploaded.", "Intended differences require a human-reviewed `Visual change approved: <ticket URL>` in the PR description; the job still reports the diff.", "");
+  lines.push("", "On failure, download **visual-regression-diffs** for expected/actual/diff PNGs and error-context.md (7 days). Traces, videos and storage state are never uploaded.", "Intended differences require a human-reviewed `Visual change approved: <ticket URL>` in the PR description; the job still reports the diff.", "");
   await appendFile(process.env.GITHUB_STEP_SUMMARY ?? path.join(workspace, "visual-summary.md"), lines.join("\n"));
 }
 

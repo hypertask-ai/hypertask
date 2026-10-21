@@ -100,7 +100,7 @@ test("workflow is informational, read-only, path-scoped and uses the smoke servi
   }
   const credentials = text => text.slice(text.indexOf("      - name: Prepare disposable local credentials"), text.indexOf('          } >> "$GITHUB_ENV"') + '          } >> "$GITHUB_ENV"'.length);
   assert.equal(credentials(workflow), credentials(smoke));
-  assert.match(workflow, /path: test-results\/\*\*\/\*\.png/);
+  assert.deepEqual(job.steps.find(step => step.name === "Upload visual differences").with.path.trim().split("\n"), ["test-results/**/*.png", "test-results/**/error-context.md"]);
   assert.match(workflow, /retention-days: 7/);
   assert.equal(job.steps.find(step => step.name === "Summarize failed screens").if, "always() && hashFiles('head/scripts/visual-regression-ci.mjs') != ''");
   assert.equal(job.steps.find(step => step.name === "Upload visual differences").with["if-no-files-found"], "ignore");
@@ -142,6 +142,8 @@ test("capture config has exactly two DPR1 Chromium viewports and strict non-upda
   assert.equal(config.projects[1].use.hasTouch, true);
   assert.equal(config.use.browserName, "chromium");
   assert.equal(config.use.deviceScaleFactor, 1);
+  assert.equal(config.use.actionTimeout, 15_000);
+  assert.equal(config.use.navigationTimeout, 15_000);
   assert.equal(config.use.timezoneId, "UTC");
   assert.equal(config.use.locale, "en-US");
   assert.equal(config.use.reducedMotion, "reduce");
@@ -157,17 +159,28 @@ test("five full-viewport screens use real theme/time, cached ticket navigation, 
   assert.match(spec, /toHaveAttribute\('data-theme', 'porcelain'\)/);
   assert.match(spec, /searchParams\.set\('realtime', 'off'\)/);
   assert.match(spec, /const card = await board\(page\)\s+await card\.click\(\)/);
-  assert.match(spec, /ticket-comment'\)\s+await expect\(comments\)\.toHaveCount\(2\)/);
+  assert.match(spec, /thread\.getByTestId\('ticket-comment'\)\s+await expect\(comments, 'both seeded comments must be mounted'\)\.toHaveCount\(2\)/);
   assert.match(spec, /document\.fonts\.ready/);
   assert.match(spec, /image\.decode\(\)/);
   assert.match(spec, /equalSamples >= 3/);
-  assert.match(spec, /parent\.scrollTop = parent\.scrollHeight/);
+  assert.match(spec, /getByTestId\('ticket-comment'\)\.filter\(\{ hasText: 'Last layout lock comment' \}\)/);
+  assert.match(spec, /expect\(lastComment, 'exactly one last seeded comment in the ticket thread'\)\.toHaveCount\(1\)/);
+  assert.match(spec, /expect\(page\.getByTestId\('comment-composer'\), 'one desktop or phone composer'\)\.toHaveCount\(1\)/);
+  assert.match(spec, /lastComment\.evaluate\(comment => comment\.scrollIntoView\(\{ behavior: 'instant', block: 'center' \}\), undefined, \{ timeout: 15_000 \}\)/);
+  assert.match(spec, /if \(testInfo\.project\.name === 'desktop'\) \{\s+await composer\.evaluate\(element => element\.scrollIntoView\(\{ behavior: 'instant', block: 'nearest' \}\), undefined, \{ timeout: 15_000 \}\)/);
+  assert.match(spec, /expect\(lastComment, 'last seeded comment must remain in viewport after scrolling'\)\.toBeInViewport\(\{ timeout: 15_000 \}\)/);
+  assert.match(spec, /expect\(composer, 'comment composer must be in viewport after scrolling'\)\.toBeInViewport\(\{ timeout: 15_000 \}\)/);
+  for (const step of ['open seeded ticket and expand desktop comments', 'scroll last seeded comment and composer into view', 'assets loaded and landmark geometry settled', 'desktop composer follows the last seeded comment']) {
+    assert.ok(spec.includes(`test.step('${step}'`));
+  }
+  assert.equal((spec.match(/\}, \{ timeout: 15_000 \}\)/g) || []).length, 4);
+  assert.doesNotMatch(spec, /scrollIntoViewIfNeeded|parent\.scrollTop|scrollingElement|ticket-comment'\)\.last\(\)|data-task-composer-slot/);
   assert.match(spec, /keyboard\.press\('Control\+j'\)/);
   assert.match(spec, /navigate\(page, '\/inbox'\)/);
   assert.match(spec, /toHaveScreenshot\(`\$\{screen\}\.png`\)/);
   assert.doesNotMatch(spec, /mask:|clip:|fullPage:|networkidle|withRealtime|\.fill\(|\.submit\(/);
   assert.ok(spec.indexOf('toHaveScreenshot(') < spec.indexOf('desktop composer must follow'));
-  assert.match(spec, /toBeGreaterThanOrEqual\(lastComment!\.y \+ lastComment!\.height\)/);
+  assert.match(spec, /toBeGreaterThanOrEqual\(lastCommentBox!\.y \+ lastCommentBox!\.height\)/);
 });
 
 test("visual seed fixes visible identity/timestamps/avatars but retains real-time auth expiry and ordinary smoke behavior", async () => {

@@ -30,6 +30,8 @@ export default defineConfig({
   },
   use: {
     baseURL: 'http://127.0.0.1:3100',
+    actionTimeout: 15_000,
+    navigationTimeout: 15_000,
     storageState,
     browserName: 'chromium',
     deviceScaleFactor: 1,
