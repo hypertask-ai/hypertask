@@ -97,14 +97,16 @@ const SearchComp = ({
     includeArchived,
     setIncludeArchivedResults,
   } = useSearch(searchTerm, _initialTabIndex, _includeArchived, _fromProject, serverStartedSearch, searchOnce);
-  useEffect(() => {
-    if (HypertasksCommands || (!showCommands.show && (!lazyClosedCommandsLoaded || lazyClosedCommands))) return;
+  const loadCommands = () => {
+    if (HypertasksCommands || (!showCommands.show && !lazyClosedCommandsLoaded)) return;
     let cancelled = false;
     void import("@/components/commands").then(({ default: Commands }) => {
       if (!cancelled) startTransition(() => setCommands(() => Commands));
     }).catch(() => {});
     return () => { cancelled = true; };
-  }, [HypertasksCommands, showCommands.show, lazyClosedCommands, lazyClosedCommandsLoaded]);
+  };
+  useEffect(lazyClosedCommands && !showCommands.show ? () => {} : loadCommands,
+    [HypertasksCommands, showCommands.show, lazyClosedCommands, lazyClosedCommandsLoaded]);
   useLayoutEffect(() => {
     if (showCommands.show && !HypertasksCommands) {
       commandFocusProxy.current?.focus({ preventScroll: true });

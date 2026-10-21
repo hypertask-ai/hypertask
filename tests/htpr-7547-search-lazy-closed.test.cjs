@@ -109,7 +109,9 @@ async function withSearch({ enabled, layout = true, mobile = true, delayed = fal
     if (hydrate) {
       serverMarkup = require('react-dom/server').renderToString(React.createElement(Page));
       container.innerHTML = serverMarkup;
+      serverMarkup = container.innerHTML;
       assert.equal(imports, 0, 'SSR must not evaluate closed tools');
+      assert.equal(container.querySelector('#outer-fallback'), null, 'SSR itself must render Search, not a failed-render fallback');
       await React.act(async () => {
         reactRoot = require('react-dom/client').hydrateRoot(container, React.createElement(Page), { onRecoverableError: (error) => hydrationErrors.push(error.message) });
       });
