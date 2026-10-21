@@ -65,8 +65,6 @@ export default async function Page(
     await isFeatureEnabled(HTPR_7501_SEARCH_SERVER_START_FLAG, sessionUser.userId)
     ? startServerSearch(sessionUser.userId, searchTerm, includeArchived, fromProject).catch(() => null)
     : undefined;
-  const searchOnce = sessionUser && sessionUser.userId === currentUser.id && isFullPageLoad &&
-    await isFeatureEnabled(HTPR_7502_SEARCH_ONCE_FLAG, sessionUser.userId) ? true : false;
 
   return (
     <Suspense fallback={<>Loading...</>}>
@@ -77,7 +75,12 @@ export default async function Page(
         _fromProject={fromProject}
         currentUser={currentUser}
         serverStartedSearch={serverStartedSearch}
-        searchOnce={searchOnce}
+        searchOnce={
+          !!sessionUser &&
+          sessionUser.userId === currentUser.id &&
+          isFullPageLoad &&
+          await isFeatureEnabled(HTPR_7502_SEARCH_ONCE_FLAG, sessionUser.userId)
+        }
         askAiFullscreenEnabled={
           !!sessionUser &&
           sessionUser.userId === currentUser.id &&
