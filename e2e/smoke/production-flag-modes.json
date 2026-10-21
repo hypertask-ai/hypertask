@@ -4,7 +4,6 @@
   "capturedAt": "2026-10-11T14:10:51.420Z",
   "modes": {
     "htpr-3533-google-calendar": "OWNER_AND_QA",
-    "htpr-4228-admin-only-time-reports": "EVERYONE",
     "htpr-4857-add-to-slack": "OWNER_AND_QA",
     "htpr-5906-shortcut-nudges": "OWNER_AND_QA",
     "htpr-5908-local-writing-assistance": "OFF",

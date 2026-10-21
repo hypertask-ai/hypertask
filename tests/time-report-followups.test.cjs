@@ -194,7 +194,7 @@ test("running timers are pinned before the 1000-row report cap", () => {
   assert.ok(pin !== -1 && pin < cap);
 });
 
-test("flag-off time reports retain archived history but fail closed to the caller", async () => {
+test("admin time reports retain archived history and the requested user filter", async () => {
   const source = read("src/lib/timeTracking.ts");
   const start = source.indexOf("export async function listReport(");
   const end = source.indexOf("\nexport async function updateEntry(", start);
@@ -212,9 +212,6 @@ test("flag-off time reports retain archived history but fail closed to the calle
     "exports",
     "prisma",
     "getProjectWhere",
-    "isProjectAdmin",
-    "isFeatureEnabled",
-    "HTPR_4228_ADMIN_ONLY_TIME_REPORTS_FLAG",
     "elapsedSeconds",
     javascript
   )(
@@ -229,9 +226,6 @@ test("flag-off time reports retain archived history but fail closed to the calle
       },
     },
     (userId) => ({ OR: [{ ownerId: userId }] }),
-    async () => false,
-    async () => false,
-    "htpr-4228-admin-only-time-reports",
     () => 0
   );
 
@@ -240,8 +234,11 @@ test("flag-off time reports retain archived history but fail closed to the calle
     adminProjectIds: [16],
   });
 
-  assert.equal(reportWhere.userId, 6);
-  assert.equal(reportWhere.OR, undefined);
+  assert.equal(reportWhere.userId, 7);
+  assert.deepEqual(reportWhere.OR, [
+    { userId: 6 },
+    { task: { projectId: { in: [16] } } },
+  ]);
   assert.deepEqual(reportWhere.task.project.status, {
     in: ["Normal", "Archive"],
   });
@@ -285,9 +282,6 @@ test("time reports limit plain members to their own entries (HTPR-4228)", async 
     "exports",
     "prisma",
     "getProjectWhere",
-    "isProjectAdmin",
-    "isFeatureEnabled",
-    "HTPR_4228_ADMIN_ONLY_TIME_REPORTS_FLAG",
     "elapsedSeconds",
     "recordAgentBoardScopeMiss",
     javascript
@@ -314,14 +308,11 @@ test("time reports limit plain members to their own entries (HTPR-4228)", async 
       project: { findMany: async () => [{ id: 16 }] },
     },
     () => ({}),
-    async () => false,
-    async () => true,
-    "htpr-4228-admin-only-time-reports",
     () => 0,
     () => {}
   );
 
-  // Flag on: caller 6 is a plain member of board 15 and admin of board 16, so
+  // Caller 6 is a plain member of board 15 and admin of board 16, so
   // the query itself must keep their rows plus board 16's, newest first.
   const visible = await loaded.exports.listReport(6);
 
@@ -352,9 +343,6 @@ test("without other-user scope the report query is pinned to the caller", async 
     "exports",
     "prisma",
     "getProjectWhere",
-    "isProjectAdmin",
-    "isFeatureEnabled",
-    "HTPR_4228_ADMIN_ONLY_TIME_REPORTS_FLAG",
     "elapsedSeconds",
     javascript
   )(
@@ -370,9 +358,6 @@ test("without other-user scope the report query is pinned to the caller", async 
       project: { findMany: async () => [] },
     },
     () => ({}),
-    async () => false,
-    async () => true,
-    "htpr-4228-admin-only-time-reports",
     () => 0
   );
 
@@ -439,16 +424,48 @@ test("administered boards come from the report scope", async () => {
   assert.deepEqual(await empty.exports.administeredProjectIds(6), []);
 });
 
-test("the flag-gated report route hides the user filter without other-user scope", () => {
+for (const adminProjectIds of [[], [16]]) {
+  test(`report route preserves scoped access with ${adminProjectIds.length} administered boards`, async () => {
+    let reportOptions;
+    const entry = {
+      startedAt: new Date("2026-10-21T10:00:00.000Z"),
+      endedAt: null,
+      pausedAt: null,
+    };
+    const { GET } = require("./task-route-loader.cjs").load("src/app/api/time/report/route.ts", {
+      "../_lib": { getTimeRequestUser: async () => ({ userId: 6 }) },
+      "@/lib/timeTracking": {
+        administeredProjectIds: async (userId, scope) => {
+          assert.equal(userId, 6);
+          assert.deepEqual(scope, { teamId: "t1", boardIds: [16] });
+          return adminProjectIds;
+        },
+        listReport: async (userId, options) => {
+          assert.equal(userId, 6);
+          reportOptions = options;
+          return [entry];
+        },
+      },
+    });
+    const response = await GET({ nextUrl: new URL("https://example.test/api/time/report?team=t1&board=16&user=7") });
+    const body = await response.json();
+
+    assert.equal(response.status, 200);
+    assert.equal(body.canViewOthers, adminProjectIds.length > 0);
+    assert.deepEqual(reportOptions.adminProjectIds, adminProjectIds);
+    assert.deepEqual(reportOptions.filterUserIds, adminProjectIds.length ? [7] : undefined);
+    assert.deepEqual(body.entries, [{ ...entry, startedAt: entry.startedAt.toISOString() }]);
+  });
+}
+
+test("the report route hides the user filter without other-user scope", () => {
   const route = read("src/app/api/time/report/route.ts");
 
-  assert.match(route, /HTPR_4228_ADMIN_ONLY_TIME_REPORTS_FLAG/);
-  assert.match(route, /isFeatureEnabled\(/);
   assert.match(route, /administeredProjectIds\(auth\.userId/);
   assert.match(
     route,
-    /canViewOthers = reportsEnabled && adminProjectIds\.length > 0/,
-    "flag-off reports must never expose another member's entries"
+    /canViewOthers = adminProjectIds\.length > 0/,
+    "reports must never expose entries outside the caller's admin scope"
   );
   assert.match(route, /canViewOthers,/);
   assert.match(
@@ -464,14 +481,6 @@ test("the flag-gated report route hides the user filter without other-user scope
     screen,
     /\{canViewOthers && \(\s+<ScopeField label="User" containerOnly>/,
     "the User filter must render only when the server allows other users"
-  );
-
-  const flags = (read("src/lib/flags.ts") + require("./helpers/flag-files.cjs").source());
-
-  assert.match(flags, /HTPR_4228_ADMIN_ONLY_TIME_REPORTS_FLAG/);
-  assert.match(
-    require("./helpers/flag-files.cjs").source(),
-    /htpr-4228-admin-only-time-reports/
   );
 });
 
