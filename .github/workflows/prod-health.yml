@@ -432,9 +432,6 @@ jobs:
     needs: health
     if: ${{ !cancelled() && github.ref == 'refs/heads/production' && github.repository == 'hypertask-ai/hypertask' && ((github.event_name == 'push' && needs.health.outputs.live == 'true' && needs.health.result == 'success') || github.event_name == 'workflow_dispatch') }}
     environment: live-qa
-    concurrency:
-      group: live-qa-account-985
-      cancel-in-progress: false
     permissions:
       contents: read
       statuses: write

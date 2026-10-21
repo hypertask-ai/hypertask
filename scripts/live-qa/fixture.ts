@@ -6,7 +6,7 @@ export const test = base.extend({
     const entry = selectScript(process.env.LIVE_QA_TICKET, process.env.LIVE_QA_SCRIPT, process.env.LIVE_QA_EXPECTED_SHA)
     await context.route('**/*', route => {
       const request = route.request()
-      return allowsRequest(request.method(), request.url(), request.postData(), entry.boardIds)
+      return allowsRequest(request.method(), request.url(), entry.allowedWrites)
         ? route.continue()
         : route.abort('blockedbyclient')
     })

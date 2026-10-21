@@ -12,32 +12,25 @@ export function selectScript(ticket, script, sha, directory = root) {
   if (script !== `e2e/live-qa/${ticket}.spec.ts`) throw new Error('Invalid script path')
   const manifest = JSON.parse(readFileSync(path.join(directory, 'scripts/live-qa/allowed-scripts.json'), 'utf8'))
   const entry = manifest[script]
-  if (!entry || entry.ticket !== ticket || !Array.isArray(entry.boardIds) || !entry.boardIds.every(id => Number.isSafeInteger(id) && id > 0)) throw new Error('Script not approved')
+  if (!entry || entry.ticket !== ticket || !Array.isArray(entry.allowedWrites) || !entry.allowedWrites.every(write => {
+    if (!write || Object.keys(write).sort().join(',') !== 'method,pathname' || !['POST', 'PUT', 'PATCH', 'DELETE', 'HEAD', 'OPTIONS'].includes(write.method)) return false
+    if (typeof write.pathname !== 'string' || !write.pathname.startsWith('/') || /[*?#\\\s]/.test(write.pathname)) return false
+    const url = new URL(write.pathname, baseURL)
+    return url.origin === baseURL && url.pathname === write.pathname
+  })) throw new Error('Script not approved')
   const boundary = path.join(realpathSync(directory), 'e2e/live-qa') + path.sep
   const resolved = realpathSync(path.join(directory, script))
   if (!resolved.startsWith(boundary) || !statSync(resolved).isFile()) throw new Error('Script escaped its directory')
   return { ...entry, script: resolved }
 }
 
-export function allowsRequest(method, address, body, boardIds) {
+export function allowsRequest(method, address, allowedWrites = []) {
   try {
     const url = new URL(address)
-    if (method === 'GET') return url.protocol === 'https:'
-    if (url.origin !== baseURL) return false
-    const ids = []
-    for (const [key, value] of url.searchParams) {
-      if (/^(projectId|boardId|project_id|board_id)$/.test(key)) ids.push(Number(value))
-    }
-    for (const match of url.pathname.matchAll(/\/(?:project-|projects\/|boards\/)([1-9][0-9]*)(?=\/|$)/g)) ids.push(Number(match[1]))
-    const visit = value => {
-      if (!value || typeof value !== 'object') return
-      for (const [key, item] of Object.entries(value)) {
-        if (/^(projectId|boardId|project_id|board_id)$/.test(key)) ids.push(Number(item))
-        else if (item && typeof item === 'object') visit(item)
-      }
-    }
-    if (body) visit(JSON.parse(body))
-    return ids.length > 0 && ids.every(id => boardIds.includes(id))
+    if (url.protocol !== 'https:') return false
+    if (method === 'GET') return true
+    if (url.hostname !== 'hypertask.ai' && !url.hostname.endsWith('.hypertask.ai')) return false
+    return allowedWrites.some(write => write.method === method && write.pathname === url.pathname)
   } catch {
     return false
   }

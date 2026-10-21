@@ -218,13 +218,13 @@ live_qa:
   timeout_minutes: 20
   account: 985
   concurrency: { group: live-qa-account-985, cancel_in_progress: false }
-  concurrency_shared_with: production_health_browser_smoke
+  concurrency_shared_with_production_smoke: false
   pending_runs_may_be_replaced: true
   login_secrets: environment_only_step_scoped_email_and_password
   broad_scope_login_copies_must_be_removed: true
   install_lifecycle_scripts: false
   scripts: scripts/live-qa/allowed-scripts.json
-  mutation_boundary: browser_non_GET_requires_manifest_board_id
+  mutation_boundary: browser_non_GET_requires_exact_manifest_allowedWrites_method_and_pathname
   unguarded_api_clients_or_contexts: prohibited_by_review
   deployment_doctor: exact_live_sha_and_successful_public_Production_deployment_before_and_after
   media: [desktop_1440x900, phone_390x844, video_on, traces_off, HAR_off]

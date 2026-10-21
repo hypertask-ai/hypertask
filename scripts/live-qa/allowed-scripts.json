@@ -1,6 +1,6 @@
 {
   "e2e/live-qa/YPER4-544.spec.ts": {
     "ticket": "YPER4-544",
-    "boardIds": []
+    "allowedWrites": []
   }
 }

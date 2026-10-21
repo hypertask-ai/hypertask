@@ -56,9 +56,6 @@ jobs:
       LIVE_QA_TICKET: ${{ inputs.ticket }}
       LIVE_QA_SCRIPT: ${{ inputs.script }}
       LIVE_QA_EXPECTED_SHA: ${{ inputs.expected_deploy_sha }}
-      LIVE_QA_STATE: ${{ runner.temp }}/live-qa-private/state.json
-      LIVE_QA_RESULTS: ${{ runner.temp }}/live-qa-results
-      LIVE_QA_EVIDENCE: ${{ runner.temp }}/live-qa-evidence
       DEBUG: ''
       NODE_DEBUG: ''
       PWDEBUG: ''

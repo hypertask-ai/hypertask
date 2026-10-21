@@ -119,7 +119,8 @@ test('production health guards every QA secret consumer without changing rollbac
   consumers.forEach(job => guard(job));
   assert.equal(health.jobs.smoke.needs, 'health');
   assert.deepEqual(health.jobs.rollback.needs, ['health', 'smoke', 'core-actions']);
-  assert.deepEqual(health.jobs.smoke.concurrency, { group: 'live-qa-account-985', 'cancel-in-progress': false });
+  assert.equal(health.jobs.smoke.concurrency, undefined);
+  assert.deepEqual(health.concurrency, { group: 'prod-health', 'cancel-in-progress': false });
   const copy = structuredClone(health.jobs.smoke);
   delete copy.if;
   assert.throws(() => guard(copy));
@@ -145,6 +146,19 @@ for (const [name, mutate] of [
     validateLive(live);
   });
 }
+
+test('new workflow contexts are valid outside steps', () => {
+  for (const name of ['live-qa', 'live-qa-secret-scope', 'wireframe-capture']) {
+    const document = workflow(name);
+    assert.doesNotMatch(JSON.stringify(document.env || {}), /runner\.|steps\.|job\.|inputs\./);
+    for (const job of Object.values(document.jobs)) {
+      assert.doesNotMatch(JSON.stringify(job.env || {}), /runner\.|steps\.|job\./);
+      assert.doesNotMatch(job.if || '', /runner\.|steps\.|secrets\.|env\./);
+      for (const step of job.steps) assert.doesNotMatch(step.if || '', /secrets\./);
+    }
+  }
+  for (const key of ['LIVE_QA_STATE', 'LIVE_QA_RESULTS', 'LIVE_QA_EVIDENCE']) assert.equal(live.jobs.capture.env[key], undefined);
+});
 
 test('wireframe workflow is secretless, readonly, pinned and path-filtered', () => {
   const document = workflow('wireframe-capture');
@@ -198,7 +212,7 @@ function fixture(t) {
   const directory = mkdtempSync(path.join(tmpdir(), 'live-qa-workflow-'));
   t.after(() => rmSync(directory, { recursive: true, force: true }));
   const put = (file, contents) => { const full = path.join(directory, file); mkdirSync(path.dirname(full), { recursive: true }); writeFileSync(full, contents); return full; };
-  put('scripts/live-qa/allowed-scripts.json', JSON.stringify({ [script]: { ticket: 'YPER4-544', boardIds: [] } }));
+  put('scripts/live-qa/allowed-scripts.json', JSON.stringify({ [script]: { ticket: 'YPER4-544', allowedWrites: [] } }));
   put(script, 'export {}');
   return { directory, put };
 }
@@ -208,7 +222,7 @@ test('launcher accepts reviewed manifest entry with fixed argument-array executi
   const { directory } = fixture(t);
   const selected = selectScript('YPER4-544', script, sha, directory);
   assert.equal(selected.script, path.join(directory, script));
-  assert.deepEqual(selected.boardIds, []);
+  assert.deepEqual(selected.allowedWrites, []);
   assert.deepEqual(playwrightArgs(selected.script).slice(0, 3), ['test', '--config', 'playwright.config.live-qa.ts']);
   assert.ok(new RegExp(playwrightArgs(selected.script)[3]).test(selected.script));
   const code = source('scripts/live-qa/run.mjs');
@@ -229,13 +243,38 @@ test('launcher refuses unknown ticket, bad SHA, invalid manifest and symlink esc
   const { directory, put } = fixture(t);
   for (const ticket of ['HTPR-9999', 'YPER4-0', 'YPER4-544\n', '-YPER4-544']) assert.throws(() => selectScript(ticket, `e2e/live-qa/${ticket}.spec.ts`, sha, directory));
   for (const value of ['', 'a'.repeat(39), `${sha}\n`, '-'.repeat(40)]) assert.throws(() => selectScript('YPER4-544', script, value, directory));
-  put('scripts/live-qa/allowed-scripts.json', JSON.stringify({ [script]: { ticket: 'YPER4-544', boardIds: [-1] } }));
+  put('scripts/live-qa/allowed-scripts.json', JSON.stringify({ [script]: { ticket: 'YPER4-544', allowedWrites: [{ method: '*', pathname: '/api/tasks/create' }] } }));
   assert.throws(() => selectScript('YPER4-544', script, sha, directory));
-  put('scripts/live-qa/allowed-scripts.json', JSON.stringify({ [script]: { ticket: 'YPER4-544', boardIds: [] } }));
+  put('scripts/live-qa/allowed-scripts.json', JSON.stringify({ [script]: { ticket: 'YPER4-544', allowedWrites: [] } }));
   const outside = put('outside.spec.ts', 'export {}');
   unlinkSync(path.join(directory, script));
   symlinkSync(outside, path.join(directory, script));
   assert.throws(() => selectScript('YPER4-544', script, sha, directory), /escaped/);
+});
+
+test('manifest requires exact write methods and canonical pathnames, never board-ID or wildcard permissions', async t => {
+  const { selectScript } = await load('scripts/live-qa/run.mjs');
+  const { directory, put } = fixture(t);
+  for (const allowedWrites of [
+    undefined, null, {}, [null], [{}],
+    [{ method: 'GET', pathname: '/api/tasks/create' }],
+    [{ method: '*', pathname: '/api/tasks/create' }],
+    [{ method: 'post', pathname: '/api/tasks/create' }],
+    [{ method: 'POST', pathname: '/api/tasks/*' }],
+    [{ method: 'POST', pathname: '/api/tasks/create?boardId=6121' }],
+    [{ method: 'POST', pathname: '/api/tasks/create#allowed' }],
+    [{ method: 'POST', pathname: 'https://app.hypertask.ai/api/tasks/create' }],
+    [{ method: 'POST', pathname: '//outsider.example/api/tasks/create' }],
+    [{ method: 'POST', pathname: '/api/../tasks/create' }],
+    [{ method: 'POST', pathname: '/api/tasks/create\n' }],
+    [{ method: 'POST', pathname: '/api/tasks/create', boardId: 6121 }],
+  ]) {
+    put('scripts/live-qa/allowed-scripts.json', JSON.stringify({ [script]: { ticket: 'YPER4-544', boardIds: [6121], allowedWrites } }));
+    assert.throws(() => selectScript('YPER4-544', script, sha, directory));
+  }
+  const allowedWrites = [{ method: 'POST', pathname: '/api/tasks/create' }];
+  put('scripts/live-qa/allowed-scripts.json', JSON.stringify({ [script]: { ticket: 'YPER4-544', allowedWrites } }));
+  assert.deepEqual(selectScript('YPER4-544', script, sha, directory).allowedWrites, allowedWrites);
 });
 
 test('launchers refuse symlinked allowlist roots, not only symlinked files', async t => {
@@ -254,22 +293,34 @@ test('launchers refuse symlinked allowlist roots, not only symlinked files', asy
   assert.throws(() => selectWireframe('YPER4-544', input, directory), /escaped/);
 });
 
-test('mutation guard allows listed board and refuses unrelated, conflicting and external writes', async () => {
+test('mutation guard refuses the board-ID bypass and allows only exact manifest writes on Hypertask hosts', async () => {
   const { allowsRequest } = await load('scripts/live-qa/run.mjs');
-  const url = 'https://app.hypertask.ai/api/tasks/create';
-  assert.equal(allowsRequest('GET', url, null, []), true);
-  assert.equal(allowsRequest('POST', url, '{"projectId":6121}', [6121]), true);
-  assert.equal(allowsRequest('PATCH', `${url}?boardId=6121`, null, [6121]), true);
-  for (const [method, address, body] of [
-    ['POST', url, '{"projectId":6122}'], ['POST', url, '{"taskId":1}'], ['POST', url, 'bad json'],
-    ['DELETE', `${url}?boardId=6121`, '{"projectId":6122}'], ['POST', 'https://outsider.example/api', '{"projectId":6121}'],
-    ['POST', url, '{"boardId":6121,"nested":{"projectId":6122}}'], ['POST', `${url}?boardId=6121&boardId=6122`, null],
-  ]) assert.equal(allowsRequest(method, address, body, [6121]), false);
-  assert.equal(allowsRequest('POST', url, '{"projectId":6121}', []), false);
+  const allowedWrites = [{ method: 'POST', pathname: '/api/tasks/create' }];
+  for (const host of ['app.hypertask.ai', 'api.hypertask.ai', 'mcp.hypertask.ai', 'other.hypertask.ai', 'nested.other.hypertask.ai', 'hypertask.ai']) {
+    const url = `https://${host}/api/tasks/create`;
+    const bypass = `https://${host}/api/tasks/deleteTask?taskId=999999&boardId=6121`;
+    assert.equal(allowsRequest('DELETE', bypass, allowedWrites), false);
+    assert.equal(allowsRequest('DELETE', bypass, []), false);
+    assert.equal(allowsRequest('POST', url, allowedWrites), true);
+    assert.equal(allowsRequest('POST', `${url}?boardId=6121`, allowedWrites), true);
+    assert.equal(allowsRequest('GET', url, []), true);
+    assert.equal(allowsRequest('POST', url, []), false);
+    assert.equal(allowsRequest('POST', url), false);
+    for (const method of ['PATCH', 'DELETE', 'PUT', 'HEAD', 'OPTIONS']) assert.equal(allowsRequest(method, `${url}?boardId=6121`, allowedWrites), false);
+    for (const pathname of ['/api/tasks/create/other', '/api/tasks/create/', '/api/tasks/CREATE']) {
+      assert.equal(allowsRequest('POST', `https://${host}${pathname}?boardId=6121`, allowedWrites), false);
+    }
+  }
+  for (const address of ['http://app.hypertask.ai/api/tasks/create', 'https://outsider.example/api/tasks/create', 'https://evilhypertask.ai/api/tasks/create', 'https://app.hypertask.ai.outsider.example/api/tasks/create', 'invalid']) {
+    assert.equal(allowsRequest('POST', address, allowedWrites), false);
+  }
+  assert.equal(allowsRequest('POST', 'https://app.hypertask.ai/api/tasks/create?boardId=6121', [{ method: 'POST', pathname: '/api/tasks/create?boardId=6121' }]), false);
   const fixtureCode = source('scripts/live-qa/fixture.ts');
   assert.match(fixtureCode, /context\.route\('\*\*\/\*'/);
+  assert.match(fixtureCode, /allowsRequest\(request\.method\(\), request\.url\(\), entry\.allowedWrites\)/);
   assert.match(fixtureCode, /route\.abort\('blockedbyclient'\)/);
-  assert.match(fixtureCode, /routeWebSocket/);
+  assert.match(fixtureCode, /routeWebSocket\('\*\*\/\*', socket => socket\.close\(\)\)/);
+  assert.match(source('docs/ci.md'), /fetch\/XHR\/navigation only.*sendBeacon.*outside `allowedWrites`/);
 });
 
 test('doctor requires exact live SHA and successful public Production deployment', async () => {
