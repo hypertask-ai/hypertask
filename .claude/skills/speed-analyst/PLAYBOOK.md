@@ -307,6 +307,12 @@ https://app.hypertask.ai/detail/project-15/7502, flag `htpr-7502-search-once`.
 
 **Trap.** Adding `searchFlagsReady` to the main mount effect looked harmless but re-ran `setInputValue(_searchTerm)`, wiping a query the user typed before settings loaded. The existing "user search wins" test caught it with the flag off.
 
+**Live result (PR 1731, merge 76b1498a2, flag Everyone).** Same fresh-tab probe, 5 desktop and 5 phone: 0 search requests in 10 of 10 (before 2 in 9 of 10), same result-list hash in all 20. Content visible: desktop 5234 ms (3890 to 9541, load 42 to 67) to 1773 ms (1314 to 3131, load 18 to 22); phone 14774 (13006 to 21212) to 9940 ms (9528 to 10750). Load differs, so the milliseconds are unproven; the request count is the proof. The daily harness search path opens search in a tab that already used the app (0 extra requests before), so it should not move.
+
+**Harness trap.** A click script that waits for the first `#tasks-list li` returns on the "Ask AI" row before any result; wait for a known result row. On a throttled phone a typed search can start more than 2 s after Enter; wait for the request, not a fixed delay.
+
+**Next probe.** Phone search in the daily harness is 2.1 s against the 2.0 s milestone 1 target, with long tasks of about 1 s; profile its main thread at load below 13.
+
 ## Milliseconds saved scoreboard
 
 Only matched end-to-end before/after evidence earns saved milliseconds; `unproven` is not zero. Do not sum different cohorts or claim forecasts as savings.
@@ -330,6 +336,7 @@ Only matched end-to-end before/after evidence earns saved milliseconds; `unprove
 | https://app.hypertask.ai/detail/project-15/7501 | Search hard load, local PR build on/off N=5, load 12 to 20 | desktop 401 → 364 ms, phone 1177 → 1307 ms | unproven, local cannot show round trips | flag `htpr-7501-search-server-start`; live before 2924 ms phone, 1192 ms desktop (daily N=5); live after pending |
 | https://app.hypertask.ai/detail/project-15/7497 | First ticket request on a board-warm server, local production build, interleaved N=5+5, load 5 | 1352 ms → 654 ms | about 700 ms local | lazy sanitizer; live first-byte rate after deploy decides |
 | https://app.hypertask.ai/detail/project-15/7406 | Desktop board-returning, first card, local premerge ABAB N=6, load 8 to 11 | 912 ms (OFF) → 255 ms (ON); chat composer 1364 → 1854 ms | about 650 ms local to the board, about -490 ms to the chat | flag `htpr-7406-desktop-server-board`; live: 2030 → 1079 / 1098 ms (two complete runs, N=5 each, 5 of 5 served), first visit unchanged by flag A/B (off 2157, on 2004 ms) |
+| https://app.hypertask.ai/detail/project-15/7502 | Search link in a fresh tab, live probe, desktop and phone N=5 each | search requests 2 (9 of 10) → 0 (10 of 10); content desktop 5234 → 1773 ms, phone 14774 → 9940 ms | unproven ms (load 42 to 67 before, 18 to 22 after); 2 requests saved per open | flag `htpr-7502-search-once`, PR 1731, identical results |
 
 Confirmed, comparable saved-ms total in this seed: **not established**. Future entries must link private before/after summaries, commits, N, median/p90/range and QA proof. This deliberately avoids inventing savings absent from the history.
 
