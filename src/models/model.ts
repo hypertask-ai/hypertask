@@ -669,6 +669,7 @@ export interface INotification {
   mutedTypes?: string[];
   returnedFromReminders?: boolean | null;
   isDecision?: boolean;
+  decisionCommentId?: number;
   directReply?: boolean;
   directReplyTypes?: NotificationType[];
   quietImportant?: boolean;
@@ -808,6 +809,7 @@ export interface IGoogleAccount {
 }
 
 export interface ITasksPlaylist {
+  decisionCommentId?: number;
   id?: number;
   uniqueIndex: number;
   projectId: number;

@@ -5,7 +5,7 @@ import { HTPR_6979_TYPED_WRITES_FLAG } from "@/lib/flags/keys";
 
 import { useFirstScreenSurface, type FirstScreenSnapshot } from "@/lib/firstScreen/SurfaceContext";
 import { projectInboxDateGroup } from "@/lib/firstScreen/inbox";
-import type { INotification, TRemoveFromInboxMode } from "@/models/model";
+import type { INotification, ITasksPlaylist, TRemoveFromInboxMode } from "@/models/model";
 import { useRouter } from "next/navigation";
 import {
   ReactNode,
@@ -59,7 +59,9 @@ import { KeyCodes, KeyValues } from "@/lib/constants/keyboard-handler";
 import BulkActionsInbox from "./bulk-actions-inbox";
 import SelectionCheckbox from "@/components/Common/selection-checkbox";
 import { useBulkSelectionContext } from "@/lib/contexts/Inbox/BulkSelectionContext";
-import { inboxConfig } from "@/lib/configs/inbox.config";
+import { decisionsSplitName, inboxConfig } from "@/lib/configs/inbox.config";
+import { withDecisionCommentAnchor } from "@/lib/inboxDecisions";
+import { HTPR_7311_DECISION_COMMENT_LINK_FLAG } from "@/lib/flags/keys";
 import { cn } from "@/utils/undoActions/helperFuncs";
 import InboxZeroState from "@/components/Common/InboxZeroState";
 import { useInboxZero } from "@/lib/contexts/InboxZeroContext";
@@ -335,6 +337,8 @@ const InboxSplit = ({
     useState<boolean>(false);
   const currentUser = useCurrentUser() ?? inboxDocument?.data.user;
   const instantTicketOpen = useFlag(HTPR_6752_INSTANT_TICKET_OPEN_FLAG);
+  const decisionCommentLinkEnabled = useFlag(HTPR_7311_DECISION_COMMENT_LINK_FLAG);
+  const decisionCommentLinks = decisionCommentLinkEnabled && selectedSplit === decisionsSplitName;
   const { navigate, navigateToTask } = useHypertasksNavigate();
   const taskRef = useRef<HTMLDivElement>(null);
   const activeSplitRef = useRef<HTMLDivElement>(null);
@@ -964,22 +968,33 @@ const InboxSplit = ({
     const queryParams = buildQueryParams(mode);
 
     if (notification) {
+      const decisionCommentId = decisionCommentLinks ? notification.decisionCommentId : undefined;
+      const cachedInboxFlow = decisionCommentId && !disableInboxFlow
+        ? `?${inboxConfig.urls.queryParams.inboxFlow}`
+        : "";
       const mentionedQueryParam =
-        notification.type === "Mentioned" && notification.commentId
+        !decisionCommentId && notification.type === "Mentioned" && notification.commentId
           ? commentIdHash(notification.commentId)
           : "";
-      const finalUrl =
+      const finalUrl = withDecisionCommentAnchor(
         inboxConfig.urls.taskDetail(
           notification.projectId,
           notification.task?.uniqueIndex,
           mentionedQueryParam,
-        ) + (disableInboxFlow ? "" : queryParams);
+        ) + (disableInboxFlow ? "" : queryParams),
+        notification.decisionCommentId,
+        decisionCommentLinks,
+      );
       if (includeCachedTask) {
         return navigateToTask(
           notification.projectId,
           notification.task?.uniqueIndex,
           "push",
-          `${mentionedQueryParam}${disableInboxFlow ? "" : queryParams}`,
+          withDecisionCommentAnchor(
+            `${cachedInboxFlow}${mentionedQueryParam}${disableInboxFlow ? "" : queryParams}`,
+            notification.decisionCommentId,
+            decisionCommentLinks,
+          ),
           notification.task,
         );
       }
@@ -1003,7 +1018,11 @@ const InboxSplit = ({
       selectedInbox.project?.id ?? selectedInbox.projectId,
       taskIndex,
       "push",
-      `${inboxFlowQuery}${mentionedQueryParam}`,
+      withDecisionCommentAnchor(
+        `${inboxFlowQuery}${mentionedQueryParam}`,
+        selectedInbox.decisionCommentId,
+        decisionCommentLinks,
+      ),
       includeCachedTask ? selectedInbox.task : undefined,
     );
   };
@@ -1013,10 +1032,7 @@ const InboxSplit = ({
     : openTaskWithCachedData.bind(null, false);
 
   const buildUniqueTasksPlaylist = (notifications: INotification[]) => {
-    const uniqueMap = new Map<
-      string,
-      { projectId: number; uniqueIndex: number; notification: any }
-    >();
+    const uniqueMap = new Map<string, ITasksPlaylist>();
     for (const notification of notifications) {
       if (notification.type === "Invited") continue;
       const key = `${notification.projectId}-${notification.task?.uniqueIndex}`;
@@ -1025,6 +1041,9 @@ const InboxSplit = ({
           projectId: notification.projectId,
           uniqueIndex: notification.task?.uniqueIndex,
           notification,
+          ...(decisionCommentLinks && notification.decisionCommentId
+            ? { decisionCommentId: notification.decisionCommentId }
+            : {}),
         });
       }
     }
@@ -1053,6 +1072,7 @@ const InboxSplit = ({
     };
   }, [
     _notifications,
+    decisionCommentLinks,
     activeDrafts,
     keyboardRows,
     selectedKeyboardRow?.key,
@@ -1309,10 +1329,14 @@ const InboxSplit = ({
                                 }
                                 href={
                                   notification.type !== "Invited"
-                                    ? inboxConfig.urls.taskDetail(
-                                        notification.projectId,
-                                        notification.task?.uniqueIndex,
-                                        mentionedQueryParam,
+                                    ? withDecisionCommentAnchor(
+                                        inboxConfig.urls.taskDetail(
+                                          notification.projectId,
+                                          notification.task?.uniqueIndex,
+                                          mentionedQueryParam,
+                                        ),
+                                        notification.decisionCommentId,
+                                        decisionCommentLinks,
                                       )
                                     : (notification.notification_invite
                                         ?.inviteURL ?? "")

@@ -12,6 +12,8 @@ import useHypertasksNavigate from '../MultiPages/Route/useHypertasksNavigate';
 import { useSearchParams } from 'next/navigation';
 import { useFlag } from '@/hooks/useFlag';
 import { HTPR_7002_INBOX_E_FIRST_PRESS_FLAG } from '@/lib/flags/keys';
+import { HTPR_7311_DECISION_COMMENT_LINK_FLAG } from '@/lib/flags/keys';
+import { withDecisionCommentAnchor } from '@/lib/inboxDecisions';
 import { inboxDataQueryKey } from '../Inbox/useGetNotifications';
 import {
   nextRemainingInboxTask,
@@ -22,6 +24,7 @@ import {
 
 const useArchiveAndNavigate = () => {
   const inboxEFirstPress = useFlag(HTPR_7002_INBOX_E_FIRST_PRESS_FLAG);
+  const decisionCommentLinkEnabled = useFlag(HTPR_7311_DECISION_COMMENT_LINK_FLAG);
   const queryClient = useQueryClient();
   const { undoAction} = useUndoContext();
   const _mbl = useContext(MobileViewContext);
@@ -104,7 +107,11 @@ const navigateToNextTask = (archiveNotification?:boolean,shouldNavigate?:boolean
       return "navigated"
     }
     const inboxParam=activeInboxFlow?'?inboxFlow=true':''
-    navigate("Replace",`/detail/project-${nextTask.projectId}/${nextTask.uniqueIndex}${inboxParam}`)
+    navigate("Replace", withDecisionCommentAnchor(
+      `/detail/project-${nextTask.projectId}/${nextTask.uniqueIndex}${inboxParam}`,
+      nextTask.decisionCommentId,
+      decisionCommentLinkEnabled && Boolean(activeInboxFlow),
+    ))
     return "navigated"
   }
   return "stayed"
@@ -118,7 +125,11 @@ const navigateToPreviousTask = useCallback((isUndoClicked:boolean, isUndo:boolea
     const taskToGoTo = tasksPlayList[indexToGoTo]
     if (!taskToGoTo) return
     const inboxParam=inboxFlow?'?inboxFlow=true':''
-    const URL = `/detail/project-${taskToGoTo.projectId}/${taskToGoTo.uniqueIndex}${inboxParam}`
+    const URL = withDecisionCommentAnchor(
+      `/detail/project-${taskToGoTo.projectId}/${taskToGoTo.uniqueIndex}${inboxParam}`,
+      taskToGoTo.decisionCommentId,
+      decisionCommentLinkEnabled && Boolean(inboxFlow),
+    )
     navigate("Replace",URL)
 
     if (isUndoClicked) moveIdxUp()
@@ -131,7 +142,7 @@ const navigateToPreviousTask = useCallback((isUndoClicked:boolean, isUndo:boolea
 
     }
   }
-},[currentItemInTasksPlaylist.projectId, currentItemInTasksPlaylist.uniqueIndex, currentTask, moveIdxUp, navigate, tasksPlayList])
+},[currentItemInTasksPlaylist.projectId, currentItemInTasksPlaylist.uniqueIndex, currentTask, decisionCommentLinkEnabled, moveIdxUp, navigate, tasksPlayList])
 
   const markAsDone = async (forceNavigate?:boolean) => {
     if (!currentTask) return;
