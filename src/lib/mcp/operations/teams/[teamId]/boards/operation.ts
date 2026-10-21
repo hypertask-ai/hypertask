@@ -15,7 +15,8 @@ import {
   withIdempotency
 } from '@/lib/mcp/idempotency/idempotencyStore'
 import { getAgentRole, requireRole } from '@/lib/mcp/agents/scopes'
-import { agentWithinTeamWhere } from '@/lib/mcp/managementKeyTeamScope'
+import { isFeatureEnabled } from '@/lib/flags'
+import { HTPR_7509_WRITE_AGENTS_CREATE_BOARDS_FLAG } from '@/lib/flags/keys'
 
 export const runtime = 'nodejs'
 
@@ -52,7 +53,8 @@ export async function POST(
       )
     }
     if (ctx.agentId) {
-      const scopeError = await requireRole(ctx, 'write')
+      const writeAgentsCreateBoards = await isFeatureEnabled(HTPR_7509_WRITE_AGENTS_CREATE_BOARDS_FLAG, ctx.user.id)
+      const scopeError = await requireRole(ctx, writeAgentsCreateBoards ? 'write' : 'admin')
       if (scopeError) return scopeError
     }
     const user = ctx.user;
@@ -140,7 +142,7 @@ export async function POST(
         where: {
           id: ctx.agentId,
           userId: user.id,
-          ...agentWithinTeamWhere(team.id),
+          members: { some: { project: { teamId: team.id } } },
         },
         select: { id: true },
       })

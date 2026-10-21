@@ -21,6 +21,7 @@ let membership = true
 let ownsTeam = false
 let agentOwnerId = user.id
 let scopeLookups = 0
+let flagOn = true
 const creations: any[] = []
 const prisma = {
   agent: {
@@ -41,6 +42,8 @@ const prisma = {
 }
 const stubs = {
   'src/lib/prisma.ts': { default: prisma },
+  'src/lib/flags.ts': { isFeatureEnabled: async (key: string) => key === 'htpr-7509-write-agents-create-boards' && flagOn },
+  'src/lib/flags/keys.ts': { HTPR_7509_WRITE_AGENTS_CREATE_BOARDS_FLAG: 'htpr-7509-write-agents-create-boards' },
   'src/lib/auth/agentScope.ts': { agentScopeEnforced: () => true, recordAgentBoardScopeMiss: () => {} },
   'src/utils/controllers/projects/getAllIncludes.ts': { projectContentAccessWhere: () => ({}) },
   'src/lib/mcp/operationCrashReport.ts': { reportMcpOperationCrash: () => assert.fail('route must not crash') },
@@ -81,6 +84,7 @@ function reset() {
   ownsTeam = false
   agentOwnerId = user.id
   scopeLookups = 0
+  flagOn = true
   creations.length = 0
 }
 
@@ -116,6 +120,19 @@ for (const actor of ['write', 'default-write', 'admin', 'person', 'team-owner'] 
   })
 }
 
+test('flag off keeps today: write agent is refused, admin agent still creates', async () => {
+  reset()
+  flagOn = false
+  const refused = await createBoard()
+  assert.equal(refused.status, 403)
+  assert.match((await refused.json()).error, /requires 'admin' or higher/)
+  assert.deepEqual(creations, [])
+  role = 'admin'
+  const allowed = await createBoard()
+  assert.equal(allowed.status, 200)
+  assert.equal(creations.length, 1)
+})
+
 test('read agent is refused with insufficient_scope before board creation', async () => {
   reset()
   role = 'read'
@@ -126,7 +143,7 @@ test('read agent is refused with insufficient_scope before board creation', asyn
   assert.equal(scopeLookups, 0)
 })
 
-for (const teamIds of [[], ['other-team'], ['team', 'other-team'], ['team', null]]) {
+for (const teamIds of [[], ['other-team'], [null]]) {
   test(`write agent with board teams ${JSON.stringify(teamIds)} cannot create in this team`, async () => {
     reset()
     memberTeamIds = teamIds
@@ -134,6 +151,16 @@ for (const teamIds of [[], ['other-team'], ['team', 'other-team'], ['team', null
     assert.equal(response.status, 403)
     assert.deepEqual(creations, [])
     assert.equal(scopeLookups, 1)
+  })
+}
+
+for (const teamIds of [['team', 'other-team'], ['team', null]]) {
+  test(`write agent on boards ${JSON.stringify(teamIds)} can still create in a team it belongs to`, async () => {
+    reset()
+    memberTeamIds = teamIds
+    const response = await createBoard()
+    assert.equal(response.status, 200)
+    assert.equal(creations.length, 1)
   })
 }
 
