@@ -227,7 +227,7 @@ async function demo() {
       params: Promise.resolve({ teamId: 'team-one' }),
     }
 
-    for (const agentId of ['read-agent', 'write-agent'] as const) {
+    for (const agentId of ['read-agent'] as const) {
       const response = await createBoard(
         boardRequest(agentTokens.get(agentId)!),
         teamParams

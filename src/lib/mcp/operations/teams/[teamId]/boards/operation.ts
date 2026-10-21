@@ -14,7 +14,8 @@ import {
   normalizeIdempotencyKey,
   withIdempotency
 } from '@/lib/mcp/idempotency/idempotencyStore'
-import { requireRole } from '@/lib/mcp/agents/scopes'
+import { getAgentRole, requireRole } from '@/lib/mcp/agents/scopes'
+import { agentWithinTeamWhere } from '@/lib/mcp/managementKeyTeamScope'
 
 export const runtime = 'nodejs'
 
@@ -51,7 +52,7 @@ export async function POST(
       )
     }
     if (ctx.agentId) {
-      const scopeError = await requireRole(ctx, 'admin')
+      const scopeError = await requireRole(ctx, 'write')
       if (scopeError) return scopeError
     }
     const user = ctx.user;
@@ -132,6 +133,29 @@ export async function POST(
         },
         { status: 403 }
       )
+    }
+
+    if (ctx.agentId && await getAgentRole(ctx) !== 'admin') {
+      const agent = await prisma.agent.findFirst({
+        where: {
+          id: ctx.agentId,
+          userId: user.id,
+          ...agentWithinTeamWhere(team.id),
+        },
+        select: { id: true },
+      })
+      if (!agent) {
+        return NextResponse.json(
+          {
+            success: false,
+            error: 'Forbidden',
+            message: 'Agent cannot create boards on this team',
+            details: { field: 'teamId', code: 'forbidden' },
+            ...(correlationId && { correlationId })
+          },
+          { status: 403 }
+        )
+      }
     }
 
     let body: unknown
