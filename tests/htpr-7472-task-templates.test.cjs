@@ -303,7 +303,7 @@ test("finished drafts about removing the search placeholder use one model call",
   }
 });
 test("finished sentences containing placeholder phrases never retry", async () => {
-  const html = "<h2>Implementation</h2><p>The migration is to be written in Go.</p><p>Explain why the old report used TBD rather than a real estimate.</p><p>The policy is to be defined by the board owner.</p><p>Remove lorem ipsum from the welcome page.</p>";
+  const html = "<h2>Implementation</h2><p>The migration is to be written in Go.</p><p>Explain why the old report used TBD rather than a real estimate.</p><p>The policy is to be defined by the board owner.</p><p>Remove lorem ipsum from the welcome page.</p><p>Hypothesis: The migration is to be written in Go.</p><p>Requirements: Explain why TBD is prohibited.</p>";
   for (const mode of ["draft", "web", "structured"]) {
     const h = writerHarness({ split: mode === "structured", outputs: [mode === "structured" ? JSON.stringify({ tasks: [{ title: "Write the migration", description: html }] }) : html] });
     const result = mode === "draft" ? await h.draft() : await h.web();
@@ -324,6 +324,22 @@ test("requests prohibiting TBD still repair an unfinished draft", async () => {
     }
     assert.equal(h.calls.length, 2, mode);
     assert.match(promptText(h.calls[1]), /unfinished placeholders.*tbd/);
+  }
+});
+test("labeled unfinished template fields retry once in every generation path", async () => {
+  for (const slot of ["<p>Hypothesis: TBD</p>", "<li>Suggested metrics: to be defined</li>", "<h2>Control: to be written</h2>", "## Requirements: placeholder", "- Related history: lorem ipsum"]) {
+    for (const mode of ["draft", "web", "structured"]) {
+      const outputs = [slot, finished].map((description) => mode === "structured" ? JSON.stringify({ tasks: [{ title: "A/B test", description }] }) : description);
+      const h = writerHarness({ split: mode === "structured", outputs });
+      const result = mode === "draft" ? await h.draft() : await h.web();
+      if (mode === "draft") assert.equal(result.success, true);
+      else {
+        assert.equal(result.status, 200);
+        await result.text();
+      }
+      assert.equal(h.calls.length, 2, `${mode}: ${slot}`);
+      assert.match(promptText(h.calls[1]), /unfinished placeholders/);
+    }
   }
 });
 test("five unfinished headline bullets retry exactly once", async () => {
@@ -509,7 +525,7 @@ function renderSettings(options = {}) {
     "@tanstack/react-query": {
       useQueryClient: () => ({ invalidateQueries: async () => {} }),
       useQuery: (query) => { queries.push(query); return { data: { templates: options.templates ?? [] } }; },
-      useMutation: (mutation) => { mutations.push(mutation); return { isPending: false, mutate() {} }; },
+      useMutation: (mutation) => { mutations.push(mutation); return { isPending: Boolean(options.pending), mutate() {} }; },
     },
     axios: { default: { patch: async (...args) => { options.writes?.push(args); } } },
   }).default;
@@ -545,7 +561,10 @@ test("editor renders approved fields and saves plain-text edits through PATCH", 
   assert.equal(document.querySelector("#template-title").maxLength, 500);
   const [cancel, save] = document.querySelectorAll("footer button");
   const sibling = fs.readFileSync(path.join(root, "src/components/Modals/Settings/WebhooksSection.tsx"), "utf8");
-  assert.ok(sibling.includes(`className="${save.className}"`));
+  assert.ok(sibling.includes(`className="${save.className.replace("disabled:opacity-50", "disabled:text-text-light-gray")}"`));
+  assert.ok(save.classList.contains("disabled:opacity-50"));
+  assert.equal(save.classList.contains("disabled:text-text-light-gray"), false);
+  assert.equal(save.disabled, false);
   assert.ok(save.classList.contains("bg-shadcn-primary"));
   assert.ok(save.classList.contains("text-primary-foreground"));
   assert.ok(save.classList.contains("rounded-[4px]"));
@@ -553,6 +572,17 @@ test("editor renders approved fields and saves plain-text edits through PATCH", 
   assert.equal(document.querySelector("textarea").readOnly, false);
   await mutations[0].mutationFn(template);
   assert.deepEqual(plain(writes), [["/api/task-templates", { templateId: 7, name: "A/B test", title: "[TAG] {idea}", descriptionHtml: "<h2>Ideas</h2><p>Finished copy.</p>" }]]);
+});
+test("editor disables the primary Save action while pending or when the name is blank", () => {
+  for (const { pending, name } of [{ pending: true, name: "A/B test" }, { pending: false, name: " " }]) {
+    const editing = { id: 7, projectId: 15, name, title: "Title", descriptionHtml: "<h2>Ideas</h2>", text: "## Ideas" };
+    const document = new JSDOM(renderSettings({ editing, pending }).html).window.document;
+    const [cancel, save] = document.querySelectorAll("footer button");
+    assert.equal(save.disabled, true);
+    assert.ok(save.classList.contains("disabled:opacity-50"));
+    assert.equal(cancel.disabled, pending);
+    assert.equal(cancel.classList.contains("bg-shadcn-primary"), false);
+  }
 });
 test("rich editor shows a read-only note and preserves its HTML when other fields save", async () => {
   const writes = [];

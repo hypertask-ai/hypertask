@@ -496,7 +496,7 @@ export function taskWriterPlaceholderFeedback(text: string, request = "") {
     .replace(/<[^>]*>/g, " ");
   const slot = "to be written|TBD|to be defined|placeholder|lorem ipsum";
   const matches = [...visible.matchAll(new RegExp(
-    `\\[(${slot})\\]|(?:^|\\n|":\\s*")\\s*(?:(?:[-*+]|\\d+[.)]|#{1,6})\\s+)?(?:(?:headline|title|copy|variation|idea)(?:\\s+\\d+)?\\s*(?::\\s*)?)?(${slot})[.!]?\\s*(?=$|\\n|"\\s*[,}])`,
+    `\\[(${slot})\\]|(?:^|\\n|":\\s*")\\s*(?:(?:[-*+]|\\d+[.)]|#{1,6})\\s+)?(?:[^\\n:]+:[\\t ]*|(?:headline|title|copy|variation|idea)(?:\\s+\\d+)?\\s+)?(${slot})[.!]?\\s*(?=$|\\n|"\\s*[,}])`,
     "gi",
   ))].map((match) => (match[1] ?? match[2]).toLowerCase());
   const literalRequests = request.split(/[.!?;\n]|\b(?:but|however|instead)\b/i).flatMap((clause) => {
