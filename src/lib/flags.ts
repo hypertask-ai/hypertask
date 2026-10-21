@@ -336,12 +336,11 @@ export async function isFeatureEnabled(
   const declared = (FEATURE_FLAG_KEYS as readonly string[]).includes(key);
   if (!row && !declared) return false;
   const mode = row?.mode ?? defaultFeatureFlagMode(key);
-  if (mode === "OWNER_AND_QA") return isOwnerOrQaUserId(userId, db);
-  const includesOwner = mode === "OWNER_ONLY";
+  const includesOwner = mode === "OWNER_ONLY" || mode === "OWNER_AND_QA";
   return featureFlagModeEnabled(
     mode,
     includesOwner && (await isFeatureFlagOwnerUser(userId, db)),
-    false,
+    mode === "OWNER_AND_QA" && (await isFeatureFlagQaUser(userId, db)),
   );
 }
 
