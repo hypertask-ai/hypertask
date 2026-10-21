@@ -62,20 +62,25 @@ export const HTPR_7122_HELLO_CAPABILITIES = {
 
 async function helloGuidedStart(
   ctx: McpAuthContext,
-  boards: Array<{ id: number; title: string; createdAt: Date }>
+  where: Prisma.ProjectWhereInput
 ) {
   const [{ isFeatureEnabled }, { HTPR_7519_LOGIN_GUIDED_START_FLAG }] = await Promise.all([
     import('@/lib/flags'),
     import('@/lib/flags/definitions/htpr-7519-login-guided-start'),
   ])
   if (!(await isFeatureEnabled(HTPR_7519_LOGIN_GUIDED_START_FLAG, ctx.user.id))) return {}
+  const newestBoard = await prisma.project.findFirst({
+    where,
+    orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
+    select: { id: true, title: true, createdAt: true },
+  })
   const agent = ctx.agentId
     ? await prisma.agent.findUnique({
         where: { id: ctx.agentId },
         select: { id: true, displayName: true },
       })
     : null
-  return { agent, ...buildGuidedStart(boards) }
+  return { agent, ...buildGuidedStart(newestBoard) }
 }
 
 async function helloCapabilities(userId: number) {
@@ -136,17 +141,17 @@ function truncatePlaybook(playbook: Prisma.JsonValue): Prisma.JsonValue {
 }
 
 export async function getHelloPayload(ctx: McpAuthContext) {
+  const where: Prisma.ProjectWhereInput = {
+    status: 'Normal',
+    ...getProjectListingWhere(ctx.user.id, ctx.agentId),
+  }
   const projects = await prisma.project.findMany({
-    where: {
-      status: 'Normal',
-      ...getProjectListingWhere(ctx.user.id, ctx.agentId),
-    },
+    where,
     select: {
       id: true,
       name: true,
       title: true,
       playbook: true,
-      createdAt: true,
       ai_custom_instructions: {
         select: {
           customInstruction: true,
@@ -215,14 +220,7 @@ export async function getHelloPayload(ctx: McpAuthContext) {
     capabilities: await helloCapabilities(ctx.user.id),
     conventions,
     conventionsTruncated,
-    ...(await helloGuidedStart(
-      ctx,
-      visibleProjects.map((project) => ({
-        id: project.id,
-        title: project.title ?? project.name,
-        createdAt: project.createdAt,
-      }))
-    )),
+    ...(await helloGuidedStart(ctx, where)),
   }
 }
 

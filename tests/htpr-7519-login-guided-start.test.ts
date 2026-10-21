@@ -6,14 +6,10 @@ import { TOOL_METADATA } from '@/lib/mcp-server/config/tool-metadata'
 import { getCreateTaskInputSchema, getListTasksInputSchema } from '@/lib/mcp-server/validations/task.validation'
 import { getBoardPlaybookInputSchema } from '@/lib/mcp-server/validations/project.validation'
 
-const boards = [
-  { id: 1, title: 'Alpha', createdAt: new Date('2026-01-01') },
-  { id: 9142, title: 'Product Launch', createdAt: new Date('2026-10-21') },
-  { id: 3, title: 'Gamma', createdAt: new Date('2026-05-01') },
-]
+const newestBoard = { id: 9142, title: 'Product Launch', createdAt: new Date('2026-10-21') }
 
 test('starts on the newest board with 3 steps for the CLI and for MCP', () => {
-  const { startBoard, nextSteps } = buildGuidedStart(boards)
+  const { startBoard, nextSteps } = buildGuidedStart(newestBoard)
   assert.deepEqual(startBoard, {
     id: 9142,
     title: 'Product Launch',
@@ -30,7 +26,7 @@ test('starts on the newest board with 3 steps for the CLI and for MCP', () => {
 })
 
 test('every MCP step names a real tool and arguments that tool accepts', () => {
-  const { nextSteps } = buildGuidedStart(boards)
+  const { nextSteps } = buildGuidedStart(newestBoard)
   const schemas: Record<string, { parse(value: unknown): unknown }> = {
     [TOOL_METADATA.LIST_TASKS.name]: getListTasksInputSchema(),
     [TOOL_METADATA.CREATE_TASK.name]: getCreateTaskInputSchema(),
@@ -41,5 +37,5 @@ test('every MCP step names a real tool and arguments that tool accepts', () => {
 })
 
 test('no board gives no start board and no steps', () => {
-  assert.deepEqual(buildGuidedStart([]), { startBoard: null, nextSteps: [] })
+  assert.deepEqual(buildGuidedStart(null), { startBoard: null, nextSteps: [] })
 })

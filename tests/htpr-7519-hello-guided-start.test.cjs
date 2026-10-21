@@ -14,14 +14,17 @@ function stubModule(relativePath, exports) {
   require.cache[filename] = { id: filename, filename, loaded: true, exports };
 }
 
-function loadHello(flagOn, agentLookups) {
-  const projects = [
+function loadHello(flagOn, agentLookups, options = {}) {
+  const projects = options.projects ?? [
     { id: 1, name: "alpha", title: "Alpha", playbook: null, createdAt: new Date("2026-01-01"), ai_custom_instructions: [] },
     { id: 9142, name: "launch", title: "Product Launch", playbook: null, createdAt: new Date("2026-10-21"), ai_custom_instructions: [] },
   ];
   stubModule("src/lib/prisma.ts", {
     default: {
-      project: { findMany: async () => projects },
+      project: {
+        findMany: async (args) => { options.projectLookups?.findMany.push(args); return projects; },
+        findFirst: async (args) => { options.projectLookups?.findFirst.push(args); return options.newestBoard === undefined ? projects[1] ?? null : options.newestBoard; },
+      },
       agent: { findUnique: async (args) => { agentLookups.push(args.where.id); return { id: args.where.id, displayName: "Claude Code" }; } },
     },
   });
@@ -31,7 +34,7 @@ function loadHello(flagOn, agentLookups) {
     createUnauthorizedResponse: () => null,
     validateMcpAuth: async () => null,
   });
-  stubModule("src/utils/controllers/projects/getAllIncludes.ts", { getProjectListingWhere: () => ({}) });
+  stubModule("src/utils/controllers/projects/getAllIncludes.ts", { getProjectListingWhere: (userId, agentId) => ({ teamId: { not: null }, members: { some: { agentId, agent: { userId, revokedAt: null } } } }) });
   delete require.cache[path.join(root, "src/lib/mcp/hello/getHelloPayload.ts")];
   const jiti = createJiti(path.join(root, `tests/htpr-7519-hello-loader-${++loads}.cjs`), {
     alias: { "@": path.join(root, "src") },
@@ -63,15 +66,58 @@ test("flag on, user token: no agent lookup, agent is null", async () => {
   assert.deepEqual(lookups, []);
 });
 
-test("flag off: none of the new fields and no agent lookup", async () => {
+test("flag off: unchanged payload and no agent or newest-board lookup", async () => {
   const lookups = [];
-  const payload = await loadHello(false, lookups).getHelloPayload({ user, agentId: "agent-1" });
+  const projectLookups = { findMany: [], findFirst: [] };
+  const hello = loadHello(false, lookups, { projectLookups });
+  const payload = await hello.getHelloPayload({ user, agentId: "agent-1" });
+  assert.deepEqual(projectLookups.findFirst, []);
+  assert.equal(JSON.stringify(payload), JSON.stringify({
+    user,
+    boards: [
+      { id: 1, name: "alpha", title: "Alpha", boardUrl: "https://app.hypertask.ai/project?id=1", taskUrlTemplate: "https://app.hypertask.ai/detail/project-1/{taskNumber}" },
+      { id: 9142, name: "launch", title: "Product Launch", boardUrl: "https://app.hypertask.ai/project?id=9142", taskUrlTemplate: "https://app.hypertask.ai/detail/project-9142/{taskNumber}" },
+    ],
+    urlFormats: hello.HELLO_URL_FORMATS,
+    boardsTotal: 2,
+    boardsTruncated: false,
+    capabilities: hello.HELLO_CAPABILITIES,
+    conventions: [],
+    conventionsTruncated: false,
+  }));
   for (const key of ["agent", "startBoard", "nextSteps"]) assert.equal(key in payload, false, key);
   assert.deepEqual(lookups, []);
   assert.deepEqual(payload.boards.map((b) => Object.keys(b)), [
     ["id", "name", "title", "boardUrl", "taskUrlTemplate"],
     ["id", "name", "title", "boardUrl", "taskUrlTemplate"],
   ]);
+});
+
+test("newest board outside the 50-board listing is the start board with the same visibility filter", async () => {
+  const projects = Array.from({ length: 50 }, (_, i) => ({
+    id: i + 1, name: `old-${i}`, title: `Old ${i}`, playbook: null,
+    createdAt: new Date("2026-01-01"), ai_custom_instructions: [],
+  }));
+  const newestBoard = { id: 9142, title: "Zulu Launch", createdAt: new Date("2026-10-21") };
+  const projectLookups = { findMany: [], findFirst: [] };
+  const payload = await loadHello(true, [], { projects, newestBoard, projectLookups })
+    .getHelloPayload({ user, agentId: "agent-1" });
+  assert.equal(payload.boards.length, 50);
+  assert.equal(payload.boards.some((board) => board.id === newestBoard.id), false);
+  assert.deepEqual(payload.startBoard, {
+    id: 9142, title: "Zulu Launch", boardUrl: "https://app.hypertask.ai/project?id=9142",
+  });
+  assert.deepEqual(payload.nextSteps.map((step) => step.arguments.project_id), [9142, 9142, 9142]);
+  assert.deepEqual(payload.nextSteps.map((step) => step.command), [
+    "hypertask task list --project 9142",
+    'hypertask task create --project 9142 --title "My first task"',
+    "hypertask project playbook 9142",
+  ]);
+  assert.equal(projectLookups.findMany.length, 1);
+  assert.equal(projectLookups.findFirst.length, 1);
+  assert.deepEqual(projectLookups.findFirst[0].where, projectLookups.findMany[0].where);
+  assert.deepEqual(projectLookups.findFirst[0].orderBy, [{ createdAt: "desc" }, { id: "desc" }]);
+  assert.deepEqual(projectLookups.findFirst[0].select, { id: true, title: true, createdAt: true });
 });
 
 test("flag ships on Everyone as a feature", () => {

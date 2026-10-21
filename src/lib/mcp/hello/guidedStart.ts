@@ -1,19 +1,15 @@
 import { buildToolName } from '@/lib/mcp-server/config/mcp-standards'
 
-type GuidedBoard = { id: number; title: string; createdAt: Date }
+type GuidedBoard = { id: number; title: string | null; createdAt: Date }
 
-export function buildGuidedStart(boards: GuidedBoard[]) {
-  const newestBoardANewUserJustMade = boards.reduce<GuidedBoard | null>(
-    (best, board) => (!best || board.createdAt > best.createdAt ? board : best),
-    null
-  )
-  if (!newestBoardANewUserJustMade) return { startBoard: null, nextSteps: [] }
+export function buildGuidedStart(newestBoard: GuidedBoard | null) {
+  if (!newestBoard) return { startBoard: null, nextSteps: [] }
 
-  const id = newestBoardANewUserJustMade.id
+  const id = newestBoard.id
   return {
     startBoard: {
       id,
-      title: newestBoardANewUserJustMade.title,
+      title: newestBoard.title,
       boardUrl: `https://app.hypertask.ai/project?id=${id}`,
     },
     nextSteps: [

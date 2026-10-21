@@ -17,7 +17,7 @@ function stubModule(relativePath, exports) {
 
 function loadHello(flagOn) {
   const flagCalls = [];
-  stubModule("src/lib/prisma.ts", { default: { project: { findMany: async () => [] }, agent: { findUnique: async () => null } } });
+  stubModule("src/lib/prisma.ts", { default: { project: { findMany: async () => [], findFirst: async () => null }, agent: { findUnique: async () => null } } });
   stubModule("src/lib/flags.ts", {
     isFeatureEnabled: async (key, userId) => {
       flagCalls.push([key, userId]);
