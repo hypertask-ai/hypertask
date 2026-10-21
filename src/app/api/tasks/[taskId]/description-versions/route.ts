@@ -1,6 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server'
 
 import prisma from '@/lib/prisma'
+import { withAgentScopeRequest } from '@/lib/auth/agentScope'
+import { getSessionUser } from '@/lib/auth/getSessionUser'
+import { getProjectWhere } from '@/utils/controllers/projects/getAllIncludes'
 import { loadCurrentUser } from '@/lib/auth/currentUser'
 import { jsonError, unauthorized } from '@/lib/api/response'
 import { parsePositiveInt } from '@/lib/parsePositiveInt'
@@ -20,11 +23,16 @@ function stripHtml(html: string): string {
     .trim()
 }
 
-export async function GET(_request: NextRequest, { params }: RouteContext) {
+export async function GET(_request: NextRequest, context: RouteContext) {
+  return withAgentScopeRequest(_request, () => getDescriptionVersions(_request, context))
+}
+
+async function getDescriptionVersions(_request: NextRequest, { params }: RouteContext) {
   try {
     const currentUser = await loadCurrentUser(_request.headers, true)
     if (!currentUser) return unauthorized()
     const { userId } = currentUser
+    const actingAgentId = (await getSessionUser(_request.headers))?.agentId
 
     const taskId = parsePositiveInt((await params).taskId)
     if (taskId === null) {
@@ -32,7 +40,10 @@ export async function GET(_request: NextRequest, { params }: RouteContext) {
     }
 
     const task = await prisma.task.findFirst({
-      where: taskAccessWhere(userId, taskId, { projectStatus: 'Normal' }),
+      where: {
+        ...taskAccessWhere(userId, taskId, { agentId: actingAgentId, projectStatus: 'Normal' }),
+        AND: [{ project: getProjectWhere(userId) }],
+      },
       select: {
         id: true,
         description_: { select: { content: true } },

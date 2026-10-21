@@ -1,11 +1,15 @@
 import { NextApiHandler, NextApiRequest, NextApiResponse } from "next";
+import { withAgentScopeRequest } from "@/lib/auth/agentScope";
 import generateRank from "@/utils/generateRank";
 import prisma from "@/lib/prisma";
 import { getSessionUser } from "@/lib/auth/getSessionUser";
 import { taskWriteAccessWhere } from "@/utils/controllers/projects/getAllIncludes";
 import { taskWriteHandler } from "@/lib/api/task-writes/route";
 
-const getDefaults: NextApiHandler = async (
+const getDefaults: NextApiHandler = (req, res) =>
+  withAgentScopeRequest(req, () => loadDefaults(req, res));
+
+const loadDefaults: NextApiHandler = async (
   req: NextApiRequest,
   res: NextApiResponse
 ) => {
@@ -31,6 +35,7 @@ const getDefaults: NextApiHandler = async (
           id: project_id,
           status: "Normal",
           ...taskWriteAccessWhere(session.userId, null),
+          AND: [taskWriteAccessWhere(session.userId, session.agentId)],
         },
         select: { id: true },
       });
@@ -68,6 +73,7 @@ const getDefaults: NextApiHandler = async (
           sectionId: section.id,
           projectId: project_id,
           status: "Normal",
+          project: taskWriteAccessWhere(session.userId, session.agentId),
         },
         orderBy: {
           ranking: position === "top" ? "asc" : "desc",
