@@ -7,7 +7,6 @@ const { JSDOM } = require('jsdom')
 const { createJiti } = require('jiti')
 const root = path.resolve(__dirname, '..')
 const layoutFlag = 'htpr-6865-search-layout'
-const prerequisites = ['htpr-6688-search-autocomplete']
 
 async function withSearch(t, config, check) {
   const dom = new JSDOM('<div id="root"></div>', { url: config.url ?? 'https://example.test/search' })
@@ -21,7 +20,7 @@ async function withSearch(t, config, check) {
   const cached = new Map(Object.entries(require.cache))
   const stub = (filename, exports) => { require.cache[filename] = { id: filename, filename, loaded: true, exports } }
   const source = (file, exports) => stub(path.join(root, file), exports)
-  const flags = Object.fromEntries([...prerequisites, layoutFlag].map((key) => [key, true]))
+  const flags = Object.fromEntries([layoutFlag].map((key) => [key, true]))
   Object.assign(flags, config.flags)
   const requests = []
   const lookups = []
@@ -256,15 +255,13 @@ test('layout-off result Tab remains native in the search field and cycles only a
   })
 })
 
-test('layout requires every autocomplete prerequisite flag', async (t) => {
-  for (const key of prerequisites) {
-    await withSearch(t, { flags: { [key]: false } }, async ({ type, tick, requests }) => {
-      assert.equal(document.querySelector('[data-search-layout]'), null)
-      await type('login')
-      await tick()
-      assert.equal(requests.length, 0)
-    })
-  }
+test('layout drafting waits for submission with autocomplete always available', async (t) => {
+  await withSearch(t, {}, async ({ type, tick, requests }) => {
+    assert.ok(document.querySelector('[data-search-layout]'))
+    await type('login')
+    await tick()
+    assert.equal(requests.length, 0)
+  })
 })
 
 test('recents appear once with readable chips in-flow, tips follow in responsive columns', async (t) => {
@@ -1006,7 +1003,7 @@ test('commenter snippet and author pill use both flags without highlighting the 
 })
 
 test('match flag and layout prerequisites off retain byte-identical row HTML despite match metadata', async (t) => {
-  for (const disabled of [matchFlag, layoutFlag, ...prerequisites]) {
+  for (const disabled of [matchFlag, layoutFlag]) {
     await withSearch(t, { query: 'login', flags: { [matchFlag]: true, [disabled]: false }, baseline: true }, async ({ complete, requests, render, capture }) => {
       const { searchMatch, ...legacy } = matchTask
       await complete(requests[0], [legacy])

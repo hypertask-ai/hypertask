@@ -77,12 +77,12 @@ const mocks = new Map([
     HTPR_6878_SEARCH_LABEL_SCOPE_FLAG: 'htpr-6878-search-label-scope',
     HTPR_6882_SEARCH_MATCH_HIGHLIGHTS_FLAG: 'htpr-6882-search-match-highlights',
     HTPR_6865_SEARCH_LAYOUT_FLAG: 'htpr-6865-search-layout',
-    HTPR_6688_SEARCH_AUTOCOMPLETE_FLAG: 'htpr-6688-search-autocomplete',
+
     isFeatureEnabled: async (key, userId) => {
       state.flagCalls.push([key, userId])
       assert.equal(userId, 42)
       return key === flag ? state.fuzzy
-        : ['htpr-6882-search-match-highlights', 'htpr-6865-search-layout', 'htpr-6688-search-autocomplete'].includes(key) ? state.match
+        : ['htpr-6882-search-match-highlights', 'htpr-6865-search-layout'].includes(key) ? state.match
         : false
     },
   }],

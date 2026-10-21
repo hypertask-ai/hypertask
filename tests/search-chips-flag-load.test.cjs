@@ -31,7 +31,6 @@ test('URL searches preserve operators and chip keyboard ownership', async (t) =>
   let reactRoot
   try {
     stub('src/lib/configs/search.config.ts', { searchConfig: { responseMessages: { default: '', fail: 'No results', error: 'Error' }, elementIds: { input: { id: 'search-input' }, history: { id: 'search-history' } }, handleKeyDown: { classNamesToReturnFrom: [] } } })
-    stub('src/lib/flags/keys.ts', { HTPR_6688_SEARCH_AUTOCOMPLETE_FLAG: 'htpr-6688-search-autocomplete' })
     stub('src/hooks/useFlag.tsx', { useFlagReady: () => true, useFlag: () => false })
     stub('src/lib/contexts/deviceContext.tsx', { useDeviceContext: () => false })
     const allProjects = [{ id: 7, title: 'Visible' }]
@@ -83,7 +82,7 @@ test('URL searches preserve operators and chip keyboard ownership', async (t) =>
     assert.equal(searchState.selectedIndex, 1, 'closed picker lets ArrowDown navigate results')
     pickerOpen = true
     await React.act(async () => { reactRoot.render(React.createElement(Search, { term: 'login' })) })
-    await React.act(async () => { searchState.setSelectedIndex(0) })
+    await React.act(async () => { searchState.setSelectedIndex(0); input.focus() })
     await React.act(async () => { down() })
     assert.equal(searchState.selectedIndex, 0, 'open picker owns ArrowDown')
     await t.test('page Back yields Escape to an open picker, then resumes when closed', async () => {

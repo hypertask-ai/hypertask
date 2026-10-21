@@ -46,7 +46,7 @@ const mocks = new Map([
     HTPR_6880_SEARCH_COMMENTER_FLAG: 'htpr-6880-search-commenter',
     HTPR_6882_SEARCH_MATCH_HIGHLIGHTS_FLAG: 'htpr-6882-search-match-highlights',
     HTPR_6865_SEARCH_LAYOUT_FLAG: 'htpr-6865-search-layout',
-    HTPR_6688_SEARCH_AUTOCOMPLETE_FLAG: 'htpr-6688-search-autocomplete',
+
     isFeatureEnabled: async (key) => key === 'htpr-6881-search-fuzzy-person' ? false
       : key === 'htpr-6878-search-label-scope' ? state.labelFlag ?? false
       : key === 'htpr-6882-search-match-highlights' ? state.matchFlag
@@ -265,7 +265,7 @@ test('filtered comment-only matches preserve the actual comment author and snipp
 
 test('match flag and every layout prerequisite off preserve legacy response bytes and do not select names', async () => {
   const baseline = JSON.stringify((await search('from:6')).res.body)
-  for (const disabledFlag of ['htpr-6865-search-layout', 'htpr-6688-search-autocomplete']) {
+  for (const disabledFlag of ['htpr-6865-search-layout']) {
     const { res, state } = await search('from:6', { matchFlag: true, disabledFlag })
     assert.equal(JSON.stringify(res.body), baseline)
     assert.equal(state.selects[0].user, undefined)

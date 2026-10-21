@@ -7,7 +7,7 @@ import { isMobileSearchSubmit, mobileSearchPickerBounds } from "@/lib/search/mob
 import { useFlag } from "@/hooks/useFlag";
 import { HTPR_6865_SEARCH_LAYOUT_FLAG, HTPR_6911_SEARCH_ROW_HIGHLIGHT_FLAG, HTPR_6878_SEARCH_LABEL_SCOPE_FLAG, HTPR_6879_SEARCH_ESC_BACK_FLAG, HTPR_6880_SEARCH_COMMENTER_FLAG, HTPR_6994_SEARCH_ESC_LEAVES_FLAG } from "@/lib/flags/keys";
 import { MentionListRows } from "@/components/AI_CHAT/MentionListComp";
-import { activeSearchValue, candidateQuery, chipQuery, searchChipText, splitSearchChips } from "@/lib/search/chips";
+import { candidateQuery, chipQuery, searchChipText, splitSearchChips } from "@/lib/search/chips";
 import { operatorMatches, parseSearchTokens, SEARCH_OPERATORS, type Names, type SearchOperator, type SearchToken } from "@/lib/search/operators";
 import { localValueSuggestions, operatorSuggestions, searchCompletion, searchFilterColour, highlightedTitle, SEARCH_TIPS, type SearchCandidate } from "@/lib/search/autocomplete";
 import { searchConfig } from "@/lib/configs/search.config";
@@ -21,7 +21,6 @@ type Props = {
   onRun: (value: string) => void;
   boardId: number | null;
   inputRef: RefObject<HTMLInputElement | null>;
-  autocompleteEnabled?: boolean;
   recentSearches?: string[];
   layoutEnabled?: boolean;
   availableBoards?: { id: number; title?: string }[];
@@ -29,7 +28,7 @@ type Props = {
   showSuggestions?: boolean;
 };
 
-export default function SearchChipsInput({ value, onChange, onRun, boardId, inputRef, autocompleteEnabled = false, recentSearches = [], layoutEnabled: layoutRequested = false, availableBoards = [], onAskAi, showSuggestions = true }: Props) {
+export default function SearchChipsInput({ value, onChange, onRun, boardId, inputRef, recentSearches = [], layoutEnabled: layoutRequested = false, availableBoards = [], onAskAi, showSuggestions = true }: Props) {
   const mobileFlagEnabled = useFlag(HTPR_6371_MOBILE_SEARCH_FLAG);
   const isMobile = useContext(MobileViewContext);
   const mobileEnabled = mobileFlagEnabled && isMobile;
@@ -38,7 +37,7 @@ export default function SearchChipsInput({ value, onChange, onRun, boardId, inpu
   const [mobileBounds, setMobileBounds] = useState<(ReturnType<typeof mobileSearchPickerBounds> & { left: number; width: number }) | null>(null);
   const layoutFlagEnabled = useFlag(HTPR_6865_SEARCH_LAYOUT_FLAG);
   const rowHighlightEnabled = useFlag(HTPR_6911_SEARCH_ROW_HIGHLIGHT_FLAG);
-  const layoutEnabled = layoutFlagEnabled && layoutRequested && autocompleteEnabled;
+  const layoutEnabled = layoutFlagEnabled && layoutRequested;
   const labelScopeFlagEnabled = useFlag(HTPR_6878_SEARCH_LABEL_SCOPE_FLAG);
   const labelScopeEnabled = labelScopeFlagEnabled && layoutEnabled;
   const searchEscBackFlagEnabled = useFlag(HTPR_6879_SEARCH_ESC_BACK_FLAG);
@@ -64,7 +63,7 @@ export default function SearchChipsInput({ value, onChange, onRun, boardId, inpu
     in: [...(names.in ?? []), ...availableBoards.map((board) => board.title ?? '')],
     board: [...(names.board ?? []), ...availableBoards.map((board) => board.title ?? '')],
   } : names;
-  const { chips, text } = splitSearchChips(value, editing, queryNames, autocompleteEnabled, commenterFlagEnabled && layoutEnabled);
+  const { chips, text } = splitSearchChips(value, editing, queryNames, true, commenterFlagEnabled && layoutEnabled);
   const pickedBoards = labelScopeEnabled ? [...new Set(parseSearchTokens(value, queryNames)
     .filter((token) => !token.negated && (token.operator === 'in' || token.operator === 'board'))
     .flatMap((token) => {
@@ -73,9 +72,9 @@ export default function SearchChipsInput({ value, onChange, onRun, boardId, inpu
         .filter((board) => board.title?.toLowerCase() === name.toLowerCase()).map((board) => board.id);
     }))].join(',') : '';
   const summary = [...chips.map(chipText), text.trim()].filter(Boolean).join(' ');
-  const completion = autocompleteEnabled ? searchCompletion(text, names, commenterEnabled) : null;
-  const active = autocompleteEnabled ? completion : activeSearchValue(text, names, commenterEnabled);
-  const tips = autocompleteEnabled && (focused || searchEscBackEnabled) && !value.trim();
+  const completion = searchCompletion(text, names, commenterEnabled);
+  const active = completion;
+  const tips = (focused || searchEscBackEnabled) && !value.trim();
   const picker = dismissed ? null : active;
   const localRows = completion?.kind === 'operator'
     ? operatorSuggestions(completion.value, commenterEnabled).map((operator) => ({ id: operator, name: `${operator}:` }))
@@ -149,7 +148,7 @@ export default function SearchChipsInput({ value, onChange, onRun, boardId, inpu
   }, [mobileOverlay]);
 
   useEffect(() => {
-    if (!autocompleteEnabled || !open) return;
+    if (!open) return;
     const list = (mobileEnabled && pickerRef.current?.querySelector<HTMLElement>(`#${listId}`)) || pickerRef.current;
     const row = list?.querySelector<HTMLElement>(`#mention-button-${selectedIndex}`);
     if (mobileEnabled && list && row) {
@@ -158,7 +157,7 @@ export default function SearchChipsInput({ value, onChange, onRun, boardId, inpu
       if (rowRect.top < listRect.top) list.scrollTop -= listRect.top - rowRect.top;
       else if (rowRect.bottom > listRect.bottom) list.scrollTop += rowRect.bottom - listRect.bottom;
     } else row?.scrollIntoView({ block: 'nearest' });
-  }, [autocompleteEnabled, open, selectedIndex, rows.length, mobileEnabled, mobileBounds]);
+  }, [open, selectedIndex, rows.length, mobileEnabled, mobileBounds]);
 
   useEffect(() => {
     if (!mobileEnabled) return;
@@ -206,7 +205,7 @@ export default function SearchChipsInput({ value, onChange, onRun, boardId, inpu
   }, [searchEscBackEnabled, showSuggestions, value]);
 
   useEffect(() => {
-    if (!(genericPrefix || picker) || (!genericPrefix && autocompleteEnabled && (completion?.kind === 'operator' || localRows !== null))) {
+    if (!(genericPrefix || picker) || (!genericPrefix && (completion?.kind === 'operator' || localRows !== null))) {
       setCandidates([]);
       setLoading(false);
       return;
@@ -246,7 +245,7 @@ export default function SearchChipsInput({ value, onChange, onRun, boardId, inpu
         setLoading(false);
       }), 180);
     return () => { clearTimeout(timer); controller.abort(); ++lookup.current; };
-  }, [picker?.operator, picker?.value, dismissed, boardId, autocompleteEnabled, layoutEnabled, genericPrefix?.[1], labelScopeEnabled, pickedBoards, commenterEnabled]);
+  }, [picker?.operator, picker?.value, dismissed, boardId, layoutEnabled, genericPrefix?.[1], labelScopeEnabled, pickedBoards, commenterEnabled]);
 
   useEffect(() => {
     if (editing) return;
@@ -286,7 +285,7 @@ export default function SearchChipsInput({ value, onChange, onRun, boardId, inpu
   }, [value, editing, boardId, layoutEnabled, layoutEnabled ? recentSearches.join('\n') : '', labelScopeEnabled, pickedBoards, commenterEnabled]);
 
   function change(event: ChangeEvent<HTMLInputElement> | React.CompositionEvent<HTMLInputElement>) {
-    setEditing(!autocompleteEnabled || Boolean(event.currentTarget.value.trim()));
+    setEditing(Boolean(event.currentTarget.value.trim()));
     setDismissed(false);
     setSelectedIndex(layoutEnabled && event.currentTarget.value.trim() ? 1 : 0);
     setCaretAtEnd(event.currentTarget.selectionStart === event.currentTarget.value.length);
@@ -296,10 +295,10 @@ export default function SearchChipsInput({ value, onChange, onRun, boardId, inpu
   function reopenPicker(event: React.SyntheticEvent<HTMLInputElement>) {
     const caret = event.currentTarget.selectionStart;
     setCaretAtEnd(caret === text.length);
-    if (autocompleteEnabled && !value.trim()) { setDismissed(false); setSelectedIndex(0); }
+    if (!value.trim()) { setDismissed(false); setSelectedIndex(0); }
     if (layoutEnabled && showSuggestions && value.trim()) { setDismissed(false); setSelectedIndex(1); }
-    if (autocompleteEnabled && completion?.kind === 'operator' && caret === text.length) setDismissed(false);
-    const atCaret = caret === null ? null : autocompleteEnabled ? searchCompletion(text.slice(0, caret), names, commenterEnabled) : activeSearchValue(text.slice(0, caret), names, commenterEnabled);
+    if (completion?.kind === 'operator' && caret === text.length) setDismissed(false);
+    const atCaret = caret === null ? null : searchCompletion(text.slice(0, caret), names, commenterEnabled);
     if (active && caret !== null && caret <= (active.end ?? text.length) && atCaret?.start === active.start) setDismissed(false);
   }
 
@@ -323,7 +322,7 @@ export default function SearchChipsInput({ value, onChange, onRun, boardId, inpu
       inputRef.current?.focus();
       return;
     }
-    if (autocompleteEnabled && (tips || (completion?.kind === 'operator' && (!layoutEnabled || row.kind === 'operator')))) {
+    if ((tips || (completion?.kind === 'operator' && (!layoutEnabled || row.kind === 'operator')))) {
       const nextText = tips ? `${row.id}:` : text.slice(0, completion?.start) + `${completion?.negated ? '-' : ''}${row.id}:` + text.slice(completion?.end);
       setEditing(true);
       setDismissed(false);
@@ -374,7 +373,7 @@ export default function SearchChipsInput({ value, onChange, onRun, boardId, inpu
       runSearch();
       return;
     }
-    if (autocompleteEnabled && (event.nativeEvent.isComposing || event.ctrlKey || event.metaKey || event.altKey)) return;
+    if ((event.nativeEvent.isComposing || event.ctrlKey || event.metaKey || event.altKey)) return;
     if (open && event.key === "Escape" && !escLeavesEnabled) {
       event.preventDefault();
       event.stopPropagation();
@@ -389,7 +388,7 @@ export default function SearchChipsInput({ value, onChange, onRun, boardId, inpu
       setSelectedIndex((current) => Math.max(0, Math.min(rows.length - 1, current + (moveDown ? 1 : -1))));
       return;
     }
-    if (open && rows.length && !(layoutEnabled && event.key === "Enter" && selectedRow?.kind === "ai" && (selectedIndex !== 0 || rows.length === 1)) && (event.key === "Enter" || (event.key === "Tab" && (!autocompleteEnabled || !event.shiftKey)))) {
+    if (open && rows.length && !(layoutEnabled && event.key === "Enter" && selectedRow?.kind === "ai" && (selectedIndex !== 0 || rows.length === 1)) && (event.key === "Enter" || (event.key === "Tab" && !event.shiftKey))) {
       event.preventDefault();
       event.stopPropagation();
       choose(selectedRow);
@@ -440,8 +439,7 @@ export default function SearchChipsInput({ value, onChange, onRun, boardId, inpu
             onPointerDown={(event) => { if (mobileEnabled) event.preventDefault(); }}
             onClick={(event) => { event.stopPropagation(); remove(index); }}
             aria-label={`Remove ${chip.operator}:${chipLabels[`${chip.operator}:${chip.value}`] ?? chip.value} filter`}
-            className={`inline-flex ${mobileEnabled ? "min-h-[44px] min-w-[44px] max-w-full " : ""}${layoutEnabled ? "min-w-0 max-w-full " : ""}items-center gap-1 rounded-sm px-2 py-1 text-content ${autocompleteEnabled ? `text-white-black border-l-2 ${searchFilterColour(chip.operator)}` : 'text-mention-highlight'}`}
-            style={autocompleteEnabled ? undefined : { backgroundColor: "color-mix(in srgb, var(--color-mention-highlight) 12%, var(--bg-mention))" }}
+            className={`inline-flex ${mobileEnabled ? "min-h-[44px] min-w-[44px] max-w-full " : ""}${layoutEnabled ? "min-w-0 max-w-full " : ""}items-center gap-1 rounded-sm px-2 py-1 text-content text-white-black border-l-2 ${searchFilterColour(chip.operator)}`}
           >
             {chip.operator === 'from' || chip.operator === 'commenter' || chip.operator === 'assignee' ? <UserRound className={mobileEnabled ? "shrink-0" : undefined} size={14} aria-hidden="true" /> : (chip.operator === 'in' || chip.operator === 'board') ? <Hash className={mobileEnabled ? "shrink-0" : undefined} size={14} aria-hidden="true" /> : null}
             <span className={mobileEnabled ? "min-w-0 max-w-[200px] truncate" : layoutEnabled ? "min-w-0 break-all" : undefined}>{chipText(chip)}</span>
@@ -449,7 +447,7 @@ export default function SearchChipsInput({ value, onChange, onRun, boardId, inpu
           </button>
         ))}
         <div className="relative min-w-[8rem] flex-1 text-subheading font-medium">
-          {autocompleteEnabled && (completion || ghost) && (
+          {(completion || ghost) && (
             <div aria-hidden="true" className="pointer-events-none absolute inset-0 flex items-center overflow-hidden whitespace-pre">
               <span className="invisible">{text.slice(0, completion?.start)}</span>
               <span className="relative">
@@ -484,14 +482,14 @@ export default function SearchChipsInput({ value, onChange, onRun, boardId, inpu
           onBlur={(event) => { if (!layoutEnabled && !pickerRef.current?.contains(event.relatedTarget)) { setDismissed(true); setFocused(false); } }}
           role="combobox"
           aria-label="Search tasks"
-          aria-autocomplete={autocompleteEnabled ? "both" : "list"}
+          aria-autocomplete="both"
           aria-expanded={open}
           aria-controls={open ? listId : undefined}
           aria-activedescendant={open && rows.length ? `mention-button-${layoutEnabled ? rows.indexOf(selectedRow) : Math.min(selectedIndex, rows.length - 1)}` : undefined}
         />
         </div>
       </div>
-      {open && layoutFlagEnabled && layoutRequested && autocompleteEnabled ? (
+      {open && layoutFlagEnabled && layoutRequested ? (
         <div ref={pickerRef} id={listId} role="listbox" aria-label="Search suggestions" data-search-layout
           style={pickerStyle} className={`w-full min-w-0 ${mobileOverlay ? "bg-containerBackground" : "mt-4"}`} onMouseDown={(event) => event.preventDefault()}>
           {tips ? <>
@@ -507,12 +505,12 @@ export default function SearchChipsInput({ value, onChange, onRun, boardId, inpu
       ) : open && (
         <div ref={pickerRef} style={pickerStyle} className="absolute left-4 top-full z-30 max-w-[calc(100%-2rem)] @md:left-9" onMouseDown={(event) => event.preventDefault()}
           onPointerDown={(event) => { if (mobileEnabled) event.preventDefault(); }}>
-          {autocompleteEnabled && !mobileEnabled && <div className="rounded-t-sm bg-modalBackground px-3 pt-2 text-meta text-text-light-gray">{tips ? 'Search tips' : 'Suggestions'} · {tips ? '↑ ↓ or j/k' : '↑ ↓'} to move · Tab / Enter to accept · Esc to close</div>}
+          {!mobileEnabled && <div className="rounded-t-sm bg-modalBackground px-3 pt-2 text-meta text-text-light-gray">{tips ? 'Search tips' : 'Suggestions'} · {tips ? '↑ ↓ or j/k' : '↑ ↓'} to move · Tab / Enter to accept · Esc to close</div>}
           {error && localRows === null && !tips ? <div id={listId} role="alert" className="rounded bg-modalBackground p-3 text-white-black">Could not load suggestions. Keep typing to retry.</div> : (
             <MentionListRows
               id={listId}
               loadingLabel="Loading suggestions..."
-              className={mobileEnabled ? "w-full h-full max-h-full max-w-full [&_button]:min-h-[44px]" : autocompleteEnabled ? "max-w-full" : undefined}
+              className={mobileEnabled ? "w-full h-full max-h-full max-w-full [&_button]:min-h-[44px]" : "max-w-full"}
               isLoading={localRows === null && !tips && loading}
               hasItems={rows.length > 0}
               noResults={!rows.length}
