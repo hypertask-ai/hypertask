@@ -1,4 +1,3 @@
-// Assert-based regression test for the exact managed-agent archive endpoint.
 import assert from 'node:assert/strict'
 import { NextRequest } from 'next/server'
 

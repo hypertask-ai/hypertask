@@ -43,9 +43,6 @@ export const useEstimateModal = (
         };
         const response = typedWrite ? await typedWrite(body) : await axios.post("/api/estimate/setEstimate", body);
         if (boardCardFresh) {
-          // Patch the board card at once, as the assignee picker does, so the
-          // new size shows on Escape (HTPR-7129). A cleared size answers with a
-          // message, not a row.
           try {
             const row = response.data && "estimate_index" in response.data ? response.data : undefined;
             updateTaskInCache({ estimate: row }, inViewObject.taskId, inViewObject.taskProjectId, inViewObject.sectionId);
@@ -65,8 +62,6 @@ export const useEstimateModal = (
 
     result = {
       EnterOnClickHandler: taskModeOnClick,
-      // No-size is estimate_index 0; empty (null/undefined) means No-size too.
-      // Don't filter(Boolean) here — it drops 0 and the "No size" row loses its check (PERT-19).
       checkedEstimates: [estimateForTaskTQ?.estimate_index ?? 0],
     };
   } else if (mode == "Filter") {

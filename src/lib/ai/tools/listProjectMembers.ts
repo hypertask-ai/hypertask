@@ -27,8 +27,6 @@ export function createListProjectMembersTool(context: ToolContext) {
                 : access.error.message,
           };
         }
-        // HTPR-3805: "list members" must include the caller — excluding them
-        // dropped the owner entirely on boards with zero Member rows.
         const result = await getProjectMembers(
           input.project_id,
           undefined,

@@ -8,10 +8,6 @@ export interface TaskInfoLabelProps {
   onClick?: () => void;
 }
 
-/**
- * Static label for task info rows (no click/tooltip).
- * Use TaskInfoLabel for read-only labels; use LocalRightSideInfo for interactive labels.
- */
 export const TaskInfoLabel: React.FC<TaskInfoLabelProps> = ({
   children,
   className,

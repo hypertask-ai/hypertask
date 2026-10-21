@@ -26,13 +26,10 @@ const RelatedTaskLabel = ({
   const taskRoute = preserveInboxFlowOnTaskHref(route, inboxFlow);
   const handleOnClick = (e: any) => {
     e.preventDefault();
-    // stopPropogation && e.stopPropagation();
     onClick(id);
   };
 
   const goToTask = (e: React.MouseEvent) => {
-    // Let cmd/ctrl/shift + click (and middle-click via the native anchor)
-    // open a new browser tab; only intercept a plain left-click for SPA nav.
     if (e.metaKey || e.ctrlKey || e.shiftKey) return;
     e.preventDefault();
     router.push(taskRoute);

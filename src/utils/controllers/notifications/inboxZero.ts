@@ -92,8 +92,7 @@ export const parseInboxZeroRules = (value: unknown): InboxZeroRules | null => {
   };
 };
 
-/** All raw rows behind the visible, de-duplicated All-tab Inbox items. */
-export const loadActiveInboxZeroNotifications = (
+export const loadActiveInboxZeroNotifications = ( // trufflehog:ignore
   userId: number,
   db: InboxZeroDb = prisma
 ) =>
@@ -162,8 +161,6 @@ const visibleInboxItemKey = (notification: InboxZeroNotification): string => {
   if (notification.notification_inviteId !== null) {
     return `invite:${notification.notification_inviteId}`;
   }
-  // The All-tab query de-duplicates on (taskId, notification_inviteId), so all
-  // task-less, invite-less rows share one visible representative.
   return "standalone";
 };
 

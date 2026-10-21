@@ -88,11 +88,6 @@ export interface TurbopufferSearchTaskIdsOptions {
   perPage?: number;
 }
 
-/**
- * Search tasks in Turbopuffer and return task IDs in relevance order.
- * Used by MCP search to get full-text ranking; post-filtering
- * (section, assignee, priority, due date) is done via Prisma.
- */
 export async function turbopufferSearchTaskIds(
   options: TurbopufferSearchTaskIdsOptions
 ): Promise<number[]> {
@@ -243,12 +238,6 @@ export async function turbopufferGetDocuments(
       commentRowToHit(row, searchQuery)
     );
 
-    // Keep tasks over comments for the same task, preserving the search
-    // relevance order (RRF rank) that Turbopuffer already returned. Do NOT
-    // re-sort by recency here: with hybrid BM25 + vector search the rows arrive
-    // ranked by relevance, and sorting by timestamp buried the best matches
-    // under whatever was most recently updated (so "stripe" surfaced recent
-    // migration tickets instead of the Stripe tasks).
     const commentTextByTaskId = new Map<number, string[]>();
     for (const hit of commentHits) {
       const taskId = parseInt(hit.document.taskId, 10);

@@ -1,3 +1,5 @@
+import { findIdParamOutOfRange, idOutOfRangeMessage } from '@/lib/mcp/listParams'
+import { reportMcpOperationCrash } from '@/lib/mcp/operationCrashReport'
 import { wrapMcpRoute } from '@/lib/mcp/routeWrapper'
 import { NextRequest, NextResponse } from 'next/server'
 
@@ -5,7 +7,7 @@ import prisma from '@/lib/prisma'
 import { buildFieldError } from '@/lib/mcp/fieldError'
 import { checkMcpRateLimit, validateMcpAuth } from '@/lib/mcp/auth'
 import { validateProjectAccess } from '@/lib/mcp/tasks/services'
-import { resolveTaskIdOnly } from '@/lib/mcp/tasks/resolveTask'
+import { resolveTaskIdOnly, taskIdentifierErrorResponse } from '@/lib/mcp/tasks/resolveTask'
 import upsertTaskDescription from '@/utils/controllers/description/common-description-create'
 import { AgentMutationLeaseConflictError } from '@/lib/mcp/tasks/agentMutationFence'
 
@@ -21,10 +23,6 @@ function positiveInt(value: unknown): number | null {
   return typeof value === 'number' && Number.isInteger(value) && value > 0 ? value : null
 }
 
-// POST /api/mcp/tasks/description-restore { task_id, version_id }
-// Restores a task's description to a historical snapshot. Restoring first
-// snapshots the current description (via upsertTaskDescription), so it is
-// itself undoable and never destroys history.
 export async function POST(request: NextRequest) {
   return wrapMcpRoute(async (request: NextRequest) => {
   try {
@@ -44,8 +42,6 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // Accept the same identifiers as every other task route, so a caller
-    // holding a ticket number does not have to look the numeric id up first.
     const taskId = await resolveTaskIdOnly({
       task_id: positiveInt(body.task_id),
       ticket_number: typeof body.ticket_number === 'string' ? body.ticket_number : null,
@@ -74,6 +70,14 @@ export async function POST(request: NextRequest) {
           'version_id',
           'version_id must be a positive integer'
         ),
+        { status: 400 }
+      )
+    }
+
+    const outOfRange = findIdParamOutOfRange({ version_id: versionId })
+    if (outOfRange) {
+      return NextResponse.json(
+        { success: false, error: idOutOfRangeMessage(outOfRange), code: 'invalid_field' },
         { status: 400 }
       )
     }
@@ -110,10 +114,13 @@ export async function POST(request: NextRequest) {
 
     return NextResponse.json({ ok: true, restored_from_version: snapshot.version })
   } catch (error) {
+    const identifierResponse = taskIdentifierErrorResponse(error)
+    if (identifierResponse) return identifierResponse
     if (error instanceof AgentMutationLeaseConflictError) {
       return NextResponse.json({ error: error.message }, { status: 409 })
     }
     console.error('[MCP Task Description Restore] Error:', error)
+    reportMcpOperationCrash(request, error)
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
   }
 

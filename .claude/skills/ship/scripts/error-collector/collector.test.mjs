@@ -96,6 +96,7 @@ function harness() {
   };
 }
 async function withHarness(fn) { const h = harness(); try { await fn(h); } finally { h.close(); } }
+const longValue = 'Xy'.repeat(20);
 const event = (overrides = {}) => ({ service: 'web', board: 15, message: 'Checkout failed for user 123', route: '/checkout/123', stack: 'Error: checkout failed\n  at checkout', ts: new Date(NOW - 1000).toISOString(), ...overrides });
 const creates = h => h.calls().filter(c => c.name === 'vcc' && c.args.includes('create'));
 const activities = (h, ticket) => h.calls().filter(c => c.name === 'vcc' && c.args[0] === 'activity' && (!ticket || c.args[2] === ticket));
@@ -118,6 +119,115 @@ check('sources', 'normalization strips every dynamic value and hash matches inde
   assert.equal(fingerprint('web', 'failed 42', '/users/1'), fingerprint('web', 'failed 7', '/teams/2'));
   assert.notEqual(fingerprint('web', 'failed 42', '/users/1'), fingerprint('api', 'failed 42', '/users/1'));
 });
+
+check('sources', 'PowerShell cancellation sessions count as one new kind across transient scopes', () => withHarness(async h => {
+  const messages = [
+    ['run-u2003472.scope', '7.6.7:B:80', 2169841],
+    ['run-u2003644.scope', '7.6.7:C:80', 2863890],
+    ['run-r1b66062f07d0426abf597f7579b30ec8.scope', '7.6.7:C:80', 3021000],
+    ['run-r536fa8835f1f416693556a3156812a26.scope', '7.4.6:C:99', 3051000],
+  ].map(([unit, session, pid]) => `${unit}: (${session}) [NamedPipeIPC_ServerListenerError:NamedPipe.Exception.Error] An error has occurred in PowerShell IPC listening thread on process: ${pid} in AppDomain: None. Error Message: Operation canceled.`);
+  assert.equal(new Set(messages.map(message => fingerprint('vps-journal', message))).size, 1);
+  assert.notEqual(fingerprint('vps-journal', messages[0]), fingerprint('vps-journal', messages[0].replace('Operation canceled.', 'Access denied.')));
+  assert.notEqual(fingerprint('vps-journal', messages[0]), fingerprint('vercel', messages[0]));
+  h.events(messages.map(message => event({ service: 'vps-journal', board: 4060, message })));
+  assert.equal(await h.run(), 0);
+  assert.equal(creates(h).length, 1);
+  assert.equal(h.state().days['2026-10-14']['vps-journal'].newGroups, 1);
+  assert.equal(h.state().days['2026-10-14']['vps-journal'].errors, messages.length);
+}));
+
+check('sources', 'leading ISO timestamps and rejected Better Auth origins do not split one error into many tickets', () => withHarness(async h => {
+  const host = 'https://hypertask-git-yper4-399-guest-demo-hypertask.vercel.app';
+  const lines = [
+    [`2026-10-15T01:33:10.523Z ERROR [Better Auth]: Invalid origin: ${host}`, '/api/demo/guest'],
+    [`2026-10-15T01:33:09.342Z ERROR [Better Auth]: Invalid origin: ${host}`, '/api/demo/guest'],
+    [`2026-10-15T01:33:06.967Z ERROR [Better Auth]: Invalid origin: ${host}/demo`, '/api/auth/bridge-legacy-session'],
+    [`2026-10-15T01:33:06.945Z ERROR [Better Auth]: Invalid origin: ${host}/demo`, '/api/auth/bridge-legacy-session'],
+  ];
+  h.events(lines.map(([message, route]) => event({ service: 'vercel', message, route })));
+  assert.equal(await h.run(), 0);
+  assert.equal(creates(h).length, 1);
+  assert.equal(Object.values(h.state().fingerprints)[0].total, 4);
+  assert.equal(normalize(lines[0][0]), 'ERROR [Better Auth]: Invalid origin: <url>');
+  assert.equal(normalize('2026-10-15 01:33:06,945+02:00 boom 7'), 'boom <n>');
+  assert.equal(normalize('failed at 2026-10-15T01:33:06.945Z'), 'failed at <time>');
+  assert.equal(normalize('Invalid callbackURL: https://other.example/x'), 'Invalid callbackURL: <url>');
+  assert.notEqual(fingerprint('vercel', lines[0][0]), fingerprint('vercel', 'ERROR [Better Auth]: Invalid callbackURL: https://x.example'));
+}));
+
+check('tickets', 'groups parked before a fingerprint rule change join the current fingerprint instead of filing duplicates', () => withHarness(async h => {
+  const parked = [
+    ['8e2912a350500b38', '2026-10-15T01:46:59.060Z', '', '/api/demo/guest'],
+    ['3c221db2496d9ced', '2026-10-15T01:46:59.025Z', '', '/api/demo/guest'],
+    ['768f089384b26376', '2026-10-15T01:46:58.277Z', '/demo', '/api/auth/bridge-legacy-session'],
+    ['502ccac81c34360a', '2026-10-15T01:46:57.514Z', '/demo', '/api/auth/bridge-legacy-session'],
+  ];
+  const pending = Object.fromEntries(parked.map(([fp, ts, path, route]) => {
+    const message = `${ts} ERROR [Better Auth]: Invalid origin: https://[redacted].vercel.app${path}`;
+    return [fp, { board: 15, service: 'vercel', normalized: normalize(message), message, stack: '', routes: [route], count: 1, firstSeen: ts, lastSeen: ts }];
+  }));
+  const seedState = () => h.seed({ version: 1, sources: {}, fingerprints: {}, pending, days: {}, summaries: {}, activities: {}, created: [] });
+  const current = fingerprint('vercel', 'ERROR [Better Auth]: Invalid origin: https://x.vercel.app');
+  seedState();
+  h.remote([{ ticketNumber: 'HTPR-7239', projectId: 15, status: 'Normal', description: `<p>error-fingerprint:${current}</p>` }]);
+  assert.equal(await h.run(), 0);
+  assert.equal(creates(h).length, 0);
+  assert.deepEqual(Object.keys(h.state().pending), []);
+  assert.equal(h.state().fingerprints[current].ticket, 'HTPR-7239');
+  assert.equal(h.state().fingerprints[current].total, 4);
+  h.remote([]);
+  seedState();
+  assert.equal(await h.run(), 0);
+  assert.equal(creates(h).length, 1);
+  assert.match(creates(h)[0].description, new RegExp(`error-fingerprint:${current}<`));
+}));
+
+check('tickets', 'a group parked under the current rules keeps its key even when its saved sample is redacted', () => withHarness(async h => {
+  const message = `Upstream refused ${longValue}`;
+  h.events([event({ message })]);
+  h.env.ERROR_COLLECTOR_HOURLY_CAP = '0';
+  assert.equal(await h.run(), 0);
+  const raw = fingerprint('web', message);
+  assert.notEqual(raw, fingerprint('web', redact(message)));
+  assert.deepEqual(Object.keys(h.state().pending), [raw]);
+  h.events([]);
+  assert.equal(await h.run({ now: NOW + 1000 }), 0);
+  assert.deepEqual(Object.keys(h.state().pending), [raw]);
+  const legacy = h.state();
+  delete legacy.pending[raw].rules;
+  h.seed(legacy);
+  assert.equal(await h.run({ now: NOW + 2000 }), 0);
+  assert.deepEqual(Object.keys(h.state().pending), [raw]);
+}));
+
+for (const [kind, hidden] of [['long-value', longValue], ['email', 'person@example.invalid']]) check('tickets', `a parked group whose ${kind}-redacted sample cannot rebuild its fingerprint keeps its key and gets one ticket`, () => withHarness(async h => {
+  const message = `2026-10-15T01:46:59.060Z Upstream refused ${hidden}`;
+  h.events([event({ message })]);
+  h.env.ERROR_COLLECTOR_HOURLY_CAP = '0';
+  assert.equal(await h.run(), 0);
+  const raw = fingerprint('web', message);
+  const legacy = h.state();
+  delete legacy.pending[raw].rules;
+  h.seed(legacy);
+  h.env.ERROR_COLLECTOR_HOURLY_CAP = '5';
+  assert.equal(await h.run({ now: NOW + 1000 }), 0);
+  assert.equal(creates(h).length, 1);
+  h.events([event({ message, ts: new Date(NOW + 1500).toISOString() })]);
+  assert.equal(await h.run({ now: NOW + 2000 }), 0);
+  assert.equal(creates(h).length, 1);
+  assert.equal(h.state().fingerprints[raw].total, 2);
+}));
+
+check('tickets', 'a ticket already filed under a parked group\'s old fingerprint is adopted, not filed again', () => withHarness(async h => {
+  const message = '2026-10-15T01:46:59.060Z ERROR [Better Auth]: Invalid origin: https://[redacted].vercel.app';
+  const old = '8e2912a350500b38';
+  h.seed({ version: 1, sources: {}, fingerprints: {}, pending: { [old]: { board: 15, service: 'vercel', normalized: normalize(message), message, stack: '', routes: ['/api/demo/guest'], count: 1, firstSeen: '2026-10-15T01:46:59.060Z', lastSeen: '2026-10-15T01:46:59.060Z' } }, days: {}, summaries: {}, activities: {}, created: [] });
+  h.remote([{ ticketNumber: 'HTPR-7244', projectId: 15, status: 'Normal', description: `<p>error-fingerprint:${old}</p>` }]);
+  assert.equal(await h.run(), 0);
+  assert.equal(creates(h).length, 0);
+  assert.equal(h.state().fingerprints[fingerprint('vercel', message)].ticket, 'HTPR-7244');
+}));
 
 check('sources', 'independent source windows, cap, partial failure and all-failed exit', () => withHarness(async h => {
   const windows = [];
@@ -353,6 +463,185 @@ check('reporting', 'cap override including zero and invalid cap', () => withHarn
   h.env.ERROR_COLLECTOR_HOURLY_CAP = 'invalid'; await assert.rejects(h.run());
 }));
 
+check('reporting', 'noise alert threshold plans exactly one ticket above the limit, not at it', async () => {
+  for (const count of [50, 51]) await withHarness(async h => {
+    h.events(Array.from({ length: count }, (_, i) => event({ service: 'vercel', message: `Warning: SECURITY WARNING: The SSL modes detail ${i}`, route: `/route/${i % 2}`, ts: new Date(NOW - 30 * 60000 + i * 1000).toISOString() })));
+    const clock = join(h.home, 'clock.mjs'); writeFileSync(clock, `Date.now = () => ${NOW};`);
+    h.env.NODE_OPTIONS = `--import=${clock}`;
+    const planned = h.cli('--once', '--sources', 'fixture', '--dry-run');
+    assert.equal(planned.status, 0, planned.stderr);
+    assert.equal((planned.stdout.match(/"create"/g) ?? []).length, count > 50 ? 1 : 0);
+    if (count > 50) {
+      assert.match(planned.stdout, /SSL configuration warning repeated 51 times in one hour/);
+      assert.match(planned.stdout, /warning on stderr/);
+      assert.match(planned.stdout, /Fix it at the source/);
+      assert.match(planned.stdout, /\/route\/0, \/route\/1/);
+    }
+    assert.equal(existsSync(h.statePath), false);
+    assert.ok(h.calls().every(call => call.name === 'ht' && call.args[0] === 'GET'));
+  });
+});
+
+check('reporting', 'noise alert rolling windows reject spread matches and combine collection passes without recounting', async () => {
+  await withHarness(async h => {
+    h.events(Array.from({ length: 120 }, (_, i) => event({ service: 'vercel', message: 'Warning: SECURITY WARNING: The SSL modes', ts: new Date(NOW - 4 * HOUR + i * 2 * 60000).toISOString() })));
+    await h.run();
+    assert.equal(creates(h).length, 0);
+    assert.equal(h.state().days['2026-10-14'].vercel.noise, 120);
+    assert.equal(h.state().days['2026-10-14'].vercel.errors, 0);
+    assert.equal(h.state().days['2026-10-14'].vercel.newGroups, 0);
+  });
+  await withHarness(async h => {
+    h.events([event({ service: 'vercel', message: 'Warning: SECURITY WARNING: The SSL modes', count: 30 })]);
+    await h.run();
+    assert.equal(creates(h).length, 0);
+    h.events([event({ service: 'vercel', message: 'Warning: SECURITY WARNING: The SSL modes changed sample', route: '/other', count: 21, ts: new Date(NOW + HOUR / 2).toISOString() })]);
+    await h.run({ now: NOW + HOUR / 2 });
+    assert.equal(creates(h).length, 1);
+    assert.match(creates(h)[0].description, /Occurrences in one hour: 51/);
+    assert.equal(Object.values(h.state().fingerprints)[0].total, 51);
+    await h.run({ now: NOW + HOUR / 2 + 1000 });
+    assert.equal(Object.values(h.state().fingerprints)[0].total, 51);
+    assert.equal(h.state().days['2026-10-14'].vercel.noise, 51);
+    h.events([]); await h.run({ now: NOW + 2 * HOUR });
+    assert.deepEqual(h.state().noiseWindows, {});
+  });
+  await withHarness(async h => {
+    h.events([event({ service: 'vercel', message: 'Warning: SECURITY WARNING: The SSL modes', count: 30, ts: new Date(NOW - HOUR).toISOString() }), event({ service: 'vercel', message: 'Warning: SECURITY WARNING: The SSL modes', count: 21, ts: new Date(NOW).toISOString() })]);
+    await h.run(); assert.equal(creates(h).length, 0);
+  });
+});
+
+check('reporting', 'noise alert opt-ins are explicit, never alert expected responses or forced tests, and respect service scope', () => withHarness(async h => {
+  const rules = JSON.parse(readFileSync(join(HERE, 'noise.json')));
+  assert.deepEqual(rules.filter(rule => rule.alert).map(rule => rule.id), ['ssl-mode-warning', 'ai-sdk-warning', 'pg-query-deprecation', 'url-parse-deprecation', 'aws-sdk-v2-note', 'console-time-warning', 'qstash-cancel-404']);
+  const messages = ['HTTP 404', 'Authenticated agents cannot archive or delete tasks in Done', 'Warning: SECURITY WARNING: The SSL modes [ht-forced-test]', 'AbortError'];
+  h.events(messages.map(message => event({ service: 'vercel', message, count: 500 })));
+  await h.run();
+  assert.equal(creates(h).length, 0);
+  assert.deepEqual(h.state().pending, {});
+  assert.deepEqual(h.state().noiseWindows, {});
+  // Warning rules only match their configured service; an ordinary error on another service keeps ordinary grouping.
+  h.events([event({ service: 'other', message: 'Warning: SECURITY WARNING: The SSL modes', ts: new Date(NOW + 1000).toISOString() })]);
+  await h.run({ now: NOW + 1000 });
+  assert.equal(creates(h).length, 1);
+  assert.match(creates(h)[0].description, /Count in window: 1/);
+}));
+
+check('reporting', 'noise alert second run reuses its ticket via activity, and cold state adopts the exact marker', () => withHarness(async h => {
+  h.events([event({ service: 'vercel', message: 'Warning: SECURITY WARNING: The SSL modes', count: 51 })]);
+  await h.run();
+  const fp = createHash('sha256').update('noise|vercel|ssl-mode-warning').digest('hex').slice(0, 16);
+  assert.equal(Object.keys(h.state().fingerprints)[0], fp);
+  const ticket = h.state().fingerprints[fp].ticket;
+  h.events([event({ service: 'vercel', message: 'Warning: SECURITY WARNING: The SSL modes different details', route: '/new-route', count: 60, ts: new Date(NOW + 6 * HOUR).toISOString() })]);
+  await h.run({ now: NOW + 6 * HOUR });
+  assert.equal(creates(h).length, 1);
+  assert.equal(activities(h, ticket).length, 1);
+  assert.match(activities(h, ticket)[0].args[3], /^60 more since .*?, 111 total,/);
+  assert.match(activities(h, ticket)[0].args[3], /\/new-route/);
+  rmSync(h.statePath);
+  await h.run({ now: NOW + 6 * HOUR });
+  assert.equal(creates(h).length, 1);
+  assert.equal(activities(h, ticket).length, 2);
+  assert.ok(h.calls().filter(call => call.name === 'ht').every(call => call.args[1].includes(`error-fingerprint%3A${fp}`)));
+}));
+
+check('reporting', 'noise alert overrides, pending cap, retry reconciliation and sample redaction', async () => {
+  await withHarness(async h => {
+    h.env.ERROR_COLLECTOR_NOISE_HOURLY_LIMIT = '100';
+    h.events([event({ service: 'vercel', message: 'Warning: SECURITY WARNING: The SSL modes', count: 51 })]);
+    await h.run(); assert.equal(creates(h).length, 0);
+    h.env.ERROR_COLLECTOR_NOISE_HOURLY_LIMIT = 'invalid'; await assert.rejects(h.run());
+  });
+  await withHarness(async h => {
+    h.env.ERROR_COLLECTOR_NOISE_HOURLY_LIMIT = '1'; h.env.ERROR_COLLECTOR_HOURLY_CAP = '0';
+    h.events([event({ service: 'vercel', message: 'Warning: SECURITY WARNING: The SSL modes password=fixture-password', route: '/safe?token=fixture-token', stack: 'Authorization: Basic fixture-credential', count: 2 })]);
+    await h.run();
+    assert.equal(creates(h).length, 0); assert.equal(Object.keys(h.state().pending).length, 1);
+    h.env.ERROR_COLLECTOR_HOURLY_CAP = '1'; h.config({ ambiguousCreate: true });
+    await h.run({ now: NOW + 1000 });
+    assert.equal(creates(h).length, 1); assert.equal(Object.keys(h.state().pending).length, 1);
+    h.config({}); await h.run({ now: NOW + 2000 });
+    assert.equal(creates(h).length, 1); assert.deepEqual(h.state().pending, {});
+    const text = JSON.stringify(h.calls()) + readFileSync(h.statePath, 'utf8');
+    for (const value of ['fixture-password', 'fixture-token', 'fixture-credential']) assert.ok(!text.includes(value));
+    assert.match(creates(h)[0].description, /Redacted sample/);
+  });
+  await withHarness(async h => {
+    h.events([event({ service: 'vercel', message: '[Upstash QStash] DELETE https://qstash.invalid/messages/fixture failed with status 404', count: 51 })]);
+    await h.run(); assert.equal(creates(h).length, 1);
+    assert.match(creates(h)[0].description, /QStash cancellation warning/);
+    assert.equal(h.state().days['2026-10-14'].vercel.errors, 0);
+  });
+});
+
+check('reporting', 'noise alert each opted-in warning uses its own rule fingerprint, not an ordinary error group', () => withHarness(async h => {
+  const messages = [
+    'Warning: SECURITY WARNING: The SSL modes',
+    'Warning: AI SDK Warning: unsupported setting',
+    'DeprecationWarning: Calling client.query() when the client is already executing a query',
+    'DeprecationWarning: `url.parse()` behavior is not standardized',
+    'NOTE: The AWS SDK for JavaScript (v2) has reached end-of-support',
+    "Warning: Label 'fixture' already exists for console.time()",
+    '[Upstash QStash] DELETE https://qstash.invalid/messages/fixture failed with status 404',
+  ];
+  h.env.ERROR_COLLECTOR_HOURLY_CAP = '10';
+  h.events(messages.map(message => event({ service: 'vercel', message, count: 51 })));
+  await h.run();
+  assert.equal(creates(h).length, messages.length);
+  assert.equal(new Set(creates(h).map(call => call.description.match(/error-fingerprint:([a-f0-9]+)/)[1])).size, messages.length);
+  assert.equal(h.state().days['2026-10-14'].vercel.errors, 0);
+  assert.equal(h.state().days['2026-10-14'].vercel.newGroups, 0);
+  assert.equal(h.state().days['2026-10-14'].vercel.noise, messages.length * 51);
+}));
+
+check('reporting', 'noise alert fingerprints cannot merge into ordinary message grouping', () => withHarness(async h => {
+  h.events([event({ service: 'vercel', message: 'Warning: SECURITY WARNING: The SSL modes', count: 51 }), event({ service: 'vercel', message: 'noise-rule:ssl-mode-warning' })]);
+  await h.run();
+  assert.equal(creates(h).length, 2);
+  assert.equal(h.state().days['2026-10-14'].vercel.errors, 1);
+  assert.equal(h.state().days['2026-10-14'].vercel.newGroups, 1);
+  assert.ok(h.state().fingerprints[fingerprint('vercel', 'noise-rule:ssl-mode-warning')]);
+}));
+
+check('reporting', 'noise alert dry run preserves existing state and only plans repeat activity', () => withHarness(async h => {
+  h.events([event({ service: 'vercel', message: 'Warning: SECURITY WARNING: The SSL modes', count: 51 })]);
+  await h.run();
+  const ticket = Object.values(h.state().fingerprints)[0].ticket;
+  const before = readFileSync(h.statePath);
+  const callsBefore = h.calls().length;
+  const clock = join(h.home, 'clock.mjs'); writeFileSync(clock, `Date.now = () => ${NOW + 6 * HOUR};`);
+  h.env.NODE_OPTIONS = `--import=${clock}`;
+  h.events([event({ service: 'vercel', message: 'Warning: SECURITY WARNING: The SSL modes', count: 51, ts: new Date(NOW + 6 * HOUR).toISOString() })]);
+  const result = h.cli('--once', '--sources', 'fixture', '--dry-run');
+  assert.equal(result.status, 0, result.stderr);
+  assert.ok(!result.stdout.includes('"create"'));
+  assert.ok(result.stdout.includes(`"activity","add","${ticket}"`));
+  assert.deepEqual(readFileSync(h.statePath), before);
+  assert.deepEqual(readdirSync(dirname(h.statePath)), ['state.json']);
+  assert.ok(h.calls().slice(callsBefore).every(call => call.name === 'ht' && call.args[0] === 'GET'));
+}));
+
+check('reporting', 'noise alert fixture dry run prints the planned ticket for 120 SSL warnings without writing', () => withHarness(async h => {
+  const clock = join(h.home, 'clock.mjs'); writeFileSync(clock, `Date.now = () => ${NOW};`);
+  h.env.NODE_OPTIONS = `--import=${clock}`;
+  const rows = Array.from({ length: 120 }, (_, i) => event({ service: 'vercel', message: 'Warning: SECURITY WARNING: The SSL modes require explicit configuration', route: '/api/fixture', stack: '', ts: new Date(NOW - 30 * 60000 + i * 1000).toISOString() }));
+  h.events(rows);
+  assert.equal(rows.reduce((sum, row) => sum + (row.count ?? 1), 0), 120);
+  assert.ok(Date.parse(rows.at(-1).ts) - Date.parse(rows[0].ts) < HOUR);
+  const result = h.cli('--once', '--sources', 'fixture', '--dry-run');
+  assert.equal(result.status, 0, result.stderr);
+  assert.equal((result.stdout.match(/"create"/g) ?? []).length, 1);
+  assert.match(result.stdout, /SSL configuration warning repeated 120 times in one hour/);
+  assert.match(result.stdout, /Occurrences in one hour: 120/);
+  assert.match(result.stdout, /"errors":0,"noise":120,"newGroups":0/);
+  assert.equal(existsSync(dirname(h.statePath)), false);
+  assert.ok(h.calls().every(call => call.name === 'ht' && call.args[0] === 'GET'));
+  console.log(result.stdout.trim());
+  console.log('SSL fixture planned ticket verified');
+}));
+
 check('reporting', 'noise counted per service and day, no tickets; daily summary once after 06 or forced', () => withHarness(async h => {
   const noise = [event({ route: '/wp-admin/' }), event({ route: '/.env' }), event({ route: '/index.php' }), event({ message: 'AbortError' }), event({ message: 'request aborted' }), event({ message: 'HTTP 401' }), event({ message: 'status: 403' }), event({ message: '404 Not Found', service: 'api' })];
   h.events(noise); await h.run(); assert.equal(creates(h).length, 0); assert.equal(activities(h).length, 0);
@@ -371,6 +660,35 @@ check('reporting', 'noise counted per service and day, no tickets; daily summary
   assert.ok(activities(h).some(c => c.args[3] === 'web on 2026-10-15: 0 errors (2026-10-14: 2), 0 new kinds, 0 noise'));
 }));
 
+check('reporting', 'errors marked [ht-forced-test] are skipped for every source, unmarked ones still file (YPER4-384)', () => withHarness(async h => {
+  h.events([
+    event({ message: 'Error: [ht-forced-test] YPER4-384 forced server test 1' }),
+    event({ service: 'browser', message: 'Error: [ht-forced-test] YPER4-384 forced browser test 2' }),
+    event({ service: 'github-actions', board: 4060, route: '', message: 'Smoke failed [ht-forced-test]' }),
+    event({ message: 'Error: YPER4-377 forced browser test 3' }),
+  ]);
+  await h.run();
+  assert.equal(creates(h).length, 1);
+  assert.equal(h.state().days['2026-10-14'].web.noise, 1);
+  assert.equal(h.state().days['2026-10-14'].browser.noise, 1);
+  assert.equal(h.state().days['2026-10-14']['github-actions'].noise, 1);
+  assert.equal(h.state().days['2026-10-14'].web.errors, 1);
+}));
+
+check('reporting', 'CLI reports named HtForcedTest are skipped, a real CLI error still files (YPER4-396)', () => withHarness(async h => {
+  const cli = { service: 'cli', board: 15, route: '/api/mcp/cli-error' };
+  h.events([
+    event({ ...cli, message: '[cli-error] task get: HtForcedTest (HTTP 502)' }),
+    event({ ...cli, message: '[cli-error] task create: HtForcedTest' }),
+    event({ ...cli, message: '[cli-error] task get: HtForcedTestX (HTTP 502)' }),
+    event({ ...cli, message: '[cli-error] task get: ServerError (HTTP 502)' }),
+  ]);
+  await h.run();
+  assert.equal(creates(h).length, 2);
+  assert.equal(h.state().days['2026-10-14'].cli.noise, 2);
+  assert.equal(h.state().days['2026-10-14'].cli.errors, 2);
+}));
+
 check('reporting', 'outside PR guard dry runs are noise, other workflow failures are errors (YPER4-364)', () => withHarness(async h => {
   const ci = { service: 'github-actions', board: 4060, route: '', stack: 'https://github.com/hypertask-ai/hypertask/actions/runs/1' };
   h.events([event({ ...ci, message: 'Outside PR guard failed: outside-pr-guard' }), event({ ...ci, message: 'CI Tests failed: browser-smoke' })]);
@@ -378,6 +696,15 @@ check('reporting', 'outside PR guard dry runs are noise, other workflow failures
   assert.equal(creates(h).length, 1);
   assert.equal(h.state().days['2026-10-14']['github-actions'].noise, 1);
   assert.equal(h.state().days['2026-10-14']['github-actions'].errors, 1);
+}));
+
+check('reporting', 'an SSH client hanging up is noise, other sshd failures are errors (YPER4-406)', () => withHarness(async h => {
+  const vps = { service: 'vps-journal', board: 4060, route: 'ssh.service', stack: '' };
+  h.events([event({ ...vps, message: 'ssh.service: fatal: ssh_packet_send_debug: send DEBUG: Broken pipe' }), event({ ...vps, message: 'ssh.service: error: bind [127.0.0.1]:7979: Address already in use' })]);
+  await h.run();
+  assert.equal(creates(h).length, 1);
+  assert.equal(h.state().days['2026-10-14']['vps-journal'].noise, 1);
+  assert.equal(h.state().days['2026-10-14']['vps-journal'].errors, 1);
 }));
 
 check('reporting', 'upstream resets are errors, client resets remain noise', () => withHarness(async h => {
@@ -416,7 +743,7 @@ check('reporting', 'dry-run plans create/activity/summary/spike and never change
   h.env.NODE_OPTIONS = `--import=${clock}`;
   h.seed({ version: 1, sources: { fixture: '2026-10-13T05:00:00.000Z' }, coverage: { fixture: { since: '2026-10-12T00:00:00.000Z', until: '2026-10-13T05:00:00.000Z', services: ['fixture', 'web'] } }, fingerprints: {}, pending: {}, activities: {}, created: [], summaries: {}, days: { '2026-10-12': { web: { errors: 0, noise: 0, newGroups: 0, complete: true } } } });
   const initial = readFileSync(h.statePath);
-  h.events([event({ count: 50, ts: new Date(NOW - DAY + HOUR).toISOString() })]);
+  h.events([event({ count: 50, ts: new Date(NOW - DAY + HOUR).toISOString() }), event({ message: 'Fresh dry-run failure' })]);
   const result = h.cli('--once', '--sources', 'fixture', '--dry-run', '--summary');
   assert.equal(result.status, 0, result.stderr);
   assert.match(result.stdout, /DRY-RUN.*"vcc".*"create"/);
@@ -874,4 +1201,275 @@ check('sources', 'Neon collector advances snapshots atomically, failures leave b
     assert.ok(!readFileSync(h.statePath, 'utf8').includes('fixture-password'));
     assert.equal(Object.values(h.state().fingerprints).find(record => record.total === 2).board, 4060);
   } finally { globalThis.fetch = original; }
+}));
+
+check('tickets', 'stale replay: cap-held HTPR-7481..7490 groups never file at 10:30 or 13:30', () => withHarness(async h => {
+  // Timings, totals and routes from the 2026-10-20 state copy; messages are shortened.
+  const rows = JSON.parse(readFileSync(join(HERE, 'fixtures/stale-replay.json'), 'utf8'));
+  const filling = Array.from({ length: 5 }, (_, i) => event({ service: 'vercel', message: `Active failure ${String.fromCharCode(65 + i)}`, route: '/cap-fixture', ts: '2026-10-20T08:00:00Z' }));
+  h.events([...filling, ...rows.filter(row => row.message !== 'MCP context task id out of range')]);
+  await h.run({ now: Date.parse('2026-10-20T08:01:00Z') });
+  assert.equal(creates(h).length, 5);
+  assert.equal(Object.keys(h.state().pending).length, 12);
+  await h.run({ now: Date.parse('2026-10-20T08:02:00Z') });
+  assert.equal(creates(h).length, 5);
+  await h.run({ now: Date.parse('2026-10-20T10:30:00Z') });
+  const at1030 = creates(h).length;
+  await h.run({ now: Date.parse('2026-10-20T13:30:00Z') });
+  console.log(`stale replay creates: 10:30=${at1030 - 5}, 13:30=${creates(h).length - at1030}`);
+  assert.equal(creates(h).length, 5, 'cap-held stale groups must not create tickets');
+  assert.deepEqual(Object.keys(h.state().pending), []);
+  assert.equal(Object.keys(h.state().stale).length, 12);
+  assert.equal(h.state().days['2026-10-20'].vercel.stale, 12);
+}));
+
+check('tickets', 'stale replay: the later context pending group also expires before 13:30', () => withHarness(async h => {
+  const rows = JSON.parse(readFileSync(join(HERE, 'fixtures/stale-replay.json'), 'utf8'));
+  h.events(rows.filter(row => row.message === 'MCP context task id out of range'));
+  h.env.ERROR_COLLECTOR_HOURLY_CAP = '0';
+  await h.run({ now: Date.parse('2026-10-20T09:54:00Z') });
+  assert.equal(Object.keys(h.state().pending).length, 1);
+  h.env.ERROR_COLLECTOR_HOURLY_CAP = '5';
+  await h.run({ now: Date.parse('2026-10-20T13:30:00Z') });
+  assert.equal(creates(h).length, 0);
+  assert.deepEqual(Object.keys(h.state().pending), []);
+}));
+
+check('tickets', 'stale records ignore old sightings but a newer recurrence files normally under the cap', () => withHarness(async h => {
+  const old = event({ ts: new Date(NOW - 3 * HOUR).toISOString(), count: 7 });
+  const fp = fingerprint(old.service, old.message);
+  h.events([old]);
+  await h.run();
+  assert.equal(creates(h).length, 0);
+  assert.equal(h.state().fingerprints[fp], undefined);
+  assert.deepEqual(h.state().stale[fp], { board: old.board, service: old.service, firstSeen: old.ts, lastSeen: old.ts, count: 7, routes: [old.route], aliases: [] });
+  const retry = h.state();
+  delete retry.sources.fixture;
+  h.seed(retry);
+  h.events([old, { ...old, ts: new Date(NOW - 4 * HOUR).toISOString() }]);
+  await h.run({ now: NOW + 1000 });
+  assert.equal(creates(h).length, 0);
+  assert.equal(h.state().days['2026-10-14'].web.stale, 1);
+  assert.equal(h.state().stale[fp].count, 7);
+  assert.deepEqual(h.state().pending, {});
+  h.events([event({ ts: new Date(NOW + 2000).toISOString(), count: 2 }), old]);
+  const recurrence = h.state();
+  delete recurrence.sources.fixture;
+  h.seed(recurrence);
+  h.env.ERROR_COLLECTOR_HOURLY_CAP = '0';
+  await h.run({ now: NOW + 2000 });
+  assert.equal(creates(h).length, 0);
+  assert.equal(h.state().fingerprints[fp], undefined);
+  assert.equal(h.state().stale[fp], undefined);
+  assert.equal(h.state().pending[fp].count, 2);
+  h.env.ERROR_COLLECTOR_HOURLY_CAP = '5';
+  await h.run({ now: NOW + 3000 });
+  assert.equal(creates(h).length, 1);
+  assert.equal(h.state().fingerprints[fp].stale, undefined);
+  assert.equal(h.state().fingerprints[fp].total, 2);
+}));
+
+check('tickets', 'stale-only activity survives revival, retries under the six-hour throttle and preserves fingerprint totals', () => withHarness(async h => {
+  h.events([event()]);
+  await h.run();
+  const ticket = Object.values(h.state().fingerprints)[0].ticket;
+  h.events([event({ message: 'Different checkout failure', ts: new Date(NOW - 3 * HOUR).toISOString(), count: 4 })]);
+  const rewind = h.state();
+  delete rewind.sources.fixture;
+  h.seed(rewind);
+  await h.run({ now: NOW + 1000 });
+  assert.equal(creates(h).length, 1);
+  assert.equal(activities(h, ticket).length, 0);
+  assert.deepEqual(Object.keys(h.state().pending), []);
+  assert.equal(h.state().activities[ticket].count, 0);
+  const staleFp = fingerprint('web', 'Different checkout failure');
+  h.events([event({ message: 'Different checkout failure', ts: new Date(NOW + HOUR).toISOString(), count: 2 })]);
+  await h.run({ now: NOW + HOUR });
+  assert.equal(h.state().stale[staleFp], undefined);
+  assert.equal(creates(h).length, 2);
+  assert.equal(h.state().activities[ticket].count, 0);
+  assert.equal(h.state().activities[ticket].stale.count, 4);
+  h.events([]);
+  await h.run({ now: NOW + 6 * HOUR - 1 });
+  assert.equal(activities(h, ticket).length, 0);
+  h.config({ activityFail: true });
+  await h.run({ now: NOW + 6 * HOUR });
+  assert.equal(activities(h, ticket).length, 1);
+  assert.equal(h.state().activities[ticket].stale.count, 4);
+  h.config({});
+  await h.run({ now: NOW + 6 * HOUR + 1000 });
+  assert.equal(activities(h, ticket).length, 2);
+  assert.equal(activities(h, ticket)[1].args[3], '0 more since 2026-10-14T02:00:00.000Z, 1 total, last seen 2026-10-14T04:59:59.000Z; stale sighting: 4 occurrences, first seen 2026-10-14T02:00:00.000Z, last seen 2026-10-14T02:00:00.000Z');
+  assert.equal(h.state().activities[ticket].stale, undefined);
+  await h.run({ now: NOW + 7 * HOUR });
+  assert.equal(activities(h, ticket).length, 2);
+}));
+
+for (const kind of ['deleted', 'other-board', 'other-route', 'empty-route']) check('tickets', `stale route adoption excludes ${kind} records`, () => withHarness(async h => {
+  h.events([event({ route: kind === 'empty-route' ? '' : '/checkout/123' })]);
+  await h.run();
+  const state = h.state();
+  const record = Object.values(state.fingerprints)[0];
+  if (kind === 'deleted') record.deleted = true;
+  if (kind === 'other-board') record.board = 4060;
+  if (kind === 'other-route') record.routes = ['/unrelated'];
+  delete state.sources.fixture;
+  h.seed(state);
+  h.events([event({ message: 'Different checkout failure', route: kind === 'empty-route' ? '' : '/checkout/123', ts: new Date(NOW - 3 * HOUR).toISOString() })]);
+  await h.run({ now: NOW + 1000 });
+  assert.equal(creates(h).length, 1);
+  assert.equal(activities(h, record.ticket).length, 0);
+  assert.equal(h.state().days['2026-10-14'].web.stale, 1);
+}));
+
+for (const setting of [undefined, '0', 'invalid', '-1', 'Infinity', '1', '2.5']) check('tickets', `stale window setting ${setting} uses a positive finite value or defaults to two hours`, () => withHarness(async h => {
+  if (setting !== undefined) h.env.ERROR_COLLECTOR_STALE_HOURS = setting;
+  h.events([event({ message: 'Fresh failure' }), event({ message: 'Boundary failure', ts: new Date(NOW - 2 * HOUR).toISOString() }), event({ message: 'Older failure', ts: new Date(NOW - 2 * HOUR - 1).toISOString() })]);
+  await h.run();
+  assert.equal(creates(h).length, setting === '1' ? 1 : setting === '2.5' ? 3 : 2);
+  assert.equal(Object.keys(h.state().stale).length, setting === '1' ? 2 : setting === '2.5' ? 0 : 1);
+}));
+
+check('reporting', 'stale unfiled groups count once in daily summaries without ticket references', () => withHarness(async h => {
+  h.events([event({ ts: new Date(NOW - 3 * HOUR).toISOString(), count: 9 })]);
+  await h.run();
+  assert.equal(creates(h).length, 0);
+  h.events([]);
+  await h.run({ now: NOW + DAY, summary: true });
+  const summary = activities(h, 'YPER4-354').find(call => /web on 2026-10-14/.test(call.args[3]));
+  assert.match(summary.args[3], /9 errors.*1 stale, not filed/);
+  assert.doesNotMatch(summary.args[3], /HTPR-/);
+  await h.run({ now: NOW + DAY + 1000, summary: true });
+  assert.equal(h.state().days['2026-10-14'].web.stale, 1);
+  assert.equal(activities(h, 'YPER4-354').filter(call => /web on 2026-10-14/.test(call.args[3])).length, 1);
+}));
+
+check('tickets', 'stale same-route groups emit one due activity and newer events can file their own tickets', () => withHarness(async h => {
+  const prior = new Date(NOW - 7 * HOUR).toISOString();
+  h.seed({ version: 1, sources: {}, fingerprints: { existing: { ticket: 'HTPR-777', board: 15, firstSeen: prior, lastSeen: prior, total: 3, routes: ['/checkout/123'], lastActivityAt: prior } }, pending: {}, days: {}, summaries: {}, activities: {}, created: [] });
+  const rows = ['Checkout connection failed', 'Checkout transaction failed'].map(message => event({ message, ts: new Date(NOW - 3 * HOUR).toISOString(), count: 4 }));
+  h.events(rows);
+  await h.run();
+  assert.equal(creates(h).length, 0);
+  assert.equal(activities(h, 'HTPR-777').length, 1);
+  assert.equal(activities(h, 'HTPR-777')[0].args[3], `0 more since 2026-10-14T02:00:00.000Z, 3 total, last seen ${prior}; stale sighting: 8 occurrences, first seen 2026-10-14T02:00:00.000Z, last seen 2026-10-14T02:00:00.000Z`);
+  assert.equal(h.state().days['2026-10-14'].web.stale, undefined);
+  await h.run({ now: NOW + 1000 });
+  assert.equal(activities(h, 'HTPR-777').length, 1);
+  h.events(rows.map(row => ({ ...row, ts: new Date(NOW + 2000).toISOString(), count: 1 })));
+  await h.run({ now: NOW + 2000 });
+  assert.equal(creates(h).length, 2);
+}));
+
+check('tickets', 'stale alias marker is reconciled before disposition and recurrence never duplicates the ticket', () => withHarness(async h => {
+  const ts = new Date(NOW - 3 * HOUR).toISOString();
+  const message = `${ts} Legacy checkout failure`;
+  const alias = '8e2912a350500b38';
+  const fp = fingerprint('web', message);
+  h.seed({ version: 1, sources: {}, fingerprints: {}, pending: { [alias]: { board: 15, service: 'web', normalized: normalize(message), message, stack: '', routes: ['/checkout'], count: 2, firstSeen: ts, lastSeen: ts } }, days: {}, summaries: {}, activities: {}, created: [] });
+  h.remote([{ ticketNumber: 'HTPR-777', projectId: 15, status: 'Normal', description: `<p>error-fingerprint:${alias}</p>` }]);
+  await h.run();
+  assert.equal(h.state().fingerprints[fp].ticket, 'HTPR-777');
+  assert.equal(h.state().stale[fp], undefined);
+  h.events([event({ message, ts: new Date(NOW + 1000).toISOString() })]);
+  await h.run({ now: NOW + 1000 });
+  assert.equal(creates(h).length, 0);
+  assert.equal(h.state().fingerprints[fp].total, 3);
+}));
+
+check('tickets', 'stale unresolved aliases survive revival into pending and adopt a legacy marker', () => withHarness(async h => {
+  const ts = new Date(NOW - 3 * HOUR).toISOString();
+  const message = `${ts} Legacy checkout failure`;
+  const alias = '8e2912a350500b38';
+  const fp = fingerprint('web', message);
+  h.seed({ version: 1, sources: {}, fingerprints: {}, pending: { [alias]: { board: 15, service: 'web', normalized: normalize(message), message, stack: '', routes: ['/checkout'], count: 2, firstSeen: ts, lastSeen: ts } }, days: {}, summaries: {}, activities: {}, created: [] });
+  await h.run();
+  assert.deepEqual(h.state().stale[fp].aliases, [alias]);
+  h.env.ERROR_COLLECTOR_HOURLY_CAP = '0';
+  h.events([event({ message, board: 4060, ts: new Date(NOW + 1000).toISOString() })]);
+  await h.run({ now: NOW + 1000 });
+  assert.deepEqual(h.state().pending[fp].aliases, [alias]);
+  assert.equal(h.state().pending[fp].board, 15);
+  assert.equal(h.state().stale[fp], undefined);
+  h.remote([{ ticketNumber: 'HTPR-777', projectId: 15, status: 'Archive', description: `<p>error-fingerprint:${alias}</p>` }]);
+  await h.run({ now: NOW + 2000 });
+  h.events([event({ message, ts: new Date(NOW + 3000).toISOString() })]);
+  await h.run({ now: NOW + 3000 });
+  assert.equal(creates(h).length, 0);
+  assert.equal(h.state().fingerprints[fp].ticket, 'HTPR-777');
+  assert.equal(h.state().fingerprints[fp].total, 2);
+}));
+
+check('reporting', 'stale warning revival still requires more than the normal hourly threshold', () => withHarness(async h => {
+  const message = 'Warning: SECURITY WARNING: The SSL modes';
+  const fp = createHash('sha256').update('noise|vercel|ssl-mode-warning').digest('hex').slice(0, 16);
+  const old = event({ service: 'vercel', message, count: 51, ts: new Date(NOW - 3 * HOUR).toISOString() });
+  h.events([old]);
+  await h.run();
+  assert.equal(creates(h).length, 0);
+  assert.equal(h.state().stale[fp].count, 51);
+  assert.equal(h.state().fingerprints[fp], undefined);
+  const state = h.state();
+  delete state.sources.fixture;
+  h.seed(state);
+  h.events([old, { ...old, ts: new Date(NOW - 4 * HOUR).toISOString() }]);
+  await h.run({ now: NOW + 1000 });
+  assert.deepEqual(h.state().noiseWindows, {});
+  assert.equal(h.state().stale[fp].count, 51);
+  const reads = h.calls().length;
+  h.events([event({ service: 'vercel', message, ts: new Date(NOW + 2000).toISOString() })]);
+  await h.run({ now: NOW + 2000 });
+  assert.equal(h.state().stale[fp], undefined);
+  assert.deepEqual(h.state().pending, {});
+  assert.equal(h.calls().length, reads);
+  h.events([event({ service: 'vercel', message, count: 49, ts: new Date(NOW + 3000).toISOString() })]);
+  await h.run({ now: NOW + 3000 });
+  assert.equal(creates(h).length, 0);
+  h.events([event({ service: 'vercel', message, ts: new Date(NOW + 4000).toISOString() })]);
+  await h.run({ now: NOW + 4000 });
+  assert.equal(creates(h).length, 1);
+  assert.equal(h.state().fingerprints[fp].total, 51);
+  assert.match(creates(h)[0].description, /Occurrences in one hour: 51/);
+}));
+
+check('reporting', 'midnight-spanning stale group is counted on disposition day after the first day was summarized', () => withHarness(async h => {
+  const start = Date.parse('2026-10-13T23:30:00Z');
+  const end = Date.parse('2026-10-14T00:30:00Z');
+  h.env.ERROR_COLLECTOR_HOURLY_CAP = '0';
+  h.events([event({ ts: new Date(start).toISOString(), count: 2 })]);
+  await h.run({ now: start });
+  h.events([event({ ts: new Date(end).toISOString(), count: 3 })]);
+  await h.run({ now: end, summary: true });
+  assert.equal(h.state().summaries['2026-10-13'].web, true);
+  h.events([]);
+  await h.run();
+  assert.equal(creates(h).length, 0);
+  assert.equal(h.state().days['2026-10-13'].web.stale, undefined);
+  assert.equal(h.state().days['2026-10-14'].web.stale, 1);
+  assert.equal(Object.values(h.state().stale)[0].count, 5);
+  await h.run({ now: NOW + DAY, summary: true });
+  const lines = activities(h, 'YPER4-354').map(call => call.args[3]);
+  assert.equal(lines.filter(line => /web on 2026-10-13/.test(line)).length, 1);
+  assert.ok(lines.some(line => /web on 2026-10-14:.*1 stale, not filed/.test(line)));
+}));
+
+check('tickets', 'stale records retain fourteen UTC days without pruning ticket fingerprints or queued sightings', () => withHarness(async h => {
+  const ts = new Date(NOW - 3 * HOUR).toISOString();
+  h.events([event({ ts })]);
+  await h.run();
+  const fp = fingerprint('web', event().message);
+  const stale = h.state().stale[fp];
+  const state = h.state();
+  state.stale.expired = { ...stale, lastSeen: '2026-09-30T23:59:59.999Z' };
+  state.stale.boundary = { ...stale, lastSeen: '2026-10-01T00:00:00.000Z' };
+  state.fingerprints.existing = { ticket: 'HTPR-777', board: 15, total: 3, routes: [], firstSeen: ts, lastSeen: ts, lastActivityAt: new Date(NOW).toISOString() };
+  state.activities['HTPR-777'] = { count: 0, since: ts, at: new Date(NOW).toISOString(), stale: { count: 2, firstSeen: ts, lastSeen: ts } };
+  h.seed(state);
+  h.events([]);
+  await h.run({ now: NOW + 1000 });
+  assert.equal(h.state().stale.expired, undefined);
+  assert.deepEqual(h.state().stale.boundary, state.stale.boundary);
+  assert.deepEqual(h.state().stale[fp], stale);
+  assert.deepEqual(h.state().fingerprints, state.fingerprints);
+  assert.deepEqual(h.state().activities, state.activities);
 }));

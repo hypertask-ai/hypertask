@@ -49,12 +49,10 @@ export const TrialsButton = ({teamId}:{teamId:string}) => {
 
     const createCheckout = async () => {
         if (
-            !teamInfo    // hasSubscription.monthly && selectedTime==0 || hasSubscription.yearly&&selectedTime===1 
+            !teamInfo
         ) {
-            // router.push(manageLink)
         }
         else {
-            // ================= POST request to create checkout sessioN
             const body: CreateCheckoutParams = {
                 teamTitle: teamInfo.teamTitle,
                 googleAccountId: teamInfo.googleAccountId,
@@ -117,21 +115,14 @@ export const TrialsButton = ({teamId}:{teamId:string}) => {
     )
 }
 
-
-// refactor opportunity:
-// some of them are reusable, please refactor them when you can.
-// for example the sentences NOW use the same font, so might as well have same component for them to avoid inconsistency.
-
 export const PlansTable = ()=>{
     return(
         <>
         <h2 className="text-4xl text-center sm:text-4xl font-semibold mb-2 sm:mb-0 lg:w-3/5 ">Try the Pro plan for free for 14 days</h2>
         <p className="font-medium  text-center text-content sm:text-emphasis text-text-light-gray lg:w-3/5">Use Hypertask as much as you want with no board or task amount limitations with unlimited AI. Risk free, cancel anytime.</p>
         <div className="py-2 sm:py-6 max-h-[58svh] max-w-[80vw] overflow-auto lg:scrollbar-none scrollbar-thin scrollbar-thumb-inherit scrollbar-track-inherit text-left font-semibold ">
-                {/* ============ map any plan for now as we want to map elements against the length =============== */}
                 <div className="flex xs:gap-3 lg:gap-8">
 
-                    {/* column 1  */}
                     <div className="lg:px-4 xs:px-2 py-2">
                         <ColumnTitle content={""} />
                         <div className="flex flex-col font-bold">
@@ -144,7 +135,6 @@ export const PlansTable = ()=>{
                         </div>
                     </div>
 
-                    {/* column 2  */}
                     <div className=" lg:px-4 xs:px-2 py-2">
                         <ColumnTitle content={"Starter"} />
 
@@ -159,7 +149,6 @@ export const PlansTable = ()=>{
                             }
                         </div>
                     </div>
-                    {/* column 3  */}
                     <div className="xs:px-3  lg:px-6  bg-[#F3F3F3] dark:bg-active-elementBg py-2">
                         <div className="flex gap-2 items-center font-bold">
                             <ColumnTitle content={"Pro with "} />

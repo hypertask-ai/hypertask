@@ -1,4 +1,4 @@
-'use client' // Error components must be Client Components
+'use client'
  
 import { useRouter } from 'next/navigation'
 import { useEffect } from 'react'
@@ -12,7 +12,6 @@ export default function Error({
 }) {
   const router=useRouter()
   useEffect(() => {
-    // Log the error to an error reporting service
     console.error(error)
   }, [error])
  
@@ -22,7 +21,6 @@ export default function Error({
       <button
       className='btn btn-primary'
         onClick={
-          // Attempt to recover by trying to re-render the segment
           () => router.replace("/")
         }
       >
@@ -31,7 +29,6 @@ export default function Error({
       <button
       className='btn btn-danger'
         onClick={
-          // Attempt to recover by trying to re-render the segment
           () => reset()
         }
       >

@@ -4,7 +4,7 @@ The one nightly QA suite for the live app (Valentin, 2026-09-15). Midscene is
 retired in favor of this; see `midscene-flows.md` for the retirement stub and
 [HTPR-6484](https://app.hypertask.ai/detail/project-15/6484) for the port
 ticket. Full detail: `~/projects/hypertask-verify-app/ABSTRACT.md` and
-`openwiki/verification-fleet.md` in the hypertasks repo.
+`.claude/skills/verify-qa/reference/verification-fleet.md` in the hypertasks repo.
 
 ## What it is
 

@@ -79,16 +79,10 @@ test("pages create keeps the not-found or access-denied response", () => {
 });
 
 test("ambiguous ticket numbers ask for project_id instead of returning 500", () => {
-  assert.match(createRoute, /error instanceof TaskIdentifierAmbiguityError/);
-  assert.match(
-    createRoute,
-    /buildFieldError\('invalid_field', 'ticket_number', error\.message\)/
-  );
-  assert.match(listRoute, /error instanceof TaskIdentifierAmbiguityError/);
-  assert.match(
-    listRoute,
-    /Ticket number is ambiguous across accessible projects; use task_id or \(project_id \+ unique_index\)/
-  );
+  for (const route of [createRoute, listRoute]) {
+    assert.match(route, /taskIdentifierErrorResponse\(error, 'ticket_number'\)/);
+    assert.match(route, /if \(identifierResponse\) return identifierResponse/);
+  }
 });
 
 // project_id remains a project-list selector unless unique_index makes it a

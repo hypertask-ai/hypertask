@@ -106,8 +106,6 @@ export async function GET(request: NextRequest) {
           },
         });
       } catch (reportingError) {
-        // Release the claim: a swallowed reporting failure would otherwise mute
-        // this signature for an hour and leave a broken demo unannounced.
         releaseFailureReport(signature);
         console.error("demo smoke failure went unreported", reportingError);
       }

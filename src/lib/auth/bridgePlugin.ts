@@ -27,14 +27,19 @@ export function bridgeSessionPlugin() {
             })
           }
 
+          if (legacySession.agentId) {
+            throw APIError.fromStatus('FORBIDDEN', {
+              message: 'Agent cookies cannot create human sessions',
+              code: 'AGENT_COOKIE_ROUTE',
+            })
+          }
+
           ctx.setHeader('cache-control', 'private, no-store')
           ctx.setHeader('pragma', 'no-cache')
           const bootstrapPromise = getAppShellBootstrap(legacySession.id).catch(
             () => null,
           )
 
-          // Better Auth's public adapter types assume string IDs, while this
-          // installation maps IDs directly to the existing integer User.id.
           const userId = legacySession.id as unknown as string
           const user = await ctx.context.internalAdapter.findUserById(userId)
           if (!user) {

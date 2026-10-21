@@ -14,8 +14,6 @@ const root = path.resolve(__dirname, "..");
 const originalFetch = global.fetch;
 let sessionUserId;
 let sessionError;
-let enabled;
-let eligibilityUserIds;
 let connectedToken;
 let connectedUserId;
 let connectionSummary;
@@ -32,10 +30,6 @@ stub("src/lib/auth/getSessionUser.ts", {
   },
 });
 stub("src/lib/figma/connection.ts", {
-  figmaConnectEnabledFor: async (userId) => {
-    eligibilityUserIds.push(userId);
-    return enabled;
-  },
   connectFigmaUser: async (userId, issueToken) => {
     connectedUserId = userId;
     connectedToken = await issueToken();
@@ -81,8 +75,6 @@ test.beforeEach(() => {
   global.fetch = originalFetch;
   sessionUserId = 6;
   sessionError = null;
-  enabled = true;
-  eligibilityUserIds = [];
   connectedToken = null;
   connectedUserId = null;
   connectionSummary = {
@@ -101,14 +93,14 @@ test.after(() => {
   else process.env.FIGMA_CLIENT_SECRET = originalFigmaClientSecret;
 });
 
-test("OAuth start requires the signed user and owner-only server flag", async () => {
+test("OAuth start requires a signed user and is open to every signed user", async () => {
   sessionUserId = null;
   assert.equal((await startRoute.GET(appRequest("/api/figma/oauth/start"))).status, 401);
 
-  sessionUserId = 6;
-  enabled = false;
-  assert.equal((await startRoute.GET(appRequest("/api/figma/oauth/start"))).status, 404);
-  assert.deepEqual(eligibilityUserIds, [6]);
+  sessionUserId = 7;
+  const response = await startRoute.GET(appRequest("/api/figma/oauth/start"));
+  assert.equal(response.status, 307);
+  assert.equal(new URL(response.headers.get("location")).origin, "https://www.figma.com");
 });
 
 test("OAuth start with no Figma keys names the reason on screen and in the log", async () => {
@@ -366,17 +358,6 @@ test("connection reads and disconnects only the signed user's row", async () => 
   assert.equal(foreignOrigin.status, 403);
   assert.equal(disconnectedUserId, null);
 
-  enabled = false;
-  const disabledResponse = await disconnectRoute.DELETE(
-    appRequest("/api/figma/disconnect", {
-      method: "DELETE",
-      headers: { origin: "https://app.hypertask.ai" },
-    }),
-  );
-  assert.equal(disabledResponse.status, 404);
-  assert.equal(disconnectedUserId, null);
-
-  enabled = true;
   const response = await disconnectRoute.DELETE(
     appRequest("/api/figma/disconnect", {
       method: "DELETE",
@@ -390,18 +371,3 @@ test("connection reads and disconnects only the signed user's row", async () => 
   assert.doesNotMatch(clearedConnectionCookie, /HttpOnly/i);
 });
 
-test("disconnect stays gated when the flag is disabled without a connection", async () => {
-  enabled = false;
-  connectionSummary = null;
-
-  const response = await disconnectRoute.DELETE(
-    appRequest("/api/figma/disconnect", {
-      method: "DELETE",
-      headers: { origin: "https://app.hypertask.ai" },
-    }),
-  );
-
-  assert.equal(response.status, 404);
-  assert.equal(connectionUserId, null);
-  assert.equal(disconnectedUserId, null);
-});

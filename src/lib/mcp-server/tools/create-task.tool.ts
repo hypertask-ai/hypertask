@@ -4,13 +4,6 @@ import { executeWithService } from '../utils/executeWithService';
 import { TaskService } from '../lib/services/task.service';
 import { normalizeCreateTaskInput } from '../utils/normalize-task-input';
 
-/**
- * Tool: create_task
- * Creates a new task in a project.
- *
- * Required: project_id and title
- * Optional: description, section_id, priority, estimate
- */
 const CreateTaskSchema = getCreateTaskInputSchema();
 
 export const createTaskTool = {
@@ -22,7 +15,6 @@ export const createTaskTool = {
     context: any,
     invocation?: { requestId: string; clientFingerprint: string }
   ) => {
-    // Normalize input (coerce project_id/section_id from strings - AI agents sometimes pass "1511")
     const normalizedArgs = normalizeCreateTaskInput((args || {}) as Record<string, any>);
     const validatedInput = normalizedArgs;
 

@@ -6,14 +6,6 @@ import { Archive, Clock } from "lucide-react";
 const ENGAGE_PX = 10;
 const COMMIT_PX = 88;
 
-/**
- * Swipe left to archive, swipe right to snooze, on the existing inbox row.
- *
- * The gesture only engages once horizontal travel beats vertical travel, so
- * vertical list scrolling always wins the ambiguous case. touch-action pan-y
- * tells the browser the same thing, which keeps scrolling smooth while we are
- * still deciding.
- */
 const SwipeableNotificationRow = ({
   children,
   onArchive,
@@ -35,7 +27,6 @@ const SwipeableNotificationRow = ({
 
   return (
     <div className="relative overflow-hidden" style={{ touchAction: "pan-y" }}>
-      {/* Coloured panels revealed by the drag, on the side being swiped from. */}
       <div
         aria-hidden
         className="pointer-events-none absolute inset-y-0 left-0 flex flex-col items-center justify-center gap-[3px] bg-[#e5a13a] text-[10px] font-bold text-white"
@@ -78,7 +69,6 @@ const SwipeableNotificationRow = ({
           const dy = touch.clientY - start.current.y;
 
           if (!engaged.current) {
-            // Let a vertical scroll claim the gesture and stay out of its way.
             if (Math.abs(dy) > Math.abs(dx)) {
               start.current = null;
               return;
@@ -96,7 +86,6 @@ const SwipeableNotificationRow = ({
           reset();
         }}
         onTouchCancel={reset}
-        // A committed swipe must not also open the task behind it.
         onClickCapture={(event) => {
           if (!engaged.current) return;
           event.preventDefault();

@@ -32,8 +32,8 @@ const EmojiComponent = memo(
   }) => {
     const _mbl = useContext(MobileViewContext);
     const tooltipTrigger = useRef<HTMLDivElement>(null);
-    const [isHovered, setIsHovered] = useState(false); // State to track hover
-    const [showReactors, setShowReactors] = useState(false); // Mobile: who reacted
+    const [isHovered, setIsHovered] = useState(false);
+    const [showReactors, setShowReactors] = useState(false);
 
     const [pickerPosition, setPickerPosition] = useState({ top: 0, left: 0 });
     const [portalRoot, setPortalRoot] = useState<HTMLElement | null>(null);
@@ -72,8 +72,6 @@ const EmojiComponent = memo(
       <>
         <div
           onClick={(e) => {
-            // Mobile has no hover, so a tap surfaces who reacted (via the
-            // sheet) instead of toggling; the sheet itself offers "Tap to remove".
             if (_mbl) {
               setShowReactors(true);
               return;
@@ -122,13 +120,13 @@ const EmojiComponent = memo(
 
         {!_mbl && isHovered && portalRoot &&
           createPortal(
-            <div // This is your .emoji-picker-wrapper equivalent
-              className="emoji-component-tooltip" // Use a more descriptive class name
+            <div
+              className="emoji-component-tooltip"
               style={{
                 position: "fixed",
                 top: pickerPosition.top,
                 left: pickerPosition.left,
-                zIndex: 9999, // Ensure it's on top of everything
+                zIndex: 9999,
               }}
             >
               <div className={`absolute left-0 z-50`}>

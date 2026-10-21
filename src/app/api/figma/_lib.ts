@@ -3,7 +3,6 @@ import { NextRequest, NextResponse } from "next/server";
 
 import { getSessionUser } from "@/lib/auth/getSessionUser";
 import { getRequestBaseUrl } from "@/lib/auth/requestBaseUrl";
-import { figmaConnectEnabledFor } from "@/lib/figma/connection";
 import {
   FIGMA_CONNECTION_VERSION_COOKIE,
   FIGMA_OAUTH_CALLBACK_PATH,
@@ -19,10 +18,6 @@ export type FigmaAuthenticatedUser =
   | { status: "error" }
   | { status: "unauthorized" };
 
-export type FigmaRequestUser =
-  | FigmaAuthenticatedUser
-  | { status: "disabled" };
-
 export async function getFigmaAuthenticatedUser(
   request: NextRequest,
 ): Promise<FigmaAuthenticatedUser> {
@@ -31,20 +26,6 @@ export async function getFigmaAuthenticatedUser(
     return session
       ? { status: "allowed", userId: session.userId }
       : { status: "unauthorized" };
-  } catch {
-    return { status: "error" };
-  }
-}
-
-export async function getFigmaRequestUser(
-  request: NextRequest,
-): Promise<FigmaRequestUser> {
-  const principal = await getFigmaAuthenticatedUser(request);
-  if (principal.status !== "allowed") return principal;
-  try {
-    return (await figmaConnectEnabledFor(principal.userId))
-      ? principal
-      : { status: "disabled" };
   } catch {
     return { status: "error" };
   }
@@ -98,8 +79,6 @@ export function rotateFigmaConnectionVersion(
     FIGMA_CONNECTION_VERSION_COOKIE,
     randomBytes(16).toString("base64url"),
     {
-      // This random cache version is not a credential; previews read it to
-      // reject responses started before a connection change.
       httpOnly: false,
       maxAge: FIGMA_CONNECTION_VERSION_MAX_AGE_SECONDS,
       path: "/",

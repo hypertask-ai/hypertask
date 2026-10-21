@@ -9,10 +9,6 @@ const MAX_REPLY_CHARACTERS = 10_000;
 const MAX_SOURCE_CHARACTERS = 100_000;
 const DEFAULT_INBOUND_DOMAIN = "reply.hypertask.ai";
 const DAY_MS = 86_400_000;
-// The signed address is a bearer credential: anyone holding it can comment as
-// the notified user. Stamping the issue day and refusing an old stamp turns a
-// leaked or forwarded notification into a bounded window instead of permanent
-// impersonation. Long enough that a genuine late reply still lands.
 const MAX_REPLY_ADDRESS_AGE_DAYS = 60;
 
 const HTML_BLOCK_TAGS = new Set([
@@ -166,8 +162,6 @@ export function verifyInboundReplyAddress(
     return null;
   }
 
-  // Reject a stamp from the future as well as a stale one: a forged day cannot
-  // buy an attacker a longer-lived credential than a real notification gets.
   const age = currentDay() - issuedDay;
   if (age < 0 || age > MAX_REPLY_ADDRESS_AGE_DAYS) return null;
 

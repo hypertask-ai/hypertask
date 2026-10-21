@@ -358,7 +358,7 @@ test("every column auto-assign entry point exposes agents and preserves selectio
 test("manage columns keeps its settings-row autosave behavior", () => {
   const manage = read("src/components/Modals/commands/manageColumn.tsx");
 
-  assert.match(manage, /One row per setting, matching the Settings board rows/);
+  assert.match(manage, /min-h-\[40px\] items-center justify-between gap-4 border-b/);
   assert.match(manage, /onBlur=\{isMobile \? undefined : saveTitleOnBlur\}/);
   assert.match(manage, /queueSave\(\(\) =>/);
   assert.match(manage, /inputId="edit-column-is-done"/);

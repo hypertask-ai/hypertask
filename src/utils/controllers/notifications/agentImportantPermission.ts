@@ -12,10 +12,6 @@ export function agentIdsRequiringImportantPermission(
   );
 }
 
-/**
- * Direct replies bypass ordinary inbox filtering only when the sending agent
- * is allowed to post to Important.
- */
 export function directReplyTypesByTask(
   rows: ReadonlyArray<{
     taskId: number | null;

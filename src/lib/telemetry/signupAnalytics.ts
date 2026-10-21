@@ -18,6 +18,7 @@ export type PostHogCapture = {
     distinctId: string;
     event: string;
     properties: Record<string, unknown>;
+    uuid?: string;
   }) => Promise<unknown>;
 };
 

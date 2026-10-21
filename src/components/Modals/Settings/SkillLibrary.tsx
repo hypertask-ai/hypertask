@@ -64,7 +64,6 @@ export default function SkillLibrary({
       params,
     });
   }
-  // Memoize by request inputs so the selected callback does not trigger a reload every render.
   const fetchSkills = useMemo(() => readSkills, [params, typedClient]);
 
   const loadSkills = useCallback(async () => {

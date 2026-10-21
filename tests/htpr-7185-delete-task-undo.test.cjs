@@ -53,14 +53,13 @@ const taskConfig = load("src/lib/configs/taskDetail.config.ts", {
   "@/utils/htmlEscape": load("src/utils/htmlEscape.ts", {}),
 }).default;
 
-async function fixture(t, flagOn, single = true, failDelete = false) {
+async function fixture(t, flagOn, failDelete = false) {
   const dom = new JSDOM("<div id='root'></div>", { url: "https://app.hypertask.ai/detail/project-42/7" });
   const previous = {};
   for (const [key, value] of Object.entries({ window: dom.window, document: dom.window.document, HTMLElement: dom.window.HTMLElement, MutationObserver: dom.window.MutationObserver, KeyboardEvent: dom.window.KeyboardEvent, IS_REACT_ACT_ENVIRONMENT: true, matchMedia: () => ({ matches: false }) })) {
     previous[key] = global[key]; global[key] = value;
   }
   hotToast.toast.removeAll(); hotToast.toast.removeAll(undoToast.SINGLE_UNDO_TOASTER_ID);
-  undoToast.undoToastSettings.single = single;
   const row = { id: 101, projectId: 42, sectionId: 9, uniqueIndex: 7, status: "Normal", subTasks: [] };
   const section = { sectionId: 9, items: [{ ...row }] };
   const project = { id: 42, tasks: section.items, sections: [section], filteredSections: [section] };
@@ -146,7 +145,7 @@ async function fixture(t, flagOn, single = true, failDelete = false) {
   function Harness() {
     undo = useUndoContext();
     shared = boardActions({
-      ...undo, toast: hotToast.toast, undoToastSettings: undoToast.undoToastSettings,
+      ...undo, toast: hotToast.toast,
       globalAPIHandlers, queryClient, dedupe: false,
       _currentProject: { id: 42 }, _currentUser: { id: 985 }, router: { replace: url => navigate("Replace", url) },
       reconcileActiveBoardTasks,
@@ -159,12 +158,12 @@ async function fixture(t, flagOn, single = true, failDelete = false) {
       inViewObject: { taskId: 101, sectionId: 9, taskProjectId: 42 }, _currentProject: { id: 42 }, currentUser: { id: 985 },
       callbackHandler: () => {}, boardCloseHandler: () => { modalClosures++; },
     });
-    return React.createElement(React.Fragment, null, React.createElement(hotToast.Toaster), single && React.createElement(undoToast.SingleUndoToaster, { mobile: false, appShellRailOn: false }));
+    return React.createElement(React.Fragment, null, React.createElement(hotToast.Toaster), React.createElement(undoToast.SingleUndoToaster, { mobile: false, appShellRailOn: false }));
   }
   const app = createRoot(document.getElementById("root"));
   t.after(async () => {
     await React.act(async () => { hotToast.toast.removeAll(); hotToast.toast.removeAll(undoToast.SINGLE_UNDO_TOASTER_ID); app.unmount(); });
-    undoToast.undoToastSettings.single = false; dom.window.close(); Object.assign(global, previous);
+    dom.window.close(); Object.assign(global, previous);
   });
   await React.act(async () => app.render(React.createElement(UndoProvider, null, React.createElement(Harness))));
   return {
@@ -203,24 +202,22 @@ test("the discovered bugfix is enabled for ordinary customers by default with a 
 
 for (const entry of ["palette", "hash"]) {
   for (const trigger of ["click", "shortcut"]) {
-    for (const single of [false, true]) {
-      test(`${entry} delete offers Undo and ${trigger} restores its original column, single toast ${single}`, async t => {
-        const f = await fixture(t, true, single);
-        await f.delete(entry);
-        assert.equal(f.row.status, "Deleted");
-        assert.deepEqual(f.project.sections.flatMap(section => section.items), []);
-        assert.match(document.body.textContent, /Undo task delete/);
-        assert.equal(f.undo().undoData.length, 1);
-        assert.deepEqual(f.navigations, [{ page: "Replace", payload: "/project?id=42" }], "deep-link deletion must not unload the global undo provider via history Back");
-        await f.restore(trigger);
-        assert.equal(f.row.status, "Normal");
-        assert.deepEqual(f.project.sections.flatMap(section => section.items.map(task => [task.id, task.sectionId, task.status])), [[101, 9, "Normal"]]);
-        assert.equal(f.undo().undoData.length, 0);
-        await f.restore("shortcut");
-        assert.equal(f.row.status, "Normal");
-        assert.match(document.body.textContent, /Nothing to undo/);
-      });
-    }
+    test(`${entry} delete offers Undo and ${trigger} restores its original column`, async t => {
+      const f = await fixture(t, true);
+      await f.delete(entry);
+      assert.equal(f.row.status, "Deleted");
+      assert.deepEqual(f.project.sections.flatMap(section => section.items), []);
+      assert.match(document.body.textContent, /Undo task delete/);
+      assert.equal(f.undo().undoData.length, 1);
+      assert.deepEqual(f.navigations, [{ page: "Replace", payload: "/project?id=42" }], "deep-link deletion must not unload the global undo provider via history Back");
+      await f.restore(trigger);
+      assert.equal(f.row.status, "Normal");
+      assert.deepEqual(f.project.sections.flatMap(section => section.items.map(task => [task.id, task.sectionId, task.status])), [[101, 9, "Normal"]]);
+      assert.equal(f.undo().undoData.length, 0);
+      await f.restore("shortcut");
+      assert.equal(f.row.status, "Normal");
+      assert.match(document.body.textContent, /Nothing to undo/);
+    });
   }
   test(`${entry} flag off keeps the existing delete behavior`, async t => {
     const f = await fixture(t, false);
@@ -232,7 +229,7 @@ for (const entry of ["palette", "hash"]) {
     else assert.match(document.body.textContent, /Task deleted/);
   });
   test(`${entry} refusal or cancellation never registers a deletion undo`, async t => {
-    const f = await fixture(t, true, true, true);
+    const f = await fixture(t, true, true);
     await f.delete(entry, false);
     assert.equal(f.row.status, "Normal");
     assert.equal(f.undo().undoData.length, 0);

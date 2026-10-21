@@ -4,7 +4,6 @@ import type { TaskUpdateFieldContext, TaskUpdateTarget } from './types';
 
 export async function updateTaskAssignees(context: TaskUpdateFieldContext, task: TaskUpdateTarget) {
     const { assigneeUserIds, clearAssignees, userObj, ctx, assignAssignees, request, baseUrl, strictSideEffectFailures } = context;
-    // Assignees via MCP route (validates project membership for all user ids)
     if (assigneeUserIds !== undefined) {
         if (assigneeUserIds.length === 0) {
             if (clearAssignees) {
@@ -101,9 +100,6 @@ export async function updateTaskAssignees(context: TaskUpdateFieldContext, task:
         }
 
         if (!currentHumanAssignees) {
-            // Could not read the current list, so reconciling would drop
-            // everyone or no one at random. Fall back to the old additive
-            // behaviour rather than silently assigning nobody.
             await updateAssignees(assigneeUserIds, 'assign');
         } else {
             const requestedUserIds = new Set(assigneeUserIds);

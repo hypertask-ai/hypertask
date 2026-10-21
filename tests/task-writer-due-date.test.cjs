@@ -9,10 +9,12 @@ const root = path.resolve(__dirname, "..");
 const load = createJiti(__filename, { alias: { "@": path.join(root, "src") }, fsCache: false });
 const key = "htpr-7054-ctrlj-due-date";
 const now = new Date("2026-10-10T02:00:00Z");
+test.mock.timers.enable({ apis: ["Date"], now });
 const example = "Review onboarding, due 2026-10-16";
 const html = '<h1 id="ai-generated-task-title">Review onboarding, due 2026-10-16</h1><p>Review onboarding by the deadline.</p><span id="ai-generated-task-due-date" style="display:none">2026-10-16</span>';
 
 function moduleWithStubs(file, stubs) {
+  stubs = { "@/lib/auth/agentScope": require("./helpers/agent-board-scope.cjs").enforcedScope, ...stubs };
   const code = ts.transpileModule(fs.readFileSync(path.join(root, file), "utf8"), {
     compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022, esModuleInterop: true },
   }).outputText;
@@ -226,6 +228,7 @@ function saveHarness(enabled) {
     "@/lib/mcp/webhooks/taskEvents": { createTaskWithBoardWebhookOutbox: async (_prisma, _actor, callback) => ({ ...(await callback(prisma)), boardWebhookDeliveryIds: [] }) },
     "@/lib/mcp/webhooks/outbox": { publishBoardWebhookDeliveries: async () => {} },
     "@/lib/agentWebhooks/outbox": { persistAgentTaskCreatedPending: async () => {} },
+    "@/lib/telemetry/savedWork": { enqueueBoardCreated: async () => "board-key", processAnalyticsIntentSoon: () => {}, enqueueTaskCreated: async () => "task-key", creationChannelFromHeader: () => 'web', CREATION_CHANNEL_HEADER: 'X-Hypertask-Creation-Channel', CREATION_AGENT_HEADER: 'X-Hypertask-Creation-Agent' },
     "@/lib/auth/getSessionUser": { getSessionUser: async () => ({ userId: 985 }) },
     "@/lib/auth/resolveActingAgent": { resolveActingAgent: () => ({ ok: true, agentId: null }) },
     "@/lib/auth/session": { SESSION_COOKIE: "session", verifySession: () => null },

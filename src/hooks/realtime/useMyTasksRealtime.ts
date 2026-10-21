@@ -13,7 +13,6 @@ export const createMyTasksRealtimeEventHandler = (
   return () => refresh("event");
 };
 
-/** Board channels → reconcile. Refresh only after channels are live (HTPR-6458). */
 export function useMyTasksRealtime(
   accountId: number,
   projectIds: number[],
@@ -157,6 +156,6 @@ export function useMyTasksRealtime(
       window.removeEventListener("online", onOnline);
       unsubscribe?.();
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+
   }, [accountId, enabled, projectIds.map((id) => id).join(",")]);
 }

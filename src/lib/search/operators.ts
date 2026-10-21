@@ -1,10 +1,8 @@
 export const SEARCH_OPERATORS = ['from', 'commenter', 'assignee', 'in', 'board', 'label', 'is', 'before', 'after', 'on', 'has'] as const
 export type SearchOperator = (typeof SEARCH_OPERATORS)[number]
 export type SearchFilter = { value: string; negated: boolean; userIds?: number[] }
-// HTPR-6368: logic-only operators. Kept out of SEARCH_OPERATORS so no suggestion, tip or chip appears for them.
 export const LOGIC_OPERATORS = ['type', 'priority'] as const
 export type LogicOperator = (typeof LOGIC_OPERATORS)[number]
-// 'phrase' holds exact phrases ("a b") and exclusions (-word, -"a b"; negated: true) found in the plain text.
 export type SearchFilterKey = SearchOperator | LogicOperator | 'phrase'
 export type ParsedSearch = { text: string; filters: Partial<Record<SearchFilterKey, SearchFilter[]>> }
 export type NameOperator = 'from' | 'commenter' | 'assignee' | 'in' | 'board' | 'label'
@@ -34,8 +32,6 @@ export function searchOperatorClauseCount(raw: string) {
 
 const TEXT_CLAUSE = /(^|\s)(-?)"([^"]+)"(?=\s|$)|(^|\s)-([\p{L}\p{N}][^\s:"]*)(?=\s|$)/gu
 
-// Pulls "exact phrases" and -word / -"phrase" exclusions out of plain text. Positive phrases stay in the
-// text without quotes so ranking still sees their words; the clause enforces the exact phrase.
 export function extractTextClauses(text: string) {
   const clauses: SearchFilter[] = []
   const rest = text.replace(TEXT_CLAUSE, (_all, lead1?: string, dash?: string, phrase?: string, lead2?: string, word?: string) => {

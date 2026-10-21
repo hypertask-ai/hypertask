@@ -1,5 +1,5 @@
-/* eslint-disable react-hooks/exhaustive-deps */
-/* eslint-disable @next/next/no-img-element */
+
+
 "use client";
 import { useRouter } from "next/navigation";
 import { useContext, useEffect, useState } from "react";
@@ -47,7 +47,6 @@ const Starred = (props: IProp) => {
   const searchParams = useSearchParams();
   const { data: savedContentFromTQ } = useGetStarredContent(
     currentUser.id
-    // JSON.parse(_savedContent)
   );
 
   const { toggleShowCommands } = useHypertasksRecoilStates();
@@ -66,7 +65,6 @@ const Starred = (props: IProp) => {
 
     if (e.keyCode === KeyCodes.ESCAPE) router.back();
 
-    // press k
     if (e.keyCode === KeyCodes.K && cmdControl) {
       e.preventDefault();
       toggleShowCommands();
@@ -164,7 +162,6 @@ const Starred = (props: IProp) => {
         onClick={() => router.back()}
         className="fixed z-[101] bottom-[110px] right-4 rounded-[20px] justify-center md:hidden cursor-pointer shadow-customshadow-2 flex w-fit px-3 py-[2px] h-fit gap-2 items-center bg-modalBackground text-[#8E9093]"
       >
-        {/* <FaArrowLeft color='#FFFFFF' /> */}
         <Image src={Goback} alt="icon" width={28} height={28} />
         <span>Back</span>
       </div>

@@ -23,10 +23,6 @@ export const runtime = "nodejs";
 
 const MAX_MESSAGE_LENGTH = 8000;
 
-// POST /api/agent-chat/[sessionId]/messages
-// Store the human turn and, for an EXTERNAL agent, drop a chat.message
-// webhook into the outbox in the same transaction so the agent runtime can
-// run its turn and reply through the MCP endpoint.
 export async function POST(
   request: NextRequest,
   { params }: { params: Promise<{ sessionId: string }> }
@@ -72,15 +68,8 @@ export async function POST(
       );
     }
 
-    // Sending is taking part, even for someone who reached the thread without
-    // going through the open path. After the refusal above, so a rejected send
-    // does not sign anyone up to a conversation they never posted to.
     await ensureChatParticipant(session.id, userId);
 
-    // The thread is shared, so its owner is not necessarily who is typing. The
-    // agent has to be told who actually sent this, or every teammate's message
-    // arrives signed by the agent's owner. Read after the refusal above, so a
-    // send to a native agent does not pay for a name it throws away.
     const sender = await prisma.user.findUnique({
       where: { id: userId },
       select: { displayName: true },
@@ -103,8 +92,6 @@ export async function POST(
 
     const { message, deliveryIds, pollingChatEnabled } =
       await prisma.$transaction(async (tx) => {
-      // Runtime heartbeats update this row. Taking its lock before the session
-      // lock makes the heartbeat/send/poll decision linearizable.
       const [agent] = await tx.$queryRaw<Array<{ heartbeatAt: Date | null }>>`
         SELECT "heartbeatAt"
         FROM "Agent"
@@ -131,18 +118,11 @@ export async function POST(
           authorUserId: userId,
         },
       });
-      // The draft became this message, so it stops being a draft in the same
-      // commit. Anything else lets sent text reappear in the composer. The
-      // read marker moves after the row exists, so the sender's own message is
-      // never newer than the marker that is meant to cover it.
       await tx.chatSessionParticipant.updateMany({
         where: { sessionId: session.id, userId },
         data: { draft: null, lastReadAt: message.createdAt },
       });
 
-      // The outbox row joins this transaction, so the webhook can never fire
-      // for a message that failed to commit. An empty list means the agent has
-      // no active subscription covering chat.message.
       const deliveryIds = await persistAgentRunTriggerWebhooks(tx, {
         event: "chat.message",
         agentId,
@@ -176,11 +156,8 @@ export async function POST(
       return { message, deliveryIds, pollingChatEnabled };
     });
 
-    // Queue only after commit; a failure stays sweepable.
     await publishAgentWebhookDeliveries(deliveryIds);
 
-    // Everyone in the shared thread refetches it, not just the sender's own
-    // tabs: a teammate watching the same conversation has to see this arrive.
     await broadcastChatSession(session.id, [userId]);
 
     return NextResponse.json({

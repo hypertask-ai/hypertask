@@ -52,8 +52,6 @@ export async function PATCH(
       fullConfig = body.config;
     }
     let configPatch: Record<string, unknown> | null = null;
-    // Merge defaultBoardId into the saved row so concurrent full saves cannot
-    // wipe it, and quick-add cannot wipe unrelated draft fields.
     if (hasOwn(body, "configPatch")) {
       if (hasOwn(body, "config")) {
         return NextResponse.json(

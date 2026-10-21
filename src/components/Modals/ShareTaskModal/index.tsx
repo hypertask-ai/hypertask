@@ -343,8 +343,6 @@ const MobileShareRow = ({
   );
 
   const handleCopy = () => {
-    // Start the clipboard operation immediately so the browser still sees the
-    // tap as an active user gesture. Feedback updates happen after this call.
     const copyOperation = onCopy();
 
     void copyOperation

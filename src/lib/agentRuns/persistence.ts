@@ -42,7 +42,6 @@ async function recordRunHeartbeat(
     data: { status: "ACTIVE", lastActivityAt: input.at },
   });
   if (heartbeat.count === 0) {
-    // Lock a run whose newer heartbeat already won without moving its clock back.
     heartbeat = await tx.agentRun.updateMany({
       where: {
         id: input.runId,

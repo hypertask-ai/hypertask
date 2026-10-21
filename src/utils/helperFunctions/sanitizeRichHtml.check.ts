@@ -1,6 +1,5 @@
-// Run: NODE_PATH=/path/to/node_modules node --experimental-strip-types src/utils/helperFunctions/sanitizeRichHtml.check.ts
 import assert from "node:assert";
-// @ts-ignore -- explicit .ts extension is required by `node --experimental-strip-types`
+// @ts-expect-error Node strip-types checks require .ts imports without allowImportingTsExtensions.
 import { sanitizeRichHtml } from "./sanitizeRichHtml.ts";
 
 const xss = sanitizeRichHtml(

@@ -1,5 +1,5 @@
-import { recordActivationOccurrence } from "@/lib/telemetry/activationOccurrences";
-// Next.js API route support: https://nextjs.org/docs/api-routes/introduction
+import { enqueueOutsideSaveAndProcessSoon } from "@/lib/telemetry/analyticsIntents";
+import { enqueueInviteSent } from "@/lib/telemetry/inviteAnalytics";
 
 import type { NextApiRequest, NextApiResponse } from 'next/dist/shared/lib/utils'
 import prisma from "@/lib/prisma";
@@ -37,13 +37,11 @@ export default  async function handler(
     const {projectId: rawProjectId, email} = req.body;
     const projectId = Number(rawProjectId)
     if (!Number.isInteger(projectId) || !email) return res.status(400).json({message:"Missing required information"})
-    // HTPR-7176: only the board's owner and members may resend its invites.
     const allowed = await getMemberAndOwner(projectId)
     if (!Array.isArray(allowed) || !allowed.includes(user.id)) return res.status(403).json({message:"Forbidden"})
     const userId = user.id
 
       var invite:any = undefined
-      // =============== first find the invite
       invite = await prisma.invite.findFirst({
         where:{
           emails:{
@@ -65,11 +63,9 @@ export default  async function handler(
       activeView = getViewFromProject(invite.project)
       viewSlug = setViewSlug(activeView)
 
-      // ========= invite was found, create the link again, and resend the email
       if (invite){inviteLink = await generateInviteLink(invite.id, projectId, invite.project.title ?? "", viewSlug, user.id)}
         
 
-      // ========= invite wasn't found so create a new one and set the invite link's value
       else{
         invite = await prisma.invite.create({
           data:{
@@ -97,7 +93,6 @@ export default  async function handler(
       }
 
       await cancelInvite(invite.id, email, projectId)
-      // ============== create a new notification and another email
       await createNotification(email, inviteLink, user.id, invite.id, projectId)
       const sent = await sendEmailNotification("Invite", {
         sender: user.displayName ?? "",
@@ -110,7 +105,7 @@ export default  async function handler(
         title: invite.project.title ?? "",
         link: inviteLink,
       })
-      if (sent) recordActivationOccurrence(user.id, "teammate_invited", invite.id, { method: "email" });
+      if (sent) await enqueueOutsideSaveAndProcessSoon(() => enqueueInviteSent(prisma, invite, "email", invite.userId, user.id));
       return res.status(200).json({message:"Success!"})
   } catch (error) {
       console.log(error)

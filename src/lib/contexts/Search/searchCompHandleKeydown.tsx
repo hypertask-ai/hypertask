@@ -1,7 +1,6 @@
 "use client"
 import { ITask } from '@/models/model';
 import { showCommandsAtom, tasksPlayListAtom, SearchTaskIndexAtom } from '@/store';
-// import { taskBaseUri } from '@/utils';
 import { useRouter } from 'next/navigation';
 import  { useEffect, useRef, useState } from 'react'
 import { useRecoilState } from '@/lib/state';
@@ -40,7 +39,6 @@ const HandleKeyboardFunctions  = (list:any[]) => {
           classNamesToReturnFrom.includes(document?.activeElement?.className)  || 
           document.activeElement?.id === "boardManager" ) return;
           if (event.key === "/"){
-            // router.back()
             event.preventDefault()
             setSelectedIndex(-1)
             document.getElementById("linksModal")?.focus()
@@ -50,7 +48,6 @@ const HandleKeyboardFunctions  = (list:any[]) => {
           if (event.key === "/" ) {
             event.preventDefault()
             document.getElementById("linksModal")?.focus()
-            // setSelectedUrl(null);
           }
           if (event.key === "Escape") {
             router.back()
@@ -73,14 +70,12 @@ const HandleKeyboardFunctions  = (list:any[]) => {
             return true;
           }
   
-          //  [#] 
           if ((event.shiftKey && event.keyCode===51)) {
             toggleConfirmation();
             return true;
           }
   
 
-          // [CTRL]/ [E]
           if (event.ctrlKey && event.keyCode===69){
             deleteHandler("recover")
           }
@@ -96,17 +91,9 @@ const HandleKeyboardFunctions  = (list:any[]) => {
       setSelectedIndex(selectedIdx)
       const tasksPlayList:any = list?.map(task=>({projectId:task.projectId,uniqueIndex:task.uniqueIndex})) 
       setTasksPlayList(tasksPlayList)
-
-      // window.history.replaceState({},"",`search?searchTerm=${searchTermFinal}&index=${idx}`)
-      // router.push(`/detail/project-${task.projectId}/${task.uniqueIndex}`)
     }
 
     const deleteHandler = (mode:"recover"|"delete")=>{
-    //   removeFromTrash({
-    //       projectId:project.id,
-    //       taskId:tasks[selectedIndex].id,
-    //       mode
-    //     })
       if(selectedIndex===listLen-1) upHandler()
     }
 
@@ -134,13 +121,11 @@ const HandleKeyboardFunctions  = (list:any[]) => {
     };
   
     const handleMouseLeave = () => {
-        // Clear any existing debounceTimeout
         if (debounceTimeout.current) {
         clearTimeout(debounceTimeout.current);
         debounceTimeout.current = null;
         }
 
-        // Start a new debounceTimeout to remove focus after a short delay (e.g., 100ms)
         debounceTimeout.current = setTimeout(() => {
             if (currentHoveredDiv.current !== null && listItemRef.current) {
             (listItemRef.current as HTMLDivElement)?.blur();
@@ -150,7 +135,6 @@ const HandleKeyboardFunctions  = (list:any[]) => {
         };
 
     const handleMouseMove = () => {
-        // Clear any existing debounceTimeout
         if (debounceTimeout.current && !isInputFocused ) {
             setSelectedIndex(currentHoveredDiv.current?currentHoveredDiv.current:0)
             clearTimeout(debounceTimeout.current);
@@ -168,7 +152,7 @@ const HandleKeyboardFunctions  = (list:any[]) => {
     useEffect(() => {
         document.addEventListener('keydown', handleKeyDown);
         return () => document.removeEventListener('keydown', handleKeyDown);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+
     }, [selectedIndex, listLen, list, handleMouseMove, ]);
 
 

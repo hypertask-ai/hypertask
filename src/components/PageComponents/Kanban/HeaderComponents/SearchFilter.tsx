@@ -11,9 +11,6 @@ interface ISearchFilter {
 }
 
 const SearchFilter = ({ project, toggleFilter }: ISearchFilter) => {
-  // Keyword lives in Recoil so it survives navigating into a task and back.
-  // The board filters at render off this value (see Homepage); nothing is
-  // baked into the query cache here.
   const [boardSearch, setBoardSearch] = useRecoilState(boardSearchAtom);
   const keyword = boardSearch.projectId === project.id ? boardSearch.keyword : "";
 
@@ -26,8 +23,6 @@ const SearchFilter = ({ project, toggleFilter }: ISearchFilter) => {
     }));
   };
 
-  // Clicking a task leaves the filter in place; Escape and the X both close
-  // it, so the whole search is reachable from the keyboard alone.
   const dismissSearch = () => {
     setBoardSearch({ open: false, keyword: "", projectId: null });
     toggleFilter(false);

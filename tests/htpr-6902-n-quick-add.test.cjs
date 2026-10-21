@@ -12,8 +12,7 @@ const sectionPath = "src/hooks/Homepage/useSections.ts";
 const tablePath = "src/components/PageComponents/Kanban/TableView/";
 const nFlag = "htpr-6902-n-quick-add";
 const shiftCFlag = "htpr-6914-shift-c-quick-add";
-const flagCombinations = [false, true].flatMap(n => [false, true].flatMap(quick => [false, true].map(shift => [n, quick, shift])));
-const quickFlag = "htpr-6175-quick-entry-cards";
+const flagCombinations = [false, true].flatMap(n => [false, true].map(shift => [n, shift]));
 const source = (file) => fs.readFileSync(path.join(root, file), "utf8");
 
 function load(file, mocks = {}) {
@@ -56,8 +55,11 @@ async function fixture(run) {
 
 function commonMocks(flags, calls) {
   return {
-    "@/hooks/useFlag": { useFlag: (key) => flags[key] === true },
-    "@/lib/flags/keys": { HTPR_6902_N_QUICK_ADD_FLAG: nFlag, HTPR_6914_SHIFT_C_QUICK_ADD_FLAG: shiftCFlag, HTPR_6175_QUICK_ENTRY_CARDS_FLAG: quickFlag },
+    "@/hooks/useFlag": { useFlag: (key) => {
+      if (key === "htpr-6175-quick-entry-cards") throw new Error("Removed flag must not be read");
+      return flags[key] === true;
+    } },
+    "@/lib/flags/keys": { HTPR_6902_N_QUICK_ADD_FLAG: nFlag, HTPR_6914_SHIFT_C_QUICK_ADD_FLAG: shiftCFlag },
     "@/utils/helperFunctions/helperFunctions": {
       throttle: (handler) => handler,
       returnIfModalOrInputActive: () => Boolean(document.querySelector(".modal") || document.activeElement.matches("input,textarea,[contenteditable='true']")),
@@ -68,7 +70,6 @@ function commonMocks(flags, calls) {
       "@/lib/utils/keyboardShortcuts": {},
     }),
     "@/lib/constants/shortcuts": { isFavoriteBoardShortcut: () => false },
-    "@/components/undoToast": { undoToastSettings: { single: false } },
     "@/lib/constants/keyboard-handler": { KeyCodes: { C: 67 } },
     "@/lib/contexts/deviceContext": { useDeviceContext: () => false },
     "@/lib/contexts/mobileContext": { MobileViewContext: React.createContext(false) },
@@ -89,11 +90,11 @@ for (const [surface, key, shiftKey, shortcut] of [
   ["board", "n", false, "N"], ["board", "C", true, "Shift+C"], ["board", "c", true, "Shift+c"],
   ["table", "n", false, "N"], ["table", "C", true, "Shift+C"], ["table", "c", true, "Shift+c"],
 ]) {
-  for (const [nEnabled, quickEnabled, shiftCEnabled] of flagCombinations) {
-    test(`${surface}: ${shortcut} respects independent flags (${nEnabled}/${quickEnabled}/${shiftCEnabled}); plain and Caps Lock C stay unchanged`, async () => fixture(async ({ reactRoot, press }) => {
+  for (const [nEnabled, shiftCEnabled] of flagCombinations) {
+    test(`${surface}: ${shortcut} respects independent flags (${nEnabled}/${shiftCEnabled}); plain and Caps Lock C stay unchanged`, async () => fixture(async ({ reactRoot, press }) => {
       const pressQuick = (overrides = {}) => press(key, { shiftKey, ...overrides });
-      const flags = { [nFlag]: nEnabled, [quickFlag]: quickEnabled, [shiftCFlag]: shiftCEnabled };
-      const shortcutEnabled = nEnabled && quickEnabled && (!shiftKey || shiftCEnabled);
+      const flags = { [nFlag]: nEnabled, [shiftCFlag]: shiftCEnabled };
+      const shortcutEnabled = nEnabled && (!shiftKey || shiftCEnabled);
       const calls = [];
       const mocks = commonMocks(flags, calls);
       let activeItem = null;
@@ -161,14 +162,14 @@ for (const [surface, key, shiftKey, shortcut] of [
         Harness = () => {
           const rows = [{ type: "task", sid: 10 }, { type: "task", sid: 20 }];
           const context = { _currentProject: currentProject, rows, selectedIndex, sections, toggleCreateTaskGlobally: (payload) => calls.push([payload]), showCommands: { show: false }, lastGAt: { current: null }, timerToggling: { current: false }, runTaskShortcut: () => false };
-          const { quickEntryEnabled } = useTable(context);
-          return React.createElement(Control, { hasCurrentProject: true, projectId: 15, rows, selectedIndex, sections, toggleCreateTaskGlobally: context.toggleCreateTaskGlobally, quickEntryEnabled, quickCreateTask: (...args) => { calls.push(args); return Promise.resolve(true); } });
+          useTable(context);
+          return React.createElement(Control, { hasCurrentProject: true, projectId: 15, rows, selectedIndex, sections, toggleCreateTaskGlobally: context.toggleCreateTaskGlobally, quickCreateTask: (...args) => { calls.push(args); return Promise.resolve(true); } });
         };
       }
       const render = async () => React.act(async () => reactRoot.render(React.createElement(Harness)));
       await render();
       if (surface === "table") assert.equal(document.querySelector("button").title,
-        `Create task in the selected column (${nEnabled && quickEnabled ? (shiftCEnabled ? "N / Shift+C" : "N") : "C"})`);
+        `Create task in the selected column (${nEnabled ? (shiftCEnabled ? "N / Shift+C" : "N") : "C"})`);
       await pressQuick();
       assert.equal(Boolean(document.querySelector("[data-quick]")), shortcutEnabled);
       assert.equal(calls.length, surface === "board" && shiftKey && !shortcutEnabled ? 1 : 0,
@@ -258,7 +259,7 @@ for (const [surface, key, shiftKey, shortcut] of [
 }
 
 test("table: flags toggle N and Shift+C with every context dependency stable", async () => fixture(async ({ reactRoot, press }) => {
-  const flags = { [nFlag]: false, [quickFlag]: false, [shiftCFlag]: false };
+  const flags = { [nFlag]: false, [shiftCFlag]: false };
   const calls = [];
   const useTable = load(`${tablePath}useTableKeyboard.ts`, {
     ...commonMocks(flags, calls),
@@ -275,27 +276,26 @@ test("table: flags toggle N and Shift+C with every context dependency stable", a
   const Harness = () => { useTable(context); return null; };
   let opened = 0;
   document.addEventListener("OPEN_TABLE_QUICK_ENTRY", () => opened++);
-  for (const [nEnabled, quickEnabled, shiftCEnabled] of [...flagCombinations, [true, true, false], [true, true, true], [true, true, false]]) {
+  for (const [nEnabled, shiftCEnabled] of [...flagCombinations, [true, false], [true, true], [true, false]]) {
     flags[nFlag] = nEnabled;
-    flags[quickFlag] = quickEnabled;
     flags[shiftCFlag] = shiftCEnabled;
     await React.act(async () => reactRoot.render(React.createElement(Harness)));
     const before = opened;
     await press("n");
-    assert.equal(opened - before, Number(nEnabled && quickEnabled));
+    assert.equal(opened - before, Number(nEnabled));
     assert.equal(calls.length, 0);
     for (const key of ["C", "c"]) {
       const beforeShift = opened;
       await press(key, { shiftKey: true });
-      assert.equal(opened - beforeShift, Number(nEnabled && quickEnabled && shiftCEnabled));
+      assert.equal(opened - beforeShift, Number(nEnabled && shiftCEnabled));
       assert.equal(calls.length, 0);
     }
   }
 }));
 
-for (const [nEnabled, quickEnabled] of [[true, true], [false, true], [true, false], [false, false]]) {
-  test(`mobile AI writer: N stays inline or does nothing (${nEnabled}/${quickEnabled})`, async () => fixture(async ({ dom, reactRoot }) => {
-    const flags = { [nFlag]: nEnabled, [quickFlag]: quickEnabled, "htpr-6141-ai-first-task-writer": true };
+for (const nEnabled of [true, false]) {
+  test(`mobile classic form: N stays inline or does nothing (${nEnabled})`, async () => fixture(async ({ dom, reactRoot }) => {
+    const flags = { [nFlag]: nEnabled };
     const calls = [];
     const atoms = { activeItemAtom: {}, currentProjectAtom: {} };
     const useSections = load(sectionPath, {
@@ -306,7 +306,6 @@ for (const [nEnabled, quickEnabled] of [[true, true], [false, true], [true, fals
       "next/navigation": { useRouter: () => ({}) },
       "../MultiPages/Route/useHypertasksNavigate": { default: () => ({ navigate: () => {} }) },
       "@/lib/contexts/mobileContext": { MobileViewContext: React.createContext(true) },
-      "@/models/CreateTaskModalModels/model": { MOBILE_AI_TASK_WRITER_FOCUS: "AI_TASK_WRITER" },
     }).default;
     let state;
     const Harness = () => {
@@ -316,34 +315,34 @@ for (const [nEnabled, quickEnabled] of [[true, true], [false, true], [true, fals
     };
     await React.act(async () => reactRoot.render(React.createElement(Harness)));
     await React.act(async () => document.querySelector("[data-column]").dispatchEvent(new dom.window.CustomEvent("OPEN_QUICK_ENTRY")));
-    assert.equal(Boolean(document.querySelector("[data-quick]")), nEnabled && quickEnabled);
+    assert.equal(Boolean(document.querySelector("[data-quick]")), nEnabled);
     assert.equal(calls.length, 0, "N must never open the full mobile editor");
-    if (nEnabled && quickEnabled) assert.equal(document.querySelector("[data-quick]").dataset.position, "bottom");
+    if (nEnabled) assert.equal(document.querySelector("[data-quick]").dataset.position, "bottom");
     await React.act(async () => state.createTaskAt("bottom", { sectionId: 10 }, undefined, true));
-    assert.equal(calls.length, 1, "the plus-button mobile behavior stays unchanged");
-    assert.equal(calls[0][1], "AI_TASK_WRITER");
+    assert.equal(calls.length, 0, "the plus button keeps the classic inline entry");
+    assert.equal(Boolean(document.querySelector("[data-quick]")), true);
+    assert.equal(document.querySelector("[data-quick]").dataset.position, "bottom");
   }));
 }
 
-test("bottom shortcut hint follows all three flags; top hint and clicks stay unchanged", async () => fixture(async ({ reactRoot }) => {
-  const flags = { [nFlag]: false, [quickFlag]: false, [shiftCFlag]: false };
+test("bottom shortcut hint follows both flags; top hint and clicks stay unchanged", async () => fixture(async ({ reactRoot }) => {
+  const flags = { [nFlag]: false, [shiftCFlag]: false };
   const calls = [];
   const Button = load("src/components/PageComponents/Kanban/KanbanSectionComponents/NewTaskButton.tsx", {
     ...commonMocks(flags, calls),
     "@/components/Common/Tooltip": { default: ({ keyCombination }) => React.createElement("span", { "data-keys": keyCombination.join("+") }) },
   }).default;
   const payload = { sectionId: 10 };
-  for (const [nEnabled, quickEnabled, shiftCEnabled] of flagCombinations) {
+  for (const [nEnabled, shiftCEnabled] of flagCombinations) {
     flags[nFlag] = nEnabled;
-    flags[quickFlag] = quickEnabled;
     flags[shiftCFlag] = shiftCEnabled;
     for (const position of ["top", "bottom"]) {
       await React.act(async () => reactRoot.render(React.createElement(Button, {
         buttonPosition: position, sectionPayload: payload, createTaskAt: (...args) => calls.push(args),
       })));
-      assert.equal(document.querySelector("[data-keys]").dataset.keys, position === "bottom" && nEnabled && quickEnabled ? (shiftCEnabled ? "N / Shift+C" : "N") : "C");
+      assert.equal(document.querySelector("[data-keys]").dataset.keys, position === "bottom" && nEnabled ? (shiftCEnabled ? "N / Shift+C" : "N") : "C");
       await React.act(async () => document.querySelector("#root > div").click());
-      assert.deepEqual(calls.pop(), [position, payload, undefined, quickEnabled ? true : undefined]);
+      assert.deepEqual(calls.pop(), [position, payload, undefined, true]);
     }
   }
 }));
@@ -355,8 +354,8 @@ test("flag registration, reused hints and existing full-editor scope are explici
   assert.match((source("src/lib/flags.ts") + require("./helpers/flag-files.cjs").source()), /key: HTPR_6914_SHIFT_C_QUICK_ADD_FLAG,[\s\S]*?description: "Shift\+C opens the quick add box like N"/);
   assert.match((source("src/lib/flags.ts") + require("./helpers/flag-files.cjs").source()), /DEFAULT_FEATURE_FLAG_MODE: FeatureFlagMode = "OWNER_AND_QA"/);
   assert.match(source("src/components/Global/BottomSettings_QuickTips.tsx"), /boardTips=\{shiftCQuickAddEnabled[\s\S]*key: \["N \/ Shift\+C"\]/);
-  assert.match(source("src/components/PageComponents/Kanban/KanbanSectionComponents/NewTaskButton.tsx"), /nQuickAddEnabled && quickEntryCardsEnabled \? \(shiftCQuickAddEnabled \? \["N \/ Shift\+C"\] : \["N"\]\) : \["C"\]/);
-  assert.match(source(sectionPath), /useEffect\(nQuickAddEnabled && quickEntryCardsEnabled \?/);
+  assert.match(source("src/components/PageComponents/Kanban/KanbanSectionComponents/NewTaskButton.tsx"), /nQuickAddEnabled \? \(shiftCQuickAddEnabled \? \["N \/ Shift\+C"\] : \["N"\]\) : \["C"\]/);
+  assert.match(source(sectionPath), /useEffect\(nQuickAddEnabled \?/);
   assert.match(source(boardPath), /if \(returnIfModalOrInputActive\(\)\) return/);
   assert.match(source(`${tablePath}useTableKeyboard.ts`), /returnIfModalOrInputActive\(\)/);
   assert.match(source("src/components/Common/newTask.tsx"), /e.key === "Enter"/);
@@ -365,7 +364,7 @@ test("flag registration, reused hints and existing full-editor scope are explici
 });
 
 
-test("global quick-add hints follow the three flags independently", () => {
+test("global quick-add hints follow both flags independently", () => {
   const file = "src/components/Global/BottomSettings_QuickTips.tsx";
   const text = source(file);
   const ast = ts.createSourceFile(file, text, ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX);
@@ -378,10 +377,10 @@ test("global quick-add hints follow the three flags independently", () => {
   }
   visit(ast);
   assert.ok(initializer && prop);
-  const hints = new Function("nQuickAddEnabled", "quickEntryCardsEnabled", "shiftCQuickAddEnabled", "KanbanTipsConstants", `const boardTips = ${initializer}; return ${prop};`);
-  for (const [n, quick, shift] of flagCombinations) {
+  const hints = new Function("nQuickAddEnabled", "shiftCQuickAddEnabled", "KanbanTipsConstants", `const boardTips = ${initializer}; return ${prop};`);
+  for (const [n, shift] of flagCombinations) {
     const original = { key: ["C"], hint: "add task" };
-    assert.deepEqual(hints(n, quick, shift, [original]), n && quick
+    assert.deepEqual(hints(n, shift, [original]), n
       ? [original, { key: [shift ? "N / Shift+C" : "N"], hint: "quick add" }]
       : [original]);
   }

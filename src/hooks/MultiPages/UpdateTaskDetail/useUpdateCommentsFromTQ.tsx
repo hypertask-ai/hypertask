@@ -4,7 +4,6 @@ const useUpdateCommentsFromTQ = ()=>{
     const queryClient = useQueryClient();   
 
 
-    // ================ update the comments upon receiving a new object.
     const updateComments = ()=>{
         
     }

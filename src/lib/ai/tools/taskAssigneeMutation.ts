@@ -123,8 +123,6 @@ export function createSingleTaskAssigneeMutation(context: TaskAssigneeContext, i
     }
 
     for (const agentId of userResolution.agentIds) {
-      // Same rule the REST route enforces: you may only assign an agent you
-      // own, not any agent that happens to share the board.
       const ownedAgent = await prisma.agent.findFirst({
         where: { id: agentId, userId: user.id },
         select: { id: true },

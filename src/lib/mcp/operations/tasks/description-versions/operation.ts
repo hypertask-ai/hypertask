@@ -1,3 +1,4 @@
+import { reportMcpOperationCrash } from '@/lib/mcp/operationCrashReport'
 import { wrapMcpRoute } from '@/lib/mcp/routeWrapper'
 import { NextRequest, NextResponse } from 'next/server'
 
@@ -5,11 +6,9 @@ import prisma from '@/lib/prisma'
 import { buildFieldError } from '@/lib/mcp/fieldError'
 import { checkMcpRateLimit, validateMcpAuth } from '@/lib/mcp/auth'
 import { validateProjectAccess } from '@/lib/mcp/tasks/services'
-import { resolveTaskIdOnly } from '@/lib/mcp/tasks/resolveTask'
+import { resolveTaskIdOnly, taskIdentifierErrorResponse } from '@/lib/mcp/tasks/resolveTask'
 import { htmlToMarkdown } from '@/utils/controllers/pages/htmlToMarkdown'
 
-// GET /api/mcp/tasks/description-versions?task_id=123
-// History of a task's description. Newest version first. Content as markdown.
 export async function GET(request: NextRequest) {
   return wrapMcpRoute(async (request: NextRequest) => {
   try {
@@ -19,9 +18,6 @@ export async function GET(request: NextRequest) {
     const rateLimited = await checkMcpRateLimit(request)
     if (rateLimited) return rateLimited
 
-    // Accept the same identifiers as every other task route. Requiring the
-    // internal numeric id forced callers working from a ticket number to make
-    // an extra lookup first, which nothing else here does.
     const params = request.nextUrl.searchParams
     const raw = params.get('task_id')
     const rawIndex = params.get('unique_index')
@@ -80,7 +76,10 @@ export async function GET(request: NextRequest) {
       })),
     })
   } catch (error) {
+    const identifierResponse = taskIdentifierErrorResponse(error)
+    if (identifierResponse) return identifierResponse
     console.error('[MCP Task Description Versions] Error:', error)
+    reportMcpOperationCrash(request, error)
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
   }
 

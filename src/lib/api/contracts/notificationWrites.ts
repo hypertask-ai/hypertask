@@ -31,7 +31,6 @@ export const notificationBulkArchiveResponseSchema = z.looseObject({
   deletedCount: z.number().int().nonnegative(),
 });
 export const notificationWriteErrorSchema = z.looseObject({ message: z.string() });
-// The unarchive route serializes a raw caught error on 500, not a message envelope.
 export const notificationUnarchiveErrorSchema = z.looseObject({});
 
 export type NotificationSeenQuery = z.input<typeof notificationSeenQuerySchema>;

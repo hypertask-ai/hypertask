@@ -1,4 +1,3 @@
-// Run: npx tsx src/components/RTE/mentionNavigation.check.ts
 import assert from "node:assert";
 import {
   firstSelectableMentionIndex,

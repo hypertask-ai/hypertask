@@ -19,10 +19,6 @@ import {
 } from "@/utils/controllers/projects/views/boardFilterWriteLock";
 import { Prisma } from "@prisma/client";
 
-// ============= simple stuff here
-// 1. user selects the default view.
-// 2. so that means the applied view in user_project_view is now null.
-// 3. LITERALLY THATS IT
 
 const route = taskWriteRoute({
   schema: z.custom<Record<string, any>>(() => true),
@@ -33,7 +29,6 @@ const route = taskWriteRoute({
     const req = { body };
     const userId = currentUser.id;
 
-    // lets check if the api request misses info like user, projectid.
 
     const { projectId, viewId, view_settings } = req.body;
     const layoutOnly = req.body.updateMode === "layout";
@@ -124,15 +119,12 @@ const route = taskWriteRoute({
       }
       const projectView = await prisma.project_View.upsert({
         create: {
-          // ... data to create a User_Project_View
           projectId,
         },
         update: {
-          // ... in case it already exists, update
         },
         where: {
           projectId,
-          // ... the filter for the User_Project_View we want to update
         },
       });
 
@@ -157,16 +149,12 @@ const route = taskWriteRoute({
               board_filters: sanitizedBoardFilters,
               board_sorting_mode: view_settings.board_sorting_mode,
               board_sorting_order: view_settings.board_sorting_order,
-              // Only write the stack when the caller actually sent one. Defaulting to [] would let any
-              // partial update (a filter-only save) silently wipe a view's tie-break levels.
               ...(view_settings.board_sorting_stack === undefined
                 ? {}
                 : { board_sorting_stack: view_settings.board_sorting_stack ?? [] }),
               board_subtask_setting: view_settings.board_subtask_setting,
               board_empty_sections: view_settings.board_empty_sections,
               board_staleness: view_settings.board_staleness ?? null,
-              // Same reason as the sorting stack: a filter-only save omits this field, and
-              // defaulting to null would wipe a view's saved "show archived" choice.
               ...(view_settings.board_show_archived === undefined
                 ? {}
                 : { board_show_archived: view_settings.board_show_archived ?? null }),
@@ -200,14 +188,12 @@ const route = taskWriteRoute({
 
       const updatedUserProjectView = await prisma.user_Project_View.upsert({
         create: {
-          // ... data to create a User_Project_View
           userId: userId,
           project_view_id: projectView.id,
           appliedViewId: updatedView.id,
         },
         update: {},
         where: {
-          // ... the filter for the User_Project_View we want to update
           user_project: {
             userId: userId,
             project_view_id: projectView.id,

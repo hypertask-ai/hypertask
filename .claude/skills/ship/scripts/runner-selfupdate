@@ -7,6 +7,7 @@ UNITS=${RUNNER_PICKUP_UNIT_DIR:-$HOME/.config/systemd/user}
 STATE=${RUNNER_SELFUPDATE_STATE:-$HOME/.local/state/runner-selfupdate}
 SYSTEMCTL=${RUNNER_SELFUPDATE_SYSTEMCTL:-systemctl}
 GIT=${RUNNER_SELFUPDATE_GIT:-git}
+SYNC_RETRY_DELAY=${RUNNER_SELFUPDATE_RETRY_DELAY:-5}
 HERE=$(cd "$(dirname "$(readlink -f "$0")")" && pwd)
 sha=unknown
 backup=
@@ -28,6 +29,17 @@ alert() {
   if [ "$rc" = 0 ] || [ "$rc" = 3 ]; then touch "$STATE/$id"; fi
 }
 
+sync_live() {
+  if ! "$GIT" -C "$LIVE" fetch -q origin production; then
+    sync_failure='fetch|Could not fetch the merged runner update'; return 1
+  fi
+  sha=$("$GIT" -C "$LIVE" rev-parse origin/production) || { sync_failure='checkout|Could not identify production'; return 1; }
+  if ! "$GIT" -C "$LIVE" checkout -q --detach origin/production ||
+    [ "$("$GIT" -C "$LIVE" rev-parse HEAD)" != "$sha" ]; then
+    sync_failure='checkout|Runner checkout is not the merged production version'; return 1
+  fi
+}
+
 install_timer() {
   local repo
   repo=$(cd "$HERE/../../.." && pwd)
@@ -47,13 +59,11 @@ run() {
   exec 9>"$STATE/update.lock"
   flock -n 9 || return 0
   sha=$("$GIT" -C "$LIVE" rev-parse HEAD 2>/dev/null) || sha=unknown
-  if ! "$GIT" -C "$LIVE" fetch -q origin production; then
-    alert fetch 'Could not fetch the merged runner update'; return 1
-  fi
-  sha=$("$GIT" -C "$LIVE" rev-parse origin/production) || { alert checkout 'Could not identify production'; return 1; }
-  if ! "$GIT" -C "$LIVE" checkout -q --detach origin/production ||
-    [ "$("$GIT" -C "$LIVE" rev-parse HEAD)" != "$sha" ]; then
-    alert checkout 'Runner checkout is not the merged production version'; return 1
+  local sync_failure
+  if ! sync_live; then
+    log "${sync_failure#*|}; retrying in ${SYNC_RETRY_DELAY}s"
+    sleep "$SYNC_RETRY_DELAY"
+    sync_live || { alert "${sync_failure%%|*}" "${sync_failure#*|}"; return 1; }
   fi
   # A detached production HEAD can still carry local edits that must not be installed.
   dirty=$("$GIT" -C "$LIVE" status --porcelain -- .claude/skills/ship/scripts .claude/hooks/runner-inbox-stop.sh .claude/systemd) || {

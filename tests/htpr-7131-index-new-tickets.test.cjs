@@ -57,7 +57,7 @@ function harness(enabled, { failIndex = false, denied = false } = {}) {
     "@/lib/mcp/webhooks/outbox": { publishBoardWebhookDeliveries: noop },
     "@/lib/agentWebhooks/outbox": { persistAgentTaskCreatedPending: noop, markAgentTaskCreatedReady: noop, emitAgentTaskCreatedWebhook: noop },
     "@/utils/controllers/assignees/autoAssignForSection": { autoAssignForSection: async () => "ready" },
-    "@/lib/ai/labelClassifier": { scheduleClassifyTaskAiLabels: noop, classifyTaskAiLabels: noop },
+    "@/lib/ai/labelClassifier": { scheduleClassifyNewTaskAiLabels: noop, classifyNewTaskAiLabels: noop },
     "@/lib/realtime/server": { broadcastBoardChange: noop },
     "@/utils/controllers/turbopuffer/turbopufferHelper": { upsertTaskToTurbopuffer: async (taskId) => {
       assert.ok(committed, "search reads must run after commit");

@@ -27,30 +27,12 @@ function loadHandler(session = null, { taskBroadcastGate } = {}) {
   const updated = [];
   const broadcasts = [];
   const stubs = {
+    "@/lib/auth/agentScope": require("./helpers/agent-board-scope.cjs").enforcedScope,
     "@/lib/auth/getSessionUser": {
       getSessionUser: async () => session,
     },
     "@/models/model": {},
-    "@/utils/controllers/projects/getAllIncludes": {
-      taskWriteAccessWhere: (userId, agentId) => ({
-        OR: [
-          { ownerId: userId },
-          { members: { some: { userId, agentId: null } } },
-          ...(agentId
-            ? [
-                {
-                  members: {
-                    some: {
-                      agentId,
-                      agent: { userId, revokedAt: null },
-                    },
-                  },
-                },
-              ]
-            : []),
-        ],
-      }),
-    },
+    "@/utils/controllers/projects/getAllIncludes": require("./helpers/agent-board-scope.cjs").access,
     "@/lib/prisma": {
       __esModule: true,
       default: {
@@ -70,8 +52,6 @@ function loadHandler(session = null, { taskBroadcastGate } = {}) {
               : null,
         },
         project: {
-          // Mirrors taskWriteAccessWhere: supplying an agent adds its owned,
-          // active membership without removing the human's own access.
           findFirst: async ({ where }) => {
             const hasMemberAccess = where.OR?.some(
               (branch) =>
@@ -364,8 +344,8 @@ test("PUT refuses a revoked agent context without persistence or realtime", asyn
   assert.deepEqual(broadcasts, []);
 });
 
-test("PUT still lets an agent this session owns write to its own board", async () => {
-  const { handler, updated } = loadHandler({ userId: MEMBER_USER_ID });
+test("PUT still lets an authenticated agent this session owns write to its own board", async () => {
+  const { handler, updated } = loadHandler({ userId: MEMBER_USER_ID, agentId: OWNED_AGENT });
   const { status } = await call(handler, {
     method: "PUT",
     taskId: TASK_ON_MEMBER_BOARD,

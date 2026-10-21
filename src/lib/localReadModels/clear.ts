@@ -35,8 +35,6 @@ export const clearRevokedBoardMarker = async (
   accountId: number,
   projectId: number,
 ): Promise<void> => {
-  // Synchronous first so a publication started in the same tick already sees
-  // the board as authorized again.
   clearBoardRevocationTombstone(accountId, projectId);
   const { clearBoardReadModelRevocation } = await import(
     "@/lib/boardSync/indexedDbReadModel"

@@ -1,9 +1,4 @@
-// Shared by the team-settings writer (pages/api/teams/updateAllowedDomains) and the
-// signup-time matcher (controllers/users/autoJoinByEmailDomain). Both must agree, or a
-// domain that cannot be saved could still be matched (or vice versa).
 
-// Auto-join on a public provider would let any stranger with a gmail address walk into a
-// paying team, so these can never be allowlisted.
 export const PUBLIC_EMAIL_DOMAINS = new Set([
   "gmail.com",
   "googlemail.com",

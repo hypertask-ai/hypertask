@@ -10,7 +10,6 @@ import type { IProject, ITeam } from "@/models/model";
 
 export type TeamBillingSnapshot = Omit<CurrentBoardBilling, "projectId">;
 
-/** Builds a billing snapshot directly from a team, without requiring a loaded board. */
 export function deriveTeamBilling(
   team: ITeam | null | undefined
 ): TeamBillingSnapshot | null {
@@ -21,19 +20,14 @@ export function deriveTeamBilling(
     team.activeSubscriptionPlanId,
   );
   const stripePriceId = row?.priceId ?? null;
-  // A row that no longer entitles (unpaid, canceled, expired) still carries its
-  // priceId, so gate on the status too (HTPR-4863).
   const entitled = subscriptionStatusGrantsAccess(row?.subscriptionStatus);
   const paid = entitled
     ? planKindFromStripePriceId(stripePriceId)
     : { storePlanId: "Free" as const, billingInterval: null };
-  // A comp grants its plan (Pro when unset) unless the team pays for more
-  // (HTPR-6653). A comp-decided plan has no billing interval.
   const comp = teamCompPlan(team);
   const paidStorePlanId = applyTeamComp(team, paid.storePlanId);
   const billingInterval =
     comp && paidStorePlanId === comp ? null : paid.billingInterval;
-  // Internal/owner teams are comped to the top tier regardless of Stripe state.
   const storePlanId = isInternalCompTeam(team.id) ? "Pro" : paidStorePlanId;
   const byokProviderFlags =
     team.byokApiKeys?.map(({ enabled, provider }) => ({
@@ -50,7 +44,6 @@ export function deriveTeamBilling(
   };
 }
 
-/** Builds billing snapshot from the current board's `IProject` (team + Stripe price on subscription row). */
 export function deriveCurrentBoardBilling(
   project: IProject | null
 ): CurrentBoardBilling | null {

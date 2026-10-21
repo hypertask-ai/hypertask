@@ -52,7 +52,6 @@ const AllDueDates = ({ _allData, tabs }: IProps) => {
   const [selectedIndex, setSelectedIndex] = useState(0);
   const [showCommands, setShowCommands] = useRecoilState(showCommandsAtom);
 
-  // Get flat array of all tasks for navigation
   const allTasksFlat = getAllTasksFlat(groupedTasks);
 
   const { goToProjectShortcut } = useProjectQuery();
@@ -60,7 +59,6 @@ const AllDueDates = ({ _allData, tabs }: IProps) => {
   const router = useRouter();
   const isApple = useDeviceContext();
 
-  // --------------- Refs
   const ulRef = useRef<HTMLUListElement | null>(null);
   const liSelectedRef = useRef<HTMLLIElement | null>(null);
   const debounceTimeout = useRef<NodeJS.Timeout | null>(null);
@@ -71,7 +69,6 @@ const AllDueDates = ({ _allData, tabs }: IProps) => {
     ...globalConstants.multipleKeys,
   };
 
-  // =========================== LINK CLICK HANDLER
   const handleLinkClick = async (task: ITask, idx: number) => {
     setSelectedIndex(idx);
     const tasksPlayList = allTasksFlat.map((task) => ({
@@ -102,7 +99,6 @@ const AllDueDates = ({ _allData, tabs }: IProps) => {
     }
     if (returnIfModalOrInputActive()) return;
 
-    // press k
     if (event.keyCode === KeyCodes.K && cmdControl) {
       event.preventDefault();
       toggleShowCommands();
@@ -142,12 +138,10 @@ const AllDueDates = ({ _allData, tabs }: IProps) => {
 
     if (allTasksFlat.length > 0) {
       const index = selectedIndex;
-      // =========== [Down Movement]
       if (
         event.keyCode === KeyCodes.J ||
         event.keyCode === KeyCodes.ARROW_DOWN
       ) {
-        // down
         if (allTasksFlat[selectedIndex]) {
           if (index === -1 || index === allTasksFlat.length - 1) {
           } else {
@@ -162,13 +156,10 @@ const AllDueDates = ({ _allData, tabs }: IProps) => {
             setSelectedIndex(0);
           }
         }
-
-        // ------------------------------ UP MOVEMENT ------------------------------
       } else if (
         event.keyCode === KeyCodes.K ||
         event.keyCode === KeyCodes.ARROW_UP
       ) {
-        // up
         if (allTasksFlat[selectedIndex]) {
           if (index <= 0) {
           } else {
@@ -187,7 +178,6 @@ const AllDueDates = ({ _allData, tabs }: IProps) => {
         }
       }
 
-      // [Visit Task] Enter
       else if (event.keyCode === KeyCodes.ENTER) {
         event.preventDefault();
         router.push(
@@ -195,14 +185,12 @@ const AllDueDates = ({ _allData, tabs }: IProps) => {
         );
       }
 
-      // [Archive/Unarchive] cmd/ctrl + e
       else if (event.keyCode === KeyCodes.E && cmdControl) {
         event.preventDefault();
         if (!shouldRunArchiveShortcut(event)) return;
         markAsDone();
       }
 
-      // [JUMP TO REPLY] cmd/ctrl + m
       else if (event.keyCode === KeyCodes.M && cmdControl) {
         event.preventDefault();
         router.push(
@@ -210,7 +198,6 @@ const AllDueDates = ({ _allData, tabs }: IProps) => {
         );
       }
 
-      // [alt][v]
       else if (
         event.keyCode === KeyCodes.V &&
         event.altKey &&
@@ -222,7 +209,6 @@ const AllDueDates = ({ _allData, tabs }: IProps) => {
         );
       }
     }
-    // ========== [g] then [g] Jump to top/bottom row
     if (controller[KeyCodes.G]?.pressed) {
       const now = new Date().getTime();
       if (
@@ -242,16 +228,14 @@ const AllDueDates = ({ _allData, tabs }: IProps) => {
       }
     }
 
-    // ========== [g]
     if (event.keyCode === KeyCodes.G) {
       const now = new Date().getTime();
       lastgClick.current = now;
       setTimeout(() => {
         lastgClick.current = null;
-      }, globalConstants.gThenKeyDelay); // 1000 milliseconds = 1 second
+      }, globalConstants.gThenKeyDelay);
     }
 
-    // ========== [g] then  [t]
     if (controller[KeyCodes.T]?.pressed) {
       const now = new Date().getTime();
       if (
@@ -269,10 +253,8 @@ const AllDueDates = ({ _allData, tabs }: IProps) => {
       event.preventDefault();
       let newValue;
       if (event.shiftKey) {
-        // Navigate to the previous tab
         newValue = activeSplit !== 0 ? activeSplit - 1 : tabs.length - 1;
       } else {
-        // Navigate to the next tab
         newValue = activeSplit !== tabs.length - 1 ? activeSplit + 1 : 0;
       }
 
@@ -280,15 +262,12 @@ const AllDueDates = ({ _allData, tabs }: IProps) => {
     }
   };
 
-  //  -------------------------- MOUSE LEAVE EVENT ----------------------------
   const handleMouseLeave = () => {
-    // Clear any existing debounceTimeout
     if (debounceTimeout.current) {
       clearTimeout(debounceTimeout.current);
       debounceTimeout.current = null;
     }
 
-    // Start a new debounceTimeout to remove focus after a short delay (e.g., 100ms)
     debounceTimeout.current = setTimeout(() => {
       if (currentHoveredDiv.current !== null && liSelectedRef.current) {
         (liSelectedRef.current as HTMLLIElement)?.blur();
@@ -300,9 +279,7 @@ const AllDueDates = ({ _allData, tabs }: IProps) => {
     currentHoveredDiv.current = index;
   };
 
-  //  -------------------------- MOUSE MOVE EVENT ----------------------------
   const handleMouseMove = () => {
-    // Clear any existing debounceTimeout
     if (
       debounceTimeout.current &&
       document.activeElement?.id !== "linksModal"
@@ -315,7 +292,6 @@ const AllDueDates = ({ _allData, tabs }: IProps) => {
     }
   };
 
-  // ----------------------- [PRESS E] || [CLICK ON MARK AS DONE] (mark as done)
   const markAsDone = async () => {
     if (!allTasksFlat[selectedIndex]) return;
 
@@ -337,12 +313,9 @@ const AllDueDates = ({ _allData, tabs }: IProps) => {
     });
 
     if (response.status === 200) {
-      //lets update this task everywhere shall we
       setAllData((prev) => {
-        // Create a new object to avoid direct mutation
         const newData = { ...prev };
 
-        // Update tasks in all tabs
         Object.keys(newData).forEach((tabKey) => {
           newData[tabKey] = prev[tabKey].map((task) => {
             if (task.id === selectedTaskId) {
@@ -358,8 +331,6 @@ const AllDueDates = ({ _allData, tabs }: IProps) => {
         return newData;
       });
 
-      // INSERT_YOUR_CODE
-      // Show a toast message for archive/unarchive success
       toast.success(
         `Task ${
           allTasksFlat[selectedIndex].status === "Archive"
@@ -370,7 +341,6 @@ const AllDueDates = ({ _allData, tabs }: IProps) => {
     }
   };
 
-  // ----------------------- [PRESS D] Update due date
   const updateDueDate = (dueDate: Date | undefined) => {
     if (!allTasksFlat[selectedIndex]) return;
     
@@ -379,24 +349,20 @@ const AllDueDates = ({ _allData, tabs }: IProps) => {
     const currentDueDate = selectedTask.dueDate;
     const newDate = dueDate ? new Date(dueDate) : undefined;
     
-    // Helper function to compare dates (handles null/undefined cases)
     const areDatesEqual = (date1: Date | null | undefined, date2: Date | null | undefined): boolean => {
-      if (!date1 && !date2) return true; // Both are null/undefined
-      if (!date1 || !date2) return false; // One is null/undefined, other is not
+      if (!date1 && !date2) return true;
+      if (!date1 || !date2) return false;
       return date1.getTime() === date2.getTime();
     };
     
-    // Check if the date is the same - if so, don't update
     if (areDatesEqual(currentDueDate, newDate)) return;
     
     selectedTaskIdRef.current = selectedTaskId;
 
-    // If no date is received (undefined), remove the task from the list
     if (dueDate === undefined) {
       setAllData((prev) => {
         const newData = { ...prev };
         
-        // Remove the task from all tabs
         Object.keys(newData).forEach((tabKey) => {
           newData[tabKey] = prev[tabKey].filter((task) => task.id !== selectedTaskId);
         });
@@ -404,17 +370,13 @@ const AllDueDates = ({ _allData, tabs }: IProps) => {
         return newData;
       });
       
-      // Show regular toast message when due date is removed
       toast("Due date removed");
       return;
     }
 
-    // Update the task's due date in local state
     setAllData((prev) => {
-      // Create a new object to avoid direct mutation
       const newData = { ...prev };
 
-      // Update tasks in all tabs
       Object.keys(newData).forEach((tabKey) => {
         newData[tabKey] = prev[tabKey].map((task) => {
           if (task.id === selectedTaskId) {
@@ -430,7 +392,6 @@ const AllDueDates = ({ _allData, tabs }: IProps) => {
       return newData;
     });
 
-    // Show a toast message for due date update success
     toast.success("Due date updated!");
   };
 
@@ -464,13 +425,11 @@ const AllDueDates = ({ _allData, tabs }: IProps) => {
     scrollToTask(0);
   };
 
-  // Update grouped tasks when allData changes
   useEffect(() => {
     const currentTab = tabs[activeSplit];
     const newGroupedTasks = groupTasksByDueDate(allData[currentTab] ?? []);
     setGroupedTasks(newGroupedTasks);
 
-    // Restore selection after update if we have a selected task ID
     if (selectedTaskIdRef.current) {
       const taskIdToFind = selectedTaskIdRef.current;
       const newAllTasksFlat = getAllTasksFlat(newGroupedTasks);
@@ -481,12 +440,10 @@ const AllDueDates = ({ _allData, tabs }: IProps) => {
       if (newIndex !== -1) {
         setSelectedIndex(newIndex);
         updateActiveItemAndItemInView(newAllTasksFlat[newIndex]);
-        // Use setTimeout to ensure DOM is updated before scrolling
         setTimeout(() => {
           scrollToTask(newIndex, newAllTasksFlat);
         }, 0);
       }
-      // Clear the ref after restoring selection
       selectedTaskIdRef.current = null;
     }
   }, [allData, activeSplit, tabs]);
@@ -550,14 +507,12 @@ const AllDueDates = ({ _allData, tabs }: IProps) => {
             >
               {Object.entries(groupedTasks).map(([groupKey, group]) => (
                 <div key={groupKey} className="date-group">
-                  {/* Date Group Header */}
                   <div className="px-4 @md:px-16 top-0 backdrop-blur-sm py-2 z-10 text-gray-400">
                     <h3 className="text-content font-bold uppercase">
                       {group.label}
                     </h3>
                   </div>
 
-                  {/* Tasks in this group */}
                   <div className="">
                     {group.tasks.map((task, i) => {
                       const globalIndex = group.startIndex + i;

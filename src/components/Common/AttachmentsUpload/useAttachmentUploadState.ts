@@ -45,15 +45,11 @@ export function useAttachmentUploadState(context: Context) {
   } = props;
   const _mbl = useContext(MobileViewContext);
   const descriptionFirstEnabled = useFlag(HTPR_6556_MOBILE_DESCRIPTION_FIRST_FLAG);
-  // Reactive: Tiptap v3 useEditor does not re-render on typing, so subscribe
-  // (same pattern as the AI-chat composer) or Send/mic state lags behind text.
   const hasText =
     (useEditorState({
       editor,
       selector: ({ editor }) => (editor?.getText().length ?? 0) > 0,
     }) ?? false) as boolean;
-  // The wireframe rule is "commit controls appear with content". For a task,
-  // content includes the title: a title-only task is savable (HTPR-5517).
   const hasSavableContent = hasText || Boolean(props.hasTitle);
   const [audioProcessing, setAudioProcessing] = useState(false);
   const [mobileUploadPending, setMobileUploadPending] = useState(false);
@@ -210,14 +206,10 @@ export function useAttachmentUploadState(context: Context) {
     if (mode === "create-comment") setFileItems([]);
   };
 
-  // use effect
   useEffect(() => {
     props.callback(fileItems.map((file) => file.file));
   }, [fileItems]);
-  // useEffect(()=>{
-  //   if (props.filesFromParent) props.callback(props.filesFromParent.map(file=>file.file))
 
-  // },[])
 
   useEffect(() => {
     if (props.filesFromParent.length === 0) {

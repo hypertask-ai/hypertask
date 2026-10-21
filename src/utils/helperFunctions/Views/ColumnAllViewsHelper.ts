@@ -4,22 +4,10 @@ import {
   isColumnVisibleInView,
 } from "@/utils/controllers/section/viewColumnVisibility";
 
-/**
- * Client side of "Show in all views" / "Hide in all views" (HTPR-5937).
- * The same applyColumnVisibility the server writes with, so the optimistic
- * patch and the stored value cannot disagree.
- */
 
 const unsavedViewId = (project?: IProject | null) =>
   project?.project_view?.user_project_views?.[0]?.unsavedView?.id;
 
-/**
- * The views a person sees in the board's view strip, which is exactly
- * `allViews` minus the live "unsaved" working copy: the board default view is
- * a titled public View row, so it arrives inside `allViews` too (see
- * useOrderedViews, which pins it first out of that same array). Views the
- * column has no entry in count as hidden, which is how the board reads them.
- */
 export const countViewsShowingColumn = (
   project: IProject | null | undefined,
   sectionId: number
@@ -52,11 +40,6 @@ const patchView = <T extends { board_columns_view?: unknown } | null | undefined
       } as T)
     : view;
 
-/**
- * Every in-memory copy of this board's column lists after the switch. Patched
- * rather than refetched because refetching the board query remounts the command
- * tree and closes the column editor mid-action.
- */
 export const applyColumnVisibilityToProject = (
   project: IProject,
   section: ISection & { id: number },
@@ -69,8 +52,6 @@ export const applyColumnVisibilityToProject = (
     ...project,
     project_view: {
       ...projectView,
-      // The default view is also an element of allViews, but Prisma hands the
-      // two relations back as separate objects, so both copies need patching.
       default_view: patchView(projectView.default_view, section, visible),
       allViews: projectView.allViews?.map((view) =>
         patchView(view, section, visible)
@@ -89,11 +70,6 @@ export const applyColumnVisibilityToProject = (
   };
 };
 
-/**
- * "Visible in 6 of 10 views", or "Visible in all 10 views". Plain "views"
- * rather than "saved views": the set counted here is the board's view strip,
- * which starts with the board default view.
- */
 export const describeViewsShowingColumn = ({
   visible,
   total,

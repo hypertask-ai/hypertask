@@ -13,8 +13,18 @@ export interface HelloResponse {
     id: number;
     name: string;
     title: string;
+    boardUrl: string;
     taskUrlTemplate: string;
   }>;
+  urlFormats: {
+    ticket: string;
+    comment: string;
+    board: string;
+    boardView: string;
+    inboxSplit: string;
+    page: string;
+    rules: string;
+  };
   boardsTotal: number;
   boardsTruncated: boolean;
   capabilities: Record<string, string>;
@@ -27,9 +37,6 @@ export interface HelloResponse {
   conventionsTruncated: boolean;
 }
 
-/**
- * Service for fetching the self-orienting welcome map for a new MCP client.
- */
 export class HelloService {
   constructor(private readonly apiClient: IApiClient) {}
 
@@ -67,9 +74,8 @@ export class HelloService {
 
       return response;
     } catch (error) {
-      logger.error('Failed to fetch hello context', {
+      logger.failure('Failed to fetch hello context', error, {
         correlationId,
-        error: error instanceof Error ? error.message : String(error),
       });
       throw error;
     }

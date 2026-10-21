@@ -5,7 +5,6 @@ export function notificationWriteJson(body: unknown, status: number): TaskWriteR
   if (status !== 304) {
     return body === undefined ? new NextResponse(null, { status }) : NextResponse.json(body, { status });
   }
-  // Pages accepts JSON with 304 and strips the body only at the HTTP boundary.
   const text = JSON.stringify(body);
   return {
     status,

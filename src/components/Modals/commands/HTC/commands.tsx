@@ -49,15 +49,16 @@ import { useGetAllProjectsMinimal } from "@/hooks/MultiPages/useGetAllProjectsMi
 import { MobileViewContext } from "@/lib/contexts/mobileContext";
 import { MobileBottomSheet } from "@/components/Modals/Sheets";
 import { useFlag } from "@/hooks/useFlag";
+import { HTPR_7328_ROUNDED_THEME_FLAG } from "@/lib/flags/keys";
 import {
   GOOGLE_CALENDAR_FLAG,
-  HTPR_6892_CMDK_VERSION_FLAG,
+  HTPR_7260_KANBAN_SELECT_ALL_FLAG,
+  HTPR_6891_PHONE_TASK_WRITER_SHEET_FLAG,
   HTPR_6929_COMPOSE_TASK_WRITER_FLAG,
   HTPR_6937_NEW_TASK_WINDOW_FLAG,
   HTPR_7053_COMPOSE_BOARD_CHIP_FLAG,
   HTPR_6868_TICKET_PREFIX_FLAG,
   HTPR_6662_AGENT_LOG_NAME_FLAG,
-  HTPR_6861_MOBILE_PAGE_BACK_ROW_FLAG,
   HTPR_6930_MY_TASKS_KANBAN_REUSE_FLAG,
   HTPR_6567_COMMAND_SCOPE_PICKER_FLAG,
   MY_TASKS_SCOPES_FLAG,
@@ -86,6 +87,8 @@ type Props = {
   focusProxy?: { current: HTMLInputElement | null };
 };
 
+const DESTRUCTIVE_COMMAND_MODES = [CommandMode.DeleteBoard, CommandMode.DeleteColumn];
+
 const Commands = (props: Props) => {
   const {
     handleAction,
@@ -99,6 +102,12 @@ const Commands = (props: Props) => {
     scope,
     focusProxy,
   } = props;
+  const kanbanSelectAllEnabled = useFlag(HTPR_7260_KANBAN_SELECT_ALL_FLAG);
+  let selectedTasksFirst = false;
+  if (kanbanSelectAllEnabled && contextOptions?.kanbanSelectAllEnabled && contextOptions.bulkSelectionCount) {
+    selectedTasksFirst = true;
+  }
+  const phoneTaskWriterSheetEnabled = useFlag(HTPR_6891_PHONE_TASK_WRITER_SHEET_FLAG);
   const composeTaskWriterEnabled = useFlag(HTPR_6929_COMPOSE_TASK_WRITER_FLAG);
   const newTaskWindowFlag = useFlag(HTPR_6937_NEW_TASK_WINDOW_FLAG);
   const composeBoardChipFlag = useFlag(HTPR_7053_COMPOSE_BOARD_CHIP_FLAG);
@@ -110,7 +119,6 @@ const Commands = (props: Props) => {
   const composeEnabled = composeTaskWriterEnabled && !props.isDemo && !props.isInteractive;
   const [showCommands, setShowCommands] = useRecoilState(showCommandsAtom);
   const isCompose = composeEnabled && showCommands.paletteTab === "compose";
-  // Ctrl+K and Ctrl+J replace the palette state, so remember the form's handoff while the palette stays open.
   const composeProjectRef = useRef<IProject | undefined>(undefined);
   const composeOnCreatedRef = useRef<(() => void | Promise<void>) | undefined>(undefined);
   if (!showCommands.show) {
@@ -130,30 +138,28 @@ const Commands = (props: Props) => {
   const [, setTableTitleWrap] = useRecoilState(tableTitleWrapAtom);
   const calendarSettings = useRecoilValue(calendarSettingsAtom);
   const pathname = usePathname();
-  // Applying these off the calendar is a no-op: the calendar hydrates its
-  // settings from the applied saved view on mount and overwrites them.
   const onCalendar = !!pathname?.startsWith("/calendar");
   const onAgentChat = !!pathname?.startsWith("/agents/chat");
   const onMyTasks = !!pathname?.startsWith(myTasksRoute);
-  const cmdkVersionEnabled = useFlag(HTPR_6892_CMDK_VERSION_FLAG);
   const ticketPrefixEnabled = useFlag(HTPR_6868_TICKET_PREFIX_FLAG);
   const agentLogNameEnabled = useFlag(HTPR_6662_AGENT_LOG_NAME_FLAG);
-  const getAgentLogCommands = useCallback(
-    (options?: IAllCommands) => getAllCommands(options, true),
-    []
+  const roundedEnabled = useFlag(HTPR_7328_ROUNDED_THEME_FLAG);
+  const getRoundedCommands = useCallback(
+    (options?: IAllCommands) => getAllCommands(options, agentLogNameEnabled, options?.kanbanSelectAllEnabled, !isMobile),
+    [agentLogNameEnabled, isMobile]
   );
-  let getCommands = getAllCommands;
-  // Keep the label gate in the component body so CI can trace UI coverage.
-  if (agentLogNameEnabled) {
-    getCommands = getAgentLogCommands;
-  }
+  const getLegacyCommands = useCallback(
+    (options?: IAllCommands) => getAllCommands(options, agentLogNameEnabled, options?.kanbanSelectAllEnabled),
+    [agentLogNameEnabled]
+  );
+  let getCommands = getLegacyCommands;
+  if (roundedEnabled) getCommands = getRoundedCommands;
   const excludeTicketPrefixCommand = useCallback(
     (command: ICommandList) => command.key !== "settingsBoardTicketPrefix",
     []
   );
   const includeTicketPrefixCommand = useCallback(() => true, []);
   let isTicketPrefixCommandVisible = excludeTicketPrefixCommand;
-  // Keep the runtime gate in the component body so CI can trace UI coverage.
   if (ticketPrefixEnabled) {
     isTicketPrefixCommandVisible = includeTicketPrefixCommand;
   }
@@ -164,7 +170,6 @@ const Commands = (props: Props) => {
     : "";
   const googleCalendarSettingsEnabled = useFlag(GOOGLE_CALENDAR_FLAG);
   const autoTaskDescriptionsEnabled = useFlag("htpr-6177-auto-task-descriptions");
-  const copyCurrentUrlEnabled = useFlag("htpr-6112-copy-current-url");
   const myTasksViewsEnabled = useFlag(MY_TASKS_VIEWS_FLAG);
   const kanbanReuseEnabled = useFlag(HTPR_6930_MY_TASKS_KANBAN_REUSE_FLAG);
   const commandScopePickerFlag = useFlag(HTPR_6567_COMMAND_SCOPE_PICKER_FLAG);
@@ -172,9 +177,8 @@ const Commands = (props: Props) => {
   const myTasksTimeGroupEnabled = useFlag(MY_TASKS_TIME_GROUP_FLAG);
   const myTasksFilterParityEnabled = useFlag(MY_TASKS_FILTER_PARITY_FLAG);
   const myTasksTableColumnsEnabled = useFlag(MY_TASKS_TABLE_COLUMNS_FLAG);
-  const mobilePageBackRowEnabled = useFlag(HTPR_6861_MOBILE_PAGE_BACK_ROW_FLAG);
   const currentPageActions = useRecoilValue(currentPageActionsAtom);
-  const pageActions = mobilePageBackRowEnabled && isMobile && currentPageActions &&
+  const pageActions = isMobile && currentPageActions &&
     pathname === `/page/${currentPageActions.publicId}`
     ? currentPageActions
     : null;
@@ -214,7 +218,6 @@ const Commands = (props: Props) => {
       scopeCommand = {
         key: "myTasksScope",
         name: "Scope",
-        // Keep the board row's mobile icon; selection is handled by key below.
         commandMode: CommandMode.GoToBoard,
         keywords: "scope boards project select filter my tasks",
       };
@@ -246,6 +249,7 @@ const Commands = (props: Props) => {
         stalenessViewEnabled: getActiveStalenessFromProject(currentProject),
         autoArchiveEnabled: currentProject?.autoArchiveAfterDays != null,
       },
+      kanbanSelectAllEnabled: kanbanSelectAllEnabled && !!contextOptions?.kanbanSelectAllEnabled,
     }).map((group) => ({
       ...group,
       commandLists: group.commandLists
@@ -255,8 +259,6 @@ const Commands = (props: Props) => {
               showByokApiKeys) &&
             (command.key !== "settingsCalendarKeepTasksUpdated" || googleCalendarSettingsEnabled) &&
             (command.key !== "settingsTaskPageSuggestDescriptionsFromTaskTitles" || autoTaskDescriptionsEnabled) &&
-            (command.commandMode !== CommandMode.CopyViewURL ||
-              copyCurrentUrlEnabled) &&
             isTicketPrefixCommandVisible(command) &&
             (command.commandMode !== CommandMode.ToggleBoardTimeTracking ||
               !!currentProject) &&
@@ -302,7 +304,6 @@ const Commands = (props: Props) => {
       commandMode: CommandMode.Command,
       keywords: "table title wrap truncate multiline single line",
     });
-    // Comment context puts both Comment and Task groups ahead of the board list
     const boardsInsertIndex = contextOptions?.commentOptions ? 2 : 1;
     const commandGroups = [
       ...registryGroups.slice(0, boardsInsertIndex),
@@ -313,13 +314,14 @@ const Commands = (props: Props) => {
     ].map((group) => ({
       ...group,
       commandLists:
-        pinCommentActions && group.group === "Comment"
+        (pinCommentActions && group.group === "Comment") ||
+        (selectedTasksFirst && group.commandLists.some((command) => command.key === "bulkMoveToColumn"))
           ? group.commandLists
           : [...group.commandLists].sort(
               (left, right) => scoreCommand(right) - scoreCommand(left)
             ),
     }));
-    if (contextOptions?.context === "Task") {
+    if (contextOptions?.context === "Task" && !selectedTasksFirst) {
       const taskGroups = getMobileCommandGroups(commandGroups, isMobile);
       return pinCommentActions
         ? pinCommentGroupFirst(taskGroups)
@@ -331,8 +333,13 @@ const Commands = (props: Props) => {
         .flatMap((group) => group.commandLists)
         .map((command) => [command.key, command])
     );
-    const topCommands = Object.entries(frequentlyUsed)
-      .filter(([key]) => canonicalCommands.has(key))
+    let suggestableFrequentlyUsed = Object.entries(frequentlyUsed)
+      .filter(([key]) => canonicalCommands.has(key));
+    if (kanbanSelectAllEnabled) {
+      suggestableFrequentlyUsed = suggestableFrequentlyUsed.filter(([key]) =>
+        !DESTRUCTIVE_COMMAND_MODES.includes(canonicalCommands.get(key)!.commandMode));
+    }
+    const topCommands = suggestableFrequentlyUsed
       .sort(
         (left, right) =>
           getHTCFrecencyScore(right[1].frequency, right[1].lastUsedAt, now)
@@ -355,15 +362,16 @@ const Commands = (props: Props) => {
       return command ? [command] : [];
     });
 
-    const rankedCommandGroups = topCommands.length > 0
+    const rankedCommandGroups = selectedTasksFirst
+      ? commandGroups
+      : topCommands.length > 0
       ? [{ group: "Frequently used", commandLists: topCommands }, ...commandGroups]
       : getStartedCommands.length > 0
         ? [{ group: "Get started", commandLists: getStartedCommands }, ...commandGroups]
         : commandGroups;
 
     const mobileGroups = getMobileCommandGroups(rankedCommandGroups, isMobile);
-    // HTPR-6861: the open page's own actions lead the palette on phones.
-    const rankedGroups = mobilePageBackRowEnabled && pageActions
+    const rankedGroups = pageActions
       ? [{
           group: `This page (Version ${pageActions.version})`,
           commandLists: [{
@@ -374,18 +382,25 @@ const Commands = (props: Props) => {
           }],
         }, ...mobileGroups]
       : mobileGroups;
+    if (selectedTasksFirst) {
+      const bulkGroup = rankedGroups.find((group) =>
+        group.commandLists.some((command) => command.key === "bulkMoveToColumn"),
+      );
+      if (bulkGroup) return [bulkGroup, ...rankedGroups.filter((group) => group !== bulkGroup)];
+    }
     return pinCommentActions
       ? pinCommentGroupFirst(rankedGroups)
       : rankedGroups;
   }, [
     appShellRailOn,
+    kanbanSelectAllEnabled,
+    selectedTasksFirst,
     boardLayout,
     calendarSettings.showWeekends,
     contextOptions,
     getCommands,
     pinCommentActions,
     pageActions,
-    copyCurrentUrlEnabled,
     googleCalendarSettingsEnabled,
     autoTaskDescriptionsEnabled,
     currentProject,
@@ -420,13 +435,11 @@ const Commands = (props: Props) => {
     setSelectedCommand,
   } = useHTC(allCommands_, emptyQueryCommands, !isMobile);
   const hoveredCommand = useRef<CommandIdentity | null>(null);
-  // const blurTimeout = useRef<NodeJS.Timeout | null>(null);
   const debounceTimeout = useRef<NodeJS.Timeout | null>(null);
   const commandRef = useRef<HTMLDivElement>(null);
   const lastgClick = useRef<number | null>(null);
 
   const [modal, setModal] = useState<boolean>(isOpen);
-  // console.log("🚀 ~ Commands ~ modal:", modal)
   const [first, setfirst] = useState(false);
 
   const onKeyChangeRef = useRef(onKeyChange);
@@ -435,14 +448,6 @@ const Commands = (props: Props) => {
     (input: HTMLInputElement | null) => {
       inputRef.current = input;
       if (!input || (!isMobile && !focusProxy)) return;
-      // The palette lives in a bottom sheet (react-modal-sheet). While the sheet
-      // plays its enter animation the input is not yet focusable, so a single
-      // focus() during the opening commit (or one frame later) silently no-ops
-      // (verified on prod: the input never gains focus, so the mobile keyboard
-      // never opens and the keyboard-aware sheet never lifts, reading as "stuck
-      // at the bottom"). Re-focus every frame until it takes; the earliest
-      // frames are still inside the iOS user-activation window that pops the
-      // keyboard. Stops the moment focus lands or the input unmounts.
       let tries = 0;
       const focusUntilLanded = () => {
         const el = inputRef.current;
@@ -452,8 +457,6 @@ const Commands = (props: Props) => {
         const selectionStart = proxy?.selectionStart ?? null;
         const selectionEnd = proxy?.selectionEnd ?? null;
         if (transferring) {
-          // Read at the successful focus attempt, not chunk resolution: typing
-          // can continue in the proxy while the bottom sheet animates in.
           el.value = proxy.value;
           onKeyChangeRef.current({ target: proxy } as React.ChangeEvent<HTMLInputElement>);
         }
@@ -582,7 +585,6 @@ const Commands = (props: Props) => {
 
   useEffect(() => {
     return () => {
-      // Clear the debounceTimeout when the component unmounts
       if (debounceTimeout.current) {
         clearTimeout(debounceTimeout.current);
       }
@@ -598,7 +600,7 @@ const Commands = (props: Props) => {
         recordHTCCommandUsage(previousUsage, command)
       );
       (document.activeElement as HTMLElement).blur();
-      if (mobilePageBackRowEnabled && command.key === "deletePage") {
+      if (command.key === "deletePage") {
         if (!pageActions) return;
         resetShowCommands();
         void pageActions.onDelete();
@@ -667,7 +669,6 @@ const Commands = (props: Props) => {
       const target = event.target as HTMLElement;
       if (composeBoardChipEnabled && isCompose && target.matches("[data-compose-task-writer] textarea") &&
           document.querySelector("[data-compose-board-chip]")) return;
-      // Leave attachment dialogs, mic controls and other focus traps alone.
       if (!target.matches('#htc-mobile-search, #htc-search, [data-compose-task-writer] textarea, [aria-label="Commands mode"] [role="tab"]')) return;
       event.preventDefault();
       event.stopImmediatePropagation();
@@ -751,7 +752,8 @@ const Commands = (props: Props) => {
         onClose={toggle}
         ariaLabel="Command center"
         aboveSlot={modeSwitch}
-        fullHeight={!isCompose}
+        fullHeight={!isCompose || phoneTaskWriterSheetEnabled}
+        contentClassName={isCompose && phoneTaskWriterSheetEnabled ? "flex flex-col overflow-hidden" : undefined}
         keyboardAware
         bottomSlot={isCompose ? undefined : searchInput}
       >
@@ -772,11 +774,6 @@ const Commands = (props: Props) => {
         backdrop={isInteractive?false:true}
         keyboard={false}
         className={`paletteModalSizing sm:top-[24%] sm:min-w-[560px] sm:max-h-fit ${styles.links_modal} ${isInteractive ? "relative group" : ""}`}
-        // The palette is centred by auto margins inside a viewport-wide fixed box, so with
-        // the AI chat panel open it centred on the window and ran underneath the panel
-        // (159px of overlap on a 914px-wide window). Padding the box by the panel width
-        // makes it centre on the space actually available. The variable is published by
-        // AI_Chat_Sidebar and is 0px whenever the panel is closed or on mobile.
         modalClassName="pr-[var(--ht-ai-sidebar-width,0px)]"
         contentClassName={composeTaskWriterEnabled && !isDemo && !isInteractive ? "rounded-[5px] overflow-visible" : "rounded-[5px] overflow-hidden"}
       >
@@ -812,19 +809,11 @@ const Commands = (props: Props) => {
                {...(composeEnabled ? { onBlur: undefined } : {})}
             />
           </div>
-          {mobilePageBackRowEnabled ? (
-            <div data-htpr-6861-page-actions="">
-              {commandGroups}
-            </div>
-          ) : (
-            commandGroups
-          )}
+          {commandGroups}
           <ModalHintBar />
-          {cmdkVersionEnabled && (
-            <div data-cmdk-version className="px-4 pb-2 text-micro text-text-light-gray">
-              v {buildId}{buildTimeLabel && ` · ${buildTimeLabel}`}
-            </div>
-          )}
+          <div data-cmdk-version className="px-4 pb-2 text-micro text-text-light-gray">
+            v {buildId}{buildTimeLabel && ` · ${buildTimeLabel}`}
+          </div>
           </>}
         </ModalBody>
       </ModalContainerCustom>

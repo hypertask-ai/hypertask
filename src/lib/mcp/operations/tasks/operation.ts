@@ -1,4 +1,6 @@
+import { agentScopeEnforced, recordAgentBoardScopeMiss } from "@/lib/auth/agentScope";
 import { stripForeignTaskRelations } from "@/lib/tasks/sameBoardRelations";
+import { reportMcpOperationCrash } from '@/lib/mcp/operationCrashReport'
 import { wrapMcpRoute, validateMcpRouteAuth as validateMcpAuth, checkMcpRouteRateLimit as checkMcpRateLimit, mcpRouteUnauthorizedResponse as mcpUnauthorizedResponse } from '@/lib/mcp/routeWrapper'
 import { NextRequest, NextResponse } from 'next/server'
 
@@ -16,12 +18,13 @@ import {
   taskMcpGetInclude,
 } from '@/lib/mcp/tasks/mappers'
 import { mcpTaskUserCommentCount } from '@/lib/mcp/tasks/mappers'
-import { findTaskByIdentifier, TaskIdentifierAmbiguityError } from '@/lib/mcp/tasks/resolveTask'
+import { findTaskByIdentifier, taskIdentifierErrorResponse } from '@/lib/mcp/tasks/resolveTask'
 import { decodeCursor, encodeCursor } from '@/lib/mcp/pagination/cursor'
 import prisma from '@/lib/prisma'
 import {
   hasPrWhere,
   normalizeTaskStatus,
+  parseTaskStatusParam,
   parseAssigneeFilter,
   parseNumericCursor,
   parseUpdatedSince,
@@ -31,8 +34,8 @@ import {
 } from '@/lib/mcp/listQuery'
 import { readListQuery } from '@/lib/mcp/readListQuery'
 import { parsePriorityFilter } from '@/lib/mcp/priorityFilter'
+import { findIdParamOutOfRange, findParamWithNulByte, idOutOfRangeMessage, parseSortOrderParam } from '@/lib/mcp/listParams'
 
-/** Minimal parent task info for MCP responses (when this task is a subtask). */
 export interface ParentTaskSummary {
   id: number
   ticketNumber?: string
@@ -84,10 +87,6 @@ export interface ListTasksResponse {
   total: number
   limit: number
   offset: number
-  /**
-   * Opaque cursor for the next page, or null when there are no more rows.
-   * A full first page also returns this.
-   */
   nextCursor: string | null
   metadata?: {
     projectCount?: number
@@ -95,11 +94,9 @@ export interface ListTasksResponse {
   }
 }
 
-/** Matches `Label.id` (Prisma `@default(uuid())`). Plain digits kept for backwards compatibility. */
 const LABEL_ID_UUID_RE =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 
-/** Name of the first date filter whose value is not a parseable date, so it answers 400 instead of crashing Prisma. */
 function findInvalidDateParam(params: Record<string, string | undefined>): string | null {
   for (const [name, value] of Object.entries(params)) {
     if (value && !parseUpdatedSince(value)) return name
@@ -157,20 +154,10 @@ function parseNonNegativeIntegerParam(searchParams: URLSearchParams, name: strin
   return { ok: true, value }
 }
 
-/**
- * GET /api/mcp/tasks
- *
- * Lists tasks with comprehensive filtering options.
- * Results are automatically limited to boards/projects the user has access to.
- *
- * Also supports getting a single task by ticket_number:
- * GET /api/mcp/tasks?ticket_number=DEV-1&project_id=1
- */
 export async function GET(request: NextRequest) {
   return wrapMcpRoute(async (request: NextRequest) => {
   let userObj: {id: number, email: string} | null = null
   try {
-    // Validate authentication
     const rateLimited = await checkMcpRateLimit(request)
     if (rateLimited) return rateLimited
     const ctx = await validateMcpAuth(request)
@@ -179,7 +166,6 @@ export async function GET(request: NextRequest) {
     }
     const user = ctx.user;
     userObj = user
-    // Parse query parameters
     const searchParams = request.nextUrl.searchParams
     const query = Object.fromEntries(searchParams)
     console.log('[MCP] tasks', {
@@ -187,8 +173,9 @@ export async function GET(request: NextRequest) {
       query,
     })
 
-    // Accept the aliases used by the low-level ht helper and CLI. Canonical
-    // snake_case wins when callers accidentally supply more than one form.
+    const paramWithNulByte = findParamWithNulByte(searchParams)
+    if (paramWithNulByte !== null) return validationError(`${paramWithNulByte} must not contain a NUL character`)
+
     const projectIdResult = parsePositiveIntegerParam(
       searchParams,
       'project_id',
@@ -205,9 +192,6 @@ export async function GET(request: NextRequest) {
     const offsetResult = parseNonNegativeIntegerParam(searchParams, 'offset', 0)
     if (!offsetResult.ok) return offsetResult.response
 
-    // Opt-in cursor pagination. When `cursor=` is present it overrides `offset`.
-    // Legacy (flag off) walks id-ascending. Flag on keeps the requested sort
-    // and still returns nextCursor on a full first page.
     const cursorParam = searchParams.get('cursor')
     const cursorId = cursorParam
       ? decodeCursor(cursorParam) ?? parseNumericCursor(cursorParam)
@@ -220,7 +204,6 @@ export async function GET(request: NextRequest) {
     }
     const usesCursor = cursorParam !== null
 
-    // Check for different task identification methods
     const taskIdParam = searchParams.get('task_id')
     const taskIds = taskIdParam ? taskIdParam.split(',').map(id => parseInt(id.trim())).filter(id => !isNaN(id)) : null
     const ticketNumberParam = searchParams.get('ticket_number')
@@ -228,11 +211,11 @@ export async function GET(request: NextRequest) {
     const uniqueIndexParam = searchParams.get('unique_index')
     const uniqueIndex = uniqueIndexParam ? (isNaN(parseInt(uniqueIndexParam)) ? null : parseInt(uniqueIndexParam)) : null
     const projectIdForLookup = projectIdResult.value
+    const lookupIdOutOfRange = findIdParamOutOfRange({ cursor: cursorId, task_id: taskIds, unique_index: uniqueIndex })
+    if (lookupIdOutOfRange) return validationError(idOutOfRangeMessage(lookupIdOutOfRange))
 
-    // Validate that only one identification method is used
     const methodCount = [!!taskIds, !!ticketNumbers, !!uniqueIndex].filter(Boolean).length
     if (methodCount === 0) {
-      // Continue with list tasks logic (no single task lookup)
     } else if (methodCount > 1) {
       console.warn('[MCP] tasks', {
         reason: 'multiple_identification_methods',
@@ -261,7 +244,6 @@ export async function GET(request: NextRequest) {
       )
     }
 
-    // Handle single task lookups (consolidated with OR)
     if (methodCount > 0) {
       const orConditions: any[] = []
 
@@ -277,7 +259,6 @@ export async function GET(request: NextRequest) {
         orConditions.push(ticketCondition)
       }
 
-      // Handle legacy single ticket_number (not array)
       const legacyTicketNumber = searchParams.get('ticket_number')
       if (legacyTicketNumber && !ticketNumbers) {
         const ticketCondition: any = { ticketNumber: legacyTicketNumber }
@@ -303,7 +284,7 @@ export async function GET(request: NextRequest) {
         }
 
         const include = {
-          ...taskMcpGetInclude(user.id),
+          ...taskMcpGetInclude(user.id, ctx.agentId),
           savedContent: {
             where: { userId: ctx.agentId ? -1 : user.id, commentId: null, type: 'Private' as const },
             select: { id: true, type: true },
@@ -343,22 +324,20 @@ export async function GET(request: NextRequest) {
           )
         }
 
-        // Legacy format: if single ticket_number (not array), return single task object
         if (legacyTicketNumber && !ticketNumbers && tasks.length === 1) {
           return NextResponse.json({
             success: true,
-            task: mapTaskToMcpGetResponse(tasks[0], user.id)
+            task: mapTaskToMcpGetResponse(tasks[0], user.id, ctx.agentId)
           })
         }
 
         return NextResponse.json({
           success: true,
-          tasks: tasks.map((task) => mapTaskToMcpGetResponse(task, user.id))
+          tasks: tasks.map((task) => mapTaskToMcpGetResponse(task, user.id, ctx.agentId))
         })
       }
     }
 
-    // Continue with list tasks logic
     const projectId = projectIdForLookup
     const boardId = boardIdResult.value
 
@@ -379,7 +358,9 @@ export async function GET(request: NextRequest) {
     const hasDueDate = searchParams.get('has_due_date') ? searchParams.get('has_due_date') === 'true' : undefined
     const dueDateBefore = searchParams.get('due_date_before') || undefined
     const dueDateAfter = searchParams.get('due_date_after') || undefined
-    let status = (searchParams.get('status') as 'Normal' | 'Archive' | 'Deleted') || 'Normal'
+    const statusParam = parseTaskStatusParam(searchParams.get('status'), ['Normal', 'Archive', 'Deleted'])
+    if (!statusParam) return validationError('status must be open, Normal, Archive, or Deleted')
+    let status = statusParam
     let labelsParam = searchParams.getAll('labels')
     const createdBy = searchParams.get('created_by') ? parseInt(searchParams.get('created_by')!) : null
     let updatedSince = searchParams.get('updated_since') || undefined
@@ -390,7 +371,9 @@ export async function GET(request: NextRequest) {
     let limit = Math.min(limitResult.value ?? 50, 100)
     const offset = offsetResult.value
     let sortBy = searchParams.get('sort_by') || 'updatedAt'
-    let sortOrder = searchParams.get('sort_order') || 'desc'
+    const sortOrderParam = parseSortOrderParam(searchParams.get('sort_order'), 'desc')
+    if (!sortOrderParam) return validationError('sort_order must be asc or desc')
+    let sortOrder = sortOrderParam
     let sectionId = sectionIdParam.value
     if (listQuery) {
       if (listQuery.query) search = listQuery.query
@@ -446,12 +429,14 @@ export async function GET(request: NextRequest) {
       return validationError(`${invalidDateParam} must be a valid date or datetime, e.g. 2026-10-14 or 2026-10-14T03:00:00Z`)
     }
 
+    const filterIdOutOfRange = findIdParamOutOfRange({ section_id: sectionId, created_by: createdBy })
+    if (filterIdOutOfRange) return validationError(idOutOfRangeMessage(filterIdOutOfRange))
+
     const TASK_SORT_FIELDS = ['createdAt', 'updatedAt', 'dueDate', 'priority', 'title', 'id'] as const
     if (listQuery?.sortBy && !TASK_SORT_FIELDS.includes(listQuery.sortBy as (typeof TASK_SORT_FIELDS)[number])) {
       return validationError(`sort must be one of ${TASK_SORT_FIELDS.join(', ')}`)
     }
 
-    // Get user's accessible projects
     const accessibleProjects = await prisma.project.findMany({
       where: {
         status: 'Normal',
@@ -472,13 +457,11 @@ export async function GET(request: NextRequest) {
       })
     }
 
-    // Build where clause
     const where: any = {
       projectId: { in: accessibleProjectIds },
       status
     }
 
-    // Filter by project/board
     if (projectId || boardId) {
       const targetId = projectId || boardId
       if (accessibleProjectIds.includes(targetId!)) {
@@ -497,14 +480,12 @@ export async function GET(request: NextRequest) {
       }
     }
 
-    // Filter by section
     if (sectionId) {
       where.sectionId = sectionId
     } else if (section) {
       where.section = section
     }
 
-    // Filter by assignee
     if (assignedTo) {
       if (assignedTo === 'me') {
         where.assignees = { some: { userId: user.id } }
@@ -512,23 +493,20 @@ export async function GET(request: NextRequest) {
         where.assignees = { none: {} }
       } else {
         const userIds = assignedTo.split(',').map(id => parseInt(id.trim())).filter(id => !isNaN(id))
+        if (findIdParamOutOfRange({ assigned_to: userIds })) return validationError(idOutOfRangeMessage('assigned_to'))
         if (userIds.length > 0) {
           where.assignees = { some: { userId: { in: userIds } } }
         }
       }
     }
 
-    // Filter by priority
     if (priorityFilter.length) {
       const byIndex = { priority: { priority_index: { in: priorityFilter } } }
-      // A task never given a priority has no Priority row; "none" (0) must match it too.
-      // AND keeps this OR apart from the search OR below.
       where.AND = priorityFilter.includes(0)
         ? [{ OR: [byIndex, { priority: { is: null } }] }]
         : [byIndex]
     }
 
-    // Filter by due date
     if (hasDueDate !== undefined) {
       if (hasDueDate) {
         where.dueDate = { not: null }
@@ -543,7 +521,6 @@ export async function GET(request: NextRequest) {
       where.dueDate = { ...where.dueDate, gte: new Date(dueDateAfter) }
     }
 
-    // Filter by labels: ids match TaskLabel.labelId (numeric legacy + UUID Label.id); else label.value
     if (labelsParam.length > 0) {
       const trimmed = labelsParam.map(l => l.trim()).filter(l => l.length > 0)
       const labelIds = trimmed.filter(isLabelIdParam)
@@ -561,12 +538,10 @@ export async function GET(request: NextRequest) {
       }
     }
 
-    // Filter by creator
     if (createdBy) {
       where.userId = createdBy
     }
 
-    // Filter by updated/created since
     if (updatedSince) {
       where.updatedAt = { gte: new Date(updatedSince) }
     }
@@ -574,7 +549,6 @@ export async function GET(request: NextRequest) {
       where.createdAt = { gte: new Date(createdSince) }
     }
 
-    // Filter by comments
     if (hasComments !== undefined) {
       if (hasComments) {
         where.comments = { some: {} }
@@ -583,7 +557,6 @@ export async function GET(request: NextRequest) {
       }
     }
 
-    // Filter by attachments
     if (hasAttachments !== undefined) {
       if (hasAttachments) {
         where.attachments = { some: {} }
@@ -592,7 +565,6 @@ export async function GET(request: NextRequest) {
       }
     }
 
-    // Search filter
     if (search) {
       where.OR = [
         { title: { contains: search, mode: 'insensitive' } },
@@ -616,7 +588,6 @@ export async function GET(request: NextRequest) {
       Object.assign(where, prWhere)
     }
 
-    // Keep the requested sort with a stable id tie-breaker across cursor pages.
     const orderBy: any[] = []
     if (sortBy === 'createdAt') {
       orderBy.push({ createdAt: sortOrder }, { id: 'asc' })
@@ -634,10 +605,8 @@ export async function GET(request: NextRequest) {
       orderBy.push({ updatedAt: 'desc' }, { id: 'asc' })
     }
 
-    // Count the full match set before applying the cursor window.
     const total = await prisma.task.count({ where })
 
-    // Get tasks
     const tasks = await prisma.task.findMany({
       where,
       select: {
@@ -659,6 +628,7 @@ export async function GET(request: NextRequest) {
           }
         },
         parentTask: {
+          ...(ctx.agentId && agentScopeEnforced() ? { where: { project: getProjectWhere(user.id, ctx.agentId) } } : {}),
           select: {
             id: true,
             ticketNumber: true,
@@ -720,6 +690,7 @@ export async function GET(request: NextRequest) {
         },
         subTasks: {
           where: {
+            ...(ctx.agentId && agentScopeEnforced() ? { project: getProjectWhere(user.id, ctx.agentId) } : {}),
             status: {
               not: "Deleted",
             },
@@ -738,18 +709,16 @@ export async function GET(request: NextRequest) {
       },
       orderBy,
       take: limit,
-      // Use cursor+skip so the requested sort is preserved across pages.
       ...(cursorId
         ? { cursor: { id: cursorId }, skip: 1 }
         : { skip: usesCursor ? 0 : offset }),
     })
 
-    // Get metadata counts
     const uniqueProjects = new Set(tasks.map(t => t.projectId))
     const uniqueSections = new Set(tasks.map(t => t.section).filter(Boolean))
 
-    // Transform to response format
     const taskList: TaskListItem[] = tasks.map(task => {
+      recordAgentBoardScopeMiss(task.projectId, "read");
       task = stripForeignTaskRelations(task)
       const agent = mapVisibleMcpAgent(task.agent, user.id, task.projectId)
       const assignees = task.assignees
@@ -765,7 +734,7 @@ export async function GET(request: NextRequest) {
         sectionId: task.sectionId || undefined,
         boardId: task.projectId,
         boardTitle: task.project.title || '',
-        parent_id: task.parentTaskId || undefined,
+        parent_id: ctx.agentId && agentScopeEnforced() && !task.parentTask ? undefined : task.parentTaskId || undefined,
         parent_task: task.parentTask
           ? {
               id: task.parentTask.id,
@@ -803,7 +772,6 @@ export async function GET(request: NextRequest) {
       ? projectRows(presentedTasks as Array<Record<string, unknown>>, listQuery.fields)
       : presentedTasks
 
-    // A full page returns nextCursor so clients can start paging.
     const nextCursor =
       tasks.length === limit
         ? encodeCursor(tasks[tasks.length - 1].id)
@@ -814,8 +782,6 @@ export async function GET(request: NextRequest) {
       tasks: projectedTasks as TaskListItem[],
       total,
       limit,
-      // Cursor mode ignores offset entirely, so report 0 rather than echoing a
-      // value that was never applied.
       offset: usesCursor ? 0 : offset,
       nextCursor,
       ...(listQuery?.fields.length
@@ -830,9 +796,9 @@ export async function GET(request: NextRequest) {
 
     return NextResponse.json(response)
   } catch (error) {
-    if (error instanceof TaskIdentifierAmbiguityError) {
-      return NextResponse.json({ success: false, error: error.message }, { status: 400 })
-    }
+    const identifierResponse = taskIdentifierErrorResponse(error)
+    if (identifierResponse) return identifierResponse
+    reportMcpOperationCrash(request, error)
     console.error('[MCP] tasks', {
       user: userObj,
       error,

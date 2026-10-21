@@ -1,8 +1,3 @@
-/**
- * Task-related validation schemas
- * 
- * Validations for: get_tasks, list_tasks, search_tasks
- */
 
 import { z } from 'zod';
 import { SORTING_MODES } from '@/models/Views/model';
@@ -32,10 +27,6 @@ import {
 
 const config = getConfig();
 
-/**
- * Schema for get_tasks tool input
- * Supports batch retrieval by task_id array or ticket_number array
- */
 export function getGetTasksInputSchema() {
   return createTaskIdentificationArraySchema();
 }
@@ -43,10 +34,6 @@ export function getGetTasksInputSchema() {
 export const GetTaskInputSchema = getGetTasksInputSchema();
 export type GetTaskInput = z.infer<typeof GetTaskInputSchema>;
 
-/**
- * Base schema for get_tasks (without refine validation)
- * Used for FastMCP parameter validation
- */
 export function getGetTasksBaseSchema() {
   return createTaskIdentificationBaseSchema().extend({
     task_id: z.array(z.coerce.number().int().positive()).optional(),
@@ -54,9 +41,6 @@ export function getGetTasksBaseSchema() {
   });
 }
 
-/**
- * Schema for list_views tool input
- */
 export function getListViewsInputSchema() {
     return z
       .object({
@@ -74,9 +58,6 @@ export function getListViewsInputSchema() {
 export const ListViewsInputSchema = getListViewsInputSchema();
 export type ListViewInput = z.infer<typeof ListViewsInputSchema>;
 
-/**
- * Schema for get_view tool input
- */
 export function getViewInputSchema() {
   return z
     .object({
@@ -110,15 +91,9 @@ const viewAssigneeIdSchema = z.union([
   z.number().int().positive(),
   z.string().uuid(),
 ]);
-// The REST view service performs the type-specific validation and canonicalization
-// for this document. The MCP boundary must preserve the complete native filter
-// projection instead of stripping fields that it does not interpret itself.
 const nativeBoardFiltersSchema = z.record(z.string(), z.unknown());
 const visibleSectionIdsSchema = z.array(z.number().int().positive());
 
-/**
- * Schema for create_view tool input
- */
 export function getCreateViewInputSchema() {
   return z
     .object({
@@ -147,10 +122,6 @@ export function getCreateViewInputSchema() {
 export const CreateViewInputSchema = getCreateViewInputSchema();
 export type CreateViewInput = z.infer<typeof CreateViewInputSchema>;
 
-/**
- * Base schema for update_view tool input.
- * FastMCP requires a plain Zod object for tool parameters.
- */
 export function getUpdateViewBaseSchema() {
   return z
     .object({
@@ -171,9 +142,6 @@ export function getUpdateViewBaseSchema() {
     .strict();
 }
 
-/**
- * Schema for update_view tool input
- */
 export function getUpdateViewInputSchema() {
   return getUpdateViewBaseSchema().refine(
     (data) =>
@@ -212,9 +180,6 @@ export function getUpdateViewInputSchema() {
 export const UpdateViewInputSchema = getUpdateViewInputSchema();
 export type UpdateViewInput = z.infer<typeof UpdateViewInputSchema>;
 
-/**
- * Schema for delete_view tool input
- */
 export function getDeleteViewInputSchema() {
   return z
     .object({
@@ -226,9 +191,6 @@ export function getDeleteViewInputSchema() {
 export const DeleteViewInputSchema = getDeleteViewInputSchema();
 export type DeleteViewInput = z.infer<typeof DeleteViewInputSchema>;
 
-/**
- * Schema for switch_view tool input
- */
 export function getApplyViewInputSchema() {
   return z
     .object({
@@ -240,9 +202,6 @@ export function getApplyViewInputSchema() {
 export const ApplyViewInputSchema = getApplyViewInputSchema();
 export type ApplyViewInput = z.infer<typeof ApplyViewInputSchema>;
 
-/**
- * Schema for search_tasks tool input (basic)
- */
 export function getSearchTasksInputSchema() {
   return z
     .object({
@@ -259,9 +218,6 @@ export function getSearchTasksInputSchema() {
 export const SearchTasksInputSchema = getSearchTasksInputSchema();
 export type SearchTasksInput = z.infer<typeof SearchTasksInputSchema>;
 
-/**
- * Enhanced schema for search_tasks tool input with additional filters
- */
 export function getEnhancedSearchTasksInputSchema() {
   return z
     .object({
@@ -284,14 +240,9 @@ export const EnhancedSearchTasksInputSchema = getEnhancedSearchTasksInputSchema(
 export type EnhancedSearchTasksInput = z.infer<typeof EnhancedSearchTasksInputSchema>;
 
 
-/**
- * Base schema for update_task tool (without refine validation)
- * Used for FastMCP parameter validation, refine is checked in execute
- */
 export function getUpdateTaskBaseSchema() {
   return createTaskIdentificationBaseSchema()
     .extend({
-      // Update fields - all optional (only update what's provided)
       title: z.string().min(1).optional(),
       description: z
         .string()
@@ -304,7 +255,7 @@ export function getUpdateTaskBaseSchema() {
             message: 'Description must be in HTML format. Use HTML tags like <p>Text</p> for paragraphs or <br> for line breaks. Plain text is not accepted.',
           }
         ),
-      priority: priorityIndexSchema, // Use index (0-4) instead of string
+      priority: priorityIndexSchema,
       estimate: estimateIndexOptionalSchema,
       status: statusFilterSchema,
       sectionId: z.number().int().positive().optional(),
@@ -322,17 +273,12 @@ export function getUpdateTaskBaseSchema() {
     .strict();
 }
 
-/**
- * Schema for update_task tool input
- * Requires task identification + optional update fields
- */
 export function getUpdateTaskInputSchema() {
   const baseSchema = getUpdateTaskBaseSchema();
 
   return baseSchema
     .refine(
       (data) => {
-        // At least one identification method must be provided
         const hasTaskId = data.task_id !== undefined;
         const hasTicketNumber = data.ticket_number !== undefined;
         const hasUniqueIndex = data.unique_index !== undefined && data.project_id !== undefined;
@@ -345,7 +291,6 @@ export function getUpdateTaskInputSchema() {
     )
     .refine(
       (data) => {
-        // Only one identification method should be provided
         const hasTaskId = data.task_id !== undefined;
         const hasTicketNumber = data.ticket_number !== undefined;
         const hasUniqueIndex = data.unique_index !== undefined;
@@ -359,7 +304,6 @@ export function getUpdateTaskInputSchema() {
     )
     .refine(
       (data) => {
-        // If unique_index is provided, project_id must also be provided
         if (data.unique_index !== undefined) {
           return data.project_id !== undefined;
         }
@@ -372,7 +316,6 @@ export function getUpdateTaskInputSchema() {
     )
     .refine(
       (data) => {
-        // At least one update field must be provided (can't update nothing)
         const hasUpdateFields =
           data.title !== undefined ||
           data.description !== undefined ||
@@ -396,11 +339,6 @@ export function getUpdateTaskInputSchema() {
 export const UpdateTaskInputSchema = getUpdateTaskInputSchema();
 export type UpdateTaskInput = z.infer<typeof UpdateTaskInputSchema>;
 
-/**
- * Base schema for assign_user tool (without refine validation)
- * intent assign (default): idempotent — ensure user is assigned; does not remove.
- * intent unassign: explicitly remove the user from assignees.
- */
 export function getAssignUserBaseSchema() {
   return createTaskIdentificationBaseSchema().extend({
     intent: z
@@ -423,10 +361,6 @@ export function getAssignUserBaseSchema() {
   }).strict();
 }
 
-/**
- * Schema for assign_user tool input
- * Requires task identification + either user_id or user_ids
- */
 export function getAssignUserInputSchema() {
   const baseSchema = getAssignUserBaseSchema();
 
@@ -495,24 +429,15 @@ export function getAssignUserInputSchema() {
 export const AssignUserInputSchema = getAssignUserInputSchema();
 export type AssignUserInput = z.infer<typeof AssignUserInputSchema>;
 
-/**
- * Check if text appears to be HTML format
- * Simple heuristic: checks for HTML tags
- */
 function isHtmlFormat(text: string): boolean {
   if (!text || typeof text !== 'string') {
     return false;
   }
   
-  // Check for HTML tags (basic pattern)
   const htmlTagPattern = /<[a-z][\s\S]*>/i;
   return htmlTagPattern.test(text.trim());
 }
 
-/**
- * Schema for create_task tool input
- * Requires project_id and title, optional description, section, priority, estimate
- */
 export function getCreateTaskInputSchema() {
   return z
     .object({
@@ -559,10 +484,6 @@ export function getCreateTaskInputSchema() {
 export const CreateTaskInputSchema = getCreateTaskInputSchema();
 export type CreateTaskInput = z.infer<typeof CreateTaskInputSchema>;
 
-/**
- * Base schema for move_task_between_boards (without refine validation)
- * Used for FastMCP parameter validation; refines are checked in execute
- */
 export function getMoveTaskBetweenBoardsBaseSchema() {
   return createTaskIdentificationBaseSchema()
     .extend({
@@ -583,10 +504,6 @@ export function getMoveTaskBetweenBoardsBaseSchema() {
     .strict();
 }
 
-/**
- * Schema for move_task_between_boards tool input (with validation)
- * Moves a task from one board/project to another (different from update_task sectionId which moves within same board)
- */
 export function getMoveTaskBetweenBoardsInputSchema() {
   return getMoveTaskBetweenBoardsBaseSchema()
     .refine(
@@ -632,10 +549,6 @@ export function getMoveTaskBetweenBoardsInputSchema() {
 export const MoveTaskBetweenBoardsInputSchema = getMoveTaskBetweenBoardsInputSchema();
 export type MoveTaskBetweenBoardsInput = z.infer<typeof MoveTaskBetweenBoardsInputSchema>;
 
-/**
- * Schema for get_task_tree (task hierarchy in one response).
- * Exactly one of ticket_number or task_id must be provided.
- */
 export function getGetTaskTreeInputSchema() {
   return z
     .object({

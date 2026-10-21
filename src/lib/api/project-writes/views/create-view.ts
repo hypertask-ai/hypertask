@@ -34,8 +34,6 @@ const route = taskWriteRoute({
         visibility,
       } = req.body as TCreate_view_body;
 
-      // HTPR-3997: authenticate from the signed session, never trust a
-      // client-supplied userId.
 
       var updatedProjectView;
       if (!Number.isInteger(projectId)) {
@@ -54,12 +52,9 @@ const route = taskWriteRoute({
       if (!accessibleProject) {
         return viewWriteJson({ message: "Board access required" }, 403);
       }
-      // a view with no name is unfindable in Manage Views, so reject it here
-      // (every client - UI, CLI, MCP - goes through this route).
       const title = viewTitle?.trim();
       if (!title)
         return viewWriteJson({ message: "View name is required!" }, 400);
-      // lets check if its a new view or an old one.
       const viewPromise = prisma.view.findFirst({
         where: {
           title: { equals: title },
@@ -77,15 +72,12 @@ const route = taskWriteRoute({
       );
       const project_view_promise = prisma.project_View.upsert({
         create: {
-          // ... data to create a Project_View
           projectId,
         },
         update: {
-          // ... in case it already exists, update
         },
         where: {
           projectId,
-          // ... the filter for the Project_View we want to update
         },
         include: {
           default_view: { select: { board_columns_view: true } },
@@ -97,8 +89,6 @@ const route = taskWriteRoute({
       ]);
       console.log("🚀 ~ consthandler:NextApiHandler= ~ view:", view);
 
-      // HTPR-3836: views inherit column order from the board's default view,
-      // not from whichever view happened to be on screen when saving.
       const defaultColumns = project_view.default_view
         ?.board_columns_view as ISection[] | null;
       const incomingColumns = view_settings.board_columns_view as
@@ -108,7 +98,6 @@ const route = taskWriteRoute({
         const orderById = new Map(
           defaultColumns.map((col, index) => [col.id, index])
         );
-        // stable sort: sections missing from the default view keep their relative order at the end
         view_settings.board_columns_view = [...incomingColumns].sort(
           (a, b) =>
             (orderById.get(a.id) ?? Number.MAX_SAFE_INTEGER) -
@@ -123,7 +112,6 @@ const route = taskWriteRoute({
         view_settings.board_filters
       );
 
-      // =============== new title means new view.
       const currentDate = new Date();
       if (!view) {
         view = await withBoardFilterWriteLock(projectId, sanitizedBoardFilters, (tx) => tx.view.create({
@@ -165,7 +153,6 @@ const route = taskWriteRoute({
                 board_subtask_setting: view_settings.board_subtask_setting,
                 board_empty_sections: view_settings.board_empty_sections,
                 board_staleness: view_settings.board_staleness ?? null,
-                // Preserve a saved "show archived" choice when the caller omits the field.
                 ...(view_settings.board_show_archived === undefined
                   ? {}
                   : { board_show_archived: view_settings.board_show_archived ?? null }),
@@ -198,16 +185,13 @@ const route = taskWriteRoute({
       });
 
       console.log("🚀 ~ consthandler:NextApiHandler= ~ view:", view);
-      // ========== add it against the user_project_view
       const user_Project_View = await prisma.user_Project_View.upsert({
         create: {
-          // ... data to create a Project_View
           userId,
           project_view_id: project_view.id,
           appliedViewId: setAsDefault ? null : view.id,
         },
         update: {
-          // ... in case it already exists, update
           userId,
           project_view_id: project_view.id,
           appliedViewId: setAsDefault ? null : view.id,
@@ -217,11 +201,9 @@ const route = taskWriteRoute({
             userId,
             project_view_id: project_view.id,
           },
-          // ... the filter for the Project_View we want to update
         },
       });
 
-      // ========== if there were any unsaved view, remove it.
       if (user_Project_View.unsavedViewId)
         await prisma.view.delete({
           where: { id: user_Project_View.unsavedViewId },

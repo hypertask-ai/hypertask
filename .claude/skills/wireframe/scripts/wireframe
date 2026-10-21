@@ -163,7 +163,7 @@ def main():
                     + "</p>"
                     '<p>Question: <span data-type="mention" class="mention" data-id="Valentin Yeo" data-label="name-6">Valentin Yeo</span> '
                     f"{html.escape(opts.question.strip())}</p>")
-            run(["vcc", "comment", "add", t, "--text", text, "--attach", str(png)])
+            run(["vcc", "comment", "add", t, "--kind", "question", "--text", text, "--attach", str(png)])
             if ux_signoff(project_id):
                 run(["vcc", "task", "move", t, "--section", "UX Sign-off"])
         print(url)

@@ -12,7 +12,7 @@ export const metadata: Metadata = {
 };
 
 export default async function AgentsWikiPage() {
-  const sourcePath = path.join(process.cwd(), "openwiki", "agents.md");
+  const sourcePath = path.join(process.cwd(), "src", "app", "wiki", "agents", "agents.md");
   const markdown = await readFile(sourcePath, "utf8");
   const html = markdownToHtml(markdown);
 

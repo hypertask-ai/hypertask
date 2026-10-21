@@ -150,6 +150,6 @@ test("the userless hard-delete worker stays signature-gated instead", () => {
   const worker = read("src/pages/api/queues/taskDeleteQueue.ts");
   assert.ok(worker.includes("export default withQstashSignature(handler)"));
   assert.ok(worker.includes("claimAndInvokeTaskDelete(taskId)"));
-  assert.ok(worker.includes("This callback has no request user"));
+  assert.ok(!worker.includes("getSessionUser"));
   assert.ok(!worker.includes("taskWriteAccessWhere"));
 });

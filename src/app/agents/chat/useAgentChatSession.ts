@@ -71,9 +71,6 @@ export function useAgentChatSession({
       if (!res.ok || !data.success || !Array.isArray(data.messages)) {
         throw new Error(data.error ?? "Failed to load messages");
       }
-      // Ignore answers for a chat the user already left, never clobber an
-      // optimistic send that is still in flight, and drop responses a newer
-      // request for the same session has already superseded.
       if (
         sessionIdRef.current !== loadSessionId ||
         sendingRef.current ||
@@ -85,15 +82,7 @@ export function useAgentChatSession({
       setAwaiting(Boolean(data.awaiting));
       setMessagesError(null);
       setDeliveryMode(data.deliveryMode ?? null);
-      // Same signal a failed send sets: no live delivery path means the human
-      // side of the notice must survive a reload.
       setDeliveryNotice(data.chatEnabled === false);
-      // First load of this thread: reconcile the two draft copies. Whatever is
-      // on this device wins, because it is what was typed most recently here,
-      // and it gets pushed up so the next device sees it. An empty device slot
-      // takes the server's copy, which is what makes a draft cross devices.
-      // Viewer rows exist for private owner chats too; only the shared roster
-      // stays behind the flag.
       if (data.viewer && draftHydratedRef.current !== loadSessionId) {
         draftHydratedRef.current = loadSessionId;
         const local = draftRef.current;
@@ -107,14 +96,9 @@ export function useAgentChatSession({
             writeDraft(currentUser.id, selectedIdRef.current, stored);
         }
       }
-      // Reading the newest page is catching up, so the unread marker moves.
       if (data.viewer && data.viewer.unreadCount > 0) {
         markChatRead(loadSessionId);
       }
-      // Draining here would read awaitingRef before the render that follows
-      // this setMessages has run, so it'd still see the stale (pre-reply)
-      // value. The effect below (keyed on the derived `awaiting`) is the one
-      // place that's guaranteed to observe the committed state instead.
     } catch (e) {
       if (
         sessionIdRef.current === loadSessionId &&
@@ -127,8 +111,6 @@ export function useAgentChatSession({
     }
   }, [currentUser.id]);
 
-  // Confirm or dismiss a proposed ticket. The server owns the decision; this
-  // just refetches so every tab lands on the state the server committed.
   const handleProposalAction = useCallback<TProposalAction>(
     async (proposalId, action) => {
       const activeSessionId = sessionIdRef.current;
@@ -164,8 +146,6 @@ export function useAgentChatSession({
     async (agentId: string) => {
       setSessionLoading(true);
       try {
-        // One ongoing thread per agent: the route upserts, so re-selecting an
-        // agent always lands on the same conversation.
         const res = await fetch("/api/ai-chat/create-session", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
@@ -179,7 +159,6 @@ export function useAgentChatSession({
         if (!res.ok || !data.success || !data.session) {
           throw new Error(data.error ?? "Could not open chat");
         }
-        // The user may have switched agents while this was in flight.
         if (selectedIdRef.current !== agentId) return;
         sessionIdRef.current = data.session.id;
         setSession({ id: data.session.id, agentId });
@@ -197,8 +176,6 @@ export function useAgentChatSession({
   );
 
   const clearSelectionState = () => {
-    // Leaving the chat is not the same as discarding the message: keep it for
-    // when this agent is opened again.
     if (selectedIdRef.current) {
       writeDraft(currentUser.id, selectedIdRef.current, draftRef.current);
     }
@@ -222,8 +199,6 @@ export function useAgentChatSession({
 
   const selectAgent = useCallback(
     (agent: TAgent) => {
-      // Read the outgoing agent off the ref before it is overwritten, or the
-      // draft lands under the agent being switched to.
       const leaving = selectedIdRef.current;
       if (leaving && leaving !== agent.id) {
         writeDraft(currentUser.id, leaving, draftRef.current);
@@ -231,20 +206,10 @@ export function useAgentChatSession({
       selectedIdRef.current = agent.id;
       sessionIdRef.current = null;
       draftHydratedRef.current = null;
-      // draftRef is normally refreshed by a passive effect, which can lag
-      // behind two switches in the same task (holding Ctrl+Tab). Setting it
-      // here means the next switch always writes the draft it actually left.
       const restored = readDraft(currentUser.id, agent.id);
       draftRef.current = restored;
       restoredDraftRef.current = restored;
-      // A queued follow-up belongs to the chat it was typed in, not whatever
-      // agent gets selected next.
       messageQueueRef.current = [];
-      // flushSync (rather than the normal batched update) commits the chat
-      // pane, composer included, before this handler returns, so the
-      // composerRef.focus() below still runs inside the tap's call stack --
-      // mobile browsers only open the keyboard for a focus() that happens
-      // synchronously in the user gesture (HTPR-6041 follow-up).
       flushSync(() => {
         setSelectedId(agent.id);
         setSession(null);
@@ -257,30 +222,22 @@ export function useAgentChatSession({
         setDeliveryNotice(false);
         setDeliveryMode(null);
         setReplyTimedOut(false);
-        // This same path runs for a reload (the ?agent= effect calls it), so
-        // restoring here covers both switching agents and coming back.
         setDraft(restored);
         setQueuedMessages([]);
       });
       dismissMention();
       if (isMbl && agent.runtimeType === "EXTERNAL") composerRef.current?.focus();
       if (isMbl && agent.runtimeType === "EXTERNAL") focusComposer();
-      // The selection lives in the URL so a reload keeps the chat open.
       router.replace(
         `/agents/chat?agent=${encodeURIComponent(agent.slug ?? agent.id)}`,
         { scroll: false },
       );
-      // Native agents are chatted with from the full AI chat surface; only
-      // external ones get an in-pane session.
       if (agent.runtimeType !== "EXTERNAL") return;
       void openAgentSession(agent.id);
     },
     [router, openAgentSession, isMbl, currentUser.id],
   );
 
-  // Honor ?agent=<slug> once the roster is in (deep link, reload, palette).
-  // The raw id resolves too: links written server side (a confirmed proposal's
-  // ticket, for one) have no slug to hand.
   const agentParam = searchParams?.get("agent") ?? null;
   useEffect(() => {
     if (!agents || !agentParam || selectedIdRef.current) return;

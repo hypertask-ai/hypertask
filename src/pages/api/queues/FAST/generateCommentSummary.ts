@@ -17,8 +17,6 @@ function buildJobId(commentId: number) {
 
 export default async function scheduleCommentSummaryGeneration(req: IReq) {
   const { commentId } = req;
-  // Debounce ~5 min after the last activity; scheduleJobById cancels and replaces
-  // any still-pending summary job for this comment.
   const runAt = new Date(new Date().getTime() + 5 * 60000);
 
   const res = await scheduleJobById({

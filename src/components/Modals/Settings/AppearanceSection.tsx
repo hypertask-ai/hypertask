@@ -1,5 +1,8 @@
 "use client";
 
+import { useFlag } from "@/hooks/useFlag";
+import { useMobileView } from "@/lib/contexts/mobileContext";
+import { HTPR_7328_ROUNDED_THEME_FLAG } from "@/lib/flags/keys";
 import { Check } from "lucide-react";
 import useDarkMode from "@/hooks/MultiPages/HTC/useDarkMode";
 import { themeOptions } from "@/lib/themePreferences";
@@ -7,13 +10,13 @@ import { cn } from "@/utils/undoActions/helperFuncs";
 import SettingsCard from "./SettingsCard";
 import SettingsSectionShell from "./SettingsSectionShell";
 
-const AppearanceThemePicker = () => {
+const AppearanceThemePicker = ({ options }: { options: readonly (typeof themeOptions)[number][] }) => {
   const { currentTheme, switchToTheme } = useDarkMode();
   const activeTheme = currentTheme ?? "system";
 
   return (
     <div className="flex flex-col gap-1">
-      {themeOptions.map((option) => {
+      {options.map((option) => {
         const isActive = activeTheme === option.value;
         return (
           <button
@@ -34,12 +37,20 @@ const AppearanceThemePicker = () => {
   );
 };
 
-const AppearanceSection = () => (
-  <SettingsSectionShell title="Appearance">
-    <SettingsCard title="Appearance">
-      <AppearanceThemePicker />
-    </SettingsCard>
-  </SettingsSectionShell>
-);
+const AppearanceSection = () => {
+  const roundedEnabled = useFlag(HTPR_7328_ROUNDED_THEME_FLAG);
+  const isMobile = useMobileView();
+  const options = roundedEnabled && !isMobile
+    ? themeOptions
+    : themeOptions.filter(({ value }) => value !== "rounded");
+
+  return (
+    <SettingsSectionShell title="Appearance">
+      <SettingsCard title="Appearance">
+        <AppearanceThemePicker options={options} />
+      </SettingsCard>
+    </SettingsSectionShell>
+  );
+};
 
 export default AppearanceSection;

@@ -18,7 +18,6 @@ export interface BoardManifestTaskInput {
   due_date?: string
 }
 
-/** Raw body from MCP / agent (before validation). */
 export interface BoardManifestInput {
   title: string
   description?: string

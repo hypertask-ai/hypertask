@@ -34,7 +34,7 @@ const TaskLabelComponent = ({
   const [overFlowing, setIsOverFlowing] = useState<boolean>(false);
   const handleOnClick = (e: any) => {
     e.preventDefault();
-    stopPropogation && e.stopPropagation(); // Prevent the click event from propagating to the parent div
+    stopPropogation && e.stopPropagation();
     onClick && onClick();
   };
 

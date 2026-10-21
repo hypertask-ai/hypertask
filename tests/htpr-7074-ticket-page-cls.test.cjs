@@ -42,7 +42,7 @@ test("the comment box is held back until the flag is known and On, and never whe
 });
 
 // Mounts the hook with a slot whose box top the test controls; frames and timers are driven by hand.
-async function withHarness(t, { hydrated = true, boxTop }, run) {
+async function withHarness(t, { hydrated = true, boxTop, rowsFinal = { current: true } }, run) {
   const { JSDOM } = require("jsdom");
   const { act } = React;
   const dom = new JSDOM("<div id=root></div>");
@@ -59,7 +59,7 @@ async function withHarness(t, { hydrated = true, boxTop }, run) {
     const useThreadSettled = loadHook(mocksFor(true, true, hydrated));
     const seen = [];
     const Probe = () => {
-      const { settled, slotRef } = useThreadSettled(true);
+      const { settled, slotRef } = useThreadSettled(true, rowsFinal.current);
       seen.push(settled);
       return React.createElement("div", { ref: slotRef }, React.createElement("section", { id: "box" }));
     };
@@ -79,7 +79,8 @@ async function withHarness(t, { hydrated = true, boxTop }, run) {
       callback = null;
       if (fn) await act(async () => { fn(clock); });
     };
-    await run({ seen, boxTop, commentHeight, frame, tick: (ms) => act(async () => { t.mock.timers.tick(ms); }) });
+    const releaseRows = () => act(async () => { rowsFinal.current = true; rootNode.render(React.createElement(Probe)); });
+    await run({ seen, boxTop, commentHeight, frame, releaseRows, tick: (ms) => act(async () => { t.mock.timers.tick(ms); }) });
     await act(async () => { rootNode.unmount(); });
   } finally {
     t.mock.timers.reset();
@@ -99,6 +100,20 @@ test("the comment box shows once its own top has held still for 300 ms, and a mo
     boxTop.current = 500.8;
     for (let i = 0; i < 8; i += 1) await frame(16);
     assert.equal(seen.at(-1), true, "300 ms without a move of more than 1 px: shown");
+  });
+});
+
+test("server-rendered rows hold the comment box even when still, and the wait starts once the live rows replace them", async (t) => {
+  await withHarness(t, { boxTop: { current: 770 }, rowsFinal: { current: false } }, async ({ seen, boxTop, frame, tick, releaseRows }) => {
+    await frame(0);
+    for (let i = 0; i < 30; i += 1) await frame(16);
+    await tick(6000);
+    assert.equal(seen.at(-1), false, "a still box under server rows is not a settled thread, and the 5 s cap waits for the live rows");
+    await releaseRows();
+    boxTop.current = 1852;
+    await frame(0);
+    for (let i = 0; i < 20; i += 1) await frame(16);
+    assert.equal(seen.at(-1), true, "live rows in place and still for 300 ms: shown at its final top");
   });
 });
 

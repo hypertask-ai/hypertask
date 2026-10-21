@@ -9,17 +9,16 @@ import {
   useState,
 } from "react";
 import toast from "react-hot-toast";
-import { undoToastSettings } from "@/components/undoToast";
 
 import { CommandMode } from "@/models/enums";
 import { IAgent, ILabel, ISection, ITask, IUser } from "@/models/model";
-import { useSetRecoilState } from "@/lib/state";
-import { showCommandsAtom } from "@/store";
+import { useRecoilValue, useSetRecoilState } from "@/lib/state";
+import { activeItemAtom, showCommandsAtom } from "@/store";
 import { KeyCodes } from "@/lib/constants/keyboard-handler";
 import { returnIfModalOrInputActive } from "@/utils/helperFunctions/helperFunctions";
 import { getInclusiveRange, toggleId } from "@/lib/kanbanBulkSelection";
 import { useFlag } from "@/hooks/useFlag";
-import { HTPR_7137_BULK_ARCHIVE_UNDO_ALL_FLAG } from "@/lib/flags/keys";
+import { HTPR_7260_KANBAN_SELECT_ALL_FLAG, HTPR_7137_BULK_ARCHIVE_UNDO_ALL_FLAG } from "@/lib/flags/keys";
 
 type Assignee = IUser | IAgent;
 type AssigneeIntent = "assign" | "unassign" | "toggle";
@@ -40,6 +39,8 @@ interface KanbanBulkSelectionContextValue {
     withRange?: boolean,
   ) => void;
   clearSelection: () => void;
+  selectAll: () => void;
+  selectColumn: (sectionId?: number) => void;
   openBulkCommand: (mode?: CommandMode) => void;
   archiveSelected: () => Promise<void>;
   moveSelected: (section: ISection) => Promise<void>;
@@ -78,6 +79,12 @@ export const KanbanBulkSelectionProvider = ({
   onAssignTask,
   onLabelTask,
 }: KanbanBulkSelectionProviderProps) => {
+  const selectAllEnabled = useFlag(HTPR_7260_KANBAN_SELECT_ALL_FLAG);
+  const focusedTaskId = useRecoilValue(activeItemAtom);
+  const latestTaskIdRef = useRef<number | null>(null);
+  useEffect(() => {
+    if (focusedTaskId != null) latestTaskIdRef.current = focusedTaskId;
+  }, [focusedTaskId]);
   const bulkArchiveUndoAll = useFlag(HTPR_7137_BULK_ARCHIVE_UNDO_ALL_FLAG);
   const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
   const [failedIds, setFailedIds] = useState<Set<number>>(new Set());
@@ -101,8 +108,6 @@ export const KanbanBulkSelectionProvider = ({
     [items, selectedIds],
   );
 
-  // A task can disappear after an action or a realtime update. Do not leave a
-  // hidden id in the selection, because the action bar count must match cards.
   useEffect(() => {
     const visibleIds = new Set(items.map((task) => task.id));
     setSelectedIds((current) => {
@@ -127,8 +132,25 @@ export const KanbanBulkSelectionProvider = ({
     anchorRef.current = null;
   }, []);
 
+  const selectAll = useCallback(() => {
+    if (!selectAllEnabled) return;
+    setSelectedIds(new Set(items.map((task) => task.id)));
+    setFailedIds(new Set());
+  }, [items, selectAllEnabled]);
+
+  const selectColumn = useCallback((sectionId?: number) => {
+    if (!selectAllEnabled) return;
+    const latestTask = items.find((task) => task.id === latestTaskIdRef.current)
+      ?? selectedTasks.at(-1);
+    const targetSectionId = sectionId ?? latestTask?.sectionId;
+    if (targetSectionId == null) return;
+    setSelectedIds(new Set(taskIdsBySection.get(targetSectionId) ?? []));
+    setFailedIds(new Set());
+  }, [items, selectAllEnabled, selectedTasks, taskIdsBySection]);
+
   const toggleTaskSelection = useCallback(
     (taskId: number, sectionId: number, withRange = false) => {
+      latestTaskIdRef.current = taskId;
       setSelectedIds((current) => {
         if (withRange && anchorRef.current?.sectionId === sectionId) {
           const taskIds = taskIdsBySection.get(sectionId) ?? [];
@@ -175,8 +197,6 @@ export const KanbanBulkSelectionProvider = ({
       setIsProcessing(true);
 
       try {
-        // Keep the calls sequential. Each operation updates the shared board
-        // cache, and the next task must see the previous update.
         for (const task of snapshot) {
           try {
             hasUndo = (await operation(task)) === true || hasUndo;
@@ -200,7 +220,7 @@ export const KanbanBulkSelectionProvider = ({
           toast.error(
             `${failures.length} of ${snapshot.length} tasks could not be updated`,
           );
-        } else if (!undoToastSettings.single || !hasUndo) {
+        } else if (!hasUndo) {
           toast.success(successText);
         }
       } finally {
@@ -258,6 +278,18 @@ export const KanbanBulkSelectionProvider = ({
 
       const isApple = /Mac|iPhone|iPad/.test(navigator.platform);
       const cmdControl = (isApple && event.metaKey) || (!isApple && event.ctrlKey);
+
+      if (
+        selectAllEnabled &&
+        event.keyCode === KeyCodes.A &&
+        cmdControl &&
+        !event.shiftKey &&
+        !event.altKey
+      ) {
+        event.preventDefault();
+        selectAll();
+        return true;
+      }
 
       if (
         focusedTaskId &&
@@ -330,6 +362,8 @@ export const KanbanBulkSelectionProvider = ({
       items,
       openBulkCommand,
       selectedTasks,
+      selectAll,
+      selectAllEnabled,
       toggleTaskSelection,
     ],
   );
@@ -342,9 +376,22 @@ export const KanbanBulkSelectionProvider = ({
       handleBulkKeyDown(event);
     };
 
+    const onSelectAllKeyDown = (event: KeyboardEvent) => {
+      if (
+        selectAllEnabled &&
+        event.keyCode === KeyCodes.A &&
+        (event.ctrlKey || event.metaKey) &&
+        handleBulkKeyDown(event)
+      ) event.stopImmediatePropagation();
+    };
+
+    document.addEventListener("keydown", onSelectAllKeyDown, true);
     document.addEventListener("keydown", onDocumentKeyDown);
-    return () => document.removeEventListener("keydown", onDocumentKeyDown);
-  }, [handleBulkKeyDown]);
+    return () => {
+      document.removeEventListener("keydown", onSelectAllKeyDown, true);
+      document.removeEventListener("keydown", onDocumentKeyDown);
+    };
+  }, [handleBulkKeyDown, selectAllEnabled]);
 
   const value = useMemo<KanbanBulkSelectionContextValue>(
     () => ({
@@ -357,6 +404,8 @@ export const KanbanBulkSelectionProvider = ({
       isSelected: (taskId) => selectedIds.has(taskId),
       toggleTaskSelection,
       clearSelection,
+      selectAll,
+      selectColumn,
       openBulkCommand,
       archiveSelected,
       moveSelected,
@@ -376,6 +425,8 @@ export const KanbanBulkSelectionProvider = ({
       openBulkCommand,
       selectedIds,
       selectedTasks,
+      selectAll,
+      selectColumn,
       toggleTaskSelection,
     ],
   );

@@ -15,13 +15,6 @@ type Props = {
   view: "Kanban" | "Calendar" | "MyTasks";
 };
 
-/**
- * The ANY/ALL control for ONE filter's own values, shown in that filter's value picker.
- * Deliberately identical to the parent Filters modal's control, keys included: these pickers keep
- * their search input focused (ModalInput re-focuses itself on blur), so a letter shortcut would be
- * swallowed by typing, and Shift+M is already "move task to a different board". Arrow left/right is
- * what the parent modal already uses for exactly this.
- */
 const MatchModeToggle = ({ type, noun, view }: Props) => {
   const currentProject = useRecoilValue(currentProjectAtom);
   const { toggleFilterValueMatch } = useFilters();

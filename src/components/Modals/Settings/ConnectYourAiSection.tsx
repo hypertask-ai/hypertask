@@ -30,9 +30,6 @@ const ConnectYourAiSection = () => {
     setCopiedProvider(null);
     setCopyError(false);
 
-    // Open the provider first. A browser only honours window.open while the
-    // click gesture is still on the stack, and awaiting the clipboard ends it,
-    // which is why the panel used to promise a tab it never opened.
     window.open(
       CONNECT_PROVIDER_SETUP_URLS[provider],
       "_blank",

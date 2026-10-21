@@ -5,8 +5,6 @@ import { TIPTAPUPDATECREATETASK } from "@/lib/constants/constants";
 import { translate } from "../constants";
 import { tiptapForwardSlashRoute } from "@/lib/constants/APIRouteConstants";
 
-// Same backend + response shape as the forward-slash AI items (items.ts),
-// so the bubble menu stays in sync with the slash menu.
 const runFlaskCommand = async (
   editor: Editor,
   command: string,
@@ -90,14 +88,11 @@ const AIDropdown = ({
   };
 
   const itemClass =
-    // !font-normal overrides the inherited `.floatingmenu button { font-weight: 900 }`
-    // so the dropdown items render as a normal-weight menu, not chunky faux-bold.
     "w-full text-left px-3 py-2 hover:bg-gray-100 text-black whitespace-nowrap !font-normal";
 
   return (
     <div className="origin-bottom scrollbar-none flex flex-col absolute justify-start items-start right-0 mt-2 w-56 max-h-72 overflow-y-auto rounded-md shadow-lg bg-white ring-1 ring-black ring-opacity-5 z-50">
       <button
-        // preventDefault keeps the text selection so the bubble menu stays open
         onMouseDown={(e) => e.preventDefault()}
         onClick={() =>
           run("FixSpellingAndGrammar", {

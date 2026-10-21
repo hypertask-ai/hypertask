@@ -123,9 +123,6 @@ export interface ApplyViewResponse {
   };
 }
 
-/**
- * Service for listing, retrieving, creating, updating, deleting, and applying views.
- */
 export class ViewService {
   constructor(private readonly apiClient: IApiClient) {}
 
@@ -133,10 +130,8 @@ export class ViewService {
     const correlationId = generateCorrelationId();
 
     try {
-      // Validate input
       const validatedInput = ListViewsInputSchema.parse(params);
 
-      // Build query parameters
       const queryParams = new URLSearchParams();
 
       if (validatedInput.project_id) {
@@ -166,11 +161,9 @@ export class ViewService {
         correlationId,
       );
 
-      // Guard against undefined/malformed response (HTPR-3030)
       const rawViews = response?.views ?? [];
       const validViews = rawViews.filter((t): t is ViewListItem => t != null);
 
-      // Add pagination metadata following MCP best practices
       const offset = validatedInput.offset ?? 0;
       const limit =
         validatedInput.limit ?? response?.limit ?? validViews.length;
@@ -200,10 +193,8 @@ export class ViewService {
     const correlationId = generateCorrelationId();
 
     try {
-      // Validate input
       const validatedInput = GetViewInputSchema.parse(params);
 
-      // Build query parameters
       const queryParams = new URLSearchParams();
 
       if (validatedInput.viewId) {
@@ -271,13 +262,6 @@ export class ViewService {
       const validatedInput = UpdateViewInputSchema.parse(params);
       const { viewId, ...body } = validatedInput;
 
-      // Omitted filter fields (label_names/assignee_ids/match) are deliberately
-      // left out of the PATCH body: the REST endpoint merges them against the
-      // view's stored filters server-side, where the real (nested) filter
-      // shape lives. Do not try to pre-merge here against GetViewResponse's
-      // board_filters — its shape (addedFilters/matchFilters) doesn't match
-      // this endpoint's flat label_names/assignee_ids/match fields, and a
-      // client-side merge against the wrong shape silently clears filters.
       const response = await this.apiClient.makeRequest<UpdateViewResponse>(
         `/mcp/view/${viewId}`,
         {

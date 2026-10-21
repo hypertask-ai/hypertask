@@ -60,7 +60,7 @@ test("comment rendering preserves mentions, links, images, attachments, code and
     '<a href="https://hypertask.app/file.pdf" download="file.pdf">attachment</a>' +
     '<img src="https://hypertask.app/image.png" alt="image" width="120">' +
     '<pre><code class="language-js">const value = 1;</code></pre><blockquote>quote</blockquote>' +
-    '<ul><li>list item</li></ul><p>https://hypertask.app/wiki</p>',
+    '<ul><li>list item</li></ul><p>https://hypertask.app/explorations</p>',
   );
   const mention = comment.querySelector(".mention");
   for (const [name, value] of Object.entries({
@@ -68,7 +68,7 @@ test("comment rendering preserves mentions, links, images, attachments, code and
   })) assert.equal(mention.getAttribute(name), value);
   assert.equal(comment.querySelector('a[href="https://hypertask.app"]').textContent, "safe link");
   assert.equal(comment.querySelector('a[download="file.pdf"]').textContent, "attachment");
-  assert.equal(comment.querySelector('a[href="https://hypertask.app/wiki"]').textContent, "https://hypertask.app/wiki");
+  assert.equal(comment.querySelector('a[href="https://hypertask.app/explorations"]').textContent, "https://hypertask.app/explorations");
   assert.equal(comment.querySelector("img").getAttribute("src"), "https://hypertask.app/image.png");
   assert.equal(comment.querySelector("pre code.language-js").textContent, "const value = 1;");
   for (const tag of ["strong", "em", "u", "blockquote", "ul li"]) assert.ok(comment.querySelector(tag));

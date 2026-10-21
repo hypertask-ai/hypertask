@@ -9,7 +9,6 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Team ID is required' }, { status: 400 });
     }
 
-    // Run subscription check in background
     const subscriptionStatus = await hasSubscription(teamId);
     
     return NextResponse.json({ 

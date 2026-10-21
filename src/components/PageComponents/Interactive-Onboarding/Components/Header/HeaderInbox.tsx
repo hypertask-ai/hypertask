@@ -22,7 +22,6 @@ const HeaderInbox = ({
         alignItems: "center",
       }}
     >
-      {/* <FaCircle className={`text-[#5896F1] w-new-notification`} /> */}
 
       <p
         className="px-1 text-white-black mt-[1px]"

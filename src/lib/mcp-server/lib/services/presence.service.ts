@@ -45,9 +45,8 @@ export class PresenceService {
 
       return response;
     } catch (error) {
-      logger.error('Failed to fetch team agent presence', {
+      logger.failure('Failed to fetch team agent presence', error, {
         correlationId,
-        error: error instanceof Error ? error.message : String(error),
       });
       throw error;
     }

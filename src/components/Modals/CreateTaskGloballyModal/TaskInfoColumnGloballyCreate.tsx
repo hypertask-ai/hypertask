@@ -172,15 +172,13 @@ const TaskInfoColumnGloballyCreate = ({
     const [_currentProject, __] = useRecoilState(currentProjectAtom)
     const [createTaskModal] = useRecoilState(showCreateTaskModalAtom)
 
-    // "Copy task to another board" opens the duplicate prefilled and lands straight on the board picker.
-    // Wait for the boards to load first — SetProjectsModal snapshots allProjects on mount.
     const autoOpenedBoardPicker = useRef(false)
     useEffect(() => {
         if (!createTaskModal.duplicate?.pickBoard) return
         if (autoOpenedBoardPicker.current || allProjects.length === 0) return
         autoOpenedBoardPicker.current = true
         toggleProjectsModal()
-        // eslint-disable-next-line react-hooks/exhaustive-deps
+
     }, [allProjects.length])
 
     if (_mbl) return (
@@ -216,17 +214,14 @@ const TaskInfoColumnGloballyCreate = ({
         console.log("🚀 ~ labelsHandler ~ param:", param);
         toggleShowTagsModal();
 
-        if (!param) return; // Early return if param is undefined
+        if (!param) return;
     
         const previousState = formValues.tags??[];
-        // Check if the label already exists in the previous state
         const index = previousState.findIndex(tag => tag.id === param.id);
     
         if (index !== -1) {
-            // If it exists, remove it
             previousState.splice(index, 1);
         } else {
-            // If it doesn't exist, add it
             previousState.push(param);
         }
         handleChange("tags",previousState)
@@ -248,11 +243,6 @@ const TaskInfoColumnGloballyCreate = ({
         if (callback) handleChange("dueDate", callback)
         else if (reset) handleChange("dueDate", undefined)
     }
-    // const priorityHandler = (param?:IPrioritiesConstants)=>{
-    //     if (param?.priority_index===0) handleChange("priority",undefined)
-    //     else  handleChange("priority", param)
-    //     togglePriorityModal()
-    // }
     return (
         <>
             <TaskInfoRow>
@@ -264,7 +254,6 @@ const TaskInfoColumnGloballyCreate = ({
             <TaskInfoRow>
                 <>
                     <LocalRightSideInfo
-                    //toggle showallprojects modal
                         onClick={toggleProjectsModal}
                         title="Project"
                         left={-44}
@@ -315,7 +304,6 @@ const TaskInfoColumnGloballyCreate = ({
                 </>
             </TaskInfoRow>
 
-            {/* ====================================== TASK DUE DATE ================================ */}
             <TaskInfoRow>
                 <LocalRightSideInfo
                     onClick={toggleDueDateModal}
@@ -391,7 +379,6 @@ const TaskInfoColumnGloballyCreate = ({
                 </TaskInfoValue>
             </TaskInfoRow>
 
-            {/* ====================================== TASK Estimate ================================ */}
             <TaskInfoRow>
                 <LocalRightSideInfo
                     onClick={toggleShowSizeModal}
@@ -418,7 +405,6 @@ const TaskInfoColumnGloballyCreate = ({
                     </Suspense>
                 </TaskInfoValue>
             </TaskInfoRow>
-            {/* ====================================== TASK Labels ================================ */}
             <TaskInfoRow alignTop>
                 <LocalRightSideInfo
                     onClick={toggleShowTagsModal}

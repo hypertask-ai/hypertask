@@ -25,7 +25,6 @@ const NewTaskFromComment: React.FC<IProps> = ({
     []
   );
 
-  //for processing comment attachments if any when creating new task from comment
   const processAttachmentsForNewTask = (attachments?: IAttachment[]) => {
     if (!attachments || attachments.length === 0) return [];
     let temp: any[] = [];
@@ -47,7 +46,6 @@ const NewTaskFromComment: React.FC<IProps> = ({
   const toggleCreateSubTask = () => {
     if (!comment || !task) return;
 
-    // SECURITY: Use the shared task-detail templates so staging sanitization and the PR's mention/link escaping both apply.
     const linkhtml = taskDetailConfig.urls.templates.commentLink(
       task.projectId,
       String(task.uniqueIndex),

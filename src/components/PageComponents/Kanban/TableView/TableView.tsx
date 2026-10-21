@@ -75,13 +75,6 @@ const AssignModal = lazy(
   () => import("@/components/Modals/AssignToUser/AssignToUser"),
 );
 
-// Right-edge drag handle for a header cell (feature 3: Excel-style column resize).
-// A thin pointer-event hit strip, sibling to the sort <button> (not a child of
-// it), so a resize drag never touches the button's draggable/click handlers.
-// Sheets/Notion pattern (HTPR-4991): faint separators appear across the header
-// row on hover, the hovered/dragged handle itself goes full accent, and a
-// full-height guide line (rendered by the parent, positioned via containerRef)
-// tracks the pointer for the duration of the drag.
 const ColumnResizeHandle = ({
   column,
   width,
@@ -93,13 +86,6 @@ const ColumnResizeHandle = ({
 }: {
   column: string;
   width: number;
-  // Excel model (HTPR-4993): title starts on a minmax(base,1fr) track that flexes
-  // to absorb all spare width, so ANY other column's resize delta gets silently
-  // swallowed by title instead of moving the dragged edge. Called at the start of
-  // every resize drag (not just title's own) to freeze title to a fixed px track
-  // — its real rendered width — if it isn't already; a no-op once frozen. Returns
-  // the freshly-measured width when it just froze (so this drag, if it's title's
-  // own, can start from that instead of the stale unflexed `width` prop).
   onBeforeResize: () => number | undefined;
   onResize: (column: string, width: number) => void;
   containerRef: React.RefObject<HTMLDivElement | null>;
@@ -150,14 +136,9 @@ const ColumnResizeHandle = ({
         className={`mx-auto block h-full transition-colors ${
           isResizing
             ? "w-0.5 bg-hypertasks-purple"
-            // bg-white-black, not bg-border-labelComponent: that token is defined under
-            // borderColor only, so `bg-` never emitted a background and the separator was
-            // invisible at every opacity (HTPR-5050).
             : "w-px bg-white-black opacity-20 group-hover/header:opacity-40 group-hover/resize:opacity-0"
         }`}
       />
-      {/* Excel's grip (HTPR-5050): the resting separator says "there is an edge here",
-          this double ridge under the pointer says "and you can drag it". */}
       {!isResizing && (
         <span className="pointer-events-none absolute inset-0 hidden items-center justify-center gap-[2px] group-hover/resize:flex">
           <span className="block h-3.5 w-[1.5px] rounded-full bg-white-black" />
@@ -232,7 +213,7 @@ const TableView = ({
     selectedIndex,
   });
   const {
-  quickEntryEnabled, quickCreateTask,
+  quickCreateTask,
   } = useTableKeyboard({
     _currentProject, rows, selectedIndex, sections, toggleCreateTaskGlobally,
     setShowCommands, isApple, handleBoardChange, _sections, lastGAt,
@@ -273,8 +254,6 @@ const TableView = ({
   }
 
   return (
-    // h-full fills the flex-sized board column (rail shell), so the horizontal
-    // scrollbar sits at the bottom of the viewport instead of under the last row.
     <div
       data-task-shortcuts={rowShortcutsEnabled ? "enabled" : undefined}
       className="w-full h-full min-h-0 bg-taskDetailPage overflow-x-auto overflow-y-auto table-hscroll"
@@ -288,7 +267,6 @@ const TableView = ({
             selectedIndex,
             sections,
             toggleCreateTaskGlobally,
-            quickEntryEnabled,
             quickCreateTask,
           })}
         />
@@ -305,16 +283,11 @@ const TableView = ({
               const sortIndex = sortState.findIndex((level) => level.column === column.key);
               const activeSort = sortState[sortIndex];
               const isActive = sortIndex >= 0;
-              // Ticket/title stay put (see LOCKED_TABLE_COLUMNS); the synthetic
-              // 'status' column injected while sorted also isn't draggable —
-              // it isn't in storedVisibleColumns to reorder.
               const isDraggableColumn = storedColumnKeys.has(column.key) && !LOCKED_TABLE_COLUMNS.has(column.key);
               return (
                 <div
                   key={column.key}
                   ref={column.key === "title" ? titleHeaderRef : undefined}
-                  // The header row stays vertically sticky everywhere. Only desktop
-                  // freezes the ticket and title headings horizontally.
                   style={
                     frozenColumnOffset(column.key) === undefined
                       ? undefined
@@ -344,9 +317,6 @@ const TableView = ({
                       if (!isDraggableColumn || !draggedColumn || draggedColumn === column.key) return;
                       event.preventDefault();
                       event.dataTransfer.dropEffect = "move";
-                      // Insertion line lands on the side the dragged column would land: dragged
-                      // currently to the right of this column (moving right-to-left) -> left edge,
-                      // otherwise (moving left-to-right) -> right edge.
                       const draggedIndex = normalizedColumnOrder.indexOf(draggedColumn);
                       const targetIndex = normalizedColumnOrder.indexOf(column.key);
                       const side = draggedIndex > targetIndex ? "left" : "right";
@@ -365,8 +335,6 @@ const TableView = ({
                       setDraggedColumn(null);
                       setDragOverColumn(null);
                     }}
-                    // The resize handle is centered on the cell edge with half of
-                    // its 12px hit area inside the cell. Keep label text clear of it.
                     className={`block w-full min-w-0 pr-3 uppercase ${column.className || "text-left"} ${isActive ? "text-white-black" : "text-text-light-gray"} ${
                       isDraggableColumn ? "cursor-grab active:cursor-grabbing" : ""
                     } ${draggedColumn === column.key ? "opacity-50" : ""}`}
@@ -406,9 +374,6 @@ const TableView = ({
               {sections.map((section, sectionIndex) => {
                 const sid = tableSectionKey(section) ?? `i${sectionIndex}`;
                 const rawItems = section.items || [];
-                // On /my-tasks a sort must reorder within each board's group rather than
-                // flattening it, so pull the already-sorted rows for this sid instead of
-                // recomputing from the unsorted section.items (HTPR-4887).
                 const sectionRows = sortState.length > 0 ? rows.filter((row) => row.sid === sid) : null;
                 const shown = sectionRows
                   ? sectionRows.filter(isTaskRow).map((row) => row.task)

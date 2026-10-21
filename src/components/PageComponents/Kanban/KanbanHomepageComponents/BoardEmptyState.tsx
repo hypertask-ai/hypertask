@@ -16,12 +16,6 @@ interface BoardEmptyStateProps {
   detection: EmptyStateDetection;
 }
 
-/**
- * BoardEmptyState Component
- * 
- * Displays contextual, actionable messages when a board appears empty.
- * Detects the root cause and provides specific guidance to resolve it.
- */
 export const BoardEmptyState: React.FC<BoardEmptyStateProps> = ({
   detection,
 }) => {
@@ -140,7 +134,6 @@ export const BoardEmptyState: React.FC<BoardEmptyStateProps> = ({
           "space-y-6"
         )}
       >
-        {/* Title */}
         <h2
           className={cn(
             "text-heading font-semibold",
@@ -150,7 +143,6 @@ export const BoardEmptyState: React.FC<BoardEmptyStateProps> = ({
           {message.title}
         </h2>
 
-        {/* Description */}
         <p
           className={cn(
             "text-emphasis",
@@ -161,9 +153,7 @@ export const BoardEmptyState: React.FC<BoardEmptyStateProps> = ({
           {message.description}
         </p>
 
-        {/* Actions */}
         <div className="flex flex-col items-center gap-4">
-          {/* Primary CTA */}
           <button
             onClick={message.primaryAction.onClick}
             className={cn(
@@ -183,7 +173,6 @@ export const BoardEmptyState: React.FC<BoardEmptyStateProps> = ({
             }
           </button>
 
-          {/* Secondary CTA (if exists) */}
           {message.secondaryAction && (
             <button
               onClick={message.secondaryAction.onClick}

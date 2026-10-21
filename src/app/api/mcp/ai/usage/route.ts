@@ -20,9 +20,6 @@ type GroupBy = (typeof GROUPS)[number]
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 const MCP_USAGE_REPORT_MAX_BYTES = 2 * 1024 * 1024
 
-// Map the API-facing group name to the real AiUsage column. 'user' is exposed
-// but the column is 'userId' — the unknown-cast on groupBy() below hides this
-// from the compiler, so it must be mapped by hand.
 const DB_FIELD: Record<GroupBy, string> = {
   model: 'model',
   feature: 'feature',
@@ -55,10 +52,6 @@ const usageUnauthorized = () =>
     { status: 401 },
   )
 
-/**
- * Management-key branch of this route. It intentionally has no project or
- * member grouping, so a usage key can expose only team-wide counts and spend.
- */
 async function getTeamUsage(ctx: McpAuthContext, request: NextRequest) {
   const requestedTeamId = request.nextUrl.searchParams.get('team_id')?.trim()
   if (requestedTeamId && !UUID_PATTERN.test(requestedTeamId)) {
@@ -207,9 +200,6 @@ async function getTeamUsage(ctx: McpAuthContext, request: NextRequest) {
       spendUsd = Math.max(gatewayUsage.totalCost, 0)
     }
 
-    // Lock the team row while checking ownership and constructing the response.
-    // Team transfers update googleAccountId, so the lock makes a transfer wait
-    // until this response has been built and the transaction has committed.
     const response = await prisma.$transaction(
       async (tx) => {
         const lockedTeam = await tx.$queryRaw<Array<{ id: string }>>`
@@ -256,14 +246,6 @@ async function getTeamUsage(ctx: McpAuthContext, request: NextRequest) {
   }
 }
 
-/**
- * GET /api/mcp/ai/usage?project_id=&group_by=model|feature|user|provider|task|agent&since=ISO
- * Read-only AI token usage for a board, grouped by the requested dimension.
- * A management key with usage read permission may instead call this route with
- * `team_id` (and without `project_id`) to receive only team-wide current-period
- * counts and model spend. It never receives plan, billing, payment, or member
- * data.
- */
 export async function GET(request: NextRequest) {
   return wrapMcpRoute(async (request: NextRequest) => {
   try {
@@ -293,9 +275,6 @@ export async function GET(request: NextRequest) {
       ) {
         return getTeamUsage(ctx, request)
       }
-      // A key without usage read may use the project-scoped route only when it
-      // also has data permission. Usage-only keys must never fall through to
-      // that broader data surface.
       if (!hasDataPermission(managementPermissions)) {
         return usageUnauthorized()
       }
@@ -320,7 +299,6 @@ export async function GET(request: NextRequest) {
       since = d
     }
 
-    // Access-scope: only report a board the caller can see.
     const project = await prisma.project.findFirst({
       where: { id: projectId, ...getProjectWhere(ctx.user.id, ctx.agentId) },
       select: { id: true },
@@ -332,9 +310,6 @@ export async function GET(request: NextRequest) {
       )
     }
 
-    // Aggregate token totals grouped by the requested dimension only.
-    // A dynamic `by` defeats Prisma's precise groupBy inference, so type the
-    // args and result explicitly. groupBy is whitelisted against GROUPS above.
     type UsageRow = {
       _sum: {
         inputTokens: number | null; outputTokens: number | null; totalTokens: number | null
@@ -347,7 +322,6 @@ export async function GET(request: NextRequest) {
     const rows = (await groupByFn({
       by: [groupField],
       where: { projectId, ...(since ? { createdAt: { gte: since } } : {}) },
-      // HTPR-7076: cache reads and writes are part of inputTokens, shown so the cached share can be measured.
       _sum: { inputTokens: true, outputTokens: true, totalTokens: true, cachedInputTokens: true, cacheWriteInputTokens: true },
       _count: { _all: true },
     })) as UsageRow[]
@@ -357,7 +331,6 @@ export async function GET(request: NextRequest) {
       const { promptCacheEnabled } = await import('@/app/api/ai/_lib/planGate')
       showCache = await promptCacheEnabled(ctx.user.id)
     } catch {
-      // A failed flag read keeps the report as before.
     }
 
     const groups = rows

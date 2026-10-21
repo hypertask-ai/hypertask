@@ -4,8 +4,9 @@ import { randomBytes } from "crypto";
 import prisma from "@/lib/prisma";
 import { createProjectViewAndCreateDefault } from "./create";
 import { getProjectViewInclude } from "./getAll";
+import { enqueueBoardCreated, processAnalyticsIntentSoon } from "@/lib/telemetry/savedWork";
 
-const getFirst = async (userId:number) => {
+const getFirst = async (userId:number, { withTasks = false }: { withTasks?: boolean } = {}) => {
         try {
             if (!userId) {
                 return({
@@ -25,13 +26,12 @@ const getFirst = async (userId:number) => {
                 })
             }
             const projectInclude = {
-                tasks: true,
+                ...(withTasks ? { tasks: true } : {}),
                 section: true,
                 ai_custom_instructions: true,
                 project_view: getProjectViewInclude({ currentUserId: userId }),
             };
 
-            // Prefer a fully-linked board (team + calendar account) for integrations.
             let project = await prisma.project.findFirst({
                 where: {
                     ...projectContentAccessWhere(userId),
@@ -42,10 +42,6 @@ const getFirst = async (userId:number) => {
                 include: projectInclude,
             });
 
-            // Auto-created fallbacks (e.g. legacy getFirst) often have null teamId/title.
-            // Re-use the latest Normal board instead of creating another orphan on every call —
-            // otherwise getAll (which filters teamId) stays empty and the client/server loop
-            // keeps inserting duplicate `project-*` rows.
             if (!project) {
                 project = await prisma.project.findFirst({
                     where: {
@@ -59,15 +55,17 @@ const getFirst = async (userId:number) => {
 
             console.log("🚀 ~ getFirst ~ project:", project)
             if (!project) {
-                // `Project.name` is globally @unique. `project-${count + 1}` races and can
-                // collide with existing rows; mirror create.ts: provisional name, then `project-${id}`.
                 const provisionalName = `n${randomBytes(5).toString("hex")}`;
-                const created = await prisma.project.create({
-                    data: {
-                        ownerId: userId,
-                        name: provisionalName,
-                        uniqueIdentifier: "",
-                    },
+                const { created, analyticsKey } = await prisma.$transaction(async (tx) => {
+                    const created = await tx.project.create({
+                        data: {
+                            ownerId: userId,
+                            name: provisionalName,
+                            uniqueIdentifier: "",
+                        },
+                    });
+                    const analyticsKey = await enqueueBoardCreated(tx, created.id, "auto", { userId });
+                    return { created, analyticsKey };
                 });
                 await prisma.project.update({
                     where: { id: created.id },
@@ -77,6 +75,7 @@ const getFirst = async (userId:number) => {
                     projectId: created.id,
                     userId,
                 });
+                processAnalyticsIntentSoon(analyticsKey);
                 project = await prisma.project.findFirst({
                     where: { id: created.id },
                     include: projectInclude,

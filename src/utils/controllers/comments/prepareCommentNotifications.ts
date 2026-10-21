@@ -2,7 +2,7 @@ import type { CommentFanoutContext } from './commentFanoutTypes';
 
 export async function prepareCommentNotifications(context: CommentFanoutContext) {
   const { dependencies } = context;
-  const { broadcastInboxChange, recordHyperAiCommentOrigin, scheduleCommentSummaryGeneration, prisma, broadcastBoardChange, upsertCommentToTurbopuffer, scheduleTaskSummaryGeneration } = dependencies;
+  const { broadcastInboxChange, recordHyperAiCommentOrigin, scheduleCommentSummaryGeneration, prisma, broadcastBoardChange, upsertCommentToTurbopuffer, scheduleTaskSummaryGeneration } = dependencies; // trufflehog:ignore
   const { task, creatorId, creatorIdNum, taskId, agentId, inboundEmailId, agentRunActivity, agentRunSelection, agentRunReplayComment, hyperAiId } = context;
   const { comment, resolvedDirectReplyUserId } = context.transactionResult;
   if (resolvedDirectReplyUserId != null) {
@@ -10,8 +10,6 @@ export async function prepareCommentNotifications(context: CommentFanoutContext)
       originUserId: creatorId,
     });
   }
-  // Approval comments must be immutable creation events. This receipt lets
-  // HyperAI reject a comment that was edited into an approval phrase later.
   await recordHyperAiCommentOrigin({
     commentId: comment.id,
     userId: creatorIdNum,
@@ -36,8 +34,6 @@ export async function prepareCommentNotifications(context: CommentFanoutContext)
       ),
   );
 
-  // Keep totalComments in sync — avoids a COUNT join on every board load.
-  // creatorId is always set in this service (unlike activity comments).
   if (
     !inboundEmailId &&
     !agentRunActivity &&

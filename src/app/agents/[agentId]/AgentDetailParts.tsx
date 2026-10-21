@@ -56,8 +56,6 @@ export const queueReasonLabel = {
   other: "Queued",
 } as const;
 
-// Must read the same two signals the register card reads, or the same agent
-// reports "Running" on the grid and "Quiet" on its own page.
 export function statusWord(agent: TAgent): string {
   if (agent.revokedAt) return "Off";
   const last = [agent.heartbeatAt, agent.lastPostedAt].filter(

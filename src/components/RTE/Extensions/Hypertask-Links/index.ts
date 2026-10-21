@@ -14,7 +14,6 @@ const getTaskData = async (match: HypertaskUrlMatch): Promise<string> => {
     let response;
 
     if (match.type === "detail") {
-      // For detail URLs: /api/tasks/getTask?project={projectId}&uniqueIndex={id}
       response = await axios.get(
         `/api/tasks/getTask?project=project-${match.id}&uniqueIndex=${match.projectId}`
       );
@@ -26,7 +25,6 @@ const getTaskData = async (match: HypertaskUrlMatch): Promise<string> => {
           : title?.trim();
       }
     } else if (match.type === "share") {
-      // For share URLs: /api/share/createShareLink?shareId={id}
       response = await axios.get(createShareLookupUrl(match.id));
 
       if (response.status === 200 && response.data) {
@@ -65,27 +63,21 @@ export const HypertaskPasteRule = Extension.create({
             const text = clipboardData.getData("text/plain");
             if (!text) return false;
 
-            // Only a standalone Hypertask URL gets the rich task-link
-            // treatment. Mixed text belongs to Tiptap's normal paste flow.
             const match = parseHypertaskPasteUrl(text);
             if (!match) return false;
 
-            // Prevent default paste behavior
             event.preventDefault();
 
-            // Get the current position
             const { from, to } = view.state.selection;
             const { schema } = view.state;
             const linkMark = schema.marks.link;
 
             if (!linkMark) {
-              // Fallback: insert as plain text if link mark is not available
               const tr = view.state.tr.replaceWith(from, to, schema.text(text));
               view.dispatch(tr);
               return true;
             }
 
-            // Step 1: Immediately insert a placeholder link with the formatted text if available, otherwise use the original URL
             const placeholderText =
               event.clipboardData
                 ?.getData("text/html")
@@ -99,17 +91,14 @@ export const HypertaskPasteRule = Extension.create({
 
             const linkNode = schema.text(placeholderText, [mark]);
 
-            // Insert the placeholder and add a space after
             const tr = view.state.tr
               .replaceWith(from, to, linkNode)
               .insertText(" ", from + placeholderText.length);
 
             view.dispatch(tr);
 
-            // Step 2: Fetch the actual data and replace the placeholder
             getTaskData(match)
               .then((formattedTitle) => {
-                // Find the placeholder text in the document
                 const currentState = view.state;
                 let foundPos = null;
 
@@ -123,12 +112,11 @@ export const HypertaskPasteRule = Extension.create({
                     )
                   ) {
                     foundPos = pos;
-                    return false; // Stop iteration
+                    return false;
                   }
                 });
 
                 if (foundPos !== null) {
-                  // Create the new link node with the actual title
                   const newMark = linkMark.create({
                     href: match.fullUrl,
                     target: "_blank",
@@ -136,7 +124,6 @@ export const HypertaskPasteRule = Extension.create({
                   });
                   const newLinkNode = schema.text(formattedTitle, [newMark]);
 
-                  // Replace the placeholder with the actual title
                   const replaceTr = currentState.tr.replaceWith(
                     foundPos,
                     foundPos + placeholderText.length,
@@ -148,7 +135,6 @@ export const HypertaskPasteRule = Extension.create({
               })
               .catch((error) => {
                 console.log("🤔 ~ addProseMirrorPlugins ~ error:", error);
-                // On error, replace placeholder with the original URL
                 const currentState = view.state;
                 let foundPos = null;
 

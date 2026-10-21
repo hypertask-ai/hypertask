@@ -1,3 +1,4 @@
+import { withAgentScopeRequest } from "@/lib/auth/agentScope";
 import { getSessionUser } from "@/lib/auth/getSessionUser";
 import prisma from "@/lib/prisma";
 import {
@@ -11,7 +12,7 @@ import {
   getProjectCycleOverview,
   setProjectCyclesEnabled,
 } from "@/lib/cycleService";
-import { getProjectWhere } from "@/utils/controllers/projects/getAllIncludes";
+import { getProjectWhere, taskWriteAccessWhere } from "@/utils/controllers/projects/getAllIncludes";
 import isProjectAdmin from "@/utils/controllers/projects/isProjectAdmin";
 import { NextRequest, NextResponse } from "next/server";
 
@@ -48,9 +49,9 @@ const projectIdFrom = (value: unknown) => {
   return Number.isInteger(projectId) && projectId > 0 ? projectId : null;
 };
 
-const planningResponse = async (projectId: number, userId: number) => {
+const planningResponse = async (projectId: number, userId: number, agentId?: string) => {
   const project = await prisma.project.findFirst({
-    where: { id: projectId, ...getProjectWhere(userId) },
+    where: { id: projectId, ...getProjectWhere(userId), AND: [getProjectWhere(userId, agentId)] },
     select: planningSelect,
   });
   if (!project) return null;
@@ -83,14 +84,14 @@ const unauthorized = () =>
 const invalid = (error: string) =>
   NextResponse.json({ success: false, error }, { status: 400 });
 
-export async function GET(request: NextRequest) {
+async function getPlanning(request: NextRequest) {
   const session = await getSessionUser(request.headers);
   if (!session) return unauthorized();
 
   const projectId = projectIdFrom(request.nextUrl.searchParams.get("projectId"));
   if (!projectId) return invalid("A valid projectId is required");
 
-  const planning = await planningResponse(projectId, session.userId);
+  const planning = await planningResponse(projectId, session.userId, session.agentId);
   if (!planning) {
     return NextResponse.json(
       { success: false, error: "Board not found or access denied" },
@@ -101,7 +102,7 @@ export async function GET(request: NextRequest) {
   return NextResponse.json({ success: true, planning });
 }
 
-export async function POST(request: NextRequest) {
+async function updatePlanning(request: NextRequest) {
   const session = await getSessionUser(request.headers);
   if (!session) return unauthorized();
 
@@ -112,7 +113,7 @@ export async function POST(request: NextRequest) {
   }
 
   const project = await prisma.project.findFirst({
-    where: { id: projectId, ...getProjectWhere(session.userId) },
+    where: { id: projectId, ...getProjectWhere(session.userId), AND: [getProjectWhere(session.userId, session.agentId)] },
     select: { id: true },
   });
   if (!project) {
@@ -140,7 +141,10 @@ export async function POST(request: NextRequest) {
     if (body.targetDate !== null && !targetDate) {
       return invalid("targetDate must be a valid YYYY-MM-DD date or null");
     }
-    await prisma.project.update({ where: { id: projectId }, data: { targetDate } });
+    await prisma.project.update({
+      where: { id: projectId, AND: [taskWriteAccessWhere(session.userId, session.agentId)] },
+      data: { targetDate },
+    });
   } else if (body.action === "create_milestone") {
     const title = cleanPlanningText(body.title, 120);
     const targetDate = parseDateOnly(body.targetDate);
@@ -191,6 +195,12 @@ export async function POST(request: NextRequest) {
   }
 
   broadcastBoardChange(projectId, { originUserId: session.userId });
-  const planning = await planningResponse(projectId, session.userId);
+  const planning = await planningResponse(projectId, session.userId, session.agentId);
   return NextResponse.json({ success: true, planning });
 }
+
+export const GET = (request: NextRequest) =>
+  withAgentScopeRequest(request, () => getPlanning(request));
+
+export const POST = (request: NextRequest) =>
+  withAgentScopeRequest(request, () => updatePlanning(request));

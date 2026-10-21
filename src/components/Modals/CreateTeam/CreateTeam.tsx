@@ -22,11 +22,6 @@ const CreateTeam = (props: Props) => {
     }
 
     const handleKeyDown = (e: KeyboardEvent) => {
-
-        // if (e.key === 'Enter' && filteredTeams.length > 0) {
-        //     console.log("i had submitted bro this is dangerous")
-        //     // createBoard(title, selectedTeam.id, selectedTeam.googleAccountId)
-        // }
         if (e.key === "Tab") {
             e.preventDefault()
             return
@@ -47,15 +42,12 @@ const CreateTeam = (props: Props) => {
             isOpen={true}
             shouldCloseOnClickOutside={true}
             id="addColumnModal"
-            // className="p-0 customshadow-4 rounded-[4px] w-[680px] max-h-[400px] bg-[#4E5663] "
         >
 
             <ModalHeaderComp className="px-[20px]" header={currentScreen === "Create Team" ? "Give your team a name" : "Creating your team!"} />
 
-            {/* ======================================== SCREEN TYPES ================================= */}
 
             {currentScreen === "Create Team" ? (
-                // ---------------------- CREATE TEAM ----------------
                 <div className="p-0 rounded-[4px]">
                     <ModalInput
 

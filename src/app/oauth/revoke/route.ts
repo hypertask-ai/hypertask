@@ -15,7 +15,6 @@ function noStoreResponse() {
   })
 }
 
-/** Refresh-token revocation for public native clients. Unknown tokens are a no-op. */
 export async function POST(request: NextRequest) {
   try {
     const formData = await request.formData()

@@ -26,7 +26,6 @@ const CreatedBy: React.FC<ICreatedBy> = ({
   subject,
 }) => {
   const mbl = useContext(MobileViewContext);
-  // if both conditions have same font, thats intentional please do not change.
   return mbl ? (
     <div className={`flex items-center gap-2 ${styles.unstacked_grid_row1}`}>
       {(publicSave || saved) && (

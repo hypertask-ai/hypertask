@@ -15,9 +15,6 @@ import { useFlag, useFlagReady } from "@/hooks/useFlag";
 import { HTPR_7009_DEDUPE_TASK_DETAIL_READS_FLAG } from "@/lib/flags/keys";
 import { fetchScopedTaskDetail, fetchTaskDetailMeta, taskDetailReadKey, TASK_DETAIL_READ_FRESH_MS } from "@/lib/taskDetailReads";
 
-// 5 min: the opened view refetches per its own query config anyway, so this
-// only bounds how often the same neighbor is re-prefetched while navigating.
-// At 15s, J/K-ing an inbox re-fired the whole fan-out constantly (HTPR-3998).
 const TASK_DETAIL_PREFETCH_STALE_TIME = 5 * 60 * 1000;
 
 export type PrefetchTaskDetailTarget = {
@@ -108,9 +105,6 @@ export const usePrefetchTaskDetailTargets = ({
       prefetch(["draft for [task,userId]:", target.id, userId], () =>
         getDraftsHelper(target.id, userId),
       );
-      // Share links are NOT prefetched: /api/share/createShareLink is a write
-      // (creates the link server-side) — firing it per focused neighbor created
-      // share links for tasks the user never opened (HTPR-3998).
     });
   }, [queryClient, userId, dedupe, flagReady]);
 };

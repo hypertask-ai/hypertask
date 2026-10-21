@@ -43,28 +43,10 @@ export const TOUR_TARGET_CONSTANTS = {
   titleInputModal: `#${DIV_ID_CONSTANTS.titleInputModal}`,
 } as const;
 
-// Apple and Android both publish 44px as the minimum touch target. Mobile
-// controls that are only a glyph reserve the target without growing the glyph
-// (HTPR-5098).
 export const MOBILE_TARGET =
   "min-h-[44px] min-w-[44px] shrink-0 flex items-center justify-center";
 
-// Grows a control's tap area past what it paints, without moving anything on
-// screen. A 32px circle keeps its look and still answers a 44px thumb. Only
-// works where neighbours are far enough apart that the halos cannot overlap
-// (HTPR-5114).
-//
-// No `relative` in here on purpose: Tailwind emits `.relative` after
-// `.absolute`, so bundling it would beat an `absolute` the caller already has
-// and drop a floating button back into the flow. Callers that are not already
-// positioned add `relative` themselves.
-// Measured live: the share and archive circles sit 40px apart, so a symmetric
-// 6px halo overlapped by 4px and a tap in the seam could archive instead of
-// share. 6px vertically (nothing above or below) and 4px horizontally gives
-// 44x40 with the neighbours exactly touching, never overlapping.
 export const TOUCH_HALO =
   "before:absolute before:-inset-y-1.5 before:-inset-x-1 before:content-['']";
 
-// Horizontal half of TOUCH_HALO, for controls stacked too closely to grow
-// vertically without overlapping a neighbour (HTPR-5114).
 export const TOUCH_HALO_X = "before:absolute before:-inset-x-1.5 before:inset-y-0 before:content-['']";

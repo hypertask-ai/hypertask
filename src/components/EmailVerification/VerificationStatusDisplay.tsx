@@ -10,10 +10,6 @@ interface VerificationStatusDisplayProps {
   onGoToLogin?: () => void
 }
 
-/**
- * Shared component for displaying verification status states
- * (verifying, verified, error)
- */
 export const VerificationStatusDisplay: React.FC<VerificationStatusDisplayProps> = ({
   status,
   errorMessage = '',
@@ -23,7 +19,6 @@ export const VerificationStatusDisplay: React.FC<VerificationStatusDisplayProps>
   const router = useRouter()
   const currentUser = useCurrentUser()
 
-  // Redirect logged-in users when verified - middleware will handle the appropriate redirect
   useEffect(() => {
     if (status === 'verified' && currentUser) {
       router.push('/')
@@ -65,9 +60,8 @@ export const VerificationStatusDisplay: React.FC<VerificationStatusDisplayProps>
   }
 
   if (status === 'verified') {
-    // If user is already logged in, redirect instead of showing verified status
     if (currentUser) {
-      return null // Component will redirect via useEffect
+      return null
     }
 
     return (

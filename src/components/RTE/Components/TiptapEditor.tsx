@@ -20,9 +20,7 @@ const TiptapEditor = () => {
   } = useTiptapGlobalContext();
   const isMbl = useContext(MobileViewContext);
   const phoneDoubleTapDescription = useFlag(HTPR_7124_PHONE_DOUBLE_TAP_DESCRIPTION_FLAG);
-  // HTPR-7124: taps on a read-only description must reach the container's double-tap detector.
   const passTapsUp = phoneDoubleTapDescription && mode === "read-edit-description" && !isEditable;
-  //  const allowedAttachmentModes = ["read-edit-description", "create-comment"]
 
   const addImage = (data: DataTransfer) => {
     const { files } = data;
@@ -46,7 +44,6 @@ const TiptapEditor = () => {
     addImage(e.dataTransfer);
   };
 
-  // =========================================================== MOBILE
   if (isMbl) {
     return (
       <div
@@ -60,10 +57,6 @@ const TiptapEditor = () => {
           scrollbar-none
           ${
             id === "comment-input"
-              // text-content (14px): the mobile new-comment branch is the one
-              // place that does not get styles.hellow, so .editorContainer's
-              // 14px paragraph rule never applies and the composer fell back to
-              // the 16px editor base, larger than every other app surface.
               ? `text-content max-h-[80px] flex-1 overflow-y-auto py-[8px]
                 focus-within:max-h-[var(--mobile-comment-auto-editor-max-height)]
                 has-[.ProseMirror-focused]:max-h-[var(--mobile-comment-auto-editor-max-height)]
@@ -85,7 +78,7 @@ const TiptapEditor = () => {
         id={`${id}-input`}
         onClick={toggleExpansion}
         onKeyDown={(e) => toggleHighlightHandler(false)}
-        tabIndex={stack ? 0 : -1} // Set tabIndex to -1 when stack is false
+        tabIndex={stack ? 0 : -1}
       >
         {mode === "read-edit-description" && !isEditable && editor?.isEmpty && (
           <div className="pointer-events-none absolute inset-0 z-10 text-[#AEB4BC]">
@@ -108,7 +101,6 @@ const TiptapEditor = () => {
     );
   }
 
-  // =========================================================== DESKTOP
   else {
     return (
       <div
@@ -140,7 +132,7 @@ const TiptapEditor = () => {
         id={`${id}-input`}
         onClick={toggleExpansion}
         onKeyDown={(e) => toggleHighlightHandler(false)}
-        tabIndex={stack ? 0 : -1} // Set tabIndex to -1 when stack is false
+        tabIndex={stack ? 0 : -1}
       >
         {mode === "read-edit-description" && !isEditable && editor?.isEmpty && (
           <div className="pointer-events-none absolute inset-0 z-10 text-[#AEB4BC]">

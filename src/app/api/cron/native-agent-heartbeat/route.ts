@@ -53,15 +53,6 @@ const HEARTBEAT_PROMPT =
   "You have new items in your inbox. Check it and act on " +
   "anything that needs a response, per your instructions.";
 
-/**
- * The custom production domain, never QSTASH_CALLBACK_BASE_URL's
- * hypertasks-prod.vercel.app: that host sits behind Vercel's own bot
- * mitigation, which 403-challenges this route's self-POST before it ever
- * reaches ai/chat/stream. The execution then sits stuck at "reserved"
- * forever with no useful error, since auth for the self-POST never runs
- * either. app.hypertask.ai is the domain every other server-to-server call
- * in this codebase already uses and is not challenged.
- */
 function heartbeatSelfCallBase(): string {
   const base = (
     process.env.NEXT_PUBLIC_APP_URL ||
@@ -167,19 +158,6 @@ const deliverCompletedExecution = async (
   return true;
 };
 
-/**
- * A spent team allowance fails before the model runs, so the turn is restored
- * and retried on later ticks, which is correct: it should resume the moment the
- * allowance resets or a key is added. Retrying *silently* is the defect. The
- * agent just stops working and nobody is told. Tell the owner once per
- * allowance period, keyed so every later tick in that period is a no-op.
- *
- * The period is the one the allowance engine itself rejected against, carried
- * out on the error frame. Re-deriving it from any clock here would key the
- * wrong month for a turn that straddles UTC rollover, either duplicating the
- * notice or consuming an id the next month still needs. The claim period is
- * only a fallback for a stop streamed by a deployment that predates the field.
- */
 const deliverAllowanceExhaustedNotice = async (
   agent: AgentCandidate,
   periodKey: string,
@@ -190,9 +168,6 @@ const deliverAllowanceExhaustedNotice = async (
     assistantMessageId: heartbeatAllowanceNoticeId(agent.id, periodKey),
     userId: agent.userId,
     agentId: agent.id,
-    // The team stamp rides as an invisible HTML comment so a reader of the
-    // notice can attribute the stop to exactly the team whose allowance is
-    // spent; the notice id itself stays keyed by agent and period only.
     content: teamId ? ALLOWANCE_NOTICE + allowanceTeamStamp(teamId) : ALLOWANCE_NOTICE,
   });
   if (delivery === "created") {
@@ -216,13 +191,6 @@ const deliverReconciliationNotice = async (state: HeartbeatExecutionState) => {
   return true;
 };
 
-/**
- * Reconciles the deterministic execution represented by the agent's current
- * heartbeatAt before considering any newer inbox work. A timed-out HTTP client
- * never replays the model loop: the server-owned stream either leaves a durable
- * assistant reply to deliver, records a safe pre-mutation failure to restore,
- * or becomes a terminal reconciliation notice before the cursor advances.
- */
 const recoverPriorExecution = async (
   agent: AgentCandidate,
   failures: string[],
@@ -231,9 +199,6 @@ const recoverPriorExecution = async (
   const ids = heartbeatExecutionIds(agent.id, agent.heartbeatAt);
   let state = await getHeartbeatExecution(ids.executionId);
   if (!state) {
-    // Redis accelerates recovery but is not the replay authority. Its record
-    // can expire or be evicted, while deterministic ChatMessage IDs remain in
-    // Postgres. Never start another mutating turn after a durable human message.
     const messages = await findDurableHeartbeatMessages(
       ids.userMessageId,
       ids.assistantMessageId,
@@ -388,8 +353,6 @@ const recoverPriorExecution = async (
   }
 
   if (decision === "restore") {
-    // The durable mutation boundary was never recorded, so no write tool
-    // could have started. Releasing this claim is therefore safe.
     if (state.status === "reserved") {
       await failHeartbeatExecution(state.executionId, "stream never started");
     } else if (state.status === "running") {
@@ -473,9 +436,6 @@ async function runHeartbeat(request: NextRequest) {
       const recovery = await recoverPriorExecution(agent, failures);
       if (recovery === "delivered") {
         woken += 1;
-        // The completed turn already observed the inbox at this heartbeat
-        // cursor. Do not run a second agent loop in the same sweep; anything
-        // genuinely newer remains eligible on the next cron tick.
         continue;
       }
       if (!heartbeatRecoveryAllowsNewClaim(recovery)) continue;
@@ -525,8 +485,6 @@ async function runHeartbeat(request: NextRequest) {
           ),
       );
       if (!hasNew) {
-        // The scan watermark was captured before the inbox read, so an item
-        // arriving during the query remains newer than this cursor.
         await prisma.agent.updateMany({
           where: { id: agent.id, heartbeatAt: agent.heartbeatAt },
           data: { heartbeatAt: claimedAt },
@@ -562,9 +520,6 @@ async function runHeartbeat(request: NextRequest) {
         previousHeartbeatAt,
       });
 
-      // Cursor advancement and the durable, pre-model execution marker commit
-      // together. A serverless termination can leave neither or both, never an
-      // advanced cursor that recovery mistakes for idle.
       try {
         await prisma.$transaction(
           async (transaction) => {
@@ -575,9 +530,6 @@ async function runHeartbeat(request: NextRequest) {
                 content: heartbeatMessage,
                 role: "human",
                 isDelivered: false,
-                // Deliberately unattributed: the scheduler wrote this prompt,
-                // not the agent's owner. Naming a person here would put words
-                // in their mouth in the transcript.
               },
             });
             const claim = await transaction.agent.updateMany({
@@ -629,8 +581,6 @@ async function runHeartbeat(request: NextRequest) {
         streamBody = await streamResponse.text();
       } catch (error) {
         if (streamController.signal.aborted) {
-          // Aborting this client does not cancel the server-owned stream. Its
-          // durable execution remains running and is reconciled next tick.
           failures.push(
             `${agent.id}: stream timed out; awaiting durable result`,
           );
@@ -658,9 +608,6 @@ async function runHeartbeat(request: NextRequest) {
 
       const allowanceStop = streamStoppedOnSpentAllowance(streamBody);
       if (allowanceStop) {
-        // Courtesy notice only. Letting it throw here would skip the claim
-        // restore below and strand this turn until a later recovery pass, so a
-        // Redis or Prisma blip on the notice would cost real work.
         await deliverAllowanceExhaustedNotice(
           agent,
           allowanceStop.periodKey ?? aiAllowancePeriod(claimedAt).key,
@@ -688,9 +635,6 @@ async function runHeartbeat(request: NextRequest) {
         failures.push(`${agent.id}: durable reply is still pending`);
       }
     } catch (error) {
-      // Before the serializable claim transaction the cursor is unchanged;
-      // after it, the durable ChatMessage marker drives recovery. Never rewind
-      // from this generic catch, because a write tool may already have run.
       failures.push(`${agent.id}: ${errorText(error)}`);
       console.error(`native agent heartbeat failed for ${agent.id}`, error);
     }

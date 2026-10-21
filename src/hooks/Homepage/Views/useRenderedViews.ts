@@ -17,9 +17,6 @@ import useOrderedViews from './useOrderedViews'
 import { useBoardRunningTimers } from '@/hooks/Task Detail/useTimeTracking'
 import { DEFAULT_SUBTASK_SETTING } from '@/models/Views/model'
 
-// Single source of truth for which view pills are visible: ordered views minus
-// 0-task views (unless the user opted to show them; default and active stay).
-// ViewTabsBar renders this list and Tab-cycling walks the same list.
 const useRenderedViews = (project: IProject | null) => {
   const orderedViews = useOrderedViews(project)
   const hiddenViewTabIds = useRecoilValue(hiddenViewTabIdsAtom)
@@ -33,7 +30,6 @@ const useRenderedViews = (project: IProject | null) => {
   const defaultViewId = project?.project_view?.default_view_id
   const activeViewId = getActiveBoardViewId(project, activeBuiltinViews)
 
-  // orderedViews already carries the built-ins, in the user's own order.
   const views: BoardView[] = useMemo(() => (
     orderedViews.filter((view) => (
       view.id === defaultViewId ||

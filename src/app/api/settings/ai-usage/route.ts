@@ -30,8 +30,6 @@ type AiUsageBreakdown = {
   tasks: PercentageRow[];
 };
 
-// Prisma groupBy row shapes (annotated so the callbacks below never fall back to
-// implicit `any` while the local generated client lags the schema).
 type FeatureGroupRow = {
   feature: string;
   _sum: { totalTokens: number | null };
@@ -62,9 +60,9 @@ type AiUsageResponse = {
     pct: number;
     capped: boolean;
     remainingUsd: number;
-    resetsOn: string; // ISO date, first of next month — the pool hard-resets here
+    resetsOn: string;
     usedUsd: number;
-    projectedPct: number | null; // end-of-month usage at the current daily pace
+    projectedPct: number | null;
   } | null;
   includedWithHypertask: { usedUsd: number } | null;
   models: DisplayModelUsage[];
@@ -117,10 +115,6 @@ const toPercentageRows = (
   }));
 };
 
-// First-party breakdown from the local AiUsage metering table (logAiUsage),
-// alongside the AI Gateway aggregate above. Best-effort: AiUsage is written
-// fire-and-forget from chat/editor/etc, so a query failure here must never
-// take down the gateway usage response — just omit the breakdown.
 const loadAiUsageBreakdown = async (
   teamId: string,
   startDate: string,
@@ -326,14 +320,10 @@ export async function GET(request: Request) {
   const isTeamOwner =
     team.googleAccount.userId === user.id ||
     Boolean(user.accountId && user.accountId === team.googleAccountId);
-  // Team owners may inspect the whole team's spend. A board admin is scoped
-  // to the one board whose admin permission authorized this request.
   const breakdownProjectIds = isTeamOwner
     ? undefined
     : [Number(projectId)];
 
-  // The funding source matters as much as the key: customer spend must never
-  // be presented as consuming Hypertask's included allowance.
   const funding = await getTeamGatewayFunding({ trustedTeamId: teamId });
 
   if (!funding) {
@@ -414,9 +404,6 @@ export async function GET(request: Request) {
     );
     const usedUsd = Math.max(totalPlatformUsd - systemUsedUsd, 0);
     const pct = Math.round((usedUsd / allowanceUsd) * 100);
-    // The pool hard-resets on the 1st (no rollover), so the meaningful signals
-    // are the reset date and the projected end-of-month usage at current pace —
-    // not "days until the pool runs out", which would exceed the month.
     const daysElapsed = now.getUTCDate();
     const daysInMonth = new Date(
       Date.UTC(now.getUTCFullYear(), now.getUTCMonth() + 1, 0),

@@ -91,6 +91,7 @@ function fixture(kind, scenario) {
     cancelDueDateJob: record("cancel-due", undefined, scenario.queueThrows ? "Queue unavailable" : null),
   };
   const mocks = {
+    "@/lib/auth/agentScope": require("./helpers/agent-board-scope.cjs").enforcedScope,
     "@prisma/client": { Prisma: { PrismaClientKnownRequestError: KnownError } },
     "@vercel/functions": { waitUntil: (promise) => { effects.push(["waitUntil"]); background.push(promise); } },
     "@/lib/prisma": { default: db },
@@ -138,7 +139,7 @@ function fixture(kind, scenario) {
     "@/pages/api/queues/FAST/generateSummary": { default: record("summary", undefined) },
     "../queues/FAST/generateSummary": { default: record("summary", undefined) },
     "@/utils/controllers/turbopuffer/turbopufferHelper": { upsertTaskToTurbopuffer: record("search", undefined), upsertCommentToTurbopuffer: record("comment-search", undefined) },
-    "@/lib/ai/labelClassifier": { classifyTaskAiLabels: record("ai-labels", undefined) },
+    "@/lib/ai/labelClassifier": { classifyNewTaskAiLabels: record("ai-labels", undefined) },
     "@/utils/controllers/assignees/autoAssignForSection": { autoAssignForSection: record("auto-assign", scenario.pendingAssignment ? "pending" : "ready") },
     "@/utils/controllers/tasks/addRelatedTasks": { addRelatedTasks: record("relations", { status: 200, json: [{ id: 9 }] }) },
     "@/utils/controllers/urls/addIntoTaskDesc": { default: record("urls", undefined) },

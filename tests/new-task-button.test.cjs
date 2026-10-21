@@ -32,10 +32,10 @@ test("the styling guard rejects the original solid-background pattern", () => {
 
 test("the bottom action keeps its click, tooltip, drag suppression and responsive reveal", () => {
   assert.match(bottom, /!snapshot\?\.isDraggingOver/);
-  assert.match(bottom, /onClick=\{\(\)=>createTaskAt\("bottom", sectionPayload, undefined, quickEntryRequested\)\}/);
+  assert.match(bottom, /onClick=\{\(\)=>createTaskAt\("bottom", sectionPayload, undefined, true\)\}/);
   assert.match(bottom, /scale-100 sm:scale-0/);
   assert.match(bottom, /group-hover\/main:scale-100/);
-  assert.match(bottom, /text='Create task' keyCombination=\{nQuickAddEnabled && quickEntryCardsEnabled \? \(shiftCQuickAddEnabled \? \["N \/ Shift\+C"\] : \["N"\]\) : \["C"\]\} left=\{20\} bottom=\{-40\}/);
+  assert.match(bottom, /text='Create task' keyCombination=\{nQuickAddEnabled \? \(shiftCQuickAddEnabled \? \["N \/ Shift\+C"\] : \["N"\]\) : \["C"\]\} left=\{20\} bottom=\{-40\}/);
   assert.match(bottom, /size=\{14\} className='text-text-light-gray'/);
   assert.match(button, /size = 10, className = 'text-white-black'/);
   assert.match(button, /<Plus\s+size=\{size\}\s+className=\{`sm:mx-0 xs:mx-2 \$\{className\}[^`]*`\}\s+strokeWidth=\{sharpPlusEnabled \? 2 : 1\.75\}/);

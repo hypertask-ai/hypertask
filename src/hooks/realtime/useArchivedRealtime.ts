@@ -45,10 +45,6 @@ export function useArchivedRealtime(userId: number | null | undefined): void {
     extractProjectIds(queryClient.getQueryData(["projectsAll"]))
   );
 
-  // On a direct visit to /archived (deep link, hard refresh, new tab) the
-  // ["projectsAll"] cache the board channels are derived from is never primed,
-  // so Tasks Archive would get zero subscriptions and silently not live-update.
-  // Fetch it once ourselves so the board effect below has projectIds to work with.
   useEffect(() => {
     if (userId == null) return;
     if (queryClient.getQueryData(["projectsAll"])) return;
@@ -112,9 +108,6 @@ export function useArchivedRealtime(userId: number | null | undefined): void {
       unsubscribe = () => {
         channel.unbind(INBOX_EVENT, onInboxEvent);
         client.connection.unbind("connected", onConnected);
-        // No client.unsubscribe() here: the always-mounted useInboxRealtime owns
-        // this same private-user channel; unsubscribing on /archived unmount
-        // would silently kill inbox realtime for the rest of the session.
         releaseRealtimeClientIfIdle(client);
       };
     })();

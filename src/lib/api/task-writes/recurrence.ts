@@ -7,8 +7,6 @@ import { isRecurrenceRule } from "@/lib/recurrence";
 import { userCanAccessTask } from "@/utils/controllers/tasks/assertTaskAccess";
 import { loadSessionUserRecord } from "@/lib/auth/sessionUserRecord";
 
-// HTPR-4885: set/clear a task's repeat rule. The rule sits on the task until
-// it is completed; spawnRecurrence.ts then moves it to the next occurrence.
 
 export const POST = taskWriteRoute({
   schema: z.custom<Record<string, any>>(() => true),
@@ -26,10 +24,6 @@ export const POST = taskWriteRoute({
         return NextResponse.json({ message: "Invalid recurrence rule" }, { status: 400 });
       }
 
-      // updateTaskSingle writes by id without checking membership, so gate here.
-      // No agentId: it would come from the request body, and the agent branch of
-      // getProjectWhere checks board membership of that agent, not that the
-      // caller owns it — a body-supplied id would be a cross-account write.
       if (!(await userCanAccessTask(userObj.id, Number(taskId)))) {
         return NextResponse.json({ message: "Task not found" }, { status: 404 });
       }

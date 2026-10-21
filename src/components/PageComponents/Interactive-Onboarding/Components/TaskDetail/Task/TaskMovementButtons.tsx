@@ -24,21 +24,16 @@ const TaskMovementContainer = () => {
       >
         <ArrowLeft className="text-button-arrow"  strokeWidth={1.75}/>
       </div>
-      {/**------------------------------- Task Movement */}
       <>
-        {/* ======================= arrow container ======================== */}
         <div className="flex rounded-[20px] py-[6px] mx-1 items-center justify-center bg-back-button shadow-md flex-col xl:flex-row">
-          {/* ======================= arrow up ================ */}
           <span className="w-10 h-[28px] grid place-items-center relative group border-white cursor-pointer">
             <ChevronUp
               className={`mx-auto ${
                 true ? "text-button-arrow-disabled" : "text-button-arrow"
               } `}
-              // color={`${indexOf===0 || tasksPlayList?.length===0 ?"gray":"white"}`}
              strokeWidth={1.75}/>
           </span>
 
-          {/* ======================= arrow down ================ */}
           <span
             className={`w-10 h-[28px] grid place-items-center relative group cursor-pointer
               

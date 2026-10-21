@@ -1,4 +1,3 @@
-// Next.js API route support: https://nextjs.org/docs/api-routes/introduction
 
 import type { NextApiRequest, NextApiResponse } from "next";
 import prisma from "@/lib/prisma";
@@ -47,7 +46,6 @@ const isManagedSmartSplitLabel = async (
   return getManagedSmartLabelIds(views, labels).has(labelId);
 };
 
-// "/api/labels/updateLabel"
 
 export default async function handler(
   req: NextApiRequest,
@@ -67,7 +65,6 @@ export default async function handler(
       return !memberCheck.error && !memberCheck.invalidIds?.length;
     };
 
-    //   ==================== IF POST
     if (req.method === "POST") {
       const { value, labelId, ai_prompt } = req.body;
       if (!value || !labelId)
@@ -85,8 +82,6 @@ export default async function handler(
             : null
           : undefined;
 
-      // Smart labels run an LLM classification pass on every task in the
-      // project (cost), so require project membership before setting one.
       const existingLabel = await prisma.label.findUnique({
         where: { id: labelId },
         select: { projectId: true, ai_prompt: true },
@@ -104,7 +99,6 @@ export default async function handler(
         return res.status(403).json({ message: "Forbidden" });
       }
 
-      // ============  update the value
       const updateData = {
         value,
         ...(normalizedAiPrompt !== undefined
@@ -150,7 +144,6 @@ export default async function handler(
       return res.status(200).json(updatedLabel);
     }
 
-    // ===================== IF DELETE
     else if (req.method === "DELETE") {
       const { labelId } = req.query;
       if (!labelId)

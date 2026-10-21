@@ -1,3 +1,5 @@
+import { reportMcpOperationCrash } from '@/lib/mcp/operationCrashReport'
+import { notificationBoardAccessWhere } from "@/utils/controllers/notifications/boardAccess"
 import { wrapMcpRoute, validateMcpRouteAuth as validateMcpAuth, checkMcpRouteRateLimit as checkMcpRateLimit } from '@/lib/mcp/routeWrapper'
 import { NextRequest, NextResponse } from 'next/server'
 import { createUnauthorizedResponse } from '@/lib/mcp/auth'
@@ -89,6 +91,7 @@ export async function POST(request: NextRequest) {
       where: {
         id: { in: notificationIds },
         userId: user.id,
+        ...(ctx.agentId ? { AND: [notificationBoardAccessWhere(user.id, ctx.agentId)] } : {}),
         ...(remindAt ? { status: 'Normal' as const } : {}),
       },
       select: {
@@ -116,7 +119,7 @@ export async function POST(request: NextRequest) {
           await tx.$executeRaw`SELECT pg_advisory_xact_lock(${REMINDER_LOCK_CLASS}::int, ${candidateTaskId}::int)`
         }
         const lockedNotifications = await tx.notification.findMany({
-          where: { id: { in: notificationIds }, userId: user.id, status: 'Normal' },
+          where: { id: { in: notificationIds }, userId: user.id, status: 'Normal', ...(ctx.agentId ? { AND: [notificationBoardAccessWhere(user.id, ctx.agentId)] } : {}) },
           select: { id: true, taskId: true, projectId: true },
         })
         if (
@@ -172,7 +175,7 @@ export async function POST(request: NextRequest) {
           }
         }
         await tx.notification.updateMany({
-          where: { userId: user.id, taskId: { in: tasks.map((item) => item.taskId!) }, status: 'Normal' },
+          where: { userId: user.id, taskId: { in: tasks.map((item) => item.taskId!) }, status: 'Normal', ...(ctx.agentId ? { AND: [notificationBoardAccessWhere(user.id, ctx.agentId)] } : {}) },
           data: { status: 'Archive', archivedAt: new Date() },
         })
         return saved
@@ -209,6 +212,7 @@ export async function POST(request: NextRequest) {
         id:{notIn:notificationIds},
         taskId:{in:taskIds},
         userId:user.id,
+        ...(ctx.agentId ? { AND: [notificationBoardAccessWhere(user.id, ctx.agentId)] } : {}),
         status:{not:"Deleted"}
       },
       data:{
@@ -220,6 +224,7 @@ export async function POST(request: NextRequest) {
       where: {
         id: { in: notificationIds },
         userId: user.id,
+        ...(ctx.agentId ? { AND: [notificationBoardAccessWhere(user.id, ctx.agentId)] } : {}),
       },
       data: {
         status: 'Archive',
@@ -240,6 +245,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ success: false, error: error.message }, { status: 409 })
     }
     console.error('Error archiving inbox notifications:', error)
+    reportMcpOperationCrash(request, error)
     return NextResponse.json(
       {
         success: false,

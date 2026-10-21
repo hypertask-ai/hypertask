@@ -4,7 +4,6 @@ function baseUrl(): string {
   return String(process.env.NEXT_PUBLIC_BASEURL);
 }
 
-/** Success return URL for /pricing after Stripe checkout (Normal mode). */
 export function buildPricingCheckoutSuccessUrl(team: IPricingSearchParams): string {
   const q = new URLSearchParams({
     teamId: team.teamId,
@@ -17,7 +16,6 @@ export function buildPricingCheckoutSuccessUrl(team: IPricingSearchParams): stri
   return `${baseUrl()}/pricing?${q.toString()}`;
 }
 
-/** Cancel return URL when user aborts checkout from pricing flow. */
 export function buildPricingCheckoutCancelUrl(team: IPricingSearchParams): string {
   const q = new URLSearchParams({
     teamId: team.teamId,

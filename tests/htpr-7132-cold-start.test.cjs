@@ -6,6 +6,7 @@ const ts = require('typescript')
 const root = path.resolve(__dirname, '..')
 
 function load(file, stubs) {
+  stubs = { '@/lib/auth/agentScope': () => require('./helpers/agent-board-scope.cjs').enforcedScope, ...stubs }
   const source = fs.readFileSync(path.join(root, file), 'utf8')
   const code = ts.transpileModule(source, { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2020, esModuleInterop: true } }).outputText
   const imports = []
@@ -25,7 +26,8 @@ function sessionHarness({ authFails = false } = {}) {
   const sessionHeaders = []
   const permissions = load('src/lib/mcp/managementPermissions.ts', {}).exports
   const loaded = load('src/lib/mcp/auth/session.ts', {
-    '@/lib/telemetry/activationOccurrences': () => ({ recordAuthenticatedConnection: () => {} }),
+    '@/lib/telemetry/analyticsIntents': () => ({ enqueueAnalyticsIntent: async () => "intent-key", processAnalyticsIntentSoon: () => {}, enqueueOutsideSaveAndProcessSoon: async (enqueue) => { await enqueue() } }),
+    '@/lib/telemetry/activationOccurrences': () => ({ enqueueAuthenticatedConnection: async () => null }),
     '@/lib/prisma': () => ({ user: { findUnique: async () => user } }),
     jsonwebtoken: () => ({ decode: () => ({ aud: 'mcp-api' }) }),
     '@/lib/apiKeys': () => ({}),

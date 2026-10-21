@@ -1,6 +1,6 @@
-/* eslint-disable react-hooks/exhaustive-deps */
+
 import { useFlag } from "@/hooks/useFlag";
-import { HTPR_6752_INSTANT_TICKET_OPEN_FLAG, HTPR_6962_KEEP_ASSIGNEE_FLAG } from "@/lib/flags/keys";
+import { HTPR_6752_INSTANT_TICKET_OPEN_FLAG, HTPR_6962_KEEP_ASSIGNEE_FLAG, HTPR_7315_UNREAD_TICKET_OPENS_TOP_FLAG } from "@/lib/flags/keys";
 import { useTaskContext } from "@/lib/contexts/TaskDetail/TaskProvider";
 import { IAttachment, IComment } from "@/models/model";
 import {
@@ -81,7 +81,6 @@ const isNewCommentForSnapshot = (
   lastReadAt: string | Date | null
 ) => {
   if (comment.activity) return false;
-  // agent comments carry the token owner's creatorId — still new to that user
   if (
     !comment.agentId &&
     (comment.creatorId === userId || comment.creator?.id === userId)
@@ -144,6 +143,7 @@ const useDescriptionAndCommentsStates = () => {
     isShareView,
     setNewCommentIds,
     setNewCommentsSnapshotReady,
+    setNewCommentsLastReadAt,
   } = useTaskContext();
   const {
     showEmojiPickerDescription,
@@ -153,6 +153,7 @@ const useDescriptionAndCommentsStates = () => {
     emojiClickHandlerDescriptionr,
   } = useDescriptionReactions();
   const instantTicketOpen = useFlag(HTPR_6752_INSTANT_TICKET_OPEN_FLAG);
+  const unreadTicketOpensTop = useFlag(HTPR_7315_UNREAD_TICKET_OPENS_TOP_FLAG);
   const keepAssignee = useFlag(HTPR_6962_KEEP_ASSIGNEE_FLAG);
   const _parsedTask = useMemo(() => JSON.parse(parsed_task), [parsed_task]);
   const [descriptionAttachments, setDescriptionAttachments] = useState<
@@ -171,10 +172,6 @@ const useDescriptionAndCommentsStates = () => {
     "Comment" | "Description" | undefined
   >(undefined);
   const [currentUser, _setCurrentUser] = useRecoilState(currentUserAtom);
-  // HTPR-4879: a ref, not state. updateSeen used to flip this with setMounted,
-  // which changed its own useCallback identity, which re-ran the layout effect
-  // that calls it. That fired updateSeen twice per task open, and with it the
-  // 2s /api/comments/updateSeen and /api/notifications/getByTask.
   const mountedRef = useRef(false);
   const taskSeenRequestRef = useRef<TaskSeenRequestState>({
     key: null,
@@ -184,11 +181,6 @@ const useDescriptionAndCommentsStates = () => {
   const [allCommentsSignal] = useRecoilState(toggleAllCommentsSignalAtom);
   const allCommentsSignalRef = useRef(allCommentsSignal);
   const [showCommentOptions, setShowCommentOptions] = useState<IShow>();
-  // const pathname = usePathname();
-  // Lazy-load the 6k-line emoji data file: it only feeds hover-tooltip semantic
-  // labels (the reaction glyph itself renders from the unified codepoint, no
-  // data needed), so wait for the non-essential gate instead of fetching on
-  // every task open (HTPR-3816, deferred further in HTPR-6056).
   const nonEssentialReady = useRecoilValue(taskDetailNonEssentialReadyAtom);
   const [emojiFinder, setEmojiFinder] = useState<(unified: any) => string>(
     () => () => ""
@@ -241,9 +233,26 @@ const useDescriptionAndCommentsStates = () => {
     preserveEditorContent,
   });
 
+  let readCacheQueryClient: typeof queryClient | undefined;
+  if (unreadTicketOpensTop) {
+    readCacheQueryClient = queryClient;
+  }
+
   const markTaskReadOnLeave = useCallback(
     (useBeacon = false) => {
       if (isShareView || !currentUser?.id || !currentTask?.id) return;
+
+      if (readCacheQueryClient) {
+        const lastReadAt = new Date().toISOString();
+        readCacheQueryClient.setQueryData(
+          [globalConstants.CommentsTQPrefixKey, currentTask.id],
+          (payload: any) => payload === undefined ? undefined : {
+            ...(Array.isArray(payload) ? {} : payload),
+            ...normalizeCommentsQueryPayload(payload),
+            lastReadAt,
+          }
+        );
+      }
 
       const body = JSON.stringify({ taskId: currentTask.id });
       if (
@@ -267,7 +276,7 @@ const useDescriptionAndCommentsStates = () => {
         console.log("🤔 ~ markTaskReadOnLeave ~ error:", error);
       });
     },
-    [currentTask?.id, currentUser?.id, isShareView]
+    [currentTask?.id, currentUser?.id, isShareView, readCacheQueryClient]
   );
 
   useEffect(() => {
@@ -286,7 +295,6 @@ const useDescriptionAndCommentsStates = () => {
     setShowCommentDeleteModal(val);
   };
 
-  // ---------------------- updateSeen
   const updateSeen = useCallback(async () => {
     if (!currentUser?.id || !currentTask?.id) return;
 
@@ -328,11 +336,10 @@ const useDescriptionAndCommentsStates = () => {
     queryClient,
   ]);
 
-  // ---------------------- updateStackfromSideBar
   const updateStackFromSidebar = async () => {
     try {
       if (commentsListFromQuery) {
-        const hash = window.location.hash; // Get the hash without the '#'
+        const hash = window.location.hash;
         const initialMap = processComments(
           commentsListFromQuery || [],
           currentUser.id,
@@ -340,15 +347,12 @@ const useDescriptionAndCommentsStates = () => {
           hash,
           newCommentIdsRef.current
         );
-        // console.log("stack initialMap at end of unseen is", initialMap);
         setStacked(initialMap);
       }
     } catch (error) {
-      // console.log("🚀 ~ file: [...slug].tsx:921 ~ updateSeen ~ error:", error)
     }
   };
 
-  // ----------------------- UPDATE THE STACK HASHMAP
   const updateStackedComments = useCallback(
     (commentIdx: number, forceOpen?: boolean) => {
       setStacked((prevCommentMap) =>
@@ -415,6 +419,7 @@ const useDescriptionAndCommentsStates = () => {
         lastReadAt: lastReadAtFromQuery,
       };
       setSnapshotIds(initialNewCommentIds);
+      setNewCommentsLastReadAt(lastReadAtFromQuery);
       setNewCommentsSnapshotReady(true);
       return;
     }
@@ -448,6 +453,7 @@ const useDescriptionAndCommentsStates = () => {
     lastReadAtFromQuery,
     setNewCommentIds,
     setNewCommentsSnapshotReady,
+    setNewCommentsLastReadAt,
     setStacked,
   ]);
 
@@ -469,20 +475,16 @@ const useDescriptionAndCommentsStates = () => {
     updateSeen,
   ]);
 
-  //trigger stack hashmap update after sidebar stack option is toggled
   useLayoutEffect(() => {
     updateStackFromSidebar();
   }, [stackData]);
 
   const isApple = useDeviceContext();
-  // =================================================================================================
   const handleKeyDown = (e: any) => {
-    // console.log("🚀 ~ handleKeyDown ~ document.activeElement?.id:", document.activeElement?.id)
     const currentIndex = parseInt(document.activeElement?.id.split("-")[1]!);
     const isInsideTipTap = Boolean(
       document.activeElement?.closest(".ProseMirror")
     );
-    // console.log("🚀 ~ handleKeyDown ~ isInsideTipTap:", isInsideTipTap)
     const isInputFocused = [
       "input",
       "textarea",
@@ -496,10 +498,9 @@ const useDescriptionAndCommentsStates = () => {
       if (showEmojiPickerAtComment?.show) {
         setShowEmojiPickerAtCount(undefined);
         returnFocusToComment();
-        return; // keep focus at the comment it was at
+        return;
       }
     }
-    //--------------------- if its any other key than escape, return
     else if (
       (isInputFocused && e.key !== "Escape") ||
       document.activeElement?.className === tipTapClassName ||
@@ -508,21 +509,17 @@ const useDescriptionAndCommentsStates = () => {
     )
       return;
 
-    // press [cmd/ctrl][j]
     if (e.keyCode === 74 && cmdControl) {
       e.preventDefault();
       CTRL_J_ENTER_Handler(true);
     }
 
-    //edit title [f2]
     if (e.keyCode === 113) {
       e.preventDefault();
       setEditMode("title");
     }
 
-    // ========================= ENTER
     if (e.key === "Enter" && !cmdControl) EnterHandler(e);
-    // ========================= CTRL + ENTER
     if (e.key === "Enter" && cmdControl) CTRL_J_ENTER_Handler();
 
     if (e.keyCode === 79 && e.shiftKey && !cmdControl) {
@@ -535,7 +532,6 @@ const useDescriptionAndCommentsStates = () => {
         updateStackedComments(parseInt(currentIndex));
       }
     }
-    // [Attachments] cmd/cntrl + shift + a
     if (e.shiftKey && cmdControl && e.keyCode === 65) {
       e.preventDefault();
       if (document.activeElement?.id === descriptionContainerId)
@@ -546,20 +542,14 @@ const useDescriptionAndCommentsStates = () => {
       }
     }
 
-    // [ctrl][shift][s]
     if (e.keyCode === 83 && e.ctrlKey && e.shiftKey) {
       e.preventDefault();
-      // currentIndex can point past the end: this handler is bound to the
-      // document and survives the comment list shrinking under it (a delete, a
-      // task switch), which threw "reading 'activity' of undefined" straight
-      // out of the keydown handler (HTPR-4822).
       const commentToPinPrivately = comments[currentIndex];
       if (!commentToPinPrivately || commentToPinPrivately.activity) return;
       updateStackedComments(currentIndex, true);
       return handlePinComment(commentToPinPrivately.id, "Private");
     }
 
-    // [ctrl][shift][p]
     if (e.keyCode === 80 && e.ctrlKey && e.shiftKey) {
       e.preventDefault();
       const commentToPinPublicly = comments[currentIndex];
@@ -568,28 +558,23 @@ const useDescriptionAndCommentsStates = () => {
       return handlePinComment(commentToPinPublicly.id, "Public");
     }
 
-    // -------------- [r] for reactions
     if (
       e.keyCode === 82 &&
       document.activeElement?.id === "comment" &&
       !e.ctrlKey
     ) {
-      // console.log("🚀 ~ handleKeyDown ~ e.key:", e.key)
       e.preventDefault();
       const foundIndex = findCommentIndexAgainstActivity();
       if (foundIndex === -1) return false;
       setShowEmojiPickerAtCount({ commentId: foundIndex, show: true });
       scrollVirtualize("comment", foundIndex);
-      // document.getElementById(`comment-${currentIndex}`)?.scrollIntoView({behavior:"smooth",block:"center"})
     }
 
-    // -------------- [r] for reactions
     else if (e.keyCode === 82 && !e.ctrlKey) {
       e.preventDefault();
       rForReactionHanlder(currentIndex);
     }
 
-    // --------------- [l] thumbsup shortcut
     if (e.keyCode === KeyCodes.L && !e.ctrlKey && !e.shiftKey) {
       e.preventDefault();
       if (currentId === descriptionContainerId)
@@ -621,21 +606,19 @@ const useDescriptionAndCommentsStates = () => {
 
     if (onCommentKeys.has(e.key)) ArrowTabKeyHandler(e);
   };
-  // ================================================================================================= HANDLE KEYDOWN OVER
   const findCommentIndexAgainstActivity = () => {
-    let foundIndex = -1; // Default value if no comment with activity is found
+    let foundIndex = -1;
 
     for (let i = comments.length - 1; i >= 0; i--) {
       if (!comments[i]?.activity) {
         foundIndex = i;
-        break; // Exit the loop once the first matching comment is found
+        break;
       }
     }
 
     return foundIndex;
   };
 
-  // ----------------------- UPDATE ALL THE STACKS
   const toggleAllComments = () => {
     const initialMap: any = {};
     comments &&
@@ -646,28 +629,22 @@ const useDescriptionAndCommentsStates = () => {
     setAllStacked((prev) => !prev);
   };
 
-  // Run the expand/collapse-all toggle when the command palette signals it
-  // (skip the initial mount so opening a task doesn't auto-toggle).
   useEffect(() => {
     if (allCommentsSignalRef.current === allCommentsSignal) return;
     allCommentsSignalRef.current = allCommentsSignal;
     toggleAllComments();
   }, [allCommentsSignal]);
 
-  // --------------- keypresses for all [tab] [arrow] movements
   const ArrowTabKeyHandler = (e: any) => {
-    // console.log("🚀 ~ ArrowTabKeyHandler ~ e:", e)
     e.preventDefault();
     try {
       setEditMode(null);
 
-      // =============== arrow/tab movements outside the comments section
       if (
         onCommentKeys.has(e.key) &&
         document.activeElement?.id?.indexOf("comment-") === -1
       )
         OutCommentsKeyHandler(e);
-      // ========================== KEY MOVEMENTS WHEN INSIDE THE COMMENTS SECTION ==========================
       else if (
         document.activeElement?.id?.indexOf("comment-") === 0 &&
         onCommentKeys.has(e.key)
@@ -678,7 +655,6 @@ const useDescriptionAndCommentsStates = () => {
     }
   };
 
-  // --------------- keypresses for arrow/tab outside comments section to focus on elements
   const OutCommentsKeyHandler = (e: any) => {
     if (!document.activeElement || !document.activeElement.id) {
       focusOn("title");
@@ -705,53 +681,23 @@ const useDescriptionAndCommentsStates = () => {
         if (comments.length >= 1) {
           const a = comments.length - 1;
           scrollVirtualize("comment", a);
-          // console.log(` --> ${comments.length}`)
         } else {
           focusOn(descriptionContainerId, false);
           scrollVirtualize("description");
         }
       }
-      // scroll-to-bottom opens set currentId to "comment" without moving DOM
-      // focus (avoidDocumentFocus), which left ArrowDown/Tab dead on a fresh
-      // page load; give the comment box real focus so the key chain works
       else if (e.key === "ArrowDown" || e.key === "Tab") {
         focusOn(`comment`);
       }
-
-      // else if (e.key==="Tab"){
-      //    focusOn('title')
-      // }
     }
-    // unknown focus target (e.g. body-layout on a fresh page load): enter the chain at the title
     else focusOn("title");
-
-    // else if(document.activeElement?.id === "copy-task-url-button"){
-    //   if (e.key === "ArrowDown" || (!e.shiftKey && e.key === "Tab")) {
-    //     e.preventDefault()
-    //     focusOn("markAsDone");
-    //   }
-    //   else if (e.key === "ArrowUp" || (e.shiftKey && e.key === "Tab")) {
-    //     focusOn("title")
-    //   }
-    // }
-
-    // else if (document.activeElement?.id === "markAsDone") {
-    //   if (e.key === "ArrowDown" || (!e.shiftKey && e.key === "Tab")) {
-
-    //     focusOn(descriptionContainerId);
-    //   } else if (e.key === "ArrowUp" || (e.shiftKey && e.key === "Tab")) {
-    //       focusOn("copy-task-url-button")
-    //   }
-    // }
   };
-  // --------------- keypresses inside comments section
   const InCommentsKeyHandler = (e: any) => {
     const currentIndex = parseInt(document.activeElement?.id.split("-")[1]!);
     if (e.key === "ArrowDown" || (e.key === "Tab" && !e.shiftKey))
       InCommentsArrowDownHandler(currentIndex);
     else if (e.key === "ArrowUp" || (e.shiftKey && e.key === "Tab"))
       InCommentsArrowUpHandler(currentIndex);
-    // inside comments but using 'tab'
     else if (e.key === "Tab") InCommentsTabHandlerInsideComments(currentIndex);
   };
 
@@ -765,7 +711,6 @@ const useDescriptionAndCommentsStates = () => {
   };
 
   const InCommentsArrowUpHandler = (currentIndex: number) => {
-    // move to the previous VISIBLE comment, or up to the description if none
     const prev = [...visibleCommentIndices]
       .reverse()
       .find((idx: number) => idx < currentIndex);
@@ -778,7 +723,6 @@ const useDescriptionAndCommentsStates = () => {
   };
 
   const InCommentsArrowDownHandler = (currentIndex: number) => {
-    // move to the next VISIBLE comment, or to the composer if none remain
     const next = visibleCommentIndices.find((idx: number) => idx > currentIndex);
     if (next === undefined) {
       focusOn(`comment`);
@@ -788,29 +732,23 @@ const useDescriptionAndCommentsStates = () => {
   };
 
   const EnterHandler = (e: any) => {
-    // ==-------------------== FOCUS TO DESCRIPTION
     if (document.activeElement?.id === descriptionContainerId)
       enterDescriptionCreateMode();
-    // ==-------------------== reply to comment
     else if (document.activeElement?.id?.indexOf("comment-") === 0) {
-      // console.log("enter pressesss five",document.activeElement?.id)
       const currentIndex: any = parseInt(
         document?.activeElement?.id?.split("-")[1]
       );
       replyToCommentHandler(currentIndex);
     }
 
-    // ==-------------------== Enter Edit Comment Mode
     else if (document.activeElement?.id === "comment") EnterCommentCreateMode();
   };
 
-  // ---------------------- return focus to comment
   const returnFocusToComment = () => {
-    const extractedId = currentId.replace("-input", ""); // Remove the "-input" part
+    const extractedId = currentId.replace("-input", "");
     focusOn(extractedId);
   };
 
-  // --------------- [r] for reactions
   const rForReactionHanlder = (currentIndex: number) => {
     const comment = comments[currentIndex];
     if (!comment || comment.activity) return;
@@ -818,7 +756,6 @@ const useDescriptionAndCommentsStates = () => {
     scrollVirtualize("comment", currentIndex);
   };
 
-  // ======================= FCM MESSAGE LISTENER =======================
   const updateOnMessageReceive = (mode: string, payload: any) => {
     if (mode === "newComment") {
       let comment_: IComment = JSON.parse(payload.comment);
@@ -828,7 +765,6 @@ const useDescriptionAndCommentsStates = () => {
         String(comment_?.taskId) === String(currentTask?.id) &&
         comment_.creatorId !== currentUser?.id
       ) {
-        // console.log(payload.data)
         toast("Comment Added By " + comment_.creator?.displayName);
 
         setComments([...comments, { ...comment_ }]);
@@ -836,8 +772,6 @@ const useDescriptionAndCommentsStates = () => {
     }
 
     if (mode === "newAssignee") {
-      // let assignees =JSON.parse(payload.assignees)
-      // setAssignedUsers([...assignedUsers,{...assignees}])
       queryClient.refetchQueries({
         queryKey: [
           "assignees",
@@ -857,7 +791,6 @@ const useDescriptionAndCommentsStates = () => {
     }
   }, [comments, currentId]);
 
-  // ======================== on messsage listener
   useEffect(() => {
     if (typeof window !== "undefined" && "serviceWorker" in navigator) {
       let cancelled = false;
@@ -870,7 +803,6 @@ const useDescriptionAndCommentsStates = () => {
         ]);
         if (cancelled) return;
 
-        // Browsers without Push/SW support throw messaging/unsupported-browser (HTPR-4755)
         if (!(await isSupported())) return;
         if (cancelled) return;
 
@@ -880,7 +812,6 @@ const useDescriptionAndCommentsStates = () => {
             "🚀 ~ file: TaskDetailComp.tsx:1458 ~ unsubscribe ~ payload:",
             payload
           );
-          // =========================== on new comment
 
           updateOnMessageReceive(payload?.data?.type || "None", payload.data);
         });
@@ -889,7 +820,7 @@ const useDescriptionAndCommentsStates = () => {
       void subscribeToMessages();
       return () => {
         cancelled = true;
-        unsubscribe?.(); // Unsubscribe from the onMessage event
+        unsubscribe?.();
       };
     }
   }, [comments]);
@@ -908,10 +839,8 @@ const useDescriptionAndCommentsStates = () => {
   }, [_parsedTask?.description_?.attachments]);
 
   useEffect(() => {
-    // Add event listeners when the component mounts
     document.addEventListener("keydown", handleKeyDown);
 
-    // Remove event listeners when the component unmounts
     return () => {
       document.removeEventListener("keydown", handleKeyDown);
     };
@@ -933,11 +862,8 @@ const useDescriptionAndCommentsStates = () => {
       description === "<p></p>" ||
       (description as string) === emptyDescription
     ) {
-      // console.log("enter pressesss two",document.activeElement?.id)
-
       setTimeout(() => {
         setEditMode("description");
-        // descriptionRef.current?.focus()
         focusOn("description", false);
         scrollVirtualize("edit-description");
         setTimeout(() => {

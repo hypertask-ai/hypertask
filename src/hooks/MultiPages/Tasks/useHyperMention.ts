@@ -1,6 +1,6 @@
 import { hasHaikuByokProviderFlags } from "@/lib/byokSelectedProviderGate";
 import { useFlag } from "@/hooks/useFlag";
-import { HTPR_7010_HAIKU_5_5_FLAG, LUNA_FREE_PLAN_FLAG } from "@/lib/flags/keys";
+import { HTPR_7010_HAIKU_5_5_FLAG } from "@/lib/flags/keys";
 import { useHaikuDefaultFlag } from "@/hooks/useHaikuDefaultFlag";
 import { useMcpToken } from "@/components/Modals/McpToken";
 import { mcpAuthorizationHeaders } from "@/lib/mcp/bearerAuth";
@@ -34,7 +34,6 @@ interface IPostHyperMention {
   taskTitle: string;
   previousText?: string;
   sourceCommentId?: number | string;
-  /** Captured at send time so mid-upload navigation cannot swap board BYOK. */
   byokProviderFlags?: ITeamByokApiKey[];
 }
 
@@ -51,10 +50,9 @@ export function useHyperMention() {
   const haiku55Enabled = useFlag(HTPR_7010_HAIKU_5_5_FLAG) || haikuDefaultEnabled;
   const { token } = useMcpToken();
   const currentBoardBilling = useCurrentBoardBilling();
-  const lunaFree = useFlag(LUNA_FREE_PLAN_FLAG) || haikuDefaultEnabled;
   const defaultBilling = currentBoardBilling;
   const defaultModelOption = haikuDefaultEnabled || haiku55Enabled
-    ? getDefaultAiModelOptionForPlan(defaultBilling?.storePlanId, hasHaikuByokProviderFlags(defaultBilling?.byokProviderFlags), lunaFree, true, haikuDefaultEnabled)
+    ? getDefaultAiModelOptionForPlan(defaultBilling?.storePlanId, hasHaikuByokProviderFlags(defaultBilling?.byokProviderFlags), true, haikuDefaultEnabled)
     : defaultAiModelOption;
 
   async function postHyperMention(

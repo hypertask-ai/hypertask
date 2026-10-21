@@ -44,7 +44,6 @@ const sortLabels = (
   inViewObject: ICurrentInViewObject,
   previouslyAddedFilters?: ILabel[]
 ) => {
-  // =========== meaning its a create task from modal
   if (previouslyAddedFilters) {
     const flatmapped = previouslyAddedFilters.flatMap((x) => x.id) || [];
 
@@ -55,7 +54,6 @@ const sortLabels = (
         return item;
       })
       .sort((a, b) => {
-        // Move checked items to the top
         return (b.check ? 1 : 0) - (a.check ? 1 : 0);
       });
 
@@ -84,21 +82,18 @@ const sortLabels = (
           _count: { task: number };
         }
       ) => {
-        // 1. Checked items first
         if (a.check && !b.check) return -1;
         if (!a.check && b.check) return 1;
 
-        // 2. Then by most recent usage (highest TaskLabel ID)
         const aLastUsedId = a.task[0]?.id || 0;
         const bLastUsedId = b.task[0]?.id || 0;
         if (bLastUsedId !== aLastUsedId) {
-          return bLastUsedId - aLastUsedId; // Most recent first
+          return bLastUsedId - aLastUsedId;
         }
 
-        // 3. Finally by frequency (most used first)
         const aCount = a._count.task;
         const bCount = b._count.task;
-        return bCount - aCount; // Higher count first
+        return bCount - aCount;
       }
     );
 
@@ -132,11 +127,9 @@ const CreateLabel: React.FC<Props> = ({
       : inViewObject.taskProjectId
   );
 
-  // Add loading state and optimistic updates state
   const [isLoading, setIsLoading] = useState(false);
   const [optimisticLabels, setOptimisticLabels] = useState<ILabel[]>([]);
 
-  // Memoize sorted labels to prevent infinite re-renders
   const sortedLabels: ILabel[] = useMemo(() => {
     if (!labelsFromTQ) return [];
     return sortLabels(
@@ -146,7 +139,6 @@ const CreateLabel: React.FC<Props> = ({
     );
   }, [labelsFromTQ, inViewObject, previouslyAddedFilters]);
 
-  // Use optimistic labels if available, otherwise use sorted labels
   const currentLabels =
     optimisticLabels.length > 0 ? optimisticLabels : sortedLabels;
 
@@ -164,7 +156,7 @@ const CreateLabel: React.FC<Props> = ({
 
   const handleToggle = useCallback(
     (payload?: any, forceClose = false) => {
-      if (isLoading && !forceClose) return; // Prevent closing while loading
+      if (isLoading && !forceClose) return;
       refetch();
       if (mode === "Task" && closeHandler) {
         payload ? closeHandler(payload, true) : closeHandler();
@@ -180,17 +172,14 @@ const CreateLabel: React.FC<Props> = ({
     [closeHandler, closeHandlerForCreateNewTask, mode, isLoading]
   );
 
-  // -------------------- ON MODAL LOAD, for focus
   const onOpenHandler = async () => {
-    enableKeyboardControls(true); // force focus on input field
+    enableKeyboardControls(true);
   };
 
-  // =================== setting input
   const onKeyChange = (e: ChangeEvent<HTMLInputElement>) => {
     setLabel(e.target.value);
   };
 
-  // =================== Optimistically update labels state
   const updateLabelOptimistically = useCallback(
     (labelToToggle: ILabel, newCheckState: boolean) => {
       const updatedLabels = currentLabels.map((labelItem) =>
@@ -199,21 +188,18 @@ const CreateLabel: React.FC<Props> = ({
           : labelItem
       );
 
-      // Keep the same sort order to prevent jumping
       setOptimisticLabels(updatedLabels);
     },
     [currentLabels]
   );
 
-  // =================== Revert optimistic update
   const revertOptimisticUpdate = useCallback(() => {
-    setOptimisticLabels([]); // Clear optimistic state, fall back to server data
+    setOptimisticLabels([]);
   }, []);
 
-  // =================== toggle label assignment with optimistic updates
   const toggleLabelAssignment = useCallback(
     async (labelToToggle: ILabel) => {
-      if (isLoading) return; // Prevent multiple submissions
+      if (isLoading) return;
 
       setIsLoading(true);
 
@@ -230,11 +216,9 @@ const CreateLabel: React.FC<Props> = ({
           return;
         }
 
-        // Optimistically update the UI immediately
         const newCheckState = !labelToToggle.check;
         updateLabelOptimistically(labelToToggle, newCheckState);
 
-        // Make the API call
         const response = typedWrite ? await typedWrite({ taskId: inViewObject.taskId!, labelId: labelToToggle.id }) : await axiosClient.post("/labels/assignLabel", {
           taskId: inViewObject.taskId,
           labelId: labelToToggle.id,
@@ -242,14 +226,8 @@ const CreateLabel: React.FC<Props> = ({
 
         closeHandler?.(response.data, true, false);
         setLabel("");
-
-        // On success, clear optimistic state and refetch in background
-        // This will sync with server data but won't affect UI since it's already correct
-        // setOptimisticLabels([]);
-        // refetch(); // Background sync, won't affect current UI
       } catch (error) {
         console.error("Error toggling label assignment:", error);
-        // On error, revert the optimistic update
         revertOptimisticUpdate();
       } finally {
         setIsLoading(false);
@@ -269,7 +247,6 @@ const CreateLabel: React.FC<Props> = ({
     ]
   );
 
-  // =================== create new label
   const createNewLabel = useCallback(async () => {
     if (isLoading) return;
 
@@ -312,15 +289,12 @@ const CreateLabel: React.FC<Props> = ({
     taskIds,
   ]);
 
-  // =================== handle selection action
   const handleSelectionAction = useCallback(async () => {
     if (isLoading) return;
 
     if (isCreateOptionSelected) {
-      // Create new label
       await createNewLabel();
     } else if (selectedLabelIndex < filteredLabels.length) {
-      // Toggle existing label
       await toggleLabelAssignment(filteredLabels[selectedLabelIndex]);
     }
   }, [
@@ -332,7 +306,6 @@ const CreateLabel: React.FC<Props> = ({
     toggleLabelAssignment,
   ]);
 
-  // Filter labels based on search term - memoized to prevent infinite re-renders
   const computedFilteredLabels = useMemo(() => {
     if (label.length === 0) return currentLabels;
 
@@ -347,30 +320,23 @@ const CreateLabel: React.FC<Props> = ({
       );
   }, [label, currentLabels]);
 
-  // Update filtered labels
   useEffect(() => {
     setFilteredLabels(computedFilteredLabels);
     
-    // Only reset selection index if the current selection is out of bounds
-    // This preserves selection when labels are updated optimistically
     if (selectedLabelIndex >= computedFilteredLabels.length) {
       setSelectedLabelIndex(Math.max(0, computedFilteredLabels.length - 1));
     }
   }, [computedFilteredLabels, selectedLabelIndex]);
 
-  // Reset selection when search term changes (user is typing)
   useEffect(() => {
     setSelectedLabelIndex(0);
   }, [label]);
 
-  // Initialize optimistic state when server data loads
   useEffect(() => {
     if (sortedLabels.length > 0 && optimisticLabels.length === 0) {
-      // Don't set optimistic labels here, let it stay empty so currentLabels uses sortedLabels
     }
   }, [sortedLabels, optimisticLabels.length]);
 
-  // Handle keyboard navigation
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.keyCode === KeyCodes.ARROW_DOWN) {
@@ -378,7 +344,6 @@ const CreateLabel: React.FC<Props> = ({
         setSelectedLabelIndex((prevIndex) => {
           const newIndex =
             prevIndex < totalItems - 1 ? prevIndex + 1 : totalItems - 1;
-          // Scroll into view on next tick
           setTimeout(() => {
             document.getElementById(`label_${newIndex}`)?.scrollIntoView({
               behavior: "smooth",
@@ -393,7 +358,6 @@ const CreateLabel: React.FC<Props> = ({
         e.preventDefault();
         setSelectedLabelIndex((prevIndex) => {
           const newIndex = prevIndex > 0 ? prevIndex - 1 : 0;
-          // Scroll into view on next tick
           setTimeout(() => {
             document.getElementById(`label_${newIndex}`)?.scrollIntoView({
               behavior: "smooth",
@@ -403,7 +367,7 @@ const CreateLabel: React.FC<Props> = ({
           return newIndex;
         });
       }
-      if (isLoading) return; // Prevent keyboard actions while loading
+      if (isLoading) return;
       if (e.keyCode === KeyCodes.ENTER) {
         e.preventDefault();
         handleSelectionAction();
@@ -425,7 +389,6 @@ const CreateLabel: React.FC<Props> = ({
     setSelectedLabelIndex,
   ]);
 
-  // =========================================================== FRONTEND COMPONENT ==================================
   return (
     <ModalContainerCustom
       id="create-label-modal"
@@ -457,7 +420,6 @@ const CreateLabel: React.FC<Props> = ({
             onChange={onKeyChange}
             value={label}
             placeholder="Enter tag name"
-            // disabled={isLoading}
           />
         </div>
         <ModalListContainer id="labels-list">

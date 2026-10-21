@@ -30,11 +30,11 @@ const MAX_COMMENTS = 30;
 
 const taskQuestionsRequestSchema = z.object({
   taskId: z.coerce.number().int().positive(),
+  kind: z.enum(["next-move", "new-ticket"]).default("next-move"),
 });
 
 const TASK_QUESTIONS_INSTRUCTIONS = renderPrompt("task-questions-context-1");
-// HTPR-6953: structured output, so a stray quote in a question can no longer
-// break a hand-rolled JSON.parse of the model text.
+const NEW_TICKET_QUESTIONS_INSTRUCTIONS = renderPrompt("task-questions-new-ticket-1");
 const taskQuestionsOutputSchema = z.object({
   questions: z.array(z.string()),
 });
@@ -216,10 +216,13 @@ export async function POST(request: NextRequest) {
       provider: haikuByok ? aiUsageProviderForCredential(haikuByok.provider, haikuByok.credential) : systemModel.provider,
       feature: "task-questions",
     });
+    const newTicket = parsedBody.data.kind === "new-ticket";
     const result = await generateText({
       model,
-      instructions: await cachedInstructionsForUser(viewer.id, { modelId: systemModel.model, fixed: TASK_QUESTIONS_INSTRUCTIONS }),
-      prompt: renderPrompt("task-questions-prompt-2", (viewerBlock), (task.title), (task.status), (task.section), (description || "(empty)"), (formattedComments)),
+      instructions: await cachedInstructionsForUser(viewer.id, { modelId: systemModel.model, fixed: newTicket ? NEW_TICKET_QUESTIONS_INSTRUCTIONS : TASK_QUESTIONS_INSTRUCTIONS }),
+      prompt: newTicket
+        ? renderPrompt("task-questions-new-ticket-prompt-1", (task.title), (task.section), (description || "(empty)"))
+        : renderPrompt("task-questions-prompt-2", (viewerBlock), (task.title), (task.status), (task.section), (description || "(empty)"), (formattedComments)),
       output: Output.object({ schema: taskQuestionsOutputSchema }),
       maxOutputTokens: 500,
       maxRetries: 2,
@@ -233,7 +236,7 @@ export async function POST(request: NextRequest) {
     const questions = result.output.questions
       .map((question) => question.trim())
       .filter(Boolean)
-      .slice(0, 5);
+      .slice(0, newTicket ? 4 : 5);
     return NextResponse.json({ questions });
   } catch (error) {
     if (NoOutputGeneratedError.isInstance(error) ||

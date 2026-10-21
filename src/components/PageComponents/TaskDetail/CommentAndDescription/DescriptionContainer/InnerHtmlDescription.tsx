@@ -8,7 +8,6 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { generateAttachmentFromImgEl } from "../CommentContainer/InnerHTMLComment";
 import { HighlightMenu } from "../ContextMenu";
 import QuoteButton from "../ContextMenu/QuoteButton";
-// import { useDeviceContext } from "@/lib/contexts/deviceContext";
 import { MobileViewContext } from "@/lib/contexts/mobileContext";
 import { cn } from "@/utils/undoActions/helperFuncs";
 import { useGifPlayback } from "@/hooks/General/useGifPlayback";
@@ -33,10 +32,8 @@ interface IInnerHTMLDescription{
     const mobileDescriptionPlaceHolder = `<div class='text-[#AEB4BC]'><h2 class="text-subheading font-bold">Add Description</h2><p>Tip: Double tap to edit</p></div>`
     const desktopDescriptionPlaceHolder = `<div class='text-[#AEB4BC]'><h2>Add Description</h2><p>Tip: Hit ENTER to edit mode or CTRL+D to jump here</p></div>`
     
-    // Corrected the placement of the closing parenthesis for the memo function call
 const InnerHTMLDescription = memo(({  descriptionText, id,attachmentsFromProps, allowQuote, className, setCarousalItems, taskCreator }:IInnerHTMLDescription) => {
     const emptyDescriptions = ["<html><head></head><body><p></p></body></html>", "<p></p>", "", "<html><head></head><body></body></html>"]
-    // const isApple = useDeviceContext()
     const _mbl = useContext(MobileViewContext);
     const currentDescriptionPlaceHolder = useMemo(()=>{
         if (_mbl){
@@ -44,7 +41,6 @@ const InnerHTMLDescription = memo(({  descriptionText, id,attachmentsFromProps, 
         }
         else return desktopDescriptionPlaceHolder
     },[_mbl])
-    // HTPR-6205: turn bare URLs (e.g. CLI-posted descriptions) into clickable links.
     const normalizedDescription = useMemo(
       () => linkifyHtml(normalizeImageSourcesInHtml(
         normalizeRichHtmlForRender(descriptionText ?? ""),
@@ -66,7 +62,6 @@ const InnerHTMLDescription = memo(({  descriptionText, id,attachmentsFromProps, 
         textToShow,
     );
 
-    // ----------------------- close gallery modal
     const toggleModal = () => {
       setIsModalOpen(!isModalOpen);
     };
@@ -78,8 +73,6 @@ const InnerHTMLDescription = memo(({  descriptionText, id,attachmentsFromProps, 
             const clickedImageIndex = images.findIndex(img => img === target);
 
             setcurrentIdx(clickedImageIndex)
-            // toggleModal()
-            // Set the attachments with the clicked image's details
             const inlineImages = images.map((img,idx)=>(generateAttachmentFromImgEl(img,idx))) 
             setAttachments([...inlineImages,...attachmentsFromProps??[]]);
             setCarousalItems && setCarousalItems({
@@ -94,7 +87,6 @@ const InnerHTMLDescription = memo(({  descriptionText, id,attachmentsFromProps, 
             if (href && isInternalTaskDetailHref(href)) {
                 if (shouldFollowLinkNatively(event)) return;
                 event.preventDefault()
-                // Call your custom function here
                 router.push(preserveInboxFlowOnTaskHref(href, inboxFlow))
                 
             }
@@ -104,11 +96,8 @@ const InnerHTMLDescription = memo(({  descriptionText, id,attachmentsFromProps, 
 
     return (
         <>
-        {/* ============ main container ============== */}
             <div className={`flex flex-col ${styles.hellow}`}>
-                {/* ============== description info container============ */}
                 
-                {/* ============== description text container =========== */}
                 <div ref={gifContainerRef} className="relative">
                     <div
                     ref={divRef}

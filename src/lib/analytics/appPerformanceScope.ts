@@ -30,11 +30,6 @@ export const performanceDeviceClass = (): "mobile" | "desktop" =>
     ? "mobile"
     : "desktop";
 
-/**
- * Give authenticated project Web Vitals their own event name and strict scope.
- * Marketing continues to use PostHog's built-in `$web_vitals` event, so the
- * app series cannot accidentally include hypertask.ai landing-page traffic.
- */
 export const scopeProjectWebVitalsEvent = (
   event: CaptureResult | null,
   identity: AppPerformanceIdentity,

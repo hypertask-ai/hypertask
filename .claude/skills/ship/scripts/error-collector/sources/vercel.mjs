@@ -1,9 +1,12 @@
 import { key, query } from '../io.mjs';
 
 export const name = 'vercel';
+const realtimeFailure = row => /^\[[\w/-]+\] (?:[\w-]+ )*broadcast failed(?:\s|$)/.test(messageParts(row.message).message);
 const infra = [
   event => event.message.includes('Vercel Runtime Timeout Error'),
   event => event.route === '/sse',
+  // Outgoing board and agent webhooks that used up every retry (YPER4-358).
+  event => /^\[(board|agent)-webhook\] delivery failed/.test(event.message),
 ];
 
 export function messageParts(message) {
@@ -25,13 +28,28 @@ export function messageParts(message) {
 
 export function parseEvents(rows, service = name) {
   if (!Array.isArray(rows)) throw new Error('invalid Vercel events');
-  return rows.filter(row => service !== 'vercel-5xx' || Number(row.httpStatus) >= 500).map(row => {
+  return rows.filter(row => service === 'realtime' ? realtimeFailure(row) : service === name ? !realtimeFailure(row) : Number(row.httpStatus) >= 500).map(row => {
     const event = {
-      service, board: 15, route: row.requestPath ?? '', ts: row.timestamp, count: 1,
+      service, board: service === 'realtime' ? 4060 : 15, route: row.requestPath ?? '', ts: row.timestamp, count: 1,
       // 5xx responses repeat failures the error log already holds: count them, never ticket them.
       ...(service === 'vercel-5xx' ? { message: `HTTP ${row.httpStatus} ${row.requestMethod ?? ''} response`, stack: '', ticket: false } : messageParts(row.message)),
     };
     if (service === name && infra.some(rule => rule(event))) event.board = 4060;
+    // Resend bounces and failed sends (YPER4-359).
+    if (service === name && event.message.startsWith('[email-event]')) {
+      event.service = 'email';
+      event.board = 4060;
+    }
+    // CLI metadata stays out of the fingerprint so failures group across releases and OSes.
+    if (service === name && event.message.startsWith('[cli-error]')) {
+      event.service = 'cli';
+      event.board = 15;
+      const metadata = event.message.match(/ (v[0-9]+\.[0-9]+\.[0-9]+(?:-[0-9A-Za-z.-]+)?(?:\+[0-9A-Za-z.-]+)? (?:linux|macos|windows|other))$/);
+      if (metadata) {
+        event.message = event.message.slice(0, -metadata[0].length);
+        event.stack = [metadata[1], event.stack].filter(Boolean).join('\n');
+      }
+    }
     return event;
   });
 }
@@ -46,7 +64,7 @@ export async function fetchVercel({ since, until, env }, service = name) {
     scope: { ownerId: team, projectIds: [project] },
     select: proxy ? ['projectId', 'requestId', 'deploymentId', 'environment', 'requestPath', 'requestMethod', 'httpStatus', 'route', 'pathType'] : ['projectId', 'requestId', 'deploymentId', 'domain', 'environment', 'requestPath', 'requestMethod', 'source', 'service', 'isSystemLog', 'region', 'runtime', 'level', 'message', 'stream', 'traceId', 'spanId', 'attributes', 'truncated'],
     order: 'desc', limit: 500,
-    filter: proxy ? 'httpStatus >= 500 AND environment:production AND NOT pathType:"background_func"' : 'level:error AND environment:production',
+    filter: proxy ? 'httpStatus >= 500 AND environment:production AND NOT pathType:"background_func"' : service === 'realtime' ? '(level:warn OR level:error) AND environment:production' : 'level:error AND environment:production',
   };
   let calls = 0;
   const unique = new Map();

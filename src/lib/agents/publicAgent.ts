@@ -1,6 +1,5 @@
 import { Prisma } from "@prisma/client";
 
-/** Agent fields that are safe to serialize outside agent-management routes. */
 export const publicAgentSelect = {
   id: true,
   userId: true,
@@ -27,13 +26,6 @@ const agentRelationKeys = new Set([
 
 export const PRIVATE_AGENT_DISPLAY_NAME = "Private agent";
 
-/**
- * A living agent the viewer cannot see stays "Private agent". A deleted agent
- * has no row left, so the name copied at write time is what we show — never
- * the owner's name. Callers must pass attributionEnabled from
- * isFeatureEnabled(HTPR_6516_AGENT_ATTRIBUTION_FLAG, userId). When the flag is
- * off, a stored name with no live row stays "Private agent".
- */
 export function resolvePublicAgentDisplayName(opts: {
   hasAgentRow: boolean;
   visibleAgent?: { displayName?: string | null } | null;
@@ -103,8 +95,6 @@ function isAgentDisplayNameKey(key: string): boolean {
 }
 
 const agentCredentialKeys = new Set([
-  // "mcpToken" is gone from the schema, but historical activity JSON can still
-  // hold rows captured while it existed, so it stays on this list.
   "mcpToken",
   "mcpTokenHash",
   "mcpTokenJti",
@@ -165,11 +155,6 @@ export function redactAgentIdentitiesForPublicShare<T>(value: T): T {
   return redacted as T;
 }
 
-/**
- * Historical activity JSON can contain full Prisma Agent rows. Project every
- * known agent relation through the public allowlist and remove credential keys
- * defensively from any unexpected nesting.
- */
 export function sanitizeAgentCredentials(value: unknown): unknown {
   if (Array.isArray(value)) return value.map(sanitizeAgentCredentials);
   if (!isRecord(value) || value instanceof Date) return value;

@@ -73,7 +73,6 @@ export function createPremergeLanguageModel(modelId: string): LanguageModelV4 | 
     },
     async doStream(params) {
       if (premergeStubEnabled("ai") && promptText(params).includes(streamErrorMarker)) {
-        // A provider failure arrives as an error part with no text, so streamText calls onError.
         return { stream: new ReadableStream({ start(controller) {
           controller.enqueue({ type: "stream-start", warnings: [] });
           controller.enqueue({ type: "error", error: new Error("Premerge stub provider failure") });

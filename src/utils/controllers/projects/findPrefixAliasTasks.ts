@@ -6,7 +6,6 @@ export async function findPrefixAliasTasks(
   projectAccess: Prisma.ProjectWhereInput,
   projectId?: number | null,
 ) {
-  // Legacy prefixes may contain underscores or hyphens (TEAM_A, TEAM-OPS); the number is the last part.
   const match = /^(.+)-(\d+)$/.exec(ticketNumber.trim());
   if (!match) return [];
   const uniqueIndex = Number(match[2]);
@@ -37,7 +36,6 @@ export async function findPrefixAliasTasks(
     orderBy: [{ projectId: "asc" }, { id: "asc" }],
   });
   if (!moved.length) return tasks;
-  // A reused source number must not redirect to a different, moved task.
   const reused = await prisma.task.findMany({
     where: { ...identity, status: { not: "Deleted" } },
     select: { projectId: true },

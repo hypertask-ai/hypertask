@@ -19,7 +19,6 @@ export const getTeamById = async (teamId: string) => {
   return team
 }
 export const getTeamInviteUrl = async (userId: number, teamId: string | undefined) => {
-  // HTPR-7094: onboarding without ?id= has no team; Prisma throws on an undefined id instead of returning null.
   if (!teamId) return "Error"
 
   const team = await prisma.team.findUnique({ where: { id: teamId } })
@@ -28,12 +27,9 @@ export const getTeamInviteUrl = async (userId: number, teamId: string | undefine
 
   const projectFirst = await prisma.project.findFirst({
     where: {
-      // teamId:team?.id,
-      // ownerId:userId,
       status: "Normal",
       teamId: team.id,
 
-      // make sure we're at least member or owner of that board in the team
       OR: [
         {
           ownerId: userId,
@@ -117,11 +113,9 @@ export const checkIfUserIsNew = async (userId: number) => {
     }
   })
 
-  // meaning the user isnt a member or owns any team.
   return teamsOwned === 0 && membersInTeam === 0
 }
 
-// utils/taskWriter.js
 export async function taskWriterFetch(prompt: string) {
   const isNativeTaskWriter = taskWriterRoute.startsWith("/")
   const baseUrl =
@@ -145,7 +139,6 @@ export async function taskWriterFetch(prompt: string) {
     }),
   });
 
-  // Handle the response
   if (!response.ok) {
     throw new Error(`Error: ${response.statusText}`);
   }

@@ -1,7 +1,3 @@
-/**
- * Shared comment creation logic used by both Pages API and MCP route.
- * Single source of truth for: DB write, notifications, email, mentions, device FCM.
- */
 import prisma from "@/lib/prisma";
 import idsToSendNotificationsTo from "@/utils/controllers/notifications/IdsToSendNotificationsTo";
 import { broadcastBoardChange, broadcastInboxChange, broadcastTaskComment } from "@/lib/realtime/server";
@@ -86,10 +82,6 @@ export async function createNotificationForComment(
   return createCommentNotification(commentDependencies, task, comment, creatorId, recipientUserIds, fromAgentId, directReplyUserId, dedupeByComment);
 }
 
-/**
- * Creates a comment with full side effects: notifications, mentions, FCM.
- * Returns the created comment.
- */
 export async function createCommentService(params: CreateCommentParams) {
   const {
     text: inputText,
@@ -166,18 +158,7 @@ export async function createCommentService(params: CreateCommentParams) {
     if (existingInboundReceipt.completedAt) return existingComment;
   }
 
-  // HTPR-4084: idempotency guard. Several clients can fire the same create twice a
-  // second or two apart (task-detail composer virtualizer remount, network retry,
-  // Enter double-fire), landing two identical rows. PR #1396's client-side guard only
-  // covered one path. This is the single service every path routes through, so dedupe
-  // here and no client can double-post. On a hit, return the first comment: the second
-  // call succeeds with no new row and no duplicate notifications/FCM/summary.
-  // ponytail: read-check window, not a DB unique index. Catches the observed sequential
-  // double-fire (~1.7s apart); a truly simultaneous race could still slip two rows past
-  // it. Upgrade path if that ever shows up: a @@unique on (taskId, creatorId, text hash).
   const DEDUP_WINDOW_MS = 10_000;
-  // Explicit agent answers use the source invocation as their idempotency key.
-  // Text dedupe would collapse two distinct requests both answered with "Done".
   const invocationSelector = buildAgentInvocationSelector({
     sourceCommentId: directReplySourceCommentId,
     invocationId: directReplyInvocationId,
@@ -222,15 +203,12 @@ export async function createCommentService(params: CreateCommentParams) {
     return duplicate;
   }
 
-  // A replay must resume the original comment's unfinished work without
-  // updating the task a second time.
   if (
     !existingInboundReceipt &&
     !agentRunActivity &&
     !agentRunSelection &&
     !agentRunReplayComment
   ) {
-    // Access was established above before the duplicate lookup or any write.
     await updateTaskSingle(
       { id: task.id, updatedAt: new Date() },
       currentUser as any,

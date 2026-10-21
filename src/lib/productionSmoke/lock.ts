@@ -135,8 +135,6 @@ export async function withCoreSmokeLock<T>(
   };
   scheduleRenewal();
 
-  // ponytail: cleanup stops after its first failed request, so the 90-second
-  // probe deadline leaves over three minutes of the lease for restoration.
   let result: T | undefined;
   let runFailed = false;
   let runError: unknown;

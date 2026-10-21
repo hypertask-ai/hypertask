@@ -12,33 +12,19 @@ import { useAiModelPreference } from "@/hooks/General/useAiModelPreference";
 import type { IProject } from "@/models/model";
 import { resolveTaskWriterBoardContext } from "@/lib/ai/taskWriterBoardContext";
 
-// ============================================================================
-// TYPE DEFINITIONS
-// ============================================================================
 
-/**
- * Represents a file item with unique ID
- */
 export interface FileItem {
   id: number;
   file: File;
 }
 
-/**
- * Represents an AI attachment with preview capability
- * Used for displaying uploaded files before sending to AI
- */
 interface IAIAttachment {
   id: string;
   file: File;
-  preview: string; // base64 or blob URL for preview
+  preview: string;
   type: 'image' | 'pdf' | 'docx';
 }
 
-/**
- * Represents a single exchange in the conversation history
- * Stores both user input and AI response with metadata
- */
 interface IAIResponseHistoryItem {
   id: string;
   userPrompt: string;
@@ -49,20 +35,14 @@ interface IAIResponseHistoryItem {
   attachments?: IAIAttachment[];
 }
 
-/**
- * Main context interface exposing all AI Task Writer functionality
- */
 interface AITaskWriterContextType {
-  // Core state
   aiMode: TAiMode;
   userPrompt: string;
   setUserPrompt: any;
 
-  // AI Options state
   displayAiOptions: TAiModal[];
   currentAiOption: TAiModal;
 
-  // File Upload
   fileItems: FileItem[];
   files: File[];
   fileInputRef: React.RefObject<HTMLInputElement | null>;
@@ -75,34 +55,29 @@ interface AITaskWriterContextType {
   setFileItems: React.Dispatch<React.SetStateAction<FileItem[]>>;
   handleAttachmentClick: (e?: any) => void;
 
-  // Attachments (legacy support)
   attachments: IAIAttachment[];
   addAttachment: (file: File) => void;
   removeAttachment: (id: string) => void;
   clearAttachments: () => void;
   updateAttachmentWithS3Url: (fileName: string, s3Url: string) => void;
 
-  // Upload state tracking
   isUploadingAttachments: boolean;
   uploadProgress: {
     uploaded: number;
     total: number;
   };
 
-  // Response history
   responseHistory: IAIResponseHistoryItem[];
   currentResponseIndex: number;
   currentDisplayResponse: string;
   getCurrentResponseItem: () => IAIResponseHistoryItem | null;
   setCurrentResponseIndex: (index: number) => void;
 
-  // Loading states
   isLoading: boolean;
   loadingText: string;
   setLoadingText: (text: string) => void;
   hasError: boolean;
 
-  // Core actions
   sendAIRequest: (
     prompt: string,
     loadingText?: string,
@@ -113,10 +88,8 @@ interface AITaskWriterContextType {
   navigateResponse: (index: number) => void;
   clearHistory: () => void;
 
-  // Dropdown callbacks
   dropDownButtonAICallback: (selected: TAiModal) => void;
 
-  // BYOK gate
   isByokBlocked: boolean;
   modelTeamId: string | null;
   modelBilling: CurrentBoardBilling | null;
@@ -130,50 +103,22 @@ interface AITaskWriterProviderProps {
   attachments?: any[];
   description?: string;
   currentTask?: ITask;
-  /** Project labels for Task Writer - injected into prompt so AI knows available tags (Task Writer only) */
   projectLabels?: import("@/models/model").ILabel[];
-  /** Project sections/columns for Task Writer - injected into prompt so AI knows available statuses (Task Writer only) */
   projectSections?: { id?: number; section_title?: string }[];
-  /** Assignable people/agents; only IDs and display names are sent to the model. */
   projectAssignees?: (import("@/models/model").IUser | import("@/models/model").IAgent)[];
-  /** Destination board for global task creation. Defaults to the open board. */
   project?: IProject;
   requestKind?: "manual" | "auto-description";
 }
 
-// ============================================================================
-// CONTEXT CREATION
-// ============================================================================
 
 const AITaskWriterContext = createContext<AITaskWriterContextType | undefined>(undefined);
 
-// ============================================================================
-// CONSTANTS
-// ============================================================================
 
-/** Maximum file size allowed for attachments (2MB) */
 const MAX_FILE_SIZE = 2 * 1024 * 1024;
 
-/** Number of recent exchanges to include in conversation context */
 const CONTEXT_HISTORY_LIMIT = 3;
 
-// ============================================================================
-// PROVIDER COMPONENT
-// ============================================================================
 
-/**
- * AITaskWriterProvider
- * 
- * Manages the complete state and functionality for the AI Task Writer feature.
- * Handles file uploads, conversation history, AI requests, and response navigation.
- * 
- * @param children - Child components that will have access to the context
- * @param defaultMode - Initial AI mode (WriteWithAI or AiTaskWriter)
- * @param additionalContext - Extra context to include with AI requests
- * @param attachments - Initial attachments to include
- * @param description - Task description for context
- * @param currentTask - Current task object for context
- */
 export const AITaskWriterProvider: React.FC<AITaskWriterProviderProps> = ({
   children,
   defaultMode = "WriteWithAI",
@@ -187,54 +132,32 @@ export const AITaskWriterProvider: React.FC<AITaskWriterProviderProps> = ({
   project,
   requestKind = "manual",
 }) => {
-  // --------------------------------------------------------------------------
-  // STATE - Core AI Configuration
-  // --------------------------------------------------------------------------
-  
-  // HTPR-3792: mode is locked to the surface (description = Task Writer,
-  // comments = Write with AI); no in-UI switching, so aiMode is read-only.
   const [aiMode] = useState<TAiMode>(defaultMode);
   const [userPrompt, setUserPrompt] = useState<string>("");
   const [openProject] = useRecoilState(currentProjectAtom);
 
-  // Ref to track if this is the initial mount (skip reset on first render)
   const prevProjectIdRef = useRef<string | number | undefined>(undefined);
 
-  // Upload state tracking
   const uploadState = useRecoilValue(uploadingStateCreateTaskModalAtom);
 
-  // --------------------------------------------------------------------------
-  // STATE - History Tracking
-  // --------------------------------------------------------------------------
   
-  /** Stores the prompt for the current in-flight request */
   const [currentPromptForHistory, setCurrentPromptForHistory] = useState("");
   
-  /** Stores attachments for the current in-flight request */
   const [attachmentsForHistory, setAttachmentsForHistory] = useState<IAIAttachment[]>([]);
   
-  /** Stores original prompt for error recovery */
   const [originalPromptForRestore, setOriginalPromptForRestore] = useState("");
   
-  /** Stores original attachments for error recovery */
   const [originalAttachmentsForRestore, setOriginalAttachmentsForRestore] = useState<IAIAttachment[]>([]);
 
-  // --------------------------------------------------------------------------
-  // STATE - Attachments & Files
-  // --------------------------------------------------------------------------
   
   const [currentAttachments, setCurrentAttachments] = useState<IAIAttachment[]>([]);
   const [fileItems, setFileItems] = useState<FileItem[]>([]);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  // Processed file arrays by type
   const [processedImages, setProcessedImages] = useState<any[]>([]);
   const [processedPDFs, setProcessedPDFs] = useState<any[]>([]);
   const [processedDOCX, setProcessedDOCX] = useState<any[]>([]);
 
-  // --------------------------------------------------------------------------
-  // STATE - AI Options & Modes
-  // --------------------------------------------------------------------------
   
   const [displayAiOptions, setDisplayAiOptions] = useState<TAiModal[]>(aiOptions);
   
@@ -258,23 +181,14 @@ export const AITaskWriterProvider: React.FC<AITaskWriterProviderProps> = ({
     },
   );
   const isByokBlocked = shouldBlockAiDueToByokProvider(billing, currentAiOption?.source);
-  
 
-  // --------------------------------------------------------------------------
-  // STATE - Response History
-  // --------------------------------------------------------------------------
-  
   const [responseHistory, setResponseHistory] = useState<IAIResponseHistoryItem[]>([]);
   const [currentResponseIndex, setCurrentResponseIndex] = useState(-1);
 
-  // --------------------------------------------------------------------------
-  // EFFECT - Reset conversation history on project switch
-  // --------------------------------------------------------------------------
 
   useEffect(() => {
     const currentProjectId = currentProject?.id;
     if (prevProjectIdRef.current === undefined) {
-      // First mount: just record the id, don't wipe initial state
       prevProjectIdRef.current = currentProjectId;
       return;
     }
@@ -293,21 +207,11 @@ export const AITaskWriterProvider: React.FC<AITaskWriterProviderProps> = ({
     }
   }, [currentProject?.id]);
 
-  // --------------------------------------------------------------------------
-  // FILE UPLOAD METHODS
-  // --------------------------------------------------------------------------
 
-  /**
-   * Triggers the hidden file input element
-   */
   const triggerFileInput = useCallback(() => {
     fileInputRef.current?.click();
   }, []);
 
-  /**
-   * Handles file selection from file input
-   * Filters out duplicates and processes valid files
-   */
   const handleFileUpload = useCallback(async (event: React.ChangeEvent<HTMLInputElement>) => {
     const files = event.target.files;
     if (!files) return;
@@ -331,10 +235,6 @@ export const AITaskWriterProvider: React.FC<AITaskWriterProviderProps> = ({
     }
   }, [fileItems]);
 
-  /**
-   * Handles files dropped via drag-and-drop
-   * Filters out duplicates and processes valid files
-   */
   const handleDroppedFiles = useCallback(async (files: File[]) => {
     const startingId = fileItems.length;
     const uniqueFiles = Array.from(files).filter(
@@ -355,61 +255,36 @@ export const AITaskWriterProvider: React.FC<AITaskWriterProviderProps> = ({
     }
   }, [fileItems]);
 
-  /**
-   * Removes a file by name from the file list
-   */
   const removeFile = useCallback((name: string) => {
     setFileItems((prevItems) =>
       prevItems.filter((item) => item.file.name !== name)
     );
   }, []);
 
-  /**
-   * Clears all files from the list
-   */
   const clearFiles = useCallback(() => {
     setFileItems([]);
   }, []);
 
-  /**
-   * Resets file list to new files or empty array
-   */
   const resetFiles = useCallback((newFiles: FileItem[] = []) => {
     setFileItems(newFiles);
   }, []);
 
-  /**
-   * Handles attachment button click, triggering file input
-   */
   const handleAttachmentClick = useCallback((e?: any) => {
     e?.stopPropagation();
     fileInputRef?.current?.click();
   }, []);
 
-  /**
-   * Computed array of File objects from fileItems
-   */
   const files = React.useMemo(() => fileItems.map(item => item.file), [fileItems]);
 
-  // --------------------------------------------------------------------------
-  // ATTACHMENT METHODS (Legacy Support)
-  // --------------------------------------------------------------------------
 
-  /**
-   * Adds a new attachment to the list
-   * Validates file size and type before adding
-   * Syncs with fileItems for backward compatibility
-   */
   const addAttachment = useCallback((UploadedFileObject: any) => {
     const { file } = UploadedFileObject;
     
-    // Validate file size
     if (file.size > MAX_FILE_SIZE) {
       alert(`File "${file.name}" is too large. Maximum size is 2MB.`);
       return;
     }
 
-    // Check for duplicates
     const fileExists = fileItems.some(item =>
       item.file.name === file.name && item.file.size === file.size
     );
@@ -419,7 +294,6 @@ export const AITaskWriterProvider: React.FC<AITaskWriterProviderProps> = ({
       return;
     }
 
-    // Validate file type
     let fileType: 'image' | 'pdf' | 'docx';
     if (file.type.startsWith('image/')) {
       fileType = 'image';
@@ -433,7 +307,6 @@ export const AITaskWriterProvider: React.FC<AITaskWriterProviderProps> = ({
       return;
     }
 
-    // Add to fileItems (syncs to attachments via useEffect)
     const newFileItem: FileItem = {
       id: fileItems.length,
       file
@@ -441,10 +314,6 @@ export const AITaskWriterProvider: React.FC<AITaskWriterProviderProps> = ({
     setFileItems(prev => [...prev, newFileItem]);
   }, [fileItems]);
 
-  /**
-   * Removes an attachment by ID
-   * Syncs removal with fileItems
-   */
   const removeAttachment = useCallback((id: string) => {
     const attachment = currentAttachments.find(att => att.id === id);
     if (attachment) {
@@ -452,16 +321,10 @@ export const AITaskWriterProvider: React.FC<AITaskWriterProviderProps> = ({
     }
   }, [currentAttachments, removeFile]);
 
-  /**
-   * Clears all attachments
-   */
   const clearAttachments = useCallback(() => {
     clearFiles();
   }, [clearFiles]);
 
-  /**
-   * Updates an existing attachment with its S3 URL after upload
-   */
   const updateAttachmentWithS3Url = useCallback((fileName: string, s3Url: string) => {
     setCurrentAttachments(prev => 
       prev.map(att => 
@@ -472,20 +335,12 @@ export const AITaskWriterProvider: React.FC<AITaskWriterProviderProps> = ({
     );
   }, []);
 
-  // --------------------------------------------------------------------------
-  // EFFECT - Sync FileItems with Attachments
-  // --------------------------------------------------------------------------
 
-  /**
-   * Synchronizes fileItems with attachment objects
-   * Creates attachment objects with previews and type information
-   */
   useEffect(() => {
     const syncedAttachments = fileItems.map(fileItem => {
       const file = fileItem.file;
       const id = `${fileItem.id}-${file.name}`;
 
-      // Determine file type
       let fileType: 'image' | 'pdf' | 'docx';
       if (file.type.startsWith('image/')) {
         fileType = 'image';
@@ -495,7 +350,7 @@ export const AITaskWriterProvider: React.FC<AITaskWriterProviderProps> = ({
         file.name.toLowerCase().endsWith('.docx')) {
         fileType = 'docx';
       } else {
-        fileType = 'image'; // default fallback
+        fileType = 'image';
       }
 
       return {
@@ -509,14 +364,7 @@ export const AITaskWriterProvider: React.FC<AITaskWriterProviderProps> = ({
     setCurrentAttachments(syncedAttachments);
   }, [fileItems]);
 
-  // --------------------------------------------------------------------------
-  // EFFECT - Process Attachments to Base64
-  // --------------------------------------------------------------------------
 
-  /**
-   * Processes attachments into base64 format for AI consumption
-   * Separates files by type (images, PDFs, DOCX)
-   */
   useEffect(() => {
     const processAttachments = async () => {
       if (currentAttachments.length === 0) {
@@ -533,7 +381,6 @@ export const AITaskWriterProvider: React.FC<AITaskWriterProviderProps> = ({
 
         await Promise.all(
           currentAttachments.map(async (attachment) => {
-            // Convert file to base64
             const reader = new FileReader();
             const base64Promise = new Promise<string>((resolve, reject) => {
               reader.onload = () => resolve(reader.result as string);
@@ -553,7 +400,6 @@ export const AITaskWriterProvider: React.FC<AITaskWriterProviderProps> = ({
               size: attachment.file.size
             };
 
-            // Separate by file type
             switch (attachment.type) {
               case 'image':
                 images.push(processedFile);
@@ -582,34 +428,17 @@ export const AITaskWriterProvider: React.FC<AITaskWriterProviderProps> = ({
     processAttachments();
   }, [currentAttachments]);
 
-  // --------------------------------------------------------------------------
-  // COMPUTED - Combined Attachments
-  // --------------------------------------------------------------------------
 
-  /**
-   * Combines all processed attachments for AI hook
-   * Falls back to initial attachments if none processed
-   */
   const combinedAttachments = React.useMemo(() => {
     const combined = [...processedImages, ...processedPDFs, ...processedDOCX];
     return combined.length > 0 ? combined : initialAttachments;
   }, [processedImages, processedPDFs, processedDOCX, initialAttachments]);
 
-  // --------------------------------------------------------------------------
-  // COMPUTED - Upload State
-  // --------------------------------------------------------------------------
 
-  /**
-   * Computes whether attachments are currently being uploaded
-   * Based on the upload state from recoil atom
-   */
   const isUploadingAttachments = React.useMemo(() => {
     return uploadState ? !uploadState.canUpload : false;
   }, [uploadState]);
 
-  /**
-   * Computes upload progress information
-   */
   const uploadProgress = React.useMemo(() => {
     return {
       uploaded: uploadState?.uploaded ?? 0,
@@ -617,9 +446,6 @@ export const AITaskWriterProvider: React.FC<AITaskWriterProviderProps> = ({
     };
   }, [uploadState]);
 
-  // --------------------------------------------------------------------------
-  // COMPUTED - Effective Additional Context (labels for Task Writer)
-  // --------------------------------------------------------------------------
 
   const effectiveAdditionalContext = React.useMemo(() => {
     const parts: string[] = [];
@@ -672,9 +498,6 @@ export const AITaskWriterProvider: React.FC<AITaskWriterProviderProps> = ({
     additionalContext,
   ]);
 
-  // --------------------------------------------------------------------------
-  // AI TASK WRITER HOOK
-  // --------------------------------------------------------------------------
 
   const { 
     isLoading, 
@@ -697,40 +520,24 @@ export const AITaskWriterProvider: React.FC<AITaskWriterProviderProps> = ({
     requestKind,
   );
 
-  // --------------------------------------------------------------------------
-  // COMPUTED - Current Display Response
-  // --------------------------------------------------------------------------
 
   const restoredAiResponse = React.useMemo(
     () => restoreMedia(aiResponse, !isLoading),
     [aiResponse, isLoading, restoreMedia]
   );
 
-  /**
-   * Determines which response to display:
-   * - During loading: shows streaming AI response
-   * - With valid history index: shows historical response
-   * - Otherwise: shows latest AI response
-   */
   const currentDisplayResponse = React.useMemo(() => {
-    // Always show live streaming response when loading
     if (isLoading) {
       return restoredAiResponse;
     }
 
-    // Show historical response if valid index
     if (currentResponseIndex >= 0 && currentResponseIndex < responseHistory.length && responseHistory[currentResponseIndex]) {
       return responseHistory[currentResponseIndex].aiResponse;
     }
 
-    // Default to latest response
     return restoredAiResponse;
   }, [currentResponseIndex, responseHistory, restoredAiResponse, isLoading]);
 
-  /**
-   * Gets the current response item from history
-   * Returns null if no valid item selected
-   */
   const getCurrentResponseItem = React.useMemo(() => {
     if (currentResponseIndex >= 0 && currentResponseIndex < responseHistory.length) {
       return responseHistory[currentResponseIndex];
@@ -738,36 +545,18 @@ export const AITaskWriterProvider: React.FC<AITaskWriterProviderProps> = ({
     return null;
   }, [currentResponseIndex, responseHistory]);
 
-  // --------------------------------------------------------------------------
-  // CORE ACTION - Send AI Request
-  // --------------------------------------------------------------------------
 
-  /**
-   * Sends a request to the AI with contextual conversation history
-   * 
-   * Features:
-   * - Builds context from recent conversation history
-   * - Handles attachments with base64 conversion
-   * - Provides error recovery by storing original input
-   * - Updates UI optimistically
-   * 
-   * @param prompt - The user's input prompt
-   * @param loadingTextParam - Optional loading text to display
-   */
   const sendAIRequest = useCallback(async (
     prompt: string,
     loadingTextParam = "Thinking...",
     requestKindOverride?: "manual" | "auto-description",
   ) => {
-    // Capture current state for history and error recovery
     const requestAttachments = currentAttachments;
     
-    // Convert blob URLs to base64 for persistent storage
     const attachmentsForPersistentStorage = await Promise.all(
       requestAttachments.map(async (attachment) => {
         let persistentPreview = attachment.preview;
 
-        // Convert blob URLs to base64
         if (attachment.preview.startsWith('blob:')) {
           try {
             const reader = new FileReader();
@@ -791,23 +580,18 @@ export const AITaskWriterProvider: React.FC<AITaskWriterProviderProps> = ({
 
     const originalPrompt = prompt;
 
-    // Block before clearing the prompt so the text stays if BYOK is not configured
     if (isByokBlocked) return;
 
-    // Update UI state
     setLoadingText(loadingTextParam);
-    setUserPrompt(""); // Clear input optimistically
+    setUserPrompt("");
     setCurrentPromptForHistory(prompt);
     setAttachmentsForHistory(attachmentsForPersistentStorage);
 
-    // Store for error recovery
     setOriginalPromptForRestore(originalPrompt);
     setOriginalAttachmentsForRestore(requestAttachments);
 
-    // Point to streaming response
     setCurrentResponseIndex(responseHistory.length);
 
-    // Build contextual prompt with history
     let finalPrompt = prompt;
     if (responseHistory.length > 0) {
       const recentHistory = responseHistory.slice(-CONTEXT_HISTORY_LIMIT);
@@ -845,7 +629,6 @@ export const AITaskWriterProvider: React.FC<AITaskWriterProviderProps> = ({
         ${prompt}${currentAttachmentInfo}`;
     }
 
-    // HTPR-6363: board search uses user-authored briefs only, not AI prose.
     const userRetrievalTexts = [
       ...responseHistory.map((item) => item.userPrompt),
       prompt,
@@ -876,34 +659,18 @@ export const AITaskWriterProvider: React.FC<AITaskWriterProviderProps> = ({
     responseHistory.length,
   ]);
 
-  // --------------------------------------------------------------------------
-  // EFFECT - Error Recovery
-  // --------------------------------------------------------------------------
 
-  /**
-   * Detects error responses and restores user input
-   * Allows user to retry after an error without losing their work
-   */
   useEffect(() => {
     if (!isLoading && originalPromptForRestore && hasError) {
-      // Restore user's input
       setUserPrompt(originalPromptForRestore);
       setCurrentAttachments(originalAttachmentsForRestore);
 
-      // Clear restore data. Keep history metadata so a retry can commit normally.
       setOriginalPromptForRestore("");
       setOriginalAttachmentsForRestore([]);
     }
   }, [aiResponse, isLoading, hasError, originalPromptForRestore, originalAttachmentsForRestore]);
 
-  // --------------------------------------------------------------------------
-  // EFFECT - Add Response to History
-  // --------------------------------------------------------------------------
 
-  /**
-   * Adds completed AI responses to conversation history
-   * Only triggers on successful, non-loading responses
-   */
   useEffect(() => {
     if (aiResponse && !isLoading && !hasError && currentPromptForHistory) {
       setResponseHistory(prev => {
@@ -917,12 +684,10 @@ export const AITaskWriterProvider: React.FC<AITaskWriterProviderProps> = ({
         };
         const newHistory = [...prev, historyItem];
         
-        // Update index to point to newly added item
         setCurrentResponseIndex(newHistory.length - 1);
         return newHistory;
       });
       
-      // Clear temporary state
       setCurrentPromptForHistory("");
       setAttachmentsForHistory([]);
       setOriginalPromptForRestore("");
@@ -931,23 +696,13 @@ export const AITaskWriterProvider: React.FC<AITaskWriterProviderProps> = ({
     }
   }, [aiResponse, restoredAiResponse, isLoading, currentPromptForHistory, aiMode, attachmentsForHistory, clearAttachments, hasError, responseHistory.length]);
 
-  // --------------------------------------------------------------------------
-  // NAVIGATION METHODS
-  // --------------------------------------------------------------------------
 
-  /**
-   * Navigates to a specific response in history
-   * Ensures index stays within valid bounds
-   * 
-   * @param index - Target history index
-   */
   const navigateResponse = useCallback((index: number) => {
     if (responseHistory.length === 0) {
       setCurrentResponseIndex(-1);
       return;
     }
 
-    // Clamp index to valid range
     if (index < 0) {
       setCurrentResponseIndex(0);
     } else if (index >= responseHistory.length) {
@@ -957,9 +712,6 @@ export const AITaskWriterProvider: React.FC<AITaskWriterProviderProps> = ({
     }
   }, [responseHistory.length]);
 
-  /**
-   * Clears all conversation history and resets state
-   */
   const clearHistory = useCallback(() => {
     setResponseHistory([]);
     setCurrentResponseIndex(-1);
@@ -967,14 +719,7 @@ export const AITaskWriterProvider: React.FC<AITaskWriterProviderProps> = ({
     clearAttachments();
   }, [clearAttachments]);
 
-  // --------------------------------------------------------------------------
-  // DROPDOWN CALLBACKS
-  // --------------------------------------------------------------------------
 
-  /**
-   * Handles AI model selection from dropdown
-   * Updates current option and reorders display list
-   */
   const dropDownButtonAICallback = useCallback((selected: TAiModal) => {
     const item = aiOptions.find(option => selected.id === option.id);
     if (item) {
@@ -983,21 +728,15 @@ export const AITaskWriterProvider: React.FC<AITaskWriterProviderProps> = ({
     }
   }, [setAiOption]);
 
-  // --------------------------------------------------------------------------
-  // CONTEXT VALUE
-  // --------------------------------------------------------------------------
 
   const contextValue: AITaskWriterContextType = {
-    // Core state
     aiMode,
     userPrompt,
     setUserPrompt,
 
-    // AI Options state
     displayAiOptions,
     currentAiOption,
 
-    // File Upload
     fileItems,
     files,
     fileInputRef,
@@ -1010,40 +749,33 @@ export const AITaskWriterProvider: React.FC<AITaskWriterProviderProps> = ({
     setFileItems,
     handleAttachmentClick,
 
-    // Attachments (legacy support)
     attachments: currentAttachments,
     addAttachment,
     removeAttachment,
     clearAttachments,
     updateAttachmentWithS3Url,
 
-    // Upload state tracking
     isUploadingAttachments,
     uploadProgress,
 
-    // Response history
     responseHistory,
     currentResponseIndex,
     currentDisplayResponse,
     getCurrentResponseItem: () => getCurrentResponseItem,
     setCurrentResponseIndex,
 
-    // Loading states
     isLoading,
     loadingText,
     setLoadingText,
     hasError,
 
-    // Core actions
     sendAIRequest,
     retryLastRequest,
     navigateResponse,
     clearHistory,
 
-    // Dropdown callbacks
     dropDownButtonAICallback,
 
-    // BYOK gate
     isByokBlocked,
     modelTeamId: modelTeamId ? String(modelTeamId) : null,
     modelBilling: billing,
@@ -1057,17 +789,7 @@ export const AITaskWriterProvider: React.FC<AITaskWriterProviderProps> = ({
   );
 };
 
-// ============================================================================
-// CUSTOM HOOK
-// ============================================================================
 
-/**
- * Custom hook to access AITaskWriter context
- * Must be used within an AITaskWriterProvider
- * 
- * @throws Error if used outside provider
- * @returns AITaskWriterContextType
- */
 export const useAITaskWriterContext = () => {
   const context = useContext(AITaskWriterContext);
   if (context === undefined) {

@@ -45,7 +45,6 @@ const SharedCommentsContainer = () => {
       <div
         {...bind}
         className={commentClasses}
-        // className=" my-[8px] outline-none"
         key={comment.id}
         tabIndex={i}
         id={`comment-${i}`}
@@ -53,12 +52,9 @@ const SharedCommentsContainer = () => {
         <Suspense fallback={<>loading...</>}>
           {!comment.activity ? (
             <>
-              {/* ========================== COMMENT ====================================== */}
               <CommentBodyDesktop>
-                {/* -------------------------- CREATED BY --------------------------- */}
                 <CommentCreatedBy />
 
-                {/* -------------------------- COMMENT TEXT -------------------------- */}
                 <SharedCommentText />
 
                 <div
@@ -70,7 +66,6 @@ const SharedCommentsContainer = () => {
                   />
                 </div>
 
-                {/* ================================= reactions ==================== */}
               </CommentBodyDesktop>
 
               {!isStacked && comment.attachments && (
@@ -87,7 +82,6 @@ const SharedCommentsContainer = () => {
               )}
             </>
           ) : (
-            // ========================== show task activity
             <CommentTaskActivity />
           )}
         </Suspense>
@@ -98,9 +92,7 @@ const SharedCommentsContainer = () => {
       <>
         {!comment.activity ? (
           <div className={`py-1`} id={`comment-${comment.id}`} {...bind}>
-            {/* ------------ comment info container. */}
 
-            {/* -------------------------- CREATED BY --------------------------- */}
             <CommentCreatedBy />
             <div
               className={`
@@ -109,12 +101,11 @@ const SharedCommentsContainer = () => {
                         ${
                           comment.creator?.id === currentUser?.id
                             ? "bg-self-comment"
-                            : // they look the same now but wasn't always t
+                            :
                               "bg-comment-description"
                         }`}
             >
               <SharedCommentText />
-              {/* ------------ comment text  */}
 
               {comment.attachments && (
                 <AttachmentView

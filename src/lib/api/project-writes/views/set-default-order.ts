@@ -39,7 +39,6 @@ const route = taskWriteRoute({
 });
 
 export const POST: TaskWriteRoute = async (request) => {
-  // Better Auth preflight must not broaden these signed-cookie-only routes.
   const session = verifySession(request.cookies ? request.cookies[SESSION_COOKIE] : parseCookies(request.headers.get("cookie") ?? "").get(SESSION_COOKIE));
   if (!session) return viewWriteJson({ message: "Unauthorized" }, 401);
   return route(request, { userId: session.id, source: "legacy", needsBridge: true });

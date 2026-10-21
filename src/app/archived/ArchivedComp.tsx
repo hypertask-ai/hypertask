@@ -1,4 +1,4 @@
-/* eslint-disable @next/next/no-img-element */
+
 "use client"
 
 import { useRouter, useSearchParams } from "next/navigation";
@@ -132,9 +132,6 @@ const Archived = ({
     useArchivedRealtime(currentUser?.id);
 
     const inboxFromQuery = useMemo(() => {
-        // Prisma `distinct` de-dups within a page, not across pages, so the same
-        // (type, taskId) can reappear on a later infinite-scroll page. Collapse
-        // duplicates client-side; rows arrive newest-first so we keep the first.
         const flat = inboxQuery.data?.pages.flat() ?? [];
         const seen = new Set<string>();
         return flat.filter((notification: any) => {
@@ -161,7 +158,6 @@ const Archived = ({
 
         if (e.key === "Escape") router.back()
     
-          // press k
           if (e.keyCode === 75 && cmdControl) {
             e.preventDefault();
             toggleShowCommands()

@@ -81,16 +81,8 @@ const tasksSearchAll = async (projectIds: number[], searchQuery__: string) => {
     }
 
     const searchQuery = searchQuery__.replace(/[\s\n\t]/g, "_");
-    // const tsquerySpecialChars = /[()|&:*!]/g;
 
-    // const getQueryFromSearchPhrase = (searchPhrase: string) =>
-    //   searchPhrase
-    //     .replace(tsquerySpecialChars, " ")
-    //     .trim()
-    //     .split(/\s+/)
-    //     .join(" | ");
 
-    // const titleQuery = getQueryFromSearchPhrase(searchQuery__);
     const exactReference = exactTaskReferenceWhere(searchQuery__);
     const [exactTasks, otherResponse, tasks] = await Promise.all([
       exactReference
@@ -142,12 +134,6 @@ const tasksSearchAll = async (projectIds: number[], searchQuery__: string) => {
               },
             },
             {
-              // ponytail: ILIKE substring, not full-text `search`. Prisma emits
-              // one-arg to_tsvector(description) which recomputes+stems a tsvector
-              // per row on every search (no functional index possible — one-arg
-              // to_tsvector isn't IMMUTABLE). At board scale that per-row parse is
-              // the bulk of the ~350ms. `contains` is a cheap substring filter over
-              // the already project-scoped rows and matches partials users expect.
               description: {
                 contains: searchQuery.toLowerCase(),
                 mode: "insensitive",

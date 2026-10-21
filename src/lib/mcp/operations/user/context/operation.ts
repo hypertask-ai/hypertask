@@ -1,3 +1,4 @@
+import { reportMcpOperationCrash } from '@/lib/mcp/operationCrashReport'
 import { wrapMcpRoute, validateMcpRouteAuth as validateMcpAuth, checkMcpRouteRateLimit as checkMcpRateLimit } from '@/lib/mcp/routeWrapper'
 import { NextRequest, NextResponse } from 'next/server'
 import { createUnauthorizedResponse } from '@/lib/mcp/auth'
@@ -18,12 +19,10 @@ export interface UserContextResponse {
     email: string
     displayName?: string
   }
-  /** Present when the MCP JWT is bound to an Agent; omitted or null for user-only sessions */
   connected_agent?: {
     id: string
     displayName: string
   } | null
-  /** Teams the user owns (Google account) or is an accepted member of - use id for POST /api/mcp/teams/:teamId/boards */
   teams?: UserContextTeam[]
   projects?: ProjectListItem[]
   all_agents?: {
@@ -32,36 +31,14 @@ export interface UserContextResponse {
   }[]
 }
 
-/**
- * GET /api/mcp/user/context
- *
- * Returns the current user's context including:
- * - User information
- * - All boards/projects they have access to
- * - Permissions
- *
- * Authentication: Bearer token (JWT or API key) in Authorization header
- *
- * JWT Token (Recommended):
- * - Created via createMcpToken(userId, email)
- * - Contains user info, no DB lookup needed (faster)
- * - 30-day expiration by default
- *
- * API Key (Alternative):
- * - Stored in ApiKey model
- * - Database-backed, can track usage
- */
 export async function GET(request: NextRequest) {
   return wrapMcpRoute(async (request: NextRequest) => {
   let userObj: {id: number, email: string} | null = null
   try {
-    // Validate JWT token or API key and get user
     const rateLimited = await checkMcpRateLimit(request)
     if (rateLimited) return rateLimited
     const ctx = await validateMcpAuth(request)
     if (!ctx) {
-      // Use helper function that includes WWW-Authenticate header
-      // This triggers Cursor to show the CONNECT button
       return createUnauthorizedResponse('Invalid or missing authentication token.', 'invalid_token')
     }
 
@@ -123,7 +100,6 @@ export async function GET(request: NextRequest) {
       (a.title ?? a.id).localeCompare(b.title ?? b.id)
     )
 
-    // Fetch projects (same structure as GET /api/mcp/projects)
     const projects = await prisma.project.findMany({
       where: {
         status: 'Normal',
@@ -222,6 +198,7 @@ export async function GET(request: NextRequest) {
       error,
       message: error instanceof Error ? error.message : String(error),
     })
+    reportMcpOperationCrash(request, error)
     return NextResponse.json(
       {
         success: false,

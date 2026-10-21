@@ -28,12 +28,6 @@ export type DescriptionIntentProps = {
   onKeyDownCapture: () => void;
 };
 
-/**
- * HTPR-7091: what a ticket's read-only description looks like, drawn without
- * the editor. The class names copy TiptapMainContainer and TiptapEditor for the
- * read-only description, so the editor takes over in the same place at the
- * same size.
- */
 export function StaticDescriptionBody({ html, isMbl }: { html: string; isMbl: boolean }) {
   const content = useMemo(() => toEditorHtml(html), [html]);
   const text = (
@@ -42,7 +36,6 @@ export function StaticDescriptionBody({ html, isMbl }: { html: string; isMbl: bo
         contentEditable={false}
         translate="no"
         className="tiptap ProseMirror"
-        // The editor adds these rules for .ProseMirror when it starts, so the copy sets them itself.
         style={PROSEMIRROR_ROOT_STYLE}
         dangerouslySetInnerHTML={{ __html: content }}
       />
@@ -87,7 +80,6 @@ export function StaticDescriptionBody({ html, isMbl }: { html: string; isMbl: bo
   );
 }
 
-/** The description's wrapper from TaskDetailEditorPanels plus the static body. */
 export default function StaticDescriptionShell({
   html,
   isMbl,
@@ -100,7 +92,6 @@ export default function StaticDescriptionShell({
   const router = useRouter();
   const inboxFlow = useSearchParams()?.get("inboxFlow");
 
-  // Same as the editor wrapper: a task link opens in the app, not a new page.
   const onClickCapture = (event: MouseEvent<HTMLDivElement>) => {
     const target = event.target;
     if (!(target instanceof Element)) return;
@@ -112,11 +103,20 @@ export default function StaticDescriptionShell({
     }
   };
 
+  return <StaticDescriptionFrame html={html} isMbl={isMbl} {...intent} onClickCapture={onClickCapture} />;
+}
+
+export function StaticDescriptionFrame({
+  html,
+  isMbl,
+  ...wrapperProps
+}: { html: string; isMbl: boolean } & Partial<DescriptionIntentProps> & {
+  onClickCapture?: (event: MouseEvent<HTMLDivElement>) => void;
+}) {
   return (
     <div
       id="main-wrapper-description"
-      {...intent}
-      onClickCapture={onClickCapture}
+      {...wrapperProps}
       className={cn(
         "col-start-1 col-end-3 relative text-white-black",
         isMbl ? taskDetailSpacing.mobile.descriptionContainer : "",

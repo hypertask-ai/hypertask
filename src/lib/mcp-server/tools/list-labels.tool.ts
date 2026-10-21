@@ -3,10 +3,6 @@ import { executeWithService } from '../utils/executeWithService';
 import { TOOL_METADATA } from '../config/tool-metadata';
 import { getListLabelsBaseSchema } from '../validations/project.validation';
 
-/**
- * Tool: list_labels
- * Lists the labels available on one project/board.
- */
 export const listLabelsTool = {
   name: TOOL_METADATA.LIST_LABELS.name,
   description: TOOL_METADATA.LIST_LABELS.description,

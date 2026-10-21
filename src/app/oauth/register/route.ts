@@ -3,30 +3,10 @@ import { randomUUID } from 'crypto'
 import prisma from '@/lib/prisma'
 import { isValidRedirectUri } from '@/lib/oauth/redirect-uri'
 
-/**
- * POST /oauth/register
- * 
- * Dynamic Client Registration endpoint (RFC 7591)
- * Allows OAuth clients to register themselves before starting the OAuth flow
- * 
- * Request body (JSON):
- * - client_name: Human-readable name of the client
- * - redirect_uris: Array of redirect URIs
- * - grant_types: Array of grant types (default: ["authorization_code"])
- * - token_endpoint_auth_method: Authentication method (default: "none")
- * 
- * Response (JSON):
- * - client_id: Generated UUID for the client
- * - client_name: Client name
- * - redirect_uris: Registered redirect URIs
- * - grant_types: Supported grant types
- * - token_endpoint_auth_method: Authentication method
- */
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json()
 
-    // Validate required fields
     if (!body.redirect_uris || !Array.isArray(body.redirect_uris) || body.redirect_uris.length === 0) {
       return NextResponse.json(
         { error: 'invalid_client_metadata', error_description: 'redirect_uris is required and must be a non-empty array' },
@@ -34,7 +14,6 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // Validate redirect URIs (must be localhost, HTTPS, or custom URI scheme)
     for (const uri of body.redirect_uris) {
       if (typeof uri !== 'string') {
         return NextResponse.json(
@@ -72,7 +51,6 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // Validate grant_types (if provided)
     const allowedGrantTypes = new Set(['authorization_code', 'refresh_token'])
     if (
       body.grant_types &&
@@ -88,10 +66,8 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // Generate client_id (UUID)
     const clientId = randomUUID()
 
-    // Prepare client data
     const clientData = {
       client_id: clientId,
       client_name: body.client_name || null,
@@ -100,7 +76,6 @@ export async function POST(request: NextRequest) {
       token_endpoint_auth_method: body.token_endpoint_auth_method || 'none',
     }
 
-    // Store client in database
     try {
       await prisma.oAuthClient.create({
         data: {
@@ -119,7 +94,6 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // Return registration response
     return NextResponse.json({
       client_id: clientData.client_id,
       client_name: clientData.client_name,
@@ -135,7 +109,6 @@ export async function POST(request: NextRequest) {
   } catch (error) {
     console.error('Error in OAuth register endpoint:', error)
     
-    // Handle JSON parsing errors
     if (error instanceof SyntaxError) {
       return NextResponse.json(
         { error: 'invalid_request', error_description: 'Invalid JSON in request body' },

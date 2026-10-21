@@ -1,5 +1,6 @@
+import { useCommentToAiChat } from "@/hooks/MultiPages/AIChat/useCommentToAiChat";
 import { useFlag } from "@/hooks/useFlag";
-import { HTPR_6929_COMPOSE_TASK_WRITER_FLAG, HTPR_6937_NEW_TASK_WINDOW_FLAG } from "@/lib/flags/keys";
+import { HTPR_7393_COMMENT_INLINE_AI_FLAG, HTPR_7337_EDIT_WITH_AI_FLAG, HTPR_6929_COMPOSE_TASK_WRITER_FLAG, HTPR_6937_NEW_TASK_WINDOW_FLAG } from "@/lib/flags/keys";
 import { useSetRecoilState } from "@/lib/state";
 import { showCommandsAtom } from "@/store";
 import { CommandMode } from "@/models/enums";
@@ -18,10 +19,9 @@ type AIGeneratedAttachment = {
 };
 import type { TaskDetailEditorContext } from "./TaskDetailEditorContext";
 export function useTaskDetailEditorSave(getContext: () => TaskDetailEditorContext) {
-  const { cancelMobileExistingEditRef, setToggleHighlight, handleSave, saveInFlightRef, mobileEditSavingRef, mode, uploadingDescription, editor, newCommentAttachments, mobileExistingEditOpen, mobileEditSnapshotRef, hasDraft, hasDraftInit, setSaveInFlight, setMobileEditSaving, setShouldShowAITaskWriter, setAiTriggerData, cancelDebounceRef, attachments, carouselAttachments, commentId, id, inboxFlow, currentTask, setTrigger, clearDescriptionDraftCache, setNewCommentAttachments, draftsFromTQ, queryClient, draftQueryKey, invalidateUserDrafts, allowEdit, isRecording, currentUser, isInboxFlow, inInbox, advanceOnSend, divIds, editMode, shouldShowAiTaskWriter, setEditMode, isMbl, isReadEditMode, mobileEditSessionActiveRef, toggleRecording, setEditState, defaultCommentFocus } = getContext();
+  const { cancelMobileExistingEditRef, setToggleHighlight, handleSave, saveInFlightRef, mobileEditSavingRef, mode, uploadingDescription, editor, newCommentAttachments, mobileExistingEditOpen, mobileEditSnapshotRef, hasDraft, hasDraftInit, setSaveInFlight, setMobileEditSaving, setShouldShowAITaskWriter, setChatHandoffOpen, setAiTriggerData, cancelDebounceRef, attachments, carouselAttachments, commentId, id, inboxFlow, currentTask, setTrigger, clearDescriptionDraftCache, setNewCommentAttachments, draftsFromTQ, queryClient, draftQueryKey, invalidateUserDrafts, allowEdit, isRecording, currentUser, isInboxFlow, inInbox, advanceOnSend, divIds, editMode, shouldShowAiTaskWriter, setEditMode, isMbl, isReadEditMode, mobileEditSessionActiveRef, toggleRecording, setEditState, defaultCommentFocus } = getContext();
 
 
-  // Event handlers
   const toggleHighlightHandler = (state: boolean) => {
     return setToggleHighlight(state);
   };
@@ -78,9 +78,6 @@ export function useTaskDetailEditorSave(getContext: () => TaskDetailEditorContex
     );
     let attachmentFilesForSave: IEditorAttachmentFile[] | undefined =
       currentAttachmentFiles;
-    // An undefined attachment list means this editor has no replacement
-    // snapshot (desktop comments); preserve stored files in that case. Mobile
-    // editing passes [] when the user intentionally removes every file.
     const hasAttachmentSnapshot = attachments !== undefined;
     if (mode === "read-edit-comments" && !hasAttachmentSnapshot) {
       attachmentFilesForSave =
@@ -145,8 +142,6 @@ export function useTaskDetailEditorSave(getContext: () => TaskDetailEditorContex
     }
   };
 
-  // A task can still carry an inbox notification when opened from another
-  // surface. Advancement is limited to Inbox lineage.
   const sendComment = (alwaysAdvance = false) => {
     const tutorialState = currentUser?.id
       ? parseLearnTutorialState(
@@ -172,7 +167,18 @@ export function useTaskDetailEditorSave(getContext: () => TaskDetailEditorContex
   const composeEnabled = useFlag(HTPR_6929_COMPOSE_TASK_WRITER_FLAG);
   const newTaskWindowFlag = useFlag(HTPR_6937_NEW_TASK_WINDOW_FLAG);
   const setCommands = useSetRecoilState(showCommandsAtom);
+  const editWithAiEnabled = useFlag(HTPR_7337_EDIT_WITH_AI_FLAG);
+  const commentInlineAi = useFlag(HTPR_7393_COMMENT_INLINE_AI_FLAG);
+  const sidebarEditWithAi = editWithAiEnabled && !(commentInlineAi && (mode === "create-comment" || mode === "read-edit-comments"));
+  const { editTicketWithAi } = useCommentToAiChat();
   const toggleAiTaskWriter = () => {
+    if (sidebarEditWithAi) {
+      editor?.commands.blur();
+      setShouldShowAITaskWriter(false);
+      if (mobileExistingEditOpen) setChatHandoffOpen(true);
+      void editTicketWithAi(currentTask.id);
+      return;
+    }
     if (mode === "read-edit-description" && composeEnabled && newTaskWindowFlag) {
       setCommands({ show: true, mode: CommandMode.Command, paletteTab: "compose" });
       return;
@@ -187,7 +193,6 @@ export function useTaskDetailEditorSave(getContext: () => TaskDetailEditorContex
       block: "center",
     });
     setShouldShowAITaskWriter((prev) => !prev);
-    //Make sure when toggling the edit Mode is updated as well.
     if (editMode === "description" && !shouldShowAiTaskWriter)
       setEditMode("description-ai");
   };
@@ -230,10 +235,6 @@ export function useTaskDetailEditorSave(getContext: () => TaskDetailEditorContex
 
   function handleCommentEscape () {
     editor?.commands.blur();
-    // Editing an existing comment: actually leave edit mode (revert to the
-    // read view) instead of only blurring. editState/editMode are what keep
-    // CommentText rendering the editor, so clearing them is the real exit —
-    // for both ESC and the footer's cancel trash. Unchanged for create-comment.
     if (mode === "read-edit-comments") {
       setEditState(null);
       setEditMode(null);

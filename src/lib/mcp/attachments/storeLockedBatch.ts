@@ -45,13 +45,6 @@ async function persistOrReconcile(
     if (signal.aborted) throw new AttachmentPersistenceUncertainError();
     const stored = await db.$transaction(
       async (tx) => {
-        // Redis serializes storage I/O, while this transaction-scoped PostgreSQL
-        // lock is the final row-creation fence if a process pause outlives the
-        // lease. It is safe with pooled connections because PostgreSQL releases
-        // it automatically at transaction end.
-        // PostgreSQL returns `void` from pg_advisory_xact_lock. Prisma cannot
-        // deserialize that unsupported type, so cast the ignored result while
-        // retaining the transaction-scoped lock.
         await tx.$queryRaw(
           Prisma.sql`SELECT pg_advisory_xact_lock(${transactionLockId})::text AS lock_result`
         );
@@ -102,11 +95,6 @@ type LockedBatchDependencies = Partial<AttachmentBatchDependencies> & {
   withTargetLock?: AttachmentTargetLock;
 };
 
-/**
- * Serialize storage ownership and row persistence for one task target. Storage
- * I/O runs outside a database transaction; only row persistence uses a short
- * transaction while a renewable lease serializes the target through rollback.
- */
 export async function storeAttachmentBatchWithTargetLock(
   db: LockingPrismaClient,
   files: ValidatedFileSpec[],

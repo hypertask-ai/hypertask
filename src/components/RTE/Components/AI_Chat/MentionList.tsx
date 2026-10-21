@@ -43,7 +43,6 @@ const MentionList = forwardRef<MentionListRef, MentionListProps>(
     const [___, setShowMentionList] = useRecoilState(showMentionListAtom);
     const [isLoading, setIsLoading] = useState<boolean>(true);
 
-    // --- HELPER FUNCTIONS ---
     const selectItem = (index: number): void => {
       const item = props.items[index];
       if (item && !ignoreItems.includes(item.type)) {
@@ -82,7 +81,6 @@ const MentionList = forwardRef<MentionListRef, MentionListProps>(
           props.command(mentionData);
         }
 
-        // Call the contextCallback if it exists to send data back to useAiChat
         if (props.contextCallback && mentionData) {
           props.contextCallback(item);
         }
@@ -97,7 +95,6 @@ const MentionList = forwardRef<MentionListRef, MentionListProps>(
       });
     };
 
-    // --- KEYDOWN HANDLERS ---
     const upHandler = (): void => {
       const nextIndex = nextSelectableMentionIndex(
         props.items,
@@ -122,9 +119,7 @@ const MentionList = forwardRef<MentionListRef, MentionListProps>(
 
     const enterHandler = (): void => selectItem(selectedIndex);
 
-    // --- CONSOLIDATED USEEFFECT ---
     useEffect(() => {
-      // On small screens, prevent background page scroll while the mention list is open
       const isMobile =
         typeof window !== "undefined" &&
         window.matchMedia("(max-width: 640px)").matches;
@@ -136,22 +131,19 @@ const MentionList = forwardRef<MentionListRef, MentionListProps>(
         document.body.style.overflow = "hidden";
       }
 
-      // If items haven't arrived yet for the current query, stay in a loading state.
       if (!props.items || props.items.length === 0) {
         setIsLoading(true);
       } else {
-        // Once items arrive, stop loading.
         setIsLoading(false);
         setSelectedIndex(firstSelectableMentionIndex(props.items));
       }
 
-      // Cleanup function to hide the list when the component unmounts or query changes.
       return () => {
         if (isMobile && typeof document !== "undefined") {
           document.body.style.overflow = previousOverflow || "";
         }
       };
-    }, [props.items, props.query]); // Effect runs when items OR query change.
+    }, [props.items, props.query]);
 
     useEffect(() => {
       setShowMentionList(true);

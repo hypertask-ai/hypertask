@@ -7,7 +7,6 @@ export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 export const maxDuration = 300;
 
-// HTPR-7098: applies finished half-price AI batches (Slack summaries, smart label backfills).
 export async function GET(request: NextRequest) {
   if (
     !hasValidCronAuthorization(

@@ -6,26 +6,6 @@ import { generateAuthCode } from '@/lib/oauth/pkce'
 import { buildRedirectUrl } from '@/lib/oauth/redirect-uri'
 import { signConsentToken, verifyConsentToken } from '@/lib/oauth/consent'
 
-/**
- * /oauth/authorize
- *
- * OAuth 2.1 authorization endpoint with PKCE.
- *
- * Params (query on GET, form body on POST):
- * - response_type: Must be "code"
- * - client_id: Client identifier
- * - redirect_uri: Where to redirect after authorization
- * - code_challenge: PKCE code challenge (base64url encoded SHA256)
- * - code_challenge_method: Must be "S256"
- * - state: Optional state parameter for CSRF protection
- * - agent_id: Optional Agent UUID; if set, access token will bind to this agent (must belong to user, not revoked)
- *
- * HTPR-6200: a GET no longer mints an authorization code. Because the session cookie
- * rides along on any top-level navigation, a GET is not evidence that the user asked
- * for this connection, so an unapproved client is sent to the /oauth/consent screen.
- * The code is minted only by POST, which requires the signed consent token that screen
- * embeds, or by a GET whose client the user has already approved (OAuthClientGrant).
- */
 
 type AuthorizationRequest = {
   responseType: string | null
@@ -66,10 +46,6 @@ function invalid(description: string, error = 'invalid_request', status = 400) {
   return NextResponse.json({ error, error_description: description }, { status })
 }
 
-/**
- * Shared by GET and POST so the two paths can never drift on what they accept.
- * Returns either a validated request or the error response to send back.
- */
 async function validateAuthorizationRequest(
   params: AuthorizationRequest
 ): Promise<{ ok: true; request: ValidatedRequest } | { ok: false; response: NextResponse }> {
@@ -110,7 +86,6 @@ async function validateAuthorizationRequest(
   }
 }
 
-/** Confirms an optional agent_id belongs to this user and is not revoked. */
 async function resolveAgentId(
   agentIdParam: string | null,
   userId: number
@@ -169,9 +144,6 @@ async function issueCodeAndRedirect(
 
   const finalRedirectUrl = buildRedirectUrl(validated.redirectUri, redirectParams)
 
-  // Every absolute URI matches, http(s) included, so in practice all clients hand off
-  // through /oauth/success. That is what makes cursor:// style schemes work at all:
-  // a server redirect to a non-web scheme is not followed reliably.
   const customSchemePattern = /^[a-z][a-z0-9+.-]*:\/\//
   if (customSchemePattern.test(validated.redirectUri.toLowerCase())) {
     const successUrl = new URL('/oauth/success', request.url)
@@ -183,8 +155,6 @@ async function issueCodeAndRedirect(
   return NextResponse.redirect(finalRedirectUrl, redirectStatus)
 }
 
-/** Carries the original request forward on a redirect. The rejected consent token
- * never travels with it: a stale approval must not survive a round trip. */
 function copyFormParams(form: FormData, url: URL) {
   for (const [key, value] of form.entries()) {
     if (typeof value === 'string' && key !== 'consent_token') {
@@ -193,8 +163,6 @@ function copyFormParams(form: FormData, url: URL) {
   }
 }
 
-/** Resolves identity only from the signed, HttpOnly session. nookies_user is a
- * client-writable presentation cache and must never select the OAuth subject. */
 async function currentSessionUser() {
   const cookieStore = await cookies()
   const session = verifySession(cookieStore.get(SESSION_COOKIE)?.value)
@@ -219,7 +187,6 @@ export async function GET(request: NextRequest) {
     const user = await currentSessionUser()
 
     if (!user) {
-      // User not authenticated - redirect to main login page with OAuth params preserved
       const loginUrl = new URL('/login', request.url)
       searchParams.forEach((value, key) => {
         loginUrl.searchParams.set(key, value)
@@ -268,11 +235,6 @@ export async function GET(request: NextRequest) {
   }
 }
 
-/**
- * The approve button on /oauth/consent posts here. A cross-site POST cannot carry
- * the SameSite=lax session cookie, and cannot mint a consent token either, so this
- * is the only place a code gets created for a connector the user has not approved.
- */
 export async function POST(request: NextRequest) {
   try {
     const form = await request.formData()
@@ -283,8 +245,6 @@ export async function POST(request: NextRequest) {
     const user = await currentSessionUser()
 
     if (!user) {
-      // The session lapsed while the consent screen sat open. Send them through
-      // login with the request intact so the flow resumes instead of dead-ending.
       const loginUrl = new URL('/login', request.url)
       copyFormParams(form, loginUrl)
 
@@ -307,23 +267,18 @@ export async function POST(request: NextRequest) {
     )
 
     if (!approved) {
-      // A person is looking at this, not a machine, so send them to the consent
-      // screen's own expiry page rather than raw JSON in the address bar. Dropping
-      // the stale token is what makes that page render the expired state.
       const consentUrl = new URL('/oauth/consent', request.url)
       copyFormParams(form, consentUrl)
 
       return NextResponse.redirect(consentUrl.toString(), 303)
     }
 
-    // Remember the approval so reconnecting this connector is one click.
     await prisma.oAuthClientGrant.upsert({
       where: { user_id_client_id: { user_id: user.id, client_id: validated.clientId } },
       update: {},
       create: { user_id: user.id, client_id: validated.clientId },
     })
 
-    // 303 so the browser turns the form POST into a GET on the client callback.
     return await issueCodeAndRedirect(
       request,
       validated,

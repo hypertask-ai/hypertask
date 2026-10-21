@@ -99,11 +99,6 @@ const deterministicUuid = (scope: string): string => {
   return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20)}`;
 };
 
-/**
- * Identifies the "team allowance is spent" inbox notice for one agent in one
- * allowance period, so the owner is told once rather than on every cron tick.
- * A UUID because decodeAgentMessage slices the marker at a fixed 36 characters.
- */
 export const heartbeatAllowanceNoticeId = (
   agentId: string,
   periodKey: string,
@@ -313,9 +308,6 @@ export const completeHeartbeatExecution = async (
 ): Promise<void> => {
   await updateExecution(executionId, (state) => {
     if (state.status === "completed") return null;
-    // The assistant ChatMessage is the authoritative completion record. A
-    // process can persist it and die before updating Redis, so recovery may
-    // legitimately promote failed/uncertain/reconciliation state to completed.
     return {
       ...state,
       status: "completed",

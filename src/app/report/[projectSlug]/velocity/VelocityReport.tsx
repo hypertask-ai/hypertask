@@ -437,8 +437,6 @@ const VelocityReport = ({
   });
 
   const content = (
-    // pt-24 on desktop clears the fixed BackButton (top 40, 40px tall); on
-    // mobile that button sits bottom-right instead, so the smaller pad applies.
     <main className="min-h-[100svh] w-full overflow-x-hidden bg-pageBackground px-4 pb-8 pt-8 text-content sm:px-8 sm:pt-24 lg:px-12">
       <div className="mx-auto flex w-full min-w-0 max-w-[1120px] flex-col gap-8">
         <header>

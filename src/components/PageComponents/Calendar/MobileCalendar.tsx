@@ -24,9 +24,6 @@ const WeekStrip = () => {
     useCalendarContext();
   const calendarSettings = useRecoilValue(calendarSettingsAtom);
   const [monthOpen, setMonthOpen] = useState(false);
-  // react-day-picker's defaultMonth only applies on mount, so with the expander
-  // open the picker kept showing its old month while day/week navigation moved
-  // the calendar on (HTPR-4761). Controlled month + follow currentDate.
   const [pickerMonth, setPickerMonth] = useState(currentDate);
   useEffect(() => setPickerMonth(currentDate), [currentDate]);
 
@@ -114,7 +111,6 @@ const WeekStrip = () => {
                     >
                       {day.getDate()}
                     </span>
-                    {/* Load dots: capped at three, so a busy day reads at a glance. */}
                     <span className="flex h-1 gap-[2px]">
                       {Array.from({ length: Math.min(load, 3) }, (_, i) => (
                         <span
@@ -143,7 +139,6 @@ const WeekStrip = () => {
         </div>
       )}
 
-      {/* Grab handle: pull down for the month grid. */}
       <button
         type="button"
         aria-label={monthOpen ? "Collapse month" : "Expand month"}
@@ -228,7 +223,6 @@ const Agenda = () => {
   );
 };
 
-/** Publishes the scrolled-to month as the shell top bar title. */
 const usePublishMonth = () => {
   const { currentDate } = useCalendarContext();
   const setTitle = useSetRecoilState(mobileTopBarTitleAtom);
@@ -241,10 +235,6 @@ const usePublishMonth = () => {
 const MobileCalendar = () => {
   usePublishMonth();
   return (
-    // Top-bar and dock spacing come from the shell wrapper, not from here. The
-    // mobile-calendar class is what globals.scss bounds so only the agenda
-    // scrolls and the week strip stays put. Board filtering is the header's
-    // checkbox sheet (calendarBoardsSidebarOpenAtom), same as desktop.
     <div className="mobile-calendar flex min-h-0 flex-col bg-containerBackground">
       <CalendarSplitsRow mobile />
       <WeekStrip />

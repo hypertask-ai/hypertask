@@ -41,9 +41,7 @@ const { ResizableMedia } = load("src/components/RTE/Extensions/resizableMedia/re
 });
 const { renderPageContent } = load("src/utils/controllers/pages/pageService.ts", {
   "@/lib/prisma": { default: {} },
-  "@/utils/controllers/tasks/assertTaskAccess": require("./task-route-loader.cjs").load(
-    "src/utils/controllers/tasks/assertTaskAccess.ts", { "@/lib/prisma": { default: {} } },
-  ),
+  "@/utils/controllers/projects/getAllIncludes": {},
   "@/utils/controllers/turbopuffer/turbopufferHelper": { convertToPlain: (html) => require("node-html-parser").parse(html).text },
   "@/utils/helperFunctions/markdownToHtml": {},
   "@/utils/helperFunctions/sanitizeRichHtml": jiti(path.join(root, "src/utils/helperFunctions/sanitizeRichHtml.ts")),

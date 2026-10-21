@@ -4,7 +4,7 @@ import React, { createContext, ReactNode, useContext } from 'react';
 
 interface TrashContextProps {
   selectedIndex: number;
-  taskRef: React.RefObject<any>; // Replace 'any' with the actual type of your taskRef
+  taskRef: React.RefObject<any>;
   handleMouseEnter: (index: number) => void;
   handleMouseLeave: () => void;
   handleMouseMove: () => void;
@@ -17,8 +17,8 @@ export const TrashContext = createContext<TrashContextProps | undefined>(undefin
 
 interface TrashContextProviderProps {
   children: ReactNode;
-  tasks: ITask[]; // Replace with your actual type
-  project: IProject; // Replace with your actual type
+  tasks: ITask[];
+  project: IProject;
 }
 
 export const TrashContextProvider: React.FC<TrashContextProviderProps> = ({ children, tasks, project }) => {

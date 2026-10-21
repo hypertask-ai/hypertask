@@ -24,13 +24,11 @@ const useHandleMouseGlobal = ({
     const handleMouseLeave = () => {
         currentHoveredDiv.current = null;
         setHoveredIndex?.(null);
-        // Clear any existing debounceTimeout
         if (debounceTimeout.current) {
             clearTimeout(debounceTimeout.current);
             debounceTimeout.current = null;
         }
 
-        // Start a new debounceTimeout to remove focus after a short delay (e.g., 100ms)
         debounceTimeout.current = setTimeout(() => {
             if (currentHoveredDiv.current === null && elRef.current) {
                 (elRef.current as HTMLDivElement)?.blur();
@@ -39,7 +37,6 @@ const useHandleMouseGlobal = ({
     };
 
     const handleMouseMove = () => {
-        // Clear any existing debounceTimeout
         if (debounceTimeout.current) {
             if (!preserveSelectedIndexOnHover && currentHoveredDiv.current !== null) {
                 setSelectedIndex(currentHoveredDiv.current)

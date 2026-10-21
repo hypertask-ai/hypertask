@@ -51,10 +51,8 @@ export function createUpdateTaskTool(context: ToolContext) {
           seenTaskIds.add(taskId);
           return true;
         });
-        // HTPR-4218: wide or destructive writes get shown to the user first.
         const destructive =
           input.status === "Deleted" || input.status === "Archive";
-        // HTPR-5536: a tag change is reversible, so it never confirms.
         const needsConfirmation = updateTasksNeedConfirmation({
           targetCount: targets.length,
           update: input,

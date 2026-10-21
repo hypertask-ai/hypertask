@@ -36,14 +36,6 @@ declare global {
   }
 }
 
-/**
- * Build the tiny parser-time bootstrap used on a full authenticated board load.
- *
- * The API routes still authenticate every request from the HTTP-only session.
- * The script only moves request start ahead of the large client hydration graph.
- * Every promise settles to a result object so an early failure cannot surface as
- * an unhandled rejection before React Query attaches a consumer.
- */
 export const buildEarlyBoardBootstrapScript = ({
   accountId,
   projectId,
@@ -132,10 +124,6 @@ export const buildEarlyBoardBootstrapScript = ({
   })();`;
 };
 
-/**
- * Consume a matching parser-time request once. Subsequent refetches must use the
- * normal network path rather than replaying the initial response indefinitely.
- */
 export const consumeEarlyBoardBootstrap = async <T>(
   requestName: EarlyBoardBootstrapRequest,
   accountId: number,
@@ -164,11 +152,6 @@ export const consumeEarlyBoardBootstrap = async <T>(
   return result.ok ? (result.data as T) : undefined;
 };
 
-/**
- * A fresh persisted React Query snapshot can satisfy the initial board query
- * without invoking its query function. Drop the now-unused parser promises so
- * a later realtime or focus refetch cannot mistake them for fresh network data.
- */
 export const discardEarlyBoardBootstrap = (
   accountId: number,
   projectId: number,

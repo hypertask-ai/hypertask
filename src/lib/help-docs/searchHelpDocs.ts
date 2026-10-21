@@ -81,7 +81,6 @@ export async function searchHelpDocs(
               }
             }
           } catch {
-            // Fall back to the excerpt already returned by search.
           }
         }
 

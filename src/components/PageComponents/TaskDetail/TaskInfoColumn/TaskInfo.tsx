@@ -48,7 +48,7 @@ import {
 import DueDateLabel from "@/components/Labels/DueDateLabel";
 import { EstimateConstants } from "@/lib/constants/constants";
 import taskDetailConfig from "@/lib/configs/taskDetail.config";
-import TaskTime from "./TaskTime";
+import TaskTime, { useTimerNow } from "./TaskTime";
 import { daysSince, stalenessLevel } from "@/lib/staleness";
 import { cn } from "@/utils/undoActions/helperFuncs";
 import { showCommandsAtom } from "@/store";
@@ -149,7 +149,7 @@ const TaskInfo = (props: ITaskInfoContainer) => {
     updateWaitingOn,
     updateCycle,
   } = props;
-  const { cachedLayout } = useTaskContext();
+  const { cachedLayout, serverTaskSeed } = useTaskContext();
   const queryClient = useQueryClient();
   const [showCyclePicker, setShowCyclePicker] = useState(false);
   const [, setShowCommands] = useRecoilState(showCommandsAtom);
@@ -170,13 +170,13 @@ const TaskInfo = (props: ITaskInfoContainer) => {
     ];
     return users.find((user) => user.id === currentTask.waitingOnUserId);
   }, [currentTask.waitingOnUserId, membersAndOwner]);
-  const [waitingOnNow] = useState(() => Date.now());
+  const now = useTimerNow(true, serverTaskSeed?.updatedAt, 60_000);
   const waitingOnAge = formatWaitingOnAge(
     currentTask.waitingOnSetAt,
-    waitingOnNow
+    now
   );
   const waitingOnIsOverdue = currentTask.waitingOnSetAt
-    ? waitingOnNow - new Date(currentTask.waitingOnSetAt).getTime() >
+    ? now - new Date(currentTask.waitingOnSetAt).getTime() >
       WAITING_ON_OVERDUE_MS
     : false;
   const [pullRequests, setPullRequests] = useState<ITaskPullRequest[]>(
@@ -206,12 +206,11 @@ const TaskInfo = (props: ITaskInfoContainer) => {
     }
   };
   const inColumnDays = daysSince(
-    currentTask.sectionChangedAt ?? currentTask.createdAt
+    currentTask.sectionChangedAt ?? currentTask.createdAt,
+    now
   );
-  const lastCommentDays = daysSince(currentTask.lastCommentAt);
-  const onBoardDays = daysSince(currentTask.createdAt);
-  // Staleness collapses to one line, shown only when actually stale. Comment age
-  // falls back to board age when the task was never commented (matches taskStaleness).
+  const lastCommentDays = daysSince(currentTask.lastCommentAt, now);
+  const onBoardDays = daysSince(currentTask.createdAt, now);
   const commentDays = lastCommentDays ?? onBoardDays;
   const staleLevel = stalenessLevel(
     Math.max(inColumnDays ?? 0, commentDays ?? 0),
@@ -222,13 +221,6 @@ const TaskInfo = (props: ITaskInfoContainer) => {
   );
   return (
     <TaskInfoColumnContainer
-      // HTPR-3753: h-full made this sticky column as tall as the whole ticket.
-      // A sticky element taller than the viewport stops sticking once its
-      // bottom edge scrolls past, so the properties drifted up on long tasks,
-      // and its height padded the row with dead space you had to scroll
-      // through before reaching the last comment (HTPR-3752). Size it to its
-      // content, capped at the viewport, and scroll inside when it overflows.
-      // Short property lists must not stretch the rail to the screen height.
       heightVariant="fit"
       style={
         _mbl
@@ -242,7 +234,6 @@ const TaskInfo = (props: ITaskInfoContainer) => {
             }
       }
     >
-      {/* ====================================== ASSIGNEES ================================ */}
 
       <AssigneesContainer
         showAssigneeModal={showAssignModal}
@@ -294,7 +285,6 @@ const TaskInfo = (props: ITaskInfoContainer) => {
         </TaskInfoRow>
       )}
 
-      {/* ===================================== TASK ID ====================================== */}
       {currentTask?.ticketNumber && (
         <TaskInfoRow>
           <>
@@ -335,7 +325,6 @@ const TaskInfo = (props: ITaskInfoContainer) => {
         </TaskInfoRow>
       )}
 
-      {/* ====================================== TASK STATUS ================================ */}
       <TaskInfoRow>
         {(() => {
           const i = sectionsForProjectTQ?.findIndex(
@@ -425,7 +414,6 @@ const TaskInfo = (props: ITaskInfoContainer) => {
         </TaskInfoRow>
       )}
 
-      {/* ====================================== TASK DUE DATE ================================ */}
       <TaskInfoRow>
         <LocalRightSideInfo
           onClick={toggleDueDate}
@@ -466,7 +454,6 @@ const TaskInfo = (props: ITaskInfoContainer) => {
         </TaskInfoValue>
       </TaskInfoRow>
 
-      {/* ====================================== TASK START DATE (HTPR-4884) ================================ */}
       {currentTask?.startDate && (
         <TaskInfoRow>
           <LocalRightSideInfo
@@ -500,7 +487,6 @@ const TaskInfo = (props: ITaskInfoContainer) => {
         </TaskInfoRow>
       )}
 
-      {/* ====================================== TASK REPEAT (HTPR-4885) ================================ */}
       {currentTask?.recurrence && (
         <TaskInfoRow>
           <LocalRightSideInfo
@@ -535,7 +521,6 @@ const TaskInfo = (props: ITaskInfoContainer) => {
         />
       )}
 
-      {/* ====================================== TASK PROJECT ================================ */}
       <TaskInfoRow>
         <LocalRightSideInfo
           onClick={() => toggleMoveToBoardModal()}
@@ -550,7 +535,6 @@ const TaskInfo = (props: ITaskInfoContainer) => {
 
         <TaskInfoValue className="w-full cursor-pointer">
           <span className="inline-flex max-w-full flex-wrap items-center gap-1.5">
-            {/* Project title */}
             <span
               onClick={() => toggleMoveToBoardModal()}
               className="relative group inline-flex max-w-full min-w-0"
@@ -564,7 +548,7 @@ const TaskInfo = (props: ITaskInfoContainer) => {
               />
               <ClickableSpan title={_parsedTask?.project?.title ?? ""} />
             </span>
-            {/* Space between lines if it wraps */} {/* Icon */}
+            {} {}
             <span
               onClick={() => goToProjectShortcut(_parsedTask.projectId, true)}
               className="relative group inline-block align-text-bottom"
@@ -585,7 +569,6 @@ const TaskInfo = (props: ITaskInfoContainer) => {
         </TaskInfoValue>
       </TaskInfoRow>
 
-      {/* ====================================== TASK Priority ================================ */}
       <TaskInfoRow>
         <LocalRightSideInfo
           onClick={togglePriorityModal}
@@ -622,7 +605,6 @@ const TaskInfo = (props: ITaskInfoContainer) => {
         </TaskInfoValue>
       </TaskInfoRow>
 
-      {/* ====================================== TASK Estimate ================================ */}
       <TaskInfoRow>
         <LocalRightSideInfo
           onClick={toggleEstimateModal}
@@ -659,7 +641,6 @@ const TaskInfo = (props: ITaskInfoContainer) => {
         </TaskInfoValue>
       </TaskInfoRow>
 
-      {/* ====================================== TASK Labels ================================ */}
       <TaskInfoRow alignTop>
         <LocalRightSideInfo
           onClick={toggleLabelModal}
@@ -708,10 +689,8 @@ const TaskInfo = (props: ITaskInfoContainer) => {
       </TaskInfoRow>
 
 
-      {/* ====================================== Custom Fields ================================ */}
       <CustomFieldRows task={currentTask} />
 
-      {/* ====================================== Followers ================================ */}
       {followers.length > 0 && (
         <TaskInfoRow alignTop>
           <TaskInfoLabel>Followers</TaskInfoLabel>
@@ -743,7 +722,6 @@ const TaskInfo = (props: ITaskInfoContainer) => {
         </TaskInfoRow>
       )}
 
-      {/* ====================================== Staleness (only when stale) ================================ */}
       {staleLevel !== "none" && (
         <div
           title={`${inColumnDays ?? 0}d in column · ${
@@ -768,15 +746,12 @@ const TaskInfo = (props: ITaskInfoContainer) => {
         </div>
       )}
 
-      {/* ====================================== TASK Relations ================================ */}
       {!cachedLayout && <TaskRelations currentTask={currentTask} removeRelationHandler={removeRelationHandler} />}
       {cachedLayout && !_mbl && <TaskInfoLateDetails currentTask={currentTask} removeRelationHandler={removeRelationHandler} />}
     </TaskInfoColumnContainer>
   );
 };
 
-// Uncached PRs and relations grow below the painted properties; on mobile they
-// belong below the thread, not above the already-visible description.
 export function TaskInfoLateDetails({ currentTask, removeRelationHandler }: Pick<ITaskInfoContainer, "currentTask" | "removeRelationHandler">) {
   const mobile = useContext(MobileViewContext);
   if (!currentTask.pullRequests?.length && !currentTask.relatedFromTasks?.length && !currentTask.relatedToTasks?.length) return null;
@@ -907,7 +882,6 @@ function TaskRelations({ currentTask, removeRelationHandler }: Pick<ITaskInfoCon
   );
 }
 
-// ── Custom field value editor (inline, per-field) ─────────────────────────────
 
 function CustomFieldRows({
   task,
@@ -915,8 +889,6 @@ function CustomFieldRows({
   task: ITaskInfoContainer["currentTask"];
 }) {
   const customFields = task.project?.customFields ?? [];
-  // Collapsed/expanded is per ticket-view state only — reopening the same
-  // ticket (or a different one) starts collapsed again, no persistence.
   const [expanded, setExpanded] = useState(false);
   if (customFields.length === 0) return null;
 
@@ -975,7 +947,6 @@ function CustomFieldRow({
   existing: ICustomFieldValue | null;
   taskId: number;
 }) {
-  // Local state for optimistic display — persists on reload via SSR
   const [savedValue, setSavedValue] = useState(existing?.value ?? "");
   const [editing, setEditing] = useState(false);
   const [inputValue, setInputValue] = useState(existing?.value ?? "");
@@ -983,8 +954,8 @@ function CustomFieldRow({
 
   async function save(val: string) {
     setEditing(false);
-    if (val === savedValue) return; // no change
-    setSavedValue(val); // optimistic update
+    if (val === savedValue) return;
+    setSavedValue(val);
     try {
       await axios.post("/api/customFields/value", {
         fieldId: field.id,
@@ -993,7 +964,7 @@ function CustomFieldRow({
       });
     } catch (err) {
       console.error("CustomField upsert error:", err);
-      setSavedValue(savedValue); // rollback
+      setSavedValue(savedValue);
       toast.error(`Unable to save ${field.name}`);
     }
   }
@@ -1134,7 +1105,6 @@ function CustomFieldInput({
     );
   }
 
-  // Text (default)
   return (
     <input
       ref={inputRef as React.MutableRefObject<HTMLInputElement>}

@@ -17,29 +17,22 @@ import {
 } from "@/lib/aiModelOptions";
 
 export const multipleKeys = {
-  65: { pressed: false }, // [a]
-  67: { pressed: false }, // [c]
-  68: { pressed: false }, // [d]
-  69: { pressed: false }, // [e]
-  71: { pressed: false }, // [g]
-  72: { pressed: false }, // [h]
-  73: { pressed: false }, // [i]
-  80: { pressed: false }, // [p]
-  82: { pressed: false }, // [r]
-  83: { pressed: false }, // [s]
-  85: { pressed: false }, // [u]
-  16: { pressed: false }, // [shift]
-  51: { pressed: false }, // [3]
-  84: { pressed: false }, // [t]
-  186: { pressed: false }, // [;]
+  65: { pressed: false },
+  67: { pressed: false },
+  68: { pressed: false },
+  69: { pressed: false },
+  71: { pressed: false },
+  72: { pressed: false },
+  73: { pressed: false },
+  80: { pressed: false },
+  82: { pressed: false },
+  83: { pressed: false },
+  85: { pressed: false },
+  16: { pressed: false },
+  51: { pressed: false },
+  84: { pressed: false },
+  186: { pressed: false },
 };
-//   if (
-//     document?.activeElement?.role==="dialog"|| document.querySelector('.modal')||
-//     document?.activeElement?.id==="modalButtons"||
-//     document.activeElement?.tagName === "INPUT" ||
-//     document.activeElement?.id === "htc"||
-//     classNamesToReturnFrom.includes(document?.activeElement?.className)  ||
-//     document.activeElement?.id === "boardManager" ) return;
 export const gThenKeyDelay = 1000;
 export const REACT_QUERY_KEYS = {
   uploadingComments: ["Uploading_Comments"],
@@ -52,10 +45,6 @@ export const DescriptionTips = (isApple: boolean) => {
   const cmdControl = isApple ? "CMD" : "CTRL";
 
   return [
-    // "Tip: Press / during editing to activate the text options and Ai functions",
-    // "Tip: Press CTRL+ENTER to save your text in this window",
-    // "Tip: Use @ to mention tasks and other people",
-    // "Tip: Press ENTER to activate edit mode when focus is active",
     `${cmdControl}+J for Ai`,
   ];
 };
@@ -66,15 +55,10 @@ export const CommentTips = (isApple: boolean, createComment: boolean) => {
   return createComment
     ? [`Tip: Hit ${cmdControl}+J for AI`]
     : [
-        // "Hit CTRL+M to jump to the comment field",
-        // "Hit CTRL+ENTER to save your text",
-        // "Use @ to mention tasks and other people",
-        // "Press / during editing to activate the text options and Ai functions",
         `Tip: Hit CTRL+M to comment`,
       ];
 };
 
-// ==================== routes
 export const allTasksRoute = "/all-tasks";
 export const myTasksRoute = "/my-tasks";
 export const inboxRoute = "/inbox";
@@ -89,13 +73,11 @@ export const snippetsRoute = "/snippets";
 export interface IPrioritiesConstants {
   priority_index: number;
   Priority_Value: string;
-  // logo: any;
   colorCode: string;
 }
 export interface IEstimateConstants {
   estimate_index: number;
   estimate_value: string;
-  // logo: any;
   estimate_full_value: string;
   colorCode?: string;
 }
@@ -105,32 +87,27 @@ export const PriorityConstants: IPrioritiesConstants[] = [
   {
     priority_index: 0,
     Priority_Value: "No Priority",
-    // logo:TbAntennaBars1,
     colorCode: "transparent",
   },
   {
     priority_index: 1,
     Priority_Value: "Urgent",
 
-    // logo:BsExclamationSquareFill,
     colorCode: UrgentPriorityColor,
   },
   {
     priority_index: 2,
     Priority_Value: "High",
-    // logo:MdOutlineSignalCellularAlt,
     colorCode: "#DE9D6E",
   },
   {
     priority_index: 3,
     Priority_Value: "Medium",
-    // logo:MdOutlineSignalCellularAlt2Bar,
     colorCode: "#C2CFA5",
   },
   {
     priority_index: 4,
     Priority_Value: "Low",
-    // logo:MdOutlineSignalCellularAlt1Bar,
     colorCode: "#95999E",
   },
 ];
@@ -140,21 +117,12 @@ export const EstimateConstants: IEstimateConstants[] = [
     estimate_index: 0,
     estimate_value: "No size",
     estimate_full_value: "-",
-    // logo:TbAntennaBars1,
     colorCode: "transparent",
   },
-  // {
-  //     estimate_index:1,
-  //     estimate_value:"-",
-  //     // logo:BsExclamationSquareFill,
-  //     estimate_full_value:"No Size",
 
-  //     colorCode:"#F88F9C"
-  // },
   {
     estimate_index: 2,
     estimate_value: "XS",
-    // logo:MdOutlineSignalCellularAlt,
     estimate_full_value: "Extra small",
     colorCode: "#DE9D6E",
   },
@@ -162,33 +130,28 @@ export const EstimateConstants: IEstimateConstants[] = [
     estimate_index: 3,
     estimate_value: "S",
     estimate_full_value: "Small",
-    // logo:MdOutlineSignalCellularAlt2Bar,
     colorCode: "#C2CFA5",
   },
   {
     estimate_index: 4,
     estimate_value: "M",
-    // logo:MdOutlineSignalCellularAlt1Bar,
     colorCode: "#95999E",
     estimate_full_value: "Medium",
   },
   {
     estimate_index: 5,
     estimate_value: "L",
-    // logo:MdOutlineSignalCellularAlt1Bar,
     colorCode: "#95999E",
     estimate_full_value: "Large",
   },
   {
     estimate_index: 6,
     estimate_value: "XL",
-    // logo:MdOutlineSignalCellularAlt1Bar,
     colorCode: "#95999E",
     estimate_full_value: "Extra large",
   },
 ];
 
-// ========================= QUERY KEY PREFIX
 export const CommentsTQPrefixKey = "comments-for-taskId:";
 export const CommentStackStatusKey = "comment-stack-for-user";
 export const ScrollSettingKey = "scroll-setting-for-user";
@@ -201,12 +164,10 @@ export const aiOptions: TAiModal[] = aiModelOptions;
 export const defaultAiOption = defaultAiModelOption;
 export type { TModelProvider };
 
-// ========================= Time Constants for duedate/reminder/calender
 export const defaultHour = 9;
 export const defaultMinutes = 0;
 export const defaultSeconds = 0;
 
-// ========================= Create Checkout Params for trial/upgrade
 
 export const createCheckoutParam = (
   teamInfo: IPricingSearchParams,
@@ -318,10 +279,9 @@ export const getCommentOptions = (
 ): ICommentOption[] => {
   const cmdControl = isApple ? "CMD" : "CTRL";
 
-  // Allow delete if user is creator OR if comment is from HyperAI
   const canDelete =
     isCurrentUserCreator || creatorId === generalConfig.hyperAiId;
-  const canEdit = isCurrentUserCreator; // Only original creator can edit
+  const canEdit = isCurrentUserCreator;
 
   return [
     {

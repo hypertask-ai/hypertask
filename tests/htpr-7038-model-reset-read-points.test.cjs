@@ -73,7 +73,7 @@ test("chat and every editor/task-writer saved-model surface await reset before r
         } },
         "@/lib/systemModelLadder": { isAiFeatureEnabled: () => true, resolveUserFacingModelOption: (_surface, _settings, id) => { assert.equal(id, "team-choice"); events.push("select"); throw selected; } },
         "@/lib/aiModelOptions": { preferredAiModelOption: model, defaultAiModelOption: model, getDefaultAiModelOptionForPlan: () => model },
-        "@/app/api/ai/_lib/planGate": { storePlanIdForProject: async () => "Pro", lunaFreePlanEnabled: async () => false, haiku55ModelEnabled: async () => false },
+        "@/app/api/ai/_lib/planGate": { storePlanIdForProject: async () => "Pro", haiku55ModelEnabled: async () => false },
         "@/app/api/ai/_lib/chatTeamContext": {
           resolveChatTeamContext: async () => ({ teamId: "team", projectId: 1, aiProviderSettings: {} }),
           buildChatProviderContext: () => ({ planGateProjectId: 1, keyLookupContext: {} }),

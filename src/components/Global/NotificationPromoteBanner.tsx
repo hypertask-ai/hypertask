@@ -22,9 +22,6 @@ import {
   notifPromoteBannerVisibleAtom,
 } from "@/store";
 
-// Parked: the persistent bottom bar overlaid the AI chat + comment composers on
-// every surface. Kept mounted so the trigger/enable logic stays intact; flip
-// this to re-enable once a non-overlay presentation is chosen (HTPR-4518).
 const BANNER_ENABLED = false;
 
 const STORAGE_KEY = "ht_notif_promote_banner";
@@ -70,9 +67,6 @@ const readSessionDismissed = () => {
 const NotificationPromoteBanner = () => {
   const pathname = usePathname();
   const mbl = useContext(MobileViewContext);
-  // When the left app-shell rail is on, start the bar after it (48px) so it
-  // never covers the rail's bottom gear/settings — same rule the quick-tips
-  // strip uses.
   const appShellRailOn = useRecoilValue(appShellRailAtom) && !mbl;
   const [currentUser, setCurrentUser] = useRecoilState(currentUserAtom);
   const [fcmData, setFcmData] = useRecoilState(fcmAtom);
@@ -95,8 +89,6 @@ const NotificationPromoteBanner = () => {
     setMounted(true);
   }, []);
 
-  // Push is only a live channel when the browser permission is granted AND the
-  // user hasn't switched the in-app device toggle off (statusToggleFromDB).
   const pushOff =
     fcmData.permissionStatus !== "granted" ||
     fcmData.statusToggleFromDB !== "true";
@@ -107,11 +99,7 @@ const NotificationPromoteBanner = () => {
     pathname?.startsWith("/onboarding") ||
     pathname?.startsWith("/login") ||
     pathname?.startsWith("/trial-plan-confirmation") ||
-    // Off on the task detail page: the bar spans the comment box and the AI
-    // chat composer at the bottom. Board views only.
     pathname?.startsWith("/detail") ||
-    // Off on mobile entirely: it collided with the mobile bottom bar. Desktop
-    // only until there's a mobile-native concept.
     mbl;
   const snoozed =
     preference.stage === 2 &&
@@ -130,8 +118,6 @@ const NotificationPromoteBanner = () => {
     return () => setBannerVisible(false);
   }, [setBannerVisible, shouldRender]);
 
-  // Publish the banner's height as a CSS var so the bottom chrome (gear cluster,
-  // quick tips) can sit ABOVE it instead of being covered.
   useEffect(() => {
     const root = document.documentElement;
     if (!shouldRender) {
@@ -158,7 +144,6 @@ const NotificationPromoteBanner = () => {
       window.localStorage.removeItem(STORAGE_KEY);
       window.sessionStorage.removeItem(SESSION_DISMISS_KEY);
     } catch {
-      // Storage can be unavailable in restricted browser contexts.
     }
     setPreference(DEFAULT_PREFERENCE);
     setDismissedThisSession(false);
@@ -169,7 +154,6 @@ const NotificationPromoteBanner = () => {
       window.localStorage.setItem(STORAGE_KEY, JSON.stringify(nextPreference));
       window.sessionStorage.setItem(SESSION_DISMISS_KEY, "true");
     } catch {
-      // Still dismiss the banner for the current component lifetime.
     }
     setPreference(nextPreference);
     setDismissedThisSession(true);
@@ -177,7 +161,6 @@ const NotificationPromoteBanner = () => {
 
   const dismiss = () => {
     if (preference.stage === 1) {
-      // A null timestamp promotes stage 2 without applying its seven-day snooze.
       savePreference({ stage: 2, dismissedAt: null });
       return;
     }
@@ -188,9 +171,6 @@ const NotificationPromoteBanner = () => {
   const enablePush = async () => {
     setPendingAction("push");
     try {
-      // retrieveToken only re-syncs the toggle to its current DB value, so it
-      // never turns push back on for a user whose permission is already granted
-      // but whose in-app device toggle is off. Get a token, then flip it on.
       let token = fcmData.fcmToken;
       if (!token) {
         token = (await retrieveToken()) || undefined;
@@ -217,8 +197,6 @@ const NotificationPromoteBanner = () => {
         notification: true,
       });
       if (response.status === 200) {
-        // Guarantee the email flag is on locally so the banner recomputes as
-        // reachable, even if the response body omits UserSetting.
         const nextUser = {
           ...response.data.res,
           UserSetting: {

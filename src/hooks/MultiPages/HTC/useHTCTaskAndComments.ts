@@ -4,7 +4,6 @@ import { ICurrentInViewObject } from "@/store";
 import { usePathname } from "next/navigation";
 import UpdateKanban from "../useUpdateTaskInBoards";
 import toast from "react-hot-toast";
-import { undoToastSettings } from "@/components/undoToast";
 import axios from "axios";
 import { useQueryClient } from "@tanstack/react-query";
 import { IProject, ITask } from "@/models/model";
@@ -21,6 +20,7 @@ import { useRemoveParentTask } from "../Tasks";
 import { useProjectQuery } from "@/hooks/General/useProjectQuery";
 import { useFlag } from "@/hooks/useFlag";
 import { HTPR_7185_DELETE_TASK_UNDO_FLAG } from "@/lib/flags/definitions/htpr-7185-delete-task-undo";
+import { HTPR_7473_DELETE_CANCEL_CLOSES_FLAG } from "@/lib/flags/definitions/htpr-7473-delete-cancel-closes";
 
 interface IProps {
   callbackHandler?: (payload: any, mode: string) => void | Promise<void>;
@@ -46,6 +46,7 @@ const useHTCTaskAndComments = ({
   toggleCreateTaskGlobally,
 }: IProps) => {
   const deleteTaskUndo = useFlag(HTPR_7185_DELETE_TASK_UNDO_FLAG);
+  const deleteCancelCloses = useFlag(HTPR_7473_DELETE_CANCEL_CLOSES_FLAG);
   const pathname = usePathname();
   const queryClient = useQueryClient();
   const {
@@ -64,22 +65,18 @@ const useHTCTaskAndComments = ({
   const { removeParentTask } = useRemoveParentTask();
   const { goToProjectShortcut } = useProjectQuery();
 
-  //----------------- TASK FUNCTIONS
 
-  // --------------------------- Speech to text handler
   const commentAudioSpeechToText = () => {
     if (callbackHandler) callbackHandler(undefined, "SpeechToText");
     boardCloseHandler();
   };
 
-  // --------------------------- Follow Task
   const followTaskHandler = () => {
     if (callbackHandler) callbackHandler(undefined, "FollowTask");
     else _activeItem && addFollowerKanban(_activeItem);
     boardCloseHandler();
   };
 
-  // --------------------------- Unfollow task
   const unFollowTaskHandler = () => {
     if (callbackHandler) callbackHandler(undefined, "UnfollowTask");
     else _activeItem && removeFollowerKanban(_activeItem);
@@ -249,7 +246,7 @@ const useHTCTaskAndComments = ({
           inViewObject.taskId,
           "Archive"
         );
-        if (!undoToastSettings.single || !hasUndo) toast("Task archived!");
+        if (!hasUndo) toast("Task archived!");
         navigate("Refresh");
         boardCloseHandler();
       }
@@ -258,7 +255,6 @@ const useHTCTaskAndComments = ({
 
   const removeSubtaskHandler = () => {
     if (callbackHandler) callbackHandler(undefined, "RemoveSubtask");
-    // boardCloseHandler();
   };
 
   const removeParentHandler = () => {
@@ -303,41 +299,21 @@ const useHTCTaskAndComments = ({
       boardCloseHandler();
     }
   };
-  /**
-   *@todo need to add remove handler for anywhere other than task page.
-   *
-   */
   const removeNotificationHandler = async () => {
     if (callbackHandler) callbackHandler(undefined, "ArchiveTaskNotification");
     else {
-      // if (!inViewObject.taskId) return;
-      // task.notifications && undoInboxArchive(task.notifications[0]);
-      // const taskToReturn = {
-      //   notifications: [],
-      //   _count: {
-      //     notifications: 0,
-      //     comments: 0,
-      //   },
-      // };
-      // updateTaskInCache(
-      //   taskToReturn,
-      //   inViewObject.taskId,
-      //   inViewObject.taskProjectId,
-      //   inViewObject.sectionId,
-      //   _currentProject
-      // );
     }
     boardCloseHandler();
   };
 
   const confirmDelete = async (response: boolean) => {
+    if (deleteCancelCloses && !response) return boardCloseHandler();
     if (
       response &&
       inViewObject.taskId &&
       _currentProject &&
       inViewObject.sectionId
     ) {
-      //   deleteItem(inViewObject.taskId, inViewObject.sectionId)
       await removeFromListWithStatus(
         inViewObject.sectionId,
         _currentProject.id,
@@ -347,12 +323,10 @@ const useHTCTaskAndComments = ({
     }
     boardCloseHandler();
     if (pathname?.startsWith("/detail") && callbackHandler) {
-      // Keep the registered Undo alive even when the task was opened by deep link.
       if (deleteTaskUndo && response && _currentProject && inViewObject.sectionId) {
         navigate("Replace", `/project?id=${_currentProject.id}`);
       } else navigate("Back");
     }
-    // goToProjectShortcut(_currentProject?.id!);
   };
 
   const setDueDateCallback = (date: Date | undefined) => {
@@ -374,7 +348,6 @@ const useHTCTaskAndComments = ({
         if (task)
           toggleCreateTaskGlobally(undefined, undefined, {
             ...task,
-            // the `description` scalar is always "" — real body lives on description_
             description: task.description_?.content || task.description,
             pickBoard,
           });
@@ -385,7 +358,6 @@ const useHTCTaskAndComments = ({
       });
   };
 
-  //----------------- COMMENT FUNCTIONS
   const commentFunctionHandler = (
     type:
       | "EditComment"

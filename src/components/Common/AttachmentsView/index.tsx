@@ -10,17 +10,11 @@ interface IProps {
   active: boolean;
   setCarousalItems?: React.Dispatch<React.SetStateAction<TCarousalItems>>;
   compact?: boolean;
-  // `compact` is about tile density, not side. The AI chat bubble is the only
-  // surface that wants its tiles on the right; mobile comments read left like
-  // their own text does, and like desktop comments already do (HTPR-5099).
   alignEnd?: boolean;
 }
 
 const AttachmentView = (props: IProps) => {
   const compact = Boolean(props.compact);
-  // HTPR-6254: a HEIC that no browser can decode still 404s nothing and still
-  // downloads, but its <img> paints a broken icon. Once one has failed, fall
-  // back to the paperclip tile for the rest of the session.
   const [unrenderable, setUnrenderable] = useState<Set<string>>(new Set());
   const markUnrenderable = (source: string) =>
     setUnrenderable((previous) =>
@@ -54,12 +48,6 @@ const AttachmentView = (props: IProps) => {
           }`}
         >
           {attachments?.map((attachment, index) => {
-            // HTPR-6264: a HEIC is shown through the JPEG copy stored beside
-            // it. `displaySrc` is a claim rather than a fact - a photo
-            // uploaded before this shipped, or one whose conversion failed, has
-            // no copy and 404s - so the tile still keeps the HTPR-6254
-            // paperclip fallback and drops to it on the image's onError, keyed
-            // by the same fileSource either way.
             const displaySrc = attachmentDisplaySrc(
               attachment?.fileSource,
               attachment?.fileType,

@@ -1,8 +1,3 @@
-/**
- * Shared list/search query contract for MCP tools and the REST routes
- * that back them (HTPR-6530). Same names everywhere: query, filter, sort,
- * fields, limit, cursor.
- */
 
 export const LIST_FILTER_KEYS = [
   'section',
@@ -66,7 +61,6 @@ export class ListQueryParseError extends Error {
   }
 }
 
-/** When the client asked for a projection and no limit, keep the page small enough for a 2 KB payload. */
 export const FIELDS_DEFAULT_LIMIT = 20
 
 export function normalizeTaskStatus(value?: string | null): TaskStatusValue | null {
@@ -76,6 +70,15 @@ export function normalizeTaskStatus(value?: string | null): TaskStatusValue | nu
   if (normalized === 'archive' || normalized === 'archived') return 'Archive'
   if (normalized === 'deleted' || normalized === 'delete') return 'Deleted'
   return null
+}
+
+export function parseTaskStatusParam<T extends TaskStatusValue>(
+  raw: string | null,
+  allowed: readonly T[],
+): T | 'Normal' | null {
+  if (!raw) return 'Normal'
+  const status = normalizeTaskStatus(raw)
+  return allowed.find((value) => value === status) ?? null
 }
 
 export function resolveListLimit(listQuery: ParsedListQuery, fallback: number, max = 100): number {
@@ -311,7 +314,6 @@ export function hasPrWhere(hasPr?: string | null): Record<string, unknown> | nul
   if (value === 'false' || value === 'no' || value === 'none') {
     return { pullRequests: { none: {} } }
   }
-  // failing is CI only. red / checks_red match the board badge: failing or closed.
   if (value === 'failing') {
     return { pullRequests: { some: { checkState: 'failing' } } }
   }
@@ -350,7 +352,6 @@ function pickPath(row: Record<string, unknown>, field: string): unknown {
   return row[field]
 }
 
-/** Keep a projected list under the 2 KB acceptance budget: rows plus paging only. */
 export function projectedListEnvelope<T>(
   items: T[],
   extras: { total?: number; limit?: number; nextCursor?: string | null },

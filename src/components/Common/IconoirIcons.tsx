@@ -1,6 +1,3 @@
-// Iconoir glyphs (viewBox 0 0 24 24, stroke-based). Paths copied verbatim from Iconoir's
-// SVG source (i-ic-* symbol defs), attrs converted to camelCase JSX props.
-// See HTPR-4931.
 
 interface IconoirIconProps {
   size?: number;

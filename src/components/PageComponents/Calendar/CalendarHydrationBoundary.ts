@@ -4,8 +4,10 @@ import { createElement, ReactNode, useEffect, useState } from "react";
 
 export default function CalendarHydrationBoundary({
   children,
+  fallback,
 }: {
   children: ReactNode;
+  fallback?: ReactNode;
 }) {
   const [hasMounted, setHasMounted] = useState(false);
 
@@ -13,5 +15,5 @@ export default function CalendarHydrationBoundary({
     setHasMounted(true);
   }, []);
 
-  return hasMounted ? children : createElement("div", null, "Loading...");
+  return hasMounted ? children : fallback ?? createElement("div", null, "Loading...");
 }

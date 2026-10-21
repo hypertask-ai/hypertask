@@ -128,7 +128,7 @@ if [ "$DRY_RUN" = "yes" ]; then
 fi
 
 [ -f "$STATE_FILE" ] \
-  || die "There is no reusable auth state at $STATE_FILE, so the shot would be of a logged-out page." "Follow the login recipe in ~/projects/hypertasks/AGENTS.md 'Repository Workflow' and openwiki/auth.md to write that file, then re-run."
+  || die "There is no reusable auth state at $STATE_FILE, so the shot would be of a logged-out page." "Follow the login recipe in .claude/skills/verify-qa/SKILL.md 'Logins' to write that file, then re-run."
 
 mkdir -p "$OUT_DIR" \
   || die "Could not create the output directory $OUT_DIR." "Pick a path you can write to, for example under \$HOME, and re-run."
@@ -145,7 +145,7 @@ agent-browser --session "$SESSION" screenshot "$OUT" >/dev/null \
 LANDED="$(agent-browser --session "$SESSION" get url 2>/dev/null || true)"
 case "$LANDED" in
   *login*|*signin*|*sign-in*)
-    die "The browser landed on a login page ($LANDED), so the auth state at $STATE_FILE is stale and the shot is not evidence." "Refresh that state file with the login recipe in openwiki/auth.md, then re-run." ;;
+    die "The browser landed on a login page ($LANDED), so the auth state at $STATE_FILE is stale and the shot is not evidence." "Refresh that state file with the login recipe in .claude/skills/verify-qa/SKILL.md 'Logins', then re-run." ;;
 esac
 
 # A redirect away from the requested path means the shot is of some other

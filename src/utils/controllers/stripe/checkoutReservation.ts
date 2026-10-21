@@ -104,8 +104,6 @@ function parseAttempt(raw: string | null): CheckoutAttempt | null {
       parsed.state !== "in_flight" &&
       parsed.state !== "settled"
     ) {
-      // Reservations written before explicit states are conservatively
-      // treated as in-flight unless they already persisted a Stripe session.
       parsed.state = parsed.sessionId ? "settled" : "in_flight";
     }
     return parsed as CheckoutAttempt;
@@ -229,7 +227,6 @@ export async function withTeamCheckoutReservation<T>(
     try {
       await redis.eval(RELEASE_SCRIPT, 1, teamLockKey, token);
     } catch {
-      // The token-bound lease expires on its own.
     }
   }
 }

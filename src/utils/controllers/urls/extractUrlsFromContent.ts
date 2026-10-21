@@ -29,7 +29,6 @@ function getEmbedTitle(url: string): string {
       title = `YouTube Video: ${videoId}`;
     }
   } catch {
-    // keep default title
   }
 
   return title;
@@ -45,9 +44,6 @@ function filenameFromUrl(url: string): string {
   }
 }
 
-/**
- * Deduplicates URL records by urlString (first occurrence wins).
- */
 export function mergeUrls(...lists: IUrl[][]): IUrl[] {
   const seen = new Set<string>();
   const merged: IUrl[] = [];
@@ -63,9 +59,6 @@ export function mergeUrls(...lists: IUrl[][]): IUrl[] {
   return merged;
 }
 
-/**
- * Converts MCP `images[]` S3 URLs into attachment IUrl records.
- */
 export function buildMcpImageUrls(images: string[], taskId: number): IUrl[] {
   return images.map((imageUrl: string) => {
     let fileType = 'image/jpeg';
@@ -88,7 +81,6 @@ export function buildMcpImageUrls(images: string[], taskId: number): IUrl[] {
       fileType = mimeTypeMap[extension] || 'image/jpeg';
       fileName = `image-${Date.now()}.${extension}`;
     } catch {
-      // use defaults
     }
 
     return {
@@ -101,10 +93,6 @@ export function buildMcpImageUrls(images: string[], taskId: number): IUrl[] {
   });
 }
 
-/**
- * Extracts URLs from comment/description HTML or plain text.
- * Mirrors client-side processHtml URL collection (without mention side effects).
- */
 export function extractUrlsFromContent(text: string, taskId: number): IUrl[] {
   const uniqueUrls: IUrl[] = [];
   const urlsArray: string[] = [];

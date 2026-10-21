@@ -1,7 +1,3 @@
-/**
- * Manual check: agent-bound MCP/OAuth JWTs have no exp; user tokens do.
- * Run: npx tsx src/scripts/verify-agent-jwt.ts
- */
 import jwt from "jsonwebtoken";
 
 process.env.JWT_SECRET = process.env.JWT_SECRET || "x".repeat(32);

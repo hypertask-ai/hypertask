@@ -6,7 +6,6 @@ import prisma from "@/lib/prisma";
 
 const sections = async (section:any, projectId:number ) => {
         try {
-            // console.log(req.body);
             const project = await prisma.project.update({
                 where: {
                     id: projectId
@@ -19,7 +18,6 @@ const sections = async (section:any, projectId:number ) => {
                 status:200,
                 json:project
             })
-            // res.status(200).json(project);
         } catch (error) {
             console.log(error);
             return({

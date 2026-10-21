@@ -34,7 +34,6 @@ const persistRevisionFence = async (
       await import("./indexedDbReadModel");
     await writeInboxReadModelRevisionFence({ accountId, revision });
   } catch {
-    // Optimistic UI remains usable when IndexedDB is unavailable.
   }
 };
 
@@ -83,9 +82,6 @@ export const updateInboxOptimistically = ({
   }
   const currentPayload = asReadModelPayload(current);
   if (!currentPayload) {
-    // Agent and legacy Inbox queries predate read-model metadata. Preserve
-    // their existing immediate cache behavior without persisting them into the
-    // account-scoped IndexedDB read model.
     const legacyBase = {
       ...current,
       splitsNoImportant: current.splitsNoImportant ?? [],
@@ -109,8 +105,6 @@ export const updateInboxOptimistically = ({
     return legacyQueryPayload;
   }
 
-  // Apply the small operation delta immediately for responsive interaction.
-  // Only the server-confirmed reconciliation may persist it to IndexedDB.
   const revision = reserveInboxReadModelRevision(accountId);
   if (localReadModelEnabled()) {
     void persistRevisionFence(accountId, revision);
@@ -158,7 +152,5 @@ export const restoreInboxAfterUndo = async ({
   });
   await queryClient
     .refetchQueries({ queryKey, exact: true })
-    // The undo is already persisted and visible, so reconciliation failure
-    // must not turn a successful undo into a false failure message.
     .catch(() => undefined);
 };

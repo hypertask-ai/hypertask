@@ -29,18 +29,15 @@ const AssigneesContainerCreateTaskGlobally: React.FC<IProps> = ({
     console.log("🚀 ~ callbackHandler ~ user:", user);
     const olderAssignees = formValues.assignees;
 
-    // Check if the user already exists in the list
     const userExists = olderAssignees.some(
       (assignee) => assignee.id === user.id
     );
     let newerAssignees;
     if (userExists) {
-      // If the user exists, remove them from the list
       newerAssignees = olderAssignees.filter(
         (assignee) => assignee.id !== user.id
       );
     } else {
-      // If the user doesn't exist, add them to the list
       newerAssignees = [...olderAssignees, user];
     }
 

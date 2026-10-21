@@ -10,7 +10,6 @@ import { HTPR_6476_MOBILE_AGENT_CHAT_FULLSCREEN_FLAG } from "@/lib/flags/keys";
 
 const MobileTopBar = dynamic(async () => {
   const { default: TopBar, loadFirstScreenControls } = await import("./MobileTopBar");
-  // Resolve the existing chunks before any header hydration subscription updates.
   const { HeaderStrip, TopBarActions } = await loadFirstScreenControls();
   return function SeededTopBar({ currentUser }: { currentUser: IUser; boardUsable?: boolean }) {
     return <TopBar currentUser={currentUser} boardUsable headerStrip={HeaderStrip} topBarActions={TopBarActions} />;

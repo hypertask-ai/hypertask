@@ -38,7 +38,6 @@ export function useCalendarFocus({
 >) {
   const FOCUS_MORE_INDICATOR = calendarConfig.constants.focus_more_indicator;
 
-  // Helper function to set currentTask, focus on it, and update active item
   const setCurrentTaskWithFocus = useCallback((taskId: number, day?: Date) => {
     setCurrentTask(taskId);
 
@@ -57,11 +56,9 @@ export function useCalendarFocus({
     }
 
     if (taskId !== -1) {
-      // Find the task object
       const task = tasks.find((t) => t.id === taskId);
 
       if (task) {
-        // Focus on the task element
         const taskElement = document.getElementById(`task-${taskId}`);
         if (taskElement) {
           taskElement.focus();
@@ -71,17 +68,14 @@ export function useCalendarFocus({
           });
         }
 
-        // Update active item and item in view
         updateActiveItemAndItemInView(task);
       }
     } else {
-      // When there are no tasks, scroll to the day section
       const dayToScroll = day || currentDay;
       const dayElement = document.getElementById(
         `day-${dayToScroll.toISOString()}`
       );
       if (dayElement) {
-        // Use setTimeout to ensure the element is fully rendered
         setTimeout(() => {
           dayElement.focus();
           dayElement.scrollIntoView({
@@ -93,9 +87,7 @@ export function useCalendarFocus({
     }
   }, [tasks, currentDay, updateActiveItemAndItemInView]);
 
-  // Helper function to update focus after date range navigation
   const updateFocusAfterNavigation = (newDate: Date) => {
-    // Calculate what days will be in the new range
     const daysInNewRange: Date[] = [];
 
     if (currentView === "month") {
@@ -110,19 +102,16 @@ export function useCalendarFocus({
         calendarSettings.weekStartsOn
       );
 
-      // Add days from previous month
       for (let i = startDay - 1; i >= 0; i--) {
         const date = new Date(monthStart);
         date.setDate(date.getDate() - (i + 1));
         daysInNewRange.push(date);
       }
-      // Add days of current month
       for (let i = 1; i <= monthEnd.getDate(); i++) {
         daysInNewRange.push(
           new Date(newDate.getFullYear(), newDate.getMonth(), i)
         );
       }
-      // Add days from next month
       for (let i = 1; i < 7 - endDay; i++) {
         daysInNewRange.push(
           new Date(monthEnd.getFullYear(), monthEnd.getMonth() + 1, i)
@@ -141,11 +130,9 @@ export function useCalendarFocus({
         }
       }
     } else {
-      // Day view - just the single day
       daysInNewRange.push(newDate);
     }
 
-    // Find the first day with tasks, or use the first day if no tasks
     let dayToFocus: Date | null = null;
     let taskToFocus: number = -1;
 
@@ -158,16 +145,13 @@ export function useCalendarFocus({
       }
     }
 
-    // If no tasks found, use the first day
     if (!dayToFocus && daysInNewRange.length > 0) {
       dayToFocus = daysInNewRange[0];
     }
 
-    // Update currentDay and currentTask
     if (dayToFocus) {
       setCurrentDay(dayToFocus);
 
-      // Focus on the day element
       const dayElement = document.getElementById(
         `day-${dayToFocus!.toISOString()}`
       );
@@ -179,7 +163,6 @@ export function useCalendarFocus({
         });
       }
 
-      // Set current task
       setCurrentTaskWithFocus(taskToFocus, dayToFocus);
     }
   };
@@ -239,7 +222,6 @@ export function useCalendarNavigation({
     try {
       if (!date) return;
 
-      // Normalize the date to remove time component (set to midnight)
       let normalizedDate = new Date(
         date.getFullYear(),
         date.getMonth(),
@@ -259,17 +241,14 @@ export function useCalendarNavigation({
         }
       }
 
-      // Flatten all days from weeks array to check if date exists in current view
       const allDaysInView = weeks.flat();
       const dateExistsInView = allDaysInView.some((day) =>
         isSameDate(day, normalizedDate)
       );
 
       if (dateExistsInView) {
-        // Date is in current view, focus on it immediately
         setCurrentDay(normalizedDate);
 
-        // Focus on the day element
         const dayElement = document.getElementById(
           `day-${normalizedDate.toISOString()}`
         );
@@ -281,25 +260,19 @@ export function useCalendarNavigation({
           });
         }
 
-        // Set current task to first task if any, or -1 if no tasks
         const tasksForDate = getTasksForDate(normalizedDate);
         setCurrentTaskWithFocus(
           tasksForDate.length > 0 ? tasksForDate[0].id : -1,
           normalizedDate
         );
       } else {
-        // Date is not in current view, navigate to the correct date range
-        // Store the target date in ref to handle after weeks recalculate
         pendingDateSelectRef.current = normalizedDate;
 
         if (currentView === "month") {
-          // For month view, set currentDate to the selected date's month
           setCurrentDate(new Date(normalizedDate.getFullYear(), normalizedDate.getMonth(), 1));
         } else if (currentView === "week") {
-          // For week view, set currentDate to the selected date (it will calculate the week)
           setCurrentDate(new Date(normalizedDate));
         } else {
-          // For day view, set currentDate to the selected date
           setCurrentDate(new Date(normalizedDate));
         }
       }
@@ -348,7 +321,6 @@ export function useCalendarNavigation({
       newDate = subtractDays(currentDate, 1);
     }
     setCurrentDate(newDate);
-    // Update focus after navigation
     updateFocusAfterNavigation(newDate);
   };
 
@@ -362,13 +334,11 @@ export function useCalendarNavigation({
       newDate = addDays(currentDate, 1);
     }
     setCurrentDate(newDate);
-    // Update focus after navigation
     updateFocusAfterNavigation(newDate);
   };
 
   const shiftFocusHorizontally = useCallback((direction: "left" | "right") => {
     try {
-      // Day view holds a single day: moving sideways means navigating days.
       if (currentView === "day") {
         if (direction === "left") handlePrevious();
         else handleNext();
@@ -386,7 +356,6 @@ export function useCalendarNavigation({
       document.getElementById(`day-${newDate.toISOString()}`)?.focus();
       setCurrentDay(newDate);
 
-      // Update current task based on tasks for the new date
       const tasks = getTasksForDate(newDate);
       setCurrentTaskWithFocus(tasks.length > 0 ? tasks[0].id : -1, newDate);
     } catch (error) {
@@ -449,7 +418,6 @@ export function useCalendarNavigation({
         currentWeekIndex === weeks.length - 1 &&
         currentView === "month";
 
-      // Focus is on the "more" indicator (month view, day has >2 tasks)
       if (currentTask === FOCUS_MORE_INDICATOR && currentView === "month") {
         if (direction === "up") {
           setCurrentTaskWithFocus(currentTasks[1].id);
@@ -460,7 +428,6 @@ export function useCalendarNavigation({
         return;
       }
 
-      // If no current task, move to adjacent week
       if (currentTaskIndex === -1 && currentView === "month") {
         if (isFirstWeek || isLastWeek) return;
         moveToWeek(direction === "up" ? -7 : 7);
@@ -469,7 +436,7 @@ export function useCalendarNavigation({
 
       const isAtFirstTask = currentTaskIndex === 0;
       const isAtLastVisibleTask = hasMoreIndicator
-        ? currentTaskIndex === 1 // down from task 1 goes to more indicator
+        ? currentTaskIndex === 1
         : currentView === "month"
           ? currentTaskIndex === visibleTasksCount - 1
           : currentTaskIndex === currentTasks.length - 1;
@@ -545,21 +512,18 @@ export function useCalendarFocusSync({
   "setCurrentTaskWithFocus"
 >) {
   useEffect(() => {
-    // When view changes, recalculate currentDay and currentTask
     const allDaysInView = weeks.flat();
     const currentDayExists = allDaysInView.some((day) =>
       isSameDate(day, currentDay)
     );
 
     if (viewRef.current !== currentView || !currentDayExists) {
-      // Helper function to get tasks for a date
       const getTasksForDateHelper = (date: Date) => {
         const dateKey = `${date.getFullYear()}-${date.getMonth()}-${date.getDate()}`;
         return tasksByDate.get(dateKey) || [];
       };
 
       if (currentDayExists) {
-        // Current day is in view, check if it has tasks
         const tasksForCurrentDay = getTasksForDateHelper(currentDay);
         if (tasksForCurrentDay.length > 0) {
           setCurrentTaskWithFocus(tasksForCurrentDay[0].id);
@@ -567,7 +531,6 @@ export function useCalendarFocusSync({
           setCurrentTaskWithFocus(-1, currentDay);
         }
       } else {
-        // Current day is not in view, find first task in weeks array
         let foundTask = false;
         let firstDayWithTask: Date | null = null;
         let firstTaskId: number | null = null;
@@ -583,11 +546,9 @@ export function useCalendarFocusSync({
         }
 
         if (foundTask && firstDayWithTask && firstTaskId !== null) {
-          // Found a task, set currentDay and currentTask
           setCurrentDay(firstDayWithTask);
           setCurrentTaskWithFocus(firstTaskId);
         } else {
-          // No tasks found, focus on the first day
           const firstDay = allDaysInView[0];
           if (firstDay) {
             setCurrentDay(firstDay);
@@ -611,27 +572,21 @@ export function useCalendarFocusSync({
       if (tasksForCurrentDay.length > 0) {
         setCurrentTaskWithFocus(tasksForCurrentDay[0].id);
       }
-      // Mark as initialized regardless of whether we found a task for current day
-      // This prevents re-running when user intentionally sets currentTask to -1
       hasInitializedTaskRef.current = true;
     }
   }, [tasksByDate, currentDay, currentTask]);
 
-  // Handle pending date selection after weeks recalculate
   useEffect(() => {
     if (pendingDateSelectRef.current) {
       const targetDate = pendingDateSelectRef.current;
-      // Check if target date is now in the weeks array
       const allDaysInView = weeks.flat();
       const dateExistsInView = allDaysInView.some((day) =>
         isSameDate(day, targetDate)
       );
 
       if (dateExistsInView) {
-        // Date is now in view, focus on it
         setCurrentDay(targetDate);
 
-        // Focus on the day element
         const dayElement = document.getElementById(
           `day-${targetDate.toISOString()}`
         );
@@ -643,14 +598,12 @@ export function useCalendarFocusSync({
           });
         }
 
-        // Set current task to first task if any, or -1 if no tasks
         const tasksForDate = getTasksForDate(targetDate);
         setCurrentTaskWithFocus(
           tasksForDate.length > 0 ? tasksForDate[0].id : -1,
           targetDate
         );
 
-        // Clear the pending date selection
         pendingDateSelectRef.current = null;
       }
     }

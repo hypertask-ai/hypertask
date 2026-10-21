@@ -34,8 +34,6 @@ export const SYSTEM_MODEL_LADDERS = {
   ],
 } as const satisfies Record<string, readonly SystemModel[]>;
 
-// Saved fast-ladder overrides that name a retired slug upgrade to its
-// successor instead of silently falling back to Auto (HTPR-6722).
 const RETIRED_SYSTEM_MODEL_SLUGS: Record<string, string> = {
   "openai/gpt-5.4-mini": "openai/gpt-6-luna",
   "deepseek/deepseek-v4-flash": "deepseek/deepseek-v4.1-flash",
@@ -327,8 +325,6 @@ export function resolveSystemModel(
 
   if (selectedOverride) return selectedOverride;
 
-  // HTPR-7075: with no explicit pick, background work runs on Haiku 5.5 only.
-  // A team that turned Anthropic off gets no AI result, never another provider.
   if (context.backgroundClaudeEnabled) {
     const haiku = ladder.find(({ provider }) => provider === "anthropic");
     return haiku && resolveTeamProviderEnabled(aiProviderSettings, "anthropic")

@@ -18,10 +18,6 @@ function isIsoDateString(s: string): boolean {
   return !Number.isNaN(d.getTime())
 }
 
-/**
- * Validates the board manifest for POST /api/mcp/teams/:teamId/boards.
- * Aligns task field rules with src/lib/mcp/tasks/validators.ts where applicable.
- */
 export function validateBoardManifest(raw: unknown): ManifestValidationResult {
   if (raw === null || typeof raw !== 'object') {
     return {

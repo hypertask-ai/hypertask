@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getFigmaRequestUser } from "@/app/api/figma/_lib";
+import { getFigmaAuthenticatedUser } from "@/app/api/figma/_lib";
 import { getFigmaAccessToken } from "@/lib/figma/connection";
 import { FIGMA_API_BASE_URL } from "@/lib/figma/paths";
 import { getFigmaOAuthConfig } from "@/lib/figma/oauth";
@@ -217,12 +217,6 @@ const getRenderedImages = async (
 };
 
 function previewResponse(body: unknown, cacheControl = CACHE_CONTROL) {
-  // Connect rotates and disconnect clears the client-readable, non-secret
-  // connection version, so a browser that performed either cannot serve a
-  // cached preview from the other authorization state. That only holds where
-  // the cookie is set, which is why token-backed frames are never stored: a
-  // second signed-in browser sends no version, so its cache key never changes
-  // on disconnect and it would keep serving private frames.
   return NextResponse.json(body, {
     headers: {
       "Cache-Control": cacheControl,
@@ -232,7 +226,7 @@ function previewResponse(body: unknown, cacheControl = CACHE_CONTROL) {
 }
 
 export async function GET(request: NextRequest) {
-  const principal = await getFigmaRequestUser(request);
+  const principal = await getFigmaAuthenticatedUser(request);
   if (principal.status === "unauthorized") {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
@@ -280,7 +274,6 @@ export async function GET(request: NextRequest) {
     if (token) rendered = await getRenderedImages(target, token);
   } catch {
     degraded = true;
-    // A connected viewer keeps the cover and the live embed click on failure.
   }
 
   const fallback = await fallbackPromise;

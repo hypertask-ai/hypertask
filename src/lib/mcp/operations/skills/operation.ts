@@ -18,9 +18,6 @@ import prisma from "@/lib/prisma";
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-// Mirrors the web skills API (src/app/api/ai/skills/route.ts) but authenticates
-// with the MCP bearer token so the hypertask CLI, `ht`, and MCP tools can list
-// and create skills. Params are snake_case to match the other /api/mcp/* routes.
 const createSchema = z.object({
   scope: z.enum(["user", "project"]).default("user"),
   project_id: z.coerce.number().int().positive().optional(),

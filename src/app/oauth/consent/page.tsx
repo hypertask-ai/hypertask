@@ -21,8 +21,6 @@ const PRIMARY_BUTTON =
 const SECONDARY_BUTTON =
   "block w-full py-3 px-6 text-text-light-gray hover:bg-hover-active hover:text-white-black font-medium rounded-[5px] transition-colors";
 
-/** Registered client names are attacker-supplied. Strip anything that could disguise
- * the name (control and bidi characters) and cap the length before showing it. */
 function safeClientName(name: string | null | undefined): string {
   if (!name) return "An unnamed app";
   const cleaned = name
@@ -31,8 +29,6 @@ function safeClientName(name: string | null | undefined): string {
   return cleaned.length === 0 ? "An unnamed app" : cleaned.slice(0, 80);
 }
 
-/** Custom schemes like cursor:// have no origin (URL.origin is the string "null"),
- * and those are exactly the desktop clients this screen is most often shown for. */
 function redirectOrigin(redirectUri: string): string {
   try {
     const url = new URL(redirectUri);
@@ -63,11 +59,6 @@ function Fallback({ heading, message }: { heading: string; message: string }) {
   );
 }
 
-/**
- * HTPR-6200: the approve step for /oauth/authorize. It only renders for a request
- * carrying a consent token this server signed for this session, so nobody can link
- * a user straight into an approve screen for a connector of their choosing.
- */
 export default async function OAuthConsentPage(props: {
   searchParams: Promise<Record<string, string | string[] | undefined>>;
 }) {

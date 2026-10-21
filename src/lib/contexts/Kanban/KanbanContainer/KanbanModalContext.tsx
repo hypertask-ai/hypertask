@@ -3,7 +3,6 @@ import useKanbanModalStates, {
 } from "@/hooks/Homepage/useKanbanModalStates";
 import React, { createContext, useContext, ReactNode } from "react";
 
-// Define the type for the modal state
 interface ModalState {
   showManageViewsModal: boolean;
   showSaveModal: boolean;
@@ -26,10 +25,8 @@ interface ModalState {
   toggleSearchTasks: (val: boolean) => void,
 }
 
-// Create a context
 const KanbanModalsContext = createContext<ModalState | undefined>(undefined);
 
-// Create a provider component
 interface ModalProviderProps {
   children: ReactNode;
 }
@@ -45,7 +42,6 @@ export const KanbanModalsProvider: React.FC<ModalProviderProps> = ({
   );
 };
 
-// Create a custom hook to consume the context
 export const useKanbanModalStatesContext = (): ModalState => {
   const context = useContext(KanbanModalsContext);
 

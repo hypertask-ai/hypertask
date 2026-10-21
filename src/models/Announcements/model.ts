@@ -33,7 +33,6 @@ const ANNOUNCEMENT_LEVELS: AnnouncementLevel[] = [
   "takeover",
 ];
 
-/** The level only when it was published explicitly. Legacy records return undefined. */
 export const getExplicitLevel = (
   body: Partial<IAnnouncementBody>
 ): AnnouncementLevel | undefined =>
@@ -46,13 +45,11 @@ export const resolveLevel = (
 ): AnnouncementLevel => {
   const explicit = getExplicitLevel(body);
   if (explicit) return explicit;
-  // Fallback mirrors the shipped sidebar precedence: a blogURL always won over slides.
   if (body.blogURL) return "link";
   if (body.slides?.length) return "takeover";
   return "note";
 };
 
-/** Poster for a YouTube embed URL. Loom/mp4/plain images return null. */
 export const youtubeThumbnailUrl = (mediaURL?: string): string | null => {
   const id = mediaURL?.match(/youtube\.com\/embed\/([\w-]+)/)?.[1];
   return id ? `https://img.youtube.com/vi/${id}/mqdefault.jpg` : null;

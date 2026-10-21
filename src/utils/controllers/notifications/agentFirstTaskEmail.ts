@@ -41,7 +41,6 @@ export function scheduleAgentFirstTaskEmailBatch(
   try {
     waitUntil(work);
   } catch {
-    // Outside Vercel the promise still runs, with rejection already handled.
   }
 }
 
@@ -77,14 +76,12 @@ async function sendAgentFirstTaskEmail(
       select: { ownerId: true, title: true, name: true, owner: { select: { email: true } } },
     }),
   ]);
-  // Membership alone is not ownership: never email either party on another user's board.
   if (
     !agent || !board || board.ownerId !== agent.userId || !board.owner.email ||
     !(await isFeatureEnabled(HTPR_7028_FIRST_TASK_EMAIL_FLAG, board.ownerId))
   ) return;
 
   const claimed = await prisma.$transaction(async (tx) => {
-    // Serialize the durable check-and-insert per user across every board and agent.
     await tx.$executeRaw`SELECT pg_advisory_xact_lock(7028::int, ${userId}::int)`;
     if (await tx.logs.findFirst({ where: { LoggedById: userId, log: marker } })) return false;
     await tx.logs.create({
@@ -94,7 +91,6 @@ async function sendAgentFirstTaskEmail(
   });
   if (!claimed) return;
 
-  // Keep the claim even on failure: a lost provider response may already have delivered mail.
   const sharedLayout = await isFeatureEnabled(HTPR_7037_SHARED_EMAIL_LAYOUT_FLAG, board.ownerId).catch(() => false);
   const { subject, html } = (sharedLayout ? renderAgentFirstTaskEmail : renderLegacyAgentFirstTaskEmail)({
     agentName: agent.displayName,

@@ -1,9 +1,6 @@
-// Browser side of real-time board sync (HTPR-3626). Holds the single persistent
-// connection to the pub/sub edge. The async connect path returns null when not
-// configured so the app runs normally without realtime.
 
 const KEY = process.env.NEXT_PUBLIC_PUSHER_KEY;
-const HOST = process.env.NEXT_PUBLIC_PUSHER_HOST; // set for Soketi / self-host
+const HOST = process.env.NEXT_PUBLIC_PUSHER_HOST;
 const PORT = process.env.NEXT_PUBLIC_PUSHER_PORT;
 const FORCE_TLS = process.env.NEXT_PUBLIC_PUSHER_USE_TLS === "true";
 const CLUSTER = process.env.NEXT_PUBLIC_PUSHER_CLUSTER || "mt1";
@@ -63,7 +60,6 @@ function updateRealtimePreference(
     if (disabled) storage.setItem(REALTIME_DISABLED_STORAGE_KEY, "1");
     else storage.removeItem(REALTIME_DISABLED_STORAGE_KEY);
   } catch {
-    // Storage can be unavailable in restricted browser contexts.
   }
 }
 
@@ -86,10 +82,6 @@ export function realtimeDisabledForBrowser(
     return false;
   }
 
-  // agent-browser launches headless Chrome without the WebDriver automation
-  // flag, so navigator.webdriver can be false even though no human is using
-  // the tab. HeadlessChrome remains in its browser UA and is the stable signal
-  // that keeps those long-lived sessions off the hosted Pusher connection cap.
   if (browser.navigator.webdriver) {
     updateRealtimePreference(browser.sessionStorage, true);
     return true;
@@ -209,9 +201,6 @@ export function installRealtimeSubscriptionWatchdog(args: {
     const channels = args.client.allChannels();
     if (channels.some((channel) => channel.subscribed === true)) return;
 
-    // Remove failed/pending channel objects before disconnecting. Otherwise
-    // the visibility lifecycle sees allChannels().length > 0 and reconnects a
-    // socket that can never deliver realtime events.
     channels.forEach((channel) => args.client.unsubscribe(channel.name));
     args.client.disconnect();
   };
@@ -379,8 +368,6 @@ export async function connectRealtimeClient(): Promise<RealtimeClient | null> {
     clientPromise = waitForVisibleDocument(document)
       .then(() => import("pusher-js"))
       .catch(() => {
-        // Transient chunk-load failure must not poison realtime for the whole
-        // session: reset so a later hook mount retries the import.
         if (attemptGeneration !== connectionGeneration) return null;
         clientPromise = null;
         return null;
@@ -402,7 +389,6 @@ export async function connectRealtimeClient(): Promise<RealtimeClient | null> {
           cluster: CLUSTER,
           forceTLS: FORCE_TLS,
           authEndpoint: "/api/pusher/auth",
-          // Soketi / self-host: pin host+port. Hosted Pusher ignores these.
           ...(HOST
             ? {
                 wsHost: HOST,
@@ -430,17 +416,10 @@ export async function connectRealtimeClient(): Promise<RealtimeClient | null> {
   return clientPromise;
 }
 
-// This tab's Pusher socket id, sent with mutations (X-Socket-Id header) so the
-// server can exclude this tab from its own broadcast echo (HTPR-3998). The
-// acting tab already updates its cache optimistically; the echo just forced a
-// full inbox refetch per action. undefined while disconnected — that's fine,
-// the mutation then broadcasts to everyone (at worst the old behaviour).
 export function getRealtimeSocketId(): string | undefined {
   return client?.connection?.socket_id || undefined;
 }
 
-// Header object for mutation requests: identifies this tab's socket so the
-// server-side broadcast can skip echoing back to it. Empty when disconnected.
 export function realtimeEchoHeaders(): Record<string, string> {
   const socketId = getRealtimeSocketId();
   return socketId ? { "X-Socket-Id": socketId } : {};

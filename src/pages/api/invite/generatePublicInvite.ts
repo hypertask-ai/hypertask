@@ -1,5 +1,5 @@
-import { recordActivationOccurrence } from "@/lib/telemetry/activationOccurrences";
-// Next.js API route support: https://nextjs.org/docs/api-routes/introduction
+import { processAnalyticsIntentSoon } from "@/lib/telemetry/analyticsIntents";
+import { enqueueInviteSent } from "@/lib/telemetry/inviteAnalytics";
 
 import type { NextApiRequest, NextApiResponse } from 'next'
 import prisma from "@/lib/prisma";
@@ -33,7 +33,6 @@ export default  async function handler(
         if (!projectId || !project) return res.status(400).json({message:"Missing required information"})
         const allowed = await getMemberAndOwner(projectId)
         if (!Array.isArray(allowed) || !allowed.includes(session.userId)) return res.status(403).json({message:"Forbidden"})
-        //! Fetching project again in getInviteFromProjectId().
         const response = await getInviteFromProjectId(projectId, session.userId)
         if (!response) throw "Error"
         else return res.status(200).json(response)
@@ -74,17 +73,21 @@ export default  async function handler(
                 expiresAt:new Date()
             }
         })
-        const newInvite = await prisma.invite.create({
-            data:{
-                projectId,
-                uses:-1,
-                expired:false,
-                userId:project.ownerId,
-                key:"public"
-            },
-            include:{project:{select:{name:true}}},
-        })
-        recordActivationOccurrence(newInvite.userId, "teammate_invited", newInvite.id, { method: "link" });
+        const { newInvite, analyticsKey } = await prisma.$transaction(async (tx) => {
+            const newInvite = await tx.invite.create({
+                data:{
+                    projectId,
+                    uses:-1,
+                    expired:false,
+                    userId:project.ownerId,
+                    key:"public"
+                },
+                include:{project:{select:{name:true}}},
+            })
+            const analyticsKey = await enqueueInviteSent(tx, newInvite, "link", session.userId, newInvite.userId);
+            return { newInvite, analyticsKey };
+        });
+        processAnalyticsIntentSoon(analyticsKey);
         const activeView = getViewFromProject(project)
         let viewSlug: string | undefined;
         viewSlug = setViewSlug(activeView)

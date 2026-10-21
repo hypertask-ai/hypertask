@@ -24,18 +24,15 @@ const ViewsForBoard: React.FC<IViewsForBoard> = ({ toggle, project }) => {
 
     const projectViews = useMemo(() =>
         deepCopy((project.project_view?.allViews ?? []).filter(v => v.id !== project.project_view?.user_project_views[0]?.unsavedView?.id)).sort((a, b) => {
-            // Ensure the default view comes first
             if (a.id === project?.project_view?.default_view_id) return -1;
             if (b.id === project?.project_view?.default_view_id) return 1;
-            // Ensure the selected view comes second (after the default view)
             if (a.id === selectedView) return -1;
             if (b.id === selectedView) return 1;
 
             const dateA = new Date(a.ViewLastUsed[0]?.lastUsedAt!).getTime()
             const dateB = new Date(b.ViewLastUsed[0]?.lastUsedAt!).getTime()
-            if (dateA > dateB) return -1;  // b comes before a (b is more recent)
-            if (dateA < dateB) return 1; // a comes before b (a is more recent)
-            // Otherwise, keep the order unchanged
+            if (dateA > dateB) return -1;
+            if (dateA < dateB) return 1;
             return 0;
         })
         , [project.project_view?.allViews, project.project_view?.default_view_id, project.project_view?.user_project_views, selectedView])
@@ -98,22 +95,6 @@ const ViewsForBoard: React.FC<IViewsForBoard> = ({ toggle, project }) => {
                     handleMouseMove={handleMouseMove}
                     id="save-view-modal-list-container">
 
-                    {/* ============== MANAGE VIEWs ELEMENT ============ */}
-                    {/* <ModalRowElementContainer
-                        key={`el-${0}`}
-                        onMouseEnter={()=>handleMouseEnter(0)}
-                        handleMouseLeave={handleMouseLeave}
-                        id={`label-htc-option-${0}`}
-                        onClick={() => toggle(true)}
-                        index={0} commandRef={elRef} isSelected={selectedIndex === 0}
-                    >
-                        <div className='flex items-center gap-2'>
-                            <span>Manage Views</span>
-                            <Settings strokeWidth={1.75} className="text-white-black-inverted" size={12} />
-                        </div>
-
-                    </ModalRowElementContainer> */}
-                    {/* ============== ALL Project View Elements ============ */}
                     {
                         filteredOptions?.map((view, index) =>
                             <ModalRowElementContainer

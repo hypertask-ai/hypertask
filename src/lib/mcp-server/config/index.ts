@@ -21,7 +21,6 @@ export function getConfig(): McpServerConfig {
   if (!config) {
     config = {
       createBoardRequestTimeoutMs: envNumber('CREATE_BOARD_REQUEST_TIMEOUT_MS', 120000),
-      // Longer than the route's absolute 630s batch deadline, shorter than MCP's 800s cap.
       attachmentRequestTimeoutMs: envNumber('ATTACHMENT_REQUEST_TIMEOUT_MS', 660000),
       limits: {
         ticketNumberMaxLength: envNumber('LIMIT_TICKET_NUMBER_MAX', 50),

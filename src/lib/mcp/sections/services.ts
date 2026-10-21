@@ -64,18 +64,12 @@ export interface CreateSectionError {
   status: number
 }
 
-/**
- * Creates a new section (column) in a project.
- * Delegates to the existing sectionCreate controller; ranking is computed there.
- * Returns errors per API spec: 404 for missing project, 403 for no access.
- */
 export async function createSection(
   params: CreateSectionParams,
   agentId?: string | null
 ): Promise<CreateSectionResult | CreateSectionError> {
   const { projectId, title, userId, afterSectionId } = params
 
-  // Preserve MCP's 404 for inactive boards; the shared creation guard returns 403.
   const project = await prisma.project.findFirst({
     where: { id: projectId, status: 'Normal' },
     select: { id: true }
@@ -120,9 +114,6 @@ export async function createSection(
   }
 }
 
-// ---------------------------------------------------------------------------
-// Update Section (rename and/or move)
-// ---------------------------------------------------------------------------
 
 export interface UpdateSectionParams {
   projectId: number
@@ -130,9 +121,7 @@ export interface UpdateSectionParams {
   userId: number
   title?: string
   moveAfterSectionId?: number
-  /** Tickets in this column are finished. null clears it, falling back to the name guess. */
   isDone?: boolean | null
-  /** Numeric user ID, agent UUID, or null to clear. */
   autoAssign?: SectionAutoAssign
 }
 
@@ -260,9 +249,6 @@ export async function updateSection(
   }
 }
 
-// ---------------------------------------------------------------------------
-// Delete Section
-// ---------------------------------------------------------------------------
 
 export interface DeleteSectionParams {
   projectId: number

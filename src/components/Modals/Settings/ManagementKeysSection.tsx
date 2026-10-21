@@ -28,9 +28,6 @@ const EXPIRY_OPTIONS = [
   { label: "365 days", value: 365 },
 ] as const;
 
-// HTPR-4340 affordance fix: a filled, rounded field so it reads as writable
-// (the old borderless transparent input looked like static text — the
-// placeholder was mistaken for a filled-in value).
 const inputClass =
   "h-10 w-full rounded-lg border-0 bg-comment-description px-3 text-dense font-medium text-white-black outline-none transition placeholder:text-text-light-gray focus:bg-modalBackground";
 

@@ -272,23 +272,23 @@
       },
       "planned": {
         "mcp": {
-          "issue": "https://app.hypertask.ai/detail/project-15/5127",
-          "expires": "2026-10-14",
+          "issue": "https://app.hypertask.ai/detail/project-4060/397",
+          "expires": "2026-11-13",
           "entries": ["hypertask_update_label"]
         },
         "cli": {
-          "issue": "https://app.hypertask.ai/detail/project-15/5127",
-          "expires": "2026-10-14",
+          "issue": "https://app.hypertask.ai/detail/project-4060/397",
+          "expires": "2026-11-13",
           "entries": ["labels update", "project label update"]
         },
         "ai_chat": {
-          "issue": "https://app.hypertask.ai/detail/project-15/5127",
-          "expires": "2026-10-14",
+          "issue": "https://app.hypertask.ai/detail/project-4060/397",
+          "expires": "2026-11-13",
           "entries": ["hypertask_update_label"]
         },
         "hyperai": {
-          "issue": "https://app.hypertask.ai/detail/project-15/5127",
-          "expires": "2026-10-14",
+          "issue": "https://app.hypertask.ai/detail/project-4060/397",
+          "expires": "2026-11-13",
           "entries": ["hypertask_update_label"]
         }
       }
@@ -465,6 +465,19 @@
       "exclusions": {
         "cli": "The hypertask feedback command ships in hypertask-ai/cli and calls the REST endpoint; the pinned CLI inventory predates it.",
         "ai_chat": "Native AI Chat keeps the existing in-app feedback surface rather than exposing the MCP feedback tool."
+      }
+    },
+    {
+      "id": "cli.error-report",
+      "title": "The CLI reports its own unexpected failures (command and error type only)",
+      "matches": {
+        "api": ["^POST /api/mcp/cli-error$"]
+      },
+      "exclusions": {
+        "mcp": "Only the CLI binary reports its own crashes; MCP clients already have hypertask_report_feedback.",
+        "cli": "The CLI calls this endpoint automatically after a failed command; it is not a user command.",
+        "ai_chat": "AI Chat runs in the app, whose errors already reach the runtime logs directly.",
+        "hyperai": "HyperAI runs in the app, whose errors already reach the runtime logs directly."
       }
     },
     {

@@ -7,13 +7,6 @@ import {
 } from "@/utils/controllers/projects/getAllIncludes";
 import { attachWaitingOnUsers } from "./attachWaitingOnUsers";
 
-// The board's show-archived toggle asks for every archived card on the project
-// at once, with the full task include (assignees, labels, subtasks, comments
-// counts). getArchivedTasks.ts, the analogous inbox-side query, has always been
-// paged; this one was not, so a long-lived board's payload grew without bound
-// (HTPR-3963). Newest-archived first is the useful end of that list, so cap it
-// rather than build a load-more the toggle has no UI for. Raise this, or switch
-// to the cursor pattern in getArchivedTasks.ts, when someone needs deeper history.
 const ARCHIVED_TASKS_LIMIT = 100;
 
 const tasksGetArchivedTasksByProject = async (

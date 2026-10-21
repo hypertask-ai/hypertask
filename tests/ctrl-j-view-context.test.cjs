@@ -93,7 +93,7 @@ async function send(api, { flag = true, currentProject = project(), destinationP
   const mounted = { current: true };
   const calls = [];
   const context = {
-    enabled: true, boardChipEnabled: false, targetBoardId: undefined, writerReasonEnabled: false, sending: { current: false }, pendingImages: { current: 0 }, dictating: false,
+    enabled: true, boardChipEnabled: false, targetBoardId: undefined, writerReasonEnabled: false, applyWriterProperties: false, sending: { current: false }, pendingImages: { current: 0 }, dictating: false,
     text: "Describe this task", files: [], showProgress: false, composer: { current: null },
     setWritingHeight() {}, setWriting() {}, setStage() {}, onBusyChange() {}, setError(error) { if (error) throw new Error(error); },
     taskContextRef: { current: null }, newTaskWindow: Boolean(existingTaskId), destinationProject,
@@ -222,6 +222,7 @@ test("existing create validation rejects foreign labels, users and agents before
       "@/utils/controllers/tasks/getNextUniqueTaskIndex": {},
       "@/lib/mcp/webhooks/taskEvents": { createTaskWithBoardWebhookOutbox: () => assert.fail("validation must finish before writes") },
       "@/lib/mcp/webhooks/outbox": {}, "@/lib/agentWebhooks/outbox": {},
+      "@/lib/telemetry/savedWork": { enqueueBoardCreated: async () => "board-key", processAnalyticsIntentSoon: () => {}, enqueueTaskCreated: async () => "task-key", creationChannelFromHeader: () => 'web', CREATION_CHANNEL_HEADER: 'X-Hypertask-Creation-Channel', CREATION_AGENT_HEADER: 'X-Hypertask-Creation-Agent' },
       "@/lib/auth/resolveActingAgent": { resolveActingAgent: () => ({ ok: true, agentId: null }) },
       "@/lib/auth/session": { SESSION_COOKIE: "session", verifySession: () => null },
       "@/utils/controllers/projects/getAllIncludes": { taskWriteAccessWhere: () => ({}) },

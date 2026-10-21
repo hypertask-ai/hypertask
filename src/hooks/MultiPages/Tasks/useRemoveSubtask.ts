@@ -14,7 +14,6 @@ import { useCallback } from "react";
   }
   
   export function useRemoveParentTask() {
-    // This would be your existing hook that provides updateTaskInCache
     const { updateTaskInCache } = UpdateKanban();
 
     const removeParentTask = (
@@ -38,9 +37,7 @@ import { useCallback } from "react";
         {
           loading: loadingMessage,
           success: (response) => {
-            // Create task with removed parent relationship
             const taskToReturn = { parentTaskId: undefined, parentTask: undefined };
-            // Update cache
             if (taskInfo.projectId) updateTaskInCache(
               taskToReturn,
               taskInfo.taskId,
@@ -48,7 +45,6 @@ import { useCallback } from "react";
               taskInfo.sectionId,
             );
             
-            // Run additional success logic if provided
             if (onSuccess) {
               onSuccess(response?.data);
             }
@@ -65,16 +61,6 @@ import { useCallback } from "react";
     }
     
     return {
-        /**
-         * Unlinks the parent from child. Called from the child only.
-         *
-         * @param {Object} taskInfo - Info about the task to unlink.
-         * @param {number} taskInfo.taskId - ID of the task to unlink.
-         * @param {number} [taskInfo.projectId] - Optional project ID.
-         * @param {number} [taskInfo.sectionId] - Optional section ID.
-         * @param {RemoveParentTaskOptions} [options] - Optional settings.
-         * @returns {*} Promise resolving to toast.
-         */
         removeParentTask,
       };
   }

@@ -53,9 +53,6 @@ export const applySubscriptionUpdatedWithTeamLockHeld = async (
     (candidate) => candidate.subscriptionId === subscription.id,
   );
   if (!storedPlan) {
-    // `customer.subscription.created` owns creation. Requiring its stored
-    // Hypertask plan also prevents unrelated subscriptions on the customer
-    // from consuming trial eligibility or recreating access.
     console.warn(
       `Ignoring update for unknown Stripe subscription ${subscription.id}`,
     );
@@ -67,9 +64,6 @@ export const applySubscriptionUpdatedWithTeamLockHeld = async (
     typeof subscription.trial_start === "number" ||
     typeof subscription.trial_end === "number";
 
-  // Trial eligibility is sticky history. Persist it before terminal handling so
-  // reordered cancellation/conversion events cannot erase the only evidence
-  // that this team already received a trial.
   if (recordsTrialHistory) {
     assertHeld();
     await prisma.team_Activity.updateMany({
@@ -81,9 +75,6 @@ export const applySubscriptionUpdatedWithTeamLockHeld = async (
   if (shouldClearTeamSubscriptionEntitlement(subscription.status)) {
     assertHeld();
     await prisma.$transaction(async (tx) => {
-      // Lock the plan before the team. The non-terminal path uses the same lock
-      // order, so a terminal transition always wins over an in-flight stale
-      // update for this subscription.
       await tx.subscriptionPlan.updateMany({
         where: { subscriptionId: subscription.id },
         data: {
@@ -121,8 +112,6 @@ export const applySubscriptionUpdatedWithTeamLockHeld = async (
         subscriptionStatus: { notIn: accessRevokingPlanStatuses },
       },
       data: {
-        // Stripe SDK 22 widened Status beyond the pinned Prisma enum. HTPR-4744
-        // owns the complete mapping; these runtime values already match it.
         subscriptionStatus: subscription.status as SubscriptionPlanStatus,
         ownerId: teamToPayFor.googleAccountId,
         projectIds: teamToPayFor.projects.map((item) => item.id),

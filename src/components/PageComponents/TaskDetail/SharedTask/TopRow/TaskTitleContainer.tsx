@@ -38,7 +38,6 @@ const SharedTaskTitleContainer = ({ containerRef }: SharedTaskTitleContainerProp
         </>
       }
     >
-      {/* --------------------------- TASK SUMMARY --------------------------- */}
       {hasSummary && (
         _mbl ? (
           <TaskSummaryMobile markdown={currentTask?.Task_Summary?.[0]?.content ?? ""} />
@@ -47,7 +46,6 @@ const SharedTaskTitleContainer = ({ containerRef }: SharedTaskTitleContainerProp
         )
       )}
 
-      {/* --------------------------- PARENT TASK INFO ------------------------------ */}
       {currentTask?.parentTask && (
         <span className="mt-2 px-2 pb-0 text-icon-dark-gray text-dense">
           Sub-task of&nbsp;

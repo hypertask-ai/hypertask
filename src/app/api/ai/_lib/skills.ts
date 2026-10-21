@@ -69,7 +69,6 @@ export async function resolveSkills(
   const skills = tokens
     .map((match) => bySlug.get(match[2]))
     .filter((skill): skill is AI_Skill => Boolean(skill))
-    // "/foo ... /foo" resolves the same skill twice; inject its body once.
     .filter((skill) => (seen.has(skill.id) ? false : (seen.add(skill.id), true)));
   if (skills.length === 0) return emptyResolution(text);
 
@@ -84,9 +83,6 @@ export async function resolveSkills(
   );
   if (removedAtStart) cleanedText = cleanedText.replace(/^\s/, "");
   if (!cleanedText.trim()) cleanedText = "";
-  // Persisted skill bodies are user-authored and can be imported from arbitrary
-  // GitHub repos, so they are DATA, not policy. Built-ins are also fenced so no
-  // prompt template can override the system rules or tool-use policy above.
   const systemPromptAddition = skills
     .map((skill) => {
       const provenance =

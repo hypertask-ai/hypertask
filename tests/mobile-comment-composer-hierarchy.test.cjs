@@ -41,7 +41,7 @@ test("typed mobile comments hand the inverted primary slot to Send", () => {
 
   const commentBranch = attachments.slice(
     attachments.indexOf('{mode === "create-comment" ? ('),
-    attachments.indexOf("// ========================================================== DESKTOP"),
+    attachments.indexOf("<DesktopAttachment\n            mode={"),
   );
   assert.match(
     commentBranch,

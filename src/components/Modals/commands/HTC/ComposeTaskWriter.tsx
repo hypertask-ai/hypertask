@@ -27,7 +27,7 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { cachedTaskDetailKey } from "@/lib/navigation/cachedTaskDetail";
 import { mergeRealtimeTaskDetail, preserveTaskAssigneesChangedDuringFetch, refreshTaskDetailQueryCache, shouldPreserveTaskEditorContent } from "@/lib/realtime/taskDetailRefresh";
 import { useFlag } from "@/hooks/useFlag";
-import { HTPR_6929_COMPOSE_TASK_WRITER_FLAG, HTPR_6937_NEW_TASK_WINDOW_FLAG, HTPR_6951_TASK_WRITING_PROGRESS_FLAG, HTPR_6962_KEEP_ASSIGNEE_FLAG, HTPR_6999_CTRL_J_VIEW_CONTEXT_FLAG, HTPR_7056_CTRLJ_SPLIT_TASKS_FLAG, HTPR_7085_CTRLJ_WRITER_REASON_FLAG, HTPR_7051_TASK_WRITER_IMAGE_UNFURL_FLAG, HTPR_7053_COMPOSE_BOARD_CHIP_FLAG } from "@/lib/flags/keys";
+import { HTPR_6891_PHONE_TASK_WRITER_SHEET_FLAG, HTPR_6929_COMPOSE_TASK_WRITER_FLAG, HTPR_6937_NEW_TASK_WINDOW_FLAG, HTPR_6951_TASK_WRITING_PROGRESS_FLAG, HTPR_6962_KEEP_ASSIGNEE_FLAG, HTPR_6999_CTRL_J_VIEW_CONTEXT_FLAG, HTPR_7056_CTRLJ_SPLIT_TASKS_FLAG, HTPR_7085_CTRLJ_WRITER_REASON_FLAG, HTPR_7051_TASK_WRITER_IMAGE_UNFURL_FLAG, HTPR_7053_COMPOSE_BOARD_CHIP_FLAG, HTPR_7313_CTRLJ_ALWAYS_BOARD_CHIP_FLAG, HTPR_7343_CTRLJ_WRITER_PROPERTIES_FLAG } from "@/lib/flags/keys";
 import { resolveComposeBoardTarget } from "./composeBoardTarget";
 import { ChatScopeChip } from "@/components/AI_CHAT/ChatScopeChip";
 import MoveTaskGlobal from "@/components/Modals/MoveTaskToBoard";
@@ -40,6 +40,7 @@ export default function ComposeTaskWriter({ active, destinationProject, onCreate
   onCreated: () => void | Promise<void>;
   onBusyChange: (busy: boolean) => void;
 }) {
+  const phoneTaskWriterSheetEnabled = useFlag(HTPR_6891_PHONE_TASK_WRITER_SHEET_FLAG);
   const enabled = useFlag(HTPR_6929_COMPOSE_TASK_WRITER_FLAG);
   const newTaskWindow = useFlag(HTPR_6937_NEW_TASK_WINDOW_FLAG) && enabled;
   const keepAssignee = useFlag(HTPR_6962_KEEP_ASSIGNEE_FLAG);
@@ -48,7 +49,9 @@ export default function ComposeTaskWriter({ active, destinationProject, onCreate
   const splitTasksEnabled = useFlag(HTPR_7056_CTRLJ_SPLIT_TASKS_FLAG);
   const writerReasonEnabled = useFlag(HTPR_7085_CTRLJ_WRITER_REASON_FLAG);
   const unfurlImageUrls = useFlag(HTPR_7051_TASK_WRITER_IMAGE_UNFURL_FLAG);
+  const applyWriterProperties = useFlag(HTPR_7343_CTRLJ_WRITER_PROPERTIES_FLAG);
   const boardChipEnabled = useFlag(HTPR_7053_COMPOSE_BOARD_CHIP_FLAG);
+  const alwaysShowBoardChip = useFlag(HTPR_7313_CTRLJ_ALWAYS_BOARD_CHIP_FLAG);
   const [selectedBoardId, setSelectedBoardId] = useState<number>();
   const [boardPickerOpen, setBoardPickerOpen] = useState(false);
   const boardChip = useRef<HTMLButtonElement>(null);
@@ -69,6 +72,7 @@ export default function ComposeTaskWriter({ active, destinationProject, onCreate
     setTranscribing(false);
   }, [newTaskWindow]);
   const mobile = Boolean(useContext(MobileViewContext));
+  const phoneTaskWriterSheet = phoneTaskWriterSheetEnabled && mobile && active;
   const [text, setText] = useState("");
   const [writing, setWriting] = useState(false);
   const [stage, setStage] = useState<ComposeTaskStage | null>(null);
@@ -112,6 +116,7 @@ export default function ComposeTaskWriter({ active, destinationProject, onCreate
     });
     targetBoardId = target.boardId;
     showBoardChip = target.showChip;
+    if (alwaysShowBoardChip) showBoardChip = true;
   } else {
     targetBoardId = undefined;
     showBoardChip = false;
@@ -132,9 +137,13 @@ export default function ComposeTaskWriter({ active, destinationProject, onCreate
 
   useEffect(() => {
     if (!newTaskWindow || !active || !input.current) return;
+    if (phoneTaskWriterSheet) {
+      input.current.style.height = "";
+      return;
+    }
     input.current.style.height = "auto";
     input.current.style.height = `${Math.max(64, Math.min(input.current.scrollHeight, 208))}px`;
-  }, [newTaskWindow, active, text]);
+  }, [newTaskWindow, active, text, phoneTaskWriterSheet]);
 
   const filesRef = useRef(files);
   filesRef.current = files;
@@ -158,7 +167,6 @@ export default function ComposeTaskWriter({ active, destinationProject, onCreate
         field.setSelectionRange(start, end, direction);
         caret.current = null;
       }
-      // The phone sheet's entry animation can reject the first focus call.
       if (mobile && document.activeElement !== field && ++tries < 30) requestAnimationFrame(focus);
     };
     focus();
@@ -209,7 +217,6 @@ export default function ComposeTaskWriter({ active, destinationProject, onCreate
   const send = async () => {
     if (!enabled || sending.current || pendingImages.current > 0 || dictating || !text.trim()) return;
     sending.current = true;
-    // Keep the window the same size while the progress steps replace the composer.
     setWritingHeight(showProgress ? composer.current?.offsetHeight : undefined);
     setWriting(true);
     setStage(null);
@@ -243,7 +250,7 @@ export default function ComposeTaskWriter({ active, destinationProject, onCreate
       if (!mounted.current) return;
       if (!project) throw new Error("Your last board is unavailable. Open a board and try again.");
       const { task: savedTask, writerFailed, writerFailureReason, tasks: splitResult, failedTitles } = await createComposedTask({
-        text, files, project, userId: user.id, explainWriterFailure: writerReasonEnabled, unfurlImageUrls, ...(existingTaskId ? { existingTaskId } : {}),
+        text, files, project, userId: user.id, explainWriterFailure: writerReasonEnabled, unfurlImageUrls, ...(applyWriterProperties ? { applyWriterProperties } : {}), ...(existingTaskId ? { existingTaskId } : {}),
         ...(viewContextEnabled && currentProject?.id === projectId && !existingTaskId &&
           /^\/project(?:\/|$)/.test(window.location.pathname) ? { viewProject: currentProject } : {}),
         ...(showProgress ? { onProgress: (next: ComposeTaskStage) => { if (mounted.current) setStage(next); } } : {}),
@@ -267,7 +274,6 @@ export default function ComposeTaskWriter({ active, destinationProject, onCreate
         await refreshTaskDetailQueryCache({ queryClient, taskId: task.id, fetchTask: async () => task });
         if (!mounted.current) return;
         updateTaskInCache(task, task.id, task.projectId, task.sectionId);
-        // Board quick-add can open a regular detail provider, not the cached view.
         const context = taskContextRef.current;
         if (context?.currentTask?.id === task.id && context.currentTask.projectId === task.projectId) {
           const syncContent = !shouldPreserveTaskEditorContent(context);
@@ -286,7 +292,6 @@ export default function ComposeTaskWriter({ active, destinationProject, onCreate
           createTaskGlobally({ task: createdTask, sectionId: createdTask.sectionId!, position: "top" });
         }
       } else if (!existingTaskId) createTaskGlobally({ task, sectionId: task.sectionId!, position: "top" });
-      // The phone form's history cleanup must finish before opening the task and chat.
       if (mobile && newTaskWindow) await onCreated();
       setIntro({ taskId: task.id, content: composeTaskAssistantMessage(task.ticketNumber ?? `${project.uniqueIdentifier ?? "TASK"}-${task.uniqueIndex}`, writerFailed, Boolean(existingTaskId), splitTasksEnabled && splitResult ? { tasks: splitResult, failedTitles } : undefined, writerFailureReason) });
       updateActiveItemAndItemInView(task);
@@ -302,12 +307,10 @@ export default function ComposeTaskWriter({ active, destinationProject, onCreate
     } finally {
       sending.current = false;
       if (mounted.current) setWriting(false);
-      // The palette can outlive Compose when the feature flag turns off.
       onBusyChange(false);
     }
   };
 
-  // A lazy thumbnail must not suspend the modal portal and remount its draft.
   const attachments = fileItems.length > 0 && (
     <Suspense fallback={null}>
       <ImageGallery files={fileItems} images={[]} allowDelete shouldUpload={false} mode="others" variant="chat"
@@ -319,7 +322,7 @@ export default function ComposeTaskWriter({ active, destinationProject, onCreate
   );
 
   return enabled ? (
-    <div hidden={!active} data-compose-task-writer data-compose-board-picker-open={boardChipEnabled && active && boardPickerOpen ? "" : undefined} className={newTaskWindow && mobile ? "max-h-[65dvh] overflow-y-auto" : undefined}
+    <div hidden={!active} data-compose-task-writer data-compose-board-picker-open={boardChipEnabled && active && boardPickerOpen ? "" : undefined} className={phoneTaskWriterSheet ? "flex min-h-0 flex-1 flex-col" : newTaskWindow && mobile ? "max-h-[65dvh] overflow-y-auto" : undefined}
       onDragOver={(event) => { if (!writing && event.dataTransfer.types.includes("Files")) event.preventDefault(); }}
       onDrop={(event) => {
         if (!event.dataTransfer.files.length) return;
@@ -331,10 +334,11 @@ export default function ComposeTaskWriter({ active, destinationProject, onCreate
           <FullScreenChatLoading inline label={showProgress && stage ? stage : "Writing your ticket…"} />
         </div>
       ) : (
-        <div ref={composer} className="p-2">
-          <div className="flex w-full flex-col rounded-[5px] bg-ai-tiptap px-3 py-2">
-            {newTaskWindow && attachments && (mobile ? attachments : (
-              // Reserve space for the textarea, actions and footer without clipping their tooltips.
+        <div ref={composer} className={phoneTaskWriterSheet ? "flex min-h-0 flex-1 flex-col p-2" : "p-2"}>
+          <div className={phoneTaskWriterSheet ? "flex min-h-0 w-full flex-1 flex-col rounded-[5px] bg-ai-tiptap px-3 py-2" : "flex w-full flex-col rounded-[5px] bg-ai-tiptap px-3 py-2"}>
+            {(newTaskWindow || phoneTaskWriterSheet) && attachments && (phoneTaskWriterSheet ? (
+              <div className="min-h-0 overflow-y-auto">{attachments}</div>
+            ) : mobile ? attachments : (
               <div className="max-h-[max(6rem,calc(65dvh-20rem))] overflow-y-auto">{attachments}</div>
             ))}
             <AiComposerTextarea
@@ -344,7 +348,7 @@ export default function ComposeTaskWriter({ active, destinationProject, onCreate
               rows={mobile ? 3 : 2}
               placeholder="Describe the task"
               aria-label="Describe the task"
-              className={newTaskWindow ? "min-h-16 max-h-52 overflow-y-auto text-content caret-hypertasks-ai-purple" : "min-h-16 text-content"}
+              className={phoneTaskWriterSheet ? "min-h-16 flex-1 overflow-y-auto text-content caret-hypertasks-ai-purple" : newTaskWindow ? "min-h-16 max-h-52 overflow-y-auto text-content caret-hypertasks-ai-purple" : "min-h-16 text-content"}
               onPaste={(event) => {
                 const images = extractPastedImageFiles(event.clipboardData?.items);
                 if (!images.length) return;
@@ -367,8 +371,8 @@ export default function ComposeTaskWriter({ active, destinationProject, onCreate
                 }
               }}
             />
-            {!newTaskWindow && attachments}
-            <div className="flex w-full items-center justify-between pt-2">
+            {!newTaskWindow && !phoneTaskWriterSheet && attachments}
+            <div className={phoneTaskWriterSheet ? "flex w-full shrink-0 items-center justify-between pt-2" : "flex w-full items-center justify-between pt-2"}>
               <div className="flex min-w-0 flex-1 items-center gap-2">
                 {!recording && <AttachmentButton disabled={addingImages || dictating} mobile={mobile} onClick={handleAttachmentClick} />}
                 {newTaskWindow && <AudioButton id="compose-task-audio-button" ariaLabel="Start dictation" editor={null}
@@ -408,13 +412,13 @@ export default function ComposeTaskWriter({ active, destinationProject, onCreate
           {error && <p role="alert" className="px-2 pt-2 text-meta text-text-light-gray">{error}</p>}
         </div>
       )}
-      <div className="flex flex-wrap items-center gap-4 border-t border-light-black-border-1 px-4 py-2 text-micro text-text-light-gray">
+      {!phoneTaskWriterSheet && <div className="flex flex-wrap items-center gap-4 border-t border-light-black-border-1 px-4 py-2 text-micro text-text-light-gray">
         <span><HintKey>Enter</HintKey> Send</span>
         <span><HintKey>{newTaskWindow ? getShortcutDisplay({ key: 85, modifiers: ["ctrl"], description: "Attach" }, isApple).join("+") : "Ctrl+U"}</HintKey> {newTaskWindow ? "Attach files" : "Add images"}</span>
         <span><HintKey>{newTaskWindow ? getShortcutDisplay({ key: 75, modifiers: ["ctrl"], description: "Search" }, isApple).join("+") : "Ctrl+K"}</HintKey> Search</span>
         {boardChipEnabled && <span><HintKey>{boardShortcut}</HintKey> Board</span>}
         <span><HintKey>Esc</HintKey> Close</span>
-      </div>
+      </div>}
       {boardChipEnabled && active && boardPickerOpen && <MoveTaskGlobal
         boards={loadingBoards && !boards.length ? undefined : boards}
         closeHTC={() => setBoardPickerOpen(false)}

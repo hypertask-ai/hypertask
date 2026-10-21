@@ -57,14 +57,12 @@ async function getCurrentUserFromCookies() {
 
 export async function GET(request: NextRequest) {
   try {
-    // The signed session alone proves identity; preferences only need the id.
     const currentUser = await loadCurrentUser(request.headers).catch(() => null);
     let restCompat = false;
     if (currentUser) {
       try {
         restCompat = await isFeatureEnabled(HTPR_6924_REST_COMPAT_FLAG, currentUser.userId);
       } catch {
-        // Flag lookup failure preserves the legacy entry path.
       }
     }
     const user = restCompat && currentUser
@@ -116,14 +114,12 @@ export async function GET(request: NextRequest) {
 
 export async function POST(request: NextRequest) {
   try {
-    // The signed session alone proves identity; preferences only need the id.
     const currentUser = await loadCurrentUser(request.headers).catch(() => null);
     let restCompat = false;
     if (currentUser) {
       try {
         restCompat = await isFeatureEnabled(HTPR_6924_REST_COMPAT_FLAG, currentUser.userId);
       } catch {
-        // Flag lookup failure preserves the legacy entry path.
       }
     }
     const user = restCompat && currentUser
@@ -420,9 +416,6 @@ export async function POST(request: NextRequest) {
           );
         }
       }
-      // Merge (max per emoji) into the stored map rather than replacing it, so
-      // a second device or a stale emoji-mart Index can never shrink the saved
-      // history. Mirrors the aiModelPreferences merge-on-write pattern above.
       const existing = await prisma.userSetting.findUnique({
         where: { userId: user.id },
         select: { emojiFrequency: true },
@@ -438,7 +431,6 @@ export async function POST(request: NextRequest) {
         const current = typeof merged[key] === "number" ? merged[key] : 0;
         merged[key] = Math.max(current, value as number);
       }
-      // Keep only the 200 highest-count emojis so the map stays bounded.
       let capped: Record<string, number> = merged;
       const mergedKeys = Object.keys(merged);
       if (mergedKeys.length > 200) {

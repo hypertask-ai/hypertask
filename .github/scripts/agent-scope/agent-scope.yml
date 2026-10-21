@@ -1,0 +1,27 @@
+rules:
+  - id: agent-board-scope
+    languages: [typescript, javascript]
+    severity: ERROR
+    message: >-
+      Build the where from getProjectWhere/getProjectListingWhere,
+      projectContentAccessWhere (getTaskContentWhere equivalent), or
+      taskWriteAccessWhere/savedViewBoardAccessWhere, and pass the authenticated agentId.
+      For a pre-authorized ID, record a reviewed exact call in agent-scope-exceptions.json.
+    patterns:
+      - pattern: prisma.$MODEL.$METHOD(...)
+      - metavariable-regex:
+          metavariable: $MODEL
+          regex: '^(project|task|comment)$'
+      - metavariable-regex:
+          metavariable: $METHOD
+          regex: '^(findMany|findFirst|findUnique|update|delete|count)$'
+      - pattern-not: |
+          prisma.$MODEL.$METHOD({ ..., where: <... getProjectWhere(...) ...>, ... })
+      - pattern-not: |
+          prisma.$MODEL.$METHOD({ ..., where: <... getProjectListingWhere(...) ...>, ... })
+      - pattern-not: |
+          prisma.$MODEL.$METHOD({ ..., where: <... projectContentAccessWhere(...) ...>, ... })
+      - pattern-not: |
+          prisma.$MODEL.$METHOD({ ..., where: <... taskWriteAccessWhere(...) ...>, ... })
+      - pattern-not: |
+          prisma.$MODEL.$METHOD({ ..., where: <... savedViewBoardAccessWhere(...) ...>, ... })

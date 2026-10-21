@@ -47,7 +47,7 @@ export enum CommandMode {
   QuickTips,
   ManageLabels,
   ArchiveTask,
-  ToggleDarkMode, // Reserved legacy ordinal: no longer registered in Ctrl+K.
+  ToggleDarkMode,
   ToggleWhiteTheme,
   ShowFilterHTC,
   SetDueDate,
@@ -63,7 +63,7 @@ export enum CommandMode {
   CreateSubTask,
   ViewSubTasks,
   CopyCommentURL,
-  InteractiveTutorial, // Reserved legacy ordinal: keyboard tutorial is disabled.
+  InteractiveTutorial,
   GoToOnboarding,
   CreateTaskFromComment,
   ManageViews,
@@ -93,7 +93,7 @@ export enum CommandMode {
   FullScreenAIChat,
   ToggleAIChatView,
   SpeechToText,
-  SetTheme, // Reserved legacy ordinal: the duplicate submenu was retired.
+  SetTheme,
   ToggleSystemTheme,
   StartKanbanTutorial,
   StartTaskWriterTutorial,
@@ -163,7 +163,6 @@ export enum CommandMode {
   MarkBlockedBy,
   MarkAsBlocking,
   MarkDuplicateOf,
-  // Retired; kept only to preserve persisted command-mode ordinals.
   BoardVelocity,
   AcceptTask,
   DeclineTask,
@@ -173,9 +172,6 @@ export enum CommandMode {
   ArchiveAllReadNotifications,
   ArchiveReactionNotifications,
   FastLikeComment,
-  // Append new modes at the end: the frequently-used palette atom persists
-  // commandMode numbers to localStorage, so inserting mid-enum silently remaps
-  // every saved shortcut past the insertion point.
   GotoBoardVelocityReport,
   OpenBlockedByModal,
   ShowAnnouncements,
@@ -186,7 +182,6 @@ export enum CommandMode {
   BoardCreationAssistant,
   ToggleFilterValueMatch,
   CreateTaskWithAiWriter,
-  // Appended per the append-only rule above (persisted ordinals).
   SetStartDate,
   SetRecurrence,
   SaveTaskTemplate,
@@ -198,7 +193,6 @@ export enum CommandMode {
   ManageCustomFields,
   CreateSmartSplit,
   UndoLatest,
-  // Numeric enum persisted in client state: only ever append.
   GoToAgents,
   TaskDescriptionVersions,
   SuggestReply,
@@ -212,10 +206,12 @@ export enum CommandMode {
   AgentChatAddAgent,
   AgentChatNextTeam,
   AgentChatPreviousTeam,
-  ArchiveInboxCluster, // Retired; reserve the persisted ordinal for old tabs.
-  // Retired; keep the ordinal so a persisted MyTasksSnooze mode does not
-  // remap a later appended command during deploy.
+  ArchiveInboxCluster,
   MyTasksSnooze,
+  SelectAllOnBoard,
+  SelectAllInColumn,
+  ClearTaskSelection,
+  ToggleRoundedTheme,
 }
 
 export enum ELogType {

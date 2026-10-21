@@ -15,8 +15,6 @@ export function previousModelForFailedStream(
   hasStreamedContent: boolean,
   hasExecutedTools: boolean,
   haiku55Enabled = false,
-  // HTPR-7075: a Claude 5.5 model retries on itself, never on an older
-  // Claude version or another provider.
   sameModelRetry = false,
 ): { model: string; status: string } | null {
   const previous = sameModelRetry && isClaude55Model(model)
