@@ -29,8 +29,19 @@ description: Required before every new or changed visible Hypertask UI, except a
 
 1. `wireframe new <TICKET>`: copies the full-app base kit (https://hypertask.app/wireframes/base) into a working folder and prints its path.
 2. Change only what the ticket needs in that file, using only elements already in the kit or the live app.
-3. Click through it in a headless browser at both sizes before publishing. Fix any broken link or dead click first.
-4. `wireframe publish <TICKET> --question "<one yes/no question>?"`: uploads to `https://hypertask.app/wireframes/<ticket>` (lowercase), verifies the bytes, posts the link, screenshot and Question mentioning Valentin, and moves board 15 tickets to **UX Sign-off** (column 22502). Put `New elements: <ComponentName>, ...` (or `New elements: none`) inside the `--question` text, using the exact component names the build will add: `ux-signoff` matches those names. Never edit a wireframe comment after posting it (the check cannot see edits); post a new wireframe comment instead, which needs a fresh yes. Keep it the last comment, with the clickable wireframe link and one closing yes/no `Question:` @mentioning Valentin. In /ship, abandon remaining gates with "waiting for Valentin: wireframe sign-off" (Valentin, 2026-10-10).
+3. Check in the static page/assets as `docs/wireframes/<TICKET>/index.html` and register `"docs/wireframes/<TICKET>/index.html": { "ticket": "<TICKET>" }` in `scripts/wireframe-capture-allowed.json`. This allowlist starts empty; this infrastructure ticket does not invent a UI mockup. Keep CSS, fonts, images and JS local to that ticket folder: external requests/redirects and symlink escapes are refused. Support the app's `html[data-theme]` plus `light`/`dark` and named theme classes (`src/lib/themePreferences.ts`). The old publisher has no four-theme capture support; do not use its local screenshot path.
+4. The path-filtered PR `wireframe-capture.yml` captures the checked-in merge revision on GitHub-hosted runners, with no secrets or environment. For a merged page, dispatch below. Confirm the exact run/head/attempt, download the public artifact, and inspect all eight PNGs (four themes, desktop 1440x900 and phone 390x844; each under 3 MiB). Static capture is not interaction proof: review/click the published flow too. Live-source grounding uses encrypted `live-qa.yml` capture (`verify-qa`), never this secretless job. Do not run browsers on the VPS.
+
+   ```bash
+   gh workflow run wireframe-capture.yml --repo hypertask-ai/hypertask --ref production \
+     -f ticket=HTPR-1234 -f wireframe=docs/wireframes/HTPR-1234/index.html
+   gh run watch "$RUN_ID" --repo hypertask-ai/hypertask --exit-status
+   gh run download "$RUN_ID" --repo hypertask-ai/hypertask \
+     --name "wireframe-$RUN_ID-$ATTEMPT" \
+     --dir "$HOME/.local/state/vcc-evidence/HTPR-1234/wireframe/$RUN_ID-$ATTEMPT"
+   ```
+
+   For the HTML-only publisher, inline assets in the checked-in HTML first and recapture, then publish those exact bytes with `wireframe publish <TICKET> --no-comment` (copy the checked-in page to the publisher's working file first). Then post the clickable `https://hypertask.app/wireframes/<ticket>` link, downloaded key PNGs and one yes/no Question @mentioning Valentin through `vcc`, and move to **UX Sign-off** (board 15 column 22502). Include `New elements: <ComponentName>, ...` or `New elements: none`; `ux-signoff` matches those exact names. Never edit an approved comment: feedback gets a new reply with before/after PNGs and another yes when the design changes. Publishing and board writes remain outside Actions. A `prototype` URL follows the same link/PNG/Question/sign-off rules.
 5. When he answers: `wireframe status <TICKET> approved` or `wireframe status <TICKET> rejected`, then build exactly what he approved, behind the ticket's flag for new behaviour, and continue /ship. Do not build a rejected option.
 
 List: https://hypertask.app/wireframes. A static image may still go on the ticket as a page.

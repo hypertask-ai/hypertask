@@ -7,6 +7,26 @@ description: After the production deploy, the session that built the change veri
 
 Load this at the `/ship` step **after deploy**. The session that built the change verifies it on production. A merged pull request is not proof. If a case fails, you fix it and ship again, then run this skill again.
 
+## GitHub runner capture
+
+Run account-985 live browser capture in `live-qa.yml` on ephemeral GitHub-hosted runners, not on the VPS ([infrastructure ticket](https://app.hypertask.ai/detail/project-4060/544)). First merge the reviewed `e2e/live-qa/<TICKET>.spec.ts` and its `scripts/live-qa/allowed-scripts.json` entry into `production`. Import `test`/`expect` from `scripts/live-qa/fixture.ts`; list only QA-owned fixture board IDs. An empty list makes browser requests read-only. The guard is defense in depth, not server authorization: no direct API-request clients, unguarded contexts, shared-data cleanup, billing, invitations or email sends. Verify ownership/membership before fixture writes; create and clean up only run-owned resources. The bootstrap script for this infra ticket checks identity only, not a product feature.
+
+```bash
+gh workflow run live-qa.yml --repo hypertask-ai/hypertask --ref production \
+  -f mode=run -f ticket=HTPR-1234 -f script=e2e/live-qa/HTPR-1234.spec.ts \
+  -f expected_deploy_sha="$LIVE_SHA"
+gh run list --repo hypertask-ai/hypertask --workflow live-qa.yml --branch production \
+  --event workflow_dispatch --json databaseId,displayTitle,headSha,status,conclusion,createdAt
+gh run watch "$RUN_ID" --repo hypertask-ai/hypertask --exit-status
+approved-age-identity-provider | scripts/live-qa/download.sh HTPR-1234 "$RUN_ID" "$ATTEMPT"
+```
+
+`approved-age-identity-provider` means the authorized operator's provider for the QA evidence identity in 1Password; it is not an installed command. Read it once into the pipe, never a shell argument, environment variable or saved key file. Confirm the exact run's title/inputs, workflow code SHA, deployed SHA and attempt; never blindly download the latest run. Download requires local `gh`, `age`, Python 3 and repository-read access. It extracts only allowlisted regular files to `~/.local/state/vcc-evidence/<TICKET>/<RUN_ID>-<ATTEMPT>/`, refusing an existing destination. Inspect PNGs/video and metadata, then write the feature-map checklist, final `proof.md` and ticket report below; an automatic capture PASS is not a final QA verdict. The script suppresses raw browser errors, so failures require inspection of encrypted media rather than public call logs.
+
+The workflow renews only QA 985 in a separate secret-bearing process, checks the deployed SHA and public successful Production deployment before/after tests, records desktop/phone video with no traces/HAR, and uploads only age-encrypted evidence for seven days. The checked-in recipient placeholder deliberately blocks capture before login until an admin provisions the public key. Setup/login failures produce no media artifact; a started test can produce encrypted FAIL/UNREACHABLE evidence. No raw auth state or credentials may be attached. All four themes and main-path screenshots belong in the reviewed script. Missing account/plan/admin coverage stays UNREACHABLE; there is no credential fallback. Existing local browser commands below describe the proof recipe for the script, not permission to run browsers on the VPS. This production flow does not replace PR-build premerge evidence.
+
+Runs need no per-run human approval. Admin migration, boolean-only scope probes, code-review protection and rollback are documented in `docs/ci.md` under “Live QA and wireframe capture”. The fixed account lock is shared with production smoke; Actions can replace pending runs, so detect cancellation and deliberately redispatch. Do not assume FIFO.
+
 Proof bar follows Lauren Tan's verification skills: [create-verification-skill](https://github.com/cursor/plugins/tree/main/pstack/skills/create-verification-skill), [maintain-verification-skill](https://github.com/cursor/plugins/tree/main/pstack/skills/maintain-verification-skill), and [poteto/verification-skill-example](https://github.com/poteto/verification-skill-example). Doctor first. Drive the real app. Prove side effects. Mocks never count.
 
 ## Released flags: before merge and after a failure
