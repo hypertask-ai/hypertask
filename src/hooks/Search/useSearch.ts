@@ -1,6 +1,6 @@
 import { parseSearchQuery } from "@/lib/search/operators";
 import { searchConfig } from "@/lib/configs/search.config";
-import { HTPR_6688_SEARCH_AUTOCOMPLETE_FLAG, HTPR_6865_SEARCH_LAYOUT_FLAG, HTPR_6878_SEARCH_LABEL_SCOPE_FLAG, HTPR_6879_SEARCH_ESC_BACK_FLAG, HTPR_6880_SEARCH_COMMENTER_FLAG, HTPR_6994_SEARCH_ESC_LEAVES_FLAG } from "@/lib/flags/keys";
+import { HTPR_6865_SEARCH_LAYOUT_FLAG, HTPR_6878_SEARCH_LABEL_SCOPE_FLAG, HTPR_6879_SEARCH_ESC_BACK_FLAG, HTPR_6880_SEARCH_COMMENTER_FLAG, HTPR_6994_SEARCH_ESC_LEAVES_FLAG } from "@/lib/flags/keys";
 import { useFlag, useFlagReady } from "@/hooks/useFlag";
 import { isServerSearchFor, type ServerStartedSearch } from "@/lib/search/serverStartedSearch";
 import { useDeviceContext } from "@/lib/contexts/deviceContext";
@@ -87,9 +87,7 @@ export function useSearch(
   const router = useRouter();
   const queryClient = useQueryClient();
   const isApple = useDeviceContext();
-  const searchAutocompleteEnabled = useFlag(HTPR_6688_SEARCH_AUTOCOMPLETE_FLAG);
-  const searchLayoutFlagEnabled = useFlag(HTPR_6865_SEARCH_LAYOUT_FLAG);
-  const searchLayoutEnabled = searchLayoutFlagEnabled && searchAutocompleteEnabled;
+  const searchLayoutEnabled = useFlag(HTPR_6865_SEARCH_LAYOUT_FLAG);
   const searchLabelScopeFlagEnabled = useFlag(HTPR_6878_SEARCH_LABEL_SCOPE_FLAG);
   const searchEscBackFlagEnabled = useFlag(HTPR_6879_SEARCH_ESC_BACK_FLAG);
   const searchEscBackEnabled = searchEscBackFlagEnabled && searchLayoutEnabled;
@@ -148,7 +146,6 @@ export function useSearch(
     const processedData = search.data.processedData as Record<string, ITypedTask[]>;
     if (processedData["All"].length > 0) {
       applySearchResults(processedData, search.data.tabs);
-      if (!searchAutocompleteEnabled) tasksInputRef.current?.blur();
     } else {
       handleStatesOnResponse(searchConfig.responseMessages.fail);
     }
@@ -182,7 +179,6 @@ export function useSearch(
           const { processedData, tabs: splits } = response.data;
           if (processedData["All"].length > 0) {
             applySearchResults(processedData, splits);
-            if (!searchAutocompleteEnabled) tasksInputRef.current?.blur();
           } else {
             handleStatesOnResponse(searchConfig.responseMessages.fail);
           }
@@ -279,7 +275,7 @@ export function useSearch(
   function updateSearchHistory(searchTerm: string) {
     if (searchTerm.length < 2) {
       searchRequestGate.invalidate();
-      if (searchLayoutFlagEnabled && searchAutocompleteEnabled) { setSubmittedQuery(null); setResponseMessage(searchConfig.responseMessages.default); }
+      if (searchLayoutEnabled) { setSubmittedQuery(null); setResponseMessage(searchConfig.responseMessages.default); }
       router.replace(searchUrl(searchTerm, null, includeArchived));
       setTypedTasks([]);
       setSelectedIndex(null);
@@ -348,7 +344,6 @@ export function useSearch(
             splits,
             options?.resetTab ? 0 : undefined
           );
-          if (!searchAutocompleteEnabled) document.getElementById(searchConfig.elementIds.input.id)?.blur();
         } else handleStatesOnResponse(searchConfig.responseMessages.fail);
       }
     } catch (error) {
@@ -397,7 +392,7 @@ export function useSearch(
   }
 
   function handleKeyDown(event: KeyboardEvent) {
-    const resultArrow = searchAutocompleteEnabled &&
+    const resultArrow =
       document.activeElement === document.body &&
       !event.ctrlKey && !event.metaKey && !event.altKey &&
       ["ArrowDown", "ArrowUp"].includes(event.key);
@@ -497,11 +492,9 @@ export function useSearch(
         }
       }
 
-      if (typedTasks.length > 0 && (selectedIndex !== null || searchAutocompleteEnabled)) {
-        if (searchAutocompleteEnabled) {
-          event.preventDefault();
-          tasksInputRef.current?.blur();
-        }
+      if (typedTasks.length > 0) {
+        event.preventDefault();
+        tasksInputRef.current?.blur();
         if (selectedIndex === null) {
           setSelectedAndInView(typedTasks[0], 0);
         } else if (selectedIndex === -1 || selectedIndex === typedTasks.length - 1) {
@@ -541,11 +534,9 @@ export function useSearch(
         }
       }
 
-      if (typedTasks.length > 0 && (selectedIndex !== null || searchAutocompleteEnabled)) {
-        if (searchAutocompleteEnabled) {
-          event.preventDefault();
-          tasksInputRef.current?.blur();
-        }
+      if (typedTasks.length > 0) {
+        event.preventDefault();
+        tasksInputRef.current?.blur();
         if (selectedIndex === null) {
           setSelectedAndInView(typedTasks[typedTasks.length - 1], typedTasks.length - 1);
         } else if (selectedIndex <= 0) {
@@ -731,7 +722,6 @@ export function useSearch(
     searchCache,
     selectedHistory,
     includeArchived,
-    searchAutocompleteEnabled,
     searchLayoutEnabled,
     searchEscBackEnabled,
     searchEscLeavesEnabled,
@@ -785,7 +775,7 @@ export function useSearch(
   }, [searchFlagsReady]);
 
   useEffect(() => {
-    if (!searchAutocompleteEnabled || !projects.length) return;
+    if (!projects.length) return;
     const term = inputValue.trim();
     const key = currentSearchKey(term, includeArchived);
     if (lastSearchKey.current === key) return;
@@ -806,7 +796,7 @@ export function useSearch(
       }
     }, 300);
     return () => clearTimeout(timer);
-  }, [inputValue, includeArchived, projects, _fromProject, searchAutocompleteEnabled, searchLayoutEnabled]);
+  }, [inputValue, includeArchived, projects, _fromProject, searchLayoutEnabled]);
 
   return {
     availableSearchBoards: searchLabelScopeFlagEnabled && searchLayoutEnabled ? projects : [],

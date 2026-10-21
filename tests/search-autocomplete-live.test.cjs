@@ -5,7 +5,7 @@ const React = require('react')
 const { JSDOM } = require('jsdom')
 const root = path.resolve(__dirname, '..')
 
-test('flagged search debounces typing, rejects stale results, and exposes submitted history in Tips', async (t) => {
+test('search debounces typing, rejects stale results, and exposes submitted history in Tips', async (t) => {
   const dom = new JSDOM('<div id="root"></div>', { url: 'https://example.test/search' })
   const previous = ['window', 'document', 'navigator', 'HTMLElement', 'localStorage', 'IS_REACT_ACT_ENVIRONMENT'].map((key) => [key, Object.getOwnPropertyDescriptor(global, key)])
   Object.assign(global, { window: dom.window, document: dom.window.document, HTMLElement: dom.window.HTMLElement, localStorage: dom.window.localStorage, IS_REACT_ACT_ENVIRONMENT: true })
@@ -21,7 +21,6 @@ test('flagged search debounces typing, rejects stale results, and exposes submit
   const source = (file, exports) => stub(path.join(root, file), exports)
   const requests = []
   const navigations = []
-  let enabled = true
   let state
   let updateCache
   let history = []
@@ -29,7 +28,7 @@ test('flagged search debounces typing, rejects stale results, and exposes submit
   try {
     source('src/utils/index.ts', { taskBaseUri: '/detail/' })
     source('src/utils/undoActions/helperFuncs.ts', { cn: (...values) => values.filter(Boolean).join(' ') })
-    source('src/hooks/useFlag.tsx', { useFlagReady: () => true, useFlag: (key) => key === 'htpr-6865-search-layout' ? false : key === 'htpr-6688-search-autocomplete' ? enabled : true })
+    source('src/hooks/useFlag.tsx', { useFlagReady: () => true, useFlag: (key) => key !== 'htpr-6865-search-layout' })
     source('src/lib/contexts/deviceContext.tsx', { useDeviceContext: () => false })
     const allProjects = [{ id: 7, title: 'Visible' }]
     source('src/hooks/MultiPages/useGetAllProjectsMinimal.ts', { useGetAllProjectsMinimal: () => ({ data: allProjects }) })
@@ -54,7 +53,7 @@ test('flagged search debounces typing, rejects stale results, and exposes submit
     const SearchChipsInput = jiti(path.join(root, 'src/app/search/SearchChipsInput.tsx')).default
     const Harness = () => {
       state = useSearch('')
-      return React.createElement(SearchChipsInput, { value: state.inputValue, onChange: state.setInputValue, onRun: state.updateSearchHistory, recentSearches: state.searchCache.history, boardId: null, inputRef: state.tasksInputRef, autocompleteEnabled: enabled })
+      return React.createElement(SearchChipsInput, { value: state.inputValue, onChange: state.setInputValue, onRun: state.updateSearchHistory, recentSearches: state.searchCache.history, boardId: null, inputRef: state.tasksInputRef })
     }
     reactRoot = require('react-dom/client').createRoot(document.getElementById('root'))
     await React.act(async () => reactRoot.render(React.createElement(Harness)))
@@ -121,19 +120,6 @@ test('flagged search debounces typing, rejects stale results, and exposes submit
     assert.equal(requests.at(-1).body.searchQuery, 'login')
     await complete(requests.at(-1))
     await tick(300)
-
-    enabled = false
-    await React.act(async () => reactRoot.render(React.createElement(Harness, { key: 'off' })))
-    const before = requests.length
-    await type('login')
-    await tick(1000)
-    assert.equal(requests.length, before, 'flag-off search still waits for Enter')
-    await press('Enter')
-    assert.equal(requests.length, before + 1)
-    await complete(requests.at(-1))
-    await type('')
-    await React.act(async () => document.getElementById('search-input').focus())
-    assert.equal(document.querySelector('[role="option"]'), null, 'flag-off search has no Tips or recent overlay')
   } finally {
     t.mock.timers.reset()
     if (reactRoot) await React.act(async () => reactRoot.unmount())

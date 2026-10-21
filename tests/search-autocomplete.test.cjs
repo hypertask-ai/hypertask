@@ -120,10 +120,9 @@ test('filter palettes and title highlighting use scoped semantic tokens for ever
   assert.deepEqual(Object.keys(SEARCH_TIPS).sort(), [...SEARCH_OPERATORS].sort())
 })
 
-test('enabled drafting retains a complete value until acceptance; flag off keeps 6370 behavior', () => {
+test('drafting retains a complete value until acceptance; submitted values become chips', () => {
   for (const query of ['is:open', 'has:comment', 'after:2026-10-01', 'label:"Bug"']) {
     assert.equal(splitSearchChips(query, true, {}, true).text, query)
-    assert.equal(splitSearchChips(query, true).chips.length, 1)
     assert.equal(splitSearchChips(`${query} `, true, {}, true).chips.length, 1)
     assert.equal(splitSearchChips(query, false, {}, true).chips.length, 1)
   }
@@ -131,14 +130,8 @@ test('enabled drafting retains a complete value until acceptance; flag off keeps
     assert.equal(splitSearchChips(query, true, {}, true).chips.length, 0)
     assert.equal(searchCompletion(query).kind, 'value')
   }
-  const flags = (readFileSync(path.join(root, 'src/lib/flags.ts'), 'utf8') + require("./helpers/flag-files.cjs").source())
-  const keys = require("./helpers/flag-files.cjs").source()
   const component = readFileSync(path.join(root, 'src/app/search/SearchComp.tsx'), 'utf8')
-  assert.match(keys, /HTPR_6688_SEARCH_AUTOCOMPLETE_FLAG = "htpr-6688-search-autocomplete"/)
-  assert.match(flags, /key: HTPR_6688_SEARCH_AUTOCOMPLETE_FLAG/)
-  assert.match(flags, /DEFAULT_FEATURE_FLAG_MODE: FeatureFlagMode = "OWNER_AND_QA"/)
-  assert.match(component, /useFlag\(\s*HTPR_6688_SEARCH_AUTOCOMPLETE_FLAG\s*\)/)
-  assert.match(component, /autocompleteEnabled \? \(\s*<SearchChipsInput[\s\S]*?\sautocompleteEnabled\s*\/>/)
+  assert.equal((component.match(/<SearchChipsInput/g) ?? []).length, 1)
 })
 
 test('title highlights are literal, case insensitive and omit filter values without HTML injection', () => {

@@ -12,7 +12,7 @@ import { useFlag } from "@/hooks/useFlag";
 import { useRouter, useSearchParams } from "next/navigation";
 import { buildFullScreenChatPath } from "@/lib/aiChatDisplayMode";
 import { HTPR_6936_ASK_AI_FULLSCREEN_FLAG } from "@/lib/flags/keys";
-import { HTPR_6688_SEARCH_AUTOCOMPLETE_FLAG, HTPR_6865_SEARCH_LAYOUT_FLAG, HTPR_6878_SEARCH_LABEL_SCOPE_FLAG, HTPR_6879_SEARCH_ESC_BACK_FLAG, HTPR_6880_SEARCH_COMMENTER_FLAG } from "@/lib/flags/keys";
+import { HTPR_6865_SEARCH_LAYOUT_FLAG, HTPR_6878_SEARCH_LABEL_SCOPE_FLAG, HTPR_6879_SEARCH_ESC_BACK_FLAG, HTPR_6880_SEARCH_COMMENTER_FLAG } from "@/lib/flags/keys";
 import { highlightedSearchSnippet, highlightedTitle } from "@/lib/search/autocomplete";
 import { HTPR_6882_SEARCH_MATCH_HIGHLIGHTS_FLAG, HTPR_6911_SEARCH_ROW_HIGHLIGHT_FLAG } from "@/lib/flags/keys";
 import LabelWrapper from "@/components/Labels/LabelWrapper";
@@ -52,9 +52,7 @@ const SearchComp = ({
   const searchTerm = askAiFullscreenEnabled && askAiFullscreenFlagEnabled
     ? searchParams?.get("searchTerm") ?? _searchTerm
     : _searchTerm;
-  const autocompleteEnabled = useFlag(HTPR_6688_SEARCH_AUTOCOMPLETE_FLAG);
-  const layoutFlagEnabled = useFlag(HTPR_6865_SEARCH_LAYOUT_FLAG);
-  const layoutEnabled = layoutFlagEnabled && autocompleteEnabled;
+  const layoutEnabled = useFlag(HTPR_6865_SEARCH_LAYOUT_FLAG);
   const matchHighlightsFlagEnabled = useFlag(HTPR_6882_SEARCH_MATCH_HIGHLIGHTS_FLAG);
   const rowHighlightFlagEnabled = useFlag(HTPR_6911_SEARCH_ROW_HIGHLIGHT_FLAG);
   const commenterFlagEnabled = useFlag(HTPR_6880_SEARCH_COMMENTER_FLAG);
@@ -125,38 +123,27 @@ const SearchComp = ({
         suppressHydrationWarning
         onClick={(e) => setSelectedIndex(null)}
         autoFocus={false}
-        className={cn(`py-9 min-h-screen bg-containerBackground flex-col rounded-[4px] my-0 global-view-width flex items-center  search-input  ${styles.links_modal}`, autocompleteEnabled && 'search-autocomplete')}
+        className={cn(`py-9 min-h-screen bg-containerBackground flex-col rounded-[4px] my-0 global-view-width flex items-center  search-input  ${styles.links_modal}`, 'search-autocomplete')}
       >
         <div className={cn('w-full px-0', appShellRailOn && 'pl-[64px] @xl:pl-0')}>
-          {autocompleteEnabled ? (
-            <SearchChipsInput
-              value={inputValue}
-              onChange={setInputValue}
-              onRun={updateSearchHistory}
-              boardId={_fromProject}
-              inputRef={tasksInputRef}
-              recentSearches={searchCache.history}
-              layoutEnabled={layoutEnabled}
-              availableBoards={labelScopeFlagEnabled && layoutEnabled ? availableSearchBoards : undefined}
-              onAskAi={openAskAi}
-              showSuggestions={isSearchDraft || (searchEscBackFlagEnabled && layoutEnabled && !inputValue.trim())}
-              autocompleteEnabled
-            />
-          ) : (
-            <SearchChipsInput
-              value={inputValue}
-              onChange={setInputValue}
-              onRun={updateSearchHistory}
-              boardId={_fromProject}
-              inputRef={tasksInputRef}
-            />
-          )}
+          <SearchChipsInput
+            value={inputValue}
+            onChange={setInputValue}
+            onRun={updateSearchHistory}
+            boardId={_fromProject}
+            inputRef={tasksInputRef}
+            recentSearches={searchCache.history}
+            layoutEnabled={layoutEnabled}
+            availableBoards={labelScopeFlagEnabled && layoutEnabled ? availableSearchBoards : undefined}
+            onAskAi={openAskAi}
+            showSuggestions={isSearchDraft || (searchEscBackFlagEnabled && layoutEnabled && !inputValue.trim())}
+          />
 
           <>
               {responseMessage !== "None" &&
               typedTasks.length === 0 &&
               !showAskAiRow ? (
-                <div className={layoutFlagEnabled && autocompleteEnabled ? "px-4 @md:px-9 my-4" : "px-0 @md:!px-16 my-4"}>
+                <div className={layoutEnabled ? "px-4 @md:px-9 my-4" : "px-0 @md:!px-16 my-4"}>
                   <span className={layoutEnabled ? "text-text-light-gray" : "text-[#8e9093]"}>{responseMessage}</span>
                 </div>
               ) : (
@@ -219,7 +206,7 @@ const SearchComp = ({
                               <TaskListRow
                                 task={item}
                                 highlight={item.highlight}
-                                titleParts={autocompleteEnabled ? highlightedTitle(item.taskTitle ?? '', inputValue, commenterFlagEnabled && layoutEnabled) : undefined}
+                                titleParts={highlightedTitle(item.taskTitle ?? '', inputValue, commenterFlagEnabled && layoutEnabled)}
                                 index={index}
                                 handleLinkClick={handleLinkClick}
                                 handleMouseEnter={handleMouseEnter}
