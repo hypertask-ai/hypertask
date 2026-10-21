@@ -1,7 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import prisma from "@/lib/prisma";
 import { withAgentScopeRequest } from "@/lib/auth/agentScope";
-import { getSessionUser } from "@/lib/auth/getSessionUser";
 import { taskWriteAccessWhere } from "@/utils/controllers/projects/getAllIncludes";
 import { loadCurrentUser } from "@/lib/auth/currentUser";
 import { jsonError, unauthorized } from "@/lib/api/response";
@@ -54,7 +53,7 @@ async function getTaskCycle(request: NextRequest) {
   try {
     const session = await loadCurrentUser(request.headers);
     if (!session) return unauthorized();
-    const actingAgentId = (await getSessionUser(request.headers))?.agentId;
+    const actingAgentId = session.agentId;
 
     const taskId = queryId(request.nextUrl.searchParams.get("taskId"));
     if (!taskId) {
@@ -109,7 +108,7 @@ async function setTaskCycle(request: NextRequest) {
   try {
     const session = await loadCurrentUser(request.headers);
     if (!session) return unauthorized();
-    const actingAgentId = (await getSessionUser(request.headers))?.agentId;
+    const actingAgentId = session.agentId;
 
     const parsed = await readJsonBody<{ taskId?: unknown; cycleId?: unknown }>(request, {
       invalidJson: () => jsonError("taskId and a valid cycleId or null are required"),

@@ -2,7 +2,6 @@ import { NextRequest, NextResponse } from 'next/server'
 
 import prisma from '@/lib/prisma'
 import { withAgentScopeRequest } from '@/lib/auth/agentScope'
-import { getSessionUser } from '@/lib/auth/getSessionUser'
 import { getProjectWhere } from '@/utils/controllers/projects/getAllIncludes'
 import { loadCurrentUser } from '@/lib/auth/currentUser'
 import { jsonError, unauthorized } from '@/lib/api/response'
@@ -31,8 +30,7 @@ async function getDescriptionVersions(_request: NextRequest, { params }: RouteCo
   try {
     const currentUser = await loadCurrentUser(_request.headers, true)
     if (!currentUser) return unauthorized()
-    const { userId } = currentUser
-    const actingAgentId = (await getSessionUser(_request.headers))?.agentId
+    const { userId, agentId: actingAgentId } = currentUser
 
     const taskId = parsePositiveInt((await params).taskId)
     if (taskId === null) {
