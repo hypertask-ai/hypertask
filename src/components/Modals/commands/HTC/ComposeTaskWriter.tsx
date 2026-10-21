@@ -1,3 +1,4 @@
+import { useKeepAiChatClosed } from "@/hooks/General/useKeepAiChatClosed";
 import { Suspense, useContext, useEffect, useRef, useState } from "react";
 import { useRecoilValue, useSetRecoilState } from "@/lib/state";
 import { currentProjectAtom, currentUserAtom, lastUsedBoardsAtom, composeTaskChatIntroAtom, showAIChatInterfaceAtom, isAiChatSidebarModeAtom, aiChatAutoOpenSuppressedAtom, aiChatExplicitOpenAtAtom, dockedChatScopeAtom, inViewObjectAtom } from "@/store";
@@ -41,6 +42,9 @@ export default function ComposeTaskWriter({ active, destinationProject, onCreate
   onCreated: () => void | Promise<void>;
   onBusyChange: (busy: boolean) => void;
 }) {
+  const { keepAiChatClosed, ready: chatAutoOpenReady } = useKeepAiChatClosed();
+  const chatAutoOpenAllowed = useRef(false);
+  chatAutoOpenAllowed.current = chatAutoOpenReady && !keepAiChatClosed;
   const ctrljFooterOneLine = useFlag(HTPR_7306_CTRLJ_FOOTER_ONE_LINE_FLAG);
   const phoneTaskWriterSheetEnabled = useFlag(HTPR_6891_PHONE_TASK_WRITER_SHEET_FLAG);
   const enabled = useFlag(HTPR_6929_COMPOSE_TASK_WRITER_FLAG);
@@ -298,10 +302,12 @@ export default function ComposeTaskWriter({ active, destinationProject, onCreate
       setIntro({ taskId: task.id, content: composeTaskAssistantMessage(task.ticketNumber ?? `${project.uniqueIdentifier ?? "TASK"}-${task.uniqueIndex}`, writerFailed, Boolean(existingTaskId), splitTasksEnabled && splitResult ? { tasks: splitResult, failedTitles } : undefined, writerFailureReason) });
       updateActiveItemAndItemInView(task);
       setScope(projectId);
-      setSidebar(true);
-      setSuppressed(false);
-      setExplicitOpen(Date.now());
-      setShowChat(true);
+      if (chatAutoOpenAllowed.current) {
+        setSidebar(true);
+        setSuppressed(false);
+        setExplicitOpen(Date.now());
+        setShowChat(true);
+      }
       router.push(`/detail/project-${projectId}/${task.uniqueIndex}`);
       if (!mobile || !newTaskWindow) onCreated();
     } catch (failure) {

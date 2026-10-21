@@ -1,3 +1,4 @@
+import { useKeepAiChatClosed } from "@/hooks/General/useKeepAiChatClosed";
 import { activeItemAtom, idToDeleteCommentAtom, showCommandsAtom, showShortcutsAtom, inViewObjectAtom, showMentionListAtom, showAIChatInterfaceAtom, openAiChatByDefaultAtom, aiChatAutoOpenSuppressedAtom, aiChatExplicitOpenAtAtom, aiChatPinnedAtom, showCreateTaskModalAtom, appShellRailAtom, tasksPlayListAtom } from "@/store";
 
 import { useContext, useEffect, useMemo, useRef, useState } from "react";
@@ -78,6 +79,7 @@ export function useTaskDetailModals(state: useTaskDetailStateValue) {
   const [inViewObject, setInViewObject] = useRecoilState(inViewObjectAtom);
   const [showAiChatInterface, setShowAiChatInterface] = useRecoilState(showAIChatInterfaceAtom);
   const hydrated = useHydrated();
+  const { keepAiChatClosed, ready: chatAutoOpenReady } = useKeepAiChatClosed();
   const openAiChatByDefault = useRecoilValue(openAiChatByDefaultAtom);
   const aiChatAutoOpenSuppressed = useRecoilValue(aiChatAutoOpenSuppressedAtom);
   const aiChatPinned = useRecoilValue(aiChatPinnedAtom);
@@ -105,12 +107,16 @@ export function useTaskDetailModals(state: useTaskDetailStateValue) {
     if (
       !hydrated ||
       _mbl ||
+      !chatAutoOpenReady ||
+      keepAiChatClosed ||
       (!aiChatPinned && (!openAiChatByDefault || aiChatAutoOpenSuppressed))
     ) return;
     setShowAiChatInterface(true);
 
   }, [
     hydrated,
+    chatAutoOpenReady,
+    keepAiChatClosed,
     _parsedTask?.id,
     openAiChatByDefault,
     aiChatAutoOpenSuppressed,

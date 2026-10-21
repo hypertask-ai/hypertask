@@ -1,3 +1,4 @@
+import { useKeepAiChatClosed } from "@/hooks/General/useKeepAiChatClosed";
 import { useEffect, useRef } from "react";
 import { useRecoilValue } from "@/lib/state";
 import { aiChatAutoOpenSuppressedAtom } from "@/store";
@@ -14,6 +15,7 @@ type Context = Pick<ReturnType<typeof useAiChatState>, "setAiOption" | "contextL
   Pick<ReturnType<typeof useAiChatAttachments>, "handleCancelStream">;
 
 export function useAiChatPresentation(context: Context) {
+  const { keepAiChatClosed, ready: chatAutoOpenReady } = useKeepAiChatClosed();
   const aiChatAutoOpenSuppressed = useRecoilValue(aiChatAutoOpenSuppressedAtom);
   const {
   setAiOption, contextList, setContextList, editor, handleCancelStream,
@@ -74,14 +76,14 @@ export function useAiChatPresentation(context: Context) {
   }, [showAiChatInterface]);
 
   useEffect(() => {
-    if (hasAttemptedRestoreRef.current || !currentUser?.id) return;
+    if (!chatAutoOpenReady || hasAttemptedRestoreRef.current || !currentUser?.id) return;
     hasAttemptedRestoreRef.current = true;
     if (window.innerWidth < MOBILE_VIEWPORT_MAX_PX) return;
-    if (!aiChatAutoOpenSuppressed && readChatOpenForSession()) {
+    if (!keepAiChatClosed && !aiChatAutoOpenSuppressed && readChatOpenForSession()) {
       setChatMounted(true);
       setShowAIChat(true);
     }
-  }, [currentUser?.id, aiChatAutoOpenSuppressed]);
+  }, [currentUser?.id, chatAutoOpenReady, keepAiChatClosed, aiChatAutoOpenSuppressed]);
 
   useEffect(() => {
     if (!hasAttemptedRestoreRef.current) return;

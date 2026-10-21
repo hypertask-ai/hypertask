@@ -10,7 +10,7 @@ import BoardDisplayMirror from "@/lib/firstScreen/BoardDisplayMirror";
 import MobileViewFlagBridge from "@/lib/contexts/MobileViewFlagBridge";
 import { globalNotificationFocusAtom, currentUserAtom, currentProjectAtom, boardLayoutAtom, boardLayoutPreferenceAtom, appShellRailAtom,
   appShellRailExpandedAtom, showQuickTipsAtom, showEmptyViewTabsAtom, hiddenViewTabIdsAtom, viewTabsOrderAtom,
-  tableVisibleColumnsAtom, tableColumnWidthsAtom, tableTitleWrapAtom, openAiChatByDefaultAtom,
+  tableVisibleColumnsAtom, tableColumnWidthsAtom, tableTitleWrapAtom, openAiChatByDefaultAtom, keepAiChatClosedAtom,
   aiChatAutoOpenSuppressedAtom, aiChatPinnedAtom, aiChatSidebarWidthPxAtom, isAiChatSidebarModeAtom } from "@/store";
 import type { StateInitialValues } from "@/lib/state";
 import { usePathname } from "next/navigation";
@@ -75,7 +75,7 @@ const boardInitialValues = (snapshot: BoardDocument | null): StateInitialValues 
     [showEmptyViewTabsAtom, display.board.showEmptyViewTabs], [hiddenViewTabIdsAtom, display.board.hiddenViewTabIds],
     [viewTabsOrderAtom, display.board.viewTabsOrder], [tableVisibleColumnsAtom, display.board.tableColumns],
     [tableColumnWidthsAtom, display.board.tableWidths], [tableTitleWrapAtom, display.board.tableTitleWrap],
-    [openAiChatByDefaultAtom, display.board.openChat], [aiChatAutoOpenSuppressedAtom, display.board.chatSuppressed], [aiChatPinnedAtom, display.board.chatPinned]];
+    [keepAiChatClosedAtom, display.board.keepChatClosed ?? false], [openAiChatByDefaultAtom, display.board.openChat], [aiChatAutoOpenSuppressedAtom, display.board.chatSuppressed], [aiChatPinnedAtom, display.board.chatPinned]];
   if (display.board.chatWidth !== undefined && display.board.chatSidebarMode !== undefined) {
     values.push([aiChatSidebarWidthPxAtom, display.board.chatWidth], [isAiChatSidebarModeAtom, display.board.chatSidebarMode]);
   }
@@ -87,7 +87,7 @@ const inboxInitialValues = (snapshot: InboxDocument): StateInitialValues => {
   return [[currentUserAtom, snapshot.data.user], [globalNotificationFocusAtom, { currIdx: 0, currSplit: snapshot.selection.split ?? 0 }],
     [appShellRailAtom, display.board.railOn], [appShellRailExpandedAtom, !display.railCollapsed],
     [showQuickTipsAtom, snapshot.data.isInboxZero ? false : display.quickTips],
-    [openAiChatByDefaultAtom, display.board.openChat], [aiChatAutoOpenSuppressedAtom, display.board.chatSuppressed], [aiChatPinnedAtom, display.board.chatPinned]];
+    [keepAiChatClosedAtom, display.board.keepChatClosed ?? false], [openAiChatByDefaultAtom, display.board.openChat], [aiChatAutoOpenSuppressedAtom, display.board.chatSuppressed], [aiChatPinnedAtom, display.board.chatPinned]];
 };
 
 function isPublicSharePath(pathname: string | null | undefined): boolean {

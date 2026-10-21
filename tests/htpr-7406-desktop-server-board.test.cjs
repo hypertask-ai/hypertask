@@ -65,6 +65,7 @@ test('chat geometry validates presence, finite width bounds and boolean mode wit
 const atoms = new Proxy({}, { get: (_, key) => key });
 function reservations(overrides = {}, width = 517, sidebar = true) {
   const { usePageLoadReservations } = load('src/hooks/General/usePageLoadReservations.ts', {
+    '@/hooks/General/useKeepAiChatClosed': { useKeepAiChatClosed: () => ({ keepAiChatClosed: false, ready: true }) },
     '@/lib/state': { useRecoilValue: atom => ({ aiChatPinnedAtom: false, openAiChatByDefaultAtom: true,
       isAiChatSidebarModeAtom: sidebar, aiChatSidebarWidthPxAtom: width })[atom] },
     '@/store': atoms,
@@ -109,11 +110,11 @@ test('reservation latch requires the flagged authenticated desktop board snapsho
   assert.notEqual(start, -1);
   const body = source.slice(start, source.indexOf('  const setShowAiChatInterface', start));
   const render = new Function('useState', 'useEffect', 'firstScreen', 'pathname', 'mbl', 'authenticatedUserId',
-    'aiChatPinned', 'openAiChatByDefault', 'aiChatAutoOpenSuppressed', 'showAiChatInterface',
+    'chatAutoOpenReady', 'keepAiChatClosed', 'aiChatPinned', 'openAiChatByDefault', 'aiChatAutoOpenSuppressed', 'showAiChatInterface',
     'HTPR_7406_DESKTOP_SERVER_BOARD_FLAG', transpile(body) + '\nreturn reserveBoardChat;');
   const snapshot = { scope: { route: '/project' }, flags: { values: { [flagKey]: true } } };
   const initial = { firstScreen: snapshot, pathname: '/project', mbl: false, authenticatedUserId: 985,
-    aiChatPinned: false, openAiChatByDefault: true, aiChatAutoOpenSuppressed: false, showAiChatInterface: false };
+    chatAutoOpenReady: true, keepAiChatClosed: false, aiChatPinned: false, openAiChatByDefault: true, aiChatAutoOpenSuppressed: false, showAiChatInterface: false };
   function harness() {
     let state;
     return overrides => {
@@ -127,7 +128,7 @@ test('reservation latch requires the flagged authenticated desktop board snapsho
   }
   assert.equal(harness()(), true);
   for (const overrides of [{ firstScreen: null }, { pathname: '/inbox' }, { mbl: true }, { authenticatedUserId: null },
-    { openAiChatByDefault: false }, { aiChatAutoOpenSuppressed: true },
+    { keepAiChatClosed: true }, { chatAutoOpenReady: false }, { openAiChatByDefault: false }, { aiChatAutoOpenSuppressed: true },
     { firstScreen: { ...snapshot, scope: { route: '/inbox' } } },
     { firstScreen: { ...snapshot, flags: { values: { [flagKey]: false } } } }]) {
     assert.equal(harness()(overrides), false, JSON.stringify(overrides));
@@ -171,4 +172,33 @@ test('new flag is discovered from its single client-safe definition with an Ever
   assert.equal(definition.shippedOn, '2026-10-20');
   assert.deepEqual(definition.related, ['htpr-6934-server-first-screen']);
   assert.equal(definition.releaseRisk.risk, 'small');
+});
+
+test('keep-chat-closed cookie is optional for old clients and validates new persisted booleans', () => {
+  assert.ok(parse());
+  for (const keepChatClosed of [false, true]) {
+    const parsed = parse({ ...display, board: { ...display.board, keepChatClosed } });
+    assert.equal(parsed.board.keepChatClosed, keepChatClosed);
+  }
+  for (const keepChatClosed of [null, 1, 'true']) {
+    assert.equal(parse({ ...display, board: { ...display.board, keepChatClosed } }), null);
+  }
+});
+
+test('board and inbox snapshots carry keep-chat-closed before hydration without changing default-open preference', () => {
+  const source = read('src/utils/Providers.tsx');
+  for (const [start, end, name] of [
+    ['const boardInitialValues =', 'const inboxInitialValues =', 'boardInitialValues'],
+    ['const inboxInitialValues =', 'function isPublicSharePath', 'inboxInitialValues'],
+  ]) {
+    const body = source.slice(source.indexOf(start), source.indexOf(end));
+    const names = [...new Set(body.match(/\b\w+Atom\b/g))];
+    const initial = new Function(...names, transpile(body) + `\nreturn ${name};`)(...names);
+    for (const keepChatClosed of [undefined, false, true]) {
+      const values = new Map(initial({ display: { ...display, board: { ...display.board, keepChatClosed } },
+        data: { user: { id: 985 }, projects: { updatedProjects: [{ id: 15 }] } }, selection: { surface: 'board' } }));
+      assert.equal(values.get('keepAiChatClosedAtom'), keepChatClosed ?? false);
+      assert.equal(values.get('openAiChatByDefaultAtom'), true);
+    }
+  }
 });

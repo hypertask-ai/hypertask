@@ -939,7 +939,7 @@ const settings: CommandGroup = {
       name: "Settings: Open AI chat by default",
       commandMode: CommandMode.Setting,
       payload: "task-page",
-      keywords: "settings open ai chat by default task page",
+      keywords: "settings open ai chat by default keep ai chat closed always task page",
     },
     {
       key: "settingsTaskPageCollapseComments",

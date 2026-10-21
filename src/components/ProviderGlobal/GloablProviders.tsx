@@ -1,5 +1,6 @@
 
 "use client";
+import { useKeepAiChatClosed } from "@/hooks/General/useKeepAiChatClosed";
 import {
   lazy,
   ReactNode,
@@ -392,10 +393,11 @@ export default function GlobalProvider({
   const aiChatAutoOpenSuppressed = useRecoilValue(aiChatAutoOpenSuppressedAtom);
   const aiChatPinned = useRecoilValue(aiChatPinnedAtom);
   const openAiChatByDefault = useRecoilValue(openAiChatByDefaultAtom);
+  const { keepAiChatClosed, ready: chatAutoOpenReady } = useKeepAiChatClosed();
   const [reserveBoardChat, setReserveBoardChat] = useState(() =>
     firstScreen?.scope.route === "/project" && pathname?.startsWith("/project") === true &&
     firstScreen.flags.values[HTPR_7406_DESKTOP_SERVER_BOARD_FLAG] === true &&
-    !mbl && authenticatedUserId !== null &&
+    !mbl && authenticatedUserId !== null && chatAutoOpenReady && !keepAiChatClosed &&
     (aiChatPinned || (openAiChatByDefault && !aiChatAutoOpenSuppressed))
   );
   useEffect(() => {
@@ -467,6 +469,7 @@ export default function GlobalProvider({
 
   useEffect(() => {
     if (
+      !chatAutoOpenReady ||
       hasAttemptedChatRestoreRef.current ||
       !currentUser?.id ||
       !pathname ||
@@ -476,12 +479,12 @@ export default function GlobalProvider({
     }
     hasAttemptedChatRestoreRef.current = true;
     if (window.innerWidth < 768) return;
-    if (!aiChatAutoOpenSuppressed && readChatOpenForSession()) {
+    if (!keepAiChatClosed && !aiChatAutoOpenSuppressed && readChatOpenForSession()) {
       setChatRuntimeMounted(true);
       setShowAiChatInterface(true);
       setAiChatExplicitOpenAt(null);
     }
-  }, [currentUser?.id, aiChatAutoOpenSuppressed, pathname, setShowAiChatInterface, setAiChatExplicitOpenAt]);
+  }, [currentUser?.id, chatAutoOpenReady, keepAiChatClosed, aiChatAutoOpenSuppressed, pathname, setShowAiChatInterface, setAiChatExplicitOpenAt]);
 
   useEffect(() => {
     if (!hasAttemptedChatRestoreRef.current) return;

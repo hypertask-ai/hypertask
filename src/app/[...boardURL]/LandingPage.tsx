@@ -1,4 +1,5 @@
 'use client'
+import { useKeepAiChatClosed } from "@/hooks/General/useKeepAiChatClosed";
 import type { useLandingSectionState } from "./useLandingSectionState";
 import { completeBoardReadinessTrace, emitBoardReadinessAfterPaint, markBoardReadinessPhase } from "@/lib/analytics/boardReadinessPhases";
 import { resolveBoardSwitchIntent } from "@/lib/analytics/boardSwitchLatency";
@@ -742,6 +743,7 @@ export function useLandingBoardHydration(context: useLandingBoardHydrationContex
   queryClient, setHydrationRetryToken, hydrationRetryToken,
   } = context;
   const hydrated = useHydrated()
+  const { keepAiChatClosed, ready: chatAutoOpenReady } = useKeepAiChatClosed()
   const setAiChatAutoOpenSuppressed = useSetRecoilState(aiChatAutoOpenSuppressedAtom)
 
 
@@ -749,6 +751,8 @@ useEffect(() => {
   if (
     !hydrated ||
     isMblForChat ||
+    !chatAutoOpenReady ||
+    keepAiChatClosed ||
     (!isGuest &&
       !aiChatPinned &&
       (!openAiChatByDefault || aiChatAutoOpenSuppressed))
@@ -757,6 +761,8 @@ useEffect(() => {
 
 }, [
   hydrated,
+  chatAutoOpenReady,
+  keepAiChatClosed,
   slugs,
   openAiChatByDefault,
   aiChatAutoOpenSuppressed,

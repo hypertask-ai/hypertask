@@ -107,6 +107,7 @@ function reservations(state) {
     isAiChatSidebarModeAtom: "isAiChatSidebarMode", aiChatSidebarWidthPxAtom: "aiChatSidebarWidthPx",
   };
   const { usePageLoadReservations } = load("src/hooks/General/usePageLoadReservations.ts", {
+    "@/hooks/General/useKeepAiChatClosed": { useKeepAiChatClosed: () => ({ keepAiChatClosed: state.keepAiChatClosed ?? false, ready: true }) },
     "@/lib/state": { useRecoilValue: (atom) => state[atom] },
     "@/store": atoms,
     "@/lib/configs/style.config": { AI_CHAT_SIDEBAR_MIN_PX: 340 },
