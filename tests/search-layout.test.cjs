@@ -47,7 +47,7 @@ async function withSearch(t, config, check) {
   try {
     source('src/utils/index.ts', { taskBaseUri: '/detail/' })
     source('src/utils/undoActions/helperFuncs.ts', { cn: (...values) => require('tailwind-merge').twMerge(require('clsx').clsx(values)) })
-    source('src/hooks/useFlag.tsx', { useFlagReady: () => config.flagsReady?.() ?? true, useFlag: (key) => flags[key] ?? false })
+    source('src/hooks/useFlag.tsx', { useFlagReady: () => config.flagsReady?.() ?? true, useFlag: (key) => (config.flagsBeforeReady && !(config.flagsReady?.() ?? true) ? config.flagsBeforeReady[key] : flags[key]) ?? false })
     source('src/lib/contexts/deviceContext.tsx', { useDeviceContext: () => false })
     const allProjects = [{ id: 7, title: 'Product Board' }]
     source('src/hooks/MultiPages/useGetAllProjectsMinimal.ts', { useGetAllProjectsMinimal: () => ({ data: config.projects?.() ?? allProjects, refetch: () => config.refetch?.() ?? Promise.resolve({ data: allProjects }) }) })
@@ -82,7 +82,7 @@ async function withSearch(t, config, check) {
     let counter = 0
     const render = async (query = config.query ?? '', reset = false) => React.act(async () => {
       if (reset) counter++
-      reactRoot.render(React.createElement(SearchComp, { key: counter, _searchTerm: query, _includeArchived: false, currentUser: {}, askAiFullscreenEnabled: config.askAiFullscreenEnabled, serverStartedSearch: config.serverStartedSearch }))
+      reactRoot.render(React.createElement(SearchComp, { key: counter, _searchTerm: query, _includeArchived: false, currentUser: {}, askAiFullscreenEnabled: config.askAiFullscreenEnabled, serverStartedSearch: config.serverStartedSearch, searchOnce: config.searchOnce }))
     })
     await render()
     t.mock.timers.enable({ apis: ['setTimeout'] })
@@ -1371,13 +1371,13 @@ for (const [name, config] of [
   })
 }
 
-test('HTPR-7501 a search the user starts while the server result is pending wins', async (t) => {
+for (const searchOnce of [false, true]) test(`HTPR-7501 a search the user starts while the server result is pending wins (HTPR-7502 ${searchOnce ? 'on' : 'off'})`, async (t) => {
   let resolveServer
   let resolveBoards
   let ready = false
   const projects = []
   const refetch = () => new Promise((resolve) => { resolveBoards = () => resolve({ data: [{ id: 7, title: 'Product Board' }] }) })
-  await withSearch(t, { query: 'Result', projects: () => projects, refetch, flagsReady: () => ready, serverStartedSearch: new Promise((resolve) => { resolveServer = resolve }) }, async ({ type, press, tick, render, requests, complete }) => {
+  await withSearch(t, { query: 'Result', projects: () => projects, refetch, flagsReady: () => ready, searchOnce, serverStartedSearch: new Promise((resolve) => { resolveServer = resolve }) }, async ({ type, press, tick, render, requests, complete }) => {
     await flush()
     await type('Other')
     await press('Enter')
@@ -1399,3 +1399,57 @@ test('HTPR-7501 a search the user starts while the server result is pending wins
     assert.equal(requests.length, 1)
   })
 })
+
+const escBack = { 'htpr-6879-search-esc-back': true }
+
+async function freshTab(t, config, run) {
+  let ready = false
+  await withSearch(t, { query: 'Result', flags: escBack, flagsBeforeReady: {}, flagsReady: () => ready, ...config }, async (tools) => {
+    await flush()
+    const before = tools.requests.length
+    ready = true
+    await tools.render('Result')
+    await flush()
+    await run({ ...tools, before })
+  })
+}
+
+test('HTPR-7502 a fresh tab with the board list loaded waits for feature settings and shows the server result without a request', async (t) => {
+  const today = await searchPageHtml(t, { flags: escBack }, async ({ requests, complete }) => complete(requests[0], serverTasks, ['All', 'Product Board']))
+  let html
+  await freshTab(t, { searchOnce: true, serverStartedSearch: Promise.resolve(serverSearch()) }, async ({ requests, before }) => {
+    assert.equal(before, 0, 'no request before feature settings load')
+    assert.equal(requests.length, 0, 'the server result is used')
+    html = document.getElementById('root').innerHTML
+  })
+  assert.equal(html, today)
+})
+
+test('HTPR-7502 a fresh tab whose server result is for other boards sends the page search once', async (t) => {
+  await freshTab(t, { searchOnce: true, serverStartedSearch: Promise.resolve(serverSearch({ projectIds: [7, 8] })) }, async ({ requests, before, complete }) => {
+    assert.equal(before, 0)
+    assert.equal(requests.length, 1)
+    assert.deepEqual(requests[0].body, { projectIds: [7], searchQuery: 'Result', archive: 'Normal', contextProjectId: null })
+    await complete(requests[0], serverTasks, ['All', 'Product Board'])
+    assert.ok(document.getElementById('task_2'))
+  })
+})
+
+test('HTPR-7502 a fresh tab without a server result searches once', async (t) => {
+  await freshTab(t, { searchOnce: true }, async ({ requests, before, complete }) => {
+    assert.equal(before, 1, 'the page search does not wait for feature settings')
+    assert.equal(requests.length, 1, 'feature settings loading does not resend it')
+    await complete(requests[0], serverTasks, ['All', 'Product Board'])
+    assert.ok(document.getElementById('task_2'))
+  })
+})
+
+for (const [name, config] of [['with a server result', { serverStartedSearch: Promise.resolve(serverSearch()) }], ['without a server result', {}]]) {
+  test(`HTPR-7502 flag off: a fresh tab ${name} keeps today's two requests`, async (t) => {
+    await freshTab(t, { searchOnce: false, ...config }, async ({ requests, complete }) => {
+      assert.equal(requests.length, 2)
+      await complete(requests.at(-1), serverTasks, ['All', 'Product Board'])
+      assert.ok(document.getElementById('task_2'))
+    })
+  })
+}
