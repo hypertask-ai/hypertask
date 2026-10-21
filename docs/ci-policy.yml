@@ -63,6 +63,7 @@ premerge_evidence:
   cache_refresh_seconds: 600
   cache_invalidation: production_checker_bytes_sha256_each_sweep
   passes_every_pr: true
+  new_flag_default_validation: separate_required_feature_flag_gate
   success_description: "test click removed (Valentin 2026-10-21)"
   browser_click_required: false
   screen_path_evaluation: false
@@ -116,7 +117,10 @@ feature_flag_gate:
   # Valentin decided this on 2026-10-02 in https://app.hypertask.ai/detail/project-15/6506;
   # the title alone is not proof of cleanup, and new behavior still needs a flag.
   refactor_risky_new_ui_line_limit: 150
-  default_mode_for_new_flags: OWNER_AND_QA
+  default_mode_for_new_flags: EVERYONE
+  new_flag_default_mode_exceptions: [bugfix, internal, releaseRisk.highRisk]
+  everyone_default_forbidden_for: [internal, releaseRisk.highRisk]
+  registry_validation_before_ui_title_and_label_exemptions: true
   default_mode_for_bugfix_flags: EVERYONE
   registry_kind: optional_feature_bugfix_improvement_default_feature
   bugfix_flag_exemptions: [saved_data, security, crashes]
