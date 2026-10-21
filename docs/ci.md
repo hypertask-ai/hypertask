@@ -58,9 +58,9 @@ Use a trusted identity with dispatch access to the private reviewer repository. 
 `premerge-evidence` passes without a recorded browser click for exactly these exemptions:
 
 - No screen files changed, even when server code touches a released flag or has unresolved flag reads. Screen paths are `src/app/**` except `src/app/api/**`, `src/components/**`, `src/styles/**`, any `*.css` or `*.scss`, `public/**`, and `tailwind.config.*`. Renames include the previous path. The complete paginated file list must be readable; file-list errors fail closed before any exemption.
-- A screen-changing flag-removal PR whose released or unknown touched keys are all deleted definitions, absent from the head registry, with each removed flag confirmed **EVERYONE** in live modes. Unresolved flag reads, unavailable live modes, or any removed flag not on Everyone do not qualify and fall through to the existing click rules.
+- A screen-changing PR that deletes at least one flag definition, with every deleted definition confirmed **EVERYONE** in live modes, even when changed files also read other released flags. The exemption reports exactly the deleted definitions' keys, collected from the base side, not every touched flag. Unresolved flag reads, unavailable live modes, or any deleted flag not on Everyone do not qualify and fall through to the existing click rules.
 
-A screen-changing PR touching a surviving released flag still needs a current-head passing click on a real board with live flag states and its recording in `~/.local/state/vcc-evidence/<TICKET>/premerge.md`. Registry defaults never substitute for live modes.
+A screen-changing PR touching a released flag without a qualifying definition removal still needs a current-head passing click on a real board with live flag states and its recording in `~/.local/state/vcc-evidence/<TICKET>/premerge.md`. Registry defaults never substitute for live modes.
 
 The `premerge-evidence.timer` reconciles all open production PRs every two minutes. Each sweep fetches the production checker and includes its SHA-256 bytes digest in every cached verdict fingerprint, so merged rule changes recheck every waiting PR in the first successful sweep, without waiting for the ten-minute unchanged-verdict refresh. Rule-fetch failures fail closed.
 

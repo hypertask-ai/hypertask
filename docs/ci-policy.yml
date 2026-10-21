@@ -64,12 +64,13 @@ premerge_evidence:
   cache_invalidation: production_checker_bytes_sha256_each_sweep
   exemptions:
     - no_screen_files_changed_even_with_released_or_unresolved_flag_reads
-    - screen_flag_removal_all_released_or_unknown_touched_keys_are_deleted_definitions_absent_from_head_and_each_removed_flag_live_EVERYONE
+    - screen_flag_removal_at_least_one_deleted_definition_and_each_deleted_flag_live_EVERYONE_even_with_other_released_reads
   screen_paths: ["src/app/** except src/app/api/**", "src/components/**", "src/styles/**", "*.css anywhere", "*.scss anywhere", "public/**", "tailwind.config.*"]
   renamed_screen_paths: current_and_previous
   complete_paginated_file_list_required: true
-  removal_exemption_refused_on: [unresolved_flag_reads, live_modes_unavailable, any_removed_flag_not_EVERYONE, surviving_released_flag]
-  screen_changes_touching_surviving_released_flag_require_click: true
+  removal_exemption_refused_on: [unresolved_flag_reads, live_modes_unavailable, any_deleted_flag_not_EVERYONE]
+  removal_exemption_reported_keys: exactly_deleted_definitions_from_base
+  screen_changes_touching_released_flag_without_qualifying_definition_removal_require_click: true
   evidence: "~/.local/state/vcc-evidence/<TICKET>/premerge.md and its recording"
   exact_head_commit_required: true
   open_production_pull_request_required: true

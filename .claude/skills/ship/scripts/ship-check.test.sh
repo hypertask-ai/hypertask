@@ -1149,7 +1149,7 @@ else:
     assert 'context=premerge-evidence' in call and 'state=' + sys.argv[2] in call, call
     description = next(c.removeprefix('description=') for c in call if c.startswith('description='))
     assert len(description) <= 140 and sys.argv[3] in description, call
-    if 'removed-everyone' in sys.argv[3]:
+    if 'removed-everyone' in sys.argv[3] or sys.argv[3].startswith('flag removal on Everyone: '):
         assert description == sys.argv[3], call
     if sys.argv[2] != 'success' or os.environ.get('EXPECT_NO_REMOVED_EVERYONE'):
         assert 'removed-everyone' not in description, call
@@ -1160,6 +1160,7 @@ C() { local PREMERGE_CASE=$1; shift; S "$@"; }
 printf 'const released = useFlag(RELEASED_FLAG);\n' > "$E/flag-source/base"; cp "$E/flag-source/base" "$E/flag-source/head"
 C server_only_released_flag_without_record 0 success 'no screen files changed' FLAG_FILE=src/app/api/x/route.ts FLAG_EXTRA_FILES=src/lib/server.ts FLAG_COUNT=2 FLAG_HTTP_ERROR=1 FLAG_SOURCE_ERROR=1
 C server_plus_component_without_record 1 failure 'record a browser click-through' FLAG_FILE=src/app/api/x/route.ts FLAG_EXTRA_FILES=src/lib/server.ts,src/components/card.tsx FLAG_COUNT=3
+C screen_released_flag_without_definition_removal_requires_click 1 failure 'record a browser click-through'
 C file_list_read_error_fails_closed 1 failure 'cannot read the PR diff' FLAG_FILE=src/app/api/x/route.ts FLAG_FILES_ERROR=1
 C incomplete_file_list_fails_closed 1 failure 'complete PR diff' FLAG_FILE=src/app/api/x/route.ts FLAG_COUNT=2
 C css_requires_click 1 failure 'record a browser click-through' FLAG_FILE=src/lib/server.ts FLAG_EXTRA_FILES=assets/theme.css FLAG_COUNT=2
@@ -1206,7 +1207,7 @@ S 1 failure 'htpr-1-released: record'
 cp "$E/record" "$premerge"
 EXPECT_NO_REMOVED_EVERYONE=1 S 0 success 'click record ok' # No definition deleted: no removed-everyone.
 API_BUDGET 6 'premerge-status with a released flag: no contents API call, at most 6 API calls'
-# A surviving released flag still needs its click when another definition is deleted.
+# Removing an Everyone definition needs no click despite other released reads.
 printf 'export * from "./definitions/index.generated";\n' > "$E/flag-source/keys"
 printf 'const DEFAULT_FEATURE_FLAG_MODE = "OWNER_AND_QA";\n' > "$E/flag-source/registry"
 printf 'export const FEATURE_FLAG_DEFINITIONS = FLAG_DEFINITIONS;\n' > "$E/flag-source/definitions"
@@ -1223,20 +1224,23 @@ printf 'const removed = useFlag("htpr-1-released");\n' > "$E/flag-source/base"
 printf 'const plain = 1;\n' > "$E/flag-source/head"
 C screen_removal_everyone_without_record 0 success 'flag removal on Everyone: htpr-1-released' "${removal[@]}"
 C screen_removal_everyone_plain_qa_without_record 0 success 'flag removal on Everyone: htpr-1-released' "${removal[@]}" AGENT_TOKEN= 'FLAG_PUBLIC={"flags":{"htpr-1-released":true}}'
+printf 'const plain = 1;\n' > "$E/flag-source/base"
+C screen_removal_definition_key_from_base_only_without_record 0 success 'flag removal on Everyone: htpr-1-released' "${removal[@]}"
+printf 'const removed = useFlag("htpr-1-released");\n' > "$E/flag-source/base"
 C screen_removal_owner_qa_without_record 1 failure 'record a browser click-through' "${removal[@]}" 'FLAG_HTTP={"flags":[{"key":"htpr-1-released","mode":"OWNER_AND_QA"}]}'
 C screen_removal_live_unavailable 1 failure 'live flag modes unavailable' "${removal[@]}" FLAG_HTTP_ERROR=1
 C screen_removal_unknown_live_key 1 failure 'live state unknown' "${removal[@]}" 'FLAG_HTTP={"flags":[{"key":"htpr-2-other","mode":"EVERYONE"}]}'
 printf 'const unknown = useFlag(dynamicKey);\n' > "$E/flag-source/head"
 C screen_removal_unresolved_read_requires_click 1 failure 'record a browser click-through' "${removal[@]}"
 printf 'const other = useFlag("htpr-2-other");\n' > "$E/flag-source/head"
-C screen_removal_surviving_released_flag_requires_click 1 failure 'record a browser click-through' "${removal[@]}"
+C screen_removal_with_other_released_reads_without_record 0 success 'flag removal on Everyone: htpr-1-released' "${removal[@]}"
 cp "$E/before-removal-record" "$premerge"
 printf 'const removed = useFlag("htpr-1-released");\nconst other = useFlag("htpr-2-other");\n' > "$E/flag-source/base"
 sed 's/htpr-1-released=EVERYONE/htpr-2-other=EVERYONE/' "$E/record" > "$premerge"
-S 0 success 'click record ok | removed-everyone: htpr-1-released' "${removal[@]}"
+S 0 success 'flag removal on Everyone: htpr-1-released' "${removal[@]}"
 EXPECT_NO_REMOVED_EVERYONE=1 S 0 success 'click record ok' "${removal[@]}" 'FLAG_HTTP={"flags":[{"key":"htpr-1-released","mode":"OFF"},{"key":"htpr-2-other","mode":"EVERYONE"}]}'
 EXPECT_NO_REMOVED_EVERYONE=1 S 0 success 'click record ok' "${removal[@]}" AGENT_TOKEN= 'FLAG_PUBLIC={"flags":{"htpr-1-released":false,"htpr-2-other":true}}'
-S 0 success 'click record ok | removed-everyone: htpr-1-released' "${removal[@]}" AGENT_TOKEN= 'FLAG_PUBLIC={"flags":{"htpr-1-released":true,"htpr-2-other":true}}'
+S 0 success 'flag removal on Everyone: htpr-1-released' "${removal[@]}" AGENT_TOKEN= 'FLAG_PUBLIC={"flags":{"htpr-1-released":true,"htpr-2-other":true}}'
 S 1 failure 'unchanged PR head' "${removal[@]}" FLAG_HEAD_RACE=1
 P 0 premerge 999 "${removal[@]}"
 F 0 '' "${removal[@]}"
@@ -1255,7 +1259,8 @@ rm "$E/flag-source/flags-"{base,head}/htpr-4-untouched.ts
 sed 's/htpr-1-released=EVERYONE/htpr-2-other=EVERYONE/' "$E/record" > "$premerge"
 cp "$E/flag-source/base" "$E/before-long-base"
 cp "$E/flag-source/head" "$E/flag-source/base"
-# removed-everyone is omitted, never truncated, when the entire description exceeds 140.
+# Unresolved reads still need proof; removed-everyone is omitted, never truncated, above 140.
+printf 'const unknown = useFlag(dynamicKey);\n' >> "$E/flag-source/head"
 for length in 140 141; do
   prefix='click record ok | removed-everyone: '
   key="htpr-3-$(printf '%*s' "$((length - ${#prefix} - 7))" '' | tr ' ' x)"
@@ -1269,12 +1274,14 @@ for length in 140 141; do
   rm "$E/flag-source/flags-base/$key.ts"
 done
 cp "$E/before-long-base" "$E/flag-source/base"
+printf 'const other = useFlag("htpr-2-other");\n' > "$E/flag-source/head"
+removal_needing_click=("${removal[@]}" 'FLAG_HTTP={"flags":[{"key":"htpr-1-released","mode":"OFF"},{"key":"htpr-2-other","mode":"EVERYONE"}]}')
 sed -i 's/htpr-2-other=EVERYONE/htpr-2-other=OFF/' "$premerge"
-S 1 failure 'expected Flags: htpr-2-other=EVERYONE' "${removal[@]}"
+S 1 failure 'expected Flags: htpr-2-other=EVERYONE' "${removal_needing_click[@]}"
 cp "$E/record" "$premerge"
-S 1 failure 'expected Flags: htpr-2-other=EVERYONE' "${removal[@]}"
+S 1 failure 'expected Flags: htpr-2-other=EVERYONE' "${removal_needing_click[@]}"
 sed '/^Flags:/d' "$E/record" > "$premerge"
-S 1 failure 'missing Flags:; expected Flags: htpr-2-other=EVERYONE' "${removal[@]}"
+S 1 failure 'missing Flags:; expected Flags: htpr-2-other=EVERYONE' "${removal_needing_click[@]}"
 # Definition-only diffs change no screen and need no click record.
 S 0 success 'no screen files changed' FLAG_FILE=src/lib/flags/definitions/htpr-1-released.ts FLAG_STATUS=removed
 printf 'Flags: \n' >> "$premerge"
@@ -1286,10 +1293,10 @@ sed '/^Flags:/d; s/Click: PASS/Click: FAIL/' "$E/record" > "$premerge"
 S 0 success 'no screen files changed' FLAG_FILE=src/lib/flags/definitions/htpr-1-released.ts FLAG_STATUS=removed
 rm "$premerge"
 S 0 success 'no screen files changed' FLAG_FILE=src/lib/flags/definitions/htpr-1-released.ts FLAG_STATUS=removed
-# A key that survives in the head registry is never exempt, even if GitHub reports a deleted file.
+# Deleted definitions determine the exemption even if the key survives elsewhere in the head registry.
 cp "$E/flag-source/flags-base/htpr-1-released.ts" "$E/flag-source/flags-head/htpr-1-released.ts"
 sed 's/htpr-1-released=EVERYONE/htpr-2-other=EVERYONE/' "$E/record" > "$premerge"
-S 1 failure 'expected Flags: htpr-1-released=EVERYONE' "${removal[@]}"
+C screen_removal_key_survives_elsewhere_in_head 0 success 'flag removal on Everyone: htpr-1-released' "${removal[@]}"
 rm "$E/flag-source/flags-base/htpr-2-other.ts" "$E/flag-source/flags-head/htpr-2-other.ts" "$E/flag-source/definitions"
 cp "$E/keys-legacy" "$E/flag-source/keys"; cp "$E/registry-legacy" "$E/flag-source/registry"
 printf 'const released = useFlag(RELEASED_FLAG);\n' > "$E/flag-source/base"; cp "$E/flag-source/base" "$E/flag-source/head"

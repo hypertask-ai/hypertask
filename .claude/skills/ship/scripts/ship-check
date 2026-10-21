@@ -819,7 +819,7 @@ try:
             modes[key] = 'EVERYONE'
     released = {key for key in touched if modes.get(key) == 'EVERYONE'}
     unknown = unknown or not live or any(key not in modes and key not in added for key in touched)
-    if (live and not unknown and released and released <= deleted_definitions - head_values
+    if (live and not unknown and deleted_definitions
             and all(modes.get(key) == 'EVERYONE' for key in deleted_definitions)):
         print('flag removal on Everyone: ' + ','.join(sorted(deleted_definitions)))
         sys.exit(0)
