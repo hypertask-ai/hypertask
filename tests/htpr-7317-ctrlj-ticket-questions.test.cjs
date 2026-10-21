@@ -58,6 +58,12 @@ async function renderList(answer) {
 
 const ok = (questions) => ({ ok: true, json: async () => ({ questions }) });
 
+test("the intro reloaded from the server under its own id still gets chips", async () => {
+  enabled = true; session = { id: "s1", taskId: 43, messages: [{ ...intro, id: "dc86e522-server-id" }] };
+  const view = await renderList(() => ok(["Which boards get the sidebar first?", "Add steps for the empty sidebar"]));
+  try { assert.equal(view.chips.length, 2); } finally { await view.cleanup(); }
+});
+
 test("Ctrl+J intro gets ticket-specific chips from the new-ticket questions request; a click sends the chip", async () => {
   enabled = true; session = { id: "s1", taskId: 43, messages: [intro] }; sent.length = 0;
   const view = await renderList(() => ok(["Which boards get the sidebar first?", "Add steps for the empty sidebar"]));
@@ -87,7 +93,7 @@ test("no request and no chips with the flag off, once the user replied, or for a
     { flagOn: false, messages: [intro] },
     { flagOn: true, messages: [intro, { id: "m2", role: "human", content: "Shorten the title" }] },
     { flagOn: true, messages: [{ ...intro, content: "<p>I created 2 tickets from your note.</p>" }] },
-    { flagOn: true, messages: [{ ...intro, id: "other-message" }] },
+    { flagOn: true, messages: [{ ...intro, content: "Here is a summary of QASA-43." }] },
   ];
   for (const { flagOn, messages } of cases) {
     enabled = flagOn; session = { id: "s1", taskId: 43, messages };

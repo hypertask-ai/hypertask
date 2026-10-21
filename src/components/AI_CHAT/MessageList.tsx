@@ -8,6 +8,8 @@ import { HTPR_7317_CTRLJ_TICKET_QUESTIONS_FLAG } from "@/lib/flags/keys";
 
 interface MessageListProps {}
 
+const isSavedOrLocalComposeIntro = (content: string) => / from your note\. Want me to refine it\?/.test(content);
+
 export const MessageList: React.FC<MessageListProps> = () => {
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const messageListRef = useRef<HTMLDivElement>(null);
@@ -29,7 +31,7 @@ export const MessageList: React.FC<MessageListProps> = () => {
   const ticketQuestionsEnabled = useFlag(HTPR_7317_CTRLJ_TICKET_QUESTIONS_FLAG);
   const newTicketId = currentSession?.taskId;
   const showTicketQuestions = ticketQuestionsEnabled && Boolean(newTicketId) && messages.length === 1 &&
-    lastMessage?.id === `compose-task-${newTicketId}` && !/ tickets from your note/.test(lastMessage.content);
+    lastMessage?.role === "assistant" && isSavedOrLocalComposeIntro(lastMessage.content ?? "");
   const ticketQuestions = useQuery({
     queryKey: ["task-questions", "new-ticket", newTicketId],
     queryFn: async (): Promise<{ questions: string[] }> => {
