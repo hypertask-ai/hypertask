@@ -53,6 +53,7 @@ export function getAddCommentInputSchema() {
       .max(config.limits.commentTextMaxLength, `Comment text cannot exceed ${config.limits.commentTextMaxLength} characters`)
       .describe('Comment text. HTML or structural markdown; content_type can explicitly select either format. Use @DisplayName with matching mentions entries.'),
     content_type: commentContentTypeSchema,
+    inline_images: z.boolean().optional(),
     mentions: z
       .array(mentionSchema)
       .optional()
@@ -129,6 +130,7 @@ export function getUpdateCommentBaseSchema() {
         .min(1, 'Comment text cannot be empty')
         .max(5000, 'Comment text cannot exceed 5000 characters'),
       content_type: commentContentTypeSchema,
+      inline_images: z.boolean().optional(),
       mentions: z.array(mentionSchema).optional(),
     })
     .strict();
@@ -161,6 +163,7 @@ export function getAddCommentBaseSchema() {
         .max(config.limits.commentTextMaxLength, `Comment text cannot exceed ${config.limits.commentTextMaxLength} characters`)
         .describe('Comment text. HTML or structural markdown; content_type can explicitly select either format. Use @DisplayName with matching mentions entries.'),
       content_type: commentContentTypeSchema,
+      inline_images: z.boolean().optional(),
       mentions: z
         .array(mentionSchema)
         .optional()
@@ -270,6 +273,7 @@ export function getAddCommentCrudBaseSchema() {
         .optional()
         .describe('Comment text for add/update. HTML or structural markdown; content_type can explicitly select either format.'),
       content_type: commentContentTypeSchema,
+      inline_images: z.boolean().optional(),
       mentions: z
         .array(mentionSchema)
         .optional()

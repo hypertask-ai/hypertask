@@ -4,6 +4,7 @@ export const createTaskItemSchema = z.object({
   project_id: z.coerce.number().int().positive(),
   title: z.string().min(1).max(500),
   description: z.string().max(20000).optional(),
+  inline_images: z.boolean().optional().describe("Set false only when the user explicitly requests attachment only or link only; images are embedded inline by default."),
   section: z
     .union([z.coerce.number().int().positive(), z.string().min(1)])
     .optional(),

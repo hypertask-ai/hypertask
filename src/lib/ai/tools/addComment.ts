@@ -1,3 +1,4 @@
+import { inlineAgentImagesForUser } from "@/lib/media/inlineAgentImages.server";
 import { tool } from "ai";
 import { z } from "zod";
 import { resolveBulkTaskTargets, buildBulkOperationKey } from "@/app/api/ai/chat/stream/bulkTools";
@@ -21,7 +22,7 @@ import { errorMessage } from "@/lib/ai/chatStream/errors";
 import type { ToolContext } from "./context";
 
 export function createAddCommentTool(context: ToolContext) {
-  const { sendStatus, user, confirmationSessionId, bulkPreviewsIssued, actingAgentId } = context;
+  const { sendStatus, user, confirmationSessionId, bulkPreviewsIssued, actingAgentId, body } = context;
   return {
     hypertask_add_comment: tool({
       description:
@@ -46,6 +47,7 @@ export function createAddCommentTool(context: ToolContext) {
           unique_index: z.coerce.number().int().positive().optional(),
           project_id: z.coerce.number().int().positive().optional(),
           text: z.string().min(1).max(5000),
+          inline_images: z.boolean().optional().describe("Set false only when the user explicitly requests attachment only or link only; images are embedded inline by default."),
           images: z.array(z.string()).optional(),
           mentions: z
             .array(
@@ -167,7 +169,7 @@ export function createAddCommentTool(context: ToolContext) {
             taskWithOwner.projectId,
             user.id,
           );
-          sanitizedText = toStoredHtml(sanitizedText);
+          sanitizedText = await inlineAgentImagesForUser(toStoredHtml(sanitizedText), user.id, { instructions: body?.message, inlineImages: input.inline_images, attachments: [...(input.images?.map((url) => ({ url })) ?? []), ...[...(body?.images64 ?? []), ...(body?.attachments ?? [])].flatMap((file) => file.url ? [{ url: file.url, fileName: file.fileName, mimeType: file.mimeType }] : [])] });
           sanitizedText = await linkifyTicketRefs(
             sanitizedText,
             user.id,

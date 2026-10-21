@@ -1,3 +1,5 @@
+import { HTPR_7514_INLINE_AGENT_IMAGES_FLAG } from "@/lib/flags/keys";
+import { inlineAgentImagesForUser } from "@/lib/media/inlineAgentImages.server";
 import { reportMcpOperationCrash } from '@/lib/mcp/operationCrashReport'
 import { wrapMcpRoute, validateMcpRouteAuth as validateMcpAuth, checkMcpRouteRateLimit as checkMcpRateLimit, mcpRouteUnauthorizedResponse as mcpUnauthorizedResponse, readMcpRouteJsonBody as readJsonBody } from '@/lib/mcp/routeWrapper'
 import { NextRequest, NextResponse } from 'next/server'
@@ -98,6 +100,8 @@ export interface AddCommentRequest {
   ticket_number?: string
   unique_index?: number
   text: string
+  has_image_attachments?: boolean
+  inline_images?: boolean
   content_type?: 'html' | 'markdown'
   project_id?: number
   images?: string[]
@@ -458,6 +462,9 @@ export async function POST(request: NextRequest) {
     const parsedBody = await readJsonBody<AddCommentRequest>(request)
     if (!parsedBody.ok) return parsedBody.response
     const body = parsedBody.body
+    if (body.inline_images !== undefined && typeof body.inline_images !== "boolean") {
+      return NextResponse.json(buildFieldError("invalid_field", "inline_images", "inline_images must be a boolean"), { status: 400 });
+    }
     const { dry_run, task_id, ticket_number, unique_index, text, content_type, project_id, images, has_attachments, mentions, reply_to_comment_id, reply_to_invocation_id } = body
     if (dry_run !== undefined && typeof dry_run !== 'boolean') {
       return NextResponse.json(
@@ -819,7 +826,7 @@ export async function POST(request: NextRequest) {
       taskWithOwner.projectId,
       user.id,
     )
-    sanitizedText = sanitizeRichHtml(sanitizedText)
+    sanitizedText = await inlineAgentImagesForUser(sanitizeRichHtml(sanitizedText), user.id, { inlineImages: body.inline_images, attachments: images?.map((url: string) => ({ url })) })
     sanitizedText = normalizeBlockHtml(sanitizedText)
 
     const textMentionIds = extractTipTapContent(sanitizedText).mentions.map((id) => parseInt(id, 10))
@@ -874,7 +881,8 @@ export async function POST(request: NextRequest) {
       replyToInvocationId: reply_to_invocation_id,
       mentionsPerson: textMentionIds.length > 0 || (mentions?.length ?? 0) > 0,
       hasImages: (images?.length ?? 0) > 0 || /<img\b/i.test(sanitizedText) ||
-        (has_attachments === true && await isFeatureEnabled(HTPR_7512_ATTACH_KEEPS_COMMENT_FLAG, user.id)),
+        (has_attachments === true && await isFeatureEnabled(HTPR_7512_ATTACH_KEEPS_COMMENT_FLAG, user.id)) ||
+        (body.has_image_attachments === true && await isFeatureEnabled(HTPR_7514_INLINE_AGENT_IMAGES_FLAG, user.id)),
       flagEnabled: await isFeatureEnabled(HTPR_7341_AGENT_CHATTER_TO_LOG_FLAG, user.id),
     }) === 'log' && agentLogPrincipal
       ? await prepareAgentLogEntry(agentLogPrincipal, sanitizedText)

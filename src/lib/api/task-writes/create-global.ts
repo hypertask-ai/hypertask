@@ -1,3 +1,4 @@
+import { inlineAgentImagesForUser } from "@/lib/media/inlineAgentImages.server";
 import { HTPR_7513_WRITER_PROJECT_LABELS_FLAG } from "@/lib/flags/keys";
 import { recordAgentBoardScopeMiss } from "@/lib/auth/agentScope";
 import { HTPR_7471_WRITER_BOARD_FORMAT_FLAG } from "@/lib/flags/keys";
@@ -90,6 +91,8 @@ const route = (requestStartedAt: number) => taskWriteRoute({
       return NextResponse.json({ message: actingAgent.message }, { status: actingAgent.status });
     }
     const agentId = actingAgent.agentId;
+    const storedDescription = agentId && typeof description === "string"
+      ? await inlineAgentImagesForUser(description, userId, { inlineImages: body.inline_images, attachments: Array.isArray(urlsToAdd) ? urlsToAdd.filter((file) => file.Attachment).map((file) => ({ url: file.urlString, fileName: file.title, mimeType: file.attachmentType })) : [] }) : description;
     if (agentId) {
       const agentOwnerId = await getActiveAgentOwnerId(agentId);
       if (agentOwnerId !== session.userId) {
@@ -146,7 +149,7 @@ const route = (requestStartedAt: number) => taskWriteRoute({
       if (!target) return NextResponse.json({ message: "Forbidden" }, { status: 403, headers: responseHeaders });
       if (!isEmptyComposeTarget(target)) return NextResponse.json({ message: "This task is no longer empty. Your note is still here." }, { status: 409, headers: responseHeaders });
       const { updateTaskSingle } = await import("@/utils/controllers/tasks/single");
-      const result = await updateTaskSingle({ id: taskId, title, description,
+      const result = await updateTaskSingle({ id: taskId, title, description: storedDescription,
         ...(writerDueDate ? { dueDate: writerDueDate, dueDateNotifiedAt: null } : {}),
       }, currentUser, agentId, {
         expectedTitle: target.title,
@@ -383,7 +386,7 @@ const route = (requestStartedAt: number) => taskWriteRoute({
             ...body,
             description_: {
               create: {
-                content: description ?? "",
+                content: storedDescription ?? "",
                 creatorId: userId,
                 agentId,
               },

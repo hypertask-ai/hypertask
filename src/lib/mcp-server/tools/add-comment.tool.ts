@@ -41,6 +41,7 @@ export const addCommentTool = {
             has_attachments: validatedInput.has_attachments,
             text: validatedInput.text,
             content_type: validatedInput.content_type,
+            inline_images: validatedInput.inline_images,
             mentions: validatedInput.mentions,
             attachments: validatedInput.attachments,
             reply_to_comment_id: validatedInput.reply_to_comment_id,
@@ -55,6 +56,7 @@ export const addCommentTool = {
             comment_id: validatedInput.comment_id!,
             text: validatedInput.text!,
             content_type: validatedInput.content_type,
+            inline_images: validatedInput.inline_images,
             mentions: validatedInput.mentions,
           });
           return { success: true, comment: result.comment };

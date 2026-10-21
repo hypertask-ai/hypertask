@@ -57,6 +57,7 @@ export interface UpdateTaskBody {
     estimate?: number;
     description?: string;
     content_type?: 'html' | 'markdown';
+    inline_images?: boolean;
     title?: string;
     sectionId?: number;
     status?: typeof VALID_STATUSES[number];

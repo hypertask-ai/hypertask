@@ -66,7 +66,9 @@ const route = taskWriteRoute({
         return NextResponse.json({ error: "This upload cannot be linked" }, { status: 403 });
       }
       try {
-        const attachment = await linkTaskAttachment(taskId, session.userId, receipt);
+        const attachment = session.agentId
+          ? await linkTaskAttachment(taskId, session.userId, receipt, { agentId: session.agentId, inlineImages: body.inline_images })
+          : await linkTaskAttachment(taskId, session.userId, receipt);
         try {
           await broadcastTaskChange(taskId, { originUserId: session.userId });
         } catch (error) {
@@ -210,7 +212,7 @@ const route = taskWriteRoute({
 export const POST: TaskWriteRoute = async (request) => {
   const signed = verifySession(request.cookies ? request.cookies[SESSION_COOKIE] : parseCookies(request.headers.get("cookie") ?? "").get(SESSION_COOKIE));
   const session = signed
-    ? { userId: signed.id, source: "legacy" as const, needsBridge: true as const }
+    ? { userId: signed.id, ...(signed.agentId ? { agentId: signed.agentId } : {}), source: "legacy" as const, needsBridge: true as const }
     : await getSessionUser(request.headers);
   if (!session) return NextResponse.json({ error: "Unauthorized", code: "SESSION_REQUIRED" }, { status: 401 });
   return route(request, session);

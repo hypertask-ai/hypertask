@@ -1,3 +1,4 @@
+import { inlineAgentImages as embedAgentImages, imageEmbeddingOptOut } from "@/lib/media/inlineAgentImages";
 import type { TaskWriterCustomFieldValue } from "@/lib/ai/taskWriterCustomFields";
 import { isBrowserRenderableImage } from "@/lib/media/browserRenderableImage";
 import type { IProject, ITask } from "@/models/model";
@@ -59,12 +60,13 @@ function writerProperties({ priority, estimate }: Pick<ReturnType<typeof extract
 export type ComposeTaskStage = "Reading past tickets" | "Understanding the context" | "Writing the ticket" | "Saving the ticket";
 
 export async function createComposedTask({
-  text, files, project, userId, existingTaskId, onProgress, viewProject, fields, explainWriterFailure, unfurlImageUrls = false,
+  text, files, project, userId, existingTaskId, onProgress, viewProject, fields, explainWriterFailure, unfurlImageUrls = false, inlineAgentImages = false,
   applyWriterProperties = false, invokeSkills = false,
 }: {
   text: string; files: File[]; project: IProject; userId: number; existingTaskId?: number;
   invokeSkills?: boolean;
   unfurlImageUrls?: boolean;
+  inlineAgentImages?: boolean;
   applyWriterProperties?: boolean;
   onProgress?: (stage: ComposeTaskStage) => void;
   viewProject?: IProject;
@@ -85,12 +87,13 @@ export async function createComposedTask({
     return { fileName: file.name, url, mimeType: file.type };
   }));
   const nextMediaToken = createTaskWriterMediaTokenFactory(text, ...uploads.flatMap(({ url, fileName }) => [url, fileName]));
-  const promptMedia = unfurlImageUrls ? extractTaskWriterPromptMedia(text, nextMediaToken) : { html: text, media: [] };
+  const optedOut = inlineAgentImages && imageEmbeddingOptOut(text);
+  const promptMedia = unfurlImageUrls && !inlineAgentImages ? extractTaskWriterPromptMedia(text, nextMediaToken) : { html: text, media: [] };
   const draftDescription = `<p>${escapeHtml(promptMedia.html).replace(/\n/g, "<br>")}</p>` +
-    uploads.map(({ url, fileName, mimeType }) => isBrowserRenderableImage(mimeType, fileName)
+    uploads.map(({ url, fileName, mimeType }) => !optedOut && isBrowserRenderableImage(mimeType, fileName)
       ? `<p><img src="${escapeHtml(url)}" alt="${escapeHtml(fileName)}"></p>`
       : `<p><a href="${escapeHtml(url)}">${escapeHtml(fileName)}</a></p>`).join("");
-  const uploadMedia = extractTaskWriterMedia(draftDescription, nextMediaToken);
+  const uploadMedia = extractTaskWriterMedia(embedAgentImages(draftDescription, { enabled: inlineAgentImages, instructions: text, attachments: uploads }), nextMediaToken);
   const media = { html: uploadMedia.html, media: [...promptMedia.media, ...uploadMedia.media] };
   const rawDescription = restoreTaskWriterMedia(media.html, media.media);
   let title = text;
@@ -190,8 +193,20 @@ export async function createComposedTask({
     }
     drafts = drafts.map((draft) => {
       let body = restoreTaskWriterMedia(draft.description, media.media);
+      if (optedOut) body = body.replace(/<img\b[^>]*>/gi, "");
+      if (inlineAgentImages && /<img\b/i.test(body)) {
+        const doc = new DOMParser().parseFromString(body, "text/html");
+        const sources = new Set<string>();
+        let duplicate = false;
+        doc.querySelectorAll("img[src]").forEach((image) => {
+          const src = image.getAttribute("src")!;
+          if (sources.has(src)) { image.remove(); duplicate = true; }
+          sources.add(src);
+        });
+        if (duplicate) body = doc.body.innerHTML;
+      }
       for (const file of uploads) {
-        if (!isBrowserRenderableImage(file.mimeType, file.fileName) && !body.includes(file.url)) {
+        if ((optedOut || !isBrowserRenderableImage(file.mimeType, file.fileName)) && !body.includes(file.url)) {
           body += `<p><a href="${escapeHtml(file.url)}">${escapeHtml(file.fileName)}</a></p>`;
         }
       }

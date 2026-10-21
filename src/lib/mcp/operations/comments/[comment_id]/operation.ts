@@ -1,3 +1,4 @@
+import { inlineAgentImagesForUser } from "@/lib/media/inlineAgentImages.server";
 import { agentScopeEnforced, recordAgentBoardScopeMiss } from "@/lib/auth/agentScope";
 import { reportMcpOperationCrash } from '@/lib/mcp/operationCrashReport'
 import { userCanAccessTask } from "@/utils/controllers/tasks/assertTaskAccess"
@@ -33,6 +34,7 @@ export interface McpMentionInput {
 
 export interface UpdateCommentRequest {
   text: string
+  inline_images?: boolean
   content_type?: 'html' | 'markdown'
   mentions?: McpMentionInput[]
 }
@@ -95,6 +97,9 @@ export async function PATCH(request: NextRequest, props: { params: Promise<{ com
       )
     }
 
+    if (body.inline_images !== undefined && typeof body.inline_images !== "boolean") {
+      return NextResponse.json({ success: false, error: "inline_images must be a boolean" }, { status: 400 });
+    }
     const { text, content_type, mentions } = body
 
     if (!text || typeof text !== 'string' || text.trim().length === 0) {
@@ -252,7 +257,7 @@ export async function PATCH(request: NextRequest, props: { params: Promise<{ com
     if (mentions && mentions.length > 0) {
       sanitizedText = convertPlainTextMentionsToHtml(sanitizedText, mentions)
     }
-    sanitizedText = sanitizeRichHtml(sanitizedText)
+    sanitizedText = await inlineAgentImagesForUser(sanitizeRichHtml(sanitizedText), user.id, { inlineImages: body.inline_images })
     sanitizedText = normalizeBlockHtml(sanitizedText)
 
     const textMentionIds = extractTipTapContent(sanitizedText).mentions.map((id) => parseInt(id, 10))

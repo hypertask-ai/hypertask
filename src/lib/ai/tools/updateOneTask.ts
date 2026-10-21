@@ -1,3 +1,4 @@
+import { inlineAgentImagesForUser } from "@/lib/media/inlineAgentImages.server";
 
 import { z } from "zod";
 import { type ToolTaskIdentifierInput } from "@/app/api/ai/chat/stream/bulkTools";
@@ -21,7 +22,7 @@ import type { ToolContext } from "./context";
 import { updateTaskSchema } from "./updateTaskSchema";
 
 export function createTaskUpdater(context: ToolContext, input: z.infer<typeof updateTaskSchema>) {
-  const { user, actingAgentId } = context;
+  const { user, actingAgentId, body } = context;
   return async (
     identifier: ToolTaskIdentifierInput,
     taskResult?: ResolveTaskForToolResult
@@ -95,7 +96,7 @@ export function createTaskUpdater(context: ToolContext, input: z.infer<typeof up
     const patch: Record<string, unknown> = { id: task.id };
     if (input.title !== undefined) patch.title = input.title;
     if (input.description !== undefined)
-      patch.description = toStoredHtml(input.description);
+      patch.description = await inlineAgentImagesForUser(toStoredHtml(input.description), user.id, { instructions: body?.message, inlineImages: input.inline_images, attachments: [...(body?.images64 ?? []), ...(body?.attachments ?? [])].flatMap((file) => file.url ? [{ url: file.url, fileName: file.fileName, mimeType: file.mimeType }] : []) });
     if (input.parent_task_id !== undefined) patch.parentTaskId = input.parent_task_id;
     const dueDateValue =
       input.due_date === undefined

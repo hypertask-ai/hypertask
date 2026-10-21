@@ -39,7 +39,7 @@ export const createFullScreenTaskAndReturn = async(projectId:number, userId:numb
         console.log("🚀 ~ createFullScreenTaskAndReturn ~ task:", task)
         const response = await create({
             title,
-            description:"",
+            description:description ?? "",
             section:section.section_title,
             userId,
             ranking:ranking!,

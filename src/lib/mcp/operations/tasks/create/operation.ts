@@ -1,3 +1,4 @@
+import { inlineAgentImagesForUser } from "@/lib/media/inlineAgentImages.server";
 import { reportMcpOperationCrash } from '@/lib/mcp/operationCrashReport';
 import { wrapMcpRoute, validateMcpRouteAuth as validateMcpAuth, checkMcpRouteRateLimit as checkMcpRateLimit, readMcpRouteJsonBody as readJsonBody } from '@/lib/mcp/routeWrapper'
 
@@ -214,7 +215,7 @@ export async function POST(request: NextRequest) {
         }
 
         if (dryRun) {
-            const sanitizedDescription = sanitizeRichHtml(description || '');
+            const sanitizedDescription = await inlineAgentImagesForUser(sanitizeRichHtml(description || ''), user.id, { inlineImages: validation.data.inline_images, attachments: images?.map((url) => ({ url })) });
             return NextResponse.json(
                 {
                     success: true,
@@ -247,7 +248,7 @@ export async function POST(request: NextRequest) {
                 const task = await createTask({
                     projectId: project_id,
                     title,
-                    description: sanitizeRichHtml(description || ''),
+                    description: await inlineAgentImagesForUser(sanitizeRichHtml(description || ''), user.id, { inlineImages: validation.data.inline_images, attachments: images?.map((url) => ({ url })) }),
                     sectionId: sectionCheck.section.id,
                     sectionTitle: sectionCheck.section.section_title,
                     userId: user.id,

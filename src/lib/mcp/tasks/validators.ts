@@ -56,6 +56,9 @@ export function validateCreateTaskBody(
     correlationId: string | null,
     dryRun = false
 ): { valid: true; data: CreateTaskBody } | { valid: false; response: NextResponse } {
+    if (body.inline_images !== undefined && typeof body.inline_images !== "boolean") {
+        return { valid: false, response: NextResponse.json(buildFieldError("invalid_field", "inline_images", "inline_images must be a boolean"), { status: 400 }) };
+    }
     if (!isDbId(body.project_id)) {
         return {
             valid: false,
@@ -427,6 +430,7 @@ export function validateCreateTaskBody(
             estimate: body.estimate !== undefined ? body.estimate : 0,
             due_date: body.due_date?.trim() || undefined,
             images: body.images || [],
+            inline_images: body.inline_images,
             labels: body.labels || [],
             parent_task_id: body.parent_task_id || undefined,
             assignee_ids

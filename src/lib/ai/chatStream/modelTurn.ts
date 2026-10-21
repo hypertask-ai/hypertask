@@ -1,5 +1,7 @@
 
 
+import { renderPrompt } from "@/lib/ai/prompts/registry";
+import { HTPR_7514_INLINE_AGENT_IMAGES_FLAG } from "@/lib/flags/keys";
 import prisma from "@/lib/prisma";
 import { isFeatureEnabled } from "@/lib/flags";
 import { HTPR_7363_CHAT_TASK_WRITER_FLAG } from "@/lib/flags/keys";
@@ -40,6 +42,7 @@ export async function runModelTurn(state: StreamState, resolvedBody: ChatRequest
     : null;
   const instructions = [
     AGENT_SYSTEM_PROMPT,
+    await isFeatureEnabled(HTPR_7514_INLINE_AGENT_IMAGES_FLAG, dbUser.id) ? renderPrompt("inline-agent-images") : null,
     skillResolution.systemPromptAddition,
     agentPromptAddition,
   ]

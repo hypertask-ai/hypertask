@@ -1,4 +1,9 @@
 export const PROMPTS = {
+  "inline-agent-images": {
+    id: "inline-agent-images",
+    version: "1",
+    parts: ["IMAGE TREATMENT: When the user supplies an image URL or image upload, include it inline in the task description or comment as <img src=\"URL\" alt=\"description\">, using the editor image markup. A link or attachment alone is not sufficient; attaching as well is allowed. Preserve exact source URLs, never invent them, never duplicate an image already inline, and never embed non-image files. If the user explicitly says attachment only, link only, or do not embed, preserve that request and pass inline_images: false to task/comment/attachment tools, including follow-up uploads. Otherwise inline images are the default. This overrides instructions that treat raw image URLs as links only; media tokens must still be preserved."],
+  },
   "suggest-reply-context-1": {
     id: "suggest-reply-context-1",
     version: "1",

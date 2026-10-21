@@ -1,3 +1,4 @@
+import { inlineAgentImagesForUser } from "@/lib/media/inlineAgentImages.server";
 import { HTPR_7513_WRITER_PROJECT_LABELS_FLAG } from "@/lib/flags/keys";
 import { isFeatureEnabled } from "@/lib/flags";
 import type { TaskWriterCustomFieldValue } from "@/lib/ai/taskWriterCustomFields";
@@ -24,7 +25,7 @@ import { isAgentOnBoard } from "@/utils/controllers/agents/boardMembers";
 import type { ToolContext } from "./context";
 
 export function createCreateTaskTool(context: ToolContext) {
-  const { sendStatus, user, confirmationSessionId, bulkPreviewsIssued, actingAgentId } = context;
+  const { sendStatus, user, confirmationSessionId, bulkPreviewsIssued, actingAgentId, body } = context;
   const { chatTaskWriterEnabled = false, abortSignal } = context;
   const writerItemSchema = createTaskItemSchema.omit({ title: true, description: true, priority: true }).extend({
     brief: z.string().min(1).refine((value) => value.trim().length > 0, "Brief cannot be empty").describe("The user's request in their own words, unabridged, including relevant refinements. Do not pre-write a title or description."),
@@ -208,7 +209,7 @@ export function createCreateTaskTool(context: ToolContext) {
               creationChannel: "agent",
               projectId: input.project_id,
               title,
-              description: description ? toStoredHtml(description) : "",
+              description: await inlineAgentImagesForUser(description ? toStoredHtml(description) : "", user.id, { instructions: [body?.message, "brief" in input ? input.brief : undefined].filter(Boolean).join("\n"), inlineImages: input.inline_images, attachments: [...(body?.images64 ?? []), ...(body?.attachments ?? [])].flatMap((file) => file.url ? [{ url: file.url, fileName: file.fileName, mimeType: file.mimeType }] : []) }),
               sectionId: sectionCheck.section.id,
               sectionTitle: sectionCheck.section.section_title,
               userId: user.id,

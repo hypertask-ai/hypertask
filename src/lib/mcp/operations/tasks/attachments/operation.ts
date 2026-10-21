@@ -1,3 +1,5 @@
+import { isFeatureEnabled } from "@/lib/flags";
+import { HTPR_7514_INLINE_AGENT_IMAGES_FLAG } from "@/lib/flags/keys";
 import { findIdParamOutOfRange, idOutOfRangeMessage } from '@/lib/mcp/listParams';
 import { reportMcpOperationCrash } from '@/lib/mcp/operationCrashReport';
 import { wrapMcpRoute } from '@/lib/mcp/routeWrapper'
@@ -170,6 +172,7 @@ export async function POST(request: NextRequest) {
         taskId: task.id,
         commentId,
         descriptionId,
+        inlineImages: parsed.inline_images !== false && await isFeatureEnabled(HTPR_7514_INLINE_AGENT_IMAGES_FLAG, user.id),
       }
     );
 

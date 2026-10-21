@@ -844,7 +844,7 @@ export class TaskService {
         if (!hasTaskFieldUpdate) {
           const attachmentResult = await attachFilesAfterMutation(
             this.apiClient,
-            { task_id: response.task.id, files: attachments },
+            { task_id: response.task.id, files: attachments, inline_images: taskUpdate.inline_images },
             `Task ${response.task.ticketNumber ?? response.task.id} lookup`
           );
           return {
@@ -861,7 +861,7 @@ export class TaskService {
         }
         const attachmentOutcome = await attachFilesAfterMutation(
           this.apiClient,
-          { task_id: response.task.id, files: attachments },
+          { task_id: response.task.id, files: attachments, inline_images: taskUpdate.inline_images },
           `Task ${response.task.ticketNumber ?? response.task.id} update`
         );
         return { ...response, ...attachmentOutcome };
@@ -899,6 +899,7 @@ export class TaskService {
       };
       if (taskInput.description !== undefined) body.description = taskInput.description;
       if (taskInput.content_type !== undefined) body.content_type = taskInput.content_type;
+      if (taskInput.inline_images !== undefined) body.inline_images = taskInput.inline_images;
       if (taskInput.section_id !== undefined) body.section_id = taskInput.section_id;
       if (taskInput.priority !== undefined) body.priority = taskInput.priority;
       if (taskInput.estimate !== undefined) body.estimate = taskInput.estimate;
@@ -935,7 +936,7 @@ export class TaskService {
       if (attachments !== undefined) {
         const attachmentOutcome = await attachFilesAfterMutation(
           this.apiClient,
-          { task_id: response.task.id, files: attachments },
+          { task_id: response.task.id, files: attachments, inline_images: taskInput.inline_images },
           `Task ${response.task.ticketNumber ?? response.task.id} creation`
         );
         return { ...response, ...attachmentOutcome };
