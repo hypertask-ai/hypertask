@@ -257,6 +257,14 @@ https://app.hypertask.ai/detail/project-15/7406, flag `htpr-7406-desktop-server-
 
 **Next probe.** Live after deploy: desktop board-returning should read `boardPreference: true`, `serverBoard: true`. Then the chat-after-hydration cost: profile what hydration does on a server board before the chat effect runs.
 
+### 2026-10-21 morning: daily read complete; the runner's own stalled PR was the biggest milestone 1 win (HTPR-7406)
+
+**Daily read.** Complete 04:35 UTC on 89cdd74d2, load 10, N=5. Milestone 1 misses: desktop board 2090 ms and board-returning 2030 ms (0 of 5 server board, target 1000); phone board first visit 11558 ms (target 4000); phone search 2130 and page navigation 2338 ms (target 2000). Met since 2026-10-18: phone ticket-cold 2293 ms, desktop ticket-cold 775, desktop search 679. Two >15% flags are secondary metrics, not content time: desktop search long tasks 233 vs 167 ms (search 34% faster after HTPR-7501, a cohort change) and phone My Tasks bytes +40% (lazy chunks after content, already noted 2026-10-21 for HTPR-7501; do not chase).
+
+**What found the work.** The dispatcher reported no free speed ticket, but a board read found HTPR-7502 unassigned and HTPR-7406 In Progress under this runner with PR 1694 approved and green, stalled for 19 h on a playbook merge conflict after its session ended. Finishing it beat filing a new ticket.
+
+**Lesson.** Before filing or researching, list the runner's own In Progress tickets and open PRs: a cleared session can strand a finished, reviewed win behind a docs conflict. Rebase conflicts in this file are additive; keep both entries.
+
 ## Milliseconds saved scoreboard
 
 Only matched end-to-end before/after evidence earns saved milliseconds; `unproven` is not zero. Do not sum different cohorts or claim forecasts as savings.
