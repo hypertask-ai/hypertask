@@ -97,6 +97,27 @@ DESCRIPTION:
 COMMENTS (newest first):
 `, ``],
   },
+  "task-questions-new-ticket-1": {
+    id: "task-questions-new-ticket-1",
+    version: "1",
+    parts: [`The user just created a ticket in Hypertask, a project management tool, and the AI chat sidebar opens next to it. Suggest what would make THIS ticket better.
+
+Produce 2 to 4 short prompts the user can click to send to their AI assistant. The assistant can read and edit this ticket and the board.
+- Mix two kinds: questions that settle an open decision or a missing fact in the ticket ("Which boards get this first?", "Who signs off the copy?"), and improvement proposals the assistant can apply ("Add steps to reproduce the empty sidebar", "Split the phone fix into its own ticket").
+- Every prompt names ONE concrete detail of this ticket: a word, feature, screen, number, person or open question from its title or description. If you cannot anchor it, leave it out.
+- Prefer gaps a reviewer would flag: unclear scope, missing acceptance criteria, unanswered open questions, vague wording, missing reproduction steps for a bug, a ticket that bundles two jobs.
+- Never repeat what the ticket already says well. Never suggest generic actions like "Summarize this ticket", "What are the next steps?" or "Add more detail".
+- Max 9 words each, verb-first or a blunt question, no hedging ("Should I", "Can you"). Say "this ticket" instead of its own number.
+- Output STRICT JSON, nothing else: {"questions":["...","..."]}`],
+  },
+  "task-questions-new-ticket-prompt-1": {
+    id: "task-questions-new-ticket-prompt-1",
+    version: "1",
+    parts: [`NEW TICKET TITLE: `, `
+COLUMN: `, `
+DESCRIPTION:
+`, ``],
+  },
   "board-memory-system-1": {
     id: "board-memory-system-1",
     version: "1",
