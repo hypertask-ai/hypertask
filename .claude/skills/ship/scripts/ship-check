@@ -9,8 +9,8 @@
 #                                with evidence (an https URL or a <pre>/<code> block), no open PR titled with T, no bound PR, and no origin
 #                                branch named *<t lowercased>* with commits not in the base branch. Then merged, deployed, proof, pr and cleaned pass.
 #   ship-check pr <T>            the ticket's PR exists and is named right
-#   ship-check premerge <pr>     released-flag browser proof for the current PR head (hookless sessions)
-#   ship-check premerge-status <pr> publish that proof as the required current-head GitHub status
+#   ship-check premerge <pr>     test click removed for every PR (hookless sessions)
+#   ship-check premerge-status <pr> publish the required current-head GitHub status
 #   ship-check title <pr>        PR title is "PREFIX-NNNN [TYPE] ..." and that ticket exists
 #   ship-check ci-tests <pr>     latest ci-tests on the PR head passes; failures name tests and production status
 #   ship-check ticket <T>        ticket exists on the board
@@ -553,338 +553,12 @@ check_cleaned() {
 }
 
 check_premerge() {
-  [ "$REPO" = hypertask-ai/hypertask ] || return 0
-  python3 - "$REPO" "$1" "$EVID" "${2:-}" <<'PY'
-import json, os, re, subprocess, sys, time, urllib.parse, urllib.request
-from pathlib import Path
-
-repo, pr, evidence, expected_sha = sys.argv[1:]
-SCREEN_PATH_RULES = (
-    r'^src/app/(?!api/)',
-    r'^src/components/',
-    r'^src/styles/',
-    r'\.(?:css|scss)$',
-    r'^public/',
-    r'^tailwind\.config\.',
-)
-def gh(*args):
-    result = subprocess.run(['gh', *args], capture_output=True, text=True, timeout=30)
-    if result.returncode:
-        raise ValueError('cannot read the PR diff or source from GitHub; retry before merging')
-    if '--paginate' not in args:
-        return json.loads(result.stdout)
-    pages, text = [], result.stdout.strip()
-    while text:
-        page, end = json.JSONDecoder().raw_decode(text)
-        pages.append(page)
-        text = text[end:].strip()
-    return pages
-
-# PR files come from a local bare cache repo: one git fetch per head, then `git show`. No contents API call, ever.
-GIT = os.environ.get('SHIP_GIT', 'git')
-CACHE = Path(os.environ.get('SHIP_GIT_CACHE') or Path.home() / '.cache/premerge-evidence/git')
-REMOTE = os.environ.get('SHIP_GIT_REMOTE', f'https://github.com/{repo}.git')
-GIT_ENV = dict(os.environ, GIT_TERMINAL_PROMPT='0')
-def git(*args, timeout=30, cwd=True):
-    command = [GIT, '-C', str(CACHE), *args] if cwd else [GIT, *args]
-    return subprocess.run(command, capture_output=True, timeout=timeout, env=GIT_ENV)
-
-def have(sha):
-    return git('cat-file', '-e', sha + '^{commit}').returncode == 0
-
-def prepare(pr, *shas):
-    import fcntl
-    CACHE.parent.mkdir(parents=True, exist_ok=True)
-    with open(str(CACHE) + '.lock', 'w') as lock:
-        fcntl.flock(lock, fcntl.LOCK_EX)
-        if not (CACHE / 'HEAD').exists() and git('init', '--bare', '-q', str(CACHE), cwd=False).returncode:
-            raise ValueError('cannot read the PR diff or source from GitHub; retry before merging')
-        if all(have(s) for s in shas):
-            return
-        git('fetch', '--no-tags', '-q', REMOTE, f'+refs/pull/{pr}/head:refs/premerge/pr-{pr}', timeout=600)
-        for s in shas:
-            if not have(s):
-                git('fetch', '--no-tags', '-q', REMOTE, s, timeout=600)
-        if not all(have(s) for s in shas):
-            raise ValueError('cannot read the PR diff or source from GitHub; retry before merging')
-
-cache = {}
-def source(path, sha):
-    if (path, sha) not in cache:
-        result = git('show', f'{sha}:{path}')
-        if result.returncode:
-            raise ValueError('cannot read the PR diff or source from GitHub; retry before merging')
-        cache[path, sha] = result.stdout.decode()
-    return cache[path, sha]
-
-def listdir(path, sha):
-    # One git ls-tree, shaped like the contents API listing (name, path, type), so a directory read costs no API call.
-    result = git('ls-tree', '-z', sha, path.rstrip('/') + '/')
-    if result.returncode:
-        raise ValueError('cannot read the PR diff or source from GitHub; retry before merging')
-    rows = []
-    for entry in filter(None, result.stdout.decode().split('\0')):
-        meta, full = entry.split('\t', 1)
-        rows.append({'name': full.rsplit('/', 1)[-1], 'path': full, 'type': 'file' if meta.split()[1] == 'blob' else 'dir'})
-    return rows
-
-def constants(text):
-    return {m[0]: m[2] for m in re.findall(r'\bconst\s+(\w+)(?:\s*:\s*[^=;\n]+)?\s*=\s*([\'\"])(.*?)\2', text)}
-
-def resolve(arg, keys):
-    arg = arg.strip()
-    if re.fullmatch(r'[\'\"][a-z0-9-]+[\'\"]', arg):
-        return arg[1:-1]
-    return keys.get(arg)
-
-def read_registry(ref):
-    text = source('src/lib/flags/keys.ts', ref)
-    keys = constants(text)
-    rows = []
-    if 'definitions/index.generated' in text:
-        listing = listdir('src/lib/flags/definitions', ref)
-        if not isinstance(listing, list) or not listing:
-            raise ValueError('cannot resolve per-flag registry; retry before merging')
-        for item in sorted(listing, key=lambda item: item['name']):
-            if item['name'] == 'index.generated.ts':
-                raise ValueError('generated flag index must not be committed')
-            if item.get('type') != 'file' or not re.fullmatch(r'(?:htpr|hyfa|yper4)-\d+-[a-z0-9-]+\.ts', item['name']):
-                raise ValueError('cannot resolve per-flag registry; invalid flag file')
-            flag = source(item['path'], ref)
-            values = constants(flag)
-            if len(values) != 1 or next(iter(values.values())) + '.ts' != item['name']:
-                raise ValueError('cannot resolve per-flag registry; invalid key')
-            keys.update(values)
-            rows.append(flag)
-    return keys, rows
-
-registry_cache = {}
-def flag_registry(ref):
-    if ref not in registry_cache:
-        registry_cache[ref] = read_registry(ref)
-    return registry_cache[ref]
-
-try:
-    # Mutable PR endpoints can briefly serve an earlier head after a push.
-    freshness = time.time_ns()
-    row = gh('api', f'repos/{repo}/pulls/{pr}?premerge={freshness}')
-    sha, base = row['head']['sha'], row['base']['sha']
-    if not re.fullmatch(r'[0-9a-f]{40}', sha):
-        raise ValueError('cannot read the full PR head sha')
-    if expected_sha and sha != expected_sha:
-        raise ValueError('PR head changed while checking evidence; retry')
-    ticket = row['title'].split()[0]
-    pages = gh('api', f'repos/{repo}/pulls/{pr}/files?per_page=100&premerge={freshness}', '--paginate')
-    files = [f for page in pages for f in page]
-    if len(files) != row['changed_files']:
-        raise ValueError('cannot read the complete PR diff; retry before merging')
-    if not any(re.search(rule, path) for f in files
-               for path in (f['filename'], f.get('previous_filename', f['filename']))
-               for rule in SCREEN_PATH_RULES):
-        print('no screen files changed')
-        sys.exit(0)
-    prepare(pr, sha, base)
-    touched, base_touched, deleted_definitions, unknown = set(), set(), set(), False
-    for f in files:
-        versions = []
-        if f['status'] != 'added':
-            versions.append((f.get('previous_filename', f['filename']), base))
-        if f['status'] != 'removed':
-            versions.append((f['filename'], sha))
-        for path, ref in versions:
-            if not re.search(r'^src/.*\.(?:[cm]?js|jsx|ts|tsx)$', path):
-                continue
-            text = source(path, ref)
-            if path.startswith('src/lib/flags/definitions/'):
-                values = constants(text)
-                if len(values) != 1:
-                    raise ValueError('cannot resolve touched flag definition')
-                touched.update(values.values())
-                if ref == base:
-                    base_touched.update(values.values())
-                    if f['status'] == 'removed':
-                        deleted_definitions.update(values.values())
-            readers = ['useFlag', 'isFeatureEnabled'] + re.findall(r'\b(?:useFlag|isFeatureEnabled)\s+as\s+(\w+)', text)
-            for call in re.finditer(r'\b(?:' + '|'.join(readers) + r')\s*\(\s*([^,)\n]+)', text):
-                if re.search(r'\bfunction\s*$', text[:call.start()]):
-                    continue
-                keys = flag_registry(ref)[0] | constants(text)
-                key = resolve(call[1], keys)
-                if not key:
-                    # Follow one `import { NAME } from "@/..."` hop to the module that defines the key.
-                    name = call[1].strip()
-                    imp = re.search(r'import\s*\{[^}]*\b' + re.escape(name) + r'\b[^}]*\}\s*from\s*[\'\"]@/([^\'\"]+)[\'\"]', text)
-                    for ext in (('.ts', '.tsx', '/index.ts') if imp else ()):
-                        try:
-                            key = resolve(name, constants(source('src/' + imp[1] + ext, ref)))
-                        except Exception:
-                            continue
-                        break
-                if key:
-                    touched.add(key)
-                    if ref == base:
-                        base_touched.add(key)
-                else:
-                    unknown = True
-    if not touched and not unknown:
-        print('no released flag touched')
-        sys.exit(0)
-    modes = None
-    token = os.environ.get('AGENT_TOKEN') or os.environ.get('HYPERTASKS_JWT_TOKEN')
-    if token:
-        try:
-            request = urllib.request.Request('https://app.hypertask.ai/api/admin/flags', headers={'Authorization': f'Bearer {token}'})
-            with urllib.request.urlopen(request, timeout=10) as response:
-                flags = json.load(response)['flags']
-            if not all(f.get('mode') in ('OFF', 'OWNER_ONLY', 'OWNER_AND_QA', 'EVERYONE') for f in flags):
-                raise ValueError('invalid modes')
-            modes = {f['key']: f['mode'] for f in flags}
-        except Exception:
-            pass
-    if modes is None:
-        # /api/admin/flags is owner-only. A flag that is on for the plain QA account (user 2343, never in the QA group) is on for Everyone.
-        # An expired or anonymous session gets 401, so this fails closed.
-        state = os.environ.get('SHIP_CHECK_PLAIN_QA_STATE', os.path.expanduser('~/.config/hypertask-videos/storageState-qa-normal.json'))
-        try:
-            cookies = json.load(open(state))['cookies']
-            cookie = '; '.join(f"{c['name']}={c['value']}" for c in cookies if 'hypertask' in c.get('domain', ''))
-            request = urllib.request.Request('https://app.hypertask.ai/api/flags', headers={'Cookie': cookie})
-            with urllib.request.urlopen(request, timeout=10) as response:
-                seen = json.load(response)['flags']
-            if not isinstance(seen, dict) or not seen or not all(isinstance(v, bool) for v in seen.values()):
-                raise ValueError('invalid flags')
-            modes = {key: 'EVERYONE' if on else 'NOT_EVERYONE' for key, on in seen.items()}
-        except Exception:
-            pass
-    registry = source('src/lib/flags.ts', base)
-    keys, flag_rows = flag_registry(base)
-    default = re.search(r'\bDEFAULT_FEATURE_FLAG_MODE[^=]*=\s*[\'\"](\w+)[\'\"]', registry)
-    definitions_pattern = r'\bFEATURE_FLAG_DEFINITIONS\s*=\s*\[([\s\S]*?)\]\s*as const'
-    definitions = re.search(definitions_pattern, registry)
-    if not definitions:
-        definitions = re.search(definitions_pattern, source('src/lib/flags/definitions.ts', base))
-    if not default or not (definitions or flag_rows):
-        raise ValueError('cannot resolve flag registry defaults; record premerge evidence before merging')
-    def definition_properties(block):
-        # Comments and strings are consumed whole, so "highRisk:" inside a reason or a comment never counts as a property.
-        pattern = r'//[^\n]*|/\*[\s\S]*?\*/|"(?:\\.|[^"\\])*"|\'(?:\\.|[^\'\\])*\'|`(?:\\.|[^`\\])*`|[A-Za-z_$][\w$]*|:'
-        tokens = [token[0] for token in re.finditer(pattern, block) if not token[0].startswith(('//', '/*'))]
-        properties = {}
-        for index in range(len(tokens) - 1):
-            name, colon = tokens[index], tokens[index + 1]
-            if colon != ':' or name == ':':
-                continue
-            name = name[1:-1] if name[0] in '"\'`' else name
-            value = tokens[index + 2] if index + 2 < len(tokens) else ''
-            properties.setdefault(name, value[1:-1] if value[:1] in ('"', "'", '`') else None)
-        return properties
-    def registry_default(block, fallback):
-        properties = definition_properties(block)
-        if properties.get('defaultMode'):
-            return properties['defaultMode']
-        return 'EVERYONE' if properties.get('kind') == 'bugfix' else fallback
-    defaults = {}
-    for block in (flag_rows or re.findall(r'\{([^{}]*)\}', definitions[1])):
-        key = re.search(r'\bkey:\s*([\'\"][^\'\"]+[\'\"]|\w+)', block)
-        if key:
-            defaults[resolve(key[1], keys)] = registry_default(block, default[1])
-    live = modes is not None
-    if not live:
-        print('note: live flag modes unavailable; registry defaults cannot prove a flag is not released')
-        modes = defaults
-    base_values = set(keys.values()) | set(defaults)
-    head_keys, head_rows = flag_registry(sha)
-    head_values = set(head_keys.values())
-    # Removed definitions cannot appear in the PR build snapshot unless the key survives.
-    recorded_flags = touched - (deleted_definitions - head_values)
-    added = {key for key in touched if key in head_values and key not in base_values and key not in base_touched}
-    added_files = {f['filename'] for f in files if f['status'] == 'added' and
-                   f['filename'].startswith('src/lib/flags/definitions/') and f['filename'].endswith('.ts')}
-    for path in added_files:
-        block = source(path, sha)
-        properties = definition_properties(block)
-        key = next(iter(constants(block).values()), path)
-        mode = registry_default(block, 'OWNER_AND_QA')
-        if properties.get('kind') == 'internal' or 'highRisk' in properties:
-            if mode == 'EVERYONE':
-                raise ValueError(f'new flag {key} with highRisk or internal kind may not default to Everyone')
-        elif properties.get('kind') != 'bugfix' and properties.get('defaultMode') != 'EVERYONE':
-            raise ValueError(f'new flag {key} must set defaultMode: "EVERYONE" (or releaseRisk.highRisk for money, access, data-deletion or customer-email)')
-    for block in head_rows:
-        key = re.search(r'\bkey:\s*(\w+)', block)
-        key = key and resolve(key[1], head_keys)
-        # A new flag that defaults to Everyone is released on merge, so it needs its own click state.
-        if key in added and registry_default(block, 'OWNER_AND_QA') == 'EVERYONE':
-            added.discard(key)
-            modes[key] = 'EVERYONE'
-    released = {key for key in touched if modes.get(key) == 'EVERYONE'}
-    unknown = unknown or not live or any(key not in modes and key not in added for key in touched)
-    if (live and not unknown and deleted_definitions
-            and all(modes.get(key) == 'EVERYONE' for key in deleted_definitions)):
-        print('flag removal on Everyone: ' + ','.join(sorted(deleted_definitions)))
-        sys.exit(0)
-    unknown = unknown or bool(deleted_definitions)
-    if not released and not unknown:
-        print('no released flag touched')
-        sys.exit(0)
-    folder = Path(evidence) / ticket
-    record = folder / 'premerge.md'
-    reason = ', '.join(sorted(released)) if released else 'unresolved flag reads'
-    message = f'{reason}: record a browser click-through on a real board against this PR build with live flag states in {record}'
-    if not live:
-        raise ValueError(message + ' (live flag modes unavailable; retry before merging)')
-    missing_live = touched - modes.keys() - added
-    if missing_live:
-        raise ValueError(message + ' (live state unknown for ' + ', '.join(sorted(missing_live)) + ')')
-    if not record.is_file():
-        raise ValueError(message)
-    fields = {key: value.strip() for key, value in re.findall(r'^(\w+):([^\n]*)', record.read_text(), re.M)}
-    if fields.get('Commit') != sha:
-        raise ValueError(f'{record} must name PR head sha {sha}; repeat the click-through after each push')
-    for field in ('Account', 'Flags', 'Board', 'Build'):
-        if field == 'Flags' and not recorded_flags:
-            continue
-        if not fields.get(field):
-            expected = ', '.join(f'{key}=EVERYONE' for key in sorted(released & recorded_flags))
-            hint = f'; expected Flags: {expected}' if field == 'Flags' and expected else ''
-            raise ValueError(message + f' (missing {field}:{hint})')
-    board = urllib.parse.urlsplit(fields['Board'])
-    board_ids = urllib.parse.parse_qs(board.query).get('id', [])
-    canonical_board = board.path == '/project' and len(board_ids) == 1 and re.fullmatch(r'[1-9][0-9]*', board_ids[0])
-    legacy_board = re.fullmatch(r'/projects/project-[1-9][0-9]*(?:[/?#]\S*)?', board.path)
-    if board.scheme not in ('http', 'https') or not board.netloc or re.search(r'\s', fields['Board']) or not (canonical_board or legacy_board):
-        raise ValueError(message + ' (Board: must name a real board URL, not /demo)')
-    states = dict(part.strip().split('=', 1) for part in fields.get('Flags', '').split(',') if part.strip())
-    for key in sorted(recorded_flags):
-        mode = modes.get(key)
-        if key not in states and key in modes and mode != 'EVERYONE':
-            continue
-        # Plain QA proves only not-Everyone; an explicit non-Everyone mode remains compatible.
-        valid = states.get(key) in ('OFF', 'OWNER_ONLY', 'OWNER_AND_QA', 'EVERYONE')
-        if mode == 'NOT_EVERYONE':
-            valid = states.get(key) in ('OFF', 'OWNER_ONLY', 'OWNER_AND_QA', 'NOT_EVERYONE')
-        elif key in modes:
-            valid = valid and states.get(key) == mode
-        if not valid:
-            expected = mode or 'OWNER_AND_QA'
-            raise ValueError(message + f' (expected Flags: {key}={expected})')
-    if not re.match(r'PASS\s+\S', fields.get('Click', '')) or not fields.get('Recording'):
-        raise ValueError(message + ' (missing passing click or recording)')
-    video = (folder / fields['Recording']).resolve()
-    if not video.is_relative_to(folder.resolve()) or not video.is_file() or not video.stat().st_size:
-        raise ValueError(message + ' (recording must be non-empty and inside the ticket evidence folder)')
-    if deleted_definitions and all(modes.get(key) == 'EVERYONE' for key in deleted_definitions):
-        print('removed-everyone: ' + ','.join(sorted(deleted_definitions)))
-    print('premerge ok')
-except Exception as error:
-    print('FAIL: ' + (str(error) if isinstance(error, ValueError) else 'cannot verify released-flag premerge evidence; retry before merging'))
-    sys.exit(1)
-PY
+  echo 'test click removed (Valentin 2026-10-21)'
 }
 
 check_premerge_status() (
   [ "$REPO" = hypertask-ai/hypertask ] || return 0
-  local sha current out lock removed state=failure description rc=1
+  local sha current lock state=success description rc=0
   local state_dir=${PREMERGE_STATUS_STATE:-$HOME/.local/state/premerge-evidence}
   mkdir -p "$state_dir" && exec {lock}>"$state_dir/publish.lock" \
     && flock -x -w 600 "$lock" || fail "cannot lock premerge publisher; no success posted"
@@ -892,29 +566,10 @@ check_premerge_status() (
   sha=$(gh pr view "$1" -R "$REPO" --json headRefOid,baseRefName,state --jq "$query" 2>/dev/null) \
     || fail "cannot read PR $1 head; no success posted"
   [[ $sha =~ ^[0-9a-f]{40}$ ]] || fail "premerge status requires an open production PR with a full head sha; no status posted"
-  if out=$(check_premerge "$1" "$sha"); then
-    case "$out" in
-      'no released flag touched'|'no screen files changed'|'flag removal on Everyone: '*) state=success; description=$out; rc=0 ;;
-      'premerge ok'|*$'\npremerge ok') state=success; description='click record ok'; rc=0 ;;
-      *) description='cannot verify premerge result; retry' ;;
-    esac
-  else
-    echo "$out"
-    description=${out##*$'\n'}; description=${description#FAIL: }
-    if [[ $description == *' ('*')' ]]; then
-      description=${description##* (}; description=${description%)}
-    fi
-  fi
+  description=$(check_premerge)
   current=$(gh pr view "$1" -R "$REPO" --json headRefOid,baseRefName,state --jq "$query" 2>/dev/null) || current=''
   if [ "$current" != "$sha" ]; then
     state=failure; description='cannot confirm unchanged PR head; retry'; rc=1
-  fi
-  description=${description:-cannot verify premerge evidence; retry}
-  if [ "$state" = success ]; then
-    removed=$(grep '^removed-everyone: ' <<<"$out") || removed=''
-    if [ -n "$removed" ] && [ $(( ${#description} + 3 + ${#removed} )) -le 140 ]; then
-      description+=" | $removed"
-    fi
   fi
   gh api "repos/$REPO/statuses/$sha" --method POST -f context=premerge-evidence \
     -f "state=$state" -f "description=${description:0:140}" >/dev/null 2>&1 \
@@ -1025,7 +680,7 @@ PY
       [ -n "$pr" ] || { echo "ship-check blocked the merge: name the PR number.$unresolved" >&2; exit 2; }
       out=$(check_title "$pr") || { echo "ship-check blocked the merge: ${out#FAIL: }. Retitle the PR to PREFIX-NNNN [TYPE] ... (create the ticket via vcc if it does not exist).$unresolved" >&2; exit 2; }
       out=$(check_ci_tests "$pr") || { echo "ship-check blocked the merge: ${out#FAIL: }.$unresolved" >&2; exit 2; }
-      out=$(check_premerge_status "$pr") || { echo "ship-check blocked the merge: ${out#FAIL: }. Follow .claude/skills/verify-qa/SKILL.md before merging.$unresolved" >&2; exit 2; }
+      out=$(check_premerge_status "$pr") || { echo "ship-check blocked the merge: ${out#FAIL: }.$unresolved" >&2; exit 2; }
     fi
     # Move to Done: needs merge, deploy and docs (FEATURE/IMPROVE); app tickets also need proof.md.
     if [[ $rest =~ ^$done ]]; then

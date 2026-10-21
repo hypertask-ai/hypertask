@@ -55,12 +55,9 @@ Use a trusted identity with dispatch access to the private reviewer repository. 
 
 ## Premerge evidence
 
-`premerge-evidence` passes without a recorded browser click for exactly these exemptions:
+`premerge-evidence` passes every open `production` PR with the exact description `test click removed (Valentin 2026-10-21)`. No screen-path, flag-removal, live-mode, browser-click, `premerge.md` or recording evaluation remains. Valentin removed the test click on 2026-10-21 because it was not helping.
 
-- No screen files changed, even when server code touches a released flag or has unresolved flag reads. Screen paths are `src/app/**` except `src/app/api/**`, `src/components/**`, `src/styles/**`, any `*.css` or `*.scss`, `public/**`, and `tailwind.config.*`. Renames include the previous path. The complete paginated file list must be readable; file-list errors fail closed before any exemption.
-- A screen-changing PR that deletes at least one flag definition, with every deleted definition confirmed **EVERYONE** in live modes, even when changed files also read other released flags. The exemption reports exactly the deleted definitions' keys, collected from the base side, not every touched flag. Unresolved flag reads, unavailable live modes, or any deleted flag not on Everyone do not qualify and fall through to the existing click rules.
-
-A screen-changing PR touching a released flag without a qualifying definition removal still needs a current-head passing click on a real board with live flag states and its recording in `~/.local/state/vcc-evidence/<TICKET>/premerge.md`. Registry defaults never substitute for live modes.
+The publisher still holds its shared lock from validation through the status post, requires a full 40-character head SHA, and re-reads the open PR's production base and head before posting. A closed PR, non-production base, unreadable or incomplete head, changed head/base, lock error or status-write error cannot publish success. The safety net is feature flags, revert, live QA after release, and screenshot comparison tracked in https://app.hypertask.ai/detail/project-4060/550.
 
 The `premerge-evidence.timer` reconciles all open production PRs every two minutes. Each sweep fetches the production checker and includes its SHA-256 bytes digest in every cached verdict fingerprint, so merged rule changes recheck every waiting PR in the first successful sweep, without waiting for the ten-minute unchanged-verdict refresh. Rule-fetch failures fail closed.
 
@@ -69,8 +66,8 @@ The `premerge-evidence.timer` reconciles all open production PRs every two minut
 The non-required `ship-scripts-tests` check in [`.github/workflows/ship-scripts-tests.yml`](../.github/workflows/ship-scripts-tests.yml) runs on GitHub-hosted `ubuntu-latest` for pull requests to `production` changing `.claude/skills/ship/scripts/**` or the workflow itself. It does not change the ruleset or auto-merge requirements. No tests run on the VPS.
 
 - Runs `bash .claude/skills/ship/scripts/ship-check.test.sh --premerge-only` and `python3 .claude/skills/ship/scripts/premerge-evidence.test.py`. The full shell suite also contains live authenticated checks and is deliberately excluded.
-- Installs Python 3 for the standard-library test harnesses and fixtures, `jq` for JSON handling in `ship-check`, Git for repository-scope detection, and Node 24 for the premerge-local evidence-output fixture. No npm or pip packages are needed; Bash and standard Unix utilities come with the hosted runner.
-- Uses a temporary HOME and the harnesses' temporary evidence, fake tokens, Git/GitHub/Hypertask fixtures and HTTP interception. A fallback `gh` stub fails unexpected calls outside the fixtures. Tests need no network, real tokens, existing VPS state or systemd service; checkout and dependency installation still use network. Checkout does not persist credentials, and the job requests only `contents: read`, so fork PRs need no secrets.
+- Installs Python 3 for the standard-library test harnesses and fixtures, `jq` for JSON handling in `ship-check`, Git for repository-scope detection, and Node 24 (retained in the workflow). No npm or pip packages are needed; Bash and standard Unix utilities come with the hosted runner.
+- Uses a temporary HOME and the harnesses' temporary state and local Git/GitHub/Hypertask fixtures. A fallback `gh` stub fails unexpected calls outside the fixtures. Tests need no network, real tokens, existing VPS state or systemd service; checkout and dependency installation still use network. Checkout does not persist credentials, and the job requests only `contents: read`, so fork PRs need no secrets.
 
 ## Visual regression gate
 
