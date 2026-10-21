@@ -95,7 +95,7 @@ with (pathlib.Path(os.environ['POSTER_TEST_ROOT']) / 'systemctl-calls').open('a'
 ''')
         (self.bin / 'systemctl').chmod(0o755)
 
-    def write_checker(self, version):
+    def write_checker(self, version, state='success'):
         self.production.write_text(f'''#!/usr/bin/env python3
 import json, os, pathlib, sys
 assert sys.argv[1] in ('premerge-status', 'premerge')
@@ -103,7 +103,8 @@ assert os.environ['SHIP_REPO'] == 'hypertask-ai/hypertask'
 assert os.environ['SHIP_BASE'] == 'production'
 with (pathlib.Path(os.environ['POSTER_TEST_ROOT']) / 'published').open('a') as log:
     log.write(json.dumps([{version!r}, sys.argv[2], __file__]) + '\\n')
-print('premerge-evidence: success (fixture)' if sys.argv[1] == 'premerge-status' else 'premerge ok')
+print('premerge-evidence: {state} (fixture)' if sys.argv[1] == 'premerge-status' else 'premerge ok')
+sys.exit(1 if sys.argv[1] == 'premerge-status' and {state!r} == 'failure' else 0)
 ''')
 
     def sweep(self, path=None, dry_run=False):
@@ -182,6 +183,23 @@ sys.exit(1)
         self.assertEqual(len(calls), 3)
         git_calls = [json.loads(line) for line in (self.root / 'gitcalls').read_text().splitlines()]
         self.assertEqual(sum(c[2:3] == ['fetch'] for c in git_calls), 3)
+
+    def test_checker_bytes_change_refreshes_every_waiting_failure_in_one_sweep(self):
+        self.write_checker('waiting', state='failure')
+        self.assertEqual(self.sweep().returncode, 0)
+        first = json.loads((self.state / 'cache.json').read_text())
+        self.assertTrue(all(entry['state'] == 'FAILURE' for entry in first.values()))
+        self.assertEqual(self.sweep().returncode, 0)
+        self.assertEqual(len(self.publications()), 2)
+        self.write_checker('exempt')
+        result = self.sweep()
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual([p[:2] for p in self.publications()[2:]], [['exempt', '998'], ['exempt', '999']])
+        self.assertIn('sweep: prs=2 skipped=0', result.stdout)
+        updated = json.loads((self.state / 'cache.json').read_text())
+        for key in first:
+            self.assertEqual(updated[key]['state'], 'SUCCESS')
+            self.assertNotEqual(first[key]['fingerprint'], updated[key]['fingerprint'])
 
     def gh_calls(self):
         return [json.loads(line) for line in self.log.read_text().splitlines()]

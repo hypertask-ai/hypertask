@@ -53,6 +53,17 @@ Use a trusted identity with dispatch access to the private reviewer repository. 
 - Vercel previews are optional. Merge to `production` deploys production; a failed deploy build keeps the previous deployment live.
 - Do not add another runner host, VPN, required preview, or paid hosted fallback without a recorded decision.
 
+## Premerge evidence
+
+`premerge-evidence` passes without a recorded browser click for exactly these exemptions:
+
+- No screen files changed, even when server code touches a released flag or has unresolved flag reads. Screen paths are `src/app/**` except `src/app/api/**`, `src/components/**`, `src/styles/**`, any `*.css` or `*.scss`, `public/**`, and `tailwind.config.*`. Renames include the previous path. The complete paginated file list must be readable; file-list errors fail closed before any exemption.
+- A screen-changing flag-removal PR whose released or unknown touched keys are all deleted definitions, absent from the head registry, with each removed flag confirmed **EVERYONE** in live modes. Unresolved flag reads, unavailable live modes, or any removed flag not on Everyone do not qualify and fall through to the existing click rules.
+
+A screen-changing PR touching a surviving released flag still needs a current-head passing click on a real board with live flag states and its recording in `~/.local/state/vcc-evidence/<TICKET>/premerge.md`. Registry defaults never substitute for live modes.
+
+The `premerge-evidence.timer` reconciles all open production PRs every two minutes. Each sweep fetches the production checker and includes its SHA-256 bytes digest in every cached verdict fingerprint, so merged rule changes recheck every waiting PR in the first successful sweep, without waiting for the ten-minute unchanged-verdict refresh. Rule-fetch failures fail closed.
+
 ## Visual regression gate
 
 `visual-regression` screenshots the five screens a user lands on (board, task detail, search, inbox, and the Ctrl+K palette) at 1440 and 390 wide in the `amoled` and `porcelain` themes, and fails when pixels move without an approved baseline. It catches the change that typechecks, lints and tests green and still puts an unwanted control on screen; [HTPR-5649](https://app.hypertask.ai/detail/project-15/5649) shipped an archived-results checkbox into search that way.

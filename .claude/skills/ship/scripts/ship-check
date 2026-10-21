@@ -559,6 +559,14 @@ import json, os, re, subprocess, sys, time, urllib.parse, urllib.request
 from pathlib import Path
 
 repo, pr, evidence, expected_sha = sys.argv[1:]
+SCREEN_PATH_RULES = (
+    r'^src/app/(?!api/)',
+    r'^src/components/',
+    r'^src/styles/',
+    r'\.(?:css|scss)$',
+    r'^public/',
+    r'^tailwind\.config\.',
+)
 def gh(*args):
     result = subprocess.run(['gh', *args], capture_output=True, text=True, timeout=30)
     if result.returncode:
@@ -665,12 +673,17 @@ try:
         raise ValueError('cannot read the full PR head sha')
     if expected_sha and sha != expected_sha:
         raise ValueError('PR head changed while checking evidence; retry')
-    prepare(pr, sha, base)
     ticket = row['title'].split()[0]
     pages = gh('api', f'repos/{repo}/pulls/{pr}/files?per_page=100&premerge={freshness}', '--paginate')
     files = [f for page in pages for f in page]
     if len(files) != row['changed_files']:
         raise ValueError('cannot read the complete PR diff; retry before merging')
+    if not any(re.search(rule, path) for f in files
+               for path in (f['filename'], f.get('previous_filename', f['filename']))
+               for rule in SCREEN_PATH_RULES):
+        print('no screen files changed')
+        sys.exit(0)
+    prepare(pr, sha, base)
     touched, base_touched, deleted_definitions, unknown = set(), set(), set(), False
     for f in files:
         versions = []
@@ -782,8 +795,7 @@ try:
     base_values = set(keys.values()) | set(defaults)
     head_keys, head_rows = flag_registry(sha)
     head_values = set(head_keys.values())
-    # Removed definitions cannot appear in the PR build's flag snapshot. They still require
-    # a current-head click when released; only their recorded mode is exempt, unless the key survives.
+    # Removed definitions cannot appear in the PR build snapshot unless the key survives.
     recorded_flags = touched - (deleted_definitions - head_values)
     added = {key for key in touched if key in head_values and key not in base_values and key not in base_touched}
     added_files = {f['filename'] for f in files if f['status'] == 'added' and
@@ -807,6 +819,11 @@ try:
             modes[key] = 'EVERYONE'
     released = {key for key in touched if modes.get(key) == 'EVERYONE'}
     unknown = unknown or not live or any(key not in modes and key not in added for key in touched)
+    if (live and not unknown and released and released <= deleted_definitions - head_values
+            and all(modes.get(key) == 'EVERYONE' for key in deleted_definitions)):
+        print('flag removal on Everyone: ' + ','.join(sorted(deleted_definitions)))
+        sys.exit(0)
+    unknown = unknown or bool(deleted_definitions)
     if not released and not unknown:
         print('no released flag touched')
         sys.exit(0)
@@ -877,7 +894,7 @@ check_premerge_status() (
   [[ $sha =~ ^[0-9a-f]{40}$ ]] || fail "premerge status requires an open production PR with a full head sha; no status posted"
   if out=$(check_premerge "$1" "$sha"); then
     case "$out" in
-      'no released flag touched') state=success; description=$out; rc=0 ;;
+      'no released flag touched'|'no screen files changed'|'flag removal on Everyone: '*) state=success; description=$out; rc=0 ;;
       'premerge ok'|*$'\npremerge ok') state=success; description='click record ok'; rc=0 ;;
       *) description='cannot verify premerge result; retry' ;;
     esac

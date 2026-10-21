@@ -13,6 +13,7 @@ G() { local want=$1; shift; echo "{\"tool_input\":{\"command\":$(jq -Rn --arg c 
 DONE='--section "Done"'
 M='gh pr merge'
 
+if [ "${1:-}" != --premerge-only ]; then
 # Concatenated assignment fragments cannot bypass missing Done evidence.
 for prefix in 'FOO=pre"fix"' "FOO='a'b\"c\""; do
   G 2 "$prefix vcc task move YPER4-999 $DONE"
@@ -708,6 +709,8 @@ T fail "evidence outside the current run rejected"
 sed -i '$d' "$E/HTPR-6570/proof.md"; mkdir -p "$E/x"; printf 'png' > "$E/x/a.png"; sed -i 's/^Run: .*/Run: ..\/..\/x/' "$E/HTPR-6570/proof.md"
 T fail "run folder outside the ticket rejected"
 
+fi
+
 # Released-flag premerge guard: deterministic GitHub and live-mode boundaries.
 mkdir -p "$E/flag-bin" "$E/flag-source" "$E/flag-http" "$E/YPER4-999"
 cat > "$E/flag-bin/gh" <<'MOCK'
@@ -783,15 +786,20 @@ if '/statuses/' in url:
 if os.environ.get('FLAG_GH_ERROR'):
     sys.exit(1)
 if '/files?' in url:
-    file = {'filename': os.environ.get('FLAG_FILE', 'src/card.tsx'), 'status': os.environ.get('FLAG_STATUS', 'modified')}
+    assert '--paginate' in args
+    if os.environ.get('FLAG_FILES_ERROR'):
+        sys.exit(1)
+    file = {'filename': os.environ.get('FLAG_FILE', 'src/components/card.tsx'), 'status': os.environ.get('FLAG_STATUS', 'modified')}
     if file['status'] == 'renamed':
-        file['previous_filename'] = 'src/old-card.tsx'
+        file['previous_filename'] = os.environ.get('FLAG_PREVIOUS_FILE', 'src/components/old-card.tsx')
     files = [file]
+    files.extend({'filename': path, 'status': 'modified'} for path in filter(None, os.environ.get('FLAG_EXTRA_FILES', '').split(',')))
+    files.extend({'filename': f'docs/file-{i}.md', 'status': 'modified'} for i in range(int(os.environ.get('FLAG_PADDING', '0'))))
     for path in filter(None, os.environ.get('FLAG_REMOVED_DEFINITION', '').split(',')):
         files.append({'filename': path, 'status': 'removed'})
     print(json.dumps(files))
     if os.environ.get('FLAG_PAGE2'):
-        print(json.dumps([{'filename': 'AGENTS.md', 'status': 'modified'}]))
+        print(json.dumps([{'filename': os.environ.get('FLAG_PAGE2_FILE', 'AGENTS.md'), 'status': 'modified'}]))
 else:
     print(json.dumps({'head': {'sha': os.environ.get('FLAG_HEAD', 'a' * 40)}, 'base': {'sha': os.environ.get('FLAG_BASE_SHA', 'b' * 40)}, 'title': 'YPER4-999 [BUGFIX] Fixture', 'changed_files': int(os.environ.get('FLAG_COUNT', '1'))}))
 MOCK
@@ -984,38 +992,38 @@ printf 'const DEFAULT_FEATURE_FLAG_MODE = "OWNER_AND_QA";\n' > "$E/flag-source/r
 printf 'export const FEATURE_FLAG_DEFINITIONS = FLAG_DEFINITIONS;\n' > "$E/flag-source/definitions"
 F 0 ''
 F 2 'record a browser click-through' FLAG_HTTP_ERROR=1
-F 0 '' FLAG_FILE=src/lib/flags/definitions/htpr-1-released.ts
+F 0 '' FLAG_FILE=src/lib/flags/definitions/htpr-1-released.ts FLAG_EXTRA_FILES=assets/theme.css FLAG_COUNT=2
 sed 's/Commit:.*/Commit: deadbeef/' "$E/record" > "$premerge"
-F 2 'must name PR head sha' FLAG_FILE=src/lib/flags/definitions/htpr-1-released.ts
+F 2 'must name PR head sha' FLAG_FILE=src/lib/flags/definitions/htpr-1-released.ts FLAG_EXTRA_FILES=assets/theme.css FLAG_COUNT=2
 cp "$E/record" "$premerge"
 # A new bugfix flag defaults to Everyone, so it is released on merge and needs its own click state.
 printf 'export const NEW_FIX_FLAG = "htpr-9-newfix";\nexport default { key: NEW_FIX_FLAG, kind: "bugfix", shippedOn: "2026-10-10", description: "Fixture" } as const;\n' > "$E/flag-source/flags-head/htpr-9-newfix.ts"
-F 2 'expected Flags: htpr-9-newfix=EVERYONE' FLAG_FILE=src/lib/flags/definitions/htpr-9-newfix.ts FLAG_STATUS=added
+F 2 'expected Flags: htpr-9-newfix=EVERYONE' FLAG_FILE=src/lib/flags/definitions/htpr-9-newfix.ts FLAG_STATUS=added FLAG_EXTRA_FILES=assets/theme.css FLAG_COUNT=2
 sed 's/^Flags:.*/&, htpr-9-newfix=EVERYONE/' "$E/record" > "$premerge"
-F 0 '' FLAG_FILE=src/lib/flags/definitions/htpr-9-newfix.ts FLAG_STATUS=added
+F 0 '' FLAG_FILE=src/lib/flags/definitions/htpr-9-newfix.ts FLAG_STATUS=added FLAG_EXTRA_FILES=assets/theme.css FLAG_COUNT=2
 # New eligible definitions must explicitly declare Everyone; existing definitions keep their modes.
 for kind in feature improvement ''; do
   printf 'export const NEW_FEATURE_FLAG = "htpr-8-newfeature";\nexport default { key: NEW_FEATURE_FLAG, %s shippedOn: "2026-10-20", description: "Fixture" } as const;\n' "${kind:+kind: \"$kind\",}" > "$E/flag-source/flags-head/htpr-8-newfeature.ts"
-  F 2 'new flag htpr-8-newfeature must set defaultMode: "EVERYONE"' FLAG_FILE=src/lib/flags/definitions/htpr-8-newfeature.ts FLAG_STATUS=added
+  F 2 'new flag htpr-8-newfeature must set defaultMode: "EVERYONE"' FLAG_FILE=src/lib/flags/definitions/htpr-8-newfeature.ts FLAG_STATUS=added FLAG_EXTRA_FILES=assets/theme.css FLAG_COUNT=2
 done
 printf 'export const NEW_FEATURE_FLAG = "htpr-8-newfeature";\nexport default { key: NEW_FEATURE_FLAG, kind: "feature", shippedOn: "2026-10-20", description: "Fixture", releaseRisk: { risk: "new", reason: "No highRisk: category applies" } } as const;\n' > "$E/flag-source/flags-head/htpr-8-newfeature.ts"
-F 2 'must set defaultMode: "EVERYONE"' FLAG_FILE=src/lib/flags/definitions/htpr-8-newfeature.ts FLAG_STATUS=added
+F 2 'must set defaultMode: "EVERYONE"' FLAG_FILE=src/lib/flags/definitions/htpr-8-newfeature.ts FLAG_STATUS=added FLAG_EXTRA_FILES=assets/theme.css FLAG_COUNT=2
 printf 'export const NEW_FEATURE_FLAG = "htpr-8-newfeature";\n/* highRisk: access */\nexport default { key: NEW_FEATURE_FLAG, kind: "feature", // kind: "internal"\n shippedOn: "2026-10-20", description: "Fixture" } as const;\n' > "$E/flag-source/flags-head/htpr-8-newfeature.ts"
-F 2 'must set defaultMode: "EVERYONE"' FLAG_FILE=src/lib/flags/definitions/htpr-8-newfeature.ts FLAG_STATUS=added
+F 2 'must set defaultMode: "EVERYONE"' FLAG_FILE=src/lib/flags/definitions/htpr-8-newfeature.ts FLAG_STATUS=added FLAG_EXTRA_FILES=assets/theme.css FLAG_COUNT=2
 printf 'export const NEW_FEATURE_FLAG = "htpr-8-newfeature";\nexport default { key: NEW_FEATURE_FLAG, kind: "feature", defaultMode: "EVERYONE", shippedOn: "2026-10-20", description: "Fixture" } as const;\n' > "$E/flag-source/flags-head/htpr-8-newfeature.ts"
-F 2 'expected Flags: htpr-8-newfeature=EVERYONE' FLAG_FILE=src/lib/flags/definitions/htpr-8-newfeature.ts FLAG_STATUS=added
+F 2 'expected Flags: htpr-8-newfeature=EVERYONE' FLAG_FILE=src/lib/flags/definitions/htpr-8-newfeature.ts FLAG_STATUS=added FLAG_EXTRA_FILES=assets/theme.css FLAG_COUNT=2
 sed 's/^Flags:.*/&, htpr-8-newfeature=EVERYONE/' "$premerge" > "$E/feature-record"
 cp "$premerge" "$E/before-feature-record"; cp "$E/feature-record" "$premerge"
-F 0 '' FLAG_FILE=src/lib/flags/definitions/htpr-8-newfeature.ts FLAG_STATUS=added
+F 0 '' FLAG_FILE=src/lib/flags/definitions/htpr-8-newfeature.ts FLAG_STATUS=added FLAG_EXTRA_FILES=assets/theme.css FLAG_COUNT=2
 cp "$E/before-feature-record" "$premerge"
 printf 'export const NEW_FEATURE_FLAG = "htpr-8-newfeature";\nexport default { key: NEW_FEATURE_FLAG, kind: "feature", defaultMode: "OWNER_AND_QA", shippedOn: "2026-10-20", description: "Fixture", releaseRisk: { risk: "new", reason: "Fixture", highRisk: "access" } } as const;\n' > "$E/flag-source/flags-head/htpr-8-newfeature.ts"
-F 0 '' FLAG_FILE=src/lib/flags/definitions/htpr-8-newfeature.ts FLAG_STATUS=added
+F 0 '' FLAG_FILE=src/lib/flags/definitions/htpr-8-newfeature.ts FLAG_STATUS=added FLAG_EXTRA_FILES=assets/theme.css FLAG_COUNT=2
 sed -i 's/OWNER_AND_QA/EVERYONE/' "$E/flag-source/flags-head/htpr-8-newfeature.ts"
-F 2 'may not default to Everyone' FLAG_FILE=src/lib/flags/definitions/htpr-8-newfeature.ts FLAG_STATUS=added
+F 2 'may not default to Everyone' FLAG_FILE=src/lib/flags/definitions/htpr-8-newfeature.ts FLAG_STATUS=added FLAG_EXTRA_FILES=assets/theme.css FLAG_COUNT=2
 printf 'export const NEW_FEATURE_FLAG = "htpr-8-newfeature";\nexport default { key: NEW_FEATURE_FLAG, kind: "internal", shippedOn: "2026-10-20", description: "Fixture" } as const;\n' > "$E/flag-source/flags-head/htpr-8-newfeature.ts"
-F 0 '' FLAG_FILE=src/lib/flags/definitions/htpr-8-newfeature.ts FLAG_STATUS=added
+F 0 '' FLAG_FILE=src/lib/flags/definitions/htpr-8-newfeature.ts FLAG_STATUS=added FLAG_EXTRA_FILES=assets/theme.css FLAG_COUNT=2
 sed -i 's/kind: "internal"/kind: "internal", defaultMode: "EVERYONE"/' "$E/flag-source/flags-head/htpr-8-newfeature.ts"
-F 2 'may not default to Everyone' FLAG_FILE=src/lib/flags/definitions/htpr-8-newfeature.ts FLAG_STATUS=added
+F 2 'may not default to Everyone' FLAG_FILE=src/lib/flags/definitions/htpr-8-newfeature.ts FLAG_STATUS=added FLAG_EXTRA_FILES=assets/theme.css FLAG_COUNT=2
 rm "$E/flag-source/flags-head/htpr-8-newfeature.ts"
 printf 'export const RELEASED_FLAG = "htpr-1-released";\nexport default { key: RELEASED_FLAG, kind: "feature", shippedOn: "2026-10-10", description: "Fixture" } as const;\n' > "$E/flag-source/flags-base/htpr-1-released.ts"
 cp "$E/flag-source/flags-base/htpr-1-released.ts" "$E/flag-source/flags-head/htpr-1-released.ts"
@@ -1146,8 +1154,25 @@ else:
     if sys.argv[2] != 'success' or os.environ.get('EXPECT_NO_REMOVED_EVERYONE'):
         assert 'removed-everyone' not in description, call
 PY
-  then ok "status: $state $description"; else bad "status: $state got $got $out"; fi
+  then ok "status: ${PREMERGE_CASE:+$PREMERGE_CASE: }$state $description"; else bad "status: ${PREMERGE_CASE:+$PREMERGE_CASE: }$state got $got $out"; fi
 }
+C() { local PREMERGE_CASE=$1; shift; S "$@"; }
+printf 'const released = useFlag(RELEASED_FLAG);\n' > "$E/flag-source/base"; cp "$E/flag-source/base" "$E/flag-source/head"
+C server_only_released_flag_without_record 0 success 'no screen files changed' FLAG_FILE=src/app/api/x/route.ts FLAG_EXTRA_FILES=src/lib/server.ts FLAG_COUNT=2 FLAG_HTTP_ERROR=1 FLAG_SOURCE_ERROR=1
+C server_plus_component_without_record 1 failure 'record a browser click-through' FLAG_FILE=src/app/api/x/route.ts FLAG_EXTRA_FILES=src/lib/server.ts,src/components/card.tsx FLAG_COUNT=3
+C file_list_read_error_fails_closed 1 failure 'cannot read the PR diff' FLAG_FILE=src/app/api/x/route.ts FLAG_FILES_ERROR=1
+C incomplete_file_list_fails_closed 1 failure 'complete PR diff' FLAG_FILE=src/app/api/x/route.ts FLAG_COUNT=2
+C css_requires_click 1 failure 'record a browser click-through' FLAG_FILE=src/lib/server.ts FLAG_EXTRA_FILES=assets/theme.css FLAG_COUNT=2
+C api_route_is_not_screen 0 success 'no screen files changed' FLAG_FILE=src/app/api/x/route.ts
+for path in src/app/page.tsx src/app/layout.tsx src/app/apiary/card.tsx src/styles/theme.ts assets/theme.scss public/icon.svg tailwind.config.ts; do
+  C "screen_path_$path" 1 failure 'record a browser click-through' FLAG_FILE=src/lib/server.ts FLAG_EXTRA_FILES="$path" FLAG_COUNT=2
+done
+C screen_rename_outside_still_requires_click 1 failure 'record a browser click-through' FLAG_FILE=docs/card.tsx FLAG_STATUS=renamed
+C screen_on_page_two_requires_click 1 failure 'record a browser click-through' FLAG_FILE=src/lib/server.ts FLAG_PADDING=99 FLAG_PAGE2=1 FLAG_PAGE2_FILE=src/components/card.tsx FLAG_COUNT=101
+C server_only_two_pages_without_record 0 success 'no screen files changed' FLAG_FILE=src/lib/server.ts FLAG_PADDING=99 FLAG_PAGE2=1 FLAG_COUNT=101 FLAG_HTTP_ERROR=1
+printf 'const released = useFlag(dynamicKey);\n' > "$E/flag-source/head"
+C server_unknown_read_needs_no_modes 0 success 'no screen files changed' FLAG_FILE=src/lib/server.ts FLAG_HTTP_ERROR=1
+C screen_unknown_read_requires_click 1 failure 'record a browser click-through'
 printf 'const plain = 1;\n' > "$E/flag-source/base"; cp "$E/flag-source/base" "$E/flag-source/head"
 S 0 success 'no released flag touched'
 # YPER4-251: one premerge-status run never touches the contents API and stays within a small fixed API budget.
@@ -1181,7 +1206,7 @@ S 1 failure 'htpr-1-released: record'
 cp "$E/record" "$premerge"
 EXPECT_NO_REMOVED_EVERYONE=1 S 0 success 'click record ok' # No definition deleted: no removed-everyone.
 API_BUDGET 6 'premerge-status with a released flag: no contents API call, at most 6 API calls'
-# YPER4-281: deleting a definition exempts only that absent key from Flags, not the click.
+# A surviving released flag still needs its click when another definition is deleted.
 printf 'export * from "./definitions/index.generated";\n' > "$E/flag-source/keys"
 printf 'const DEFAULT_FEATURE_FLAG_MODE = "OWNER_AND_QA";\n' > "$E/flag-source/registry"
 printf 'export const FEATURE_FLAG_DEFINITIONS = FLAG_DEFINITIONS;\n' > "$E/flag-source/definitions"
@@ -1192,6 +1217,21 @@ rm "$E/flag-source/flags-head/htpr-1-released.ts"
 printf 'const removed = useFlag("htpr-1-released");\nconst other = useFlag("htpr-2-other");\n' > "$E/flag-source/base"
 printf 'const other = useFlag("htpr-2-other");\n' > "$E/flag-source/head"
 removal=(FLAG_REMOVED_DEFINITION=src/lib/flags/definitions/htpr-1-released.ts FLAG_COUNT=2 'FLAG_HTTP={"flags":[{"key":"htpr-1-released","mode":"EVERYONE"},{"key":"htpr-2-other","mode":"EVERYONE"}]}')
+cp "$premerge" "$E/before-removal-record"
+rm "$premerge"
+printf 'const removed = useFlag("htpr-1-released");\n' > "$E/flag-source/base"
+printf 'const plain = 1;\n' > "$E/flag-source/head"
+C screen_removal_everyone_without_record 0 success 'flag removal on Everyone: htpr-1-released' "${removal[@]}"
+C screen_removal_everyone_plain_qa_without_record 0 success 'flag removal on Everyone: htpr-1-released' "${removal[@]}" AGENT_TOKEN= 'FLAG_PUBLIC={"flags":{"htpr-1-released":true}}'
+C screen_removal_owner_qa_without_record 1 failure 'record a browser click-through' "${removal[@]}" 'FLAG_HTTP={"flags":[{"key":"htpr-1-released","mode":"OWNER_AND_QA"}]}'
+C screen_removal_live_unavailable 1 failure 'live flag modes unavailable' "${removal[@]}" FLAG_HTTP_ERROR=1
+C screen_removal_unknown_live_key 1 failure 'live state unknown' "${removal[@]}" 'FLAG_HTTP={"flags":[{"key":"htpr-2-other","mode":"EVERYONE"}]}'
+printf 'const unknown = useFlag(dynamicKey);\n' > "$E/flag-source/head"
+C screen_removal_unresolved_read_requires_click 1 failure 'record a browser click-through' "${removal[@]}"
+printf 'const other = useFlag("htpr-2-other");\n' > "$E/flag-source/head"
+C screen_removal_surviving_released_flag_requires_click 1 failure 'record a browser click-through' "${removal[@]}"
+cp "$E/before-removal-record" "$premerge"
+printf 'const removed = useFlag("htpr-1-released");\nconst other = useFlag("htpr-2-other");\n' > "$E/flag-source/base"
 sed 's/htpr-1-released=EVERYONE/htpr-2-other=EVERYONE/' "$E/record" > "$premerge"
 S 0 success 'click record ok | removed-everyone: htpr-1-released' "${removal[@]}"
 EXPECT_NO_REMOVED_EVERYONE=1 S 0 success 'click record ok' "${removal[@]}" 'FLAG_HTTP={"flags":[{"key":"htpr-1-released","mode":"OFF"},{"key":"htpr-2-other","mode":"EVERYONE"}]}'
@@ -1206,12 +1246,15 @@ for d in base head; do
 done
 mv "$E/flag-source/flags-head/htpr-2-other.ts" "$E/other-definition"
 multiple=(FLAG_REMOVED_DEFINITION=src/lib/flags/definitions/htpr-2-other.ts,src/lib/flags/definitions/htpr-1-released.ts FLAG_COUNT=3)
-S 0 success 'click record ok | removed-everyone: htpr-1-released,htpr-2-other' "${removal[@]}" "${multiple[@]}"
+S 0 success 'flag removal on Everyone: htpr-1-released,htpr-2-other' "${removal[@]}" "${multiple[@]}"
 EXPECT_NO_REMOVED_EVERYONE=1 S 0 success 'click record ok' "${removal[@]}" "${multiple[@]}" 'FLAG_HTTP={"flags":[{"key":"htpr-1-released","mode":"EVERYONE"},{"key":"htpr-2-other","mode":"OFF"}]}'
 EXPECT_NO_REMOVED_EVERYONE=1 S 0 success 'click record ok' "${removal[@]}" "${multiple[@]}" AGENT_TOKEN= 'FLAG_PUBLIC={"flags":{"htpr-1-released":true,"htpr-2-other":false}}'
 S 1 failure 'live state unknown' "${multiple[@]}"
 mv "$E/other-definition" "$E/flag-source/flags-head/htpr-2-other.ts"
 rm "$E/flag-source/flags-"{base,head}/htpr-4-untouched.ts
+sed 's/htpr-1-released=EVERYONE/htpr-2-other=EVERYONE/' "$E/record" > "$premerge"
+cp "$E/flag-source/base" "$E/before-long-base"
+cp "$E/flag-source/head" "$E/flag-source/base"
 # removed-everyone is omitted, never truncated, when the entire description exceeds 140.
 for length in 140 141; do
   prefix='click record ok | removed-everyone: '
@@ -1219,29 +1262,30 @@ for length in 140 141; do
   path="src/lib/flags/definitions/$key.ts"
   printf 'export const LONG_FLAG = "%s";\nexport default { key: LONG_FLAG, kind: "bugfix" } as const;\n' "$key" > "$E/flag-source/flags-base/$key.ts"
   if [ "$length" = 140 ]; then
-    S 0 success "$prefix$key" FLAG_FILE="$path" FLAG_STATUS=removed "FLAG_HTTP={\"flags\":[{\"key\":\"$key\",\"mode\":\"EVERYONE\"}]}"
+    S 0 success "$prefix$key" FLAG_FILE="$path" FLAG_STATUS=removed FLAG_EXTRA_FILES=src/components/card.tsx FLAG_COUNT=2 "FLAG_HTTP={\"flags\":[{\"key\":\"$key\",\"mode\":\"EVERYONE\"},{\"key\":\"htpr-1-released\",\"mode\":\"EVERYONE\"},{\"key\":\"htpr-2-other\",\"mode\":\"EVERYONE\"}]}"
   else
-    EXPECT_NO_REMOVED_EVERYONE=1 S 0 success 'click record ok' FLAG_FILE="$path" FLAG_STATUS=removed "FLAG_HTTP={\"flags\":[{\"key\":\"$key\",\"mode\":\"EVERYONE\"}]}"
+    EXPECT_NO_REMOVED_EVERYONE=1 S 0 success 'click record ok' FLAG_FILE="$path" FLAG_STATUS=removed FLAG_EXTRA_FILES=src/components/card.tsx FLAG_COUNT=2 "FLAG_HTTP={\"flags\":[{\"key\":\"$key\",\"mode\":\"EVERYONE\"},{\"key\":\"htpr-1-released\",\"mode\":\"EVERYONE\"},{\"key\":\"htpr-2-other\",\"mode\":\"EVERYONE\"}]}"
   fi
   rm "$E/flag-source/flags-base/$key.ts"
 done
+cp "$E/before-long-base" "$E/flag-source/base"
 sed -i 's/htpr-2-other=EVERYONE/htpr-2-other=OFF/' "$premerge"
 S 1 failure 'expected Flags: htpr-2-other=EVERYONE' "${removal[@]}"
 cp "$E/record" "$premerge"
 S 1 failure 'expected Flags: htpr-2-other=EVERYONE' "${removal[@]}"
 sed '/^Flags:/d' "$E/record" > "$premerge"
 S 1 failure 'missing Flags:; expected Flags: htpr-2-other=EVERYONE' "${removal[@]}"
-# A removal-only diff has no touched surviving flag to record, even with an empty Flags line.
-S 0 success 'click record ok' FLAG_FILE=src/lib/flags/definitions/htpr-1-released.ts FLAG_STATUS=removed
+# Definition-only diffs change no screen and need no click record.
+S 0 success 'no screen files changed' FLAG_FILE=src/lib/flags/definitions/htpr-1-released.ts FLAG_STATUS=removed
 printf 'Flags: \n' >> "$premerge"
-S 0 success 'click record ok' FLAG_FILE=src/lib/flags/definitions/htpr-1-released.ts FLAG_STATUS=removed
-S 1 failure 'live flag modes unavailable' FLAG_FILE=src/lib/flags/definitions/htpr-1-released.ts FLAG_STATUS=removed FLAG_HTTP_ERROR=1
+S 0 success 'no screen files changed' FLAG_FILE=src/lib/flags/definitions/htpr-1-released.ts FLAG_STATUS=removed
+S 0 success 'no screen files changed' FLAG_FILE=src/lib/flags/definitions/htpr-1-released.ts FLAG_STATUS=removed FLAG_HTTP_ERROR=1
 sed -i 's/Commit:.*/Commit: deadbeef/' "$premerge"
-S 1 failure 'must name PR head sha' FLAG_FILE=src/lib/flags/definitions/htpr-1-released.ts FLAG_STATUS=removed
+S 0 success 'no screen files changed' FLAG_FILE=src/lib/flags/definitions/htpr-1-released.ts FLAG_STATUS=removed
 sed '/^Flags:/d; s/Click: PASS/Click: FAIL/' "$E/record" > "$premerge"
-S 1 failure 'missing passing click' FLAG_FILE=src/lib/flags/definitions/htpr-1-released.ts FLAG_STATUS=removed
+S 0 success 'no screen files changed' FLAG_FILE=src/lib/flags/definitions/htpr-1-released.ts FLAG_STATUS=removed
 rm "$premerge"
-S 1 failure 'record a browser click-through' FLAG_FILE=src/lib/flags/definitions/htpr-1-released.ts FLAG_STATUS=removed
+S 0 success 'no screen files changed' FLAG_FILE=src/lib/flags/definitions/htpr-1-released.ts FLAG_STATUS=removed
 # A key that survives in the head registry is never exempt, even if GitHub reports a deleted file.
 cp "$E/flag-source/flags-base/htpr-1-released.ts" "$E/flag-source/flags-head/htpr-1-released.ts"
 sed 's/htpr-1-released=EVERYONE/htpr-2-other=EVERYONE/' "$E/record" > "$premerge"
@@ -1259,6 +1303,12 @@ python3 - "$E/status-log" <<'PY' && ok 'pr gate posts status' || bad 'pr gate om
 import json, sys
 assert any('context=premerge-evidence' in json.loads(l) for l in open(sys.argv[1]))
 PY
+
+if [ "${1:-}" = --premerge-only ]; then
+  echo "$passes passed, $fails failed"
+  [ "$fails" = 0 ] && echo 'premerge ship-check tests passed'
+  exit "$((fails > 0))"
+fi
 
 # The sweep uses one list call, skips unchanged heads and notices changed/deleted evidence.
 W() {

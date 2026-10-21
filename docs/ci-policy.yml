@@ -61,11 +61,21 @@ premerge_evidence:
   timer: premerge-evidence.timer
   discovery_interval_seconds: 120
   cache_refresh_seconds: 600
+  cache_invalidation: production_checker_bytes_sha256_each_sweep
+  exemptions:
+    - no_screen_files_changed_even_with_released_or_unresolved_flag_reads
+    - screen_flag_removal_all_released_or_unknown_touched_keys_are_deleted_definitions_absent_from_head_and_each_removed_flag_live_EVERYONE
+  screen_paths: ["src/app/** except src/app/api/**", "src/components/**", "src/styles/**", "*.css anywhere", "*.scss anywhere", "public/**", "tailwind.config.*"]
+  renamed_screen_paths: current_and_previous
+  complete_paginated_file_list_required: true
+  removal_exemption_refused_on: [unresolved_flag_reads, live_modes_unavailable, any_removed_flag_not_EVERYONE, surviving_released_flag]
+  screen_changes_touching_surviving_released_flag_require_click: true
   evidence: "~/.local/state/vcc-evidence/<TICKET>/premerge.md and its recording"
   exact_head_commit_required: true
   open_production_pull_request_required: true
   publisher_serialization: shared_user_lock_validation_through_status_post
-  fail_closed_on: [github_read_error, live_flag_uncertainty, missing_or_failed_click, stale_commit, missing_recording, status_write_error]
+  fail_closed_on: [github_read_error, incomplete_file_list, status_write_error]
+  non_exempt_fail_closed_on: [live_flag_uncertainty, missing_or_failed_click, stale_commit, missing_recording]
   production_enforcement: production-required-checks-ruleset
   activation_prerequisite: statuses_seeded_on_all_open_production_pull_requests
 
