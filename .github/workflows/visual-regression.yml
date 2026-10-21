@@ -31,9 +31,6 @@ on:
         required: true
         type: string
 
-permissions:
-  contents: read
-
 concurrency:
   group: visual-regression-${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: true
@@ -44,11 +41,17 @@ jobs:
     if: github.event_name == 'workflow_dispatch' || github.event.pull_request.draft == false
     runs-on: ubuntu-latest
     timeout-minutes: 35
+    permissions:
+      contents: read
+      packages: read
     env:
       TZ: UTC
     services:
       postgres:
         image: ghcr.io/hypertask-ai/ci-postgres:16-bookworm@sha256:bb3e1a57e5407e0a5280b4211980a5e537f4abd234a87014ac979849a78dd825
+        credentials:
+          username: ${{ github.actor }}
+          password: ${{ github.token }}
         env:
           POSTGRES_DB: hypertask_smoke
           POSTGRES_USER: browser_smoke
@@ -62,6 +65,9 @@ jobs:
           --health-retries 12
       redis:
         image: ghcr.io/hypertask-ai/ci-redis:7-alpine@sha256:ff02b58f971e7d7d156a1267e283fcbbeee91773b6aa36c49dac28ecfe28eadf
+        credentials:
+          username: ${{ github.actor }}
+          password: ${{ github.token }}
         ports:
           - 6379:6379
         options: >-
@@ -131,7 +137,7 @@ jobs:
       - name: Build and capture base, then compare head
         run: node head/scripts/visual-regression-ci.mjs
       - name: Summarize failed screens
-        if: always()
+        if: always() && hashFiles('head/scripts/visual-regression-ci.mjs') != ''
         run: node head/scripts/visual-regression-ci.mjs --summary
       - name: Upload visual differences
         if: failure()

@@ -5,6 +5,7 @@ const path = require("node:path");
 const { pathToFileURL, fileURLToPath } = require("node:url");
 const vm = require("node:vm");
 const ts = require("typescript");
+const yaml = require("js-yaml");
 
 const source = file => readFileSync(path.join(__dirname, "..", file), "utf8");
 const runner = import("../scripts/visual-regression-ci.mjs");
@@ -77,8 +78,9 @@ test("workflow is informational, read-only, path-scoped and uses the smoke servi
   assert.match(workflow, /branches: \[production\]/);
   for (const pattern of ["src/app/**", "!src/app/api/**", "src/components/**", "src/hooks/**", "src/styles/**", "styles/**", "**/*.css", "tailwind.config.*", "public/**", "e2e/visual/**"]) assert.ok(workflow.includes(`'${pattern}'`));
   assert.match(workflow, /workflow_dispatch:[\s\S]*base:[\s\S]*default: production[\s\S]*head:/);
-  assert.match(workflow, /contents: read/);
-  assert.doesNotMatch(workflow, /secrets\.|: write|workflow_run|pull_request_target|packages:/);
+  const job = yaml.load(workflow).jobs["visual-regression"];
+  assert.deepEqual(job.permissions, { contents: "read", packages: "read" });
+  assert.doesNotMatch(workflow, /secrets\.|: write|workflow_run|pull_request_target/);
   assert.match(workflow, /github\.event\.pull_request\.draft == false/);
   assert.match(workflow, /group: visual-regression-\$\{\{ github\.event\.pull_request\.number \|\| github\.ref \}\}/);
   assert.match(workflow, /cancel-in-progress: true/);
@@ -94,12 +96,14 @@ test("workflow is informational, read-only, path-scoped and uses the smoke servi
   for (const service of ["postgres", "redis"]) {
     const image = workflow.match(new RegExp(`image: (ghcr\\.io/hypertask-ai/ci-${service}:[^\\n]+)`))[1];
     assert.ok(smoke.includes(image));
+    assert.deepEqual(job.services[service], yaml.load(smoke).jobs["browser-smoke"].services[service]);
   }
   const credentials = text => text.slice(text.indexOf("      - name: Prepare disposable local credentials"), text.indexOf('          } >> "$GITHUB_ENV"') + '          } >> "$GITHUB_ENV"'.length);
   assert.equal(credentials(workflow), credentials(smoke));
   assert.match(workflow, /path: test-results\/\*\*\/\*\.png/);
   assert.match(workflow, /retention-days: 7/);
-  assert.match(workflow, /Summarize failed screens\n        if: always\(\)/);
+  assert.equal(job.steps.find(step => step.name === "Summarize failed screens").if, "always() && hashFiles('head/scripts/visual-regression-ci.mjs') != ''");
+  assert.equal(job.steps.find(step => step.name === "Upload visual differences").with["if-no-files-found"], "ignore");
   assert.ok(!source("docs/ci-policy.yml").includes("visual-regression"));
   assert.match(source("docs/ci.md"), /Visual change approved: <ticket URL>/);
   assert.doesNotMatch(source("docs/ci.md"), /visual\/harness\.mjs|visual\/baseline/);
