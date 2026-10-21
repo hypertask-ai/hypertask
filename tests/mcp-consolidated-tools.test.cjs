@@ -107,17 +107,19 @@ test('catalog flag on advertises 15 to 25 consolidated tools, with no duplicate 
   }
 })
 
+const flagGatedLegacy = legacy.filter((tool) => tool.name !== 'hypertask_ensure_agent')
+
 test('server flag defaults to Owner + QA and evaluates the authenticated user', async () => {
   mode = null
   for (const [id, enabled] of [[6, true], [985, true], [7, false]]) {
     authUserId = id
     assert.equal(await flags.isFeatureEnabled(flags.HTPR_6804_MCP_TOOLS_FLAG, id), enabled)
     const listed = (await (await mcpHandler(request('tools/list'))).json()).result.tools
-    assert.equal(listed.length, enabled ? definitions.length : legacy.length + 1)
+    assert.equal(listed.length, enabled ? definitions.length : flagGatedLegacy.length + 1)
   }
   mode = 'OFF'
   authUserId = 6
-  assert.equal((await (await mcpHandler(request('tools/list'))).json()).result.tools.length, legacy.length + 1)
+  assert.equal((await (await mcpHandler(request('tools/list'))).json()).result.tools.length, flagGatedLegacy.length + 1)
   const disabledCall = await (await mcpHandler(request('tools/call', { name: 'hypertask_tasks', arguments: { action: 'create', input: { project_id: 15, title: 'Not executed' } } }))).json()
   assert.equal(disabledCall.error.code, -32602)
   mode = null
@@ -127,7 +129,7 @@ test('server flag defaults to Owner + QA and evaluates the authenticated user', 
 test('scope filtering advertises only callable actions for management, agent and team credentials', async () => {
   for (const [permissions, expected] of [
     [{ management: ['read'] }, { hypertask_report_feedback: ['report'], hypertask_user_context: ['connections'], hypertask_agents: ['list'] }],
-    [{ management: ['write'] }, { hypertask_report_feedback: ['report'], hypertask_agents: ['create', 'revoke', 'archive', 'delete'], hypertask_tokens: ['mint', 'revoke'] }],
+    [{ management: ['write'] }, { hypertask_report_feedback: ['report'], hypertask_agents: ['create', 'ensure', 'revoke', 'archive', 'delete'], hypertask_tokens: ['mint', 'revoke'] }],
   ]) {
     const tools = selectMcpTools(legacy, true, { managementPermissions: permissions })
     const listed = (await rpc(tools, 'tools/list')).result.tools

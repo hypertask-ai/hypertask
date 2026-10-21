@@ -7,10 +7,13 @@ import { CONSOLIDATED_OUTPUT_SCHEMA, formatToolResponse } from './tool-response'
 import { createMetaTools } from './deferred-tools'
 import { annotationsForActions } from './config/tool-annotations'
 import type { AgentRole } from '@/lib/mcp/agents/scopes'
+import { runAsAgent } from './utils/actAsAgent'
 
-export type ToolCaller = { managementPermissions?: ManagementPermissions; agent?: boolean; teamScoped?: boolean; agentRole?: AgentRole }
-type Action = { tool: string; legacy_action?: string; read_only: boolean; permission: string }
+export type ToolCaller = { managementPermissions?: ManagementPermissions; agent?: boolean; teamScoped?: boolean; agentRole?: AgentRole; actAsAgent?: boolean }
+type Action = { tool: string; legacy_action?: string; read_only: boolean; permission: string; as_agent?: 'board' | 'owner' }
 type Description = { name: string; does: string; use_when: string; do_not_use_when: string; parameters_and_caveats: string; actions: Record<string, Action>; input_examples: unknown[] }
+
+const AsAgentSchema = z.string().uuid('as_agent must be an agent UUID')
 
 const RENAMED_PARAMETERS: Record<string, string> = {
   viewId: 'view_id', displayName: 'display_name', photoURL: 'photo_url',
@@ -34,12 +37,13 @@ function canCall(action: Action, caller: ToolCaller): boolean {
   return !permissions || hasDataPermission(permissions)
 }
 
-function inputSchema(tool: PortableTool, action: Action): Record<string, unknown> {
+function inputSchema(tool: PortableTool, action: Action, actAsAgent: boolean): Record<string, unknown> {
   const schema = z.toJSONSchema(tool.parameters, { target: 'draft-7', unrepresentable: 'any', io: 'input' }) as Record<string, unknown>
   delete schema.$schema
   const properties = schema.properties as Record<string, unknown>
   schema.properties = Object.fromEntries(Object.entries(properties).filter(([key]) => key !== 'action' || !action.legacy_action).map(([key, value]) => [RENAMED_PARAMETERS[key] ?? key, value]))
   if (Array.isArray(schema.required)) schema.required = schema.required.filter((key) => key !== 'action' || !action.legacy_action).map((key) => RENAMED_PARAMETERS[String(key)] ?? key)
+  if (actAsAgent && action.as_agent) (schema.properties as Record<string, unknown>).as_agent = { type: 'string', format: 'uuid' }
   function document(value: unknown) {
     if (!value || typeof value !== 'object') return
     const node = value as Record<string, unknown>
@@ -133,13 +137,13 @@ export function selectMcpTools(
         input: {
           type: 'object',
           description: `${properties.input.description} Fields depend on action; use the variant whose title is the action.`,
-          anyOf: names.map((name) => ({ title: name, ...inputSchema(byName.get(actions[name].tool)!, actions[name]) })),
+          anyOf: names.map((name) => ({ title: name, ...inputSchema(byName.get(actions[name].tool)!, actions[name], caller.actAsAgent === true) })),
         },
       },
     } : {
       ...baseSchema,
       oneOf: names.map((name) => {
-        const input = inputSchema(byName.get(actions[name].tool)!, actions[name])
+        const input = inputSchema(byName.get(actions[name].tool)!, actions[name], caller.actAsAgent === true)
         return {
           properties: { action: { const: name }, input },
           required: Array.isArray(input.required) && input.required.length ? ['action', 'input'] : ['action'],
@@ -160,7 +164,9 @@ export function selectMcpTools(
         const tool = byName.get(action.tool)!
         const oldArgs = raw as Record<string, unknown>
         const oldInput = Object.fromEntries(Object.keys(legacyShape).filter((key) => oldArgs[key] !== undefined).map((key) => [key, oldArgs[key]]))
-        const input = { ...oldInput, ...legacyArguments(args.input, action, tool) }
+        const { as_agent: requestedAgent, ...actionInput } = args.input
+        if (requestedAgent !== undefined && !(caller.actAsAgent && action.as_agent)) throw new Error(`as_agent is not supported on ${definition.name} ${args.action}.`)
+        const input = { ...oldInput, ...legacyArguments(actionInput, action, tool) }
         const supportsOffset = 'offset' in tool.parameters.shape
         const supportsLimit = 'limit' in tool.parameters.shape
         const supportsCursor = 'cursor' in tool.parameters.shape
@@ -181,7 +187,13 @@ export function selectMcpTools(
           }
           if (action.read_only && supportsOffset) input.offset = offset
           const validated = tool.parameters.parse(input)
-          const text = await dispatch(action, validated, token, invocation)
+          const run = () => dispatch(action, validated, token, invocation)
+          const text = requestedAgent === undefined ? await run() : await runAsAgent(token, {
+            agentId: AsAgentSchema.parse(requestedAgent),
+            input: validated,
+            write: !action.read_only,
+            requireBoard: action.as_agent === 'board',
+          }, run)
           return formatToolResponse(text, args.response_format, action.read_only, readLimit, offset, supportsOffset || cursorPaginated, endpointCap)
         } catch (error) {
           if (error instanceof z.ZodError) {

@@ -84,6 +84,7 @@
         ],
         "mcp": [
           "^hypertask_create_agent$",
+          "^hypertask_ensure_agent$",
           "^hypertask_revoke_agent$",
           "^hypertask_archive_agent$",
           "^hypertask_delete_agent$",
@@ -113,6 +114,7 @@
         ],
         "hyperai": [
           "^hypertask_create_agent$",
+          "^hypertask_ensure_agent$",
           "^hypertask_revoke_agent$",
           "^hypertask_archive_agent$",
           "^hypertask_delete_agent$",

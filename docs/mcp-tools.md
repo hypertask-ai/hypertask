@@ -48,7 +48,7 @@ Each reaction in the comments list includes its `createdAt` ISO timestamp. `POST
 | `hypertask_tokens` | `mint`, `revoke` | `hypertask_mint_token`, `hypertask_revoke_token` |
 | `hypertask_webhooks` | `get`, `configure`, `test`, `replay`, `rotate`, `delete` | `hypertask_agent_webhook` |
 | `hypertask_skills` | `list`, `get`, `create`, `update`, `delete`, `import` | `hypertask_list_skills`, `hypertask_get_skill`, `hypertask_create_skill`, `hypertask_update_skill`, `hypertask_delete_skill`, `hypertask_import_skills` |
-| `hypertask_agents` | `list`, `presence`, `create`, `revoke`, `archive`, `delete` | `hypertask_list_agents`, `hypertask_agent_presence`, `hypertask_create_agent`, `hypertask_revoke_agent`, `hypertask_archive_agent`, `hypertask_delete_agent` |
+| `hypertask_agents` | `list`, `presence`, `create`, `ensure`, `revoke`, `archive`, `delete` | `hypertask_list_agents`, `hypertask_agent_presence`, `hypertask_create_agent`, `hypertask_ensure_agent`, `hypertask_revoke_agent`, `hypertask_archive_agent`, `hypertask_delete_agent` |
 | `hypertask_comments` | `list`, `add`, `update`, `delete` | `hypertask_get_comments_for_task`, `hypertask_add_comment_to_task`, `hypertask_update_comment`, `hypertask_delete_comment` |
 | `hypertask_user_context` | `hello`, `get`, `profile`, `connections` | `hypertask_hello`, `hypertask_get_user_context`, `hypertask_update_profile`, `hypertask_list_connections` |
 | `hypertask_pages` | `create`, `get`, `update`, `list`, `search`, `versions`, `restore`, `archive` | `hypertask_create_page`, `hypertask_get_page`, `hypertask_update_page`, `hypertask_list_pages`, `hypertask_search_pages`, `hypertask_page_history` |
@@ -58,6 +58,15 @@ Each reaction in the comments list includes its `createdAt` ISO timestamp. `POST
 | `hypertask_labels` | `list`, `create` | `hypertask_list_labels`, `hypertask_create_label` |
 | `hypertask_search` | `tasks`, `semantic`, `related`, `help` | `hypertask_search_tasks`, `hypertask_rag_retrieval`, `hypertask_find_related_tasks`, `hypertask_search_help_docs` |
 | `hypertask_drafts` | `create`, `list`, `update`, `publish`, `delete` | `hypertask_draft` |
+
+## Acting as an owned agent
+
+A person's MCP connection (OAuth or account token, not an agent token or management key) can talk on a board as one of their agents without holding its token. This is behind `htpr-7529-mcp-act-as-agent` (Owner + QA); with it off, `ensure` and `as_agent` are not advertised and `as_agent` is refused.
+
+1. `hypertask_agents ensure {display_name, project_ids, role}` returns the caller's active agent with that display name (case-insensitive), adding any missing boards, or creates it. Calling it again returns the same id. It never returns a token.
+2. `as_agent: <agent UUID>` inside `input` on `hypertask_tasks` create/update/move/assign, `hypertask_comments` list/add/update/delete and `hypertask_decisions` create/list/get/cancel runs the action with the agent's identity. The server checks that the caller owns the agent, that it is not revoked or archived, that it is an Accepted member of the ticket's board (and of `target_project_id` on move), and that a read-role agent does not write.
+3. `hypertask_inbox list {as_agent}` returns the agent's notifications in `agent_notifications`, each with the comment id to pass as `reply_to_comment_id` (or the notification id for `reply_to_invocation_id` when the mention was in a description). `archive` and `unarchive` take `as_agent` too.
+4. `hypertask_webhooks configure {agent_id, url, events: ["comment.mention", "comment.created"]}` makes Hypertask post a signed delivery with the ticket number, comment id and author whenever someone mentions the agent, so a host that supports external wakes can start a session. Polling `inbox list {as_agent}` stays the fallback.
 
 ## Autonomous anonymous feedback
 

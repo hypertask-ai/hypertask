@@ -8,17 +8,20 @@
     "list": {
       "tool": "hypertask_inbox_list",
       "read_only": true,
-      "permission": "data"
+      "permission": "data",
+      "as_agent": "owner"
     },
     "archive": {
       "tool": "hypertask_inbox_archive",
       "read_only": false,
-      "permission": "data"
+      "permission": "data",
+      "as_agent": "owner"
     },
     "unarchive": {
       "tool": "hypertask_inbox_unarchive",
       "read_only": false,
-      "permission": "data"
+      "permission": "data",
+      "as_agent": "owner"
     },
     "move_task": {
       "tool": "hypertask_move_task_to_inbox",

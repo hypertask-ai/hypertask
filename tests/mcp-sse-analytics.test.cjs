@@ -29,6 +29,7 @@ source('src/lib/mcp-server/legacy-sse.ts', {
 const flagChecks = []
 source('src/lib/flags.ts', {
   HTPR_6804_MCP_TOOLS_FLAG: 'htpr-6804-mcp-tools',
+  HTPR_7529_MCP_ACT_AS_AGENT_FLAG: 'htpr-7529-mcp-act-as-agent',
   isFeatureEnabled: async (key, userId) => {
     flagChecks.push({ key, userId })
     return false
@@ -123,6 +124,7 @@ test('transport analytics evaluates the catalog flag through an isolated fixture
     assert.deepEqual(flagChecks, [
       { key: 'htpr-6927-mcp-v2', userId: 2343 },
       { key: 'htpr-7195-ai-feedback', userId: 2343 },
+      { key: 'htpr-7529-mcp-act-as-agent', userId: 2343 },
       { key: 'htpr-6804-mcp-tools', userId: 2343 },
     ])
   }
