@@ -1,3 +1,4 @@
+import { withAgentScopeRequest } from "@/lib/auth/agentScope";
 import { NextRequest, NextResponse } from "next/server";
 import type { Prisma } from "@prisma/client";
 import prisma from "@/lib/prisma";
@@ -40,10 +41,17 @@ async function resolveAgent(userId: number, ref: string) {
 
 async function getCurrentUser(request: NextRequest) {
   const session = await getSessionUser(request.headers);
-  return session ? { id: session.userId } : null;
+  return session ? { id: session.userId, agentId: session.agentId } : null;
 }
 
 export async function GET(
+  request: NextRequest,
+  props: { params: Promise<{ agentId: string }> },
+) {
+  return withAgentScopeRequest(request, () => getAgentDetails(request, props));
+}
+
+async function getAgentDetails(
   request: NextRequest,
   props: { params: Promise<{ agentId: string }> },
 ) {
@@ -56,6 +64,7 @@ export async function GET(
     );
   }
 
+  const actingAgentId = user.agentId;
   const resolved = await resolveAgent(user.id, params.agentId);
   const agent = resolved
     ? await prisma.agent.findFirst({
@@ -80,7 +89,11 @@ export async function GET(
       members: {
         where: {
           status: "Accepted",
-          project: { status: "Normal", ...getProjectWhere(user.id) },
+          project: {
+            status: "Normal",
+            ...getProjectWhere(user.id),
+            AND: [getProjectWhere(user.id, actingAgentId)],
+          },
         },
         select: {
           project: {
@@ -109,13 +122,22 @@ export async function GET(
       prisma.comment.aggregate({
         where: {
           agentId: agent.id,
-          task: { project: getProjectWhere(user.id) },
+          task: {
+            project: {
+              ...getProjectWhere(user.id),
+              AND: [getProjectWhere(user.id, actingAgentId)],
+            },
+          },
         },
         _max: { createdAt: true },
       }),
       workingOnByAgent([agent.id], user.id),
       prisma.project.findMany({
-        where: { status: "Normal", ...getProjectWhere(user.id) },
+        where: {
+          status: "Normal",
+          ...getProjectWhere(user.id),
+          AND: [getProjectWhere(user.id, actingAgentId)],
+        },
         select: {
           id: true,
           name: true,
@@ -166,14 +188,29 @@ export async function GET(
     boardIds.length > 0
       ? await Promise.all([
           sourceSections.length > 0
-            ? prisma.task.count({ where: sourceScopeWhere })
+            ? prisma.task.count({
+                where: {
+                  AND: [
+                    sourceScopeWhere,
+                    { project: getProjectWhere(user.id, actingAgentId) },
+                  ],
+                },
+              })
             : Promise.resolve(null),
-          prisma.task.count({ where: assignedWhere }),
+          prisma.task.count({
+            where: {
+              AND: [
+                assignedWhere,
+                { project: getProjectWhere(user.id, actingAgentId) },
+              ],
+            },
+          }),
           sourceSections.length > 0
             ? prisma.task.count({
                 where: {
                   AND: [
                     sourceScopeWhere,
+                    { project: getProjectWhere(user.id, actingAgentId) },
                     { assignees: { none: { agentId: { not: null } } } },
                   ],
                 },
@@ -184,6 +221,7 @@ export async function GET(
                 where: {
                   AND: [
                     sourceScopeWhere,
+                    { project: getProjectWhere(user.id, actingAgentId) },
                     {
                       assignees: {
                         some: {
@@ -200,6 +238,7 @@ export async function GET(
                 where: {
                   AND: [
                     sourceScopeWhere,
+                    { project: getProjectWhere(user.id, actingAgentId) },
                     {
                       OR: processedReferences.map(({ boardId, ticket }) => ({
                         projectId: boardId,
@@ -212,7 +251,14 @@ export async function GET(
               })
             : Promise.resolve(0),
           sourceSections.length > 0
-            ? prisma.task.count({ where: eligiblePoolWhere })
+            ? prisma.task.count({
+                where: {
+                  AND: [
+                    eligiblePoolWhere,
+                    { project: getProjectWhere(user.id, actingAgentId) },
+                  ],
+                },
+              })
             : Promise.resolve(null),
         ])
       : [null, 0, 0, 0, 0, null];
@@ -220,7 +266,9 @@ export async function GET(
   if (boardIds.length > 0 && sourceSections.length > 0) {
     const grouped = await prisma.task.groupBy({
       by: ["projectId", "section"],
-      where: eligiblePoolWhere,
+      where: {
+        AND: [eligiblePoolWhere, { project: getProjectWhere(user.id, actingAgentId) }],
+      },
       _count: { _all: true },
     });
     for (const row of grouped) {
@@ -241,7 +289,9 @@ export async function GET(
   const inferredTasks =
     !runtimeIsCurrent && boardIds.length > 0
       ? await prisma.task.findMany({
-          where: assignedWhere,
+          where: {
+            AND: [assignedWhere, { project: getProjectWhere(user.id, actingAgentId) }],
+          },
           orderBy: [
             { dueDate: { sort: "asc", nulls: "last" } },
             { priority: { priority_index: "asc" } },
