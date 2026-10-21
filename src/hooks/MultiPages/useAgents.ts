@@ -2,6 +2,8 @@ import { currentProjectAtom, currentUserAtom } from "@/store";
 import type { IAgent } from "@/models/model";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useRecoilValue } from "@/lib/state";
+import { useFlag } from "@/hooks/useFlag";
+import { HTPR_7509_AGENT_ROLE_SCREEN_FLAG } from "@/lib/flags/keys";
 
 export const agentsQueryKey = (userId: number, teamId: string) =>
   ["agents", userId, teamId] as const;
@@ -83,6 +85,7 @@ export function useAgents(
     teamId?: string | null;
   } = {},
 ) {
+  const agentRolesEnabled = useFlag(HTPR_7509_AGENT_ROLE_SCREEN_FLAG);
   const currentUser = useRecoilValue(currentUserAtom);
   const currentProject = useRecoilValue(currentProjectAtom);
   const userId = currentUser?.id;
@@ -172,6 +175,38 @@ export function useAgents(
     },
   });
 
+  const changeAgentRole = useMutation({
+    mutationFn: async ({ id, role }: { id: string; role: NonNullable<IAgent["role"]> }) => {
+      if (!agentRolesEnabled) throw new Error("Agent role changes are not available");
+      if (!teamId) throw new Error("Select a team before changing an agent role");
+      const res = await fetch(`/api/agents/${id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ teamId, role }),
+      });
+      const data = (await res.json()) as {
+        success?: boolean;
+        agent?: Pick<IAgent, "id" | "role">;
+        error?: string;
+      };
+      if (!res.ok || !data.success || !data.agent) {
+        throw new Error(data.error ?? "Could not change agent role");
+      }
+      return { ...data.agent, teamId };
+    },
+    onSuccess: (updatedAgent) => {
+      if (typeof userId === "number") {
+        queryClient.setQueryData<IAgent[]>(
+          agentsQueryKey(userId, updatedAgent.teamId),
+          (agents) => agents?.map((agent) =>
+            agent.id === updatedAgent.id ? { ...agent, role: updatedAgent.role } : agent,
+          ),
+        );
+      }
+      invalidate();
+    },
+  });
+
   const revokeAgent = useMutation({
     mutationFn: async ({
       agentId,
@@ -243,6 +278,7 @@ export function useAgents(
     refetch: listQuery.refetch,
     createAgent,
     updateAgent,
+    changeAgentRole,
     revokeAgent,
     addAgentToBoard,
     allAgents: boardQuery.data ?? [],
