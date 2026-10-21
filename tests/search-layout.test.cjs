@@ -1124,7 +1124,7 @@ test('Escape closes retained layout suggestions after focus moved elsewhere, kee
 
 test('layout rows share the inbox highlight without changing content insets on desktop and phone', async (t) => {
   for (const mobile of [false, true]) {
-    await withSearch(t, { mobile, history: ['login'], flags: { 'htpr-6911-search-row-highlight': true } }, async ({ options, selected, type, tick, press, complete, capture, state }) => {
+    await withSearch(t, { mobile, history: ['login'] }, async ({ options, selected, type, tick, press, complete, capture, state }) => {
       const assertRow = (row) => {
         assert.ok(row.hasAttribute('data-search-layout-row'))
         assert.doesNotMatch(row.className, /rounded-sm|bg-active-elementBg|border-l-4/)
@@ -1206,15 +1206,6 @@ test('shared highlight uses inbox theme tokens and extends behind both tip colum
       assert.ok(values.length && values.every(Boolean), `${theme} defines ${token}`)
     }
   }
-})
-
-test('row highlight flag off keeps the previous inset highlight', async (t) => {
-  await withSearch(t, { history: ['login'], flags: { 'htpr-6911-search-row-highlight': false } }, async ({ selected }) => {
-    assert.ok(selected())
-    assert.equal(selected().hasAttribute('data-search-layout-row'), false)
-    assert.match(selected().className, /rounded-sm/)
-    assert.match(selected().className, /bg-active-elementBg/)
-  })
 })
 
 test('phone layout keeps board tabs in scrollable flow under the search input and selecting a board filters results', async (t) => {
