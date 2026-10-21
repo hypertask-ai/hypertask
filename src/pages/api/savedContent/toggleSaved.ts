@@ -1,3 +1,4 @@
+import { withAgentScopeRequest } from "@/lib/auth/agentScope";
 import { NextApiHandler, NextApiRequest, NextApiResponse } from "next";
 import { includeSavedContentComment } from "@/utils/controllers/savedContent/helper";
 import { withTaskStarWriteLock } from "@/lib/taskCardActions/writeLocks";
@@ -37,14 +38,19 @@ const handler: NextApiHandler = async (
     const task = await prisma.task.findFirst({
       where: {
         id: requestedTaskId,
-        project: projectContentAccessWhere(userId),
+        project: projectContentAccessWhere(userId, session.agentId),
+        AND: [{ project: projectContentAccessWhere(userId) }],
       },
       select: { id: true, projectId: true },
     });
     const comment =
       task && commentId !== null
         ? await prisma.comment.findFirst({
-            where: { id: commentId, taskId: task.id },
+            where: {
+              id: commentId,
+              taskId: task.id,
+              task: { project: projectContentAccessWhere(userId, session.agentId) },
+            },
             select: { id: true },
           })
         : null;
@@ -100,4 +106,4 @@ const handler: NextApiHandler = async (
   }
 };
 
-export default handler;
+export default ((req, res) => withAgentScopeRequest(req, () => handler(req, res))) satisfies NextApiHandler;
