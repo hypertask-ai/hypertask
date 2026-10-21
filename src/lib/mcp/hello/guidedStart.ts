@@ -1,8 +1,13 @@
+import type { AgentRole } from '@/lib/mcp/agents/scopes'
 import { buildToolName } from '@/lib/mcp-server/config/mcp-standards'
 
 type GuidedBoard = { id: number; title: string | null; name: string }
 
-export function buildGuidedStart(newestBoard: GuidedBoard | null) {
+export function buildGuidedStart(
+  newestBoard: GuidedBoard | null,
+  consolidated: boolean,
+  agentRole: AgentRole
+) {
   if (!newestBoard) return { startBoard: null, nextSteps: [] }
 
   const id = newestBoard.id
@@ -16,20 +21,22 @@ export function buildGuidedStart(newestBoard: GuidedBoard | null) {
       {
         step: 'See the board',
         command: `hypertask task list --project ${id}`,
-        tool: buildToolName('list_tasks'),
-        arguments: { project_id: id },
+        tool: buildToolName(consolidated ? 'tasks' : 'list_tasks'),
+        arguments: consolidated ? { action: 'list', input: { project_id: id } } : { project_id: id },
       },
-      {
+      ...(agentRole === 'read' ? [] : [{
         step: 'Create a first task',
         command: `hypertask task create --project ${id} --title "My first task"`,
-        tool: buildToolName('create_task'),
-        arguments: { project_id: id, title: 'My first task' },
-      },
+        tool: buildToolName(consolidated ? 'tasks' : 'create_task'),
+        arguments: consolidated
+          ? { action: 'create', input: { project_id: id, title: 'My first task' } }
+          : { project_id: id, title: 'My first task' },
+      }]),
       {
         step: 'Read the board rules',
         command: `hypertask project playbook ${id}`,
-        tool: buildToolName('get_board_playbook'),
-        arguments: { project_id: id },
+        tool: buildToolName(consolidated ? 'projects' : 'get_board_playbook'),
+        arguments: consolidated ? { action: 'playbook', input: { project_id: id } } : { project_id: id },
       },
     ],
   }

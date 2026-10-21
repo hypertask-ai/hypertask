@@ -64,7 +64,7 @@ async function helloGuidedStart(
   ctx: McpAuthContext,
   where: Prisma.ProjectWhereInput
 ) {
-  const [{ isFeatureEnabled }, { HTPR_7519_LOGIN_GUIDED_START_FLAG }] = await Promise.all([
+  const [{ isFeatureEnabled, HTPR_6804_MCP_TOOLS_FLAG }, { HTPR_7519_LOGIN_GUIDED_START_FLAG }] = await Promise.all([
     import('@/lib/flags'),
     import('@/lib/flags/definitions/htpr-7519-login-guided-start'),
   ])
@@ -80,7 +80,9 @@ async function helloGuidedStart(
         select: { id: true, displayName: true },
       })
     : null
-  return { agent, ...buildGuidedStart(newestBoard) }
+  const { getAgentRole } = await import('@/lib/mcp/agents/scopes')
+  const consolidated = Number.isFinite(ctx.user.id) && await isFeatureEnabled(HTPR_6804_MCP_TOOLS_FLAG, ctx.user.id)
+  return { agent, ...buildGuidedStart(newestBoard, consolidated, await getAgentRole(ctx)) }
 }
 
 async function helloCapabilities(userId: number) {

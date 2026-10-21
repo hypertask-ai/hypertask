@@ -25,10 +25,20 @@ function loadHello(flagOn, agentLookups, options = {}) {
         findMany: async (args) => { options.projectLookups?.findMany.push(args); return projects; },
         findFirst: async (args) => { options.projectLookups?.findFirst.push(args); return options.newestBoard === undefined ? projects[1] ?? null : options.newestBoard; },
       },
-      agent: { findUnique: async (args) => { agentLookups.push(args.where.id); return { id: args.where.id, displayName: "Claude Code" }; } },
+      agent: { findUnique: async (args) => {
+        if (args.select.permissions) { options.roleLookups?.push(args.where.id); return { permissions: options.permissions ?? null }; }
+        agentLookups.push(args.where.id);
+        return { id: args.where.id, displayName: "Claude Code" };
+      } },
     },
   });
-  stubModule("src/lib/flags.ts", { isFeatureEnabled: async (key) => key === FLAG && flagOn });
+  stubModule("src/lib/flags.ts", {
+    HTPR_6804_MCP_TOOLS_FLAG: "htpr-6804-mcp-tools",
+    isFeatureEnabled: async (key, userId) => {
+      options.flagCalls?.push([key, userId]);
+      return key === FLAG ? flagOn : key === "htpr-6804-mcp-tools" && Boolean(options.consolidated);
+    },
+  });
   stubModule("src/lib/mcp/auth.ts", {
     checkMcpRateLimit: async () => null,
     createUnauthorizedResponse: () => null,
@@ -36,6 +46,7 @@ function loadHello(flagOn, agentLookups, options = {}) {
   });
   stubModule("src/utils/controllers/projects/getAllIncludes.ts", { getProjectListingWhere: (userId, agentId) => ({ teamId: { not: null }, members: { some: { agentId, agent: { userId, revokedAt: null } } } }) });
   delete require.cache[path.join(root, "src/lib/mcp/hello/getHelloPayload.ts")];
+  delete require.cache[path.join(root, "src/lib/mcp/agents/scopes.ts")];
   const jiti = createJiti(path.join(root, `tests/htpr-7519-hello-loader-${++loads}.cjs`), {
     alias: { "@": path.join(root, "src") },
     interopDefault: true,
@@ -58,6 +69,26 @@ test("flag on, agent token: hello names the agent, starts on the newest board an
   assert.deepEqual(lookups, ["agent-1"]);
 });
 
+for (const consolidated of [false, true]) {
+  for (const role of ["read", "write", "admin"]) {
+    test(`hello uses credential catalog consolidated=${consolidated} and permissions role=${role}`, async () => {
+      const flagCalls = [];
+      const roleLookups = [];
+      const payload = await loadHello(true, [], { consolidated, permissions: { role }, flagCalls, roleLookups })
+        .getHelloPayload({ user, agentId: "agent-1" });
+      assert.deepEqual(roleLookups, ["agent-1"]);
+      assert.deepEqual(flagCalls.filter(([key]) => key === "htpr-6804-mcp-tools"), [["htpr-6804-mcp-tools", user.id]]);
+      const expected = [
+        [consolidated ? "hypertask_tasks" : "hypertask_list_tasks", consolidated ? { action: "list", input: { project_id: 9142 } } : { project_id: 9142 }],
+        ...(role === "read" ? [] : [[consolidated ? "hypertask_tasks" : "hypertask_create_task", consolidated ? { action: "create", input: { project_id: 9142, title: "My first task" } } : { project_id: 9142, title: "My first task" }]]),
+        [consolidated ? "hypertask_projects" : "hypertask_get_board_playbook", consolidated ? { action: "playbook", input: { project_id: 9142 } } : { project_id: 9142 }],
+      ];
+      assert.deepEqual(payload.nextSteps.map((step) => [step.tool, step.arguments]), expected);
+      assert.deepEqual(payload.agent, { id: "agent-1", displayName: "Claude Code" });
+    });
+  }
+}
+
 test("newest board with no title falls back to its name", async () => {
   const newestBoard = { id: 9142, title: null, name: "launch" };
   const payload = await loadHello(true, [], { newestBoard }).getHelloPayload({ user, agentId: "agent-1" });
@@ -75,9 +106,13 @@ test("flag on, user token: no agent lookup, agent is null", async () => {
 test("flag off: unchanged payload and no agent or newest-board lookup", async () => {
   const lookups = [];
   const projectLookups = { findMany: [], findFirst: [] };
-  const hello = loadHello(false, lookups, { projectLookups });
+  const roleLookups = [];
+  const flagCalls = [];
+  const hello = loadHello(false, lookups, { projectLookups, roleLookups, flagCalls });
   const payload = await hello.getHelloPayload({ user, agentId: "agent-1" });
   assert.deepEqual(projectLookups.findFirst, []);
+  assert.deepEqual(roleLookups, []);
+  assert.equal(flagCalls.some(([key]) => key === "htpr-6804-mcp-tools"), false);
   assert.equal(JSON.stringify(payload), JSON.stringify({
     user,
     boards: [
