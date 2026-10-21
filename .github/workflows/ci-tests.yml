@@ -128,6 +128,12 @@ jobs:
         with:
           fetch-depth: 1
 
+      - name: Runner dispatcher and selfupdate fixtures
+        run: |
+          python3 .claude/skills/ship/scripts/runner-dispatch.test.py
+          python3 .claude/skills/ship/scripts/runner-dispatch.cache.test.py
+          bash .claude/skills/ship/scripts/runner-selfupdate.test.sh
+
       - name: Guard CI image sources
         run: node --test tests/ci-image-sources.test.cjs
 
