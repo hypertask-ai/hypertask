@@ -33,6 +33,7 @@ interface IProps {
   currentUser: IUser;
   askAiFullscreenEnabled?: boolean;
   serverStartedSearch?: Promise<ServerStartedSearch | null>;
+  searchOnce?: boolean;
 }
 
 const SearchComp = ({
@@ -43,6 +44,7 @@ const SearchComp = ({
   currentUser,
   askAiFullscreenEnabled = false,
   serverStartedSearch,
+  searchOnce = false,
 }: IProps) => {
   const router = useRouter();
   const askAiFullscreenFlagEnabled = useFlag(HTPR_6936_ASK_AI_FULLSCREEN_FLAG);
@@ -89,7 +91,7 @@ const SearchComp = ({
     results,
     includeArchived,
     setIncludeArchivedResults,
-  } = useSearch(searchTerm, _initialTabIndex, _includeArchived, _fromProject, serverStartedSearch);
+  } = useSearch(searchTerm, _initialTabIndex, _includeArchived, _fromProject, serverStartedSearch, searchOnce);
   const matchSnippets = matchHighlightsFlagEnabled && layoutEnabled
     ? typedTasks.map((task) => highlightedSearchSnippet((task.commentId ? task.commentText : task.descriptionText) ?? '', inputValue, commenterFlagEnabled && layoutEnabled))
     : undefined;
