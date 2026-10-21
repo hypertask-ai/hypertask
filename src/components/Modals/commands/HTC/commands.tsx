@@ -694,7 +694,7 @@ const Commands = (props: Props) => {
       />
     </div>
   ) : null;
-  const compose = composeEnabled ? <ComposeTaskWriter active={isCompose} destinationProject={newTaskWindow ? composeProjectRef.current : undefined} onBusyChange={setWriting} onCreated={async () => {
+  const compose = composeEnabled ? <ComposeTaskWriter active={isCompose} destinationProject={newTaskWindow ? composeProjectRef.current : undefined} onBusyChange={setWriting} onSearch={() => setShowCommands((previous) => ({ ...previous, paletteTab: "search" }))} onClose={toggle} onCreated={async () => {
     if (newTaskWindow && isMobile) await composeOnCreatedRef.current?.();
     else if (newTaskWindow) composeOnCreatedRef.current?.();
     resetShowCommands();

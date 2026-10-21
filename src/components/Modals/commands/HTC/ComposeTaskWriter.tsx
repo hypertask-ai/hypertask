@@ -29,17 +29,20 @@ import { mergeRealtimeTaskDetail, preserveTaskAssigneesChangedDuringFetch, refre
 import { useFlag } from "@/hooks/useFlag";
 import { HTPR_7306_CTRLJ_FOOTER_ONE_LINE_FLAG } from "@/lib/flags/keys";
 import { HTPR_6891_PHONE_TASK_WRITER_SHEET_FLAG, HTPR_6929_COMPOSE_TASK_WRITER_FLAG, HTPR_6937_NEW_TASK_WINDOW_FLAG, HTPR_6951_TASK_WRITING_PROGRESS_FLAG, HTPR_6962_KEEP_ASSIGNEE_FLAG, HTPR_6999_CTRL_J_VIEW_CONTEXT_FLAG, HTPR_7056_CTRLJ_SPLIT_TASKS_FLAG, HTPR_7085_CTRLJ_WRITER_REASON_FLAG, HTPR_7051_TASK_WRITER_IMAGE_UNFURL_FLAG, HTPR_7053_COMPOSE_BOARD_CHIP_FLAG, HTPR_7313_CTRLJ_ALWAYS_BOARD_CHIP_FLAG, HTPR_7343_CTRLJ_WRITER_PROPERTIES_FLAG } from "@/lib/flags/keys";
+import { HTPR_7307_CTRLJ_FOOTER_CLICKABLE_FLAG } from "@/lib/flags/keys";
 import { resolveComposeBoardTarget } from "./composeBoardTarget";
 import { ChatScopeChip } from "@/components/AI_CHAT/ChatScopeChip";
 import MoveTaskGlobal from "@/components/Modals/MoveTaskToBoard";
 import { discardUnboundCreateTaskUploads } from "@/lib/createTaskAttachmentUploads";
 import type { IProject, ITask } from "@/models/model";
 
-export default function ComposeTaskWriter({ active, destinationProject, onCreated, onBusyChange }: {
+export default function ComposeTaskWriter({ active, destinationProject, onCreated, onBusyChange, onSearch, onClose }: {
   active: boolean;
   destinationProject?: IProject;
   onCreated: () => void | Promise<void>;
   onBusyChange: (busy: boolean) => void;
+  onSearch: () => void;
+  onClose: () => void;
 }) {
   const ctrljFooterOneLine = useFlag(HTPR_7306_CTRLJ_FOOTER_ONE_LINE_FLAG);
   const phoneTaskWriterSheetEnabled = useFlag(HTPR_6891_PHONE_TASK_WRITER_SHEET_FLAG);
@@ -54,6 +57,8 @@ export default function ComposeTaskWriter({ active, destinationProject, onCreate
   const applyWriterProperties = useFlag(HTPR_7343_CTRLJ_WRITER_PROPERTIES_FLAG);
   const boardChipEnabled = useFlag(HTPR_7053_COMPOSE_BOARD_CHIP_FLAG);
   const alwaysShowBoardChip = useFlag(HTPR_7313_CTRLJ_ALWAYS_BOARD_CHIP_FLAG);
+  const clickableFooter = useFlag(HTPR_7307_CTRLJ_FOOTER_CLICKABLE_FLAG);
+  const footerButtonClassName = "rounded-[4px] transition hover:bg-hover-active hover:text-white-black focus-visible:bg-hover-active focus-visible:outline-none";
   const [selectedBoardId, setSelectedBoardId] = useState<number>();
   const [boardPickerOpen, setBoardPickerOpen] = useState(false);
   const boardChip = useRef<HTMLButtonElement>(null);
@@ -415,11 +420,11 @@ export default function ComposeTaskWriter({ active, destinationProject, onCreate
         </div>
       )}
       {!phoneTaskWriterSheet && <div className="flex flex-wrap items-center gap-4 border-t border-light-black-border-1 px-4 py-2 text-micro text-text-light-gray">
-        <span><HintKey>Enter</HintKey> Send</span>
-        <span><HintKey>{newTaskWindow ? getShortcutDisplay({ key: 85, modifiers: ["ctrl"], description: "Attach" }, isApple).join("+") : "Ctrl+U"}</HintKey> {newTaskWindow ? "Attach files" : "Add images"}</span>
-        <span><HintKey>{newTaskWindow ? getShortcutDisplay({ key: 75, modifiers: ["ctrl"], description: "Search" }, isApple).join("+") : "Ctrl+K"}</HintKey> Search</span>
-        {boardChipEnabled && <span><HintKey>{boardShortcut}</HintKey> Board</span>}
-        {(!ctrljFooterOneLine || !newTaskWindow || mobile) && <span><HintKey>Esc</HintKey> Close</span>}
+        {clickableFooter ? <button type="button" aria-label="Send" className={footerButtonClassName} disabled={writing || addingImages || dictating || !text.trim()} onClick={() => void send()}><HintKey>Enter</HintKey> Send</button> : <span><HintKey>Enter</HintKey> Send</span>}
+        {clickableFooter ? <button type="button" aria-label={newTaskWindow ? "Attach files" : "Add images"} className={footerButtonClassName} disabled={writing || addingImages || dictating} onClick={handleAttachmentClick}><HintKey>{newTaskWindow ? getShortcutDisplay({ key: 85, modifiers: ["ctrl"], description: "Attach" }, isApple).join("+") : "Ctrl+U"}</HintKey> {newTaskWindow ? "Attach files" : "Add images"}</button> : <span><HintKey>{newTaskWindow ? getShortcutDisplay({ key: 85, modifiers: ["ctrl"], description: "Attach" }, isApple).join("+") : "Ctrl+U"}</HintKey> {newTaskWindow ? "Attach files" : "Add images"}</span>}
+        {clickableFooter ? <button type="button" aria-label="Search" className={footerButtonClassName} disabled={writing} onClick={onSearch}><HintKey>{newTaskWindow ? getShortcutDisplay({ key: 75, modifiers: ["ctrl"], description: "Search" }, isApple).join("+") : "Ctrl+K"}</HintKey> Search</button> : <span><HintKey>{newTaskWindow ? getShortcutDisplay({ key: 75, modifiers: ["ctrl"], description: "Search" }, isApple).join("+") : "Ctrl+K"}</HintKey> Search</span>}
+        {boardChipEnabled && (clickableFooter ? <button type="button" aria-label="Board" className={footerButtonClassName} disabled={writing || dictating} onClick={openBoardPicker}><HintKey>{boardShortcut}</HintKey> Board</button> : <span><HintKey>{boardShortcut}</HintKey> Board</span>)}
+        {(!ctrljFooterOneLine || !newTaskWindow || mobile) && (clickableFooter ? <button type="button" aria-label="Close" className={footerButtonClassName} disabled={writing} onClick={onClose}><HintKey>Esc</HintKey> Close</button> : <span><HintKey>Esc</HintKey> Close</span>)}
       </div>}
       {boardChipEnabled && active && boardPickerOpen && <MoveTaskGlobal
         boards={loadingBoards && !boards.length ? undefined : boards}
