@@ -1,7 +1,6 @@
 import { HTPR_7513_WRITER_PROJECT_LABELS_FLAG } from "@/lib/flags/keys";
 import { taskWriterDateContext, taskWriterDueDateInstructions } from "@/lib/ai/taskWriterDueDate";
-import { HTPR_7500_WRITER_OLD_STRUCTURE_FLAG } from "@/lib/flags/keys";
-import { HTPR_7471_WRITER_BOARD_FORMAT_FLAG } from "@/lib/flags/keys";
+import { HTPR_7500_WRITER_OLD_STRUCTURE_FLAG, HTPR_7472_TASK_TEMPLATES_FLAG, HTPR_7471_WRITER_BOARD_FORMAT_FLAG } from "@/lib/flags/keys";
 import type { TaskWriterCustomFieldDefinition } from "@/lib/ai/taskWriterCustomFields";
 import { HTPR_7054_CTRLJ_DUE_DATE_FLAG } from "@/lib/flags/keys";
 import { taskWriteAccessWhere } from "@/utils/controllers/projects/getAllIncludes";
@@ -205,7 +204,9 @@ export async function prepareTaskWriterRun(
   }) : undefined;
   const boardFormatEnabled = body.aiMode === "AiTaskWriter" &&
     await isFeatureEnabled(HTPR_7471_WRITER_BOARD_FORMAT_FLAG, userId);
-  const customInstructions = boardFormatEnabled && !body.customInstructions.trim()
+  const taskTemplatesEnabled = body.aiMode === "AiTaskWriter" &&
+    await isFeatureEnabled(HTPR_7472_TASK_TEMPLATES_FLAG, userId);
+  const customInstructions = (boardFormatEnabled || taskTemplatesEnabled) && !body.customInstructions.trim()
     ? await (await import("@/app/api/ai/_lib/customInstructions")).loadCustomInstructionText(body.projectId)
     : body.customInstructions;
   const customFieldDefinitions: TaskWriterCustomFieldDefinition[] | undefined = boardFormatEnabled
@@ -319,8 +320,8 @@ export async function prepareTaskWriterRun(
   });
   const webWriting = await isFeatureEnabled(HTPR_7342_WEB_WRITING_TASK_WRITER_FLAG, userId);
   const oldStructure = await isFeatureEnabled(HTPR_7500_WRITER_OLD_STRUCTURE_FLAG, userId);
-  const authoringStyle = boardFormatEnabled || oldStructure
-    ? createTaskAuthoringStyle(webWriting, boardFormatEnabled, oldStructure)
+  const authoringStyle = boardFormatEnabled || oldStructure || taskTemplatesEnabled
+    ? createTaskAuthoringStyle(webWriting, boardFormatEnabled, oldStructure, taskTemplatesEnabled)
     : webWriting ? TASK_AUTHORING_WEB_STYLE : TASK_AUTHORING_STYLE;
   const boardResearchRules = webWriting
     ? oldStructure
@@ -406,6 +407,7 @@ export async function prepareTaskWriterRun(
     aiFeature,
     selected,
     splitTasks,
+    taskTemplatesEnabled,
     instructions,
     messages,
     allowedImgSrcs,
@@ -486,4 +488,13 @@ async function loadTaskWriterStyleExamples(projectId: number) {
       section: task.section,
     }))
   );
+}
+
+export function taskWriterPlaceholderFeedback(text: string) {
+  const placeholders = [...new Set(text.replace(/<[^>]*>/g, " ")
+    .match(/\b(?:to be written|TBD|to be defined|placeholder|lorem ipsum)\b/gi)
+    ?.map((phrase) => phrase.toLowerCase()) ?? [])];
+  return placeholders.length
+    ? `Rewrite the complete draft once, replacing these unfinished placeholders with finished, board-grounded content: ${placeholders.join(", ")}. Follow the original request's exact item count and the matched template's title pattern and headings. Return the same output format.`
+    : null;
 }

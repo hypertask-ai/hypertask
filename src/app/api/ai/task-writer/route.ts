@@ -20,6 +20,7 @@ import {
   ProjectAccessError,
   missingRequiredFields,
   prepareTaskWriterRun,
+  taskWriterPlaceholderFeedback,
   taskWriterRequestSchema,
   type TaskWriterRequest,
 } from "@/app/api/ai/_lib/taskWriterRun";
@@ -70,7 +71,7 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const { selected, instructions, messages, allowedImgSrcs, usageTaskId, splitTasks, validateDraft, dueDateContext, ticketTypeEnabled, customFieldDefinitions, tasksSchema, boardLabelIds } =
+    const { selected, instructions, messages, allowedImgSrcs, usageTaskId, splitTasks, validateDraft, dueDateContext, ticketTypeEnabled, customFieldDefinitions, tasksSchema, boardLabelIds, taskTemplatesEnabled } =
       await prepareTaskWriterRun(body, userId);
     const typeHeaders: Record<string, string> = {
       ...(ticketTypeEnabled ? { [TICKET_TYPE_HEADER]: "enabled" } : {}),
@@ -81,11 +82,20 @@ export async function POST(request: NextRequest) {
         userId, teamId: selected.teamId, projectId: body.projectId,
         taskId: usageTaskId, provider: selected.usageProvider, feature: "task-writer",
       });
-      const result = await generateText({
+      const options = {
         model: selected.model, instructions, messages, tools: selected.tools,
         maxRetries: 2, providerOptions: selected.providerOptions, ...selected.settings,
         output: Output.object({ schema: tasksSchema }),
-      });
+      };
+      let result = await generateText(options);
+      if (taskTemplatesEnabled) {
+        const previous = JSON.stringify(result.output);
+        const feedback = taskWriterPlaceholderFeedback(previous);
+        if (feedback) result = await generateText({
+          ...options,
+          messages: [...messages, { role: "assistant", content: previous }, { role: "user", content: feedback }],
+        });
+      }
       const fieldTools = customFieldDefinitions?.length ? await import("@/lib/ai/taskWriterCustomFields") : null;
       const { tasks } = tasksSchema.parse({ tasks: result.output.tasks.slice(0, 10) });
       return NextResponse.json({ tasks: tasks.map(({ dueDate: modelDueDate, ...draft }) => {
@@ -114,8 +124,8 @@ export async function POST(request: NextRequest) {
 
         let held = "";
         const enqueueText = (text: string) => {
-          if (validateDraft || dueDateContext || ticketTypeEnabled || boardLabelIds) draft += text;
-          if (!text || dueDateContext || boardLabelIds) return;
+          if (validateDraft || dueDateContext || ticketTypeEnabled || boardLabelIds || taskTemplatesEnabled) draft += text;
+          if (!text || dueDateContext || boardLabelIds || taskTemplatesEnabled) return;
           if (!ticketTypeEnabled) {
             controller.enqueue(encoder.encode(text));
             return;
@@ -186,6 +196,16 @@ export async function POST(request: NextRequest) {
             enqueueError("error", errorMessage(error), "task-writer-stream-error");
             return;
           }
+          const feedback = taskTemplatesEnabled ? taskWriterPlaceholderFeedback(draft) : null;
+          if (feedback) {
+            const retry = await generateText({
+              model: selected.model, instructions,
+              messages: [...messages, { role: "assistant", content: draft }, { role: "user", content: feedback }],
+              tools: selected.tools, maxRetries: 2,
+              providerOptions: selected.providerOptions, ...selected.settings,
+            });
+            draft = allowedImgSrcs ? filterOneImagePass(retry.text, allowedImgSrcs).emit : retry.text;
+          }
           const description = validateDraft && body.aiMode === "AiTaskWriter"
             ? extractTaskWriterProperties(ticketTypeEnabled ? readTaskWriterTicketType(draft).html : draft).description
             : draft;
@@ -197,6 +217,8 @@ export async function POST(request: NextRequest) {
             const labeled = boardLabelIds ? normalizeTaskWriterLabels(draft, boardLabelIds) : draft;
             const dated = dueDateContext ? applyTaskWriterDueDate(labeled, dueDateContext).html : labeled;
             controller.enqueue(encoder.encode(ticketTypeEnabled ? normalizeTaskWriterTicketType(dated) : dated));
+          } else if (taskTemplatesEnabled) {
+            controller.enqueue(encoder.encode(ticketTypeEnabled ? normalizeTaskWriterTicketType(draft) : draft));
           } else if (ticketTypeEnabled && held) {
             controller.enqueue(encoder.encode(normalizeTaskWriterTicketType(held)));
           }
