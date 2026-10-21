@@ -75,7 +75,7 @@ const BoardTaskTemplatesSection = () => {
                 className="h-8 min-w-0 flex-1 rounded-[4px] border-0 bg-transparent px-2 text-right text-dense font-medium text-white-black outline-none placeholder:text-text-light-gray focus:bg-active-modal-element"
                 disabled={mutation.isPending}
                 id={`template-${field}`}
-                maxLength={field === "name" ? 200 : undefined}
+                maxLength={field === "name" ? 200 : 500}
                 onChange={(event) => setEditing({ ...editor, [field]: event.target.value })}
                 value={editor[field]}
               />
@@ -98,9 +98,14 @@ const BoardTaskTemplatesSection = () => {
           )}
           <footer className="flex self-end px-2 py-2">
             <ActionButton disabled={mutation.isPending} onClick={() => setEditing(null)}>Cancel</ActionButton>
-            <ActionButton disabled={mutation.isPending || !editor.name.trim()} onClick={() => mutation.mutate(editor)}>
+            <button
+              className="ml-2 inline-flex w-fit items-center gap-2 rounded-[4px] bg-shadcn-primary px-4 py-2 font-semibold text-primary-foreground transition hover:brightness-110 disabled:cursor-not-allowed disabled:text-text-light-gray"
+              disabled={mutation.isPending || !editor.name.trim()}
+              onClick={() => mutation.mutate(editor)}
+              type="button"
+            >
               Save template
-            </ActionButton>
+            </button>
           </footer>
         </SettingsCard>
       </SettingsSectionShell>

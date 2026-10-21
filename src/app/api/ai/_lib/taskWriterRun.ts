@@ -494,12 +494,18 @@ export function taskWriterPlaceholderFeedback(text: string, request = "") {
   const visible = text.replace(/<placeholder>/gi, "[placeholder]")
     .replace(/<\/?(?:p|li|h[1-6]|div|ul|ol|br)\b[^>]*>/gi, "\n")
     .replace(/<[^>]*>/g, " ");
-  const matches = visible.match(/\b(?:to be written|TBD|to be defined|lorem ipsum)\b|\[placeholder\]/gi) ?? [];
-  if (/(?:^|\n|":\s*")\s*(?:(?:[-*+]|\d+[.)])\s+)?placeholder[.!]?\s*(?=$|\n|"\s*[,}])/i.test(visible)) {
-    matches.push("placeholder");
-  }
-  const placeholders = [...new Set(matches.map((phrase) => phrase.toLowerCase().replace(/[\[\]]/g, "")))]
-    .filter((phrase) => !new RegExp(`\\b${phrase}\\b`, "i").test(request));
+  const slot = "to be written|TBD|to be defined|placeholder|lorem ipsum";
+  const matches = [...visible.matchAll(new RegExp(
+    `\\[(${slot})\\]|(?:^|\\n|":\\s*")\\s*(?:(?:[-*+]|\\d+[.)]|#{1,6})\\s+)?(?:(?:headline|title|copy|variation|idea)(?:\\s+\\d+)?\\s*(?::\\s*)?)?(${slot})[.!]?\\s*(?=$|\\n|"\\s*[,}])`,
+    "gi",
+  ))].map((match) => (match[1] ?? match[2]).toLowerCase());
+  const literalRequests = request.split(/[.!?;\n]|\b(?:but|however|instead)\b/i).flatMap((clause) => {
+    if (/\b(?:not|never|avoid|without|no|omit|exclude|remove|don't|mustn't|shouldn't|cannot|can't)\b/i.test(clause)) return [];
+    const literal = clause.match(/\b(?:use|keep|preserve|include|retain|document|write|output|print|quote)\s+(?:the\s+)?literal(?:\s+(?:text|phrases?|values?|strings?|words?))?\s+(.+)/i);
+    return literal ? literal[1].split(/\s*(?:,|\band\b|&)\s*/i).flatMap((value) =>
+      value.match(new RegExp(`^["'“‘]?\\[?(${slot})\\]?["'”’]?(?=$|[\\s.,])`, "i"))?.[1].toLowerCase() ?? []) : [];
+  });
+  const placeholders = [...new Set(matches)].filter((phrase) => !literalRequests.includes(phrase));
   return placeholders.length
     ? `Rewrite the complete draft once, replacing these unfinished placeholders with finished, board-grounded content: ${placeholders.join(", ")}. Follow the original request's exact item count and the matched template's title pattern and headings. Return the same output format.`
     : null;

@@ -222,12 +222,20 @@ test("PATCH still allows normal headings, paragraphs and lists unchanged", async
   assert.equal((await h.patch({ templateId: 7, name: "Bug", title: "Bug", descriptionHtml })).status, 200);
   assert.equal(h.stored().descriptionHtml, descriptionHtml);
 });
-test("PATCH caps over-long titles to the task creation limit without changing valid titles", async () => {
-  for (const title of ["T".repeat(500), "T".repeat(501), "T".repeat(2000)]) {
+test("PATCH rejects oversized titles without writing and preserves valid titles at the boundary", async () => {
+  for (const length of [501, 2000]) {
     const h = patchHarness();
-    assert.equal((await h.patch({ templateId: 7, name: "Bug", title, descriptionHtml: "" })).status, 200);
-    assert.equal(h.stored().title, title.slice(0, 500));
+    const original = h.stored();
+    const response = await h.patch({ templateId: 7, name: "Bug", title: "T".repeat(length), descriptionHtml: "" });
+    assert.equal(response.status, 400);
+    assert.match((await response.json()).error, /title cannot exceed 500 characters/);
+    assert.deepEqual(h.updates, []);
+    assert.equal(h.stored(), original);
   }
+  const h = patchHarness();
+  const title = "T".repeat(500);
+  assert.equal((await h.patch({ templateId: 7, name: "Bug", title, descriptionHtml: "" })).status, 200);
+  assert.equal(h.stored().title, title);
 });
 test("PATCH refuses oversized descriptions without writing and still allows the size boundary", async () => {
   const h = patchHarness();
@@ -269,7 +277,7 @@ for (const oldStructure of [false, true]) for (const boardFormat of [false, true
   });
 }
 test("placeholder drafts retry exactly once, naming each placeholder and retaining request/context", async () => {
-  const unfinished = '<p>Headline TO BE WRITTEN. TBD. To be defined. [placeholder]. Lorem ipsum.</p>';
+  const unfinished = '<ul><li>Headline TO BE WRITTEN.</li><li>TBD.</li><li>To be defined.</li><li>[placeholder].</li><li>Lorem ipsum.</li></ul>';
   for (const second of [finished, unfinished]) {
     const h = writerHarness({ outputs: [unfinished, second] });
     const result = await h.draft();
@@ -292,6 +300,30 @@ test("finished drafts about removing the search placeholder use one model call",
       assert.match(text, /input placeholder attribute/);
       assert.equal(h.calls.length, 1, `${mode}: ${prompt}`);
     }
+  }
+});
+test("finished sentences containing placeholder phrases never retry", async () => {
+  const html = "<h2>Implementation</h2><p>The migration is to be written in Go.</p><p>Explain why the old report used TBD rather than a real estimate.</p><p>The policy is to be defined by the board owner.</p><p>Remove lorem ipsum from the welcome page.</p>";
+  for (const mode of ["draft", "web", "structured"]) {
+    const h = writerHarness({ split: mode === "structured", outputs: [mode === "structured" ? JSON.stringify({ tasks: [{ title: "Write the migration", description: html }] }) : html] });
+    const result = mode === "draft" ? await h.draft() : await h.web();
+    const text = mode === "draft" ? result.html : await result.text();
+    assert.match(text, /The migration is to be written in Go/);
+    assert.equal(h.calls.length, 1, mode);
+  }
+});
+test("requests prohibiting TBD still repair an unfinished draft", async () => {
+  for (const mode of ["draft", "web", "structured"]) {
+    const outputs = ["<ul><li>TBD</li></ul>", finished].map((description) => mode === "structured" ? JSON.stringify({ tasks: [{ title: "A/B test", description }] }) : description);
+    const h = writerHarness({ prompt: "Write five headlines; do not use TBD", split: mode === "structured", outputs });
+    const result = mode === "draft" ? await h.draft() : await h.web();
+    if (mode === "draft") assert.equal(result.success, true);
+    else {
+      assert.equal(result.status, 200);
+      await result.text();
+    }
+    assert.equal(h.calls.length, 2, mode);
+    assert.match(promptText(h.calls[1]), /unfinished placeholders.*tbd/);
   }
 });
 test("five unfinished headline bullets retry exactly once", async () => {
@@ -407,17 +439,39 @@ for (const oldStructure of [false, true]) for (const web of [false, true]) for (
     assert.equal(promptText(stream.calls[0]), prompt);
   });
 }
+test("placeholder feedback typechecks with the project's strict TypeScript settings", () => {
+  const filename = path.join(root, "src/app/api/ai/_lib/taskWriterRun.ts");
+  const source = ts.createSourceFile(filename, fs.readFileSync(filename, "utf8"), ts.ScriptTarget.Latest, true);
+  const declaration = source.statements.find((node) => ts.isFunctionDeclaration(node) && node.name?.text === "taskWriterPlaceholderFeedback");
+  assert.ok(declaration);
+  const virtualFile = path.join(root, "placeholder-feedback-typecheck.ts");
+  const options = { strict: true, noEmit: true, skipLibCheck: true, target: ts.ScriptTarget.ES2022, types: [] };
+  const host = ts.createCompilerHost(options);
+  const getSourceFile = host.getSourceFile.bind(host);
+  host.getSourceFile = (file, ...args) => file === virtualFile
+    ? ts.createSourceFile(file, declaration.getText(source), ts.ScriptTarget.ES2022, true)
+    : getSourceFile(file, ...args);
+  const program = ts.createProgram([virtualFile], options, host);
+  const errors = ts.getPreEmitDiagnostics(program).map((diagnostic) => ts.flattenDiagnosticMessageText(diagnostic.messageText, "\n"));
+  assert.deepEqual(errors, []);
+});
 test("placeholder matching uses the explicit list, not partial words or HTML attributes", () => {
   const { taskWriterPlaceholderFeedback } = writerHarness().run;
   assert.equal(taskWriterPlaceholderFeedback('<p title="placeholder">A household keeps its placeholders documented.</p>'), null);
   assert.equal(taskWriterPlaceholderFeedback("<p>Remove the search placeholder.</p>"), null);
   assert.equal(taskWriterPlaceholderFeedback("<p>Remove the <code>placeholder</code> attribute.</p>"), null);
-  for (const slot of ["<li>placeholder</li>", "- Placeholder.", "[placeholder]", "<placeholder>", '{"title":"placeholder"}']) assert.match(taskWriterPlaceholderFeedback(slot), /placeholder/);
+  for (const slot of ["<li>placeholder</li>", "- Placeholder.", "[placeholder]", "<placeholder>", '{"title":"placeholder"}', "<h2>TBD</h2>", "## To be defined", "1. to be written", "<li>Headline 1: to be written</li>", "<p>Headline: [to be written]</p>"]) assert.match(taskWriterPlaceholderFeedback(slot), /placeholder/);
   for (const text of ["to be written", "TBD", "to be defined", "placeholder", "lorem ipsum"]) {
     assert.match(taskWriterPlaceholderFeedback(`<p>${text.toUpperCase()}</p>`), new RegExp(text, "i"));
     assert.equal(taskWriterPlaceholderFeedback(`<p>${text.toUpperCase()}</p>`, `Document the literal phrase "${text}".`), null);
   }
   assert.match(taskWriterPlaceholderFeedback("<p>placeholder</p><p>TBD</p>", "Remove the search placeholder"), /tbd/);
+  for (const request of ["Do not use TBD", "Never keep the literal text TBD", "Avoid the literal value TBD", "Write literal headlines without TBD", "Do not use the literal phrase TBD", "Use the literal phrase placeholder, but do not use TBD", "Write five literal examples about TBD", 'Keep the literal text "placeholder" in a sentence about TBD']) {
+    assert.match(taskWriterPlaceholderFeedback("<p>TBD</p>", request), /tbd/, request);
+  }
+  assert.match(taskWriterPlaceholderFeedback("<p>TBD</p>", "Explain what TBD means"), /tbd/);
+  assert.equal(taskWriterPlaceholderFeedback("<p>TBD</p>", "Keep the literal text TBD"), null);
+  assert.equal(taskWriterPlaceholderFeedback("<p>The migration is to be written in Go.</p>"), null);
 });
 test("ticket flag is registered through its definition, with Everyone rollout", () => {
   const definition = load("src/lib/flags/definitions/htpr-7472-task-templates.ts").default;
@@ -487,6 +541,15 @@ test("editor renders approved fields and saves plain-text edits through PATCH", 
   assert.equal(document.querySelector("h2").textContent, "A/B test template");
   assert.deepEqual(Array.from(document.querySelectorAll("label"), (node) => node.textContent), ["Template name", "Title pattern", "Description structure"]);
   assert.deepEqual(Array.from(document.querySelectorAll("button"), (node) => node.textContent.trim()), ["‹ Task templates", "Cancel", "Save template"]);
+  assert.equal(document.querySelector("#template-name").maxLength, 200);
+  assert.equal(document.querySelector("#template-title").maxLength, 500);
+  const [cancel, save] = document.querySelectorAll("footer button");
+  const sibling = fs.readFileSync(path.join(root, "src/components/Modals/Settings/WebhooksSection.tsx"), "utf8");
+  assert.ok(sibling.includes(`className="${save.className}"`));
+  assert.ok(save.classList.contains("bg-shadcn-primary"));
+  assert.ok(save.classList.contains("text-primary-foreground"));
+  assert.ok(save.classList.contains("rounded-[4px]"));
+  assert.equal(cancel.classList.contains("bg-shadcn-primary"), false);
   assert.equal(document.querySelector("textarea").readOnly, false);
   await mutations[0].mutationFn(template);
   assert.deepEqual(plain(writes), [["/api/task-templates", { templateId: 7, name: "A/B test", title: "[TAG] {idea}", descriptionHtml: "<h2>Ideas</h2><p>Finished copy.</p>" }]]);
