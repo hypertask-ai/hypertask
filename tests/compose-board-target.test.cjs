@@ -38,6 +38,17 @@ test('board and ticket views use their board and hide the chip, ignoring stale i
   }
 });
 
+test('HTPR-7313 always-show flag shows the chip on board and ticket views without changing the target board', () => {
+  for (const url of ['/project?id=8', '/project/8', '/project/project-8', '/detail/project-8/12']) {
+    assert.deepEqual(resolve(url, { focusedTicketBoardId: 9, alwaysShowChip: true }), { boardId: 8, showChip: true });
+    assert.deepEqual(resolve(url, { selectedBoardId: 9, alwaysShowChip: true }), { boardId: 9, showChip: true });
+  }
+  for (const url of ['/inbox', '/inbox?split=Board&projectId=8', '/my-tasks', '/search', '/calendar']) {
+    assert.deepEqual(resolve(url, { alwaysShowChip: true }), resolve(url));
+  }
+  assert.deepEqual(resolve('/inbox', { lastUsedBoardId: undefined, alwaysShowChip: true }), { boardId: undefined, showChip: true });
+});
+
 test('mixed-board views show the target and ignore stale ticket focus', () => {
   for (const url of ['/my-tasks', '/search', '/all-tasks', '/calendar', '/starred', '/drafts']) {
     assert.deepEqual(resolve(url, { focusedTicketBoardId: 9 }), { boardId: 7, showChip: true });
