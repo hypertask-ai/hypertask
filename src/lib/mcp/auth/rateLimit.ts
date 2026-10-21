@@ -16,16 +16,22 @@ const localCounts = new Map<string, { count: number; reserved: number; leasing: 
 let localWindowStart: number | undefined
 let fastFlagDecision: { enabled: boolean; expiresAt: number } | undefined
 let exactCountFlagDecision: { enabled: boolean; expiresAt: number } | undefined
+let exactCountFlagLookup: Promise<boolean> | undefined
 
 async function shouldUseExactCountRateLimit(): Promise<boolean> {
   if (exactCountFlagDecision && exactCountFlagDecision.expiresAt > Date.now()) return exactCountFlagDecision.enabled
-  let enabled = true
-  try {
-    const { featureFlagCandidateUserIds } = await import('@/lib/flags')
-    enabled = await featureFlagCandidateUserIds(HTPR_7462_MCP_RATELIMIT_EXACT_COUNT_FLAG) === null
-  } catch {}
-  exactCountFlagDecision = { enabled, expiresAt: Date.now() + 30_000 }
-  return enabled
+  if (!exactCountFlagLookup) {
+    exactCountFlagLookup = (async () => {
+      let enabled = true
+      try {
+        const { featureFlagCandidateUserIds } = await import('@/lib/flags')
+        enabled = await featureFlagCandidateUserIds(HTPR_7462_MCP_RATELIMIT_EXACT_COUNT_FLAG) === null
+      } catch {}
+      exactCountFlagDecision = { enabled, expiresAt: Date.now() + 30_000 }
+      return enabled
+    })().finally(() => { exactCountFlagLookup = undefined })
+  }
+  return exactCountFlagLookup
 }
 
 async function shouldUseFastRateLimit(): Promise<boolean> {

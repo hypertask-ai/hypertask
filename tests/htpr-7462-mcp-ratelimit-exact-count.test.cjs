@@ -24,7 +24,7 @@ function load(file, stubs, extras = {}, append = '') {
 
 const decision = load('src/lib/mcp/rateLimitDecision.ts', {})
 
-function harness({ mode = 'EVERYONE', agent = false, redisFails = false, flagFails = false } = {}) {
+function harness({ mode = 'EVERYONE', agent = false, redisFails = false, flagFails = false, flagLookup } = {}) {
   const store = new Map()
   const writes = []
   const expiries = []
@@ -60,6 +60,7 @@ function harness({ mode = 'EVERYONE', agent = false, redisFails = false, flagFai
       flagCalls.push(key)
       if (key === fastFlagKey) return null
       if (flagFails) throw new Error('Fixture flag lookup failure')
+      if (flagLookup) await flagLookup()
       return mode === 'EVERYONE' ? null : mode === 'OFF' ? [] : [6, 985]
     } },
     '@/lib/redis': { getRedis: async () => redis },
@@ -194,6 +195,30 @@ test('exact-count on and off decisions are cached for 30 seconds and enabling cl
   await h.call()
   assert.equal(h.writes.at(-1).method, 'incrby')
   assert.equal(h.flagCalls.filter(key => key === exactCountFlagKey).length, 3)
+})
+
+test('concurrent calls after exact-count decision expiry share one lookup and each count exactly once', async () => {
+  let lookupWait
+  const h = harness({ mode: 'OFF', flagLookup: () => lookupWait })
+  assert.equal(await h.call(), null)
+  const lookupsBefore = h.flagCalls.filter(key => key === exactCountFlagKey).length
+  const writesBefore = h.writes.length
+  h.setMode('EVERYONE')
+  h.advance(30_000)
+  let release
+  lookupWait = new Promise(resolve => { release = resolve })
+  const calls = Array.from({ length: 20 }, () => h.call())
+  await new Promise(resolve => setImmediate(resolve))
+  const lookups = h.flagCalls.filter(key => key === exactCountFlagKey).length - lookupsBefore
+  const writesWhilePending = h.writes.length
+  release()
+  assert.deepEqual(await Promise.all(calls), Array(20).fill(null))
+  assert.equal(lookups, 1)
+  assert.equal(writesWhilePending, writesBefore)
+  const writes = h.writes.slice(writesBefore)
+  assert.equal(writes.length, 20)
+  assert.ok(writes.every(({ method, amount }) => method === 'incr' && amount === 1))
+  assert.equal(h.flagCalls.filter(key => key === exactCountFlagKey).length - lookupsBefore, 1)
 })
 
 test('failed exact-count lookups are cached ON and retried after 30 seconds', async () => {
