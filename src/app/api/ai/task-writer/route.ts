@@ -90,7 +90,7 @@ export async function POST(request: NextRequest) {
       let result = await generateText(options);
       if (taskTemplatesEnabled) {
         const previous = JSON.stringify(result.output);
-        const feedback = taskWriterPlaceholderFeedback(previous);
+        const feedback = taskWriterPlaceholderFeedback(previous, body.PROMPT);
         if (feedback) result = await generateText({
           ...options,
           messages: [...messages, { role: "assistant", content: previous }, { role: "user", content: feedback }],
@@ -196,7 +196,7 @@ export async function POST(request: NextRequest) {
             enqueueError("error", errorMessage(error), "task-writer-stream-error");
             return;
           }
-          const feedback = taskTemplatesEnabled ? taskWriterPlaceholderFeedback(draft) : null;
+          const feedback = taskTemplatesEnabled ? taskWriterPlaceholderFeedback(draft, body.PROMPT) : null;
           if (feedback) {
             const retry = await generateText({
               model: selected.model, instructions,

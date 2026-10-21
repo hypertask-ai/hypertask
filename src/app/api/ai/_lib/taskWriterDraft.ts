@@ -44,7 +44,7 @@ export async function generateTaskWriterDraft(
     ...(abortSignal ? { abortSignal } : {}),
   };
   let { text } = await generateText(options);
-  const feedback = taskTemplatesEnabled ? taskWriterPlaceholderFeedback(text) : null;
+  const feedback = taskTemplatesEnabled ? taskWriterPlaceholderFeedback(text, body.PROMPT) : null;
   if (feedback) {
     ({ text } = await generateText({
       ...options,

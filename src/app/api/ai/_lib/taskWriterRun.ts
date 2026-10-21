@@ -490,10 +490,16 @@ async function loadTaskWriterStyleExamples(projectId: number) {
   );
 }
 
-export function taskWriterPlaceholderFeedback(text: string) {
-  const placeholders = [...new Set(text.replace(/<[^>]*>/g, " ")
-    .match(/\b(?:to be written|TBD|to be defined|placeholder|lorem ipsum)\b/gi)
-    ?.map((phrase) => phrase.toLowerCase()) ?? [])];
+export function taskWriterPlaceholderFeedback(text: string, request = "") {
+  const visible = text.replace(/<placeholder>/gi, "[placeholder]")
+    .replace(/<\/?(?:p|li|h[1-6]|div|ul|ol|br)\b[^>]*>/gi, "\n")
+    .replace(/<[^>]*>/g, " ");
+  const matches = visible.match(/\b(?:to be written|TBD|to be defined|lorem ipsum)\b|\[placeholder\]/gi) ?? [];
+  if (/(?:^|\n|":\s*")\s*(?:(?:[-*+]|\d+[.)])\s+)?placeholder[.!]?\s*(?=$|\n|"\s*[,}])/i.test(visible)) {
+    matches.push("placeholder");
+  }
+  const placeholders = [...new Set(matches.map((phrase) => phrase.toLowerCase().replace(/[\[\]]/g, "")))]
+    .filter((phrase) => !new RegExp(`\\b${phrase}\\b`, "i").test(request));
   return placeholders.length
     ? `Rewrite the complete draft once, replacing these unfinished placeholders with finished, board-grounded content: ${placeholders.join(", ")}. Follow the original request's exact item count and the matched template's title pattern and headings. Return the same output format.`
     : null;

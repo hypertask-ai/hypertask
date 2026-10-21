@@ -2,7 +2,7 @@ import { getSessionUser } from "@/lib/auth/getSessionUser";
 import { isFeatureEnabled } from "@/lib/flags";
 import { HTPR_7472_TASK_TEMPLATES_FLAG } from "@/lib/flags/keys";
 import prisma from "@/lib/prisma";
-import { getProjectWhere } from "@/utils/controllers/projects/getAllIncludes";
+import { getProjectWhere, taskWriteAccessWhere } from "@/utils/controllers/projects/getAllIncludes";
 import { sanitizeRichHtml } from "@/utils/helperFunctions/sanitizeRichHtml";
 import {
   findTaskTemplateTargetSection,
@@ -152,7 +152,7 @@ export async function PATCH(request: NextRequest) {
     return NextResponse.json({ success: false, error: `descriptionHtml cannot exceed ${TEMPLATE_DESCRIPTION_MAX} characters` }, { status: 400 });
   }
   const updated = await prisma.taskTemplate.updateMany({
-    where: { id: templateId, project: { ...getProjectWhere(session.userId) } },
+    where: { id: templateId, project: { ...taskWriteAccessWhere(session.userId, session.agentId) } },
     data: {
       name: body.name.trim().slice(0, TEMPLATE_NAME_MAX),
       title: body.title.slice(0, TEMPLATE_TITLE_MAX),

@@ -105,7 +105,7 @@ function writerHarness(options = {}) {
     ai, "./modelProvider": { configureAiModelUsage() {} }, "./editorAi": editor, "./taskWriterRun": run,
     "./taskWriterProperties": properties, "@/lib/ai/taskWriterDuplicateGuard": load("src/lib/ai/taskWriterDuplicateGuard.ts"),
   });
-  const request = run.taskWriterRequestSchema.parse({ projectId: 15, PROMPT: "A/B test: 5 headlines for the welcome page", customInstructions: options.enabled === false ? "Existing instruction" : "", ...(options.split ? { requestKind: "compose-task" } : {}) });
+  const request = run.taskWriterRequestSchema.parse({ projectId: 15, PROMPT: options.prompt ?? "A/B test: 5 headlines for the welcome page", customInstructions: options.enabled === false ? "Existing instruction" : "", ...(options.split ? { requestKind: "compose-task" } : {}) });
   const route = moduleWithStubs("src/app/api/ai/task-writer/route.ts", {
     ai, "@/lib/ai/taskWriterDueDate": load("src/lib/ai/taskWriterDueDate.ts"),
     "@/lib/ai/taskWriterTicketType": load("src/lib/ai/taskWriterTicketType.ts"), "@/lib/errors/reportError": { reportError: async () => {} },
@@ -123,7 +123,19 @@ test("template headings and paragraphs round-trip without losing HTML or entitie
   assert.equal(parsed.editable, true);
   assert.deepEqual(plain(parsed.headings), ["Problem & goal", "Variations"]);
   assert.equal(editing.writeTaskTemplateDescription(parsed.text, html), html);
-  assert.equal(editing.writeTaskTemplateDescription("Problem & goal\nNew <text>\n\nVariations\nFive finished lines.", html), '<h2>Problem &amp; goal</h2><p>New &lt;text&gt;</p><h2>Variations</h2><p>Five finished lines.</p>');
+  assert.equal(parsed.text, '## Problem & goal\n\nKeep <facts> and "quotes".\n\n## Variations\n\nWrite five lines.');
+  assert.equal(editing.writeTaskTemplateDescription("## Problem & goal\nNew <text>\n\n## Variations\nFive finished lines.", html), '<h2>Problem &amp; goal</h2><p>New &lt;text&gt;</p><h2>Variations</h2><p>Five finished lines.</p>');
+});
+test("renaming a heading and adding a new heading preserves explicit block types", () => {
+  const html = "<h2>Problem</h2><p>Explain the issue.</p>";
+  const text = editing.readTaskTemplateDescription(html).text.replace("Problem", "Context");
+  assert.equal(editing.writeTaskTemplateDescription(text, html), "<h2>Context</h2><p>Explain the issue.</p>");
+  assert.equal(editing.writeTaskTemplateDescription(`${text}\n\n## Acceptance\n#not-a-heading`, html), "<h2>Context</h2><p>Explain the issue.</p><h2>Acceptance</h2><p>#not-a-heading</p>");
+});
+test("literal heading markers in paragraphs survive edits to other blocks", () => {
+  const html = "<h2>Problem</h2><p>Problem</p><p>#tag</p><p>## Literal paragraph</p><p>\\Literal backslash</p>";
+  const text = editing.readTaskTemplateDescription(html).text.replace("Problem", "Context");
+  assert.equal(editing.writeTaskTemplateDescription(text, html), html.replace("Problem", "Context"));
 });
 test("rich templates are read-only and cannot be damaged by the plain text writer", () => {
   for (const html of ['<p><strong>Bold</strong></p>', '<ul><li>Item</li></ul>', '<p class="rich">Text</p>', '<p>A<br>B</p>', 'Plain text', '<!--metadata--><p>Text</p>']) {
@@ -131,20 +143,32 @@ test("rich templates are read-only and cannot be damaged by the plain text write
     assert.equal(editing.writeTaskTemplateDescription("Changed", html), html);
   }
 });
-function patchHarness({ userId = 1, enabled = true } = {}) {
+const projectAccess = moduleWithStubs("src/utils/controllers/projects/getAllIncludes.ts", {
+  "@/lib/auth/agentScope": { agentScopeEnforced: () => true },
+  "@/lib/agents/publicAgent": {}, "@/lib/cycles": {}, "@/lib/agents/visibility": {},
+  "@/utils/controllers/notifications/visibleInboxScope": {},
+});
+function patchHarness({ userId = 1, agentId, grantStatus, revoked = false, enabled = true } = {}) {
   const updates = [], accessCalls = [];
   let stored = { name: "Bug", title: "[BUG] {problem}", descriptionHtml: "<h2>Steps</h2><p>Reproduce.</p>" };
   const route = moduleWithStubs("src/app/api/task-templates/route.ts", {
-    "@/lib/auth/getSessionUser": { getSessionUser: async () => userId ? { userId } : null },
+    "@/lib/auth/getSessionUser": { getSessionUser: async () => userId ? { userId, agentId } : null },
     "@/lib/flags": { isFeatureEnabled: async (key, id) => { assert.equal(key, flag); assert.equal(id, userId); return enabled; } },
     "@/lib/flags/keys": keys, "next/server": { NextResponse: { json: Response.json } },
     "@/lib/taskTemplatePrefill": {},
     "@/utils/helperFunctions/sanitizeRichHtml": load("src/utils/helperFunctions/sanitizeRichHtml.ts"),
-    "@/utils/controllers/projects/getAllIncludes": { getProjectWhere: (id) => { accessCalls.push(id); return { OR: [{ ownerId: id }, { members: { some: { userId: id } } }] }; } },
+    "@/utils/controllers/projects/getAllIncludes": Object.fromEntries(["getProjectWhere", "taskWriteAccessWhere"].map((key) => [key, (id, agent) => {
+      accessCalls.push([id, agent ?? null]);
+      return projectAccess[key](id, agent);
+    }])),
     "@/lib/prisma": { default: { taskTemplate: {
       updateMany: async (args) => {
         updates.push(plain(args));
-        const allowed = args.where.id === 7 && args.where.project.OR.some((entry) => entry.ownerId === 1 || entry.members?.some.userId === 2);
+        const allowed = args.where.id === 7 && args.where.project.OR.some((entry) => {
+          const member = entry.members?.some;
+          return entry.ownerId === 1 || (member?.agentId === null && member.userId === 2) ||
+            (member?.agentId === agentId && agentId && grantStatus === "Accepted" && member.status === "Accepted" && member.agent.userId === userId && member.agent.revokedAt === null && !revoked);
+        });
         if (allowed) stored = args.data;
         return { count: allowed ? 1 : 0 };
       },
@@ -156,8 +180,8 @@ test("PATCH still allows both board owner and editor, preserving board-scoped au
   for (const userId of [1, 2]) {
     const h = patchHarness({ userId });
     assert.equal((await h.patch()).status, 200);
-    assert.deepEqual(h.accessCalls, [userId]);
-    assert.deepEqual(h.updates[0].where, { id: 7, project: { OR: [{ ownerId: userId }, { members: { some: { userId } } }] } });
+    assert.deepEqual(h.accessCalls, [[userId, null]]);
+    assert.deepEqual(h.updates[0].where, { id: 7, project: plain(projectAccess.taskWriteAccessWhere(userId)) });
     assert.equal(h.stored().name, "A/B test");
     assert.equal(h.stored().title, "[TAG] {idea} ICE {score}/30");
   }
@@ -166,8 +190,23 @@ test("PATCH now refuses users without access to the template board and leaves it
   const h = patchHarness({ userId: 3 });
   const original = h.stored();
   assert.equal((await h.patch()).status, 404);
-  assert.deepEqual(h.accessCalls, [3]);
+  assert.deepEqual(h.accessCalls, [[3, null]]);
   assert.equal(h.stored(), original);
+});
+test("PATCH refuses owner agents without an Accepted board grant or with revoked access", async () => {
+  for (const options of [{}, { grantStatus: "Invited" }, { grantStatus: "Accepted", revoked: true }]) {
+    const h = patchHarness({ userId: 1, agentId: "agent-1", ...options });
+    const original = h.stored();
+    assert.equal((await h.patch()).status, 404);
+    assert.deepEqual(h.accessCalls, [[1, "agent-1"]]);
+    assert.equal(h.stored(), original);
+  }
+});
+test("PATCH still allows an agent with an Accepted board grant", async () => {
+  const h = patchHarness({ userId: 1, agentId: "agent-1", grantStatus: "Accepted" });
+  assert.equal((await h.patch()).status, 200);
+  assert.deepEqual(h.accessCalls, [[1, "agent-1"]]);
+  assert.equal(h.stored().name, "A/B test");
 });
 test("PATCH now strips script content and event-handler attributes before saving", async () => {
   const h = patchHarness();
@@ -228,7 +267,7 @@ for (const oldStructure of [false, true]) for (const boardFormat of [false, true
   });
 }
 test("placeholder drafts retry exactly once, naming each placeholder and retaining request/context", async () => {
-  const unfinished = '<p>Headline TO BE WRITTEN. TBD. To be defined. Placeholder. Lorem ipsum.</p>';
+  const unfinished = '<p>Headline TO BE WRITTEN. TBD. To be defined. [placeholder]. Lorem ipsum.</p>';
   for (const second of [finished, unfinished]) {
     const h = writerHarness({ outputs: [unfinished, second] });
     const result = await h.draft();
@@ -238,6 +277,43 @@ test("placeholder drafts retry exactly once, naming each placeholder and retaini
     assert.match(retry, /5 headlines/);
     assert.match(retry, /BOARD_MEMORY/);
     assert.equal(result.success, true);
+  }
+});
+test("finished drafts about removing the search placeholder use one model call", async () => {
+  const html = '<h1 id="ai-generated-task-title">Remove the search placeholder</h1><h2>Problem</h2><p>Remove the input placeholder attribute so the visible label is the only prompt.</p>';
+  for (const prompt of ["Remove the search placeholder", "Simplify the search input"]) {
+    for (const mode of ["draft", "web", "structured"]) {
+      const h = writerHarness({ prompt, split: mode === "structured", outputs: [mode === "structured" ? JSON.stringify({ tasks: [{ title: "Remove the search placeholder", description: html }] }) : html] });
+      const result = mode === "draft" ? await h.draft() : await h.web();
+      if (mode !== "draft") assert.equal(result.status, 200);
+      const text = mode === "draft" ? result.html : await result.text();
+      assert.match(text, /input placeholder attribute/);
+      assert.equal(h.calls.length, 1, `${mode}: ${prompt}`);
+    }
+  }
+});
+test("five unfinished headline bullets retry exactly once", async () => {
+  const unfinished = "<ul>" + "<li>headline to be written</li>".repeat(5) + "</ul>";
+  for (const mode of ["draft", "web", "structured"]) {
+    const outputs = [unfinished, finished].map((description) => mode === "structured" ? JSON.stringify({ tasks: [{ title: "A/B test", description }] }) : description);
+    const h = writerHarness({ split: mode === "structured", outputs });
+    const result = mode === "draft" ? await h.draft() : await h.web();
+    if (mode === "draft") assert.equal(result.success, true);
+    else {
+      assert.equal(result.status, 200);
+      await result.text();
+    }
+    assert.equal(h.calls.length, 2, mode);
+    assert.match(promptText(h.calls[1]), /to be written/);
+  }
+});
+test("placeholder phrases supplied by the user do not cause paid retries", async () => {
+  for (const mode of ["draft", "web", "structured"]) {
+    const description = "<p>placeholder</p><p>TBD</p>";
+    const h = writerHarness({ prompt: 'Use the literal values "placeholder" and "TBD".', split: mode === "structured", outputs: [mode === "structured" ? JSON.stringify({ tasks: [{ title: "Document literal values", description }] }) : description] });
+    const result = mode === "draft" ? await h.draft() : await h.web();
+    if (mode !== "draft") await result.text();
+    assert.equal(h.calls.length, 1, mode);
   }
 });
 test("Ctrl+J holds placeholder output and never retries more than once", async () => {
@@ -305,7 +381,14 @@ for (const oldStructure of [false, true]) for (const web of [false, true]) for (
 test("placeholder matching uses the explicit list, not partial words or HTML attributes", () => {
   const { taskWriterPlaceholderFeedback } = writerHarness().run;
   assert.equal(taskWriterPlaceholderFeedback('<p title="placeholder">A household keeps its placeholders documented.</p>'), null);
-  for (const text of ["to be written", "TBD", "to be defined", "placeholder", "lorem ipsum"]) assert.match(taskWriterPlaceholderFeedback(`<p>${text.toUpperCase()}</p>`), new RegExp(text, "i"));
+  assert.equal(taskWriterPlaceholderFeedback("<p>Remove the search placeholder.</p>"), null);
+  assert.equal(taskWriterPlaceholderFeedback("<p>Remove the <code>placeholder</code> attribute.</p>"), null);
+  for (const slot of ["<li>placeholder</li>", "- Placeholder.", "[placeholder]", "<placeholder>", '{"title":"placeholder"}']) assert.match(taskWriterPlaceholderFeedback(slot), /placeholder/);
+  for (const text of ["to be written", "TBD", "to be defined", "placeholder", "lorem ipsum"]) {
+    assert.match(taskWriterPlaceholderFeedback(`<p>${text.toUpperCase()}</p>`), new RegExp(text, "i"));
+    assert.equal(taskWriterPlaceholderFeedback(`<p>${text.toUpperCase()}</p>`, `Document the literal phrase "${text}".`), null);
+  }
+  assert.match(taskWriterPlaceholderFeedback("<p>placeholder</p><p>TBD</p>", "Remove the search placeholder"), /tbd/);
 });
 test("ticket flag is registered through its definition, with Everyone rollout", () => {
   const definition = load("src/lib/flags/definitions/htpr-7472-task-templates.ts").default;
@@ -369,7 +452,7 @@ test("flag off renders no list or editor and disables its template query", () =>
 });
 test("editor renders approved fields and saves plain-text edits through PATCH", async () => {
   const writes = [];
-  const template = { id: 7, projectId: 15, name: "A/B test", title: "[TAG] {idea}", descriptionHtml: "<h2>Ideas</h2><p>Original.</p>", text: "Ideas\n\nFinished copy." };
+  const template = { id: 7, projectId: 15, name: "A/B test", title: "[TAG] {idea}", descriptionHtml: "<h2>Ideas</h2><p>Original.</p>", text: "## Ideas\n\nFinished copy." };
   const { html, mutations } = renderSettings({ editing: template, writes });
   const document = new JSDOM(html).window.document;
   assert.equal(document.querySelector("h2").textContent, "A/B test template");
