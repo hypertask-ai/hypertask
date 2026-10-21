@@ -33,6 +33,8 @@ function load(relative, mocks, baseline = false) {
   return exports;
 }
 
+const highlightedContent = '<html><head></head><body><p>Synthetic <mark data-color="#b89bdd" style="background-color: rgb(184, 155, 221); color: inherit;">highlight</mark> sample</p></body></html>';
+
 async function fixture(t, { enabled = true, stable = false, legacyStatic = false, baseline = false, content = task.description_.content, editMode = null, draft = null, embedded = false } = {}) {
   const dom = new JSDOM("<div id=root></div>", { url: "https://app.hypertask.ai/detail/project-6859/43" });
   const globals = { window: dom.window, document: dom.window.document, Element: dom.window.Element, DOMParser: dom.window.DOMParser, IS_REACT_ACT_ENVIRONMENT: true };
@@ -319,4 +321,130 @@ test("the ticket-specific improvement flag defaults to Everyone with release ris
   assert.equal(definition.shippedOn, "2026-10-22");
   assert.equal(definition.releaseRisk.risk, "small");
   assert.ok(definition.releaseRisk.reason);
+});
+
+
+test("highlighted saved descriptions paint before a cold or warm editor, then retain identical marks", async t => {
+  for (const warm of [false, true]) {
+    const f = await fixture(t, { content: highlightedContent });
+    if (warm) await f.prime();
+    await f.render();
+    assert.equal(f.container.querySelector("#title-input")?.textContent, "Cached title");
+    const mark = f.container.querySelector("#description-input mark");
+    assert.ok(mark, "highlight is present before editor initialization");
+    const first = mark.outerHTML;
+    assert.equal(f.mounts(), 0);
+    assert.equal(f.imports(), warm ? 1 : 0);
+    await f.frame();
+    assert.equal(f.mounts(), 0);
+    await f.frame();
+    await f.resolve();
+    assert.equal(f.mounts(), 1);
+    assert.equal(f.container.querySelector("mark").outerHTML, first);
+    await f.unmount();
+  }
+});
+
+test("static marks match real Tiptap renderHTML and inherit the same colour and size rules", async t => {
+  const f = await fixture(t, { content: highlightedContent });
+  await f.render();
+  const { Editor } = require("@tiptap/core");
+  const Highlight = require("@tiptap/extension-highlight").default;
+  const StarterKit = require("@tiptap/starter-kit").default;
+  const tiptap = fs.readFileSync(path.join(root, "src/components/RTE/Tiptap.ts"), "utf8");
+  assert.match(tiptap, /Highlight.configure\(\{ multicolor: true \}\)/);
+  const editor = new Editor({
+    extensions: [StarterKit, Highlight.configure({ multicolor: true })],
+    content: highlightedContent,
+    editable: false,
+  });
+  t.after(() => editor.destroy());
+  const editorWrapper = document.createElement("div");
+  editorWrapper.className = "hellow editorContainer readOnlyDescription";
+  editorWrapper.append(editor.view.dom);
+  f.container.append(editorWrapper);
+  const actual = f.container.querySelector("#description-input mark");
+  const expected = editor.view.dom.querySelector("mark");
+  assert.ok(actual, "static highlight must exist");
+  const normalise = node => {
+    const clone = node.cloneNode(true);
+    for (const name of clone.getAttributeNames()) clone.removeAttribute(name);
+    for (const name of node.getAttributeNames().sort()) clone.setAttribute(name, node.getAttribute(name));
+    return clone.outerHTML;
+  };
+  const serialized = document.createElement("div");
+  serialized.innerHTML = editor.getHTML();
+  assert.equal(normalise(actual), normalise(serialized.querySelector("mark")));
+  assert.equal(normalise(actual), normalise(expected));
+  assert.equal(actual.className, expected.className);
+  assert.equal(actual.style.cssText, expected.style.cssText);
+  const moduleScss = fs.readFileSync(path.join(root, "src/styles/tiptap.module.scss"), "utf8");
+  const globalScss = fs.readFileSync(path.join(root, "src/styles/globals.scss"), "utf8");
+  const moduleMark = moduleScss.slice(moduleScss.indexOf(".hellow {")).match(/mark\s*\{([^}]+)\}/)[1];
+  const globalMark = globalScss.slice(globalScss.indexOf(".tiptap {")).match(/mark\s*\{([^}]+)\}/)[1];
+  assert.match(moduleMark, /padding: 0\.125em/);
+  assert.match(moduleMark, /color: black !important/);
+  const style = document.createElement("style");
+  style.textContent = require("sass").compileString(`.tiptap { mark { ${globalMark} } } .hellow { mark { ${moduleMark} } }`).css;
+  document.head.append(style);
+  for (const node of [actual, expected]) {
+    assert.ok(node.closest(".tiptap.ProseMirror"));
+    assert.ok(node.closest(".hellow"));
+    assert.ok(node.closest(".editorContainer"));
+  }
+  const editorContainer = fs.readFileSync(path.join(root, "src/components/RTE/Components/TiptapMainContainer.tsx"), "utf8");
+  assert.match(editorContainer, /styles\.hellow/);
+  const properties = ["backgroundColor", "color", "padding", "borderRadius", "boxDecorationBreak", "fontSize", "lineHeight"];
+  const staticStyle = window.getComputedStyle(actual);
+  const editorStyle = window.getComputedStyle(expected);
+  for (const property of properties) assert.equal(staticStyle[property], editorStyle[property], property);
+  assert.equal(staticStyle.backgroundColor, "rgb(184, 155, 221)");
+  assert.equal(staticStyle.padding, "2px");
+  assert.equal(staticStyle.borderRadius, "0.25em");
+});
+
+test("only exact native highlighted markup enters the static-safe path", async t => {
+  const f = await fixture(t);
+  const { isPlainDescriptionHtml } = require("jiti").createJiti(__filename, { fsCache: false, alias: { "@": path.join(root, "src") } })(path.join(root, dir, "staticDescriptionHtml.ts"));
+  assert.equal(isPlainDescriptionHtml(highlightedContent, true, true), true);
+  assert.equal(isPlainDescriptionHtml(highlightedContent, true), false);
+  assert.equal(isPlainDescriptionHtml(highlightedContent), false);
+  assert.equal(isPlainDescriptionHtml('<p><mark>Default highlight</mark></p>', true, true), true);
+  for (const content of [
+    highlightedContent.replace('data-color=', 'class="custom" data-color='),
+    highlightedContent.replace('data-color=', 'onclick="alert(1)" data-color='),
+    highlightedContent.replace('color: inherit;', 'color: red;'),
+    highlightedContent.replace('color: inherit;', 'color: inherit; font-size: 40px;'),
+    highlightedContent.replace('rgb(184, 155, 221)', 'rgb(1, 2, 3)'),
+    highlightedContent.replace('data-color="#b89bdd" ', ''),
+    highlightedContent.replace('highlight</mark>', '<span>highlight</span></mark>'),
+    highlightedContent.replace('highlight</mark>', '<img src="x.png"></mark>'),
+    '<p><mark id="custom">Other attribute</mark></p>',
+    '<p><mark style="background-color: red">Style only</mark></p>',
+    '<p><mark><mark>Nested highlight</mark></mark></p>',
+    highlightedContent.replace('rgb(184, 155, 221)', 'rgb(184, 154, 477)'),
+    highlightedContent.replace('</mark>', '</mark class="custom">'),
+  ]) {
+    assert.equal(isPlainDescriptionHtml(content, true, true), false, content);
+    const rejected = await fixture(t, { content });
+    await rejected.render();
+    assert.equal(rejected.imports(), 1);
+    assert.equal(rejected.container.querySelector("#title-input"), null);
+    await rejected.unmount();
+  }
+  await f.unmount();
+});
+
+test("highlight support does not change flag-off behavior even with legacy static flags on", async t => {
+  for (const legacyStatic of [false, true]) {
+    const f = await fixture(t, { content: highlightedContent, enabled: false, legacyStatic });
+    await f.render();
+    assert.equal(f.imports(), 1);
+    assert.equal(f.frames(), 0);
+    assert.equal(f.container.querySelector("#title-input"), null);
+    await f.resolve();
+    assert.equal(f.mounts(), 1);
+    assert.match(f.container.querySelector("mark").textContent, /highlight/);
+    await f.unmount();
+  }
 });
