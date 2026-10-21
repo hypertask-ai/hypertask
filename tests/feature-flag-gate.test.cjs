@@ -1961,12 +1961,27 @@ test("first placement of an existing local component needs a flag", async (t) =>
 test("added-file default policy preserves existing flags and requires explicit Everyone only for new eligible definitions", async (t) => {
   const risk = 'releaseRisk: { risk: "new", reason: "Fixture" }';
   const sensitive = 'releaseRisk: { risk: "new", reason: "Fixture", highRisk: "access" }';
+  const ownerRequest = 'ownerRequest: { quote: "Keep this Owner only for now.", ticketUrl: "https://app.hypertask.ai/detail/project-15/2" }';
+  const requested = `releaseRisk: { risk: "new", reason: "Fixture", ${ownerRequest} }`;
   for (const [extra, pass, message] of [
     [risk, false, /new flag htpr-2-new must set defaultMode: "EVERYONE"/],
     [`kind: "feature", ${risk}`, false],
     [`kind: "improvement", ${risk}`, false],
     [`kind: "feature", defaultMode: "EVERYONE", ${risk}`, true],
     [`kind: "improvement", defaultMode: "EVERYONE", ${risk}`, true],
+    [`defaultMode: "OWNER_ONLY", ${requested}`, true],
+    [`kind: "feature", defaultMode: "OWNER_ONLY", ${requested}`, true],
+    [`kind: "improvement", defaultMode: "OWNER_ONLY", ${requested}`, true],
+    [`defaultMode: "OWNER_ONLY", ${risk}`, false, /OWNER_ONLY.*releaseRisk\.ownerRequest.*quote.*ticketUrl/],
+    [`defaultMode: "OWNER_ONLY", ${requested.replace('"Keep this Owner only for now."', '""')}`, false, /ownerRequest\.quote must be a non-blank string literal/],
+    [`defaultMode: "OWNER_ONLY", ${requested.replace('"Keep this Owner only for now."', '"   "')}`, false, /ownerRequest\.quote must be a non-blank string literal/],
+    [`defaultMode: "OWNER_ONLY", ${requested.replace("app.hypertask.ai", "hypertask.ai")}`, false, /ownerRequest\.ticketUrl must be a string literal like https:\/\/app\.hypertask\.ai\/detail\/project-15\/123/],
+    [`defaultMode: "OWNER_AND_QA", ${requested}`, false, /must set defaultMode: "EVERYONE"/],
+    [`defaultMode: "OFF", ${requested}`, false, /must set defaultMode: "EVERYONE"/],
+    [requested, false, /must set defaultMode: "EVERYONE"/],
+    [`defaultMode: "EVERYONE", ${requested}`, true],
+    [`defaultMode: "OWNER_AND_QA", releaseRisk: { risk: "new", reason: "Fixture", highRisk: "access", ${ownerRequest} }`, true],
+    [`defaultMode: "EVERYONE", releaseRisk: { risk: "new", reason: "Fixture", highRisk: "access", ${ownerRequest} }`, false, /releaseRisk\.highRisk may not default to Everyone/],
     [`kind: "bugfix", ${risk}`, true],
     [`kind: "feature", defaultMode: "OWNER_AND_QA", ${sensitive}`, true],
     [`kind: "feature", defaultMode: "EVERYONE", ${sensitive}`, false],
