@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getSessionUser } from "@/lib/auth/getSessionUser";
 import { isFeatureEnabled } from "@/lib/flags";
-import { HTPR_7511_SIGNUP_STRAIGHT_TO_BOARD_FLAG } from "@/lib/flags/definitions/htpr-7511-signup-straight-to-board";
+import { HTPR_7549_FIRST_TASK_POINTER_FLAG } from "@/lib/flags/definitions/htpr-7549-first-task-pointer";
 import prisma from "@/lib/prisma";
 
 export async function GET(request: NextRequest) {
@@ -13,7 +13,7 @@ export async function GET(request: NextRequest) {
   if (!Number.isSafeInteger(projectId) || projectId <= 0) {
     return NextResponse.json({ eligible: false }, { status: 400 });
   }
-  if (!(await isFeatureEnabled(HTPR_7511_SIGNUP_STRAIGHT_TO_BOARD_FLAG, session.userId))) {
+  if (!(await isFeatureEnabled(HTPR_7549_FIRST_TASK_POINTER_FLAG, session.userId))) {
     return NextResponse.json({ eligible: false });
   }
   const project = await prisma.project.findFirst({

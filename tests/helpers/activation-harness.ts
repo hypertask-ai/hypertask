@@ -46,7 +46,12 @@ export function activationHarness() {
       count: async ({ where }: any) => [...projects.values()].filter((row) => row.ownerId === where.ownerId).length,
       create: async ({ data }: any) => { const project = { ...data, id: 20 + projects.size, owner: users.get(data.ownerId), team: { title: "Team" } }; projects.set(project.id, project); return project; },
       update: async ({ where, data }: any) => Object.assign(projects.get(where.id), data),
-      updateMany: async ({ where, data }: any) => { for (const id of where.id.in) Object.assign(projects.get(id), data); return { count: where.id.in.length }; },
+      updateMany: async ({ where, data }: any) => {
+        const ids = typeof where.id === "number" ? [where.id] : where.id.in;
+        const rows = ids.map((id: number) => projects.get(id)).filter((row: any) => row && matches(row, { ...where, id: row.id }));
+        for (const row of rows) Object.assign(row, data);
+        return { count: rows.length };
+      },
     },
     task: {
       findUnique: async ({ where }: any) => ({ ...tasks.get(where.id) }),

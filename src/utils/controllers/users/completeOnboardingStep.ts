@@ -11,7 +11,7 @@ import { createProjectWithStableName } from "../projects/createProjectWithStable
 import { createTaskCore } from "../tasks/createTaskCore";
 import assigneesAssign from "../assignees/assign";
 import { stripeCustomerName } from "@/lib/stripeCustomerName";
-import { HTPR_7033_CLI_INSTALL_COMMAND_FLAG, HTPR_7511_SIGNUP_STRAIGHT_TO_BOARD_FLAG, isFeatureEnabled } from "@/lib/flags";
+import { HTPR_7033_CLI_INSTALL_COMMAND_FLAG, HTPR_7549_FIRST_TASK_POINTER_FLAG, isFeatureEnabled } from "@/lib/flags";
 import { CLI_INSTALL_COMMAND, CLI_LOGIN_COMMAND, CLI_WINDOWS_NOTE } from "@/lib/onboarding/installCommands";
 
 type CompleteOnboardingFirstStepOptions = {
@@ -270,7 +270,7 @@ export const createOnboardingSampleBoardProject = async ({
 
   if (firstSection) {
     try {
-      const firstTaskPointerEnabled = await isFeatureEnabled(HTPR_7511_SIGNUP_STRAIGHT_TO_BOARD_FLAG, exist_user.id);
+      const firstTaskPointerEnabled = await isFeatureEnabled(HTPR_7549_FIRST_TASK_POINTER_FLAG, exist_user.id);
       const connectAiTask = firstTaskPointerEnabled ? CONNECT_YOUR_AI_TASK : CONNECT_AI_TASK(
         await isFeatureEnabled(HTPR_7033_CLI_INSTALL_COMMAND_FLAG, exist_user.id),
       );

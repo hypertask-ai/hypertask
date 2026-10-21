@@ -5,9 +5,9 @@ const path = require("node:path");
 const React = require("react");
 const { JSDOM } = require("jsdom");
 const { load } = require("./helpers/agent-connection.cjs");
-const key = "htpr-7511-signup-straight-to-board";
+const key = "htpr-7549-first-task-pointer";
 const composeKey = "htpr-6929-compose-task-writer";
-const flagModule = load("src/lib/flags/definitions/htpr-7511-signup-straight-to-board.ts");
+const flagModule = load("src/lib/flags/definitions/htpr-7549-first-task-pointer.ts");
 const { CommandMode } = load("src/models/enums.ts");
 const store = { showCommandsAtom: "commands", activeSectionAtom: "section", activeSectionIdAtom: "sectionId" };
 const keyboard = load("src/lib/utils/keyboardShortcuts.ts", {
@@ -22,13 +22,16 @@ async function withPointer(fn) {
   const { createRoot } = require("react-dom/client");
   const container = dom.window.document.getElementById("root");
   const root = createRoot(container);
-  const state = { enabled: true, compose: true, apple: false, fetching: false, data: { eligible: true, starterTaskId: 71, sectionId: 10 } };
+  const state = { enabled: true, compose: true, apple: false, pending: false, fetching: false, data: { eligible: true, starterTaskId: 71, sectionId: 10 } };
   const actions = [];
+  const cacheWrites = [];
+  const cancellations = [];
+  const queryClient = { cancelQueries: async (options) => { cancellations.push(options); }, setQueryData: (key, data) => { cacheWrites.push([key, data]); state.data = data; } };
   let query;
   const Pointer = load("src/components/PageComponents/Kanban/KanbanSectionComponents/FirstTaskPointer.tsx", {
-    "@tanstack/react-query": { useQuery: (options) => { query = options; return { data: state.data, isFetching: state.fetching }; } },
+    "@tanstack/react-query": { useQuery: (options) => { query = options; return { data: state.data, isPending: state.pending, isFetching: state.fetching }; }, useQueryClient: () => queryClient },
     "@/hooks/useFlag": { useFlag: (flag) => flag === key ? state.enabled : flag === composeKey ? state.compose : assert.fail(`Unexpected flag ${flag}`) },
-    "@/lib/flags/definitions/htpr-7511-signup-straight-to-board": flagModule,
+    "@/lib/flags/definitions/htpr-7549-first-task-pointer": flagModule,
     "@/lib/flags/keys": { HTPR_6929_COMPOSE_TASK_WRITER_FLAG: composeKey },
     "@/lib/contexts/deviceContext": { useDeviceContext: () => state.apple },
     "@/lib/state": { useSetRecoilState: (atom) => (value) => actions.push([atom, value]) },
@@ -36,12 +39,11 @@ async function withPointer(fn) {
     "@/models/enums": { CommandMode },
     "@/store": store,
     "@/components/Common/kbd": { __esModule: true, default: ({ content }) => React.createElement("kbd", null, content) },
-    "@/components/Common/Tooltip": { __esModule: true, default: () => null },
   });
   const render = async (overrides = {}) => React.act(async () => root.render(React.createElement(Pointer, {
-    projectId: 7, sectionId: 10, sectionIndex: 2, taskIds: [71], ready: true, writable: true, filtered: false, kanban: true, ...overrides,
+    projectId: 7, sectionId: 10, sectionIndex: 2, taskIds: [71], ready: true, writable: true, filtered: false, ...overrides,
   })));
-  try { await fn({ dom, container, render, state, actions, getQuery: () => query }); }
+  try { await fn({ dom, container, render, state, actions, cacheWrites, cancellations, getQuery: () => query }); }
   finally {
     await React.act(async () => root.unmount());
     Object.assign(global, previous);
@@ -55,6 +57,8 @@ test("starter-only board points to the original column even after reorder and op
     const button = container.querySelector("button");
     assert.match(button.textContent, /Write your first task here/);
     assert.equal(button.tabIndex, 0);
+    for (const token of ["bg-shadcn-primary", "text-primary-foreground", "focus-visible:bg-hover-active", "focus-visible:outline-none"]) assert.ok(button.classList.contains(token));
+    assert.doesNotMatch(button.className, /(?:^| )border(?: |$)|outline-white|ring-white/);
     assert.equal(button.getAttribute("aria-keyshortcuts"), "Control+J");
     assert.deepEqual([...button.querySelectorAll("kbd")].map((node) => node.textContent), ["CTRL", "J"]);
     await React.act(async () => button.dispatchEvent(new dom.window.MouseEvent("click", { bubbles: true })));
@@ -66,23 +70,41 @@ test("starter-only board points to the original column even after reorder and op
   });
 });
 
-test("first real task from local success or realtime hides immediately; server milestone prevents reshow after removal", async () => {
-  await withPointer(async ({ container, render, state }) => {
+test("query stays board-keyed across task changes and background refetches do not flicker", async () => {
+  await withPointer(async ({ container, render, state, getQuery, cacheWrites }) => {
     await render();
-    assert.ok(container.querySelector("button"));
+    assert.deepEqual(getQuery().queryKey, ["first-task-pointer", 7]);
+    assert.equal(getQuery().enabled, true);
+    state.fetching = true;
     await render({ taskIds: [] });
     assert.ok(container.querySelector("button"));
-    await render({ taskIds: [71, 72] });
-    assert.equal(container.querySelector("button"), null);
-    state.data = { eligible: false };
-    await render();
-    assert.equal(container.querySelector("button"), null);
+    assert.deepEqual(getQuery().queryKey, ["first-task-pointer", 7]);
+    assert.deepEqual(cacheWrites, []);
+    await render({ projectId: 8 });
+    assert.deepEqual(getQuery().queryKey, ["first-task-pointer", 8]);
   });
 });
 
-test("flag-off normal user is still refused, as are read-only, table, filtered and loading boards", async () => {
+for (const taskIds of [[71, 72], null, [72]]) {
+  test(`real task hides immediately and clears only this board's cached eligibility (${JSON.stringify(taskIds)})`, async () => {
+    await withPointer(async ({ container, render, getQuery, cacheWrites, cancellations }) => {
+      await render();
+      assert.ok(container.querySelector("button"));
+      await render({ taskIds });
+      assert.equal(container.querySelector("button"), null);
+      assert.equal(getQuery().enabled, taskIds !== null && taskIds.length <= 1);
+      assert.deepEqual(getQuery().queryKey, ["first-task-pointer", 7]);
+      assert.deepEqual(cacheWrites, [[["first-task-pointer", 7], { eligible: false, starterTaskId: 71, sectionId: 10 }]]);
+      assert.deepEqual(cancellations, [{ queryKey: ["first-task-pointer", 7], exact: true }]);
+      await render();
+      assert.equal(container.querySelector("button"), null, "deletion cannot revive cached eligibility");
+    });
+  });
+}
+
+test("flag-off normal user is still refused, as are read-only, filtered and loading boards", async () => {
   await withPointer(async ({ container, render, state, getQuery }) => {
-    for (const props of [{ writable: false }, { kanban: false }, { filtered: true }, { ready: false }]) {
+    for (const props of [{ writable: false }, { filtered: true }, { ready: false }]) {
       await render(props);
       assert.equal(container.querySelector("button"), null);
       assert.equal(getQuery().enabled, false);
@@ -100,7 +122,7 @@ test("flag-off normal user is still refused, as are read-only, table, filtered a
       assert.equal(container.querySelector("button"), null);
     }
     state.data = { eligible: true, starterTaskId: 71, sectionId: 10 };
-    state.fetching = true;
+    state.pending = true;
     await render();
     assert.equal(container.querySelector("button"), null);
   });
@@ -113,7 +135,7 @@ function routeHarness(overrides = {}) {
     "next/server": { NextResponse: { json: (body, options) => ({ body, status: options?.status ?? 200 }) } },
     "@/lib/auth/getSessionUser": { getSessionUser: async () => state.userId ? { userId: state.userId, agentId: state.agentId } : null },
     "@/lib/flags": { isFeatureEnabled: async (flag, id) => { assert.equal(flag, key); assert.equal(id, state.userId); return state.enabled; } },
-    "@/lib/flags/definitions/htpr-7511-signup-straight-to-board": flagModule,
+    "@/lib/flags/definitions/htpr-7549-first-task-pointer": flagModule,
     "@/lib/prisma": { __esModule: true, default: {
       project: { findFirst: async (args) => { calls.push(args); assert.deepEqual(args.where, { id: 7, ownerId: state.userId, seeded: true, status: "Normal" }); return state.project; } },
       task: {
@@ -154,7 +176,7 @@ test("shared human/agent task transaction records the irreversible milestone onl
   const db = { $transaction: async (callback) => {
     let staged = completed;
     const result = await callback({ project: { updateMany: async ({ where, data }) => {
-      assert.deepEqual(where, { id: 7, firstTaskPointerTaskId: { not: null }, firstRealTaskCreatedAt: null });
+      assert.deepEqual(where, { id: 7, firstTaskPointerTaskId: 71, firstRealTaskCreatedAt: null });
       assert.ok(data.firstRealTaskCreatedAt instanceof Date);
       staged = true;
     } } });
@@ -164,13 +186,26 @@ test("shared human/agent task transaction records the irreversible milestone onl
   for (const agentId of [null, "agent"]) {
     completed = false;
     fail = true;
-    const create = () => createTaskWithBoardWebhookOutbox(db, { userId: 6, agentId }, async () => ({ taskId: 72, result: {}, webhookTask: { projectId: 7 } }), "web");
+    const create = () => createTaskWithBoardWebhookOutbox(db, { userId: 6, agentId }, async () => ({ taskId: 72, firstTaskPointerTaskId: 71, result: {}, webhookTask: { projectId: 7 } }), "web");
     await assert.rejects(create(), /rollback/);
     assert.equal(completed, false);
     fail = false;
     await create();
     assert.equal(completed, true);
   }
+});
+
+test("Homepage skips task-ID work above one task and deduplicates the starter across board stores", () => {
+  const homepage = read("src/components/PageComponents/Kanban/KanbanHomepageComponents/Homepage.tsx");
+  const body = /const pointerTaskIds = useMemo\(\(\) => \{([\s\S]*?)\n  \}, \[/.exec(homepage)?.[1];
+  assert.ok(body);
+  const collect = new Function("firstTaskPointerEnabled", "_currentProject", "sections", body);
+  const unreadableTask = { get id() { assert.fail("a multi-task board must not read task IDs"); } };
+  assert.equal(collect(true, { tasks: [unreadableTask, unreadableTask] }, []), null);
+  assert.equal(collect(true, { tasks: [] }, [{ items: [unreadableTask, unreadableTask] }]), null);
+  assert.equal(collect(false, { get tasks() { assert.fail("OFF must not inspect tasks"); } }, []), null);
+  assert.deepEqual(collect(true, { tasks: [{ id: 71 }] }, [{ items: [{ id: 71 }] }]), [71]);
+  assert.equal(collect(true, { tasks: [] }, [{ items: [{ id: 71 }] }, { items: [{ id: 72 }] }]), null);
 });
 
 test("integration keeps the existing plus, shares Ctrl+J action, and adds no motion or synthetic keys", () => {
@@ -184,5 +219,10 @@ test("integration keeps the existing plus, shares Ctrl+J action, and adds no mot
   const homepage = read("src/components/PageComponents/Kanban/KanbanHomepageComponents/Homepage.tsx");
   assert.match(homepage, /getActiveFiltersFromProject\(_currentProject\).addedFilters/);
   assert.match(homepage, /ready=\{tasksHydrated && secondaryStartupEnabled\}/);
+  const pointerIds = homepage.slice(homepage.indexOf("const pointerTaskIds = useMemo"), homepage.indexOf("const pointerFiltered ="));
+  assert.ok(pointerIds.indexOf("_currentProject.tasks?.length") < pointerIds.indexOf("new Set"));
+  assert.match(pointerIds, /if \(ids.size > 1\) return null/);
+  assert.doesNotMatch(pointerIds, /flatMap|\.sort\(/);
+  assert.doesNotMatch(pointer, /Tooltip|kanban|isFetching/);
   assert.match(read("src/app/[...boardURL]/LandingPage.tsx"), /boardLayout === "table"[\s\S]*?<TableView[\s\S]*?: \([\s\S]*?<HomePage/);
 });

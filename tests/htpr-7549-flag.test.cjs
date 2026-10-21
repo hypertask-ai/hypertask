@@ -1,8 +1,8 @@
 const test = require("node:test");
 const assert = require("node:assert/strict");
 const { load } = require("./helpers/agent-connection.cjs");
-const definition = load("src/lib/flags/definitions/htpr-7511-signup-straight-to-board.ts");
-const key = "htpr-7511-signup-straight-to-board";
+const definition = load("src/lib/flags/definitions/htpr-7549-first-task-pointer.ts");
+const key = "htpr-7549-first-task-pointer";
 
 const registry = load("src/lib/flags.ts", {
   "@/lib/prisma": { default: {} },
@@ -10,15 +10,14 @@ const registry = load("src/lib/flags.ts", {
   "@/lib/flags/keys": { HTPR_7042_NEON_WORK_AVOIDANCE_FLAG: "htpr-7042-neon-work-avoidance" },
 });
 
-test("the single discoverable feature defaults to Owner only with the approved access risk", () => {
-  assert.equal(definition.HTPR_7511_SIGNUP_STRAIGHT_TO_BOARD_FLAG, key);
+test("the ticket-named UI feature keeps the requested Owner-only preview without claiming high risk", () => {
+  assert.equal(definition.HTPR_7549_FIRST_TASK_POINTER_FLAG, key);
   assert.equal(definition.default.key, key);
   assert.equal(definition.default.kind, "feature");
   assert.equal(registry.defaultFeatureFlagMode(key), "OWNER_ONLY");
   assert.deepEqual(definition.default.releaseRisk, {
     risk: "new",
-    highRisk: "access",
-    reason: "Changes signup/session trust and customer email; also introduces a seven-day paid-plan trial entry point.",
+    reason: "Adds a first-task compose pointer and updates the seeded board's AI connection instructions; no signup, access, billing or email changes.",
   });
 });
 

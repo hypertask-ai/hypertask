@@ -5,7 +5,7 @@ const path = require("node:path");
 const { JSDOM } = require("jsdom");
 const { load } = require("./helpers/agent-connection.cjs");
 const legacy = require("./fixtures/cli-install/legacy.json");
-const key = "htpr-7511-signup-straight-to-board";
+const key = "htpr-7549-first-task-pointer";
 const cliKey = "htpr-7033-cli-install-command";
 const commands = load("src/lib/onboarding/installCommands.ts");
 
@@ -34,7 +34,7 @@ async function seed(enabled, cliEnabled) {
     "@/lib/stripeCustomerName": { stripeCustomerName() {} },
     "@/lib/onboarding/installCommands": commands,
     "@/lib/flags": {
-      HTPR_7511_SIGNUP_STRAIGHT_TO_BOARD_FLAG: key,
+      HTPR_7549_FIRST_TASK_POINTER_FLAG: key,
       HTPR_7033_CLI_INSTALL_COMMAND_FLAG: cliKey,
       isFeatureEnabled: async (flag, userId) => {
         assert.equal(userId, 2343);

@@ -34,6 +34,7 @@ interface CreatedTaskResult<T> {
   taskId: number
   result: T
   webhookTask: WebhookTaskSnapshot
+  firstTaskPointerTaskId: number | null
 }
 
 export async function createTaskWithBoardWebhookOutbox<T>(
@@ -53,10 +54,12 @@ export async function createTaskWithBoardWebhookOutbox<T>(
       actor.userId,
       actor.agentId
     )
-    await tx.project.updateMany({
-      where: { id: created.webhookTask.projectId, firstTaskPointerTaskId: { not: null }, firstRealTaskCreatedAt: null },
-      data: { firstRealTaskCreatedAt: new Date() },
-    })
+    if (created.firstTaskPointerTaskId) {
+      await tx.project.updateMany({
+        where: { id: created.webhookTask.projectId, firstTaskPointerTaskId: created.firstTaskPointerTaskId, firstRealTaskCreatedAt: null },
+        data: { firstRealTaskCreatedAt: new Date() },
+      })
+    }
     const analyticsKey = await enqueueTaskCreated(tx, created.taskId, { userId: actor.userId, agentId: actor.agentId ?? analyticsAgentId }, channel)
     return { analyticsKey, result: created.result, boardWebhookDeliveryIds }
   })

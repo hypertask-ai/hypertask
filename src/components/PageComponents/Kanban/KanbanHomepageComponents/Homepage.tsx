@@ -1,7 +1,7 @@
 import { useFlag } from "@/hooks/useFlag";
 import { updateSection as writeSection } from "@/lib/api/typedClient";
 import { HTPR_6979_TYPED_WRITES_FLAG } from "@/lib/flags/keys";
-import { HTPR_7511_SIGNUP_STRAIGHT_TO_BOARD_FLAG } from "@/lib/flags/definitions/htpr-7511-signup-straight-to-board";
+import { HTPR_7549_FIRST_TASK_POINTER_FLAG } from "@/lib/flags/definitions/htpr-7549-first-task-pointer";
 
 import React, { useCallback, useContext, useMemo, useRef, useState } from "react";
 import { useRecoilValue } from "@/lib/state";
@@ -792,11 +792,19 @@ const HomePage = ({
     ? detectEmptyBoardState(_sections, filteredSections, _currentProject)
     : null;
 
-  const firstTaskPointerEnabled = useFlag(HTPR_7511_SIGNUP_STRAIGHT_TO_BOARD_FLAG);
-  const pointerTaskIds = useMemo(() => firstTaskPointerEnabled ? Array.from(new Set([
-    ...(_currentProject.tasks ?? []).map((task) => task.id),
-    ...sections.flatMap((section) => (section.items ?? []).map((task) => task.id)),
-  ])).sort((a, b) => a - b) : [], [firstTaskPointerEnabled, _currentProject.tasks, sections]);
+  const firstTaskPointerEnabled = useFlag(HTPR_7549_FIRST_TASK_POINTER_FLAG);
+  const pointerTaskIds = useMemo(() => {
+    if (!firstTaskPointerEnabled || (_currentProject.tasks?.length ?? 0) > 1) return null;
+    const ids = new Set((_currentProject.tasks ?? []).map((task) => task.id));
+    for (const section of sections) {
+      if ((section.items?.length ?? 0) > 1) return null;
+      for (const task of section.items ?? []) {
+        ids.add(task.id);
+        if (ids.size > 1) return null;
+      }
+    }
+    return Array.from(ids);
+  }, [firstTaskPointerEnabled, _currentProject.tasks, sections]);
   const pointerFiltered = !firstTaskPointerEnabled || Boolean(
     getActiveFiltersFromProject(_currentProject).addedFilters?.length ||
     (searchProjectId === _currentProject.id && searchKeyword.trim()) ||
@@ -844,7 +852,6 @@ const HomePage = ({
                     ready={tasksHydrated && secondaryStartupEnabled}
                     writable={Number(_currentProject.ownerId) === currentUser.id}
                     filtered={pointerFiltered || hiddenSectionIndexes.has(index)}
-                    kanban
                   />
                 ) : null}
               />)}

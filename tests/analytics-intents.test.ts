@@ -52,7 +52,7 @@ function harness() {
   const saveTask = (create?: (tx: any) => Promise<any>) => taskEvents().createTaskWithBoardWebhookOutbox(h.prisma,
     { userId: 123, agentId: null }, create ?? (async () => {
       h.tasks.set(41, { id: 41, projectId: 15, createdAt: new Date("2026-10-17T12:00:00Z") });
-      return { taskId: 41, result: { id: 41 }, webhookTask: { id: 41, projectId: 15, section: "Doing", sectionId: 1, status: "Normal" } };
+      return { taskId: 41, firstTaskPointerTaskId: h.projects.get(15).firstTaskPointerTaskId, result: { id: 41 }, webhookTask: { id: 41, projectId: 15, section: "Doing", sectionId: 1, status: "Normal" } };
     }), "web");
   return { ...h, intents, phases, kicks, saveTask, setInsertFailure: (value: boolean) => { failInsert = value; } };
 }
@@ -90,6 +90,20 @@ test("intent insert failure rolls the task back rather than leaving a committed 
   assert.equal(h.tasks.has(41), false);
   assert.equal(h.intentRows.length, 0);
   assert.equal(h.kicks.length, 0);
+});
+
+test("enrolled-board milestone and analytics intent commit together and roll back together", async () => {
+  const h = harness();
+  Object.assign(h.projects.get(15), { firstTaskPointerTaskId: 9, firstRealTaskCreatedAt: null });
+  h.setInsertFailure(true);
+  await assert.rejects(h.saveTask(), /intent unavailable/);
+  assert.equal(h.projects.get(15).firstRealTaskCreatedAt, null);
+  assert.equal(h.tasks.has(41), false);
+  h.setInsertFailure(false);
+  await h.saveTask();
+  assert.ok(h.projects.get(15).firstRealTaskCreatedAt instanceof Date);
+  assert.equal(h.intentRows.length, 1);
+  assert.deepEqual(h.kicks, [h.intentRows[0].key]);
 });
 
 for (const failure of ["flag", "task lookup", "occurrence transaction"]) {
