@@ -17,6 +17,8 @@ import {
   focusedCardIndexInColumn,
 } from "@/utils/helperFunctions/Kanban/columnFocus";
 import { scrollBoardColumnIntoView } from "@/utils/helperFunctions/Views/scrollBoardColumnIntoView";
+import { useFlag } from "@/hooks/useFlag";
+import { HTPR_7537_FIRST_COLUMN_PADDING_FLAG } from "@/lib/flags/definitions/htpr-7537-first-column-padding";
 import toast from "react-hot-toast";
 import globalAPIHandlers from "@/utils/api/global";
 import generateRanking from "@/utils/generateRank";
@@ -49,6 +51,7 @@ export function useUniversalMovement(props: TProps) {
   const store = useStore();
   const setActiveSection = useSetRecoilState(activeSectionAtom);
   const currentProject = useRecoilValue(currentProjectAtom);
+  const firstColumnPadding = useFlag(HTPR_7537_FIRST_COLUMN_PADDING_FLAG);
   const getActiveSection = () => store.get(activeSectionAtom);
   const getActiveItem = () => store.get(activeItemAtom);
 
@@ -370,7 +373,9 @@ export function useUniversalMovement(props: TProps) {
     if (props.type === "Kanban") {
       if (ItemId) refocus(ItemId);
       const sectionId = filteredSections[index]?.sectionId;
-      if (sectionId != null) scrollBoardColumnIntoView(sectionId);
+      if (sectionId != null) {
+        scrollBoardColumnIntoView(sectionId, undefined, firstColumnPadding && index === 0);
+      }
     } else if (ItemId) {
       refocus(ItemId);
       const element = document.getElementById(`task-${ItemId}`);
