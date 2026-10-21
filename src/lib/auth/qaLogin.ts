@@ -1,7 +1,7 @@
 import { scrypt, timingSafeEqual } from "node:crypto";
 import { promisify } from "node:util";
 
-import { FEATURE_FLAG_QA_USER_ID } from "@/lib/auth/ownerOrQa";
+import { FEATURE_FLAG_QA_USER_ID } from "@/lib/flags";
 
 export const QA_LOGIN_USER_ID = FEATURE_FLAG_QA_USER_ID;
 export const QA_LOGIN_PASSWORD_MIN_BYTES = 32;

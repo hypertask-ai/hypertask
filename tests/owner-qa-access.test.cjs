@@ -24,7 +24,6 @@ function load(relativePath, aliases = {}) {
 }
 
 const ids = load("src/lib/auth/ownerOrQaIds.ts");
-const identities = load("src/lib/auth/ownerOrQa.ts", { "@/lib/auth/ownerOrQaIds": ids });
 const users = [
   { id: 6, email: "valentin.yeo@gmail.com" },
   { id: 985, email: "valentin@hypertask.ai" },
@@ -49,7 +48,6 @@ const flags = load("src/lib/flags.ts", {
   "@/lib/prisma": db,
   "@/lib/flags/definitions": { FEATURE_FLAG_DEFINITIONS: [] },
   "@/lib/flags/keys": {},
-  "@/lib/auth/ownerOrQa": identities,
 });
 const aliases = {
   "@/lib/prisma": db,
@@ -124,7 +122,7 @@ test.beforeEach(() => {
 test("permanent and OWNER_AND_QA checks still allow the exact owner and QA identities", async () => {
   for (const user of users.slice(0, 2)) {
     storedUsers = [{ ...user, email: ` ${user.email.toUpperCase()} ` }];
-    assert.equal(identities.isOwnerOrQaUser(storedUsers[0]), true);
+    assert.equal(ids.hasOwnerOrQaUserId(user), true);
     assert.equal(await flags.isOwnerOrQaUserId(user.id), true);
     assert.equal(await flags.isFeatureEnabled("test-stored-mode", user.id), true);
   }
@@ -133,14 +131,13 @@ test("permanent and OWNER_AND_QA checks still allow the exact owner and QA ident
 test("permanent and OWNER_AND_QA checks still refuse customers, mismatched IDs/emails and absent users", async () => {
   for (const user of [users[2], { ...users[0], email: users[1].email }, { ...users[1], email: users[0].email }, { id: 2343, email: users[0].email }]) {
     storedUsers = [user];
-    assert.equal(identities.isOwnerOrQaUser(user), false);
     assert.equal(await flags.isOwnerOrQaUserId(user.id), false);
     assert.equal(await flags.isFeatureEnabled("test-stored-mode", user.id), false);
   }
   storedUsers = [];
   assert.equal(await flags.isOwnerOrQaUserId(6), false);
-  assert.equal(identities.isOwnerOrQaUser(null), false);
-  assert.equal(identities.isOwnerOrQaUser({ id: 6 }), false);
+  assert.equal(ids.hasOwnerOrQaUserId(null), false);
+  assert.equal(ids.hasOwnerOrQaUserId(users[2]), false);
 });
 
 for (const [name, route] of [["owned", owned], ["team", team]]) {
@@ -244,9 +241,11 @@ test("QA login never issues a session for a different database account", async (
 });
 
 test("the browser panel decides by user id only, so owner and QA emails stay out of client code", () => {
+  assert.equal(ids.FEATURE_FLAG_OWNER_USER_ID, flags.FEATURE_FLAG_OWNER_USER_ID);
+  assert.equal(ids.FEATURE_FLAG_QA_USER_ID, flags.FEATURE_FLAG_QA_USER_ID);
   for (const file of ["src/app/agents/McpClientEvalPanel.tsx", "src/lib/auth/ownerOrQaIds.ts"]) {
     const source = fs.readFileSync(path.join(root, file), "utf8");
-    assert.doesNotMatch(source, /@lib\/auth\/ownerOrQa"/, `${file} must not import the email allowlist`);
+    assert.doesNotMatch(source, /@\/lib\/flags"/, `${file} must not import the server email allowlist`);
     assert.doesNotMatch(source, /[\w.+-]+@[\w-]+\.[a-z]{2,}/i, `${file} must not contain an email address`);
   }
 });

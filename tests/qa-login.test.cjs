@@ -34,7 +34,7 @@ function loadQaLogin(env = {}) {
   else process.env.QA_LOGIN_PASSWORD = env.QA_LOGIN_PASSWORD;
 
   return loadTypescriptModule("src/lib/auth/qaLogin.ts", {
-    "@/lib/auth/ownerOrQa": { FEATURE_FLAG_QA_USER_ID: 985 },
+    "@/lib/flags": { FEATURE_FLAG_QA_USER_ID: 985 },
   });
 }
 

@@ -13,15 +13,6 @@ import {
   HTPR_7042_NEON_WORK_AVOIDANCE_FLAG,
 } from "@/lib/flags/keys";
 
-import {
-  FEATURE_FLAG_OWNER_USER_ID,
-  FEATURE_FLAG_OWNER,
-  FEATURE_FLAG_QA_USER_ID,
-  FEATURE_FLAG_QA_USER,
-  isOwnerOrQaUser,
-} from "@/lib/auth/ownerOrQa";
-export { FEATURE_FLAG_OWNER_USER_ID, FEATURE_FLAG_QA_USER_ID, FEATURE_FLAG_QA_USER } from "@/lib/auth/ownerOrQa";
-
 export * from "@/lib/flags/keys";
 export type { FeatureFlagKind } from "@/lib/flags/definitions";
 export function withFeatureFlagSnapshot<T>(run: () => T): T {
@@ -35,7 +26,17 @@ async function withFlagModeInvalidation<T>(write: () => Promise<T>): Promise<T> 
   return withFlagModeInvalidation(write);
 }
 
+export const FEATURE_FLAG_OWNER_USER_ID = 6;
 export const FEATURE_FLAG_SWEEP_AGENT_ID = "85b985ac-afe8-41a3-a1ac-d9549a9310c7";
+const FEATURE_FLAG_OWNER = {
+  userId: FEATURE_FLAG_OWNER_USER_ID,
+  email: "valentin.yeo@gmail.com",
+} as const;
+export const FEATURE_FLAG_QA_USER_ID = 985;
+export const FEATURE_FLAG_QA_USER = {
+  userId: FEATURE_FLAG_QA_USER_ID,
+  email: "valentin@hypertask.ai",
+} as const;
 
 export const RETIRED_FEATURE_FLAG_KEYS = new Set([
   "htpr-5913-consistent-comment-shortcuts",
@@ -145,11 +146,9 @@ export const isFeatureFlagOwnerUserId = isFeatureFlagOwnerUser;
 
 export async function isOwnerOrQaUserId(
   userId: number,
-  db: Pick<FeatureFlagDatabase, "user"> = prisma,
+  db: FeatureFlagDatabase = prisma,
 ): Promise<boolean> {
-  if (userId !== FEATURE_FLAG_OWNER_USER_ID && userId !== FEATURE_FLAG_QA_USER_ID) return false;
-  const user = await db.user.findUnique({ where: { id: userId }, select: { email: true } });
-  return isOwnerOrQaUser(user ? { id: userId, email: user.email } : null);
+  return (await isFeatureFlagOwnerUser(userId, db)) || (await isFeatureFlagQaUser(userId, db));
 }
 
 export async function isFeatureFlagOwner(headers: Headers): Promise<boolean> {
