@@ -32,7 +32,7 @@ const EditCommentButton = compile(`${base}CommentContainer/CommentOptions/EditCo
 const globalStates = fs.readFileSync(path.join(root, "src/hooks/Task Detail/useTaskDetailGlobalStates.ts"), "utf8");
 const descriptionAction = globalStates.slice(
   globalStates.indexOf("  const editDescriptionHandler ="),
-  globalStates.indexOf("  // ------------------ [ENTER]"),
+  globalStates.indexOf("const replyToCommentHandler = (currentIndex"),
 );
 assert.match(descriptionAction, /setEditMode\(editModeToSelect\)/);
 const { createDescriptionEditAction } = compile("description-action.ts", {}, `

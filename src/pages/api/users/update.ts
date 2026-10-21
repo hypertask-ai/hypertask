@@ -9,9 +9,6 @@ const handler: NextApiHandler = async (
   res: NextApiResponse
 ) => {
   try {
-    // HTPR-4191: identity comes from the signed session, never the body.
-    // Unauthenticated, this route minted fully verified users (isVerified
-    // defaults to true in update_or_create_user) for any email a caller named.
     const session = verifySession(req.cookies[SESSION_COOKIE]);
     if (!session) {
       return res
@@ -19,7 +16,6 @@ const handler: NextApiHandler = async (
         .json({ error: "Unauthorized", code: "SESSION_REQUIRED" });
     }
 
-    // session.email is optional on older sessions; the DB row is the identity.
     const sessionUser = await prisma.user.findUnique({
       where: { id: session.id },
       select: { email: true },

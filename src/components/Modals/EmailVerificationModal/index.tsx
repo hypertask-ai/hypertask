@@ -19,7 +19,6 @@ const EmailVerificationModal: React.FC<IEmailVerificationModal> = ({
   const currentUser = useRecoilValue(currentUserAtom);
   const [email, setEmail] = useState<string>('');
 
-  // Use unified verification status hook with polling enabled
   const { status } = useEmailVerificationStatus({
     userId: currentUser?.id,
     enablePolling: true,
@@ -29,7 +28,6 @@ const EmailVerificationModal: React.FC<IEmailVerificationModal> = ({
 
   const { isResending, errorMessage, handleResend } = useResendVerificationEmail();
 
-  // Set email from current user
   useEffect(() => {
     if (currentUser?.email) {
       setEmail(currentUser.email);
@@ -54,7 +52,6 @@ const EmailVerificationModal: React.FC<IEmailVerificationModal> = ({
     >
       <ModalHeader className="rounded-none border-b-0 h-[60px] pl-[24px] text-subheading font-bold [&>*:first-child]:w-full">
         <div className="flex justify-end items-center w-full">
-          {/* No close button - user must verify */}
         </div>
       </ModalHeader>
       

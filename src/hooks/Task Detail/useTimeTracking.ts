@@ -1,3 +1,4 @@
+import { useHydrated } from "@/hooks/General/useHydrated";
 import { useFirstScreenSurface } from "@/lib/firstScreen/SurfaceContext";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useMemo, useRef, useState } from "react";
@@ -32,8 +33,6 @@ export interface TaskTimeSummary {
   activeRunningEntryCount: number;
   myTotalSeconds: number;
   taskTotalSeconds: number;
-  // Total minus the caller's own running entry, so the client can tell other
-  // time on the ticket from the run in progress without doing clock maths.
   otherEntriesSeconds: number;
 }
 
@@ -108,16 +107,16 @@ export const taskTimeQueryKey = (taskId: number | null) => ["time", "task", task
 export const taskTimeEntriesQueryKey = (taskId: number) =>
   ["time", "entries", taskId] as const;
 
-export function useTimerNow(running: boolean) {
+export function useTimerNow(running: boolean, initialNow?: number, intervalMs = 1000) {
   const snapshot = useFirstScreenSurface();
-  const [now, setNow] = useState(() => snapshot ? Date.parse(snapshot.now) : Date.now());
+  const [now, setNow] = useState(() => initialNow ?? (snapshot ? Date.parse(snapshot.now) : Date.now()));
 
   useEffect(() => {
     if (!running) return;
     setNow(Date.now());
-    const interval = window.setInterval(() => setNow(Date.now()), 1000);
+    const interval = window.setInterval(() => setNow(Date.now()), intervalMs);
     return () => window.clearInterval(interval);
-  }, [running]);
+  }, [running, intervalMs]);
 
   return now;
 }
@@ -127,10 +126,6 @@ const emptyBoardRunningTimers = new Map<
   { startedAt: string; pausedAt: string | null; userName: string }
 >();
 
-// One Pusher subscription per channel for the whole app, however many
-// components ask for it. useBoardRunningTimers is mounted by every task card,
-// so binding per instance would fire one invalidation per card per event and
-// each would cancel the last one's fetch (HTPR-4700).
 const timeChannelRefs = new Map<string, { count: number; release: () => void }>();
 
 function useTimeChannel(channelName: string | null, invalidate: () => void) {
@@ -148,9 +143,6 @@ function useTimeChannel(channelName: string | null, invalidate: () => void) {
       timeChannelRefs.set(channelName, entry);
       void (async () => {
         const client = await connectRealtimeClient();
-        // Identity, not presence: the channel can be released and reacquired
-        // while this awaits, and a stale initializer would bind a second
-        // listener whose cleanup nobody holds.
         if (!client) return;
         if (timeChannelRefs.get(channelName) !== entry) {
           releaseRealtimeClientIfIdle(client);
@@ -159,9 +151,6 @@ function useTimeChannel(channelName: string | null, invalidate: () => void) {
         const channel = client.subscribe(channelName);
         const fire = () => handler.current();
         channel.bind(TIME_EVENT, fire);
-        // A dropped connection silently misses events, so pull once on the way
-        // back. Not on the first connect: the queries are already fetching on
-        // mount and firing here would just restart them.
         let wasConnected = client.connection.state === "connected";
         const onConnected = () => {
           if (wasConnected) fire();
@@ -216,6 +205,7 @@ export function useTaskTime(taskId: number | null) {
       ),
     enabled: taskId !== null && taskId > 0,
     refetchOnWindowFocus: true,
+    ...(useHydrated() ? {} : { queryKey: [...taskTimeQueryKey(taskId), "hydrating"], enabled: false }),
   });
 
   const invalidate = async () => {
@@ -230,8 +220,6 @@ export function useTaskTime(taskId: number | null) {
     ]);
   };
 
-  // A timer started from another tab, another person, or the CLI is invisible
-  // here until the window regains focus, so listen for it (HTPR-4700).
   useTimeChannel(taskId === null ? null : timeTaskChannel(taskId), () => {
     void queryClient.invalidateQueries({ queryKey: taskTimeQueryKey(taskId) });
     if (taskId)
@@ -318,9 +306,6 @@ export function useBoardRunningTimers(
       }>(
         `/api/time/board-summary?board=${projectId}`
       );
-      // Return a plain, JSON-serializable array. This query's cache is
-      // persisted to localStorage (PersistQueryClientProvider), and a Map
-      // deserializes to {} — losing .get/.has/.size and crashing consumers.
       return data.entries.map((entry) => ({
         ...entry,
         calculatedAt: data.calculatedAt,
@@ -331,9 +316,6 @@ export function useBoardRunningTimers(
   });
 
   const timers = useMemo(() => {
-    // Array.isArray guards against a stale persisted cache from before this
-    // query returned an array (old shape rehydrated from localStorage).
-    // Keep valid cached timers while the startup network gate is closed.
     if (!projectEligible || !Array.isArray(query.data)) {
       return emptyBoardRunningTimers;
     }
@@ -484,7 +466,6 @@ export function useTaskTimeEntries(taskId: number, enabled: boolean) {
     refetchOnWindowFocus: true,
   });
 
-  // Tolerate the legacy array shape restored from persisted query caches.
   const data = query.data as typeof query.data | TaskTimeEntry[];
   return {
     ...query,

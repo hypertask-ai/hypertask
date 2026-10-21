@@ -27,9 +27,6 @@ export async function deliverCommentNotifications(
     ) {
       throw new Error("Run activity notification claim is missing");
     }
-    // ponytail: per-target checkpoints follow successful handoff, so a process
-    // exit between handoff and checkpoint can still duplicate that target.
-    // Exactly-once needs provider-idempotent outboxes.
     if (!agentRunCommentNotificationState.commentFcmAttemptedAt) {
       const devices = await prisma.subscribedDevices.findMany({
         where: { userId: { in: userIds } },
@@ -98,8 +95,6 @@ export async function deliverCommentNotifications(
         throw new Error("Run activity email notification claim was lost");
       }
     }
-    // Keep the realtime handoff inside the lease so an interrupted request
-    // can retry it, while completed duplicate requests remain side-effect free.
     await renewNotificationClaim();
     await broadcastTaskComment(taskId, {
       originUserId: accessUserId ?? currentUser.id,

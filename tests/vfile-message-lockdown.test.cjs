@@ -73,7 +73,10 @@ for (const mode of Object.keys(lockdown)) {
 }
 
 test("the vendored constructor stays upstream-identical", () => {
-  const constructor = (filename) => fs.readFileSync(filename, "utf8")
+  const constructor = (filename) => ts.transpileModule(fs.readFileSync(filename, "utf8"), {
+    compilerOptions: { removeComments: true, target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.ESNext },
+    fileName: "message.js",
+  }).outputText
     .split("export class VFileMessage")[1].split("\n}\n")[0];
   assert.equal(constructor(patchedPath), constructor(upstreamPath));
 });

@@ -34,16 +34,14 @@ const { useMobileToastAutoDismiss } = load("src/components/undoToast/useMobileTo
 // Exercise the production Toaster JSX, including isolation and rail/phone offsets.
 const globalSource = read("src/components/ProviderGlobal/GloablProviders.tsx");
 const toasterMarkup = globalSource.slice(globalSource.indexOf("      <Toaster"), globalSource.indexOf("      <ShortcutArchiveNudge"));
-const flagEffect = globalSource.slice(globalSource.indexOf("  useEffect(() => {\n    undoToastSettings.single"), globalSource.indexOf("  const isApple", globalSource.indexOf("  useEffect(() => {\n    undoToastSettings.single")));
 const { Toasts } = load("src/components/ProviderGlobal/GloablProviders.tsx", {
   "react-hot-toast": hotToast,
   "@/components/undoToast": undo,
-}, `import { useEffect } from "react";
-import { Toaster } from "react-hot-toast";
-import { SingleUndoToaster, undoToastSettings } from "@/components/undoToast";
-export function Toasts({mbl, singleUndoToast, appShellRailOn}) { ${flagEffect} return <>${toasterMarkup}</>; }`);
+}, `import { Toaster } from "react-hot-toast";
+import { SingleUndoToaster } from "@/components/undoToast";
+export function Toasts({mbl, appShellRailOn}) { return <>${toasterMarkup}</>; }`);
 
-async function fixture(t, { mobile = false, enabled = true, rail = true } = {}) {
+async function fixture(t, { mobile = false, rail = true } = {}) {
   const dom = new JSDOM("<!doctype html><div id='root'></div>", { url: "https://example.test" });
   const previous = {};
   for (const [key, value] of Object.entries({
@@ -62,7 +60,7 @@ async function fixture(t, { mobile = false, enabled = true, rail = true } = {}) 
     useMobileToastAutoDismiss();
     useMobileToastAutoDismiss(undo.SINGLE_UNDO_TOASTER_ID);
     return React.createElement(mobileContext.Provider, { value: mobile },
-      React.createElement(Toasts, { mbl: mobile, singleUndoToast: enabled, appShellRailOn: rail && !mobile }));
+      React.createElement(Toasts, { mbl: mobile, appShellRailOn: rail && !mobile }));
   }
   await React.act(async () => root.render(React.createElement(App)));
   t.after(async () => {
@@ -81,7 +79,6 @@ async function fixture(t, { mobile = false, enabled = true, rail = true } = {}) 
     },
     async tick(ms) { await React.act(async () => t.mock.timers.tick(ms)); },
     async event(target, type) { await React.act(async () => target.dispatchEvent(new dom.window.MouseEvent(type, { bubbles: true }))); },
-    async setEnabled(value) { enabled = value; await React.act(async () => root.render(React.createElement(App))); },
     card() { return document.querySelector(`[data-rht-toaster="${undo.SINGLE_UNDO_TOASTER_ID}"] > div > div`); },
     namedToasts() { return namedStore.toasts; },
     defaultToasts() { return defaultStore.toasts; },
@@ -89,7 +86,7 @@ async function fixture(t, { mobile = false, enabled = true, rail = true } = {}) 
 }
 
 for (const mobile of [false, true]) {
-  test(`flag on replaces only the undo card with unique action IDs (${mobile ? "phone" : "desktop"})`, async (t) => {
+  test(`single toast replaces only the undo card with unique action IDs (${mobile ? "phone" : "desktop"})`, async (t) => {
     const f = await fixture(t, { mobile });
     await React.act(async () => hotToast.toast.success("Other notification", { duration: Infinity }));
     const first = await f.show("First action");
@@ -149,7 +146,7 @@ for (const mobile of [false, true]) {
     assert.equal(f.card(), null);
   });
 
-  test(`flag on expires after 5000ms then removes after 200ms (${mobile ? "phone" : "desktop"})`, async (t) => {
+  test(`single toast expires after 5000ms then removes after 200ms (${mobile ? "phone" : "desktop"})`, async (t) => {
     const f = await fixture(t, { mobile });
     await f.show("Timed action");
     await f.tick(4999);
@@ -194,41 +191,8 @@ for (const type of ["touchend", "touchcancel"]) {
   });
 }
 
-for (const mobile of [false, true]) {
-  test(`flag off preserves stacking, design, duration and position (${mobile ? "phone" : "desktop"})`, async (t) => {
-    const f = await fixture(t, { enabled: false, mobile });
-    await f.show("First legacy action");
-    await f.show("Second legacy action");
-    assert.equal(document.querySelectorAll('[aria-label="Undo"]').length, 2);
-    assert.equal(document.querySelector(`[data-rht-toaster="${undo.SINGLE_UNDO_TOASTER_ID}"]`), null);
-    const button = document.querySelector('[aria-label="Undo"]');
-    const card = button.closest("[style]");
-    assert.equal(button.textContent, mobile ? "Undo" : "UNDO");
-    assert.ok(card.classList.contains(mobile ? "bg-modalBackground" : "bg-white"));
-    assert.equal(card.parentElement.style[mobile ? "top" : "bottom"], "0px");
-    assert.equal(card.style.transition, mobile ? "opacity 150ms ease-in-out, transform 200ms ease-in-out" : "opacity 150ms ease-in-out");
-    await f.tick((mobile ? 7500 : 15000) - 1);
-    assert.equal(card.style.opacity, "1");
-    await f.tick(1);
-    assert.equal(card.style.opacity, "0");
-  });
-}
 
-test("flag is registered with Owner + QA default and the global toaster publishes it to imperative callers", async (t) => {
-  assert.equal(undo.undoToastSettings.single, false);
-  assert.match(require("./helpers/flag-files.cjs").source(), /HTPR_6885_SINGLE_UNDO_TOAST_FLAG = "htpr-6885-single-undo-toast"/);
-  assert.match((read("src/lib/flags.ts") + require("./helpers/flag-files.cjs").source()), /key: HTPR_6885_SINGLE_UNDO_TOAST_FLAG/);
-  assert.match((read("src/lib/flags.ts") + require("./helpers/flag-files.cjs").source()), /DEFAULT_FEATURE_FLAG_MODE: FeatureFlagMode = "OWNER_AND_QA"/);
-  assert.match(globalSource, /useFlag\(HTPR_6885_SINGLE_UNDO_TOAST_FLAG\)/);
-  const f = await fixture(t, { enabled: false });
-  assert.equal(undo.undoToastSettings.single, false);
-  await f.setEnabled(true);
-  assert.equal(undo.undoToastSettings.single, true);
-  await f.show("Enabled action");
-  assert.ok(f.card());
-  await f.setEnabled(false);
-  assert.equal(undo.undoToastSettings.single, false);
-  await f.show("Disabled action");
-  assert.equal(f.card(), null);
-  assert.equal(document.querySelector('[aria-label="Undo"]').textContent, "UNDO");
+test("the global provider always mounts the named undo toaster and mobile auto-dismiss hook", () => {
+  assert.match(globalSource, /useMobileToastAutoDismiss\(SINGLE_UNDO_TOASTER_ID\)/);
+  assert.match(toasterMarkup, /<SingleUndoToaster mobile=\{mbl\} appShellRailOn=\{appShellRailOn\} \/>/);
 });

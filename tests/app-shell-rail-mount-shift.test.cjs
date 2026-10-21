@@ -18,7 +18,7 @@ const railSource = readRefactoredSource(
   "utf8",
 );
 const cssVarEffect = railSource.match(
-  /\/\/ Page content offsets[\s\S]*?\}, \[wide\]\);/,
+  /useLayoutEffect\(\(\) => \{\s*document\.documentElement\.removeAttribute\("data-rail"\)[\s\S]*?\}, \[wide\]\);/,
 )?.[0] ?? "";
 
 test("the --app-shell-rail-w sync effect runs before paint (useLayoutEffect, not useEffect)", () => {

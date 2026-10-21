@@ -15,16 +15,6 @@ function validationError(message: string, field?: string) {
   )
 }
 
-/**
- * GET /api/mcp/agents/analytics?project_id=&since=ISO
- * Per-agent throughput on a board: how many tasks each agent owns, split into
- * done (in a done-role column) vs still-open. Read-only over existing task data.
- * project_id is access-scoped.
- *
- * Note: fix-rate / revert-rate and cost-per-agent need richer history + per-agent
- * cost attribution that isn't recorded yet (tracked as follow-ups), so they are
- * intentionally not reported here rather than faked.
- */
 export async function GET(request: NextRequest) {
   return wrapMcpRoute(async (request: NextRequest) => {
   try {
@@ -68,8 +58,6 @@ export async function GET(request: NextRequest) {
       )
     }
 
-    // One row per (agent, section) — bounded by agents x columns, so no unbounded
-    // task load. Finished columns are resolved once from this board's sections.
     const rows = await prisma.task.groupBy({
       by: ['agentId', 'section'],
       where: {
@@ -95,7 +83,6 @@ export async function GET(request: NextRequest) {
       perAgent.set(agentId, a)
     }
 
-    // Attach display names for the agents that appeared.
     const agentIds = [...perAgent.keys()]
     const agents = agentIds.length
       ? await prisma.agent.findMany({

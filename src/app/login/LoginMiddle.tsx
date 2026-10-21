@@ -42,8 +42,6 @@ interface LoginMiddleProps {
 export const LoginMiddle = ({ serifClassName }: LoginMiddleProps) => {
   const [showEmailForm, setShowEmailForm] = useState(false);
   const [email, setEmail] = useState("");
-  // Native app shell (Capacitor WebView) cannot complete Google OAuth because
-  // Firebase's callback never returns to the app, so default to email there.
   const [isAppShell, setIsAppShell] = useState(false);
   const [isPasskeySupported, setIsPasskeySupported] = useState(false);
   const [isPasskeyLoading, setIsPasskeyLoading] = useState(false);
@@ -57,7 +55,6 @@ export const LoginMiddle = ({ serifClassName }: LoginMiddleProps) => {
     );
   }, []);
 
-  // Preserve OAuth query parameters if present.
   const oauthParams = useMemo(() => {
     const params = new URLSearchParams();
     const hasOAuthParams =
@@ -94,15 +91,11 @@ export const LoginMiddle = ({ serifClassName }: LoginMiddleProps) => {
         return;
       }
 
-      // Resume an in-progress OAuth/CLI authorize flow rather than dropping it.
       if (hasOAuthParams) {
         router.push(`/oauth/authorize?${oauthParams.toString()}`);
         return;
       }
 
-      // Honor a stored post-login return path (e.g. CLI auth), else route by
-      // membership the same way the reverse bridge does: projectless users
-      // must land on /onboarding, not the black /project page.
       const { hasProjects } = await bridge
         .json()
         .catch(() => ({ hasProjects: true }));
@@ -129,7 +122,6 @@ export const LoginMiddle = ({ serifClassName }: LoginMiddleProps) => {
     }
   };
 
-  // Persist CLI auth return path for after sign-in (survives Google redirect in the same tab).
   useEffect(() => {
     if (hasOAuthParams) return;
     const safe = parseSafeReturnTo(searchParams?.get("returnTo"));
@@ -138,7 +130,6 @@ export const LoginMiddle = ({ serifClassName }: LoginMiddleProps) => {
     }
   }, [hasOAuthParams, searchParams]);
 
-  // Check if the user is already authenticated and redirect to authorize for OAuth flows.
   useEffect(() => {
     if (!hasOAuthParams) return;
 
@@ -157,19 +148,16 @@ export const LoginMiddle = ({ serifClassName }: LoginMiddleProps) => {
             router.push(`/oauth/authorize?${oauthParams.toString()}`);
           }
         } catch {
-          // Invalid cookie; keep showing login.
         }
       }
     };
 
     checkAuth();
 
-    // Also check periodically in case the cookie is set asynchronously.
     const interval = setInterval(checkAuth, 500);
     return () => clearInterval(interval);
   }, [hasOAuthParams, oauthParams, router]);
 
-  // In the native app shell, Google sign-in cannot return to the WebView.
   useEffect(() => {
     if (
       typeof navigator !== "undefined" &&
@@ -180,7 +168,6 @@ export const LoginMiddle = ({ serifClassName }: LoginMiddleProps) => {
     }
   }, []);
 
-  // JWT email tokens and account recovery must open the existing email flow immediately.
   useLayoutEffect(() => {
     if (typeof window === "undefined") return;
 

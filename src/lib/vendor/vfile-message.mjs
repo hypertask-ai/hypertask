@@ -1,7 +1,3 @@
-// vfile-message 4.0.3 (MIT; see vfile-message.LICENSE). Keep the constructor upstream-identical.
-/**
- * @import {Node, Point, Position} from 'unist'
- */
 
 /**
  * @typedef {object & {type: string, position?: Position | undefined}} NodeLike
@@ -22,9 +18,6 @@
 
 import {stringifyPosition} from 'unist-util-stringify-position'
 
-/**
- * Message.
- */
 export class VFileMessage extends Error {
   /**
    * Create a message for `reason`.
@@ -80,7 +73,7 @@ export class VFileMessage extends Error {
    * @returns
    *   Instance of `VFileMessage`.
    */
-  // eslint-disable-next-line complexity
+
   constructor(causeOrReason, optionsOrParentOrPlace, origin) {
     super()
 
@@ -96,28 +89,24 @@ export class VFileMessage extends Error {
     let legacyCause = false
 
     if (optionsOrParentOrPlace) {
-      // Point.
       if (
         'line' in optionsOrParentOrPlace &&
         'column' in optionsOrParentOrPlace
       ) {
         options = {place: optionsOrParentOrPlace}
       }
-      // Position.
       else if (
         'start' in optionsOrParentOrPlace &&
         'end' in optionsOrParentOrPlace
       ) {
         options = {place: optionsOrParentOrPlace}
       }
-      // Node.
       else if ('type' in optionsOrParentOrPlace) {
         options = {
           ancestors: [optionsOrParentOrPlace],
           place: optionsOrParentOrPlace.position
         }
       }
-      // Options.
       else {
         options = {...optionsOrParentOrPlace}
       }
@@ -126,7 +115,6 @@ export class VFileMessage extends Error {
     if (typeof causeOrReason === 'string') {
       reason = causeOrReason
     }
-    // Error.
     else if (!options.cause && causeOrReason) {
       legacyCause = true
       reason = causeOrReason.message
@@ -196,7 +184,6 @@ export class VFileMessage extends Error {
      */
     this.file = ''
 
-    // Field from `Error`.
     /**
      * Reason for message.
      *
@@ -211,13 +198,6 @@ export class VFileMessage extends Error {
      */
     this.line = start ? start.line : undefined
 
-    // Field from `Error`.
-    /**
-     * Serialized positional info of message.
-     *
-     * On normal errors, this would be something like `ParseError`, buit in
-     * `VFile` messages we use this space to show where an error happened.
-     */
     this.name = stringifyPosition(options.place) || '1:1'
 
     /**
@@ -248,7 +228,6 @@ export class VFileMessage extends Error {
      */
     this.source = options.source || undefined
 
-    // Field from `Error`.
     /**
      * Stack of message.
      *
@@ -262,9 +241,6 @@ export class VFileMessage extends Error {
         ? options.cause.stack
         : ''
 
-    // The following fields are “well known”.
-    // Not standard.
-    // Feel free to add other non-standard fields to your messages.
 
     /**
      * Specify the source value that’s being reported, which is deemed
@@ -300,8 +276,6 @@ export class VFileMessage extends Error {
   }
 }
 
-// Define own defaults without [[Set]]: locked Error intrinsics can make inherited
-// name, message, and stack read-only, even though this prototype is still mutable.
 for (const [key, value] of Object.entries({
   file: '',
   name: '',

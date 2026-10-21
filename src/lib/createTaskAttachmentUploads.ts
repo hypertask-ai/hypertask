@@ -144,7 +144,6 @@ async function runPendingDiscard(pending: PendingDiscard) {
         pending.running = false;
         return;
       }
-      // Keep the receipt queued after these immediate-session retries fail.
     }
   }
   pending.running = false;
@@ -225,8 +224,6 @@ async function runLink(job: UploadJob) {
     const attachment = await job.link(job.taskId, job.receipt);
     patch(job, { status: "complete", attachment });
   } catch {
-    // The receipt remains valid. Retry links the same verified object instead
-    // of uploading a second copy after a lost success response.
     patch(job, { status: "link-failed" });
   }
 }
@@ -410,6 +407,3 @@ export function createTaskUploadsForTask(
       attachment,
     }));
 }
-
-// ponytail: this survives React navigation, not a reload or mobile browser
-// eviction. A durable upload-session service worker is the upgrade path.

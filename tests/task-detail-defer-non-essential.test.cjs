@@ -112,7 +112,7 @@ test("HTPR-6047: WelcomeScreen gates AI task-questions/sessions on task-detail r
     "off the task-detail page the gate must be a no-op (always ready)",
   );
   const taskQuestionsEnabled = (src.match(
-    /enabled:\s*Boolean\(taskId\)\s*&&\s*taskDetailDataReady,/g,
+    /enabled:\s*Boolean\(taskId\)\s*&&\s*taskDetailDataReady(?:\s*&&\s*!isEditMode)?,/g,
   ) || []).length;
   assert.equal(
     taskQuestionsEnabled,

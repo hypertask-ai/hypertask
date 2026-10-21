@@ -83,7 +83,7 @@ test("no resolved row navigates to the top of the column, never the bottom", () 
 test("the board restores focus to the active card when the save-view modal closes", () => {
   const source = read("src/hooks/Homepage/useHandleKeyDownOperations.ts");
   const refocusEffect = source.slice(
-    source.indexOf("bring focus back to the active element"),
+    source.indexOf("useEffect(() => {\n\n            const activeItem"),
   );
   const effectDeps = refocusEffect.slice(0, refocusEffect.indexOf("])"));
   assert.match(effectDeps, /showSaveModal/);

@@ -19,8 +19,6 @@ export async function getAgentRole(
 ): Promise<AgentRole> {
   if (!ctx.agentId) return 'write'
 
-  // ponytail: add an in-memory TTL cache here if this DB round trip is measured
-  // as a hot-path cost.
   const agent = await prisma.agent.findUnique({
     where: { id: ctx.agentId },
     select: { permissions: true },

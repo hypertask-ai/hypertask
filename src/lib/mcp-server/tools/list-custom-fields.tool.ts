@@ -3,7 +3,6 @@ import { CustomFieldService } from '../lib/services/custom-field.service';
 import { executeWithService } from '../utils/executeWithService';
 import { getListCustomFieldsBaseSchema } from '../validations/custom-field.validation';
 
-/** Tool: list_custom_fields - lists the fields defined on one board. */
 export const listCustomFieldsTool = {
   name: TOOL_METADATA.LIST_CUSTOM_FIELDS.name,
   description: TOOL_METADATA.LIST_CUSTOM_FIELDS.description,

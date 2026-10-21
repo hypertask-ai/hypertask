@@ -1,6 +1,6 @@
 /* eslint-disable react/jsx-key */
-/* eslint-disable react-hooks/exhaustive-deps */
-/* eslint-disable @next/next/no-img-element */
+
+
 "use client"
 
 import { unarchiveNotification } from "@/lib/api/typedClient";
@@ -58,7 +58,6 @@ const ArchivedNotificationsContainer = ({
     const router = useRouter();
     const { navigateToTask } = useHypertasksNavigate()
 
-    // refs
     const currentHoveredDiv = useRef<number | null>(null);
     const debounceTimeout = useRef<NodeJS.Timeout | null>(null);
     const taskRef = useRef<HTMLDivElement>(null);
@@ -98,30 +97,22 @@ const ArchivedNotificationsContainer = ({
             eHandler()
         }
 
-        // [j] for down
         if (e.key === "j" || e.key === "ArrowDown") ArrowDownHandler()
 
-        // [k] for up
         if (e.key === "k" || e.key === "ArrowUp") ArrowUpHandler()
 
-        // [enter]
         if (e.key === "Enter" && notifications[selectedIndex]?.task) openTask(notifications[selectedIndex].task)
         
-        // cmd/ctrl + m
         if (e.keyCode===77 && cmdControl && notifications[selectedIndex]?.task) openTask(notifications[selectedIndex].task, "reply")
 
-        // [g]
         if (e.key === "g") gPressHandler()
         
-        // [g]->[b]
         if (e.key === 'b') gThenB()
         
-        // [g]->[i]
         if (e.key === 'i') gThenI()
         if (e.key === 't') gThenT()
     }
 
-   // [e] for unarchive
    const eHandler = (index = selectedIndex)=>{
         if (notifications[index]) {
         if (index >= 0 ) {
@@ -134,7 +125,6 @@ const ArchivedNotificationsContainer = ({
     }
     }
 
-    // [j] for down
     const ArrowDownHandler = ()=>{
         if (notifications[selectedIndex]) {
             if (selectedIndex === -1 || selectedIndex === (notifications.length - 1)) {
@@ -152,7 +142,6 @@ const ArchivedNotificationsContainer = ({
         }
     }
 
-    // [k] for up
     const ArrowUpHandler = ()=>{
         if (notifications[selectedIndex]) {
             if (selectedIndex <= 0) {
@@ -170,13 +159,11 @@ const ArchivedNotificationsContainer = ({
         }
     }
 
-    // [g]
     const gPressHandler=()=>{
         const now = new Date().getTime();
         lastgClick.current = now;
     }
 
-    // g->i
     const gThenI =()=>{
         const now = new Date().getTime();
         if (lastgClick.current && now - lastgClick.current < 5000) {
@@ -185,7 +172,6 @@ const ArchivedNotificationsContainer = ({
         }
     }
 
-    // g->t
     const gThenB=()=>{
         const now = new Date().getTime();
         if (lastgClick.current && now - lastgClick.current < 5000) {
@@ -195,7 +181,6 @@ const ArchivedNotificationsContainer = ({
     }
 
 
-    // g->h
     const gThenT=()=>{
         const now = new Date().getTime();
         if (lastgClick.current && now - lastgClick.current < 5000) {
@@ -370,7 +355,6 @@ const TaskRowComponent = (
                     </div>
                 </div>
 
-                {/* -------------- task title ----------------- */}
                 <TaskTitleUniqueIndex title={notification.task.title} uniqueIndex={notification.task.uniqueIndex}/>
                 <NotificationContent/>
                     <ButtonGroup eHandler={eHandler} index={index}/>
@@ -392,7 +376,7 @@ const ButtonGroup = ({
                 className="relative group"
                 onClick={(e) => {
                 e.preventDefault();
-                e.stopPropagation(); // Prevent the click event from propagating to the parent div
+                e.stopPropagation();
                     eHandler(index);
                 }}
             >

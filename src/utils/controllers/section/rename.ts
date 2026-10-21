@@ -1,8 +1,3 @@
-/**
- * Section rename - delegates to centralized sectionService.
- * Used by: /api/section/rename (Pages)
- * Returns project_view for UI compatibility.
- */
 import { ISection } from '@/models/model'
 import getProjectView from '../projects/views/viewsHelperAPIfunctions'
 import * as sectionService from './sectionService'
@@ -26,7 +21,6 @@ const RenameSection = async (
     return { status: result.status, json: result.json }
   }
 
-  // Pages API expects project_view_updated for cache update
   if (result.status === 200 && 'projectId' in result.json) {
     const project_view_updated = await getProjectView(
       (result.json as { projectId: number }).projectId,

@@ -5,7 +5,7 @@ description: Any ticket that adds or changes UI, before writing a line of code
 
 # reuse-existing-ui
 
-Use before `fix-bug` or `ship-feature-behind-flag` on any ticket touching UI. The app repo is `~/projects/hypertask-oss`. Its own style rules live in `reference/style-guide.md` and `reference/typography.md` (copied from `~/projects/hypertasks/openwiki/`); the twelve behavioural rules that back step 4 live in `reference/karpathy-rules.md`.
+Use before `fix-bug` or `ship-feature-behind-flag` on any ticket touching UI. The app repo is `~/projects/hypertask-oss`. Its own style rules live in `reference/style-guide.md` and `reference/typography.md` (the canonical visual contracts); the twelve behavioural rules that back step 4 live in `reference/karpathy-rules.md`.
 
 ## Steps
 
@@ -22,7 +22,8 @@ Use before `fix-bug` or `ship-feature-behind-flag` on any ticket touching UI. Th
 3. **Reuse it as is. Props only.** Import the component and pass it the props it already takes. Don't fork it, don't copy its internals into a new file "to customize", don't wrap it in a new component that just re-renders it with a different name. When the owner selects an existing trigger, keep that exact trigger instead of adding a parallel button or label.
 4. **A new component is allowed only when no existing one can do the job.** Say what you checked and why it doesn't fit. Put that reason on the ticket comment and, one line, in the PR summary. Rules 2 (Simplicity First) and 3 (Surgical Changes) in `reference/karpathy-rules.md` back this: no abstractions for single-use code, touch only what you must.
 5. **Never re-implement layout that already exists for the same kind of screen.** A mobile full-screen chat is the AI chat's mobile layout (`AI_Chat_Layout.tsx` and friends in `src/components/AI_CHAT/`), not a new page shell that happens to look similar.
-6. **Check before hand-off:**
+6. **Write no explanatory comments.** Say it in code: a clearer name, a smaller function, or an assertion or log message. The `local/no-comments` lint rule fails the PR otherwise; only tool-read comments (`eslint-disable`, `@ts-expect-error <reason>`, bundler pragmas, JSDoc `@deprecated`/`@type`) pass (YPER4-379).
+7. **Check before hand-off:**
    - Your grep shows no new component whose name resembles an existing one (a `ChatComposer2`, a `MicButtonNew`, a `CustomSendArrow` next to the real `SendArrow` is a red flag, not a variant).
    - The PR diff touches existing components, not new copies of them.
 

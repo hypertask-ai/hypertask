@@ -1,3 +1,4 @@
+import { agentScopeEnforced } from "@/lib/auth/agentScope";
 import { Prisma, Status, ViewVisibility } from "@prisma/client";
 import { publicAgentSelect } from "@/lib/agents/publicAgent";
 import { CYCLE_WINDOW_SIZE, utcDate } from "@/lib/cycles";
@@ -22,6 +23,9 @@ const humanProjectAccessBranches = (
     ];
   }
 
+  if (agentScopeEnforced()) {
+    return [{ members: { some: { agentId, status: "Accepted", agent: { userId, revokedAt: null } } } }];
+  }
   const activeAgent = { id: agentId, userId, revokedAt: null };
   return [
     {
@@ -42,17 +46,13 @@ const humanProjectAccessBranches = (
   ];
 };
 
-// Authorization for reading task content from a specific board. Unlike
-// getProjectWhere this intentionally permits legacy teamless boards. A
-// delegate keeps its connecting human's owner/member scope and may additionally
-// access boards where that owned, active agent is a member.
 export const projectContentAccessWhere = (
   userId: number,
   agentId?: string | null
 ): Prisma.ProjectWhereInput => ({
   OR: [
     ...humanProjectAccessBranches(userId, agentId),
-    ...(agentId
+    ...(agentId && !agentScopeEnforced()
       ? [
           {
             members: {
@@ -64,17 +64,13 @@ export const projectContentAccessWhere = (
   ],
 });
 
-// HTPR-4982: who may write to a board. Deliberately not getProjectWhere: this
-// is authorization, not listing, so it does not care about team scoping (an
-// old teamless board still belongs to its owner). An agent counts only when
-// the caller owns it and it has not been revoked.
 export const taskWriteAccessWhere = (
   userId: number,
   agentId?: string | null
 ): Prisma.ProjectWhereInput => ({
   OR: [
     ...humanProjectAccessBranches(userId, agentId),
-    ...(agentId
+    ...(agentId && !agentScopeEnforced()
       ? [
           {
             members: {
@@ -93,11 +89,9 @@ export const getProjectWhere = (
   teamId: { not: null },
   OR: [
     ...humanProjectAccessBranches(userId, agentId),
-    ...(agentId
+    ...(agentId && !agentScopeEnforced()
       ? [
           {
-            // HTPR-4982: the agent must also belong to the caller. Matching on
-            // the agent id alone lets anyone who knows it borrow board access.
             members: {
               some: { agentId, agent: { userId, revokedAt: null } },
             },
@@ -107,17 +101,12 @@ export const getProjectWhere = (
   ],
 });
 
-// Board discovery is deliberately narrower than delegate authorization. An
-// agent may act as its connecting human on routes that target a known board,
-// but board pickers and bootstrap payloads must expose only boards where that
-// agent was explicitly added. Otherwise a single-board token enumerates every
-// board its owner can access (HTPR-5208).
 export const getProjectListingWhere = (
   userId: number,
   agentId?: string | null
 ): Prisma.ProjectWhereInput =>
   agentId
-    ? {
+    ? agentScopeEnforced() ? getProjectWhere(userId, agentId) : {
         teamId: { not: null },
         members: {
           some: { agentId, agent: { userId, revokedAt: null } },
@@ -129,8 +118,6 @@ export const getTaskWhere = (): Prisma.TaskWhereInput => ({
   status: "Normal",
 });
 
-// Only notification count remains — comment count is read from Task.totalComments (scalar column).
-// Match Inbox visibility so board → task detail never inherits a false "in inbox" count (HTPR-6365).
 export const getTaskCountSelect = (userId: number) => ({
   select: {
     notifications: {
@@ -163,7 +150,6 @@ export const getTaskNotificationsInclude = (
   notifications: getTaskNotificationsArgs(userId),
 });
 
-/** Kanban comment badge uses Task.totalComments; _count is notification-only. */
 export const getTaskIncludeLayers = ({
   userId,
   userDbId,
@@ -215,7 +201,6 @@ export const getTaskIncludeLayers = ({
       },
     },
   };
-  // Kanban-only fields — see CardSubTasks, task playlist, Homepage.updateParentTask
   const boardSubTaskSelect = {
     id: true,
     uniqueIndex: true,
@@ -233,7 +218,6 @@ export const getTaskIncludeLayers = ({
       select: boardSubTaskSelect,
     },
   };
-  // Pointer for archive/delete flows — no nested parent.subTasks (Neon was loading them twice)
   const parentTask = {
     parentTask: {
       select: {
@@ -286,8 +270,6 @@ export const getFullTaskInclude = (
   );
 };
 
-// Board/Table only reads assignment identity, label identity, and the latest
-// inbox marker. Richer relation rows still load on task-detail surfaces.
 export const getBoardTaskInclude = (
   options: GetAllIncludesOptions
 ): Prisma.TaskInclude => {
@@ -328,10 +310,6 @@ export const getBoardTaskInclude = (
         select: {
           id: true,
           label: {
-            // Hypertask labels have no per-label color column. Board/Table
-            // render the shared label theme from value and filter by id; the
-            // prompt, timestamps, project relation, and reverse task relation
-            // are not part of the authenticated board rendering contract.
             select: {
               id: true,
               value: true,
@@ -382,12 +360,11 @@ export const getBoardTaskInclude = (
   );
 };
 
-// Saved views require accepted board membership; team membership and stored
-// personal view pointers are not access grants. Delegates must be owned/active.
 export const savedViewBoardAccessWhere = (
   userId: number,
   agentId?: string | null,
 ): Prisma.ProjectWhereInput => {
+  if (agentId && agentScopeEnforced()) return { OR: [{ members: { some: { agentId, status: "Accepted", agent: { userId, revokedAt: null } } } }] };
   const activeAgent = { id: agentId!, userId, revokedAt: null };
   return {
     OR: [
@@ -453,7 +430,6 @@ export const getProjectAllViewsInclude = ({
 }) => ({
   where: {
     OR: [
-      // HTPR-7188: an open invite is not access; shared views need owner or accepted membership.
       ...(currentUserId !== undefined
         ? [{ visibility: ViewVisibility.Public, project_view: { project: savedViewBoardAccessWhere(currentUserId) } }]
         : []),
@@ -501,9 +477,6 @@ const boardUserSelect = {
   email: true,
 } satisfies Prisma.UserSelect;
 
-// Inactive boards only need enough data to remain addressable in the shared
-// cache and to expose their columns to cross-board task actions. Feature-heavy
-// metadata is fetched with the board payload when that board becomes active.
 export const projectBootstrapSelect = {
   id: true,
   name: true,
@@ -609,7 +582,6 @@ export const getProjectIncludeWithoutTasks = (
   project_view: getProjectViewBaseInclude({
     currentUserId: options.currentUserId,
   }) as Prisma.ProjectInclude["project_view"],
-  // Attachments load when the custom-instruction modal opens (not needed for board paint)
   ai_custom_instructions: {
     select: {
       id: true,
@@ -620,11 +592,6 @@ export const getProjectIncludeWithoutTasks = (
   },
 });
 
-/**
- * Long-form task content and server-maintained delivery/deletion bookkeeping
- * are fetched on demand or used only by background jobs. Board/Table does not
- * read them, and every nullable key otherwise repeats once per task.
- */
 export const taskBoardOmit = {
   description: true,
   descriptionJson: true,

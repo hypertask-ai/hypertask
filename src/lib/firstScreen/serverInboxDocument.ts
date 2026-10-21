@@ -33,12 +33,8 @@ export async function readInboxDocument(route: string, displayCookie: string | u
   if (performance.now() > deadline || response.status !== 200 || !("notifications" in response.json) ||
       preferences.status !== 200) return null;
   const raw = JSON.parse(JSON.stringify(response.json)) as { notifications: INotification[]; splitsNoImportant: InboxDocument["data"]["payload"]["splitsNoImportant"]; showImportantSplit: boolean };
-  // Projectless agent rows need an agent-access proof, not a board-access proof.
-  // Until the controller supplies that scope, keep the complete legacy path.
   if (raw.notifications.some(row => row.userId === user.id && row.type === "AgentMessage" && !row.task && !row.projectId)) return null;
   const accessible = new Set(projectIds);
-  // Use the existing signed inbox controller and its fresh project-content
-  // access proof. Never serialize its stale compact tabs or another account.
   const rows = raw.notifications.filter(row => row.userId === user.id &&
     ((row.type === "Invited" && !row.task && !row.projectId) ||
       (accessible.has(row.projectId) && (!row.task || accessible.has(row.task.projectId)))));
@@ -74,8 +70,6 @@ export async function readInboxDocument(route: string, displayCookie: string | u
   } as unknown as InboxDocument;
 }
 
-// Request-local, shared by the layout and page. A late or partial response is
-// discarded, including on Flight navigation where the live root already exists.
 export const getServerInboxDocument = cache(async (): Promise<InboxDocument | null> => {
   const requestHeaders = await headers();
   const route = requestHeaders.get(INBOX_DOCUMENT_ROUTE_HEADER);

@@ -113,7 +113,7 @@ export function ticketUrl(title, runUrl) {
   return project ? `https://app.hypertask.ai/detail/project-${project}/${ticket.number}` : runUrl;
 }
 
-export function createGithub({ env = process.env, fetchImpl = fetch, exec = execFileSync } = {}) {
+export function createGithub({ env = process.env, fetchImpl = fetch, exec = execFileSync, sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms)) } = {}) {
   return async (path, { method = 'GET', body } = {}) => {
     if (!env.GH_TOKEN) {
       const args = ['api', '--method', method, path];
@@ -123,17 +123,29 @@ export function createGithub({ env = process.env, fetchImpl = fetch, exec = exec
         stdio: ['pipe', 'pipe', 'pipe'],
       }));
     }
-    const response = await fetchImpl(`https://api.github.com/${path}`, {
-      method,
-      headers: {
-        Authorization: `Bearer ${env.GH_TOKEN}`, Accept: 'application/vnd.github+json',
-        'X-GitHub-Api-Version': '2022-11-28', 'Content-Type': 'application/json',
-      },
-      body: body ? JSON.stringify(body) : undefined,
-      signal: AbortSignal.timeout(30000),
-    });
-    if (!response.ok) throw new Error(`GitHub API returned HTTP ${response.status}`);
-    return response.json();
+    for (let attempt = 0; ; attempt++) {
+      let response;
+      try {
+        response = await fetchImpl(`https://api.github.com/${path}`, {
+          method,
+          headers: {
+            Authorization: `Bearer ${env.GH_TOKEN}`, Accept: 'application/vnd.github+json',
+            'X-GitHub-Api-Version': '2022-11-28', 'Content-Type': 'application/json',
+          },
+          body: body ? JSON.stringify(body) : undefined,
+          signal: AbortSignal.timeout(30000),
+        });
+      } catch (error) {
+        if (method !== 'GET' || attempt === 2) throw error;
+        await sleep(attempt === 0 ? 1000 : 3000);
+        continue;
+      }
+      if (response.ok) return response.json();
+      if (method !== 'GET' || attempt === 2 || (response.status !== 429 && response.status < 500)) {
+        throw new Error(`GitHub API returned HTTP ${response.status}`);
+      }
+      await sleep(attempt === 0 ? 1000 : 3000);
+    }
   };
 }
 
@@ -284,9 +296,11 @@ export async function run(args, { env = process.env, fetchImpl = fetch, github =
         log(JSON.stringify({ pr: pr.number, ...verdict }, null, 2));
         break;
       }
-    } catch {
+    } catch (error) {
       errors = true;
-      log(JSON.stringify({ pr: listed.number, state: 'error', description: 'Could not read or publish UX signoff status; left untouched' }));
+      const reason = /^GitHub API returned (HTTP \d+|no list)$/.test(error?.message) || error?.message === 'No PR head SHA to publish'
+        ? error.message : 'unexpected error';
+      log(JSON.stringify({ pr: listed.number, state: 'error', description: 'Could not read or publish UX signoff status; left untouched', reason }));
     }
   }
   return errors ? 2 : 0;

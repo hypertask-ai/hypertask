@@ -52,7 +52,6 @@ export async function validateTaskUpdateFields(requestBody: UpdateTaskBody, dryR
         assigneeUserIds = parsed.ids;
     }
     
-    // Validate that at least one field to update is provided
     const hasLabels = requestBody.labels !== undefined && Array.isArray(requestBody.labels);
     const hasLabelMutation =
         Array.isArray(requestBody.add_labels) || Array.isArray(requestBody.remove_labels);
@@ -181,7 +180,6 @@ export async function validateTaskUpdateFields(requestBody: UpdateTaskBody, dryR
         )
     }
 
-    // Validate labels if provided
     if (hasLabels) {
         const invalidLabel = requestBody.labels!.find(
             (l: unknown) => typeof l !== 'string' && typeof l !== 'number'

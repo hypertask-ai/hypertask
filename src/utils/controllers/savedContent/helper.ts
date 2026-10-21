@@ -47,7 +47,6 @@ export const includeSavedContentComment = (
     },
   };
 
-  // Now TypeScript won't complain when adding a property
   if (comment) {
     baseInclude.include.comments = {
       select: {
@@ -79,7 +78,6 @@ export const fetchProjectIds = async (userId: number) => {
   return idArray;
 };
 
-// HTPR-7161: a saved comment is only shown on the task it belongs to.
 export const commentOnSavedTask = <
   T extends { taskId: number; comment: { taskId: number } | null },
 >(

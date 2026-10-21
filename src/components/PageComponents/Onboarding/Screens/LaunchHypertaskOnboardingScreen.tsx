@@ -18,7 +18,6 @@ export const LaunchHypertaskOnboardingScreen = () => {
     const shareId = params?.get("shareId");
 
     router.refresh();
-    //New funnel doesn't require users to go through interactive tutorial
     if (!isMbl) {
       if (projectId && projectId.length > 0 && projectId !== "undefined") {
         return `/project?id=${projectId}`;
@@ -40,7 +39,6 @@ export const LaunchHypertaskOnboardingScreen = () => {
         return `/detail/project-${res.data.taskShared.projectId}/${res.data.taskShared.task.uniqueIndex}`;
       }
     } catch {
-      // HTPR-7174: an expired link or a Domain link for a non-member is refused.
     }
     return "/";
   };

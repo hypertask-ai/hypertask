@@ -31,7 +31,6 @@ const TrialModal: React.FC<IProps> = ({closeCallback}) => {
     }
     return (
         <ModalContainerCustom
-            // fade={false}
             id="createTaskModal"
             fullScreen={true}
             autoFocus
@@ -111,7 +110,6 @@ const BackButton = ({closeHandler}:any) => {
                 onClick={closeHandler}
                 style={{ zIndex: 101, position: "fixed", bottom: 30, right: 16, borderRadius: 20, justifyContent: 'center' }}
                 className="absolute sm:hidden cursor-pointer shadow-customshadow-2 flex w-fit px-3  py-[2px] h-fit gap-2  items-center bg-active-mentionList text-text-light-gray">
-                {/* <ArrowLeft strokeWidth={1.75} color='#FFFFFF' /> */}
                 <Image src={Goback} alt="icon" width={28} height={28} />
                 <span>Back</span>
             </div>

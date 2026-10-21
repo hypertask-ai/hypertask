@@ -59,9 +59,8 @@ export class DecisionRequestService {
       })
       return response
     } catch (error) {
-      logger.error('Failed to create decision request', {
+      logger.failure('Failed to create decision request', error, {
         correlationId,
-        error: error instanceof Error ? error.message : String(error),
       })
       throw error
     }
@@ -98,9 +97,8 @@ export class DecisionRequestService {
       })
       return response
     } catch (error) {
-      logger.error('Failed to list decision requests', {
+      logger.failure('Failed to list decision requests', error, {
         correlationId,
-        error: error instanceof Error ? error.message : String(error),
       })
       throw error
     }
@@ -115,10 +113,9 @@ export class DecisionRequestService {
         correlationId
       )
     } catch (error) {
-      logger.error('Failed to get decision request', {
+      logger.failure('Failed to get decision request', error, {
         correlationId,
         decisionRequestId,
-        error: error instanceof Error ? error.message : String(error),
       })
       throw error
     }
@@ -144,10 +141,9 @@ export class DecisionRequestService {
         correlationId
       )
     } catch (error) {
-      logger.error('Failed to answer decision request', {
+      logger.failure('Failed to answer decision request', error, {
         correlationId,
         decisionRequestId,
-        error: error instanceof Error ? error.message : String(error),
       })
       throw error
     }
@@ -165,10 +161,9 @@ export class DecisionRequestService {
         correlationId
       )
     } catch (error) {
-      logger.error('Failed to cancel decision request', {
+      logger.failure('Failed to cancel decision request', error, {
         correlationId,
         decisionRequestId,
-        error: error instanceof Error ? error.message : String(error),
       })
       throw error
     }

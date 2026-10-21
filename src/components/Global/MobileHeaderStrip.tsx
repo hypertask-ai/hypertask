@@ -19,26 +19,11 @@ interface IStripItem {
   onSelect: () => void;
 }
 
-/**
- * The horizontally-swipeable middle of the mobile header: a lead label (the
- * surface name) followed by its splits, matching the desktop header row. Board
- * splits are the board's saved views; inbox splits are the notification tabs;
- * calendar has no inline splits (its board filter is a checkbox sheet).
- */
 const Strip = ({ lead, items }: { lead?: string; items: IStripItem[] }) => {
   const scrollerRef = useRef<HTMLDivElement>(null);
   const activeRef = useRef<HTMLButtonElement>(null);
   const activeKey = items.find((item) => item.active)?.key;
 
-  // The strip scrolls but never scrolled itself, so on a board with several
-  // views the selected one could sit past the right edge after a load and the
-  // header read as though nothing was selected (HTPR-5097). Rect maths rather
-  // than offsetLeft: the scroller is not a positioned ancestor, so offsetLeft
-  // would be measured against something further up the tree.
-  //
-  // useLayoutEffect, not useEffect: an effect runs after paint, so the strip
-  // would render once at scrollLeft 0 — the exact broken frame — before
-  // snapping. This corrects it before the browser paints.
   useLayoutEffect(() => {
     const scroller = scrollerRef.current;
     const tab = activeRef.current;
@@ -67,9 +52,6 @@ const Strip = ({ lead, items }: { lead?: string; items: IStripItem[] }) => {
           aria-selected={item.active}
           onClick={item.onSelect}
           className={cn(
-            // The tabs measured 26x38, under the 44px minimum on both axes
-            // (HTPR-5114). The strip scrolls and centres its active tab, so the
-            // extra width costs nothing that is not already scrollable.
             "shrink-0 self-stretch border-b-2 pt-[7px] font-medium",
             "min-h-[44px] min-w-[44px]",
             item.active
@@ -96,9 +78,6 @@ const SaveViewModal = lazy(
 const BoardStrip = ({ project }: { project: IProject }) => {
   const { switchViewHandler, resetView } = useKanbanViews(project);
   const [showSaveModal, setShowSaveModal] = useState(false);
-  // ShellViewControls (desktop) never mounts on mobile and the legacy board
-  // header is md-and-up only, so without this the Save view affordance did not
-  // exist on phones: sort/filter changes could never be persisted (HTPR-5900).
   const isDirty = Boolean(
     project.project_view?.user_project_views[0]?.unsavedView,
   );

@@ -28,10 +28,10 @@ test("page unload leaves the stream running while cleanup remains unmount-only",
     "mobile suspension or eviction must not ask the server to cancel the reply"
   );
 
-  const marker = "// Cancel an active stream only when the provider genuinely unmounts.";
+  const marker = "useEffect(() => {\n    return () => {";
   const at = source.indexOf(marker);
   assert.ok(at > 0, "unmount-only cancel effect not found");
-  const effect = source.slice(at, source.indexOf("// `editor` is in the deps", at));
+  const effect = source.slice(at, source.indexOf("useEffect(() => {\n    if (!showAiChatInterface", at));
   assert.match(
     effect,
     /useEffect\(\(\) => \{[\s\S]*return \(\) => \{[\s\S]*\};\s*\}, \[\]\);/,
@@ -41,7 +41,7 @@ test("page unload leaves the stream running while cleanup remains unmount-only",
 
 test("a stream is registered synchronously, so an immediate unmount cannot miss it", () => {
   const source = read(CHAT_HOOK);
-  const start = source.indexOf("// Set current streaming session for cancellation");
+  const start = source.indexOf("streamingSessionRef.current = session");
   assert.ok(start > 0, "stream-start site not found");
   const startBlock = source.slice(start, start + 220);
   const refMatch = startBlock.match(
@@ -69,12 +69,12 @@ test("a stream is registered synchronously, so an immediate unmount cannot miss 
 test("the unmount handler reads the synchronous ref, not committed state", () => {
   const source = read(CHAT_HOOK);
   const effectStart = source.indexOf(
-    "// Cancel an active stream only when the provider genuinely unmounts."
+    "useEffect(() => {\n    return"
   );
   assert.ok(effectStart > 0, "unmount handler not found");
   const effect = source.slice(
     effectStart,
-    source.indexOf("// `editor` is in the deps", effectStart)
+    source.indexOf("useEffect(() => {\n    if (!showAiChatInterface", effectStart)
   );
   const cleanup = effect.slice(effect.indexOf("return () => {"));
   assert.match(

@@ -35,7 +35,6 @@ export type PersonalTeamUsage = {
   userSharePct: number;
 };
 
-// Backward-compatible default for callers that have not supplied the plan yet.
 export const TEAM_AI_BUDGET_USD = PAID_TEAM_AI_ALLOWANCE_USD;
 
 export const GATEWAY_BASE_URL = "https://ai-gateway.vercel.sh/v1";
@@ -246,11 +245,6 @@ export const reconcileLegacySystemUserSpend = (
   );
   if (taggedSpend <= 0 || legacySystemSpend <= 0) return rows;
 
-  // Gateway reports cannot group by both feature and custom user tag. Before
-  // the stable system tag shipped, automatic requests carried member tags, so
-  // remove that known legacy total proportionally. This temporary month-bound
-  // reconciliation keeps member totals consistent without guessing that all
-  // system spend belonged to one person.
   const retainedShare =
     Math.max(taggedSpend - legacySystemSpend, 0) / taggedSpend;
   return rows.map((row) => ({
@@ -297,7 +291,6 @@ export const buildGatewayMemberUsage = (
     )
     .map(({ displayName, spendUsd, userId }) => ({
       displayName,
-      // ceil, not round: any real spend must show as at least 1%, never a flat 0%
       sharePct:
         shareUsd > 0 ? Math.ceil((Math.max(spendUsd, 0) / shareUsd) * 100) : 0,
       userId,
@@ -396,22 +389,14 @@ export const gatewayGet = async (
       signal: controller.signal,
     });
 
-    // Buffer the body while the abort signal is active. Callers still receive
-    // a Response, but a gateway that stalls after sending headers cannot leave
-    // response.json() hanging past the request timeout.
     const body = await readBoundedGatewayBody(
       response,
       maxBytes,
       controller.signal,
     );
     const headers = new Headers(response.headers);
-    // fetch transparently decodes compressed bodies. Do not advertise the
-    // original encoding or length after rebuilding the buffered response.
     headers.delete("content-encoding");
     headers.delete("content-length");
-    // The callers use the standard status, headers, and body methods. The
-    // buffered response intentionally omits runtime-specific metadata such as
-    // the original URL because it is not part of this helper's contract.
     return new Response(
       response.status === 204 || response.status === 205 ? null : body,
       {
@@ -485,9 +470,6 @@ export const computePersonalTeamSharePct = async ({
   });
 
   try {
-    // The day-grouped team report only feeds buildGatewayMemberUsage;
-    // skip it when no member breakdown is requested (halves the fan-out
-    // for the per-team "all" endpoint).
     if (!members) {
       const tagOnlyResponse = await gatewayGet(
         `/report?${tagReportParams.toString()}`,

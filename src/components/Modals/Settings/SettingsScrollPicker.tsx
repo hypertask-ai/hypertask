@@ -14,9 +14,6 @@ const scrollOptions: { text: string; type: ScrollSetting }[] = [
   { text: "Scroll to bottom when coming from inbox", type: "Inbox" },
 ];
 
-// Inline version of the Scroll Settings modal — the three options rendered
-// directly in Settings so picking one is a single click. The modal component
-// still exists; this just removes the extra step here.
 const SettingsScrollPicker = () => {
   const queryClient = useQueryClient();
   const { data } = useGetScrollSetting([globalConstants.ScrollSettingKey]);

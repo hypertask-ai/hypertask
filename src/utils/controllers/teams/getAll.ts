@@ -26,7 +26,6 @@ const getAllTeams = async (userId:number) => {
                 })
             }
 
-            // ========================== after confirming that the owner is present, first find the teams he OWNS.
             const owned_teams = await prisma.team.findMany({
                 where:{
                     googleAccountId:owner.id

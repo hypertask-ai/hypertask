@@ -9,7 +9,6 @@ const EMPTY_DESCRIPTION_DRAFTS = new Set([
   "<html><head></head><body></body></html>",
 ]);
 
-/** Align with getDraftsController — empty drafts should not force description edit UI. */
 export const isMeaningfulDescriptionDraft = (draft: IDraft) => {
   const content = draft?.content?.trim() ?? "";
   return (
@@ -33,8 +32,6 @@ const useHasDrafts = (taskId: number | undefined, userId: number | undefined) =>
   }, [isFetching, draftsFromTQ]);
 
   const hasCommentDraft = useMemo(() => {
-    // Only a comment draft with real content counts, so the discard-draft trash
-    // stays hidden on an empty composer (mirrors isMeaningfulDescriptionDraft).
     return (
       draftsFromTQ?.some((draft: IDraft) => {
         if (draft?.type !== "Comment") return false;

@@ -45,9 +45,6 @@ export async function POST(request: NextRequest) {
   if (rateLimited) return rateLimited;
 
   const ctx = await validateMcpAuth(request);
-  // This endpoint turns an authenticated health identity into a short-lived
-  // browser session for one fixed fixture. Agent tokens must not inherit their
-  // owner's wider browser permissions through it.
   const access = decideCoreSmokeAccess(ctx, true);
   if (!access.ok) {
     return NextResponse.json(

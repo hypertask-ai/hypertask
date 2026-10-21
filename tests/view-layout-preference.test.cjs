@@ -345,7 +345,7 @@ test("surface navigation never dirties a saved view", () => {
     "built-ins must align their URL with the browser layout without creating an unsaved view",
   );
   const navigationStart = source.indexOf("const changeBoardLayout");
-  const navigationEnd = source.indexOf("// ============ reset view", navigationStart);
+  const navigationEnd = source.indexOf("const resetView = async (", navigationStart);
   assert.ok(navigationStart >= 0 && navigationEnd > navigationStart);
   const navigation = source.slice(navigationStart, navigationEnd);
   assert.match(navigation, /setBoardLayoutPreference\(nextLayout\)/);

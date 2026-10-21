@@ -7,16 +7,12 @@ export function adoptInboxDocument(client: QueryClient, snapshot: InboxDocument)
   const accountId = snapshot.scope.accountId;
   const updatedAt = Date.parse(snapshot.fetchedAt);
   const queryKey = ["inbox", "data", accountId];
-  // A document is a mount-only candidate, never a replay over an optimistic
-  // cache. Its browser revision fences later mutations, not server freshness.
   if (client.getQueryData(queryKey)) return;
   client.setQueryData(queryKey, { ...snapshot.data.payload, serverDocumentGeneration: snapshot.scope.generation,
     ...(typeof window === "undefined" ? {} : { readModelRevision: reserveInboxReadModelRevision(accountId) }),
   }, { updatedAt });
   client.setQueryData(["inbox", "count", accountId], snapshot.data.counts, { updatedAt });
   client.setQueryData(["drafts for user:", accountId], snapshot.data.drafts, { updatedAt });
-  // Never persist the HTML snapshot. Only the existing fenced authoritative
-  // network read after subscription may write an Inbox IndexedDB read model.
 }
 
 export function excludeInboxDocumentRestore(client: PersistedClient | undefined, snapshot: InboxDocument): PersistedClient | undefined {

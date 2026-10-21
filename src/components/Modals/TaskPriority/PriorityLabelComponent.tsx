@@ -33,10 +33,10 @@ const PriorityLabelComponet = ({
   const handleOnClick = (e: any) => {
     if (!onClick) return;
     e.preventDefault();
-    stopPropogation && e.stopPropagation(); // Prevent the click event from propagating to the parent div
+    stopPropogation && e.stopPropagation();
     onClick();
   };
-  const includeDot = [1, 2]; // high and urgent.
+  const includeDot = [1, 2];
   const typographyStyle = {
     ...(fontSize ? { fontSize } : {}),
     ...(fontWeight ? { fontWeight } : {}),

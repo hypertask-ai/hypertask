@@ -1,3 +1,5 @@
+import { recordAgentBoardScopeMiss } from "@/lib/auth/agentScope";
+import { projectContentAccessWhere } from "@/utils/controllers/projects/getAllIncludes";
 import { wrapMcpRoute } from '@/lib/mcp/routeWrapper'
 import { NextRequest } from "next/server";
 import { parse } from "node-html-parser";
@@ -8,17 +10,18 @@ import {
   FeatureFlagInputError,
   FeatureFlagApprovalError,
   defaultFeatureFlagMode,
+  isFeatureEnabled,
   isFeatureFlagOwnerUserId,
   listFeatureFlagModes,
   setFeatureFlagMode,
   type FeatureFlagMode,
 } from "@/lib/flags";
+import { HTPR_7364_BATCH_FLAG_APPROVAL_FLAG } from "@/lib/flags/definitions/htpr-7364-batch-flag-approval";
 import { checkMcpRateLimit, validateMcpAuth } from "@/lib/mcp/auth";
 import prisma from "@/lib/prisma";
 import { broadcastFeatureFlagsChange } from "@/lib/realtime/server";
 
-// The whole approval comment is "Question: Switch <flag-key> to <mode label>?", optionally after
-// the @Valentin Yeo mention, so a negated, quoted or second request never matches.
+const APPROVAL_REQUIRED_MESSAGE = "Valentin must thumbs-up that comment within 7 days, the comment must be unedited, and the whole comment must be: Question: Switch <flag-key> to <mode>?";
 const MODE_APPROVAL_WORDS: Record<FeatureFlagMode, string> = {
   OWNER_ONLY: "Only me",
   OWNER_AND_QA: "Owner + QA",
@@ -26,6 +29,22 @@ const MODE_APPROVAL_WORDS: Record<FeatureFlagMode, string> = {
   OFF: "Off",
 };
 const SWITCH_REQUEST = /^(?:@?Valentin Yeo )?Question: Switch ([a-z0-9]+(?:-[a-z0-9]+)*) to (Only me|Owner \+ QA|Everyone|Off)\?$/;
+const BATCH_SWITCH_REQUEST = /^(?:@?Valentin Yeo )?Question:((?:\s*Switch [a-z0-9]+(?:-[a-z0-9]+)* to (?:Only me|Owner \+ QA|Everyone|Off)\?)+)$/;
+const BATCH_SWITCH_ITEM = /Switch ([a-z0-9]+(?:-[a-z0-9]+)*) to (Only me|Owner \+ QA|Everyone|Off)\?/g;
+
+function approvedSwitches(words: string, batchAllowed: boolean): Map<string, string> | null {
+  const text = words.replace(/\s+/g, " ").trim();
+  const single = SWITCH_REQUEST.exec(text);
+  if (single) return new Map([[single[1], single[2]]]);
+  const batch = batchAllowed ? BATCH_SWITCH_REQUEST.exec(text) : null;
+  if (!batch) return null;
+  const switches = new Map<string, string>();
+  for (const [, key, mode] of batch[1].matchAll(BATCH_SWITCH_ITEM)) {
+    if (switches.has(key)) return null;
+    switches.set(key, mode);
+  }
+  return switches;
+}
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -49,7 +68,7 @@ export async function GET(request: NextRequest) {
   try {
     const ctx = await authorize(request);
     if (ctx instanceof Response) return ctx;
-    const flags = await listFeatureFlagModes({ includeTicketTitles: true, includeLastChange: true });
+    const flags = await listFeatureFlagModes({ includeTicketTitles: true, includeLastChange: true, principal: { userId: ctx.user.id, agentId: ctx.agentId } });
     const key = request.nextUrl.searchParams.get("key");
     if (key !== null) {
       const flag = flags.find((flag) => flag.key === key);
@@ -79,7 +98,6 @@ export async function PATCH(request: NextRequest) {
       || typeof body.mode !== "string" || !FEATURE_FLAG_MODES.includes(body.mode as FeatureFlagMode)) {
       return noStore({ error: "Invalid feature flag" }, 400);
     }
-    // The reason names one comment: the ticket link plus #comment-<id>.
     const link = typeof body.reason === "string" && body.reason.length <= 500
       ? /^https:\/\/app\.hypertask\.ai\/detail\/project-([1-9]\d{0,8})\/([1-9]\d{0,8})#comment-([1-9]\d{0,8})$/.exec(body.reason)
       : null;
@@ -90,6 +108,7 @@ export async function PATCH(request: NextRequest) {
       where: { id: ctx.agentId as string },
       select: { displayName: true },
     });
+    const batchAllowed = await isFeatureEnabled(HTPR_7364_BATCH_FLAG_APPROVAL_FLAG, ctx.user.id);
     const flag = await setFeatureFlagMode(body.key, body.mode as FeatureFlagMode, {
       userId: ctx.user.id,
       agentId: ctx.agentId as string,
@@ -98,17 +117,20 @@ export async function PATCH(request: NextRequest) {
       source: "api",
     }, async (tx) => {
       const commentId = Number(link[3]);
-      // Hold the comment, its task and its reactions until the flag write commits, so an edit,
-      // a task delete or a removed thumbs up cannot land between this check and the write.
-      await tx.$queryRaw`SELECT c.id FROM "Comment" c JOIN "Task" t ON t.id = c."taskId" WHERE c.id = ${commentId} FOR UPDATE`;
+      const approval = await tx.comment.findFirst({
+        where: { id: commentId, task: { projectId: Number(link[1]), uniqueIndex: Number(link[2]), status: { not: "Deleted" }, project: projectContentAccessWhere(ctx.user.id, ctx.agentId) } },
+        select: { taskId: true },
+      });
+      if (!approval) throw new FeatureFlagApprovalError(APPROVAL_REQUIRED_MESSAGE);
+      recordAgentBoardScopeMiss(Number(link[1]), "write");
+      const locked = await tx.$queryRaw<Array<{ id: number }>>`SELECT c.id FROM "Comment" c JOIN "Task" t ON t.id = c."taskId" WHERE c.id = ${commentId} AND t.id = ${approval.taskId} AND t."projectId" = ${Number(link[1])} FOR UPDATE`;
+      if (!locked.length) throw new FeatureFlagApprovalError(APPROVAL_REQUIRED_MESSAGE);
       await tx.$queryRaw`SELECT id FROM "Reaction" WHERE "commentId" = ${commentId} FOR UPDATE`;
-      // An edited comment never counts: the thumbs up may have been given to different words,
-      // and edit and reaction times come from different clocks.
       const comment = await tx.comment.findFirst({
         where: {
           id: commentId,
           editedAt: null,
-          task: { projectId: Number(link[1]), uniqueIndex: Number(link[2]), status: { not: "Deleted" } },
+          task: { projectId: Number(link[1]), uniqueIndex: Number(link[2]), status: { not: "Deleted" }, project: projectContentAccessWhere(ctx.user.id, ctx.agentId) },
           reactions: { some: {
             userId: FEATURE_FLAG_OWNER_USER_ID, agentId: null, agentDisplayName: null, isDeleted: false,
             unified: { startsWith: "1f44d" },
@@ -117,17 +139,14 @@ export async function PATCH(request: NextRequest) {
         },
         select: { commentText: true, text: true },
       });
-      // Compare the visible HTML first; legacy comments may only have commentText.
       const words = parse(comment?.text || comment?.commentText || "").text;
-      const ask = SWITCH_REQUEST.exec(words.replace(/\s+/g, " ").trim());
-      if (!comment || !ask || ask[1] !== body.key
-        || ask[2] !== MODE_APPROVAL_WORDS[body.mode as FeatureFlagMode]) {
+      const switches = comment ? approvedSwitches(words, batchAllowed) : null;
+      if (!switches || switches.get(body.key as string) !== MODE_APPROVAL_WORDS[body.mode as FeatureFlagMode]) {
         throw new FeatureFlagApprovalError(
-          "Valentin must thumbs-up that comment within 7 days, the comment must be unedited, and the whole comment must be: Question: Switch <flag-key> to <mode>?",
+          APPROVAL_REQUIRED_MESSAGE,
         );
       }
     });
-    // The locked write supplies the previous mode, not a read that can race another session.
     const previousMode = flag.lastChange
       ? flag.lastChange.oldMode ?? defaultFeatureFlagMode(body.key)
       : flag.mode;

@@ -1,6 +1,5 @@
 import type { Prisma } from "@prisma/client";
 
-/** Public team fields needed to resolve AI model access after switching boards. */
 export const teamBillingSnapshotSelect = {
   id: true,
   title: true,

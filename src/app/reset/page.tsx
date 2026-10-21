@@ -18,10 +18,8 @@ export default function AdminResetTool() {
     const [password, setPassword] = useState("")
     const [passwordError, setPasswordError] = useState("")
     const [searchTerm, setSearchTerm] = useState("")
-    // Reset trial specific state
     const [trialSearchTerm, setTrialSearchTerm] = useState("")
 
-    // Query function to fetch users for reset user tab (hardcoded emails)
     const fetchUsers = async () => {
         const emails = ['valentin@tryhypertask.com', 'valentin@hypertasks.io', 'valentin.yeo@eduki.com', 'valentinyeo.ux@gmail.com', 'rodmentou@gmail.com', 'rodmentouuk@gmail.com', 'ai@rodrigonask.com']
         try {
@@ -34,7 +32,6 @@ export default function AdminResetTool() {
         }
     }
 
-    // Use react-query to fetch users for reset user tab
     const { data: apiUsers } = useQuery({
         queryKey: ["reset-users"],
         queryFn: fetchUsers,
@@ -42,7 +39,6 @@ export default function AdminResetTool() {
         gcTime: 10000,
     })
 
-    // Filter users based on search term (for reset user tab)
     const filteredUsers = useMemo(() => {
         const users: IUser[] = apiUsers || []
         return users.filter(
@@ -70,7 +66,6 @@ export default function AdminResetTool() {
         setTrialSearchTerm("")
     }
 
-    // Password Gate Screen
     if (!isAuthenticated) {
         return (
             <PasswordGate
@@ -82,7 +77,6 @@ export default function AdminResetTool() {
         )
     }
 
-    // Main Admin Interface
     return (
         <div className="min-h-screen bg-gray-50 p-4 text-black">
             <div className="max-w-6xl mx-auto">
@@ -93,7 +87,6 @@ export default function AdminResetTool() {
 
                 <TabNavigation activeTab={activeTab} onTabChange={handleTabChange} />
 
-                {/* Reset User Tab Content */}
                 {activeTab === "reset-user" && (
                     <ResetUserTab
                         filteredUsers={filteredUsers}
@@ -103,7 +96,6 @@ export default function AdminResetTool() {
                     />
                 )}
 
-                {/* Reset Trial Tab Content */}
                 {activeTab === "reset-trial" && (
                     <ResetTrialTab
                         searchTerm={trialSearchTerm}

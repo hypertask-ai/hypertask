@@ -3,7 +3,6 @@ import { visibleUserInboxWhere } from "@/utils/controllers/notifications/visible
 import { eventKeepsImportant, isQuietAgentMention } from "@/lib/inboxQuietAgents";
 import { HTPR_7096_QUIET_OWNER_INBOX_FLAG } from "@/lib/flags/definitions/htpr-7096-quiet-owner-inbox";
 
-/** HTPR-7096 flag, keyed on the inbox owner. Loaded lazily so strict module stubs stay untouched. */
 export async function isQuietOwnerInboxOn(ownerUserId: number): Promise<boolean> {
   const { isFeatureEnabled } = await import("@/lib/flags");
   return isFeatureEnabled(HTPR_7096_QUIET_OWNER_INBOX_FLAG, ownerUserId);
@@ -18,13 +17,6 @@ type QuietCandidate = {
   createdAt: Date | string;
 };
 
-/**
- * With the flag on for the viewer, an agent mention is Important only while it
- * is an unanswered Question. Answered = the viewer commented on the task after
- * the question; their agents' comments do not count. A task is quieted only when
- * no other active event would keep it Important. Flag off returns the rows
- * untouched.
- */
 export async function markQuietAgentMentions<T extends QuietCandidate>(
   db: {
     comment: { groupBy: (args: any) => Promise<any[]> };
@@ -57,10 +49,6 @@ export async function markQuietAgentMentions<T extends QuietCandidate>(
   }
   const candidates = rows.filter((row) => isQuietAgentMention(row, answeredAt));
   if (candidates.length === 0) return rows;
-  // getAll keeps one representative row per task. Quiet the task only when EVERY
-  // active event that would make it Important today is a quiet agent mention. A
-  // human mention, comment or Assigned event, a direct reply or an unanswered
-  // agent Question keeps the task Important.
   const candidateTaskIds = Array.from(
     new Set(candidates.flatMap((row) => (row.taskId == null ? [] : [row.taskId]))),
   );

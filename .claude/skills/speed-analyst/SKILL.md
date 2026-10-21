@@ -7,6 +7,8 @@ description: SPEED RUNNER only, read daily live speed numbers, investigate and s
 
 **SPEED RUNNER takes speed work only.** Route non-speed work to another runner. Measuring is deterministic; choosing causes and experiments needs a high-capability model at high reasoning effort. Use `/intensity` when available. Do not turn analysis into a script or a second bot.
 
+**Work toward [GOALS.md](GOALS.md)**: 50 ms in-app navigation, next open milestone first. The runner dispatcher sends you the top free `[SPEED]` ticket, or a research round every 6 hours when none is free.
+
 This is the map, not a parallel `/ship`. Read [PLAYBOOK.md](PLAYBOOK.md) first and update it **after every investigation and every weekly research round**, including no-win and failed experiments. Source: https://app.hypertask.ai/detail/project-4060/232.
 
 | Step | Load / do | Done when |

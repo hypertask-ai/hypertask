@@ -23,12 +23,10 @@ const TaskHeadingContainer = ({ heading }: { heading: string }) => {
           style={{ flex: 1 }}
         >
           <>
-            {/* --------------------------- TITLE -------------------------- */}
             <div
               className="block items-center gap-[12px]"
               style={{
                 whiteSpace: "pre-line",
-                // wordBreak:"break-wr"
               }}
             >
               <span className="inline xs:text-subheading sm:text-heading sm:leading-[39px]">
@@ -42,7 +40,6 @@ const TaskHeadingContainer = ({ heading }: { heading: string }) => {
           className="flex items-center gap-[10px]"
         >
           <>
-            {/**---------------------------------ARCHIVE TASK NOTIFICATION */}
             <>
               <div>
                 <button className={` hidden relative group sm:block`}>
@@ -50,7 +47,6 @@ const TaskHeadingContainer = ({ heading }: { heading: string }) => {
                 </button>
               </div>
             </>
-            {/**----------------------------------REMIND ME TASK DETAIL */}
             <>
               <button className="relative group flex gap-1 items-center">
                 <Clock className={`h-[18px] w-[18px] text-[${"#696b6e"}]`}  strokeWidth={1.75}/>
@@ -58,7 +54,6 @@ const TaskHeadingContainer = ({ heading }: { heading: string }) => {
             </>
           </>
 
-          {/**--------------------------------------MARK TASK AS DONE */}
           <div tabIndex={0} id="markAsDone" className="relative group h-[20px]">
             <button tabIndex={-1}>
               <Check
@@ -72,7 +67,6 @@ const TaskHeadingContainer = ({ heading }: { heading: string }) => {
         </>
       }
     >
-      {/**---------------------------------------TASK SUMMARY */}
       {false && (
         <div
           id="task-summary-container"

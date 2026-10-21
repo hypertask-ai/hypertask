@@ -23,8 +23,6 @@ const route = taskWriteRoute({
     const actingUserId = session.userId;
     const signedSession = verifySession(request.cookies ? request.cookies[SESSION_COOKIE] : parseCookies(request.headers.get("cookie") ?? "").get(SESSION_COOKIE));
 
-    // HTPR-6376: agent actor comes from the signed session claim. Body agentId
-    // may confirm that claim but cannot forge one.
     const actingAgent = resolveActingAgent({
       sessionAgentId: signedSession?.agentId ?? null,
       bodyAgentId: agentId,
@@ -33,7 +31,6 @@ const route = taskWriteRoute({
       return NextResponse.json({ message: actingAgent.message }, { status: actingAgent.status });
     }
 
-    // Audit display comes from the verified session's user row.
     const [sessionUser, agent] = await Promise.all([
       prisma.user.findUnique({
         where: { id: actingUserId },
@@ -73,16 +70,12 @@ const route = taskWriteRoute({
       dueDate: null,
     };
 
-    // agent?.id is the auth-bound, ownership-checked actor. Never pass the raw
-    // body value through after the resolution above.
     const { status: writeStatus, json: updatedTask }: any = await updateTaskSingle(
       newTask,
       user as IUser,
       agent?.id ?? null
     );
 
-    // Same as setDueDate: stop before the activity and the queue work when
-    // the write was refused (HTPR-4982).
     if (writeStatus !== 200) {
       return NextResponse.json(updatedTask, { status: writeStatus });
     }
@@ -91,8 +84,6 @@ const route = taskWriteRoute({
       await cancelDueDateJob(taskId, updatedTask.projectId);
     }
 
-    // Archiving (or restoring) moves the task in or out of every inbox that
-    // holds a notification for it, so those inboxes need a nudge (HTPR-4724).
     void broadcastInboxForTask(taskId);
 
     await createArchiveActivity({
@@ -112,9 +103,6 @@ const route = taskWriteRoute({
       agent?.id ?? null
     );
 
-    // Real-time: refresh this board for everyone watching it, and notify any
-    // open task-detail views so they live-sync the archived/unarchived state
-    // (HTPR-3980, HTPR-5690). originUserId is for other subscribers only.
     void broadcastBoardChange(updatedTask?.projectId, { originUserId: user.id });
     void broadcastTaskChange(updatedTask?.id ?? taskId, {
       originUserId: user.id,
@@ -127,7 +115,6 @@ const route = taskWriteRoute({
 export const POST: TaskWriteRoute = async (request, session) => {
   try {
     const body = await request.json();
-    // The legacy 500 exposes req.body in its pre-auth destructuring error text.
     const req = { body };
     const { taskId } = req.body;
     void taskId;

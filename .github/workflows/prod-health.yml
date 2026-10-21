@@ -85,7 +85,7 @@ jobs:
           }
           ignored_only_between() {
             local from="$1" to="$2"
-            [ -z "$(git diff --name-only "$from..$to" -- . ':!*.md' ':!.github' ':!openwiki' ':!docs' ':!.claude' | sed -n 1p)" ]
+            [ -z "$(git diff --name-only "$from..$to" -- . ':!*.md' ':!.github' ':!docs' ':!.claude' | sed -n 1p)" ]
           }
           current_prod_head() {
             if [ -n "${PROD_HEAD_OVERRIDE:-}" ]; then
@@ -761,9 +761,9 @@ jobs:
           [ "$AGE" -lt 900 ] && { echo "Staging tip is ${AGE}s old; a deploy is probably still in flight."; exit 0; }
 
           if git merge-base --is-ancestor "$LIVE" "$TIP" 2>/dev/null; then
-            # Commits the deploy ignore-step skips (docs, .github, openwiki) never
+            # Commits the deploy ignore-step skips (docs, .github) never
             # build, so being "behind" by only those is the expected steady state.
-            APP_CHANGES=$(git diff --name-only "$LIVE..$TIP" -- . ':!*.md' ':!.github' ':!openwiki' ':!docs' ':!.claude' | sed -n 1p)
+            APP_CHANGES=$(git diff --name-only "$LIVE..$TIP" -- . ':!*.md' ':!.github' ':!docs' ':!.claude' | sed -n 1p)
             if [ -z "$APP_CHANGES" ]; then
               echo "Live deploy is behind only by non-building commits (docs/CI); nothing to promote."
               exit 0

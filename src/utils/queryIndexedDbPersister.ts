@@ -7,6 +7,7 @@ import {
   MAX_PERSISTED_CLIENT_BYTES,
   serializePersistedClientWithinBudget,
 } from "@/utils/queryPersistence";
+import { requestValue, waitForTransaction } from "@/lib/indexedDb/transactionPromises";
 
 const DATABASE_NAME = "hypertask-query-cache";
 const DATABASE_VERSION = 1;
@@ -173,9 +174,6 @@ export const parseQueryCacheRecord = async (
   }
 
   try {
-    // Response.json exposes an asynchronous parse boundary. Unlike the former
-    // localStorage path, a cache up to 2 MB is never read and parsed in the
-    // provider's synchronous startup call stack.
     const client = await new Response(value.payload).json();
     return isPersistedClient(client) ? client : null;
   } catch {
@@ -270,7 +268,6 @@ const clearLocalQueryStorage = () => {
       }
     }
   } catch {
-    // Account-scoped local fallback cleanup is best-effort on sign-out.
   }
 };
 
@@ -298,18 +295,11 @@ export const handleQueryPersistenceControlMessage = (data: unknown) => {
     pauseActivePersisters();
     closeActiveDatabases();
     beginDeletionBarrier(data.token);
-    // The sender removes these keys before posting. Removing them again in
-    // each receiving tab closes the gap where a pending throttled local write
-    // can run before the BroadcastChannel message is delivered.
     clearLocalQueryStorage();
     return;
   }
   const deleted = data.deleted === true;
   finishDeletionBarrier(data.token, deleted);
-  // CLEAR_START is emitted by the full-account logout cleanup. Existing
-  // QueryClients can still contain the departing account's data, so they stay
-  // fenced even after deletion succeeds. Only a new server-authenticated
-  // account boundary may create a persister in the new generation.
 };
 
 const getControlChannel = (): BroadcastChannel | null => {
@@ -373,19 +363,6 @@ const openDatabase = (startedGeneration: number): Promise<IDBDatabase> => {
     };
   });
 };
-
-const waitForTransaction = (transaction: IDBTransaction): Promise<void> =>
-  new Promise((resolve, reject) => {
-    transaction.oncomplete = () => resolve();
-    transaction.onabort = () => reject(transaction.error);
-    transaction.onerror = () => reject(transaction.error);
-  });
-
-const requestValue = <T>(request: IDBRequest<T>): Promise<T> =>
-  new Promise((resolve, reject) => {
-    request.onsuccess = () => resolve(request.result);
-    request.onerror = () => reject(request.error);
-  });
 
 const indexedDbStorage: QueryCacheStorage = {
   read: async (accountId) => {
@@ -452,7 +429,6 @@ const retireUnscopedLegacyCache = (
   try {
     storage?.removeItem(LEGACY_QUERY_CACHE_STORAGE_KEY);
   } catch {
-    // Storage cleanup is best-effort; the unscoped value is never hydrated.
   }
 };
 
@@ -464,7 +440,6 @@ const retireLegacyCachesAfterIndexedDbRead = (
   try {
     storage?.removeItem(accountLocalCacheKey(accountId));
   } catch {
-    // The account-scoped fallback is never read while IndexedDB is active.
   }
 };
 
@@ -479,7 +454,6 @@ const finishRestoreMeasurement = (startedAt: number | null) => {
       end: performance.now(),
     });
   } catch {
-    // Performance measurement is diagnostic only.
   }
 };
 
@@ -591,8 +565,6 @@ export const createIndexedDbQueryPersister = ({
           await storage.remove(accountId, revision).catch(() => undefined);
         }
       } catch {
-        // IndexedDB can be denied or blocked. The network remains the source
-        // of truth, and query_cache=local is the explicit fallback switch.
       } finally {
         finishRestoreMeasurement(restoreStartedAt);
       }
@@ -662,12 +634,10 @@ const createLocalQueryPersister = (
                 return;
               }
             } catch {
-              // A valid current snapshot replaces corrupt fallback data.
             }
           }
           window.localStorage.setItem(key, serialized);
         } catch {
-          // The local fallback is best-effort; network data remains canonical.
         }
       }, DEFAULT_THROTTLE_MS);
     },
@@ -701,7 +671,6 @@ const createLocalQueryPersister = (
           window.localStorage.removeItem(key);
         }
       } catch {
-        // Conditional cleanup is best-effort in restricted storage contexts.
       } finally {
         restoredValue = undefined;
       }
@@ -713,9 +682,6 @@ const createReadyQueryPersister = (
   accountId: number,
 ): DisposableQueryPersister => {
   if (typeof window === "undefined") return noOpPersister;
-  // A completed logout advances the global generation before deleting data.
-  // A newly server-authenticated account may resume only in that new
-  // generation; persisters created before logout remain permanently fenced.
   operationsDisabled = false;
   const persisterOperationGeneration = operationGeneration;
   getControlChannel();
@@ -739,7 +705,6 @@ const createReadyQueryPersister = (
       );
     }
   } catch {
-    // Storage access is optional; the environment default still applies.
   }
 
   const mode = resolveQueryPersistenceMode({
@@ -753,8 +718,6 @@ const createReadyQueryPersister = (
     return createIndexedDbQueryPersister({ accountId });
   }
 
-  // Local mode owns the account-scoped key below. Retire only the former
-  // unscoped cache so the fallback survives reloads.
   retireUnscopedLegacyCache(window.localStorage);
   return createLocalQueryPersister(accountId, persisterOperationGeneration);
 };

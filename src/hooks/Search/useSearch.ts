@@ -1,8 +1,8 @@
 import { parseSearchQuery } from "@/lib/search/operators";
 import { searchConfig } from "@/lib/configs/search.config";
-import { HTPR_6369_SEARCH_OPERATORS_FLAG } from "@/lib/flags/keys";
-import { HTPR_6370_SEARCH_CHIPS_FLAG, HTPR_6688_SEARCH_AUTOCOMPLETE_FLAG, HTPR_6865_SEARCH_LAYOUT_FLAG, HTPR_6878_SEARCH_LABEL_SCOPE_FLAG, HTPR_6879_SEARCH_ESC_BACK_FLAG, HTPR_6880_SEARCH_COMMENTER_FLAG, HTPR_6994_SEARCH_ESC_LEAVES_FLAG } from "@/lib/flags/keys";
-import { useFlag } from "@/hooks/useFlag";
+import { HTPR_6688_SEARCH_AUTOCOMPLETE_FLAG, HTPR_6865_SEARCH_LAYOUT_FLAG, HTPR_6878_SEARCH_LABEL_SCOPE_FLAG, HTPR_6879_SEARCH_ESC_BACK_FLAG, HTPR_6880_SEARCH_COMMENTER_FLAG, HTPR_6994_SEARCH_ESC_LEAVES_FLAG } from "@/lib/flags/keys";
+import { useFlag, useFlagReady } from "@/hooks/useFlag";
+import { isServerSearchFor, type ServerStartedSearch } from "@/lib/search/serverStartedSearch";
 import { useDeviceContext } from "@/lib/contexts/deviceContext";
 import { useQueryClient } from "@tanstack/react-query";
 import axios from "axios";
@@ -33,7 +33,9 @@ export function useSearch(
   _searchTerm: string,
   _initialTabIndex?: number,
   _includeArchived = false,
-  _fromProject: number | null = null
+  _fromProject: number | null = null,
+  serverStartedSearch?: Promise<ServerStartedSearch | null>,
+  searchOnce = false
 ) {
   const commenterFlagEnabled = useFlag(HTPR_6880_SEARCH_COMMENTER_FLAG);
   const { data: searchCache } = useGetSearchCache();
@@ -63,12 +65,9 @@ export function useSearch(
   >(_initialTabIndex);
   const [tabs, setTabs] = useState<string[]>([]);
   const [results, setResults] = useState<Record<string, any[]> | null>(null);
-  const [filterModifiers, setFilterModifiers] = useState<any>(null);
-  const [suggestedValue, setSuggestedValue] = useState<string>("");
   const [includeArchived, setIncludeArchived] =
     useState<boolean>(_includeArchived);
 
-  // --------------- Refs
   const tasksInputRef = useRef<HTMLInputElement>(null);
   const ulRef = useRef<HTMLUListElement | null>(null);
   const liSelectedRef = useRef<HTMLLIElement | null>(null);
@@ -78,6 +77,8 @@ export function useSearch(
   const searchRequestGate = useRef(new SearchRequestGate()).current;
   const lastSearchKey = useRef<string | null>(null);
   const tabSearchHistory = useRef<string[] | null>(null);
+  const pendingServerSearch = useRef(serverStartedSearch);
+  const mountSearchAwaitsFlags = useRef(false);
   const controller: { [key: number]: { pressed: boolean } } = {
     ...globalConstants.multipleKeys,
   };
@@ -86,51 +87,15 @@ export function useSearch(
   const router = useRouter();
   const queryClient = useQueryClient();
   const isApple = useDeviceContext();
-  const searchOperatorsEnabled = useFlag(HTPR_6369_SEARCH_OPERATORS_FLAG);
-  const searchChipsEnabled = useFlag(HTPR_6370_SEARCH_CHIPS_FLAG) && searchOperatorsEnabled;
-  const searchAutocompleteEnabled = useFlag(HTPR_6688_SEARCH_AUTOCOMPLETE_FLAG) && searchChipsEnabled;
+  const searchAutocompleteEnabled = useFlag(HTPR_6688_SEARCH_AUTOCOMPLETE_FLAG);
   const searchLayoutFlagEnabled = useFlag(HTPR_6865_SEARCH_LAYOUT_FLAG);
   const searchLayoutEnabled = searchLayoutFlagEnabled && searchAutocompleteEnabled;
   const searchLabelScopeFlagEnabled = useFlag(HTPR_6878_SEARCH_LABEL_SCOPE_FLAG);
   const searchEscBackFlagEnabled = useFlag(HTPR_6879_SEARCH_ESC_BACK_FLAG);
   const searchEscBackEnabled = searchEscBackFlagEnabled && searchLayoutEnabled;
   const searchEscLeavesEnabled = useFlag(HTPR_6994_SEARCH_ESC_LEAVES_FLAG);
+  const searchFlagsReady = useFlagReady(HTPR_6865_SEARCH_LAYOUT_FLAG);
   const isSearchDraft = searchLayoutEnabled && submittedQuery !== inputValue.trim();
-
-  function handleProjectsFromCache() {
-    setProjects(allProjects);
-    const boardNames = allProjects.map((project: any) =>
-      project.title.toLowerCase()
-    );
-    setFilterModifiers({
-      "is:": ["archived", "open"],
-      "board:": boardNames,
-    });
-  }
-
-  function handleInputAutoComplete(currentText: string): string {
-    const regex = /(.*)(is:|priority:|board:)(.*)$/;
-    const match = currentText.match(regex);
-
-    if (!match) return "";
-
-    const textBeforePrefix = match[1];
-    const potentialPrefix = match[2].toLowerCase();
-    const partialValue = match[3].toLowerCase();
-    if (!filterModifiers[potentialPrefix]) return "";
-
-    const validValues = filterModifiers[potentialPrefix];
-    const bestMatchValue = validValues.find((value: string) => {
-      return value.toLowerCase().startsWith(partialValue);
-    });
-
-    if (bestMatchValue && bestMatchValue.toLowerCase() !== partialValue) {
-      const completedTerm = potentialPrefix + bestMatchValue;
-      return textBeforePrefix + completedTerm;
-    }
-
-    return "";
-  }
 
   function currentSearchKey(searchTerm: string, showArchived: boolean, searchProjects = projects) {
     return JSON.stringify([
@@ -138,7 +103,6 @@ export function useSearch(
       showArchived,
       _fromProject,
       searchProjects.map((project) => project.id),
-      searchOperatorsEnabled,
     ]);
   }
 
@@ -153,39 +117,64 @@ export function useSearch(
   }
 
   function beginSearch(searchTerm: string, showArchived: boolean) {
+    pendingServerSearch.current = undefined;
+    recordSearch(searchTerm, showArchived);
+    return searchRequestGate.begin();
+  }
+
+  function recordSearch(searchTerm: string, showArchived: boolean) {
     if (searchEscBackEnabled) {
       const history = getTabSearchHistory();
       const term = searchTerm.trim();
       if (term.length >= 2 && history.at(-1) !== term) {
         history.push(term);
-        try { sessionStorage.setItem("htpr-6879-search-history", JSON.stringify(history)); } catch { /* Keep history in memory when storage is unavailable. */ }
+        try { sessionStorage.setItem("htpr-6879-search-history", JSON.stringify(history)); } catch {}
       }
     }
     setSubmittedQuery(searchTerm.trim());
     lastSearchKey.current = currentSearchKey(searchTerm, showArchived);
-    return searchRequestGate.begin();
+  }
+
+  async function showServerStartedSearch(started: Promise<ServerStartedSearch | null>, isCurrent: () => boolean) {
+    const searchesBeforeWait = searchRequestGate.latestRequest();
+    if (searchLayoutEnabled) tasksInputRef.current?.blur();
+    const search = await started;
+    if (!isCurrent() || pendingServerSearch.current !== started || !searchRequestGate.isLatest(searchesBeforeWait) ||
+      !isServerSearchFor(search, _searchTerm, _includeArchived, _fromProject)) return;
+    pendingServerSearch.current = undefined;
+    searchRequestGate.begin();
+    recordSearch(_searchTerm, _includeArchived);
+    lastSearchKey.current = currentSearchKey(_searchTerm, _includeArchived, search.projectIds.map((id) => ({ id }) as IProject));
+    const processedData = search.data.processedData as Record<string, ITypedTask[]>;
+    if (processedData["All"].length > 0) {
+      applySearchResults(processedData, search.data.tabs);
+      if (!searchAutocompleteEnabled) tasksInputRef.current?.blur();
+    } else {
+      handleStatesOnResponse(searchConfig.responseMessages.fail);
+    }
+  }
+
+  async function mountSearchResponse(showArchived: boolean, started: Promise<ServerStartedSearch | null> | undefined) {
+    const search = started ? await started : null;
+    if (isServerSearchFor(search, _searchTerm, showArchived, _fromProject) &&
+      search.projectIds.join() === projects.map((item) => item.id).join()) {
+      return { status: 200, data: search.data };
+    }
+    return axios.post(searchDocumentsRoute, {
+      projectIds: projects.map((item) => item.id),
+      searchQuery: _searchTerm,
+      archive: defaultSearchArchiveStatus(showArchived),
+      contextProjectId: _fromProject,
+    });
   }
 
   async function handleSearchOnMount(showArchived = includeArchived) {
-    // If there's a search term from URL params, fetch results from server
     if (_searchTerm && _searchTerm.length >= 2) {
+      const serverSearch = searchFlagsReady ? pendingServerSearch.current : undefined;
       const requestId = beginSearch(_searchTerm, showArchived);
       if (searchLayoutEnabled) tasksInputRef.current?.blur();
-      const { searchProjectIds, processedSearchTerm, archive } =
-        searchOperatorsEnabled
-          ? { searchProjectIds: [], processedSearchTerm: _searchTerm, archive: defaultSearchArchiveStatus(showArchived) }
-          : searchBoards(_searchTerm, showArchived);
-
       try {
-        const response = await axios.post(searchDocumentsRoute, {
-          projectIds:
-            searchProjectIds.length > 0
-              ? searchProjectIds
-              : projects.map((item) => item.id),
-          searchQuery: processedSearchTerm,
-          archive,
-          contextProjectId: _fromProject,
-        });
+        const response = await mountSearchResponse(showArchived, serverSearch);
 
         if (!searchRequestGate.isLatest(requestId)) return;
 
@@ -206,12 +195,6 @@ export function useSearch(
         handleStatesOnResponse(searchConfig.responseMessages.error);
       }
     }
-  }
-
-  function handleChange(e: any) {
-    setInputValue(e.target.value);
-    setSuggestedValue(handleInputAutoComplete(e.target.value));
-    if (searchChipsEnabled) setSuggestedValue("");
   }
 
   async function handleLinkClick(task: ITypedTask) {
@@ -293,60 +276,6 @@ export function useSearch(
     return buildSearchUrl(searchTerm, tabIndex, showArchived, _fromProject);
   }
 
-  /**
-   * Searches for boards in the given array based on an input string
-   * @param input - The search input that may contain board identifiers
-   * @param boardsArray - Array of board names to search through
-   * @returns Object containing matching board names and their indexes
-   */
-  function searchBoards(input: string, showArchived = includeArchived, searchProjects = projects): {
-    searchProjectIds: number[];
-    archive: null | "Normal" | "Archive";
-    processedSearchTerm: string;
-  } {
-    const searchProjectIds: number[] = [];
-    let lowerInput = input.toLowerCase();
-    let archive: null | "Normal" | "Archive" =
-      defaultSearchArchiveStatus(showArchived);
-    // Check if input contains the "board:" identifier
-    if (!lowerInput.includes("board:") && !lowerInput.includes("is:")) {
-      return {
-        searchProjectIds: [],
-        archive,
-        processedSearchTerm: input,
-      };
-    }
-
-    if (lowerInput.includes("board:")) {
-      for (const project of searchProjects) {
-        if (lowerInput.includes(("board:" + project.title).toLowerCase()))
-          searchProjectIds.push(project.id);
-      }
-
-      for (const project of searchProjects) {
-        if (lowerInput.includes(("board:" + project.title).toLowerCase()))
-          lowerInput = lowerInput.replaceAll(
-            ("board:" + project.title).toLowerCase(),
-            ""
-          );
-      }
-    }
-
-    if (lowerInput.includes("is:archived")) {
-      archive = "Archive";
-      lowerInput = lowerInput.replaceAll("is:archived".toLowerCase(), "");
-    } else if (lowerInput.includes("is:open")) {
-      archive = "Normal";
-      lowerInput = lowerInput.replaceAll("is:open".toLowerCase(), "");
-    }
-
-    return {
-      searchProjectIds: searchProjectIds,
-      archive,
-      processedSearchTerm: lowerInput.trim(),
-    };
-  }
-
   function updateSearchHistory(searchTerm: string) {
     if (searchTerm.length < 2) {
       searchRequestGate.invalidate();
@@ -384,7 +313,6 @@ export function useSearch(
         return handleStatesOnResponse(searchConfig.responseMessages.fail);
       lastSearchKey.current = currentSearchKey(searchTerm, showArchived, searchProjects);
 
-      // Draft results must not navigate: a delayed URL render can overwrite newer typing.
       if (!options?.live) router.replace(
         searchUrl(
           searchTerm,
@@ -392,18 +320,10 @@ export function useSearch(
           showArchived
         )
       );
-      const { searchProjectIds, processedSearchTerm, archive } =
-        searchOperatorsEnabled
-          ? { searchProjectIds: [], processedSearchTerm: searchTerm, archive: defaultSearchArchiveStatus(showArchived) }
-          : searchBoards(searchTerm, showArchived, searchProjects);
-
       const response = await axios.post(searchDocumentsRoute, {
-        projectIds:
-          searchProjectIds.length > 0
-            ? searchProjectIds
-            : searchProjects.map((item) => item.id),
-        searchQuery: processedSearchTerm,
-        archive,
+        projectIds: searchProjects.map((item) => item.id),
+        searchQuery: searchTerm,
+        archive: defaultSearchArchiveStatus(showArchived),
         contextProjectId: _fromProject,
       });
 
@@ -414,7 +334,6 @@ export function useSearch(
       if (response.status === 200) {
         const { processedData, tabs: splits } = response.data;
         if (processedData["All"].length > 0) {
-          // Only update search history in cache, not results
           const newData = {
             history: updatedHistory,
             results: [],
@@ -478,17 +397,16 @@ export function useSearch(
   }
 
   function handleKeyDown(event: KeyboardEvent) {
-    // The app shell prevents body arrows from scrolling, not from selecting results.
     const resultArrow = searchAutocompleteEnabled &&
       document.activeElement === document.body &&
       !event.ctrlKey && !event.metaKey && !event.altKey &&
       ["ArrowDown", "ArrowUp"].includes(event.key);
-    if (searchChipsEnabled && ((event.defaultPrevented && !resultArrow) ||
-      (event.key === "Escape" && !searchEscLeavesEnabled && tasksInputRef.current?.getAttribute("aria-expanded") === "true"))) return;
+    if ((event.defaultPrevented && !resultArrow) ||
+      (event.key === "Escape" && !searchEscLeavesEnabled && tasksInputRef.current?.getAttribute("aria-expanded") === "true")) return;
     const cycleSearchTabs = searchLayoutEnabled && !isSearchDraft && event.key === "Tab" &&
       !event.isComposing && !event.ctrlKey && !event.metaKey && !event.altKey &&
       tasksInputRef.current?.getAttribute("aria-expanded") !== "true";
-    if (searchChipsEnabled && document.activeElement === tasksInputRef.current &&
+    if (document.activeElement === tasksInputRef.current &&
       (["Enter", "Backspace"].includes(event.key) || (event.key === "Tab" && !cycleSearchTabs) ||
         (["ArrowDown", "ArrowUp"].includes(event.key) && tasksInputRef.current?.getAttribute("aria-expanded") === "true"))) return;
     let cmdControl = (isApple && event.metaKey) || (!isApple && event.ctrlKey);
@@ -506,7 +424,7 @@ export function useSearch(
         const history = getTabSearchHistory();
         if (!isSearchDraft) history.pop();
         const previous = history.at(-1) ?? "";
-        try { sessionStorage.setItem("htpr-6879-search-history", JSON.stringify(history)); } catch { /* The in-memory history still works. */ }
+        try { sessionStorage.setItem("htpr-6879-search-history", JSON.stringify(history)); } catch {}
         setInputValue(previous);
         setExplicitTabIndex(undefined);
         handleStatesOnResponse(searchConfig.responseMessages.default);
@@ -522,7 +440,6 @@ export function useSearch(
       showCommands.show ||
       document?.activeElement?.role === "dialog" ||
       document?.activeElement?.id === "modalButtons" ||
-      // document.activeElement?.tagName === "INPUT" ||
       document.activeElement?.id === "htc" ||
       searchConfig.handleKeyDown.classNamesToReturnFrom.includes(
         document?.activeElement?.className
@@ -531,10 +448,8 @@ export function useSearch(
     )
       return;
 
-    // Draft suggestions own navigation; old result rows must never be actionable.
     if (isSearchDraft && [KeyCodes.ARROW_DOWN, KeyCodes.ARROW_UP, KeyCodes.J, KeyCodes.K, KeyCodes.TAB].some((key) => key === event.keyCode) && !cmdControl) return;
 
-    // press k
     if (event.keyCode === KeyCodes.K && cmdControl) {
       event.preventDefault();
       toggleShowCommands();
@@ -564,7 +479,6 @@ export function useSearch(
         searchConfig.elementIds.history.id
       );
 
-      //Phase 1 (if nothing in search type, we are going to display past searches if any)
       if (!!historyList) {
         if (selectedHistory === null) {
           setSelectedHistory(0);
@@ -583,7 +497,6 @@ export function useSearch(
         }
       }
 
-      //Phase 3 (Since we are skipping suggestions right now)
       if (typedTasks.length > 0 && (selectedIndex !== null || searchAutocompleteEnabled)) {
         if (searchAutocompleteEnabled) {
           event.preventDefault();
@@ -628,7 +541,6 @@ export function useSearch(
         }
       }
 
-      //Phase 3 (Since we are skipping suggestions right now)
       if (typedTasks.length > 0 && (selectedIndex !== null || searchAutocompleteEnabled)) {
         if (searchAutocompleteEnabled) {
           event.preventDefault();
@@ -652,37 +564,20 @@ export function useSearch(
     if (
       (event.keyCode === KeyCodes.TAB || cycleSearchTabs) && tabs.length > 0 &&
       (searchLayoutEnabled
-        // Enter leaves the search box, so Tab cycles only outside it and never traps the cursor.
         ? cycleSearchTabs && !isInputFocused && tabs.length > 1
         : !isInputFocused)
     ) {
       event.preventDefault();
       let newValue;
       if (event.shiftKey) {
-        // Navigate to the previous tab
         newValue = activeSplit !== 0 ? activeSplit - 1 : tabs.length - 1;
       } else {
-        // Navigate to the next tab
         newValue = activeSplit !== tabs.length - 1 ? activeSplit + 1 : 0;
       }
 
       updateSplitAndTasks(newValue);
     }
 
-    // Only the search field swallows Tab, and only to accept a live
-    // autocompletion. Anything else focusable on the page (the archived
-    // toggle) keeps native Tab so it stays keyboard reachable.
-    if (
-      event.keyCode === KeyCodes.TAB &&
-      document.activeElement === tasksInputRef.current &&
-      suggestedValue
-    ) {
-      event.preventDefault();
-      setInputValue(suggestedValue);
-      setSuggestedValue("");
-    }
-
-    // ========== [g] main handler: initiate sequence only if no other g-then sequence is active
     if (
       event.keyCode === KeyCodes.G &&
       !isInputFocused &&
@@ -692,7 +587,6 @@ export function useSearch(
       !event.shiftKey &&
       !event.repeat
     ) {
-      // If another g-sequence was not just triggered, start the timer for g-then combos.
       if (!lastgClick.current) {
         const now = new Date().getTime();
         lastgClick.current = now;
@@ -701,10 +595,8 @@ export function useSearch(
         }, globalConstants.gThenKeyDelay);
         return;
       }
-      // Don't let a plain [g] immediately fall through to any other logic
     }
 
-    // ========== [g] then [x] - Toggle archived search results
     if (
       lastgClick.current &&
       event.keyCode === KeyCodes.X &&
@@ -723,8 +615,6 @@ export function useSearch(
       }
     }
 
-    // ========== [g] then [g] - Jump to top/bottom row
-    // Only handle this if (a) g was just pressed, timer active, (b) NOT mixed up with other G-combos
     if (
       lastgClick.current &&
       controller[KeyCodes.G]?.pressed &&
@@ -733,9 +623,8 @@ export function useSearch(
     ) {
       const now = new Date().getTime();
       if (now - lastgClick.current < globalConstants.gThenKeyDelay) {
-        lastgClick.current = null; // consume the combo
+        lastgClick.current = null;
         if (event.shiftKey) {
-          // Go to bottom
           setSelectedAndInView(
             typedTasks[typedTasks.length - 1],
             typedTasks.length - 1
@@ -744,13 +633,12 @@ export function useSearch(
             .getElementById(`task_${typedTasks[typedTasks.length - 1].taskId}`)
             ?.scrollIntoView({ behavior: "smooth", block: "center" });
         } else {
-          // Go to top
           setSelectedAndInView(typedTasks[0], 0);
           document
             .getElementById(`task_${typedTasks[0].taskId}`)
             ?.scrollIntoView({ behavior: "smooth", block: "center" });
         }
-        return; // prevent interfering with any other g-then-[key]
+        return;
       }
     }
 
@@ -842,9 +730,7 @@ export function useSearch(
     inputValue,
     searchCache,
     selectedHistory,
-    suggestedValue,
     includeArchived,
-    searchChipsEnabled,
     searchAutocompleteEnabled,
     searchLayoutEnabled,
     searchEscBackEnabled,
@@ -855,24 +741,34 @@ export function useSearch(
     results,
   ]);
 
-  // -------------------- recieving data from React-Query
-  useEffect(() => handleProjectsFromCache(), [allProjects]);
+  useEffect(() => setProjects(allProjects), [allProjects]);
+
+  const hasProjects = projects.length > 0;
+  useEffect(() => {
+    const started = pendingServerSearch.current;
+    if (!started || !searchFlagsReady || hasProjects) return;
+    let current = true;
+    void showServerStartedSearch(started, () => current);
+    return () => {
+      current = false;
+    };
+  }, [searchFlagsReady, hasProjects, _searchTerm, _includeArchived, _fromProject]);
 
   useEffect(() => {
     setExplicitTabIndex(_initialTabIndex);
   }, [_initialTabIndex]);
 
-  // Keep URL navigation authoritative while avoiding the duplicate request
-  // caused by our own router.replace after an already-started search.
-  // Board loading must not reset a local draft or invalidate its waiting search.
   useEffect(() => {
     setIncludeArchived(_includeArchived);
     setInputValue(_searchTerm);
     if (projects.length > 0 && _searchTerm.length >= 2) {
       const key = currentSearchKey(_searchTerm, _includeArchived);
-      if (lastSearchKey.current !== key || (searchEscBackEnabled && getTabSearchHistory().at(-1) !== _searchTerm.trim())) {
-        void handleSearchOnMount(_includeArchived);
-      }
+      const sameSearchMissingFromHistory = lastSearchKey.current === key && searchEscBackEnabled &&
+        getTabSearchHistory().at(-1) !== _searchTerm.trim();
+      const serverSearchAwaitsFlags = !!pendingServerSearch.current && !searchFlagsReady;
+      if (searchOnce && sameSearchMissingFromHistory) recordSearch(_searchTerm, _includeArchived);
+      else if (searchOnce && serverSearchAwaitsFlags && lastSearchKey.current !== key) mountSearchAwaitsFlags.current = true;
+      else if (lastSearchKey.current !== key || sameSearchMissingFromHistory) void handleSearchOnMount(_includeArchived);
       return;
     }
     if (_searchTerm.length < 2) {
@@ -880,7 +776,13 @@ export function useSearch(
       lastSearchKey.current = currentSearchKey("", _includeArchived);
       handleStatesOnResponse(searchConfig.responseMessages.default);
     }
-  }, [_searchTerm.length >= 2 ? projects : null, _includeArchived, _searchTerm, _fromProject, searchOperatorsEnabled, searchEscBackEnabled]);
+  }, [_searchTerm.length >= 2 ? projects : null, _includeArchived, _searchTerm, _fromProject, searchEscBackEnabled]);
+
+  useEffect(() => {
+    if (!searchFlagsReady || !mountSearchAwaitsFlags.current) return;
+    mountSearchAwaitsFlags.current = false;
+    if (pendingServerSearch.current) void handleSearchOnMount(_includeArchived);
+  }, [searchFlagsReady]);
 
   useEffect(() => {
     if (!searchAutocompleteEnabled || !projects.length) return;
@@ -904,7 +806,7 @@ export function useSearch(
       }
     }, 300);
     return () => clearTimeout(timer);
-  }, [inputValue, includeArchived, projects, _fromProject, searchOperatorsEnabled, searchAutocompleteEnabled, searchLayoutEnabled]);
+  }, [inputValue, includeArchived, projects, _fromProject, searchAutocompleteEnabled, searchLayoutEnabled]);
 
   return {
     availableSearchBoards: searchLabelScopeFlagEnabled && searchLayoutEnabled ? projects : [],
@@ -912,7 +814,6 @@ export function useSearch(
     selectedIndex,
     tasksInputRef,
     inputValue,
-    handleChange,
     responseMessage: isSearchDraft ? searchConfig.responseMessages.default : responseMessage,
     typedTasks: isSearchDraft ? [] : typedTasks,
     isSearchDraft,
@@ -926,13 +827,11 @@ export function useSearch(
     updateSearchHistory,
     showCommands,
     setInputValue,
-    searchChipsEnabled,
     liSelectedRef,
     tabs,
     activeSplit,
     updateSplitAndTasks,
     results: isSearchDraft ? null : results,
-    suggestedValue,
     includeArchived,
     setIncludeArchivedResults,
   };

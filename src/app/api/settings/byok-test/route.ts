@@ -71,7 +71,6 @@ export async function POST(request: Request) {
     );
   }
 
-  // HTPR-4839: testing a key is part of the paid BYOK feature.
   if (!(await isPaidTeam(teamId))) {
     return NextResponse.json(
       {

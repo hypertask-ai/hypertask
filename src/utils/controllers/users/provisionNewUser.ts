@@ -44,7 +44,6 @@ export const provisionNewUser = async ({
     LoggedById: userId,
   };
   createLog(createLogBody);
-  // =================== CREATE USER SETTINGS
   const userSetting = await prisma.userSetting.create({
     data: {
       notification: true,
@@ -86,7 +85,6 @@ export const provisionNewUser = async ({
     },
   });
 
-  // =================== CREATE Google Account and attach the user with it
   const googleAccount = createGoogleAccount
     ? await prisma.googleAccount.create({
         data: {
@@ -105,13 +103,11 @@ export const provisionNewUser = async ({
       },
     });
   }
-  // =================== CREATE stripe customer
   const customer = await stripe.customers.create({
     name: stripeCustomerName(stripeCustomerNameEmail),
     ...(googleAccount ? { metadata: { googleAccountId: googleAccount.id } } : {}),
   });
 
-  // now update the googleaccount with the right stripeId
   if (googleAccount) {
     await prisma.googleAccount.update({
       where: {
@@ -123,12 +119,6 @@ export const provisionNewUser = async ({
     });
   }
 
-  // =================== AUTO-JOIN teams that allowlisted this email domain
-  // Only for a proven mailbox. instant-signup provisions with isVerified: false and
-  // hands back a login token, so auto-joining here unverified would let anyone claim
-  // ceo@allowlisted-company.com and walk into that team's paid boards. Users who
-  // verify later are auto-joined from the verify-code / verify-email-token routes.
-  // Never fatal: a signup must still succeed if seat billing or Stripe fails.
   if (isVerified) {
     try {
       await autoJoinByEmailDomain(userId, email);
@@ -137,7 +127,6 @@ export const provisionNewUser = async ({
     }
   }
 
-  // =========== RETURNING point for NEW USER
   return prisma.user.update({
     where: {
       id: userId,
@@ -166,7 +155,6 @@ export const updateUserProfilePicture = async (
     },
   });
 
-  //set default if none is set
   if (foundUser?.userPicture?.photoSet) {
     await prisma.userPicture.update({
       where: {

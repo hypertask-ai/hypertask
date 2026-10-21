@@ -2061,7 +2061,7 @@ if (require.main === module) {
     const { default: proxy } = load('src/proxy.ts', {
       './utils/edgeHelpers': { isValidUser: () => ({ isValid: false, user: null }) },
       './utils/serverActions': {}, './utils/helperFunctions/helperFunctions': {},
-      '@/lib/auth/cookieIdentity': identity, '@/lib/auth/sessionEdge': {},
+      '@/lib/auth/cookieIdentity': identity, '@/lib/auth/sessionEdge': { verifySessionEdge: async (token) => token === 'signed-985' ? { id: 985 } : null },
     });
     for (const mode of ['ON', 'OFF']) for (const operation of profileOperations) {
       const [suffix, method] = operations[operation];

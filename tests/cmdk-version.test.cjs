@@ -11,7 +11,6 @@ const { spawnSync } = require("node:child_process");
 
 const root = path.resolve(__dirname, "..");
 const paletteFile = "src/components/Modals/commands/HTC/commands.tsx";
-const flag = "htpr-6892-cmdk-version";
 const buildEnv = {
   NEXT_PUBLIC_BUILD_ID: "a91d4481234567890",
   NEXT_PUBLIC_BUILD_TIME: "2026-10-03T13:55:00.000Z",
@@ -21,7 +20,7 @@ const noop = () => {};
 const defaultExport = (value) => ({ __esModule: true, default: value });
 
 // Exercise the real palette and shared UI, isolating only unrelated data/hooks and modal portals.
-function renderPalette({ enabled = true, mobile = false, env = buildEnv, rows = 2 } = {}) {
+function renderPalette({ mobile = false, env = buildEnv, rows = 2 } = {}) {
   const atoms = {
     calendarSettingsAtom: { default: { showWeekends: true } },
     boardLayoutAtom: { default: "board" },
@@ -52,7 +51,7 @@ function renderPalette({ enabled = true, mobile = false, env = buildEnv, rows = 
       useRecoilState: (atom) => React.useState(atom.default),
       useRecoilValue: (atom) => atom.default,
     },
-    "@/hooks/useFlag": { useFlag: (key) => enabled && key === flag },
+    "@/hooks/useFlag": { useFlag: () => false },
     "@/lib/contexts/mobileContext": { MobileViewContext: React.createContext(mobile) },
     "@/lib/contexts/TourContext": { useTourContext: () => ({ endTour: noop }) },
     "@/hooks/MultiPages/useGetAllProjectsMinimal": { useGetAllProjectsMinimal: () => ({ data: [] }) },
@@ -128,12 +127,11 @@ function footer(html) {
 }
 
 if (require.main === module) {
-  test("flag off removes the line; the positive control actually renders it", () => {
-    assert.ok(footer(renderPalette({ enabled: true })));
-    assert.equal(footer(renderPalette({ enabled: false })), null);
+  test("desktop palette always renders the line, with every flag off", () => {
+    assert.ok(footer(renderPalette()));
   });
 
-  test("flag on shows seven-character SHA and the viewer's local short-month time", () => {
+  test("shows seven-character SHA and the viewer's local short-month time", () => {
     const previous = process.env.TZ;
     try {
       process.env.TZ = "UTC";
@@ -156,8 +154,8 @@ if (require.main === module) {
     }
   });
 
-  test("mobile bottom sheet and its search/list remain identical with either flag mode", () => {
-    assert.equal(renderPalette({ enabled: true, mobile: true }), renderPalette({ enabled: false, mobile: true }));
+  test("mobile bottom sheet has no version line", () => {
+    assert.equal(footer(renderPalette({ mobile: true })), null);
   });
 
   test("Vercel and git/prebuilt build paths supply Next's static client environment", () => {
@@ -199,13 +197,9 @@ if (require.main === module) {
     }
   });
 
-  test("ticket-specific registry entry inherits Owner+QA and reuses muted micro footer styles", () => {
-    const keys = require("./helpers/flag-files.cjs").source();
-    const flags = (read("src/lib/flags.ts") + require("./helpers/flag-files.cjs").source());
-    assert.match(keys, /HTPR_6892_CMDK_VERSION_FLAG = "htpr-6892-cmdk-version"/);
-    assert.match(flags, /key: HTPR_6892_CMDK_VERSION_FLAG,\s*shippedOn: "2026-10-03",\s*description:/);
-    assert.match(flags, /DEFAULT_FEATURE_FLAG_MODE: FeatureFlagMode = "OWNER_AND_QA"/);
-    assert.match(read(paletteFile), /useFlag\(HTPR_6892_CMDK_VERSION_FLAG\)/);
+  test("the removed flag is gone and the line reuses muted micro footer styles", () => {
+    assert.doesNotMatch(require("./helpers/flag-files.cjs").source(), /htpr-6892-cmdk-version/);
+    assert.doesNotMatch(read(paletteFile), /HTPR_6892_CMDK_VERSION_FLAG|cmdkVersionEnabled/);
     const dom = new JSDOM(renderPalette());
     try {
       const line = dom.window.document.querySelector("[data-cmdk-version]");

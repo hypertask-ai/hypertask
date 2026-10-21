@@ -12,10 +12,6 @@ export type SetMyTasksSnoozeResult =
     }
   | { ok: false; status: number; error: string };
 
-/**
- * Sets or clears snooze on the caller's person assignment row.
- * Prefer immutable Assignees.id; taskId falls back for the command palette.
- */
 function isPositiveInt(value: unknown): value is number {
   return typeof value === "number" && Number.isInteger(value) && value > 0;
 }
@@ -93,10 +89,6 @@ export async function setMyTasksSnooze(args: {
   }
 }
 
-/**
- * Hide or restore a My Tasks row when Remind Me is set or fires.
- * No assignment (created/watching only) is a no-op.
- */
 export async function syncMyTasksSnoozeFromReminder(args: {
   userId: number;
   taskId: number;

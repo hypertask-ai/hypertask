@@ -12,6 +12,14 @@ const userId = 100
 const demoBoardId = 42
 
 function loadTs(relativePath, aliases) {
+  aliases = {
+    "@/lib/auth/agentCookieBridgeRoutes": require("./task-route-loader.cjs").load("src/lib/auth/agentCookieBridgeRoutes.ts", {}),
+    "@/lib/telemetry/signupAnalytics": { recordServerCapture: () => {} },
+    "@/lib/auth/agentScope": require("./helpers/agent-board-scope.cjs").enforcedScope,
+    '@/lib/auth/signupAttributionContext': { createSignupContext: async () => null, consumeSignupContext: async () => null, consumeSignupCookie: async () => null, consumeGoogleSignupContext: async () => null, bindSignupCodeContext: async () => {}, takeSignupCodeContext: async () => null },
+    ...aliases,
+  }
+
   if (/src\/lib\/flags\/(?:keys|definitions)\.ts$/.test(relativePath)) return require("./helpers/flag-files.cjs").load(relativePath);
   const javascript = ts.transpileModule(fs.readFileSync(path.join(root, relativePath), 'utf8'), {
     compilerOptions: { esModuleInterop: true, module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2020 },
@@ -91,7 +99,8 @@ function makeHarness({ existing = true, membershipOnly = false, flagMode = 'EVER
     '@/lib/themePreferences': { themeCookieSeedValue: () => undefined },
     '@/lib/telemetry/signupAnalytics': { signupAttributionFromHeaders: () => ({}) },
     '@/lib/onboarding/emails/agentNudge': { maybeScheduleAgentNudge: async () => 'flag_off' },
-    '@/lib/telemetry/activationOccurrences': { recordActivationOccurrence: () => {} },
+    '@/lib/telemetry/activationOccurrences': { captureActivationOccurrence: async () => null },
+    '@/lib/telemetry/savedWork': { enqueueBoardCreated: async () => "board-key", processAnalyticsIntentSoon: () => {}, enqueueTaskCreated: async () => "task-key", creationChannelFromHeader: () => 'web', CREATION_CHANNEL_HEADER: 'X-Hypertask-Creation-Channel', CREATION_AGENT_HEADER: 'X-Hypertask-Creation-Agent' },
     '@vercel/functions': { waitUntil: () => {} },
     '@/lib/auth/emailLinkToken': { consumeEmailLinkToken: async () => true },
     '@/lib/onboarding/emails/welcome': { maybeSendWelcomeEmail: async () => 'flag_off' },

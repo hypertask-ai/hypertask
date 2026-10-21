@@ -81,6 +81,7 @@ function harness(t, { existingUser = null, modes = {} } = {}) {
     }),
     '@/lib/auth/safeReturnTo': loadTs('src/lib/auth/safeReturnTo.ts'),
     '@/lib/auth/requestBaseUrl': loadTs('src/lib/auth/requestBaseUrl.ts'),
+    '@/lib/auth/signupAttributionContext': { createSignupContext: async () => null, bindSignupCodeContext: async () => {} },
     '@/lib/email/sendEmail': { sendEmail: async email => sent.push(email) },
   })
   return {

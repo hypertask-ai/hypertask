@@ -13,8 +13,6 @@ const handler: NextApiHandler = async (
   }
 
   try {
-    // Identity comes from the signed session only. Trusting a body userId here would
-    // let anyone allowlist their own domain into someone else's paid team (HTPR-4182).
     const session = verifySession(req.cookies[SESSION_COOKIE]);
     if (!session) {
       return res

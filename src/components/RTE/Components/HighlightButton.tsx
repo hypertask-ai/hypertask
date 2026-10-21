@@ -1,4 +1,3 @@
-// HighlightButton.tsx
 import React from 'react';
 
 interface HighlightButtonProps {

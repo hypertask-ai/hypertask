@@ -1,7 +1,3 @@
-/**
- * Shared comment update logic used by both Pages API and MCP route.
- * Single source of truth for: DB update, activity, search index, summary scheduling, mentions.
- */
 import prisma from '@/lib/prisma'
 import { projectContentAccessWhere } from '@/utils/controllers/projects/getAllIncludes'
 import { upsertCommentToTurbopuffer } from '@/utils/controllers/turbopuffer/turbopufferHelper'
@@ -24,14 +20,9 @@ export interface UpdateCommentParams {
     fileName: string
     fileSize?: string | null
   }>
-  /** Set only when attachments is a complete snapshot and removals are intentional. */
   replaceAttachments?: boolean
 }
 
-/**
- * Updates a comment and runs all post-update hooks.
- * The authenticated user must own the stored comment.
- */
 export async function updateCommentService(params: UpdateCommentParams) {
   const { commentId, text: inputText, userId, agentId, attachments, replaceAttachments } = params
   const text = normalizeBlockHtml(inputText)
@@ -119,7 +110,6 @@ export async function updateCommentService(params: UpdateCommentParams) {
       }
     }
 
-    // Same text as read: lock the row only if it still holds that text, else a concurrent edit landed and this write is an edit too.
     const markEdited = textChanged || (await transaction.comment.updateMany({
       where: { id: commentId, text: comment.text },
       data: { summary: null }
@@ -144,11 +134,9 @@ export async function updateCommentService(params: UpdateCommentParams) {
     console.warn('[updateCommentService] comment summary schedule failed:', err)
   )
 
-  // Post-update hooks (same as Pages API)
   upsertCommentToTurbopuffer(commentId)
   scheduleTaskSummaryGeneration({ taskId: comment.taskId, agentId: agentId ?? null })
 
-  // Process mentions for notifications
   await processMentionsFromCommentText({
     text,
     commentId,

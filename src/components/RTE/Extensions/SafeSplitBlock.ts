@@ -62,11 +62,6 @@ function canSplitAfterDeletingSelection({ tr, editor }: CommandProps) {
   );
 }
 
-/**
- * Tiptap 3.31.3 validates splitBlock before deleting a cross-block selection,
- * then can split the changed document at an invalid depth. Remove this command
- * override after a Tiptap release includes upstream PR #8285.
- */
 export const SafeSplitBlock = Extension.create({
   name: "safeSplitBlock",
 

@@ -11,9 +11,7 @@ const useCurrentUser = (authenticatedUserId?: number | null) => {
   const recoilUser = useRecoilValue(currentUserAtom);
   const lastSyncedRef = useRef<any>(null);
   
-  // Read from cookies on mount
   useLayoutEffect(() => {
-    // Only run this logic once on mount
     try {
       const cookies = parseCookies();
       const { isValid, user } = isValidUser(cookies?.nookies_user);
@@ -34,14 +32,12 @@ const useCurrentUser = (authenticatedUserId?: number | null) => {
     } catch (error) {
       console.error('Error parsing nookies_user cookie:', error);
       
-      // Only clear storage/cookies if in browser
       if (typeof window !== 'undefined') {
         localStorage.clear();
       }
     }
   }, [authenticatedUserId, setRecoilCurrentUser]);
 
-  // Sync with Recoil atom updates (so we react to changes from other components)
   useEffect(() => {
     if (
       recoilUser &&

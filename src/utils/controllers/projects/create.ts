@@ -1,4 +1,4 @@
-import { recordActivationOccurrence } from "@/lib/telemetry/activationOccurrences";
+import { enqueueBoardCreated, processAnalyticsIntentSoon } from "@/lib/telemetry/savedWork";
 import { LogType, Status } from "@prisma/client";
 import createLog from "../logs/createLog";
 import { CreateLogInput } from "@/models/model";
@@ -20,7 +20,6 @@ const create = async (userId: number, title: string, teamId: string, googleAccou
         status: 400,
         json: { message: "Required information missing" }
       })
-      // return res.status(400).json({ message: "Required information missing" });
     }
     const user = await prisma.user.findUnique({
       where: {
@@ -32,11 +31,8 @@ const create = async (userId: number, title: string, teamId: string, googleAccou
         status: 400,
         json: { message: "User not found" }
       })
-      // return res.status(400).json({ message: "User not found" });
     }
 
-    // HTPR-7164: only the team owner or an accepted member may add a board,
-    // and the board takes the team's own account, never one from the request.
     const team = await prisma.team.findFirst({
       where: {
         id: teamId,
@@ -55,7 +51,6 @@ const create = async (userId: number, title: string, teamId: string, googleAccou
       })
     }
 
-    // HTPR-4894: free accounts cap out at FREE_BOARD_LIMIT owned boards.
     if (await isBoardLimitReached(userId)) {
       return ({
         status: 403,
@@ -63,7 +58,7 @@ const create = async (userId: number, title: string, teamId: string, googleAccou
       })
     }
 
-    let projectCount = Date.now() //temp count
+    let projectCount = Date.now()
     let project : any = undefined
 
     const hasPrefix = ticketPrefix !== undefined;
@@ -71,7 +66,7 @@ const create = async (userId: number, title: string, teamId: string, googleAccou
       return { status: 403, json: { message: "Custom ticket prefixes are not enabled" } };
     }
     const prefix = hasPrefix ? normalizeProjectPrefix(ticketPrefix) : undefined;
-    project = await prisma.$transaction(async (tx) => {
+    const committed = await prisma.$transaction(async (tx) => {
       await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${teamId}))`;
       if (prefix && await tx.project.findFirst({
         where: { teamId, OR: [
@@ -82,7 +77,7 @@ const create = async (userId: number, title: string, teamId: string, googleAccou
       })) {
         throw new Error("Ticket prefix is already used by another board in this team");
       }
-      return tx.project.create({
+      const created = await tx.project.create({
         data: {
           ownerId: userId,
           uniqueIdentifier: prefix,
@@ -90,7 +85,7 @@ const create = async (userId: number, title: string, teamId: string, googleAccou
           title: title,
           teamId: teamId,
           googleAccountId: team.googleAccountId,
-          section: { // Add the section field with the related section records
+          section: {
             create: [
               { section_title: "Todo", ranking: "A0100" },
               { section_title: "Doing", ranking: "A0200" },
@@ -99,9 +94,12 @@ const create = async (userId: number, title: string, teamId: string, googleAccou
           },
         },
       });
+      const analyticsKey = await enqueueBoardCreated(tx, created.id, "manual", { userId });
+      return { project: created, analyticsKey };
     });
 
-    recordActivationOccurrence(userId, "board_created", String(project.id), { source: "manual" });
+    project = committed.project;
+    processAnalyticsIntentSoon(committed.analyticsKey);
 
     project = await prisma.project.update({
       where: { id: project.id },
@@ -170,15 +168,12 @@ export async function createProjectViewAndCreateDefault(
 ) {
   const project_view = await prisma.project_View.upsert({
     create: {
-      // ... data to create a Project_View
       projectId
     },
     update: {
-      // ... in case it already exists, update
     },
     where: {
       projectId
-      // ... the filter for the Project_View we want to update
     },
     include:{
       project:{
@@ -246,7 +241,6 @@ export async function updateUniqueIdentifier(teamId: string, title: string, proj
   return prisma.$transaction(async (tx) => {
     await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${teamId}))`;
 
-    // Ensure uniqueness within the team; on collision append a counter (kept <= 5 chars).
     let candidate = base;
     let clash = await tx.project.findFirst({
       where: { teamId, id: { not: projectId }, OR: [

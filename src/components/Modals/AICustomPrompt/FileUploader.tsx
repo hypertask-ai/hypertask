@@ -48,14 +48,12 @@ export function FileUploader({ onUpload, existingFiles }: FileUploaderProps) {
         renamedFiles.push(renamedFile);
       });
   
-      // Initialize progress tracking
       const initialProgress: Record<string, number> = {};
       renamedFiles.forEach((file) => {
         initialProgress[file.name] = 0;
       });
       setUploadProgress(initialProgress);
   
-      // Upload files
       const uploadPromises = renamedFiles.map((file) => {
         return new Promise<IAttachment>(async (resolve) => {
           const { uploadAttachmentToAICustomInstruction } = await import("@/lib/serverActions");
@@ -184,7 +182,6 @@ export function FileUploader({ onUpload, existingFiles }: FileUploaderProps) {
   )
 }
 
-// Define a type guard
 function isIAttachment(obj: unknown): obj is IAttachment {
   return typeof obj === 'object' && obj !== null && 'id' in obj;
 }

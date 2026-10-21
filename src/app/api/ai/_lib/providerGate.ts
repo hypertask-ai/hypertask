@@ -56,8 +56,6 @@ export async function getProjectTeamProviderContext(
     where: {
       id: projectId,
       status: "Normal",
-      // Platform-funded inference requires write-capable board membership.
-      // Public/share-only content access must never bill the owning team.
       ...taskWriteAccessWhere(userId),
     },
     select: {

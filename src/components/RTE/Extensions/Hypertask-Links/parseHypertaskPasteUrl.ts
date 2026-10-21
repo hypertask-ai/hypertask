@@ -13,11 +13,6 @@ export const createShareLookupUrl = (shareId: string) => {
   return `/api/share/createShareLink?${query.toString()}`;
 };
 
-/**
- * Parse a clipboard value only when the entire value is one Hypertask URL.
- * Surrounding whitespace is harmless, but prose or multiple lines must remain
- * available to Tiptap's normal paste pipeline.
- */
 export const parseHypertaskPasteUrl = (
   clipboardText: string,
 ): HypertaskUrlMatch | null => {

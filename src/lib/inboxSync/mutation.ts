@@ -78,13 +78,6 @@ export const createInboxRemovalMutation = (
     if (notificationId) {
       notificationIds.push(notificationId);
     }
-    // markAsDone and (un)archiveBulk both archive every OTHER notification that
-    // shares this taskId server-side (HTPR-5640 sibling cleanup) -- e.g. every
-    // reactor's Reacted row for the same task, not just the one that was
-    // clicked. Task-less types (Invited) never carry a taskId, so they fall
-    // through untouched, matching the server's own guard. Without this, a task
-    // with several rows in the inbox (most commonly the Reactions split) left
-    // the sibling rows painted until the next refetch (HTPR-5745).
     if (typeof notification.taskId === "number") {
       taskIds.push(notification.taskId);
     }
@@ -104,12 +97,6 @@ const notificationMatchesRemoval = (
 ): boolean => {
   if (!notification) return false;
   if (notificationIds.has(String(notification.id ?? ""))) return true;
-  // Synthetic "waiting on you" rows (id "-<taskId>") aren't real DB
-  // notifications -- getAll.ts recomputes them fresh from the task's current
-  // waitingOnSetAt on every fetch. The server sibling-cleanup a taskId match
-  // is mirroring here never touches them, so removing a real row on the same
-  // task must not strip the synthetic one optimistically: it would just pop
-  // back on the next refetch (HTPR-5745).
   if (notification.waitingOnSynthetic || String(notification.id ?? "").startsWith("-")) {
     return false;
   }

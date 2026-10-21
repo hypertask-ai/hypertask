@@ -45,7 +45,7 @@ jobs:
     # newer than a failed one would read as passing again.
     if: github.event_name == 'push' || github.event.pull_request.draft == false
     runs-on: ubuntu-latest
-    timeout-minutes: 25
+    timeout-minutes: 40
     # This job checks out and executes pull request code, so it never holds a
     # write token. The production warning is a separate push-only job.
     permissions:
@@ -149,7 +149,7 @@ jobs:
           echo "$CHANGED"
           # A change to this gate itself (or the CI scripts) always runs the
           # full pipeline once, so the edited workflow is exercised end to end.
-          if echo "$CHANGED" | grep -qvE '^(scripts/self_hosted_agent/|openwiki/|docs/|\.claude/|\.github/)' \
+          if echo "$CHANGED" | grep -qvE '^(scripts/self_hosted_agent/|docs/|\.claude/|\.github/)' \
             || echo "$CHANGED" | grep -qE '^\.github/(workflows/ci-tests\.yml|scripts/)'; then
             echo "build_needed=true" >> "$GITHUB_OUTPUT"
           else
@@ -193,6 +193,45 @@ jobs:
       - name: Install dependencies
         if: (github.event_name == 'push' || steps.scope.outputs.build_needed == 'true') && steps.restore-node-modules.outputs.cache-hit != 'true'
         run: npm ci --prefer-offline --no-audit --no-fund
+
+      - name: Agent scope debt needs a recorded approval
+        if: github.event_name == 'pull_request'
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+        run: node .github/scripts/agent-scope/baseline-approval.mjs
+
+      - name: Restore agent scope pip cache
+        id: agent-scope-pip-cache
+        if: github.event_name == 'push' || steps.scope.outputs.build_needed == 'true'
+        uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
+        with:
+          path: ${{ runner.temp }}/agent-scope-pip-cache
+          key: agent-scope-pip-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('.github/scripts/agent-scope/requirements.txt') }}
+
+      - name: Guard agent board scope
+        if: github.event_name == 'push' || steps.scope.outputs.build_needed == 'true'
+        env:
+          PIP_CACHE_DIR: ${{ runner.temp }}/agent-scope-pip-cache
+          PIP_DISABLE_PIP_VERSION_CHECK: "1"
+          SEMGREP_SEND_METRICS: "off"
+          SEMGREP_ENABLE_VERSION_CHECK: "0"
+        run: |
+          set -euo pipefail
+          PY312=$(ls -d "$RUNNER_TOOL_CACHE"/Python/3.12.*/x64/bin/python3 2>/dev/null | sort -V | tail -1 || true)
+          PY312=${PY312:-python3}
+          "$PY312" -c 'import sys; assert sys.version_info[:2] == (3, 12), "requirements.txt is locked for Python 3.12, got " + sys.version'
+          "$PY312" -m venv "$RUNNER_TEMP/agent-scope-venv"
+          export PATH="$RUNNER_TEMP/agent-scope-venv/bin:$PATH"
+          python -m pip install --require-hashes -r .github/scripts/agent-scope/requirements.txt
+          python .github/scripts/agent-scope/run.py --self-test
+          python .github/scripts/agent-scope/run.py
+
+      - name: Save agent scope pip cache
+        if: github.event_name == 'push' && steps.agent-scope-pip-cache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
+        with:
+          path: ${{ runner.temp }}/agent-scope-pip-cache
+          key: ${{ steps.agent-scope-pip-cache.outputs.cache-primary-key }}
 
       - name: Save node_modules cache
         # PRs restore the trusted production cache, but only production pushes save.

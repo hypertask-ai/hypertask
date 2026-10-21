@@ -55,7 +55,7 @@ const prisma = {
 const mocks = {
   "@/lib/prisma": { default: prisma },
   "@/lib/flags": flagsMock,
-  "@/lib/telemetry/activationOccurrences": { recordActivationOccurrence: () => {} },
+  "@/lib/telemetry/activationOccurrences": { captureActivationOccurrence: async () => null },
   "@/utils/helperFunctions/helperFunctions": { getSequentialLetters: () => "TEST" },
   "@/lib/subscription": { stripe: {} },
   "@/lib/stripeCustomerName": { stripeCustomerName: () => "Test" },
@@ -88,10 +88,10 @@ function assertCurrent(text) {
   assertNoRetiredCli(text);
 }
 
-test("canonical commands keep the existing pin and Settings MCP URL", () => {
-  assert.equal(commands.CLI_INSTALL_COMMAND, "curl -fsSL https://raw.githubusercontent.com/hypertask-ai/cli/8a9245246cec8ddac4ab1dfccae5c5cba5c39707/scripts/install.sh | sh");
+test("canonical commands use the short hypertask.ai installers and Settings MCP URL", () => {
+  assert.equal(commands.CLI_INSTALL_COMMAND, "curl -fsSL https://hypertask.ai/install | sh");
   assert.equal(commands.CLI_LOGIN_COMMAND, "hypertask login");
-  assert.equal(commands.CLI_WINDOWS_NOTE, "Windows: download hypertask-windows-x86_64.exe from https://github.com/hypertask-ai/cli/releases/latest, rename it to hypertask.exe and put it on your PATH.");
+  assert.equal(commands.CLI_WINDOWS_NOTE, "Windows (PowerShell): irm https://hypertask.ai/install.ps1 | iex");
   assert.equal(commands.MCP_ADD_COMMAND, "claude mcp add --transport http hypertask https://mcp.hypertask.ai/mcp");
   const mcp = load("src/components/Modals/McpToken/utils.ts");
   assert.equal(commands.MCP_ADD_COMMAND.split(" ").at(-1), mcp.MCP_SERVER_URL);

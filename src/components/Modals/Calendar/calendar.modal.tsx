@@ -33,7 +33,6 @@ interface IProps {
   selectedTask?: ITask;
 }
 
-//The entire flow is heavily dependent on the mode
 const CalendarDueDateModal: React.FC<IProps> = ({
   callbackHandler,
   mode,
@@ -68,7 +67,6 @@ const CalendarDueDateModal: React.FC<IProps> = ({
 
   const toggleCreateTaskHandler = () => {
     if (!inViewObject.sectionId || !inViewObject.sectionTitle) return;
-    //Man I'm stuck at the Radiance boss fight in Hollow Knight.
     let finalDueDate: Date | undefined = undefined;
     if (isToday(currentDay) || isBefore(currentDay, new Date())) {
       const nextBestOption = getDefaultOptions()[0];
@@ -232,7 +230,6 @@ const CalendarDueDateModal: React.FC<IProps> = ({
       <DueDateModal
         mode={"Update"}
         closeHandler={(callback, reset) => {
-          //Man it sucks when duedate modal returns the current date when we press escape for some reason.
           callbackHandler(undefined, {
             date: callback ?? (reset ? undefined : undefined),
             task: selectedTask,

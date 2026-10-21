@@ -1,13 +1,6 @@
-/**
- * Client-side cookie utilities for UTM tracking
- * Single source of truth for cookie operations
- */
 
 import { UTM_COOKIE_EXPIRY_DAYS } from "@/lib/constants/utm";
 
-/**
- * Set a cookie with expiration
- */
 export function setCookie(
   name: string,
   value: string,
@@ -24,9 +17,6 @@ export function setCookie(
   )};expires=${expires.toUTCString()};path=/;SameSite=Lax`;
 }
 
-/**
- * Get a cookie value by name
- */
 export function getCookie(name: string): string | null {
   if (typeof document === "undefined") {
     return null;

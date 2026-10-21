@@ -1,10 +1,5 @@
 export const MCP_RATE_LIMIT_WINDOW_SECONDS = 60
 
-/**
- * Pure fixed-window decision: given the request count already seen in the current
- * window, is this request over the limit, and if so how long until the window
- * resets. Kept dependency-free so it's cheap to unit test.
- */
 export function decideMcpRateLimit(
   countInWindow: number,
   limit: number,

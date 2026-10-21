@@ -5,7 +5,6 @@
     "htpr-5906-shortcut-nudges": "OWNER_AND_QA",
     "htpr-5908-local-writing-assistance": "OWNER_AND_QA",
     "htpr-6112-copy-current-url": "OWNER_AND_QA",
-    "htpr-6141-ai-first-task-writer": "OWNER_AND_QA",
     "htpr-6154-chat-stop-and-timeout": "OWNER_AND_QA",
     "htpr-6177-auto-task-descriptions": "OWNER_AND_QA",
     "htpr-6197-confirmed-proposal-heading": "OWNER_AND_QA",
@@ -14,7 +13,6 @@
     "htpr-6372-search-ranking": "OWNER_AND_QA",
     "htpr-6407-mobile-agent-chat-layout": "OWNER_AND_QA",
     "htpr-6421-my-tasks-shortcuts-width": "OWNER_AND_QA",
-    "htpr-6512-seed-team-agent": "OWNER_AND_QA",
     "htpr-6516-agent-attribution": "OWNER_AND_QA",
     "htpr-6911-search-row-highlight": "OWNER_AND_QA",
     "htpr-6951-task-writing-progress": "OWNER_AND_QA"

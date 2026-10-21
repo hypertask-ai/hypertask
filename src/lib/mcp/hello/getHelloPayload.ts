@@ -15,6 +15,16 @@ const PER_BOARD_TEXT_LIMIT = 2000
 const CONVENTIONS_TOTAL_LIMIT = 8 * 1024
 const TRUNCATION_MARKER = '… [truncated]'
 
+export const HELLO_URL_FORMATS = {
+  ticket: 'https://app.hypertask.ai/detail/project-{boardId}/{taskNumber}',
+  comment: 'https://app.hypertask.ai/detail/project-{boardId}/{taskNumber}#comment-{commentId}',
+  board: 'https://app.hypertask.ai/project?id={boardId}',
+  boardView: 'https://app.hypertask.ai/project?id={boardId}&view={viewSlug}',
+  inboxSplit: 'https://app.hypertask.ai/inbox?split={splitName}&projectId={boardId}',
+  page: 'https://app.hypertask.ai/page/{pagePublicId}',
+  rules: 'taskNumber is the number after the ticket prefix (HTPR-7321 is 7321) on the board the task is on now, never the global task id. boardId is the numeric board id. Prefer the url or link field a tool returns over building one.',
+} as const
+
 export const HELLO_CAPABILITIES = {
   tasks:
     'Create, read, update, search, move, archive, and relate tasks with MCP tools or /api/mcp/tasks/*, including risk level, acceptance criteria, and verify command for structured contracts.',
@@ -38,7 +48,6 @@ export const HELLO_CAPABILITIES = {
     'Use signed per-agent webhooks to wake an agent on mentions and assignments, or SSE streams for board events. Setup and verification: https://docs.hypertask.ai/mcp/agent-webhooks/',
 } as const
 
-// HTPR-7122: the shared agent directive, served while htpr-7122-agent-reactions is on.
 export const HTPR_7122_HELLO_CAPABILITIES = {
   ...HELLO_CAPABILITIES,
   comments:
@@ -136,6 +145,7 @@ export async function getHelloPayload(ctx: McpAuthContext) {
     id: project.id,
     name: project.name,
     title: project.title ?? project.name,
+    boardUrl: `https://app.hypertask.ai/project?id=${project.id}`,
     taskUrlTemplate: `https://app.hypertask.ai/detail/project-${project.id}/{taskNumber}`,
   }))
 
@@ -178,6 +188,7 @@ export async function getHelloPayload(ctx: McpAuthContext) {
       email: ctx.user.email,
     },
     boards,
+    urlFormats: HELLO_URL_FORMATS,
     boardsTotal: projects.length,
     boardsTruncated,
     capabilities: await helloCapabilities(ctx.user.id),

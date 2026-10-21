@@ -1,3 +1,4 @@
+import { reportMcpOperationCrash } from '@/lib/mcp/operationCrashReport'
 import { wrapMcpRoute, validateMcpRouteAuth as validateMcpAuth, checkMcpRouteRateLimit as checkMcpRateLimit } from '@/lib/mcp/routeWrapper'
 import { NextRequest, NextResponse } from 'next/server'
 
@@ -5,7 +6,6 @@ import { loadSessionUserRecord } from '@/lib/auth/sessionUserRecord'
 import updateProject from '@/utils/controllers/projects/update'
 import { broadcastBoardChange } from '@/lib/realtime/server'
 
-/** PATCH /api/mcp/projects/:projectId with { title: string }. */
 export async function PATCH(
   request: NextRequest,
   props: { params: Promise<{ projectId: string }> }
@@ -47,6 +47,7 @@ export async function PATCH(
     return NextResponse.json({ success: true, project: { id, title, name } })
   } catch (error) {
     console.error('Error renaming board:', error)
+    reportMcpOperationCrash(request, error)
     return NextResponse.json(
       { success: false, error: 'An unexpected error occurred while renaming the board' },
       { status: 500 }

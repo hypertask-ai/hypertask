@@ -61,7 +61,6 @@ async function transcribeAudio(
   if (context.teamId) tags.push(`team:${context.teamId}`);
   if (context.userId) tags.push(`user:${context.userId}`);
 
-  // Only read language here; model selection resets saved picks if improvement runs.
   const prefs = context.userId
     ? await prisma.userSetting.findUnique({
         where: { userId: context.userId },
@@ -170,8 +169,6 @@ export async function POST(request: NextRequest) {
     const stream = new ReadableStream<Uint8Array>({
       async start(controller) {
         try {
-          // One SSE payload: the client inserts the full transcript in a single
-          // editor operation instead of animating word-by-word (HTPR-5691).
           const normalized = normalizeDictationTranscriptForSse(transcript);
           controller.enqueue(encoder.encode(`data: ${normalized}\n\n`));
         } catch (error) {

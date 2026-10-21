@@ -48,7 +48,6 @@ export const useProjectQuery = () => {
     updateSearchParamsOnly: boolean = false,
     surface?: "board" | "table",
   ) => {
-    // Track board usage
     setLastUsedBoards((prev) => ({
       ...prev,
       [projectId]: Date.now(),
@@ -61,10 +60,6 @@ export const useProjectQuery = () => {
     );
     const activeView = getViewFromProject(project);
 
-    // Every client-side board switch funnels through here (sidebar, palette,
-    // keyboard), and the board page's own last-board-team effect does not
-    // re-fire on shallow/in-place switches -- so Agent Chat's default team
-    // filter went stale until a full reload (HTPR-6036 QA).
     if (project?.teamId) setLastBoardTeam(project.teamId);
 
     if (updateBoardCookie) {
@@ -86,7 +81,6 @@ export const useProjectQuery = () => {
       surface,
     });
 
-    // Only update search params without navigation
     if (updateSearchParamsOnly) {
       router.replace(destination);
       return;
@@ -101,8 +95,6 @@ export const useProjectQuery = () => {
       return;
     }
 
-    // Missing cache entries and navigation from other routes retain the
-    // server-side project access check.
     router.push(destination);
   };
 
@@ -126,7 +118,7 @@ export const useProjectQuery = () => {
       ...comments,
       {
         ...newComment,
-        text: "", // Consider providing a meaningful text or removing this field if not needed
+        text: "",
         taskId,
         activity: {
           type: newComment.activity?.type,

@@ -55,7 +55,6 @@ export const readCalendarSessionDraft = (
     try {
       storage.removeItem(key);
     } catch {
-      // Storage can be unavailable in privacy-restricted browser contexts.
     }
   }
   return null;
@@ -69,7 +68,6 @@ export const writeCalendarSessionDraft = (
   try {
     storage.setItem(calendarSessionDraftKey(accountId), JSON.stringify(draft));
   } catch {
-    // Session persistence is an enhancement; the Calendar remains usable.
   }
 };
 
@@ -80,7 +78,6 @@ export const clearCalendarSessionDraft = (
   try {
     storage.removeItem(calendarSessionDraftKey(accountId));
   } catch {
-    // Session persistence is an enhancement; the Calendar remains usable.
   }
 };
 

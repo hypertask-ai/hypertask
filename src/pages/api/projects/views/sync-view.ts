@@ -1,12 +1,13 @@
 import prisma from "@/lib/prisma";
 import { sanitizeViewBoardFilters } from "@/utils/helperFunctions/Views/BoardFilterSanitizer";
-import { NextApiHandler } from "next";
+import type { NextApiHandler, NextApiRequest, NextApiResponse } from "next";
+import { reportLegacyRouteHit } from "@/lib/telemetry/legacyRouteHit";
 import { getSessionUser } from "@/lib/auth/getSessionUser";
 import { savedViewBoardAccessWhere } from "@/utils/controllers/projects/getAllIncludes";
 import { acquireBoardFilterWriteLock } from "@/utils/controllers/projects/views/boardFilterWriteLock";
 import type { Prisma } from "@prisma/client";
 
-const handler: NextApiHandler = async (req, res) => {
+const syncView: NextApiHandler = async (req, res) => {
   if (req.method !== "POST") return res.status(405).json({ message: "Method not allowed" });
   const session = await getSessionUser(new Headers(req.headers as Record<string, string>));
   if (!session) return res.status(401).json({ message: "Unauthorized" });
@@ -35,9 +36,7 @@ const handler: NextApiHandler = async (req, res) => {
       if (applied.visibility === "Private") return targets;
     }
     if (pv.default_view_id) {
-      // A null applied pointer means the default is active, including an owned Private default.
       const defaultView = await db.view.findFirst({ where: { id: pv.default_view_id, project_view_id: pv.id, ...(state.appliedViewId ? { visibility: "Public" as const } : {}), ...viewWhere } });
-      // A Public applied view still syncs; a Private default is never a secondary target.
       if (!defaultView) return state.appliedViewId ? targets : null;
       if (!targets.some(target => target.id === defaultView.id)) targets.push(defaultView);
     }
@@ -65,4 +64,7 @@ const handler: NextApiHandler = async (req, res) => {
   }
 };
 
-export default handler;
+export default function legacyRoute(req: NextApiRequest, res: NextApiResponse) {
+  reportLegacyRouteHit("/api/projects/views/sync-view", req);
+  return syncView(req, res);
+}

@@ -12,6 +12,7 @@ const { loadSharedRoute } = require("./helpers/groupb-route.cjs");
 const root = path.resolve(__dirname, "..");
 const read = file => fs.readFileSync(path.join(root, file), "utf8");
 function load(file, stubs = {}) {
+  stubs = { "@/lib/auth/agentScope": require("./helpers/agent-board-scope.cjs").enforcedScope, "@/lib/mcp/operationCrashReport": { reportMcpOperationCrash: () => {} }, ...stubs };
   if (/src\/lib\/flags\/(?:keys|definitions)\.ts$/.test(file)) return require("./helpers/flag-files.cjs").load(file);
   const filename = path.join(root, file);
   const javascript = ts.transpileModule(read(file), {
@@ -24,6 +25,9 @@ function load(file, stubs = {}) {
     if (request === "@/lib/api/task-writes/route") return loadSharedRoute(stubs["@/lib/auth/getSessionUser"]?.getSessionUser);
     if (request === "@/lib/tasks/sameBoardRelations") return load("src/lib/tasks/sameBoardRelations.ts");
     if (Object.hasOwn(stubs, request)) return stubs[request];
+    if (request === "@/lib/auth/agentCookieBridgeRoutes") return load("src/lib/auth/agentCookieBridgeRoutes.ts");
+    if (request === "@/lib/telemetry/signupAnalytics") return { recordServerCapture: () => {} };
+    if (request === "@/lib/mcp/listParams") return load("src/lib/mcp/listParams.ts", {});
     if (["@prisma/client", "react", "react/jsx-runtime", "next/server", "zod"].includes(request)) return require(request);
     throw new Error(`Unexpected import ${request} in ${file}`);
   };
@@ -67,12 +71,13 @@ function writes({ enabled = true, ownerId = 6, boards = [], failSql = false, los
   const updates = [];
   const reindexed = [];
   const scheduled = [];
+  const reads = [];
   let committed = false;
   let transactions = 0;
   const prisma = {
     project: {
       findFirst: async ({ where }) => rows.find(row => matches(row, where)) ?? null,
-      findUnique: async () => board,
+      findUnique: async args => { reads.push(args); return board; },
       update: async ({ where, data }) => {
         assert.ok(matches(board, where));
         events.push("project");
@@ -120,7 +125,7 @@ function writes({ enabled = true, ownerId = 6, boards = [], failSql = false, los
       upsertAllCommentsToTurbopuffer: async id => { assert.ok(committed); reindexed.push(["comments", id]); },
     },
   });
-  return { board, aliases, sql, events, updates, reindexed, scheduled, prisma, controller, transactions: () => transactions, update: value => controller.default(15, "Board", undefined, value, { id: 6 }) };
+  return { board, aliases, sql, events, updates, reindexed, scheduled, reads, prisma, controller, transactions: () => transactions, update: value => controller.default(15, "Board", undefined, value, { id: 6 }) };
 }
 
 for (const input of ["", "A", "ABCDEF", "1AB", "A-B", "A B", "ÉB", "AB_", 42, {}, null]) {
@@ -152,6 +157,11 @@ test("unique prefix permits deleted boards, other teams and the same board", asy
   assert.equal((await f.update("NEW")).status, 200);
   assert.equal((await f.update("NEW")).status, 200);
   assert.equal(f.aliases.length, 1);
+});
+test("prefix change reads only task ids for the search reindex (YPER4-388)", async () => {
+  const f = writes();
+  assert.equal((await f.update("NEW")).status, 200);
+  assert.deepEqual(f.reads.map(args => args.include), [{ tasks: { select: { id: true } } }]);
 });
 test("permission rejection and changed access write nothing", async () => {
   for (const options of [{ ownerId: 9 }, { loseAccess: true }]) {
@@ -271,6 +281,7 @@ function lookups({ enabled = true, visible = true, live = false, liveAccess = tr
     "@/lib/mcp/agents": {}, "@/lib/agents/visibility": {},
     "@/lib/mcp/tasks/mappers": { taskMcpGetInclude: () => ({}), mapTaskToMcpGetResponse: task => ({ id: task.id, ticketNumber: task.ticketNumber }) },
     "@/lib/mcp/tasks/resolveTask": resolver, "@/lib/mcp/pagination/cursor": {}, "@/lib/flags": {}, "@/lib/mcp/listQuery": {}, "@/lib/mcp/readListQuery": {}, "@/lib/mcp/priorityFilter": {},
+    "@/lib/mcp/listParams": load("src/lib/mcp/listParams.ts", {}),
   });
   return { resolver, detail, prisma, tasks, moveAliases, flagCalls, taskQueries, aliasQueries: () => aliasQueries, get: query => route.GET({ nextUrl: { searchParams: new URLSearchParams(query) } }) };
 }
@@ -350,7 +361,8 @@ function creation({ enabled = true, clash = false, boards = [] } = {}) {
     $transaction: async callback => callback(prisma),
   };
   const controller = load("src/utils/controllers/projects/create.ts", {
-    "@/lib/telemetry/activationOccurrences": { recordActivationOccurrence: () => {} },
+    "@/lib/telemetry/activationOccurrences": { captureActivationOccurrence: async () => null },
+    "@/lib/telemetry/savedWork": { enqueueBoardCreated: async () => "board-key", processAnalyticsIntentSoon: () => {}, enqueueTaskCreated: async () => "task-key", creationChannelFromHeader: () => 'web', CREATION_CHANNEL_HEADER: 'X-Hypertask-Creation-Channel', CREATION_AGENT_HEADER: 'X-Hypertask-Creation-Agent' },
     "@/lib/prisma": { __esModule: true, default: prisma },
     "../logs/createLog": { __esModule: true, default: () => {} },
     "@/lib/projectPrefix": prefix,
@@ -533,6 +545,7 @@ test("UI create updates the automatic suggestion until edited and submits the ov
   }
 });
 
+const descriptionFirstKey = "htpr-7367-server-description-first";
 function detailPage({ enabled = true, task = { id: 101, projectId: 20, uniqueIndex: 7 }, projectId = 15, userId = 6 } = {}) {
   const calls = [];
   const detail = lookups().detail;
@@ -545,7 +558,7 @@ function detailPage({ enabled = true, task = { id: 101, projectId: 20, uniqueInd
     },
     "@/lib/auth/serverUser": { requireServerCookieUser: async () => ({ id: userId }) },
     "@/utils/controllers/projects/getAllIncludes": { projectContentAccessWhere: () => { throw new Error("Unexpected metadata access lookup"); } },
-    "@/lib/flags": { HTPR_6868_TICKET_PREFIX_FLAG: flagKey, isFeatureEnabled: async (key, id) => { calls.push(["flag", key, id]); return enabled; } },
+    "@/lib/flags": { HTPR_6868_TICKET_PREFIX_FLAG: flagKey, HTPR_7367_SERVER_DESCRIPTION_FIRST_FLAG: descriptionFirstKey, isFeatureEnabled: async (key, id) => { calls.push(["flag", key, id]); return enabled; } },
     "next/navigation": { redirect: url => { throw new Error(`REDIRECT ${url}`); } },
     "@/lib/prisma": {}, "@/lib/contexts/TaskDetail/TaskProvider": {}, "@/lib/contexts/TaskDetail/FollowersProvider": {},
     "@/utils/helperFunctions/TaskDetail": {}, "@/utils/controllers/users/fetch_preferences": { fetchUserPreferenceController: async () => ({}) },
@@ -601,7 +614,7 @@ test("production: prefixed ticket URLs pass the proxy before page flag and acces
   for (const enabled of [false, true]) {
     const numeric = detailPage({ enabled, projectId: 7049, userId: 985 });
     assert.equal((await numeric.page("33")).type, "Unauthorized");
-    assert.deepEqual(numeric.calls, []);
+    assert.deepEqual(numeric.calls, [["flag", descriptionFirstKey, 985]], "numeric ids never read the prefix flag; only the description-first read runs beside the task fetch");
   }
 });
 
@@ -619,7 +632,7 @@ test("review: detail URLs check the server flag before resolving and redirecting
   for (const enabled of [false, true]) {
     const numeric = detailPage({ enabled });
     assert.equal((await numeric.page("123")).type, "Unauthorized");
-    assert.deepEqual(numeric.calls, []);
+    assert.deepEqual(numeric.calls, [["flag", descriptionFirstKey, 6]], "numeric ids never read the prefix flag; only the description-first read runs beside the task fetch");
   }
 });
 

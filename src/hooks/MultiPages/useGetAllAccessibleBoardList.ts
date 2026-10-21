@@ -5,10 +5,6 @@ import { getAllProjects } from "@/utils/api/Homepage";
 export const MOBILE_BOARD_SWITCHER_QUERY_KEY = (accountId: number) =>
   ["mobileBoardSwitcherProjects", accountId] as const;
 
-/**
- * Fetches the authoritative accessible-board list without registering another
- * observer or query function on LandingPage's route-owned projectsAll cache.
- */
 export const useGetAllAccessibleBoardList = (
   user: IUser | null | undefined,
   options?: { enabled?: boolean },
@@ -22,8 +18,6 @@ export const useGetAllAccessibleBoardList = (
     },
     enabled: (options?.enabled ?? true) && Boolean(user?.id),
     staleTime: 30_000,
-    // Opening the sheet is an explicit authorization intent. Always refresh so
-    // a previously accessible board cannot remain visible for the stale window.
     refetchOnMount: "always",
     refetchOnWindowFocus: false,
   });

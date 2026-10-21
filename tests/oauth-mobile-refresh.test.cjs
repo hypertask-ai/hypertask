@@ -141,8 +141,8 @@ nextHeaders.cookies = async () => ({
     : { name, value: requestCookies[name] },
 })
 stubModule('src/lib/telemetry/activationOccurrences.ts', {
-  recordAgentConnection: () => {},
-  recordAuthenticatedConnection: () => {},
+  enqueueAgentConnection: async () => null,
+  enqueueAuthenticatedConnection: async () => null,
 })
 
 stubModule('src/utils/controllers/logs/createLog.ts', { default: async () => {} })

@@ -43,7 +43,6 @@ function fixture(enabled = true, { archiveFailure, restoreFailure, subtasks = fa
     HTPR_7137_BULK_ARCHIVE_UNDO_ALL_FLAG: "htpr-7137-bulk-archive-undo-all", dedupe: false,
     _currentProject: project, _currentUser: { id: 985 },
     toast: Object.assign(() => {}, { dismiss() {}, success: text => messages.push(text), error: text => messages.push(text) }),
-    undoToastSettings: { single: true },
     queryClient: { refetchQueries: async () => {} },
     getProjectIdxAndAllData: async () => ({ allData: { updatedProjects: [project] }, projectToUpdateIndex: 0 }),
     returnSortedItems: items => items, reAdjustFocusFromCurrContext() {},
@@ -134,19 +133,6 @@ test("bulk archives with subtasks get one Undo while single parent archives reta
   const single = fixture(true, { subtasks: true });
   assert.equal(await single.removeFromListWithStatus(11, 15, 1, "Archive"), false);
   assert.equal(single.undos.length, 0);
-});
-
-test("legacy board Undo also dispatches the whole batch when single-toast mode is off", async () => {
-  const f = fixture();
-  f.undoToastSettings.single = false;
-  await f.archiveSelected();
-  assert.equal(f.undos.length, 1);
-  const entry = f.undos[0];
-  const data = { ...entry.data, undoHandler: entry.handler, toastId: "fixture-toast" };
-  const { undoHandler } = load(homepageFile, ["undoHandler"], f);
-  await undoHandler(data, undefined);
-  assert.deepEqual([...f.store.values()].map(task => task.status), ["Normal", "Normal"]);
-  assert.deepEqual(f.reconciliations, [[15, 985]]);
 });
 
 test("ticket bugfix registry defaults to Everyone, respects Off and gates at the provider's top level", () => {

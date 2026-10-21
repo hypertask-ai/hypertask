@@ -62,6 +62,7 @@ async function run(operation, mode = 'OFF', options = {}) {
       if (mode === 'USER_FAILURE') throw new Error('user lookup failed');
       return mode === 'NO_SESSION' ? null : { userId };
     } },
+    '@/utils/controllers/pages/standalonePagesEnabled': { standalonePagesEnabled: async () => true },
     '@/lib/flags': { HTPR_6924_REST_COMPAT_FLAG: key, isFeatureEnabled: async (...args) => {
       probes.push(['flag', ...args]);
       if (mode === 'FLAG_FAILURE') throw new Error('flag lookup failed');
@@ -218,7 +219,10 @@ const baseline = {
       [
         "list",
         {
-          "taskId": 50
+          "taskId": 50,
+          "standalonePagesEnabled": true,
+          "userId": 985,
+          "agentId": null
         }
       ]
     ]
@@ -268,6 +272,9 @@ const baseline = {
         "search",
         {
           "query": "hello",
+          "standalonePagesEnabled": true,
+          "userId": 985,
+          "agentId": null,
           "projectIds": [
             15
           ]
@@ -289,6 +296,7 @@ const baseline = {
         "get",
         {
           "publicId": "opaque-001/slug",
+          "standalonePagesEnabled": true,
           "userId": 985
         }
       ]
@@ -312,6 +320,7 @@ const baseline = {
         "get",
         {
           "publicId": "opaque-001/slug",
+          "standalonePagesEnabled": true,
           "userId": 985
         }
       ],
@@ -360,6 +369,7 @@ const baseline = {
         "get",
         {
           "publicId": "opaque-001/slug",
+          "standalonePagesEnabled": true,
           "userId": 985
         }
       ],
@@ -387,6 +397,7 @@ const baseline = {
         "get",
         {
           "publicId": "opaque-001/slug",
+          "standalonePagesEnabled": true,
           "userId": 985
         }
       ],
@@ -416,6 +427,7 @@ const baseline = {
         "get",
         {
           "publicId": "opaque-001/slug",
+          "standalonePagesEnabled": true,
           "userId": 985
         }
       ],

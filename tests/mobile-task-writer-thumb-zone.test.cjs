@@ -148,5 +148,5 @@ test("desktop Task Writer retains its existing alignment and input styling", () 
     input,
     /: "resize-none outline-none bg-inherit w-full py-2 border-none scrollbar-none placeholder:truncate"/,
   );
-  assert.match(container, /if \(isMobile\) \{[\s\S]*?desktop \/ non-mobile overlay/);
+  assert.match(container, /if \(isMobile\) \{[\s\S]*?<AppSheet[\s\S]*?\n  return \(/);
 });

@@ -20,7 +20,6 @@ export async function changeProjectPrefix(
   const prefix = normalizeProjectPrefix(input);
   const accessWhere = taskWriteAccessWhere(currentUser.id, agentId);
   const project = await prisma.$transaction(async (tx) => {
-    // Share task creation's board lock and serialize team-wide prefix claims.
     await tx.$executeRaw`SELECT pg_advisory_xact_lock(9428471::int, ${projectId}::int)`;
     const board = await tx.project.findFirst({
       where: { id: projectId, status: { not: "Deleted" }, ...accessWhere },
@@ -53,7 +52,7 @@ export async function changeProjectPrefix(
       data: { ...settings, uniqueIdentifier: prefix },
     });
     await tx.$executeRaw`UPDATE "Task" SET "ticketNumber" = ${prefix} || '-' || "uniqueIndex", "updatedAt" = CURRENT_TIMESTAMP WHERE "projectId" = ${projectId}`;
-    return tx.project.findUnique({ where: { id: projectId }, include: { tasks: true } });
+    return tx.project.findUnique({ where: { id: projectId }, include: { tasks: { select: { id: true } } } });
   });
   if (!project) return { status: 403, json: { message: "Not allowed to edit this board" } };
   waitUntil(Promise.all(project.tasks.map(task => Promise.all([
@@ -102,7 +101,6 @@ const updateProject = async (
     const project = await prisma.project.update({
       where: { id: projectId, status: { not: "Deleted" }, AND: accessWhere },
       data: { title: trimmedTitle, sorting_mode },
-      include: { tasks: true },
     });
     return { status: 200, json: project };
   } catch (error) {

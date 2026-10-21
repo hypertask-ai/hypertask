@@ -135,6 +135,7 @@ test("the rendered table create control follows live selection and project scope
   const previousWindow = global.window;
   const previousDocument = global.document;
   const previousNavigator = global.navigator;
+  const previousGetComputedStyle = global.getComputedStyle;
   const previousActEnvironment = global.IS_REACT_ACT_ENVIRONMENT;
   const dom = new JSDOM("<!doctype html><div id='root'></div>");
   const rows = [{ sid: 20 }, { sid: 10 }];
@@ -169,6 +170,7 @@ test("the rendered table create control follows live selection and project scope
     global.window = dom.window;
     global.document = dom.window.document;
     global.navigator = dom.window.navigator;
+    global.getComputedStyle = dom.window.getComputedStyle;
     global.IS_REACT_ACT_ENVIRONMENT = true;
     ({ act } = React);
     const { createRoot } = require("react-dom/client");
@@ -220,11 +222,11 @@ test("the rendered table create control follows live selection and project scope
       quickCalls.push(args);
       return quickResult;
     };
-    const quickProps = { quickEntryEnabled: true, quickCreateTask };
+    const quickProps = { quickCreateTask };
     const type = async (input, value) => {
       await act(async () => {
         Object.getOwnPropertyDescriptor(
-          dom.window.HTMLInputElement.prototype,
+          dom.window.HTMLTextAreaElement.prototype,
           "value",
         ).set.call(input, value);
         input.dispatchEvent(new dom.window.Event("input", { bubbles: true }));
@@ -240,22 +242,22 @@ test("the rendered table create control follows live selection and project scope
       renderControl({ id: 15 }, 0, rows, sections, quickProps),
     ));
     await act(async () => container.querySelector("button").click());
-    await type(container.querySelector("input"), "First card");
-    await press(container.querySelector("input"), "Enter");
+    await type(container.querySelector("textarea"), "First card");
+    await press(container.querySelector("textarea"), "Enter");
     assert.deepEqual(quickCalls[0], ["First card", 15, 20, "Doing"]);
-    assert.equal(container.querySelector("input").value, "");
+    assert.equal(container.querySelector("textarea").value, "");
 
     quickResult = false;
-    await type(container.querySelector("input"), "Keep this draft");
-    await press(container.querySelector("input"), "Enter");
-    await press(container.querySelector("input"), "Escape");
+    await type(container.querySelector("textarea"), "Keep this draft");
+    await press(container.querySelector("textarea"), "Enter");
+    await press(container.querySelector("textarea"), "Escape");
     await act(async () => container.querySelector("button").click());
-    assert.equal(container.querySelector("input").value, "Keep this draft");
+    assert.equal(container.querySelector("textarea").value, "Keep this draft");
 
     quickResult = new Promise((resolve) => { finishCreate = resolve; });
-    await type(container.querySelector("input"), "Only once");
+    await type(container.querySelector("textarea"), "Only once");
     await act(async () => {
-      const input = container.querySelector("input");
+      const input = container.querySelector("textarea");
       input.dispatchEvent(new dom.window.KeyboardEvent("keydown", { key: "Enter", bubbles: true }));
       input.dispatchEvent(new dom.window.KeyboardEvent("keydown", { key: "Enter", bubbles: true }));
     });
@@ -265,9 +267,9 @@ test("the rendered table create control follows live selection and project scope
     await act(async () => reactRoot.render(
       renderControl({ id: 16 }, 0, rows, sections, quickProps),
     ));
-    assert.equal(container.querySelector("input"), null);
+    assert.equal(container.querySelector("textarea"), null);
     await act(async () => container.querySelector("button").click());
-    assert.equal(container.querySelector("input").value, "");
+    assert.equal(container.querySelector("textarea").value, "");
 
     await act(async () => {
       reactRoot.render(renderControl(null, 0));
@@ -281,6 +283,8 @@ test("the rendered table create control follows live selection and project scope
     else global.document = previousDocument;
     if (previousNavigator === undefined) delete global.navigator;
     else global.navigator = previousNavigator;
+    if (previousGetComputedStyle === undefined) delete global.getComputedStyle;
+    else global.getComputedStyle = previousGetComputedStyle;
     dom.window.close();
     if (previousActEnvironment === undefined) {
       delete global.IS_REACT_ACT_ENVIRONMENT;

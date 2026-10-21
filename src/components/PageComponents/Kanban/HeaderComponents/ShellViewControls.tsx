@@ -30,7 +30,6 @@ const ShellViewControls = ({ project }: { project: IProject }) => {
   const hasActiveFilters =
     getActiveFiltersFromProject(project).addedFilters.length > 0
   const hasActiveSort = getActiveSortingModeFromProject(project) !== "Manual"
-  // Tie-break levels are invisible until the popover is open, so surface the total on the icon.
   const sortLevels = getActiveSortingStackFromProject(project).length + 1
 
   if (isMbl) return null

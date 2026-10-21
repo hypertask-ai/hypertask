@@ -22,7 +22,7 @@ function declaration(name) {
 }
 const nextTurn = () => new Promise((resolve) => setImmediate(resolve));
 
-function mount(backgroundTaskUploadsEnabled) {
+function mount() {
   const created = [];
   const errors = [];
   const state = { saving: false, closed: false, reset: false, attachments: [], trigger: false };
@@ -33,7 +33,7 @@ function mount(backgroundTaskUploadsEnabled) {
   });
   const context = {
     isRecording: false, uploadInProgress: false, canSave: undefined,
-    backgroundTaskUploadsEnabled, createSubmissionRef: { current: false },
+    createSubmissionRef: { current: false },
     pendingAttachmentUploadsRef: { current: new Map() }, createTaskAttachmentsRef: { current: [] },
     attachmentComposerEpochRef: { current: 0 }, attachmentComposerEpoch: 0,
     aiPromptRef: { current: undefined }, setAttachmentComposerEpoch: () => {},
@@ -69,48 +69,46 @@ function mount(backgroundTaskUploadsEnabled) {
   };
 }
 
-for (const background of [false, true]) {
-  for (const mode of ['Save', 'SaveAndClose', 'SaveAndNew']) {
-    test(`${mode} waits for a pending upload and saves its attachment (background=${background})`, async () => {
-      const fixture = mount(background);
-      const file = new File(['hello'], 'just-added.txt', { type: 'text/plain' });
-      fixture.onFilesSelected([file]);
-      let resolveUpload;
-      const upload = new Promise((resolve) => { resolveUpload = resolve; });
-      const receipt = upload.then((source) => fixture.callbackAttachments([{ id: 0, file: { name: file.name, size: file.size, type: file.type, source } }]));
-      const save = fixture.CtrlEnterHandler(mode);
-      await nextTurn();
-      assert.equal(fixture.state.saving, true);
-      assert.equal(fixture.created.length, 0, 'create cannot run before the upload resolves');
-      await fixture.CtrlEnterHandler(mode);
-      assert.equal(fixture.created.length, 0, 'a second shortcut cannot bypass the pending save');
-      resolveUpload('https://files.example/just-added.txt');
-      await receipt;
-      await save;
-      await nextTurn();
-      assert.equal(fixture.created.length, 1);
-      assert.equal(fixture.created[0].attachments[0].file.source, 'https://files.example/just-added.txt');
-      assert.equal(fixture.state.reset, true);
-      assert.equal(fixture.state.saving, false);
-    });
-    test(`${mode} does not create or close when the pending upload fails (background=${background})`, async () => {
-      const fixture = mount(background);
-      fixture.onFilesSelected([new File(['hello'], 'failed.txt')]);
-      const save = fixture.CtrlEnterHandler(mode);
-      await nextTurn();
-      fixture.onUploadFailed('failed.txt');
-      await save;
-      assert.equal(fixture.created.length, 0);
-      assert.equal(fixture.state.closed, false);
-      assert.equal(fixture.state.reset, false);
-      assert.equal(fixture.state.saving, false);
-      assert.match(fixture.errors[0], /Could not upload "failed.txt"/);
-    });
-  }
+for (const mode of ['Save', 'SaveAndClose', 'SaveAndNew']) {
+  test(`${mode} waits for a pending upload and saves its attachment`, async () => {
+    const fixture = mount();
+    const file = new File(['hello'], 'just-added.txt', { type: 'text/plain' });
+    fixture.onFilesSelected([file]);
+    let resolveUpload;
+    const upload = new Promise((resolve) => { resolveUpload = resolve; });
+    const receipt = upload.then((source) => fixture.callbackAttachments([{ id: 0, file: { name: file.name, size: file.size, type: file.type, source } }]));
+    const save = fixture.CtrlEnterHandler(mode);
+    await nextTurn();
+    assert.equal(fixture.state.saving, true);
+    assert.equal(fixture.created.length, 0, 'create cannot run before the upload resolves');
+    await fixture.CtrlEnterHandler(mode);
+    assert.equal(fixture.created.length, 0, 'a second shortcut cannot bypass the pending save');
+    resolveUpload('https://files.example/just-added.txt');
+    await receipt;
+    await save;
+    await nextTurn();
+    assert.equal(fixture.created.length, 1);
+    assert.equal(fixture.created[0].attachments[0].file.source, 'https://files.example/just-added.txt');
+    assert.equal(fixture.state.reset, true);
+    assert.equal(fixture.state.saving, false);
+  });
+  test(`${mode} does not create or close when the pending upload fails`, async () => {
+    const fixture = mount();
+    fixture.onFilesSelected([new File(['hello'], 'failed.txt')]);
+    const save = fixture.CtrlEnterHandler(mode);
+    await nextTurn();
+    fixture.onUploadFailed('failed.txt');
+    await save;
+    assert.equal(fixture.created.length, 0);
+    assert.equal(fixture.state.closed, false);
+    assert.equal(fixture.state.reset, false);
+    assert.equal(fixture.state.saving, false);
+    assert.match(fixture.errors[0], /Could not upload "failed.txt"/);
+  });
 }
 
 test('discarding the composer during an upload invalidates the save', async () => {
-  const fixture = mount(false);
+  const fixture = mount();
   fixture.onFilesSelected([new File(['hello'], 'discarded.txt')]);
   const save = fixture.CtrlEnterHandler('Save');
   fixture.context.saveEpochRef.current++;
@@ -141,14 +139,14 @@ for (const method of ['handleFileUpload', 'handleDroppedFiles']) {
 }
 
 test('an initial empty preview emission cannot forget a just-selected file', async () => {
-  const fixture = mount(false);
+  const fixture = mount();
   fixture.onFilesSelected([new File(['hello'], 'not-prepared.txt')]);
   await fixture.getAttachments([]);
   assert.equal(fixture.context.pendingAttachmentUploadsRef.current.size, 1);
 });
 
 test('deliberately removing a prepared file releases its pending save', async () => {
-  const fixture = mount(false);
+  const fixture = mount();
   const file = new File(['hello'], 'removed.txt');
   fixture.onFilesSelected([file]);
   await fixture.getAttachments([file]);
@@ -160,7 +158,7 @@ test('deliberately removing a prepared file releases its pending save', async ()
 });
 
 test('an upload failure before Save still blocks creation with a warning', async () => {
-  const fixture = mount(false);
+  const fixture = mount();
   fixture.onFilesSelected([new File(['hello'], 'already-failed.txt')]);
   fixture.onUploadFailed('already-failed.txt');
   await fixture.getAttachments([]);
@@ -171,7 +169,7 @@ test('an upload failure before Save still blocks creation with a warning', async
 
 for (const fails of [false, true]) {
   test(`image preparation can rename a pending attachment (failure=${fails})`, async () => {
-    const fixture = mount(false);
+    const fixture = mount();
     const original = new File(['image'], 'photo.png');
     const resized = new File(['webp'], 'photo.webp');
     let finishPreparation;
@@ -190,7 +188,7 @@ for (const fails of [false, true]) {
 }
 
 test('the window registers a dropped file before the child preparation effect', async () => {
-  const fixture = mount(false);
+  const fixture = mount();
   const file = new File(['hello'], 'dropped-before-effect.txt');
   void fixture.handleFileDrop([file]);
   const save = fixture.CtrlEnterHandler('Save');
@@ -202,7 +200,7 @@ test('the window registers a dropped file before the child preparation effect', 
 });
 
 test('dropping an already-attached file does not leave an unresolvable wait', async () => {
-  const fixture = mount(false);
+  const fixture = mount();
   const file = new File(['hello'], 'duplicate-drop.txt');
   fixture.context.createTaskAttachmentsRef.current = [{ id: 0, file }];
   await fixture.handleFileDrop([file]);
@@ -210,7 +208,7 @@ test('dropping an already-attached file does not leave an unresolvable wait', as
 });
 
 test('a settled ordinary upload still saves the unwrapped preview metadata', async () => {
-  const fixture = mount(false);
+  const fixture = mount();
   const uploaded = { name: 'settled.txt', source: 'https://files.example/settled.txt', size: 5, type: 'text/plain' };
   fixture.context.createTaskAttachmentsRef.current = [uploaded];
   await fixture.CtrlEnterHandler('SaveAndClose');
@@ -228,35 +226,33 @@ test('the create window wires selection and upload-failure reports through the s
   assert.match(uploader, /onUploadFailed=\{props\.onUploadFailed\}/);
 });
 
-for (const background of [false, true]) {
-  test(`Save & new isolates late preview and upload callbacks from the next ticket (background=${background})`, async () => {
-    const fixture = mount(background);
-    const file = new File(['image'], 'first.webp', { type: 'image/webp' });
-    const uploaded = [{ id: 0, file: { name: file.name, size: file.size, type: file.type, source: 'https://files.example/first.webp' } }];
-    fixture.onFilesSelected([file]);
-    const save = fixture.CtrlEnterHandler('SaveAndNew');
-    await fixture.callbackAttachments(uploaded);
-    await save;
-    await nextTurn();
-    assert.equal(fixture.created[0].attachments[0].file.source, uploaded[0].file.source);
-    assert.deepEqual(fixture.state.attachments, []);
-    assert.deepEqual(fixture.context.createTaskAttachmentsRef.current, []);
-    const triggerAfterReset = fixture.state.trigger;
-    // The old gallery emits its uploadedFiles again when its files become empty.
-    await fixture.getAttachments([file]);
-    await fixture.callbackAttachments(uploaded);
-    assert.deepEqual(fixture.state.attachments, [], 'old callbacks cannot repopulate the next composer');
-    assert.deepEqual(fixture.context.formValues.attachments, []);
-    assert.equal(fixture.state.trigger, triggerAfterReset);
-    const next = fixture.rerender();
-    await next.CtrlEnterHandler('SaveAndClose');
-    await nextTurn();
-    assert.deepEqual(fixture.created[1].attachments, [], 'title-only second ticket has no old attachment');
-  });
-}
+test(`Save & new isolates late preview and upload callbacks from the next ticket`, async () => {
+  const fixture = mount();
+  const file = new File(['image'], 'first.webp', { type: 'image/webp' });
+  const uploaded = [{ id: 0, file: { name: file.name, size: file.size, type: file.type, source: 'https://files.example/first.webp' } }];
+  fixture.onFilesSelected([file]);
+  const save = fixture.CtrlEnterHandler('SaveAndNew');
+  await fixture.callbackAttachments(uploaded);
+  await save;
+  await nextTurn();
+  assert.equal(fixture.created[0].attachments[0].file.source, uploaded[0].file.source);
+  assert.deepEqual(fixture.state.attachments, []);
+  assert.deepEqual(fixture.context.createTaskAttachmentsRef.current, []);
+  const triggerAfterReset = fixture.state.trigger;
+  // The old gallery emits its uploadedFiles again when its files become empty.
+  await fixture.getAttachments([file]);
+  await fixture.callbackAttachments(uploaded);
+  assert.deepEqual(fixture.state.attachments, [], 'old callbacks cannot repopulate the next composer');
+  assert.deepEqual(fixture.context.formValues.attachments, []);
+  assert.equal(fixture.state.trigger, triggerAfterReset);
+  const next = fixture.rerender();
+  await next.CtrlEnterHandler('SaveAndClose');
+  await nextTurn();
+  assert.deepEqual(fixture.created[1].attachments, [], 'title-only second ticket has no old attachment');
+});
 
 test('late preparation, failure and upload callbacks cannot affect a same-name file in the next composer', async () => {
-  const fixture = mount(true);
+  const fixture = mount();
   const original = new File(['old'], 'photo.png');
   let prepare;
   fixture.onFilesSelected([original], new Promise((resolve) => { prepare = resolve; }));

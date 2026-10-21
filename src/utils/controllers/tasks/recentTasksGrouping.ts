@@ -1,18 +1,5 @@
 import type { ITask } from "@/models/model";
 
-/**
- * Grouping helpers for the All Tasks view (`/all-tasks`).
- *
- * The view used to run ONE global `take: 50` ordered by `updatedAt desc` and then
- * derive every project split from that same 50 rows. On a workspace where one
- * busy board produces most of the recent activity, that board consumed the whole
- * budget: quieter boards lost their split entirely, so the view looked like it
- * only contained tasks from a single board (HTPR-5539).
- *
- * Each project now brings its own recent slice. The "All" tab still shows the
- * globally most recent tasks; every project with recent activity always gets a
- * split, no matter how noisy its neighbours are.
- */
 
 export const RECENT_TASKS_PER_PROJECT_LIMIT = 50;
 export const RECENT_TASKS_ALL_LIMIT = 50;
@@ -22,7 +9,6 @@ export const RESERVED_TAB_TITLES = ["All", "All Due Dates", "My Due Dates"];
 const normalizeProjectTitle = (title: string | null | undefined): string =>
   title || "Uncategorized";
 
-/** Create stable labels without consuming a real board title or synthetic tab. */
 const createProjectTitleResolver = (buckets: IProjectTaskBucket[]) => {
   const originalTitles = new Set(
     buckets.map((bucket) => normalizeProjectTitle(bucket.title))
@@ -56,7 +42,6 @@ export interface IProjectTaskBucket {
   tasks: ITask[];
 }
 
-/** The field each view orders by; it must match the per-project DB `orderBy`. */
 export type RecentTasksSortKey = "updatedAt" | "dueDate";
 
 const timestampMs = (task: ITask, key: RecentTasksSortKey): number => {
@@ -88,15 +73,9 @@ export function groupRecentTasksByProject(
     .sort(desc)
     .slice(0, allLimit);
 
-  // A project can legitimately be titled "All" (or one of the due-date tab
-  // names), which would otherwise silently overwrite the synthetic tab. Keep
-  // the accumulation in a Map so user-controlled titles like `__proto__` are
-  // plain data, and rename any board that collides with a reserved tab.
   const byTitle = new Map<string, ITask[]>();
   const tabs = ["All"];
 
-  // Most recently touched project first, so the split order matches what the
-  // user just worked on rather than an arbitrary project id order.
   const ordered = [...populated].sort(
     (a, b) => timestampMs(b.tasks[0], sortKey) - timestampMs(a.tasks[0], sortKey)
   );
@@ -105,7 +84,6 @@ export function groupRecentTasksByProject(
     const title = resolveProjectTitle(bucket.title);
     const existing = byTitle.get(title);
     if (existing) {
-      // Two boards can share a title; merge them into one split.
       byTitle.set(title, [...existing, ...bucket.tasks].sort(desc));
       continue;
     }
@@ -135,7 +113,6 @@ export function groupRecentTasksByDueDate(
   };
   delete tasksByDueDate.All;
 
-  // Skip "All" from the project tabs; "All Due Dates" replaces it.
   const tabs = ["All Due Dates", ...projectTabs.slice(1)];
 
   if (myDueDatesTasks.length > 0) {

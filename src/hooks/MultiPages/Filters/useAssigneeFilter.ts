@@ -158,13 +158,6 @@ export const useAssigneeFilter = ({
   const enterHandler = (index: number) =>
     closeHandler(filteredAssignees[index]);
 
-  // HTPR-5089: the people already used by the filter belong at the top, same
-  // as the tag picker. Snapshot the selection when the modal mounts rather
-  // than tracking activeFiltersFlatMap: sorting off the live value would
-  // reorder rows under the cursor every time you toggle someone.
-  // Seed on the first render that actually has a selection: on mount the
-  // project may still be loading, and an empty seed would never sort anything.
-  // Once seeded it never changes, which is what keeps rows still on toggle.
   const selectedOnOpenRef = useRef<Set<number | string>>(new Set());
   if (!selectedOnOpenRef.current.size && activeFiltersFlatMap.length) {
     selectedOnOpenRef.current = new Set(activeFiltersFlatMap);

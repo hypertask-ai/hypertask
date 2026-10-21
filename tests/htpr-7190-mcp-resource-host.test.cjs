@@ -127,7 +127,7 @@ test('path-suffixed route reuses GET/OPTIONS and proxy permits anonymous discove
     './utils/edgeHelpers': { isValidUser: () => ({ isValid: false }) },
     './utils/serverActions': {},
     './utils/helperFunctions/helperFunctions': {},
-    '@/lib/auth/sessionEdge': {},
+    '@/lib/auth/sessionEdge': { verifySessionEdge: async () => null },
     '@/lib/auth/sessionRevocation': { isSessionTokenRevoked: () => { throw new Error('well-known must bypass cookie revocation') } },
     '@/lib/auth/cookieIdentity': { verifyCookieIdentity: () => { throw new Error('well-known must bypass identity checks') } },
   })('src/proxy.ts').default

@@ -55,8 +55,6 @@ export async function GET(request: NextRequest) {
         })),
         skipDuplicates: true,
       });
-      // Clear only the exact snapshot we migrated. A concurrent preference
-      // write wins, and a later GET safely retries the idempotent createMany.
       await tx.userSetting.updateMany({
         where: {
           userId: session.userId,

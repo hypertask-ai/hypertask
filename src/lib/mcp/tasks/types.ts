@@ -53,7 +53,7 @@ export interface TaskDetail {
         fileName: string;
         fileType: string;
         fileSize: number;
-        fileSource: string; // URL to the attachment
+        fileSource: string;
     }>;
     pullRequests?: Array<{
         id: string;
@@ -77,7 +77,6 @@ export interface TaskDetail {
         id: number;
         email: string;
         displayName?: string;
-        /** Creating managed agent when Task.agentId is set and visible */
         agent?: McpAgentSummary;
     };
 }
@@ -91,10 +90,10 @@ export interface CreateTaskBody {
     section_id?: number;
     priority?: number;
     estimate?: number;
-    due_date?: string; // ISO 8601 date or datetime (e.g. "2026-03-10" or "2026-03-10T00:00:00Z")
-    images?: string[]; // Array of S3 image URLs
-    labels?: (string | number)[]; // Label IDs to assign to the task
-    parent_task_id?: number; // Parent task ID to assign to the task
+    due_date?: string;
+    images?: string[];
+    labels?: (string | number)[];
+    parent_task_id?: number;
     assignee_ids?: number[];
 }
 

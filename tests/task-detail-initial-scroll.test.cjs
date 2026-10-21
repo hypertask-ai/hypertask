@@ -119,27 +119,27 @@ test("task detail wires the guard to task lifecycle and every delayed mobile scr
   );
   const bottomPositioning = sourceBetween(
     source,
-    "// Reliably land at the very bottom of the thread on mobile.",
-    "// A scroll gesture owns initial positioning for one task."
+    "const scrollWindowToBottomMobile = useCallback(",
+    "useLayoutEffect(() => {\n    const generation"
   );
   const taskLifecycle = sourceBetween(
     source,
-    "// A scroll gesture owns initial positioning for one task.",
-    "// Rebind input listeners without restarting initial positioning."
+    "useLayoutEffect(() => {\n    const generation",
+    "useLayoutEffect(() => {\n    const previousViewport"
   );
   const viewportLifecycle = sourceBetween(
     source,
-    "// Rebind input listeners without restarting initial positioning.",
-    "//Initial Scroll and focus when page loads"
+    "useLayoutEffect(() => {\n    const previousViewport",
+    "useEffect(() => {\n    const"
   );
   const mountPositioning = sourceBetween(
     source,
-    "//Initial Scroll and focus when page loads",
-    "// Where a freshly-opened task lands."
+    "useEffect(() => {\n    const",
+    "useEffect(stableLayout && instantTicketOpen"
   );
   const unreadPositioning = sourceBetween(
     source,
-    "// Where a freshly-opened task lands.",
+    "useEffect(stableLayout && instantTicketOpen",
     "  useEffect(() => {\n    if (embedded) return;"
   );
   const unreadDependencyStart = unreadPositioning?.lastIndexOf("}, [") ?? -1;
@@ -170,7 +170,7 @@ test("task detail wires the guard to task lifecycle and every delayed mobile scr
   );
   assert.match(mountPositioning, /runInitialPositioning\(scrollToElement\)/);
   assert.match(mountPositioning, /runInitialPositioning\(\(\) =>\s*focusOn/);
-  assert.match(mountPositioning, /\}, \[_parsedTask\.id, stableLayout, instantTicketOpen, cachedLayout\]\);$/);
+  assert.match(mountPositioning, /\}, \[_parsedTask\.id, stableLayout, instantTicketOpen, cachedLayout, unreadTicketOpensTop\]\);$/);
   assert.match(mountPositioning, /useEffect\(\(\) => \{/);
   assert.ok(
     mountPositioning.indexOf("else if (stableLayout && instantTicketOpen && cachedLayout)") >

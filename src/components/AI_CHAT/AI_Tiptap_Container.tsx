@@ -166,15 +166,6 @@ export function AI_Tiptap_Container({
     void handleDroppedFiles(imageFiles);
   };
 
-  // Focus the composer as soon as it is on screen — but only when an explicit
-  // user action just opened the panel. Auto-open ("Open AI chat by default",
-  // reload restore) mounts this panel at page load; focusing then steals the
-  // cursor so board shortcuts like c, j, k type into the chat box (HTPR-6317).
-  // The loop itself exists because the focus call in useAiChat fires when the
-  // open-toggle flips, before the dynamically imported panel has mounted this
-  // editor, so it silently no-ops (HTPR-4565). Live tracing showed the Tiptap
-  // command path also no-ops during the open transition, while plain DOM
-  // .focus() on the mounted contenteditable sticks — so retry exactly that.
   const [explicitOpenAt, setExplicitOpenAt] = useRecoilState(
     aiChatExplicitOpenAtAtom
   );
@@ -198,8 +189,6 @@ export function AI_Tiptap_Container({
         window.clearInterval(interval);
         return;
       }
-      // The panel can finish loading after an explicit open while the user
-      // has already moved to a comment or title. Do not steal the cursor back.
       if (isEditableElement(active)) {
         window.clearInterval(interval);
         return;
@@ -209,16 +198,9 @@ export function AI_Tiptap_Container({
     };
     const interval = window.setInterval(tick, 60);
     return () => window.clearInterval(interval);
-    // Only the mount-time value matters: the decision is made once, when the
-    // panel appears.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+
   }, []);
 
-  // Dictation shortcuts (desktop): at rest, Chrome swallows CTRL+SHIFT+D
-  // (bookmark-all-tabs) before the editor's own onKeyDown ever fires. A
-  // document listener reclaims it here the same way NewCommentComponent does
-  // for the task comment box (HTPR-5086). Skips when another input/editor has
-  // focus, since that composer owns the shortcut instead.
   useEffect(() => {
     if (isMbl) return;
     const onKeyDown = (e: KeyboardEvent) => {
@@ -227,14 +209,13 @@ export function AI_Tiptap_Container({
       if (e.keyCode !== 68 && e.keyCode !== 70) return;
       const active = document.activeElement as HTMLElement | null;
       const inChat = Boolean(active?.closest?.("#ai-chat-tiptap-editor"));
-      if (inChat) return; // the editor's own onKeyDown handles it
+      if (inChat) return;
       const inOtherField =
         Boolean(active) &&
         (active!.tagName === "INPUT" ||
           active!.tagName === "TEXTAREA" ||
           active!.isContentEditable);
-      if (inOtherField) return; // another composer owns the shortcut
-      // AI chat only has a "speech to text" mic, no dictate-and-improve.
+      if (inOtherField) return;
       if (e.keyCode === 70) return;
       const anchor = document.getElementById("ai-chat-audio-button");
       if (!anchor) return;
@@ -245,9 +226,6 @@ export function AI_Tiptap_Container({
     return () => document.removeEventListener("keydown", onKeyDown);
   }, [isMbl]);
 
-  // Tiptap v3's useEditor doesn't re-render on typing, so editor.isEmpty read
-  // inline is stale (empty at mount -> Send stays disabled; only Enter, which
-  // reads live editor state, worked). Subscribe so the button re-enables live.
   const isEditorEmpty =
     useEditorState({
       editor,
@@ -558,18 +536,10 @@ function ChatScopeDropdown({ mobile = false, reuseChip = false }: { mobile?: boo
   const selectedProject = teams
     .flatMap((team) => team.projects)
     .find((project) => project.id === dockedScope);
-  // When the scope follows the current location (dockedScope === null), name the
-  // concrete thing in context instead of the generic "Current board": the task
-  // on a task page, otherwise the board's own name. HTPR-4563.
   const onTask =
     !!pathname?.startsWith("/detail") && inViewObject.taskId != null;
   const currentBoardName =
     currentProject?.title ?? currentProject?.name ?? "Current board";
-  // A numeric dockedScope is an explicitly-picked board: always show a board
-  // chip (its name, or a neutral "Board" while `allTeams` is still loading) so
-  // the chip never falls through to the current task/board and misreports the
-  // scope. The contextual task/board resolution runs only in follow-current
-  // mode (dockedScope === null). HTPR-4563.
   const pickedBoardName =
     selectedProject?.title ?? selectedProject?.name ?? "Board";
   const scopeChip: { kind: "task" | "board" | "boards"; label: string; title: string } =

@@ -3,12 +3,6 @@ import {
   type MyTasksViewConfig,
 } from "@/models/MyTasksView";
 
-/**
- * Resolve the config JSON for a My Tasks view PATCH.
- * `configPatch.defaultBoardId` is the only writer of that field; full `config`
- * bodies keep the database value so a stale Save cannot wipe a newer quick-add
- * default (and the reverse cannot drop unrelated view edits mid-flight).
- */
 export function mergeMyTasksViewConfigUpdate(args: {
   existingConfig: unknown;
   fullConfig?: unknown;

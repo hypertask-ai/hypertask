@@ -54,7 +54,6 @@ const SharedTaskInfo = ({
             }
       }
     >
-      {/* ====================================== ASSIGNEES ================================ */}
 
       <TaskInfoRow>
         <AssigneesContainer
@@ -66,7 +65,6 @@ const SharedTaskInfo = ({
         />
       </TaskInfoRow>
 
-      {/* ===================================== TASK ID ====================================== */}
       {currentTask?.ticketNumber && (
         <TaskInfoRow>
           <TaskInfoLabel>ID</TaskInfoLabel>
@@ -76,7 +74,6 @@ const SharedTaskInfo = ({
         </TaskInfoRow>
       )}
 
-      {/* ====================================== TASK STATUS ================================ */}
       {currentTask?.id != -1 && (
         <TaskInfoRow>
           <>
@@ -100,7 +97,6 @@ const SharedTaskInfo = ({
         </TaskInfoRow>
       )}
 
-      {/* ====================================== TASK DUE DATE ================================ */}
       <TaskInfoRow>
         <LocalRightSideInfo
           onClick={() => {}}
@@ -130,7 +126,6 @@ const SharedTaskInfo = ({
         </TaskInfoValue>
       </TaskInfoRow>
 
-      {/* ====================================== TASK PROJECT ================================ */}
       <TaskInfoRow>
         <LocalRightSideInfo
           onClick={() => {}}
@@ -148,7 +143,6 @@ const SharedTaskInfo = ({
         </TaskInfoValue>
       </TaskInfoRow>
 
-      {/* ====================================== TASK Priority ================================ */}
       <TaskInfoRow>
         <LocalRightSideInfo
           onClick={() => {}}
@@ -175,7 +169,6 @@ const SharedTaskInfo = ({
         </TaskInfoValue>
       </TaskInfoRow>
 
-      {/* ====================================== TASK Estimate ================================ */}
       <TaskInfoRow>
         <LocalRightSideInfo
           onClick={() => {}}
@@ -203,7 +196,6 @@ const SharedTaskInfo = ({
         </TaskInfoValue>
       </TaskInfoRow>
 
-      {/* ====================================== TASK Labels ================================ */}
       <TaskInfoRow>
         <LocalRightSideInfo
           onClick={() => {}}
@@ -237,7 +229,6 @@ const SharedTaskInfo = ({
           </TaskInfoValue>
         )}
       </TaskInfoRow>
-      {/* ====================================== Followers ================================ */}
       {followers.length > 0 && (
         <TaskInfoRow>
           <TaskInfoLabel>Followers</TaskInfoLabel>

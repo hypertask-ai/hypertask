@@ -193,6 +193,46 @@ async function main() {
     })
     assert.equal(conflict.response.status, 409)
     assert.equal((await conflict.response.json()).code, 'pr_already_linked')
+
+    const linkFailingWith = async (error: Error) => {
+      const original = { error: console.error, warn: console.warn }
+      const logged: Array<['error' | 'warn', string]> = []
+      console.error = (...args: unknown[]) => { logged.push(['error', String(args[0])]) }
+      console.warn = (...args: unknown[]) => { logged.push(['warn', String(args[0])]) }
+      try {
+        const result = await executeTaskUpdate({
+          request,
+          ctx,
+          requestBody: { task_id: 1, pull_request_url: canonicalUrl },
+          linkPullRequest: async () => { throw error },
+        })
+        return { status: result.response.status, body: await result.response.json(), logged }
+      } finally {
+        Object.assign(console, original)
+      }
+    }
+
+    const privateRepo = await linkFailingWith(
+      new PullRequestLinkError('Pull request not found', 404, 'pr_not_found'),
+    )
+    assert.equal(privateRepo.status, 404)
+    assert.equal(privateRepo.body.code, 'pr_not_found')
+    assert.deepEqual(
+      privateRepo.logged.filter(([level]) => level === 'error'),
+      [],
+      'a pull request GitHub cannot find is a caller mistake, not a server error (HTPR-7279)',
+    )
+    assert.ok(privateRepo.logged.some(([level, line]) => level === 'warn' && line.includes('task 1')))
+
+    const githubDown = await linkFailingWith(
+      new PullRequestLinkError('GitHub could not verify this pull request', 502, 'github_unavailable'),
+    )
+    assert.equal(githubDown.status, 502)
+    assert.ok(githubDown.logged.some(([level, line]) => level === 'error' && line.includes('task 1')))
+
+    const crash = await linkFailingWith(new Error('database down'))
+    assert.equal(crash.status, 500)
+    assert.ok(crash.logged.some(([level, line]) => level === 'error' && line.includes('task 1')))
   } finally {
     prismaMock.task.findMany = originalTaskFindMany
     prismaMock.user.findUnique = originalUserFindUnique

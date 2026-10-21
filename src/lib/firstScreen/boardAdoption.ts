@@ -13,8 +13,6 @@ export function adoptBoardDocument(client: QueryClient, snapshot: BoardDocument)
 
 export function excludeBoardDocumentRestore(client: PersistedClient | undefined, snapshot: BoardDocument): PersistedClient | undefined {
   if (!client) return client;
-  // Wall clocks cannot prove a persisted authorization result is newer than
-  // this request. Keep route keys out of restoration, even with future dates.
   return { ...client, clientState: { ...client.clientState, queries: client.clientState.queries.filter(query => {
     const key = query.queryKey;
     return key[0] !== "projectsAll" &&

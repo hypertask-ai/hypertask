@@ -9,11 +9,11 @@ export async function updateTaskSection(context: TaskUpdateFieldContext, task: T
             'Cookie': authCookieHeader
         }
     }
-    // 1. Section change (same board): use moveTask for activity + notifications
     if (requestBody.sectionId && sectionInfo && sectionInfo.projectId === task.projectId) {
         const moveTaskUrl = `${baseUrl}/api/tasks/moveTask`
         const moveResponse = await fetch(moveTaskUrl, {
             method: 'PUT',
+            redirect: 'manual',
             ...fetchOpts,
             body: JSON.stringify({
                 taskId: task.id,
@@ -21,14 +21,9 @@ export async function updateTaskSection(context: TaskUpdateFieldContext, task: T
                 sectionId: requestBody.sectionId,
                 projectId: task.projectId,
                 agentId: ctx.agentId || undefined
-                // ranking omitted - moveTask computes it
             })
         })
         if (!moveResponse.ok) {
-            // A body that fails to parse must not mask the HTTP status:
-            // a fabricated message here replaced the status-bearing
-            // fallback and reached the CLI as a bare "Failed to move
-            // task" (HTPR-6224).
             const errorData = await moveResponse.json().catch(() => null)
             throw new Error(
                 toErrorMessage(

@@ -1,4 +1,3 @@
-// Run: npx tsx normalizeImageSource.check.ts
 import assert from "node:assert";
 import {
   normalizeImageSource,

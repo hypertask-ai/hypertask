@@ -16,7 +16,6 @@ const cliPackagePath = 'node_modules/@posthog/cli/package.json'
 const installDirectory = 'node_modules/@posthog/cli/node_modules/.bin_real'
 
 const cliPackage = JSON.parse(await readFile(cliPackagePath, 'utf8'))
-const baseUrl = cliPackage?.artifactDownloadUrls?.[0]
 // package.json is candidate-controlled: parse the URL and pin it to the
 // official PostHog release path on github.com after normalization.
 const isOfficialPosthogReleaseBase = (value) => {
@@ -31,8 +30,14 @@ const isOfficialPosthogReleaseBase = (value) => {
     return false
   }
 }
-if (!isOfficialPosthogReleaseBase(baseUrl)) {
-  throw new Error(`Unexpected @posthog/cli artifact base URL: ${baseUrl}`)
+const artifactDownloadUrls = cliPackage?.artifactDownloadUrls
+const baseUrl = Array.isArray(artifactDownloadUrls)
+  ? artifactDownloadUrls.find(isOfficialPosthogReleaseBase)
+  : undefined
+if (!baseUrl) {
+  throw new Error(
+    `No official @posthog/cli artifact base URL in: ${JSON.stringify(artifactDownloadUrls)}`,
+  )
 }
 
 const platform = cliPackage?.supportedPlatforms?.['x86_64-unknown-linux-gnu']

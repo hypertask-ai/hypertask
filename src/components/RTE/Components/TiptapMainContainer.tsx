@@ -63,7 +63,6 @@ const TiptapMainContainer = ({
   const isReadOnlyExistingContent =
     !isEditModeActive &&
     (mode === "read-edit-description" || mode === "read-edit-comments");
-  // =============================================== Mobile
   if (isMbl) {
     if (mobileEditOpen) {
       const aiOpen = shouldShowInlineDraftAi && !!editor;
@@ -145,7 +144,6 @@ const TiptapMainContainer = ({
       );
     }
 
-    // FOR: New comment on mobile
     if (mode === "create-comment") {
       const aiRefineOpen =
         shouldShowInlineDraftAi && !!editor && !editor.isEmpty;
@@ -174,7 +172,6 @@ const TiptapMainContainer = ({
                   : "items-center bg-transparent px-0"
               }
             `}
-          // onFocus={handleFocus}
 
           id={id}
           tabIndex={-1}
@@ -192,7 +189,6 @@ const TiptapMainContainer = ({
           >
             {!aiRefineOpen && !aiComposeOpen && <TiptapEditor />}
           </div>
-          {/* ================== attachment button ============= */}
           <div
             className={isComposerExpanded ? "w-full shrink-0" : "shrink-0"}
           >
@@ -245,7 +241,6 @@ const TiptapMainContainer = ({
       );
     }
 
-    // FOR: Description and old comment.
     else {
       return (
         <div
@@ -277,7 +272,6 @@ const TiptapMainContainer = ({
         >
           <CreatedInfoTiptap />
           <TiptapEditor />
-          {/* ================== attachment button ============= */}
 
           {isEditModeActive && (
             <AttachmentsUpload
@@ -300,7 +294,6 @@ const TiptapMainContainer = ({
     }
   }
 
-  // =============================================== DESKTOP
   else {
     return (
       <div
@@ -332,9 +325,6 @@ const TiptapMainContainer = ({
         onClick={toggleExpansion}
       >
         <FileDragOverlay
-          // ponytail: drop is gated on the callback, not on allowDrop — flipping
-          // allowDrop swaps FileDragAndDrop's wrapper element, which unmounts the
-          // editor and cold-reloads every embedded iframe (HTPR-4933).
           dropCallbackHandler={isEditable ? handleFileDrop : () => {}}
           allowDrop={
             mode === "create-comment" || mode === "read-edit-description"
@@ -360,7 +350,6 @@ const TiptapMainContainer = ({
               isRecording={isRecording}
             />
           )}
-          {/* ================== attachment button ============= */}
           {allowedAttachmentModes.includes(mode) &&
             !isReadOnlyExistingContent && (
             <AttachmentsUpload

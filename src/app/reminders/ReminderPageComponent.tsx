@@ -1,7 +1,6 @@
-/* eslint-disable react-hooks/exhaustive-deps */
-/* eslint-disable @next/next/no-img-element */
+
+
 "use client"
-// import Head from 'next/head'
 
 import { useRouter } from 'next/navigation';
 import { useEffect, useLayoutEffect, useRef, useState } from 'react'
@@ -40,7 +39,6 @@ const ReminderPageComponent = ({
         }
     }
 
-    // refs
     const currentHoveredDiv = useRef<number | null>(null);
     const debounceTimeout = useRef<NodeJS.Timeout | null>(null);
     const taskRef = useRef<HTMLDivElement>(null);
@@ -54,7 +52,6 @@ const ReminderPageComponent = ({
     const [showCommands, setShowCommands] = useRecoilState(showCommandsAtom);
 
     const queryClient = useQueryClient();   
-    // const blurTimeout = useRef<NodeJS.Timeout | null>(null);
 
     const router = useRouter();
     const [_reminders, setReminders] = useState<IReminder[]>([]);
@@ -64,7 +61,6 @@ const ReminderPageComponent = ({
 
     const {data:reminderFromQuery} = useGetAllReminders(_currentUser.id)
 
-    // const tasksPlayList=_notifications.map({})
 
     const handleKeyDown = async(e: KeyboardEvent) => {
         var cmdControl = osName === "MacOS"&&e.metaKey || osName !== "MacOS"&&e.ctrlKey;
@@ -80,27 +76,20 @@ const ReminderPageComponent = ({
             document.activeElement?.id === "boardManager" ) return;
 
         if (e.key === "Escape") {
-            // queryClient.refetchQueries({queryKey:["projectsAll"]});
-
             router.back()
     }
-          // press k
           if (e.keyCode === 75 && cmdControl) {
             e.preventDefault();
-            // console.log("1: change commands mode");
             toggleShowCommands();
         }
         
         if(_selectedReminder && e.key === '#' && e.shiftKey) {
-            // const index = _reminders.indexOf(_selectedReminder)
-
             deleteTask(_selectedReminder, index)
         }
 
         if(e.key === "e" ) {
             e.preventDefault()
             if (_selectedReminder) {
-                // const index = _reminders.indexOf(_selectedReminder)
                 if (index >= 0 ) {
                     if (index>=0 && index<_reminders.length-1){
                         setSelectedReminder(_reminders[index+1])
@@ -119,8 +108,6 @@ const ReminderPageComponent = ({
                 console.log("🚀 ~ handleKeyDown ~ _reminders:", _reminders)
                 console.log("🚀 ~ handleKeyDown ~ index:", index)
                 if (index === -1 || index === (_reminders.length - 1)) {
-                    // setSelectedReminder(_reminders[0])
-                    // document.getElementById(`task-${_reminders[0].id}`)?.scrollIntoView({ behavior: 'smooth', block: 'center' })
                 } else {
                     setSelectedReminder(_reminders[index + 1])
                     const activeElement = document.getElementById(`task-${_reminders[index + 1].id}`)
@@ -137,10 +124,7 @@ const ReminderPageComponent = ({
 
         if (e.key === "k" || e.key === "ArrowUp") {
             if (_selectedReminder) {
-                // const index = _reminders.indexOf(_selectedReminder)
                 if (index <= 0) {
-                    // setSelectedReminder(_reminders[_reminders.length - 1])
-                    // document.getElementById(`task-${_reminders[_reminders.length - 1].id}`)?.scrollIntoView({ behavior: 'smooth', block: 'center' })
                 } else {
                     setSelectedReminder(_reminders[index - 1])
                     const activeElement = document.getElementById(`task-${_reminders[index - 1].id}`)
@@ -156,10 +140,8 @@ const ReminderPageComponent = ({
         }
 
         if (e.key === "Enter") {
-            // console.log()
             openTask(_selectedReminder)
         }
-           // cmd/ctrl + m
         if (e.keyCode===77 && cmdControl) {
             openTask(_selectedReminder, "reply")
 
@@ -195,26 +177,9 @@ const ReminderPageComponent = ({
     }
 
     const deleteTask = async (reminder: IReminder, index: number) => {
-        // setReminders(old => {
-        //     old.splice(index, 1)
-        //     return [...old]
-        // })
-
-        // try {
-        //     await fetch(`/api/tasks/single`, {
-        //         method: "PUT",
-        //         headers: { "Content-Type": "application/json" },
-        //         body: JSON.stringify({ newreminder: { id: reminder.task?.id, status: 'Deleted' } })
-        //     })
-        // } catch (error) {
-        // }
     }
 
     const invokeReminderHandler = async (reminder: IReminder, index: number) => {
-        // if (fetching) return
-
-        // setFetching(true)
-       
         try {
             await axios.post("/api/reminders/invokeReminder",{reminder:reminder})
             const newData =_reminders.filter((r,idx)=>idx!==index)
@@ -230,21 +195,14 @@ const ReminderPageComponent = ({
 
     const handleMouseEnter = (index: number) => {
         currentHoveredDiv.current = index;
-        // console.log(index);
-        // Set focus on the div when the mouse hovers over it
-        // taskRef?.current[index]?.focus();
-        // setSelectedReminder(_reminders[currentHoveredDiv.current])
-
       };
     
     const handleMouseLeave = () => {
-    // Clear any existing debounceTimeout
     if (debounceTimeout.current) {
         clearTimeout(debounceTimeout.current);
         debounceTimeout.current = null;
     }
 
-    // Start a new debounceTimeout to remove focus after a short delay (e.g., 100ms)
     debounceTimeout.current = setTimeout(() => {
         if (currentHoveredDiv.current !== null && taskRef.current) {
             (taskRef.current as HTMLDivElement)?.blur();
@@ -254,7 +212,6 @@ const ReminderPageComponent = ({
     };
 
     const handleMouseMove = () => {
-    // Clear any existing debounceTimeout
         if (debounceTimeout.current) {
             setSelectedReminder(_reminders[currentHoveredDiv.current?currentHoveredDiv.current:0])
             clearTimeout(debounceTimeout.current);
@@ -270,7 +227,6 @@ const ReminderPageComponent = ({
     }
 
     useEffect(() => {
-        // queryClient.refetchQueries({queryKey:["projectsAll"]});
         setArchivedTaskIndex(0)
         if (_selectedReminder){
             const elementToScrollTo =document.getElementById(`task-${_selectedReminder.id}`) 
@@ -281,7 +237,6 @@ const ReminderPageComponent = ({
             fetchArchivedTasksAsFallback()
         }
         return () => {
-            // Clear the debounceTimeout when the component unmounts
             if (debounceTimeout.current) {
             clearTimeout(debounceTimeout.current);
             }
@@ -320,7 +275,6 @@ const ReminderPageComponent = ({
                         {
                             _reminders?.map((reminder, i) => (
                                 <div id={`reminder-${reminder.id}`} 
-                                // onFocus={() => console.log('Focused on div:', task)}
                                     onMouseEnter={() => handleMouseEnter(i)}
                                     onMouseLeave={handleMouseLeave}
                                     ref={taskRef}
@@ -354,7 +308,7 @@ const ReminderPageComponent = ({
                                         <button
                                             className='relative group' 
                                             onClick={(e) =>{
-                                                e.stopPropagation(); // Prevent the click event from propagating to the parent div
+                                                e.stopPropagation();
                                                 invokeReminderHandler(reminder, i)
                                             }}
                                         >

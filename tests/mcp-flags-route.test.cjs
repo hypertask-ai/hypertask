@@ -10,6 +10,8 @@ function stubModule(relativePath, exports) {
   require.cache[filename] = { id: filename, filename, loaded: true, exports };
 }
 
+stubModule("src/lib/auth/agentScope.ts", require("./helpers/agent-board-scope.cjs").enforcedScope);
+
 let ctx;
 let owner;
 let limited;
@@ -22,9 +24,11 @@ let previousMode;
 let approvalComment;
 let approvalQueries;
 let lockQueries;
+let batchFlagOn;
+let commentLockLost;
 class FeatureFlagInputError extends Error {}
 class FeatureFlagApprovalError extends Error {}
-const key = "htpr-6136-figma-connect";
+const key = "htpr-3533-google-calendar";
 const reason = "https://app.hypertask.ai/detail/project-4060/215#comment-123";
 const rows = [{ key, mode: "OWNER_AND_QA" }, { key: "legacy-rollout", mode: "OFF" }];
 stubModule("src/lib/mcp/auth.ts", {
@@ -41,8 +45,13 @@ stubModule("src/lib/flags.ts", {
   FeatureFlagInputError,
   FeatureFlagApprovalError,
   defaultFeatureFlagMode: () => "OWNER_AND_QA",
+  isFeatureEnabled: async (flagKey, userId) => {
+    assert.equal(flagKey, "htpr-7364-batch-flag-approval");
+    assert.equal(userId, 6);
+    return batchFlagOn;
+  },
   isFeatureFlagOwnerUserId: async (userId) => { calls.push("owner"); return owner && userId === 6; },
-  listFeatureFlagModes: async (options) => { calls.push("list"); assert.deepEqual(options, { includeTicketTitles: true, includeLastChange: true }); return rows; },
+  listFeatureFlagModes: async (options) => { calls.push("list"); assert.deepEqual(options, { includeTicketTitles: true, includeLastChange: true, principal: { userId: ctx.user.id, agentId: ctx.agentId } }); return rows; },
   setFeatureFlagMode: async (...args) => {
     if (writeError) throw writeError;
     assert.equal(typeof args[3], "function");
@@ -56,19 +65,22 @@ stubModule("src/lib/flags.ts", {
   },
 });
 const tx = {
-  $queryRaw: async (strings, commentId) => {
+  $queryRaw: async (strings, commentId, taskId, projectId) => {
     const sql = strings.join("?");
     const commentLock = lockQueries.length % 2 === 0;
     assert.equal(sql, commentLock
-      ? 'SELECT c.id FROM "Comment" c JOIN "Task" t ON t.id = c."taskId" WHERE c.id = ? FOR UPDATE'
+      ? 'SELECT c.id FROM "Comment" c JOIN "Task" t ON t.id = c."taskId" WHERE c.id = ? AND t.id = ? AND t."projectId" = ? FOR UPDATE'
       : 'SELECT id FROM "Reaction" WHERE "commentId" = ? FOR UPDATE');
     assert.equal(commentId, 123);
+    assert.equal(taskId, commentLock ? 900 : undefined);
+    assert.equal(projectId, commentLock ? 4060 : undefined);
     lockQueries.push({ sql, commentId });
     calls.push(commentLock ? "comment-lock" : "reaction-lock");
-    return approvalComment ? [{ id: commentId }] : [];
+    return approvalComment && !(commentLock && commentLockLost) ? [{ id: commentId }] : [];
   },
   comment: {
     findFirst: async (query) => {
+      if (query.select.taskId) return approvalComment && approvalComment.id === query.where.id && approvalComment.task.projectId === query.where.task.projectId && approvalComment.task.uniqueIndex === query.where.task.uniqueIndex && approvalComment.task.status !== "Deleted" ? { taskId: 900 } : null;
       assert.deepEqual(calls.slice(-2), ["comment-lock", "reaction-lock"]);
       assert.equal(lockQueries.length, 2 * (approvalQueries.length + 1));
       calls.push("approval");
@@ -77,7 +89,8 @@ const tx = {
       assert.deepEqual(query.select, { commentText: true, text: true });
       assert.equal(query.where.id, 123);
       assert.equal(query.where.editedAt, null);
-      assert.deepEqual(query.where.task, { projectId: 4060, uniqueIndex: 215, status: { not: "Deleted" } });
+      assert.deepEqual({ ...query.where.task, project: undefined }, { projectId: 4060, uniqueIndex: 215, status: { not: "Deleted" }, project: undefined });
+      assert.deepEqual(query.where.task.project, { OR: [{ members: { some: { agentId: "runner-3", status: "Accepted", agent: { userId: 6, revokedAt: null } } } }] });
       assert.deepEqual({ ...reaction, createdAt: undefined }, {
         userId: 6, agentId: null, agentDisplayName: null, isDeleted: false,
         unified: { startsWith: "1f44d" }, createdAt: undefined,
@@ -131,7 +144,7 @@ test.beforeEach(() => {
   ctx = { user: { id: 6, email: "valentin.yeo@gmail.com" }, agentId: "runner-3" };
   owner = true; limited = null; writes = []; calls = []; broadcasts = 0;
   broadcastFails = false; writeError = null; previousMode = "OWNER_AND_QA";
-  approvalQueries = []; lockQueries = [];
+  approvalQueries = []; lockQueries = []; batchFlagOn = false; commentLockLost = false;
   approvalComment = {
     id: 123, task: { projectId: 4060, uniqueIndex: 215, status: "Normal" },
     commentText: `Question: Switch ${key} to Off?`, text: null, editedAt: null,
@@ -308,8 +321,9 @@ for (const rejected of ["missing key", "wrong mode", "refusal naming both modes"
     });
     assert.equal(writes.length, 0);
     assert.equal(broadcasts, 0);
-    assert.deepEqual(calls, ["rate-limit", "auth", "owner", "agent", "comment-lock", "reaction-lock", "approval"]);
-    assert.equal(approvalQueries.length, 1);
+    const early = ["unknown comment", "different comment", "wrong project", "wrong ticket", "deleted ticket"].includes(rejected);
+    assert.deepEqual(calls, early ? ["rate-limit", "auth", "owner", "agent"] : ["rate-limit", "auth", "owner", "agent", "comment-lock", "reaction-lock", "approval"]);
+    assert.equal(approvalQueries.length, early ? 0 : 1);
   });
 }
 
@@ -344,8 +358,61 @@ test("PATCH checks the visible text before legacy commentText", async () => {
 test("PATCH locks the comment and task, then reactions before reading approval and writing the flag", async () => {
   assert.equal((await result(await PATCH(request("PATCH", { key, mode: "OFF", reason })))).status, 200);
   assert.deepEqual(lockQueries, [
-    { sql: 'SELECT c.id FROM "Comment" c JOIN "Task" t ON t.id = c."taskId" WHERE c.id = ? FOR UPDATE', commentId: 123 },
+    { sql: 'SELECT c.id FROM "Comment" c JOIN "Task" t ON t.id = c."taskId" WHERE c.id = ? AND t.id = ? AND t."projectId" = ? FOR UPDATE', commentId: 123 },
     { sql: 'SELECT id FROM "Reaction" WHERE "commentId" = ? FOR UPDATE', commentId: 123 },
   ]);
   assert.deepEqual(calls.slice(-4), ["comment-lock", "reaction-lock", "approval", "write"]);
+});
+
+const batchHtml = `<p>@Valentin Yeo Question: Switch other-flag to Everyone?</p><p>Switch ${key} to Owner + QA?</p><p>Switch third-flag to Off?</p>`;
+
+for (const flagOn of [false, true]) {
+  test(`PATCH still allows the one-comment thumbs up with the batch flag ${flagOn ? "on" : "off"}`, async () => {
+    batchFlagOn = flagOn;
+    assert.equal((await result(await PATCH(request("PATCH", { key, mode: "OFF", reason })))).status, 200);
+    assert.equal(writes.length, 1);
+  });
+}
+
+test("PATCH still allows a batch thumbs up for each listed flag when the batch flag is on", async () => {
+  batchFlagOn = true;
+  approvalComment.commentText = "";
+  approvalComment.text = batchHtml;
+  const response = await result(await PATCH(request("PATCH", { key, mode: "OWNER_AND_QA", reason })));
+  assert.equal(response.status, 200);
+  assert.deepEqual(writes, [[key, "OWNER_AND_QA", { userId: 6, agentId: "runner-3", agentName: "Runner 3", reason, source: "api" }]]);
+});
+
+for (const [name, setup, body] of [
+  ["a batch comment while the batch flag is off", () => { batchFlagOn = false; }, { key, mode: "OWNER_AND_QA", reason }],
+  ["a mode the batch comment does not list for that flag", () => {}, { key, mode: "EVERYONE", reason }],
+  ["a flag the batch comment does not list", () => {}, { key: "htpr-1-unlisted", mode: "OFF", reason }],
+  ["a batch comment naming the flag twice", () => {
+    approvalComment.text = `<p>Question: Switch ${key} to Owner + QA?</p><p>Switch ${key} to Everyone?</p>`;
+  }, { key, mode: "EVERYONE", reason }],
+  ["a batch comment with any other text", () => {
+    approvalComment.text = `${batchHtml}<p>and also make it faster</p>`;
+  }, { key, mode: "OWNER_AND_QA", reason }],
+  ["an edited batch comment", () => { approvalComment.editedAt = new Date(); }, { key, mode: "OWNER_AND_QA", reason }],
+  ["a batch comment without Valentin's own thumbs up", () => {
+    approvalComment.reactions[0].agentId = "runner-3";
+  }, { key, mode: "OWNER_AND_QA", reason }],
+]) {
+  test(`PATCH refuses ${name}`, async () => {
+    batchFlagOn = true;
+    approvalComment.commentText = "";
+    approvalComment.text = batchHtml;
+    setup();
+    const response = await result(await PATCH(request("PATCH", body)));
+    assert.equal(response.status, 403);
+    assert.equal(writes.length, 0);
+  });
+}
+
+test("PATCH stops before reaction locks when the verified comment/task binding changed", async () => {
+  commentLockLost = true;
+  assert.equal((await result(await PATCH(request("PATCH", { key, mode: "OFF", reason })))).status, 403);
+  assert.equal(lockQueries.length, 1);
+  assert.equal(approvalQueries.length, 0);
+  assert.equal(writes.length, 0);
 });

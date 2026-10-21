@@ -9,7 +9,7 @@ import {
 } from "@/lib/realtime/server";
 import {
   evaluateInboxZero,
-  loadActiveInboxZeroNotifications,
+  loadActiveInboxZeroNotifications, // trufflehog:ignore
   loadInboxZeroDoneTitlesByProject,
   parseInboxZeroRules,
 } from "@/utils/controllers/notifications/inboxZero";

@@ -137,7 +137,7 @@ def full_publish(ticket="HTPR-255", move=True, **env):
     writes = events(log, "vcc")
     assert len(writes) == (2 if move else 1)
     comment = writes[0]["args"]
-    assert comment[:4] == ["comment", "add", ticket, "--text"]
+    assert comment[:6] == ["comment", "add", ticket, "--kind", "question", "--text"]
     url = calls[0]["url"]
     expected = ('<p><strong>Wireframe ready for ' + html.escape('Full <ticket> & "title"') + '.</strong></p>'
                 + f'<p><a href="{url}">{url}</a></p>'
@@ -145,9 +145,9 @@ def full_publish(ticket="HTPR-255", move=True, **env):
                 + (f' claude --resume {os.environ["CLAUDE_CODE_SESSION_ID"]}' if os.environ.get("CLAUDE_CODE_SESSION_ID") else '') + '</p>'
                 + '<p>Question: <span data-type="mention" class="mention" data-id="Valentin Yeo" data-label="name-6">Valentin Yeo</span> '
                 + html.escape(question) + '</p>')
-    assert comment[4] == expected
-    assert comment[5] == "--attach"
-    png = Path(comment[6])
+    assert comment[6] == expected
+    assert comment[7] == "--attach"
+    png = Path(comment[8])
     assert png == Path(os.environ["HOME"]) / ".local/state/vcc-evidence" / ticket / "wireframe/desktop.png"
     body = png.read_bytes()
     assert body[:8] == b"\x89PNG\r\n\x1a\n"

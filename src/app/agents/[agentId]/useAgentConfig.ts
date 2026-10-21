@@ -41,8 +41,6 @@ export function useAgentConfig({
 }: Props) {
   const handleSaveName = async () => {
     const next = nameDraft.trim();
-    // The route rejects an empty name, so do not send one; closing on an empty
-    // draft would look like a rename that silently did nothing.
     if (!agent || !next || next === agent.displayName) {
       setEditingName(false);
       return;
@@ -50,8 +48,6 @@ export function useAgentConfig({
     setSavingName(true);
     try {
       const updated = await patchAgent({ displayName: next });
-      // The slug follows the name, so the URL has to follow the slug or the
-      // address bar keeps pointing at a name this agent no longer has.
       setAgent((prev) =>
         prev
           ? {
@@ -66,7 +62,6 @@ export function useAgentConfig({
       }
       setEditingName(false);
     } catch {
-      // leave the field open so the typed name is not lost
     } finally {
       setSavingName(false);
     }
@@ -76,22 +71,17 @@ export function useAgentConfig({
     if (!agent || promptDraft.length > PROMPT_MAX) return;
     setSavingPrompt(true);
     try {
-      // The route trims and nulls an empty prompt, so mirror what it actually
-      // stored rather than the raw (possibly untrimmed) draft.
       const updated = await patchAgent({ prompt: promptDraft });
       setAgent((prev) =>
         prev ? { ...prev, prompt: updated.prompt ?? null } : prev,
       );
       setEditingPrompt(false);
     } catch {
-      // leave the textarea open so the edit isn't lost
     } finally {
       setSavingPrompt(false);
     }
   };
 
-  // Two writes in flight can land out of order and leave the agent pinned to
-  // the model that was picked first, so the picker waits for its own write.
   const handleModelChange = async (value: string) => {
     if (!agent || savingModel) return;
     const prevModelOptionId = agent.modelOptionId;
@@ -150,9 +140,6 @@ export function useAgentConfig({
     void saveVisibility(value);
   };
 
-  // The inbox-routing rule the create/edit modal has always carried. It is
-  // enforced server-side in getAll.ts; without a control here the agent page
-  // would show every other setting and silently hide this one.
   const handleImportantToggle = async () => {
     if (!agent || savingImportant) return;
     const next = agent.postsToImportant === false;

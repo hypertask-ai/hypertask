@@ -158,9 +158,6 @@ export function createAddCommentTool(context: ToolContext) {
           });
           if (!taskWithOwner) return { success: false, error: "Task not found" };
 
-          // Mentions resolve BEFORE the HTML conversion: both matchers look for a literal
-          // "@Name", and conversion escapes the apostrophe in "@O'Brien" (and the & in
-          // "@R&D Bot") so the match would silently fail and nobody would be notified.
           let sanitizedText = input.text.trim();
           if (input.mentions?.length) {
             sanitizedText = convertPlainTextMentionsToHtml(sanitizedText, input.mentions);

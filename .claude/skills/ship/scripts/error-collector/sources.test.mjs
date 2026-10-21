@@ -1,11 +1,13 @@
+import { createHash } from 'node:crypto';
 import { test, after } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync, mkdtempSync, mkdirSync, writeFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { collect, loadSources, fingerprint } from './collector.mjs';
+import { collect, loadSources, fingerprint, isNoise } from './collector.mjs';
 import * as vercel from './sources/vercel.mjs';
 import * as proxy from './sources/vercel-5xx.mjs';
+import * as realtime from './sources/realtime.mjs';
 import * as github from './sources/github-actions.mjs';
 import * as journal from './sources/vps-journal.mjs';
 import * as workers from './sources/cloudflare-workers.mjs';
@@ -41,7 +43,7 @@ function fakeCommand(name, source) {
 globalThis.fetch = async () => { throw new Error('NETWORK FORBIDDEN'); };
 
 test('default sources are explicit and fixture stays opt-in', async () => {
-  assert.deepEqual((await loadSources()).map(source => source.name), ['vercel', 'vercel-5xx', 'github-actions', 'vps-journal', 'cloudflare-workers', 'posthog', 'neon']);
+  assert.deepEqual((await loadSources()).map(source => source.name), ['vercel', 'vercel-5xx', 'realtime', 'github-actions', 'vps-journal', 'cloudflare-workers', 'posthog', 'neon']);
 });
 
 test('recorded Vercel structured messages lose metadata, preserve error details and request path', () => {
@@ -98,18 +100,27 @@ test('GitHub recorded failure and timeout jobs, production plus scheduled runs, 
   fakeCommand('gh', `import { readFileSync, appendFileSync } from 'node:fs';
 const data = JSON.parse(readFileSync(process.env.HOME + '/github.json'));
 const args = process.argv.slice(2); appendFileSync(process.env.HOME + '/gh-calls.jsonl', JSON.stringify(args) + '\\n');
-console.log(JSON.stringify(args[1] === 'list' ? data.runs : { jobs: data.jobs }));`);
+console.log(JSON.stringify(args[1] === 'list' ? (args[args.indexOf('--repo') + 1] === 'hypertask-ai/docs' ? data.docsRuns : data.runs) : { jobs: data.jobs }));`);
   const events = await github.fetch(context);
-  assert.equal(events.length, 2);
+  assert.equal(events.length, 4);
+  const docs = events.filter(event => event.message.startsWith('docs: '));
+  assert.equal(docs.length, 2);
+  assert.equal(docs[0].message, 'docs: Build and Deploy failed: Build');
+  assert.equal(docs[0].stack, 'https://github.com/hypertask-ai/docs/actions/runs/100');
+  assert.equal(events.find(event => event.message === 'Deploy failed: Build').stack, 'https://github.com/hypertask-ai/hypertask/actions/runs/100');
+  assert.notEqual(fingerprint(github.name, docs[0].message), fingerprint(github.name, 'Build and Deploy failed: Build'));
   assert.ok(events.every(event => event.board === 4060));
   const calls = readFileSync(join(home, 'gh-calls.jsonl'), 'utf8').trim().split('\n').map(JSON.parse);
-  assert.equal(calls.filter(args => args[1] === 'view').length, 2);
-  assert.ok(calls.some(args => args.includes('production')));
+  assert.equal(calls.filter(args => args[1] === 'view').length, 4);
+  for (const [repo, branch] of [['hypertask-ai/hypertask', 'production'], ['hypertask-ai/docs', 'main']]) {
+    assert.ok(calls.some(args => args.includes(repo) && args.includes(branch)));
+    assert.ok(calls.some(args => args.includes(repo) && args.includes('schedule')));
+  }
   assert.ok(calls.some(args => args.includes('schedule')));
   assert.ok(calls.some(args => args.includes('timed_out')));
   data.runs = Array.from({ length: 21 }, (_, i) => ({ ...data.runs[0], databaseId: i }));
   writeFileSync(join(home, 'github.json'), JSON.stringify(data));
-  assert.equal((await github.fetch(context)).length, 21);
+  assert.equal((await github.fetch(context)).length, 23);
 });
 
 test('journal recorded entries group normalized MESSAGE per unit, exclude collector and dedupe user/system', async () => {
@@ -172,7 +183,7 @@ test('summary-only event never enters fingerprints/pending, search or tickets, e
   assert.ok(messages.some(line => line.includes('"errors":5')));
 });
 
-test('every h1 group replays through core: precisely REAL/INFRA pending and every NOISE skipped', async () => {
+test('every h1 group replays through core: REAL/INFRA pending, noise stays noise with opted-in hourly alerts', async () => {
   const groups = JSON.parse(readFileSync(new URL('./fixtures/h1-groups.json', import.meta.url)));
   const root = join(home, 'replay-state');
   const rules = JSON.parse(readFileSync(new URL('./noise.json', import.meta.url)));
@@ -182,10 +193,22 @@ test('every h1 group replays through core: precisely REAL/INFRA pending and ever
     assert.equal(matched.length > 0, group.classification === 'NOISE', `research group ${group.id}`);
     if (group.classification === 'NOISE') noiseCount += group.count;
   }
-  await collect({ env: { ...env, ERROR_COLLECTOR_STATE_DIR: root, ERROR_COLLECTOR_HOURLY_CAP: '0' }, now: Date.parse(until), sources: [{ name: 'research', fetch: async () => groups }] });
+  // This classification replay spans a full day; keep all groups inside its filing window.
+  await collect({ env: { ...env, ERROR_COLLECTOR_STATE_DIR: root, ERROR_COLLECTOR_HOURLY_CAP: '0', ERROR_COLLECTOR_STALE_HOURS: '24' }, now: Date.parse(until), sources: [{ name: 'research', fetch: async () => groups }] });
   const state = JSON.parse(readFileSync(join(root, 'state.json')));
   const expected = [...new Set(groups.filter(group => group.classification !== 'NOISE').map(group => fingerprint(group.service, group.message, group.route)))].sort();
-  assert.deepEqual(Object.keys(state.pending).sort(), expected);
+  assert.deepEqual(Object.keys(state.pending).filter(fp => !state.pending[fp].noiseRule).sort(), expected);
+  const alerts = new Map();
+  for (const group of groups.filter(group => group.classification === 'NOISE')) {
+    const rule = rules.find(rule => rule.alert && (!rule.service || rule.service === group.service) && new RegExp(rule.match, 'i').test(`${group.message}\n${group.route}`));
+    if (!rule) continue;
+    const fp = createHash('sha256').update(`noise|${group.service}|${rule.id}`).digest('hex').slice(0, 16);
+    if (!alerts.has(fp)) alerts.set(fp, []);
+    alerts.get(fp).push(group);
+  }
+  const expectedAlerts = [...alerts].filter(([, events]) => events.some(end => events.filter(event => Date.parse(event.ts) > Date.parse(end.ts) - 3600000 && event.ts <= end.ts).reduce((count, event) => count + event.count, 0) > 50)).map(([fp]) => fp).sort();
+  assert.deepEqual(Object.keys(state.pending).filter(fp => state.pending[fp].noiseRule).sort(), expectedAlerts);
+  assert.equal(Object.values(state.days).reduce((sum, day) => sum + day.vercel.errors, 0), groups.filter(group => group.classification !== 'NOISE').reduce((sum, group) => sum + group.count, 0));
   assert.equal(Object.values(state.days).reduce((sum, day) => sum + day.vercel.noise, 0), noiseCount);
   // Positive control ensures the noise assertion rejects a real error.
   assert.ok(!rules.some(rule => new RegExp(rule.match, 'i').test('guest cleanup failed Foreign key constraint violated')));
@@ -222,7 +245,7 @@ test('R2: GitHub backlog returns all runs with only twenty newest job lookups', 
   fakeCommand('gh', `import { readFileSync, appendFileSync } from 'node:fs';
 const args = process.argv.slice(2);
 appendFileSync(process.env.HOME + '/backlog-calls.jsonl', JSON.stringify(args) + '\\n');
-console.log(JSON.stringify(args[1] === 'list' ? JSON.parse(readFileSync(process.env.HOME + '/backlog.json')) : { jobs: [{ name: 'Build', conclusion: 'failure' }] }));`);
+console.log(JSON.stringify(args[1] === 'list' ? (args.includes('hypertask-ai/docs') ? [] : JSON.parse(readFileSync(process.env.HOME + '/backlog.json'))) : { jobs: [{ name: 'Build', conclusion: 'failure' }] }));`);
   const events = await github.fetch(context);
   assert.equal(events.length, 25);
   const lookups = readFileSync(join(home, 'backlog-calls.jsonl'), 'utf8').trim().split('\n').map(JSON.parse).filter(args => args[1] === 'view');
@@ -249,6 +272,61 @@ test('R4: Vercel live timeout and SSE route go to infra only', () => {
   const rows = [row, { ...row, message: 'other failure', requestPath: '/sse' }, { ...row, message: 'other failure', requestPath: '/mcp' }, { ...row, message: 'other failure', requestPath: '/sse-other' }];
   assert.match(vercel.messageParts(rows[0].message).message, /Vercel Runtime Timeout Error/);
   assert.deepEqual(vercel.parseEvents(rows).map(event => event.board), [4060, 4060, 15, 15]);
+});
+
+test('YPER4-358: dead outgoing board and agent webhooks go to infra, other webhook text stays on 15', () => {
+  const row = { requestPath: '/api/webhooks/qstash', timestamp: '2026-10-14T10:00:00.000Z' };
+  const messages = [
+    '[board-webhook] delivery failed after 8 attempts (HTTP 500)',
+    '[board-webhook] delivery failed after its worker stopped (no response)',
+    '[agent-webhook] delivery failed after 6 attempts (no response)',
+    'GitHub webhook [board-webhook] delivery failed',
+  ];
+  const events = vercel.parseEvents(messages.map(message => ({ ...row, message })));
+  assert.deepEqual(events.map(event => event.board), [4060, 4060, 4060, 15]);
+  assert.equal(events[0].message, messages[0]);
+});
+
+test('YPER4-359: email event prefix routes to email/infra, embedded text stays on vercel/15', () => {
+  const row = { requestPath: '/api/webhooks/resend-events', timestamp: until };
+  const messages = ['[email-event] email.bounced (Permanent, General)', 'other [email-event] text'];
+  const events = vercel.parseEvents(messages.map(message => ({ ...row, message })));
+  assert.deepEqual(events.map(event => [event.service, event.board]), [['email', 4060], ['vercel', 15]]);
+  assert.deepEqual(events.map(event => event.message), messages);
+});
+
+test('YPER4-356: CLI error logs route to cli/15 and group across versions and OSes', async () => {
+  const events = vercel.parseEvents(fixtures.cli.events);
+  assert.deepEqual(events.map(event => [event.service, event.board]), [['cli', 15], ['cli', 15], ['cli', 15]]);
+  assert.deepEqual(events.map(event => event.message), [
+    '[cli-error] task create: ApiFailure (HTTP 503)',
+    '[cli-error] task create: ApiFailure (HTTP 503)',
+    '[cli-error] login: NoToken',
+  ]);
+  assert.deepEqual(events.map(event => event.stack), ['v0.2.0 linux', 'v0.3.1-beta.2+abc macos', 'v0.3.1 windows']);
+  assert.equal(fingerprint(events[0].service, events[0].message, events[0].route), fingerprint(events[1].service, events[1].message, events[1].route));
+  assert.notEqual(fingerprint(events[0].service, events[0].message, events[0].route), fingerprint(events[2].service, events[2].message, events[2].route));
+  const calls = mockHTTP([[200, { events: fixtures.cli.events, pagination: { hasMore: false } }]]);
+  assert.deepEqual(await vercel.fetch(context), events);
+  assert.equal(calls[0].body.filter, 'level:error AND environment:production');
+});
+
+test('YPER4-356: only a leading CLI prefix routes to cli; metadata and existing frames stay in stack', () => {
+  const row = { requestPath: '/api/mcp/cli-error', timestamp: until };
+  const events = vercel.parseEvents([
+    { ...row, message: 'other [cli-error] text v0.2.0 linux' },
+    { ...row, message: '[cli-error] login: NoToken v0.2.0 other\n    at caller (file:1)' },
+    { ...row, message: '[cli-error] malformed without metadata' },
+    { ...row, message: '[cli-error] task create: ApiFailure (HTTP 500) v0.2.0 linux' },
+  ]);
+  assert.deepEqual(events.map(event => [event.service, event.board]), [['vercel', 15], ['cli', 15], ['cli', 15], ['cli', 15]]);
+  assert.equal(events[0].message, 'other [cli-error] text v0.2.0 linux');
+  assert.equal(events[1].message, '[cli-error] login: NoToken');
+  assert.equal(events[1].stack, 'v0.2.0 other\nat caller (file:1)');
+  assert.equal(events[2].message, '[cli-error] malformed without metadata');
+  assert.equal(events[2].stack, '');
+  assert.equal(events[3].message, '[cli-error] task create: ApiFailure (HTTP 500)');
+  assert.deepEqual(vercel.parseEvents([{ ...row, message: fixtures.cli.events[0].message, httpStatus: 503 }], proxy.name).map(event => event.service), ['vercel-5xx']);
 });
 
 test('R6: journal identical errors are bucketed separately across UTC midnight', () => {
@@ -416,4 +494,89 @@ test('Neon changed stats_reset or any decreasing counter establishes a fresh bas
   counters.rows[0].deadlocks = '3';
   neonHTTP({ slow: { rows: [] }, counters });
   assert.equal((await neon.fetch({ ...context, cursor: baseline.cursor })).events[0].count, 1);
+});
+
+const realtimeFixture = JSON.parse(readFileSync(new URL('./fixtures/realtime.json', import.meta.url)));
+
+test('YPER4-360: realtime reads production warning/error logs, pages and dedupes before selecting broadcast failures', async () => {
+  const first = { ...realtimeFixture.page, pagination: { hasMore: true, nextCursor: 'realtime-page-2' } };
+  const calls = mockHTTP([[200, first], [200, realtimeFixture.page]]);
+  const events = await realtime.fetch(context);
+  assert.equal(calls[0].body.event, 'vercel.log');
+  assert.equal(calls[0].body.filter, '(level:warn OR level:error) AND environment:production');
+  assert.equal(calls[0].headers['x-vercel-observability-query-reason'], 'cli/logs-runtime');
+  assert.equal(calls[0].body.limit, 500);
+  assert.equal(calls[1].body.cursor, 'realtime-page-2');
+  assert.equal(events.length, 2);
+  assert.ok(events.every(event => event.service === 'realtime' && event.board === 4060 && event.count === 1));
+  assert.deepEqual(events.map(event => event.route), ['/api/tasks/single', '/api/mcp/tasks/update']);
+  assert.equal(events[0].ts, realtimeFixture.page.events[0].timestamp);
+  assert.match(events[0].stack, /^at trigger/);
+  assert.equal(fingerprint('realtime', events[0].message), fingerprint('realtime', events[1].message));
+  // Error-level copies belong only to realtime, never both runtime sources.
+  assert.deepEqual(vercel.parseEvents([realtimeFixture.page.events[1]]), []);
+  mockHTTP([[200, realtimeFixture.empty]]);
+  assert.deepEqual(await realtime.fetch(context), []);
+});
+
+test('YPER4-360: realtime ignores unrelated warnings and near-matching text; ordinary runtime errors remain collected', () => {
+  const row = realtimeFixture.page.events[0];
+  const unrelated = ['Other failure', 'prefix [realtime] broadcast failed', '[realtime] broadcast failedness', '[realtime] connected'];
+  const rows = unrelated.map(message => ({ ...row, message }));
+  assert.deepEqual(vercel.parseEvents(rows, realtime.name), []);
+  assert.equal(vercel.parseEvents(rows).length, rows.length);
+  assert.ok(vercel.parseEvents(rows).every(event => event.service === 'vercel' && event.board === 15));
+  assert.equal(vercel.parseEvents([{ ...row, message: '[realtime] broadcast failed' }], realtime.name).length, 1);
+  const callers = ['[cycle-rollover] realtime broadcast failed', '[tasks/single] task realtime broadcast failed', '[agent-run] runtime run board broadcast failed'];
+  assert.equal(vercel.parseEvents(callers.map(message => ({ ...row, message })), realtime.name).length, callers.length);
+});
+
+test('YPER4-402: realtime collects console.warn broadcast failures, which Vercel stores as level warn', async () => {
+  const messages = ['[feature-flags] realtime broadcast failed Error: socket hang up', '[agent-run] Agent Chat activity broadcast failed Error: 500'];
+  const rows = messages.map(message => ({ ...realtimeFixture.page.events[0], level: 'warn', message }));
+  const calls = mockHTTP([[200, { events: rows, pagination: { hasMore: false } }]]);
+  const events = await realtime.fetch(context);
+  assert.match(calls[0].body.filter, /\blevel:warn\b/);
+  assert.doesNotMatch(calls[0].body.filter, /level:warning/);
+  assert.deepEqual(events.map(event => event.message.split(' Error')[0]), ['[feature-flags] realtime broadcast failed', '[agent-run] Agent Chat activity broadcast failed']);
+  assert.ok(events.every(event => event.service === 'realtime' && event.board === 4060));
+});
+
+test('YPER4-360: realtime query failures/incomplete pages fail closed without exposing provider bodies', async () => {
+  for (const [status, data] of [[401, { error: 'private-provider-body' }], [429, {}], [200, {}], [200, { events: [{ ...realtimeFixture.page.events[0], truncated: true }] }], [200, { ...realtimeFixture.empty, meta: { excludedIntervals: [{}] } }], [200, { ...realtimeFixture.empty, pagination: { hasMore: true } }]]) {
+    mockHTTP([[status, data]]);
+    await assert.rejects(realtime.fetch(context), error => !String(error.stack).includes('private-provider-body'));
+  }
+});
+
+test('YPER4-360: realtime collector groups normalized failures once and keeps its cursor on failure', async () => {
+  const root = join(home, 'realtime-state');
+  const collectorEnv = { ...env, ERROR_COLLECTOR_STATE_DIR: root, ERROR_COLLECTOR_HOURLY_CAP: '0' };
+  fakeCommand('ht', 'console.log(JSON.stringify({ success: true, tasks: [], total: 0 }));');
+  fakeCommand('vcc', 'throw new Error("WRITE FORBIDDEN");');
+  mockHTTP([[200, realtimeFixture.page]]);
+  assert.equal(await collect({ env: collectorEnv, now: Date.parse(until), sources: [realtime] }), 0);
+  const before = readFileSync(join(root, 'state.json'), 'utf8');
+  const state = JSON.parse(before);
+  assert.equal(state.sources.realtime, until);
+  assert.equal(state.days['2026-10-14'].realtime.errors, 2);
+  assert.equal(Object.keys(state.pending).length, 1);
+  assert.equal(Object.values(state.pending)[0].board, 4060);
+  assert.equal(Object.values(state.pending)[0].count, 2);
+  mockHTTP([[503, {}]]);
+  assert.equal(await collect({ env: collectorEnv, now: Date.parse(until) + 1000, sources: [realtime] }), 1);
+  assert.equal(readFileSync(join(root, 'state.json'), 'utf8'), before);
+  mockHTTP([[200, realtimeFixture.empty]]);
+  assert.equal(await collect({ env: collectorEnv, now: Date.parse(until) + 1000, sources: [realtime], dryRun: true }), 0);
+  assert.equal(readFileSync(join(root, 'state.json'), 'utf8'), before);
+});
+
+
+test('YPER4-360: failed server-to-Pusher authentication and aborted publishes are errors, not expected client noise', () => {
+  for (const detail of ['HTTP 401 Unauthorized', 'HTTP 403 Forbidden', 'HTTP 404 Not Found', 'AbortError']) {
+    const message = `[realtime] broadcast failed private-board-123 board.changed ${detail}`;
+    assert.equal(isNoise({ service: 'realtime', message, route: '/api/tasks/single' }), false);
+    assert.equal(isNoise({ service: 'vercel', message, route: '/api/tasks/single' }), true);
+  }
+  assert.equal(isNoise({ service: 'realtime', message: '[realtime] broadcast failed [ht-forced-test]', route: '' }), true);
 });

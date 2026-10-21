@@ -207,7 +207,6 @@ export function rewrittenInlineDraftAiRange({
   };
 }
 
-/** Keep the AI edit range when the editor selection collapses (e.g. prompt focus). */
 export function nextInlineDraftAiScope(
   previous: InlineDraftAiRange,
   next: InlineDraftAiRange,

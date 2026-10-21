@@ -22,7 +22,6 @@ export function teamAccessWhere(userId: number): Prisma.TeamWhereInput {
   };
 }
 
-/** True when the user owns, belongs to, or can access a board on the team. */
 export async function hasTeamMembershipAccess(
   userId: number,
   teamId: string

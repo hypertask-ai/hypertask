@@ -69,7 +69,6 @@ export default async function InboxPage(
     const [project, view] = previousBoardString.value.split("|&|");
     const projectId = project.split("-")[1];
 
-    //Set homepage link with previousBoard cookie
     homePageLink = `/project?id=${projectId}${
       view && view !== "undefined" ? `&view=${view}` : ""
     }`;

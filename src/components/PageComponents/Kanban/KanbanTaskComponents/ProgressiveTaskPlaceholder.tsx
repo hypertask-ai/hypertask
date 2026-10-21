@@ -24,10 +24,6 @@ const estimatedTaskHeight = (task: ITask) => {
   return 76 + (hasMetadata ? 28 : 0) + subtaskRows * 24;
 };
 
-/**
- * A cheap, navigable stand-in for a card outside the large-board viewport.
- * The real card replaces it before interaction or drag dimension collection.
- */
 const ProgressiveTaskPlaceholder = ({
   task,
   provided,
@@ -40,10 +36,6 @@ const ProgressiveTaskPlaceholder = ({
     id={`task-${task.id}`}
     data-progressive-task-id={task.id}
     aria-label={task.title}
-    // HTPR-6298: a bare `border` class collides with Bootstrap's `.border`
-    // utility (imported !important into layer(bootstrap)) and renders a light
-    // #dee2e6 outline instead of transparent. `border-thin` is the canonical
-    // 1px width token and doesn't collide with Bootstrap's `.border`.
     className="block rounded-[5px] border-thin border-transparent bg-cardBackground px-2 py-2 text-dense text-white-black"
     {...provided.draggableProps}
     {...provided.dragHandleProps}

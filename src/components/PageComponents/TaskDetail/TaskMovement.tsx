@@ -34,12 +34,10 @@ const TaskMovement =(
     return (
         <>
 
-            {/* ======================= arrow container ======================== */}
             <div
                 className={`task-nav-controls flex rounded-[20px] py-[6px] mx-1 items-center justify-center bg-back-button shadow-md flex-col ${showAiChatInterface && isSidebarMode ? "" : "xl:flex-row"}`}
                 >
 
-                {/* ======================= arrow up ================ */}
                 <span
                     onClick={()=>navigateToPreviousTask(false, false)}
                     aria-disabled={previousDisabled}
@@ -56,7 +54,6 @@ const TaskMovement =(
                         />
                 </span>
 
-                {/* ======================= arrow down ================ */}
                 <span                
                     onClick={()=>navigateToNextTask(false, true)}
                     aria-disabled={nextDisabled}

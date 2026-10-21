@@ -53,11 +53,6 @@ const mergeReorderedSections = (
   return applyVisibleSectionOrder(sections, reorderedCurrentSections);
 };
 
-/**
- * Keep every in-memory representation of a board aligned after a visible
- * column reorder. Hidden and filtered-out columns keep their existing slots,
- * while the moved columns carry their canonical rankings into each list.
- */
 export const applyReorderedSectionsToProject = (
   project: IProject,
   reorderedSections: ISection[]

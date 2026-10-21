@@ -126,7 +126,6 @@ const EditSingleLabel = (
                 </>
              }
        
-             {/* --------------- DELETE CONFIRM MODAL ------------------- */}
              {deleteModal && (
                <ConfirmDialog
                  id="confirm-delete-tag"
@@ -138,7 +137,6 @@ const EditSingleLabel = (
                />
              )}
        
-             {/* ------------------ MODAL FOOTER ----------------- */}
              <ModalFooter className={`${!confirming?"visible":"hidden"} flex items-center justify-between border-t border-light-black-border-1 px-4 py-2`}>
                <button
                  type="button"

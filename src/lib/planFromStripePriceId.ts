@@ -3,12 +3,10 @@ import {
   allYearlyPrices,
 } from "@/lib/subscriptionPlans";
 
-/** Matches `ISubscriptionPlan.id` from the product store; `AI` = legacy Stripe prices. */
 export type StorePlanKind = "Free" | "BYOK" | "Pro" | "AI";
 
 export type StripeBillingInterval = "month" | "year";
 
-/** Higher = better / more expensive product tier (Pro is top). */
 export const STORE_PLAN_RANK: Record<StorePlanKind, number> = {
   Free: 0,
   BYOK: 1,
@@ -16,18 +14,13 @@ export const STORE_PLAN_RANK: Record<StorePlanKind, number> = {
   Pro: 3,
 };
 
-// Canonical advertised seat prices (HTPR-4153). Check before legacy arrays because these ids also occupy _02 slots.
 const CANONICAL_SEAT_PRICE = {
   month: "price_1QjJeDIhmcH60VcciHzZ3mTJ",
   year: "price_1QjJf8IhmcH60VccNUrF7YJf",
 } as const;
 
-// The live STRIPE_MONTHLY_PRICE_ID ($25/seat "Hypertask Pro") — real paying
-// teams (inne, 66loop) subscribe on this id; unmapped it read as Free and
-// plan-gated features (BYOK page) vanished for paying customers.
 const CURRENT_SEAT_PRICE_MONTH = "price_1TMlqDIhmcH60VccRZGW1xK3";
 
-// 5-seat $100/month custom deals for inne and vetsak.
 const CUSTOM_DEAL_PRICES = new Set(["price_1QCKkpIhmcH60Vcc2RqVACTc"]);
 
 export function planKindFromStripePriceId(priceId: string | null | undefined): {

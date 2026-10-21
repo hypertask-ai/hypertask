@@ -8,8 +8,6 @@ const storageKey = (userId: number) => `htpr-6938-my-tasks:${userId}`;
 const validId = (value: unknown): value is number | null =>
   value === null || (typeof value === "number" && Number.isSafeInteger(value) && value > 0);
 
-// No generic server preference exists. Store only explicit picks in this browser,
-// with the default ID at pick time so a later default change takes precedence.
 export function readMyTasksViewMemory(userId: number): MyTasksViewMemory {
   try {
     const value = JSON.parse(window.localStorage.getItem(storageKey(userId)) ?? "{}");
@@ -30,6 +28,5 @@ export function rememberMyTasksView(userId: number, selection: MyTasksViewMemory
       ...readMyTasksViewMemory(userId), ...selection,
     }));
   } catch {
-    // Storage can be disabled or full; navigation must still work.
   }
 }

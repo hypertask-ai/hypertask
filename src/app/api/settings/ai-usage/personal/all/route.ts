@@ -28,13 +28,10 @@ export async function GET() {
 
   const teams = await prisma.team.findMany({
     where: {
-      // A team with no live boards is effectively archived - hide it.
       projects: { some: { status: "Normal" } },
       OR: [
         { googleAccount: { userId: user.id } },
         { members: { some: { userId: user.id, status: "Accepted" } } },
-        // Never pass undefined into an OR branch: Prisma treats it as
-        // no-filter and the branch would match every team.
         ...(user.accountId ? [{ googleAccountId: user.accountId }] : []),
       ],
     },

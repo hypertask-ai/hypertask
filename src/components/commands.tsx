@@ -14,34 +14,11 @@ import { createCommandModalCallbacks } from "./commandModalCallbacks";
 import { createCommandDispatcher } from "./commandDispatcher";
 import { useEffect } from "react";
 import { useFlag } from "@/hooks/useFlag";
-import { HTPR_6868_TICKET_PREFIX_FLAG, HTPR_6929_COMPOSE_TASK_WRITER_FLAG, HTPR_6937_NEW_TASK_WINDOW_FLAG } from "@/lib/flags/keys";
+import { HTPR_7328_ROUNDED_THEME_FLAG, HTPR_7260_KANBAN_SELECT_ALL_FLAG, HTPR_6868_TICKET_PREFIX_FLAG, HTPR_6929_COMPOSE_TASK_WRITER_FLAG, HTPR_6937_NEW_TASK_WINDOW_FLAG } from "@/lib/flags/keys";
 
 
 
 import { CommandMode } from "@/models/enums";
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-// ─── Static Imports ─────────────────────────────────────────────────────────────
-
-
-
-
-
 
 import "./Modals/commands/HTC/AllCommands";
 
@@ -84,6 +61,8 @@ import "./Modals/commands/HTC/AllCommands";
 
 
 const HypertasksCommands = ({ callbackHandler, contextOptions, focusProxy }: IHTCProps) => {
+  const roundedEnabled = useFlag(HTPR_7328_ROUNDED_THEME_FLAG);
+  const kanbanSelectAllEnabled = useFlag(HTPR_7260_KANBAN_SELECT_ALL_FLAG);
   const composeEnabled = useFlag(HTPR_6929_COMPOSE_TASK_WRITER_FLAG);
   const newTaskWindowFlag = useFlag(HTPR_6937_NEW_TASK_WINDOW_FLAG);
   let newTaskWindow = false;
@@ -93,7 +72,7 @@ const HypertasksCommands = ({ callbackHandler, contextOptions, focusProxy }: IHT
   if (typedWrites) createSectionWriter = createSection;
   const ticketPrefixEnabled = useFlag(HTPR_6868_TICKET_PREFIX_FLAG);
   const {
-  queryClient, copyCurrentUrlEnabled, rowShortcutsEnabled, myTasksViewsEnabled, myTasksTableColumnsEnabled,
+  queryClient, rowShortcutsEnabled, myTasksViewsEnabled, myTasksTableColumnsEnabled,
   myTasksSnoozeEnabled, myTasksBulkSelectionEnabled, activeSectionId, updateTaskInCache, moveItem,
   removeFromListWithStatus, renameBoard, getProjectIdxAndAllData, updateProjectView, removeMemberFromBoard,
   addAgentToBoard, removeAgentFromBoard, inviteNewMembersToBoard, reSendInvite, cancelInvite,
@@ -118,6 +97,7 @@ const HypertasksCommands = ({ callbackHandler, contextOptions, focusProxy }: IHT
   boardCloseHandler, refreshRowTaskList, taskTemplatePickerForCurrentProject,
   } = useCommandsState({
     contextOptions, callbackHandler,
+    ...(kanbanSelectAllEnabled ? { kanbanSelectAllEnabled: true } : {}),
   });
   const {
   setRecurrenceHandler, saveTaskTemplateHandler, openTaskTemplateHandler, generateStatusUpdateHandler, toggleStalenessHandler,
@@ -152,13 +132,18 @@ const HypertasksCommands = ({ callbackHandler, contextOptions, focusProxy }: IHT
     ...(ticketPrefixEnabled ? { ticketPrefixEnabled: true } : {}),
     createSectionWriter,
   });
+  let switchCommandTheme = switchToTheme;
+  if (!roundedEnabled) {
+    switchCommandTheme = (theme) => switchToTheme(theme === "rounded" ? "system" : theme);
+  }
   const {
   handleAction,
   } = createCommandDispatcher({
     newTaskWindow,
-    copyCurrentUrlEnabled, boardCloseHandler, setShowCommands, setCommandMode, undoLatest,
+    boardCloseHandler, setShowCommands, setCommandMode, undoLatest,
     _currentProject, setBoardZoomedOutByProject, currentUser, openSettings, setShowShortcuts,
-    switchToTheme, followTaskHandler, unFollowTaskHandler, hasBulkSelection, bulkSelection,
+    switchToTheme: switchCommandTheme,
+    followTaskHandler, unFollowTaskHandler, hasBulkSelection, bulkSelection,
     archiveHandler, acceptTaskHandler, removeNotificationHandler, setShowQuickTips, openAnnouncements,
     setShowTaskHistory, setToggleAllCommentsSignal, saveEmptySectionsAPI, hideActiveColumn, toggleShowArchivedOnBoard,
     callbackHandler, paletteContextOptions, setArchiveBoardScope, toggleBoardLayout, onMyTasks,

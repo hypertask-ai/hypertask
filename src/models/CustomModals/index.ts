@@ -23,19 +23,9 @@ export interface ICustomModalContainerProps extends React.HTMLAttributes<HTMLEle
     forceRenderOnlyChildren?:boolean;
     fullScreen?:boolean;
     trapFocus?: boolean;
-    /**
-     * Pin this modal to the pre-HTPR-4098 scale (60px rows, 24px header/input).
-     * Opt-in: everything else inherits the compact palette scale the shared
-     * primitives already default to.
-     */
     legacySizing?: boolean;
     fullscreen?: boolean | 'sm' | 'md' | 'lg' | 'xl';
     contentClassName?:string;
-    /**
-     * Class for reactstrap's outer `.modal` element (the viewport-wide fixed box), as
-     * opposed to `className`, which lands on `.modal-dialog`. Reactstrap hardcodes an
-     * inline style on that outer element, so a class is the only way to influence it.
-     */
     modalClassName?: string;
     scrollable?: boolean;
   }

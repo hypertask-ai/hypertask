@@ -10,11 +10,6 @@ export function isAgentVisibility(value: unknown): value is AgentVisibility {
   return AGENT_VISIBILITIES.includes(value as AgentVisibility);
 }
 
-/**
- * The PATCH contract for a visibility change, shared by the web route
- * (`/api/agents/[agentId]`) and the MCP layer so the two can never disagree:
- * the body must carry `visibility` and nothing else.
- */
 export function isVisibilityOnlyBody(
   body: Record<string, unknown>,
 ): body is Record<string, unknown> & { visibility: AgentVisibility } {
@@ -41,7 +36,6 @@ export function isAgentVisibleToUser(
   );
 }
 
-/** Projects shared by an agent and the requesting human. */
 export function accessibleAgentMembershipWhere(
   userId: number,
   projectId?: number,
@@ -58,14 +52,12 @@ export function accessibleAgentMembershipWhere(
   };
 }
 
-/** Visibility inside a board/team query whose human access is already proven. */
 export function boardAgentVisibilityWhere(
   userId: number,
 ): Prisma.AgentWhereInput {
   return { OR: [{ userId }, { visibility: "TEAM" }] };
 }
 
-/** Visibility for an agent-id lookup without an existing board scope. */
 export function accessibleAgentWhere(userId: number): Prisma.AgentWhereInput {
   return {
     OR: [

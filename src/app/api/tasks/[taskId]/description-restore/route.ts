@@ -29,7 +29,6 @@ export async function POST(request: NextRequest, { params }: RouteContext) {
     })
     if (!parsed.ok) return parsed.response
 
-    // Preserve the legacy numeric version range; task path IDs remain safe integers.
     const versionId = typeof parsed.body.version_id === 'number'
       ? parsePositiveInt(parsed.body.version_id, { safe: false, max: Infinity })
       : null

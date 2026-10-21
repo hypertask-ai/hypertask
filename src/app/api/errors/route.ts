@@ -86,9 +86,6 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "Invalid error report" }, { status: 400 });
     }
 
-    // This public endpoint only receives browser reports. Never trust a caller
-    // to label its own event as a server error because server spikes can roll
-    // back production.
     await reportError({
       ...parsed.data,
       source: parsed.data.source === "handled" ? "handled" : "client",

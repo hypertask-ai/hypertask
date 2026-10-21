@@ -8,6 +8,7 @@ import upsertTaskDescription from '@/utils/controllers/description/common-descri
 import { PriorityConstants, EstimateConstants } from '@/lib/constants/constants';
 import { autoAssignForSection } from '@/utils/controllers/assignees/autoAssignForSection';
 import { createTaskWithBoardWebhookOutbox } from '@/lib/mcp/webhooks/taskEvents';
+import type { CreationChannel } from '@/lib/telemetry/savedWork';
 import { publishBoardWebhookDeliveries } from '@/lib/mcp/webhooks/outbox';
 import {
     emitAgentTaskCreatedWebhook,
@@ -20,6 +21,7 @@ export interface CreateTaskCoreOptions {
     description: string;
     userId: number;
     agentId?: string | null;
+    creationChannel: CreationChannel;
     projectId: number;
     sectionId: number;
     sectionTitle: string;
@@ -40,16 +42,13 @@ export interface CreateTaskCoreResult {
     description: any;
 }
 
-/**
- * Core task creation logic shared between UI and MCP endpoints
- * Extracted from createGlobally.ts to avoid duplication
- */
 export async function createTaskCore(options: CreateTaskCoreOptions): Promise<CreateTaskCoreResult> {
     const {
         title,
         description,
         userId,
         agentId,
+        creationChannel,
         projectId,
         sectionId,
         sectionTitle,
@@ -65,11 +64,9 @@ export async function createTaskCore(options: CreateTaskCoreOptions): Promise<Cr
         updateTeamActivity = true
     } = options;
 
-    // Generate unique task count and ticket number
     const taskCount = await getUniqueTaskCount(projectId);
     const ticketNumber = `${projectIdentifier}-${taskCount + 1}`;
 
-    // Generate ranking if not provided
     let ranking = providedRanking;
     if (!ranking) {
         const lastTask = await prisma.task.findFirst({
@@ -105,15 +102,12 @@ export async function createTaskCore(options: CreateTaskCoreOptions): Promise<Cr
         createdAt: currentDate
     };
 
-    // Labels are project-scoped rows; connect by id (used by recurrence spawn
-    // and template instantiation).
     if (labelIds && labelIds.length > 0) {
         taskData.taskLabels = {
             create: labelIds.map((labelId) => ({ labelId }))
         };
     }
 
-    // Add priority if provided
     if (priorityIndex > 0) {
         const priorityConstant = PriorityConstants.find(p => p.priority_index === priorityIndex);
         if (priorityConstant) {
@@ -129,7 +123,6 @@ export async function createTaskCore(options: CreateTaskCoreOptions): Promise<Cr
         }
     }
 
-    // Add estimate if provided
     if (estimateIndex > 0) {
         const estimateConstant = EstimateConstants.find(e => e.estimate_index === estimateIndex);
         if (estimateConstant) {
@@ -146,8 +139,6 @@ export async function createTaskCore(options: CreateTaskCoreOptions): Promise<Cr
         }
     }
 
-    // Create task. The board webhook rows are written in the same transaction so
-    // the task and its task.created event can never exist without each other.
     const taskCreatedActor = { userId, agentId: agentId ?? null };
     const createdTask = await createTaskWithBoardWebhookOutbox(prisma, taskCreatedActor, async (tx) => {
         const created = await tx.task.create({
@@ -158,9 +149,6 @@ export async function createTaskCore(options: CreateTaskCoreOptions): Promise<Cr
                         teamId: true
                     }
                 },
-                // Needed for the task.created webhook payload (HTPR-5928) — taskData
-                // can nest a priority create above, and without this include Prisma
-                // won't return it on the created row.
                 priority: {
                     select: { id: true, priority_index: true, Priority_Value: true }
                 }
@@ -188,7 +176,7 @@ export async function createTaskCore(options: CreateTaskCoreOptions): Promise<Cr
                     : null
             }
         };
-    });
+    }, creationChannel);
     const newTask = createdTask.result;
     const boardWebhookDeliveryIds = createdTask.boardWebhookDeliveryIds;
     await publishBoardWebhookDeliveries(boardWebhookDeliveryIds);
@@ -197,7 +185,6 @@ export async function createTaskCore(options: CreateTaskCoreOptions): Promise<Cr
         throw new Error('Failed to create task');
     }
 
-    // Create description
     const description_ = await upsertTaskDescription({
         taskId: newTask.id,
         creatorId: userId,
@@ -206,15 +193,12 @@ export async function createTaskCore(options: CreateTaskCoreOptions): Promise<Cr
         actingUserId: userId
     });
 
-    // HTPR-7131: index the new ticket for search. waitUntil keeps the serverless
-    // instance alive without making creation wait on the embedding call.
     waitUntil((async () => {
         if (!await isFeatureEnabled(HTPR_7131_INDEX_NEW_TICKETS_FLAG, userId)) return;
         const { upsertTaskToTurbopuffer } = await import('@/utils/controllers/turbopuffer/turbopufferHelper');
         await upsertTaskToTurbopuffer(newTask.id);
     })().catch((error) => console.error('[task-create-core] search indexing failed', { taskId: newTask.id, error })));
 
-    // Update team activity (fire-and-forget)
     if (updateTeamActivity && newTask.project?.teamId) {
         prisma.team_Activity.update({
             where: {
@@ -226,7 +210,6 @@ export async function createTaskCore(options: CreateTaskCoreOptions): Promise<Cr
         });
     }
 
-    // Create drafts if requested (for UI-driven creation)
     if (createDrafts) {
         prisma.drafts.create({
             data: {
@@ -250,8 +233,6 @@ export async function createTaskCore(options: CreateTaskCoreOptions): Promise<Cr
         });
     }
 
-    // A column rule applies to every ticket that lands in the column, not only
-    // to tickets dragged in later (HTPR-5488).
     const autoAssigned = await autoAssignForSection({
         taskId: newTask.id,
         projectId,
@@ -269,17 +250,12 @@ export async function createTaskCore(options: CreateTaskCoreOptions): Promise<Cr
             );
             const recoveryResult = await recoverPendingAgentTaskCreatedWebhook(newTask.id, taskCreatedActor);
             if (recoveryResult === 'recovered') {
-                // The recovery helper emitted task.created after its final
-                // assignment and task-state checks.
             } else if (recoveryResult === 'pending') {
-                // The recovery helper already requeued the marker.
                 console.warn('[task-create-core] task.created handoff remains pending for the recovery sweep', {
                     taskId: newTask.id,
                 });
             }
         } catch (error) {
-            // Keep the creation marker pending. Emitting here could publish
-            // task.created without the final assignees.
             console.error('[task-create-core] pending task.created recovery failed', {
                 taskId: newTask.id,
                 error,
@@ -297,8 +273,6 @@ export async function createTaskCore(options: CreateTaskCoreOptions): Promise<Cr
             );
         }
     } else {
-        // The outbox query runs after auto-assignment and reads final assignees and
-        // labels from the task before creating the task.created delivery.
         try {
             await markAgentTaskCreatedReady(newTask.id);
             await emitAgentTaskCreatedWebhook({
@@ -306,8 +280,6 @@ export async function createTaskCore(options: CreateTaskCoreOptions): Promise<Cr
                 actor: taskCreatedActor,
             });
         } catch (error) {
-            // The creation transaction left a pending marker; the minute sweep
-            // retries this handoff if the request path stops here.
             console.error('[task-create-core] agent task.created webhook failed', {
                 taskId: newTask.id,
                 error,

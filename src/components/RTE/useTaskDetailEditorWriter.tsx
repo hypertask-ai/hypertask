@@ -38,7 +38,6 @@ export function useTaskDetailEditorWriter(getContext: () => TaskDetailEditorCont
     }
   };
 
-  // AI Task Writer handlers
   const handleEscape = () => {
     const { handleFocus } = getContext();
     setShouldShowAITaskWriter(false);
@@ -54,38 +53,29 @@ export function useTaskDetailEditorWriter(getContext: () => TaskDetailEditorCont
     let urlToSet: string = "";
 
     if (task) {
-      // Generate URL for the task: /detail/project-${projectId}/${uniqueIndex}
       urlToSet = `/detail/project-${task.projectId}/${task.uniqueIndex}`;
     } else if (keyword) {
-      // Check if keyword is a valid URL
       const trimmedKeyword = keyword.trim();
 
-      // Check if it's already a valid absolute URL (http://, https://)
       if (trimmedKeyword.startsWith("http://") || trimmedKeyword.startsWith("https://")) {
         try {
           new URL(trimmedKeyword);
           urlToSet = trimmedKeyword;
         } catch {
-          // Invalid URL format
           urlToSet = "";
         }
       }
-      // Check if it's a relative URL (starts with /)
       else if (trimmedKeyword.startsWith("/")) {
         urlToSet = trimmedKeyword;
       }
-      // Check if it looks like a domain (contains .)
       else if (trimmedKeyword.includes(".") && !trimmedKeyword.includes(" ")) {
         try {
-          // Try to validate as URL with http:// prefix
           new URL(`http://${trimmedKeyword}`);
           urlToSet = `http://${trimmedKeyword}`;
         } catch {
-          // Not a valid domain, treat as text
           urlToSet = "";
         }
       }
-      // Otherwise, it's likely just text, not a URL
       else {
         urlToSet = "";
       }
@@ -104,18 +94,16 @@ export function useTaskDetailEditorWriter(getContext: () => TaskDetailEditorCont
     const { handleFocus } = getContext();
     editor?.commands.setContent(content);
 
-    // Map AI attachments to match FileItem structure: { id, file }
-    // where file contains the attachment properties
     const mappedAttachments = attachments?.map((attachment, idx) => ({
       id: idx,
       file: {
         id: attachment.id || `ai-${idx}`,
         createdAt: new Date().toISOString(),
         type: attachment.file.type,
-        source: attachment.preview, // S3 URL from the uploaded attachment
+        source: attachment.preview,
         name: attachment.file.name,
         size: attachment.file.size.toString(),
-        taskId: null, // AI generated attachments don't have a taskId yet
+        taskId: null,
       }
     })) || [];
     const attachmentsToSave = preserveExistingAttachments

@@ -141,7 +141,7 @@ test('blocked dismissal storage cannot escape the mirror effect or leave a misle
   const js = require('typescript').transpileModule(body, { compilerOptions: { target: 7 } }).outputText;
   const document = { documentElement: { dataset: { theme: 'porcelain' } }, cookie: 'old mirror' };
   const bindings = { document, BOARD_DISPLAY_COOKIE, parseBoardDisplay, location: { protocol: 'https:' }, window: { innerWidth: 390 }, navigator: { language: 'en-US' },
-    accountId: 985, boardLayout: 'board', railCollapsed: true, quickTips: false, fcm: { permissionStatus: 'default', statusToggleFromDB: 'false' }, ...display.board,
+    accountId: 985, boardLayout: 'board', railCollapsed: true, quickTips: false, fcm: { permissionStatus: 'default', statusToggleFromDB: 'false' }, ...display.board, desktopChat: false, chatWidth: 517, chatSidebarMode: true,
     localStorage: { getItem: () => { throw Error('storage blocked'); } } };
   const mirror = storage => new Function(...Object.keys(bindings), js + '\nmirror();')(...Object.values({ ...bindings, localStorage: storage }));
   assert.doesNotThrow(() => mirror(bindings.localStorage));
@@ -158,4 +158,15 @@ test('inbox HTML and Flight use dynamic private no-store with replaced caller ro
   assert.match(proxy, /forwardedHeaders.delete\('x-ht-inbox-document-route'\)/);
   assert.match(proxy, /request.nextUrl.pathname === '\/inbox'/);
   for (const header of ['Cache-Control', 'CDN-Cache-Control', 'Vercel-CDN-Cache-Control']) assert.ok(proxy.includes(`response.headers.set('${header}'`));
+});
+
+
+test('desktop chat opt-in is board-only and never authorizes the inbox document', async () => {
+  reset();
+  const value = JSON.stringify({ ...display, isMobile: false,
+    board: { ...display.board, chatWidth: 517, chatSidebarMode: true } });
+  assert.ok(parseBoardDisplay(value, 985, { desktopChat: true }));
+  assert.equal(parseBoardDisplay(value, 985), null);
+  assert.equal(await readInboxDocument('/inbox', value), null);
+  assert.deepEqual(calls, []);
 });

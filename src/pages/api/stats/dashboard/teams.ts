@@ -1,4 +1,3 @@
-// Import PrismaClient from the generated Prisma client
 import prisma from '@/lib/prisma';
 import { NextApiHandler, NextApiRequest, NextApiResponse } from 'next';
 import { json } from "@/utils/helperFunctions/helperFunctions";
@@ -14,13 +13,6 @@ const handler: NextApiHandler = async (req: NextApiRequest, res: NextApiResponse
     if (req.method==="GET"){
         
         try {
-            // const teams = await prisma.team.findMany({
-            //     include:{
-            //         googleAccount:{
-                        
-            //         }
-            //     }
-            // })
             const result = await prisma.$queryRaw`
             SELECT 
               t.id AS team_id,

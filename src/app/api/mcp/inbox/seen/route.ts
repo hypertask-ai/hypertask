@@ -1,3 +1,4 @@
+import { notificationBoardAccessWhere } from "@/utils/controllers/notifications/boardAccess"
 import { wrapMcpRoute, checkMcpRouteRateLimit as checkMcpRateLimit, validateMcpRouteAuth as validateMcpAuth } from '@/lib/mcp/routeWrapper'
 import { NextRequest, NextResponse } from 'next/server'
 import { createUnauthorizedResponse } from '@/lib/mcp/auth'
@@ -74,6 +75,7 @@ export async function POST(request: NextRequest) {
       where: {
         id: { in: notificationIds },
         userId: ctx.user.id,
+        ...(ctx.agentId ? { AND: [notificationBoardAccessWhere(ctx.user.id, ctx.agentId)] } : {}),
         seen: false,
       },
       data: { seen: true },

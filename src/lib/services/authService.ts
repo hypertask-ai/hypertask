@@ -20,23 +20,7 @@ export interface AuthResult {
   error?: string
 }
 
-/**
- * Centralized authentication service used by:
- * - Google Auth (useAuth.tsx)
- * - Email Link Auth (/api/auth/verify-email-token)
- * - Email Code Auth (/api/auth/verify-code)
- */
 export class AuthService {
-  
-  /**
-   * Complete authentication flow - handles everything after Firebase auth
-   * @param firebaseUser - Firebase user object
-   * @param shouldSkipInteractive - Whether to skip interactive onboarding
-   * @param currentBrowserUrl - Current browser URL for context
-   * @param source - Authentication source for analytics
-   * @param requestBaseUrl - Optional request-derived origin for server self-fetches
-   * @returns Authentication result with redirect URL
-   */
   static async completeAuthentication(
     firebaseUser: AuthUser,
     shouldSkipInteractive: boolean = false,
@@ -48,7 +32,6 @@ export class AuthService {
     try {
       console.log(`🔐 Starting authentication flow for ${firebaseUser.email} (source: ${source})`)
 
-      // 1. Update user in database (same logic as useAuth.tsx)
       const userUpdateResult = await update_or_create_user(
         firebaseUser.email,
         {
@@ -85,11 +68,9 @@ export class AuthService {
         isNewUser: userUpdateResult.res.isNewUser
       })
 
-      // 2. Get user's projects (same logic as useAuth.tsx)
       const prevBoard = await this.getProjects(userData.id, requestBaseUrl)
       console.log(`📋 User projects fetched (${source}):`, prevBoard)
 
-      // 3. Calculate redirect URL (same logic as useAuth.tsx)
       const redirectUrl = this.getRedirectUrl(userData, prevBoard, false)
       console.log(`🔄 Redirect URL calculated (${source}):`, redirectUrl)
 
@@ -108,26 +89,18 @@ export class AuthService {
     }
   }
 
-  /**
-   * Set authentication cookies for client-side (useAuth.tsx)
-   * @param userData - User data to store in cookies
-   * @param prevBoard - Previous board data
-   * @param view - Optional view parameter
-   */
   static async setClientAuthCookies(
     userData: any,
     prevBoard?: IProject,
     view?: string
   ): Promise<void> {
-    // Set previous board cookie
     if (prevBoard?.id) {
       nookies.set(null, 'previousBoard', `project-${prevBoard.id}|&|${view || ''}`, {
-        maxAge: 600 * 60 * 24 * 7, // 1 week
+        maxAge: 600 * 60 * 24 * 7,
         path: '/',
       })
     }
 
-    // Seed the theme only when the browser has no valid preference.
     const existingTheme = nookies.get(null)[authConfig.cookies.theme]
     const themeToSeed = themeCookieSeedValue(existingTheme)
     if (themeToSeed) {
@@ -139,18 +112,14 @@ export class AuthService {
       )
     }
 
-    // Set user cookie
     nookies.set(null, 'nookies_user', JSON.stringify(slimUserForCookie(userData)), {
-      maxAge: 600 * 60 * 24 * 7, // 1 week
+      maxAge: 600 * 60 * 24 * 7,
       path: '/',
     })
 
     console.log('✅ Client authentication cookies set successfully')
   }
 
-  /**
-   * Get user's projects (same logic as useAuth.tsx)
-   */
   private static async getProjects(
     userId: number,
     baseUrl: string = (typeof window !== 'undefined' ? window.location.origin : (process.env.NEXT_PUBLIC_SITE_URL || 'http://localhost:3000'))
@@ -173,9 +142,6 @@ export class AuthService {
     return undefined
   }
 
-  /**
-   * Calculate redirect URL (EXACT same logic as useAuth.tsx)
-   */
   private static getRedirectUrl(
     user: any,
     prevBoard: any,
@@ -186,22 +152,18 @@ export class AuthService {
     const { onboardingTourStatus } = user?.UserSetting || {}
     console.log('🔄 getRedirectUrl - onboardingTourStatus:', onboardingTourStatus)
 
-    // Shared task URL generation helper
     const getSharedTaskUrl = () =>
       sharedTask
         ? `/detail/project-${sharedTask.projectId}/${sharedTask.task?.uniqueIndex}`
         : ""
 
-    // Project URL with optional view parameter
     const getProjectUrl = () =>
       `/project?id=${prevBoard?.id}${view ? `&view=${view}` : ""}`
 
-    // User has completed all onboarding steps
     if (onboardingTourStatus) {
       return sharedTask ? getSharedTaskUrl() : getProjectUrl()
     }
 
-    // User has not completed onboarding
     return `/onboarding?projectId=${prevBoard?.id}&teamTitle=${
       prevBoard?.team?.title || 'MyTeam'
     }&id=${prevBoard?.team?.id || ''}${sharedTask ? `&shareId=${sharedTask.id}` : ""}`

@@ -199,9 +199,6 @@ const median = (values: number[]): number | null => {
 const wholeDaysSince = (date: Date, now: Date): number =>
   Math.max(0, Math.floor((now.getTime() - date.getTime()) / DAY_IN_MS));
 
-/** When a task finished, or null if it is not finished.
- *  Done-like column -> sectionChangedAt (when it entered that column).
- *  Archived elsewhere -> updatedAt (the archive write). */
 export function completedAt(
   task: VelocityTaskRow,
   doneTitles?: ReadonlySet<string>
@@ -217,8 +214,6 @@ export function completedAt(
   return null;
 }
 
-// The report is computed from existing task timestamps at read time. Capturing
-// now once keeps every bucket, age, and activity cutoff internally consistent.
 export function buildVelocityReport(
   tasks: VelocityTaskRow[],
   comments: VelocityCommentRow[],
@@ -350,9 +345,6 @@ export function buildVelocityReport(
     }
   };
 
-  // Only completions and comments are attributed per person. `updatedByUserIds`
-  // is append-only with no per-user timestamp, so crediting an edit to everyone
-  // on that list would report people as active in a period they sat out.
   taskDates.forEach(({ task, completed }) => {
     if (
       completed &&

@@ -123,7 +123,6 @@ const isTaskEntry = (
     const entry = new URL(entryUrl);
     const task = new URL(taskHref, currentOrigin);
 
-    // Query and hash carry inbox/comment context, but do not change the task.
     return entry.origin === task.origin && entry.pathname === task.pathname;
   } catch {
     return false;
@@ -140,11 +139,6 @@ const isExactEntry = (entryUrl: string, expectedUrl: string) => {
 
 const relativeHref = (url: URL) => `${url.pathname}${url.search}${url.hash}`;
 
-/**
- * Records an internal task → Page transition and returns a marker-bearing Page
- * href. The pending nonce also lives on this Window until the first Page entry
- * binds it, so a new tab cannot inherit authority by cloning sessionStorage.
- */
 export const createPageReturnHref = ({
   pageHref,
   taskHref,
@@ -183,8 +177,6 @@ export const createPageReturnHref = ({
     page.searchParams.set(PAGE_RETURN_CONTEXT_PARAM, nonce);
     return relativeHref(page);
   } catch {
-    // Storage can be unavailable in privacy modes. A plain Page link remains
-    // usable; the return control will take the safe replace path.
     return pageHref;
   }
 };
@@ -248,12 +240,6 @@ const historyStateHasPageReturn = (state: unknown, nonce: string) => {
   );
 };
 
-/**
- * Binds a pending task → Page marker to this exact session-history entry.
- * A first bind requires the pending nonce on this live Window. Once bound,
- * `history.state` survives reloads but is not carried by a copied URL or later
- * revisit. The storage flag prevents another entry from binding it again.
- */
 export const bindPageReturnEntry = ({
   currentHref,
   taskHref,
@@ -322,13 +308,6 @@ const inspectPreviousEntry = (navigation?: NavigationHistoryLike | null) => {
   }
 };
 
-/**
- * Returns from a Page without pushing a duplicate task entry.
- *
- * The Navigation API can prove the immediate predecessor directly. Other
- * browsers may use Back only when the task → Page nonce is bound to this exact
- * history entry. Direct, copied, and replayed visits replace the Page safely.
- */
 export const returnFromPage = ({
   router,
   navigation,
@@ -361,7 +340,6 @@ export const returnFromPage = ({
       try {
         storage.removeItem(context.key);
       } catch {
-        // A storage policy change must not prevent a verified navigation.
       }
     }
     router.back();
@@ -372,7 +350,6 @@ export const returnFromPage = ({
     try {
       storage.removeItem(context.key);
     } catch {
-      // The same-origin validated task URL is still a safe replacement.
     }
   }
   router.replace(

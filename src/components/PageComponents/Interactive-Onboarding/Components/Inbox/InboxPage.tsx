@@ -18,10 +18,8 @@ const InboxPage = () => {
           }`}>
           <InboxZeroState className="w-full h-full" showContent={true} />
         </div>
-        {/**---------------------Split title*/}
         <SplitTitle notifications={notifications} splitTitles={splitTitles} />
 
-        {/**------------------------------- Notifications List */}
 
         {activeScene.index < 17 && (
           <NotificationsList
@@ -30,7 +28,6 @@ const InboxPage = () => {
           />
         )}
       </div>
-      {/**------------------------------- Back Button */}
       <div
         className="relative group goback_btn hidden sm:left-[10px] shadow-md xl:left-[40px] sm:block bg-back-button"
         style={{

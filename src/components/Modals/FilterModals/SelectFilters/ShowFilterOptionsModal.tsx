@@ -111,8 +111,6 @@ const ShowFilterOptions: React.FC<IFilterModalProps & { extraFilters?: React.Rea
   );
 };
 
-// Exported so a filter's own value picker can show the identical control for its own values,
-// instead of growing a second look for the same idea.
 export const ToggleFilterType = ({
   selectedOption,
   handleFilterChange,
@@ -171,12 +169,11 @@ const RenderActiveFilters: FC<RenderActiveFiltersProps> = ({
       case "UpdatedBy":
       case "CreatedBy":
         if (elKey === "AssigneeToMe") {
-          // If the current user is present in the payload, just return "Active"
           if (
             currentlyActive.searchPayload &&
             currentlyActive.searchPayload.some(
               (x: any) => x.id === currentUser?.id
-            ) // Assuming 1 is the current user's ID
+            )
           ) {
             return "Active";
           }
@@ -218,7 +215,6 @@ const RenderActiveFilters: FC<RenderActiveFiltersProps> = ({
   return (
     <span className="text-micro font-medium">
       {displayText}
-      {/* ANY is the default and stays unlabelled — only ALL needs announcing. */}
       {supportsMatchMode(currentlyActive.type) && currentlyActive.match === "ALL" && (
         <span className="ml-1 text-text-light-gray">· ALL</span>
       )}

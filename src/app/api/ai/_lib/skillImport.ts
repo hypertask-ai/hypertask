@@ -5,9 +5,6 @@ import {
 } from "./skillMarkdown";
 
 const MAX_IMPORT_SKILLS = 50;
-// Bound the tree walk: a malicious/huge repo (e.g. the Linux kernel) must not be
-// able to fan the unauthenticated GitHub API out indefinitely and burn the
-// deployment's shared 60 req/hr limit or the function timeout.
 const MAX_DIRS_VISITED = 200;
 const MAX_WALK_DEPTH = 6;
 const FETCH_TIMEOUT_MS = 10_000;
@@ -166,9 +163,6 @@ async function fetchTextWithoutRedirect(url: string) {
     throw new Error("GitHub redirects are not allowed");
   }
   if (!response.ok) throw new Error(`GitHub import failed (${response.status})`);
-  // Cap before buffering: a raw.githubusercontent.com URL can point at any file
-  // size, and the 64KB body limit is otherwise only checked after the whole
-  // response is read into memory.
   const declared = Number(response.headers.get("content-length"));
   if (Number.isFinite(declared) && declared > MAX_SKILL_BODY_BYTES) {
     throw new Error("SKILL.md file exceeds the 64KB body limit");

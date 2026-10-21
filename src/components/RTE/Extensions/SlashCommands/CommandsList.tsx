@@ -1,5 +1,8 @@
 
 import { currentProjectAtom } from "@/store";
+import { useFlag } from "@/hooks/useFlag";
+import { HTPR_7480_COMMENT_SKILL_RUN_FLAG, HTPR_7393_COMMENT_INLINE_AI_FLAG } from "@/lib/flags/keys";
+import { AI_TASK_WRITER_EVENT } from "@/components/PageComponents/TaskDetail/TopRow/CreateSummaryButton";
 import type { SuggestionOptions, SuggestionProps } from "@tiptap/suggestion";
 import { forwardRef, useEffect, useImperativeHandle, useRef, useState } from "react";
 import { useRecoilState } from "@/lib/state";
@@ -31,14 +34,14 @@ const CommandsList = forwardRef<SuggestionListRef, SuggestionListProps>(
     const mode = (props.editor?.storage as any)?.slashCommands?.mode as
       | string
       | undefined;
+    const commentSkillRun = useFlag(HTPR_7480_COMMENT_SKILL_RUN_FLAG);
+    const commentInlineAi = useFlag(HTPR_7393_COMMENT_INLINE_AI_FLAG);
+    const runCommentSkill = commentSkillRun && commentInlineAi &&
+      (mode === COMMENT_SKILL_MODE || mode === "read-edit-comments");
     const skillsEnabled =
       mode === COMMENT_SKILL_MODE ||
-      mode === AGENT_CHAT_SKILL_MODE;
-    // Track whether this editor ever had base commands. Tiptap v3 emits a
-    // transient empty props.items frame between keystrokes; once we've seen real
-    // base items, an empty frame is that loading placeholder (keep the prior
-    // list). For skills-only menus (AI chat) base is always empty and that is the
-    // steady state, so we must still render the skills.
+      mode === AGENT_CHAT_SKILL_MODE ||
+      runCommentSkill;
     const everHadBase = useRef(false);
     const lastBase = useRef<any[]>([]);
     if ((props.items?.length ?? 0) > 0) everHadBase.current = true;
@@ -56,17 +59,7 @@ const CommandsList = forwardRef<SuggestionListRef, SuggestionListProps>(
         cancelled = true;
       };
     }, [skillsEnabled, currentProject?.id]);
-    // const itemsFinal = props.items.map(item => {
-    //     // console.log("🚀 ~ itemsFinal ~ currentProject?.team.subscriptionPlan:", currentProject?.team)
-    //     if (item.type && item.type === "AI") {
-    //       const itemtoReturn = currentProject?.team.activeSubscriptionPlanId ? item : false;
-    //       // console.log("🚀 ~ itemsFinal ~ itemtoReturn:", itemtoReturn)
-    //       return itemtoReturn;
-    //     }
-    //     return item;
-    //   }).filter(Boolean);
   
-    // console.log("🚀 ~ itemsFinal ~ itemsFinal:", itemsFinal)
     const [filteredItems, setFilteredItems] = useState(props.items)
     const selectItem = (index: number) => {
       if (index >= filteredItems.length) {
@@ -78,7 +71,16 @@ const CommandsList = forwardRef<SuggestionListRef, SuggestionListProps>(
         currentProjectId: currentProject?.id,
       };
 
-      //@ts-ignore
+      if (runCommentSkill && command.type === "SKILL") {
+        const targetId = (props.editor.storage as any)?.slashCommands?.editorId as string | undefined;
+        if (targetId) {
+          props.editor.chain().focus().deleteRange(props.range).run();
+          window.dispatchEvent(new window.CustomEvent(AI_TASK_WRITER_EVENT, {
+            detail: { targetId, prompt: `${command.title} ` },
+          }));
+          return;
+        }
+      }
       props.command(command );
     };
 
@@ -105,23 +107,13 @@ const CommandsList = forwardRef<SuggestionListRef, SuggestionListProps>(
 
     
     useEffect(() => {
-      // v3 delivers suggestion items asynchronously: every update arrives first
-      // as an empty "loading" array, then the real items. Skip those transient
-      // empty frames so the menu doesn't flicker/collapse to a 0x0 popup between
-      // keystrokes. Only treat empty as "loading" once we've actually seen base
-      // items (see everHadBase) — an AI-chat menu is skills-only and legitimately
-      // has no base items, so it must still render.
       const currentBase = props.items ?? [];
       const baseIsLoadingPlaceholder =
         currentBase.length === 0 && everHadBase.current;
       if (baseIsLoadingPlaceholder && skillItems.length === 0) return;
-      // Keep the last real base list during a placeholder frame so base commands
-      // don't blink out for a frame when skills are also present.
       const base = baseIsLoadingPlaceholder ? lastBase.current : currentBase;
       if (!baseIsLoadingPlaceholder) lastBase.current = currentBase;
       const normalizedQuery = props.query.toLowerCase();
-      // Skills go at the bottom, below the built-in commands (in the AI chat
-      // base is empty, so the menu is skills-only there regardless).
       const source = [...base, ...skillItems];
       const filteredResults = source.filter((item) =>
         item.type?.toLowerCase().includes(normalizedQuery) ||
@@ -132,8 +124,6 @@ const CommandsList = forwardRef<SuggestionListRef, SuggestionListProps>(
       );
     setFilteredItems(filteredResults)
     setSelectedIndex(0);
-    // Depend on props.items (not just props.query) so the list populates when the
-    // async items land, and on skillItems so it re-renders when skills resolve.
     }, [props.query, props.items, skillItems])
     
 
@@ -150,16 +140,6 @@ const CommandsList = forwardRef<SuggestionListRef, SuggestionListProps>(
         }
 
         if (event.key === "Enter") {
-          // SlashCommands is configured with allowedPrefixes: null (mid-text
-          // trigger, HTPR-3847), so the suggestion silently activates whenever a
-          // "/" appears with no preceding whitespace required, e.g. dates
-          // (7/7), "and/or", or a pasted Hypertask/URL link, which is packed
-          // with slashes. With no matching command, filteredItems is empty and
-          // this component renders nothing, but this handler still claimed
-          // Enter unconditionally, silently eating every Enter keystroke until
-          // the suggestion state reset (HTPR-3972). Only claim Enter when
-          // there's an actual item to select, otherwise let it fall through to
-          // the editor's normal Enter (new paragraph) handling.
           if (filteredItems.length === 0) return false;
           enterHandler();
           return true;
@@ -182,10 +162,6 @@ const CommandsList = forwardRef<SuggestionListRef, SuggestionListProps>(
               id={`command-${index}`}
               key={item.title}
               onMouseEnter={()=>setSelectedIndex(index)}
-              // Use onMouseDown + preventDefault (like the mention list) so the
-              // editor keeps focus. A plain onClick blurs the editor on mousedown,
-              // which tears down the suggestion popup before the click registers,
-              // making menu items feel unclickable with the mouse.
               onMouseDown={(e) => {
                 e.preventDefault();
                 e.stopPropagation();

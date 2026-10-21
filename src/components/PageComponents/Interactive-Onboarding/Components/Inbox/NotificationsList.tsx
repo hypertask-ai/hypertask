@@ -73,7 +73,6 @@ const NotificationsList = ({ notifications, activeNotification }: Props) => {
               </div>
 
               <div className="flex flex-grow gap-2 items-baseline sm:items-center sm:w-[40%] flex-col sm:flex-row">
-                {/* ============ title =================  */}
                 <div
                   suppressHydrationWarning
                   className={"truncate flex-1 flex-column sm:flex-initial"}
@@ -84,7 +83,6 @@ const NotificationsList = ({ notifications, activeNotification }: Props) => {
                       fontSize: 14,
                     }}
                   >
-                    {/* ================== priority label ============== */}
                     {notification.priority && (
                       <div
                         style={{
@@ -99,7 +97,6 @@ const NotificationsList = ({ notifications, activeNotification }: Props) => {
                       </div>
                     )}
 
-                    {/* ===================== task labels ================= */}
                     <>
                       {notification.tags.map(
                         (tag, tagIndex) =>
@@ -132,7 +129,6 @@ const NotificationsList = ({ notifications, activeNotification }: Props) => {
                   </span>
                 </div>
 
-                {/* ============ notification content =========== */}
                 <div
                   suppressHydrationWarning
                   className="flex-1 truncate text-[#8E9093] flex-column sm:min-w-[160px]"

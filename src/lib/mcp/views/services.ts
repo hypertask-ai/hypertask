@@ -42,8 +42,6 @@ function assertEmptySections(value: unknown): asserts value is EmptySections | u
     }
 }
 
-// Board filters are persisted without their `condition` function; the client
-// re-attaches one by `type` (see defaultConditions in FilterHelperFunctions).
 type BoardFilterEntry = { type: string; searchPayload: unknown[] };
 
 async function buildLabelsFilterEntry(
@@ -190,8 +188,6 @@ export async function createView(input: CreateViewInput) {
         where: { projectId },
     });
 
-    // This helper acquires the board lock and validates every Labels id against
-    // this project before the create callback can persist the view.
     const view = await withBoardFilterWriteLock(projectId, board_filters, (tx) => tx.view.create({
         data: {
             title,
@@ -204,8 +200,6 @@ export async function createView(input: CreateViewInput) {
             board_subtask_setting: input.subtask_setting ?? DEFAULT_SUBTASK_SETTING,
             board_empty_sections: input.board_empty_sections ?? EmptySections.Show,
             board_filters: board_filters as unknown as Prisma.InputJsonValue,
-            // Omitted native columns inherit the default view; supplied columns
-            // intentionally freeze the caller's current visibility projection.
             board_columns_view: boardColumns as unknown as Prisma.InputJsonValue | undefined,
             lastUsedAt: new Date(),
         },
@@ -260,7 +254,6 @@ export type UpdateViewInput = {
     setAsDefault?: boolean;
 };
 
-// Rename / re-filter / re-sort an existing view. Any field left undefined is untouched.
 export async function updateView(input: UpdateViewInput) {
     const { viewId, userId, agentId } = input;
     assertEmptySections(input.board_empty_sections);
@@ -288,9 +281,6 @@ export async function updateView(input: UpdateViewInput) {
     if (view.visibility === 'Private' && view.userId !== userId) {
         throw new Error("Cannot edit another user's private view");
     }
-    // Visibility itself is owner-only: any board member may re-filter/rename a
-    // Public view (existing product semantics), but only the owner may hide it
-    // from the rest of the team by flipping it to Private.
     if (input.visibility !== undefined && view.userId !== userId) {
         throw new Error("Only the view's owner can change its visibility");
     }
@@ -350,9 +340,6 @@ export async function updateView(input: UpdateViewInput) {
                     !Array.isArray(entry) &&
                     entry.type === type
             );
-        // Preserve every stored filter type this endpoint doesn't understand
-        // (Priority, DueDate, Size, etc. set via the board UI) so a partial
-        // label/assignee update via chat/CLI/MCP doesn't silently drop them.
         const otherStoredEntries = storedAddedFilters.filter(
             (entry) =>
                 entry !== null &&
@@ -362,8 +349,6 @@ export async function updateView(input: UpdateViewInput) {
                 entry.type !== 'Assignees'
         );
 
-        // A rebuilt entry is a fresh object, so it loses the per-filter ANY/ALL mode the board UI
-        // stored. Carry it across, or changing a view's labels via chat/CLI silently widens it.
         const keepMatch = (
             entry: BoardFilterEntry | undefined,
             type: 'Labels' | 'Assignees'
@@ -462,8 +447,6 @@ export async function updateView(input: UpdateViewInput) {
     };
 }
 
-// Switch the caller's active view on a board (what the highlighted tab reflects).
-// Applying the board's default view clears appliedView back to null.
 export async function applyView(input: { viewId: string; userId: number; agentId?: string | null }) {
     const { viewId, userId, agentId } = input;
 
@@ -512,7 +495,6 @@ export async function applyView(input: { viewId: string; userId: number; agentId
         where: { user_view_last_used: { userId, viewId } },
     });
 
-    // Switching away discards any unsaved draft view, matching the board UI.
     if (userProjectView.unsavedViewId && userProjectView.unsavedViewId !== viewId) {
         await prisma.view
             .delete({ where: { id: userProjectView.unsavedViewId } })
@@ -561,8 +543,6 @@ export async function deleteView(viewId: string, userId: number, agentId?: strin
             view.id
         );
 
-        // Nothing may still point at the view when it goes (appliedView/unsavedView
-        // are FKs), so unhook it everywhere first.
         await tx.user_Project_View.updateMany({
             where: { appliedViewId: view.id },
             data: { appliedViewId: null },
@@ -572,8 +552,6 @@ export async function deleteView(viewId: string, userId: number, agentId?: strin
             data: { unsavedViewId: null },
         });
         await tx.view_Last_Used.deleteMany({ where: { viewId: view.id } });
-        // Re-check default-ness at delete time. Because the board row is locked,
-        // a concurrent default-view change cannot cross this mutation.
         const deleted = await tx.view.deleteMany({
             where: {
                 id: view.id,

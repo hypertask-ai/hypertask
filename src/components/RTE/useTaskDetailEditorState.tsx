@@ -1,5 +1,4 @@
-import { HTPR_6929_COMPOSE_TASK_WRITER_FLAG, HTPR_6937_NEW_TASK_WINDOW_FLAG } from "@/lib/flags/keys";
-// Tiptap.tsx
+import { HTPR_7480_COMMENT_SKILL_RUN_FLAG, HTPR_7393_COMMENT_INLINE_AI_FLAG, HTPR_7337_EDIT_WITH_AI_FLAG, HTPR_6929_COMPOSE_TASK_WRITER_FLAG, HTPR_6937_NEW_TASK_WINDOW_FLAG } from "@/lib/flags/keys";
 import { Dispatch, SetStateAction, useState, useRef } from "react";
 import { IAttachment, IEditorAttachmentFile, IUser, RedirectAPIParams, RedirectMode } from "@/models/model";
 import { useQueryClient } from "@tanstack/react-query";
@@ -86,8 +85,6 @@ export function useTaskDetailEditorState({
   createNewComment = false,
   handleTaskOptions,
 }: TiptapProps) {
-
-  // Context and state setup
   const {
     parsedTask: taskFromServer,
     focusOn,
@@ -116,7 +113,6 @@ export function useTaskDetailEditorState({
   const router = useRouter();
   const searchParams = useSearchParams();
 
-  // Computed values
   const inboxFlow = searchParams?.get("inboxFlow");
   const currentTask = JSON.parse(taskFromServer);
   const inInbox = currentTask?._count?.notifications > 0;
@@ -128,9 +124,9 @@ export function useTaskDetailEditorState({
   const advanceOnSend = userPreferences.inboxAdvanceOnSend ?? true;
   const draftQueryKey = ["draft for [task,userId]:", currentTask?.id, currentUser?.id];
 
-  // State
   const { editor } = useTiptap({
     mode,
+    editorId: id,
     defaultContent,
     createNewComment,
     mentionProjectId: currentTask?.projectId,
@@ -140,14 +136,20 @@ export function useTaskDetailEditorState({
   const [toggleHighlight, setToggleHighlight] = useState<boolean>(false);
   const [trigger, setTrigger] = useState(false);
   const [filesDropped, setFilesDropped] = useState<File[]>([]);
+  const editWithAiEnabled = useFlag(HTPR_7337_EDIT_WITH_AI_FLAG);
+  const commentInlineAi = useFlag(HTPR_7393_COMMENT_INLINE_AI_FLAG);
+  const commentSkillRun = useFlag(HTPR_7480_COMMENT_SKILL_RUN_FLAG) && commentInlineAi;
+  const sidebarEditWithAi = editWithAiEnabled && !(commentInlineAi && (mode === "create-comment" || mode === "read-edit-comments"));
   const composeEnabled = useFlag(HTPR_6929_COMPOSE_TASK_WRITER_FLAG);
   const newTaskWindowFlag = useFlag(HTPR_6937_NEW_TASK_WINDOW_FLAG);
   const [writerOpen, setShouldShowAITaskWriter] = useState(shouldTriggerAiTaskWriter);
+  const [chatHandoffOpen, setChatHandoffOpen] = useState(false);
   const [aiTriggerData, setAiTriggerData] = useState({
     autoTrigger: false,
     initialPrompt: ''
   });
   let shouldShowAiTaskWriter = writerOpen;
+  if (sidebarEditWithAi) shouldShowAiTaskWriter = false;
   if (mode === "read-edit-description" && composeEnabled && newTaskWindowFlag && !(aiTriggerData.autoTrigger && aiTriggerData.initialPrompt)) shouldShowAiTaskWriter = false;
   const suggestReplyAbortRef = useRef<AbortController | null>(null);
   const shouldShowInlineDraftAiRef = useRef(false);
@@ -190,11 +192,7 @@ export function useTaskDetailEditorState({
       },
     }))
   );
-  // Debug: Log initial attachments format
-  // Commented this out. Too many console logs when I am typing
-  // console.log("🚀 ~ Initial newCommentAttachments format:", newCommentAttachments);
 
-  // IDs for elements
   const divIds = {
     wrapperId: "main-wrapper-" + id,
     popoverContainer: "popover-wrapper-" + id,
@@ -202,7 +200,7 @@ export function useTaskDetailEditorState({
     editorId: id,
     popoverTriggerButtonId: "popover-button-" + id,
   };
-  return { allowPerks, defaultContent, createdAt, user, attachments, carouselAttachments, creatorname, isSelected, id, allowEdit, stack, reply, mode, handleSave, commentId, isMbl, shouldTriggerAiTaskWriter, setLoading, createNewComment, handleTaskOptions, taskFromServer, focusOn, setEditMode, setEditState, hasDraft, hasDraftInit, setHasDraftInit, editMode, currentId, descriptionFocusRequest, hasCommentDraft, defaultCommentFocus, isRecording, toggleRecording, scrollVirtualize, draftsFromTQ, setCarousalItems, uploadingDescription, resetDraft, setResetDraft, isApple, queryClient, currentUser, inViewObject, router, searchParams, inboxFlow, currentTask, inInbox, isInboxFlow, isReadEditMode, isReadOnlyContent, userPreferences, advanceOnSend, draftQueryKey, editor, editorContent, setEditorContent, scrolledOnMobile, setScrolledOnMobile, toggleHighlight, setToggleHighlight, trigger, setTrigger, filesDropped, setFilesDropped, shouldShowAiTaskWriter, setShouldShowAITaskWriter, aiTriggerData, setAiTriggerData, suggestReplyAbortRef, shouldShowInlineDraftAiRef, showSetLinkModal, setShowSetLinkModal, pendingGuestDescriptionFocusTaskRef, handledDescriptionFocusNonceRef, emojiGifPicker, setEmojiGifPicker, mobileExistingEditOpen, mobileEditViewport, mobileEditHeight, mobileEditSaving, setMobileEditSaving, saveInFlight, setSaveInFlight, mobileEditSavingRef, saveInFlightRef, mobileEditSessionActiveRef, cancelMobileExistingEditRef, mobileEditSnapshotRef, newCommentAttachments, setNewCommentAttachments, divIds };
+  return { commentSkillRun, allowPerks, defaultContent, createdAt, user, attachments, carouselAttachments, creatorname, isSelected, id, allowEdit, stack, reply, mode, handleSave, commentId, isMbl, shouldTriggerAiTaskWriter, setLoading, createNewComment, handleTaskOptions, taskFromServer, focusOn, setEditMode, setEditState, hasDraft, hasDraftInit, setHasDraftInit, editMode, currentId, descriptionFocusRequest, hasCommentDraft, defaultCommentFocus, isRecording, toggleRecording, scrollVirtualize, draftsFromTQ, setCarousalItems, uploadingDescription, resetDraft, setResetDraft, isApple, queryClient, currentUser, inViewObject, router, searchParams, inboxFlow, currentTask, inInbox, isInboxFlow, isReadEditMode, isReadOnlyContent, userPreferences, advanceOnSend, draftQueryKey, editor, editorContent, setEditorContent, scrolledOnMobile, setScrolledOnMobile, toggleHighlight, setToggleHighlight, trigger, setTrigger, filesDropped, setFilesDropped, shouldShowAiTaskWriter, setShouldShowAITaskWriter, chatHandoffOpen, setChatHandoffOpen, aiTriggerData, setAiTriggerData, suggestReplyAbortRef, shouldShowInlineDraftAiRef, showSetLinkModal, setShowSetLinkModal, pendingGuestDescriptionFocusTaskRef, handledDescriptionFocusNonceRef, emojiGifPicker, setEmojiGifPicker, mobileExistingEditOpen, mobileEditViewport, mobileEditHeight, mobileEditSaving, setMobileEditSaving, saveInFlight, setSaveInFlight, mobileEditSavingRef, saveInFlightRef, mobileEditSessionActiveRef, cancelMobileExistingEditRef, mobileEditSnapshotRef, newCommentAttachments, setNewCommentAttachments, divIds };
 }
 
 export type useTaskDetailEditorStateValue = ReturnType<typeof useTaskDetailEditorState>;

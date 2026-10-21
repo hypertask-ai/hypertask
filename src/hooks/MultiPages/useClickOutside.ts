@@ -6,9 +6,6 @@ const useClickOutside = (ref: MutableRefObject<HTMLElement | null> | null, callb
       const element = ref?.current || (id ? document.getElementById(id) : null);
       const openModal = document.querySelector('.modal.show');
 
-      // A different modal layered on top should suppress this outside click.
-      // But if the tracked element IS the open modal, this is that modal's
-      // own click-outside-to-close and must not be blocked (HTPR-5139).
       if (openModal && !(element && openModal.contains(element))) {
         return;
       }

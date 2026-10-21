@@ -542,8 +542,6 @@ export async function runCoreActionsSmoke(options: {
 
   const deleteOwnedComments = async () => {
     for (const id of [...ownedCommentIds].sort((a, b) => b - a)) {
-      // A timed-out delete may have committed. Retry this owned id once;
-      // 404 is safe, and the final re-read still proves the fixture is clean.
       for (let attempt = 0; attempt < 2; attempt += 1) {
         try {
           await request(
@@ -764,8 +762,6 @@ export async function runCoreActionsSmoke(options: {
     }
     steps.push("post comment and mention user and agent");
 
-    // The move dialog is fed by this pages route, not MCP; a board whose
-    // column list crashed used to escape the smoke entirely (HTPR-6259).
     const columns = await request(
       "load move-to-column columns",
       "/api/section/getProjectSections",
@@ -784,8 +780,6 @@ export async function runCoreActionsSmoke(options: {
           : "response was not a columns array",
       );
     }
-    // A non-empty list is not enough: the move below targets Alternate, so the
-    // dialog has to offer both fixture columns or the move is untestable.
     const offeredSections = new Set(
       columns.data.map((column: any) => Number(column?.id)),
     );
@@ -901,8 +895,6 @@ export async function runCoreActionsSmoke(options: {
     }
     steps.push("inbox list added task");
 
-    // getTask uses fetchTaskDetail, the same controller as the detail page SSR.
-    // Checking only markAsDone misses the UI's earlier 'not in inbox' guard.
     const identity = await getTask("inbox task identity");
     if (!Number.isSafeInteger(identity.uniqueIndex) || identity.uniqueIndex <= 0) {
       throw new SmokeFailure("application", "inbox task detail", 200, "fixture ticket number was missing");
@@ -941,8 +933,6 @@ export async function runCoreActionsSmoke(options: {
     } else {
       if (inboxStarted) {
         try {
-          // Recover an id even if add committed but its response was lost.
-          // Delete by owned id only, never by taskId or the user's whole inbox.
           const discovery = await Promise.allSettled([
             getInbox("inbox cleanup discover active"),
             getInbox("inbox cleanup discover archived", true),
@@ -988,9 +978,6 @@ export async function runCoreActionsSmoke(options: {
             ownedCommentIds.add(markerId);
           }
         }
-        // Only claim activities returned by mutations or recorded on the marker.
-        // Do not discover Unassigned/Assigned rows by status here: that can delete
-        // another same-user request's audit trail on this fixture.
         const task = await getTask("cleanup task read");
         if (Number(task.sectionId) !== fixture.baseSectionId) {
           const cleanupMove = await move(

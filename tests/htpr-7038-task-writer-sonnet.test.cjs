@@ -202,6 +202,13 @@ function harness({ enabled = false, plan = "Free", saved = null, teamByok = fals
     "@/lib/ai/taskWriterDuplicateGuard": { taskTitleFromBrief: () => "Fixture" },
     "@/lib/errors/reportError": { reportError: async () => {} },
   };
+  routeStubs["@/app/api/ai/_lib/taskWriterDraft"] = moduleWithStubs("src/app/api/ai/_lib/taskWriterDraft.ts", {
+    ...routeStubs,
+    "./modelProvider": modelApi,
+    "./editorAi": editor,
+    "./taskWriterRun": run,
+    "./taskWriterProperties": routeStubs["@/app/api/ai/_lib/taskWriterProperties"],
+  });
   const routes = {
     app: moduleWithStubs("src/app/api/ai/task-writer/route.ts", routeStubs),
     mcp: moduleWithStubs("src/app/api/mcp/ai/task-writer/route.ts", routeStubs),
@@ -250,7 +257,7 @@ async function main() {
     for (const plan of ["Free", "Pro", "BYOK"]) {
       const h = harness({ plan });
       assert.equal((await h.post(kind)).status, 200);
-      assert.equal(h.calls.at(-1).modelId, plan === "Pro" ? "openai/gpt-6-luna" : "google/gemini-3.5-flash-lite");
+      assert.equal(h.calls.at(-1).modelId, plan !== "BYOK" ? "openai/gpt-6-luna" : "google/gemini-3.5-flash-lite");
       assert.equal(h.calls.at(-1).params.providerOptions?.anthropic, undefined);
     }
     const offPremium = harness({ plan: "Free", saved: "claude-sonnet-5-5-thinking" });

@@ -1,7 +1,3 @@
-/**
- * Helper Functions Configuration
- * Centralized configuration for utility functions across the application
- */
 
 export const helperFunctionsConfig = {
   dateTime: {
@@ -22,7 +18,7 @@ export const helperFunctionsConfig = {
     },
     todayOptions: {
       maxHoursAhead: 8,
-      laterHour: 20, // 8 PM
+      laterHour: 20,
     },
     thresholds: {
       hoursInDay: 24,
@@ -68,9 +64,9 @@ export const helperFunctionsConfig = {
   },
   scroll: {
     thresholds: {
-      nearBottom: 20, // percentage
-      nearTop: 20, // percentage
-      nearHorizontal: 15, // percentage
+      nearBottom: 20,
+      nearTop: 20,
+      nearHorizontal: 15,
     },
   },
   notifications: {

@@ -14,13 +14,11 @@ export type ArchivedMeta = {
     byProject: ArchivedProjectCount[];
 };
 
-// ================== GET ARCHIVED PROJECTS
 export const getArchivedProjects = async(id:number)=>{
     return axios.get(`/api/projects/getArchived?userId=${id}`)
 }
 
 
-// ================== GET ALL ARCHIVES 
 export const getAllArchives = async (
     userId:number,
     cursorId:number | string = 0,

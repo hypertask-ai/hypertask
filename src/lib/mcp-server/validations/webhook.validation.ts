@@ -21,7 +21,6 @@ const agentWebhookInputObjectSchema = z.object({
   delivery_id: z.string().uuid().optional(),
 }).strict();
 
-/** Portable MCP/HyperAI parameters must remain extendable as a Zod object. */
 export function getAgentWebhookInputSchema() {
   return agentWebhookInputObjectSchema;
 }
@@ -29,7 +28,6 @@ export function getAgentWebhookInputSchema() {
 export const AgentWebhookInputSchema = getAgentWebhookInputSchema();
 export type AgentWebhookInput = z.infer<typeof AgentWebhookInputSchema>;
 
-/** Cross-field validation belongs at execution time, after surface projection. */
 export const AgentWebhookExecutionSchema = AgentWebhookInputSchema.superRefine(
   (input, ctx) => {
     if (input.action === "replay" && !input.delivery_id) {

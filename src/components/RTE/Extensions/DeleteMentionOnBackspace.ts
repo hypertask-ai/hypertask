@@ -23,8 +23,6 @@ export const DeleteMentionOnBackspace = Extension.create({
                 return false;
               }
 
-              // Gboard may mark backward deletion as composing. The adjacent
-              // mention check keeps that event safe without ignoring it.
               const mention = selection.$from.nodeBefore;
               if (mention?.type.name !== "mention") return false;
 

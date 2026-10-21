@@ -1,4 +1,6 @@
+import { agentScopeEnforced, recordAgentBoardScopeMiss } from "@/lib/auth/agentScope";
 import { stripForeignTaskRelations } from "@/lib/tasks/sameBoardRelations";
+import { projectContentAccessWhere } from "@/utils/controllers/projects/getAllIncludes";
 import {
     mapVisibleMcpAgent,
     mcpVisibleAgentSelect,
@@ -33,8 +35,6 @@ export function mapTaskAssignee(a: {
     const mapped: McpTaskAssignee = {
         id: a.user.id,
         email: a.user.email,
-        // An agent assignment stores the owner's user row. Print the agent
-        // name, or task get and the CLI still show the owner.
         displayName: agent?.displayName || a.user.displayName || undefined,
     };
     const agentAssigner = mapVisibleMcpAgent(a.agentAssigner, userId, projectId);
@@ -43,7 +43,6 @@ export function mapTaskAssignee(a: {
     return mapped;
 }
 
-/** Nest the creating agent under createdBy the same way assignees nest agent. */
 export function mapTaskCreatedBy(
     user: { id: number; email: string; displayName: string | null } | null | undefined,
     agent: Parameters<typeof mapVisibleMcpAgent>[0],
@@ -167,8 +166,7 @@ export function taskDetailInclude(userId: number) {
     };
 }
 
-/** GET /api/mcp/tasks single-task lookup (includes hierarchy fields). */
-export function taskMcpGetInclude(userId: number) {
+export function taskMcpGetInclude(userId: number, agentId?: string | null) {
     return {
     ...taskDetailInclude(userId),
     attachments: {
@@ -180,6 +178,7 @@ export function taskMcpGetInclude(userId: number) {
         },
     },
     subTasks: {
+        ...(agentId && agentScopeEnforced() ? { where: { project: projectContentAccessWhere(userId, agentId) } } : {}),
         select: {
             id: true,
             ticketNumber: true,
@@ -189,6 +188,7 @@ export function taskMcpGetInclude(userId: number) {
         },
     },
     parentTask: {
+        ...(agentId && agentScopeEnforced() ? { where: { project: projectContentAccessWhere(userId, agentId) } } : {}),
         select: {
             id: true,
             ticketNumber: true,
@@ -211,7 +211,8 @@ export function taskMcpGetInclude(userId: number) {
     };
 }
 
-export function mapTaskToMcpGetResponse(task: any, userId: number) {
+export function mapTaskToMcpGetResponse(task: any, userId: number, agentId?: string | null) {
+    recordAgentBoardScopeMiss(task.projectId);
     task = stripForeignTaskRelations(task);
     const subTasks = Array.isArray(task.subTasks)
         ? task.subTasks.map(
@@ -233,8 +234,6 @@ export function mapTaskToMcpGetResponse(task: any, userId: number) {
         id: task.id,
         ticketNumber: task.ticketNumber || undefined,
         uniqueIndex: task.uniqueIndex,
-        // Ready-made board-relative link. Callers/LLMs must use this verbatim,
-        // never build the path from `id` (that is the global DB id, not the ticket number).
         url: `/detail/project-${task.projectId}/${task.uniqueIndex}`,
         title: task.title,
         section: task.section,
@@ -242,7 +241,7 @@ export function mapTaskToMcpGetResponse(task: any, userId: number) {
         description: mapTaskDescriptionContent(task),
         boardId: task.projectId,
         boardTitle: task.project.title || '',
-        parent_id: task.parentTaskId || undefined,
+        parent_id: agentId && agentScopeEnforced() && !task.parentTask ? undefined : task.parentTaskId || undefined,
         parent_task: task.parentTask
             ? {
                   id: task.parentTask.id,
@@ -331,13 +330,12 @@ export function mapTaskToMcpGetResponse(task: any, userId: number) {
     };
 
     const agent = mapVisibleMcpAgent(task.agent, userId, task.projectId);
-    // Count the already-filtered, visibility-checked assignee list so the
-    // number always matches what the response actually lists (HTPR-6279).
     const withAssigneeCount = { ...mapped, assigneeCount: mapped.assignees.length };
     return agent ? { ...withAssigneeCount, agent } : withAssigneeCount;
 }
 
 export function mapTaskToDetail(task: any, userId: number): TaskDetail {
+    recordAgentBoardScopeMiss(task.projectId);
     const descriptionContent = mapTaskDescriptionContent(task);
     const taskAgent = mapVisibleMcpAgent(task.agent, userId, task.projectId);
 

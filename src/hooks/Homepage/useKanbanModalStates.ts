@@ -16,10 +16,6 @@ const useKanbanModalStates = () => {
   const [showViewsModal, setShowViewsModal] = useState<boolean>(false);
   const [showManageViewsModal, setManageViewsModal] = useState<boolean>(false);
   const [currentProject] = useRecoilState(currentProjectAtom);
-  // HTPR-6072: reading currentProject.id after an await inside the same async
-  // call still returns the closure-captured value, not a fresh one, so a
-  // plain variable comparison can never catch a project change that happened
-  // during the await. A ref is the only thing that reads as current.
   const currentProjectIdRef = useRef(currentProject?.id);
   currentProjectIdRef.current = currentProject?.id;
   const [boardSearch, setBoardSearch] = useRecoilState(boardSearchAtom);
@@ -34,8 +30,6 @@ const useKanbanModalStates = () => {
   const [tasksToDelete, setTasksToDelete] = useState<number[]|undefined>([])
   const toggleSaveViewsModal = () => setShowSaveModal((prev) => !prev);
 
-  // HTPR-6072: the board tree no longer remounts on a board switch, so these
-  // modals must close explicitly instead of getting torn down for free.
   useEffect(() => {
     setShowMoveModal(false);
     setShowViewsModal(false);
@@ -55,7 +49,6 @@ const useKanbanModalStates = () => {
     setShowViewsModal((prev) => !prev);
   };
 
-  // Closing the search also clears the keyword so the render-time filter drops.
   const toggleSearchTasks = (val: boolean) =>
     setBoardSearch((s) => ({
       open: val,
@@ -70,13 +63,6 @@ const useKanbanModalStates = () => {
     if (state) {
         if(!task) return
         setTaskInfo(task)
-        // HTPR-6072: SectionComp stays mounted across a board switch, so this
-        // await can resolve after the user has already moved to another
-        // board. currentProject is a closure-captured value that would stay
-        // stale across the whole call, so compare against the ref instead,
-        // which is refreshed on every render and reads as current after the
-        // await. Ignore a stale lookup instead of reopening the delete flow
-        // on the wrong board.
         const lookupProjectId = currentProjectIdRef.current
         try {
           const allTasks : number[] | undefined = await getAllSubTasks(task.id)

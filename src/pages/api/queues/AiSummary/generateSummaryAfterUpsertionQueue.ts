@@ -25,7 +25,6 @@ async function handler(req: NextApiRequest, res: NextApiResponse) {
     if (error instanceof SummaryRetryableError) {
       return res.status(503).json({ ok: false, retry: true });
     }
-    // Return 200 so QStash does not retry an error we have already handled/logged.
     return res.status(200).json({ ok: false });
   }
 }
@@ -61,7 +60,7 @@ export const generateSummariesByTeamIdHandler = async(teamId:string)=>{
             await generateBatchSummaries(tasksBatch);
             if (i + batchSize < allTasks.length) {
                 console.log(`Waiting for 100ms before processing the next batch...`);
-                await new Promise(resolve => setTimeout(resolve, 100)); // 10 seconds interval
+                await new Promise(resolve => setTimeout(resolve, 100));
             }
             console.log("tasks completed: ", i)
         }

@@ -9,7 +9,6 @@ import { NextRequest, NextResponse } from "next/server";
 
 export const runtime = "nodejs";
 
-//Tis simple. We get the attachments in the sessions. We delete them from the bucket and then the db. 
 async function removeChatAttachmentsForSessions(sessionIds: string[]) {
   if (sessionIds.length === 0) return;
 
@@ -36,7 +35,6 @@ async function removeChatAttachmentsForSessions(sessionIds: string[]) {
   });
 }
 
-// Template for handling DELETE request to remove a chat session
 export async function DELETE(req: NextRequest) {
   try {
     const cookieStore = await cookies();
@@ -49,7 +47,6 @@ export async function DELETE(req: NextRequest) {
       try {
         restCompat = await isFeatureEnabled(HTPR_6924_REST_COMPAT_FLAG, currentUser.userId);
       } catch {
-        // Flag lookup failure preserves the legacy entry path.
       }
     }
     const { isValid, user } = restCompat && currentUser

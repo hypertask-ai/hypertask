@@ -42,10 +42,8 @@ const useGlobalPathCheck = (currentUser: IUser | null) => {
       (path) => pathname === path || pathname?.startsWith(path)
     );
 
-    // Handle settings visibility
     setAllowShowSettings(!isExcludedPath);
 
-    // Reset index items when not in inbox, drafts or detail pages
     if (
       !pathname?.startsWith("/inbox") &&
       !pathname?.startsWith("/detail") &&
@@ -54,7 +52,6 @@ const useGlobalPathCheck = (currentUser: IUser | null) => {
       setGlobalFocus({ currIdx: 0, currSplit: 0 });
     }
 
-    // Reset specific page indexes
     if (!pathname?.startsWith("/inbox")) setInboxTaskIndexAtom(0);
     if (!pathname?.startsWith("/search")) setSearchTaskIndexAtom(0);
     if (!pathname?.startsWith("/archive")) setArchivedTaskIndexAtom(0);
@@ -70,9 +67,6 @@ const useGlobalPathCheck = (currentUser: IUser | null) => {
       pathname?.startsWith("/trial") ||
       pathname?.startsWith("/cli-auth");
     if (checkForAIChat) closeAIChatInterface();
-
-    // HTPR-4839: out-of-trial users stay on the free tier; nothing compels a
-    // redirect to /trial any more (the page stays reachable voluntarily).
   }, [pathname, currentUser, currentUser?.UserSetting?.trialStatus]);
 
   return {

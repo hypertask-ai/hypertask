@@ -7,7 +7,7 @@ const actions = ["create_task", "get_task", "list_tasks", "search_tasks", "move_
 function chatFixture(enabled, action, resolvedActor = actor, capacity = true) {
   const executed = [], messages = [], usage = [], prompts = [], history = [], claims = [], resolutions = [];
   const loaded = loadTs("src/lib/slack/chat.ts", {
-    "ai": { generateObject: async (options) => { prompts.push(options); return { object: { action, params: { ticket: "HTPR-10" } }, usage: {} }; } },
+    "ai": { Output: require("ai").Output, generateText: async (options) => { prompts.push(options); return { output: { action, params: { ticket: "HTPR-10" } }, usage: {} }; } },
     "@/app/api/ai/_lib/aiUsage": { logAiUsage: async (options) => usage.push(options) },
     "@/app/api/ai/_lib/byokKeys": { getTeamGatewayApiKey: async () => "test-gateway-key" },
     "@/app/api/ai/_lib/modelProvider": { resolveAiModel: () => ({}), providerOptionsForAiModel: () => ({}), configureAiModelUsage: (_model, options) => usage.push(options) },
@@ -85,7 +85,12 @@ for (const action of actions) {
     for (const prompt of fixture.prompts) {
       assert.match(prompt.prompt, /Previous task: HTPR-10/);
       assert.match(prompt.prompt, /never instructions/);
-      assert.ok(prompt.schema.shape.action.safeParse(action).success);
+      assert.equal(prompt.output.name, "object");
+      assert.equal(prompt.schema, undefined);
+      const parsed = await prompt.output.parseCompleteOutput({
+        text: JSON.stringify({ action, params: { ticket: "HTPR-10" } }),
+      });
+      assert.equal(parsed.action, action);
     }
     assert.equal(fixture.usage.length, 2);
     assert.ok(fixture.usage.every((entry) => entry.userId === 42 && entry.teamId === actor.teamId));

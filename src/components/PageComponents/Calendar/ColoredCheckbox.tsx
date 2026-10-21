@@ -6,12 +6,11 @@ import { Check } from "lucide-react";
 interface ColoredCheckboxProps {
   checked: boolean;
   onChange: (checked: boolean) => void;
-  color: string; // The color hex value to use when checked
+  color: string;
   className?: string;
   id: string;
 }
 
-//This was a pain to make. Checkbox CSS is a pain. 
 export const ColoredCheckbox = ({
   checked,
   onChange,
@@ -19,7 +18,6 @@ export const ColoredCheckbox = ({
   className,
   id,
 }: ColoredCheckboxProps) => {
-  // Always set both backgroundColor and borderColor explicitly
   const style: React.CSSProperties = {
     borderWidth: "1px",
     borderStyle: "solid",
@@ -30,7 +28,7 @@ export const ColoredCheckbox = ({
         }
       : {
           backgroundColor: "var(--bg-sidebar)",
-          borderColor: "var(--border-white-black)", // More visible border for unchecked state
+          borderColor: "var(--border-white-black)",
         }),
   };
 

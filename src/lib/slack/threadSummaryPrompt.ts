@@ -2,7 +2,6 @@ import { z } from "zod";
 
 import { escapeHtml } from "@/utils/helperFunctions/escapeHtml";
 
-/** Pure pieces of the Slack thread summary, shared by the instant path and the HTPR-7098 batch path. */
 export const slackSummarySchema = z.object({
   outcome: z.string().min(1).max(500),
   bullets: z.array(z.string().min(1).max(500)).min(2).max(4),
@@ -19,13 +18,11 @@ export function slackSummaryPrompt(transcript: string): string {
   return `Slack thread:\n${transcript}`;
 }
 
-/** Batch requests have no structured-output mode, so the shape is requested in the instructions. */
 export const SLACK_SUMMARY_JSON_INSTRUCTIONS =
   'Reply with ONLY a JSON object of the form {"outcome": string, "bullets": [string, ...]} with 2 to 4 bullets. No other text.';
 
 const CODE_FENCE = /^```(?:json)?\s*([\s\S]*?)\s*```$/i;
 
-/** Returns null when the model output is not a valid summary object. */
 export function parseSlackSummaryOutput(text: string): SlackSummaryObject | null {
   const trimmed = text.trim();
   const fence = trimmed.match(CODE_FENCE);

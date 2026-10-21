@@ -26,11 +26,6 @@ interface GuestDescriptionEditor {
 
 type GuestDescriptionEventWindow = Window & typeof globalThis;
 
-/**
- * Demo guests arrive on a disposable board to try the product immediately.
- * Let their first plain desktop click enter description edit mode, while the
- * established double-click interaction remains unchanged for signed-up users.
- */
 export function shouldEnterGuestDescriptionEdit({
   isGuest,
   isMobile,
@@ -59,11 +54,6 @@ export function dispatchGuestDescriptionEditRequest(
   );
 }
 
-/**
- * Each mounted description editor owns its pending request. The task/editor
- * match prevents another task from consuming it, and cleanup clears the
- * component-local request before navigation can reuse the editor surface.
- */
 export function subscribeGuestDescriptionEditRequests({
   root,
   taskId,
@@ -94,11 +84,6 @@ export function subscribeGuestDescriptionEditRequests({
   };
 }
 
-/**
- * React commits the editable Tiptap state after the click handler returns.
- * Consume only this editor's matching one-shot request, then use the editor
- * command so the caret is ready for the guest's next keystroke.
- */
 export function syncGuestDescriptionEditorState({
   editor,
   editable,

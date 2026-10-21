@@ -12,8 +12,6 @@ interface IProps{
     attachments:File[],
     totalAttachments:number;
     navigateToNextParams: NavigateToNextTaskParams
-    // Captured when the user hit send, so the comment lands on the task it was
-    // written for even if the user has navigated away since (HTPR-3175).
     taskId?: number
     ownerId?: number
     projectId?: number
@@ -23,11 +21,7 @@ interface IProps{
     taskTitle?: string
     taskDescription?: string
 }
-// 1: process html
-// 2: setInlineImagesUploadedTotal pass this callback. 
-// 3: when ALL attachments are uploaded, create the comment and use setComments to upload it. 
 
-// Module-level because the virtualizer can remount the row mid-flight.
 const startedUploads = new Set<number>();
 const createdUploads = new Set<number>();
 
@@ -35,7 +29,6 @@ const UploadingCommentContainer:React.FC<IProps> = ({id,content, attachments,tot
     const hasRun = useRef(false);
     const hasCreated = useRef(false);
 
-//   const [uploadedTotal, setUploadedTotal] = useState<number>(0);
   const [inlineImagesUploadedTotal, setInlineImagesUploadedTotal] = useState<number>(0);
   const [processedResult, setProcessedResult] = useState<string>("");
   const [uploadedAttachments, setUploadedAttachments] = useState<any[]>([]) 
@@ -54,26 +47,13 @@ const UploadingCommentContainer:React.FC<IProps> = ({id,content, attachments,tot
     setTotalChecks(prev => ({ ...prev, content: true }));
   }
 
-// RUN WHEN ALL IS DONE
-// createComment(content_,content,"",uploadedAttachments,[], )
-
-
 const callbackAttachments = async(attachmentsReturned:any[]) => {
-
-  // get all the urls back
   console.log("🚀 ~ callbackAttachments ~ attachmentsReturned:", attachmentsReturned)
-    // this is confirmation that attachments are uploaded.
-    // setTotalChecks(prev=>prev+1)
     setUploadedAttachments(attachmentsReturned)
     setTotalChecks(prev => ({ ...prev, attachments: true }));
   }
 
-    // run this use effect whenever the passed checks change
     const finalStep = async()=>{
-      // ponytail: guard once — createComment removes this item only after its
-      // async POST resolves, so any second totalChecks change in that window
-      // (ImageGallery re-firing callbackAttachments) would post a duplicate
-      // comment. One container = exactly one comment. (HTPR duplicate-comment)
       if (hasCreated.current || createdUploads.has(id)) return;
       hasCreated.current = true;
       createdUploads.add(id);
@@ -117,13 +97,10 @@ const callbackAttachments = async(attachmentsReturned:any[]) => {
 
   useEffect(()=>{if (totalChecks.content && totalChecks.attachments) finalStep()},[totalChecks])
   useEffect(() => {
-    // Calculate the total number of attachments that need to be uploaded
-  
     const totalAttachmentsUploaded = inlineImagesUploadedTotal + uploadedAttachments.length;
-    const progressPerAttachment = 100 / totalAttachments; // Calculate the progress per attachment
-    const totalProgress = progressPerAttachment * totalAttachmentsUploaded; // Calculate the total progress
+    const progressPerAttachment = 100 / totalAttachments;
+    const totalProgress = progressPerAttachment * totalAttachmentsUploaded;
   
-    // Update the progress percentage based on the total progress
     setProgressPercentage(totalProgress);
   }, [uploadedAttachments, inlineImagesUploadedTotal, totalAttachments]);
   

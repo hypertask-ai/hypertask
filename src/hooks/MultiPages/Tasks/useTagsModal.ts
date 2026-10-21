@@ -1,4 +1,4 @@
-/* eslint-disable react-hooks/exhaustive-deps */
+
 import { useGetAllProjectLabels } from "@/hooks/MultiPages/useGetAllProjectLabels";
 import { ILabel } from "@/models/model";
 import {
@@ -28,11 +28,6 @@ export const useTagsModal = (
   const calendarTaskFilters = useRecoilValue(calendarTaskFiltersAtom);
   const currentProject = useRecoilValue(currentProjectAtom);
   const myTasksFilters = useMyTasksFilterController();
-  // HTPR-4878: this is the BOARD's tag filter, so it must load the board's
-  // labels. It used to read inViewObject.taskProjectId, which is the focused
-  // task, so on a freshly loaded board with nothing focused the query ran with
-  // no project id and the picker rendered zero rows. Fall back to the focused
-  // task only when there is no current project.
   const { data: labelsFromTQ } = useGetAllProjectLabels(
     currentProject?.id ?? inViewObject.taskProjectId,
   );
@@ -81,11 +76,6 @@ export const useTagsModal = (
 
   const filterData = useCallback(
     (kw: string) => {
-      // HTPR-5089: sort here too. Without it, the tags already used by the
-      // filter jump back into alphabetical order the moment you type, so the
-      // most relevant ones scroll out of reach. reSort deliberately keeps
-      // sort=false so a tag does not leap to the top under the cursor the
-      // instant you check it.
       const updatedLabels = sortedLabelsFn(
         deepCopy(labelSource),
         activeForSort,

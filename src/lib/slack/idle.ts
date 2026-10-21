@@ -3,7 +3,6 @@ export const SLACK_THREAD_IDLE_MS = 30 * 60 * 1000;
 export type SlackThreadSummaryState = {
   lastMessageTs: string;
   lastSummarizedTs: string | null;
-  /** HTPR-7098: set while the summary waits in a batch. */
   summaryBatchId?: string | null;
 };
 

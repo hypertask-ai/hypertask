@@ -22,7 +22,6 @@ export function renderOnboardingEmail({
     `<p style="margin:0 0 16px;">${escapeHtml(paragraph)}</p>`
   );
   if (code !== undefined) {
-    // Porcelain: --bg-comment-description #f9f9fa; --color-white-black #18181b.
     blocks.splice(1, 0, `<pre class="onboarding-code" style="margin:0 0 16px;padding:12px;background-color:#f9f9fa;color:#18181b;white-space:pre-wrap;overflow-wrap:anywhere;font-family:monospace;"><code>${escapeHtml(code)}</code></pre>`);
   }
   const textBlocks = [...paragraphs];

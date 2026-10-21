@@ -105,7 +105,7 @@ test("the mic is never re-parented between states", () => {
   // element is conditionally rendered in two places, which is the remount bug.
   const commentBranch = composer.slice(
     composer.indexOf('{mode === "create-comment" ? ('),
-    composer.indexOf("// ========================================================== DESKTOP"),
+    composer.indexOf("<DesktopAttachment\n            mode={"),
   );
   const mics = commentBranch.match(/<AudioButton/g) || [];
   assert.equal(mics.length, 1, "the comment composer must mount ONE mic");
@@ -124,7 +124,7 @@ test("transcribing keeps the mic in the primary slot", () => {
 test("the comment AI action uses the purple PencilSparkles icon", () => {
   const branch = composer.slice(
     composer.indexOf('{mode === "create-comment" ? ('),
-    composer.indexOf("// ========================================================== DESKTOP"),
+    composer.indexOf("<DesktopAttachment\n            mode={"),
   );
   assert.match(
     branch,
@@ -165,7 +165,7 @@ test("every child of the flattened row carries an order", () => {
 test("DOM order is Plus, AI, mic, Send", () => {
   const branch = composer.slice(
     composer.indexOf('{mode === "create-comment" ? ('),
-    composer.indexOf("// ========================================================== DESKTOP"),
+    composer.indexOf("<DesktopAttachment\n            mode={"),
   );
   const plusAt = branch.indexOf('aria-label="More comment actions"');
   const aiAt = branch.indexOf('id={mode + "-ai-writer-button"}');
@@ -178,7 +178,7 @@ test("DOM order is Plus, AI, mic, Send", () => {
 test("Plus menu exposes the five specified actions through existing handlers", () => {
   const branch = composer.slice(
     composer.indexOf('{mode === "create-comment" ? ('),
-    composer.indexOf("// ========================================================== DESKTOP"),
+    composer.indexOf("<DesktopAttachment\n            mode={"),
   );
   for (const label of [
     "Attach image",
@@ -216,7 +216,7 @@ test("Plus menu closes on outside press, Escape, and dictation", () => {
 test("ai stays hidden while recording or transcribing", () => {
   const branch = composer.slice(
     composer.indexOf('{mode === "create-comment" ? ('),
-    composer.indexOf("// ========================================================== DESKTOP"),
+    composer.indexOf("<DesktopAttachment\n            mode={"),
   );
   assert.match(
     branch,

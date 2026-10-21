@@ -274,7 +274,6 @@ const AiUsageSection = () => {
   );
 };
 
-// Raw AiUsage feature slugs -> human labels for the "By feature" breakdown.
 const FEATURE_LABELS: Record<string, string> = {
   chat: "AI chat",
   summary: "Summaries",
@@ -287,7 +286,6 @@ const FEATURE_LABELS: Record<string, string> = {
 };
 const featureLabel = (slug: string) => FEATURE_LABELS[slug] ?? slug;
 
-// "2026-08-01" -> "Aug 1". Parsed as UTC so the day never shifts by timezone.
 const formatResetDate = (iso: string) => {
   const parsed = new Date(`${iso}T00:00:00Z`);
   return Number.isNaN(parsed.getTime())

@@ -10,7 +10,6 @@ async function handler(req: NextApiRequest, res: NextApiResponse) {
     return res.status(200).json({ skipped: true });
   } catch (error) {
     console.log("🤔 api/queues/FAST/upsertTaskOnActivityQueue ~ error:", error);
-    // 200 so QStash does not retry an error we have already handled/logged.
     return res.status(200).json({ ok: false });
   }
 }

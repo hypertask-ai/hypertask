@@ -5,9 +5,6 @@ type UseCopyURLOptions = {
   plainTextOnly?: boolean;
 };
 
-// Rich (HTML + plain) copy with graceful degradation. The ClipboardItem/HTML
-// path is unsupported on many mobile browsers and throws; when it does we fall
-// back to copying the plain URL so the button never silently does nothing.
 const writeRichToClipboard = async (
   html: string,
   text: string

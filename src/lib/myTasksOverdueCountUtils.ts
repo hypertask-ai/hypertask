@@ -27,7 +27,6 @@ const creatorId = (task: { userId?: unknown }): number | null => {
   return null;
 };
 
-/** Whether a loaded My Tasks row belongs to one of the view's scopes. */
 export function taskMatchesMyTasksScopes(
   task: {
     id: number;
@@ -62,7 +61,6 @@ export function taskMatchesMyTasksScopes(
   return false;
 }
 
-/** Keep the active tab's count on the dataset that tab actually loaded. */
 export function mergeActiveViewOverdueCounts(
   remote: MyTasksViewOverdueCounts,
   activeViewId: number | null,
@@ -99,7 +97,6 @@ export function parseMyTasksViewOverdueCounts(
   return { all: record.all, byViewId };
 }
 
-/** Milliseconds until the next local calendar day. Always at least 1ms. */
 export function msUntilNextLocalMidnight(now: Date = new Date()): number {
   const next = new Date(now.getTime());
   next.setHours(24, 0, 0, 0);

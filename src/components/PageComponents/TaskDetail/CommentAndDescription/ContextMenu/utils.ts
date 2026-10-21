@@ -6,7 +6,6 @@ import {
     SelectionDetails,
   } from "./types";
   
-  /* Used to position the HiglightMenu. Transforms ranges and deals with nullish values. */
   const getPopoverCoordinates = (
     range: Range | undefined
   ): HMClientRect | null => {
@@ -20,7 +19,6 @@ import {
     };
   };
   
-  /* Simple clipboard support. TODO: More support for HTML text */
   const setClipboard: SetClipboard = (text, onSuccess, onError) => {
     if (!navigator?.clipboard) return false;
     if (!text) return false;
@@ -36,23 +34,18 @@ import {
       });
   };
   
-  /* Extrapolates elements from either a React Ref object or a selector string */
   function resolveTargets(target: TargetSelector): TargetElements {
     if (typeof target === "string") {
-      /* Class and IDs */
       return document.querySelectorAll(target);
     } else {
-      /* Ref Objects */
       return [target?.current].filter(Boolean);
     }
   }
   
-  /* Input and Textarea selections are rendered in the browsers native UI. We need to handle them differently */
   function getSelectionDetails(): SelectionDetails {
     return getDomSelectionDetails() || getUISelection();
   }
   
-  /* Get the selection for browser native-UI elements */
   function getUISelection(): SelectionDetails {
     const focusedElement = document?.activeElement as HTMLInputElement;
   
@@ -71,7 +64,6 @@ import {
     return selectedText ? selectionDetails : null;
   }
   
-  /* Get the selection for non-UI elements */
   function getDomSelectionDetails(): SelectionDetails {
     if (window?.getSelection?.()?.isCollapsed) return null;
     const Serializer = new XMLSerializer();
@@ -90,7 +82,6 @@ import {
     return selectionDetails;
   }
   
-  /* Is the target we are selecting within the `TargetElements`? */
   function isSelectionWithinTarget(
     targets: TargetElements,
     selection: SelectionDetails

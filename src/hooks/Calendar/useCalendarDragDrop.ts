@@ -33,12 +33,10 @@ export function useCalendarDragDrop({
 >) {
   const moveTaskHorizontally = useCallback(async (direction: "left" | "right") => {
     try {
-      // Check if there's a current task selected (excludes more-indicator focus)
       if (currentTask < 0) return;
 
       let newDueDate: Date | undefined;
       if (currentView === "day") {
-        // Day view shows one day: reschedule relative to it.
         newDueDate =
           direction === "left"
             ? subtractDays(currentDay, 1)
@@ -54,13 +52,11 @@ export function useCalendarDragDrop({
       }
       if (!newDueDate) return;
 
-      // Get the current task
       const currentTasks = getTasksForDate(currentDay);
       const task = currentTasks.find((t) => t.id === currentTask);
       if (!task) return;
 
       await updateDueDateHandler(task, newDueDate);
-      // Follow the task, as week view's focus does after a move.
       if (currentView === "day") setCurrentDate(newDueDate);
     } catch (error) {
       console.log("🚀 ~ moveTaskHorizontally ~ error:", error);
@@ -69,7 +65,6 @@ export function useCalendarDragDrop({
 
   const moveTaskVertically = useCallback(async (direction: "up" | "down") => {
     try {
-      // Check if there's a current task selected (excludes more-indicator focus)
       if (currentTask < 0) return;
       if (currentView === "week") return;
 
@@ -79,16 +74,13 @@ export function useCalendarDragDrop({
       const currentWeekElement = currentDayElement?.parentElement;
       const currentWeekIndex = Number(currentWeekElement?.id?.split("-")[1]);
 
-      // Check boundary conditions
       if (direction === "up" && currentWeekIndex === 0) return;
       if (direction === "down" && currentWeekIndex === weeks.length - 1) return;
 
-      // Get the current task
       const currentTasks = getTasksForDate(currentDay);
       const task = currentTasks.find((t) => t.id === currentTask);
       if (!task) return;
 
-      // Calculate new date (move by 7 days for one week)
       const weekOffset = direction === "up" ? -7 : 7;
       const newDueDate = new Date(
         currentDay.getFullYear(),

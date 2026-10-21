@@ -119,8 +119,6 @@ export function formatChatHistory(chatHistory: ChatRequest["chat_history"]) {
   return parts.join("\n");
 }
 
-// Raise the provider's reasoning effort for a retry after an empty completion.
-// Instant/low effort is the usual cause of an empty agentic completion.
 export function withHigherEffort(
   providerOptions: Record<string, Record<string, any>> | undefined
 ): Record<string, Record<string, any>> | undefined {

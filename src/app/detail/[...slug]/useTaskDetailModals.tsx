@@ -18,10 +18,6 @@ import type { useTaskDetailStateValue } from "./useTaskDetailState";
 export function useTaskDetailModals(state: useTaskDetailStateValue) {
   const { embedded, _parsedTask, createContextOptionsForHTC } = state;
 
-  // const {data:draftsFromTQ , isLoading} =useGetDrafts(_parsedTask.id, currentUser.id)
-
-  // console.log("🚀 ~ _currentTask:", currentTask)
-
   const [showEmojiPickerAtComment, setShowEmojiPickerAtCount] = useState<{
     commentId: number;
     show: boolean;
@@ -29,12 +25,10 @@ export function useTaskDetailModals(state: useTaskDetailStateValue) {
 
   const [priority_, setPriority_] = useState(_parsedTask.priority ?? null);
   const [estimate_, setEstimate_] = useState(_parsedTask.estimate ?? null);
-  // ----------------- STATE HANDLERS when focus NOT on task detail main components ( title, description container, comment container, mark as done, new comment container )
   const activeModals: string[] | undefined = [...taskDetailConfig.modals.active];
 
   const tipTapClassName: string = taskDetailConfig.classNames.tipTap;
 
-  // =================== MODAL STATES
   const [showMoveTaskToBoard, setShowMoveTaskToBoard] =
     useState<boolean>(false);
   const [showMoveModal, setShowMoveModal] = useState<boolean>(false);
@@ -65,10 +59,8 @@ export function useTaskDetailModals(state: useTaskDetailStateValue) {
       );
   }, []);
 
-  // To check operating system
   const isApple = useDeviceContext();
 
-  // =================== RECOIL ROOT STATE OBJECTS
   const { resetShowCommands, toggleCreateTaskGlobally } =
     useHypertasksRecoilStates();
   const [showShortucts, setShowShortcuts] = useRecoilState(showShortcutsAtom);
@@ -109,17 +101,14 @@ export function useTaskDetailModals(state: useTaskDetailStateValue) {
   const appShellRailOn =
     useRecoilValue(appShellRailAtom) && !_mbl && !embedded;
 
-  // Pinning always opens chat. Otherwise, the default setting opens it unless
-  // a manual close suppressed auto-open or the task is shown on mobile.
   useEffect(() => {
-    // The state adapter exposes SSR defaults until this consumer has hydrated.
     if (
       !hydrated ||
       _mbl ||
       (!aiChatPinned && (!openAiChatByDefault || aiChatAutoOpenSuppressed))
     ) return;
     setShowAiChatInterface(true);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+
   }, [
     hydrated,
     _parsedTask?.id,
@@ -128,7 +117,6 @@ export function useTaskDetailModals(state: useTaskDetailStateValue) {
     aiChatPinned,
     _mbl,
   ]);
-  // const dummy = useRef<HTMLElement | null>(null);
   const controller: { [key: number]: { pressed: boolean } } = {
     ...globalConstants.multipleKeys,
   };

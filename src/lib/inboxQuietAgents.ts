@@ -1,11 +1,6 @@
 import { isQuestionComment } from "@/lib/inboxDecisions";
 import { inboxConfig } from "@/lib/configs/inbox.config";
 
-/**
- * HTPR-7096: pure rules for a quiet owner inbox. Client safe, no flag reads.
- * Question detection is shared with HTPR-7092 (src/lib/inboxDecisions.ts), so the
- * Important split and the Decisions split agree.
- */
 export { isQuestionComment };
 
 type MentionRow = {
@@ -17,12 +12,6 @@ type MentionRow = {
   taskId: number | null;
 };
 
-/**
- * Whether a Mentioned row must stay out of Important. An agent mention counts
- * only when it is a Question that the viewer has not answered yet. Human
- * mentions and every other row type are never quiet.
- * `answeredAtByTaskId` holds the viewer's newest own comment time per task.
- */
 export function isQuietAgentMention(
   row: MentionRow,
   answeredAtByTaskId: ReadonlyMap<number, number>,
@@ -40,14 +29,6 @@ type ActiveEvent = MentionRow & {
   returnedFromReminders?: boolean | null;
 };
 
-/**
- * Whether one active event would put its task in Important today, mirroring
- * getInboxTabs: a mention that is not a quiet agent mention; an Important-split
- * type addressed to the viewer (always-addressed types, or assigned-only types
- * while the viewer is a human assignee) that is not agent housekeeping; a direct
- * reply; or a row the viewer snoozed and got back. Liveness is ignored on
- * purpose: a dead task never reaches Important, so keeping it is harmless.
- */
 export function eventKeepsImportant(
   event: ActiveEvent,
   answeredAtByTaskId: ReadonlyMap<number, number>,

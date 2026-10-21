@@ -1,14 +1,11 @@
-// Import PrismaClient from the generated Prisma client
 import { IUrl } from '@/models/model';
 
 import { NextApiHandler, NextApiRequest, NextApiResponse } from 'next';
-// Create an instance of PrismaClient
 import prisma from "@/lib/prisma";
 import { measuredSizeString } from "@/lib/attachments/measuredSize";
 import { urlRowData } from "@/lib/attachments/urlRowData";
 
 
-// Example usage
 const addIntoTask = async (urlsToAdd:IUrl[],commentId:number,method:string|undefined) => {
   console.log("🚀 ~ file: addIntoTask.ts:12 ~ constaddIntoTask:NextApiHandler= ~ commentId:", commentId)
   console.log("🚀 ~ file: addIntoTask.ts:12 ~ constaddIntoTask:NextApiHandler= ~ urlsToAdd:", urlsToAdd)
@@ -22,9 +19,6 @@ const addIntoTask = async (urlsToAdd:IUrl[],commentId:number,method:string|undef
         })
       }
       var response:any = []
-      // forEach does not await its async callback, so the handler used to respond
-      // 200 while these creates were still in flight (and swallowed their errors),
-      // dropping comment attachments. Await sequentially like the PUT branch below.
       for (const url_ of urlsToAdd) {
         if (url_.Attachment){
           const attachment_ = await prisma.attachment.create({
@@ -32,9 +26,6 @@ const addIntoTask = async (urlsToAdd:IUrl[],commentId:number,method:string|undef
               fileType: url_.attachmentType??"",
               fileSource: url_.urlString,
               fileName: url_.title ?? "",
-              // A hardcoded "1" used to be written here, which made every
-              // editor-uploaded attachment claim it was one byte long and fail
-              // the download integrity check. Unknown stays null, not a lie.
               fileSize: measuredSizeString(url_.fileSize),
               commentId: commentId,
               taskId: url_.TaskId,
@@ -71,17 +62,14 @@ const addIntoTask = async (urlsToAdd:IUrl[],commentId:number,method:string|undef
     }
   } 
   
-  // =========================== UPDATING A COMMENT
   else if (method === "PUT") {
     try {
-      // Fetch existing URLs for the given commentId
       const existingUrls = await prisma.url.findMany({
         where: {
           commentId: commentId,
         },
       });
 
-      // Iterate through existingUrls and update or delete as needed
       for (const existingUrl of existingUrls) {
         const matchedUrlData = urlsToAdd.find(
           (urlData: IUrl) =>
@@ -90,20 +78,17 @@ const addIntoTask = async (urlsToAdd:IUrl[],commentId:number,method:string|undef
         );
 
         if (matchedUrlData) {
-          // Update the existing URL
           await prisma.url.update({
             where: { id: existingUrl.id },
             data: urlRowData(matchedUrlData),
           });
         } else {
-          // Delete the existing URL if not found in urlsToAdd
           await prisma.url.delete({
             where: { id: existingUrl.id },
           });
         }
       }
 
-      // Insert new URLs from urlsToAdd
       const newUrlsToAdd = urlsToAdd
         .filter(
           (urlData: IUrl) =>
@@ -141,5 +126,4 @@ const addIntoTask = async (urlsToAdd:IUrl[],commentId:number,method:string|undef
   }
 }
 
-// Export the main function
 export default addIntoTask;

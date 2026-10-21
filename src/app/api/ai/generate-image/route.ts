@@ -84,8 +84,6 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Precedence: explicit request override → user's "Default models" image
-    // preference (team-scoped, then global) → team's system image ladder.
     const preferenceIds = getAiModelPreferenceIds(
       userPreferences.res.aiModelPreferences as
         | TAiModelPreferences

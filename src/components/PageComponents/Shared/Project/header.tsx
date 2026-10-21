@@ -1,4 +1,4 @@
-/* eslint-disable @next/next/no-img-element */
+
 import { IProject } from "@/models/model";
 import React, { Suspense, useContext, useState } from "react";
 import { MobileViewContext } from "@/lib/contexts/mobileContext";
@@ -47,20 +47,8 @@ const ReadOnlyHeader = ({
           <span className="text-white-black font-medium text-emphasis leading-[20px] cursor-default">
             {project?.title ?? project?.name}
           </span>
-          {/* {hasUserSelectedView && (
-              <>
-                <FaChevronRight size={10} />
-                <span
-                  onClick={onViewClickHandler}
-                  className="cursor-pointer font-normal text-subheading leading-[24.2px]"
-                >
-                  {hasUserSelectedView.title}
-                </span>
-              </>
-            )} */}
         </div>
 
-        {/* ================= invite people ================== */}
         <Suspense
           fallback={<div className="text-white"> loading header...</div>}
         >
@@ -127,7 +115,6 @@ const ReadOnlyHeader = ({
                 navigator.clipboard.writeText(window.location.href);
                 toast.success("Read only view link copied");
               }}
-              // className="mr-3"
             >
               <Share2
                 size={14}

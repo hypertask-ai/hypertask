@@ -162,7 +162,6 @@ const MCPTutorial = ()=>{
 }
 
 const BookCoaching = ()=>{
-  // Book 1:1 Coaching (https://book.vimcal.com/p/valentinyeo/30-minute-meeting-fbcb1)
   return(
     <LinkedSingleSectionContentTitle
       id="BookCoaching" 
@@ -173,7 +172,6 @@ const BookCoaching = ()=>{
   )
 }
 
-// https://hypertask.ai/help
 const HelpCenter = ()=>{
   return(
     <LinkedSingleSectionContentTitle

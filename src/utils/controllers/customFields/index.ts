@@ -73,7 +73,6 @@ export async function createCustomField(
             );
           }
 
-          // Append after existing fields: find max ranking and increment
           const last = await tx.customField.findFirst({
             where: { projectId },
             orderBy: { ranking: "desc" },
@@ -110,8 +109,6 @@ export async function createCustomField(
   throw new Error("Unable to create custom field");
 }
 
-// valueCount rides along so the manage-fields modal's delete confirm can show
-// "N tickets carry a value" without a separate round trip per field.
 export async function getCustomFieldsForProject(projectId: number) {
   const fields = await prisma.customField.findMany({
     where: { projectId },
@@ -137,12 +134,6 @@ export async function getCustomFieldById(fieldId: string) {
   return prisma.customField.findUnique({ where: { id: fieldId } });
 }
 
-/**
- * Deletes a custom field. CustomFieldValue rows cascade via the schema's
- * onDelete: Cascade, so counting them here (inside the same transaction, so
- * the count can't drift from what's about to be deleted) is purely for the
- * caller to report the blast radius. Returns null if the field doesn't exist.
- */
 export async function deleteCustomField(fieldId: string) {
   return prisma.$transaction(async (tx) => {
     const field = await tx.customField.findUnique({ where: { id: fieldId } });
@@ -154,10 +145,6 @@ export async function deleteCustomField(fieldId: string) {
   });
 }
 
-/**
- * Rename a field and/or flip its rail/table visibility. Returns null if the
- * field doesn't exist or the patch is empty.
- */
 export async function updateCustomField(
   fieldId: string,
   patch: { name?: string; showInRail?: boolean; showInTable?: boolean }
@@ -177,7 +164,7 @@ export async function updateCustomField(
   try {
     return await prisma.customField.update({ where: { id: fieldId }, data });
   } catch (error) {
-    if ((error as { code?: string })?.code === "P2025") return null; // not found
+    if ((error as { code?: string })?.code === "P2025") return null;
     if ((error as { code?: string })?.code === "P2002") {
       throw new CustomFieldValidationError(
         "name",
@@ -188,11 +175,6 @@ export async function updateCustomField(
   }
 }
 
-/**
- * Persists a drag-to-reorder from the manage-fields modal. Renumbers every
- * field on the board sequentially (fields cap at 50, so a full renumber is
- * cheap and avoids a lexical-midpoint scheme just for this list).
- */
 export async function reorderCustomFields(
   projectId: number,
   orderedFieldIds: string[]
@@ -240,10 +222,6 @@ export async function getCustomFieldForProjectByName(
   });
 }
 
-/**
- * Upsert a custom field value. Empty/null value deletes the row (clearing).
- * Validates type-specific values and computes the numeric sort key.
- */
 export async function upsertCustomFieldValue(
   fieldId: string,
   taskId: number,
@@ -322,4 +300,15 @@ export async function upsertCustomFieldValue(
     create: { fieldId, taskId, value: normalizedValue, numericValue },
     update: { value: normalizedValue, numericValue },
   });
+}
+
+export async function saveWriterCustomFieldValues(
+  taskId: number,
+  values: { fieldId: string; value: string | number }[]
+) {
+  for (const { fieldId, value } of values) {
+    await upsertCustomFieldValue(fieldId, taskId, value).catch((error) => {
+      console.error("[task-writer] custom field save failed", { taskId, fieldId, error });
+    });
+  }
 }

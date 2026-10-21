@@ -30,13 +30,6 @@ import {
 
 export const PROJECTS_ALL_QUERY_KEY = ["projectsAll"] as const;
 
-// HTPR-7129: a board load aborted by an unmount (the board remounting on its
-// way back from a ticket) reverts to the previous result, which still counts as
-// fresh, so the next mount never loads again and the card stays stale. Mark it
-// stale and reload it, unless a newer load is already running. A move or other
-// write may still be on its way to the server (a drag patches the board first),
-// so wait until no mutation or board move is pending and the cache is quiet for
-// RECOVERY_QUIET_MS; reloading earlier could snap a dragged card back.
 const RECOVERY_QUIET_MS = 300;
 const RECOVERY_MAX_CHECKS = 100;
 export const recoverAbortedProjectsAll = (
@@ -59,7 +52,6 @@ export const recoverAbortedProjectsAll = (
       .invalidateQueries({ queryKey: PROJECTS_ALL_QUERY_KEY, exact: true, refetchType: "active" })
       .catch(() => undefined);
   };
-  // Start after the cancelling write has patched the cache in the same task.
   schedule(() => {
     lastUpdate = queryClient.getQueryState(PROJECTS_ALL_QUERY_KEY)?.dataUpdatedAt ?? 0;
     schedule(check, RECOVERY_QUIET_MS);
@@ -93,16 +85,10 @@ export const purgeRevokedBoardTaskQueries = async (
       !authorized.has(query.queryKey[2]),
   };
 
-  // boardTasks begins before /getAll so it must share /getAll's revocation
-  // boundary. Abort first without restoring the pre-cancel snapshot, then
-  // remove both settled and in-flight entries for boards no longer visible.
   await queryClient.cancelQueries(revokedBoardTasks, { revert: false });
   queryClient.removeQueries(revokedBoardTasks);
 };
 
-// The mobile board switcher keeps its own accessible-board list. Account-wide
-// authorization already filters it; a single-board denial has to do the same or
-// the denied board stays tappable in the sheet.
 const purgeRevokedBoardFromSwitcher = (
   queryClient: QueryClient,
   accountId: number,
@@ -120,8 +106,6 @@ const purgeRevokedBoardFromSwitcher = (
       switcherCache.filter((project) => project.id !== projectId),
     );
   }
-  // A cancelled active QueryObserver becomes idle. Restart it once the stale
-  // response is aborted so an open sheet refetches the authorized list.
   void switcherCancellation
     .then(() =>
       queryClient.invalidateQueries({
@@ -133,9 +117,6 @@ const purgeRevokedBoardFromSwitcher = (
     .catch(() => undefined);
 };
 
-// A denial proves only the board it was issued for. Once the route has moved on,
-// the revocation may still clean up account-scoped state but must not cancel or
-// redirect whatever the user is now looking at.
 export const isRevocationStillActiveBoard = ({
   proofIsCurrent,
   currentBoardKey,
@@ -159,14 +140,9 @@ export const revokeBoardAccess = async ({
   projectId: number;
   clearLocalBoard: (accountId: number, projectId: number) => Promise<boolean>;
   router: { replace: (href: string) => void };
-  // The route can change while the cancellation and IndexedDB work below run.
-  // A revocation that is no longer the rendered board must do nothing at all.
   isCurrent?: () => boolean;
 }): Promise<void> => {
   const stillRevokingActiveBoard = isCurrent ?? (() => true);
-  // Every step below is board scoped and destructive. Once the route has moved
-  // on, none of it may run: reopening a genuinely denied board 403s again and
-  // produces a fresh revocation that is current.
   if (!stillRevokingActiveBoard()) return;
   const revokedBoardTasks = {
     predicate: (query: { queryKey: readonly unknown[] }) =>
@@ -195,15 +171,10 @@ export const revokeBoardAccess = async ({
       };
     },
   );
-  // clearLocalBoard overwrites the snapshot with a revocation stub, which is
-  // the durable marker. One retry covers a transient IndexedDB failure.
   const stubWritten =
     (await clearLocalBoard(accountId, projectId).catch(() => false)) ||
     (await clearLocalBoard(accountId, projectId).catch(() => false));
-  // The stub is gone but the snapshot may not be. Fall back to a marker
-  // outside IndexedDB so a reload still fails closed.
   if (!stubWritten) persistBoardRevocationFallback(accountId, projectId);
-  // A local read that started before this revocation may still be in flight.
   recordBoardRevocationTombstone(accountId, projectId);
   if (stillRevokingActiveBoard()) router.replace("/");
 };
@@ -305,9 +276,6 @@ export const shouldForceFreshProjectAuthorization = ({
 export const useGetAllBoards = (
   user: IUser,
   slugs: any,
-  // HTPR-4504: callers that mount before the user is known (the mobile board
-  // switcher) must not fire a request with no user — the result would be cached
-  // under the shared key and every later consumer would read the error.
   options?: {
     enabled?: boolean;
     onProjectsAuthorized?: (
@@ -421,10 +389,6 @@ export const useGetAllBoards = (
                 signal,
                 boardReader,
               )
-              // This request exists only to prove and hydrate the current
-              // network result. It must not write BOARD_TASKS_KEY: account-wide
-              // authorization may deny and purge the board before this promise
-              // settles, and a late side-cache write would resurrect it.
             : queryClient.fetchQuery({
                 queryKey: BOARD_TASKS_KEY(
                   requestProjectId,
@@ -437,8 +401,6 @@ export const useGetAllBoards = (
                     boardSignal,
                     boardReader,
                   ),
-                // Realtime and command refetches keep the existing five-minute
-                // task cache once this route's authorization has resolved.
                 staleTime: BOARD_TASKS_STALE_TIME_MS,
               })
           : undefined;
@@ -468,9 +430,6 @@ export const useGetAllBoards = (
               queryClient.getQueryState<IProjectsAll>(
                 PROJECTS_ALL_QUERY_KEY,
               )?.dataUpdateCount ?? 0;
-            // The payload is already authorized by its project-scoped route.
-            // Start local publication without adding its latency to the
-            // network winner; the callback keeps its own generation guards.
             void Promise.resolve()
               .then(() =>
                 optionsRef.current?.onActiveBoardAuthorized?.(
@@ -481,9 +440,6 @@ export const useGetAllBoards = (
                     accountId: requestAccountId,
                     projectId: requestProjectId,
                     queryUpdateCountAtAuthorization,
-                    // Full /getAll authorization may resolve while IndexedDB
-                    // is still reading. Its allow/deny result wins, so this
-                    // project-scoped proof cannot publish afterward.
                     isCurrent: isProjectAuthorizationCurrent,
                   },
                 ),
@@ -563,17 +519,11 @@ export const useGetAllBoards = (
           projects.activeBoardPayloadLoaded === false &&
           projects.authorizedLocalBoardPublished === true
         ) {
-          // Authorization metadata succeeded, but the visible board payload
-          // did not. Rejecting this refresh makes React Query retain the
-          // already-authorized local board instead of publishing an empty
-          // network shell over it. Normal query retries still recover online.
           throw new ActiveBoardPayloadUnavailableError();
         }
         if (document && requestProjectId != null && isCurrent()) {
           const taskState = queryClient.getQueryState<BoardTasksPayload>(BOARD_TASKS_KEY(requestProjectId, requestAccountId));
           const index = projects.updatedProjects.findIndex(project => project.id === requestProjectId);
-          // Metadata may arrive after subscription catch-up. Keep its access
-          // decision, but never republish the seed over a newer live payload.
           if (index >= 0 && taskState?.data && taskState.dataUpdateCount > boardTaskUpdatesAtStart) {
             projects.updatedProjects[index] = hydrateBoardWithPayload(projects.updatedProjects[index], taskState.data);
           }
@@ -616,8 +566,6 @@ export const useGetAllBoards = (
       return;
     }
 
-    // Complete the account-wide metadata in place. The signed document already
-    // authorized the active board, so reuse its live side cache on this read.
     if (document && projectAuthorizationScopeRef.current?.scopeKey === currentScopeKey) {
       void query.refetch().catch(() => undefined);
       return;
@@ -664,8 +612,6 @@ export const useGetAllBoards = (
       return;
     }
 
-    // A fresh persisted response won the initial load, so queryFn never
-    // consumed the parser-time requests. Remove them before realtime starts.
     discardEarlyBoardBootstrap(user.id, projectId, "projectsAll");
   }, [
     query.data,
@@ -683,9 +629,6 @@ export const useGetAllBoards = (
 
     if (!accountChanged && (!cached || cached.accountId === user.id)) return;
 
-    // This query predates account-scoped keys and has many mutation consumers.
-    // Resetting it clears the previous owner's payload and immediately refetches
-    // with this render's authenticated user rather than waiting for staleTime.
     void queryClient.resetQueries({
       queryKey: PROJECTS_ALL_QUERY_KEY,
       exact: true,
@@ -714,8 +657,6 @@ export const useWarmProjectsAllQuery = ({
 
     void queryClient
       .prefetchQuery({
-        // Warm the exact side cache consumed by route startup. Metadata still
-        // obtains a fresh scoped authorization response on navigation.
         queryKey: BOARD_TASKS_KEY(Number(projectId), user.id),
         queryFn: ({ signal }) =>
           fetchBoardTasks(Number(projectId), user.id, signal, boardReader),

@@ -34,17 +34,6 @@ export default async function Page(
   const User = await requireServerCookieUser();
   const userFromDB = await getUserById(User.id)
   console.log("🚀 ~ userFromDB:", userFromDB)
-  //this is causing a major issue
-  // if (userFromDB?.status===200 && userFromDB.res.UserSetting?.trialStatus){
-  //   let previousBoardString = cookieStore.get('previousBoard');
-  //   let redirectUrl = '/' 
-  //   if (previousBoardString){
-  //     const previousBoard = previousBoardString.value.split('-')
-  //     redirectUrl = `/project?id=${previousBoard[1]}`
-  //   }
-  //     console.log("🚀 ~ redirectUrl:", redirectUrl)
-  //   redirect(redirectUrl)
-  // } 
   var team: any;
   if (
     !User ||
@@ -53,15 +42,10 @@ export default async function Page(
     !searchParams.totalSeats ||
     !searchParams.googleAccountId
   ) {
-    //if (!searchParams.session_id || !searchParams.success) redirect("/");
-
     team = await findTeam(User);
     console.log("🚀 ~ team:", team);
   }
 
-  // HTPR-4358: createCustomerIfNull now throws on failure. This page stays
-  // tolerant on purpose: a provisioning error must not replace the
-  // post-checkout confirmation with a Next.js error page.
   try {
     await createCustomerIfNull(User.email!, searchParams.teamId ?? team.id);
   } catch (error) {
@@ -71,7 +55,6 @@ export default async function Page(
   console.log("🚀 ~ session_id:", searchParams.session_id);
   const customerId = await checkTrialSuccess(searchParams.session_id as string);
 
-  // check which subscriptions does that user have
   const hasSub = await hasSubscription(searchParams.teamId ?? team.id);
   console.log("🚀 ~ hasSub:", hasSub);
 

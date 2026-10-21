@@ -29,7 +29,6 @@ const TaskInfoContainer = ({ task }: IProp) => {
         style={{ top: 103 }}
         mobileResponsive={false}
       >
-        {/* ====================================== ASSIGNEES ================================ */}
         <TaskInfoRow>
           <TaskInfoLabel>Assignees</TaskInfoLabel>
           <TaskInfoValue className="flex flex-col">
@@ -62,13 +61,11 @@ const TaskInfoContainer = ({ task }: IProp) => {
           </TaskInfoValue>
         </TaskInfoRow>
 
-        {/* ===================================== TASK ID ====================================== */}
         <TaskInfoRow>
           <TaskInfoLabel>ID</TaskInfoLabel>
           <TaskInfoValue className="uppercase">{id}</TaskInfoValue>
         </TaskInfoRow>
 
-        {/* ====================================== TASK STATUS ================================ */}
         <TaskInfoRow>
           <TaskInfoLabel>Status</TaskInfoLabel>
           <TaskInfoValue className="group w-full">
@@ -76,19 +73,16 @@ const TaskInfoContainer = ({ task }: IProp) => {
           </TaskInfoValue>
         </TaskInfoRow>
 
-        {/* ====================================== TASK DUE DATE ================================ */}
         <TaskInfoRow>
           <TaskInfoLabel>Due Date</TaskInfoLabel>
           <TaskInfoValue className="group">-</TaskInfoValue>
         </TaskInfoRow>
 
-        {/* ====================================== TASK PROJECT ================================ */}
         <TaskInfoRow>
           <TaskInfoLabel>Project</TaskInfoLabel>
           <TaskInfoValue className="group">{project}</TaskInfoValue>
         </TaskInfoRow>
 
-        {/* ====================================== TASK Priority ================================ */}
         <TaskInfoRow>
           <TaskInfoLabel>Priority</TaskInfoLabel>
           <TaskInfoValue className="group">
@@ -113,7 +107,6 @@ const TaskInfoContainer = ({ task }: IProp) => {
           </TaskInfoValue>
         </TaskInfoRow>
 
-        {/* ====================================== TASK Estimate ================================ */}
         <TaskInfoRow>
           <TaskInfoLabel>Task Size</TaskInfoLabel>
           <TaskInfoValue className="group">
@@ -133,7 +126,6 @@ const TaskInfoContainer = ({ task }: IProp) => {
             )}
           </TaskInfoValue>
         </TaskInfoRow>
-        {/* ====================================== TASK Labels ================================ */}
         <TaskInfoRow>
           <TaskInfoLabel>Tags</TaskInfoLabel>
           {tags && tags.length > 0 ? (

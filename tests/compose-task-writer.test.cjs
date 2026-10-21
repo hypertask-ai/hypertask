@@ -292,6 +292,7 @@ test('shared server writer gates compose before accessing a board; legacy writer
 // Loads the shared create handler (the code behind /api/tasks/createGlobally POST)
 // with strict stubs; only the packages it needs at runtime come from node_modules.
 function loadCreateGlobal(stubs) {
+  stubs["@/lib/auth/agentScope"] = require("./helpers/agent-board-scope.cjs").enforcedScope;
   stubs['@/utils/controllers/tasks/parentTaskAccess'] = createJiti(__filename)(path.join(root, 'src/utils/controllers/tasks/parentTaskAccess.ts'));
   const real = new Set(['next/server', 'zod', 'better-auth/cookies']);
   const code = require('typescript').transpileModule(require('node:fs').readFileSync(path.join(root, 'src/lib/api/task-writes/create-global.ts'), 'utf8'), {
@@ -328,6 +329,7 @@ test('actual create endpoint rejects disabled Compose before database work and p
     '@prisma/client': {}, '@/utils/generateRank': {}, '@vercel/functions': {},
     '@/utils/controllers/tasks/getNextUniqueTaskIndex': {}, '@/lib/mcp/webhooks/taskEvents': {},
     '@/lib/mcp/webhooks/outbox': {}, '@/lib/agentWebhooks/outbox': {},
+    '@/lib/telemetry/savedWork': { enqueueBoardCreated: async () => "board-key", processAnalyticsIntentSoon: () => {}, enqueueTaskCreated: async () => "task-key", creationChannelFromHeader: () => 'web', CREATION_CHANNEL_HEADER: 'X-Hypertask-Creation-Channel', CREATION_AGENT_HEADER: 'X-Hypertask-Creation-Agent' },
     '@/utils/controllers/activities/createAssignedActivity': {},
   };
   const created = loadCreateGlobal(stubs);
@@ -452,6 +454,7 @@ test('save existing target enforces both flags, edit permissions, board match an
     '@prisma/client': {}, '@/utils/generateRank': {}, '@vercel/functions': {},
     '@/utils/controllers/tasks/getNextUniqueTaskIndex': {}, '@/lib/mcp/webhooks/taskEvents': {},
     '@/lib/mcp/webhooks/outbox': {}, '@/lib/agentWebhooks/outbox': {}, '@/utils/controllers/activities/createAssignedActivity': {},
+    '@/lib/telemetry/savedWork': { enqueueBoardCreated: async () => "board-key", processAnalyticsIntentSoon: () => {}, enqueueTaskCreated: async () => "task-key", creationChannelFromHeader: () => 'web', CREATION_CHANNEL_HEADER: 'X-Hypertask-Creation-Channel', CREATION_AGENT_HEADER: 'X-Hypertask-Creation-Agent' },
   };
   const created = loadCreateGlobal(stubs);
   const handler = sharedRoute.taskWriteHandler({ POST: async () => created.POST });

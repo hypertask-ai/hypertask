@@ -1,4 +1,4 @@
-/* eslint-disable react-hooks/exhaustive-deps */
+
 
 import { useEffect, useRef, useState } from 'react';
 import { Bot, Check } from "lucide-react";
@@ -20,13 +20,13 @@ export type UserSelectionContext = "assignees" | "followers" | "updatedBy" | "cr
 interface IUserSelectionModalProps {
   display: boolean;
   onClose: (selectedUsers?: UserSelectionEntry | UserSelectionEntry[]) => void;
-  users: UserSelectionEntry[]; // All available users and agents
-  selectedUsers?: (number | string)[]; // Currently selected user/agent IDs
-  mode?: UserSelectionMode; // single or multiple selection
-  context: UserSelectionContext; // What this modal is being used for
-  title?: string; // Custom title for the modal
-  placeholder?: string; // Custom placeholder for search
-  allowDeselect?: boolean; // Whether users can be deselected
+  users: UserSelectionEntry[];
+  selectedUsers?: (number | string)[];
+  mode?: UserSelectionMode;
+  context: UserSelectionContext;
+  title?: string;
+  placeholder?: string;
+  allowDeselect?: boolean;
 }
 
 const UserSelectionModal = ({ 
@@ -53,13 +53,11 @@ const UserSelectionModal = ({
     return typeof entry.id === "string";
   }
 
-  // Initialize internal selected users
   useEffect(() => {
     const selectedIds = new Set(selectedUsers);
     setInternalSelectedUsers(selectedIds);
   }, [selectedUsers]);
 
-  // Filter users based on search
   useEffect(() => {
     const filtered = users.filter((user) =>
       !searchKeyword || user.displayName?.toLowerCase().includes(searchKeyword.toLowerCase())
@@ -67,7 +65,6 @@ const UserSelectionModal = ({
     setFilteredUsers(filtered);
   }, [searchKeyword, users]);
 
-  // Modal title based on context
   const getModalTitle = () => {
     if (title) return title;
     switch (context) {
@@ -93,11 +90,9 @@ const UserSelectionModal = ({
     const isSelected = internalSelectedUsers.has(user.id);
     
     if (mode === "single") {
-      // Single selection mode
       onClose(user);
       toggle();
     } else {
-      // Multiple selection mode
       const newSelectedUsers = new Set(internalSelectedUsers);
       
       if (isSelected && allowDeselect) {
@@ -108,7 +103,6 @@ const UserSelectionModal = ({
       
       setInternalSelectedUsers(newSelectedUsers);
       
-      // Convert back to user array for callback
       const selectedUserArray = users.filter(u => newSelectedUsers.has(u.id));
       onClose(selectedUserArray);
     }

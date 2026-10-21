@@ -19,7 +19,6 @@ export async function deliverManagerAlert(db: PrismaClient, delivery: AlertDeliv
   const text = alertMessage(delivery);
   const messageId = `ai-chat-alert:${delivery.id}`;
   const { sessionId, deliveryIds } = await db.$transaction(async (tx) => {
-    // Match Agent Chat's lock order so a runtime heartbeat cannot race handoff.
     const agents = await tx.$queryRaw<Array<{ id: string }>>`SELECT "id" FROM "Agent" WHERE "id" = ${manager.id} AND "revokedAt" IS NULL FOR UPDATE`;
     if (!agents.length) throw new Error("AI Chat alert Manager is unavailable");
     const session = await tx.chatSession.upsert({
@@ -28,7 +27,6 @@ export async function deliverManagerAlert(db: PrismaClient, delivery: AlertDeliv
       update: {},
       select: { id: true },
     });
-    // A retry after an uncertain commit cannot create a second Manager alert.
     await tx.$queryRaw`SELECT "id" FROM "ChatSession" WHERE "id" = ${session.id} FOR UPDATE`;
     const existing = await tx.chatMessage.findUnique({ where: { id: messageId }, select: { id: true } });
     if (existing) return { sessionId: session.id, deliveryIds: [] };
@@ -55,8 +53,6 @@ export async function deliverManagerAlert(db: PrismaClient, delivery: AlertDeliv
     await tx.chatSession.update({ where: { id: session.id }, data: { updatedAt: new Date() } });
     return { sessionId: session.id, deliveryIds };
   }, { timeout: 10_000 });
-  // Existing webhook outbox retries transport failures; polling runtimes read
-  // the undelivered message through the existing Agent Chat pending endpoint.
   await publishAgentWebhookDeliveries(deliveryIds);
   await broadcastChatSession(sessionId, [manager.userId]);
 }

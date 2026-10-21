@@ -1,3 +1,5 @@
+import { recordAgentBoardScopeMiss } from "@/lib/auth/agentScope";
+import { reportMcpOperationCrash } from '@/lib/mcp/operationCrashReport'
 import { wrapMcpRoute, validateMcpRouteAuth as validateMcpAuth, checkMcpRouteRateLimit as checkMcpRateLimit } from '@/lib/mcp/routeWrapper'
 import { NextRequest, NextResponse } from 'next/server'
 
@@ -47,25 +49,9 @@ export interface ListProjectsResponse {
   nextCursor?: string | null
 }
 
-/**
- * GET /api/mcp/projects
- *
- * Lists all projects the authenticated user has access to.
- *
- * Query Parameters:
- * - status: Filter by status ('Normal', 'Archive', 'Deleted')
- * - search: Search term for project title/name
- * - limit: Maximum number of results (default: 50)
- * - offset: Number of results to skip (default: 0)
- * - sort_by: Field to sort by ('title', 'createdAt', 'updatedAt')
- * - sort_order: Sort order ('asc' or 'desc', default: 'asc')
- *
- * Authentication: Bearer token (JWT or API key) in Authorization header
- */
 export async function GET(request: NextRequest) {
   return wrapMcpRoute(async (request: NextRequest) => {
   try {
-    // Validate authentication
     const rateLimited = await checkMcpRateLimit(request)
     if (rateLimited) return rateLimited
     const ctx = await validateMcpAuth(request)
@@ -79,7 +65,6 @@ export async function GET(request: NextRequest) {
       )
     }
     const user = ctx.user;
-    // Parse query parameters
     const searchParams = request.nextUrl.searchParams
 
     const parsedListQuery = readListQuery(searchParams)
@@ -98,7 +83,7 @@ export async function GET(request: NextRequest) {
       )
     }
     const search = listQuery?.query || searchParams.get('search') || undefined
-    const limit = Math.min(listQuery?.limit ?? parseInt(searchParams.get('limit') || '50'), 100) // Max 100
+    const limit = Math.min(listQuery?.limit ?? parseInt(searchParams.get('limit') || '50'), 100)
     const offset = Math.max(parseInt(searchParams.get('offset') || '0'), 0)
     const sortBy = listQuery?.sortBy || searchParams.get('sort_by') || 'title'
     const sortOrder = listQuery?.sortOrder || searchParams.get('sort_order') || 'asc'
@@ -146,7 +131,6 @@ export async function GET(request: NextRequest) {
       where.updatedAt = { gte: since }
     }
 
-    // Build orderBy
     const orderBy: any = {}
     if (sortBy === 'title') {
       orderBy.title = sortOrder
@@ -155,13 +139,11 @@ export async function GET(request: NextRequest) {
     } else if (sortBy === 'updatedAt') {
       orderBy.updatedAt = sortOrder
     } else {
-      orderBy.title = 'asc' // Default
+      orderBy.title = 'asc'
     }
 
-    // Get total count
     const total = await prisma.project.count({ where })
 
-    // Get projects with pagination
     const projects = await prisma.project.findMany({
       where,
       select: {
@@ -210,7 +192,7 @@ export async function GET(request: NextRequest) {
       ...(cursorId ? { cursor: { id: cursorId } } : {}),
     })
 
-    // Transform to response format
+    projects.forEach(project => recordAgentBoardScopeMiss(project.id, "read"));
     const projectList: ProjectListItem[] = projects.map(project => ({
       id: project.id,
       title: project.title || '',
@@ -250,6 +232,7 @@ export async function GET(request: NextRequest) {
     return NextResponse.json(response)
   } catch (error) {
     console.error('Error listing projects:', error)
+    reportMcpOperationCrash(request, error)
     return NextResponse.json(
       {
         success: false,

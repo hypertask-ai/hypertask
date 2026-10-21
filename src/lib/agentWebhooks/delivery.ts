@@ -130,7 +130,11 @@ export async function deliverAgentWebhook(
     }),
   ]);
 
-  if (!failedPermanently) {
+  if (failedPermanently) {
+    console.error(
+      `[agent-webhook] delivery failed after ${attemptCount} attempts (${result.statusCode ? `HTTP ${result.statusCode}` : "no response"})`,
+    );
+  } else {
     await queueAgentWebhookDelivery(
       delivery.id,
       Math.floor(nextAttemptAt.getTime() / 1000),
@@ -164,7 +168,6 @@ export async function deliverAgentWebhook(
   };
 }
 
-/** Republish due rows that were stranded by a QStash publish failure. */
 export async function sweepAgentWebhookDeliveries(limit = 100): Promise<number> {
   const now = new Date();
   const staleBefore = new Date(now.getTime() - PROCESSING_LEASE_MS);
