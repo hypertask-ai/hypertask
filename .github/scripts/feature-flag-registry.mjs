@@ -245,10 +245,10 @@ export function parseFlagFile(source, path) {
   }
   if (fields.has("releaseRisk")) {
     const risk = fields.get("releaseRisk");
-    if (!typescript.isObjectLiteralExpression(risk) || risk.properties.length < 2 || risk.properties.length > 3 || risk.properties.some((entry) =>
+    if (!typescript.isObjectLiteralExpression(risk) || risk.properties.length < 2 || risk.properties.length > 4 || risk.properties.some((entry) =>
       !typescript.isPropertyAssignment(entry) || !(typescript.isIdentifier(entry.name) || typescript.isStringLiteral(entry.name)))) fail("releaseRisk needs literal risk and reason fields");
     const values = new Map(risk.properties.map((entry) => [entry.name.text, unwrapExpr(entry.initializer)]));
-    if (values.size !== risk.properties.length || [...values.keys()].some((name) => !["risk", "reason", "highRisk"].includes(name))) fail("releaseRisk needs literal risk, reason and optional highRisk fields");
+    if (values.size !== risk.properties.length || [...values.keys()].some((name) => !["risk", "reason", "highRisk", "ownerRequest"].includes(name))) fail("releaseRisk needs literal risk, reason and optional highRisk and ownerRequest fields");
     const level = values.get("risk"), reason = values.get("reason");
     if (!level || !typescript.isStringLiteral(level) || !["none", "small", "new"].includes(level.text) ||
         !reason || !typescript.isStringLiteral(reason) || !reason.text.trim() || /[\r\n\u2014]/.test(reason.text)) fail("releaseRisk needs risk none, small or new and a nonempty one-line reason");
@@ -257,6 +257,17 @@ export function parseFlagFile(source, path) {
       const highRisk = values.get("highRisk");
       if (!typescript.isStringLiteral(highRisk) || !["money", "access", "data-deletion", "customer-email"].includes(highRisk.text)) fail("releaseRisk.highRisk must be money, access, data-deletion or customer-email");
       definition.releaseRisk.highRisk = highRisk.text;
+    }
+    if (values.has("ownerRequest")) {
+      const ownerRequest = values.get("ownerRequest");
+      if (!typescript.isObjectLiteralExpression(ownerRequest) || ownerRequest.properties.length !== 2 || ownerRequest.properties.some((entry) =>
+        !typescript.isPropertyAssignment(entry) || !(typescript.isIdentifier(entry.name) || typescript.isStringLiteral(entry.name)))) fail("releaseRisk.ownerRequest needs exactly literal quote and ticketUrl fields");
+      const request = new Map(ownerRequest.properties.map((entry) => [entry.name.text, unwrapExpr(entry.initializer)]));
+      if (request.size !== 2 || [...request.keys()].some((name) => !["quote", "ticketUrl"].includes(name))) fail("releaseRisk.ownerRequest needs exactly literal quote and ticketUrl fields");
+      const quote = request.get("quote"), ticketUrl = request.get("ticketUrl");
+      if (!quote || !typescript.isStringLiteral(quote) || !quote.text.trim()) fail("releaseRisk.ownerRequest.quote must be a non-blank string literal quoting Valentin's explicit Owner only request");
+      if (!ticketUrl || !typescript.isStringLiteral(ticketUrl) || !/^https:\/\/app\.hypertask\.ai\/detail\/project-\d+\/\d+$/.test(ticketUrl.text)) fail("releaseRisk.ownerRequest.ticketUrl must be a string literal like https://app.hypertask.ai/detail/project-15/123 with only numeric project and ticket IDs");
+      definition.releaseRisk.ownerRequest = { quote: quote.text, ticketUrl: ticketUrl.text };
     }
     if (definition.releaseRisk.highRisk && (definition.defaultMode ?? (definition.kind === "bugfix" ? "EVERYONE" : "OWNER_AND_QA")) === "EVERYONE") fail("a flag with releaseRisk.highRisk may not default to Everyone");
   }
