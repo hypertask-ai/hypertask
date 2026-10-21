@@ -5,7 +5,7 @@ import { MobileViewContext } from "@/lib/contexts/mobileContext";
 import { HTPR_6371_MOBILE_SEARCH_FLAG, HTPR_6368_SEARCH_OPERATOR_LOGIC_FLAG, HTPR_7387_SEARCH_OPERATOR_COLOURS_FLAG, HTPR_7563_SEARCH_ESC_FOOTER_FLAG } from "@/lib/flags/keys";
 import { isMobileSearchSubmit, mobileSearchPickerBounds } from "@/lib/search/mobile";
 import { useFlag } from "@/hooks/useFlag";
-import { HTPR_6865_SEARCH_LAYOUT_FLAG, HTPR_6878_SEARCH_LABEL_SCOPE_FLAG, HTPR_6879_SEARCH_ESC_BACK_FLAG, HTPR_6880_SEARCH_COMMENTER_FLAG, HTPR_6994_SEARCH_ESC_LEAVES_FLAG } from "@/lib/flags/keys";
+import { HTPR_6865_SEARCH_LAYOUT_FLAG, HTPR_6878_SEARCH_LABEL_SCOPE_FLAG, HTPR_6880_SEARCH_COMMENTER_FLAG, HTPR_6994_SEARCH_ESC_LEAVES_FLAG } from "@/lib/flags/keys";
 import { MentionListRows } from "@/components/AI_CHAT/MentionListComp";
 import { candidateQuery, chipQuery, searchChipText, splitSearchChips } from "@/lib/search/chips";
 import { operatorMatches, parseSearchTokens, SEARCH_OPERATORS, LOGIC_OPERATORS, type Names, type SearchToken } from "@/lib/search/operators";
@@ -39,8 +39,6 @@ export default function SearchChipsInput({ value, onChange, onRun, boardId, inpu
   const layoutEnabled = layoutFlagEnabled && layoutRequested;
   const labelScopeFlagEnabled = useFlag(HTPR_6878_SEARCH_LABEL_SCOPE_FLAG);
   const labelScopeEnabled = labelScopeFlagEnabled && layoutEnabled;
-  const searchEscBackFlagEnabled = useFlag(HTPR_6879_SEARCH_ESC_BACK_FLAG);
-  const searchEscBackEnabled = searchEscBackFlagEnabled && layoutEnabled;
   const escLeavesEnabled = useFlag(HTPR_6994_SEARCH_ESC_LEAVES_FLAG);
   const escFooterEnabled = useFlag(HTPR_7563_SEARCH_ESC_FOOTER_FLAG);
   const escFooterText = escFooterEnabled && escLeavesEnabled ? 'Esc to go back' : 'Esc to close';
@@ -79,7 +77,7 @@ export default function SearchChipsInput({ value, onChange, onRun, boardId, inpu
   const completion = operatorColoursEnabled
     ? searchCompletion(text, names, commenterEnabled, operatorLogicEnabled)
     : searchCompletion(text, names, commenterEnabled);
-  const tips = (focused || searchEscBackEnabled) && !value.trim();
+  const tips = (focused || layoutEnabled) && !value.trim();
   const picker = dismissed ? null : completion;
   const localRows = completion?.kind === 'operator'
     ? operatorSuggestions(completion.value, commenterEnabled, logicEnabled).map((operator) => ({ id: operator, name: `${operator}:` }))
@@ -95,7 +93,7 @@ export default function SearchChipsInput({ value, onChange, onRun, boardId, inpu
     ...(localRows ?? []).map((row) => ({ ...row, kind: completion?.kind === 'operator' ? 'operator' as const : 'value' as const })),
     ...((localRows === null || genericPrefix) ? candidates.map((row) => ({ ...row, kind: 'value' as const })) : []),
   ] : localRows ?? candidates;
-  const open = !(mobileEnabled && composing) && ((searchEscBackEnabled && tips) || (!dismissed && (layoutEnabled ? focused && showSuggestions && Boolean(value.trim() || tips) : Boolean(picker || tips))));
+  const open = !(mobileEnabled && composing) && ((layoutEnabled && tips) || (!dismissed && (layoutEnabled ? focused && showSuggestions && Boolean(value.trim() || tips) : Boolean(picker || tips))));
   const openRef = useRef(open);
   openRef.current = open;
   const listId = "search-chip-options";
@@ -206,8 +204,8 @@ export default function SearchChipsInput({ value, onChange, onRun, boardId, inpu
   }, [boardId]);
 
   useEffect(() => {
-    if (searchEscBackEnabled && !showSuggestions) setEditing(false);
-  }, [searchEscBackEnabled, showSuggestions, value]);
+    if (layoutEnabled && !showSuggestions) setEditing(false);
+  }, [layoutEnabled, showSuggestions, value]);
 
   useEffect(() => {
     if (!(genericPrefix || picker) || (!genericPrefix && (completion?.kind === 'operator' || localRows !== null))) {
@@ -309,7 +307,7 @@ export default function SearchChipsInput({ value, onChange, onRun, boardId, inpu
 
   function chipText(chip: SearchToken) {
     const name = chipLabels[`${chip.operator}:${chip.value}`] ?? chip.value;
-    return searchChipText(chip, name, searchEscBackEnabled);
+    return searchChipText(chip, name, layoutEnabled);
   }
 
   function choose(row: Candidate) {
