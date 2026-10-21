@@ -274,10 +274,11 @@ test("email models stay unchanged and flag defaults to Owner + QA", () => {
   const { execFileSync } = require("node:child_process");
   const baseline = execFileSync("git", ["show", "origin/production:src/prisma/schema.prisma"], { cwd: root, encoding: "utf8" });
   const schema = read("src/prisma/schema.prisma");
-  // The email reuses existing models; unrelated tickets may add models, migrations, indexes, the HTPR-7271 Project.seeded flag, and HTPR-7298 PageTaskLink back-relations.
+  // The email reuses existing models; unrelated tickets may add models, migrations, indexes, the HTPR-7271 Project.seeded flag, HTPR-7298 PageTaskLink back-relations, and the HTPR-7515 BoardGithubRepository back-relation.
   const pageLinkRelations = {
     User: /^\s*pageTaskLinksCreated\s+PageTaskLink\[\]\s*$/,
     Task: /^\s*pageLinks\s+PageTaskLink\[\]\s*$/,
+    Project: /^\s*githubRepositories\s+BoardGithubRepository\[\]\s*$/,
   };
   const fields = (model, name) => model.split("\n").filter((line) => !/^\s*(\/\/.*|@@index\(.*\)|featureFlagChanges\s+FeatureFlagChange\[\]|seeded\s+Boolean\s+@default\(false\))?\s*$/.test(line) && !pageLinkRelations[name]?.test(line)).join("\n");
   for (const name of ["Logs", "User", "Section", "Agent", "Project", "Task"]) {
