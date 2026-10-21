@@ -3,26 +3,42 @@ const test = require("node:test");
 const { NextRequest } = require("next/server");
 const { fixture, matches, hydrate } = require("./helpers/agent-board-scope.cjs");
 
-function harness({ actor = "owner", enabled = true, visibility = "TEAM", agentOwner = 99 } = {}) {
+function harness({ actor = "owner", enabled = true, visibility = "TEAM", agentOwner = 99, runtimeType = "EXTERNAL" } = {}) {
   const f = fixture();
   const team = { id: "team", googleAccount: { userId: 6 } };
   f.state.ctx.agentId = actor === "agent" ? f.agent.id : null;
   f.state.ctx.user.id = actor === "member" ? 7 : actor === "other-owner" ? 8 : 6;
   const target = {
-    id: "target-agent", userId: agentOwner, visibility, displayName: "Helper",
+    id: "target-agent", userId: agentOwner, visibility, runtimeType, displayName: "Helper",
     createdAt: new Date(), revokedAt: null, permissions: { role: "write", postsToImportant: false, extra: "kept" },
     members: [{ project: { id: 15, teamId: "team", title: "Board" } }],
   };
   const writes = [];
   const transactions = [];
   f.prisma.team.findFirst = async args => matches(team, args.where) ? hydrate(team, args) : null;
-  f.prisma.agent.findFirst = async args => matches(target, args.where) ? hydrate(target, args) : null;
+  f.prisma.agent.findFirst = async args => {
+    const snapshot = matches(target, args.where) ? hydrate(target, args) : null;
+    await f.state.afterAgentRead?.(args);
+    return snapshot;
+  };
   f.prisma.agent.findUnique = f.prisma.agent.findFirst;
   f.prisma.agent.update = async args => {
     assert.ok(matches(target, args.where));
     writes.push(args);
     Object.assign(target, args.data);
     return hydrate(target, args);
+  };
+  f.prisma.$executeRaw = async (strings, ...values) => {
+    const sql = strings.join("?").replace(/\s+/g, " ").trim();
+    const match = sql.match(/^UPDATE "Agent" SET "permissions" = \(CASE WHEN jsonb_typeof\("permissions"\) = 'object' THEN "permissions" ELSE '\{\}'::jsonb END\) \|\| jsonb_build_object\('(role|postsToImportant)', \?::(text|boolean)\) WHERE "id" = \?$/);
+    assert.ok(match, `Expected a parameterized, single-key JSONB merge: ${sql}`);
+    const key = match[1];
+    assert.equal(match[2], key === "role" ? "text" : "boolean");
+    assert.equal(values.length, 2);
+    assert.equal(values[1], target.id);
+    writes.push({ sql, values });
+    target.permissions = { ...target.permissions, [key]: values[0] };
+    return 1;
   };
   f.prisma.$transaction = async (run, options) => {
     transactions.push(options);
@@ -62,7 +78,7 @@ for (const role of ["read", "write", "admin"]) {
     assert.deepEqual(await response.json(), { success: true, agent: { id: h.target.id, role } });
     assert.deepEqual(h.target.permissions, { role, postsToImportant: false, extra: "kept" });
     assert.equal(h.writes.length, 1);
-    assert.deepEqual(h.transactions, [{ isolationLevel: "Serializable" }]);
+    assert.deepEqual(h.transactions, [undefined]);
     const scopes = h.load("src/lib/mcp/agents/scopes.ts");
     assert.equal(await scopes.getAgentRole({ agentId: h.target.id }), role);
   });
@@ -151,3 +167,56 @@ for (const enabled of [false, true]) {
     assert.equal(Object.hasOwn(agents[0], "permissions"), false);
   });
 }
+
+for (const role of ["read", "write", "admin"]) {
+  test(`native agent role change to ${role} is refused without changing permissions`, async () => {
+    const h = harness({ runtimeType: "NATIVE" });
+    const response = await h.request({ teamId: "team", role });
+    assert.equal(response.status, 400);
+    assert.deepEqual(await response.json(), {
+      success: false, error: "This agent's role cannot be changed yet",
+    });
+    assert.equal(h.writes.length, 0);
+    assert.equal(h.target.permissions.role, "write");
+  });
+}
+
+for (const pausedWriter of ["preference", "role"]) {
+  test(`a stale ${pausedWriter} request preserves the other writer's latest permission`, { timeout: 5000 }, async () => {
+    const h = harness({ agentOwner: 6 });
+    h.target.permissions = { role: "admin", postsToImportant: false, extra: "kept" };
+    let markRead;
+    const read = new Promise(resolve => { markRead = resolve; });
+    let release;
+    const resume = new Promise(resolve => { release = resolve; });
+    h.state.afterAgentRead = async args => {
+      const isPausedRead = pausedWriter === "preference" ? !args.select : Boolean(args.select);
+      if (!isPausedRead) return;
+      h.state.afterAgentRead = null;
+      markRead();
+      await resume;
+    };
+    const roleBody = { teamId: "team", role: "read" };
+    const preferenceBody = { postsToImportant: true };
+    const pending = h.request(pausedWriter === "preference" ? preferenceBody : roleBody);
+    await read;
+    try {
+      const latest = await h.request(pausedWriter === "preference" ? roleBody : preferenceBody);
+      assert.equal(latest.status, 200);
+    } finally {
+      release();
+    }
+    assert.equal((await pending).status, 200);
+    assert.deepEqual(h.target.permissions, { role: "read", postsToImportant: true, extra: "kept" });
+    assert.equal(h.writes.filter(write => write.sql).length, 2);
+  });
+}
+
+test("preference-only editing initializes missing permissions without inventing a role", async () => {
+  const h = harness({ agentOwner: 6 });
+  h.target.permissions = null;
+  const response = await h.request({ postsToImportant: false });
+  assert.equal(response.status, 200);
+  assert.equal((await response.json()).agent.postsToImportant, false);
+  assert.deepEqual(h.target.permissions, { postsToImportant: false });
+});

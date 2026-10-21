@@ -5,8 +5,8 @@ import { useRecoilValue } from "@/lib/state";
 import { useFlag } from "@/hooks/useFlag";
 import { HTPR_7509_AGENT_ROLE_SCREEN_FLAG } from "@/lib/flags/keys";
 
-export const agentsQueryKey = (userId: number, teamId: string) =>
-  ["agents", userId, teamId] as const;
+export const agentsQueryKey = (userId: number, teamId: string, agentRolesEnabled: boolean) =>
+  ["agents", userId, teamId, agentRolesEnabled] as const;
 
 export const boardAgentsQueryKey = (projectId: number) =>
   ["boardAgents", projectId] as const;
@@ -98,7 +98,7 @@ export function useAgents(
   const listQuery = useQuery({
     queryKey:
       typeof userId === "number" && teamId
-        ? agentsQueryKey(userId, teamId)
+        ? agentsQueryKey(userId, teamId, agentRolesEnabled)
         : ["agents", "none"],
     queryFn: () => fetchAgents(teamId!),
     enabled: typeof userId === "number" && Boolean(teamId),
@@ -118,7 +118,7 @@ export function useAgents(
   const invalidate = () => {
     if (typeof userId === "number" && teamId) {
       void queryClient.invalidateQueries({
-        queryKey: agentsQueryKey(userId, teamId),
+        queryKey: ["agents", userId, teamId],
       });
     }
     if (typeof projectId === "number") {
@@ -197,7 +197,7 @@ export function useAgents(
     onSuccess: (updatedAgent) => {
       if (typeof userId === "number") {
         queryClient.setQueryData<IAgent[]>(
-          agentsQueryKey(userId, updatedAgent.teamId),
+          agentsQueryKey(userId, updatedAgent.teamId, agentRolesEnabled),
           (agents) => agents?.map((agent) =>
             agent.id === updatedAgent.id ? { ...agent, role: updatedAgent.role } : agent,
           ),
@@ -234,7 +234,7 @@ export function useAgents(
     onSuccess: (updatedAgent) => {
       if (typeof userId === "number" && teamId) {
         queryClient.setQueryData<IAgent[]>(
-          agentsQueryKey(userId, teamId),
+          agentsQueryKey(userId, teamId, agentRolesEnabled),
           (agents) => mergeAgentRevocation(agents, updatedAgent),
         );
       }

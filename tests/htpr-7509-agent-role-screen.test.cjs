@@ -14,6 +14,7 @@ function harness({ enabled = true, owner = true, failSave = false, showBoards = 
     { id: "write-agent", displayName: "Writer", role: "write" },
     { id: "admin-agent", displayName: "Administrator", role: "admin" },
     { id: "legacy-agent", displayName: "Legacy" },
+    { id: "native-agent", displayName: "Native helper", role: "read", runtimeType: "NATIVE" },
   ].map(agent => ({ ...agent, boards: [{ id: 15, name: "Team board" }] }));
   const load = loader({
     "@/hooks/useFlag": { useFlag: key => { state.flagReads.push(key); return key === flag && enabled; } },
@@ -69,7 +70,7 @@ for (const enabled of [false, true]) {
         assert.equal(h.container.textContent.includes(legend), enabled);
         assert.equal(h.buttons().filter(button => button.textContent === "Change role").length, enabled && owner ? 4 : 0);
         const roles = [...h.container.querySelectorAll("span")].filter(span => ["Read", "Write", "Admin"].includes(span.textContent));
-        assert.deepEqual(roles.map(span => span.textContent), enabled ? ["Read", "Write", "Admin", "Write"] : []);
+        assert.deepEqual(roles.map(span => span.textContent), enabled ? ["Read", "Write", "Admin", "Read"] : []);
         assert.ok(h.container.textContent.includes("Disabled"));
         assert.ok(h.container.textContent.includes("Team board"));
         assert.ok(h.state.flagReads.filter(key => key === flag).length >= 2);
@@ -151,4 +152,40 @@ test("an owner whose cookie stores a string user ID still gets the role button",
   try {
     assert.equal(h.buttons().filter(button => button.textContent === "Change role").length, 4);
   } finally { h.close(); }
+});
+
+test("native agents keep their role chip but never offer Change role", () => {
+  const h = harness();
+  try {
+    const name = [...h.container.querySelectorAll("span")].find(span => span.textContent === "Native helper");
+    const row = name.closest(".hover\\:bg-hover-active");
+    assert.ok(row);
+    assert.ok([...row.querySelectorAll("span")].some(span => span.textContent === "Read"));
+    assert.equal(row.querySelector("button"), null);
+    assert.ok(h.buttons().some(button => button.textContent === "Change role"));
+  } finally { h.close(); }
+});
+
+test("a missing role shows no chip and no Current mark in the picker", () => {
+  const h = harness();
+  try {
+    const legacyName = [...h.container.querySelectorAll("span")].find(span => span.textContent === "Legacy");
+    const row = legacyName.closest(".hover\\:bg-hover-active");
+    assert.ok(row);
+    assert.equal([...row.querySelectorAll("span")].some(span => ["Read", "Write", "Admin"].includes(span.textContent)), false);
+    h.click(row.querySelector("button"));
+    assert.ok(h.container.textContent.includes("Role for Legacy"));
+    assert.deepEqual(h.buttons().filter(button => button.id.startsWith("option-picker-")).map(button => button.textContent), labels);
+    assert.equal(h.container.textContent.includes("Current"), false);
+  } finally { h.close(); }
+});
+
+test("agent role access flag defaults to Owner + QA with explicit high-risk access", () => {
+  const definition = loader()("src/lib/flags/definitions/htpr-7509-agent-role-screen.ts").default;
+  assert.equal(definition.key, flag);
+  assert.equal(definition.kind, "feature");
+  assert.equal(definition.defaultMode, "OWNER_AND_QA");
+  assert.equal(definition.releaseRisk.risk, "new");
+  assert.equal(definition.releaseRisk.highRisk, "access");
+  assert.ok(definition.releaseRisk.reason.trim());
 });

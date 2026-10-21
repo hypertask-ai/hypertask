@@ -59,7 +59,7 @@ const TeamAgentsSection = () => {
             { id: "admin", label: "Admin · also gives other agents access" },
           ].map((option) => ({
             ...option,
-            hint: (editingAgent.role ?? "write") === option.id ? "Current" : undefined,
+            hint: editingAgent.role === option.id ? "Current" : undefined,
           }))}
           onClose={() => setEditingAgent(null)}
           onSelect={(option) => {

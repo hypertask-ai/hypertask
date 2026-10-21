@@ -26,20 +26,21 @@ export async function changeTeamAgentRole(
           every: { project: { OR: [{ teamId }, { teamId: null }] } },
         },
       },
-      select: { id: true, permissions: true },
+      select: { id: true, runtimeType: true },
     });
     if (!agent) {
       return { ok: false as const, status: 404, error: "Agent does not exist in this team" };
     }
 
-    const permissions =
-      agent.permissions && typeof agent.permissions === "object" && !Array.isArray(agent.permissions)
-        ? agent.permissions
-        : {};
-    await tx.agent.update({
-      where: { id: agent.id },
-      data: { permissions: { ...permissions, role } },
-    });
+    if (agent.runtimeType === "NATIVE") {
+      return { ok: false as const, status: 400, error: "This agent's role cannot be changed yet" };
+    }
+
+    await tx.$executeRaw`
+      UPDATE "Agent"
+      SET "permissions" = (CASE WHEN jsonb_typeof("permissions") = 'object' THEN "permissions" ELSE '{}'::jsonb END) || jsonb_build_object('role', ${role}::text)
+      WHERE "id" = ${agent.id}
+    `;
     return { ok: true as const, agent: { id: agent.id, role } };
-  }, { isolationLevel: "Serializable" });
+  });
 }

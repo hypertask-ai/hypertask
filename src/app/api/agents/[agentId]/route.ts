@@ -3,7 +3,6 @@ import { NextRequest, NextResponse } from "next/server";
 import { isFeatureEnabled } from "@/lib/flags";
 import { HTPR_7509_AGENT_ROLE_SCREEN_FLAG } from "@/lib/flags/keys";
 import { changeTeamAgentRole } from "@/utils/controllers/agents/changeTeamAgentRole";
-import type { Prisma } from "@prisma/client";
 import prisma from "@/lib/prisma";
 import {
   agentTokenCredentialFields,
@@ -639,7 +638,6 @@ async function patchAgent(
   const data: {
     displayName?: string;
     photoURL?: string | null;
-    permissions?: Prisma.InputJsonValue;
     prompt?: string | null;
     modelOptionId?: string | null;
     archivedAt?: Date | null;
@@ -728,26 +726,16 @@ async function patchAgent(
         { status: 400 },
       );
     }
-    const permissions =
-      existing.permissions &&
-      typeof existing.permissions === "object" &&
-      !Array.isArray(existing.permissions)
-        ? existing.permissions
-        : {};
-    data.permissions = {
-      ...permissions,
-      postsToImportant: body.postsToImportant,
-    };
   }
 
-  if (Object.keys(data).length === 0) {
+  if (Object.keys(data).length === 0 && body.postsToImportant === undefined) {
     return NextResponse.json(
       { success: false, error: "No valid fields to update" },
       { status: 400 },
     );
   }
 
-  const agent = await prisma.agent.update({
+  const update = {
     where: { id: existing.id },
     data,
     select: {
@@ -764,7 +752,17 @@ async function patchAgent(
       modelOptionId: true,
       heartbeatAt: true,
     },
-  });
+  } as const;
+  const agent = typeof body.postsToImportant === "boolean"
+    ? await prisma.$transaction(async (tx) => {
+        await tx.$executeRaw`
+          UPDATE "Agent"
+          SET "permissions" = (CASE WHEN jsonb_typeof("permissions") = 'object' THEN "permissions" ELSE '{}'::jsonb END) || jsonb_build_object('postsToImportant', ${body.postsToImportant}::boolean)
+          WHERE "id" = ${existing.id}
+        `;
+        return tx.agent.update(update);
+      })
+    : await prisma.agent.update(update);
 
   const { permissions, ...agentFields } = agent;
   const slugs = await ownedAgentSlugs(user.id);
