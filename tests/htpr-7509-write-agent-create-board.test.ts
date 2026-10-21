@@ -17,6 +17,7 @@ const user = { id: 42, email: 'owner@example.invalid', displayName: 'Owner' }
 const ctx: McpAuthContext = { user, agentId: 'writer' }
 let role: AgentRole | undefined = 'write'
 let memberTeamIds: Array<string | null> = ['team']
+let memberStatus = 'Accepted'
 let membership = true
 let ownsTeam = false
 let agentOwnerId = user.id
@@ -31,7 +32,7 @@ const prisma = {
       const agent = {
         id: ctx.agentId,
         userId: agentOwnerId,
-        members: memberTeamIds.map(teamId => ({ project: { teamId } })),
+        members: memberTeamIds.map(teamId => ({ status: memberStatus, project: { teamId } })),
       }
       return matches(agent, where) ? { id: agent.id } : null
     },
@@ -80,6 +81,7 @@ function reset() {
   ctx.agentId = 'writer'
   role = 'write'
   memberTeamIds = ['team']
+  memberStatus = 'Accepted'
   membership = true
   ownsTeam = false
   agentOwnerId = user.id
@@ -163,6 +165,14 @@ for (const teamIds of [['team', 'other-team'], ['team', null]]) {
     assert.equal(creations.length, 1)
   })
 }
+
+test('write agent with only an Invited board membership in the team is refused', async () => {
+  reset()
+  memberStatus = 'Invited'
+  const response = await createBoard()
+  assert.equal(response.status, 403)
+  assert.deepEqual(creations, [])
+})
 
 test('write agent cannot bypass the owner user team access check', async () => {
   reset()

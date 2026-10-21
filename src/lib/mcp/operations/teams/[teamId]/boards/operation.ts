@@ -142,7 +142,7 @@ export async function POST(
         where: {
           id: ctx.agentId,
           userId: user.id,
-          members: { some: { project: { teamId: team.id } } },
+          members: { some: { status: 'Accepted', project: { teamId: team.id } } },
         },
         select: { id: true },
       })
