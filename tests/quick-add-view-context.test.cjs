@@ -229,7 +229,7 @@ test("client defaults render human and agent avatars without response assignment
   }
 });
 
-test("modal inherits sanitized tags and preserves duplicate defaults and board switches", () => {
+test("modal always inherits filtered view defaults and preserves selected tags", () => {
   const source = fs.readFileSync(path.join(root, "src/hooks/MultiPages/Tasks/useCreateTaskModalStates.ts"), "utf8");
   const parsed = ts.createSourceFile("modal.ts", source, ts.ScriptTarget.Latest, true);
   let expression;
@@ -244,17 +244,24 @@ test("modal inherits sanitized tags and preserves duplicate defaults and board s
   const switchExpression = source.match(/const tags = ([\s\S]*?);/)[1];
   const activeFilters = filters({ Labels: [{ id: "no-label" }, ...labels], Assignees: assignees, Priority: [priority], Size: [estimate] });
   const project = { project_view: { user_project_views: [{ appliedView: { board_filters: activeFilters } }] } };
-  const evaluate = new Function("createTaskModal", "_currentProject", "getNewTaskViewDefaults", "getActiveFiltersFromProject", "normalizeCreateTaskFormDate", ts.transpileModule(`const newTaskWindowViewContextEnabled = false; return (${expression})();`, { compilerOptions: { target: ts.ScriptTarget.ES2022 } }).outputText);
-  const form = evaluate({}, project, defaults.getNewTaskViewDefaults, viewHelpers.getActiveFiltersFromProject, value => value);
+  const calls = [];
+  const getDefaults = active => { calls.push(active); return defaults.getNewTaskViewDefaults(active); };
+  const evaluate = new Function("createTaskModal", "_currentProject", "getNewTaskViewDefaults", "getActiveFiltersFromProject", "normalizeCreateTaskFormDate", ts.transpileModule(`return (${expression})();`, { compilerOptions: { target: ts.ScriptTarget.ES2022 } }).outputText);
+  const form = evaluate({}, project, getDefaults, viewHelpers.getActiveFiltersFromProject, value => value);
+  assert.deepEqual(calls, [activeFilters]);
   assert.deepEqual(form.tags, labels);
-  assert.deepEqual(form.assignees, []);
-  assert.equal(form.priority, undefined);
-  assert.equal(form.estimate, undefined);
-  const switchTags = new Function("project", "getNewTaskViewDefaults", "getActiveFiltersFromProject", `const newTaskWindowViewContextEnabled = false; const viewDefaults = getNewTaskViewDefaults(getActiveFiltersFromProject(project)); return (${switchExpression});`);
-  assert.deepEqual(switchTags(project, defaults.getNewTaskViewDefaults, viewHelpers.getActiveFiltersFromProject), labels);
+  assert.deepEqual(form.assignees, assignees);
+  assert.deepEqual(form.priority, priority);
+  assert.deepEqual(form.estimate, estimate);
+  const switchTags = new Function("formValuesRef", "editedViewFieldsRef", "boardChanged", "viewDefaults", `return (${switchExpression});`);
+  const viewDefaults = defaults.getNewTaskViewDefaults(activeFilters);
+  assert.deepEqual(switchTags({ current: form }, { current: {} }, true, viewDefaults), labels);
+  assert.deepEqual(switchTags({ current: { tags: [] } }, { current: { tags: true } }, true, viewDefaults), []);
   const duplicate = { taskLabels: [{ label: labels[0] }], priority, estimate };
-  const duplicateForm = evaluate({ duplicate }, project, defaults.getNewTaskViewDefaults, viewHelpers.getActiveFiltersFromProject, value => value);
+  const duplicateForm = evaluate({ duplicate }, project, getDefaults, viewHelpers.getActiveFiltersFromProject, value => value);
+  assert.deepEqual(calls, [activeFilters, activeFilters]);
   assert.deepEqual(duplicateForm.tags, [labels[0]]);
+  assert.deepEqual(duplicateForm.assignees, []);
   assert.deepEqual(duplicateForm.priority, priority);
   assert.deepEqual(duplicateForm.estimate, estimate);
 });
