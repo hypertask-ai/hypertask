@@ -218,7 +218,7 @@ function agent(id, overrides = {}) {
 }
 const membership = (teamId, id = 15) => ({ project: { id, teamId, name: "Board", title: null } });
 
-function candidates(rows, access = true) {
+function candidates(rows, access = true, flagOn = true) {
   let query;
   let selectedIds;
   const prisma = {
@@ -244,8 +244,14 @@ function candidates(rows, access = true) {
     "@/utils/controllers/teams/hasTeamMembershipAccess": { hasTeamMembershipAccess: async () => access },
     "@/lib/agents/visibility": visibility,
     "@/lib/auth/getSessionUser": { getSessionUser: async () => ({ userId: 6 }) },
-    "@/lib/flags": { isFeatureEnabled: async () => false, isOwnerOrQaUserId: async () => false },
-    "@/lib/flags/keys": { HTPR_7509_AGENT_ROLE_SCREEN_FLAG: "unused" },
+    "@/lib/flags": {
+      isFeatureEnabled: async (key) => flagOn && key === "htpr-7574-owned-unattached-agents",
+      isOwnerOrQaUserId: async () => false,
+    },
+    "@/lib/flags/keys": {
+      HTPR_7509_AGENT_ROLE_SCREEN_FLAG: "unused",
+      HTPR_7574_OWNED_UNATTACHED_AGENTS_FLAG: "htpr-7574-owned-unattached-agents",
+    },
     "@/utils/controllers/agents/ensureDefaultTeamAgent": {},
   });
   return {
@@ -308,6 +314,27 @@ test("S3 still excluded: post-query team filter rejects a legacy agent attached 
   assert.equal(response.status, 200);
   assert.deepEqual(state.selectedIds(), ["mixed", "positive-control"]);
   assert.deepEqual((await response.json()).agents.map(({ id }) => id), ["positive-control"]);
+});
+
+test("S3 flag off: viewer-owned unattached agent stays hidden as before", async () => {
+  const state = candidates([
+    agent("owned-unattached"),
+    agent("owned", { members: [membership("team")] }),
+  ], true, false);
+  const response = await state.get();
+  assert.equal(response.status, 200);
+  assert.deepEqual(state.selectedIds(), ["owned"]);
+  assert.deepEqual((await response.json()).agents.map(({ id }) => id), ["owned"]);
+});
+
+test("S3 flag off: same-team owned and shared agents still listed", async () => {
+  const state = candidates([
+    agent("owned", { members: [membership("team")] }),
+    agent("shared", { userId: 9, visibility: "TEAM", members: [membership("team")] }),
+  ], true, false);
+  const response = await state.get();
+  assert.equal(response.status, 200);
+  assert.deepEqual((await response.json()).agents.map(({ id }) => id), ["owned", "shared"]);
 });
 
 test("S3 still refused: team access is required before listing owned unattached agents", async () => {
