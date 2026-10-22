@@ -3,16 +3,16 @@
     "path": "src/lib/mcp/operations/comments/operation.ts",
     "call": "prisma.comment.count({ where: commentWhere })",
     "occurrence": 1,
-    "approvedIn": "https://app.hypertask.ai/detail/project-15/7514",
-    "sha256": "341778cdd2740236710ce04cbdfdd61b6af95e487c103be8c38511aaecbf9676",
+    "approvedIn": "https://app.hypertask.ai/detail/project-15/7583",
+    "sha256": "8e65ed0b8b8c08af5dc634a45e0e7ac15d7c8596a9baeffe02a857267c3d984a",
     "reason": "validateMcpAuth supplies ctx.user and ctx.agentId. findTaskByIdentifier(user, identifier, ctx.agentId) must return a task before these calls; commentWhere fixes taskId to that authorized task and later filters only narrow it."
   },
   {
     "path": "src/lib/mcp/operations/comments/operation.ts",
     "call": "prisma.comment.findMany({ where: commentWhere, include: commentInclude(user.id, task.projectId), orderBy: [ { [sortField]: effectiveSortOrder }, { id: effectiveSortOrder }, ], take: pageLimit, skip: cursorId ? 1 : offset, ...(cursorId ? { cursor: { id: cursorId } } : {}), })",
     "occurrence": 1,
-    "approvedIn": "https://app.hypertask.ai/detail/project-15/7514",
-    "sha256": "341778cdd2740236710ce04cbdfdd61b6af95e487c103be8c38511aaecbf9676",
+    "approvedIn": "https://app.hypertask.ai/detail/project-15/7583",
+    "sha256": "8e65ed0b8b8c08af5dc634a45e0e7ac15d7c8596a9baeffe02a857267c3d984a",
     "reason": "validateMcpAuth supplies ctx.user and ctx.agentId. findTaskByIdentifier(user, identifier, ctx.agentId) must return a task before these calls; commentWhere fixes taskId to that authorized task and later filters only narrow it."
   },
   {
