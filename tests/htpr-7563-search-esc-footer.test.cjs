@@ -74,7 +74,7 @@ test('existing suggestion and tips footers match Escape for all four flag combin
           const event = new dom.window.KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true })
           await React.act(async () => input.dispatchEvent(event))
           assert.equal(event.defaultPrevented, !leaves, context)
-          assert.equal(input.getAttribute('aria-expanded'), String(leaves), context)
+          assert.equal(input.getAttribute('aria-expanded'), String(leaves || (layout && !initial)), context)
           assert.equal(input.value, initial, context)
         }
       }

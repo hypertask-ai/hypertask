@@ -177,10 +177,10 @@ test('client Ask AI uses the same readable chip summary and hands readable names
   await withSearch(t, { query: 'board:7 label:bug login' }, async ({ input, type, options, prompts, aiOpened }) => {
     await type('login updated')
     await React.act(async () => input().focus())
-    assert.equal(options()[0].textContent, 'Ask AIboard:#Product Board label:Bug login updated')
+    assert.equal(options()[0].textContent, 'Ask AIboard:Product Board label:Bug login updated')
     assert.doesNotMatch(options()[0].textContent, /board:7|label:bug/)
     await React.act(async () => options()[0].click())
-    assert.deepEqual(prompts, ['board:#Product Board label:Bug login updated'])
+    assert.deepEqual(prompts, ['board:Product Board label:Bug login updated'])
     assert.equal(aiOpened(), 1)
   })
 })

@@ -1,6 +1,6 @@
 import { parseSearchQuery } from "@/lib/search/operators";
 import { searchConfig } from "@/lib/configs/search.config";
-import { HTPR_6865_SEARCH_LAYOUT_FLAG, HTPR_6878_SEARCH_LABEL_SCOPE_FLAG, HTPR_6879_SEARCH_ESC_BACK_FLAG, HTPR_6880_SEARCH_COMMENTER_FLAG, HTPR_6994_SEARCH_ESC_LEAVES_FLAG } from "@/lib/flags/keys";
+import { HTPR_6865_SEARCH_LAYOUT_FLAG, HTPR_6878_SEARCH_LABEL_SCOPE_FLAG, HTPR_6880_SEARCH_COMMENTER_FLAG, HTPR_6994_SEARCH_ESC_LEAVES_FLAG } from "@/lib/flags/keys";
 import { useFlag, useFlagReady } from "@/hooks/useFlag";
 import { isServerSearchFor, type ServerStartedSearch } from "@/lib/search/serverStartedSearch";
 import { useDeviceContext } from "@/lib/contexts/deviceContext";
@@ -89,8 +89,6 @@ export function useSearch(
   const isApple = useDeviceContext();
   const searchLayoutEnabled = useFlag(HTPR_6865_SEARCH_LAYOUT_FLAG);
   const searchLabelScopeFlagEnabled = useFlag(HTPR_6878_SEARCH_LABEL_SCOPE_FLAG);
-  const searchEscBackFlagEnabled = useFlag(HTPR_6879_SEARCH_ESC_BACK_FLAG);
-  const searchEscBackEnabled = searchEscBackFlagEnabled && searchLayoutEnabled;
   const searchEscLeavesEnabled = useFlag(HTPR_6994_SEARCH_ESC_LEAVES_FLAG);
   const searchFlagsReady = useFlagReady(HTPR_6865_SEARCH_LAYOUT_FLAG);
   const isSearchDraft = searchLayoutEnabled && submittedQuery !== inputValue.trim();
@@ -121,7 +119,7 @@ export function useSearch(
   }
 
   function recordSearch(searchTerm: string, showArchived: boolean) {
-    if (searchEscBackEnabled) {
+    if (searchLayoutEnabled) {
       const history = getTabSearchHistory();
       const term = searchTerm.trim();
       if (term.length >= 2 && history.at(-1) !== term) {
@@ -415,7 +413,7 @@ export function useSearch(
 
     if (event.keyCode === KeyCodes.ESCAPE && !showCommands.show) {
       event.preventDefault();
-      if (searchEscBackEnabled && !searchEscLeavesEnabled) {
+      if (searchLayoutEnabled && !searchEscLeavesEnabled) {
         const history = getTabSearchHistory();
         if (!isSearchDraft) history.pop();
         const previous = history.at(-1) ?? "";
@@ -723,7 +721,6 @@ export function useSearch(
     selectedHistory,
     includeArchived,
     searchLayoutEnabled,
-    searchEscBackEnabled,
     searchEscLeavesEnabled,
     isSearchDraft,
     activeSplit,
@@ -753,7 +750,7 @@ export function useSearch(
     setInputValue(_searchTerm);
     if (projects.length > 0 && _searchTerm.length >= 2) {
       const key = currentSearchKey(_searchTerm, _includeArchived);
-      const sameSearchMissingFromHistory = lastSearchKey.current === key && searchEscBackEnabled &&
+      const sameSearchMissingFromHistory = lastSearchKey.current === key && searchLayoutEnabled &&
         getTabSearchHistory().at(-1) !== _searchTerm.trim();
       const serverSearchAwaitsFlags = !!pendingServerSearch.current && !searchFlagsReady;
       if (searchOnce && sameSearchMissingFromHistory) recordSearch(_searchTerm, _includeArchived);
@@ -766,7 +763,7 @@ export function useSearch(
       lastSearchKey.current = currentSearchKey("", _includeArchived);
       handleStatesOnResponse(searchConfig.responseMessages.default);
     }
-  }, [_searchTerm.length >= 2 ? projects : null, _includeArchived, _searchTerm, _fromProject, searchEscBackEnabled]);
+  }, [_searchTerm.length >= 2 ? projects : null, _includeArchived, _searchTerm, _fromProject, searchLayoutEnabled]);
 
   useEffect(() => {
     if (!searchFlagsReady || !mountSearchAwaitsFlags.current) return;
