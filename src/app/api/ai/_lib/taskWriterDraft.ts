@@ -1,7 +1,7 @@
 import { generateText } from "ai";
 import { configureAiModelUsage } from "./modelProvider";
 import { filterOneImagePass } from "./editorAi";
-import { prepareTaskWriterRun, type TaskWriterRequest } from "./taskWriterRun";
+import { taskWriterPlaceholderFeedback, prepareTaskWriterRun, type TaskWriterRequest } from "./taskWriterRun";
 import { extractTaskWriterProperties, hasUsableTaskWriterDraft, TASK_WRITER_EMPTY_DRAFT_MESSAGE } from "./taskWriterProperties";
 import { taskTitleFromBrief } from "@/lib/ai/taskWriterDuplicateGuard";
 
@@ -19,6 +19,7 @@ export async function generateTaskWriterDraft(
     skills,
     usageTaskId,
     validateDraft,
+    taskTemplatesEnabled,
     customFieldDefinitions,
     boardLabelIds,
   } = await prepareTaskWriterRun(body, userId, agentId);
@@ -32,7 +33,7 @@ export async function generateTaskWriterDraft(
     provider: selected.usageProvider,
     feature: "task-writer",
   });
-  const { text } = await generateText({
+  const options = {
     model: selected.model,
     instructions,
     messages,
@@ -41,7 +42,15 @@ export async function generateTaskWriterDraft(
     providerOptions: selected.providerOptions,
     ...selected.settings,
     ...(abortSignal ? { abortSignal } : {}),
-  });
+  };
+  let { text } = await generateText(options);
+  const feedback = taskTemplatesEnabled ? taskWriterPlaceholderFeedback(text, body.PROMPT) : null;
+  if (feedback) {
+    ({ text } = await generateText({
+      ...options,
+      messages: [...messages, { role: "assistant", content: text }, { role: "user", content: feedback }],
+    }));
+  }
 
   const filtered = allowedImgSrcs
     ? filterOneImagePass(text, allowedImgSrcs).emit

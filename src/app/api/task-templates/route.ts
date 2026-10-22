@@ -1,6 +1,9 @@
 import { getSessionUser } from "@/lib/auth/getSessionUser";
+import { isFeatureEnabled } from "@/lib/flags";
+import { HTPR_7472_TASK_TEMPLATES_FLAG } from "@/lib/flags/keys";
 import prisma from "@/lib/prisma";
-import { getProjectWhere } from "@/utils/controllers/projects/getAllIncludes";
+import { getProjectWhere, taskWriteAccessWhere } from "@/utils/controllers/projects/getAllIncludes";
+import { sanitizeRichHtml } from "@/utils/helperFunctions/sanitizeRichHtml";
 import {
   findTaskTemplateTargetSection,
   taskTemplateSectionWhere,
@@ -9,6 +12,8 @@ import { NextRequest, NextResponse } from "next/server";
 
 
 const TEMPLATE_NAME_MAX = 200;
+const TEMPLATE_TITLE_MAX = 500;
+const TEMPLATE_DESCRIPTION_MAX = 100_000;
 
 async function accessibleProject(userId: number, projectId: number) {
   return prisma.project.findFirst({
@@ -123,6 +128,41 @@ export async function DELETE(request: NextRequest) {
     where: { id: templateId, project: { ...getProjectWhere(session.userId) } },
   });
   if (deleted.count === 0) {
+    return NextResponse.json({ success: false, error: "Template not found or access denied" }, { status: 404 });
+  }
+  return NextResponse.json({ success: true });
+}
+
+export async function PATCH(request: NextRequest) {
+  const session = await getSessionUser(request.headers);
+  if (!session) {
+    return NextResponse.json({ success: false, error: "Unauthorized" }, { status: 401 });
+  }
+  if (!(await isFeatureEnabled(HTPR_7472_TASK_TEMPLATES_FLAG, session.userId))) {
+    return NextResponse.json({ success: false, error: "Task template editing is turned off" }, { status: 403 });
+  }
+  const body = await request.json().catch(() => null);
+  const templateId = Number(body?.templateId);
+  if (!Number.isInteger(templateId) || templateId <= 0 ||
+      typeof body?.name !== "string" || !body.name.trim() ||
+      typeof body?.title !== "string" || typeof body?.descriptionHtml !== "string") {
+    return NextResponse.json({ success: false, error: "templateId, name, title and descriptionHtml are required" }, { status: 400 });
+  }
+  if (body.title.length > TEMPLATE_TITLE_MAX) {
+    return NextResponse.json({ success: false, error: `title cannot exceed ${TEMPLATE_TITLE_MAX} characters` }, { status: 400 });
+  }
+  if (body.descriptionHtml.length > TEMPLATE_DESCRIPTION_MAX) {
+    return NextResponse.json({ success: false, error: `descriptionHtml cannot exceed ${TEMPLATE_DESCRIPTION_MAX} characters` }, { status: 400 });
+  }
+  const updated = await prisma.taskTemplate.updateMany({
+    where: { id: templateId, project: { ...taskWriteAccessWhere(session.userId, session.agentId) } },
+    data: {
+      name: body.name.trim().slice(0, TEMPLATE_NAME_MAX),
+      title: body.title,
+      descriptionHtml: sanitizeRichHtml(body.descriptionHtml),
+    },
+  });
+  if (updated.count === 0) {
     return NextResponse.json({ success: false, error: "Template not found or access denied" }, { status: 404 });
   }
   return NextResponse.json({ success: true });

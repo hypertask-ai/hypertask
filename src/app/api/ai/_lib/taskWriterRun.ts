@@ -1,7 +1,6 @@
 import { HTPR_7312_CTRLJ_SKILLS_FLAG, HTPR_7513_WRITER_PROJECT_LABELS_FLAG } from "@/lib/flags/keys";
 import { taskWriterDateContext, taskWriterDueDateInstructions } from "@/lib/ai/taskWriterDueDate";
-import { HTPR_7500_WRITER_OLD_STRUCTURE_FLAG } from "@/lib/flags/keys";
-import { HTPR_7471_WRITER_BOARD_FORMAT_FLAG } from "@/lib/flags/keys";
+import { HTPR_7500_WRITER_OLD_STRUCTURE_FLAG, HTPR_7472_TASK_TEMPLATES_FLAG, HTPR_7471_WRITER_BOARD_FORMAT_FLAG } from "@/lib/flags/keys";
 import type { TaskWriterCustomFieldDefinition } from "@/lib/ai/taskWriterCustomFields";
 import { HTPR_7054_CTRLJ_DUE_DATE_FLAG } from "@/lib/flags/keys";
 import { taskWriteAccessWhere } from "@/utils/controllers/projects/getAllIncludes";
@@ -207,7 +206,9 @@ export async function prepareTaskWriterRun(
   }) : undefined;
   const boardFormatEnabled = body.aiMode === "AiTaskWriter" &&
     await isFeatureEnabled(HTPR_7471_WRITER_BOARD_FORMAT_FLAG, userId);
-  const customInstructions = boardFormatEnabled && !body.customInstructions.trim()
+  const taskTemplatesEnabled = body.aiMode === "AiTaskWriter" &&
+    await isFeatureEnabled(HTPR_7472_TASK_TEMPLATES_FLAG, userId);
+  const customInstructions = (boardFormatEnabled || taskTemplatesEnabled) && !body.customInstructions.trim()
     ? await (await import("@/app/api/ai/_lib/customInstructions")).loadCustomInstructionText(body.projectId)
     : body.customInstructions;
   const customFieldDefinitions: TaskWriterCustomFieldDefinition[] | undefined = boardFormatEnabled
@@ -333,8 +334,8 @@ export async function prepareTaskWriterRun(
   });
   const webWriting = await isFeatureEnabled(HTPR_7342_WEB_WRITING_TASK_WRITER_FLAG, userId);
   const oldStructure = await isFeatureEnabled(HTPR_7500_WRITER_OLD_STRUCTURE_FLAG, userId);
-  const authoringStyle = boardFormatEnabled || oldStructure
-    ? createTaskAuthoringStyle(webWriting, boardFormatEnabled, oldStructure)
+  const authoringStyle = boardFormatEnabled || oldStructure || taskTemplatesEnabled
+    ? createTaskAuthoringStyle(webWriting, boardFormatEnabled, oldStructure, taskTemplatesEnabled)
     : webWriting ? TASK_AUTHORING_WEB_STYLE : TASK_AUTHORING_STYLE;
   const boardResearchRules = webWriting
     ? oldStructure
@@ -422,6 +423,7 @@ export async function prepareTaskWriterRun(
     aiFeature,
     selected,
     splitTasks,
+    taskTemplatesEnabled,
     instructions,
     messages,
     allowedImgSrcs,
@@ -502,4 +504,25 @@ async function loadTaskWriterStyleExamples(projectId: number) {
       section: task.section,
     }))
   );
+}
+
+export function taskWriterPlaceholderFeedback(text: string, request = "") {
+  const visible = text.replace(/<placeholder>/gi, "[placeholder]")
+    .replace(/<\/?(?:p|li|h[1-6]|div|ul|ol|br)\b[^>]*>/gi, "\n")
+    .replace(/<[^>]*>/g, " ");
+  const slot = "to be written|TBD|to be defined|placeholder|lorem ipsum";
+  const matches = [...visible.matchAll(new RegExp(
+    `\\[(${slot})\\]|(?:^|\\n|":\\s*")\\s*(?:(?:[-*+]|\\d+[.)]|#{1,6})\\s+)?(?:[^\\n:]+:[\\t ]*|(?:headline|title|copy|variation|idea)(?:\\s+\\d+)?\\s+)?(${slot})[.!]?\\s*(?=$|\\n|"\\s*[,}])`,
+    "gi",
+  ))].map((match) => (match[1] ?? match[2]).toLowerCase());
+  const literalRequests = request.split(/[.!?;\n]|\b(?:but|however|instead)\b/i).flatMap((clause) => {
+    if (/\b(?:not|never|avoid|without|no|omit|exclude|remove|don't|mustn't|shouldn't|cannot|can't)\b/i.test(clause)) return [];
+    const literal = clause.match(/\b(?:use|keep|preserve|include|retain|document|write|output|print|quote)\s+(?:the\s+)?literal(?:\s+(?:text|phrases?|values?|strings?|words?))?\s+(.+)/i);
+    return literal ? literal[1].split(/\s*(?:,|\band\b|&)\s*/i).flatMap((value) =>
+      value.match(new RegExp(`^["'“‘]?\\[?(${slot})\\]?["'”’]?(?=$|[\\s.,])`, "i"))?.[1].toLowerCase() ?? []) : [];
+  });
+  const placeholders = [...new Set(matches)].filter((phrase) => !literalRequests.includes(phrase));
+  return placeholders.length
+    ? `Rewrite the complete draft once, replacing these unfinished placeholders with finished, board-grounded content: ${placeholders.join(", ")}. Follow the original request's exact item count and the matched template's title pattern and headings. Return the same output format.`
+    : null;
 }
