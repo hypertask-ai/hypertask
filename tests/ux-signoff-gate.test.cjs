@@ -348,7 +348,14 @@ test('a Question thumbs up is still refused from an agent, before or at its last
   assert.equal((await decision(later)).state, 'failure');
   const unnamed = htpr7518({ text: '<p>Question: <strong>May slice A ship?</strong></p><p>Details: #comment-297898</p><p>Yes: it merges.</p>' });
   unnamed.comments[0].text = '<p>Wireframe: https://hypertask.app/wireframes/htpr-7518</p>';
-  assert.match((await decision(unnamed)).description, /New element AgentSidebarChatCommands/);
+  assert.equal((await decision(unnamed)).state, 'failure');
+  const partlyNamed = htpr7518({ text: '<p>Question: <strong>May slice A ship with AgentSidebarChatCommands?</strong></p><p>Details: #comment-297898</p><p>Yes: it merges.</p>' });
+  partlyNamed.comments[0].text = unnamed.comments[0].text;
+  assert.equal((await decision(partlyNamed)).state, 'failure');
+  const noNewElements = htpr7518();
+  noNewElements.files = [modified];
+  noNewElements.comments[0].text = unnamed.comments[0].text;
+  assert.equal((await decision(noNewElements)).state, 'failure');
 });
 
 test('a Question thumbs up approves only an affirmative Question tied to the current wireframe', async () => {
@@ -362,6 +369,9 @@ test('a Question thumbs up approves only an affirmative Question tied to the cur
     '<p>Question: <strong>May slice A ship?</strong></p><p>Details: #comment-297898</p>',
     '<p>Question: <strong>May slice A ship?</strong></p><p>Details: #comment-2978981</p><p>Yes: it merges.</p>',
     '<p>Question: <strong>May slice A ship?</strong></p><p>Wireframe: https://hypertask.app/wireframes/htpr-7000</p><p>Yes: it merges.</p>',
+    '<p>Question: <strong>Should we request another review?</strong></p><p>Details: #comment-297898</p><p>Yes: request review.</p>',
+    '<p>Question: <strong>Should AgentSidebarChatCommands, AgentConnectGreeting, TerminalSessionMirror get another review?</strong></p><p>Details: #comment-297898</p><p>Yes: request review.</p>',
+    '<p>Question: <strong>Do you like AgentSidebarChatCommands, AgentConnectGreeting, TerminalSessionMirror?</strong></p><p>Details: #comment-297898</p><p>Yes: noted.</p>',
   ]) {
     assert.equal((await decision(htpr7518({ text }))).state, 'failure', text);
   }

@@ -329,11 +329,14 @@ function commentVerdict(comment) {
   return /^(?:(?:yes|yep|yeah|go|ok|okay|agree|approve|approved|lgtm|looks good|ship it)\b|👍)/u.test(text) ? 'approve' : null;
 }
 
-function asksYesToDesign(comment, wireframeLink, designIds) {
+function asksYesToShipElements(comment, wireframeLink, designIds, newElements) {
   const text = plainText(comment.text).trim();
-  const ask = /^Question:[ \t]*([^\n]*)/.exec(text)?.[1].toLowerCase().replace(/[’‘]/g, "'");
+  const ask = /^Question:[ \t]*([^\n]*)/.exec(text)?.[1].replace(/[’‘]/g, "'");
   if (ask == null || !/(?:^|\n)[ \t]*Yes:/.test(text)) return false;
-  if (/\b(?:no|not|block|blocked|reject|defer|postpone|hold|wait|stop|cancel|revert|undo)\b|n't/.test(ask)) return false;
+  const askWords = new Set(ask.split(/[^A-Za-z0-9_]+/));
+  if (!newElements.length || !newElements.every((name) => askWords.has(name))) return false;
+  if (!/\b(?:ship|build|add|approve|merge)\b/i.test(ask)) return false;
+  if (/\b(?:no|not|block|blocked|reject|defer|postpone|hold|wait|stop|cancel|revert|undo|instead|another|different|change|review|later)\b|n't/i.test(ask)) return false;
   return comment.text.match(WIREFRAME)?.[0] === wireframeLink ||
     designIds.some((id) => new RegExp(`#comment-${id}(?!\\d)`).test(comment.text));
 }
@@ -383,23 +386,21 @@ export function evaluate({ title, author, files, comments = [], parentComments =
     !humanValentin(comment, 'creatorId') && comment.text.match(WIREFRAME)?.[0] === wireframeLink &&
     Date.parse(comment.editedAt ?? comment.updatedAt ?? comment.createdAt) < created);
   const designIds = [wireframe, ...earlierSameWireframe].map((comment) => comment?.id).filter((id) => id != null);
-  const question = wireframe && newest(comments.filter((comment) =>
-    !humanValentin(comment, 'creatorId') && Date.parse(comment.createdAt) > revision &&
-    asksYesToDesign(comment, wireframeLink, designIds) && valentinReacted(comment)));
-  const approved = commentVerdict(verdict ?? {}) !== 'reject' && Boolean(approval || reacted || question);
   const newElements = [...new Set(ui.filter(({ filename, status }) =>
     (status === 'added' || status === 'copied') && filename.startsWith('src/components/') &&
     /\.(tsx|jsx)$/.test(filename)).map(({ filename }) => {
       const name = basename(filename).replace(/\.(tsx|jsx)$/, '');
       return name === 'index' ? basename(dirname(filename)) : name;
     }))];
-  const questionWords = new Set(question ? plainText(question.text).split(/[^A-Za-z0-9_]+/) : []);
+  const question = wireframe && newest(comments.filter((comment) =>
+    !humanValentin(comment, 'creatorId') && Date.parse(comment.createdAt) > revision &&
+    asksYesToShipElements(comment, wireframeLink, designIds, newElements) && valentinReacted(comment)));
+  const approved = commentVerdict(verdict ?? {}) !== 'reject' && Boolean(approval || reacted || question);
   const approvedNames = new Set(approved ? [
     ...(wireframe ? elementNames(wireframe) : []),
     ...earlierSameWireframe.flatMap(elementNames),
     ...(approval ? elementNames(approval) : []),
-    ...(question ? elementNames(question) : []),
-    ...newElements.filter((name) => questionWords.has(name)).map((name) => name.toLowerCase().replace(/[^a-z0-9]/g, '')),
+    ...(question ? newElements.map((name) => name.toLowerCase().replace(/[^a-z0-9]/g, '')) : []),
   ] : []);
   const missingNames = newElements.filter((name) => !approvedNames.has(name.toLowerCase().replace(/[^a-z0-9]/g, '')));
   const exempt = ticket.type === 'BUGFIX' || ticket.prefix === 'YPER4';
