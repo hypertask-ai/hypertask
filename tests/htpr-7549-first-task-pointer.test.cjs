@@ -37,7 +37,7 @@ async function withPointer(fn) {
     "@/models/enums": { CommandMode },
     "@/store": store,
     "@/components/Common/kbd": { __esModule: true, default: ({ content }) => React.createElement("kbd", null, content) },
-  });
+  }).default;
   const render = async (overrides = {}) => React.act(async () => root.render(React.createElement(Pointer, {
     projectId: 7, sectionId: 10, sectionIndex: 2, taskIds: [71], ready: true, writable: true, filtered: false, ...overrides,
   })));
