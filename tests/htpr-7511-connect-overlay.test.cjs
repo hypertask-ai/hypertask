@@ -128,6 +128,8 @@ async function withBoard(fn, overrides = {}) {
       "@/hooks/MultiPages/useClickOutside": { __esModule: true, default: () => {} },
     });
     const { ConnectAgentOverlay } = load("src/components/PageComponents/Onboarding/ConnectAgentOverlay.tsx", {
+      "@/hooks/useFlag": { useFlag: (key) => { assert.equal(key, overlayKey); return state.overlay; } },
+      "@/lib/flags/keys": keys,
       "@/components/Common/CommonModalComponents": sharedModal,
       "next/dynamic": () => (props) => { pickerProps = props; return React.createElement("button", { onClick: props.onConnected }, "Fixture agent connected"); },
     });
@@ -196,9 +198,12 @@ test("pending eligibility withholds pointer and duplicate card; explicit flag OF
   }, { overlay: false });
 });
 
-test("unresolved 7550 flag withholds the pointer; known OFF still allows it", async () => {
-  await withBoard(async ({ state, render }) => {
-    await render(); assert.equal(document.getElementById("pointer"), null);
+test("7550 OFF keeps production behavior even before flag readiness", async () => {
+  await withBoard(async ({ state, render, requests }) => {
+    await render();
+    assert.ok(document.getElementById("pointer"));
+    assert.ok(document.getElementById("inline-card"));
+    assert.equal(requests.length, 0);
     state.ready = true; await render(); assert.ok(document.getElementById("pointer"));
   }, { overlay: false, ready: false });
 });
@@ -238,16 +243,21 @@ test("integration wires pointer blocking, keeps the independent inline-removal s
   const home = read("src/components/PageComponents/Kanban/KanbanHomepageComponents/Homepage.tsx");
   const landing = read("src/app/[...boardURL]/LandingPage.tsx");
   const screen = read("src/components/PageComponents/Onboarding/Screens/ConnectAIOnboardingScreen.tsx");
-  assert.match(home, /filtered=\{pointerFiltered \|\| hiddenSectionIndexes.has\(index\) \|\| connectOverlay.blocked\}/);
-  assert.match(home, /composeEnabled && connectOverlay.open/);
+  assert.match(home, /filtered=\{pointerFiltered \|\| hiddenSectionIndexes.has\(index\) \|\| \(connectOverlayEnabled && connectOverlay.blocked\)\}/);
+  assert.match(home, /connectOverlayEnabled && composeEnabled && connectOverlay.open/);
+  assert.match(home, /const connectOverlayEnabled = useFlag\(HTPR_7550_CONNECT_OVERLAY_FLAG\)/);
   assert.match(home, /tasksHydrated && secondaryStartupEnabled/);
   assert.match(home, /displaySections\?\.some/);
   assert.match(landing, /!connectBlockRemoved && !connectOverlayBlocked/);
-  assert.match(landing, /context.boardLayout !== "table"/);
+  assert.match(landing, /connectOverlayActive=\{connectOverlayEnabled \? boardRender.boardLayout !== "table" : false\}/);
+  assert.match(landing, /props.connectOverlayActive && Number/);
+  assert.match(screen, /overlay=\{overlayEnabled && props.overlay\} onConnected=\{overlayEnabled \? props.onConnected : undefined\}/);
   assert.match(screen, /useMcpToken\(!overlay\)/);
   assert.match(screen, /\(!overlay \|\| visible\) &&/);
   assert.match(screen, /onConnected\?\.\(\)/);
-  assert.match(read("src/components/Modals/McpToken/hooks/useMcpToken.ts"), /if \(!autoGenerate\) return/);
+  assert.match(read("src/components/Modals/McpToken/hooks/useMcpToken.ts"), /useEffect\(overlayEnabled && !autoGenerate \? \(\) => \{\} : \(\) =>/);
+  assert.match(read("src/components/PageComponents/Onboarding/ConnectAgentOverlay.tsx"), /if \(!overlayEnabled\) return null/);
+  assert.match(read("src/hooks/useConnectAgentOverlay.ts"), /if \(!overlayEnabled\) return \{ enabled: false, blocked: false, open: false/);
 });
 
 test("the real shared picker polls only while visible, reports actual connection, and never auto-mints an overlay token", async () => {
@@ -264,8 +274,8 @@ test("the real shared picker polls only while visible, reports actual connection
     const requests = [];
     global.fetch = async (url) => { requests.push(url); return response({ eligible: true, connected, client: "Codex" }); };
     const { ConnectAIOnboardingScreen } = load("src/components/PageComponents/Onboarding/Screens/ConnectAIOnboardingScreen.tsx", {
-      "@/hooks/useFlag": { useFlag: () => false },
-      "@/lib/flags/keys": { HTPR_7026_AGENT_CONNECT_CHECK_FLAG: "htpr-7026-agent-connect-check" },
+      "@/hooks/useFlag": { useFlag: (key) => key === overlayKey },
+      "@/lib/flags/keys": { ...keys, HTPR_7026_AGENT_CONNECT_CHECK_FLAG: "htpr-7026-agent-connect-check" },
       "@/components/Modals/CliInstall/constants": { INSTALL_COMMAND: "fixture install", LOGIN_COMMAND: "hypertask login" },
       "@/components/Modals/McpToken/components": { getIntegrationChipClassName: () => "text-meta", ConnectInstructions: () => null, TokenStatusBar: () => null },
       "@/components/Modals/McpToken/components/ConnectInstructions": { CopyableCodeBlock: () => null },

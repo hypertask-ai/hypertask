@@ -29,6 +29,7 @@ export function useConnectAgentOverlay(projectId: number, userId: number, active
     await queryClient.cancelQueries({ queryKey, exact: true });
     queryClient.setQueryData<OverlayState>(queryKey, { eligible: false });
   };
+  if (!overlayEnabled) return { enabled: false, blocked: false, open: false, sectionId: undefined, close };
   return {
     enabled,
     blocked: active && pointerEnabled && (!overlayReady || (enabled && (isPending || isFetching || isError || data?.eligible === true))),

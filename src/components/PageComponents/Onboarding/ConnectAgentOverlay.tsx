@@ -2,6 +2,8 @@
 
 import React, { useEffect, useRef, useState } from "react";
 import dynamic from "next/dynamic";
+import { useFlag } from "@/hooks/useFlag";
+import { HTPR_7550_CONNECT_OVERLAY_FLAG } from "@/lib/flags/keys";
 import { ModalContainerCustom } from "@/components/Common/CommonModalComponents";
 
 const ConnectAIOnboardingScreen = dynamic(() => import("./Screens/ConnectAIOnboardingScreen").then((module) => module.ConnectAIOnboardingScreen), { ssr: false });
@@ -9,6 +11,7 @@ const ConnectAIOnboardingScreen = dynamic(() => import("./Screens/ConnectAIOnboa
 type Props = { sectionId: number; onClose: () => Promise<void> };
 
 export function ConnectAgentOverlay({ sectionId, onClose }: Props) {
+  const overlayEnabled = useFlag(HTPR_7550_CONNECT_OVERLAY_FLAG);
   const [visible, setVisible] = useState(() => typeof document !== "undefined" && !document.hidden);
   const [dismissing, setDismissing] = useState(false);
   const [error, setError] = useState("");
@@ -16,6 +19,7 @@ export function ConnectAgentOverlay({ sectionId, onClose }: Props) {
   const mounted = useRef(true);
 
   useEffect(() => {
+    if (!overlayEnabled) return;
     mounted.current = true;
     const updateVisibility = () => setVisible(!document.hidden);
     document.addEventListener("visibilitychange", updateVisibility);
@@ -30,7 +34,7 @@ export function ConnectAgentOverlay({ sectionId, onClose }: Props) {
         }
       });
     };
-  }, [sectionId]);
+  }, [sectionId, overlayEnabled]);
 
   const dismiss = async () => {
     if (dismissingRef.current) return;
@@ -48,6 +52,8 @@ export function ConnectAgentOverlay({ sectionId, onClose }: Props) {
       if (mounted.current) setDismissing(false);
     }
   };
+
+  if (!overlayEnabled) return null;
 
   return (
     <ModalContainerCustom

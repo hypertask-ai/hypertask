@@ -20,7 +20,7 @@ import nookies from "nookies"
 import { IProject, IProjectsAll, IUser } from "@/models/model";
 
 import { useFlag, useFlagReady } from "@/hooks/useFlag";
-import { HTPR_7028_FIRST_TASK_EMAIL_FLAG, HTPR_7078_REMOVE_CONNECT_BLOCK_FLAG } from "@/lib/flags/keys";
+import { HTPR_7028_FIRST_TASK_EMAIL_FLAG, HTPR_7078_REMOVE_CONNECT_BLOCK_FLAG, HTPR_7550_CONNECT_OVERLAY_FLAG } from "@/lib/flags/keys";
 import { CommandMode } from "@/models/enums";
 import { showCommandsAtom, currentProjectAtom, boardLayoutAtom, boardLayoutPreferenceAtom, showAIChatInterfaceAtom, openAiChatByDefaultAtom, keepAiChatClosedAtom, aiChatAutoOpenSuppressedAtom, aiChatExplicitOpenAtAtom, aiChatPinnedAtom } from "@/store";
 import { useRecoilState, useRecoilValue, useSetRecoilState } from "@/lib/state";
@@ -973,6 +973,7 @@ const  LandingPage= ({
   user: IUser,
   authenticated: boolean,
 }) =>{
+  const connectOverlayEnabled = useFlag(HTPR_7550_CONNECT_OVERLAY_FLAG);
   const {
   queryClient, router, releaseSecondaryStartup, secondaryStartupEnabled, isMblForChat,
   searchParams, slugs, pilotParameter, currentView, requestedSurface,
@@ -1159,6 +1160,7 @@ return (
         <NoBoardsEmptyState user={user} />
       ) : boardRender ? (
            <SectionComp
+            connectOverlayActive={connectOverlayEnabled ? boardRender.boardLayout !== "table" : false}
             _allProjects={boardRender.projects}
             _projectCount={boardRender.projects.length}
             _currentUser={user}
@@ -1197,10 +1199,10 @@ return (
 
 export default LandingPage
 
-const SectionComp = (props: SectionCompProps) => {
+const SectionComp = (props: SectionCompProps & { connectOverlayActive: boolean }) => {
   const connectBlockRemoved = useFlag(HTPR_7078_REMOVE_CONNECT_BLOCK_FLAG)
   const context = useLandingSection(props, useLandingSectionReadiness);
-  const overlay = useConnectAgentOverlay(context._currentProject?.id ?? 0, context._currentUser?.id ?? 0, context.boardLayout !== "table" && Number(context._currentProject?.ownerId) === context._currentUser?.id);
+  const overlay = useConnectAgentOverlay(context._currentProject?.id ?? 0, context._currentUser?.id ?? 0, props.connectOverlayActive && Number(context._currentProject?.ownerId) === context._currentUser?.id);
   return renderLandingSection(context, connectBlockRemoved, overlay.blocked);
 };
 

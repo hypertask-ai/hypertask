@@ -4,11 +4,12 @@ const React = require("react");
 const { JSDOM } = require("jsdom");
 const { load } = require("./helpers/agent-connection.cjs");
 const FLAG = "htpr-7026-agent-connect-check";
+const OVERLAY_FLAG = "htpr-7550-connect-overlay";
 
 function loadScreen(enabled = true) {
   return load("src/components/PageComponents/Onboarding/Screens/ConnectAIOnboardingScreen.tsx", {
-    "@/hooks/useFlag": { useFlag: (key) => { assert.equal(key, FLAG); return enabled; } },
-    "@/lib/flags/keys": { HTPR_7026_AGENT_CONNECT_CHECK_FLAG: FLAG },
+    "@/hooks/useFlag": { useFlag: (key) => { assert.ok([FLAG, OVERLAY_FLAG].includes(key)); return key === FLAG && enabled; } },
+    "@/lib/flags/keys": { HTPR_7026_AGENT_CONNECT_CHECK_FLAG: FLAG, HTPR_7550_CONNECT_OVERLAY_FLAG: OVERLAY_FLAG },
     "@/components/Modals/CliInstall/constants": { INSTALL_COMMAND: "install fixture", LOGIN_COMMAND: "hypertask login" },
     "@/components/Modals/McpToken/components": {
       getIntegrationChipClassName: () => "text-meta",

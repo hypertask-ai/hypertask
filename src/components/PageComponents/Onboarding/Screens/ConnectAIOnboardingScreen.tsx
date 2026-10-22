@@ -17,7 +17,7 @@ import { useMcpToken } from "@/components/Modals/McpToken/hooks/useMcpToken";
 import type { IntegrationId } from "@/components/Modals/McpToken/utils";
 import { cn } from "@/utils/undoActions/helperFuncs";
 import { useFlag } from "@/hooks/useFlag";
-import { HTPR_7026_AGENT_CONNECT_CHECK_FLAG } from "@/lib/flags/keys";
+import { HTPR_7026_AGENT_CONNECT_CHECK_FLAG, HTPR_7550_CONNECT_OVERLAY_FLAG } from "@/lib/flags/keys";
 import { GetStartedButton } from "../GetStartedButton";
 
 interface IConnectAIOnboardingScreen {
@@ -185,8 +185,9 @@ function ConnectionStatus({ label, onConnected, first = false, visible = true, s
 
 export const ConnectAIOnboardingScreen: React.FC<IConnectAIOnboardingScreen> = (props) => {
   const flagEnabled = useFlag(HTPR_7026_AGENT_CONNECT_CHECK_FLAG);
+  const overlayEnabled = useFlag(HTPR_7550_CONNECT_OVERLAY_FLAG);
   const screen = (flagEnabled ? true : props.serverEligible === true)
-    ? <ConnectAISetup {...props} />
+    ? <ConnectAISetup {...props} overlay={overlayEnabled && props.overlay} onConnected={overlayEnabled ? props.onConnected : undefined} />
     : <ConnectAISetup onNextScreen={props.onNextScreen} />;
   return screen;
 };

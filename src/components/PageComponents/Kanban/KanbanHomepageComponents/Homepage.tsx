@@ -1,7 +1,7 @@
 import { useFlag } from "@/hooks/useFlag";
 import { updateSection as writeSection } from "@/lib/api/typedClient";
 import { HTPR_6979_TYPED_WRITES_FLAG } from "@/lib/flags/keys";
-import { HTPR_6929_COMPOSE_TASK_WRITER_FLAG, HTPR_7549_FIRST_TASK_POINTER_FLAG } from "@/lib/flags/keys";
+import { HTPR_6929_COMPOSE_TASK_WRITER_FLAG, HTPR_7549_FIRST_TASK_POINTER_FLAG, HTPR_7550_CONNECT_OVERLAY_FLAG } from "@/lib/flags/keys";
 
 import React, { useCallback, useContext, useMemo, useRef, useState } from "react";
 import { useRecoilValue } from "@/lib/state";
@@ -795,6 +795,7 @@ const HomePage = ({
     : null;
 
   const composeEnabled = useFlag(HTPR_6929_COMPOSE_TASK_WRITER_FLAG);
+  const connectOverlayEnabled = useFlag(HTPR_7550_CONNECT_OVERLAY_FLAG);
   const connectOverlay = useConnectAgentOverlay(_currentProject.id, currentUser.id);
   const firstTaskPointerEnabled = useFlag(HTPR_7549_FIRST_TASK_POINTER_FLAG);
   const pointerTaskIds = useMemo(() => {
@@ -855,7 +856,7 @@ const HomePage = ({
                     taskIds={pointerTaskIds}
                     ready={tasksHydrated && secondaryStartupEnabled}
                     writable={Number(_currentProject.ownerId) === currentUser.id}
-                    filtered={pointerFiltered || hiddenSectionIndexes.has(index) || connectOverlay.blocked}
+                    filtered={pointerFiltered || hiddenSectionIndexes.has(index) || (connectOverlayEnabled && connectOverlay.blocked)}
                   />
                 ) : null}
               />)}
@@ -932,7 +933,7 @@ const HomePage = ({
           <HypertasksCommands contextOptions={createContextOptionsForHTC()} />
         </React.Suspense>
       )}
-      {composeEnabled && connectOverlay.open && connectOverlay.sectionId && tasksHydrated && secondaryStartupEnabled &&
+      {connectOverlayEnabled && composeEnabled && connectOverlay.open && connectOverlay.sectionId && tasksHydrated && secondaryStartupEnabled &&
         Number(_currentProject.ownerId) === currentUser.id && !pointerFiltered && pointerTaskIds !== null &&
         displaySections?.some((section, index) => (section.sectionId ?? section.id) === connectOverlay.sectionId && !hiddenSectionIndexes.has(index)) && (
           <ConnectAgentOverlay key={`${currentUser.id}:${_currentProject.id}`} sectionId={connectOverlay.sectionId} onClose={connectOverlay.close} />
