@@ -99,7 +99,7 @@ test("app smoke validates the head before isolated build and route checks", asyn
   assert.match(request, /branches: \[production\]/);
   assert.match(
     request,
-    /types: \[opened, synchronize, reopened, ready_for_review, edited\]/,
+    /types: \[opened, synchronize, reopened, ready_for_review\]/,
   );
   assert.match(workflow, /workflow_run:/);
   assert.match(workflow, /workflows: \["App Smoke Request"\]/);

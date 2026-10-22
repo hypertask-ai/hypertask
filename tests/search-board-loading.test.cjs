@@ -45,7 +45,7 @@ for (const scenario of [
     try {
       source("src/utils/index.ts", { taskBaseUri: "/detail/" });
       source("src/utils/undoActions/helperFuncs.ts", { cn: (...values) => values.filter(Boolean).join(" ") });
-      source("src/hooks/useFlag.tsx", { useFlagReady: () => true, useFlag: (key) => scenario.modern && ["htpr-6688-search-autocomplete", "htpr-6865-search-layout"].includes(key) });
+      source("src/hooks/useFlag.tsx", { useFlagReady: () => true, useFlag: (key) => scenario.modern && key === "htpr-6865-search-layout" });
       source("src/lib/contexts/deviceContext.tsx", { useDeviceContext: () => false });
       source("src/hooks/MultiPages/useGetAllProjectsMinimal.ts", { useGetAllProjectsMinimal: (queryKey) => useQuery({ queryKey, initialData: [], queryFn: () => boardsPromise }) });
       source("src/hooks/RecoilRoot/useHypertasksRecoilStates.ts", { default: () => ({ toggleShowCommands() {} }) });
@@ -80,7 +80,7 @@ for (const scenario of [
         const [urlTerm, setUrlTerm] = React.useState("");
         navigate = setUrlTerm;
         state = useSearch(urlTerm);
-        return React.createElement(SearchChipsInput, { value: state.inputValue, onChange: state.setInputValue, onRun: state.updateSearchHistory, recentSearches: [], boardId: null, inputRef: state.tasksInputRef, autocompleteEnabled: Boolean(scenario.modern) });
+        return React.createElement(SearchChipsInput, { value: state.inputValue, onChange: state.setInputValue, onRun: state.updateSearchHistory, recentSearches: [], boardId: null, inputRef: state.tasksInputRef });
       };
       reactRoot = require("react-dom/client").createRoot(document.getElementById("root"));
       await React.act(async () => reactRoot.render(React.createElement(QueryClientProvider, { client }, React.createElement(Harness))));

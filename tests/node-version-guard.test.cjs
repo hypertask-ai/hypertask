@@ -110,3 +110,24 @@ test("the API request alone receives the Vercel secret and missing settings fail
   assert.ok(!workflow.jobs["node-version-guard"].env);
   assert.ok(steps.some((step) => step.run?.includes("node .github/scripts/check-node-version.cjs")));
 });
+
+test("only Dependabot pull requests may skip the live Vercel read; everyone else still fails without the token", () => {
+  const workflow = yaml.load(fs.readFileSync(".github/workflows/node-version-guard.yml", "utf8"), { schema: yaml.JSON_SCHEMA });
+  const read = workflow.jobs["vercel-node-version"].steps.find(step => step.id === "vercel");
+  assert.equal(read.env.PR_AUTHOR, "${{ github.event_name == 'pull_request' && github.event.pull_request.user.login || '' }}");
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "node-guard-"));
+  const runRead = (author) => {
+    const output = path.join(dir, `out-${author.replace(/\W/g, "")}`);
+    fs.writeFileSync(output, "");
+    const result = spawnSync("bash", ["-c", read.run], { encoding: "utf8", env: { PATH: process.env.PATH, VERCEL_TOKEN: "", PR_AUTHOR: author, GITHUB_OUTPUT: output } });
+    return { status: result.status, output: fs.readFileSync(output, "utf8") };
+  };
+  try {
+    assert.deepEqual(runRead("dependabot[bot]"), { status: 0, output: "node-version=\n" });
+    for (const author of ["", "valentinyeo", "dependabot", "renovate[bot]"]) {
+      assert.equal(runRead(author).status, 1, `${author || "push"} without VERCEL_TOKEN must still fail`);
+    }
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
+});

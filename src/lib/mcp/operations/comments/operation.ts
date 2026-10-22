@@ -46,7 +46,7 @@ import { loadVisibleReactionAgents } from '@/lib/mcp/comments/visibleReactionAge
 import { overlayDurableAgentDisplayName } from '@/lib/agents/publicAgent'
 import { isFeatureEnabled } from '@/lib/flags'
 import { COMMENT_KINDS, parseCommentKind, routeComment, type CommentKind } from './agentChatterRouting'
-import { HTPR_6516_AGENT_ATTRIBUTION_FLAG, HTPR_7341_AGENT_CHATTER_TO_LOG_FLAG } from '@/lib/flags/keys'
+import { HTPR_6516_AGENT_ATTRIBUTION_FLAG, HTPR_7341_AGENT_CHATTER_TO_LOG_FLAG, HTPR_7512_ATTACH_KEEPS_COMMENT_FLAG } from '@/lib/flags/keys'
 import { parseNumericCursor, parseUpdatedSince, projectRows } from '@/lib/mcp/listQuery'
 import { readListQuery } from '@/lib/mcp/readListQuery'
 
@@ -101,6 +101,7 @@ export interface AddCommentRequest {
   content_type?: 'html' | 'markdown'
   project_id?: number
   images?: string[]
+  has_attachments?: boolean
   mentions?: McpMentionInput[]
   reply_to_comment_id?: number
   reply_to_invocation_id?: number
@@ -457,10 +458,16 @@ export async function POST(request: NextRequest) {
     const parsedBody = await readJsonBody<AddCommentRequest>(request)
     if (!parsedBody.ok) return parsedBody.response
     const body = parsedBody.body
-    const { dry_run, task_id, ticket_number, unique_index, text, content_type, project_id, images, mentions, reply_to_comment_id, reply_to_invocation_id } = body
+    const { dry_run, task_id, ticket_number, unique_index, text, content_type, project_id, images, has_attachments, mentions, reply_to_comment_id, reply_to_invocation_id } = body
     if (dry_run !== undefined && typeof dry_run !== 'boolean') {
       return NextResponse.json(
         buildFieldError('invalid_field', 'dry_run', 'dry_run must be a boolean'),
+        { status: 400 }
+      )
+    }
+    if (has_attachments !== undefined && typeof has_attachments !== 'boolean') {
+      return NextResponse.json(
+        buildFieldError('invalid_field', 'has_attachments', 'has_attachments must be a boolean'),
         { status: 400 }
       )
     }
@@ -866,7 +873,8 @@ export async function POST(request: NextRequest) {
       replyToCommentId: reply_to_comment_id,
       replyToInvocationId: reply_to_invocation_id,
       mentionsPerson: textMentionIds.length > 0 || (mentions?.length ?? 0) > 0,
-      hasImages: (images?.length ?? 0) > 0 || /<img\b/i.test(sanitizedText),
+      hasImages: (images?.length ?? 0) > 0 || /<img\b/i.test(sanitizedText) ||
+        (has_attachments === true && await isFeatureEnabled(HTPR_7512_ATTACH_KEEPS_COMMENT_FLAG, user.id)),
       flagEnabled: await isFeatureEnabled(HTPR_7341_AGENT_CHATTER_TO_LOG_FLAG, user.id),
     }) === 'log' && agentLogPrincipal
       ? await prepareAgentLogEntry(agentLogPrincipal, sanitizedText)

@@ -1,0 +1,86 @@
+name: Coverage Nightly
+
+# Separate from CI Tests: diagnostics must never publish a newer ci-tests check.
+on:
+  schedule:
+    - cron: '17 2 * * *'
+  workflow_dispatch:
+
+concurrency:
+  group: coverage-nightly-production
+  cancel-in-progress: false
+
+permissions: {}
+
+jobs:
+  coverage-nightly:
+    name: coverage-nightly
+    if: github.ref == 'refs/heads/production'
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    permissions:
+      contents: read
+      packages: read
+    env:
+      HTPR_PG_IMAGE: ghcr.io/hypertask-ai/ci-postgres:16-alpine@sha256:721873c34ceb9f8d8fc265984940dc982404c105f19ad51be9fdc5970a6080ea
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: 24
+
+      - name: Resolve dependency cache version
+        id: dependency-cache-version
+        run: |
+          echo "node-abi=$(node -p 'process.versions.modules')" >> "$GITHUB_OUTPUT"
+          echo "npm-major=$(npm --version | cut -d. -f1)" >> "$GITHUB_OUTPUT"
+
+      - name: Restore node_modules cache
+        id: restore-node-modules
+        uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
+        with:
+          path: node_modules
+          key: node-modules-${{ runner.os }}-${{ runner.arch }}-abi${{ steps.dependency-cache-version.outputs.node-abi }}-npm${{ steps.dependency-cache-version.outputs.npm-major }}-${{ hashFiles('package-lock.json', 'package.json', '.npmrc') }}
+
+      - name: Install dependencies
+        if: steps.restore-node-modules.outputs.cache-hit != 'true'
+        run: npm ci --prefer-offline --no-audit --no-fund
+
+      - name: Generate Prisma client
+        run: npx prisma generate
+
+      - name: Authenticate CI image pulls
+        uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9 # v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ github.token }}
+
+      - name: Pull PostgreSQL test image
+        run: docker pull "$HTPR_PG_IMAGE"
+
+      - name: Test with coverage collection
+        env:
+          NODE_V8_COVERAGE: coverage/raw
+          HT_REQUIRE_PG_TESTS: "1"
+        run: npm test
+
+      - name: Build report-only coverage baseline
+        continue-on-error: true
+        run: npm run coverage:report
+
+      - name: Upload coverage baseline
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: automated-test-coverage-${{ github.sha }}
+          path: |
+            coverage/report/
+            coverage/critical-domains.json
+            coverage/critical-domains.md
+          if-no-files-found: warn
+          retention-days: 30

@@ -26,9 +26,17 @@ jobs:
         id: vercel
         env:
           VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+          PR_AUTHOR: ${{ github.event_name == 'pull_request' && github.event.pull_request.user.login || '' }}
         shell: bash
         run: |
           set -euo pipefail
+          # GitHub gives Dependabot runs no repository secrets. Their pins are then
+          # compared with the base branch, which this guard checks against Vercel on push.
+          if [ -z "$VERCEL_TOKEN" ] && [ "$PR_AUTHOR" = "dependabot[bot]" ]; then
+            echo "::notice::Dependabot run has no VERCEL_TOKEN; comparing with the base branch Node major instead."
+            echo "node-version=" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
           [ -n "$VERCEL_TOKEN" ] || { echo "::error::VERCEL_TOKEN is unavailable; cannot verify the live Node setting."; exit 1; }
           version=$(curl --fail --silent --show-error --max-time 30 \
             -H "Authorization: Bearer $VERCEL_TOKEN" \
@@ -55,8 +63,15 @@ jobs:
         env:
           NODE_PATH: ${{ github.workspace }}/.github/scripts/node-version-guard/node_modules
           LIVE_NODE_VERSION: ${{ needs.vercel-node-version.outputs.node-version }}
+          PR_AUTHOR: ${{ github.event_name == 'pull_request' && github.event.pull_request.user.login || '' }}
+          BASE_REF: ${{ github.base_ref }}
         shell: bash
         run: |
           set -euo pipefail
+          if [ -z "$LIVE_NODE_VERSION" ] && [ "$PR_AUTHOR" = "dependabot[bot]" ]; then
+            git fetch --quiet --depth 1 origin "refs/heads/$BASE_REF"
+            LIVE_NODE_VERSION=$(git show FETCH_HEAD:package.json | jq -er '.engines.node')
+            echo "Comparing with $BASE_REF package.json engines.node $LIVE_NODE_VERSION"
+          fi
           printf '%s\n' "$LIVE_NODE_VERSION" > "$RUNNER_TEMP/vercel-node-version"
           node .github/scripts/check-node-version.cjs "$RUNNER_TEMP/vercel-node-version"
