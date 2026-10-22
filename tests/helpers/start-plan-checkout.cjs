@@ -21,7 +21,7 @@ const flag = load("src/lib/flags/definitions/htpr-7551-start-plan-checkout.ts");
 function harness() {
   const h = {
     enabled: true, seats: 3, record: null, calls: [], expired: [], sessions: new Map(),
-    locks: 0, stripeCalls: [], flagReads: [],
+    locks: 0, stripeCalls: [], flagReads: [], attemptReads: 0,
     payloads: new Map(), subscriptions: [], hidden: false, writes: 0, lost: false,
     team: {
       id: "team-owned", title: "Owned", totalSeats: 1,
@@ -53,7 +53,7 @@ function harness() {
         return { data: h.hidden ? [] : [...h.sessions.values()].filter((session) => session.customer === request.customer), has_more: false };
       },
       retrieve: async (id) => { h.stripeCalls.push("sessions.retrieve"); return h.sessions.get(id); },
-      expire: async (id) => { h.stripeCalls.push("sessions.expire"); h.expired.push(id); h.sessions.get(id).status = "expired"; },
+      expire: async (id) => { h.stripeCalls.push("sessions.expire"); h.expired.push(id); h.sessions.set(id, { ...h.sessions.get(id), status: "expired" }); },
       create: async (payload, options) => {
         h.stripeCalls.push("sessions.create");
         const key = options.idempotencyKey;
@@ -78,7 +78,7 @@ function harness() {
   function Stripe() { return stripe; }
   const stripeModule = load("src/lib/stripe.ts", { stripe: Stripe });
   const reservations = load("src/utils/controllers/stripe/checkoutReservation.ts", { "@/lib/redis": {} });
-  reservations.readTeamCheckoutAttempt = async () => h.record && structuredClone(h.record);
+  reservations.readTeamCheckoutAttempt = async () => { h.attemptReads++; return h.record && structuredClone(h.record); };
   let tail = Promise.resolve();
   reservations.withTeamCheckoutReservation = async (_teamId, run) => {
     h.locks++;

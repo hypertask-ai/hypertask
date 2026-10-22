@@ -349,10 +349,19 @@ export async function createAuthorizedCheckoutSession(
 
   const suppliedCustomerId = nonEmptyString(body.stripe_customer_id);
   const suppliedAccountId = nonEmptyString(body.googleAccountId);
+  const billingOwner = await prisma.team.findUnique({
+    where: { id: teamId },
+    select: { googleAccount: { select: { userId: true } } },
+  });
+  if (!billingOwner) return { status: 404, body: { message: "Team not found" } };
+  if (billingOwner.googleAccount.userId !== userId) {
+    return { status: 403, body: { message: "Only the team owner can update billing" } };
+  }
   let enabled = false;
   try {
     enabled = await isFeatureEnabled(HTPR_7551_START_PLAN_CHECKOUT_FLAG, userId);
   } catch {
+    console.warn("Checkout flag lookup failed; treating Start plan as disabled");
   }
   if (signupIntent && !enabled && !(await readTeamCheckoutAttempt(teamId))) {
     return { status: 403, body: { message: "Start plan is not available" } };
@@ -400,19 +409,25 @@ export async function createAuthorizedCheckoutSession(
       attempt = null;
     }
     const ownerChanged = attempt?.desired.ownerUserId !== undefined && attempt.desired.ownerUserId !== userId;
-    const identityChanged = attempt && (attempt.desired.customerId !== customerId ||
-      attempt.desired.googleAccountId !== team.googleAccountId);
-    if (attempt?.state === "in_flight" && ownerChanged) {
-      return { status: 403, body: { message: "Checkout belongs to a different owner" } };
-    }
-    if (attempt?.state === "in_flight" && identityChanged) {
+    const identityChanged = attempt && attempt.desired.googleAccountId !== team.googleAccountId;
+    const staleInFlight = attempt?.state === "in_flight" &&
+      Date.now() - Date.parse(attempt.createdAt) >= 24 * 60 * 60 * 1000;
+    if (attempt && attempt.desired.customerId !== customerId) {
       return { status: 409, body: { message: "Billing identity changed; checkout needs reconciliation" } };
     }
+    if (attempt?.state === "in_flight" && !staleInFlight && ownerChanged) {
+      return { status: 403, body: { message: "Checkout belongs to a different owner" } };
+    }
+    if (attempt?.state === "in_flight" && !staleInFlight && identityChanged) {
+      return { status: 409, body: { message: "Billing identity changed; checkout needs reconciliation" } };
+    }
+    let oldSession: Stripe.Checkout.Session | null = null;
     if (attempt && (ownerChanged || identityChanged)) {
-      const oldSession = await reconcileAttemptSession(stripe, attempt, attempt.sessionId ? [] :
+      oldSession = await reconcileAttemptSession(stripe, attempt, attempt.sessionId ? [] :
         await listTeamCheckoutSessions(stripe, attempt.desired.customerId, team.id));
       if (oldSession?.status === "open") {
         await expireCheckoutSessions(stripe, [oldSession], reservation.assertHeld);
+        oldSession.status = "expired";
       }
       await reservation.clear();
       attempt = null;
@@ -430,15 +445,20 @@ export async function createAuthorizedCheckoutSession(
       customerId,
       team.id,
     );
-    if (!enabled && attempt?.state === "in_flight" &&
-      (effectiveTrialDays(attempt.desired) === 7 || attempt.desired.checkoutIntent === "signup-straight-to-board") &&
-      Date.now() - Date.parse(attempt.createdAt) >= 24 * 60 * 60 * 1000) {
+    if (oldSession && !teamSessions.some((session) => session.id === oldSession?.id)) {
+      teamSessions.push(oldSession);
+    }
+    if (!enabled && attempt?.state === "in_flight" && staleInFlight &&
+      (effectiveTrialDays(attempt.desired) === 7 || attempt.desired.checkoutIntent === "signup-straight-to-board")) {
       const staleSession = await reconcileAttemptSession(stripe, attempt, teamSessions);
-      if (staleSession && !teamSessions.some((session) => session.id === staleSession.id)) {
-        teamSessions.push(staleSession);
+      if (staleSession) {
+        if (!teamSessions.some((session) => session.id === staleSession.id)) {
+          teamSessions.push(staleSession);
+        }
+      } else {
+        await reservation.clear();
+        attempt = null;
       }
-      await reservation.clear();
-      attempt = null;
     }
     const openSessions = teamSessions.filter(
       (session) => session.status === "open",

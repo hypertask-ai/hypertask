@@ -60,7 +60,14 @@ test("member is refused, owner is still allowed and ownership is rechecked under
   const h = harness();
   assert.equal((await h.checkout(startBody(), 99)).status, 403);
   assert.equal(h.calls.length, 0);
+  assert.deepEqual(h.flagReads, []);
+  assert.equal(h.attemptReads, 0); assert.equal(h.locks, 0);
   assert.equal((await h.checkout()).status, 200);
+  assert.deepEqual(h.flagReads, [6]);
+  const off = harness(); off.enabled = false;
+  assert.equal((await off.checkout(startBody(), 99)).body.message, "Only the team owner can update billing");
+  assert.deepEqual(off.flagReads, []); assert.equal(off.attemptReads, 0); assert.equal(off.locks, 0);
+  assert.equal((await off.checkout(legacyBody())).status, 200);
   const changed = harness(); changed.onLock = () => { changed.team.googleAccount.userId = 99; };
   assert.equal((await changed.checkout()).status, 403);
   assert.equal(changed.calls.length, 0);
@@ -68,39 +75,77 @@ test("member is refused, owner is still allowed and ownership is rechecked under
 
 for (const rollout of [false, true]) {
   for (const identity of rollout ? ["owner", "account", "customer", "transfer"] : ["account", "customer", "transfer"]) {
-    test(`OFF refuses ${identity} changes on an old ${rollout ? "rollout" : "legacy"} in-flight attempt; the new owner can buy after prepared or settled attempts`, async () => {
-      for (const state of ["in_flight", "prepared", "settled"]) {
-        for (const savedSessionId of [false, true]) {
-          const h = harness(); h.enabled = rollout;
-          await h.checkout(rollout ? startBody() : legacyBody());
-          const key = h.record.idempotencyKey;
-          h.record.state = state;
-          h.record.createdAt = new Date(Date.now() - 25 * 60 * 60 * 1000).toISOString();
-          if (!savedSessionId) delete h.record.sessionId;
-          h.enabled = false;
-          if (identity === "owner" || identity === "transfer") h.team.googleAccount.userId = 99;
-          if (identity === "account" || identity === "transfer") h.team.googleAccountId = "account-new";
-          if (identity === "customer" || identity === "transfer") h.team.stripe_customer_id = "cus_new";
-          h.stripeCalls = [];
-          const result = await h.checkout(legacyBody(), h.team.googleAccount.userId);
-          if (state === "in_flight") {
-            assert.equal(result.status, rollout && (identity === "owner" || identity === "transfer") ? 403 : 409);
-            assert.equal(h.record.idempotencyKey, key);
-            assert.equal(h.calls.length, 1);
-            assert.deepEqual(h.stripeCalls, []);
-            assert.deepEqual(h.expired, []);
-          } else {
-            assert.equal(result.status, 200);
-            assert.notEqual(h.record.idempotencyKey, key);
-            assert.deepEqual(h.expired, ["cs_1"]);
-            assert.equal(h.calls.length, 2);
-            assert.equal(h.calls[1].payload.customer, h.team.stripe_customer_id);
-            assert.equal(h.calls[1].payload.metadata.googleAccountId, h.team.googleAccountId);
-            assert.equal(h.calls[1].payload.subscription_data.trial_period_days, 14);
+    test(`OFF refuses recent ${identity} changes and any customer change on ${rollout ? "rollout" : "legacy"} attempts; safe identity cleanup remains allowed`, async () => {
+      for (const hours of [1, 24, 25]) {
+        for (const state of ["in_flight", "prepared", "settled"]) {
+          for (const savedSessionId of [false, true]) {
+            const h = harness(); h.enabled = rollout;
+            await h.checkout(rollout ? startBody() : legacyBody());
+            const key = h.record.idempotencyKey;
+            h.record.state = state;
+            h.record.createdAt = new Date(Date.now() - hours * 60 * 60 * 1000).toISOString();
+            if (!savedSessionId) delete h.record.sessionId;
+            h.enabled = false;
+            if (identity === "owner" || identity === "transfer") h.team.googleAccount.userId = 99;
+            if (identity === "account" || identity === "transfer") h.team.googleAccountId = "account-new";
+            if (identity === "customer") h.team.stripe_customer_id = "cus_new";
+            h.stripeCalls = [];
+            const result = await h.checkout(legacyBody(), h.team.googleAccount.userId);
+            if (identity === "customer" || (state === "in_flight" && hours < 24)) {
+              assert.equal(result.status, identity !== "customer" && rollout && (identity === "owner" || identity === "transfer") ? 403 : 409);
+              assert.equal(h.record.idempotencyKey, key);
+              assert.equal(h.calls.length, 1);
+              assert.deepEqual(h.stripeCalls, []);
+              assert.deepEqual(h.expired, []);
+              if (identity === "customer") {
+                h.team.stripe_customer_id = "cus_owned";
+                assert.equal((await h.checkout(rollout ? startBody() : legacyBody())).status, 200);
+                assert.equal(h.record.idempotencyKey, key);
+                assert.equal(h.calls.length, 1);
+              }
+            } else {
+              assert.equal(result.status, 200);
+              assert.notEqual(h.record.idempotencyKey, key);
+              assert.deepEqual(h.expired, ["cs_1"]);
+              assert.equal(h.calls.length, 2);
+              assert.equal(h.calls[1].payload.customer, h.team.stripe_customer_id);
+              assert.equal(h.calls[1].payload.metadata.googleAccountId, h.team.googleAccountId);
+              assert.equal(h.calls[1].payload.subscription_data.trial_period_days, 14);
+            }
           }
         }
       }
     });
+  }
+}
+
+for (const identity of ["owner", "account"]) {
+  for (const state of ["in_flight", "prepared", "settled"]) {
+    for (const savedSessionId of [false, true]) {
+      test(`${identity} cleanup retains a completed ${state} checkout with saved id=${savedSessionId}; cancellation still permits a new purchase`, async () => {
+        const h = harness(); h.team.team_activity.hasCompletedTrial = true;
+        await h.checkout();
+        const key = h.record.idempotencyKey;
+        h.record.state = state;
+        h.record.createdAt = new Date(Date.now() - 25 * 60 * 60 * 1000).toISOString();
+        if (!savedSessionId) delete h.record.sessionId;
+        const completed = h.sessions.get("cs_1");
+        completed.status = "complete"; completed.subscription = "sub_started";
+        h.hidden = savedSessionId; h.enabled = false;
+        if (identity === "owner") h.team.googleAccount.userId = 99;
+        else h.team.googleAccountId = "account-new";
+        const normal = legacyBody({ mode: "Normal", priceId: "price_pro_year" });
+        const refused = await h.checkout(normal, h.team.googleAccount.userId);
+        assert.equal(refused.status, 409); assert.equal(refused.body.finishing, true);
+        assert.equal(h.record, null); assert.equal(h.calls.length, 1);
+        assert.deepEqual(h.expired, []);
+        h.subscriptions = [subscription("canceled", { id: "sub_started" })];
+        assert.equal((await h.checkout(normal, h.team.googleAccount.userId)).status, 200);
+        assert.notEqual(h.record.idempotencyKey, key);
+        assert.equal(h.calls.length, 2);
+        assert.equal(h.calls[1].payload.line_items[0].price, "price_pro_year");
+      });
+    }
   }
 }
 
@@ -283,14 +328,15 @@ for (const hours of [24, 25]) {
   }
 }
 
-test("OFF clears a stale lost-response attempt but still refuses a live orphan rollout offer", async () => {
+test("OFF settles a stale lost-response attempt and refuses a live rollout offer; expiry still allows legacy checkout", async () => {
   const h = harness(); h.timeoutAfterCreate = true;
   assert.equal((await h.checkout()).status, 409);
   const key = h.record.idempotencyKey;
   h.record.createdAt = new Date(Date.now() - 25 * 60 * 60 * 1000).toISOString();
   h.enabled = false;
   assert.equal((await h.checkout(legacyBody())).status, 409);
-  assert.equal(h.record, null);
+  assert.equal(h.record.state, "settled"); assert.equal(h.record.idempotencyKey, key);
+  assert.equal(h.record.sessionId, "cs_1");
   assert.equal(h.calls.filter((call) => call.key === key).length, 1);
   assert.deepEqual(h.expired, []);
   h.sessions.get("cs_1").status = "expired";
@@ -299,7 +345,7 @@ test("OFF clears a stale lost-response attempt but still refuses a live orphan r
   assert.equal(h.calls[1].payload.subscription_data.trial_period_days, 14);
 });
 
-test("OFF clears a stale in-flight key without forgetting a known completed checkout hidden from listings", async () => {
+test("OFF settles a stale in-flight key without forgetting a known completed checkout hidden from listings", async () => {
   const h = harness(); h.team.team_activity.hasCompletedTrial = true;
   await h.checkout();
   h.record.state = "in_flight";
@@ -310,12 +356,37 @@ test("OFF clears a stale in-flight key without forgetting a known completed chec
   const normal = legacyBody({ mode: "Normal", priceId: "price_pro_month" });
   const result = await h.checkout(normal);
   assert.equal(result.status, 409); assert.equal(result.body.finishing, true);
-  assert.equal(h.record, null); assert.equal(h.calls.length, 1);
+  assert.equal(h.record.state, "settled"); assert.equal(h.calls.length, 1);
   assert.deepEqual(h.expired, []);
   h.hidden = false; h.subscriptions = [subscription("canceled", { id: "sub_started" })];
   assert.equal((await h.checkout(normal)).status, 200);
   assert.equal(h.calls.length, 2);
 });
+
+for (const savedSessionId of [false, true]) {
+  test(`OFF retains a stale completed in-flight checkout with saved id=${savedSessionId} and refuses a second price; cancellation still allows it`, async () => {
+    const h = harness(); h.team.team_activity.hasCompletedTrial = true;
+    await h.checkout();
+    const key = h.record.idempotencyKey;
+    h.record.state = "in_flight";
+    h.record.createdAt = new Date(Date.now() - 25 * 60 * 60 * 1000).toISOString();
+    if (!savedSessionId) delete h.record.sessionId;
+    const completed = h.sessions.get("cs_1");
+    completed.status = "complete"; completed.subscription = "sub_started";
+    h.hidden = savedSessionId; h.enabled = false;
+    h.subscriptions = [subscription("active", { id: "sub_started" })];
+    const normal = legacyBody({ mode: "Normal", priceId: "price_pro_year" });
+    const refused = await h.checkout(normal);
+    assert.equal(refused.status, 409);
+    assert.equal(refused.body.message, "An existing subscription needs billing recovery");
+    assert.equal(h.record.state, "settled"); assert.equal(h.record.idempotencyKey, key);
+    assert.equal(h.calls.length, 1); assert.deepEqual(h.expired, []);
+    h.subscriptions = [subscription("canceled", { id: "sub_started" })];
+    assert.equal((await h.checkout(normal)).status, 200);
+    assert.equal(h.calls.length, 2); assert.notEqual(h.record.idempotencyKey, key);
+    assert.equal(h.calls[1].payload.line_items[0].price, "price_pro_year");
+  });
+}
 
 test("OFF preserves known seven-day sessions and orphan offers, never adopting them into fresh legacy requests", async () => {
   for (const orphan of [false, true]) {
@@ -628,7 +699,8 @@ test("route refuses fresh signup with flag OFF while production legacy checkout 
   assert.equal(h.calls[0].payload.metadata.checkoutIntent, undefined);
 });
 
-test("an unreadable flag refuses fresh signup without lock or Stripe but still allows production legacy checkout", async () => {
+test("an unreadable flag warns and refuses fresh signup without lock or Stripe but still allows production legacy checkout", async (t) => {
+  const warning = t.mock.method(console, "warn", () => {});
   const h = harness(); h.flagFailure = true;
   const route = load("src/pages/api/stripe/session/checkout.ts", {
     "@/lib/auth/session": { SESSION_COOKIE: "ht_session", verifySession: () => ({ id: 6 }) },
@@ -644,6 +716,10 @@ test("an unreadable flag refuses fresh signup without lock or Stripe but still a
   assert.equal(h.locks, 0); assert.deepEqual(h.stripeCalls, []); assert.equal(h.record, null);
   assert.equal((await invoke(legacyBody())).code, 200);
   assert.deepEqual(h.flagReads, [6, 6]);
+  assert.equal(warning.mock.calls.length, 2);
+  for (const call of warning.mock.calls) {
+    assert.deepEqual(call.arguments, ["Checkout flag lookup failed; treating Start plan as disabled"]);
+  }
   assert.equal(h.calls.length, 1);
   assert.equal(h.calls[0].payload.subscription_data.trial_period_days, 14);
   assert.equal(h.calls[0].payload.line_items[0].price, "price_legacy_trial");
