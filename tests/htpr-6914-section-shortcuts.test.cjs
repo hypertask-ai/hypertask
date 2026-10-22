@@ -19,6 +19,8 @@ test("active column shortcuts survive rerenders without changing the active colu
   const root = createRoot(document.getElementById("root"));
   const calls = [];
   const mocks = {
+    "@/hooks/useFlag": { useFlag: () => false, useFlagLoaded: () => true },
+    "@/lib/flags/keys": {},
     react: React,
     axios: {},
     "@/store": {},
