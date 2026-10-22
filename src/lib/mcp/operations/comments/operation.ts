@@ -115,6 +115,7 @@ export interface AddCommentRequest {
 export type AddCommentResponse = {
   success: boolean
   routedTo: 'comments'
+  visibleToPeople: true
   url: string
   idempotent_replayed?: true
   agent?: McpAgentSummary
@@ -139,6 +140,8 @@ export type AddCommentResponse = {
 } | {
   success: boolean
   routedTo: 'log'
+  visibleToPeople: false
+  notice: string
   url: string
   idempotent_replayed?: true
   activity: {
@@ -941,6 +944,8 @@ export async function POST(request: NextRequest) {
             return {
               success: true,
               routedTo: 'log' as const,
+              visibleToPeople: false,
+              notice: 'Saved to the agent log, not the ticket thread; people do not see it. Resend with kind (question|qa|done) to post for people.',
               url: buildMcpTaskUrl(taskWithOwner.projectId, taskWithOwner.uniqueIndex),
               activity: { id, runId, type, text, createdAt },
             }
@@ -1004,6 +1009,7 @@ export async function POST(request: NextRequest) {
         return {
           success: true,
           routedTo: 'comments' as const,
+          visibleToPeople: true,
           url: buildMcpTaskUrl(taskWithOwner.projectId, taskWithOwner.uniqueIndex),
           ...(sessionAgent ? { agent: sessionAgent } : {}),
           comment: {

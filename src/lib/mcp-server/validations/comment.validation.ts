@@ -11,7 +11,7 @@ import { inlineAttachmentsSchema } from './attachment.validation';
 const config = getConfig();
 
 const commentKindSchema = z.enum(['question', 'qa', 'done']).optional()
-  .describe('question for a decision by a person, qa for a QA verdict, done for the closing summary; leave out for progress notes, which go to the agent log');
+  .describe('Without a kind, a reply target or an @mention of a person (and no images or attachments), an agent comment is saved to the hidden ticket agent log, which people do not see. To post for people, pass kind: question for a decision by a person, qa for a QA verdict, or done for the closing summary.');
 
 const hasAttachmentsSchema = z.boolean().optional()
   .describe('Set true when files will be attached after creation so an agent post stays a comment instead of going to the agent log');
