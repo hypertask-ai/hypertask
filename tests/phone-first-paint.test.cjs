@@ -24,9 +24,10 @@ function load(relative, mocks) {
 }
 
 async function warming({ mobile, enabled, pathname, saveData = false }) {
-  const effects = [], frames = [], idle = [], timers = [], listeners = new Map(), imports = [];
+  const effects = [], frames = [], idle = [], timers = [], listeners = new Map(), historyListeners = new Map(), imports = [];
   const previousWindow = global.window, previousDocument = global.document;
   global.window = { innerWidth: mobile ? 390 : 1440, location: { pathname }, history: { state: {} }, navigator: { connection: { saveData, effectiveType: '4g' } },
+    addEventListener: (name, fn) => historyListeners.set(name, fn), removeEventListener: name => historyListeners.delete(name),
     requestAnimationFrame: fn => { frames.push(fn); return frames.length; }, cancelAnimationFrame: () => {},
     requestIdleCallback: fn => { idle.push(fn); return idle.length; }, cancelIdleCallback: () => {},
     setTimeout: fn => { timers.push(fn); return timers.length; }, clearTimeout: () => {},
@@ -66,6 +67,7 @@ async function warming({ mobile, enabled, pathname, saveData = false }) {
     while (timers.length) timers.shift()();
     await Promise.resolve(); await Promise.resolve();
     const automatic = imports.length;
+    assert.equal(typeof historyListeners.get('cached-task-detail-popstate'), 'function', 'authorized navigation always registers history recovery');
     assert.equal(typeof listeners.get('pointerdown'), 'function');
     listeners.get('pointerdown')();
     await Promise.resolve(); await Promise.resolve();
@@ -73,6 +75,7 @@ async function warming({ mobile, enabled, pathname, saveData = false }) {
   } finally {
     cleanups.reverse().forEach(fn => fn());
     assert.equal(listeners.has('pointerdown'), false, 'unmount removes the warming listener');
+    assert.equal(historyListeners.has('cached-task-detail-popstate'), false, 'unmount removes history recovery');
     global.window = previousWindow; global.document = previousDocument;
   }
 }

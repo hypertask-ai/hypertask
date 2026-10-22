@@ -46,7 +46,7 @@ const detail = (key) => Detail({ params: Promise.resolve({ key }) });
 
 test.beforeEach(() => {
   owner = true; reads = 0; discoveryEnabled = false; urlFiltersEnabled = false;
-  rows = [fixture("htpr-6972-subtask-link"), fixture("yper4-123-board-check")];
+  rows = [fixture("htpr-7000-inbox-next-open"), fixture("yper4-123-board-check")];
 });
 
 test("both server pages reject non-owners before reading flags", async () => {
@@ -122,7 +122,7 @@ async function withAdmin(props, data, run, query = "") {
 
 for (const detailsEnabled of [true, false]) {
   test(`overview keys link to pages across metadata and title variants (details=${detailsEnabled})`, async () => {
-    rows[0] = { ...rows[0], ticketTitle: "Subtask link", ticketUrl: "https://app.hypertask.ai/detail/project-15/6972" };
+    rows[0] = { ...rows[0], ticketTitle: "Inbox next open", ticketUrl: "https://app.hypertask.ai/detail/project-15/7000" };
     await withAdmin({}, { flags: rows, detailsEnabled }, async ({ document }) => {
       for (const row of rows) {
         const code = [...document.querySelectorAll("code")].find((node) => node.textContent === row.key);
@@ -132,7 +132,7 @@ for (const detailsEnabled of [true, false]) {
   });
 }
 
-for (const [key, project, number] of [["htpr-6972-subtask-link", 15, 6972], ["yper4-123-board-check", 4060, 123]]) {
+for (const [key, project, number] of [["htpr-7000-inbox-next-open", 15, 7000], ["yper4-123-board-check", 4060, 123]]) {
   test(`detail shows just ${key}, metadata, audience, ticket and back link even when overview details are off`, async () => {
     await withAdmin({ flagKey: key }, { flags: rows, detailsEnabled: false }, async ({ document }) => {
       assert.equal(document.querySelector("h1").textContent, key);
@@ -240,7 +240,7 @@ test("counts and the active Unreleased list update before PATCH finishes, then r
 
 for (const singleFlag of [false, true]) {
   test(`shared controls PATCH the existing API, refetch, invalidate and roll back failures (detail=${singleFlag})`, async () => {
-    const row = fixture("htpr-6972-subtask-link", { mode: "EVERYONE", releasedAt: new Date().toISOString() });
+    const row = fixture("htpr-7000-inbox-next-open", { mode: "EVERYONE", releasedAt: new Date().toISOString() });
     await withAdmin({ ...(singleFlag ? { flagKey: row.key } : {}) }, { flags: [row], detailsEnabled: true }, async ({ document, client, calls, click, setFail }) => {
       const invalidated = [];
       const invalidate = client.invalidateQueries.bind(client);

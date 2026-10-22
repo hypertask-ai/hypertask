@@ -45,7 +45,6 @@ const prefix = load("src/lib/projectPrefix.ts", {
   "@/utils/helperFunctions/helperFunctions": { getSequentialLetters },
 });
 const flagKey = "htpr-6868-ticket-prefix";
-const subtaskFlagKey = "htpr-6972-subtask-link";
 function matches(row, where) {
   if (!row) return false;
   return Object.entries(where).every(([key, value]) => {
@@ -264,12 +263,10 @@ function lookups({ enabled = true, visible = true, live = false, liveAccess = tr
   });
   base["@/lib/mcp/tasks/resolveTask"] = resolver;
   const detail = load("src/utils/controllers/taskDetail/load.ts", {
-    "@/lib/flags/keys": { HTPR_6868_TICKET_PREFIX_FLAG: flagKey, HTPR_6972_SUBTASK_LINK_FLAG: subtaskFlagKey },
+    "@/lib/flags/keys": { HTPR_6868_TICKET_PREFIX_FLAG: flagKey },
     ...base, "@vercel/functions": {}, "@/lib/realtime/server": {}, "@/lib/cycles": {}, "@/lib/pullRequests/taskPullRequests": {}, "@/lib/agents/publicAgent": {},
     "@/lib/flags": {
       HTPR_6868_TICKET_PREFIX_FLAG: flagKey,
-      HTPR_6972_SUBTASK_LINK_FLAG: subtaskFlagKey,
-
       isFeatureEnabled: async (key, id) => { flagCalls.push([key, id]); return key === flagKey && enabled; },
     },
     "@/lib/agents/visibility": { boardAgentVisibilityWhere: () => ({}), accessibleAgentMembershipWhere: () => ({}) },
@@ -816,7 +813,7 @@ test("round 2: shared detail loader gates ticket identifiers but preserves numer
       f.tasks[0].pullRequests = [];
       const task = await f.detail.fetchTaskDetail("project-15", identifier, 6);
       assert.equal(task?.id ?? null, enabled ? 101 : null);
-      assert.deepEqual(f.flagCalls, [[flagKey, 6], ...(enabled ? [[subtaskFlagKey, 6]] : [])]);
+      assert.deepEqual(f.flagCalls, [[flagKey, 6]]);
       if (!enabled) {
         assert.deepEqual(f.taskQueries, []);
         assert.equal(f.aliasQueries(), 0);
@@ -826,7 +823,7 @@ test("round 2: shared detail loader gates ticket identifiers but preserves numer
       const f = lookups({ enabled });
       f.tasks[0].pullRequests = [];
       assert.equal((await f.detail.fetchTaskDetail("project-15", identifier, 6)).id, 101);
-      assert.deepEqual(f.flagCalls, [[subtaskFlagKey, 6]]);
+      assert.deepEqual(f.flagCalls, []);
       assert.equal(f.taskQueries.length, 1);
       assert.equal(f.aliasQueries(), 0);
     }

@@ -16,7 +16,7 @@ import {
   type PublicAgent,
 } from "@/lib/agents/publicAgent";
 import { isFeatureEnabled } from "@/lib/flags";
-import { HTPR_6516_AGENT_ATTRIBUTION_FLAG, HTPR_6868_TICKET_PREFIX_FLAG, HTPR_6972_SUBTASK_LINK_FLAG } from "@/lib/flags/keys";
+import { HTPR_6516_AGENT_ATTRIBUTION_FLAG, HTPR_6868_TICKET_PREFIX_FLAG } from "@/lib/flags/keys";
 import {
   accessibleAgentMembershipWhere,
   boardAgentVisibilityWhere,
@@ -237,7 +237,7 @@ export async function findTaskByTicketNumber(ticketNumber: string, userId: numbe
   }
 }
 
-export function taskDetailInclude(userId: number, projectId: number, cachedRelations = false) {
+export function taskDetailInclude(userId: number, projectId: number) {
   return {
     user: { select: userSelect },
     description_: {
@@ -362,9 +362,7 @@ export function taskDetailInclude(userId: number, projectId: number, cachedRelat
         projectId: true,
         sectionId: true,
         createdAt: true,
-        ...(cachedRelations ? {
-          description_: { where: { task: { projectId } }, select: { content: true } },
-        } : {}),
+        description_: { where: { task: { projectId } }, select: { content: true } },
       },
     },
     parentTask: {
@@ -374,10 +372,8 @@ export function taskDetailInclude(userId: number, projectId: number, cachedRelat
         ticketNumber: true,
         title: true,
         projectId: true,
-        ...(cachedRelations ? {
-          status: true,
-          description_: { where: { task: { projectId } }, select: { content: true } },
-        } : {}),
+        status: true,
+        description_: { where: { task: { projectId } }, select: { content: true } },
         subTasks: {
           where: { status: { not: Status.Deleted } },
           select: {
@@ -471,10 +467,9 @@ export async function fetchTaskDetail(
     : parseDetailSlug([projectSlug, String(uniqueIndex)]);
   if (!slug) return null;
 
-  const cachedRelations = await isFeatureEnabled(HTPR_6972_SUBTASK_LINK_FLAG, userId);
   const task = await prisma.task.findFirst({
     where: taskWhere(slug, userId),
-    include: taskDetailInclude(userId, slug.projectId, cachedRelations),
+    include: taskDetailInclude(userId, slug.projectId),
   });
 
   if (!task) return null;

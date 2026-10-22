@@ -410,21 +410,20 @@ test("same-task modal popstate keeps the task and unsent composer mounted", asyn
   assert.equal(f.observed().loading, undefined);
 });
 
-test("native detail seeds cache readiness with the Back flag independently of subtask links", () => {
+test("native detail always seeds authorized non-embedded routes", () => {
   const nativeSource = fs.readFileSync(path.join(root, "src/app/detail/[...slug]/useTaskDetailState.tsx"), "utf8");
-  const body = nativeSource.slice(nativeSource.indexOf("  const subtaskLink =")).match(/useEffect\(\(\) => \{([\s\S]*?)\n  \}, \[/)?.[1];
+  const body = nativeSource.slice(nativeSource.indexOf("  const { authenticatedUserId }")).match(/useEffect\(\(\) => \{([\s\S]*?)\n  \}, \[/)?.[1];
   assert.ok(body);
-  const seed = new Function("subtaskLink", "backFirstOpen", "embedded", "authenticatedUserId", "currentUser", "_parsedTask", "queryClient", "cachedTaskDetailKey", body);
-  for (const subtaskLink of [false, true]) for (const backFirstOpen of [false, true]) {
-    const client = new QueryClient();
-    seed(subtaskLink, backFirstOpen, false, 2343, { id: 2343 }, parent, client, cache.cachedTaskDetailKey);
-    assert.equal(client.getQueryData(cache.cachedTaskDetailKey(2343, parent.id)), subtaskLink || backFirstOpen ? parent : undefined);
-    client.clear();
-  }
+  const seed = new Function("embedded", "authenticatedUserId", "currentUser", "_parsedTask", "queryClient", "cachedTaskDetailKey", body);
   const client = new QueryClient();
-  seed(false, true, true, 2343, { id: 2343 }, parent, client, cache.cachedTaskDetailKey);
-  seed(false, true, false, 2344, { id: 2343 }, parent, client, cache.cachedTaskDetailKey);
+  seed(false, 2343, { id: 2343 }, parent, client, cache.cachedTaskDetailKey);
+  assert.equal(client.getQueryData(cache.cachedTaskDetailKey(2343, parent.id)), parent);
+  client.clear();
+  seed(true, 2343, { id: 2343 }, parent, client, cache.cachedTaskDetailKey);
+  seed(false, 2344, { id: 2343 }, parent, client, cache.cachedTaskDetailKey);
+  seed(false, 2343, { id: 2343 }, { ...parent, id: 0 }, client, cache.cachedTaskDetailKey);
   assert.equal(client.getQueryData(cache.cachedTaskDetailKey(2343, parent.id)), undefined);
+  assert.equal(client.getQueryData(cache.cachedTaskDetailKey(2343, 0)), undefined);
   client.clear();
 });
 

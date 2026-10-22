@@ -648,15 +648,10 @@ test("phone-first-paint bugfix defaults to Everyone for plain QA and respects OF
   assert.equal(await flags.isFeatureEnabled(key, 2343), false);
 });
 
-test("subtask-link bugfix defaults to Everyone for plain QA and respects OFF", async () => {
-  const { HTPR_6972_SUBTASK_LINK_FLAG: key } = flags;
-  assert.equal(key, "htpr-6972-subtask-link");
-  const entry = (await flags.listFeatureFlagModes()).find(entry => entry.key === key);
-  assert.equal(entry.kind, "bugfix");
-  assert.equal(entry.mode, "EVERYONE");
-  assert.equal(await flags.isFeatureEnabled(key, 2343), true);
-  row = { mode: "OFF", updatedAt: new Date() };
-  assert.equal(await flags.isFeatureEnabled(key, 2343), false);
+test("subtask-link is absent from the registry after becoming permanent", async () => {
+  assert.equal(flags.HTPR_6972_SUBTASK_LINK_FLAG, undefined);
+  assert.equal(definitions.some(entry => entry.key === "htpr-6972-subtask-link"), false);
+  assert.equal((await flags.listFeatureFlagModes()).some(entry => entry.key === "htpr-6972-subtask-link"), false);
 });
 
 test("inbox-next-open bugfix defaults to Everyone for plain QA and respects OFF", async () => {
