@@ -269,11 +269,11 @@ test('hello advertises feature discovery only when its flag is enabled, independ
 })
 
 test('Question lines qualify; ordinary mentions and questions answered later by the viewer do not', () => {
-  const { pickDecisionTaskIds } = load('src/lib/inboxDecisions.ts', {})
+  const { pickDecisionComments } = load('src/lib/inboxDecisions.ts', {})
   const comment = { taskId: 1, text: '<p>Question: ship it? @Reader</p>', commentText: null, createdAt: new Date(1000) }
-  assert.deepEqual([...pickDecisionTaskIds([comment], [])], [1])
-  assert.deepEqual([...pickDecisionTaskIds([{ ...comment, text: '<p>FYI @Reader</p>' }], [])], [])
-  assert.deepEqual([...pickDecisionTaskIds([comment], [{ taskId: 1, createdAt: new Date(2000) }])], [])
+  assert.deepEqual([...pickDecisionComments([comment], []).keys()], [1])
+  assert.deepEqual([...pickDecisionComments([{ ...comment, text: '<p>FYI @Reader</p>' }], []).keys()], [])
+  assert.deepEqual([...pickDecisionComments([comment], [{ taskId: 1, createdAt: new Date(2000) }]).keys()], [])
 })
 
 function pageEndpoint(agentId, warningModule = catalog({ [decisionsKey]: true })) {
