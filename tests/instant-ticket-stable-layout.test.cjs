@@ -470,6 +470,7 @@ test("only cached stable instant opens skip automatic late scrolls; ordinary ope
           "@/lib/flags/definitions/htpr-7315-unread-ticket-opens-top": common["@/lib/flags/definitions/htpr-7315-unread-ticket-opens-top"],
           "@/lib/configs/taskDetail.config": { default: config },
           "@/lib/constants/TaskDetail": { descriptionContainerId: "description-container" },
+          "@/lib/snippets": { getTiptapEditorForMode: () => null },
         }, {
           window: { ...scrollTarget, location: { hash: "" }, history: {}, innerHeight: 844 },
           document: { documentElement: scrollTarget },
@@ -544,6 +545,7 @@ test("both flags preserve comment URL/hash links, reply focus and audio entry wi
         "@/lib/flags/definitions/htpr-7315-unread-ticket-opens-top": common["@/lib/flags/definitions/htpr-7315-unread-ticket-opens-top"],
         "@/lib/configs/taskDetail.config": { default: config },
         "@/lib/constants/TaskDetail": { descriptionContainerId: "description-container" },
+        "@/lib/snippets": { getTiptapEditorForMode: () => null },
       }, {
         window: { location: { hash: action === "hash" ? "#comment-77" : "" }, history: {} },
         document,
