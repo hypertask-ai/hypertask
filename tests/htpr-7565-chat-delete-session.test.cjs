@@ -15,7 +15,7 @@ function fixture(options = {}) {
     { id: 'assistant', role: 'assistant', content: 'answer', attachments: [] },
   ] })];
   const files = options.files ?? [];
-  const calls = [], removedObjects = [];
+  const calls = [], removedObjects = [], storageSnapshots = [];
   const matches = (row, where) => (where.userId === undefined || row.userId === where.userId) &&
     (where.id === undefined || (typeof where.id === 'string' ? row.id === where.id : where.id.in.includes(row.id)));
   const chatSession = {
@@ -26,6 +26,10 @@ function fixture(options = {}) {
       await options.beforeDelete?.();
       if (options.deleteError) throw options.deleteError;
       const removed = rows.filter((row) => matches(row, where));
+      const messageIds = removed.flatMap((row) => row.messages.map(({ id }) => id));
+      for (const file of files) {
+        if (messageIds.includes(file.chatMessageId)) file.chatMessageId = null;
+      }
       rows.splice(0, rows.length, ...rows.filter((row) => !matches(row, where)));
       return { count: removed.length };
     },
@@ -72,6 +76,7 @@ function fixture(options = {}) {
     },
     deleteMany: async ({ where }) => {
       calls.push('deleteAttachments');
+      if (options.attachmentDeleteError) throw options.attachmentDeleteError;
       files.splice(0, files.length, ...files.filter((file) => !where.id.in.includes(file.id)));
       return { count: where.id.in.length };
     },
@@ -80,8 +85,11 @@ function fixture(options = {}) {
     chatSession, chatMessage, attachment,
     $transaction: async (run) => {
       const savedRows = structuredClone(rows), savedFiles = structuredClone(files);
-      try { return await run({ chatSession, chatMessage, attachment }); }
-      catch (error) {
+      try {
+        const result = await run({ chatSession, chatMessage, attachment });
+        if (options.transactionError) throw options.transactionError;
+        return result;
+      } catch (error) {
         rows.splice(0, rows.length, ...savedRows);
         files.splice(0, files.length, ...savedFiles);
         throw error;
@@ -98,9 +106,11 @@ function fixture(options = {}) {
       return { eval: async () => 1 };
     } },
     '@/lib/storage/uploadTaskAttachmentToS3': { deleteTaskAttachmentFromS3: async (source) => {
+      calls.push('storage');
       removedObjects.push(source);
+      storageSnapshots.push(structuredClone({ rows, files }));
       if (options.storageError) throw options.storageError;
-      return true;
+      return options.storageResult ? options.storageResult(source) : true;
     } },
     'next/headers': { cookies: async () => ({ get: () => ({ value: 'fixture-cookie' }) }) },
     'next/server': { NextResponse: Response },
@@ -108,7 +118,7 @@ function fixture(options = {}) {
   const { DELETE } = load('src/app/api/ai-chat/delete-session/route.ts', mocks);
   const { persistAssistantMessage } = load('src/app/api/ai/chat/stream/persistAssistantMessage.ts', {});
   return {
-    rows, files, calls, removedObjects, db,
+    rows, files, calls, removedObjects, storageSnapshots, db,
     remove: (sessionId = id(1)) => DELETE(new Request(`https://example.test/api/ai-chat/delete-session${sessionId === null ? '' : `?delete=${sessionId}`}`, { method: 'DELETE' })),
     finish: (linkify = async (text) => text) => persistAssistantMessage({
       db, sessionId: id(1), userId: 985, messageId: 'finishing-reply', content: 'final answer', linkify,
@@ -135,26 +145,39 @@ for (const compat of [false, true]) {
     assert.equal(f.rows.flatMap((row) => row.messages).length, 0);
     assert.deepEqual(f.files, []);
     assert.deepEqual(f.removedObjects, ['owned.png']);
+    assert.deepEqual(f.calls, ['attachments', 'delete', 'storage', 'deleteAttachments', 'count', 'create']);
+    assert.deepEqual(f.storageSnapshots, [{
+      rows: [], files: [{ id: 7, chatMessageId: null, fileSource: 'owned.png' }],
+    }], 'the file reference survives the session commit until storage deletion succeeds');
     assert.equal(f.rows.length, 1, 'last-chat deletion still seeds an empty replacement');
   });
 
   test(`another user's session is refused before attachment side effects (compat=${compat})`, async () => {
     const foreign = session(2, { userId: 986 });
     const files = [{ id: 8, chatMessageId: foreign.messages[0].id, fileSource: 'foreign.png' }];
+    const expected = structuredClone({ rows: [foreign], files });
     const f = fixture({ compat, rows: [foreign], files });
-    assert.equal((await f.remove(id(2))).status, 404);
-    assert.deepEqual(f.rows, [foreign]);
-    assert.equal(f.files.length, 1);
+    const response = await f.remove(id(2));
+    assert.equal(response.status, 404);
+    assert.deepEqual(await response.json(), { error: 'Session not found' });
+    assert.deepEqual(f.rows, expected.rows);
+    assert.deepEqual(f.files, expected.files);
     assert.deepEqual(f.removedObjects, []);
     assert.deepEqual(f.calls, []);
   });
 
   test(`own session is still allowed through the same ownership boundary (compat=${compat})`, async () => {
     const foreign = session(2, { userId: 986 });
-    const f = fixture({ compat, rows: [session(1, { userId: 985 }), foreign] });
+    const foreignFile = { id: 8, chatMessageId: foreign.messages[0].id, fileSource: 'foreign.png' };
+    const expectedForeign = structuredClone(foreign);
+    const f = fixture({ compat, rows: [session(1, { userId: 985 }), foreign], files: [
+      { id: 7, chatMessageId: 'message-1', fileSource: 'owned.png' }, foreignFile,
+    ] });
     assert.equal((await f.remove()).status, 200);
     assert.equal(f.rows.some((row) => row.id === id(1)), false);
-    assert.deepEqual(f.rows.find((row) => row.id === id(2)), foreign);
+    assert.deepEqual(f.rows.find((row) => row.id === id(2)), expectedForeign);
+    assert.deepEqual(f.files, [{ id: 8, chatMessageId: 'message-2', fileSource: 'foreign.png' }]);
+    assert.deepEqual(f.removedObjects, ['owned.png']);
   });
 }
 
@@ -168,20 +191,52 @@ for (const failure of ['countError', 'createError']) {
   }));
 }
 
-test('failed database deletion rolls back attachment cleanup and reports failure', () => withLogs(async () => {
-  const f = fixture({ deleteError: new Error('delete failed'), files: [{ id: 7, chatMessageId: 'human', fileSource: 'owned.png' }] });
-  assert.equal((await f.remove()).status, 500);
-  assert.equal(f.rows[0].messages.length, 2);
-  assert.equal(f.files.length, 1);
-  assert.deepEqual(f.removedObjects, []);
-}));
+for (const failure of ['deleteError', 'transactionError']) {
+  test(`failed database deletion preserves attachments and never touches storage (${failure})`, () => withLogs(async () => {
+    const f = fixture({ [failure]: new Error('delete failed'), files: [{ id: 7, chatMessageId: 'human', fileSource: 'owned.png' }] });
+    assert.equal((await f.remove()).status, 500);
+    assert.equal(f.rows[0].messages.length, 2);
+    assert.deepEqual(f.files, [{ id: 7, chatMessageId: 'human', fileSource: 'owned.png' }]);
+    assert.deepEqual(f.removedObjects, []);
+    assert.equal(f.calls.includes('deleteAttachments'), false);
+  }));
+}
 
-test('storage cleanup throwing after deletion logs and still returns success', () => withLogs(async ({ errors }) => {
-  const error = new Error('storage unavailable');
-  const f = fixture({ storageError: error, files: [{ id: 7, chatMessageId: 'human', fileSource: 'owned.png' }] });
+for (const toDelete of [id(1), 'ALL']) {
+  test(`throwing storage cleanup retains the file reference and returns success (${toDelete})`, () => withLogs(async ({ errors }) => {
+    const error = new Error('storage unavailable');
+    const f = fixture({ storageError: error, files: [{ id: 7, chatMessageId: 'human', fileSource: 'owned.png' }] });
+    const response = await f.remove(toDelete);
+    assert.equal(response.status, 200);
+    assert.deepEqual(await response.json(), { message: `Session ${toDelete} deleted successfully` });
+    assert.equal(f.rows.some((row) => row.id === id(1)), false);
+    assert.deepEqual(f.files, [{ id: 7, chatMessageId: null, fileSource: 'owned.png' }]);
+    assert.deepEqual(f.removedObjects, ['owned.png']);
+    assert.equal(f.calls.includes('deleteAttachments'), false);
+    assert.ok(errors.some(([message, , cause]) => message.includes('storage cleanup failed') && cause === error));
+  }));
+
+  test(`mixed storage results remove only successfully cleaned attachment rows (${toDelete})`, () => withLogs(async ({ errors }) => {
+    const f = fixture({ files: [
+      { id: 7, chatMessageId: 'human', fileSource: 'removed.png' },
+      { id: 8, chatMessageId: 'assistant', fileSource: 'retained.png' },
+    ], storageResult: (source) => source === 'removed.png' });
+    assert.equal((await f.remove(toDelete)).status, 200);
+    assert.equal(f.rows.some((row) => row.id === id(1)), false);
+    assert.deepEqual(f.files, [{ id: 8, chatMessageId: null, fileSource: 'retained.png' }]);
+    assert.deepEqual(f.removedObjects, ['removed.png', 'retained.png']);
+    assert.ok(errors.some(([message, fileId]) => message.includes('storage cleanup failed') && fileId === 8));
+  }));
+}
+
+test('attachment-row cleanup failure after storage deletion preserves references and returns success', () => withLogs(async ({ errors }) => {
+  const error = new Error('attachment cleanup database unavailable');
+  const f = fixture({ attachmentDeleteError: error, files: [{ id: 7, chatMessageId: 'human', fileSource: 'owned.png' }] });
   assert.equal((await f.remove()).status, 200);
   assert.equal(f.rows.some((row) => row.id === id(1)), false);
-  assert.ok(errors.some(([message, , cause]) => message.includes('storage cleanup failed') && cause === error));
+  assert.deepEqual(f.files, [{ id: 7, chatMessageId: null, fileSource: 'owned.png' }]);
+  assert.deepEqual(f.removedObjects, ['owned.png']);
+  assert.ok(errors.some(([message, cause]) => message.includes('attachment row cleanup failed after deletion') && cause === error));
 }));
 
 test('the real Redis cache/rate-limit step throwing logs but does not fail deletion', () => withLogs(async ({ warnings }) => {
@@ -228,12 +283,45 @@ test('next legacy load and cached compat cursor both exclude the deleted chat', 
   assert.deepEqual(refreshed.sessions.map(({ id }) => id), [id(9)]);
 });
 
-test('delete ALL removes only owned sessions and preserves an empty replacement', async () => {
+for (const compat of [false, true]) {
+  test(`delete ALL removes only owned sessions and attachments (compat=${compat})`, async () => {
+    const foreign = session(2, { userId: 986 });
+    const expectedForeign = structuredClone(foreign);
+    const f = fixture({ compat, rows: [session(1, { userId: 985 }), session(3, { userId: 985 }), foreign], files: [
+      { id: 7, chatMessageId: 'message-1', fileSource: 'owned-1.png' },
+      { id: 8, chatMessageId: 'message-2', fileSource: 'foreign.png' },
+      { id: 9, chatMessageId: 'message-3', fileSource: 'owned-3.png' },
+    ] });
+    const response = await f.remove('ALL');
+    assert.equal(response.status, 200);
+    assert.deepEqual(await response.json(), { message: 'Session ALL deleted successfully' });
+    assert.deepEqual(f.rows.find((row) => row.id === id(2)), expectedForeign);
+    assert.deepEqual(f.rows.filter((row) => row.userId === 985).map((row) => row.messages), [[]]);
+    assert.deepEqual(f.files, [{ id: 8, chatMessageId: 'message-2', fileSource: 'foreign.png' }]);
+    assert.deepEqual(f.removedObjects, ['owned-1.png', 'owned-3.png']);
+  });
+
+  test(`nonexistent session has no attachment or mutation side effects (compat=${compat})`, async () => {
+    const f = fixture({ compat });
+    const expected = structuredClone(f.rows);
+    const response = await f.remove(id(404));
+    assert.equal(response.status, 404);
+    assert.deepEqual(await response.json(), { error: 'Session not found' });
+    assert.deepEqual(f.rows, expected);
+    assert.deepEqual(f.calls, []);
+    assert.deepEqual(f.removedObjects, []);
+  });
+}
+
+test('delete ALL with no owned sessions leaves foreign files untouched and seeds a replacement', async () => {
   const foreign = session(2, { userId: 986 });
-  const f = fixture({ rows: [session(1, { userId: 985 }), session(3, { userId: 985 }), foreign] });
+  const expectedForeign = structuredClone(foreign);
+  const f = fixture({ rows: [foreign], files: [{ id: 8, chatMessageId: 'message-2', fileSource: 'foreign.png' }] });
   assert.equal((await f.remove('ALL')).status, 200);
-  assert.deepEqual(f.rows.find((row) => row.id === id(2)), foreign);
+  assert.deepEqual(f.rows.find((row) => row.id === id(2)), expectedForeign);
   assert.deepEqual(f.rows.filter((row) => row.userId === 985).map((row) => row.messages), [[]]);
+  assert.deepEqual(f.files, [{ id: 8, chatMessageId: 'message-2', fileSource: 'foreign.png' }]);
+  assert.deepEqual(f.removedObjects, []);
 });
 
 test('missing id remains 400 without database or storage side effects', async () => {

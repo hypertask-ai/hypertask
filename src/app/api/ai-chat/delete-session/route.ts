@@ -61,9 +61,6 @@ export async function DELETE(req: NextRequest) {
         where: { chatMessage: { sessionId: { in: sessionIds } } },
         select: { id: true, fileSource: true },
       });
-      await tx.attachment.deleteMany({
-        where: { id: { in: rows.map((row) => row.id) } },
-      });
       await tx.chatSession.deleteMany({
         where: { userId: user.id, id: { in: sessionIds } },
       });
@@ -74,15 +71,28 @@ export async function DELETE(req: NextRequest) {
       return NextResponse.json({ error: "Session not found" }, { status: 404 });
     }
 
+    const removedAttachmentIds: number[] = [];
     await Promise.all(attachments.map(async (row) => {
       try {
-        if (!await deleteTaskAttachmentFromS3(row.fileSource)) {
+        if (await deleteTaskAttachmentFromS3(row.fileSource)) {
+          removedAttachmentIds.push(row.id);
+        } else {
           console.error("[ai-chat/delete-session] attachment storage cleanup failed", row.id);
         }
       } catch (error) {
         console.error("[ai-chat/delete-session] attachment storage cleanup failed", row.id, error);
       }
     }));
+
+    try {
+      if (removedAttachmentIds.length > 0) {
+        await prisma.attachment.deleteMany({
+          where: { id: { in: removedAttachmentIds } },
+        });
+      }
+    } catch (error) {
+      console.error("[ai-chat/delete-session] attachment row cleanup failed after deletion", error);
+    }
 
     try {
       const numSessions = await prisma.chatSession.count({
