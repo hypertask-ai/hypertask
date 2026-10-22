@@ -30,7 +30,7 @@ function load(relative, dependencies, exportName = "default") {
   return exportName ? exports[exportName] : exports;
 }
 
-async function withPicker(t, { enabled = true, initialAssignees = [], rejectSave = false, holdSave = false, loadPath = "realtime" } = {}) {
+async function withPicker(t, { initialAssignees = [], rejectSave = false, holdSave = false, loadPath = "realtime" } = {}) {
   const dom = new JSDOM("<div id='root'></div>", { url: "https://app.hypertask.ai/detail/project-6859/61" });
   const previous = new Map();
   for (const [key, value] of Object.entries({ window: dom.window, document: dom.window.document,
@@ -141,7 +141,6 @@ async function withPicker(t, { enabled = true, initialAssignees = [], rejectSave
     "@/lib/constants/constants": {}, "@/lib/constants/TaskDetail": {}, "@/store": {},
     "@/lib/contexts/TaskDetail/TaskProvider": { useTaskContext: () => state },
     "axios": { default: { post: () => new Promise(resolve => { resolveReaction = resolve; }) } },
-    "@/hooks/useFlag": { useFlag: () => enabled }, "@/lib/flags/keys": {},
     "@/lib/realtime/taskDetailRefresh": refresh,
     "@/lib/state": { useRecoilState: () => [user, noop] },
     "@/lib/contexts/deviceContext": { useDeviceContext: () => false },
@@ -151,7 +150,7 @@ async function withPicker(t, { enabled = true, initialAssignees = [], rejectSave
     const [showAssignModal, setShowAssignModal] = React.useState(false);
     const lastM_APress = React.useRef(null);
     useRealtime(loadPath === "initial" ? null : task.id, { currentUserId: user.id, taskProjectId: task.projectId, taskUniqueIndex: task.uniqueIndex,
-      currentTaskTitle: currentTask.title, currentTaskAssignees: currentTask.assignees, keepAssignee: enabled,
+      currentTaskTitle: currentTask.title, currentTaskAssignees: currentTask.assignees,
       setCurrentTask, hasPullRequests: loadPath !== "shared" });
     state = { currentTask, setCurrentTask, showAssignModal, setShowAssignModal, lastM_APress,
       updateTaskInCache: noop, _setActiveItem: noop, setInViewObject: noop, queryClient, setDescription: noop, parsedTask: JSON.stringify(task), focusOn: noop };
@@ -174,8 +173,8 @@ async function withPicker(t, { enabled = true, initialAssignees = [], rejectSave
         showAssigneeModal: context.showAssignModal, toggleAssigneeModal: context.toggleModal, showTooltip: false });
     } },
     "@/hooks/General/useGetUserPreferences": { useGetUserPreferences: () => ({ data: preferences }) },
-    "@/hooks/useFlag": { useFlag: key => key === "htpr-6962-keep-assignee" ? enabled : loadPath === "shared" && ["htpr-7009-dedupe-task-detail-reads", "htpr-7004-no-loading-flash"].includes(key) },
-    "@/lib/flags/keys": { HTPR_6962_KEEP_ASSIGNEE_FLAG: "htpr-6962-keep-assignee", HTPR_7004_NO_LOADING_FLASH_FLAG: "htpr-7004-no-loading-flash" },
+    "@/hooks/useFlag": { useFlag: key => loadPath === "shared" && ["htpr-7009-dedupe-task-detail-reads", "htpr-7004-no-loading-flash"].includes(key) },
+    "@/lib/flags/keys": { HTPR_7004_NO_LOADING_FLASH_FLAG: "htpr-7004-no-loading-flash" },
     "@/lib/constants": constants,
     "@/lib/contexts/TaskDetail/FollowersProvider": { FollowersProvider: ({ children }) => children },
     "@/lib/state": { useRecoilValue: () => user },
@@ -264,9 +263,9 @@ test("realtime 500 keeps the previous shared task rendered and cached", async t 
   assert.equal(picker.row(), "AssigneesThe Assignees");
 });
 
-for (const loadPath of ["realtime", "initial"]) for (const enabled of [true, false]) {
-  test(`${loadPath}: closing the picker then receiving a pre-selection response ${enabled ? "keeps the assignee" : "retains the flag-off path"}`, async t => {
-    const picker = await withPicker(t, { enabled, loadPath });
+for (const loadPath of ["realtime", "initial"]) {
+  test(`${loadPath}: closing the picker then receiving a pre-selection response keeps the assignee`, async t => {
+    const picker = await withPicker(t, { loadPath });
     await picker.open();
     await picker.select();
     assert.match(picker.row(), /QA user/);
@@ -275,21 +274,19 @@ for (const loadPath of ["realtime", "initial"]) for (const enabled of [true, fal
     await picker.escape();
     await picker.completeLoad();
     assert.deepEqual(picker.serverRows().map(row => row.userId), [2343], "Escape cannot undo the server save");
-    assert.equal(picker.row(), enabled ? "AssigneesQA user" : "AssigneesThe Assignees");
+    assert.equal(picker.row(), "AssigneesQA user");
     assert.equal(picker.state().currentTask.section, "Doing", "unrelated server fields still refresh");
-    if (enabled) {
-      await picker.refresh();
-      await picker.completeLoad([]);
-      assert.equal(picker.row(), "AssigneesThe Assignees", "a later remote removal without a local toggle still applies");
-    }
+    await picker.refresh();
+    await picker.completeLoad([]);
+    assert.equal(picker.row(), "AssigneesThe Assignees", "a later remote removal without a local toggle still applies");
   });
 }
 
-for (const loadPath of ["realtime", "initial"]) for (const enabled of [true, false]) for (const intent of ["assign", "unassign"]) {
-  test(`${loadPath}: refetch started while ${intent} is pending ${enabled ? "keeps the local row" : "retains flag-off behavior"}`, async t => {
+for (const loadPath of ["realtime", "initial"]) for (const intent of ["assign", "unassign"]) {
+  test(`${loadPath}: refetch started while ${intent} is pending keeps the local row`, async t => {
     const assigned = [{ id: 1, userId: 2343, user: { id: 2343, displayName: "QA user" }, agent: null }];
     const initialAssignees = intent === "assign" ? [] : assigned;
-    const picker = await withPicker(t, { enabled, initialAssignees, holdSave: true, loadPath });
+    const picker = await withPicker(t, { initialAssignees, holdSave: true, loadPath });
     await picker.completeLoad();
     await picker.open();
     await picker.select();
@@ -301,8 +298,8 @@ for (const loadPath of ["realtime", "initial"]) for (const enabled of [true, fal
     assert.deepEqual(picker.serverRows(), initialAssignees, "the outbound write has not committed");
     await picker.refresh();
     await picker.completeLoad(initialAssignees, "Remote title while save pending");
-    assert.equal(picker.row(), enabled ? expected : intent === "assign" ? "AssigneesThe Assignees" : "AssigneesQA user");
-    if (enabled) assert.equal(picker.state().currentTask.assignees, localRows, "no assignee reference change occurred during this fetch");
+    assert.equal(picker.row(), expected);
+    assert.equal(picker.state().currentTask.assignees, localRows, "no assignee reference change occurred during this fetch");
     assert.equal(picker.state().currentTask.section, "Doing");
     await picker.completeSave();
     assert.equal(picker.row(), expected, "the authoritative response still applies after Escape");
@@ -386,23 +383,21 @@ test("assigning a person preserves hidden agent assignees", async t => {
   assert.deepEqual(picker.state().currentTask.assignees.map(row => row.agentId || row.userId), ["agent-1", 2343]);
 });
 
-for (const enabled of [true, false]) {
-  test(`initial response while the picker is open ${enabled ? "keeps" : "resets"} the row and reopening tick`, async t => {
-    const picker = await withPicker(t, { enabled, loadPath: "initial" });
-    await picker.open();
-    await picker.select();
-    assert.equal(picker.checked(), true);
-    await picker.completeLoad();
-    assert.equal(picker.checked(), true, "the open picker does not reset its own optimistic list on task props");
-    assert.equal(picker.row().includes("The Assignees"), !enabled);
-    await picker.refreshMembers();
-    assert.equal(picker.checked(), enabled, "members revalidation builds ticks from current task assignees");
-    await picker.escape();
-    await picker.open();
-    assert.equal(picker.checked(), enabled, "reopening derives ticks from the guarded task row");
-    await picker.escape();
-  });
-}
+test("initial response while the picker is open keeps the row and reopening tick", async t => {
+  const picker = await withPicker(t, { loadPath: "initial" });
+  await picker.open();
+  await picker.select();
+  assert.equal(picker.checked(), true);
+  await picker.completeLoad();
+  assert.equal(picker.checked(), true, "the open picker does not reset its own optimistic list on task props");
+  assert.equal(picker.row().includes("The Assignees"), false);
+  await picker.refreshMembers();
+  assert.equal(picker.checked(), true, "members revalidation builds ticks from current task assignees");
+  await picker.escape();
+  await picker.open();
+  assert.equal(picker.checked(), true, "reopening derives ticks from the guarded task row");
+  await picker.escape();
+});
 
 test("initial and subsequent revalidation accept server assignees when no local pick occurred", async t => {
   const rows = [{ id: 1, userId: 2343, user: { id: 2343, displayName: "QA user" }, agent: null }];
@@ -425,19 +420,18 @@ test("a pick during a subsequent cached-query revalidation wins over that respon
   assert.equal(picker.row(), "AssigneesQA user");
 });
 
-test("the shared assignee rule preserves empty removals and formerly undefined rows, but not other tasks or flag-off changes", () => {
+test("the shared assignee rule preserves empty removals and formerly undefined rows, but not other tasks", () => {
   const { preserveTaskAssigneesChangedDuringFetch: preserve } = load("src/lib/realtime/taskDetailRefresh.ts", { "./shared": {} }, null);
   const start = [{ userId: 2343 }];
   const fetched = { id: 1, projectId: 2, assignees: start, title: "Server title" };
   const current = { ...fetched, assignees: [] };
-  assert.equal(preserve(current, fetched, start, true).assignees, current.assignees);
-  assert.equal(preserve(current, fetched, undefined, true).assignees, current.assignees);
-  assert.equal(preserve(current, fetched, current.assignees, true), fetched);
-  assert.equal(preserve(current, fetched, start, false), fetched);
-  assert.equal(preserve({ ...current, id: 3 }, fetched, start, true), fetched);
-  assert.equal(preserve({ ...current, projectId: 3 }, fetched, start, true), fetched);
-  assert.equal(preserve(null, fetched, start, true), fetched);
-  assert.equal(preserve(current, fetched, start, true).title, "Server title");
+  assert.equal(preserve(current, fetched, start).assignees, current.assignees);
+  assert.equal(preserve(current, fetched, undefined).assignees, current.assignees);
+  assert.equal(preserve(current, fetched, current.assignees), fetched);
+  assert.equal(preserve({ ...current, id: 3 }, fetched, start), fetched);
+  assert.equal(preserve({ ...current, projectId: 3 }, fetched, start), fetched);
+  assert.equal(preserve(null, fetched, start), fetched);
+  assert.equal(preserve(current, fetched, start).title, "Server title");
 });
 
 test("pending assignee writes are counted per task and cleared only after every write finishes", () => {
@@ -448,29 +442,26 @@ test("pending assignee writes are counted per task and cleared only after every 
   const finishSecond = beginTaskAssigneeWrite(current.id);
   const finishOther = beginTaskAssigneeWrite(3);
   try {
-    assert.equal(preserve(current, fetched, current.assignees, true).assignees, current.assignees);
-    assert.equal(preserve(current, fetched, current.assignees, false), fetched);
-    assert.equal(preserve({ ...current, id: 3 }, fetched, current.assignees, true), fetched);
-    assert.equal(preserve({ ...current, projectId: 3 }, fetched, current.assignees, true), fetched);
-    assert.equal(preserve(null, fetched, current.assignees, true), fetched);
+    assert.equal(preserve(current, fetched, current.assignees).assignees, current.assignees);
+    assert.equal(preserve({ ...current, id: 3 }, fetched, current.assignees), fetched);
+    assert.equal(preserve({ ...current, projectId: 3 }, fetched, current.assignees), fetched);
+    assert.equal(preserve(null, fetched, current.assignees), fetched);
     finishSecond();
-    assert.equal(preserve(current, fetched, current.assignees, true).assignees, current.assignees, "an older pending write still needs protection");
+    assert.equal(preserve(current, fetched, current.assignees).assignees, current.assignees, "an older pending write still needs protection");
     finishFirst();
-    assert.equal(preserve(current, fetched, current.assignees, true), fetched, "a different task's pending write cannot block this refresh");
+    assert.equal(preserve(current, fetched, current.assignees), fetched, "a different task's pending write cannot block this refresh");
   } finally {
     finishOther();
   }
 });
 
-for (const enabled of [true, false]) {
-  test(`description reaction finishing after a pick ${enabled ? "preserves the assignee" : "retains the flag-off replacement"}`, async t => {
-    const picker = await withPicker(t, { enabled });
-    await picker.startReaction();
-    await picker.open();
-    await picker.select();
-    await picker.escape();
-    await picker.completeReaction();
-    assert.equal(picker.row(), enabled ? "AssigneesQA user" : "AssigneesThe Assignees");
-    assert.deepEqual(picker.state().currentTask.description_.reactions, [{ emoji: "thumbs-up" }]);
-  });
-}
+test("description reaction finishing after a pick preserves the assignee", async t => {
+  const picker = await withPicker(t);
+  await picker.startReaction();
+  await picker.open();
+  await picker.select();
+  await picker.escape();
+  await picker.completeReaction();
+  assert.equal(picker.row(), "AssigneesQA user");
+  assert.deepEqual(picker.state().currentTask.description_.reactions, [{ emoji: "thumbs-up" }]);
+});

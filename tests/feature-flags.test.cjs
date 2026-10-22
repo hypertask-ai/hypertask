@@ -586,13 +586,11 @@ test("an explicit defaultMode wins when no row is stored (HTPR-6926 MCP route wr
   assert.equal((await flags.listFeatureFlagModes()).find((row) => row.key === key).mode, "OFF");
 });
 
-test("keep-assignee bugfix defaults to Everyone for plain QA and respects OFF", async () => {
-  const { HTPR_6962_KEEP_ASSIGNEE_FLAG: key } = flags;
-  assert.equal(key, "htpr-6962-keep-assignee");
-  assert.equal((await flags.listFeatureFlagModes()).find(entry => entry.key === key).mode, "EVERYONE");
-  assert.equal(await flags.isFeatureEnabled(key, 2343), true);
-  row = { mode: "OFF", updatedAt: new Date() };
-  assert.equal(await flags.isFeatureEnabled(key, 2343), false);
+test("permanent assignee preservation is absent from the flag registry", async () => {
+  assert.equal("HTPR_6962_KEEP_ASSIGNEE_FLAG" in flags, false);
+  assert.equal(flags.FEATURE_FLAG_KEYS.includes("htpr-6962-keep-assignee"), false);
+  assert.equal(definitions.some(entry => entry.key === "htpr-6962-keep-assignee"), false);
+  assert.equal((await flags.listFeatureFlagModes()).some(entry => entry.key === "htpr-6962-keep-assignee"), false);
 });
 
 test("back-first-open bugfix defaults to Everyone for plain QA and respects OFF", async () => {

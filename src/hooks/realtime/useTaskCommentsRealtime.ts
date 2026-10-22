@@ -33,7 +33,6 @@ type UseTaskCommentsRealtimeOptions = {
   taskUniqueIndex?: number | string | null;
   currentTaskTitle?: string;
   currentTaskAssignees?: ITask["assignees"];
-  keepAssignee?: boolean;
   setCurrentTask?: Dispatch<SetStateAction<ITask | null>>;
   setDescription?: Dispatch<SetStateAction<string>>;
   setDescriptionAttachments?: Dispatch<SetStateAction<IAttachment[]>>;
@@ -73,7 +72,6 @@ export function useTaskCommentsRealtime(
     setCurrentTask,
     setDescription,
     setDescriptionAttachments,
-    keepAssignee = false,
     preserveEditorContent = false,
     hasPullRequests = false,
   } = options;
@@ -150,7 +148,6 @@ export function useTaskCommentsRealtime(
                 currentTask,
                 mergeRealtimeTaskDetail(currentTask, task, includeTaskContentSync),
                 assigneesAtFetchStart,
-                keepAssignee,
               );
               return currentTask &&
                 titleAtFetchStart !== undefined &&
@@ -382,7 +379,6 @@ export function useTaskCommentsRealtime(
     setCurrentTask,
     setDescription,
     setDescriptionAttachments,
-    keepAssignee,
     preserveEditorContent,
     hasPullRequests,
     dedupe,

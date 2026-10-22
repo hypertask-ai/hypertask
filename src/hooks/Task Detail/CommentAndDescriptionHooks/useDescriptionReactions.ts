@@ -4,15 +4,12 @@ import { descriptionContainerId } from "@/lib/constants/TaskDetail";
 import { useTaskContext } from "@/lib/contexts/TaskDetail/TaskProvider";
 import { currentUserAtom } from "@/store";
 import axios from "axios";
-import { useFlag } from "@/hooks/useFlag";
-import { HTPR_6962_KEEP_ASSIGNEE_FLAG } from "@/lib/flags/keys";
 import { preserveTaskAssigneesChangedDuringFetch } from "@/lib/realtime/taskDetailRefresh";
 import { useEffect, useMemo, useState } from "react";
 import { useRecoilState } from "@/lib/state";
 import { useDeviceContext } from "@/lib/contexts/deviceContext";
 
 const useDescriptionReactions = ()=>{
-    const keepAssignee = useFlag(HTPR_6962_KEEP_ASSIGNEE_FLAG);
     const [showEmojiPickerDescription,setShowEmojiPickerDescription ] = useState<boolean>(false)
     const {currentTask, parsedTask:parsed_task, setCurrentTask, focusOn}= useTaskContext()
     const [currentUser, _setCurrentUser] = useRecoilState(currentUserAtom);
@@ -47,7 +44,7 @@ const useDescriptionReactions = ()=>{
             }; 
             
             setCurrentTask(current => preserveTaskAssigneesChangedDuringFetch(
-              current, updatedTask, currentTask.assignees, keepAssignee,
+              current, updatedTask, currentTask.assignees,
             ));
           }          
           focusOn(descriptionContainerId)
