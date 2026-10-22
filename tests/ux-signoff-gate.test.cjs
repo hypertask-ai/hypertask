@@ -81,6 +81,7 @@ for (const [context, open, close] of [
   ['template literal', '<main>{`', '`}'],
   ['block comment', '<main>{/*', '*/}'],
   ['string literal with invalid raw newlines', '<main>{"', '"}'],
+  ['single-quoted string with invalid raw newlines', "<main>{'", "'}"],
 ]) {
   test(`flag-like wrapper in ${context} cannot exempt a literal-text rewrite`, async () => {
     const clean = removalFixture();
@@ -98,18 +99,79 @@ for (const [context, open, close] of [
   });
 }
 
-test('missing TypeScript refuses the exemption without breaking normal sign-off', async () => {
+test('the built-in scanner exempts real removals with no TypeScript available', async () => {
   const original = process.env.FEATURE_FLAG_TYPESCRIPT_PATH;
   try {
     process.env.FEATURE_FLAG_TYPESCRIPT_PATH = path.join(root, 'missing-ux-signoff-typescript.cjs');
-    const withoutParser = await import(`${pathToFileURL(path.join(root, '.github/scripts/ux-signoff-gate.mjs'))}?missing-parser`);
+    const withoutTypescript = await import(`${pathToFileURL(path.join(root, '.github/scripts/ux-signoff-gate.mjs'))}?no-typescript`);
     const fixture = removalFixture();
-    assert.deepEqual(withoutParser.flagRemovalOnly(fixture.files, fixture.productionModes, fixture.sources), []);
-    assert.equal(withoutParser.evaluate(input(removalFixture())).state, 'failure');
-    assert.equal(withoutParser.evaluate(input({ ...removalFixture(), comments: [wireframe(), yes()] })).state, 'success');
+    assert.deepEqual(withoutTypescript.flagRemovalOnly(fixture.files, fixture.productionModes, fixture.sources), ['htpr-1-panel']);
+    assert.equal(withoutTypescript.evaluate(input(removalFixture())).state, 'success');
+    assert.equal(withoutTypescript.evaluate(input({ ...removalFixture(), comments: [wireframe(), yes()] })).state, 'success');
   } finally {
     if (original === undefined) delete process.env.FEATURE_FLAG_TYPESCRIPT_PATH;
     else process.env.FEATURE_FLAG_TYPESCRIPT_PATH = original;
+  }
+});
+
+test('the scanner keeps quoted JSX text, ordinary strings, comments and expression braces distinct', async () => {
+  const clean = removalFixture();
+  const before = clean.sources['src/components/Panel.tsx']
+    .replace('  return (', '  const label = "{notCode}";\n  // {notCode}\n  /* {notCode} */\n  return (')
+    .replace('<main>', '<main title="{notCode}" data-count={1}>Don\'t treat this "quote as code');
+  const after = before.replace(/^import .*\n/gm, '')
+    .replace(/^  const panelEnabled = .*\n/m, '')
+    .replace('      {panelEnabled && (\n        <button>Existing action</button>\n      )}\n',
+      '      <button>Existing action</button>\n');
+  assert.equal((await decision(removalFixture({ before, after }))).state, 'success');
+});
+
+for (const [context, rewrite] of [
+  ['regex literal', (source) => source.replace('  return (', '  const pattern = /[{}]/;\n  return (')],
+  ['unbalanced brace', (source) => source.replace('  return (', '  {\n  return (')],
+  ['unbalanced parenthesis', (source) => source.replace('  return (', '  (\n  return (')],
+  ['line continuation', (source) => source.replace('  return (', '  const text = "line' + '\\' + '\n' + 'continuation";\n  return (')],
+  ['multiline attribute string', (source) => source.replace('<main>', '<main title="first\nsecond">')],
+  ['mismatched JSX tags', (source) => source.replace('</main>', '</aside>')],
+]) {
+  test(`the scanner refuses ${context} even when it is preserved`, async () => {
+    const clean = removalFixture();
+    const before = rewrite(clean.sources['src/components/Panel.tsx']);
+    const after = before.replace(/^import .*\n/gm, '')
+      .replace(/^  const panelEnabled = .*\n/m, '')
+      .replace('      {panelEnabled && (\n        <button>Existing action</button>\n      )}\n',
+        '      <button>Existing action</button>\n');
+    assert.equal((await decision(removalFixture({ before, after }))).state, 'failure');
+  });
+}
+
+test('a canonical wrapper can also be a plain expression statement, not an object value', async () => {
+  const clean = removalFixture();
+  const before = clean.sources['src/components/Panel.tsx']
+    .replace('  return (\n    <main>\n', '').replace('    </main>\n  );\n', '');
+  const after = before.replace(/^import .*\n/gm, '')
+    .replace(/^  const panelEnabled = .*\n/m, '')
+    .replace('      {panelEnabled && (\n        <button>Existing action</button>\n      )}\n',
+      '      <button>Existing action</button>\n');
+  assert.equal((await decision(removalFixture({ before, after }))).state, 'success');
+  assert.equal((await decision(removalFixture({
+    before: before.replace('      {panelEnabled', '  const value = (\n      {panelEnabled').replace('      )}\n', '      )}\n  );\n'),
+    after: after.replace('      <button>', '  const value = (\n      <button>').replace('</button>\n', '</button>\n  );\n'),
+  }))).state, 'failure');
+});
+
+test('a wrapper in a JavaScript comment is not a plain expression statement', async () => {
+  const clean = removalFixture();
+  const plain = clean.sources['src/components/Panel.tsx']
+    .replace('  return (\n    <main>\n', '').replace('    </main>\n  );\n', '');
+  for (const [open, close] of [['  /*\n', '  */\n'], ['  // ', '']]) {
+    const before = plain.replace('      {panelEnabled', `${open}      {panelEnabled`)
+      .replace('      )}\n', `      )}\n${close}`);
+    const after = before.replace(/^import .*\n/gm, '')
+      .replace(/^  const panelEnabled = .*\n/m, '')
+      .replace('      {panelEnabled && (\n        <button>Existing action</button>\n      )}\n',
+        '      <button>Existing action</button>\n');
+    assert.equal((await decision(removalFixture({ before, after }))).state, 'failure');
   }
 });
 

@@ -1,13 +1,7 @@
 import { execFileSync } from 'node:child_process';
 import { readFileSync } from 'node:fs';
-import { createRequire } from 'node:module';
 import { basename, dirname } from 'node:path';
 import { pathToFileURL } from 'node:url';
-
-const require = createRequire(import.meta.url);
-let typescript;
-try { typescript = require(process.env.FEATURE_FLAG_TYPESCRIPT_PATH || 'typescript'); }
-catch { /* Missing parser must retain sign-off, not disable the rest of the gate. */ }
 
 const CONTEXT = 'ux-signoff';
 const READ_ERROR = 'Could not read the ticket; retried every 10 minutes';
@@ -73,10 +67,142 @@ function patchedSource(source, file) {
   return result.length ? result.join('\n') + '\n' : '';
 }
 
+function scanFlagSource(source) {
+  // This is deliberately not a JS parser: unsupported syntax keeps normal sign-off.
+  if (/`|\\\r?\n/.test(source)) return null;
+  const code = new Set();
+  const containers = new Map();
+  const blocks = new Map();
+  const elements = new Map();
+  let cursor = 0;
+  let depth = 0;
+
+  function quoted(attribute = false) {
+    const quote = source[cursor++];
+    while (cursor < source.length) {
+      const char = source[cursor++];
+      if (char === '\n' || char === '\r') return false;
+      if (char === quote) return true;
+      if (char === '\\') {
+        if (attribute) return false;
+        if (cursor === source.length || /[\r\n]/.test(source[cursor])) return false;
+        cursor++;
+      }
+    }
+    return false;
+  }
+
+  function expression(end = '', block = true) {
+    if (++depth > 100) return false;
+    let previous = block ? 'block-open' : '';
+    while (cursor < source.length) {
+      const char = source[cursor];
+      if (/\s/.test(char)) { cursor++; continue; }
+      if (end && char === end) { cursor++; depth--; return true; }
+      if (/[})\]]/.test(char)) return false;
+      if (source.startsWith('//', cursor)) {
+        const newline = source.indexOf('\n', cursor + 2);
+        cursor = newline < 0 ? source.length : newline + 1;
+        continue;
+      }
+      if (source.startsWith('/*', cursor)) {
+        const close = source.indexOf('*/', cursor + 2);
+        if (close < 0) return false;
+        cursor = close + 2;
+        continue;
+      }
+      if (char === '"' || char === "'") {
+        if (!quoted()) return false;
+        previous = 'value';
+        continue;
+      }
+      // A slash in code could start a regex. Division is also outside this subset.
+      if (char === '/' || char === '\\') return false;
+      if (char === '<') {
+        if (!['block-open', 'block-close', ';', '(', '[', '=', '=>', 'return', '&&', '||', '?', ':', ',', ''].includes(previous) || !element()) return false;
+        previous = 'value';
+        continue;
+      }
+      const start = cursor;
+      code.add(cursor++);
+      if (/[A-Za-z_$0-9]/.test(char)) {
+        while (cursor < source.length && /[\w$]/.test(source[cursor])) code.add(cursor++);
+        previous = source.slice(start, cursor);
+      } else if (char === '(' || char === '[' || char === '{') {
+        const isBlock = char === '{' && ['block-open', 'block-close', ';', ')', '=>', 'else', 'try', 'finally'].includes(previous);
+        if (!expression({ '(': ')', '[': ']', '{': '}' }[char], isBlock)) return false;
+        if (isBlock) blocks.set(start, cursor);
+        previous = isBlock ? 'block-close' : { '(': ')', '[': ']', '{': 'value' }[char];
+      } else {
+        const pair = source.slice(start, cursor + 1);
+        if (['=>', '&&', '||'].includes(pair)) { code.add(cursor++); previous = pair; }
+        else previous = char;
+      }
+    }
+    depth--;
+    return !end;
+  }
+
+  function container(child = false) {
+    const start = cursor++;
+    if (!expression('}', false)) return false;
+    if (child) containers.set(start, cursor);
+    return true;
+  }
+
+  function element() {
+    if (++depth > 100) return false;
+    const start = cursor;
+    const opening = /^<([A-Za-z][\w.-]*(?::[A-Za-z][\w.-]*)?|)(?=[\s/>])/.exec(source.slice(cursor));
+    if (!opening) return false;
+    const name = opening[1];
+    cursor += name.length + 1;
+    if (!name && source[cursor] !== '>') return false;
+    while (cursor < source.length && source[cursor] !== '>') {
+      if (source.startsWith('/>', cursor)) {
+        cursor += 2;
+        elements.set(start, cursor);
+        depth--;
+        return Boolean(name);
+      }
+      if (/\s/.test(source[cursor])) { cursor++; continue; }
+      if (source[cursor] === '{') { if (!container()) return false; continue; }
+      const attribute = /^[A-Za-z_:][\w:.-]*/.exec(source.slice(cursor));
+      if (!attribute) return false;
+      cursor += attribute[0].length;
+      while (/\s/.test(source[cursor] ?? '') && cursor < source.length) cursor++;
+      if (source[cursor] !== '=') continue;
+      cursor++;
+      while (/\s/.test(source[cursor] ?? '') && cursor < source.length) cursor++;
+      if (source[cursor] === '"' || source[cursor] === "'") { if (!quoted(true)) return false; }
+      else if (source[cursor] === '{') { if (!container()) return false; }
+      else return false;
+    }
+    if (source[cursor++] !== '>') return false;
+    while (cursor < source.length) {
+      if (source.startsWith('</', cursor)) {
+        const closing = `</${name}>`;
+        if (!source.startsWith(closing, cursor)) return false;
+        cursor += closing.length;
+        elements.set(start, cursor);
+        depth--;
+        return true;
+      }
+      if (source[cursor] === '<') { if (!element()) return false; }
+      else if (source[cursor] === '{') { if (!container(true)) return false; }
+      else if (source[cursor] === '}') return false;
+      else cursor++; // JSX text, including quotes, is not JavaScript.
+    }
+    return false;
+  }
+
+  return expression() ? { code, containers, blocks, elements } : null;
+}
+
 function projectFlagOn(source, symbols) {
-  // Keep the projection narrow even when the parser can disambiguate these contexts.
-  if (!typescript || /`|\/\*|\*\/|\/\/|\\\r?\n/.test(source)) return null;
-  const imports = [...source.matchAll(/^import \{ ([A-Za-z_$][\w$]*(?:, [A-Za-z_$][\w$]*)*) \} from (["'])(@\/lib\/flags(?:\/keys)?|@\/hooks\/useFlag)\2;\n/gm)];
+  const initial = scanFlagSource(source);
+  if (!initial) return null;
+  const imports = [...source.matchAll(/^import \{ ([A-Za-z_$][\w$]*(?:, [A-Za-z_$][\w$]*)*) \} from (["'])(@\/lib\/flags(?:\/keys)?|@\/hooks\/useFlag)\2;\n/gm)].filter((match) => initial.code.has(match.index));
   const importedSymbols = new Set(imports.filter((match) => match[3].startsWith('@/lib/flags')).flatMap((match) => match[1].split(', ')));
   const importedHooks = new Set(imports.flatMap((match) => match[1].split(', ').filter((name) =>
     (name === 'useFlag' && match[3] === '@/hooks/useFlag') || (name === 'isFeatureEnabled' && match[3] === '@/lib/flags'))));
@@ -86,44 +212,38 @@ function projectFlagOn(source, symbols) {
   let projected = source.replace(/^([ \t]*)const ([A-Za-z_][A-Za-z0-9_]*) = (useFlag\(([A-Z][A-Z0-9_]*)\)|await isFeatureEnabled\(([A-Z][A-Z0-9_]*), [A-Za-z_$][\w$.]*\));\n/gm,
     (line, indent, alias, call, clientSymbol, serverSymbol, offset) => {
       const symbol = clientSymbol ?? serverSymbol;
-      if (!symbols.has(symbol) || !importedSymbols.has(symbol) || !importedHooks.has(clientSymbol ? 'useFlag' : 'isFeatureEnabled') || source.slice(0, offset).includes('<')) return line;
+      if (!initial.code.has(offset + indent.length) || !symbols.has(symbol) || !importedSymbols.has(symbol) || !importedHooks.has(clientSymbol ? 'useFlag' : 'isFeatureEnabled') || source.slice(0, offset).includes('<')) return line;
       aliases.push(alias);
       return '';
     });
   let unwrapped = 0;
   for (const alias of aliases) {
-    const parsed = typescript.createSourceFile('flag-removal.tsx', projected, typescript.ScriptTarget.Latest, true, typescript.ScriptKind.TSX);
-    if (parsed.parseDiagnostics.length) return null;
-    const branches = new Map();
-    function visit(node) {
-      if (typescript.isJsxExpression(node) && node.expression) {
-        const expression = node.expression;
-        const binary = typescript.isBinaryExpression(expression) &&
-          expression.operatorToken.kind === typescript.SyntaxKind.AmpersandAmpersandToken;
-        const conditional = typescript.isConditionalExpression(expression) &&
-          expression.whenFalse.kind === typescript.SyntaxKind.NullKeyword;
-        const condition = binary ? expression.left : conditional ? expression.condition : null;
-        const body = binary ? expression.right : conditional ? expression.whenTrue : null;
-        if (condition && typescript.isIdentifier(condition) && condition.text === alias &&
-          typescript.isParenthesizedExpression(body)) branches.set(node.getStart(parsed), node.end);
-      }
-      typescript.forEachChild(node, visit);
-    }
-    visit(parsed);
+    const scanned = scanFlagSource(projected);
+    if (!scanned) return null;
     const wrapper = new RegExp(`^([ \t]*)\\{${alias} (&&|\\?) \\(\n([\\s\\S]*?)^\\1\\)( : null)?\\}\n`, 'gm');
     projected = projected.replace(wrapper, (whole, indent, operator, body, fallback, offset) => {
-      if (branches.get(offset + indent.length) !== offset + whole.length - 1) return whole;
+      const start = offset + indent.length;
+      const end = offset + whole.length - 1;
+      if (scanned.containers.get(start) !== end && scanned.blocks.get(start) !== end) return whole;
       if ((operator === '?') !== Boolean(fallback)) return whole;
       const rows = body.slice(0, -1).split('\n');
       if (!rows.length || rows.some((line) => !line.startsWith(indent + '  '))) return whole;
+      // Only a single JSX element can lose these parentheses without changing evaluation.
+      const bodyStart = offset + whole.indexOf('\n') + 1;
+      const elementStart = bodyStart + body.search(/\S/);
+      const elementEnd = scanned.elements.get(elementStart);
+      if (elementEnd == null || projected.slice(elementEnd, bodyStart + body.length).trim()) return whole;
       unwrapped++;
       return rows.map((line) => indent + line.slice(indent.length + 2)).join('\n') + '\n';
     });
     if (new RegExp(`\\b${alias}\\b`).test(projected)) return null;
   }
+  const final = scanFlagSource(projected);
+  if (!final) return null;
   const removable = new Set([...symbols, 'useFlag', 'isFeatureEnabled']);
   projected = projected.replace(/^import \{ ([A-Za-z_$][\w$]*(?:, [A-Za-z_$][\w$]*)*) \} from (["'])(@\/lib\/flags(?:\/keys)?|@\/hooks\/useFlag)\2;\n/gm,
-    (line, names, quote, module) => {
+    (line, names, quote, module, offset) => {
+      if (!final.code.has(offset)) return line;
       const kept = names.split(', ').filter((name) => {
         if (!removable.has(name)) return true;
         const rest = projected.replace(line, '');
