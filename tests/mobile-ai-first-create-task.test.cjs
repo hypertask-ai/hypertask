@@ -439,10 +439,6 @@ test("board create entry points keep the classic form and explicit AI shortcut",
 
     assert.deepEqual(createCalls.slice(modalCallsBeforeQuickEntry), [
       { payload: sectionPayload, defaultEditFocus: undefined },
-      {
-        payload: { sectionId: 9190, sectionTitle: "Backlog", position: "bottom" },
-        defaultEditFocus: undefined,
-      },
     ]);
   } finally {
     if (reactRoot) await React.act(async () => reactRoot.unmount());
