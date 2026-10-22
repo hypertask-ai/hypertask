@@ -329,6 +329,13 @@ function commentVerdict(comment) {
   return /^(?:(?:yes|yep|yeah|go|ok|okay|agree|approve|approved|lgtm|looks good|ship it)\b|👍)/u.test(text) ? 'approve' : null;
 }
 
+function valentinReacted(comment) {
+  const edited = comment.editedAt ?? comment.updatedAt;
+  return (comment.reactions ?? []).some((reaction) =>
+    humanValentin(reaction, 'userId') && /^(?:👍[🏻-🏿]?|✅)️?$/u.test(reaction.emoji) &&
+    (edited == null || Date.parse(reaction.createdAt) > Date.parse(edited)));
+}
+
 function newest(comments) {
   return comments.filter((comment) => Number.isFinite(Date.parse(comment.createdAt)))
     .sort((a, b) => Date.parse(b.createdAt) - Date.parse(a.createdAt) || (b.id ?? 0) - (a.id ?? 0))[0];
@@ -361,20 +368,29 @@ export function evaluate({ title, author, files, comments = [], parentComments =
   const verdict = newest(comments.filter((comment) =>
     Date.parse(comment.createdAt) > created && commentVerdict(comment)));
   const approval = verdict && commentVerdict(verdict) === 'approve' && Date.parse(verdict.createdAt) > revision ? verdict : null;
-  const reacted = wireframe && (wireframe.reactions ?? []).some((reaction) =>
-    humanValentin(reaction, 'userId') && /^(?:👍[🏻-🏿]?|✅)\uFE0F?$/u.test(reaction.emoji) &&
-    (edited == null || Date.parse(reaction.createdAt) > revision));
-  const approved = commentVerdict(verdict ?? {}) !== 'reject' && Boolean(approval || reacted);
-  const approvedNames = new Set([
-    ...(wireframe && approved ? elementNames(wireframe) : []),
-    ...(approval && approved ? elementNames(approval) : []),
-  ]);
+  const reacted = wireframe && valentinReacted(wireframe);
+  const question = wireframe && newest(comments.filter((comment) =>
+    !humanValentin(comment, 'creatorId') && /^Question:/.test(plainText(comment.text).trim()) &&
+    Date.parse(comment.createdAt) > revision && valentinReacted(comment)));
+  const approved = commentVerdict(verdict ?? {}) !== 'reject' && Boolean(approval || reacted || question);
+  const wireframeLink = wireframe?.text.match(WIREFRAME)?.[0];
+  const earlierSameWireframe = !wireframe ? [] : comments.filter((comment) => comment !== wireframe &&
+    !humanValentin(comment, 'creatorId') && comment.text.match(WIREFRAME)?.[0] === wireframeLink &&
+    Date.parse(comment.editedAt ?? comment.updatedAt ?? comment.createdAt) < created);
   const newElements = [...new Set(ui.filter(({ filename, status }) =>
     (status === 'added' || status === 'copied') && filename.startsWith('src/components/') &&
     /\.(tsx|jsx)$/.test(filename)).map(({ filename }) => {
       const name = basename(filename).replace(/\.(tsx|jsx)$/, '');
       return name === 'index' ? basename(dirname(filename)) : name;
     }))];
+  const questionWords = new Set(question ? plainText(question.text).split(/[^A-Za-z0-9_]+/) : []);
+  const approvedNames = new Set(approved ? [
+    ...(wireframe ? elementNames(wireframe) : []),
+    ...earlierSameWireframe.flatMap(elementNames),
+    ...(approval ? elementNames(approval) : []),
+    ...(question ? elementNames(question) : []),
+    ...newElements.filter((name) => questionWords.has(name)).map((name) => name.toLowerCase().replace(/[^a-z0-9]/g, '')),
+  ] : []);
   const missingNames = newElements.filter((name) => !approvedNames.has(name.toLowerCase().replace(/[^a-z0-9]/g, '')));
   const exempt = ticket.type === 'BUGFIX' || ticket.prefix === 'YPER4';
   const details = [];
