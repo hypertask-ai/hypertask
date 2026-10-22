@@ -13,7 +13,7 @@ import {
 import { getKeyboardShortcuts } from "@/lib/constants/shortcuts";
 import { MobileViewContext } from "@/lib/contexts/mobileContext";
 import { useFlag } from "@/hooks/useFlag";
-import { HTPR_6662_AGENT_LOG_NAME_FLAG, HTPR_6929_COMPOSE_TASK_WRITER_FLAG } from "@/lib/flags/keys";
+import { HTPR_6929_COMPOSE_TASK_WRITER_FLAG } from "@/lib/flags/keys";
 
 const KeyboardShortcuts = () => {
   const shortcutsHelpPhone = useFlag(HTPR_7045_SHORTCUTS_HELP_PHONE_FLAG);
@@ -36,11 +36,7 @@ const KeyboardShortcuts = () => {
   const newTaskWindowFlag = useFlag(HTPR_6937_NEW_TASK_WINDOW_FLAG);
   let newTaskWindow = false;
   if (composeTaskWriterEnabled && newTaskWindowFlag) newTaskWindow = true;
-  const agentLogNameEnabled = useFlag(HTPR_6662_AGENT_LOG_NAME_FLAG);
-  let historyToggleLabel = "Toggle history events";
-  if (agentLogNameEnabled) {
-    historyToggleLabel = "Toggle agent log";
-  }
+  const historyToggleLabel = "Toggle agent log";
   const [_showShortcuts, setShowShortcuts] = useRecoilState(showShortcutsAtom);
   const [keyword, setKeyword] = useState("");
   const mainData = getKeyboardShortcuts(

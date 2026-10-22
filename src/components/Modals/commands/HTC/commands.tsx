@@ -58,7 +58,6 @@ import {
   HTPR_6937_NEW_TASK_WINDOW_FLAG,
   HTPR_7053_COMPOSE_BOARD_CHIP_FLAG,
   HTPR_6868_TICKET_PREFIX_FLAG,
-  HTPR_6662_AGENT_LOG_NAME_FLAG,
   HTPR_6930_MY_TASKS_KANBAN_REUSE_FLAG,
   HTPR_6567_COMMAND_SCOPE_PICKER_FLAG,
   MY_TASKS_SCOPES_FLAG,
@@ -142,15 +141,14 @@ const Commands = (props: Props) => {
   const onAgentChat = !!pathname?.startsWith("/agents/chat");
   const onMyTasks = !!pathname?.startsWith(myTasksRoute);
   const ticketPrefixEnabled = useFlag(HTPR_6868_TICKET_PREFIX_FLAG);
-  const agentLogNameEnabled = useFlag(HTPR_6662_AGENT_LOG_NAME_FLAG);
   const roundedEnabled = useFlag(HTPR_7328_ROUNDED_THEME_FLAG);
   const getRoundedCommands = useCallback(
-    (options?: IAllCommands) => getAllCommands(options, agentLogNameEnabled, options?.kanbanSelectAllEnabled, !isMobile),
-    [agentLogNameEnabled, isMobile]
+    (options?: IAllCommands) => getAllCommands(options, options?.kanbanSelectAllEnabled, !isMobile),
+    [isMobile]
   );
   const getLegacyCommands = useCallback(
-    (options?: IAllCommands) => getAllCommands(options, agentLogNameEnabled, options?.kanbanSelectAllEnabled),
-    [agentLogNameEnabled]
+    (options?: IAllCommands) => getAllCommands(options, options?.kanbanSelectAllEnabled),
+    []
   );
   let getCommands = getLegacyCommands;
   if (roundedEnabled) getCommands = getRoundedCommands;

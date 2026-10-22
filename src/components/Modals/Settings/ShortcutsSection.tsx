@@ -12,7 +12,7 @@ import { MobileViewContext } from "@/lib/contexts/mobileContext";
 import { useRecoilValue } from "@/lib/state";
 import { appShellRailAtom } from "@/store";
 import { useFlag } from "@/hooks/useFlag";
-import { HTPR_6662_AGENT_LOG_NAME_FLAG, HTPR_6929_COMPOSE_TASK_WRITER_FLAG } from "@/lib/flags/keys";
+import { HTPR_6929_COMPOSE_TASK_WRITER_FLAG } from "@/lib/flags/keys";
 
 const ShortcutsSection = () => {
   const isApple = useDeviceContext();
@@ -24,11 +24,7 @@ const ShortcutsSection = () => {
   const newTaskWindowFlag = useFlag(HTPR_6937_NEW_TASK_WINDOW_FLAG);
   let newTaskWindow = false;
   if (composeTaskWriterEnabled && newTaskWindowFlag) newTaskWindow = true;
-  const agentLogNameEnabled = useFlag(HTPR_6662_AGENT_LOG_NAME_FLAG);
-  let historyToggleLabel = "Toggle history events";
-  if (agentLogNameEnabled) {
-    historyToggleLabel = "Toggle agent log";
-  }
+  const historyToggleLabel = "Toggle agent log";
   const shortcutGroups = getKeyboardShortcuts(
     isApple,
     appShellRailOn,
