@@ -178,6 +178,8 @@ import useGlobalPathCheck from "@/hooks/General/useGlobalPathCheck";
 import { useGetAllProjectsMinimal } from "@/hooks/MultiPages/useGetAllProjectsMinimal";
 import { useProjectQuery } from "@/hooks/General/useProjectQuery";
 import { markBoardSwitchIntent } from "@/lib/analytics/boardSwitchLatency";
+import { boardFromDeviceFirst, boardFromFreshList } from "@/lib/keyboard/boardShortcutTarget";
+import { HTPR_7588_BOARD_SHORTCUT_FROM_DEVICE_FLAG } from "@/lib/flags/definitions/htpr-7588-board-shortcut-from-device";
 import { useEmojiFrequencyHydration } from "@/hooks/General/useEmojiFrequencyHydration";
 import { useFlag, useFlagReady } from "@/hooks/useFlag";
 import { useTaskBoxOutlinesFlag } from "@/hooks/useTaskBoxOutlinesFlag";
@@ -317,6 +319,7 @@ export default function GlobalProvider({
   const firstScreen = useFirstScreenSurface(authenticatedUserId);
   const routeOwnsMobileChrome = Boolean(firstScreen);
   const myTasksShortcutsWidthEnabled = useFlag(MY_TASKS_SHORTCUTS_WIDTH_FLAG);
+  const boardShortcutFromDevice = useFlag(HTPR_7588_BOARD_SHORTCUT_FROM_DEVICE_FLAG);
   useAppShellSurfaceShortcuts();
   const startupUser = useRecoilValue(currentUserAtom);
   const currentProject = useRecoilValue(currentProjectAtom);
@@ -934,21 +937,12 @@ export default function GlobalProvider({
             .split("|&|")[0]
             ?.replace("project-", ""),
         );
-        const availableBoards = currentUser?.id
-          ? await queryClient
-              .fetchQuery<IProject[]>({
-                queryKey: ["projectsAllMinimal", currentUser.id],
-                queryFn: () =>
-                  globalAPIHandlers.getAllProjectsMinimal("ExtraMinimal"),
-                staleTime: 60_000,
-              })
-              .catch(() => [])
-          : [];
-        const boardId = [_currentProject?.id, previousBoardId].find(
-          (candidate) =>
-            Number.isInteger(candidate) &&
-            availableBoards.some((project) => project.id === candidate),
-        );
+        const boardCandidates = [_currentProject?.id, previousBoardId];
+        const fetchBoardList = (): Promise<IProject[]> =>
+          globalAPIHandlers.getAllProjectsMinimal("ExtraMinimal");
+        const boardId = await (boardShortcutFromDevice
+          ? boardFromDeviceFirst(queryClient, currentUser?.id, boardCandidates, fetchBoardList)
+          : boardFromFreshList(queryClient, currentUser?.id, boardCandidates, fetchBoardList));
         if (boardId) {
           markBoardSwitchIntent({ surface: "keyboard_shortcut", projectId: boardId });
           goToProjectShortcut(boardId, true);
