@@ -51,9 +51,9 @@ function expression(file, name) {
 
 function evaluate(source, environment) {
   const javascript = ts.transpileModule(`module.exports = (${source});`, { compilerOptions }).outputText;
-  const module = { exports: {} };
-  new Function("module", ...Object.keys(environment), javascript)(module, ...Object.values(environment));
-  return module.exports;
+  const loaded = { exports: {} };
+  new Function("module", ...Object.keys(environment), javascript)(loaded, ...Object.values(environment));
+  return loaded.exports;
 }
 
 test("latest unanswered Question mentioning the viewer wins regardless of query order", () => {
