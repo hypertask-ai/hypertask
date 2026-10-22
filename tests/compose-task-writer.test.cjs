@@ -292,6 +292,7 @@ test('shared server writer gates compose before accessing a board; legacy writer
 // Loads the shared create handler (the code behind /api/tasks/createGlobally POST)
 // with strict stubs; only the packages it needs at runtime come from node_modules.
 function loadCreateGlobal(stubs) {
+  stubs['@/lib/media/inlineAgentImages.server'] = { inlineAgentImagesForUser: async (html) => html };
   stubs["@/lib/auth/agentScope"] = require("./helpers/agent-board-scope.cjs").enforcedScope;
   stubs['@/utils/controllers/tasks/parentTaskAccess'] = createJiti(__filename)(path.join(root, 'src/utils/controllers/tasks/parentTaskAccess.ts'));
   const real = new Set(['next/server', 'zod', 'better-auth/cookies']);

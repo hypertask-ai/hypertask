@@ -30,6 +30,7 @@ function loadRoute(comments) {
     },
   };
   const stubs = {
+    "@/lib/media/inlineAgentImages.server": { inlineAgentImagesForUser: async (html) => html },
     "@/lib/mcp/operationCrashReport": { reportMcpOperationCrash: () => {} },
     "next/server": {
       NextResponse: {
