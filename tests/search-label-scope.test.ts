@@ -29,6 +29,7 @@ const matches = (row: Label, where: any): boolean => {
 }
 for (const [file, exports] of [
   ['src/lib/auth/getSessionUser.ts', { getSessionUser: async () => state.session }],
+  ['src/lib/auth/agentScope.ts', { withAgentScopeRequest: (_request: any, run: () => any) => run() }],
   ['src/lib/flags.ts', {
     HTPR_6865_SEARCH_LAYOUT_FLAG: layoutFlag,
     HTPR_6878_SEARCH_LABEL_SCOPE_FLAG: flag,
@@ -46,7 +47,10 @@ for (const [file, exports] of [
   ['src/utils/controllers/turbopuffer/turbopufferHelper.ts', { searchPreviewText: (text: string) => text }],
   ['src/utils/controllers/search/document.ts', { turbopufferGetDocuments: async () => ({ status: 200 }) }],
   ['src/lib/prisma.ts', { default: {
-    project: { findMany: async ({ where }: any) => { assert.equal(where.ownerId, 6); return [{ id: 7, title: 'One' }, { id: 8, title: 'Two' }] } },
+    project: { findMany: async ({ where, select }: any) => {
+      assert.deepEqual(where, select.title ? { status: 'Normal', ownerId: 6, AND: [{ ownerId: 6 }] } : { id: { in: [7, 8] }, status: 'Normal', ownerId: 6 })
+      return [{ id: 7, title: 'One' }, { id: 8, title: 'Two' }]
+    } },
     label: { findMany: async (args: any) => {
       state.labelQueries.push(args)
       return state.labels.filter((row) => matches(row, args.where))

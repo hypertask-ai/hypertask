@@ -42,7 +42,7 @@ function effect(file, handlerName, bindings) {
 function menu(pathname, show = true, authenticatedUserId = 1) {
   const expression = findNode(provider, (node) => ts.isJsxExpression(node) && node.expression?.getText().includes("showCommands.show") && node.expression.getText().includes("<HypertasksCommands"));
   return evaluate(expression.slice(1, -1), {
-    React, ...shortcuts, pathname, authenticatedUserId, showCommands: { show }, HypertasksCommands: "command-menu",
+    React, ...shortcuts, pathname, authenticatedUserId, showCommands: { show }, myTasksSingleCommandCenter: false, HypertasksCommands: "command-menu",
   });
 }
 

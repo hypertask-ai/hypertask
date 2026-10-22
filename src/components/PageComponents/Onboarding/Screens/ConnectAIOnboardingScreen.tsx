@@ -16,8 +16,8 @@ import { CopyableCodeBlock } from "@/components/Modals/McpToken/components/Conne
 import { useMcpToken } from "@/components/Modals/McpToken/hooks/useMcpToken";
 import type { IntegrationId } from "@/components/Modals/McpToken/utils";
 import { cn } from "@/utils/undoActions/helperFuncs";
-import { useFlag } from "@/hooks/useFlag";
-import { HTPR_7026_AGENT_CONNECT_CHECK_FLAG } from "@/lib/flags/keys";
+import { useFlag, useFlagReady } from "@/hooks/useFlag";
+import { HTPR_7551_START_PLAN_CHECKOUT_FLAG, HTPR_7026_AGENT_CONNECT_CHECK_FLAG } from "@/lib/flags/keys";
 import { GetStartedButton } from "../GetStartedButton";
 
 interface IConnectAIOnboardingScreen {
@@ -182,17 +182,21 @@ function ConnectionStatus({ label, onConnected, first = false, visible = true, s
 
 export const ConnectAIOnboardingScreen: React.FC<IConnectAIOnboardingScreen> = (props) => {
   const flagEnabled = useFlag(HTPR_7026_AGENT_CONNECT_CHECK_FLAG);
+  const startPlanEnabled = useFlag(HTPR_7551_START_PLAN_CHECKOUT_FLAG);
+  const planFlagReady = useFlagReady(HTPR_7551_START_PLAN_CHECKOUT_FLAG);
+  const planMessage = <>{!planFlagReady ? "Checking plan access…" : startPlanEnabled ? "Start on Free. Choose a plan when you are ready." : "Full access free for 14 days. No credit card needed."}</>;
   const screen = (flagEnabled ? true : props.serverEligible === true)
-    ? <ConnectAISetup {...props} />
-    : <ConnectAISetup onNextScreen={props.onNextScreen} />;
+    ? <ConnectAISetup {...props} planMessage={planMessage} />
+    : <ConnectAISetup onNextScreen={props.onNextScreen} planMessage={planMessage} />;
   return screen;
 };
 
-const ConnectAISetup: React.FC<IConnectAIOnboardingScreen> = ({
+const ConnectAISetup: React.FC<IConnectAIOnboardingScreen & { planMessage: React.ReactNode }> = ({
   onNextScreen,
   compact: isCompact = false,
   visible = true,
   serverEligible = false,
+  planMessage,
 }) => {
   const [phase, setPhase] = useState<"choose" | "connect">("choose");
   const [chosenTool, setChosenTool] = useState<ToolChoice | null>(null);
@@ -359,7 +363,7 @@ const ConnectAISetup: React.FC<IConnectAIOnboardingScreen> = ({
         </div>
 
         <p className="text-meta text-text-light-gray">
-          Full access free for 14 days. No credit card needed.
+          {planMessage}
         </p>
       </div>
     );

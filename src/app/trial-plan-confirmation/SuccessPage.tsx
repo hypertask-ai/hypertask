@@ -1,5 +1,7 @@
 "use client";
 
+import { useFlag, useFlagReady } from "@/hooks/useFlag";
+import { HTPR_7551_START_PLAN_CHECKOUT_FLAG } from "@/lib/flags/keys";
 import { useRecoilState } from "@/lib/state";
 import { currentProjectAtom } from "@/store";
 import { useRouter } from "next/navigation";
@@ -8,6 +10,8 @@ import { parseCookies } from "nookies";
 const Success = () => {
   const [_currentProject, _] = useRecoilState(currentProjectAtom);
   const router = useRouter();
+  const startPlanEnabled = useFlag(HTPR_7551_START_PLAN_CHECKOUT_FLAG);
+  const flagReady = useFlagReady(HTPR_7551_START_PLAN_CHECKOUT_FLAG);
 
   const onClickHandler = () => {
     if (_currentProject?.id) {
@@ -44,7 +48,7 @@ const Success = () => {
                 Your Pro Plan trial is now active!
               </h1>
               <p className="text-center">
-                You have 14 days to test all Hypertask Pro Features
+                {!flagReady ? "Checking plan access…" : startPlanEnabled ? "Check your board for your current plan details" : "You have 14 days to test all Hypertask Pro Features"}
               </p>
             </div>
             <div
