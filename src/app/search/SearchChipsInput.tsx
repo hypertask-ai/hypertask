@@ -75,7 +75,9 @@ export default function SearchChipsInput({ value, onChange, onRun, boardId, inpu
         .filter((board) => board.title?.toLowerCase() === name.toLowerCase()).map((board) => board.id);
     }))].join(',') : '';
   const summary = [...chips.map(chipText), text.trim()].filter(Boolean).join(' ');
-  const completion = searchCompletion(text, names, commenterEnabled, logicEnabled);
+  const completion = operatorColoursEnabled
+    ? searchCompletion(text, names, commenterEnabled, operatorLogicEnabled)
+    : searchCompletion(text, names, commenterEnabled);
   const tips = (focused || searchEscBackEnabled) && !value.trim();
   const picker = dismissed ? null : completion;
   const localRows = completion?.kind === 'operator'

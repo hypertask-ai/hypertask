@@ -134,6 +134,7 @@ test('ticket bugfix flag defaults to Everyone and also requires the original log
   assert.match(input, /useFlag\(HTPR_6368_SEARCH_OPERATOR_LOGIC_FLAG\)/)
   assert.match(input, /useFlag\(HTPR_7387_SEARCH_OPERATOR_COLOURS_FLAG\)/)
   assert.match(input, /const logicEnabled = operatorLogicEnabled && operatorColoursEnabled;/)
+  assert.match(input, /const completion = operatorColoursEnabled\s*\? searchCompletion\(text, names, commenterEnabled, operatorLogicEnabled\)\s*: searchCompletion\(text, names, commenterEnabled\);/)
 })
 
 test('existing input keeps autocomplete on across all four logic/colour flag combinations and accepts priority/type suggestions', async () => {
