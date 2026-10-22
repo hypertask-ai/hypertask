@@ -27,11 +27,12 @@ const query = (rows, args) => rows.filter((row) => matches(row, args.where))
   }).slice(0, args.take)
 const mocks = new Map([
   ['src/lib/auth/getSessionUser.ts', { getSessionUser: async () => state.session }],
+  ['src/lib/auth/agentScope.ts', { withAgentScopeRequest: (_request, run) => run() }],
   ['src/lib/flags.ts', { HTPR_6865_SEARCH_LAYOUT_FLAG: 'htpr-6865-search-layout', HTPR_6878_SEARCH_LABEL_SCOPE_FLAG: 'htpr-6878-search-label-scope', HTPR_6880_SEARCH_COMMENTER_FLAG: 'htpr-6880-search-commenter', isFeatureEnabled: async () => false }],
   ['src/utils/controllers/projects/getAllIncludes.ts', { getProjectWhere: (id) => ({ ownerId: id }) }],
   ['src/lib/prisma.ts', { default: {
     project: { findMany: async ({ where }) => {
-      assert.equal(where.ownerId, 6)
+      assert.deepEqual(where, { status: 'Normal', ownerId: 6, AND: [{ ownerId: 6 }] })
       return [{ id: 7, title: 'Visible' }]
     } },
     label: { findMany: async (args) => {
@@ -39,7 +40,11 @@ const mocks = new Map([
       assert.deepEqual(args.where.projectId.in, [7])
       return query(state.labels, args)
     } },
-    task: { findMany: async () => [] },
+    task: { findMany: async (args) => {
+      assert.deepEqual(args, { where: { projectId: { in: [7] }, createdAt: { gte: args.where.createdAt.gte }, project: { ownerId: 6 } }, select: { userId: true }, orderBy: { createdAt: 'desc' }, take: 100 })
+      assert.ok(args.where.createdAt.gte instanceof Date)
+      return []
+    } },
     assignees: { findMany: async () => [] },
     user: { findMany: async (args) => {
       state.peopleQueries.push(args)
