@@ -41,7 +41,7 @@ for (const enabled of [false, true]) {
     const clippingBottoms = new Map();
     window.innerHeight = 600;
     HTMLElement.prototype.getBoundingClientRect = function () {
-      if (this.id === "listContainer") return { top: listTop, bottom: listTop + 364 };
+      if (this.id === "dropdownSelectors") return { top: listTop - 30, bottom: listTop };
       if (clippingBottoms.has(this)) return { top: 0, bottom: clippingBottoms.get(this) };
       return originalRect.call(this);
     };
@@ -79,7 +79,9 @@ for (const enabled of [false, true]) {
       assert.equal(list.style.maxHeight, enabled ? "312px" : "");
       window.innerHeight = 400;
       React.act(() => window.dispatchEvent(new window.Event("resize")));
-      assert.equal(list.style.maxHeight, enabled ? "160px" : "");
+      assert.equal(list.style.maxHeight, enabled ? "282px" : "");
+      assert.equal(list.style.top, enabled ? "auto" : "100%");
+      assert.equal(list.style.bottom, enabled ? "100%" : "auto");
       window.innerHeight = 1000;
       React.act(() => window.dispatchEvent(new window.Event("resize")));
       assert.equal(list.style.maxHeight, enabled ? "364px" : "");
@@ -93,6 +95,12 @@ for (const enabled of [false, true]) {
       clippingBottoms.set(outerClip, 520);
       React.act(() => window.dispatchEvent(new window.Event("resize")));
       assert.equal(list.style.maxHeight, enabled ? "192px" : "");
+      assert.equal(list.style.top, "100%");
+      listTop = 450;
+      React.act(() => window.dispatchEvent(new window.Event("resize")));
+      assert.equal(list.style.maxHeight, enabled ? "364px" : "");
+      assert.equal(list.style.bottom, enabled ? "100%" : "auto");
+      listTop = 320;
       window.innerHeight = 500;
       React.act(() => window.dispatchEvent(new window.Event("resize")));
       assert.equal(list.style.maxHeight, enabled ? "172px" : "");

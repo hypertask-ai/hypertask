@@ -230,7 +230,7 @@ const TeamsDropDown = (
            } 
             
 
-            const [maxHeight, setMaxHeight] = useState(364);
+            const [placement, setPlacement] = useState({ opensUp: false, maxHeight: 364 });
 
             useEffect(()=>{
                 if (!favoritesMenuContrast) {
@@ -242,13 +242,23 @@ const TeamsDropDown = (
                     const dropdown: HTMLUListElement | null = dropdownRef.current;
                     if (!dropdown) return;
 
+                    const anchor = dropdown.parentElement;
+                    if (!anchor) return;
+
+                    let top = 0;
                     let bottom = window.innerHeight;
-                    for (let parent = dropdown.parentElement; parent; parent = parent.parentElement) {
+                    for (let parent = anchor.parentElement; parent; parent = parent.parentElement) {
                         if (/auto|scroll|hidden|clip|overlay/.test(window.getComputedStyle(parent).overflowY)) {
-                            bottom = Math.min(bottom, parent.getBoundingClientRect().bottom);
+                            const clip = parent.getBoundingClientRect();
+                            top = Math.max(top, clip.top);
+                            bottom = Math.min(bottom, clip.bottom);
                         }
                     }
-                    setMaxHeight(Math.max(160, Math.min(364, bottom - dropdown.getBoundingClientRect().top - 8)));
+                    const anchorRect = anchor.getBoundingClientRect();
+                    const spaceBelow = bottom - anchorRect.bottom - 8;
+                    const spaceAbove = anchorRect.top - top - 8;
+                    const opensUp = spaceBelow < 160 && spaceAbove > spaceBelow;
+                    setPlacement({ opensUp, maxHeight: Math.max(0, Math.min(364, opensUp ? spaceAbove : spaceBelow)) });
                 };
 
                 updateMaxHeight();
@@ -261,9 +271,9 @@ const TeamsDropDown = (
             ref={dropdownRef}
             id={"listContainer"}
             style={{
-                top: '100%',
-                bottom: 'auto',
-                maxHeight: favoritesMenuContrast ? maxHeight : undefined }}
+                top: favoritesMenuContrast && placement.opensUp ? 'auto' : '100%',
+                bottom: favoritesMenuContrast && placement.opensUp ? '100%' : 'auto',
+                maxHeight: favoritesMenuContrast ? placement.maxHeight : undefined }}
             className={`dropdown-menu absolute flex max-h-[364px] w-[244px] cursor-auto flex-col overflow-y-scroll rounded-sm bg-modalBackground shadow-customshadow-2 p-4${favoritesMenuContrast ? " text-white-black" : ""}`}>
                 <li
                     onClick={reset}
