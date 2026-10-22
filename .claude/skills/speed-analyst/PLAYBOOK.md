@@ -406,6 +406,23 @@ https://app.hypertask.ai/detail/project-15/7555, PR 1838 (merge 9209e26b3, flag 
 
 **Next probe.** `createQueryCacheRecord` still stringifies each kept query in `keepWithinBudget` and then the whole client on every persist. Reusing the per-query string from the size check could remove one more pass; measure with the same probe.
 
+### 2026-10-22 afternoon: font preload fix failed live and broke ticket-page CLS; reverted (HTPR-7554)
+
+https://app.hypertask.ai/detail/project-15/7554, PR 1839 (merge 75b0995b7), revert PR 1846 (merge 707bd637a).
+
+**Premise wrong.** The fix stamped `?dpl=<NEXT_DEPLOYMENT_ID>` on the three manual font preloads to match the `next/font` stylesheet. Live, the stylesheet `34413c5a9dc26b9b.css` keeps the tag of the build that last compiled that chunk (`dpl_ANdm...` under HTML tagged `dpl_6ibF...`; this morning HTML `dpl_B9e9...`, CSS `dpl_ANdm...`). An env var read at render time cannot predict it: 3 of 3 preloads unmatched before and after, fonts still downloaded twice.
+
+**Regression.** Every PR containing 1839 failed browser-smoke's ticket-page layout check (CLS 0.127 and 0.120 vs 0.05; comments drew 217 px then collapsed to 29 px); PRs without it passed, and the revert passed. CI sets no `NEXT_DEPLOYMENT_ID`, so the href code took the old path there: the suspect is the added `await isFeatureEnabled(...)` in `RootLayout`, not the URLs. Unproven; check before any retry.
+
+**Deadlock trap.** With production red on an unrelated test, the revert failed ci-tests while the test fix (PR 1845) failed browser-smoke until the revert landed. Fix: cherry-pick the test-only commit into the revert and merge one combined PR.
+
+**Lessons.**
+- Before stamping a URL to match another asset, read that asset's own URL on production across two deploys.
+- An extra awaited server call in the root layout is not "no visible change": run browser-smoke's layout checks before merging, and treat a CLS failure on your PR as yours until a PR without your change passes.
+- A speed fix that ships flagged Everyone still needs live proof before Done; the flag let it ship, it did not make it safe.
+
+**Next probe.** Reproduce the CLS cause on a PR build: the layout await alone (no href change) vs the href change alone. Then the real fix candidate: drop the three manual preloads (today they only add a second download) without any layout await, desktop returning board on/off, browser-smoke green first.
+
 ## Milliseconds saved scoreboard
 
 Only matched end-to-end before/after evidence earns saved milliseconds; `unproven` is not zero. Do not sum different cohorts or claim forecasts as savings.
@@ -432,6 +449,7 @@ Only matched end-to-end before/after evidence earns saved milliseconds; `unprove
 | https://app.hypertask.ai/detail/project-15/7502 | Search link in a fresh tab, live probe, desktop and phone N=5 each | search requests 2 (9 of 10) → 0 (10 of 10); content desktop 5234 → 1773 ms, phone 14774 → 9940 ms | unproven ms (load 42 to 67 before, 18 to 22 after); 2 requests saved per open | flag `htpr-7502-search-once`, PR 1731, identical results |
 | https://app.hypertask.ai/detail/project-15/7395 | Phone tap from the board to ticket text, live on/off interleaved, build 309ae766d, load 2 to 3 | 10531 ms (off, N=5) → 7398 ms (on, N=10) | about 3,100 ms | flag `htpr-7395-cached-static-first`, PRs 1759 and 1822; settled screenshot identical 15 of 15 |
 | https://app.hypertask.ai/detail/project-15/7555 | Phone tap board to ticket, JSON.stringify time, live on/off interleaved N=5+5, load 6 to 9 | 317 ms (off) → 171 ms (on) main-thread stringify; ticket text 7785 → 8097 ms (overlapping) | about 146 ms CPU, 0 to ticket text | flag `htpr-7555-persist-size-once`, PR 1838; cache, text and screenshot identical |
+| https://app.hypertask.ai/detail/project-15/7554 | Font preloads vs stylesheet URL, live login, PR 1839 | 3 of 3 unmatched → 3 of 3 unmatched; ticket-page CLS 0.127 in browser-smoke | 0, regression, reverted in PR 1846 | premise wrong (stylesheet keeps an older deployment tag) |
 
 Confirmed, comparable saved-ms total in this seed: **not established**. Future entries must link private before/after summaries, commits, N, median/p90/range and QA proof. This deliberately avoids inventing savings absent from the history.
 
