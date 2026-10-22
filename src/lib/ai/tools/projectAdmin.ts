@@ -1,3 +1,6 @@
+import { assertAgentBoardInviteScope, checkAgentBoardDelegation } from "@/lib/mcp/agents/delegatedAccess";
+import { requireRole } from "@/lib/mcp/agents/scopes";
+import isProjectAdmin from "@/utils/controllers/projects/isProjectAdmin";
 import { tool } from "ai";
 import { z } from "zod";
 import prisma from "@/lib/prisma";
@@ -12,7 +15,7 @@ import { sanitizeForJson } from "@/lib/ai/tools/helpers";
 import type { ToolContext } from "./context";
 
 export function createProjectAdminTool(context: ToolContext) {
-  const { sendStatus, user, confirmationSessionId, bulkPreviewsIssued } = context;
+  const { sendStatus, user, confirmationSessionId, bulkPreviewsIssued, actingAgentId } = context;
   return {
     hypertask_project_admin: tool({
       description:
@@ -134,7 +137,9 @@ export function createProjectAdminTool(context: ToolContext) {
           return sanitizeForJson({ success: true, project: updated });
         }
 
-        const access = await validateProjectAccess(input.project_id, user.id);
+        const access = actingAgentId
+          ? await validateProjectAccess(input.project_id, user.id, actingAgentId)
+          : await validateProjectAccess(input.project_id, user.id);
         if (access.error) {
           return {
             success: false,
@@ -145,6 +150,18 @@ export function createProjectAdminTool(context: ToolContext) {
           };
         }
 
+        if (actingAgentId) {
+          if (!(await isProjectAdmin(user.id, input.project_id))) {
+            return { success: false, error: "Only the board owner or a project admin can add members" };
+          }
+          const ctx = { user, agentId: actingAgentId };
+          const delegationError = typeof input.userToAdd === "string" && PROJECT_ADMIN_MEMBER_UUID_PATTERN.test(input.userToAdd)
+            ? await checkAgentBoardDelegation(ctx, input.userToAdd)
+            : await requireRole(ctx, "admin");
+          if (delegationError) return sanitizeForJson(await delegationError.json());
+          await assertAgentBoardInviteScope(prisma.member, input.project_id, user.id, actingAgentId);
+        }
+
         if (
           typeof input.userToAdd === "string" &&
           PROJECT_ADMIN_MEMBER_UUID_PATTERN.test(input.userToAdd)
@@ -152,7 +169,8 @@ export function createProjectAdminTool(context: ToolContext) {
           const result = await addAgentToBoard(
             input.project_id,
             input.userToAdd,
-            user.id
+            user.id,
+            actingAgentId,
           );
           if (!result.ok) {
             return { success: false, error: result.message };
@@ -196,7 +214,7 @@ export function createProjectAdminTool(context: ToolContext) {
 
         const result = await addMemberController(user.id, input.project_id, [
           emailToAdd,
-        ]);
+        ], actingAgentId);
         if (result.status !== 200) {
           return { success: false, error: result.json };
         }
