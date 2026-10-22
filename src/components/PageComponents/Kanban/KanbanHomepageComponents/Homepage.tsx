@@ -1,7 +1,7 @@
 import { useFlag } from "@/hooks/useFlag";
 import { updateSection as writeSection } from "@/lib/api/typedClient";
 import { HTPR_6979_TYPED_WRITES_FLAG } from "@/lib/flags/keys";
-import { HTPR_7549_FIRST_TASK_POINTER_FLAG } from "@/lib/flags/definitions/htpr-7549-first-task-pointer";
+import { HTPR_7549_FIRST_TASK_POINTER_FLAG } from "@/lib/flags/keys";
 
 import React, { useCallback, useContext, useMemo, useRef, useState } from "react";
 import { useRecoilValue } from "@/lib/state";

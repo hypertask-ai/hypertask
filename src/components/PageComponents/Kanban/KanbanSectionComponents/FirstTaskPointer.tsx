@@ -3,7 +3,7 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import KBDElement from "@/components/Common/kbd";
 import { useFlag } from "@/hooks/useFlag";
 import { useDeviceContext } from "@/lib/contexts/deviceContext";
-import { HTPR_7549_FIRST_TASK_POINTER_FLAG } from "@/lib/flags/definitions/htpr-7549-first-task-pointer";
+import { HTPR_7549_FIRST_TASK_POINTER_FLAG } from "@/lib/flags/keys";
 import { HTPR_6929_COMPOSE_TASK_WRITER_FLAG } from "@/lib/flags/keys";
 import { useSetRecoilState } from "@/lib/state";
 import { getShortcutDisplay } from "@/lib/utils/keyboardShortcuts";

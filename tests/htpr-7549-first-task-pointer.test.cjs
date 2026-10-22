@@ -7,7 +7,6 @@ const { JSDOM } = require("jsdom");
 const { load } = require("./helpers/agent-connection.cjs");
 const key = "htpr-7549-first-task-pointer";
 const composeKey = "htpr-6929-compose-task-writer";
-const flagModule = load("src/lib/flags/definitions/htpr-7549-first-task-pointer.ts");
 const { CommandMode } = load("src/models/enums.ts");
 const store = { showCommandsAtom: "commands", activeSectionAtom: "section", activeSectionIdAtom: "sectionId" };
 const keyboard = load("src/lib/utils/keyboardShortcuts.ts", {
@@ -31,8 +30,7 @@ async function withPointer(fn) {
   const Pointer = load("src/components/PageComponents/Kanban/KanbanSectionComponents/FirstTaskPointer.tsx", {
     "@tanstack/react-query": { useQuery: (options) => { query = options; return { data: state.data, isPending: state.pending, isFetching: state.fetching }; }, useQueryClient: () => queryClient },
     "@/hooks/useFlag": { useFlag: (flag) => flag === key ? state.enabled : flag === composeKey ? state.compose : assert.fail(`Unexpected flag ${flag}`) },
-    "@/lib/flags/definitions/htpr-7549-first-task-pointer": flagModule,
-    "@/lib/flags/keys": { HTPR_6929_COMPOSE_TASK_WRITER_FLAG: composeKey },
+    "@/lib/flags/keys": { HTPR_6929_COMPOSE_TASK_WRITER_FLAG: composeKey, HTPR_7549_FIRST_TASK_POINTER_FLAG: key },
     "@/lib/contexts/deviceContext": { useDeviceContext: () => state.apple },
     "@/lib/state": { useSetRecoilState: (atom) => (value) => actions.push([atom, value]) },
     "@/lib/utils/keyboardShortcuts": keyboard,
@@ -136,7 +134,7 @@ function routeHarness(overrides = {}) {
     "next/server": { NextResponse: { json: (body, options) => ({ body, status: options?.status ?? 200 }) } },
     "@/lib/auth/getSessionUser": { getSessionUser: async () => state.userId ? { userId: state.userId, agentId: state.agentId } : null },
     "@/lib/flags": { isFeatureEnabled: async (flag, id) => { assert.equal(flag, key); assert.equal(id, state.userId); return state.enabled; } },
-    "@/lib/flags/definitions/htpr-7549-first-task-pointer": flagModule,
+    "@/lib/flags/keys": { HTPR_7549_FIRST_TASK_POINTER_FLAG: key },
     "@/utils/controllers/projects/getAllIncludes": { projectContentAccessWhere: (userId, agentId) => { assert.equal(userId, state.userId); assert.equal(agentId, state.agentId); return accessWhere; } },
     "@/lib/prisma": { __esModule: true, default: {
       project: { findFirst: async (args) => { calls.push(args); assert.deepEqual(args.where, { id: 7, ownerId: state.userId, seeded: true, status: "Normal", AND: [accessWhere] }); return state.project; } },
