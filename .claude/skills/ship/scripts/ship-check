@@ -410,18 +410,28 @@ check_deployed() {
   fi
   id=$(gh api "repos/$REPO/deployments?sha=$sha&environment=Production" --jq '.[0].id // empty' 2>/dev/null) \
     || fail "could not read deployments for $sha"
-  [ -n "$id" ] || fail "no Production deployment for $sha"
+  local live
+  if [ -z "$id" ]; then
+    # Vercel can skip a merge's build and ship it inside the next Production deploy.
+    live=$(live_production_sha_containing "$sha") || fail "no Production deployment for $sha"
+    echo "deployed ok (live in ${live:0:9})"; return
+  fi
   state=$(gh api "repos/$REPO/deployments/$id/statuses" --jq '.[0].state // empty' 2>/dev/null) \
     || fail "could not read deployment status for $sha"
   if [ "$state" != success ]; then
     # A failed build can still go live inside the next successful Production deploy.
-    local live cmp
-    live=$(newest_successful_production_sha) || fail "Production deployment for $sha is \"$state\""
-    cmp=$(gh api "repos/$REPO/compare/$sha...$live" --jq .status 2>/dev/null) || fail "could not compare $sha with live $live"
-    [[ $cmp == ahead || $cmp == identical ]] || fail "Production deployment for $sha is \"$state\""
+    live=$(live_production_sha_containing "$sha") || fail "Production deployment for $sha is \"$state\""
     echo "deployed ok (live in ${live:0:9})"; return
   fi
   echo "deployed ok"
+}
+
+live_production_sha_containing() {
+  local live cmp
+  live=$(newest_successful_production_sha) || return 1
+  cmp=$(gh api "repos/$REPO/compare/$1...$live" --jq .status 2>/dev/null) || return 1
+  [[ $cmp == ahead || $cmp == identical ]] || return 1
+  echo "$live"
 }
 
 check_docs() {

@@ -179,6 +179,31 @@ for statuses in \
     && ok "non-skipped/latest-success status still requires deployment" || bad "deployment bypass: $out"
 done
 
+# A merge Vercel never built passes only when a newer successful Production deploy contains it.
+cat > "$E/mock-bin/gh" <<'MOCK'
+#!/usr/bin/env bash
+case "$1:$2" in
+  pr:view) echo '{"number":838,"title":"YPER4-999 [INFRA] Fixture","state":"MERGED","mergeCommit":{"oid":"ec45678a2"},"baseRefName":"production"}' ;;
+  api:*/status) echo '{"statuses":[]}' | jq -r "$4" ;;
+  api:*/deployments\?sha=*) echo '[]' | jq -r "$4" ;;
+  api:*/deployments\?environment=Production*) printf '%s' "$DEPLOYS_FIXTURE" | jq -r "$4" ;;
+  api:*/deployments/*/statuses) id=${2#*/deployments/}; id=${id%%/*}
+    jq -n --arg s "$(jq -r --arg id "$id" '.[$id]' <<<"$STATES_FIXTURE")" '[{state:$s}]' | jq -r "$4" ;;
+  api:*/compare/ec45678a2...*) [[ $2 == *"...$CONTAINS_SHA" ]] && echo ahead || echo behind ;;
+  *) exit 1 ;;
+esac
+MOCK
+SK() {
+  local want=$1 msg=$2 out got; shift 2
+  out=$(env PATH="$E/mock-bin:$PATH" "$@" ./ship-check deployed YPER4-999); got=$?
+  [ "$got" = "$want" ] && [[ $out == "$msg"* ]] && ok "skipped merge: $msg" || bad "skipped merge want $want '$msg' got $got: $out"
+}
+deploys='[{"id":2,"sha":"bbbbbbbbbbbb"},{"id":1,"sha":"aaaaaaaaaaaa"}]'
+SK 0 'deployed ok (live in bbbbbbbbb)' DEPLOYS_FIXTURE="$deploys" STATES_FIXTURE='{"2":"success","1":"success"}' CONTAINS_SHA=bbbbbbbbbbbb
+SK 1 'FAIL: no Production deployment for ec45678a2' DEPLOYS_FIXTURE="$deploys" STATES_FIXTURE='{"2":"success","1":"success"}' CONTAINS_SHA=none
+SK 1 'FAIL: no Production deployment for ec45678a2' DEPLOYS_FIXTURE="$deploys" STATES_FIXTURE='{"2":"failure","1":"success"}' CONTAINS_SHA=bbbbbbbbbbbb
+SK 1 'FAIL: no Production deployment for ec45678a2' DEPLOYS_FIXTURE='[]' STATES_FIXTURE='{}' CONTAINS_SHA=none
+
 # Bindings keep their repository and base when ledger commands omit the environment.
 binding_tests() {
   local HOME PATH=$PATH BIND_EXPECT_REPO SHIP_REPO SHIP_BASE
