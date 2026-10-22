@@ -6,6 +6,7 @@ import { reportError } from "@/lib/errors/reportError";
 import { configureAiModelUsage } from "@/app/api/ai/_lib/modelProvider";
 import { cachedInstructionsForUser } from "@/app/api/ai/_lib/promptCache";
 import { renderPrompt } from "@/lib/ai/prompts/registry";
+import { HTPR_7534_WRITING_QUESTIONS_FLAG, isFeatureEnabled } from "@/lib/flags";
 import { generateText, NoObjectGeneratedError, NoOutputGeneratedError, Output } from "ai";
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
@@ -37,6 +38,7 @@ const taskQuestionsRequestSchema = z.object({
 
 const TASK_QUESTIONS_INSTRUCTIONS = renderPrompt("task-questions-context-1");
 const NEW_TICKET_QUESTIONS_INSTRUCTIONS = renderPrompt("task-questions-new-ticket-1");
+const WRITING_QUESTIONS_INSTRUCTIONS = renderPrompt("task-questions-writing-1");
 const taskQuestionsOutputSchema = z.object({
   questions: z.array(z.string()),
 });
@@ -233,9 +235,10 @@ async function taskQuestions(request: NextRequest) {
       feature: "task-questions",
     });
     const newTicket = parsedBody.data.kind === "new-ticket";
+    const writingQuestions = newTicket && await isFeatureEnabled(HTPR_7534_WRITING_QUESTIONS_FLAG, viewer.id);
     const result = await generateText({
       model,
-      instructions: await cachedInstructionsForUser(viewer.id, { modelId: systemModel.model, fixed: newTicket ? NEW_TICKET_QUESTIONS_INSTRUCTIONS : TASK_QUESTIONS_INSTRUCTIONS }),
+      instructions: await cachedInstructionsForUser(viewer.id, { modelId: systemModel.model, fixed: writingQuestions ? WRITING_QUESTIONS_INSTRUCTIONS : newTicket ? NEW_TICKET_QUESTIONS_INSTRUCTIONS : TASK_QUESTIONS_INSTRUCTIONS }),
       prompt: newTicket
         ? renderPrompt("task-questions-new-ticket-prompt-1", (task.title), (task.section), (description || "(empty)"))
         : renderPrompt("task-questions-prompt-2", (viewerBlock), (task.title), (task.status), (task.section), (description || "(empty)"), (formattedComments)),
