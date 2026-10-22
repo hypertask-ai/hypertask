@@ -84,6 +84,7 @@ for (const rollout of [false, true]) {
             const key = h.record.idempotencyKey;
             h.record.state = state;
             h.record.createdAt = new Date(Date.now() - hours * 60 * 60 * 1000).toISOString();
+            h.record.submittedAt = h.record.createdAt;
             if (!savedSessionId) delete h.record.sessionId;
             h.enabled = false;
             if (identity === "owner" || identity === "transfer") h.team.googleAccount.userId = 99;
@@ -128,6 +129,7 @@ for (const identity of ["owner", "account"]) {
         const key = h.record.idempotencyKey;
         h.record.state = state;
         h.record.createdAt = new Date(Date.now() - 25 * 60 * 60 * 1000).toISOString();
+        h.record.submittedAt = h.record.createdAt;
         if (!savedSessionId) delete h.record.sessionId;
         const completed = h.sessions.get("cs_1");
         completed.status = "complete"; completed.subscription = "sub_started";
@@ -137,7 +139,19 @@ for (const identity of ["owner", "account"]) {
         const normal = legacyBody({ mode: "Normal", priceId: "price_pro_year" });
         const refused = await h.checkout(normal, h.team.googleAccount.userId);
         assert.equal(refused.status, 409); assert.equal(refused.body.finishing, true);
-        assert.equal(h.record, null); assert.equal(h.calls.length, 1);
+        assert.equal(h.record.idempotencyKey, key); assert.equal(h.record.sessionId, "cs_1");
+        assert.equal(h.record.state, "settled"); assert.equal(h.calls.length, 1);
+        h.hidden = true;
+        for (const subscriptions of [[], [subscription("canceled", { id: "sub_unrelated" })]]) {
+          h.subscriptions = subscriptions;
+          const retry = await h.checkout(normal, h.team.googleAccount.userId);
+          assert.equal(retry.status, 409); assert.equal(retry.body.finishing, true);
+          assert.equal(h.record.idempotencyKey, key); assert.equal(h.record.sessionId, "cs_1");
+          assert.equal(h.calls.length, 1);
+        }
+        h.subscriptions = [subscription("active", { id: "sub_started" })];
+        assert.equal((await h.checkout(normal, h.team.googleAccount.userId)).status, 409);
+        assert.equal(h.record.idempotencyKey, key); assert.equal(h.calls.length, 1);
         assert.deepEqual(h.expired, []);
         h.subscriptions = [subscription("canceled", { id: "sub_started" })];
         assert.equal((await h.checkout(normal, h.team.googleAccount.userId)).status, 200);
@@ -298,6 +312,54 @@ for (const retryLegacy of [false, true]) {
   });
 }
 
+for (const legacyTimestamp of [false, true]) {
+  test(`OFF retains recently submitted old preparations and clears old submissions (legacy timestamp=${legacyTimestamp})`, async () => {
+    const h = harness();
+    const desired = { teamId: "team-owned", customerId: "cus_owned", googleAccountId: "account-owned",
+      ownerUserId: 6, quantity: 3, priceId: "price_pro_month", checkoutMode: "Trial", trialDays: 7,
+      checkoutIntent: "signup-straight-to-board", returnUrl: boardUrl, cancelUrl: boardUrl };
+    h.record = h.reservations.createCheckoutAttempt(desired);
+    h.record.createdAt = new Date(Date.now() - 30 * 60 * 60 * 1000).toISOString();
+    const key = h.record.idempotencyKey;
+    h.rejectOnce = new Error("ambiguous response");
+    assert.equal((await h.checkout()).status, 409);
+    const submittedAt = h.record.submittedAt;
+    assert.ok(Date.parse(submittedAt) > Date.now() - 60_000);
+    assert.equal(h.reservationWrites.find((attempt) => attempt.state === "in_flight").submittedAt, submittedAt);
+    h.enabled = false; h.rejectOnce = new Error("still ambiguous");
+    assert.equal((await h.checkout(legacyBody())).status, 409);
+    assert.equal(h.record.idempotencyKey, key); assert.equal(h.record.submittedAt, submittedAt);
+    assert.deepEqual(h.calls.map((call) => call.key), [key, key]);
+    h.record.submittedAt = new Date(Date.now() - 25 * 60 * 60 * 1000).toISOString();
+    if (legacyTimestamp) delete h.record.submittedAt;
+    assert.equal((await h.checkout()).status, 403);
+    assert.equal(h.record, null); assert.equal(h.calls.length, 2);
+    assert.equal((await h.checkout(legacyBody())).status, 200);
+    assert.notEqual(h.record.idempotencyKey, key);
+    assert.equal(h.calls.at(-1).payload.subscription_data.trial_period_days, 14);
+  });
+}
+
+for (const identity of ["owner", "account"]) {
+  test(`OFF refuses ${identity} transfer for recently submitted old preparation; old submission cleanup still allows legacy checkout`, async () => {
+    const h = harness(); h.rejectOnce = new Error("ambiguous response");
+    assert.equal((await h.checkout()).status, 409);
+    const key = h.record.idempotencyKey;
+    h.record.createdAt = new Date(Date.now() - 30 * 60 * 60 * 1000).toISOString();
+    h.enabled = false;
+    if (identity === "owner") h.team.googleAccount.userId = 99;
+    else h.team.googleAccountId = "account-new";
+    h.stripeCalls = [];
+    assert.equal((await h.checkout(legacyBody(), h.team.googleAccount.userId)).status, identity === "owner" ? 403 : 409);
+    assert.equal(h.record.idempotencyKey, key); assert.equal(h.calls.length, 1);
+    assert.deepEqual(h.stripeCalls, []);
+    h.record.submittedAt = new Date(Date.now() - 25 * 60 * 60 * 1000).toISOString();
+    assert.equal((await h.checkout(legacyBody(), h.team.googleAccount.userId)).status, 200);
+    assert.notEqual(h.record.idempotencyKey, key);
+    assert.equal(h.calls.at(-1).payload.subscription_data.trial_period_days, 14);
+  });
+}
+
 for (const hours of [24, 25]) {
   for (const pastTrial of [false, true]) {
     test(`OFF clears a ${hours}h-old ${pastTrial ? "Normal" : "Trial"} rollout attempt without replay; fresh legacy checkout remains allowed`, async () => {
@@ -307,6 +369,7 @@ for (const hours of [24, 25]) {
         assert.equal((await h.checkout()).status, 409);
         const key = h.record.idempotencyKey;
         h.record.createdAt = new Date(Date.now() - hours * 60 * 60 * 1000).toISOString();
+        h.record.submittedAt = h.record.createdAt;
         h.enabled = false;
         const result = await h.checkout(retryLegacy ? legacyBody({
           mode: pastTrial ? "Normal" : "Trial", priceId: pastTrial ? "price_pro_month" : "price_legacy_trial",
@@ -333,6 +396,7 @@ test("OFF settles a stale lost-response attempt and refuses a live rollout offer
   assert.equal((await h.checkout()).status, 409);
   const key = h.record.idempotencyKey;
   h.record.createdAt = new Date(Date.now() - 25 * 60 * 60 * 1000).toISOString();
+  h.record.submittedAt = h.record.createdAt;
   h.enabled = false;
   assert.equal((await h.checkout(legacyBody())).status, 409);
   assert.equal(h.record.state, "settled"); assert.equal(h.record.idempotencyKey, key);
@@ -350,6 +414,7 @@ test("OFF settles a stale in-flight key without forgetting a known completed che
   await h.checkout();
   h.record.state = "in_flight";
   h.record.createdAt = new Date(Date.now() - 25 * 60 * 60 * 1000).toISOString();
+  h.record.submittedAt = h.record.createdAt;
   const completed = h.sessions.get("cs_1");
   completed.status = "complete"; completed.subscription = "sub_started";
   h.hidden = true; h.enabled = false;
@@ -370,6 +435,7 @@ for (const savedSessionId of [false, true]) {
     const key = h.record.idempotencyKey;
     h.record.state = "in_flight";
     h.record.createdAt = new Date(Date.now() - 25 * 60 * 60 * 1000).toISOString();
+    h.record.submittedAt = h.record.createdAt;
     if (!savedSessionId) delete h.record.sessionId;
     const completed = h.sessions.get("cs_1");
     completed.status = "complete"; completed.subscription = "sub_started";

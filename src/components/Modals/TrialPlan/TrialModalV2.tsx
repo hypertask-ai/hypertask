@@ -1,4 +1,4 @@
-import { StartPlanButton } from "@/components/PageComponents/Kanban/HeaderComponents/StartPlanButton";
+import { TeamStartPlanButton } from "@/components/PageComponents/Kanban/HeaderComponents/StartPlanButton";
 import { useFlag, useFlagReady } from "@/hooks/useFlag";
 import { HTPR_7551_START_PLAN_CHECKOUT_FLAG } from "@/lib/flags/keys";
 import { ModalContainerCustom } from "@/components/Common/CommonModalComponents";
@@ -114,7 +114,7 @@ const TrialModal: React.FC<ITrialModal> = ({ currentUser, callback }) => {
         <div className="">
           <ModalBody className="w-full flex items-center justify-center border-b-0 border-transparent pt-0">
             <TrialBody team={currTeam} callback={callback} startPlanCheckout={startPlanEnabled
-              ? currTeam?.id ? <StartPlanButton teamId={currTeam.id} /> : null
+              ? <TeamStartPlanButton teamId={currTeam?.id} />
               : undefined} />
           </ModalBody>
           <ModalFooter className="w-full items-center justify-center border-t-0 py-0 px-2">

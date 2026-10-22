@@ -96,6 +96,7 @@ export type CheckoutAttemptState = "prepared" | "in_flight" | "settled";
 export type CheckoutAttempt = {
   attemptId: string;
   createdAt: string;
+  submittedAt?: string;
   desired: CheckoutAttemptDesired;
   idempotencyKey: string;
   sessionId?: string;

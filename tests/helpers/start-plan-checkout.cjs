@@ -21,7 +21,7 @@ const flag = load("src/lib/flags/definitions/htpr-7551-start-plan-checkout.ts");
 function harness() {
   const h = {
     enabled: true, seats: 3, record: null, calls: [], expired: [], sessions: new Map(),
-    locks: 0, stripeCalls: [], flagReads: [], attemptReads: 0,
+    locks: 0, stripeCalls: [], flagReads: [], attemptReads: 0, reservationWrites: [],
     payloads: new Map(), subscriptions: [], hidden: false, writes: 0, lost: false,
     team: {
       id: "team-owned", title: "Owned", totalSeats: 1,
@@ -92,7 +92,7 @@ function harness() {
       return await run({
         assertHeld,
         read: async () => { assertHeld(); return h.record && structuredClone(h.record); },
-        write: async (attempt) => { assertHeld(); h.record = structuredClone(attempt); },
+        write: async (attempt) => { assertHeld(); h.record = structuredClone(attempt); h.reservationWrites.push(structuredClone(attempt)); },
         clear: async () => { assertHeld(); h.record = null; },
       });
     } finally { release(); }

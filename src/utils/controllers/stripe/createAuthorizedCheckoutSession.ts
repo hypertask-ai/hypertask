@@ -411,7 +411,7 @@ export async function createAuthorizedCheckoutSession(
     const ownerChanged = attempt?.desired.ownerUserId !== undefined && attempt.desired.ownerUserId !== userId;
     const identityChanged = attempt && attempt.desired.googleAccountId !== team.googleAccountId;
     const staleInFlight = attempt?.state === "in_flight" &&
-      Date.now() - Date.parse(attempt.createdAt) >= 24 * 60 * 60 * 1000;
+      Date.now() - Date.parse(attempt.submittedAt ?? attempt.createdAt) >= 24 * 60 * 60 * 1000;
     if (attempt && attempt.desired.customerId !== customerId) {
       return { status: 409, body: { message: "Billing identity changed; checkout needs reconciliation" } };
     }
@@ -429,8 +429,13 @@ export async function createAuthorizedCheckoutSession(
         await expireCheckoutSessions(stripe, [oldSession], reservation.assertHeld);
         oldSession.status = "expired";
       }
-      await reservation.clear();
-      attempt = null;
+      if (oldSession?.status === "complete") {
+        attempt = { ...attempt, sessionId: oldSession.id, sessionUrl: oldSession.url, state: "settled" };
+        await reservation.write(attempt);
+      } else {
+        await reservation.clear();
+        attempt = null;
+      }
     }
     if (signupIntent && !enabled && !attempt) {
       return { status: 403, body: { message: "Start plan is not available" } };
@@ -447,6 +452,20 @@ export async function createAuthorizedCheckoutSession(
     );
     if (oldSession && !teamSessions.some((session) => session.id === oldSession?.id)) {
       teamSessions.push(oldSession);
+    }
+    if (oldSession?.status === "complete") {
+      const oldSubscriptionId = checkoutSubscriptionId(oldSession);
+      const oldSubscription = subscriptions.find((subscription) => subscription.id === oldSubscriptionId);
+      if (!oldSubscription) {
+        return { status: preview ? 200 : 409, body: {
+          canStartPlan: false, finishing: true, message: "Finishing plan setup",
+        } };
+      }
+      if (oldSubscription.status !== "canceled" && oldSubscription.status !== "incomplete_expired") {
+        return { status: 409, body: { message: "An existing subscription needs billing recovery" } };
+      }
+      await reservation.clear();
+      attempt = null;
     }
     if (!enabled && attempt?.state === "in_flight" && staleInFlight &&
       (effectiveTrialDays(attempt.desired) === 7 || attempt.desired.checkoutIntent === "signup-straight-to-board")) {
@@ -783,7 +802,11 @@ export async function createAuthorizedCheckoutSession(
     }
 
     if (attempt.state !== "in_flight") {
-      attempt = { ...attempt, state: "in_flight" };
+      attempt = {
+        ...attempt,
+        submittedAt: attempt.submittedAt ?? (attempt.state === "prepared" ? new Date().toISOString() : attempt.createdAt),
+        state: "in_flight",
+      };
       await reservation.write(attempt);
     }
     reservation.assertHeld();

@@ -52,6 +52,12 @@ async function withButton(fn, backend) {
     "@/lib/state": { useRecoilValue: (atom) => atom === "user" ? (state.userId ? { id: state.userId } : null) : state.board }, "@/store": { currentProjectAtom: "project", currentUserAtom: "user" },
     "@/hooks/useFlag": flagMock,
     "@/lib/flags/keys": flag,
+    "@/hooks/MultiPages/useGetAllAccessibleBoardList": { useGetAllAccessibleBoardList: (user, options) => {
+      state.boardsQuery = { user, options };
+      const isPending = state.boards === undefined;
+      return { data: state.boards, isError: Boolean(state.boardsError), isPending, refetch: async () => { state.boardRefetches = (state.boardRefetches ?? 0) + 1; },
+        isLoading: isPending && options.enabled && Boolean(user?.id) };
+    } },
     "@/lib/deriveCurrentBoardBilling": billing,
   });
   const legacy = load("src/components/Modals/TrialPlan/TrialPlanComponents.tsx", {
@@ -82,14 +88,32 @@ async function withButton(fn, backend) {
     "@/hooks/General/useTrial": trialHook,
     "@/lib/state": { useRecoilValue: (atom) => atom === "user" ? (state.userId ? { id: state.userId } : null) : state.board },
     "@/store": { currentProjectAtom: "project", currentUserAtom: "user" },
-    "@/hooks/MultiPages/useGetAllAccessibleBoardList": { useGetAllAccessibleBoardList: (user, options) => {
-      state.boardsQuery = { user, options };
-      const isPending = state.boards === undefined;
-      return { data: state.boards, isError: false, isPending,
-        isLoading: isPending && options.enabled && Boolean(user?.id) };
-    } },
     "@/assets/AILogo.png": { src: "fixture.png" }, "next/image": () => null,
   }).default;
+  const passthrough = ({ children }) => React.createElement("div", null, children);
+  const TrialModal = load("src/components/Modals/TrialPlan/TrialModalV2.tsx", {
+    "@/components/PageComponents/Kanban/HeaderComponents/StartPlanButton": buttonModule,
+    "@/hooks/useFlag": flagMock, "@/lib/flags/keys": flag,
+    "@/components/Common/CommonModalComponents": { ModalContainerCustom: passthrough },
+    "@/styles/AttachmentView.scss": {},
+    reactstrap: { ModalHeader: passthrough, ModalBody: passthrough, ModalFooter: passthrough, Carousel: passthrough, CarouselItem: passthrough },
+    "@/lib/constants/constants": { testimonials: [] }, "next/image": () => null,
+    "@/store": { currentProjectAtom: "project" },
+    "@/lib/state": { useRecoilState: () => [state.board, () => {}] },
+    "@/lib/constants/APIRouteConstants": { CHECKOUT_SESSION_API_ENDPOINT: "/api/stripe/session/checkout" },
+    axios: { ...axios, get: async () => ({ status: 200, data: backend?.team ?? freeBoard().team }) },
+    "next/navigation": { useRouter: () => router }, "@/lib/subscriptionPlans": plans,
+    "@/lib/contexts/mobileContext": { MobileViewContext: React.createContext(false) },
+    "lucide-react": { LogOut: () => null, Star: () => null },
+    "@/hooks/MultiPages/HTC/useSignout": { useSignout: () => ({ handleHardReset: () => {} }) },
+    "@/assets/rightSidebarHTCLogoDarkMode.svg": {}, "@/assets/RightSidebarLogo.webp": {},
+    "@/components/Common/Tooltip": () => null,
+    "@/hooks/MultiPages/HTC/useDarkMode": () => ({ effectiveTheme: "dark" }),
+    "@/lib/pricingCheckoutUrls": { buildPricingCheckoutCancelUrl: () => "/pricing" },
+  }).default;
+  const renderModal = async () => React.act(async () => reactRoot.render(React.createElement(TrialModal, {
+    currentUser: state.userId ? { id: state.userId } : null, callback: () => {},
+  })));
   const renderCard = async () => React.act(async () => reactRoot.render(React.createElement(TrialCard, {
     teamInfo: { teamId: "team-owned", stripe_customer_id: "cus_owned", googleAccountId: "account-owned", totalSeats: 3 }, manageLink: "/manage", plan: plans.storeSubscriptionPlans[0],
     hasSubscription: { activeStorePlan: "Free" },
@@ -98,7 +122,7 @@ async function withButton(fn, backend) {
   const renderLegacy = async (component) => React.act(async () => reactRoot.render(React.createElement(legacy[component], { teamId: "team-owned" })));
   const click = async () => React.act(async () => container.querySelector("button").dispatchEvent(new dom.window.MouseEvent("click", { bubbles: true })));
   try {
-    await fn({ dom, container, state, render, renderLegacy, renderCard, click, requests, pushes, invalidations,
+    await fn({ dom, container, state, render, renderLegacy, renderCard, renderModal, click, requests, pushes, invalidations,
       getQuery: () => query, refreshes: () => refreshes, refetches: () => refetches, requestCheckout: buttonModule.requestCheckout });
   } finally {
     await React.act(async () => reactRoot.unmount());
@@ -244,7 +268,7 @@ test("header mounts action beside title under the ticket flag; alternate trial e
   assert.match(header, /useFlag\(HTPR_7551_START_PLAN_CHECKOUT_FLAG\)/);
   const alternate = read("src/components/Modals/TrialPlan/TrialModalV2.tsx");
   assert.match(alternate, /if \(!flagReady\) return null/);
-  assert.match(alternate, /<TrialBody team=\{currTeam\} callback=\{callback\} startPlanCheckout=\{startPlanEnabled\s*\? currTeam\?\.id \? <StartPlanButton teamId=\{currTeam\.id\}/);
+  assert.match(alternate, /<TrialBody team=\{currTeam\} callback=\{callback\} startPlanCheckout=\{startPlanEnabled\s*\? <TeamStartPlanButton teamId=\{currTeam\?\.id\}/);
   assert.match(alternate, /if \(startPlanCheckout !== undefined\) return startPlanCheckout/);
   const settings = read("src/components/Modals/Settings/PlansSection.tsx");
   assert.match(settings, /useFlag\(HTPR_7551_START_PLAN_CHECKOUT_FLAG\)/);
@@ -346,9 +370,43 @@ test("standalone trial card does not reuse another team's board when the explici
     assert.equal(container.querySelector("button"), null);
     assert.match(container.textContent, /Open a board in this team/);
     assert.deepEqual(requests, []);
+    const previousBoardsQuery = state.boardsQuery;
     state.enabled = false;
     await renderCard();
-    assert.equal(state.boardsQuery.options.enabled, false);
+    assert.equal(state.boardsQuery, previousBoardsQuery);
     assert.match(container.textContent, /Begin Hypertask Trial/);
   });
 });
+
+for (const selection of ["none", "different team"]) {
+  test(`trial modal with ${selection} selected loads its own team's board; missing board refuses checkout and loaded owner remains allowed`, async () => {
+    const backend = harness();
+    await withButton(async ({ state, renderModal, container, getQuery, click, requests, pushes }) => {
+      const otherBoard = { ...freeBoard(), id: 8, team: { ...freeBoard().team, id: "other-team" } };
+      state.board = selection === "none" ? null : otherBoard;
+      state.boards = undefined;
+      await renderModal();
+      assert.match(container.textContent, /Loading this team's boards/);
+      assert.doesNotMatch(container.textContent, /Get Started|14 day/);
+      assert.deepEqual(requests, []);
+      state.boards = [otherBoard]; await renderModal();
+      assert.match(container.textContent, /Open a board in this team/);
+      assert.deepEqual(requests, []);
+      state.boardsError = true; await renderModal();
+      assert.match(container.textContent, /Could not load this team's boards/);
+      await React.act(async () => container.querySelector("button").click());
+      assert.equal(state.boardRefetches, 1);
+      state.boardsError = false; state.boards = [otherBoard, freeBoard()];
+      await renderModal(); assert.match(container.textContent, /Checking plan access/);
+      state.data = await getQuery().queryFn(); await renderModal();
+      assert.equal(container.querySelector("button").textContent, "Start a Hypertask plan");
+      await click();
+      assert.equal(requests.at(-1).body.teamId, "team-owned");
+      assert.match(requests.at(-1).body.boardUrl, /project\?id=7/);
+      assert.equal(backend.calls.length, 1);
+      assert.deepEqual(pushes, ["https://checkout.stripe.test/cs_1"]);
+      state.enabled = false; await renderModal();
+      assert.match(container.textContent, /14 day FREE trial/);
+    }, backend);
+  });
+}
