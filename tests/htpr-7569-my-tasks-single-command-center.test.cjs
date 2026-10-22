@@ -37,11 +37,11 @@ function evaluate(expression, bindings) {
   const js = ts.transpileModule(`const result = (${expression});`, {
     compilerOptions: { module: ts.ModuleKind.CommonJS, jsx: ts.JsxEmit.ReactJSX, target: ts.ScriptTarget.ES2020 },
   }).outputText;
-  return new Function("require", ...Object.keys(bindings), `${js}; return result;`)((id) => {
+  return new Function("require", "exports", ...Object.keys(bindings), `${js}; return result;`)((id) => {
     assert.equal(id, "react/jsx-runtime");
     const jsx = (type, props) => ({ type, props });
     return { jsx, jsxs: jsx };
-  }, ...Object.values(bindings));
+  }, {}, ...Object.values(bindings));
 }
 
 function commandHostExpressions(file) {
