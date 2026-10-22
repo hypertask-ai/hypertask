@@ -337,10 +337,14 @@ for (const enabled of [false, true]) {
         { project_id: 15, title: "First", description: html },
         { project_id: 15, title: "Second", description: "<p>Second evidence</p>", ...(enabled ? { image_urls: [other] } : {}) },
       ] })).success, true);
-      assert.equal(count(writes[5]), enabled && !optOut ? 1 : 0);
-      assert.ok(!writes[5].includes("other.png"));
-      assert.equal(count(writes[6]), enabled && !optOut ? 1 : 0);
-      assert.ok(!writes[6].includes("screenshot.png"));
+      const bulkWrites = writes.slice(5, 7);
+      const firstWrite = bulkWrites.find((value) => !value.includes("Second evidence"));
+      const secondWrite = bulkWrites.find((value) => value.includes("Second evidence"));
+      assert.ok(firstWrite && secondWrite);
+      assert.equal(count(firstWrite), enabled && !optOut ? 1 : 0);
+      assert.ok(!firstWrite.includes("other.png"));
+      assert.equal(count(secondWrite), enabled && !optOut ? 1 : 0);
+      assert.ok(!secondWrite.includes("screenshot.png"));
       assert.equal((await createUpdateCommentTool(context).hypertask_update_comment.execute({ comment_id: 44, text: "<p>Correct an old typo</p>" })).success, true);
       assert.equal(writes[7], "<p>Correct an old typo</p>");
       assert.equal((await createDraftTool(context).hypertask_draft.execute({ action: "create", task_id: 91, draft_type: "description", text: "<p>Unrelated draft</p>" })).success, true);
