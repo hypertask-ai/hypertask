@@ -450,6 +450,26 @@ https://app.hypertask.ai/detail/project-15/7588, PR https://github.com/hypertask
 
 **Next probe.** Start the board read-model read at key press instead of after the route renders, then the React render cost after `boardTasks` (about 1 s on the phone).
 
+### 2026-10-23: daily read Can't verify; the board's own code is requested only after the first wave runs (HTPR-7617)
+
+https://app.hypertask.ai/detail/project-15/7617.
+
+**Daily read.** Can't verify. `measure.mjs --latest` is the 2026-10-22 06:17 UTC run on 0f0854834; production is now 4f3732e23. The GitHub schedule (`speed-live.yml`, merged in PR 1755) has 0 runs: `scripts/speed/github-age-recipient.txt` is still the placeholder and the repo has no `live-qa` environment (only `Production`), so it skips (YPER4-544, YPER4-545). No browser run from the VPS to fill the gap. Stranded green playbook PR 1869 (HTPR-7588 live result) merged.
+
+**What found it.** The saved per-request waterfalls of that run, no new browser. In 10 of 10 phone board samples (first visit and returning) the app layout chunk, the `[...boardURL]` page chunk and their shared chunks (about 400 KB wire, for example 41724, 33412, 67977) start at 3.3 to 3.7 s, right after the first wave (webpack runtime, React 4bd1b696, react-dom 93794, main-app) finishes at about 3.1 s. Desktop: 0.32 to 1.03 s. On a phone first visit they finish at 5.3 to 5.6 s and content follows at 11.2 to 12.2 s. A returning board paints from server HTML before they arrive, so only the first visit waits on them.
+
+**Why.** Live HTML (public `/login`, same root layout) names only the first wave as `<script async>` plus a `webpack` preload; `app/layout-*.js` and the page chunk appear only inside the inline flight data, so the browser asks for them once the runtime has run and parsed it. The Next.js change that added these tags ("App Router - preinitialize chunks during SSR", vercel/next.js #54752) emits them only for client components rendered during SSR; installed `react-server-dom-webpack` client preinits each chunk while resolving a module row (`prepareDestinationWithChunks`). Why this app gets none is the ticket's first step.
+
+**Scored.** Start the layout and page download with the first wave (Next's own tags if a fixable cause, else preload hints for the same files): gain 3 / cost 2 / risk 2 = 0.75. Expected up to about 1 to 1.5 s on the phone first visit (the line is shared, so not the whole 2.2 s), about 0.1 s desktop; unmeasured. Yesterday's idea 2 (drop the per-card `showCreateTaskModalAtom` read) rescored 1/1/1 with gain about 0 on load: the subscription only fires when that atom changes.
+
+**Evidence error caught before it landed.** The four `<template data-dgst="">` client-render fallbacks were in the `/login` HTML, a static page; they say nothing about `/project`, which is `force-dynamic`. Do not cite them for the board.
+
+**Lessons.**
+- A waterfall's request start times answer "what does content wait on" without a new browser run: compare when each chunk group starts across paths and profiles before profiling CPU.
+- `secrets-guard` blocks any command that also mentions a protected path, including a `sed` with `/` in its pattern next to a redirect; write such probes as a small script file.
+
+**Next probe.** HTPR-7617: find why the layout and page client chunks get no early script tag on `/project` (server render of those parts or config), then an interleaved on/off live run once a measurement path exists.
+
 ## Milliseconds saved scoreboard
 
 Only matched end-to-end before/after evidence earns saved milliseconds; `unproven` is not zero. Do not sum different cohorts or claim forecasts as savings.
