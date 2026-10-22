@@ -24,6 +24,8 @@ import styles from "@/styles/linksModal.module.scss";
 import { ICommandList } from "./HTCTypes";
 import CommandGroups from "./CommandGroup";
 import useHTC from "@/hooks/MultiPages/HTC/useHTC";
+import type { CommandFocusProxy } from "@/components/commandTypes";
+import { HTPR_7547_SEARCH_LAZY_CLOSED_FLAG } from "@/lib/flags/keys";
 import { ModalContainerCustom, ModalHintBar, ModalInput } from "@/components/Common/CommonModalComponents";
 import useHypertasksRecoilStates from "@/hooks/RecoilRoot/useHypertasksRecoilStates";
 import {
@@ -83,7 +85,7 @@ type Props = {
   showByokApiKeys?: boolean;
   appShellRailOn?: boolean;
   scope?: "board";
-  focusProxy?: { current: HTMLInputElement | null };
+  focusProxy?: CommandFocusProxy;
 };
 
 const DESTRUCTIVE_COMMAND_MODES = [CommandMode.DeleteBoard, CommandMode.DeleteColumn];
@@ -115,6 +117,7 @@ const Commands = (props: Props) => {
   let newTaskWindow = false;
   if (composeTaskWriterEnabled && newTaskWindowFlag && !props.isDemo && !props.isInteractive) newTaskWindow = true;
   const isApple = useDeviceContext();
+  const lazyClosedCommands = useFlag(HTPR_7547_SEARCH_LAZY_CLOSED_FLAG);
   const composeEnabled = composeTaskWriterEnabled && !props.isDemo && !props.isInteractive;
   const [showCommands, setShowCommands] = useRecoilState(showCommandsAtom);
   const isCompose = composeEnabled && showCommands.paletteTab === "compose";
@@ -459,8 +462,9 @@ const Commands = (props: Props) => {
         const selectionStart = proxy?.selectionStart ?? null;
         const selectionEnd = proxy?.selectionEnd ?? null;
         if (transferring) {
+          if (focusProxy.pendingEnter !== proxy.value) delete focusProxy.pendingEnter;
           el.value = proxy.value;
-          onKeyChangeRef.current({ target: proxy } as React.ChangeEvent<HTMLInputElement>);
+          onKeyChangeRef.current({ target: { value: proxy.value } } as React.ChangeEvent<HTMLInputElement>);
         }
         el.focus({ preventScroll: true });
         if (document.activeElement === el) {
@@ -641,6 +645,14 @@ const Commands = (props: Props) => {
                 }, 1);
     }
 
+  useEffect(() => {
+    if (isCompose || !focusProxy || focusProxy.pendingEnter === undefined ||
+        keyword !== focusProxy.pendingEnter || document.activeElement !== inputRef.current ||
+        selectedCommand !== (filterCommands[0]?.commandLists[0] ?? null)) return;
+    delete focusProxy.pendingEnter;
+    if (selectedCommand) updateCommandFrequency(selectedCommand);
+  }, [isCompose, keyword, selectedCommand, filterCommands, focusProxy]);
+
   const toggle = () => {
     if (writing) return;
     setModal(!modal);
@@ -696,7 +708,7 @@ const Commands = (props: Props) => {
       />
     </div>
   ) : null;
-  const compose = composeEnabled ? <ComposeTaskWriter active={isCompose} destinationProject={newTaskWindow ? composeProjectRef.current : undefined} onBusyChange={setWriting} onSearch={clickableComposeFooter ? () => setShowCommands((previous) => ({ ...previous, paletteTab: "search" })) : undefined} onClose={clickableComposeFooter ? toggle : undefined} onCreated={async () => {
+  const compose = composeEnabled ? <ComposeTaskWriter active={isCompose} focusProxy={lazyClosedCommands || focusProxy?.compose ? focusProxy : undefined} destinationProject={newTaskWindow ? composeProjectRef.current : undefined} onBusyChange={setWriting} onSearch={clickableComposeFooter ? () => setShowCommands((previous) => ({ ...previous, paletteTab: "search" })) : undefined} onClose={clickableComposeFooter ? toggle : undefined} onCreated={async () => {
     if (newTaskWindow && isMobile) await composeOnCreatedRef.current?.();
     else if (newTaskWindow) composeOnCreatedRef.current?.();
     resetShowCommands();
@@ -710,7 +722,10 @@ const Commands = (props: Props) => {
         autoFocus={!isMobile}
         id="htc-mobile-search"
         placeholder={isDemo ? "Press Enter to select" : "Type a command or search..."}
-        onChange={onKeyChange}
+        onChange={(event) => {
+          if (focusProxy) delete focusProxy.pendingEnter;
+          onKeyChange(event);
+        }}
         value={keyword}
         onKeyDown={(e) => {
           if (e.key === "Enter" && selectedCommand) {
@@ -799,7 +814,10 @@ const Commands = (props: Props) => {
                autoFocus
                id={newTaskWindow ? "htc-search" : "htc"}
                placeholder={isDemo ? "Press Enter to select" : "Type a command or search..."}
-               onChange={onKeyChange}
+               onChange={(event) => {
+                 if (focusProxy) delete focusProxy.pendingEnter;
+                 onKeyChange(event);
+               }}
                value={keyword}
                onKeyDown={(e) => {
                  if (e.key === "Enter" && selectedCommand) {

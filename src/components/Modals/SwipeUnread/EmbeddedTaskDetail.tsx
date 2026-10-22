@@ -10,7 +10,7 @@ import { mergeRealtimeTaskDetail, preserveTaskAssigneesChangedDuringFetch, shoul
 import TaskDetail from "@/app/detail/[...slug]/TaskDetailComp";
 import { useGetUserPreferences } from "@/hooks/General/useGetUserPreferences";
 import { useFlag, useFlagReady } from "@/hooks/useFlag";
-import { HTPR_6899_STABLE_LAYOUT_FLAG, HTPR_6962_KEEP_ASSIGNEE_FLAG, HTPR_7004_NO_LOADING_FLASH_FLAG, HTPR_7009_DEDUPE_TASK_DETAIL_READS_FLAG } from "@/lib/flags/keys";
+import { HTPR_7395_CACHED_STATIC_FIRST_FLAG, HTPR_6899_STABLE_LAYOUT_FLAG, HTPR_6962_KEEP_ASSIGNEE_FLAG, HTPR_7004_NO_LOADING_FLASH_FLAG, HTPR_7009_DEDUPE_TASK_DETAIL_READS_FLAG } from "@/lib/flags/keys";
 import globalConstants from "@/lib/constants";
 import { FollowersProvider } from "@/lib/contexts/TaskDetail/FollowersProvider";
 import { TasksProvider } from "@/lib/contexts/TaskDetail/TaskProvider";
@@ -94,6 +94,7 @@ const EmbeddedTaskDetail = ({
   const flagReady = useFlagReady(HTPR_7009_DEDUPE_TASK_DETAIL_READS_FLAG);
   const dedupe = useFlag(HTPR_7009_DEDUPE_TASK_DETAIL_READS_FLAG);
   const stableLayoutFlag = useFlag(HTPR_6899_STABLE_LAYOUT_FLAG);
+  const cachedStaticFirst = useFlag(HTPR_7395_CACHED_STATIC_FIRST_FLAG);
   const currentTaskRef = useRef<ITask | null>(initialTask ?? null);
   const assigneeSnapshotRef = useRef<{ assignees: ITask["assignees"] } | null>(null);
   const taskQuery = useQuery({
@@ -168,6 +169,7 @@ const EmbeddedTaskDetail = ({
       scrollSetting={preferences.scrollSetting}
       embedded={embedded}
       cachedNavigation={!embedded && stableLayoutFlag}
+      cachedEditorAfterPaint={cachedStaticFirst ? !embedded : false}
       scrollElementRef={scrollElementRef}
     >
       {embedded ? detail : (

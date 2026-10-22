@@ -30,6 +30,7 @@ import { mergeRealtimeTaskDetail, preserveTaskAssigneesChangedDuringFetch, refre
 import { useFlag } from "@/hooks/useFlag";
 import { HTPR_7305_BOARD_FROM_TEXT_FLAG, HTPR_7306_CTRLJ_FOOTER_ONE_LINE_FLAG, HTPR_7312_CTRLJ_SKILLS_FLAG } from "@/lib/flags/keys";
 import { matchComposeTaskBoard } from "@/lib/ai/composeTaskBoard";
+import type { CommandFocusProxy } from "@/components/commandTypes";
 import { HTPR_6891_PHONE_TASK_WRITER_SHEET_FLAG, HTPR_6929_COMPOSE_TASK_WRITER_FLAG, HTPR_6937_NEW_TASK_WINDOW_FLAG, HTPR_6951_TASK_WRITING_PROGRESS_FLAG, HTPR_6962_KEEP_ASSIGNEE_FLAG, HTPR_6999_CTRL_J_VIEW_CONTEXT_FLAG, HTPR_7056_CTRLJ_SPLIT_TASKS_FLAG, HTPR_7085_CTRLJ_WRITER_REASON_FLAG, HTPR_7051_TASK_WRITER_IMAGE_UNFURL_FLAG, HTPR_7053_COMPOSE_BOARD_CHIP_FLAG, HTPR_7313_CTRLJ_ALWAYS_BOARD_CHIP_FLAG, HTPR_7343_CTRLJ_WRITER_PROPERTIES_FLAG } from "@/lib/flags/keys";
 import { HTPR_7307_CTRLJ_FOOTER_CLICKABLE_FLAG } from "@/lib/flags/keys";
 import { resolveComposeBoardTarget } from "./composeBoardTarget";
@@ -38,8 +39,9 @@ import MoveTaskGlobal from "@/components/Modals/MoveTaskToBoard";
 import { discardUnboundCreateTaskUploads } from "@/lib/createTaskAttachmentUploads";
 import type { IProject, ITask } from "@/models/model";
 
-export default function ComposeTaskWriter({ active, destinationProject, onCreated, onBusyChange, onSearch, onClose }: {
+export default function ComposeTaskWriter({ active, focusProxy, destinationProject, onCreated, onBusyChange, onSearch, onClose }: {
   active: boolean;
+  focusProxy?: CommandFocusProxy;
   destinationProject?: IProject;
   onCreated: () => void | Promise<void>;
   onBusyChange: (busy: boolean) => void;
@@ -88,6 +90,7 @@ export default function ComposeTaskWriter({ active, destinationProject, onCreate
   const mobile = Boolean(useContext(MobileViewContext));
   const phoneTaskWriterSheet = phoneTaskWriterSheetEnabled && mobile && active;
   const [text, setText] = useState("");
+  const [inputFocused, setInputFocused] = useState(false);
   const [writing, setWriting] = useState(false);
   const [stage, setStage] = useState<ComposeTaskStage | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -177,7 +180,20 @@ export default function ComposeTaskWriter({ active, destinationProject, onCreate
     const focus = () => {
       const field = input.current;
       if (cancelled || !field || (document.activeElement === field && !(boardChipEnabled && caret.current))) return;
+      const proxy = focusProxy?.current;
+      const transferring = proxy && (document.activeElement === proxy || (tries === 0 && proxy.value));
+      const selectionStart = proxy?.selectionStart ?? null;
+      const selectionEnd = proxy?.selectionEnd ?? null;
+      if (transferring) {
+        if (focusProxy.pendingEnter !== proxy.value) delete focusProxy.pendingEnter;
+        field.value = proxy.value;
+        setText(proxy.value);
+      }
       field.focus({ preventScroll: true });
+      if (transferring && document.activeElement === field) {
+        field.setSelectionRange(selectionStart, selectionEnd);
+        proxy.value = "";
+      }
       if (boardChipEnabled && caret.current && document.activeElement === field) {
         const { start, end, direction } = caret.current;
         field.setSelectionRange(start, end, direction);
@@ -187,7 +203,7 @@ export default function ComposeTaskWriter({ active, destinationProject, onCreate
     };
     focus();
     return () => { cancelled = true; };
-  }, [active, writing, mobile, dictating, boardChipEnabled, boardPickerOpen]);
+  }, [active, writing, mobile, dictating, boardChipEnabled, boardPickerOpen, focusProxy]);
   useEffect(() => {
     if (!enabled || !active || writing) return;
     const attachShortcut = (event: KeyboardEvent) => {
@@ -329,6 +345,13 @@ export default function ComposeTaskWriter({ active, destinationProject, onCreate
     }
   };
 
+  useEffect(() => {
+    if (!active || !focusProxy || focusProxy.pendingEnter === undefined ||
+        text !== focusProxy.pendingEnter || document.activeElement !== input.current) return;
+    delete focusProxy.pendingEnter;
+    void send();
+  }, [active, text, focusProxy, inputFocused]);
+
   const attachments = fileItems.length > 0 && (
     <Suspense fallback={null}>
       <ImageGallery files={fileItems} images={[]} allowDelete shouldUpload={false} mode="others" variant="chat"
@@ -361,8 +384,13 @@ export default function ComposeTaskWriter({ active, destinationProject, onCreate
             ))}
             <AiComposerTextarea
               ref={input}
+              onFocus={() => setInputFocused(true)}
+              onBlur={() => setInputFocused(false)}
               value={text}
-              onChange={(event) => setText(event.target.value)}
+              onChange={(event) => {
+                if (focusProxy) delete focusProxy.pendingEnter;
+                setText(event.target.value);
+              }}
               rows={mobile ? 3 : 2}
               placeholder="Describe the task"
               aria-label="Describe the task"
