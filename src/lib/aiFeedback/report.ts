@@ -6,7 +6,7 @@ import { escapeHtml } from '@/utils/htmlEscape'
 import { createTaskCore } from '@/utils/controllers/tasks/createTaskCore'
 import { createCommentService } from '@/utils/controllers/comments/createCommentService'
 import { broadcastTaskChange } from '@/lib/realtime/server'
-import { aiFeedbackSchema, feedbackFingerprint, scrubFeedbackText, type AiFeedbackInput } from './input'
+import { aiFeedbackSchema, feedbackFingerprint, scrubFeedbackText, automaticFeedbackSchema, type AiFeedbackInput, type AutomaticFeedbackInput } from './input'
 import { reserveFeedbackAttempt, reserveFeedbackQuota } from './rateLimit'
 
 export { aiFeedbackEnabled } from './enabled'
@@ -43,10 +43,10 @@ function tallyComment(content: string, marker: string, count: number, displayNam
     reporterLine('Clients', reportingNames(content, 'Clients', client))
 }
 
-function description(input: AiFeedbackInput, fingerprint: string, displayName?: string) {
+function description(input: AutomaticFeedbackInput, fingerprint: string, displayName?: string) {
   const rows = [
     ['Surface', input.surface], ['Tool', input.tool], ['HTTP status', input.status],
-    ['Error code', input.errorCode], ['Category', input.category ?? 'other'],
+    ['Error code', input.errorCode], ['Field', input.field], ['Category', input.category ?? 'other'],
   ].filter(([, value]) => value !== undefined && value !== '')
   return rows.map(([label, value]) => `<p>${label}: ${escapeHtml(String(value))}</p>`).join('') +
     (input.note !== undefined || input.error !== undefined ? '<p>Free text was supplied and not stored, for privacy.</p>' : '') +
@@ -63,7 +63,7 @@ function scopeRefusal(input: AiFeedbackInput): boolean {
   return /\b(?:unauthorized|forbidden|(?:permission|access|scope) (?:denied|refused)|insufficient (?:permissions?|scope)|(?:invalid|expired|revoked) (?:token|key)|(?:token|key) (?:invalid|expired|revoked)|auth(?:entication)? failed|(?:task|board|project) not found)\b/i.test(refusal)
 }
 
-export function plainFeedback(input: AiFeedbackInput, fingerprint: string, reporter?: { agentName?: string; ownerName?: string; origin?: 'agent' | 'automatic' }) {
+export function plainFeedback(input: AutomaticFeedbackInput, fingerprint: string, reporter?: { agentName?: string; ownerName?: string; origin?: 'agent' | 'automatic' }) {
   const surface = { mcp: 'MCP', cli: 'CLI', api: 'API', agent: 'agent connection' }[input.surface]
   const call = `An agent's ${surface} call${input.tool && input.tool !== input.surface ? ` to ${input.tool}` : ''}`
   const noDetails = !input.tool && input.status === undefined && !input.errorCode && !input.error && !input.note
@@ -104,14 +104,14 @@ export function plainFeedback(input: AiFeedbackInput, fingerprint: string, repor
 
 export async function fileAiFeedback(raw: unknown, userId?: number, reporter: { origin: 'agent' | 'automatic'; agentName?: string | null } = { origin: 'agent' }) {
   if (!await aiFeedbackEnabled(userId)) throw new AiFeedbackError(404, 'Not found')
-  const parsed = aiFeedbackSchema.safeParse(raw)
+  const parsed = (reporter.origin === 'automatic' ? automaticFeedbackSchema : aiFeedbackSchema).safeParse(raw)
   if (!parsed.success) {
     throw new AiFeedbackError(400, parsed.error.issues.map((issue) => `${issue.path.join('.') || 'body'}: ${issue.message}`).join('; '))
   }
   if (!await reserveFeedbackAttempt(userId)) throw new AiFeedbackError(429, 'AI feedback hourly attempt limit reached')
   const reporterId = userId ?? Number(process.env.AI_FEEDBACK_AGENT_USER_ID)
   if (!Number.isSafeInteger(reporterId) || reporterId <= 0) return
-  const input = { ...parsed.data, client: parsed.data.client?.toLowerCase() }
+  const input: AutomaticFeedbackInput = { ...parsed.data, client: parsed.data.client?.toLowerCase() }
   let plain = false
   try {
     const { featureFlagCandidateUserIds, isFeatureEnabled } = await import('@/lib/flags')
