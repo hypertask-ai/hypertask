@@ -483,20 +483,14 @@ test('all explicit approval prefixes work, but qualified or negative yes does no
   }
 });
 
-test('HTPR-7263: "Agreed" plus a request for a separate new ticket stays a yes; a change to this wireframe still refuses', async () => {
+test('"agreed" is a yes word; HTPR-7263’s "Agreed but ... new ticket" still needs his thumbs up', async () => {
   const agreed = '<html><head></head><body><p>Agreed but why is the blue border misaligned we have the same problem on desktop pls create a new ticket for the misalginge dborder on deksotp mobile and fix that too. The blue border when the checkbox is present and ticketd<a target="_blank" rel="noopener noreferrer nofollow" href="https://screencast2.com/a8liU.png">https://screencast2.com/a8liU.png</a><br><img src="https://screencast2.com/a8liU.png?raw" media-type="img" width="181" height="320" dataalign="left" loading="lazy" style="height: 320px; width: 181px;">the left border is off</p></body></html>';
-  for (const text of [agreed, 'agreed', 'Agreed, ship it', 'yes but make a separate ticket for the icon']) {
+  for (const text of ['agreed', 'Agreed.', 'Agreed, ship it', 'Yes, the fix looks good']) {
     assert.equal((await decision({ comments: [wireframe(), yes({ text })] })).state, 'success', text);
   }
-  for (const text of ['no', 'not like this', 'change X first', 'Agreed but not like this, create a new ticket for the rest',
-    'Yes but change the header first, new ticket for the rest', 'agreed but change X instead, new ticket for Y',
-    "agreed but don't ship yet, new ticket for the border", 'Agreed but before merging fix the border, new ticket for desktop',
-    'why is the border off? pls create a new ticket',
-    'Yes but change the header on this wireframe; create a new ticket for the icon',
-    'Yes but fix the header and create a new ticket for the icon',
-    'Yes, create a new ticket for the icon. Also fix the header',
-    'Agreed but move the button left, new ticket for the border',
-    "yes but don't create a new ticket", 'yes but no new ticket, fix it here', 'yes but dont open a new ticket']) {
+  for (const text of [agreed, 'no', 'not like this', 'change X first', 'agreed but change X', 'agreed not yet', 'agreeable',
+    'Yes but create a new ticket for the icon and fix the header on this wireframe',
+    'Yes but change the header on this wireframe; create a new ticket for the icon']) {
     assert.equal((await decision({ comments: [wireframe(), yes({ text })] })).state, 'failure', text);
   }
 });

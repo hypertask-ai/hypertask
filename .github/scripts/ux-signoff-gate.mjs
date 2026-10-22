@@ -325,17 +325,8 @@ function commentVerdict(comment) {
   // Agents for the same owner keep his attribution: any edit he did not make himself blocks until a fresh yes.
   if (comment.editedAt != null && !(comment.editedBy && humanValentin(comment.editedBy, 'userId'))) return 'reject';
   const text = plainText(comment.text).trim().toLowerCase().replace(/[’‘]/g, "'");
-  if (/^(?:no|nope|not|reject|don't)\b/.test(text)) return 'reject';
-  const yesFirst = /^(?:(?:yes|yep|yeah|go|ok|okay|agree|agreed|approve|approved|lgtm|looks good|ship it)\b|👍)/u.test(text);
-  const hedged = /\b(?:no|not|but|change|instead)\b|n't/.test(text);
-  if (!yesFirst) return hedged ? 'reject' : null;
-  const ticketAt = text.search(/\b(?:new|separate|another|follow-?up) ticket\b/);
-  if (hedged && (ticketAt < 0 || /\b(?:no|not|change|instead|first|before)\b|n't|\bdont\b/.test(text))) return 'reject';
-  const ticketSentenceEnd = ticketAt < 0 ? -1 : text.slice(ticketAt).search(/[.;!?\n](?:\s|$)/);
-  const outsideTicketRequest = ticketAt < 0 ? text
-    : text.slice(0, ticketAt) + (ticketSentenceEnd < 0 ? '' : text.slice(ticketAt + ticketSentenceEnd));
-  const asksDesignChange = /\b(?:fix|fixes|move|update|adjust|tweak|redo|rework|align|remove|rename|replace|swap|resize)\b/;
-  return asksDesignChange.test(outsideTicketRequest) ? 'reject' : 'approve';
+  if (/^(?:no|nope|not|reject|don't)\b|\b(?:no|not|but|change|instead)\b|n't/.test(text)) return 'reject';
+  return /^(?:(?:yes|yep|yeah|go|ok|okay|agree|agreed|approve|approved|lgtm|looks good|ship it)\b|👍)/u.test(text) ? 'approve' : null;
 }
 
 function asksYesToShipElements(comment, wireframeLink, designIds, newElements) {
