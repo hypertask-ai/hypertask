@@ -170,7 +170,7 @@ export function createAddCommentTool(context: ToolContext) {
             taskWithOwner.projectId,
             user.id,
           );
-          sanitizedText = await inlineAgentImagesForUser(toStoredHtml(sanitizedText), user.id, { instructions: body?.message, inlineImages: input.inline_images, attachments: [...(input.images?.map((url) => ({ url })) ?? []), ...(input.image_urls?.map((url) => ({ url })) ?? []), ...[...(body?.images64 ?? []), ...(body?.attachments ?? [])].flatMap((file) => file.url && (input.image_urls?.includes(file.url) || input.text?.includes(file.url)) ? [{ url: file.url, fileName: file.fileName, mimeType: file.mimeType }] : [])] });
+          sanitizedText = await inlineAgentImagesForUser(toStoredHtml(sanitizedText), user.id, { instructions: body?.message, inlineImages: input.inline_images, attachments: [...(input.images?.map((url: string) => ({ url })) ?? []), ...(input.image_urls?.map((url: string) => ({ url })) ?? []), ...[...(body?.images64 ?? []), ...(body?.attachments ?? [])].flatMap((file) => file.url && (input.image_urls?.includes(file.url) || input.text?.includes(file.url)) ? [{ url: file.url, fileName: file.fileName, mimeType: file.mimeType }] : [])] });
           sanitizedText = await linkifyTicketRefs(
             sanitizedText,
             user.id,
