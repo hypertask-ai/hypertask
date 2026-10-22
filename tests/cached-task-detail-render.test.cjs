@@ -18,8 +18,8 @@ const mocks = {
   "@/lib/state": { useRecoilValue: () => ({ id: 2343 }) },
   "@/store": { currentUserAtom: {} },
   "@/hooks/General/useGetUserPreferences": { useGetUserPreferences: () => ({ data: { commentsStacked: false, scrollSetting: "Bottom" } }) },
-  "@/hooks/useFlag": { useFlagReady: () => true, useFlag: (key) => { if (["htpr-7395-cached-static-first", "htpr-7009-dedupe-task-detail-reads", "htpr-6962-keep-assignee", "htpr-7004-no-loading-flash"].includes(key)) return false; assert.equal(key, "htpr-6899-stable-layout"); return stableLayoutEnabled; } },
-  "@/lib/flags/keys": { HTPR_7395_CACHED_STATIC_FIRST_FLAG: "htpr-7395-cached-static-first", HTPR_7009_DEDUPE_TASK_DETAIL_READS_FLAG: "htpr-7009-dedupe-task-detail-reads", HTPR_6899_STABLE_LAYOUT_FLAG: "htpr-6899-stable-layout", HTPR_6962_KEEP_ASSIGNEE_FLAG: "htpr-6962-keep-assignee", HTPR_7004_NO_LOADING_FLASH_FLAG: "htpr-7004-no-loading-flash" },
+  "@/hooks/useFlag": { useFlagReady: () => true, useFlag: (key) => { if (["htpr-7395-cached-static-first", "htpr-7009-dedupe-task-detail-reads", "htpr-7004-no-loading-flash"].includes(key)) return false; assert.equal(key, "htpr-6899-stable-layout"); return stableLayoutEnabled; } },
+  "@/lib/flags/keys": { HTPR_7395_CACHED_STATIC_FIRST_FLAG: "htpr-7395-cached-static-first", HTPR_7009_DEDUPE_TASK_DETAIL_READS_FLAG: "htpr-7009-dedupe-task-detail-reads", HTPR_6899_STABLE_LAYOUT_FLAG: "htpr-6899-stable-layout", HTPR_7004_NO_LOADING_FLASH_FLAG: "htpr-7004-no-loading-flash" },
   "@/lib/taskDetailReads": require("jiti").createJiti(__filename, {
     alias: { "@": path.join(root, "src") },
   })(path.join(root, "src/lib/taskDetailReads.ts")),
@@ -132,6 +132,37 @@ test("a denied or moved cached ticket re-enters the normal server route without 
   assert.equal(result.type, mocks["@/app/unauthorized/page"].default);
   effects.forEach((effect) => effect());
   assert.deepEqual(replacements, [href], "the server must resolve permissions and board-move aliases, preserving inbox/hash context");
+});
+
+test("cached refresh applies a new timestamp for the same task reference and preserves assignees only with a fetch snapshot", () => {
+  const refresh = require("jiti").createJiti(__filename)(path.join(root, "src/lib/realtime/taskDetailRefresh.ts"));
+  for (const hasSnapshot of [false, true]) {
+    const serverAssignees = [];
+    const localAssignees = [{ userId: 2343 }];
+    const fetched = { ...task, assignees: serverAssignees };
+    let currentTask = { ...task, assignees: localAssignees };
+    const effects = [], writes = [], descriptions = [];
+    const dependencies = {
+      ...mocks,
+      react: { ...React, useRef: initial => ({ current: typeof initial === "number" ? 1 : initial }), useEffect: effect => effects.push(effect) },
+      "@tanstack/react-query": { useQueryClient: () => ({}), useQuery: ({ queryKey }) => queryKey[0] === "cached-task-detail" ? { data: fetched, dataUpdatedAt: 2, error: null } : {} },
+      "@/lib/realtime/taskDetailRefresh": refresh,
+      "@/lib/contexts/TaskDetail/TaskProvider": {
+        ...mocks["@/lib/contexts/TaskDetail/TaskProvider"],
+        useTaskContext: () => ({ currentTask, setCurrentTask: update => { currentTask = update(currentTask); writes.push(currentTask); }, setDescription: value => descriptions.push(value) }),
+      },
+    };
+    const loaded = {};
+    new Function("require", "exports", compiled)(name => dependencies[name], loaded);
+    const provider = loaded.default({ taskId: 42, projectId: 6859, uniqueIndex: 43, initialTask: fetched, embedded: false });
+    const child = provider.props.children;
+    child.props.assigneeSnapshotRef.current = hasSnapshot ? { assignees: serverAssignees } : null;
+    child.type(child.props);
+    effects.forEach(effect => effect());
+    assert.equal(writes.length, 1, "a completed refetch must apply even when structural sharing retains the task reference");
+    assert.equal(currentTask.assignees, hasSnapshot ? localAssignees : serverAssignees);
+    assert.deepEqual(descriptions, [task.description_.content]);
+  }
 });
 
 test("the original embedded SwipeUnread flow still waits for its complete payload", () => {

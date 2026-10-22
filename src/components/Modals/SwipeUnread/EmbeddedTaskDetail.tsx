@@ -10,7 +10,7 @@ import { mergeRealtimeTaskDetail, preserveTaskAssigneesChangedDuringFetch, shoul
 import TaskDetail from "@/app/detail/[...slug]/TaskDetailComp";
 import { useGetUserPreferences } from "@/hooks/General/useGetUserPreferences";
 import { useFlag, useFlagReady } from "@/hooks/useFlag";
-import { HTPR_7395_CACHED_STATIC_FIRST_FLAG, HTPR_6899_STABLE_LAYOUT_FLAG, HTPR_6962_KEEP_ASSIGNEE_FLAG, HTPR_7004_NO_LOADING_FLASH_FLAG, HTPR_7009_DEDUPE_TASK_DETAIL_READS_FLAG } from "@/lib/flags/keys";
+import { HTPR_7395_CACHED_STATIC_FIRST_FLAG, HTPR_6899_STABLE_LAYOUT_FLAG, HTPR_7004_NO_LOADING_FLASH_FLAG, HTPR_7009_DEDUPE_TASK_DETAIL_READS_FLAG } from "@/lib/flags/keys";
 import globalConstants from "@/lib/constants";
 import { FollowersProvider } from "@/lib/contexts/TaskDetail/FollowersProvider";
 import { TasksProvider } from "@/lib/contexts/TaskDetail/TaskProvider";
@@ -31,7 +31,6 @@ type EmbeddedTaskDetailProps = {
 };
 
 function RefreshCachedTask({ task, dataUpdatedAt, error, refetch, currentTaskRef, assigneeSnapshotRef, children }: { task: ITask; dataUpdatedAt: number; error: Error | null; refetch: () => Promise<unknown>; currentTaskRef: RefObject<ITask | null>; assigneeSnapshotRef: RefObject<{ assignees: ITask["assignees"] } | null>; children: ReactNode }) {
-  const keepAssignee = useFlag(HTPR_6962_KEEP_ASSIGNEE_FLAG);
   const noLoadingFlash = useFlag(HTPR_7004_NO_LOADING_FLASH_FLAG);
   const dedupe = useFlag(HTPR_7009_DEDUPE_TASK_DETAIL_READS_FLAG);
   const { currentTask, setCurrentTask, setDescription, editMode, hasDraft, hasDraftInit, uploadingDescription } = useTaskContext();
@@ -59,18 +58,16 @@ function RefreshCachedTask({ task, dataUpdatedAt, error, refetch, currentTaskRef
     window.location.replace(window.location.href);
   }, [error, editing, noLoadingFlash, refetch]);
   useEffect(() => {
-    if (previousTask.current === task && (!keepAssignee || previousUpdatedAt.current === dataUpdatedAt)) return;
+    if (previousTask.current === task && previousUpdatedAt.current === dataUpdatedAt) return;
     previousTask.current = task;
     previousUpdatedAt.current = dataUpdatedAt;
     const preserveContent = shouldPreserveTaskEditorContent({ hasDraft, hasDraftInit, editMode, uploadingDescription });
     const assigneeSnapshot = assigneeSnapshotRef.current;
     setCurrentTask((current) => {
-      const refreshed = preserveTaskAssigneesChangedDuringFetch(
-        current,
-        mergeRealtimeTaskDetail(current, task, !preserveContent),
-        assigneeSnapshot?.assignees,
-        keepAssignee && assigneeSnapshot !== null,
-      );
+      const merged = mergeRealtimeTaskDetail(current, task, !preserveContent);
+      const refreshed = assigneeSnapshot !== null
+        ? preserveTaskAssigneesChangedDuringFetch(current, merged, assigneeSnapshot.assignees)
+        : merged;
       return editMode === "title" && current ? { ...refreshed, title: current.title } : refreshed;
     });
     if (!preserveContent) setDescription(task.description_?.content ?? "");

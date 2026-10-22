@@ -870,6 +870,26 @@ for (const writerFailed of [false, true]) test(`same-task fill updates the mount
   });
 });
 
+test('same-task fill preserves an assignee selected while the writer response is pending', async (t) => {
+  const targetTask = { id: 52, projectId: 7, sectionId: 12, uniqueIndex: 4, title: 'Enter task title here', assignees: [], description_: { content: '' }, project: { id: 7 } };
+  await withPalette(t, { newWindow: true, tab: 'compose', headerTask: targetTask, targetTask, url: '/detail/project-7/4', inView: { taskId: 52 } }, async ({ type, press, finish, headerState, queryClient, cacheUpdates, cacheAdds, requests }) => {
+    await type('Write this task');
+    await press('Enter');
+    assert.equal(requests.length, 1);
+    assert.equal(requests[0].body.existingTaskId, targetTask.id);
+    const assignees = [{ userId: 985 }];
+    await React.act(async () => headerState().setCurrentTask(current => ({ ...current, assignees })));
+    const savedTask = { ...targetTask, title: 'Written title', description_: { content: '<p>Written body</p>' } };
+    await finish(false, savedTask);
+    const expected = { ...savedTask, assignees };
+    assert.deepEqual(headerState().currentTask, expected);
+    assert.deepEqual(queryClient.getQueryData(['cached-task-detail', 985, 52]), expected);
+    assert.deepEqual(cacheUpdates, [[expected, 52, 7, 12]]);
+    assert.deepEqual(cacheAdds, []);
+    assert.equal(headerState().description, savedTask.description_.content);
+  });
+});
+
 test('board quick-add same-task fill updates the mounted header, description editor and properties, with either flag off unchanged', async (t) => {
   // Quick-add cards have no description_ payload, so instant open falls back
   // to the regular detail provider, which does not subscribe to the query cache.

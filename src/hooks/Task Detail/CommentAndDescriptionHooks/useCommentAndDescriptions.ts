@@ -1,6 +1,6 @@
 
 import { useFlag } from "@/hooks/useFlag";
-import { HTPR_6962_KEEP_ASSIGNEE_FLAG, HTPR_7315_UNREAD_TICKET_OPENS_TOP_FLAG } from "@/lib/flags/keys";
+import { HTPR_7315_UNREAD_TICKET_OPENS_TOP_FLAG } from "@/lib/flags/keys";
 import { useTaskContext } from "@/lib/contexts/TaskDetail/TaskProvider";
 import { IAttachment, IComment } from "@/models/model";
 import {
@@ -153,7 +153,6 @@ const useDescriptionAndCommentsStates = () => {
     emojiClickHandlerDescriptionr,
   } = useDescriptionReactions();
   const unreadTicketOpensTop = useFlag(HTPR_7315_UNREAD_TICKET_OPENS_TOP_FLAG);
-  const keepAssignee = useFlag(HTPR_6962_KEEP_ASSIGNEE_FLAG);
   const _parsedTask = useMemo(() => JSON.parse(parsed_task), [parsed_task]);
   const [descriptionAttachments, setDescriptionAttachments] = useState<
     IAttachment[]
@@ -224,7 +223,6 @@ const useDescriptionAndCommentsStates = () => {
     taskUniqueIndex: _parsedTask?.uniqueIndex,
     currentTaskTitle: currentTask?.title,
     currentTaskAssignees: currentTask?.assignees,
-    keepAssignee,
     hasPullRequests: (_parsedTask?.pullRequests?.length ?? 0) > 0,
     setCurrentTask,
     setDescription,
