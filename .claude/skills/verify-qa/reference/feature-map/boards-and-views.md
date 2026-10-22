@@ -51,6 +51,8 @@ https://app.hypertask.ai/detail/project-15/7397: Calendar is its own route (`/ca
 
 https://app.hypertask.ai/detail/project-15/7260 adds board select all behind `htpr-7260-kanban-select-all`. With nothing editable focused, Ctrl/Cmd+A selects every visible card; X toggles the focused card and Shift-click selects a range inside one column. The bottom bar shows the count, Archive, Assign, Tags and Move icons (44px targets on phones), Open actions and Esc. Ctrl+K with a selection lists the "N selected tasks" group first: Move to column, Assign, Set tags, Archive, Select all on board, Select all in this column, Clear selection; no Frequently used group, and Delete board or Delete column never appear under Frequently used. Ctrl+A inside a text field must keep native text selection. Move a few cards on a disposable board and reload to prove the move saved; check the flag-off account still sees the old bar ("Open actions", "Esc to clear").
 
+https://app.hypertask.ai/detail/project-15/7263 adds phone selection behind `htpr-7263-phone-hold-select`, on for Everyone by default. Hold a card for the existing 900 ms and release within 5 px to toggle its shared selection and show the existing checkboxes and action bar. With a selection, tapping another card toggles it; after deselecting the last card, taps open details again. Hold then move beyond 5 px to drag without changing selection. Scrolling before the hold, pinch, cancellation and column dragging must not select. Desktop and flag-Off behavior stay unchanged. Verify phone jitter, scrolling, hold-release, hold-move, checkbox taps and clearing the bar on a real touch device before release.
+
 ## Cleanup
 
 None if you only viewed and switched. If you changed a saved filter or view

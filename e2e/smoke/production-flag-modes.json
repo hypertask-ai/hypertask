@@ -170,6 +170,7 @@
     "htpr-7203-mcp-flat-schema": "EVERYONE",
     "htpr-7220-legacy-sse-keepalive": "EVERYONE",
     "htpr-7260-kanban-select-all": "EVERYONE",
+    "htpr-7263-phone-hold-select": "EVERYONE",
     "htpr-7267-shortcut-tips-setting": "EVERYONE",
     "htpr-7268-invite-seat-analytics": "EVERYONE",
     "htpr-7269-signup-identity-link": "EVERYONE",
