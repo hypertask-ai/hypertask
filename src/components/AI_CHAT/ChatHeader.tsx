@@ -18,7 +18,7 @@ import {
 } from "lucide-react";
 import { usePathname, useRouter } from "next/navigation";
 import { useFlag } from "@/hooks/useFlag";
-import { HTPR_6752_INSTANT_TICKET_OPEN_FLAG, HTPR_6971_CHAT_HISTORY_PAGING_FLAG } from "@/lib/flags/keys";
+import { HTPR_6971_CHAT_HISTORY_PAGING_FLAG } from "@/lib/flags/keys";
 import Tooltip from "../Common/Tooltip";
 import { format } from "date-fns";
 import { useContext, useEffect, useMemo, useRef, useState } from "react";
@@ -95,8 +95,7 @@ export const ChatHeader = () => {
   const router = useRouter();
   const pathname = usePathname();
   const sessionPagingEnabled = useFlag(HTPR_6971_CHAT_HISTORY_PAGING_FLAG);
-  const instantTicketOpen = useFlag(HTPR_6752_INSTANT_TICKET_OPEN_FLAG);
-  const quietTicketOpen = instantTicketOpen && pathname?.startsWith("/detail/");
+  const quietTicketOpen = pathname?.startsWith("/detail/");
   const {
     togglePopover,
     minimizeChat,

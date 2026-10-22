@@ -18,7 +18,7 @@ import { useGetSelectionDetails, getPopoverCoordinates, setClipboard } from ".";
 
 import { MenuArgs, SetMenuOpen, TargetSelector } from "./types";
 import { useFlag } from "@/hooks/useFlag";
-import { HTPR_6752_INSTANT_TICKET_OPEN_FLAG, HTPR_6899_STABLE_LAYOUT_FLAG } from "@/lib/flags/keys";
+import { HTPR_6899_STABLE_LAYOUT_FLAG } from "@/lib/flags/keys";
 
 const ARROW_WIDTH = 10;
 const ARROW_HEIGHT = 5;
@@ -57,7 +57,6 @@ function HighlightMenu({
   zIndex = 999999999,
   ...props
 }: MainArgs) {
-  const instantTicketOpen = useFlag(HTPR_6752_INSTANT_TICKET_OPEN_FLAG);
   const stableLayout = useFlag(HTPR_6899_STABLE_LAYOUT_FLAG);
   const selection = useGetSelectionDetails(target);
   const [menuOpen, setMenuOpen] = useState<SetMenuOpen>(null);
@@ -127,7 +126,7 @@ function HighlightMenu({
       <div
         className="Popover"
         ref={refs.setFloating}
-        style={stableLayout && instantTicketOpen ? { ...getFloatingStylesOverride(), pointerEvents: "auto" } : getFloatingStylesOverride()}
+        style={stableLayout ? { ...getFloatingStylesOverride(), pointerEvents: "auto" } : getFloatingStylesOverride()}
         aria-labelledby={headingId}
         {...getFloatingProps()}
         onMouseDown={(e) => {

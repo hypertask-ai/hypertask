@@ -96,7 +96,7 @@ async function mount(t, { surface, mobile = false, enabled = true, guest = false
     "@/lib/contexts/TaskDetail/TaskProvider": { useTaskContext: () => React.useContext(Task) },
     "@/lib/contexts/mobileContext": { MobileViewContext: Mobile },
     "@/hooks/useFlag": { useFlag: (key) => key === "htpr-7044-double-click-to-edit" ? enabled : false },
-    "@/lib/flags/keys": { HTPR_7044_DOUBLE_CLICK_TO_EDIT_FLAG: "htpr-7044-double-click-to-edit", HTPR_6752_INSTANT_TICKET_OPEN_FLAG: "instant" },
+    "@/lib/flags/keys": { HTPR_7044_DOUBLE_CLICK_TO_EDIT_FLAG: "htpr-7044-double-click-to-edit", },
     "@/lib/taskDetailEditTarget": editTarget,
     "@/hooks/MultiPages/useDoubleTap": doubleTap,
     "@/lib/constants/TaskDetail": { descriptionContainerId: "description-container", DELIBERATE_DOUBLE_CLICK_MS: 500 },

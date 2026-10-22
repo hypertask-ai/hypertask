@@ -46,8 +46,7 @@ pass even with the bug present, hiding exactly what broke.
 For desktop composer placement, open a ticket with several comments from both
 Inbox and its board at 1920x1080 and 1440x900. Scroll to the last comment and
 capture it above the Send box, with no overlap or estimated-height gap. Check
-empty and one-comment threads, repeat with `htpr-6899-stable-layout` and
-`htpr-6752-instant-ticket-open` on and off in a disposable local build, and
+empty and one-comment threads, repeat with `htpr-6899-stable-layout` on and off in a disposable local build, and
 confirm the separate fixed mobile composer at 390x844 is unchanged.
 
 ## Cleanup

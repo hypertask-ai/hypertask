@@ -8,7 +8,7 @@ import { agentPageHref } from "@/lib/agents/pageHref";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useFlag } from "@/hooks/useFlag";
-import { HTPR_6752_INSTANT_TICKET_OPEN_FLAG, HTPR_6950_TOOLTIP_TOP_LAYER_FLAG } from "@/lib/flags/keys";
+import { HTPR_6950_TOOLTIP_TOP_LAYER_FLAG } from "@/lib/flags/keys";
 import {
   autoUpdate,
   flip,
@@ -105,8 +105,6 @@ const PersonHovercardSurfaceContent = ({
     dismiss,
     role,
   ]);
-
-  const instantTicketOpen = useFlag(HTPR_6752_INSTANT_TICKET_OPEN_FLAG);
   const pathname = usePathname();
   const detailRoute = pathname?.startsWith("/detail/");
   const query = usePersonHovercard(projectId, subject ?? null, open);
@@ -210,7 +208,7 @@ const PersonHovercardSurfaceContent = ({
   return (
     <>
       {reference}
-      {open && (!instantTicketOpen || quiet === false || !detailRoute || profile || query.isError) && (
+      {open && (quiet === false || !detailRoute || profile || query.isError) && (
         <FloatingPortal>
           {topLayer ? (
             <TooltipPortal placement="fixed" anchorElement={refs.domReference.current} interactive>
@@ -230,9 +228,8 @@ const PersonHovercardSurface = (props: PersonHovercardSurfaceProps) => {
 
 const PersonHovercard = ({ projectId, subject, children }: PersonHovercardProps) => {
   const topLayer = useFlag(HTPR_6950_TOOLTIP_TOP_LAYER_FLAG);
-  const instantTicketOpen = useFlag(HTPR_6752_INSTANT_TICKET_OPEN_FLAG);
   if (!projectId || !subject) return children;
-  const surfaceProps = { projectId, subject, quiet: instantTicketOpen ? true : false, children };
+  const surfaceProps = { projectId, subject, quiet: true, children };
   return topLayer ? <PersonHovercardSurface {...surfaceProps} /> : <PersonHovercardSurfaceContent {...surfaceProps} />;
 };
 
@@ -244,7 +241,6 @@ const ParentPersonHovercard = ({
   subject?: PersonHovercardSubject | null;
 }) => {
   const topLayer = useFlag(HTPR_6950_TOOLTIP_TOP_LAYER_FLAG);
-  const instantTicketOpen = useFlag(HTPR_6752_INSTANT_TICKET_OPEN_FLAG);
   const markerRef = useRef<HTMLSpanElement>(null);
   const closeTimerRef = useRef<number | null>(null);
   const [anchor, setAnchor] = useState<HTMLElement | null>(null);
@@ -297,7 +293,7 @@ const ParentPersonHovercard = ({
     projectId,
     subject,
     anchor,
-    quiet: instantTicketOpen ? true : false,
+    quiet: true,
     externallyOpen: open,
     onExternallyOpenChange: setOpen,
     onFloatingPointerEnter: cancelClose,

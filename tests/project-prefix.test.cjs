@@ -264,11 +264,12 @@ function lookups({ enabled = true, visible = true, live = false, liveAccess = tr
   });
   base["@/lib/mcp/tasks/resolveTask"] = resolver;
   const detail = load("src/utils/controllers/taskDetail/load.ts", {
+    "@/lib/flags/keys": { HTPR_6868_TICKET_PREFIX_FLAG: flagKey, HTPR_6972_SUBTASK_LINK_FLAG: subtaskFlagKey },
     ...base, "@vercel/functions": {}, "@/lib/realtime/server": {}, "@/lib/cycles": {}, "@/lib/pullRequests/taskPullRequests": {}, "@/lib/agents/publicAgent": {},
     "@/lib/flags": {
       HTPR_6868_TICKET_PREFIX_FLAG: flagKey,
       HTPR_6972_SUBTASK_LINK_FLAG: subtaskFlagKey,
-      HTPR_6752_INSTANT_TICKET_OPEN_FLAG: "htpr-6752-instant-ticket-open",
+
       isFeatureEnabled: async (key, id) => { flagCalls.push([key, id]); return key === flagKey && enabled; },
     },
     "@/lib/agents/visibility": { boardAgentVisibilityWhere: () => ({}), accessibleAgentMembershipWhere: () => ({}) },

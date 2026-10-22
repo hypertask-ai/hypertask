@@ -25,9 +25,9 @@ function visit(node) {
 visit(inboxSource);
 assert.ok(clickCapture, "exercise the real enclosing Inbox Link capture handler");
 const captureModule = { exports: {} };
-vm.runInNewContext(ts.transpileModule(`export function handler(instantTicketOpen, notification, openTask, globalIndex) { return ${clickCapture}; }`, { compilerOptions: { module: ts.ModuleKind.CommonJS } }).outputText, { exports: captureModule.exports });
+vm.runInNewContext(ts.transpileModule(`export function handler(notification, openTask, globalIndex) { return ${clickCapture}; }`, { compilerOptions: { module: ts.ModuleKind.CommonJS } }).outputText, { exports: captureModule.exports });
 
-function fixture(mobile, shortcutPeers = false, instantTicketOpen = true) {
+function fixture(mobile, shortcutPeers = false) {
   const dom = new JSDOM('<div id="root"></div>', { url: "https://app.hypertask.ai/inbox?split=All" });
   global.window = dom.window;
   global.document = dom.window.document;
@@ -113,7 +113,7 @@ function fixture(mobile, shortcutPeers = false, instantTicketOpen = true) {
   act(() => reactRoot.render(React.createElement(React.Fragment, null,
     shortcutPeers && React.createElement(Remind, { show: false }),
     shortcutPeers && React.createElement(Remind, { show: true, mode: "Bulk" }),
-    React.createElement("a", { href: "/detail/project-7049/6946", onClickCapture: captureModule.exports.handler(instantTicketOpen, { type: "TaskMovedToInbox" }, () => navigation.push("task detail"), 0) },
+    React.createElement("a", { href: "/detail/project-7049/6946", onClickCapture: captureModule.exports.handler({ type: "TaskMovedToInbox" }, () => navigation.push("task detail"), 0) },
       React.createElement(Row, { divId: 1, divType: "inbox", index: 0, selected: true, openTask: () => navigation.push("task detail") },
         React.createElement("span", { id: "title" }, "Own QA task"), React.createElement(Remind, { show: true }))))));
   const click = async (el) => {
@@ -124,12 +124,12 @@ function fixture(mobile, shortcutPeers = false, instantTicketOpen = true) {
   return { requests, navigation, options, queryClient, queryKey, reconciliations, click, close: () => { queryClient.clear(); act(() => reactRoot.unmount()); dom.window.close(); delete global.window; delete global.document; delete global.IS_REACT_ACT_ENVIRONMENT; } };
 }
 
-for (const instantTicketOpen of [false, true]) {
+{
   for (const mobile of [false, true]) {
     for (const trigger of ["mouse", "H"]) {
       for (const label of ["Later today", "Tomorrow"]) {
-        test(`instant open ${instantTicketOpen ? "on" : "off"}: ${mobile ? "phone" : "desktop"} ${trigger}: ${label} consumes the portal click, snoozes once and closes without opening the task`, async () => {
-          const f = fixture(mobile, false, instantTicketOpen);
+        test(`${mobile ? "phone" : "desktop"} ${trigger}: ${label} consumes the portal click, snoozes once and closes without opening the task`, async () => {
+          const f = fixture(mobile, false);
           try {
             if (trigger === "mouse") await f.click(document.querySelector("#inbox-1 button"));
             else await act(async () => document.dispatchEvent(new window.KeyboardEvent("keydown", { key: "h", keyCode: 72, bubbles: true })));

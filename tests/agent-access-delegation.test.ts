@@ -56,7 +56,8 @@ async function demo() {
     // An agent cannot widen its own access.
     const self = await json(await checkAgentBoardDelegation(ctx, 'ceo'))
     assert.equal(self.status, 403)
-    assert.equal(self.body.error, 'An agent cannot change its own board access')
+    assert.equal(self.body.error, 'An agent cannot change its own board access. Ask the person who owns this agent to open Agents, pick this agent, and add the board under Board access.')
+    assert.equal(self.body.code, 'forbidden')
 
     // Write-role agents keep the old rejection path via insufficient_scope.
     role = 'write'

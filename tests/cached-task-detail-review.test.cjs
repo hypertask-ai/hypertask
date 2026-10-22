@@ -25,10 +25,9 @@ const { withDecisionCommentAnchor } = compile(read("src/lib/inboxDecisions.ts"),
   "@/lib/configs/inbox.config": { inboxConfig },
 });
 
-test("creator hydration enables description quoting without changing the frozen editor seed; flag off keeps the seed creator", () => {
+test("creator hydration enables description quoting without changing the frozen editor seed", () => {
   let currentTask = task;
   let seed = task;
-  let flagEnabled = true;
   const noop = () => null;
   const Editor = noop;
   const HighlightMenu = () => null;
@@ -42,8 +41,9 @@ test("creator hydration enables description quoting without changing the frozen 
     "@/lib/contexts/TaskDetail/TaskProvider": { useTaskContext: () => ({ currentTask, parsedTask: JSON.stringify(seed), secondaryPanelsReady: true }) },
     "@/lib/contexts/mobileContext": { MobileViewContext: {} },
     "@/hooks/General/useHasDrafts": { isMeaningfulDescriptionDraft: () => false },
-    "@/hooks/useFlag": { useFlag: () => flagEnabled },
-    "@/lib/flags/keys": { HTPR_6752_INSTANT_TICKET_OPEN_FLAG: "htpr-6752-instant-ticket-open" },
+    "@/lib/flags/keys": require("./helpers/flag-files.cjs").load("src/lib/flags/keys.ts"),
+    "@/hooks/useFlag": { useFlag: () => true },
+
     "../ContextMenu": { HighlightMenu },
     "../ContextMenu/QuoteButton": { __esModule: true, default: QuoteButton },
     "@/components/RTE/TipTapTaskDetail": { __esModule: true, default: Editor },
@@ -69,10 +69,8 @@ test("creator hydration enables description quoting without changing the frozen 
   assert.equal(quote.props.creator, user);
   assert.equal(quote.props.selection, "Selected text");
   assert.equal(seed.user, undefined, "the initialization seed remains unchanged");
-  flagEnabled = false;
-  assert.equal(children().find((child) => child?.type === HighlightMenu), undefined);
   seed = { ...task, user: { id: 99, displayName: "Production seed" } };
-  assert.equal(children().find((child) => child?.type === Editor).props.user.id, 99);
+  assert.equal(children().find((child) => child?.type === Editor).props.user.id, 6, "a changed initialization seed must not replace the hydrated creator");
 });
 
 test("flag-off cached network and HTTP refresh failures recover through the authorized route, while embedded behavior is unchanged", () => {
@@ -118,58 +116,58 @@ const inboxSource = ts.createSourceFile("inbox.tsx", read("src/components/notifi
 const declarations = [];
 let clickCapture;
 function visit(node) {
-  if (ts.isVariableStatement(node) && node.declarationList.declarations.some((item) => ["openTaskWithCachedData", "openTask"].includes(item.name.getText(inboxSource)))) declarations.push(node.getText(inboxSource));
+  if (ts.isVariableStatement(node) && node.declarationList.declarations.some((item) => item.name.getText(inboxSource) === "openTask")) declarations.push(node.getText(inboxSource));
   if (ts.isJsxAttribute(node) && node.name.getText(inboxSource) === "onClickCapture") clickCapture = node.initializer.expression.getText(inboxSource);
   ts.forEachChild(node, visit);
 }
 visit(inboxSource);
-assert.equal(declarations.length, 2);
+assert.equal(declarations.length, 1);
 assert.ok(clickCapture);
 
-test("explicit inbox mouse rows use cached navigation with their own task; flag off retains production URLs and side effects", async () => {
+test("explicit inbox mouse rows use cached navigation with their own task and retain side effects", async () => {
   const notification = { id: "7", type: "Mentioned", projectId: 15, task, commentId: 12, decisionCommentId: 30 };
   const js = ts.transpileModule(`${declarations.join("\n")}\nreturn openTask;`, { compilerOptions: { module: ts.ModuleKind.CommonJS } }).outputText;
-  for (const instantTicketOpen of [false, true]) {
+  {
     const pushes = [];
     const navigations = [];
     const seen = [];
     const playlists = [];
-    const open = new Function("instantTicketOpen", "decisionCommentLinks", "withDecisionCommentAnchor", "selectedKeyboardRow", "disableNotificationSideEffects", "disableInboxFlow", "markSeenOnOpen", "buildUniqueTasksPlaylist", "_notifications", "setTasksPlayList", "buildQueryParams", "commentIdHash", "inboxConfig", "router", "markTaskDetailNavigationStart", "navigateToTask", js)(
-      instantTicketOpen, false, withDecisionCommentAnchor, { item: { kind: "notification", notification: { ...notification, task: { ...task, id: 99 } } } }, false, false,
+    const open = new Function("decisionCommentLinks", "withDecisionCommentAnchor", "selectedKeyboardRow", "disableNotificationSideEffects", "disableInboxFlow", "markSeenOnOpen", "buildUniqueTasksPlaylist", "_notifications", "setTasksPlayList", "buildQueryParams", "commentIdHash", "inboxConfig", "router", "markTaskDetailNavigationStart", "navigateToTask", js)(
+      false, withDecisionCommentAnchor, { item: { kind: "notification", notification: { ...notification, task: { ...task, id: 99 } } } }, false, false,
       (row) => seen.push(row), () => [task], [notification], (list) => playlists.push(list), () => "?inboxFlow=true", (id) => `#comment-${id}`,
       { urls: { taskDetail: (projectId, index, hash) => `/detail/project-${projectId}/${index}${hash}` } }, { push: (url) => pushes.push(url) }, () => {}, (...args) => navigations.push(args),
     );
     await open("view", notification);
     assert.deepEqual(seen, [notification]);
     assert.deepEqual(playlists, [[task]]);
-    assert.deepEqual(pushes, instantTicketOpen ? [] : ["/detail/project-15/43#comment-12?inboxFlow=true"]);
-    assert.deepEqual(navigations, instantTicketOpen ? [[15, 43, "push", "#comment-12?inboxFlow=true", task]] : []);
+    assert.deepEqual(pushes, []);
+    assert.deepEqual(navigations, [[15, 43, "push", "#comment-12?inboxFlow=true", task]]);
   }
 });
 
-test("Decisions mouse rows anchor the decision comment with cached navigation on and off", async () => {
+test("Decisions mouse rows anchor the decision comment with cached navigation", async () => {
   const notification = { id: "7", type: "Mentioned", projectId: 15, task, commentId: 12, decisionCommentId: 30 };
   const js = ts.transpileModule(`${declarations.join("\n")}\nreturn openTask;`, { compilerOptions: { module: ts.ModuleKind.CommonJS } }).outputText;
-  for (const instantTicketOpen of [false, true]) {
+  {
     const pushes = [];
     const navigations = [];
-    const open = new Function("instantTicketOpen", "decisionCommentLinks", "withDecisionCommentAnchor", "selectedKeyboardRow", "disableNotificationSideEffects", "disableInboxFlow", "markSeenOnOpen", "buildUniqueTasksPlaylist", "_notifications", "setTasksPlayList", "buildQueryParams", "commentIdHash", "inboxConfig", "router", "markTaskDetailNavigationStart", "navigateToTask", js)(
-      instantTicketOpen, true, withDecisionCommentAnchor, null, true, false,
+    const open = new Function("decisionCommentLinks", "withDecisionCommentAnchor", "selectedKeyboardRow", "disableNotificationSideEffects", "disableInboxFlow", "markSeenOnOpen", "buildUniqueTasksPlaylist", "_notifications", "setTasksPlayList", "buildQueryParams", "commentIdHash", "inboxConfig", "router", "markTaskDetailNavigationStart", "navigateToTask", js)(
+      true, withDecisionCommentAnchor, null, true, false,
       () => {}, () => [task], [notification], () => {}, () => "", inboxConfig.urls.commentHash,
       inboxConfig, { push: (url) => pushes.push(url) }, () => {}, (...args) => navigations.push(args),
     );
     await open("view", notification);
-    assert.deepEqual(pushes, instantTicketOpen ? [] : ["/detail/project-15/43?inboxFlow=true#comment-30"]);
-    assert.deepEqual(navigations, instantTicketOpen ? [[15, 43, "push", "?inboxFlow=true#comment-30", task]] : []);
+    assert.deepEqual(pushes, []);
+    assert.deepEqual(navigations, [[15, 43, "push", "?inboxFlow=true#comment-30", task]]);
   }
 });
 
-test("inbox Link clicks open once, preserve modified browser clicks and row controls, and leave flag-off and invitations untouched", () => {
-  const js = ts.transpileModule(`export function handler(instantTicketOpen, notification, openTask, globalIndex) { return ${clickCapture}; }`, { compilerOptions: { module: ts.ModuleKind.CommonJS } }).outputText;
+test("inbox Link clicks open once, preserve modified browser clicks and row controls, and leave invitations untouched", () => {
+  const js = ts.transpileModule(`export function handler(notification, openTask, globalIndex) { return ${clickCapture}; }`, { compilerOptions: { module: ts.ModuleKind.CommonJS } }).outputText;
   const handler = compile(js, {}).handler;
   const notification = { type: "Mentioned", task };
   const opens = [];
-  const onClick = handler(true, notification, (...args) => opens.push(args), 3);
+  const onClick = handler(notification, (...args) => opens.push(args), 3);
   const anchor = { contains: () => true };
   for (const modifier of [{}, { ctrlKey: true }, { metaKey: true }, { shiftKey: true }, { altKey: true }, { button: 1 }]) {
     let prevented = false;
@@ -181,6 +179,5 @@ test("inbox Link clicks open once, preserve modified browser clicks and row cont
   assert.deepEqual(opens, [["view", notification, 3]]);
   onClick({ target: { closest: () => ({ tagName: "BUTTON" }) }, currentTarget: anchor, preventDefault: () => assert.fail("row controls own their click"), stopPropagation: () => assert.fail("row controls must receive their click") });
   assert.equal(opens.length, 1);
-  assert.equal(handler(false, notification, () => assert.fail(), 3), undefined);
-  assert.equal(handler(true, { type: "Invited" }, () => assert.fail(), 3), undefined);
+  assert.equal(handler({ type: "Invited" }, () => assert.fail(), 3), undefined);
 });

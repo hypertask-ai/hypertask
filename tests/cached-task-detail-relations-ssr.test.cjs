@@ -23,6 +23,7 @@ function load({ enabled = [], task = null, legacy = false } = {}) {
     "@/lib/cycles": { CYCLE_WINDOW_SIZE: 4 },
     "@/lib/pullRequests/taskPullRequests": {},
     "@/lib/agents/publicAgent": { publicAgentSelect: {} },
+    "@/lib/flags/keys": flags,
     "@/lib/flags": { ...flags, isFeatureEnabled: async (key, userId) => { flagCalls.push([key, userId]); return enabled.includes(key); } },
     "@/lib/agents/visibility": { boardAgentVisibilityWhere: () => ({}), accessibleAgentMembershipWhere: () => ({}) },
     "@/utils/controllers/notifications/visibleInboxScope": { visibleUserInboxWhere: () => ({}) },
@@ -89,15 +90,14 @@ test("relation body projection is source-board scoped and deleted or cross-board
   client.clear();
 });
 
-test("fetchTaskDetail enables cached relation projection only when both flags are enabled for the reader", async () => {
+test("fetchTaskDetail enables cached relation projection only when the subtask flag is enabled for the reader", async () => {
   const subtask = flags.HTPR_6972_SUBTASK_LINK_FLAG;
-  const instant = flags.HTPR_6752_INSTANT_TICKET_OPEN_FLAG;
-  for (const enabled of [[], [subtask], [instant], [subtask, instant]]) {
+  for (const enabled of [[], [subtask]]) {
     const f = load({ enabled, task: { id: 42, projectId: 15, uniqueIndex: 7, pullRequests: [], description_: null, agent: null } });
     assert.equal((await f.fetchTaskDetail("project-15", 7, 6)).id, 42);
     assert.deepEqual(f.queries[0].where, f.taskWhere({ projectId: 15, uniqueIndex: 7 }, 6));
-    assert.equal(Object.hasOwn(f.queries[0].include.subTasks.select, "description_"), enabled.length === 2);
-    assert.equal(Object.hasOwn(f.queries[0].include.parentTask.select, "description_"), enabled.length === 2);
-    assert.deepEqual(f.flagCalls, [[subtask, 6], ...(enabled.includes(subtask) ? [[instant, 6]] : [])]);
+    assert.equal(Object.hasOwn(f.queries[0].include.subTasks.select, "description_"), enabled.includes(subtask));
+    assert.equal(Object.hasOwn(f.queries[0].include.parentTask.select, "description_"), enabled.includes(subtask));
+    assert.deepEqual(f.flagCalls, [[subtask, 6]]);
   }
 });

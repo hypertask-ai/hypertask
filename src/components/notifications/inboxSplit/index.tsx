@@ -2,7 +2,6 @@
 
 import { setNotificationSeen } from "@/lib/api/typedClient";
 import {
-  HTPR_6752_INSTANT_TICKET_OPEN_FLAG,
   HTPR_6979_TYPED_WRITES_FLAG,
   HTPR_7311_DECISION_COMMENT_LINK_FLAG,
   SHORTCUT_NUDGES_FLAG,
@@ -80,7 +79,6 @@ import {
   jumpToInboxBoundary,
   reconcileInboxKeyboardRow,
 } from "@/lib/inboxKeyboardNavigation";
-import { markTaskDetailNavigationStart } from "@/lib/analytics/taskDetailReadiness";
 import toast from "react-hot-toast";
 
 interface Props {
@@ -338,7 +336,6 @@ const InboxSplit = ({
   const [showSubtaskLinkingModal, setShowSubtaskLinkingModal] =
     useState<boolean>(false);
   const currentUser = useCurrentUser() ?? inboxDocument?.data.user;
-  const instantTicketOpen = useFlag(HTPR_6752_INSTANT_TICKET_OPEN_FLAG);
   const decisionCommentLinkEnabled = useFlag(HTPR_7311_DECISION_COMMENT_LINK_FLAG);
   let decisionCommentLinks = false;
   if (decisionCommentLinkEnabled) {
@@ -925,8 +922,7 @@ const InboxSplit = ({
     );
   };
 
-  const openTaskWithCachedData = async (
-    includeCachedTask: boolean,
+  const openTask = async (
     mode: string,
     notification: INotification | null = null,
     index?: number,
@@ -981,30 +977,17 @@ const InboxSplit = ({
         !decisionCommentId && notification.type === "Mentioned" && notification.commentId
           ? commentIdHash(notification.commentId)
           : "";
-      const finalUrl = withDecisionCommentAnchor(
-        inboxConfig.urls.taskDetail(
-          notification.projectId,
-          notification.task?.uniqueIndex,
-          mentionedQueryParam,
-        ) + (disableInboxFlow ? "" : queryParams),
-        notification.decisionCommentId,
-        decisionCommentLinks,
+      return navigateToTask(
+        notification.projectId,
+        notification.task?.uniqueIndex,
+        "push",
+        withDecisionCommentAnchor(
+          `${cachedInboxFlow}${mentionedQueryParam}${disableInboxFlow ? "" : queryParams}`,
+          notification.decisionCommentId,
+          decisionCommentLinks,
+        ),
+        notification.task,
       );
-      if (includeCachedTask) {
-        return navigateToTask(
-          notification.projectId,
-          notification.task?.uniqueIndex,
-          "push",
-          withDecisionCommentAnchor(
-            `${cachedInboxFlow}${mentionedQueryParam}${disableInboxFlow ? "" : queryParams}`,
-            notification.decisionCommentId,
-            decisionCommentLinks,
-          ),
-          notification.task,
-        );
-      }
-      markTaskDetailNavigationStart("inbox", finalUrl);
-      return router.push(finalUrl);
     }
 
     if (!selectedInbox) return;
@@ -1028,13 +1011,9 @@ const InboxSplit = ({
         selectedInbox.decisionCommentId,
         decisionCommentLinks,
       ),
-      includeCachedTask ? selectedInbox.task : undefined,
+      selectedInbox.task,
     );
   };
-
-  const openTask = instantTicketOpen
-    ? openTaskWithCachedData.bind(null, true)
-    : openTaskWithCachedData.bind(null, false);
 
   const buildUniqueTasksPlaylist = (notifications: INotification[]) => {
     const uniqueMap = new Map<string, ITasksPlaylist>();
@@ -1317,7 +1296,7 @@ const InboxSplit = ({
                                 className={
                                   appShellRail ? "min-w-0 flex-1" : "w-full"
                                 }
-                                onClickCapture={instantTicketOpen && notification.type !== "Invited" ? (event) => {
+                                onClickCapture={notification.type !== "Invited" ? (event) => {
                                   if (!event.currentTarget.contains(event.target as Node)) return;
                                   const control = (event.target as Element).closest("button, input, select, textarea, a");
                                   if (control && control !== event.currentTarget) return;

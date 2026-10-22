@@ -42,7 +42,7 @@ const common = {
   "@/hooks/useFlag": { useFlag: () => cachedLayout },
   "@/lib/taskDetail/initialTicketPosition": require("jiti").createJiti(__filename)(path.join(root, "src/lib/taskDetail/initialTicketPosition.ts")),
   "@/lib/flags/definitions/htpr-7315-unread-ticket-opens-top": { HTPR_7315_UNREAD_TICKET_OPENS_TOP_FLAG: "unread-ticket-opens-top" },
-  "@/lib/flags/keys": { HTPR_6752_INSTANT_TICKET_OPEN_FLAG: "instant", HTPR_6899_STABLE_LAYOUT_FLAG: "stable", HTPR_6967_TYPED_TASK_READS_FLAG: "htpr-6967-typed-task-reads" },
+  "@/lib/flags/keys": { HTPR_6899_STABLE_LAYOUT_FLAG: "stable", HTPR_6967_TYPED_TASK_READS_FLAG: "htpr-6967-typed-task-reads" },
   "@/utils/undoActions/helperFuncs": { cn: (...values) => values.filter(Boolean).join(" ") },
 };
 const title = load("src/components/PageComponents/TaskDetail/TopRow/TaskDetailTitleContainer.tsx", {
@@ -361,7 +361,7 @@ test("real cached description retains its first-painted HTML until editing start
   assert.match(html(body, false, { draftTQ: [] }), /Rich editor/, "flag-off editor mounting is unchanged");
 });
 
-test("cached layout requires both flags and flag-off keeps the production layout", () => {
+test("cached layout requires the stable-layout flag and flag-off keeps the production layout", () => {
   const statement = hook.body.statements.find(node => ts.isVariableStatement(node) && node.declarationList.declarations.some(declaration => declaration.name.getText(hookSource) === "[cachedLayout]"));
   assert.ok(statement, "the real hook must declare its cached-layout state");
   const flag = hook.body.statements.find(node => ts.isVariableStatement(node) && node.declarationList.declarations.some(declaration => declaration.initializer?.getText(hookSource) === "useFlag(HTPR_6899_STABLE_LAYOUT_FLAG)"));
@@ -369,13 +369,13 @@ test("cached layout requires both flags and flag-off keeps the production layout
   assert.equal(flag.declarationList.declarations[0].initializer.getText(hookSource), "useFlag(HTPR_6899_STABLE_LAYOUT_FLAG)");
   const initializer = statement.declarationList.declarations[0].initializer.getText(hookSource);
   const js = ts.transpileModule(`return ${initializer};`, { compilerOptions: { module: ts.ModuleKind.CommonJS } }).outputText;
-  const initialize = new Function("instantTicketOpen", flag.declarationList.declarations[0].name.getText(hookSource), "cachedNavigation", "initialCommentsPayload", "useState", js);
+  const initialize = new Function(flag.declarationList.declarations[0].name.getText(hookSource), "cachedNavigation", "initialCommentsPayload", "useState", js);
   const state = (value) => [value];
-  for (const instant of [false, true]) {
+  {
     for (const stable of [false, true]) {
       for (const navigation of [false, true]) {
         for (const pending of [false, true]) {
-          assert.deepEqual(initialize(instant, stable, navigation, { pending }, state), [instant && stable && (navigation || pending)]);
+          assert.deepEqual(initialize(stable, navigation, { pending }, state), [stable && (navigation || pending)]);
         }
       }
     }
@@ -383,8 +383,9 @@ test("cached layout requires both flags and flag-off keeps the production layout
   commentCount = 1;
   secondaryPanelsReady = true;
   late = false;
-  for (const [instant, stable] of [[true, false], [false, true], [false, false]]) {
-    [cachedLayout] = initialize(instant, stable, true, { pending: true }, state);
+  {
+    const stable = false;
+    [cachedLayout] = initialize(stable, true, { pending: true }, state);
     for (const isMobile of [false, true]) {
       const output = html(thread, isMobile);
       const row = output.match(/<div[^>]*data-index="1"[^>]*>/)?.[0];
@@ -452,7 +453,7 @@ test("new-comment scrolling targets the trailing desktop composer instead of the
 const config = load("src/lib/configs/taskDetail.config.ts", { "@/utils/htmlEscape": { escapeHtml: value => value } }).default;
 
 test("only cached stable instant opens skip automatic late scrolls; ordinary opens retain saved positioning", () => {
-  for (const instant of [false, true]) for (const stable of [false, true]) {
+  for (const stable of [false, true]) {
     for (const isMobile of [false, true]) for (const unread of [false, true]) {
       for (const scrollSetting of ["None", "Bottom"]) for (const embedded of [false, true]) for (const cached of [false, true]) {
         const effects = [];
@@ -463,7 +464,7 @@ test("only cached stable instant opens skip automatic late scrolls; ordinary ope
         const scrollTarget = { scrollHeight: 6000, scrollTo: value => movement.push(["bottom", value]), scrollBy: value => movement.push(["offset", value]) };
         const useScroll = load("src/app/detail/[...slug]/useTaskDetailInitialScroll.tsx", {
           react: { useEffect: callback => effects.push(callback), useLayoutEffect: noop, useCallback: callback => callback },
-          "@/hooks/useFlag": { useFlag: key => key === "instant" ? instant : key === "stable" && stable },
+          "@/hooks/useFlag": { useFlag: key => key === "stable" && stable },
           "@/lib/contexts/TaskDetail/TaskProvider": { useTaskContext: () => ({ cachedLayout: cached, liveRowsPendingFor: () => false }) },
           "@/lib/flags/keys": common["@/lib/flags/keys"],
           "@/lib/taskDetail/initialTicketPosition": common["@/lib/taskDetail/initialTicketPosition"],
@@ -504,7 +505,7 @@ test("only cached stable instant opens skip automatic late scrolls; ordinary ope
           timers.splice(0).forEach(callback => callback());
           frames.splice(0).forEach(callback => callback());
         }
-        if (instant && stable && cached) {
+        if (stable && cached) {
           assert.deepEqual(movement, [], "late data must not move the first paint or collapse the mobile header");
           assert.equal(ctx.hasBottomScrolledRef.current, false);
           assert.equal(ctx.hasScrolledToUnreadRef.current, false);
@@ -627,7 +628,7 @@ test("late composer and reaction controls fill reserved space and pages start be
 });
 
 test("the real quote insertion effect fills the composer before centering it clear of the sticky header", () => {
-  for (const instant of [false, true]) for (const stable of [false, true]) {
+  for (const stable of [false, true]) {
     const effects = [];
     const events = [];
     let html = "";
@@ -635,7 +636,7 @@ test("the real quote insertion effect fills the composer before centering it cle
     const useEvents = load("src/components/RTE/useTaskDetailEditorEvents.tsx", {
       "@/hooks/MultiPages/AIChat/useCommentToAiChat": { useCommentToAiChat: () => ({}) },
       react: { useEffect: callback => effects.push(callback), useLayoutEffect: noop },
-      "@/hooks/useFlag": { useFlag: key => key === "instant" ? instant : key === "stable" && stable },
+      "@/hooks/useFlag": { useFlag: key => key === "stable" && stable },
       "@/lib/flags/keys": { ...common["@/lib/flags/keys"], HTPR_6929_COMPOSE_TASK_WRITER_FLAG: "compose", HTPR_6937_NEW_TASK_WINDOW_FLAG: "new-task-window" },
       "@/lib/state": { useSetRecoilState: () => noop },
       "@/store": { showCommandsAtom: {} },
@@ -652,11 +653,11 @@ test("the real quote insertion effect fills the composer before centering it cle
       handleFocus: () => events.push("focus"), divIds: {} });
     effects[1]();
     assert.equal(html, "<blockquote>Quoted text</blockquote><p></p>");
-    assert.deepEqual(events, ["insert", { behavior: instant && stable ? "auto" : "smooth", block: instant && stable ? "center" : "start" }, "focus"]);
+    assert.deepEqual(events, ["insert", { behavior: stable ? "auto" : "smooth", block: stable ? "center" : "start" }, "focus"]);
   }
 });
 
-test("the desktop Quote popover accepts pointer events despite a contact hovercard blocking body, only with both flags on", () => {
+test("the desktop Quote popover accepts pointer events despite a contact hovercard blocking body, only with stable layout on", () => {
   const { JSDOM } = require("jsdom");
   const source = ts.createSourceFile("highlight.tsx", fs.readFileSync(path.join(process.env.STABLE_LAYOUT_SOURCE_ROOT || root, "src/components/PageComponents/TaskDetail/CommentAndDescription/ContextMenu/HighlightMenu.tsx"), "utf8"), ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX);
   let style;
@@ -669,17 +670,17 @@ test("the desktop Quote popover accepts pointer events despite a contact hoverca
   visit(source);
   assert.ok(style && ts.isJsxExpression(style));
   const js = ts.transpileModule(`return ${style.expression.getText(source)};`, { compilerOptions: { module: ts.ModuleKind.CommonJS } }).outputText;
-  const styles = new Function("instantTicketOpen", "stableLayout", "getFloatingStylesOverride", js);
+  const styles = new Function("stableLayout", "getFloatingStylesOverride", js);
   const originalStyle = { position: "fixed", top: "40px", left: "20px", zIndex: 999999999 };
   const dom = new JSDOM('<body style="pointer-events: none"><div id="popover" class="Popover">Quote</div></body>');
   try {
     const popover = dom.window.document.getElementById("popover");
-    for (const instant of [false, true]) for (const stable of [false, true]) {
-      const result = styles(instant, stable, () => originalStyle);
-      assert.deepEqual(result, instant && stable ? { ...originalStyle, pointerEvents: "auto" } : originalStyle);
+    for (const stable of [false, true]) {
+      const result = styles(stable, () => originalStyle);
+      assert.deepEqual(result, stable ? { ...originalStyle, pointerEvents: "auto" } : originalStyle);
       popover.style.cssText = "";
       Object.assign(popover.style, result);
-      assert.equal(dom.window.getComputedStyle(popover).pointerEvents, instant && stable ? "auto" : "none");
+      assert.equal(dom.window.getComputedStyle(popover).pointerEvents, stable ? "auto" : "none");
       assert.equal(dom.window.document.body.style.pointerEvents, "none", "contact hovercard behavior is untouched");
     }
   } finally {

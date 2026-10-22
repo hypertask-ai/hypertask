@@ -39,7 +39,7 @@ async function warming({ mobile, enabled, pathname, saveData = false }) {
     'next/navigation': { usePathname: () => pathname, useRouter: () => ({}) },
     '@tanstack/react-query': { useQueryClient: () => ({}) },
     '@/lib/state': { useRecoilValue: () => user }, '@/store': {},
-    '@/hooks/useFlag': { useFlag: key => key === phoneFlag ? enabled : key === keys.HTPR_6752_INSTANT_TICKET_OPEN_FLAG },
+    '@/hooks/useFlag': { useFlag: key => key === phoneFlag ? enabled : false },
     '@/lib/flags/keys': keys,
     '@/lib/navigation/cachedTaskDetail': { cachedTaskDetailLocation: () => undefined },
     '@/utils/helperFunctions/helperFunctions': {}, '@/lib/constants/constants': {},
