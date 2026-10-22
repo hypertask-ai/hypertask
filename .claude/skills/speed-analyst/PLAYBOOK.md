@@ -444,7 +444,11 @@ https://app.hypertask.ai/detail/project-15/7588, PR https://github.com/hypertask
 - Read the first request of a navigation before blaming render: a `fetchQuery` with a short staleTime in front of `router.push` costs a round trip on every press after the stale window.
 - `feature-flag-gate` did not count `useFlag` assigned to a constant and used inside the async key handler; `if (useFlag(KEY)) lookup = flaggedLookup;` at render (the HTPR-7406 pattern) passes. Run the gate after `npm run flags:generate`.
 
-**Next probe.** Live flag on/off after deploy (`/api/flags` rewrite per sample, N=5 interleaved): key press to `/project` request, list requests before it (expect 1 off, 0 on), landed board identical. Then start the board read-model read at key press instead of after the route renders.
+**Live result (merge 56e3ab899, build 4f13edc55, phone, QA 2343, flag forced per sample, 5 interleaved pairs, load 3 to 5, every run kept).** Key press to `/project` request: on 95 ms median (80 to 131), off 388 ms (368 to 440). Content: on 1947 ms (1662 to 2386), off 1985 ms (1813 to 2398): no measurable difference. Same landed board in 10 of 10; settled screenshots identical. The background list refresh still starts right away, so "list requests before the board" reads 1 in both arms; the board just no longer waits for it. Result: real 290 ms earlier start, absorbed by the busy main thread before content. Flag stays Everyone.
+
+**Probe trap.** Playwright `page.route` disables the browser cache, and with it g then b timed out in 6 of 6 samples. Rewrite `/api/flags` with CDP `Fetch` at the Response stage alongside the request-stage write blocker instead.
+
+**Next probe.** Start the board read-model read at key press instead of after the route renders, then the React render cost after `boardTasks` (about 1 s on the phone).
 
 ## Milliseconds saved scoreboard
 
@@ -473,7 +477,7 @@ Only matched end-to-end before/after evidence earns saved milliseconds; `unprove
 | https://app.hypertask.ai/detail/project-15/7395 | Phone tap from the board to ticket text, live on/off interleaved, build 309ae766d, load 2 to 3 | 10531 ms (off, N=5) → 7398 ms (on, N=10) | about 3,100 ms | flag `htpr-7395-cached-static-first`, PRs 1759 and 1822; settled screenshot identical 15 of 15 |
 | https://app.hypertask.ai/detail/project-15/7555 | Phone tap board to ticket, JSON.stringify time, live on/off interleaved N=5+5, load 6 to 9 | 317 ms (off) → 171 ms (on) main-thread stringify; ticket text 7785 → 8097 ms (overlapping) | about 146 ms CPU, 0 to ticket text | flag `htpr-7555-persist-size-once`, PR 1838; cache, text and screenshot identical |
 | https://app.hypertask.ai/detail/project-15/7554 | Font preloads vs stylesheet URL, live login, PR 1839 | 3 of 3 unmatched → 3 of 3 unmatched; ticket-page CLS 0.127 in browser-smoke | 0, regression, reverted in PR 1846 | premise wrong (stylesheet keeps an older deployment tag) |
-| https://app.hypertask.ai/detail/project-15/7588 | Phone page navigation, key press to /project request, daily harness N=5 | 217 to 312 ms (after a board-list request) → pending live on/off | unproven | flag `htpr-7588-board-shortcut-from-device`, PR 1863 |
+| https://app.hypertask.ai/detail/project-15/7588 | Phone page navigation, key press to /project request, daily harness N=5 | /project request 388 → 95 ms (live on/off N=5+5); content 1985 → 1947 ms, overlapping | about 290 ms to the board request, 0 to content | flag `htpr-7588-board-shortcut-from-device` Everyone, PR 1863; same board and screen in 10 of 10 |
 
 Confirmed, comparable saved-ms total in this seed: **not established**. Future entries must link private before/after summaries, commits, N, median/p90/range and QA proof. This deliberately avoids inventing savings absent from the history.
 
