@@ -59,12 +59,11 @@ const filters = entries => ({ matchFilters: "ALL", addedFilters: Object.entries(
 const allFilters = () => filters({ Labels: labels, Assignees: assignees, Priority: [priority], Size: [estimate] });
 const project = (activeFilters = allFilters(), id = 15) => ({ id, project_view: { user_project_views: [{ appliedView: { board_filters: activeFilters } }] } });
 
-function modal({ flag = true, quickFlag = true, board = project(), payload, duplicate } = {}) {
+function modal({ flag = true, board = project(), payload, duplicate } = {}) {
   let helperCalls = 0;
   const context = {
     createTaskModal: { column_payload: payload, duplicate },
     _currentProject: board,
-    quickAddViewContextEnabled: quickFlag,
     newTaskWindowViewContextEnabled: flag,
     getActiveFiltersFromProject: viewHelpers.getActiveFiltersFromProject,
     getNewTaskViewDefaults: activeFilters => { helperCalls++; return getNewTaskViewDefaults(activeFilters); },
@@ -117,12 +116,10 @@ for (const [name, entries, field, expected] of [
   });
 }
 
-test("all view defaults share one helper call independently of the quick-add flag", () => {
-  for (const quickFlag of [false, true]) {
-    const result = modal({ quickFlag });
-    assert.deepEqual([result.form.tags, result.form.assignees, result.form.priority, result.form.estimate], [labels, assignees, priority, estimate]);
-    assert.equal(result.helperCalls, 1);
-  }
+test("all view defaults share one helper call", () => {
+  const result = modal();
+  assert.deepEqual([result.form.tags, result.form.assignees, result.form.priority, result.form.estimate], [labels, assignees, priority, estimate]);
+  assert.equal(result.helperCalls, 1);
 });
 
 test("prefilled picker values reach the existing create payload unchanged", async () => {
@@ -167,43 +164,39 @@ test("explicit caller values including empty selections win initially and during
 });
 
 test("duplicate initial values remain unchanged with the flag on", () => {
-  for (const quickFlag of [false, true]) {
-    for (const fields of [
-      { assignees: [{ user: assignees[0] }, { agent: assignees[1] }], priority: constants.PriorityConstants[1], estimate: constants.EstimateConstants.at(-1) },
-      {},
-      { assignees: [], priority: null, estimate: null },
-    ]) {
-      const duplicate = { title: "Copy", taskLabels: [{ label: labels[0] }], ...fields };
-      for (const payload of [undefined, { priority, estimate, assignees }]) {
-        const on = modal({ duplicate, payload, quickFlag });
-        const off = modal({ duplicate, payload, quickFlag, flag: false });
-        assert.deepEqual(on.form, off.form);
-        assert.deepEqual(on.form.assignees, []);
-        assert.deepEqual(on.form.priority, duplicate.priority ?? payload?.priority);
-        assert.deepEqual(on.form.estimate, duplicate.estimate ?? undefined);
-      }
+  for (const fields of [
+    { assignees: [{ user: assignees[0] }, { agent: assignees[1] }], priority: constants.PriorityConstants[1], estimate: constants.EstimateConstants.at(-1) },
+    {},
+    { assignees: [], priority: null, estimate: null },
+  ]) {
+    const duplicate = { title: "Copy", taskLabels: [{ label: labels[0] }], ...fields };
+    for (const payload of [undefined, { priority, estimate, assignees }]) {
+      const on = modal({ duplicate, payload });
+      const off = modal({ duplicate, payload, flag: false });
+      assert.deepEqual(on.form, off.form);
+      assert.deepEqual(on.form.assignees, []);
+      assert.deepEqual(on.form.priority, duplicate.priority ?? payload?.priority);
+      assert.deepEqual(on.form.estimate, duplicate.estimate ?? undefined);
     }
   }
 });
 
 test("duplicate board resolution does not add view assignees, priority or size with the flag on", () => {
-  for (const quickFlag of [false, true]) {
-    for (const fields of [
-      { priority: constants.PriorityConstants[1], estimate: constants.EstimateConstants.at(-1) },
-      {},
-      { assignees: [], priority: null, estimate: null },
-    ]) {
-      const duplicate = { title: "Copy", taskLabels: [], ...fields };
-      const on = modal({ duplicate, quickFlag, board: { id: 15 } });
-      const off = modal({ duplicate, quickFlag, board: { id: 15 }, flag: false });
-      on.switchBoard(project());
-      off.switchBoard(project());
-      assert.deepEqual({ ...on.form, tags: off.form.tags }, off.form);
-      assert.deepEqual(on.form.tags, []);
-      assert.deepEqual(on.form.assignees, []);
-      assert.deepEqual(on.form.priority, duplicate.priority ?? undefined);
-      assert.deepEqual(on.form.estimate, duplicate.estimate ?? undefined);
-    }
+  for (const fields of [
+    { priority: constants.PriorityConstants[1], estimate: constants.EstimateConstants.at(-1) },
+    {},
+    { assignees: [], priority: null, estimate: null },
+  ]) {
+    const duplicate = { title: "Copy", taskLabels: [], ...fields };
+    const on = modal({ duplicate, board: { id: 15 } });
+    const off = modal({ duplicate, board: { id: 15 }, flag: false });
+    on.switchBoard(project());
+    off.switchBoard(project());
+    assert.deepEqual({ ...on.form, tags: off.form.tags }, off.form);
+    assert.deepEqual(on.form.tags, []);
+    assert.deepEqual(on.form.assignees, []);
+    assert.deepEqual(on.form.priority, duplicate.priority ?? undefined);
+    assert.deepEqual(on.form.estimate, duplicate.estimate ?? undefined);
   }
 });
 
@@ -222,15 +215,13 @@ test("user values and deliberate clearing survive later board defaults", () => {
 test("a real board switch replaces inherited fields with the target view or emptiness", () => {
   const other = { tags: [{ ...labels[0], id: "22222222-2222-4222-8222-222222222222" }], assignees: [assignees[1]], priority: constants.PriorityConstants[1], estimate: constants.EstimateConstants.at(-1) };
   const target = project(filters({ Labels: other.tags, Assignees: other.assignees, Priority: [other.priority], Size: [other.estimate] }), 16);
-  for (const quickFlag of [false, true]) {
-    const result = modal({ quickFlag });
-    result.switchBoard(target);
-    for (const [field, value] of Object.entries(other)) assert.deepEqual(result.form[field], value, field);
-    result.switchBoard(project(emptyFilters, 17));
-    assert.deepEqual([result.form.tags, result.form.assignees, result.form.priority, result.form.estimate], [undefined, [], undefined, undefined]);
-    result.switchBoard(project());
-    assert.deepEqual([result.form.tags, result.form.assignees, result.form.priority, result.form.estimate], [labels, assignees, priority, estimate]);
-  }
+  const result = modal();
+  result.switchBoard(target);
+  for (const [field, value] of Object.entries(other)) assert.deepEqual(result.form[field], value, field);
+  result.switchBoard(project(emptyFilters, 17));
+  assert.deepEqual([result.form.tags, result.form.assignees, result.form.priority, result.form.estimate], [undefined, [], undefined, undefined]);
+  result.switchBoard(project());
+  assert.deepEqual([result.form.tags, result.form.assignees, result.form.priority, result.form.estimate], [labels, assignees, priority, estimate]);
 });
 
 test("a real board switch keeps user selections and deliberate clearing field by field", () => {
@@ -290,21 +281,19 @@ test("same-board hydration does not clear inherited defaults", () => {
 });
 
 test("untouched inherited defaults are clean, but edits and clearing are dirty until restored", () => {
-  for (const quickFlag of [false, true]) {
-    const result = modal({ quickFlag });
-    assert.equal(result.isDirty(), false);
-    for (const [field, empty, original] of [["assignees", [], assignees], ["tags", [], labels], ["priority", undefined, priority], ["estimate", undefined, estimate]]) {
-      result.change(field, empty);
-      assert.equal(result.isDirty(), true, field);
-      result.change(field, structuredClone(original));
-      assert.equal(result.isDirty(), false, field);
-    }
-    for (const [field, value, original] of [["title", "Draft", ""], ["description", "<p>Draft</p>", "<p></p>"], ["attachments", [{}], []], ["dueDate", new Date(), undefined], ["startDate", new Date(), undefined], ["status", { sectionId: 7 }, undefined]]) {
-      result.change(field, value);
-      assert.equal(result.isDirty(), true, field);
-      result.change(field, original);
-      assert.equal(result.isDirty(), false, field);
-    }
+  const result = modal();
+  assert.equal(result.isDirty(), false);
+  for (const [field, empty, original] of [["assignees", [], assignees], ["tags", [], labels], ["priority", undefined, priority], ["estimate", undefined, estimate]]) {
+    result.change(field, empty);
+    assert.equal(result.isDirty(), true, field);
+    result.change(field, structuredClone(original));
+    assert.equal(result.isDirty(), false, field);
+  }
+  for (const [field, value, original] of [["title", "Draft", ""], ["description", "<p>Draft</p>", "<p></p>"], ["attachments", [{}], []], ["dueDate", new Date(), undefined], ["startDate", new Date(), undefined], ["status", { sectionId: 7 }, undefined]]) {
+    result.change(field, value);
+    assert.equal(result.isDirty(), true, field);
+    result.change(field, original);
+    assert.equal(result.isDirty(), false, field);
   }
 });
 
@@ -362,23 +351,21 @@ test("late automatic board defaults are clean without treating user selections a
 });
 
 test("flag off keeps legacy dirty checks and overwrites selected tags on a board switch", () => {
-  for (const quickFlag of [false, true]) {
-    const result = modal({ flag: false, quickFlag });
-    assert.equal(result.isDirty(), true);
-    result.change("assignees", [assignees[0]]);
-    result.change("priority", priority);
-    result.change("estimate", estimate);
-    result.change("tags", []);
-    result.switchBoard(project(allFilters(), 16));
-    assert.deepEqual([result.form.tags, result.form.assignees, result.form.priority, result.form.estimate], [labels, [], priority, estimate]);
-    assert.equal(result.isDirty(), true);
-    const empty = modal({ flag: false, quickFlag, board: project(emptyFilters) });
-    assert.equal(empty.isDirty(), false);
-    empty.change("assignees", assignees);
-    assert.equal(empty.isDirty(), true);
-    empty.change("assignees", []);
-    assert.equal(empty.isDirty(), false);
-  }
+  const result = modal({ flag: false });
+  assert.equal(result.isDirty(), true);
+  result.change("assignees", [assignees[0]]);
+  result.change("priority", priority);
+  result.change("estimate", estimate);
+  result.change("tags", []);
+  result.switchBoard(project(allFilters(), 16));
+  assert.deepEqual([result.form.tags, result.form.assignees, result.form.priority, result.form.estimate], [labels, [], priority, estimate]);
+  assert.equal(result.isDirty(), true);
+  const empty = modal({ flag: false, board: project(emptyFilters) });
+  assert.equal(empty.isDirty(), false);
+  empty.change("assignees", assignees);
+  assert.equal(empty.isDirty(), true);
+  empty.change("assignees", []);
+  assert.equal(empty.isDirty(), false);
 });
 
 test("caller board resolution fills defaults from the target view, not the current board", () => {
@@ -390,24 +377,22 @@ test("caller board resolution fills defaults from the target view, not the curre
   assert.equal(result.helperCalls - calls, 1);
 });
 
-test("flag off matches the production form and board-switch behavior byte for byte", () => {
-  for (const quickFlag of [false, true]) {
-    const rawLabels = [{ id: "no-label" }, ...labels];
-    const board = project(filters({ Labels: rawLabels, Assignees: assignees, Priority: [priority], Size: [estimate] }));
-    const payload = { priority, estimate, assignees };
-    const result = modal({ flag: false, quickFlag, board, payload });
-    const expected = {
-      title: "", description: "<p></p>", assignees: [], attachments: [], status: payload,
-      priority, estimate: undefined, dueDate: undefined, startDate: undefined,
-      tags: quickFlag ? labels : rawLabels, currentProject: board,
-    };
-    assert.deepEqual(result.form, expected);
-    assert.equal(JSON.stringify(result.form), JSON.stringify(expected));
-    result.switchBoard(board);
-    expected.status = undefined;
-    assert.deepEqual(result.form, expected);
-    assert.equal(JSON.stringify(result.form), JSON.stringify(expected));
-  }
+test("modal flag off keeps sanitized tags and legacy form fields on board switches", () => {
+  const rawLabels = [{ id: "no-label" }, ...labels];
+  const board = project(filters({ Labels: rawLabels, Assignees: assignees, Priority: [priority], Size: [estimate] }));
+  const payload = { priority, estimate, assignees };
+  const result = modal({ flag: false, board, payload });
+  const expected = {
+    title: "", description: "<p></p>", assignees: [], attachments: [], status: payload,
+    priority, estimate: undefined, dueDate: undefined, startDate: undefined,
+    tags: labels, currentProject: board,
+  };
+  assert.deepEqual(result.form, expected);
+  assert.equal(JSON.stringify(result.form), JSON.stringify(expected));
+  result.switchBoard(board);
+  expected.status = undefined;
+  assert.deepEqual(result.form, expected);
+  assert.equal(JSON.stringify(result.form), JSON.stringify(expected));
 });
 
 test("no view stays unchanged with the flag on", () => {

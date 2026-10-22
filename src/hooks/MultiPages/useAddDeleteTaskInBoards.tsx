@@ -9,8 +9,6 @@ import axios from 'axios';
 import UpdateKanban from './useUpdateTaskInBoards';
 import { returnSortedItems } from "@/utils/helperFunctions/helperFunctions";
 import { ITask } from "@/models/model";
-import { useFlag } from "@/hooks/useFlag";
-import { HTPR_6993_QUICK_ADD_VIEW_CONTEXT_FLAG } from "@/lib/flags/keys";
 import { getActiveFiltersFromProject } from "@/utils/helperFunctions/Views/ViewsHelperFunctions";
 import { getNewTaskViewDefaults } from "@/utils/helperFunctions/Views/NewTaskViewDefaults";
 import { PriorityConstants } from "@/lib/constants/constants";
@@ -37,7 +35,6 @@ const useAddDeleteTaskInBoards = () => {
   const store = useStore();
   const _currentProject = useRecoilValue(currentProjectAtom)
   const currentUser = useRecoilValue(currentUserAtom);
-  const quickAddViewContextEnabled = useFlag(HTPR_6993_QUICK_ADD_VIEW_CONTEXT_FLAG);
   const getActiveSection = () => store.get(activeSectionAtom);
 
   const { updateActiveItemAndItemInView, mutationHandler, getProjectIdxAndAllData } = UpdateKanban()
@@ -121,14 +118,12 @@ const useAddDeleteTaskInBoards = () => {
     );
 
     console.log("🚀 ~ createItem ~ ranking:", ranking)
-      const defaults = quickAddViewContextEnabled
-        ? getNewTaskViewDefaults(getActiveFiltersFromProject(_currentProject))
-        : undefined;
-      const useViewContext = Boolean(defaults && (
+      const defaults = getNewTaskViewDefaults(getActiveFiltersFromProject(_currentProject));
+      const useViewContext = Boolean(
         defaults.tags?.length || defaults.assignees.length || defaults.priority || defaults.estimate
-      ));
+      );
       let task: ITask;
-      if (useViewContext && defaults) {
+      if (useViewContext) {
         if (!currentUser?.id) return false;
         const result = await createNewTaskGloballyAPIHandler({
           ...item,
