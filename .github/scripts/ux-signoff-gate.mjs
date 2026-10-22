@@ -327,10 +327,15 @@ function commentVerdict(comment) {
   const text = plainText(comment.text).trim().toLowerCase().replace(/[’‘]/g, "'");
   if (/^(?:no|nope|not|reject|don't)\b/.test(text)) return 'reject';
   const yesFirst = /^(?:(?:yes|yep|yeah|go|ok|okay|agree|agreed|approve|approved|lgtm|looks good|ship it)\b|👍)/u.test(text);
-  if (!/\b(?:no|not|but|change|instead)\b|n't/.test(text)) return yesFirst ? 'approve' : null;
-  const asksSeparateTicket = /\b(?:new|separate|another|follow-?up) ticket\b/.test(text);
-  const wantsChangeHere = /\b(?:first|before|instead|not like this)\b|\b(?:don't|do not|dont) (?:build|ship|merge)\b/.test(text);
-  return yesFirst && asksSeparateTicket && !wantsChangeHere ? 'approve' : 'reject';
+  const hedged = /\b(?:no|not|but|change|instead)\b|n't/.test(text);
+  if (!yesFirst) return hedged ? 'reject' : null;
+  const ticketAt = text.search(/\b(?:new|separate|another|follow-?up) ticket\b/);
+  if (hedged && (ticketAt < 0 || /\b(?:no|not|change|instead|first|before)\b|n't|\bdont\b/.test(text))) return 'reject';
+  const ticketSentenceEnd = ticketAt < 0 ? -1 : text.slice(ticketAt).search(/[.;!?\n](?:\s|$)/);
+  const outsideTicketRequest = ticketAt < 0 ? text
+    : text.slice(0, ticketAt) + (ticketSentenceEnd < 0 ? '' : text.slice(ticketAt + ticketSentenceEnd));
+  const asksDesignChange = /\b(?:fix|fixes|move|update|adjust|tweak|redo|rework|align|remove|rename|replace|swap|resize)\b/;
+  return asksDesignChange.test(outsideTicketRequest) ? 'reject' : 'approve';
 }
 
 function asksYesToShipElements(comment, wireframeLink, designIds, newElements) {

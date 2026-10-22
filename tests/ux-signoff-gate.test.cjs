@@ -491,7 +491,12 @@ test('HTPR-7263: "Agreed" plus a request for a separate new ticket stays a yes; 
   for (const text of ['no', 'not like this', 'change X first', 'Agreed but not like this, create a new ticket for the rest',
     'Yes but change the header first, new ticket for the rest', 'agreed but change X instead, new ticket for Y',
     "agreed but don't ship yet, new ticket for the border", 'Agreed but before merging fix the border, new ticket for desktop',
-    'why is the border off? pls create a new ticket']) {
+    'why is the border off? pls create a new ticket',
+    'Yes but change the header on this wireframe; create a new ticket for the icon',
+    'Yes but fix the header and create a new ticket for the icon',
+    'Yes, create a new ticket for the icon. Also fix the header',
+    'Agreed but move the button left, new ticket for the border',
+    "yes but don't create a new ticket", 'yes but no new ticket, fix it here', 'yes but dont open a new ticket']) {
     assert.equal((await decision({ comments: [wireframe(), yes({ text })] })).state, 'failure', text);
   }
 });
