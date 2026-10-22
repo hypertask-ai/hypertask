@@ -127,7 +127,13 @@ const db = {
 for (const [file, exports] of [
   ['src/lib/prisma.ts', { default: db }],
   ['src/lib/auth/getSessionUser.ts', { getSessionUser: async () => state.session }],
-  ['src/lib/auth/agentScope.ts', { withAgentScopeRequest: (_request: any, run: () => any) => run() }],
+  ['src/lib/auth/agentScope.ts', {
+    withAgentScopeRequest: (_request: any, run: () => any) => run(),
+    agentScopeMode: async () => 'WATCH',
+    prepareAgentScope: async () => {},
+    agentScopeEnforced: () => false,
+    recordAgentBoardScopeMiss: () => {},
+  }],
   ['src/lib/mcp/auth.ts', { validateMcpAuth: async () => state.session ? { user: { id: 42 }, agentId: null } : null, checkMcpRateLimit: async () => null }],
   ['src/lib/flags.ts', { ...keys, isFeatureEnabled: async (key: string, userId: number) => { assert.equal(userId, 42); state.flagCalls.push(key); return state.flags[key] ?? false } }],
   ['src/utils/controllers/projects/getAllIncludes.ts', { getProjectWhere: (userId: number) => ({ ownerId: userId }), projectContentAccessWhere: (userId: number) => ({ ownerId: userId }) }],
