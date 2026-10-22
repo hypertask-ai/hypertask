@@ -672,16 +672,10 @@ test("inbox-next-open bugfix defaults to Everyone for plain QA and respects OFF"
   assert.equal(await flags.isFeatureEnabled(key, 2343), false);
 });
 
-test("size-label-click bugfix defaults to Everyone and respects OFF", async () => {
-  const { HTPR_6978_SIZE_LABEL_CLICK_FLAG: key } = flags;
-  assert.equal(key, "htpr-6978-size-label-click");
-  const entry = (await flags.listFeatureFlagModes()).find(entry => entry.key === key);
-  assert.equal(entry.kind, "bugfix");
-  assert.equal(entry.mode, "EVERYONE");
-  assert.equal(entry.shippedOn, "2026-10-06");
-  assert.equal(await flags.isFeatureEnabled(key, 2343), true);
-  row = { mode: "OFF", updatedAt: new Date() };
-  assert.equal(await flags.isFeatureEnabled(key, 2343), false);
+test("size label clicks no longer have a feature flag", async () => {
+  assert.equal(flags.HTPR_6978_SIZE_LABEL_CLICK_FLAG, undefined);
+  assert.equal(definitions.some(entry => entry.key === "htpr-6978-size-label-click"), false);
+  assert.equal((await flags.listFeatureFlagModes()).some(entry => entry.key === "htpr-6978-size-label-click"), false);
 });
 
 test("server first-screen flag is registered but unused and scoped flag seeds reuse server evaluation", async () => {
