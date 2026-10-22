@@ -96,7 +96,11 @@ export function createAddCommentTool(context: ToolContext) {
               identifier,
               resolvedTaskId: resolution.task?.id ?? null,
             })),
-            [["text", input.text.trim()]]
+            [
+              ["text", input.text.trim()],
+              ...(input.image_urls !== undefined ? [["image_urls", input.image_urls]] : []),
+              ...(input.inline_images !== undefined ? [["inline_images", input.inline_images]] : []),
+            ]
           );
           if (
             await requireCrossMessageConfirmation({
@@ -129,6 +133,8 @@ export function createAddCommentTool(context: ToolContext) {
               success: false,
               confirmation_required: true,
               affected,
+              ...(input.image_urls !== undefined ? { image_urls: input.image_urls } : {}),
+              ...(input.inline_images !== undefined ? { inline_images: input.inline_images } : {}),
               message:
                 `This would comment on ${targets.length} tasks. Nothing has been changed yet. ` +
                 "End your turn now: list the affected tasks for the user and ask them to confirm. Only after they say yes, in a new message, call this tool again with confirmed: true.",

@@ -65,6 +65,12 @@ export function createUpdateTaskTool(context: ToolContext) {
           if (input.description !== undefined) {
             operationChanges.push(["description", input.description]);
           }
+          if (input.image_urls !== undefined) {
+            operationChanges.push(["image_urls", input.image_urls]);
+          }
+          if (input.inline_images !== undefined) {
+            operationChanges.push(["inline_images", input.inline_images]);
+          }
           if (input.priority !== undefined) {
             operationChanges.push(["priority", input.priority]);
           }
@@ -147,6 +153,8 @@ export function createUpdateTaskTool(context: ToolContext) {
               success: false,
               confirmation_required: true,
               affected,
+              ...(input.image_urls !== undefined ? { image_urls: input.image_urls } : {}),
+              ...(input.inline_images !== undefined ? { inline_images: input.inline_images } : {}),
               message:
                 `This would change ${targets.length} tasks` +
                 (destructive ? ` (status: ${input.status})` : "") +

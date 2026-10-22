@@ -467,3 +467,108 @@ for (const [creatorId, expectedInline] of [[985, true], [7, false]]) {
     assert.deepEqual(targets, [{ taskId: 91, commentId: 44, descriptionId: null, inlineImages: expectedInline }]);
   });
 }
+
+for (const mode of ["update", "comment", "create", "writer-create"]) {
+  for (const enabled of [false, true]) {
+    test(`bulk ${mode} binds supplied image fields and preserves legacy keys, flag ${enabled}`, async () => {
+      const { buildBulkOperationKey } = load("src/app/api/ai/chat/stream/bulkTools.ts", {});
+      const { requireCrossMessageConfirmation } = load("src/lib/ai/bulkConfirmation.ts", {
+        "@/lib/redis": { getRedis: async () => { throw new Error("Tests must inject Redis"); } },
+      });
+      const keys = [];
+      const taskIds = [91, 92, 93, 94];
+      const creating = mode === "create" || mode === "writer-create";
+      const writer = mode === "writer-create";
+      const tasks = taskIds.map((id) => ({ project_id: 15, ...(writer ? { brief: `Evidence ${id}` } : { title: `Evidence ${id}` }) }));
+      const input = creating ? { tasks } : mode === "update"
+        ? { task_ids: taskIds, description: html } : { task_ids: taskIds, text: `  ${html}  ` };
+      const stubs = {
+        ai: { tool: (definition) => definition },
+        "./updateOneTask": { createTaskUpdater: () => async () => { throw new Error("Preview must not persist"); } },
+        "@/lib/ai/bulkConfirmation": { requireCrossMessageConfirmation: async ({ operationKey }) => { keys.push(operationKey); return "preview"; } },
+        "@/lib/prisma": { default: { task: { findUnique: async ({ where }) => ({ id: where.id, title: "Evidence", projectId: 15, uniqueIndex: where.id }) } } },
+        "@/lib/ai/tools/execution": {
+          withToolErrors: (fn) => fn, dropEmptyPadding: (value) => value,
+          resolveTaskForTool: async (_user, { task_id }) => ({ task: { id: task_id } }),
+        },
+        "@/lib/ai/tools/helpers": { sanitizeForJson: (value) => value },
+        "@/lib/media/inlineAgentImages.server": {},
+        "@/lib/ai/chatStream/errors": {},
+        "@/lib/constants/constants": {},
+        "@/lib/mcp/tasks/services": {},
+        "@/utils/helperFunctions/toStoredHtml": {},
+        "@/utils/controllers/getMemberAndOwnerForBoard": {},
+        "@/utils/controllers/comments/processMentions": {},
+        "@/utils/controllers/comments/linkifyTicketRefs": {},
+        "@/utils/controllers/comments/createCommentService": {},
+        "@/utils/controllers/urls/extractUrlsFromContent": {},
+        "@/lib/realtime/server": {},
+        "@/lib/flags": {},
+        "@/lib/ai/chatStream/prompt": { COMMENT_TASK_LINK_RULE: "" },
+        "@/app/api/ai/_lib/taskWriterDraft": {},
+        "@/app/api/ai/_lib/taskWriterRun": {},
+        "@/utils/controllers/agents/boardMembers": {},
+      };
+      const context = { inlineAgentImagesEnabled: enabled, chatTaskWriterEnabled: writer, user: { id: 985 }, confirmationSessionId: "image-confirmation", bulkPreviewsIssued: new Set(), sendStatus() {} };
+      const tool = creating
+        ? load("src/lib/ai/tools/createTask.ts", stubs).createCreateTaskTool(context).hypertask_create_task
+        : mode === "update"
+          ? load("src/lib/ai/tools/updateTask.ts", stubs).createUpdateTaskTool(context).hypertask_update_task
+          : load("src/lib/ai/tools/addComment.ts", stubs).createAddCommentTool(context).hypertask_add_comment;
+      const preview = async (fields = {}, taskIndex = 0) => {
+        const call = creating ? { tasks: tasks.map((task, index) => index === taskIndex ? { ...task, ...fields } : task) } : { ...input, ...fields };
+        const result = await tool.execute(tool.inputSchema.parse(call));
+        assert.equal(result.confirmation_required, true);
+        return { key: keys.at(-1), fields: creating ? result.affected[taskIndex] : result };
+      };
+      const legacySubjects = taskIds.map((task_id) => ({ identifier: { task_id }, resolvedTaskId: task_id }));
+      const legacyKey = creating ? buildBulkOperationKey("create-tasks", tasks.map((task) => ({ key: JSON.stringify(["project", task.project_id, writer ? "brief" : "title", writer ? task.brief : task.title]) })))
+        : buildBulkOperationKey(mode === "update" ? "update-tasks" : "comment-on-tasks", legacySubjects, [[mode === "update" ? "description" : "text", html]]);
+      const baseline = await preview();
+      assert.equal(baseline.key, legacyKey);
+      assert.equal(Object.hasOwn(baseline.fields, "image_urls"), false);
+      assert.equal(Object.hasOwn(baseline.fields, "inline_images"), false);
+      assert.equal((await preview({ image_urls: undefined, inline_images: undefined })).key, legacyKey);
+      if (!enabled) {
+        assert.equal((await preview({ image_urls: [image], inline_images: false })).key, legacyKey);
+        return;
+      }
+      for (const [field, first, second, extra] of [
+        ["image_urls", [image], ["https://files.hypertask.app/other.png"], []],
+        ["inline_images", true, false, undefined],
+      ]) {
+        const original = await preview({ [field]: first });
+        const changed = await preview({ [field]: second });
+        assert.notEqual(original.key, changed.key);
+        assert.notEqual(original.key, baseline.key);
+        assert.notEqual(changed.key, baseline.key);
+        assert.deepEqual(original.fields[field], first);
+        assert.deepEqual(changed.fields[field], second);
+        if (extra !== undefined) {
+          const empty = await preview({ [field]: extra });
+          assert.notEqual(empty.key, baseline.key);
+          assert.notEqual(empty.key, original.key);
+          assert.deepEqual(empty.fields[field], extra);
+        }
+        if (creating) assert.notEqual((await preview({ [field]: first }, 1)).key, original.key);
+        const tokens = new Map();
+        const redis = {
+          getdel: async (key) => { const value = tokens.get(key) ?? null; tokens.delete(key); return value; },
+          set: async (key, value) => { tokens.set(key, value); },
+        };
+        const confirm = (operationKey, confirmed) => requireCrossMessageConfirmation({
+          userId: 985, sessionId: "image-confirmation", operationKey, confirmed,
+          previewsIssuedThisRequest: new Set(), getRedisClient: async () => redis,
+        });
+        assert.equal(await confirm(original.key, false), "preview");
+        assert.equal(await confirm(changed.key, true), "preview");
+        assert.equal(await confirm(original.key, true), "proceed");
+      }
+      const combined = await preview({ image_urls: [image], inline_images: false });
+      assert.deepEqual(combined.fields.image_urls, [image]);
+      assert.equal(combined.fields.inline_images, false);
+      assert.notEqual(combined.key, (await preview({ image_urls: [image] })).key);
+      assert.notEqual(combined.key, (await preview({ inline_images: false })).key);
+    });
+  }
+}

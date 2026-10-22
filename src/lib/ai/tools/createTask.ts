@@ -66,6 +66,8 @@ export function createCreateTaskTool(context: ToolContext) {
                 task.project_id ?? null,
                 chatTaskWriterEnabled ? "brief" : "title",
                 (chatTaskWriterEnabled ? task.brief : task.title) ?? null,
+                ...(task.image_urls !== undefined ? [["image_urls", task.image_urls]] : []),
+                ...(task.inline_images !== undefined ? [["inline_images", task.inline_images]] : []),
               ]),
             }))
           );
@@ -84,6 +86,8 @@ export function createCreateTaskTool(context: ToolContext) {
               affected: requestedTasks.map((task) => ({
                 project_id: task.project_id,
                 ...(chatTaskWriterEnabled ? { brief: task.brief } : { title: task.title }),
+                ...(task.image_urls !== undefined ? { image_urls: task.image_urls } : {}),
+                ...(task.inline_images !== undefined ? { inline_images: task.inline_images } : {}),
               })),
               message:
                 `This would create ${requestedTasks.length} tasks. Nothing has been changed yet. ` +
