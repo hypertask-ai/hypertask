@@ -180,6 +180,10 @@ test("five full-viewport screens use real theme/time, cached ticket navigation, 
   assert.doesNotMatch(spec, /scrollIntoViewIfNeeded|parent\.scrollTop|scrollingElement|ticket-comment'\)\.last\(\)|data-task-composer-slot/);
   assert.match(spec, /keyboard\.press\('Control\+j'\)/);
   assert.match(spec, /navigate\(page, '\/inbox'\)/);
+  assert.match(spec, /getByAltText\('Inbox zero reward background'\)/);
+  assert.match(spec, /image\.complete\)/);
+  assert.ok(spec.indexOf('image.complete)') < spec.indexOf('toHaveScreenshot('));
+  assert.match(spec, /image\.currentSrc && image\.naturalWidth > 0/);
   assert.match(spec, /toHaveScreenshot\(`\$\{screen\}\.png`\)/);
   assert.doesNotMatch(spec, /mask:|clip:|fullPage:|networkidle|withRealtime|\.fill\(|\.submit\(/);
   assert.ok(spec.indexOf('toHaveScreenshot(') < spec.indexOf('desktop composer must follow'));

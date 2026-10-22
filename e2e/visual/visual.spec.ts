@@ -65,7 +65,7 @@ async function settled(page: Page, landmarks: Locator[]) {
   await expect(page.locator('html')).toHaveAttribute('data-theme', 'porcelain')
   await page.evaluate(async () => {
     await document.fonts.ready
-    await Promise.all(Array.from(document.images).filter(image => image.currentSrc).map(image => image.decode()))
+    await Promise.all(Array.from(document.images).filter(image => image.currentSrc && image.naturalWidth > 0).map(image => image.decode()))
   })
   let previous = ''
   let equalSamples = 0
@@ -149,6 +149,12 @@ for (const screen of screens) {
       await navigate(page, '/inbox')
       await expect(page.locator('[data-tutorial-inbox-loaded="true"]')).toBeAttached()
       landmarks = [page.getByTestId('inbox-panel'), page.locator('[data-testid="inbox-list"]:visible')]
+      const inboxZeroBackground = page.getByAltText('Inbox zero reward background')
+      await expect(inboxZeroBackground, 'inbox zero background must mount before the screenshot').toBeAttached()
+      await expect.poll(() => inboxZeroBackground.evaluate((image: HTMLImageElement) => image.complete), {
+        timeout: 30_000,
+        message: 'inbox zero background must finish loading or fail before the screenshot',
+      }).toBe(true)
     }
     await test.step('assets loaded and landmark geometry settled', async () => {
       await settled(page, landmarks)
