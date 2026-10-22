@@ -73,7 +73,7 @@ function welcome(enabled, editTaskId = 123) {
     "next/navigation": { usePathname: () => "/detail/project-15/123" },
     "@tanstack/react-query": { useQuery: ({ queryKey }) => ({ data: queryKey[0] === "task-questions" ? { questions: ["Generated question"] } : [{ id: "old-thread", title: "Previous thread" }] }) },
     "@/lib/state": { useRecoilValue: (atom) => ({ task: { taskId: 123, taskTicketNumber: "HTPR-123" }, edit: editTaskId, ready: true })[atom] },
-    "@/store": { inViewObjectAtom: "task", aiChatEditTaskIdAtom: "edit", taskDetailNonEssentialReadyAtom: "ready" },
+    "@/store": { composeTaskQuestionsTaskIdAtom: "questionsTaskId", inViewObjectAtom: "task", aiChatEditTaskIdAtom: "edit", taskDetailNonEssentialReadyAtom: "ready" },
     "@/lib/demo/isGuestClient": { isGuestCookieUser: () => false },
     "@/lib/demo/guestBoardBuild": { isGuestBoardBuild: () => false },
     "./GuestBoardSpotlight": { GuestBoardSpotlight: () => null },

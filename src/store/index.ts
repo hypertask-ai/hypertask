@@ -85,6 +85,11 @@ export const composeTaskChatIntroAtom = atom<{ taskId: number; content: string }
     default: null,
 });
 
+export const composeTaskQuestionsTaskIdAtom = atom<number | null>({
+    key: "composeTaskQuestionsTaskId",
+    default: null,
+});
+
 export const aiChatPendingPromptAtom = atom<string | { query: string; fullScreen: true } | null>({
     key: "aiChatPendingPromptAtom",
     default: null,

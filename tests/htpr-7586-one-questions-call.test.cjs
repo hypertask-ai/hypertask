@@ -36,12 +36,14 @@ async function withSidebar(options, check) {
   const requests = [];
   const sent = [];
   let pendingIntro = options.pendingIntro ?? null;
+  let questionsTaskId = options.questionsTaskId ?? null;
+  let dataReady = options.dataReady ?? true;
   let session = { id: "s1", taskId: 43, messages: [] };
   const flags = new Set([composeFlag, questionsFlag, flag]);
   for (const disabled of options.disabledFlags ?? []) flags.delete(disabled);
   const atoms = {
     currentProjectAtom: "project", inViewObjectAtom: "task", taskDetailNonEssentialReadyAtom: "ready",
-    aiChatEditTaskIdAtom: "edit", composeTaskChatIntroAtom: "intro", aiChatSidebarWidthPxAtom: "width",
+    aiChatEditTaskIdAtom: "edit", composeTaskChatIntroAtom: "intro", composeTaskQuestionsTaskIdAtom: "questionsTaskId", aiChatSidebarWidthPxAtom: "width",
   };
   const mocks = {
     "@/hooks/useFlag": { useFlag: (key) => flags.has(key) },
@@ -61,7 +63,11 @@ async function withSidebar(options, check) {
     },
     "next/navigation": { usePathname: () => "/detail/project-6859/43" },
     "@/lib/state": {
-      useRecoilValue: (atom) => ({ task: { taskId: 43, taskTicketNumber: "QASA-43" }, ready: true, intro: pendingIntro })[atom] ?? null,
+      useRecoilValue: (atom) => ({ task: { taskId: 43, taskTicketNumber: "QASA-43" }, ready: dataReady, intro: pendingIntro, questionsTaskId })[atom] ?? null,
+      useSetRecoilState: (atom) => (value) => {
+        assert.equal(atom, atoms.composeTaskQuestionsTaskIdAtom);
+        questionsTaskId = value;
+      },
       useRecoilState: () => [360, () => {}],
     },
     "@/store": atoms,
@@ -105,8 +111,13 @@ async function withSidebar(options, check) {
     await render();
     await check({
       requests, sent, client,
+      get pendingIntro() { return pendingIntro; },
+      get questionsTaskId() { return questionsTaskId; },
+      clearIntro: async () => { pendingIntro = null; await render(); },
+      ready: async () => { dataReady = true; await render(); },
+      newChat: async () => { session = { ...session, id: "s2", messages: [] }; await render(); },
       deliverIntro: async () => {
-        session = { ...session, messages: [{ id: "persisted-intro", role: "assistant", content: pendingIntro.content }] };
+        session = { ...session, messages: [{ id: "persisted-intro", role: "assistant", content: intro.content }] };
         pendingIntro = null;
         await render();
       },
@@ -128,11 +139,17 @@ const chipTexts = () => [...document.querySelectorAll("[data-compose-question]")
 
 for (const enabled of [true, false]) {
   test(`Ctrl+J welcome-to-intro transition makes ${enabled ? "one new-ticket request" : "today's two requests with the bugfix off"} and keeps the same chips`, async () => {
-    await withSidebar({ pendingIntro: intro, disabledFlags: enabled ? [] : [flag] }, async (view) => {
+    await withSidebar({ pendingIntro: intro, questionsTaskId: 43, dataReady: false, disabledFlags: enabled ? [] : [flag] }, async (view) => {
+      assert.deepEqual(view.requests, []);
+      await view.clearIntro();
+      assert.equal(view.pendingIntro, null);
+      assert.equal(view.questionsTaskId, 43);
+      await view.ready();
       assert.deepEqual(view.requests, enabled ? [] : [request({ taskId: 43 })]);
       assert.match(document.body.textContent, /Summarize the current task/);
       if (enabled) assert.equal(view.client.getQueryState(["task-questions", 43]).fetchStatus, "idle");
       await view.deliverIntro();
+      assert.equal(view.questionsTaskId, null);
       assert.deepEqual(view.requests, [
         ...(enabled ? [] : [request({ taskId: 43 })]),
         request({ taskId: 43, kind: "new-ticket" }),
@@ -149,22 +166,45 @@ for (const enabled of [true, false]) {
   });
 }
 
-test("existing ticket still fetches generic questions once and renders actionable questions and Ask all", async () => {
-  await withSidebar({}, async (view) => {
-    assert.deepEqual(view.requests, [request({ taskId: 43 })]);
+for (const questionsTaskId of [null, 99]) {
+  test(`existing ticket with marker ${questionsTaskId} still fetches generic questions once and renders actionable questions and Ask all`, async () => {
+    await withSidebar({ questionsTaskId }, async (view) => {
+      assert.deepEqual(view.requests, [request({ taskId: 43 })]);
+      assert.deepEqual(chipTexts(), []);
+      const buttons = [...document.querySelectorAll("button")];
+      for (const question of genericQuestions) assert.ok(buttons.some((button) => button.textContent === question));
+      const askAll = buttons.find((button) => button.textContent === "Ask all");
+      assert.ok(askAll);
+      await React.act(async () => buttons.find((button) => button.textContent === genericQuestions[0]).click());
+      await React.act(async () => askAll.click());
+      assert.deepEqual(view.sent, [
+        "What is blocking this ticket?",
+        "Answer each of these about this ticket:\n1. What is blocking this ticket?\n2. Who should take the next step?",
+      ]);
+      await view.render();
+      assert.deepEqual(view.requests, [request({ taskId: 43 })]);
+    });
+  });
+}
+
+test("MessageList releases the marker so a later new chat fetches generic questions", async () => {
+  await withSidebar({ questionsTaskId: 43 }, async (view) => {
+    assert.deepEqual(view.requests, []);
+    await view.deliverIntro();
+    assert.equal(view.questionsTaskId, null);
+    assert.deepEqual(view.requests, [request({ taskId: 43, kind: "new-ticket" })]);
+    await view.newChat();
+    assert.deepEqual(view.requests, [request({ taskId: 43, kind: "new-ticket" }), request({ taskId: 43 })]);
+    for (const question of genericQuestions) assert.ok(document.body.textContent.includes(question));
     assert.deepEqual(chipTexts(), []);
-    const buttons = [...document.querySelectorAll("button")];
-    for (const question of genericQuestions) assert.ok(buttons.some((button) => button.textContent === question));
-    const askAll = buttons.find((button) => button.textContent === "Ask all");
-    assert.ok(askAll);
-    await React.act(async () => buttons.find((button) => button.textContent === genericQuestions[0]).click());
-    await React.act(async () => askAll.click());
-    assert.deepEqual(view.sent, [
-      "What is blocking this ticket?",
-      "Answer each of these about this ticket:\n1. What is blocking this ticket?\n2. Who should take the next step?",
-    ]);
-    await view.render();
-    assert.deepEqual(view.requests, [request({ taskId: 43 })]);
+  });
+});
+
+test("MessageList leaves another task's marker intact", async () => {
+  await withSidebar({ questionsTaskId: 99 }, async (view) => {
+    await view.deliverIntro();
+    assert.equal(view.questionsTaskId, 99);
+    assert.deepEqual(chipTexts(), newQuestions);
   });
 });
 

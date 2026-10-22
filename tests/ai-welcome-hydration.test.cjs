@@ -14,6 +14,7 @@ const { createJiti } = require("jiti");
 
 const root = path.resolve(__dirname, "..");
 const atoms = {
+  composeTaskQuestionsTaskIdAtom: Symbol("composeTaskQuestionsTaskIdAtom"),
   currentProjectAtom: Symbol("currentProjectAtom"),
   inViewObjectAtom: Symbol("inViewObjectAtom"),
   taskDetailNonEssentialReadyAtom: Symbol("taskDetailNonEssentialReadyAtom"),

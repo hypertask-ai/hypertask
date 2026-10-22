@@ -8,7 +8,7 @@ const { JSDOM } = require("jsdom");
 const { QueryClient, QueryClientProvider } = require("@tanstack/react-query");
 const ts = require("typescript");
 
-const atoms = { currentProjectAtom: "project", inViewObjectAtom: "task", taskDetailNonEssentialReadyAtom: "ready" };
+const atoms = { composeTaskQuestionsTaskIdAtom: "questionsTaskId", currentProjectAtom: "project", inViewObjectAtom: "task", taskDetailNonEssentialReadyAtom: "ready" };
 let dataReady = true;
 const sent = [];
 const mocks = {
