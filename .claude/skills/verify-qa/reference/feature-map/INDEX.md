@@ -39,14 +39,14 @@ each ticket only needs the one or two areas it touches.
 | Inbox | [inbox.md](inbox.md) | `view-inbox` (load-only); no write journey for archive/undo |
 | Search and filters | [search-and-filters.md](search-and-filters.md) | `view-AI-search` (load-only, capital AI); no write journey for filters |
 | Demo board | [demo-board.md](demo-board.md) | `demo` (tag `@demo`, `demo.spec.ts`) |
-| CLI install commands | [cli-install.md](cli-install.md) | no smoke id; Settings CLI shots plus a real install from the shown commands |
+| CLI install commands and login | [cli-install.md](cli-install.md) | no smoke id; Settings CLI shots, real install and read-only token-login guided start |
 | Billing and plans | [billing-and-plans.md](billing-and-plans.md) | no payment journey; open checkout and cancel without payment |
 | My Tasks | [my-tasks.md](my-tasks.md) | no write journey; verify by hand |
 | Pages | [pages.md](pages.md) | no write journey; verify by hand (flagged standalone parts through the session API) |
 | Slack app | [slack-app.md](slack-app.md) | read-only install/support pages and redirects; real workspace parity needs a human |
 | Mobile | [mobile.md](mobile.md) | any id above tagged `@mobile` (`open-board`, `open-task`, `create-task`) |
 | Legacy MCP SSE transport | [mcp-legacy-sse.md](mcp-legacy-sse.md) | no smoke id; verify requests and PostHog ingestion directly |
-| MCP task lookup | [mcp-task-lookup.md](mcp-task-lookup.md) | no smoke id; real `tools/call` with string and list identifiers |
+| MCP task lookup and hello | [mcp-task-lookup.md](mcp-task-lookup.md) | no smoke id; real `tools/call` lookups and read-only hello/catalog checks |
 | MCP token revoke | [mcp-token-revoke.md](mcp-token-revoke.md) | no smoke id; never revoke-all on QA 2343 (it runs the MCP watcher) |
 
 Load-only ids come from `prod.spec.ts`'s per-view smoke check (page loads,
