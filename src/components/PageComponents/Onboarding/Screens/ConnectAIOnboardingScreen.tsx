@@ -25,6 +25,8 @@ interface IConnectAIOnboardingScreen {
   compact?: boolean;
   visible?: boolean;
   serverEligible?: boolean;
+  overlay?: boolean;
+  onConnected?: () => void;
 }
 
 type ToolChoice = IntegrationId | "builtin";
@@ -111,9 +113,10 @@ interface ConnectionStatusProps {
   first?: boolean;
   visible?: boolean;
   serverEligible?: boolean;
+  overlay?: boolean;
 }
 
-function ConnectionStatus({ label, onConnected, first = false, visible = true, serverEligible = false }: ConnectionStatusProps) {
+function ConnectionStatus({ label, onConnected, first = false, visible = true, serverEligible = false, overlay = false }: ConnectionStatusProps) {
   const enabled = useFlag(HTPR_7026_AGENT_CONNECT_CHECK_FLAG);
   const showClient = enabled ? true : serverEligible;
   const [connected, setConnected] = useState(false);
@@ -132,7 +135,7 @@ function ConnectionStatus({ label, onConnected, first = false, visible = true, s
       pending = true;
       try {
         const response = await fetch(
-          first ? "/api/users/ai-connection-status?mode=first" : `/api/users/ai-connection-status?since=${encodeURIComponent(enteredAt.current)}`,
+          first ? `/api/users/ai-connection-status?mode=${overlay ? "overlay" : "first"}` : `/api/users/ai-connection-status?since=${encodeURIComponent(enteredAt.current)}`,
           { cache: "no-store", signal: controller.signal },
         );
         if (!response.ok) return;
@@ -159,7 +162,7 @@ function ConnectionStatus({ label, onConnected, first = false, visible = true, s
       controller.abort();
       if (intervalId) clearInterval(intervalId);
     };
-  }, [connected, showClient, first, label, onConnected, visible]);
+  }, [connected, showClient, first, label, onConnected, overlay, visible]);
 
   return (
     <div role="status" className="flex items-center gap-2 text-content">
@@ -193,6 +196,8 @@ const ConnectAISetup: React.FC<IConnectAIOnboardingScreen> = ({
   compact: isCompact = false,
   visible = true,
   serverEligible = false,
+  overlay = false,
+  onConnected,
 }) => {
   const [phase, setPhase] = useState<"choose" | "connect">("choose");
   const [chosenTool, setChosenTool] = useState<ToolChoice | null>(null);
@@ -202,10 +207,11 @@ const ConnectAISetup: React.FC<IConnectAIOnboardingScreen> = ({
   const [connectedClient, setConnectedClient] = useState("");
   const hasGeneratedToken = useRef(false);
   const { token, expiresAt, isLoading, isGenerating, generateToken } =
-    useMcpToken();
+    useMcpToken(!overlay);
 
   useEffect(() => {
     if (
+      (!overlay || visible) &&
       phase === "connect" &&
       chosenTool &&
       chosenTool !== "builtin" &&
@@ -217,7 +223,7 @@ const ConnectAISetup: React.FC<IConnectAIOnboardingScreen> = ({
       hasGeneratedToken.current = true;
       void generateToken();
     }
-  }, [chosenTool, generateToken, isGenerating, isLoading, phase, token]);
+  }, [chosenTool, generateToken, isGenerating, isLoading, phase, token, overlay, visible]);
 
   const handleChooseTool = (tool: ToolChoice) => {
     void fetch("/api/users/onboarding-ai-choice", {
@@ -242,7 +248,8 @@ const ConnectAISetup: React.FC<IConnectAIOnboardingScreen> = ({
   const handleConnected = useCallback((client: string) => {
     setConnectedClient(client);
     setConnected(true);
-  }, []);
+    onConnected?.();
+  }, [onConnected]);
 
   const chosenLabel = TOOL_CHOICES.find(
     (choice) => choice.id === chosenTool,
@@ -264,7 +271,7 @@ const ConnectAISetup: React.FC<IConnectAIOnboardingScreen> = ({
     ));
 
   const liveStatus = isCompact ? (
-    <ConnectionStatus label={chosenLabel || "Your agent"} onConnected={handleConnected} first visible={visible} serverEligible={serverEligible} />
+    <ConnectionStatus label={chosenLabel || "Your agent"} onConnected={handleConnected} first visible={visible} serverEligible={serverEligible} overlay={overlay} />
   ) : null;
 
   if (isCompact && connected) {

@@ -132,6 +132,7 @@ function routeHarness(overrides = {}) {
   const accessWhere = { OR: [{ ownerId: state.userId }, { members: { some: { userId: state.userId, agentId: null } } }] };
   const { GET } = load("src/app/api/projects/first-task-pointer/route.ts", {
     "next/server": { NextResponse: { json: (body, options) => ({ body, status: options?.status ?? 200 }) } },
+    "@/lib/onboarding/agentConnection": { getAgentConnectCardState: async () => assert.fail("legacy pointer must not query connection state") },
     "@/lib/auth/getSessionUser": { getSessionUser: async () => state.userId ? { userId: state.userId, agentId: state.agentId } : null },
     "@/lib/flags": { isFeatureEnabled: async (flag, id) => { assert.equal(flag, key); assert.equal(id, state.userId); return state.enabled; } },
     "@/lib/flags/keys": { HTPR_7549_FIRST_TASK_POINTER_FLAG: key },

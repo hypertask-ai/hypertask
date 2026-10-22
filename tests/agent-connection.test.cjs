@@ -45,6 +45,7 @@ function harness({ rows = [], enabled = true, qaEnabled = true, armed = false, r
     "@/lib/telemetry/activationAnalytics": { trackActivation: (...args) => { activations.push(args); return new Promise(() => {}); } },
     "@prisma/client": enums,
     "@/lib/prisma": prisma,
+    "@/lib/flags/keys": { HTPR_7549_FIRST_TASK_POINTER_FLAG: "htpr-7549-first-task-pointer", HTPR_7550_CONNECT_OVERLAY_FLAG: "htpr-7550-connect-overlay" },
     "@/lib/flags": { FEATURE_FLAG_QA_USER_ID: 985, HTPR_7026_AGENT_CONNECT_CHECK_FLAG: FLAG, HTPR_7037_SHARED_EMAIL_LAYOUT_FLAG: LAYOUT_FLAG, isFeatureEnabled: async (key, id) => { assert.ok([FLAG, LAYOUT_FLAG].includes(key)); assert.ok([42, 985].includes(id)); flagReads.push([key, id]); return key === LAYOUT_FLAG || (id === 985 ? qaEnabled : enabled); } },
     "@/lib/redis": { getRedis: async () => { if (redisInitFailure) throw new Error("Redis unavailable"); return { get: async (key) => { redisReads.push(key); if (redisFailure) throw new Error("Redis read failed"); return armed ? "1" : null; } }; } },
     "@/lib/onboarding/qaArm": load("src/lib/onboarding/qaArm.ts"),

@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getSessionUser } from "@/lib/auth/getSessionUser";
 import { isFeatureEnabled } from "@/lib/flags";
 import { HTPR_7549_FIRST_TASK_POINTER_FLAG } from "@/lib/flags/keys";
+import { getAgentConnectCardState } from "@/lib/onboarding/agentConnection";
 import prisma from "@/lib/prisma";
 import { projectContentAccessWhere } from "@/utils/controllers/projects/getAllIncludes";
 
@@ -31,5 +32,11 @@ export async function GET(request: NextRequest) {
     prisma.task.count({ where: { projectId, id: { not: starterTaskId }, project: projectContentAccessWhere(session.userId, session.agentId) } }),
     prisma.section.findFirst({ where: { id: sectionId, projectId }, select: { id: true } }),
   ]);
-  return NextResponse.json({ eligible: !!section && realTaskCount === 0, starterTaskId, sectionId });
+  const eligible = !!section && realTaskCount === 0;
+  if (request.nextUrl.searchParams.get("connectOverlay") === "1") {
+    if (!eligible) return NextResponse.json({ eligible: false });
+    const connection = await getAgentConnectCardState(session.userId, true);
+    return NextResponse.json({ eligible: connection.eligible && !connection.connected && !connection.dismissed && connection.boardId === projectId, sectionId });
+  }
+  return NextResponse.json({ eligible, starterTaskId, sectionId });
 }
