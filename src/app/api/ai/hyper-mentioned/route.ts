@@ -1,3 +1,4 @@
+import { withAgentScopeRequest } from "@/lib/auth/agentScope";
 import { haiku55ModelEnabled } from "@/app/api/ai/_lib/planGate";
 import { reportError } from "@/lib/errors/reportError";
 import { configureAiModelUsage } from "@/app/api/ai/_lib/modelProvider";
@@ -99,6 +100,10 @@ const hyperMentionRequestSchema = z.object({
 });
 
 export async function POST(request: NextRequest) {
+  return withAgentScopeRequest(request, () => hyperMention(request));
+}
+
+async function hyperMention(request: NextRequest) {
   const [cookieUser, sessionUser, cookieIdentity] = await Promise.all([
     getCurrentUserFromCookies(),
     getSessionUser(request.headers),
@@ -143,6 +148,8 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
+  const actingAgentId = hasAuthorization ? bearerContext?.agentId : sessionUser?.agentId;
+
   try {
     const parsedBody = hyperMentionRequestSchema.safeParse(
       await request.json().catch(() => null),
@@ -160,6 +167,7 @@ export async function POST(request: NextRequest) {
         projectId: body.projectId,
         deletedAt: null,
         project: taskWriteAccessWhere(requestUser.id),
+        AND: [{ project: taskWriteAccessWhere(requestUser.id, actingAgentId) }],
       },
       select: { id: true, userId: true },
     });
@@ -187,6 +195,7 @@ export async function POST(request: NextRequest) {
           taskId: body.taskId,
           creatorId: requestUser.id,
           agentId: null,
+          task: { project: taskWriteAccessWhere(requestUser.id, actingAgentId) },
         },
         select: { id: true, text: true, createdAt: true, agentId: true },
       });
@@ -291,6 +300,7 @@ export async function POST(request: NextRequest) {
       where: {
         status: "Normal",
         ...getProjectWhere(requestUser.id),
+        AND: [getProjectWhere(requestUser.id, actingAgentId)],
       },
       select: { id: true },
     });

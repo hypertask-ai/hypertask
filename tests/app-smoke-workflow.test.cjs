@@ -99,7 +99,7 @@ test("app smoke validates the head before isolated build and route checks", asyn
   assert.match(request, /branches: \[production\]/);
   assert.match(
     request,
-    /types: \[opened, synchronize, reopened, ready_for_review, edited\]/,
+    /types: \[opened, synchronize, reopened, ready_for_review\]/,
   );
   assert.match(workflow, /workflow_run:/);
   assert.match(workflow, /workflows: \["App Smoke Request"\]/);
@@ -320,20 +320,53 @@ test("auto-merge waits for app smoke and runs when it completes", async () => {
   assert.match(workflow, /REQUIRED="\$REQUIRED feature-flag-gate"/);
   assert.match(workflow, /REQUIRED="\$REQUIRED browser-smoke"/);
   assert.match(ciWorkflow, /name: Verify live required-check settings/);
-  assert.doesNotMatch(ciWorkflow, /if \. == "claude-review" then "ai-review" else \. end/);
-  assert.match(ciWorkflow, /unique \| sort \| \.\[\]/);
-  assert.match(ciWorkflow, /default_branch.*gh api "repos\/\$REPO"/);
-  assert.match(ciWorkflow, /name == "production-required-checks"/);
-  assert.match(ciWorkflow, /\.target == "branch"/);
-  assert.match(ciWorkflow, /index\("refs\/heads\/production"\)/);
-  assert.match(ciWorkflow, /Live required checks do not match docs\/ci-policy\.yml/);
-  assert.match(
-    ciWorkflow,
-    /expected=\$\(printf '%s\\n' app-smoke ci-tests ai-review claude-review feature-flag-gate next-public-secrets pr-title secret-scan \| sort\)/,
+  const settingsScript = await readFile(
+    ".github/scripts/verify-required-check-settings.mjs",
+    "utf8",
   );
-  assert.match(
-    ciWorkflow,
-    /expected=\$\(printf '%s\\n' "\$expected" browser-smoke premerge-evidence \| sort\)/,
+  const steps = yaml.load(ciWorkflow).jobs["ci-tests"].steps;
+  const settingsIndex = steps.findIndex(
+    (step) => step.name === "Verify live required-check settings",
+  );
+  const settingsStep = steps[settingsIndex];
+  assert.equal(settingsStep.run, "node .github/scripts/verify-required-check-settings.mjs");
+  assert.equal(settingsStep.if, undefined);
+  assert.equal(settingsStep["continue-on-error"], undefined);
+  assert.equal(settingsStep["timeout-minutes"], 7);
+  assert.equal(settingsStep.env.GH_TOKEN, "${{ github.token }}");
+  assert.equal(settingsStep.env.REPO, "${{ github.repository }}");
+  assert.match(steps[0].uses, /^actions\/checkout@/);
+  assert.equal(steps[0].with["fetch-depth"], 1);
+  assert.ok(settingsIndex > 0);
+  assert.match(settingsScript, /GITHUB_EVENT_NAME !== "pull_request"/);
+  assert.match(settingsScript, /"fetch", "--no-tags", "--depth=1", "origin", base, head/);
+  assert.match(settingsScript, /"diff", "--name-only", "--no-renames", "-z", base, head/);
+  assert.match(settingsScript, /file\.startsWith\("\.github\/"\)/);
+  assert.match(settingsScript, /file === "docs\/ci-policy\.yml"/);
+  assert.match(settingsScript, /file === "docs\/ci\.md"/);
+  assert.match(settingsScript, /changed files unknown; verifying \(fail-closed\)/);
+  assert.match(settingsScript, /skipping settings API reads/);
+  assert.match(settingsScript, /"api", "--include", endpoint/);
+  assert.match(settingsScript, /x-ratelimit-reset/);
+  assert.match(settingsScript, /retry-after/);
+  assert.match(settingsScript, /status === 403 \|\| status === 429/);
+  assert.match(settingsScript, /maxWaitSeconds = 300/);
+  assert.match(settingsScript, /waitedSeconds \+ seconds > maxWaitSeconds/);
+  assert.match(settingsScript, /rate limited, waiting \$\{seconds\}s until reset/);
+  assert.match(settingsScript, /spawnSync\("sleep"/);
+  assert.match(settingsScript, /process\.exitCode = 1/);
+  assert.match(settingsScript, /repository\.default_branch !== "production"/);
+  assert.match(settingsScript, /ruleset\.name === "production-required-checks" && ruleset\.enforcement === "active"/);
+  assert.match(settingsScript, /matches\.length !== 1/);
+  assert.match(settingsScript, /ruleset\.target !== "branch"/);
+  assert.match(settingsScript, /!ruleset\.conditions\.ref_name\.include\.includes\("refs\/heads\/production"\)/);
+  assert.match(settingsScript, /ruleset\.conditions\.ref_name\.exclude\.includes\("refs\/heads\/production"\)/);
+  assert.match(settingsScript, /new Set\(ruleset\.rules/);
+  assert.match(settingsScript, /Live required checks do not match docs\/ci-policy\.yml/);
+  const contexts = settingsScript.match(/const expected = \[([\s\S]*?)\]\.sort\(\)/)[1];
+  assert.deepEqual(
+    [...contexts.matchAll(/"([^"\n]+)"/g)].map((match) => match[1]).sort(),
+    yaml.load(await readFile("docs/ci-policy.yml", "utf8")).required_checks.contexts.sort(),
   );
 });
 

@@ -43,6 +43,38 @@ function gitShow(sha, file) {
   return execFileSync('git', ['show', `${sha}:${file}`], { encoding: 'utf8' })
 }
 
+function comparisonBase(baseSha) {
+  const head = execFileSync('git', ['cat-file', '-p', 'HEAD'], { encoding: 'utf8' })
+  const parents = [...head.split('\n\n', 1)[0].matchAll(/^parent ([0-9a-f]{40})$/gm)].map(match => match[1])
+  if (parents.length === 2) {
+    const firstParent = parents[0]
+    try {
+      execFileSync('git', ['cat-file', '-e', `${firstParent}^{commit}`], { stdio: 'ignore' })
+    } catch {
+      try {
+        execFileSync('git', ['fetch', '--no-tags', '--depth=1', 'origin', firstParent], { stdio: 'pipe' })
+      } catch {
+        throw new Error('Unable to fetch the PR merge commit first parent for the approval comparison.')
+      }
+    }
+    return firstParent
+  }
+  const headSha = execFileSync('git', ['rev-parse', 'HEAD'], { encoding: 'utf8' }).trim()
+  for (const deepen of [0, 50, 200, 1000]) {
+    if (deepen) {
+      try {
+        execFileSync('git', ['fetch', '--no-tags', `--deepen=${deepen}`, 'origin', baseSha, headSha], { stdio: 'pipe' })
+      } catch {
+        throw new Error('Unable to fetch history to determine the PR merge base for the approval comparison.')
+      }
+    }
+    try {
+      return execFileSync('git', ['merge-base', baseSha, headSha], { encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] }).trim()
+    } catch {}
+  }
+  throw new Error('Unable to determine the PR merge base for the approval comparison after bounded history fetching.')
+}
+
 function main() {
   const event = JSON.parse(readFileSync(process.env.GITHUB_EVENT_PATH, 'utf8'))
   if (!event.pull_request) {
@@ -51,9 +83,10 @@ function main() {
   }
   const baseSha = process.env.BASE_SHA || event.pull_request.base?.sha
   if (!/^[0-9a-f]{40}$/.test(baseSha ?? '')) throw new Error('Missing valid BASE_SHA')
+  const base = comparisonBase(baseSha)
   const files = Object.keys(WATCHED).map(file => ({
     file,
-    base: gitShow(baseSha, file),
+    base: gitShow(base, file),
     head: existsSync(file) ? readFileSync(file, 'utf8') : null,
   }))
   const { failures, approvals } = checkApproval(files, event.pull_request.body)
@@ -63,4 +96,11 @@ function main() {
   return failures.length ? 1 : 0
 }
 
-if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) process.exit(main())
+if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
+  try {
+    process.exitCode = main()
+  } catch (error) {
+    console.error(`::error::Agent scope approval: ${error.message}`)
+    process.exitCode = 1
+  }
+}

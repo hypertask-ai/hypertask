@@ -1,6 +1,8 @@
 import { withAgentScopeRequest } from "@/lib/auth/agentScope";
 import { NextRequest, NextResponse } from "next/server";
-import type { Prisma } from "@prisma/client";
+import { isFeatureEnabled } from "@/lib/flags";
+import { HTPR_7509_AGENT_ROLE_SCREEN_FLAG } from "@/lib/flags/keys";
+import { changeTeamAgentRole } from "@/utils/controllers/agents/changeTeamAgentRole";
 import prisma from "@/lib/prisma";
 import {
   agentTokenCredentialFields,
@@ -131,7 +133,7 @@ async function getAgentDetails(
         },
         _max: { createdAt: true },
       }),
-      workingOnByAgent([agent.id], user.id),
+      workingOnByAgent([agent.id], user.id, actingAgentId),
       prisma.project.findMany({
         where: {
           status: "Normal",
@@ -397,6 +399,13 @@ export async function PATCH(
   request: NextRequest,
   props: { params: Promise<{ agentId: string }> },
 ) {
+  return withAgentScopeRequest(request, () => patchAgent(request, props));
+}
+
+async function patchAgent(
+  request: NextRequest,
+  props: { params: Promise<{ agentId: string }> },
+) {
   const params = await props.params;
   const user = await getCurrentUser(request);
   if (!user?.id) {
@@ -404,6 +413,70 @@ export async function PATCH(
       { success: false, error: "Unauthorized" },
       { status: 401 },
     );
+  }
+
+  let body: {
+    displayName?: unknown;
+    photoURL?: unknown;
+    postsToImportant?: unknown;
+    prompt?: unknown;
+    modelOptionId?: unknown;
+    revoke?: unknown;
+    revoked?: unknown;
+    archived?: unknown;
+    visibility?: unknown;
+    role?: unknown;
+    teamId?: unknown;
+  };
+
+  try {
+    body = await request.json();
+  } catch {
+    return NextResponse.json(
+      { success: false, error: "Invalid JSON" },
+      { status: 400 },
+    );
+  }
+  if (!body || typeof body !== "object" || Array.isArray(body)) {
+    return NextResponse.json(
+      { success: false, error: "Invalid JSON" },
+      { status: 400 },
+    );
+  }
+
+  if (body.role !== undefined || body.teamId !== undefined) {
+    if (user.agentId) {
+      return NextResponse.json(
+        { success: false, error: "Agent tokens cannot change agent roles" },
+        { status: 403 },
+      );
+    }
+    if (!(await isFeatureEnabled(HTPR_7509_AGENT_ROLE_SCREEN_FLAG, user.id))) {
+      return NextResponse.json(
+        { success: false, error: "Agent role changes are not available" },
+        { status: 403 },
+      );
+    }
+    if (
+      (body.role !== "read" && body.role !== "write" && body.role !== "admin") ||
+      typeof body.teamId !== "string" || !body.teamId.trim() ||
+      Object.keys(body).some((key) => key !== "role" && key !== "teamId")
+    ) {
+      return NextResponse.json(
+        { success: false, error: "A valid role and teamId are required" },
+        { status: 400 },
+      );
+    }
+    const result = await changeTeamAgentRole(
+      user.id, body.teamId.trim(), params.agentId, body.role,
+    );
+    if (!result.ok) {
+      return NextResponse.json(
+        { success: false, error: result.error },
+        { status: result.status },
+      );
+    }
+    return NextResponse.json({ success: true, agent: result.agent });
   }
 
   const ref = params.agentId.trim();
@@ -421,33 +494,6 @@ export async function PATCH(
     return NextResponse.json(
       { success: false, error: "Agent does not exist" },
       { status: 404 },
-    );
-  }
-
-  let body: {
-    displayName?: unknown;
-    photoURL?: unknown;
-    postsToImportant?: unknown;
-    prompt?: unknown;
-    modelOptionId?: unknown;
-    revoke?: unknown;
-    revoked?: unknown;
-    archived?: unknown;
-    visibility?: unknown;
-  };
-
-  try {
-    body = await request.json();
-  } catch {
-    return NextResponse.json(
-      { success: false, error: "Invalid JSON" },
-      { status: 400 },
-    );
-  }
-  if (!body || typeof body !== "object" || Array.isArray(body)) {
-    return NextResponse.json(
-      { success: false, error: "Invalid JSON" },
-      { status: 400 },
     );
   }
 
@@ -592,7 +638,6 @@ export async function PATCH(
   const data: {
     displayName?: string;
     photoURL?: string | null;
-    permissions?: Prisma.InputJsonValue;
     prompt?: string | null;
     modelOptionId?: string | null;
     archivedAt?: Date | null;
@@ -681,26 +726,16 @@ export async function PATCH(
         { status: 400 },
       );
     }
-    const permissions =
-      existing.permissions &&
-      typeof existing.permissions === "object" &&
-      !Array.isArray(existing.permissions)
-        ? existing.permissions
-        : {};
-    data.permissions = {
-      ...permissions,
-      postsToImportant: body.postsToImportant,
-    };
   }
 
-  if (Object.keys(data).length === 0) {
+  if (Object.keys(data).length === 0 && body.postsToImportant === undefined) {
     return NextResponse.json(
       { success: false, error: "No valid fields to update" },
       { status: 400 },
     );
   }
 
-  const agent = await prisma.agent.update({
+  const update = {
     where: { id: existing.id },
     data,
     select: {
@@ -717,7 +752,17 @@ export async function PATCH(
       modelOptionId: true,
       heartbeatAt: true,
     },
-  });
+  } as const;
+  const agent = typeof body.postsToImportant === "boolean"
+    ? await prisma.$transaction(async (tx) => {
+        await tx.$executeRaw`
+          UPDATE "Agent"
+          SET "permissions" = (CASE WHEN jsonb_typeof("permissions") = 'object' THEN "permissions" ELSE '{}'::jsonb END) || jsonb_build_object('postsToImportant', ${body.postsToImportant}::boolean)
+          WHERE "id" = ${existing.id}
+        `;
+        return tx.agent.update(update);
+      })
+    : await prisma.agent.update(update);
 
   const { permissions, ...agentFields } = agent;
   const slugs = await ownedAgentSlugs(user.id);

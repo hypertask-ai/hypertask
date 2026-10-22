@@ -42,7 +42,7 @@ import { useSettingsNavigation } from "../Modals/Settings/settingsNavigation";
 import { tooltipConfig } from "@/lib/configs/tooltip.config";
 import { CLASS_NAME_CONSTANTS } from "@/lib/configs/general.config";
 import { useFlag } from "@/hooks/useFlag";
-import { HTPR_6914_SHIFT_C_QUICK_ADD_FLAG, HTPR_6902_N_QUICK_ADD_FLAG } from "@/lib/flags/keys";
+import { HTPR_6902_N_QUICK_ADD_FLAG } from "@/lib/flags/keys";
 
 const cn = (...classes: (string | boolean | undefined)[]) =>
   classes.filter(Boolean).join(" ");
@@ -125,7 +125,6 @@ const BottomSettings_QuickTips = ({
   announcements: any;
 }) => {
   const nQuickAddEnabled = useFlag(HTPR_6902_N_QUICK_ADD_FLAG);
-  const shiftCQuickAddEnabled = useFlag(HTPR_6914_SHIFT_C_QUICK_ADD_FLAG);
   const boardTips = nQuickAddEnabled
     ? KanbanTipsConstants.flatMap(tip => tip.hint === "add task"
       ? [tip, { key: ["N"], hint: "quick add" }]
@@ -244,9 +243,7 @@ const BottomSettings_QuickTips = ({
         </div>
       )}
 
-      {!mbl && <QuickTips boardTips={shiftCQuickAddEnabled
-        ? boardTips.map(tip => tip.hint === "quick add" ? { ...tip, key: ["N / Shift+C"] } : tip)
-        : boardTips} />}
+      {!mbl && <QuickTips boardTips={boardTips.map(tip => tip.hint === "quick add" ? { ...tip, key: ["N / Shift+C"] } : tip)} />}
     </>
   );
 };

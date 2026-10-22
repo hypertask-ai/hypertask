@@ -411,7 +411,7 @@ test('MCP timer running/report and team presence forward the authenticated agent
     }
   }
   const presence = f.load('src/lib/mcp/operations/agents/presence/operation.ts').GET;
-  assert.deepEqual((await (await presence(request('/api/mcp/agents/presence?team_id=team'))).json()).agents.map(row => row.agent.id), ['other-15', 'other-4060']);
+  assert.deepEqual((await (await presence(request('/api/mcp/agents/presence?team_id=team'))).json()).agents.map(row => row.agent.id).sort(), ['other-15', 'other-4060']);
 });
 
 test('MCP cross-board move independently authorizes its source and destination', async () => {

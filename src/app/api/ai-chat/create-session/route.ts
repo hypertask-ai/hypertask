@@ -1,3 +1,4 @@
+import { withAgentScopeRequest } from "@/lib/auth/agentScope";
 import { readJsonBody } from "@/lib/mcp/readJsonBody";
 import { checkRestRateLimit } from "@/lib/api/rateLimit";
 import prisma from "@/lib/prisma";
@@ -26,8 +27,14 @@ const createSessionSchema = z.object({
 });
 
 export async function POST(request: NextRequest) {
+  return withAgentScopeRequest(request, () => createSession(request));
+}
+
+async function createSession(request: NextRequest) {
   try {
-    const userId = (await getSessionUser(request.headers))?.userId;
+    const sessionUser = await getSessionUser(request.headers);
+    const userId = sessionUser?.userId;
+    const actingAgentId = sessionUser?.agentId;
     if (!userId) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
@@ -143,10 +150,18 @@ export async function POST(request: NextRequest) {
       if (chatNames) {
         const [task, project] = await Promise.all([
           parsed.data.taskId
-            ? prisma.task.findFirst({ where: taskAccessWhere(userId, parsed.data.taskId), select: { title: true } })
+            ? prisma.task.findFirst({
+                where: {
+                  AND: [
+                    taskAccessWhere(userId, parsed.data.taskId, { agentId: actingAgentId }),
+                    { project: getProjectWhere(userId) },
+                  ],
+                },
+                select: { title: true },
+              })
             : null,
           parsed.data.projectId
-            ? prisma.project.findFirst({ where: { id: parsed.data.projectId, ...getProjectWhere(userId) }, select: { name: true, title: true } })
+            ? prisma.project.findFirst({ where: { id: parsed.data.projectId, ...getProjectWhere(userId), AND: [getProjectWhere(userId, actingAgentId)] }, select: { name: true, title: true } })
             : null,
         ]);
         initialTitle = initialChatTitle(true, { taskTitle: task?.title, boardName: project?.title || project?.name });

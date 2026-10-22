@@ -1538,8 +1538,9 @@ export function evaluate({ title, baseSha, headSha, labels = [] }) {
         if (baseFiles.has(path)) continue;
         const { definition } = parseFlagFile(git(["show", `${headSha}:${path}`]), path);
         if (!["bugfix", "internal"].includes(definition.kind) && !definition.releaseRisk?.highRisk &&
-            definition.defaultMode !== "EVERYONE") {
-          throw new Error(`new flag ${definition.key} must set defaultMode: "EVERYONE" (or releaseRisk.highRisk for money, access, data-deletion or customer-email)`);
+            definition.defaultMode !== "EVERYONE" &&
+            !(definition.defaultMode === "OWNER_ONLY" && definition.releaseRisk?.ownerRequest)) {
+          throw new Error(`new flag ${definition.key} must set defaultMode: "EVERYONE" (or releaseRisk.highRisk for money, access, data-deletion or customer-email; or defaultMode: "OWNER_ONLY" with releaseRisk.ownerRequest containing Valentin's exact quote and ticketUrl)`);
         }
       }
     } catch (error) {
