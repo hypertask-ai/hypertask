@@ -136,6 +136,8 @@ test('the parent approves only when the child has no sign-off thread, a child re
   assert.equal((await decision({ comments: [wireframe({ id: 9, createdAt: '2026-10-11T12:00:00Z' })], parentComments })).state, 'success');
   const otherDesign = wireframe({ id: 9, text: '<p>https://claude.ai/artifact/OtherDesign1</p>', createdAt: '2026-10-11T12:00:00Z' });
   assert.equal((await decision({ comments: [otherDesign], parentComments })).state, 'failure');
+  const historicalOther = wireframe({ id: 7, text: '<p>https://claude.ai/artifact/OtherDesign1</p>', createdAt: '2026-10-09T12:00:00Z' });
+  assert.equal((await decision({ comments: [otherDesign], parentComments: [historicalOther, wireframe(), yes()] })).state, 'failure');
 });
 
 test('mentions are removed and HTML and basic entities are decoded before matching', async () => {
