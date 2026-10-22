@@ -107,7 +107,8 @@ export function evaluate({ title, author, files, comments = [], parentComments =
     const childLink = wireframe?.text.match(WIREFRAME)?.[0];
     const parentWireframe = newest(parentComments.filter((comment) => WIREFRAME.test(comment.text) && !humanValentin(comment, 'creatorId')));
     const sameDesignAsParent = !childLink || parentWireframe?.text.match(WIREFRAME)?.[0] === childLink;
-    if (parentComments.length && !verdict && sameDesignAsParent) {
+    const childDesignUnedited = edited == null;
+    if (parentComments.length && !verdict && sameDesignAsParent && childDesignUnedited) {
       const parent = evaluate({ title, author, files, comments: parentComments });
       if (parent.state === 'success') return parent;
     }
