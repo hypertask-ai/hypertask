@@ -255,6 +255,7 @@ test('hello advertises feature discovery only when its flag is enabled, independ
         '@/lib/mcp/auth': {},
         '@/lib/flags': { isFeatureEnabled: async (key, userId) => {
           assert.equal(userId, reader.user.id)
+          if (key === 'htpr-7519-login-guided-start') return false
           return key === discoveryKey ? discoveryEnabled : reactionsEnabled
         } },
         '@/utils/controllers/projects/getAllIncludes': { getProjectListingWhere: () => ({}) },
