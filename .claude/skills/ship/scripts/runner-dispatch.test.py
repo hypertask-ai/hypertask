@@ -215,9 +215,91 @@ class DispatchTests(unittest.TestCase):
         self.assertEqual(list(self.claim_dir.glob("*.tmp.*")), [])
         self.assertTrue(m.acquire_claim("HTPR-2", self.rows[0], self.claim_dir, self.now))
         data = json.loads((self.claim_dir / "HTPR-2.json").read_text())
-        self.assertEqual(set(data), {"ticket", "pane", "runner", "owner", "at"})
+        self.assertEqual(set(data), {"ticket", "pane", "runner", "owner", "at", "pending_until"})
         self.assertEqual(data["owner"], m.OWNER)
         self.assertTrue(data["at"].endswith("+00:00"))
+
+    def test_new_claim_is_published_with_pending_delivery_expiry(self):
+        link = os.link
+        def check_link(source, target):
+            data = json.loads(source.read_text())
+            self.assertIn("pending_until", data)
+            self.assertEqual(data["pending_until"], self.now + m.PENDING_DELIVERY_TTL)
+            self.assertGreater(data["pending_until"], self.now)
+            link(source, target)
+        with patch.object(m.os, "link", side_effect=check_link):
+            self.assertTrue(m.acquire_claim("HTPR-1", self.rows[0], self.claim_dir, self.now))
+        data = json.loads((self.claim_dir / "HTPR-1.json").read_text())
+        self.assertEqual(data["pending_until"], self.now + m.PENDING_DELIVERY_TTL)
+        self.commands.assert_not_called()
+
+    def test_successful_delivery_atomically_clears_pending_expiry_after_last_send(self):
+        self.add_speed_ticket()
+        replace = os.replace
+        for row, ticket in ((self.rows[0], "HTPR-1"), (self.rows[8], "HTPR-9")):
+            with self.subTest(runner=row["runner"]):
+                self.ready_go()
+                self.commands.reset_mock()
+                path = self.claim_dir / f"{ticket}.json"
+                replacements = []
+                def check_replace(source, target):
+                    if target == path:
+                        sent = [c.args for c in self.commands.call_args_list if "send-keys" in c.args]
+                        self.assertEqual(len(sent), 4)
+                        self.assertEqual(sent[-1], ("tmux", "send-keys", "-t", row["pane"], "Enter"))
+                        before = json.loads(path.read_text())
+                        self.assertEqual(before.pop("pending_until"), self.now + m.PENDING_DELIVERY_TTL)
+                        self.assertEqual(json.loads(source.read_text()), before)
+                        self.assertEqual(source.parent, path.parent)
+                        replacements.append(target)
+                    replace(source, target)
+                with patch.object(m.os, "replace", side_effect=check_replace):
+                    self.assertEqual(self.dispatch([row], go=True)[0]["action"], "sent")
+                self.assertEqual(replacements, [path])
+                self.assertNotIn("pending_until", json.loads(path.read_text()))
+                self.assertEqual(list(self.claim_dir.glob("*.tmp.*")), [])
+
+    def test_killed_process_pending_claim_expires_and_next_run_dispatches_again(self):
+        self.add_speed_ticket()
+        for row, ticket in ((self.rows[0], "HTPR-1"), (self.rows[8], "HTPR-9")):
+            with self.subTest(runner=row["runner"]):
+                self.ready_go()
+                self.commands.reset_mock()
+                with patch.object(m, "snapshots", side_effect=SystemExit("process terminated")):
+                    with self.assertRaises(SystemExit):
+                        self.dispatch([row], go=True)
+                self.assertFalse(any("send-keys" in c.args for c in self.commands.call_args_list))
+                path = self.claim_dir / f"{ticket}.json"
+                self.assertNotIn("failed_delivery_until", json.loads(path.read_text()))
+                self.now += m.PENDING_DELIVERY_TTL - 1
+                self.dispatch([], go=True)
+                self.assertTrue(path.exists())
+                self.now += 2
+                before = path.read_bytes()
+                self.dispatch([], go=False)
+                self.dispatch([], load=13, go=True)
+                self.assertEqual(path.read_bytes(), before)
+                result = self.dispatch([row], go=True)[0]
+                self.assertEqual((result["action"], result["ticket"]), ("sent", ticket))
+                self.assertNotIn("pending_until", json.loads(path.read_text()))
+
+    def test_delivered_claim_never_expires_before_done(self):
+        self.add_speed_ticket()
+        for row, ticket in ((self.rows[0], "HTPR-1"), (self.rows[8], "HTPR-9")):
+            with self.subTest(runner=row["runner"]):
+                self.ready_go()
+                self.assertEqual(self.dispatch([row], go=True)[0]["ticket"], ticket)
+                path = self.claim_dir / f"{ticket}.json"
+                before = path.read_bytes()
+                self.assertNotIn("pending_until", json.loads(before))
+                self.now += 10 * max(m.PENDING_DELIVERY_TTL, m.FAILED_DELIVERY_TTL)
+                self.dispatch([], go=True)
+                self.assertTrue(path.exists())
+                self.assertEqual(path.read_bytes(), before)
+                self.assertNotIn(ticket, m.free_tickets(self.boards, self.comments, self.claim_dir))
+                next(task for task in self.boards[15] if task["ticketNumber"] == ticket)["section"] = "Done"
+                self.dispatch([], go=True)
+                self.assertFalse(path.exists())
 
     def test_go_collision_tries_next_ticket(self):
         self.ready_go()

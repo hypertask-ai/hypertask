@@ -22,6 +22,7 @@ COLUMNS = ((15, "Bugs"), (15, "Todo"), (4060, "Backlog"))
 ELIGIBLE = {f"RUNNER {n}" for n in range(1, 8)}
 SPEED = "SPEED RUNNER"
 SPEED_STATES = {"done", "idle", "waiting_valentin"}
+PENDING_DELIVERY_TTL = 900
 FAILED_DELIVERY_TTL = 3600
 RESEARCH_EVERY = 6 * 3600
 RESEARCH_PROMPT = ("/speed-analyst No free [SPEED] ticket is on the board. Read .claude/skills/speed-analyst/GOALS.md, "
@@ -167,7 +168,8 @@ def acquire_claim(ticket, row, claim_dir, now):
     try:
         with temporary.open("x", encoding="utf-8") as stream:
             json.dump({"ticket": ticket, "pane": row["pane"], "runner": row["runner"],
-                       "owner": OWNER, "at": datetime.fromtimestamp(now, timezone.utc).isoformat()}, stream)
+                       "owner": OWNER, "at": datetime.fromtimestamp(now, timezone.utc).isoformat(),
+                       "pending_until": now + PENDING_DELIVERY_TTL}, stream)
         try:
             os.link(temporary, target)
         except FileExistsError:
@@ -186,7 +188,7 @@ def cleanup_claims(boards, claim_dir, now):
             continue
         if not isinstance(data, dict):
             continue
-        expires = data.get("failed_delivery_until")
+        expires = data.get("failed_delivery_until", data.get("pending_until"))
         if data.get("owner") == OWNER and (path.stem in done or
                 (type(expires) in (int, float) and expires <= now)):
             path.unlink()
@@ -203,6 +205,15 @@ def send(pane, text, claim_path=None):
         command("tmux", "send-keys", "-t", pane, "-l", text)
         time.sleep(1)
         command("tmux", "send-keys", "-t", pane, "Enter")
+        if claim_path is not None:
+            data = json.loads(claim_path.read_text())
+            data.pop("pending_until", None)
+            temporary = claim_path.with_name(f"{claim_path.name}.tmp.{os.getpid()}")
+            try:
+                temporary.write_text(json.dumps(data) + "\n")
+                os.replace(temporary, claim_path)
+            finally:
+                temporary.unlink(missing_ok=True)
     except Exception as error:
         if claim_path is not None:
             if not started and isinstance(error, (RuntimeError, OSError)):
