@@ -24,7 +24,6 @@ export const MATRIX_CHANGE_MESSAGE = "Layout moved. If the ticket asked for this
 export type BaselineScrollLayout = 'desktop' | 'phone' | 'phone-top'
 export function matrixBaselineLayout(page: string, width: number, state: MatrixState): BaselineScrollLayout {
   if (width >= 768 || !page.startsWith('ticket-')) return 'desktop'
-  // This sheet/rail state was captured at the top, where the long thread's virtualized properties row is mounted.
   if (page === 'ticket-long-thread' && state.ai === 'open' && state.rail === 'expanded') return 'phone-top'
   return 'phone'
 }
@@ -152,7 +151,6 @@ export async function waitForStableScroll({
 }: { baselineLayout?: BaselineScrollLayout; read?: () => string; frame?: () => Promise<void>; maxFrames?: number } = {}): Promise<void> {
   const sample = () => {
     if (baselineLayout) {
-      // Do not disturb the AI sheet or its scrollers when restoring its background ticket to the top.
       const ticketContainer = baselineLayout === 'phone-top'
         ? document.querySelector('[data-testid="ticket-thread"]')?.closest('[data-task-detail-path]')
         : null
