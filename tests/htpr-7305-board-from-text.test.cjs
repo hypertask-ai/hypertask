@@ -82,6 +82,7 @@ for (const mobile of [false, true]) {
       assert.equal(requests.length, 0);
       await press("Enter", { code: "Enter" });
       assert.equal(requests[0].body.project.id, 8);
+      assert.equal(requests[0].body.viewProject, undefined);
       assert.equal(requests[0].body.text, note);
     });
   });
@@ -142,6 +143,7 @@ for (const [url, expected] of [["/project?id=7", 7], ["/inbox", 9]]) {
         await type(note);
         await press("Enter", { code: "Enter" });
         assert.equal(requests[0].body.project.id, expected);
+        assert.equal(requests[0].body.viewProject?.id, expected === 7 ? 7 : undefined);
       });
     });
   }
