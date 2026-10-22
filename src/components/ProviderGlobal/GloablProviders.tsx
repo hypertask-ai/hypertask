@@ -319,7 +319,8 @@ export default function GlobalProvider({
   const firstScreen = useFirstScreenSurface(authenticatedUserId);
   const routeOwnsMobileChrome = Boolean(firstScreen);
   const myTasksShortcutsWidthEnabled = useFlag(MY_TASKS_SHORTCUTS_WIDTH_FLAG);
-  const boardShortcutFromDevice = useFlag(HTPR_7588_BOARD_SHORTCUT_FROM_DEVICE_FLAG);
+  let boardShortcutLookup = boardFromFreshList;
+  if (useFlag(HTPR_7588_BOARD_SHORTCUT_FROM_DEVICE_FLAG)) boardShortcutLookup = boardFromDeviceFirst;
   useAppShellSurfaceShortcuts();
   const startupUser = useRecoilValue(currentUserAtom);
   const currentProject = useRecoilValue(currentProjectAtom);
@@ -940,9 +941,12 @@ export default function GlobalProvider({
         const boardCandidates = [_currentProject?.id, previousBoardId];
         const fetchBoardList = (): Promise<IProject[]> =>
           globalAPIHandlers.getAllProjectsMinimal("ExtraMinimal");
-        const boardId = await (boardShortcutFromDevice
-          ? boardFromDeviceFirst(queryClient, currentUser?.id, boardCandidates, fetchBoardList)
-          : boardFromFreshList(queryClient, currentUser?.id, boardCandidates, fetchBoardList));
+        const boardId = await boardShortcutLookup(
+          queryClient,
+          currentUser?.id,
+          boardCandidates,
+          fetchBoardList,
+        );
         if (boardId) {
           markBoardSwitchIntent({ surface: "keyboard_shortcut", projectId: boardId });
           goToProjectShortcut(boardId, true);
