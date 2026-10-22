@@ -174,6 +174,7 @@ function globalHook(h) {
     "@/lib/agentRuns/taskActivityFeed": { mergeTaskThreadFeed: () => [] },
     "@/lib/htc/isCommentCreatedByUser": { isCommentCreatedByUser: () => true },
     "@/hooks/General/useHydrated": { useHydrated: () => false },
+    "@/lib/taskDetailCommentsStacked": { commentsStackedSetting: ({ preferenceStacked }) => preferenceStacked },
   })("src/hooks/Task Detail/useTaskDetailGlobalStates.ts").default;
 }
 

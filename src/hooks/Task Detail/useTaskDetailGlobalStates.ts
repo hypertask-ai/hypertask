@@ -65,8 +65,9 @@ import { mergeTaskThreadFeed } from "@/lib/agentRuns/taskActivityFeed";
 import { isCommentCreatedByUser } from "@/lib/htc/isCommentCreatedByUser";
 import { useCommentToAiChat } from "@/hooks/MultiPages/AIChat/useCommentToAiChat";
 import { useFlag } from "@/hooks/useFlag";
+import { commentsStackedSetting } from "@/lib/taskDetailCommentsStacked";
 import { useHydrated } from "@/hooks/General/useHydrated";
-import { HTPR_7393_COMMENT_INLINE_AI_FLAG, HTPR_7337_EDIT_WITH_AI_FLAG, HTPR_6899_STABLE_LAYOUT_FLAG, HTPR_6551_QUIET_RUN_ACTIVITY_FLAG, HTPR_7116_TICKET_STAYS_OPEN_FLAG, HTPR_7531_ESCAPE_OWN_BOARD_FLAG } from "@/lib/flags/keys";
+import { HTPR_7393_COMMENT_INLINE_AI_FLAG, HTPR_7337_EDIT_WITH_AI_FLAG, HTPR_6899_STABLE_LAYOUT_FLAG, HTPR_6551_QUIET_RUN_ACTIVITY_FLAG, HTPR_7116_TICKET_STAYS_OPEN_FLAG, HTPR_7531_ESCAPE_OWN_BOARD_FLAG, HTPR_7611_COMMENTS_FOLD_FROM_FIRST_PAINT_FLAG } from "@/lib/flags/keys";
 
 export type TReturnFocusedEl =
   | "Description"
@@ -164,7 +165,14 @@ const useTaskDetailGlobalStates = (
   const { hasDraft, hasCommentDraft, draftsFromTQ, draftsHydrated } =
     useHasDrafts(_parsedTask.id, currentUser?.id);
 
-  const { data: userPreferences } = useGetUserPreferences();
+  const { data: userPreferences, dataUpdatedAt: userPreferencesLoadedAt } = useGetUserPreferences();
+  const foldFromFirstPaint = useFlag(HTPR_7611_COMMENTS_FOLD_FROM_FIRST_PAINT_FLAG);
+  const commentsStacked = commentsStackedSetting({
+    foldFromFirstPaint,
+    preferencesLoaded: userPreferencesLoadedAt > 0,
+    serverStacked: stack?.stack,
+    preferenceStacked: userPreferences.commentsStacked,
+  });
 
   const [hasDraftInit, setHasDraftInit] = useState<boolean>(
     currentTask?.drafts?.some((draft: IDraft) =>
@@ -824,7 +832,7 @@ const useTaskDetailGlobalStates = (
     _count,
     scrollVirtualize,
     listRef,
-    stackData: userPreferences.commentsStacked,
+    stackData: commentsStacked,
     virtualizeIndexes,
     showHistory,
     toggleHistory,
