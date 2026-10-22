@@ -68,7 +68,7 @@ test("real history Back replaces Next's stale source tree after detail RSC; Forw
     "@/lib/state": { useRecoilValue: () => ({ id: 985 }) },
     "@/store": { currentUserAtom: {} },
     "@/hooks/useFlag": { useFlag: (key) => false },
-    "@/lib/flags/keys": { HTPR_6972_SUBTASK_LINK_FLAG: "htpr-6972-subtask-link" },
+    "@/lib/flags/keys": {},
     "@/components/Modals/SwipeUnread/EmbeddedTaskDetail": { __esModule: true, default: () => React.createElement("article", { id: "cached-detail" }, "Cached detail") },
     "@/lib/navigation/cachedTaskDetail": cache,
     "@/utils/helperFunctions/helperFunctions": { returnIfModalOrInputActive: () => false },

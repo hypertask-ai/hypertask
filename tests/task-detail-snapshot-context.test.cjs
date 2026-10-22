@@ -46,7 +46,7 @@ test("real task detail reads the provider snapshot without duplicate props and r
   const provider = load("src/lib/contexts/TaskDetail/TaskProvider.tsx", {
     "@tanstack/react-query": { useQueryClient: () => queryClient },
     "@/hooks/General/useAuth": { useAuth: () => ({ authenticatedUserId }) },
-    "@/hooks/useFlag": { useFlag: () => subtaskLink },
+    "@/hooks/useFlag": { useFlag: () => dedupeReads },
     "@/lib/flags/keys": { HTPR_7009_DEDUPE_TASK_DETAIL_READS_FLAG: "htpr-7009-dedupe-task-detail-reads" },
     "@/hooks/General/useHydrated": { useHydrated: () => true },
     "@/lib/taskDetailReads": require("jiti")(__filename, { alias: { "@": path.join(__dirname, "..", "src") }, interopDefault: true })(path.join(__dirname, "..", "src/lib/taskDetailReads.ts")),
@@ -61,15 +61,13 @@ test("real task detail reads the provider snapshot without duplicate props and r
   const queryClient = new QueryClient();
   let embedded = true;
   let authenticatedUserId = 2343;
-  let subtaskLink = true;
+  let dedupeReads = true;
   const cachedKey = id => ["cached-task-detail", 2343, id];
   const stubs = {
     "@/store": {},
     "@/lib/state": { useRecoilState: () => [null, noop], useSetRecoilState: () => noop },
     "@tanstack/react-query": { useQueryClient: () => queryClient },
     "@/hooks/General/useAuth": { useAuth: () => ({ authenticatedUserId }) },
-    "@/hooks/useFlag": { useFlag: () => subtaskLink },
-    "@/lib/flags/keys": { HTPR_6972_SUBTASK_LINK_FLAG: "htpr-6972-subtask-link", HTPR_7009_DEDUPE_TASK_DETAIL_READS_FLAG: "htpr-7009-dedupe-task-detail-reads" },
     "@/lib/taskDetailReads": { taskDetailReadKey: (accountId, id) => ["cached-task-detail", accountId, id, "read"] },
     "@/lib/navigation/cachedTaskDetail": { cachedTaskDetailKey: (accountId, id) => ["cached-task-detail", accountId, id] },
     "next/navigation": { useRouter: emptyHook, useSearchParams: emptyHook },
@@ -146,11 +144,12 @@ test("real task detail reads the provider snapshot without duplicate props and r
   assert.equal(queryClient.getQueryData(readKey), undefined, "embedded snapshots must not seed verified full-detail reads");
   assert.equal(queryClient.getQueryData(cachedKey(nextTask.id)), undefined, "embedded detail must not publish a native-navigation seed");
   embedded = false;
-  subtaskLink = false;
+  dedupeReads = false;
   await render(nextTask);
-  assert.equal(queryClient.getQueryData(cachedKey(nextTask.id)), undefined, "flag-off routes keep the original cache behavior");
-  assert.equal(queryClient.getQueryData(readKey), undefined, "flag-off routes must not seed the new read cache");
-  subtaskLink = true;
+  assert.deepEqual(queryClient.getQueryData(cachedKey(nextTask.id)), nextTask, "native routes seed navigation even when dedupe reads are off");
+  assert.equal(queryClient.getQueryData(readKey), undefined, "dedupe-off routes must not seed the new read cache");
+  queryClient.removeQueries({ queryKey: cachedKey(nextTask.id), exact: true });
+  dedupeReads = true;
   authenticatedUserId = 985;
   await render(nextTask);
   assert.equal(queryClient.getQueryData(cachedKey(nextTask.id)), undefined, "an old server account cannot seed the signed-in account's cache");

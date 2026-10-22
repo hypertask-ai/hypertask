@@ -35,10 +35,9 @@ const mocks = {
   "next/navigation": { useSearchParams: () => new URLSearchParams("inboxFlow=true") },
   "@tanstack/react-query": { useQueryClient: () => ({}) },
   "@/hooks/General/useAuth": { useAuth: () => ({ authenticatedUserId: null }) },
-  "@/hooks/useFlag": { useFlag: () => false },
   "@/lib/state": { useRecoilValue: () => null },
   "@/store": { currentUserAtom: {} },
-  "@/lib/navigation/cachedTaskDetail": { openCachedTaskDetail: () => assert.fail("flag-off links must use Next") },
+  "@/lib/navigation/cachedTaskDetail": { openCachedTaskDetail: () => assert.fail("unauthenticated links must use Next") },
   "@/components/Common/Tooltip": { __esModule: true, default: () => null },
   "@/utils/undoActions/helperFuncs": { cn: (...classes) => classes.filter(Boolean).join(" ") },
 };
@@ -126,7 +125,7 @@ test("task-detail subtasks retain identical links, archive colors, playlist, and
     const nodes = elements(tree);
     const links = nodes.filter((element) => element.props?.href);
     assert.deepEqual(links.map((element) => element.props.href), ["/detail/project-15/52?inboxFlow=true", "/detail/project-15/53?inboxFlow=true"]);
-    for (const element of nodes) if (element.props?.onClick) element.props.onClick();
+    for (const element of nodes) if (element.props?.onClick) element.props.onClick({ button: 0 });
     assert.equal(linking, 1);
     assert.equal(pages, 1);
     playlists.push(playlist);
