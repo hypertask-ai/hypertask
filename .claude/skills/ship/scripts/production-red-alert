@@ -284,7 +284,7 @@ async function tick({ dryRun = false, runId, dir = STATE, api = live(), now = Ma
 function units(lib) {
   if (/[\n\r"%]/.test(lib + os.homedir())) throw new Error('Unsupported systemd path');
   return {
-    service: `[Unit]\nDescription=One assigned fixer for production-red tests\n[Service]\nType=oneshot\nWorkingDirectory="${os.homedir()}"\nEnvironment="PATH=${os.homedir()}/.local/bin:/usr/local/bin:/usr/bin:/bin"\nExecStart=/usr/bin/nice -n 19 "${lib}/production-red-alert"\nTimeoutStartSec=240\nUMask=0077\n`,
+    service: `[Unit]\nDescription=One assigned fixer for production-red tests\n[Service]\nType=oneshot\nWorkingDirectory=%h\nEnvironment="PATH=${os.homedir()}/.local/bin:/usr/local/bin:/usr/bin:/bin"\nExecStart=/usr/bin/nice -n 19 "${lib}/production-red-alert"\nTimeoutStartSec=240\nUMask=0077\n`,
     timer: '[Unit]\nDescription=Check production CI every five minutes\n[Timer]\nOnBootSec=2min\nOnUnitActiveSec=5min\n[Install]\nWantedBy=timers.target\n'
   };
 }
