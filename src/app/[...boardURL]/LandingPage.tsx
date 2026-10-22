@@ -1159,7 +1159,6 @@ return (
         <NoBoardsEmptyState user={user} />
       ) : boardRender ? (
            <SectionComp
-            connectOverlayEnabled={connectOverlayEnabled ? boardRender.boardLayout !== "table" : false}
             _allProjects={boardRender.projects}
             _projectCount={boardRender.projects.length}
             _currentUser={user}
@@ -1172,6 +1171,7 @@ return (
             _readinessSource={boardRender.readinessSource}
             _readinessProjectId={boardRender.readinessProjectId}
             _readinessRouteEntryId={boardRender.readinessRouteEntryId}
+            connectOverlayEnabled={connectOverlayEnabled ? boardRender.boardLayout !== "table" : false}
             />   
       ) : data?.updatedProjects?.[projectIndex] ? (
         hydrationFailedProjectId === data.updatedProjects[projectIndex].id ? (
