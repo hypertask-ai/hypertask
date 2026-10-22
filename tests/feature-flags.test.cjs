@@ -380,19 +380,12 @@ test("quick-add view context is permanent and absent from the registry", () => {
   assert.equal(flags.FEATURE_FLAG_KEYS.includes("htpr-6993-quick-add-view-context"), false);
 });
 
-test("new-task window view context defaults to Everyone as a bugfix and respects OFF", async () => {
-  const key = flags.HTPR_6997_NEW_TASK_WINDOW_VIEW_CONTEXT_FLAG;
-  assert.equal(key, "htpr-6997-new-task-window-view-context");
-  assert.equal(flags.defaultFeatureFlagMode(key), "EVERYONE");
-  const entry = (await flags.listFeatureFlagModes()).find(entry => entry.key === key);
-  assert.equal(entry.kind, "bugfix");
-  assert.equal(entry.mode, "EVERYONE");
-  assert.equal(await flags.isFeatureEnabled(key, 7), true);
-  row = { mode: "OFF", updatedAt: new Date() };
-  assert.equal(await flags.isFeatureEnabled(key, 6), false);
-  assert.equal(await flags.isFeatureEnabled(key, 7), false);
+test("new-task window view context is no longer registered", async () => {
+  assert.equal(flags.HTPR_6997_NEW_TASK_WINDOW_VIEW_CONTEXT_FLAG, undefined);
+  assert.equal(definitions.some(entry => entry.key === "htpr-6997-new-task-window-view-context"), false);
+  assert.equal((await flags.listFeatureFlagModes()).some(entry => entry.key === "htpr-6997-new-task-window-view-context"), false);
   const snapshot = require("../e2e/smoke/production-flag-modes.json");
-  assert.equal(snapshot.modes[key], "EVERYONE");
+  assert.equal(Object.hasOwn(snapshot.modes, "htpr-6997-new-task-window-view-context"), false);
 });
 
 test("Ctrl+J view context defaults to Everyone as a bugfix and respects OFF", async () => {

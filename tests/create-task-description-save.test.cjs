@@ -116,7 +116,7 @@ test("discard checks the latest create-task fields before React renders", () => 
   );
   assert.match(
     guard,
-    /const areFormValuesEqualToDefault =\s*currentFormValues\.assignees\.length/,
+    /const openingDefaults = openingViewDefaultsRef\.current;\s*return !\(\s*currentFormValues\.assignees\.length === openingDefaults\.assignees\.length/,
   );
   assert.doesNotMatch(
     guard,
