@@ -43,10 +43,10 @@ Use a trusted identity with dispatch access to the private reviewer repository. 
 
 - App CI (CI Tests, App Smoke, Secret Guard, Gitleaks, Revert Guard, PR checks, Auto-merge, Production Health) runs on GitHub-hosted `ubuntu-latest` runners; review discovery is a local 30-second systemd timer and occupies no Actions runner. AI review runs from the private reviewer repository on that repo's own `[self-hosted, ai-review]` runner.
 - CI Tests uses the committed `package-lock.json` with `npm ci --prefer-offline` and GitHub-hosted caches. ESLint still covers the full repository, but unchanged file results are restored through its content-validated cache; a cache miss performs a complete lint. The workflow relocates ESLint's absolute cache paths when GitHub schedules a run on a different hosted runner. PRs consume the trusted base-branch cache read-only. Every new `production` commit runs the full suite, and a failure warns without changing the live site. Only the current Production Health probe can trigger a rollback.
-- TypeScript and the full Node test suite remain uncached correctness checks on every CI Tests run.
+- TypeScript and the selected PR tests (full suite on production pushes) remain correctness checks on every non-docs CI Tests run.
 - `contabo-1` is registered only to the private reviewer repository, carries `ai-review`, and runs as `htreviewrunner`. Application PR workflows cannot schedule it, and its subscription wrappers are unreachable from hosted runner jobs.
 - The repository default branch is `production`. GitHub loads `workflow_run` files from the default branch, so this setting lets the protected App Smoke workflow react to every App Smoke Request run. Frozen `main` remains the legacy EC2 rollback branch.
-- The `production` ruleset requires `app-smoke`, `ci-tests`, GitHub AI Review (`ai-review`, or legacy `claude-review` during the transition), `pr-title`, `next-public-secrets`, and `secret-scan`. CI Tests normally reports after the pr-feedback timer applies the `full-ci` label on review success. The speed checks were retired with the 2026-08 staging rename; no `[SPEED]` gate exists today.
+- The `production` ruleset requires the exact contexts in `docs/ci-policy.yml`, including `ci-tests` and `browser-smoke`. Both jobs run on every non-draft PR without a label gate. CI Tests still verifies the live ruleset before deciding scope; this optimization adds no required check names. The speed checks were retired with the 2026-08 staging rename; no `[SPEED]` gate exists today.
 - Gitleaks (`secret-scan`) scans only the commits a change adds: a pull request scans base..head, and a push scans the previous tip..new tip (a new branch, or a force push whose old tip is gone, scans everything not on `production`). A finding on one branch therefore cannot turn other branches red. Branch deletions are not scanned.
 - Auto-merge uses the newest result for each check name. This lets a current provider-portable compatibility check supersede an obsolete reviewer failure on the same backlog commit; the exact-commit `APPROVE` comment is still mandatory.
 - Auto-merge keeps all scratch state in a unique directory under `RUNNER_TEMP`. A PR read, diff read, or merge that still fails after retries makes the workflow fail visibly; an incomplete sweep must never report green.
@@ -70,6 +70,30 @@ The non-required `ship-scripts-tests` check in [`.github/workflows/ship-scripts-
 - Runs `bash .claude/skills/ship/scripts/ship-check.test.sh --premerge-only` and `python3 .claude/skills/ship/scripts/premerge-evidence.test.py`. The full shell suite also contains live authenticated checks and is deliberately excluded.
 - Installs Python 3 for the standard-library test harnesses and fixtures, `jq` for JSON handling in `ship-check`, and Git for repository-scope detection. Neither offline test path nor its called code needs Node, so the workflow does not install it. No npm or pip packages are needed; Bash and standard Unix utilities come with the hosted runner.
 - Uses a temporary HOME and the harnesses' temporary state and local Git/GitHub/Hypertask fixtures. A fallback `gh` stub fails unexpected calls outside the fixtures. Tests need no network, real tokens, existing VPS state or systemd service; checkout and dependency installation still use network. Checkout does not persist credentials, and the job requests only `contents: read`, so fork PRs need no secrets.
+
+## Docs-only CI lane (YPER4-548)
+
+On non-draft PRs, the existing `ci-tests` and `browser-smoke` jobs both run and
+report ordinary **success**, not a skipped job, when every changed file is under
+`docs/`, `.claude/`, `scripts/self_hosted_agent/` or `.github/`, or is a `.md`
+file at the repo root (`README.md`). Nested Markdown such as
+`src/app/wiki/agents/agents.md` is app content and runs everything. Changes to
+`.github/workflows/ci-tests.yml` or `.github/scripts/` always run everything so
+the edited gate is exercised. Existing live-settings, review and approval guards still apply.
+There are no workflow-level path filters and no additional detector jobs.
+
+Each job runs `.github/scripts/ci-change-scope.cjs` using the runner's bundled
+Node before setup-node, dependency installation, caches, tests or Docker work.
+It fetches the exact PR base and head SHAs and uses `git diff --no-renames
+--name-only -z BASE_SHA HEAD_SHA`; both sides of a renamed file are considered.
+A non-doc file, empty list, missing SHA/base, git error or detector failure runs
+the heavy lane. Production pushes always run everything. The existing PR-only
+cancellation and draft guards are unchanged.
+
+Browser PostgreSQL, Redis and Soketi stay job-level services, so a docs-only
+`browser-smoke` still pays their short start-up but skips install, build and tests.
+Only free GitHub-hosted `ubuntu-latest` runners are used. Verify the matcher without installing dependencies:
+`node .github/scripts/ci-change-scope.cjs --self-check`.
 
 ## Visual regression gate
 
@@ -134,6 +158,8 @@ The existing pinned native CLI release is checksum verified, runs with isolated 
 and a child-only bearer, and checks boards, task reads, creation, comments and column
 moves against REST readbacks. Its TCP destinations are traced and must remain on the
 local app. Missing output, failed, skipped or cancelled browser smoke fails the summary.
+The sole no-contract exception is a successful docs-only browser job with an explicit
+`docs_only=true` scope output; it does not claim the contract executed.
 Activate the new production ruleset context in coordination with this policy update:
 CI Tests' `Verify live required-check settings` step compares the live ruleset's exact
 context set against the workflow expectation. This change does not modify that ruleset.
