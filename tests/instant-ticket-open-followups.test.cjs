@@ -136,6 +136,7 @@ test("quiet: deferred activity/comments suspend without loading text", () => {
   };
   for (const name of ["CommentBodyDesktop", "CommentCreatedBy", "CommentText", "CommentOptions/ReplyToComment", "SwipeableCommentRow"]) mocks[`./${name}`] = { __esModule: true, default: noop };
   mocks["./CommentOptions"] = { CommentOptions: noop };
+  mocks["./CommentReactions"] = { __esModule: true, default: noop };
   mocks["./CommentTaskActivity"] = { __esModule: true, default: () => { throw new Promise(() => {}); } };
   const Comments = compile(read("src/components/PageComponents/TaskDetail/CommentAndDescription/CommentContainer/CommentsContainer.tsx"), mocks).default;
   const quiet = renderToString(React.createElement(Comments));

@@ -6,7 +6,10 @@ import { useContext, useMemo, useState } from "react";
 import { MobileViewContext } from "@/lib/contexts/mobileContext";
 import TimeTooltip from "@/components/Common/TimeTooltip";
 import { useDescriptionAndCommentsContext } from "@/lib/contexts/TaskDetail/DescriptionProvider";
-const EmojiOptionsComp = dynamic(() => import("./EmojiOptionsComp"));
+import EmojiOptionsInOnePass from "./EmojiOptionsComp";
+import { useFlag } from "@/hooks/useFlag";
+import { HTPR_7611_COMMENT_PARTS_ONE_PASS_FLAG } from "@/lib/flags/keys";
+const EmojiOptionsLoadedLater = dynamic(() => import("./EmojiOptionsComp"));
 import Tooltip from "@/components/Common/Tooltip";
 import { cn } from "@/utils/undoActions/helperFuncs";
 import ReplyToComment from "./CommentOptions/ReplyToComment";
@@ -22,6 +25,7 @@ export const CommentOptions = ({
 }: {
   isCurrentUserCreator: boolean;
 }) => {
+  const EmojiOptionsComp = useFlag(HTPR_7611_COMMENT_PARTS_ONE_PASS_FLAG) ? EmojiOptionsInOnePass : EmojiOptionsLoadedLater;
   const [isHovered, setIsHovered] = useState(false);
   const [isThumbsHovered, setIsThumbsHovered] = useState(false);
   const isApple = useDeviceContext();

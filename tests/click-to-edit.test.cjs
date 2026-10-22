@@ -118,6 +118,7 @@ async function mount(t, { surface, mobile = false, enabled = true, guest = false
     "./CommentCreatedBy": { default: () => null },
     "./CommentText": { default: Text },
     "./CommentOptions": { CommentOptions: Controls },
+    "./CommentReactions": { default: () => null },
     "./CommentTaskActivity": { default: () => null },
     "./CommentOptions/ReplyToComment": { default: () => null },
     "./SwipeableCommentRow": { default: ({ children }) => children },
