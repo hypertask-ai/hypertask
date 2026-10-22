@@ -16,6 +16,8 @@ import { useDeviceContext } from "@/lib/contexts/deviceContext";
 import { returnIfModalOrInputActive } from "@/utils/helperFunctions/helperFunctions";
 import { KeyCodes } from "@/lib/constants/keyboard-handler";
 import useHypertasksNavigate from "../MultiPages/Route/useHypertasksNavigate";
+import { useFlag, useFlagLoaded } from "@/hooks/useFlag";
+import { HTPR_6929_COMPOSE_TASK_WRITER_FLAG, HTPR_7585_CTRLJ_WAITS_FOR_FLAGS_FLAG } from "@/lib/flags/keys";
 
 type SectionKeydownHandler = (event: KeyboardEvent) => void;
 
@@ -44,6 +46,11 @@ const useSections = ({
   sectionId: number;
 }) => {
   const router = useRouter();
+  const ctrlJWaitsForFlags = useFlag(HTPR_7585_CTRLJ_WAITS_FOR_FLAGS_FLAG);
+  const ctrlJWaitsForFlagsLoaded = useFlagLoaded(HTPR_7585_CTRLJ_WAITS_FOR_FLAGS_FLAG);
+  const composeEnabled = useFlag(HTPR_6929_COMPOSE_TASK_WRITER_FLAG);
+  const composeLoaded = useFlagLoaded(HTPR_6929_COMPOSE_TASK_WRITER_FLAG);
+  const blockLegacyCtrlJ = (ctrlJWaitsForFlags || !ctrlJWaitsForFlagsLoaded) && (!composeLoaded || composeEnabled);
   const store = useStore();
   const { createItem } = useAddDeleteTaskInBoards();
   const { toggleCreateTaskGlobally }= useHypertasksRecoilStates()
@@ -144,6 +151,7 @@ const useSections = ({
     title,
     _currentProject,
     createTaskAt,
+    blockLegacyCtrlJ,
   });
   latestRef.current = {
     active,
@@ -155,6 +163,7 @@ const useSections = ({
     title,
     _currentProject,
     createTaskAt,
+    blockLegacyCtrlJ,
   };
 
   const handleLegacyKeyDown = useCallback((e: KeyboardEvent) => {
@@ -168,6 +177,7 @@ const useSections = ({
       title,
       _currentProject,
       createTaskAt,
+      blockLegacyCtrlJ,
     } = latestRef.current;
 
     if (!active) return;
@@ -311,18 +321,20 @@ const useSections = ({
       !e.shiftKey
     ) {
       e.preventDefault();
-      createTaskAt(
-        "top",
-        {
-          sectionId: sectionId,
-          sectionTitle: title,
-          position: "top",
-        },
-        {
-          defaultEditMode: "Description-ai",
-          defaultFocus: "Description",
-        }
-      );
+      if (!blockLegacyCtrlJ) {
+        createTaskAt(
+          "top",
+          {
+            sectionId: sectionId,
+            sectionTitle: title,
+            position: "top",
+          },
+          {
+            defaultEditMode: "Description-ai",
+            defaultFocus: "Description",
+          }
+        );
+      }
       setKeypressed((prev: any) => {
         prev[e.key] = false;
         return prev;
