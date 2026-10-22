@@ -1,0 +1,13 @@
+2026-10-22T11:25:46.3987298Z test at tests/htpr-7574-agent-onboarding.test.cjs:97:3
+2026-10-22T11:25:46.3988838Z ✖ S4 refused: read self-change gives owner guidance before checking role (44.0558ms)
+2026-10-22T11:25:46.3990032Z   Error: Unexpected import in src/lib/mcp/agents/delegatedAccess.ts: @/lib/auth/agentScope
+2026-10-22T11:25:46.3991578Z       at loaded.require (/home/runner/work/hypertask/hypertask/tests/htpr-7574-agent-onboarding.test.cjs:30:11)
+2026-10-22T11:25:46.3992711Z       at require (node:internal/modules/helpers:157:16)
+2026-10-22T11:25:46.3993835Z       at Object.<anonymous> (/home/runner/work/hypertask/hypertask/src/lib/mcp/agents/delegatedAccess.ts:7:22)
+2026-10-22T11:25:46.3995030Z       at Module._compile (node:internal/modules/cjs/loader:1929:14)
+2026-10-22T11:25:46.3996155Z       at load (/home/runner/work/hypertask/hypertask/tests/htpr-7574-agent-onboarding.test.cjs:32:10)
+2026-10-22T11:25:46.3997810Z       at delegation (/home/runner/work/hypertask/hypertask/tests/htpr-7574-agent-onboarding.test.cjs:46:41)
+2026-10-22T11:25:46.3999396Z       at TestContext.<anonymous> (/home/runner/work/hypertask/hypertask/tests/htpr-7574-agent-onboarding.test.cjs:98:19)
+2026-10-22T11:25:46.4000609Z       at Test.runInAsyncScope (node:async_hooks:227:14)
+2026-10-22T11:25:46.4001359Z       at Test.run (node:internal/test_runner/test:1402:25)
+2026-10-22T11:25:46.4002162Z       at Test.start (node:internal/test_runner/test:1262:17)

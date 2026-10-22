@@ -1,0 +1,90 @@
+{
+  "status": "failure",
+  "run": {
+    "id": 39719731623,
+    "name": "CI Tests",
+    "head_branch": "production",
+    "head_sha": "4b51e2e8465063bf6d64a848e2aee6afe78db98e",
+    "status": "completed",
+    "conclusion": "failure",
+    "workflow_id": 345284758,
+    "created_at": "2026-10-22T03:58:06Z",
+    "html_url": "https://github.com/hypertask-ai/hypertask/actions/runs/39719731623",
+    "job": {
+      "id": 119631186995,
+      "name": "ci-tests",
+      "status": "completed",
+      "conclusion": "failure"
+    },
+    "run_attempt": 1
+  },
+  "firstRed": {
+    "head_sha": "4b51e2e8465063bf6d64a848e2aee6afe78db98e",
+    "id": 39719731623,
+    "run_attempt": 1
+  },
+  "green": {
+    "id": 39717702716,
+    "name": "CI Tests",
+    "head_branch": "production",
+    "head_sha": "12e5f6a4c6e13e91b57c3963e587193214b68899",
+    "status": "completed",
+    "conclusion": "success",
+    "workflow_id": 345284758,
+    "created_at": "2026-10-22T03:35:46Z",
+    "html_url": "https://github.com/hypertask-ai/hypertask/actions/runs/39717702716",
+    "run_attempt": 1
+  },
+  "failures": [
+    {
+      "file": "tests/htpr-7322-agent-feature-discovery.test.cjs",
+      "error": "TypeError: pickDecisionTaskIds is not a function or its return value is not iterable"
+    }
+  ],
+  "prs": [
+    {
+      "number": 1806,
+      "title": "YPER4-562 [QA] Layout checks wait for the ticket's initial scroll before measuring",
+      "url": "https://github.com/hypertask-ai/hypertask/pull/1806",
+      "files": [
+        "docs/ci.md",
+        "e2e/smoke/layout-lock-matrix.spec.ts",
+        "e2e/smoke/layout-lock.spec.ts",
+        "e2e/smoke/lib/layout-lock-matrix.ts",
+        "e2e/smoke/lib/layout-lock-scroll.ts",
+        "src/components/PageComponents/TaskDetail/CommentAndDescription/index.tsx",
+        "tests/layout-lock-scroll.test.cjs"
+      ]
+    },
+    {
+      "number": 1789,
+      "title": "HTPR-7311 [FEATURE] Opening a ticket from Decisions jumps to the question",
+      "url": "https://github.com/hypertask-ai/hypertask/pull/1789",
+      "files": [
+        ".claude/skills/verify-qa/reference/feature-map/inbox.md",
+        "src/components/notifications/inboxSplit/index.tsx",
+        "src/hooks/Task Detail/useArchiveAndNavigate.ts",
+        "src/lib/flags/definitions/htpr-7311-decision-comment-link.ts",
+        "src/lib/inboxDecisions.ts",
+        "src/models/model.ts",
+        "src/utils/controllers/notifications/decisionTasks.ts",
+        "src/utils/controllers/notifications/getAllWithDecisions.ts",
+        "tests/cached-task-detail-review.test.cjs",
+        "tests/htpr-7092-decisions.test.cjs",
+        "tests/htpr-7311-decision-comment-link.test.cjs",
+        "tests/task-page-inbox-removal.test.cjs"
+      ]
+    },
+    {
+      "number": 1808,
+      "title": "HTPR-7544 [BUGFIX] Ctrl+J on the new task screen reaches the AI chat handoff before the older compose shortcut",
+      "url": "https://github.com/hypertask-ai/hypertask/pull/1808",
+      "files": [
+        "src/components/Modals/CreateTaskGloballyModal/CreateTaskModalBody.tsx",
+        "src/components/RTE/TiptapCreateTaskModal.tsx",
+        "tests/compose-task-palette.test.cjs",
+        "tests/htpr-7544-ctrlj-sidebar-on-new-task.test.cjs"
+      ]
+    }
+  ]
+}

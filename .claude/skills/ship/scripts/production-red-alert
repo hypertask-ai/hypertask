@@ -1,0 +1,325 @@
+#!/usr/bin/env node
+// One free, agent-owned alert per production-red streak.
+'use strict';
+const fs = require('node:fs');
+const path = require('node:path');
+const os = require('node:os');
+const { execFileSync } = require('node:child_process');
+const { createHash } = require('node:crypto');
+const REPO = 'hypertask-ai/hypertask';
+const IDENTITY = 'INFRA MANAGER';
+const UUID = /^[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}$/i;
+const STATE = path.join(os.homedir(), '.local/state/production-red-alert');
+
+function command(bin, args, options = {}) {
+  try {
+    return execFileSync(bin, args, { encoding: 'utf8', timeout: 25000,
+      maxBuffer: 32 * 1024 * 1024, stdio: ['pipe', 'pipe', 'pipe'], ...options });
+  } catch {
+    // Never echo command arguments: vcc descriptions and credential-handling tools are not diagnostics.
+    throw new Error(`${bin} failed or timed out; retry after backoff`);
+  }
+}
+function json(text) {
+  const value = JSON.parse(text);
+  if (value.success === false) throw new Error('API returned success=false');
+  return value;
+}
+function agent(task) {
+  const agents = new Map((task.assignees || []).filter(a => UUID.test(a.agent?.id || ''))
+    .map(a => [a.agent.id, { id: a.agent.id, name: a.agent.displayName }]));
+  if (agents.size !== 1) throw new Error('Chosen PR ticket must have exactly one assigned agent; refusing a human or ambiguous fixer');
+  return [...agents.values()][0];
+}
+function identity(run = command) {
+  const helper = path.join(os.homedir(), '.agents/skills/ship/scripts/ship-identity');
+  const expected = path.join(os.homedir(), '.config/hypertask-agents/credentials/sessions/infra-manager-agent-token');
+  const [name, tokenPath] = run(helper, [], { env: { ...process.env, SHIP_SESSION_NAME: IDENTITY } }).trim().split('\t');
+  if (name !== IDENTITY || tokenPath !== expected || !fs.statSync(expected).isFile() || fs.statSync(expected).size === 0) {
+    throw new Error('INFRA MANAGER session credential unavailable; refusing the Valentin fallback');
+  }
+  return { name, credentialPath: expected };
+}
+function runOrder(a, b) {
+  const ta = Date.parse(a.run_started_at || a.created_at), tb = Date.parse(b.run_started_at || b.created_at);
+  return (Number.isFinite(ta) && Number.isFinite(tb) ? tb - ta : 0) || b.id - a.id || (b.run_attempt || 1) - (a.run_attempt || 1);
+}
+function streak(data, state) {
+  const key = `${data.firstRed.id}:${data.firstRed.run_attempt || 1}:${data.green.id}`;
+  const existingKey = Object.keys(state.alerts).find(k => k === key ||
+    (!/^\d+:\d+:\d+$/.test(k) && !state.alerts[k].closed &&
+      state.alerts[k].firstRed === data.firstRed.head_sha && state.alerts[k].runId > data.green.id));
+  return { key, existingKey };
+}
+function live(run = command) {
+  const api = route => json(run('gh', ['api', '-X', 'GET', `repos/${REPO}/${route}`]));
+  const jobs = (id, attempt) => {
+    const all = [];
+    for (let page = 1; ; page++) {
+      const rows = api(`actions/runs/${id}${attempt ? `/attempts/${attempt}` : ''}/jobs?per_page=100&page=${page}`).jobs;
+      if (!Array.isArray(rows)) throw new Error('Unreadable CI jobs');
+      all.push(...rows);
+      if (rows.length < 100) break;
+    }
+    return all.filter(j => j.name === 'ci-tests').sort((a, b) => b.id - a.id)[0];
+  };
+  return {
+    async collect(runId, state = { alerts: {} }) {
+      const target = runId ? api(`actions/runs/${runId}`) : null;
+      if (target && (target.name !== 'CI Tests' || target.head_branch !== 'production' || target.status !== 'completed')) {
+        throw new Error('--run must be a completed production CI Tests run');
+      }
+      let red, firstRed, green, latest;
+      for (let page = 1; !green; page++) {
+        const route = target ? `actions/workflows/${target.workflow_id}/runs` : 'actions/workflows/ci-tests.yml/runs';
+        const rows = api(`${route}?branch=production&status=completed&per_page=100&page=${page}${target ? `&created=<=${target.updated_at || target.created_at}` : ''}`).workflow_runs;
+        if (!Array.isArray(rows)) throw new Error('Unreadable production runs');
+        if (!rows.length) break;
+        rows.sort(runOrder);
+        while (rows.length) {
+          const r = rows.shift();
+          if (r.name !== 'CI Tests' || r.head_branch !== 'production' || r.status !== 'completed' ||
+              r.conclusion === 'cancelled' || (target && runOrder(r, target) < 0)) continue;
+          if (!latest) {
+            latest = r;
+            if (!target && state.lastRun === `${r.id}:${r.run_attempt || 1}:${r.updated_at || ''}`) {
+              return { status: 'idle', run: r };
+            }
+          }
+          // A successful workflow cannot contain a failed ci-tests job.
+          const job = r.conclusion === 'success' ? { status: 'completed', conclusion: 'success' } : jobs(r.id, r.previousAttempt ? r.run_attempt : undefined);
+          if (!job || job.status !== 'completed') throw new Error(`Missing completed ci-tests job for run ${r.id}`);
+          if (!red) {
+            if (job.conclusion !== 'failure') return { status: job.conclusion, run: r };
+            red = { ...r, job }; firstRed = r;
+          } else if (job.conclusion === 'success') { green = r; break; }
+          else if (job.conclusion === 'failure') firstRed = r;
+          if (r.run_attempt > 1) {
+            rows.push({ ...api(`actions/runs/${r.id}/attempts/${r.run_attempt - 1}`), previousAttempt: true });
+            rows.sort(runOrder);
+          }
+        }
+      }
+      if (!red) return { status: 'none' };
+      if (!green) throw new Error('No last green production run found; refusing an incomplete PR range');
+      const failures = json(run('python3', [path.join(__dirname, 'ci-test-failures.py'), '--json'], {
+        input: run('gh', ['api', '-X', 'GET', `repos/${REPO}/actions/jobs/${red.job.id}/logs`])
+      }));
+      if (!failures.length) throw new Error('Failed ci-tests log names no failing test file; refusing to guess');
+      for (const sha of [green.head_sha, red.head_sha, firstRed.head_sha]) {
+        if (!/^[0-9a-f]{40}$/.test(sha)) throw new Error('Invalid CI commit SHA');
+      }
+      if (streak({ firstRed, green }, state).existingKey) {
+        return { status: 'failure', run: red, firstRed, green, failures, prs: [] };
+      }
+      const commits = [];
+      let total;
+      if (green.head_sha === red.head_sha) commits.push(api(`commits/${red.head_sha}`));
+      else for (let page = 1; ; page++) {
+        const comparison = api(`compare/${green.head_sha}...${red.head_sha}?per_page=100&page=${page}`);
+        if (!Array.isArray(comparison.commits) || !Number.isSafeInteger(comparison.total_commits) ||
+            !['ahead', 'identical'].includes(comparison.status)) throw new Error('Unreadable or divergent production commit range');
+        total ??= comparison.total_commits;
+        if (comparison.total_commits !== total) throw new Error('Production commit range changed during pagination');
+        commits.push(...comparison.commits);
+        if (commits.length === total) break;
+        if (!comparison.commits.length || commits.length > total) throw new Error('Incomplete production commit range');
+      }
+      const prs = [];
+      for (const commit of commits.reverse()) {
+        const sha = commit.sha, title = commit.commit.message.split('\n')[0];
+        const number = title.match(/\(#(\d+)\)$/)?.[1];
+        if (!number) throw new Error(`Non-squash commit ${sha} in production range; refusing to omit it`);
+        const files = [], patches = [];
+        for (let page = 1; ; page++) {
+          const rows = api(`pulls/${number}/files?per_page=100&page=${page}`);
+          if (!Array.isArray(rows)) throw new Error('Unreadable PR files');
+          files.push(...rows.flatMap(f => [f.filename, f.previous_filename].filter(Boolean)));
+          patches.push(...rows.map(f => f.patch || ''));
+          if (rows.length < 100) break;
+          if (page >= 30) throw new Error('GitHub PR file limit reached; refusing a partial range');
+        }
+        prs.push({ number: Number(number), title: title.replace(/ \(#\d+\)$/, ''),
+          url: `https://github.com/${REPO}/pull/${number}`, files, patches });
+      }
+      return { status: 'failure', run: red, firstRed, green, failures, prs };
+    },
+    task(ticket) {
+      const tasks = json(run('hypertask', ['tasks', 'get', ticket, '--json'])).tasks;
+      if (tasks?.length !== 1) throw new Error(`Cannot read chosen PR ticket ${ticket}`);
+      return tasks[0];
+    },
+    identity: () => identity(run),
+    write(args) {
+      return run('vcc', args, { env: { ...process.env, SHIP_SESSION_NAME: IDENTITY } });
+    },
+    recover(title, marker) {
+      const rows = json(run('hypertask', ['tasks', 'list', '--project', '4060', '--search', title, '--limit', '100', '--json'])).tasks;
+      if (!Array.isArray(rows) || rows.length >= 100) throw new Error('Cannot safely reconcile alert creation');
+      const matches = rows.filter(t => t.title === title).map(t => this.task(t.ticketNumber))
+        .filter(t => t.description?.includes(marker));
+      if (matches.length !== 1) throw new Error('Alert creation outcome unknown; reconcile the saved intent manually before retrying (no duplicate created)');
+      return matches[0].ticketNumber;
+    }
+  };
+}
+async function plan(data, api, state = { alerts: {} }) {
+  if (data.status !== 'failure') return { action: data.status === 'success' ? 'green' : data.status === 'idle' ? 'idle' : 'none', run: data.run };
+  const files = [...new Set(data.failures.map(f => f.file))].sort();
+  const { key, existingKey } = streak(data, state);
+  if (existingKey) return { action: 'alert', key, existingKey, firstRed: data.firstRed.head_sha, run: data.run, green: data.green, failures: data.failures };
+  const touched = data.prs.find(pr => pr.files.some(f => files.includes(f)));
+  const ignored = new Set(['function', 'return', 'iterable', 'unexpected', 'import', 'undefined', 'cannot',
+    'property', 'typeerror', 'referenceerror', 'syntaxerror', 'error', 'module', 'resolve', 'reading']);
+  const errors = data.failures.map(f => f.error).join('\n');
+  const modules = errors.match(/(?:@[\w-]*\/|\.{1,2}\/|src\/)[\w./$@-]+/g) || [];
+  const identifiers = new Set((errors.replace(/(?:@[\w-]*\/|\.{1,2}\/|src\/)[\w./$@-]+/g, '')
+    .match(/[A-Za-z_$][\w$]{5,}/g) || []).filter(id => !ignored.has(id.toLowerCase())));
+  const modulePath = p => p.replace(/^@\//, 'src/').replace(/^\.\//, '').replace(/\.[cm]?[jt]sx?$/, '');
+  const implicated = data.prs.find(pr => pr.files.some(f => modules.some(m => modulePath(f) === modulePath(m))) ||
+    (pr.patches || []).some(patch => patch.split('\n').some(line => /^[+-]/.test(line) && !/^(?:\+\+\+|---)\s/.test(line) &&
+      ((line.match(/[A-Za-z_$][\w$]{5,}/g) || []).some(id => identifiers.has(id)) ||
+        (line.match(/(?:@[\w-]*\/|\.{1,2}\/|src\/)[\w./$@-]+/g) || [])
+          .some(p => modules.some(m => modulePath(p) === modulePath(m)))))));
+  const chosen = touched || implicated || data.prs.at(-1);
+  if (!chosen) throw new Error('Red range contains no PR; refusing to invent a fixer');
+  const ticket = chosen.title.match(/^((?:HTPR|YPER4|HYFA)-\d+)\b/)?.[1];
+  if (!ticket) throw new Error('Chosen PR title has no recognized ticket prefix');
+  const fixer = agent(await api.task(ticket));
+  const marker = `production-red-alert:${createHash('sha256').update(key).digest('hex')}`;
+  const rule = touched ? 'failing-test-file' : implicated ? 'error-identifier' : 'oldest-pr';
+  const why = touched ? `PR #${chosen.number} is the newest PR in this range that changed a failing test file.`
+    : implicated ? `PR #${chosen.number} is the newest PR whose changed lines or module paths match an identifier in the first errors.`
+    : `No PR changed a failing test file or matched an error identifier, so PR #${chosen.number}, the oldest PR (first change after green), owns the fix.`;
+  const description = [
+    'Production tests are failing. One agent owns this fix so runners do not duplicate the work.', '',
+    'Failing tests (first error for each file):', ...data.failures.map(f => `- ${f.file}: ${f.error}`), '',
+    `Red run: ${data.run.html_url}`, `Last green run: ${data.green.html_url}`, '',
+    'PRs merged since the last green run (newest first):', ...data.prs.map(pr => `- #${pr.number} ${pr.title} ${pr.url}`), '',
+    `Fixer: ${fixer.name} (${fixer.id}), the agent assigned to ${ticket}. Rule: ${rule}. ${why}`, '', marker
+  ].join('\n');
+  return { action: 'alert', key, marker, firstRed: data.firstRed.head_sha, run: data.run,
+    green: data.green, failures: data.failures, prs: data.prs, chosenPR: chosen.number, fixer, rule, why,
+    title: `Production red: ${data.failures[0].file}`, description, project: 4060, section: 'In Progress' };
+}
+function load(dir) {
+  try { return json(fs.readFileSync(path.join(dir, 'state.json'), 'utf8')); }
+  catch (e) { if (e.code === 'ENOENT') return { alerts: {}, fails: 0, until: 0 }; throw e; }
+}
+function save(dir, state) {
+  fs.mkdirSync(dir, { recursive: true, mode: 0o700 });
+  const tmp = path.join(dir, `state.${process.pid}.tmp`);
+  fs.writeFileSync(tmp, `${JSON.stringify(state, null, 2)}\n`, { mode: 0o600 });
+  fs.renameSync(tmp, path.join(dir, 'state.json'));
+}
+async function apply(p, state, api, persist) {
+  if (p.action === 'green') {
+    for (const a of Object.values(state.alerts)) {
+      if (a.closed || runOrder({ id: a.runId, run_attempt: a.runAttempt, run_started_at: a.runStartedAt }, p.run) < 0) continue;
+      if (!a.ticket) { a.ticket = api.recover(a.title, a.marker); persist(); }
+      // Ambiguous activity writes are not retried: retain the intent for operator reconciliation.
+      if (a.closing) throw new Error('Recovery note outcome unknown; reconcile saved closing intent manually');
+      a.closing = true; persist();
+      api.write(['activity', 'add', a.ticket, `Production green again: ${p.run.html_url} (${a.marker}).`]);
+      a.closed = true; a.closing = false; persist();
+    }
+    return;
+  }
+  if (p.action !== 'alert') return;
+  await apply({ action: 'green', run: p.green }, state, api, persist);
+  let a = state.alerts[p.existingKey || p.key];
+  if (a?.closed) return;
+  if (!a) {
+    // Save an intent before the non-idempotent create. An interrupted create is reconciled, never blindly repeated.
+    a = state.alerts[p.key] = { title: p.title, marker: p.marker, firstRed: p.firstRed, runId: p.run.id, runAttempt: p.run.run_attempt || 1, runStartedAt: p.run.run_started_at || p.run.created_at, fixer: p.fixer, files: p.failures.map(f => f.file) };
+    persist();
+    const result = json(api.write(['task', 'create', '--project', '4060', '--section', 'In Progress',
+      '--title', p.title, '--description', p.description, '--json']));
+    if (result.success !== true) throw new Error('Create returned no success receipt; reconcile saved intent');
+    a.ticket = result.task?.ticketNumber || result.tasks?.[0]?.ticketNumber;
+    if (!/^YPER4-\d+$/.test(a.ticket || '')) throw new Error('Create returned no alert ticket reference; reconcile saved intent');
+    persist();
+  } else if (!a.ticket) { a.ticket = api.recover(a.title, a.marker); persist(); }
+  if (!a.assigned) {
+    if (!UUID.test(a.fixer.id)) throw new Error('Refusing non-agent assignment');
+    if (json(api.write(['task', 'assign', a.ticket, '--assignee', a.fixer.id, '--json'])).success !== true) {
+      throw new Error('Assignment returned no success receipt');
+    }
+    a.assigned = true; persist();
+  }
+  if (a.updating) throw new Error('Additional failures activity outcome unknown; reconcile saved update intent manually');
+  // Older state keyed by file set already recorded those files in the original alert.
+  const recorded = a.files || Object.keys(state.alerts).find(k => state.alerts[k] === a).split(':').slice(1).join(':').split(',');
+  const added = p.failures.filter(f => !recorded.includes(f.file));
+  if (added.length) {
+    a.updating = true; persist();
+    api.write(['activity', 'add', a.ticket, `Additional failing tests: ${added.map(f => `${f.file}: ${f.error}`).join('; ').replace(/[\r\n]+/g, ' ')} (${a.marker}).`]);
+    a.files = [...recorded, ...added.map(f => f.file)]; a.updating = false; persist();
+  }
+}
+async function tick({ dryRun = false, runId, dir = STATE, api = live(), now = Math.floor(Date.now() / 1000) } = {}) {
+  const state = load(dir);
+  if (!dryRun && state.until > now) return { action: 'backoff', until: state.until };
+  try {
+    const context = dryRun ? { alerts: {} } : state;
+    const p = await plan(await api.collect(runId, context), api, context);
+    if (dryRun) {
+      let writer;
+      try { writer = api.identity(); } catch { writer = { name: IDENTITY, refused: 'Session credential unavailable; writes refused (no Valentin fallback)' }; }
+      return { dryRun: true, identity: writer, ...p, alreadyAlerted: p.key ? !!state.alerts[p.key] : false };
+    }
+    if (p.action !== 'idle') api.identity();
+    await apply(p, state, api, () => save(dir, state));
+    if (p.run) state.lastRun = `${p.run.id}:${p.run.run_attempt || 1}:${p.run.updated_at || ''}`;
+    state.fails = 0; state.until = 0; save(dir, state);
+    return { action: p.action, key: p.key };
+  } catch (e) {
+    if (!dryRun) {
+      state.fails = Math.min((state.fails || 0) + 1, 10);
+      state.until = now + Math.min(300 * 2 ** state.fails, 3600); save(dir, state);
+    }
+    throw e;
+  }
+}
+function units(lib) {
+  if (/[\n\r"%]/.test(lib + os.homedir())) throw new Error('Unsupported systemd path');
+  return {
+    service: `[Unit]\nDescription=One assigned fixer for production-red tests\n[Service]\nType=oneshot\nWorkingDirectory="${os.homedir()}"\nEnvironment="PATH=${os.homedir()}/.local/bin:/usr/local/bin:/usr/bin:/bin"\nExecStart=/usr/bin/nice -n 19 "${lib}/production-red-alert"\nTimeoutStartSec=240\nUMask=0077\n`,
+    timer: '[Unit]\nDescription=Check production CI every five minutes\n[Timer]\nOnBootSec=2min\nOnUnitActiveSec=5min\n[Install]\nWantedBy=timers.target\n'
+  };
+}
+function install() {
+  identity();
+  const lib = path.join(os.homedir(), '.local/lib/hypertask/production-red-alert');
+  const unitDir = path.join(os.homedir(), '.config/systemd/user');
+  for (const dir of [lib, unitDir, STATE]) fs.mkdirSync(dir, { recursive: true, mode: 0o700 });
+  for (const file of ['production-red-alert', 'ci-test-failures.py']) {
+    fs.copyFileSync(path.join(__dirname, file), path.join(lib, file)); fs.chmodSync(path.join(lib, file), 0o755);
+  }
+  const u = units(lib);
+  fs.writeFileSync(path.join(unitDir, 'production-red-alert.service'), u.service);
+  fs.writeFileSync(path.join(unitDir, 'production-red-alert.timer'), u.timer);
+  command('systemctl', ['--user', 'daemon-reload']);
+  command('systemctl', ['--user', 'enable', '--now', 'production-red-alert.timer']);
+  console.log('production-red-alert: installed production-red-alert.timer (5 minutes, error backoff to 1 hour)');
+}
+async function main(args) {
+  if (args[0] === 'install' && args.length === 1) return install();
+  let dryRun = false, runId;
+  for (let i = 0; i < args.length; i++) {
+    if (args[i] === '--dry-run') dryRun = true;
+    else if (args[i] === '--run' && /^\d+$/.test(args[i + 1] || '')) runId = args[++i];
+    else throw new Error('usage: production-red-alert [--dry-run] [--run ID] | install');
+  }
+  if (runId && !dryRun) throw new Error('--run is replay-only; add --dry-run');
+  // Timer and manual writes take the same lock before reading state; dry-run never creates a lock.
+  if (!dryRun && !process.env.PRODUCTION_RED_ALERT_LOCKED) {
+    fs.mkdirSync(STATE, { recursive: true, mode: 0o700 });
+    return process.stdout.write(command('flock', ['-n', path.join(STATE, 'tick.lock'), process.execPath, __filename], {
+      timeout: 240000, env: { ...process.env, PRODUCTION_RED_ALERT_LOCKED: '1' }
+    }));
+  }
+  console.log(JSON.stringify(await tick({ dryRun, runId }), null, 2));
+}
+module.exports = { agent, identity, live, plan, apply, tick, units, install, main };
+if (require.main === module) main(process.argv.slice(2)).catch(e => { console.error(`production-red-alert: ${e.message}`); process.exitCode = 1; });
