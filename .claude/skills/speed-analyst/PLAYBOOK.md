@@ -380,6 +380,20 @@ https://app.hypertask.ai/detail/project-15/7395, PR 1759 (flag `htpr-7395-cached
 
 **Next probe.** The remaining 7.4 s is the phone's main thread (HTPR-7395 CPU profile: React render 5.4 s); HTPR-7560 and research ideas 2, 3 and 5 target it.
 
+### 2026-10-22 afternoon: daily read complete but before today's deploys; two finished branches were stranded again (HTPR-7554, HTPR-7555)
+
+**Daily read.** Complete at 06:17 UTC on 0f0854834, load 8.9, N=5; production is now 52a67016a, so the current deploy is not verified. Milestone 1 misses: phone first-visit board 11744 ms (target 4000), desktop first-visit board 2018 ms (target 1000), phone page navigation 2491 ms (target 2000; no matching 7-day baseline). Met on this run: desktop board-returning 936 ms (was 1079), phone search 1920 ms, phone ticket-cold 2294 ms. No content-time regression over 15%; the five flags are bytes or long tasks (phone board-returning long tasks 728 vs 395 ms, watch). The run says 18 CPUs (VPS) while `speed-measure.timer` is still disabled; the active `speed-check.timer` is the Product Bot check (YPER4-148), not this harness.
+
+**What found the work.** The dispatcher said no free speed ticket. The board search found HTPR-7554 and HTPR-7555 In Progress under Speed Runner since 21:36 UTC yesterday, each with a pushed branch, tests and a flag, but no PR and no log entry. Same failure as 2026-10-21 (HTPR-7406): a session ended between push and PR.
+
+**HTPR-7554 verified live before shipping.** `curl` of https://app.hypertask.ai/login: every manual preload (Inter, Newsreader, IBM Plex Sans) uses a bare `/_next/static/media/...-s.woff2`, while the `next/font` CSS asks for the same file with `?dpl=dpl_...`. Two URLs, two downloads (Inter 48 KB, immutable cache), and the preload never feeds the `@font-face`. PR 1839 adds the deployment tag to the preload href behind `htpr-7554-font-once`.
+
+**HTPR-7555 scope.** The branch caches only the per-query size verdict in `shouldDehydratePersistedQuery` (WeakMap on the query, valid while the data reference is unchanged). `createQueryCacheRecord` still stringifies every kept query and then the whole client on each persist, so this removes one of three stringify passes, not the whole 0.5 s the HTPR-7395 profile charged to persistence. PR 1838, flag `htpr-7555-persist-size-once`.
+
+**Lesson.** Open the PR in the same turn as the first push of a ticket branch, even as a draft; a pushed branch without a PR is invisible to the dispatcher and to `gh pr list`.
+
+**Next probe.** Live on/off for both after deploy (flag forced per sample by rewriting `/api/flags`): 7554 counts font requests on the desktop returning board; 7555 times phone page navigation and the first ticket tap. If 7555 helps but persistence still shows in the tap profile, the next target is `serializePersistedClientWithinBudget` stringifying each query twice.
+
 ## Milliseconds saved scoreboard
 
 Only matched end-to-end before/after evidence earns saved milliseconds; `unproven` is not zero. Do not sum different cohorts or claim forecasts as savings.
