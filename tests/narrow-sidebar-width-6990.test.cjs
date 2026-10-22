@@ -10,11 +10,9 @@ const ts = require("typescript");
 const { chromium } = require("@playwright/test");
 const { compile } = require("@tailwindcss/node");
 const root = path.resolve(__dirname, "..");
-const flagKey = "htpr-6990-narrow-sidebar-width";
-const phoneFlagKey = "htpr-7074-phone-workspace-width";
 const noop = () => null;
 
-function frame(enabled, mobile = false, pathname = "/detail/project-15/6990", phoneEnabled = false) {
+function frame(mobile = false, pathname = "/detail/project-15/6990") {
   const dependencies = {
     react: React,
     "next/navigation": { usePathname: () => pathname },
@@ -22,8 +20,8 @@ function frame(enabled, mobile = false, pathname = "/detail/project-15/6990", ph
     "@/components/Common/Tooltip": { __esModule: true, default: noop },
     "@/lib/contexts/mobileContext": { MobileViewContext: React.createContext(mobile) },
     "@/utils/undoActions/helperFuncs": { cn: (...parts) => parts.filter(Boolean).join(" ") },
-    "@/hooks/useFlag": { useFlag: (key) => { assert.ok([flagKey, phoneFlagKey, "htpr-7055-chat-overlays-ticket"].includes(key)); return key === flagKey ? enabled : key === phoneFlagKey ? phoneEnabled : false; }, useFlagLoaded: () => true },
-    "@/lib/flags/keys": { HTPR_6990_NARROW_SIDEBAR_WIDTH_FLAG: flagKey, HTPR_7074_PHONE_WORKSPACE_WIDTH_FLAG: phoneFlagKey, HTPR_7055_CHAT_OVERLAYS_TICKET_FLAG: "htpr-7055-chat-overlays-ticket" },
+    "@/hooks/useFlag": { useFlag: (key) => { assert.equal(key, "htpr-7055-chat-overlays-ticket"); return false; } },
+    "@/lib/flags/keys": { HTPR_7055_CHAT_OVERLAYS_TICKET_FLAG: "htpr-7055-chat-overlays-ticket" },
   };
   const source = fs.readFileSync(path.join(root, "src/components/AI_CHAT/AI_Chat_Closed_Layout.tsx"), "utf8");
   const js = ts.transpileModule(source, {
@@ -56,44 +54,37 @@ test("narrow desktop reserves no chat width even before viewport hydration, whil
   const browser = await chromium.launch({ headless: true });
   t.after(() => browser.close());
   const page = await browser.newPage();
-  for (const enabled of [false, true]) {
-    for (const panels of [undefined, React.createElement("aside", { style: { width: 420, position: "fixed", right: 0 } }, "Chat")]) {
-      const html = renderToString(workspace(frame(enabled), 420, panels));
-      const css = await styles(html);
-      for (const viewport of [390, 767, 768, 1024, 1440]) {
-        await page.setViewportSize({ width: viewport, height: 844 });
-        await page.setContent(`<style>${css}body{margin:0}</style>${html}`);
-        const measurements = await page.evaluate(() => ({
-          main: document.querySelector("[data-ai-workspace]").getBoundingClientRect().width,
-          slot: document.querySelector("[data-ai-chat-slot]").getBoundingClientRect().width,
-          comments: document.querySelector("[data-comments]").textContent,
-        }));
-        const reserved = enabled && viewport < 768 ? 0 : 420;
-        assert.equal(measurements.main, Math.max(0, viewport - reserved), `${enabled ? "on" : "off"} at ${viewport}px`);
-        assert.equal(measurements.slot, 420, "wide sidebar reservation does not change when chunks load");
-        assert.equal(measurements.comments, "Visible comments");
-      }
+  for (const panels of [undefined, React.createElement("aside", { style: { width: 420, position: "fixed", right: 0 } }, "Chat")]) {
+    const html = renderToString(workspace(frame(), 420, panels));
+    const css = await styles(html);
+    for (const viewport of [390, 767, 768, 1024, 1440]) {
+      await page.setViewportSize({ width: viewport, height: 844 });
+      await page.setContent(`<style>${css}body{margin:0}</style>${html}`);
+      const measurements = await page.evaluate(() => ({
+        main: document.querySelector("[data-ai-workspace]").getBoundingClientRect().width,
+        slot: document.querySelector("[data-ai-chat-slot]").getBoundingClientRect().width,
+        comments: document.querySelector("[data-comments]").textContent,
+      }));
+      const reserved = viewport < 768 ? 0 : 420;
+      assert.equal(measurements.main, Math.max(0, viewport - reserved), `at ${viewport}px`);
+      assert.equal(measurements.slot, 420, "wide sidebar reservation does not change when chunks load");
+      assert.equal(measurements.comments, "Visible comments");
     }
   }
 });
 
-test("flag Off retains the original desktop slot and mobile closed-ticket path", () => {
-  const desktop = new JSDOM(renderToString(workspace(frame(false)))).window.document;
+test("desktop slots protect narrow viewports while mobile closed tickets omit the slot", () => {
+  const desktop = new JSDOM(renderToString(workspace(frame()))).window.document;
   const slot = desktop.querySelector("[data-ai-chat-slot]");
-  assert.equal(slot.className, "shrink-0");
+  assert.equal(slot.className, "shrink-0 max-md:fixed max-md:right-0 max-md:top-0 max-md:z-[51]");
   assert.equal(slot.style.width, "420px");
-  for (const enabled of [false, true]) {
-    const mobile = new JSDOM(renderToString(workspace(frame(enabled, true)))).window.document;
-    assert.equal(mobile.querySelector("[data-ai-chat-slot]"), null);
-    assert.ok(mobile.querySelector("[data-comments]"));
-    if (enabled) {
-      const desktop = new JSDOM(renderToString(workspace(frame(true)))).window.document;
-      assert.ok(desktop.querySelector("[data-ai-chat-slot]").classList.contains("max-md:fixed"), "CSS protects the initial desktop-UA render before viewport hydration");
-    }
-    const closed = new JSDOM(renderToString(workspace(frame(enabled), 0))).window.document;
-    assert.equal(closed.querySelector("[data-ai-chat-slot]").className, "contents");
-    assert.equal(closed.querySelector("[data-ai-chat-slot]").style.width, "");
-  }
+  const mobile = new JSDOM(renderToString(workspace(frame(true)))).window.document;
+  assert.equal(mobile.querySelector("[data-ai-chat-slot]"), null);
+  assert.ok(mobile.querySelector("[data-comments]"));
+  assert.ok(slot.classList.contains("max-md:fixed"), "CSS protects the initial desktop-UA render before viewport hydration");
+  const closed = new JSDOM(renderToString(workspace(frame(), 0))).window.document;
+  assert.equal(closed.querySelector("[data-ai-chat-slot]").className, "contents");
+  assert.equal(closed.querySelector("[data-ai-chat-slot]").style.width, "");
 });
 
 test("oversized persisted sidebars overlay instead of squeezing content and resize without remounting comments", async (t) => {
@@ -112,7 +103,7 @@ test("oversized persisted sidebars overlay instead of squeezing content and resi
     dom.window.close();
   });
   window.innerWidth = 1440;
-  const Frame = frame(true);
+  const Frame = frame();
   await React.act(async () => reactRoot.render(workspace(Frame, 600, React.createElement("aside", null, "Chat"))));
   const comments = container.querySelector("[data-comments]");
   for (const [viewport, overlay] of [[800, true], [939, true], [940, false], [1440, false], [390, true]]) {
