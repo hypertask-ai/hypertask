@@ -54,6 +54,7 @@ function commandHostExpressions(file) {
   function visit(node) {
     if (ts.isJsxExpression(node) && node.expression && ts.isBinaryExpression(node.expression) && hasHost(node.expression)) {
       expressions.push(node.expression.getText(parsed));
+      return;
     }
     ts.forEachChild(node, visit);
   }
@@ -163,7 +164,7 @@ test("board table/kanban, ticket, inbox and search retain one host and their ori
       embedded: false, callback, commandContextOptions: context,
     }, context],
     ["/inbox", "src/app/inbox/Inbox.tsx", { htcCallbackHandler: callback, commandFocusProxy: {} }, undefined],
-    ["/search", "src/app/search/SearchComp.tsx", { handleCommand: callback, includeArchived: true }, {
+    ["/search", "src/app/search/SearchComp.tsx", { handleCommand: callback, includeArchived: true, commandFocusProxy: {} }, {
       context: "Others", searchOptions: { includeArchived: true },
     }],
   ];
