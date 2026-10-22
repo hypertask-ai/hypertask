@@ -31,7 +31,7 @@ import { getServerBoardDocument } from "@/lib/firstScreen/serverBoardDocument";
 import { getServerInboxDocument } from "@/lib/firstScreen/serverInboxDocument";
 import type { BoardDisplay } from "@/lib/firstScreen/boardDisplay";
 import { buildTicketSidebarBootScript, TICKET_SIDEBAR_BOOT_CSS } from "@/lib/ticketSidebarBoot";
-import { HTPR_6990_NARROW_SIDEBAR_WIDTH_FLAG, HTPR_7055_CHAT_OVERLAYS_TICKET_FLAG, HTPR_7530_KEEP_AI_CHAT_CLOSED_FLAG, HTPR_7615_SIDEBAR_FIRST_PAINT_FLAG } from "@/lib/flags/keys";
+import { HTPR_7055_CHAT_OVERLAYS_TICKET_FLAG, HTPR_7530_KEEP_AI_CHAT_CLOSED_FLAG, HTPR_7615_SIDEBAR_FIRST_PAINT_FLAG } from "@/lib/flags/keys";
 
 export async function generateViewport() {
   const device = await isMobileDevice();
@@ -81,7 +81,7 @@ export default async function RootLayout(
 
   const sidebarFirstPaint = analyticsSession ? await isFeatureEnabled(HTPR_7615_SIDEBAR_FIRST_PAINT_FLAG, analyticsSession.id) : false;
   const sidebarFlags = analyticsSession && sidebarFirstPaint ? await Promise.all([
-    HTPR_7530_KEEP_AI_CHAT_CLOSED_FLAG, HTPR_6990_NARROW_SIDEBAR_WIDTH_FLAG, HTPR_7055_CHAT_OVERLAYS_TICKET_FLAG,
+    HTPR_7530_KEEP_AI_CHAT_CLOSED_FLAG, HTPR_7055_CHAT_OVERLAYS_TICKET_FLAG,
   ].map(key => isFeatureEnabled(key, analyticsSession.id))) : null;
 
   const theme = cookieStore.get(authConfig.cookies.theme) ?? {
@@ -150,8 +150,7 @@ export default async function RootLayout(
               dangerouslySetInnerHTML={{
                 __html: buildTicketSidebarBootScript({
                   keepClosed: sidebarFlags[0],
-                  narrowWidth: sidebarFlags[1],
-                  overlayTicket: sidebarFlags[2],
+                  overlayTicket: sidebarFlags[1],
                 }),
               }}
             />

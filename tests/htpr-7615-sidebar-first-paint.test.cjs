@@ -25,7 +25,7 @@ function load(file, mocks = {}) {
 const { buildTicketSidebarBootScript, TICKET_SIDEBAR_BOOT_CSS } = load("src/lib/ticketSidebarBoot.ts", {
   "@/lib/configs/style.config": load("src/lib/configs/style.config.ts"),
 });
-const flags = { keepClosed: true, narrowWidth: true, overlayTicket: true };
+const flags = { keepClosed: true, overlayTicket: true };
 
 function firstPaint(saved, { viewport = 1440, pathname = "/detail/project-8190/26", modes = flags, blocked = false } = {}) {
   const { default: Frame } = load("src/components/AI_CHAT/AI_Chat_Closed_Layout.tsx", {
@@ -67,7 +67,6 @@ test("saved expanded widths, pinning, floating mode and existing flag modes dete
     [{ aiChatSidebarWidthPx: 517 }, { viewport: 1600 }, "reserved", 517],
     [{ aiChatSidebarWidthPx: 280 }, {}, "reserved", 340],
     [{ aiChatSidebarWidthPx: 600 }, {}, "overlay", 600],
-    [{ aiChatSidebarWidthPx: 600 }, { modes: { ...flags, narrowWidth: false } }, "reserved", 600],
     [{ aiChatSidebarWidthPx: 600 }, { modes: { ...flags, overlayTicket: false } }, "reserved", 600],
     [{ aiChatPinned: true, aiChatAutoOpenSuppressed: true }, {}, "reserved", 420],
     [{ openAiChatByDefault: false }, {}, "closed", 420],

@@ -22,11 +22,9 @@ html[data-ticket-sidebar="overlay"] [data-ai-chat-slot] {
 
 export function buildTicketSidebarBootScript({
   keepClosed,
-  narrowWidth,
   overlayTicket,
 }: {
   keepClosed: boolean;
-  narrowWidth: boolean;
   overlayTicket: boolean;
 }): string {
   return `(function(){try{
@@ -37,7 +35,7 @@ export function buildTicketSidebarBootScript({
       (s.aiChatPinned===true||(s.openAiChatByDefault!==false&&s.aiChatAutoOpenSuppressed!==true));
     var width=typeof s.aiChatSidebarWidthPx==='number'&&Number.isFinite(s.aiChatSidebarWidthPx)
       ?Math.max(s.aiChatSidebarWidthPx,${AI_CHAT_SIDEBAR_MIN_PX}):${AI_CHAT_SIDEBAR_DEFAULT_PX};
-    var overlay=${narrowWidth}&&window.innerWidth<Math.max(768,width+(${overlayTicket}?944:340));
+    var overlay=window.innerWidth<Math.max(768,width+(${overlayTicket}?944:340));
     document.documentElement.style.setProperty('--ticket-sidebar-width',width+'px');
     document.documentElement.setAttribute('data-ticket-sidebar',!open?'closed':overlay?'overlay':'reserved');
   }catch(e){}})();`;
