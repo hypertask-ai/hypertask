@@ -5,7 +5,7 @@ import { MobileViewContext } from "@/lib/contexts/mobileContext";
 import { HTPR_6371_MOBILE_SEARCH_FLAG, HTPR_6368_SEARCH_OPERATOR_LOGIC_FLAG, HTPR_7387_SEARCH_OPERATOR_COLOURS_FLAG, HTPR_7563_SEARCH_ESC_FOOTER_FLAG } from "@/lib/flags/keys";
 import { isMobileSearchSubmit, mobileSearchPickerBounds } from "@/lib/search/mobile";
 import { useFlag } from "@/hooks/useFlag";
-import { HTPR_6865_SEARCH_LAYOUT_FLAG, HTPR_6911_SEARCH_ROW_HIGHLIGHT_FLAG, HTPR_6878_SEARCH_LABEL_SCOPE_FLAG, HTPR_6879_SEARCH_ESC_BACK_FLAG, HTPR_6880_SEARCH_COMMENTER_FLAG, HTPR_6994_SEARCH_ESC_LEAVES_FLAG } from "@/lib/flags/keys";
+import { HTPR_6865_SEARCH_LAYOUT_FLAG, HTPR_6878_SEARCH_LABEL_SCOPE_FLAG, HTPR_6879_SEARCH_ESC_BACK_FLAG, HTPR_6880_SEARCH_COMMENTER_FLAG, HTPR_6994_SEARCH_ESC_LEAVES_FLAG } from "@/lib/flags/keys";
 import { MentionListRows } from "@/components/AI_CHAT/MentionListComp";
 import { candidateQuery, chipQuery, searchChipText, splitSearchChips } from "@/lib/search/chips";
 import { operatorMatches, parseSearchTokens, SEARCH_OPERATORS, LOGIC_OPERATORS, type Names, type SearchToken } from "@/lib/search/operators";
@@ -36,7 +36,6 @@ export default function SearchChipsInput({ value, onChange, onRun, boardId, inpu
   const composingRef = useRef(false);
   const [mobileBounds, setMobileBounds] = useState<(ReturnType<typeof mobileSearchPickerBounds> & { left: number; width: number }) | null>(null);
   const layoutFlagEnabled = useFlag(HTPR_6865_SEARCH_LAYOUT_FLAG);
-  const rowHighlightEnabled = useFlag(HTPR_6911_SEARCH_ROW_HIGHLIGHT_FLAG);
   const layoutEnabled = layoutFlagEnabled && layoutRequested;
   const labelScopeFlagEnabled = useFlag(HTPR_6878_SEARCH_LABEL_SCOPE_FLAG);
   const labelScopeEnabled = labelScopeFlagEnabled && layoutEnabled;
@@ -424,8 +423,8 @@ export default function SearchChipsInput({ value, onChange, onRun, boardId, inpu
       <button key={`${row.kind}-${row.operator ?? ''}-${row.id}`} id={`mention-button-${index}`} type="button" role="option"
         aria-selected={row === selectedRow} onPointerDown={(event) => { if (mobileEnabled) event.preventDefault(); }} onMouseEnter={() => setSelectedIndex(index)} onClick={() => choose(row)}
         onKeyDown={(event) => { if (event.key === 'Enter' || event.key === ' ') event.stopPropagation(); }}
-        data-search-layout-row={rowHighlightEnabled ? '' : undefined}
-        className={`grid w-full min-w-0 ${mobileEnabled ? "min-h-[44px] " : ""}grid-cols-1 gap-1 py-2 text-left text-dense text-white-black ${rowHighlightEnabled ? '' : `rounded-sm hover:bg-active-elementBg ${row === selectedRow ? 'bg-active-elementBg' : ''}`} ${row.email ? '@md:grid-cols-2 @md:gap-4' : ''}${labelScopeEnabled && row.count === 0 ? ' opacity-50' : ''}`}>
+        data-search-layout-row=""
+        className={`grid w-full min-w-0 ${mobileEnabled ? "min-h-[44px] " : ""}grid-cols-1 gap-1 py-2 text-left text-dense text-white-black ${row.email ? '@md:grid-cols-2 @md:gap-4' : ''}${labelScopeEnabled && row.count === 0 ? ' opacity-50' : ''}`}>
         {tip ? <span><strong className="block font-semibold">{tip.example}</strong><span className="text-meta text-text-light-gray">{tip.meaning}</span></span>
           : recent ? <span className="flex min-w-0 flex-wrap items-center gap-1 break-words">{recent.chips.map((chip, i) => <span key={i} className={`min-w-0 max-w-full break-all rounded-sm px-2 py-1 text-micro ${searchFilterColour(chip.operator)}`}>{chipText(chip)}</span>)}<span className="min-w-0 break-all">{recent.text}</span></span>
           : row.kind === 'ai' ? <span className="flex min-w-0 gap-2"><span className="shrink-0 font-semibold text-hypertasks-ai-purple">Ask AI</span><span className="min-w-0 break-words">{row.name}</span></span>
