@@ -235,6 +235,7 @@
     "htpr-7531-escape-own-board": "EVERYONE",
     "htpr-7537-first-column-padding": "EVERYONE",
     "htpr-7544-ctrlj-sidebar-on-new-task": "EVERYONE",
+    "htpr-7559-enter-runs-search": "EVERYONE",
     "htpr-7560-flag-reader-subscribe": "OFF"
   }
 }
