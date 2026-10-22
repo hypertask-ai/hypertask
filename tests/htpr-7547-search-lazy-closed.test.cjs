@@ -10,7 +10,7 @@ const ts = require('typescript');
 const root = path.resolve(__dirname, '..');
 const flag = 'htpr-7547-search-lazy-closed';
 
-async function withSearch({ enabled, layout = true, mobile = true, delayed = false, loaded = true, hydrate = false, apple = false, suspendPanel = false, tab = 'search', importFailures = 0 }, check) {
+async function withSearch({ enabled, layout = true, mobile = true, delayed = false, loaded = true, hydrate = false, apple = false, suspendPanel = false, tab = 'search', importFailures = 0, shortcuts = false, compose = true, pathname = '/search' }, check) {
   const dom = new JSDOM('<div id="root"></div>', { url: 'https://example.test/search' });
   const globals = ['window', 'document', 'IS_REACT_ACT_ENVIRONMENT'].map((key) => [key, Object.getOwnPropertyDescriptor(global, key)]);
   Object.assign(global, { window: dom.window, document: dom.window.document, IS_REACT_ACT_ENVIRONMENT: true });
@@ -19,6 +19,8 @@ async function withSearch({ enabled, layout = true, mobile = true, delayed = fal
   let imports = 0;
   let renders = 0;
   let setOpen;
+  let setCommandsState;
+  let commandsState;
   let setArchived;
   let setEnabled;
   let setLoaded;
@@ -30,9 +32,10 @@ async function withSearch({ enabled, layout = true, mobile = true, delayed = fal
   let bufferedInput;
   let pendingEnter;
   const showCommandsAtom = {};
-  function realModule(relative) {
+  function realModule(relative, dependencies = {}) {
     const filename = path.join(root, relative);
     const mod = new Module(filename, module);
+    mod.require = (id) => Object.hasOwn(dependencies, id) ? dependencies[id] : require(id);
     mod._compile(ts.transpileModule(fs.readFileSync(filename, 'utf8'), { compilerOptions: { module: ts.ModuleKind.CommonJS } }).outputText, filename);
     return mod.exports;
   }
@@ -42,20 +45,22 @@ async function withSearch({ enabled, layout = true, mobile = true, delayed = fal
     'lucide-react': { Check: () => null },
     '@/lib/configs/search.config': { searchConfig: { elementIds: { results: { id: 'tasks-list', childKeys: 'task' }, history: { id: 'history-list' }, input: { id: 'search-input' } } } },
     '@/hooks/Search/useSearch': { useSearch: () => {
-      const [show, updateOpen] = React.useState(false);
+      const [showCommands, updateCommands] = React.useState({ show: false, paletteTab: tab });
       const [includeArchived, updateArchived] = React.useState(false);
-      setOpen = updateOpen;
+      setCommandsState = updateCommands;
+      commandsState = showCommands;
+      setOpen = (update) => updateCommands((prev) => ({ ...prev, show: typeof update === 'function' ? update(prev.show) : update }));
       setArchived = updateArchived;
       return {
         availableSearchBoards: [], setSelectedIndex() {}, selectedIndex: 0, tasksInputRef: React.useRef(null),
         inputValue: 'QA', responseMessage: 'None', typedTasks: [{ taskId: 43, projectId: 6859, projectTitle: 'QA Sandbox', ticketNumber: 'QASA-43', taskTitle: 'Fixture result', highlight: {} }],
         isSearchDraft: false, ulRef: React.useRef(null), handleLinkClick() {}, handleMouseEnter() {}, handleMouseLeave() {}, handleMouseMove() {},
-        searchCache: { history: [] }, selectedHistory: null, updateSearchHistory() {}, showCommands: { show, paletteTab: tab }, setInputValue() {}, liSelectedRef: React.useRef(null),
+        searchCache: { history: [] }, selectedHistory: null, updateSearchHistory() {}, showCommands, setInputValue() {}, liSelectedRef: React.useRef(null),
         tabs: ['All'], activeSplit: 0, updateSplitAndTasks() {}, results: { All: [{}] }, includeArchived, setIncludeArchivedResults: updateArchived,
       };
     } },
     '@/utils/undoActions/helperFuncs': { cn: (...args) => args.filter((arg) => typeof arg === 'string').join(' ') },
-    '@/hooks/useFlag': { useFlag: (key) => key === flag ? loaded && enabled : layout, useFlagLoaded: () => loaded },
+    '@/hooks/useFlag': { useFlag: (key) => key === flag ? loaded && enabled : key === 'HTPR_6929_COMPOSE_TASK_WRITER_FLAG' ? compose : layout, useFlagLoaded: () => loaded },
     'next/navigation': { useRouter: () => ({ push() {} }), useSearchParams: () => new URLSearchParams() },
     '@/lib/aiChatDisplayMode': { buildFullScreenChatPath: () => '/chat' },
     '@/lib/flags/keys': new Proxy({}, { get: (_target, key) => key === 'HTPR_7547_SEARCH_LAZY_CLOSED_FLAG' ? flag : String(key) }),
@@ -64,13 +69,18 @@ async function withSearch({ enabled, layout = true, mobile = true, delayed = fal
     '@/lib/search/autocomplete': { highlightedSearchSnippet: () => [], highlightedTitle: (text) => [{ text, matched: false }] },
     '@/components/Labels/LabelWrapper': ({ children }) => children,
     '@/lib/contexts/mobileContext': { MobileViewContext: React.createContext(mobile) },
-    '@/lib/state': { useRecoilValue: () => false, useSetRecoilState: (atom) => atom === showCommandsAtom ? (update) => setOpen((show) => update({ show }).show) : () => {} },
+    '@/lib/state': { useRecoilValue: () => false, useSetRecoilState: (atom) => atom === showCommandsAtom ? (update) => setCommandsState(update) : () => {} },
     '@/store': { aiChatPendingPromptAtom: {}, appShellRailAtom: {}, showCommandsAtom },
     '@/components/ProviderGlobal/useGlobalUIState': { useGlobalUIState: () => ({ openAIChatInterface() {} }) },
     '@/components/PageComponents/Kanban/HeaderComponents/AppShellRail': () => null,
     './SearchChipsInput': ({ value }) => React.createElement('input', { id: 'search-input', value, readOnly: true }),
     './search-autocomplete.css': {},
   };
+  const { useCommandCenterShortcut } = realModule('src/hooks/General/useCommandCenterShortcut.ts', {
+    ...stubs,
+    '@/lib/constants/commandCenterShortcut': realModule('src/lib/constants/commandCenterShortcut.ts'),
+    '@/models/enums': { CommandMode: { Command: 0 } },
+  });
   const filename = path.join(root, 'src/app/search/SearchComp.tsx');
   const mod = new Module(filename, module);
   mod.filename = filename;
@@ -104,6 +114,7 @@ async function withSearch({ enabled, layout = true, mobile = true, delayed = fal
       const [isLoaded, updateLoaded] = React.useState(loaded);
       loaded = isLoaded;
       setLoaded = updateLoaded;
+      useCommandCenterShortcut(shortcuts ? 2343 : null, apple, pathname, false, false, () => setCommandsState((prev) => ({ show: !prev.show, mode: 0 })));
       return React.createElement(React.Suspense, { fallback: React.createElement('div', { id: 'outer-fallback' }, 'Search hidden') },
         React.createElement(SearchComp, { _searchTerm: 'QA', _includeArchived: false, currentUser: { id: 2343 } }));
     }
@@ -126,6 +137,8 @@ async function withSearch({ enabled, layout = true, mobile = true, delayed = fal
       resultsMarkup: () => container.querySelector('.search-input').outerHTML,
       hydrationErrors, serverMarkup, bufferedInput: () => bufferedInput, pendingEnter: () => pendingEnter,
       proxy: () => document.getElementById('search-command-focus-proxy'),
+      paletteTab: () => commandsState.paletteTab,
+      pressShortcut: (key = 'k') => React.act(async () => document.activeElement.dispatchEvent(new dom.window.KeyboardEvent('keydown', { key, code: key === 'j' ? 'KeyJ' : 'KeyK', ctrlKey: !apple, metaKey: apple, bubbles: true, cancelable: true }))),
       pressProxy: (key, extra = {}) => React.act(async () => document.getElementById('search-command-focus-proxy').dispatchEvent(new dom.window.KeyboardEvent('keydown', { key, bubbles: true, cancelable: true, ...extra }))),
       open: () => React.act(async () => setOpen(true)), close: () => React.act(async () => setOpen(false)),
       release: () => React.act(async () => release()),
@@ -262,6 +275,88 @@ test('pending cold opens preserve Escape and platform command shortcut dismissal
         assert.doesNotMatch(markup(), /id="commands"/, 'a resolved import must not reopen dismissed commands');
       });
     }
+  }
+});
+
+
+test('HTPR-7547 global Ctrl/Cmd+K closes a cold Search palette and a third chord reopens it', async () => {
+  for (const apple of [true, false]) {
+    for (const compose of [true, false]) {
+      for (const reopenBeforeRelease of [true, false]) {
+        await withSearch({ enabled: true, delayed: true, apple, compose, shortcuts: true }, async ({ pressShortcut, proxy, imports, renders, markup, resultsMarkup, release }) => {
+          const baseline = resultsMarkup();
+          await pressShortcut();
+          assert.equal(imports(), 1);
+          assert.equal(renders(), 0, 'the real capture hook opens before the command chunk resolves');
+          assert.ok(proxy());
+          assert.equal(document.activeElement, proxy());
+          await pressShortcut();
+          assert.equal(proxy(), null, 'the second chord must dismiss through the global capture handler');
+          assert.equal(resultsMarkup(), baseline);
+          if (reopenBeforeRelease) {
+            await pressShortcut();
+            assert.ok(proxy(), 'the third chord opens again while the chunk is still pending');
+            assert.equal(document.activeElement, proxy());
+            assert.equal(renders(), 0);
+          }
+          await release();
+          if (!reopenBeforeRelease) {
+            assert.equal(proxy(), null);
+            assert.equal(renders(), 0, 'the late import cannot mount a dismissed palette');
+            assert.doesNotMatch(markup(), /id="commands"/);
+            await pressShortcut();
+          }
+          assert.ok(document.getElementById('commands'), 'the third chord loads and displays commands');
+          assert.equal(imports(), 2, 'reopening retries the cancelled import effect');
+          assert.equal(resultsMarkup(), baseline);
+        });
+      }
+    }
+  }
+});
+
+
+test('HTPR-7547 global single Ctrl/Cmd+K still opens and Escape closes before or after loading', async () => {
+  for (const apple of [true, false]) {
+    for (const releaseBeforeEscape of [true, false]) {
+      await withSearch({ enabled: true, delayed: true, apple, shortcuts: true }, async ({ pressShortcut, pressProxy, proxy, renders, markup, resultsMarkup, release }) => {
+        const baseline = resultsMarkup();
+        await pressShortcut();
+        assert.ok(proxy());
+        assert.equal(document.activeElement, proxy());
+        assert.equal(renders(), 0);
+        if (releaseBeforeEscape) {
+          await release();
+          assert.ok(document.getElementById('commands'));
+        }
+        await pressProxy('Escape', { code: 'Escape' });
+        assert.equal(proxy(), null);
+        await release();
+        assert.doesNotMatch(markup(), /id="commands"/);
+        assert.equal(resultsMarkup(), baseline);
+      });
+    }
+  }
+});
+
+
+test('HTPR-7547 global shortcut keeps existing behavior off, unresolved, on other routes and in Compose', async () => {
+  for (const options of [
+    { enabled: false },
+    { enabled: true, loaded: false },
+    { enabled: true, pathname: '/inbox' },
+    { enabled: true, initialKey: 'j' },
+  ]) {
+    await withSearch({ ...options, delayed: true, shortcuts: true }, async ({ pressShortcut, proxy, paletteTab, release }) => {
+      await pressShortcut(options.initialKey);
+      assert.ok(proxy());
+      if (options.initialKey === 'j') assert.equal(paletteTab(), 'compose');
+      await pressShortcut();
+      assert.ok(proxy(), 'the scoped fix must not change existing open/search-switch behavior');
+      assert.equal(paletteTab(), 'search');
+      await release();
+      assert.ok(document.getElementById('commands'));
+    });
   }
 });
 

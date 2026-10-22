@@ -1,7 +1,7 @@
 import { useEffect } from "react";
 import { isCommandCenterShortcut, isComposePaletteShortcut } from "@/lib/constants/commandCenterShortcut";
 import { useFlag } from "@/hooks/useFlag";
-import { HTPR_6929_COMPOSE_TASK_WRITER_FLAG } from "@/lib/flags/keys";
+import { HTPR_6929_COMPOSE_TASK_WRITER_FLAG, HTPR_7547_SEARCH_LAZY_CLOSED_FLAG } from "@/lib/flags/keys";
 import { useSetRecoilState } from "@/lib/state";
 import { showCommandsAtom } from "@/store";
 import { CommandMode } from "@/models/enums";
@@ -15,6 +15,7 @@ export function useCommandCenterShortcut(
   toggleShowCommands: () => void,
 ) {
   const composeEnabled = useFlag(HTPR_6929_COMPOSE_TASK_WRITER_FLAG);
+  const lazyClosedSearchCommands = useFlag(HTPR_7547_SEARCH_LAZY_CLOSED_FLAG);
   const setShowCommands = useSetRecoilState(showCommandsAtom);
   useEffect(() => {
     const handleCommandCenterShortcut = (e: KeyboardEvent) => {
@@ -23,7 +24,11 @@ export function useCommandCenterShortcut(
       if (composeEnabled && isComposePaletteShortcut(e, isApple, pathname)) {
         e.preventDefault();
         e.stopImmediatePropagation();
-        setShowCommands({ show: true, mode: CommandMode.Command, paletteTab: e.code === "KeyJ" ? "compose" : "search" });
+        const closePendingSearch = lazyClosedSearchCommands && pathname === "/search" && e.code === "KeyK" &&
+          (e.target as HTMLElement | null)?.id === "search-command-focus-proxy";
+        setShowCommands((prev) => closePendingSearch && prev.paletteTab === "search"
+          ? { ...prev, show: false }
+          : { show: true, mode: CommandMode.Command, paletteTab: e.code === "KeyJ" ? "compose" : "search" });
         return;
       }
       if (!isCommandCenterShortcut(e, isApple, pathname)) return;
@@ -42,6 +47,7 @@ export function useCommandCenterShortcut(
     showEmailVerificationModal,
     toggleShowCommands,
     composeEnabled,
+    lazyClosedSearchCommands,
     setShowCommands,
   ]);
 }
