@@ -13,7 +13,6 @@ import { EstimateConstants, PriorityConstants } from "@/lib/constants/constants"
 import {
   HTPR_6938_MY_TASKS_ICON_CONTROLS_FLAG,
   HTPR_6930_MY_TASKS_KANBAN_REUSE_FLAG,
-  HTPR_6567_COMMAND_SCOPE_PICKER_FLAG,
   MY_TASKS_FILTER_PARITY_FLAG,
   MY_TASKS_SCOPES_FLAG,
   MY_TASKS_SNOOZE_FLAG,
@@ -151,8 +150,6 @@ const MyTasksViewControls = ({
   const iconControlsEnabled = iconControlsFlag && variant === "icons";
   const filterParityEnabled = useFlag(MY_TASKS_FILTER_PARITY_FLAG);
   const kanbanReuseEnabled = useFlag(HTPR_6930_MY_TASKS_KANBAN_REUSE_FLAG);
-  const commandScopePickerFlag = useFlag(HTPR_6567_COMMAND_SCOPE_PICKER_FLAG);
-  const commandScopePickerEnabled = commandScopePickerFlag || kanbanReuseEnabled;
   const myTasksTableColumnsFlag = useFlag(MY_TASKS_TABLE_COLUMNS_FLAG);
   const myTasksScopesFlag = useFlag(MY_TASKS_SCOPES_FLAG);
   const myTasksSnoozeFlag = useFlag(MY_TASKS_SNOOZE_FLAG);
@@ -177,7 +174,7 @@ const MyTasksViewControls = ({
   useClickOutside(groupRef, () => setGroupOpen(false));
 
   useEffect(() => {
-    if (!commandScopePickerEnabled || !myTasksViewsEnabled || !filterParityEnabled) return;
+    if (!myTasksViewsEnabled || !filterParityEnabled) return;
     const openScope = () => {
       setScopeOpen(true);
       setInvolvementOpen(false);
@@ -187,7 +184,7 @@ const MyTasksViewControls = ({
     };
     window.addEventListener("my-tasks-scope-picker", openScope);
     return () => window.removeEventListener("my-tasks-scope-picker", openScope);
-  }, [commandScopePickerEnabled, myTasksViewsEnabled, filterParityEnabled]);
+  }, [myTasksViewsEnabled, filterParityEnabled]);
 
   useEffect(() => {
     if (!kanbanReuseEnabled) return;
@@ -250,17 +247,12 @@ const MyTasksViewControls = ({
     snoozeEnabled && config.filters.showSnoozed ? true : null,
   ].filter((value) => value !== null).length;
 
-  const kanbanFilterCount = myTasksParityFilterCount(config) + (commandScopePickerEnabled ? [
+  const kanbanFilterCount = myTasksParityFilterCount(config) + [
     config.filters.sectionIds.length > 0,
     config.filters.showDone,
     snoozeEnabled && config.filters.showSnoozed,
-  ].filter(Boolean).length : 0);
-  const scopeCount = commandScopePickerEnabled ? Number(config.boardIds !== null) : [
-    config.boardIds,
-    config.filters.sectionIds.length ? config.filters.sectionIds : null,
-    config.filters.showDone ? true : null,
-    snoozeEnabled && config.filters.showSnoozed ? true : null,
-  ].filter((value) => value !== null).length;
+  ].filter(Boolean).length;
+  const scopeCount = Number(config.boardIds !== null);
 
   const updateFilters = (filters: Partial<MyTasksViewConfig["filters"]>) =>
     onChange({ ...config, filters: { ...config.filters, ...filters } });
@@ -343,57 +335,6 @@ const MyTasksViewControls = ({
     typeof config.filters.dueDate === "object" && config.filters.dueDate
       ? "custom"
       : (config.filters.dueDate ?? "");
-
-  const scopePanel = (
-    <div className="absolute right-0 top-full z-40 mt-1 max-h-[min(72vh,620px)] w-[min(92vw,420px)] overflow-y-auto rounded-[5px] bg-modalBackground p-4 shadow-md">
-      <div className="grid gap-5">
-        <Field label="Boards">
-          <CheckRow
-            checked={config.boardIds === null}
-            label="All boards"
-            onChange={() => setBoards(kanbanReuseEnabled && config.boardIds === null ? [] : null)}
-          />
-          <div className="max-h-36 overflow-y-auto">
-            {boards.map((board) => (
-              <CheckRow
-                key={board.id}
-                checked={selectedBoardIds.includes(board.id)}
-                label={board.title}
-                onChange={() => toggleBoard(board.id)}
-              />
-            ))}
-          </div>
-        </Field>
-
-        <Field label="Columns">
-          <div className="max-h-44 overflow-y-auto">
-            {selectedBoards.map((board) => (
-              <div key={board.id} className="mb-2">
-                <p className="px-1 text-micro text-text-light-gray">{board.title}</p>
-                {board.sections.map((section) => (
-                  <CheckRow
-                    key={section.id}
-                    checked={config.filters.sectionIds.includes(section.id)}
-                    label={section.title}
-                    onChange={() => toggleNumber("sectionIds", section.id)}
-                  />
-                ))}
-              </div>
-            ))}
-          </div>
-        </Field>
-
-        <Field label="Completed tasks">
-          <CheckRow
-            checked={config.filters.showDone}
-            label="Show done"
-            onChange={() => updateFilters({ showDone: !config.filters.showDone })}
-          />
-        </Field>
-        {snoozeFilterField}
-      </div>
-    </div>
-  );
 
   if (!myTasksViewsEnabled && !timeGroupOn) return null;
 
@@ -560,7 +501,7 @@ const MyTasksViewControls = ({
               )}
             </button>
           )}
-            {scopeOpen && (commandScopePickerEnabled ? (
+            {scopeOpen && (
               <AssignModal
                 assignees={[]}
                 title="Scope"
@@ -573,7 +514,7 @@ const MyTasksViewControls = ({
                   onSelect: (id) => id === null ? setBoards(kanbanReuseEnabled && config.boardIds === null ? [] : null) : toggleBoard(id),
                 }}
               />
-            ) : scopePanel)}
+            )}
           </div>
 
           {iconControlsEnabled ? (
