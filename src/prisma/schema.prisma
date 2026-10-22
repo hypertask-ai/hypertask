@@ -840,6 +840,9 @@ model Project {
   pages                  Page[]
   createdAt              DateTime                 @default(now())
   seeded                 Boolean                  @default(false)
+  firstTaskPointerTaskId  Int?
+  firstTaskPointerSectionId Int?
+  firstRealTaskCreatedAt  DateTime?
   members                Member[]
   sections               String[]                 @default(["Todo", "Doing", "Done"])
   section                Section[]

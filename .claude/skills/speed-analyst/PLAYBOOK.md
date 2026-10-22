@@ -313,6 +313,53 @@ https://app.hypertask.ai/detail/project-15/7502, flag `htpr-7502-search-once`.
 
 **Next probe.** Phone search in the daily harness is 2.1 s against the 2.0 s milestone 1 target, with long tasks of about 1 s; profile its main thread at load below 13.
 
+### 2026-10-22: first weekly research round; flag readers redraw after load (HTPR-7560)
+
+https://app.hypertask.ai/detail/project-15/7560.
+
+**Daily read.** Can't verify. The VPS `speed-measure.timer` was stopped on purpose on 2026-10-21 at 22:39 local (no live browsers or tests on the VPS, Valentin 2026-10-21). The replacement GitHub schedule (https://app.hypertask.ai/detail/project-4060/545, PR 1755) waits on the `live-qa` environment from https://app.hypertask.ai/detail/project-4060/544. Its red checks were the GitHub app rate limit at 20:08 UTC, not the code. The last complete run is still 2026-10-21 07:42 UTC. Do not restart the VPS timer to fill the gap.
+
+**Installed (origin/production 12ed2d28c).** Next 16.4.0 (webpack, no React Compiler), React 19.3.0, Prisma 7.10.0 with adapter-pg and pg 8.22.0, react-query 5.104.1, jotai 3.0.1, Node 24.x. Candidates: Next 16.4.2 (backports only), Prisma 7.10.1 (bugfixes), babel-plugin-react-compiler 1.0 (not installed).
+
+**Sources (dated).** Next 16.4 post 2026-10-06 and v16.4.2 2026-10-15; Next 16.3 "Instant Navigations" 2026-06-25; React 19.3 2026-09-09; React 19.2 Activity 2025-10-01; React Compiler 1.0 2025-10-07; perfplanet "React 19.2 further advances INP" 2025-12-10; "How is Linear so fast" (performance.dev) 2026-05-03; Vercel changelog 2026-10-20; Prisma releases 2026-10-19. Full report: private scratch notes of this round.
+
+**Ideas scored (gain/cost/risk, priority = gain/(cost x risk)).**
+
+| # | Idea | G/C/R | Priority | Product decision |
+|---|---|---|---|---|
+| 1 | Flag readers subscribe per key; same values after load keep the same object | 4/2/2 | 1.00 | none, filed as HTPR-7560 |
+| 2 | Drop the unused `showCreateTaskModalAtom` read on every card | 1/1/1 | 1.00 | none |
+| 3 | Navigate hook reads the address at click time, not `usePathname` per card | 2/1/2 | 1.00 | none |
+| 4 | Lift per-card drafts and timer queries to the board | 2/2/2 | 0.50 | none |
+| 5 | Probe whether the board remounts on a tap (`CachedTaskDetailNavigation.tsx`), then keep it with `<Activity mode="hidden">` | 4/3/3 | 0.44 | yes, board kept in memory |
+| 6 | React Compiler, annotation mode on card and section | 3/3/3 | 0.33 | build time risk (HTPR-6163) |
+| 7 | Mount `Draggable` only on drag intent | 3/3/4 | 0.25 | none if drag identical |
+| 8 | Activity boundaries around board chrome for selective hydration | 2/3/3 | 0.22 | none |
+
+**Rejected this round.** Cache Components and partial prefetching: the board renders client-side data, migration cost 5. Turbopack build: bytes are not the limiter (HTPR-7395). Vercel WebSockets in place of Pusher: no render gain and a price decision. A Linear-style sync engine: rewrite scale.
+
+**Why idea 1.** Both measured limiters are React render CPU: react-dom 4.8 s on the phone board, and 5.4 s of React in the 10.8 s tap. In `src/hooks/useFlag.tsx` the context value moves from `seed.values` to a new `query.data` object with the same values after hydration. Every `useFlag` also reads `useHydrated`. So all readers (399 calls in 183 files, several per card) redraw once after load, and again on a first visit when `/api/flags` lands. The gain is an estimate until the ABAB runs.
+
+**Trap.** The research helper proposed a local production build to measure. Builds are banned on the VPS now; measure live by switching the server flag for QA 2343 between samples, or with the GitHub run once YPER4-545 lands.
+
+**Next probe.** HTPR-7560 ABAB on the phone board. Then idea 5 step 0: a no-code live probe of whether `#kanban-page-container` survives the tap.
+
+### 2026-10-22 morning: daily read still Can't verify; the research entry sat on a branch
+
+**Daily read.** Can't verify. `measure.mjs --latest` returns the failed 2026-10-21 11:23 UTC run; the timer is still off on purpose, and no run has happened since. Last complete run 2026-10-21 07:42 UTC on ee3c49c3c. Production is now 4b51e2e84.
+
+**What was stranded.** The research entry above was committed to branch `htpr-7560-flag-readers` and pushed, but Runner 4 took HTPR-7560 and merged its code as PR 1799 from another branch, so the entry never reached production. A playbook entry riding in a ticket's code PR is lost when someone else ships that ticket. Land playbook entries in their own small PR.
+
+**Second research round: not run.** The last one finished 6 hours earlier; its ranked queue (ideas 2 to 8) still stands. Nothing on the live site was measured since, so a new round would only re-read the same sources.
+
+**Open speed work, all waiting on live measurement.**
+- HTPR-7395, PR 1759: cached ticket shows its description before the editor (flag `htpr-7395-cached-static-first`). Required checks green; `ux-signoff` is red only because the gate fires on any `src/components/` path and is not required.
+- HTPR-7547, PR 1763: phone search loads closed tools on open. Conflicts with production.
+- HTPR-7560, PR 1799 (Runner 4): merged; its ABAB has not run.
+- YPER4-545, PR 1755: the GitHub speed schedule. It skips with a notice until the `live-qa` environment (YPER4-544, Runner 6), the read-only deploy key and the age key pair exist; its red checks were the review rate limit, rerun.
+
+**Next probe.** Merge PR 1755 so the schedule exists, then the first GitHub run starts a new baseline (`conditions.runner: github-actions`, not comparable with VPS runs). HTPR-7560, 7395 and 7547 get their on/off numbers from it.
+
 ## Milliseconds saved scoreboard
 
 Only matched end-to-end before/after evidence earns saved milliseconds; `unproven` is not zero. Do not sum different cohorts or claim forecasts as savings.
@@ -354,6 +401,7 @@ Confirmed, comparable saved-ms total in this seed: **not established**. Future e
 | Re-baseline phone daily read | Profile fixed 2026-10-11; older phone days not comparable | Run the daily harness at host load below 12, record as the new phone baseline |
 | Live description sooner after a server description (HTPR-7367) | Controls arrive about 1 s later with the server description | Time the editor chunk against the live swap; if it gates the transition, nest a Suspense with the static frame as fallback; ABAB phone N=5 |
 | Account-based flag A/B on a shared board | HTPR-6934 verdict pending | Seed inboxes for both accounts, run desktop and inbox when load is low |
+| Flag readers redraw after load (HTPR-7560) | `useFlag` context swaps to an equal new object after hydration; 399 readers | Per-key subscription behind a server flag, live ABAB phone N=5, render-count test |
 | Name the React work in a phone tap from the board (HTPR-7395) | Tap window is 5.4 s React, 1.4 s module eval, 1.2 s idle of 10.8 s | Local production build with source maps, phone profile, CPU profile the tap; then defer the pointerdown Firebase and emoji warm until the ticket paints, ABAB N=5 at load under 20 |
 
 ## Weekly research seed and experiment queue

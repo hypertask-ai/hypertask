@@ -106,7 +106,7 @@ const nextConfig = {
     // Otherwise webpack stays in the main process through the peak (YPER4-184).
     webpackBuildWorker: true,
     webpackMemoryOptimizations: true,
-    cpus: 2,
+    cpus: 1,
     // The smoke build runs server tracing beside the client compiler to stay
     // below ten minutes. Production keeps tracing sequential to limit memory.
     parallelServerBuildTraces: process.env.CORE_APP_SMOKE === "true",

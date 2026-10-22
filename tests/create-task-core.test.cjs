@@ -15,9 +15,10 @@ function stubModule(relativePath, exports) {
 
 const prisma = {
   task: {
-    create: async ({ data }) => {
+    create: async ({ data, include }) => {
       calls.taskData = data;
-      return { id: 99, ...data, project: { teamId: 1 }, priority: null };
+      assert.equal(include.project.select.firstTaskPointerTaskId, true);
+      return { id: 99, ...data, project: { teamId: 1, firstTaskPointerTaskId: 71 }, priority: null };
     },
   },
   team_Activity: { update: async (options) => { calls.teamActivity = options; } },
@@ -35,6 +36,7 @@ stubModule("src/lib/mcp/webhooks/taskEvents.ts", {
   createTaskWithBoardWebhookOutbox: async (db, actor, callback) => {
     calls.boardActor = actor;
     const result = await callback(db);
+    calls.firstTaskPointerTaskId = result.firstTaskPointerTaskId;
     return { ...result, boardWebhookDeliveryIds: ["delivery-1"] };
   },
 });
@@ -89,6 +91,8 @@ for (const [name, options, expectedAgentId, assignmentResult] of [
     assert.equal(calls.taskData.agentId, expectedAgentId);
     assert.equal(result.task.agentId, expectedAgentId);
     assert.equal(result.task.ticketNumber, "HTPR-11");
+    assert.equal(calls.firstTaskPointerTaskId, 71);
+    assert.deepEqual(result.task.project, { teamId: 1 });
     assert.equal(calls.taskData.assignees, undefined);
     assert.equal(calls.taskData.assigneeId, undefined);
     assert.deepEqual(calls.boardActor, actor);
