@@ -3,8 +3,9 @@ import { linkifyHtml } from "@/utils/helperFunctions/linkifyHtml";
 
 const TAG = /<(\/?)([a-zA-Z][a-zA-Z0-9]*)((?:\s+[^<>]*)?)\/?>/g;
 const BLOCKS = new Set(["p", "h1", "h2", "h3", "ul", "ol", "li"]);
-const INLINE = new Set(["strong", "b", "em", "i", "u", "s", "a", "br"]);
+const INLINE = new Set(["strong", "b", "em", "i", "u", "s", "a", "br", "mark"]);
 const LINK_ATTRS = /^\s+href="(?:https?:\/\/|mailto:|\/)[^"<>]*"(?:\s+target="_blank")?(?:\s+rel="[^"<>]*")?\s*$/i;
+const MARK_ATTRS = /^ data-color="#([\da-f]{6})" style="background-color: rgb\((\d{1,3}), (\d{1,3}), (\d{1,3})\); color: inherit;"$/i;
 const RAW_BRACKET = /[<>]/;
 
 const LOOSE_WHITESPACE = /[\n\r\t ​]|\s{2}|<(?:p|li|h[1-3])>\s|\s<\/(?:p|li|h[1-3])>|<\/?(?:p|h[1-3]|ul|ol|li)>\s+<|<br\s*\/?>\s|\s<br/i;
@@ -17,12 +18,13 @@ function unwrapBareDocument(html: string): string | null {
   return /<\/?(?:html|head|body)\b/i.test(match[1]) ? null : match[1].trim();
 }
 
-export function isPlainDescriptionHtml(raw: string | null | undefined, appSaved = false): boolean {
+export function isPlainDescriptionHtml(raw: string | null | undefined, appSaved = false, allowHighlight = false): boolean {
   if (!raw || !raw.trim()) return false;
   const html = appSaved ? unwrapBareDocument(raw.trim()) : raw.trim();
   if (!html) return false;
   if (LOOSE_WHITESPACE.test(html)) return false;
   const stack: string[] = [];
+  let hasText = false;
   let cursor = 0;
   TAG.lastIndex = 0;
   for (let match = TAG.exec(html); match; match = TAG.exec(html)) {
@@ -32,9 +34,20 @@ export function isPlainDescriptionHtml(raw: string | null | undefined, appSaved 
     const tag = name.toLowerCase();
     if (RAW_BRACKET.test(text)) return false;
     if (stack.length === 0 && text.trim()) return false;
+    if (text.trim()) hasText = true;
     if (!BLOCKS.has(tag) && !INLINE.has(tag)) return false;
     if (tag === "a") {
       if (!closing && !LINK_ATTRS.test(attrs)) return false;
+    } else if (tag === "mark") {
+      if (!allowHighlight || (!closing && stack.includes("mark"))) return false;
+      if (stack.includes("li") && !stack.includes("p")) return false;
+      if (attrs.trim()) {
+        const highlight = MARK_ATTRS.exec(attrs);
+        if (closing || !highlight) return false;
+        const [, hex, red, green, blue] = highlight;
+        const channels = [red, green, blue].map(Number);
+        if (channels.some((value) => value > 255) || parseInt(hex, 16) !== channels[0] * 65536 + channels[1] * 256 + channels[2]) return false;
+      }
     } else if (attrs.trim() && !(appSaved && tag === "ol" && attrs === ' class="numbered-list"')) return false;
     if (tag === "br") {
       if (/^\s*<\/p>/i.test(html.slice(cursor))) return false;
@@ -51,7 +64,8 @@ export function isPlainDescriptionHtml(raw: string | null | undefined, appSaved 
       stack.push(tag);
     }
   }
-  if (stack.length || html.slice(cursor).trim()) return false;  return true;
+  if (stack.length || html.slice(cursor).trim()) return false;
+  return !allowHighlight || hasText;
 }
 
 const EMPTY_PARAGRAPH = '<p><br class="ProseMirror-trailingBreak"></p>';

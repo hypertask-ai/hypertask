@@ -48,6 +48,7 @@ interface TaskContextProps {
   isShareView?: boolean;
   embedded?: boolean;
   cachedNavigation?: boolean;
+  cachedEditorAfterPaint?: boolean;
   scrollElementRef?: RefObject<HTMLDivElement | null>;
 }
 
