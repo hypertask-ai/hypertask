@@ -21,6 +21,14 @@ export const MATRIX_TOLERANCE = 8
 const EDGE = 2
 export const MATRIX_CHANGE_MESSAGE = "Layout moved. If the ticket asked for this change, update e2e/smoke/layout-lock-matrix.baseline.json, add the page to its approvedIn map with the ticket where Valentin approved it, and put 'Layout change approved: <that ticket URL>' in the PR body."
 
+export type BaselineScrollLayout = 'desktop' | 'phone' | 'phone-top'
+export function matrixBaselineLayout(page: string, width: number, state: MatrixState): BaselineScrollLayout {
+  if (width >= 768 || !page.startsWith('ticket-')) return 'desktop'
+  // This sheet/rail state was captured at the top, where the long thread's virtualized properties row is mounted.
+  if (page === 'ticket-long-thread' && state.ai === 'open' && state.rail === 'expanded') return 'phone-top'
+  return 'phone'
+}
+
 export const stateKey = (state: MatrixState) => `ai-${state.ai}|rail-${state.rail}`
 export function describeCombo(page: string, width: number, state: MatrixState) {
   return `${page} @ ${width}px, AI sidebar ${state.ai === 'open' ? 'open' : 'closed'}, left sidebar ${state.rail}`
@@ -141,10 +149,15 @@ export async function waitForStableScroll({
   },
   frame = () => new Promise<void>(resolve => requestAnimationFrame(() => resolve())),
   maxFrames = 120,
-}: { baselineLayout?: 'desktop' | 'phone'; read?: () => string; frame?: () => Promise<void>; maxFrames?: number } = {}): Promise<void> {
+}: { baselineLayout?: BaselineScrollLayout; read?: () => string; frame?: () => Promise<void>; maxFrames?: number } = {}): Promise<void> {
   const sample = () => {
     if (baselineLayout) {
-      for (const element of document.querySelectorAll('*')) {
+      // Do not disturb the AI sheet or its scrollers when restoring its background ticket to the top.
+      const ticketContainer = baselineLayout === 'phone-top'
+        ? document.querySelector('[data-testid="ticket-thread"]')?.closest('[data-task-detail-path]')
+        : null
+      const elements = baselineLayout === 'phone-top' ? (ticketContainer ? [ticketContainer] : []) : document.querySelectorAll('*')
+      for (const element of elements) {
         if (element.scrollTop > 0 || element.scrollHeight > element.clientHeight) {
           element.scrollTo({ top: baselineLayout === 'phone' ? element.scrollHeight - element.clientHeight : 0, behavior: 'instant' })
         }

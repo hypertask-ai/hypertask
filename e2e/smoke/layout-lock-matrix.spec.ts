@@ -15,7 +15,7 @@ import path from 'node:path'
 import type { Box } from './lib/layout-lock'
 import {
   MATRIX_CHANGE_MESSAGE, MATRIX_STATES, MATRIX_WIDTHS, composerFollowsComments, describeCombo, matrixDifferences,
-  stateKey, validateMatrixFlagChanges, type Anchor, type Anchors, type MatrixFlagChange, type MatrixState,
+  stateKey, validateMatrixFlagChanges, matrixBaselineLayout, type Anchor, type Anchors, type MatrixFlagChange, type MatrixState,
 } from './lib/layout-lock-matrix'
 import { FEATURE_FLAG_KEYS } from '../../src/lib/flags'
 import { createTask } from './lib/api'
@@ -253,7 +253,7 @@ for (const definition of selected) {
           found.push(`${label}: comment box still hidden 3s after the window changed width`)
         }
         const required = Object.keys(expected ?? {}).filter(name => width >= 768 || name !== 'ai-sidebar')
-        await scrollToBaselinePosition(page, definition.thread && width < 768 ? 'phone' : 'desktop')
+        await scrollToBaselinePosition(page, matrixBaselineLayout(definition.name, width, state))
         const { actual, stable } = await settle(page, definition.targets, required)
         // On a phone the AI chat is an animated sheet over the page, not part of the layout.
         if (width < 768) actual['ai-sidebar'] = null

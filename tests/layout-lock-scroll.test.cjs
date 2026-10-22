@@ -2,7 +2,7 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const path = require('node:path');
 const load = require('jiti')(__filename, { alias: { '@': path.join(__dirname, '../src') } });
-const { waitForStableScroll } = load('../e2e/smoke/lib/layout-lock-matrix.ts');
+const { MATRIX_STATES, MATRIX_WIDTHS, matrixBaselineLayout, waitForStableScroll } = load('../e2e/smoke/lib/layout-lock-matrix.ts');
 const { scrollToBaselinePosition, waitForTicketInitialScroll } = load('../e2e/smoke/lib/layout-lock-scroll.ts');
 const taskDetailConfig = load('../src/lib/configs/taskDetail.config.ts').default;
 
@@ -152,3 +152,64 @@ test('phone reset follows growing scroll extents before accepting two stable fra
     else global.window = previousWindow;
   }
 });
+
+test('only the phone long-thread AI-open expanded-rail matrix state changes its captured target', () => {
+  for (const name of ['ticket-short-thread', 'ticket-long-thread', 'board', 'inbox', 'search']) {
+    for (const width of MATRIX_WIDTHS) {
+      for (const state of MATRIX_STATES) {
+        const previous = name.startsWith('ticket-') && width < 768 ? 'phone' : 'desktop';
+        const changed = name === 'ticket-long-thread' && width < 768 && state.ai === 'open' && state.rail === 'expanded';
+        assert.equal(matrixBaselineLayout(name, width, state), changed ? 'phone-top' : previous, `${name}/${width}/${state.ai}/${state.rail}`);
+      }
+    }
+  }
+  const baseline = require('../e2e/smoke/layout-lock-matrix.baseline.json');
+  const anchors = baseline.pages['ticket-long-thread']['ai-open|rail-expanded']['390'];
+  assert.equal(anchors.title.box.y, 64);
+  assert.equal(anchors['properties-panel'].box.y, 126);
+  assert.equal(anchors.description.box.y, 502);
+  assert.equal(anchors['comment-list'].box.y, 118);
+});
+
+for (const kind of ['embedded', 'page', 'missing-ticket']) {
+  test(`phone-top: ${kind} resets only the window and ticket container, never sheet, rail or virtualized descendants`, async () => {
+    const previousDocument = global.document;
+    const previousWindow = global.window;
+    const calls = [];
+    const container = { scrollTop: kind === 'embedded' ? 2400 : 0, scrollLeft: 0, scrollHeight: kind === 'embedded' ? 3300 : 0, clientHeight: kind === 'embedded' ? 900 : 0, scrollWidth: 390, clientWidth: 390, parentElement: null };
+    container.scrollTo = options => { container.scrollTop = options.top; calls.push(['ticket', options]); };
+    const thread = {
+      scrollLeft: 0, scrollTop: 0, scrollWidth: 390, scrollHeight: 3200, clientWidth: 390, clientHeight: 3200,
+      parentElement: container,
+      closest: selector => { assert.equal(selector, '[data-task-detail-path]'); return container; },
+    };
+    global.document = {
+      querySelector: selector => { assert.equal(selector, '[data-testid="ticket-thread"]'); return kind === 'missing-ticket' ? null : thread; },
+      querySelectorAll: () => { assert.fail('phone-top must not scroll unrelated elements'); },
+      documentElement: { scrollHeight: 3300, clientHeight: 900 },
+    };
+    global.window = {
+      scrollX: 0, scrollY: 2400,
+      scrollTo: options => { global.window.scrollY = options.top; calls.push(['window', options]); },
+    };
+    let frames = 0;
+    try {
+      await scrollToBaselinePosition({
+        evaluate: (callback, argument) => callback({ ...argument, frame: async () => { frames += 1; } }),
+      }, 'phone-top');
+      const reset = [
+        ...(kind === 'embedded' ? [['ticket', { top: 0, behavior: 'instant' }]] : []),
+        ['window', { top: 0, left: 0, behavior: 'instant' }],
+      ];
+      assert.deepEqual(calls, [...reset, ...reset, ...reset]);
+      assert.equal(global.window.scrollY, 0);
+      assert.equal(container.scrollTop, 0);
+      assert.equal(frames, 2);
+    } finally {
+      if (previousDocument === undefined) delete global.document;
+      else global.document = previousDocument;
+      if (previousWindow === undefined) delete global.window;
+      else global.window = previousWindow;
+    }
+  });
+}
