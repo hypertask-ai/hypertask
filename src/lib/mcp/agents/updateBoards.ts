@@ -1,5 +1,6 @@
 import { agentScopeEnforced, recordAgentBoardScopeMiss } from "@/lib/auth/agentScope";
 import type { Prisma } from '@prisma/client'
+import { getAgentBoardScope } from '@/lib/mcp/agents/delegatedAccess'
 
 import { agentWithinTeamWhere } from '@/lib/mcp/managementKeyTeamScope'
 
@@ -163,13 +164,11 @@ export async function updateOwnedAgentBoards(
           let allowedProjects: Set<number> | undefined
           if (actingAgentId) {
             const touched = [...input.addProjectIds, ...input.removeProjectIds]
-            const inScope = new Set(
-              (
-                await member.findMany({
-                  where: { agentId: actingAgentId, projectId: { in: [...touched, ...agent.members.map((row) => row.projectId)] }, ...(agentScopeEnforced() ? { status: 'Accepted', agent: { userId, revokedAt: null } } : {}) },
-                  select: { projectId: true },
-                })
-              ).map((row) => row.projectId)
+            const inScope = await getAgentBoardScope(
+              member,
+              actingAgentId,
+              userId,
+              [...touched, ...agent.members.map((row) => row.projectId)]
             )
             allowedProjects = inScope
             touched.forEach((id) => recordAgentBoardScopeMiss(id, 'write'))

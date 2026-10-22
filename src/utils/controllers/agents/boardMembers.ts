@@ -1,3 +1,4 @@
+import { assertAgentBoardInviteScope } from "@/lib/mcp/agents/delegatedAccess";
 import prisma from "@/lib/prisma";
 import type { Member, Prisma, User } from "@prisma/client";
 import { canAttachAgentToTeam } from "./teamScope";
@@ -124,7 +125,8 @@ export type AddAgentToBoardResult =
 export async function addAgentToBoard(
   projectId: number,
   agentId: string,
-  requestingUserId: number
+  requestingUserId: number,
+  actingAgentId?: string | null,
 ): Promise<AddAgentToBoardResult> {
   const project = await prisma.project.findFirst({
     where: { id: projectId, status: "Normal" },
@@ -201,7 +203,7 @@ export async function addAgentToBoard(
     return { ok: false, status: 400, message: "Agent is already on this board" };
   }
 
-  const member = await prisma.member.create({
+  const createMember = (database: Pick<Prisma.TransactionClient, "member">) => database.member.create({
     data: {
       projectId,
       userId: agent.userId,
@@ -212,6 +214,12 @@ export async function addAgentToBoard(
       user: true,
     },
   });
+  const member = actingAgentId
+    ? await prisma.$transaction(async (tx) => {
+        await assertAgentBoardInviteScope(tx.member, projectId, requestingUserId, actingAgentId);
+        return createMember(tx);
+      }, { isolationLevel: "Serializable" })
+    : await createMember(prisma);
 
   if (!member.agent) {
     return { ok: false, status: 500, message: "Failed to add agent to board" };

@@ -75,7 +75,7 @@ test("hypertask_project_admin archive and restore are owner-only", () => {
   const body = toolBody(source, "hypertask_project_admin");
   const archiveStart = body.indexOf('if (input.action === "archive")');
   const inviteAccessStart = body.indexOf(
-    "const access = await validateProjectAccess(input.project_id, user.id)",
+    "const access = actingAgentId",
   );
   const archiveBranch = body.slice(archiveStart, inviteAccessStart);
   const ownerCheckAt = archiveBranch.indexOf("ownerId: user.id");
@@ -95,7 +95,7 @@ test("hypertask_project_admin previews archive and restore without mutating", ()
   const body = toolBody(source, "hypertask_project_admin");
   const archiveStart = body.indexOf('if (input.action === "archive")');
   const inviteAccessStart = body.indexOf(
-    "const access = await validateProjectAccess(input.project_id, user.id)",
+    "const access = actingAgentId",
   );
   const archiveBranch = body.slice(archiveStart, inviteAccessStart);
   const lookupAt = archiveBranch.indexOf("prisma.project.findFirst({");
@@ -140,7 +140,7 @@ test("hypertask_project_admin rejects a mismatched title, names both titles, and
   const source = fs.readFileSync(ROUTE, "utf8");
   const body = toolBody(source, "hypertask_project_admin");
   const inviteAccessStart = body.indexOf(
-    "const access = await validateProjectAccess(input.project_id, user.id)",
+    "const access = actingAgentId",
   );
   const archiveBranch = body.slice(0, inviteAccessStart);
   const titleGateAt = archiveBranch.indexOf(
@@ -167,7 +167,7 @@ test("hypertask_project_admin archive with the exact trimmed title proceeds", ()
   const source = fs.readFileSync(ROUTE, "utf8");
   const body = toolBody(source, "hypertask_project_admin");
   const inviteAccessStart = body.indexOf(
-    "const access = await validateProjectAccess(input.project_id, user.id)",
+    "const access = actingAgentId",
   );
   const archiveBranch = body.slice(0, inviteAccessStart);
   const titleGateAt = archiveBranch.indexOf(
@@ -184,7 +184,7 @@ test("hypertask_project_admin checks the title even when confirmed is true", () 
   const source = fs.readFileSync(ROUTE, "utf8");
   const body = toolBody(source, "hypertask_project_admin");
   const inviteAccessStart = body.indexOf(
-    "const access = await validateProjectAccess(input.project_id, user.id)",
+    "const access = actingAgentId",
   );
   const archiveBranch = body.slice(0, inviteAccessStart);
   const titleGateAt = archiveBranch.indexOf(
@@ -206,7 +206,7 @@ test("hypertask_project_admin keeps the archive update path after the gate and i
   const source = fs.readFileSync(ROUTE, "utf8");
   const body = toolBody(source, "hypertask_project_admin");
   const inviteAccessStart = body.indexOf(
-    "const access = await validateProjectAccess(input.project_id, user.id)",
+    "const access = actingAgentId",
   );
   const archiveBranch = body.slice(0, inviteAccessStart);
   const inviteBranch = body.slice(inviteAccessStart);
@@ -230,7 +230,7 @@ test("hypertask_project_admin dispatches user IDs and agent UUIDs differently", 
   const source = fs.readFileSync(ROUTE, "utf8");
   const body = toolBody(source, "hypertask_project_admin");
   const accessAt = body.indexOf(
-    "validateProjectAccess(input.project_id, user.id)",
+    "validateProjectAccess(input.project_id, user.id, actingAgentId)",
   );
   const uuidAt = body.indexOf(
     "PROJECT_ADMIN_MEMBER_UUID_PATTERN.test(input.userToAdd)",
