@@ -1,0 +1,130 @@
+name: Live speed checks
+
+on:
+  schedule:
+    - cron: '35 4 * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: speed-live
+  cancel-in-progress: false
+
+jobs:
+  measure:
+    if: github.ref == 'refs/heads/production'
+    environment: live-qa
+    permissions:
+      contents: read
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: 24
+
+      - name: Check private setup
+        id: setup
+        env:
+          COMPANY_SKILLS_DEPLOY_KEY: ${{ secrets.COMPANY_SKILLS_DEPLOY_KEY }}
+          QA_NORMAL_STORAGE_STATE: ${{ secrets.QA_NORMAL_STORAGE_STATE }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          missing=''
+          if [ -z "$COMPANY_SKILLS_DEPLOY_KEY" ]; then missing='COMPANY_SKILLS_DEPLOY_KEY';
+          elif [ -z "$QA_NORMAL_STORAGE_STATE" ]; then missing='QA_NORMAL_STORAGE_STATE';
+          elif ! grep -Eq '^age1[0-9a-z]+$' scripts/speed/github-age-recipient.txt; then missing='age public recipient'; fi
+          if [ -n "$missing" ]; then
+            printf '::notice::skipped: %s\n' "$missing"
+            printf 'ready=false\n' >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          printf 'ready=true\n' >> "$GITHUB_OUTPUT"
+
+      - name: Checkout private read-only guard
+        if: steps.setup.outputs.ready == 'true'
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          repository: hypertask-ai/company-skills
+          ssh-key: ${{ secrets.COMPANY_SKILLS_DEPLOY_KEY }}
+          path: company-skills
+          persist-credentials: false
+
+      - name: Install matching Chromium and age
+        if: steps.setup.outputs.ready == 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          umask 077
+          {
+            # Install only the exact Playwright in the app lock, not the app or its lifecycle scripts.
+            version=$(node -p "require('./package-lock.json').packages['node_modules/playwright'].version")
+            npm install --prefix "$RUNNER_TEMP/speed-playwright" --ignore-scripts --no-audit --no-fund "playwright@$version"
+            "$RUNNER_TEMP/speed-playwright/node_modules/.bin/playwright" install --with-deps chromium
+            sudo apt-get update
+            sudo apt-get install -y age
+          } > "$RUNNER_TEMP/speed-install.log" 2>&1
+
+      - name: Measure privately and encrypt the single run
+        id: measure
+        if: steps.setup.outputs.ready == 'true'
+        env:
+          COMPANY_SKILLS_DIR: ${{ github.workspace }}/company-skills
+          PLAYWRIGHT_NODE_MODULES: ${{ runner.temp }}/speed-playwright/node_modules
+          QA_NORMAL_STORAGE_STATE: ${{ secrets.QA_NORMAL_STORAGE_STATE }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          umask 077
+          {
+            mkdir -p "$HOME/.config/hypertask-videos" "$RUNNER_TEMP/speed-encrypted"
+            printf '%s' "$QA_NORMAL_STORAGE_STATE" > "$HOME/.config/hypertask-videos/storageState-qa-normal.json"
+            status=complete
+            node scripts/speed/measure.mjs || status=failed
+            printf 'status=%s\n' "$status" >> "$GITHUB_OUTPUT"
+            node --input-type=module <<'NODE'
+              import fs from "node:fs";
+              import { STATE } from "./scripts/speed/measure.mjs";
+              const history = JSON.parse(fs.readFileSync(`${STATE}/history.json`, "utf8"));
+              fs.writeFileSync(`${process.env.RUNNER_TEMP}/speed-run.json`, JSON.stringify(history.at(-1)), { mode: 0o600 });
+          NODE
+            grep -E '^age1[0-9a-z]+$' scripts/speed/github-age-recipient.txt > "$RUNNER_TEMP/speed-recipients.txt"
+            age -R "$RUNNER_TEMP/speed-recipients.txt" -o "$RUNNER_TEMP/speed-encrypted/run.json.age" "$RUNNER_TEMP/speed-run.json"
+          } > "$RUNNER_TEMP/speed-private.log" 2>&1
+
+      - name: Upload encrypted run only
+        if: ${{ !cancelled() && steps.measure.outcome == 'success' }}
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: speed-run-${{ github.run_id }}
+          path: ${{ runner.temp }}/speed-encrypted/run.json.age
+          retention-days: 30
+          if-no-files-found: error
+
+      - name: Remove private plaintext
+        if: always() && steps.setup.outputs.ready == 'true'
+        shell: bash
+        run: |
+          rm -f "$HOME/.config/hypertask-videos/storageState-qa-normal.json" \
+            "$RUNNER_TEMP/speed-run.json" "$RUNNER_TEMP/speed-private.log" "$RUNNER_TEMP/speed-install.log"
+          rm -rf "$HOME/.local/state/speed"
+
+      - name: Status only
+        if: always() && steps.setup.outputs.ready == 'true'
+        env:
+          JOB_STATUS: ${{ job.status }}
+          MEASUREMENT_STATUS: ${{ steps.measure.outputs.status }}
+        shell: bash
+        run: |
+          if [ "$JOB_STATUS" = success ] && [ "$MEASUREMENT_STATUS" = complete ]; then
+            printf 'complete\n'
+          else
+            printf 'failed\n'
+            exit 1
+          fi
