@@ -341,6 +341,12 @@ export const openAiChatByDefaultAtom = atom<boolean>({
     effects_UNSTABLE: [persistAtom],
 });
 
+export const keepAiChatClosedAtom = atom<boolean>({
+    key: "keepAiChatClosed",
+    default: false,
+    effects_UNSTABLE: [persistAtom],
+});
+
 export const aiChatAutoOpenSuppressedAtom = atom<boolean>({
     key: "aiChatAutoOpenSuppressed",
     default: false,

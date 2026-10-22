@@ -939,7 +939,7 @@ const settings: CommandGroup = {
       name: "Settings: Open AI chat by default",
       commandMode: CommandMode.Setting,
       payload: "task-page",
-      keywords: "settings open ai chat by default task page",
+      keywords: "settings open ai chat by default keep ai chat closed always task page",
     },
     {
       key: "settingsTaskPageCollapseComments",
@@ -1301,6 +1301,7 @@ export const getAllCommands = (
   commandOptions: IAllCommands = { context: "Others" },
   kanbanSelectAllEnabled = commandOptions.kanbanSelectAllEnabled,
   roundedEnabled = false,
+  keepAiChatClosedKeywords = "",
 ): CommandGroup[] => {
   const navigate = getNavigateCommands(commandOptions);
   const time = getTimeCommands(commandOptions);
@@ -1327,7 +1328,8 @@ export const getAllCommands = (
       { key: "roundedTheme", name: "Material (follows device)", commandMode: CommandMode.ToggleRoundedTheme, keywords: "rounded round system light dark theme appearance" },
       ...appearance.commandLists.slice(5),
     ] } : appearance,
-    settings,
+    { ...settings, commandLists: settings.commandLists.map((command) => command.key === "settingsTaskPageOpenAiChatByDefault"
+      ? { ...command, keywords: keepAiChatClosedKeywords ? command.keywords : "settings open ai chat by default task page" } : command) },
     help,
   ].filter((group) => group.commandLists.length > 0);
 

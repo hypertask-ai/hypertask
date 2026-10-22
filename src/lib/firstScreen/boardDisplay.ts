@@ -15,6 +15,7 @@ export type BoardDisplay = FirstScreenDisplayPreferences & {
     tableWidths: Record<string, number>;
     tableTitleWrap: boolean;
     openChat: boolean;
+    keepChatClosed?: boolean;
     chatSuppressed: boolean;
     chatPinned: boolean;
     chatWidth?: number;
@@ -38,7 +39,8 @@ export function parseBoardDisplay(value: string | undefined, accountId: number, 
           typeof key === "string" && ((TABLE_COLUMN_KEYS as readonly string[]).includes(key) || /^customField:[a-zA-Z0-9-]{1,100}$/.test(key))) ||
         !record(b.tableWidths) || !Object.entries(b.tableWidths).every(([k, v]) => typeof v === "number" && Number.isFinite(v) && v >= 40 && v <= 2000 &&
           ((TABLE_COLUMN_KEYS as readonly string[]).includes(k) || /^customField:[a-zA-Z0-9-]{1,100}$/.test(k)))) return null;
-    if ((b.chatWidth !== undefined && (typeof b.chatWidth !== "number" || !Number.isFinite(b.chatWidth) || b.chatWidth < AI_CHAT_SIDEBAR_MIN_PX || b.chatWidth > 2000)) ||
+    if ((b.keepChatClosed !== undefined && typeof b.keepChatClosed !== "boolean") ||
+        (b.chatWidth !== undefined && (typeof b.chatWidth !== "number" || !Number.isFinite(b.chatWidth) || b.chatWidth < AI_CHAT_SIDEBAR_MIN_PX || b.chatWidth > 2000)) ||
         (b.chatSidebarMode !== undefined && typeof b.chatSidebarMode !== "boolean")) return null;
     if (!display.isMobile && (b.chatPinned || (b.openChat && !b.chatSuppressed)) &&
         (!desktopChat || b.chatWidth === undefined || b.chatSidebarMode === undefined)) return null;

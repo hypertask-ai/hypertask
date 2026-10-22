@@ -1,4 +1,5 @@
 'use client'
+import { HTPR_7530_KEEP_AI_CHAT_CLOSED_FLAG } from "@/lib/flags/keys";
 import type { useLandingSectionState } from "./useLandingSectionState";
 import { completeBoardReadinessTrace, emitBoardReadinessAfterPaint, markBoardReadinessPhase } from "@/lib/analytics/boardReadinessPhases";
 import { resolveBoardSwitchIntent } from "@/lib/analytics/boardSwitchLatency";
@@ -18,10 +19,10 @@ export { type LandingPageInput } from "./LandingPageShared";
 import nookies from "nookies"
 import { IProject, IProjectsAll, IUser } from "@/models/model";
 
-import { useFlag } from "@/hooks/useFlag";
+import { useFlag, useFlagReady } from "@/hooks/useFlag";
 import { HTPR_7028_FIRST_TASK_EMAIL_FLAG, HTPR_7078_REMOVE_CONNECT_BLOCK_FLAG } from "@/lib/flags/keys";
 import { CommandMode } from "@/models/enums";
-import { showCommandsAtom, currentProjectAtom, boardLayoutAtom, boardLayoutPreferenceAtom, showAIChatInterfaceAtom, openAiChatByDefaultAtom, aiChatAutoOpenSuppressedAtom, aiChatExplicitOpenAtAtom, aiChatPinnedAtom } from "@/store";
+import { showCommandsAtom, currentProjectAtom, boardLayoutAtom, boardLayoutPreferenceAtom, showAIChatInterfaceAtom, openAiChatByDefaultAtom, keepAiChatClosedAtom, aiChatAutoOpenSuppressedAtom, aiChatExplicitOpenAtAtom, aiChatPinnedAtom } from "@/store";
 import { useRecoilState, useRecoilValue, useSetRecoilState } from "@/lib/state";
 import { Suspense, useCallback, useContext, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 
@@ -725,14 +726,13 @@ const boardLayoutForRender =
 
 
 type useLandingBoardHydrationContext = Pick<LandingPageInput, "user"> &
-  Pick<ReturnType<typeof useLandingBoardAccess>, "isMblForChat" | "isGuest" | "slugs" | "surfaceResolutionRef" | "lastObservedBoardLayoutRef" | "boardLayout" | "pendingProgrammaticSurfaceRef" | "surfaceInitializationKey" | "userSurfaceChangeVersionRef" | "requestedSurface" | "boardLayoutPreference" | "setBoardLayout" | "setSurfaceInitializedFor" | "searchParams" | "surfaceInitializedFor" | "currentView" | "router" | "queryClient"> &
-  Pick<ReturnType<typeof useLandingBoardSurface>, "aiChatPinned" | "openAiChatByDefault" | "aiChatAutoOpenSuppressed" | "setShowAiChatInterface" | "pinnedProject" | "projectIndex" | "hydrationFailedProjectId" | "welcomeAiHandledRef" | "setAiChatExplicitOpenAt" | "pathname" | "setProjectLookupFailed" | "hydrationRetryAttemptsRef" | "setHydrationFailedProjectId" | "hydratingRef" | "setHydrationRetryToken" | "hydrationRetryToken"> &
+  Pick<ReturnType<typeof useLandingBoardAccess>, "slugs" | "surfaceResolutionRef" | "lastObservedBoardLayoutRef" | "boardLayout" | "pendingProgrammaticSurfaceRef" | "surfaceInitializationKey" | "userSurfaceChangeVersionRef" | "requestedSurface" | "boardLayoutPreference" | "setBoardLayout" | "setSurfaceInitializedFor" | "searchParams" | "surfaceInitializedFor" | "currentView" | "router" | "queryClient"> &
+  Pick<ReturnType<typeof useLandingBoardSurface>, "setShowAiChatInterface" | "pinnedProject" | "projectIndex" | "hydrationFailedProjectId" | "welcomeAiHandledRef" | "setAiChatExplicitOpenAt" | "pathname" | "setProjectLookupFailed" | "hydrationRetryAttemptsRef" | "setHydrationFailedProjectId" | "hydratingRef" | "setHydrationRetryToken" | "hydrationRetryToken"> &
   Pick<ReturnType<typeof useLandingBoardQuery>, "data" | "dataFetching" | "refetchProjects">;
 
 
 export function useLandingBoardHydration(context: useLandingBoardHydrationContext) {
   const {
-  isMblForChat, isGuest, aiChatPinned, openAiChatByDefault, aiChatAutoOpenSuppressed,
   setShowAiChatInterface, slugs, pinnedProject, data, surfaceResolutionRef,
   lastObservedBoardLayoutRef, boardLayout, pendingProgrammaticSurfaceRef, surfaceInitializationKey, userSurfaceChangeVersionRef,
   requestedSurface, boardLayoutPreference, setBoardLayout, setSurfaceInitializedFor, searchParams,
@@ -741,28 +741,7 @@ export function useLandingBoardHydration(context: useLandingBoardHydrationContex
   setProjectLookupFailed, user, hydrationRetryAttemptsRef, setHydrationFailedProjectId, hydratingRef,
   queryClient, setHydrationRetryToken, hydrationRetryToken,
   } = context;
-  const hydrated = useHydrated()
   const setAiChatAutoOpenSuppressed = useSetRecoilState(aiChatAutoOpenSuppressedAtom)
-
-
-useEffect(() => {
-  if (
-    !hydrated ||
-    isMblForChat ||
-    (!isGuest &&
-      !aiChatPinned &&
-      (!openAiChatByDefault || aiChatAutoOpenSuppressed))
-  ) return;
-  setShowAiChatInterface(true);
-
-}, [
-  hydrated,
-  slugs,
-  openAiChatByDefault,
-  aiChatAutoOpenSuppressed,
-  aiChatPinned,
-  isMblForChat,
-])
 
 useEffect(() => {
   if (!pinnedProject) return
@@ -1031,7 +1010,6 @@ const  LandingPage= ({
   const {
   retryBoardHydration, activeSortingMode,
   } = useLandingBoardHydration({
-    isMblForChat, isGuest, aiChatPinned, openAiChatByDefault, aiChatAutoOpenSuppressed,
     setShowAiChatInterface, slugs, pinnedProject, data, surfaceResolutionRef,
     lastObservedBoardLayoutRef, boardLayout, pendingProgrammaticSurfaceRef, surfaceInitializationKey, userSurfaceChangeVersionRef,
     requestedSurface, boardLayoutPreference, setBoardLayout, setSurfaceInitializedFor, searchParams,
@@ -1040,6 +1018,37 @@ const  LandingPage= ({
     setProjectLookupFailed, user, hydrationRetryAttemptsRef, setHydrationFailedProjectId, hydratingRef,
     queryClient, setHydrationRetryToken, hydrationRetryToken,
   });
+
+  const hydrated = useHydrated();
+  const keepAiChatClosedEnabled = useFlag(HTPR_7530_KEEP_AI_CHAT_CLOSED_FLAG);
+  const keepAiChatClosedReady = useFlagReady(HTPR_7530_KEEP_AI_CHAT_CLOSED_FLAG);
+  const savedKeepAiChatClosed = useRecoilValue(keepAiChatClosedAtom);
+  const chatAutoOpenReady = !savedKeepAiChatClosed || keepAiChatClosedReady;
+  let keepAiChatClosed = false;
+  if (keepAiChatClosedEnabled) keepAiChatClosed = savedKeepAiChatClosed;
+
+useEffect(() => {
+  if (
+    !hydrated ||
+    isMblForChat ||
+    !chatAutoOpenReady ||
+    keepAiChatClosed ||
+    (!isGuest &&
+      !aiChatPinned &&
+      (!openAiChatByDefault || aiChatAutoOpenSuppressed))
+  ) return;
+  setShowAiChatInterface(true);
+
+}, [
+  hydrated,
+  chatAutoOpenReady,
+  keepAiChatClosed,
+  slugs,
+  openAiChatByDefault,
+  aiChatAutoOpenSuppressed,
+  aiChatPinned,
+  isMblForChat,
+])
 
 useEffect(() => {
   console.log("🪵 ~ Project data fetched", !!data)

@@ -23,6 +23,7 @@ const jiti = createJiti(__filename, { alias: { '@': path.join(root, 'src') }, in
 const flag = 'htpr-6929-compose-task-writer';
 const newFlag = 'htpr-6937-new-task-window';
 const tooltipFlag = 'htpr-6950-tooltip-top-layer';
+const keepClosedFlag = 'htpr-7530-keep-ai-chat-closed';
 const boardChipFlag = 'htpr-7053-compose-board-chip';
 
 async function withPalette(t, config, check) {
@@ -44,12 +45,13 @@ async function withPalette(t, config, check) {
   const stubbed = new Set();
   const stub = (filename, exports) => { stubbed.add(filename); require.cache[filename] = { id: filename, filename, loaded: true, exports }; };
   const source = (file, exports) => stub(path.join(root, file), exports);
-  const flags = { [flag]: config.enabled ?? true, [newFlag]: config.newWindow ?? false, 'htpr-6951-task-writing-progress': config.progress ?? config.newWindow ?? false, [tooltipFlag]: config.topLayer ?? false, [boardChipFlag]: config.boardChip ?? false };
+  const flags = { [keepClosedFlag]: config.keepClosedFlag ?? false, [flag]: config.enabled ?? true, [newFlag]: config.newWindow ?? false, 'htpr-6951-task-writing-progress': config.progress ?? config.newWindow ?? false, [tooltipFlag]: config.topLayer ?? false, [boardChipFlag]: config.boardChip ?? false };
   const TaskContext = React.createContext(undefined);
-  const atomNames = ['boardLayoutAtom', 'calendarSettingsAtom', 'currentProjectAtom', 'currentUserAtom', 'frequentlyUsedHTCAton', 'tableTitleWrapAtom', 'showCommandsAtom', 'lastUsedBoardsAtom', 'composeTaskChatIntroAtom', 'showAIChatInterfaceAtom', 'isAiChatSidebarModeAtom', 'aiChatAutoOpenSuppressedAtom', 'aiChatExplicitOpenAtAtom', 'dockedChatScopeAtom', 'showCreateTaskModalAtom', 'showShortcutsAtom', 'showSidebarAtom', 'showBoardManagerAtom', 'inViewObjectAtom', 'uploadingStateCreateTaskModalAtom'];
+  const atomNames = ['keepAiChatClosedAtom', 'boardLayoutAtom', 'calendarSettingsAtom', 'currentProjectAtom', 'currentUserAtom', 'frequentlyUsedHTCAton', 'tableTitleWrapAtom', 'showCommandsAtom', 'lastUsedBoardsAtom', 'composeTaskChatIntroAtom', 'showAIChatInterfaceAtom', 'isAiChatSidebarModeAtom', 'aiChatAutoOpenSuppressedAtom', 'aiChatExplicitOpenAtAtom', 'dockedChatScopeAtom', 'showCreateTaskModalAtom', 'showShortcutsAtom', 'showSidebarAtom', 'showBoardManagerAtom', 'inViewObjectAtom', 'uploadingStateCreateTaskModalAtom'];
   const atoms = Object.fromEntries(atomNames.map((name) => [name, name]));
   const project = { id: 7, title: 'QA Sandbox', uniqueIdentifier: 'QASA' };
   const values = new Map(Object.entries({
+    keepAiChatClosedAtom: config.keepClosed ?? false,
     inViewObjectAtom: config.inView ?? { taskId: null },
     currentProjectAtom: config.project === null ? null : config.project ?? project, currentUserAtom: { id: 985, uid: 'qa' },
     boardLayoutAtom: 'board', calendarSettingsAtom: {}, frequentlyUsedHTCAton: {}, lastUsedBoardsAtom: config.recency ?? {},
@@ -1495,5 +1497,47 @@ test('board chip without a current or remembered board lets the user pick before
     await type('Create on the chosen board');
     await press('Enter', { code: 'Enter' });
     assert.equal(requests[0].body.project.id, 7);
+  });
+});
+
+for (const keepClosedFlag of [false, true]) {
+  for (const keepClosed of [false, true]) {
+    test(`Ctrl+J creation: keep closed flag=${keepClosedFlag}, preference=${keepClosed}`, async (t) => {
+      await withPalette(t, { open: false, newWindow: true, keepClosedFlag, keepClosed }, async ({ press, type, finish, values, set, navigations, cacheAdds }) => {
+        await React.act(async () => {
+          set('showAIChatInterfaceAtom', false);
+          set('aiChatAutoOpenSuppressedAtom', true);
+        });
+        await press('j', { ctrlKey: true }, document.body);
+        await type('Create a task without forcing the chat open');
+        await press('Enter');
+        await finish();
+        assert.equal(cacheAdds.length, 1, 'task creation still succeeds');
+        assert.deepEqual(navigations, ['/detail/project-7/44']);
+        assert.equal(values.get('showCommandsAtom').show, false, 'creation window closes');
+        const prevented = keepClosedFlag && keepClosed;
+        assert.equal(values.get('showAIChatInterfaceAtom'), !prevented);
+        assert.equal(values.get('aiChatAutoOpenSuppressedAtom'), prevented, 'veto must not clear a previous manual close');
+        assert.equal(Boolean(values.get('aiChatExplicitOpenAtAtom')), !prevented);
+        assert.equal(values.get('keepAiChatClosedAtom'), keepClosed);
+      });
+    });
+  }
+}
+
+test('Ctrl+J uses the latest saved veto if it changes while task creation is pending', async (t) => {
+  await withPalette(t, { open: false, newWindow: true, keepClosedFlag: true }, async ({ press, type, finish, values, set, navigations }) => {
+    await press('j', { ctrlKey: true }, document.body);
+    await type('Create while the preference changes');
+    await press('Enter');
+    await React.act(async () => {
+      set('keepAiChatClosedAtom', true);
+      set('showAIChatInterfaceAtom', false);
+      set('aiChatAutoOpenSuppressedAtom', true);
+    });
+    await finish();
+    assert.deepEqual(navigations, ['/detail/project-7/44']);
+    assert.equal(values.get('showAIChatInterfaceAtom'), false);
+    assert.equal(values.get('aiChatAutoOpenSuppressedAtom'), true);
   });
 });

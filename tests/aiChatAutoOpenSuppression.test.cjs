@@ -45,7 +45,7 @@ function effectFrom(relative, identifies, extraNames = []) {
   visit(ast);
   assert.equal(effects.length, 1, `identify exactly one production effect in ${relative}`);
   return load(`export function run(scope) { const { useEffect, ...values } = scope;
-    const { hydrated, slugs, _parsedTask, openAiChatByDefault, aiChatAutoOpenSuppressed,
+    const { hydrated, slugs, _parsedTask, openAiChatByDefault, aiChatAutoOpenSuppressed, keepAiChatClosed, chatAutoOpenReady,
       aiChatPinned, isMblForChat, _mbl, isGuest, setShowAiChatInterface,
       ${extraNames.join(", ")} } = values;
     ${effects[0]}; }`).run;
@@ -92,7 +92,7 @@ const pinOpen = userOpenFrom("src/components/AI_CHAT/ChatHeader.tsx",
       (declaration) => declaration.name.getText(ast) === "nextPinned")),
   (source) => `(${source})();`);
 
-async function harness(persisted, run) {
+async function harness(persisted, run, flagEnabled = true, flagReady = true) {
   const previous = { window: global.window, document: global.document,
     IS_REACT_ACT_ENVIRONMENT: global.IS_REACT_ACT_ENVIRONMENT };
   const dom = new JSDOM("<div id='root'></div>", { url: "https://app.hypertask.ai/project?id=1" });
@@ -108,13 +108,19 @@ async function harness(persisted, run) {
   const storeSource = read("src/store/index.ts");
   const storeAst = ts.createSourceFile("store.ts", storeSource, ts.ScriptTarget.Latest, true);
   const names = new Set(["showAIChatInterfaceAtom", "openAiChatByDefaultAtom",
-    "aiChatAutoOpenSuppressedAtom", "aiChatPinnedAtom"]);
+    "aiChatAutoOpenSuppressedAtom", "aiChatPinnedAtom", "keepAiChatClosedAtom"]);
   const declarations = storeAst.statements.filter((node) => ts.isVariableStatement(node) &&
     node.declarationList.declarations.some((declaration) => names.has(declaration.name.getText(storeAst))));
   assert.equal(declarations.length, names.size);
   const atoms = load(`import { atom, recoilPersist } from "@/lib/state";
     const { persistAtom } = recoilPersist();
     ${declarations.map((node) => node.getText(storeAst)).join("\n")}`, { "@/lib/state": state });
+  const { useKeepAiChatClosed } = load(read("src/hooks/General/useKeepAiChatClosed.ts"), {
+    "@/hooks/useFlag": { useFlag: () => flagEnabled, useFlagReady: () => flagReady },
+    "@/lib/state": state,
+    "@/store": atoms,
+    "@/lib/flags/keys": { HTPR_7530_KEEP_AI_CHAT_CLOSED_FLAG: "htpr-7530-keep-ai-chat-closed" },
+  });
   const store = createStore();
   const mobileContext = React.createContext(false);
   for (const name of ["showBoardManagerAtom", "showShortcutsAtom", "showCommandsAtom",
@@ -140,10 +146,11 @@ async function harness(persisted, run) {
     const openAiChatByDefault = state.useRecoilValue(atoms.openAiChatByDefaultAtom);
     const aiChatAutoOpenSuppressed = state.useRecoilValue(atoms.aiChatAutoOpenSuppressedAtom);
     const aiChatPinned = state.useRecoilValue(atoms.aiChatPinnedAtom);
+    const { keepAiChatClosed, ready: chatAutoOpenReady } = useKeepAiChatClosed();
     const restoreRef = React.useRef(false);
     const effect = effects[relative];
     effect({ useEffect: React.useEffect, hydrated, slugs: String(id), _parsedTask: { id },
-      openAiChatByDefault, aiChatAutoOpenSuppressed, aiChatPinned, isMblForChat: mobile,
+      openAiChatByDefault, aiChatAutoOpenSuppressed, keepAiChatClosed, chatAutoOpenReady, aiChatPinned, isMblForChat: mobile,
       _mbl: mobile, isGuest: guest, setShowAiChatInterface,
       hasAttemptedChatRestoreRef: restoreRef, hasAttemptedRestoreRef: restoreRef,
       currentUser: hydrated && !guest ? { id: 123 } : null, pathname: "/my-tasks",
@@ -169,6 +176,7 @@ async function harness(persisted, run) {
   }
   try {
     await run({ store, atoms, state, attemptedOpens, hydrate,
+      setFlag: (enabled, ready) => { flagEnabled = enabled; flagReady = ready; },
       navigate: (props) => React.act(async () => reactRoot.render(tree(props))),
       headerClose: () => headerClose({ editor: null,
         setAiChatAutoOpenSuppressed: (value) => store.set(atoms.aiChatAutoOpenSuppressedAtom, value),
@@ -317,3 +325,75 @@ test("Ctrl+Q before the runtime mounts explicitly opens chat and clears suppress
     assert.ok(h.store.get(h.atoms.aiChatExplicitOpenAtAtom));
   });
 });
+
+for (const relative of [boardPath, detailPath, ...restorePaths]) {
+  for (const flagEnabled of [false, true]) {
+    for (const keepAiChatClosed of [false, true]) {
+      for (const openAiChatByDefault of [false, true]) {
+        test(`${relative}: flag=${flagEnabled}, keep closed=${keepAiChatClosed}, default open=${openAiChatByDefault}`, async () => {
+          await harness({ keepAiChatClosed, openAiChatByDefault }, async (h) => {
+            window.sessionStorage.setItem("ht:aiChatOpen", "1");
+            await h.hydrate({ relative });
+            const expected = !(flagEnabled && keepAiChatClosed) &&
+              (restorePaths.includes(relative) || openAiChatByDefault);
+            assert.equal(h.store.get(h.atoms.showAIChatInterfaceAtom), expected);
+            if (!expected) assert.deepEqual(h.attemptedOpens, [], "no hydration-time opening");
+            await h.navigate({ relative, id: 2 });
+            assert.equal(h.store.get(h.atoms.showAIChatInterfaceAtom), expected);
+          }, flagEnabled);
+        });
+      }
+    }
+  }
+}
+
+for (const relative of [boardPath, detailPath]) {
+  test(`${relative}: keep closed overrides pins and guest auto-open without blocking manual opening`, async () => {
+    for (const guest of [false, true]) {
+      await harness({ keepAiChatClosed: true, aiChatPinned: true }, async (h) => {
+        await h.hydrate({ relative, guest });
+        assert.deepEqual(h.attemptedOpens, []);
+        await React.act(async () => h.ui().toggle());
+        assert.equal(h.store.get(h.atoms.showAIChatInterfaceAtom), true);
+        assert.equal(h.store.get(h.atoms.keepAiChatClosedAtom), true, "manual opening never clears the preference");
+        await h.navigate({ relative, id: 2, guest });
+        assert.equal(h.store.get(h.atoms.showAIChatInterfaceAtom), true, "a veto must not close explicitly opened chat");
+        await React.act(async () => h.headerClose());
+        await h.navigate({ relative, id: 3, guest });
+        assert.equal(h.store.get(h.atoms.showAIChatInterfaceAtom), false);
+        await React.act(async () => h.ui().open());
+        assert.equal(h.store.get(h.atoms.showAIChatInterfaceAtom), true, "explicit shortcut opening still works");
+        assert.equal(h.store.get(h.atoms.aiChatAutoOpenSuppressedAtom), false);
+        assert.ok(h.store.get(h.atoms.aiChatExplicitOpenAtAtom));
+        window.dispatchEvent(new window.Event("pagehide"));
+        assert.equal(JSON.parse(window.localStorage.getItem("recoil-persist")).keepAiChatClosed, true);
+      });
+    }
+  });
+}
+
+for (const [name, handler] of [["welcome link", welcomeOpen], ["pin", pinOpen]]) {
+  test(`${name} remains an explicit open with keep closed enabled`, async () => {
+    await harness({ keepAiChatClosed: true, aiChatAutoOpenSuppressed: true }, async (h) => {
+      await h.hydrate({ relative: boardPath });
+      await React.act(async () => h.userOpen(handler));
+      assert.equal(h.store.get(h.atoms.showAIChatInterfaceAtom), true);
+      assert.equal(h.store.get(h.atoms.keepAiChatClosedAtom), true);
+    });
+  });
+}
+
+for (const relative of [boardPath, detailPath, ...restorePaths]) {
+  for (const flagEnabled of [false, true]) {
+    test(`${relative}: a stored veto waits for flag resolution, then honors flag=${flagEnabled}`, async () => {
+      await harness({ keepAiChatClosed: true }, async (h) => {
+        window.sessionStorage.setItem("ht:aiChatOpen", "1");
+        await h.hydrate({ relative });
+        assert.deepEqual(h.attemptedOpens, [], "pending flags must not allow a flash-open");
+        h.setFlag(flagEnabled, true);
+        await h.navigate({ relative });
+        assert.equal(h.store.get(h.atoms.showAIChatInterfaceAtom), !flagEnabled);
+      }, false, false);
+    });
+  }
+}
