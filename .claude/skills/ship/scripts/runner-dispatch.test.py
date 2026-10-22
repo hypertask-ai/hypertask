@@ -481,6 +481,17 @@ class DispatchTests(unittest.TestCase):
         self.assertIsNone(result[0]["ticket"])
         self.assertEqual(result[1]["ticket"], "HTPR-1")
 
+    def test_snapshot_script_falls_back_to_runners_skill_and_names_paths_when_missing(self):
+        with tempfile.TemporaryDirectory() as root:
+            local, skill = Path(root) / "local", Path(root) / "skill"
+            with patch.object(m, "SNAPSHOT_CANDIDATES", (local, skill)):
+                with self.assertRaisesRegex(RuntimeError, "runner-snapshot not found in: .*local.*skill"):
+                    m.snapshot_script()
+                skill.write_text("")
+                self.assertEqual(m.snapshot_script(), skill)
+                local.write_text("")
+                self.assertEqual(m.snapshot_script(), local)
+
     def test_snapshot_failure_releases_unsent_claim(self):
         self.ready_go()
         with patch.object(m, "snapshots", side_effect=RuntimeError("snapshot failed")):

@@ -67,8 +67,18 @@ def pages(args, key, reads=None):
         seen.add(cursor)
 
 
+SNAPSHOT_CANDIDATES = (SCRIPTS / "runner-snapshot", Path.home() / ".claude/skills/runners/scripts/runner-snapshot")
+
+
+def snapshot_script():
+    for candidate in SNAPSHOT_CANDIDATES:
+        if candidate.is_file():
+            return candidate
+    raise RuntimeError("runner-snapshot not found in: " + ", ".join(map(str, SNAPSHOT_CANDIDATES)))
+
+
 def snapshots():
-    return [json.loads(line) for line in command(str(SCRIPTS / "runner-snapshot")).splitlines() if line.strip()]
+    return [json.loads(line) for line in command(str(snapshot_script())).splitlines() if line.strip()]
 
 
 def read_boards(reads=None):
