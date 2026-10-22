@@ -104,12 +104,35 @@ test('only a later human Valentin yes approves a wireframe', async () => {
 });
 
 test('all explicit approval prefixes work, but qualified or negative yes does not', async () => {
-  for (const text of ['yes', 'yep', 'yeah', 'go', 'ok', 'okay', 'approve', 'approved', 'lgtm', 'looks good', 'ship it', '👍', 'YES go']) {
+  for (const text of ['yes', 'yep', 'yeah', 'go', 'ok', 'okay', 'agree', 'Agree to ux though', 'approve', 'approved', 'lgtm', 'looks good', 'ship it', '👍', 'YES go']) {
     assert.equal((await decision({ comments: [wireframe(), yes({ text })] })).state, 'success', text);
   }
-  for (const text of ["yes but change the header", 'yes no', 'yes not now', "yes don't ship", 'yes don’t ship', 'yes instead', 'yes change it', 'yesterday', 'good', 'okayish', 'maybe yes']) {
+  for (const text of ["yes but change the header", 'yes no', 'yes not now', "yes don't ship", 'yes don’t ship', 'yes instead', 'yes change it', 'no, change X', 'agree but change X', 'agree no', 'agree not yet', 'agree instead', 'yesterday', 'good', 'okayish', 'maybe yes']) {
     assert.equal((await decision({ comments: [wireframe(), yes({ text })] })).state, 'failure', text);
   }
+});
+
+test('claude.ai artifact wireframes accept only Valentin’s own human agreement', async () => {
+  const artifact = wireframe({ text: 'https://claude.ai/artifact/YVeR2xUWw7KcWFNH8YtEbf', agent: { displayName: 'Runner 8' } });
+  assert.equal((await decision({ comments: [artifact, yes({ text: 'Agree to ux though' })] })).state, 'success');
+  for (const marker of ['agent', 'agent_display_name', 'agentId', 'isAgent']) {
+    assert.equal((await decision({ comments: [artifact, yes({ text: 'Agree to ux though', [marker]: 'Runner 8' })] })).state, 'failure');
+  }
+  assert.equal((await decision({ comments: [artifact, yes({ text: 'Valentin said: yes', agent: { displayName: 'Runner 8' } })] })).state, 'failure');
+  assert.equal((await decision({ comments: [artifact, yes({ text: 'no, change X' })] })).state, 'failure');
+});
+
+test('either ticket thread can approve, but wireframes and verdicts never mix across threads', async () => {
+  const parentComments = [wireframe(), yes()];
+  assert.equal((await decision({ parentComments })).state, 'success');
+  assert.equal((await decision({ comments: [wireframe(), yes()], parentComments: [wireframe(), yes({ text: 'no, change X' })] })).state, 'success');
+  assert.equal((await decision({ comments: [wireframe(), yes({ text: 'no, change X' })], parentComments })).state, 'success');
+  for (const comments of [[wireframe()], [yes()]]) {
+    assert.equal((await decision({ comments, parentComments: comments[0].id === 1 ? [yes()] : [wireframe()] })).state, 'failure');
+  }
+  assert.equal((await decision({ parentComments: [wireframe(), yes({ agent: { displayName: 'Runner 8' } })] })).state, 'failure');
+  assert.equal((await decision({ files: [added], parentComments })).state, 'failure');
+  assert.equal((await decision({ files: [added], parentComments: [wireframe(), yes({ text: 'agree New elements: ExamplePanel' })] })).state, 'success');
 });
 
 test('mentions are removed and HTML and basic entities are decoded before matching', async () => {
@@ -163,7 +186,7 @@ test('ticket title is strict; unknown project links fall back to the workflow ru
 });
 
 test('lookalike links and unapproved wireframes do not count', async () => {
-  for (const text of ['https://example.com/wireframes/a', 'https://hypertask.app.evil/wireframes/a', 'http://hypertask.app/wireframes/a', 'https://hypertask.app/wireframes/']) {
+  for (const text of ['https://example.com/wireframes/a', 'https://hypertask.app.evil/wireframes/a', 'http://hypertask.app/wireframes/a', 'https://hypertask.app/wireframes/', 'https://claude.ai.evil/artifact/a', 'http://claude.ai/artifact/a', 'https://claude.ai/artifact/', 'https://claude.ai/artifacts/a']) {
     assert.equal((await decision({ comments: [wireframe({ text }), yes()] })).state, 'failure');
   }
 });
@@ -192,7 +215,79 @@ function apiFixture({ prs = [pr()], files = [modified], statuses = [], prError, 
   };
   return { github, calls };
 }
-const commentsFetch = async () => response({ success: true, comments: [], nextCursor: null });
+const ticketResponse = (url, parent = null) => response({ success: true, tasks: [{
+  ticketNumber: new URL(String(url)).searchParams.get('ticket_number'),
+  ...(parent ? { parent_id: 99123, parent_task: { id: 99123, ticketNumber: parent } } : {}),
+}] });
+const commentsFetch = async (url) => new URL(String(url)).pathname === '/api/mcp/tasks'
+  ? ticketResponse(url) : response({ success: true, comments: [], nextCursor: null });
+
+test('PR 1771 reads the API parent of HTPR-7549 and accepts Valentin’s artifact agreement on HTPR-7511', async () => {
+  const { run } = await gate;
+  const fixture = apiFixture({ prs: [pr(1771, { title: 'HTPR-7549 [FEATURE] UI' })] });
+  const requests = [];
+  const output = [];
+  const fetchImpl = async (url, options) => {
+    requests.push(String(url));
+    assert.equal(options.headers.Authorization, 'Bearer hypertask-fixture');
+    assert.equal(options.method, undefined);
+    const parsed = new URL(String(url));
+    if (parsed.pathname === '/api/mcp/tasks') return ticketResponse(url, 'HTPR-7511');
+    assert.equal(parsed.pathname, '/api/mcp/comments');
+    return response({ comments: parsed.searchParams.get('ticket_number') === 'HTPR-7511'
+      ? [wireframe({ text: 'https://claude.ai/artifact/YVeR2xUWw7KcWFNH8YtEbf', agent: { displayName: 'Runner 8' } }), yes({ text: 'Agree to ux though' })] : [] });
+  };
+  assert.equal(await run(['--pr', '1771'], { env, github: fixture.github, fetchImpl, log: (line) => output.push(JSON.parse(line)) }), 0);
+  assert.equal(output[0].state, 'success');
+  assert.deepEqual(requests, [
+    'https://app.hypertask.ai/api/mcp/comments?ticket_number=HTPR-7549&limit=100',
+    'https://app.hypertask.ai/api/mcp/tasks?ticket_number=HTPR-7549',
+    'https://app.hypertask.ai/api/mcp/comments?ticket_number=HTPR-7511&limit=100',
+  ]);
+  assert.ok(fixture.calls.every((call) => call.method !== 'POST'));
+});
+
+test('approved child needs no parent read, and missing or inaccessible parent metadata fails closed', async () => {
+  const { run } = await gate;
+  const fixture = () => apiFixture({ prs: [pr(1, { title })] });
+  assert.equal(await run(['--pr', '1'], { env, github: fixture().github, fetchImpl: async (url) => {
+    assert.equal(new URL(String(url)).pathname, '/api/mcp/comments');
+    return response({ comments: [wireframe(), yes()] });
+  }, log: () => {} }), 0);
+  for (const data of [
+    { success: false }, { tasks: [] }, { tasks: [{ ticketNumber: 'HTPR-999' }] },
+    { tasks: [{ ticketNumber: 'HTPR-7072', parent_id: 99123 }] },
+    { tasks: [{ ticketNumber: 'HTPR-7072', parent_task: { ticketNumber: 'HTPR-7072' } }] },
+    { tasks: [{ ticketNumber: 'HTPR-7072', parent_task: { ticketNumber: 'unrelated' } }] },
+  ]) {
+    await assert.rejects(run(['--pr', '1'], { env, github: fixture().github, fetchImpl: async (url) =>
+      new URL(String(url)).pathname === '/api/mcp/tasks' ? response(data) : response({ comments: [] }), log: () => {} }), /valid ticket|valid parent ticket number/);
+  }
+  await assert.rejects(run(['--pr', '1'], { env, github: fixture().github, fetchImpl: async (url) =>
+    new URL(String(url)).pathname === '/api/mcp/tasks' ? response({}, 403) : response({ comments: [] }), log: () => {} }), /HTTP 403/);
+});
+
+test('parent comments are paginated and shared between PRs without reading grandparents', async () => {
+  const { run } = await gate;
+  const prs = [pr(1, { title }), pr(2, { title: 'HTPR-7073 [FEATURE] UI' })];
+  const fixture = apiFixture({ prs });
+  const requests = [];
+  const fetchImpl = async (url) => {
+    const parsed = new URL(String(url));
+    const ticket = parsed.searchParams.get('ticket_number');
+    requests.push(`${parsed.pathname}:${ticket}:${parsed.searchParams.get('cursor') || ''}`);
+    if (parsed.pathname === '/api/mcp/tasks') {
+      assert.notEqual(ticket, 'HTPR-7511');
+      return ticketResponse(url, 'HTPR-7511');
+    }
+    if (ticket !== 'HTPR-7511') return response({ comments: [] });
+    return parsed.searchParams.has('cursor') ? response({ comments: [yes()] })
+      : response({ comments: [wireframe()], nextCursor: 'next' });
+  };
+  assert.equal(await run(['--reconcile'], { env, github: fixture.github, fetchImpl, log: () => {} }), 0);
+  assert.equal(requests.filter((request) => request.startsWith('/api/mcp/comments:HTPR-7511:')).length, 2);
+  assert.deepEqual(fixture.calls.filter((call) => call.method === 'POST').map((call) => call.body.state), ['success', 'success']);
+});
 
 test('Hypertask auth, query and cursor pagination match the read API', async () => {
   const requests = [];
@@ -557,11 +652,11 @@ test('item 7: reconciliation caches, caps reads including pages and stops after 
     return { posts: fixture.calls.filter((call) => call.method === 'POST'), logs };
   };
   let reads = 0;
-  const capped = await execute(async () => { reads++; return response({ comments: [], nextCursor: null }); });
+  const capped = await execute(async (url) => { reads++; return commentsFetch(url); });
   assert.equal(reads, 120);
   assert.equal(capped.posts.length, 124);
-  assert.equal(capped.posts.filter((post) => post.body.state === 'pending').length, 3);
-  assert.equal(capped.logs.filter((line) => line.state === 'deferred').length, 3);
+  assert.equal(capped.posts.filter((post) => post.body.state === 'pending').length, 63);
+  assert.equal(capped.logs.filter((line) => line.state === 'deferred').length, 63);
   for (const status of [429, 500, 503]) {
     reads = 0;
     const stopped = await execute(async () => ++reads === 1 ? response({ comments: [] }) : response({}, status));
@@ -665,6 +760,7 @@ test('status cursor: every PR is read within ceil(reads / budget) sweeps and sta
     };
     const read = new Set();
     const fetchImpl = async (url) => {
+      if (new URL(String(url)).pathname === '/api/mcp/tasks') return ticketResponse(url);
       const params = new URL(String(url)).searchParams;
       read.add(params.get('ticket_number'));
       const next = Number(params.get('cursor') ?? 0) + 1;
@@ -674,8 +770,8 @@ test('status cursor: every PR is read within ceil(reads / budget) sweeps and sta
       await run(['--reconcile'], { env, github, fetchImpl, log: () => {}, now: () => clock });
       clock += 600000;
     };
-    // Whole tickets fit floor(120 / pages) per sweep; a ticket cut off mid-pagination is retried first next sweep.
-    const sweeps = Math.ceil(total / Math.floor(120 / pages));
+    // Each failed ticket also needs one parent lookup; interrupted reads are retried first next sweep.
+    const sweeps = Math.ceil(total / Math.floor(120 / (pages + 1)));
     for (let index = 0; index < sweeps; index++) await sweep();
     assert.equal(read.size, total, `${pages} page(s): every PR read within ${sweeps} sweeps`);
     // A further day of sweeps: about one heartbeat per head per hour, never one per sweep.
@@ -694,7 +790,7 @@ test('a Hypertask outage turns an earlier green to pending; budget exhaustion ke
   const prs = Array.from({ length: 121 }, (_, i) => pr(i + 1, { title: `HTPR-${i + 1} [FEATURE] UI`, head: { sha: (i + 1).toString(16).padStart(40, '0') } }));
   const busy = apiFixture({ prs, statuses: green });
   await run(['--reconcile'], { env, github: busy.github, fetchImpl: commentsFetch, log: () => {} });
-  assert.equal(busy.calls.filter((call) => call.method === 'POST').length, 120);
+  assert.equal(busy.calls.filter((call) => call.method === 'POST').length, 60);
 });
 
 test("Valentin's yes that quotes the wireframe link still approves it", async () => {

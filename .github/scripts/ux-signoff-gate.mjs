@@ -8,7 +8,7 @@ const READ_BUDGET = 120;
 const HEARTBEAT_MS = 60 * 60 * 1000;
 const DEFERRED = 'Ticket not read this sweep; rechecked within 10 minutes';
 const TICKET_TITLE = /^(HTPR|HYFA|YPER4)-(\d+) \[([^\]]+)\] \S/;
-const WIREFRAME = /https:\/\/hypertask\.app\/(?:wireframes|explorations)\/[A-Za-z0-9_-]+/;
+const WIREFRAME = /https:\/\/(?:hypertask\.app\/(?:wireframes|explorations)|claude\.ai\/artifact)\/[A-Za-z0-9_-]+/;
 
 function ticketFromTitle(title) {
   const match = TICKET_TITLE.exec(title);
@@ -47,7 +47,7 @@ function commentVerdict(comment) {
   if (comment.editedAt != null && !(comment.editedBy && humanValentin(comment.editedBy, 'userId'))) return 'reject';
   const text = plainText(comment.text).trim().toLowerCase().replace(/[’‘]/g, "'");
   if (/^(?:no|nope|not|reject|don't)\b|\b(?:no|not|but|change|instead)\b|n't/.test(text)) return 'reject';
-  return /^(?:(?:yes|yep|yeah|go|ok|okay|approve|approved|lgtm|looks good|ship it)\b|👍)/u.test(text) ? 'approve' : null;
+  return /^(?:(?:yes|yep|yeah|go|ok|okay|agree|approve|approved|lgtm|looks good|ship it)\b|👍)/u.test(text) ? 'approve' : null;
 }
 
 function newest(comments) {
@@ -61,7 +61,7 @@ function elementNames(comment) {
     .flatMap((match) => match[1].split(',').map(normalize)).filter((name) => name && name !== 'none');
 }
 
-export function evaluate({ title, author, files, comments = [] }) {
+export function evaluate({ title, author, files, comments = [], parentComments = [] }) {
   const success = (description) => ({ state: 'success', description, details: [] });
   const ui = visibleFiles(files);
   if (ui.length === 0) return success('No visible UI change');
@@ -103,7 +103,13 @@ export function evaluate({ title, author, files, comments = [] }) {
   if (missingNames.length) {
     details.push(`New element ${missingNames.join(', ')} needs Valentin's yes by name on ${ticket.key}`);
   }
-  if (details.length) return { state: 'failure', description: details[0].slice(0, 140), details };
+  if (details.length) {
+    if (parentComments.length) {
+      const parent = evaluate({ title, author, files, comments: parentComments });
+      if (parent.state === 'success') return parent;
+    }
+    return { state: 'failure', description: details[0].slice(0, 140), details };
+  }
   return success(exempt ? 'Wireframe exempt; new elements approved' : 'Wireframe and new elements have UX signoff');
 }
 
@@ -159,6 +165,28 @@ async function githubPages(github, path) {
   }
 }
 
+async function readHypertask(url, { env = process.env, fetchImpl = fetch, budget } = {}) {
+  if (!env.MCP_TOKEN) throw new Error('HYPERTASK_MCP_TOKEN is empty');
+  if (budget) {
+    if (budget.stopped || budget.remaining === 0) {
+      throw Object.assign(new Error(budget.stopped || 'Hypertask read budget exhausted; left untouched this run'), { deferred: true });
+    }
+    budget.remaining--;
+  }
+  const response = await fetchImpl(url, {
+    headers: { Authorization: `Bearer ${env.MCP_TOKEN}` }, signal: AbortSignal.timeout(30000),
+  });
+  if (!response.ok) {
+    const error = new Error(`Hypertask API returned HTTP ${response.status}`);
+    if (budget && (response.status === 429 || response.status >= 500)) {
+      budget.stopped = `${error.message}; further reads stopped this run`;
+      error.deferred = true;
+    }
+    throw error;
+  }
+  return response.json();
+}
+
 export async function readComments(ticket, { env = process.env, fetchImpl = fetch, budget } = {}) {
   if (!env.MCP_TOKEN) throw new Error('HYPERTASK_MCP_TOKEN is empty');
   const comments = [];
@@ -169,24 +197,7 @@ export async function readComments(ticket, { env = process.env, fetchImpl = fetc
     url.searchParams.set('ticket_number', ticket);
     url.searchParams.set('limit', '100');
     if (cursor != null) url.searchParams.set('cursor', cursor);
-    if (budget) {
-      if (budget.stopped || budget.remaining === 0) {
-        throw Object.assign(new Error(budget.stopped || 'Hypertask read budget exhausted; left untouched this run'), { deferred: true });
-      }
-      budget.remaining--;
-    }
-    const response = await fetchImpl(url, {
-      headers: { Authorization: `Bearer ${env.MCP_TOKEN}` }, signal: AbortSignal.timeout(30000),
-    });
-    if (!response.ok) {
-      const error = new Error(`Hypertask API returned HTTP ${response.status}`);
-      if (budget && (response.status === 429 || response.status >= 500)) {
-        budget.stopped = `${error.message}; further reads stopped this run`;
-        error.deferred = true;
-      }
-      throw error;
-    }
-    const data = await response.json();
+    const data = await readHypertask(url, { env, fetchImpl, budget });
     if (data.success === false || !Array.isArray(data.comments) ||
       data.comments.some((comment) => !comment || typeof comment.text !== 'string')) {
       throw new Error('Hypertask API returned no valid comment list');
@@ -203,7 +214,23 @@ export async function readComments(ticket, { env = process.env, fetchImpl = fetc
   return comments;
 }
 
-async function readVerdict(pr, { github, repo, env, fetchImpl, commentCache, budget }) {
+async function readParentTicket(ticket, { env, fetchImpl, budget }) {
+  const url = new URL('/api/mcp/tasks', env.MCP_BASE_URL || 'https://app.hypertask.ai');
+  url.searchParams.set('ticket_number', ticket);
+  const data = await readHypertask(url, { env, fetchImpl, budget });
+  const task = data.tasks?.[0];
+  if (data.success === false || !Array.isArray(data.tasks) || data.tasks.length !== 1 || task?.ticketNumber !== ticket) {
+    throw new Error('Hypertask API returned no valid ticket');
+  }
+  const parent = task.parent_task?.ticketNumber;
+  if (parent == null && task.parent_id == null && task.parent_task == null) return null;
+  if (typeof parent !== 'string' || !/^(HTPR|HYFA|YPER4)-[1-9]\d*$/.test(parent) || parent === ticket) {
+    throw new Error('Hypertask API did not expose a valid parent ticket number');
+  }
+  return parent;
+}
+
+async function readVerdict(pr, { github, repo, env, fetchImpl, commentCache, parentCache, budget }) {
   if (typeof pr.title !== 'string' || typeof pr.user?.login !== 'string') throw new Error('Invalid PR metadata');
   const files = await githubPages(github, `repos/${repo}/pulls/${pr.number}/files`);
   if (files.some((file) => typeof file.filename !== 'string' || typeof file.status !== 'string') ||
@@ -217,7 +244,18 @@ async function readVerdict(pr, { github, repo, env, fetchImpl, commentCache, bud
   if (!commentCache.has(ticket.key)) {
     commentCache.set(ticket.key, readComments(ticket.key, { env, fetchImpl, budget }));
   }
-  return evaluate({ ...input, comments: await commentCache.get(ticket.key) });
+  const comments = await commentCache.get(ticket.key);
+  const verdict = evaluate({ ...input, comments });
+  if (verdict.state === 'success') return verdict;
+  if (!parentCache.has(ticket.key)) {
+    parentCache.set(ticket.key, readParentTicket(ticket.key, { env, fetchImpl, budget }));
+  }
+  const parent = await parentCache.get(ticket.key);
+  if (!parent) return verdict;
+  if (!commentCache.has(parent)) {
+    commentCache.set(parent, readComments(parent, { env, fetchImpl, budget }));
+  }
+  return evaluate({ ...input, comments, parentComments: await commentCache.get(parent) });
 }
 
 export async function run(args, { env = process.env, fetchImpl = fetch, github = createGithub({ env, fetchImpl }), log = console.log, now = Date.now } = {}) {
@@ -231,7 +269,7 @@ export async function run(args, { env = process.env, fetchImpl = fetch, github =
   if (!reconcile && number == null) throw new Error('Read-only mode requires --pr <number>');
   const repo = env.REPO || env.GITHUB_REPOSITORY || 'hypertask-ai/hypertask';
   const runUrl = env.RUN_URL || `https://github.com/${repo}/actions${env.GITHUB_RUN_ID ? `/runs/${env.GITHUB_RUN_ID}` : ''}`;
-  const options = { github, repo, env, fetchImpl, commentCache: new Map(), budget: { remaining: READ_BUDGET, stopped: false } };
+  const options = { github, repo, env, fetchImpl, commentCache: new Map(), parentCache: new Map(), budget: { remaining: READ_BUDGET, stopped: false } };
   if (!reconcile) {
     const pr = await github(`repos/${repo}/pulls/${number}`);
     const verdict = await readVerdict(pr, options);
