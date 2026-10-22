@@ -1,10 +1,7 @@
 #!/usr/bin/env bash
 # Screenshot a URL at a real phone viewport (390x844, mobile UA), signed in.
 #
-# Viewport is set with `agent-browser set viewport`, then the page is reloaded,
-# because `set viewport` after load does not re-lay-out an already-rendered
-# page. All calls share one named session so the state, UA and viewport apply
-# to the same browser as the screenshot.
+# Playwright loads the auth state, viewport and user agent before navigation.
 #
 # Run `phone-shot.sh --help` for usage and examples.
 set -euo pipefail
@@ -37,6 +34,7 @@ landed somewhere other than the page you asked for.
 Usage:
   phone-shot.sh <url> <absolute out.png> [--state <absolute path>]
                 [--allow-redirect] [--dry-run] [--help]
+                [--viewport WxH] [--theme <porcelain|graphite|amoled|dia>]
 
   <url>             full https:// URL, scheme included.
   <out.png>         ABSOLUTE path for the PNG. A relative path is rejected,
@@ -50,7 +48,10 @@ Usage:
   --allow-redirect  downgrade "landed on a different path" from a failure to a
                     warning. Only for flows that redirect on purpose, and the
                     success line then says UNVERIFIED.
-  --dry-run         print the exact agent-browser calls and take no shot.
+  --dry-run         print the exact Playwright command and take no shot.
+  --viewport        viewport size, default 390x844. Widths of 800 or more
+                    use a desktop user agent (for example 1440x900).
+  --theme           set the theme cookie before loading the page.
 
 It exits non-zero when the state file is missing, when the browser lands on a
 login page, when it lands on a path other than the one requested (unless
@@ -84,13 +85,17 @@ DEFAULT_STATE="${HOME}/.config/hypertask-videos/storageState-qa.json"
 STATE_FILE=""
 DRY_RUN="no"
 ALLOW_REDIRECT="no"
-SESSION="phone-shot"
+VIEWPORT="390x844"
+THEME=""
+SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 UA="Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Mobile/15E148 Safari/604.1"
 
 while [ "$#" -gt 0 ]; do
   case "$1" in
     --help|-h) show_help; exit 0 ;;
     --state) STATE_FILE="${2:?}"; shift 2 ;;
+    --viewport) VIEWPORT="${2:?}"; shift 2 ;;
+    --theme) THEME="${2:?}"; shift 2 ;;
     --allow-redirect) ALLOW_REDIRECT="yes"; shift ;;
     --dry-run) DRY_RUN="yes"; shift ;;
     *) die "$SELF does not know the argument '$1'." "Run 'phone-shot.sh --help' for the accepted flags." ;;
@@ -99,7 +104,7 @@ done
 
 case "$URL" in
   http://*|https://*) ;;
-  *) die "'$URL' has no scheme, so agent-browser cannot open it." "Re-run with the full URL, for example https://app.hypertask.ai/detail/project-15/6471." ;;
+  *) die "'$URL' has no scheme, so Playwright cannot open it." "Re-run with the full URL, for example https://app.hypertask.ai/detail/project-15/6471." ;;
 esac
 
 require_abs "$OUT" "The output path" "Re-run with the full path, for example \"\$PWD/after.png\". The browser session does not share your working directory."
@@ -112,17 +117,30 @@ case "$STATE_FILE" in
 esac
 require_abs "$STATE_FILE" "--state" "Re-run with the full path, for example --state \"\$HOME/.config/hypertask-videos/storageState-qa.json\"."
 
+if [[ ! "$VIEWPORT" =~ ^[1-9][0-9]{0,4}x[1-9][0-9]{0,4}$ ]]; then
+  die "Invalid viewport '$VIEWPORT'." "Pass --viewport WxH, for example 390x844 or 1440x900."
+fi
+case "$THEME" in
+  ""|porcelain|graphite|amoled|dia) ;;
+  *) die "Unknown theme '$THEME'." "Pass --theme porcelain, graphite, amoled, or dia." ;;
+esac
+UA_LABEL="iPhone"
+if [ "${VIEWPORT%x*}" -ge 800 ]; then
+  UA="Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36"
+  UA_LABEL="desktop"
+fi
+
+REQ_PATH="${URL#*://*/}"
+NODE_ARGS=("$SCRIPT_DIR/phone-shot.mjs" "$URL" "$OUT" "$STATE_FILE" "$UA" "$VIEWPORT" "$ALLOW_REDIRECT" "$REQ_PATH" "$THEME")
 OUT_DIR="$(dirname "$OUT")"
 
 if [ "$DRY_RUN" = "yes" ]; then
   printf 'DRY RUN: state file: %s\n' "$STATE_FILE"
   printf 'DRY RUN: mkdir -p %q\n' "$OUT_DIR"
-  printf 'DRY RUN: agent-browser --session %q --state %q --user-agent <iphone-ua> open %q\n' "$SESSION" "$STATE_FILE" "$URL"
-  printf 'DRY RUN: agent-browser --session %q set viewport 390 844\n' "$SESSION"
-  printf 'DRY RUN: agent-browser --session %q reload\n' "$SESSION"
-  printf 'DRY RUN: agent-browser --session %q screenshot %q\n' "$SESSION" "$OUT"
-  printf 'DRY RUN: agent-browser --session %q get url   # must not be a login page, and must contain the requested path\n' "$SESSION"
-  printf 'DRY RUN OK: would write %s at 390x844, redirect check %s.\n' "$OUT" \
+  printf 'DRY RUN: nice -n 19 node'
+  shq "${NODE_ARGS[@]}"
+  printf '\n'
+  printf 'DRY RUN OK: would write %s at %s, redirect check %s.\n' "$OUT" "$VIEWPORT" \
     "$([ "$ALLOW_REDIRECT" = yes ] && echo 'downgraded to a warning' || echo 'fatal')"
   exit 0
 fi
@@ -133,41 +151,21 @@ fi
 mkdir -p "$OUT_DIR" \
   || die "Could not create the output directory $OUT_DIR." "Pick a path you can write to, for example under \$HOME, and re-run."
 
-agent-browser --session "$SESSION" --state "$STATE_FILE" --user-agent "$UA" open "$URL" >/dev/null \
-  || die "agent-browser could not open $URL." "Run 'agent-browser --session $SESSION open $URL' by hand to read the real error. If the browser is wedged, close the session and retry."
-agent-browser --session "$SESSION" set viewport 390 844 >/dev/null \
-  || die "agent-browser could not set the 390x844 viewport, so the shot would be desktop width." "Run 'agent-browser --session $SESSION set viewport 390 844' by hand and read the error."
-agent-browser --session "$SESSION" reload >/dev/null \
-  || die "agent-browser could not reload after the viewport change, so the page is still laid out at the old width." "Run 'agent-browser --session $SESSION reload' by hand and read the error."
-agent-browser --session "$SESSION" screenshot "$OUT" >/dev/null \
-  || die "agent-browser could not write the screenshot to $OUT." "Check the directory is writable and re-run. If the page never settled, open the URL by hand first."
+LANDED="$(nice -n 19 node "${NODE_ARGS[@]}")" || exit 1
 
-LANDED="$(agent-browser --session "$SESSION" get url 2>/dev/null || true)"
-case "$LANDED" in
-  *login*|*signin*|*sign-in*)
-    die "The browser landed on a login page ($LANDED), so the auth state at $STATE_FILE is stale and the shot is not evidence." "Refresh that state file with the login recipe in .claude/skills/verify-qa/SKILL.md 'Logins', then re-run." ;;
-esac
-
-# A redirect away from the requested path means the shot is of some other
-# screen. A screenshot of the wrong page is worse than none.
-REQ_PATH="${URL#*://*/}"
 REDIRECTED="no"
 case "$LANDED" in
   *"$REQ_PATH"*) ;;
   *) REDIRECTED="yes" ;;
 esac
 
-if [ "$REDIRECTED" = "yes" ] && [ "$ALLOW_REDIRECT" != "yes" ]; then
-  die "Asked for $URL but the browser landed on $LANDED, so $OUT shows a different screen." "Check this account has access to that page. If the redirect is expected, re-run with --allow-redirect and say so when you post the shot."
-fi
-
 [ -s "$OUT" ] \
-  || die "No screenshot bytes were written to $OUT." "Run the agent-browser calls by hand with --dry-run's command list and find which one produced nothing."
+  || die "No screenshot bytes were written to $OUT." "Run the Playwright command from --dry-run by hand and read the error."
 
 BYTES="$(wc -c <"$OUT" | tr -d ' ')"
 printf '%s: saved.\n' "$SELF"
 printf '  file:     %s (%s bytes)\n' "$OUT" "$BYTES"
-printf '  viewport: 390x844, iPhone user agent\n'
+printf '  viewport: %s, %s user agent\n' "$VIEWPORT" "$UA_LABEL"
 printf '  url:      %s\n' "$LANDED"
 if [ "$REDIRECTED" = "yes" ]; then
   printf '  status:   UNVERIFIED - redirected away from %s, allowed by --allow-redirect\n' "$URL"
