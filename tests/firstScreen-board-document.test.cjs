@@ -137,7 +137,7 @@ test('display cookie is account scoped, validated and rejects unsupported open d
 test('only a seeded Plex-theme document preloads the existing critical font; OFF keeps automatic preload disabled', () => {
   const layout = fs.readFileSync(path.join(root, 'src/app/layout.tsx'), 'utf8');
   assert.match(layout, /firstScreen && \["amoled", "graphite", "porcelain"\]\.includes\(firstScreen.display.theme\)/);
-  assert.match(layout, /href=\{IBM_PLEX_SANS_LATIN_FONT_HREF\} as="font"/);
+  assert.match(layout, /<link rel="preload" href=\{.*IBM_PLEX_SANS_LATIN_FONT_HREF\} as="font"/);
   const font = fs.readFileSync(path.join(root, 'src/lib/fonts/ibmPlexSans.ts'), 'utf8');
   assert.match(font, /preload: false/);
   assert.match(font, /IBM_PLEX_SANS_LATIN_FONT_HREF = "\/_next\/static\/media\/[a-f0-9]+-s\.woff2"/);
