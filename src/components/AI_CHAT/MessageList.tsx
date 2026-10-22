@@ -4,9 +4,9 @@ import { TypingIndicator } from "./TypingIndicator";
 import { useAiChatContext } from "@/lib/contexts/Multipages/AI_Agent/AI_Agent_Chat_Context";
 import { useQuery } from "@tanstack/react-query";
 import { useRecoilValue, useSetRecoilState } from "@/lib/state";
-import { composeTaskQuestionsTaskIdAtom } from "@/store";
+import { composeTaskQuestionsTaskIdAtom, inViewObjectAtom } from "@/store";
 import { useFlag } from "@/hooks/useFlag";
-import { HTPR_7317_CTRLJ_TICKET_QUESTIONS_FLAG } from "@/lib/flags/keys";
+import { HTPR_7317_CTRLJ_TICKET_QUESTIONS_FLAG, HTPR_7601_ONLY_VIEWED_TICKET_QUESTIONS_FLAG } from "@/lib/flags/keys";
 
 interface MessageListProps {}
 
@@ -32,7 +32,10 @@ export const MessageList: React.FC<MessageListProps> = () => {
   const lastMessage = messages[messages.length - 1];
   const ticketQuestionsEnabled = useFlag(HTPR_7317_CTRLJ_TICKET_QUESTIONS_FLAG);
   const newTicketId = currentSession?.taskId;
-  const showTicketQuestions = ticketQuestionsEnabled && Boolean(newTicketId) && messages.length === 1 &&
+  const onlyViewedTicket = useFlag(HTPR_7601_ONLY_VIEWED_TICKET_QUESTIONS_FLAG);
+  const viewedTaskId = useRecoilValue(inViewObjectAtom)?.taskId;
+  const sessionIsAnotherTicket = onlyViewedTicket && Boolean(viewedTaskId) && viewedTaskId !== newTicketId;
+  const showTicketQuestions = ticketQuestionsEnabled && Boolean(newTicketId) && !sessionIsAnotherTicket && messages.length === 1 &&
     lastMessage?.role === "assistant" && isSavedOrLocalComposeIntro(lastMessage.content ?? "");
   const ticketQuestions = useQuery({
     queryKey: ["task-questions", "new-ticket", newTicketId],
