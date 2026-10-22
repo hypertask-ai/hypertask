@@ -15,6 +15,7 @@ each ticket only needs the one or two areas it touches.
 | Area | File | e2e/smoke id |
 |---|---|---|
 | CI Node-version guard | [ci-node-version.md](ci-node-version.md) | throwaway PR negative control, no app writes |
+| Visual Regression check | [visual-regression.md](visual-regression.md) | dispatch on production one run at a time, 3 green on one commit, per-screen capture times, no app writes |
 | Production build and deploy | [production-build.md](production-build.md) | Vercel build log of the merge sha, no app writes |
 | Premerge evidence status | [premerge-evidence.md](premerge-evidence.md) | read-only status sweep of open PRs, no app writes |
 | Runner dispatch | [runner-dispatch.md](runner-dispatch.md) | read-only plan from the live copy, no --go, no app writes |
