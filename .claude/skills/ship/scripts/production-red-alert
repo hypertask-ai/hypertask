@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// One free, agent-owned alert per production-red streak and failing-file set.
+// One free, agent-owned alert per production-red streak.
 'use strict';
 const fs = require('node:fs');
 const path = require('node:path');
@@ -54,12 +54,12 @@ function live(run = command, repoDir = process.cwd()) {
     return all.filter(j => j.name === 'ci-tests').sort((a, b) => b.id - a.id)[0];
   };
   return {
-    async collect(runId) {
+    async collect(runId, state = { alerts: {} }) {
       const target = runId ? api(`actions/runs/${runId}`) : null;
       if (target && (target.name !== 'CI Tests' || target.head_branch !== 'production' || target.status !== 'completed')) {
         throw new Error('--run must be a completed production CI Tests run');
       }
-      let red, firstRed, green;
+      let red, firstRed, green, latest;
       for (let page = 1; !green; page++) {
         const route = target ? `actions/workflows/${target.workflow_id}/runs` : 'actions/workflows/ci-tests.yml/runs';
         const rows = api(`${route}?branch=production&status=completed&per_page=100&page=${page}${target ? `&created=<=${target.created_at}` : ''}`).workflow_runs;
@@ -68,7 +68,14 @@ function live(run = command, repoDir = process.cwd()) {
         for (const r of rows.sort((a, b) => b.id - a.id)) {
           if (r.name !== 'CI Tests' || r.head_branch !== 'production' || r.status !== 'completed' ||
               r.conclusion === 'cancelled' || (target && r.id > target.id)) continue;
-          const job = jobs(r.id);
+          if (!latest) {
+            latest = r;
+            if (!target && state.lastRun === `${r.id}:${r.run_attempt || 1}:${r.updated_at || ''}`) {
+              return { status: 'idle', run: r };
+            }
+          }
+          // A successful workflow cannot contain a failed ci-tests job.
+          const job = r.conclusion === 'success' ? { status: 'completed', conclusion: 'success' } : jobs(r.id);
           if (!job || job.status !== 'completed') throw new Error(`Missing completed ci-tests job for run ${r.id}`);
           if (!red) {
             if (job.conclusion !== 'failure') return { status: job.conclusion, run: r };
@@ -86,6 +93,9 @@ function live(run = command, repoDir = process.cwd()) {
       for (const sha of [green.head_sha, red.head_sha, firstRed.head_sha]) {
         if (!/^[0-9a-f]{40}$/.test(sha)) throw new Error('Invalid CI commit SHA');
       }
+      if (Object.values(state.alerts).some(a => a.firstRed === firstRed.head_sha)) {
+        return { status: 'failure', run: red, firstRed, green, failures, prs: [] };
+      }
       git(['merge-base', '--is-ancestor', red.head_sha, 'origin/production']);
       git(['merge-base', '--is-ancestor', green.head_sha, red.head_sha]);
       const commits = git(['log', '--first-parent', '--format=%H\t%s', `${green.head_sha}..${red.head_sha}`]);
@@ -94,16 +104,17 @@ function live(run = command, repoDir = process.cwd()) {
         const [sha, title] = line.split('\t');
         const number = title.match(/\(#(\d+)\)$/)?.[1];
         if (!number) throw new Error(`Non-squash commit ${sha} in production range; refusing to omit it`);
-        const files = [];
+        const files = [], patches = [];
         for (let page = 1; ; page++) {
           const rows = api(`pulls/${number}/files?per_page=100&page=${page}`);
           if (!Array.isArray(rows)) throw new Error('Unreadable PR files');
           files.push(...rows.flatMap(f => [f.filename, f.previous_filename].filter(Boolean)));
+          patches.push(...rows.map(f => f.patch || ''));
           if (rows.length < 100) break;
           if (page >= 30) throw new Error('GitHub PR file limit reached; refusing a partial range');
         }
         prs.push({ number: Number(number), title: title.replace(/ \(#\d+\)$/, ''),
-          url: `https://github.com/${REPO}/pull/${number}`, files });
+          url: `https://github.com/${REPO}/pull/${number}`, files, patches });
       }
       return { status: 'failure', run: red, firstRed, green, failures, prs };
     },
@@ -126,28 +137,44 @@ function live(run = command, repoDir = process.cwd()) {
     }
   };
 }
-async function plan(data, api) {
-  if (data.status !== 'failure') return { action: data.status === 'success' ? 'green' : 'none', run: data.run };
+async function plan(data, api, state = { alerts: {} }) {
+  if (data.status !== 'failure') return { action: data.status === 'success' ? 'green' : data.status === 'idle' ? 'idle' : 'none', run: data.run };
   const files = [...new Set(data.failures.map(f => f.file))].sort();
+  const key = data.firstRed.head_sha;
+  const existing = Object.values(state.alerts).find(a => a.firstRed === key);
+  if (existing) return { action: 'alert', key, firstRed: key, run: data.run, green: data.green, failures: data.failures };
   const touched = data.prs.find(pr => pr.files.some(f => files.includes(f)));
-  const chosen = touched || data.prs[0];
+  const ignored = new Set(['function', 'return', 'iterable', 'unexpected', 'import', 'undefined', 'cannot',
+    'property', 'typeerror', 'referenceerror', 'syntaxerror', 'error', 'module', 'resolve', 'reading']);
+  const errors = data.failures.map(f => f.error).join('\n');
+  const modules = errors.match(/(?:@[\w-]*\/|\.{1,2}\/|src\/)[\w./$@-]+/g) || [];
+  const identifiers = new Set((errors.replace(/(?:@[\w-]*\/|\.{1,2}\/|src\/)[\w./$@-]+/g, '')
+    .match(/[A-Za-z_$][\w$]{5,}/g) || []).filter(id => !ignored.has(id.toLowerCase())));
+  const modulePath = p => p.replace(/^@\//, 'src/').replace(/^\.\//, '').replace(/\.[cm]?[jt]sx?$/, '');
+  const implicated = data.prs.find(pr => pr.files.some(f => modules.some(m => modulePath(f) === modulePath(m))) ||
+    (pr.patches || []).some(patch => patch.split('\n').some(line => /^[+-]/.test(line) && !/^(?:\+\+\+|---)\s/.test(line) &&
+      ((line.match(/[A-Za-z_$][\w$]{5,}/g) || []).some(id => identifiers.has(id)) ||
+        (line.match(/(?:@[\w-]*\/|\.{1,2}\/|src\/)[\w./$@-]+/g) || [])
+          .some(p => modules.some(m => modulePath(p) === modulePath(m)))))));
+  const chosen = touched || implicated || data.prs.at(-1);
   if (!chosen) throw new Error('Red range contains no PR; refusing to invent a fixer');
   const ticket = chosen.title.match(/^((?:HTPR|YPER4|HYFA)-\d+)\b/)?.[1];
   if (!ticket) throw new Error('Chosen PR title has no recognized ticket prefix');
   const fixer = agent(await api.task(ticket));
-  const key = `${data.firstRed.head_sha}:${files.join(',')}`;
   const marker = `production-red-alert:${createHash('sha256').update(key).digest('hex')}`;
+  const rule = touched ? 'failing-test-file' : implicated ? 'error-identifier' : 'oldest-pr';
   const why = touched ? `PR #${chosen.number} is the newest PR in this range that changed a failing test file.`
-    : `No PR in this range changed a failing test file, so PR #${chosen.number}, the newest PR, owns the fix.`;
+    : implicated ? `PR #${chosen.number} is the newest PR whose changed lines or module paths match an identifier in the first errors.`
+    : `No PR changed a failing test file or matched an error identifier, so PR #${chosen.number}, the oldest PR (first change after green), owns the fix.`;
   const description = [
     'Production tests are failing. One agent owns this fix so runners do not duplicate the work.', '',
     'Failing tests (first error for each file):', ...data.failures.map(f => `- ${f.file}: ${f.error}`), '',
     `Red run: ${data.run.html_url}`, `Last green run: ${data.green.html_url}`, '',
     'PRs merged since the last green run (newest first):', ...data.prs.map(pr => `- #${pr.number} ${pr.title} ${pr.url}`), '',
-    `Fixer: ${fixer.name} (${fixer.id}), the agent assigned to ${ticket}. ${why}`, '', marker
+    `Fixer: ${fixer.name} (${fixer.id}), the agent assigned to ${ticket}. Rule: ${rule}. ${why}`, '', marker
   ].join('\n');
   return { action: 'alert', key, marker, firstRed: data.firstRed.head_sha, run: data.run,
-    green: data.green, failures: data.failures, prs: data.prs, chosenPR: chosen.number, fixer, why,
+    green: data.green, failures: data.failures, prs: data.prs, chosenPR: chosen.number, fixer, rule, why,
     title: `Production red: ${data.failures[0].file}`, description, project: 4060, section: 'In Progress' };
 }
 function load(dir) {
@@ -175,11 +202,11 @@ async function apply(p, state, api, persist) {
   }
   if (p.action !== 'alert') return;
   await apply({ action: 'green', run: p.green }, state, api, persist);
-  let a = state.alerts[p.key];
-  if (a?.closed || a?.assigned) return;
+  let a = state.alerts[p.key] || Object.values(state.alerts).find(a => a.firstRed === p.firstRed);
+  if (a?.closed) return;
   if (!a) {
     // Save an intent before the non-idempotent create. An interrupted create is reconciled, never blindly repeated.
-    a = state.alerts[p.key] = { title: p.title, marker: p.marker, firstRed: p.firstRed, runId: p.run.id, fixer: p.fixer };
+    a = state.alerts[p.key] = { title: p.title, marker: p.marker, firstRed: p.firstRed, runId: p.run.id, fixer: p.fixer, files: p.failures.map(f => f.file) };
     persist();
     const result = json(api.write(['task', 'create', '--project', '4060', '--section', 'In Progress',
       '--title', p.title, '--description', p.description, '--json']));
@@ -188,24 +215,37 @@ async function apply(p, state, api, persist) {
     if (!/^YPER4-\d+$/.test(a.ticket || '')) throw new Error('Create returned no alert ticket reference; reconcile saved intent');
     persist();
   } else if (!a.ticket) { a.ticket = api.recover(a.title, a.marker); persist(); }
-  if (!UUID.test(a.fixer.id)) throw new Error('Refusing non-agent assignment');
-  if (json(api.write(['task', 'assign', a.ticket, '--assignee', a.fixer.id, '--json'])).success !== true) {
-    throw new Error('Assignment returned no success receipt');
+  if (!a.assigned) {
+    if (!UUID.test(a.fixer.id)) throw new Error('Refusing non-agent assignment');
+    if (json(api.write(['task', 'assign', a.ticket, '--assignee', a.fixer.id, '--json'])).success !== true) {
+      throw new Error('Assignment returned no success receipt');
+    }
+    a.assigned = true; persist();
   }
-  a.assigned = true; persist();
+  if (a.updating) throw new Error('Additional failures activity outcome unknown; reconcile saved update intent manually');
+  // Older state keyed by file set already recorded those files in the original alert.
+  const recorded = a.files || Object.keys(state.alerts).find(k => state.alerts[k] === a).split(':').slice(1).join(':').split(',');
+  const added = p.failures.filter(f => !recorded.includes(f.file));
+  if (added.length) {
+    a.updating = true; persist();
+    api.write(['activity', 'add', a.ticket, `Additional failing tests: ${added.map(f => `${f.file}: ${f.error}`).join('; ').replace(/[\r\n]+/g, ' ')} (${a.marker}).`]);
+    a.files = [...recorded, ...added.map(f => f.file)]; a.updating = false; persist();
+  }
 }
 async function tick({ dryRun = false, runId, dir = STATE, api = live(), now = Math.floor(Date.now() / 1000) } = {}) {
   const state = load(dir);
   if (!dryRun && state.until > now) return { action: 'backoff', until: state.until };
   try {
-    const p = await plan(await api.collect(runId), api);
+    const context = dryRun ? { alerts: {} } : state;
+    const p = await plan(await api.collect(runId, context), api, context);
     if (dryRun) {
       let writer;
       try { writer = api.identity(); } catch { writer = { name: IDENTITY, refused: 'Session credential unavailable; writes refused (no Valentin fallback)' }; }
       return { dryRun: true, identity: writer, ...p, alreadyAlerted: p.key ? !!state.alerts[p.key] : false };
     }
-    api.identity();
+    if (p.action !== 'idle') api.identity();
     await apply(p, state, api, () => save(dir, state));
+    if (p.run) state.lastRun = `${p.run.id}:${p.run.run_attempt || 1}:${p.run.updated_at || ''}`;
     state.fails = 0; state.until = 0; save(dir, state);
     return { action: p.action, key: p.key };
   } catch (e) {

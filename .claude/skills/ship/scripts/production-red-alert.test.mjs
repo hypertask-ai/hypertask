@@ -11,6 +11,9 @@ const { agent, identity, live, plan, tick, units, main } = require('./production
 const here = path.dirname(fileURLToPath(import.meta.url));
 const fixture = name => JSON.parse(fs.readFileSync(path.join(here, 'fixtures/yper4-582', `${name}.json`), 'utf8'));
 const tasks = fixture('tasks');
+tasks['HTPR-7311'] = { ...structuredClone(tasks['HTPR-7322']), ticketNumber: 'HTPR-7311' };
+tasks['HTPR-7576'] = { ...structuredClone(tasks['HTPR-7574']), ticketNumber: 'HTPR-7576' };
+tasks['HTPR-7567'] = { ...structuredClone(tasks['HTPR-7574']), ticketNumber: 'HTPR-7567' };
 const first = () => fixture('39719731623');
 const second = () => fixture('39765957007');
 const tmp = t => { const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'red-alert-')); t.after(() => fs.rmSync(dir, { recursive: true, force: true })); return dir; };
@@ -41,14 +44,17 @@ test('crossed #1837 + #1835: #1835 touched onboarding test, so Runner 5 owns it'
   for (const pr of data.prs) assert.ok(p.description.includes(`#${pr.number} ${pr.title} ${pr.url}`));
   assert.ok(p.description.includes(data.green.html_url)); assert.ok(p.description.includes(data.run.html_url));
 });
-test('actual 39719731623 range has no failing-file change: newest #1806 owns fallback', async () => {
-  const p = await plan(first(), fake());
-  assert.equal(p.chosenPR, 1806); assert.equal(p.fixer.name, 'Runner 5');
-  assert.match(p.why, /No PR.*newest PR/);
+test('39719731623: removed error identifier in #1789 beats newest #1806', async () => {
+  const data = first();
+  data.prs.find(p => p.number === 1789).patches = ['@@ -1 +1 @@\n-export function pickDecisionTaskIds() {}\n+export function pickDecisionTargets() {}'];
+  const p = await plan(data, fake());
+  assert.equal(p.chosenPR, 1789); assert.equal(p.rule, 'error-identifier');
+  assert.equal(p.fixer.id, tasks['HTPR-7311'].assignees[0].agent.id);
+  assert.match(p.description, /Rule: error-identifier/);
 });
-test('no touching PR falls back to newest, not the oldest or PR author', async () => {
+test('no touching PR or error identifier falls back to oldest, not newest or PR author', async () => {
   const d = second(); d.prs.forEach(p => { p.files = ['unrelated.txt']; });
-  const p = await plan(d, fake()); assert.equal(p.chosenPR, d.prs[0].number);
+  const p = await plan(d, fake()); assert.equal(p.chosenPR, d.prs.at(-1).number); assert.equal(p.rule, 'oldest-pr');
   assert.match(p.why, /No PR/);
 });
 test('same red streak twice, even at a later red commit, creates and assigns once', async t => {
@@ -81,10 +87,10 @@ test('a green boundary missed between timer ticks still closes the previous stre
   assert.equal(api.writes.filter(a => a[0] === 'activity').length, 1);
   assert.equal(api.writes.filter(a => a[1] === 'create').length, 1);
 });
-test('key uses first red SHA plus sorted unique failing files, not newest red SHA', async () => {
+test('key uses only first red SHA, not failing files or newest red SHA', async () => {
   const a = second(), b = second();
   a.failures.push({ file: 'tests/a.test.cjs', error: 'Error: a' });
-  b.failures = [...a.failures].reverse(); b.run.head_sha = 'f'.repeat(40);
+  b.failures = [...a.failures, { file: 'tests/new.test.cjs', error: 'new failure' }].reverse(); b.run.head_sha = 'f'.repeat(40);
   const pa = await plan(a, fake()), pb = await plan(b, fake());
   assert.equal(pa.key, pb.key); assert.ok(pa.key.startsWith(a.firstRed.head_sha));
   b.firstRed.head_sha = 'c'.repeat(40);
@@ -161,7 +167,7 @@ test('timer is five minutes, low priority, bounded, and installation is explicit
   await assert.rejects(main(['--run', '39719731623']), /replay-only/);
 });
 
-function fixtureCommand(data, { cancelled = true, greenOnly = false, paginate = false } = {}) {
+function fixtureCommand(data, { cancelled = true, greenOnly = false, paginate = false, history = [], log } = {}) {
   const calls = [], run = (bin, args, options) => {
     calls.push([bin, args]);
     if (bin === 'python3') return execFileSync(bin, args, { encoding: 'utf8', input: options.input });
@@ -174,7 +180,7 @@ function fixtureCommand(data, { cancelled = true, greenOnly = false, paginate = 
     if (route.endsWith(`/actions/runs/${data.run.id}`)) return JSON.stringify(data.run);
     if (route.includes('/runs?')) {
       const rows = [ ...(cancelled ? [{ ...data.run, id: data.run.id + 5, conclusion: 'cancelled' }] : []),
-        ...(greenOnly ? [] : [data.run]), data.green ];
+        ...(greenOnly ? [] : [data.run, ...history]), data.green ];
       if (paginate && !route.includes('page=2')) return JSON.stringify({ workflow_runs: rows.filter(r => r.id !== data.green.id) });
       return JSON.stringify({ workflow_runs: paginate ? [data.green] : rows });
     }
@@ -183,9 +189,9 @@ function fixtureCommand(data, { cancelled = true, greenOnly = false, paginate = 
       const green = route.includes(`/runs/${data.green.id}/`);
       return JSON.stringify({ jobs: [{ id: green ? 1 : data.run.job.id, name: 'ci-tests', status: 'completed', conclusion: green ? 'success' : 'failure' }] });
     }
-    if (route.endsWith('/logs')) return fs.readFileSync(path.join(here, 'fixtures/yper4-582', `${data.run.id}.log`), 'utf8');
+    if (route.endsWith('/logs')) return log ?? fs.readFileSync(path.join(here, 'fixtures/yper4-582', `${data.run.id}.log`), 'utf8');
     const pr = data.prs.find(pr => route.includes(`/pulls/${pr.number}/files?`));
-    if (pr) return JSON.stringify(pr.files.map(filename => ({ filename })));
+    if (pr) return JSON.stringify(pr.files.map((filename, i) => ({ filename, patch: pr.patches?.[i] })));
     assert.fail(`Unexpected fixture command: ${bin} ${args.join(' ')}`);
   };
   return { run, calls };
@@ -254,4 +260,116 @@ test('an interrupted recovery note is not posted a second time', async t => {
   const retry = fake({ status: 'success', run: { id: second().run.id + 1 } });
   await assert.rejects(tick({ dir, api: retry, now: 10000 }), /Recovery note outcome unknown/);
   assert.equal(retry.writes.length, 0);
+});
+
+test('identifier rules use added or removed tokens, ignore context/common words, and prefer newest matching PR', async () => {
+  const d = second();
+  d.prs.forEach(p => { p.files = ['unrelated.txt']; p.patches = []; });
+  d.failures[0].error = 'TypeError: pickDecisionTaskIds is not a function or its return value is not iterable';
+  d.prs[0].patches = ['@@ -1 +1 @@\n function pickDecisionTaskIds() {}\n+const iterable = undefined; // Unexpected import Cannot property return'];
+  d.prs[1].patches = ['+const pickDecisionTaskIdsExtra = true;'];
+  assert.equal((await plan(d, fake())).rule, 'oldest-pr');
+  d.prs.at(-1).patches = ['-const pickDecisionTaskIds = old;'];
+  d.prs[1].patches = ['+const pickDecisionTaskIds = changed;'];
+  assert.equal((await plan(d, fake())).chosenPR, d.prs[1].number);
+  d.prs[0].files = [d.failures[0].file];
+  const touched = await plan(d, fake());
+  assert.equal(touched.chosenPR, d.prs[0].number); assert.equal(touched.rule, 'failing-test-file');
+});
+test('module-path identifiers match changed module paths or changed import lines, not generic path segments', async () => {
+  const d = second();
+  d.prs.forEach(p => { p.files = ['unrelated.txt']; p.patches = []; });
+  d.failures[0].error = "Error: Cannot find module '@/lib/auth/agentScope'";
+  d.prs[0].patches = ['+const agentScope = undefined;'];
+  assert.equal((await plan(d, fake())).rule, 'oldest-pr');
+  d.prs[1].files = ['src/lib/auth/agentScope.ts'];
+  assert.equal((await plan(d, fake())).chosenPR, d.prs[1].number);
+  d.prs[0].patches = ["-import { scope } from '@/lib/auth/agentScope';"];
+  assert.equal((await plan(d, fake())).chosenPR, d.prs[0].number);
+});
+function counted(data, options) {
+  const mock = fixtureCommand(data, options), f = fake(data);
+  return { ...mock, api: { ...live(mock.run, '/fixture'), task: f.task, identity: f.identity,
+    write: f.write, recover: f.recover }, writes: f.writes,
+    github: () => mock.calls.filter(([bin]) => bin === 'gh').length };
+}
+test('idle green ticks, including a new green run without an open streak, make exactly one API call', async t => {
+  const dir = tmp(t), d = second(), mock = counted(d, { greenOnly: true, cancelled: false });
+  mock.api.task = () => assert.fail('idle tick must not read tickets');
+  assert.equal((await tick({ dir, api: mock.api })).action, 'green');
+  assert.equal(mock.github(), 1);
+  let before = mock.github();
+  assert.equal((await tick({ dir, api: mock.api })).action, 'idle');
+  assert.equal(mock.github() - before, 1);
+  d.green.id++;
+  before = mock.github();
+  assert.equal((await tick({ dir, api: mock.api })).action, 'green');
+  assert.equal(mock.github() - before, 1); assert.equal(mock.writes.length, 0);
+  t.diagnostic(`green cold/idle/new-green gh calls: ${mock.github() / 3} each; writes: ${mock.writes.length}`);
+});
+test('unchanged red tick makes one API call and no second alert; new failures append once without PR or ticket reads', async t => {
+  const dir = tmp(t), d = second();
+  const originalLog = fs.readFileSync(path.join(here, 'fixtures/yper4-582', `${d.run.id}.log`), 'utf8');
+  const mock = counted(d, { cancelled: false });
+  await tick({ dir, api: mock.api });
+  const firstCalls = mock.github();
+  assert.equal(firstCalls, 3 + d.prs.length); // list, failed job, log, and new-streak PR files
+  const writes = mock.writes.length;
+  mock.api.task = () => assert.fail('repeated streak must not read fixer tickets');
+  mock.api.identity = () => assert.fail('idle tick must not resolve a writer');
+  assert.equal((await tick({ dir, api: mock.api })).action, 'idle');
+  assert.equal(mock.github() - firstCalls, 1); assert.equal(mock.writes.length, writes);
+  const prior = structuredClone(d.run);
+  d.run.id++; d.run.head_sha = 'a'.repeat(40);
+  const next = counted(d, { cancelled: false, history: [prior],
+    log: `${originalLog}\ntest at tests/new-red.test.cjs:1:1\n  Error: newFailureToken is not a function\ntest at tests/another-red.test.cjs:1:1\n  Error: anotherFailureToken is not a function\n` });
+  next.api.task = () => assert.fail('existing streak must not re-read tickets');
+  await tick({ dir, api: next.api });
+  assert.equal(next.github(), 4); // list, two failed jobs, log; no PR patches
+  assert.equal(next.calls.filter(([bin, args]) => bin === 'gh' && args[3].includes('/pulls/')).length, 0);
+  assert.equal(next.writes.length, 1);
+  assert.deepEqual(next.writes[0].slice(0, 3), ['activity', 'add', 'YPER4-9999']);
+  assert.match(next.writes[0][3], /tests\/new-red.test.cjs: Error: newFailureToken/);
+  assert.match(next.writes[0][3], /tests\/another-red.test.cjs: Error: anotherFailureToken/);
+  assert.equal(next.writes[0][3].split('\n').length, 1);
+  const before = next.github();
+  await tick({ dir, api: next.api });
+  assert.equal(next.github() - before, 1); assert.equal(next.writes.length, 1);
+  assert.equal(mock.writes.filter(a => a[1] === 'create').length + next.writes.filter(a => a[1] === 'create').length, 1);
+  const saved = JSON.parse(fs.readFileSync(path.join(dir, 'state.json')));
+  assert.deepEqual(Object.keys(saved.alerts), [d.firstRed.head_sha]);
+  t.diagnostic(`new-streak gh calls: ${firstCalls}; unchanged-red gh calls: ${mock.github() - firstCalls}; later-red gh calls: ${before}; repeat-later-red gh calls: ${next.github() - before}; activity lines: ${next.writes.length}; tickets: ${Object.keys(saved.alerts).length}`);
+});
+test('a rerun attempt on the same run ID is not mistaken for an idle tick', async t => {
+  const dir = tmp(t), d = second(), mock = counted(d, { greenOnly: true, cancelled: false });
+  await tick({ dir, api: mock.api });
+  d.green.run_attempt = 2;
+  assert.equal((await tick({ dir, api: mock.api })).action, 'green');
+  assert.equal(mock.github(), 2);
+});
+test('an ambiguous additional-failures activity is never posted twice', async t => {
+  const dir = tmp(t), d = second(), api = fake(d);
+  await tick({ dir, api });
+  d.run.id++; d.failures.push({ file: 'tests/extra.test.cjs', error: 'Error: extra' });
+  api.write = args => { api.writes.push(args); throw new Error('response lost'); };
+  await assert.rejects(tick({ dir, api, now: 1 }), /response lost/);
+  const retry = fake(d);
+  await assert.rejects(tick({ dir, api: retry, now: 10000 }), /activity outcome unknown/);
+  assert.equal(retry.writes.length, 0);
+});
+
+test('legacy file-set keys retain the existing ticket and append only genuinely new failures', async t => {
+  const dir = tmp(t), d = second(), api = fake(d);
+  await tick({ dir, api });
+  const stateFile = path.join(dir, 'state.json'), state = JSON.parse(fs.readFileSync(stateFile));
+  const alert = state.alerts[d.firstRed.head_sha];
+  delete state.alerts[d.firstRed.head_sha]; delete alert.files;
+  state.alerts[`${d.firstRed.head_sha}:${d.failures.map(f => f.file).sort().join(',')}`] = alert;
+  fs.writeFileSync(stateFile, JSON.stringify(state));
+  d.run.id++; d.failures.push({ file: 'tests/new.test.cjs', error: 'Error: new' });
+  const next = fake(d); next.task = () => assert.fail('legacy streak must retain its fixer');
+  await tick({ dir, api: next });
+  assert.equal(next.writes.length, 1); assert.equal(next.writes[0][0], 'activity');
+  assert.match(next.writes[0][3], /tests\/new.test.cjs/);
+  assert.ok(!next.writes[0][3].includes(d.failures[0].file));
 });
