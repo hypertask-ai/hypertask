@@ -55,7 +55,7 @@ function commonMocks(calls) {
     "@/hooks/useFlag": { useFlag: (key) => {
       if (key === "htpr-6175-quick-entry-cards") throw new Error("Removed flag must not be read");
       return false;
-    } },
+    }, useFlagLoaded: () => true },
     "@/lib/flags/keys": { HTPR_7047_SHARP_PLUS_SIGNS_FLAG: "htpr-7047-sharp-plus-signs" },
     "@/utils/helperFunctions/helperFunctions": {
       throttle: (handler) => handler,

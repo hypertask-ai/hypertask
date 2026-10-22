@@ -42,7 +42,7 @@ test("quick-entry Escape cancels only the card, discards its text, and never sub
     "@/lib/constants/keyboard-handler": { KeyCodes: {} },
     "../MultiPages/Route/useHypertasksNavigate": { default: () => ({ navigate: () => {} }) },
     "@/lib/contexts/mobileContext": { MobileViewContext: React.createContext(false) },
-    "@/hooks/useFlag": { useFlag: () => false },
+    "@/hooks/useFlag": { useFlag: () => false, useFlagLoaded: () => true },
     "@/lib/flags/keys": {},
     "@/lib/configs/general.config": { MOBILE_TARGET: "min-h-[44px] min-w-[44px] shrink-0 flex items-center justify-center" },
     "react-hot-toast": { default: () => {} },

@@ -60,7 +60,6 @@ import {
   HTPR_6937_NEW_TASK_WINDOW_FLAG,
   HTPR_7053_COMPOSE_BOARD_CHIP_FLAG,
   HTPR_6868_TICKET_PREFIX_FLAG,
-  HTPR_6930_MY_TASKS_KANBAN_REUSE_FLAG,
   MY_TASKS_SCOPES_FLAG,
   MY_TASKS_TIME_GROUP_FLAG,
   MY_TASKS_FILTER_PARITY_FLAG,
@@ -175,7 +174,6 @@ const Commands = (props: Props) => {
   const googleCalendarSettingsEnabled = useFlag(GOOGLE_CALENDAR_FLAG);
   const autoTaskDescriptionsEnabled = useFlag("htpr-6177-auto-task-descriptions");
   const myTasksViewsEnabled = useFlag(MY_TASKS_VIEWS_FLAG);
-  const kanbanReuseEnabled = useFlag(HTPR_6930_MY_TASKS_KANBAN_REUSE_FLAG);
   const myTasksScopesEnabled = useFlag(MY_TASKS_SCOPES_FLAG);
   const myTasksTimeGroupEnabled = useFlag(MY_TASKS_TIME_GROUP_FLAG);
   const myTasksFilterParityEnabled = useFlag(MY_TASKS_FILTER_PARITY_FLAG);
@@ -227,7 +225,7 @@ const Commands = (props: Props) => {
     }
     if (scopeCommand) boardCommands.unshift(scopeCommand);
     const myTasksPickerCommands: ICommandList[] = [];
-    if (kanbanReuseEnabled && onMyTasks) {
+    if (onMyTasks) {
       if (myTasksScopesEnabled) myTasksPickerCommands.push({
         key: "myTasksInvolvement", name: "Involvement", commandMode: CommandMode.GoToBoard,
         keywords: "involvement assigned created mentioned watching my tasks",
@@ -413,7 +411,6 @@ const Commands = (props: Props) => {
     onCalendar,
     onMyTasks,
     myTasksViewsEnabled,
-    kanbanReuseEnabled,
     myTasksScopesEnabled,
     myTasksTimeGroupEnabled,
     myTasksFilterParityEnabled,
@@ -621,7 +618,7 @@ const Commands = (props: Props) => {
       };
       if (myTasksPickerEvents[command.key]) {
         resetShowCommands();
-        if (onMyTasks && kanbanReuseEnabled) window.dispatchEvent(new Event(myTasksPickerEvents[command.key]));
+        if (onMyTasks) window.dispatchEvent(new Event(myTasksPickerEvents[command.key]));
         return;
       }
       if (composeEnabled && (command.commandMode === CommandMode.CreateTaskWithAiWriter ||
@@ -738,15 +735,10 @@ const Commands = (props: Props) => {
   const commandGroups = (
     <CommandGroups
       handleMouseMove={handleMouseMove}
-      filterCommands={kanbanReuseEnabled ? filterCommands.map((paletteGroup) => ({
+      filterCommands={filterCommands.map((paletteGroup) => ({
         ...paletteGroup,
         commandLists: paletteGroup.commandLists.filter((paletteRow) =>
           !["myTasksInvolvement", "myTasksSort", "myTasksGroup"].includes(paletteRow.key) || onMyTasks
-        ),
-      })) : filterCommands.map((legacyPaletteGroup) => ({
-        ...legacyPaletteGroup,
-        commandLists: legacyPaletteGroup.commandLists.filter((legacyPaletteRow) =>
-          !["myTasksInvolvement", "myTasksSort", "myTasksGroup"].includes(legacyPaletteRow.key)
         ),
       }))}
       selectedCommand={selectedCommand}
