@@ -46,6 +46,13 @@ export function reportClientError(payload: ClientErrorPayload) {
     /^TypeError: network error(?:\n|$)/.test(payload.stack || '') &&
     /\bHypertaskApp\b/.test(navigator.userAgent)
   ) return
+  if (
+    (payload.source === 'global-error' || payload.source === 'unhandledrejection') &&
+    payload.message === 'network error' &&
+    /^(?:(?:Type)?Error: network error)?\s*$/.test(payload.stack || '') &&
+    !payload.componentStack?.trim() &&
+    !payload.digest
+  ) return
   if (payload.message === 'Network Error') return
   if (
     payload.source === 'unhandledrejection' &&
