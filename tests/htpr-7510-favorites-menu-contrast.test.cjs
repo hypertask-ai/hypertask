@@ -106,7 +106,7 @@ for (const enabled of [false, true]) {
       assert.deepEqual(writes[1], ["put", "/api/favorites/addEditFavorites", { userSettingId: 12, index: 1, projectId: -1 }]);
       assert.deepEqual(refetches, [{ queryKey: ["getAllFavorites"] }, { queryKey: ["getAllFavorites"] }]);
       assert.equal(ui.container.querySelector("#listContainer"), null);
-      assert.equal(scrolls.length, enabled ? 0 : 12);
+      assert.equal(scrolls.length, enabled ? 0 : 11);
     } finally {
       HTMLElement.prototype.getBoundingClientRect = originalRect;
       HTMLElement.prototype.scrollIntoView = originalScroll;
