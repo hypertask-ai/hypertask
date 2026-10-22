@@ -52,6 +52,7 @@ async function seed(visual) {
     if (file.endsWith("session.ts")) return { SESSION_TTL_SECONDS: 3600, signSession: () => "fake-session" };
     if (file.endsWith("flags.ts")) return { FEATURE_FLAG_KEYS: [], defaultFeatureFlagMode: () => "OFF" };
     if (file.endsWith("redis.ts")) return { getRedis: async () => ({ disconnect() {} }) };
+    if (file.endsWith("verifyJwt.ts")) return { createMcpToken: () => "fake-agent-token", agentTokenCredentialFields: () => ({}) };
     throw new Error(`Unexpected mock module ${file}`);
   };
   const file = pathToFileURL(path.join(__dirname, "../scripts/seed-browser-smoke.mjs")).href;
