@@ -4,6 +4,8 @@ import React, { useCallback, ReactNode, useContext } from "react";
 import { DraggableProvided, DraggableStateSnapshot } from "@hello-pangea/dnd";
 import { MobileViewContext } from "@/lib/contexts/mobileContext";
 import { cn } from "@/utils/undoActions/helperFuncs";
+import { useFlag } from "@/hooks/useFlag";
+import { HTPR_7614_SELECTED_CARD_BORDER_FLAG } from "@/lib/flags/keys";
 interface ITaskDraggableContainer {
   children: ReactNode;
   selectionControl?: ReactNode;
@@ -34,6 +36,10 @@ const TaskDraggableContainer: React.FC<ITaskDraggableContainer> = ({
   linkClassName,
 }) => {
   const isMbl = useContext(MobileViewContext);
+  const selectedCardBorder = useFlag(HTPR_7614_SELECTED_CARD_BORDER_FLAG);
+  const selectionLine = selectedCardBorder
+    ? "!outline-solid !outline-1 !-outline-offset-1 !outline-hypertasks-purple"
+    : "ring-1 ring-inset ring-hypertasks-purple";
 
   const getStyle = useCallback(
     (style: any, snapshot: DraggableStateSnapshot) => {
@@ -60,8 +66,8 @@ const TaskDraggableContainer: React.FC<ITaskDraggableContainer> = ({
         blocked ? "border-l-[3px]" : "border-l-4",
         selected
           ? blocked
-            ? "ring-1 ring-inset ring-hypertasks-purple border-[hsl(0_62.8%_30.6%)] bg-kanban-active-cardbg hover:bg-hover-active"
-            : "ring-1 ring-inset ring-hypertasks-purple border-transparent bg-kanban-active-cardbg hover:bg-hover-active"
+            ? `${selectionLine} border-[hsl(0_62.8%_30.6%)] bg-kanban-active-cardbg hover:bg-hover-active`
+            : `${selectionLine} border-transparent bg-kanban-active-cardbg hover:bg-hover-active`
           : active
           ? blocked
             ? "border-[hsl(0_62.8%_30.6%)] bg-kanban-active-cardbg hover:bg-hover-active"
@@ -70,6 +76,7 @@ const TaskDraggableContainer: React.FC<ITaskDraggableContainer> = ({
             ? "border-[hsl(0_62.8%_30.6%)] bg-cardBackground hover:bg-hoverCardBackground hover:shadow-md"
             : "border-transparent bg-cardBackground hover:bg-hoverCardBackground hover:shadow-md",
         "kanban-task-card group/kanban-selection relative rounded-[5px] outline-none cursor-pointer",
+        selectedCardBorder && selected && blocked && "!border-l-[hsl(0_62.8%_30.6%)]",
         parentClassName
       )}
       onClick={openDetail}
