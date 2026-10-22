@@ -43,14 +43,18 @@ function delegation(role, actingBoards = [15], enforce = false) {
       } },
     } },
   });
-  const { checkAgentBoardDelegation } = load("src/lib/mcp/agents/delegatedAccess.ts", {
+  const agentScope = {
+    agentScopeEnforced: () => enforce,
+    recordAgentBoardScopeMiss: () => {},
+  };
+  const delegatedAccess = load("src/lib/mcp/agents/delegatedAccess.ts", {
     "@/lib/mcp/agents/scopes": scopes,
+    "@/lib/auth/agentScope": agentScope,
   });
+  const { checkAgentBoardDelegation } = delegatedAccess;
   const updates = load("src/lib/mcp/agents/updateBoards.ts", {
-    "@/lib/auth/agentScope": {
-      agentScopeEnforced: () => enforce,
-      recordAgentBoardScopeMiss: () => {},
-    },
+    "@/lib/auth/agentScope": agentScope,
+    "@/lib/mcp/agents/delegatedAccess": delegatedAccess,
     "@/lib/mcp/managementKeyTeamScope": { agentWithinTeamWhere: () => ({}) },
   });
   const writes = [];
