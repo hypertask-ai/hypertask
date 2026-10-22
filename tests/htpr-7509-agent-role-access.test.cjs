@@ -151,7 +151,7 @@ for (const enabled of [false, true]) {
     const h = harness({ enabled });
     h.target.permissions = null;
     h.prisma.agent.findMany = async () => [h.target];
-    h.prisma.comment.groupBy = async () => [];
+    h.prisma.comment = { ...h.prisma.comment, groupBy: async () => [] };
     h.prisma.oAuthAuthorizationCode = { findMany: async () => [] };
     const route = h.load("src/app/api/agents/route.ts", {
       ...h.mocks,
