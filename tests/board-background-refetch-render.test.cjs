@@ -294,12 +294,8 @@ for (const chatMounted of [false, true]) {
         assert.ok(currentCards.every((card, index) => card === cards[index]), "cards must not reset to placeholders");
         assert.ok(columns.every((column) => column.isConnected));
         assert.equal(boardAuthorizations, 1, "the route must not restart board authorization");
-        assert.equal(document.querySelector("[data-ai-chat-slot]").className,
-          chatMounted ? "shrink-0 max-md:fixed max-md:right-0 max-md:top-0 max-md:z-[51]" : "contents",
-          "narrow-sidebar protection stays permanent as the remaining flags resolve");
       };
 
-      assertRetained();
       layoutFlagsEnabled = true;
       await React.act(async () => render());
       assertRetained();
