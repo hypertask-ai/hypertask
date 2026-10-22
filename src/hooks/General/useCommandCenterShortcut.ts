@@ -24,11 +24,15 @@ export function useCommandCenterShortcut(
       if (composeEnabled && isComposePaletteShortcut(e, isApple, pathname)) {
         e.preventDefault();
         e.stopImmediatePropagation();
-        const closePendingSearch = lazyClosedSearchCommands && pathname === "/search" && e.code === "KeyK" &&
+        const fromPendingSearchProxy = lazyClosedSearchCommands && pathname === "/search" && e.code === "KeyK" &&
           (e.target as HTMLElement | null)?.id === "search-command-focus-proxy";
-        setShowCommands((prev) => closePendingSearch && prev.paletteTab === "search"
-          ? { ...prev, show: false }
-          : { show: true, mode: CommandMode.Command, paletteTab: e.code === "KeyJ" ? "compose" : "search" });
+        if (fromPendingSearchProxy) {
+          setShowCommands((prev) => prev.paletteTab === "search"
+            ? { ...prev, show: false }
+            : { show: true, mode: CommandMode.Command, paletteTab: "search" });
+          return;
+        }
+        setShowCommands({ show: true, mode: CommandMode.Command, paletteTab: e.code === "KeyJ" ? "compose" : "search" });
         return;
       }
       if (!isCommandCenterShortcut(e, isApple, pathname)) return;
