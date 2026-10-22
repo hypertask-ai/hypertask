@@ -128,3 +128,27 @@ export function composerFollowsComments(label: string, composerTop: number, last
     ? [`${label}: composer is no longer the last part of the thread (last comment ends at ${lastCommentBottom}px, composer starts at ${composerTop}px)`]
     : []
 }
+
+// Self-contained so Playwright can serialize it; injected readers/frames keep its unit cases pure.
+export async function waitForStableScroll({
+  read = () => {
+    const offsets = [[window.scrollX, window.scrollY]]
+    for (let element = document.querySelector('[data-testid="ticket-thread"]'); element; element = element.parentElement) {
+      offsets.push([element.scrollLeft, element.scrollTop, element.scrollWidth, element.scrollHeight, element.clientWidth, element.clientHeight])
+    }
+    return JSON.stringify(offsets)
+  },
+  frame = () => new Promise<void>(resolve => requestAnimationFrame(() => resolve())),
+  maxFrames = 120,
+}: { read?: () => string; frame?: () => Promise<void>; maxFrames?: number } = {}): Promise<void> {
+  let previous = read()
+  let stableFrames = 0
+  for (let index = 0; index < maxFrames; index++) {
+    await frame()
+    const current = read()
+    stableFrames = current === previous ? stableFrames + 1 : 0
+    if (stableFrames === 2) return
+    previous = current
+  }
+  throw new Error('Layout lock: ticket scroll did not stabilize across two animation frames')
+}
