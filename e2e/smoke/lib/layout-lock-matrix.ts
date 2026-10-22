@@ -131,6 +131,7 @@ export function composerFollowsComments(label: string, composerTop: number, last
 
 // Self-contained so Playwright can serialize it; injected readers/frames keep its unit cases pure.
 export async function waitForStableScroll({
+  baselineLayout,
   read = () => {
     const offsets = [[window.scrollX, window.scrollY]]
     for (let element = document.querySelector('[data-testid="ticket-thread"]'); element; element = element.parentElement) {
@@ -140,12 +141,27 @@ export async function waitForStableScroll({
   },
   frame = () => new Promise<void>(resolve => requestAnimationFrame(() => resolve())),
   maxFrames = 120,
-}: { read?: () => string; frame?: () => Promise<void>; maxFrames?: number } = {}): Promise<void> {
-  let previous = read()
+}: { baselineLayout?: 'desktop' | 'phone'; read?: () => string; frame?: () => Promise<void>; maxFrames?: number } = {}): Promise<void> {
+  const sample = () => {
+    if (baselineLayout) {
+      for (const element of document.querySelectorAll('*')) {
+        if (element.scrollTop > 0 || element.scrollHeight > element.clientHeight) {
+          element.scrollTo({ top: baselineLayout === 'phone' ? element.scrollHeight - element.clientHeight : 0, behavior: 'instant' })
+        }
+      }
+      window.scrollTo({
+        top: baselineLayout === 'phone' ? document.documentElement.scrollHeight - document.documentElement.clientHeight : 0,
+        left: 0,
+        behavior: 'instant',
+      })
+    }
+    return read()
+  }
+  let previous = sample()
   let stableFrames = 0
   for (let index = 0; index < maxFrames; index++) {
     await frame()
-    const current = read()
+    const current = sample()
     stableFrames = current === previous ? stableFrames + 1 : 0
     if (stableFrames === 2) return
     previous = current

@@ -13,7 +13,7 @@ import { layoutDifferences, validateFlagChanges, verticalOrder, LAYOUT_CHANGE_ME
 import { FEATURE_FLAG_KEYS } from '../../src/lib/flags'
 import path from 'node:path'
 import { withRealtime } from './lib/realtime'
-import { scrollToTop, waitForTicketInitialScroll } from './lib/layout-lock-scroll'
+import { scrollToBaselinePosition, waitForTicketInitialScroll } from './lib/layout-lock-scroll'
 
 const fixturePath = path.join(path.dirname(process.env.BROWSER_SMOKE_STATE_FILE || 'e2e/smoke/.state/smoke-state.json'), 'card-fixture.json')
 
@@ -149,7 +149,7 @@ for (const name of [...screens, 'ticket from board card']) {
     const targets = landmarks(screen, phone)
     if (screen === 'ticket') {
       await waitForTicketInitialScroll(page)
-      await scrollToTop(page)
+      await scrollToBaselinePosition(page, phone ? 'phone' : 'desktop')
     }
     // Measure one settled viewport, never scroll individual landmarks into view.
     let previous = ''

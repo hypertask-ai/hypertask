@@ -13,12 +13,6 @@ export async function waitForTicketInitialScroll(page: Page) {
   await page.evaluate(waitForStableScroll, {})
 }
 
-export async function scrollToTop(page: Page) {
-  await page.evaluate(() => {
-    for (const element of document.querySelectorAll('*')) {
-      if (element.scrollTop > 0) element.scrollTo({ top: 0, behavior: 'instant' })
-    }
-    window.scrollTo({ top: 0, left: 0, behavior: 'instant' })
-  })
-  await page.evaluate(waitForStableScroll, {})
+export async function scrollToBaselinePosition(page: Page, layout: 'desktop' | 'phone') {
+  await page.evaluate(waitForStableScroll, { baselineLayout: layout })
 }

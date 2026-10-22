@@ -20,7 +20,7 @@ import {
 import { FEATURE_FLAG_KEYS } from '../../src/lib/flags'
 import { createTask } from './lib/api'
 import { withRealtime } from './lib/realtime'
-import { scrollToTop, waitForTicketInitialScroll } from './lib/layout-lock-scroll'
+import { scrollToBaselinePosition, waitForTicketInitialScroll } from './lib/layout-lock-scroll'
 
 const stateFile = process.env.BROWSER_SMOKE_STATE_FILE || 'e2e/smoke/.state/smoke-state.json'
 const fixturePath = path.join(path.dirname(stateFile), 'card-fixture.json')
@@ -253,7 +253,7 @@ for (const definition of selected) {
           found.push(`${label}: comment box still hidden 3s after the window changed width`)
         }
         const required = Object.keys(expected ?? {}).filter(name => width >= 768 || name !== 'ai-sidebar')
-        await scrollToTop(page)
+        await scrollToBaselinePosition(page, definition.thread && width < 768 ? 'phone' : 'desktop')
         const { actual, stable } = await settle(page, definition.targets, required)
         // On a phone the AI chat is an animated sheet over the page, not part of the layout.
         if (width < 768) actual['ai-sidebar'] = null
