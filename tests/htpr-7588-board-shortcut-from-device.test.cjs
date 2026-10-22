@@ -73,11 +73,25 @@ test("flag off: a stale list on the device still waits for a fresh list", async 
   assert.deepEqual(calls, ["fetch"]);
 });
 
-test("flag on: a board in the account list on the device opens before any request", async () => {
-  const { queryClient, calls, fetchBoards } = setup({ scoped: [{ id: currentBoard }, { id: previousBoard }] });
-  const board = target.boardFromDeviceFirst(queryClient, userId, [currentBoard, previousBoard], fetchBoards);
-  assert.deepEqual(calls, []);
-  assert.equal(await board, currentBoard);
+test("flag on: a board in the account list on the device opens without waiting for the list request", async () => {
+  const { queryClient } = setup({ scoped: [{ id: currentBoard }, { id: previousBoard }] });
+  let listRequests = 0;
+  const neverAnswers = () => { listRequests += 1; return new Promise(() => {}); };
+  const outcome = await Promise.race([
+    target.boardFromDeviceFirst(queryClient, userId, [currentBoard, previousBoard], neverAnswers),
+    new Promise(resolve => setTimeout(() => resolve("waited for the list"), 50)),
+  ]);
+  assert.equal(outcome, currentBoard);
+  assert.equal(listRequests, 1, "the list is still refreshed in the background");
+});
+
+test("flag off: the same unanswered list request holds the board back", async () => {
+  const { queryClient } = setup({ scoped: [{ id: currentBoard }] });
+  const outcome = await Promise.race([
+    target.boardFromFreshList(queryClient, userId, [currentBoard], () => new Promise(() => {})),
+    new Promise(resolve => setTimeout(() => resolve("waited for the list"), 50)),
+  ]);
+  assert.equal(outcome, "waited for the list");
 });
 
 test("flag on: the shared board list on the device counts too, in the same candidate order", async () => {
