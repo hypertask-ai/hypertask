@@ -285,7 +285,15 @@ test('switching chats does not move the ticket, its comments or its comment comp
   await expect(page.getByTestId('ticket-comment')).toHaveCount(2)
   await waitForTicketInitialScroll(page)
   const selectors = ['#title-input', '[data-testid="ticket-description"]', '[data-testid="ticket-comment"]', '[data-testid="comment-composer"]']
-  const before = await Promise.all(selectors.map((selector) => page.locator(selector).first().boundingBox()))
+  const measure = () => Promise.all(selectors.map((selector) => page.locator(selector).first().boundingBox()))
+  let settled = await measure()
+  await expect.poll(async () => {
+    const next = await measure()
+    const stable = JSON.stringify(next) === JSON.stringify(settled)
+    settled = next
+    return stable
+  }, { message: 'the ticket layout must settle before switching chats', intervals: [500], timeout: 10_000 }).toBe(true)
+  const before = settled
   for (const box of before) expect(box).not.toBeNull()
   await choose(page, fixture.lanes[info.project.name][0].name)
   const after = await Promise.all(selectors.map((selector) => page.locator(selector).first().boundingBox()))
