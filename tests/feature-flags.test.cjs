@@ -1214,16 +1214,10 @@ test("instant column deletion is permanent and its flag is no longer registered"
   assert.equal((await flags.listFeatureFlagModes()).some((flag) => flag.key === "htpr-6980-instant-column-delete"), false);
 });
 
-test("board scroll restoration is an Everyone-default bugfix and respects OFF", async () => {
-  const key = flags.HTPR_6998_BOARD_SCROLL_RESTORE_FLAG;
-  assert.equal(key, "htpr-6998-board-scroll-restore");
-  const entry = (await flags.listFeatureFlagModes()).find((flag) => flag.key === key);
-  assert.equal(entry.kind, "bugfix");
-  assert.equal(entry.mode, "EVERYONE");
-  assert.equal(entry.shippedOn, "2026-10-07");
-  assert.deepEqual(await Promise.all([6, 985, 7].map((userId) => flags.isFeatureEnabled(key, userId))), [true, true, true]);
-  row = { mode: "OFF", updatedAt: new Date() };
-  assert.deepEqual(await Promise.all([6, 985, 7].map((userId) => flags.isFeatureEnabled(key, userId))), [false, false, false]);
+test("board scroll restoration no longer has a feature flag", async () => {
+  assert.equal(flags.HTPR_6998_BOARD_SCROLL_RESTORE_FLAG, undefined);
+  assert.equal(flags.FEATURE_FLAG_KEYS.includes("htpr-6998-board-scroll-restore"), false);
+  assert.equal((await flags.listFeatureFlagModes()).some((flag) => flag.key === "htpr-6998-board-scroll-restore"), false);
 });
 
 test("ticket page CLS fix is an Everyone-default bugfix and respects OFF", async () => {

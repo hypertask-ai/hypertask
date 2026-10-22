@@ -1,15 +1,12 @@
 import { useEffect } from "react";
 import { usePathname, useSearchParams } from "next/navigation";
-import { useFlag } from "@/hooks/useFlag";
-import { HTPR_6998_BOARD_SCROLL_RESTORE_FLAG } from "@/lib/flags/keys";
 
 export const useBoardScrollRestore = (isMobile: boolean, ready: boolean) => {
-  const enabled = useFlag(HTPR_6998_BOARD_SCROLL_RESTORE_FLAG);
   const pathname = usePathname();
   const query = useSearchParams()?.toString() ?? "";
 
   useEffect(() => {
-    if (!enabled || !ready) return;
+    if (!ready) return;
     const board = document.getElementById("sectionsContainer");
     const strip = board?.closest<HTMLElement>(".homepage-container-tag");
     if (!board || !strip) return;
@@ -126,5 +123,5 @@ export const useBoardScrollRestore = (isMobile: boolean, ready: boolean) => {
       document.removeEventListener("scroll", onScroll, true);
       window.removeEventListener("pagehide", save);
     };
-  }, [enabled, isMobile, pathname, query, ready]);
+  }, [isMobile, pathname, query, ready]);
 };
