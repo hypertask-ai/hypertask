@@ -30,17 +30,17 @@ const TaskDetail: React.FC<TaskDetailProps> = (props) => {
   const { isApple } = modals;
   const inViewObject = useRecoilValue(inViewObjectAtom);
   const newTaskAiOpened = useRef<number | null>(null);
-  useEffect(() => {
-    if (!ctrlJSidebarOnNewTask || props.embedded || !currentTask || currentTask.id <= 0 || state.searchParams?.get("newTaskAi") !== "1" || newTaskAiOpened.current === currentTask.id) return;
+  useEffect(ctrlJSidebarOnNewTask ? () => {
+    if (props.embedded || !currentTask || currentTask.id <= 0 || state.searchParams?.get("newTaskAi") !== "1" || newTaskAiOpened.current === currentTask.id) return;
     if (inViewObject?.taskId !== currentTask.id || window.location.pathname !== `/detail/project-${currentTask.projectId}/${currentTask.uniqueIndex}`) return;
     newTaskAiOpened.current = currentTask.id;
     const params = new URLSearchParams(state.searchParams.toString());
     params.delete("newTaskAi");
     state.router.replace(`${window.location.pathname}${params.size ? `?${params}` : ""}`, { scroll: false });
     void editTicketWithAi(currentTask.id);
-  }, [ctrlJSidebarOnNewTask, props.embedded, currentTask, state.searchParams, state.router, inViewObject?.taskId, editTicketWithAi]);
-  useEffect(() => {
-    if (!ctrlJSidebarOnNewTask || props.embedded || !currentTask || currentTask.id <= 0 || !isEmptyComposeTarget(currentTask)) return;
+  } : () => {}, [ctrlJSidebarOnNewTask, props.embedded, currentTask, state.searchParams, state.router, inViewObject?.taskId, editTicketWithAi]);
+  useEffect(ctrlJSidebarOnNewTask ? () => {
+    if (props.embedded || !currentTask || currentTask.id <= 0 || !isEmptyComposeTarget(currentTask)) return;
     const openNewTaskSidebar = (event: KeyboardEvent) => {
       const cmdControl = (isApple && event.metaKey) || (!isApple && event.ctrlKey);
       if (event.key.toLowerCase() !== "j" || !cmdControl || event.shiftKey || event.altKey || event.isComposing || isRecording) return;
@@ -51,7 +51,7 @@ const TaskDetail: React.FC<TaskDetailProps> = (props) => {
     };
     document.addEventListener("keydown", openNewTaskSidebar, true);
     return () => document.removeEventListener("keydown", openNewTaskSidebar, true);
-  }, [ctrlJSidebarOnNewTask, props.embedded, currentTask, isApple, isRecording, editTicketWithAi]);
+  } : () => {}, [ctrlJSidebarOnNewTask, props.embedded, currentTask, isApple, isRecording, editTicketWithAi]);
   const context = { ...props, ...state, ...modals } as TaskDetailContext;
   Object.assign(context, useTaskDetailNavigationActions(() => context));
   Object.assign(context, useTaskDetailCommandActions(() => context));

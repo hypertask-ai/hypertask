@@ -42,8 +42,7 @@ const CreateTaskModalBody: React.FC<IProps> = ({ }) => {
     const ctrlJSidebarOnNewTask = useFlag(HTPR_7544_CTRLJ_SIDEBAR_ON_NEW_TASK_FLAG)
     const router = useRouter()
     const sidebarHandoffPending = useRef(false)
-    useEffect(() => {
-        if (!ctrlJSidebarOnNewTask) return
+    useEffect(ctrlJSidebarOnNewTask ? () => {
         const openNewTaskSidebar = async (event: KeyboardEvent) => {
             const cmdControl = (isApple && event.metaKey) || (!isApple && event.ctrlKey)
             if (!document.getElementById("createTaskModal") || event.key.toLowerCase() !== "j" || !cmdControl || event.shiftKey || event.altKey || event.isComposing || isRecording || showAssignModal || showConfirmationModal) return
@@ -68,7 +67,7 @@ const CreateTaskModalBody: React.FC<IProps> = ({ }) => {
         }
         document.addEventListener("keydown", openNewTaskSidebar, true)
         return () => document.removeEventListener("keydown", openNewTaskSidebar, true)
-    }, [ctrlJSidebarOnNewTask, isApple, isRecording, showAssignModal, showConfirmationModal, uploadInProgress, formValues, CreateTaskAndDescription, setUploadInProgress, router, closeHandler])
+    } : () => {}, [ctrlJSidebarOnNewTask, isApple, isRecording, showAssignModal, showConfirmationModal, uploadInProgress, formValues, CreateTaskAndDescription, setUploadInProgress, router, closeHandler])
 
     const {
         toggleMoveModal, toggleShowSizeModal, toggleDueDateModal,
