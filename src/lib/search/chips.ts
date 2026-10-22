@@ -1,7 +1,7 @@
 import { parseSearchTokens, type Names, type SearchToken } from './operators'
 
-export function splitSearchChips(raw: string, editing = false, names: Names = {}, keepActive = false, commenterEnabled = false) {
-  const tokens = parseSearchTokens(raw, names, commenterEnabled)
+export function splitSearchChips(raw: string, editing = false, names: Names = {}, keepActive = false, commenterEnabled = false, logicEnabled = false) {
+  const tokens = parseSearchTokens(raw, names, commenterEnabled, logicEnabled)
   const chips = editing ? tokens.filter((token) => {
     if (keepActive && ((token.end === raw.length && !/\s$/.test(raw)) || /^-?[a-z]+:"[^"]*$/i.test(raw.slice(token.start)))) return false
     if (token.raw.includes('"')) return true
@@ -15,6 +15,8 @@ export function splitSearchChips(raw: string, editing = false, names: Names = {}
     }
     if (token.end < raw.length || /\s$/.test(raw)) return true
     if (token.operator === 'is') return ['open', 'done', 'archived'].includes(token.value.toLowerCase())
+    if (token.operator === 'priority') return ['urgent', 'high', 'medium', 'low'].includes(token.value.toLowerCase())
+    if (token.operator === 'type') return ['ticket', 'comment'].includes(token.value.toLowerCase())
     if (token.operator === 'has') return ['attachment', 'comment', 'due', 'due-date'].includes(token.value.toLowerCase())
     if (['before', 'after', 'on'].includes(token.operator)) return /\d{4}-\d{2}-\d{2}$/.test(token.value)
     return namesForOperator?.some((name) => token.value.replace(/^[@#]/, '').toLowerCase() === name.toLowerCase()) ?? false

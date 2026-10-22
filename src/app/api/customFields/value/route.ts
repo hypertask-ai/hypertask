@@ -1,3 +1,5 @@
+import { withAgentScopeRequest } from "@/lib/auth/agentScope";
+import { getSessionUser } from "@/lib/auth/getSessionUser";
 import { readJsonBody } from "@/lib/mcp/readJsonBody";
 import { loadCurrentUser } from "@/lib/auth/currentUser";
 import { HTPR_6924_REST_COMPAT_FLAG, isFeatureEnabled } from "@/lib/flags";
@@ -13,6 +15,10 @@ import {
 } from "@/utils/controllers/customFields";
 
 export async function POST(request: NextRequest) {
+  return withAgentScopeRequest(request, () => setCustomFieldValue(request));
+}
+
+async function setCustomFieldValue(request: NextRequest) {
   try {
     const cookieStore = await cookies();
     const userCookie = cookieStore.get("nookies_user");
@@ -31,6 +37,8 @@ export async function POST(request: NextRequest) {
     if (!isValid || !user) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
+
+    const actingAgentId = (await getSessionUser(request.headers).catch(() => null))?.agentId;
 
     let body: Awaited<ReturnType<typeof request.json>>;
     if (restCompat) {
@@ -63,7 +71,10 @@ export async function POST(request: NextRequest) {
     }
 
     const task = await prisma.task.findUnique({
-      where: { id: parseInt(taskId) },
+      where: {
+        id: parseInt(taskId),
+        ...(actingAgentId ? { project: getProjectWhere(user.id, actingAgentId) } : {}),
+      },
       select: { projectId: true },
     });
     if (!task) {
@@ -71,7 +82,11 @@ export async function POST(request: NextRequest) {
     }
 
     const project = await prisma.project.findFirst({
-      where: { id: task.projectId, ...getProjectWhere(user.id) },
+      where: {
+        id: task.projectId,
+        ...getProjectWhere(user.id),
+        ...(actingAgentId ? { AND: [getProjectWhere(user.id, actingAgentId)] } : {}),
+      },
       select: { id: true },
     });
     if (!project) {

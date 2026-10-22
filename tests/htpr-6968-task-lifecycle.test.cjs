@@ -299,6 +299,14 @@ test("createGlobally GET keeps the pinned section and rank defaults", async () =
   try {
     global.performance = { now: () => 1 };
     const response = await invoke(after, {}, "current", {}, "GET");
-    pin("global-get", "global GET", { response: response === undefined ? null : response, effects: clean(after.effects) });
+    assert.deepEqual({ response, effects: clean(after.effects) }, {
+      response: { status: 200, body: { section: "Todo", ranking: "new-rank", sectionId: 8 }, headers: { "server-timing": "total;dur=0.0" } },
+      effects: [
+        ["project", { where: { id: 15, status: "Normal", ownerId: 985, agentId: null, AND: [{ ownerId: 985 }] }, select: { id: true } }],
+        ["section", { where: { id: 8, projectId: 15, visibility: true, deleted: false } }],
+        ["rank-task", { where: { sectionId: 8, projectId: 15, status: "Normal", project: { ownerId: 985 } }, orderBy: { ranking: "asc" } }],
+        ["rank", null, "old-rank"],
+      ],
+    });
   } finally { global.performance = oldPerformance; }
 });

@@ -435,6 +435,7 @@ export interface IAgent {
   lastOAuthMcpClient?: IAgentLastOAuthMcpClient | null;
   permissions?: Record<string, unknown> | null;
   postsToImportant?: boolean;
+  role?: "read" | "write" | "admin";
   assigned?: boolean;
   mcpToken?: string | null;
   hasMcpToken?: boolean;

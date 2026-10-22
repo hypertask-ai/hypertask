@@ -5,7 +5,7 @@ import { isValidUser } from '@/utils/edgeHelpers'
 import { HTPR_6924_REST_COMPAT_FLAG, isFeatureEnabled } from '@/lib/flags'
 import prisma from '@/lib/prisma'
 
-type CurrentUser = { userId: number }
+type CurrentUser = { userId: number; agentId?: string }
 type CurrentUserWithProfile = CurrentUser & { user: IUser }
 
 export function loadCurrentUser(headers: Headers, legacyProfile: true): Promise<CurrentUserWithProfile | null>
@@ -16,17 +16,19 @@ export async function loadCurrentUser(
 ): Promise<CurrentUserWithProfile | CurrentUser | null> {
   const session = await getSessionUser(headers)
   if (!session) return null
+  const currentUser = { userId: session.userId, ...(session.agentId ? { agentId: session.agentId } : {}) }
 
   if (legacyProfile) {
     const cookie = (await cookies()).get('nookies_user')
     const { isValid, user } = isValidUser(cookie?.value)
     if (isValid && user && user.id === session.userId) {
-      return { userId: session.userId, user }
+      return { ...currentUser, user }
     }
-    return loadProfileFromSession(session.userId)
+    const profile = await loadProfileFromSession(session.userId)
+    return profile ? { ...profile, ...currentUser } : null
   }
 
-  return { userId: session.userId }
+  return currentUser
 }
 
 async function loadProfileFromSession(userId: number): Promise<CurrentUserWithProfile | null> {

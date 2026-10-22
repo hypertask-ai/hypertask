@@ -8,7 +8,7 @@ Regenerate it with `node scripts/parity-contract.mjs --write --cli-capabilities 
 
 | Job | api | mcp | cli | ai_chat | hyperai |
 |---|---|---|---|---|---|
-| **Discover identity and accessible workspace context** | ✅ 3 | ✅ 2 | ✅ 2 | ✅ 1 | ✅ 2 |
+| **Discover identity and accessible workspace context** | ✅ 3 (transition) | ✅ 2 (transition) | ✅ 2 | ✅ 1 | ✅ 2 (transition) |
 | **Update the human profile** | ✅ 1 | ✅ 1 | ✅ 1 | ✅ 1 | ✅ 1 |
 | **List, inspect, and contact board agents** | ✅ 7 | ✅ 2 | ✅ 4 | ✅ 3 | ✅ 2 |
 | **Agent Chat: an agent runtime reads and answers its owner's chat** | ✅ 10 | ↪ Only the chatted agent's runtime token may read or answer its session; MCP clients act as the human, not as the agent. | ↪ The agent worker runtime posts replies with its own bearer token; the CLI has no agent-side chat command. | ↪ Agent Chat is the surface itself; native agents answer in-process without this route. | ↪ HyperAI inherits the human session and never speaks as an external agent. |

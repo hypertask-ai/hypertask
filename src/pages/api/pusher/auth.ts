@@ -1,3 +1,5 @@
+import { withAgentScopeRequest } from "@/lib/auth/agentScope";
+import { getProjectWhere } from "@/utils/controllers/projects/getAllIncludes";
 import type { NextApiRequest, NextApiResponse } from "next";
 import { validateProjectAccess } from "@/lib/mcp/tasks/services";
 import { getRealtimeServer } from "@/lib/realtime/server";
@@ -7,27 +9,31 @@ import prisma from "@/lib/prisma";
 
 async function userMayAccess(
   channel: string,
-  userId: number
+  userId: number,
+  actingAgentId: string | null,
 ): Promise<boolean> {
   if (channel === featureFlagsChannel()) return true;
   let m = /^private-project-(\d+)$/.exec(channel);
   if (m) {
-    const access = await validateProjectAccess(Number(m[1]), userId, null);
+    const access = await validateProjectAccess(Number(m[1]), userId, actingAgentId);
     return !access.error;
   }
   m = /^private-time-project-(\d+)$/.exec(channel);
   if (m) {
-    const access = await validateProjectAccess(Number(m[1]), userId, null);
+    const access = await validateProjectAccess(Number(m[1]), userId, actingAgentId);
     return !access.error;
   }
   m = /^private-(?:time-)?task-(\d+)$/.exec(channel);
   if (m) {
     const task = await prisma.task.findUnique({
-      where: { id: Number(m[1]) },
+      where: {
+        id: Number(m[1]),
+        project: getProjectWhere(userId, actingAgentId),
+      },
       select: { projectId: true },
     });
     if (!task) return false;
-    const access = await validateProjectAccess(task.projectId, userId, null);
+    const access = await validateProjectAccess(task.projectId, userId, actingAgentId);
     return !access.error;
   }
   m = /^private-user-(\d+)$/.exec(channel);
@@ -38,6 +44,13 @@ async function userMayAccess(
 }
 
 export default async function handler(
+  req: NextApiRequest,
+  res: NextApiResponse
+) {
+  return withAgentScopeRequest(req, () => authorizeChannel(req, res));
+}
+
+async function authorizeChannel(
   req: NextApiRequest,
   res: NextApiResponse
 ) {
@@ -60,7 +73,7 @@ export default async function handler(
     }
     const userId = session.userId;
 
-    const allowed = await userMayAccess(channel, userId);
+    const allowed = await userMayAccess(channel, userId, session.agentId ?? null);
     if (!allowed) {
       return res.status(403).json({ error: "No access to this channel" });
     }

@@ -12,7 +12,7 @@ name: CI Tests
 # itself a checked artifact.
 on:
   pull_request:
-    types: [opened, synchronize, reopened, ready_for_review, edited, labeled]
+    types: [opened, synchronize, reopened, ready_for_review]
   push:
     branches: [production]
 
@@ -39,7 +39,7 @@ jobs:
     # review-first `full-ci` label (owner, 2026-08-26) left ci-tests SKIPPED
     # until the label arrived, and GitHub's ruleset counts SKIPPED as passing:
     # PRs 782, 798 and 799 went live that way, and 782 broke the suite. Every
-    # non-draft PR now runs the gate on every event; superseded runs are
+    # non-draft PR now runs the gate on code/lifecycle events; superseded runs are
     # cancelled by the concurrency group above, so only the newest one costs
     # runner time. A job-level skip is never used here, because a skipped run
     # newer than a failed one would read as passing again.
@@ -63,51 +63,16 @@ jobs:
       test_failed: ${{ steps.test-outcome.outputs.failed }}
       failed_tests: ${{ steps.test-outcome.outputs.failed_tests }}
     steps:
-      # An administrator applied HTPR-6237 on 2026-09-08. Run 34278240903
-      # proved this read-only token can verify both live settings.
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          fetch-depth: 1
+
       - name: Verify live required-check settings
+        timeout-minutes: 7
         env:
           GH_TOKEN: ${{ github.token }}
           REPO: ${{ github.repository }}
-        shell: bash
-        run: |
-          set -euo pipefail
-          default_branch=$(gh api "repos/$REPO" --jq .default_branch)
-          [ "$default_branch" = production ] || {
-            echo "::error::Repository default branch is $default_branch, expected production."
-            exit 1
-          }
-
-          ruleset_id=$(gh api "repos/$REPO/rulesets?per_page=100" --jq '
-            [.[] | select(.name == "production-required-checks" and .enforcement == "active")] |
-            if length == 1 then .[0].id else empty end
-          ')
-          [ -n "$ruleset_id" ] || {
-            echo "::error::Expected one active production-required-checks ruleset."
-            exit 1
-          }
-
-          ruleset_json=$(gh api "repos/$REPO/rulesets/$ruleset_id")
-          jq -e '
-            .target == "branch" and
-            (.conditions.ref_name.include | index("refs/heads/production") != null) and
-            (.conditions.ref_name.exclude | index("refs/heads/production") == null)
-          ' <<<"$ruleset_json" >/dev/null || {
-            echo "::error::The required-check ruleset does not protect production."
-            exit 1
-          }
-
-          expected=$(printf '%s\n' app-smoke ci-tests ai-review claude-review feature-flag-gate next-public-secrets pr-title secret-scan | sort)
-          expected=$(printf '%s\n' "$expected" browser-smoke premerge-evidence | sort)
-          actual=$(jq -r '
-            [.rules[] | select(.type == "required_status_checks") |
-              .parameters.required_status_checks[].context] | unique | sort | .[]
-          ' <<<"$ruleset_json")
-          [ "$actual" = "$expected" ] || {
-            echo "::error::Live required checks do not match docs/ci-policy.yml."
-            diff -u <(printf '%s\n' "$expected") <(printf '%s\n' "$actual") || true
-            exit 1
-          }
+        run: node .github/scripts/verify-required-check-settings.mjs
 
       # Never build a commit whose review already failed (owner, 2026-08-26).
       # This does NOT wait: a pending or absent verdict builds in parallel as
@@ -124,36 +89,26 @@ jobs:
             | if any(.[]; .state == "success") then "success"
               elif any(.[]; .state == "failure") then "failure" else "none" end')
           [ "$STATE" != "failure" ] || { echo "::error::GitHub AI Review already failed for $HEAD_SHA; fix the findings and push - the new commit builds normally."; exit 1; }
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
-        with:
-          fetch-depth: 1
+      - name: Runner dispatcher and selfupdate fixtures
+        run: |
+          python3 .claude/skills/ship/scripts/runner-dispatch.test.py
+          python3 .claude/skills/ship/scripts/runner-dispatch.cache.test.py
+          bash .claude/skills/ship/scripts/runner-selfupdate.test.sh
 
       - name: Guard CI image sources
         run: node --test tests/ci-image-sources.test.cjs
 
-      # ci-build is a required status check, so path-filtered PRs must still
-      # report success (paths-ignore at the trigger level would leave it
-      # pending forever). Instead: diff against the PR base here and skip the
-      # Next.js build/test steps when every changed file is doc/worker-only.
-      # Pushes to production always run the full build.
+      # Keep both required jobs running: only their heavy steps may be skipped.
       - name: Determine change scope
         id: scope
-        if: github.event_name == 'pull_request'
         env:
           BASE_SHA: ${{ github.event.pull_request.base.sha }}
           HEAD_SHA: ${{ github.event.pull_request.head.sha }}
         run: |
-          git fetch --depth=1 origin "$BASE_SHA" "$HEAD_SHA"
-          CHANGED=$(git diff --name-only "$BASE_SHA" "$HEAD_SHA")
-          printf '%s\n' "$CHANGED" > "$RUNNER_TEMP/changed-files.txt"
-          echo "$CHANGED"
-          # A change to this gate itself (or the CI scripts) always runs the
-          # full pipeline once, so the edited workflow is exercised end to end.
-          if echo "$CHANGED" | grep -qvE '^(scripts/self_hosted_agent/|docs/|\.claude/|\.github/)' \
-            || echo "$CHANGED" | grep -qE '^\.github/(workflows/ci-tests\.yml|scripts/)'; then
+          # A missing/broken detector must never suppress correctness checks.
+          if ! node .github/scripts/ci-change-scope.cjs; then
             echo "build_needed=true" >> "$GITHUB_OUTPUT"
-          else
-            echo "build_needed=false" >> "$GITHUB_OUTPUT"
+            : > "$RUNNER_TEMP/changed-files.txt"
           fi
 
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
@@ -164,6 +119,7 @@ jobs:
 
       - name: Resolve dependency cache version
         id: dependency-cache-version
+        if: github.event_name == 'push' || steps.scope.outputs.build_needed == 'true'
         run: |
           echo "node-abi=$(node -p 'process.versions.modules')" >> "$GITHUB_OUTPUT"
           echo "npm-major=$(npm --version | cut -d. -f1)" >> "$GITHUB_OUTPUT"
@@ -316,8 +272,8 @@ jobs:
           # The selector still reads the PR's own tests (cwd is the workspace).
           SEL="$RUNNER_TEMP/selector"
           mkdir -p "$SEL/.github/scripts" "$SEL/scripts"
-          git fetch --depth=1 --quiet origin "$GITHUB_BASE_REF"
-          if git show "FETCH_HEAD:.github/scripts/select-tests.mjs" > "$SEL/.github/scripts/select-tests.mjs" \
+          if git fetch --depth=1 --quiet origin "$GITHUB_BASE_REF" \
+            && git show "FETCH_HEAD:.github/scripts/select-tests.mjs" > "$SEL/.github/scripts/select-tests.mjs" \
             && git show "FETCH_HEAD:scripts/test-inventory.mjs" > "$SEL/scripts/test-inventory.mjs"; then
             SELECTED=$(node "$SEL/.github/scripts/select-tests.mjs" < "$RUNNER_TEMP/changed-files.txt")
           else
@@ -355,12 +311,11 @@ jobs:
           HT_REQUIRE_PG_TESTS: ${{ steps.select.outputs.require_pg }}
         run: npm test -- ${{ steps.select.outputs.files }}
 
-      - name: Test with coverage collection
+      - name: Test full suite
         id: push-test
         if: github.event_name == 'push'
         shell: bash
         env:
-          NODE_V8_COVERAGE: coverage/raw
           HT_REQUIRE_PG_TESTS: "1"
         run: npm test 2>&1 | tee "$RUNNER_TEMP/push-test.log"
 
@@ -377,35 +332,20 @@ jobs:
           fi
           echo "failed_tests=${failures:-test command failed before naming a test}" >> "$GITHUB_OUTPUT"
 
-      - name: Build report-only coverage baseline
-        if: github.event_name == 'push'
-        continue-on-error: true
-        run: npm run coverage:report
-
-      - name: Upload coverage baseline
-        if: always() && github.event_name == 'push'
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
-        with:
-          name: automated-test-coverage-${{ github.sha }}
-          path: |
-            coverage/report/
-            coverage/critical-domains.json
-            coverage/critical-domains.md
-          if-no-files-found: warn
-          retention-days: 30
-
   browser-smoke:
     name: browser-smoke
     # HR-04 (Valentin, 2026-09-29): no author is exempted and no label is
     # needed, same as ci-tests (PR 785, HTPR-6734). This job holds no
     # repository secret (tests/browser-smoke-workflow.test.cjs pins that), so
     # an agent-authored PR runs it like anyone else; a skip would count as
-    # passing and let a fix ship without the customer test.
+    # passing and let a fix ship without the customer test. Docs-only PRs
+    # instead run this job successfully without starting the heavy lane.
     if: github.event_name == 'push' || github.event.pull_request.draft == false
     runs-on: ubuntu-latest
     timeout-minutes: 25
     outputs:
       contract: ${{ steps.smoke.outputs.contract }}
+      docs_only: ${{ steps.scope.outputs.build_needed == 'false' }}
     permissions:
       contents: read
       packages: read
@@ -458,7 +398,21 @@ jobs:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
           persist-credentials: false
+      # Keep both required jobs running: only their heavy steps may be skipped.
+      - name: Determine change scope
+        id: scope
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          # A missing/broken detector must never suppress correctness checks.
+          if ! node .github/scripts/ci-change-scope.cjs; then
+            echo "build_needed=true" >> "$GITHUB_OUTPUT"
+            : > "$RUNNER_TEMP/changed-files.txt"
+          fi
+
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        if: github.event_name == 'push' || steps.scope.outputs.build_needed == 'true'
         with:
           node-version: 24
           cache: npm
@@ -472,6 +426,7 @@ jobs:
           git fetch --depth=1 origin "$BASE_SHA"
           node .github/scripts/layout-lock-approval.mjs
       - name: Install dependencies and Chromium
+        if: github.event_name == 'push' || steps.scope.outputs.build_needed == 'true'
         run: |
           npm ci --prefer-offline --no-audit --no-fund
           npx prisma generate
@@ -479,6 +434,7 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y strace
       - name: Prepare disposable local credentials
+        if: github.event_name == 'push' || steps.scope.outputs.build_needed == 'true'
         shell: bash
         run: |
           set -euo pipefail
@@ -517,6 +473,7 @@ jobs:
             printf '%s\n' 'PUSHER_CLUSTER=mt1'
           } >> "$GITHUB_ENV"
       - name: Create isolated database and logged-in fixtures
+        if: github.event_name == 'push' || steps.scope.outputs.build_needed == 'true'
         id: fixtures
         env:
           BROWSER_SMOKE_STATE_FILE: e2e/smoke/.state/smoke-state.json
@@ -525,6 +482,7 @@ jobs:
           npx prisma migrate deploy
           node scripts/seed-browser-smoke.mjs
       - name: Download checksum-verified pinned native CLI
+        if: github.event_name == 'push' || steps.scope.outputs.build_needed == 'true'
         env:
           TRUSTED_CLI_BINARY_VERSION: "0.2.15"
           TRUSTED_CLI_BINARY_SHA256: "685af04562d52683e7d6f8feed58fa807407176940558ba79fbcc7cc5406b2a9"
@@ -538,6 +496,7 @@ jobs:
           chmod 755 "$CLI_BINARY"
           printf 'MCP_CONTRACT_CLI=%s\n' "$CLI_BINARY" >> "$GITHUB_ENV"
       - name: Build the local app (no migrations)
+        if: github.event_name == 'push' || steps.scope.outputs.build_needed == 'true'
         # YPER4-363: next/font downloads Google fonts at build time and about
         # 6% of builds lost that download. Retry once, only for that failure.
         run: |
@@ -549,6 +508,7 @@ jobs:
           done
           exit 1
       - name: Serve and check logged-in pages and layout lock
+        if: github.event_name == 'push' || steps.scope.outputs.build_needed == 'true'
         id: smoke
         env:
           BASE_URL: http://127.0.0.1:3100
@@ -579,13 +539,14 @@ jobs:
           npx playwright test -c playwright.config.smoke.ts e2e/smoke/layout-lock.spec.ts e2e/smoke/layout-lock-matrix.spec.ts
       # Failing parts are listed in the job log; their "after" screenshots (baseline boxes outlined) are here.
       - name: Upload layout lock screenshots
-        if: failure()
+        if: failure() && (github.event_name == 'push' || steps.scope.outputs.build_needed == 'true')
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: layout-lock-matrix
           path: test-results/layout-lock-matrix/
           if-no-files-found: ignore
           retention-days: 7
+
 
   mcp-cli-api-contract:
     name: mcp-cli-api-contract
@@ -599,8 +560,9 @@ jobs:
         env:
           SMOKE_RESULT: ${{ needs.browser-smoke.result }}
           CONTRACT_RESULT: ${{ needs.browser-smoke.outputs.contract }}
+          DOCS_ONLY: ${{ needs.browser-smoke.outputs.docs_only }}
         run: |
-          test "$SMOKE_RESULT" = success && test "$CONTRACT_RESULT" = passed
+          test "$SMOKE_RESULT" = success && { test "$CONTRACT_RESULT" = passed || test "${DOCS_ONLY:-false}" = true; }
 
   production-test-warning:
     name: production-test-warning

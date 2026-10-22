@@ -49,7 +49,7 @@ import { useGetAllProjectsMinimal } from "@/hooks/MultiPages/useGetAllProjectsMi
 import { MobileViewContext } from "@/lib/contexts/mobileContext";
 import { MobileBottomSheet } from "@/components/Modals/Sheets";
 import { useFlag } from "@/hooks/useFlag";
-import { HTPR_7530_KEEP_AI_CHAT_CLOSED_FLAG, HTPR_7328_ROUNDED_THEME_FLAG } from "@/lib/flags/keys";
+import { HTPR_7307_CTRLJ_FOOTER_CLICKABLE_FLAG, HTPR_7328_ROUNDED_THEME_FLAG, HTPR_7530_KEEP_AI_CHAT_CLOSED_FLAG } from "@/lib/flags/keys";
 import {
   GOOGLE_CALENDAR_FLAG,
   HTPR_7260_KANBAN_SELECT_ALL_FLAG,
@@ -58,7 +58,6 @@ import {
   HTPR_6937_NEW_TASK_WINDOW_FLAG,
   HTPR_7053_COMPOSE_BOARD_CHIP_FLAG,
   HTPR_6868_TICKET_PREFIX_FLAG,
-  HTPR_6662_AGENT_LOG_NAME_FLAG,
   HTPR_6930_MY_TASKS_KANBAN_REUSE_FLAG,
   HTPR_6567_COMMAND_SCOPE_PICKER_FLAG,
   MY_TASKS_SCOPES_FLAG,
@@ -142,18 +141,18 @@ const Commands = (props: Props) => {
   const onAgentChat = !!pathname?.startsWith("/agents/chat");
   const onMyTasks = !!pathname?.startsWith(myTasksRoute);
   const ticketPrefixEnabled = useFlag(HTPR_6868_TICKET_PREFIX_FLAG);
-  const agentLogNameEnabled = useFlag(HTPR_6662_AGENT_LOG_NAME_FLAG);
   const roundedEnabled = useFlag(HTPR_7328_ROUNDED_THEME_FLAG);
+  const clickableComposeFooter = useFlag(HTPR_7307_CTRLJ_FOOTER_CLICKABLE_FLAG);
   const keepAiChatClosedEnabled = useFlag(HTPR_7530_KEEP_AI_CHAT_CLOSED_FLAG);
   let keepAiChatClosedKeywords = "";
   if (keepAiChatClosedEnabled) keepAiChatClosedKeywords = "keep ai chat closed always";
   const getRoundedCommands = useCallback(
-    (options?: IAllCommands) => getAllCommands(options, agentLogNameEnabled, options?.kanbanSelectAllEnabled, !isMobile, keepAiChatClosedKeywords),
-    [agentLogNameEnabled, isMobile, keepAiChatClosedKeywords]
+    (options?: IAllCommands) => getAllCommands(options, options?.kanbanSelectAllEnabled, !isMobile, keepAiChatClosedKeywords),
+    [isMobile, keepAiChatClosedKeywords]
   );
   const getLegacyCommands = useCallback(
-    (options?: IAllCommands) => getAllCommands(options, agentLogNameEnabled, options?.kanbanSelectAllEnabled, false, keepAiChatClosedKeywords),
-    [agentLogNameEnabled, keepAiChatClosedKeywords]
+    (options?: IAllCommands) => getAllCommands(options, options?.kanbanSelectAllEnabled, false, keepAiChatClosedKeywords),
+    [keepAiChatClosedKeywords]
   );
   let getCommands = getLegacyCommands;
   if (roundedEnabled) getCommands = getRoundedCommands;
@@ -697,7 +696,7 @@ const Commands = (props: Props) => {
       />
     </div>
   ) : null;
-  const compose = composeEnabled ? <ComposeTaskWriter active={isCompose} destinationProject={newTaskWindow ? composeProjectRef.current : undefined} onBusyChange={setWriting} onCreated={async () => {
+  const compose = composeEnabled ? <ComposeTaskWriter active={isCompose} destinationProject={newTaskWindow ? composeProjectRef.current : undefined} onBusyChange={setWriting} onSearch={clickableComposeFooter ? () => setShowCommands((previous) => ({ ...previous, paletteTab: "search" })) : undefined} onClose={clickableComposeFooter ? toggle : undefined} onCreated={async () => {
     if (newTaskWindow && isMobile) await composeOnCreatedRef.current?.();
     else if (newTaskWindow) composeOnCreatedRef.current?.();
     resetShowCommands();

@@ -76,11 +76,14 @@ test("shared current-user loader preserves session-only and legacy-profile preco
   }
   cookie = { value: JSON.stringify({ id: 7, displayName: "User", email: "test@example.invalid", UserSetting: { notificationPreference: "all" } }) };
   assert.deepEqual(await loadCurrentUser(headers, true), { userId: 7, user: { ...JSON.parse(cookie.value), notificationPreference: "all" } });
+  session = { userId: 7, agentId: "agent-1" };
+  assert.deepEqual(await loadCurrentUser(headers), { userId: 7, agentId: "agent-1" });
+  assert.deepEqual(await loadCurrentUser(headers, true), { userId: 7, agentId: "agent-1", user: { ...JSON.parse(cookie.value), notificationPreference: "all" } });
   session = { userId: 8 };
   assert.equal(await loadCurrentUser(headers, true), null);
   session = null;
   assert.equal(await loadCurrentUser(headers, true), null);
-  assert.equal(sessionCalls, 11);
+  assert.equal(sessionCalls, 13);
 });
 
 test("positive-integer helper preserves task path, cycle range, and legacy version-number rules", () => {

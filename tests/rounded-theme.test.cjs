@@ -101,7 +101,7 @@ test("all four old themes preserve resolution and boot output regardless of flag
 
 test("both theme pickers and the live listener use the ticket flag; server render gates the cookie", () => {
   for (const enabled of [false, true]) {
-    const commands = getAllCommands({ context: "Others" }, false, false, enabled).flatMap(group => group.commandLists);
+    const commands = getAllCommands({ context: "Others" }, false, enabled).flatMap(group => group.commandLists);
     assert.equal(commands.some(command => command.key === "roundedTheme"), enabled);
   }
   const appearance = fs.readFileSync(path.join(root, "src/components/Modals/Settings/AppearanceSection.tsx"), "utf8");
@@ -177,11 +177,9 @@ test("component flag branches preserve theme choices, cookie reads and writes, a
     visit(parsed);
     assert.equal(statements.length, 4);
     const code = ts.transpileModule(statements.join("\n"), { compilerOptions: { target: ts.ScriptTarget.ES2020 } }).outputText;
-    for (const agentLogNameEnabled of [false, true]) {
-      const getCommands = new Function("useCallback", "getAllCommands", "roundedEnabled", "agentLogNameEnabled", "isMobile", "keepAiChatClosedKeywords", `${code}; return getCommands;`)((callback) => callback, getAllCommands, enabled, agentLogNameEnabled, isMobile, "");
-      for (const options of [undefined, { context: "Others" }, { context: "Task", kanbanSelectAllEnabled: true }]) {
-        assert.deepEqual(getCommands(options), getAllCommands(options, agentLogNameEnabled, options?.kanbanSelectAllEnabled, enabled && !isMobile));
-      }
+    const getCommands = new Function("useCallback", "getAllCommands", "roundedEnabled", "isMobile", "keepAiChatClosedKeywords", `${code}; return getCommands;`)((callback) => callback, getAllCommands, enabled, isMobile, "");
+    for (const options of [undefined, { context: "Others" }, { context: "Task", kanbanSelectAllEnabled: true }]) {
+      assert.deepEqual(getCommands(options), getAllCommands(options, options?.kanbanSelectAllEnabled, enabled && !isMobile));
     }
     const dispatcherSource = fs.readFileSync(path.join(root, "src/components/commands.tsx"), "utf8");
     const dispatcher = ts.createSourceFile("commands.tsx", dispatcherSource, ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX);

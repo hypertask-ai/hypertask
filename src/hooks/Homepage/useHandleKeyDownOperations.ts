@@ -29,7 +29,7 @@ import { buildBuiltinViewContext, isBuiltinViewId } from '@/lib/constants/builti
 import { useToggleShowArchivedOnBoard } from './useShowArchivedOnBoard'
 import useKanbanViews from '@/hooks/Homepage/Views/useKanbanViews'
 import { useFlag } from '@/hooks/useFlag'
-import { HTPR_6914_SHIFT_C_QUICK_ADD_FLAG, HTPR_6902_N_QUICK_ADD_FLAG } from '@/lib/flags/keys'
+import { HTPR_6902_N_QUICK_ADD_FLAG } from '@/lib/flags/keys'
 import { shouldIgnoreTaskShortcutTarget } from '@/lib/keyboard/taskShortcuts'
 
 interface IHandleKeyDownOperations {
@@ -71,7 +71,6 @@ const useHandleKeyDownOperations= (props:IHandleKeyDownOperations) => {
     const isApple = useDeviceContext()
     const sorting_mode_current = getActiveSortingModeFromProject(_currentProject)
     const nQuickAddEnabled = useFlag(HTPR_6902_N_QUICK_ADD_FLAG);
-    const shiftCQuickAddEnabled = useFlag(HTPR_6914_SHIFT_C_QUICK_ADD_FLAG);
     const getActiveItem = () => store.get(activeItemAtom);
     const getActiveSection = () => store.get(activeSectionAtom);
 
@@ -94,11 +93,11 @@ const useHandleKeyDownOperations= (props:IHandleKeyDownOperations) => {
       }
     };
 
-    const registerQuickAdd = (allowShiftC: boolean) => {
+    const registerQuickAdd = () => {
       const handleNQuickAdd = (e: KeyboardEvent) => {
         if (
           !((e.key.toLowerCase() === "n" && !e.shiftKey) ||
-            (allowShiftC && e.key.toLowerCase() === "c" && e.shiftKey)) ||
+            (e.key.toLowerCase() === "c" && e.shiftKey)) ||
           e.ctrlKey || e.metaKey || e.altKey || e.repeat || e.isComposing ||
           showCommands.show || returnIfModalOrInputActive() ||
           shouldIgnoreTaskShortcutTarget(e.target as HTMLElement | null) ||
@@ -122,8 +121,8 @@ const useHandleKeyDownOperations= (props:IHandleKeyDownOperations) => {
       return () => document.removeEventListener("keydown", handleNQuickAdd);
     };
     useEffect(nQuickAddEnabled
-      ? (shiftCQuickAddEnabled ? () => registerQuickAdd(true) : () => registerQuickAdd(false))
-      : () => {}, [nQuickAddEnabled, shiftCQuickAddEnabled, showCommands.show, filteredSections, store]);
+      ? registerQuickAdd
+      : () => {}, [nQuickAddEnabled, showCommands.show, filteredSections, store]);
 
     const handleKeyDown = (e: any) => {
     let cmdControl = isApple&&e.metaKey || !isApple&&e.ctrlKey;

@@ -115,7 +115,7 @@ test("the palette adds keep-closed search words only with the ticket flag and ne
   const jiti = createJiti(__filename, { alias: { "@": path.join(root, "src") } });
   const { getAllCommands } = jiti(path.join(root, "src/components/Modals/commands/HTC/AllCommands.ts"));
   for (const enabled of [false, true, false]) {
-    const groups = getAllCommands(undefined, false, undefined, false, enabled ? "keep ai chat closed always" : "");
+    const groups = getAllCommands(undefined, undefined, false, enabled ? "keep ai chat closed always" : "");
     const command = groups.flatMap((group) => group.commandLists).find((item) => item.key === "settingsTaskPageOpenAiChatByDefault");
     assert.equal(command.keywords, enabled
       ? "settings open ai chat by default keep ai chat closed always task page"

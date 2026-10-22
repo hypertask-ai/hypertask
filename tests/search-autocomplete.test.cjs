@@ -5,7 +5,7 @@ const { test } = require('node:test')
 const root = path.resolve(__dirname, '..')
 const jiti = require('jiti')(__filename, { alias: { '@': path.join(root, 'src') }, interopDefault: true })
 const { operatorSuggestions, searchCompletion, localValueSuggestions, searchFilterType, searchFilterColour, SEARCH_FILTER_COLOURS, SEARCH_TIPS, highlightedTitle } = jiti(path.join(root, 'src/lib/search/autocomplete.ts'))
-const { SEARCH_OPERATORS, parseSearchQuery } = jiti(path.join(root, 'src/lib/search/operators.ts'))
+const { SEARCH_OPERATORS, LOGIC_OPERATORS, parseSearchQuery } = jiti(path.join(root, 'src/lib/search/operators.ts'))
 const { splitSearchChips } = jiti(path.join(root, 'src/lib/search/chips.ts'))
 
 test('operator prefixes match only the real parser operators, including aliases and exclusions', () => {
@@ -117,7 +117,7 @@ test('filter palettes and title highlighting use scoped semantic tokens for ever
   }
   const component = readFileSync(path.join(root, 'src/app/search/SearchComp.tsx'), 'utf8')
   assert.match(component, /<mark[^>]*className="rounded-\[2px\] bg-search-highlight text-inherit"/)
-  assert.deepEqual(Object.keys(SEARCH_TIPS).sort(), [...SEARCH_OPERATORS].sort())
+  assert.deepEqual(Object.keys(SEARCH_TIPS).sort(), [...SEARCH_OPERATORS, ...LOGIC_OPERATORS, 'phrase', 'exclude'].sort())
 })
 
 test('drafting retains a complete value until acceptance; submitted values become chips', () => {

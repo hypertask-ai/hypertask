@@ -17,7 +17,7 @@ import { returnIfModalOrInputActive } from "@/utils/helperFunctions/helperFuncti
 import { KeyCodes } from "@/lib/constants/keyboard-handler";
 import useHypertasksNavigate from "../MultiPages/Route/useHypertasksNavigate";
 import { useFlag } from "@/hooks/useFlag";
-import { HTPR_6914_SHIFT_C_QUICK_ADD_FLAG, HTPR_6902_N_QUICK_ADD_FLAG } from "@/lib/flags/keys";
+import { HTPR_6902_N_QUICK_ADD_FLAG } from "@/lib/flags/keys";
 
 type SectionKeydownHandler = (event: KeyboardEvent) => void;
 
@@ -73,7 +73,6 @@ const useSections = ({
   const [keyPressed, setKeypressed] = useState<any>({});
   const isApple = useDeviceContext()
   const nQuickAddEnabled = useFlag(HTPR_6902_N_QUICK_ADD_FLAG);
-  const shiftCQuickAddEnabled = useFlag(HTPR_6914_SHIFT_C_QUICK_ADD_FLAG);
   const { navigate } = useHypertasksNavigate();
   const sectionListenerKeyRef = useRef<string | null>(null);
   if (!sectionListenerKeyRef.current) {
@@ -361,7 +360,7 @@ const useSections = ({
     handleLegacyKeyDown(e);
   }, [handleLegacyKeyDown]);
   let handleKeyDown = handleLegacyKeyDown;
-  if (shiftCQuickAddEnabled && nQuickAddEnabled) {
+  if (nQuickAddEnabled) {
     handleKeyDown = handleShiftCKeyDown;
   }
   const handleKeyDownRef = useRef(handleKeyDown);
