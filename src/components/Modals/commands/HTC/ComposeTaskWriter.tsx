@@ -283,7 +283,7 @@ export default function ComposeTaskWriter({ active, focusProxy, destinationProje
       if (!mounted.current) return;
       if (!project) throw new Error("Your last board is unavailable. Open a board and try again.");
       const { task: savedTask, writerFailed, writerFailureReason, tasks: splitResult, failedTitles } = await createComposedTask({
-        text, files, project, userId: user.id, explainWriterFailure: writerReasonEnabled, unfurlImageUrls, inlineAgentImages, ...(invokeSkills ? { invokeSkills } : {}), ...(applyWriterProperties ? { applyWriterProperties } : {}), ...(existingTaskId ? { existingTaskId } : {}),
+        text, files, project, userId: user.id, explainWriterFailure: writerReasonEnabled, unfurlImageUrls, ...(inlineAgentImages ? { inlineAgentImages } : {}), ...(invokeSkills ? { invokeSkills } : {}), ...(applyWriterProperties ? { applyWriterProperties } : {}), ...(existingTaskId ? { existingTaskId } : {}),
         ...(viewContextEnabled && currentProject?.id === projectId && !existingTaskId &&
           /^\/project(?:\/|$)/.test(window.location.pathname) ? { viewProject: currentProject } : {}),
         ...(showProgress ? { onProgress: (next: ComposeTaskStage) => { if (mounted.current) setStage(next); } } : {}),
