@@ -344,6 +344,22 @@ https://app.hypertask.ai/detail/project-15/7560.
 
 **Next probe.** HTPR-7560 ABAB on the phone board. Then idea 5 step 0: a no-code live probe of whether `#kanban-page-container` survives the tap.
 
+### 2026-10-22 morning: daily read still Can't verify; the research entry sat on a branch
+
+**Daily read.** Can't verify. `measure.mjs --latest` returns the failed 2026-10-21 11:23 UTC run; the timer is still off on purpose, and no run has happened since. Last complete run 2026-10-21 07:42 UTC on ee3c49c3c. Production is now 4b51e2e84.
+
+**What was stranded.** The research entry above was committed to branch `htpr-7560-flag-readers` and pushed, but Runner 4 took HTPR-7560 and merged its code as PR 1799 from another branch, so the entry never reached production. A playbook entry riding in a ticket's code PR is lost when someone else ships that ticket. Land playbook entries in their own small PR.
+
+**Second research round: not run.** The last one finished 6 hours earlier; its ranked queue (ideas 2 to 8) still stands. Nothing on the live site was measured since, so a new round would only re-read the same sources.
+
+**Open speed work, all waiting on live measurement.**
+- HTPR-7395, PR 1759: cached ticket shows its description before the editor (flag `htpr-7395-cached-static-first`). Required checks green; `ux-signoff` is red only because the gate fires on any `src/components/` path and is not required.
+- HTPR-7547, PR 1763: phone search loads closed tools on open. Conflicts with production.
+- HTPR-7560, PR 1799 (Runner 4): merged; its ABAB has not run.
+- YPER4-545, PR 1755: the GitHub speed schedule. It skips with a notice until the `live-qa` environment (YPER4-544, Runner 6), the read-only deploy key and the age key pair exist; its red checks were the review rate limit, rerun.
+
+**Next probe.** Merge PR 1755 so the schedule exists, then the first GitHub run starts a new baseline (`conditions.runner: github-actions`, not comparable with VPS runs). HTPR-7560, 7395 and 7547 get their on/off numbers from it.
+
 ## Milliseconds saved scoreboard
 
 Only matched end-to-end before/after evidence earns saved milliseconds; `unproven` is not zero. Do not sum different cohorts or claim forecasts as savings.
