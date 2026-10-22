@@ -149,8 +149,8 @@ const AppShellRail = ({
   return (
     <>
     <aside
-      className={`app-shell-rail fixed left-0 top-0 z-[60] flex h-[100svh] flex-col border-r-[1.3px] border-light-black-border-1 bg-containerBackground py-2 [@media(max-height:540px)]:overflow-y-auto scrollbar-none ${
-        wide ? "w-[130px] items-stretch px-1.5" : "w-[48px] items-center"
+      className={`app-shell-rail w-[var(--app-shell-rail-w,48px)] fixed left-0 top-0 z-[60] flex h-[100svh] flex-col border-r-[1.3px] border-light-black-border-1 bg-containerBackground py-2 [@media(max-height:540px)]:overflow-y-auto scrollbar-none ${
+        wide ? "items-stretch px-1.5" : "items-center"
       }`}
     >
       <button

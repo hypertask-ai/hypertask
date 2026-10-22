@@ -30,6 +30,8 @@ import { buildEarlyAppShellBootstrapScript } from "@/lib/appShellBootstrap/clien
 import { getServerBoardDocument } from "@/lib/firstScreen/serverBoardDocument";
 import { getServerInboxDocument } from "@/lib/firstScreen/serverInboxDocument";
 import type { BoardDisplay } from "@/lib/firstScreen/boardDisplay";
+import { buildTicketSidebarBootScript, TICKET_SIDEBAR_BOOT_CSS } from "@/lib/ticketSidebarBoot";
+import { HTPR_6990_NARROW_SIDEBAR_WIDTH_FLAG, HTPR_7055_CHAT_OVERLAYS_TICKET_FLAG, HTPR_7530_KEEP_AI_CHAT_CLOSED_FLAG } from "@/lib/flags/keys";
 
 export async function generateViewport() {
   const device = await isMobileDevice();
@@ -76,6 +78,10 @@ export default async function RootLayout(
   const analyticsIsGuest =
     analyticsSession?.email?.endsWith("@demo.hypertask.ai") ?? false;
   const memoryOnlyTracking = await isFeatureEnabled(HTPR_7278_MEMORY_ONLY_TRACKING_FLAG, analyticsSession?.id ?? -1);
+
+  const sidebarFlags = analyticsSession ? await Promise.all([
+    HTPR_7530_KEEP_AI_CHAT_CLOSED_FLAG, HTPR_6990_NARROW_SIDEBAR_WIDTH_FLAG, HTPR_7055_CHAT_OVERLAYS_TICKET_FLAG,
+  ].map(key => isFeatureEnabled(key, analyticsSession.id))) : null;
 
   const theme = cookieStore.get(authConfig.cookies.theme) ?? {
     value: authConfig.cookies.defaultTheme,
@@ -136,6 +142,20 @@ export default async function RootLayout(
               "(function(){try{var s=JSON.parse(localStorage.getItem('recoil-persist')||'{}');var el=document.documentElement;if(s.appShellRail===false){el.style.setProperty('--app-shell-rail-w','0px');el.setAttribute('data-rail','off');}else if(s.appShellRailExpanded===true){el.style.setProperty('--app-shell-rail-w','130px');}}catch(e){}})();",
           }}
         />
+        {sidebarFlags && (
+          <>
+            <style dangerouslySetInnerHTML={{ __html: TICKET_SIDEBAR_BOOT_CSS }} />
+            <script
+              dangerouslySetInnerHTML={{
+                __html: buildTicketSidebarBootScript({
+                  keepClosed: sidebarFlags[0],
+                  narrowWidth: sidebarFlags[1],
+                  overlayTicket: sidebarFlags[2],
+                }),
+              }}
+            />
+          </>
+        )}
         <meta
           name="description"
           content="Hypertask - AI-powered Project Boards"
