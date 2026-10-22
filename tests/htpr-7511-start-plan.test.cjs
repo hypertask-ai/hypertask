@@ -244,10 +244,12 @@ test("header mounts action beside title under the ticket flag; alternate trial e
   assert.match(header, /useFlag\(HTPR_7551_START_PLAN_CHECKOUT_FLAG\)/);
   const alternate = read("src/components/Modals/TrialPlan/TrialModalV2.tsx");
   assert.match(alternate, /if \(!flagReady\) return null/);
-  assert.match(alternate, /if \(startPlanEnabled\) return team\?\.id \? <StartPlanButton teamId=\{team\.id\}/);
+  assert.match(alternate, /<TrialBody team=\{currTeam\} callback=\{callback\} startPlanCheckout=\{startPlanEnabled\s*\? currTeam\?\.id \? <StartPlanButton teamId=\{currTeam\.id\}/);
+  assert.match(alternate, /if \(startPlanCheckout !== undefined\) return startPlanCheckout/);
   const settings = read("src/components/Modals/Settings/PlansSection.tsx");
   assert.match(settings, /useFlag\(HTPR_7551_START_PLAN_CHECKOUT_FLAG\)/);
-  assert.match(settings, /plan.id === "Free"[\s\S]*?!planFlagReady \? "Checking plan access…" : startPlanEnabled \? "Free plan" : selectedType.description/);
+  assert.match(settings, /const freePlanDescription = <>\{!planFlagReady \? "Checking plan access…" : startPlanEnabled \? "Free plan" : null\}<\/>/);
+  assert.match(settings, /plan.id === "Free"\s*\? !planFlagReady \|\| startPlanEnabled \? freePlanDescription : selectedType.description\s*: selectedType.description/);
   assert.doesNotMatch(read("src/components/PageComponents/Kanban/HeaderComponents/StartPlanButton.tsx"), /trialStatus|hasSubscription/);
 });
 

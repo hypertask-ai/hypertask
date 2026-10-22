@@ -38,6 +38,7 @@ type BillingIntervalIndex = 0 | 1;
 const PlansSection = () => {
   const startPlanEnabled = useFlag(HTPR_7551_START_PLAN_CHECKOUT_FLAG);
   const planFlagReady = useFlagReady(HTPR_7551_START_PLAN_CHECKOUT_FLAG);
+  const freePlanDescription = <>{!planFlagReady ? "Checking plan access…" : startPlanEnabled ? "Free plan" : null}</>;
   const router = useRouter();
   const searchParams = useSearchParams();
   const currentUser = useRecoilValue(currentUserAtom);
@@ -196,7 +197,7 @@ const PlansSection = () => {
                 <div className="flex min-w-0 flex-wrap items-center justify-end gap-2">
                   <span className="min-w-0 text-right text-dense font-medium text-text-light-gray">
                     {selectedType.price} {plan.id === "Free"
-                      ? !planFlagReady ? "Checking plan access…" : startPlanEnabled ? "Free plan" : selectedType.description
+                      ? !planFlagReady || startPlanEnabled ? freePlanDescription : selectedType.description
                       : selectedType.description}
                   </span>
                   {isCurrentTier && (
