@@ -1,6 +1,9 @@
 import { AI_CHAT_SIDEBAR_DEFAULT_PX, AI_CHAT_SIDEBAR_MIN_PX } from "@/lib/configs/style.config";
 
 export const TICKET_SIDEBAR_BOOT_CSS = `
+html .app-shell-rail {
+  width: var(--app-shell-rail-w, 48px);
+}
 html[data-ticket-sidebar] [data-ai-chat-slot] {
   display: block !important;
   width: var(--ticket-sidebar-width) !important;

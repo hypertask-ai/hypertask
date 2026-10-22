@@ -31,7 +31,7 @@ import { getServerBoardDocument } from "@/lib/firstScreen/serverBoardDocument";
 import { getServerInboxDocument } from "@/lib/firstScreen/serverInboxDocument";
 import type { BoardDisplay } from "@/lib/firstScreen/boardDisplay";
 import { buildTicketSidebarBootScript, TICKET_SIDEBAR_BOOT_CSS } from "@/lib/ticketSidebarBoot";
-import { HTPR_6990_NARROW_SIDEBAR_WIDTH_FLAG, HTPR_7055_CHAT_OVERLAYS_TICKET_FLAG, HTPR_7530_KEEP_AI_CHAT_CLOSED_FLAG } from "@/lib/flags/keys";
+import { HTPR_6990_NARROW_SIDEBAR_WIDTH_FLAG, HTPR_7055_CHAT_OVERLAYS_TICKET_FLAG, HTPR_7530_KEEP_AI_CHAT_CLOSED_FLAG, HTPR_7615_SIDEBAR_FIRST_PAINT_FLAG } from "@/lib/flags/keys";
 
 export async function generateViewport() {
   const device = await isMobileDevice();
@@ -79,7 +79,8 @@ export default async function RootLayout(
     analyticsSession?.email?.endsWith("@demo.hypertask.ai") ?? false;
   const memoryOnlyTracking = await isFeatureEnabled(HTPR_7278_MEMORY_ONLY_TRACKING_FLAG, analyticsSession?.id ?? -1);
 
-  const sidebarFlags = analyticsSession ? await Promise.all([
+  const sidebarFirstPaint = analyticsSession ? await isFeatureEnabled(HTPR_7615_SIDEBAR_FIRST_PAINT_FLAG, analyticsSession.id) : false;
+  const sidebarFlags = analyticsSession && sidebarFirstPaint ? await Promise.all([
     HTPR_7530_KEEP_AI_CHAT_CLOSED_FLAG, HTPR_6990_NARROW_SIDEBAR_WIDTH_FLAG, HTPR_7055_CHAT_OVERLAYS_TICKET_FLAG,
   ].map(key => isFeatureEnabled(key, analyticsSession.id))) : null;
 

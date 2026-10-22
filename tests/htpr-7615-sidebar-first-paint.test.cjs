@@ -99,13 +99,8 @@ test("phone, other routes, malformed and blocked storage keep their existing lay
   }
 });
 
-test("the display mirror hands layout back before paint only when persisted state and all relevant flags are ready", () => {
-  const keys = {
-    HTPR_6990_NARROW_SIDEBAR_WIDTH_FLAG: "narrow",
-    HTPR_7055_CHAT_OVERLAYS_TICKET_FLAG: "overlay",
-    HTPR_7530_KEEP_AI_CHAT_CLOSED_FLAG: "closed",
-  };
-  for (const pending of ["hydration", "narrow", "overlay", "closed", null]) {
+test("the display mirror hands layout back on hydration even when a related flag never reports ready", () => {
+  for (const hydrated of [false, true]) {
     const dom = firstPaint({ aiChatAutoOpenSuppressed: true });
     const previousDocument = global.document;
     const layouts = [];
@@ -113,19 +108,27 @@ test("the display mirror hands layout back before paint only when persisted stat
       global.document = dom.window.document;
       const { default: Mirror } = load("src/lib/firstScreen/BoardDisplayMirror.tsx", {
         react: { useEffect: noop, useLayoutEffect: callback => layouts.push(callback) },
-        "@/hooks/useFlag": { useFlag: () => false, useFlagReady: key => key !== pending },
-        "@/hooks/General/useHydrated": { useHydrated: () => pending !== "hydration" },
-        "@/lib/state": { useRecoilValue: () => ({}) }, "@/store": {}, "@/lib/flags/keys": keys,
+        "@/hooks/useFlag": { useFlag: () => false, useFlagReady: () => false },
+        "@/hooks/General/useHydrated": { useHydrated: () => hydrated },
+        "@/lib/state": { useRecoilValue: () => ({}) }, "@/store": {}, "@/lib/flags/keys": {},
         "./boardDocument": {}, "./boardDisplay": {},
       });
       assert.equal(Mirror({ accountId: 985 }), null);
       layouts.forEach(callback => callback());
-      assert.equal(document.documentElement.hasAttribute("data-ticket-sidebar"), pending !== null);
-      if (pending === null) assert.equal(document.documentElement.style.getPropertyValue("--ticket-sidebar-width"), "");
+      assert.equal(document.documentElement.hasAttribute("data-ticket-sidebar"), !hydrated);
+      if (hydrated) assert.equal(document.documentElement.style.getPropertyValue("--ticket-sidebar-width"), "");
     } finally {
       if (previousDocument === undefined) delete global.document;
       else global.document = previousDocument;
       dom.window.close();
     }
   }
+});
+
+test("HTPR-7615 registers a reversible Everyone bugfix", () => {
+  const definition = require("jiti").createJiti(__filename, { interopDefault: true })(path.join(root, "src/lib/flags/definitions/htpr-7615-sidebar-first-paint.ts"));
+  assert.equal(definition.key, "htpr-7615-sidebar-first-paint");
+  assert.equal(definition.kind, "bugfix");
+  assert.equal(definition.defaultMode, "EVERYONE");
+  assert.equal(definition.releaseRisk.risk, "small");
 });

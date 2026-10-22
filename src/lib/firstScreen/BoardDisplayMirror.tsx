@@ -1,13 +1,13 @@
 "use client";
 
 import { useEffect, useLayoutEffect } from "react";
-import { useFlag, useFlagReady } from "@/hooks/useFlag";
+import { useFlag } from "@/hooks/useFlag";
 import { useHydrated } from "@/hooks/General/useHydrated";
 import { useRecoilValue } from "@/lib/state";
 import { fcmAtom, currentUserAtom, boardLayoutPreferenceAtom, appShellRailAtom, appShellRailExpandedAtom, showQuickTipsAtom,
   showEmptyViewTabsAtom, hiddenViewTabIdsAtom, viewTabsOrderAtom, tableVisibleColumnsAtom, tableColumnWidthsAtom,
   tableTitleWrapAtom, openAiChatByDefaultAtom, keepAiChatClosedAtom, aiChatAutoOpenSuppressedAtom, aiChatPinnedAtom, aiChatSidebarWidthPxAtom, isAiChatSidebarModeAtom } from "@/store";
-import { HTPR_6990_NARROW_SIDEBAR_WIDTH_FLAG, HTPR_7055_CHAT_OVERLAYS_TICKET_FLAG, HTPR_7530_KEEP_AI_CHAT_CLOSED_FLAG, HTPR_7406_DESKTOP_SERVER_BOARD_FLAG } from "@/lib/flags/keys";
+import { HTPR_7406_DESKTOP_SERVER_BOARD_FLAG } from "@/lib/flags/keys";
 import { BOARD_FIRST_SCREEN_FLAG } from "./boardDocument";
 import { BOARD_DISPLAY_COOKIE, parseBoardDisplay } from "./boardDisplay";
 
@@ -15,9 +15,6 @@ export default function BoardDisplayMirror({ accountId }: { accountId: number | 
   const enabled = useFlag(BOARD_FIRST_SCREEN_FLAG);
   const desktopChat = useFlag(HTPR_7406_DESKTOP_SERVER_BOARD_FLAG);
   const hydrated = useHydrated();
-  const narrowWidthReady = useFlagReady(HTPR_6990_NARROW_SIDEBAR_WIDTH_FLAG);
-  const overlayTicketReady = useFlagReady(HTPR_7055_CHAT_OVERLAYS_TICKET_FLAG);
-  const keepClosedReady = useFlagReady(HTPR_7530_KEEP_AI_CHAT_CLOSED_FLAG);
   const user = useRecoilValue(currentUserAtom);
   const fcm = useRecoilValue(fcmAtom);
   const boardLayout = useRecoilValue(boardLayoutPreferenceAtom);
@@ -37,10 +34,10 @@ export default function BoardDisplayMirror({ accountId }: { accountId: number | 
   const chatWidth = useRecoilValue(aiChatSidebarWidthPxAtom);
   const chatSidebarMode = useRecoilValue(isAiChatSidebarModeAtom);
   useLayoutEffect(() => {
-    if (!hydrated || !narrowWidthReady || !overlayTicketReady || !keepClosedReady) return;
+    if (!hydrated) return;
     document.documentElement.removeAttribute("data-ticket-sidebar");
     document.documentElement.style.removeProperty("--ticket-sidebar-width");
-  }, [hydrated, narrowWidthReady, overlayTicketReady, keepClosedReady]);
+  }, [hydrated]);
   useEffect(() => {
     if (!enabled || accountId === null || user?.id !== accountId) return;
     const mirror = () => {
