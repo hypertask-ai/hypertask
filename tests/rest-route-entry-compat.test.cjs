@@ -67,8 +67,11 @@ async function run(operation, mode = 'OFF', options = {}) {
     user: { update: fn('userUpdate', actor), findUnique: fn('userFind', ({ where }) => options.noUserRow ? null : { id: where.id, displayName: 'Actor', email: 'actor@fixture.invalid', UserSetting: null, userPicture: null }) }, revokedToken: { upsert: fn('tokenRevoke', {}) },
     userSetting: { update: fn('preferencesUpdate', { playGifs: false }), findUnique: fn('preferencesFind', null) },
     agent: { findFirst: fn('agent', { id: agentId, userId, displayName: 'Agent' }) },
-    $transaction: fn('transaction', async (promises) => Promise.all(promises)),
+    $transaction: async (work) => typeof work === 'function'
+      ? record('transaction', ['callback'], await work(prisma))
+      : arrayTransaction(work),
   };
+  const arrayTransaction = fn('transaction', async (promises) => Promise.all(promises));
   const cookieValue = options.badCookie ? '{' : JSON.stringify(actor);
   const mocks = {
     'next/headers': { cookies: async () => ({ get: (name) => name === 'nookies_user' ? options.noProfile ? undefined : { value: cookieValue } : options.tokenCookie ? { value: 'token' } : undefined }) },
@@ -107,7 +110,7 @@ async function run(operation, mode = 'OFF', options = {}) {
     '@/utils/helperFunctions/sanitizeRichHtml': {}, '@/lib/dictationProvider': {}, '@/lib/configs/allTasks.config': {}, '@/models/Calendar/model': {},
     '@/lib/storage/uploadTaskAttachmentToS3': {
       resolveOwnAiChatAttachmentKey: () => null, getHypertasksObjectSize: fn('objectSize', 5),
-      uploadAiChatAttachmentToS3: fn('upload', 'own-file'), deleteTaskAttachmentFromS3: fn('storageDelete', undefined),
+      uploadAiChatAttachmentToS3: fn('upload', 'own-file'), deleteTaskAttachmentFromS3: fn('storageDelete', true),
     },
     '@/utils/controllers/comments/linkifyTicketRefs': { linkifyTicketRefs: fn('linkify', 'Hello') },
     '@/lib/redis': { getRedis: async () => ({ set: fn('redisSet', 'OK') }) },
@@ -363,6 +366,20 @@ const baseline = {
     ],
     "calls": [
       [
+        "sessions",
+        [
+          {
+            "where": {
+              "userId": 985,
+              "id": "session-1"
+            },
+            "select": {
+              "id": true
+            }
+          }
+        ]
+      ],
+      [
         "attachments",
         [
           {
@@ -383,6 +400,27 @@ const baseline = {
         ]
       ],
       [
+        "sessionDeleteMany",
+        [
+          {
+            "where": {
+              "userId": 985,
+              "id": {
+                "in": [
+                  "session-1"
+                ]
+              }
+            }
+          }
+        ]
+      ],
+      [
+        "transaction",
+        [
+          "callback"
+        ]
+      ],
+      [
         "storageDelete",
         [
           "own-file"
@@ -398,17 +436,6 @@ const baseline = {
                   "attachment-1"
                 ]
               }
-            }
-          }
-        ]
-      ],
-      [
-        "sessionDelete",
-        [
-          {
-            "where": {
-              "id": "session-1",
-              "userId": 985
             }
           }
         ]
