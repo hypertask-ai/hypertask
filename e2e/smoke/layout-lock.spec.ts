@@ -13,6 +13,7 @@ import { layoutDifferences, validateFlagChanges, verticalOrder, LAYOUT_CHANGE_ME
 import { FEATURE_FLAG_KEYS } from '../../src/lib/flags'
 import path from 'node:path'
 import { withRealtime } from './lib/realtime'
+import { scrollToBaselinePosition, waitForTicketInitialScroll } from './lib/layout-lock-scroll'
 
 const fixturePath = path.join(path.dirname(process.env.BROWSER_SMOKE_STATE_FILE || 'e2e/smoke/.state/smoke-state.json'), 'card-fixture.json')
 
@@ -146,6 +147,10 @@ for (const name of [...screens, 'ticket from board card']) {
     }
     await page.evaluate(() => document.fonts.ready)
     const targets = landmarks(screen, phone)
+    if (screen === 'ticket') {
+      await waitForTicketInitialScroll(page)
+      await scrollToBaselinePosition(page, phone ? 'phone' : 'desktop')
+    }
     // Measure one settled viewport, never scroll individual landmarks into view.
     let previous = ''
     let actual: Record<string, Box | null> = {}
@@ -212,6 +217,7 @@ test('layout lock: comment composer is the end of the ticket thread', async ({ p
       const composer = page.getByTestId('comment-composer')
       const comments = page.getByTestId('ticket-comment')
       await expect(composer).toBeVisible()
+      await waitForTicketInitialScroll(page)
       // Bring the last virtualized rows into view, without moving a fixed phone composer.
       await composer.scrollIntoViewIfNeeded()
       await expect(comments).toHaveCount(2)

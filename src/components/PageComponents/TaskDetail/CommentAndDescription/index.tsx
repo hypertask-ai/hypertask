@@ -77,6 +77,7 @@ const CommentAndDescriptionContainer = (props: ITaskInfoContainer) => {
     allowPerks,
     descriptionStart,
     liveRowsPendingFor,
+    newCommentsSnapshotReady,
     showLiveRows,
   } = useTaskContext();
   const descriptionFirstFlag = useFlag(HTPR_7367_SERVER_DESCRIPTION_FIRST_FLAG);
@@ -135,6 +136,7 @@ const CommentAndDescriptionContainer = (props: ITaskInfoContainer) => {
     >
       <RichTextPersonHovercards projectId={allowPerks ? currentTask?.projectId : undefined} />
       <div
+        data-ticket-initial-scroll-ready={newCommentsSnapshotReady && !serverRowsShown}
         style={{
           height: _mbl && (!cachedLayout || numberOfComments || numberOfUploadingComments) ? `${virtualizer.getTotalSize()}px` : undefined,
           ...(stableLayout && cachedLayout && _mbl ? {

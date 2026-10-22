@@ -15,11 +15,12 @@ import path from 'node:path'
 import type { Box } from './lib/layout-lock'
 import {
   MATRIX_CHANGE_MESSAGE, MATRIX_STATES, MATRIX_WIDTHS, composerFollowsComments, describeCombo, matrixDifferences,
-  stateKey, validateMatrixFlagChanges, type Anchor, type Anchors, type MatrixFlagChange, type MatrixState,
+  stateKey, validateMatrixFlagChanges, matrixBaselineLayout, type Anchor, type Anchors, type MatrixFlagChange, type MatrixState,
 } from './lib/layout-lock-matrix'
 import { FEATURE_FLAG_KEYS } from '../../src/lib/flags'
 import { createTask } from './lib/api'
 import { withRealtime } from './lib/realtime'
+import { scrollToBaselinePosition, waitForTicketInitialScroll } from './lib/layout-lock-scroll'
 
 const stateFile = process.env.BROWSER_SMOKE_STATE_FILE || 'e2e/smoke/.state/smoke-state.json'
 const fixturePath = path.join(path.dirname(stateFile), 'card-fixture.json')
@@ -135,12 +136,6 @@ const lastCommentBottom = (page: Page) => page.evaluate(() => {
   return comments.length ? Math.round(Math.max(...comments.map(comment => comment.getBoundingClientRect().bottom))) : null
 })
 
-// Scroll offsets differ between a fresh load and a resize; every comparison starts from the top.
-const scrollToTop = (page: Page) => page.evaluate(() => {
-  for (const element of document.querySelectorAll('*')) if (element.scrollTop > 0) element.scrollTop = 0
-  window.scrollTo(0, 0)
-})
-
 // Two animation frames, then the same boxes twice in a row: the layout has stopped changing.
 // Parts the baseline expects must be on the page first: the phone top bar mounts lazily and the phone
 // comment box waits for the thread to settle, so "missing twice in a row" is not "settled". A part that
@@ -244,12 +239,12 @@ for (const definition of selected) {
       const { flags } = await (await flagsResponse).json() as { flags: Record<string, boolean> }
       for (const [key, enabled] of Object.entries(fixture.flags)) expect(flags[key] === true, `layout flag ${key}`).toBe(enabled)
       await definition.ready(page)
+      if (definition.thread) await waitForTicketInitialScroll(page)
       if (definition.name === 'ticket-short-thread') await expandComments(page)
       await applyState(page, state)
       for (const width of MATRIX_WIDTHS) {
         const label = describeCombo(definition.name, width, state)
         await page.setViewportSize({ width, height: 900 })
-        await scrollToTop(page)
         const expected = baseline?.pages[definition.name]?.[stateKey(state)]?.[String(width)]
         const found: string[] = []
         // HTPR-7074 hides the comment box until the thread settles (2s hard stop). Still hidden after 3s is a real failure.
@@ -258,6 +253,7 @@ for (const definition of selected) {
           found.push(`${label}: comment box still hidden 3s after the window changed width`)
         }
         const required = Object.keys(expected ?? {}).filter(name => width >= 768 || name !== 'ai-sidebar')
+        await scrollToBaselinePosition(page, matrixBaselineLayout(definition.name, width, state))
         const { actual, stable } = await settle(page, definition.targets, required)
         // On a phone the AI chat is an animated sheet over the page, not part of the layout.
         if (width < 768) actual['ai-sidebar'] = null
