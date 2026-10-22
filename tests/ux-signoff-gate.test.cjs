@@ -23,6 +23,261 @@ async function decision(overrides) {
   return result;
 }
 
+function removalFixture({ mode = 'EVERYONE', before: original, after, call = 'useFlag(HTPR_1_PANEL_FLAG)', module = '@/hooks/useFlag' } = {}) {
+  const key = 'htpr-1-panel';
+  const filename = 'src/components/Panel.tsx';
+  const definition = `src/lib/flags/definitions/${key}.ts`;
+  const before = original ?? [
+    `import { ${call.startsWith('await ') ? 'isFeatureEnabled' : 'useFlag'} } from "${module}";`,
+    'import { HTPR_1_PANEL_FLAG } from "@/lib/flags/keys";',
+    'export default async function Panel() {',
+    `  const panelEnabled = ${call};`,
+    '  return (',
+    '    <main>',
+    '      {panelEnabled && (',
+    '        <button>Existing action</button>',
+    '      )}',
+    '    </main>',
+    '  );',
+    '}',
+    '',
+  ].join('\n');
+  const retained = after ?? [
+    'export default async function Panel() {',
+    '  return (',
+    '    <main>',
+    '      <button>Existing action</button>',
+    '    </main>',
+    '  );',
+    '}',
+    '',
+  ].join('\n');
+  const definitionSource = `export const HTPR_1_PANEL_FLAG = "${key}";\nexport default { key: HTPR_1_PANEL_FLAG };\n`;
+  const patch = (filename, source, target, status) => {
+    const oldLines = source.slice(0, -1).split('\n');
+    const newLines = target ? target.slice(0, -1).split('\n') : [];
+    return { filename, status, additions: newLines.length, deletions: oldLines.length,
+      patch: [`@@ -1,${oldLines.length} +${newLines.length ? 1 : 0},${newLines.length} @@`,
+        ...oldLines.map((line) => `-${line}`), ...newLines.map((line) => `+${line}`)].join('\n') };
+  };
+  return {
+    files: [patch(definition, definitionSource, '', 'removed'), patch(filename, before, retained, 'modified')],
+    sources: { [filename]: before, [definition]: definitionSource },
+    productionModes: { modes: { [key]: mode } },
+  };
+}
+
+test('EVERYONE flag removal keeps the existing flag-on JSX and needs no wireframe', async () => {
+  assert.deepEqual(await decision(removalFixture()), {
+    state: 'success', description: 'Flag removal only: htpr-1-panel already on for everyone', details: [],
+  });
+  const server = removalFixture({ call: 'await isFeatureEnabled(HTPR_1_PANEL_FLAG, userId)', module: '@/lib/flags' });
+  assert.equal((await decision(server)).state, 'success');
+});
+
+for (const [context, open, close] of [
+  ['double-quoted JSX attribute', '<main title="', '">'],
+  ['single-quoted JSX attribute', "<main title='", "'>"],
+  ['template literal', '<main>{`', '`}'],
+  ['block comment', '<main>{/*', '*/}'],
+  ['string literal with invalid raw newlines', '<main>{"', '"}'],
+  ['single-quoted string with invalid raw newlines', "<main>{'", "'}"],
+]) {
+  test(`flag-like wrapper in ${context} cannot exempt a literal-text rewrite`, async () => {
+    const clean = removalFixture();
+    assert.equal((await decision(clean)).state, 'success');
+    const before = clean.sources['src/components/Panel.tsx']
+      .replace('    <main>', `    ${open}`)
+      .replace('    </main>', `    ${close}\n    </main>`);
+    const after = before.replace(/^import .*\n/gm, '')
+      .replace(/^  const panelEnabled = .*\n/m, '')
+      .replace('      {panelEnabled && (\n        <button>Existing action</button>\n      )}\n',
+        '      <button>Existing action</button>\n');
+    const refused = removalFixture({ before, after });
+    assert.equal((await decision(refused)).state, 'failure');
+    assert.equal((await decision({ ...refused, comments: [wireframe(), yes()] })).state, 'success');
+  });
+}
+
+test('the built-in scanner exempts real removals with no TypeScript available', async () => {
+  const original = process.env.FEATURE_FLAG_TYPESCRIPT_PATH;
+  try {
+    process.env.FEATURE_FLAG_TYPESCRIPT_PATH = path.join(root, 'missing-ux-signoff-typescript.cjs');
+    const withoutTypescript = await import(`${pathToFileURL(path.join(root, '.github/scripts/ux-signoff-gate.mjs'))}?no-typescript`);
+    const fixture = removalFixture();
+    assert.deepEqual(withoutTypescript.flagRemovalOnly(fixture.files, fixture.productionModes, fixture.sources), ['htpr-1-panel']);
+    assert.equal(withoutTypescript.evaluate(input(removalFixture())).state, 'success');
+    assert.equal(withoutTypescript.evaluate(input({ ...removalFixture(), comments: [wireframe(), yes()] })).state, 'success');
+  } finally {
+    if (original === undefined) delete process.env.FEATURE_FLAG_TYPESCRIPT_PATH;
+    else process.env.FEATURE_FLAG_TYPESCRIPT_PATH = original;
+  }
+});
+
+test('the scanner keeps quoted JSX text, ordinary strings, comments and expression braces distinct', async () => {
+  const clean = removalFixture();
+  const before = clean.sources['src/components/Panel.tsx']
+    .replace('  return (', '  const label = "{notCode}";\n  // {notCode}\n  /* {notCode} */\n  return (')
+    .replace('<main>', '<main title="{notCode}" data-count={1}>Don\'t treat this "quote as code');
+  const after = before.replace(/^import .*\n/gm, '')
+    .replace(/^  const panelEnabled = .*\n/m, '')
+    .replace('      {panelEnabled && (\n        <button>Existing action</button>\n      )}\n',
+      '      <button>Existing action</button>\n');
+  assert.equal((await decision(removalFixture({ before, after }))).state, 'success');
+});
+
+for (const [context, rewrite] of [
+  ['regex literal', (source) => source.replace('  return (', '  const pattern = /[{}]/;\n  return (')],
+  ['unbalanced brace', (source) => source.replace('  return (', '  {\n  return (')],
+  ['unbalanced parenthesis', (source) => source.replace('  return (', '  (\n  return (')],
+  ['line continuation', (source) => source.replace('  return (', '  const text = "line' + '\\' + '\n' + 'continuation";\n  return (')],
+  ['multiline attribute string', (source) => source.replace('<main>', '<main title="first\nsecond">')],
+  ['mismatched JSX tags', (source) => source.replace('</main>', '</aside>')],
+]) {
+  test(`the scanner refuses ${context} even when it is preserved`, async () => {
+    const clean = removalFixture();
+    const before = rewrite(clean.sources['src/components/Panel.tsx']);
+    const after = before.replace(/^import .*\n/gm, '')
+      .replace(/^  const panelEnabled = .*\n/m, '')
+      .replace('      {panelEnabled && (\n        <button>Existing action</button>\n      )}\n',
+        '      <button>Existing action</button>\n');
+    assert.equal((await decision(removalFixture({ before, after }))).state, 'failure');
+  });
+}
+
+test('a canonical wrapper can also be a plain expression statement, not an object value', async () => {
+  const clean = removalFixture();
+  const before = clean.sources['src/components/Panel.tsx']
+    .replace('  return (\n    <main>\n', '').replace('    </main>\n  );\n', '');
+  const after = before.replace(/^import .*\n/gm, '')
+    .replace(/^  const panelEnabled = .*\n/m, '')
+    .replace('      {panelEnabled && (\n        <button>Existing action</button>\n      )}\n',
+      '      <button>Existing action</button>\n');
+  assert.equal((await decision(removalFixture({ before, after }))).state, 'success');
+  assert.equal((await decision(removalFixture({
+    before: before.replace('      {panelEnabled', '  const value = (\n      {panelEnabled').replace('      )}\n', '      )}\n  );\n'),
+    after: after.replace('      <button>', '  const value = (\n      <button>').replace('</button>\n', '</button>\n  );\n'),
+  }))).state, 'failure');
+});
+
+test('a wrapper in a JavaScript comment is not a plain expression statement', async () => {
+  const clean = removalFixture();
+  const plain = clean.sources['src/components/Panel.tsx']
+    .replace('  return (\n    <main>\n', '').replace('    </main>\n  );\n', '');
+  for (const [open, close] of [['  /*\n', '  */\n'], ['  // ', '']]) {
+    const before = plain.replace('      {panelEnabled', `${open}      {panelEnabled`)
+      .replace('      )}\n', `      )}\n${close}`);
+    const after = before.replace(/^import .*\n/gm, '')
+      .replace(/^  const panelEnabled = .*\n/m, '')
+      .replace('      {panelEnabled && (\n        <button>Existing action</button>\n      )}\n',
+        '      <button>Existing action</button>\n');
+    assert.equal((await decision(removalFixture({ before, after }))).state, 'failure');
+  }
+});
+
+for (const mode of ['OWNER_ONLY', 'OWNER_AND_QA', 'OFF', undefined]) {
+  test(`removal of a ${mode ?? 'missing'} production mode still needs the wireframe yes`, async () => {
+    assert.equal((await decision(removalFixture())).state, 'success');
+    const refused = removalFixture({ mode });
+    if (mode === undefined) delete refused.productionModes.modes['htpr-1-panel'];
+    assert.equal((await decision(refused)).state, 'failure');
+    assert.equal((await decision({ ...refused, comments: [wireframe(), yes()] })).state, 'success');
+  });
+}
+
+for (const change of [
+  (fixture) => { delete fixture.productionModes; },
+  (fixture) => { delete fixture.files[1].patch; },
+  (fixture) => { fixture.files[1].additions++; },
+  (fixture) => { fixture.files[1].patch = fixture.files[1].patch.replace('Existing action</button>', 'Changed action</button>'); },
+  (fixture) => { fixture.sources['src/components/Panel.tsx'] = fixture.sources['src/components/Panel.tsx'].replace('Existing action', 'Other action'); },
+  (fixture) => { fixture.files[0].status = 'modified'; },
+  (fixture) => { fixture.files[1].status = 'renamed'; },
+  (fixture) => { fixture.files.push({ filename: 'docs/Panel.md', previous_filename: 'src/components/Other.tsx', status: 'renamed' }); },
+  (fixture) => { fixture.files.push({ filename: 'src/lib/unrelated.ts', status: 'modified' }); },
+]) {
+  test(`unproven removal fails closed: ${change.toString()}`, async () => {
+    assert.equal((await decision(removalFixture())).state, 'success');
+    const refused = removalFixture();
+    change(refused);
+    assert.equal((await decision(refused)).state, 'failure');
+    assert.equal((await decision({ ...refused, comments: [wireframe(), yes()] })).state, 'success');
+  });
+}
+
+test('complete context hunks prove the same removal; truncated or misplaced hunks do not', async () => {
+  const fixture = removalFixture();
+  fixture.files[1] = { ...fixture.files[1], additions: 1, deletions: 6, patch: [
+    '@@ -1,4 +1,1 @@',
+    '-import { useFlag } from "@/hooks/useFlag";',
+    '-import { HTPR_1_PANEL_FLAG } from "@/lib/flags/keys";',
+    ' export default async function Panel() {',
+    '-  const panelEnabled = useFlag(HTPR_1_PANEL_FLAG);',
+    '@@ -6,5 +3,3 @@',
+    '     <main>',
+    '-      {panelEnabled && (',
+    '-        <button>Existing action</button>',
+    '-      )}',
+    '+      <button>Existing action</button>',
+    '     </main>',
+  ].join('\n') };
+  assert.equal((await decision(fixture)).state, 'success');
+  const badPatch = fixture.files[1].patch.replace('@@ -6,5 +3,3 @@', '@@ -6,4 +3,3 @@');
+  assert.equal((await decision({ ...fixture, files: [fixture.files[0], { ...fixture.files[1], patch: badPatch }] })).state, 'failure');
+});
+
+for (const change of [
+  (source) => source.replace('{panelEnabled && (', '{!panelEnabled && ('),
+  (source) => source.replace('@/hooks/useFlag', '@/hooks/notTheFlagHook'),
+  (source) => source.replace('  return (', '  /* ambiguous lexical context */\n  return ('),
+  (source) => source.replace('  return (', '  const text = `not parsed`;\n  return ('),
+]) {
+  test(`ambiguous or non-flag-on branch keeps sign-off: ${change.toString()}`, async () => {
+    const clean = removalFixture();
+    assert.equal((await decision(clean)).state, 'success');
+    const filename = 'src/components/Panel.tsx';
+    const before = change(clean.sources[filename]);
+    const oldLines = before.slice(0, -1).split('\n');
+    const newRows = clean.files[1].patch.split('\n').filter((row) => row.startsWith('+'));
+    clean.sources[filename] = before;
+    clean.files[1] = { ...clean.files[1], deletions: oldLines.length,
+      patch: [`@@ -1,${oldLines.length} +1,${newRows.length} @@`, ...oldLines.map((line) => `-${line}`), ...newRows].join('\n') };
+    assert.equal((await decision(clean)).state, 'failure');
+    assert.equal((await decision({ ...clean, comments: [wireframe(), yes()] })).state, 'success');
+  });
+}
+
+test('a canonical ternary retains the flag-on branch, never the null/off branch', async () => {
+  const fixture = removalFixture();
+  const filename = 'src/components/Panel.tsx';
+  fixture.sources[filename] = fixture.sources[filename].replace('{panelEnabled && (', '{panelEnabled ? (').replace('      )}', '      ) : null}');
+  fixture.files[1].patch = fixture.files[1].patch.replace('-      {panelEnabled && (', '-      {panelEnabled ? (').replace('-      )}', '-      ) : null}');
+  assert.equal((await decision(fixture)).state, 'success');
+  const after = fixture.files[1].patch.replace('+      <button>Existing action</button>', '+      null');
+  assert.equal((await decision({ ...fixture, files: [fixture.files[0], { ...fixture.files[1], patch: after }] })).state, 'failure');
+});
+
+test('flag cleanup mixed with new JSX or a new user-facing string is not removal-only', async () => {
+  const clean = removalFixture();
+  assert.equal((await decision(clean)).state, 'success');
+  for (const addition of ['      <aside>New visible element</aside>\n', '      New user-facing copy\n']) {
+    const after = 'export default async function Panel() {\n  return (\n    <main>\n      <button>Existing action</button>\n' + addition + '    </main>\n  );\n}\n';
+    const mixed = removalFixture({ after });
+    assert.equal((await decision(mixed)).state, 'failure');
+    assert.equal((await decision({ ...mixed, comments: [wireframe(), yes()] })).state, 'success');
+  }
+  const mixed = { ...clean, files: [...clean.files, added] };
+  assert.equal((await decision(mixed)).state, 'failure');
+  assert.equal((await decision({ ...mixed, comments: [wireframe(), yes({ text: 'yes\nNew elements: ExamplePanel' })] })).state, 'success');
+});
+
+test('new visible UI without a flag removal still needs the wireframe yes', async () => {
+  assert.equal((await decision(removalFixture())).state, 'success');
+  const newUi = { files: [added], productionModes: { modes: { 'htpr-1-panel': 'EVERYONE' } } };
+  assert.equal((await decision(newUi)).state, 'failure');
+  assert.equal((await decision({ ...newUi, comments: [wireframe(), yes({ text: 'yes\nNew elements: ExamplePanel' })] })).state, 'success');
+});
+
 test('PR 1271 shape fails both wireframe and new element rules', async () => {
   const result = await decision({ files: [{ filename: 'src/app/inbox/Inbox.tsx', status: 'modified' }, added] });
   assert.equal(result.state, 'failure');
