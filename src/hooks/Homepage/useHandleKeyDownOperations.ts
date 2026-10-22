@@ -28,8 +28,6 @@ import { toggleTaskTimer } from '@/hooks/Task Detail/useTimeTracking'
 import { buildBuiltinViewContext, isBuiltinViewId } from '@/lib/constants/builtinViews'
 import { useToggleShowArchivedOnBoard } from './useShowArchivedOnBoard'
 import useKanbanViews from '@/hooks/Homepage/Views/useKanbanViews'
-import { useFlag } from '@/hooks/useFlag'
-import { HTPR_6902_N_QUICK_ADD_FLAG } from '@/lib/flags/keys'
 import { shouldIgnoreTaskShortcutTarget } from '@/lib/keyboard/taskShortcuts'
 
 interface IHandleKeyDownOperations {
@@ -70,7 +68,6 @@ const useHandleKeyDownOperations= (props:IHandleKeyDownOperations) => {
     const timerToggling = useRef(false);
     const isApple = useDeviceContext()
     const sorting_mode_current = getActiveSortingModeFromProject(_currentProject)
-    const nQuickAddEnabled = useFlag(HTPR_6902_N_QUICK_ADD_FLAG);
     const getActiveItem = () => store.get(activeItemAtom);
     const getActiveSection = () => store.get(activeSectionAtom);
 
@@ -120,9 +117,7 @@ const useHandleKeyDownOperations= (props:IHandleKeyDownOperations) => {
       document.addEventListener("keydown", handleNQuickAdd);
       return () => document.removeEventListener("keydown", handleNQuickAdd);
     };
-    useEffect(nQuickAddEnabled
-      ? registerQuickAdd
-      : () => {}, [nQuickAddEnabled, showCommands.show, filteredSections, store]);
+    useEffect(registerQuickAdd, [showCommands.show, filteredSections, store]);
 
     const handleKeyDown = (e: any) => {
     let cmdControl = isApple&&e.metaKey || !isApple&&e.ctrlKey;

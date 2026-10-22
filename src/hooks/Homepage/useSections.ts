@@ -16,8 +16,6 @@ import { useDeviceContext } from "@/lib/contexts/deviceContext";
 import { returnIfModalOrInputActive } from "@/utils/helperFunctions/helperFunctions";
 import { KeyCodes } from "@/lib/constants/keyboard-handler";
 import useHypertasksNavigate from "../MultiPages/Route/useHypertasksNavigate";
-import { useFlag } from "@/hooks/useFlag";
-import { HTPR_6902_N_QUICK_ADD_FLAG } from "@/lib/flags/keys";
 
 type SectionKeydownHandler = (event: KeyboardEvent) => void;
 
@@ -72,7 +70,6 @@ const useSections = ({
   const [newTaskDraftTitle, setNewTaskDraftTitle] = useState("");
   const [keyPressed, setKeypressed] = useState<any>({});
   const isApple = useDeviceContext()
-  const nQuickAddEnabled = useFlag(HTPR_6902_N_QUICK_ADD_FLAG);
   const { navigate } = useHypertasksNavigate();
   const sectionListenerKeyRef = useRef<string | null>(null);
   if (!sectionListenerKeyRef.current) {
@@ -101,7 +98,7 @@ const useSections = ({
     toggleCreateTaskGlobally(sectionPayload, defaultEditFocus)
   };
 
-  useEffect(nQuickAddEnabled ? () => {
+  useEffect(() => {
     const sectionElement = sectionRef.current;
     const openQuickEntry = () => {
       setPosition("bottom");
@@ -109,7 +106,7 @@ const useSections = ({
     };
     sectionElement?.addEventListener("OPEN_QUICK_ENTRY", openQuickEntry);
     return () => sectionElement?.removeEventListener("OPEN_QUICK_ENTRY", openQuickEntry);
-  } : () => {}, [nQuickAddEnabled]);
+  }, []);
 
   const invokeCreateItem = async (taskTitle: string, createAnother: boolean): Promise<boolean> => {
     const itemToCreate = {
@@ -359,10 +356,7 @@ const useSections = ({
       !e.ctrlKey && !e.metaKey && !e.altKey) return;
     handleLegacyKeyDown(e);
   }, [handleLegacyKeyDown]);
-  let handleKeyDown = handleLegacyKeyDown;
-  if (nQuickAddEnabled) {
-    handleKeyDown = handleShiftCKeyDown;
-  }
+  const handleKeyDown = handleShiftCKeyDown;
   const handleKeyDownRef = useRef(handleKeyDown);
   handleKeyDownRef.current = handleKeyDown;
 

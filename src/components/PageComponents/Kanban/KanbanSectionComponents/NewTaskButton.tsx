@@ -1,6 +1,6 @@
 import Tooltip from '@/components/Common/Tooltip';
 import { useFlag } from '@/hooks/useFlag';
-import { HTPR_6902_N_QUICK_ADD_FLAG, HTPR_7047_SHARP_PLUS_SIGNS_FLAG } from '@/lib/flags/keys';
+import { HTPR_7047_SHARP_PLUS_SIGNS_FLAG } from '@/lib/flags/keys';
 import { TDefaultEditFocus, TSectionPayload } from '@/models/CreateTaskModalModels/model';
 import React, { useState } from 'react'
 import { DroppableStateSnapshot } from '@hello-pangea/dnd';
@@ -20,7 +20,6 @@ interface INewTaskButton{
 }
 
 const NewTaskButton:React.FC<INewTaskButton> = ({buttonPosition, createTaskAt, snapshot, sectionPayload}) => {
-    const nQuickAddEnabled = useFlag(HTPR_6902_N_QUICK_ADD_FLAG);
     
     if (buttonPosition == "top"){
         const  left= -160;
@@ -46,7 +45,7 @@ const NewTaskButton:React.FC<INewTaskButton> = ({buttonPosition, createTaskAt, s
                 group-hover/main:scale-100 w-full mt-[16px] py-2
                 rounded flex justify-center"
                 >
-                <TooltipAndIcon text='Create task' keyCombination={nQuickAddEnabled ? ["N / Shift+C"] : ["C"]} left={20} bottom={-40} size={14} className='text-text-light-gray'/>
+                <TooltipAndIcon text='Create task' keyCombination={["N / Shift+C"]} left={20} bottom={-40} size={14} className='text-text-light-gray'/>
             </div>
         )
     }

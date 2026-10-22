@@ -41,8 +41,6 @@ import { useGlobalUIState } from "../ProviderGlobal/useGlobalUIState";
 import { useSettingsNavigation } from "../Modals/Settings/settingsNavigation";
 import { tooltipConfig } from "@/lib/configs/tooltip.config";
 import { CLASS_NAME_CONSTANTS } from "@/lib/configs/general.config";
-import { useFlag } from "@/hooks/useFlag";
-import { HTPR_6902_N_QUICK_ADD_FLAG } from "@/lib/flags/keys";
 
 const cn = (...classes: (string | boolean | undefined)[]) =>
   classes.filter(Boolean).join(" ");
@@ -124,12 +122,9 @@ const BottomSettings_QuickTips = ({
 }: {
   announcements: any;
 }) => {
-  const nQuickAddEnabled = useFlag(HTPR_6902_N_QUICK_ADD_FLAG);
-  const boardTips = nQuickAddEnabled
-    ? KanbanTipsConstants.flatMap(tip => tip.hint === "add task"
-      ? [tip, { key: ["N"], hint: "quick add" }]
-      : [tip])
-    : KanbanTipsConstants;
+  const boardTips = KanbanTipsConstants.flatMap(tip => tip.hint === "add task"
+    ? [tip, { key: ["N"], hint: "quick add" }]
+    : [tip]);
   const mbl = useContext(MobileViewContext);
   const pathname = usePathname();
   const { toggleShowCommands } = useHypertasksRecoilStates();
