@@ -169,6 +169,8 @@ async function fixture(t, { mobile = true, hasDraft = false, hasDraftInit = fals
     "next/link": ({ prefetch, ...props }) => React.createElement("a", props),
     "@/lib/contexts/mobileContext": { MobileViewContext },
     "@/utils/undoActions/helperFuncs": { cn: (...classes) => classes.filter(Boolean).join(" ") },
+    "@/hooks/useFlag": { useFlag: () => true },
+    "@/lib/flags/keys": flags,
   }).default;
   const cache = load("src/lib/navigation/cachedTaskDetail.ts", {
     "@/lib/boardSync/revocationTombstone": { isBoardRevocationTombstoned: () => false },
