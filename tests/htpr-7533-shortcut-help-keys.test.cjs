@@ -231,7 +231,7 @@ for (const [title, display, code] of [["Bulk Archive", "SHIFT|E", "E"], ["Bulk R
   contract("Inbox", title, display, "inbox", `keyboardShortcut: [KeyCodes.${code}]`);
 }
 contract("Inbox", "Archive", "E", "inbox", "e.keyCode === KeyCodes.E", 'eHandler(cmdControl, undefined, "keyboard")');
-contract("Inbox", "Open task", "ENTER", "inbox", "e.keyCode === KeyCodes.ENTER", "openTask()");
+contract("Inbox", "Open task", "ENTER", "inbox", "e.keyCode === KeyCodes.ENTER", 'openTask("view")');
 contract("Inbox", "Move focus down", "J", "inbox", "e.keyCode === KeyCodes.J || e.keyCode === KeyCodes.ARROW_DOWN");
 contract("Inbox", "Move focus up", "K", "inbox", "(e.keyCode === KeyCodes.K || e.keyCode === KeyCodes.ARROW_UP) && !cmdControl");
 contract("Inbox", "Archive task", "MOD|E", "inbox", "e.keyCode === KeyCodes.E && cmdControl", 'eHandler(cmdControl, undefined, "keyboard")');
