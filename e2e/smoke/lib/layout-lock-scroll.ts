@@ -4,15 +4,13 @@ import { waitForStableScroll } from './layout-lock-matrix'
 
 export async function waitForTicketInitialScroll(page: Page) {
   await page.locator('[data-ticket-initial-scroll-ready="true"]').waitFor({ state: 'attached' })
-  // Let the readiness commit's positioning effect run before timing its configured delay.
-  await page.evaluate(waitForStableScroll)
-  // Start the positioning delay after the snapshot and live rows, not after navigation or networkidle.
+  await page.evaluate(waitForStableScroll, {})
   await page.waitForTimeout(Math.max(
     taskDetailConfig.delays.defaultCommentFocus,
     taskDetailConfig.delays.mobileFocusComment,
     taskDetailConfig.delays.scrollToElement,
   ))
-  await page.evaluate(waitForStableScroll)
+  await page.evaluate(waitForStableScroll, {})
 }
 
 export async function scrollToTop(page: Page) {
@@ -22,5 +20,5 @@ export async function scrollToTop(page: Page) {
     }
     window.scrollTo({ top: 0, left: 0, behavior: 'instant' })
   })
-  await page.evaluate(waitForStableScroll)
+  await page.evaluate(waitForStableScroll, {})
 }
