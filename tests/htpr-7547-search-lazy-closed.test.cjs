@@ -346,18 +346,19 @@ test('HTPR-7547 editing pending proxy text cancels the queued Enter even when th
 });
 
 
-test('HTPR-7547 a failed command import closes the palette and the next open retries it', async () => {
+test('HTPR-7547 a failed command import closes a flag-enabled palette and reopening retries it', async () => {
   for (const loaded of [true, false]) {
-    await withSearch({ enabled: true, loaded, delayed: true, importFailures: 1 }, async ({ open, proxy, pressProxy, release, imports, resultsMarkup, pendingEnter }) => {
+    await withSearch({ enabled: true, loaded, delayed: true, importFailures: 1 }, async ({ open, close, proxy, pressProxy, release, imports, resultsMarkup, pendingEnter }) => {
       const baseline = resultsMarkup();
       await open();
       proxy().value = 'draft';
       await pressProxy('Enter', { code: 'Enter' });
       await release();
       assert.equal(imports(), 1);
-      assert.equal(proxy(), null, 'a failed import closes the palette instead of leaving it invisible');
+      assert.equal(proxy() === null, loaded, 'only a resolved On flag closes the palette after a failed import');
       assert.equal(document.querySelector('[role="alert"]'), null, 'no new UI on a failed import');
       assert.equal(resultsMarkup(), baseline, 'a failed tool import cannot hide search results');
+      if (!loaded) await close();
       await open();
       await release();
       assert.equal(imports(), 2);
