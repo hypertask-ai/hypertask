@@ -134,17 +134,14 @@ Browser PostgreSQL, Redis and Soketi stay job-level services, so a docs-only
 Only free GitHub-hosted `ubuntu-latest` runners are used. Verify the matcher without installing dependencies:
 `node .github/scripts/ci-change-scope.cjs --self-check`.
 
-## Visual regression gate
+## Visual regression (informational v1)
 
-`visual-regression` screenshots the five screens a user lands on (board, task detail, search, inbox, and the Ctrl+K palette) at 1440 and 390 wide in the `amoled` and `porcelain` themes, and fails when pixels move without an approved baseline. It catches the change that typechecks, lints and tests green and still puts an unwanted control on screen; [HTPR-5649](https://app.hypertask.ai/detail/project-15/5649) shipped an archived-results checkbox into search that way.
-
-- The job builds and serves the application itself against a throwaway PostgreSQL container on its GitHub-hosted runner. It does not screenshot a Vercel preview: previews are opt-in here, and auto-merge treats a required check with no run exactly like a failing one, so a preview-triggered required check would freeze merging on every pull request.
-- The check reports success on a pull request that changes no pixel-affecting file, which is what makes membership of the auto-merge required list safe. Never add a name to that list unless its job reports on every pull request.
-- Chromium runs inside the pinned `mcr.microsoft.com/playwright` image rather than on the runner, so a baseline generated on a developer machine matches one generated in CI. Fonts and the Chromium build are the same in both places.
-- The fixture comes from the demo provisioner with the guest prefix removed, so the screenshots show the ordinary signed-in chrome against a realistic board without any network credential.
-- Reference images live in [`visual/baseline/`](../visual/baseline). Regenerate them with `node visual/harness.mjs update`, and prove the gate can still fail with `node visual/harness.mjs control`, which injects an unapproved control and expects a red run.
-- `.github/scripts/visual-baseline-guard.mjs` rejects any pull request that edits `visual/baseline/**` unless its body carries a `## Visual change` heading. Without that rule a pull request could approve its own regression by committing new pixels.
-- The search screenshot pins the search chrome, not result rows: results come from Turbopuffer, which a self-contained job has no key for.
+`Visual Regression` (`.github/workflows/visual-regression.yml`) reports `visual-regression` on non-draft production PRs touching screen or harness files; manual runs accept `base` and `head` refs.
+It builds base then head on one GitHub-hosted runner, each with a fresh disposable database; base creates temporary expected PNGs and head compares against them.
+Chromium 1.64.0 captures board, task detail, the scrolled comment-box scene, Ctrl+J and inbox in Porcelain at 1440×900 and 390×844.
+On failure, download `visual-regression-diffs` (7-day retention) and compare each screen's expected, actual and diff PNGs; the step summary lists failed screens or setup failures.
+An intended visual change is approved by a human in the PR description with `Visual change approved: <ticket URL>`; the job still shows the diff and does not auto-approve it.
+This v1 signal is not required by a ruleset and does not replace existing browser-smoke, layout locks or premerge evidence. No committed PNG baselines or storage-state artifacts are used.
 
 ## Layout lock matrix (YPER4-252)
 

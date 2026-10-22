@@ -12,7 +12,7 @@ import { useDeviceContext } from "@/lib/contexts/deviceContext";
 import { useRouter, useSearchParams } from "next/navigation";
 import { buildFullScreenChatPath } from "@/lib/aiChatDisplayMode";
 import { HTPR_6936_ASK_AI_FULLSCREEN_FLAG } from "@/lib/flags/keys";
-import { HTPR_6865_SEARCH_LAYOUT_FLAG, HTPR_6878_SEARCH_LABEL_SCOPE_FLAG, HTPR_6879_SEARCH_ESC_BACK_FLAG, HTPR_6880_SEARCH_COMMENTER_FLAG } from "@/lib/flags/keys";
+import { HTPR_6865_SEARCH_LAYOUT_FLAG, HTPR_6878_SEARCH_LABEL_SCOPE_FLAG, HTPR_6880_SEARCH_COMMENTER_FLAG } from "@/lib/flags/keys";
 import { highlightedSearchSnippet, highlightedTitle } from "@/lib/search/autocomplete";
 import LabelWrapper from "@/components/Labels/LabelWrapper";
 import { MobileViewContext } from "@/lib/contexts/mobileContext";
@@ -62,7 +62,6 @@ const SearchComp = ({
   const layoutEnabled = useFlag(HTPR_6865_SEARCH_LAYOUT_FLAG);
   const commenterFlagEnabled = useFlag(HTPR_6880_SEARCH_COMMENTER_FLAG);
   const labelScopeFlagEnabled = useFlag(HTPR_6878_SEARCH_LABEL_SCOPE_FLAG);
-  const searchEscBackFlagEnabled = useFlag(HTPR_6879_SEARCH_ESC_BACK_FLAG);
   const setAiChatPendingPrompt = useSetRecoilState(aiChatPendingPromptAtom);
   const { openAIChatInterface } = useGlobalUIState();
   const isMbl = useContext(MobileViewContext);
@@ -164,7 +163,7 @@ const SearchComp = ({
             layoutEnabled={layoutEnabled}
             availableBoards={labelScopeFlagEnabled && layoutEnabled ? availableSearchBoards : undefined}
             onAskAi={openAskAi}
-            showSuggestions={isSearchDraft || (searchEscBackFlagEnabled && layoutEnabled && !inputValue.trim())}
+            showSuggestions={isSearchDraft || (layoutEnabled && !inputValue.trim())}
           />
 
           <>

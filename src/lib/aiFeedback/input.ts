@@ -19,6 +19,13 @@ export const aiFeedbackSchema = z.object({
 
 export type AiFeedbackInput = z.input<typeof aiFeedbackSchema>
 
+export const automaticFeedbackSchema = aiFeedbackSchema.extend({
+  field: z.string().max(80).regex(/^[a-z_][a-z0-9_]*(?:\.[a-z0-9_]+){0,4}$/i)
+    .refine((value) => !credential.test(value), 'Credential-shaped values are not allowed').optional(),
+})
+
+export type AutomaticFeedbackInput = z.input<typeof automaticFeedbackSchema>
+
 export function scrubFeedbackText(value: string): string {
   return value
     .replace(/&(?:quot|#34|#x22);/gi, '"')
@@ -36,9 +43,11 @@ export function scrubFeedbackText(value: string): string {
     .slice(0, 300)
 }
 
-export function feedbackFingerprint(input: AiFeedbackInput): string {
+export function feedbackFingerprint(input: AutomaticFeedbackInput): string {
+  const parts = [input.surface, input.tool ?? '', input.status ?? '', input.errorCode ?? '', input.category ?? 'other']
+  if (input.field) parts.push(input.field)
   return createHash('sha256')
-    .update([input.surface, input.tool ?? '', input.status ?? '', input.errorCode ?? '', input.category ?? 'other'].join('|').toLowerCase())
+    .update(parts.join('|').toLowerCase())
     .digest('hex')
 }
 

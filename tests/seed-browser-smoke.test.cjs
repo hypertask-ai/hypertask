@@ -69,7 +69,7 @@ test("contract callers and boards are isolated from the browser smoke user", asy
   assert.ok(seedStart >= 0 && seedEnd > seedStart);
   const run = new (Object.getPrototypeOf(async function () {}).constructor)(
     "prisma", "createBoard", "signSession", "SESSION_TTL_SECONDS", "path", "stateFile", "fixtureFile", "mkdir", "writeFile", "appendFile", "process", "randomUUID",
-    `const runKey = "test", localPremerge = false, contractEnabled = true;\n${source.slice(seedStart, seedEnd)}\nawait seedSessionFixtures({});`,
+    `const runKey = "test", localPremerge = false, contractEnabled = true, visual = false, VISUAL_NOW = "2026-10-01T12:00:00Z";\n${source.slice(seedStart, seedEnd)}\nawait seedSessionFixtures({});`,
   );
   await run(prisma, async data => {
     const board = { ...data, id: nextId++, task: { id: nextId++, uniqueIndex: 1, title: data.title, updatedAt: new Date() }, columns: [] };

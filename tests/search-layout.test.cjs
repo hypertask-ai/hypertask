@@ -1100,7 +1100,7 @@ test('one-board results keep open and archived split tabs in either layout', asy
 })
 
 test('Escape closes retained layout suggestions after focus moved elsewhere, keeping the query', async (t) => {
-  await withSearch(t, { flags: { 'htpr-6879-search-esc-back': true } }, async ({ input, type, tick, dom }) => {
+  await withSearch(t, {}, async ({ input, type, tick, dom }) => {
     await type('board:')
     await tick(180)
     assert.equal(input().getAttribute('aria-expanded'), 'true')
@@ -1398,11 +1398,9 @@ for (const searchOnce of [false, true]) test(`HTPR-7501 a search the user starts
   })
 })
 
-const escBack = { 'htpr-6879-search-esc-back': true }
-
 async function freshTab(t, config, run) {
   let ready = false
-  await withSearch(t, { query: 'Result', flags: escBack, flagsBeforeReady: {}, flagsReady: () => ready, ...config }, async (tools) => {
+  await withSearch(t, { query: 'Result', flagsBeforeReady: {}, flagsReady: () => ready, ...config }, async (tools) => {
     await flush()
     const before = tools.requests.length
     ready = true
@@ -1413,7 +1411,7 @@ async function freshTab(t, config, run) {
 }
 
 test('HTPR-7502 a fresh tab with the board list loaded waits for feature settings and shows the server result without a request', async (t) => {
-  const today = await searchPageHtml(t, { flags: escBack }, async ({ requests, complete }) => complete(requests[0], serverTasks, ['All', 'Product Board']))
+  const today = await searchPageHtml(t, {}, async ({ requests, complete }) => complete(requests[0], serverTasks, ['All', 'Product Board']))
   let html
   await freshTab(t, { searchOnce: true, serverStartedSearch: Promise.resolve(serverSearch()) }, async ({ requests, before }) => {
     assert.equal(before, 0, 'no request before feature settings load')
