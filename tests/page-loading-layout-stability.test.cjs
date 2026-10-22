@@ -385,11 +385,12 @@ test("a disabled board's empty Time row is absent before and after its summary l
   assert.equal(timer.props.timeTrackingEnabled, false, "use the board setting already present in the task snapshot");
 });
 
-function editorPanels(flag) {
+function editorPanels(flag, cachedStaticFirst = false) {
   return load("src/components/RTE/TaskDetailEditorPanels.tsx", {
-    useFlag: (key) => key === "instant" && flag,
+    useFlag: (key) => key === "instant" ? flag : key === "cached-static-first" && cachedStaticFirst,
     HTPR_6752_INSTANT_TICKET_OPEN_FLAG: "instant",
     HTPR_7091_STATIC_DESCRIPTION_FIRST_FLAG: "static-first",
+    HTPR_7395_CACHED_STATIC_FIRST_FLAG: "cached-static-first",
     HTPR_6929_COMPOSE_TASK_WRITER_FLAG: "compose",
     HTPR_7337_EDIT_WITH_AI_FLAG: "edit-with-ai",
     HTPR_7393_COMMENT_INLINE_AI_FLAG: "comment-inline-ai",
@@ -414,8 +415,8 @@ function editorPanels(flag) {
 }
 
 test("with instant open, the description reserves its real content before the editor exists", () => {
-  for (const flag of [true]) {
-    const Panels = editorPanels(flag);
+  for (const cachedStaticFirst of [false, true]) {
+    const Panels = editorPanels(true, cachedStaticFirst);
     const context = {
       divIds: {}, currentTask: { id: 42 }, inViewObject: {},
       mode: "read-edit-description", id: "description", defaultContent: "Long cached description",
