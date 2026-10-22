@@ -1219,16 +1219,11 @@ test("typed section and notification writes are a feature defaulting Owner + QA"
   assert.deepEqual(await Promise.all([6, 985, 7].map((userId) => flags.isFeatureEnabled(key, userId))), [false, false, false]);
 });
 
-test("saved view deletion is an Everyone-default bugfix and respects OFF", async () => {
-  const key = flags.HTPR_6985_DELETE_VIEW_ONCE_FLAG;
-  assert.equal(key, "htpr-6985-delete-view-once");
-  const entry = (await flags.listFeatureFlagModes()).find((flag) => flag.key === key);
-  assert.equal(entry.kind, "bugfix");
-  assert.equal(entry.mode, "EVERYONE");
-  assert.equal(entry.shippedOn, "2026-10-07");
-  assert.deepEqual(await Promise.all([6, 985, 7].map((userId) => flags.isFeatureEnabled(key, userId))), [true, true, true]);
-  row = { mode: "OFF", updatedAt: new Date() };
-  assert.deepEqual(await Promise.all([6, 985, 7].map((userId) => flags.isFeatureEnabled(key, userId))), [false, false, false]);
+test("saved view deletion no longer has a feature flag", async () => {
+  assert.equal(flags.HTPR_6985_DELETE_VIEW_ONCE_FLAG, undefined);
+  assert.equal(flags.FEATURE_FLAG_KEYS.find((key) => key === "htpr-6985-delete-view-once"), undefined);
+  assert.equal(definitions.find((definition) => definition.key === "htpr-6985-delete-view-once"), undefined);
+  assert.equal((await flags.listFeatureFlagModes()).find((flag) => flag.key === "htpr-6985-delete-view-once"), undefined);
 });
 
 test("bulk inbox archive undo is an Everyone-default bugfix and respects OFF", async () => {
