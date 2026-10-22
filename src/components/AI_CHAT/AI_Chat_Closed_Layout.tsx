@@ -1,6 +1,6 @@
 import React, { useContext, useLayoutEffect, useRef, useState } from "react";
-import { useFlag, useFlagLoaded } from "@/hooks/useFlag";
-import { HTPR_6990_NARROW_SIDEBAR_WIDTH_FLAG, HTPR_7055_CHAT_OVERLAYS_TICKET_FLAG, HTPR_7074_PHONE_WORKSPACE_WIDTH_FLAG } from "@/lib/flags/keys";
+import { useFlag } from "@/hooks/useFlag";
+import { HTPR_7055_CHAT_OVERLAYS_TICKET_FLAG } from "@/lib/flags/keys";
 import { usePathname } from "next/navigation";
 import { ChevronLeft } from "lucide-react";
 import Tooltip from "@/components/Common/Tooltip";
@@ -33,12 +33,8 @@ export default function AIChatClosedLayout({
   const pathname = usePathname();
   const isMobile = useContext(MobileViewContext);
   const isDetailPage = pathname?.startsWith("/detail") ?? false;
-  const narrowSidebarWidth = useFlag(HTPR_6990_NARROW_SIDEBAR_WIDTH_FLAG);
   const chatOverlaysTicket = useFlag(HTPR_7055_CHAT_OVERLAYS_TICKET_FLAG);
   const overlayDetailPage = chatOverlaysTicket && isDetailPage;
-  const phoneFlagOn = useFlag(HTPR_7074_PHONE_WORKSPACE_WIDTH_FLAG);
-  const phoneFlagKnown = useFlagLoaded(HTPR_7074_PHONE_WORKSPACE_WIDTH_FLAG);
-  const phoneWorkspaceWidth = phoneFlagOn || !phoneFlagKnown;
   const [sidebarOverlays, setSidebarOverlays] = useState(false);
   const previousIsMobile = useRef(isMobile);
   const [viewportKey, setViewportKey] = useState(0);
@@ -51,14 +47,14 @@ export default function AIChatClosedLayout({
   }, [isMobile, isDetailPage, chatOpen]);
 
   useLayoutEffect(() => {
-    if (!narrowSidebarWidth || isMobile || sidebarWidthPx <= 0) return;
+    if (isMobile || sidebarWidthPx <= 0) return;
     const update = () => setSidebarOverlays(
       window.innerWidth < Math.max(768, sidebarWidthPx + (overlayDetailPage ? DETAIL_PAGE_MIN_WIDTH : 340))
     );
     update();
     window.addEventListener("resize", update);
     return () => window.removeEventListener("resize", update);
-  }, [narrowSidebarWidth, isMobile, sidebarWidthPx, overlayDetailPage]);
+  }, [isMobile, sidebarWidthPx, overlayDetailPage]);
 
   const workspaceClasses = cn(
     "outline-none",
@@ -93,13 +89,9 @@ export default function AIChatClosedLayout({
       {!phoneDetailWithoutChat && <div
         data-ai-chat-slot
         className={sidebarWidthPx > 0 && !isMobile
-          ? narrowSidebarWidth
-            ? sidebarOverlays
-              ? "fixed right-0 top-0 z-[51]"
-              : "shrink-0 max-md:fixed max-md:right-0 max-md:top-0 max-md:z-[51]"
-            : phoneWorkspaceWidth
-              ? "shrink-0 max-md:fixed max-md:right-0 max-md:top-0 max-md:z-[51]"
-              : "shrink-0"
+          ? sidebarOverlays
+            ? "fixed right-0 top-0 z-[51]"
+            : "shrink-0 max-md:fixed max-md:right-0 max-md:top-0 max-md:z-[51]"
           : "contents"}
         style={sidebarWidthPx > 0 && !isMobile ? { width: sidebarWidthPx } : undefined}
       >
