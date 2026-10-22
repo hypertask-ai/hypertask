@@ -120,13 +120,21 @@ for (const screen of screens) {
     } else if (screen === 'ctrl-j') {
       await board(page)
       const writer = page.locator('[data-compose-task-writer]:visible')
-      await expect(async () => {
-        if (await writer.count() === 0) {
-          await page.evaluate(() => (document.activeElement as HTMLElement)?.blur())
-          await page.keyboard.press('Control+j')
-        }
-        await expect(writer, 'Ctrl+J must open the task writer once flags and shortcuts are ready').toBeVisible({ timeout: 5_000 })
-      }).toPass({ intervals: [500], timeout: 20_000 })
+      await page.evaluate(() => (document.activeElement as HTMLElement)?.blur())
+      if (testInfo.project.name === 'desktop') {
+        await page.mouse.move(1, 1)
+        await expect(async () => {
+          await page.keyboard.press('Control+k')
+          try {
+            await expect(page.getByRole('tab', { name: 'New Task', exact: true }), 'compose palette must be ready before Ctrl+J').toBeVisible({ timeout: 2_000 })
+          } finally {
+            await page.keyboard.press('Escape')
+            await expect(page.getByRole('dialog')).toHaveCount(0)
+          }
+        }).toPass({ intervals: [500], timeout: 20_000 })
+      }
+      await page.keyboard.press('Control+j')
+      await expect(writer, 'Ctrl+J must open the task writer once flags and shortcuts are ready').toBeVisible({ timeout: 20_000 })
       await expect(page.getByRole('textbox', { name: 'Describe the task' })).toBeVisible()
       landmarks = [writer, page.getByRole('textbox', { name: 'Describe the task' })]
     } else {
