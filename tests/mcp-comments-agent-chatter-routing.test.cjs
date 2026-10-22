@@ -218,3 +218,17 @@ test('ticket flag is registered by generated keys and definitions with the reque
   assert.equal(definition.shippedOn, '2026-10-19')
   assert.ok(definition.releaseRisk.reason)
 })
+
+for (const enabled of [false, true]) {
+  test(`image routing ignores forged booleans and uses same-call attachments, flag ${enabled}`, async () => {
+    const forged = setup({ inlineImages: enabled });
+    assert.equal((await forged.post({ has_image_attachments: true })).body.routedTo, "log");
+    const image = setup({ inlineImages: enabled });
+    const response = await image.post({ attachments: [{ filename: "image.png", content_type: "image/png", url: "https://files.hypertask.app/image.png" }] });
+    assert.equal(response.body.routedTo, enabled ? "comments" : "log");
+    const document = setup({ inlineImages: enabled });
+    assert.equal((await document.post({ attachments: [{ filename: "report.pdf", content_type: "application/pdf", url: "https://files.hypertask.app/report.pdf" }] })).body.routedTo, "log");
+    const invalid = setup({ inlineImages: enabled });
+    assert.equal((await invalid.post({ attachments: [{ filename: "image.png", content_type: "image/png" }] })).status, enabled ? 400 : 201);
+  });
+}

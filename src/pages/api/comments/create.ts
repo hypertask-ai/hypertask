@@ -1,3 +1,4 @@
+import { inlineAgentImagesForUser } from "@/lib/media/inlineAgentImages.server";
 import { withAgentScopeRequest, prepareAgentScope } from "@/lib/auth/agentScope";
 import { NextApiHandler, NextApiRequest, NextApiResponse } from "next";
 import { createCommentService } from "@/utils/controllers/comments/createCommentService";
@@ -35,7 +36,7 @@ const handler: NextApiHandler = async (
         return res.status(400).json({ message: "Bad request" });
 
       const comment = await createCommentService({
-        text,
+        text: agentId ? await inlineAgentImagesForUser(text, currentUser.id, { inlineImages: req.body.inline_images }) : text,
         creatorId,
         taskId,
         ownerId,

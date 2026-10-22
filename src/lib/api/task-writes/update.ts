@@ -1,3 +1,4 @@
+import { inlineAgentImagesForUser } from "@/lib/media/inlineAgentImages.server";
 import { recordAgentBoardScopeMiss } from "@/lib/auth/agentScope";
 import { NextResponse } from "next/server";
 import { z } from "zod";
@@ -62,6 +63,10 @@ export const PUT = taskWriteRoute({
         photoURL: sessionUser?.photoURL ?? undefined,
         email: sessionUser?.email ?? undefined,
       } as IUser;
+      if (actingAgentId && typeof newTask.description === "string") {
+        newTask.description = await inlineAgentImagesForUser(newTask.description, session.userId, { inlineImages: newTask.inline_images });
+      }
+      delete newTask.inline_images;
       const response = await updateTaskSingle(newTask, currentUser, actingAgentId);
       if (response.status === 200) {
         void broadcastBoardChange((response.json as any)?.projectId ?? newTask?.projectId, {

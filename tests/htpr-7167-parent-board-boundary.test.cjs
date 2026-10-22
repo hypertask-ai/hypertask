@@ -7,6 +7,7 @@ const ts = require("typescript");
 const root = path.resolve(__dirname, "..");
 const read = (file) => fs.readFileSync(path.join(root, file), "utf8");
 function load(file, stubs = {}) {
+  stubs = { "@/lib/media/inlineAgentImages.server": { inlineAgentImagesForUser: async (html) => html }, ...stubs };
   stubs = { "@/lib/auth/agentScope": require("./helpers/agent-board-scope.cjs").enforcedScope, ...stubs };
   const javascript = ts.transpileModule(read(file), {
     compilerOptions: { esModuleInterop: true, module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2020 },

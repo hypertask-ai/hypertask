@@ -93,7 +93,8 @@ export class CommentService {
 
   async addComment(
     params: unknown,
-    invocation?: McpInvocationIdentity
+    invocation?: McpInvocationIdentity,
+    options: { inlineAgentImages?: boolean } = {}
   ): Promise<CommentResponse | LoggedCommentResponse> {
     const correlationId = generateCorrelationId();
 
@@ -122,7 +123,7 @@ export class CommentService {
         '/mcp/comments',
         {
           method: 'POST',
-          body: JSON.stringify(commentInput),
+          body: JSON.stringify({ ...commentInput, ...(options.inlineAgentImages && attachments?.length ? { attachments } : {}) }),
           ...(idempotencyKey
             ? { headers: { 'Idempotency-Key': idempotencyKey } }
             : {}),
@@ -149,6 +150,7 @@ export class CommentService {
                 }),
             ...('comment' in response ? { comment_id: response.comment.id } : {}),
             files: attachments,
+            inline_images: commentInput.inline_images,
           },
           'comment' in response ? `Comment ${response.comment.id} creation` : `Agent activity ${response.activity.id} creation`
         );
@@ -260,6 +262,7 @@ export class CommentService {
           body: JSON.stringify({
             text: validatedInput.text,
             content_type: validatedInput.content_type,
+            inline_images: validatedInput.inline_images,
             mentions: validatedInput.mentions,
           }),
         },

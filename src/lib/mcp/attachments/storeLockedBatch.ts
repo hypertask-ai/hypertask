@@ -19,7 +19,7 @@ const ATTACHMENT_TRANSACTION_TIMEOUT_MS = 10_000;
 
 type AttachmentTransactionClient = Pick<
   Prisma.TransactionClient,
-  'attachment' | '$queryRaw'
+  'attachment' | 'description' | 'comment' | '$queryRaw'
 >;
 
 interface LockingPrismaClient {
@@ -84,7 +84,9 @@ async function persistOrReconcile(
     const bySource = new Map(committed.map((row) => [row.fileSource, row]));
     const reconciled = uploads.map(({ url }) => bySource.get(url));
     if (reconciled.every((row): row is StoredAttachmentResult => row !== undefined)) {
-      return reconciled;
+      return persistenceTarget.inlineImages
+        ? db.$transaction((tx) => persistAttachmentRows(tx, uploads, persistenceTarget), { timeout: ATTACHMENT_TRANSACTION_TIMEOUT_MS })
+        : reconciled;
     }
     if (committed.length === 0) throw persistenceError;
     throw new AttachmentPersistenceUncertainError();

@@ -23,6 +23,7 @@ const toolFiles = {
 function chatTools() {
   const scope = {
     z,
+    context: { inlineAgentImagesEnabled: false },
     ...load(path.join(root, 'src/lib/ai/chatStream/request.ts')),
     ...load(path.join(root, 'src/lib/ai/tools/constants.ts')),
     ...load(path.join(root, 'src/lib/ai/tools/schemas.ts')),

@@ -9,6 +9,9 @@ import { parseGithubPullRequestUrl } from "@/lib/pullRequests/githubPullRequests
 import type { UpdateTaskBody } from './types';
 
 export async function validateTaskUpdateFields(requestBody: UpdateTaskBody, dryRun: boolean) {
+    if (requestBody.inline_images !== undefined && typeof requestBody.inline_images !== "boolean") {
+        return NextResponse.json(buildFieldError("invalid_field", "inline_images", "inline_images must be a boolean"), { status: 400 });
+    }
     if (requestBody.content_type !== undefined && requestBody.content_type !== 'html' && requestBody.content_type !== 'markdown') {
         return NextResponse.json(
             {

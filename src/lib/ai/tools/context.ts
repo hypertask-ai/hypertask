@@ -19,7 +19,8 @@ export function createToolContext(
   recordToolStart?: ToolStartRecorder,
   heartbeatTurn?: HeartbeatTurnMetadata,
   chatTaskWriterEnabled = false,
-  abortSignal?: AbortSignal
+  abortSignal?: AbortSignal,
+  inlineAgentImagesEnabled = false
 ) {
   const requestingUserId = user.id;
   const sendStatus = (toolName: string) => {
@@ -72,7 +73,7 @@ export function createToolContext(
       : null;
   };
   const mutateTaskAssignees = createTaskAssigneeMutation({ user, actingAgentId, requestingUserId, confirmationSessionId, bulkPreviewsIssued });
-  return { chatTaskWriterEnabled, abortSignal, user, body, send, recordToolExecution, actingAgentId, recordToolStart, heartbeatTurn, requestingUserId, sendStatus, bulkPreviewsIssued, confirmationSessionId, invokeAgentManagementHandler, requireAccountManagementConfirmation, mutateTaskAssignees };
+  return { inlineAgentImagesEnabled, chatTaskWriterEnabled, abortSignal, user, body, send, recordToolExecution, actingAgentId, recordToolStart, heartbeatTurn, requestingUserId, sendStatus, bulkPreviewsIssued, confirmationSessionId, invokeAgentManagementHandler, requireAccountManagementConfirmation, mutateTaskAssignees };
 }
 
 export type ToolContext = ReturnType<typeof createToolContext>;

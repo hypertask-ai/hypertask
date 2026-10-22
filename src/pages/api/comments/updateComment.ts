@@ -1,3 +1,4 @@
+import { inlineAgentImagesForUser } from "@/lib/media/inlineAgentImages.server";
 import { NextApiHandler, NextApiRequest, NextApiResponse } from "next";
 import { updateCommentService } from "@/utils/controllers/comments/updateCommentService";
 import { broadcastTaskComment } from "@/lib/realtime/server";
@@ -65,7 +66,7 @@ const handler: NextApiHandler = async (
     try {
       const toUpdate = await updateCommentService({
         commentId,
-        text,
+        text: session.agentId ? await inlineAgentImagesForUser(text, userId, { inlineImages: updatedComment.inline_images, attachments: attachments?.map((file: { fileSource: string; fileType: string; fileName: string }) => ({ url: file.fileSource, mimeType: file.fileType, fileName: file.fileName })) }) : text,
         userId,
         attachments,
         replaceAttachments,

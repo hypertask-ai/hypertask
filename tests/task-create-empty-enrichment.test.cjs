@@ -22,6 +22,7 @@ function compile(relativePath) {
 }
 
 function execute(javascript, stubs) {
+  stubs = { "@/lib/media/inlineAgentImages.server": { inlineAgentImagesForUser: async (html) => html }, ...stubs };
   stubs = { "@/lib/auth/agentScope": require("./helpers/agent-board-scope.cjs").enforcedScope, ...stubs };
   const originalLoad = Module._load;
   Module._load = (request, parent, isMain) =>

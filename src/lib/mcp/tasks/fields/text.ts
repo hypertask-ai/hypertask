@@ -1,3 +1,4 @@
+import { inlineAgentImagesForUser } from "@/lib/media/inlineAgentImages.server";
 import { persistUrlsForDescription } from "@/utils/controllers/urls/extractUrlsFromContent";
 import { sanitizeRichHtml } from "@/utils/helperFunctions/sanitizeRichHtml";
 import { toErrorMessage } from "@/lib/api/errorMessage";
@@ -15,9 +16,12 @@ export async function updateTaskText(context: TaskUpdateFieldContext, task: Task
         const newTask: any = { id: task.id }
         if (requestBody.title !== undefined) newTask.title = requestBody.title
         const sanitizedDescription = hasDescriptionUpdate
-            ? sanitizeRichHtml(requestBody.description ?? '')
+            ? await inlineAgentImagesForUser(sanitizeRichHtml(requestBody.description ?? ''), ctx.user.id, { inlineImages: requestBody.inline_images })
             : undefined
-        if (sanitizedDescription !== undefined) newTask.description = sanitizedDescription
+        if (sanitizedDescription !== undefined) {
+            newTask.description = sanitizedDescription
+            newTask.inline_images = requestBody.inline_images
+        }
         if (requestBody.parent_task_id !== undefined) newTask.parentTaskId = requestBody.parent_task_id
 
         const singleUrl = `${baseUrl}/api/tasks/single`

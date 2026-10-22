@@ -168,6 +168,7 @@ export function getAttachFilesBaseSchema() {
   return createTaskIdentificationBaseSchema()
     .extend({
       comment_id: z.coerce.number().int().positive().optional(),
+      inline_images: z.boolean().optional().describe("Images embed inline by default. Set false only for an explicit attachment only or link only request."),
       files: attachmentFilesSchema,
     })
     .strict();

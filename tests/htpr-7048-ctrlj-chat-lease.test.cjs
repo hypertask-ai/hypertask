@@ -28,6 +28,7 @@ function load(relativePath, stubs, globals = {}) {
     module: loadedModule, exports: loadedModule.exports,
     require(id) {
       if (Object.hasOwn(stubs, id)) return stubs[id];
+      if (id === "@/lib/media/inlineAgentImages") return require("jiti")(__filename, { alias: { "@": path.join(root, "src") }, interopDefault: true })(path.join(root, "src/lib/media/inlineAgentImages.ts"));
       if (id.startsWith("node:")) return require(id);
       throw new Error(`Unstubbed import: ${id}`);
     },

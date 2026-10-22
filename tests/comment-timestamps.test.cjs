@@ -22,6 +22,7 @@ function load(relativePath, modules = {}) {
   new Function('module', 'exports', 'require', 'Date', javascript)(loadedModule, loadedModule.exports, (name) => {
     if (name === './agentChatterRouting') return load('src/lib/mcp/operations/comments/agentChatterRouting.ts')
     if (Object.hasOwn(modules, name)) return modules[name]
+    if (name === "@/lib/media/inlineAgentImages.server") return { inlineAgentImagesForUser: async (html) => html }
     throw new Error(`Unexpected import: ${name}`)
   }, FixedDate)
   return loadedModule.exports
@@ -161,6 +162,7 @@ test('the AI comment edit tool passes its acting agent into the shared service',
   const { createUpdateCommentTool } = load('src/lib/ai/tools/updateComment.ts', {
     ai: { tool: (definition) => definition },
     zod: require('zod'),
+    './schemas': load('src/lib/ai/tools/schemas.ts', { zod: require('zod') }),
     '@/lib/prisma': { default: fixture.prisma, __esModule: true },
     '@/utils/controllers/comments/processMentions': {},
     '@/utils/helperFunctions/toStoredHtml': { toStoredHtml: (text) => text },
