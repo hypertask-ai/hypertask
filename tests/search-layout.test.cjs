@@ -69,7 +69,7 @@ async function withSearch(t, config, check) {
     source('src/lib/constants/keyboard-handler.ts', { KeyCodes: { ARROW_DOWN: 40, ARROW_UP: 38, ENTER: 13, ESCAPE: 27, J: 74, K: 75, TAB: 9, FORWARD_SLASH: 191 } })
     const post = (_url, body) => new Promise((resolve) => requests.push({ body, resolve }))
     stub(require.resolve('axios'), { default: { post }, post })
-    stub(require.resolve('next/navigation'), { useSearchParams: () => new URLSearchParams(dom.window.location.search), useRouter: () => ({ replace(url) { navigations.push(url) }, push(url) { navigations.push(url); if (config.browserHistory) dom.window.history.pushState(null, '', url) }, back() {} }) })
+    stub(require.resolve('next/navigation'), { useSearchParams: () => new URLSearchParams(dom.window.location.search), useRouter: () => ({ replace(url) { navigations.push(url) }, push(url) { navigations.push(url); if (config.browserHistory) dom.window.history.pushState(null, '', url) }, back() { navigations.push('back') } }) })
     stub(require.resolve('@tanstack/react-query'), { useQueryClient: () => ({ invalidateQueries() {}, setQueryData(_key, data) { cache.history = data.history } }) })
     const baseline = config.baseline && process.env.SEARCH_LAYOUT_BASELINE_DIR
     const jiti = createJiti(__filename, { alias: { ...(baseline ? { '@/lib/search': path.join(baseline, 'search') } : {}), '@': path.join(root, 'src') }, interopDefault: true, fsCache: false, jsx: { runtime: 'automatic' } })
@@ -1449,3 +1449,81 @@ for (const [name, config] of [['with a server result', { serverStartedSearch: Pr
     })
   })
 }
+
+for (const enabled of [true, false]) {
+  for (const query of ['', 'a']) {
+    test(`HTPR-7558 flag ${enabled ? 'on' : 'off'}: a short query ${JSON.stringify(query)} ${enabled ? 'keeps' : 'retains the legacy loss of'} initial writing focus`, async (t) => {
+      let resolveServer
+      let projects = []
+      await withSearch(t, {
+        query,
+        flags: { 'htpr-7558-slash-search-focus': enabled },
+        projects: () => projects,
+        serverStartedSearch: new Promise((resolve) => { resolveServer = resolve }),
+      }, async ({ input, dom, render, state, requests }) => {
+        assert.equal(document.activeElement, enabled ? input() : document.body, 'focus is decided before the server promise settles')
+        await React.act(async () => resolveServer(null))
+        assert.equal(document.activeElement, enabled ? input() : document.body, 'a null server result must not take writing focus')
+        projects = [{ id: 7, title: 'Product Board' }]
+        await render(query)
+        assert.equal(document.activeElement, enabled ? input() : document.body, 'loading the board list must not change focus')
+        assert.equal(requests.length, 0, 'opening search does not submit an empty or one-character query')
+        if (enabled) {
+          await React.act(async () => {
+            Object.getOwnPropertyDescriptor(dom.window.HTMLInputElement.prototype, 'value').set.call(document.activeElement, 'focusprobe')
+            document.activeElement.dispatchEvent(new dom.window.Event('input', { bubbles: true }))
+          })
+          assert.equal(input().value, 'focusprobe', 'typing goes into the search box without focus() or a click')
+          assert.equal(state().inputValue, 'focusprobe')
+        }
+      })
+    })
+  }
+}
+
+test('HTPR-7558 keeps Enter result navigation and one-Escape exit after opening an empty search', async (t) => {
+  let projects = []
+  await withSearch(t, {
+    flags: { 'htpr-7558-slash-search-focus': true, 'htpr-6994-search-esc-leaves': true },
+    projects: () => projects,
+    serverStartedSearch: Promise.resolve(null),
+  }, async ({ input, render, dom, press, requests, complete, state, navigations }) => {
+    assert.equal(document.activeElement, input())
+    projects = [{ id: 7, title: 'Product Board' }]
+    await render()
+    await React.act(async () => {
+      Object.getOwnPropertyDescriptor(dom.window.HTMLInputElement.prototype, 'value').set.call(document.activeElement, 'qzxw7558')
+      document.activeElement.dispatchEvent(new dom.window.Event('input', { bubbles: true }))
+    })
+    await press('Enter', { keyCode: 13 })
+    assert.equal(requests.at(-1).body.searchQuery, 'qzxw7558')
+    await complete(requests.at(-1), serverTasks)
+    assert.equal(document.activeElement, document.body, 'Enter still leaves writing mode')
+    const key = async (key, keyCode) => React.act(async () => {
+      document.activeElement.dispatchEvent(new dom.window.KeyboardEvent('keydown', { key, keyCode, bubbles: true, cancelable: true }))
+    })
+    await key('j', 74)
+    assert.equal(state().selectedIndex, 1)
+    await key('k', 75)
+    assert.equal(state().selectedIndex, 0)
+    await key('Escape', 27)
+    assert.equal(navigations.at(-1), 'back')
+    assert.equal(navigations.filter((url) => url === 'back').length, 1)
+  })
+})
+
+test('HTPR-7558 still starts a populated URL search in result-navigation mode', async (t) => {
+  const projects = []
+  await withSearch(t, {
+    query: 'Result',
+    flags: { 'htpr-7558-slash-search-focus': true },
+    projects: () => projects,
+    serverStartedSearch: Promise.resolve(serverSearch()),
+  }, async ({ state, requests }) => {
+    await flush()
+    assert.equal(document.activeElement, document.body)
+    assert.equal(document.getElementById('task_2').textContent.includes('Second result'), true)
+    assert.equal(state().selectedIndex, 0)
+    assert.equal(requests.length, 0)
+  })
+})
