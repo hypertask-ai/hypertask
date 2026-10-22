@@ -24,7 +24,7 @@ import SearchChipsInput from "./SearchChipsInput";
 import "./search-autocomplete.css";
 import type { CommandFocusProxy } from "@/components/commandTypes";
 import type { ServerStartedSearch } from "@/lib/search/serverStartedSearch";
-import { HTPR_7547_SEARCH_LAZY_CLOSED_FLAG } from "@/lib/flags/keys";
+import { HTPR_7547_SEARCH_LAZY_CLOSED_FLAG, HTPR_7618_SEARCH_ROWS_FIT_PANE_FLAG } from "@/lib/flags/keys";
 
 interface IProps {
   _searchTerm: string;
@@ -60,6 +60,7 @@ const SearchComp = ({
     ? searchParams?.get("searchTerm") ?? _searchTerm
     : _searchTerm;
   const layoutEnabled = useFlag(HTPR_6865_SEARCH_LAYOUT_FLAG);
+  const rowsFitPane = useFlag(HTPR_7618_SEARCH_ROWS_FIT_PANE_FLAG);
   const commenterFlagEnabled = useFlag(HTPR_6880_SEARCH_COMMENTER_FLAG);
   const labelScopeFlagEnabled = useFlag(HTPR_6878_SEARCH_LABEL_SCOPE_FLAG);
   const setAiChatPendingPrompt = useSetRecoilState(aiChatPendingPromptAtom);
@@ -243,6 +244,7 @@ const SearchComp = ({
                                 aligned={layoutEnabled}
                                 inboxHighlight={layoutEnabled}
                                 snippetParts={matchSnippets?.[index]}
+                                fitPane={rowsFitPane}
                               />
                             </Fragment>
                           );
@@ -420,6 +422,7 @@ interface ITaskRow {
   aligned?: boolean;
   inboxHighlight?: boolean;
   snippetParts?: ReturnType<typeof highlightedSearchSnippet>;
+  fitPane?: boolean;
   liRef: RefObject<HTMLLIElement | null>;
 }
 
@@ -436,6 +439,7 @@ const TaskListRow = (props: ITaskRow) => {
     aligned,
     inboxHighlight,
     snippetParts,
+    fitPane,
     liRef,
   } = props;
 
@@ -458,7 +462,7 @@ const TaskListRow = (props: ITaskRow) => {
       ref={liRef}
     >
       <div
-        className={`font-medium ${aligned ? "min-w-0 [&>div]:min-w-0" : "px-4"} text-white-black flex flex-col @md:flex py-2 @md:items-center gap-1 @md:!gap-3 ${styles.list_container}`}
+        className={`font-medium ${aligned ? "min-w-0 [&>div]:min-w-0" : "px-4"} text-white-black flex flex-col @md:flex py-2 @md:items-center gap-1 @md:!gap-3 ${fitPane ? styles.list_container_pane : styles.list_container}`}
       >
         <div className="flex justify-between items-center">
           <div className="flex items-center justify-center">
