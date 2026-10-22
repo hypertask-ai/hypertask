@@ -635,6 +635,7 @@ for (const [state, expected] of [[undefined, "false:false"], [false, "true:false
       "@tanstack/react-query": { useQueryClient: () => ({}), useQuery: () => ({ data: typeof state === "boolean" ? { [key]: state } : undefined, isError: state === "failure" }) },
       "@/hooks/General/useHydrated": { useHydrated: () => true },
       "@/lib/realtime/client": {},
+      react: { ...React, useSyncExternalStore: (_subscribe, getSnapshot) => getSnapshot() },
     });
     const View = () => React.createElement("span", null, `${flags.useFlagReady(key)}:${flags.useFlag(key)}`);
     assert.equal(renderToString(React.createElement(flags.FeatureFlagProvider, { userId: 985 }, React.createElement(View))), `<span>${expected}</span>`);

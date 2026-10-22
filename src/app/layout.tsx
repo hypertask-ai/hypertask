@@ -3,6 +3,7 @@ import "@/styles/tailwindThemes/rounded.css";
 import "../../tokens.css";
 import { cookies } from "next/headers";
 import Provider from "@/utils/Providers";
+import { FeatureFlagProvider, SubscribedFeatureFlagProvider } from "@/hooks/useFlag";
 import PostHogAnalytics from "@/components/Analytics/PostHogAnalytics";
 import { SpeedInsights } from "@vercel/speed-insights/next";
 import ClientErrorReporter from "@/components/ErrorBoundary/ClientErrorReporter";
@@ -23,7 +24,7 @@ import {
   resolveInitialThemeColor,
   resolveThemePreference,
 } from "@/lib/themePreferences";
-import { HTPR_7328_ROUNDED_THEME_FLAG } from "@/lib/flags/keys";
+import { HTPR_7328_ROUNDED_THEME_FLAG, HTPR_7560_FLAG_READER_SUBSCRIBE_FLAG } from "@/lib/flags/keys";
 import { buildThemeBootScript } from "@/lib/themeBootScript";
 import { buildEarlyAppShellBootstrapScript } from "@/lib/appShellBootstrap/client";
 import { getServerBoardDocument } from "@/lib/firstScreen/serverBoardDocument";
@@ -81,6 +82,7 @@ export default async function RootLayout(
     name: authConfig.cookies.theme,
   };
   const roundedEnabled = await isFeatureEnabled(HTPR_7328_ROUNDED_THEME_FLAG, analyticsSession?.id ?? -1);
+  const flagReaderSubscribe = await isFeatureEnabled(HTPR_7560_FLAG_READER_SUBSCRIBE_FLAG, analyticsSession?.id ?? -1);
   const savedTheme = roundedEnabled
     ? normalizeThemePreference(theme.value, true)
     : normalizeThemePreference(theme.value);
@@ -167,6 +169,7 @@ export default async function RootLayout(
           initialIsApple={device.isApple}
           authenticatedUserId={analyticsSession?.id ?? null}
           firstScreen={firstScreen}
+          flagProvider={flagReaderSubscribe ? SubscribedFeatureFlagProvider : FeatureFlagProvider}
         >
           {children}
         </Provider>

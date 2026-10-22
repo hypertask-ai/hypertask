@@ -118,12 +118,14 @@ export default function Provider({
   initialIsApple,
   authenticatedUserId,
   firstScreen,
+  flagProvider: FlagProvider = FeatureFlagProvider,
 }: {
   children: ReactNode;
   initialIsMobile: boolean;
   initialIsApple: boolean;
   authenticatedUserId: number | null;
   firstScreen?: BoardDocument | InboxDocument | null;
+  flagProvider?: typeof FeatureFlagProvider;
 }) {
   const pathname = usePathname();
   const publicShare = isPublicSharePath(pathname);
@@ -186,14 +188,14 @@ export default function Provider({
                       {publicShare ? (
                         <PublicShell><ThemeListener />{children}</PublicShell>
                       ) : (
-                        <FeatureFlagProvider userId={authenticatedUserId} initialFlags={snapshot?.flags}>
+                        <FlagProvider userId={authenticatedUserId} initialFlags={snapshot?.flags}>
                           <ThemeListener />
                           <BoardDisplayMirror accountId={authenticatedUserId} />
                           <MobileViewFlagBridge />
                           <GlobalProvider authenticatedUserId={authenticatedUserId}>
                             {children}
                           </GlobalProvider>
-                        </FeatureFlagProvider>
+                        </FlagProvider>
                       )}
                     </TourProvider>
                   </AuthProvider>
