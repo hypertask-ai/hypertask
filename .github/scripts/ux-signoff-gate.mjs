@@ -1,4 +1,5 @@
 import { execFileSync } from 'node:child_process';
+import { readFileSync } from 'node:fs';
 import { basename, dirname } from 'node:path';
 import { pathToFileURL } from 'node:url';
 
@@ -22,6 +23,139 @@ function visibleFiles(files) {
       (filename.startsWith('src/app/') && !filename.startsWith('src/app/api/'))) &&
     /\.(tsx|jsx|css|scss)$/.test(filename) &&
     !/(?:\.(?:test|spec|stories)\.|(?:^|\/)__tests__\/)/.test(filename));
+}
+
+const PRODUCTION_MODES = 'e2e/smoke/production-flag-modes.json';
+const FLAG_DEFINITION = /^src\/lib\/flags\/definitions\/([a-z0-9-]+)\.ts$/;
+
+function patchedSource(source, file) {
+  if (typeof source !== 'string' || !source.endsWith('\n') || typeof file.patch !== 'string') return null;
+  const lines = source.slice(0, -1).split('\n');
+  const result = [];
+  let cursor = 0;
+  let additions = 0;
+  let deletions = 0;
+  const hunks = file.patch.split(/(?=^@@ )/m);
+  for (const hunk of hunks) {
+    const rows = hunk.replace(/\n$/, '').split('\n');
+    const header = /^@@ -(\d+)(?:,(\d+))? \+(\d+)(?:,(\d+))? @@(?: .*)?$/.exec(rows.shift());
+    if (!header) return null;
+    const start = Number(header[1]) - 1;
+    if (start < cursor || start > lines.length) return null;
+    result.push(...lines.slice(cursor, start));
+    cursor = start;
+    if (Number(header[3]) !== result.length + (Number(header[4] ?? 1) === 0 ? 0 : 1)) return null;
+    let oldCount = 0;
+    let newCount = 0;
+    for (const row of rows) {
+      if (!/^[ +-]/.test(row)) return null;
+      if (row[0] !== '+') {
+        if (lines[cursor++] !== row.slice(1)) return null;
+        oldCount++;
+      }
+      if (row[0] !== '-') {
+        result.push(row.slice(1));
+        newCount++;
+      }
+      if (row[0] === '+') additions++;
+      if (row[0] === '-') deletions++;
+    }
+    if (oldCount !== Number(header[2] ?? 1) || newCount !== Number(header[4] ?? 1)) return null;
+  }
+  if (additions !== file.additions || deletions !== file.deletions) return null;
+  result.push(...lines.slice(cursor));
+  return result.length ? result.join('\n') + '\n' : '';
+}
+
+function projectFlagOn(source, symbols) {
+  // Without a JS parser, ambiguous lexical contexts and noncanonical rewrites must retain sign-off.
+  if (/`|\/\*|\*\/|\/\/|\\\r?\n/.test(source)) return null;
+  const imports = [...source.matchAll(/^import \{ ([A-Za-z_$][\w$]*(?:, [A-Za-z_$][\w$]*)*) \} from (["'])(@\/lib\/flags(?:\/keys)?|@\/hooks\/useFlag)\2;\n/gm)];
+  const importedSymbols = new Set(imports.filter((match) => match[3].startsWith('@/lib/flags')).flatMap((match) => match[1].split(', ')));
+  const importedHooks = new Set(imports.flatMap((match) => match[1].split(', ').filter((name) =>
+    (name === 'useFlag' && match[3] === '@/hooks/useFlag') || (name === 'isFeatureEnabled' && match[3] === '@/lib/flags'))));
+  const withoutImports = imports.reduce((text, match) => text.replace(match[0], ''), source);
+  if (/\b(?:useFlag|isFeatureEnabled)\b/.test(withoutImports.replace(/\b(?:useFlag|isFeatureEnabled)(?=\([A-Z][A-Z0-9_]*[,)])/g, ''))) return null;
+  const aliases = [];
+  let projected = source.replace(/^([ \t]*)const ([A-Za-z_][A-Za-z0-9_]*) = (useFlag\(([A-Z][A-Z0-9_]*)\)|await isFeatureEnabled\(([A-Z][A-Z0-9_]*), [A-Za-z_$][\w$.]*\));\n/gm,
+    (line, indent, alias, call, clientSymbol, serverSymbol, offset) => {
+      const symbol = clientSymbol ?? serverSymbol;
+      if (!symbols.has(symbol) || !importedSymbols.has(symbol) || !importedHooks.has(clientSymbol ? 'useFlag' : 'isFeatureEnabled') || source.slice(0, offset).includes('<')) return line;
+      aliases.push(alias);
+      return '';
+    });
+  let unwrapped = 0;
+  for (const alias of aliases) {
+    const wrapper = new RegExp(`^([ \t]*)\\{${alias} (&&|\\?) \\(\n([\\s\\S]*?)^\\1\\)( : null)?\\}\n`, 'gm');
+    projected = projected.replace(wrapper, (whole, indent, operator, body, fallback) => {
+      if ((operator === '?') !== Boolean(fallback)) return whole;
+      const rows = body.slice(0, -1).split('\n');
+      if (!rows.length || rows.some((line) => !line.startsWith(indent + '  '))) return whole;
+      unwrapped++;
+      return rows.map((line) => indent + line.slice(indent.length + 2)).join('\n') + '\n';
+    });
+    if (new RegExp(`\\b${alias}\\b`).test(projected)) return null;
+  }
+  const removable = new Set([...symbols, 'useFlag', 'isFeatureEnabled']);
+  projected = projected.replace(/^import \{ ([A-Za-z_$][\w$]*(?:, [A-Za-z_$][\w$]*)*) \} from (["'])(@\/lib\/flags(?:\/keys)?|@\/hooks\/useFlag)\2;\n/gm,
+    (line, names, quote, module) => {
+      const kept = names.split(', ').filter((name) => {
+        if (!removable.has(name)) return true;
+        const rest = projected.replace(line, '');
+        return new RegExp(`\\b${name}\\b`).test(rest);
+      });
+      return kept.length ? `import { ${kept.join(', ')} } from ${quote}${module}${quote};\n` : '';
+    });
+  if ([...symbols].some((symbol) => new RegExp(`\\b${symbol}\\b`).test(projected))) return null;
+  return { source: projected, unwrapped };
+}
+
+export function flagRemovalOnly(files, productionModes, sources = {}) {
+  const definitions = files.filter((file) => FLAG_DEFINITION.test(file.filename));
+  if (!definitions.length || !productionModes?.modes || !sources || files.some((file) => ['renamed', 'copied'].includes(file.status))) return [];
+  const keys = [];
+  const symbols = new Set();
+  for (const file of definitions) {
+    const key = FLAG_DEFINITION.exec(file.filename)[1];
+    const source = sources[file.filename];
+    if (file.status !== 'removed' || productionModes.modes[key] !== 'EVERYONE' || patchedSource(source, file) !== '') return [];
+    const definition = new RegExp(`^export const ([A-Z][A-Z0-9_]*) = ["']${key}["'];$`, 'm').exec(source);
+    if (!definition || !new RegExp(`key: ${definition[1]}[,\\s]`).test(source)) return [];
+    keys.push(key);
+    symbols.add(definition[1]);
+  }
+  let unwrapped = 0;
+  for (const file of files) {
+    if (definitions.includes(file) || /^(?:tests\/|docs\/)/.test(file.filename) || (!file.filename.startsWith('src/') && /\.md$/.test(file.filename))) continue;
+    if (file.filename === PRODUCTION_MODES) {
+      try {
+        const expected = structuredClone(productionModes);
+        for (const key of keys) delete expected.modes[key];
+        if (file.status !== 'modified' || JSON.stringify(JSON.parse(patchedSource(sources[file.filename], file))) !== JSON.stringify(expected)) return [];
+      } catch { return []; }
+      continue;
+    }
+    if (/^src\/prisma\/migrations\/[^/]+\/migration\.sql$/.test(file.filename)) {
+      const rows = file.patch?.split('\n').slice(1);
+      if (file.status !== 'added' || file.deletions !== 0 || rows?.length !== file.additions ||
+        rows.some((row) => !keys.some((key) => row === `+DELETE FROM "FeatureFlag" WHERE "key" = '${key}';`))) return [];
+      continue;
+    }
+    if (file.status !== 'modified' || !/^src\//.test(file.filename) || !/\.[jt]sx?$/.test(file.filename)) return [];
+    const source = sources[file.filename];
+    const after = patchedSource(source, file);
+    if (after == null) return [];
+    const projection = projectFlagOn(source, symbols);
+    if (!projection || projection.source !== after) return [];
+    unwrapped += projection.unwrapped;
+  }
+  return unwrapped ? keys.sort() : [];
+}
+
+function readProductionFile(filename) {
+  if (!/^[A-Za-z0-9_./-]+$/.test(filename) || filename.split('/').includes('..')) return null;
+  try { return readFileSync(new URL(`../../${filename}`, import.meta.url), 'utf8'); }
+  catch { return null; }
 }
 
 function plainText(text) {
@@ -61,11 +195,13 @@ function elementNames(comment) {
     .flatMap((match) => match[1].split(',').map(normalize)).filter((name) => name && name !== 'none');
 }
 
-export function evaluate({ title, author, files, comments = [], parentComments = [] }) {
+export function evaluate({ title, author, files, comments = [], parentComments = [], productionModes, sources }) {
   const success = (description) => ({ state: 'success', description, details: [] });
   const ui = visibleFiles(files);
   if (ui.length === 0) return success('No visible UI change');
   if (author === 'dependabot[bot]') return success('Dependabot is exempt from UX signoff');
+  const removedFlags = flagRemovalOnly(files, productionModes, sources);
+  if (removedFlags.length) return success(`Flag removal only: ${removedFlags.join(', ')} already on for everyone`.slice(0, 140));
   const ticket = ticketFromTitle(title);
   if (!ticket) {
     const description = 'Title names no ticket, so the wireframe sign-off cannot be checked';
@@ -241,7 +377,15 @@ async function readVerdict(pr, { github, repo, env, fetchImpl, commentCache, par
     (Number.isInteger(pr.changed_files) && files.length !== pr.changed_files)) {
     throw new Error('Incomplete PR file list');
   }
-  const input = { title: pr.title, author: pr.user.login, files };
+  let productionModes;
+  const sources = Object.create(null);
+  if (files.some((file) => FLAG_DEFINITION.test(file.filename) && file.status === 'removed')) {
+    try { productionModes = JSON.parse(readProductionFile(PRODUCTION_MODES)); } catch { /* Missing modes never exempt. */ }
+    for (const file of files) {
+      if (file.filename.startsWith('src/') || file.filename === PRODUCTION_MODES) sources[file.filename] = readProductionFile(file.filename);
+    }
+  }
+  const input = { title: pr.title, author: pr.user.login, files, productionModes, sources };
   const preliminary = evaluate(input);
   const ticket = ticketFromTitle(pr.title);
   if (preliminary.state === 'success' || !ticket) return preliminary;
