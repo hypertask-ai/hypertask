@@ -748,6 +748,8 @@ export interface FCMDeviceInfo {
 }
 
 export interface CreateCheckoutParams {
+  trialDays?: number;
+  checkoutIntent?: "signup-straight-to-board";
   googleAccountId: string;
   returnUrl: string;
   priceId: string;
