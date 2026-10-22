@@ -121,7 +121,6 @@ async function loadArchiveBulk() {
   resetModules([
     "src/pages/api/notifications/(un)archiveBulk.ts",
     "src/lib/api/notification-writes/archive-bulk.ts",
-    "src/lib/flags.ts",
     "src/lib/auth/getSessionUser.ts",
     "src/lib/api/task-writes/route.ts",
     "src/lib/realtime/server.ts",
@@ -135,10 +134,6 @@ async function loadArchiveBulk() {
     socketIdFromHeader: () => null,
   });
   stubModule("src/lib/prisma.ts", { default: prisma });
-  stubModule("src/lib/flags.ts", {
-    HTPR_6989_BULK_ARCHIVE_UNDO_FLAG: "htpr-6989-bulk-archive-undo",
-    isFeatureEnabled: async () => false,
-  });
   const handler = loadTs("src/pages/api/notifications/(un)archiveBulk.ts");
   return { handler, calls };
 }
@@ -292,4 +287,5 @@ test("bulk unarchive does not delete or re-archive siblings", async () => {
   assert.equal(writes.length, 1, "only the representative write is expected");
   assert.equal(writes[0].where.id, 5);
   assert.equal(writes[0].data.status, "Normal");
+  assert.equal(writes[0].data.archivedAt, null);
 });

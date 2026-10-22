@@ -1226,16 +1226,10 @@ test("saved view deletion no longer has a feature flag", async () => {
   assert.equal((await flags.listFeatureFlagModes()).find((flag) => flag.key === "htpr-6985-delete-view-once"), undefined);
 });
 
-test("bulk inbox archive undo is an Everyone-default bugfix and respects OFF", async () => {
-  const key = flags.HTPR_6989_BULK_ARCHIVE_UNDO_FLAG;
-  assert.equal(key, "htpr-6989-bulk-archive-undo");
-  const entry = (await flags.listFeatureFlagModes()).find((flag) => flag.key === key);
-  assert.equal(entry.kind, "bugfix");
-  assert.equal(entry.mode, "EVERYONE");
-  assert.equal(entry.shippedOn, "2026-10-07");
-  assert.deepEqual(await Promise.all([6, 985, 7].map((userId) => flags.isFeatureEnabled(key, userId))), [true, true, true]);
-  row = { mode: "OFF", updatedAt: new Date() };
-  assert.deepEqual(await Promise.all([6, 985, 7].map((userId) => flags.isFeatureEnabled(key, userId))), [false, false, false]);
+test("bulk inbox archive undo no longer has a feature flag", async () => {
+  assert.equal(flags.HTPR_6989_BULK_ARCHIVE_UNDO_FLAG, undefined);
+  assert.ok(!flags.FEATURE_FLAG_KEYS.includes("htpr-6989-bulk-archive-undo"));
+  assert.ok(!(await flags.listFeatureFlagModes()).some(({ key }) => key === "htpr-6989-bulk-archive-undo"));
 });
 
 test("instant column deletion is permanent and its flag is no longer registered", async () => {
