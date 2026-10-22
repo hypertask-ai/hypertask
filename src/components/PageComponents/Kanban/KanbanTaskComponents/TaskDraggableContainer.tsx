@@ -38,7 +38,7 @@ const TaskDraggableContainer: React.FC<ITaskDraggableContainer> = ({
   const isMbl = useContext(MobileViewContext);
   const selectedCardBorder = useFlag(HTPR_7614_SELECTED_CARD_BORDER_FLAG);
   const selectionLine = selectedCardBorder
-    ? "!outline-solid !outline-1 !outline-offset-0 !outline-hypertasks-purple"
+    ? "!outline-solid !outline-1 !-outline-offset-1 !outline-hypertasks-purple"
     : "ring-1 ring-inset ring-hypertasks-purple";
 
   const getStyle = useCallback(
@@ -76,7 +76,6 @@ const TaskDraggableContainer: React.FC<ITaskDraggableContainer> = ({
             ? "border-[hsl(0_62.8%_30.6%)] bg-cardBackground hover:bg-hoverCardBackground hover:shadow-md"
             : "border-transparent bg-cardBackground hover:bg-hoverCardBackground hover:shadow-md",
         "kanban-task-card group/kanban-selection relative rounded-[5px] outline-none cursor-pointer",
-        selectedCardBorder && selected && blocked && "!border-l-[hsl(0_62.8%_30.6%)]",
         parentClassName
       )}
       onClick={openDetail}

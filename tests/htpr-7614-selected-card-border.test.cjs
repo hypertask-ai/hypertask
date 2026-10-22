@@ -55,7 +55,7 @@ for (const mobile of [false, true]) {
           assert.ok(off.includes(legacy));
         }
         assert.ok(!on.some(name => name.startsWith("ring-")), "no inset selection shadow remains");
-        const selectionPaint = name => /^(?:!?outline(?:-|$)|!?-outline-offset-|ring-|!border-l-\[hsl)/.test(name);
+        const selectionPaint = name => /^(?:!?outline(?:-|$)|!?-outline-offset-|ring-)/.test(name);
         assert.deepEqual(on.filter(name => !selectionPaint(name)), off.filter(name => !selectionPaint(name)),
           "border widths, radius, backgrounds, spacing and shadows must stay unchanged");
         assert.ok(on.includes(blocked ? "border-l-[3px]" : "border-l-4"));
@@ -104,7 +104,7 @@ test("selection compiles to an important one-pixel border-box outline, independe
   assert.equal(declarations.get("--tw-outline-style"), "solid", "outline-none cannot reset the selected style");
   assert.match(declarations.get("outline-style"), /^(?:solid|var\(--tw-outline-style\))$/);
   assert.equal(declarations.get("outline-width"), "1px");
-  assert.equal(declarations.get("outline-offset"), "0px", "the line must not cover even a one-pixel blocked stripe");
+  assert.match(declarations.get("outline-offset"), /^(?:-1px|calc\(1px \* -1\)|calc\(-1px\))$/, "the line sits on the card's own outer edge");
   const outlineColor = declarations.get("outline-color");
   if (outlineColor === "var(--color-hypertasks-purple)") {
     let themeColor;
@@ -113,7 +113,6 @@ test("selection compiles to an important one-pixel border-box outline, independe
   } else {
     assert.equal(outlineColor.toLowerCase(), "#4455bb");
   }
-  assert.equal(declarations.get("border-left-color"), "hsl(0 62.8% 30.6%)");
   for (const name of added) {
     assert.ok(!/rounded|border-l-(?:\d|\[\d)|[wh]-|p[trblxy]?-/.test(name), "no selection layout or radius change");
   }
