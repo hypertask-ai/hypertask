@@ -1,4 +1,4 @@
-import { HTPR_6929_COMPOSE_TASK_WRITER_FLAG, HTPR_6937_NEW_TASK_WINDOW_FLAG } from "@/lib/flags/keys";
+import { HTPR_6929_COMPOSE_TASK_WRITER_FLAG, HTPR_6937_NEW_TASK_WINDOW_FLAG, HTPR_7544_CTRLJ_SIDEBAR_ON_NEW_TASK_FLAG } from "@/lib/flags/keys";
 import { useRecoilValue, useSetRecoilState } from "@/lib/state";
 import { showCommandsAtom } from "@/store";
 import { CommandMode } from "@/models/enums";
@@ -181,6 +181,9 @@ const TiptapCreateTaskModal = () => {
   const { continueTourInModal, isTourActive, endTour } = useTourContext();
   const composeEnabled = useFlag(HTPR_6929_COMPOSE_TASK_WRITER_FLAG);
   const newTaskWindowFlag = useFlag(HTPR_6937_NEW_TASK_WINDOW_FLAG);
+  const ctrlJSidebarOnNewTask = useFlag(HTPR_7544_CTRLJ_SIDEBAR_ON_NEW_TASK_FLAG);
+  let composeShortcutCapture = true;
+  if (ctrlJSidebarOnNewTask) composeShortcutCapture = false;
   let newTaskWindow = false;
   if (composeEnabled && newTaskWindowFlag) newTaskWindow = true;
   const setCommands = useSetRecoilState(showCommandsAtom);
@@ -268,9 +271,9 @@ const TiptapCreateTaskModal = () => {
       event.stopImmediatePropagation();
       setCommands({ show: true, mode: CommandMode.Command, paletteTab: "compose", composeProject: projectForContext, composeOnCreated: closeComposedTaskForm });
     };
-    window.addEventListener("keydown", openNewTask, true);
-    return () => window.removeEventListener("keydown", openNewTask, true);
-  }, [newTaskWindow, isApple, pathname, projectForContext, setCommands, closeComposedTaskForm]);
+    window.addEventListener("keydown", openNewTask, composeShortcutCapture);
+    return () => window.removeEventListener("keydown", openNewTask, composeShortcutCapture);
+  }, [newTaskWindow, composeShortcutCapture, isApple, pathname, projectForContext, setCommands, closeComposedTaskForm]);
   const { data: projectLabels } = useGetAllProjectLabels(
     projectId ?? undefined,
   );

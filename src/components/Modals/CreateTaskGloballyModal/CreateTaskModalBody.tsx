@@ -65,8 +65,8 @@ const CreateTaskModalBody: React.FC<IProps> = ({ }) => {
                 setUploadInProgress(false)
             }
         }
-        document.addEventListener("keydown", openNewTaskSidebar, true)
-        return () => document.removeEventListener("keydown", openNewTaskSidebar, true)
+        window.addEventListener("keydown", openNewTaskSidebar, true)
+        return () => window.removeEventListener("keydown", openNewTaskSidebar, true)
     } : () => {}, [ctrlJSidebarOnNewTask, isApple, isRecording, showAssignModal, showConfirmationModal, uploadInProgress, formValues, CreateTaskAndDescription, setUploadInProgress, router, closeHandler])
 
     const {
