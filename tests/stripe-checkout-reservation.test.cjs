@@ -175,3 +175,18 @@ test("reservation round trips never inject new fields into an old in-flight atte
     assert.equal((await context.read()).desired.trialDays, undefined);
   });
 });
+
+
+test("the preflight read never takes a lock or changes an existing attempt", async () => {
+  redis.values.clear();
+  assert.equal(await reservation.readTeamCheckoutAttempt("team-owned"), null);
+  assert.equal(redis.values.size, 0);
+  const attempt = reservation.createCheckoutAttempt(desired);
+  await reservation.withTeamCheckoutReservation("team-owned", async (context) => {
+    await context.write(attempt);
+  });
+  const before = [...redis.values];
+  assert.deepEqual(await reservation.readTeamCheckoutAttempt("team-owned"), attempt);
+  assert.deepEqual([...redis.values], before);
+  assert.equal(redis.values.has(teamLockKey), false);
+});

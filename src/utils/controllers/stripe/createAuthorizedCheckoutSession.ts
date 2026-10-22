@@ -18,6 +18,7 @@ import {
   desiredMatches,
   billingDesiredMatches,
   withTeamCheckoutReservation,
+  readTeamCheckoutAttempt,
   type CheckoutAttempt,
   type CheckoutAttemptDesired,
   type CheckoutMode,
@@ -348,6 +349,14 @@ export async function createAuthorizedCheckoutSession(
 
   const suppliedCustomerId = nonEmptyString(body.stripe_customer_id);
   const suppliedAccountId = nonEmptyString(body.googleAccountId);
+  let enabled = false;
+  try {
+    enabled = await isFeatureEnabled(HTPR_7551_START_PLAN_CHECKOUT_FLAG, userId);
+  } catch {
+  }
+  if (signupIntent && !enabled && !(await readTeamCheckoutAttempt(teamId))) {
+    return { status: 403, body: { message: "Start plan is not available" } };
+  }
   const stripe = getStripeInstance();
 
   return withTeamCheckoutReservation(teamId, async (reservation) => {
@@ -385,7 +394,32 @@ export async function createAuthorizedCheckoutSession(
       return { status: 400, body: { message: "Team account mismatch" } };
     }
 
-    const enabled = await isFeatureEnabled(HTPR_7551_START_PLAN_CHECKOUT_FLAG, userId);
+    let attempt = await reservation.read();
+    if (attempt && attempt.desired.teamId !== team.id) {
+      await reservation.clear();
+      attempt = null;
+    }
+    const ownerChanged = attempt?.desired.ownerUserId !== undefined && attempt.desired.ownerUserId !== userId;
+    const identityChanged = attempt && (attempt.desired.customerId !== customerId ||
+      attempt.desired.googleAccountId !== team.googleAccountId);
+    if (attempt?.state === "in_flight" && ownerChanged) {
+      return { status: 403, body: { message: "Checkout belongs to a different owner" } };
+    }
+    if (attempt?.state === "in_flight" && identityChanged) {
+      return { status: 409, body: { message: "Billing identity changed; checkout needs reconciliation" } };
+    }
+    if (attempt && (ownerChanged || identityChanged)) {
+      const oldSession = await reconcileAttemptSession(stripe, attempt, attempt.sessionId ? [] :
+        await listTeamCheckoutSessions(stripe, attempt.desired.customerId, team.id));
+      if (oldSession?.status === "open") {
+        await expireCheckoutSessions(stripe, [oldSession], reservation.assertHeld);
+      }
+      await reservation.clear();
+      attempt = null;
+    }
+    if (signupIntent && !enabled && !attempt) {
+      return { status: 403, body: { message: "Start plan is not available" } };
+    }
     const billedQuantity = await resolveSeatQuantity(team.id, team.totalSeats);
     const subscriptions = await listAllCustomerSubscriptions(
       stripe,
@@ -396,22 +430,20 @@ export async function createAuthorizedCheckoutSession(
       customerId,
       team.id,
     );
+    if (!enabled && attempt?.state === "in_flight" &&
+      (effectiveTrialDays(attempt.desired) === 7 || attempt.desired.checkoutIntent === "signup-straight-to-board") &&
+      Date.now() - Date.parse(attempt.createdAt) >= 24 * 60 * 60 * 1000) {
+      const staleSession = await reconcileAttemptSession(stripe, attempt, teamSessions);
+      if (staleSession && !teamSessions.some((session) => session.id === staleSession.id)) {
+        teamSessions.push(staleSession);
+      }
+      await reservation.clear();
+      attempt = null;
+    }
     const openSessions = teamSessions.filter(
       (session) => session.status === "open",
     );
     let remainingOpenSessions = openSessions;
-    let attempt = await reservation.read();
-    if (attempt && attempt.desired.teamId !== team.id) {
-      await reservation.clear();
-      attempt = null;
-    }
-    if (attempt?.desired.ownerUserId !== undefined && attempt.desired.ownerUserId !== userId) {
-      return { status: 403, body: { message: "Checkout belongs to a different owner" } };
-    }
-    if (attempt && (attempt.desired.customerId !== customerId ||
-      attempt.desired.googleAccountId !== team.googleAccountId)) {
-      return { status: 409, body: { message: "Billing identity changed; checkout needs reconciliation" } };
-    }
     if (!preview && attempt?.state === "in_flight") {
       let recoveredSession = await reconcileAttemptSession(
         stripe,

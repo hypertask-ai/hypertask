@@ -41,7 +41,7 @@ const TrialCard = ({ teamInfo, manageLink, plan, hasSubscription }: IProps) => {
   if (startPlanEnabled) {
     if (checkoutBoard) return <StartPlanButton project={checkoutBoard} teamId={teamInfo.teamId} />;
     if (boards.isError) return <div role="status">Could not load this team's boards. <button type="button" onClick={() => void boards.refetch()}>Retry</button></div>;
-    return <span role="status">{boards.isPending ? "Loading this team's boards…" : "Open a board in this team to start a plan"}</span>;
+    return <span role="status">{boards.isLoading ? "Loading this team's boards…" : "Open a board in this team to start a plan"}</span>;
   }
 
   return (

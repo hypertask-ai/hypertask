@@ -166,6 +166,13 @@ export function createCheckoutAttempt(
   };
 }
 
+export async function readTeamCheckoutAttempt(
+  teamId: string,
+): Promise<CheckoutAttempt | null> {
+  const redis = await getRedis();
+  return parseAttempt(await redis.get(reservationKey(teamId)));
+}
+
 export async function withTeamCheckoutReservation<T>(
   teamId: string,
   run: (context: CheckoutReservationContext) => Promise<T>,

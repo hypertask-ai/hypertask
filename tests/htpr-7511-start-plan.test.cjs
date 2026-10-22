@@ -49,7 +49,7 @@ async function withButton(fn, backend) {
         isError: state.isError, error: state.error, refetch: async () => { refetches++; } }; },
       useQueryClient: () => ({ invalidateQueries: async (options) => { invalidations.push(options.queryKey); } }),
     },
-    "@/lib/state": { useRecoilValue: (atom) => atom === "user" ? { id: state.userId } : state.board }, "@/store": { currentProjectAtom: "project", currentUserAtom: "user" },
+    "@/lib/state": { useRecoilValue: (atom) => atom === "user" ? (state.userId ? { id: state.userId } : null) : state.board }, "@/store": { currentProjectAtom: "project", currentUserAtom: "user" },
     "@/hooks/useFlag": flagMock,
     "@/lib/flags/definitions/htpr-7551-start-plan-checkout": flag,
     "@/lib/deriveCurrentBoardBilling": billing,
@@ -70,7 +70,7 @@ async function withButton(fn, backend) {
       teamId: teamInfo.teamId, stripe_customer_id: teamInfo.stripe_customer_id, googleAccountId: teamInfo.googleAccountId,
       quantity: teamInfo.totalSeats, priceId: plan.types[selectedTime].stripePriceId, mode, returnUrl, cancelUrl,
     }) },
-    "@/lib/state": { useRecoilState: (atom) => [atom === "user" ? { id: state.userId } : state.board, () => {}] },
+    "@/lib/state": { useRecoilState: (atom) => [atom === "user" ? (state.userId ? { id: state.userId } : null) : state.board, () => {}] },
     "@/store": { currentProjectAtom: "project", currentUserAtom: "user" },
     "@/utils/helperFunctions/helperFunctions": { constructTrialPageURL: () => "https://app.hypertask.ai/trial-plan-confirmation" },
   }).default;
@@ -80,11 +80,13 @@ async function withButton(fn, backend) {
     "@/hooks/useFlag": flagMock,
     "@/lib/flags/definitions/htpr-7551-start-plan-checkout": flag,
     "@/hooks/General/useTrial": trialHook,
-    "@/lib/state": { useRecoilValue: (atom) => atom === "user" ? { id: state.userId } : state.board },
+    "@/lib/state": { useRecoilValue: (atom) => atom === "user" ? (state.userId ? { id: state.userId } : null) : state.board },
     "@/store": { currentProjectAtom: "project", currentUserAtom: "user" },
     "@/hooks/MultiPages/useGetAllAccessibleBoardList": { useGetAllAccessibleBoardList: (user, options) => {
       state.boardsQuery = { user, options };
-      return { data: state.boards, isError: false, isPending: false };
+      const isPending = state.boards === undefined;
+      return { data: state.boards, isError: false, isPending,
+        isLoading: isPending && options.enabled && Boolean(user?.id) };
     } },
     "@/assets/AILogo.png": { src: "fixture.png" }, "next/image": () => null,
   }).default;
@@ -265,6 +267,23 @@ test("the standalone legacy trial card also refuses flagged members and still al
   });
 });
 
+
+test("standalone trial card without currentUser is not stuck loading; a signed-in owner still loads boards and can start a plan", async () => {
+  await withButton(async ({ state, renderCard, container, requests }) => {
+    state.board = null; state.boards = undefined; state.userId = undefined;
+    await renderCard();
+    assert.equal(container.querySelector("button"), null);
+    assert.doesNotMatch(container.textContent, /Loading this team's boards/);
+    assert.match(container.textContent, /Open a board in this team/);
+    assert.deepEqual(requests, []);
+    state.userId = 6;
+    await renderCard();
+    assert.match(container.textContent, /Loading this team's boards/);
+    state.boards = [freeBoard()]; state.data = { canStartPlan: true, trialDays: 7 };
+    await renderCard();
+    assert.equal(container.querySelector("button").textContent, "Start a Hypertask plan");
+  });
+});
 
 for (const selection of ["none", "different team"]) {
   for (const pastTrial of [false, true]) {

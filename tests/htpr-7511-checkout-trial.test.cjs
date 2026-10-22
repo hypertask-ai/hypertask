@@ -35,6 +35,9 @@ test("new intent refuses flag OFF; eligible Free owner is still allowed with ser
   const refused = harness(); refused.enabled = false;
   assert.equal((await refused.checkout()).status, 403);
   assert.equal(refused.calls.length, 0);
+  assert.deepEqual(refused.stripeCalls, []);
+  assert.equal(refused.locks, 0);
+  assert.equal(refused.record, null);
   const h = harness();
   const preview = await h.checkout(startBody({ action: "preview" }));
   assert.deepEqual(preview.body, { canStartPlan: true, trialDays: 7 });
@@ -61,6 +64,56 @@ test("member is refused, owner is still allowed and ownership is rechecked under
   const changed = harness(); changed.onLock = () => { changed.team.googleAccount.userId = 99; };
   assert.equal((await changed.checkout()).status, 403);
   assert.equal(changed.calls.length, 0);
+});
+
+for (const rollout of [false, true]) {
+  for (const identity of rollout ? ["owner", "account", "customer", "transfer"] : ["account", "customer", "transfer"]) {
+    test(`OFF refuses ${identity} changes on an old ${rollout ? "rollout" : "legacy"} in-flight attempt; the new owner can buy after prepared or settled attempts`, async () => {
+      for (const state of ["in_flight", "prepared", "settled"]) {
+        for (const savedSessionId of [false, true]) {
+          const h = harness(); h.enabled = rollout;
+          await h.checkout(rollout ? startBody() : legacyBody());
+          const key = h.record.idempotencyKey;
+          h.record.state = state;
+          h.record.createdAt = new Date(Date.now() - 25 * 60 * 60 * 1000).toISOString();
+          if (!savedSessionId) delete h.record.sessionId;
+          h.enabled = false;
+          if (identity === "owner" || identity === "transfer") h.team.googleAccount.userId = 99;
+          if (identity === "account" || identity === "transfer") h.team.googleAccountId = "account-new";
+          if (identity === "customer" || identity === "transfer") h.team.stripe_customer_id = "cus_new";
+          h.stripeCalls = [];
+          const result = await h.checkout(legacyBody(), h.team.googleAccount.userId);
+          if (state === "in_flight") {
+            assert.equal(result.status, rollout && (identity === "owner" || identity === "transfer") ? 403 : 409);
+            assert.equal(h.record.idempotencyKey, key);
+            assert.equal(h.calls.length, 1);
+            assert.deepEqual(h.stripeCalls, []);
+            assert.deepEqual(h.expired, []);
+          } else {
+            assert.equal(result.status, 200);
+            assert.notEqual(h.record.idempotencyKey, key);
+            assert.deepEqual(h.expired, ["cs_1"]);
+            assert.equal(h.calls.length, 2);
+            assert.equal(h.calls[1].payload.customer, h.team.stripe_customer_id);
+            assert.equal(h.calls[1].payload.metadata.googleAccountId, h.team.googleAccountId);
+            assert.equal(h.calls[1].payload.subscription_data.trial_period_days, 14);
+          }
+        }
+      }
+    });
+  }
+}
+
+test("OFF rechecks the attempt under the lock after preflight; a vanished attempt refuses without Stripe", async () => {
+  const h = harness(); await h.checkout(); h.enabled = false;
+  h.stripeCalls = [];
+  h.onLock = () => { h.record = null; };
+  assert.equal((await h.checkout()).status, 403);
+  assert.deepEqual(h.stripeCalls, []);
+  assert.equal(h.calls.length, 1);
+  h.enabled = true; h.onLock = null;
+  assert.equal((await h.checkout()).status, 200);
+  assert.equal(h.calls.length, 1);
 });
 
 test("new intent rejects every client billing term and arbitrary return destination; ordinary owner request remains allowed", async () => {
@@ -199,6 +252,70 @@ for (const retryLegacy of [false, true]) {
     assert.equal(h.sessions.size, 1);
   });
 }
+
+for (const hours of [24, 25]) {
+  for (const pastTrial of [false, true]) {
+    test(`OFF clears a ${hours}h-old ${pastTrial ? "Normal" : "Trial"} rollout attempt without replay; fresh legacy checkout remains allowed`, async () => {
+      for (const retryLegacy of [false, true]) {
+        const h = harness(); h.team.team_activity.hasCompletedTrial = pastTrial;
+        h.rejectOnce = new Error("network unavailable");
+        assert.equal((await h.checkout()).status, 409);
+        const key = h.record.idempotencyKey;
+        h.record.createdAt = new Date(Date.now() - hours * 60 * 60 * 1000).toISOString();
+        h.enabled = false;
+        const result = await h.checkout(retryLegacy ? legacyBody({
+          mode: pastTrial ? "Normal" : "Trial", priceId: pastTrial ? "price_pro_month" : "price_legacy_trial",
+        }) : startBody());
+        assert.equal(result.status, retryLegacy ? 200 : 403);
+        assert.equal(h.calls.filter((call) => call.key === key).length, 1);
+        if (retryLegacy) {
+          assert.equal(h.calls.length, 2);
+          assert.notEqual(h.record.idempotencyKey, key);
+          assert.equal(h.calls[1].payload.metadata.checkoutIntent, undefined);
+          assert.equal(h.calls[1].payload.subscription_data?.trial_period_days, pastTrial ? undefined : 14);
+        } else {
+          assert.equal(h.calls.length, 1);
+          assert.equal(h.record, null);
+        }
+        assert.deepEqual(h.expired, []);
+      }
+    });
+  }
+}
+
+test("OFF clears a stale lost-response attempt but still refuses a live orphan rollout offer", async () => {
+  const h = harness(); h.timeoutAfterCreate = true;
+  assert.equal((await h.checkout()).status, 409);
+  const key = h.record.idempotencyKey;
+  h.record.createdAt = new Date(Date.now() - 25 * 60 * 60 * 1000).toISOString();
+  h.enabled = false;
+  assert.equal((await h.checkout(legacyBody())).status, 409);
+  assert.equal(h.record, null);
+  assert.equal(h.calls.filter((call) => call.key === key).length, 1);
+  assert.deepEqual(h.expired, []);
+  h.sessions.get("cs_1").status = "expired";
+  assert.equal((await h.checkout(legacyBody())).status, 200);
+  assert.equal(h.calls.length, 2);
+  assert.equal(h.calls[1].payload.subscription_data.trial_period_days, 14);
+});
+
+test("OFF clears a stale in-flight key without forgetting a known completed checkout hidden from listings", async () => {
+  const h = harness(); h.team.team_activity.hasCompletedTrial = true;
+  await h.checkout();
+  h.record.state = "in_flight";
+  h.record.createdAt = new Date(Date.now() - 25 * 60 * 60 * 1000).toISOString();
+  const completed = h.sessions.get("cs_1");
+  completed.status = "complete"; completed.subscription = "sub_started";
+  h.hidden = true; h.enabled = false;
+  const normal = legacyBody({ mode: "Normal", priceId: "price_pro_month" });
+  const result = await h.checkout(normal);
+  assert.equal(result.status, 409); assert.equal(result.body.finishing, true);
+  assert.equal(h.record, null); assert.equal(h.calls.length, 1);
+  assert.deepEqual(h.expired, []);
+  h.hidden = false; h.subscriptions = [subscription("canceled", { id: "sub_started" })];
+  assert.equal((await h.checkout(normal)).status, 200);
+  assert.equal(h.calls.length, 2);
+});
 
 test("OFF preserves known seven-day sessions and orphan offers, never adopting them into fresh legacy requests", async () => {
   for (const orphan of [false, true]) {
@@ -503,9 +620,34 @@ test("route refuses fresh signup with flag OFF while production legacy checkout 
   assert.equal(refused.code, 403);
   assert.equal(refused.body.message, "Start plan is not available");
   assert.equal(forwarded, 1); assert.equal(h.calls.length, 0);
+  assert.equal(h.locks, 0); assert.deepEqual(h.stripeCalls, []); assert.equal(h.record, null);
   assert.equal((await invoke(legacyBody())).code, 200);
   assert.equal(forwarded, 2);
   assert.equal(h.calls[0].payload.subscription_data.trial_period_days, 14);
+  assert.equal(h.calls[0].payload.metadata.trialDays, undefined);
+  assert.equal(h.calls[0].payload.metadata.checkoutIntent, undefined);
+});
+
+test("an unreadable flag refuses fresh signup without lock or Stripe but still allows production legacy checkout", async () => {
+  const h = harness(); h.flagFailure = true;
+  const route = load("src/pages/api/stripe/session/checkout.ts", {
+    "@/lib/auth/session": { SESSION_COOKIE: "ht_session", verifySession: () => ({ id: 6 }) },
+    "@/lib/demo/guestGuard": { isGuestRequest: async () => false },
+    "@/utils/controllers/stripe/createAuthorizedCheckoutSession": { createAuthorizedCheckoutSession: (id, body) => h.checkout(body, id) },
+  }).default;
+  const invoke = async (body) => {
+    const res = { status(code) { this.code = code; return this; }, json(value) { this.body = value; return this; } };
+    await route({ method: "POST", cookies: {}, headers: { origin: "https://app.hypertask.ai" }, body }, res);
+    return res;
+  };
+  assert.equal((await invoke(startBody())).code, 403);
+  assert.equal(h.locks, 0); assert.deepEqual(h.stripeCalls, []); assert.equal(h.record, null);
+  assert.equal((await invoke(legacyBody())).code, 200);
+  assert.deepEqual(h.flagReads, [6, 6]);
+  assert.equal(h.calls.length, 1);
+  assert.equal(h.calls[0].payload.subscription_data.trial_period_days, 14);
+  assert.equal(h.calls[0].payload.line_items[0].price, "price_legacy_trial");
+  assert.deepEqual(h.calls[0].payload.line_items[0].adjustable_quantity, { enabled: true, minimum: 3 });
   assert.equal(h.calls[0].payload.metadata.trialDays, undefined);
   assert.equal(h.calls[0].payload.metadata.checkoutIntent, undefined);
 });

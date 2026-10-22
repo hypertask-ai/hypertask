@@ -21,6 +21,7 @@ const flag = load("src/lib/flags/definitions/htpr-7551-start-plan-checkout.ts");
 function harness() {
   const h = {
     enabled: true, seats: 3, record: null, calls: [], expired: [], sessions: new Map(),
+    locks: 0, stripeCalls: [], flagReads: [],
     payloads: new Map(), subscriptions: [], hidden: false, writes: 0, lost: false,
     team: {
       id: "team-owned", title: "Owned", totalSeats: 1,
@@ -35,9 +36,10 @@ function harness() {
     },
   };
   const stripe = {
-    prices: { retrieve: async (id) => { assert.equal(id, "price_pro_month"); if (h.priceFailure) throw new Error("price lookup unavailable"); return h.price; } },
+    prices: { retrieve: async (id) => { h.stripeCalls.push("prices.retrieve"); assert.equal(id, "price_pro_month"); if (h.priceFailure) throw new Error("price lookup unavailable"); return h.price; } },
     subscriptions: { list: async (request) => {
-      assert.equal(request.customer, "cus_owned");
+      h.stripeCalls.push("subscriptions.list");
+      assert.equal(request.customer, h.team.stripe_customer_id);
       h.subscriptionRequests ??= [];
       h.subscriptionRequests.push(request);
       if (h.subscriptionPages) return h.subscriptionPages[request.starting_after ? 1 : 0];
@@ -45,13 +47,15 @@ function harness() {
     } },
     checkout: { sessions: {
       list: async (request) => {
+        h.stripeCalls.push("sessions.list");
         h.sessionRequests ??= []; h.sessionRequests.push(request);
         if (h.sessionPages) return h.sessionPages[request.starting_after ? 1 : 0];
-        return { data: h.hidden ? [] : [...h.sessions.values()], has_more: false };
+        return { data: h.hidden ? [] : [...h.sessions.values()].filter((session) => session.customer === request.customer), has_more: false };
       },
-      retrieve: async (id) => h.sessions.get(id),
-      expire: async (id) => { h.expired.push(id); h.sessions.get(id).status = "expired"; },
+      retrieve: async (id) => { h.stripeCalls.push("sessions.retrieve"); return h.sessions.get(id); },
+      expire: async (id) => { h.stripeCalls.push("sessions.expire"); h.expired.push(id); h.sessions.get(id).status = "expired"; },
       create: async (payload, options) => {
+        h.stripeCalls.push("sessions.create");
         const key = options.idempotencyKey;
         h.calls.push({ key, payload: structuredClone(payload) });
         if (h.payloads.has(key)) assert.deepEqual(payload, h.payloads.get(key), "same key must keep the entire Stripe wire payload");
@@ -74,8 +78,10 @@ function harness() {
   function Stripe() { return stripe; }
   const stripeModule = load("src/lib/stripe.ts", { stripe: Stripe });
   const reservations = load("src/utils/controllers/stripe/checkoutReservation.ts", { "@/lib/redis": {} });
+  reservations.readTeamCheckoutAttempt = async () => h.record && structuredClone(h.record);
   let tail = Promise.resolve();
   reservations.withTeamCheckoutReservation = async (_teamId, run) => {
+    h.locks++;
     const previous = tail;
     let release;
     tail = new Promise((resolve) => { release = resolve; });
@@ -98,7 +104,7 @@ function harness() {
   const controller = load("src/utils/controllers/stripe/createAuthorizedCheckoutSession.ts", {
     "@/lib/prisma": prisma,
     "@/lib/deriveCurrentBoardBilling": billing,
-    "@/lib/flags": { isFeatureEnabled: async (key, id) => { assert.equal(key, flag.HTPR_7551_START_PLAN_CHECKOUT_FLAG); assert.equal(id, h.team.googleAccount.userId); return h.enabled; } },
+    "@/lib/flags": { isFeatureEnabled: async (key, id) => { assert.equal(key, flag.HTPR_7551_START_PLAN_CHECKOUT_FLAG); h.flagReads.push(id); if (h.flagFailure) throw new Error("flag lookup unavailable"); return h.enabled; } },
     "@/lib/flags/definitions/htpr-7551-start-plan-checkout": flag,
     "@/lib/resolveSeatQuantity": { resolveSeatQuantity: async () => h.seats },
     "@/lib/stripe": stripeModule,
