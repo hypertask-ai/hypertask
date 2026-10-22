@@ -35,6 +35,16 @@ for (const enabled of [false, true]) {
         put: async (...args) => writes.push(["put", ...args]),
       } },
     });
+    const originalRect = HTMLElement.prototype.getBoundingClientRect;
+    const originalScroll = HTMLElement.prototype.scrollIntoView;
+    let listTop = 300;
+    const clippingBottoms = new Map();
+    window.innerHeight = 600;
+    HTMLElement.prototype.getBoundingClientRect = function () {
+      if (this.id === "dropdownSelectors") return { top: listTop - 30, bottom: listTop };
+      if (clippingBottoms.has(this)) return { top: 0, bottom: clippingBottoms.get(this) };
+      return originalRect.call(this);
+    };
     HTMLElement.prototype.scrollIntoView = function (options) { scrolls.push({ id: this.id, options }); };
     try {
       const Dialog = load("src/components/Modals/ManageFavorites/index.tsx").default;
@@ -56,10 +66,45 @@ for (const enabled of [false, true]) {
         const board = [...list.querySelectorAll("li")].find(item => item.textContent === "Board");
         assert.equal(board.className, enabled ? `${boardClass} text-white-black` : boardClass);
         assert.equal(ui.container.querySelectorAll('[id="dropdownSelectors"]').length, 10);
-        assert.deepEqual(scrolls.at(-1), { id: "listContainer", options: { behavior: "smooth", block: enabled ? "nearest" : "center", inline: "start" } });
+        assert.equal(list.style.maxHeight, enabled ? "292px" : "");
+        if (enabled) assert.deepEqual(scrolls, []);
+        else assert.deepEqual(scrolls.at(-1), { id: "listContainer", options: { behavior: "smooth", block: "center", inline: "start" } });
         if (trigger !== triggers.at(-1)) React.act(() => trigger.firstElementChild.click());
       }
-      assert.equal(scrolls.length, 10);
+      assert.equal(scrolls.length, enabled ? 0 : 10);
+      const list = ui.container.querySelector("#listContainer");
+      listTop = 320;
+      window.innerHeight = 640;
+      React.act(() => window.dispatchEvent(new window.Event("resize")));
+      assert.equal(list.style.maxHeight, enabled ? "312px" : "");
+      window.innerHeight = 400;
+      React.act(() => window.dispatchEvent(new window.Event("resize")));
+      assert.equal(list.style.maxHeight, enabled ? "282px" : "");
+      assert.equal(list.style.top, enabled ? "auto" : "100%");
+      assert.equal(list.style.bottom, enabled ? "100%" : "auto");
+      window.innerHeight = 1000;
+      React.act(() => window.dispatchEvent(new window.Event("resize")));
+      assert.equal(list.style.maxHeight, enabled ? "364px" : "");
+      const scroller = list.parentElement.parentElement;
+      scroller.style.overflowY = "auto";
+      clippingBottoms.set(scroller, 560);
+      React.act(() => window.dispatchEvent(new window.Event("resize")));
+      assert.equal(list.style.maxHeight, enabled ? "232px" : "");
+      const outerClip = scroller.parentElement;
+      outerClip.style.overflowY = "hidden";
+      clippingBottoms.set(outerClip, 520);
+      React.act(() => window.dispatchEvent(new window.Event("resize")));
+      assert.equal(list.style.maxHeight, enabled ? "192px" : "");
+      assert.equal(list.style.top, "100%");
+      listTop = 450;
+      React.act(() => window.dispatchEvent(new window.Event("resize")));
+      assert.equal(list.style.maxHeight, enabled ? "364px" : "");
+      assert.equal(list.style.bottom, enabled ? "100%" : "auto");
+      listTop = 320;
+      window.innerHeight = 500;
+      React.act(() => window.dispatchEvent(new window.Event("resize")));
+      assert.equal(list.style.maxHeight, enabled ? "172px" : "");
+      assert.equal(scrolls.length, enabled ? 0 : 10);
       const board = [...ui.container.querySelectorAll("#listContainer li")].find(item => item.textContent === "Board");
       await React.act(async () => board.click());
       assert.deepEqual(writes, [["post", "/api/favorites/addEditFavorites", { userSettingId: 12, index: 0, projectId: 42 }]]);
@@ -69,7 +114,10 @@ for (const enabled of [false, true]) {
       assert.deepEqual(writes[1], ["put", "/api/favorites/addEditFavorites", { userSettingId: 12, index: 1, projectId: -1 }]);
       assert.deepEqual(refetches, [{ queryKey: ["getAllFavorites"] }, { queryKey: ["getAllFavorites"] }]);
       assert.equal(ui.container.querySelector("#listContainer"), null);
+      assert.equal(scrolls.length, enabled ? 0 : 11);
     } finally {
+      HTMLElement.prototype.getBoundingClientRect = originalRect;
+      HTMLElement.prototype.scrollIntoView = originalScroll;
       ui.close();
     }
   });
