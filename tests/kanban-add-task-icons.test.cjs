@@ -12,7 +12,6 @@ const root = path.resolve(__dirname, "..");
 const sharpPlusFlag = "htpr-7047-sharp-plus-signs";
 const keys = {
   HTPR_6902_N_QUICK_ADD_FLAG: "htpr-6902-n-quick-add",
-  HTPR_6914_SHIFT_C_QUICK_ADD_FLAG: "htpr-6914-shift-c-quick-add",
   HTPR_7047_SHARP_PLUS_SIGNS_FLAG: sharpPlusFlag,
 };
 

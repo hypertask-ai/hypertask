@@ -57,6 +57,41 @@ Use a trusted identity with dispatch access to the private reviewer repository. 
 - Vercel previews are optional. Merge to `production` deploys production; a failed deploy build keeps the previous deployment live.
 - Do not add another runner host, VPN, required preview, or paid hosted fallback without a recorded decision.
 
+## Live required-check settings
+
+`Verify live required-check settings` runs the dependency-free
+[verifier](../.github/scripts/verify-required-check-settings.mjs) on free
+GitHub-hosted runners. Every `production` push verifies the default branch,
+exactly one active `production-required-checks` ruleset, its branch target and
+production include/exclude conditions, and the exact required-context set
+(including both review contexts, without aliasing).
+
+On pull requests, it reads settings only when the merge-base diff changes
+`.github/**`, `docs/ci-policy.yml`, or `docs/ci.md`. Checkout includes full history;
+the NUL-delimited diff disables rename detection so moving a CI file out of
+`.github/` cannot hide its deletion. An unreadable event, invalid SHA, failed diff,
+or empty/unknown diff verifies instead of skipping. Other PRs log an explicit
+skip and make **zero settings API calls**. No changed-files API is used.
+
+Before this change, every run made three settings API calls. Scoped PRs and
+production pushes still make three on a successful first attempt: repository
+metadata, ruleset list, and one full ruleset read. GitHub REST's
+[repository ruleset list](https://docs.github.com/en/rest/repos/rules#get-all-repository-rulesets)
+returns summaries, not rules or ref conditions; `includes_parents` includes parent
+rulesets, not full details. The
+[branch rules endpoint](https://docs.github.com/en/rest/repos/rules#get-rules-for-a-branch)
+returns effective rules but not the name/enforcement/target/ref conditions needed
+to preserve these assertions. Neither can replace the full ruleset read safely.
+
+Reads use `gh api --include`. A rate-limited 403 or 429 waits for
+`x-ratelimit-reset` / `retry-after` (the later time when both apply), logging
+`rate limited, waiting Ns until reset`, then retries only that failed read.
+Cumulative sleeps are capped at **300 seconds**, with a six-minute overall
+budget and a seven-minute step timeout inside the 40-minute job. Missing usable
+rate-limit timing, an exceeded budget, other API errors, malformed settings, or a
+settings mismatch fail the check; nothing passes without reading the settings
+when verification is required. No paid runner, service, or dependency is added.
+
 ## Premerge evidence
 
 `premerge-evidence` passes every open `production` PR with the exact description `test click removed (Valentin 2026-10-21)`. No screen-path, flag-removal, live-mode, browser-click, `premerge.md` or recording evaluation remains. Valentin removed the test click on 2026-10-21 because it was not helping.
