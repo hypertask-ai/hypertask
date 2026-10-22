@@ -34,7 +34,7 @@ function compile(file, mocks) {
   return exports.default;
 }
 
-function fixture(t, { enabled = true, instant = true, authenticatedId = 2343, inboxAccountId = 2343, cached = true, upload = false, realDetail = false } = {}) {
+function fixture(t, { enabled = true, authenticatedId = 2343, inboxAccountId = 2343, cached = true, upload = false, realDetail = false } = {}) {
   const dom = new JSDOM('<div id="root"></div>', { url: "https://app.hypertask.ai/inbox" });
   const names = ["window", "document", "Event", "IS_REACT_ACT_ENVIRONMENT"];
   const previous = Object.fromEntries(names.map(name => [name, global[name]]));
@@ -67,7 +67,6 @@ function fixture(t, { enabled = true, instant = true, authenticatedId = 2343, in
     "@/store": { currentUserAtom: {} },
     "@/hooks/useFlag": { useFlag: key => {
       if (key === flags.HTPR_7001_INBOX_NEXT_CACHED_FLAG) return enabled;
-      if (key === flags.HTPR_6752_INSTANT_TICKET_OPEN_FLAG) return instant;
       if (key === flags.HTPR_7000_INBOX_NEXT_OPEN_FLAG) return true;
       assert.ok([flags.HTPR_6972_SUBTASK_LINK_FLAG, flags.HTPR_6991_BACK_FIRST_OPEN_FLAG, flags.HTPR_7002_INBOX_E_FIRST_PRESS_FLAG, flags.HTPR_7003_BOARD_BACK_FLAG, flags.HTPR_7008_PHONE_FIRST_PAINT_FLAG, flags.HTPR_7129_BOARD_CARD_FRESH_AFTER_ESCAPE_FLAG].includes(key), key);
       return false;
@@ -104,6 +103,7 @@ function fixture(t, { enabled = true, instant = true, authenticatedId = 2343, in
     Detail = compile("src/components/Modals/SwipeUnread/EmbeddedTaskDetail.tsx", {
       ...mocks,
       "@tanstack/react-query": query,
+      "@/lib/flags/keys": require("./helpers/flag-files.cjs").load("src/lib/flags/keys.ts"),
       "@/hooks/useFlag": { useFlag: () => false },
       "@/hooks/General/useGetUserPreferences": { useGetUserPreferences: () => ({ data: { commentsStacked: false, scrollSetting: "Bottom" } }) },
       "@/lib/contexts/TaskDetail/FollowersProvider": { FollowersProvider: ({ children }) => children },
@@ -142,8 +142,6 @@ function fixture(t, { enabled = true, instant = true, authenticatedId = 2343, in
         pathname = href(first);
         render();
       });
-      // Even the instant flag OFF control starts on an already-open detail.
-      if (!instant) window.history.replaceState({}, "", href(first) + "?inboxFlow=true");
     },
     move: route => React.act(async () => navigate("Replace", route)),
   };
@@ -183,7 +181,7 @@ test("bugfix OFF keeps the exact server Replace route and old view until server 
   assert.equal(document.querySelector("article").dataset.taskId, String(first.id));
 });
 
-for (const options of [{ instant: false }, { authenticatedId: 999 }, { inboxAccountId: 999 }, { cached: false }]) {
+for (const options of [{ authenticatedId: 999 }, { inboxAccountId: 999 }, { cached: false }]) {
   test(`unsafe or unavailable cache falls back to server without publishing another task: ${JSON.stringify(options)}`, async t => {
     const f = fixture(t, options);
     await f.start();

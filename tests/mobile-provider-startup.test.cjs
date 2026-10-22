@@ -89,7 +89,7 @@ test("closed boards do not mount or preload the AI chat provider", () => {
   assert.match(
     globalProvider,
     /holdChildren=\{\s*isFullScreenChat \|\|\s*shouldMountAgentChatRuntime\s*\}\s*loading=\{<FullScreenChatLoading \/>\}/,
-    "cold /chat and flagged mobile /agents/chat wait for ChatProvider; /detail renders at once and reads the chat optionally (HTPR-6752)",
+    "cold /chat and flagged mobile /agents/chat wait for ChatProvider; /detail renders at once and reads the chat optionally",
   );
   assert.match(chatClient, /loading: \(\) => <FullScreenChatLoading \/>/);
   assert.match(fullScreenLoading, /label = "Loading AI chat"/);

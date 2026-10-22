@@ -268,6 +268,7 @@ function readerStubs(prisma) {
     "@/lib/tasks/sameBoardRelations": relations,
     "@/lib/prisma": { __esModule: true, default: prisma },
     "@prisma/client": client,
+    "@/lib/flags/keys": require("./helpers/flag-files.cjs").load("src/lib/flags/keys.ts"),
     "@/lib/flags": { isFeatureEnabled: async () => false },
     "@/utils/controllers/projects/getAllIncludes": { projectContentAccessWhere: () => ({}), getProjectWhere: () => ({}) },
     "@/lib/agents/visibility": { boardAgentVisibilityWhere: () => ({}), isAgentVisibleToUser: () => false, accessibleAgentWhere: () => ({}), accessibleAgentMembershipWhere: () => ({}) },

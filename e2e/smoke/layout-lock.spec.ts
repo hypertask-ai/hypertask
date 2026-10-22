@@ -388,7 +388,7 @@ test('layout lock: phone ticket opened from a board card stays on screen while t
   test.skip(testInfo.project.name !== 'Mobile', 'phone ticket open')
   test.setTimeout(60_000)
   const fixture = JSON.parse(readFileSync(fixturePath, 'utf8')) as { taskId: number; detailPath: string; flags: Record<string, boolean> }
-  test.skip(!fixture.flags['htpr-6991-back-first-open'] || !fixture.flags['htpr-6752-instant-ticket-open'], 'no Back boundary around the instant ticket')
+  test.skip(!fixture.flags['htpr-6991-back-first-open'], 'no Back boundary around the instant ticket')
   // The seeded description is plain, so it would take HTPR-7091's static path. Rich descriptions
   // (images, mentions, code) mount the editor directly: take that path here.
   await page.route('**/api/flags*', async (route) => {

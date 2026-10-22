@@ -56,7 +56,7 @@ function scrollHarness({ mobile = false, enabled = true, fromInbox = false, scro
   const mocks = {
     react: { useEffect: callback => effects.push(callback), useLayoutEffect: callback => layouts.push(callback), useCallback: callback => callback },
     "@/hooks/useFlag": { useFlag: key => key === flag.HTPR_7315_UNREAD_TICKET_OPENS_TOP_FLAG ? enabled : cachedLayout },
-    "@/lib/flags/keys": { HTPR_6752_INSTANT_TICKET_OPEN_FLAG: "instant", HTPR_6899_STABLE_LAYOUT_FLAG: "stable", HTPR_7315_UNREAD_TICKET_OPENS_TOP_FLAG: flag.HTPR_7315_UNREAD_TICKET_OPENS_TOP_FLAG, HTPR_7367_SERVER_DESCRIPTION_FIRST_FLAG: "description-first" },
+    "@/lib/flags/keys": { HTPR_6899_STABLE_LAYOUT_FLAG: "stable", HTPR_7315_UNREAD_TICKET_OPENS_TOP_FLAG: flag.HTPR_7315_UNREAD_TICKET_OPENS_TOP_FLAG, HTPR_7367_SERVER_DESCRIPTION_FIRST_FLAG: "description-first" },
     "@/lib/flags/definitions/htpr-7315-unread-ticket-opens-top": flag,
     "@/lib/taskDetail/initialTicketPosition": { initialTicketPosition },
     "@/lib/contexts/TaskDetail/TaskProvider": { useTaskContext: () => ({ cachedLayout, newCommentsLastReadAt: lastReadAt, descriptionStart: "live", liveRowsPendingFor: () => false }) },

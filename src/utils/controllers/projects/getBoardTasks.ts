@@ -1,6 +1,7 @@
 import { stripForeignTaskRelations } from "@/lib/tasks/sameBoardRelations";
 import prisma from "@/lib/prisma";
-import { HTPR_6752_INSTANT_TICKET_OPEN_FLAG, HTPR_7071_AGENT_STATUS_CHIP_FLAG, isFeatureEnabled } from "@/lib/flags";
+import { isFeatureEnabled } from "@/lib/flags";
+import { HTPR_7071_AGENT_STATUS_CHIP_FLAG } from "@/lib/flags/keys";
 import { teamBillingSnapshotSelect } from "@/lib/ai/teamBillingSnapshotSelect";
 import { attachAgentStatus } from "@/utils/controllers/tasks/attachAgentStatus";
 import {
@@ -30,8 +31,6 @@ const getBoardTasks = async (
     if (!projectId || !userId) {
       return { status: 400, json: { message: "projectId and userId are required" } };
     }
-
-    const cachedDescriptionPromise = isFeatureEnabled(HTPR_6752_INSTANT_TICKET_OPEN_FLAG, userId).catch(() => false);
 
     const project = await prisma.project.findFirst({
       where: { id: projectId, status: "Normal", ...getProjectWhere(userId) },
@@ -63,13 +62,12 @@ const getBoardTasks = async (
       return { status: 403, json: { message: "No access to this board" } };
     }
 
-    const includeCachedDescription = await cachedDescriptionPromise;
     const agentStatusPromise = isFeatureEnabled(HTPR_7071_AGENT_STATUS_CHIP_FLAG, userId).catch(() => false);
     const tasks = await prisma.task.findMany({
       where: { projectId, ...getTaskWhere() },
       omit: taskBoardOmit,
       include: {
-        ...getBoardTaskInclude({ userId, userDbId: userId, currentUserId, includeCachedDescription }),
+        ...getBoardTaskInclude({ userId, userDbId: userId, currentUserId, includeCachedDescription: true }),
         customFieldValues: {
           select: { fieldId: true, value: true, numericValue: true },
         },

@@ -15,7 +15,8 @@ import {
   sanitizeAgentCredentials,
   type PublicAgent,
 } from "@/lib/agents/publicAgent";
-import { HTPR_6516_AGENT_ATTRIBUTION_FLAG, HTPR_6752_INSTANT_TICKET_OPEN_FLAG, HTPR_6868_TICKET_PREFIX_FLAG, HTPR_6972_SUBTASK_LINK_FLAG, isFeatureEnabled } from "@/lib/flags";
+import { isFeatureEnabled } from "@/lib/flags";
+import { HTPR_6516_AGENT_ATTRIBUTION_FLAG, HTPR_6868_TICKET_PREFIX_FLAG, HTPR_6972_SUBTASK_LINK_FLAG } from "@/lib/flags/keys";
 import {
   accessibleAgentMembershipWhere,
   boardAgentVisibilityWhere,
@@ -470,8 +471,7 @@ export async function fetchTaskDetail(
     : parseDetailSlug([projectSlug, String(uniqueIndex)]);
   if (!slug) return null;
 
-  const cachedRelations = await isFeatureEnabled(HTPR_6972_SUBTASK_LINK_FLAG, userId) &&
-    await isFeatureEnabled(HTPR_6752_INSTANT_TICKET_OPEN_FLAG, userId);
+  const cachedRelations = await isFeatureEnabled(HTPR_6972_SUBTASK_LINK_FLAG, userId);
   const task = await prisma.task.findFirst({
     where: taskWhere(slug, userId),
     include: taskDetailInclude(userId, slug.projectId, cachedRelations),

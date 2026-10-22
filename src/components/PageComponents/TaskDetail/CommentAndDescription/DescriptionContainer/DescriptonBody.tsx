@@ -18,7 +18,6 @@ import type { IAttachment } from "@/models/model";
 import { linkifyHtml } from "@/utils/helperFunctions/linkifyHtml";
 import { useFlag } from "@/hooks/useFlag";
 import {
-  HTPR_6752_INSTANT_TICKET_OPEN_FLAG,
   HTPR_7091_STATIC_DESCRIPTION_FIRST_FLAG,
   HTPR_7110_APP_SAVED_STATIC_DESCRIPTION_FLAG,
   HTPR_7395_CACHED_STATIC_FIRST_FLAG,
@@ -40,11 +39,10 @@ const DescriptonBody = ({ draftTQ }: any) => {
     setCarousalItems,
   } = useTaskContext();
   const task = useMemo(() => JSON.parse(parsedTask), [parsedTask]);
-  const instantTicketOpen = useFlag(HTPR_6752_INSTANT_TICKET_OPEN_FLAG);
   const staticFirstFlag = useFlag(HTPR_7091_STATIC_DESCRIPTION_FIRST_FLAG);
   const appSavedStatic = useFlag(HTPR_7110_APP_SAVED_STATIC_DESCRIPTION_FLAG);
   const cachedStaticFirst = useFlag(HTPR_7395_CACHED_STATIC_FIRST_FLAG);
-  const creator = instantTicketOpen ? currentTask?.user : task.user;
+  const creator = currentTask?.user;
   const {
     description,
     descriptionAttachments,
@@ -82,7 +80,7 @@ const DescriptonBody = ({ draftTQ }: any) => {
       {secondaryPanelsReady !== false && (!cachedLayout || isEditing) ? <DescriptionEditorSlot
         key={task.id}
         afterPaint={cachedStaticFirst && !!cachedEditorAfterPaint && !isEditing && isPlainDescriptionHtml(linkedContent, true, true)}
-        lazy={staticFirstFlag ? instantTicketOpen && !isEditing && (appSavedStatic
+        lazy={staticFirstFlag ? !isEditing && (appSavedStatic
           ? isPlainDescriptionHtml(linkedContent, true)
           : isPlainDescriptionHtml(linkedContent)) : false}
         allowPerks={allowPerks}
