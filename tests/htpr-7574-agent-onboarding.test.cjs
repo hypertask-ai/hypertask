@@ -184,6 +184,16 @@ for (const message of safeMessages) {
   });
 }
 
+test("S10 preserved refusal: the invite route's off-board refusal reaches the agent", async () => {
+  const { AgentBoardInviteScopeError } = load("src/lib/mcp/agents/delegatedAccess.ts", {
+    "@/lib/auth/agentScope": { agentScopeEnforced: () => false, recordAgentBoardScopeMiss: () => {} },
+    "@/lib/mcp/agents/scopes": { requireRole: async () => null },
+  });
+  const { message } = new AgentBoardInviteScopeError();
+  assert.ok(safeMessages.includes(message));
+  await assertAuthorizationResult(message, `${message.replace(/[.!]$/, "")}. ${genericHint}`);
+});
+
 for (const message of [
   "Unknown authorization refusal",
   "Error: Prisma exception\n at internal (/srv/private.ts:1) Bearer htk_fixture_secret",
