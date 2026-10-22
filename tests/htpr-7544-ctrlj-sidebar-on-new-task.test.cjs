@@ -181,7 +181,7 @@ test("flag is a client-safe improvement released to Everyone with risk metadata"
   assert.ok(definition.releaseRisk.reason.length);
 });
 
-function draftHandoff(enabled, create, calls, dom) {
+function draftHandoff(enabled, create, calls, dom, apple = false) {
   const source = read("src/components/Modals/CreateTaskGloballyModal/CreateTaskModalBody.tsx");
   const file = ts.createSourceFile("CreateTaskModalBody.tsx", source, ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX);
   let effect;
@@ -192,8 +192,8 @@ function draftHandoff(enabled, create, calls, dom) {
   visit(file);
   assert.ok(effect);
   const compiled = ts.transpileModule(`const effect = ${effect};`, { compilerOptions: { target: ts.ScriptTarget.ES2022 } }).outputText;
-  return new Function("ctrlJSidebarOnNewTask", "document", "isApple", "isRecording", "showAssignModal", "showConfirmationModal", "sidebarHandoffPending", "uploadInProgress", "formValues", "setUploadInProgress", "CreateTaskAndDescription", "router", "closeHandler", "toast", `${compiled}; return effect();`)(
-    enabled, dom.window.document, false, false, false, false, { current: false }, false,
+  return new Function("ctrlJSidebarOnNewTask", "window", "document", "isApple", "isRecording", "showAssignModal", "showConfirmationModal", "sidebarHandoffPending", "uploadInProgress", "formValues", "setUploadInProgress", "CreateTaskAndDescription", "router", "closeHandler", "toast", `${compiled}; return effect();`)(
+    enabled, dom.window, dom.window.document, apple, false, false, false, { current: false }, false,
     { currentProject: { id: 6859 }, status: { sectionId: 7 }, title: "" },
     (value) => calls.push(["busy", value]), create, { push: (url) => calls.push(["navigate", url]) },
     (save) => calls.push(["close", save]), { error: () => calls.push(["error"]) },
@@ -237,5 +237,96 @@ test("unsaved form flag off leaves its handler alone; failed save retains the dr
       assert.equal(calls.filter(([kind]) => kind === "error").length, enabled ? 2 : 0);
       assert.equal(calls.some(([kind]) => kind === "navigate" || kind === "close"), false);
     } finally { cleanup?.(); dom.window.close(); }
+  }
+});
+
+function composePaletteListener(enabled, calls, dom, apple) {
+  const file = ts.createSourceFile("TiptapCreateTaskModal.tsx", read("src/components/RTE/TiptapCreateTaskModal.tsx"), ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX);
+  let effect;
+  const captureSelection = [];
+  function visit(node) {
+    if (ts.isVariableStatement(node) && node.declarationList.declarations.some((declaration) => declaration.name.getText(file) === "composeShortcutCapture")) captureSelection.push(node.getText(file));
+    if (ts.isIfStatement(node) && node.expression.getText(file) === "ctrlJSidebarOnNewTask") captureSelection.push(node.getText(file));
+    if (ts.isCallExpression(node) && node.expression.getText(file) === "useEffect" && node.arguments[0]?.getText(file).includes("const openNewTask =")) effect = node.arguments[0].getText(file);
+    ts.forEachChild(node, visit);
+  }
+  visit(file);
+  assert.ok(effect);
+  const compiled = ts.transpileModule(`${captureSelection.join("\n")}\nconst effect = ${effect};`, { compilerOptions: { target: ts.ScriptTarget.ES2022 } }).outputText;
+  const { isComposePaletteShortcut } = load("src/lib/constants/commandCenterShortcut.ts");
+  return new Function("ctrlJSidebarOnNewTask", "window", "newTaskWindow", "isComposePaletteShortcut", "isApple", "pathname", "setCommands", "CommandMode", "projectForContext", "closeComposedTaskForm", `${compiled}; return effect();`)(
+    enabled, dom.window, true, isComposePaletteShortcut, apple, "/project",
+    (value) => calls.push(["palette", value]), { Command: "command" }, { id: 6859 }, () => {},
+  );
+}
+
+function globalComposeListener(calls, dom, apple) {
+  const cleanups = [];
+  const { useCommandCenterShortcut } = load("src/hooks/General/useCommandCenterShortcut.ts", {
+    react: { useEffect: (effect) => cleanups.push(effect()) },
+    "@/lib/constants/commandCenterShortcut": load("src/lib/constants/commandCenterShortcut.ts"),
+    "@/hooks/useFlag": { useFlag: () => true },
+    "@/lib/flags/keys": { HTPR_6929_COMPOSE_TASK_WRITER_FLAG: "compose" },
+    "@/lib/state": { useSetRecoilState: () => (value) => calls.push(["global-palette", value]) },
+    "@/store": { showCommandsAtom: "commands" },
+    "@/models/enums": { CommandMode: { Command: "command" } },
+  });
+  const previous = global.document;
+  global.document = dom.window.document;
+  try {
+    useCommandCenterShortcut(985, apple, "/project", false, false, () => calls.push(["toggle"]));
+  } finally { global.document = previous; }
+  return () => {
+    global.document = dom.window.document;
+    try { cleanups.forEach((cleanup) => cleanup?.()); }
+    finally { global.document = previous; }
+  };
+}
+
+test("C form Ctrl+J wins over both compose listeners with the flag on, regardless of mount order, and preserves the old palette with it off", async () => {
+  for (const width of [1440, 390]) {
+    for (const apple of [false, true]) {
+      for (const enabled of [false, true]) {
+        for (const paletteFirst of [false, true]) {
+          const dom = new JSDOM("<div id='createTaskModal'><textarea id='title-input-modal'></textarea><div class='ProseMirror' contenteditable='true' tabindex='0'></div></div>");
+          dom.window.innerWidth = width;
+          const calls = [];
+          const cleanups = [globalComposeListener(calls, dom, apple)];
+          const registerPalette = () => cleanups.push(composePaletteListener(enabled, calls, dom, apple));
+          const registerHandoff = () => cleanups.push(draftHandoff(enabled, async (...args) => {
+            calls.push(["save", ...args]);
+            return "/detail/project-6859/43";
+          }, calls, dom, apple));
+          try {
+            if (paletteFirst) { registerPalette(); registerHandoff(); }
+            else { registerHandoff(); registerPalette(); }
+            for (const selector of ["#title-input-modal", ".ProseMirror"]) {
+              const target = dom.window.document.querySelector(selector);
+              target.focus();
+              assert.equal(dom.window.document.activeElement, target);
+              const event = new dom.window.KeyboardEvent("keydown", { key: "j", code: "KeyJ", keyCode: 74, ctrlKey: !apple, metaKey: apple, bubbles: true, cancelable: true });
+              assert.equal(target.dispatchEvent(event), false);
+              await Promise.resolve();
+            }
+            if (enabled) {
+              assert.deepEqual(calls, [["busy", true], ["save", undefined, "New Task"], ["navigate", "/detail/project-6859/43?newTaskAi=1"], ["close", true], ["busy", false]]);
+            } else {
+              assert.equal(calls.length, 2);
+              for (const [kind, value] of calls) {
+                assert.equal(kind, "palette");
+                assert.equal(value.show, true);
+                assert.equal(value.mode, "command");
+                assert.equal(value.paletteTab, "compose");
+                assert.deepEqual(value.composeProject, { id: 6859 });
+                assert.equal(typeof value.composeOnCreated, "function");
+              }
+            }
+          } finally {
+            cleanups.reverse().forEach((cleanup) => cleanup?.());
+            dom.window.close();
+          }
+        }
+      }
+    }
   }
 });

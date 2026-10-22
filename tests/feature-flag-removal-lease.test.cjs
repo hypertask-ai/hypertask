@@ -23,7 +23,7 @@ const prisma = {
     findFirst: async () => null,
     findUnique: async ({ where }) => state.task?.id === where.id ? state.task : null,
     create: async ({ data }) => {
-      state.task = { id: 99, ...data, priority: null };
+      state.task = { id: 99, ...data, project: { teamId: null, firstTaskPointerTaskId: null }, priority: null };
       return state.task;
     },
   },

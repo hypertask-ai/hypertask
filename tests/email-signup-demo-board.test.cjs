@@ -89,6 +89,7 @@ function makeHarness({ guestBoard = true, existing = false, memberships = 0, fla
       return callback(prisma)
     },
     featureFlag: { findUnique: async ({ where }) => {
+      if (where.key === 'htpr-7549-first-task-pointer') return { mode: 'OFF' }
       calls.flags.push(where.key)
       return flagMode === null ? null : { mode: flagMode }
     } },

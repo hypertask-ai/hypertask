@@ -22,7 +22,7 @@ function taskEvents(h: ReturnType<typeof activationHarness>) {
 function saveTask(h: ReturnType<typeof activationHarness>, id: number, actor: Record<string, unknown>, channel: string, analyticsAgentId?: string) {
   h.tasks.set(id, { id, projectId: 15, createdAt: new Date("2026-10-16T12:00:00Z") });
   return taskEvents(h).createTaskWithBoardWebhookOutbox(h.prisma, actor, async () => ({
-    taskId: id, result: { id }, webhookTask: { id, projectId: 15, sectionId: 1, section: "Doing", status: "Normal" },
+    taskId: id, firstTaskPointerTaskId: h.projects.get(15).firstTaskPointerTaskId, result: { id }, webhookTask: { id, projectId: 15, sectionId: 1, section: "Doing", status: "Normal" },
   }), channel, analyticsAgentId);
 }
 
@@ -109,6 +109,24 @@ test("a saved task sends task_created with board, seeded and channel properties"
   assert.equal(properties.creation_channel, "web");
   assert.equal(properties.creator_type, "human");
   assert.equal(properties.actor_id, "123");
+});
+
+test("ordinary analytics task saves skip the pointer write; enrolled saves accept numeric project IDs", async () => {
+  const h = harness();
+  const project = h.projects.get(15);
+  project.firstTaskPointerTaskId = null;
+  project.firstRealTaskCreatedAt = null;
+  await saveTask(h, 48, { userId: 123, agentId: null }, "web");
+  assert.equal(h.prismaCalls.filter((call) => call === "project.updateMany").length, 0);
+  project.firstTaskPointerTaskId = 8;
+  await saveTask(h, 49, { userId: 123, agentId: "agent-1" }, "mcp");
+  assert.ok(project.firstRealTaskCreatedAt instanceof Date);
+  assert.equal(h.prismaCalls.filter((call) => call === "project.updateMany").length, 1);
+  const completedAt = project.firstRealTaskCreatedAt;
+  await saveTask(h, 50, { userId: 123, agentId: null }, "web");
+  assert.equal(project.firstRealTaskCreatedAt, completedAt, "conditional update leaves the milestone immutable");
+  await h.drain();
+  assert.deepEqual(new Set(h.captures.map((capture) => capture.properties.task_id)), new Set(["48", "49", "50"]));
 });
 
 test("an agent task on a seeded board is flagged seeded and agent-made", async () => {

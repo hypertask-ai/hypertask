@@ -146,7 +146,8 @@ export async function createTaskCore(options: CreateTaskCoreOptions): Promise<Cr
             include: {
                 project: {
                     select: {
-                        teamId: true
+                        teamId: true,
+                        firstTaskPointerTaskId: true
                     }
                 },
                 priority: {
@@ -156,7 +157,8 @@ export async function createTaskCore(options: CreateTaskCoreOptions): Promise<Cr
         });
         await persistAgentTaskCreatedPending(tx, created.id);
         return { taskId: created.id,
-            result: created,
+            firstTaskPointerTaskId: created.project.firstTaskPointerTaskId,
+            result: { ...created, project: { teamId: created.project.teamId } },
             webhookTask: {
                 id: created.id,
                 ticketNumber: created.ticketNumber,
