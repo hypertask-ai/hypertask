@@ -628,20 +628,12 @@ export default function GlobalProvider({
           .split("|&|")[0]
           ?.replace("project-", ""),
       );
-      const availableBoards = currentUser?.id
-        ? await queryClient
-            .fetchQuery<IProject[]>({
-              queryKey: ["projectsAllMinimal", currentUser.id],
-              queryFn: () =>
-                globalAPIHandlers.getAllProjectsMinimal("ExtraMinimal"),
-              staleTime: 60_000,
-            })
-            .catch(() => [])
-        : [];
-      const boardId = [_currentProject?.id, previousBoardId].find(
-        (candidate) =>
-          Number.isInteger(candidate) &&
-          availableBoards.some((project) => project.id === candidate),
+      const boardId = await boardShortcutLookup(
+        queryClient,
+        currentUser?.id,
+        [_currentProject?.id, previousBoardId],
+        (): Promise<IProject[]> =>
+          globalAPIHandlers.getAllProjectsMinimal("ExtraMinimal"),
       );
       if (boardId) {
         markBoardSwitchIntent({ surface: "keyboard_shortcut", projectId: boardId });
@@ -652,6 +644,7 @@ export default function GlobalProvider({
     },
     [
       _currentProject?.id,
+      boardShortcutLookup,
       currentUser?.id,
       goToProjectShortcut,
       navigate,

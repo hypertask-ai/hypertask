@@ -105,5 +105,7 @@ test("g then b picks the lookup by the flag and keeps the same navigation", () =
   assert.match(source, /if \(useFlag\(HTPR_7588_BOARD_SHORTCUT_FROM_DEVICE_FLAG\)\) boardShortcutLookup = boardFromDeviceFirst;/);
   assert.match(source, /await boardShortcutLookup\(\s*queryClient,\s*currentUser\?\.id,\s*boardCandidates,\s*fetchBoardList,\s*\)/);
   assert.doesNotMatch(source, /fetchQuery<IProject\[\]>\(\{\s*queryKey: \["projectsAllMinimal", currentUser\.id\]/);
+  assert.equal(source.match(/await boardShortcutLookup\(/g)?.length, 2, "key handler and capture-phase g shortcut both use the flagged lookup");
+  assert.match(source, /_currentProject\?\.id,\s*boardShortcutLookup,\s*currentUser\?\.id,/);
   assert.match(source, /goToProjectShortcut\(boardId, true\)/);
 });
