@@ -3,7 +3,16 @@
 # because trufflehog's live check can call a working key dead. A false hit: `trufflehog:ignore` on its line.
 name: Gitleaks
 
-on: [push, pull_request]
+# Branch pushes are scanned by their pull request; a push run here would
+# post a second secret-scan check on the same commit.
+on:
+  push:
+    branches: [main, master, production]
+  pull_request:
+
+concurrency:
+  group: gitleaks-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 permissions:
   contents: read

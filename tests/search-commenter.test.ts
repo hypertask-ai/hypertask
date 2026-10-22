@@ -144,7 +144,7 @@ const valuesHandler = jiti(path.join(root, 'src/pages/api/search/values.ts')).de
 const { GET } = jiti(path.join(root, 'src/lib/mcp/operations/tasks/search/operation.ts')) as any
 function reset(overrides: any = {}) {
   state = { session: { userId: 42 }, flags: { [flag]: true, [fuzzyFlag]: true,
-    [keys.HTPR_6688_SEARCH_AUTOCOMPLETE_FLAG]: true, [keys.HTPR_6865_SEARCH_LAYOUT_FLAG]: true },
+    [keys.HTPR_6865_SEARCH_LAYOUT_FLAG]: true },
     indexComments: [], countQueries: [], anchorQueries: [], peopleQueries: [], taskQueries: [], commentQueries: [], detailQueries: [], flagCalls: [], deleted: [], indexCalls: 0, ...overrides }
 }
 const response = () => ({ code: 0, body: undefined as any, status(code: number) { this.code = code; return this }, json(body: any) { this.body = body; return this } })
@@ -258,7 +258,7 @@ test('comment author pill falls back to email and highlight prerequisites do not
     reset()
     state.flags[keys.HTPR_6882_SEARCH_MATCH_HIGHLIGHTS_FLAG] = true
     assert.equal((await search('needle commenter:1')).body.processedData.All[0].searchMatch.commentAuthor, 'one@example.test')
-    for (const prerequisite of [keys.HTPR_6688_SEARCH_AUTOCOMPLETE_FLAG, keys.HTPR_6865_SEARCH_LAYOUT_FLAG]) {
+    for (const prerequisite of [keys.HTPR_6865_SEARCH_LAYOUT_FLAG]) {
       reset()
       state.flags[keys.HTPR_6882_SEARCH_MATCH_HIGHLIGHTS_FLAG] = true
       state.flags[prerequisite] = false

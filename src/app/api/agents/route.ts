@@ -11,7 +11,8 @@ import { hasTeamMembershipAccess } from "@/utils/controllers/teams/hasTeamMember
 import type { AgentScopes } from "@/lib/mcp/agents/scopes";
 import { boardAgentVisibilityWhere } from "@/lib/agents/visibility";
 import { getSessionUser } from "@/lib/auth/getSessionUser";
-import { isOwnerOrQaUserId } from "@/lib/flags";
+import { isFeatureEnabled, isOwnerOrQaUserId } from "@/lib/flags";
+import { HTPR_7509_AGENT_ROLE_SCREEN_FLAG } from "@/lib/flags/keys";
 import {
   ensureDefaultTeamAgent,
   lockTeamAgentSeed,
@@ -136,9 +137,16 @@ export async function GET(request: NextRequest) {
     }
   }
 
+  const agentRolesEnabled = await isFeatureEnabled(
+    HTPR_7509_AGENT_ROLE_SCREEN_FLAG,
+    currentUserId,
+  );
   const agentsWithOAuth = scopedAgents.map(
     ({ members, permissions, mcpTokenJti, mcpTokenExpiresAt, byokApiKeys, ...a }) => ({
       ...a,
+      ...(agentRolesEnabled
+        ? { role: (permissions as AgentScopes | null)?.role ?? "write" }
+        : {}),
       providerKey:
         a.userId === currentUserId ? maskAgentProviderKey(byokApiKeys) : null,
       postsToImportant:
