@@ -24,6 +24,19 @@ export const CONSOLIDATED_OUTPUT_SCHEMA = {
   required: ['data', 'response_format'],
 } as const
 
+const SAFE_AUTHORIZATION_MESSAGES = new Set([
+  'Only the board owner or a project admin can add members',
+  'Agent not found or you do not own this agent',
+  'This agent belongs to another team',
+  'An agent cannot change its own board access. Ask the person who owns this agent to add it under Agents > <agent> > Board access.',
+  'This agent is not a member of this board. Ask the board owner to add it.',
+  ...['read', 'write', 'admin'].flatMap((role) =>
+    ['read', 'write', 'admin'].map((required) =>
+      `This agent's role ('${role}') does not permit this action; requires '${required}' or higher.`,
+    ),
+  ),
+])
+
 export function actionableToolError(error: unknown): string {
   if (error instanceof z.ZodError) {
     return error.issues.slice(0, 4).map((issue) => {
@@ -38,11 +51,15 @@ export function actionableToolError(error: unknown): string {
     }).join(' ')
   }
   const detail = error as { code?: number; httpStatus?: number; message?: string }
+  if (detail?.code === -32003) {
+    const hint = 'Access denied. Use a credential with the required scope and confirm membership in the target board.'
+    const message = detail.message ?? ''
+    return SAFE_AUTHORIZATION_MESSAGES.has(message)
+      ? `${message.replace(/[.!]$/, '')}. ${hint}`
+      : hint
+  }
   if (detail?.code === -32001 || /missing.*token/i.test(detail?.message ?? '')) {
     return 'Authentication failed. Reconnect the MCP connector and retry with a valid bearer token.'
-  }
-  if (detail?.code === -32003) {
-    return 'Access denied. Use a credential with the required scope and confirm membership in the target board.'
   }
   if (detail?.code === -32004) {
     const hint = 'Check the identifier with a targeted list or search using the same credential.'

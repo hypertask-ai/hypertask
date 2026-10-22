@@ -54,8 +54,20 @@ export async function GET(request: NextRequest) {
 
   const agents = await prisma.agent.findMany({
     where: {
-      members: { some: { project: { teamId } } },
-      ...boardAgentVisibilityWhere(currentUserId),
+      AND: [
+        boardAgentVisibilityWhere(currentUserId),
+        {
+          OR: [
+            { members: { some: { project: { teamId } } } },
+            {
+              userId: currentUserId,
+              members: { none: {} },
+              revokedAt: null,
+              archivedAt: null,
+            },
+          ],
+        },
+      ],
     },
     orderBy: { createdAt: "desc" },
     select: {
@@ -91,6 +103,7 @@ export async function GET(request: NextRequest) {
 
   const scopedAgents = agents.filter(
     (agent) =>
+      (agent.userId === currentUserId && agent.members.length === 0) ||
       getAgentTeamId(
         agent.members.map(({ project: memberProject }) => memberProject.teamId),
       ) === teamId,
