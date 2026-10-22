@@ -3,7 +3,7 @@ const test = require("node:test");
 const { NextRequest } = require("next/server");
 const { fixture, matches, hydrate } = require("./helpers/agent-board-scope.cjs");
 
-function harness({ actor = "agent", enforce = true, grant = "none", bypassBoardProducer = false, currentRuntime = false, authenticated = true } = {}) {
+function harness({ actor = "agent", enforce = true, grant = "none", bypassBoardProducer = false, currentRuntime = false, authenticated = true, withUsage = false } = {}) {
   const f = fixture();
   f.state.enforce = enforce;
   if (actor !== "agent") f.state.ctx.agentId = null;
@@ -73,7 +73,37 @@ function harness({ actor = "agent", enforce = true, grant = "none", bypassBoardP
     } };
   }
   f.prisma.comment.aggregate = async args => ({ _max: { createdAt: matches(row, args.where) ? row.createdAt : null } });
-  f.prisma.aiUsage = { findMany: async () => [] };
+  const leases = [{
+    agentId: target.id, createdAt: new Date("2026-10-01"),
+    expiresAt: new Date(Date.now() + 60_000), heartbeatAt: new Date(), task: tasks[1],
+  }];
+  const leaseQueries = [];
+  f.prisma.taskLease = { findMany: async args => {
+    leaseQueries.push(args);
+    return leases.filter(lease => matches(lease, args.where)).map(lease => hydrate(lease, args));
+  } };
+  const usageRows = withUsage ? [
+    { id: "board", agentId: target.id, projectId: project.id, createdAt: new Date(), model: "board-model", feature: "agent", totalTokens: 101 },
+    { id: "other-board", agentId: target.id, projectId: f.projects[0].id, createdAt: new Date(), model: "other-model", feature: "agent", totalTokens: 202 },
+    { id: "no-board", agentId: target.id, projectId: null, createdAt: new Date(), model: "unattributed-model", feature: "agent", totalTokens: 303 },
+  ] : [];
+  if (withUsage) {
+    for (const board of f.projects.filter(board => board !== project)) {
+      board.members = board.members.filter(member => member.agentId !== f.agent.id);
+    }
+  }
+  const usageQueries = [];
+  f.prisma.aiUsage = { findMany: async args => {
+    usageQueries.push(args);
+    return usageRows.filter(usage => matches(usage, args.where)).slice(0, args.take).map(usage => hydrate(usage, args));
+  } };
+  const projectQueries = [];
+  const findProjects = f.prisma.project.findMany;
+  f.prisma.project.findMany = async args => {
+    projectQueries.push(args);
+    return findProjects(args);
+  };
+  const working = f.load("src/lib/agents/working.ts");
   const runtimeState = f.load("src/lib/agents/runtimeState.ts", { "../redis": { getRedis: async () => { throw new Error("Unexpected Redis access"); } } });
   const snapshot = {
     version: 1, sequence: 1, workerId: "fixture", runtime: "external", model: null,
@@ -92,7 +122,7 @@ function harness({ actor = "agent", enforce = true, grant = "none", bypassBoardP
     "@/lib/mcp/auth": {},
     "@/lib/aiModelOptions": {},
     "@/lib/nativeAgent/modelPin": { UNPINNABLE_MODEL_OPTION_IDS: new Set() },
-    "@/lib/agents/working": { workingOnByAgent: async () => new Map() },
+    "@/lib/agents/working": working,
     "@/lib/agents/ownedSlugs": { resolveOwnedAgent: async (userId, ref) => userId === target.userId && ref === target.id ? { id: target.id, slug: "target" } : null },
     "@/lib/mcp/agents/ownedAgents": {},
     "@/lib/agents/visibility": {},
@@ -106,7 +136,7 @@ function harness({ actor = "agent", enforce = true, grant = "none", bypassBoardP
     const req = new NextRequest(`https://app.hypertask.ai/api/agents/${targetId}${area === "activity" ? "/activity" : ""}?agentId=${target.id}&userId=999`);
     return routes[area].GET(req, { params: Promise.resolve({ agentId: targetId }) });
   }
-  return { ...f, project, target, tasks, taskQueries, activityQueries, agentQueries, snapshot, request };
+  return { ...f, project, target, tasks, taskQueries, activityQueries, agentQueries, snapshot, request, leases, leaseQueries, working, usageRows, usageQueries, projectQueries };
 }
 
 for (const area of ["activity", "detail"]) {
@@ -269,4 +299,129 @@ test("detail: board producer filters runtime snapshot and board access by acting
     assert.equal(agent.operations.snapshot.processedTickets.length, enforce ? 0 : 1);
     assert.equal(agent.lastPostedAt === null, enforce);
   }
+});
+
+test("detail: ungranted ENFORCE actor receives no working ticket from the real helper", async () => {
+  const h = harness();
+  const response = await h.request("detail");
+  assert.equal(response.status, 200);
+  const { agent } = await response.json();
+  assert.deepEqual(agent.boards, []);
+  assert.equal(agent.working, null);
+  assert.equal(h.leaseQueries.length, 1);
+  assert.deepEqual(h.leaseQueries[0].where.agentId, { in: [h.target.id] });
+  assert.equal(matches(h.leases[0], h.leaseQueries[0].where), false);
+  assert.equal(h.state.flagReads, 1);
+});
+
+for (const [label, options] of [
+  ["ungranted WATCH actor", { enforce: false }],
+  ["human owner", { actor: "owner" }],
+  ["human member", { actor: "member" }],
+  ["human guest", { actor: "guest" }],
+  ["Accepted ENFORCE actor", { grant: "accepted" }],
+]) {
+  test(`detail: ${label} still receives the working ticket from the real helper`, async () => {
+    const h = harness(options);
+    const response = await h.request("detail");
+    assert.equal(response.status, 200);
+    const { agent } = await response.json();
+    assert.deepEqual(agent.working, {
+      ticket: h.tasks[1].ticketNumber,
+      title: h.tasks[1].title,
+      url: `/detail/project-${h.project.id}/${h.tasks[1].uniqueIndex}`,
+      since: h.leases[0].createdAt.toISOString(),
+      expiresAt: h.leases[0].expiresAt.toISOString(),
+    });
+    assert.equal(matches(h.leases[0], h.leaseQueries[0].where), true);
+    assert.equal(matches({ ...h.leases[0], agentId: h.agent.id }, h.leaseQueries[0].where), false);
+    assert.equal(matches({ ...h.leases[0], expiresAt: new Date(0) }, h.leaseQueries[0].where), false);
+  });
+}
+
+for (const grant of ["invited", "revoked", "wrong-owner"]) {
+  test(`detail and activity: ${grant} grant refuses working ticket and board usage in ENFORCE`, async () => {
+    const h = harness({ grant, withUsage: true });
+    assert.equal((await (await h.request("detail")).json()).agent.working, null);
+    assert.deepEqual((await (await h.request("activity")).json()).items, []);
+  });
+}
+
+test("working helper: omitted acting-agent argument preserves the owned-list caller in both modes", async () => {
+  for (const enforce of [true, false]) {
+    const h = harness({ enforce });
+    const result = await h.run({ url: "https://example.invalid/api/agents/owned" }, () =>
+      h.working.workingOnByAgent([h.target.id], h.user.id));
+    assert.equal(result.get(h.target.id).ticket, h.tasks[1].ticketNumber);
+    const empty = await h.working.workingOnByAgent([], h.user.id);
+    assert.equal(empty.size, 0);
+    assert.equal(h.leaseQueries.length, 1);
+  }
+});
+
+test("detail: a grant cannot widen the working helper's existing human access in either mode", async () => {
+  for (const enforce of [true, false]) {
+    const h = harness({ grant: "accepted", enforce });
+    h.project.ownerId = 99;
+    h.project.owner = { id: 99, agents: [] };
+    assert.equal((await (await h.request("detail")).json()).agent.working, null);
+  }
+});
+
+test("activity: ungranted ENFORCE actor receives no board or null-project model usage", async () => {
+  const h = harness({ withUsage: true });
+  const response = await h.request("activity");
+  assert.equal(response.status, 200);
+  assert.deepEqual((await response.json()).items, []);
+  assert.equal(h.projectQueries.length, 1);
+  assert.deepEqual(h.projectQueries[0].select, { id: true });
+  assert.deepEqual(h.usageQueries[0].where, { agentId: h.target.id, projectId: { in: [] } });
+  assert.equal(h.state.flagReads, 1);
+});
+
+for (const [label, options] of [
+  ["ungranted WATCH actor", { enforce: false }],
+  ["human owner", { actor: "owner" }],
+  ["human member", { actor: "member" }],
+  ["human guest", { actor: "guest" }],
+]) {
+  test(`activity: ${label} retains all prior model usage including null projectId`, async () => {
+    const h = harness({ ...options, withUsage: true });
+    const response = await h.request("activity");
+    assert.equal(response.status, 200);
+    const modelItems = (await response.json()).items.filter(item => item.kind === "model");
+    assert.deepEqual(modelItems.map(item => [item.id, item.detail, item.tokens]).sort(), [
+      ["model-board", "board-model", 101],
+      ["model-other-board", "other-model", 202],
+      ["model-no-board", "unattributed-model", 303],
+    ].sort());
+    assert.equal(h.projectQueries.length, 0);
+    assert.deepEqual(h.usageQueries[0].where, { agentId: h.target.id });
+    assert.equal(h.usageQueries[0].take, 40);
+    assert.deepEqual(h.usageQueries[0].orderBy, { createdAt: "desc" });
+  });
+}
+
+test("activity: Accepted ENFORCE actor sees only its granted board model usage", async () => {
+  const h = harness({ grant: "accepted", withUsage: true });
+  const response = await h.request("activity");
+  assert.equal(response.status, 200);
+  const items = (await response.json()).items;
+  assert.equal(items.filter(item => item.kind !== "model").length, 4);
+  assert.deepEqual(items.filter(item => item.kind === "model").map(item => [item.id, item.detail, item.tokens]), [
+    ["model-board", "board-model", 101],
+  ]);
+  assert.equal(h.projectQueries.length, 1);
+  assert.deepEqual(h.usageQueries[0].where, { agentId: h.target.id, projectId: { in: [h.project.id] } });
+  assert.equal(h.usageQueries[0].take, 40);
+  assert.deepEqual(h.usageQueries[0].orderBy, { createdAt: "desc" });
+  assert.equal(matches({ ...h.usageRows[0], agentId: h.agent.id }, h.usageQueries[0].where), false);
+  assert.equal(h.state.flagReads, 1);
+});
+
+test("activity: an ENFORCE grant cannot expose usage on a board the human cannot access", async () => {
+  const h = harness({ grant: "accepted", withUsage: true });
+  h.project.ownerId = 99;
+  h.project.owner = { id: 99, agents: [] };
+  assert.deepEqual((await (await h.request("activity")).json()).items, []);
 });

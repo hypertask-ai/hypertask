@@ -131,7 +131,7 @@ async function getAgentDetails(
         },
         _max: { createdAt: true },
       }),
-      workingOnByAgent([agent.id], user.id),
+      workingOnByAgent([agent.id], user.id, actingAgentId),
       prisma.project.findMany({
         where: {
           status: "Normal",
