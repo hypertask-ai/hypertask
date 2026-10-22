@@ -264,7 +264,6 @@ test('layout lock: comment composer is the end of the ticket thread', async ({ p
 test('layout lock: phone New Task title has a real height and accepts a tap', async ({ page }, testInfo) => {
   test.skip(testInfo.project.name !== 'Mobile', 'phone title invariant')
   const fixture = JSON.parse(readFileSync(fixturePath, 'utf8')) as { flags: Record<string, boolean> }
-  test.skip(!fixture.flags['htpr-6970-phone-new-task-title'], 'phone title fix is off')
   const flagsResponse = page.waitForResponse(response => new URL(response.url()).pathname === '/api/flags' && response.ok())
   await page.goto(withRealtime(process.env.SMOKE_BOARD_PATH!), { waitUntil: 'load' })
   const { flags } = await (await flagsResponse).json() as { flags: Record<string, boolean> }

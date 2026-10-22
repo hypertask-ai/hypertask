@@ -370,13 +370,10 @@ test("invite email bugfix defaults to Everyone and respects OFF", async () => {
   assert.equal(await flags.isFeatureEnabled(key, 2343), false);
 });
 
-test("phone New Task title fix defaults to Everyone as a bugfix", async () => {
-  const key = flags.HTPR_6970_PHONE_NEW_TASK_TITLE_FLAG;
-  assert.equal(key, "htpr-6970-phone-new-task-title");
-  assert.equal(flags.defaultFeatureFlagMode(key), "EVERYONE");
-  const entry = (await flags.listFeatureFlagModes()).find(entry => entry.key === key);
-  assert.equal(entry.kind, "bugfix");
-  assert.equal(entry.mode, "EVERYONE");
+test("phone New Task title behavior is permanent and its flag is gone", async () => {
+  assert.equal(flags.HTPR_6970_PHONE_NEW_TASK_TITLE_FLAG, undefined);
+  assert.equal(definitions.some(entry => entry.key === "htpr-6970-phone-new-task-title"), false);
+  assert.equal((await flags.listFeatureFlagModes()).some(entry => entry.key === "htpr-6970-phone-new-task-title"), false);
 });
 
 test("quick-add view context defaults to Everyone as a bugfix and respects OFF", async () => {
