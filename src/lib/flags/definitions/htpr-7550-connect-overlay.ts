@@ -6,7 +6,7 @@ export default {
   key: HTPR_7550_CONNECT_OVERLAY_FLAG,
   kind: "feature",
   defaultMode: "OWNER_ONLY",
-  shippedOn: "2026-10-21",
+  shippedOn: "2026-10-22",
   releaseRisk: {
     risk: "new",
     reason: "Shows the existing agent picker in a modal before the first-task pointer; no signup, access, billing or email changes.",
