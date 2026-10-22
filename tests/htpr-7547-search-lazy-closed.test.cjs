@@ -10,7 +10,7 @@ const ts = require('typescript');
 const root = path.resolve(__dirname, '..');
 const flag = 'htpr-7547-search-lazy-closed';
 
-async function withSearch({ enabled, layout = true, mobile = true, delayed = false, loaded = true, hydrate = false, apple = false, suspendPanel = false, tab = 'search' }, check) {
+async function withSearch({ enabled, layout = true, mobile = true, delayed = false, loaded = true, hydrate = false, apple = false, suspendPanel = false, tab = 'search', importFailures = 0 }, check) {
   const dom = new JSDOM('<div id="root"></div>', { url: 'https://example.test/search' });
   const globals = ['window', 'document', 'IS_REACT_ACT_ENVIRONMENT'].map((key) => [key, Object.getOwnPropertyDescriptor(global, key)]);
   Object.assign(global, { window: dom.window, document: dom.window.document, IS_REACT_ACT_ENVIRONMENT: true });
@@ -78,6 +78,7 @@ async function withSearch({ enabled, layout = true, mobile = true, delayed = fal
   mod.require = (id) => {
     if (id === '@/components/commands') {
       imports++;
+      const failImport = importFailures-- > 0;
       const commands = { __esModule: true, default: ({ contextOptions, callbackHandler, focusProxy }) => {
         renders++;
         if (suspendPanel && !released) throw wait;
@@ -85,7 +86,8 @@ async function withSearch({ enabled, layout = true, mobile = true, delayed = fal
         pendingEnter = focusProxy?.pendingEnter;
         return React.createElement('button', { id: 'commands', onClick: () => callbackHandler(!contextOptions.searchOptions.includeArchived, 'ToggleArchivedSearchResults') }, `Archived: ${contextOptions.searchOptions.includeArchived}`);
       } };
-      return delayed ? { __esModule: true, then: (resolve) => wait.then(() => resolve(commands)) } : commands;
+      if (failImport && !delayed) throw new Error('Command import failed');
+      return delayed ? { __esModule: true, then: (resolve, reject) => wait.then(() => failImport ? reject(new Error('Command import failed')) : resolve(commands)) } : commands;
     }
     if (Object.hasOwn(stubs, id)) return stubs[id];
     if (id === 'react' || id === 'react/jsx-runtime') return require(id);
@@ -341,4 +343,39 @@ test('HTPR-7547 editing pending proxy text cancels the queued Enter even when th
       assert.equal(pendingEnter(), undefined);
     });
   }
+});
+
+
+test('HTPR-7547 a failed command import closes the palette and the next open retries it', async () => {
+  for (const loaded of [true, false]) {
+    await withSearch({ enabled: true, loaded, delayed: true, importFailures: 1 }, async ({ open, proxy, pressProxy, release, imports, resultsMarkup, pendingEnter }) => {
+      const baseline = resultsMarkup();
+      await open();
+      proxy().value = 'draft';
+      await pressProxy('Enter', { code: 'Enter' });
+      await release();
+      assert.equal(imports(), 1);
+      assert.equal(proxy(), null, 'a failed import closes the palette instead of leaving it invisible');
+      assert.equal(document.querySelector('[role="alert"]'), null, 'no new UI on a failed import');
+      assert.equal(resultsMarkup(), baseline, 'a failed tool import cannot hide search results');
+      await open();
+      await release();
+      assert.equal(imports(), 2);
+      assert.ok(document.getElementById('commands'));
+      assert.equal(pendingEnter(), undefined, 'the closed draft does not submit on reopen');
+    });
+  }
+});
+
+
+test('HTPR-7547 failed background warmup stays invisible and opening retries the import', async () => {
+  await withSearch({ enabled: false, importFailures: 1 }, async ({ open, imports, markup }) => {
+    assert.equal(imports(), 1);
+    assert.equal(document.querySelector('[role="alert"]'), null);
+    assert.match(markup(), /QASA-43/);
+    await open();
+    assert.equal(imports(), 2);
+    assert.ok(document.getElementById('commands'));
+    assert.equal(document.querySelector('[role="alert"]'), null);
+  });
 });

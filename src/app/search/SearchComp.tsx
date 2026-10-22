@@ -102,7 +102,9 @@ const SearchComp = ({
     let cancelled = false;
     void import("@/components/commands").then(({ default: Commands }) => {
       if (!cancelled) startTransition(() => setCommands(() => Commands));
-    }).catch(() => {});
+    }).catch(() => {
+      if (!cancelled && lazyClosedCommands) setShowCommands((prev) => prev.show ? { ...prev, show: false } : prev);
+    });
     return () => { cancelled = true; };
   };
   useEffect(lazyClosedCommands && !showCommands.show ? () => {} : loadCommands,

@@ -30,7 +30,8 @@ async function withPalette(t, config, check) {
   const dom = new JSDOM('<div id="root"></div>', { url: `https://example.test${config.url ?? '/project?id=7'}` });
   const globals = ['window', 'document', 'navigator', 'HTMLElement', 'localStorage', 'IS_REACT_ACT_ENVIRONMENT', 'File', 'requestAnimationFrame', 'fetch', 'DOMParser']
     .map((key) => [key, Object.getOwnPropertyDescriptor(global, key)]);
-  Object.assign(global, { DOMParser: dom.window.DOMParser, window: dom.window, document: dom.window.document, HTMLElement: dom.window.HTMLElement, localStorage: dom.window.localStorage, File: dom.window.File, IS_REACT_ACT_ENVIRONMENT: true, requestAnimationFrame: (fn) => fn() });
+  const animationFrames = [];
+  Object.assign(global, { DOMParser: dom.window.DOMParser, window: dom.window, document: dom.window.document, HTMLElement: dom.window.HTMLElement, localStorage: dom.window.localStorage, File: dom.window.File, IS_REACT_ACT_ENVIRONMENT: true, requestAnimationFrame: (fn) => config.deferAnimationFrames ? animationFrames.push(fn) : fn() });
   Object.defineProperty(global, 'navigator', { configurable: true, value: dom.window.navigator });
   dom.window.HTMLElement.prototype.attachEvent = () => {};
   dom.window.HTMLElement.prototype.detachEvent = () => {};
@@ -46,7 +47,7 @@ async function withPalette(t, config, check) {
     focusProxy.current = document.createElement('textarea');
     focusProxy.current.value = config.bufferedText;
     document.body.appendChild(focusProxy.current);
-    focusProxy.current.focus();
+    focus.call(focusProxy.current);
     focusProxy.current.setSelectionRange(2, 5);
   }
   const cached = new Map(Object.entries(require.cache));
@@ -191,7 +192,12 @@ async function withPalette(t, config, check) {
       await React.act(async () => reactRoot.render(React.createElement(config.strict ? React.StrictMode : React.Fragment, null, React.createElement(Harness))));
       assert.equal(document.getElementById('root').innerHTML, current);
     };
-    await check({ dom, focusProxy, input, type, press, clickTab, finish, fail, rerender, flags, values, set, requests, navigations, cacheAdds, cacheUpdates, queryClient, viewedTasks, loadedBoards, shells, capture, baseline, source, stub, jiti, mountProbe, headerState: () => headerState, legacyJ: () => legacyJ });
+    const flushAnimationFrame = () => React.act(async () => {
+      const callbacks = animationFrames.splice(0);
+      assert.ok(callbacks.length, 'a focus retry must be pending');
+      callbacks.forEach((callback) => callback());
+    });
+    await check({ dom, flushAnimationFrame, focusProxy, input, type, press, clickTab, finish, fail, rerender, flags, values, set, requests, navigations, cacheAdds, cacheUpdates, queryClient, viewedTasks, loadedBoards, shells, capture, baseline, source, stub, jiti, mountProbe, headerState: () => headerState, legacyJ: () => legacyJ });
   } finally {
     document.removeEventListener('keydown', legacy);
     try {
@@ -1645,5 +1651,29 @@ test('HTPR-7547 flag On preserves the opted-in Compose handoff for existing prox
       assert.equal(input().value, 'existing host draft');
       assert.equal(focusProxy.current.value, '');
     });
+  }
+});
+
+
+test('HTPR-7547 queued Compose Enter submits once when mobile focus lands in a later animation frame', async (t) => {
+  for (const strict of [false, true]) {
+    for (const preserveColdCommandInput of [true, false, undefined]) {
+      const bufferedText = 'first line\nsecond line';
+      await withPalette(t, { tab: 'compose', mobile: true, strict, preserveColdCommandInput, bufferedText, pendingEnter: bufferedText, focusFailures: strict ? 2 : 1, deferAnimationFrames: true }, async ({ input, focusProxy, requests, flushAnimationFrame, rerender }) => {
+        assert.equal(input().value, bufferedText, 'text commits before the focus retry');
+        assert.equal(document.activeElement, focusProxy.current);
+        assert.equal(requests.length, 0, 'queued Enter waits for the focus handoff');
+        assert.equal(focusProxy.pendingEnter, bufferedText);
+        let focusLanded = false;
+        input().addEventListener('focus', () => { focusLanded = true; });
+        await flushAnimationFrame();
+        assert.equal(focusLanded, true, 'the retry focuses Compose before submitting');
+        assert.equal(requests.length, 1);
+        assert.equal(requests[0].body.text, bufferedText);
+        assert.equal(focusProxy.pendingEnter, undefined);
+        await rerender();
+        assert.equal(requests.length, 1, 'focus changes and StrictMode cannot resubmit');
+      });
+    }
   }
 });

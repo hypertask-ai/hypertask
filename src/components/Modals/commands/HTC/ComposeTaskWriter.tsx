@@ -90,6 +90,7 @@ export default function ComposeTaskWriter({ active, focusProxy, destinationProje
   const mobile = Boolean(useContext(MobileViewContext));
   const phoneTaskWriterSheet = phoneTaskWriterSheetEnabled && mobile && active;
   const [text, setText] = useState("");
+  const [inputFocused, setInputFocused] = useState(false);
   const [writing, setWriting] = useState(false);
   const [stage, setStage] = useState<ComposeTaskStage | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -349,7 +350,7 @@ export default function ComposeTaskWriter({ active, focusProxy, destinationProje
         text !== focusProxy.pendingEnter || document.activeElement !== input.current) return;
     delete focusProxy.pendingEnter;
     void send();
-  }, [active, text, focusProxy]);
+  }, [active, text, focusProxy, inputFocused]);
 
   const attachments = fileItems.length > 0 && (
     <Suspense fallback={null}>
@@ -383,6 +384,8 @@ export default function ComposeTaskWriter({ active, focusProxy, destinationProje
             ))}
             <AiComposerTextarea
               ref={input}
+              onFocus={() => setInputFocused(true)}
+              onBlur={() => setInputFocused(false)}
               value={text}
               onChange={(event) => {
                 if (focusProxy) delete focusProxy.pendingEnter;
