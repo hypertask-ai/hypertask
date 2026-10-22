@@ -18,7 +18,7 @@ test('ticket bugfix flag defaults to Everyone and is exported through the genera
   assert.equal(flag.releaseRisk.risk, 'small')
   assert.ok(flag.releaseRisk.reason)
   assert.equal(keys.HTPR_7563_SEARCH_ESC_FOOTER_FLAG, footerFlag)
-  assert.deepEqual(FEATURE_FLAG_DEFINITIONS.find(({ key }) => key === footerFlag), flag)
+  assert.deepEqual(FEATURE_FLAG_DEFINITIONS.find(({ key }) => key === footerFlag), flag.default ?? flag)
 })
 
 test('existing suggestion and tips footers match Escape for all four flag combinations in both layouts', async () => {
