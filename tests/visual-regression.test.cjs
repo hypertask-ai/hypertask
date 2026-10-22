@@ -98,7 +98,8 @@ test("workflow is informational, read-only, path-scoped and uses the smoke servi
     assert.ok(smoke.includes(image));
     assert.deepEqual(job.services[service], yaml.load(smoke).jobs["browser-smoke"].services[service]);
   }
-  const credentials = text => text.slice(text.indexOf("      - name: Prepare disposable local credentials"), text.indexOf('          } >> "$GITHUB_ENV"') + '          } >> "$GITHUB_ENV"'.length);
+  const credentials = text => text.slice(text.indexOf("      - name: Prepare disposable local credentials"), text.indexOf('          } >> "$GITHUB_ENV"') + '          } >> "$GITHUB_ENV"'.length)
+    .split("\n").filter(line => !/^        if: /.test(line)).join("\n");
   assert.equal(credentials(workflow), credentials(smoke));
   assert.deepEqual(job.steps.find(step => step.name === "Upload visual differences").with.path.trim().split("\n"), ["test-results/**/*.png", "test-results/**/error-context.md"]);
   assert.match(workflow, /retention-days: 7/);

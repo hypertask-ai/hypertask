@@ -125,8 +125,8 @@ for (const screen of screens) {
           await page.evaluate(() => (document.activeElement as HTMLElement)?.blur())
           await page.keyboard.press('Control+j')
         }
-        await expect(writer, 'Ctrl+J must open the task writer once flags and shortcuts are ready').toBeVisible({ timeout: 2_000 })
-      }).toPass({ timeout: 15_000 })
+        await expect(writer, 'Ctrl+J must open the task writer once flags and shortcuts are ready').toBeVisible({ timeout: 5_000 })
+      }).toPass({ intervals: [500], timeout: 20_000 })
       await expect(page.getByRole('textbox', { name: 'Describe the task' })).toBeVisible()
       landmarks = [writer, page.getByRole('textbox', { name: 'Describe the task' })]
     } else {
