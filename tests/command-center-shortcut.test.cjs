@@ -69,7 +69,7 @@ test("the signed-in shell renders the Command Center where no route host exists"
   );
   assert.match(
     provider,
-    /showCommands\.show\s*&&\s*shouldRenderGlobalCommandMenu\(pathname\)\s*&&\s*\(?\s*<HypertasksCommands \/>/,
+    /showCommands\.show\s*&&\s*shouldRenderGlobalCommandMenu\(pathname, myTasksSingleCommandCenter\)\s*&&\s*\(?\s*<HypertasksCommands \/>/,
   );
 });
 
