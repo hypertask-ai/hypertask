@@ -325,8 +325,12 @@ function commentVerdict(comment) {
   // Agents for the same owner keep his attribution: any edit he did not make himself blocks until a fresh yes.
   if (comment.editedAt != null && !(comment.editedBy && humanValentin(comment.editedBy, 'userId'))) return 'reject';
   const text = plainText(comment.text).trim().toLowerCase().replace(/[’‘]/g, "'");
-  if (/^(?:no|nope|not|reject|don't)\b|\b(?:no|not|but|change|instead)\b|n't/.test(text)) return 'reject';
-  return /^(?:(?:yes|yep|yeah|go|ok|okay|agree|approve|approved|lgtm|looks good|ship it)\b|👍)/u.test(text) ? 'approve' : null;
+  if (/^(?:no|nope|not|reject|don't)\b/.test(text)) return 'reject';
+  const yesFirst = /^(?:(?:yes|yep|yeah|go|ok|okay|agree|agreed|approve|approved|lgtm|looks good|ship it)\b|👍)/u.test(text);
+  if (!/\b(?:no|not|but|change|instead)\b|n't/.test(text)) return yesFirst ? 'approve' : null;
+  const asksSeparateTicket = /\b(?:new|separate|another|follow-?up) ticket\b/.test(text);
+  const wantsChangeHere = /\b(?:first|before|instead|not like this)\b|\b(?:don't|do not|dont) (?:build|ship|merge)\b/.test(text);
+  return yesFirst && asksSeparateTicket && !wantsChangeHere ? 'approve' : 'reject';
 }
 
 function asksYesToShipElements(comment, wireframeLink, designIds, newElements) {
