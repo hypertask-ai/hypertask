@@ -61,7 +61,6 @@ import {
   HTPR_7053_COMPOSE_BOARD_CHIP_FLAG,
   HTPR_6868_TICKET_PREFIX_FLAG,
   HTPR_6930_MY_TASKS_KANBAN_REUSE_FLAG,
-  HTPR_6567_COMMAND_SCOPE_PICKER_FLAG,
   MY_TASKS_SCOPES_FLAG,
   MY_TASKS_TIME_GROUP_FLAG,
   MY_TASKS_FILTER_PARITY_FLAG,
@@ -177,7 +176,6 @@ const Commands = (props: Props) => {
   const autoTaskDescriptionsEnabled = useFlag("htpr-6177-auto-task-descriptions");
   const myTasksViewsEnabled = useFlag(MY_TASKS_VIEWS_FLAG);
   const kanbanReuseEnabled = useFlag(HTPR_6930_MY_TASKS_KANBAN_REUSE_FLAG);
-  const commandScopePickerFlag = useFlag(HTPR_6567_COMMAND_SCOPE_PICKER_FLAG);
   const myTasksScopesEnabled = useFlag(MY_TASKS_SCOPES_FLAG);
   const myTasksTimeGroupEnabled = useFlag(MY_TASKS_TIME_GROUP_FLAG);
   const myTasksFilterParityEnabled = useFlag(MY_TASKS_FILTER_PARITY_FLAG);
@@ -219,7 +217,7 @@ const Commands = (props: Props) => {
         keywords: `${project.title} board project go open switch`,
       }));
     let scopeCommand: ICommandList | undefined;
-    if ((commandScopePickerFlag || kanbanReuseEnabled) && onMyTasks && myTasksViewsEnabled && myTasksFilterParityEnabled) {
+    if (onMyTasks && myTasksViewsEnabled && myTasksFilterParityEnabled) {
       scopeCommand = {
         key: "myTasksScope",
         name: "Scope",
@@ -415,7 +413,6 @@ const Commands = (props: Props) => {
     onCalendar,
     onMyTasks,
     myTasksViewsEnabled,
-    commandScopePickerFlag,
     kanbanReuseEnabled,
     myTasksScopesEnabled,
     myTasksTimeGroupEnabled,
@@ -614,7 +611,7 @@ const Commands = (props: Props) => {
       }
       if (command.key === "myTasksScope") {
         resetShowCommands();
-        if (onMyTasks && (commandScopePickerFlag || kanbanReuseEnabled)) window.dispatchEvent(new Event("my-tasks-scope-picker"));
+        if (onMyTasks) window.dispatchEvent(new Event("my-tasks-scope-picker"));
         return;
       }
       const myTasksPickerEvents: Record<string, string> = {
@@ -749,7 +746,6 @@ const Commands = (props: Props) => {
       })) : filterCommands.map((legacyPaletteGroup) => ({
         ...legacyPaletteGroup,
         commandLists: legacyPaletteGroup.commandLists.filter((legacyPaletteRow) =>
-          (legacyPaletteRow.key !== "myTasksScope" || commandScopePickerFlag) &&
           !["myTasksInvolvement", "myTasksSort", "myTasksGroup"].includes(legacyPaletteRow.key)
         ),
       }))}

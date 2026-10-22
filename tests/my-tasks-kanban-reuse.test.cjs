@@ -39,24 +39,23 @@ test("flag is registered with the OWNER_AND_QA default and every changed UI entr
   assert.match((read("src/lib/flags.ts") + require("./helpers/flag-files.cjs").source()), /DEFAULT_FEATURE_FLAG_MODE: FeatureFlagMode = "OWNER_AND_QA"/);
   for (const file of [controlsFile, tabsFile, sortFile, saveFile, modalFile, commandsFile,
     "src/app/my-tasks/MyTasksInvolvementPicker.tsx", "src/app/my-tasks/MyTasksGroupPicker.tsx",
-    "src/app/my-tasks/MyTasksSortPicker.tsx", "src/app/my-tasks/MyTasksKanbanFilterModal.tsx",
-    "src/components/Modals/OptionPicker/index.tsx", "src/components/Modals/AssignToUser/AssignToUser.tsx",
+    "src/app/my-tasks/MyTasksSortPicker.tsx",
+    "src/components/Modals/OptionPicker/index.tsx",
     "src/components/PageComponents/Kanban/TableView/TableColumnsPicker.tsx",
     "src/components/PageComponents/Kanban/HeaderComponents/ShellViewControls.tsx",
-    "src/components/Modals/FilterModals/SelectFilters/FilterHTC.tsx",
     "src/components/Modals/FilterModals/SelectFilters/ShowFilterOptionsModal.tsx"]) {
     assert.match(read(file), new RegExp(`useFlag\\(${flagName}\\)`), file);
   }
 });
 
-test("All boards toggles through setBoards in AssignModal and both legacy rows", () => {
+test("All boards toggles through setBoards in AssignModal and the legacy filter row", () => {
   const source = read(controlsFile);
   const toggle = /setBoards\(kanbanReuseEnabled && config\.boardIds === null \? \[\] : null\)/g;
-  assert.equal([...source.matchAll(toggle)].length, 3);
+  assert.equal([...source.matchAll(toggle)].length, 2);
   assert.match(source, /onSelect: \(id\) => id === null \? setBoards\(kanbanReuseEnabled/);
   assert.match(source, /sectionIds: config\.filters\.sectionIds\.filter/);
   assert.match(source, /labelIds: config\.filters\.labelIds\.filter/);
-  assert.match(read("src/components/Modals/AssignToUser/AssignToUser.tsx"), /commandScopePickerEnabled \|\| kanbanReuseEnabled \? boardPickerProp/);
+  assert.match(read("src/components/Modals/AssignToUser/AssignToUser.tsx"), /\{boardPicker \? \(/);
 });
 
 test("picker adapters reuse OptionPicker and preserve involvement fallback and group values", () => {
@@ -113,14 +112,13 @@ test("commands cached by search disappear when the flag turns off or the route c
   const js = ts.transpileModule(`const result = ${expression.getText(source)};`, {
     compilerOptions: { module: ts.ModuleKind.CommonJS },
   }).outputText;
-  const evaluate = new Function("kanbanReuseEnabled", "commandScopePickerFlag", "onMyTasks", "filterCommands", `${js}; return result;`);
+  const evaluate = new Function("kanbanReuseEnabled", "onMyTasks", "filterCommands", `${js}; return result;`);
   const keys = ["myTasksScope", "myTasksInvolvement", "myTasksSort", "myTasksGroup", "otherCommand"];
   const groups = [{ commandLists: keys.map((key) => ({ key })) }];
-  const result = (flag, legacy, route) => evaluate(flag, legacy, route, groups)[0].commandLists.map((row) => row.key);
-  assert.deepEqual(result(true, false, true), keys, "positive control shows new commands");
-  assert.deepEqual(result(false, true, true), ["myTasksScope", "otherCommand"]);
-  assert.deepEqual(result(false, false, true), ["otherCommand"]);
-  assert.deepEqual(result(true, false, false), ["myTasksScope", "otherCommand"]);
+  const result = (flag, route) => evaluate(flag, route, groups)[0].commandLists.map((row) => row.key);
+  assert.deepEqual(result(true, true), keys, "positive control shows new commands");
+  assert.deepEqual(result(false, true), ["myTasksScope", "otherCommand"]);
+  assert.deepEqual(result(true, false), ["myTasksScope", "otherCommand"]);
 });
 
 test("Save as view and standalone Save are flag-off only, with a controlled personal-only SaveView path", () => {
@@ -163,7 +161,7 @@ const box = ({ children }) => React.createElement("div", null, children);
 const overrides = {
   "react": React,
   "reactstrap": { ModalBody: box },
-  "@/hooks/useFlag": { useFlag: (key) => key === flagKey ? enabled : !["htpr-6567-command-scope-picker", "htpr-6938-my-tasks-icon-controls"].includes(key) },
+  "@/hooks/useFlag": { useFlag: (key) => key === flagKey ? enabled : key !== "htpr-6938-my-tasks-icon-controls" },
   "@/hooks/MultiPages/useClickOutside": { default: noop },
   "@/hooks/General/useHandleMouse": { default: ({ setSelectedIndex }) => ({ handleMouseEnter: setSelectedIndex, handleMouseLeave: noop, handleMouseMove: noop, elRef: React.useRef(null) }) },
   "@/hooks/General/useHandleKeydownBasic": { default: () => { const [selectedIndex, setSelectedIndex] = React.useState(0); return { selectedIndex, setSelectedIndex, handleKeydown: noop }; } },
@@ -255,7 +253,7 @@ test("flag off keeps the legacy involvement, sort, group and Save as view contro
   assert.equal(button("Save view"), undefined);
 });
 
-test("All boards toggles null to empty and back with 6930 on and 6567 off, pruning filters", () => {
+test("All boards toggles null to empty and back with 6930 on, pruning filters", () => {
   enabled = true;
   config.filters.sectionIds = [11]; config.filters.labelIds = ["a"];
   render(Harness);

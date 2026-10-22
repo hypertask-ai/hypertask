@@ -9,7 +9,6 @@ import useClickOutside from "@/hooks/MultiPages/useClickOutside";
 import { useFlag } from "@/hooks/useFlag";
 import {
   HTPR_6938_MY_TASKS_ICON_CONTROLS_FLAG,
-  HTPR_6567_COMMAND_SCOPE_PICKER_FLAG,
   MY_TASKS_FILTER_PARITY_FLAG,
   MY_TASKS_LIVE_UPDATES_FLAG,
   MY_TASKS_PRIORITY_FILTER_FLAG,
@@ -217,7 +216,6 @@ const MyTasks = ({
   );
   const lastColumnsPickerRequest = useRef(columnsPickerRequest);
 
-  const commandScopePickerEnabled = useFlag(HTPR_6567_COMMAND_SCOPE_PICKER_FLAG);
   const filterEnabled = useFlag(MY_TASKS_PRIORITY_FILTER_FLAG);
   const myTasksBulkSelectionEnabled = useFlag(MY_TASKS_BULK_SELECTION_FLAG);
   const [prioritySelection, setPrioritySelection] = useState<
@@ -1393,11 +1391,13 @@ const boardTabCounts = useMemo(() => {
         dueDate: null,
         createdRange: null,
         updatedRange: null,
-        ...(commandScopePickerEnabled ? { sectionIds: [], showDone: false, showSnoozed: false } : {}),
+        sectionIds: [],
+        showDone: false,
+        showSnoozed: false,
       },
       filterSettings: emptyFilterSettings(),
     }));
-  }, [commandScopePickerEnabled, updateViewConfig]);
+  }, [updateViewConfig]);
 
   const onClearNotStarred = useCallback(() => {
     updateViewConfig((current) => ({
@@ -1431,7 +1431,7 @@ const boardTabCounts = useMemo(() => {
       {filterParityEnabled && kanbanFiltersOpen && (
         <MyTasksKanbanFilterModal
           boards={boards}
-          config={commandScopePickerEnabled ? viewConfig : undefined}
+          config={viewConfig}
           onViewChange={updateViewConfig}
           snoozeEnabled={myTasksSnoozeEnabled}
           settings={viewConfig.filterSettings}
