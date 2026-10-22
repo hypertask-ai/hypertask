@@ -60,7 +60,7 @@ async function withSearch(t, config, check) {
     source('src/components/ProviderGlobal/useGlobalUIState.ts', { useGlobalUIState: () => ({ openAIChatInterface() { aiOpened++ } }) })
     source('src/components/commands.tsx', { default: () => null })
     source('src/components/PageComponents/Kanban/HeaderComponents/AppShellRail.tsx', { default: () => null })
-    source('src/styles/search.module.scss', { default: { links_modal: 'links_modal', list_container: 'list_container', links_list: 'links_list' } })
+    source('src/styles/search.module.scss', { default: { links_modal: 'links_modal', list_container: 'list_container', list_container_pane: 'list_container_pane', links_list: 'links_list' } })
     source('src/app/search/search-autocomplete.css', {})
     source('src/store/index.ts', { inViewObjectAtom: {}, SearchTaskIndexAtom, showCommandsAtom: {}, tasksPlayListAtom: {}, aiChatPendingPromptAtom: {}, appShellRailAtom: {} })
     source('src/hooks/Search/useSearchCache.ts', { useGetSearchCache: () => ({ data: cache }) })
@@ -1526,4 +1526,22 @@ test('HTPR-7558 still starts a populated URL search in result-navigation mode', 
     assert.equal(state().selectedIndex, 0)
     assert.equal(requests.length, 0)
   })
+})
+
+test('HTPR-7618 result rows follow the search pane width only while the bugfix flag is on', async (t) => {
+  for (const enabled of [true, false]) {
+    await withSearch(t, { query: 'login', flags: { 'htpr-7618-search-rows-fit-pane': enabled } }, async ({ complete }) => {
+      await complete()
+      const grid = document.getElementById('task_1').firstElementChild
+      assert.equal(grid.classList.contains('list_container_pane'), enabled)
+      assert.equal(grid.classList.contains('list_container'), !enabled)
+    })
+  }
+})
+
+test('HTPR-7618 pane rows switch to the wide grid by container width, the old rows by window width', () => {
+  const css = require('sass').compile(path.join(root, 'src/styles/search.module.scss')).css
+  assert.match(css, /@container \(min-width: 768px\)\s*\{\s*\.links_modal \.list_container_pane \{\s*display: grid;/)
+  assert.match(css, /@media \(min-width: 768px\)\s*\{\s*\.links_modal \.list_container \{\s*display: grid;/)
+  assert.match(css, /\.links_modal \.list_container_pane \{[^}]*display: flex;[^}]*flex-direction: column;/)
 })

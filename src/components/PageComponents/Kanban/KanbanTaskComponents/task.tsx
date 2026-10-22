@@ -48,7 +48,7 @@ import type { BlockerUser } from "./BlockerChip";
 import { splitAssignees } from "@/lib/assignees";
 import { useKanbanBulkSelection } from "@/lib/contexts/Kanban/BulkSelectionContext";
 import { useFlag } from "@/hooks/useFlag";
-import { HTPR_6427_ROW_SHORTCUTS_FLAG } from "@/lib/flags/keys";
+import { HTPR_6427_ROW_SHORTCUTS_FLAG, HTPR_7263_PHONE_HOLD_SELECT_FLAG } from "@/lib/flags/keys";
 import type {
   DraggableProvided,
   DraggableStateSnapshot,
@@ -75,7 +75,7 @@ interface IProps {
   dragSnapshot?: DraggableStateSnapshot;
 }
 
-type TaskContentProps = IProps & { rowShortcutsEnabled: boolean };
+type TaskContentProps = IProps & { rowShortcutsEnabled: boolean; phoneHoldSelect: boolean };
 
 const TaskContent = ({
   task,
@@ -97,6 +97,7 @@ const TaskContent = ({
   dragProvided,
   dragSnapshot,
   rowShortcutsEnabled,
+  phoneHoldSelect,
 }: TaskContentProps) => {
   const isApple = useDeviceContext();
   const {
@@ -977,6 +978,7 @@ const TaskContent = ({
         navigateToTask(task.projectId, task.uniqueIndex, "push", undefined, task);
       }}
       selectionMode={bulkSelectedCount > 0}
+      phoneHoldSelect={phoneHoldSelect}
       onSelectionClick={
         isArchivedOnBoard
           ? undefined
@@ -1036,7 +1038,10 @@ const MemoizedTaskContent = React.memo(TaskContent);
 
 export default function Task(props: IProps) {
   const rowShortcutsEnabled = useFlag(HTPR_6427_ROW_SHORTCUTS_FLAG);
-  return (
-    <MemoizedTaskContent {...props} rowShortcutsEnabled={rowShortcutsEnabled} />
+  const phoneHoldSelect = useFlag(HTPR_7263_PHONE_HOLD_SELECT_FLAG);
+  return phoneHoldSelect ? (
+    <MemoizedTaskContent {...props} rowShortcutsEnabled={rowShortcutsEnabled} phoneHoldSelect />
+  ) : (
+    <MemoizedTaskContent {...props} rowShortcutsEnabled={rowShortcutsEnabled} phoneHoldSelect={false} />
   );
 }
