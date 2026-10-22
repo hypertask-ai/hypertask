@@ -27,6 +27,14 @@ out="$TEST_CHECKOUT/.github/workflows/gitleaks.yml"
 sh "$src/install-workflow" "$TEST_CHECKOUT"
 cmp "$src/gitleaks.yml" "$out"
 echo 'ok - PUBLIC is byte-identical and uses checkout origin, not upstream or GH_REPO'
+grep -qxF '  push:' "$out"
+grep -qxF '    branches: [main, master, production]' "$out"
+grep -qxF '  pull_request:' "$out"
+grep -qxF '    name: secret-scan' "$out"
+grep -qxF "    if: github.event_name != 'push' || !github.event.deleted" "$out"
+grep -qxF '  group: gitleaks-${{ github.event.pull_request.number || github.ref }}' "$out"
+grep -qxF "  cancel-in-progress: \${{ github.event_name == 'pull_request' }}" "$out"
+echo 'ok - every PR reports secret-scan, only default-branch pushes scan, and only superseded PR runs cancel'
 
 for TEST_VISIBILITY in PRIVATE INTERNAL; do
   export TEST_VISIBILITY

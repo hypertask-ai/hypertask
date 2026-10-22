@@ -100,6 +100,9 @@ export class CommentService {
     try {
       const validatedInput = validateAndSanitizeAddCommentInput(params);
       const { attachments, ...commentInput } = validatedInput;
+      if (attachments?.length) {
+        commentInput.has_attachments = true;
+      }
 
       logger.debug('Adding comment', {
         correlationId,

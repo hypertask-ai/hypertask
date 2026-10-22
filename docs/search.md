@@ -1,6 +1,6 @@
 # Search suggestions
 
-The existing search screen can show an aligned, full-width list under its input when `htpr-6865-search-layout` and `htpr-6688-search-autocomplete` are enabled. The new flag defaults to Owner + QA; the owner controls rollout at `/admin/flags`.
+The existing search screen can show an aligned, full-width list under its input when `htpr-6865-search-layout` is enabled. Autocomplete is always available. The layout flag defaults to Owner + QA; the owner controls rollout at `/admin/flags`.
 
 - Empty search shows recent queries once, with readable filter chips, then operator examples and meanings. Tips use two columns on desktop and one on phones.
 - Typing shows Ask AI first, matching operators next, then matching people, labels and boards. People include their email and the existing avatar; matching letters are bold.
@@ -9,6 +9,6 @@ The existing search screen can show an aligned, full-width list under its input 
 - Draft text does not request document results or display previous results. Accepting a value or recent query, pressing Enter, or loading a search URL runs search. Choosing an operator alone opens its values rather than searching an incomplete filter. Removing a chip or changing archive scope while drafting also waits for submission.
 - Search results and the empty-result message share the input's inset.
 
-With the layout flag off (or any prerequisite off), the existing popover, history, and search behavior remain unchanged. `/api/search/values` returns people emails only to sessions with all four flags enabled, within the existing accessible-board scope.
+With the layout flag off, the existing popover, history, and search behavior remain unchanged. `/api/search/values` returns people emails only to sessions with the layout flag enabled, within the existing accessible-board scope.
 
 Sources: `src/app/search/SearchChipsInput.tsx`, `src/app/search/SearchComp.tsx`, `src/hooks/Search/useSearch.ts`, `src/pages/api/search/values.ts`. Tests: `tests/search-layout.test.cjs` and the existing `tests/search-*` suites.

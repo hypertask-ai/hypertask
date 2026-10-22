@@ -691,6 +691,7 @@ model Team {
   team_activity                Team_Activity?
   byokApiKeys                  TeamByokApiKey[]
   managementApiKeys            BetterAuthApiKey[]
+  githubInstallations          GithubInstallation[]
   slackInstall                 SlackInstall?
   aiProviderSettings           Json?
   webhookSubscriptions         WebhookSubscription[]
@@ -886,6 +887,7 @@ model Project {
   targetDate             DateTime?
   milestones             ProjectMilestone[]
   statusUpdates          ProjectStatusUpdate[]
+  githubRepositories     BoardGithubRepository[]
 
   // @@index([status, teamId]) // For WHERE status="Normal" AND teamId IS NOT NULL
   // @@index([ownerId, status]) // For owner-based queries
@@ -1281,6 +1283,52 @@ model TaskNumberAlias {
   @@index([taskId])
 }
 
+enum GithubRepositoryProvenance {
+  legacy
+  installed
+}
+
+enum GithubPullRequestLinkOrigin {
+  installed
+}
+
+model GithubInstallation {
+  id           String   @id @db.VarChar(32)
+  accountId    String   @db.VarChar(32)
+  accountLogin String   @db.VarChar(100)
+  accountType  String   @db.VarChar(32)
+  teamId       String
+  team         Team     @relation(fields: [teamId], references: [id], onDelete: Restrict)
+  createdAt    DateTime @default(now())
+  revokedAt    DateTime?
+  repositories BoardGithubRepository[]
+
+  @@index([teamId])
+}
+
+model BoardGithubRepository {
+  id             String                     @id @default(uuid())
+  projectId      Int
+  project        Project                    @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  repositoryId   String?                    @db.VarChar(32)
+  fullName       String                     @db.VarChar(201)
+  installationId String?                    @db.VarChar(32)
+  installation   GithubInstallation?        @relation(fields: [installationId], references: [id], onDelete: Restrict)
+  provenance     GithubRepositoryProvenance
+  activatedAt    DateTime                   @default(now())
+  revokedAt      DateTime?
+
+  @@index([projectId, revokedAt])
+  @@index([installationId])
+}
+
+model GithubWebhookDelivery {
+  deliveryId       String   @id @db.VarChar(100)
+  businessEventKey String   @unique @db.VarChar(255)
+  receivedAt       DateTime @default(now())
+  processedAt      DateTime?
+}
+
 model TaskPullRequest {
   id                  String   @id @default(uuid())
   taskId              Int
@@ -1289,6 +1337,7 @@ model TaskPullRequest {
   repositoryName      String   @db.VarChar(100)
   githubRepositoryId  String?  @db.VarChar(32)
   githubPullRequestId String?  @db.VarChar(32)
+  githubLinkOrigin    GithubPullRequestLinkOrigin?
   number              Int
   url                 String   @db.Text
   title               String   @db.Text

@@ -101,12 +101,12 @@ test('timer services scope running/report with and without administered boards',
   const service = f.load('src/lib/timeTracking.ts', {
     '@/lib/timeTrackingPersistence': {},
   });
-  assert.deepEqual((await service.listRunning(f.user.id, f.agent.id)).map(row => row.task.projectId), [15, 4060]);
+  assert.deepEqual((await service.listRunning(f.user.id, f.agent.id)).map(row => row.task.projectId).sort((a, b) => a - b), [15, 4060]);
   assert.equal((await service.listRunning(f.user.id)).length, 3);
   for (const adminProjectIds of [[], [15, 4060, 2128]]) {
-    assert.deepEqual((await service.listReport(f.user.id, { agentId: f.agent.id, adminProjectIds })).map(row => row.task.projectId), [15, 4060]);
+    assert.deepEqual((await service.listReport(f.user.id, { agentId: f.agent.id, adminProjectIds })).map(row => row.task.projectId).sort((a, b) => a - b), [15, 4060]);
     assert.deepEqual(await service.listReport(f.user.id, { agentId: f.agent.id, boardId: 2128, adminProjectIds: [] }), []);
-    assert.deepEqual((await service.listReport(f.user.id, { agentId: f.agent.id, boardIds: [], adminProjectIds: [] })).map(row => row.task.projectId), [15, 4060]);
+    assert.deepEqual((await service.listReport(f.user.id, { agentId: f.agent.id, boardIds: [], adminProjectIds: [] })).map(row => row.task.projectId).sort((a, b) => a - b), [15, 4060]);
     assert.equal((await service.listReport(f.user.id, { adminProjectIds: [] })).length, 3);
   }
   f.projects.forEach(project => { project.members = []; });

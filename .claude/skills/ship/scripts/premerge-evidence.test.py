@@ -31,7 +31,6 @@ class PosterTests(unittest.TestCase):
         self.env = dict(os.environ, HOME=str(self.root),
                         PATH=f'{self.bin}:{os.environ["PATH"]}',
                         PREMERGE_STATUS_STATE=str(self.state),
-                        VCC_EVIDENCE_DIR=str(self.root / 'evidence'),
                         POSTER_TEST_ROOT=str(self.root))
         self.write_checker('first')
         (self.bin / 'gh').write_text('''#!/usr/bin/env python3
@@ -95,7 +94,7 @@ with (pathlib.Path(os.environ['POSTER_TEST_ROOT']) / 'systemctl-calls').open('a'
 ''')
         (self.bin / 'systemctl').chmod(0o755)
 
-    def write_checker(self, version):
+    def write_checker(self, version, state='success'):
         self.production.write_text(f'''#!/usr/bin/env python3
 import json, os, pathlib, sys
 assert sys.argv[1] in ('premerge-status', 'premerge')
@@ -103,7 +102,8 @@ assert os.environ['SHIP_REPO'] == 'hypertask-ai/hypertask'
 assert os.environ['SHIP_BASE'] == 'production'
 with (pathlib.Path(os.environ['POSTER_TEST_ROOT']) / 'published').open('a') as log:
     log.write(json.dumps([{version!r}, sys.argv[2], __file__]) + '\\n')
-print('premerge-evidence: success (fixture)' if sys.argv[1] == 'premerge-status' else 'premerge ok')
+print('premerge-evidence: {state} (test click removed (Valentin 2026-10-21))' if sys.argv[1] == 'premerge-status' else 'test click removed (Valentin 2026-10-21)')
+sys.exit(1 if sys.argv[1] == 'premerge-status' and {state!r} == 'failure' else 0)
 ''')
 
     def sweep(self, path=None, dry_run=False):
@@ -146,7 +146,7 @@ with (root / 'published').open('a') as log:
 if (root / 'post-error').exists():
     print('FAIL: cannot post premerge-evidence; retry')
 else:
-    print('premerge-evidence: failure (missing click)')
+    print('premerge-evidence: failure (cannot confirm unchanged PR head; retry)')
 sys.exit(1)
 ''')
         (self.root / 'post-error').touch()
@@ -183,6 +183,25 @@ sys.exit(1)
         git_calls = [json.loads(line) for line in (self.root / 'gitcalls').read_text().splitlines()]
         self.assertEqual(sum(c[2:3] == ['fetch'] for c in git_calls), 3)
 
+    def test_checker_bytes_change_refreshes_every_waiting_failure_in_one_sweep(self):
+        self.write_checker('waiting', state='failure')
+        self.assertEqual(self.sweep().returncode, 0)
+        first = json.loads((self.state / 'cache.json').read_text())
+        self.assertTrue(all(entry['state'] == 'FAILURE' for entry in first.values()))
+        self.assertEqual(self.sweep().returncode, 0)
+        self.assertEqual(len(self.publications()), 2)
+        self.write_checker('click-removed')
+        result = self.sweep()
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual([p[:2] for p in self.publications()[2:]], [['click-removed', '998'], ['click-removed', '999']])
+        for key in ('998', '999'):
+            self.assertIn(f'PR #{key}: premerge-evidence: success (test click removed (Valentin 2026-10-21))', result.stdout)
+        self.assertIn('sweep: prs=2 skipped=0', result.stdout)
+        updated = json.loads((self.state / 'cache.json').read_text())
+        for key in first:
+            self.assertEqual(updated[key]['state'], 'SUCCESS')
+            self.assertNotEqual(first[key]['fingerprint'], updated[key]['fingerprint'])
+
     def gh_calls(self):
         return [json.loads(line) for line in self.log.read_text().splitlines()]
 
@@ -209,44 +228,10 @@ sys.exit(1)
         self.assertIn('list=graphql rechecks=1', result.stdout)
         self.assertEqual(len(self.gh_calls()), 2)
 
-    def test_evidence_and_binding_changes_recheck_only_affected_pr_in_same_sweep(self):
-        folder = self.root / 'evidence/YPER4-999'
-        folder.mkdir(parents=True)
-        record = folder / 'premerge.md'
-        record.write_text('Recording: click.webm\nClick: PASS fixture\n')
-        video = folder / 'click.webm'
-        video.write_bytes(b'recording')
-        binding = folder / 'pr'
-        binding.write_text('999\n')
-        self.assertEqual(self.sweep().returncode, 0)
-        self.assertEqual(self.sweep().returncode, 0)
-        self.assertEqual(len(self.publications()), 2)
-        for change in (lambda: record.write_text(record.read_text() + 'Account: QA\n'),
-                       lambda: os.utime(record, ns=(record.stat().st_atime_ns, record.stat().st_mtime_ns + 1000)),
-                       lambda: binding.write_text('1000\n'),
-                       lambda: video.write_bytes(b'changed recording'),
-                       lambda: video.unlink(), lambda: record.unlink()):
-            count = len(self.publications())
-            change()
-            result = self.sweep()
-            self.assertEqual(result.returncode, 0, result.stderr)
-            self.assertEqual([p[1] for p in self.publications()[count:]], ['999'])
-
-    def test_fingerprint_does_not_read_recording_contents(self):
-        folder = self.root / 'evidence/YPER4-999'
-        folder.mkdir(parents=True)
-        (folder / 'premerge.md').write_text('Recording: click.webm\n')
-        (folder / 'click.webm').write_bytes(b'recording')
-        original = Path.open
-        def guarded(path, *args, **kwargs):
-            self.assertNotEqual(path.name, 'click.webm', 'sweep must not stream recordings')
-            return original(path, *args, **kwargs)
-        with patch.object(Path, 'open', guarded):
-            self.assertTrue(poster.fingerprint({'title': 'YPER4-999 [INFRA] Fixture', 'headRefOid': 'a' * 40},
-                                               self.root / 'evidence', 'checker'))
-
     def test_dry_run_never_posts_or_populates_live_status_cache(self):
-        self.assertEqual(self.sweep(dry_run=True).returncode, 0)
+        result = self.sweep(dry_run=True)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn('test click removed (Valentin 2026-10-21)', result.stdout)
         self.assertFalse((self.state / 'cache.json').exists())
         self.assertEqual(json.loads((self.state / 'dry-run/cache.json').read_text())['999']['state'], 'DRY_RUN')
         self.assertTrue(all(c[:2] == ['api', 'graphql'] for c in self.gh_calls()))
@@ -346,15 +331,9 @@ sys.exit(1)
         self.assertEqual(self.sweep().returncode, 0)
         self.assertEqual(len(self.publications()), 4)
 
-    def test_fetch_failure_after_deleted_evidence_revokes_passing_statuses(self):
-        folder = self.root / 'evidence/YPER4-999'
-        folder.mkdir(parents=True)
-        record = folder / 'premerge.md'
-        record.write_text('Recording: click.webm\nClick: PASS fixture\n')
-        (folder / 'click.webm').write_bytes(b'recording fixture')
+    def test_fetch_failure_revokes_passing_statuses(self):
         self.assertEqual(self.sweep().returncode, 0)
         checker = (self.state / 'ship-check').read_bytes()
-        record.unlink()
         (self.root / 'fetch-error').touch()
         result = self.sweep()
         self.assertNotEqual(result.returncode, 0)

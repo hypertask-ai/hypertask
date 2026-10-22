@@ -30,9 +30,14 @@ updates:
       time: "05:00"
       timezone: Europe/Berlin
     target-branch: production
-    # One grouped small PR plus headroom for a few individual majors. Higher
+    # One grouped small PR plus headroom for two individual majors. Higher
     # just queues PRs against a CI host with bounded concurrency.
-    open-pull-requests-limit: 6
+    open-pull-requests-limit: 3
+    # YPER4-557: rebasing every open PR after each production merge reran full
+    # CI on the shared free runners (11 rebuilds in 90 min on 2026-10-21).
+    # Required checks are not strict, so a stale Dependabot branch still merges;
+    # refresh one by hand with the update-branch API when it truly conflicts.
+    rebase-strategy: disabled
     # Every package is in scope by decision, with one exception: the Better Auth
     # family moves by hand, not by robot. The 1.7 family shipped in #508 broke
     # live get-session/auth/ok on production with missing Better Auth tables, so

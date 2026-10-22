@@ -2,7 +2,7 @@ import type { NextApiHandler } from 'next'
 import { Prisma } from '@prisma/client'
 import { getSessionUser } from '@/lib/auth/getSessionUser'
 import { isFeatureEnabled } from '@/lib/flags'
-import { HTPR_6688_SEARCH_AUTOCOMPLETE_FLAG, HTPR_6865_SEARCH_LAYOUT_FLAG, HTPR_6878_SEARCH_LABEL_SCOPE_FLAG, HTPR_6880_SEARCH_COMMENTER_FLAG } from '@/lib/flags'
+import { HTPR_6865_SEARCH_LAYOUT_FLAG, HTPR_6878_SEARCH_LABEL_SCOPE_FLAG, HTPR_6880_SEARCH_COMMENTER_FLAG } from '@/lib/flags'
 import prisma from '@/lib/prisma'
 import { getProjectWhere } from '@/utils/controllers/projects/getAllIncludes'
 
@@ -24,8 +24,7 @@ const handler: NextApiHandler = async (req, res) => {
   const ids = boards.map((board) => board.id)
   if (!ids.length) return res.status(200).json({ candidates: [] })
   const activeBoardId = ids.includes(boardId) ? boardId : null
-  const layoutEnabled = await isFeatureEnabled(HTPR_6865_SEARCH_LAYOUT_FLAG, session.userId) &&
-    await isFeatureEnabled(HTPR_6688_SEARCH_AUTOCOMPLETE_FLAG, session.userId)
+  const layoutEnabled = await isFeatureEnabled(HTPR_6865_SEARCH_LAYOUT_FLAG, session.userId)
   const labelScopeEnabled = operator === 'label' && layoutEnabled &&
     await isFeatureEnabled(HTPR_6878_SEARCH_LABEL_SCOPE_FLAG, session.userId)
   const pickedBoardIds = labelScopeEnabled ? String(req.query.boards ?? '').split(',')

@@ -13,25 +13,13 @@ Proof bar follows Lauren Tan's verification skills: [create-verification-skill](
 
 When live QA FAILs on code behind a flag, switch that flag Off on /admin/flags first (seconds, no deploy), then repair. Only Valentin's login can open that page: a runner sends the flag key and the failure to the HT Product Lead session with SendMessage at once, and it switches the flag Off. A revert PR is the second step, not the first. (Valentin, 2026-10-03)
 
-Any change to code inside a flag that is already on for Everyone, whatever its PR type ([BUGFIX] included), needs one recorded browser click-through of the changed path on a real board before merge, on the preview or locally against the PR build, with the live flag states. Record commit, account and flag state in ~/.local/state/vcc-evidence/<TICKET>/premerge.md.
-
-Use this premerge record. The recording must show the changed path working, not just the board loading. For ticket opening, click a real card and check its title and body appear and stay open without reloading. Use a QA account, never Valentin's login. This does not replace live QA after deploy.
-
-```text
-Commit: <full PR head sha>
-Account: <user id and role, never credentials>
-Flags: <released key>=EVERYONE
-Board: <real board URL, not /demo>
-Build: <preview or local PR build URL>
-Click: PASS <changed path and result>
-Recording: <video file next to premerge.md>
-```
-
-List every touched Everyone flag as `key=EVERYONE`, separated by commas. A touched flag may be omitted when the live read confirms it is not on for Everyone. If listed, its value must agree with the live read; plain QA's off result can be recorded as `NOT_EVERYONE`. Unavailable live reads or unknown existing keys still block the check.
+Test click removed (Valentin 2026-10-21); safety is flags, revert, live QA after release and the YPER4-550 screenshot check.
 
 ### Disposable local PR build
 
-From the PR worktree, run `scripts/premerge-local.sh up` as a managed background task (Docker and Node 24 required). It runs the CI browser-smoke migrations, seed and webpack build against fresh local Postgres, Redis, Soketi and MinIO, then prints the build URL, seeded board URL, Playwright storage-state path and premerge record lines. Use the printed state in a Playwright context, click a seeded card, and record the changed path, screenshot and video in the ticket's evidence folder. Never print the state or private credentials/log files. Run `scripts/premerge-local.sh down` in the same worktree when finished; it stops the server and removes the disposable containers and credentials. If Docker is unavailable, local cleanup still runs; rerun `down` when Docker returns to remove the containers.
+Test click removed (Valentin 2026-10-21); safety is flags, revert, live QA after release and the YPER4-550 screenshot check.
+
+`scripts/premerge-local.sh` remains optional for manual use outside the VPS. Do not run it on the VPS (Valentin, 2026-10-21: no tests).
 
 The command refuses worktrees containing `.env` files and ignores inherited service credentials. It installs dependencies with `npm ci` when `node_modules` is absent and refuses a symlinked `node_modules`. To reuse the main checkout's install, run `scripts/worktree-node-modules.sh <main checkout> <worktree>` (a hardlinked copy); never symlink `node_modules`, because `npm ci` through a symlink empties the shared install. It reads `/api/flags` with the plain QA storage state at `~/.config/hypertask-videos/storageState-qa-normal.json`, preserving Everyone flags and setting every other registry flag to Owner + QA in the disposable database. The seeded account has the QA identity only in that database. Repeat `--flag key=MODE` to override local modes; never count an overridden released mode as live-state proof. `Flags:` prints the resulting modes. The real app board route is `/project?id=N`; ship-check also accepts older `/projects/project-N` records.
 

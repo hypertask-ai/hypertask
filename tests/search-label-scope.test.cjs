@@ -8,7 +8,6 @@ const { createJiti } = require('jiti')
 const root = path.resolve(__dirname, '..')
 const layoutFlag = 'htpr-6865-search-layout'
 const labelFlag = 'htpr-6878-search-label-scope'
-const prerequisites = ['htpr-6688-search-autocomplete']
 
 async function withSearch(t, config, check) {
   const dom = new JSDOM('<div id="root"></div>', { url: 'https://example.test/search' })
@@ -22,7 +21,7 @@ async function withSearch(t, config, check) {
   const cached = new Map(Object.entries(require.cache))
   const stub = (filename, exports) => { require.cache[filename] = { id: filename, filename, loaded: true, exports } }
   const source = (file, exports) => stub(path.join(root, file), exports)
-  const flags = Object.fromEntries([...prerequisites, layoutFlag, labelFlag].map((key) => [key, true]))
+  const flags = Object.fromEntries([layoutFlag, labelFlag].map((key) => [key, true]))
   Object.assign(flags, config.flags)
   const requests = []
   const lookups = []

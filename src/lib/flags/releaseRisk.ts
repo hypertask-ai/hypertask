@@ -6,6 +6,7 @@ export type FeatureFlagReleaseRisk = {
   risk: "none" | "small" | "new";
   reason: string;
   highRisk?: "money" | "access" | "data-deletion" | "customer-email";
+  ownerRequest?: { quote: string; ticketUrl: string };
 };
 
 export const HIGH_RISK_CATEGORIES = ["money", "access", "data-deletion", "customer-email"] as const;
