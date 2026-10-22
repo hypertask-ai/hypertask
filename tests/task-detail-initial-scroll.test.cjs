@@ -147,7 +147,7 @@ test("task detail wires the guard to task lifecycle and every delayed mobile scr
   assert.match(bottomPositioning, /!initialScrollGuard\.allows\(generation\)/);
   assert.match(
     bottomPositioning,
-    /\}, \[initialScrollGuard, scrollElementRef\]\);$/
+    /\}, \[initialScrollGuard, scrollElementRef, deferredEditorReady\]\);$/
   );
   assert.match(taskLifecycle, /initialScrollGuard\.reset\(\)/);
   assert.match(taskLifecycle, /initialScrollGuard\.invalidate\(generation\)/);

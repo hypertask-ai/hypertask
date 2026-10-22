@@ -62,6 +62,7 @@ function scrollHarness({ mobile = false, enabled = true, fromInbox = false, scro
     "@/lib/contexts/TaskDetail/TaskProvider": { useTaskContext: () => ({ cachedLayout, newCommentsLastReadAt: lastReadAt, descriptionStart: "live", liveRowsPendingFor: () => false }) },
     "@/lib/configs/taskDetail.config": { __esModule: true, default: config },
     "@/lib/constants/TaskDetail": { descriptionContainerId: "description-container" },
+    "@/lib/snippets": { getTiptapEditorForMode: () => null },
   };
   const source = fs.readFileSync(path.join(root, "src/app/detail/[...slug]/useTaskDetailInitialScroll.tsx"), "utf8");
   const js = ts.transpileModule(source, { compilerOptions: { module: ts.ModuleKind.CommonJS } }).outputText;

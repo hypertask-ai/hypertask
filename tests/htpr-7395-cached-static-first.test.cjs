@@ -563,3 +563,162 @@ test("static eligibility requires validated text while flag off retains empty ma
     assert.equal(isPlainDescriptionHtml(content, true, true), false, content);
   }
 });
+
+function mobileBottomScroll({ enabled = true, afterPaint = true, cachedLayout = false, embedded = false } = {}) {
+  const relative = "src/app/detail/[...slug]/useTaskDetailInitialScroll.tsx";
+  const source = process.env.HTPR7395_BASELINE
+    ? execFileSync("git", ["show", `${base}:${relative}`], { cwd: root, encoding: "utf8" })
+    : fs.readFileSync(path.join(root, relative), "utf8");
+  const file = ts.createSourceFile(relative, source, ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX);
+  let callback;
+  const helpers = [];
+  const visit = node => {
+    if (ts.isVariableDeclaration(node) && node.name.getText(file) === "scrollWindowToBottomMobile") {
+      callback = node.initializer.arguments[0].getText(file);
+    }
+    if (ts.isFunctionDeclaration(node) && node.name?.text === "deferredDescriptionEditorSettled") helpers.push(node.getText(file));
+    if (ts.isVariableStatement(node) && node.getText(file).includes("deferredEditorReadyCheck =")) helpers.push(node.getText(file));
+    ts.forEachChild(node, visit);
+  };
+  visit(file);
+  assert.ok(callback, "exercise the production mobile bottom-scroll callback");
+  const readyCheck = helpers.length === 2
+    ? `${helpers.join("\n")}\nconst deferredEditorReady = deferredEditorReadyCheck(cachedStaticFirst && cachedEditorAfterPaint && !cachedLayout);`
+    : "const deferredEditorReady = null;";
+  const compiled = ts.transpileModule(`${readyCheck}\nconst start = ${callback};`, {
+    compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 },
+  }).outputText;
+  const { createTaskDetailInitialScrollGuard } = require("jiti").createJiti(__filename, { fsCache: false })(path.join(root, "src/lib/taskDetailInitialScroll.ts"));
+  const guard = createTaskDetailInitialScrollGuard(noop);
+  const generation = { current: guard.reset() };
+  let now = 0, height = 900, scrollTop = 0;
+  let mounted = false, composerSettled = false, registered = false;
+  const editor = { isDestroyed: false, view: { dom: {} } };
+  const frames = [];
+  const trace = [];
+  const queries = [];
+  const scope = {
+    get scrollHeight() { return height; },
+    querySelector(selector) {
+      queries.push(selector);
+      if (selector === "#description-input") return { contains: node => mounted && node === editor.view.dom };
+      if (selector === '[data-composer-slot-settled="false"]') return composerSettled ? null : {};
+      assert.fail(`Unexpected settling selector: ${selector}`);
+    },
+    scrollTo(options) {
+      assert.equal(options.behavior, "auto");
+      scrollTop = Math.max(0, Math.min(options.top, height - 844));
+      trace.push({ now, height, scrollTop });
+    },
+  };
+  const env = {
+    cachedStaticFirst: enabled, cachedEditorAfterPaint: afterPaint, cachedLayout,
+    initialScrollGuard: guard, initialScrollGenerationRef: generation,
+    scrollElementRef: embedded ? { current: scope } : undefined,
+    performance: { now: () => now }, document: { ...scope, documentElement: scope }, window: scope,
+    requestAnimationFrame: run => frames.push(run),
+    getTiptapEditorForMode: mode => { assert.equal(mode, "read-edit-description"); return registered ? editor : null; },
+  };
+  const start = new Function("env", `const { ${Object.keys(env).join(", ")} } = env;\n${compiled}\nreturn start;`)(env);
+  const cancel = start();
+  return {
+    guard, generation, cancel, editor, trace, queries,
+    top: () => scrollTop,
+    pending: () => frames.length,
+    frame(time, nextHeight = height, state = {}) {
+      now = time;
+      height = nextHeight;
+      mounted = state.mounted ?? mounted;
+      registered = state.registered ?? registered;
+      composerSettled = state.composerSettled ?? composerSettled;
+      const pending = frames.splice(0);
+      pending.forEach(run => run(now));
+    },
+  };
+}
+
+test("flag-on mobile bottom scroll follows stepped height growth beyond 2.5 seconds until editor and composer settle", () => {
+  const f = mobileBottomScroll();
+  const steps = [[0, 900], [700, 923], [1500, 1011], [2200, 1129], [2900, 1179], [3500, 1269]];
+  for (let now = 16; now <= 4500; now += 16) {
+    const height = steps.filter(([time]) => time <= now).at(-1)[1];
+    f.frame(now, height, { registered: now >= 3000, mounted: now >= 3300, composerSettled: now >= 3900 });
+  }
+  assert.equal(f.top(), 425);
+  assert.equal(f.pending(), 0);
+  assert.ok(f.trace.at(-1).now >= 3900 + 300 - 16, "settling starts after replacement and composer readiness, not at static paint");
+  for (const [, height] of steps) assert.ok(f.trace.some(frame => frame.height === height));
+});
+
+test("flag-off mobile bottom scroll keeps the three-equal-frame exit and 2.5-second cap without readiness queries", () => {
+  const stable = mobileBottomScroll({ enabled: false });
+  for (let now = 16; now <= 4000; now += 16) stable.frame(now, now < 1000 ? 900 : 1269);
+  assert.deepEqual(stable.trace.map(frame => frame.now), [16, 32, 48, 64]);
+  assert.equal(stable.top(), 56);
+  assert.equal(stable.pending(), 0);
+  assert.deepEqual(stable.queries, []);
+  const growing = mobileBottomScroll({ enabled: false });
+  for (let now = 100; now <= 4000; now += 100) growing.frame(now, 900 + now);
+  assert.equal(growing.trace.at(-1).now, 2500);
+  assert.equal(growing.trace.length, 25);
+  assert.equal(growing.pending(), 0);
+  assert.deepEqual(growing.queries, []);
+});
+
+test("flag-on mobile scrolling requires a mounted editor, not a stale registration or the static shell", () => {
+  const f = mobileBottomScroll();
+  for (let now = 16; now <= 4000; now += 16) {
+    f.frame(now, now < 3000 ? 900 : 1269, { registered: true, mounted: now >= 3000, composerSettled: true });
+  }
+  assert.equal(f.top(), 425);
+  assert.ok(f.trace.at(-1).now >= 3300);
+  assert.equal(f.pending(), 0);
+});
+
+test("flag-on mobile bottom scrolling keeps its hard cap when the editor never mounts or height never stabilizes", () => {
+  for (const growing of [false, true]) {
+    const f = mobileBottomScroll();
+    for (let now = 100; now <= 12000; now += 100) {
+      f.frame(now, growing ? 900 + now : 900, { registered: growing, mounted: growing, composerSettled: growing });
+    }
+    assert.equal(f.trace.at(-1).now, 10000);
+    assert.equal(f.trace.length, 100);
+    assert.equal(f.pending(), 0);
+  }
+});
+
+test("user gestures, task invalidation and cleanup cancel flag-on mobile bottom following", () => {
+  for (const interruption of ["touchmove", "wheel", "navigation", "cleanup"]) {
+    const f = mobileBottomScroll();
+    const target = new EventTarget();
+    const unlisten = f.guard.listen(target);
+    f.frame(16);
+    if (interruption === "navigation") f.guard.invalidate(f.generation.current);
+    else if (interruption === "cleanup") f.cancel();
+    else target.dispatchEvent(new Event(interruption));
+    f.frame(3000, 1269, { registered: true, mounted: true, composerSettled: true });
+    assert.equal(f.trace.length, 1, interruption);
+    assert.equal(f.top(), 56, interruption);
+    assert.equal(f.pending(), 0, interruption);
+    unlisten();
+  }
+});
+
+test("non-deferred and permanently static tickets retain legacy mobile scroll timing with the flag on", () => {
+  for (const options of [{ afterPaint: false }, { cachedLayout: true }]) {
+    const f = mobileBottomScroll(options);
+    for (let now = 16; now <= 1000; now += 16) f.frame(now);
+    assert.deepEqual(f.trace.map(frame => frame.now), [16, 32, 48, 64]);
+    assert.deepEqual(f.queries, []);
+    assert.equal(f.pending(), 0);
+  }
+});
+
+test("deferred mobile bottom following scopes editor readiness and scrolling to an embedded scroll target", () => {
+  const f = mobileBottomScroll({ embedded: true });
+  for (let now = 16; now <= 4000; now += 16) {
+    f.frame(now, now < 3000 ? 900 : 1269, { registered: now >= 3000, mounted: now >= 3000, composerSettled: now >= 3000 });
+  }
+  assert.equal(f.top(), 425);
+  assert.equal(f.pending(), 0);
+});
