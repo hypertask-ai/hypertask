@@ -16,6 +16,8 @@ let enabled = true;
 let session = { id: "s1", taskId: 43, messages: [intro] };
 const sent = [];
 const mocks = {
+  "@/store": { composeTaskQuestionsTaskIdAtom: "questionsTaskId" },
+  "@/lib/state": { useRecoilValue: () => null, useSetRecoilState: () => () => {} },
   "@/hooks/useFlag": { useFlag: (key) => enabled && key === flag },
   "@/lib/flags/keys": { HTPR_7317_CTRLJ_TICKET_QUESTIONS_FLAG: flag },
   "./MessageItem": { MessageItem: ({ message }) => React.createElement("div", { "data-message": message.id }, message.content) },

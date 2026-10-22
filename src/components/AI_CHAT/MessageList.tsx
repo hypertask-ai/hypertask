@@ -1,8 +1,10 @@
-import { useLayoutEffect, useRef } from "react";
+import { useEffect, useLayoutEffect, useRef } from "react";
 import { MessageItem } from "./MessageItem";
 import { TypingIndicator } from "./TypingIndicator";
 import { useAiChatContext } from "@/lib/contexts/Multipages/AI_Agent/AI_Agent_Chat_Context";
 import { useQuery } from "@tanstack/react-query";
+import { useRecoilValue, useSetRecoilState } from "@/lib/state";
+import { composeTaskQuestionsTaskIdAtom } from "@/store";
 import { useFlag } from "@/hooks/useFlag";
 import { HTPR_7317_CTRLJ_TICKET_QUESTIONS_FLAG } from "@/lib/flags/keys";
 
@@ -48,6 +50,11 @@ export const MessageList: React.FC<MessageListProps> = () => {
     refetchOnWindowFocus: false,
     enabled: showTicketQuestions,
   });
+  const questionsTaskId = useRecoilValue(composeTaskQuestionsTaskIdAtom);
+  const setQuestionsTaskId = useSetRecoilState(composeTaskQuestionsTaskIdAtom);
+  useEffect(() => {
+    if (showTicketQuestions && newTicketId === questionsTaskId) setQuestionsTaskId(null);
+  }, [showTicketQuestions, newTicketId, questionsTaskId, setQuestionsTaskId]);
   const newTicketQuestions = ticketQuestions.data?.questions?.filter(Boolean) ?? [];
 
   useLayoutEffect(() => {

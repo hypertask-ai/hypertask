@@ -4,7 +4,7 @@ import { useEffect, useMemo, useState } from "react"
 import { useQuery } from "@tanstack/react-query"
 import { useRecoilValue } from "@/lib/state"
 import type { IProject } from "@/models/model"
-import { aiChatEditTaskIdAtom, composeTaskChatIntroAtom, currentProjectAtom, inViewObjectAtom, taskDetailNonEssentialReadyAtom } from "@/store"
+import { aiChatEditTaskIdAtom, composeTaskQuestionsTaskIdAtom, currentProjectAtom, inViewObjectAtom, taskDetailNonEssentialReadyAtom } from "@/store"
 import { isGuestCookieUser } from "@/lib/demo/isGuestClient"
 import { isGuestBoardBuild } from "@/lib/demo/guestBoardBuild"
 import { GuestBoardSpotlight } from "./GuestBoardSpotlight"
@@ -12,7 +12,7 @@ import formatDateDifference from "@/utils/generateTime"
 import { Sparkles } from "lucide-react"
 import { taskSummaryActionFor } from "./taskSummaryAction"
 import { useFlag } from "@/hooks/useFlag"
-import { HTPR_6929_COMPOSE_TASK_WRITER_FLAG, HTPR_7317_CTRLJ_TICKET_QUESTIONS_FLAG, HTPR_7337_EDIT_WITH_AI_FLAG, HTPR_7586_ONE_QUESTIONS_CALL_FLAG } from "@/lib/flags/keys"
+import { HTPR_7337_EDIT_WITH_AI_FLAG, HTPR_7586_ONE_QUESTIONS_CALL_FLAG } from "@/lib/flags/keys"
 import { useHydrated } from "@/hooks/General/useHydrated"
 
 type TaskSessionSummary = {
@@ -113,11 +113,8 @@ export const WelcomeScreen = () => {
   );
   const taskDetailDataReady = !isDetailPage || taskDetailNonEssentialReady;
   const oneQuestionsCallEnabled = useFlag(HTPR_7586_ONE_QUESTIONS_CALL_FLAG);
-  const composeEnabled = useFlag(HTPR_6929_COMPOSE_TASK_WRITER_FLAG);
-  const ticketQuestionsEnabled = useFlag(HTPR_7317_CTRLJ_TICKET_QUESTIONS_FLAG);
-  const composeIntro = useRecoilValue(composeTaskChatIntroAtom);
-  const hasPendingTicketQuestions = oneQuestionsCallEnabled && composeEnabled && ticketQuestionsEnabled &&
-    composeIntro?.taskId === taskId && / from your note\. Want me to refine it\?/.test(composeIntro?.content ?? "");
+  const questionsTaskId = useRecoilValue(composeTaskQuestionsTaskIdAtom);
+  const hasPendingTicketQuestions = oneQuestionsCallEnabled && questionsTaskId === taskId;
   const taskQuestions = useQuery({
     queryKey: ["task-questions", taskId],
     queryFn: async (): Promise<{ questions: string[] }> => {
