@@ -7,7 +7,7 @@ const actingAgentId = "11111111-1111-4111-8111-111111111111";
 const siblingAgentId = "22222222-2222-4222-8222-222222222222";
 const owner = { id: 6, email: "owner@example.test", displayName: "Owner" };
 const person = { id: 7, email: "person@example.test", displayName: "Person" };
-const outsideScope = /This agent is not a member of project 15, so it cannot grant or remove access there/;
+const outsideScope = /This agent is not a member of this board\. Ask the board owner to add it\./;
 const selfRefusal = /cannot change (?:its|their) own board access/i;
 const insufficientScope = /requires 'admin' or higher/;
 

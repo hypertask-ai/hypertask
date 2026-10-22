@@ -50,8 +50,8 @@ export async function getAgentBoardScope(
 export class AgentBoardInviteScopeError extends Error {
   readonly status = 403
 
-  constructor(projectId: number) {
-    super(`This agent is not a member of project ${projectId}, so it cannot grant or remove access there`)
+  constructor() {
+    super('This agent is not a member of this board. Ask the board owner to add it.')
     this.name = 'AgentBoardInviteScopeError'
   }
 }
@@ -65,5 +65,5 @@ export async function assertAgentBoardInviteScope(
   if (!actingAgentId) return
   const inScope = await getAgentBoardScope(member, actingAgentId, userId, [projectId])
   recordAgentBoardScopeMiss(projectId, 'write')
-  if (!inScope.has(projectId)) throw new AgentBoardInviteScopeError(projectId)
+  if (!inScope.has(projectId)) throw new AgentBoardInviteScopeError()
 }
