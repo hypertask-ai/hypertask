@@ -12,8 +12,7 @@ function loadScreen(enabled = true, startPlanEnabled = false, planFlagReady = tr
       useFlag: (key) => key === planFlag.HTPR_7551_START_PLAN_CHECKOUT_FLAG ? startPlanEnabled : (assert.equal(key, FLAG), enabled),
       useFlagReady: () => planFlagReady,
     },
-    "@/lib/flags/definitions/htpr-7551-start-plan-checkout": planFlag,
-    "@/lib/flags/keys": { HTPR_7026_AGENT_CONNECT_CHECK_FLAG: FLAG },
+    "@/lib/flags/keys": { ...planFlag, HTPR_7026_AGENT_CONNECT_CHECK_FLAG: FLAG },
     "@/components/Modals/CliInstall/constants": { INSTALL_COMMAND: "install fixture", LOGIN_COMMAND: "hypertask login" },
     "@/components/Modals/McpToken/components": {
       getIntegrationChipClassName: () => "text-meta",

@@ -105,7 +105,7 @@ function harness() {
     "@/lib/prisma": prisma,
     "@/lib/deriveCurrentBoardBilling": billing,
     "@/lib/flags": { isFeatureEnabled: async (key, id) => { assert.equal(key, flag.HTPR_7551_START_PLAN_CHECKOUT_FLAG); h.flagReads.push(id); if (h.flagFailure) throw new Error("flag lookup unavailable"); return h.enabled; } },
-    "@/lib/flags/definitions/htpr-7551-start-plan-checkout": flag,
+    "@/lib/flags/keys": flag,
     "@/lib/resolveSeatQuantity": { resolveSeatQuantity: async () => h.seats },
     "@/lib/stripe": stripeModule,
     "@/lib/subscriptionPlans": plans,

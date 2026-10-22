@@ -51,7 +51,7 @@ async function withButton(fn, backend) {
     },
     "@/lib/state": { useRecoilValue: (atom) => atom === "user" ? (state.userId ? { id: state.userId } : null) : state.board }, "@/store": { currentProjectAtom: "project", currentUserAtom: "user" },
     "@/hooks/useFlag": flagMock,
-    "@/lib/flags/definitions/htpr-7551-start-plan-checkout": flag,
+    "@/lib/flags/keys": flag,
     "@/lib/deriveCurrentBoardBilling": billing,
   });
   const legacy = load("src/components/Modals/TrialPlan/TrialPlanComponents.tsx", {
@@ -60,7 +60,7 @@ async function withButton(fn, backend) {
     "@/lib/subscriptionPlans": { storeSubscriptionPlans: [{ perks: [] }, { perks: [] }] },
     "@/components/PageComponents/Kanban/HeaderComponents/StartPlanButton": buttonModule,
     "@/hooks/useFlag": flagMock,
-    "@/lib/flags/definitions/htpr-7551-start-plan-checkout": flag,
+    "@/lib/flags/keys": flag,
     "next/navigation": { useRouter: () => router },
   });
   const trialHook = load("src/hooks/General/useTrial.ts", {
@@ -78,7 +78,7 @@ async function withButton(fn, backend) {
   const TrialCard = load("src/components/PageComponents/Trial/TrialCard.tsx", {
     "@/components/PageComponents/Kanban/HeaderComponents/StartPlanButton": buttonModule,
     "@/hooks/useFlag": flagMock,
-    "@/lib/flags/definitions/htpr-7551-start-plan-checkout": flag,
+    "@/lib/flags/keys": flag,
     "@/hooks/General/useTrial": trialHook,
     "@/lib/state": { useRecoilValue: (atom) => atom === "user" ? (state.userId ? { id: state.userId } : null) : state.board },
     "@/store": { currentProjectAtom: "project", currentUserAtom: "user" },

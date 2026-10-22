@@ -1,7 +1,7 @@
 
 import dynamic from "next/dynamic";
 import { useFlag } from "@/hooks/useFlag";
-import { HTPR_7551_START_PLAN_CHECKOUT_FLAG } from "@/lib/flags/definitions/htpr-7551-start-plan-checkout";
+import { HTPR_7551_START_PLAN_CHECKOUT_FLAG } from "@/lib/flags/keys";
 import { StartPlanButton } from "./StartPlanButton";
 import { IMember, IProject, IUser } from "@/models/model";
 import React, { Suspense, useCallback, useContext, useEffect } from "react";

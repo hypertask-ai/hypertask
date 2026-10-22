@@ -1,7 +1,7 @@
 import prisma from "@/lib/prisma";
 import { deriveTeamBilling } from "@/lib/deriveCurrentBoardBilling";
 import { isFeatureEnabled } from "@/lib/flags";
-import { HTPR_7551_START_PLAN_CHECKOUT_FLAG } from "@/lib/flags/definitions/htpr-7551-start-plan-checkout";
+import { HTPR_7551_START_PLAN_CHECKOUT_FLAG } from "@/lib/flags/keys";
 import { resolveSeatQuantity } from "@/lib/resolveSeatQuantity";
 import {
   createStripeCheckout,

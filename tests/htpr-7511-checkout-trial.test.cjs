@@ -523,7 +523,7 @@ test("agent and cross-origin requests are refused at the signed-session boundary
   let session = { id: 6, agentId: "agent" };
   const route = load("src/pages/api/stripe/session/checkout.ts", {
     "@/lib/flags": { isFeatureEnabled: async (key, id) => { assert.equal(key, flag.HTPR_7551_START_PLAN_CHECKOUT_FLAG); assert.equal(id, 6); return h.enabled; } },
-    "@/lib/flags/definitions/htpr-7551-start-plan-checkout": flag,
+    "@/lib/flags/keys": flag,
     "@/lib/demo/guestGuard": { isGuestRequest: async () => false },
     "@/lib/auth/session": { SESSION_COOKIE: "ht_session", verifySession: () => session },
     "@/utils/controllers/stripe/createAuthorizedCheckoutSession": { createAuthorizedCheckoutSession: (_id, body) => h.checkout(body) },
@@ -595,7 +595,7 @@ test("unsigned and guest requests remain refused while a signed non-guest owner 
   const route = load("src/pages/api/stripe/session/checkout.ts", {
     "@/lib/auth/session": { SESSION_COOKIE: "ht_session", verifySession: () => session },
     "@/lib/flags": { isFeatureEnabled: async (key, id) => { assert.equal(key, flag.HTPR_7551_START_PLAN_CHECKOUT_FLAG); assert.equal(id, 6); return h.enabled; } },
-    "@/lib/flags/definitions/htpr-7551-start-plan-checkout": flag,
+    "@/lib/flags/keys": flag,
     "@/lib/demo/guestGuard": { GUEST_FORBIDDEN_MESSAGE: "Guests cannot buy plans", isGuestRequest: async () => guest },
     "@/utils/controllers/stripe/createAuthorizedCheckoutSession": { createAuthorizedCheckoutSession: (_id, body) => h.checkout(body) },
   }).default;
@@ -678,7 +678,7 @@ test("route refuses fresh signup with flag OFF while production legacy checkout 
     "@/lib/flags": { isFeatureEnabled: async (key, id) => {
       assert.equal(key, "htpr-7551-start-plan-checkout"); assert.equal(id, 6); return h.enabled;
     } },
-    "@/lib/flags/definitions/htpr-7551-start-plan-checkout": flag,
+    "@/lib/flags/keys": flag,
     "@/lib/demo/guestGuard": { isGuestRequest: async () => false },
     "@/utils/controllers/stripe/createAuthorizedCheckoutSession": { createAuthorizedCheckoutSession: (_id, body) => { forwarded++; return h.checkout(body); } },
   }).default;

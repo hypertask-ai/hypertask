@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import { useRecoilValue } from "@/lib/state";
 import { currentProjectAtom, currentUserAtom } from "@/store";
 import { useFlag } from "@/hooks/useFlag";
-import { HTPR_7551_START_PLAN_CHECKOUT_FLAG } from "@/lib/flags/definitions/htpr-7551-start-plan-checkout";
+import { HTPR_7551_START_PLAN_CHECKOUT_FLAG } from "@/lib/flags/keys";
 import { deriveCurrentBoardBilling } from "@/lib/deriveCurrentBoardBilling";
 import type { IProject } from "@/models/model";
 

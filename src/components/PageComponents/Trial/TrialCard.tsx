@@ -3,7 +3,7 @@ import { currentProjectAtom, currentUserAtom } from "@/store";
 import { useGetAllAccessibleBoardList } from "@/hooks/MultiPages/useGetAllAccessibleBoardList";
 import { StartPlanButton } from "@/components/PageComponents/Kanban/HeaderComponents/StartPlanButton";
 import { useFlag, useFlagReady } from "@/hooks/useFlag";
-import { HTPR_7551_START_PLAN_CHECKOUT_FLAG } from "@/lib/flags/definitions/htpr-7551-start-plan-checkout";
+import { HTPR_7551_START_PLAN_CHECKOUT_FLAG } from "@/lib/flags/keys";
 import useTrial from "@/hooks/General/useTrial";
 import { ISubscriptionPlan } from "@/lib/subscriptionPlans";
 import { IHasSubscriptionCheck, IPricingSearchParams } from "@/models/model";
