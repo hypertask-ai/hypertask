@@ -1,6 +1,6 @@
 
 "use client";
-import { HTPR_7530_KEEP_AI_CHAT_CLOSED_FLAG } from "@/lib/flags/keys";
+import { HTPR_7530_KEEP_AI_CHAT_CLOSED_FLAG, HTPR_7569_MY_TASKS_SINGLE_COMMAND_CENTER_FLAG } from "@/lib/flags/keys";
 import {
   lazy,
   ReactNode,
@@ -310,6 +310,7 @@ export default function GlobalProvider({
   useMobileToastAutoDismiss(SINGLE_UNDO_TOASTER_ID);
   useTaskBoxOutlinesFlag();
   const composeTaskWriterEnabled = useFlag("htpr-6929-compose-task-writer");
+  const myTasksSingleCommandCenter = useFlag(HTPR_7569_MY_TASKS_SINGLE_COMMAND_CENTER_FLAG);
   const isApple = useDeviceContext();
   const mbl = useContext(MobileViewContext);
   const pathname = usePathname();
@@ -1338,7 +1339,7 @@ export default function GlobalProvider({
 
       {authenticatedUserId !== null &&
         showCommands.show &&
-        shouldRenderGlobalCommandMenu(pathname) && <HypertasksCommands />}
+        shouldRenderGlobalCommandMenu(pathname, myTasksSingleCommandCenter) && <HypertasksCommands />}
 
       {composeTaskWriterEnabled && authenticatedUserId !== null && showCommands.show && pathname === "/new" && <HypertasksCommands />}
 
