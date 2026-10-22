@@ -1,3 +1,4 @@
+import { DECISIONS_GUIDANCE } from '@/lib/mcp/decisionsGuidance'
 import feedback from './descriptions/report_feedback.json'
 import user_context from './descriptions/user_context.json'
 import tasks from './descriptions/tasks.json'
@@ -24,7 +25,7 @@ export const CONSOLIDATED_TOOL_DESCRIPTIONS = [
   feedback,
   user_context,
   tasks,
-  comments,
+  { ...comments, use_when: `${comments.use_when} ${DECISIONS_GUIDANCE}` },
   projects,
   sections,
   labels,
@@ -39,7 +40,7 @@ export const CONSOLIDATED_TOOL_DESCRIPTIONS = [
   skills,
   search,
   reports,
-  decisions,
+  { ...decisions, do_not_use_when: `${decisions.do_not_use_when} ${DECISIONS_GUIDANCE}` },
   drafts,
   attachments,
 ]

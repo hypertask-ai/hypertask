@@ -3,6 +3,7 @@ import { reportMcpOperationCrash } from '@/lib/mcp/operationCrashReport'
 import { wrapMcpRoute } from '@/lib/mcp/routeWrapper'
 import { NextRequest, NextResponse } from 'next/server'
 
+import { getFeaturePageWarnings } from '@/lib/mcp/featureCatalog'
 import { buildFieldError } from '@/lib/mcp/fieldError'
 import { checkMcpRateLimit, validateMcpAuth } from '@/lib/mcp/auth'
 import { requireRole } from '@/lib/mcp/agents/scopes'
@@ -257,7 +258,11 @@ export async function POST(request: NextRequest) {
       }
     )
 
-    return NextResponse.json(response)
+    const warnings = ctx.agentId
+      ? await getFeaturePageWarnings(response.page.title, ctx.user.id).catch(() => [])
+      : []
+
+    return NextResponse.json({ ...response, ...(warnings.length ? { warnings } : {}) })
   } catch (error) {
     const identifierResponse = taskIdentifierErrorResponse(error, 'ticket_number')
     if (identifierResponse) return identifierResponse

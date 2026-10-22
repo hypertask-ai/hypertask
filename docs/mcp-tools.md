@@ -50,7 +50,7 @@ Each reaction in the comments list includes its `createdAt` ISO timestamp. `POST
 | `hypertask_skills` | `list`, `get`, `create`, `update`, `delete`, `import` | `hypertask_list_skills`, `hypertask_get_skill`, `hypertask_create_skill`, `hypertask_update_skill`, `hypertask_delete_skill`, `hypertask_import_skills` |
 | `hypertask_agents` | `list`, `presence`, `create`, `revoke`, `archive`, `delete` | `hypertask_list_agents`, `hypertask_agent_presence`, `hypertask_create_agent`, `hypertask_revoke_agent`, `hypertask_archive_agent`, `hypertask_delete_agent` |
 | `hypertask_comments` | `list`, `add`, `update`, `delete` | `hypertask_get_comments_for_task`, `hypertask_add_comment_to_task`, `hypertask_update_comment`, `hypertask_delete_comment` |
-| `hypertask_user_context` | `hello`, `get`, `profile`, `connections` | `hypertask_hello`, `hypertask_get_user_context`, `hypertask_update_profile`, `hypertask_list_connections` |
+| `hypertask_user_context` | `hello`, `features`, `get`, `profile`, `connections` | `hypertask_hello`, `hypertask_list_features`, `hypertask_get_user_context`, `hypertask_update_profile`, `hypertask_list_connections` |
 | `hypertask_pages` | `create`, `get`, `update`, `list`, `search`, `versions`, `restore`, `archive` | `hypertask_create_page`, `hypertask_get_page`, `hypertask_update_page`, `hypertask_list_pages`, `hypertask_search_pages`, `hypertask_page_history` |
 | `hypertask_reports` | `list`, `get`, `create`, `update`, `delete` | `hypertask_report` |
 | `hypertask_projects` | `list`, `manifest`, `playbook`, `create`, `rename`, `members`, `archive`, `invite_member`, `get_playbook`, `set_playbook`, `get_instructions`, `set_instructions` | `hypertask_list_projects`, `hypertask_board_manifest`, `hypertask_get_board_playbook`, `hypertask_create_board`, `hypertask_rename_board`, `hypertask_list_project_members`, `hypertask_project_admin`, `hypertask_board_config` |
@@ -58,6 +58,10 @@ Each reaction in the comments list includes its `createdAt` ISO timestamp. `POST
 | `hypertask_labels` | `list`, `create` | `hypertask_list_labels`, `hypertask_create_label` |
 | `hypertask_search` | `tasks`, `semantic`, `related`, `help` | `hypertask_search_tasks`, `hypertask_rag_retrieval`, `hypertask_find_related_tasks`, `hypertask_search_help_docs` |
 | `hypertask_drafts` | `create`, `list`, `update`, `publish`, `delete` | `hypertask_draft` |
+
+## Feature discovery
+
+`hypertask_list_features`, `hypertask_user_context` action `features`, and `GET /api/mcp/features` return enabled feature-kind flags and core destinations for the authenticated user, with descriptions, shipped dates and verified URLs where known. `htpr-7322-agent-feature-discovery` defaults to Everyone; switching it Off disables catalog reads, hides discovery guidance from hello, and suppresses agent page-creation warnings, including on idempotent replays. Page creation itself remains available.
 
 ## Autonomous anonymous feedback
 
