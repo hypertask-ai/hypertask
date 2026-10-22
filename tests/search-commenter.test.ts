@@ -23,7 +23,7 @@ const people: any[] = [
 const tasks: any[] = [7, 7, 7, 7, 7, 999, 7].map((projectId, i) => ({
   id: 101 + i, projectId, title: 'Needle in the title', status: i === 6 ? 'Deleted' : 'Normal',
   userId: 3, ticketNumber: `TEST-${i + 1}`, uniqueIndex: i + 1, section: 'Todo',
-  project: { id: projectId, title: projectId === 7 ? 'Visible' : 'Private' },
+  project: { id: projectId, title: projectId === 7 ? 'Visible' : 'Private', ownerId: projectId === 7 ? 42 : 99 },
   description: 'Needle in the description', description_: { content: 'Needle in the description' },
   createdAt: new Date('2026-10-01'), updatedAt: new Date(`2026-10-0${7 - i}`), comments: [],
 }))
@@ -86,7 +86,14 @@ const db = {
   user: { findMany: async (args: any) => { state.peopleQueries.push(args); return people.filter((row) => matches(row, args.where)).slice(0, args.take) } },
   assignees: { findMany: async () => [] },
   task: {
-    findMany: async (args: any) => { state.taskQueries.push(args); return pageRows(tasks.filter((row) => matches(row, args.where)), args) },
+    findMany: async (args: any) => {
+      if (Object.keys(args.select ?? {}).join() === 'userId') {
+        assert.deepEqual(args, { where: { projectId: { in: [7] }, createdAt: { gte: args.where.createdAt.gte }, project: { ownerId: 42 } }, select: { userId: true }, orderBy: { createdAt: 'desc' }, take: 100 })
+        assert.ok(args.where.createdAt.gte instanceof Date)
+      }
+      state.taskQueries.push(args)
+      return pageRows(tasks.filter((row) => matches(row, args.where)), args)
+    },
     count: async (args: any) => { state.countQueries.push(args); return tasks.filter((row) => matches(row, args.where)).length },
   },
   comment: {
@@ -120,6 +127,13 @@ const db = {
 for (const [file, exports] of [
   ['src/lib/prisma.ts', { default: db }],
   ['src/lib/auth/getSessionUser.ts', { getSessionUser: async () => state.session }],
+  ['src/lib/auth/agentScope.ts', {
+    withAgentScopeRequest: (_request: any, run: () => any) => run(),
+    agentScopeMode: async () => 'WATCH',
+    prepareAgentScope: async () => {},
+    agentScopeEnforced: () => false,
+    recordAgentBoardScopeMiss: () => {},
+  }],
   ['src/lib/mcp/auth.ts', { validateMcpAuth: async () => state.session ? { user: { id: 42 }, agentId: null } : null, checkMcpRateLimit: async () => null }],
   ['src/lib/flags.ts', { ...keys, isFeatureEnabled: async (key: string, userId: number) => { assert.equal(userId, 42); state.flagCalls.push(key); return state.flags[key] ?? false } }],
   ['src/utils/controllers/projects/getAllIncludes.ts', { getProjectWhere: (userId: number) => ({ ownerId: userId }), projectContentAccessWhere: (userId: number) => ({ ownerId: userId }) }],

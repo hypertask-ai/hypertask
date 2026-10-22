@@ -1,6 +1,7 @@
 import type { NextApiHandler } from 'next'
 import { Prisma } from '@prisma/client'
 import { getSessionUser } from '@/lib/auth/getSessionUser'
+import { withAgentScopeRequest } from '@/lib/auth/agentScope'
 import { isFeatureEnabled } from '@/lib/flags'
 import { HTPR_6865_SEARCH_LAYOUT_FLAG, HTPR_6878_SEARCH_LABEL_SCOPE_FLAG, HTPR_6880_SEARCH_COMMENTER_FLAG } from '@/lib/flags'
 import prisma from '@/lib/prisma'
@@ -18,7 +19,7 @@ const handler: NextApiHandler = async (req, res) => {
     return res.status(400).json({ error: 'Unknown operator' })
   }
   const boards = await prisma.project.findMany({
-    where: { status: 'Normal', ...getProjectWhere(session.userId) },
+    where: { status: 'Normal', ...getProjectWhere(session.userId), AND: [getProjectWhere(session.userId, session.agentId)] },
     select: { id: true, title: true },
   })
   const ids = boards.map((board) => board.id)
@@ -133,7 +134,7 @@ const handler: NextApiHandler = async (req, res) => {
       ] },
     ] })
     const recentIds = [
-      ...await prisma.task.findMany({ where: { projectId: { in: scope }, createdAt: { gte: recent } }, select: { userId: true }, orderBy: { createdAt: 'desc' }, take: 100 }),
+      ...await prisma.task.findMany({ where: { projectId: { in: scope }, createdAt: { gte: recent }, project: getProjectWhere(session.userId, session.agentId) }, select: { userId: true }, orderBy: { createdAt: 'desc' }, take: 100 }),
       ...await prisma.assignees.findMany({ where: { task: { projectId: { in: scope } }, assignedAt: { gte: recent } }, select: { userId: true }, orderBy: { assignedAt: 'desc' }, take: 100 }),
     ].map((row) => row.userId)
     const recentPeople = recentIds.length ? await prisma.user.findMany({
@@ -195,4 +196,4 @@ const handler: NextApiHandler = async (req, res) => {
   return res.status(200).json({ candidates: ranked })
 }
 
-export default handler
+export default ((req, res) => withAgentScopeRequest(req, () => handler(req, res))) satisfies NextApiHandler
