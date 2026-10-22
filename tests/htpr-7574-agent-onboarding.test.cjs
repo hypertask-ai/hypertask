@@ -7,7 +7,7 @@ const ts = require("typescript");
 const { z } = require("zod");
 
 const root = path.resolve(__dirname, "..");
-const selfRefusal = "An agent cannot change its own board access. Ask the person who owns this agent to add it under Agents > <agent> > Board access.";
+const selfRefusal = "An agent cannot change its own board access. Ask the person who owns this agent to open Agents, pick this agent, and add the board under Board access.";
 const genericHint = "Access denied. Use a credential with the required scope and confirm membership in the target board.";
 const nextServer = { NextResponse: { json: (body, init) => Response.json(body, init) } };
 

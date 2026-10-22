@@ -28,7 +28,7 @@ const SAFE_AUTHORIZATION_MESSAGES = new Set([
   'Only the board owner or a project admin can add members',
   'Agent not found or you do not own this agent',
   'This agent belongs to another team',
-  'An agent cannot change its own board access. Ask the person who owns this agent to add it under Agents > <agent> > Board access.',
+  'An agent cannot change its own board access. Ask the person who owns this agent to open Agents, pick this agent, and add the board under Board access.',
   'This agent is not a member of this board. Ask the board owner to add it.',
   ...['read', 'write', 'admin'].flatMap((role) =>
     ['read', 'write', 'admin'].map((required) =>

@@ -13,7 +13,7 @@ export async function checkAgentBoardDelegation(
   if (!actingAgentId) return null
 
   if (targetAgentId === actingAgentId) {
-    return forbidden('An agent cannot change its own board access. Ask the person who owns this agent to add it under Agents > <agent> > Board access.')
+    return forbidden('An agent cannot change its own board access. Ask the person who owns this agent to open Agents, pick this agent, and add the board under Board access.')
   }
 
   const roleError = await requireRole(ctx, 'admin')
