@@ -28,7 +28,8 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { cachedTaskDetailKey } from "@/lib/navigation/cachedTaskDetail";
 import { mergeRealtimeTaskDetail, preserveTaskAssigneesChangedDuringFetch, refreshTaskDetailQueryCache, shouldPreserveTaskEditorContent } from "@/lib/realtime/taskDetailRefresh";
 import { useFlag } from "@/hooks/useFlag";
-import { HTPR_7306_CTRLJ_FOOTER_ONE_LINE_FLAG } from "@/lib/flags/keys";
+import { HTPR_7305_BOARD_FROM_TEXT_FLAG, HTPR_7306_CTRLJ_FOOTER_ONE_LINE_FLAG } from "@/lib/flags/keys";
+import { matchComposeTaskBoard } from "@/lib/ai/composeTaskBoard";
 import { HTPR_6891_PHONE_TASK_WRITER_SHEET_FLAG, HTPR_6929_COMPOSE_TASK_WRITER_FLAG, HTPR_6937_NEW_TASK_WINDOW_FLAG, HTPR_6951_TASK_WRITING_PROGRESS_FLAG, HTPR_6962_KEEP_ASSIGNEE_FLAG, HTPR_6999_CTRL_J_VIEW_CONTEXT_FLAG, HTPR_7056_CTRLJ_SPLIT_TASKS_FLAG, HTPR_7085_CTRLJ_WRITER_REASON_FLAG, HTPR_7051_TASK_WRITER_IMAGE_UNFURL_FLAG, HTPR_7053_COMPOSE_BOARD_CHIP_FLAG, HTPR_7313_CTRLJ_ALWAYS_BOARD_CHIP_FLAG, HTPR_7343_CTRLJ_WRITER_PROPERTIES_FLAG } from "@/lib/flags/keys";
 import { HTPR_7307_CTRLJ_FOOTER_CLICKABLE_FLAG } from "@/lib/flags/keys";
 import { resolveComposeBoardTarget } from "./composeBoardTarget";
@@ -60,6 +61,7 @@ export default function ComposeTaskWriter({ active, destinationProject, onCreate
   const unfurlImageUrls = useFlag(HTPR_7051_TASK_WRITER_IMAGE_UNFURL_FLAG);
   const applyWriterProperties = useFlag(HTPR_7343_CTRLJ_WRITER_PROPERTIES_FLAG);
   const boardChipEnabled = useFlag(HTPR_7053_COMPOSE_BOARD_CHIP_FLAG);
+  const boardFromTextEnabled = useFlag(HTPR_7305_BOARD_FROM_TEXT_FLAG);
   const alwaysShowBoardChip = useFlag(HTPR_7313_CTRLJ_ALWAYS_BOARD_CHIP_FLAG);
   const clickableFooter = useFlag(HTPR_7307_CTRLJ_FOOTER_CLICKABLE_FLAG);
   const footerButtonClassName = "rounded-[4px] transition hover:bg-hover-active hover:text-white-black focus-visible:bg-hover-active focus-visible:outline-none";
@@ -113,8 +115,10 @@ export default function ComposeTaskWriter({ active, destinationProject, onCreate
   const { data: boards = [], isFetching: loadingBoards } = useQuery<IProject[]>({
     queryKey: ["projectsAllMinimal", user?.id],
     queryFn: () => globalAPIHandlers.getAllProjectsMinimal("ExtraMinimal"),
-    enabled: boardChipEnabled && enabled && active && Boolean(user?.id),
+    enabled: (boardChipEnabled || boardFromTextEnabled) && enabled && active && Boolean(user?.id),
   });
+  const waitingForBoards = boardFromTextEnabled && loadingBoards && !boards.length;
+  const textBoardId = boardFromTextEnabled && selectedBoardId === undefined ? matchComposeTaskBoard(text, boards) : undefined;
   let targetBoardId: number | undefined;
   let showBoardChip = false;
   if (boardChipEnabled) {
@@ -123,13 +127,13 @@ export default function ComposeTaskWriter({ active, destinationProject, onCreate
       focusedTicketBoardId: inView?.taskId ? inView.taskProjectId : undefined,
       lastUsedBoardId: composeTaskBoardId("/", parseCookies().previousBoard, lastUsedBoards),
       destinationBoardId: destinationProject?.id,
-      selectedBoardId,
+      selectedBoardId: selectedBoardId ?? textBoardId,
     });
     targetBoardId = target.boardId;
     showBoardChip = target.showChip;
     if (alwaysShowBoardChip) showBoardChip = true;
   } else {
-    targetBoardId = undefined;
+    targetBoardId = textBoardId;
     showBoardChip = false;
   }
   const targetBoard: IProject | undefined = boards.find((board) => board.id === targetBoardId)
@@ -226,7 +230,7 @@ export default function ComposeTaskWriter({ active, destinationProject, onCreate
   };
 
   const send = async () => {
-    if (!enabled || sending.current || pendingImages.current > 0 || dictating || !text.trim()) return;
+    if (!enabled || sending.current || pendingImages.current > 0 || waitingForBoards || dictating || !text.trim()) return;
     sending.current = true;
     setWritingHeight(showProgress ? composer.current?.offsetHeight : undefined);
     setWriting(true);
@@ -239,7 +243,7 @@ export default function ComposeTaskWriter({ active, destinationProject, onCreate
       let targetProjectId: number | undefined;
       const detail = window.location.pathname.match(/^\/detail\/project-(\d+)\/(\d+)$/);
       if (newTaskWindow && !destinationProject && detail && inView?.taskId &&
-          (!boardChipEnabled || targetBoardId === Number(detail[1]))) {
+          ((!boardChipEnabled && !textBoardId) || targetBoardId === Number(detail[1]))) {
         const { data: task } = await axios.get("/api/tasks/single", { params: { id: inView.taskId } });
         if (task.projectId === Number(detail[1]) && task.uniqueIndex === Number(detail[2]) && isEmptyComposeTarget(task)) {
           existingTaskId = task.id;
@@ -250,7 +254,7 @@ export default function ComposeTaskWriter({ active, destinationProject, onCreate
       if (boardChipEnabled) {
         projectId = targetBoardId;
       } else {
-        projectId = destinationProject?.id ?? targetProjectId ?? composeTaskBoardId(window.location.href, parseCookies().previousBoard, lastUsedBoards);
+        projectId = textBoardId ?? destinationProject?.id ?? targetProjectId ?? composeTaskBoardId(window.location.href, parseCookies().previousBoard, lastUsedBoards);
       }
       if (!projectId || !user?.id) throw new Error("Open a board first, then try again. Your note is still here.");
       let project = destinationProject?.id === projectId ? destinationProject : (currentProject?.id === projectId ? currentProject : undefined);
@@ -415,7 +419,7 @@ export default function ComposeTaskWriter({ active, destinationProject, onCreate
                     }} />
                 </div>}
               </div>
-              <SendMessageButton disabled={addingImages || dictating || !text.trim()} mobile={mobile} onClick={() => void send()} />
+              <SendMessageButton disabled={addingImages || waitingForBoards || dictating || !text.trim()} mobile={mobile} onClick={() => void send()} />
             </div>
           </div>
           <input type="file" accept={newTaskWindow ? undefined : "image/*"} multiple hidden ref={fileInputRef} onChange={(event) => {
