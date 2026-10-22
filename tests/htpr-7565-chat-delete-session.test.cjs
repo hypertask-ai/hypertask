@@ -157,7 +157,13 @@ for (const compat of [false, true]) {
     const files = [{ id: 8, chatMessageId: foreign.messages[0].id, fileSource: 'foreign.png' }];
     const expected = structuredClone({ rows: [foreign], files });
     const f = fixture({ compat, rows: [foreign], files });
-    const response = await f.remove(id(2));
+    const response = await withLogs(async ({ warnings }) => {
+      const result = await f.remove(id(2));
+      assert.deepEqual(warnings, [[
+        "[ai-chat/delete-session] refused delete of another user's chat", { callerId: 985, sessionId: id(2) },
+      ]], 'a refused foreign delete is logged with ids only');
+      return result;
+    });
     assert.equal(response.status, 404);
     assert.deepEqual(await response.json(), { error: 'Session not found' });
     assert.deepEqual(f.rows, expected.rows);
@@ -304,7 +310,11 @@ for (const compat of [false, true]) {
   test(`nonexistent session has no attachment or mutation side effects (compat=${compat})`, async () => {
     const f = fixture({ compat });
     const expected = structuredClone(f.rows);
-    const response = await f.remove(id(404));
+    const response = await withLogs(async ({ warnings }) => {
+      const result = await f.remove(id(404));
+      assert.deepEqual(warnings, [], 'a missing chat is not reported as a foreign delete');
+      return result;
+    });
     assert.equal(response.status, 404);
     assert.deepEqual(await response.json(), { error: 'Session not found' });
     assert.deepEqual(f.rows, expected);

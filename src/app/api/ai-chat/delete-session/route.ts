@@ -9,6 +9,21 @@ import { NextRequest, NextResponse } from "next/server";
 
 export const runtime = "nodejs";
 
+async function warnIfSessionBelongsToAnotherUser(sessionId: string, callerId: number) {
+  if (sessionId === "ALL") return;
+  try {
+    const session = await prisma.chatSession.findFirst({
+      where: { id: sessionId },
+      select: { userId: true },
+    });
+    if (session && session.userId !== callerId) {
+      console.warn("[ai-chat/delete-session] refused delete of another user's chat", { callerId, sessionId });
+    }
+  } catch (error) {
+    console.error("[ai-chat/delete-session] foreign-chat check failed", error);
+  }
+}
+
 export async function DELETE(req: NextRequest) {
   try {
     const cookieStore = await cookies();
@@ -68,6 +83,7 @@ export async function DELETE(req: NextRequest) {
     });
 
     if (!attachments) {
+      await warnIfSessionBelongsToAnotherUser(toDelete, user.id);
       return NextResponse.json({ error: "Session not found" }, { status: 404 });
     }
 
