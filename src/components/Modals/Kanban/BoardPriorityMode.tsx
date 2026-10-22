@@ -11,9 +11,6 @@ import { ModalBody } from "reactstrap";
 import { useRecoilState } from "@/lib/state";
 import { sortingModeLabel, TBoardSortingLevel } from "@/models/Views/model";
 
-import { useFlag } from "@/hooks/useFlag";
-import { HTPR_6930_MY_TASKS_KANBAN_REUSE_FLAG } from "@/lib/flags/keys";
-
 export type PickerSortingLevel<ExtraMode extends string = never> = {
     mode: SortingMode | ExtraMode;
     order: SortingOrder;
@@ -38,13 +35,12 @@ const ascendingSortingModes = new Set<string>([
 ])
 
 const BoardPriorityMode = <ExtraMode extends string = never,>(props: Props<ExtraMode>) => {
-    const kanbanReuseEnabled = useFlag(HTPR_6930_MY_TASKS_KANBAN_REUSE_FLAG);
     const [_currentProject, __] = useRecoilState(currentProjectAtom)
     const { setBoardSortingViewAndReturn } = useKanbanViews(_currentProject)
     const { closeHandler, onSortChange, sort, maxLevels = MAX_SORT_LEVELS } = props
-    const extraModes = kanbanReuseEnabled && onSortChange ? props.extraModes ?? [] : []
+    const extraModes = onSortChange ? props.extraModes ?? [] : []
     const isControlled = onSortChange !== undefined
-    const replaceSingleLevel = kanbanReuseEnabled && isControlled && maxLevels === 1
+    const replaceSingleLevel = isControlled && maxLevels === 1
 
     const currentHoveredDiv = useRef<number | null>(null);
     const teamRef = useRef<HTMLDivElement>(null);
@@ -67,7 +63,7 @@ const BoardPriorityMode = <ExtraMode extends string = never,>(props: Props<Extra
     const [selectedPriority, setSelectedPriority] = useState<SortingMode | ExtraMode>();
     const defaultModes: SortingMode[] = ["UpdatedAt", "Priority", "DueDate", "Size", "Assignee", "Title", "TicketNumber", "TimeInColumn", "TimeOnBoard", "TimeWithoutComment", "CreatedAt", "SectionChangedAt", "LastCommentAt", "Manual"]
     const priorityModes: (SortingMode | ExtraMode)[] = [
-        ...(kanbanReuseEnabled && isControlled ? props.modes ?? defaultModes : defaultModes),
+        ...(isControlled ? props.modes ?? defaultModes : defaultModes),
         ...extraModes.map((option) => option.id),
     ];
     const labelFor = (mode: SortingMode | ExtraMode) => {
@@ -122,7 +118,7 @@ const BoardPriorityMode = <ExtraMode extends string = never,>(props: Props<Extra
 
     const removeLevel = (index: number) => {
         const nextLevels = levels.filter((_, levelIndex) => levelIndex !== index)
-        if (kanbanReuseEnabled && props.allowClear === false && nextLevels.length === 0) return
+        if (props.allowClear === false && nextLevels.length === 0) return
         persistLevels(nextLevels)
     }
 
@@ -291,7 +287,7 @@ const BoardPriorityMode = <ExtraMode extends string = never,>(props: Props<Extra
                                                         selectedOption={level.order}
                                                         handleSortOrder={(order) => handleSortOrder(index, order)}
                                                     />
-                                                    {!(kanbanReuseEnabled && props.allowClear === false) && <button
+                                                    {props.allowClear !== false && <button
                                                         type="button"
                                                         aria-label={`Remove ${labelFor(level.mode)} sort`}
                                                         onClick={(event) => {

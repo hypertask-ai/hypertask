@@ -1,8 +1,6 @@
 "use client";
 
 import OptionPickerModal from "@/components/Modals/OptionPicker";
-import { useFlag } from "@/hooks/useFlag";
-import { HTPR_6930_MY_TASKS_KANBAN_REUSE_FLAG } from "@/lib/flags/keys";
 import type { MyTasksGroupBy } from "@/models/MyTasksView";
 
 export default function MyTasksGroupPicker({ groupBy, onChange, onClose }: {
@@ -10,8 +8,7 @@ export default function MyTasksGroupPicker({ groupBy, onChange, onClose }: {
   onChange: (groupBy: MyTasksGroupBy) => void;
   onClose: () => void;
 }) {
-  const kanbanReuseEnabled = useFlag(HTPR_6930_MY_TASKS_KANBAN_REUSE_FLAG);
-  return kanbanReuseEnabled ? (
+  return (
     <OptionPickerModal
       header="Group by"
       options={[
@@ -25,5 +22,5 @@ export default function MyTasksGroupPicker({ groupBy, onChange, onClose }: {
       }}
       onClose={onClose}
     />
-  ) : null;
+  );
 }

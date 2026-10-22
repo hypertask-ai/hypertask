@@ -1,8 +1,6 @@
 "use client";
 
 import OptionPickerModal from "@/components/Modals/OptionPicker";
-import { useFlag } from "@/hooks/useFlag";
-import { HTPR_6930_MY_TASKS_KANBAN_REUSE_FLAG } from "@/lib/flags/keys";
 import { MY_TASKS_SCOPE_VALUES, type MyTasksScope } from "@/lib/myTasksScopes";
 
 const labels: Record<MyTasksScope, string> = {
@@ -17,8 +15,7 @@ export default function MyTasksInvolvementPicker({ scopes, onToggle, onClose }: 
   onToggle: (scope: MyTasksScope) => void;
   onClose: () => void;
 }) {
-  const kanbanReuseEnabled = useFlag(HTPR_6930_MY_TASKS_KANBAN_REUSE_FLAG);
-  return kanbanReuseEnabled ? (
+  return (
     <OptionPickerModal
       header="Involvement"
       options={MY_TASKS_SCOPE_VALUES.map((scope) => ({
@@ -30,5 +27,5 @@ export default function MyTasksInvolvementPicker({ scopes, onToggle, onClose }: 
       }}
       onClose={onClose}
     />
-  ) : null;
+  );
 }
