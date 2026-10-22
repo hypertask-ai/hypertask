@@ -340,7 +340,10 @@ const InboxSplit = ({
   const currentUser = useCurrentUser() ?? inboxDocument?.data.user;
   const instantTicketOpen = useFlag(HTPR_6752_INSTANT_TICKET_OPEN_FLAG);
   const decisionCommentLinkEnabled = useFlag(HTPR_7311_DECISION_COMMENT_LINK_FLAG);
-  const decisionCommentLinks = decisionCommentLinkEnabled && selectedSplit === decisionsSplitName;
+  let decisionCommentLinks = false;
+  if (decisionCommentLinkEnabled) {
+    decisionCommentLinks = selectedSplit === decisionsSplitName;
+  }
   const { navigate, navigateToTask } = useHypertasksNavigate();
   const taskRef = useRef<HTMLDivElement>(null);
   const activeSplitRef = useRef<HTMLDivElement>(null);

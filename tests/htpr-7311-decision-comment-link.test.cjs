@@ -156,9 +156,12 @@ const notification = (overrides = {}) => ({
 function createInboxHarness(enabled, split, rows = [notification()], disableInboxFlow = false) {
   const calls = [];
   let playlist;
+  const tree = sourceTree(inboxFile);
+  const decisionGate = findNode(tree, (node) => ts.isIfStatement(node) && node.expression.getText(tree) === "decisionCommentLinkEnabled");
+  assert.ok(decisionGate);
   const environment = {
     inboxConfig, withDecisionCommentAnchor,
-    decisionCommentLinks: evaluate(expression(inboxFile, "decisionCommentLinks"), { decisionCommentLinkEnabled: enabled, selectedSplit: split, decisionsSplitName }),
+    decisionCommentLinks: evaluate(`(() => { let decisionCommentLinks = ${expression(inboxFile, "decisionCommentLinks")}; ${decisionGate.getText(tree)} return decisionCommentLinks; })()`, { decisionCommentLinkEnabled: enabled, selectedSplit: split, decisionsSplitName }),
     disableInboxFlow, disableNotificationSideEffects: true,
     _notifications: rows, selectedKeyboardRow: { item: { kind: "notification", notification: rows[0] } },
     setTasksPlayList: (value) => { playlist = value; },
