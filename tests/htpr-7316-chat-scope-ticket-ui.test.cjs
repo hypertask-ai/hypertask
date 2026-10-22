@@ -154,38 +154,43 @@ async function sendPayload(state) {
       "@/lib/mcp/bearerAuth": { mcpAuthorizationHeaders: () => ({}) },
       "@/lib/demo/guestBoardBuild": { isGuestBoardBuild: () => false },
     });
-    const result = await createAiChatSend({
-      ...state,
-      editor: { getHTML: () => "<p>Summarize this</p>", getText: () => "Summarize this", commands: { clearContent: noop } },
-      fileUpload: { fileItems: [], clearFiles: noop },
-      waitForChatSession: async () => ({ id: "session", messages: [] }),
-      processAttachments: async () => [], addMessageToSessionQuery: noop,
-      drainQueuedMessage: noop, handleSendMessageRef: { current: null },
-      setAgentStatus: noop, appendMessageToSessionCache: assert.fail,
-      chatRoute: "/api/ai/chat/stream", currentAiOption: { id: "model" },
-    }).handleSendMessage();
+    let result;
+    await React.act(async () => {
+      result = await createAiChatSend({
+        ...state,
+        editor: { getHTML: () => "<p>Summarize this</p>", getText: () => "Summarize this", commands: { clearContent: noop } },
+        fileUpload: { fileItems: [], clearFiles: noop },
+        waitForChatSession: async () => ({ id: "session", messages: [] }),
+        processAttachments: async () => [], addMessageToSessionQuery: noop,
+        drainQueuedMessage: noop, handleSendMessageRef: { current: null },
+        setAgentStatus: noop, appendMessageToSessionCache: assert.fail,
+        chatRoute: "/api/ai/chat/stream", currentAiOption: { id: "model" },
+      }).handleSendMessage();
+    });
     assert.equal(result, true);
     assert.ok(payload);
     return payload;
   } finally { global.fetch = originalFetch; console.log = originalLog; }
 }
 
-for (const ticketScopeSelected of [false, true]) {
-  test(`chat hook forwards the resolved ticket-scope selection to the sender: ${ticketScopeSelected}`, () => {
-    let sending;
-    const { useAiChat } = load("src/hooks/MultiPages/AIChat/useAiChat.ts", {
-      react: { useState: () => [0, noop], useEffect: noop },
-      "@/hooks/useFlag": { useFlag: () => false },
-      "@/lib/state": { useRecoilState: () => [null, noop] },
-      "@/store": {},
-      "./useAiChatState": { useAiChatState: () => ({ ticketScopeSelected }) },
-      "./useAiChatSessions": { useAiChatSessions: () => ({}) },
-      "./useAiChatAttachments": { useAiChatAttachments: () => ({}) },
-      "./aiChatSend": { createAiChatSend: (context) => { sending = context; return {}; } },
-      "./aiChatKeyboard": { createAiChatKeyboard: () => ({}) },
-      "./useAiChatPresentation": { useAiChatPresentation: () => ({}) },
+for (const enabled of [false, true]) {
+  for (const ticketScopeSelected of [false, true]) {
+    test(`chat hook forwards ticket scope ${ticketScopeSelected} with flag ${enabled}`, () => {
+      let sending;
+      const { useAiChat } = load("src/hooks/MultiPages/AIChat/useAiChat.ts", {
+        react: { useState: () => [0, noop], useEffect: noop },
+        "@/hooks/useFlag": { useFlag: (key) => key === flag && enabled },
+        "@/lib/state": { useRecoilState: () => [null, noop] },
+        "@/store": {},
+        "./useAiChatState": { useAiChatState: () => ({ ticketScopeSelected }) },
+        "./useAiChatSessions": { useAiChatSessions: () => ({}) },
+        "./useAiChatAttachments": { useAiChatAttachments: () => ({}) },
+        "./aiChatSend": { createAiChatSend: (context) => { sending = context; return {}; } },
+        "./aiChatKeyboard": { createAiChatKeyboard: () => ({}) },
+        "./useAiChatPresentation": { useAiChatPresentation: () => ({}) },
+      });
+      useAiChat();
+      assert.equal(sending.ticketScopeSelected, enabled && ticketScopeSelected);
     });
-    useAiChat();
-    assert.equal(sending.ticketScopeSelected, ticketScopeSelected);
-  });
+  }
 }

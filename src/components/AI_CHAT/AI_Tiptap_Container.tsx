@@ -97,6 +97,9 @@ export function AI_Tiptap_Container({
 } = {}) {
   const composeTaskWriterEnabled = useFlag(HTPR_6929_COMPOSE_TASK_WRITER_FLAG);
   const composeBoardChipFlag = useFlag(HTPR_7053_COMPOSE_BOARD_CHIP_FLAG);
+  const ticketScopeFlag = useFlag(HTPR_7316_CHAT_SCOPE_TICKET_FLAG);
+  let ticketScopeEnabled = false;
+  if (ticketScopeFlag) ticketScopeEnabled = true;
   let composeBoardChipEnabled = false;
   if (composeBoardChipFlag) composeBoardChipEnabled = true;
   const ComposerTextarea = composeTaskWriterEnabled ? AiComposerTextarea : "textarea";
@@ -259,7 +262,7 @@ export function AI_Tiptap_Container({
           data-ai-chat-mobile-context-row
           className="mb-2 flex min-w-0 items-center gap-2"
         >
-          {!pathname?.startsWith("/chat") && <ChatScopeDropdown mobile reuseChip={composeBoardChipEnabled} />}
+          {!pathname?.startsWith("/chat") && <ChatScopeDropdown mobile reuseChip={composeBoardChipEnabled} ticketScopeEnabled={ticketScopeEnabled} />}
           <div
             data-ai-chat-mobile-context-scroll
             className="flex min-w-0 flex-1 items-center gap-2 overflow-x-auto scrollbar-none"
@@ -372,7 +375,7 @@ export function AI_Tiptap_Container({
                     pathname?.startsWith("/chat") ? undefined : "hidden"
                   }
                 />
-                {!pathname?.startsWith("/chat") && <ChatScopeDropdown reuseChip={composeBoardChipEnabled} />}
+                {!pathname?.startsWith("/chat") && <ChatScopeDropdown reuseChip={composeBoardChipEnabled} ticketScopeEnabled={ticketScopeEnabled} />}
               </>
             )
           }
@@ -513,8 +516,7 @@ export function AI_Tiptap_Container({
   );
 }
 
-function ChatScopeDropdown({ mobile = false, reuseChip = false }: { mobile?: boolean; reuseChip?: boolean }) {
-  const ticketScopeEnabled = useFlag(HTPR_7316_CHAT_SCOPE_TICKET_FLAG);
+function ChatScopeDropdown({ mobile = false, reuseChip = false, ticketScopeEnabled = false }: { mobile?: boolean; reuseChip?: boolean; ticketScopeEnabled?: boolean }) {
   const pathname = usePathname();
   const currentUser = useRecoilValue(currentUserAtom);
   const currentProject = useRecoilValue(currentProjectAtom);
