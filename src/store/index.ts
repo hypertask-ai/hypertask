@@ -381,7 +381,7 @@ export const fullScreenChatScopeAtom = atom<number | null>({
     effects_UNSTABLE: [persistAtom],
 });
 
-export const dockedChatScopeAtom = atom<number | "all" | null>({
+export const dockedChatScopeAtom = atom<number | "all" | "ticket" | null>({
     key: "dockedChatScope",
     default: null,
     effects_UNSTABLE: [persistAtom],

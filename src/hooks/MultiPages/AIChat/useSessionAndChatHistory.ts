@@ -49,7 +49,7 @@ export const useSessionAndChatHistory = (
   const nameBoardRef = useRef<number | undefined>(undefined);
   let scopedBoardId: number | undefined = fullScreenScope ?? undefined;
   if (!(pathname?.startsWith("/chat") ?? false)) {
-    if (dockedScope === null) scopedBoardId = currentProject?.id;
+    if (dockedScope === null || dockedScope === "ticket") scopedBoardId = currentProject?.id;
     else scopedBoardId = dockedScope === "all" ? undefined : dockedScope;
   }
   if (chatNames) nameBoardRef.current = scopedBoardId;
