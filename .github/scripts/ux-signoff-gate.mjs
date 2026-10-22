@@ -329,6 +329,15 @@ function commentVerdict(comment) {
   return /^(?:(?:yes|yep|yeah|go|ok|okay|agree|approve|approved|lgtm|looks good|ship it)\b|👍)/u.test(text) ? 'approve' : null;
 }
 
+function asksYesToDesign(comment, wireframeLink, designIds) {
+  const text = plainText(comment.text).trim();
+  const ask = /^Question:[ \t]*([^\n]*)/.exec(text)?.[1].toLowerCase().replace(/[’‘]/g, "'");
+  if (ask == null || !/(?:^|\n)[ \t]*Yes:/.test(text)) return false;
+  if (/\b(?:no|not|block|blocked|reject|defer|postpone|hold|wait|stop|cancel|revert|undo)\b|n't/.test(ask)) return false;
+  return comment.text.match(WIREFRAME)?.[0] === wireframeLink ||
+    designIds.some((id) => new RegExp(`#comment-${id}(?!\\d)`).test(comment.text));
+}
+
 function valentinReacted(comment) {
   const edited = comment.editedAt ?? comment.updatedAt;
   return (comment.reactions ?? []).some((reaction) =>
@@ -369,14 +378,15 @@ export function evaluate({ title, author, files, comments = [], parentComments =
     Date.parse(comment.createdAt) > created && commentVerdict(comment)));
   const approval = verdict && commentVerdict(verdict) === 'approve' && Date.parse(verdict.createdAt) > revision ? verdict : null;
   const reacted = wireframe && valentinReacted(wireframe);
-  const question = wireframe && newest(comments.filter((comment) =>
-    !humanValentin(comment, 'creatorId') && /^Question:/.test(plainText(comment.text).trim()) &&
-    Date.parse(comment.createdAt) > revision && valentinReacted(comment)));
-  const approved = commentVerdict(verdict ?? {}) !== 'reject' && Boolean(approval || reacted || question);
   const wireframeLink = wireframe?.text.match(WIREFRAME)?.[0];
   const earlierSameWireframe = !wireframe ? [] : comments.filter((comment) => comment !== wireframe &&
     !humanValentin(comment, 'creatorId') && comment.text.match(WIREFRAME)?.[0] === wireframeLink &&
     Date.parse(comment.editedAt ?? comment.updatedAt ?? comment.createdAt) < created);
+  const designIds = [wireframe, ...earlierSameWireframe].map((comment) => comment?.id).filter((id) => id != null);
+  const question = wireframe && newest(comments.filter((comment) =>
+    !humanValentin(comment, 'creatorId') && Date.parse(comment.createdAt) > revision &&
+    asksYesToDesign(comment, wireframeLink, designIds) && valentinReacted(comment)));
+  const approved = commentVerdict(verdict ?? {}) !== 'reject' && Boolean(approval || reacted || question);
   const newElements = [...new Set(ui.filter(({ filename, status }) =>
     (status === 'added' || status === 'copied') && filename.startsWith('src/components/') &&
     /\.(tsx|jsx)$/.test(filename)).map(({ filename }) => {

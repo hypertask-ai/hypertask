@@ -346,9 +346,25 @@ test('a Question thumbs up is still refused from an agent, before or at its last
   const later = htpr7518();
   later.comments.push(yes({ id: 299600, createdAt: '2026-10-22T21:40:00Z', text: '<p>No, change the greeting</p>' }));
   assert.equal((await decision(later)).state, 'failure');
-  const unnamed = htpr7518({ text: '<p>Question: <strong>May slice A ship?</strong></p>' });
+  const unnamed = htpr7518({ text: '<p>Question: <strong>May slice A ship?</strong></p><p>Details: #comment-297898</p><p>Yes: it merges.</p>' });
   unnamed.comments[0].text = '<p>Wireframe: https://hypertask.app/wireframes/htpr-7518</p>';
   assert.match((await decision(unnamed)).description, /New element AgentSidebarChatCommands/);
+});
+
+test('a Question thumbs up approves only an affirmative Question tied to the current wireframe', async () => {
+  const linked = '<p>Question: <strong>May slice A ship: AgentSidebarChatCommands, AgentConnectGreeting, TerminalSessionMirror?</strong></p><p>Wireframe: https://hypertask.app/wireframes/htpr-7518</p><p>Yes: it merges.</p>';
+  assert.equal((await decision(htpr7518({ text: linked }))).state, 'success');
+  for (const text of [
+    '<p>Question: <strong>May slice A ship: AgentSidebarChatCommands?</strong></p><p>Yes: it merges.</p>',
+    '<p>Question: <strong>Should we keep this design blocked?</strong></p><p>Details: #comment-297898</p><p>Yes: it stays blocked.</p>',
+    '<p>Question: <strong>Should we not ship slice A?</strong></p><p>Details: #comment-297898</p><p>Yes: we wait.</p>',
+    '<p>Question: <strong>Can this wait until next week?</strong></p><p>Details: #comment-297898</p><p>Yes: later.</p>',
+    '<p>Question: <strong>May slice A ship?</strong></p><p>Details: #comment-297898</p>',
+    '<p>Question: <strong>May slice A ship?</strong></p><p>Details: #comment-2978981</p><p>Yes: it merges.</p>',
+    '<p>Question: <strong>May slice A ship?</strong></p><p>Wireframe: https://hypertask.app/wireframes/htpr-7000</p><p>Yes: it merges.</p>',
+  ]) {
+    assert.equal((await decision(htpr7518({ text }))).state, 'failure', text);
+  }
 });
 
 const htpr7577 = ({ question = {}, earlier = {}, extra = [] } = {}) => ({
@@ -367,6 +383,18 @@ const htpr7577 = ({ question = {}, earlier = {}, extra = [] } = {}) => ({
 
 test('HTPR-7577: a thumbs up on a newer Question with the same wireframe carries over that wireframe’s element names', async () => {
   assert.equal((await decision(htpr7577())).state, 'success');
+});
+
+test('HTPR-7577: a linkless Question needs his own yes comment; his comment then carries over the element names', async () => {
+  const reply = wireframe({ id: 299543, createdAt: '2026-10-22T21:35:41.113Z', agent: { displayName: 'Runner 5' },
+    text: '<p>Question: Build it so any board member can add their own agents, as in the wireframe https://hypertask.app/wireframes/htpr-7577 ?</p><p>Yes: building starts.</p>' });
+  const linkless = wireframe({ id: 299550, createdAt: '2026-10-22T21:36:12.634Z', agent: { displayName: 'HT Product Lead' },
+    editedAt: '2026-10-22T21:36:48.138Z', text: '<p>Question: <strong>Build it with today’s rule: any board member can add an agent they own?</strong></p><p>Yes: RUNNER 3 builds the wireframe.</p><p>No: say who.</p>',
+    reactions: [{ userId: 6, emoji: '👍', createdAt: '2026-10-22T21:38:21.592Z' }] });
+  const okay = yes({ id: 299551, createdAt: '2026-10-22T21:38:47.315Z', text: '<p>Okay. Either way, everybody should be able to give their agent access to a board.</p>' });
+  const base = { question: { reactions: [] } };
+  assert.equal((await decision(htpr7577({ ...base, extra: [reply, linkless] }))).state, 'failure');
+  assert.equal((await decision(htpr7577({ ...base, extra: [reply, linkless, okay] }))).state, 'success');
 });
 
 test('element names do not carry over from another wireframe, a later edit, an agent reaction or after his pushback', async () => {
