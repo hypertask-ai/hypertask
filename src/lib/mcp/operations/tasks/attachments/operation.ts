@@ -135,11 +135,12 @@ export async function POST(request: NextRequest) {
 
   let descriptionId: string | null = null;
   let commentId: number | null = null;
+  let mayRewriteTargetText = true;
 
   if (parsed.comment_id !== undefined) {
     const comment = await prisma.comment.findFirst({
       where: { id: parsed.comment_id, taskId: task.id },
-      select: { id: true },
+      select: { id: true, creatorId: true },
     });
     if (!comment) {
       return NextResponse.json(
@@ -148,6 +149,7 @@ export async function POST(request: NextRequest) {
       );
     }
     commentId = comment.id;
+    mayRewriteTargetText = comment.creatorId === user.id;
   } else {
     const description = await prisma.description.findUnique({
       where: { taskId: task.id },
@@ -172,7 +174,7 @@ export async function POST(request: NextRequest) {
         taskId: task.id,
         commentId,
         descriptionId,
-        inlineImages: parsed.inline_images !== false && await isFeatureEnabled(HTPR_7514_INLINE_AGENT_IMAGES_FLAG, user.id),
+        inlineImages: mayRewriteTargetText && parsed.inline_images !== false && await isFeatureEnabled(HTPR_7514_INLINE_AGENT_IMAGES_FLAG, user.id),
       }
     );
 

@@ -250,7 +250,7 @@ for (const [file, pattern] of surfaces) test(`write surface uses shared rule: ${
 
 test("flag-gated entrypoints, upload transaction and prompts stay wired to the ticket flag", () => {
   assert.match(read("src/components/Modals/commands/HTC/ComposeTaskWriter.tsx"), /useFlag\(HTPR_7514_INLINE_AGENT_IMAGES_FLAG\)/);
-  assert.match(read("src/lib/mcp/operations/tasks/attachments/operation.ts"), /parsed.inline_images !== false && await isFeatureEnabled\(HTPR_7514_INLINE_AGENT_IMAGES_FLAG, user.id\)/);
+  assert.match(read("src/lib/mcp/operations/tasks/attachments/operation.ts"), /mayRewriteTargetText && parsed.inline_images !== false && await isFeatureEnabled\(HTPR_7514_INLINE_AGENT_IMAGES_FLAG, user.id\)/);
   assert.match(read("src/lib/mcp/attachments/storeLockedBatch.ts"), /persistAttachmentRows\(tx, uploads, persistenceTarget\)/);
   assert.match(read("src/lib/api/task-writes/update.ts"), /delete newTask.inline_images/);
   for (const file of ["src/lib/ai/chatStream/modelTurn.ts", "src/app/api/ai/_lib/taskWriterRun.ts"]) {
@@ -435,4 +435,35 @@ for (const enabled of [false, true]) {
       assert.equal(writes[0].description, "");
     });
   }
+}
+
+for (const [creatorId, expectedInline] of [[985, true], [7, false]]) {
+  test(`image upload to a comment by ${creatorId === 985 ? "the uploader still inlines" : "another user is refused inline rewriting"}`, async () => {
+    const targets = [];
+    const { NextResponse } = require("next/server");
+    const { POST } = load("src/lib/mcp/operations/tasks/attachments/operation.ts", {
+      "@/lib/flags": { isFeatureEnabled: async (key, userId) => key === flag && userId === 985 },
+      "@/lib/mcp/routeWrapper": { wrapMcpRoute: (handler) => handler },
+      "@/lib/mcp/auth": { checkMcpRateLimit: async () => null, validateMcpAuth: async () => ({ user: { id: 985 }, agentId: null }) },
+      "@/lib/prisma": { default: { comment: { findFirst: async ({ where, select }) => {
+        assert.deepEqual(where, { id: 44, taskId: 91 });
+        assert.deepEqual(select, { id: true, creatorId: true });
+        return { id: 44, creatorId };
+      } } } },
+      "@/lib/mcp/agents/scopes": { requireRole: async () => null },
+      "@/lib/mcp/tasks/resolveTask": { findTaskByIdentifier: async () => ({ id: 91 }), taskIdentifierErrorResponse: () => null },
+      "@/lib/mcp/attachments/readRequestBody": { McpAttachmentRequestBodyError: class extends Error {}, readMcpAttachmentJsonBody: async () => ({}) },
+      "@/lib/mcp/attachments/validateBody": { parseAndValidateAttachmentsBody: () => ({ task_id: 91, comment_id: 44, files: [png] }) },
+      "@/lib/mcp/attachments/storeBatch": { AttachmentBatchError: class extends Error {} },
+      "@/lib/mcp/attachments/storeLockedBatch": { storeAttachmentBatchWithTargetLock: async (_client, _files, _lock, target) => { targets.push(target); return []; } },
+      "@/lib/mcp/attachments/safeFetch": { McpAttachmentFetchError: class extends Error {}, safeFetchAttachmentUrl: async () => null },
+      "@/lib/mcp/attachments/constants": { normalizeMime: (value) => value },
+      "@/lib/mcp/attachments/downloadHandler": { createAttachmentDownloadHandler: () => () => NextResponse.json({}) },
+      "@/lib/mcp/operationCrashReport": { reportMcpOperationCrash: () => {} },
+      "@/lib/realtime/server": { broadcastTaskChange() {}, broadcastTaskComment() {} },
+    });
+    const response = await POST(new Request("https://app.hypertask.ai/api/mcp/tasks/attachments", { method: "POST", body: "{}" }));
+    assert.equal(response.status, 200);
+    assert.deepEqual(targets, [{ taskId: 91, commentId: 44, descriptionId: null, inlineImages: expectedInline }]);
+  });
 }
