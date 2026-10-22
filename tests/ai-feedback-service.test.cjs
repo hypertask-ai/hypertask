@@ -6,7 +6,7 @@ const stub = (file, exports) => {
   const filename = path.join(root, file)
   require.cache[filename] = { id: filename, filename, loaded: true, exports }
 }
-let enabled, globalEnabled, rows, created, updates, comments, commentCreates, descriptionWrites, labelCreated, taskQuery, userQuery, failWrite, configured, failFlag, partialWriteFailure
+let enabled, globalEnabled, plainEnabled, rows, created, updates, comments, commentCreates, descriptionWrites, labelCreated, taskQuery, userQuery, failWrite, configured, failFlag, partialWriteFailure
 let bucketCounts, lockQueue, lockKeys, attempts, activeRedis, prismaCalls, flagCalls, onQuota, labelError, labelRace, onLock, onTaskCreate, transactionError, onQueued, openTransactions, transactionRecords
 const redis = {
   eval: async (script, _keys, key, now, limit, token) => {
@@ -29,7 +29,7 @@ const redis = {
   },
 }
 stub('src/lib/redis.ts', { getRedis: async () => activeRedis })
-stub('src/lib/flags.ts', { isFeatureEnabled: async () => { flagCalls++; if (failFlag) throw new Error('flag storage failed'); return enabled }, featureFlagCandidateUserIds: async () => { flagCalls++; if (failFlag) throw new Error('flag storage failed'); return globalEnabled ? null : [6, 985] } })
+stub('src/lib/flags.ts', { isFeatureEnabled: async (key) => { flagCalls++; if (failFlag) throw new Error('flag storage failed'); return key === 'htpr-7536-plain-ai-feedback' ? plainEnabled : key === 'htpr-7195-ai-feedback' && enabled }, featureFlagCandidateUserIds: async (key) => { flagCalls++; if (failFlag) throw new Error('flag storage failed'); return (key === 'htpr-7536-plain-ai-feedback' ? plainEnabled : key === 'htpr-7195-ai-feedback' && globalEnabled) ? null : [6, 985] } })
 const db = {
   user: { findUnique: async (query) => { userQuery = query; return { displayName: 'Kamil <Admin> customer@example.test' } } },
   project: {
@@ -121,7 +121,7 @@ const { queueAiFeedback } = jiti('../src/lib/aiFeedback/automatic.ts')
 const input = { surface: 'mcp', client: 'claude', tool: 'hypertask_tasks', status: 503, errorCode: 'unavailable', error: 'Cannot save "Confidential task description" for customer@example.test' }
 
 test.beforeEach(() => {
-  pending = []; enabled = true; globalEnabled = false; rows = []; created = []; updates = []; comments = []; commentCreates = []; descriptionWrites = 0; labelCreated = 0; bucketCounts = new Map(); lockQueue = new Map(); lockKeys = []; attempts = new Map(); prismaCalls = 0; flagCalls = 0; onQuota = undefined; labelError = undefined; labelRace = false; activeRedis = redis; failWrite = false; configured = true; failFlag = false; partialWriteFailure = false; onLock = undefined; onTaskCreate = undefined; transactionError = undefined; onQueued = undefined; openTransactions = 0; transactionRecords = []; userQuery = undefined; taskQuery = undefined
+  pending = []; enabled = true; globalEnabled = false; plainEnabled = false; rows = []; created = []; updates = []; comments = []; commentCreates = []; descriptionWrites = 0; labelCreated = 0; bucketCounts = new Map(); lockQueue = new Map(); lockKeys = []; attempts = new Map(); prismaCalls = 0; flagCalls = 0; onQuota = undefined; labelError = undefined; labelRace = false; activeRedis = redis; failWrite = false; configured = true; failFlag = false; partialWriteFailure = false; onLock = undefined; onTaskCreate = undefined; transactionError = undefined; onQueued = undefined; openTransactions = 0; transactionRecords = []; userQuery = undefined; taskQuery = undefined
   delete process.env.AI_FEEDBACK_AGENT_USER_ID
 })
 
@@ -719,4 +719,15 @@ test('automatic contention still files when the lock becomes free just before th
   assert.equal(bucketCounts.has('ai-feedback:quota:42:bump'), false)
   assert.equal(openTransactions, 0)
   assert.equal(lockQueue.size, 0)
+})
+
+
+test('plain flag On changes summaries without changing the filing receipt or dedupe tally', async () => {
+  plainEnabled = true
+  const result = await fileAiFeedback(input, 42)
+  assert.equal(result.success, true)
+  assert.match(created[0].title, /server error/)
+  assert.match(created[0].description, /What happened/)
+  assert.equal((await fileAiFeedback(input, 42)).count, 2)
+  assert.equal(created.length, 1)
 })

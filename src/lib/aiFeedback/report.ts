@@ -1,5 +1,6 @@
 import prisma from '@/lib/prisma'
 import { aiFeedbackEnabled } from './enabled'
+import { HTPR_7536_PLAIN_AI_FEEDBACK_FLAG } from '@/lib/flags/definitions/htpr-7536-plain-ai-feedback'
 import { PriorityConstants } from '@/lib/constants/constants'
 import { escapeHtml } from '@/utils/htmlEscape'
 import { createTaskCore } from '@/utils/controllers/tasks/createTaskCore'
@@ -54,7 +55,54 @@ function description(input: AiFeedbackInput, fingerprint: string, displayName?: 
     reporterLine('Clients', input.client ? [input.client] : [])
 }
 
-export async function fileAiFeedback(raw: unknown, userId?: number) {
+function scopeRefusal(input: AiFeedbackInput): boolean {
+  if (![401, 403, 404].includes(input.status ?? 0)) return false
+  const code = input.errorCode?.toLowerCase().replace(/[._-]+/g, ' ') ?? ''
+  if (code === 'route not found' || code === 'not found' && /\/api\//i.test(input.error ?? '')) return false
+  const refusal = `${code} ${input.error ?? ''}`
+  return /\b(?:unauthorized|forbidden|(?:permission|access|scope) (?:denied|refused)|insufficient (?:permissions?|scope)|(?:invalid|expired|revoked) (?:token|key)|(?:token|key) (?:invalid|expired|revoked)|auth(?:entication)? failed|(?:task|board|project) not found)\b/i.test(refusal)
+}
+
+export function plainFeedback(input: AiFeedbackInput, fingerprint: string, reporter?: { agentName?: string; ownerName?: string; origin?: 'agent' | 'automatic' }) {
+  const surface = { mcp: 'MCP', cli: 'CLI', api: 'API', agent: 'agent connection' }[input.surface]
+  const call = `An agent's ${surface} call${input.tool && input.tool !== input.surface ? ` to ${input.tool}` : ''}`
+  const noDetails = !input.tool && input.status === undefined && !input.errorCode && !input.error && !input.note
+  let happened: string
+  let reading: string
+  let action: string
+  if (reporter?.origin !== 'automatic' && scopeRefusal(input)) {
+    const signIn = input.status === 401 || input.errorCode?.toLowerCase() === 'unauthorized' || input.category === 'auth_failed'
+    happened = signIn ? `An agent was refused when it signed in through ${surface}` : `${call} was refused because the agent may not use that board or action`
+    reading = signIn ? 'This usually means the agent used a wrong or expired key, not a Hypertask bug.' : 'The agent may have used a board or action it is not allowed to use; this is usually not a Hypertask bug.'
+    action = "Tell the agent's owner to check its key and board permissions."
+  } else if (input.status !== undefined && input.status >= 500) {
+    happened = `${call} failed because Hypertask returned a server error`
+    reading = 'This is likely a Hypertask bug.'
+    action = 'An engineer should look.'
+  } else {
+    const failure = {
+      call_failed: 'failed', empty_result: 'returned nothing', unexpected_result: 'returned an unexpected result',
+      slow: 'was slow', user_reported_broken: 'was reported as broken', other: 'had a problem', auth_failed: 'was refused',
+    }[input.category ?? 'other']
+    happened = `${call} ${failure}${noDetails ? ' with no details' : ''}`
+    reading = noDetails ? "There are no details, so we can't tell whether this is a Hypertask bug." : "The report alone does not show whether this is a Hypertask bug."
+    action = noDetails ? 'Nothing for now; wait for a report with details.' : 'An engineer should look.'
+  }
+  const date = new Intl.DateTimeFormat('en-GB', { day: 'numeric', month: 'short', timeZone: 'UTC' }).format(new Date())
+  const who = reporter?.agentName
+    ? `${reporter.agentName}${reporter.ownerName ? `, owned by ${reporter.ownerName}` : ''}`
+    : reporter?.ownerName ? `an agent owned by ${reporter.ownerName}` : 'unknown agent'
+  return {
+    title: `${happened} (${date})`,
+    description: `<p><strong>What happened</strong>: ${escapeHtml(happened)}.</p>` +
+      `<p><strong>Who hit it</strong>: ${escapeHtml(who)}.</p>` +
+      `<p><strong>Is it a real bug?</strong> ${escapeHtml(reading)}</p>` +
+      `<p><strong>What to do</strong>: ${escapeHtml(action)}</p>` +
+      '<h2>Details for engineers</h2>' + description(input, fingerprint, reporter?.ownerName),
+  }
+}
+
+export async function fileAiFeedback(raw: unknown, userId?: number, reporter: { origin: 'agent' | 'automatic'; agentName?: string | null } = { origin: 'agent' }) {
   if (!await aiFeedbackEnabled(userId)) throw new AiFeedbackError(404, 'Not found')
   const parsed = aiFeedbackSchema.safeParse(raw)
   if (!parsed.success) {
@@ -64,6 +112,13 @@ export async function fileAiFeedback(raw: unknown, userId?: number) {
   const reporterId = userId ?? Number(process.env.AI_FEEDBACK_AGENT_USER_ID)
   if (!Number.isSafeInteger(reporterId) || reporterId <= 0) return
   const input = { ...parsed.data, client: parsed.data.client?.toLowerCase() }
+  let plain = false
+  try {
+    const { featureFlagCandidateUserIds, isFeatureEnabled } = await import('@/lib/flags')
+    plain = userId === undefined
+      ? await featureFlagCandidateUserIds(HTPR_7536_PLAIN_AI_FEEDBACK_FLAG) === null
+      : await isFeatureEnabled(HTPR_7536_PLAIN_AI_FEEDBACK_FLAG, userId)
+  } catch {}
   const fingerprint = feedbackFingerprint(input)
   const marker = `<p>Fingerprint: ai-fb-${fingerprint.slice(0, 12)}</p>`
   const doneSections = await prisma.section.findMany({ where: { projectId: PROJECT_ID, OR: [{ isDone: true }, { section_title: { equals: 'Done', mode: 'insensitive' } }] }, select: { id: true, section_title: true } })
@@ -99,6 +154,10 @@ export async function fileAiFeedback(raw: unknown, userId?: number) {
         const existing = await tx.task.findFirst({
           where, select: { id: true, userId: true, ticketNumber: true, uniqueIndex: true },
         })
+        if (plain && reporter.origin === 'agent' && scopeRefusal(input) && !existing) {
+          console.info('AI feedback not filed: normal access refusal', { surface: input.surface, fingerprint: `ai-fb-${fingerprint.slice(0, 12)}` })
+          return { success: false as const, filed: false as const, reason: 'access_refused' as const, error: 'Normal access refusal; no new ticket was filed.' }
+        }
         if (!await reserveFeedbackQuota(userId, Boolean(existing))) {
           throw new AiFeedbackError(429, 'AI feedback hourly limit reached')
         }
@@ -133,10 +192,15 @@ export async function fileAiFeedback(raw: unknown, userId?: number) {
           }
         }
         const count = 1
+        const readable = plain ? plainFeedback(input, fingerprint, {
+          agentName: scrubFeedbackText(reporter?.agentName ?? '').slice(0, 60) || undefined,
+          ownerName: displayName,
+          origin: reporter.origin,
+        }) : undefined
         const { task } = await createTaskCore({
           creationChannel: "agent",
-          title: `AI feedback: ${input.surface} ${input.tool ?? input.errorCode ?? input.status ?? 'unexpected-result'}`.slice(0, 80),
-          description: description(input, fingerprint, displayName),
+          title: readable?.title ?? `AI feedback: ${input.surface} ${input.tool ?? input.errorCode ?? input.status ?? 'unexpected-result'}`.slice(0, 80),
+          description: readable?.description ?? description(input, fingerprint, displayName),
           userId: actorId, projectId: PROJECT_ID, sectionId: section.id, sectionTitle: section.section_title,
           projectIdentifier: project.uniqueIdentifier, createDrafts: false, labelIds: [label.id],
           priorityIndex: PriorityConstants.find((priority) => priority.Priority_Value === 'Medium')!.priority_index,

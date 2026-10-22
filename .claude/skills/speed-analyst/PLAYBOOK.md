@@ -394,6 +394,18 @@ https://app.hypertask.ai/detail/project-15/7395, PR 1759 (flag `htpr-7395-cached
 
 **Next probe.** Live on/off for both after deploy (flag forced per sample by rewriting `/api/flags`): 7554 counts font requests on the desktop returning board; 7555 times phone page navigation and the first ticket tap. If 7555 helps but persistence still shows in the tap profile, the next target is `serializePersistedClientWithinBudget` stringifying each query twice.
 
+### 2026-10-22 midday: the cache save no longer re-measures unchanged data; CPU saved, ticket text not sooner (HTPR-7555)
+
+https://app.hypertask.ai/detail/project-15/7555, PR 1838 (merge 9209e26b3, flag `htpr-7555-persist-size-once`, Everyone).
+
+**Method.** Live, QA 2343, phone profile, fresh context per sample: board 6859, tap ticket 43, 8 s after the description shows. Flag forced per sample through an `/api/flags` rewrite. An init script times every `JSON.stringify`; after each sample the IndexedDB record is read and hashed. Script: `~/.local/state/vcc-evidence/HTPR-7555/probe.mjs`.
+
+**Result (load 6 to 9, interleaved, every run kept).** Stringify time in the tap window: on 171 ms median (155 to 174, N=5), off 317 ms (293 to 367, N=5); calls 7.1k vs 10.6k. Time to ticket text: on 8097 ms, off 7785 ms, ranges overlap: no measurable change. The saved work runs mostly after the text paints. Same 53 cached keys, same non-flag data hash, same text and screenshot hash in every sample.
+
+**Trap.** The saved cache differed by exactly 1 byte between arms: the persisted `feature-flags` query holds the forced flag (`true` vs `false`). Hash the cache with the flag query excluded before calling an identical-output check failed.
+
+**Next probe.** `createQueryCacheRecord` still stringifies each kept query in `keepWithinBudget` and then the whole client on every persist. Reusing the per-query string from the size check could remove one more pass; measure with the same probe.
+
 ## Milliseconds saved scoreboard
 
 Only matched end-to-end before/after evidence earns saved milliseconds; `unproven` is not zero. Do not sum different cohorts or claim forecasts as savings.
@@ -419,6 +431,7 @@ Only matched end-to-end before/after evidence earns saved milliseconds; `unprove
 | https://app.hypertask.ai/detail/project-15/7406 | Desktop board-returning, first card, local premerge ABAB N=6, load 8 to 11 | 912 ms (OFF) → 255 ms (ON); chat composer 1364 → 1854 ms | about 650 ms local to the board, about -490 ms to the chat | flag `htpr-7406-desktop-server-board`; live: 2030 → 1079 / 1098 ms (two complete runs, N=5 each, 5 of 5 served), first visit unchanged by flag A/B (off 2157, on 2004 ms) |
 | https://app.hypertask.ai/detail/project-15/7502 | Search link in a fresh tab, live probe, desktop and phone N=5 each | search requests 2 (9 of 10) → 0 (10 of 10); content desktop 5234 → 1773 ms, phone 14774 → 9940 ms | unproven ms (load 42 to 67 before, 18 to 22 after); 2 requests saved per open | flag `htpr-7502-search-once`, PR 1731, identical results |
 | https://app.hypertask.ai/detail/project-15/7395 | Phone tap from the board to ticket text, live on/off interleaved, build 309ae766d, load 2 to 3 | 10531 ms (off, N=5) → 7398 ms (on, N=10) | about 3,100 ms | flag `htpr-7395-cached-static-first`, PRs 1759 and 1822; settled screenshot identical 15 of 15 |
+| https://app.hypertask.ai/detail/project-15/7555 | Phone tap board to ticket, JSON.stringify time, live on/off interleaved N=5+5, load 6 to 9 | 317 ms (off) → 171 ms (on) main-thread stringify; ticket text 7785 → 8097 ms (overlapping) | about 146 ms CPU, 0 to ticket text | flag `htpr-7555-persist-size-once`, PR 1838; cache, text and screenshot identical |
 
 Confirmed, comparable saved-ms total in this seed: **not established**. Future entries must link private before/after summaries, commits, N, median/p90/range and QA proof. This deliberately avoids inventing savings absent from the history.
 

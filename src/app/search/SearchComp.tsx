@@ -14,7 +14,7 @@ import { buildFullScreenChatPath } from "@/lib/aiChatDisplayMode";
 import { HTPR_6936_ASK_AI_FULLSCREEN_FLAG } from "@/lib/flags/keys";
 import { HTPR_6865_SEARCH_LAYOUT_FLAG, HTPR_6878_SEARCH_LABEL_SCOPE_FLAG, HTPR_6879_SEARCH_ESC_BACK_FLAG, HTPR_6880_SEARCH_COMMENTER_FLAG } from "@/lib/flags/keys";
 import { highlightedSearchSnippet, highlightedTitle } from "@/lib/search/autocomplete";
-import { HTPR_6882_SEARCH_MATCH_HIGHLIGHTS_FLAG, HTPR_6911_SEARCH_ROW_HIGHLIGHT_FLAG } from "@/lib/flags/keys";
+import { HTPR_6882_SEARCH_MATCH_HIGHLIGHTS_FLAG } from "@/lib/flags/keys";
 import LabelWrapper from "@/components/Labels/LabelWrapper";
 import { MobileViewContext } from "@/lib/contexts/mobileContext";
 import { useRecoilValue, useSetRecoilState } from "@/lib/state";
@@ -62,7 +62,6 @@ const SearchComp = ({
     : _searchTerm;
   const layoutEnabled = useFlag(HTPR_6865_SEARCH_LAYOUT_FLAG);
   const matchHighlightsFlagEnabled = useFlag(HTPR_6882_SEARCH_MATCH_HIGHLIGHTS_FLAG);
-  const rowHighlightFlagEnabled = useFlag(HTPR_6911_SEARCH_ROW_HIGHLIGHT_FLAG);
   const commenterFlagEnabled = useFlag(HTPR_6880_SEARCH_COMMENTER_FLAG);
   const labelScopeFlagEnabled = useFlag(HTPR_6878_SEARCH_LABEL_SCOPE_FLAG);
   const searchEscBackFlagEnabled = useFlag(HTPR_6879_SEARCH_ESC_BACK_FLAG);
@@ -245,7 +244,7 @@ const SearchComp = ({
                                 isActive={selectedIndex === index}
                                 liRef={liSelectedRef}
                                 aligned={layoutEnabled}
-                                inboxHighlight={layoutEnabled && rowHighlightFlagEnabled}
+                                inboxHighlight={layoutEnabled}
                                 snippetParts={matchSnippets?.[index]}
                               />
                             </Fragment>
