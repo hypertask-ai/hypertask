@@ -12,7 +12,7 @@ test("the flag is a bugfix flag that is on for everyone", () => {
 
 test("the Connect your agent block renders only when the flag is off", () => {
   assert.match(landing, /const connectBlockRemoved = useFlag\(HTPR_7078_REMOVE_CONNECT_BLOCK_FLAG\)/);
-  assert.match(landing, /\{!connectBlockRemoved && _currentProject && _currentUser\?\.id && \(\s*<AgentConnectCard/);
+  assert.match(landing, /const inlineConnectCard = !connectBlockRemoved && _currentProject && _currentUser\?\.id \? \(\s*<AgentConnectCard/);
   assert.equal(landing.match(/<AgentConnectCard/g).length, 1);
 });
 

@@ -4,15 +4,16 @@ const React = require("react");
 const { JSDOM } = require("jsdom");
 const { load } = require("./helpers/agent-connection.cjs");
 const FLAG = "htpr-7026-agent-connect-check";
+const OVERLAY_FLAG = "htpr-7550-connect-overlay";
 const planFlag = load("src/lib/flags/definitions/htpr-7551-start-plan-checkout.ts");
 
 function loadScreen(enabled = true, startPlanEnabled = false, planFlagReady = true) {
   return load("src/components/PageComponents/Onboarding/Screens/ConnectAIOnboardingScreen.tsx", {
     "@/hooks/useFlag": {
-      useFlag: (key) => key === planFlag.HTPR_7551_START_PLAN_CHECKOUT_FLAG ? startPlanEnabled : (assert.equal(key, FLAG), enabled),
+      useFlag: (key) => key === planFlag.HTPR_7551_START_PLAN_CHECKOUT_FLAG ? startPlanEnabled : key === OVERLAY_FLAG ? false : (assert.equal(key, FLAG), enabled),
       useFlagReady: () => planFlagReady,
     },
-    "@/lib/flags/keys": { ...planFlag, HTPR_7026_AGENT_CONNECT_CHECK_FLAG: FLAG },
+    "@/lib/flags/keys": { ...planFlag, HTPR_7026_AGENT_CONNECT_CHECK_FLAG: FLAG, HTPR_7550_CONNECT_OVERLAY_FLAG: OVERLAY_FLAG },
     "@/components/Modals/CliInstall/constants": { INSTALL_COMMAND: "install fixture", LOGIN_COMMAND: "hypertask login" },
     "@/components/Modals/McpToken/components": {
       getIntegrationChipClassName: () => "text-meta",

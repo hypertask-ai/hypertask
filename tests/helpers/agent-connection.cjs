@@ -8,7 +8,7 @@ function load(file, mocks = {}) {
   if (/src\/lib\/flags\/(?:keys|definitions)\.ts$/.test(file)) return require("./flag-files.cjs").load(file);
   const filename = path.join(root, file);
   const compiled = ts.transpileModule(fs.readFileSync(filename, "utf8"), {
-    compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022, jsx: ts.JsxEmit.React, esModuleInterop: true },
+    compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022, jsx: ts.JsxEmit.ReactJSX, esModuleInterop: true },
   }).outputText;
   const loaded = new Module(filename);
   loaded.filename = filename;
