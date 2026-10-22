@@ -88,7 +88,7 @@ const AgentSettingsList: React.FC<AgentSettingsListProps> = ({
                 {agent.role && (
                   <span
                     className={cn(
-                      "shrink-0 rounded-[5px] bg-active-modal-element px-1.5 py-[1px] text-micro font-medium text-text-light-gray",
+                      "shrink-0 rounded-sm bg-active-modal-element px-1.5 py-[1px] text-micro font-medium text-text-light-gray",
                       agent.role === "admin" && "text-white-black",
                     )}
                   >
@@ -97,7 +97,7 @@ const AgentSettingsList: React.FC<AgentSettingsListProps> = ({
                 )}
                 {onChangeRole && agent.runtimeType !== "NATIVE" && (
                   <button
-                    className="inline-flex shrink-0 items-center gap-1 rounded-[5px] px-2 py-1 text-dense font-semibold text-white-black transition hover:bg-hover-active focus-visible:bg-hover-active focus-visible:outline-none disabled:cursor-not-allowed disabled:text-text-light-gray"
+                    className="inline-flex shrink-0 items-center gap-1 rounded-sm px-2 py-1 text-dense font-semibold text-text-light-gray transition hover:bg-hover-active hover:text-white-black focus-visible:bg-hover-active focus-visible:text-white-black focus-visible:outline-none disabled:cursor-not-allowed disabled:text-text-light-gray"
                     disabled={changingRole}
                     onClick={() => onChangeRole(agent)}
                     type="button"
