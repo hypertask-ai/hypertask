@@ -435,6 +435,29 @@ class CacheTests(unittest.TestCase):
         self.assertEqual(self.cache_path.read_bytes(), before)
         self.assertEqual(self.summary[:2], ("2", "3"))
 
+    def test_truncated_dispatch_state_does_not_halt_next_run(self):
+        self.loop.mkdir()
+        path = self.loop / "last-dispatch.json"
+        path.write_text('{"%1":')
+        self.rows = [{"runner": "RUNNER 1", "pane": "%1", "state": "done"}]
+        replace = os.replace
+        replaced = []
+        def check_replace(source, target):
+            if target == path:
+                self.assertEqual(path.read_text(), '{"%1":')
+                self.assertEqual(source.parent, path.parent)
+                self.assertEqual(json.loads(source.read_text()), {"%1": self.now})
+                replaced.append(target)
+            replace(source, target)
+        with patch.object(m.os, "replace", side_effect=check_replace):
+            self.run_dispatch()
+        self.assertIn("sent=HTPR-1", self.stdout.getvalue())
+        self.assertEqual(replaced, [path])
+        self.assertEqual(json.loads(path.read_text()), {"%1": self.now})
+        self.assertEqual(self.cache()["runs"], 1)
+        self.assertEqual(self.stderr.getvalue().count("malformed last-dispatch.json"), 1)
+        self.assertEqual(list(self.loop.glob("*.tmp.*")), [])
+
     def test_atomic_replace_in_same_directory_only_after_dispatch(self):
         replace = os.replace
         with patch.object(m, "dispatch", return_value=[]) as dispatch:
@@ -578,7 +601,8 @@ class MutationTests(unittest.TestCase):
                     self.assertEqual(source.count(old), 1)
                     mutant = Path(directory) / name
                     mutant.write_text(source.replace(old, new))
-                    result = subprocess.run([sys.executable, str(Path(__file__).resolve()), f"CacheTests.{test}"],
+                    result = subprocess.run(["nice", "-n", "19", sys.executable, "-I",
+                                             str(Path(__file__).resolve()), f"CacheTests.{test}"],
                                             env=dict(os.environ, DISPATCH_TEST_SOURCE=str(mutant),
                                                      PYTHONDONTWRITEBYTECODE="1"),
                                             text=True, capture_output=True, timeout=30)

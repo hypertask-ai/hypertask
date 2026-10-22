@@ -1,5 +1,7 @@
 #!/usr/bin/env python3
 """JSON fixture tests; external commands and sleeps are always mocked."""
+import contextlib
+import io
 import importlib.machinery
 import importlib.util
 import json
@@ -7,6 +9,7 @@ import os
 import subprocess
 from pathlib import Path
 import tempfile
+import types
 import unittest
 from unittest.mock import patch
 
@@ -130,6 +133,45 @@ class DispatchTests(unittest.TestCase):
         self.add_speed_ticket()
         self.assertEqual(self.dispatch(self.rows[8:])[0]["ticket"], "HTPR-9")
 
+    def test_speed_active_holds_block_ticket_and_research_before_claim(self):
+        self.comments["HTPR-4"] = [claim("Speed Runner")]
+        self.ready_go()
+        for state in ("idle", "waiting_valentin"):
+            for speed_ticket in (False, True):
+                self.boards[15] = [t for t in self.boards[15] if t["ticketNumber"] != "HTPR-9"]
+                if speed_ticket:
+                    self.add_speed_ticket()
+                for go in (False, True):
+                    with self.subTest(state=state, speed_ticket=speed_ticket, go=go):
+                        with patch.object(m, "acquire_claim", wraps=m.acquire_claim) as acquire:
+                            result = self.dispatch([dict(self.rows[8], state=state)], go=go)[0]
+                        self.assertEqual(result["held"], ["HTPR-4"])
+                        self.assertIsNone(result["ticket"])
+                        acquire.assert_not_called()
+                        self.commands.assert_not_called()
+                        self.assertEqual(list(self.state.iterdir()), [])
+
+    def test_fresh_active_holds_abort_and_release_unsent_claim(self):
+        self.add_speed_ticket()
+        for row in (self.rows[0], self.rows[8]):
+            self.comments["HTPR-4"] = [claim(row["runner"])]
+            for state in (("idle",) if row["runner"] != m.SPEED else ("idle", "waiting_valentin")):
+                with self.subTest(runner=row["runner"], state=state):
+                    self.ready_go([dict(row, state=state)])
+                    self.commands.reset_mock()
+                    result = self.dispatch([row], go=True)[0]
+                    self.assertIsNone(result["ticket"])
+                    self.assertEqual(result["state"], state)
+                    self.assertFalse(any("send-keys" in c.args for c in self.commands.call_args_list))
+                    self.assertEqual(list(self.claim_dir.glob("*.json")), [])
+                    self.assertFalse((self.loop / "last-dispatch.json").exists())
+
+    def test_speed_done_with_stale_hold_still_dispatches(self):
+        self.add_speed_ticket()
+        self.comments["HTPR-4"] = [claim(m.SPEED)]
+        self.ready_go()
+        self.assertEqual(self.dispatch(self.rows[8:], go=True)[0]["ticket"], "HTPR-9")
+
     def test_speed_tickets_never_go_to_normal_runners(self):
         self.add_speed_ticket()
         self.boards[15] = [t for t in self.boards[15] if t["ticketNumber"] == "HTPR-9"]
@@ -206,6 +248,114 @@ class DispatchTests(unittest.TestCase):
         self.assertEqual(self.dispatch()[1]["ticket"], "HTPR-1")
         path.write_text(json.dumps({"%1": self.now - 600}))
         self.assertEqual(self.dispatch()[0]["ticket"], "HTPR-1")
+
+    def test_malformed_dispatch_state_is_empty_with_one_log_line(self):
+        self.loop.mkdir()
+        path = self.loop / "last-dispatch.json"
+        for raw in ('{"%1":', '[]', 'null', '{"%1":"bad"}', '{"%1":true}',
+                    '{"%1":NaN}', '{"%1":Infinity}'):
+            with self.subTest(raw=raw):
+                path.write_text(raw)
+                stderr = io.StringIO()
+                with contextlib.redirect_stderr(stderr):
+                    self.assertEqual(self.dispatch(self.rows[:1])[0]["ticket"], "HTPR-1")
+                self.assertEqual(stderr.getvalue().splitlines(), [
+                    "runner-dispatch: malformed last-dispatch.json; using empty state"])
+                self.assertEqual(path.read_text(), raw)
+        path.unlink()
+        with contextlib.redirect_stderr(io.StringIO()) as stderr:
+            self.assertEqual(m.read_last(self.loop), {})
+        self.assertEqual(stderr.getvalue(), "")
+
+    def test_dispatch_state_replaced_atomically_for_normal_speed_and_research(self):
+        self.add_speed_ticket()
+        self.loop.mkdir()
+        path = self.loop / "last-dispatch.json"
+        replace = os.replace
+        for row, ticket in ((self.rows[0], "HTPR-1"), (self.rows[8], "HTPR-9"),
+                            (self.rows[8], "research")):
+            with self.subTest(ticket=ticket):
+                if ticket == "research":
+                    self.boards[15] = [t for t in self.boards[15] if t["ticketNumber"] != "HTPR-9"]
+                path.write_text('{"truncated":')
+                self.ready_go()
+                replacements = []
+                def check_replace(source, target):
+                    if target == path:
+                        self.assertEqual(path.read_text(), '{"truncated":')
+                        self.assertEqual(source.parent, path.parent)
+                        self.assertNotEqual(source, target)
+                        expected = {row["pane"]: self.now}
+                        if ticket == "research":
+                            expected["speed-research"] = self.now
+                        self.assertEqual(json.loads(source.read_text()), expected)
+                        replacements.append(target)
+                    replace(source, target)
+                with patch.object(m.os, "replace", side_effect=check_replace), \
+                        contextlib.redirect_stderr(io.StringIO()):
+                    self.assertEqual(self.dispatch([row], go=True)[0]["action"], "sent")
+                self.assertEqual(replacements, [path])
+                self.assertEqual(json.loads(path.read_text())[row["pane"]], self.now)
+                self.assertEqual(list(self.loop.glob("*.tmp.*")), [])
+
+    def test_dispatch_state_write_failure_preserves_old_state_and_cleans_temp(self):
+        self.loop.mkdir()
+        path = self.loop / "last-dispatch.json"
+        old = '{"%1": 123}\n'
+        path.write_text(old)
+        write_text = Path.write_text
+        def partial_write(target, text, *args, **kwargs):
+            write_text(target, text[:3], *args, **kwargs)
+            raise OSError("partial write")
+        for failure in ("write", "replace"):
+            with self.subTest(failure=failure):
+                if failure == "write":
+                    mocked = patch.object(Path, "write_text", partial_write)
+                else:
+                    mocked = patch.object(m.os, "replace", side_effect=OSError("replace failed"))
+                with mocked, self.assertRaises(OSError):
+                    m.write_last(self.loop, {"%1": self.now})
+                self.assertEqual(path.read_text(), old)
+                self.assertEqual(list(self.loop.glob("*.tmp.*")), [])
+
+    def test_review_fix_mutations_are_killed(self):
+        source = SOURCE.read_text()
+        mutants = [
+            ("speed_hold", 'row["state"] not in SPEED_STATES\n                    or blocking',
+             'row["state"] not in SPEED_STATES', "test_speed_active_holds_block_ticket_and_research_before_claim", 1),
+            ("waiting_hold", 'blocking = holding if row["state"] != "done" else []',
+             'blocking = holding if row["state"] == "idle" else []',
+             "test_speed_active_holds_block_ticket_and_research_before_claim", 1),
+            ("fresh_speed_hold", 'fresh[0]["state"] not in SPEED_STATES\n                            or (fresh[0]["state"] != "done" and holding)',
+             'fresh[0]["state"] not in SPEED_STATES', "test_fresh_active_holds_abort_and_release_unsent_claim", 1),
+            ("fresh_normal_hold", 'fresh[0]["state"] not in {"done", "idle"}\n                            or (fresh[0]["state"] != "done" and holding)',
+             'fresh[0]["state"] not in {"done", "idle"}', "test_fresh_active_holds_abort_and_release_unsent_claim", 1),
+            ("malformed_state", "except ValueError:", "except json.JSONDecodeError as error:\n        raise error",
+             "test_malformed_dispatch_state_is_empty_with_one_log_line", 1),
+            ("state_validation", 'raise ValueError("invalid dispatch timestamps")', 'return data',
+             "test_malformed_dispatch_state_is_empty_with_one_log_line", 1),
+            ("non_atomic_state", "os.replace(temporary, path)", "path.write_text(temporary.read_text())",
+             "test_dispatch_state_replaced_atomically_for_normal_speed_and_research", 1),
+            ("temp_cleanup", "temporary.unlink(missing_ok=True)\n\n\ndef acquire_claim",
+             "pass\n\n\ndef acquire_claim", "test_dispatch_state_write_failure_preserves_old_state_and_cleans_temp", 1),
+        ]
+        for name, old, new, test, count in mutants:
+            with self.subTest(mutant=name):
+                self.assertEqual(source.count(old), count)
+                mutant = types.ModuleType("runner_dispatch_mutant")
+                mutant.__file__ = str(SOURCE)
+                exec(compile(source.replace(old, new, count), str(SOURCE), "exec"), mutant.__dict__)
+                with patch.dict(globals(), m=mutant):
+                    result = unittest.TextTestRunner(stream=io.StringIO()).run(
+                        unittest.TestSuite([DispatchTests(test)]))
+                self.assertFalse(result.wasSuccessful())
+                self.assertTrue(result.failures or result.errors)
+                self.assertTrue(all("AssertionError" in error for _, error in result.failures))
+                expected_errors = (("AttributeError", "TypeError") if name == "state_validation"
+                                   else ("JSONDecodeError", "ValueError: invalid dispatch timestamps"))
+                self.assertTrue(all(any(expected in error for expected in expected_errors)
+                                    for _, error in result.errors), result.errors)
+                print(f"MUTATION KILLED {name}: DispatchTests.{test}")
 
     def test_atomic_link_claim_conflict_preserves_owner_and_removes_tmp(self):
         path = self.file_claim("HTPR-1", "Mini Boss CEO")

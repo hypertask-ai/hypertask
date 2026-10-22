@@ -158,7 +158,29 @@ def free_tickets(boards, comments, claim_dir):
 
 def read_last(loop):
     path = loop / "last-dispatch.json"
-    return json.loads(path.read_text()) if path.exists() else {}
+    try:
+        data = json.loads(path.read_text())
+        if (not isinstance(data, dict) or
+                any(type(value) not in (int, float) or not 0 <= value < float("inf")
+                    for value in data.values())):
+            raise ValueError("invalid dispatch timestamps")
+        return data
+    except FileNotFoundError:
+        return {}
+    except ValueError:
+        print("runner-dispatch: malformed last-dispatch.json; using empty state", file=sys.stderr)
+        return {}
+
+
+def write_last(loop, last):
+    loop.mkdir(parents=True, exist_ok=True)
+    path = loop / "last-dispatch.json"
+    temporary = loop / f"last-dispatch.json.tmp.{os.getpid()}"
+    try:
+        temporary.write_text(json.dumps(last) + "\n")
+        os.replace(temporary, path)
+    finally:
+        temporary.unlink(missing_ok=True)
 
 
 def acquire_claim(ticket, row, claim_dir, now):
@@ -248,9 +270,10 @@ def dispatch(rows, boards, comments, load, now, *, go=False, claim_dir=CLAIMS, l
         holding = held.get(runner.casefold(), [])
         result = dict(row, held=holding, ticket=None, action="planned")
         output.append(result)
-        blocking = holding if row["state"] == "idle" else []
+        blocking = holding if row["state"] != "done" else []
         if runner == SPEED:
-            if load > 12 or row["state"] not in SPEED_STATES or now - last.get(pane, 0) < 600:
+            if (load > 12 or row["state"] not in SPEED_STATES
+                    or blocking or now - last.get(pane, 0) < 600):
                 continue
             if speed_free:
                 ticket = speed_free.pop(0)
@@ -264,7 +287,8 @@ def dispatch(rows, boards, comments, load, now, *, go=False, claim_dir=CLAIMS, l
                     continue
                 try:
                     fresh = [r for r in snapshots() if r["pane"] == pane and r["runner"] == runner]
-                    if len(fresh) != 1 or fresh[0]["state"] not in SPEED_STATES or os.getloadavg()[0] > 12:
+                    if (len(fresh) != 1 or fresh[0]["state"] not in SPEED_STATES
+                            or (fresh[0]["state"] != "done" and holding) or os.getloadavg()[0] > 12):
                         if claim_path is not None:
                             claim_path.unlink()
                         if len(fresh) == 1:
@@ -281,8 +305,7 @@ def dispatch(rows, boards, comments, load, now, *, go=False, claim_dir=CLAIMS, l
                 result["action"] = "sent"
             result["ticket"] = ticket
             if go and result["action"] == "sent":
-                loop.mkdir(parents=True, exist_ok=True)
-                (loop / "last-dispatch.json").write_text(json.dumps(last) + "\n")
+                write_last(loop, last)
                 with (loop / "dispatch.log").open("a", encoding="utf-8") as stream:
                     stream.write(json.dumps({"at": datetime.fromtimestamp(now, timezone.utc).isoformat(),
                                              "runner": runner, "pane": pane, "ticket": result["ticket"],
@@ -302,7 +325,8 @@ def dispatch(rows, boards, comments, load, now, *, go=False, claim_dir=CLAIMS, l
                     before = saved[-1] + "k" if saved else "unknown"
                     # Snapshot all panes because runner-snapshot has no pane filter.
                     fresh = [r for r in snapshots() if r["pane"] == pane and r["runner"] == runner]
-                    if len(fresh) != 1 or fresh[0]["state"] not in {"done", "idle"} or os.getloadavg()[0] > 12:
+                    if (len(fresh) != 1 or fresh[0]["state"] not in {"done", "idle"}
+                            or (fresh[0]["state"] != "done" and holding) or os.getloadavg()[0] > 12):
                         (claim_dir / f"{ticket}.json").unlink()
                         free.insert(0, ticket)
                         if len(fresh) == 1:
@@ -314,10 +338,7 @@ def dispatch(rows, boards, comments, load, now, *, go=False, claim_dir=CLAIMS, l
                 at = time.time()
                 send(pane, f"/ship {ticket}", claim_dir / f"{ticket}.json")
                 last[pane] = at
-                loop.mkdir(parents=True, exist_ok=True)
-                temporary = loop / f"last-dispatch.json.tmp.{os.getpid()}"
-                temporary.write_text(json.dumps(last) + "\n")
-                os.replace(temporary, loop / "last-dispatch.json")
+                write_last(loop, last)
                 with (state / "fresh-session-trial.log").open("a", encoding="utf-8") as stream:
                     stream.write(f"{datetime.fromtimestamp(at).strftime('%H:%M')} {runner} before={before} {ticket} auto\n")
                 with (loop / "dispatch.log").open("a", encoding="utf-8") as stream:
