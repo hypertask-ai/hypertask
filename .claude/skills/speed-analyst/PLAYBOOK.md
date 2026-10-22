@@ -423,6 +423,29 @@ https://app.hypertask.ai/detail/project-15/7554, PR 1839 (merge 75b0995b7), reve
 
 **Next probe.** Reproduce the CLS cause on a PR build: the layout await alone (no href change) vs the href change alone. Then the real fix candidate: drop the three manual preloads (today they only add a second download) without any layout await, desktop returning board on/off, browser-smoke green first.
 
+### 2026-10-22 evening: phone page navigation waits for a board list before it starts (HTPR-7588)
+
+https://app.hypertask.ai/detail/project-15/7588, PR https://github.com/hypertask-ai/hypertask/pull/1863, flag `htpr-7588-board-shortcut-from-device`.
+
+**Question.** Phone page navigation (My Tasks, `g` then `b`) is the only milestone 1 miss with no owner: 2491 ms median on the 06:17 UTC run (p90 2618, 2097 to 2618, N=5, load 8.9; target 2000). Desktop 579 ms.
+
+**What found it.** The saved per-request waterfall of every page-navigation sample: a `getAllMinimal` request starts at 13 to 20 ms after the key press and the `/project` RSC request only after it returns, at 217 to 312 ms on the phone (desktop 110 to 176 ms). In code, the `b` handler in `GloablProviders.tsx` awaits `fetchQuery(["projectsAllMinimal", userId], staleTime 60 s)` before `goToProjectShortcut`, so every press more than a minute after the last list fetch pays a round trip first.
+
+**False leads, ruled out with live read-only probes (phone profile, QA 2343, load 2).**
+- "The phone never keeps its board copy": wrong. After one board visit the `ht_board_read_model_seen` marker is set and IndexedDB holds the board (6 of 6 contexts, quick or 20 s stay). Desktop page navigation reads it at about 250 ms; on the phone the read only starts at 750 to 1670 ms, after the route has rendered.
+- Chunks 2011 and 24392 carry the same board read-model modules and both download on a cold phone; they arrive after `boardTasks` and are off the content path. Minor waste, not chased.
+- A CPU profile showed 0.5 s in ticket modules (24111, 92049, emoji 13972) during the navigation; a timeline of the same profile puts them all after content. Cut any profile at the content time before ranking modules.
+
+**Remaining limiter (trace, phone, load 2).** Main thread busy 2.1 of 2.6 s; four React render tasks of 174 to 369 ms (`react-dom` chunk 93794) after `boardTasks`. Same shape as the board and the tap (HTPR-7395).
+
+**Change.** When the list already in the query client (account key, then the shared key `navigateToBoard` uses) contains the board, open it at once and refresh the list in the background; otherwise unchanged. Expected: phone about 2250 ms, desktop about 450 ms (estimate from the request start times).
+
+**Lessons.**
+- Read the first request of a navigation before blaming render: a `fetchQuery` with a short staleTime in front of `router.push` costs a round trip on every press after the stale window.
+- `feature-flag-gate` did not count `useFlag` assigned to a constant and used inside the async key handler; `if (useFlag(KEY)) lookup = flaggedLookup;` at render (the HTPR-7406 pattern) passes. Run the gate after `npm run flags:generate`.
+
+**Next probe.** Live flag on/off after deploy (`/api/flags` rewrite per sample, N=5 interleaved): key press to `/project` request, list requests before it (expect 1 off, 0 on), landed board identical. Then start the board read-model read at key press instead of after the route renders.
+
 ## Milliseconds saved scoreboard
 
 Only matched end-to-end before/after evidence earns saved milliseconds; `unproven` is not zero. Do not sum different cohorts or claim forecasts as savings.
@@ -450,6 +473,7 @@ Only matched end-to-end before/after evidence earns saved milliseconds; `unprove
 | https://app.hypertask.ai/detail/project-15/7395 | Phone tap from the board to ticket text, live on/off interleaved, build 309ae766d, load 2 to 3 | 10531 ms (off, N=5) → 7398 ms (on, N=10) | about 3,100 ms | flag `htpr-7395-cached-static-first`, PRs 1759 and 1822; settled screenshot identical 15 of 15 |
 | https://app.hypertask.ai/detail/project-15/7555 | Phone tap board to ticket, JSON.stringify time, live on/off interleaved N=5+5, load 6 to 9 | 317 ms (off) → 171 ms (on) main-thread stringify; ticket text 7785 → 8097 ms (overlapping) | about 146 ms CPU, 0 to ticket text | flag `htpr-7555-persist-size-once`, PR 1838; cache, text and screenshot identical |
 | https://app.hypertask.ai/detail/project-15/7554 | Font preloads vs stylesheet URL, live login, PR 1839 | 3 of 3 unmatched → 3 of 3 unmatched; ticket-page CLS 0.127 in browser-smoke | 0, regression, reverted in PR 1846 | premise wrong (stylesheet keeps an older deployment tag) |
+| https://app.hypertask.ai/detail/project-15/7588 | Phone page navigation, key press to /project request, daily harness N=5 | 217 to 312 ms (after a board-list request) → pending live on/off | unproven | flag `htpr-7588-board-shortcut-from-device`, PR 1863 |
 
 Confirmed, comparable saved-ms total in this seed: **not established**. Future entries must link private before/after summaries, commits, N, median/p90/range and QA proof. This deliberately avoids inventing savings absent from the history.
 
