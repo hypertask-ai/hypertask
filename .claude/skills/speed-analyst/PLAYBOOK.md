@@ -360,6 +360,26 @@ https://app.hypertask.ai/detail/project-15/7560.
 
 **Next probe.** Merge PR 1755 so the schedule exists, then the first GitHub run starts a new baseline (`conditions.runner: github-actions`, not comparable with VPS runs). HTPR-7560, 7395 and 7547 get their on/off numbers from it.
 
+### 2026-10-22 midday: phone tap from the board shows the ticket 3 s sooner; the static-first swap cut the bottom scroll short (HTPR-7395)
+
+https://app.hypertask.ai/detail/project-15/7395, PR 1759 (flag `htpr-7395-cached-static-first`, Everyone), fix PR 1822.
+
+**Method.** Live, QA 2343, board 6859, ticket 43, phone profile, fresh context per sample: board, wait 2 s, tap, time to non-empty `#description-input`, time to the editor, then a 12 s per-250 ms trace of the description top and `scrollTop`, settled screenshot hash and text hash. The flag is forced on or off per sample by rewriting the `/api/flags` response. Script: `~/.local/state/vcc-evidence/HTPR-7395/live-qa/trace.mjs`.
+
+**What found the problem.** Screenshot hashes, not timings: 1 of 6 flag-on screenshots differed. The trace showed the page growing in 5 steps for about 3.5 s after the text appeared (scrollHeight 900 to 1269), with `scrollWindowToBottomMobile` ending after 3 equal frames or 2.5 s and stopping 50 px short in 2 of 10 flag-on opens (0 of 7 off). Same text and geometry otherwise.
+
+**Fix (PR 1822).** On the flag path only, the mobile bottom scroll keeps following until the description editor is mounted, no composer slot reports unsettled and the height holds for 300 ms (10 s cap; user scroll still cancels). Flag off unchanged.
+
+**Result (live, build 309ae766d, load 2 to 3, interleaved, every run kept).** Text visible: on median 7398 ms (7117 to 8056, N=10), off 10531 ms (10263 to 11908, N=5). Scroll short stops 0 of 10. Settled screenshot hash identical in 15 of 15. Still above the ticket's 4 s target.
+
+**Lessons.**
+- A screenshot hash per sample catches a layout difference that timings miss; keep it in every on/off QA.
+- A description of 5 characters (highlighted text) broke a `> 20` characters readiness wait; wait for non-empty.
+- `feature-flag-gate` does not count a flag read inside a `useCallback` body or a ternary that picks between a function and `null`; a flag expression passed as a call argument at hook level counts (`deferredEditorReadyCheck(flag && ...)`). Run `.github/scripts/feature-flag-gate.mjs "<title>" origin/production HEAD` locally before pushing.
+- A `git reset --soft` onto a newer production folds production's newer changes into the commit as reversions; rebuild from only the changed files.
+
+**Next probe.** The remaining 7.4 s is the phone's main thread (HTPR-7395 CPU profile: React render 5.4 s); HTPR-7560 and research ideas 2, 3 and 5 target it.
+
 ## Milliseconds saved scoreboard
 
 Only matched end-to-end before/after evidence earns saved milliseconds; `unproven` is not zero. Do not sum different cohorts or claim forecasts as savings.
@@ -384,6 +404,7 @@ Only matched end-to-end before/after evidence earns saved milliseconds; `unprove
 | https://app.hypertask.ai/detail/project-15/7497 | First ticket request on a board-warm server, local production build, interleaved N=5+5, load 5 | 1352 ms → 654 ms | about 700 ms local | lazy sanitizer; live first-byte rate after deploy decides |
 | https://app.hypertask.ai/detail/project-15/7406 | Desktop board-returning, first card, local premerge ABAB N=6, load 8 to 11 | 912 ms (OFF) → 255 ms (ON); chat composer 1364 → 1854 ms | about 650 ms local to the board, about -490 ms to the chat | flag `htpr-7406-desktop-server-board`; live: 2030 → 1079 / 1098 ms (two complete runs, N=5 each, 5 of 5 served), first visit unchanged by flag A/B (off 2157, on 2004 ms) |
 | https://app.hypertask.ai/detail/project-15/7502 | Search link in a fresh tab, live probe, desktop and phone N=5 each | search requests 2 (9 of 10) → 0 (10 of 10); content desktop 5234 → 1773 ms, phone 14774 → 9940 ms | unproven ms (load 42 to 67 before, 18 to 22 after); 2 requests saved per open | flag `htpr-7502-search-once`, PR 1731, identical results |
+| https://app.hypertask.ai/detail/project-15/7395 | Phone tap from the board to ticket text, live on/off interleaved, build 309ae766d, load 2 to 3 | 10531 ms (off, N=5) → 7398 ms (on, N=10) | about 3,100 ms | flag `htpr-7395-cached-static-first`, PRs 1759 and 1822; settled screenshot identical 15 of 15 |
 
 Confirmed, comparable saved-ms total in this seed: **not established**. Future entries must link private before/after summaries, commits, N, median/p90/range and QA proof. This deliberately avoids inventing savings absent from the history.
 
