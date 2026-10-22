@@ -1,7 +1,13 @@
 import { execFileSync } from 'node:child_process';
 import { readFileSync } from 'node:fs';
+import { createRequire } from 'node:module';
 import { basename, dirname } from 'node:path';
 import { pathToFileURL } from 'node:url';
+
+const require = createRequire(import.meta.url);
+let typescript;
+try { typescript = require(process.env.FEATURE_FLAG_TYPESCRIPT_PATH || 'typescript'); }
+catch { /* Missing parser must retain sign-off, not disable the rest of the gate. */ }
 
 const CONTEXT = 'ux-signoff';
 const READ_ERROR = 'Could not read the ticket; retried every 10 minutes';
@@ -68,8 +74,8 @@ function patchedSource(source, file) {
 }
 
 function projectFlagOn(source, symbols) {
-  // Without a JS parser, ambiguous lexical contexts and noncanonical rewrites must retain sign-off.
-  if (/`|\/\*|\*\/|\/\/|\\\r?\n/.test(source)) return null;
+  // Keep the projection narrow even when the parser can disambiguate these contexts.
+  if (!typescript || /`|\/\*|\*\/|\/\/|\\\r?\n/.test(source)) return null;
   const imports = [...source.matchAll(/^import \{ ([A-Za-z_$][\w$]*(?:, [A-Za-z_$][\w$]*)*) \} from (["'])(@\/lib\/flags(?:\/keys)?|@\/hooks\/useFlag)\2;\n/gm)];
   const importedSymbols = new Set(imports.filter((match) => match[3].startsWith('@/lib/flags')).flatMap((match) => match[1].split(', ')));
   const importedHooks = new Set(imports.flatMap((match) => match[1].split(', ').filter((name) =>
@@ -86,8 +92,27 @@ function projectFlagOn(source, symbols) {
     });
   let unwrapped = 0;
   for (const alias of aliases) {
+    const parsed = typescript.createSourceFile('flag-removal.tsx', projected, typescript.ScriptTarget.Latest, true, typescript.ScriptKind.TSX);
+    if (parsed.parseDiagnostics.length) return null;
+    const branches = new Map();
+    function visit(node) {
+      if (typescript.isJsxExpression(node) && node.expression) {
+        const expression = node.expression;
+        const binary = typescript.isBinaryExpression(expression) &&
+          expression.operatorToken.kind === typescript.SyntaxKind.AmpersandAmpersandToken;
+        const conditional = typescript.isConditionalExpression(expression) &&
+          expression.whenFalse.kind === typescript.SyntaxKind.NullKeyword;
+        const condition = binary ? expression.left : conditional ? expression.condition : null;
+        const body = binary ? expression.right : conditional ? expression.whenTrue : null;
+        if (condition && typescript.isIdentifier(condition) && condition.text === alias &&
+          typescript.isParenthesizedExpression(body)) branches.set(node.getStart(parsed), node.end);
+      }
+      typescript.forEachChild(node, visit);
+    }
+    visit(parsed);
     const wrapper = new RegExp(`^([ \t]*)\\{${alias} (&&|\\?) \\(\n([\\s\\S]*?)^\\1\\)( : null)?\\}\n`, 'gm');
-    projected = projected.replace(wrapper, (whole, indent, operator, body, fallback) => {
+    projected = projected.replace(wrapper, (whole, indent, operator, body, fallback, offset) => {
+      if (branches.get(offset + indent.length) !== offset + whole.length - 1) return whole;
       if ((operator === '?') !== Boolean(fallback)) return whole;
       const rows = body.slice(0, -1).split('\n');
       if (!rows.length || rows.some((line) => !line.startsWith(indent + '  '))) return whole;

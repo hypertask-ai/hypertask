@@ -23,11 +23,11 @@ async function decision(overrides) {
   return result;
 }
 
-function removalFixture({ mode = 'EVERYONE', after, call = 'useFlag(HTPR_1_PANEL_FLAG)', module = '@/hooks/useFlag' } = {}) {
+function removalFixture({ mode = 'EVERYONE', before: original, after, call = 'useFlag(HTPR_1_PANEL_FLAG)', module = '@/hooks/useFlag' } = {}) {
   const key = 'htpr-1-panel';
   const filename = 'src/components/Panel.tsx';
   const definition = `src/lib/flags/definitions/${key}.ts`;
-  const before = [
+  const before = original ?? [
     `import { ${call.startsWith('await ') ? 'isFeatureEnabled' : 'useFlag'} } from "${module}";`,
     'import { HTPR_1_PANEL_FLAG } from "@/lib/flags/keys";',
     'export default async function Panel() {',
@@ -73,6 +73,44 @@ test('EVERYONE flag removal keeps the existing flag-on JSX and needs no wirefram
   });
   const server = removalFixture({ call: 'await isFeatureEnabled(HTPR_1_PANEL_FLAG, userId)', module: '@/lib/flags' });
   assert.equal((await decision(server)).state, 'success');
+});
+
+for (const [context, open, close] of [
+  ['double-quoted JSX attribute', '<main title="', '">'],
+  ['single-quoted JSX attribute', "<main title='", "'>"],
+  ['template literal', '<main>{`', '`}'],
+  ['block comment', '<main>{/*', '*/}'],
+  ['string literal with invalid raw newlines', '<main>{"', '"}'],
+]) {
+  test(`flag-like wrapper in ${context} cannot exempt a literal-text rewrite`, async () => {
+    const clean = removalFixture();
+    assert.equal((await decision(clean)).state, 'success');
+    const before = clean.sources['src/components/Panel.tsx']
+      .replace('    <main>', `    ${open}`)
+      .replace('    </main>', `    ${close}\n    </main>`);
+    const after = before.replace(/^import .*\n/gm, '')
+      .replace(/^  const panelEnabled = .*\n/m, '')
+      .replace('      {panelEnabled && (\n        <button>Existing action</button>\n      )}\n',
+        '      <button>Existing action</button>\n');
+    const refused = removalFixture({ before, after });
+    assert.equal((await decision(refused)).state, 'failure');
+    assert.equal((await decision({ ...refused, comments: [wireframe(), yes()] })).state, 'success');
+  });
+}
+
+test('missing TypeScript refuses the exemption without breaking normal sign-off', async () => {
+  const original = process.env.FEATURE_FLAG_TYPESCRIPT_PATH;
+  try {
+    process.env.FEATURE_FLAG_TYPESCRIPT_PATH = path.join(root, 'missing-ux-signoff-typescript.cjs');
+    const withoutParser = await import(`${pathToFileURL(path.join(root, '.github/scripts/ux-signoff-gate.mjs'))}?missing-parser`);
+    const fixture = removalFixture();
+    assert.deepEqual(withoutParser.flagRemovalOnly(fixture.files, fixture.productionModes, fixture.sources), []);
+    assert.equal(withoutParser.evaluate(input(removalFixture())).state, 'failure');
+    assert.equal(withoutParser.evaluate(input({ ...removalFixture(), comments: [wireframe(), yes()] })).state, 'success');
+  } finally {
+    if (original === undefined) delete process.env.FEATURE_FLAG_TYPESCRIPT_PATH;
+    else process.env.FEATURE_FLAG_TYPESCRIPT_PATH = original;
+  }
 });
 
 for (const mode of ['OWNER_ONLY', 'OWNER_AND_QA', 'OFF', undefined]) {
