@@ -28,7 +28,7 @@ import ThemeListener from "@/lib/contexts/ThemeListener";
 import { MobileBlockingProvider } from "@/lib/contexts/mobileBlockingContext";
 import { TourProvider } from "@/lib/contexts/TourContext";
 import { shouldDehydratePersistedQuery } from "@/utils/queryPersistence";
-import { FeatureFlagProvider, SubscribedFeatureFlagProvider } from "@/hooks/useFlag";
+import { FeatureFlagProvider } from "@/hooks/useFlag";
 import {
   createQueryPersister,
   type DisposableQueryPersister,
@@ -118,17 +118,16 @@ export default function Provider({
   initialIsApple,
   authenticatedUserId,
   firstScreen,
-  flagReaderSubscribe = false,
+  flagProvider: FlagProvider = FeatureFlagProvider,
 }: {
   children: ReactNode;
   initialIsMobile: boolean;
   initialIsApple: boolean;
   authenticatedUserId: number | null;
   firstScreen?: BoardDocument | InboxDocument | null;
-  flagReaderSubscribe?: boolean;
+  flagProvider?: typeof FeatureFlagProvider;
 }) {
   const pathname = usePathname();
-  const FlagProvider = flagReaderSubscribe ? SubscribedFeatureFlagProvider : FeatureFlagProvider;
   const publicShare = isPublicSharePath(pathname);
   const [initialDocument] = useState(() => getBoardDocument(firstScreen ?? null, authenticatedUserId ?? 0) ?? getInboxDocument(firstScreen ?? null, authenticatedUserId ?? 0));
   const snapshot = initialDocument?.scope.accountId === authenticatedUserId ? initialDocument : null;

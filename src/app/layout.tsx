@@ -3,6 +3,7 @@ import "@/styles/tailwindThemes/rounded.css";
 import "../../tokens.css";
 import { cookies } from "next/headers";
 import Provider from "@/utils/Providers";
+import { FeatureFlagProvider, SubscribedFeatureFlagProvider } from "@/hooks/useFlag";
 import PostHogAnalytics from "@/components/Analytics/PostHogAnalytics";
 import { SpeedInsights } from "@vercel/speed-insights/next";
 import ClientErrorReporter from "@/components/ErrorBoundary/ClientErrorReporter";
@@ -80,10 +81,8 @@ export default async function RootLayout(
     value: authConfig.cookies.defaultTheme,
     name: authConfig.cookies.theme,
   };
-  const [roundedEnabled, flagReaderSubscribe] = await Promise.all([
-    isFeatureEnabled(HTPR_7328_ROUNDED_THEME_FLAG, analyticsSession?.id ?? -1),
-    isFeatureEnabled(HTPR_7560_FLAG_READER_SUBSCRIBE_FLAG, analyticsSession?.id ?? -1),
-  ]);
+  const roundedEnabled = await isFeatureEnabled(HTPR_7328_ROUNDED_THEME_FLAG, analyticsSession?.id ?? -1);
+  const flagReaderSubscribe = await isFeatureEnabled(HTPR_7560_FLAG_READER_SUBSCRIBE_FLAG, analyticsSession?.id ?? -1);
   const savedTheme = roundedEnabled
     ? normalizeThemePreference(theme.value, true)
     : normalizeThemePreference(theme.value);
@@ -170,7 +169,7 @@ export default async function RootLayout(
           initialIsApple={device.isApple}
           authenticatedUserId={analyticsSession?.id ?? null}
           firstScreen={firstScreen}
-          flagReaderSubscribe={flagReaderSubscribe}
+          flagProvider={flagReaderSubscribe ? SubscribedFeatureFlagProvider : FeatureFlagProvider}
         >
           {children}
         </Provider>

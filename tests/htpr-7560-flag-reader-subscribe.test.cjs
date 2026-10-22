@@ -117,8 +117,8 @@ test("the ticket flag is an Everyone improvement with a release risk and a serve
   assert.equal(definition.releaseRisk.highRisk, undefined);
   const layout = read("src/app/layout.tsx");
   assert.match(layout, /isFeatureEnabled\(HTPR_7560_FLAG_READER_SUBSCRIBE_FLAG, analyticsSession\?\.id \?\? -1\)/);
-  assert.match(layout, /flagReaderSubscribe=\{flagReaderSubscribe\}/);
-  assert.match(read("src/utils/Providers.tsx"), /const FlagProvider = flagReaderSubscribe \? SubscribedFeatureFlagProvider : FeatureFlagProvider;/);
+  assert.match(layout, /flagProvider=\{flagReaderSubscribe \? SubscribedFeatureFlagProvider : FeatureFlagProvider\}/);
+  assert.match(read("src/utils/Providers.tsx"), /flagProvider: FlagProvider = FeatureFlagProvider,/);
   assert.match(read("src/utils/Providers.tsx"), /<FlagProvider userId=\{authenticatedUserId\} initialFlags=\{snapshot\?\.flags\}>/);
 });
 
