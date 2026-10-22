@@ -230,9 +230,40 @@ const TeamsDropDown = (
            } 
             
 
+            const [placement, setPlacement] = useState({ opensUp: false, maxHeight: 364 });
+
             useEffect(()=>{
-                    dropdownRef.current?.scrollIntoView({behavior:"smooth",block:favoritesMenuContrast ? "nearest" : "center",inline:"start"})
-                
+                if (!favoritesMenuContrast) {
+                    dropdownRef.current?.scrollIntoView({behavior:"smooth",block:"center",inline:"start"})
+                    return;
+                }
+
+                const updateMaxHeight = () => {
+                    const dropdown: HTMLUListElement | null = dropdownRef.current;
+                    if (!dropdown) return;
+
+                    const anchor = dropdown.parentElement;
+                    if (!anchor) return;
+
+                    let top = 0;
+                    let bottom = window.innerHeight;
+                    for (let parent = anchor.parentElement; parent; parent = parent.parentElement) {
+                        if (/auto|scroll|hidden|clip|overlay/.test(window.getComputedStyle(parent).overflowY)) {
+                            const clip = parent.getBoundingClientRect();
+                            top = Math.max(top, clip.top);
+                            bottom = Math.min(bottom, clip.bottom);
+                        }
+                    }
+                    const anchorRect = anchor.getBoundingClientRect();
+                    const spaceBelow = bottom - anchorRect.bottom - 8;
+                    const spaceAbove = anchorRect.top - top - 8;
+                    const opensUp = spaceBelow < 160 && spaceAbove > spaceBelow;
+                    setPlacement({ opensUp, maxHeight: Math.max(0, Math.min(364, opensUp ? spaceAbove : spaceBelow)) });
+                };
+
+                updateMaxHeight();
+                window.addEventListener("resize", updateMaxHeight);
+                return () => window.removeEventListener("resize", updateMaxHeight);
             },[dropdownRef, favoritesMenuContrast])
 
     return (
@@ -240,8 +271,9 @@ const TeamsDropDown = (
             ref={dropdownRef}
             id={"listContainer"}
             style={{
-                top: '100%',
-                bottom: 'auto' }} 
+                top: favoritesMenuContrast && placement.opensUp ? 'auto' : '100%',
+                bottom: favoritesMenuContrast && placement.opensUp ? '100%' : 'auto',
+                maxHeight: favoritesMenuContrast ? placement.maxHeight : undefined }}
             className={`dropdown-menu absolute flex max-h-[364px] w-[244px] cursor-auto flex-col overflow-y-scroll rounded-sm bg-modalBackground shadow-customshadow-2 p-4${favoritesMenuContrast ? " text-white-black" : ""}`}>
                 <li
                     onClick={reset}

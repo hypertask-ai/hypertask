@@ -48,8 +48,18 @@ test('a part that jumps to another column is reported', () => {
 
 test('a hidden part and a composer above the last comment fail', () => {
   assert.match(diff({ ...same(), 'comment-box': null })[0], /comment-box disappeared/);
-  assert.deepEqual(matrix.composerFollowsComments(label, 520, 519), []);
-  assert.match(matrix.composerFollowsComments(label, 520, 700)[0], /composer is no longer the last part of the thread/);
+  assert.deepEqual(matrix.composerFollowsThread(label, 520, 519, 100), []);
+  assert.deepEqual(matrix.composerFollowsThread(label, 520, 520, 100), []);
+  assert.match(matrix.composerFollowsThread(label, 520, 700, 100)[0], /composer is no longer the last part of the thread/);
+  assert.match(matrix.composerFollowsThread(label, 520, 520.5, 100)[0], /last comment ends at 520.5px/);
+});
+
+test('a thread without rendered comments keeps the composer below its description', () => {
+  assert.deepEqual(matrix.composerFollowsThread(label, 520, null, 519), []);
+  assert.deepEqual(matrix.composerFollowsThread(label, 520, null, 520), []);
+  assert.match(matrix.composerFollowsThread(label, 520, null, 700)[0], /description ends at 700px/);
+  assert.match(matrix.composerFollowsThread(label, null, 500, 100)[0], /comment composer is missing/);
+  assert.match(matrix.composerFollowsThread(label, 520, null, null)[0], /no rendered comment or description/);
 });
 
 test('a listed flag change is allowed only when that flag is on', () => {

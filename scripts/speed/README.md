@@ -1,5 +1,7 @@
 # Daily live speed measurement
 
+Daily measurements run on GitHub-hosted `ubuntu-latest` via `.github/workflows/speed-live.yml` at **04:35 UTC**, or by manual dispatch on `production` only, in the `live-qa` environment. See https://app.hypertask.ai/detail/project-4060/545. The VPS only downloads and decrypts results after the migration below; manual local measurements remain available. Missing setup skips the workflow with a notice and no live requests. This is not a merge gate.
+
 For https://app.hypertask.ai/detail/project-4060/232. Deterministic measuring, not automated diagnosis or board writes. Uses the existing company `speed-check/scripts/common.mjs` for QA-only storage state, browser resolution, read-only request policy, context/profile and action pacing. No copied login or separate credentials. See `.claude/skills/speed-analyst/SKILL.md` for analysis.
 
 ## Run
@@ -50,29 +52,51 @@ All app writes and unknown API reads are blocked by the shared CDP policy. Revie
 
 `~/.local/state/speed/history.json` is an append-only JSON array logically, atomically replaced on disk (0600). It keeps every raw sample and failed/partial run, UTC dates, browser/profile/fixture/protocol, host load and the live full production commit from `/api/version` before and after. A deploy during a run makes it invalid. No repo-local history. A single-process lock refuses overlap; if a killed process leaves `measure.lock`, confirm no measuring process remains before removing only that lock and rerunning. Do not remove history.
 
+**Runner cohorts.** Every new run records `conditions.runner` (`github-actions` or `vps`); older history without it counts as `vps`. GitHub has different CPU capacity and network location: its numbers start a new cohort and must never be compared with VPS measurements. Browser and Node updates can also start new matching baselines. GitHub runs carry `github.runId` and the workflow checkout `github.sha` separately from the measured live `productionCommit`.
+
 Comparison uses the median of the latest matching successful run's cohort median per UTC day in the preceding seven full UTC days. Match Node/browser, profiles, fixture, sample count and protocol, not production commit or variable host load. Today is not its own baseline. Every measured content time, request count, wire bytes and long-task total over 15% of that reference is flagged. A zero baseline becoming nonzero is flagged without inventing a percent. No matching history says so. Failed runs never enter the median. Regression output does not make the service fail: operational inability to verify exits 1, measurements finish with 0 even when regressions need investigation.
 
 High VPS load and under-five samples are provisional. Preserve slow samples and failures. Confirm a candidate with the existing speed-check 5 cold/5 warm protocol, variance, p90 and at least ten minutes since deploy before claiming an improvement. This eight-path history does not replace `performance/evidence`, `npm run performance:budget`, `npm run performance:field` or `fix-slow-page` proof.
 
-## Install the daily user timer (owning session only, after merge)
+## One-time GitHub setup (owning session only, after merge)
 
-No install command is run by this PR. Use a permanent updated app checkout, not a ticket worktree that cleanup will delete. The units default to `~/projects/hypertask` and `~/projects/company-skills`. Verify the QA doctor manually first.
+The app repository is **public**: logs and artifacts are public. The workflow redirects all measurement/install output to private runner-local files, prints only a generic complete/failed status (or a missing-setup skip notice), and uploads **only** a single-run JSON encrypted with `age`. Failed/partial run JSON is encrypted too if available, but never ingested as verified speed evidence. Plaintext login, history and logs are removed in an always-run cleanup; no private company guard is copied into this repo. Artifacts are named `speed-run-<GitHub run id>` and retained for 30 days. Do not add raw history, request details, failure DOM, sample numbers, or fixture URLs to public logs, summaries or artifacts.
+
+1. Generate an age keypair privately (`age-keygen`, with umask 077). Store its **private identity** in 1Password item `speed-age`, field `SPEED_AGE_IDENTITY`. Never commit or print it. Commit only the **public recipient**, on its own `age1...` line, in `scripts/speed/github-age-recipient.txt`, replacing the placeholder comment. The placeholder intentionally leaves the workflow skipped.
+2. Add a **read-only SSH deploy key** to the private `hypertask-ai/company-skills` repository and put its private key in GitHub secret `COMPANY_SKILLS_DEPLOY_KEY` accessible to the `live-qa` job. The workflow checks out that private repo separately, with credential persistence off, and sets `COMPANY_SKILLS_DIR`. Keep that repo's shared QA guard authoritative.
+3. In the **production-only** GitHub environment `live-qa`, set `QA_NORMAL_STORAGE_STATE` to the QA-normal Playwright state JSON for user 2343, prepared by https://app.hypertask.ai/detail/project-4060/544. It is written privately (umask 077) to `~/.config/hypertask-videos/storageState-qa-normal.json`; never echo it. An expired login fails the guarded QA doctor. No other account is allowed.
+4. Merge, dispatch `speed-live.yml` on `production`, and confirm the **first green measurement** (not a setup-skip) has its encrypted artifact. The runner installs Node 24, the exact Playwright version in `package-lock.json` with its matching Chromium, and `age`. No app build is needed.
+
+## Switch the VPS timer to importing (owning session only, after the first green GitHub run)
+
+Do not change a live service from a temporary worktree. Update the permanent production checkout, install `age` and authenticated `gh` with Actions-read access, then change `~/.local/bin/speed-measure-latest` so `speed-measure.service` invokes **`node scripts/speed/fetch-github-runs.mjs` instead of measuring**. Leave the existing timer active as an importer; do not leave a second VPS measurement schedule running.
+
+The wrapper must supply `SPEED_AGE_IDENTITY` from 1Password **once per job**, with shell tracing off. For example, under the wrapper's existing approved 1Password authentication (use the actual vault if needed):
 
 ```sh
-node --version                         # must be v24.x
-node scripts/speed/measure.mjs --samples 1
-mkdir -p ~/.config/systemd/user/speed-measure.service.d
-cp scripts/speed/systemd/speed-measure.{service,timer} ~/.config/systemd/user/
-# systemd does not inherit an interactive shell's Node manager PATH.
-printf '[Service]\nExecStart=\nExecStart=%s %s/scripts/speed/measure.mjs\n' \
-  "$(command -v node)" "$PWD" > ~/.config/systemd/user/speed-measure.service.d/runtime.conf
-systemd-analyze --user verify ~/.config/systemd/user/speed-measure.{service,timer}
-systemctl --user daemon-reload
-systemctl --user enable --now speed-measure.timer
-systemctl --user list-timers speed-measure.timer
-journalctl --user -u speed-measure.service -n 30 --no-pager
+umask 077
+set +x
+cd /home/valentin/projects/hypertask
+SPEED_AGE_IDENTITY="$(op item get speed-age --fields label=SPEED_AGE_IDENTITY --reveal)" \
+  node scripts/speed/fetch-github-runs.mjs
 ```
 
-For a different permanent checkout, override `WorkingDirectory`, `ExecStart`, `COMPANY_SKILLS_DIR` and `PLAYWRIGHT_NODE_MODULES` in the drop-in, using absolute paths. The daily schedule is 04:30 UTC plus up to 15 minutes jitter, with missed-run catch-up. The timer measures only; SPEED RUNNER reads the report in its session. Weekly research is part of that session, not a second scheduled LLM job. The owner must confirm user-manager persistence if measurements must run after logout; do not alter host/login policy here.
+Do not put the identity in a command argument, persistent environment file, journal or shell trace. The importer strips it from child environments, writes it only to a 0600 file in a private temporary directory, and deletes that directory in `finally`, including on download/decrypt/validation failure. It logs only import complete/failed, never identity material or private exception details.
 
-Stop: `systemctl --user disable --now speed-measure.timer`. Stop an active measurement with `systemctl --user stop speed-measure.service`, then inspect the lock as above. Tests: `node --test tests/speed-analyst.test.cjs`. Units: `systemd-analyze --user verify scripts/speed/systemd/speed-measure.{service,timer}`.
+The importer lists the latest 100 successful production runs, ignores setup-skips/expired artifacts, downloads only not-yet-imported `speed-run-<id>` artifacts, decrypts locally, and validates each measurement with the harness's `verifyRun` plus runner and GitHub metadata checks. An available artifact that fails download, decrypt or validation fails the whole batch without changing history and is retried next time. Runs dedupe by `github.runId`, are merged chronologically, and atomically replace `~/.local/state/speed/history.json` at mode 0600. It shares `measure.lock` with manual/legacy measurements to prevent lost history. Review runs missed beyond the 100-run or 30-day retention window separately; this is not an archival backfill.
+
+The original timer fires at 04:30 UTC plus up to 15 minutes jitter, **before GitHub's new run may finish**. Move the existing timer to a later time (for example 06:00 UTC), or accept importing the previous day's run until the next tick. Keep missed-run catch-up. Inspect existing service overrides first; they may still point directly to the old measure script. After changing the wrapper/service/timer, validate units, reload the user manager, run the importer once, and check private history:
+
+```sh
+systemctl --user cat speed-measure.service speed-measure.timer
+systemd-analyze --user verify ~/.config/systemd/user/speed-measure.{service,timer}
+systemctl --user daemon-reload
+systemctl --user restart speed-measure.timer
+systemctl --user start speed-measure.service
+node scripts/speed/measure.mjs --verify-history
+node scripts/speed/measure.mjs --latest    # private VPS terminal only
+```
+
+Confirm that the latest imported run has `conditions.runner: "github-actions"` and `github.runId`, and that a second import adds nothing. Do not disable the old measurement path until that first green GitHub run is available. This PR does not install units, change the VPS wrapper, access 1Password, set secrets or switch the active timer.
+
+Tests (one file at a time): `node --test tests/speed-analyst.test.cjs`, `node --test tests/speed-github-fetch.test.cjs`, `node --test tests/speed-live-workflow.test.cjs`.

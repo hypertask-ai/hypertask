@@ -5,6 +5,7 @@ import path from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { isDeepStrictEqual } from 'node:util';
 
+export const RUNNER = process.env.GITHUB_ACTIONS === 'true' ? 'github-actions' : 'vps';
 export const STATE = path.join(os.homedir(), '.local/state/speed');
 // Real-phone context (2026-10-11): the shared setup only sets viewport, isMobile and hasTouch, which renders the ticket page at
 // innerWidth 780 and document width 834. A mobile user agent and deviceScaleFactor 3 give the real 390 wide layout (iPhone 13).
@@ -53,7 +54,7 @@ export const servedBoardFromServer = (requests, contentMs) => !requests.some(req
 
 const pathVersion = (conditions, cohort) => conditions.pathVersions?.[cohort.split(':')[1]] ?? 1;
 
-const sharedConditions = ({ pathVersions, ...conditions }) => conditions;
+const sharedConditions = ({ pathVersions, runner = 'vps', ...conditions }) => ({ ...conditions, runner });
 
 export function landedBoards(run, profile) {
   return run.samples.filter(sample => sample.profile === profile && sample.path === 'page-navigation').map(sample => `${sample.landed?.id}|${sample.landed?.view ?? ''}`).sort();
@@ -425,7 +426,7 @@ async function main() {
   const lock = path.join(STATE, 'measure.lock');
   const handle = fs.openSync(lock, 'wx', 0o600);
   let browser;
-  const run = { schema: PROTOCOL, started: new Date().toISOString(), base: BASE, accountId: 2343, status: 'failed', hostLoad: os.loadavg(), cpus: os.availableParallelism(), samples: [], groups: {}, actions: [] };
+  const run = { schema: PROTOCOL, started: new Date().toISOString(), base: BASE, accountId: 2343, status: 'failed', hostLoad: os.loadavg(), cpus: os.availableParallelism(), conditions: { runner: RUNNER }, ...(process.env.GITHUB_ACTIONS === 'true' ? { github: { runId: Number(process.env.GITHUB_RUN_ID), sha: process.env.GITHUB_SHA } } : {}), samples: [], groups: {}, actions: [] };
   try {
     const company = process.env.COMPANY_SKILLS_DIR || path.join(os.homedir(), 'projects/company-skills');
     const shared = await import(pathToFileURL(path.join(company, 'skills/speed-check/scripts/common.mjs')).href);
@@ -435,7 +436,7 @@ async function main() {
     shared.readPosts.add('/api/search/document');
     shared.readGets.add('/api/search/values');
     browser = await shared.playwright().chromium.launch({ headless: true });
-    run.conditions = { protocol: PROTOCOL, node: process.version, browser: browser.version(), samples, fixture: 'qa-normal-2343-project-6859-task-43', profiles: ['desktop-unthrottled-1440x900', PHONE_PROFILE_KEY], observationTailMs: 2000, serviceWorkers: 'blocked', pathVersions: PATH_VERSIONS };
+    run.conditions = { runner: RUNNER, protocol: PROTOCOL, node: process.version, browser: browser.version(), samples, fixture: 'qa-normal-2343-project-6859-task-43', profiles: ['desktop-unthrottled-1440x900', PHONE_PROFILE_KEY], observationTailMs: 2000, serviceWorkers: 'blocked', pathVersions: PATH_VERSIONS };
     const doctor = await shared.setup(browser, false);
     try {
       const identity = await doctor.request.post(BASE + '/api/app-shell/bootstrap');
