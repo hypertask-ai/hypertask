@@ -55,7 +55,7 @@ export default function FirstTaskPointer({ projectId, sectionId, sectionIndex, t
     <button
       type="button"
       aria-keyshortcuts={isApple ? "Meta+J" : "Control+J"}
-      className="absolute right-0 top-full z-20 mt-2 flex w-max max-w-[280px] items-center gap-2 rounded bg-shadcn-primary px-2 py-[6px] text-dense font-semibold text-primary-foreground shadow-md hover:bg-shadcn-primary/90 focus-visible:bg-hover-active focus-visible:text-white-black focus-visible:outline-none"
+      className="absolute right-0 top-[100%] z-20 mt-2 flex w-max max-w-[280px] items-center gap-2 rounded bg-shadcn-primary px-2 py-[6px] text-dense font-semibold text-primary-foreground shadow-md hover:bg-shadcn-primary/90 focus-visible:bg-hover-active focus-visible:text-white-black focus-visible:outline-none"
       onClick={(event) => {
         event.stopPropagation();
         setActiveSection(sectionIndex);
