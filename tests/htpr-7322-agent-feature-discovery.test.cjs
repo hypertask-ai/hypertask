@@ -10,8 +10,8 @@ const read = (file) => fs.readFileSync(path.join(root, file), 'utf8')
 const { DECISIONS_GUIDANCE } = load('src/lib/mcp/decisionsGuidance.ts', {})
 const discoveryKey = 'htpr-7322-agent-feature-discovery'
 const decisionsKey = 'htpr-7092-decisions'
-const searchKey = 'htpr-6688-search-autocomplete'
-const definitionKeys = [decisionsKey, 'htpr-7064-inbox-remind-returns', 'htpr-6422-my-tasks-views', 'htpr-6457-my-tasks-scopes', 'htpr-6461-my-tasks-snooze', searchKey]
+const mappedKey = 'htpr-6422-my-tasks-views'
+const definitionKeys = [decisionsKey, 'htpr-7064-inbox-remind-returns', 'htpr-6422-my-tasks-views', 'htpr-6457-my-tasks-scopes', 'htpr-6461-my-tasks-snooze']
 const definitions = definitionKeys.map((key) => ({
   key,
   kind: key === 'htpr-7064-inbox-remind-returns' ? 'bugfix' : 'feature',
@@ -64,10 +64,10 @@ function endpoint(ctx, mod, limited = null, discoveryEnabled = true) {
 const request = () => new NextRequest('https://app.hypertask.ai/api/mcp/features')
 
 test('catalog includes every enabled feature kind without requiring a destination and excludes off and non-feature kinds', async () => {
-  const mod = catalog({ [decisionsKey]: false, [searchKey]: true, 'htpr-7064-inbox-remind-returns': true, 'htpr-999-improvement': true, 'htpr-998-unmapped-product': true })
+  const mod = catalog({ [decisionsKey]: false, [mappedKey]: true, 'htpr-7064-inbox-remind-returns': true, 'htpr-999-improvement': true, 'htpr-998-unmapped-product': true })
   const rows = await mod.getFeatureCatalog(reader.user.id)
   assert.deepEqual(rows.filter(({ key }) => !key.startsWith('core-')), [
-    { key: searchKey, description: definitions.find(({ key }) => key === searchKey).description, shippedOn: definitions.find(({ key }) => key === searchKey).shippedOn, available: true, name: 'Search suggestions', url: 'https://app.hypertask.ai/search' },
+    { key: mappedKey, description: definitions.find(({ key }) => key === mappedKey).description, shippedOn: definitions.find(({ key }) => key === mappedKey).shippedOn, available: true, name: 'My Tasks views', url: 'https://app.hypertask.ai/my-tasks' },
     { key: 'htpr-998-unmapped-product', name: 'unmapped product', description: 'No verified destination', shippedOn: '2026-10-11', available: true },
   ])
   for (const key of [decisionsKey, 'htpr-7064-inbox-remind-returns', 'htpr-999-improvement', 'core-decisions']) {
@@ -153,7 +153,7 @@ test('a valid read-role agent is still allowed through the same catalog boundary
 })
 
 test('human and OAuth-style user contexts can read, and rate limiting stops catalog reads', async () => {
-  const route = endpoint({ ...reader, agentId: null }, catalog({ [searchKey]: true }))
+  const route = endpoint({ ...reader, agentId: null }, catalog({ [mappedKey]: true }))
   assert.equal((await route.GET(request())).status, 200)
   const limited = endpoint(reader, catalog(), NextResponse.json({ error: 'Rate limited' }, { status: 429 }))
   assert.equal((await limited.GET(request())).status, 429)

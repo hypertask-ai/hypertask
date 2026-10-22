@@ -8,7 +8,6 @@ const FEATURE_DESTINATIONS: Record<string, { name: string; url: string }> = {
   'htpr-6422-my-tasks-views': { name: 'My Tasks views', url: 'https://app.hypertask.ai/my-tasks' },
   'htpr-6457-my-tasks-scopes': { name: 'My Tasks scope', url: 'https://app.hypertask.ai/my-tasks' },
   'htpr-6461-my-tasks-snooze': { name: 'My Tasks snooze', url: 'https://app.hypertask.ai/my-tasks' },
-  'htpr-6688-search-autocomplete': { name: 'Search suggestions', url: 'https://app.hypertask.ai/search' },
 }
 
 const CORE_DESTINATIONS = [
