@@ -106,7 +106,7 @@ export async function generateAndStoreTaskSummary(
   } catch (error) {
     if (error instanceof SummaryGenerationTimeoutError) {
       releaseLease = false;
-      console.error(
+      console.warn(
         `[taskSummaries] Retaining timed-out task ${taskId} lease until TTL expiry`,
       );
     }
