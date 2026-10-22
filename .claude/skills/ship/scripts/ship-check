@@ -94,20 +94,7 @@ ci_test_failures() {
   local id url log names
   id=$(jq -r '.id' <<<"$1"); url=$(jq -r '.html_url' <<<"$1")
   if log=$(gh api "repos/$REPO/actions/jobs/$id/logs" 2>/dev/null); then
-    names=$(python3 -c '
-import re, sys
-log = re.sub(r"\x1b\[[0-9;]*m", "", sys.stdin.read())
-log = re.sub(r"(?m)^\d{4}-\d\d-\d\dT\S+\s?", "", log)
-path = r"tests/[^\s\x27\"():]+\.test\.\w+:\d+(?::\d+)?"
-locations = re.findall(r"(?:test at |location:\s*[\x27\"]?(?:[^\n]*?/)?)(" + path + r")", log)
-stacks = re.findall(r"(?m)^\s+at [^\n]*?(" + path + r")", log)
-names = re.findall(r"(?m)^\s*not ok \d+ - (.+)$|^\s*✖ (.+) \([\d.]+ms\)$", log)
-items = locations or stacks or [a or b for a, b in names]
-unique = {}
-for item in items:
-    unique.setdefault(re.sub(r":\d+(?::\d+)?$", "", item), item[:180])
-print("; ".join(list(unique.values())[:3]))
-' <<<"$log")
+    names=$(python3 "$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")/ci-test-failures.py" <<<"$log")
     [ -z "$names" ] || { echo "$names"; return 0; }
   fi
   echo "see $url"

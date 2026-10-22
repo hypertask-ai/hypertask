@@ -1,0 +1,165 @@
+{
+  "status": "failure",
+  "run": {
+    "id": 39765957007,
+    "name": "CI Tests",
+    "head_branch": "production",
+    "head_sha": "d897185951026b946cba76b3a9bcd5a079110761",
+    "status": "completed",
+    "conclusion": "failure",
+    "workflow_id": 345284758,
+    "created_at": "2026-10-22T10:49:20Z",
+    "html_url": "https://github.com/hypertask-ai/hypertask/actions/runs/39765957007",
+    "job": {
+      "id": 119785579403,
+      "name": "ci-tests",
+      "status": "completed",
+      "conclusion": "failure"
+    }
+  },
+  "firstRed": {
+    "head_sha": "d897185951026b946cba76b3a9bcd5a079110761",
+    "id": 39765957007
+  },
+  "green": {
+    "id": 39764276911,
+    "name": "CI Tests",
+    "head_branch": "production",
+    "head_sha": "91eaee93bd2ea81cd0496e0f8c2f7246f218a39c",
+    "status": "completed",
+    "conclusion": "success",
+    "workflow_id": 345284758,
+    "created_at": "2026-10-22T10:35:46Z",
+    "html_url": "https://github.com/hypertask-ai/hypertask/actions/runs/39764276911"
+  },
+  "failures": [
+    {
+      "file": "tests/htpr-7574-agent-onboarding.test.cjs",
+      "error": "Error: Unexpected import in src/lib/mcp/agents/delegatedAccess.ts: @/lib/auth/agentScope"
+    }
+  ],
+  "prs": [
+    {
+      "number": 1835,
+      "title": "HTPR-7574 [BUGFIX] Agents get a clear way onto a board when onboarding",
+      "url": "https://github.com/hypertask-ai/hypertask/pull/1835",
+      "files": [
+        "src/app/api/agents/route.ts",
+        "src/lib/flags/definitions/htpr-7574-owned-unattached-agents.ts",
+        "src/lib/mcp-server/tool-response.ts",
+        "src/lib/mcp/agents/delegatedAccess.ts",
+        "tests/agent-access-delegation.test.ts",
+        "tests/htpr-7574-agent-onboarding.test.cjs"
+      ]
+    },
+    {
+      "number": 1832,
+      "title": "HTPR-7567 [REFACTOR] Remove feature flag htpr-6752-instant-ticket-open",
+      "url": "https://github.com/hypertask-ai/hypertask/pull/1832",
+      "files": [
+        ".claude/skills/verify-qa/reference/feature-map/task-detail-and-description.md",
+        "docs/htpr-6509-slices.md",
+        "e2e/smoke/layout-lock.spec.ts",
+        "e2e/smoke/production-flag-modes.json",
+        "src/app/detail/[...slug]/TaskDetailPanels.tsx",
+        "src/app/detail/[...slug]/useTaskDetailInitialScroll.tsx",
+        "src/components/AI_CHAT/ChatHeader.tsx",
+        "src/components/Common/PersonHovercard.tsx",
+        "src/components/PageComponents/Kanban/KanbanSectionComponents/section.tsx",
+        "src/components/PageComponents/Kanban/KanbanTaskComponents/task.tsx",
+        "src/components/PageComponents/Kanban/TableView/useTableActions.ts",
+        "src/components/PageComponents/TaskDetail/CachedTaskDetailNavigation.tsx",
+        "src/components/PageComponents/TaskDetail/CommentAndDescription/CommentContainer/CommentsContainer.tsx",
+        "src/components/PageComponents/TaskDetail/CommentAndDescription/ContextMenu/HighlightMenu.tsx",
+        "src/components/PageComponents/TaskDetail/CommentAndDescription/DescriptionContainer/DescriptionSubTasks/DescriptionSubTasks.tsx",
+        "src/components/PageComponents/TaskDetail/CommentAndDescription/DescriptionContainer/DescriptonBody.tsx",
+        "src/components/PageComponents/TaskDetail/CommentAndDescription/DescriptionContainer/TopRow/DescriptionTopRight.tsx",
+        "src/components/PageComponents/TaskDetail/CommentAndDescription/index.tsx",
+        "src/components/PageComponents/TaskDetail/TopRow/SubtaskLink.tsx",
+        "src/components/RTE/TaskDetailEditorPanels.tsx",
+        "src/components/RTE/useTaskDetailEditorEvents.tsx",
+        "src/components/notifications/inboxSplit/index.tsx",
+        "src/hooks/MultiPages/Route/useHypertasksNavigate.ts",
+        "src/hooks/Task Detail/CommentAndDescriptionHooks/useCommentAndDescriptions.ts",
+        "src/hooks/Task Detail/useTaskDetailGlobalStates.ts",
+        "src/lib/flags/definitions/htpr-6752-instant-ticket-open.ts",
+        "src/lib/flags/definitions/htpr-6899-stable-layout.ts",
+        "src/lib/flags/definitions/htpr-7091-static-description-first.ts",
+        "src/lib/flags/definitions/htpr-7116-ticket-stays-open.ts",
+        "src/lib/flags/definitions/htpr-7129-board-card-fresh-after-escape.ts",
+        "src/lib/flags/definitions/htpr-7367-server-description-first.ts",
+        "src/prisma/migrations/20261022110000_drop_htpr_6752_instant_ticket_open_flag/migration.sql",
+        "src/utils/controllers/notifications/getAll.ts",
+        "src/utils/controllers/projects/getBoardTasks.ts",
+        "src/utils/controllers/taskDetail/load.ts",
+        "src/utils/controllers/tasks/myTasks.ts",
+        "tests/board-background-refetch-render.test.cjs",
+        "tests/board-metadata-projection.test.cjs",
+        "tests/cached-task-detail-editor.test.cjs",
+        "tests/cached-task-detail-flags.test.cjs",
+        "tests/cached-task-detail-navigation.test.cjs",
+        "tests/cached-task-detail-relations-ssr.test.cjs",
+        "tests/cached-task-detail-render.test.cjs",
+        "tests/cached-task-detail-review.test.cjs",
+        "tests/cached-task-detail-subtask-link.test.cjs",
+        "tests/cached-task-router-navigation.test.cjs",
+        "tests/click-to-edit.test.cjs",
+        "tests/detail-hydration.test.cjs",
+        "tests/feature-flags-admin-ui.test.cjs",
+        "tests/fixtures/htpr-6972/CachedTaskDetailNavigation.tsx.txt",
+        "tests/htpr-7091-static-description-first.test.cjs",
+        "tests/htpr-7167-parent-board-boundary.test.cjs",
+        "tests/htpr-7186-related-tasks-access.test.cjs",
+        "tests/htpr-7311-decision-comment-link.test.cjs",
+        "tests/htpr-7315-initial-ticket-position.test.cjs",
+        "tests/htpr-7326-slim-mcp-inbox.test.cjs",
+        "tests/htpr-7395-cached-static-first.test.cjs",
+        "tests/htpr-7567-remove-instant-open-flag.test.cjs",
+        "tests/inbox-next-cached-7001.test.cjs",
+        "tests/inbox-remind-interaction.test.cjs",
+        "tests/instant-ticket-open-browser-history.test.cjs",
+        "tests/instant-ticket-open-followups.test.cjs",
+        "tests/instant-ticket-open.test.cjs",
+        "tests/instant-ticket-stable-layout.test.cjs",
+        "tests/kanban-progressive-rendering.test.cjs",
+        "tests/mobile-provider-startup.test.cjs",
+        "tests/page-loading-layout-stability.test.cjs",
+        "tests/phone-first-paint.test.cjs",
+        "tests/project-boardtasks-controller.test.cjs",
+        "tests/project-prefix.test.cjs",
+        "tests/task-detail-initial-scroll.test.cjs",
+        "tests/task-navigation.test.cjs",
+        "tests/task-number-alias.test.cjs"
+      ]
+    },
+    {
+      "number": 1838,
+      "title": "HTPR-7555 [SPEED] App cache skips re-measuring unchanged data",
+      "url": "https://github.com/hypertask-ai/hypertask/pull/1838",
+      "files": [
+        "src/lib/flags/definitions/htpr-7555-persist-size-once.ts",
+        "src/utils/Providers.tsx",
+        "src/utils/queryPersistence.ts",
+        "tests/htpr-7555-persist-size-once.test.cjs"
+      ]
+    },
+    {
+      "number": 1837,
+      "title": "HTPR-7576 [BUGFIX] Board invites by an agent follow the agent board-update rules",
+      "url": "https://github.com/hypertask-ai/hypertask/pull/1837",
+      "files": [
+        "src/lib/ai/tools/projectAdmin.ts",
+        "src/lib/mcp/agents/delegatedAccess.ts",
+        "src/lib/mcp/agents/updateBoards.ts",
+        "src/lib/mcp/operations/projects/[projectId]/members/operation.ts",
+        "src/pages/api/invite/createInviteLink.ts",
+        "src/utils/controllers/agents/boardMembers.ts",
+        "src/utils/controllers/members/addExistingUserToProject.ts",
+        "tests/ai-chat-project-admin.test.cjs",
+        "tests/helpers/activation-harness.ts",
+        "tests/htpr-7576-invite-agent-rules.test.cjs",
+        "tests/mcp-agent-patch-visibility.test.cjs"
+      ]
+    }
+  ]
+}

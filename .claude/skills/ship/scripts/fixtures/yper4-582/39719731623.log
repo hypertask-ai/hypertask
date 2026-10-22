@@ -1,0 +1,10 @@
+2026-10-22T04:23:56.1500555Z test at tests/htpr-7322-agent-feature-discovery.test.cjs:271:1
+2026-10-22T04:23:56.1501514Z ✖ Question lines qualify; ordinary mentions and questions answered later by the viewer do not (35.127421ms)
+2026-10-22T04:23:56.1502482Z   TypeError: pickDecisionTaskIds is not a function or its return value is not iterable
+2026-10-22T04:23:56.1503367Z       at TestContext.<anonymous> (/home/runner/work/hypertask/hypertask/tests/htpr-7322-agent-feature-discovery.test.cjs:274:24)
+2026-10-22T04:23:56.1504072Z       at Test.runInAsyncScope (node:async_hooks:227:14)
+2026-10-22T04:23:56.1504503Z       at Test.run (node:internal/test_runner/test:1402:25)
+2026-10-22T04:23:56.1505014Z       at Test.processPendingSubtests (node:internal/test_runner/test:974:18)
+2026-10-22T04:23:56.1505538Z       at Test.postRun (node:internal/test_runner/test:1542:19)
+2026-10-22T04:23:56.1505991Z       at Test.run (node:internal/test_runner/test:1467:12)
+2026-10-22T04:23:56.1506623Z       at async Test.processPendingSubtests (node:internal/test_runner/test:974:7)
