@@ -162,6 +162,7 @@ test('the AI comment edit tool passes its acting agent into the shared service',
   const { createUpdateCommentTool } = load('src/lib/ai/tools/updateComment.ts', {
     ai: { tool: (definition) => definition },
     zod: require('zod'),
+    './schemas': load('src/lib/ai/tools/schemas.ts', { zod: require('zod') }),
     '@/lib/prisma': { default: fixture.prisma, __esModule: true },
     '@/utils/controllers/comments/processMentions': {},
     '@/utils/helperFunctions/toStoredHtml': { toStoredHtml: (text) => text },

@@ -29,6 +29,7 @@ function stub(file, exports) {
   const filename = path.join(root, file)
   require.cache[filename] = { id: filename, filename, loaded: true, exports }
 }
+stub('src/lib/flags.ts', { isFeatureEnabled: async () => false })
 stub('src/lib/mcp/auth.ts', {
   validateMcpAuth: async () => { credentialChecks++; return auth },
   checkMcpRateLimit: async () => { limitChecks++; return limitedResponse ?? null },

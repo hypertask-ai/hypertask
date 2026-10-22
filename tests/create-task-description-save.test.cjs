@@ -65,9 +65,10 @@ test("follower links use the created task board snapshot", () => {
 test("the create route persists the request description atomically", () => {
   const source = read("src/lib/api/task-writes/create-global.ts");
 
+  assert.match(source, /const storedDescription = agentId && typeof description === "string"\s*\? await inlineAgentImagesForUser\(description, userId,[^\n]+ : description;/);
   assert.match(
     source,
-    /description_:\s*\{\s*create:\s*\{\s*content: description \?\? ""/,
+    /description_:\s*\{\s*create:\s*\{\s*content: storedDescription \?\? ""/,
   );
 });
 

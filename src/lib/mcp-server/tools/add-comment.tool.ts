@@ -51,7 +51,8 @@ export const addCommentTool = {
             reply_to_invocation_id: validatedInput.reply_to_invocation_id,
           });
           const userId = typeof context === "string" ? getMcpExecutionContext(context)?.user.id : undefined;
-          const inlineAgentImages = userId ? await isFeatureEnabled(HTPR_7514_INLINE_AGENT_IMAGES_FLAG, userId) : false;
+          const inlineAgentImages = userId && addParams.attachments?.length && addParams.inline_images !== false
+            ? await isFeatureEnabled(HTPR_7514_INLINE_AGENT_IMAGES_FLAG, userId) : false;
           const result = await service.addComment(addParams, invocation, { inlineAgentImages });
           return result;
         }

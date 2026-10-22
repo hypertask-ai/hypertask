@@ -275,6 +275,7 @@ for (const enabled of [false, true]) {
       const comment = { id: 44, creatorId: 985, taskId: 91, task: { id: 91, projectId: 15, project: {} } };
       const context = { inlineAgentImagesEnabled: enabled, user: { id: 985 }, actingAgentId: null, sendStatus() {}, body: { message: optOut ? "Add these screenshots, attachment only." : `Create two tasks using ${image} and https://files.hypertask.app/other.png.`, images64: [png, { url: "https://files.hypertask.app/other.png", mimeType: "image/png" }] } };
       const stubs = {
+        "@/lib/errors/reportError": { reportError: async () => {} },
         ai: { tool: (definition) => definition },
         "@/lib/media/inlineAgentImages.server": server(enabled),
         "@/lib/prisma": { default: {
@@ -372,6 +373,40 @@ for (const enabled of [false, true]) {
   }
 }
 
+for (const enabled of [false, true]) {
+  for (const mode of ["text-only", "attachment", "opt-out"]) {
+    test(`MCP comment tool checks the image flag only for eligible attachments: ${mode}, flag ${enabled}`, async () => {
+      let flagChecks = 0;
+      const calls = [];
+      const { addCommentTool } = load("src/lib/mcp-server/tools/add-comment.tool.ts", {
+        "../config/tool-metadata": { TOOL_METADATA: { ADD_COMMENT: { name: "hypertask_add_comment_to_task", description: "Add a comment" } } },
+        "@/lib/flags": { isFeatureEnabled: async (key, userId) => {
+          assert.equal(key, flag);
+          assert.equal(userId, 985);
+          flagChecks++;
+          return enabled;
+        } },
+        "@/lib/mcp/operationContext": { getMcpExecutionContext: () => ({ user: { id: 985 } }) },
+        "../utils/executeWithService": { executeWithService: async (_context, _service, execute) => execute({
+          addComment: async (...args) => { calls.push(args); return { success: true }; },
+        }) },
+      });
+      const attachments = [{ filename: "Screenshot.png", content_type: "image/png", url: image }];
+      const result = await addCommentTool.execute({
+        task_id: 91, text: "Evidence",
+        ...(mode === "text-only" ? {} : { attachments }),
+        ...(mode === "opt-out" ? { inline_images: false } : {}),
+      }, "fixture-token");
+      assert.deepEqual(result, { success: true });
+      assert.equal(flagChecks, mode === "attachment" ? 1 : 0);
+      assert.equal(calls.length, 1);
+      assert.deepEqual(calls[0][2], { inlineAgentImages: enabled && mode === "attachment" });
+      assert.deepEqual(calls[0][0].attachments, mode === "text-only" ? undefined : attachments);
+      assert.equal(calls[0][0].inline_images, mode === "opt-out" ? false : undefined);
+    });
+  }
+}
+
 test("attachment MIME classification wins over a misleading .png link", () => {
   assert.equal(rule.inlineAgentImages(html, { enabled: true, attachments: [{ ...png, mimeType: "application/pdf" }] }), html);
 });
@@ -386,7 +421,7 @@ for (const enabled of [false, true]) {
     const { CommentService } = load("src/lib/mcp-server/lib/services/comment.service.ts", {});
     const attachments = [{ filename: "Screenshot.png", content_type: "image/png", url: image }];
     await new CommentService(client).addComment({ task_id: 91, text: "<p>Evidence</p>", attachments }, undefined, { inlineAgentImages: enabled });
-    assert.deepEqual(calls[0].body, { task_id: 91, text: "<p>Evidence</p>", ...(enabled ? { attachments } : {}) });
+    assert.deepEqual(calls[0].body, { task_id: 91, text: "<p>Evidence</p>", has_attachments: true, ...(enabled ? { attachments } : {}) });
     assert.equal(Object.hasOwn(calls[0].body, "has_image_attachments"), false);
     assert.equal(calls[1].url, "/mcp/tasks/attachments");
   });

@@ -1,6 +1,13 @@
 [
   {
     "file": "src/app/api/ai/_lib/taskWriterRun.ts",
+    "id": "inline-agent-images",
+    "version": "1",
+    "partsHash": "3bf57f261880c4ed9befd2865f3ae15e47594e67935037a2f999174c8c6b601e",
+    "expressionsHash": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945"
+  },
+  {
+    "file": "src/app/api/ai/_lib/taskWriterRun.ts",
     "id": "task-writer-output-language",
     "version": "1",
     "partsHash": "605d59e983b447d884ca7a042d54d93f1666dd247e842ba83b742a5add4d3c49",
