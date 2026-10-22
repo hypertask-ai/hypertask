@@ -104,7 +104,7 @@ test("selection compiles to an important one-pixel border-box outline, independe
   assert.equal(declarations.get("--tw-outline-style"), "solid", "outline-none cannot reset the selected style");
   assert.match(declarations.get("outline-style"), /^(?:solid|var\(--tw-outline-style\))$/);
   assert.equal(declarations.get("outline-width"), "1px");
-  assert.match(declarations.get("outline-offset"), /^(?:-1px|calc\(1px \* -1\))$/);
+  assert.equal(declarations.get("outline-offset"), "0px", "the line must not cover even a one-pixel blocked stripe");
   const outlineColor = declarations.get("outline-color");
   if (outlineColor === "var(--color-hypertasks-purple)") {
     let themeColor;
