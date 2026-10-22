@@ -93,6 +93,13 @@ async function withSidebar(options, check) {
     const { MessageList } = load("src/components/AI_CHAT/MessageList.tsx", mocks);
     const { AI_Chat_Sidebar } = load("src/components/AI_CHAT/AI_Chat_Sidebar.tsx", {
       ...mocks, "./WelcomeScreen": { WelcomeScreen }, "./MessageList": { MessageList },
+      "@/app/agents/chat/AgentChatClient": { default: () => null },
+      "@/lib/agents/chatDrafts": { readDraft: () => "", writeDraft: () => {} },
+      "@/lib/agents/chatViewerState": { getNativeSidebarChat: () => null, setNativeSidebarChat: () => {} },
+      "@/utils/api/ai_chat/aiChatHelpers": { AI_Chat_API: {} },
+      "@/store": { ...atoms, currentUserAtom: "user" },
+      "next/navigation": { useSearchParams: () => new URLSearchParams() },
+      "@tanstack/react-query": { useQueryClient: () => ({ invalidateQueries: async () => {} }) },
     });
     global.fetch = async (url, init) => {
       if (url === "/api/ai/task-questions") {
