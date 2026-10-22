@@ -1554,6 +1554,7 @@ test('Ctrl+J uses the latest saved veto if it changes while task creation is pen
     assert.equal(values.get('showAIChatInterfaceAtom'), false);
     assert.equal(values.get('aiChatAutoOpenSuppressedAtom'), true);
   });
+});
 
 test('HTPR-7547 cold Compose receives text and selection from the command focus proxy', async (t) => {
   for (const mobile of [false, true]) {
