@@ -74,7 +74,9 @@ test("flag copies Owner-only rollout and registry/keys use the generated definit
   assert.equal(definition.HTPR_7550_CONNECT_OVERLAY_FLAG, overlayKey);
   assert.equal(definition.default.defaultMode, "OWNER_ONLY");
   assert.deepEqual(definition.default.releaseRisk.ownerRequest, previous.default.releaseRisk.ownerRequest);
-  assert.equal(definition.default.releaseRisk.highRisk, undefined);
+  assert.equal(definition.default.releaseRisk.highRisk, "access");
+  assert.equal(definition.default.releaseRisk.risk, "new");
+  assert.match(definition.default.releaseRisk.reason, /MCP credential provisioning/);
   const registry = load("src/lib/flags.ts", {
     "@/lib/prisma": {}, "@/lib/flags/definitions": { FEATURE_FLAG_DEFINITIONS: [definition.default] }, "@/lib/flags/keys": {},
   });
@@ -85,6 +87,26 @@ test("flag copies Owner-only rollout and registry/keys use the generated definit
   assert.match(read("src/lib/flags/keys.ts"), /export \* from "\.\/definitions\/index.generated"/);
   assert.match(read("scripts/generate-flag-index.mjs"), /export \{ \$\{identifier\} \}/);
 });
+
+test("boards outside the starter lookup are ordinary overlay ineligibility, without changing pointer-only status", async () => {
+  assert.equal((await server().get()).body.eligible, true);
+  assert.deepEqual(await server({ project: null }).get(), { body: { eligible: false }, status: 200 });
+  assert.deepEqual(await server({ project: null }).get(false), { body: { eligible: false }, status: 404 });
+  assert.equal((await server({ userId: null }).get()).status, 401);
+  assert.equal((await server({ agentId: "fixture-agent" }).get()).status, 401);
+});
+
+function isOverlayActive(overlay, overrides = {}) {
+  const source = read("src/components/PageComponents/Kanban/KanbanHomepageComponents/Homepage.tsx");
+  const expression = source.match(/const connectOverlayActive = ([\s\S]*?);/);
+  assert.ok(expression);
+  const scope = {
+    connectOverlayEnabled: true, composeEnabled: true, connectOverlay: overlay, overlaySectionId: overlay.sectionId, tasksHydrated: true, secondaryStartupEnabled: true,
+    _currentProject: { ownerId: 6 }, currentUser: { id: 6 }, pointerFiltered: false, pointerTaskIds: [71],
+    displaySections: [{ sectionId: 10 }], hiddenSectionIndexes: new Set(), ...overrides,
+  };
+  return Function(...Object.keys(scope), `return ${expression[1]}`)(...Object.values(scope));
+}
 
 async function withDOM(fn) {
   const dom = new JSDOM("<!doctype html><div id='root'></div>", { url: "https://fixture.test/project?id=7", pretendToBeVisual: true });
@@ -115,7 +137,8 @@ async function withBoard(fn, overrides = {}) {
       requests.push([url, options]);
       if (options.method === "POST") { if (state.dismissOk) state.eligible = false; return response({}, state.dismissOk); }
       if (state.pending) await new Promise((resolve) => { release = resolve; });
-      return response({ eligible: state.eligible, sectionId: 10 });
+      if (state.requestError) throw new Error("Fixture request failed");
+      return response({ eligible: state.eligible, sectionId: 10 }, state.requestOk !== false);
     };
     const { useConnectAgentOverlay } = load("src/hooks/useConnectAgentOverlay.ts", {
       "@tanstack/react-query": require("@tanstack/react-query"),
@@ -135,12 +158,13 @@ async function withBoard(fn, overrides = {}) {
     });
     function Board({ projectId = 7, userId = 6, active = true }) {
       const overlay = useConnectAgentOverlay(projectId, userId, active);
+      const overlayActive = isOverlayActive(overlay, state.activation);
       return React.createElement(React.Fragment, null,
         React.createElement("main", { id: "board" }, "Visible starter board"),
         React.createElement("div", { id: "droppable-section-container-10" }, React.createElement("div", { className: "create-new-task-button" }, "+")),
-        !overlay.blocked && React.createElement("section", { id: "inline-card" }, "Legacy inline card"),
+        !overlayActive && React.createElement("section", { id: "inline-card" }, "Legacy inline card"),
         state.pointer && !overlay.blocked && React.createElement("button", { id: "pointer" }, "Write your first task here"),
-        overlay.open && React.createElement(ConnectAgentOverlay, { sectionId: overlay.sectionId, onClose: overlay.close }));
+        overlayActive && React.createElement(ConnectAgentOverlay, { sectionId: overlay.sectionId, onClose: overlay.close }));
     }
     const render = async (props = {}) => domContext.act(async () => domContext.root.render(React.createElement(QueryClientProvider, { client }, React.createElement(Board, props))));
     const settle = async () => domContext.act(async () => { await new Promise((resolve) => setTimeout(resolve, 0)); });
@@ -175,11 +199,11 @@ for (const close of ["escape", "skip", "connected"]) {
   });
 }
 
-test("pending eligibility withholds pointer and duplicate card; explicit flag OFF keeps the old path", async () => {
+test("pending eligibility withholds the pointer but preserves inline fallback; explicit flag OFF keeps the old path", async () => {
   await withBoard(async ({ state, render, settle, release, requests }) => {
     await render();
     assert.equal(document.getElementById("pointer"), null);
-    assert.equal(document.getElementById("inline-card"), null);
+    assert.ok(document.getElementById("inline-card"));
     assert.equal(document.querySelector('[role="dialog"]'), null);
     state.pending = false;
     await React.act(async () => release()); await settle();
@@ -207,6 +231,43 @@ test("7550 OFF keeps production behavior even before flag readiness", async () =
     state.ready = true; await render(); assert.ok(document.getElementById("pointer"));
   }, { overlay: false, ready: false });
 });
+
+for (const [name, overrides] of [["network error", { requestError: true }], ["HTTP error", { requestOk: false }], ["ineligible board", { eligible: false }]]) {
+  test(`${name} reveals the pointer and inline fallback next to an eligible blocking control`, async () => {
+    await withBoard(async ({ render, settle }) => {
+      await render(); await settle();
+      assert.ok(document.querySelector('[role="dialog"]'));
+      assert.equal(document.getElementById("pointer"), null);
+      assert.equal(document.getElementById("inline-card"), null);
+    });
+    await withBoard(async ({ render, settle }) => {
+      await render(); await settle();
+      assert.equal(document.querySelector('[role="dialog"]'), null);
+      assert.ok(document.getElementById("pointer"));
+      assert.ok(document.getElementById("inline-card"));
+    }, overrides);
+  });
+}
+
+for (const [name, activation] of [
+  ["compose off", { composeEnabled: false }], ["filtered board", { pointerFiltered: true }],
+  ["hidden target section", { hiddenSectionIndexes: new Set([0]) }], ["missing target section", { displaySections: [{ sectionId: 20 }] }],
+  ["tasks not hydrated", { tasksHydrated: false }], ["startup not ready", { secondaryStartupEnabled: false }],
+  ["non-owner", { _currentProject: { ownerId: 9 } }], ["non-starter tasks", { pointerTaskIds: null }],
+]) {
+  test(`${name} keeps inline fallback next to a still-allowed visible starter overlay`, async () => {
+    await withBoard(async ({ render, settle }) => {
+      await render(); await settle();
+      assert.ok(document.querySelector('[role="dialog"]'));
+      assert.equal(document.getElementById("inline-card"), null);
+    });
+    await withBoard(async ({ render, settle }) => {
+      await render(); await settle();
+      assert.equal(document.querySelector('[role="dialog"]'), null);
+      assert.ok(document.getElementById("inline-card"));
+    }, { activation });
+  });
+}
 
 test("shared modal traps focus; failed skip stays open with retry and hidden picker stops being visible", async () => {
   await withBoard(async ({ dom, state, render, settle, act, picker }) => {
@@ -244,13 +305,17 @@ test("integration wires pointer blocking, keeps the independent inline-removal s
   const landing = read("src/app/[...boardURL]/LandingPage.tsx");
   const screen = read("src/components/PageComponents/Onboarding/Screens/ConnectAIOnboardingScreen.tsx");
   assert.match(home, /filtered=\{pointerFiltered \|\| hiddenSectionIndexes.has\(index\) \|\| \(connectOverlayEnabled && connectOverlay.blocked\)\}/);
-  assert.match(home, /connectOverlayEnabled && composeEnabled && connectOverlay.open/);
+  assert.match(home, /const connectOverlayActive = connectOverlayEnabled && composeEnabled && connectOverlay.open/);
+  assert.match(home, /\{!connectOverlayActive && inlineConnectCard\}/);
+  assert.match(home, /\{connectOverlayActive && \(/);
   assert.match(home, /const connectOverlayEnabled = useFlag\(HTPR_7550_CONNECT_OVERLAY_FLAG\)/);
   assert.match(home, /tasksHydrated && secondaryStartupEnabled/);
   assert.match(home, /displaySections\?\.some/);
-  assert.match(landing, /!connectBlockRemoved && !connectOverlayBlocked/);
-  assert.match(landing, /connectOverlayActive=\{connectOverlayEnabled \? boardRender.boardLayout !== "table" : false\}/);
-  assert.match(landing, /props.connectOverlayActive && Number/);
+  assert.match(landing, /const inlineConnectCard = !connectBlockRemoved && _currentProject && _currentUser\?\.id/);
+  assert.match(landing, /\{\(!connectOverlayEnabled \|\| boardLayout === "table"\) && inlineConnectCard\}/);
+  assert.match(landing, /inlineConnectCard=\{connectOverlayEnabled \? inlineConnectCard : null\}/);
+  assert.match(landing, /connectOverlayEnabled=\{connectOverlayEnabled \? boardRender.boardLayout !== "table" : false\}/);
+  assert.doesNotMatch(landing, /useConnectAgentOverlay/);
   assert.match(screen, /overlay=\{overlayEnabled && props.overlay\} onConnected=\{overlayEnabled \? props.onConnected : undefined\}/);
   assert.match(screen, /useMcpToken\(!overlay\)/);
   assert.match(screen, /\(!overlay \|\| visible\) &&/);

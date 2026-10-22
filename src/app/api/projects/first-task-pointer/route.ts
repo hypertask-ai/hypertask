@@ -22,7 +22,7 @@ export async function GET(request: NextRequest) {
     where: { id: projectId, ownerId: session.userId, seeded: true, status: "Normal", AND: [projectContentAccessWhere(session.userId, session.agentId)] },
     select: { firstTaskPointerTaskId: true, firstTaskPointerSectionId: true, firstRealTaskCreatedAt: true },
   });
-  if (!project) return NextResponse.json({ eligible: false }, { status: 404 });
+  if (!project) return NextResponse.json({ eligible: false }, { status: request.nextUrl.searchParams.get("connectOverlay") === "1" ? 200 : 404 });
   const starterTaskId = project.firstTaskPointerTaskId;
   const sectionId = project.firstTaskPointerSectionId;
   if (!starterTaskId || !sectionId || project.firstRealTaskCreatedAt) {

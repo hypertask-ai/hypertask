@@ -32,7 +32,7 @@ export function useConnectAgentOverlay(projectId: number, userId: number, active
   if (!overlayEnabled) return { enabled: false, blocked: false, open: false, sectionId: undefined, close };
   return {
     enabled,
-    blocked: active && pointerEnabled && (!overlayReady || (enabled && (isPending || isFetching || isError || data?.eligible === true))),
+    blocked: active && pointerEnabled && !isError && (!overlayReady || (enabled && (isPending || isFetching || data?.eligible === true))),
     open: enabled && !isPending && !isFetching && !isError && data?.eligible === true,
     sectionId: data?.sectionId,
     close,

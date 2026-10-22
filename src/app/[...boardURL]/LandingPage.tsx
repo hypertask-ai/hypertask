@@ -34,7 +34,6 @@ import { useGetNotificationCount } from "@/hooks/Inbox/useGetNotifications";
 import { useQueryClient } from "@tanstack/react-query";
 
 import HomePage from "@/components/PageComponents/Kanban/KanbanHomepageComponents/Homepage";
-import { useConnectAgentOverlay } from "@/hooks/useConnectAgentOverlay";
 import { AgentConnectCard } from "@/components/PageComponents/Onboarding/AgentConnectCard";
 import { KanbanModalsProvider } from "@/lib/contexts/Kanban/KanbanContainer/KanbanModalContext";
 
@@ -1160,7 +1159,7 @@ return (
         <NoBoardsEmptyState user={user} />
       ) : boardRender ? (
            <SectionComp
-            connectOverlayActive={connectOverlayEnabled ? boardRender.boardLayout !== "table" : false}
+            connectOverlayEnabled={connectOverlayEnabled ? boardRender.boardLayout !== "table" : false}
             _allProjects={boardRender.projects}
             _projectCount={boardRender.projects.length}
             _currentUser={user}
@@ -1199,20 +1198,22 @@ return (
 
 export default LandingPage
 
-const SectionComp = (props: SectionCompProps & { connectOverlayActive: boolean }) => {
+const SectionComp = (props: SectionCompProps & { connectOverlayEnabled: boolean }) => {
   const connectBlockRemoved = useFlag(HTPR_7078_REMOVE_CONNECT_BLOCK_FLAG)
   const context = useLandingSection(props, useLandingSectionReadiness);
-  const overlay = useConnectAgentOverlay(context._currentProject?.id ?? 0, context._currentUser?.id ?? 0, props.connectOverlayActive && Number(context._currentProject?.ownerId) === context._currentUser?.id);
-  return renderLandingSection(context, connectBlockRemoved, overlay.blocked);
+  return renderLandingSection(context, connectBlockRemoved, props.connectOverlayEnabled);
 };
 
-function renderLandingSection(context: ReturnType<typeof useLandingSection>, connectBlockRemoved: boolean, connectOverlayBlocked: boolean) {
+function renderLandingSection(context: ReturnType<typeof useLandingSection>, connectBlockRemoved: boolean, connectOverlayEnabled: boolean) {
   const {
   boardLayout, isMbl, appShellRailOn, showQuickTips, _currentProject,
   sections, setShowTrial, showTrial, activeBuiltinViews, filteredSectionsForActiveView,
   kanbanContainerRef, handleSideBar, handleBoardChange, debouncedHandleBoardChange, _notifications,
   _currentUser, _activeSortingMode,
   } = context;
+  const inlineConnectCard = !connectBlockRemoved && _currentProject && _currentUser?.id ? (
+    <AgentConnectCard projectId={_currentProject.id} userId={_currentUser.id} />
+  ) : null;
 
 return (
   <>
@@ -1283,9 +1284,7 @@ return (
               ? 'bg-pageBackground homepage-container-tag ml-[var(--app-shell-rail-w,48px)] !w-[calc(100%-var(--app-shell-rail-w,48px))] flex-col gap-4 flex items-center'
               : 'bg-pageBackground homepage-container-tag flex-col gap-4 flex items-center'}
             >
-            {!connectBlockRemoved && !connectOverlayBlocked && _currentProject && _currentUser?.id && (
-              <AgentConnectCard projectId={_currentProject.id} userId={_currentUser.id} />
-            )}
+            {(!connectOverlayEnabled || boardLayout === "table") && inlineConnectCard}
             {boardLayout === "table" ? (
               <BoardDocumentBoundary
                 fallback={(
@@ -1306,6 +1305,7 @@ return (
               </BoardDocumentBoundary>
             ) : (
             <HomePage
+              inlineConnectCard={connectOverlayEnabled ? inlineConnectCard : null}
               filteredSections={filteredSectionsForActiveView}
               handleBoardChange={debouncedHandleBoardChange}
               _sections={sections}

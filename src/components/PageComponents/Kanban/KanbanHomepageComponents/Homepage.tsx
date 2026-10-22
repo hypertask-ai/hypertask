@@ -90,6 +90,7 @@ const HomePage = ({
   _sections,
   filteredSections,
   _activeSortingMode,
+  inlineConnectCard,
 
 }:
   {
@@ -99,6 +100,7 @@ const HomePage = ({
     _sections: ISection[],
     filteredSections: ISection[],
     _activeSortingMode: TBoardSortingViewMode,
+    inlineConnectCard?: React.ReactNode,
   }
 
 ) => {
@@ -817,6 +819,11 @@ const HomePage = ({
     getActiveBoardViewId(_currentProject, activeBuiltinViews)?.startsWith("builtin:")
   );
 
+  const overlaySectionId = connectOverlay.sectionId;
+  const connectOverlayActive = connectOverlayEnabled && composeEnabled && connectOverlay.open && !!overlaySectionId && tasksHydrated && secondaryStartupEnabled &&
+    Number(_currentProject.ownerId) === currentUser.id && !pointerFiltered && pointerTaskIds !== null &&
+    displaySections?.some((section, index) => (section.sectionId ?? section.id) === overlaySectionId && !hiddenSectionIndexes.has(index)) === true;
+
   const renderSections = (archivedTasks?: ITask[]) =>
     displaySections && displaySections.map((sec, index) => (
               <Draggable
@@ -877,6 +884,7 @@ const HomePage = ({
       onLabelTask={labelTaskForBulk}
     >
       <>
+      {!connectOverlayActive && inlineConnectCard}
       <span
         data-board-tasks-hydrated={tasksHydrated ? "true" : "false"}
         hidden
@@ -933,10 +941,8 @@ const HomePage = ({
           <HypertasksCommands contextOptions={createContextOptionsForHTC()} />
         </React.Suspense>
       )}
-      {connectOverlayEnabled && composeEnabled && connectOverlay.open && connectOverlay.sectionId && tasksHydrated && secondaryStartupEnabled &&
-        Number(_currentProject.ownerId) === currentUser.id && !pointerFiltered && pointerTaskIds !== null &&
-        displaySections?.some((section, index) => (section.sectionId ?? section.id) === connectOverlay.sectionId && !hiddenSectionIndexes.has(index)) && (
-          <ConnectAgentOverlay key={`${currentUser.id}:${_currentProject.id}`} sectionId={connectOverlay.sectionId} onClose={connectOverlay.close} />
+      {connectOverlayActive && (
+          <ConnectAgentOverlay key={`${currentUser.id}:${_currentProject.id}`} sectionId={overlaySectionId} onClose={connectOverlay.close} />
         )}
       {showDeleteTaskModal && tasksToDelete && <ConfirmTaskDelete confirmDelete={deleteTaskHandler} content={`Clicking confirm will delete this task${tasksToDelete?.length>1?' and its associated sub-tasks':''}! Task can be recovered within 30 days.`} loading={loading}/>}
       </>
