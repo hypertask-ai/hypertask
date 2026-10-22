@@ -359,7 +359,7 @@ test('a Question thumbs up is still refused from an agent, before or at its last
 });
 
 test('a Question thumbs up approves only an affirmative Question tied to the current wireframe', async () => {
-  const linked = '<p>Question: <strong>May slice A ship: AgentSidebarChatCommands, AgentConnectGreeting, TerminalSessionMirror?</strong></p><p>Wireframe: https://hypertask.app/wireframes/htpr-7518</p><p>Yes: it merges.</p>';
+  const linked = '<p>Question: <strong>May slice A ship with the new elements named here: AgentSidebarChatCommands,AgentConnectGreeting, TerminalSessionMirror?</strong></p><p>Wireframe: https://hypertask.app/wireframes/htpr-7518</p><p>Yes: it merges.</p>';
   assert.equal((await decision(htpr7518({ text: linked }))).state, 'success');
   for (const text of [
     '<p>Question: <strong>May slice A ship: AgentSidebarChatCommands?</strong></p><p>Yes: it merges.</p>',
@@ -372,6 +372,10 @@ test('a Question thumbs up approves only an affirmative Question tied to the cur
     '<p>Question: <strong>Should we request another review?</strong></p><p>Details: #comment-297898</p><p>Yes: request review.</p>',
     '<p>Question: <strong>Should AgentSidebarChatCommands, AgentConnectGreeting, TerminalSessionMirror get another review?</strong></p><p>Details: #comment-297898</p><p>Yes: request review.</p>',
     '<p>Question: <strong>Do you like AgentSidebarChatCommands, AgentConnectGreeting, TerminalSessionMirror?</strong></p><p>Details: #comment-297898</p><p>Yes: noted.</p>',
+    '<p>Question: <strong>Should we add tests for AgentSidebarChatCommands, AgentConnectGreeting, TerminalSessionMirror?</strong></p><p>Details: #comment-297898</p><p>Yes: add tests only.</p>',
+    '<p>Question: <strong>May the tests only ship with the new parts named here: AgentSidebarChatCommands, AgentConnectGreeting, TerminalSessionMirror?</strong></p><p>Details: #comment-297898</p><p>Yes: tests only.</p>',
+    '<p>Question: <strong>May slice A ship with the new parts named here: AgentSidebarChatCommands?</strong></p><p>Details: #comment-297898</p><p>Yes: it merges.</p>',
+    '<p>Question: <strong>May slice A ship with the new parts named here: AgentSidebarChatCommands, AgentConnectGreeting, TerminalSessionMirror? Or wait?</strong></p><p>Details: #comment-297898</p><p>Yes: it merges.</p>',
   ]) {
     assert.equal((await decision(htpr7518({ text }))).state, 'failure', text);
   }

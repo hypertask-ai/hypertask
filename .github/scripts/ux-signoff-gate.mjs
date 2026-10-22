@@ -333,10 +333,11 @@ function asksYesToShipElements(comment, wireframeLink, designIds, newElements) {
   const text = plainText(comment.text).trim();
   const ask = /^Question:[ \t]*([^\n]*)/.exec(text)?.[1].replace(/[’‘]/g, "'");
   if (ask == null || !/(?:^|\n)[ \t]*Yes:/.test(text)) return false;
-  const askWords = new Set(ask.split(/[^A-Za-z0-9_]+/));
-  if (!newElements.length || !newElements.every((name) => askWords.has(name))) return false;
-  if (!/\b(?:ship|build|add|approve|merge)\b/i.test(ask)) return false;
-  if (/\b(?:no|not|block|blocked|reject|defer|postpone|hold|wait|stop|cancel|revert|undo|instead|another|different|change|review|later)\b|n't/i.test(ask)) return false;
+  const template = /^May (.+) ship with the (?:\d+ )?new (?:parts|elements) named here: ([A-Za-z0-9_]+(?:, ?[A-Za-z0-9_]+)*)\?$/.exec(ask.trim());
+  if (!template) return false;
+  const named = new Set(template[2].split(/, ?/));
+  if (!newElements.length || !newElements.every((name) => named.has(name))) return false;
+  if (/\b(?:no|not|block|blocked|reject|defer|postpone|hold|wait|stop|cancel|revert|undo|instead|another|different|change|review|later|tests?|only)\b|n't/i.test(template[1])) return false;
   return comment.text.match(WIREFRAME)?.[0] === wireframeLink ||
     designIds.some((id) => new RegExp(`#comment-${id}(?!\\d)`).test(comment.text));
 }
