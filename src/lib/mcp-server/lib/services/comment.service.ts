@@ -20,6 +20,9 @@ import { appendListQueryParams } from '@/lib/mcp/listQuery';
 
 export interface CommentResponse {
   success: boolean;
+  routedTo?: 'comments';
+  visibleToPeople?: true;
+  url?: string;
   comment: {
     id: number;
     text: string;
@@ -38,6 +41,8 @@ export interface CommentResponse {
 export interface LoggedCommentResponse {
   success: boolean;
   routedTo: 'log';
+  visibleToPeople: false;
+  notice: string;
   url: string;
   activity: { id: string; runId: string; type: string; text: string; createdAt: string };
 }

@@ -599,3 +599,29 @@ test('inventory documentation covers every legacy tool and explains missing usag
   assert.match(doc, /6506/)
   assert.match(doc, /Owner \+ QA/)
 })
+
+test('legacy and consolidated comment catalogs explain hidden logs and human-facing kinds', async () => {
+  for (const consolidated of [false, true]) {
+    const selected = selectMcpTools(legacy, consolidated)
+    const catalog = (await rpc(selected, 'tools/list')).result.tools
+    const name = consolidated ? 'hypertask_comments' : 'hypertask_add_comment_to_task'
+    let tool = toolNamed(catalog, name)
+    if (!consolidated) {
+      assert.match(tool.description, /hidden agent log/)
+      assert.match(tool.description, /kind question\|qa\|done for people/)
+      const described = await rpc(selected, 'tools/call', { name: 'hypertask_describe_tool', arguments: { name } })
+      tool = JSON.parse(described.result.content[0].text)
+    }
+    assert.ok(tool, name)
+    const schema = consolidated
+      ? tool.inputSchema.oneOf.find((variant) => variant.properties.action.const === 'add').properties.input
+      : tool.inputSchema
+    for (const text of [tool.description, schema.properties.kind.description]) {
+      assert.match(text, /Without a kind, a reply target or an @mention of a person/)
+      assert.match(text, /hidden ticket agent log, which people do not see/)
+      assert.match(text, /question for a decision by a person/)
+      assert.match(text, /qa for a QA verdict/)
+      assert.match(text, /done for the closing summary/)
+    }
+  }
+})
