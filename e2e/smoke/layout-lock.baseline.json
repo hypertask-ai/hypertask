@@ -154,7 +154,7 @@
               "selector": "[data-testid=\"my-tasks-title\"]",
               "box": {
                 "x": 136,
-                "y": 36,
+                "y": 92,
                 "width": 77,
                 "height": 27
               }
@@ -163,25 +163,25 @@
               "selector": "[data-testid=\"my-tasks-toolbar\"]",
               "box": {
                 "x": 48,
-                "y": 36,
+                "y": 92,
                 "width": 1392,
-                "height": 27
+                "height": 32
               }
             },
             "list": {
               "selector": "[data-testid=\"my-tasks-list\"]",
               "box": {
                 "x": 48,
-                "y": 135,
+                "y": 196,
                 "width": 1392,
-                "height": 729
+                "height": 668
               }
             },
             "splits": {
               "selector": "[data-testid=\"my-tasks-splits-desktop\"]",
               "box": {
                 "x": 48,
-                "y": 87,
+                "y": 148,
                 "width": 1392,
                 "height": 32
               }
@@ -628,7 +628,7 @@
               "selector": "[data-testid=\"my-tasks-title\"]",
               "box": {
                 "x": 16,
-                "y": 92,
+                "y": 148,
                 "width": 77,
                 "height": 27
               }
@@ -637,18 +637,18 @@
               "selector": "[data-testid=\"my-tasks-toolbar\"]",
               "box": {
                 "x": 0,
-                "y": 92,
+                "y": 148,
                 "width": 390,
-                "height": 27
+                "height": 44
               }
             },
             "list": {
               "selector": "[data-testid=\"my-tasks-list\"]",
               "box": {
                 "x": 0,
-                "y": 135,
+                "y": 208,
                 "width": 390,
-                "height": 608
+                "height": 535
               }
             },
             "splits": {
@@ -797,5 +797,9 @@
   },
   "sourceCommit": "fc38d8b752ac871f03e8f189d5961fa5f2dd7004",
   "flagMode": "live-like",
-  "flagSnapshotSha256": "dbe55bec498b41eea368b0b8f51e532ef208dfb6565338725bb755822439f505"
+  "flagSnapshotSha256": "dbe55bec498b41eea368b0b8f51e532ef208dfb6565338725bb755822439f505",
+  "approvedIn": {
+    "my-tasks/Desktop": "https://app.hypertask.ai/detail/project-4060/253",
+    "my-tasks/Mobile": "https://app.hypertask.ai/detail/project-4060/253"
+  }
 }

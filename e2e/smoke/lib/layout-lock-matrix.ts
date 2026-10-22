@@ -128,11 +128,13 @@ export function validateMatrixFlagChanges(entries: readonly MatrixFlagChange[], 
   return failures
 }
 
-// The composer is the last thing of a ticket thread: no comment may end below its top edge.
-export function composerFollowsComments(label: string, composerTop: number, lastCommentBottom: number | null): string[] {
-  if (lastCommentBottom === null) return []
-  return lastCommentBottom > composerTop + EDGE
-    ? [`${label}: composer is no longer the last part of the thread (last comment ends at ${lastCommentBottom}px, composer starts at ${composerTop}px)`]
+// The composer is the last thing of a ticket thread, including when only the description is rendered.
+export function composerFollowsThread(label: string, composerTop: number | null, lastCommentBottom: number | null, descriptionBottom: number | null): string[] {
+  if (composerTop === null) return [`${label}: comment composer is missing`]
+  const threadBottom = lastCommentBottom ?? descriptionBottom
+  if (threadBottom === null) return [`${label}: no rendered comment or description to check before the composer`]
+  return threadBottom > composerTop
+    ? [`${label}: composer is no longer the last part of the thread (${lastCommentBottom === null ? 'description' : 'last comment'} ends at ${threadBottom}px, composer starts at ${composerTop}px)`]
     : []
 }
 
