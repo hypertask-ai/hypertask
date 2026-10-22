@@ -206,7 +206,7 @@ test("task auto-open reserves the lazy desktop sidebar width without affecting c
     const slot = pending.querySelector("[data-ai-chat-slot]");
     assert.ok(slot, "the slot must exist even before the lazy runtime or panels load");
     assert.equal(slot.style.width, `${Math.max(width, 340)}px`);
-    assert.equal(slot.className, "shrink-0");
+    assert.equal(slot.className, "shrink-0 max-md:fixed max-md:right-0 max-md:top-0 max-md:z-[51]");
     const readySlot = ready.querySelector("[data-ai-chat-slot]");
     assert.equal(slot.style.width, readySlot.style.width);
     assert.equal(slot.className, readySlot.className);
