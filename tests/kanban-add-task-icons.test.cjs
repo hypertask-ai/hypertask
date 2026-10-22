@@ -11,7 +11,6 @@ const { createRefactoredModuleRequire } = require("./refactored-module-require.c
 const root = path.resolve(__dirname, "..");
 const sharpPlusFlag = "htpr-7047-sharp-plus-signs";
 const keys = {
-  HTPR_6902_N_QUICK_ADD_FLAG: "htpr-6902-n-quick-add",
   HTPR_7047_SHARP_PLUS_SIGNS_FLAG: sharpPlusFlag,
 };
 

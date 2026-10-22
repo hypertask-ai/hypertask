@@ -6,10 +6,9 @@ const React = require("react");
 const { JSDOM } = require("jsdom");
 const ts = require("typescript");
 
-const nFlag = "htpr-6902-n-quick-add";
 const sectionPath = path.resolve(__dirname, "../src/hooks/Homepage/useSections.ts");
 
-test("active column shortcuts survive N flag toggles without changing the active column", async () => {
+test("active column shortcuts survive rerenders without changing the active column", async () => {
   const dom = new JSDOM("<!doctype html><div id='root'></div>");
   const names = ["window", "document", "navigator", "HTMLElement", "IS_REACT_ACT_ENVIRONMENT"];
   const previous = names.map((name) => [name, Object.getOwnPropertyDescriptor(global, name)]);
@@ -18,7 +17,6 @@ test("active column shortcuts survive N flag toggles without changing the active
   });
   const { createRoot } = require("react-dom/client");
   const root = createRoot(document.getElementById("root"));
-  const flags = { [nFlag]: false };
   const calls = [];
   const mocks = {
     react: React,
@@ -36,8 +34,6 @@ test("active column shortcuts survive N flag toggles without changing the active
     "@/lib/constants/keyboard-handler": { KeyCodes: { C: 67 } },
     "../MultiPages/Route/useHypertasksNavigate": { default: () => ({ navigate: () => {} }) },
     "@/lib/contexts/mobileContext": { MobileViewContext: React.createContext(false) },
-    "@/hooks/useFlag": { useFlag: (key) => flags[key] === true },
-    "@/lib/flags/keys": { HTPR_6902_N_QUICK_ADD_FLAG: nFlag },
   };
   const source = fs.readFileSync(process.env.HTPR_6914_SECTION_SOURCE || sectionPath, "utf8");
   const compiled = ts.transpileModule(source, {
@@ -67,8 +63,7 @@ test("active column shortcuts survive N flag toggles without changing the active
   try {
     await render();
     const activeColumn = document.querySelector('[data-column="0"]');
-    for (const enabled of [false, true, false, true]) {
-      flags[nFlag] = enabled;
+    for (let renderCount = 0; renderCount < 4; renderCount++) {
       await render();
       assert.equal(document.querySelector('[data-column="0"]'), activeColumn, "the active column must not remount");
       calls.length = 0;
@@ -77,11 +72,10 @@ test("active column shortcuts survive N flag toggles without changing the active
       assert.equal(calls[0][0].sectionId, 10, "only the active column handles the shortcut");
       calls.length = 0;
       await press(true);
-      assert.equal(calls.length, enabled ? 0 : 1, "Shift+C must use the latest N flag, not a stale handler");
-      if (!enabled) assert.equal(calls[0][0].position, "bottom");
+      assert.equal(calls.length, 0, "Shift+C must not open the full editor");
       calls.length = 0;
       await press(true, true);
-      assert.equal(calls.length, 1, "Ctrl+Shift+C remains available after each toggle");
+      assert.equal(calls.length, 1, "Ctrl+Shift+C remains available after each rerender");
       assert.equal(calls[0][0].position, "top");
     }
     await React.act(async () => root.unmount());

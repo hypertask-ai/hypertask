@@ -1,5 +1,4 @@
 import { useCallback, useEffect } from "react";
-import { HTPR_6902_N_QUICK_ADD_FLAG } from "@/lib/flags/keys";
 import { returnIfModalOrInputActive } from "@/utils/helperFunctions/helperFunctions";
 import { isFavoriteBoardShortcut } from "@/lib/constants/shortcuts";
 import { KeyCodes } from "@/lib/constants/keyboard-handler";
@@ -7,7 +6,6 @@ import { shouldRunArchiveShortcut } from "@/lib/keyboard/archiveShortcutGuard";
 import { shouldIgnoreTaskShortcutTarget } from "@/lib/keyboard/taskShortcuts";
 import { createTaskFromTableSelection } from "./tableCreateTask";
 import useAddDeleteTaskInBoards from "@/hooks/MultiPages/useAddDeleteTaskInBoards";
-import { useFlag } from "@/hooks/useFlag";
 import type { TableViewProps } from "./tableViewShared";
 import type { useTableRows } from "./useTableRows";
 import type { useTableState } from "./useTableState";
@@ -29,7 +27,6 @@ export function useTableKeyboard(context: Context) {
   } = context;
 
 
-  const nQuickAddEnabled = useFlag(HTPR_6902_N_QUICK_ADD_FLAG);
   const { createItem } = useAddDeleteTaskInBoards();
   const quickCreateTask = (
     title: string,
@@ -186,9 +183,7 @@ export function useTableKeyboard(context: Context) {
     document.addEventListener("keydown", handleKeyDown);
     return () => document.removeEventListener("keydown", handleKeyDown);
   };
-  useEffect(nQuickAddEnabled
-    ? registerQuickAdd
-    : () => {}, [_currentProject, nQuickAddEnabled, showCommands.show, assignTask]);
+  useEffect(registerQuickAdd, [_currentProject, showCommands.show, assignTask]);
 
   return {
   quickCreateTask,
