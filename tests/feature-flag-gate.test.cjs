@@ -1583,6 +1583,39 @@ function perFlagLayout(dir) {
   writeFile(dir, "src/lib/flags/definitions/htpr-1-other.ts", 'export const OTHER_FLAG = "htpr-1-other";\nexport default { key: OTHER_FLAG, description: "Fixture", shippedOn: "2026-10-09" } as const;\n');
 }
 
+test("runtime flag keys must come from their own registered definition or a supported barrel", async (t) => {
+  const { dir, git } = makeRepo(t);
+  perFlagLayout(dir);
+  writeFile(dir, "src/lib/flags/definitions/htpr-2-new.ts", 'export const NEW_FLAG = "htpr-2-new";\nexport default { key: NEW_FLAG, description: "Another flag", shippedOn: "2026-10-10" } as const;\n');
+  for (const filename of ["src/lib/flagsx.ts", "src/lib/flags/definitions-fake/htpr-1-other.ts", "src/components/flag-key.ts"]) {
+    writeFile(dir, filename, 'export const OTHER_FLAG = "htpr-1-other";\n');
+  }
+  const base = commit(git, "registered flags and look-alike modules");
+  for (const [moduleName, pass] of [
+    ["@/lib/flags/definitions/htpr-1-other", true],
+    ["@/lib/flags/definitions/htpr-1-other.ts", true],
+    ["../lib/flags/definitions/htpr-1-other", true],
+    ["../lib/flags/definitions/htpr-1-other.ts", true],
+    ["@/lib/flags/keys", true],
+    ["@/lib/flags", true],
+    ["@/lib/flagsx", false],
+    ["@/lib/flags/definitions-fake/htpr-1-other", false],
+    ["./flag-key", false],
+    ["../lib/flagsx", false],
+    ["@/lib/flags/definitions/htpr-2-new", false],
+    ["../lib/flags/definitions/htpr-2-new", false],
+    ["@/lib/flags/definitions/htpr-1-missing", false],
+    ["../lib/flags/definitions/htpr-1-missing", false],
+  ]) {
+    writeFile(dir, "src/components/Widget.tsx", `import { OTHER_FLAG as ticketFlag } from "${moduleName}";\nimport { useFlag } from "@/hooks/useFlag";\nexport const Widget = () => useFlag(ticketFlag) ? <div>Widget</div> : null;\n`);
+    const head = commit(git, `import from ${moduleName}`);
+    const result = await evaluate("HTPR-1 [FEATURE] Widget", base, head, dir);
+    assert.equal(result.pass, pass, `${moduleName}: ${result.reason}`);
+    if (pass) assert.equal(result.ownerReview, "feature-gated-ui");
+    else assert.match(result.reason, /without a feature flag/);
+  }
+});
+
 test("per-flag registry handles legacy inline and extracted base refs without a generated index", async (t) => {
   for (const extracted of [false, true]) {
     const { dir, git } = makeRepo(t);
