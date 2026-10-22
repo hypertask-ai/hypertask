@@ -3,7 +3,7 @@ name: App Smoke Request
 on:
   pull_request:
     branches: [production]
-    types: [opened, synchronize, reopened, ready_for_review, edited]
+    types: [opened, synchronize, reopened, ready_for_review]
 
 concurrency:
   group: app-smoke-request-${{ github.event.pull_request.number }}
