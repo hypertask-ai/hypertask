@@ -122,17 +122,20 @@ test('claude.ai artifact wireframes accept only Valentin’s own human agreement
   assert.equal((await decision({ comments: [artifact, yes({ text: 'no, change X' })] })).state, 'failure');
 });
 
-test('either ticket thread can approve, but wireframes and verdicts never mix across threads', async () => {
+test('the parent approves only when the child has no sign-off thread, a child rejection still refuses, and threads never mix', async () => {
   const parentComments = [wireframe(), yes()];
   assert.equal((await decision({ parentComments })).state, 'success');
   assert.equal((await decision({ comments: [wireframe(), yes()], parentComments: [wireframe(), yes({ text: 'no, change X' })] })).state, 'success');
-  assert.equal((await decision({ comments: [wireframe(), yes({ text: 'no, change X' })], parentComments })).state, 'success');
+  assert.equal((await decision({ comments: [wireframe(), yes({ text: 'no, change X' })], parentComments })).state, 'failure');
   for (const comments of [[wireframe()], [yes()]]) {
     assert.equal((await decision({ comments, parentComments: comments[0].id === 1 ? [yes()] : [wireframe()] })).state, 'failure');
   }
   assert.equal((await decision({ parentComments: [wireframe(), yes({ agent: { displayName: 'Runner 8' } })] })).state, 'failure');
   assert.equal((await decision({ files: [added], parentComments })).state, 'failure');
   assert.equal((await decision({ files: [added], parentComments: [wireframe(), yes({ text: 'agree New elements: ExamplePanel' })] })).state, 'success');
+  assert.equal((await decision({ comments: [wireframe({ id: 9, createdAt: '2026-10-11T12:00:00Z' })], parentComments })).state, 'success');
+  const otherDesign = wireframe({ id: 9, text: '<p>https://claude.ai/artifact/OtherDesign1</p>', createdAt: '2026-10-11T12:00:00Z' });
+  assert.equal((await decision({ comments: [otherDesign], parentComments })).state, 'failure');
 });
 
 test('mentions are removed and HTML and basic entities are decoded before matching', async () => {

@@ -104,7 +104,10 @@ export function evaluate({ title, author, files, comments = [], parentComments =
     details.push(`New element ${missingNames.join(', ')} needs Valentin's yes by name on ${ticket.key}`);
   }
   if (details.length) {
-    if (parentComments.length) {
+    const childLink = wireframe?.text.match(WIREFRAME)?.[0];
+    const sameDesignAsParent = !childLink || parentComments.some((comment) =>
+      [...comment.text.matchAll(new RegExp(WIREFRAME.source, 'g'))].some(([link]) => link === childLink));
+    if (parentComments.length && !verdict && sameDesignAsParent) {
       const parent = evaluate({ title, author, files, comments: parentComments });
       if (parent.state === 'success') return parent;
     }
