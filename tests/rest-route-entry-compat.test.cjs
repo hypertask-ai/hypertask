@@ -400,6 +400,26 @@ const baseline = {
         ]
       ],
       [
+        "storageDelete",
+        [
+          "own-file"
+        ]
+      ],
+      [
+        "attachmentDelete",
+        [
+          {
+            "where": {
+              "id": {
+                "in": [
+                  "attachment-1"
+                ]
+              }
+            }
+          }
+        ]
+      ],
+      [
         "sessionDeleteMany",
         [
           {
@@ -418,26 +438,6 @@ const baseline = {
         "transaction",
         [
           "callback"
-        ]
-      ],
-      [
-        "storageDelete",
-        [
-          "own-file"
-        ]
-      ],
-      [
-        "attachmentDelete",
-        [
-          {
-            "where": {
-              "id": {
-                "in": [
-                  "attachment-1"
-                ]
-              }
-            }
-          }
         ]
       ],
       [

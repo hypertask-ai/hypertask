@@ -72,7 +72,7 @@ function fixture(options = {}) {
       calls.push('attachments');
       const messageIds = rows.filter((row) => where.chatMessage.sessionId.in.includes(row.id))
         .flatMap((row) => row.messages.map(({ id }) => id));
-      return files.filter((file) => messageIds.includes(file.chatMessageId));
+      return files.filter((file) => messageIds.includes(file.chatMessageId)).map(({ id, fileSource }) => ({ id, fileSource }));
     },
     deleteMany: async ({ where }) => {
       calls.push('deleteAttachments');
@@ -84,6 +84,7 @@ function fixture(options = {}) {
   const db = {
     chatSession, chatMessage, attachment,
     $transaction: async (run) => {
+      calls.push('transaction');
       const savedRows = structuredClone(rows), savedFiles = structuredClone(files);
       try {
         const result = await run({ chatSession, chatMessage, attachment });
@@ -138,6 +139,7 @@ async function withLogs(run) {
 for (const compat of [false, true]) {
   test(`fresh answered chat deletion removes messages and attachments (compat=${compat})`, async () => {
     const f = fixture({ compat, files: [{ id: 7, chatMessageId: 'human', fileSource: 'owned.png' }] });
+    const expected = structuredClone({ rows: f.rows, files: f.files });
     const response = await f.remove();
     assert.equal(response.status, 200);
     assert.deepEqual(await response.json(), { message: `Session ${id(1)} deleted successfully` });
@@ -145,10 +147,8 @@ for (const compat of [false, true]) {
     assert.equal(f.rows.flatMap((row) => row.messages).length, 0);
     assert.deepEqual(f.files, []);
     assert.deepEqual(f.removedObjects, ['owned.png']);
-    assert.deepEqual(f.calls, ['attachments', 'delete', 'storage', 'deleteAttachments', 'count', 'create']);
-    assert.deepEqual(f.storageSnapshots, [{
-      rows: [], files: [{ id: 7, chatMessageId: null, fileSource: 'owned.png' }],
-    }], 'the file reference survives the session commit until storage deletion succeeds');
+    assert.deepEqual(f.calls, ['attachments', 'storage', 'transaction', 'deleteAttachments', 'delete', 'count', 'create']);
+    assert.deepEqual(f.storageSnapshots, [expected], 'storage cleanup precedes any database deletion');
     assert.equal(f.rows.length, 1, 'last-chat deletion still seeds an empty replacement');
   });
 
@@ -190,60 +190,64 @@ for (const compat of [false, true]) {
 for (const failure of ['countError', 'createError']) {
   test(`committed deletion stays successful when ${failure} throws`, () => withLogs(async ({ errors }) => {
     const error = new Error('replacement bookkeeping failed');
-    const f = fixture({ [failure]: error });
-    assert.equal((await f.remove()).status, 200);
+    const f = fixture({ [failure]: error, files: [{ id: 7, chatMessageId: 'human', fileSource: 'owned.png' }] });
+    const response = await f.remove();
+    assert.equal(response.status, 200);
+    assert.deepEqual(await response.json(), { message: `Session ${id(1)} deleted successfully` });
     assert.equal(f.rows.some((row) => row.id === id(1)), false);
+    assert.deepEqual(f.files, []);
+    assert.deepEqual(f.removedObjects, ['owned.png']);
     assert.ok(errors.some(([message, cause]) => message.includes('after deletion') && cause === error));
   }));
 }
 
-for (const failure of ['deleteError', 'transactionError']) {
-  test(`failed database deletion preserves attachments and never touches storage (${failure})`, () => withLogs(async () => {
+for (const failure of ['attachmentDeleteError', 'deleteError', 'transactionError']) {
+  test(`failed database deletion rolls back session and attachment rows after storage cleanup (${failure})`, () => withLogs(async () => {
     const f = fixture({ [failure]: new Error('delete failed'), files: [{ id: 7, chatMessageId: 'human', fileSource: 'owned.png' }] });
+    const expected = structuredClone({ rows: f.rows, files: f.files });
     assert.equal((await f.remove()).status, 500);
-    assert.equal(f.rows[0].messages.length, 2);
-    assert.deepEqual(f.files, [{ id: 7, chatMessageId: 'human', fileSource: 'owned.png' }]);
-    assert.deepEqual(f.removedObjects, []);
-    assert.equal(f.calls.includes('deleteAttachments'), false);
+    assert.deepEqual(f.rows, expected.rows);
+    assert.deepEqual(f.files, expected.files);
+    assert.deepEqual(f.removedObjects, ['owned.png']);
+    assert.deepEqual(f.storageSnapshots, [expected]);
+    assert.deepEqual(f.calls, ['attachments', 'storage', 'transaction', 'deleteAttachments', ...(failure === 'attachmentDeleteError' ? [] : ['delete'])]);
   }));
 }
 
 for (const toDelete of [id(1), 'ALL']) {
-  test(`throwing storage cleanup retains the file reference and returns success (${toDelete})`, () => withLogs(async ({ errors }) => {
-    const error = new Error('storage unavailable');
-    const f = fixture({ storageError: error, files: [{ id: 7, chatMessageId: 'human', fileSource: 'owned.png' }] });
-    const response = await f.remove(toDelete);
-    assert.equal(response.status, 200);
-    assert.deepEqual(await response.json(), { message: `Session ${toDelete} deleted successfully` });
-    assert.equal(f.rows.some((row) => row.id === id(1)), false);
-    assert.deepEqual(f.files, [{ id: 7, chatMessageId: null, fileSource: 'owned.png' }]);
-    assert.deepEqual(f.removedObjects, ['owned.png']);
-    assert.equal(f.calls.includes('deleteAttachments'), false);
-    assert.ok(errors.some(([message, , cause]) => message.includes('storage cleanup failed') && cause === error));
-  }));
+  for (const failure of ['false', 'throw']) {
+    test(`storage ${failure} keeps session and rows untouched; retry succeeds after recovery (${toDelete})`, () => withLogs(async ({ errors }) => {
+      let recovered = false;
+      const f = fixture({ files: [
+        { id: 7, chatMessageId: 'human', fileSource: 'removed.png' },
+        { id: 8, chatMessageId: 'assistant', fileSource: 'retained.png' },
+      ], storageResult: (source) => {
+        if (source === 'removed.png' || recovered) return true;
+        if (failure === 'throw') throw new Error('storage unavailable: retained.png');
+        return false;
+      } });
+      const expected = structuredClone({ rows: f.rows, files: f.files });
+      const response = await f.remove(toDelete);
+      assert.equal(response.status, 503);
+      assert.deepEqual(await response.json(), { error: 'Could not remove chat files, please try again' });
+      assert.deepEqual(f.rows, expected.rows);
+      assert.deepEqual(f.files, expected.files);
+      assert.deepEqual(f.calls, ['attachments', 'storage', 'storage'], 'no transaction, row deletion or replacement bookkeeping on failure');
+      assert.deepEqual(f.removedObjects, ['removed.png', 'retained.png']);
+      assert.deepEqual(f.storageSnapshots, [expected, expected]);
+      assert.deepEqual(errors, [['[ai-chat/delete-session] attachment storage cleanup failed', 8]], 'storage failures log ids, not sources or thrown errors');
 
-  test(`mixed storage results remove only successfully cleaned attachment rows (${toDelete})`, () => withLogs(async ({ errors }) => {
-    const f = fixture({ files: [
-      { id: 7, chatMessageId: 'human', fileSource: 'removed.png' },
-      { id: 8, chatMessageId: 'assistant', fileSource: 'retained.png' },
-    ], storageResult: (source) => source === 'removed.png' });
-    assert.equal((await f.remove(toDelete)).status, 200);
-    assert.equal(f.rows.some((row) => row.id === id(1)), false);
-    assert.deepEqual(f.files, [{ id: 8, chatMessageId: null, fileSource: 'retained.png' }]);
-    assert.deepEqual(f.removedObjects, ['removed.png', 'retained.png']);
-    assert.ok(errors.some(([message, fileId]) => message.includes('storage cleanup failed') && fileId === 8));
-  }));
+      recovered = true;
+      const retry = await f.remove(toDelete);
+      assert.equal(retry.status, 200);
+      assert.deepEqual(await retry.json(), { message: `Session ${toDelete} deleted successfully` });
+      assert.equal(f.rows.some((row) => row.id === id(1)), false);
+      assert.deepEqual(f.files, []);
+      assert.deepEqual(f.removedObjects, ['removed.png', 'retained.png', 'removed.png', 'retained.png']);
+      assert.deepEqual(f.calls, ['attachments', 'storage', 'storage', 'attachments', 'storage', 'storage', 'transaction', 'deleteAttachments', 'delete', 'count', 'create']);
+    }));
+  }
 }
-
-test('attachment-row cleanup failure after storage deletion preserves references and returns success', () => withLogs(async ({ errors }) => {
-  const error = new Error('attachment cleanup database unavailable');
-  const f = fixture({ attachmentDeleteError: error, files: [{ id: 7, chatMessageId: 'human', fileSource: 'owned.png' }] });
-  assert.equal((await f.remove()).status, 200);
-  assert.equal(f.rows.some((row) => row.id === id(1)), false);
-  assert.deepEqual(f.files, [{ id: 7, chatMessageId: null, fileSource: 'owned.png' }]);
-  assert.deepEqual(f.removedObjects, ['owned.png']);
-  assert.ok(errors.some(([message, cause]) => message.includes('attachment row cleanup failed after deletion') && cause === error));
-}));
 
 test('the real Redis cache/rate-limit step throwing logs but does not fail deletion', () => withLogs(async ({ warnings }) => {
   const f = fixture({ cacheError: new Error('cache unavailable') });
@@ -257,6 +261,16 @@ test('finishing stream persistence before deletion is cascaded with the other me
   f = fixture({ beforeDelete: async () => { assert.equal(await f.finish(), true); } });
   assert.equal((await f.remove()).status, 200);
   assert.equal(f.rows.flatMap((row) => row.messages).length, 0);
+});
+
+test('attachments created after the cleanup snapshot fall to SET NULL without being deleted', async () => {
+  let f;
+  f = fixture({ beforeDelete: async () => {
+    f.files.push({ id: 8, chatMessageId: 'assistant', fileSource: 'late.png' });
+  }, files: [{ id: 7, chatMessageId: 'human', fileSource: 'owned.png' }] });
+  assert.equal((await f.remove()).status, 200);
+  assert.deepEqual(f.files, [{ id: 8, chatMessageId: null, fileSource: 'late.png' }]);
+  assert.deepEqual(f.removedObjects, ['owned.png']);
 });
 
 test('deletion while a finishing stream is linkifying cannot return a server error or resurrect its session', async () => {

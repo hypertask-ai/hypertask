@@ -61,31 +61,23 @@ export async function DELETE(req: NextRequest) {
       );
     }
 
-    const attachments = await prisma.$transaction(async (tx) => {
-      const sessions = await tx.chatSession.findMany({
-        where: {
-          userId: user.id,
-          ...(toDelete === "ALL" ? {} : { id: toDelete }),
-        },
-        select: { id: true },
-      });
-      if (toDelete !== "ALL" && sessions.length === 0) return null;
-
-      const sessionIds = sessions.map((session) => session.id);
-      const rows = await tx.attachment.findMany({
-        where: { chatMessage: { sessionId: { in: sessionIds } } },
-        select: { id: true, fileSource: true },
-      });
-      await tx.chatSession.deleteMany({
-        where: { userId: user.id, id: { in: sessionIds } },
-      });
-      return rows;
+    const sessions = await prisma.chatSession.findMany({
+      where: {
+        userId: user.id,
+        ...(toDelete === "ALL" ? {} : { id: toDelete }),
+      },
+      select: { id: true },
     });
-
-    if (!attachments) {
+    if (toDelete !== "ALL" && sessions.length === 0) {
       await warnIfSessionBelongsToAnotherUser(toDelete, user.id);
       return NextResponse.json({ error: "Session not found" }, { status: 404 });
     }
+
+    const sessionIds = sessions.map((session) => session.id);
+    const attachments = await prisma.attachment.findMany({
+      where: { chatMessage: { sessionId: { in: sessionIds } } },
+      select: { id: true, fileSource: true },
+    });
 
     const removedAttachmentIds: number[] = [];
     await Promise.all(attachments.map(async (row) => {
@@ -95,20 +87,28 @@ export async function DELETE(req: NextRequest) {
         } else {
           console.error("[ai-chat/delete-session] attachment storage cleanup failed", row.id);
         }
-      } catch (error) {
-        console.error("[ai-chat/delete-session] attachment storage cleanup failed", row.id, error);
+      } catch {
+        console.error("[ai-chat/delete-session] attachment storage cleanup failed", row.id);
       }
     }));
 
-    try {
+    if (removedAttachmentIds.length !== attachments.length) {
+      return NextResponse.json(
+        { error: "Could not remove chat files, please try again" },
+        { status: 503 }
+      );
+    }
+
+    await prisma.$transaction(async (tx) => {
       if (removedAttachmentIds.length > 0) {
-        await prisma.attachment.deleteMany({
+        await tx.attachment.deleteMany({
           where: { id: { in: removedAttachmentIds } },
         });
       }
-    } catch (error) {
-      console.error("[ai-chat/delete-session] attachment row cleanup failed after deletion", error);
-    }
+      await tx.chatSession.deleteMany({
+        where: { userId: user.id, id: { in: sessionIds } },
+      });
+    });
 
     try {
       const numSessions = await prisma.chatSession.count({
