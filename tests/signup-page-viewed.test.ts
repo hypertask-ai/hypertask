@@ -62,6 +62,7 @@ function harness() {
     "posthog-js/dist/module.slim": { default: posthog },
     "posthog-js/dist/extension-bundles": { ErrorTrackingExtensions: {} },
     "@/utils/Providers": { default: "Provider" },
+    "@/hooks/useFlag": { FeatureFlagProvider: "FeatureFlagProvider", SubscribedFeatureFlagProvider: "SubscribedFeatureFlagProvider" },
     "@/components/Analytics/PostHogAnalytics": { default: "PostHogAnalytics" },
     "@vercel/speed-insights/next": { SpeedInsights: "SpeedInsights" },
     "@/components/ErrorBoundary/ClientErrorReporter": { default: "ClientErrorReporter" },
