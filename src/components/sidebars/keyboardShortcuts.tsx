@@ -1,4 +1,4 @@
-import { HTPR_6937_NEW_TASK_WINDOW_FLAG, HTPR_7045_SHORTCUTS_HELP_PHONE_FLAG } from "@/lib/flags/keys";
+import { HTPR_6937_NEW_TASK_WINDOW_FLAG, HTPR_7045_SHORTCUTS_HELP_PHONE_FLAG, HTPR_7564_PHONE_SHORTCUTS_HEADER_FLAG } from "@/lib/flags/keys";
 import { useContext, useEffect, useState } from "react";
 import { X } from "lucide-react";
 import { useRecoilState, useRecoilValue } from "@/lib/state";
@@ -17,6 +17,7 @@ import { HTPR_6929_COMPOSE_TASK_WRITER_FLAG } from "@/lib/flags/keys";
 
 const KeyboardShortcuts = () => {
   const shortcutsHelpPhone = useFlag(HTPR_7045_SHORTCUTS_HELP_PHONE_FLAG);
+  const phoneShortcutsHeader = useFlag(HTPR_7564_PHONE_SHORTCUTS_HEADER_FLAG);
   const panelClassName = "fixed bg-sidebar text-white-black top-0  right-0 w-[26vw] lg:w-min-[30vw] md:w-min-[32vw] overflow-y-auto h-SVH-full z-[100] pt-[env(safe-area-inset-top)]";
   const rowClassName = shortcutsHelpPhone
     ? "flex flex-row items-center mb-2 gap-2 max-sm:flex-wrap"
@@ -121,7 +122,7 @@ const KeyboardShortcuts = () => {
   }, [keyPressHandler, keyword]);
 
   return (
-    <BackDropContainer>
+    <BackDropContainer className={phoneShortcutsHeader ? "max-sm:!z-[9990]" : undefined}>
       <div
         id={DIV_ID_CONSTANTS.keyboardShortcuts}
         style={{ fontSize: 14 }}
