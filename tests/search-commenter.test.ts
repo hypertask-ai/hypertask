@@ -241,27 +241,24 @@ test('newest matching comment supplies snippets and date, not the newest unrelat
   assert.equal(state.indexCalls, 0)
 })
 
-test('commenter and match highlight flags independently select matching comment snippets and author metadata', async () => {
+test('permanent highlights preserve matching snippets and author metadata with commenter independently toggled', async () => {
   for (const commenter of [false, true]) {
-    for (const highlights of [false, true]) {
-      reset()
-      state.flags[flag] = commenter
-      state.flags[keys.HTPR_6882_SEARCH_MATCH_HIGHLIGHTS_FLAG] = highlights
-      const res = await search('needle commenter:1')
-      if (!commenter) {
-        assert.equal(res.body.legacyQuery, 'needle commenter:1')
-        assert.equal(state.commentQueries.length, 0)
-        continue
-      }
-      assert.deepEqual(res.body.processedData.All.map((row: any) => row.taskId), [101])
-      const row = res.body.processedData.All[0]
-      assert.equal(row.commentId, 2)
-      assert.equal(row.updatedAt, '2026-10-05T00:00:00.000Z')
-      assert.equal(row.commentText, comments[1].commentText)
-      assert.deepEqual(row.searchMatch, highlights ? { people: [], labels: [], commentAuthor: 'Hicham' } : undefined)
-      assert.deepEqual(state.detailQueries[0].select.creator, { select: { displayName: true, email: true } })
-      assert.equal(state.indexCalls, 0)
+    reset()
+    state.flags[flag] = commenter
+    const res = await search('needle commenter:1')
+    if (!commenter) {
+      assert.equal(res.body.legacyQuery, 'needle commenter:1')
+      assert.equal(state.commentQueries.length, 0)
+      continue
     }
+    assert.deepEqual(res.body.processedData.All.map((row: any) => row.taskId), [101])
+    const row = res.body.processedData.All[0]
+    assert.equal(row.commentId, 2)
+    assert.equal(row.updatedAt, '2026-10-05T00:00:00.000Z')
+    assert.equal(row.commentText, comments[1].commentText)
+    assert.deepEqual(row.searchMatch, { people: [], labels: [], commentAuthor: 'Hicham' })
+    assert.deepEqual(state.detailQueries[0].select.creator, { select: { displayName: true, email: true } })
+    assert.equal(state.indexCalls, 0)
   }
 })
 
@@ -270,11 +267,9 @@ test('comment author pill falls back to email and highlight prerequisites do not
   try {
     people[0].displayName = ''
     reset()
-    state.flags[keys.HTPR_6882_SEARCH_MATCH_HIGHLIGHTS_FLAG] = true
     assert.equal((await search('needle commenter:1')).body.processedData.All[0].searchMatch.commentAuthor, 'one@example.test')
     for (const prerequisite of [keys.HTPR_6865_SEARCH_LAYOUT_FLAG]) {
       reset()
-      state.flags[keys.HTPR_6882_SEARCH_MATCH_HIGHLIGHTS_FLAG] = true
       state.flags[prerequisite] = false
       const row = (await search('needle commenter:1')).body.processedData.All[0]
       assert.equal(row.commentId, 2)
@@ -405,7 +400,6 @@ test('review flag-off preserves ordinary indexed comment metadata and production
   for (const enabled of [false, true]) {
     reset()
     state.flags[flag] = enabled
-    state.flags[keys.HTPR_6882_SEARCH_MATCH_HIGHLIGHTS_FLAG] = true
     const hit = { id: '2', taskId: 101, commentText: comments[1].commentText, creatorName: 'Hicham', createdAt: '2026-10-05T00:00:00.000Z' }
     state.indexComments = [hit]
     const parsed = await parseSearchWithNames('needle from:3', [7], false, [7], enabled)
@@ -518,24 +512,21 @@ test('review paging uses bounded comment DB pages and separate full totals for c
   assert.ok(state.taskQueries.filter((args: any) => args.take !== undefined).every((args: any) => args.take === 1))
 })
 
-test('review flag-off ordinary comment output is byte-identical with either highlight mode', async () => {
-  for (const highlights of [false, true]) {
-    reset()
-    state.flags[flag] = false
-    state.flags[keys.HTPR_6882_SEARCH_MATCH_HIGHLIGHTS_FLAG] = highlights
-    const hit = { id: '2', taskId: 101, commentText: comments[1].commentText, creatorName: 'Hicham', createdAt: '2026-10-05T00:00:00.000Z' }
-    state.indexComments = [hit]
-    const row = {
-      taskId: 101, projectId: 7, ticketNumber: 'TEST-1', taskTitle: tasks[0].title,
-      descriptionText: tasks[0].description, projectTitle: 'Visible', status: 'Normal',
-      updatedAt: tasks[0].updatedAt.toISOString(), uniqueIndex: 1, highlight: {},
-      ...(highlights ? { searchMatch: { people: [], labels: [], commentAuthor: 'Hicham' }, commentId: 2, commentText: hit.commentText } : {}),
-    }
-    const expected = { processedData: { All: [row], Visible: [row] }, tabs: ['All', 'Visible'], contextProjectId: null, status: 200 }
-    assert.equal(JSON.stringify((await search('needle from:3')).body), JSON.stringify(expected))
-    assert.equal(state.commentQueries.length, 0)
-    assert.equal(state.detailQueries.length, 0)
+test('review flag-off ordinary comment output retains permanent highlights and production timestamps', async () => {
+  reset()
+  state.flags[flag] = false
+  const hit = { id: '2', taskId: 101, commentText: comments[1].commentText, creatorName: 'Hicham', createdAt: '2026-10-05T00:00:00.000Z' }
+  state.indexComments = [hit]
+  const row = {
+    taskId: 101, projectId: 7, ticketNumber: 'TEST-1', taskTitle: tasks[0].title,
+    descriptionText: tasks[0].description, projectTitle: 'Visible', status: 'Normal',
+    updatedAt: tasks[0].updatedAt.toISOString(), uniqueIndex: 1, highlight: {},
+    searchMatch: { people: [], labels: [], commentAuthor: 'Hicham' }, commentId: 2, commentText: hit.commentText,
   }
+  const expected = { processedData: { All: [row], Visible: [row] }, tabs: ['All', 'Visible'], contextProjectId: null, status: 200 }
+  assert.equal(JSON.stringify((await search('needle from:3')).body), JSON.stringify(expected))
+  assert.equal(state.commentQueries.length, 0)
+  assert.equal(state.detailQueries.length, 0)
 })
 
 test('review scanAll pages latest-per-task comment timestamps with ties and many older comments', async () => {

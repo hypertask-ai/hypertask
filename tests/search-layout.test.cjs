@@ -936,13 +936,12 @@ test('typing after chip removal or archive changes remains a draft until Enter',
   })
 })
 
-const matchFlag = 'htpr-6882-search-match-highlights'
 const matchTask = { taskId: 1, projectId: 7, projectTitle: 'Product Board', uniqueIndex: 1, ticketNumber: 'HTPR-1',
   taskTitle: 'Login <script>alert(1)</script>', descriptionText: 'Login needs login help', highlight: {},
   searchMatch: { people: ['Valentin Yeo'], labels: ['Bug'], board: 'Product Board' } }
 
 test('match results reuse inbox mention and board label pills with safe title and snippet marks', async (t) => {
-  await withSearch(t, { query: 'login from:6 label:bug in:7', flags: { [matchFlag]: true } }, async ({ complete, requests, capture }) => {
+  await withSearch(t, { query: 'login from:6 label:bug in:7' }, async ({ complete, requests, capture }) => {
     await complete(requests[0], [matchTask])
     const row = document.getElementById('task_1')
     const matches = row.querySelector('[data-search-match-highlights]')
@@ -959,7 +958,7 @@ test('match results reuse inbox mention and board label pills with safe title an
 })
 
 test('comment result author is an inbox pill before the safely highlighted snippet, including late matches', async (t) => {
-  await withSearch(t, { query: 'login', flags: { [matchFlag]: true } }, async ({ complete, requests }) => {
+  await withSearch(t, { query: 'login' }, async ({ complete, requests }) => {
     await complete(requests[0], [{ ...matchTask, commentId: 44, commentText: `${'before '.repeat(80)}Login <img src=x onerror=alert(1)>`,
       searchMatch: { commentAuthor: 'Comment Writer' } }])
     const matches = document.querySelector('[data-search-match-highlights]')
@@ -971,31 +970,27 @@ test('comment result author is an inbox pill before the safely highlighted snipp
   })
 })
 
-test('commenter snippet and author pill use both flags without highlighting the operator or injecting HTML', async (t) => {
+test('permanent highlights respect commenter on and off without highlighting the operator or injecting HTML', async (t) => {
   for (const commenter of [false, true]) {
-    for (const highlights of [false, true]) {
-      await withSearch(t, { query: 'login commenter:77', flags: { [matchFlag]: highlights, 'htpr-6880-search-commenter': commenter } }, async ({ complete, requests }) => {
-        const text = 'Login commenter:77 <img src=x onerror=alert(1)>'
-        await complete(requests[0], [{ ...matchTask, commentId: 44,
-          commentText: text,
-          searchMatch: { commentAuthor: 'Malcolm Stern' } }])
-        const row = document.getElementById('task_1')
-        const matches = row.querySelector('[data-search-match-highlights]')
-        assert.equal(Boolean(matches), highlights)
-        assert.equal(row.querySelector('img'), null)
-        assert.match(row.textContent, /<img src=x onerror=alert\(1\)>/)
-        if (highlights) {
-          assert.equal(matches.firstElementChild.textContent, '@Malcolm Stern')
-          assert.deepEqual([...matches.querySelectorAll('mark')].map((mark) => mark.textContent), commenter ? ['Login'] : ['Login', 'commenter:77'])
-        }
-      })
-    }
+    await withSearch(t, { query: 'login commenter:77', flags: { 'htpr-6880-search-commenter': commenter } }, async ({ complete, requests }) => {
+      const text = 'Login commenter:77 <img src=x onerror=alert(1)>'
+      await complete(requests[0], [{ ...matchTask, commentId: 44,
+        commentText: text,
+        searchMatch: { commentAuthor: 'Malcolm Stern' } }])
+      const row = document.getElementById('task_1')
+      const matches = row.querySelector('[data-search-match-highlights]')
+      assert.ok(matches)
+      assert.equal(row.querySelector('img'), null)
+      assert.match(row.textContent, /<img src=x onerror=alert\(1\)>/)
+      assert.equal(matches.firstElementChild.textContent, '@Malcolm Stern')
+      assert.deepEqual([...matches.querySelectorAll('mark')].map((mark) => mark.textContent), commenter ? ['Login'] : ['Login', 'commenter:77'])
+    })
   }
 })
 
-test('match flag and layout prerequisites off retain byte-identical row HTML despite match metadata', async (t) => {
-  for (const disabled of [matchFlag, layoutFlag]) {
-    await withSearch(t, { query: 'login', flags: { [matchFlag]: true, [disabled]: false }, baseline: true }, async ({ complete, requests, render, capture }) => {
+test('layout off retains byte-identical row HTML despite match metadata', async (t) => {
+  for (const disabled of [layoutFlag]) {
+    await withSearch(t, { query: 'login', flags: { [disabled]: false }, baseline: true }, async ({ complete, requests, render, capture }) => {
       const { searchMatch, ...legacy } = matchTask
       await complete(requests[0], [legacy])
       const before = document.getElementById('task_1').outerHTML

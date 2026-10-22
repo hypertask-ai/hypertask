@@ -50,9 +50,8 @@ const mocks = new Map([
     HTPR_6881_SEARCH_FUZZY_PERSON_FLAG: 'htpr-6881-search-fuzzy-person',
     HTPR_6878_SEARCH_LABEL_SCOPE_FLAG: 'htpr-6878-search-label-scope',
     HTPR_6880_SEARCH_COMMENTER_FLAG: 'htpr-6880-search-commenter',
-    HTPR_6882_SEARCH_MATCH_HIGHLIGHTS_FLAG: 'htpr-6882-search-match-highlights',
     HTPR_6865_SEARCH_LAYOUT_FLAG: 'htpr-6865-search-layout',
-    isFeatureEnabled: async (key) => ['htpr-6878-search-label-scope', 'htpr-6881-search-fuzzy-person', 'htpr-6882-search-match-highlights'].includes(key) ? false : true,
+    isFeatureEnabled: async (key) => ['htpr-6878-search-label-scope', 'htpr-6881-search-fuzzy-person'].includes(key) ? false : true,
   }],
   ['src/utils/controllers/projects/getAllIncludes.ts', {
     projectContentAccessWhere: (userId) => ({ ownerId: userId }),

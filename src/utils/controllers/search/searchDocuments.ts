@@ -1,6 +1,6 @@
 import { isFeatureEnabled } from "@/lib/flags";
 import { HTPR_6865_SEARCH_LAYOUT_FLAG, HTPR_6878_SEARCH_LABEL_SCOPE_FLAG, HTPR_6881_SEARCH_FUZZY_PERSON_FLAG, HTPR_6880_SEARCH_COMMENTER_FLAG } from "@/lib/flags";
-import { HTPR_6882_SEARCH_MATCH_HIGHLIGHTS_FLAG, HTPR_6368_SEARCH_OPERATOR_LOGIC_FLAG } from "@/lib/flags";
+import { HTPR_6368_SEARCH_OPERATOR_LOGIC_FLAG } from "@/lib/flags";
 import { MAX_SEARCH_OPERATOR_CLAUSES, searchOperatorClauseCount, type SearchFilter } from "@/lib/search/operators";
 import { parseSearchWithChipNames } from "@/lib/search/serverOperators";
 import { rankedSearchWhere } from "@/lib/search/rankedWhere";
@@ -37,8 +37,7 @@ export async function searchDocuments(
   }
 
   const fuzzyPersonEnabled = await isFeatureEnabled(HTPR_6881_SEARCH_FUZZY_PERSON_FLAG, userId);
-  const matchHighlightsEnabled = await isFeatureEnabled(HTPR_6882_SEARCH_MATCH_HIGHLIGHTS_FLAG, userId) &&
-    await isFeatureEnabled(HTPR_6865_SEARCH_LAYOUT_FLAG, userId);
+  const matchHighlightsEnabled = await isFeatureEnabled(HTPR_6865_SEARCH_LAYOUT_FLAG, userId);
   const commenterEnabled = await isFeatureEnabled(HTPR_6880_SEARCH_COMMENTER_FLAG, userId);
   const logicEnabled = await isFeatureEnabled(HTPR_6368_SEARCH_OPERATOR_LOGIC_FLAG, userId);
   const parsed = await parseSearchWithChipNames(normalizedSearchQuery, requestedProjectIds, fuzzyPersonEnabled, requestedProjectIds, commenterEnabled, logicEnabled);

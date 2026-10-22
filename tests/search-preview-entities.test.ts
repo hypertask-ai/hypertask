@@ -17,11 +17,9 @@ const root = path.resolve(__dirname, '..')
 let taskRows: any[] = []
 let commentRows: any[] = []
 let databaseRows: any[] = []
-let highlights = false
 const flags = {
   HTPR_6865_SEARCH_LAYOUT_FLAG: 'layout',
-  HTPR_6882_SEARCH_MATCH_HIGHLIGHTS_FLAG: 'highlights',
-  isFeatureEnabled: async (flag: string) => flag === 'highlights' ? highlights : flag === 'layout',
+  isFeatureEnabled: async (flag: string) => flag === 'layout',
 }
 for (const [file, exports] of [
   ['src/lib/prisma.ts', { default: {
@@ -104,25 +102,19 @@ for (const query of ['lab', 'unmatched']) {
   }
 }
 
-test('filtered ranked descriptions and comments decode once, with highlights on and off', async () => {
-  for (const enabled of [false, true]) {
-    highlights = enabled
-    fixtures()
-    const tasks = await filtered('lab from:6')
-    assert.equal(tasks[0].descriptionText, plain)
-    if (enabled) assert.equal(tasks[1].commentText, plain)
-    for (const task of tasks) assert.ok(renderRow(task, 'lab', enabled).text.includes(plain))
-  }
+test('filtered ranked descriptions and comments decode once with permanent highlights', async () => {
+  fixtures()
+  const tasks = await filtered('lab from:6')
+  assert.equal(tasks[0].descriptionText, plain)
+  assert.equal(tasks[1].commentText, plain)
+  for (const task of tasks) assert.ok(renderRow(task, 'lab', true).text.includes(plain))
 })
 
 test('operator-only fallback strips HTML before decoding entities once', async () => {
-  for (const enabled of [false, true]) {
-    highlights = enabled
-    fixtures()
-    const tasks = await filtered('from:6')
-    assert.equal(tasks[0].descriptionText, plain)
-    assert.ok(renderRow(tasks[0], 'from:6', enabled).text.includes(plain))
-  }
+  fixtures()
+  const tasks = await filtered('from:6')
+  assert.equal(tasks[0].descriptionText, plain)
+  assert.ok(renderRow(tasks[0], 'from:6', true).text.includes(plain))
 })
 
 test('literal image markup in descriptions and comments renders as text in every snippet path', async () => {
@@ -145,14 +137,11 @@ test('literal image markup in descriptions and comments renders as text in every
       }
     }
   }
-  for (const enabled of [false, true]) {
-    highlights = enabled
-    fixtures(stored)
-    const tasks = await filtered('from:6')
-    const rendered = renderRow(tasks[0], 'from:6', enabled)
-    assert.equal(rendered.querySelectorAll('img').length, 0)
-    assert.ok(rendered.text.includes(attack))
-  }
+  fixtures(stored)
+  const tasks = await filtered('from:6')
+  const rendered = renderRow(tasks[0], 'from:6', true)
+  assert.equal(rendered.querySelectorAll('img').length, 0)
+  assert.ok(rendered.text.includes(attack))
 })
 
 test('server highlights match visible text, not generated escape sequences', async () => {
