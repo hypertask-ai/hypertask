@@ -119,7 +119,7 @@ export function StartPlanButton({ project, teamId, compact = false }: {
 
   return <div className={compact ? "ml-3 flex flex-col" : "flex flex-col gap-1"}>
     <button type="button" disabled={pending || access.isFetching} onClick={createCheckout}
-      className={`rounded-[5px] bg-white-black py-1 text-content font-medium text-white-black-inverted hover:opacity-90 disabled:opacity-50 ${compact ? "px-3" : "min-w-[280px] px-10"}`}>
+      className={`rounded-[5px] bg-shadcn-primary py-1 text-content font-medium text-primary-foreground hover:opacity-90 disabled:opacity-50 ${compact ? "px-3" : "min-w-[280px] px-10"}`}>
       {pending ? "Opening checkout…" : "Start a Hypertask plan"}
     </button>
     <span className="text-meta text-text-light-gray">{access.data.trialDays === 7
