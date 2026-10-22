@@ -21,7 +21,7 @@
       "hypertask_create_task": "d90f8c3589e5a5920d6c7aa368ecd909b8e0196b93f8223e749f7c23ed5d63bb",
       "hypertask_update_task": "7424d545928e7c0f2d9ac61764526ced96b1ac80affb812e1a25821bd936d945",
       "hypertask_get_comments_for_task": "8202cb3528f82e6d900adcde6caa5df4d7200ce5c9bfd3c755ae6fc52bc1a18e",
-      "hypertask_add_comment_to_task": "7030580d35650ac1c24b72e33382fec3a7f0fb49b70c6c652752fb7643bdbd9e",
+      "hypertask_add_comment_to_task": "fb206e67a66cd1863bb1136000bea305782c5d6c84b36190557933ac25bcc885",
       "hypertask_list_labels": "a6bd96057e32f9054d31196b5075b76cc579e6bdb03fb27e3ed0195e16de38c4",
       "hypertask_assign_user": "ebbf516d90adb42bc4bf51cd05acaa75678581a0264340b60920f953ce7ad0e8"
     }
