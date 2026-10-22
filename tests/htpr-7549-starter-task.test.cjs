@@ -61,10 +61,10 @@ for (const cliEnabled of [false, true]) {
     const text = dom.window.document.body.textContent;
     for (const tool of ["Claude", "ChatGPT", "Claude Code", "Codex", "Cursor", "VS Code"]) assert.ok(text.includes(tool));
     const code = [...dom.window.document.querySelectorAll("code")].map((node) => node.textContent);
-    assert.ok(code.includes("https://mcp.hypertask.ai/mcp"));
-    assert.ok(code.includes("claude mcp add --transport http hypertask https://mcp.hypertask.ai/mcp"));
-    assert.ok(code.includes("curl -fsSL https://hypertask.ai/install | sh"));
-    assert.ok(code.includes("irm https://hypertask.ai/install.ps1 | iex"));
+    assert.equal(code.find((value) => value === "https://mcp.hypertask.ai/mcp"), "https://mcp.hypertask.ai/mcp");
+    assert.equal(code.find((value) => value === "claude mcp add --transport http hypertask https://mcp.hypertask.ai/mcp"), "claude mcp add --transport http hypertask https://mcp.hypertask.ai/mcp");
+    assert.equal(code.find((value) => value === "curl -fsSL https://hypertask.ai/install | sh"), "curl -fsSL https://hypertask.ai/install | sh");
+    assert.equal(code.find((value) => value === "irm https://hypertask.ai/install.ps1 | iex"), "irm https://hypertask.ai/install.ps1 | iex");
     assert.ok(code.includes("hypertask login --token <your-agent-token>"));
     assert.match(text, /Approve and connect/);
     assert.match(text, /Never post the token in a task or chat/);

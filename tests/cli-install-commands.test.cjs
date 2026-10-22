@@ -83,10 +83,11 @@ const cli = load("src/components/Modals/Settings/CliSection.tsx", {
 const assertNoRetiredCli = (text) => assert.doesNotMatch(text, /@hypertask\/hypertask_cli/);
 
 function assertCurrent(text) {
-  assert.ok(text.includes(commands.CLI_INSTALL_COMMAND));
+  const parts = text.split(/<[^>]*>|`|\r?\n/).map((value) => value.trim());
+  assert.ok(parts.some((value) => value === commands.CLI_INSTALL_COMMAND));
   assert.ok(text.includes(commands.CLI_LOGIN_COMMAND));
   assert.ok(text.indexOf(commands.CLI_INSTALL_COMMAND) < text.indexOf(commands.CLI_LOGIN_COMMAND));
-  assert.ok(text.includes(commands.CLI_WINDOWS_NOTE));
+  assert.ok(parts.some((value) => value === commands.CLI_WINDOWS_NOTE));
   assertNoRetiredCli(text);
 }
 
@@ -123,7 +124,7 @@ for (const flag of [true, false]) {
     assert.deepEqual(flagReads, [[key, 77], [key, 78]]);
     if (flag) {
       for (const text of [onboardingText, cliText]) assertCurrent(text);
-      assert.ok(mcpText.includes(commands.MCP_ADD_COMMAND));
+      assert.ok(mcpText.split(/<[^>]*>/).some((value) => value === commands.MCP_ADD_COMMAND));
     } else {
       assert.equal(onboardingText, legacy.onboarding);
       assert.equal(cliText, legacy.guestCli);
@@ -138,10 +139,10 @@ test("Settings useFlag adds only the Windows note and keeps the old markup off",
   const on = renderToStaticMarkup(React.createElement(cli.default));
   enabled = false;
   const off = renderToStaticMarkup(React.createElement(cli.default));
-  assert.ok(on.includes(commands.CLI_WINDOWS_NOTE));
+  assert.ok(on.split(/<[^>]*>/).some((value) => value === commands.CLI_WINDOWS_NOTE));
   assert.equal(on.replace(`<p class="px-2 text-dense font-medium text-text-light-gray">${commands.CLI_WINDOWS_NOTE}</p>`, ""), off);
   assert.equal(off, legacy.settingsHtml);
-  assert.ok(off.includes(commands.CLI_INSTALL_COMMAND));
+  assert.ok(off.split(/<[^>]*>/).some((value) => value === commands.CLI_INSTALL_COMMAND));
   assert.ok(off.includes(commands.CLI_LOGIN_COMMAND));
   assert.doesNotMatch(off, /Windows/);
 });

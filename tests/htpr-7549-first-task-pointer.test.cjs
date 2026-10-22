@@ -131,21 +131,39 @@ test("flag-off normal user is still refused, as are read-only, filtered and load
 function routeHarness(overrides = {}) {
   const state = { userId: 6, enabled: true, project: { firstTaskPointerTaskId: 71, firstTaskPointerSectionId: 10, firstRealTaskCreatedAt: null }, count: 0, section: { id: 10 }, ...overrides };
   const calls = [];
+  const accessWhere = { OR: [{ ownerId: state.userId }, { members: { some: { userId: state.userId, agentId: null } } }] };
   const { GET } = load("src/app/api/projects/first-task-pointer/route.ts", {
     "next/server": { NextResponse: { json: (body, options) => ({ body, status: options?.status ?? 200 }) } },
     "@/lib/auth/getSessionUser": { getSessionUser: async () => state.userId ? { userId: state.userId, agentId: state.agentId } : null },
     "@/lib/flags": { isFeatureEnabled: async (flag, id) => { assert.equal(flag, key); assert.equal(id, state.userId); return state.enabled; } },
     "@/lib/flags/definitions/htpr-7549-first-task-pointer": flagModule,
+    "@/utils/controllers/projects/getAllIncludes": { projectContentAccessWhere: (userId, agentId) => { assert.equal(userId, state.userId); assert.equal(agentId, state.agentId); return accessWhere; } },
     "@/lib/prisma": { __esModule: true, default: {
-      project: { findFirst: async (args) => { calls.push(args); assert.deepEqual(args.where, { id: 7, ownerId: state.userId, seeded: true, status: "Normal" }); return state.project; } },
+      project: { findFirst: async (args) => { calls.push(args); assert.deepEqual(args.where, { id: 7, ownerId: state.userId, seeded: true, status: "Normal", AND: [accessWhere] }); return state.project; } },
       task: {
-        count: async ({ where }) => { assert.deepEqual(where, { projectId: 7, id: { not: 71 } }); return state.count; },
+        count: async ({ where }) => { calls.push({ where }); assert.deepEqual(where, { projectId: 7, id: { not: 71 }, project: accessWhere }); return state.count; },
       },
-      section: { findFirst: async ({ where }) => { assert.deepEqual(where, { id: 10, projectId: 7 }); return state.section; } },
+      section: { findFirst: async ({ where }) => { calls.push({ where }); assert.deepEqual(where, { id: 10, projectId: 7 }); return state.section; } },
     } },
   });
   return { state, calls, get: (id = "7") => GET({ headers: new Headers(), nextUrl: new URL(`https://fixture.test/api/projects/first-task-pointer?projectId=${id}`) }) };
 }
+
+test("first-task pointer: owner human still allowed", async () => {
+  const harness = routeHarness();
+  const response = await harness.get();
+  assert.equal(response.status, 200);
+  assert.deepEqual(response.body, { eligible: true, starterTaskId: 71, sectionId: 10 });
+  assert.equal(harness.calls.length, 3);
+});
+
+test("first-task pointer: agent without board access now refused before any board query", async () => {
+  const harness = routeHarness({ agentId: "ungranted-agent" });
+  const response = await harness.get();
+  assert.equal(response.status, 401);
+  assert.deepEqual(response.body, { eligible: false });
+  assert.deepEqual(harness.calls, []);
+});
 
 test("server identifies edited starter by stored ID, counts every status, and refuses foreign/unmarked/completed boards", async () => {
   const harness = routeHarness();

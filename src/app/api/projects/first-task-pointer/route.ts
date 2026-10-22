@@ -3,6 +3,7 @@ import { getSessionUser } from "@/lib/auth/getSessionUser";
 import { isFeatureEnabled } from "@/lib/flags";
 import { HTPR_7549_FIRST_TASK_POINTER_FLAG } from "@/lib/flags/definitions/htpr-7549-first-task-pointer";
 import prisma from "@/lib/prisma";
+import { projectContentAccessWhere } from "@/utils/controllers/projects/getAllIncludes";
 
 export async function GET(request: NextRequest) {
   const session = await getSessionUser(request.headers);
@@ -17,7 +18,7 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ eligible: false });
   }
   const project = await prisma.project.findFirst({
-    where: { id: projectId, ownerId: session.userId, seeded: true, status: "Normal" },
+    where: { id: projectId, ownerId: session.userId, seeded: true, status: "Normal", AND: [projectContentAccessWhere(session.userId, session.agentId)] },
     select: { firstTaskPointerTaskId: true, firstTaskPointerSectionId: true, firstRealTaskCreatedAt: true },
   });
   if (!project) return NextResponse.json({ eligible: false }, { status: 404 });
@@ -27,7 +28,7 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ eligible: false });
   }
   const [realTaskCount, section] = await Promise.all([
-    prisma.task.count({ where: { projectId, id: { not: starterTaskId } } }),
+    prisma.task.count({ where: { projectId, id: { not: starterTaskId }, project: projectContentAccessWhere(session.userId, session.agentId) } }),
     prisma.section.findFirst({ where: { id: sectionId, projectId }, select: { id: true } }),
   ]);
   return NextResponse.json({ eligible: !!section && realTaskCount === 0, starterTaskId, sectionId });
