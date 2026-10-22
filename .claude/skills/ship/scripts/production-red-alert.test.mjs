@@ -167,7 +167,7 @@ test('assignment errors resume the same ticket; invalid assignment receipt is no
 test('timer is five minutes, low priority, bounded, and installation is explicit only', async () => {
   const u = units('/tmp/lib'); assert.match(u.timer, /OnUnitActiveSec=5min/);
   assert.match(u.service, /nice -n 19/); assert.match(u.service, /TimeoutStartSec=240/);
-  assert.equal(u.service.match(/WorkingDirectory="([^"]+)"/)[1], os.homedir());
+  assert.match(u.service, /^WorkingDirectory=%h$/m);
   const source = fs.readFileSync(path.join(here, 'production-red-alert'), 'utf8');
   assert.match(source, /timeout: 25000/);
   assert.match(source, /command\('flock',[\s\S]*?timeout: 240000/);
