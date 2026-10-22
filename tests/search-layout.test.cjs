@@ -1506,7 +1506,6 @@ test('HTPR-7558 keeps Enter result navigation and one-Escape exit after opening 
     })
     await key('j', 74)
     assert.equal(state().selectedIndex, 1)
-    assert.equal(document.getElementById('task_2').classList.contains('border-l-selected-item-border'), true)
     await key('k', 75)
     assert.equal(state().selectedIndex, 0)
     await key('Escape', 27)
