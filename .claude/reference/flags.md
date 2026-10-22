@@ -1,6 +1,8 @@
 # Flag-release detail
 
-Read AGENTS.md Feature flags and verify-qa Released flags for defaults, exceptions, cleanup, premerge recording and emergency flag-off.
+Read AGENTS.md Feature flags and verify-qa Released flags for defaults, exceptions, cleanup and emergency flag-off.
+
+Test click removed (Valentin 2026-10-21); safety is flags, revert, live QA after release and the YPER4-550 screenshot check.
 
 New feature and improvement flags set `defaultMode: "EVERYONE"` in their definition file, so the change is live at once and can still be switched off in seconds (Valentin, 2026-10-20, HTPR-7389: "we set it to live right away for everyone by default unless there is a REAL STRONG reason not to"). Exceptions are `kind: "internal"` and a flag whose `releaseRisk.highRisk` names one of four high-risk kinds: `money`, `access` (login and access), `data-deletion` or `customer-email`. High-risk flags set `defaultMode: "OWNER_AND_QA"` and get a Fable review plus one HT Product Lead check before anyone asks Valentin to release them. When unsure whether a ticket is high risk, ask Fable and HT Product Lead. Existing flags keep their current mode. Switching an existing flag still needs his thumbs up (Switching flags in /ship).
 

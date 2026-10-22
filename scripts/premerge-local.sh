@@ -3,7 +3,10 @@ set -euo pipefail
 # Never allow caller tracing to reveal disposable credentials.
 set +x
 
-usage() { echo 'Usage: scripts/premerge-local.sh [up|down|sweep|--install] [--flag key=MODE ...]' >&2; }
+usage() {
+  echo 'Not run on the VPS (Valentin 2026-10-21: no tests).' >&2
+  echo 'Usage: scripts/premerge-local.sh [up|down|sweep|--install] [--flag key=MODE ...]' >&2
+}
 action=up
 if [ "$#" -gt 0 ]; then
   case "$1" in up|down|sweep|--install) action=$1; shift ;; --flag) ;; *) usage; exit 2 ;; esac
@@ -222,5 +225,6 @@ printf 'Build URL: %s\nBoard URL: %s%s\nStorage state: %s\nCommit: %s\nAccount: 
   "$url" "$url" "$board_path" "$BROWSER_SMOKE_STATE_FILE" "$(git rev-parse HEAD)" "$account" "$flags" "$url" "$board_path" "$url" >&3
 
 # Keep the owning run alive so success, interruption and explicit down share cleanup.
+printf 'Test click removed (Valentin 2026-10-21); safety is flags, revert, live QA after release and the YPER4-550 screenshot check.\n' >&3
 printf 'Local QA is ready. Keep this run open; use down when finished.\n' >&3
 wait "$pid"
