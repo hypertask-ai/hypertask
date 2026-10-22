@@ -14,7 +14,7 @@ function deferredDescriptionEditorSettled(scope: ParentNode) {
     !!scope.querySelector("#description-input")?.contains(editor.view.dom) &&
     !scope.querySelector('[data-composer-slot-settled="false"]');
 }
-const deferredEditorReadyCheck = (applies: boolean) => applies ? deferredDescriptionEditorSettled : null;
+const deferredEditorReadyCheck = (applies: boolean | undefined) => applies ? deferredDescriptionEditorSettled : null;
 export function useTaskDetailInitialScroll(context: TaskDetailKeyboardContext) {
   const instantTicketOpen = useFlag(HTPR_6752_INSTANT_TICKET_OPEN_FLAG);
   const stableLayout = useFlag(HTPR_6899_STABLE_LAYOUT_FLAG);
