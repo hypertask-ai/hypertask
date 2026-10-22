@@ -36,11 +36,19 @@ async function board(page: Page) {
 
 async function taskDetail(page: Page) {
   const card = await board(page)
-  await card.click()
+  const cardBox = (await card.boundingBox())!
+  const clickPoint = { x: cardBox.width / 2, y: cardBox.height - 8 }
+  await card.click({ position: clickPoint })
   await page.mouse.move(1, 1)
   await expect(page).toHaveURL(url => url.pathname === fixture.detailPath)
   await expect(page.locator('#title-input')).toHaveValue(fixture.title)
   await expect(page.getByTestId('ticket-description')).toContainText(fixture.description)
+  const clickedAt = { x: cardBox.x + clickPoint.x, y: cardBox.y + clickPoint.y }
+  const hovercardAnchorsUnderClick = await page.locator('[aria-haspopup="dialog"]').evaluateAll((anchors, point) => anchors.filter(anchor => {
+    const rect = anchor.getBoundingClientRect()
+    return point.x >= rect.left && point.x <= rect.right && point.y >= rect.top && point.y <= rect.bottom
+  }).length, clickedAt)
+  expect(hovercardAnchorsUnderClick, 'the card click point must not land on a hover card anchor of the opened ticket').toBe(0)
   const thread = page.getByTestId('ticket-thread')
   await expect(thread, 'one seeded ticket thread').toHaveCount(1)
   const comments = thread.getByTestId('ticket-comment')

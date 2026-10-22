@@ -159,7 +159,9 @@ test("five full-viewport screens use real theme/time, cached ticket navigation, 
   assert.match(spec, /addCookies\(\[\{ name: 'theme', value: 'porcelain'/);
   assert.match(spec, /toHaveAttribute\('data-theme', 'porcelain'\)/);
   assert.match(spec, /searchParams\.set\('realtime', 'off'\)/);
-  assert.match(spec, /const card = await board\(page\)\s+await card\.click\(\)/);
+  assert.match(spec, /const card = await board\(page\)\s+const cardBox = \(await card\.boundingBox\(\)\)!\s+const clickPoint = \{ x: cardBox\.width \/ 2, y: cardBox\.height - 8 \}\s+await card\.click\(\{ position: clickPoint \}\)/);
+  assert.match(spec, /expect\(hovercardAnchorsUnderClick, 'the card click point must not land on a hover card anchor of the opened ticket'\)\.toBe\(0\)/);
+  assert.match(spec, /expect\(page\.getByRole\('dialog'\), 'no popup may cover the ticket'\)\.toHaveCount\(0\)/);
   assert.match(spec, /thread\.getByTestId\('ticket-comment'\)\s+await expect\(comments, 'both seeded comments must be mounted'\)\.toHaveCount\(2\)/);
   assert.match(spec, /document\.fonts\.ready/);
   assert.match(spec, /image\.decode\(\)/);
