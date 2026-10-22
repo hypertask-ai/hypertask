@@ -9,8 +9,6 @@ const { createRoot } = require("react-dom/client");
 const { JSDOM } = require("jsdom");
 const root = path.resolve(__dirname, "..");
 const read = (file) => fs.readFileSync(path.join(root, file), "utf8");
-const flagName = "HTPR_6930_MY_TASKS_KANBAN_REUSE_FLAG";
-const flagKey = "htpr-6930-my-tasks-kanban-reuse";
 const controlsFile = "src/app/my-tasks/MyTasksViewControls.tsx";
 const tabsFile = "src/app/my-tasks/MyTasksViewTabs.tsx";
 const sortFile = "src/components/Modals/Kanban/BoardPriorityMode.tsx";
@@ -33,10 +31,8 @@ function declaration(file, name) {
   return found.getText(source);
 }
 
-test("flag is registered with the OWNER_AND_QA default and every changed UI entry uses it", () => {
-  assert.match(require("./helpers/flag-files.cjs").source(), new RegExp(`${flagName} = "${flagKey}"`));
-  assert.match((read("src/lib/flags.ts") + require("./helpers/flag-files.cjs").source()), new RegExp(`key: ${flagName},`));
-  assert.match((read("src/lib/flags.ts") + require("./helpers/flag-files.cjs").source()), /DEFAULT_FEATURE_FLAG_MODE: FeatureFlagMode = "OWNER_AND_QA"/);
+test("retired kanban reuse key is absent from the registry and controls are permanent", () => {
+  assert.equal(require("./helpers/flag-files.cjs").definitions().some(({ key }) => key === "htpr-6930-my-tasks-kanban-reuse"), false, "retired key is absent from registry");
   for (const file of [controlsFile, tabsFile, sortFile, saveFile, modalFile, commandsFile,
     "src/app/my-tasks/MyTasksInvolvementPicker.tsx", "src/app/my-tasks/MyTasksGroupPicker.tsx",
     "src/app/my-tasks/MyTasksSortPicker.tsx",
@@ -44,15 +40,15 @@ test("flag is registered with the OWNER_AND_QA default and every changed UI entr
     "src/components/PageComponents/Kanban/TableView/TableColumnsPicker.tsx",
     "src/components/PageComponents/Kanban/HeaderComponents/ShellViewControls.tsx",
     "src/components/Modals/FilterModals/SelectFilters/ShowFilterOptionsModal.tsx"]) {
-    assert.match(read(file), new RegExp(`useFlag\\(${flagName}\\)`), file);
+    assert.doesNotMatch(read(file), /kanbanReuseEnabled|styleGuideEnabled/, file);
   }
 });
 
 test("All boards toggles through setBoards in AssignModal and the legacy filter row", () => {
   const source = read(controlsFile);
-  const toggle = /setBoards\(kanbanReuseEnabled && config\.boardIds === null \? \[\] : null\)/g;
+  const toggle = /setBoards\(config\.boardIds === null \? \[\] : null\)/g;
   assert.equal([...source.matchAll(toggle)].length, 2);
-  assert.match(source, /onSelect: \(id\) => id === null \? setBoards\(kanbanReuseEnabled/);
+  assert.match(source, /onSelect: \(id\) => id === null \? setBoards\(config\.boardIds === null/);
   assert.match(source, /sectionIds: config\.filters\.sectionIds\.filter/);
   assert.match(source, /labelIds: config\.filters\.labelIds\.filter/);
   assert.match(read("src/components/Modals/AssignToUser/AssignToUser.tsx"), /\{boardPicker \? \(/);
@@ -81,7 +77,7 @@ test("sort adapter uses controlled BoardPriorityMode and keeps board outside the
   assert.match(source, /sort\.direction === "asc" \? "Ascending" : "Descending"/);
   assert.match(source, /next\.order === "Ascending" \? "asc" : "desc"/);
   assert.doesNotMatch(source, /as SortingMode|as TBoardSortingLevel/);
-  assert.match(read(sortFile), /replaceSingleLevel = kanbanReuseEnabled && isControlled && maxLevels === 1/);
+  assert.match(read(sortFile), /replaceSingleLevel = isControlled && maxLevels === 1/);
   assert.match(read(sortFile), /\.\.\.\(replaceSingleLevel \? \[\] : levels\)/);
   assert.match(read(sortFile), /replaceSingleLevel \|\| levels\.length < maxLevels/);
   assert.match(read(controlsFile), /<ViewControlButton[\s\S]*<ArrowUpDown size=\{18\} strokeWidth=\{1\.75\}/);
@@ -89,17 +85,17 @@ test("sort adapter uses controlled BoardPriorityMode and keeps board outside the
 
 test("commands are defined inside Commands useMemo and dispatch the matching local picker events", () => {
   const memo = declaration(commandsFile, "allCommands_");
-  assert.match(memo, /if \(kanbanReuseEnabled && onMyTasks\)/);
+  assert.match(memo, /if \(onMyTasks\)/);
   for (const [key, event] of Object.entries({ myTasksInvolvement: "my-tasks-involvement-picker", myTasksSort: "my-tasks-sort-picker", myTasksGroup: "my-tasks-group-picker" })) {
     assert.match(memo, new RegExp(`key: "${key}"`));
     assert.match(read(commandsFile), new RegExp(`${key}: "${event}"`));
     assert.match(read(controlsFile), new RegExp(`addEventListener\\("${event}"`));
     assert.match(read(controlsFile), new RegExp(`removeEventListener\\("${event}"`));
   }
-  assert.match(read(commandsFile), /if \(onMyTasks && kanbanReuseEnabled\) window\.dispatchEvent/);
+  assert.match(read(commandsFile), /if \(onMyTasks\) window\.dispatchEvent/);
 });
 
-test("commands cached by search disappear when the flag turns off or the route changes", () => {
+test("commands cached by search disappear when the route leaves My Tasks", () => {
   const source = parsed(commandsFile);
   let expression;
   function visit(node) {
@@ -112,19 +108,18 @@ test("commands cached by search disappear when the flag turns off or the route c
   const js = ts.transpileModule(`const result = ${expression.getText(source)};`, {
     compilerOptions: { module: ts.ModuleKind.CommonJS },
   }).outputText;
-  const evaluate = new Function("kanbanReuseEnabled", "onMyTasks", "filterCommands", `${js}; return result;`);
+  const evaluate = new Function("onMyTasks", "filterCommands", `${js}; return result;`);
   const keys = ["myTasksScope", "myTasksInvolvement", "myTasksSort", "myTasksGroup", "otherCommand"];
   const groups = [{ commandLists: keys.map((key) => ({ key })) }];
-  const result = (flag, route) => evaluate(flag, route, groups)[0].commandLists.map((row) => row.key);
-  assert.deepEqual(result(true, true), keys, "positive control shows new commands");
-  assert.deepEqual(result(false, true), ["myTasksScope", "otherCommand"]);
-  assert.deepEqual(result(true, false), ["myTasksScope", "otherCommand"]);
+  const result = (route) => evaluate(route, groups)[0].commandLists.map((row) => row.key);
+  assert.deepEqual(result(true), keys, "My Tasks keeps every picker command");
+  assert.deepEqual(result(false), ["myTasksScope", "otherCommand"]);
 });
 
-test("Save as view and standalone Save are flag-off only, with a controlled personal-only SaveView path", () => {
+test("shared SaveView is the only save path and personal choices never use board state", () => {
   const tabs = read(tabsFile);
-  assert.match(tabs, /!kanbanReuseEnabled && dirty &&/);
-  assert.match(tabs, /!kanbanReuseEnabled && <button[\s\S]*onClick=\{saveAs\}/);
+  assert.doesNotMatch(tabs, /Save as view|onClick=\{saveAs\}|onClick=\{onSave\}|onClick=\{onReset\}/);
+  assert.match(tabs, /\{saveOpen && \(\s*<SaveViewModal/);
   assert.match(tabs, /<SaveView variant="shell" dirty=\{dirty\} busy=\{busy\} onReset=\{onReset\} onSaveClick=/);
   assert.match(tabs, /<SaveViewModal[\s\S]*personal=\{\{[\s\S]*canSaveCurrent: Boolean\(activeView\)/);
   assert.match(tabs, /onSaveCurrent: onSave, onCreate: onSaveAs, onReset/);
@@ -135,7 +130,6 @@ test("Save as view and standalone Save are flag-off only, with a controlled pers
   assert.match(personal, /personal\.canSaveCurrent \? \["Save to current view"\] : \[\]/);
   assert.match(personal, /"New personal view"[\s\S]*"Reset"/);
   assert.doesNotMatch(personal, /useKanbanViews|IProject|Public|SaveForTeam|everyone/);
-  assert.doesNotMatch(tabs, /activeView \|\| kanbanReuseEnabled|kanbanReuseEnabled && !dirty/);
   for (const label of ["Rename", "Set as default", "Delete"]) assert.ok(tabs.includes(label));
 });
 
@@ -144,16 +138,15 @@ test("Check icons use the bare house mark and Columns retains locks, drag handle
     assert.match(read(file), /<Check size=\{16\} strokeWidth=\{1\.75\} \/>/);
   }
   assert.match(read("src/components/Modals/OptionPicker/index.tsx"), /checked\?: boolean/);
-  assert.match(read("src/components/Modals/OptionPicker/index.tsx"), /checkedIcon = kanbanReuseEnabled \? <Check/);
+  assert.match(read("src/components/Modals/OptionPicker/index.tsx"), /checkedIcon = <Check/);
   assert.match(read("src/components/Modals/OptionPicker/index.tsx"), /option\.checked && checkedIcon/);
   const columns = read("src/components/PageComponents/Kanban/TableView/TableColumnsPicker.tsx");
   for (const text of ['role="checkbox"', "aria-checked={isChecked}", "dragProvided.dragHandleProps", "isDragDisabled={isLocked}", "if (lockedColumns.has(column)) return"]) assert.ok(columns.includes(text));
-  assert.match(columns, /kanbanReuseEnabled \? \(\s+isChecked && checkedIcon/);
+  assert.match(columns, /\{isChecked && checkedIcon\}/);
 });
 
 // Render the production components with inert service boundaries. Board writes
 // throw so a controlled Save path cannot accidentally pass by using board state.
-let enabled = false;
 let boardHookCalls = 0;
 let changeName;
 const noop = () => {};
@@ -161,7 +154,7 @@ const box = ({ children }) => React.createElement("div", null, children);
 const overrides = {
   "react": React,
   "reactstrap": { ModalBody: box },
-  "@/hooks/useFlag": { useFlag: (key) => key === flagKey ? enabled : key !== "htpr-6938-my-tasks-icon-controls" },
+  "@/hooks/useFlag": { useFlag: (key) => key !== "htpr-6938-my-tasks-icon-controls" },
   "@/hooks/MultiPages/useClickOutside": { default: noop },
   "@/hooks/General/useHandleMouse": { default: ({ setSelectedIndex }) => ({ handleMouseEnter: setSelectedIndex, handleMouseLeave: noop, handleMouseMove: noop, elRef: React.useRef(null) }) },
   "@/hooks/General/useHandleKeydownBasic": { default: () => { const [selectedIndex, setSelectedIndex] = React.useState(0); return { selectedIndex, setSelectedIndex, handleKeydown: noop }; } },
@@ -229,7 +222,6 @@ function Harness() {
   return React.createElement(Controls, { boards, config: value, onChange: setValue, scopesEnabled: true, timeGroupEnabled: true });
 }
 test.beforeEach((context) => {
-  enabled = false;
   boardHookCalls = 0;
   config = structuredClone(DEFAULT_MY_TASKS_VIEW_CONFIG);
   dom = new JSDOM('<div id="root"></div>', { url: "https://app.hypertask.ai/my-tasks" });
@@ -241,20 +233,26 @@ test.beforeEach((context) => {
 });
 test.afterEach(() => { act(() => reactRoot.unmount()); dom.window.close(); });
 
-test("flag off keeps the legacy involvement, sort, group and Save as view controls", () => {
+test("shared pickers and SaveView replace legacy native controls and standalone saving", () => {
   render(Harness);
   click(document.querySelector('[aria-label="My Tasks involvement"]'));
-  assert.equal(document.querySelectorAll('input[type="checkbox"]').length, 4);
+  assert.equal(document.querySelector("h2").textContent, "Involvement");
+  assert.equal(document.querySelectorAll('input[type="checkbox"]').length, 0);
   click(document.querySelector('[aria-label="Sort My Tasks"]'));
-  assert.equal(document.querySelectorAll("select").length, 2);
-  assert.ok(button("Time"));
-  render(Tabs, { views: [], activeViewId: null, dirty: false, busy: false, onSaveAs: noop });
-  assert.ok(button("Save as view"));
-  assert.equal(button("Save view"), undefined);
+  assert.ok(button("Priority"));
+  assert.equal(document.querySelectorAll("select").length, 0);
+  const props = { views: [], activeViewId: null, dirty: false, busy: false, onSaveAs: noop, onReset: noop, onSave: noop };
+  render(Tabs, props);
+  assert.equal(button("Save view").tabIndex, -1);
+  assert.equal(button("New personal view"), undefined);
+  render(Tabs, { ...props, dirty: true });
+  assert.equal(button("Save as view"), undefined);
+  assert.ok(button("Save view"));
+  click(button("Save view"));
+  assert.ok(button("New personal view"));
 });
 
-test("All boards toggles null to empty and back with 6930 on, pruning filters", () => {
-  enabled = true;
+test("All boards toggles null to empty and back, pruning filters", () => {
   config.filters.sectionIds = [11]; config.filters.labelIds = ["a"];
   render(Harness);
   click(document.querySelector('[aria-label="My Tasks scope"]'));
@@ -267,7 +265,7 @@ test("All boards toggles null to empty and back with 6930 on, pruning filters", 
 });
 
 test("involvement picker stays open, shows Check membership and falls back to assigned", (context) => {
-  enabled = true; render(Harness);
+  render(Harness);
   act(() => window.dispatchEvent(new Event("my-tasks-involvement-picker")));
   click(button("Created by me")); act(() => context.mock.timers.tick(1));
   assert.deepEqual(config.scopes, ["assigned", "created"]);
@@ -281,8 +279,6 @@ test("involvement picker stays open, shows Check membership and falls back to as
 
 test("HTPR-6958 keeps Group by in phone Commands and the desktop toolbar without adding a phone row", (context) => {
   render(Harness);
-  assert.equal(document.querySelector('[aria-label="Group My Tasks"]').parentElement.className, "relative");
-  enabled = true; render(Harness);
   assert.ok(button("Group: Due date"));
   assert.equal(document.querySelector('[aria-label="Group My Tasks"]').parentElement.className, "relative hidden @md:block");
   act(() => window.dispatchEvent(new Event("my-tasks-group-picker")));
@@ -293,14 +289,11 @@ test("HTPR-6958 keeps Group by in phone Commands and the desktop toolbar without
   assert.ok(button("Group: Board"));
 });
 
-test("controlled single-level sort replaces the field only with the flag on and never writes a board", async () => {
+test("controlled single-level sort replaces the field and never writes a board", async () => {
   let next, closed = false;
   const props = { sort: { mode: "DueDate", order: "Ascending" }, maxLevels: 1,
     onSortChange: (value) => { next = value; }, closeHandler: () => { closed = true; } };
   render(Sort, props);
-  assert.equal(button("Priority"), undefined);
-  assert.match(document.body.textContent, /Remove a level to add another/);
-  enabled = true; render(Sort, props);
   assert.ok(button("Priority"));
   await act(async () => click(button("Priority")));
   assert.deepEqual(next, { mode: "Priority", order: "Descending" });
@@ -308,7 +301,7 @@ test("controlled single-level sort replaces the field only with the flag on and 
 });
 
 test("My Tasks sort picker preserves saved board sorting and maps direction without unsupported modes", async () => {
-  enabled = true; config.sort = { field: "board", direction: "desc" };
+  config.sort = { field: "board", direction: "desc" };
   render(Harness);
   act(() => window.dispatchEvent(new Event("my-tasks-sort-picker")));
   assert.match(document.body.textContent, /BoardDescending/);
@@ -319,11 +312,13 @@ test("My Tasks sort picker preserves saved board sorting and maps direction with
 });
 
 test("controlled Save pills retain kanban animation, obey dirty and busy and never use board hooks", () => {
-  enabled = true;
   let saves = 0, resets = 0;
   const props = { variant: "shell", dirty: false, busy: false, onSaveClick: () => { saves += 1; }, onReset: () => { resets += 1; } };
   render(SaveView, props);
   assert.equal(button("Save view").tabIndex, -1);
+  assert.deepEqual([...document.querySelectorAll("button")].map((row) => row.textContent), ["Reset", "Save view"]);
+  assert.match(button("Save view").className, /rounded-\[4px\] bg-shadcn-primary/);
+  assert.match(button("Reset").className, /rounded-\[4px\] px-2 text-text-light-gray/);
   assert.match(button("Save view").parentElement.className, /max-w-0/);
   render(SaveView, { ...props, dirty: true });
   assert.match(button("Save view").parentElement.className, /max-w-\[144px\]/);
@@ -336,7 +331,6 @@ test("controlled Save pills retain kanban animation, obey dirty and busy and nev
 });
 
 test("personal Save modal has only current, new personal and reset choices with no board persistence", async () => {
-  enabled = true;
   let saved = 0, reset = 0, created;
   const personal = { canSaveCurrent: true, busy: false, onSaveCurrent: () => { saved += 1; }, onCreate: (name) => { created = name; }, onReset: () => { reset += 1; } };
   render(SaveModal, { toggle: noop, personal });
@@ -354,7 +348,6 @@ test("personal Save modal has only current, new personal and reset choices with 
 });
 
 test("personal Save modal on All omits current save, and busy callbacks cannot run", async () => {
-  enabled = true;
   let calls = 0;
   render(SaveModal, { toggle: noop, personal: { canSaveCurrent: false, busy: true, onSaveCurrent: noop, onCreate: noop, onReset: () => { calls += 1; } } });
   assert.deepEqual([...document.querySelectorAll("button")].map((row) => row.textContent), ["New personal view", "Reset"]);

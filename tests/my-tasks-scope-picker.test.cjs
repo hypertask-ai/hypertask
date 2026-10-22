@@ -17,7 +17,7 @@ let changeBoardSearch;
 const noop = () => {};
 const box = ({ children }) => React.createElement("div", null, children);
 const members = { members: [], owner: null };
-stub("src/hooks/useFlag.tsx", { useFlag: (key) => ["htpr-6930-my-tasks-kanban-reuse", "htpr-6938-my-tasks-icon-controls"].includes(key) ? false : true });
+stub("src/hooks/useFlag.tsx", { useFlag: (key) => key !== "htpr-6938-my-tasks-icon-controls" });
 stub("src/lib/state.tsx", {
   useRecoilValue: (atom) => atom?.default ?? null,
   useRecoilState: (atom) => React.useState(atom?.default ?? {}),
@@ -39,7 +39,7 @@ stub("src/components/Common/CommonModalComponents/index.tsx", {
     if (placeholder === "Type board name") changeBoardSearch = onChange;
     return React.createElement("input", { value, placeholder, onChange });
   },
-  ModalRowElementContainer: ({ children, onClick, id }) => React.createElement("button", { onClick, id }, children),
+  ModalRowElementContainer: ({ children, onClick, id, role, onKeyDown, "aria-checked": checked }) => React.createElement("button", { onClick, id, role, onKeyDown, "aria-checked": checked }, children),
 });
 stub("src/hooks/MultiPages/useGetMembersForAssignees.ts", { useGetAllMembersForAssign: (_key, _id, _data, options) => {
   memberQueryEnabled = options?.enabled;
@@ -165,10 +165,11 @@ test("Filters has Columns, Completed tasks and snoozed controls tied to current 
   render({ filters: true });
   const filters = document.querySelector('[data-filters]');
   assert.match(filters.textContent, /Columns[\s\S]*Completed tasks[\s\S]*Show done[\s\S]*Show snoozed/);
-  const inputs = filters.querySelectorAll('input[type="checkbox"]');
-  click(inputs[0]); assert.deepEqual(config.filters.sectionIds, [11]);
-  click(inputs[2]); assert.equal(config.filters.showDone, true);
-  click(inputs[3]); assert.equal(config.filters.showSnoozed, true);
+  const rows = filters.querySelectorAll('[role="checkbox"]');
+  assert.equal(rows.length, 4);
+  click(rows[0]); assert.deepEqual(config.filters.sectionIds, [11]);
+  click(rows[2]); assert.equal(config.filters.showDone, true);
+  click(rows[3]); assert.equal(config.filters.showSnoozed, true);
   assert.equal(document.querySelector('[aria-label="Filter My Tasks"]').textContent, "Filters3");
   const filterHost = fs.readFileSync(path.join(root, "src/components/Modals/FilterModals/SelectFilters/FilterHTC.tsx"), "utf8");
   const filterList = fs.readFileSync(path.join(root, "src/components/Modals/FilterModals/SelectFilters/ShowFilterOptionsModal.tsx"), "utf8");
@@ -183,24 +184,28 @@ test("shared Assign picker keeps assignee mode when no boardPicker is supplied",
   assert.equal(memberQueryEnabled, true);
 });
 
-test("shared filter list renders extra controls and leaves checkbox keys to the control", () => {
-  let toggles = 0;
-  act(() => reactRoot.render(React.createElement(FilterOptions, {
-    view: "MyTasks", handleAction: noop, toggleFilterMatchOptions: () => { toggles += 1; },
-    extraFilters: React.createElement("label", null, "Extra scope control", React.createElement("input", { type: "checkbox" })),
-  })));
-  assert.match(document.body.textContent, /Extra scope control/);
-  const arrow = (target) => act(() => target.dispatchEvent(new dom.window.KeyboardEvent("keydown", { key: "ArrowRight", keyCode: 39, bubbles: true })));
-  arrow(document.querySelector('input[type="checkbox"]'));
-  assert.equal(toggles, 0);
-  arrow(document.body);
-  assert.equal(toggles, 1, "non-checkbox keys retain filter match handling");
-});
+for (const control of ["native", "role"]) {
+  test(`shared filter list leaves ${control} checkbox keys to the control`, () => {
+    let toggles = 0;
+    const checkbox = control === "native" ? React.createElement("input", { type: "checkbox" }) :
+      React.createElement("button", { role: "checkbox", "aria-checked": false }, React.createElement("span", null, "Toggle"));
+    act(() => reactRoot.render(React.createElement(FilterOptions, {
+      view: "MyTasks", handleAction: noop, toggleFilterMatchOptions: () => { toggles += 1; },
+      extraFilters: React.createElement("label", null, "Extra scope control", checkbox),
+    })));
+    assert.match(document.body.textContent, /Extra scope control/);
+    const arrow = (target) => act(() => target.dispatchEvent(new dom.window.KeyboardEvent("keydown", { key: "ArrowRight", keyCode: 39, bubbles: true })));
+    arrow(document.querySelector(control === "native" ? 'input[type="checkbox"]' : '[role="checkbox"] span'));
+    assert.equal(toggles, 0);
+    arrow(document.body);
+    assert.equal(toggles, 1, "non-checkbox keys retain filter match handling");
+  });
+}
 
 test("retired command scope flag is absent from the registry and production modes", () => {
   const key = "htpr-6567-command-scope-picker";
   const definitions = require("./helpers/flag-files.cjs").definitions();
-  assert.ok(definitions.some(({ key }) => key === "htpr-6930-my-tasks-kanban-reuse"), "registry positive control");
+  assert.equal(definitions.some(({ key }) => key === "htpr-6930-my-tasks-kanban-reuse"), false, "retired key is absent from registry");
   assert.equal(definitions.some((definition) => definition.key === key), false);
   assert.equal(fs.existsSync(path.join(root, `src/lib/flags/definitions/${key}.ts`)), false);
   const snapshot = JSON.parse(fs.readFileSync(path.join(root, "e2e/smoke/production-flag-modes.json"), "utf8"));
