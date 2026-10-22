@@ -10,11 +10,28 @@
       "id": "identity.context",
       "title": "Discover identity and accessible workspace context",
       "matches": {
-        "api": ["^(GET|POST) /api/mcp/hello$", "^GET /api/mcp/user/context$"],
-        "mcp": ["^hypertask_(hello|get_user_context)$"],
+        "api": ["^(GET|POST) /api/mcp/hello$", "^GET /api/mcp/user/context$", "^GET /api/mcp/features$"],
+        "mcp": ["^hypertask_(hello|get_user_context)$", "^hypertask_list_features$"],
         "cli": ["^(context|status)$"],
         "ai_chat": ["^hypertask_get_user_context$"],
-        "hyperai": ["^hypertask_(hello|get_user_context)$"]
+        "hyperai": ["^hypertask_(hello|get_user_context)$", "^hypertask_list_features$"]
+      },
+      "planned": {
+        "api": {
+          "issue": "https://app.hypertask.ai/detail/project-15/7322",
+          "expires": "2026-11-20",
+          "entries": ["GET /api/mcp/features"]
+        },
+        "mcp": {
+          "issue": "https://app.hypertask.ai/detail/project-15/7322",
+          "expires": "2026-11-20",
+          "entries": ["hypertask_list_features"]
+        },
+        "hyperai": {
+          "issue": "https://app.hypertask.ai/detail/project-15/7322",
+          "expires": "2026-11-20",
+          "entries": ["hypertask_list_features"]
+        }
       }
     },
     {
