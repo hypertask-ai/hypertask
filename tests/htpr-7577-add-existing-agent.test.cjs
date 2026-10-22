@@ -291,6 +291,7 @@ async function withPicker({ agents, addError } = {}, run) {
     });
     stub("react-hot-toast", { default: { success: (message) => successes.push(message), error: (message) => errors.push(message) } });
     stub("next/link", { default: ({ href, children, className }) => React.createElement("a", { href, className }, children) });
+    stub("next/navigation", { useRouter: () => ({ push: () => {} }) });
     stub("src/components/Common/UserAvatar.tsx", { default: () => null });
     stub("src/components/Common/CommonModalComponents/index.tsx", {
       ModalContainerCustom: ({ children }) => React.createElement("div", { "data-modal": true }, children),
@@ -400,10 +401,19 @@ test("picker: Cancel closes without adding an agent", async () => {
   });
 });
 
-test("picker: when nothing is addable only the muted empty line is shown", async () => {
-  await withPicker({ agents: [agent("Off Bot", { revokedAt: "2026-10-22" })] }, async ({ container }) => {
+test("picker: with no matching agents only the muted empty line is shown", async () => {
+  await withPicker({ agents: [] }, async ({ container }) => {
     assert.equal(container.querySelector("p").textContent, "No agents you own can be added to this board");
     assert.equal(container.querySelector("ul"), null);
     assert.equal(container.querySelector("a"), null);
+  });
+});
+
+test("picker: when only unavailable agents match, their reason and View agent link stay visible", async () => {
+  await withPicker({ agents: [agent("Off Bot", { revokedAt: "2026-10-22" })] }, async ({ container }) => {
+    assert.match(container.textContent, /UNAVAILABLE/);
+    assert.match(container.textContent, /Turn the agent on before adding it/);
+    assert.equal(container.querySelector('[aria-disabled="true"] a').getAttribute("href"), "/agents/Off Bot");
+    assert.doesNotMatch(container.textContent, /No agents you own can be added to this board/);
   });
 });

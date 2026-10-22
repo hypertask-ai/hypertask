@@ -2,6 +2,7 @@
 
 import { Fragment, useEffect, useRef, useState } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import toast from "react-hot-toast";
 import {
@@ -29,6 +30,7 @@ type Props = {
 const AddExistingAgentPicker = ({ projectId, boardName, boardTeamId, onClose }: Props) => {
   const currentUser = useRecoilValue(currentUserAtom);
   const queryClient = useQueryClient();
+  const router = useRouter();
   const { addAgentToBoard } = useAgents({ projectId, teamId: boardTeamId });
   const [keyword, setKeyword] = useState("");
   const [selectedIndex, setSelectedIndex] = useState(0);
@@ -154,7 +156,7 @@ const AddExistingAgentPicker = ({ projectId, boardName, boardTeamId, onClose }: 
               setSelectedIndex(0);
             }}
           />
-          {isLoading || error || enabledAgents.length === 0 ? (
+          {isLoading || error || enabledAgents.length + groups.unavailable.length === 0 ? (
             <p className="px-6 py-4 text-dense text-text-light-gray">
               {isLoading ? "Loading agents..." : error ? error.message : "No agents you own can be added to this board"}
             </p>
@@ -196,6 +198,7 @@ const AddExistingAgentPicker = ({ projectId, boardName, boardTeamId, onClose }: 
                     <ModalRowElementContainer
                       key={agent.id}
                       isSelected={false}
+                      onClick={() => router.push(`/agents/${agent.id}`)}
                       aria-disabled={true}
                       className="h-auto min-h-11 cursor-default py-2 text-text-light-gray"
                     >

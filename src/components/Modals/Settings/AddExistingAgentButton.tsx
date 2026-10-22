@@ -16,7 +16,7 @@ const AddExistingAgentButton = ({ projectId, boardName, boardTeamId }: Props) =>
     <>
       <button
         type="button"
-        className="min-h-11 text-dense font-medium text-hypertasks-purple"
+        className="min-h-11 rounded-sm px-2 text-dense font-semibold text-text-light-gray transition hover:bg-hover-active hover:text-white-black focus-visible:bg-hover-active focus-visible:text-white-black focus-visible:outline-none"
         onClick={() => setIsOpen(true)}
       >
         Add existing agent
