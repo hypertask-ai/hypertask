@@ -40,13 +40,23 @@ function identity(run = command) {
   }
   return { name, credentialPath: expected };
 }
-function live(run = command, repoDir = process.cwd()) {
+function runOrder(a, b) {
+  const ta = Date.parse(a.run_started_at || a.created_at), tb = Date.parse(b.run_started_at || b.created_at);
+  return (Number.isFinite(ta) && Number.isFinite(tb) ? tb - ta : 0) || b.id - a.id || (b.run_attempt || 1) - (a.run_attempt || 1);
+}
+function streak(data, state) {
+  const key = `${data.firstRed.id}:${data.firstRed.run_attempt || 1}:${data.green.id}`;
+  const existingKey = Object.keys(state.alerts).find(k => k === key ||
+    (!/^\d+:\d+:\d+$/.test(k) && !state.alerts[k].closed &&
+      state.alerts[k].firstRed === data.firstRed.head_sha && state.alerts[k].runId > data.green.id));
+  return { key, existingKey };
+}
+function live(run = command) {
   const api = route => json(run('gh', ['api', '-X', 'GET', `repos/${REPO}/${route}`]));
-  const git = args => run('git', ['-C', repoDir, ...args]).trim();
-  const jobs = id => {
+  const jobs = (id, attempt) => {
     const all = [];
     for (let page = 1; ; page++) {
-      const rows = api(`actions/runs/${id}/jobs?per_page=100&page=${page}`).jobs;
+      const rows = api(`actions/runs/${id}${attempt ? `/attempts/${attempt}` : ''}/jobs?per_page=100&page=${page}`).jobs;
       if (!Array.isArray(rows)) throw new Error('Unreadable CI jobs');
       all.push(...rows);
       if (rows.length < 100) break;
@@ -62,12 +72,14 @@ function live(run = command, repoDir = process.cwd()) {
       let red, firstRed, green, latest;
       for (let page = 1; !green; page++) {
         const route = target ? `actions/workflows/${target.workflow_id}/runs` : 'actions/workflows/ci-tests.yml/runs';
-        const rows = api(`${route}?branch=production&status=completed&per_page=100&page=${page}${target ? `&created=<=${target.created_at}` : ''}`).workflow_runs;
+        const rows = api(`${route}?branch=production&status=completed&per_page=100&page=${page}${target ? `&created=<=${target.updated_at || target.created_at}` : ''}`).workflow_runs;
         if (!Array.isArray(rows)) throw new Error('Unreadable production runs');
         if (!rows.length) break;
-        for (const r of rows.sort((a, b) => b.id - a.id)) {
+        rows.sort(runOrder);
+        while (rows.length) {
+          const r = rows.shift();
           if (r.name !== 'CI Tests' || r.head_branch !== 'production' || r.status !== 'completed' ||
-              r.conclusion === 'cancelled' || (target && r.id > target.id)) continue;
+              r.conclusion === 'cancelled' || (target && runOrder(r, target) < 0)) continue;
           if (!latest) {
             latest = r;
             if (!target && state.lastRun === `${r.id}:${r.run_attempt || 1}:${r.updated_at || ''}`) {
@@ -75,13 +87,17 @@ function live(run = command, repoDir = process.cwd()) {
             }
           }
           // A successful workflow cannot contain a failed ci-tests job.
-          const job = r.conclusion === 'success' ? { status: 'completed', conclusion: 'success' } : jobs(r.id);
+          const job = r.conclusion === 'success' ? { status: 'completed', conclusion: 'success' } : jobs(r.id, r.previousAttempt ? r.run_attempt : undefined);
           if (!job || job.status !== 'completed') throw new Error(`Missing completed ci-tests job for run ${r.id}`);
           if (!red) {
             if (job.conclusion !== 'failure') return { status: job.conclusion, run: r };
             red = { ...r, job }; firstRed = r;
           } else if (job.conclusion === 'success') { green = r; break; }
           else if (job.conclusion === 'failure') firstRed = r;
+          if (r.run_attempt > 1) {
+            rows.push({ ...api(`actions/runs/${r.id}/attempts/${r.run_attempt - 1}`), previousAttempt: true });
+            rows.sort(runOrder);
+          }
         }
       }
       if (!red) return { status: 'none' };
@@ -93,15 +109,24 @@ function live(run = command, repoDir = process.cwd()) {
       for (const sha of [green.head_sha, red.head_sha, firstRed.head_sha]) {
         if (!/^[0-9a-f]{40}$/.test(sha)) throw new Error('Invalid CI commit SHA');
       }
-      if (Object.values(state.alerts).some(a => a.firstRed === firstRed.head_sha)) {
+      if (streak({ firstRed, green }, state).existingKey) {
         return { status: 'failure', run: red, firstRed, green, failures, prs: [] };
       }
-      git(['merge-base', '--is-ancestor', red.head_sha, 'origin/production']);
-      git(['merge-base', '--is-ancestor', green.head_sha, red.head_sha]);
-      const commits = git(['log', '--first-parent', '--format=%H\t%s', `${green.head_sha}..${red.head_sha}`]);
+      const commits = [];
+      let total;
+      for (let page = 1; ; page++) {
+        const comparison = api(`compare/${green.head_sha}...${red.head_sha}?per_page=100&page=${page}`);
+        if (!Array.isArray(comparison.commits) || !Number.isSafeInteger(comparison.total_commits) ||
+            !['ahead', 'identical'].includes(comparison.status)) throw new Error('Unreadable or divergent production commit range');
+        total ??= comparison.total_commits;
+        if (comparison.total_commits !== total) throw new Error('Production commit range changed during pagination');
+        commits.push(...comparison.commits);
+        if (commits.length === total) break;
+        if (!comparison.commits.length || commits.length > total) throw new Error('Incomplete production commit range');
+      }
       const prs = [];
-      for (const line of commits.split('\n').filter(Boolean)) {
-        const [sha, title] = line.split('\t');
+      for (const commit of commits.reverse()) {
+        const sha = commit.sha, title = commit.commit.message.split('\n')[0];
         const number = title.match(/\(#(\d+)\)$/)?.[1];
         if (!number) throw new Error(`Non-squash commit ${sha} in production range; refusing to omit it`);
         const files = [], patches = [];
@@ -140,9 +165,8 @@ function live(run = command, repoDir = process.cwd()) {
 async function plan(data, api, state = { alerts: {} }) {
   if (data.status !== 'failure') return { action: data.status === 'success' ? 'green' : data.status === 'idle' ? 'idle' : 'none', run: data.run };
   const files = [...new Set(data.failures.map(f => f.file))].sort();
-  const key = data.firstRed.head_sha;
-  const existing = Object.values(state.alerts).find(a => a.firstRed === key);
-  if (existing) return { action: 'alert', key, firstRed: key, run: data.run, green: data.green, failures: data.failures };
+  const { key, existingKey } = streak(data, state);
+  if (existingKey) return { action: 'alert', key, existingKey, firstRed: data.firstRed.head_sha, run: data.run, green: data.green, failures: data.failures };
   const touched = data.prs.find(pr => pr.files.some(f => files.includes(f)));
   const ignored = new Set(['function', 'return', 'iterable', 'unexpected', 'import', 'undefined', 'cannot',
     'property', 'typeerror', 'referenceerror', 'syntaxerror', 'error', 'module', 'resolve', 'reading']);
@@ -190,7 +214,7 @@ function save(dir, state) {
 async function apply(p, state, api, persist) {
   if (p.action === 'green') {
     for (const a of Object.values(state.alerts)) {
-      if (a.closed || a.runId > p.run.id) continue;
+      if (a.closed || runOrder({ id: a.runId, run_attempt: a.runAttempt, run_started_at: a.runStartedAt }, p.run) < 0) continue;
       if (!a.ticket) { a.ticket = api.recover(a.title, a.marker); persist(); }
       // Ambiguous activity writes are not retried: retain the intent for operator reconciliation.
       if (a.closing) throw new Error('Recovery note outcome unknown; reconcile saved closing intent manually');
@@ -202,11 +226,11 @@ async function apply(p, state, api, persist) {
   }
   if (p.action !== 'alert') return;
   await apply({ action: 'green', run: p.green }, state, api, persist);
-  let a = state.alerts[p.key] || Object.values(state.alerts).find(a => a.firstRed === p.firstRed);
+  let a = state.alerts[p.existingKey || p.key];
   if (a?.closed) return;
   if (!a) {
     // Save an intent before the non-idempotent create. An interrupted create is reconciled, never blindly repeated.
-    a = state.alerts[p.key] = { title: p.title, marker: p.marker, firstRed: p.firstRed, runId: p.run.id, fixer: p.fixer, files: p.failures.map(f => f.file) };
+    a = state.alerts[p.key] = { title: p.title, marker: p.marker, firstRed: p.firstRed, runId: p.run.id, runAttempt: p.run.run_attempt || 1, runStartedAt: p.run.run_started_at || p.run.created_at, fixer: p.fixer, files: p.failures.map(f => f.file) };
     persist();
     const result = json(api.write(['task', 'create', '--project', '4060', '--section', 'In Progress',
       '--title', p.title, '--description', p.description, '--json']));
@@ -292,7 +316,7 @@ async function main(args) {
   if (!dryRun && !process.env.PRODUCTION_RED_ALERT_LOCKED) {
     fs.mkdirSync(STATE, { recursive: true, mode: 0o700 });
     return process.stdout.write(command('flock', ['-n', path.join(STATE, 'tick.lock'), process.execPath, __filename], {
-      env: { ...process.env, PRODUCTION_RED_ALERT_LOCKED: '1' }
+      timeout: 240000, env: { ...process.env, PRODUCTION_RED_ALERT_LOCKED: '1' }
     }));
   }
   console.log(JSON.stringify(await tick({ dryRun, runId }), null, 2));

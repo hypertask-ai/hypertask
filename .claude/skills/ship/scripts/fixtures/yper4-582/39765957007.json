@@ -15,11 +15,13 @@
       "name": "ci-tests",
       "status": "completed",
       "conclusion": "failure"
-    }
+    },
+    "run_attempt": 1
   },
   "firstRed": {
     "head_sha": "d897185951026b946cba76b3a9bcd5a079110761",
-    "id": 39765957007
+    "id": 39765957007,
+    "run_attempt": 1
   },
   "green": {
     "id": 39764276911,
@@ -30,7 +32,8 @@
     "conclusion": "success",
     "workflow_id": 345284758,
     "created_at": "2026-10-22T10:35:46Z",
-    "html_url": "https://github.com/hypertask-ai/hypertask/actions/runs/39764276911"
+    "html_url": "https://github.com/hypertask-ai/hypertask/actions/runs/39764276911",
+    "run_attempt": 1
   },
   "failures": [
     {
