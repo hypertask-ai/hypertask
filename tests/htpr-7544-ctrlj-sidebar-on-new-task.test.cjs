@@ -190,8 +190,8 @@ test("board Ctrl+J still invokes its unchanged New Task writer with either flag 
   for (const enabled of [false, true]) {
     const calls = [];
     const compiled = ts.transpileModule(`if (${branch.expression.getText(file)}) ${branch.thenStatement.getText(file)}`, { compilerOptions: { target: ts.ScriptTarget.ES2022 } }).outputText;
-    const handler = new Function("e", "KeyCodes", "document", "isApple", "createTaskAt", "setKeypressed", "sectionId", "title", "ctrlJSidebarOnNewTask", compiled);
-    handler({ keyCode: 74, key: "j", ctrlKey: true, preventDefault: () => calls.push("prevented") }, { J: 74 }, dom.window.document, false, (...args) => calls.push(args), () => {}, 7, "To Do", enabled);
+    const handler = new Function("e", "KeyCodes", "document", "isApple", "createTaskAt", "setKeypressed", "sectionId", "title", "ctrlJSidebarOnNewTask", "blockLegacyCtrlJ", compiled);
+    handler({ keyCode: 74, key: "j", ctrlKey: true, preventDefault: () => calls.push("prevented") }, { J: 74 }, dom.window.document, false, (...args) => calls.push(args), () => {}, 7, "To Do", enabled, false);
     assert.deepEqual(calls, ["prevented", ["top", { sectionId: 7, sectionTitle: "To Do", position: "top" }, { defaultEditMode: "Description-ai", defaultFocus: "Description" }]]);
   }
   dom.window.close();
