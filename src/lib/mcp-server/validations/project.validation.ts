@@ -110,7 +110,7 @@ export function getProjectAdminBaseSchema() {
             (value) =>
               /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value) ||
               PROJECT_MEMBER_UUID_PATTERN.test(value),
-            'userToAdd must be an email address or agent UUID'
+            'Use an email address or agent UUID, not a name'
           ),
         ])
         .optional()
@@ -124,7 +124,7 @@ export function getProjectAdminInputSchema() {
     if (data.action === 'invite_member' && data.userToAdd === undefined) {
       ctx.addIssue({
         code: z.ZodIssueCode.custom,
-        message: 'userToAdd is required for invite_member',
+        message: 'An email address or agent UUID is required for invite_member',
         path: ['userToAdd'],
       });
     }
