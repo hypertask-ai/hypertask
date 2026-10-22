@@ -106,7 +106,9 @@ test("actual skills GET invalid query, permission and auth errors match the erro
   teamAllowed = false;
   await body(await skillsRoute.GET(request("/api/ai/skills", { teamId: "team-1" })), 403, contracts.apiReadErrorSchema);
   denied = true;
-  await body(await skillsRoute.GET(request("/api/ai/skills", { projectId: 15 })), 400, contracts.apiReadErrorSchema);
+  calls.length = 0;
+  await body(await skillsRoute.GET(request("/api/ai/skills", { projectId: 15 })), 404, contracts.apiReadErrorSchema);
+  assert.deepEqual(calls, []);
   user = null; calls.length = 0;
   await body(await skillsRoute.GET(request("/api/ai/skills")), 401, contracts.apiReadErrorSchema);
   assert.deepEqual(calls, []);
