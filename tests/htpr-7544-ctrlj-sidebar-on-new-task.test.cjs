@@ -38,6 +38,8 @@ async function detail(options, run) {
   const previous = { window: global.window, document: global.document, act: global.IS_REACT_ACT_ENVIRONMENT };
   Object.assign(global, { window: dom.window, document: dom.window.document, IS_REACT_ACT_ENVIRONMENT: true });
   const calls = [];
+  let cleanupCompose;
+  if (options.competingCompose && options.composeFirst) cleanupCompose = globalComposeListener(calls, dom, options.apple);
   const currentTask = options.task === null ? null : { id: 43, projectId: 6859, uniqueIndex: 43, title: "New Task", description_: { content: "<p></p>" }, ...options.task };
   const state = { currentTask, isRecording: options.recording ?? false,
     searchParams: new URLSearchParams(options.openRequest ? "newTaskAi=1" : ""),
@@ -86,8 +88,10 @@ async function detail(options, run) {
   };
   try {
     await React.act(async () => reactRoot.render(React.createElement(TaskDetail, { embedded: options.embedded })));
+    if (options.competingCompose && !options.composeFirst) cleanupCompose = globalComposeListener(calls, dom, options.apple);
     await run({ calls, press, dom });
   } finally {
+    cleanupCompose?.();
     await React.act(async () => reactRoot.unmount());
     Object.assign(global, { window: previous.window, document: previous.document, IS_REACT_ACT_ENVIRONMENT: previous.act });
     dom.window.close();
@@ -111,6 +115,27 @@ test("fresh task Ctrl+J opens only the existing sidebar on that task, including 
         press({ repeat: true });
         assert.equal(calls.length, 3, "holding the key must not create more sessions");
       });
+    }
+  }
+});
+
+test("empty saved detail Ctrl+J wins over the global compose capture listener in either mount order", async () => {
+  for (const apple of [false, true]) {
+    for (const composeFirst of [false, true]) {
+      for (const options of [{}, { enabled: false }, { task: { title: "Existing task" } }]) {
+        await detail({ apple, composeFirst, competingCompose: true, ...options }, async ({ calls, press }) => {
+          document.getElementById("title-input").focus();
+          assert.equal(document.activeElement.id, "title-input");
+          assert.equal(press({ code: "KeyJ" }).defaultPrevented, true);
+          if (options.enabled === false || options.task) {
+            assert.equal(calls.length, 1);
+            assert.equal(calls[0][0], "global-palette");
+            assert.equal(calls[0][1].paletteTab, "compose");
+          } else {
+            assert.deepEqual(calls, [["sidebar", 43]]);
+          }
+        });
+      }
     }
   }
 });
@@ -194,7 +219,7 @@ function draftHandoff(enabled, create, calls, dom, apple = false, options = {}) 
   const compiled = ts.transpileModule(`const effect = ${effect};`, { compilerOptions: { target: ts.ScriptTarget.ES2022 } }).outputText;
   return new Function("ctrlJSidebarOnNewTask", "window", "document", "isApple", "isRecording", "showAssignModal", "showConfirmationModal", "sidebarHandoffPending", "uploadInProgress", "formValues", "setUploadInProgress", "CreateTaskAndDescription", "router", "closeHandler", "toast", "_mbl", "closeBackDismissBeforeNavigation", `${compiled}; return effect();`)(
     enabled, dom.window, dom.window.document, apple, false, false, false, { current: false }, false,
-    { currentProject: { id: 6859 }, status: { sectionId: 7 }, title: "" },
+    options.formValues ?? { currentProject: { id: 6859 }, status: { sectionId: 7 }, title: "" },
     (value) => calls.push(["busy", value]), create, options.router ?? { push: (url) => calls.push(["navigate", url]) },
     options.closeHandler ?? ((save) => calls.push(["close", save])), { error: () => calls.push(["error"]) },
     options.mobile ?? false, load("src/lib/mobile/backDismiss.ts").closeBackDismissBeforeNavigation,
@@ -224,38 +249,42 @@ test("C's unsaved new task screen saves exactly once then hands off to its detai
   await detail({ openRequest: true, enabled: false }, async ({ calls }) => assert.deepEqual(calls, []));
 });
 
-test("phone handoff waits for armed back-dismiss cleanup before navigating to the task sidebar", { timeout: 5000 }, async () => {
-  const dom = new JSDOM("<div id='createTaskModal'><textarea id='title-input-modal'></textarea></div>", { url: "https://app.hypertask.ai/project?id=7049" });
-  dom.window.innerWidth = 390;
-  const calls = [];
-  const { armBackDismiss } = load("src/lib/mobile/backDismiss.ts");
-  const disarm = armBackDismiss(dom.window, { key: "createTaskModal", onBack: () => calls.push(["back-dismiss"]) });
-  const popped = new Promise((resolve) => dom.window.addEventListener("popstate", resolve, { once: true }));
-  const cleanup = draftHandoff(true, async (...args) => {
-    calls.push(["save", ...args]);
-    return "/detail/project-7049/43";
-  }, calls, dom, false, {
-    mobile: true,
-    closeHandler: (saved) => {
-      calls.push(["close", saved]);
-      dom.window.setTimeout(() => { dom.window.document.getElementById("createTaskModal").remove(); disarm(); }, 10);
-    },
-    router: { push: (url) => { calls.push(["navigate", url]); dom.window.history.pushState({}, "", url); } },
-  });
-  try {
-    assert.equal(dom.window.history.state.createTaskModal, true);
-    const title = dom.window.document.getElementById("title-input-modal");
-    title.focus();
-    assert.equal(dom.window.document.activeElement, title);
-    const event = new dom.window.KeyboardEvent("keydown", { key: "j", ctrlKey: true, bubbles: true, cancelable: true });
-    assert.equal(title.dispatchEvent(event), false);
-    await popped;
-    await Promise.resolve();
-    assert.equal(dom.window.location.pathname + dom.window.location.search, "/detail/project-7049/43?newTaskAi=1");
-    assert.deepEqual(calls, [["busy", true], ["save", undefined, "New Task"], ["close", true], ["navigate", "/detail/project-7049/43?newTaskAi=1"], ["busy", false]]);
-    assert.equal(dom.window.history.state.createTaskModal, undefined);
-    assert.equal(dom.window.document.getElementById("createTaskModal"), null);
-  } finally { cleanup(); disarm(); dom.window.close(); }
+test("phone handoff waits for armed back-dismiss cleanup with or without loaded section defaults", { timeout: 5000 }, async () => {
+  for (const sectionReady of [true, false]) {
+    const dom = new JSDOM("<div id='createTaskModal'><textarea id='title-input-modal'></textarea></div>", { url: "https://app.hypertask.ai/project?id=7049" });
+    dom.window.innerWidth = 390;
+    const calls = [];
+    const { armBackDismiss } = load("src/lib/mobile/backDismiss.ts");
+    const disarm = armBackDismiss(dom.window, { key: "createTaskModal", onBack: () => calls.push(["back-dismiss"]) });
+    const popped = new Promise((resolve) => dom.window.addEventListener("popstate", resolve, { once: true }));
+    const cleanup = draftHandoff(true, async (...args) => {
+      calls.push(["save", ...args]);
+      return "/detail/project-7049/43";
+    }, calls, dom, false, {
+      mobile: true,
+      formValues: { currentProject: { id: 7049 }, title: "", status: sectionReady ? { sectionId: 19409 } : undefined },
+      closeHandler: (saved) => {
+        calls.push(["close", saved]);
+        dom.window.setTimeout(() => { dom.window.document.getElementById("createTaskModal").remove(); disarm(); }, 10);
+      },
+      router: { push: (url) => { calls.push(["navigate", url]); dom.window.history.pushState({}, "", url); } },
+    });
+    try {
+      assert.equal(dom.window.history.state.createTaskModal, true);
+      const title = dom.window.document.getElementById("title-input-modal");
+      title.focus();
+      assert.equal(dom.window.document.activeElement, title);
+      const event = new dom.window.KeyboardEvent("keydown", { key: "j", ctrlKey: true, bubbles: true, cancelable: true });
+      assert.equal(title.dispatchEvent(event), false);
+      assert.equal(calls.filter(([kind]) => kind === "save").length, 1, "Ctrl+J must save even before section defaults arrive");
+      await popped;
+      await Promise.resolve();
+      assert.equal(dom.window.location.pathname + dom.window.location.search, "/detail/project-7049/43?newTaskAi=1");
+      assert.deepEqual(calls, [["busy", true], ["save", undefined, "New Task"], ["close", true], ["navigate", "/detail/project-7049/43?newTaskAi=1"], ["busy", false]]);
+      assert.equal(dom.window.history.state.createTaskModal, undefined);
+      assert.equal(dom.window.document.getElementById("createTaskModal"), null);
+    } finally { cleanup(); disarm(); dom.window.close(); }
+  }
 });
 
 test("unsaved form flag off leaves its handler alone; failed save retains the draft and permits retry", async () => {

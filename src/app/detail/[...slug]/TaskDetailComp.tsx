@@ -49,8 +49,8 @@ const TaskDetail: React.FC<TaskDetailProps> = (props) => {
       event.stopImmediatePropagation();
       if (!event.repeat) void editTicketWithAi(currentTask.id);
     };
-    document.addEventListener("keydown", openNewTaskSidebar, true);
-    return () => document.removeEventListener("keydown", openNewTaskSidebar, true);
+    window.addEventListener("keydown", openNewTaskSidebar, true);
+    return () => window.removeEventListener("keydown", openNewTaskSidebar, true);
   } : () => {}, [ctrlJSidebarOnNewTask, props.embedded, currentTask, isApple, isRecording, editTicketWithAi]);
   const context = { ...props, ...state, ...modals } as TaskDetailContext;
   Object.assign(context, useTaskDetailNavigationActions(() => context));
