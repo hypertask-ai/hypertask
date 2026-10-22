@@ -2,7 +2,6 @@ import { agentScopeEnforced } from "@/lib/auth/agentScope";
 import { notificationBoardAccessWhere } from "@/utils/controllers/notifications/boardAccess";
 import { NotificationType, Prisma } from "@prisma/client";
 import prisma from "@/lib/prisma";
-import { HTPR_6752_INSTANT_TICKET_OPEN_FLAG, isFeatureEnabled } from "@/lib/flags";
 import { getInboxTabs } from "@/utils/helperFunctions/helperFunctions";
 import { markQuietAgentMentions } from "@/utils/controllers/notifications/quietOwnerInbox";
 import { inboxConfig } from "@/lib/configs/inbox.config";
@@ -143,13 +142,10 @@ export async function getInboxNotifications(
   { withCachedDescription = true }: { withCachedDescription?: boolean } = {},
   agentId?: string | null,
 ) {
-  const cachedDescriptionPromise = withCachedDescription
-    ? isFeatureEnabled(HTPR_6752_INSTANT_TICKET_OPEN_FLAG, userId).catch(() => false)
-    : Promise.resolve(false);
   if (agentId && agentScopeEnforced()) {
     return client.notification.findMany({
       where: { AND: [visibleUserInboxWhere(userId), notificationBoardAccessWhere(userId, agentId)] },
-      include: notificationInboxInclude(userId, await cachedDescriptionPromise),
+      include: notificationInboxInclude(userId, withCachedDescription),
       distinct: ["taskId", "notification_inviteId"],
       orderBy: [{ createdAt: "desc" }, { id: "desc" }],
     });
@@ -174,9 +170,8 @@ export async function getInboxNotifications(
 
   if (!selectedRows.length) return [];
 
-  const includeCachedDescription = await cachedDescriptionPromise;
   return client.notification.findMany({
-    include: notificationInboxInclude(userId, includeCachedDescription),
+    include: notificationInboxInclude(userId, withCachedDescription),
     where: {
       AND: [
         { id: { in: selectedRows.map(({ id }) => id) } },

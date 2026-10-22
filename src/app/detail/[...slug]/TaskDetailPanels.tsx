@@ -4,7 +4,7 @@ import { TaskRelations, ICycle } from "@/models/model";
 import { showAIChatInterfaceAtom, isAiChatSidebarModeAtom } from "@/store";
 import DescriptionAndCommentsProvider from "@/lib/contexts/TaskDetail/DescriptionProvider";
 import { useFlag } from "@/hooks/useFlag";
-import { HTPR_6752_INSTANT_TICKET_OPEN_FLAG, HTPR_6899_STABLE_LAYOUT_FLAG, HTPR_7349_TITLE_CLEAR_OF_NAV_FLAG, HTPR_7367_SERVER_DESCRIPTION_FIRST_FLAG } from "@/lib/flags/keys";
+import { HTPR_6899_STABLE_LAYOUT_FLAG, HTPR_7349_TITLE_CLEAR_OF_NAV_FLAG, HTPR_7367_SERVER_DESCRIPTION_FIRST_FLAG } from "@/lib/flags/keys";
 import { SettledComposerSlot } from "@/components/PageComponents/TaskDetail/CommentAndDescription/SettledComposerSlot";
 import { useThreadSettled } from "@/hooks/Task Detail/useThreadSettled";
 import { useTaskContext } from "@/lib/contexts/TaskDetail/TaskProvider";
@@ -71,9 +71,6 @@ import AppShellRail from "@/components/PageComponents/Kanban/HeaderComponents/Ap
 import type { TaskDetailContext } from "./TaskDetailContext";
 export function TaskDetailPanels(context: TaskDetailContext) {
   const { embedded, _slugs, currentTask, setCurrentTask, showCommands, callback, commandContextOptions, showShortucts, scrollElementRef, _mbl, currentItemInTasksPlaylist, navigateToNextTask, searchParams, navigateToPreviousTask, dynamicElementRef, toggleDueDate, showAssignModal, toggleModal, _parsedTask, estimate_, priority_, labelsFromTQ, removeRelationHandler, toggleEstimateModal, toggleLabelModal, toggleMoveModal, toggleMoveToBoardModal, togglePriorityModal, dynamicTopValue, sectionsForProjectTQ, moveTaskToNextColumn, followers, onGoback, appShellRailOn, showTaskDeleteModal, deleteTask, carousalItems, setCarousalItems, showLinksModal, idToDelete, currentId, linksModalToggle, showMoveModal, moveTaskModalCallback, taskUpdateCommentsInCache, showCommentDeleteModal, setShowCommentDeleteModal, comments, setComments, showPriorityModal, showEstimateModal, showMoveTaskToBoard, setShowMoveTaskToBoard, showCreateLabelModal, setShowCreateLabelModal, setShowCommands, showDueDateModal, setDueDateCallback, showSubtaskLinkingModal, toggleSubtaskLinkingModal, callBackHandlerSubtaskLinking, showRemoveSubtaskModal, toggleRemoveSubtaskModal, callBackHandlerRemoveSubtask, showRemindMeModal, toggleRemindMeModal, currentUser } = context;
-
-
-  const instantTicketOpen = useFlag(HTPR_6752_INSTANT_TICKET_OPEN_FLAG);
   const stableLayoutFlag = useFlag(HTPR_6899_STABLE_LAYOUT_FLAG);
   const titleClearOfNavFlag = useFlag(HTPR_7349_TITLE_CLEAR_OF_NAV_FLAG);
   const descriptionFirstFlag = useFlag(HTPR_7367_SERVER_DESCRIPTION_FIRST_FLAG);
@@ -203,7 +200,7 @@ export function TaskDetailPanels(context: TaskDetailContext) {
               </TaskDetailMainContainer>
             </MobileTaskDetailSwipe>
           </div>
-          {_mbl && embedded && secondaryPanelsReady !== false && (instantTicketOpen ? <Suspense fallback={null}><NewCommentComponent /></Suspense> : <NewCommentComponent />)}
+          {_mbl && embedded && secondaryPanelsReady !== false && (<Suspense fallback={null}><NewCommentComponent /></Suspense>)}
 
           {
             !_mbl && !embedded && (
@@ -380,7 +377,6 @@ const DesktopNavigation = ({
 }) => {
   const [showAiChatInterface] = useRecoilState(showAIChatInterfaceAtom);
   const [isSidebarMode] = useRecoilState(isAiChatSidebarModeAtom);
-  const instantTicketOpen = useFlag(HTPR_6752_INSTANT_TICKET_OPEN_FLAG);
   return (
     <div
       className={`fixed  flex gap-2  items-center  flex-col left-3 ${
@@ -408,17 +404,17 @@ const DesktopNavigation = ({
         }`}
       >
         <ArrowLeft size={18} strokeWidth={1.75}/>
-        {instantTicketOpen ? <Suspense fallback={null}>
+        <Suspense fallback={null}>
           <Tooltip left={taskDetailConfig.dimensions.tooltip.leftOffset} bottom={taskDetailConfig.dimensions.tooltip.bottomOffset} text="Back" keyCombination={[...taskDetailConfig.keyboard.escapeCombination]} />
-        </Suspense> : <Tooltip left={taskDetailConfig.dimensions.tooltip.leftOffset} bottom={taskDetailConfig.dimensions.tooltip.bottomOffset} text="Back" keyCombination={[...taskDetailConfig.keyboard.escapeCombination]} />}
+        </Suspense>
       </div>
-      {instantTicketOpen ? <Suspense fallback={null}>
+      <Suspense fallback={null}>
         <TaskMovement
           currentItemInTasksPlaylist={currentItemInTasksPlaylist}
           navigateToNextTask={navigateToNextTask}
           navigateToPreviousTask={navigateToPreviousTask}
         />
-      </Suspense> : <TaskMovement currentItemInTasksPlaylist={currentItemInTasksPlaylist} navigateToNextTask={navigateToNextTask} navigateToPreviousTask={navigateToPreviousTask} />}
+      </Suspense>
     </div>
   );
 };

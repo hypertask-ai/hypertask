@@ -385,10 +385,10 @@ test("a disabled board's empty Time row is absent before and after its summary l
   assert.equal(timer.props.timeTrackingEnabled, false, "use the board setting already present in the task snapshot");
 });
 
-function editorPanels(flag, cachedStaticFirst = false) {
+function editorPanels(cachedStaticFirst = false) {
   return load("src/components/RTE/TaskDetailEditorPanels.tsx", {
-    useFlag: (key) => key === "instant" ? flag : key === "cached-static-first" && cachedStaticFirst,
-    HTPR_6752_INSTANT_TICKET_OPEN_FLAG: "instant",
+    useFlag: (key) => key === "cached-static-first" && cachedStaticFirst,
+
     HTPR_7091_STATIC_DESCRIPTION_FIRST_FLAG: "static-first",
     HTPR_7395_CACHED_STATIC_FIRST_FLAG: "cached-static-first",
     HTPR_6929_COMPOSE_TASK_WRITER_FLAG: "compose",
@@ -416,7 +416,7 @@ function editorPanels(flag, cachedStaticFirst = false) {
 
 test("with instant open, the description reserves its real content before the editor exists", () => {
   for (const cachedStaticFirst of [false, true]) {
-    const Panels = editorPanels(true, cachedStaticFirst);
+    const Panels = editorPanels(cachedStaticFirst);
     const context = {
       divIds: {}, currentTask: { id: 42 }, inViewObject: {},
       mode: "read-edit-description", id: "description", defaultContent: "Long cached description",
@@ -438,7 +438,7 @@ function threadRender({ hydrated, mobile = false, measured = false, comments = f
     MobileViewContext: React.createContext(mobile),
     useDescriptionAndCommentsContext: () => ({ comments: [{ text: "Existing comment" }], stacked: [] }),
     useFlag: () => true,
-    HTPR_6752_INSTANT_TICKET_OPEN_FLAG: "instant",
+
     HTPR_6899_STABLE_LAYOUT_FLAG: "stable",
     HTPR_7074_TICKET_PAGE_CLS_FLAG: "cls",
     HTPR_7367_SERVER_DESCRIPTION_FIRST_FLAG: "server-description",

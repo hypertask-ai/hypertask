@@ -10,7 +10,6 @@ const ts = require("typescript");
 const { QueryClient } = require("@tanstack/react-query");
 const root = path.resolve(__dirname, "..");
 const cache = require("jiti").createJiti(__filename, { alias: { "@": path.join(root, "src") } })(path.join(root, "src/lib/navigation/cachedTaskDetail.ts"));
-const flag = "htpr-6752-instant-ticket-open";
 const navigationPath = "src/components/PageComponents/TaskDetail/CachedTaskDetailNavigation.tsx";
 const task = { id: 42, projectId: 7049, uniqueIndex: 31, status: "Normal", title: "Cached title", description_: { content: "Cached body" } };
 const read = (file) => fs.readFileSync(path.join(root, file), "utf8");
@@ -34,7 +33,7 @@ function domFixture(t) {
   t.after(() => { for (const name of names) global[name] = previous[name]; dom.window.close(); });
   return dom;
 }
-function navigationMocks(client, enabled, pathname, react = React) {
+function navigationMocks(client, pathname, react = React) {
   return {
     "react-dom": require("react-dom"),
     react,
@@ -43,8 +42,8 @@ function navigationMocks(client, enabled, pathname, react = React) {
     "@tanstack/react-query": { useQueryClient: () => client },
     "@/lib/state": { useRecoilValue: () => ({ id: 985 }) },
     "@/store": { currentUserAtom: {} },
-    "@/hooks/useFlag": { useFlag: (key) => { if (["htpr-6972-subtask-link", "htpr-6991-back-first-open", "htpr-7002-inbox-e-first-press", "htpr-7003-board-back", "htpr-7008-phone-first-paint", "htpr-7129-board-card-fresh-after-escape"].includes(key)) return false; if (key === "htpr-7000-inbox-next-open") return true; assert.equal(key, flag); return enabled(); } },
-    "@/lib/flags/keys": { HTPR_6752_INSTANT_TICKET_OPEN_FLAG: flag, HTPR_7008_PHONE_FIRST_PAINT_FLAG: "htpr-7008-phone-first-paint", HTPR_6972_SUBTASK_LINK_FLAG: "htpr-6972-subtask-link", HTPR_6991_BACK_FIRST_OPEN_FLAG: "htpr-6991-back-first-open", HTPR_7000_INBOX_NEXT_OPEN_FLAG: "htpr-7000-inbox-next-open", HTPR_7002_INBOX_E_FIRST_PRESS_FLAG: "htpr-7002-inbox-e-first-press", HTPR_7003_BOARD_BACK_FLAG: "htpr-7003-board-back", HTPR_7129_BOARD_CARD_FRESH_AFTER_ESCAPE_FLAG: "htpr-7129-board-card-fresh-after-escape" },
+    "@/hooks/useFlag": { useFlag: (key) => { if (["htpr-6972-subtask-link", "htpr-6991-back-first-open", "htpr-7002-inbox-e-first-press", "htpr-7003-board-back", "htpr-7008-phone-first-paint", "htpr-7129-board-card-fresh-after-escape"].includes(key)) return false; if (key === "htpr-7000-inbox-next-open") return true; assert.fail(`Unexpected flag: ${key}`); } },
+    "@/lib/flags/keys": { HTPR_7008_PHONE_FIRST_PAINT_FLAG: "htpr-7008-phone-first-paint", HTPR_6972_SUBTASK_LINK_FLAG: "htpr-6972-subtask-link", HTPR_6991_BACK_FIRST_OPEN_FLAG: "htpr-6991-back-first-open", HTPR_7000_INBOX_NEXT_OPEN_FLAG: "htpr-7000-inbox-next-open", HTPR_7002_INBOX_E_FIRST_PRESS_FLAG: "htpr-7002-inbox-e-first-press", HTPR_7003_BOARD_BACK_FLAG: "htpr-7003-board-back", HTPR_7129_BOARD_CARD_FRESH_AFTER_ESCAPE_FLAG: "htpr-7129-board-card-fresh-after-escape" },
     "@/components/Modals/SwipeUnread/EmbeddedTaskDetail": { __esModule: true, default: ({ initialTask }) => React.createElement("article", { id: "ticket" }, initialTask.title, initialTask.description_.content) },
     "@/lib/navigation/cachedTaskDetail": cache,
     "@/utils/helperFunctions/helperFunctions": { returnIfModalOrInputActive: () => false },
@@ -58,7 +57,7 @@ test("navigation: back restores board rows and forward restores the cached detai
   t.after(() => client.clear());
   let nextPath = "/project";
   const source = read(navigationPath);
-  const Navigation = compile(source, navigationMocks(client, () => true, () => nextPath)).default;
+  const Navigation = compile(source, navigationMocks(client, () => nextPath)).default;
   const renderer = createRoot(document.getElementById("root"));
   const board = React.createElement("ul", { id: "board" }, React.createElement("li", null, "Board row"));
   await React.act(async () => renderer.render(React.createElement(Navigation, { accountId: 985 }, board)));
@@ -89,36 +88,29 @@ test("navigation: back restores board rows and forward restores the cached detai
   await React.act(async () => renderer.unmount());
 });
 
-test("navigation: server hydration ignores browser-only cached history and flag off preserves the original route", (t) => {
+test("navigation: server hydration ignores browser-only cached history", (t) => {
   domFixture(t);
   const client = new QueryClient();
   t.after(() => client.clear());
   client.setQueryData(cache.cachedTaskDetailKey(985, 42), task);
   window.history.replaceState({ cachedTaskDetail: { accountId: 985, taskId: 42, projectId: 7049, uniqueIndex: 31 } }, "", "/detail/project-7049/31");
-  const Navigation = compile(read(navigationPath), navigationMocks(client, () => false, () => "/detail/project-7049/31")).default;
+  const Navigation = compile(read(navigationPath), navigationMocks(client, () => "/detail/project-7049/31")).default;
   assert.equal(renderToString(React.createElement(Navigation, { accountId: 985 }, "Production route")), "Production route");
 });
 
-test("quiet: phone board placeholders reserve height but show no bars or pulse; flag off retains production skeletons", () => {
+test("quiet: phone board placeholders reserve height but show no bars or pulse", () => {
   const source = ts.createSourceFile("section.tsx", read("src/components/PageComponents/Kanban/KanbanSectionComponents/section.tsx"), ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX);
   const declaration = source.statements.find((statement) => ts.isVariableStatement(statement) && statement.declarationList.declarations.some((item) => item.name.getText(source) === "TaskSkeleton"));
   assert.ok(declaration);
-  let enabled = true;
-  // The extracted renderer uses its enclosing runtime gate, not a copied template.
   const code = ts.transpileModule(`${declaration.getText(source)}\nexport default TaskSkeleton;`, { compilerOptions: { jsx: ts.JsxEmit.ReactJSX, module: ts.ModuleKind.CommonJS } }).outputText;
   const exports = {};
-  new Function("require", "exports", "useFlag", "HTPR_6752_INSTANT_TICKET_OPEN_FLAG", code)(require, exports, () => enabled, flag);
+  new Function("require", "exports", code)(require, exports);
   const quiet = renderToString(React.createElement(exports.default));
   assert.match(quiet, /min-h-\[100px\]/);
   assert.doesNotMatch(quiet, /animate-pulse|bg-gray-300/);
-  enabled = false;
-  const legacy = renderToString(React.createElement(exports.default));
-  assert.match(legacy, /animate-pulse/);
-  assert.match(legacy, /bg-gray-300/);
 });
 
-test("quiet: deferred activity/comments suspend without loading text, with a flag-off positive control", () => {
-  let enabled = true;
+test("quiet: deferred activity/comments suspend without loading text", () => {
   const comment = { id: 1, activity: { type: "Updated" } };
   const noop = () => null;
   const mocks = {
@@ -136,7 +128,7 @@ test("quiet: deferred activity/comments suspend without loading text, with a fla
     "@/hooks/MultiPages/useDoubleTap": { useDoubleTap: () => ({}) },
     "@/lib/constants/TaskDetail": {},
     "lucide-react": { Reply: noop },
-    "@/hooks/useFlag": { useFlag: (key) => key === flag && enabled },
+    "@/hooks/useFlag": { useFlag: (key) => false },
     "@/lib/flags/keys": require("./helpers/flag-files.cjs").load("src/lib/flags/keys.ts"),
     "@/lib/taskDetailEditTarget": compile(read("src/lib/taskDetailEditTarget.ts"), {}),
     "@/lib/htc/isCommentCreatedByUser": { isCommentCreatedByUser: () => false },
@@ -148,12 +140,9 @@ test("quiet: deferred activity/comments suspend without loading text, with a fla
   const Comments = compile(read("src/components/PageComponents/TaskDetail/CommentAndDescription/CommentContainer/CommentsContainer.tsx"), mocks).default;
   const quiet = renderToString(React.createElement(Comments));
   assert.doesNotMatch(quiet, /loading\.\.\./);
-  enabled = false;
-  assert.match(renderToString(React.createElement(Comments)), /loading\.\.\./);
 });
 
-test("quiet: contact hover waits for final content only on flagged detail, retaining legacy loading and errors", () => {
-  let enabled = true;
+test("quiet: contact hover waits for final content on detail routes, retaining explicit loading and errors", () => {
   let pathname = "/detail/project-7049/31";
   let query = { isFetching: true, isError: false };
   const noop = () => {};
@@ -167,8 +156,8 @@ test("quiet: contact hover waits for final content only on flagged detail, retai
     "next/link": { __esModule: true, default: "a" },
     "next/navigation": { usePathname: () => pathname },
     "./TooltipPortal": { __esModule: true, default: pass },
-    "@/hooks/useFlag": { useFlag: (key) => { if (key === "htpr-6950-tooltip-top-layer") return false; assert.equal(key, flag); return enabled; } },
-    "@/lib/flags/keys": { HTPR_6752_INSTANT_TICKET_OPEN_FLAG: flag, HTPR_6950_TOOLTIP_TOP_LAYER_FLAG: "htpr-6950-tooltip-top-layer" },
+    "@/hooks/useFlag": { useFlag: (key) => { if (key === "htpr-6950-tooltip-top-layer") return false; assert.fail(`Unexpected flag: ${key}`); } },
+    "@/lib/flags/keys": { HTPR_6950_TOOLTIP_TOP_LAYER_FLAG: "htpr-6950-tooltip-top-layer" },
     "@floating-ui/react": { useFloating: () => ({ refs: { setFloating: noop }, context: {}, floatingStyles: {} }), useInteractions: () => ({ getFloatingProps: (props) => props }), FloatingFocusManager: pass, FloatingPortal: pass },
     "lucide-react": { Check: () => null, Copy: () => null },
   };
@@ -181,10 +170,6 @@ test("quiet: contact hover waits for final content only on flagged detail, retai
   assert.equal(loaded.default({ ...props, children: reference }).props.quiet, true);
   assert.match(render({ quiet: false }), /Loading contact/, "exported callers can explicitly retain the legacy loading mode");
   assert.equal(render(), "", "no empty hovercard or loading text while fetching");
-  enabled = false;
-  assert.equal(loaded.default({ ...props, children: reference }).props.quiet, false);
-  assert.match(render(), /Loading contact/);
-  enabled = true;
   pathname = "/project";
   assert.match(render(), /Loading contact/);
   pathname = "/detail/project-7049/31";
@@ -198,7 +183,6 @@ test("warm: press and idle share a retryable warmup; only idle skips slow connec
   domFixture(t);
   const client = new QueryClient();
   t.after(() => client.clear());
-  let enabled = true;
   let pathname = "/project";
   const effects = [];
   const loaded = [];
@@ -226,7 +210,7 @@ test("warm: press and idle share a retryable warmup; only idle skips slow connec
   window.setTimeout = (callback, delay) => { assert.equal(delay, 2000); timers.set(++id, callback); return id; };
   window.clearTimeout = (key) => timers.delete(key);
   const flush = (queue) => { const callbacks = [...queue.values()]; queue.clear(); callbacks.forEach((callback) => callback()); };
-  const mocks = navigationMocks(client, () => enabled, () => pathname, {
+  const mocks = navigationMocks(client, () => pathname, {
     ...React, useMemo: (factory) => factory(), useRef: (initial) => ({ current: initial }), useState: (initial) => [typeof initial === "function" ? initial() : initial, () => {}], useEffect: (effect) => effects.push(effect), useSyncExternalStore: (subscribe, snapshot) => snapshot(),
   });
   const chunks = [
@@ -312,11 +296,6 @@ test("warm: press and idle share a retryable warmup; only idle skips slow connec
   flush(frames); flush(frames); cleanup();
   assert.equal(timers.size, 0, "navigation cancels the fallback timer");
   loaded.length = 0;
-  enabled = false;
-  mount();
-  press();
-  assert.equal(frames.size, 0, "flag off schedules nothing");
-  enabled = true;
   mount(null);
   press();
   assert.equal(frames.size, 0, "unknown accounts never warm");
@@ -349,7 +328,7 @@ test("cold click: the source page stays visible until the lazy viewer resolves, 
   let release;
   let imports = 0;
   const pending = Object.assign(new Promise(resolve => { release = resolve; }), { __esModule: true });
-  const mocks = navigationMocks(client, () => true, () => "/project");
+  const mocks = navigationMocks(client, () => "/project");
   const detail = mocks["@/components/Modals/SwipeUnread/EmbeddedTaskDetail"];
   Object.defineProperty(mocks, "@/components/Modals/SwipeUnread/EmbeddedTaskDetail", { get: () => { imports++; return pending; } });
   const Navigation = compile(read(navigationPath), mocks).default;
@@ -378,7 +357,7 @@ test("cold click: Back before the viewer import finishes does not reopen the tic
   t.after(() => client.clear());
   let release;
   const pending = Object.assign(new Promise(resolve => { release = resolve; }), { __esModule: true });
-  const mocks = navigationMocks(client, () => true, () => "/project");
+  const mocks = navigationMocks(client, () => "/project");
   const detail = mocks["@/components/Modals/SwipeUnread/EmbeddedTaskDetail"];
   mocks["@/components/Modals/SwipeUnread/EmbeddedTaskDetail"] = pending;
   const Navigation = compile(read(navigationPath), mocks).default;
@@ -398,7 +377,6 @@ test("cold click: Back before the viewer import finishes does not reopen the tic
 });
 
 test("warm: a cold desktop reaction chunk cannot delay the title/body or change its reserved layout", () => {
-  let enabled = true;
   const noop = () => null;
   const Header = compile(read("src/components/PageComponents/TaskDetail/CommentAndDescription/DescriptionContainer/TopRow/DescriptionTopRight.tsx"), {
     react: { __esModule: true, default: React, ...React },
@@ -410,8 +388,9 @@ test("warm: a cold desktop reaction chunk cannot delay the title/body or change 
     "@/lib/contexts/mobileContext": { MobileViewContext: React.createContext(false) },
     "@/components/Common/AIWriterButton": { __esModule: true, default: noop },
     "@/components/Common/TimeTooltip": { __esModule: true, default: noop },
-    "@/hooks/useFlag": { useFlag: () => enabled },
-    "@/lib/flags/keys": { HTPR_6752_INSTANT_TICKET_OPEN_FLAG: flag },
+    "@/lib/flags/keys": require("./helpers/flag-files.cjs").load("src/lib/flags/keys.ts"),
+    "@/hooks/useFlag": { useFlag: () => false },
+
   }).default;
   const render = () => renderToString(React.createElement(React.Suspense, { fallback: "Outer loading" },
     React.createElement("article", null, "Cached title and body", React.createElement(Header))));
@@ -420,6 +399,4 @@ test("warm: a cold desktop reaction chunk cannot delay the title/body or change 
   assert.match(quiet, /Final timestamp/);
   assert.match(quiet, /h-\[14px\] w-\[14px\]/);
   assert.doesNotMatch(quiet, /Outer loading/);
-  enabled = false;
-  assert.match(render(), /Outer loading/, "positive control proves this cold dependency used to suspend the whole detail");
 });

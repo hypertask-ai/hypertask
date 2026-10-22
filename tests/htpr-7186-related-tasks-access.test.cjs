@@ -55,6 +55,7 @@ function load() {
     "@/lib/cycles": { CYCLE_WINDOW_SIZE: 4 },
     "@/lib/pullRequests/taskPullRequests": {},
     "@/lib/agents/publicAgent": { publicAgentSelect: {} },
+    "@/lib/flags/keys": flags,
     "@/lib/flags": { ...flags, isFeatureEnabled: async () => false },
     "@/lib/agents/visibility": { boardAgentVisibilityWhere: () => ({}), accessibleAgentMembershipWhere: () => ({}) },
     "@/utils/controllers/notifications/visibleInboxScope": { visibleUserInboxWhere: () => ({}) },

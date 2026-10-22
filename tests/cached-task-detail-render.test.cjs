@@ -158,8 +158,9 @@ test("description paints cached content and drafts before constructing the rich 
     "@/hooks/Task Detail/CommentAndDescriptionHooks/useSaveContent": { __esModule: true, default: () => ({ redirectAPI: noop }) },
     "@/lib/contexts/TaskDetail/DescriptionProvider": { useDescriptionAndCommentsContext: () => ({ description: task.description_.content, descriptionAttachments: [], setDescriptionAttachments: noop }) },
     "@/lib/contexts/TaskDetail/TaskProvider": { useTaskContext: () => ({ secondaryPanelsReady, currentTask: task, parsedTask: JSON.stringify(task), editMode: null, currentId: "description", allowPerks: true, hasDraft: false, hasDraftInit: false, setCarousalItems: noop }) },
+    "@/lib/flags/keys": require("./helpers/flag-files.cjs").load("src/lib/flags/keys.ts"),
     "@/hooks/useFlag": { useFlag: () => true },
-    "@/lib/flags/keys": { HTPR_6752_INSTANT_TICKET_OPEN_FLAG: "htpr-6752-instant-ticket-open" },
+
     "@/lib/contexts/mobileContext": { MobileViewContext: React.createContext(false) },
     "@/hooks/General/useHasDrafts": { isMeaningfulDescriptionDraft: (draft) => Boolean(draft.content) },
     "../ContextMenu": { HighlightMenu: noop },
@@ -194,7 +195,7 @@ test("pending cached details paint property geometry immediately but defer edito
   const state = fs.readFileSync(path.join(root, "src/hooks/Task Detail/useTaskDetailGlobalStates.ts"), "utf8");
   const panels = fs.readFileSync(path.join(root, "src/app/detail/[...slug]/TaskDetailPanels.tsx"), "utf8");
   const thread = fs.readFileSync(path.join(root, "src/components/PageComponents/TaskDetail/CommentAndDescription/index.tsx"), "utf8");
-  assert.match(state, /useState\(!instantTicketOpen \|\| !initialCommentsPayload\.pending\)/);
+  assert.match(state, /useState\(!initialCommentsPayload\.pending\)/);
   // HTPR-7116: `reveal` sets the panels ready (in a transition when its flag is on).
   assert.match(state, /requestAnimationFrame\(\(\) => \{\s*frame = requestAnimationFrame\(reveal\)/);
   assert.match(state, /: \(\) => setSecondaryPanelsReady\(true\);/);

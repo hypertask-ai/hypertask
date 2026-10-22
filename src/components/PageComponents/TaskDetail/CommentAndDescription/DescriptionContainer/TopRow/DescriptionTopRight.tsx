@@ -8,8 +8,6 @@ import { useDescriptionAndCommentsContext } from '@/lib/contexts/TaskDetail/Desc
 import { MobileViewContext } from '@/lib/contexts/mobileContext';
 import AIWriterButton from '@/components/Common/AIWriterButton';
 import TimeTooltip from '@/components/Common/TimeTooltip';
-import { useFlag } from '@/hooks/useFlag';
-import { HTPR_6752_INSTANT_TICKET_OPEN_FLAG } from '@/lib/flags/keys';
 
 const DescriptionTopRight = () => {
     const {currentTask, editMode} =useTaskContext()
@@ -23,7 +21,6 @@ const DescriptionTopRight = () => {
         document.getElementById("popover-button-description")?.click();
     }
   const shouldShowAiWriterButton = isMbl && (editMode === "description" || editMode === "description-ai")
-  const instantTicketOpen = useFlag(HTPR_6752_INSTANT_TICKET_OPEN_FLAG);
   const emojiButton = <DescriptionEmojiButton
     showEmojiPickerDescription={showEmojiPickerDescription}
     handleClickOutside={handleClickOutside}
@@ -32,11 +29,11 @@ const DescriptionTopRight = () => {
   />;
   return (
     <div data-task-detail-actions className='flex gap-1 items-center'>
-      {!isMbl && (instantTicketOpen ? (
+      {!isMbl && (
         <span className="inline-flex h-[14px] w-[14px]">
           <React.Suspense fallback={null}>{emojiButton}</React.Suspense>
         </span>
-      ) : emojiButton)}
+      )}
       {
         shouldShowAiWriterButton ?
             <AIWriterButton 

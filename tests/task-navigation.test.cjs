@@ -34,7 +34,7 @@ function loadSource(relativePath, mocks) {
   return loaded.exports.default;
 }
 
-function fixture(t, { flagEnabled = false, mobile = false, cached = false, openDetail } = {}) {
+function fixture(t, { inboxNextCached = false, mobile = false, cached = false, openDetail } = {}) {
   const dom = new JSDOM("<!doctype html><div id='root'></div>", { url: `https://app.hypertask.ai${boardHref}` });
   const originals = new Map();
   for (const [name, value] of Object.entries({ window: dom.window, document: dom.window.document, location: dom.window.location, Event: dom.window.Event, IS_REACT_ACT_ENVIRONMENT: true })) {
@@ -57,8 +57,8 @@ function fixture(t, { flagEnabled = false, mobile = false, cached = false, openD
     "@/lib/state": { useRecoilValue: () => ({ id: 2343 }) },
     "@/store": { currentUserAtom: {} },
     "@/hooks/General/useAuth": { useAuth: () => ({ authenticatedUserId: 2343 }) },
-    "@/hooks/useFlag": { useFlag: () => flagEnabled },
-    "@/lib/flags/keys": { HTPR_6752_INSTANT_TICKET_OPEN_FLAG: "htpr-6752-instant-ticket-open", HTPR_7001_INBOX_NEXT_CACHED_FLAG: "htpr-7001-inbox-next-cached" },
+    "@/hooks/useFlag": { useFlag: () => inboxNextCached },
+    "@/lib/flags/keys": { HTPR_7001_INBOX_NEXT_CACHED_FLAG: "htpr-7001-inbox-next-cached" },
     "@/hooks/Inbox/useGetNotifications": { inboxDataQueryKey: id => ["inbox", "data", id] },
     "@/lib/navigation/cachedTaskDetail": cache,
     "@/lib/analytics/taskDetailReadiness": { taskDetailEntryPathForRoute: () => "board", markTaskDetailNavigationStart: () => {} },
@@ -85,8 +85,8 @@ function fixture(t, { flagEnabled = false, mobile = false, cached = false, openD
     react: React,
     "react/jsx-runtime": require("react/jsx-runtime"),
     "next/link": linkModule.exports,
-    "@/hooks/useFlag": { useFlag: () => flagEnabled },
-    "@/lib/flags/keys": { HTPR_6752_INSTANT_TICKET_OPEN_FLAG: "htpr-6752-instant-ticket-open", HTPR_7001_INBOX_NEXT_CACHED_FLAG: "htpr-7001-inbox-next-cached" },
+    "@/hooks/useFlag": { useFlag: () => inboxNextCached },
+    "@/lib/flags/keys": { HTPR_7001_INBOX_NEXT_CACHED_FLAG: "htpr-7001-inbox-next-cached" },
     "@/lib/contexts/mobileContext": { MobileViewContext: React.createContext(mobile) },
     "@/utils/undoActions/helperFuncs": { cn: (...classes) => classes.filter(Boolean).join(" ") },
   });
@@ -130,9 +130,9 @@ function fixture(t, { flagEnabled = false, mobile = false, cached = false, openD
 }
 
 for (const mobile of [false, true]) {
-  for (const [flagEnabled, cached] of [[false, false], [true, false], [true, true]]) {
-    test(`one card click adds one history entry (${mobile ? "phone" : "desktop"}, instant=${flagEnabled}, cached=${cached})`, async (t) => {
-      const f = fixture(t, { mobile, flagEnabled, cached });
+  for (const [inboxNextCached, cached] of [[false, false], [true, false], [true, true]]) {
+    test(`one card click adds one history entry (${mobile ? "phone" : "desktop"}, inbox-cache=${inboxNextCached}, cached=${cached})`, async (t) => {
+      const f = fixture(t, { mobile, inboxNextCached, cached });
       await f.render();
       const documentBefore = f.dom.window.document;
       const event = await f.click();
@@ -151,9 +151,9 @@ for (const mobile of [false, true]) {
   }
 }
 
-for (const flagEnabled of [false, true]) {
-  test(`modifier clicks keep the native link without opening the current tab (instant=${flagEnabled})`, async (t) => {
-    const f = fixture(t, { flagEnabled });
+for (const inboxNextCached of [false, true]) {
+  test(`modifier clicks keep the native link without opening the current tab (inbox-cache=${inboxNextCached})`, async (t) => {
+    const f = fixture(t, { inboxNextCached });
     await f.render();
     for (const modifiers of [{ ctrlKey: true }, { metaKey: true }, { shiftKey: true }, { altKey: true }, { button: 1 }]) {
       const event = await f.click("#title", modifiers);
@@ -164,9 +164,9 @@ for (const flagEnabled of [false, true]) {
     assert.equal(f.dom.window.history.length, 1);
   });
 
-  test(`the card leaves modal/side-panel and stopped child actions to their owner (instant=${flagEnabled})`, async (t) => {
+  test(`the card leaves modal/side-panel and stopped child actions to their owner (inbox-cache=${inboxNextCached})`, async (t) => {
     let opens = 0;
-    const f = fixture(t, { flagEnabled, openDetail: () => opens++ });
+    const f = fixture(t, { inboxNextCached, openDetail: () => opens++ });
     await f.render(React.createElement("button", { id: "selection", onClick: (event) => event.stopPropagation() }, "Select"));
     await f.click("#selection");
     assert.equal(opens, 0);

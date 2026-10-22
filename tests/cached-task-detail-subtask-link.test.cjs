@@ -276,8 +276,7 @@ test("links preserve modified clicks and fallback for missing descriptions, disa
   };
   const link = () => document.querySelector("a");
   for (const options of [{ ctrlKey: true }, { metaKey: true }, { shiftKey: true }, { altKey: true }, { button: 1 }]) await dispatch(link(), options);
-  f.instant(false); await React.act(async () => f.render()); await dispatch(link());
-  f.instant(true); f.authenticated(985); await React.act(async () => f.render()); await dispatch(link());
+  f.authenticated(985); await React.act(async () => f.render()); await dispatch(link());
   f.authenticated(2343); f.account(985); await React.act(async () => f.render()); await dispatch(link());
   f.account(2343);
   const compactChild = { id: child.id, projectId: child.projectId, uniqueIndex: child.uniqueIndex, title: child.title };

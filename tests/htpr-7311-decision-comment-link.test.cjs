@@ -172,39 +172,39 @@ function createInboxHarness(enabled, split, rows = [notification()], disableInbo
   };
   environment.buildQueryParams = evaluate(expression(inboxFile, "buildQueryParams"), environment);
   environment.buildUniqueTasksPlaylist = evaluate(expression(inboxFile, "buildUniqueTasksPlaylist"), environment);
-  return { calls, environment, open: evaluate(expression(inboxFile, "openTaskWithCachedData"), environment), playlist: () => playlist };
+  return { calls, environment, open: evaluate(expression(inboxFile, "openTask"), environment), playlist: () => playlist };
 }
 
-test("Decisions click and keyboard open anchor the question with cached opens both on and off", async () => {
-  for (const cached of [true, false]) {
+test("Decisions click and keyboard open anchor the question with cached opens", async () => {
+  {
     for (const clicked of [true, false]) {
       const row = notification({ type: "Mentioned", commentId: 99 });
       const harness = createInboxHarness(true, "Decisions", [row]);
-      await harness.open(cached, "view", clicked ? row : null);
+      await harness.open("view", clicked ? row : null);
       assert.deepEqual(harness.calls, ["/detail/project-15/7311?inboxFlow=true#comment-30"]);
       assert.equal(harness.playlist()[0].decisionCommentId, 30);
     }
   }
   const reply = createInboxHarness(true, "Decisions");
-  await reply.open(true, "reply", notification());
+  await reply.open("reply", notification());
   assert.deepEqual(reply.calls, ["/detail/project-15/7311?inboxFlow=true&reply=true#comment-30"]);
 });
 
 test("flag off and every other split keep byte-identical open URLs and playlists", async () => {
   for (const [enabled, split] of [[false, "Decisions"], [true, "Important"], [true, "Updates"], [true, "@Mentions"], [true, "Agents"], [true, "Stale"], [true, "Reactions"]]) {
-    for (const cached of [true, false]) {
+    {
       for (const clicked of [true, false]) {
         const row = notification();
         const harness = createInboxHarness(enabled, split, [row]);
-        await harness.open(cached, "view", clicked ? row : null);
-        assert.deepEqual(harness.calls, [`/detail/project-15/7311${clicked && cached ? "" : "?inboxFlow=true"}`]);
+        await harness.open("view", clicked ? row : null);
+        assert.deepEqual(harness.calls, [`/detail/project-15/7311${clicked ? "" : "?inboxFlow=true"}`]);
         assert.deepEqual(harness.playlist(), [{ projectId: 15, uniqueIndex: 7311, notification: row }]);
       }
     }
     const mentioned = notification({ type: "Mentioned", commentId: 99 });
     const harness = createInboxHarness(enabled, split, [mentioned]);
-    await harness.open(false, "view", mentioned);
-    assert.deepEqual(harness.calls, ["/detail/project-15/7311?inboxFlow=true#comment-99"]);
+    await harness.open("view", mentioned);
+    assert.deepEqual(harness.calls, ["/detail/project-15/7311#comment-99"]);
   }
 });
 

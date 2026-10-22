@@ -43,7 +43,6 @@ const syncJs = ts.transpileModule(`
     const { currentTask, _parsedTask, setDescription, hasDraft, hasDraftInit, editMode, uploadingDescription } = context;
     const { useState, useEffect } = React;
     const { shouldPreserveTaskEditorContent } = refresh;
-    const instantTicketOpen = context.instantTicketOpen ?? true;
     ${relevant.map((node) => node.getText(source)).join("\n")}
     return { descriptionAttachments, setDescriptionAttachments };
   }
@@ -101,25 +100,6 @@ test("all description sync effects normalize partial attachments and preserve ac
   await render(React.createElement(Probe, { parsed: task, current: task }));
   assert.deepEqual(state.descriptionAttachments, []);
   assert.equal(descriptionWrites.at(-1), "Cached body");
-});
-
-test("flag-off description synchronization retains production seed updates even during editing", async (t) => {
-  const render = await mount(t);
-  let state;
-  const descriptionWrites = [];
-  const Probe = ({ parsed, current }) => {
-    state = syncExports.useSync({ instantTicketOpen: false, _parsedTask: parsed, currentTask: current, hasDraft: true, editMode: "description", setDescription: (value) => descriptionWrites.push(value) });
-    return null;
-  };
-  const initial = { ...task, description_: { content: "Production body", attachments: [{ id: 1 }] } };
-  await render(React.createElement(Probe, { parsed: initial, current: initial }));
-  assert.equal(descriptionWrites.at(-1), "Production body");
-  const incoming = { ...task, description_: { content: "Updated seed", attachments: [{ id: 2 }] } };
-  await render(React.createElement(Probe, { parsed: incoming, current: incoming }));
-  assert.equal(descriptionWrites.at(-1), "Updated seed");
-  assert.deepEqual(state.descriptionAttachments, [{ id: 2 }]);
-  await render(React.createElement(Probe, { parsed: task, current: incoming }));
-  assert.equal(state.descriptionAttachments, undefined, "flag-off must retain production's unnormalized seed effect");
 });
 
 test("cached refresh keeps parsedTask stable while updating metadata and preserving editor content", async (t) => {

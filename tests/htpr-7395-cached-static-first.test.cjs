@@ -52,12 +52,12 @@ async function fixture(t, { enabled = true, stable = false, legacyStatic = false
   const flags = {
     HTPR_7395_CACHED_STATIC_FIRST_FLAG: flag,
     HTPR_6899_STABLE_LAYOUT_FLAG: "stable",
-    HTPR_6752_INSTANT_TICKET_OPEN_FLAG: "instant",
+
     HTPR_7091_STATIC_DESCRIPTION_FIRST_FLAG: "static",
     HTPR_7110_APP_SAVED_STATIC_DESCRIPTION_FLAG: "saved",
     HTPR_7009_DEDUPE_TASK_DETAIL_READS_FLAG: "dedupe",
   };
-  const flagHooks = { useFlagReady: () => true, useFlag: key => key === flag ? enabled : key === "stable" ? stable : key === "instant" || (["static", "saved"].includes(key) && legacyStatic) };
+  const flagHooks = { useFlagReady: () => true, useFlag: key => key === flag ? enabled : key === "stable" ? stable : (["static", "saved"].includes(key) && legacyStatic) };
   const common = {
     "@/hooks/useFlag": flagHooks,
     "@/lib/flags/keys": flags,
@@ -289,8 +289,8 @@ test("the editor's initial null-editor render retains the static geometry under 
   const Placeholder = React.createContext(null);
   let enabled = true;
   const panels = load("src/components/RTE/TaskDetailEditorPanels.tsx", {
-    "@/lib/flags/keys": { HTPR_7395_CACHED_STATIC_FIRST_FLAG: flag, HTPR_6752_INSTANT_TICKET_OPEN_FLAG: "instant" },
-    "@/hooks/useFlag": { useFlag: key => key === "instant" || (key === flag && enabled) },
+    "@/lib/flags/keys": { HTPR_7395_CACHED_STATIC_FIRST_FLAG: flag },
+    "@/hooks/useFlag": { useFlag: key => (key === flag && enabled) },
     "@/lib/state": { useRecoilValue: () => false, useSetRecoilState: () => noop },
     "@/store": {},
     "@/models/enums": {},

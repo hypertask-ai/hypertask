@@ -23,7 +23,7 @@ test("the description body no longer imports the editor statically", () => {
   assert.doesNotMatch(body, /from "@\/components\/RTE\/TipTapTaskDetail"/);
   assert.match(body, /DescriptionEditorSlot/);
   assert.match(body, /const staticFirstFlag = useFlag\(HTPR_7091_STATIC_DESCRIPTION_FIRST_FLAG\);/);
-  assert.match(body, /lazy=\{staticFirstFlag \? instantTicketOpen && !isEditing && \(appSavedStatic/);
+  assert.match(body, /lazy=\{staticFirstFlag \? !isEditing && \(appSavedStatic/);
 });
 
 test("the slot loads the editor with import() in both flag states", () => {

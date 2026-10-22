@@ -5,9 +5,8 @@ const { load } = require("./task-route-loader.cjs");
 const flagFiles = require("./helpers/flag-files.cjs");
 
 const slimFlag = "htpr-7326-slim-mcp-inbox";
-const instantFlag = "htpr-6752-instant-ticket-open";
 
-function inboxController(instant = true) {
+function inboxController() {
   const calls = { flags: [], queries: [] };
   const prisma = {
     $queryRaw: async () => [{ id: 42 }],
@@ -21,11 +20,10 @@ function inboxController(instant = true) {
   const controller = load("src/utils/controllers/notifications/getAll.ts", {
     "@/lib/prisma": { default: prisma },
     "@/lib/flags": {
-      HTPR_6752_INSTANT_TICKET_OPEN_FLAG: instantFlag,
+
       isFeatureEnabled: async (key, userId) => {
         calls.flags.push([key, userId]);
-        if (instant === "error") throw new Error("flag unavailable");
-        return instant;
+        throw new Error("Inbox must not read a feature flag");
       },
     },
     "@/utils/helperFunctions/helperFunctions": { getInboxTabs: () => ({}) },
@@ -39,7 +37,7 @@ for (const options of [undefined, {}, { withCachedDescription: true }, { withCac
     const { controller, prisma, calls } = inboxController();
     assert.deepEqual(await controller.getInboxNotifications(985, prisma, options), []);
     const enabled = options?.withCachedDescription !== false;
-    assert.deepEqual(calls.flags, enabled ? [[instantFlag, 985]] : []);
+    assert.deepEqual(calls.flags, []);
     assert.equal(calls.queries.length, 1);
     const query = calls.queries[0];
     assert.equal(Object.hasOwn(query.include.task.select, "description_"), enabled);
@@ -50,21 +48,12 @@ for (const options of [undefined, {}, { withCachedDescription: true }, { withCac
   });
 }
 
-for (const instant of [false, "error"]) {
-  test(`web default still respects instant-open flag ${instant}`, async () => {
-    const { controller, prisma, calls } = inboxController(instant);
-    await controller.getInboxNotifications(985, prisma);
-    assert.deepEqual(calls.flags, [[instantFlag, 985]]);
-    assert.equal(Object.hasOwn(calls.queries[0].include.task.select, "description_"), false);
-  });
-}
-
 test("notificationGetAll forwards the cached-description option to the real inbox query", async () => {
   for (const options of [undefined, { withCachedDescription: false }]) {
     const { controller, calls } = inboxController();
     const result = await controller.default("985", options);
     assert.equal(result.status, 200);
-    assert.deepEqual(calls.flags, options ? [] : [[instantFlag, 985]]);
+    assert.deepEqual(calls.flags, []);
     assert.equal(Object.hasOwn(calls.queries.find((query) => query.include).include.task.select, "description_"), !options);
   }
 });

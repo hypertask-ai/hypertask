@@ -11,7 +11,6 @@ const ts = require("typescript");
 const { QueryClient } = require("@tanstack/react-query");
 const root = path.resolve(__dirname, "..");
 const cache = require("jiti").createJiti(__filename, { alias: { "@": path.join(root, "src") } })(path.join(root, "src/lib/navigation/cachedTaskDetail.ts"));
-const flag = "htpr-6752-instant-ticket-open";
 function load(file, mocks) {
   const exports = {};
   const source = process.env.INSTANT_OPEN_BASELINE
@@ -25,7 +24,7 @@ function load(file, mocks) {
   return exports;
 }
 
-test("real history Back replaces Next's stale source tree after detail RSC; Forward and flag off retain router traversal", async (t) => {
+test("real history Back replaces Next's stale source tree after detail RSC; Forward retains router traversal", async (t) => {
   const dom = new JSDOM('<div id="root"></div>', { url: "https://app.hypertask.ai/project?id=7049#board" });
   const names = ["window", "document", "Event", "IS_REACT_ACT_ENVIRONMENT"];
   const previous = Object.fromEntries(names.map((name) => [name, global[name]]));
@@ -42,7 +41,6 @@ test("real history Back replaces Next's stale source tree after detail RSC; Forw
     dom.window.close();
   });
   let nextPath = "/project";
-  let enabled = true;
   let serverChildren = React.createElement("ul", { id: "board" }, React.createElement("li", null, "Board row"));
   const board = serverChildren;
   const detail = React.createElement("article", { id: "server-detail" }, "Server detail");
@@ -69,8 +67,8 @@ test("real history Back replaces Next's stale source tree after detail RSC; Forw
     "@tanstack/react-query": { useQueryClient: () => client },
     "@/lib/state": { useRecoilValue: () => ({ id: 985 }) },
     "@/store": { currentUserAtom: {} },
-    "@/hooks/useFlag": { useFlag: (key) => key === flag && enabled },
-    "@/lib/flags/keys": { HTPR_6752_INSTANT_TICKET_OPEN_FLAG: flag, HTPR_6972_SUBTASK_LINK_FLAG: "htpr-6972-subtask-link" },
+    "@/hooks/useFlag": { useFlag: (key) => false },
+    "@/lib/flags/keys": { HTPR_6972_SUBTASK_LINK_FLAG: "htpr-6972-subtask-link" },
     "@/components/Modals/SwipeUnread/EmbeddedTaskDetail": { __esModule: true, default: () => React.createElement("article", { id: "cached-detail" }, "Cached detail") },
     "@/lib/navigation/cachedTaskDetail": cache,
     "@/utils/helperFunctions/helperFunctions": { returnIfModalOrInputActive: () => false },
@@ -121,15 +119,9 @@ test("real history Back replaces Next's stale source tree after detail RSC; Forw
   await traverse("forward");
   assert.deepEqual(traversals, ["/detail/project-7049/31"]);
   assert.ok(document.querySelector("#server-detail"));
-  await React.act(async () => { enabled = false; render(); });
-  await traverse("back");
-  assert.equal(replacements.length, 1, "flag off must not replace the original router traversal");
-  assert.equal(refreshes, 1, "flag off must not refresh the original router traversal");
-  assert.equal(traversals.at(-1), "/project");
 });
 
-test("pending AI header is quiet only for flagged ticket routes; resolved titles and flag-off loading are unchanged", () => {
-  let enabled = true;
+test("pending AI header is quiet on ticket routes; resolved titles and other routes are unchanged", () => {
   let pathname = "/detail/project-7049/31";
   let currentSession;
   const noop = () => null;
@@ -137,8 +129,9 @@ test("pending AI header is quiet only for flagged ticket routes; resolved titles
     react: React,
     "react/jsx-runtime": require("react/jsx-runtime"),
     "next/navigation": { usePathname: () => pathname, useRouter: () => ({}) },
-    "@/hooks/useFlag": { useFlag: () => enabled },
-    "@/lib/flags/keys": { HTPR_6752_INSTANT_TICKET_OPEN_FLAG: flag },
+    "@/lib/flags/keys": require("./helpers/flag-files.cjs").load("src/lib/flags/keys.ts"),
+    "@/hooks/useFlag": { useFlag: () => false },
+
     "@/lib/contexts/Multipages/AI_Agent/AI_Agent_Chat_Context": { useAiChatContext: () => ({ sessions: [], currentSession, isSessionPending: true, isSidebarMode: true }) },
     "lucide-react": Object.fromEntries(["Check", "ChevronDown", "ChevronRight", "Ellipsis", "History", "Maximize2", "Minus", "PanelRight", "Pencil", "PictureInPicture2", "Pin", "PinOff", "SquarePen", "Trash2", "X"].map((name) => [name, noop])),
     "../Common/Tooltip": { __esModule: true, default: ({ children }) => children },
@@ -155,9 +148,6 @@ test("pending AI header is quiet only for flagged ticket routes; resolved titles
   const render = () => renderToString(React.createElement(Header));
   assert.doesNotMatch(render(), /Loading\.\.\./);
   assert.match(render(), /AI Chat/);
-  enabled = false;
-  assert.match(render(), /Loading\.\.\./, "positive control exercises the original loading state");
-  enabled = true;
   pathname = "/project";
   assert.match(render(), /Loading\.\.\./, "other routes retain the original behavior");
   pathname = "/detail/project-7049/31";
