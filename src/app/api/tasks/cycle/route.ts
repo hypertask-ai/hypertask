@@ -1,5 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import prisma from "@/lib/prisma";
+import { withAgentScopeRequest } from "@/lib/auth/agentScope";
+import { taskWriteAccessWhere } from "@/utils/controllers/projects/getAllIncludes";
 import { loadCurrentUser } from "@/lib/auth/currentUser";
 import { jsonError, unauthorized } from "@/lib/api/response";
 import { readJsonBody } from "@/lib/mcp/readJsonBody";
@@ -18,13 +20,17 @@ const queryId = (value: string | null): number | null =>
 const jsonId = (value: unknown): number | null =>
   typeof value === "number" ? parsePositiveInt(value, { max: MAX_DATABASE_ID }) : null;
 
-const accessibleTask = (taskId: number, userId: number) =>
+const accessibleTask = (taskId: number, userId: number, agentId?: string) =>
   prisma.task.findFirst({
-    where: taskAccessWhere(userId, taskId, {
-      taskStatus: "Normal",
-      projectStatus: "Normal",
-      scope: "content",
-    }),
+    where: {
+      ...taskAccessWhere(userId, taskId, {
+        agentId,
+        taskStatus: "Normal",
+        projectStatus: "Normal",
+        scope: "content",
+      }),
+      AND: [{ project: taskWriteAccessWhere(userId) }],
+    },
     select: {
       id: true,
       cycleId: true,
@@ -40,16 +46,21 @@ const serverError = (operation: "load" | "update", error: unknown) => {
 };
 
 export async function GET(request: NextRequest) {
+  return withAgentScopeRequest(request, () => getTaskCycle(request));
+}
+
+async function getTaskCycle(request: NextRequest) {
   try {
     const session = await loadCurrentUser(request.headers);
     if (!session) return unauthorized();
+    const actingAgentId = session.agentId;
 
     const taskId = queryId(request.nextUrl.searchParams.get("taskId"));
     if (!taskId) {
       return jsonError("A valid taskId is required", 400);
     }
 
-    const task = await accessibleTask(taskId, session.userId);
+    const task = await accessibleTask(taskId, session.userId, actingAgentId);
     if (!task) return jsonError("Task not found", 404);
 
     const cursor = queryId(request.nextUrl.searchParams.get("cursor"));
@@ -90,9 +101,14 @@ export async function GET(request: NextRequest) {
 }
 
 export async function POST(request: NextRequest) {
+  return withAgentScopeRequest(request, () => setTaskCycle(request));
+}
+
+async function setTaskCycle(request: NextRequest) {
   try {
     const session = await loadCurrentUser(request.headers);
     if (!session) return unauthorized();
+    const actingAgentId = session.agentId;
 
     const parsed = await readJsonBody<{ taskId?: unknown; cycleId?: unknown }>(request, {
       invalidJson: () => jsonError("taskId and a valid cycleId or null are required"),
@@ -106,7 +122,7 @@ export async function POST(request: NextRequest) {
       return jsonError("taskId and a valid cycleId or null are required", 400);
     }
 
-    const task = await accessibleTask(taskId, session.userId);
+    const task = await accessibleTask(taskId, session.userId, actingAgentId);
     if (!task) return jsonError("Task not found", 404);
 
     let cycle = null;

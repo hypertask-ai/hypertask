@@ -1985,7 +1985,7 @@ if (require.main === module) {
       for (const mode of ['ON', 'OFF', 'FLAG_FAILURE', 'USER_FAILURE', 'NO_SESSION']) {
         const result = await run(operation, mode);
         assert.deepEqual(contract(result), baseline[operation]);
-        assert.equal(result.probes.filter(([kind]) => kind === 'user').length, operation === 'velocity' ? 2 : 1);
+        assert.equal(result.probes.filter(([kind]) => kind === 'user').length, ['velocity', 'fieldValue'].includes(operation) ? 2 : 1);
         assert.deepEqual(result.probes.filter(([kind]) => kind === 'flag'), ['ON', 'OFF', 'FLAG_FAILURE'].includes(mode) ? [['flag', key, 985]] : []);
         assert.equal(result.probes[0][1], result.requestHeaders);
       }
@@ -2091,7 +2091,7 @@ if (require.main === module) {
         const result = await run(operation, 'ON', { mocks: { '@/lib/auth/getSessionUser': { getSessionUser } } });
         assert.deepEqual(contract(result), baseline[operation]);
         assert.deepEqual(result.probes, [['flag', key, 985]]);
-        assert.equal(sessionReads, process.env.AUTH_LEGACY_FAST_PATH === '1' ? 0 : operation === 'velocity' ? 2 : 1);
+        assert.equal(sessionReads, process.env.AUTH_LEGACY_FAST_PATH === '1' ? 0 : ['velocity', 'fieldValue'].includes(operation) ? 2 : 1);
       }
     } finally {
       if (saved === undefined) delete process.env.BETTER_AUTH_ENABLED;
