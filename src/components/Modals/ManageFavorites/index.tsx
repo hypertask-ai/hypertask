@@ -230,9 +230,30 @@ const TeamsDropDown = (
            } 
             
 
+            const [maxHeight, setMaxHeight] = useState(364);
+
             useEffect(()=>{
-                    dropdownRef.current?.scrollIntoView({behavior:"smooth",block:favoritesMenuContrast ? "nearest" : "center",inline:"start"})
-                
+                if (!favoritesMenuContrast) {
+                    dropdownRef.current?.scrollIntoView({behavior:"smooth",block:"center",inline:"start"})
+                    return;
+                }
+
+                const updateMaxHeight = () => {
+                    const dropdown: HTMLUListElement | null = dropdownRef.current;
+                    if (!dropdown) return;
+
+                    let bottom = window.innerHeight;
+                    for (let parent = dropdown.parentElement; parent; parent = parent.parentElement) {
+                        if (/auto|scroll|hidden|clip|overlay/.test(window.getComputedStyle(parent).overflowY)) {
+                            bottom = Math.min(bottom, parent.getBoundingClientRect().bottom);
+                        }
+                    }
+                    setMaxHeight(Math.max(160, Math.min(364, bottom - dropdown.getBoundingClientRect().top - 8)));
+                };
+
+                updateMaxHeight();
+                window.addEventListener("resize", updateMaxHeight);
+                return () => window.removeEventListener("resize", updateMaxHeight);
             },[dropdownRef, favoritesMenuContrast])
 
     return (
@@ -241,7 +262,8 @@ const TeamsDropDown = (
             id={"listContainer"}
             style={{
                 top: '100%',
-                bottom: 'auto' }} 
+                bottom: 'auto',
+                maxHeight: favoritesMenuContrast ? maxHeight : undefined }}
             className={`dropdown-menu absolute flex max-h-[364px] w-[244px] cursor-auto flex-col overflow-y-scroll rounded-sm bg-modalBackground shadow-customshadow-2 p-4${favoritesMenuContrast ? " text-white-black" : ""}`}>
                 <li
                     onClick={reset}
