@@ -5,8 +5,7 @@ const path = require("node:path");
 const React = require("react");
 const { JSDOM } = require("jsdom");
 const { load, root } = require("./helpers/agent-connection.cjs");
-process.env.NEXT_PUBLIC_STRIPE_MONTHLY_PRICE_ID_PRO = "price_pro_month";
-process.env.NEXT_PUBLIC_BASEURL = "https://app.hypertask.ai";
+const { harness, plans } = require("./helpers/start-plan-checkout.cjs");
 const jiti = require("jiti")(__filename, { interopDefault: true, alias: { "@": path.join(root, "src") } });
 const billing = jiti(path.join(root, "src/lib/deriveCurrentBoardBilling.ts"));
 const flag = load("src/lib/flags/definitions/htpr-7551-start-plan-checkout.ts");
@@ -17,19 +16,24 @@ const freeBoard = () => ({ id: 7, teamId: "team-owned", team: {
   googleAccount: { userId: 6 }, team_activity: { hasCompletedTrial: false },
 } });
 
-async function withButton(fn) {
+async function withButton(fn, backend) {
   const dom = new JSDOM("<!doctype html><div id='root'></div>", { url: "https://app.hypertask.ai/project?id=7&view=default#board" });
   const previous = { React: global.React, window: global.window, document: global.document, IS_REACT_ACT_ENVIRONMENT: global.IS_REACT_ACT_ENVIRONMENT, fetch: global.fetch };
   Object.assign(global, { React, window: dom.window, document: dom.window.document, IS_REACT_ACT_ENVIRONMENT: true });
   const { createRoot } = require("react-dom/client");
   const container = dom.window.document.getElementById("root");
   const reactRoot = createRoot(container);
-  const state = { userId: 6, enabled: true, flagReady: true, board: freeBoard(), data: undefined, fetching: false, isError: false, error: null };
+  const state = { boards: [freeBoard()], userId: 6, enabled: true, flagReady: true, board: freeBoard(), data: undefined, fetching: false, isError: false, error: null };
   const requests = [], pushes = [], invalidations = [];
   let query, refreshes = 0, refetches = 0;
   const axios = {
     post: async (url, body) => {
       requests.push({ url, body });
+      if (backend) {
+        const result = await backend.checkout(body, state.userId);
+        if (result.status !== 200) throw { isAxiosError: true, response: { status: result.status, data: result.body } };
+        return { data: result.body };
+      }
       if (body.action === "preview") return { data: { canStartPlan: true, trialDays: 7 } };
       if (state.checkout) return state.checkout();
       return { data: { url: "https://checkout.stripe.test/session" } };
@@ -76,12 +80,16 @@ async function withButton(fn) {
     "@/hooks/useFlag": flagMock,
     "@/lib/flags/definitions/htpr-7551-start-plan-checkout": flag,
     "@/hooks/General/useTrial": trialHook,
-    "@/lib/state": { useRecoilValue: () => state.board },
-    "@/store": { currentProjectAtom: "project" },
+    "@/lib/state": { useRecoilValue: (atom) => atom === "user" ? { id: state.userId } : state.board },
+    "@/store": { currentProjectAtom: "project", currentUserAtom: "user" },
+    "@/hooks/MultiPages/useGetAllAccessibleBoardList": { useGetAllAccessibleBoardList: (user, options) => {
+      state.boardsQuery = { user, options };
+      return { data: state.boards, isError: false, isPending: false };
+    } },
     "@/assets/AILogo.png": { src: "fixture.png" }, "next/image": () => null,
   }).default;
   const renderCard = async () => React.act(async () => reactRoot.render(React.createElement(TrialCard, {
-    teamInfo: { teamId: "team-owned", stripe_customer_id: "cus_owned", googleAccountId: "account-owned", totalSeats: 3 }, manageLink: "/manage", plan: { id: "BYOK", name: "BYOK", types: [{ price: "$10", description: "per user/month", stripePriceId: "price_legacy_trial" }] },
+    teamInfo: { teamId: "team-owned", stripe_customer_id: "cus_owned", googleAccountId: "account-owned", totalSeats: 3 }, manageLink: "/manage", plan: plans.storeSubscriptionPlans[0],
     hasSubscription: { activeStorePlan: "Free" },
   })));
   const render = async (props = {}) => React.act(async () => reactRoot.render(React.createElement(buttonModule.StartPlanButton, { project: state.board, compact: true, ...props })));
@@ -259,22 +267,67 @@ test("the standalone legacy trial card also refuses flagged members and still al
 
 
 for (const selection of ["none", "different team"]) {
-  test(`standalone trial card still checks out its explicit team with ${selection} selected`, async () => {
-    await withButton(async ({ state, dom, renderCard, container, requests, pushes }) => {
+  for (const pastTrial of [false, true]) {
+    test(`standalone trial card with ${selection} selected submits server-accepted ${pastTrial ? "Normal" : "Trial"} terms for its explicit team`, async () => {
+      const backend = harness(); backend.team.team_activity.hasCompletedTrial = pastTrial;
+      await withButton(async ({ state, dom, renderCard, container, getQuery, click, requests, pushes }) => {
+        dom.reconfigure({ url: "https://app.hypertask.ai/trial-plan-confirmation?teamId=team-owned" });
+        const otherBoard = { ...freeBoard(), id: 8, teamId: "other-team", team: { ...freeBoard().team, id: "other-team" } };
+        state.board = selection === "none" ? null : otherBoard;
+        state.boards = [otherBoard, freeBoard()];
+        await renderCard();
+        assert.equal(state.boardsQuery.options.enabled, true);
+        assert.equal(state.boardsQuery.user.id, 6);
+        assert.equal(container.querySelector("button"), null);
+        state.data = await getQuery().queryFn();
+        assert.deepEqual(state.data, { canStartPlan: true, trialDays: pastTrial ? 0 : 7 });
+        await renderCard(); await click();
+        const expected = { intent: "signup-straight-to-board", teamId: "team-owned", boardUrl: "https://app.hypertask.ai/project?id=7" };
+        assert.deepEqual(requests, [
+          { url: "/api/stripe/session/checkout", body: { ...expected, action: "preview" } },
+          { url: "/api/stripe/session/checkout", body: expected },
+        ]);
+        assert.equal(plans.storeSubscriptionPlans[0].types[0].stripePriceId, "price_byok_month");
+        assert.equal(backend.calls.length, 1);
+        const payload = backend.calls[0].payload;
+        assert.equal(payload.customer, "cus_owned");
+        assert.deepEqual(payload.line_items, [{ price: "price_pro_month", quantity: 3 }]);
+        assert.equal(payload.subscription_data?.trial_period_days, pastTrial ? undefined : 7);
+        assert.equal(payload.metadata.checkoutMode, pastTrial ? "Normal" : "Trial");
+        assert.equal(payload.success_url, expected.boardUrl);
+        assert.equal(payload.cancel_url, expected.boardUrl);
+        assert.deepEqual(pushes, ["https://checkout.stripe.test/cs_1"]);
+      }, backend);
+    });
+  }
+  test(`standalone trial card with ${selection} selected refuses an explicit-team member at the controller`, async () => {
+    const backend = harness(); backend.team.googleAccount.userId = 99;
+    await withButton(async ({ state, dom, renderCard, container, getQuery, requests, pushes }) => {
       dom.reconfigure({ url: "https://app.hypertask.ai/trial-plan-confirmation?teamId=team-owned" });
-      state.data = { canStartPlan: true, trialDays: 7 };
       state.board = selection === "none" ? null : { ...freeBoard(), teamId: "other-team", team: { ...freeBoard().team, id: "other-team" } };
       await renderCard();
-      const action = [...container.querySelectorAll("div")].find((node) => node.textContent === "Begin Hypertask Trial");
-      assert.ok(action);
-      await React.act(async () => action.dispatchEvent(new dom.window.MouseEvent("click", { bubbles: true })));
-      assert.equal(requests.length, 1);
-      assert.equal(requests[0].body.teamId, "team-owned");
-      assert.equal(requests[0].body.stripe_customer_id, "cus_owned");
-      assert.equal(requests[0].body.mode, "Trial");
-      assert.deepEqual(pushes, ["https://checkout.stripe.test/session"]);
-      state.board = freeBoard(); await renderCard();
-      assert.equal(container.querySelector("button").textContent, "Start a Hypertask plan");
-    });
+      await assert.rejects(getQuery().queryFn(), (error) => error.response.status === 403);
+      state.isError = true; state.error = { isAxiosError: true, response: { data: { message: "Only the team owner can update billing" } } };
+      await renderCard();
+      assert.match(container.textContent, /Only the team owner/);
+      assert.equal(container.querySelector("button"), null);
+      assert.equal(requests.length, 1); assert.equal(backend.calls.length, 0);
+      assert.deepEqual(pushes, []);
+    }, backend);
   });
 }
+
+test("standalone trial card does not reuse another team's board when the explicit team has none", async () => {
+  await withButton(async ({ state, renderCard, container, requests }) => {
+    state.board = null;
+    state.boards = [{ ...freeBoard(), team: { ...freeBoard().team, id: "other-team" } }];
+    await renderCard();
+    assert.equal(container.querySelector("button"), null);
+    assert.match(container.textContent, /Open a board in this team/);
+    assert.deepEqual(requests, []);
+    state.enabled = false;
+    await renderCard();
+    assert.equal(state.boardsQuery.options.enabled, false);
+    assert.match(container.textContent, /Begin Hypertask Trial/);
+  });
+});

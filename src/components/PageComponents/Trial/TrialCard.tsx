@@ -1,5 +1,6 @@
 import { useRecoilValue } from "@/lib/state";
-import { currentProjectAtom } from "@/store";
+import { currentProjectAtom, currentUserAtom } from "@/store";
+import { useGetAllAccessibleBoardList } from "@/hooks/MultiPages/useGetAllAccessibleBoardList";
 import { StartPlanButton } from "@/components/PageComponents/Kanban/HeaderComponents/StartPlanButton";
 import { useFlag, useFlagReady } from "@/hooks/useFlag";
 import { HTPR_7551_START_PLAN_CHECKOUT_FLAG } from "@/lib/flags/definitions/htpr-7551-start-plan-checkout";
@@ -18,8 +19,17 @@ interface IProps {
 
 const TrialCard = ({ teamInfo, manageLink, plan, hasSubscription }: IProps) => {
   const currentProject = useRecoilValue(currentProjectAtom);
+  const currentUser = useRecoilValue(currentUserAtom);
   const startPlanEnabled = useFlag(HTPR_7551_START_PLAN_CHECKOUT_FLAG);
   const flagReady = useFlagReady(HTPR_7551_START_PLAN_CHECKOUT_FLAG);
+  const selectedTeamBoard = currentProject?.team?.id === teamInfo.teamId && currentProject.id
+    ? currentProject : undefined;
+  const boards = useGetAllAccessibleBoardList(currentUser, {
+    enabled: flagReady && startPlanEnabled && !selectedTeamBoard,
+  });
+  const checkoutBoard = selectedTeamBoard ?? boards.data?.find((board) =>
+    board.id && board.team?.id === teamInfo.teamId);
+
   const { selectedTime, createCheckout, handleDurationChange } = useTrial({
     teamInfo,
     manageLink,
@@ -28,8 +38,10 @@ const TrialCard = ({ teamInfo, manageLink, plan, hasSubscription }: IProps) => {
   });
 
   if (!flagReady) return null;
-  if (startPlanEnabled && currentProject?.id && currentProject.team?.id === teamInfo.teamId) {
-    return <StartPlanButton project={currentProject} teamId={teamInfo.teamId} />;
+  if (startPlanEnabled) {
+    if (checkoutBoard) return <StartPlanButton project={checkoutBoard} teamId={teamInfo.teamId} />;
+    if (boards.isError) return <div role="status">Could not load this team's boards. <button type="button" onClick={() => void boards.refetch()}>Retry</button></div>;
+    return <span role="status">{boards.isPending ? "Loading this team's boards…" : "Open a board in this team to start a plan"}</span>;
   }
 
   return (

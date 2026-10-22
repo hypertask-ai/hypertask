@@ -1,8 +1,6 @@
 import { NextApiRequest, NextApiResponse } from "next";
 import { GUEST_FORBIDDEN_MESSAGE, isGuestRequest } from "@/lib/demo/guestGuard";
 import { SESSION_COOKIE, verifySession } from "@/lib/auth/session";
-import { isFeatureEnabled } from "@/lib/flags";
-import { HTPR_7551_START_PLAN_CHECKOUT_FLAG } from "@/lib/flags/definitions/htpr-7551-start-plan-checkout";
 import { createAuthorizedCheckoutSession } from "@/utils/controllers/stripe/createAuthorizedCheckoutSession";
 
 export default async function checkoutsSessionHandler(
@@ -26,9 +24,6 @@ export default async function checkoutsSessionHandler(
   }
 
   if (req.body?.intent === "signup-straight-to-board") {
-    if (!(await isFeatureEnabled(HTPR_7551_START_PLAN_CHECKOUT_FLAG, session.id))) {
-      return res.status(403).json({ message: "Start plan is not available" });
-    }
     const baseUrl = process.env.NEXT_PUBLIC_BASEURL || process.env.NEXT_PUBLIC_APP_URL;
     let appOrigin: string;
     try {

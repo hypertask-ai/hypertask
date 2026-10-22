@@ -453,7 +453,6 @@ export async function createAuthorizedCheckoutSession(
 
     const reservedSession = attempt && await reconcileAttemptSession(stripe, attempt, teamSessions);
     const knownSessions = reservedSession ? [...teamSessions, reservedSession] : teamSessions;
-    // A completed offer cannot be replaced through another entry while Stripe listings lag.
     const awaitingPlanSubscription = knownSessions.some((session) => {
       if (session.status !== "complete" ||
         (session.metadata?.checkoutIntent !== "signup-straight-to-board" && session.metadata?.trialDays !== "7")) return false;
