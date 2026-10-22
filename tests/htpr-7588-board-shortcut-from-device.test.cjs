@@ -101,9 +101,9 @@ test("flag on: an empty placeholder list on the device does not count", async ()
 
 test("g then b picks the lookup by the flag and keeps the same navigation", () => {
   const source = read("src/components/ProviderGlobal/GloablProviders.tsx");
-  assert.match(source, /useFlag\(HTPR_7588_BOARD_SHORTCUT_FROM_DEVICE_FLAG\)/);
-  assert.match(source, /boardShortcutFromDevice\s*\?\s*boardFromDeviceFirst\(/);
-  assert.match(source, /:\s*boardFromFreshList\(/);
+  assert.match(source, /let boardShortcutLookup = boardFromFreshList;/);
+  assert.match(source, /if \(useFlag\(HTPR_7588_BOARD_SHORTCUT_FROM_DEVICE_FLAG\)\) boardShortcutLookup = boardFromDeviceFirst;/);
+  assert.match(source, /await boardShortcutLookup\(\s*queryClient,\s*currentUser\?\.id,\s*boardCandidates,\s*fetchBoardList,\s*\)/);
   assert.doesNotMatch(source, /fetchQuery<IProject\[\]>\(\{\s*queryKey: \["projectsAllMinimal", currentUser\.id\]/);
   assert.match(source, /goToProjectShortcut\(boardId, true\)/);
 });
