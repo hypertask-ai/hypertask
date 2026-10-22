@@ -1250,9 +1250,17 @@ function referencesFlagAtRuntime(ref, path, registry, allowedKeys, addedLines) {
       importedFunctions.set(symbol, { imported, module: moduleName });
       if ((moduleName === "@/hooks/useFlag" && imported === "useFlag") ||
           (moduleName === "@/lib/flags" && imported === "isFeatureEnabled")) helperSymbols.add(symbol);
-      if (FLAG_KEY_MODULES.has(moduleName) && registry.byIdentifier.has(imported)) {
-        flagSymbols.set(symbol, registry.byIdentifier.get(imported));
+      const key = registry.byIdentifier.get(imported);
+      if (!key) continue;
+      if (!FLAG_KEY_MODULES.has(moduleName)) {
+        const definitionPath = moduleName.startsWith("@/lib/flags/definitions/")
+          ? `src/${moduleName.slice(2)}${moduleName.endsWith(".ts") ? "" : ".ts"}`
+          : resolveRelativeModule(ref, path, moduleName);
+        if (!definitionPath || !flagDefinitionPaths(ref).includes(definitionPath)) continue;
+        const { identifier, definition } = parseFlagFile(git(["show", `${ref}:${definitionPath}`]), definitionPath);
+        if (identifier !== imported || definition.key !== key) continue;
       }
+      flagSymbols.set(symbol, key);
     }
   }
 
