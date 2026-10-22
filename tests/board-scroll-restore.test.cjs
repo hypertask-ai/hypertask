@@ -7,10 +7,9 @@ const { JSDOM } = require("jsdom");
 const ts = require("typescript");
 
 const root = path.resolve(__dirname, "..");
-const flag = "htpr-6998-board-scroll-restore";
 const hookFile = "src/hooks/Kanban/useBoardScrollRestore.ts";
 
-async function fixture(run, { mobile = false, enabled = true, pageScroll = false } = {}) {
+async function fixture(run, { mobile = false, pageScroll = false } = {}) {
   const dom = new JSDOM("<!doctype html><div id='root'></div>", { url: "https://app.hypertask.ai/project?id=15" });
   const names = ["window", "document", "navigator", "HTMLElement", "MutationObserver", "ResizeObserver", "IS_REACT_ACT_ENVIRONMENT"];
   const previous = names.map(name => [name, Object.getOwnPropertyDescriptor(global, name)]);
@@ -26,7 +25,6 @@ async function fixture(run, { mobile = false, enabled = true, pageScroll = false
   });
   Object.defineProperty(document, "scrollingElement", { value: document.documentElement });
   let boardUrl = "/project?id=15";
-  let flagOn = enabled;
   const frames = new Map();
   let frameId = 0;
   window.requestAnimationFrame = callback => { frames.set(++frameId, callback); return frameId; };
@@ -36,8 +34,6 @@ async function fixture(run, { mobile = false, enabled = true, pageScroll = false
   }).outputText;
   const loaded = { exports: {} };
   const mocks = {
-    "@/hooks/useFlag": { useFlag: key => { assert.equal(key, flag); return flagOn; } },
-    "@/lib/flags/keys": { HTPR_6998_BOARD_SCROLL_RESTORE_FLAG: flag },
     "next/navigation": {
       usePathname: () => boardUrl.split("?")[0],
       useSearchParams: () => new URLSearchParams(boardUrl.split("?")[1]),
@@ -120,7 +116,6 @@ async function fixture(run, { mobile = false, enabled = true, pageScroll = false
   try {
     await run({ render, flush, scrollers, scroll, leave, back, dom, resizeObservers,
       setUrl: url => { boardUrl = url; window.history.replaceState({}, "", url); },
-      setEnabled: value => { flagOn = value; },
       setHeight: value => { contentHeight = value; }, setWidth: value => { contentWidth = value; },
     });
   } finally {
@@ -134,22 +129,20 @@ async function fixture(run, { mobile = false, enabled = true, pageScroll = false
 }
 
 for (const mobile of [false, true]) {
-  for (const enabled of [false, true]) {
-    test(`${mobile ? "phone" : "desktop"}, flag ${enabled ? "on" : "off"}: history return restores both columns and horizontal strip`, async () => fixture(async f => {
-      await f.render();
-      const before = f.scrollers();
-      f.scroll(before.columns[0], "scrollTop", 283);
-      f.scroll(before.columns[1], "scrollTop", 120);
-      f.scroll(before.strip, "scrollLeft", 411);
-      await f.leave();
-      await f.back();
-      const after = f.scrollers();
-      assert.notEqual(after.columns[0], before.columns[0], "the board really remounts");
-      assert.deepEqual(after.columns.map(column => column.scrollTop), enabled ? [283, 120] : [0, 0]);
-      assert.equal(after.strip.scrollLeft, enabled ? 411 : 0);
-      if (mobile) assert.equal(document.getElementById("droppable-section-container-10").scrollTop, 0);
-    }, { mobile, enabled }));
-  }
+  test(`${mobile ? "phone" : "desktop"}: history return restores both columns and horizontal strip`, async () => fixture(async f => {
+    await f.render();
+    const before = f.scrollers();
+    f.scroll(before.columns[0], "scrollTop", 283);
+    f.scroll(before.columns[1], "scrollTop", 120);
+    f.scroll(before.strip, "scrollLeft", 411);
+    await f.leave();
+    await f.back();
+    const after = f.scrollers();
+    assert.notEqual(after.columns[0], before.columns[0], "the board really remounts");
+    assert.deepEqual(after.columns.map(column => column.scrollTop), [283, 120]);
+    assert.equal(after.strip.scrollLeft, 411);
+    if (mobile) assert.equal(document.getElementById("droppable-section-container-10").scrollTop, 0);
+  }, { mobile }));
 
   test(`${mobile ? "phone" : "desktop"}: quick Back restores the browser board URL while Next still reports the ticket`, async () => fixture(async f => {
     await f.render();
@@ -333,13 +326,6 @@ test("different board URLs and views do not inherit saved positions; exact-URL l
   await f.leave();
   f.setUrl("/project?id=15"); await f.render();
   assert.equal(f.scrollers().columns[0].scrollTop, 283);
-}));
-
-test("turning the flag off on return ignores existing saved scroll", async () => fixture(async f => {
-  await f.render(); f.scroll(f.scrollers().columns[0], "scrollTop", 283);
-  await f.leave(); f.setEnabled(false); await f.back();
-  assert.equal(f.scrollers().columns[0].scrollTop, 0);
-  assert.equal(f.resizeObservers.size, 0);
 }));
 
 for (const operation of ["getItem", "setItem"]) {
