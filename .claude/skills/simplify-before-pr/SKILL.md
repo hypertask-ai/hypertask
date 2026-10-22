@@ -28,7 +28,11 @@ Scope is the ticket's own diff, nothing else: `git diff --name-only pub/producti
    - Remove helpful abstractions that improve code organization.
    - Prioritize "fewer lines" over readability (e.g. nested ternaries, dense one-liners).
    - Make the code harder to debug or extend.
-6. **Run `/no-comments` on this ticket's diff (required).** Load `.claude/skills/no-comments/SKILL.md` and pass the scope from step 1: `git diff pub/production...HEAD` plus the working tree, nothing outside it. It spawns Comment Sicko (`.claude/agents/comment-sicko.md`), which goes beyond the `local/no-comments` lint: `eslint-disable`, `@ts-ignore` and `@ts-expect-error` suppressions, workaround code and comments in every touched file, also outside `src/`. Fix accepted findings inside the diff; report `MUST KILL` flags outside it as open work. Source: pstack by Lauren Tan, MIT (`.claude/skills/no-comments/LICENSE`).
+6. **Run `/no-comments` on this ticket's diff (required).** Load `.claude/skills/no-comments/SKILL.md` and pass the scope from step 1: `git diff pub/production...HEAD` plus the working tree, nothing outside it. It spawns Comment Sicko (`.claude/agents/comment-sicko.md`), which goes beyond the `local/no-comments` lint: `eslint-disable`, `@ts-ignore` and `@ts-expect-error` suppressions, workaround code and comments in every touched file, also outside `src/`. Spawn it by the newest Token ladder mode:
+   - **CLAUDE mode:** the Agent tool with `subagent_type: "Comment Sicko"`, as the skill says.
+   - **CODEX mode:** one hax helper, report only: save the diff to a scratch file, then `nice -n 19 hax --provider=codex --model=gpt-6.1-sol --effort=high --no-session -p "<prompt>"` where the prompt is the mode line, the unlazy line, the full contents of `.claude/agents/comment-sicko.md`, the diff file path, and "REPORT ONLY: edit nothing, no board access, never run tests, tsc, next or npm".
+
+   Either way, judge its report as `/no-comments` step 2 says. Fix accepted findings inside the diff; report `MUST KILL` flags outside it as open work. Source: pstack by Lauren Tan, MIT (`.claude/skills/no-comments/LICENSE`).
 7. **Re-run the tests you ran for the fix itself.** Same command, same scope as the ticket's own test step. They must still pass with no changes to what they assert.
 8. **Commit the simplification separately from the fix**, so the reviewer can see the two apart:
    ```
