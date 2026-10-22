@@ -1,7 +1,8 @@
-import { useKeepAiChatClosed } from "@/hooks/General/useKeepAiChatClosed";
+import { useFlag, useFlagReady } from "@/hooks/useFlag";
+import { HTPR_7530_KEEP_AI_CHAT_CLOSED_FLAG } from "@/lib/flags/keys";
 import { useEffect, useRef } from "react";
 import { useRecoilValue } from "@/lib/state";
-import { aiChatAutoOpenSuppressedAtom } from "@/store";
+import { aiChatAutoOpenSuppressedAtom, keepAiChatClosedAtom } from "@/store";
 import { TAiModal } from "@/models/AI_Task_writer_model";
 import { focusAiChatEditorForRequest, isEditableElement } from "@/utils/aiChat/focusRequestWindow";
 import { IChatMessage } from "@/models/model";
@@ -15,7 +16,12 @@ type Context = Pick<ReturnType<typeof useAiChatState>, "setAiOption" | "contextL
   Pick<ReturnType<typeof useAiChatAttachments>, "handleCancelStream">;
 
 export function useAiChatPresentation(context: Context) {
-  const { keepAiChatClosed, ready: chatAutoOpenReady } = useKeepAiChatClosed();
+  const keepAiChatClosedEnabled = useFlag(HTPR_7530_KEEP_AI_CHAT_CLOSED_FLAG);
+  const keepAiChatClosedReady = useFlagReady(HTPR_7530_KEEP_AI_CHAT_CLOSED_FLAG);
+  const savedKeepAiChatClosed = useRecoilValue(keepAiChatClosedAtom);
+  const chatAutoOpenReady = !savedKeepAiChatClosed || keepAiChatClosedReady;
+  let keepAiChatClosed = false;
+  if (keepAiChatClosedEnabled) keepAiChatClosed = savedKeepAiChatClosed;
   const aiChatAutoOpenSuppressed = useRecoilValue(aiChatAutoOpenSuppressedAtom);
   const {
   setAiOption, contextList, setContextList, editor, handleCancelStream,

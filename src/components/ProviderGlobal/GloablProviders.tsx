@@ -1,6 +1,6 @@
 
 "use client";
-import { useKeepAiChatClosed } from "@/hooks/General/useKeepAiChatClosed";
+import { HTPR_7530_KEEP_AI_CHAT_CLOSED_FLAG } from "@/lib/flags/keys";
 import {
   lazy,
   ReactNode,
@@ -36,6 +36,7 @@ import {
   aiChatAutoOpenSuppressedAtom,
   aiChatPinnedAtom,
   openAiChatByDefaultAtom,
+  keepAiChatClosedAtom,
   showAIChatInterfaceAtom,
   mobileCommentComposerOpenAtom,
   showAccountSwitcherAtom,
@@ -178,7 +179,7 @@ import { useGetAllProjectsMinimal } from "@/hooks/MultiPages/useGetAllProjectsMi
 import { useProjectQuery } from "@/hooks/General/useProjectQuery";
 import { markBoardSwitchIntent } from "@/lib/analytics/boardSwitchLatency";
 import { useEmojiFrequencyHydration } from "@/hooks/General/useEmojiFrequencyHydration";
-import { useFlag } from "@/hooks/useFlag";
+import { useFlag, useFlagReady } from "@/hooks/useFlag";
 import { useTaskBoxOutlinesFlag } from "@/hooks/useTaskBoxOutlinesFlag";
 import { useInboxLegacyWarm } from "@/hooks/useInboxLegacyWarm";
 import { MY_TASKS_SHORTCUTS_WIDTH_FLAG, HTPR_6476_MOBILE_AGENT_CHAT_FULLSCREEN_FLAG } from "@/lib/flags/keys";
@@ -393,7 +394,12 @@ export default function GlobalProvider({
   const aiChatAutoOpenSuppressed = useRecoilValue(aiChatAutoOpenSuppressedAtom);
   const aiChatPinned = useRecoilValue(aiChatPinnedAtom);
   const openAiChatByDefault = useRecoilValue(openAiChatByDefaultAtom);
-  const { keepAiChatClosed, ready: chatAutoOpenReady } = useKeepAiChatClosed();
+  const keepAiChatClosedEnabled = useFlag(HTPR_7530_KEEP_AI_CHAT_CLOSED_FLAG);
+  const keepAiChatClosedReady = useFlagReady(HTPR_7530_KEEP_AI_CHAT_CLOSED_FLAG);
+  const savedKeepAiChatClosed = useRecoilValue(keepAiChatClosedAtom);
+  const chatAutoOpenReady = !savedKeepAiChatClosed || keepAiChatClosedReady;
+  let keepAiChatClosed = false;
+  if (keepAiChatClosedEnabled) keepAiChatClosed = savedKeepAiChatClosed;
   const [reserveBoardChat, setReserveBoardChat] = useState(() =>
     firstScreen?.scope.route === "/project" && pathname?.startsWith("/project") === true &&
     firstScreen.flags.values[HTPR_7406_DESKTOP_SERVER_BOARD_FLAG] === true &&

@@ -45,7 +45,7 @@ function gatedValue(file, name, bindings, extraNames = [], flagName = "agentLogN
 
 function groups(enabled, showHistory) {
   const getCommands = gatedValue(palette, "getCommands", {
-    getAllCommands, useCallback: (callback) => callback, agentLogNameEnabled: enabled, roundedEnabled: false, isMobile: false,
+    getAllCommands, useCallback: (callback) => callback, agentLogNameEnabled: enabled, roundedEnabled: false, isMobile: false, keepAiChatClosedKeywords: "",
   }, ["getRoundedCommands", "getLegacyCommands"], "roundedEnabled");
   return getCommands({ context: "Task", taskOptions: { showHistory, isKanban: false } });
 }

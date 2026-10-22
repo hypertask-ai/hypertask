@@ -119,7 +119,7 @@ async function harness(persisted, run, flagEnabled = true, flagReady = true) {
     "@/hooks/useFlag": { useFlag: () => flagEnabled, useFlagReady: () => flagReady },
     "@/lib/state": state,
     "@/store": atoms,
-    "@/lib/flags/definitions/htpr-7530-keep-ai-chat-closed": { HTPR_7530_KEEP_AI_CHAT_CLOSED_FLAG: "htpr-7530-keep-ai-chat-closed" },
+    "@/lib/flags/keys": { HTPR_7530_KEEP_AI_CHAT_CLOSED_FLAG: "htpr-7530-keep-ai-chat-closed" },
   });
   const store = createStore();
   const mobileContext = React.createContext(false);

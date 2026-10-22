@@ -141,7 +141,7 @@ test('blocked dismissal storage cannot escape the mirror effect or leave a misle
   const js = require('typescript').transpileModule(body, { compilerOptions: { target: 7 } }).outputText;
   const document = { documentElement: { dataset: { theme: 'porcelain' } }, cookie: 'old mirror' };
   const bindings = { document, BOARD_DISPLAY_COOKIE, parseBoardDisplay, location: { protocol: 'https:' }, window: { innerWidth: 390 }, navigator: { language: 'en-US' },
-    accountId: 985, boardLayout: 'board', railCollapsed: true, quickTips: false, fcm: { permissionStatus: 'default', statusToggleFromDB: 'false' }, ...display.board, desktopChat: false, chatWidth: 517, chatSidebarMode: true,
+    accountId: 985, boardLayout: 'board', railCollapsed: true, quickTips: false, fcm: { permissionStatus: 'default', statusToggleFromDB: 'false' }, ...display.board, keepChatClosed: false, desktopChat: false, chatWidth: 517, chatSidebarMode: true,
     localStorage: { getItem: () => { throw Error('storage blocked'); } } };
   const mirror = storage => new Function(...Object.keys(bindings), js + '\nmirror();')(...Object.values({ ...bindings, localStorage: storage }));
   assert.doesNotThrow(() => mirror(bindings.localStorage));

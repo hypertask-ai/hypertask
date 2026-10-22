@@ -49,7 +49,7 @@ import { useGetAllProjectsMinimal } from "@/hooks/MultiPages/useGetAllProjectsMi
 import { MobileViewContext } from "@/lib/contexts/mobileContext";
 import { MobileBottomSheet } from "@/components/Modals/Sheets";
 import { useFlag } from "@/hooks/useFlag";
-import { HTPR_7328_ROUNDED_THEME_FLAG } from "@/lib/flags/keys";
+import { HTPR_7530_KEEP_AI_CHAT_CLOSED_FLAG, HTPR_7328_ROUNDED_THEME_FLAG } from "@/lib/flags/keys";
 import {
   GOOGLE_CALENDAR_FLAG,
   HTPR_7260_KANBAN_SELECT_ALL_FLAG,
@@ -144,13 +144,16 @@ const Commands = (props: Props) => {
   const ticketPrefixEnabled = useFlag(HTPR_6868_TICKET_PREFIX_FLAG);
   const agentLogNameEnabled = useFlag(HTPR_6662_AGENT_LOG_NAME_FLAG);
   const roundedEnabled = useFlag(HTPR_7328_ROUNDED_THEME_FLAG);
+  const keepAiChatClosedEnabled = useFlag(HTPR_7530_KEEP_AI_CHAT_CLOSED_FLAG);
+  let keepAiChatClosedKeywords = "";
+  if (keepAiChatClosedEnabled) keepAiChatClosedKeywords = "keep ai chat closed always";
   const getRoundedCommands = useCallback(
-    (options?: IAllCommands) => getAllCommands(options, agentLogNameEnabled, options?.kanbanSelectAllEnabled, !isMobile),
-    [agentLogNameEnabled, isMobile]
+    (options?: IAllCommands) => getAllCommands(options, agentLogNameEnabled, options?.kanbanSelectAllEnabled, !isMobile, keepAiChatClosedKeywords),
+    [agentLogNameEnabled, isMobile, keepAiChatClosedKeywords]
   );
   const getLegacyCommands = useCallback(
-    (options?: IAllCommands) => getAllCommands(options, agentLogNameEnabled, options?.kanbanSelectAllEnabled),
-    [agentLogNameEnabled]
+    (options?: IAllCommands) => getAllCommands(options, agentLogNameEnabled, options?.kanbanSelectAllEnabled, false, keepAiChatClosedKeywords),
+    [agentLogNameEnabled, keepAiChatClosedKeywords]
   );
   let getCommands = getLegacyCommands;
   if (roundedEnabled) getCommands = getRoundedCommands;

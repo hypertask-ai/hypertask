@@ -39,7 +39,7 @@ test("the shared veto ignores a saved value with flag off and waits only when a 
         const { useKeepAiChatClosed } = load("src/hooks/General/useKeepAiChatClosed.ts", {
           "@/hooks/useFlag": { useFlag: (key) => { assert.equal(key, flagKey); return enabled; }, useFlagReady: () => ready },
           "@/lib/state": { useRecoilValue: () => saved }, "@/store": { keepAiChatClosedAtom: "saved" },
-          "@/lib/flags/definitions/htpr-7530-keep-ai-chat-closed": flagModule,
+          "@/lib/flags/keys": flagModule,
         });
         assert.deepEqual(useKeepAiChatClosed(), { keepAiChatClosed: enabled && saved, ready: !saved || ready });
       }
@@ -58,7 +58,7 @@ test("Task Page reuses the adjacent SettingsToggle row, preserves the other sett
         "@/lib/state": { useRecoilState: (key) => [values[key], (next) => { values[key] = next(values[key]); }] },
         "@/store": { openAiChatByDefaultAtom: "open", keepAiChatClosedAtom: "closed" },
         "@/hooks/useFlag": { useFlag: (key) => { assert.equal(key, flagKey); return enabled; } },
-        "@/lib/flags/definitions/htpr-7530-keep-ai-chat-closed": flagModule,
+        "@/lib/flags/keys": flagModule,
         "./SettingsCard": inert, "./SettingsScrollPicker": inert, "./SettingsSectionShell": inert,
         "./SettingsToggle": { __esModule: true, default: Toggle },
       });
@@ -107,5 +107,19 @@ test("closed automatic chat reserves no empty column, but manually opened chat s
         }
       }
     }
+  }
+});
+
+test("the palette adds keep-closed search words only with the ticket flag and never mutates its registry", () => {
+  const { createJiti } = require("jiti");
+  const jiti = createJiti(__filename, { alias: { "@": path.join(root, "src") } });
+  const { getAllCommands } = jiti(path.join(root, "src/components/Modals/commands/HTC/AllCommands.ts"));
+  for (const enabled of [false, true, false]) {
+    const groups = getAllCommands(undefined, false, undefined, false, enabled ? "keep ai chat closed always" : "");
+    const command = groups.flatMap((group) => group.commandLists).find((item) => item.key === "settingsTaskPageOpenAiChatByDefault");
+    assert.equal(command.keywords, enabled
+      ? "settings open ai chat by default keep ai chat closed always task page"
+      : "settings open ai chat by default task page");
+    assert.equal(command.payload, "task-page");
   }
 });
