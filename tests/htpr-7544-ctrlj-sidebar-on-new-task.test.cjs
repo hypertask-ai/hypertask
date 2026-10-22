@@ -181,7 +181,7 @@ test("flag is a client-safe improvement released to Everyone with risk metadata"
   assert.ok(definition.releaseRisk.reason.length);
 });
 
-function draftHandoff(enabled, create, calls, dom, apple = false) {
+function draftHandoff(enabled, create, calls, dom, apple = false, options = {}) {
   const source = read("src/components/Modals/CreateTaskGloballyModal/CreateTaskModalBody.tsx");
   const file = ts.createSourceFile("CreateTaskModalBody.tsx", source, ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX);
   let effect;
@@ -192,11 +192,12 @@ function draftHandoff(enabled, create, calls, dom, apple = false) {
   visit(file);
   assert.ok(effect);
   const compiled = ts.transpileModule(`const effect = ${effect};`, { compilerOptions: { target: ts.ScriptTarget.ES2022 } }).outputText;
-  return new Function("ctrlJSidebarOnNewTask", "window", "document", "isApple", "isRecording", "showAssignModal", "showConfirmationModal", "sidebarHandoffPending", "uploadInProgress", "formValues", "setUploadInProgress", "CreateTaskAndDescription", "router", "closeHandler", "toast", `${compiled}; return effect();`)(
+  return new Function("ctrlJSidebarOnNewTask", "window", "document", "isApple", "isRecording", "showAssignModal", "showConfirmationModal", "sidebarHandoffPending", "uploadInProgress", "formValues", "setUploadInProgress", "CreateTaskAndDescription", "router", "closeHandler", "toast", "_mbl", "closeBackDismissBeforeNavigation", `${compiled}; return effect();`)(
     enabled, dom.window, dom.window.document, apple, false, false, false, { current: false }, false,
     { currentProject: { id: 6859 }, status: { sectionId: 7 }, title: "" },
-    (value) => calls.push(["busy", value]), create, { push: (url) => calls.push(["navigate", url]) },
-    (save) => calls.push(["close", save]), { error: () => calls.push(["error"]) },
+    (value) => calls.push(["busy", value]), create, options.router ?? { push: (url) => calls.push(["navigate", url]) },
+    options.closeHandler ?? ((save) => calls.push(["close", save])), { error: () => calls.push(["error"]) },
+    options.mobile ?? false, load("src/lib/mobile/backDismiss.ts").closeBackDismissBeforeNavigation,
   );
 }
 
@@ -221,6 +222,40 @@ test("C's unsaved new task screen saves exactly once then hands off to its detai
     assert.deepEqual(calls, [["replace", "/detail/project-6859/43"], ["sidebar", 43]]);
   });
   await detail({ openRequest: true, enabled: false }, async ({ calls }) => assert.deepEqual(calls, []));
+});
+
+test("phone handoff waits for armed back-dismiss cleanup before navigating to the task sidebar", { timeout: 5000 }, async () => {
+  const dom = new JSDOM("<div id='createTaskModal'><textarea id='title-input-modal'></textarea></div>", { url: "https://app.hypertask.ai/project?id=7049" });
+  dom.window.innerWidth = 390;
+  const calls = [];
+  const { armBackDismiss } = load("src/lib/mobile/backDismiss.ts");
+  const disarm = armBackDismiss(dom.window, { key: "createTaskModal", onBack: () => calls.push(["back-dismiss"]) });
+  const popped = new Promise((resolve) => dom.window.addEventListener("popstate", resolve, { once: true }));
+  const cleanup = draftHandoff(true, async (...args) => {
+    calls.push(["save", ...args]);
+    return "/detail/project-7049/43";
+  }, calls, dom, false, {
+    mobile: true,
+    closeHandler: (saved) => {
+      calls.push(["close", saved]);
+      dom.window.setTimeout(() => { dom.window.document.getElementById("createTaskModal").remove(); disarm(); }, 10);
+    },
+    router: { push: (url) => { calls.push(["navigate", url]); dom.window.history.pushState({}, "", url); } },
+  });
+  try {
+    assert.equal(dom.window.history.state.createTaskModal, true);
+    const title = dom.window.document.getElementById("title-input-modal");
+    title.focus();
+    assert.equal(dom.window.document.activeElement, title);
+    const event = new dom.window.KeyboardEvent("keydown", { key: "j", ctrlKey: true, bubbles: true, cancelable: true });
+    assert.equal(title.dispatchEvent(event), false);
+    await popped;
+    await Promise.resolve();
+    assert.equal(dom.window.location.pathname + dom.window.location.search, "/detail/project-7049/43?newTaskAi=1");
+    assert.deepEqual(calls, [["busy", true], ["save", undefined, "New Task"], ["close", true], ["navigate", "/detail/project-7049/43?newTaskAi=1"], ["busy", false]]);
+    assert.equal(dom.window.history.state.createTaskModal, undefined);
+    assert.equal(dom.window.document.getElementById("createTaskModal"), null);
+  } finally { cleanup(); disarm(); dom.window.close(); }
 });
 
 test("unsaved form flag off leaves its handler alone; failed save retains the draft and permits retry", async () => {

@@ -17,7 +17,7 @@ import ConfirmModal from '../Common Modals/ConfirmActionModal'
 import { useTourContext } from '@/lib/contexts/TourContext'
 import { DIV_ID_CONSTANTS } from '@/lib/configs/general.config'
 import { KeyCodes } from '@/lib/constants/keyboard-handler'
-import { armBackDismiss } from '@/lib/mobile/backDismiss'
+import { armBackDismiss, closeBackDismissBeforeNavigation } from '@/lib/mobile/backDismiss'
 import { usePathname, useRouter } from 'next/navigation'
 import { useFlag } from '@/hooks/useFlag'
 import { HTPR_6556_MOBILE_DESCRIPTION_FIRST_FLAG, HTPR_7544_CTRLJ_SIDEBAR_ON_NEW_TASK_FLAG } from '@/lib/flags/keys'
@@ -56,8 +56,10 @@ const CreateTaskModalBody: React.FC<IProps> = ({ }) => {
             try {
                 const taskUrl = await CreateTaskAndDescription(undefined, formValues.title.trim() || "New Task")
                 if (!taskUrl) throw new Error("Task could not be created")
+                const closeBeforeNavigation = _mbl && window.location.pathname !== "/new"
+                if (closeBeforeNavigation) await closeBackDismissBeforeNavigation(window, "createTaskModal", () => closeHandler(true))
                 router.push(`${taskUrl}?newTaskAi=1`)
-                closeHandler(true)
+                if (!closeBeforeNavigation) closeHandler(true)
             } catch {
                 sidebarHandoffPending.current = false
                 toast.error("Could not open AI chat. Your task draft is still here.")
@@ -67,7 +69,7 @@ const CreateTaskModalBody: React.FC<IProps> = ({ }) => {
         }
         window.addEventListener("keydown", openNewTaskSidebar, true)
         return () => window.removeEventListener("keydown", openNewTaskSidebar, true)
-    } : () => {}, [ctrlJSidebarOnNewTask, isApple, isRecording, showAssignModal, showConfirmationModal, uploadInProgress, formValues, CreateTaskAndDescription, setUploadInProgress, router, closeHandler])
+    } : () => {}, [ctrlJSidebarOnNewTask, _mbl, isApple, isRecording, showAssignModal, showConfirmationModal, uploadInProgress, formValues, CreateTaskAndDescription, setUploadInProgress, router, closeHandler])
 
     const {
         toggleMoveModal, toggleShowSizeModal, toggleDueDateModal,
