@@ -28,7 +28,7 @@ function loadTsModule(relativePath, stubs = {}) {
 }
 
 const FLAG = "htpr-7092-decisions";
-const { isQuestionComment, pickDecisionTaskIds } = loadTsModule("src/lib/inboxDecisions.ts");
+const { isQuestionComment, pickDecisionComments } = loadTsModule("src/lib/inboxDecisions.ts");
 const builtin = loadTsModule("src/lib/constants/builtinViews.ts");
 const { getInboxTabs } = loadTsModule("src/utils/helperFunctions/inboxHelpers.ts");
 const jiti = require("jiti")(path.join(root, "tests/builtin-views-jiti-entry.cjs"), {
@@ -58,13 +58,13 @@ test("Question detection accepts bold and plain Question: only at the start", ()
 
 test("a Question is a decision until the viewer answers it later", () => {
   const mentions = [
-    { taskId: 1, text: "<p>Question: a?</p>", commentText: "Question: a?", createdAt: at(5) },
-    { taskId: 2, text: "<p>Question: b?</p>", commentText: "Question: b?", createdAt: at(5) },
-    { taskId: 3, text: "<p>Just FYI</p>", commentText: "Just FYI", createdAt: at(5) },
+    { taskId: 1, commentId: 11, text: "<p>Question: a?</p>", commentText: "Question: a?", createdAt: at(5) },
+    { taskId: 2, commentId: 22, text: "<p>Question: b?</p>", commentText: "Question: b?", createdAt: at(5) },
+    { taskId: 3, commentId: 33, text: "<p>Just FYI</p>", commentText: "Just FYI", createdAt: at(5) },
   ];
   const answered = [{ taskId: 2, createdAt: at(1) }];
   const early = [{ taskId: 1, createdAt: at(9) }];
-  assert.deepEqual([...pickDecisionTaskIds(mentions, [...answered, ...early])], [1]);
+  assert.deepEqual([...pickDecisionComments(mentions, [...answered, ...early]).keys()], [1]);
 });
 
 const projectOf = (id) => ({ id, title: `Board ${id}`, name: `Board ${id}` });
@@ -158,7 +158,7 @@ const loadServer = (enabled, db) =>
     "@/lib/prisma": { __esModule: true, default: db },
     "@/lib/flags": { isFeatureEnabled: async () => enabled },
     "@/lib/flags/keys": { HTPR_7092_DECISIONS_FLAG: FLAG },
-  }).getDecisionTaskIds;
+  }).getDecisionComments;
 
 test("server: flag off returns no decisions and runs no query", async () => {
   let queries = 0;
@@ -178,8 +178,8 @@ test("server: flag on returns unanswered Question tasks with two queries", async
       findMany: async (args) => {
         calls.push(["notification", args.where.type]);
         return [
-          { taskId: 1, comment: { text: "<p><strong>Question:</strong> a?</p>", commentText: "Question: a?", createdAt: at(5) } },
-          { taskId: 2, comment: { text: "<p>Question: b?</p>", commentText: "Question: b?", createdAt: at(5) } },
+          { taskId: 1, commentId: 11, comment: { text: "<p><strong>Question:</strong> a?</p>", commentText: "Question: a?", createdAt: at(5) } },
+          { taskId: 2, commentId: 22, comment: { text: "<p>Question: b?</p>", commentText: "Question: b?", createdAt: at(5) } },
         ];
       },
     },
@@ -191,13 +191,13 @@ test("server: flag on returns unanswered Question tasks with two queries", async
     },
   };
   const ids = await loadServer(true, db)(6, { userId: 6 });
-  assert.deepEqual([...ids], [1]);
+  assert.deepEqual([...ids.keys()], [1]);
   assert.deepEqual(calls, [["notification", "Mentioned"], ["comment", 6]]);
 });
 
 test("server: getAll.ts stays untouched; the wrapper marks rows through the gated helper", () => {
   const wrapper = fs.readFileSync(path.join(root, "src/utils/controllers/notifications/getAllWithDecisions.ts"), "utf8");
-  assert.match(wrapper, /getDecisionTaskIds\(parsedUserId, visibleUserInboxWhere\(parsedUserId\)\)/);
+  assert.match(wrapper, /getDecisionComments\(parsedUserId, visibleUserInboxWhere\(parsedUserId\)\)/);
   assert.match(wrapper, /isDecision: true/);
   assert.doesNotMatch(fs.readFileSync(path.join(root, "src/utils/controllers/notifications/getAll.ts"), "utf8"), /isDecision/);
   for (const file of ["src/lib/api/notification-writes/all-read.ts", "src/lib/firstScreen/serverInboxDocument.ts"]) {
@@ -210,14 +210,16 @@ test("wrapper: flag off or no pending Question returns the original response unc
   const run = async (ids) => {
     const mod = loadTsModule("src/utils/controllers/notifications/getAllWithDecisions.ts", {
       "@/utils/controllers/notifications/getAll": { __esModule: true, default: async () => original },
+      "@/lib/flags": { isFeatureEnabled: async () => false },
+      "@/lib/flags/keys": { HTPR_7311_DECISION_COMMENT_LINK_FLAG: "htpr-7311-decision-comment-link" },
       "@/utils/controllers/notifications/visibleInboxScope": { visibleUserInboxWhere: () => ({}) },
-      "@/utils/controllers/notifications/decisionTasks": { getDecisionTaskIds: async () => ids },
+      "@/utils/controllers/notifications/decisionTasks": { getDecisionComments: async () => ids },
       "@/utils/helperFunctions/helperFunctions": { getInboxTabs: (rows) => ({ tabs: [{ project: "Decisions" }], data: [rows.map((_, i) => i)] }) },
     });
     return mod.default("6");
   };
-  assert.equal(await run(new Set()), original);
-  const marked = await run(new Set([5]));
+  assert.equal(await run(new Map()), original);
+  const marked = await run(new Map([[5, { commentId: 55 }]]));
   assert.equal(marked.json.notifications[0].isDecision, true);
   assert.equal(marked.json.structuredData.tabs[0].project, "Decisions");
 });
@@ -251,10 +253,10 @@ test("a first-paragraph question still matches", () => {
   assert.equal(isQuestionComment("<p><strong>Question:</strong> go?</p><p>More</p>"), true);
 });
 
-test("later-paragraph Question counts through pickDecisionTaskIds", () => {
+test("later-paragraph Question counts through pickDecisionComments", () => {
   const html = "<p><strong>Summary.</strong></p><p><strong>Question:</strong> @V ok?</p>";
-  const ids = pickDecisionTaskIds([{ taskId: 9, text: html, commentText: "Summary. Question: @V ok?", createdAt: at(3) }], []);
-  assert.deepEqual([...ids], [9]);
+  const ids = pickDecisionComments([{ taskId: 9, commentId: 99, text: html, commentText: "Summary. Question: @V ok?", createdAt: at(3) }], []);
+  assert.deepEqual([...ids.keys()], [9]);
 });
 
 test("Decisions board view sits right after the home tab for viewers who never reordered", () => {

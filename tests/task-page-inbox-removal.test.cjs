@@ -171,7 +171,11 @@ function makeFlow(t, initialTask, currentTask, playlist = [task]) {
   }).default();
   const useArchive = loadSource("src/hooks/Task Detail/useArchiveAndNavigate.ts", {
     "@/hooks/useFlag": { useFlag: () => false },
-    "@/lib/flags/keys": {},
+    "@/lib/flags/keys": { HTPR_7311_DECISION_COMMENT_LINK_FLAG: "htpr-7311-decision-comment-link" },
+    "@/lib/inboxDecisions": { withDecisionCommentAnchor: (href, _commentId, enabled) => {
+      assert.equal(enabled, false, "Decisions comment links remain off in this harness");
+      return href;
+    } },
     "../Inbox/useGetNotifications": { inboxDataQueryKey: () => key },
     "@/lib/contexts/TaskDetail/TaskProvider": { useTaskContext: () => context },
     react: { useContext: () => false, useCallback: (callback) => callback },

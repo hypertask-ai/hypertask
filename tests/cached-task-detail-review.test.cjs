@@ -20,6 +20,10 @@ function compile(source, mocks) {
 }
 
 const read = (relative) => fs.readFileSync(path.join(root, relative), "utf8");
+const { inboxConfig } = compile(read("src/lib/configs/inbox.config.ts"), {});
+const { withDecisionCommentAnchor } = compile(read("src/lib/inboxDecisions.ts"), {
+  "@/lib/configs/inbox.config": { inboxConfig },
+});
 
 test("creator hydration enables description quoting without changing the frozen editor seed; flag off keeps the seed creator", () => {
   let currentTask = task;
@@ -123,15 +127,15 @@ assert.equal(declarations.length, 2);
 assert.ok(clickCapture);
 
 test("explicit inbox mouse rows use cached navigation with their own task; flag off retains production URLs and side effects", async () => {
-  const notification = { id: "7", type: "Mentioned", projectId: 15, task, commentId: 12 };
+  const notification = { id: "7", type: "Mentioned", projectId: 15, task, commentId: 12, decisionCommentId: 30 };
   const js = ts.transpileModule(`${declarations.join("\n")}\nreturn openTask;`, { compilerOptions: { module: ts.ModuleKind.CommonJS } }).outputText;
   for (const instantTicketOpen of [false, true]) {
     const pushes = [];
     const navigations = [];
     const seen = [];
     const playlists = [];
-    const open = new Function("instantTicketOpen", "selectedKeyboardRow", "disableNotificationSideEffects", "disableInboxFlow", "markSeenOnOpen", "buildUniqueTasksPlaylist", "_notifications", "setTasksPlayList", "buildQueryParams", "commentIdHash", "inboxConfig", "router", "markTaskDetailNavigationStart", "navigateToTask", js)(
-      instantTicketOpen, { item: { kind: "notification", notification: { ...notification, task: { ...task, id: 99 } } } }, false, false,
+    const open = new Function("instantTicketOpen", "decisionCommentLinks", "withDecisionCommentAnchor", "selectedKeyboardRow", "disableNotificationSideEffects", "disableInboxFlow", "markSeenOnOpen", "buildUniqueTasksPlaylist", "_notifications", "setTasksPlayList", "buildQueryParams", "commentIdHash", "inboxConfig", "router", "markTaskDetailNavigationStart", "navigateToTask", js)(
+      instantTicketOpen, false, withDecisionCommentAnchor, { item: { kind: "notification", notification: { ...notification, task: { ...task, id: 99 } } } }, false, false,
       (row) => seen.push(row), () => [task], [notification], (list) => playlists.push(list), () => "?inboxFlow=true", (id) => `#comment-${id}`,
       { urls: { taskDetail: (projectId, index, hash) => `/detail/project-${projectId}/${index}${hash}` } }, { push: (url) => pushes.push(url) }, () => {}, (...args) => navigations.push(args),
     );
@@ -140,6 +144,23 @@ test("explicit inbox mouse rows use cached navigation with their own task; flag 
     assert.deepEqual(playlists, [[task]]);
     assert.deepEqual(pushes, instantTicketOpen ? [] : ["/detail/project-15/43#comment-12?inboxFlow=true"]);
     assert.deepEqual(navigations, instantTicketOpen ? [[15, 43, "push", "#comment-12?inboxFlow=true", task]] : []);
+  }
+});
+
+test("Decisions mouse rows anchor the decision comment with cached navigation on and off", async () => {
+  const notification = { id: "7", type: "Mentioned", projectId: 15, task, commentId: 12, decisionCommentId: 30 };
+  const js = ts.transpileModule(`${declarations.join("\n")}\nreturn openTask;`, { compilerOptions: { module: ts.ModuleKind.CommonJS } }).outputText;
+  for (const instantTicketOpen of [false, true]) {
+    const pushes = [];
+    const navigations = [];
+    const open = new Function("instantTicketOpen", "decisionCommentLinks", "withDecisionCommentAnchor", "selectedKeyboardRow", "disableNotificationSideEffects", "disableInboxFlow", "markSeenOnOpen", "buildUniqueTasksPlaylist", "_notifications", "setTasksPlayList", "buildQueryParams", "commentIdHash", "inboxConfig", "router", "markTaskDetailNavigationStart", "navigateToTask", js)(
+      instantTicketOpen, true, withDecisionCommentAnchor, null, true, false,
+      () => {}, () => [task], [notification], () => {}, () => "", inboxConfig.urls.commentHash,
+      inboxConfig, { push: (url) => pushes.push(url) }, () => {}, (...args) => navigations.push(args),
+    );
+    await open("view", notification);
+    assert.deepEqual(pushes, instantTicketOpen ? [] : ["/detail/project-15/43?inboxFlow=true#comment-30"]);
+    assert.deepEqual(navigations, instantTicketOpen ? [[15, 43, "push", "?inboxFlow=true#comment-30", task]] : []);
   }
 });
 

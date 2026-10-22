@@ -11,6 +11,8 @@
 or assign a task the QA account watches), then check it lands in the inbox,
 and that archiving/undo works.
 
+- With `htpr-7311-decision-comment-link` on, open Decisions by click, Enter, and Inbox Next: each ticket jumps to and highlights its latest unanswered Question mentioning the viewer; flag off and other splits keep existing navigation. https://app.hypertask.ai/detail/project-15/7311
+
 ## What usually breaks
 
 - Undo restore skipping rows that are missing by the time undo runs
