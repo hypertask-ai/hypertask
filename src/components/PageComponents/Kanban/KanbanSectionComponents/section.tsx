@@ -107,6 +107,7 @@ export const Section = ({
   renderAllTasks,
   dragDisabled = false,
   project,
+  firstTaskPointer,
 }: {
   section: ISection;
   currentSetting: TBoardSubtaskSetting;
@@ -130,6 +131,7 @@ export const Section = ({
   renderAllTasks: boolean;
   dragDisabled?: boolean;
   project: IProject;
+  firstTaskPointer?: React.ReactNode;
 }) => {
   const snapshot = useFirstScreenSurface();
   const [seeded] = useState(() => Boolean(snapshot));
@@ -466,11 +468,14 @@ export const Section = ({
                 id={section.sectionId!}
               />
               {!showAddItem && (
-                <NewTaskButton
-                  buttonPosition="top"
-                  createTaskAt={createTaskAt}
-                  sectionPayload={topSectionPayload}
-                />
+                <div className="relative">
+                  <NewTaskButton
+                    buttonPosition="top"
+                    createTaskAt={createTaskAt}
+                    sectionPayload={topSectionPayload}
+                  />
+                  {firstTaskPointer}
+                </div>
               )}
             </div>
             <div

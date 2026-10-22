@@ -348,7 +348,7 @@ const route = (requestStartedAt: number) => taskWriteRoute({
           select: { id: true, section_title: true },
         });
         if (!sectionRow) throw new TaskSectionValidationError(sectionErrorMessage);
-        const currentProject = await tx.project.findUnique({ where: { id: projectId }, select: { uniqueIdentifier: true } });
+        const currentProject = await tx.project.findUnique({ where: { id: projectId }, select: { uniqueIdentifier: true, firstTaskPointerTaskId: true } });
         const nextUniqueIndex = await getNextUniqueTaskIndex(projectId, tx);
         const currentDate = new Date();
         const taskRanking = ranking == null || typeof ranking === "string"
@@ -440,6 +440,7 @@ const route = (requestStartedAt: number) => taskWriteRoute({
         await persistAgentTaskCreatedPending(tx, task.id);
         return {
           taskId: task.id,
+          firstTaskPointerTaskId: currentProject?.firstTaskPointerTaskId ?? null,
           result: {
             task,
             priority: createdPriority,

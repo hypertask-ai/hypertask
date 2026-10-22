@@ -42,6 +42,7 @@ function harness() {
   });
   const prisma = {
     project: {
+      updateMany: async () => ({ count: 0 }),
       findFirst: async () => ({ id: 15 }),
       findUnique: async () => ({ id: 15, uniqueIdentifier: "TEST" }),
     },

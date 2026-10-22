@@ -71,6 +71,7 @@ function makeHarness({ guestBoard = false, ownedBoard = false, memberships = 0, 
     $transaction: async (callback) => callback(prisma),
     featureFlag: {
       findUnique: async ({ where }) => {
+        if (where.key === 'htpr-7549-first-task-pointer') return { mode: 'OFF' }
         calls.flags.push(where.key)
         if (failFlag) throw new Error('test flag failure')
         return flagMode === null ? null : { mode: flagMode }
