@@ -10,6 +10,7 @@ import type { useAgentChatState } from "./useAgentChatState";
 
 type Props = Pick<
   ReturnType<typeof useAgentChatState>,
+  | "embedded"
   | "rosterGenRef"
   | "setAgents"
   | "setRosterError"
@@ -20,10 +21,11 @@ type Props = Pick<
 >;
 
 export function useAgentChatRoster({
-  rosterGenRef, setAgents, setRosterError, setDetailsCollapsed, setTeamId, setIsNarrow,
+  embedded, rosterGenRef, setAgents, setRosterError, setDetailsCollapsed, setTeamId, setIsNarrow,
   setDetailsSheetOpen,
 }: Props) {
   const loadAgents = useCallback(async () => {
+    if (embedded) return [embedded.agent];
     const res = await fetch("/api/agents/owned");
     const data = (await res.json()) as {
       success?: boolean;
@@ -34,7 +36,7 @@ export function useAgentChatRoster({
       throw new Error(data.error ?? "Failed to load agents");
     }
     return data.agents;
-  }, []);
+  }, [embedded?.agent]);
 
   useEffect(() => {
     let cancelled = false;

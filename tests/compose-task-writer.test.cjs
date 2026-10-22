@@ -383,14 +383,15 @@ test('standalone dictation improvement never prefixes undefined and disabled mic
   const improve = new Function('editor', 'defaultContent', 'response', 'canDeliver', 'callbackHandler', `return async () => { const htmlContent = ${htmlContent}; const textContent = ${textContent}; ${improveBlock} };`)(null, 'Typed note', { json: async () => ({ response_html: '<p>Spoken note</p>' }) }, () => true, (...args) => delivered.push(args));
   await improve();
   assert.deepEqual(delivered, [['<p>Spoken note</p>', true]]);
-  for (const disabled of [false, true]) {
+  for (const [disabled, active] of [[false, true], [true, true], [false, false]]) {
     const stops = [];
     const javascript = ts.transpileModule(`const handler = ${keyHandler};`, { compilerOptions: { target: ts.ScriptTarget.ES2020 } }).outputText;
-    const handler = new Function('disabled', 'recordingRef', 'stopRecording', `${javascript}; return handler;`)(disabled, { current: true }, (send) => stops.push(send));
+    const handler = new Function('disabled', 'recordingRef', 'activeRef', 'stopRecording', `${javascript}; return handler;`)(disabled, { current: true }, { current: active }, (send) => stops.push(send));
     let prevented = false;
     handler({ key: 'Enter', keyCode: 13, preventDefault: () => { prevented = true; } });
-    assert.deepEqual(stops, disabled ? [] : [true]);
-    assert.equal(prevented, !disabled);
+    const handled = active && !disabled;
+    assert.deepEqual(stops, handled ? [true] : []);
+    assert.equal(prevented, handled);
   }
 });
 

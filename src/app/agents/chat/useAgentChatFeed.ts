@@ -7,6 +7,7 @@ import type { useAgentChatState } from "./useAgentChatState";
 
 type Props = Pick<
   ReturnType<typeof useAgentChatState>,
+  | "embedded"
   | "messages"
   | "activityRowsEnabled"
   | "activity"
@@ -26,10 +27,15 @@ type Props = Pick<
 >;
 
 export function useAgentChatFeed({
-  messages, activityRowsEnabled, activity, feedFilter, messageListRef, setShowScrollToBottom,
+  embedded, messages, activityRowsEnabled, activity, feedFilter, messageListRef, setShowScrollToBottom,
   queuedMessages, awaiting, deliveryNotice, replyTimedOut,
   showScrollToBottom, sessionName, awaitingRef,
 }: Props) {
+  const savedScrollTop = useRef(0);
+  useLayoutEffect(() => {
+    if (!embedded?.active || !messageListRef.current) return;
+    messageListRef.current.scrollTop = savedScrollTop.current;
+  }, [embedded?.active]);
   const feed = useMemo(
     () =>
       mergeAgentChatFeed(
@@ -65,14 +71,16 @@ export function useAgentChatFeed({
   );
 
   const handleMessageListScroll = useCallback(() => {
+    if (embedded && !embedded.active) return;
     const target = messageListRef.current;
     if (!target) {
       setShowScrollToBottom(false);
       return;
     }
     const { scrollTop, scrollHeight, clientHeight } = target;
+    savedScrollTop.current = scrollTop;
     setShowScrollToBottom(scrollTop + clientHeight < scrollHeight - 4);
-  }, []);
+  }, [embedded?.active]);
 
   const extraRowsRevision = agentChatExtraRowsRevision({
     queuedMessageIds: queuedMessages.map((item) => item.id),
@@ -88,6 +96,7 @@ export function useAgentChatFeed({
   const prevExtraRowsRevisionRef = useRef("");
   const initialScrollDoneRef = useRef(false);
   useLayoutEffect(() => {
+    if (embedded && !embedded.active) return;
     const changed =
       visibleFeedRevision !== prevFeedRevisionRef.current ||
       extraRowsRevision !== prevExtraRowsRevisionRef.current;
@@ -106,7 +115,7 @@ export function useAgentChatFeed({
     if (visibleFeed.length > 0) initialScrollDoneRef.current = true;
     handleMessageListScroll();
 
-  }, [visibleFeedRevision, activeFeedFilter, extraRowsRevision]);
+  }, [visibleFeedRevision, activeFeedFilter, extraRowsRevision, embedded?.active]);
   useLayoutEffect(() => {
     prevFeedRevisionRef.current = "";
     prevExtraRowsRevisionRef.current = "";

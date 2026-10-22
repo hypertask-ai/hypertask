@@ -70,7 +70,7 @@ export interface ChatContextType {
   };
   sessions: IChatSession[];
   sessionPagingEnabled: boolean;
-  historySessions: (Pick<IChatSession, "id" | "title" | "updatedAt" | "createdAt" | "projectId"> & {
+  historySessions: (Pick<IChatSession, "id" | "title" | "updatedAt" | "createdAt" | "projectId" | "agentId"> & {
     hasMessages?: boolean;
     messages?: IChatMessage[];
   })[];

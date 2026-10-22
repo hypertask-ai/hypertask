@@ -102,7 +102,7 @@ test("switching agents saves the outgoing draft before restoring the incoming on
   assert.doesNotMatch(selectAgent, /setDraft\(""\)/);
   // The same callback is the reload path (the ?agent= effect calls it), so it
   // must not be re-created on every keystroke by depending on `draft`.
-  assert.match(selectAgent, /\[router, openAgentSession, isMbl, currentUser\.id\]/);
+  assert.match(selectAgent, /\[router, openAgentSession, isMbl, currentUser\.id, embedded\?\.projectId\]/);
 });
 
 test("the mobile details sheet is a native modal dialog, so Escape and focus work", () => {

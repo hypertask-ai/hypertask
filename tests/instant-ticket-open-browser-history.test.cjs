@@ -128,7 +128,10 @@ test("pending AI header is quiet on ticket routes; resolved titles and other rou
   const Header = load("src/components/AI_CHAT/ChatHeader.tsx", {
     react: React,
     "react/jsx-runtime": require("react/jsx-runtime"),
-    "next/navigation": { usePathname: () => pathname, useRouter: () => ({}) },
+    "next/navigation": { usePathname: () => pathname, useRouter: () => ({}), useSearchParams: () => new URLSearchParams() },
+    "./AgentSidebarChatCommands": { AgentSidebarChatCommands: noop },
+    "@/lib/configs/general.config": { MOBILE_TARGET: "min-h-[44px] min-w-[44px]" },
+    "@/utils/undoActions/helperFuncs": { cn: (...values) => values.filter(Boolean).join(" ") },
     "@/lib/flags/keys": require("./helpers/flag-files.cjs").load("src/lib/flags/keys.ts"),
     "@/hooks/useFlag": { useFlag: () => false },
 

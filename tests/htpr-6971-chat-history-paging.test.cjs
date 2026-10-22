@@ -405,7 +405,10 @@ test('real history menu pages on end visibility/scroll, preserves list order, ex
   const mocks = {
     '@/lib/contexts/Multipages/AI_Agent/AI_Agent_Chat_Context': { useAiChatContext: () => state },
     '@tanstack/react-query': { useQueryClient: () => queryClient },
-    'next/navigation': { usePathname: () => '/chat', useRouter: () => ({ push() {} }) },
+    'next/navigation': { usePathname: () => '/chat', useRouter: () => ({ push() {} }), useSearchParams: () => new URLSearchParams() },
+    './AgentSidebarChatCommands': { AgentSidebarChatCommands: () => null },
+    '@/lib/configs/general.config': { MOBILE_TARGET: 'min-h-[44px] min-w-[44px]' },
+    '@/utils/undoActions/helperFuncs': { cn: (...values) => values.filter(Boolean).join(' ') },
     '@/hooks/useFlag': { useFlag: (key) => key === flag && enabled },
     '@/lib/flags/keys': { HTPR_6971_CHAT_HISTORY_PAGING_FLAG: flag },
     '../Common/Tooltip': { __esModule: true, default: () => null },

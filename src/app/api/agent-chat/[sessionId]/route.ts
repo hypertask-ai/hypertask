@@ -5,6 +5,7 @@ import { NextRequest, NextResponse } from "next/server";
 import {
   ensureChatParticipant,
   loadUserAgentChatSession,
+  sidebarChatProjectId,
 } from "@/lib/agents/chatAccess";
 import { listAgentChatActivity } from "@/lib/agents/agentChatActivity";
 import { isFeatureEnabled } from "@/lib/flags";
@@ -50,7 +51,8 @@ export async function GET(
   { params }: { params: Promise<{ sessionId: string }> }
 ) {
   try {
-    const userId = (await getSessionUser(request.headers))?.userId;
+    const sessionUser = await getSessionUser(request.headers);
+    const userId = sessionUser?.userId;
     if (!userId) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
@@ -59,6 +61,8 @@ export async function GET(
     const access = await loadUserAgentChatSession({
       sessionId,
       userId,
+      sidebarProjectId: sidebarChatProjectId(request.headers),
+      actingAgentId: sessionUser?.agentId,
       select: { agent: { select: { heartbeatAt: true } } },
     });
     if (!access.ok) {
@@ -89,7 +93,7 @@ export async function GET(
       }
     }
 
-    const activityRowsEnabled = await isFeatureEnabled(
+    const activityRowsEnabled = sidebarChatProjectId(request.headers) === undefined && await isFeatureEnabled(
       "htpr-6094-agent-activity-rows",
       userId,
     );

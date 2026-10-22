@@ -284,6 +284,27 @@ async function seedSessionFixtures(flags) {
     flag: "wx",
     mode: 0o600,
   });
+  const { createMcpToken, agentTokenCredentialFields } = jiti(path.join(root, "src/lib/mcp/auth/verifyJwt.ts"));
+  const sidebarLanes = {};
+  for (const lane of ["Desktop", "Mobile"]) {
+    const agents = [];
+    for (const [suffix, runtimeType] of [["A", "EXTERNAL"], ["B", "EXTERNAL"], ["Native", "NATIVE"]]) {
+      const agent = await prisma.agent.create({ data: {
+        userId: user.id, displayName: `Sidebar ${lane} ${suffix}`, runtimeType,
+        photoURL: null, visibility: "PRIVATE", prompt: runtimeType === "NATIVE" ? "Answer this user's board questions." : null,
+      } });
+      await prisma.member.create({ data: { projectId: board.id, userId: user.id, agentId: agent.id, status: "Accepted" } });
+      const token = createMcpToken(user.id, user.email, "1h", agent.id);
+      await prisma.agent.update({ where: { id: agent.id }, data: agentTokenCredentialFields(token) });
+      const session = await prisma.chatSession.create({ data: { userId: user.id, agentId: agent.id, teamId: team.id, title: agent.displayName } });
+      await prisma.chatMessage.createMany({ data: Array.from({ length: 30 }, (_, index) => ({
+        sessionId: session.id, content: `${agent.displayName} history ${index + 1}`, role: "assistant", authorAgentId: agent.id, isDelivered: true,
+      })) });
+      agents.push({ id: agent.id, name: agent.displayName, sessionId: session.id, token });
+    }
+    sidebarLanes[lane] = agents;
+  }
+  await writeFile(path.join(path.dirname(stateFile), "agent-sidebar-fixture.json"), JSON.stringify({ projectId: board.id, lanes: sidebarLanes }), { flag: "wx", mode: 0o600 });
   let contract;
   if (contractEnabled) {
     const callers = {};

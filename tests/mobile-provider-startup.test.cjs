@@ -68,7 +68,7 @@ test("closed boards do not mount or preload the AI chat provider", () => {
   );
   assert.match(
     globalProvider,
-    /const shouldMountChatRuntime\s*=\s*chatRuntimeMounted \|\|\s*isFullScreenChat \|\|\s*shouldMountAgentChatRuntime \|\|\s*isTaskDetailPage \|\|\s*showAiChatInterface/,
+    /const shouldMountChatRuntime\s*=\s*chatRuntimeMounted \|\|\s*sidebarRequested \|\|\s*isFullScreenChat \|\|\s*shouldMountAgentChatRuntime \|\|\s*isTaskDetailPage \|\|\s*showAiChatInterface/,
     "task detail and flagged mobile Agent Chat hooks require ChatProvider even while the chat panel is closed",
   );
   assert.match(

@@ -261,7 +261,7 @@ test('proposal adapter prepares its session agent before checking the target boa
   let checked = false;
   const route = f.load('src/app/api/agent-chat/[sessionId]/proposals/[proposalId]/route.ts', {
     '@/lib/auth/getSessionUser': { getSessionUser: async () => ({ userId: 6 }) },
-    '@/lib/agents/chatAccess': { loadUserAgentChatSession: async () => ({ ok: true, agentId: f.agent.id, session: { id: 'session', agent: f.agent } }) },
+    '@/lib/agents/chatAccess': { sidebarChatProjectId: () => undefined, loadUserAgentChatSession: async () => ({ ok: true, agentId: f.agent.id, session: { id: 'session', agent: f.agent } }) },
     '@/lib/flags': { isFeatureEnabled: async () => true },
     '@/lib/mcp/agents/scopes': { getAgentRole: async () => 'write' },
     '@/lib/agents/chatTicketProposal': { chatTicketProposalSelect: {}, serializeChatTicketProposal: row => row },
