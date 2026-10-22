@@ -19,6 +19,23 @@ export default async function checkoutsSessionHandler(
       .json({ error: "Unauthorized", code: "SESSION_REQUIRED" });
   }
 
+  if ("agentId" in session && session.agentId) {
+    return res.status(403).json({ message: "Only human team owners can update billing" });
+  }
+
+  if (req.body?.intent === "signup-straight-to-board") {
+    const baseUrl = process.env.NEXT_PUBLIC_BASEURL || process.env.NEXT_PUBLIC_APP_URL;
+    let appOrigin: string;
+    try {
+      appOrigin = new URL(baseUrl ?? "").origin;
+    } catch {
+      return res.status(503).json({ message: "Checkout origin configuration is unavailable" });
+    }
+    if (req.headers.origin !== appOrigin) {
+      return res.status(403).json({ message: "Invalid checkout origin" });
+    }
+  }
+
   if (await isGuestRequest(req)) {
     return res.status(403).json({ message: GUEST_FORBIDDEN_MESSAGE });
   }

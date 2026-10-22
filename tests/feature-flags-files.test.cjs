@@ -180,3 +180,24 @@ export default { key: INTERNAL_FLAG, kind: "internal", shippedOn: "2026-10-20", 
   assert.equal(parseFlagFile(source(', defaultMode: "OWNER_AND_QA"'), filename).definition.defaultMode, "OWNER_AND_QA");
   assert.throws(() => parseFlagFile(source(', defaultMode: "EVERYONE"'), filename), /internal flag may not default to Everyone/);
 });
+
+
+test("owner-request metadata rejects malformed evidence but still accepts the exact checkout rollout request", async () => {
+  const { parseFlagFile } = await import("../.github/scripts/feature-flag-registry.mjs");
+  const filename = "src/lib/flags/definitions/htpr-7551-start-plan-checkout.ts";
+  const source = fs.readFileSync(path.join(__dirname, "..", filename), "utf8");
+  const parsed = parseFlagFile(source, filename).definition;
+  assert.equal(parsed.defaultMode, "OWNER_ONLY");
+  assert.equal(parsed.releaseRisk.highRisk, "money");
+  assert.deepEqual(parsed.releaseRisk.ownerRequest, {
+    quote: "this one goes behind a feature flag that is only on for me at first pls. Don't release to everyone right away.",
+    ticketUrl: "https://app.hypertask.ai/detail/project-15/7511",
+  });
+  for (const replacement of ['ticketUrl: "https://evil.test/7511"', 'ticketUrl: evidence', 'quote: ""', 'quote: "ok", extra: true']) {
+    const invalid = replacement.startsWith("ticketUrl")
+      ? source.replace('ticketUrl: "https://app.hypertask.ai/detail/project-15/7511"', replacement)
+      : source.replace(/quote: "[^\n]+",/, replacement + ",");
+    assert.throws(() => parseFlagFile(invalid, filename), /ownerRequest/);
+  }
+  assert.deepEqual(parseFlagFile(source, filename).definition, parsed);
+});

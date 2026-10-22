@@ -50,7 +50,7 @@ const CreateTaskModalBody: React.FC<IProps> = ({ }) => {
             event.preventDefault()
             event.stopImmediatePropagation()
             if (event.repeat || sidebarHandoffPending.current || uploadInProgress) return
-            if (!formValues.currentProject || !formValues.status?.sectionId) return
+            if (!formValues.currentProject) return
             sidebarHandoffPending.current = true
             setUploadInProgress(true)
             try {

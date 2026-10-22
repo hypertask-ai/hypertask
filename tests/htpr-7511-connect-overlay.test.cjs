@@ -274,7 +274,7 @@ test("the real shared picker polls only while visible, reports actual connection
     const requests = [];
     global.fetch = async (url) => { requests.push(url); return response({ eligible: true, connected, client: "Codex" }); };
     const { ConnectAIOnboardingScreen } = load("src/components/PageComponents/Onboarding/Screens/ConnectAIOnboardingScreen.tsx", {
-      "@/hooks/useFlag": { useFlag: (key) => key === overlayKey },
+      "@/hooks/useFlag": { useFlag: (key) => key === overlayKey, useFlagReady: () => true },
       "@/lib/flags/keys": { ...keys, HTPR_7026_AGENT_CONNECT_CHECK_FLAG: "htpr-7026-agent-connect-check" },
       "@/components/Modals/CliInstall/constants": { INSTALL_COMMAND: "fixture install", LOGIN_COMMAND: "hypertask login" },
       "@/components/Modals/McpToken/components": { getIntegrationChipClassName: () => "text-meta", ConnectInstructions: () => null, TokenStatusBar: () => null },

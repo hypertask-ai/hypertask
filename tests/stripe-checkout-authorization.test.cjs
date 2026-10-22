@@ -27,6 +27,8 @@ const loadTs = (rel) => jiti(path.join(root, rel));
 const prismaModule = loadTs("src/lib/prisma.ts");
 const prisma = prismaModule.default ?? prismaModule;
 const stripeModule = loadTs("src/lib/stripe.ts");
+const flagsModule = loadTs("src/lib/flags.ts");
+flagsModule.isFeatureEnabled = async () => false;
 const seatModule = loadTs("src/lib/resolveSeatQuantity.ts");
 const reservationModule = loadTs(
   "src/utils/controllers/stripe/checkoutReservation.ts",

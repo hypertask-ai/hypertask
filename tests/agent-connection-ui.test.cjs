@@ -5,11 +5,15 @@ const { JSDOM } = require("jsdom");
 const { load } = require("./helpers/agent-connection.cjs");
 const FLAG = "htpr-7026-agent-connect-check";
 const OVERLAY_FLAG = "htpr-7550-connect-overlay";
+const planFlag = load("src/lib/flags/definitions/htpr-7551-start-plan-checkout.ts");
 
-function loadScreen(enabled = true) {
+function loadScreen(enabled = true, startPlanEnabled = false, planFlagReady = true) {
   return load("src/components/PageComponents/Onboarding/Screens/ConnectAIOnboardingScreen.tsx", {
-    "@/hooks/useFlag": { useFlag: (key) => { assert.ok([FLAG, OVERLAY_FLAG].includes(key)); return key === FLAG && enabled; } },
-    "@/lib/flags/keys": { HTPR_7026_AGENT_CONNECT_CHECK_FLAG: FLAG, HTPR_7550_CONNECT_OVERLAY_FLAG: OVERLAY_FLAG },
+    "@/hooks/useFlag": {
+      useFlag: (key) => key === planFlag.HTPR_7551_START_PLAN_CHECKOUT_FLAG ? startPlanEnabled : key === OVERLAY_FLAG ? false : (assert.equal(key, FLAG), enabled),
+      useFlagReady: () => planFlagReady,
+    },
+    "@/lib/flags/keys": { ...planFlag, HTPR_7026_AGENT_CONNECT_CHECK_FLAG: FLAG, HTPR_7550_CONNECT_OVERLAY_FLAG: OVERLAY_FLAG },
     "@/components/Modals/CliInstall/constants": { INSTALL_COMMAND: "install fixture", LOGIN_COMMAND: "hypertask login" },
     "@/components/Modals/McpToken/components": {
       getIntegrationChipClassName: () => "text-meta",
@@ -218,4 +222,17 @@ test("connected email shares the current layout, escapes the client and has exac
   assert.ok(email.html.includes(".cta { background-color: #4455BB !important; color: #ffffff !important; }"));
   assert.doesNotMatch(email.html, /\u2014/);
   dom.window.close();
+});
+
+
+test("signup checkout rollout never promises fourteen days or no card to flagged users; OFF keeps the original onboarding offer", async () => {
+  for (const [enabled, ready] of [[true, true], [false, true], [false, false]]) {
+    await withDOM(async ({ container, reactRoot, act }) => {
+      const Screen = loadScreen(false, enabled, ready);
+      await act(async () => reactRoot.render(React.createElement(Screen, { onNextScreen() {} })));
+      if (ready && !enabled) assert.match(container.textContent, /Full access free for 14 days. No credit card needed/);
+      else assert.doesNotMatch(container.textContent, /14 days|No credit card needed/);
+      if (enabled) assert.match(container.textContent, /Start on Free/);
+    });
+  }
 });

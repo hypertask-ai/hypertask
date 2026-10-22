@@ -46,7 +46,7 @@ async function withSearch(t, config, check) {
   try {
     source('src/utils/index.ts', { taskBaseUri: '/detail/' })
     source('src/utils/undoActions/helperFuncs.ts', { cn: (...values) => require('tailwind-merge').twMerge(require('clsx').clsx(values)) })
-    source('src/hooks/useFlag.tsx', { useFlagReady: () => config.flagsReady?.() ?? true, useFlag: (key) => (config.flagsBeforeReady && !(config.flagsReady?.() ?? true) ? config.flagsBeforeReady[key] : flags[key]) ?? false })
+    source('src/hooks/useFlag.tsx', { useFlagLoaded: () => true, useFlagReady: () => config.flagsReady?.() ?? true, useFlag: (key) => (config.flagsBeforeReady && !(config.flagsReady?.() ?? true) ? config.flagsBeforeReady[key] : flags[key]) ?? false })
     source('src/lib/contexts/deviceContext.tsx', { useDeviceContext: () => false })
     const allProjects = [{ id: 7, title: 'Product Board' }]
     source('src/hooks/MultiPages/useGetAllProjectsMinimal.ts', { useGetAllProjectsMinimal: () => ({ data: config.projects?.() ?? allProjects, refetch: () => config.refetch?.() ?? Promise.resolve({ data: allProjects }) }) })
