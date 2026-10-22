@@ -2,7 +2,7 @@
 
 import UserAvatar from "@/components/Common/UserAvatar";
 import { MobileViewContext } from "@/lib/contexts/mobileContext";
-import { HTPR_6371_MOBILE_SEARCH_FLAG, HTPR_6368_SEARCH_OPERATOR_LOGIC_FLAG, HTPR_7387_SEARCH_OPERATOR_COLOURS_FLAG, HTPR_7563_SEARCH_ESC_FOOTER_FLAG } from "@/lib/flags/keys";
+import { HTPR_6371_MOBILE_SEARCH_FLAG, HTPR_6368_SEARCH_OPERATOR_LOGIC_FLAG, HTPR_7387_SEARCH_OPERATOR_COLOURS_FLAG, HTPR_7563_SEARCH_ESC_FOOTER_FLAG, HTPR_7559_ENTER_RUNS_SEARCH_FLAG } from "@/lib/flags/keys";
 import { isMobileSearchSubmit, mobileSearchPickerBounds } from "@/lib/search/mobile";
 import { useFlag } from "@/hooks/useFlag";
 import { HTPR_6865_SEARCH_LAYOUT_FLAG, HTPR_6878_SEARCH_LABEL_SCOPE_FLAG, HTPR_6880_SEARCH_COMMENTER_FLAG, HTPR_6994_SEARCH_ESC_LEAVES_FLAG } from "@/lib/flags/keys";
@@ -28,6 +28,10 @@ type Props = {
   showSuggestions?: boolean;
 };
 
+function typedFilter(text: string, completion: ReturnType<typeof searchCompletion>) {
+  return completion?.kind === 'value' && /^-?[a-z]+:/i.test(text.slice(completion.start));
+}
+
 export default function SearchChipsInput({ value, onChange, onRun, boardId, inputRef, recentSearches = [], layoutEnabled: layoutRequested = false, availableBoards = [], onAskAi, showSuggestions = true }: Props) {
   const mobileFlagEnabled = useFlag(HTPR_6371_MOBILE_SEARCH_FLAG);
   const isMobile = useContext(MobileViewContext);
@@ -37,6 +41,8 @@ export default function SearchChipsInput({ value, onChange, onRun, boardId, inpu
   const [mobileBounds, setMobileBounds] = useState<(ReturnType<typeof mobileSearchPickerBounds> & { left: number; width: number }) | null>(null);
   const layoutFlagEnabled = useFlag(HTPR_6865_SEARCH_LAYOUT_FLAG);
   const layoutEnabled = layoutFlagEnabled && layoutRequested;
+  const enterRunsSearchFlagEnabled = useFlag(HTPR_7559_ENTER_RUNS_SEARCH_FLAG);
+  const enterRunsSearchEnabled = enterRunsSearchFlagEnabled && layoutEnabled && !mobileEnabled;
   const labelScopeFlagEnabled = useFlag(HTPR_6878_SEARCH_LABEL_SCOPE_FLAG);
   const labelScopeEnabled = labelScopeFlagEnabled && layoutEnabled;
   const escLeavesEnabled = useFlag(HTPR_6994_SEARCH_ESC_LEAVES_FLAG);
@@ -51,7 +57,6 @@ export default function SearchChipsInput({ value, onChange, onRun, boardId, inpu
   const [names, setNames] = useState<Names>({});
   const [chipLabels, setChipLabels] = useState<Record<string, string>>({});
   const [candidates, setCandidates] = useState<Candidate[]>([]);
-  const [selectedIndex, setSelectedIndex] = useState(0);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(false);
   const [hydrationStatus, setHydrationStatus] = useState<'loading' | 'error' | null>(null);
@@ -78,6 +83,9 @@ export default function SearchChipsInput({ value, onChange, onRun, boardId, inpu
     ? searchCompletion(text, names, commenterEnabled, operatorLogicEnabled)
     : searchCompletion(text, names, commenterEnabled);
   const tips = (focused || layoutEnabled) && !value.trim();
+  const plainSearch = enterRunsSearchEnabled && !tips && !typedFilter(text, completion);
+  const defaultSelectedIndex = plainSearch ? -1 : layoutEnabled && !tips ? 1 : 0;
+  const [selectedIndex, setSelectedIndex] = useState(enterRunsSearchEnabled ? defaultSelectedIndex : 0);
   const picker = dismissed ? null : completion;
   const localRows = completion?.kind === 'operator'
     ? operatorSuggestions(completion.value, commenterEnabled, logicEnabled).map((operator) => ({ id: operator, name: `${operator}:` }))
@@ -97,7 +105,7 @@ export default function SearchChipsInput({ value, onChange, onRun, boardId, inpu
   const openRef = useRef(open);
   openRef.current = open;
   const listId = "search-chip-options";
-  const selectedRow = rows[selectedIndex] ?? rows[layoutEnabled && !tips ? 1 : 0] ?? rows[0];
+  const selectedRow = enterRunsSearchEnabled && selectedIndex < 0 ? undefined : rows[selectedIndex] ?? rows[layoutEnabled && !tips ? 1 : 0] ?? rows[0];
   const ghost = open && caretAtEnd && selectedRow && completion?.kind === 'operator' && (!layoutEnabled || selectedRow.kind === 'operator')
     ? String(selectedRow.id).slice(completion.value.length) + ':'
     : open && layoutEnabled && caretAtEnd && completion?.kind === 'value' && selectedRow?.kind === 'value' &&
@@ -208,6 +216,7 @@ export default function SearchChipsInput({ value, onChange, onRun, boardId, inpu
   }, [layoutEnabled, showSuggestions, value]);
 
   useEffect(() => {
+    if (enterRunsSearchEnabled) setSelectedIndex(defaultSelectedIndex);
     if (!(genericPrefix || picker) || (!genericPrefix && (completion?.kind === 'operator' || localRows !== null))) {
       setCandidates([]);
       setLoading(false);
@@ -218,7 +227,7 @@ export default function SearchChipsInput({ value, onChange, onRun, boardId, inpu
     setLoading(true);
     setError(false);
     setCandidates([]);
-    setSelectedIndex(layoutEnabled ? 1 : 0);
+    setSelectedIndex(defaultSelectedIndex);
     const operators = genericPrefix ? ['from', 'label', 'in'] as const : [picker!.operator as SearchToken['operator']];
     const timer = setTimeout(() => Promise.all(operators.map(async (operator) => {
       const params = new URLSearchParams({ operator, value: lookupValue ?? '' });
@@ -248,7 +257,7 @@ export default function SearchChipsInput({ value, onChange, onRun, boardId, inpu
         setLoading(false);
       }), 180);
     return () => { clearTimeout(timer); controller.abort(); ++lookup.current; };
-  }, [picker?.operator, picker?.value, dismissed, boardId, layoutEnabled, genericPrefix?.[1], labelScopeEnabled, pickedBoards, commenterEnabled, logicEnabled]);
+  }, [picker?.operator, picker?.value, dismissed, boardId, layoutEnabled, genericPrefix?.[1], labelScopeEnabled, pickedBoards, commenterEnabled, logicEnabled, enterRunsSearchEnabled, defaultSelectedIndex]);
 
   useEffect(() => {
     if (editing) return;
@@ -290,7 +299,9 @@ export default function SearchChipsInput({ value, onChange, onRun, boardId, inpu
   function change(event: ChangeEvent<HTMLInputElement> | React.CompositionEvent<HTMLInputElement>) {
     setEditing(Boolean(event.currentTarget.value.trim()));
     setDismissed(false);
-    setSelectedIndex(layoutEnabled && event.currentTarget.value.trim() ? 1 : 0);
+    const nextText = event.currentTarget.value;
+    const typingPlainWords = enterRunsSearchEnabled && nextText.trim() && !typedFilter(nextText, searchCompletion(nextText, names, commenterEnabled, logicEnabled));
+    setSelectedIndex(typingPlainWords ? -1 : layoutEnabled && nextText.trim() ? 1 : 0);
     setCaretAtEnd(event.currentTarget.selectionStart === event.currentTarget.value.length);
     onChange(chipQuery(chips, event.currentTarget.value) + (/\s$/.test(event.currentTarget.value) ? ' ' : ''));
   }
@@ -299,7 +310,7 @@ export default function SearchChipsInput({ value, onChange, onRun, boardId, inpu
     const caret = event.currentTarget.selectionStart;
     setCaretAtEnd(caret === text.length);
     if (!value.trim()) { setDismissed(false); setSelectedIndex(0); }
-    if (layoutEnabled && showSuggestions && value.trim()) { setDismissed(false); setSelectedIndex(1); }
+    if (layoutEnabled && showSuggestions && value.trim()) { setDismissed(false); setSelectedIndex(defaultSelectedIndex); }
     if (completion?.kind === 'operator' && caret === text.length) setDismissed(false);
     const atCaret = caret === null ? null : searchCompletion(text.slice(0, caret), names, commenterEnabled, logicEnabled);
     if (completion && caret !== null && caret <= (completion.end ?? text.length) && atCaret?.start === completion.start) setDismissed(false);
@@ -388,10 +399,16 @@ export default function SearchChipsInput({ value, onChange, onRun, boardId, inpu
     if (open && (moveDown || moveUp)) {
       event.preventDefault();
       event.stopPropagation();
-      setSelectedIndex((current) => Math.max(0, Math.min(rows.length - 1, current + (moveDown ? 1 : -1))));
+      setSelectedIndex((current) => Math.max(plainSearch ? -1 : 0, Math.min(rows.length - 1, current + (moveDown ? 1 : -1))));
       return;
     }
-    if (open && rows.length && !(layoutEnabled && event.key === "Enter" && selectedRow?.kind === "ai" && (selectedIndex !== 0 || rows.length === 1)) && (event.key === "Enter" || (event.key === "Tab" && !event.shiftKey))) {
+    if (open && !selectedRow && rows[1] && event.key === "Tab" && !event.shiftKey) {
+      event.preventDefault();
+      event.stopPropagation();
+      choose(rows[1]);
+      return;
+    }
+    if (open && rows.length && selectedRow && !(layoutEnabled && event.key === "Enter" && selectedRow?.kind === "ai" && (selectedIndex !== 0 || (!enterRunsSearchEnabled && rows.length === 1))) && (event.key === "Enter" || (event.key === "Tab" && !event.shiftKey))) {
       event.preventDefault();
       event.stopPropagation();
       choose(selectedRow);
@@ -488,7 +505,7 @@ export default function SearchChipsInput({ value, onChange, onRun, boardId, inpu
           aria-autocomplete="both"
           aria-expanded={open}
           aria-controls={open ? listId : undefined}
-          aria-activedescendant={open && rows.length ? `mention-button-${layoutEnabled ? rows.indexOf(selectedRow) : Math.min(selectedIndex, rows.length - 1)}` : undefined}
+          aria-activedescendant={open && rows.length && selectedRow ? `mention-button-${layoutEnabled ? rows.indexOf(selectedRow) : Math.min(selectedIndex, rows.length - 1)}` : undefined}
         />
         </div>
       </div>
@@ -503,7 +520,7 @@ export default function SearchChipsInput({ value, onChange, onRun, boardId, inpu
           </> : rows.map(renderRow)}
           {!tips && loading && <div role="status" className="py-2 text-meta text-text-light-gray">Loading suggestions...</div>}
           {!tips && error && <div role="alert" className="py-2 text-meta text-text-light-gray">Could not load suggestions. Keep typing to retry.</div>}
-          {!(mobileFlagEnabled && isMobile) && <div className="mt-4 text-meta text-text-light-gray">↑ ↓ to move · Tab / Enter to accept · {escFooterText}</div>}
+          {!(mobileFlagEnabled && isMobile) && <div className="mt-4 text-meta text-text-light-gray">↑ ↓ to move · {plainSearch && !selectedRow ? 'Tab to accept · Enter to search' : 'Tab / Enter to accept'} · {escFooterText}</div>}
         </div>
       ) : open && (
         <div ref={pickerRef} style={pickerStyle} className="absolute left-4 top-full z-30 max-w-[calc(100%-2rem)] @md:left-9" onMouseDown={(event) => event.preventDefault()}
