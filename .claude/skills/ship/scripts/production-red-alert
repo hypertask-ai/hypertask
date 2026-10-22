@@ -114,7 +114,8 @@ function live(run = command) {
       }
       const commits = [];
       let total;
-      for (let page = 1; ; page++) {
+      if (green.head_sha === red.head_sha) commits.push(api(`commits/${red.head_sha}`));
+      else for (let page = 1; ; page++) {
         const comparison = api(`compare/${green.head_sha}...${red.head_sha}?per_page=100&page=${page}`);
         if (!Array.isArray(comparison.commits) || !Number.isSafeInteger(comparison.total_commits) ||
             !['ahead', 'identical'].includes(comparison.status)) throw new Error('Unreadable or divergent production commit range');
@@ -280,23 +281,22 @@ async function tick({ dryRun = false, runId, dir = STATE, api = live(), now = Ma
     throw e;
   }
 }
-function units(lib, repoDir) {
-  if (/[\n\r"%]/.test(lib + repoDir)) throw new Error('Unsupported systemd path');
+function units(lib) {
+  if (/[\n\r"%]/.test(lib + os.homedir())) throw new Error('Unsupported systemd path');
   return {
-    service: `[Unit]\nDescription=One assigned fixer for production-red tests\n[Service]\nType=oneshot\nWorkingDirectory="${repoDir}"\nEnvironment="PATH=${os.homedir()}/.local/bin:/usr/local/bin:/usr/bin:/bin"\nExecStart=/usr/bin/nice -n 19 "${lib}/production-red-alert"\nTimeoutStartSec=240\nUMask=0077\n`,
+    service: `[Unit]\nDescription=One assigned fixer for production-red tests\n[Service]\nType=oneshot\nWorkingDirectory="${os.homedir()}"\nEnvironment="PATH=${os.homedir()}/.local/bin:/usr/local/bin:/usr/bin:/bin"\nExecStart=/usr/bin/nice -n 19 "${lib}/production-red-alert"\nTimeoutStartSec=240\nUMask=0077\n`,
     timer: '[Unit]\nDescription=Check production CI every five minutes\n[Timer]\nOnBootSec=2min\nOnUnitActiveSec=5min\n[Install]\nWantedBy=timers.target\n'
   };
 }
-function install(repoDir = process.cwd()) {
+function install() {
   identity();
-  command('git', ['-C', repoDir, 'rev-parse', '--verify', 'origin/production']);
   const lib = path.join(os.homedir(), '.local/lib/hypertask/production-red-alert');
   const unitDir = path.join(os.homedir(), '.config/systemd/user');
   for (const dir of [lib, unitDir, STATE]) fs.mkdirSync(dir, { recursive: true, mode: 0o700 });
   for (const file of ['production-red-alert', 'ci-test-failures.py']) {
     fs.copyFileSync(path.join(__dirname, file), path.join(lib, file)); fs.chmodSync(path.join(lib, file), 0o755);
   }
-  const u = units(lib, path.resolve(repoDir));
+  const u = units(lib);
   fs.writeFileSync(path.join(unitDir, 'production-red-alert.service'), u.service);
   fs.writeFileSync(path.join(unitDir, 'production-red-alert.timer'), u.timer);
   command('systemctl', ['--user', 'daemon-reload']);

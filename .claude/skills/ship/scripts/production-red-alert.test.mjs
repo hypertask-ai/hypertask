@@ -165,9 +165,9 @@ test('assignment errors resume the same ticket; invalid assignment receipt is no
   assert.deepEqual(retry.writes.map(a => a[1]), ['assign']);
 });
 test('timer is five minutes, low priority, bounded, and installation is explicit only', async () => {
-  const u = units('/tmp/lib', '/tmp/repo'); assert.match(u.timer, /OnUnitActiveSec=5min/);
+  const u = units('/tmp/lib'); assert.match(u.timer, /OnUnitActiveSec=5min/);
   assert.match(u.service, /nice -n 19/); assert.match(u.service, /TimeoutStartSec=240/);
-  assert.match(u.service, /WorkingDirectory="\/tmp\/repo"/);
+  assert.equal(u.service.match(/WorkingDirectory="([^"]+)"/)[1], os.homedir());
   const source = fs.readFileSync(path.join(here, 'production-red-alert'), 'utf8');
   assert.match(source, /timeout: 25000/);
   assert.match(source, /command\('flock',[\s\S]*?timeout: 240000/);
@@ -475,4 +475,21 @@ test('a failed rerun without a green boundary retains the first red attempt and 
   assert.equal(rerun.calls.filter(([bin, args]) => bin === 'gh' && args[3].includes('/compare/')).length, 0);
   assert.equal(rerun.writes.length, 0);
   assert.equal(Object.keys(JSON.parse(fs.readFileSync(path.join(dir, 'state.json'))).alerts).length, 1);
+});
+test('red after green at the same SHA blames that commit and opens one new incident', async t => {
+  const dir = tmp(t), d = second(); d.run.run_started_at = '2026-10-22T11:00:00Z';
+  const prior = structuredClone(d.run);
+  await tick({ dir, api: counted(d, { cancelled: false }).api });
+  const green = { ...d.green, id: d.run.id + 1, head_sha: d.run.head_sha, run_started_at: '2026-10-22T11:30:00Z' };
+  await tick({ dir, api: fake({ status: 'success', run: green }) });
+  d.green = green; d.run.run_attempt = 2; d.run.run_started_at = '2026-10-22T12:00:00Z';
+  const pr = d.prs.at(-1), rerun = counted(d, { cancelled: false, attempts: [prior] });
+  const run = (bin, args, opts) => bin === 'gh' && args[3].endsWith(`/commits/${d.run.head_sha}`)
+    ? JSON.stringify({ sha: d.run.head_sha, commit: { message: `${pr.title} (#${pr.number})` } }) : rerun.run(bin, args, opts);
+  const api = { ...rerun.api, ...live(run), task: rerun.api.task, identity: rerun.api.identity, write: rerun.api.write, recover: rerun.api.recover };
+  assert.equal((await tick({ dir, api })).action, 'alert');
+  assert.equal(rerun.writes.filter(a => a[1] === 'create').length, 1);
+  assert.ok(!rerun.calls.some(([bin, args]) => bin === 'gh' && args[3].includes('/compare/')));
+  const saved = JSON.parse(fs.readFileSync(path.join(dir, 'state.json')));
+  assert.deepEqual(Object.keys(saved.alerts), [`${d.run.id}:1:${second().green.id}`, `${d.run.id}:2:${green.id}`]);
 });
