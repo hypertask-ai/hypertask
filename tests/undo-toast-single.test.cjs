@@ -28,6 +28,9 @@ function load(relativePath, stubs = {}, source = read(relativePath)) {
 const undo = load("src/components/undoToast/index.tsx", {
   "@/lib/contexts/mobileContext": { MobileViewContext: mobileContext },
   "@/lib/configs/general.config": { MOBILE_TARGET: mobileTarget },
+  "@/hooks/useFlag": { useFlag: () => false },
+  "@/lib/flags/keys": { HTPR_7657_ONE_TOAST_FLAG: "htpr-7657-one-toast" },
+  "@/lib/toastIdsToDismiss": { toastIdsToDismiss: () => [] },
   "@/lib/constants/appShellRail": { APP_SHELL_RAIL_OFFSET: "calc(var(--app-shell-rail-w, 48px) + 8px)" },
 });
 const { useMobileToastAutoDismiss } = load("src/components/undoToast/useMobileToastAutoDismiss.ts");
