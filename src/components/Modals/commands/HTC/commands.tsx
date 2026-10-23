@@ -64,6 +64,7 @@ import { HTPR_7891_PALETTE_SHARE_KEY_LABELS_FLAG } from "@/lib/flags/definitions
 import { HTPR_7307_CTRLJ_FOOTER_CLICKABLE_FLAG, HTPR_7328_ROUNDED_THEME_FLAG, HTPR_7530_KEEP_AI_CHAT_CLOSED_FLAG } from "@/lib/flags/keys";
 import {
   GOOGLE_CALENDAR_FLAG,
+  HTPR_7515_CONNECT_GITHUB_PER_BOARD_FLAG,
   HTPR_7260_KANBAN_SELECT_ALL_FLAG,
   HTPR_6891_PHONE_TASK_WRITER_SHEET_FLAG,
   HTPR_6929_COMPOSE_TASK_WRITER_FLAG,
@@ -202,6 +203,7 @@ const Commands = (props: Props) => {
   const grokGemini4Enabled = useFlag(HTPR_7939_GROK_GEMINI4_MODELS_FLAG);
   let hiddenXaiCommandKeys = "";
   if (!grokGemini4Enabled) hiddenXaiCommandKeys = "settingsApiKeysXaiApiKey settingsAiModelsXai";
+  const githubConnectEnabled = useFlag(HTPR_7515_CONNECT_GITHUB_PER_BOARD_FLAG);
   const googleCalendarSettingsEnabled = useFlag(GOOGLE_CALENDAR_FLAG);
   const autoTaskDescriptionsEnabled = useFlag("htpr-6177-auto-task-descriptions");
   const myTasksViewsEnabled = useFlag(MY_TASKS_VIEWS_FLAG);
@@ -298,6 +300,7 @@ const Commands = (props: Props) => {
               showByokApiKeys) &&
             command.key !== hiddenBasetenCommandKey &&
             !hiddenXaiCommandKeys.split(" ").includes(command.key) &&
+            (command.key !== "settingsGithub" || githubConnectEnabled) &&
             (command.key !== "settingsCalendarKeepTasksUpdated" || googleCalendarSettingsEnabled) &&
             (command.key !== "settingsTaskPageSuggestDescriptionsFromTaskTitles" || autoTaskDescriptionsEnabled) &&
             isTicketPrefixCommandVisible(command) &&
@@ -447,6 +450,7 @@ const Commands = (props: Props) => {
     pagesEnabled,
     standalonePages,
     pathname,
+    githubConnectEnabled,
     googleCalendarSettingsEnabled,
     hiddenBasetenCommandKey,
     hiddenXaiCommandKeys,

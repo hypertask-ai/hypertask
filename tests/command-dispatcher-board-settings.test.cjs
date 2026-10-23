@@ -211,3 +211,40 @@ test("a failed board lookup reports the failure rather than opening the wrong bo
   assert.equal(page.errors.length, 1);
   assert.deepEqual(page.pushes, []);
 });
+
+for (const entry of [
+  { pathname: "/project", query: "id=15", currentProject: boards[2] },
+  { pathname: "/detail/project-15/7515", query: "", currentProject: boards[0] },
+  { pathname: "/settings/github", query: "projectId=15", currentProject: boards[0] },
+]) {
+  test(`Connect GitHub keeps explicit board context from ${entry.pathname}`, async (t) => {
+    const command = getAllCommands({ context: "Kanban" }).flatMap((group) => group.commandLists)
+      .find((item) => item.key === "settingsGithub");
+    assert.equal(command.name, "Connect GitHub");
+    assert.equal(command.commandMode, CommandMode.Setting);
+    assert.equal(command.payload, "github");
+    const page = fixture(t, entry);
+    await page.run(command.commandMode, command.payload);
+    assert.equal(page.selectedBoard()?.id, 15);
+    assert.equal(page.teamId(), "hypertask");
+    assert.deepEqual(page.pushes, ["/settings/github?projectId=15"]);
+  });
+}
+
+for (const pathname of ["/inbox", "/detail/project-999/1"]) {
+  test(`Connect GitHub never substitutes another board from ${pathname}`, async (t) => {
+    const page = fixture(t, { pathname, query: "", currentProject: boards[0] });
+    await page.run(CommandMode.Setting, "github");
+    assert.deepEqual(page.pushes, []);
+    assert.equal(page.errors.length, 1);
+  });
+}
+
+for (const query of ["projectId=invalid", "projectId=0", "projectId=9007199254740992"]) {
+  test(`Connect GitHub refuses invalid explicit context ${query} instead of a persisted board`, async (t) => {
+    const page = fixture(t, { pathname: "/settings/github", query, currentProject: boards[0] });
+    await page.run(CommandMode.Setting, "github");
+    assert.deepEqual(page.pushes, []);
+    assert.equal(page.errors.length, 1);
+  });
+}
