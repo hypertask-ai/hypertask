@@ -418,7 +418,7 @@ test('all adopted REST methods preserve legacy wire results and scaffold order w
     if (originalMode === undefined) delete process.env.HTPR_6926_TEST_FLAG
     else process.env.HTPR_6926_TEST_FLAG = originalMode
   })
-  assert.equal(files.length, 109)
+  assert.equal(files.length, 110)
   assert.equal(compared, 147)
 })
 

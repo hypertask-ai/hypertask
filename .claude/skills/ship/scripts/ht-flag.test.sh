@@ -51,7 +51,7 @@ for bad_reason in \
   'https://app.hypertask.ai/detail/project-4060/1000000000#comment-123' \
   "${reason}junk" "${reason}?extra=1" "${reason}/extra" "${reason}#extra"; do
   reject set "$key" off --reason "$bad_reason"
-  rg -q 'Question comment.*flag key and target mode.*#comment-<id>' "$tmp/output"
+  grep -qE 'Question comment.*flag key and target mode.*#comment-<id>' "$tmp/output"
 done
 reject set "$key" off --reason 'https://app.hypertask.ai/page/approval'
 reject set "$key" off --reason 'https://app.hypertask.ai/detail/project-4060/215/extra'
@@ -115,13 +115,13 @@ if TEST_STATUS=403 TEST_RESPONSE='{"error":"Forbidden"}' "$script" get > "$tmp/o
   printf 'non-2xx must fail\n' >&2
   exit 1
 fi
-rg -q 'Forbidden' "$tmp/output"
-if rg -q 'offline-test-credential' "$tmp/output"; then
+grep -qE 'Forbidden' "$tmp/output"
+if grep -qE 'offline-test-credential' "$tmp/output"; then
   printf 'credential leaked\n' >&2
   exit 1
 fi
 TEST_STATUS=201 TEST_RESPONSE='{"review":{"id":42}}' "$script" review "$key" everyone --ai-review "$ai_review" --independent "$independent" --live-qa "$live_qa" > "$tmp/output" 2>&1
-rg -q '^review 42$' "$tmp/output"
+grep -qE '^review 42$' "$tmp/output"
 for api_error in 'The review must be recorded by a different agent' 'Failure-Off is not allowed for high-risk flags'; do
   if [[ $api_error == *high-risk* ]]; then
     switch_args=(off --failure "$live_qa")
@@ -132,6 +132,6 @@ for api_error in 'The review must be recorded by a different agent' 'Failure-Off
     printf 'API refusal must fail\n' >&2
     exit 1
   fi
-  rg -q "$api_error" "$tmp/output"
+  grep -qE "$api_error" "$tmp/output"
 done
 printf 'ht-flag tests passed\n'
