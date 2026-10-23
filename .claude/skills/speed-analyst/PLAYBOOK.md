@@ -502,6 +502,41 @@ Result: **no-go**. The earlier start competes with the first wave for the 1.6 Mb
 
 **Next probe.** Phone first visit after the fix is about 9.2 s: `boardTasks` returns at 2.4 s, the local read starts at 6.5 s and the first commit is 7.4 to 7.6 s, with 4.5 s of long tasks from 5.5 s. Name what hydration runs between the code arriving (about 5.6 s) and the local read (6.5 s), then the 0.9 s from first commit to cards in the page.
 
+### 2026-10-23 midday: the first board draw is grey placeholder cards although the card code is loaded (HTPR-7644)
+
+https://app.hypertask.ai/detail/project-15/7644, flag `htpr-7644-board-cards-first-draw`.
+
+**Daily read.** Can't verify: `--latest` is still the 2026-10-22 06:17 UTC run on 0f0854834; production is 6f9901764. `speed-live.yml` ran on schedule at 09:31 UTC and skipped in 18 s (`skipped: COMPANY_SKILLS_DEPLOY_KEY`, no QA storage secret).
+
+**The five >15% flags on that run, explained from the saved request lists (no browser).** None costs content time.
+- My Tasks bytes, phone 90 to 160 KB, desktop 139 to 171 KB: the My Tasks page chunk grew 33 to 59 KB and phone now also loads chunk 3cb99d79 (13 KB); desktop also fetches `/api/ai-chat/all-sessions` (50 KB) inside the window. Content medians 1008 to 1095 ms phone, 453 to 344 ms desktop, overlapping ranges.
+- Phone board-returning long tasks 395 to 728 ms: bimodal per sample (712, 991, 57, 0, 63 before; 728, 800, 692, 54, 867 after); the median moved between the two modes. Content 1978 to 1951 ms.
+- Desktop ticket-warm bytes 10 to 12 KB and desktop Ctrl+J long tasks 134 to 154 ms: about 2 KB and 21 ms; noise-sized.
+
+**Why desktop first visit, not the phone.** PostHog `app_board_readiness`, 7 days: desktop 224 loads from the device copy (p50 133, p75 217 ms, 13 people) and 66 from the network (p50 446, p75 879 ms, 11 people); mobile 7 loads from 1 person. The phone first visit is the biggest synthetic gap but almost no real traffic; desktop network loads are where people wait. Tooling: the `posthog` read-only key lacks `query:read`; HogQL needs the full key, used read-only.
+
+**What found it.** The app's own marks plus a per-frame count of `#kanban-sections-container div.min-h-[100px]` (the `TaskSkeleton`) and card links, live, QA 2343, board 6859, desktop, fresh context without the board preference. Script and rows: `~/.local/state/vcc-evidence/SPEED-2026-10-23-desktop-board/frames.mjs`, `desktop-frames.jsonl`, `desktop-tl.jsonl`.
+
+| Run (load 14 to 15) | First commit | 28 skeletons → 28 cards | Gap |
+|---|---|---|---|
+| 1 | 969 ms | 974 → 1232 ms | 258 ms |
+| 2 | 988 ms | 994 → 1277 ms | 283 ms |
+| 3 | 936 ms | 942 → 1210 ms | 268 ms |
+
+An earlier 3-run probe (load 13) showed the same shape with cards 241 to 756 ms after the first commit. The card chunk (7063) had finished downloading before the first commit in 6 of 6 runs.
+
+**Cause (code).** `section.tsx` starts every non-seeded column with `taskModuleReady=false`, so the first commit draws `TaskSkeleton`; an effect then awaits `loadTask()` and sets it true; the card is `dynamic(loadTask, { ssr: false })`, a lazy wrapper that suspends once more even for a loaded module; the gaps cluster at 258 to 283 ms, which fits React throttling the reveal of content behind a committed fallback to about 300 ms (leading explanation, not watched executing). `ht-board-first-commit` and `ht-board-usable-ready` fire on the skeleton commit, so field readiness reads about 0.27 s early on network loads.
+
+**Change.** Remember the loaded card module; a column that mounts after hydration, not server-drawn, with the module already loaded starts ready and renders the loaded component directly. Otherwise unchanged. Expected: desktop first visit about 0.27 s sooner (2018 ms daily median, 1886 to 2832); phone unmeasured (the 0.9 s from first commit to cards in the morning entry may be the same gap).
+
+**False lead ruled out.** The ~1.0 s wave of about 25 chunks (54a60aa6, 70e0d97a, 18034, 27179, a6d7571c) is the AI chat (`71372` loadable) and a layout loadable (`50872`); it overlaps the card reveal and does not gate it. The `getTask`/`detailMeta` pair at 1.75 s is the active card's own prefetch on mount, a sign the cards already exist.
+
+**Lessons.**
+- Count the placeholder elements per frame, not just the target element: "first commit" can be a commit of placeholders.
+- A `next/dynamic` or `React.lazy` component whose chunk is already loaded still suspends on first render; behind a committed fallback that costs up to 300 ms of React's reveal throttle.
+
+**Next probe.** Live on/off for HTPR-7644 (rewrite the flag seed in the board document per sample, 5 interleaved pairs, desktop and phone first visit), then the phone: hydration between code arrival (about 5.6 s) and the local read (6.5 s).
+
 ## Milliseconds saved scoreboard
 
 Only matched end-to-end before/after evidence earns saved milliseconds; `unproven` is not zero. Do not sum different cohorts or claim forecasts as savings.
