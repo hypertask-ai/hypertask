@@ -60,8 +60,7 @@ export default async function RootLayout(
   const analyticsSession = verifySession(
     cookieStore.get(SESSION_COOKIE)?.value,
   );
-  const firstScreenPromise = Promise.all([isMobileDevice(), getServerBoardDocument(), getServerInboxDocument(), getServerTicketShell(),
-    analyticsSession ? isFeatureEnabled(HTPR_7627_TICKET_FIRST_SCREEN_FLAG, analyticsSession.id).catch(() => false) : false]);
+  const firstScreenPromise = Promise.all([isMobileDevice(), getServerBoardDocument(), getServerInboxDocument(), getServerTicketShell()]);
   let identifyEventIds = false;
   if (analyticsSession) {
     try {
@@ -72,7 +71,8 @@ export default async function RootLayout(
       if (enabled) identifyEventIds = true;
     } catch {}
   }
-  const [device, boardDocument, inboxDocument, ticketShell, ticketShellEnabled] = await firstScreenPromise;
+  const [device, boardDocument, inboxDocument, ticketShell] = await firstScreenPromise;
+  const ticketShellEnabled = analyticsSession && ticketShell ? await isFeatureEnabled(HTPR_7627_TICKET_FIRST_SCREEN_FLAG, analyticsSession.id) : false;
   const firstScreen = boardDocument ?? inboxDocument;
   const deferUnusedBoardFonts = boardDocument?.flags.values[HTPR_7016_PHONE_BOARD_COLD_START_FLAG] === true &&
     (boardDocument.display as BoardDisplay).isMobile &&
