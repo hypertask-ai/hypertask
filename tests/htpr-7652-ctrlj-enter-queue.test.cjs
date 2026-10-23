@@ -88,6 +88,19 @@ test("switching the fix or board-from-text off while Enter is held cancels the s
   }
 });
 
+test("switching the fix off and on again while Enter is held does not revive the send", async (t) => {
+  await withColdBoards(t, true, async ({ flags, rerender, type, press, requests, boardsArrive }) => {
+    await type("Improve search");
+    await press("Enter", { code: "Enter" });
+    flags[flag] = false;
+    await rerender();
+    flags[flag] = true;
+    await rerender();
+    await boardsArrive();
+    assert.equal(requests.length, 0);
+  });
+});
+
 test("flag off keeps the old behaviour where Enter during the board load does nothing", async (t) => {
   await withColdBoards(t, false, async ({ type, press, requests, boardsArrive }) => {
     await type("Improve search");

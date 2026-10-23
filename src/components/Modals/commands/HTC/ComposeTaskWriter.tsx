@@ -362,9 +362,11 @@ export default function ComposeTaskWriter({ active, focusProxy, destinationProje
 
   useEffect(() => {
     const heldText = textHeldUntilBoardsLoad.current;
-    if (heldText === null || (waitingForBoards && queueEnterWhileBoardsLoad && active && text === heldText) || addingImages) return;
+    if (heldText === null) return;
+    const holdStillValid = queueEnterWhileBoardsLoad && boardFromTextEnabled && active && !dictating && text === heldText;
+    if (holdStillValid && (waitingForBoards || addingImages)) return;
     textHeldUntilBoardsLoad.current = null;
-    if (queueEnterWhileBoardsLoad && active && boardFromTextEnabled && boardsLoaded && !dictating && text === heldText) void send();
+    if (holdStillValid && boardsLoaded) void send();
   }, [waitingForBoards, addingImages, active, queueEnterWhileBoardsLoad, boardFromTextEnabled, boardsLoaded, dictating, text]);
 
   const attachments = fileItems.length > 0 && (
