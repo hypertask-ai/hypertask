@@ -72,6 +72,16 @@ for (const mode of ['WATCH', 'ENFORCE', 'FLAG_ERROR']) {
       const deleted = await item.DELETE(request('skills/1', 'DELETE'), { params: Promise.resolve({ skill_id: '1' }) });
       assert.equal(deleted.status, actor === 'bound' ? 403 : 200);
       if (actor === 'bound') assert.equal(f.writes.length, beforeDelete);
+      for (const projectId of [15, 25]) {
+        const beforeWrite = f.writes.length;
+        const params = { params: Promise.resolve({ skill_id: String(projectId) }) };
+        const patch = await item.PATCH(request(`skills/${projectId}`, 'PATCH', { body: 'updated' }), params);
+        const remove = await item.DELETE(request(`skills/${projectId}`, 'DELETE'), params);
+        const allowed = projectId === 15 || actor !== 'bound';
+        assert.equal(patch.status, allowed ? 200 : 403);
+        assert.equal(remove.status, allowed ? 200 : 403);
+        if (!allowed) assert.equal(f.writes.length, beforeWrite);
+      }
     });
 
     test(`${mode} ${actor}: context inventories and requested-team presence do not expose B metadata`, async () => {

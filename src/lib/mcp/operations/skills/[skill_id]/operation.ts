@@ -13,6 +13,7 @@ import {
   slugifySkill,
 } from "@/app/api/ai/_lib/skillMarkdown";
 import prisma from "@/lib/prisma";
+import { withScopedProjectWrite } from "@/app/api/ai/_lib/customInstructions";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -57,13 +58,16 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
     const data = markdown
       ? parseSkillMarkdown(markdown)
       : parseUpdateFields(input, skill.slug);
-    const updated = await prisma.aI_Skill.update({
+    const write = async (db: import("@prisma/client").Prisma.TransactionClient) => db.aI_Skill.update({
       where: { id: skill.id, ...(auth.teamScope != null ? { project: { is: (await import("@/utils/controllers/projects/getAllIncludes")).getProjectWhere(auth.userId, auth.agentId, auth.teamScope) } } : {}) },
       data: {
         ...data,
         ...(input.enabled === undefined ? {} : { enabled: input.enabled }),
       },
     });
+    const updated = auth.teamScope != null
+      ? await withScopedProjectWrite({ userId: auth.userId, agentId: auth.agentId, teamScope: auth.teamScope }, skill.projectId!, write)
+      : await write(prisma);
     return NextResponse.json({ success: true, skill: updated });
   } catch (error) {
     return skillErrorResponse(error);
@@ -79,7 +83,9 @@ export async function DELETE(request: NextRequest, context: RouteContext) {
 
   try {
     const skill = await loadSkill(auth.userId, context, auth);
-    await prisma.aI_Skill.delete({ where: { id: skill.id } });
+    const remove = async (db: import("@prisma/client").Prisma.TransactionClient) => db.aI_Skill.delete({ where: { id: skill.id, ...(auth.teamScope != null ? { projectId: skill.projectId, project: { is: (await import("@/utils/controllers/projects/getAllIncludes")).getProjectWhere(auth.userId, auth.agentId, auth.teamScope) } } : {}) } });
+    if (auth.teamScope != null) await withScopedProjectWrite({ userId: auth.userId, agentId: auth.agentId, teamScope: auth.teamScope }, skill.projectId!, remove);
+    else await remove(prisma);
     return NextResponse.json({ success: true });
   } catch (error) {
     return skillErrorResponse(error);
