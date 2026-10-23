@@ -2,7 +2,8 @@
 
 import { SettingsScopeTabs } from "./SettingsScopeTabs";
 import { useFlag, useFlagReady } from "@/hooks/useFlag";
-import { HTPR_6929_COMPOSE_TASK_WRITER_FLAG, HTPR_7515_CONNECT_GITHUB_PER_BOARD_FLAG } from "@/lib/flags/keys";
+import { HTPR_6929_COMPOSE_TASK_WRITER_FLAG } from "@/lib/flags/keys";
+import { HTPR_7515_CONNECT_GITHUB_PER_BOARD_FLAG } from "@/lib/flags/definitions/htpr-7515-connect-github-per-board";
 import dynamic from "next/dynamic";
 import { useRouter, useSearchParams } from "next/navigation";
 import {
@@ -276,8 +277,8 @@ const SettingsShell: React.FC<SettingsShellProps> = ({ section }) => {
   const githubConnectReady = useFlagReady(HTPR_7515_CONNECT_GITHUB_PER_BOARD_FLAG);
   const searchParams = useSearchParams();
   const normalizedSection = normalizeSettingsSection(section);
-  const activeSection = normalizedSection === "github" && !githubConnectEnabled
-    ? "mcp" : normalizedSection;
+  let activeSection = normalizedSection;
+  if (!githubConnectEnabled && normalizedSection === "github") activeSection = "mcp";
   const activeTab = getSettingsTabForSection(activeSection);
   const mbl = useMobileView();
   const currentUser = useRecoilValue(currentUserAtom);
