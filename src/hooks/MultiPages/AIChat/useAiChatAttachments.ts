@@ -1,3 +1,4 @@
+import { sidebarChatHeaders } from "@/lib/agents/chatViewerState";
 import { useCallback } from "react";
 import { IChatSession } from "@/models/model";
 import toast from "react-hot-toast";
@@ -57,6 +58,7 @@ export function useAiChatAttachments(context: Context) {
           headers: {
             "Content-Type": "application/json",
             ...mcpAuthorizationHeaders(token),
+            ...sidebarChatHeaders(sessionId),
           },
           body: JSON.stringify({
             session_id: sessionId,

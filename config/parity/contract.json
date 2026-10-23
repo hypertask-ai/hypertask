@@ -10,11 +10,11 @@
       "id": "identity.context",
       "title": "Discover identity and accessible workspace context",
       "matches": {
-        "api": ["^(GET|POST) /api/mcp/hello$", "^GET /api/mcp/user/context$"],
-        "mcp": ["^hypertask_(hello|get_user_context)$"],
+        "api": ["^(GET|POST) /api/mcp/hello$", "^GET /api/mcp/user/context$", "^GET /api/mcp/features$"],
+        "mcp": ["^hypertask_(hello|get_user_context)$", "^hypertask_list_features$"],
         "cli": ["^(context|status)$"],
         "ai_chat": ["^hypertask_get_user_context$"],
-        "hyperai": ["^hypertask_(hello|get_user_context)$"]
+        "hyperai": ["^hypertask_(hello|get_user_context)$", "^hypertask_list_features$"]
       }
     },
     {

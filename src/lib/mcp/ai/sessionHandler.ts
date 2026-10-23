@@ -12,7 +12,8 @@ export type AiSessionHandlerDependencies<TContext> = {
   validateProject: (
     userId: number,
     agentId: string | null,
-    projectId: number
+    projectId: number,
+    context: TContext,
   ) => Promise<Response | null>;
   list: (context: TContext, limit: number, offset: number) => Promise<{
     sessions: AiSessionPayload[];
@@ -132,7 +133,8 @@ export function createAiSessionsCollectionHandlers<TContext>(
         const projectError = await dependencies.validateProject(
           userId,
           agentId,
-          projectId
+          projectId,
+          resolved.context,
         );
         if (projectError) return projectError;
       }

@@ -1,4 +1,5 @@
 'use client'
+import { HTPR_7530_KEEP_AI_CHAT_CLOSED_FLAG } from "@/lib/flags/keys";
 import type { useLandingSectionState } from "./useLandingSectionState";
 import { completeBoardReadinessTrace, emitBoardReadinessAfterPaint, markBoardReadinessPhase } from "@/lib/analytics/boardReadinessPhases";
 import { resolveBoardSwitchIntent } from "@/lib/analytics/boardSwitchLatency";
@@ -18,10 +19,10 @@ export { type LandingPageInput } from "./LandingPageShared";
 import nookies from "nookies"
 import { IProject, IProjectsAll, IUser } from "@/models/model";
 
-import { useFlag } from "@/hooks/useFlag";
-import { HTPR_7028_FIRST_TASK_EMAIL_FLAG, HTPR_7078_REMOVE_CONNECT_BLOCK_FLAG } from "@/lib/flags/keys";
+import { useFlag, useFlagReady } from "@/hooks/useFlag";
+import { HTPR_7028_FIRST_TASK_EMAIL_FLAG, HTPR_7078_REMOVE_CONNECT_BLOCK_FLAG, HTPR_7550_CONNECT_OVERLAY_FLAG } from "@/lib/flags/keys";
 import { CommandMode } from "@/models/enums";
-import { showCommandsAtom, currentProjectAtom, boardLayoutAtom, boardLayoutPreferenceAtom, showAIChatInterfaceAtom, openAiChatByDefaultAtom, aiChatAutoOpenSuppressedAtom, aiChatExplicitOpenAtAtom, aiChatPinnedAtom } from "@/store";
+import { showCommandsAtom, currentProjectAtom, boardLayoutAtom, boardLayoutPreferenceAtom, showAIChatInterfaceAtom, openAiChatByDefaultAtom, keepAiChatClosedAtom, aiChatAutoOpenSuppressedAtom, aiChatExplicitOpenAtAtom, aiChatPinnedAtom } from "@/store";
 import { useRecoilState, useRecoilValue, useSetRecoilState } from "@/lib/state";
 import { Suspense, useCallback, useContext, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 
@@ -725,14 +726,13 @@ const boardLayoutForRender =
 
 
 type useLandingBoardHydrationContext = Pick<LandingPageInput, "user"> &
-  Pick<ReturnType<typeof useLandingBoardAccess>, "isMblForChat" | "isGuest" | "slugs" | "surfaceResolutionRef" | "lastObservedBoardLayoutRef" | "boardLayout" | "pendingProgrammaticSurfaceRef" | "surfaceInitializationKey" | "userSurfaceChangeVersionRef" | "requestedSurface" | "boardLayoutPreference" | "setBoardLayout" | "setSurfaceInitializedFor" | "searchParams" | "surfaceInitializedFor" | "currentView" | "router" | "queryClient"> &
-  Pick<ReturnType<typeof useLandingBoardSurface>, "aiChatPinned" | "openAiChatByDefault" | "aiChatAutoOpenSuppressed" | "setShowAiChatInterface" | "pinnedProject" | "projectIndex" | "hydrationFailedProjectId" | "welcomeAiHandledRef" | "setAiChatExplicitOpenAt" | "pathname" | "setProjectLookupFailed" | "hydrationRetryAttemptsRef" | "setHydrationFailedProjectId" | "hydratingRef" | "setHydrationRetryToken" | "hydrationRetryToken"> &
+  Pick<ReturnType<typeof useLandingBoardAccess>, "slugs" | "surfaceResolutionRef" | "lastObservedBoardLayoutRef" | "boardLayout" | "pendingProgrammaticSurfaceRef" | "surfaceInitializationKey" | "userSurfaceChangeVersionRef" | "requestedSurface" | "boardLayoutPreference" | "setBoardLayout" | "setSurfaceInitializedFor" | "searchParams" | "surfaceInitializedFor" | "currentView" | "router" | "queryClient"> &
+  Pick<ReturnType<typeof useLandingBoardSurface>, "setShowAiChatInterface" | "pinnedProject" | "projectIndex" | "hydrationFailedProjectId" | "welcomeAiHandledRef" | "setAiChatExplicitOpenAt" | "pathname" | "setProjectLookupFailed" | "hydrationRetryAttemptsRef" | "setHydrationFailedProjectId" | "hydratingRef" | "setHydrationRetryToken" | "hydrationRetryToken"> &
   Pick<ReturnType<typeof useLandingBoardQuery>, "data" | "dataFetching" | "refetchProjects">;
 
 
 export function useLandingBoardHydration(context: useLandingBoardHydrationContext) {
   const {
-  isMblForChat, isGuest, aiChatPinned, openAiChatByDefault, aiChatAutoOpenSuppressed,
   setShowAiChatInterface, slugs, pinnedProject, data, surfaceResolutionRef,
   lastObservedBoardLayoutRef, boardLayout, pendingProgrammaticSurfaceRef, surfaceInitializationKey, userSurfaceChangeVersionRef,
   requestedSurface, boardLayoutPreference, setBoardLayout, setSurfaceInitializedFor, searchParams,
@@ -741,28 +741,7 @@ export function useLandingBoardHydration(context: useLandingBoardHydrationContex
   setProjectLookupFailed, user, hydrationRetryAttemptsRef, setHydrationFailedProjectId, hydratingRef,
   queryClient, setHydrationRetryToken, hydrationRetryToken,
   } = context;
-  const hydrated = useHydrated()
   const setAiChatAutoOpenSuppressed = useSetRecoilState(aiChatAutoOpenSuppressedAtom)
-
-
-useEffect(() => {
-  if (
-    !hydrated ||
-    isMblForChat ||
-    (!isGuest &&
-      !aiChatPinned &&
-      (!openAiChatByDefault || aiChatAutoOpenSuppressed))
-  ) return;
-  setShowAiChatInterface(true);
-
-}, [
-  hydrated,
-  slugs,
-  openAiChatByDefault,
-  aiChatAutoOpenSuppressed,
-  aiChatPinned,
-  isMblForChat,
-])
 
 useEffect(() => {
   if (!pinnedProject) return
@@ -993,6 +972,7 @@ const  LandingPage= ({
   user: IUser,
   authenticated: boolean,
 }) =>{
+  const connectOverlayEnabled = useFlag(HTPR_7550_CONNECT_OVERLAY_FLAG);
   const {
   queryClient, router, releaseSecondaryStartup, secondaryStartupEnabled, isMblForChat,
   searchParams, slugs, pilotParameter, currentView, requestedSurface,
@@ -1031,7 +1011,6 @@ const  LandingPage= ({
   const {
   retryBoardHydration, activeSortingMode,
   } = useLandingBoardHydration({
-    isMblForChat, isGuest, aiChatPinned, openAiChatByDefault, aiChatAutoOpenSuppressed,
     setShowAiChatInterface, slugs, pinnedProject, data, surfaceResolutionRef,
     lastObservedBoardLayoutRef, boardLayout, pendingProgrammaticSurfaceRef, surfaceInitializationKey, userSurfaceChangeVersionRef,
     requestedSurface, boardLayoutPreference, setBoardLayout, setSurfaceInitializedFor, searchParams,
@@ -1040,6 +1019,37 @@ const  LandingPage= ({
     setProjectLookupFailed, user, hydrationRetryAttemptsRef, setHydrationFailedProjectId, hydratingRef,
     queryClient, setHydrationRetryToken, hydrationRetryToken,
   });
+
+  const hydrated = useHydrated();
+  const keepAiChatClosedEnabled = useFlag(HTPR_7530_KEEP_AI_CHAT_CLOSED_FLAG);
+  const keepAiChatClosedReady = useFlagReady(HTPR_7530_KEEP_AI_CHAT_CLOSED_FLAG);
+  const savedKeepAiChatClosed = useRecoilValue(keepAiChatClosedAtom);
+  const chatAutoOpenReady = !savedKeepAiChatClosed || keepAiChatClosedReady;
+  let keepAiChatClosed = false;
+  if (keepAiChatClosedEnabled) keepAiChatClosed = savedKeepAiChatClosed;
+
+useEffect(() => {
+  if (
+    !hydrated ||
+    isMblForChat ||
+    !chatAutoOpenReady ||
+    keepAiChatClosed ||
+    (!isGuest &&
+      !aiChatPinned &&
+      (!openAiChatByDefault || aiChatAutoOpenSuppressed))
+  ) return;
+  setShowAiChatInterface(true);
+
+}, [
+  hydrated,
+  chatAutoOpenReady,
+  keepAiChatClosed,
+  slugs,
+  openAiChatByDefault,
+  aiChatAutoOpenSuppressed,
+  aiChatPinned,
+  isMblForChat,
+])
 
 useEffect(() => {
   console.log("🪵 ~ Project data fetched", !!data)
@@ -1161,6 +1171,7 @@ return (
             _readinessSource={boardRender.readinessSource}
             _readinessProjectId={boardRender.readinessProjectId}
             _readinessRouteEntryId={boardRender.readinessRouteEntryId}
+            connectOverlayEnabled={connectOverlayEnabled ? boardRender.boardLayout !== "table" : false}
             />   
       ) : data?.updatedProjects?.[projectIndex] ? (
         hydrationFailedProjectId === data.updatedProjects[projectIndex].id ? (
@@ -1187,18 +1198,22 @@ return (
 
 export default LandingPage
 
-const SectionComp = (props: SectionCompProps) => {
+const SectionComp = (props: SectionCompProps & { connectOverlayEnabled: boolean }) => {
   const connectBlockRemoved = useFlag(HTPR_7078_REMOVE_CONNECT_BLOCK_FLAG)
-  return renderLandingSection(useLandingSection(props, useLandingSectionReadiness), connectBlockRemoved);
+  const context = useLandingSection(props, useLandingSectionReadiness);
+  return renderLandingSection(context, connectBlockRemoved, props.connectOverlayEnabled);
 };
 
-function renderLandingSection(context: ReturnType<typeof useLandingSection>, connectBlockRemoved: boolean) {
+function renderLandingSection(context: ReturnType<typeof useLandingSection>, connectBlockRemoved: boolean, connectOverlayEnabled: boolean) {
   const {
   boardLayout, isMbl, appShellRailOn, showQuickTips, _currentProject,
   sections, setShowTrial, showTrial, activeBuiltinViews, filteredSectionsForActiveView,
   kanbanContainerRef, handleSideBar, handleBoardChange, debouncedHandleBoardChange, _notifications,
   _currentUser, _activeSortingMode,
   } = context;
+  const inlineConnectCard = !connectBlockRemoved && _currentProject && _currentUser?.id ? (
+    <AgentConnectCard projectId={_currentProject.id} userId={_currentUser.id} />
+  ) : null;
 
 return (
   <>
@@ -1269,9 +1284,7 @@ return (
               ? 'bg-pageBackground homepage-container-tag ml-[var(--app-shell-rail-w,48px)] !w-[calc(100%-var(--app-shell-rail-w,48px))] flex-col gap-4 flex items-center'
               : 'bg-pageBackground homepage-container-tag flex-col gap-4 flex items-center'}
             >
-            {!connectBlockRemoved && _currentProject && _currentUser?.id && (
-              <AgentConnectCard projectId={_currentProject.id} userId={_currentUser.id} />
-            )}
+            {(!connectOverlayEnabled || boardLayout === "table") && inlineConnectCard}
             {boardLayout === "table" ? (
               <BoardDocumentBoundary
                 fallback={(
@@ -1292,6 +1305,7 @@ return (
               </BoardDocumentBoundary>
             ) : (
             <HomePage
+              inlineConnectCard={connectOverlayEnabled ? inlineConnectCard : null}
               filteredSections={filteredSectionsForActiveView}
               handleBoardChange={debouncedHandleBoardChange}
               _sections={sections}

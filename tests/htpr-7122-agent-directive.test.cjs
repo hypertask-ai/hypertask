@@ -17,11 +17,11 @@ function stubModule(relativePath, exports) {
 
 function loadHello(flagOn) {
   const flagCalls = [];
-  stubModule("src/lib/prisma.ts", { default: { project: { findMany: async () => [] } } });
+  stubModule("src/lib/prisma.ts", { default: { project: { findMany: async () => [], findFirst: async () => null }, agent: { findUnique: async () => null } } });
   stubModule("src/lib/flags.ts", {
     isFeatureEnabled: async (key, userId) => {
       flagCalls.push([key, userId]);
-      return flagOn;
+      return key === FLAG && flagOn;
     },
   });
   stubModule("src/lib/mcp/auth.ts", {
@@ -45,7 +45,7 @@ test("flag off: agents get exactly today's capabilities", async () => {
   const payload = await mod.getHelloPayload(ctx);
   assert.deepEqual(payload.capabilities, mod.HELLO_CAPABILITIES);
   assert.equal("reactions" in payload.capabilities, false);
-  assert.deepEqual(flagCalls, [[FLAG, 6]]);
+  assert.deepEqual(flagCalls.filter(([key]) => key === FLAG), [[FLAG, 6]]);
 });
 
 test("flag on: the directive asks for reactions instead of ack comments", async () => {

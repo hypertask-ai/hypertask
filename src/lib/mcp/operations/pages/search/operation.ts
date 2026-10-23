@@ -45,7 +45,7 @@ export async function GET(request: NextRequest) {
     const projects = await prisma.project.findMany({
       where: {
         status: 'Normal',
-        ...getProjectWhere(ctx.user.id, ctx.agentId),
+        ...getProjectWhere(ctx.user.id, ctx.agentId, ctx.teamScope),
       },
       select: { id: true },
     })
@@ -55,7 +55,7 @@ export async function GET(request: NextRequest) {
       projectIds: projects.map((project) => project.id),
       userId: ctx.user.id,
       standalonePagesEnabled: await standalonePagesEnabled(ctx.user.id),
-      agentId: ctx.agentId,
+      agentId: ctx.agentId, teamScope: ctx.teamScope,
     })
 
     const pages = matches.map(({ contentText, ...page }) => ({

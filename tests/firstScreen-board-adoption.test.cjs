@@ -64,7 +64,7 @@ test('a later edit uses the same query client and the old document is not replay
   const providers = source('src/utils/Providers.tsx');
   assert.match(providers, /useState\(\(\) => getBoardDocument/);
   assert.match(providers, /initialValues=\{initialValues\}/);
-  assert.match(providers, /initialFlags=\{snapshot\?\.flags\}/);
+  assert.match(providers, /initialFlags=\{snapshot\?\.flags \?\? shell\?\.flags\}/);
   assert.equal((providers.match(/<StateRoot\b/g) || []).length, 1);
   cache.clear();
 });

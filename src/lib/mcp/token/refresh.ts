@@ -15,6 +15,7 @@ import {
   validateMcpAuth,
   verifyMcpJwtToken,
 } from '@/lib/mcp/auth'
+import { isOAuthAccessTokenPayload } from '@/lib/mcp/oauthTokenContract'
 import prisma from '@/lib/prisma'
 import createLog from '@/utils/controllers/logs/createLog'
 
@@ -98,6 +99,13 @@ export async function handleMcpTokenRefresh(
   if (!oldToken || !oldDecoded?.exp) {
     return createUnauthorizedResponse(
       'Invalid or missing authentication token.',
+      'invalid_token'
+    )
+  }
+
+  if (isOAuthAccessTokenPayload(oldDecoded)) {
+    return createUnauthorizedResponse(
+      'OAuth access tokens must use OAuth token refresh.',
       'invalid_token'
     )
   }

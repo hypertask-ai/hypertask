@@ -3,7 +3,7 @@
 import { type AgentChatActivity } from "@/lib/agents/chatActivityFeed";
 import { readDraft, writeDraft } from "@/lib/agents/chatDrafts";
 import { markChatRead, saveDraftToServer, } from "@/lib/agents/chatViewerState";
-import { useCallback, useEffect } from "react";
+import { useCallback, useEffect, useRef } from "react";
 import { flushSync } from "react-dom";
 import toast from "react-hot-toast";
 import type { TAgent } from "../AgentsRegister";
@@ -12,9 +12,11 @@ import type { useAgentChatState } from "./useAgentChatState";
 
 type Props = Pick<
   ReturnType<typeof useAgentChatState>,
+  | "embedded"
   | "loadGenRef"
   | "sessionIdRef"
   | "sendingRef"
+  | "setSending"
   | "setMessages"
   | "setActivity"
   | "setAwaiting"
@@ -45,17 +47,20 @@ type Props = Pick<
 >;
 
 export function useAgentChatSession({
-  loadGenRef, sessionIdRef, sendingRef, setMessages, setActivity, setAwaiting, setMessagesError,
+  embedded, loadGenRef, sessionIdRef, sendingRef, setSending, setMessages, setActivity, setAwaiting, setMessagesError,
   setDeliveryMode, setDeliveryNotice, draftHydratedRef, draftRef, setDraft, selectedIdRef,
   currentUser, setSessionLoading, setSession, setSelectedId, setStopping, setReplyTimedOut,
   dismissMention, restoredDraftRef, messageQueueRef, setQueuedMessages, isMbl, composerRef,
   focusComposer, router, searchParams, agents, session,
 }: Props) {
+  const activeRef = useRef(!embedded || embedded.active);
+  activeRef.current = !embedded || embedded.active;
   const loadMessages = useCallback(async (loadSessionId: string) => {
     const generation = ++loadGenRef.current;
     try {
       const res = await fetch(`/api/agent-chat/${loadSessionId}`, {
         cache: "no-store",
+        headers: embedded ? { "x-hypertask-sidebar-project": String(embedded.projectId) } : {},
       });
       const data = (await res.json()) as {
         success?: boolean;
@@ -88,7 +93,7 @@ export function useAgentChatSession({
         const local = draftRef.current;
         const stored = data.viewer?.draft ?? "";
         if (local.trim() !== "") {
-          if (local !== stored) saveDraftToServer(loadSessionId, local);
+          if (local !== stored) saveDraftToServer(loadSessionId, local, embedded?.projectId);
         } else if (stored !== "") {
           draftRef.current = stored;
           setDraft(stored);
@@ -96,8 +101,8 @@ export function useAgentChatSession({
             writeDraft(currentUser.id, selectedIdRef.current, stored);
         }
       }
-      if (data.viewer && data.viewer.unreadCount > 0) {
-        markChatRead(loadSessionId);
+      if (activeRef.current && data.viewer && data.viewer.unreadCount > 0) {
+        markChatRead(loadSessionId, embedded?.projectId);
       }
     } catch (e) {
       if (
@@ -109,7 +114,7 @@ export function useAgentChatSession({
         );
       }
     }
-  }, [currentUser.id]);
+  }, [currentUser.id, embedded?.projectId]);
 
   const handleProposalAction = useCallback<TProposalAction>(
     async (proposalId, action) => {
@@ -120,7 +125,7 @@ export function useAgentChatSession({
           `/api/agent-chat/${activeSessionId}/proposals/${proposalId}`,
           {
             method: "POST",
-            headers: { "Content-Type": "application/json" },
+            headers: { "Content-Type": "application/json", ...(embedded ? { "x-hypertask-sidebar-project": String(embedded.projectId) } : {}) },
             body: JSON.stringify({ action }),
           },
         );
@@ -146,10 +151,10 @@ export function useAgentChatSession({
     async (agentId: string) => {
       setSessionLoading(true);
       try {
-        const res = await fetch("/api/ai-chat/create-session", {
+        const res = await fetch(embedded ? "/api/agent-sidebar-chats" : "/api/ai-chat/create-session", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ agentId }),
+          body: JSON.stringify({ agentId, ...(embedded ? { projectId: embedded.projectId } : {}) }),
         });
         const data = (await res.json()) as {
           success?: boolean;
@@ -172,7 +177,7 @@ export function useAgentChatSession({
         if (selectedIdRef.current === agentId) setSessionLoading(false);
       }
     },
-    [],
+    [embedded?.projectId],
   );
 
   const clearSelectionState = () => {
@@ -181,6 +186,10 @@ export function useAgentChatSession({
     }
     selectedIdRef.current = null;
     sessionIdRef.current = null;
+    if (embedded) {
+      sendingRef.current = false;
+      setSending(false);
+    }
     draftHydratedRef.current = null;
     setSelectedId(null);
     setSession(null);
@@ -205,12 +214,16 @@ export function useAgentChatSession({
       }
       selectedIdRef.current = agent.id;
       sessionIdRef.current = null;
+      if (embedded) {
+        sendingRef.current = false;
+        setSending(false);
+      }
       draftHydratedRef.current = null;
       const restored = readDraft(currentUser.id, agent.id);
       draftRef.current = restored;
       restoredDraftRef.current = restored;
       messageQueueRef.current = [];
-      flushSync(() => {
+      const updateSelection = () => {
         setSelectedId(agent.id);
         setSession(null);
         setSessionLoading(false);
@@ -224,23 +237,25 @@ export function useAgentChatSession({
         setReplyTimedOut(false);
         setDraft(restored);
         setQueuedMessages([]);
-      });
+      };
+      if (embedded) updateSelection();
+      else flushSync(updateSelection);
       dismissMention();
       if (isMbl && agent.runtimeType === "EXTERNAL") composerRef.current?.focus();
       if (isMbl && agent.runtimeType === "EXTERNAL") focusComposer();
-      router.replace(
+      if (!embedded) router.replace(
         `/agents/chat?agent=${encodeURIComponent(agent.slug ?? agent.id)}`,
         { scroll: false },
       );
       if (agent.runtimeType !== "EXTERNAL") return;
       void openAgentSession(agent.id);
     },
-    [router, openAgentSession, isMbl, currentUser.id],
+    [router, openAgentSession, isMbl, currentUser.id, embedded?.projectId],
   );
 
   const agentParam = searchParams?.get("agent") ?? null;
   useEffect(() => {
-    if (!agents || !agentParam || selectedIdRef.current) return;
+    if (embedded || !agents || !agentParam || selectedIdRef.current) return;
     const match = agents.find(
       (a) => !a.revokedAt && (a.slug ?? a.id) === agentParam,
     ) ?? agents.find((a) => !a.revokedAt && a.id === agentParam);

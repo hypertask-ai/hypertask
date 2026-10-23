@@ -1,3 +1,4 @@
+import { loadSidebarChatRequest } from "@/lib/agents/chatAccess";
 import { reportError } from "@/lib/errors/reportError";
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
@@ -22,6 +23,9 @@ export async function POST(request: NextRequest) {
   if (!parsed.success) {
     return NextResponse.json({ success: false, error: "A valid session_id is required" }, { status: 400 });
   }
+
+  const sidebarAccess = await loadSidebarChatRequest(request, parsed.data.session_id);
+  if (!sidebarAccess.ok) return NextResponse.json({ success: false, error: sidebarAccess.error }, { status: sidebarAccess.status });
 
   try {
     const actingAgent = await loadActingAgent(parsed.data.session_id, user.id);

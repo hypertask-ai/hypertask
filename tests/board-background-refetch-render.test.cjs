@@ -27,7 +27,7 @@ const networkData = {
   updatedProjects: [board],
 };
 let queryResult = { data: networkData, isFetching: false, isError: false };
-let instantTicketOpen = false;
+let layoutFlagsEnabled = false;
 let boardAuthorizations = 0;
 const queryClient = { getQueryData: () => undefined };
 const searchParams = new URLSearchParams("id=1&view=default");
@@ -37,6 +37,7 @@ const noopComponent = () => null;
 const atoms = new Proxy({}, { get: (_, key) => key });
 const moduleMocks = {
   "@/components/Global/FirstScreenMobileChrome": { __esModule: true, default: noopComponent },
+  "@/hooks/useConnectAgentOverlay": { useConnectAgentOverlay: () => ({ blocked: false }) },
   "@/components/PageComponents/Onboarding/AgentConnectCard": { AgentConnectCard: noopComponent },
   "nookies": { __esModule: true, default: { set: noop } },
   "next/navigation": {
@@ -128,8 +129,9 @@ const moduleMocks = {
   "@/lib/firstScreen/BoardDocumentBoundary": { __esModule: true, default: ({ children }) => children },
   "@/lib/firstScreen/SurfaceContext": { useFirstScreenSurface: () => null },
     "@/lib/firstScreen/boardDocument": { getBoardDocument: () => null },
-    "@/hooks/useFlag": { useFlag: () => instantTicketOpen, useFlagLoaded: () => true },
-  "@/lib/flags/keys": { HTPR_6752_INSTANT_TICKET_OPEN_FLAG: "instant-ticket-open" },
+    "@/lib/flags/keys": require("./helpers/flag-files.cjs").load("src/lib/flags/keys.ts"),
+    "@/hooks/useFlag": { useFlag: () => layoutFlagsEnabled, useFlagReady: () => true, useFlagLoaded: () => true },
+
   "@/lib/navigation/cachedTaskDetail": { cachedTaskDetailLocation: () => undefined },
   "@/lib/constants/constants": { REACT_QUERY_KEYS: { uploadStates: ["Uploading_States"] } },
   "@/components/Modals/SwipeUnread/EmbeddedTaskDetail": { __esModule: true, default: noopComponent },
@@ -221,7 +223,7 @@ const shellSource = `
   const mobilePullCommandVisible = false;
   const openAIChatInterface = () => {};
   const authenticatedUserId = 8;
-  exports.Workspace = function Workspace({ children, instantTicketOpen, chatMounted }) {
+  exports.Workspace = function Workspace({ children, layoutFlagsEnabled, chatMounted }) {
     const shouldMountChatRuntime = chatMounted;
     const showAiChatInterface = chatMounted;
     const sidebarWidthPx = chatMounted ? 420 : 0;
@@ -266,11 +268,11 @@ for (const chatMounted of [false, true]) {
     const Workspace = shellModule.exports.Workspace;
     const root = createRoot(document.getElementById("root"));
     const render = () => root.render(React.createElement(
-      Workspace, { instantTicketOpen, chatMounted },
+      Workspace, { layoutFlagsEnabled, chatMounted },
       React.createElement(LandingPage, { user: { id: 8 }, authenticated: true, slugs: "1" }),
     ));
     try {
-      instantTicketOpen = false;
+      layoutFlagsEnabled = false;
       boardAuthorizations = 0;
       queryResult = { data: undefined, isFetching: true, isError: false };
       await React.act(async () => render());
@@ -294,7 +296,7 @@ for (const chatMounted of [false, true]) {
         assert.equal(boardAuthorizations, 1, "the route must not restart board authorization");
       };
 
-      instantTicketOpen = true;
+      layoutFlagsEnabled = true;
       await React.act(async () => render());
       assertRetained();
       queryResult = { data: undefined, isFetching: true, isError: false };
@@ -306,12 +308,12 @@ for (const chatMounted of [false, true]) {
       });
       assertRetained();
       queryResult = { data: networkData, isFetching: false, isError: false };
-      instantTicketOpen = false;
+      layoutFlagsEnabled = false;
       await React.act(async () => render());
       assertRetained();
     } finally {
       await React.act(async () => root.unmount());
-      instantTicketOpen = false;
+      layoutFlagsEnabled = false;
       for (const [key, descriptor] of previous) {
         if (descriptor) Object.defineProperty(global, key, descriptor);
         else delete global[key];

@@ -1,10 +1,6 @@
 import { writeFileSync } from "node:fs";
-import { createRequire } from "node:module";
 import { posix as pathPosix } from "node:path";
-import { git, parseFlagRegistry, parseDefinitions, unwrapExpr, isBindingWrite, assertAddedFlagReleaseRisks } from "./feature-flag-registry.mjs";
-
-const require = createRequire(import.meta.url);
-const typescript = require(process.env.FEATURE_FLAG_TYPESCRIPT_PATH || "typescript");
+import { typescript, git, parseFlagRegistry, parseDefinitions, unwrapExpr, isBindingWrite, assertAddedFlagReleaseRisks, flagDefinitionPaths, parseFlagFile } from "./feature-flag-registry.mjs";
 
 const EXEMPT_TAGS = new Set(["BUGFIX", "INFRA", "AI CHAT"]);
 const CROSS_CHECK_LINE_BUDGET = 150;
@@ -1250,9 +1246,17 @@ function referencesFlagAtRuntime(ref, path, registry, allowedKeys, addedLines) {
       importedFunctions.set(symbol, { imported, module: moduleName });
       if ((moduleName === "@/hooks/useFlag" && imported === "useFlag") ||
           (moduleName === "@/lib/flags" && imported === "isFeatureEnabled")) helperSymbols.add(symbol);
-      if (FLAG_KEY_MODULES.has(moduleName) && registry.byIdentifier.has(imported)) {
-        flagSymbols.set(symbol, registry.byIdentifier.get(imported));
+      const key = registry.byIdentifier.get(imported);
+      if (!key) continue;
+      if (!FLAG_KEY_MODULES.has(moduleName)) {
+        const definitionPath = moduleName.startsWith("@/lib/flags/definitions/")
+          ? `src/${moduleName.slice(2)}${moduleName.endsWith(".ts") ? "" : ".ts"}`
+          : resolveRelativeModule(ref, path, moduleName);
+        if (!definitionPath || !flagDefinitionPaths(ref).includes(definitionPath)) continue;
+        const { identifier, definition } = parseFlagFile(git(["show", `${ref}:${definitionPath}`]), definitionPath);
+        if (identifier !== imported || definition.key !== key) continue;
       }
+      flagSymbols.set(symbol, key);
     }
   }
 
@@ -1533,6 +1537,16 @@ export function evaluate({ title, baseSha, headSha, labels = [] }) {
         if (!baseDefinitions.keys.includes(key)) added.add(key);
       }
       if (added.size) assertAddedFlagReleaseRisks(headSha, [...added]);
+      const baseFiles = new Set(flagDefinitionPaths(mergeBase));
+      for (const path of flagDefinitionPaths(headSha)) {
+        if (baseFiles.has(path)) continue;
+        const { definition } = parseFlagFile(git(["show", `${headSha}:${path}`]), path);
+        if (!["bugfix", "internal"].includes(definition.kind) && !definition.releaseRisk?.highRisk &&
+            definition.defaultMode !== "EVERYONE" &&
+            !(definition.defaultMode === "OWNER_ONLY" && definition.releaseRisk?.ownerRequest)) {
+          throw new Error(`new flag ${definition.key} must set defaultMode: "EVERYONE" (or releaseRisk.highRisk for money, access, data-deletion or customer-email; or defaultMode: "OWNER_ONLY" with releaseRisk.ownerRequest containing Valentin's exact quote and ticketUrl)`);
+        }
+      }
     } catch (error) {
       return failure(`Feature flag files or imports could not be parsed safely, or new flags need release-risk entries: ${error.message}`);
     }
@@ -1546,7 +1560,7 @@ export function evaluate({ title, baseSha, headSha, labels = [] }) {
     return { pass: true, ownerReview: null, reason: "No changed file matches the UI-change path filter." };
   }
 
-  // Title exemptions never permit widening a feature default to Everyone.
+  // Title exemptions never bypass registry default validation.
   if (changedFiles.some((path) => ["src/lib/flags.ts", "src/lib/flags/definitions.ts"].includes(path) || path.startsWith("src/lib/flags/definitions/"))) {
     try {
       parseDefinitions(headSha);

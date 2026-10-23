@@ -59,7 +59,7 @@ function effectiveModel(
       feature as UserFacingModelFeature,
       enabledSettings,
       null,
-      { customEndpointConfigured, haiku55Enabled, ...context, ...(haiku55Enabled ? { defaultModelOption: getDefaultAiModelOptionForPlan(context.plan, context.hasByok, true, context.haikuDefaultEnabled) } : {}) },
+      { customEndpointConfigured, haiku55Enabled, ...context, ...(haiku55Enabled ? { defaultModelOption: getDefaultAiModelOptionForPlan(context.plan, context.hasByok, true, context.haikuDefaultEnabled, context) } : {}) },
     )?.id ?? null
   );
 }

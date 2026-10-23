@@ -64,9 +64,10 @@ import type { SerializedAgentRunActivity } from "@/lib/agentRuns/model";
 import { mergeTaskThreadFeed } from "@/lib/agentRuns/taskActivityFeed";
 import { isCommentCreatedByUser } from "@/lib/htc/isCommentCreatedByUser";
 import { useCommentToAiChat } from "@/hooks/MultiPages/AIChat/useCommentToAiChat";
-import { useFlag } from "@/hooks/useFlag";
+import { useFlag, useFlagLoaded } from "@/hooks/useFlag";
+import { commentsStackedSetting, foldCommentsFromFirstPaintNow } from "@/lib/taskDetailCommentsStacked";
 import { useHydrated } from "@/hooks/General/useHydrated";
-import { HTPR_7337_EDIT_WITH_AI_FLAG, HTPR_6752_INSTANT_TICKET_OPEN_FLAG, HTPR_6899_STABLE_LAYOUT_FLAG, HTPR_6551_QUIET_RUN_ACTIVITY_FLAG, HTPR_7116_TICKET_STAYS_OPEN_FLAG } from "@/lib/flags/keys";
+import { HTPR_7393_COMMENT_INLINE_AI_FLAG, HTPR_7337_EDIT_WITH_AI_FLAG, HTPR_6899_STABLE_LAYOUT_FLAG, HTPR_6551_QUIET_RUN_ACTIVITY_FLAG, HTPR_7116_TICKET_STAYS_OPEN_FLAG, HTPR_7531_ESCAPE_OWN_BOARD_FLAG, HTPR_7611_COMMENTS_FOLD_FROM_FIRST_PAINT_FLAG } from "@/lib/flags/keys";
 
 export type TReturnFocusedEl =
   | "Description"
@@ -93,13 +94,14 @@ const useTaskDetailGlobalStates = (
 
   const [editMode, setEditMode] = useState<ITaskDetailEditMode>(null);
   const editWithAiEnabled = useFlag(HTPR_7337_EDIT_WITH_AI_FLAG);
+  const commentInlineAi = useFlag(HTPR_7393_COMMENT_INLINE_AI_FLAG);
   const { editTicketWithAi } = useCommentToAiChat();
-  const instantTicketOpen = useFlag(HTPR_6752_INSTANT_TICKET_OPEN_FLAG);
   const stableLayout = useFlag(HTPR_6899_STABLE_LAYOUT_FLAG);
   const initialCommentsPayload = useMemo(() => JSON.parse(_comments), [_comments]);
-  const [cachedLayout] = useState(instantTicketOpen && stableLayout && (cachedNavigation || Boolean(initialCommentsPayload.pending)));
-  const [secondaryPanelsReady, setSecondaryPanelsReady] = useState(!instantTicketOpen || !initialCommentsPayload.pending);
+  const [cachedLayout] = useState(stableLayout && (cachedNavigation || Boolean(initialCommentsPayload.pending)));
+  const [secondaryPanelsReady, setSecondaryPanelsReady] = useState(!initialCommentsPayload.pending);
   const ticketStaysOpen = useFlag(HTPR_7116_TICKET_STAYS_OPEN_FLAG);
+  const escapeOwnBoard = useFlag(HTPR_7531_ESCAPE_OWN_BOARD_FLAG);
   useEffect(() => {
     if (secondaryPanelsReady) return;
     const reveal = ticketStaysOpen
@@ -163,7 +165,20 @@ const useTaskDetailGlobalStates = (
   const { hasDraft, hasCommentDraft, draftsFromTQ, draftsHydrated } =
     useHasDrafts(_parsedTask.id, currentUser?.id);
 
-  const { data: userPreferences } = useGetUserPreferences();
+  const { data: userPreferences, dataUpdatedAt: userPreferencesLoadedAt } = useGetUserPreferences();
+  const foldFlagOn = useFlag(HTPR_7611_COMMENTS_FOLD_FROM_FIRST_PAINT_FLAG);
+  const foldFlagLoaded = useFlagLoaded(HTPR_7611_COMMENTS_FOLD_FROM_FIRST_PAINT_FLAG);
+  const foldCommentsFromFirstPaint = foldCommentsFromFirstPaintNow({
+    flagLoaded: foldFlagLoaded,
+    flagOn: foldFlagOn,
+    serverFlagOn: stack?.foldCommentsFromFirstPaint,
+  });
+  const commentsStacked = commentsStackedSetting({
+    foldFromFirstPaint: foldCommentsFromFirstPaint,
+    preferencesLoaded: userPreferencesLoadedAt > 0,
+    serverStacked: stack?.stack,
+    preferenceStacked: userPreferences.commentsStacked,
+  });
 
   const [hasDraftInit, setHasDraftInit] = useState<boolean>(
     currentTask?.drafts?.some((draft: IDraft) =>
@@ -287,7 +302,7 @@ const useTaskDetailGlobalStates = (
   const windowVirtualizer = useWindowVirtualizer({
     ...virtualizerOptions,
     count: scrollElementRef ? 0 : _count,
-    initialRect: instantTicketOpen && hydrated ? { width: window.innerWidth, height: window.innerHeight } : undefined,
+    initialRect: hydrated ? { width: window.innerWidth, height: window.innerHeight } : undefined,
   });
   const elementVirtualizer = useVirtualizer({
     ...virtualizerOptions,
@@ -403,6 +418,12 @@ const useTaskDetailGlobalStates = (
         if (!prevUrl) return false;
         const prev = new URL(prevUrl);
         if (prev.origin !== window.location.origin) return false;
+        if (escapeOwnBoard) {
+          const legacyBoardId = prev.pathname.match(/^\/project-(\d+)$/)?.[1];
+          if (prev.pathname !== "/project" && !legacyBoardId) return false;
+          const prevBoardId = Number(legacyBoardId ?? prev.searchParams.get("id"));
+          return !Number.isSafeInteger(prevBoardId) || prevBoardId <= 0 || prevBoardId !== currentTask?.projectId;
+        }
         if (prev.pathname !== "/project") return false;
         const prevBoardId = prev.searchParams.get("id");
         return !!prevBoardId && Number(prevBoardId) !== currentTask?.projectId;
@@ -421,7 +442,8 @@ const useTaskDetailGlobalStates = (
   };
 
   const refocusAndOpenTaskWriter = (prevActive: string) => {
-    if (editWithAiEnabled) {
+    const sidebarEditWithAi = editWithAiEnabled && !(commentInlineAi && (prevActive === "comment" || prevActive.startsWith("comment-")));
+    if (sidebarEditWithAi) {
       void editTicketWithAi(currentTask!.id);
       return;
     }
@@ -430,11 +452,12 @@ const useTaskDetailGlobalStates = (
   };
 
   const CTRL_J_ENTER_Handler = (shouldTriggerAi: boolean = false) => {
-    if (shouldTriggerAi && editWithAiEnabled) {
+    const currentFocusedType = returnCurrentFocusedType();
+    const sidebarEditWithAi = editWithAiEnabled && !(commentInlineAi && (currentFocusedType === "Edit-Comment" || currentFocusedType === "New-Comment"));
+    if (shouldTriggerAi && sidebarEditWithAi) {
       setShowCommands({ show: true, mode: CommandMode.Command, paletteTab: "compose" });
       return;
     }
-    const currentFocusedType = returnCurrentFocusedType();
     if (currentFocusedType === "Description")
       editDescriptionHandler(shouldTriggerAi);
     else if (currentFocusedType === "Edit-Comment") {
@@ -815,7 +838,8 @@ const useTaskDetailGlobalStates = (
     _count,
     scrollVirtualize,
     listRef,
-    stackData: userPreferences.commentsStacked,
+    stackData: commentsStacked,
+    foldCommentsFromFirstPaint,
     virtualizeIndexes,
     showHistory,
     toggleHistory,

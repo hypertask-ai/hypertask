@@ -6,6 +6,7 @@ SCRIPT=$HERE/runner-selfupdate
 REPO=$(cd "$HERE/../../../.." && pwd)
 T=$(mktemp -d)
 trap 'rm -rf "$T"' EXIT
+export USER_UNIT_CHECK=/usr/bin/true
 export GIT_CONFIG_NOSYSTEM=1 GIT_CONFIG_GLOBAL=/dev/null
 fails=0; passes=0
 ok() { echo "ok   $*"; passes=$((passes + 1)); }
@@ -15,6 +16,7 @@ commit() { git -C "$C/source" add .; git -C "$C/source" -c user.name=Fixture -c 
 setup() {
   C=$T/$1
   export HOME=$C/home RUNNER_SELFUPDATE_LIVE=$C/live RUNNER_SELFUPDATE_LIB=$C/lib
+  export RUNNER_SELFUPDATE_DISPATCH=$HOME/.claude/skills/runners/scripts/runner-dispatch
   export RUNNER_PICKUP_UNIT_DIR=$C/units RUNNER_PICKUP_SETTINGS=$C/settings.json
   export RUNNER_SELFUPDATE_STATE=$C/state RUNNER_SELFUPDATE_SYSTEMCTL=$C/systemctl
   export FAKE_SYSTEMCTL_LOG=$C/systemctl.log FAKE_EVENTS=$C/events FAKE_DELIVER_CALLS=$C/deliver-calls
@@ -25,10 +27,10 @@ setup() {
   mkdir -p "$TMPDIR"
   mkdir -p "$HOME" "$C/source/.claude/skills/ship/scripts" "$C/source/.claude/hooks" "$C/source/.claude/systemd" "$C/lib" "$C/units/agent-events.service.d"
   S=$C/source/.claude/skills/ship/scripts
-  cp "$HERE/runner-pickup" "$SCRIPT" "$S/"
+  cp "$HERE/runner-pickup" "$HERE/user-unit-check" "$SCRIPT" "$S/"
   for file in runner-chat-reply ship-identity; do printf '#!/usr/bin/env bash\nexit 0\n' > "$S/$file"; done
   printf '#!/usr/bin/env bash\nexit 0\n' > "$C/source/.claude/hooks/runner-inbox-stop.sh"
-  printf '#!/usr/bin/env python3\nprint("fixture")\n' > "$S/runner-webhook"
+  for file in runner-webhook runner-dispatch; do printf '#!/usr/bin/env python3\nprint("fixture")\n' > "$S/$file"; done
   cat > "$S/runner-deliver" <<'EOF'
 #!/usr/bin/env bash
 set -euo pipefail
@@ -74,6 +76,9 @@ EOF
   git clone -q --branch production "$C/remote" "$C/live"
   git -C "$C/live" checkout -q --detach origin/production
   cp "$S/"* "$C/lib/"
+  rm "$C/lib/runner-dispatch"
+  install -D -m 0755 "$S/runner-dispatch" "$RUNNER_SELFUPDATE_DISPATCH"
+  cp -a "$RUNNER_SELFUPDATE_DISPATCH" "$C/old-dispatch"
   cp "$C/source/.claude/hooks/runner-inbox-stop.sh" "$C/lib/"
   for file in runner-pickup@.service runner-pickup@.timer runner-webhook.service runner-selfupdate.service runner-selfupdate.timer; do
     cp "$C/source/.claude/systemd/$file" "$C/units/"
@@ -87,7 +92,10 @@ merge() { printf '%s\n' "$2" >> "$S/$1"; commit; git -C "$C/source" push -q orig
 run_ok() { if "$C/lib/runner-selfupdate" run > "$C/output" 2>&1; then ok "$1"; else bad "$1"; cat "$C/output"; fi; }
 run_bad() { if "$C/lib/runner-selfupdate" run > "$C/output" 2>&1; then bad "$1 unexpectedly succeeded"; else ok "$1"; fi; }
 restored() {
-  if diff -r "$C/old-lib" "$C/lib" && diff -r "$C/old-units" "$C/units"; then ok "$1 restored all lib and unit files"; else bad "$1 did not restore all files"; fi
+  if diff -r "$C/old-lib" "$C/lib" && diff -r "$C/old-units" "$C/units" &&
+    cmp -s "$C/old-dispatch" "$RUNNER_SELFUPDATE_DISPATCH" && [ "$(stat -c %a "$RUNNER_SELFUPDATE_DISPATCH")" = 755 ]; then
+    ok "$1 restored all lib, dispatcher and unit files"
+  else bad "$1 did not restore all files"; fi
 }
 events() { wc -l < "$FAKE_EVENTS" | tr -d ' '; }
 
@@ -109,6 +117,29 @@ eq 'successful install raises no event' "$(events)" 0
 : > "$FAKE_SYSTEMCTL_LOG"
 run_ok 'installed update is idempotent'
 eq 'second run performs no install' "$(cat "$FAKE_SYSTEMCTL_LOG")" ''
+
+setup dispatcher-change
+merge runner-dispatch '# merged dispatcher update'
+run_ok 'dispatcher-only change installs'
+if cmp -s "$S/runner-dispatch" "$RUNNER_SELFUPDATE_DISPATCH" && [ "$(stat -c %a "$RUNNER_SELFUPDATE_DISPATCH")" = 755 ]; then
+  ok 'dispatcher installed executable at the existing unit path'
+else bad 'dispatcher installation differs'; fi
+if [ -e "$C/lib/runner-dispatch" ]; then bad 'dispatcher installed into pickup library'; else ok 'dispatcher stays outside pickup library'; fi
+: > "$FAKE_SYSTEMCTL_LOG"
+run_ok 'installed dispatcher update is idempotent'
+eq 'dispatcher second run performs no install' "$(cat "$FAKE_SYSTEMCTL_LOG")" ''
+
+setup dispatcher-first-install
+rm "$RUNNER_SELFUPDATE_DISPATCH"
+run_ok 'missing dispatcher triggers installation'
+if cmp -s "$S/runner-dispatch" "$RUNNER_SELFUPDATE_DISPATCH"; then ok 'missing dispatcher installed'; else bad 'missing dispatcher not installed'; fi
+
+setup dispatcher-syntax-error
+merge runner-dispatch 'def broken('
+run_bad 'invalid dispatcher syntax rejected'
+restored dispatcher-syntax-error
+eq 'dispatcher validation precedes installation' "$(cat "$FAKE_SYSTEMCTL_LOG")" ''
+eq 'invalid dispatcher alerts' "$(events)" 1
 
 setup syntax-error
 merge runner-deliver 'if then'
@@ -133,6 +164,7 @@ if grep -q 'daemon-reload' "$FAKE_SYSTEMCTL_LOG"; then ok 'rollback reloads unit
 
 setup webhook-failure
 merge runner-webhook '# merged receiver update'
+merge runner-dispatch '# dispatcher restored after webhook failure'
 merge runner-selfupdate '# updater installed before webhook restart fails'
 export FAKE_SYSTEMCTL_FAIL=restart
 run_bad 'case 5: failed webhook restart rejected'
@@ -140,6 +172,13 @@ restored webhook-failure
 eq 'webhook failure alerts' "$(events)" 1
 eq 'rollback restarts old webhook' "$(grep -c 'restart runner-webhook.service' "$FAKE_SYSTEMCTL_LOG")" 2
 if grep -q 'is-active --quiet runner-webhook.service' "$FAKE_SYSTEMCTL_LOG"; then ok 'restored webhook must be active'; else bad 'missing active check'; fi
+
+setup dispatcher-first-install-failure
+rm "$RUNNER_SELFUPDATE_DISPATCH"
+merge runner-webhook '# fail restart after first dispatcher install'
+export FAKE_SYSTEMCTL_FAIL=restart
+run_bad 'failed update rolls back first dispatcher installation'
+if [ -e "$RUNNER_SELFUPDATE_DISPATCH" ]; then bad 'rollback left a newly installed dispatcher'; else ok 'rollback removes newly installed dispatcher'; fi
 
 setup wrong-head
 merge runner-deliver '# new production not checked out'

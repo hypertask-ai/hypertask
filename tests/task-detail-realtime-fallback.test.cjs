@@ -5,6 +5,7 @@ const test = require("node:test");
 const ts = require("typescript");
 
 const root = path.resolve(__dirname, "..");
+const { preserveTaskAssigneesChangedDuringFetch } = require("jiti")(__filename)(path.join(root, "src/lib/realtime/taskDetailRefresh.ts"));
 
 function loadHook(stubs) {
   const filename = path.join(
@@ -59,12 +60,16 @@ async function settle() {
 
 test("fallback reconciliation refreshes the task detail without replacing an active draft", async () => {
   let cleanup;
+  const initialAssignees = [];
+  const selectedAssignees = [{ userId: 985 }];
+  let selectDuringFetch = false;
   let currentTask = {
     id: 42,
     projectId: 15,
     uniqueIndex: 6281,
     title: "Before",
     description: "Local draft",
+    assignees: initialAssignees,
   };
   let fetchedTask = {
     id: 42,
@@ -72,10 +77,12 @@ test("fallback reconciliation refreshes the task detail without replacing an act
     uniqueIndex: 6281,
     title: "First fallback",
     description: "Remote description",
+    assignees: initialAssignees,
   };
   const intervals = new Set();
   const fetches = [];
   const merges = [];
+  const assigneeMerges = [];
   const original = {
     clearInterval: global.clearInterval,
     consoleWarn: console.warn,
@@ -99,6 +106,7 @@ test("fallback reconciliation refreshes the task detail without replacing an act
   global.clearInterval = (callback) => intervals.delete(callback);
   global.fetch = async (url, options) => {
     fetches.push({ url, options });
+    if (selectDuringFetch) currentTask = { ...currentTask, assignees: selectedAssignees };
     return { ok: true, json: async () => fetchedTask };
   };
   console.warn = () => {};
@@ -129,7 +137,11 @@ test("fallback reconciliation refreshes the task detail without replacing an act
         refreshTaskComments: async () => {},
       },
       "@/lib/realtime/taskDetailRefresh": {
-        preserveTaskAssigneesChangedDuringFetch: (_current, fetched, _snapshot, keepAssignee) => { assert.equal(keepAssignee, false); return fetched; },
+        preserveTaskAssigneesChangedDuringFetch: (...args) => {
+          assert.equal(args.length, 3);
+          assigneeMerges.push(args);
+          return preserveTaskAssigneesChangedDuringFetch(...args);
+        },
         mergeRealtimeTaskDetail(current, fetched, includeTaskContent) {
           merges.push(includeTaskContent);
           return {
@@ -150,6 +162,7 @@ test("fallback reconciliation refreshes the task detail without replacing an act
       taskProjectId: 15,
       taskUniqueIndex: 6281,
       preserveEditorContent: true,
+      currentTaskAssignees: initialAssignees,
       setCurrentTask(updater) {
         currentTask = updater(currentTask);
       },
@@ -158,6 +171,8 @@ test("fallback reconciliation refreshes the task detail without replacing an act
 
     fetches.length = 0;
     merges.length = 0;
+    assigneeMerges.length = 0;
+    selectDuringFetch = true;
     fetchedTask = { ...fetchedTask, title: "After fallback tick" };
     for (const callback of intervals) callback();
     await settle();
@@ -168,6 +183,11 @@ test("fallback reconciliation refreshes the task detail without replacing an act
     assert.equal(currentTask.title, "After fallback tick");
     assert.equal(currentTask.description, "Local draft");
     assert.deepEqual(merges, [false]);
+    assert.equal(currentTask.assignees, selectedAssignees, "fallback cannot replace a concurrent local assignment");
+    assert.equal(assigneeMerges.length, 1);
+    assert.equal(assigneeMerges[0][0].assignees, selectedAssignees);
+    assert.equal(assigneeMerges[0][1].assignees, initialAssignees);
+    assert.equal(assigneeMerges[0][2], initialAssignees);
   } finally {
     cleanup?.();
     global.clearInterval = original.clearInterval;
@@ -224,7 +244,11 @@ test("linked PR tasks reconcile on subscription so a pre-mount GitHub update is 
       },
       "@/lib/realtime/taskCommentsRefresh": { refreshTaskComments: async () => {} },
       "@/lib/realtime/taskDetailRefresh": {
-        preserveTaskAssigneesChangedDuringFetch: (_current, fetched, _snapshot, keepAssignee) => { assert.equal(keepAssignee, false); return fetched; },
+        preserveTaskAssigneesChangedDuringFetch: (...args) => {
+          assert.equal(args.length, 3);
+          assert.equal(args[2], undefined);
+          return preserveTaskAssigneesChangedDuringFetch(...args);
+        },
         refreshTaskDetailQueryCache: ({ fetchTask }) => fetchTask(),
         mergeRealtimeTaskDetail: (_current, fetched) => fetched,
         shouldApplyRealtimeTaskDetail: () => true,

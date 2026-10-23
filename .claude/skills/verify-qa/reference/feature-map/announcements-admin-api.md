@@ -2,11 +2,11 @@
 
 ## How a customer reaches it
 
-The rocket-digest agent (agent-fleet `workers/rocket-digest`) reads and posts the in-app announcements through three admin routes: `GET /api/admin/announcements/getAnnouncements`, `POST /api/admin/announcements/updateAnnouncement` and `POST /api/admin/postAnnouncement`. It authenticates with the owner announcements credential; admins in the app use a Firebase ID token with the `admin` claim. Users then see the announcements in the sidebar.
+The rocket-digest agent (agent-fleet `workers/rocket-digest`) reads and posts the in-app announcements through three admin routes: `GET /api/admin/announcements/getAnnouncements`, `POST /api/admin/announcements/updateAnnouncement`, `DELETE /api/admin/announcements/updateAnnouncement?announcementId=<id>` and `POST /api/admin/postAnnouncement`. It authenticates with the owner announcements credential; admins in the app use a Firebase ID token with the `admin` claim. Users then see the announcements in the sidebar.
 
 ## How to drive it
 
-Without any login, call each route with its method against https://app.hypertask.ai. Each must answer JSON `{"error":"Unauthorized"}` with status 401, never Vercel's HTML 500 page (`x-matched-path: /500`). Also send `Authorization: Bearer not-a-real-firebase-token` to `postAnnouncement`: 401 JSON proves the Firebase Admin path loads. Never use the owner credential for writes from QA; the agent's next scheduled run (cron `23 7 */2 * *`) is the end-to-end proof.
+Without any login, probe all four method/route combinations against https://app.hypertask.ai. Each must answer JSON `{"error":"Unauthorized"}` with status 401, never Vercel's HTML 500 page (`x-matched-path: /500`). Also send `Authorization: Bearer not-a-real-firebase-token` to `postAnnouncement`: 401 JSON proves a safe denial, not that Firebase Admin loaded: import or initialization failures also return 401. With an authorized admin QA account, a valid Firebase admin ID token must succeed on the read-only announcements GET to prove that auth path works; if unavailable, record that proof as unreachable. Never use the owner credential for writes from QA; the agent's next scheduled run (cron `23 7 */2 * *`) is the end-to-end proof.
 
 Locally, `node --no-experimental-require-module -e "require('firebase-admin/auth')"` reproduces Vercel's module loading: it must not throw `ERR_REQUIRE_ESM`.
 
@@ -17,8 +17,8 @@ Locally, `node --no-experimental-require-module -e "require('firebase-admin/auth
 
 ## What proof to collect
 
-Checklist written before QA; the three no-login responses with status and body (text plus a rendered screenshot); the bogus Firebase token response. Doctor: merge SHA production deployment success and /my-tasks signed in with a QA account. Record the account id, never credentials. Publish a self-contained HTML report on the ticket and attach proof and key screenshots.
+Checklist written before QA; the four no-login method/route responses with status and body (text plus a rendered screenshot); the bogus Firebase token response. Doctor: merge SHA production deployment success and /my-tasks signed in with a QA account. Record the account id, never credentials. Publish a self-contained HTML report on the ticket and attach proof and key screenshots.
 
 ## Cleanup
 
-None: the checks are read-only and write nothing.
+The unauthenticated denial probes stop before persistence and need no cleanup. The signed-in doctor can create missing announcement recipient rows for the QA account through app-shell bootstrap. Record this side effect and retain those normal account records; do not delete announcements or recipient rows as QA cleanup.

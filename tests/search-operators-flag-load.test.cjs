@@ -25,7 +25,7 @@ test('URL searches always post the full operator query without duplicate request
   let reactRoot
   try {
     stub('src/lib/configs/search.config.ts', { searchConfig: { responseMessages: { default: '', fail: 'No results', error: 'Error' } } })
-    stub('src/hooks/useFlag.tsx', { useFlag: () => false })
+    stub('src/hooks/useFlag.tsx', { useFlagReady: () => true, useFlag: () => false })
     stub('src/lib/contexts/deviceContext.tsx', { useDeviceContext: () => false })
     const allProjects = [{ id: 7, title: 'Visible' }]
     stub('src/hooks/MultiPages/useGetAllProjectsMinimal.ts', { useGetAllProjectsMinimal: () => ({ data: allProjects }) })

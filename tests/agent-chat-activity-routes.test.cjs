@@ -88,6 +88,7 @@ stub("src/lib/mcp/auth.ts", {
   checkMcpRateLimit: async () => null,
   validateMcpAuth: async () => ({
     agentId: "agent-1",
+    teamScope: null,
     user: { id: 6, displayName: "Agent" },
   }),
 });
@@ -210,7 +211,7 @@ test("MCP adds at most ten activity facts only for an explicit activity question
     createdAt: "2026-09-04T12:00:50.000Z",
   });
   assert.deepEqual(activityCalls, [
-    { agentId: "agent-1", sessionId: "session-1", userId: 6 },
+    { agentId: "agent-1", sessionId: "session-1", userId: 6, teamScope: null },
   ]);
 });
 
@@ -232,8 +233,8 @@ test("ordinary MCP transcript reads preserve all normal messages without activit
 
 test("activity rows keep refreshing without a pending reply, and uncached", () => {
   const polling = chatClientSource.slice(
-    chatClientSource.indexOf("useEffect(() => {\n    if (!session || !"),
-    chatClientSource.indexOf("useEffect(() => {\n    if (!session || awaiting"),
+    chatClientSource.lastIndexOf("useEffect(() => {", chatClientSource.indexOf("if (!session || !activityRowsEnabled) return;")),
+    chatClientSource.lastIndexOf("useEffect(() => {", chatClientSource.indexOf("if (!session || awaiting || activityRowsEnabled) return;")),
   );
 
   // 5s keeps the ticket's "within 10 seconds" promise with one request in hand.
@@ -255,8 +256,8 @@ test("activity rows keep refreshing without a pending reply, and uncached", () =
 
 test("polling delivery status refreshes while an idle chat stays open", () => {
   const polling = chatClientSource.slice(
-    chatClientSource.indexOf("useEffect(() => {\n    if (!session || awaiting"),
-    chatClientSource.indexOf("useEffect(() => {\n    let cancelled = false;\n    let unsubscribe"),
+    chatClientSource.lastIndexOf("useEffect(() => {", chatClientSource.indexOf("if (!session || awaiting || activityRowsEnabled) return;")),
+    chatClientSource.lastIndexOf("useEffect(() => {", chatClientSource.indexOf("let cancelled = false;\n    let unsubscribe")),
   );
 
   assert.match(chatClientSource, /const CHAT_AVAILABILITY_POLL_MS = 30_000/);

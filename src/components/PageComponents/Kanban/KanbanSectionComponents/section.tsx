@@ -4,7 +4,12 @@ import dynamic from "next/dynamic";
 import { useFirstScreenSurface } from "@/lib/firstScreen/SurfaceContext";
 import { getViewAppliedArchivedTasks } from "@/utils/helperFunctions/Views/ArchivedTasksHelper";
 import React, { useCallback, useContext, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
-const loadTask = () => import("../KanbanTaskComponents/task");
+import { rememberLoadedModule } from "@/lib/boardStartup/loadedModule";
+import { useFlag } from "@/hooks/useFlag";
+import { useHydrated } from "@/hooks/General/useHydrated";
+import { HTPR_7644_BOARD_CARDS_FIRST_DRAW_FLAG } from "@/lib/flags/definitions/htpr-7644-board-cards-first-draw";
+const taskModule = rememberLoadedModule(() => import("../KanbanTaskComponents/task"));
+const loadTask = taskModule.load;
 if (typeof window !== "undefined") {
   void loadTask().catch(() => {});
 }
@@ -33,8 +38,6 @@ import {
 } from "@/models/Views/model";
 import { CommandMode } from "@/models/enums";
 import ProgressiveTaskPlaceholder from "../KanbanTaskComponents/ProgressiveTaskPlaceholder";
-import { useFlag } from "@/hooks/useFlag";
-import { HTPR_6752_INSTANT_TICKET_OPEN_FLAG } from "@/lib/flags/keys";
 import useHypertasksNavigate from "@/hooks/MultiPages/Route/useHypertasksNavigate";
 import {
   getMobileSectionObserverOptions,
@@ -47,7 +50,6 @@ const INITIAL_PROGRESSIVE_TASKS_PER_SECTION = 2;
 const PROGRESSIVE_REVEAL_SETTLE_MS = 160;
 
 const TaskSkeleton = ({ provided }: { provided?: DraggableProvided }) => {
-  const instantTicketOpen = useFlag(HTPR_6752_INSTANT_TICKET_OPEN_FLAG);
   return (
     <div
       ref={provided?.innerRef}
@@ -55,31 +57,7 @@ const TaskSkeleton = ({ provided }: { provided?: DraggableProvided }) => {
       style={provided?.draggableProps.style}
       className="outline-none rounded-[5px]"
     >
-      <div className="shadow-md border-l-4 border-transparent bg-cardBackground rounded-[5px] outline-none min-h-[100px]">
-        {!instantTicketOpen && <div className="flex items-start p-2 gap-2 flex-col animate-pulse">
-          <div className="w-full flex justify-between items-center">
-            <div className="flex items-center gap-2">
-              <div className="w-16 h-3 bg-gray-300 dark:bg-gray-600 rounded"></div>
-              <div className="w-4 h-4 bg-gray-300 dark:bg-gray-600 rounded-full"></div>
-            </div>
-            <div className="flex gap-1">
-              <div className="w-5 h-5 bg-gray-300 dark:bg-gray-600 rounded"></div>
-              <div className="w-5 h-5 bg-gray-300 dark:bg-gray-600 rounded"></div>
-            </div>
-          </div>
-
-          <div className="w-full flex-1">
-            <div className="w-4/5 h-4 bg-gray-300 dark:bg-gray-600 rounded mb-2"></div>
-            <div className="w-3/5 h-3 bg-gray-300 dark:bg-gray-600 rounded"></div>
-          </div>
-
-          <div className="w-full flex gap-2 mt-2">
-            <div className="w-12 h-5 bg-gray-300 dark:bg-gray-600 rounded-full"></div>
-            <div className="w-16 h-5 bg-gray-300 dark:bg-gray-600 rounded-full"></div>
-            <div className="w-14 h-5 bg-gray-300 dark:bg-gray-600 rounded-full"></div>
-          </div>
-        </div>}
-      </div>
+      <div className="shadow-md border-l-4 border-transparent bg-cardBackground rounded-[5px] outline-none min-h-[100px]" />
     </div>
   );
 };
@@ -107,6 +85,7 @@ export const Section = ({
   renderAllTasks,
   dragDisabled = false,
   project,
+  firstTaskPointer,
 }: {
   section: ISection;
   currentSetting: TBoardSubtaskSetting;
@@ -130,24 +109,26 @@ export const Section = ({
   renderAllTasks: boolean;
   dragDisabled?: boolean;
   project: IProject;
+  firstTaskPointer?: React.ReactNode;
 }) => {
   const snapshot = useFirstScreenSurface();
   const [seeded] = useState(() => Boolean(snapshot));
-  const TaskRenderer = seeded ? SeededTask : Task;
+  const hydrated = useHydrated();
+  let firstDrawTask: ReturnType<typeof taskModule.loaded> = null;
+  if (useFlag(HTPR_7644_BOARD_CARDS_FIRST_DRAW_FLAG)) firstDrawTask = taskModule.loaded();
+  const [loadedTask] = useState(() => (seeded || !hydrated ? null : firstDrawTask));
+  const TaskRenderer = seeded ? SeededTask : loadedTask?.default ?? Task;
   const currentProject = project;
   const activeItem = useRecoilValue(activeItemAtom);
   const active = useRecoilValue(isActiveSectionSelector(index));
   const setActiveSection = useSetRecoilState(activeSectionAtom);
   const setActiveSectionId = useSetRecoilState(activeSectionIdAtom);
   const setTasksPlayList = useSetRecoilState(tasksPlayListAtom);
-  const instantTicketOpen = useFlag(
-    HTPR_6752_INSTANT_TICKET_OPEN_FLAG,
-  );
   const { navigateToTask } = useHypertasksNavigate();
   const [revealedTaskIds, setRevealedTaskIds] = useState<Set<number>>(
     () => new Set(),
   );
-  const [taskModuleReady, setTaskModuleReady] = useState(seeded);
+  const [taskModuleReady, setTaskModuleReady] = useState(seeded || loadedTask !== null);
   const [taskModuleFailed, setTaskModuleFailed] = useState(false);
   const [mobileSectionNearViewport, setMobileSectionNearViewport] = useState(
     index === 0,
@@ -257,17 +238,14 @@ export const Section = ({
     });
   }, [taskModuleReady]);
 
-  const openTaskWithCachedData = useCallback(
-    (includeCachedTask: boolean, task: ITask) => {
+  const openTask = useCallback(
+    (task: ITask) => {
       if (task.uniqueIndex === undefined) return;
       setTasksPlayList(tasksPlayList);
-      navigateToTask(task.projectId, task.uniqueIndex, "push", undefined, includeCachedTask ? task : undefined);
+      navigateToTask(task.projectId, task.uniqueIndex, "push", undefined, task);
     },
     [navigateToTask, setTasksPlayList, tasksPlayList],
   );
-  const openTask = instantTicketOpen
-    ? openTaskWithCachedData.bind(null, true)
-    : openTaskWithCachedData.bind(null, false);
 
   useEffect(() => {
     if (
@@ -466,11 +444,14 @@ export const Section = ({
                 id={section.sectionId!}
               />
               {!showAddItem && (
-                <NewTaskButton
-                  buttonPosition="top"
-                  createTaskAt={createTaskAt}
-                  sectionPayload={topSectionPayload}
-                />
+                <div className="relative">
+                  <NewTaskButton
+                    buttonPosition="top"
+                    createTaskAt={createTaskAt}
+                    sectionPayload={topSectionPayload}
+                  />
+                  {firstTaskPointer}
+                </div>
               )}
             </div>
             <div

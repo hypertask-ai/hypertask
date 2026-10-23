@@ -1,5 +1,5 @@
 import { updateSection as writeSection } from "@/lib/api/typedClient";
-import { HTPR_6979_TYPED_WRITES_FLAG, HTPR_6980_INSTANT_COLUMN_DELETE_FLAG, HTPR_7040_LAST_COLUMN_DELETE_MESSAGE_FLAG, HTPR_7043_NO_EMPTY_BOARD_FLASH_FLAG } from "@/lib/flags/keys";
+import { HTPR_6979_TYPED_WRITES_FLAG, HTPR_7040_LAST_COLUMN_DELETE_MESSAGE_FLAG, HTPR_7043_NO_EMPTY_BOARD_FLASH_FLAG } from "@/lib/flags/keys";
 import { IMember, IProject, IProjectsAll, ISection, IUser } from "@/models/model";
 import type { IAgent } from "@/models/model";
 import { currentProjectAtom, currentUserAtom, showCommandsAtom } from "@/store";
@@ -41,7 +41,6 @@ import {
 } from "@/lib/sectionAutoAssign";
 import SettingsToggle from "@/components/Modals/Settings/SettingsToggle";
 import { useFlag } from "@/hooks/useFlag";
-import { COLUMN_ALL_VIEWS_FLAG } from "@/lib/flags/keys";
 import {
   applyColumnVisibilityToProject,
   countViewsShowingColumn,
@@ -53,7 +52,6 @@ import { MobileViewContext } from "@/lib/contexts/mobileContext";
 const ManageColumns = ({ toggleModal }: { toggleModal: (add: boolean) => void }) => {
   const queryClient = useQueryClient();
   const typedWrites = useFlag(HTPR_6979_TYPED_WRITES_FLAG);
-  const instantColumnDelete = useFlag(HTPR_6980_INSTANT_COLUMN_DELETE_FLAG);
   const lastColumnDeleteMessage = useFlag(HTPR_7040_LAST_COLUMN_DELETE_MESSAGE_FLAG);
   const noEmptyBoardFlash = useFlag(HTPR_7043_NO_EMPTY_BOARD_FLASH_FLAG);
   let typedWrite: typeof writeSection | undefined;
@@ -349,7 +347,6 @@ const ManageColumns = ({ toggleModal }: { toggleModal: (add: boolean) => void })
     }
   };
 
-  const columnAllViewsEnabled = useFlag(COLUMN_ALL_VIEWS_FLAG);
   const viewCounts = useMemo(() => {
     const sectionId = editSection?.id ?? editSection?.sectionId;
     return currentProject && sectionId
@@ -584,7 +581,7 @@ const ManageColumns = ({ toggleModal }: { toggleModal: (add: boolean) => void })
     : autoAssignName;
 
   const confirmDelete = async () => {
-    if (instantColumnDelete && editSection && currentProject) {
+    if (editSection && currentProject) {
       const projectId = currentProject.id;
       const queryKey = [
         globalConstants.GetAllManageColumnsPrefixKey,
@@ -898,34 +895,32 @@ const ManageColumns = ({ toggleModal }: { toggleModal: (add: boolean) => void })
               />
             </div>
 
-            {columnAllViewsEnabled && (
-              <div className="flex min-h-[40px] items-center justify-between gap-4 border-b border-light-black-border-1 px-4 py-2">
-                <div className="min-w-0">
-                  <span className="text-dense font-semibold text-white-black">
-                    Views
-                  </span>
-                  <p className="text-dense font-medium text-text-light-gray">
-                    {describeViewsShowingColumn(viewCounts)}
-                  </p>
-                </div>
-                <div className="flex shrink-0 items-center gap-2">
-                  <button
-                    type="button"
-                    className="border-0 bg-transparent p-0 text-dense text-white-black transition hover:opacity-70"
-                    onClick={() => void queueSave(() => setVisibilityInAllViews(true))}
-                  >
-                    Show in all views
-                  </button>
-                  <button
-                    type="button"
-                    className="border-0 bg-transparent p-0 text-dense text-text-light-gray transition hover:text-white-black"
-                    onClick={() => void queueSave(() => setVisibilityInAllViews(false))}
-                  >
-                    Hide in all views
-                  </button>
-                </div>
+            <div className="flex min-h-[40px] items-center justify-between gap-4 border-b border-light-black-border-1 px-4 py-2">
+              <div className="min-w-0">
+                <span className="text-dense font-semibold text-white-black">
+                  Views
+                </span>
+                <p className="text-dense font-medium text-text-light-gray">
+                  {describeViewsShowingColumn(viewCounts)}
+                </p>
               </div>
-            )}
+              <div className="flex shrink-0 items-center gap-2">
+                <button
+                  type="button"
+                  className="border-0 bg-transparent p-0 text-dense text-white-black transition hover:opacity-70"
+                  onClick={() => void queueSave(() => setVisibilityInAllViews(true))}
+                >
+                  Show in all views
+                </button>
+                <button
+                  type="button"
+                  className="border-0 bg-transparent p-0 text-dense text-text-light-gray transition hover:text-white-black"
+                  onClick={() => void queueSave(() => setVisibilityInAllViews(false))}
+                >
+                  Hide in all views
+                </button>
+              </div>
+            </div>
 
             <button
               type="button"

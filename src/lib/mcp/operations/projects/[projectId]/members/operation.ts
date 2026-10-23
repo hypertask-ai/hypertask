@@ -8,6 +8,8 @@ import prisma from "@/lib/prisma";
 import { addMemberController } from "@/pages/api/invite/createInviteLink";
 import { addAgentToBoard } from "@/utils/controllers/agents/boardMembers";
 import { addExistingUserToProject } from "@/utils/controllers/members/addExistingUserToProject";
+import { AgentBoardInviteScopeError, assertAgentBoardInviteScope, checkAgentBoardDelegation } from "@/lib/mcp/agents/delegatedAccess";
+import { requireRole } from "@/lib/mcp/agents/scopes";
 import isProjectAdmin from "@/utils/controllers/projects/isProjectAdmin";
 
 import {
@@ -45,7 +47,7 @@ export async function GET(request: NextRequest, props: { params: Promise<{ proje
       );
     }
 
-    const access = await validateProjectAccess(projectId, user.id, ctx.agentId);
+    const access = await validateProjectAccess(projectId, user.id, ctx.agentId, ctx.teamScope);
     if (access.error) {
       const message =
         access.error.status === 403
@@ -129,7 +131,7 @@ export async function POST(request: NextRequest, props: { params: Promise<{ proj
       );
     }
 
-    const access = await validateProjectAccess(projectId, user.id, ctx.agentId);
+    const access = await validateProjectAccess(projectId, user.id, ctx.agentId, ctx.teamScope);
     if (access.error) {
       const message =
         access.error.status === 403
@@ -170,8 +172,16 @@ export async function POST(request: NextRequest, props: { params: Promise<{ proj
       );
     }
 
+    if (ctx.agentId) {
+      const delegationError = target.kind === "agent"
+        ? await checkAgentBoardDelegation(ctx, target.agentId)
+        : await requireRole(ctx, "admin");
+      if (delegationError) return delegationError;
+      await assertAgentBoardInviteScope(prisma.member, projectId, user.id, ctx.agentId);
+    }
+
     if (target.kind === "agent") {
-      const result = await addAgentToBoard(projectId, target.agentId, ctx.user.id);
+      const result = await addAgentToBoard(projectId, target.agentId, ctx.user.id, ctx.agentId);
 
       if (!result.ok) {
         return NextResponse.json(
@@ -198,7 +208,7 @@ export async function POST(request: NextRequest, props: { params: Promise<{ proj
     }
 
     if (target.kind === "user_id") {
-      const result = await addExistingUserToProject(projectId, target.userId, ctx.user.id);
+      const result = await addExistingUserToProject(projectId, target.userId, ctx.user.id, ctx.agentId);
       if (!result.ok) {
         return NextResponse.json(
           {
@@ -230,7 +240,7 @@ export async function POST(request: NextRequest, props: { params: Promise<{ proj
         })
       : null;
 
-    const result = await addMemberController(ctx.user.id, projectId, [emailToAdd]);
+    const result = await addMemberController(ctx.user.id, projectId, [emailToAdd], ctx.agentId);
 
     if (result.status !== 200) {
       return NextResponse.json(
@@ -292,6 +302,9 @@ export async function POST(request: NextRequest, props: { params: Promise<{ proj
       { status: 500 }
     );
   } catch (err) {
+    if (err instanceof AgentBoardInviteScopeError) {
+      return NextResponse.json({ success: false, error: err.message }, { status: err.status });
+    }
     console.error("[MCP Add Project Member] Error:", err);
     reportMcpOperationCrash(request, err);
     return NextResponse.json(

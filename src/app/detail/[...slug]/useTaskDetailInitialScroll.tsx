@@ -6,13 +6,22 @@ import { descriptionContainerId } from "@/lib/constants/TaskDetail";
 import type { TaskDetailKeyboardContext } from "./TaskDetailKeyboardContext";
 import { useFlag } from "@/hooks/useFlag";
 import { useTaskContext } from "@/lib/contexts/TaskDetail/TaskProvider";
-import { HTPR_6752_INSTANT_TICKET_OPEN_FLAG, HTPR_6899_STABLE_LAYOUT_FLAG, HTPR_7315_UNREAD_TICKET_OPENS_TOP_FLAG, HTPR_7367_SERVER_DESCRIPTION_FIRST_FLAG } from "@/lib/flags/keys";
+import { HTPR_6899_STABLE_LAYOUT_FLAG, HTPR_7315_UNREAD_TICKET_OPENS_TOP_FLAG, HTPR_7367_SERVER_DESCRIPTION_FIRST_FLAG, HTPR_7395_CACHED_STATIC_FIRST_FLAG } from "@/lib/flags/keys";
+import { getTiptapEditorForMode } from "@/lib/snippets";
+function deferredDescriptionEditorSettled(scope: ParentNode) {
+  const editor = getTiptapEditorForMode("read-edit-description");
+  return !!editor && !editor.isDestroyed &&
+    !!scope.querySelector("#description-input")?.contains(editor.view.dom) &&
+    !scope.querySelector('[data-composer-slot-settled="false"]');
+}
+const deferredEditorReadyCheck = (applies: boolean | undefined) => applies ? deferredDescriptionEditorSettled : null;
 export function useTaskDetailInitialScroll(context: TaskDetailKeyboardContext) {
-  const instantTicketOpen = useFlag(HTPR_6752_INSTANT_TICKET_OPEN_FLAG);
   const stableLayout = useFlag(HTPR_6899_STABLE_LAYOUT_FLAG);
   const unreadTicketOpensTop = useFlag(HTPR_7315_UNREAD_TICKET_OPENS_TOP_FLAG);
   const descriptionFirstFlag = useFlag(HTPR_7367_SERVER_DESCRIPTION_FIRST_FLAG);
-  const { cachedLayout, newCommentsLastReadAt, liveRowsPendingFor, descriptionStart } = useTaskContext();
+  const cachedStaticFirst = useFlag(HTPR_7395_CACHED_STATIC_FIRST_FLAG);
+  const { cachedLayout, cachedEditorAfterPaint, newCommentsLastReadAt, liveRowsPendingFor, descriptionStart } = useTaskContext();
+  const deferredEditorReady = deferredEditorReadyCheck(cachedStaticFirst && cachedEditorAfterPaint && !cachedLayout);
   const waitsForLiveRows = liveRowsPendingFor(descriptionFirstFlag || descriptionStart === "server");
   const { bottomScrollCancelRef, hasBottomScrolledRef, newCommentsSnapshotReady, newCommentIds, comments, visibleCommentIndices, virtualizer, virtualizeIndexes, setPriority_, priorityForTaskTQ, setEstimate_, estimateForTaskTQ, showCreateTaskModal, _parsedTask, initialScrollGenerationRef, scrollElementRef, initialScrollGuard, hasScrolledToUnreadRef, initialScrollViewportRef, _mbl, searchParams, scrollVirtualize, focusOn, scrollSetting, defaultCommentFocus } = context;
 
@@ -46,8 +55,15 @@ export function useTaskDetailInitialScroll(context: TaskDetailKeyboardContext) {
     let lastHeight = -1;
     let stableFrames = 0;
     const startedAt = performance.now();
+    let stableSince = startedAt;
     const generation = initialScrollGenerationRef.current;
     const scrollTarget = scrollElementRef?.current;
+    const followsDeferredEditor = (height: number) => {
+      if (!deferredEditorReady) return undefined;
+      const now = performance.now();
+      if (height !== lastHeight || !deferredEditorReady(scrollTarget ?? document)) stableSince = now;
+      return now - stableSince < 300 && now - startedAt < 10000;
+    };
     const cleanup = () => {
       cancelled = true;
     };
@@ -57,12 +73,13 @@ export function useTaskDetailInitialScroll(context: TaskDetailKeyboardContext) {
       const height =
         scrollTarget?.scrollHeight ?? document.documentElement.scrollHeight;
       (scrollTarget ?? window).scrollTo({ top: height, behavior: "auto" });
+      const keepScrolling = followsDeferredEditor(height);
       if (height === lastHeight) stableFrames += 1;
       else {
         stableFrames = 0;
         lastHeight = height;
       }
-      if (stableFrames < 3 && performance.now() - startedAt < 2500) {
+      if (keepScrolling ?? (stableFrames < 3 && performance.now() - startedAt < 2500)) {
         requestAnimationFrame(step);
       } else {
         cleanup();
@@ -70,7 +87,7 @@ export function useTaskDetailInitialScroll(context: TaskDetailKeyboardContext) {
     };
     requestAnimationFrame(step);
     return cleanup;
-  }, [initialScrollGuard, scrollElementRef]);
+  }, [initialScrollGuard, scrollElementRef, deferredEditorReady]);
 
   useLayoutEffect(() => {
     const generation = initialScrollGuard.reset();
@@ -138,7 +155,7 @@ export function useTaskDetailInitialScroll(context: TaskDetailKeyboardContext) {
         );
         document.getElementById(`${taskDetailConfig.audioButtons.createComment}-${taskDetailConfig.audioButtons.suffix}`)?.click();
         return () => clearTimeout(timeout);
-      } else if (stableLayout && instantTicketOpen && cachedLayout) {
+      } else if (stableLayout && cachedLayout) {
         return;
       } else if (unreadTicketOpensTop) {
         return;
@@ -180,9 +197,9 @@ export function useTaskDetailInitialScroll(context: TaskDetailKeyboardContext) {
         }
       }
     }
-  }, [_parsedTask.id, stableLayout, instantTicketOpen, cachedLayout, unreadTicketOpensTop]);
+  }, [_parsedTask.id, stableLayout, cachedLayout, unreadTicketOpensTop]);
 
-  useEffect(stableLayout && instantTicketOpen && cachedLayout ? () => {} : () => {
+  useEffect(stableLayout && cachedLayout ? () => {} : () => {
     const generation = initialScrollGenerationRef.current;
     const runInitialPositioning = (callback: () => void) =>
       initialScrollGuard.run(generation, callback);
@@ -298,7 +315,6 @@ export function useTaskDetailInitialScroll(context: TaskDetailKeyboardContext) {
     defaultCommentFocus,
     cachedLayout,
     stableLayout,
-    instantTicketOpen,
     scrollSetting,
     scrollElementRef,
     scrollWindowToBottomMobile,

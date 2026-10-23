@@ -1,3 +1,4 @@
+import { recordAgentBoardScopeMiss } from "@/lib/auth/agentScope";
 import { reportMcpOperationCrash } from '@/lib/mcp/operationCrashReport'
 import { wrapMcpRoute, validateMcpRouteAuth as validateMcpAuth, checkMcpRouteRateLimit as checkMcpRateLimit } from '@/lib/mcp/routeWrapper'
 import { NextRequest, NextResponse } from 'next/server'
@@ -101,7 +102,7 @@ export async function GET(request: NextRequest) {
     const where: any = {
       status: status ?? 'Normal',
       AND: [
-        getProjectListingWhere(user.id, ctx.agentId),
+        getProjectListingWhere(user.id, ctx.agentId, ctx.teamScope),
         ...(search
           ? [
               {
@@ -191,6 +192,7 @@ export async function GET(request: NextRequest) {
       ...(cursorId ? { cursor: { id: cursorId } } : {}),
     })
 
+    projects.forEach(project => recordAgentBoardScopeMiss(project.id, "read"));
     const projectList: ProjectListItem[] = projects.map(project => ({
       id: project.id,
       title: project.title || '',

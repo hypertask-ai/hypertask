@@ -6,6 +6,8 @@ Do not edit shared keys, definitions or risk maps to add a flag. `scripts/genera
 
 Existing keys.ts, definitions.ts, releaseRisk.ts and flags.ts imports remain supported. Agent run constants are re-exported from their flag files by agentRuns/model.ts. Non-flag reply guidance stays in keys.ts.
 
-New features and improvements default to Owner + QA. Bugfix flags use `kind: "bugfix"` and default to Everyone unless an explicit defaultMode overrides it. Infra tickets do not add a flag.
+New feature and improvement flags set `defaultMode: "EVERYONE"` in their definition file unless `releaseRisk.highRisk` is set (`money`, `access`, `data-deletion`, `customer-email`) or kind is `internal`. High-risk flags set `defaultMode: "OWNER_AND_QA"`; internal flags retain Owner + QA unless explicitly restricted further. Neither may default to Everyone. Bugfix flags inherit Everyone by kind unless high risk, which requires explicit Owner + QA. Existing flags keep their current mode (HTPR-7389). Infra tickets do not add a flag.
 
-Trusted CI and ship-check read the per-flag files without executing them and accept legacy inline registries in flags.ts or definitions.ts for old base refs. A stale premerge click is accepted only for a fetchable earlier commit associated with the same PR when its own patch differs solely in registry files. Changes to production are excluded using each commit's merge-base. Live modes, account, board, passing click and recording are still required; any other PR change needs a new click. premerge-evidence.py continues to invoke the same ship-check publisher.
+Only for Valentin's own explicit request, a new flag may instead use `defaultMode: "OWNER_ONLY"` with `releaseRisk.ownerRequest: { quote: "<his exact request>", ticketUrl: "<ticket link>" }`: the quote must be non-blank and the link must match `^https://app\.hypertask\.ai/detail/project-\d+/\d+$`. This exception permits only Owner only, not Owner + QA or Off, and does not replace required `releaseRisk.highRisk` metadata.
+
+Test click removed (Valentin 2026-10-21); safety is flags, revert, live QA after release and the YPER4-550 screenshot check.

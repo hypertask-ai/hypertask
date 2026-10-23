@@ -1,3 +1,4 @@
+const { withStubs } = require("./helpers/stub-map.cjs");
 const assert = require("node:assert/strict");
 const fs = require("node:fs");
 const path = require("node:path");
@@ -10,6 +11,7 @@ const { JSDOM } = require("jsdom");
 const root = path.resolve(__dirname, "..");
 const noop = () => {};
 function load(file, mocks = {}, runtime = {}) {
+  mocks = withStubs({ "@/lib/auth/agentScope": require("./helpers/agent-board-scope.cjs").enforcedScope }, mocks);
   const target = { exports: {} };
   const compiled = ts.transpileModule(fs.readFileSync(path.join(root, file), "utf8"), {
     compilerOptions: { jsx: ts.JsxEmit.ReactJSX, module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022, esModuleInterop: true },
@@ -208,6 +210,9 @@ const parser = require("node-html-parser");
 const canvas = load("src/utils/controllers/pages/htmlCanvas.ts", { "node-html-parser": parser });
 const urls = load("src/utils/controllers/urls/extractUrlsFromContent.ts", {
   "node-html-parser": parser,
+  "@/lib/prisma": {},
+  "@/lib/mcp/tasks/agentMutationFence": {},
+  "@/utils/controllers/projects/getAllIncludes": access,
   "@/utils/controllers/urls/addIntoTask": {}, "@/utils/controllers/urls/addIntoTaskDesc": {},
 });
 const fileSource = "https://files.example.test/uploads/private.png";
@@ -266,7 +271,7 @@ for (const userId of [1, 2, 3]) {
       "@/utils/controllers/agents/boardMembers": { getBoardAgentMembers: async () => [] },
       "../search/document": { turbopufferFetchMentionTasks: async () => [] },
       "@/utils/controllers/pages/standalonePagesEnabled": { standalonePagesEnabled: async () => true },
-      "@/lib/flags": { isFeatureEnabled: async () => true, PAGE_MENTIONS_FLAG: "pages" },
+      "@/lib/flags": { isFeatureEnabled: async () => true },
       "@/utils/helperFunctions/mentionSearch": { matchesMentionName: () => true, selectMentionAgents: () => [] },
     }).default;
     const result = await mentions("Page", userId, 10);

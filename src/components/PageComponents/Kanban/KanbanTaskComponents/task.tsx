@@ -22,7 +22,6 @@ const RemoveSubtaskModal = dynamic(
 import { Draggable } from "@hello-pangea/dnd";
 import globalConstants from "@/lib/constants";
 import { useDeviceContext } from "@/lib/contexts/deviceContext";
-import { HTPR_6752_INSTANT_TICKET_OPEN_FLAG } from "@/lib/flags/keys";
 import useHypertasksNavigate from "@/hooks/MultiPages/Route/useHypertasksNavigate";
 import { TBoardSubtaskSetting } from "@/models/Views/model";
 import useHypertasksRecoilStates from "@/hooks/RecoilRoot/useHypertasksRecoilStates";
@@ -49,7 +48,7 @@ import type { BlockerUser } from "./BlockerChip";
 import { splitAssignees } from "@/lib/assignees";
 import { useKanbanBulkSelection } from "@/lib/contexts/Kanban/BulkSelectionContext";
 import { useFlag } from "@/hooks/useFlag";
-import { HTPR_6427_ROW_SHORTCUTS_FLAG } from "@/lib/flags/keys";
+import { HTPR_6427_ROW_SHORTCUTS_FLAG, HTPR_7263_PHONE_HOLD_SELECT_FLAG } from "@/lib/flags/keys";
 import type {
   DraggableProvided,
   DraggableStateSnapshot,
@@ -76,7 +75,7 @@ interface IProps {
   dragSnapshot?: DraggableStateSnapshot;
 }
 
-type TaskContentProps = IProps & { rowShortcutsEnabled: boolean; instantTicketOpen: boolean };
+type TaskContentProps = IProps & { rowShortcutsEnabled: boolean; phoneHoldSelect: boolean };
 
 const TaskContent = ({
   task,
@@ -98,7 +97,7 @@ const TaskContent = ({
   dragProvided,
   dragSnapshot,
   rowShortcutsEnabled,
-  instantTicketOpen,
+  phoneHoldSelect,
 }: TaskContentProps) => {
   const isApple = useDeviceContext();
   const {
@@ -629,14 +628,14 @@ const TaskContent = ({
       console.time("EnterPressOnTask");
       if (!task.uniqueIndex) return;
       setTasksPlayList(tasksPlayList);
-      navigateToTask(task.projectId, task.uniqueIndex, "push", undefined, instantTicketOpen ? task : undefined);
+      navigateToTask(task.projectId, task.uniqueIndex, "push", undefined, task);
       console.timeEnd("EnterPressOnTask");
     }
 
     if (e.keyCode === KeyCodes.M && cmdControl) {
       if (!task.uniqueIndex) return;
       setTasksPlayList(tasksPlayList);
-      navigateToTask(task.projectId, task.uniqueIndex, "push", `?reply=true`, instantTicketOpen ? task : undefined);
+      navigateToTask(task.projectId, task.uniqueIndex, "push", `?reply=true`, task);
     }
 
     if (e.keyCode === KeyCodes.G && e.shiftKey) {
@@ -754,7 +753,7 @@ const TaskContent = ({
     if (e.keyCode === KeyCodes.V && e.altKey && !e.shiftKey) {
       if (!task.uniqueIndex) return;
       setTasksPlayList(tasksPlayList);
-      navigateToTask(task.projectId, task.uniqueIndex, "push", `?audio=true`, instantTicketOpen ? task : undefined);
+      navigateToTask(task.projectId, task.uniqueIndex, "push", `?audio=true`, task);
     }
 
     if (
@@ -805,7 +804,7 @@ const TaskContent = ({
     )
       return;
     setTasksPlayList(tasksPlayList);
-    navigateToTask(task.projectId, task.uniqueIndex, "push", undefined, instantTicketOpen ? task : undefined);
+    navigateToTask(task.projectId, task.uniqueIndex, "push", undefined, task);
   };
 
   const toggleRemoveSubtaskModal = async (
@@ -972,13 +971,14 @@ const TaskContent = ({
       handleStarTask={handleStarTask}
       eHandler={eHandler}
       onParentTaskClick={() => {
-        navigateToTask(task.projectId, task.uniqueIndex, "push", undefined, instantTicketOpen ? task : undefined);
+        navigateToTask(task.projectId, task.uniqueIndex, "push", undefined, task);
       }}
       onSubtaskClick={() => {
         setTasksPlayList(subTaskPlaylist);
-        navigateToTask(task.projectId, task.uniqueIndex, "push", undefined, instantTicketOpen ? task : undefined);
+        navigateToTask(task.projectId, task.uniqueIndex, "push", undefined, task);
       }}
       selectionMode={bulkSelectedCount > 0}
+      phoneHoldSelect={phoneHoldSelect}
       onSelectionClick={
         isArchivedOnBoard
           ? undefined
@@ -1038,10 +1038,10 @@ const MemoizedTaskContent = React.memo(TaskContent);
 
 export default function Task(props: IProps) {
   const rowShortcutsEnabled = useFlag(HTPR_6427_ROW_SHORTCUTS_FLAG);
-  const instantTicketOpen = useFlag(HTPR_6752_INSTANT_TICKET_OPEN_FLAG);
-  return instantTicketOpen ? (
-    <MemoizedTaskContent {...props} rowShortcutsEnabled={rowShortcutsEnabled} instantTicketOpen />
+  const phoneHoldSelect = useFlag(HTPR_7263_PHONE_HOLD_SELECT_FLAG);
+  return phoneHoldSelect ? (
+    <MemoizedTaskContent {...props} rowShortcutsEnabled={rowShortcutsEnabled} phoneHoldSelect />
   ) : (
-    <MemoizedTaskContent {...props} rowShortcutsEnabled={rowShortcutsEnabled} instantTicketOpen={false} />
+    <MemoizedTaskContent {...props} rowShortcutsEnabled={rowShortcutsEnabled} phoneHoldSelect={false} />
   );
 }

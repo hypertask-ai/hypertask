@@ -7,6 +7,7 @@ const path = require('node:path');
 const vm = require('node:vm');
 const ts = require('typescript');
 const root = path.resolve(__dirname, '..');
+const { load } = require('./task-route-loader.cjs');
 
 const WRITE_ACCESS = { writeAccessFor: 7 };
 
@@ -35,6 +36,11 @@ function loadSetter(file, field) {
     agent: { findUnique: async () => null },
     [field]: model,
   };
+  const scope = load('src/lib/auth/agentScope.ts', {
+    '@/lib/flags': { isFeatureEnabled: async () => false },
+    '@/lib/prisma': { default: { member: { findMany: async () => [] } } },
+    '@/lib/telemetry/signupAnalytics': { recordServerCapture: () => {} },
+  });
   const filename = path.join(root, file);
   const code = ts.transpileModule(fs.readFileSync(filename, 'utf8'), {
     compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022, esModuleInterop: true },
@@ -42,10 +48,13 @@ function loadSetter(file, field) {
   const loaded = { exports: {} };
   const activity = { __esModule: true, default: () => {} };
   const stubs = {
+    '@/lib/auth/agentScope': scope,
+    '@/lib/auth/resolveActingAgent': load('src/lib/auth/resolveActingAgent.ts', {}),
+    '@/utils/controllers/tasks/assertTaskAccess': { userCanAccessTask: async () => { throw new Error('WATCH must use the existing content access query'); } },
     '@/lib/prisma': { __esModule: true, default: prisma },
     '@/utils/controllers/activities/CreatePriorityActivity': activity,
     '@/utils/controllers/activities/createEstimateActivity': activity,
-    '@/lib/auth/getSessionUser': { getSessionUser: async () => ({ userId: 7 }) },
+    '@/lib/auth/getSessionUser': { getSessionUser: async () => ({ userId: 7, teamScope: null }) },
     '@/lib/auth/sessionUserRecord': { loadSessionUserRecord: async () => ({ id: 7 }) },
     '@/utils/controllers/projects/getAllIncludes': {
       taskWriteAccessWhere: (...args) => { accessArgs.push(args); return WRITE_ACCESS; },
@@ -67,7 +76,7 @@ test('an agent acting for the user is checked as that user\'s own agent', async 
   const { call, accessArgs } = loadSetter('src/pages/api/priority/setPriority.ts', 'priority');
   await call({ taskId: 10, priority_index: 4, Priority_Value: 'Low', agentId: 'agent-1' });
   await call({ taskId: 10, priority_index: 4, Priority_Value: 'Low', agentId: { id: 'x' } });
-  assert.deepEqual(accessArgs, [[7, 'agent-1'], [7, null]]);
+  assert.deepEqual(accessArgs, [[7, 'agent-1', null], [7, null, null]]);
 });
 
 const SETTERS = [

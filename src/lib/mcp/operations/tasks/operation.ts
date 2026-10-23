@@ -1,3 +1,4 @@
+import { agentScopeEnforced, recordAgentBoardScopeMiss } from "@/lib/auth/agentScope";
 import { stripForeignTaskRelations } from "@/lib/tasks/sameBoardRelations";
 import { reportMcpOperationCrash } from '@/lib/mcp/operationCrashReport'
 import { wrapMcpRoute, validateMcpRouteAuth as validateMcpAuth, checkMcpRouteRateLimit as checkMcpRateLimit, mcpRouteUnauthorizedResponse as mcpUnauthorizedResponse } from '@/lib/mcp/routeWrapper'
@@ -17,7 +18,7 @@ import {
   taskMcpGetInclude,
 } from '@/lib/mcp/tasks/mappers'
 import { mcpTaskUserCommentCount } from '@/lib/mcp/tasks/mappers'
-import { findTaskByIdentifier, TaskIdentifierAmbiguityError } from '@/lib/mcp/tasks/resolveTask'
+import { findTaskByIdentifier, taskIdentifierErrorResponse } from '@/lib/mcp/tasks/resolveTask'
 import { decodeCursor, encodeCursor } from '@/lib/mcp/pagination/cursor'
 import prisma from '@/lib/prisma'
 import {
@@ -279,11 +280,11 @@ export async function GET(request: NextRequest) {
       if (orConditions.length > 0) {
         const where: any = {
           OR: orConditions,
-          project: getProjectWhere(user.id, ctx.agentId)
+          project: getProjectWhere(user.id, ctx.agentId, ctx.teamScope)
         }
 
         const include = {
-          ...taskMcpGetInclude(user.id),
+          ...taskMcpGetInclude(user.id, ctx.agentId, ctx.teamScope),
           savedContent: {
             where: { userId: ctx.agentId ? -1 : user.id, commentId: null, type: 'Private' as const },
             select: { id: true, type: true },
@@ -294,16 +295,16 @@ export async function GET(request: NextRequest) {
         const missingTickets = requestedTickets.filter(number => !tasks.some(task => task.ticketNumber === number))
         const aliasTargets = await Promise.all([
           ...missingTickets.map(ticket_number => findTaskByIdentifier(
-            user, { ticket_number, project_id: projectIdForLookup }, ctx.agentId
+            user, { ticket_number, project_id: projectIdForLookup }, ctx.agentId, undefined, ctx.teamScope
           )),
           ...(uniqueIndex !== null && projectIdForLookup !== null && tasks.length === 0
-            ? [findTaskByIdentifier(user, { unique_index: uniqueIndex, project_id: projectIdForLookup }, ctx.agentId)]
+            ? [findTaskByIdentifier(user, { unique_index: uniqueIndex, project_id: projectIdForLookup }, ctx.agentId, undefined, ctx.teamScope)]
             : []),
         ])
         const aliasIds = aliasTargets.flatMap(task => task && !tasks.some(live => live.id === task.id) ? [task.id] : [])
         if (aliasIds.length) {
           tasks.push(...await prisma.task.findMany({
-            where: { id: { in: aliasIds }, status: { not: 'Deleted' }, project: getProjectWhere(user.id, ctx.agentId) },
+            where: { id: { in: aliasIds }, status: { not: 'Deleted' }, project: getProjectWhere(user.id, ctx.agentId, ctx.teamScope) },
             include,
           }))
         }
@@ -326,13 +327,13 @@ export async function GET(request: NextRequest) {
         if (legacyTicketNumber && !ticketNumbers && tasks.length === 1) {
           return NextResponse.json({
             success: true,
-            task: mapTaskToMcpGetResponse(tasks[0], user.id)
+            task: mapTaskToMcpGetResponse(tasks[0], user.id, ctx.agentId, ctx.teamScope)
           })
         }
 
         return NextResponse.json({
           success: true,
-          tasks: tasks.map((task) => mapTaskToMcpGetResponse(task, user.id))
+          tasks: tasks.map((task) => mapTaskToMcpGetResponse(task, user.id, ctx.agentId, ctx.teamScope))
         })
       }
     }
@@ -439,7 +440,7 @@ export async function GET(request: NextRequest) {
     const accessibleProjects = await prisma.project.findMany({
       where: {
         status: 'Normal',
-        ...getProjectWhere(user.id, ctx.agentId),
+        ...getProjectWhere(user.id, ctx.agentId, ctx.teamScope),
       },
       select: { id: true }
     })
@@ -627,6 +628,7 @@ export async function GET(request: NextRequest) {
           }
         },
         parentTask: {
+          ...((ctx.teamScope != null || (ctx.agentId && agentScopeEnforced())) ? { where: { project: getProjectWhere(user.id, ctx.agentId, ctx.teamScope) } } : {}),
           select: {
             id: true,
             ticketNumber: true,
@@ -688,6 +690,7 @@ export async function GET(request: NextRequest) {
         },
         subTasks: {
           where: {
+            ...((ctx.teamScope != null || (ctx.agentId && agentScopeEnforced())) ? { project: getProjectWhere(user.id, ctx.agentId, ctx.teamScope) } : {}),
             status: {
               not: "Deleted",
             },
@@ -715,6 +718,7 @@ export async function GET(request: NextRequest) {
     const uniqueSections = new Set(tasks.map(t => t.section).filter(Boolean))
 
     const taskList: TaskListItem[] = tasks.map(task => {
+      recordAgentBoardScopeMiss(task.projectId, "read");
       task = stripForeignTaskRelations(task)
       const agent = mapVisibleMcpAgent(task.agent, user.id, task.projectId)
       const assignees = task.assignees
@@ -730,7 +734,7 @@ export async function GET(request: NextRequest) {
         sectionId: task.sectionId || undefined,
         boardId: task.projectId,
         boardTitle: task.project.title || '',
-        parent_id: task.parentTaskId || undefined,
+        parent_id: (ctx.teamScope != null || (ctx.agentId && agentScopeEnforced())) && !task.parentTask ? undefined : task.parentTaskId || undefined,
         parent_task: task.parentTask
           ? {
               id: task.parentTask.id,
@@ -792,9 +796,8 @@ export async function GET(request: NextRequest) {
 
     return NextResponse.json(response)
   } catch (error) {
-    if (error instanceof TaskIdentifierAmbiguityError) {
-      return NextResponse.json({ success: false, error: error.message }, { status: 400 })
-    }
+    const identifierResponse = taskIdentifierErrorResponse(error)
+    if (identifierResponse) return identifierResponse
     reportMcpOperationCrash(request, error)
     console.error('[MCP] tasks', {
       user: userObj,

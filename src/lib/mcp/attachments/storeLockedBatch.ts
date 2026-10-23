@@ -1,3 +1,4 @@
+import { taskWriteAccessWhere } from '@/utils/controllers/projects/getAllIncludes';
 import { createHash } from 'node:crypto';
 import { Prisma } from '@prisma/client';
 import {
@@ -19,7 +20,7 @@ const ATTACHMENT_TRANSACTION_TIMEOUT_MS = 10_000;
 
 type AttachmentTransactionClient = Pick<
   Prisma.TransactionClient,
-  'attachment' | '$queryRaw'
+  'attachment' | 'description' | 'comment' | 'task' | '$queryRaw'
 >;
 
 interface LockingPrismaClient {
@@ -27,6 +28,18 @@ interface LockingPrismaClient {
     callback: (tx: AttachmentTransactionClient) => Promise<T>,
     options: { timeout: number }
   ): Promise<T>;
+}
+
+async function authorizeAttachmentTarget(
+  tx: AttachmentTransactionClient,
+  target: Parameters<typeof persistAttachmentRows>[2],
+): Promise<void> {
+  if (target.teamScope == null) return;
+  await tx.$queryRaw`SELECT id FROM "Task" WHERE id = ${target.taskId} FOR UPDATE`;
+  if (target.userId == null || !await tx.task.findFirst({
+    where: { id: target.taskId, project: taskWriteAccessWhere(target.userId, target.agentId, target.teamScope) },
+    select: { id: true },
+  })) throw new AttachmentBatchError('Task not found or access denied', 404, false);
 }
 
 async function persistOrReconcile(
@@ -48,6 +61,7 @@ async function persistOrReconcile(
         await tx.$queryRaw(
           Prisma.sql`SELECT pg_advisory_xact_lock(${transactionLockId})::text AS lock_result`
         );
+        await authorizeAttachmentTarget(tx, persistenceTarget);
         return persistAttachmentRows(tx, uploads, persistenceTarget);
       },
       { timeout: ATTACHMENT_TRANSACTION_TIMEOUT_MS }
@@ -55,12 +69,14 @@ async function persistOrReconcile(
     if (signal.aborted) throw new AttachmentPersistenceUncertainError();
     return stored;
   } catch (persistenceError) {
+    if (persistenceError instanceof AttachmentBatchError && persistenceError.status === 404) throw persistenceError;
     let committed: StoredAttachmentResult[];
     try {
       if (signal.aborted) throw new AttachmentPersistenceUncertainError();
       committed = await db.$transaction(
-        (tx) =>
-          tx.attachment.findMany({
+        async (tx) => {
+          await authorizeAttachmentTarget(tx, persistenceTarget);
+          return tx.attachment.findMany({
             where: {
               taskId: persistenceTarget.taskId,
               commentId: persistenceTarget.commentId,
@@ -73,18 +89,22 @@ async function persistOrReconcile(
               fileType: true,
               fileSource: true,
             },
-          }),
+          });
+        },
         { timeout: ATTACHMENT_TRANSACTION_TIMEOUT_MS }
       );
       if (signal.aborted) throw new AttachmentPersistenceUncertainError();
-    } catch {
+    } catch (error) {
+      if (error instanceof AttachmentBatchError && error.status === 404) throw error;
       throw new AttachmentPersistenceUncertainError();
     }
 
     const bySource = new Map(committed.map((row) => [row.fileSource, row]));
     const reconciled = uploads.map(({ url }) => bySource.get(url));
     if (reconciled.every((row): row is StoredAttachmentResult => row !== undefined)) {
-      return reconciled;
+      return persistenceTarget.inlineImages
+        ? db.$transaction(async (tx) => { await authorizeAttachmentTarget(tx, persistenceTarget); return persistAttachmentRows(tx, uploads, persistenceTarget); }, { timeout: ATTACHMENT_TRANSACTION_TIMEOUT_MS })
+        : reconciled;
     }
     if (committed.length === 0) throw persistenceError;
     throw new AttachmentPersistenceUncertainError();

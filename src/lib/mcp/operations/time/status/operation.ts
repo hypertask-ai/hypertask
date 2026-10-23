@@ -9,7 +9,7 @@ export async function POST(request: NextRequest) {
   if (resolved.response) return resolved.response;
 
   try {
-    const summary = await taskSummary(resolved.ctx.user.id, resolved.task.id);
+    const summary = await taskSummary(resolved.ctx.user.id, resolved.task.id, resolved.ctx.agentId, resolved.ctx.teamScope);
     return NextResponse.json({ success: true, summary });
   } catch (error) {
     if (error instanceof TimeTrackingDisabledError) {

@@ -43,10 +43,9 @@ export async function createStripeCheckout(
   const lineItem: Stripe.Checkout.SessionCreateParams.LineItem = {
     quantity: params.quantity,
     price: params.priceId,
-    adjustable_quantity: {
-      enabled: true,
-      minimum: params.quantity,
-    },
+    ...(params.checkoutIntent === "signup-straight-to-board"
+      ? {}
+      : { adjustable_quantity: { enabled: true, minimum: params.quantity } }),
   };
 
   const successUrl = params.returnUrl;
@@ -62,7 +61,7 @@ export async function createStripeCheckout(
         allow_promotion_codes: true,
         payment_method_collection: "always",
         subscription_data: {
-          trial_period_days: 14,
+          trial_period_days: params.trialDays ?? 14,
           trial_settings: {
             end_behavior: {
               missing_payment_method: "create_invoice",

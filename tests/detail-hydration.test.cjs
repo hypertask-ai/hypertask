@@ -27,10 +27,10 @@ const MobileViewContext = React.createContext(false);
 const TaskContext = React.createContext(null);
 const noop = () => null;
 const childrenOnly = ({ children }) => children;
-let instantTicketOpen;
+let layoutFlagsEnabled;
 let pendingLiveBody = null;
 const mocks = {
-  "@/hooks/useFlag": { useFlag: () => instantTicketOpen },
+  "@/hooks/useFlag": { useFlag: () => layoutFlagsEnabled },
   "@/hooks/General/useHydrated": hydrated,
   "@/hooks/Task Detail/useThreadSettled": { useThreadSettled: () => ({ settled: true, slotRef: () => {} }) },
   "./SettledComposerSlot": { SettledComposerSlot: ({ children }) => children },
@@ -77,7 +77,7 @@ function TaskState({ state, descriptionStart, children }) {
 }
 
 function setup(t, mobile, flag, { taskInfoRow = false, panelsReady = false, descriptionStart = "server" } = {}) {
-  instantTicketOpen = flag;
+  layoutFlagsEnabled = flag;
   const previous = new Map(["window", "document", "IS_REACT_ACT_ENVIRONMENT"].map((key) => [key, Object.getOwnPropertyDescriptor(global, key)]));
   delete global.window;
   delete global.document;
@@ -114,7 +114,7 @@ function setup(t, mobile, flag, { taskInfoRow = false, panelsReady = false, desc
 
 for (const mobile of [false, true]) {
   for (const flag of [false, true]) {
-    const variant = `${mobile ? "phone" : "desktop"}, instant-open ${flag ? "on" : "off"}`;
+    const variant = `${mobile ? "phone" : "desktop"}, layout flags ${flag ? "on" : "off"}`;
     test(`late streamed thread hydrates its server-rendered description even after its provider has populated the viewport (${variant})`, async (t) => {
       const fixture = setup(t, mobile, flag);
       const serverHtml = renderToString(fixture.render());
@@ -215,7 +215,7 @@ for (const mobile of [false, true]) {
   });
 }
 
-test("with the ticket flag off on the server and in the browser, the server HTML keeps no rows and hydration fills them as before", async (t) => {
+test("with secondary layout flags off on the server and in the browser, the server HTML keeps no rows and hydration fills them as before", async (t) => {
   const fixture = setup(t, true, false, { descriptionStart: "live" });
   fixture.container.innerHTML = renderToString(fixture.render());
   assert.equal(fixture.container.querySelectorAll("[data-index]").length, 0);

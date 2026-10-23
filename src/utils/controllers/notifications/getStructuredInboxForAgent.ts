@@ -1,3 +1,5 @@
+import type { AgentTokenTeamScope } from '@/lib/mcp/auth/types';
+import { notificationBoardAccessWhere } from "./boardAccess";
 import type { INotification } from "@/models/model";
 import { Prisma } from "@prisma/client";
 import prisma from "@/lib/prisma";
@@ -38,6 +40,8 @@ export async function getStructuredInboxForAgent(params: {
   userId: number;
   agentId: string;
   window?: { after: Date | null; through: Date };
+  scopeToAgentBoards?: boolean;
+  teamScope?: AgentTokenTeamScope | null;
 }): Promise<GetStructuredInboxForAgentResult> {
   const { userId, agentId, window } = params;
 
@@ -46,7 +50,9 @@ export async function getStructuredInboxForAgent(params: {
       where: { id: agentId, userId, revokedAt: null },
       include: {
         notificationsToAgent: {
-          where: agentInboxVisibilityWhere(userId, window),
+          where: params.scopeToAgentBoards || params.teamScope != null
+            ? { AND: [agentInboxVisibilityWhere(userId, window), notificationBoardAccessWhere(userId, agentId, params.teamScope)] }
+            : agentInboxVisibilityWhere(userId, window),
           include: notificationInboxInclude(userId),
           orderBy: {
             createdAt: "desc",

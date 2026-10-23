@@ -1,3 +1,4 @@
+const { withStubs } = require("./helpers/stub-map.cjs")
 // HTPR-5478: the CLI printed "Failed to update 1 task(s). [object Object]"
 // whenever a hop dropped an error object into a string slot. Two halves:
 // every relay unwraps the payload, and no controller hands back a raw Error.
@@ -24,6 +25,7 @@ function compile(relativePath) {
 }
 
 function execute(javascript, stubs) {
+  stubs = withStubs({ "@/lib/auth/agentScope": require("./helpers/agent-board-scope.cjs").enforcedScope }, stubs);
   const originalLoad = Module._load;
   Module._load = (request, parent, isMain) =>
     stubs[request] ?? originalLoad(request, parent, isMain);

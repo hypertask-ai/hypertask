@@ -1,4 +1,6 @@
+import { agentScopeEnforced, recordAgentBoardScopeMiss } from "@/lib/auth/agentScope";
 import { reportMcpOperationCrash } from '@/lib/mcp/operationCrashReport'
+import { projectContentAccessWhere } from "@/utils/controllers/projects/getAllIncludes"
 import { wrapMcpRoute, validateMcpRouteAuth as validateMcpAuth, checkMcpRouteRateLimit as checkMcpRateLimit } from '@/lib/mcp/routeWrapper'
 import { NextRequest, NextResponse } from 'next/server'
 import prisma from '@/lib/prisma'
@@ -68,26 +70,31 @@ export async function GET(request: NextRequest) {
             )
         }
 
-        if (project.ownerId !== ctx.user.id) {
+        if ((ctx.teamScope != null || (ctx.agentId && agentScopeEnforced()))) {
+            const access = await prisma.project.findFirst({
+                where: { id: projectId, ...projectContentAccessWhere(ctx.user.id, ctx.agentId, ctx.teamScope) },
+                select: { id: true },
+            })
+            if (!access) return NextResponse.json({ success: false, error: 'You are not a member of this project' }, { status: 403 })
+        } else if (project.ownerId !== ctx.user.id) {
             const membership = await prisma.member.findFirst({
                 where: { projectId, userId: ctx.user.id, agentId: null },
                 select: { id: true },
             })
-            if (!membership) {
-                return NextResponse.json(
-                    { success: false, error: 'You are not a member of this project' },
-                    { status: 403 }
-                )
-            }
+            if (!membership) return NextResponse.json({ success: false, error: 'You are not a member of this project' }, { status: 403 })
         }
 
+        recordAgentBoardScopeMiss(projectId, "read");
         const rows = await prisma.notification.groupBy({
             by: ['userId', 'type', 'fromAgentId', 'fromUserId', 'taskId'],
             where: {
                 projectId,
                 status: 'Normal',
                 agentId: null,
-                task: { status: 'Normal' },
+                task: {
+                    status: 'Normal',
+                    ...((ctx.teamScope != null || (ctx.agentId && agentScopeEnforced())) ? { project: projectContentAccessWhere(ctx.user.id, ctx.agentId, ctx.teamScope) } : {}),
+                },
             },
             _count: { _all: true },
         })
@@ -97,7 +104,7 @@ export async function GET(request: NextRequest) {
         )
         const tasks = taskIds.length
             ? await prisma.task.findMany({
-                  where: { id: { in: taskIds } },
+                  where: { id: { in: taskIds }, ...(ctx.teamScope != null ? { project: projectContentAccessWhere(ctx.user.id, ctx.agentId, ctx.teamScope) } : {}) },
                   select: {
                       id: true,
                       status: true,
@@ -124,7 +131,7 @@ export async function GET(request: NextRequest) {
         >()
         const doneProjectIds = new Set(rows.length ? [projectId] : [])
         for (const userId of userIds) {
-            const active = await loadActiveInboxZeroNotifications(userId)
+            const active = await loadActiveInboxZeroNotifications(userId, prisma, { userId: ctx.user.id, agentId: ctx.agentId, teamScope: ctx.teamScope })
             activeByUser.set(userId, active)
             for (const notification of active) {
                 if (notification.task) doneProjectIds.add(notification.task.projectId)

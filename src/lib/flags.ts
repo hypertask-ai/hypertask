@@ -144,6 +144,13 @@ const isFeatureFlagQaUser = (
 
 export const isFeatureFlagOwnerUserId = isFeatureFlagOwnerUser;
 
+export async function isOwnerOrQaUserId(
+  userId: number,
+  db: FeatureFlagDatabase = prisma,
+): Promise<boolean> {
+  return (await isFeatureFlagOwnerUser(userId, db)) || (await isFeatureFlagQaUser(userId, db));
+}
+
 export async function isFeatureFlagOwner(headers: Headers): Promise<boolean> {
   const { getSessionUser } = await import("@/lib/auth/getSessionUser");
   const session = await getSessionUser(headers);
@@ -209,16 +216,23 @@ function withFeatureFlagMetadata(
   };
 }
 
-async function loadFeatureFlagTicketTitles(keys: readonly string[]): Promise<Map<number, string>> {
+async function loadFeatureFlagTicketTitles(keys: readonly string[], principal?: { userId: number; agentId?: string | null; teamScope?: import("@/lib/mcp/auth/types").AgentTokenTeamScope | null }): Promise<Map<number, string>> {
   const ticketNumbers = keys
     .map((key) => FEATURE_FLAG_KEY_TICKET_NUMBER.exec(key)?.[1])
     .filter((value): value is string => value !== undefined)
     .map(Number);
   if (ticketNumbers.length === 0) return new Map();
+  const project = principal && (principal.agentId || principal.teamScope != null)
+    ? (await import("@/utils/controllers/projects/getAllIncludes")).projectContentAccessWhere(principal.userId, principal.agentId, principal.teamScope)
+    : undefined;
   const tickets = await prisma.task.findMany({
-    where: { projectId: FEATURE_FLAG_TICKET_PROJECT_ID, uniqueIndex: { in: ticketNumbers } },
+    where: { projectId: FEATURE_FLAG_TICKET_PROJECT_ID, uniqueIndex: { in: ticketNumbers }, ...(project ? { project } : {}) },
     select: { uniqueIndex: true, title: true },
   });
+  if (tickets.length && principal?.agentId) {
+    const { recordAgentBoardScopeMiss } = await import("@/lib/auth/agentScope");
+    recordAgentBoardScopeMiss(FEATURE_FLAG_TICKET_PROJECT_ID, "read");
+  }
   return new Map(tickets.map((ticket) => [ticket.uniqueIndex, ticket.title]));
 }
 
@@ -330,7 +344,7 @@ export async function isFeatureEnabled(
 }
 
 export async function listFeatureFlagModes(
-  options: { includeTicketTitles?: boolean; includeLastChange?: boolean } = {},
+  options: { includeTicketTitles?: boolean; includeLastChange?: boolean; principal?: { userId: number; agentId?: string | null; teamScope?: import("@/lib/mcp/auth/types").AgentTokenTeamScope | null } } = {},
 ): Promise<FeatureFlagRow[]> {
   const stored = (
     await prisma.featureFlag.findMany({
@@ -341,7 +355,7 @@ export async function listFeatureFlagModes(
   const ticketTitleByNumber = options.includeTicketTitles
     ? await loadFeatureFlagTicketTitles([
         ...new Set([...FEATURE_FLAG_KEYS, ...stored.map(({ key }) => key)]),
-      ])
+      ], options.principal)
     : new Map<number, string>();
   const byKey = new Map<string, FeatureFlagRow>(
     FEATURE_FLAG_KEYS.map((key) => [
@@ -461,7 +475,7 @@ export async function setFeatureFlagMode(
       } : null,
     };
   }));
-  return withFeatureFlagMetadata(row, await loadFeatureFlagTicketTitles([key]));
+  return withFeatureFlagMetadata(row, await loadFeatureFlagTicketTitles([key], actor));
 }
 
 export async function setFeatureFlagKeep(key: string, keep: boolean): Promise<FeatureFlagRow> {

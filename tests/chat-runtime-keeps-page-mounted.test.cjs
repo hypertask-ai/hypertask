@@ -23,7 +23,7 @@ const moduleMocks = {
   "@/utils/undoActions/helperFuncs": { cn: (...parts) => parts.filter(Boolean).join(" ") },
   "@/lib/contexts/Multipages/AI_Agent/chatContext": chatContextModule.exports,
   "@/hooks/useFlag": { useFlag: () => true, useFlagLoaded: () => true },
-  "@/lib/flags/keys": { HTPR_6990_NARROW_SIDEBAR_WIDTH_FLAG: "htpr-6990-narrow-sidebar-width" },
+  "@/lib/flags/keys": { HTPR_7055_CHAT_OVERLAYS_TICKET_FLAG: "htpr-7055-chat-overlays-ticket" },
 };
 
 function load(relativePath, target) {

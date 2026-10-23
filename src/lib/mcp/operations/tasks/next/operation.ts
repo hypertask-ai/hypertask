@@ -82,12 +82,12 @@ export async function GET(request: NextRequest) {
     }
     const limit = Math.min(parsedLimit, 50)
 
-    const projectAccessWhere = getProjectWhere(ctx.user.id, ctx.agentId)
+    const projectAccessWhere = getProjectWhere(ctx.user.id, ctx.agentId, ctx.teamScope)
     const project = await prisma.project.findFirst({
       where: {
         id: projectId,
         status: 'Normal',
-        ...projectAccessWhere,
+        ...getProjectWhere(ctx.user.id, ctx.agentId, ctx.teamScope),
       },
       select: {
         id: true,
@@ -129,7 +129,6 @@ export async function GET(request: NextRequest) {
 
     const where: ClaimableTaskWhereInput = {
       projectId,
-      project: projectAccessWhere,
       status: 'Normal',
       ...(section
         ? { section }
@@ -165,7 +164,7 @@ export async function GET(request: NextRequest) {
     }
 
     const tasks = await prisma.task.findMany({
-      where,
+      where: { ...where, project: getProjectWhere(ctx.user.id, ctx.agentId, ctx.teamScope) },
       select: {
         id: true,
         ticketNumber: true,
@@ -190,13 +189,13 @@ export async function GET(request: NextRequest) {
           orderBy: { labelId: 'asc' },
         },
         relatedFromTasks: {
-          where: { relationType: 'BlockedBy' },
+          where: { relationType: 'BlockedBy', ...(ctx.teamScope == null ? {} : { targetTask: { project: projectAccessWhere } }) },
           select: {
             targetTask: { select: { status: true, section: true, projectId: true } },
           },
         },
         relatedToTasks: {
-          where: { relationType: 'BlockedTo' },
+          where: { relationType: 'BlockedTo', ...(ctx.teamScope == null ? {} : { sourceTask: { project: projectAccessWhere } }) },
           select: {
             sourceTask: { select: { status: true, section: true, projectId: true } },
           },

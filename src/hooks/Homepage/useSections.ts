@@ -1,5 +1,5 @@
 
-import { useCallback, useContext, useEffect, useLayoutEffect, useRef, useMemo, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useRef, useMemo, useState } from "react";
 
 import axios from "axios";
 import { activeItemAtom, currentProjectAtom } from "@/store";
@@ -9,16 +9,15 @@ import { useStore } from "jotai";
 import { ITask } from "@/models/model";
 import { useRouter } from "next/navigation";
 import useAddDeleteTaskInBoards from "../MultiPages/useAddDeleteTaskInBoards";
-import { MOBILE_AI_TASK_WRITER_FOCUS, TDefaultEditFocus, TSectionPayload } from "@/models/CreateTaskModalModels/model";
+import { TDefaultEditFocus, TSectionPayload } from "@/models/CreateTaskModalModels/model";
 import useHypertasksRecoilStates from "../RecoilRoot/useHypertasksRecoilStates";
 import globalConstants from "@/lib/constants";
 import { useDeviceContext } from "@/lib/contexts/deviceContext";
 import { returnIfModalOrInputActive } from "@/utils/helperFunctions/helperFunctions";
 import { KeyCodes } from "@/lib/constants/keyboard-handler";
 import useHypertasksNavigate from "../MultiPages/Route/useHypertasksNavigate";
-import { MobileViewContext } from "@/lib/contexts/mobileContext";
-import { useFlag } from "@/hooks/useFlag";
-import { HTPR_6914_SHIFT_C_QUICK_ADD_FLAG, HTPR_6902_N_QUICK_ADD_FLAG } from "@/lib/flags/keys";
+import { useFlag, useFlagLoaded } from "@/hooks/useFlag";
+import { HTPR_6929_COMPOSE_TASK_WRITER_FLAG, HTPR_7585_CTRLJ_WAITS_FOR_FLAGS_FLAG } from "@/lib/flags/keys";
 
 type SectionKeydownHandler = (event: KeyboardEvent) => void;
 
@@ -47,6 +46,11 @@ const useSections = ({
   sectionId: number;
 }) => {
   const router = useRouter();
+  const ctrlJWaitsForFlags = useFlag(HTPR_7585_CTRLJ_WAITS_FOR_FLAGS_FLAG);
+  const ctrlJWaitsForFlagsLoaded = useFlagLoaded(HTPR_7585_CTRLJ_WAITS_FOR_FLAGS_FLAG);
+  const composeEnabled = useFlag(HTPR_6929_COMPOSE_TASK_WRITER_FLAG);
+  const composeLoaded = useFlagLoaded(HTPR_6929_COMPOSE_TASK_WRITER_FLAG);
+  const blockLegacyCtrlJ = (ctrlJWaitsForFlags || !ctrlJWaitsForFlagsLoaded) && (!composeLoaded || composeEnabled);
   const store = useStore();
   const { createItem } = useAddDeleteTaskInBoards();
   const { toggleCreateTaskGlobally }= useHypertasksRecoilStates()
@@ -73,10 +77,6 @@ const useSections = ({
   const [newTaskDraftTitle, setNewTaskDraftTitle] = useState("");
   const [keyPressed, setKeypressed] = useState<any>({});
   const isApple = useDeviceContext()
-  const isMbl = useContext(MobileViewContext);
-  const aiFirstTaskWriterEnabled = useFlag("htpr-6141-ai-first-task-writer");
-  const nQuickAddEnabled = useFlag(HTPR_6902_N_QUICK_ADD_FLAG);
-  const shiftCQuickAddEnabled = useFlag(HTPR_6914_SHIFT_C_QUICK_ADD_FLAG);
   const { navigate } = useHypertasksNavigate();
   const sectionListenerKeyRef = useRef<string | null>(null);
   if (!sectionListenerKeyRef.current) {
@@ -97,18 +97,15 @@ const useSections = ({
     defaultEditFocus?: TDefaultEditFocus,
     useQuickEntry = false,
   ) => {
-    const editFocus =
-      defaultEditFocus ??
-      (isMbl && aiFirstTaskWriterEnabled ? MOBILE_AI_TASK_WRITER_FOCUS : undefined);
-    if (useQuickEntry && !editFocus) {
+    if (useQuickEntry && !defaultEditFocus) {
       setShowAddItem(true);
       setPosition(position);
       return;
     }
-    toggleCreateTaskGlobally(sectionPayload, editFocus)
+    toggleCreateTaskGlobally(sectionPayload, defaultEditFocus)
   };
 
-  useEffect(nQuickAddEnabled ? () => {
+  useEffect(() => {
     const sectionElement = sectionRef.current;
     const openQuickEntry = () => {
       setPosition("bottom");
@@ -116,7 +113,7 @@ const useSections = ({
     };
     sectionElement?.addEventListener("OPEN_QUICK_ENTRY", openQuickEntry);
     return () => sectionElement?.removeEventListener("OPEN_QUICK_ENTRY", openQuickEntry);
-  } : () => {}, [nQuickAddEnabled]);
+  }, []);
 
   const invokeCreateItem = async (taskTitle: string, createAnother: boolean): Promise<boolean> => {
     const itemToCreate = {
@@ -154,6 +151,7 @@ const useSections = ({
     title,
     _currentProject,
     createTaskAt,
+    blockLegacyCtrlJ,
   });
   latestRef.current = {
     active,
@@ -165,6 +163,7 @@ const useSections = ({
     title,
     _currentProject,
     createTaskAt,
+    blockLegacyCtrlJ,
   };
 
   const handleLegacyKeyDown = useCallback((e: KeyboardEvent) => {
@@ -178,6 +177,7 @@ const useSections = ({
       title,
       _currentProject,
       createTaskAt,
+      blockLegacyCtrlJ,
     } = latestRef.current;
 
     if (!active) return;
@@ -321,18 +321,20 @@ const useSections = ({
       !e.shiftKey
     ) {
       e.preventDefault();
-      createTaskAt(
-        "top",
-        {
-          sectionId: sectionId,
-          sectionTitle: title,
-          position: "top",
-        },
-        {
-          defaultEditMode: "Description-ai",
-          defaultFocus: "Description",
-        }
-      );
+      if (!blockLegacyCtrlJ) {
+        createTaskAt(
+          "top",
+          {
+            sectionId: sectionId,
+            sectionTitle: title,
+            position: "top",
+          },
+          {
+            defaultEditMode: "Description-ai",
+            defaultFocus: "Description",
+          }
+        );
+      }
       setKeypressed((prev: any) => {
         prev[e.key] = false;
         return prev;
@@ -366,10 +368,7 @@ const useSections = ({
       !e.ctrlKey && !e.metaKey && !e.altKey) return;
     handleLegacyKeyDown(e);
   }, [handleLegacyKeyDown]);
-  let handleKeyDown = handleLegacyKeyDown;
-  if (shiftCQuickAddEnabled && nQuickAddEnabled) {
-    handleKeyDown = handleShiftCKeyDown;
-  }
+  const handleKeyDown = handleShiftCKeyDown;
   const handleKeyDownRef = useRef(handleKeyDown);
   handleKeyDownRef.current = handleKeyDown;
 

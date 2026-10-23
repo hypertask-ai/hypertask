@@ -1,3 +1,4 @@
+process.env.FEATURE_FLAG_TYPESCRIPT_PATH = require.resolve("typescript");
 const assert = require("node:assert/strict");
 const test = require("node:test");
 const path = require("node:path");
@@ -1168,7 +1169,7 @@ test("workflow covers metadata changes, uses trusted code, and reconciles old PR
   assert.match(parserLock.packages["node_modules/typescript"].integrity, /^sha512-/);
   assert.equal((workflow.match(/ref: production/g) || []).length, 2);
   assert.match(workflow, /persist-credentials: false/);
-  assert.match(workflow, /gh api "repos\/\$REPO\/pulls\/\$PR_NUMBER"/);
+  assert.match(workflow, /gh_api "repos\/\$REPO\/pulls\/\$PR_NUMBER"/);
   assert.match(workflow, /git fetch --no-tags origin \+refs\/heads\/production:refs\/remotes\/origin\/production "refs\/pull\/\$PR_NUMBER\/head"/);
   assert.equal((workflow.match(/git fetch --no-tags origin \+refs\/heads\/production:refs\/remotes\/origin\/production/g) || []).length, 2);
   assert.match(workflow, /--argjson labels "\$FEATURE_FLAG_PR_LABELS"/);
@@ -1190,11 +1191,11 @@ test("workflow covers metadata changes, uses trusted code, and reconciles old PR
   assert.match(workflow, /\$current\.state == \$state and \$current\.description == \$description/);
   assert.doesNotMatch(workflow, /feature-flag-gate is reconciling this pull request/);
   assert.match(workflow, /could not refresh pull-request heads/);
-  assert.ok(workflow.indexOf('state: "pending"') < workflow.indexOf('gh api "repos/$REPO/pulls/$PR_NUMBER"'));
+  assert.ok(workflow.indexOf('state: "pending"') < workflow.indexOf('gh_api "repos/$REPO/pulls/$PR_NUMBER"'));
   assert.ok(workflow.indexOf("open-heads.txt") < workflow.lastIndexOf('npm ci --prefix "$parser_dir"'));
   assert.ok(workflow.indexOf('state: "pending"') < workflow.indexOf("elif node .github/scripts/feature-flag-gate.mjs"));
   assert.match(workflow, /statuses\/\$head_sha/);
-  assert.match(workflow, /gh api --paginate --slurp/);
+  assert.match(workflow, /gh_api --paginate --slurp/);
   assert.equal((workflow.match(/elif node \.github\/scripts\/feature-flag-gate\.mjs/g) || []).length, 2);
   assert.doesNotMatch(workflow, /^\s+node \.github\/scripts\/feature-flag-gate\.mjs/m);
   assert.match(workflow, /head_pr_count.*flatten\[\].*\.head\.sha == \$sha/);
@@ -1583,6 +1584,39 @@ function perFlagLayout(dir) {
   writeFile(dir, "src/lib/flags/definitions/htpr-1-other.ts", 'export const OTHER_FLAG = "htpr-1-other";\nexport default { key: OTHER_FLAG, description: "Fixture", shippedOn: "2026-10-09" } as const;\n');
 }
 
+test("runtime flag keys must come from their own registered definition or a supported barrel", async (t) => {
+  const { dir, git } = makeRepo(t);
+  perFlagLayout(dir);
+  writeFile(dir, "src/lib/flags/definitions/htpr-2-new.ts", 'export const NEW_FLAG = "htpr-2-new";\nexport default { key: NEW_FLAG, description: "Another flag", shippedOn: "2026-10-10" } as const;\n');
+  for (const filename of ["src/lib/flagsx.ts", "src/lib/flags/definitions-fake/htpr-1-other.ts", "src/components/flag-key.ts"]) {
+    writeFile(dir, filename, 'export const OTHER_FLAG = "htpr-1-other";\n');
+  }
+  const base = commit(git, "registered flags and look-alike modules");
+  for (const [moduleName, pass] of [
+    ["@/lib/flags/definitions/htpr-1-other", true],
+    ["@/lib/flags/definitions/htpr-1-other.ts", true],
+    ["../lib/flags/definitions/htpr-1-other", true],
+    ["../lib/flags/definitions/htpr-1-other.ts", true],
+    ["@/lib/flags/keys", true],
+    ["@/lib/flags", true],
+    ["@/lib/flagsx", false],
+    ["@/lib/flags/definitions-fake/htpr-1-other", false],
+    ["./flag-key", false],
+    ["../lib/flagsx", false],
+    ["@/lib/flags/definitions/htpr-2-new", false],
+    ["../lib/flags/definitions/htpr-2-new", false],
+    ["@/lib/flags/definitions/htpr-1-missing", false],
+    ["../lib/flags/definitions/htpr-1-missing", false],
+  ]) {
+    writeFile(dir, "src/components/Widget.tsx", `import { OTHER_FLAG as ticketFlag } from "${moduleName}";\nimport { useFlag } from "@/hooks/useFlag";\nexport const Widget = () => useFlag(ticketFlag) ? <div>Widget</div> : null;\n`);
+    const head = commit(git, `import from ${moduleName}`);
+    const result = await evaluate("HTPR-1 [FEATURE] Widget", base, head, dir);
+    assert.equal(result.pass, pass, `${moduleName}: ${result.reason}`);
+    if (pass) assert.equal(result.ownerReview, "feature-gated-ui");
+    else assert.match(result.reason, /without a feature flag/);
+  }
+});
+
 test("per-flag registry handles legacy inline and extracted base refs without a generated index", async (t) => {
   for (const extracted of [false, true]) {
     const { dir, git } = makeRepo(t);
@@ -1592,7 +1626,9 @@ test("per-flag registry handles legacy inline and extracted base refs without a 
     }
     const base = commit(git, "old layout");
     perFlagLayout(dir);
-    writeFile(dir, "src/lib/flags/definitions/htpr-5-widget.ts", `export const WIDGET_FLAG = "htpr-5-widget";\nexport default { key: WIDGET_FLAG, description: "Widget", shippedOn: "${RELEASE_RISK_REQUIRED_FROM}", releaseRisk: { risk: "new", reason: "Adds a widget." } } as const;\n`);
+    const existingFile = "src/lib/flags/definitions/htpr-1-other.ts";
+    writeFile(dir, existingFile, fs.readFileSync(path.join(dir, existingFile), "utf8").replace("key: OTHER_FLAG", 'key: OTHER_FLAG, defaultMode: "EVERYONE"'));
+    writeFile(dir, "src/lib/flags/definitions/htpr-5-widget.ts", `export const WIDGET_FLAG = "htpr-5-widget";\nexport default { key: WIDGET_FLAG, defaultMode: "EVERYONE", description: "Widget", shippedOn: "${RELEASE_RISK_REQUIRED_FROM}", releaseRisk: { risk: "new", reason: "Adds a widget." } } as const;\n`);
     writeFile(dir, "src/components/Widget.tsx", 'import { WIDGET_FLAG } from "@/lib/flags/keys";\nimport { useFlag } from "@/hooks/useFlag";\nexport const Widget = () => useFlag(WIDGET_FLAG) ? <div>Widget</div> : null;\n');
     const head = commit(git, "new layout and widget");
     const result = await evaluate("HTPR-5 [FEATURE] Widget", base, head, dir);
@@ -1606,13 +1642,13 @@ test("per-flag additions enforce the release-risk cutoff and registry defaults e
   const base = commit(git, "per flag base");
   const filename = "src/lib/flags/definitions/htpr-2-new.ts";
   const source = `export const NEW_FLAG = "htpr-2-new";\nexport default { key: NEW_FLAG, shippedOn: "${RELEASE_RISK_REQUIRED_FROM}", description: "New flag" EXTRA } as const;`;
-  for (const [extra, pass] of [["", false], [', releaseRisk: { risk: "none", reason: "Records events." }', true], [', defaultMode: "EVERYONE"', false], [', releaseRisk: { risk: "large", reason: "Invalid." }', false]]) {
+  for (const [extra, pass] of [["", false], [', releaseRisk: { risk: "none", reason: "Records events." }', false], [', defaultMode: "EVERYONE", releaseRisk: { risk: "none", reason: "Records events." }', true], [', defaultMode: "EVERYONE"', false], [', releaseRisk: { risk: "large", reason: "Invalid." }', false]]) {
     writeFile(dir, filename, source.replace(" EXTRA", extra));
     const head = commit(git, "add flag " + extra);
     const result = await evaluate("YPER4-2 [INFRA] Fixture", base, head, dir);
     assert.equal(result.pass, pass, result.reason);
   }
-  writeFile(dir, filename, source.replace(RELEASE_RISK_REQUIRED_FROM, "2026-10-10").replace(" EXTRA", ""));
+  writeFile(dir, filename, source.replace(RELEASE_RISK_REQUIRED_FROM, "2026-10-10").replace(" EXTRA", ', defaultMode: "EVERYONE"'));
   assert.equal((await evaluate("YPER4-2 [INFRA] Fixture", base, commit(git, "pre cutoff"), dir)).pass, true);
 });
 
@@ -1953,4 +1989,76 @@ test("first placement of an existing local component needs a flag", async (t) =>
   const result = await evaluate("HTPR-7274 [BUGFIX] consent", base, commit(git, "place local banner"), dir);
   assert.equal(result.pass, false);
   assert.match(result.reason, /Providers.tsx:Banner rendered 1 more times/);
+});
+
+
+test("added-file default policy preserves existing flags and requires explicit Everyone only for new eligible definitions", async (t) => {
+  const risk = 'releaseRisk: { risk: "new", reason: "Fixture" }';
+  const sensitive = 'releaseRisk: { risk: "new", reason: "Fixture", highRisk: "access" }';
+  const ownerRequest = 'ownerRequest: { quote: "Keep this Owner only for now.", ticketUrl: "https://app.hypertask.ai/detail/project-15/2" }';
+  const requested = `releaseRisk: { risk: "new", reason: "Fixture", ${ownerRequest} }`;
+  for (const [extra, pass, message] of [
+    [risk, false, /new flag htpr-2-new must set defaultMode: "EVERYONE"/],
+    [`kind: "feature", ${risk}`, false],
+    [`kind: "improvement", ${risk}`, false],
+    [`kind: "feature", defaultMode: "EVERYONE", ${risk}`, true],
+    [`kind: "improvement", defaultMode: "EVERYONE", ${risk}`, true],
+    [`defaultMode: "OWNER_ONLY", ${requested}`, true],
+    [`kind: "feature", defaultMode: "OWNER_ONLY", ${requested}`, true],
+    [`kind: "improvement", defaultMode: "OWNER_ONLY", ${requested}`, true],
+    [`defaultMode: "OWNER_ONLY", ${risk}`, false, /OWNER_ONLY.*releaseRisk\.ownerRequest.*quote.*ticketUrl/],
+    [`defaultMode: "OWNER_ONLY", ${requested.replace('"Keep this Owner only for now."', '""')}`, false, /ownerRequest\.quote must be a non-blank string literal/],
+    [`defaultMode: "OWNER_ONLY", ${requested.replace('"Keep this Owner only for now."', '"   "')}`, false, /ownerRequest\.quote must be a non-blank string literal/],
+    [`defaultMode: "OWNER_ONLY", ${requested.replace("app.hypertask.ai", "hypertask.ai")}`, false, /ownerRequest\.ticketUrl must be a string literal like https:\/\/app\.hypertask\.ai\/detail\/project-15\/123/],
+    [`defaultMode: "OWNER_AND_QA", ${requested}`, false, /must set defaultMode: "EVERYONE"/],
+    [`defaultMode: "OFF", ${requested}`, false, /must set defaultMode: "EVERYONE"/],
+    [requested, false, /must set defaultMode: "EVERYONE"/],
+    [`defaultMode: "EVERYONE", ${requested}`, true],
+    [`defaultMode: "OWNER_AND_QA", releaseRisk: { risk: "new", reason: "Fixture", highRisk: "access", ${ownerRequest} }`, true],
+    [`defaultMode: "EVERYONE", releaseRisk: { risk: "new", reason: "Fixture", highRisk: "access", ${ownerRequest} }`, false, /releaseRisk\.highRisk may not default to Everyone/],
+    [`kind: "bugfix", ${risk}`, true],
+    [`kind: "feature", defaultMode: "OWNER_AND_QA", ${sensitive}`, true],
+    [`kind: "feature", defaultMode: "EVERYONE", ${sensitive}`, false],
+    [`kind: "bugfix", ${sensitive}`, false],
+    [`kind: "bugfix", defaultMode: "OWNER_AND_QA", ${sensitive}`, true],
+    [`kind: "internal", ${risk}`, true],
+    [`kind: "internal", defaultMode: "EVERYONE", ${risk}`, false],
+  ]) {
+    const { dir, git } = makeRepo(t);
+    perFlagLayout(dir);
+    const base = commit(git, "existing feature without defaultMode");
+    writeFile(dir, "src/lib/flags/definitions/htpr-2-new.ts", `export const NEW_FLAG = "htpr-2-new";
+export default { key: NEW_FLAG, shippedOn: "2026-10-20", description: "Fixture", ${extra} } as const;`);
+    const result = await evaluate("YPER4-2 [INFRA] Fixture", base, commit(git, "added definition"), dir);
+    assert.equal(result.pass, pass, extra + ": " + result.reason);
+    if (message) assert.match(result.reason, message);
+  }
+  const { dir, git } = makeRepo(t);
+  perFlagLayout(dir);
+  const base = commit(git, "existing feature without defaultMode");
+  writeFile(dir, "src/components/Widget.tsx", 'import { OTHER_FLAG } from "@/lib/flags/keys";\nimport { useFlag } from "@/hooks/useFlag";\nexport const Widget = () => useFlag(OTHER_FLAG) ? <div /> : null;\n');
+  const result = await evaluate("HTPR-1 [FEATURE] Existing flag", base, commit(git, "unchanged definition"), dir);
+  assert.equal(result.pass, true, result.reason);
+});
+
+test("sidebar lazy-runtime gating is visible at the exported entry, not hidden inside an effect callback", async (t) => {
+  const provider = fs.readFileSync(path.join(root, "src/components/ProviderGlobal/GloablProviders.tsx"), "utf8");
+  const effect = provider.slice(provider.indexOf("  useEffect(agentSidebarChatsEnabled ?"), provider.indexOf("  const [chatRuntimeMounted"));
+  assert.match(effect, /useEffect\(agentSidebarChatsEnabled \?/);
+  for (const [name, source, expected] of [
+    ["current provider effect", effect, true],
+    ["old hidden effect branch", 'useEffect(() => { if (!agentSidebarChatsEnabled) return; setSidebarRequested(new URLSearchParams(window.location.search).has("agentSidebar")); }, [agentSidebarChatsEnabled]);', false],
+  ]) {
+    const fixture = makeRepo(t), base = commit(fixture.git, "base");
+    writeFile(fixture.dir, "src/components/Provider.tsx", `import { useEffect } from "react";
+import { useFlag } from "@/hooks/useFlag";
+import { OTHER_FLAG } from "@/lib/flags/keys";
+export function Provider() {
+  const agentSidebarChatsEnabled = useFlag(OTHER_FLAG);
+  ${source}
+  return <div />;
+}`);
+    const result = await evaluate("HTPR-1 [FEATURE] sidebar startup", base, commit(fixture.git, name), fixture.dir);
+    assert.equal(result.pass, expected, `${name}: ${result.reason}`);
+  }
 });

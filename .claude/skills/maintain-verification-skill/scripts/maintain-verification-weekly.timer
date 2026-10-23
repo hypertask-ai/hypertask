@@ -1,0 +1,7 @@
+[Unit]
+Description=Audit changed feature-map sources weekly
+[Timer]
+OnCalendar=Mon *-*-* 03:43:00 UTC
+Persistent=true
+[Install]
+WantedBy=timers.target

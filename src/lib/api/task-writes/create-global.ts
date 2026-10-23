@@ -1,3 +1,7 @@
+import { inlineAgentImagesForUser } from "@/lib/media/inlineAgentImages.server";
+import { HTPR_7513_WRITER_PROJECT_LABELS_FLAG } from "@/lib/flags/keys";
+import { recordAgentBoardScopeMiss } from "@/lib/auth/agentScope";
+import { HTPR_7471_WRITER_BOARD_FORMAT_FLAG } from "@/lib/flags/keys";
 import { assertParentTaskOnBoard, ParentTaskNotFoundError } from "@/utils/controllers/tasks/parentTaskAccess";
 import { taskWriterDueDateForSave } from "@/lib/ai/taskWriterDueDate";
 import { HTPR_7054_CTRLJ_DUE_DATE_FLAG } from "@/lib/flags/keys";
@@ -103,38 +107,73 @@ const route = (requestStartedAt: number) => taskWriteRoute({
       where: {
         id: projectId,
         status: "Normal",
-        ...taskWriteAccessWhere(userId, agentId),
+        ...taskWriteAccessWhere(userId, agentId, session.teamScope),
       },
       select: { id: true },
     });
     if (!authorizedProject) {
       return NextResponse.json({ message: "Forbidden" }, { status: 403, headers: responseHeaders });
     }
+    recordAgentBoardScopeMiss(authorizedProject.id, "write");
+    const storedDescription = agentId && typeof description === "string"
+      ? await inlineAgentImagesForUser(description, userId, { inlineImages: body.inline_images, attachments: Array.isArray(urlsToAdd) ? urlsToAdd.filter((file) => file.Attachment).map((file) => ({ url: file.urlString, fileName: file.title, mimeType: file.attachmentType })) : [] }) : description;
+    let customFields: import("@/lib/ai/taskWriterCustomFields").TaskWriterCustomFieldValue[] = [];
+    if (body.requestKind === "compose-task" && Array.isArray(body.customFields) && body.customFields.length &&
+        await isFeatureEnabled(HTPR_7471_WRITER_BOARD_FORMAT_FLAG, userId)) {
+      const { validateTaskWriterCustomFields } = await import("@/lib/ai/taskWriterCustomFields");
+      const { getCustomFieldsForProject } = await import("@/utils/controllers/customFields");
+      customFields = validateTaskWriterCustomFields(await getCustomFieldsForProject(projectId), body.customFields);
+    }
     const dueDateEnabled = body.requestKind === "compose-task" && body.writerDueDate != null &&
       await isFeatureEnabled(HTPR_7054_CTRLJ_DUE_DATE_FLAG, userId);
     const writerDueDate = dueDateEnabled ? taskWriterDueDateForSave(body.writerDueDate, body.writerTimeZone) : undefined;
     const dueDate = writerDueDate ?? requestedDueDate;
+    let writerLabelIds: string[] = [];
+    let boardLabelIds: string[] = [];
+    if (!tags?.length && body.requestKind === "compose-task" && Array.isArray(body.writerLabelIds) && body.writerLabelIds.length &&
+        await isFeatureEnabled(HTPR_7513_WRITER_PROJECT_LABELS_FLAG, userId)) {
+      const { validateTaskWriterLabelIds } = await import("@/app/api/ai/_lib/taskWriterProperties");
+      const boardLabels = await prisma.label.findMany({ where: { projectId }, select: { id: true } });
+      boardLabelIds = boardLabels.map((label) => label.id);
+      writerLabelIds = validateTaskWriterLabelIds(body.writerLabelIds, boardLabelIds);
+    }
     if (body.existingTaskId != null) {
       const taskId = Number(body.existingTaskId);
       if (!Number.isSafeInteger(taskId) || taskId <= 0) {
         return NextResponse.json({ message: "Invalid task id" }, { status: 400, headers: responseHeaders });
       }
       const target = await prisma.task.findFirst({
-        where: { id: taskId, projectId, status: "Normal", project: taskWriteAccessWhere(userId, agentId) },
+        where: { id: taskId, projectId, status: "Normal", project: taskWriteAccessWhere(userId, agentId, session.teamScope) },
         include: { description_: { select: { content: true } } },
       });
       if (!target) return NextResponse.json({ message: "Forbidden" }, { status: 403, headers: responseHeaders });
       if (!isEmptyComposeTarget(target)) return NextResponse.json({ message: "This task is no longer empty. Your note is still here." }, { status: 409, headers: responseHeaders });
       const { updateTaskSingle } = await import("@/utils/controllers/tasks/single");
-      const result = await updateTaskSingle({ id: taskId, title, description,
+      const result = await updateTaskSingle({ id: taskId, title, description: storedDescription,
         ...(writerDueDate ? { dueDate: writerDueDate, dueDateNotifiedAt: null } : {}),
       }, currentUser, agentId, {
+        teamScope: session.teamScope,
         expectedTitle: target.title,
         expectedDescription: target.description_?.content ?? "",
         expectedProjectId: target.projectId,
         expectedStatus: target.status,
       });
       if (result.status !== 200) return NextResponse.json(result.json, { status: result.status, headers: responseHeaders });
+      if (writerLabelIds.length) {
+        const { mutateTaskLabels } = await import("@/lib/mcp/tasks/services");
+        const actingAgent = agentId ? await prisma.agent.findUnique({
+          where: { id: agentId },
+          select: { id: true, userId: true, displayName: true, photoURL: true },
+        }) : null;
+        await mutateTaskLabels(taskId, projectId, { add: writerLabelIds, skipIfPresent: boardLabelIds }, {
+          id: userId, email: currentUser.email ?? "", displayName: currentUser.displayName, photoURL: currentUser.photoURL,
+        }, actingAgent);
+        result.json.taskLabels = await prisma.taskLabel.findMany({ where: { taskId }, include: { label: true } });
+      }
+      if (customFields.length) {
+        const { saveWriterCustomFieldValues } = await import("@/utils/controllers/customFields");
+        await saveWriterCustomFieldValues(taskId, customFields);
+      }
       if (writerDueDate) {
         const { cancelDueDateJob, scheduleDueDateJob } = await import("@/pages/api/queues/duedateQueue");
         await cancelDueDateJob(taskId, projectId);
@@ -167,6 +206,7 @@ const route = (requestStartedAt: number) => taskWriteRoute({
         }, { status: 400, headers: responseHeaders });
       }
     }
+    if (!tagIds.length) tagIds = writerLabelIds;
     let priorityCreated: any = undefined;
     let estimateCreated: any = undefined;
     let relatedTasks: any = { status: 200, json: [] };
@@ -306,13 +346,16 @@ const route = (requestStartedAt: number) => taskWriteRoute({
     try {
       const created = await createTaskWithBoardWebhookOutbox(prisma, taskCreatedActor, async (tx) => {
         await tx.$executeRaw`SELECT pg_advisory_xact_lock(${TASK_UNIQUE_INDEX_ADVISORY_LOCK_CLASS}::int, ${projectId}::int)`;
+        if (session.teamScope != null && !await tx.project.findFirst({
+          where: { id: projectId, ...taskWriteAccessWhere(userId, agentId, session.teamScope) }, select: { id: true },
+        })) throw new TaskSectionValidationError('Project not found or access denied');
         const sectionRow = await tx.section.findFirst({
           where: sectionWhere,
           ...(sectionOrderBy ? { orderBy: sectionOrderBy } : {}),
           select: { id: true, section_title: true },
         });
         if (!sectionRow) throw new TaskSectionValidationError(sectionErrorMessage);
-        const currentProject = await tx.project.findUnique({ where: { id: projectId }, select: { uniqueIdentifier: true } });
+        const currentProject = await tx.project.findUnique({ where: { id: projectId }, select: { uniqueIdentifier: true, firstTaskPointerTaskId: true } });
         const nextUniqueIndex = await getNextUniqueTaskIndex(projectId, tx);
         const currentDate = new Date();
         const taskRanking = ranking == null || typeof ranking === "string"
@@ -347,7 +390,7 @@ const route = (requestStartedAt: number) => taskWriteRoute({
             ...body,
             description_: {
               create: {
-                content: description ?? "",
+                content: storedDescription ?? "",
                 creatorId: userId,
                 agentId,
               },
@@ -404,6 +447,7 @@ const route = (requestStartedAt: number) => taskWriteRoute({
         await persistAgentTaskCreatedPending(tx, task.id);
         return {
           taskId: task.id,
+          firstTaskPointerTaskId: currentProject?.firstTaskPointerTaskId ?? null,
           result: {
             task,
             priority: createdPriority,
@@ -456,6 +500,10 @@ const route = (requestStartedAt: number) => taskWriteRoute({
     if (!newTask) {
       return NextResponse.json({ message: "Failed to create task" }, { status: 400, headers: responseHeaders });
     }
+    if (customFields.length) {
+      const { saveWriterCustomFieldValues } = await import("@/utils/controllers/customFields");
+      await saveWriterCustomFieldValues(newTask.id, customFields);
+    }
     const taskCreatedAt = performance.now();
     const description_ = newTask.description_;
     if (priorityCreated) {
@@ -482,7 +530,9 @@ const route = (requestStartedAt: number) => taskWriteRoute({
           relatedTasks: relationsToAdd,
           currentTaskId: newTask.id,
         },
-        currentUser.id
+        currentUser.id,
+        agentId,
+        session.teamScope
       );
     }
     if (Array.isArray(urlsToAdd) && urlsToAdd.length > 0) {

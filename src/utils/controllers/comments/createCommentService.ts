@@ -90,6 +90,7 @@ export async function createCommentService(params: CreateCommentParams) {
     ownerId,
     currentUser,
     agentId,
+    teamScope,
     directReplyUserId,
     directReplySourceCommentId,
     directReplyInvocationId,
@@ -127,12 +128,13 @@ export async function createCommentService(params: CreateCommentParams) {
   const task = await prisma.task.findFirst({
     where: {
       id: taskId,
-      ...(trustedCaller
+      ...(trustedCaller && teamScope == null
         ? {}
         : {
             project: taskWriteAccessWhere(
               accessUserId ?? currentUser.id,
               agentId,
+              teamScope,
             ),
           }),
     },
@@ -230,7 +232,7 @@ export async function createCommentService(params: CreateCommentParams) {
   } catch (error) {
     if (error instanceof DirectReplyAlreadyHandledError) {
       return prisma.comment.findUniqueOrThrow({
-        where: { id: error.commentId },
+        where: { id: error.commentId, ...(teamScope == null ? {} : { task: { project: taskWriteAccessWhere(accessUserId ?? currentUser.id, agentId, teamScope) } }) },
       });
     }
     throw error;

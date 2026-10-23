@@ -1,3 +1,5 @@
+import { downloadWithoutBrotli } from "@/lib/net/downloadWithoutBrotli";
+import { withAgentScopeRequest } from "@/lib/auth/agentScope";
 import { haiku55ModelEnabled } from "@/app/api/ai/_lib/planGate";
 import { reportError } from "@/lib/errors/reportError";
 import { configureAiModelUsage } from "@/app/api/ai/_lib/modelProvider";
@@ -44,6 +46,7 @@ import {
   createHyperAiTools,
   HYPER_AI_TOOL_COUNT,
 } from "@/app/api/ai/_lib/hyperAiTools";
+import { warnIfAllowanceRefused } from "@/app/api/ai/_lib/allowanceRefusal";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -99,6 +102,10 @@ const hyperMentionRequestSchema = z.object({
 });
 
 export async function POST(request: NextRequest) {
+  return withAgentScopeRequest(request, () => hyperMention(request));
+}
+
+async function hyperMention(request: NextRequest) {
   const [cookieUser, sessionUser, cookieIdentity] = await Promise.all([
     getCurrentUserFromCookies(),
     getSessionUser(request.headers),
@@ -143,6 +150,8 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
+  const actingAgentId = hasAuthorization ? bearerContext?.agentId : sessionUser?.agentId;
+
   try {
     const parsedBody = hyperMentionRequestSchema.safeParse(
       await request.json().catch(() => null),
@@ -160,6 +169,7 @@ export async function POST(request: NextRequest) {
         projectId: body.projectId,
         deletedAt: null,
         project: taskWriteAccessWhere(requestUser.id),
+        AND: [{ project: taskWriteAccessWhere(requestUser.id, actingAgentId) }],
       },
       select: { id: true, userId: true },
     });
@@ -187,6 +197,7 @@ export async function POST(request: NextRequest) {
           taskId: body.taskId,
           creatorId: requestUser.id,
           agentId: null,
+          task: { project: taskWriteAccessWhere(requestUser.id, actingAgentId) },
         },
         select: { id: true, text: true, createdAt: true, agentId: true },
       });
@@ -291,6 +302,7 @@ export async function POST(request: NextRequest) {
       where: {
         status: "Normal",
         ...getProjectWhere(requestUser.id),
+        AND: [getProjectWhere(requestUser.id, actingAgentId)],
       },
       select: { id: true },
     });
@@ -348,6 +360,7 @@ export async function POST(request: NextRequest) {
       feature: "hyper-mentioned",
     });
     const result = await generateText({
+      experimental_download: downloadWithoutBrotli,
       model: selected.model,
       instructions: renderPrompt("hyper-mentioned-instructions-1", (HOUSE_OUTPUT_STYLE), (HYPER_AI_TOOL_COUNT), (skillResolution.systemPromptAddition
           ? `\n\n${skillResolution.systemPromptAddition}`
@@ -431,6 +444,8 @@ export async function POST(request: NextRequest) {
 
     return NextResponse.json({ success: true }, { status: 200 });
   } catch (error) {
+    const allowanceMessage = warnIfAllowanceRefused(error, "ai/hyper-mentioned");
+    if (allowanceMessage) return NextResponse.json({ error: allowanceMessage }, { status: 429 });
     await reportError({
       message: error instanceof Error ? error.message : "AI request failed",
       stack: error instanceof Error ? error.stack : undefined,

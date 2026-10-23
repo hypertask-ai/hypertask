@@ -1,3 +1,5 @@
+import { requireAgentWriteRole } from '@/lib/mcp/agents/readRoleGuard'
+import { findIdParamOutOfRange, idOutOfRangeMessage } from '@/lib/mcp/listParams'
 import { reportMcpOperationCrash } from '@/lib/mcp/operationCrashReport'
 import { wrapMcpRoute } from '@/lib/mcp/routeWrapper'
 import { NextRequest, NextResponse } from 'next/server'
@@ -6,7 +8,7 @@ import prisma from '@/lib/prisma'
 import { buildFieldError } from '@/lib/mcp/fieldError'
 import { checkMcpRateLimit, validateMcpAuth } from '@/lib/mcp/auth'
 import { validateProjectAccess } from '@/lib/mcp/tasks/services'
-import { resolveTaskIdOnly } from '@/lib/mcp/tasks/resolveTask'
+import { resolveTaskIdOnly, taskIdentifierErrorResponse } from '@/lib/mcp/tasks/resolveTask'
 import upsertTaskDescription from '@/utils/controllers/description/common-description-create'
 import { AgentMutationLeaseConflictError } from '@/lib/mcp/tasks/agentMutationFence'
 
@@ -27,6 +29,8 @@ export async function POST(request: NextRequest) {
   try {
     const ctx = await validateMcpAuth(request)
     if (!ctx) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    const roleRefusal = await requireAgentWriteRole(ctx)
+    if (roleRefusal) return roleRefusal
 
     const rateLimited = await checkMcpRateLimit(request)
     if (rateLimited) return rateLimited
@@ -73,11 +77,19 @@ export async function POST(request: NextRequest) {
       )
     }
 
+    const outOfRange = findIdParamOutOfRange({ version_id: versionId })
+    if (outOfRange) {
+      return NextResponse.json(
+        { success: false, error: idOutOfRangeMessage(outOfRange), code: 'invalid_field' },
+        { status: 400 }
+      )
+    }
+
     const task = await prisma.task.findUnique({
       where: { id: taskId },
       select: { projectId: true },
     })
-    if (!task || (await validateProjectAccess(task.projectId, ctx.user.id, ctx.agentId)).error) {
+    if (!task || (await validateProjectAccess(task.projectId, ctx.user.id, ctx.agentId, ctx.teamScope)).error) {
       return NextResponse.json(
         buildFieldError('not_found', 'task_id', 'Task not found'),
         { status: 404 }
@@ -99,12 +111,14 @@ export async function POST(request: NextRequest) {
       taskId,
       creatorId: ctx.user.id,
       content: snapshot.contentHtml,
-      agentId: ctx.agentId,
+      agentId: ctx.agentId, teamScope: ctx.teamScope,
       actingUserId: ctx.user.id,
     })
 
     return NextResponse.json({ ok: true, restored_from_version: snapshot.version })
   } catch (error) {
+    const identifierResponse = taskIdentifierErrorResponse(error)
+    if (identifierResponse) return identifierResponse
     if (error instanceof AgentMutationLeaseConflictError) {
       return NextResponse.json({ error: error.message }, { status: 409 })
     }

@@ -1,5 +1,9 @@
+import { resolveAgentTeamScope } from "@/lib/auth/agentTeamScope";
+import { withAgentScopeRequest } from "@/lib/auth/agentScope";
 import { NextRequest, NextResponse } from "next/server";
-import type { Prisma } from "@prisma/client";
+import { isFeatureEnabled } from "@/lib/flags";
+import { HTPR_7509_AGENT_ROLE_SCREEN_FLAG } from "@/lib/flags/keys";
+import { changeTeamAgentRole } from "@/utils/controllers/agents/changeTeamAgentRole";
 import prisma from "@/lib/prisma";
 import {
   agentTokenCredentialFields,
@@ -40,10 +44,17 @@ async function resolveAgent(userId: number, ref: string) {
 
 async function getCurrentUser(request: NextRequest) {
   const session = await getSessionUser(request.headers);
-  return session ? { id: session.userId } : null;
+  return session ? { id: session.userId, agentId: session.agentId } : null;
 }
 
 export async function GET(
+  request: NextRequest,
+  props: { params: Promise<{ agentId: string }> },
+) {
+  return withAgentScopeRequest(request, () => getAgentDetails(request, props));
+}
+
+async function getAgentDetails(
   request: NextRequest,
   props: { params: Promise<{ agentId: string }> },
 ) {
@@ -56,6 +67,7 @@ export async function GET(
     );
   }
 
+  const actingAgentId = user.agentId;
   const resolved = await resolveAgent(user.id, params.agentId);
   const agent = resolved
     ? await prisma.agent.findFirst({
@@ -80,7 +92,11 @@ export async function GET(
       members: {
         where: {
           status: "Accepted",
-          project: { status: "Normal", ...getProjectWhere(user.id) },
+          project: {
+            status: "Normal",
+            ...getProjectWhere(user.id),
+            AND: [getProjectWhere(user.id, actingAgentId)],
+          },
         },
         select: {
           project: {
@@ -109,13 +125,22 @@ export async function GET(
       prisma.comment.aggregate({
         where: {
           agentId: agent.id,
-          task: { project: getProjectWhere(user.id) },
+          task: {
+            project: {
+              ...getProjectWhere(user.id),
+              AND: [getProjectWhere(user.id, actingAgentId)],
+            },
+          },
         },
         _max: { createdAt: true },
       }),
-      workingOnByAgent([agent.id], user.id),
+      workingOnByAgent([agent.id], user.id, actingAgentId),
       prisma.project.findMany({
-        where: { status: "Normal", ...getProjectWhere(user.id) },
+        where: {
+          status: "Normal",
+          ...getProjectWhere(user.id),
+          AND: [getProjectWhere(user.id, actingAgentId)],
+        },
         select: {
           id: true,
           name: true,
@@ -166,14 +191,29 @@ export async function GET(
     boardIds.length > 0
       ? await Promise.all([
           sourceSections.length > 0
-            ? prisma.task.count({ where: sourceScopeWhere })
+            ? prisma.task.count({
+                where: {
+                  AND: [
+                    sourceScopeWhere,
+                    { project: getProjectWhere(user.id, actingAgentId) },
+                  ],
+                },
+              })
             : Promise.resolve(null),
-          prisma.task.count({ where: assignedWhere }),
+          prisma.task.count({
+            where: {
+              AND: [
+                assignedWhere,
+                { project: getProjectWhere(user.id, actingAgentId) },
+              ],
+            },
+          }),
           sourceSections.length > 0
             ? prisma.task.count({
                 where: {
                   AND: [
                     sourceScopeWhere,
+                    { project: getProjectWhere(user.id, actingAgentId) },
                     { assignees: { none: { agentId: { not: null } } } },
                   ],
                 },
@@ -184,6 +224,7 @@ export async function GET(
                 where: {
                   AND: [
                     sourceScopeWhere,
+                    { project: getProjectWhere(user.id, actingAgentId) },
                     {
                       assignees: {
                         some: {
@@ -200,6 +241,7 @@ export async function GET(
                 where: {
                   AND: [
                     sourceScopeWhere,
+                    { project: getProjectWhere(user.id, actingAgentId) },
                     {
                       OR: processedReferences.map(({ boardId, ticket }) => ({
                         projectId: boardId,
@@ -212,7 +254,14 @@ export async function GET(
               })
             : Promise.resolve(0),
           sourceSections.length > 0
-            ? prisma.task.count({ where: eligiblePoolWhere })
+            ? prisma.task.count({
+                where: {
+                  AND: [
+                    eligiblePoolWhere,
+                    { project: getProjectWhere(user.id, actingAgentId) },
+                  ],
+                },
+              })
             : Promise.resolve(null),
         ])
       : [null, 0, 0, 0, 0, null];
@@ -220,7 +269,9 @@ export async function GET(
   if (boardIds.length > 0 && sourceSections.length > 0) {
     const grouped = await prisma.task.groupBy({
       by: ["projectId", "section"],
-      where: eligiblePoolWhere,
+      where: {
+        AND: [eligiblePoolWhere, { project: getProjectWhere(user.id, actingAgentId) }],
+      },
       _count: { _all: true },
     });
     for (const row of grouped) {
@@ -241,7 +292,9 @@ export async function GET(
   const inferredTasks =
     !runtimeIsCurrent && boardIds.length > 0
       ? await prisma.task.findMany({
-          where: assignedWhere,
+          where: {
+            AND: [assignedWhere, { project: getProjectWhere(user.id, actingAgentId) }],
+          },
           orderBy: [
             { dueDate: { sort: "asc", nulls: "last" } },
             { priority: { priority_index: "asc" } },
@@ -347,6 +400,13 @@ export async function PATCH(
   request: NextRequest,
   props: { params: Promise<{ agentId: string }> },
 ) {
+  return withAgentScopeRequest(request, () => patchAgent(request, props));
+}
+
+async function patchAgent(
+  request: NextRequest,
+  props: { params: Promise<{ agentId: string }> },
+) {
   const params = await props.params;
   const user = await getCurrentUser(request);
   if (!user?.id) {
@@ -354,6 +414,70 @@ export async function PATCH(
       { success: false, error: "Unauthorized" },
       { status: 401 },
     );
+  }
+
+  let body: {
+    displayName?: unknown;
+    photoURL?: unknown;
+    postsToImportant?: unknown;
+    prompt?: unknown;
+    modelOptionId?: unknown;
+    revoke?: unknown;
+    revoked?: unknown;
+    archived?: unknown;
+    visibility?: unknown;
+    role?: unknown;
+    teamId?: unknown;
+  };
+
+  try {
+    body = await request.json();
+  } catch {
+    return NextResponse.json(
+      { success: false, error: "Invalid JSON" },
+      { status: 400 },
+    );
+  }
+  if (!body || typeof body !== "object" || Array.isArray(body)) {
+    return NextResponse.json(
+      { success: false, error: "Invalid JSON" },
+      { status: 400 },
+    );
+  }
+
+  if (body.role !== undefined || body.teamId !== undefined) {
+    if (user.agentId) {
+      return NextResponse.json(
+        { success: false, error: "Agent tokens cannot change agent roles" },
+        { status: 403 },
+      );
+    }
+    if (!(await isFeatureEnabled(HTPR_7509_AGENT_ROLE_SCREEN_FLAG, user.id))) {
+      return NextResponse.json(
+        { success: false, error: "Agent role changes are not available" },
+        { status: 403 },
+      );
+    }
+    if (
+      (body.role !== "read" && body.role !== "write" && body.role !== "admin") ||
+      typeof body.teamId !== "string" || !body.teamId.trim() ||
+      Object.keys(body).some((key) => key !== "role" && key !== "teamId")
+    ) {
+      return NextResponse.json(
+        { success: false, error: "A valid role and teamId are required" },
+        { status: 400 },
+      );
+    }
+    const result = await changeTeamAgentRole(
+      user.id, body.teamId.trim(), params.agentId, body.role,
+    );
+    if (!result.ok) {
+      return NextResponse.json(
+        { success: false, error: result.error },
+        { status: result.status },
+      );
+    }
+    return NextResponse.json({ success: true, agent: result.agent });
   }
 
   const ref = params.agentId.trim();
@@ -371,33 +495,6 @@ export async function PATCH(
     return NextResponse.json(
       { success: false, error: "Agent does not exist" },
       { status: 404 },
-    );
-  }
-
-  let body: {
-    displayName?: unknown;
-    photoURL?: unknown;
-    postsToImportant?: unknown;
-    prompt?: unknown;
-    modelOptionId?: unknown;
-    revoke?: unknown;
-    revoked?: unknown;
-    archived?: unknown;
-    visibility?: unknown;
-  };
-
-  try {
-    body = await request.json();
-  } catch {
-    return NextResponse.json(
-      { success: false, error: "Invalid JSON" },
-      { status: 400 },
-    );
-  }
-  if (!body || typeof body !== "object" || Array.isArray(body)) {
-    return NextResponse.json(
-      { success: false, error: "Invalid JSON" },
-      { status: 400 },
     );
   }
 
@@ -444,7 +541,6 @@ export async function PATCH(
         console.warn("[Agent runtime] Snapshot invalidation failed:", error);
       }
     };
-    if (isReEnabling) await clearRuntimeBestEffort();
     if (isReEnabling && existing.runtimeType === "EXTERNAL") {
       const owner = await prisma.user.findUnique({
         where: { id: user.id },
@@ -456,14 +552,22 @@ export async function PATCH(
           { status: 404 },
         );
       }
+      let teamScope
+      try {
+        teamScope = await resolveAgentTeamScope(user.id, existing)
+      } catch {
+        return NextResponse.json({ success: false, error: "Agent team grant is no longer valid" }, { status: 403 })
+      }
       reenabledToken = createMcpToken(
         user.id,
         owner.email,
         undefined,
         existing.id,
+        teamScope ?? undefined,
       );
     }
     if (isReEnabling) {
+      await clearRuntimeBestEffort();
       const transition = await prisma.agent.updateMany({
         where: {
           id: existing.id,
@@ -542,7 +646,6 @@ export async function PATCH(
   const data: {
     displayName?: string;
     photoURL?: string | null;
-    permissions?: Prisma.InputJsonValue;
     prompt?: string | null;
     modelOptionId?: string | null;
     archivedAt?: Date | null;
@@ -631,26 +734,16 @@ export async function PATCH(
         { status: 400 },
       );
     }
-    const permissions =
-      existing.permissions &&
-      typeof existing.permissions === "object" &&
-      !Array.isArray(existing.permissions)
-        ? existing.permissions
-        : {};
-    data.permissions = {
-      ...permissions,
-      postsToImportant: body.postsToImportant,
-    };
   }
 
-  if (Object.keys(data).length === 0) {
+  if (Object.keys(data).length === 0 && body.postsToImportant === undefined) {
     return NextResponse.json(
       { success: false, error: "No valid fields to update" },
       { status: 400 },
     );
   }
 
-  const agent = await prisma.agent.update({
+  const update = {
     where: { id: existing.id },
     data,
     select: {
@@ -667,7 +760,17 @@ export async function PATCH(
       modelOptionId: true,
       heartbeatAt: true,
     },
-  });
+  } as const;
+  const agent = typeof body.postsToImportant === "boolean"
+    ? await prisma.$transaction(async (tx) => {
+        await tx.$executeRaw`
+          UPDATE "Agent"
+          SET "permissions" = (CASE WHEN jsonb_typeof("permissions") = 'object' THEN "permissions" ELSE '{}'::jsonb END) || jsonb_build_object('postsToImportant', ${body.postsToImportant}::boolean)
+          WHERE "id" = ${existing.id}
+        `;
+        return tx.agent.update(update);
+      })
+    : await prisma.agent.update(update);
 
   const { permissions, ...agentFields } = agent;
   const slugs = await ownedAgentSlugs(user.id);

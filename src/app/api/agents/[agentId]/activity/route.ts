@@ -1,3 +1,4 @@
+import { agentScopeEnforced, withAgentScopeRequest } from "@/lib/auth/agentScope";
 import { NextRequest, NextResponse } from "next/server";
 import prisma from "@/lib/prisma";
 import { getProjectWhere } from "@/utils/controllers/projects/getAllIncludes";
@@ -38,9 +39,18 @@ export async function GET(
   request: NextRequest,
   props: { params: Promise<{ agentId: string }> },
 ) {
+  return withAgentScopeRequest(request, () => getAgentActivity(request, props));
+}
+
+async function getAgentActivity(
+  request: NextRequest,
+  props: { params: Promise<{ agentId: string }> },
+) {
   const params = await props.params;
 
-  const userId = (await getSessionUser(request.headers))?.userId;
+  const session = await getSessionUser(request.headers);
+  const userId = session?.userId;
+  const actingAgentId = session?.agentId;
   if (!userId) {
     return NextResponse.json(
       { success: false, error: "Unauthorized" },
@@ -66,10 +76,24 @@ export async function GET(
       : DEFAULT_LIMIT;
 
   const visibleTask = { task: { project: getProjectWhere(userId) } };
+  const visibleUsageProjects =
+    actingAgentId && agentScopeEnforced()
+      ? await prisma.project.findMany({
+          where: {
+            ...getProjectWhere(userId),
+            AND: [getProjectWhere(userId, actingAgentId)],
+          },
+          select: { id: true },
+        })
+      : null;
 
   const [comments, evidence, questions, sessions, usage] = await Promise.all([
     prisma.comment.findMany({
-      where: { agentId: agent.id, ...visibleTask },
+      where: {
+        agentId: agent.id,
+        ...visibleTask,
+        AND: [{ task: { project: getProjectWhere(userId, actingAgentId) } }],
+      },
       orderBy: { createdAt: "desc" },
       take: limit,
       select: {
@@ -80,7 +104,11 @@ export async function GET(
       },
     }),
     prisma.taskEvidence.findMany({
-      where: { agentId: agent.id, ...visibleTask },
+      where: {
+        agentId: agent.id,
+        ...visibleTask,
+        AND: [{ task: { project: getProjectWhere(userId, actingAgentId) } }],
+      },
       orderBy: { createdAt: "desc" },
       take: limit,
       select: {
@@ -92,7 +120,11 @@ export async function GET(
       },
     }),
     prisma.decisionRequest.findMany({
-      where: { agentId: agent.id, ...visibleTask },
+      where: {
+        agentId: agent.id,
+        ...visibleTask,
+        AND: [{ task: { project: getProjectWhere(userId, actingAgentId) } }],
+      },
       orderBy: { createdAt: "desc" },
       take: limit,
       select: {
@@ -104,7 +136,11 @@ export async function GET(
       },
     }),
     prisma.taskSession.findMany({
-      where: { agentId: agent.id, ...visibleTask },
+      where: {
+        agentId: agent.id,
+        ...visibleTask,
+        AND: [{ task: { project: getProjectWhere(userId, actingAgentId) } }],
+      },
       orderBy: { createdAt: "desc" },
       take: limit,
       select: {
@@ -115,7 +151,12 @@ export async function GET(
       },
     }),
     prisma.aiUsage.findMany({
-      where: { agentId: agent.id },
+      where: {
+        agentId: agent.id,
+        ...(visibleUsageProjects
+          ? { projectId: { in: visibleUsageProjects.map((project) => project.id) } }
+          : {}),
+      },
       orderBy: { createdAt: "desc" },
       take: limit,
       select: {

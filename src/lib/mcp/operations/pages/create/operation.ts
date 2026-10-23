@@ -1,7 +1,10 @@
+import { IdempotencyAccessError } from "@/lib/mcp/idempotency/idempotencyStore"
+import { findIdParamOutOfRange, idOutOfRangeMessage } from '@/lib/mcp/listParams'
 import { reportMcpOperationCrash } from '@/lib/mcp/operationCrashReport'
 import { wrapMcpRoute } from '@/lib/mcp/routeWrapper'
 import { NextRequest, NextResponse } from 'next/server'
 
+import { getFeaturePageWarnings } from '@/lib/mcp/featureCatalog'
 import { buildFieldError } from '@/lib/mcp/fieldError'
 import { checkMcpRateLimit, validateMcpAuth } from '@/lib/mcp/auth'
 import { requireRole } from '@/lib/mcp/agents/scopes'
@@ -12,7 +15,7 @@ import {
 } from '@/lib/mcp/idempotency/idempotencyStore'
 import {
   findTaskByIdentifier,
-  TaskIdentifierAmbiguityError,
+  taskIdentifierErrorResponse,
   validateTaskIdentifier,
 } from '@/lib/mcp/tasks/resolveTask'
 import {
@@ -190,6 +193,14 @@ export async function POST(request: NextRequest) {
       parentPageId = parsedParentPageId
     }
 
+    const outOfRange = findIdParamOutOfRange({ parent_page_id: parentPageId })
+    if (outOfRange) {
+      return NextResponse.json(
+        { success: false, error: idOutOfRangeMessage(outOfRange), code: 'invalid_field' },
+        { status: 400 }
+      )
+    }
+
     let idempotencyKey: string | null
     try {
       idempotencyKey = normalizeIdempotencyKey(
@@ -211,7 +222,7 @@ export async function POST(request: NextRequest) {
     const task = await findTaskByIdentifier(
       ctx.user,
       identifier,
-      ctx.agentId
+      ctx.agentId, undefined, ctx.teamScope
     )
     if (!task || !(await canAccessProject(task.projectId, ctx))) {
       return NextResponse.json(
@@ -233,7 +244,7 @@ export async function POST(request: NextRequest) {
           contentType: contentType as PageContentType,
           parentPageId,
           userId: ctx.user.id,
-          agentId: ctx.agentId,
+          agentId: ctx.agentId, teamScope: ctx.teamScope,
         })
 
         return {
@@ -245,20 +256,22 @@ export async function POST(request: NextRequest) {
             url: getPageUrl(page.publicId),
           },
         }
-      }
+      },
+      ctx.teamScope != null ? ctx.agentId : undefined,
+      ctx.teamScope
     )
 
-    return NextResponse.json(response)
+    const warnings = ctx.agentId
+      ? await getFeaturePageWarnings(response.page.title, ctx.user.id).catch(() => [])
+      : []
+
+    return NextResponse.json({ ...response, ...(warnings.length ? { warnings } : {}) })
   } catch (error) {
+    if (error instanceof IdempotencyAccessError) return NextResponse.json({ error: error.message }, { status: 404 })
+    const identifierResponse = taskIdentifierErrorResponse(error, 'ticket_number')
+    if (identifierResponse) return identifierResponse
     if (error instanceof IdempotencyInProgressError) {
       return NextResponse.json({ error: error.message }, { status: 409 })
-    }
-
-    if (error instanceof TaskIdentifierAmbiguityError) {
-      return NextResponse.json(
-        buildFieldError('invalid_field', 'ticket_number', error.message),
-        { status: 400 }
-      )
     }
 
     if (error instanceof Error && error.message.includes('not found')) {

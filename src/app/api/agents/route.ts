@@ -11,7 +11,8 @@ import { hasTeamMembershipAccess } from "@/utils/controllers/teams/hasTeamMember
 import type { AgentScopes } from "@/lib/mcp/agents/scopes";
 import { boardAgentVisibilityWhere } from "@/lib/agents/visibility";
 import { getSessionUser } from "@/lib/auth/getSessionUser";
-import { isFeatureEnabled, HTPR_6512_SEED_TEAM_AGENT_FLAG } from "@/lib/flags";
+import { isFeatureEnabled, isOwnerOrQaUserId } from "@/lib/flags";
+import { HTPR_7509_AGENT_ROLE_SCREEN_FLAG, HTPR_7574_OWNED_UNATTACHED_AGENTS_FLAG } from "@/lib/flags/keys";
 import {
   ensureDefaultTeamAgent,
   lockTeamAgentSeed,
@@ -47,14 +48,28 @@ export async function GET(request: NextRequest) {
     );
   }
 
-  if (await isFeatureEnabled(HTPR_6512_SEED_TEAM_AGENT_FLAG, currentUserId)) {
+  if (await isOwnerOrQaUserId(currentUserId)) {
     await ensureDefaultTeamAgent(currentUserId, teamId, prisma);
   }
 
+  const includeOwnedUnattached = await isFeatureEnabled(
+    HTPR_7574_OWNED_UNATTACHED_AGENTS_FLAG,
+    currentUserId,
+  );
+  const teamMember = { members: { some: { project: { teamId } } } };
+  const ownedUnattached = {
+    userId: currentUserId,
+    members: { none: {} },
+    revokedAt: null,
+    archivedAt: null,
+  };
+
   const agents = await prisma.agent.findMany({
     where: {
-      members: { some: { project: { teamId } } },
-      ...boardAgentVisibilityWhere(currentUserId),
+      AND: [
+        boardAgentVisibilityWhere(currentUserId),
+        includeOwnedUnattached ? { OR: [teamMember, ownedUnattached] } : teamMember,
+      ],
     },
     orderBy: { createdAt: "desc" },
     select: {
@@ -90,6 +105,7 @@ export async function GET(request: NextRequest) {
 
   const scopedAgents = agents.filter(
     (agent) =>
+      (includeOwnedUnattached && agent.userId === currentUserId && agent.members.length === 0) ||
       getAgentTeamId(
         agent.members.map(({ project: memberProject }) => memberProject.teamId),
       ) === teamId,
@@ -136,9 +152,16 @@ export async function GET(request: NextRequest) {
     }
   }
 
+  const agentRolesEnabled = await isFeatureEnabled(
+    HTPR_7509_AGENT_ROLE_SCREEN_FLAG,
+    currentUserId,
+  );
   const agentsWithOAuth = scopedAgents.map(
     ({ members, permissions, mcpTokenJti, mcpTokenExpiresAt, byokApiKeys, ...a }) => ({
       ...a,
+      ...(agentRolesEnabled
+        ? { role: (permissions as AgentScopes | null)?.role ?? "write" }
+        : {}),
       providerKey:
         a.userId === currentUserId ? maskAgentProviderKey(byokApiKeys) : null,
       postsToImportant:

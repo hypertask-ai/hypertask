@@ -20,6 +20,9 @@ import { appendListQueryParams } from '@/lib/mcp/listQuery';
 
 export interface CommentResponse {
   success: boolean;
+  routedTo?: 'comments';
+  visibleToPeople?: true;
+  url?: string;
   comment: {
     id: number;
     text: string;
@@ -38,6 +41,8 @@ export interface CommentResponse {
 export interface LoggedCommentResponse {
   success: boolean;
   routedTo: 'log';
+  visibleToPeople: false;
+  notice: string;
   url: string;
   activity: { id: string; runId: string; type: string; text: string; createdAt: string };
 }
@@ -93,13 +98,17 @@ export class CommentService {
 
   async addComment(
     params: unknown,
-    invocation?: McpInvocationIdentity
+    invocation?: McpInvocationIdentity,
+    options: { inlineAgentImages?: boolean } = {}
   ): Promise<CommentResponse | LoggedCommentResponse> {
     const correlationId = generateCorrelationId();
 
     try {
       const validatedInput = validateAndSanitizeAddCommentInput(params);
       const { attachments, ...commentInput } = validatedInput;
+      if (attachments?.length) {
+        commentInput.has_attachments = true;
+      }
 
       logger.debug('Adding comment', {
         correlationId,
@@ -119,7 +128,7 @@ export class CommentService {
         '/mcp/comments',
         {
           method: 'POST',
-          body: JSON.stringify(commentInput),
+          body: JSON.stringify({ ...commentInput, ...(options.inlineAgentImages && attachments?.length ? { attachments } : {}) }),
           ...(idempotencyKey
             ? { headers: { 'Idempotency-Key': idempotencyKey } }
             : {}),
@@ -146,6 +155,7 @@ export class CommentService {
                 }),
             ...('comment' in response ? { comment_id: response.comment.id } : {}),
             files: attachments,
+            inline_images: commentInput.inline_images,
           },
           'comment' in response ? `Comment ${response.comment.id} creation` : `Agent activity ${response.activity.id} creation`
         );
@@ -257,6 +267,7 @@ export class CommentService {
           body: JSON.stringify({
             text: validatedInput.text,
             content_type: validatedInput.content_type,
+            inline_images: validatedInput.inline_images,
             mentions: validatedInput.mentions,
           }),
         },

@@ -1,3 +1,8 @@
+import { sealWebhookSigningKey, webhookSigningKeyHint } from "@/lib/webhooks/signingKeyStore";
+import { SEALED_WEBHOOK_KEYS_FLAG } from "@/lib/flags/definitions/htpr-7624-sealed-webhook-keys";
+import type { BoardKnowledgePrincipal } from "@/lib/rag/retrieveBoardKnowledge";
+import { agentWithinTeamWhere } from "@/lib/mcp/managementKeyTeamScope";
+import { webhookCredentialAllows } from "@/lib/webhooks/credentialScope";
 import crypto from "crypto";
 import { Prisma } from "@prisma/client";
 import prisma from "@/lib/prisma";
@@ -52,7 +57,7 @@ export function serializeAgentWebhookSubscription(sub: {
     url: sub.url,
     events: sub.events,
     active: sub.active,
-    secretHint: `whsec_…${sub.secret.slice(-4)}`,
+    secretHint: webhookSigningKeyHint(sub.secret),
     createdAt: sub.createdAt.toISOString(),
     updatedAt: sub.updatedAt.toISOString(),
     lastDeliveryAt: sub.lastDeliveryAt?.toISOString() ?? null,
@@ -84,9 +89,9 @@ export function serializeAgentWebhookDelivery(delivery: {
   };
 }
 
-export async function assertAgentWebhookOwner(userId: number, agentId: string) {
+export async function assertAgentWebhookOwner(userId: number, agentId: string, principal?: BoardKnowledgePrincipal) {
   const agent = await prisma.agent.findFirst({
-    where: { id: agentId, userId, revokedAt: null },
+    where: { id: agentId, userId, revokedAt: null, ...(principal?.teamScope != null ? agentWithinTeamWhere(principal.teamScope.teamId) : {}) },
     select: { id: true },
   });
   if (!agent) {
@@ -98,15 +103,17 @@ export async function assertAgentWebhookOwner(userId: number, agentId: string) {
 export async function validateAgentWebhookProject(input: {
   userId: number;
   agentId: string;
+  principal?: BoardKnowledgePrincipal;
   projectId: number | null;
 }) {
+  if (!await webhookCredentialAllows(input.agentId, { event: "webhook.test", projectId: input.projectId }, { projectId: input.projectId }, prisma, input.principal)) throw new AgentWebhookInputError("Project not found or access denied", "projectId", 404);
   if (input.projectId == null) return;
   if (!Number.isSafeInteger(input.projectId) || input.projectId <= 0) {
     throw new AgentWebhookInputError("projectId must be a positive integer or null", "projectId");
   }
   const [project, onBoard] = await Promise.all([
     prisma.project.findFirst({
-      where: { id: input.projectId, ...getProjectWhere(input.userId) },
+      where: { id: input.projectId, ...getProjectWhere(input.userId, input.principal?.agentId, input.principal?.teamScope) },
       select: { id: true },
     }),
     isAgentOnBoard(input.projectId, input.agentId),
@@ -122,9 +129,10 @@ export async function validateAgentWebhookProject(input: {
 export async function upsertAgentWebhook(input: {
   userId: number;
   agentId: string;
+  principal?: BoardKnowledgePrincipal;
   body: Record<string, unknown>;
 }) {
-  await assertAgentWebhookOwner(input.userId, input.agentId);
+  await assertAgentWebhookOwner(input.userId, input.agentId, input.principal);
   const runsEnabled = await isFeatureEnabled(
     AGENT_RUN_FEATURE_FLAG,
     input.userId,
@@ -171,6 +179,7 @@ export async function upsertAgentWebhook(input: {
     await validateAgentWebhookProject({
       userId: input.userId,
       agentId: input.agentId,
+      principal: input.principal,
       projectId: requestedProjectId,
     });
   }
@@ -206,6 +215,8 @@ export async function upsertAgentWebhook(input: {
         requestedProjectId === undefined
           ? existing?.projectId ?? null
           : requestedProjectId;
+      if (input.principal?.teamScope != null && projectId != null && !await tx.project.findFirst({ where: { id: projectId, ...getProjectWhere(input.userId, input.principal.agentId, input.principal.teamScope) }, select: { id: true } })) throw new AgentWebhookInputError("Project not found or access denied", "projectId", 404);
+      if (!await webhookCredentialAllows(input.agentId, { event: "webhook.test", projectId }, { projectId }, tx, input.principal)) throw new AgentWebhookInputError("Project not found or access denied", "projectId", 404);
       const active =
         typeof input.body.active === "boolean"
           ? input.body.active
@@ -214,6 +225,9 @@ export async function upsertAgentWebhook(input: {
       const secret = rotateSecret
         ? `whsec_${crypto.randomBytes(24).toString("hex")}`
         : existing.secret;
+      const storedSecret = rotateSecret && await isFeatureEnabled(SEALED_WEBHOOK_KEYS_FLAG, input.userId)
+        ? sealWebhookSigningKey(secret)
+        : secret;
       const subscription = await tx.agentWebhookSubscription.upsert({
         where: { agentId: input.agentId },
         create: {
@@ -222,14 +236,14 @@ export async function upsertAgentWebhook(input: {
           url,
           events: parsedEvents.events,
           active,
-          secret,
+          secret: storedSecret,
         },
         update: {
           projectId,
           url,
           events: parsedEvents.events,
           active,
-          ...(rotateSecret ? { secret } : {}),
+          ...(rotateSecret ? { secret: storedSecret } : {}),
         },
       });
       return { subscription, rotateSecret, secret };
@@ -262,6 +276,7 @@ export type AgentWebhookManagementAction =
 export async function manageAgentWebhook(input: {
   userId: number;
   agentId: string;
+  principal?: BoardKnowledgePrincipal;
   action: AgentWebhookManagementAction;
   url?: unknown;
   projectId?: unknown;
@@ -269,7 +284,7 @@ export async function manageAgentWebhook(input: {
   active?: unknown;
   deliveryId?: unknown;
 }) {
-  await assertAgentWebhookOwner(input.userId, input.agentId);
+  await assertAgentWebhookOwner(input.userId, input.agentId, input.principal);
 
   if (input.action === "configure" || input.action === "rotate") {
     return {
@@ -278,6 +293,7 @@ export async function manageAgentWebhook(input: {
       ...(await upsertAgentWebhook({
         userId: input.userId,
         agentId: input.agentId,
+        principal: input.principal,
         body: {
           url: input.url,
           projectId: input.projectId,
@@ -295,6 +311,12 @@ export async function manageAgentWebhook(input: {
       deliveries: { orderBy: { createdAt: "desc" }, take: 25 },
     },
   });
+
+  if (subscription && input.principal?.teamScope != null) {
+    await validateAgentWebhookProject({ userId: input.userId, agentId: input.agentId, projectId: subscription.projectId, principal: input.principal });
+    const allowed = await Promise.all(subscription.deliveries.map(async (delivery) => await webhookCredentialAllows(input.agentId, delivery.payload, subscription, prisma, input.principal) ? delivery : null));
+    subscription.deliveries = allowed.filter((delivery): delivery is NonNullable<typeof delivery> => delivery !== null);
+  }
 
   if (input.action === "get") {
     const runsEnabled = await isFeatureEnabled(

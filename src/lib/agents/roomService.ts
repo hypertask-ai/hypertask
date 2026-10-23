@@ -1,3 +1,5 @@
+import type { BoardKnowledgePrincipal } from "@/lib/rag/retrieveBoardKnowledge";
+import { projectContentAccessWhere } from "@/utils/controllers/projects/getAllIncludes";
 import type { Prisma } from "@prisma/client";
 import prisma from "@/lib/prisma";
 import {
@@ -95,7 +97,10 @@ async function findRoomTask(
   });
 }
 
-export async function listAgentRoom(roomId: string, now = new Date()) {
+export async function listAgentRoom(roomId: string, now = new Date(), principal?: BoardKnowledgePrincipal) {
+  const scopedProject = principal?.teamScope != null ? projectContentAccessWhere(principal.userId, principal.agentId, principal.teamScope) : null;
+  if (scopedProject && !await prisma.agentRoom.findFirst({ where: { id: roomId, project: scopedProject }, select: { id: true } })) throw new AgentRoomError("Room not found", 404);
+  const messageScope: Prisma.AgentRoomMessageWhereInput = scopedProject ? { room: { project: scopedProject }, OR: [{ taskId: null }, { task: { project: scopedProject } }] } : {};
   const { start, end } = roomBudgetWindow(now);
   const [room, messages, agents, turnsUsed, pending] = await Promise.all([
     prisma.agentRoom.findUnique({
@@ -103,7 +108,7 @@ export async function listAgentRoom(roomId: string, now = new Date()) {
       include: { project: { select: { id: true, name: true, title: true } } },
     }),
     prisma.agentRoomMessage.findMany({
-      where: { roomId },
+      where: { roomId, ...messageScope },
       orderBy: [{ createdAt: "desc" }, { id: "desc" }],
       take: AGENT_ROOM_TRANSCRIPT_LIMIT,
       include: roomMessageInclude,
@@ -130,6 +135,7 @@ export async function listAgentRoom(roomId: string, now = new Date()) {
     prisma.agentRoomMessage.count({
       where: {
         roomId,
+        ...messageScope,
         authorAgentId: { not: null },
         createdAt: { gte: start, lt: end },
       },
@@ -137,7 +143,7 @@ export async function listAgentRoom(roomId: string, now = new Date()) {
     prisma.agentRoomDelivery.findMany({
       where: {
         handledAt: null,
-        message: { roomId, stoppedAt: null },
+        message: { roomId, stoppedAt: null, ...messageScope },
       },
       orderBy: { createdAt: "asc" },
       select: {
@@ -238,6 +244,7 @@ export async function createHumanAgentRoomMessage(input: {
 export async function createAgentRoomReply(input: {
   roomId: string;
   agentId: string;
+  principal?: BoardKnowledgePrincipal;
   text: string;
   replyToMessageId: string;
   ticketNumber?: string | null;
@@ -257,6 +264,10 @@ export async function createAgentRoomReply(input: {
       Array<{ id: string; projectId: number; dailyTurnBudget: number }>
     >`SELECT "id", "projectId", "dailyTurnBudget" FROM "AgentRoom" WHERE "id" = ${input.roomId} FOR UPDATE`;
     if (!room) throw new AgentRoomError("Room not found", 404);
+    if (input.principal?.teamScope != null) {
+      await tx.$queryRaw`SELECT id FROM "Project" WHERE id = ${room.projectId} FOR UPDATE`;
+      if (!await tx.project.findFirst({ where: { id: room.projectId, ...projectContentAccessWhere(input.principal.userId, input.principal.agentId, input.principal.teamScope) }, select: { id: true } })) throw new AgentRoomError("Room not found", 404);
+    }
 
     const existing = await tx.agentRoomMessage.findFirst({
       where: {
@@ -267,6 +278,7 @@ export async function createAgentRoomReply(input: {
       include: roomMessageInclude,
     });
     if (existing) {
+      if (input.principal?.teamScope != null && existing.taskId != null && !await tx.task.findFirst({ where: { id: existing.taskId, project: projectContentAccessWhere(input.principal.userId, input.principal.agentId, input.principal.teamScope) }, select: { id: true } })) throw new AgentRoomError("Message not found", 404);
       return {
         message: serializeAgentRoomMessage(existing),
         duplicate: true,
@@ -292,6 +304,8 @@ export async function createAgentRoomReply(input: {
     ) {
       throw new AgentRoomError("This room turn is no longer active", 409);
     }
+
+    if (input.principal?.teamScope != null && delivery.message.taskId != null && !await tx.task.findFirst({ where: { id: delivery.message.taskId, project: projectContentAccessWhere(input.principal.userId, input.principal.agentId, input.principal.teamScope) }, select: { id: true } })) throw new AgentRoomError("Message not found", 404);
 
     const botTurnDepth = nextRoomBotDepth(delivery.message.botTurnDepth);
     if (botTurnDepth === null) {
@@ -434,12 +448,17 @@ export async function createAgentRoomReply(input: {
 export async function markAgentRoomMessageHandled(input: {
   messageId: string;
   agentId: string;
+  principal?: BoardKnowledgePrincipal;
   now?: Date;
 }) {
   const updated = await prisma.agentRoomDelivery.updateMany({
     where: {
       messageId: input.messageId,
       agentId: input.agentId,
+      ...(input.principal?.teamScope != null ? { message: {
+        room: { project: projectContentAccessWhere(input.principal.userId, input.principal.agentId, input.principal.teamScope) },
+        OR: [{ taskId: null }, { task: { project: projectContentAccessWhere(input.principal.userId, input.principal.agentId, input.principal.teamScope) } }],
+      } } : {}),
       handledAt: null,
     },
     data: { handledAt: input.now ?? new Date() },

@@ -1,3 +1,4 @@
+const { withStubs } = require("./helpers/stub-map.cjs");
 const test = require("node:test");
 const assert = require("node:assert/strict");
 const fs = require("node:fs");
@@ -14,13 +15,15 @@ const example = "Review onboarding, due 2026-10-16";
 const html = '<h1 id="ai-generated-task-title">Review onboarding, due 2026-10-16</h1><p>Review onboarding by the deadline.</p><span id="ai-generated-task-due-date" style="display:none">2026-10-16</span>';
 
 function moduleWithStubs(file, stubs) {
+  stubs = withStubs({ "@/lib/net/downloadWithoutBrotli": { downloadWithoutBrotli: undefined }, "@/lib/media/inlineAgentImages.server": { inlineAgentImagesForUser: async (html) => html } }, stubs);
+  stubs = withStubs({ "@/lib/auth/agentScope": require("./helpers/agent-board-scope.cjs").enforcedScope }, stubs);
   const code = ts.transpileModule(fs.readFileSync(path.join(root, file), "utf8"), {
     compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022, esModuleInterop: true },
   }).outputText;
   const mod = { exports: {} };
   new Function("module", "exports", "require", code)(mod, mod.exports, (id) => {
     if (id === "@/utils/controllers/tasks/parentTaskAccess") return load(path.join(root, "src/utils/controllers/tasks/parentTaskAccess.ts"));
-    if (Object.hasOwn(stubs, id)) return stubs[id];
+    if (id in stubs) return stubs[id];
     if (!id.startsWith("@/") && !id.startsWith(".")) return require(id);
     throw new Error(`Unexpected dependency: ${id}`);
   });
@@ -136,6 +139,10 @@ function writerHarness(enabled, output = html, fail = false) {
     sseFrame: (event, payload) => `event: ${event}\ndata: ${JSON.stringify(payload)}\n\n`,
   };
   const run = moduleWithStubs("src/app/api/ai/_lib/taskWriterRun.ts", {
+    "@/lib/rag/authorizeIndexedRows": { authorizeIndexedRows: async (taskRows, commentRows, principal) => {
+      assert.equal(principal?.teamScope == null, true);
+      return { taskRows, commentRows };
+    } },
     "@/lib/ai/prompts/registry": { renderPrompt: () => "output language rule" },
     "@/lib/ai/taskWriterDueDate": dates, "@/lib/ai/taskWriterTicketType": ticketTypes, "@/lib/flags/keys": keys,
     "@/lib/ai/composeTaskTarget": {},

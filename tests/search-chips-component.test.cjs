@@ -5,6 +5,7 @@ const React = require('react')
 const { readFileSync, existsSync } = require('node:fs')
 test('client chip graph imports only the Prisma-free parser', () => {
   const component = readFileSync(path.join(root, 'src/app/search/SearchChipsInput.tsx'), 'utf8')
+  assert.match(component, /const layoutEnabled = layoutRequested;/)
   const chips = readFileSync(path.join(root, 'src/lib/search/chips.ts'), 'utf8')
   const parser = readFileSync(path.join(root, 'src/lib/search/operators.ts'), 'utf8')
   assert.match(component + chips, /from ['"](?:@\/lib\/search\/operators|\.\/operators)['"]/)

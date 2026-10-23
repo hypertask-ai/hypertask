@@ -1,8 +1,11 @@
+import { requireAgentWriteRole } from "@/lib/mcp/agents/readRoleGuard"
+import { TaskTeamScopeError } from "@/lib/mcp/tasks/agentMutationFence"
+import { projectContentAccessWhere } from "@/utils/controllers/projects/getAllIncludes"
 import { wrapMcpRoute, checkMcpRouteRateLimit as checkMcpRateLimit, validateMcpRouteAuth as validateMcpAuth } from '@/lib/mcp/routeWrapper'
 import { NextRequest, NextResponse } from 'next/server'
 
 import prisma from '@/lib/prisma'
-import { findTaskByIdentifier } from '@/lib/mcp/tasks/resolveTask'
+import { findTaskByIdentifier, taskIdentifierErrorResponse } from '@/lib/mcp/tasks/resolveTask'
 import { createCommentService } from '@/utils/controllers/comments/createCommentService'
 import { sanitizeRichHtml } from '@/utils/helperFunctions/sanitizeRichHtml'
 import { buildEscalationCommentHtml } from '@/lib/mcp/tasks/escalationHtml'
@@ -34,6 +37,8 @@ export async function POST(request: NextRequest) {
         { status: 401 }
       )
     }
+    const roleRefusal = await requireAgentWriteRole(ctx)
+    if (roleRefusal) return roleRefusal
 
     let body: Record<string, unknown>
     try {
@@ -76,7 +81,7 @@ export async function POST(request: NextRequest) {
     const task = await findTaskByIdentifier(
       ctx.user,
       { task_id: taskId, ticket_number: ticketNumber, project_id: projectId },
-      ctx.agentId
+      ctx.agentId, undefined, ctx.teamScope
     )
     if (!task) {
       return NextResponse.json(
@@ -87,7 +92,7 @@ export async function POST(request: NextRequest) {
 
     const [taskOwner, currentUser] = await Promise.all([
       prisma.task.findUnique({
-        where: { id: task.id },
+        where: { id: task.id, ...(ctx.teamScope != null ? { project: projectContentAccessWhere(ctx.user.id, ctx.agentId, ctx.teamScope) } : {}) },
         select: { userId: true, title: true, ticketNumber: true },
       }),
       prisma.user.findUnique({
@@ -125,6 +130,7 @@ export async function POST(request: NextRequest) {
       ownerId: taskOwner.userId,
       currentUser,
       agentId: ctx.agentId ?? undefined,
+      teamScope: ctx.teamScope,
       extraBoardWebhookEvents: [escalatedEvent],
     })
 
@@ -133,6 +139,9 @@ export async function POST(request: NextRequest) {
       { status: 201 }
     )
   } catch (error) {
+    if (error instanceof TaskTeamScopeError) return NextResponse.json({ success: false, error: error.message }, { status: 404 })
+    const identifierResponse = taskIdentifierErrorResponse(error)
+    if (identifierResponse) return identifierResponse
     console.error('[MCP Task Escalate] Error:', error)
     return NextResponse.json({ success: false, error: 'Internal server error' }, { status: 500 })
   }

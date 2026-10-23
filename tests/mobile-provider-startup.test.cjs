@@ -19,7 +19,7 @@ test("request device flags seed the client providers before hydration", () => {
   assert.match(providers, /<DeviceProvider initialIsApple=\{initialIsApple\}>/);
   assert.match(
     providers,
-    /<MobileViewProvider initialIsMobile=\{initialIsMobile\}>/,
+    /<MobileViewProvider initialIsMobile=\{shell\?\.display\.isMobile \?\? initialIsMobile\}>/,
   );
 
   assert.doesNotMatch(device, /isMobileDevice|useLayoutEffect/);
@@ -68,7 +68,7 @@ test("closed boards do not mount or preload the AI chat provider", () => {
   );
   assert.match(
     globalProvider,
-    /const shouldMountChatRuntime\s*=\s*chatRuntimeMounted \|\|\s*isFullScreenChat \|\|\s*shouldMountAgentChatRuntime \|\|\s*isTaskDetailPage \|\|\s*showAiChatInterface/,
+    /const shouldMountChatRuntime\s*=\s*chatRuntimeMounted \|\|\s*sidebarRequested \|\|\s*isFullScreenChat \|\|\s*shouldMountAgentChatRuntime \|\|\s*isTaskDetailPage \|\|\s*showAiChatInterface/,
     "task detail and flagged mobile Agent Chat hooks require ChatProvider even while the chat panel is closed",
   );
   assert.match(
@@ -89,7 +89,7 @@ test("closed boards do not mount or preload the AI chat provider", () => {
   assert.match(
     globalProvider,
     /holdChildren=\{\s*isFullScreenChat \|\|\s*shouldMountAgentChatRuntime\s*\}\s*loading=\{<FullScreenChatLoading \/>\}/,
-    "cold /chat and flagged mobile /agents/chat wait for ChatProvider; /detail renders at once and reads the chat optionally (HTPR-6752)",
+    "cold /chat and flagged mobile /agents/chat wait for ChatProvider; /detail renders at once and reads the chat optionally",
   );
   assert.match(chatClient, /loading: \(\) => <FullScreenChatLoading \/>/);
   assert.match(fullScreenLoading, /label = "Loading AI chat"/);

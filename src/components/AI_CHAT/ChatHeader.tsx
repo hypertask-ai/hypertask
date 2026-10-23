@@ -1,3 +1,5 @@
+import { AgentSidebarChatCommands } from "./AgentSidebarChatCommands";
+import type { SidebarChatContext } from "@/app/agents/chat/agentChatTypes";
 import { useAiChatContext } from "@/lib/contexts/Multipages/AI_Agent/AI_Agent_Chat_Context";
 import {
   Check,
@@ -16,13 +18,15 @@ import {
   Trash2,
   X,
 } from "lucide-react";
-import { usePathname, useRouter } from "next/navigation";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useFlag } from "@/hooks/useFlag";
-import { HTPR_6752_INSTANT_TICKET_OPEN_FLAG, HTPR_6971_CHAT_HISTORY_PAGING_FLAG } from "@/lib/flags/keys";
+import { HTPR_6971_CHAT_HISTORY_PAGING_FLAG } from "@/lib/flags/keys";
 import Tooltip from "../Common/Tooltip";
 import { format } from "date-fns";
-import { useContext, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
 import { MobileViewContext } from "@/lib/contexts/mobileContext";
+import { MOBILE_TARGET } from "@/lib/configs/general.config";
+import { cn } from "@/utils/undoActions/helperFuncs";
 import { useDeviceContext } from "@/lib/contexts/deviceContext";
 import { aiTaskWriterConfig } from "@/lib/configs/aiTaskWriter.config";
 import { buildFullScreenChatPath } from "@/lib/aiChatDisplayMode";
@@ -37,7 +41,7 @@ import {
   showAIChatInterfaceAtom,
 } from "@/store";
 
-type HistorySession = Pick<IChatSession, "id" | "title" | "updatedAt" | "createdAt">;
+type HistorySession = Pick<IChatSession, "id" | "title" | "updatedAt" | "createdAt" | "agentId">;
 
 const MS_PER_DAY = 24 * 60 * 60 * 1000;
 
@@ -91,12 +95,26 @@ function ChatSessionRow({
   );
 }
 
-export const ChatHeader = () => {
+export const ChatHeader = ({ sidebarChats }: { sidebarChats?: SidebarChatContext } = {}) => {
+  const [conversationsOpen, setConversationsOpen] = useState(false);
+  const titleRef = useRef<HTMLButtonElement>(null);
+  const closeConversations = useCallback(() => setConversationsOpen(false), []);
+  const aiSessionActionsAvailable = !sidebarChats || sidebarChats.target.kind === "ai";
+  const sidebarTitle = sidebarChats?.target.kind === "ai" ? "AI chat" : sidebarChats?.target.agent.displayName;
+  useEffect(() => { setConversationsOpen(false); }, [sidebarChats?.projectId]);
+  const searchParams = useSearchParams();
+  const openFromLink = searchParams?.get("agentSidebar");
+  useEffect(() => {
+    if (!sidebarChats) return;
+    const open = () => setConversationsOpen(true);
+    if (openFromLink && !searchParams?.get("sidebarAgent")) open();
+    window.addEventListener("ht-agent-sidebar-open", open);
+    return () => window.removeEventListener("ht-agent-sidebar-open", open);
+  }, [!!sidebarChats, openFromLink]);
   const router = useRouter();
   const pathname = usePathname();
   const sessionPagingEnabled = useFlag(HTPR_6971_CHAT_HISTORY_PAGING_FLAG);
-  const instantTicketOpen = useFlag(HTPR_6752_INSTANT_TICKET_OPEN_FLAG);
-  const quietTicketOpen = instantTicketOpen && pathname?.startsWith("/detail/");
+  const quietTicketOpen = pathname?.startsWith("/detail/");
   const {
     togglePopover,
     minimizeChat,
@@ -141,9 +159,10 @@ export const ChatHeader = () => {
     return () => observer.disconnect();
   }, [sessionPagingEnabled, isDropdownOpen, hasMoreSessions, isLoadingMoreSessions, pagingError, loadMoreSessions]);
 
+  const filterAgentSessions = Boolean(sidebarChats);
   const { previous7Days, older } = useMemo(
-    () => partitionSessionsByRecency((sessionPagingEnabled ? historySessions : sessions) ?? []),
-    [sessions, historySessions, sessionPagingEnabled]
+    () => partitionSessionsByRecency(((sessionPagingEnabled ? historySessions : sessions) ?? []).filter((session) => !filterAgentSessions || !session.agentId)),
+    [sessions, historySessions, sessionPagingEnabled, filterAgentSessions]
   );
 
   const resolvedSessionId = currentSession?.id;
@@ -182,6 +201,7 @@ export const ChatHeader = () => {
     isStartingNewSessionRef.current = true;
     setIsStartingNewSession(true);
     try {
+      sidebarChats?.onSelect({ kind: "ai" });
       await startNewSession();
       setTimeout(() => {
         try {
@@ -227,6 +247,7 @@ export const ChatHeader = () => {
                   isActive={chat.id === resolvedSessionId}
                   onSelect={() => {
                     setIsDropdownOpen(false);
+                    sidebarChats?.onSelect({ kind: "ai" });
                     selectSession(chat.id);
                   }}
                 />
@@ -250,6 +271,7 @@ export const ChatHeader = () => {
                   isActive={chat.id === resolvedSessionId}
                   onSelect={() => {
                     setIsDropdownOpen(false);
+                    sidebarChats?.onSelect({ kind: "ai" });
                     selectSession(chat.id);
                   }}
                 />
@@ -260,6 +282,17 @@ export const ChatHeader = () => {
         {sessionPagingEnabled && hasMoreSessions && <div ref={historyEndRef} className="h-1" aria-hidden />}
       </div>
     ) : null;
+
+  const historyButton = (
+    <button type="button" onMouseDown={sidebarChats ? (event) => event.stopPropagation() : undefined}
+      onClick={() => { if (sidebarChats) { closeConversations(); setIsOverflowOpen(false); } setIsDropdownOpen((open) => !open); }}
+      aria-label="Chat history" aria-controls="ai-chat-session-history" aria-expanded={isDropdownOpen}
+      className={isMbl
+        ? "flex h-11 w-11 touch-manipulation items-center justify-center rounded-full text-icon-dark-gray hover:bg-hover-active hover:text-white-black"
+        : "text-icon-dark-gray hover:text-white-black"}>
+      <History size={isMbl ? 20 : 16} strokeWidth={1.75} />
+    </button>
+  );
 
   if (isMbl) {
     return (
@@ -276,13 +309,24 @@ export const ChatHeader = () => {
           <ChevronDown size={22} strokeWidth={1.75} />
         </button>
         <div className="min-w-0 flex-1">
+          {sidebarChats ? (
+            <div className="relative">
+              <button ref={titleRef} type="button" aria-label="Switch conversation" aria-expanded={conversationsOpen}
+                aria-controls="agent-sidebar-conversations" onClick={() => { setIsDropdownOpen(false); setConversationsOpen((open) => !open); }}
+                className={cn(MOBILE_TARGET, "max-w-full gap-1 truncate px-2 text-modalSmall font-semibold leading-5")}>
+                <span className="truncate">{sidebarTitle}</span><ChevronDown size={18} aria-hidden />
+              </button>
+              {conversationsOpen && <AgentSidebarChatCommands context={sidebarChats} anchorRef={titleRef} onClose={closeConversations} />}
+            </div>
+          ) : (
           <div
             className="truncate px-2 text-modalSmall font-semibold leading-5"
             title={currentSession?.title ?? undefined}
           >
             {currentSession?.title ?? "AI Chat"}
           </div>
-          <div
+          )}
+          {(!sidebarChats || sidebarChats.target.kind === "ai") && <div
             data-ai-chat-mobile-model-label
             className="flex min-h-6 items-center gap-1 px-2 text-dense text-text-light-gray"
           >
@@ -290,19 +334,10 @@ export const ChatHeader = () => {
               {getMobileAiChatModelLabel(currentAiOption)}
             </span>
             <ChevronDown size={14} strokeWidth={1.75} aria-hidden />
-          </div>
+          </div>}
         </div>
         <div className="relative shrink-0" ref={dropdownRef}>
-          <button
-            type="button"
-            onClick={() => setIsDropdownOpen((open) => !open)}
-            aria-label="Chat history"
-            aria-controls="ai-chat-session-history"
-            aria-expanded={isDropdownOpen}
-            className="flex h-11 w-11 touch-manipulation items-center justify-center rounded-full text-icon-dark-gray hover:bg-hover-active hover:text-white-black"
-          >
-            <History size={20} strokeWidth={1.75} />
-          </button>
+          {historyButton}
           {renderSessionMenu("right-0")}
         </div>
         <button
@@ -327,12 +362,19 @@ export const ChatHeader = () => {
       <div className="relative min-w-0 flex-1" ref={dropdownRef}>
         <button
           type="button"
-          title={currentSession?.title ?? undefined}
-          onClick={() => setIsDropdownOpen((prev) => !prev)}
+          ref={titleRef}
+          title={sidebarTitle ?? currentSession?.title ?? undefined}
+          aria-label={sidebarChats ? "Switch conversation" : undefined}
+          aria-expanded={sidebarChats ? conversationsOpen : isDropdownOpen}
+          aria-controls={sidebarChats ? "agent-sidebar-conversations" : "ai-chat-session-history"}
+          onClick={() => {
+            if (sidebarChats) { setIsDropdownOpen(false); setConversationsOpen((open) => !open); }
+            else setIsDropdownOpen((prev) => !prev);
+          }}
           className="flex min-w-0 max-w-full items-center gap-1 hover:bg-active-modal-element transition-colors rounded px-1 py-0.5"
         >
           <span className="min-w-0 truncate font-medium">
-            {currentSession?.title ?? (isSessionPending && !quietTicketOpen ? "Loading..." : "AI Chat")}
+            {sidebarTitle ?? currentSession?.title ?? (isSessionPending && !quietTicketOpen ? "Loading..." : "AI Chat")}
           </span>
           <span
             style={{
@@ -348,17 +390,19 @@ export const ChatHeader = () => {
             <ChevronDown
               size={18}
               className={`text-icon-dark-gray transition-transform ${
-                isDropdownOpen ? "rotate-180" : ""
+                (sidebarChats ? conversationsOpen : isDropdownOpen) ? "rotate-180" : ""
               }`}
               strokeWidth={1.75}
             />
           </span>
         </button>
 
+        {sidebarChats && conversationsOpen && <AgentSidebarChatCommands context={sidebarChats} anchorRef={titleRef} onClose={closeConversations} />}
         {renderSessionMenu("left-0")}
       </div>
 
       <div className="flex shrink-0 items-center space-x-2">
+        {sidebarChats && historyButton}
         <button
           onClick={handleStartNewSession}
           disabled={isStartingNewSession}
@@ -409,7 +453,7 @@ export const ChatHeader = () => {
                 )}
                 <span>{aiChatPinned ? "Unpin AI chat" : "Pin AI chat open"}</span>
               </button>
-              {!isMbl && (
+              {!isMbl && aiSessionActionsAvailable && (
                 <button
                   type="button"
                   role="menuitem"
@@ -441,7 +485,7 @@ export const ChatHeader = () => {
                   </span>
                 </button>
               )}
-              {!isMbl && (
+              {!isMbl && aiSessionActionsAvailable && (
                 <button
                   type="button"
                   role="menuitem"
@@ -459,7 +503,7 @@ export const ChatHeader = () => {
                   <span>Open full screen</span>
                 </button>
               )}
-              <button
+              {aiSessionActionsAvailable && <button
                 type="button"
                 role="menuitem"
                 className="flex w-full items-center gap-2 px-3 py-2 text-left text-content text-white-black hover:bg-active-modal-element transition-colors"
@@ -475,8 +519,8 @@ export const ChatHeader = () => {
                       .rename_chat_button.text
                   }
                 </span>
-              </button>
-              <button
+              </button>}
+              {aiSessionActionsAvailable && <button
                 type="button"
                 role="menuitem"
                 className="flex w-full items-center gap-2 px-3 py-2 text-left text-content text-white-black hover:bg-active-modal-element transition-colors"
@@ -500,9 +544,9 @@ export const ChatHeader = () => {
                       .delete_chat_button.text
                   }
                 </span>
-              </button>
+              </button>}
 
-              {currentSession && (
+              {currentSession && aiSessionActionsAvailable && (
                 <>
                   <div className="mx-2 h-px bg-gray-600/60" role="separator" />
                   <div className="px-3 py-2 text-micro text-icon-dark-gray">
@@ -518,7 +562,7 @@ export const ChatHeader = () => {
           onClick={() =>
             !isSidebarMode && !isMbl ? minimizeChat() : togglePopover()
           }
-          aria-label={isMbl ? "Close AI chat" : undefined}
+          aria-label={isMbl || sidebarChats ? "Close AI chat" : undefined}
           className="text-icon-dark-gray hover:text-white-black relative group"
         >
           {isSidebarMode && !isMbl ? (

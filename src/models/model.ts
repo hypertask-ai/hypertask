@@ -36,6 +36,7 @@ export type IChatRole = "human" | "assistant";
 
 export interface IChatSession {
   id: string;
+  agentId?: string | null;
   createdAt: Date;
   updatedAt: Date;
   userId: number;
@@ -435,6 +436,7 @@ export interface IAgent {
   lastOAuthMcpClient?: IAgentLastOAuthMcpClient | null;
   permissions?: Record<string, unknown> | null;
   postsToImportant?: boolean;
+  role?: "read" | "write" | "admin";
   assigned?: boolean;
   mcpToken?: string | null;
   hasMcpToken?: boolean;
@@ -668,6 +670,7 @@ export interface INotification {
   mutedTypes?: string[];
   returnedFromReminders?: boolean | null;
   isDecision?: boolean;
+  decisionCommentId?: number;
   directReply?: boolean;
   directReplyTypes?: NotificationType[];
   quietImportant?: boolean;
@@ -729,6 +732,7 @@ export interface QueryParams {
 }
 
 export interface IFCMReqBody {
+  taskId: number;
   devices: any[];
   to?: string;
   type: string;
@@ -746,6 +750,8 @@ export interface FCMDeviceInfo {
 }
 
 export interface CreateCheckoutParams {
+  trialDays?: number;
+  checkoutIntent?: "signup-straight-to-board";
   googleAccountId: string;
   returnUrl: string;
   priceId: string;
@@ -807,6 +813,7 @@ export interface IGoogleAccount {
 }
 
 export interface ITasksPlaylist {
+  decisionCommentId?: number;
   id?: number;
   uniqueIndex: number;
   projectId: number;

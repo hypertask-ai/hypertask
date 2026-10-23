@@ -301,3 +301,14 @@ export async function upsertCustomFieldValue(
     update: { value: normalizedValue, numericValue },
   });
 }
+
+export async function saveWriterCustomFieldValues(
+  taskId: number,
+  values: { fieldId: string; value: string | number }[]
+) {
+  for (const { fieldId, value } of values) {
+    await upsertCustomFieldValue(fieldId, taskId, value).catch((error) => {
+      console.error("[task-writer] custom field save failed", { taskId, fieldId, error });
+    });
+  }
+}

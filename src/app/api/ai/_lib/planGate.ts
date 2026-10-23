@@ -6,7 +6,7 @@ import {
   pickEntitlingSubscriptionRow,
   subscriptionStatusGrantsAccess,
 } from "@/lib/subscriptionAccess";
-import { HTPR_7010_HAIKU_5_5_FLAG, HTPR_7038_HAIKU_DEFAULT_FLAG, HTPR_7075_BACKGROUND_CLAUDE_FLAG, HTPR_7076_PROMPT_CACHE_FLAG, HTPR_7098_BATCH_BACKGROUND_AI_FLAG } from "@/lib/flags/keys";
+import { HTPR_7038_HAIKU_DEFAULT_FLAG, HTPR_7075_BACKGROUND_CLAUDE_FLAG, HTPR_7076_PROMPT_CACHE_FLAG, HTPR_7098_BATCH_BACKGROUND_AI_FLAG } from "@/lib/flags/keys";
 import {
   getAiModelDefinition,
   isPremiumAiModelDefinition,
@@ -135,13 +135,7 @@ export async function haikuDefaultModelEnabled(userId: number | null | undefined
 
 export async function haiku55ModelEnabled(userId: number | null | undefined): Promise<boolean> {
   if (await haikuDefaultModelEnabled(userId)) return true;
-  if (!userId) return false;
-  try {
-    const { isFeatureEnabled } = await import("@/lib/flags");
-    return await isFeatureEnabled(HTPR_7010_HAIKU_5_5_FLAG, userId);
-  } catch {
-    return false;
-  }
+  return Boolean(userId);
 }
 
 export async function assertModelAllowedForPlan(

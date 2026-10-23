@@ -11,7 +11,10 @@ import { inlineAttachmentsSchema } from './attachment.validation';
 const config = getConfig();
 
 const commentKindSchema = z.enum(['question', 'qa', 'done']).optional()
-  .describe('question for a decision by a person, qa for a QA verdict, done for the closing summary; leave out for progress notes, which go to the agent log');
+  .describe('Without a kind, a reply target or an @mention of a person (and no images or attachments), an agent comment is saved to the hidden ticket agent log, which people do not see. To post for people, pass kind: question for a decision by a person, qa for a QA verdict, or done for the closing summary.');
+
+const hasAttachmentsSchema = z.boolean().optional()
+  .describe('Set true when files will be attached after creation so an agent post stays a comment instead of going to the agent log');
 
 const commentContentTypeSchema = z
   .enum(['html', 'markdown'])
@@ -50,12 +53,14 @@ export function getAddCommentInputSchema() {
       .max(config.limits.commentTextMaxLength, `Comment text cannot exceed ${config.limits.commentTextMaxLength} characters`)
       .describe('Comment text. HTML or structural markdown; content_type can explicitly select either format. Use @DisplayName with matching mentions entries.'),
     content_type: commentContentTypeSchema,
+    inline_images: z.boolean().optional(),
     mentions: z
       .array(mentionSchema)
       .optional()
       .describe('Required when text contains @mentions. Resolve each @DisplayName via list_project_members, then include { user_id, display_name } for each. Use longest match first (e.g. prefer "John Doe" over "John" when both exist).'),
     attachments: inlineAttachmentsSchema,
     kind: commentKindSchema,
+    has_attachments: hasAttachmentsSchema,
     reply_to_comment_id: replyToCommentIdSchema,
     reply_to_invocation_id: replyToInvocationIdSchema,
   }).strict();
@@ -125,6 +130,7 @@ export function getUpdateCommentBaseSchema() {
         .min(1, 'Comment text cannot be empty')
         .max(5000, 'Comment text cannot exceed 5000 characters'),
       content_type: commentContentTypeSchema,
+      inline_images: z.boolean().optional(),
       mentions: z.array(mentionSchema).optional(),
     })
     .strict();
@@ -157,12 +163,14 @@ export function getAddCommentBaseSchema() {
         .max(config.limits.commentTextMaxLength, `Comment text cannot exceed ${config.limits.commentTextMaxLength} characters`)
         .describe('Comment text. HTML or structural markdown; content_type can explicitly select either format. Use @DisplayName with matching mentions entries.'),
       content_type: commentContentTypeSchema,
+      inline_images: z.boolean().optional(),
       mentions: z
         .array(mentionSchema)
         .optional()
         .describe('Required when text contains @mentions. Resolve each @DisplayName via list_project_members, then include { user_id, display_name } for each. Use longest match first (e.g. prefer "John Doe" over "John" when both exist).'),
       attachments: inlineAttachmentsSchema,
       kind: commentKindSchema,
+      has_attachments: hasAttachmentsSchema,
       reply_to_comment_id: replyToCommentIdSchema,
       reply_to_invocation_id: replyToInvocationIdSchema,
     })
@@ -265,12 +273,14 @@ export function getAddCommentCrudBaseSchema() {
         .optional()
         .describe('Comment text for add/update. HTML or structural markdown; content_type can explicitly select either format.'),
       content_type: commentContentTypeSchema,
+      inline_images: z.boolean().optional(),
       mentions: z
         .array(mentionSchema)
         .optional()
         .describe('Required when text contains @mentions. Resolve via list_project_members, then include { user_id, display_name } for each.'),
       attachments: inlineAttachmentsSchema,
       kind: commentKindSchema,
+      has_attachments: hasAttachmentsSchema,
       reply_to_comment_id: replyToCommentIdSchema,
       reply_to_invocation_id: replyToInvocationIdSchema,
     })
@@ -279,7 +289,11 @@ export function getAddCommentCrudBaseSchema() {
 
 export function getAddCommentCrudInputSchema() {
   return getAddCommentCrudBaseSchema().superRefine((data, ctx) => {
-      const { kind, action, task_id, ticket_number, project_id, unique_index, comment_id, text, content_type, attachments, reply_to_comment_id, reply_to_invocation_id } = data;
+      const { kind, has_attachments, action, task_id, ticket_number, project_id, unique_index, comment_id, text, content_type, attachments, reply_to_comment_id, reply_to_invocation_id } = data;
+
+      if (action !== 'add' && has_attachments !== undefined) {
+        ctx.addIssue({ code: z.ZodIssueCode.custom, message: 'has_attachments is only supported when action is add', path: ['has_attachments'] });
+      }
 
       if (action !== 'add' && kind !== undefined) {
         ctx.addIssue({ code: z.ZodIssueCode.custom, message: 'kind is only supported when action is add', path: ['kind'] });

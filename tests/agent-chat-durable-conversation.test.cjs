@@ -912,7 +912,7 @@ test("seeing an agent across a board is not enough to open its team's thread", a
 
 test("the shared thread is keyed on the agent's owner, not on whoever opens it", () => {
   const source = fs.readFileSync(
-    path.join(root, "src/app/api/ai-chat/create-session/route.ts"),
+    path.join(root, "src/lib/agents/chatService.ts"),
     "utf8",
   );
   assert.match(

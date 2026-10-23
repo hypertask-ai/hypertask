@@ -42,6 +42,10 @@ function harness({ enabled = true, dueDates = false, tasks = drafts, failAt = []
     SSE_HEADERS: { "content-type": "text/event-stream" }, sseFrame: () => "event: error\n",
   };
   const run = load("src/app/api/ai/_lib/taskWriterRun.ts", {
+    "@/lib/rag/authorizeIndexedRows": { authorizeIndexedRows: async (taskRows, commentRows, principal) => {
+      assert.equal(principal?.teamScope == null, true);
+      return { taskRows, commentRows };
+    } },
     zod: { z }, "@/lib/flags": flags,
     "@/lib/ai/prompts/registry": { renderPrompt: () => "output language rule" },
     "@/lib/flags/keys": { HTPR_7054_CTRLJ_DUE_DATE_FLAG: dueDateFlag },
@@ -66,6 +70,7 @@ function harness({ enabled = true, dueDates = false, tasks = drafts, failAt = []
   });
   const route = load("src/app/api/ai/task-writer/route.ts", {
     "@/app/api/ai/_lib/sharedAllowance": { sharedAiAllowanceErrorMessage: () => null },
+    "@/lib/net/downloadWithoutBrotli": { downloadWithoutBrotli: undefined },
     zod: { z },
     "@/lib/ai/taskWriterDueDate": dates, "@/lib/ai/taskWriterTicketType": ticketTypes,
     "@/utils/htmlEscape": { escapeHtml },
@@ -300,21 +305,24 @@ test("actual composer send caches every saved ticket and publishes the complete 
   }
   visit(ast);
   assert.ok(send);
-  const cache = [], intros = [], navigations = [];
+  const cache = [], intros = [], navigations = [], questionsTaskIds = [];
   const context = {
-    enabled: true, boardChipEnabled: false, targetBoardId: undefined, sending: { current: false }, pendingImages: { current: 0 }, dictating: false, text: multiPrompt,
+    enabled: true, boardChipEnabled: false, targetBoardId: undefined, waitingForBoards: false, queueEnterWhileBoardsLoad: true, textHeldUntilBoardsLoad: { current: null }, textBoardId: undefined, invokeSkills: false, sending: { current: false }, pendingImages: { current: 0 }, dictating: false, text: multiPrompt,
     files: [], showProgress: false, composer: { current: null }, setWritingHeight() {}, setWriting() {}, setStage() {}, onBusyChange() {},
     setError(error) { if (error) throw new Error(error); }, taskContextRef: { current: null }, newTaskWindow: true, destinationProject: board,
     window: { location: { pathname: "/project", href: "https://app.hypertask.ai/project?id=15" } }, inView: null,
-    user: { id: 985 }, currentProject: board, mounted: { current: true }, viewContextEnabled: true, writerReasonEnabled: false, unfurlImageUrls: false, applyWriterProperties: false, splitTasksEnabled: true,
+    user: { id: 985 }, currentProject: board, mounted: { current: true }, writerReasonEnabled: false, unfurlImageUrls: false, inlineAgentImages: false, applyWriterProperties: false, splitTasksEnabled: true, skillFollowupEnabled: false,
     createComposedTask: async () => result,
     createTaskGlobally: body => cache.push(body.task), mobile: false, onCreated() {},
+    ticketQuestionsEnabled: true, setQuestionsTaskId: value => questionsTaskIds.push(value),
     setIntro: value => intros.push(value), composeTaskAssistantMessage: h.composeTaskAssistantMessage,
+    chatAutoOpenAllowed: { current: true },
     updateActiveItemAndItemInView() {}, setScope() {}, setSidebar() {}, setSuppressed() {}, setExplicitOpen() {}, setShowChat() {},
     router: { push: url => navigations.push(url) },
   };
   const compiled = ts.transpileModule(`return (${send});`, { compilerOptions: { target: ts.ScriptTarget.ES2022 } }).outputText;
   await new Function(...Object.keys(context), compiled)(...Object.values(context))();
+  assert.deepEqual(questionsTaskIds, []);
   assert.deepEqual(cache, result.tasks);
   assert.equal(intros[0].content, h.composeTaskAssistantMessage("HTPR-101", false, false, result));
   assert.equal(navigations[0], "/detail/project-15/101");
@@ -325,6 +333,7 @@ test("actual composer send caches every saved ticket and publishes the complete 
   intros.length = 0;
   navigations.length = 0;
   await new Function(...Object.keys(context), compiled)(...Object.values(context))();
+  assert.deepEqual(questionsTaskIds, [result.task.id]);
   assert.deepEqual(cache, [result.task]);
   assert.equal(intros[0].content, h.composeTaskAssistantMessage("HTPR-101", false, false));
   assert.equal(navigations[0], "/detail/project-15/101");

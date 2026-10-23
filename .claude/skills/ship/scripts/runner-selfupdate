@@ -3,6 +3,7 @@
 set -euo pipefail
 LIVE=${RUNNER_SELFUPDATE_LIVE:-$HOME/projects/ht-skills-live}
 LIB=${RUNNER_SELFUPDATE_LIB:-$HOME/.local/lib/hypertask/runner-pickup}
+DISPATCH=${RUNNER_SELFUPDATE_DISPATCH:-$HOME/.claude/skills/runners/scripts/runner-dispatch}
 UNITS=${RUNNER_PICKUP_UNIT_DIR:-$HOME/.config/systemd/user}
 STATE=${RUNNER_SELFUPDATE_STATE:-$HOME/.local/state/runner-selfupdate}
 SYSTEMCTL=${RUNNER_SELFUPDATE_SYSTEMCTL:-systemctl}
@@ -44,15 +45,16 @@ install_timer() {
   local repo
   repo=$(cd "$HERE/../../.." && pwd)
   mkdir -p "$UNITS" "$LIB"
-  install -m 0755 "$HERE/runner-selfupdate" "$LIB/"
+  install -m 0755 "$HERE/runner-selfupdate" "$HERE/user-unit-check" "$LIB/"
   install -m 0644 "$repo/systemd/runner-selfupdate.service" "$repo/systemd/runner-selfupdate.timer" "$UNITS/"
+  "${USER_UNIT_CHECK:-$LIB/user-unit-check}" "$UNITS/runner-selfupdate.service" "$UNITS/runner-selfupdate.timer"
   "$SYSTEMCTL" --user daemon-reload
   "$SYSTEMCTL" --user enable --now runner-selfupdate.timer
 }
 
 run() {
   local scripts source changed=0 webhook_changed=0 enabled n dirty i
-  local shell_files=(runner-pickup runner-deliver runner-chat-reply ship-identity runner-selfupdate)
+  local shell_files=(runner-pickup runner-deliver runner-chat-reply ship-identity runner-selfupdate user-unit-check)
   local unit_files=(runner-pickup@.service runner-pickup@.timer runner-webhook.service runner-selfupdate.service runner-selfupdate.timer)
   local sources=() targets=()
   mkdir -p "$STATE"
@@ -74,6 +76,7 @@ run() {
   for source in "${shell_files[@]}" runner-webhook; do
     sources+=("$scripts/$source"); targets+=("$LIB/$source")
   done
+  sources+=("$scripts/runner-dispatch"); targets+=("$DISPATCH")
   sources+=("$LIVE/.claude/hooks/runner-inbox-stop.sh"); targets+=("$LIB/runner-inbox-stop.sh")
   for source in "${unit_files[@]}"; do
     sources+=("$LIVE/.claude/systemd/$source"); targets+=("$UNITS/$source")
@@ -89,12 +92,13 @@ run() {
     if ! bash -n "$scripts/$source"; then alert syntax 'Runner update contains invalid shell code'; return 1; fi
   done
   if ! bash -n "$LIVE/.claude/hooks/runner-inbox-stop.sh" ||
-    ! python3 - "$scripts/runner-webhook" <<'PY'
+    ! python3 - "$scripts/runner-webhook" "$scripts/runner-dispatch" <<'PY'
 import pathlib, sys
-path = pathlib.Path(sys.argv[1])
-compile(path.read_bytes(), str(path), 'exec')
+for source in sys.argv[1:]:
+    path = pathlib.Path(source)
+    compile(path.read_bytes(), str(path), 'exec')
 PY
-  then alert syntax 'Runner update contains invalid hook or webhook code'; return 1; fi
+  then alert syntax 'Runner update contains invalid hook or Python code'; return 1; fi
   if ! enabled=$("$SYSTEMCTL" --user list-units 'runner-pickup@*.timer' --all --plain --no-legend --no-pager); then
     alert runners 'Could not list runner timers'; return 1
   fi
@@ -121,6 +125,7 @@ PY
 backup_files() {
   local i
   if [ -e "$LIB" ]; then cp -a "$LIB" "$backup/lib" || return 1; fi
+  if [ -e "$DISPATCH" ]; then cp -a "$DISPATCH" "$backup/runner-dispatch" || return 1; fi
   mkdir -p "$backup/units" || return 1
   for i in "${!targets[@]}"; do
     [[ ${targets[$i]} == "$UNITS/"* ]] || continue
@@ -144,7 +149,9 @@ install_files() (
   "$scripts/runner-pickup" install "$1" >/dev/null || exit 1
   "$scripts/runner-pickup" install-webhook >/dev/null || exit 1
   install -m 0755 "$scripts/runner-selfupdate" "$LIB/"
+  install -D -m 0755 "$scripts/runner-dispatch" "$DISPATCH"
   install -m 0644 "$LIVE/.claude/systemd/runner-selfupdate.service" "$LIVE/.claude/systemd/runner-selfupdate.timer" "$UNITS/"
+  "${USER_UNIT_CHECK:-$LIB/user-unit-check}" "$UNITS/runner-selfupdate.service" "$UNITS/runner-selfupdate.timer" || exit 1
   systemctl --user daemon-reload
 )
 
@@ -166,6 +173,11 @@ rollback() {
       rm -f "${targets[$i]}" || failed=1
     fi
   done
+  if [ -e "$backup/runner-dispatch" ]; then
+    cp -a "$backup/runner-dispatch" "$DISPATCH" || failed=1
+  else
+    rm -f "$DISPATCH" || failed=1
+  fi
   "$SYSTEMCTL" --user daemon-reload || failed=1
   if [ "$restarted" = 1 ]; then
     "$SYSTEMCTL" --user restart runner-webhook.service &&

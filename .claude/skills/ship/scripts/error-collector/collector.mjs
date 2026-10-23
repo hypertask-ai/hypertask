@@ -41,10 +41,12 @@ export function redact(text) {
     .replace(/\b[A-Za-z0-9_+\/-]{32,}={0,2}\b/g, '[redacted]');
 }
 
-const FINGERPRINT_RULES = 2;
+const FINGERPRINT_RULES = 3;
 const isoTime = /\d{4}-\d{2}-\d{2}[T ]\d{2}:\d{2}:\d{2}(?:[.,]\d+)?(?:Z|[+-]\d{2}:?\d{2})?/;
 const rejectedUrl = /(\bInvalid [A-Za-z ]{1,40}: )https?:\/\/\S+/g;
-const changedByCurrentRules = message => (isoTime.test(message) || new RegExp(rejectedUrl.source).test(message)) && !/\[redacted(?:-[a-z]+)?\]/.test(normalize(message));
+const transientScope = /\brun-(?:u\d+|r[0-9a-f]{32})\.scope\b/g;
+const powerShellSession = /\(\d+(?:\.\d+)*:[A-Z]:\d+\)(?= \[NamedPipeIPC_ServerListenerError:NamedPipe\.Exception\.Error\])/g;
+const changedByCurrentRules = message => (isoTime.test(message) || new RegExp(rejectedUrl.source).test(message) || new RegExp(transientScope.source).test(message) || new RegExp(powerShellSession.source).test(message)) && !/\[redacted(?:-[a-z]+)?\]/.test(normalize(message));
 
 export function normalize(text, route = false) {
   const id = route ? ':id' : '<id>';
@@ -52,6 +54,8 @@ export function normalize(text, route = false) {
     .replace(new RegExp(`^\\s*${isoTime.source}\\s+`), '')
     .replace(new RegExp(`\\b${isoTime.source}`, 'g'), '<time>')
     .replace(rejectedUrl, '$1<url>')
+    .replace(transientScope, 'run-<id>.scope')
+    .replace(powerShellSession, '<session>')
     .replace(/https?:\/\/[^\s<>"']+/gi, url => url.replace(/\?[^#]*/, '').replace(/#.*$/, ''))
     .replace(/\?[^\s]*/g, '')
     .replace(/\b[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}\b/gi, id)
@@ -195,10 +199,13 @@ async function run({ env = process.env, now = Date.now(), sources, dryRun = fals
     return command(name, args, { ...env, ...extraEnv }, input);
   };
   state.coverage ??= {};
+  state.stale ??= {};
   const cap = Number(env.ERROR_COLLECTOR_HOURLY_CAP ?? 5);
   if (!Number.isSafeInteger(cap) || cap < 0) throw new Error('invalid hourly cap');
   const noiseLimit = Number(env.ERROR_COLLECTOR_NOISE_HOURLY_LIMIT ?? 50);
   if (!Number.isSafeInteger(noiseLimit) || noiseLimit < 0) throw new Error('invalid noise hourly limit');
+  const staleHours = Number(env.ERROR_COLLECTOR_STALE_HOURS ?? 2);
+  const staleWindow = (Number.isFinite(staleHours) && staleHours > 0 ? staleHours : 2) * HOUR;
   state.noiseWindows ??= {};
   const stats = (date, service) => {
     state.days[date] ??= {};
@@ -236,6 +243,7 @@ async function run({ env = process.env, now = Date.now(), sources, dryRun = fals
     try {
       const groups = new Map();
       const warnings = new Map();
+      const revived = new Map();
       const previous = Date.parse(state.sources[source.name]);
       const since = iso(Math.max(now - DAY, Math.min(now, Number.isFinite(previous) ? previous : now - DAY)));
       const until = iso(now);
@@ -256,26 +264,31 @@ async function run({ env = process.env, now = Date.now(), sources, dryRun = fals
         if (event.ticket === false) continue;
         const rule = noiseRule(event);
         const fp = rule?.alert ? noiseFingerprint(event.service, rule.id) : fingerprint(event.service, event.message, event.route);
-        const board = state.fingerprints[fp]?.board ?? state.pending[fp]?.board ?? boards.get(fp);
+        const board = state.fingerprints[fp]?.board ?? state.pending[fp]?.board ?? state.stale[fp]?.board ?? boards.get(fp);
         if (board == null) boards.set(fp, event.board);
         else event.board = board;
       }
       for (const event of events) {
         const counts = stats(day(event.ts), event.service);
         const rule = noiseRule(event);
+        if (rule) counts.noise += event.count;
+        else counts.errors += event.count;
+        if (rule?.id === 'forced-test') diagnostic(`skipped forced test error from ${event.service} (${event.count})`);
+        if (event.ticket === false) continue;
+        const fp = rule?.alert ? noiseFingerprint(event.service, rule.id) : fingerprint(event.service, event.message, event.route);
+        const stale = state.stale[fp] ?? revived.get(fp);
+        if (stale) {
+          if (event.ts <= stale.lastSeen) continue;
+          revived.set(fp, stale);
+          delete state.stale[fp];
+        }
         if (rule) {
-          counts.noise += event.count;
-          if (rule.id === 'forced-test') diagnostic(`skipped forced test error from ${event.service} (${event.count})`);
-          if (rule.alert && event.ticket !== false) {
-            const fp = noiseFingerprint(event.service, rule.id);
+          if (rule.alert) {
             if (!warnings.has(fp)) warnings.set(fp, { rule, events: [] });
             warnings.get(fp).events.push({ board: event.board, service: event.service, ts: event.ts, count: event.count, message: redact(event.message).slice(0, 4000), route: redact(event.route), stack: redact(event.stack).split('\n').slice(0, 40).join('\n').slice(0, 12000) });
           }
           continue;
         }
-        counts.errors += event.count;
-        if (event.ticket === false) continue;
-        const fp = fingerprint(event.service, event.message, event.route);
         if (!groups.has(fp)) groups.set(fp, { rules: FINGERPRINT_RULES, board: event.board, service: event.service,normalized: redact(normalize(event.message)), message: redact(event.message).slice(0, 4000), stack: redact(event.stack).split('\n').slice(0, 40).join('\n').slice(0, 12000), routes: [], count: 0, firstSeen: event.ts, lastSeen: event.ts });
         merge(groups.get(fp), event);
       }
@@ -314,7 +327,10 @@ async function run({ env = process.env, now = Date.now(), sources, dryRun = fals
       }
       state.coverage[source.name] = coverage;
       if (dryRun) console.log(`DRY-RUN source ${JSON.stringify({ name: source.name, since, until, events: events.length, count: events.reduce((sum, event) => sum + event.count, 0) })}`);
-      for (const [fp, group] of groups) absorb(fp, group);
+      for (const [fp, group] of groups) {
+        if (revived.get(fp)?.aliases) group.aliases = revived.get(fp).aliases;
+        absorb(fp, group);
+      }
       state.sources[source.name] = until;
       if (!Array.isArray(fetched)) (state.sourceCursors ??= {})[source.name] = cursor;
       await checkpoint();
@@ -330,6 +346,7 @@ async function run({ env = process.env, now = Date.now(), sources, dryRun = fals
   state.created = state.created.filter(time => Date.parse(time) > now - HOUR);
   for (const date of Object.keys(state.days)) if (date < day(now - 13 * DAY)) delete state.days[date];
   for (const date of Object.keys(state.summaries)) if (date < day(now - 13 * DAY)) delete state.summaries[date];
+  for (const [fp, record] of Object.entries(state.stale)) if (day(record.lastSeen) < day(now - 13 * DAY)) delete state.stale[fp];
   for (const [fp, group] of Object.entries(state.pending)) {
     if (group.noiseRule || group.rules === FINGERPRINT_RULES) continue;
     group.rules = FINGERPRINT_RULES;
@@ -349,6 +366,24 @@ async function run({ env = process.env, now = Date.now(), sources, dryRun = fals
       let found = search(fp, group.board, env);
       for (const alias of group.aliases ?? []) found ??= search(alias, group.board, env);
       if (!found) {
+        if (now - Date.parse(group.lastSeen) > staleWindow) {
+          const target = Object.values(state.fingerprints).find(record => record.ticket && !record.deleted && record.board === group.board && group.routes.some(route => route && record.routes?.includes(route)));
+          state.stale[fp] = { board: group.board, service: group.service, firstSeen: group.firstSeen, lastSeen: group.lastSeen, count: group.count, routes: group.routes, aliases: group.aliases ?? [] };
+          if (target) {
+            const activity = state.activities[target.ticket] ??= { count: 0, since: group.firstSeen, at: target.lastActivityAt };
+            const stale = activity.stale ??= { count: 0, firstSeen: group.firstSeen, lastSeen: group.lastSeen };
+            stale.count += group.count;
+            stale.firstSeen = stale.firstSeen < group.firstSeen ? stale.firstSeen : group.firstSeen;
+            stale.lastSeen = stale.lastSeen > group.lastSeen ? stale.lastSeen : group.lastSeen;
+          } else {
+            const counts = stats(day(now), group.service);
+            counts.stale = (counts.stale ?? 0) + 1;
+          }
+          if (dryRun) console.log(`DRY-RUN stale ${JSON.stringify({ fingerprint: fp, lastSeen: group.lastSeen, outcome: target ? 'stale sighting' : 'stale, not filed', ticket: target?.ticket })}`);
+          delete state.pending[fp];
+          await checkpoint();
+          continue;
+        }
         if (state.created.length >= cap) { held++; continue; }
         const column = group.board === 15 ? 'Bugs' : (section ??= intake(env));
         const text = description(group, fp);
@@ -381,12 +416,14 @@ async function run({ env = process.env, now = Date.now(), sources, dryRun = fals
     if (signal.aborted) break;
     const records = Object.values(state.fingerprints).filter(record => record.ticket === ticket);
     const lastActivity = Math.max(0, Date.parse(activity.at) || 0, ...records.map(record => Date.parse(record.lastActivityAt) || 0));
-    if (!activity.count || records.some(record => record.deleted) || now - lastActivity < 6 * HOUR) continue;
+    if ((!activity.count && !activity.stale?.count) || records.some(record => record.deleted) || now - lastActivity < 6 * HOUR) continue;
     const total = records.reduce((sum, record) => sum + record.total, 0);
     const lastSeen = records.map(record => record.lastSeen).sort().at(-1);
     try {
       const routes = (activity.routes ?? []).slice(0, 3).map(route => route.trim().slice(0, 120)).join(', ');
-      write('vcc', ['activity', 'add', ticket, `${activity.count} more since ${activity.since}, ${total} total, last seen ${lastSeen}${routes ? `; new routes: ${routes}` : ''}`]);
+      const stale = activity.stale ? `; stale sighting: ${activity.stale.count} occurrences, first seen ${activity.stale.firstSeen}, last seen ${activity.stale.lastSeen}` : '';
+      write('vcc', ['activity', 'add', ticket, `${activity.count} more since ${activity.since}, ${total} total, last seen ${lastSeen}${routes ? `; new routes: ${routes}` : ''}${stale}`]);
+      delete activity.stale;
       activity.count = 0;
       activity.routes = [];
       activity.since = iso(now);
@@ -416,9 +453,9 @@ async function run({ env = process.env, now = Date.now(), sources, dryRun = fals
         if (!due(date, service)) continue;
         const counts = stats(date, service);
         const previous = covered(previousDate, service) ? state.days[previousDate][service].errors : null;
-        const text = covered(date, service)
+        const text = (covered(date, service)
           ? `${service} on ${date}: ${counts.errors} errors (${previousDate}: ${previous ?? 'no complete data'}), ${counts.newGroups} new kinds, ${counts.noise} noise`
-          : `${service} on ${date}: no complete data, ${finalized(date, service) ? 'collection did not cover the full day' : 'the source kept failing'} (partial count ${counts.errors})`;
+          : `${service} on ${date}: no complete data, ${finalized(date, service) ? 'collection did not cover the full day' : 'the source kept failing'} (partial count ${counts.errors})`) + (counts.stale ? `, ${counts.stale} stale, not filed` : '');
         try {
           write('vcc', ['activity', 'add', CONTROL, text]);
           if (covered(date, service) && previous !== null && counts.errors > 3 * previous && counts.errors >= 50) {
@@ -451,12 +488,16 @@ async function install(env) {
     for (const name of ['collector.mjs', 'io.mjs', 'noise.json']) await fs.copyFile(join(HERE, name), join(target, name));
     await fs.cp(join(HERE, 'sources'), join(target, 'sources'), { recursive: true });
   }
+  const checker = join(HERE, HERE === target ? '' : '..', 'user-unit-check');
+  if (checker !== join(target, 'user-unit-check')) await fs.copyFile(checker, join(target, 'user-unit-check'));
+  await fs.chmod(join(target, 'user-unit-check'), 0o755);
   await fs.chmod(join(target, 'collector.mjs'), 0o755);
   for (const suffix of ['service', 'timer']) {
     const name = `error-collector.${suffix}`;
     if (HERE !== target) await fs.copyFile(join(HERE, '..', name), join(target, name));
     await fs.copyFile(join(target, name), join(units, name));
   }
+  command(env.USER_UNIT_CHECK || join(target, 'user-unit-check'), [join(units, 'error-collector.service'), join(units, 'error-collector.timer')], env);
   command('systemctl', ['--user', 'daemon-reload'], env);
   command('systemctl', ['--user', 'enable', '--now', 'error-collector.timer'], env);
   console.log('Installed error-collector user timer');

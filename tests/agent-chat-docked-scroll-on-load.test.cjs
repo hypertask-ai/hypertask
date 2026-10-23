@@ -22,6 +22,8 @@ const path = require("node:path");
 const test = require("node:test");
 const { JSDOM } = require("jsdom");
 const React = require("react");
+const { QueryClient, QueryClientProvider } = require("@tanstack/react-query");
+const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
 const { createRoot } = require("react-dom/client");
 const { createJiti } = require("jiti");
 
@@ -66,7 +68,9 @@ async function renderReloadAndMeasure({ historyOnFirstPaint = false } = {}) {
     "src/components/AI_CHAT/TypingIndicator.tsx",
   );
   const listPath = path.join(root, "src/components/AI_CHAT/MessageList.tsx");
-  const stubbed = [contextPath, itemPath, typingPath, listPath];
+  const storePath = path.join(root, "src/store/index.ts");
+  const statePath = path.join(root, "src/lib/state.tsx");
+  const stubbed = [contextPath, itemPath, typingPath, listPath, storePath, statePath];
   const previousModules = new Map(
     stubbed.map((filename) => [filename, require.cache[filename]]),
   );
@@ -146,6 +150,13 @@ async function renderReloadAndMeasure({ historyOnFirstPaint = false } = {}) {
       };
     }
 
+    for (const [filename, exports] of [
+      [storePath, { composeTaskQuestionsTaskIdAtom: "questionsTaskId" }],
+      [statePath, { useRecoilValue: () => null, useSetRecoilState: () => () => {} }],
+    ]) {
+      require.cache[filename] = { id: filename, filename, loaded: true, exports };
+    }
+
     const jiti = createJiti(__filename, {
       alias: { "@": path.join(root, "src") },
       interopDefault: true,
@@ -178,13 +189,13 @@ async function renderReloadAndMeasure({ historyOnFirstPaint = false } = {}) {
     // the panel is restored open first and the history arrives after.
     if (historyOnFirstPaint) showHistory();
     await React.act(async () => {
-      reactRoot.render(React.createElement(MessageList));
+      reactRoot.render(React.createElement(QueryClientProvider, { client: queryClient }, React.createElement(MessageList)));
     });
 
     if (!historyOnFirstPaint) {
       showHistory();
       await React.act(async () => {
-        reactRoot.render(React.createElement(MessageList));
+        reactRoot.render(React.createElement(QueryClientProvider, { client: queryClient }, React.createElement(MessageList)));
       });
     }
 

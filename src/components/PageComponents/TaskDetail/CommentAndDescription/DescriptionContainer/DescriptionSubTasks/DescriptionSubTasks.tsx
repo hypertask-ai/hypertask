@@ -16,8 +16,6 @@ import { useSearchParams } from "next/navigation";
 import { preserveInboxFlowOnTaskHref, shouldFollowLinkNatively } from "@/lib/taskDetailInboxFlow";
 import { useQueryClient } from "@tanstack/react-query";
 import { useAuth } from "@/hooks/General/useAuth";
-import { useFlag } from "@/hooks/useFlag";
-import { HTPR_6752_INSTANT_TICKET_OPEN_FLAG, HTPR_6972_SUBTASK_LINK_FLAG } from "@/lib/flags/keys";
 import { openCachedTaskDetail } from "@/lib/navigation/cachedTaskDetail";
 
 const DescriptionSubTask = () => {
@@ -27,8 +25,6 @@ const DescriptionSubTask = () => {
   const queryClient = useQueryClient();
   const { authenticatedUserId } = useAuth();
   const currentUser = useRecoilValue(currentUserAtom);
-  const subtaskLink = useFlag(HTPR_6972_SUBTASK_LINK_FLAG);
-  const instantTicketOpen = useFlag(HTPR_6752_INSTANT_TICKET_OPEN_FLAG);
   const [_, setTasksPlayList] = useRecoilState(tasksPlayListAtom);
   const isApple = useDeviceContext();
   var cmdControl = useMemo(
@@ -78,7 +74,7 @@ const DescriptionSubTask = () => {
                   )}
                   onClick={(event) => {
                     setTasksPlayList(subTaskPlaylist);
-                    if (!subtaskLink || !instantTicketOpen || event.defaultPrevented || shouldFollowLinkNatively(event) ||
+                    if (event.defaultPrevented || shouldFollowLinkNatively(event) ||
                         !currentUser?.id || authenticatedUserId !== currentUser.id) return;
                     if (openCachedTaskDetail({
                       queryClient, accountId: currentUser.id, projectId: currentTask.projectId,

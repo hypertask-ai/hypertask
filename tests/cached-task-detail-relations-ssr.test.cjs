@@ -11,7 +11,7 @@ const jiti = require("jiti").createJiti(__filename, { alias: { "@": path.join(ro
 const flags = jiti(path.join(root, "src/lib/flags/keys.ts"));
 const { findCachedTaskDetail } = jiti(path.join(root, "src/lib/navigation/cachedTaskDetail.ts"));
 
-function load({ enabled = [], task = null, legacy = false } = {}) {
+function load({ task = null } = {}) {
   const queries = [], flagCalls = [];
   const mocks = {
     "@/lib/tasks/sameBoardRelations": jiti(path.join(root, "src/lib/tasks/sameBoardRelations.ts")),
@@ -23,12 +23,13 @@ function load({ enabled = [], task = null, legacy = false } = {}) {
     "@/lib/cycles": { CYCLE_WINDOW_SIZE: 4 },
     "@/lib/pullRequests/taskPullRequests": {},
     "@/lib/agents/publicAgent": { publicAgentSelect: {} },
-    "@/lib/flags": { ...flags, isFeatureEnabled: async (key, userId) => { flagCalls.push([key, userId]); return enabled.includes(key); } },
+    "@/lib/flags/keys": flags,
+    "@/lib/flags": { ...flags, isFeatureEnabled: async (key, userId) => { flagCalls.push([key, userId]); return false; } },
     "@/lib/agents/visibility": { boardAgentVisibilityWhere: () => ({}), accessibleAgentMembershipWhere: () => ({}) },
     "@/utils/controllers/notifications/visibleInboxScope": { visibleUserInboxWhere: () => ({}) },
   };
   mocks["@/utils/controllers/projects/getAllIncludes"] = require("./task-route-loader.cjs").load("src/utils/controllers/projects/getAllIncludes.ts", mocks);
-  const source = fs.readFileSync(legacy ? path.join(__dirname, "fixtures/htpr-6972/load.ts.txt") : path.join(root, file), "utf8");
+  const source = fs.readFileSync(path.join(root, file), "utf8");
   const compiled = ts.transpileModule(source, { compilerOptions: { module: ts.ModuleKind.CommonJS } }).outputText;
   const exports = {};
   new Function("require", "exports", compiled)(name => {
@@ -47,18 +48,8 @@ function projectRelation(row, select) {
   return projected;
 }
 
-test("flag-off relation projections retain the compact legacy shape plus sibling board ids", () => {
-  const { taskDetailInclude } = load();
-  const legacy = load({ legacy: true }).taskDetailInclude(6, 15);
-  legacy.parentTask.select.subTasks.select.projectId = true;
-  for (const projection of [taskDetailInclude(6, 15), taskDetailInclude(6, 15, false)]) {
-    assert.deepEqual(projection.subTasks, legacy.subTasks);
-    assert.deepEqual(projection.parentTask, legacy.parentTask);
-  }
-});
-
-test("flagged SSR relations carry known full and empty descriptions for cold cached opening", () => {
-  const include = load().taskDetailInclude(6, 15, true);
+test("SSR relations carry known full and empty descriptions for cold cached opening", () => {
+  const include = load().taskDetailInclude(6, 15);
   const client = new QueryClient();
   for (const select of [include.subTasks.select, include.parentTask.select]) {
     assert.deepEqual(select.description_, { where: { task: { projectId: 15 } }, select: { content: true } });
@@ -77,7 +68,7 @@ test("relation body projection is source-board scoped and deleted or cross-board
   assert.deepEqual(taskWhere({ projectId: 15, uniqueIndex: 7 }, 6).project, {
     id: 15, status: { not: "Deleted" }, OR: [{ ownerId: 6 }, { members: { some: { userId: 6, agentId: null } } }],
   });
-  const include = taskDetailInclude(6, 15, true);
+  const include = taskDetailInclude(6, 15);
   const client = new QueryClient();
   for (const select of [include.subTasks.select, include.parentTask.select]) {
     const crossBoard = projectRelation({ id: 42, projectId: 99, uniqueIndex: 7, status: "Normal", description_: { content: "Private body" } }, select);
@@ -89,15 +80,12 @@ test("relation body projection is source-board scoped and deleted or cross-board
   client.clear();
 });
 
-test("fetchTaskDetail enables cached relation projection only when both flags are enabled for the reader", async () => {
-  const subtask = flags.HTPR_6972_SUBTASK_LINK_FLAG;
-  const instant = flags.HTPR_6752_INSTANT_TICKET_OPEN_FLAG;
-  for (const enabled of [[], [subtask], [instant], [subtask, instant]]) {
-    const f = load({ enabled, task: { id: 42, projectId: 15, uniqueIndex: 7, pullRequests: [], description_: null, agent: null } });
-    assert.equal((await f.fetchTaskDetail("project-15", 7, 6)).id, 42);
-    assert.deepEqual(f.queries[0].where, f.taskWhere({ projectId: 15, uniqueIndex: 7 }, 6));
-    assert.equal(Object.hasOwn(f.queries[0].include.subTasks.select, "description_"), enabled.length === 2);
-    assert.equal(Object.hasOwn(f.queries[0].include.parentTask.select, "description_"), enabled.length === 2);
-    assert.deepEqual(f.flagCalls, [[subtask, 6], ...(enabled.includes(subtask) ? [[instant, 6]] : [])]);
-  }
+test("fetchTaskDetail always projects cached relations without checking a flag", async () => {
+  const f = load({ task: { id: 42, projectId: 15, uniqueIndex: 7, pullRequests: [], description_: null, agent: null } });
+  assert.equal((await f.fetchTaskDetail("project-15", 7, 6)).id, 42);
+  assert.deepEqual(f.queries[0].where, f.taskWhere({ projectId: 15, uniqueIndex: 7 }, 6));
+  assert.deepEqual(f.queries[0].include.subTasks.select.description_, { where: { task: { projectId: 15 } }, select: { content: true } });
+  assert.deepEqual(f.queries[0].include.parentTask.select.description_, { where: { task: { projectId: 15 } }, select: { content: true } });
+  assert.equal(f.queries[0].include.parentTask.select.status, true);
+  assert.deepEqual(f.flagCalls, []);
 });

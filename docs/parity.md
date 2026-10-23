@@ -4,11 +4,11 @@
 
 The first landing is bootstrapped by the pre-existing, exact-head GitHub AI Review (`ai-review`) required check plus manual sensitive-path merge. After landing, `parity-contract-trusted` evaluates candidate source with the verifier and policy from the protected base branch; PR code cannot replace or relax the rules judging that PR.
 
-Regenerate it with `node scripts/parity-contract.mjs --write --cli-capabilities <production-capabilities.json>`. Inventory: api: 172, mcp: 75, cli: 156, ai_chat: 84, hyperai: 75. A number is the count of concrete routes, tools, or leaf commands implementing the canonical job. ↪ records an intentional exclusion; 🛠 is a reviewed, temporary two-step transition and must be removed by its implementation PR. The CLI inventory is pinned to `@hypertask/hypertask_cli@2.0.10`; HyperAI keys are independently validated as the identity projection of the canonical MCP registry.
+Regenerate it with `node scripts/parity-contract.mjs --write --cli-capabilities <production-capabilities.json>`. Inventory: api: 173, mcp: 76, cli: 156, ai_chat: 84, hyperai: 76. A number is the count of concrete routes, tools, or leaf commands implementing the canonical job. ↪ records an intentional exclusion; 🛠 is a reviewed, temporary two-step transition and must be removed by its implementation PR. The CLI inventory is pinned to `@hypertask/hypertask_cli@2.0.10`; HyperAI keys are independently validated as the identity projection of the canonical MCP registry.
 
 | Job | api | mcp | cli | ai_chat | hyperai |
 |---|---|---|---|---|---|
-| **Discover identity and accessible workspace context** | ✅ 3 | ✅ 2 | ✅ 2 | ✅ 1 | ✅ 2 |
+| **Discover identity and accessible workspace context** | ✅ 4 | ✅ 3 | ✅ 2 | ✅ 1 | ✅ 3 |
 | **Update the human profile** | ✅ 1 | ✅ 1 | ✅ 1 | ✅ 1 | ✅ 1 |
 | **List, inspect, and contact board agents** | ✅ 7 | ✅ 2 | ✅ 4 | ✅ 3 | ✅ 2 |
 | **Agent Chat: an agent runtime reads and answers its owner's chat** | ✅ 10 | ↪ Only the chatted agent's runtime token may read or answer its session; MCP clients act as the human, not as the agent. | ↪ The agent worker runtime posts replies with its own bearer token; the CLI has no agent-side chat command. | ↪ Agent Chat is the surface itself; native agents answer in-process without this route. | ↪ HyperAI inherits the human session and never speaks as an external agent. |

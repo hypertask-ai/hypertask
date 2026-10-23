@@ -4,7 +4,7 @@ import type { WebhookDelivery, WebhookTaskStatus } from './events'
 import { enqueueTaskCreated, processAnalyticsIntentSoon, type CreationChannel } from '../../telemetry/savedWork'
 
 
-type TaskCreatedDb = {
+type TaskCreatedDb = Pick<Prisma.TransactionClient, "agent" | "project" | "task" | "comment" | "chatSession" | "agentRun"> & {
   webhookSubscription: { findMany: (args: any) => Promise<any> }
   boardWebhookDelivery: { create: (args: any) => Promise<any> }
 }
@@ -34,6 +34,7 @@ interface CreatedTaskResult<T> {
   taskId: number
   result: T
   webhookTask: WebhookTaskSnapshot
+  firstTaskPointerTaskId: number | null
 }
 
 export async function createTaskWithBoardWebhookOutbox<T>(
@@ -53,6 +54,12 @@ export async function createTaskWithBoardWebhookOutbox<T>(
       actor.userId,
       actor.agentId
     )
+    if (created.firstTaskPointerTaskId) {
+      await tx.project.updateMany({
+        where: { id: created.webhookTask.projectId, firstTaskPointerTaskId: created.firstTaskPointerTaskId, firstRealTaskCreatedAt: null },
+        data: { firstRealTaskCreatedAt: new Date() },
+      })
+    }
     const analyticsKey = await enqueueTaskCreated(tx, created.taskId, { userId: actor.userId, agentId: actor.agentId ?? analyticsAgentId }, channel)
     return { analyticsKey, result: created.result, boardWebhookDeliveryIds }
   })

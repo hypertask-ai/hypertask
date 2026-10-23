@@ -8,7 +8,7 @@ export type ParsedSearch = { text: string; filters: Partial<Record<SearchFilterK
 export type NameOperator = 'from' | 'commenter' | 'assignee' | 'in' | 'board' | 'label'
 type Names = Partial<Record<NameOperator, string[]>>
 export type { Names }
-export type SearchToken = { operator: SearchOperator; value: string; negated: boolean; raw: string; start: number; end: number }
+export type SearchToken = { operator: SearchOperator | LogicOperator; value: string; negated: boolean; raw: string; start: number; end: number }
 export const MAX_SEARCH_OPERATOR_CLAUSES = 12
 
 function operatorMatches(raw: string) {
@@ -98,13 +98,14 @@ export function parseSearchQuery(raw: string, names: Names = {}, commenterEnable
 
 export { operatorMatches }
 
-export function parseSearchTokens(raw: string, names: Names = {}, commenterEnabled = false): SearchToken[] {
-  const parsed = parseSearchQuery(raw, names, commenterEnabled)
-  const used: Partial<Record<SearchOperator, number>> = {}
+export function parseSearchTokens(raw: string, names: Names = {}, commenterEnabled = false, logicEnabled = false): SearchToken[] {
+  const parsed = parseSearchQuery(raw, names, commenterEnabled, logicEnabled)
+  const operators: readonly string[] = [...SEARCH_OPERATORS, ...(logicEnabled ? LOGIC_OPERATORS : [])]
+  const used: Partial<Record<SearchToken['operator'], number>> = {}
   const matches = operatorMatches(raw)
   return matches.flatMap(({ start, valueStart, operator, negated }, index) => {
-    if (!SEARCH_OPERATORS.includes(operator as SearchOperator)) return []
-    const key = operator as SearchOperator
+    if (!operators.includes(operator)) return []
+    const key = operator as SearchToken['operator']
     const rawValue = raw.slice(valueStart, matches[index + 1]?.start ?? raw.length).trim()
     if (!rawValue) return []
     const value = parsed.filters[key]?.[used[key] ?? 0]?.value

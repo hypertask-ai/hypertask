@@ -24,6 +24,8 @@ import styles from "@/styles/linksModal.module.scss";
 import { ICommandList } from "./HTCTypes";
 import CommandGroups from "./CommandGroup";
 import useHTC from "@/hooks/MultiPages/HTC/useHTC";
+import type { CommandFocusProxy } from "@/components/commandTypes";
+import { HTPR_7547_SEARCH_LAZY_CLOSED_FLAG } from "@/lib/flags/keys";
 import { ModalContainerCustom, ModalHintBar, ModalInput } from "@/components/Common/CommonModalComponents";
 import useHypertasksRecoilStates from "@/hooks/RecoilRoot/useHypertasksRecoilStates";
 import {
@@ -49,19 +51,15 @@ import { useGetAllProjectsMinimal } from "@/hooks/MultiPages/useGetAllProjectsMi
 import { MobileViewContext } from "@/lib/contexts/mobileContext";
 import { MobileBottomSheet } from "@/components/Modals/Sheets";
 import { useFlag } from "@/hooks/useFlag";
-import { HTPR_7328_ROUNDED_THEME_FLAG } from "@/lib/flags/keys";
+import { HTPR_7307_CTRLJ_FOOTER_CLICKABLE_FLAG, HTPR_7328_ROUNDED_THEME_FLAG, HTPR_7530_KEEP_AI_CHAT_CLOSED_FLAG } from "@/lib/flags/keys";
 import {
   GOOGLE_CALENDAR_FLAG,
   HTPR_7260_KANBAN_SELECT_ALL_FLAG,
   HTPR_6891_PHONE_TASK_WRITER_SHEET_FLAG,
-  HTPR_6892_CMDK_VERSION_FLAG,
   HTPR_6929_COMPOSE_TASK_WRITER_FLAG,
   HTPR_6937_NEW_TASK_WINDOW_FLAG,
   HTPR_7053_COMPOSE_BOARD_CHIP_FLAG,
   HTPR_6868_TICKET_PREFIX_FLAG,
-  HTPR_6662_AGENT_LOG_NAME_FLAG,
-  HTPR_6930_MY_TASKS_KANBAN_REUSE_FLAG,
-  HTPR_6567_COMMAND_SCOPE_PICKER_FLAG,
   MY_TASKS_SCOPES_FLAG,
   MY_TASKS_TIME_GROUP_FLAG,
   MY_TASKS_FILTER_PARITY_FLAG,
@@ -85,7 +83,7 @@ type Props = {
   showByokApiKeys?: boolean;
   appShellRailOn?: boolean;
   scope?: "board";
-  focusProxy?: { current: HTMLInputElement | null };
+  focusProxy?: CommandFocusProxy;
 };
 
 const DESTRUCTIVE_COMMAND_MODES = [CommandMode.DeleteBoard, CommandMode.DeleteColumn];
@@ -117,6 +115,7 @@ const Commands = (props: Props) => {
   let newTaskWindow = false;
   if (composeTaskWriterEnabled && newTaskWindowFlag && !props.isDemo && !props.isInteractive) newTaskWindow = true;
   const isApple = useDeviceContext();
+  const lazyClosedCommands = useFlag(HTPR_7547_SEARCH_LAZY_CLOSED_FLAG);
   const composeEnabled = composeTaskWriterEnabled && !props.isDemo && !props.isInteractive;
   const [showCommands, setShowCommands] = useRecoilState(showCommandsAtom);
   const isCompose = composeEnabled && showCommands.paletteTab === "compose";
@@ -142,17 +141,19 @@ const Commands = (props: Props) => {
   const onCalendar = !!pathname?.startsWith("/calendar");
   const onAgentChat = !!pathname?.startsWith("/agents/chat");
   const onMyTasks = !!pathname?.startsWith(myTasksRoute);
-  const cmdkVersionEnabled = useFlag(HTPR_6892_CMDK_VERSION_FLAG);
   const ticketPrefixEnabled = useFlag(HTPR_6868_TICKET_PREFIX_FLAG);
-  const agentLogNameEnabled = useFlag(HTPR_6662_AGENT_LOG_NAME_FLAG);
   const roundedEnabled = useFlag(HTPR_7328_ROUNDED_THEME_FLAG);
+  const clickableComposeFooter = useFlag(HTPR_7307_CTRLJ_FOOTER_CLICKABLE_FLAG);
+  const keepAiChatClosedEnabled = useFlag(HTPR_7530_KEEP_AI_CHAT_CLOSED_FLAG);
+  let keepAiChatClosedKeywords = "";
+  if (keepAiChatClosedEnabled) keepAiChatClosedKeywords = "keep ai chat closed always";
   const getRoundedCommands = useCallback(
-    (options?: IAllCommands) => getAllCommands(options, agentLogNameEnabled, options?.kanbanSelectAllEnabled, !isMobile),
-    [agentLogNameEnabled, isMobile]
+    (options?: IAllCommands) => getAllCommands(options, options?.kanbanSelectAllEnabled, !isMobile, keepAiChatClosedKeywords),
+    [isMobile, keepAiChatClosedKeywords]
   );
   const getLegacyCommands = useCallback(
-    (options?: IAllCommands) => getAllCommands(options, agentLogNameEnabled, options?.kanbanSelectAllEnabled),
-    [agentLogNameEnabled]
+    (options?: IAllCommands) => getAllCommands(options, options?.kanbanSelectAllEnabled, false, keepAiChatClosedKeywords),
+    [keepAiChatClosedKeywords]
   );
   let getCommands = getLegacyCommands;
   if (roundedEnabled) getCommands = getRoundedCommands;
@@ -172,10 +173,7 @@ const Commands = (props: Props) => {
     : "";
   const googleCalendarSettingsEnabled = useFlag(GOOGLE_CALENDAR_FLAG);
   const autoTaskDescriptionsEnabled = useFlag("htpr-6177-auto-task-descriptions");
-  const copyCurrentUrlEnabled = useFlag("htpr-6112-copy-current-url");
   const myTasksViewsEnabled = useFlag(MY_TASKS_VIEWS_FLAG);
-  const kanbanReuseEnabled = useFlag(HTPR_6930_MY_TASKS_KANBAN_REUSE_FLAG);
-  const commandScopePickerFlag = useFlag(HTPR_6567_COMMAND_SCOPE_PICKER_FLAG);
   const myTasksScopesEnabled = useFlag(MY_TASKS_SCOPES_FLAG);
   const myTasksTimeGroupEnabled = useFlag(MY_TASKS_TIME_GROUP_FLAG);
   const myTasksFilterParityEnabled = useFlag(MY_TASKS_FILTER_PARITY_FLAG);
@@ -217,7 +215,7 @@ const Commands = (props: Props) => {
         keywords: `${project.title} board project go open switch`,
       }));
     let scopeCommand: ICommandList | undefined;
-    if ((commandScopePickerFlag || kanbanReuseEnabled) && onMyTasks && myTasksViewsEnabled && myTasksFilterParityEnabled) {
+    if (onMyTasks && myTasksViewsEnabled && myTasksFilterParityEnabled) {
       scopeCommand = {
         key: "myTasksScope",
         name: "Scope",
@@ -227,7 +225,7 @@ const Commands = (props: Props) => {
     }
     if (scopeCommand) boardCommands.unshift(scopeCommand);
     const myTasksPickerCommands: ICommandList[] = [];
-    if (kanbanReuseEnabled && onMyTasks) {
+    if (onMyTasks) {
       if (myTasksScopesEnabled) myTasksPickerCommands.push({
         key: "myTasksInvolvement", name: "Involvement", commandMode: CommandMode.GoToBoard,
         keywords: "involvement assigned created mentioned watching my tasks",
@@ -262,8 +260,6 @@ const Commands = (props: Props) => {
               showByokApiKeys) &&
             (command.key !== "settingsCalendarKeepTasksUpdated" || googleCalendarSettingsEnabled) &&
             (command.key !== "settingsTaskPageSuggestDescriptionsFromTaskTitles" || autoTaskDescriptionsEnabled) &&
-            (command.commandMode !== CommandMode.CopyViewURL ||
-              copyCurrentUrlEnabled) &&
             isTicketPrefixCommandVisible(command) &&
             (command.commandMode !== CommandMode.ToggleBoardTimeTracking ||
               !!currentProject) &&
@@ -406,7 +402,6 @@ const Commands = (props: Props) => {
     getCommands,
     pinCommentActions,
     pageActions,
-    copyCurrentUrlEnabled,
     googleCalendarSettingsEnabled,
     autoTaskDescriptionsEnabled,
     currentProject,
@@ -416,8 +411,6 @@ const Commands = (props: Props) => {
     onCalendar,
     onMyTasks,
     myTasksViewsEnabled,
-    commandScopePickerFlag,
-    kanbanReuseEnabled,
     myTasksScopesEnabled,
     myTasksTimeGroupEnabled,
     myTasksFilterParityEnabled,
@@ -463,8 +456,9 @@ const Commands = (props: Props) => {
         const selectionStart = proxy?.selectionStart ?? null;
         const selectionEnd = proxy?.selectionEnd ?? null;
         if (transferring) {
+          if (focusProxy.pendingEnter !== proxy.value) delete focusProxy.pendingEnter;
           el.value = proxy.value;
-          onKeyChangeRef.current({ target: proxy } as React.ChangeEvent<HTMLInputElement>);
+          onKeyChangeRef.current({ target: { value: proxy.value } } as React.ChangeEvent<HTMLInputElement>);
         }
         el.focus({ preventScroll: true });
         if (document.activeElement === el) {
@@ -614,7 +608,7 @@ const Commands = (props: Props) => {
       }
       if (command.key === "myTasksScope") {
         resetShowCommands();
-        if (onMyTasks && (commandScopePickerFlag || kanbanReuseEnabled)) window.dispatchEvent(new Event("my-tasks-scope-picker"));
+        if (onMyTasks) window.dispatchEvent(new Event("my-tasks-scope-picker"));
         return;
       }
       const myTasksPickerEvents: Record<string, string> = {
@@ -624,7 +618,7 @@ const Commands = (props: Props) => {
       };
       if (myTasksPickerEvents[command.key]) {
         resetShowCommands();
-        if (onMyTasks && kanbanReuseEnabled) window.dispatchEvent(new Event(myTasksPickerEvents[command.key]));
+        if (onMyTasks) window.dispatchEvent(new Event(myTasksPickerEvents[command.key]));
         return;
       }
       if (composeEnabled && (command.commandMode === CommandMode.CreateTaskWithAiWriter ||
@@ -644,6 +638,14 @@ const Commands = (props: Props) => {
                   );
                 }, 1);
     }
+
+  useEffect(() => {
+    if (isCompose || !focusProxy || focusProxy.pendingEnter === undefined ||
+        keyword !== focusProxy.pendingEnter || document.activeElement !== inputRef.current ||
+        selectedCommand !== (filterCommands[0]?.commandLists[0] ?? null)) return;
+    delete focusProxy.pendingEnter;
+    if (selectedCommand) updateCommandFrequency(selectedCommand);
+  }, [isCompose, keyword, selectedCommand, filterCommands, focusProxy]);
 
   const toggle = () => {
     if (writing) return;
@@ -700,7 +702,7 @@ const Commands = (props: Props) => {
       />
     </div>
   ) : null;
-  const compose = composeEnabled ? <ComposeTaskWriter active={isCompose} destinationProject={newTaskWindow ? composeProjectRef.current : undefined} onBusyChange={setWriting} onCreated={async () => {
+  const compose = composeEnabled ? <ComposeTaskWriter active={isCompose} focusProxy={lazyClosedCommands || focusProxy?.compose ? focusProxy : undefined} destinationProject={newTaskWindow ? composeProjectRef.current : undefined} onBusyChange={setWriting} onSearch={clickableComposeFooter ? () => setShowCommands((previous) => ({ ...previous, paletteTab: "search" })) : undefined} onClose={clickableComposeFooter ? toggle : undefined} onCreated={async () => {
     if (newTaskWindow && isMobile) await composeOnCreatedRef.current?.();
     else if (newTaskWindow) composeOnCreatedRef.current?.();
     resetShowCommands();
@@ -714,7 +716,10 @@ const Commands = (props: Props) => {
         autoFocus={!isMobile}
         id="htc-mobile-search"
         placeholder={isDemo ? "Press Enter to select" : "Type a command or search..."}
-        onChange={onKeyChange}
+        onChange={(event) => {
+          if (focusProxy) delete focusProxy.pendingEnter;
+          onKeyChange(event);
+        }}
         value={keyword}
         onKeyDown={(e) => {
           if (e.key === "Enter" && selectedCommand) {
@@ -730,16 +735,10 @@ const Commands = (props: Props) => {
   const commandGroups = (
     <CommandGroups
       handleMouseMove={handleMouseMove}
-      filterCommands={kanbanReuseEnabled ? filterCommands.map((paletteGroup) => ({
+      filterCommands={filterCommands.map((paletteGroup) => ({
         ...paletteGroup,
         commandLists: paletteGroup.commandLists.filter((paletteRow) =>
           !["myTasksInvolvement", "myTasksSort", "myTasksGroup"].includes(paletteRow.key) || onMyTasks
-        ),
-      })) : filterCommands.map((legacyPaletteGroup) => ({
-        ...legacyPaletteGroup,
-        commandLists: legacyPaletteGroup.commandLists.filter((legacyPaletteRow) =>
-          (legacyPaletteRow.key !== "myTasksScope" || commandScopePickerFlag) &&
-          !["myTasksInvolvement", "myTasksSort", "myTasksGroup"].includes(legacyPaletteRow.key)
         ),
       }))}
       selectedCommand={selectedCommand}
@@ -803,7 +802,10 @@ const Commands = (props: Props) => {
                autoFocus
                id={newTaskWindow ? "htc-search" : "htc"}
                placeholder={isDemo ? "Press Enter to select" : "Type a command or search..."}
-               onChange={onKeyChange}
+               onChange={(event) => {
+                 if (focusProxy) delete focusProxy.pendingEnter;
+                 onKeyChange(event);
+               }}
                value={keyword}
                onKeyDown={(e) => {
                  if (e.key === "Enter" && selectedCommand) {
@@ -817,11 +819,9 @@ const Commands = (props: Props) => {
           </div>
           {commandGroups}
           <ModalHintBar />
-          {cmdkVersionEnabled && (
-            <div data-cmdk-version className="px-4 pb-2 text-micro text-text-light-gray">
-              v {buildId}{buildTimeLabel && ` · ${buildTimeLabel}`}
-            </div>
-          )}
+          <div data-cmdk-version className="px-4 pb-2 text-micro text-text-light-gray">
+            v {buildId}{buildTimeLabel && ` · ${buildTimeLabel}`}
+          </div>
           </>}
         </ModalBody>
       </ModalContainerCustom>

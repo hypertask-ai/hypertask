@@ -1,3 +1,4 @@
+import { withAgentScopeRequest } from "@/lib/auth/agentScope";
 import { NextRequest } from 'next/server'
 
 import { validateMcpAuth } from '@/lib/mcp/auth'
@@ -26,6 +27,7 @@ export class RagRetrievalService {
     })
     const executionContext = getMcpExecutionContext(bearerToken)
     if (executionContext) bindMcpOperationContext(request, executionContext, true)
+    return withAgentScopeRequest(request, async () => {
     const ctx = await validateMcpAuth(request)
     if (!ctx) {
       throw new Error('Unauthorized. Invalid or missing authentication token.')
@@ -41,7 +43,9 @@ export class RagRetrievalService {
       {
         userId: ctx.user.id,
         agentId: ctx.agentId,
+        teamScope: ctx.teamScope,
       }
     )
+    })
   }
 }

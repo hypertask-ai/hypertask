@@ -631,7 +631,7 @@ Ticket: https://app.hypertask.ai/detail/project-15/6968. Base: `d6d104caff5fe570
 
 #### Live QA: slice 11 premerge handoff (not executed)
 
-A read-only `/api/flags` request using the existing plain-QA account (user 2343) on **2026-10-07 at 04:40 UTC** reported `htpr-6923-app-router-writes` **disabled / not Everyone** and downstream `htpr-6752-instant-ticket-open` **enabled / Everyone**. The live inbox reader still calls the unchanged controller that reads the latter flag. Conservatively record an Inbox → open a real-board task click-through against the PR build before merge, confirming GET `notifications/getAll` and the instant-open payload, with live flag states, commit and account in `~/.local/state/vcc-evidence/HTPR-6968/premerge.md`. Recheck live modes before merge; defaults cannot prove a flag is unreleased. Use Owner/QA for migration-On coverage without changing production flag modes.
+A read-only `/api/flags` request using the existing plain-QA account (user 2343) on **2026-10-07 at 04:40 UTC** reported `htpr-6923-app-router-writes` **disabled / not Everyone** and cached instant ticket opening **enabled / Everyone** (now permanent). The live inbox reader still calls the unchanged controller. Conservatively record an Inbox → open a real-board task click-through against the PR build before merge, confirming GET `notifications/getAll` and the instant-open payload, with live flag states, commit and account in `~/.local/state/vcc-evidence/HTPR-6968/premerge.md`. Recheck live modes before merge; defaults cannot prove a flag is unreleased. Use Owner/QA for migration-On coverage without changing production flag modes.
 
 | Endpoint | Existing UI click path / action |
 | --- | --- |

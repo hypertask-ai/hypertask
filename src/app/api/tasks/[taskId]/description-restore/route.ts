@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server'
 
 import prisma from '@/lib/prisma'
+import { withAgentScopeRequest } from '@/lib/auth/agentScope'
+import { getProjectWhere } from '@/utils/controllers/projects/getAllIncludes'
 import { loadCurrentUser } from '@/lib/auth/currentUser'
 import { jsonError, unauthorized } from '@/lib/api/response'
 import { readJsonBody } from '@/lib/mcp/readJsonBody'
@@ -12,11 +14,15 @@ import { broadcastBoardChange, broadcastTaskChange } from '@/lib/realtime/server
 type RouteContext = { params: Promise<{ taskId: string }> }
 type RestoreDescriptionBody = { version_id?: unknown }
 
-export async function POST(request: NextRequest, { params }: RouteContext) {
+export async function POST(request: NextRequest, context: RouteContext) {
+  return withAgentScopeRequest(request, () => restoreDescription(request, context))
+}
+
+async function restoreDescription(request: NextRequest, { params }: RouteContext) {
   try {
     const currentUser = await loadCurrentUser(request.headers, true)
     if (!currentUser) return unauthorized()
-    const { userId, user } = currentUser
+    const { userId, user, agentId: actingAgentId } = currentUser
 
     const taskId = parsePositiveInt((await params).taskId)
     if (taskId === null) {
@@ -37,7 +43,10 @@ export async function POST(request: NextRequest, { params }: RouteContext) {
     }
 
     const task = await prisma.task.findFirst({
-      where: taskAccessWhere(userId, taskId, { projectStatus: 'Normal' }),
+      where: {
+        ...taskAccessWhere(userId, taskId, { agentId: actingAgentId, projectStatus: 'Normal' }),
+        AND: [{ project: getProjectWhere(userId) }],
+      },
       select: {
         id: true,
         projectId: true,

@@ -2,6 +2,7 @@ import { createHash } from "node:crypto";
 import { modelCostUsd, modelPricing, sharedAiAllowanceErrorMessage } from "@/app/api/ai/_lib/sharedAllowance";
 import { cappedDemoModel, demoCapsEnabled } from "@/lib/demo/demoAllowance";
 import { consumeDemoWindow } from "@/lib/demo/slidingWindow";
+import { downloadWithoutBrotli } from "@/lib/net/downloadWithoutBrotli";
 import { reportError } from "@/lib/errors/reportError";
 import { createGateway, streamText, type ModelMessage } from "ai";
 import { NextRequest } from "next/server";
@@ -254,6 +255,7 @@ export async function POST(request: NextRequest) {
 
       try {
         const result = streamText({
+          experimental_download: downloadWithoutBrotli,
           model,
           system: SYSTEM,
           messages,

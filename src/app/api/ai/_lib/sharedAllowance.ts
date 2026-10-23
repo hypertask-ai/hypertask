@@ -1,4 +1,5 @@
 import { randomUUID } from "node:crypto";
+import { findSharedAiAllowanceError, SHARED_AI_ALLOWANCE_ERROR_NAME } from "@/app/api/ai/_lib/allowanceError";
 import type { ImageModelMiddleware, LanguageModelMiddleware } from "ai";
 
 import { getRedis } from "@/lib/redis";
@@ -62,39 +63,13 @@ export class SharedAiAllowanceExceededError extends Error {
 
   constructor(periodKey: string, readonly reason: "month" | "day" | "demo" = "month") {
     super(reason === "day" ? DAILY_AI_ALLOWANCE_EXCEEDED_MESSAGE : SHARED_AI_ALLOWANCE_EXCEEDED_MESSAGE);
-    this.name = "SharedAiAllowanceExceededError";
+    this.name = SHARED_AI_ALLOWANCE_ERROR_NAME;
     this.periodKey = periodKey;
   }
 }
 
 export function sharedAiAllowanceErrorMessage(error: unknown): string | null {
-  let current: unknown = error;
-  const visited = new Set<unknown>();
-  for (
-    let depth = 0;
-    depth < 8 && current && !visited.has(current);
-    depth += 1
-  ) {
-    visited.add(current);
-    if (current instanceof Error) {
-      if (current.name === "SharedAiAllowanceExceededError") {
-        return current.message;
-      }
-      const wrapped = current as Error & {
-        cause?: unknown;
-        lastError?: unknown;
-      };
-      current = wrapped.cause ?? wrapped.lastError;
-      continue;
-    }
-    if (typeof current === "object") {
-      const wrapped = current as { cause?: unknown; lastError?: unknown };
-      current = wrapped.cause ?? wrapped.lastError;
-      continue;
-    }
-    break;
-  }
-  return null;
+  return findSharedAiAllowanceError(error)?.message ?? null;
 }
 
 type ModelPricing = {
@@ -385,7 +360,7 @@ async function gatewaySpendBreakdownMicroUsd(
     headers: { Authorization: `Bearer ${gatewayApiKey}` },
   });
   if (!response.ok) {
-    throw new Error(`AI Gateway allowance report returned ${response.status}`);
+    throw Object.assign(new Error("AI Gateway allowance report failed"), { status: response.status });
   }
   const payload = (await response.json()) as { results?: unknown };
   if (!Array.isArray(payload.results)) {
@@ -1000,7 +975,7 @@ async function demoGatewaySpendMicroUsd(gatewayApiKey: string, month: ReturnType
   const response = await fetch(`${GATEWAY_BASE_URL}/report?${params}`, {
     cache: "no-store", headers: { Authorization: `Bearer ${gatewayApiKey}` },
   });
-  if (!response.ok) throw new Error(`AI Gateway demo allowance report returned ${response.status}`);
+  if (!response.ok) throw Object.assign(new Error("AI Gateway demo allowance report failed"), { status: response.status });
   const payload = await response.json() as { results?: Array<{ total_cost?: unknown }> };
   if (!Array.isArray(payload.results)) throw new Error("AI Gateway demo allowance report is invalid");
   let total = 0;

@@ -1,3 +1,4 @@
+import { requireAgentWriteRole } from '@/lib/mcp/agents/readRoleGuard'
 import { wrapMcpRoute } from '@/lib/mcp/routeWrapper'
 import { deleteEntry } from "@/lib/timeTracking";
 import { NextRequest, NextResponse } from "next/server";
@@ -7,11 +8,13 @@ export async function POST(request: NextRequest) {
   return wrapMcpRoute(async (request: NextRequest) => {
   const { ctx, body, response } = await authenticateMcpTime(request);
   if (response) return response;
+  const roleRefusal = await requireAgentWriteRole(ctx);
+  if (roleRefusal) return roleRefusal;
 
   const entry = readEntryId(body);
   if (entry.response) return entry.response;
 
-  const deleted = await deleteEntry(ctx.user.id, entry.entryId, ctx.agentId);
+  const deleted = await deleteEntry(ctx.user.id, entry.entryId, ctx.agentId, ctx.teamScope);
 
   if (!deleted) {
     return NextResponse.json(

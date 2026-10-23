@@ -1,16 +1,16 @@
 ---
 name: interrogate
-description: Before coding in the valentin-review lane only, get three independent Codex reviews of the design
+description: Before coding in the valentin-review lane only (money, login and access, security, irreversible data, and code that reads approvals or gates merges and releases), get three independent Codex reviews of the design
 ---
 
 # Interrogate
 
-Use only for the `valentin-review` lane: money, login and access, security, or data that cannot be undone. Run before coding, after writing the design. Ordinary `ai-review` work keeps the existing ai-review check and must not use this skill. This review does not replace CI, ai-review or Valentin's decision.
+Use only for the `valentin-review` lane: money, login and access, security, or data that cannot be undone. Code that reads an approval (a thumbs up, a yes word, a sign-off) or decides whether a merge or release may go ahead is access code and belongs here, also when it lives in `.github/` or a runner script. Run before coding, after writing the design. Ordinary `ai-review` work keeps the existing ai-review check and must not use this skill. This review does not replace CI, ai-review or Valentin's decision.
 
 ## Steps
 
-1. Write a short design file: ticket URL, intent, proposed changes, source paths, affected users, trust boundaries, data lifetime, rollback and open questions. Use `origin/production` for branch context. Do not include credentials.
-2. Give every reviewer the same prompt and design. Ask for real failure paths, not praise or style preferences. Cover correctness, permissions, money, security, irreversible data, root causes, existing shared code, unnecessary complexity and missing proof. Each finding needs severity, `path:line`, a concrete failure path and the cheapest check. No findings is valid. Reviewers must not edit files or write to the board.
+1. Write a short design file: ticket URL, intent, proposed changes, source paths, affected users, trust boundaries, data lifetime, rollback and open questions. List every authenticated entry point the change touches (API route, cookie, token, webhook, CLI). Under data lifetime, name any access, token or session created before a rollout or switch-over and what it can still do after it. Use `origin/production` for branch context. Do not include credentials.
+2. Give every reviewer the same prompt and design. Ask for real failure paths, not praise or style preferences. For each entry point, check three things separately: the caller's identity reaches the check, the check is enforced, and the decision is logged; a path that drops the identity can fall back to wider access and vanish from the logs. Cover correctness, permissions, money, security, irreversible data, root causes, existing shared code, unnecessary complexity and missing proof. Each finding needs severity, `path:line`, a concrete failure path and the cheapest check. No findings is valid. Reviewers must not edit files or write to the board.
 3. Launch one hax run per model, concurrently. Fill `prompt` with the shared review brief and absolute design path. Each review writes its own ledger and answer under a separate scratch path, not in the repo. Read-only review means no app mutations or code edits.
 
    ```bash

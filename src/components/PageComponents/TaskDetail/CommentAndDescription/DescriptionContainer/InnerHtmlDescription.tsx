@@ -14,6 +14,7 @@ import { useGifPlayback } from "@/hooks/General/useGifPlayback";
 import { normalizeRichHtmlForRender } from "@/utils/helperFunctions/normalizeRichHtmlForRender";
 import { normalizeImageSourcesInHtml } from "@/utils/helperFunctions/normalizeImageSource";
 import { linkifyHtml } from "@/utils/helperFunctions/linkifyHtml";
+import { sanitizeDescriptionHtml } from "@/utils/helperFunctions/sanitizeHtml";
 import {
   isInternalTaskDetailHref,
   preserveInboxFlowOnTaskHref,
@@ -42,9 +43,9 @@ const InnerHTMLDescription = memo(({  descriptionText, id,attachmentsFromProps, 
         else return desktopDescriptionPlaceHolder
     },[_mbl])
     const normalizedDescription = useMemo(
-      () => linkifyHtml(normalizeImageSourcesInHtml(
+      () => sanitizeDescriptionHtml(linkifyHtml(normalizeImageSourcesInHtml(
         normalizeRichHtmlForRender(descriptionText ?? ""),
-      )),
+      ))),
       [descriptionText],
     );
     const textToShow = (normalizedDescription.length===0 || emptyDescriptions.includes(normalizedDescription))?currentDescriptionPlaceHolder:normalizedDescription

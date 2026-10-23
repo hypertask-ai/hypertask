@@ -232,6 +232,8 @@ export async function fanOutCommentNotifications(context: CommentFanoutContext) 
             committedText,
             taskId,
             currentUser.id,
+            agentId,
+            context.teamScope,
           ).catch((err) =>
             console.warn(
               "[createCommentService] processTaskReferences failed:",

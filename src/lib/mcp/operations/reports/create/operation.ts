@@ -1,3 +1,5 @@
+import { requireAgentWriteRole } from "@/lib/mcp/agents/readRoleGuard"
+import { IdempotencyAccessError } from "@/lib/mcp/idempotency/idempotencyStore"
 import { reportMcpOperationCrash } from '@/lib/mcp/operationCrashReport'
 import { wrapMcpRoute } from '@/lib/mcp/routeWrapper'
 import { NextRequest, NextResponse } from 'next/server'
@@ -35,6 +37,8 @@ export async function POST(request: NextRequest) {
     if (!ctx) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
+    const roleRefusal = await requireAgentWriteRole(ctx)
+    if (roleRefusal) return roleRefusal
 
     const rateLimited = await checkMcpRateLimit(request)
     if (rateLimited) return rateLimited
@@ -138,7 +142,7 @@ export async function POST(request: NextRequest) {
       async () => {
         const report = await createReport({
           userId: ctx.user.id,
-          agentId: ctx.agentId,
+          agentId: ctx.agentId, teamScope: ctx.teamScope,
           projectId,
           slug: body.slug as string,
           title: body.title as string,
@@ -164,11 +168,14 @@ export async function POST(request: NextRequest) {
             url: getReportUrl(report.projectId, report.slug),
           },
         }
-      }
+      },
+      ctx.teamScope != null ? ctx.agentId : undefined,
+      ctx.teamScope
     )
 
     return NextResponse.json(response)
   } catch (error) {
+    if (error instanceof IdempotencyAccessError) return NextResponse.json({ error: error.message }, { status: 404 })
     if (error instanceof IdempotencyInProgressError) {
       return NextResponse.json({ error: error.message }, { status: 409 })
     }

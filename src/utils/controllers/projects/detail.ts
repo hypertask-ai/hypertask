@@ -1,3 +1,5 @@
+import type { AgentTokenTeamScope } from '@/lib/mcp/auth/types';
+import { recordAgentBoardScopeMiss } from "@/lib/auth/agentScope";
 import { NextApiHandler, NextApiRequest, NextApiResponse } from "next";
 
 
@@ -7,7 +9,7 @@ import { projectContentAccessWhere } from "@/utils/controllers/projects/getAllIn
 const publicUserSelect = { id: true, displayName: true, photoURL: true } as const;
 
 
-const projectDetail = async (projectId:number, userId:number, agentId?:string) => {
+const projectDetail = async (projectId:number, userId:number, agentId?:string, teamScope?: AgentTokenTeamScope | null) => {
         try {
             if (!projectId) {
                 return({
@@ -20,7 +22,7 @@ const projectDetail = async (projectId:number, userId:number, agentId?:string) =
                 where: {
                     id: projectId,
                     status:"Normal",
-                    ...projectContentAccessWhere(userId, agentId)
+                    ...projectContentAccessWhere(userId, agentId, teamScope)
                 },
                 include: {
                     tasks: {
@@ -59,6 +61,7 @@ const projectDetail = async (projectId:number, userId:number, agentId?:string) =
                 })
             }
             
+            recordAgentBoardScopeMiss(project.id, "read");
             return({
                 status:200,
                 json:project

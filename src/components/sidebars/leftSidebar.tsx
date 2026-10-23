@@ -18,7 +18,6 @@ import {
   showBoardManagerAtom,
   showCommandsAtom,
   currentUserAtom,
-  boardSortModeAtom,
   lastUsedBoardsAtom,
   isFavoritesExpandedAtom,
   showAccountSwitcherAtom,
@@ -55,6 +54,7 @@ import { useQueryClient } from "@tanstack/react-query";
 import axios from "axios";
 import { useSettingsNavigation } from "@/components/Modals/Settings/settingsNavigation";
 import { prefetchBoard } from "@/utils/api/Homepage";
+import { useBoardSortMode } from "@/hooks/General/useBoardSortMode";
 import UserAvatar from "@/components/Common/UserAvatar";
 
 const favoriteSlotOrder = (index: number) => (index === 0 ? 10 : index);
@@ -79,7 +79,7 @@ function LeftSidebar({ toggleLeftSidebar }: { toggleLeftSidebar: () => void }) {
     useRecoilState(showBoardManagerAtom);
   const [currentGroup, setCurrentGroup] =
     useRecoilState<Tgroup>(CurrentGroupAtom);
-  const [boardSortMode, setBoardSortMode] = useRecoilState(boardSortModeAtom);
+  const [boardSortMode, setBoardSortMode] = useBoardSortMode();
   const [lastUsedBoards, setLastUsedBoards] =
     useRecoilState(lastUsedBoardsAtom);
   const [isFavoritesExpanded, setIsFavoritesExpanded] =

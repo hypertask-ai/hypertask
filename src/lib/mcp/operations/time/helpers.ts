@@ -1,5 +1,5 @@
 import { validateMcpAuth, checkMcpRateLimit } from "@/lib/mcp/auth";
-import { findTaskByStringIdentifier } from "@/lib/mcp/tasks/resolveTask";
+import { findTaskByStringIdentifier, taskIdentifierErrorResponse } from "@/lib/mcp/tasks/resolveTask";
 import prisma from "@/lib/prisma";
 import { getProjectWhere } from "@/utils/controllers/projects/getAllIncludes";
 import { NextRequest, NextResponse } from "next/server";
@@ -61,7 +61,14 @@ export async function resolveMcpTimeTask(
     };
   }
 
-  const task = await findTaskByStringIdentifier(ctx.user, body.task, ctx.agentId);
+  let task;
+  try {
+    task = await findTaskByStringIdentifier(ctx.user, body.task, ctx.agentId, ctx.teamScope);
+  } catch (error) {
+    const response = taskIdentifierErrorResponse(error);
+    if (response) return { ctx, task: null, body, response };
+    throw error;
+  }
   const activeProject = task
     ? await prisma.project.findFirst({
         where: {
@@ -69,7 +76,7 @@ export async function resolveMcpTimeTask(
           status: options.allowArchived
             ? { in: ["Normal", "Archive"] }
             : "Normal",
-          ...getProjectWhere(ctx.user.id, ctx.agentId),
+          ...getProjectWhere(ctx.user.id, ctx.agentId, ctx.teamScope),
         },
         select: { id: true },
       })

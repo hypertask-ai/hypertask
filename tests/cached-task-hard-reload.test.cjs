@@ -2,9 +2,7 @@ const assert = require("node:assert/strict");
 const test = require("node:test");
 const { load } = require("./task-route-loader.cjs");
 
-const flag = "htpr-7004-no-loading-flash";
-
-function mount({ enabled, cachedLayout, cachedNavigation = false, cachedTaskId = 57094 }) {
+function mount(t, { cachedLayout, cachedNavigation = false, cachedTaskId = 57094, inboxFlow = false }) {
   const effects = [];
   const refreshes = [];
   const projects = [];
@@ -16,7 +14,7 @@ function mount({ enabled, cachedLayout, cachedNavigation = false, cachedTaskId =
     setCurrentProject: project => projects.push(project),
   };
   const mocks = {
-    "@/hooks/useFlag": { useFlagReady: () => true, useFlag: key => key === flag && enabled },
+    "@/hooks/useFlag": { useFlagReady: () => true, useFlag: () => false },
     "@/lib/contexts/TaskDetail/TaskProvider": { useTaskContext: () => ({ cachedLayout }) },
     "@/lib/configs/taskDetail.config": { default: { navigation: { refresh: "Refresh" }, taskIds: { newTask: -1 } } },
     "@/utils/api/global": { default: {} },
@@ -37,55 +35,50 @@ function mount({ enabled, cachedLayout, cachedNavigation = false, cachedTaskId =
   const mountEffect = effects.find(effect => effect.dependencies[0] === context._currentTask);
   assert(mountEffect, "the actual detail mount effect must run");
   const previousWindow = global.window;
-  global.window = { history: { state: cachedNavigation ? { cachedTaskDetail: { taskId: cachedTaskId } } : null } };
-  try {
-    mountEffect.callback();
-  } finally {
+  global.window = {
+    history: { state: cachedNavigation ? { cachedTaskDetail: { taskId: cachedTaskId } } : null },
+    location: new URL(`https://app.hypertask.ai/detail/project-6859/57094${inboxFlow ? "?inboxFlow=true" : ""}`),
+  };
+  t.after(() => {
     if (previousWindow === undefined) delete global.window;
     else global.window = previousWindow;
-  }
+  });
+  mountEffect.callback();
   return { context, refreshes, projects };
 }
 
-test("cached parent mount after subtask Back does not enqueue redundant RSC refresh", () => {
-  const flow = mount({ enabled: true, cachedLayout: true });
+test("cached parent mount after subtask Back does not enqueue redundant RSC refresh", t => {
+  const flow = mount(t, { cachedLayout: true });
   assert.deepEqual(flow.refreshes, []);
   assert.deepEqual(flow.projects, [{ id: 6859 }], "cached mount still initializes the current board");
 });
 
-test("cached Back skips the RSC mount refresh even with stable layout off", () => {
-  const flow = mount({ enabled: true, cachedLayout: false, cachedNavigation: true });
+test("cached Back skips the RSC mount refresh even with stable layout off", t => {
+  const flow = mount(t, { cachedLayout: false, cachedNavigation: true });
   assert.deepEqual(flow.refreshes, []);
   assert.deepEqual(flow.projects, [{ id: 6859 }]);
 });
 
-test("another task's cached marker does not suppress a native mount refresh", () => {
-  const flow = mount({ enabled: true, cachedLayout: false, cachedNavigation: true, cachedTaskId: 57095 });
+test("another task's cached marker does not suppress a native mount refresh", t => {
+  const flow = mount(t, { cachedLayout: false, cachedNavigation: true, cachedTaskId: 57095 });
   assert.deepEqual(flow.refreshes, ["Refresh"]);
 });
 
-test("flag off preserves the cached-navigation refresh with stable layout off", () => {
-  const flow = mount({ enabled: false, cachedLayout: false, cachedNavigation: true });
-  assert.deepEqual(flow.refreshes, ["Refresh"]);
-});
-
-test("flag off preserves the cached mount refresh", () => {
-  const flow = mount({ enabled: false, cachedLayout: true });
+test("native detail still refreshes on mount", t => {
+  const flow = mount(t, { cachedLayout: false });
   assert.deepEqual(flow.refreshes, ["Refresh"]);
   assert.deepEqual(flow.projects, [{ id: 6859 }]);
 });
 
-for (const enabled of [false, true]) {
-  test(`native detail still refreshes on mount with flag ${enabled ? "on" : "off"}`, () => {
-    const flow = mount({ enabled, cachedLayout: false });
-    assert.deepEqual(flow.refreshes, ["Refresh"]);
-    assert.deepEqual(flow.projects, [{ id: 6859 }]);
-  });
-}
-
-test("explicit task refresh after restoring a description remains available in cached detail", async () => {
-  const flow = mount({ enabled: true, cachedLayout: true });
+test("explicit task refresh after restoring a description remains available in cached detail", async t => {
+  const flow = mount(t, { cachedLayout: true });
   await flow.context.getTask();
   assert.deepEqual(flow.refreshes, ["Refresh"], "only the mount refresh is suppressed, not explicit actions");
   assert.equal(flow.projects.length, 2);
+});
+
+test("cached Inbox detail skips mount refresh even when all remaining flags are off", t => {
+  const flow = mount(t, { cachedLayout: false, cachedNavigation: true, inboxFlow: true });
+  assert.deepEqual(flow.refreshes, []);
+  assert.deepEqual(flow.projects, [{ id: 6859 }]);
 });

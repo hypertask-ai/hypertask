@@ -1,3 +1,4 @@
+import { downloadWithoutBrotli } from "@/lib/net/downloadWithoutBrotli";
 import { createGateway, generateText, Output } from "ai";
 import { z } from "zod";
 
@@ -102,6 +103,7 @@ export async function generateDemoBoard(purpose: string, teamId?: string): Promi
   const model = capsEnabled ? cappedDemoModel(rawModel, modelSlug, apiKey, teamId) : rawModel;
   try {
     const { output } = await generateText({
+      experimental_download: downloadWithoutBrotli,
       model,
       output: Output.object({ schema: BoardSchema }),
       maxOutputTokens: 4096,

@@ -1,3 +1,4 @@
+import type { TaskWriterCustomFieldDefinition } from "@/lib/ai/taskWriterCustomFields";
 import { renderPrompt } from "@/lib/ai/prompts/registry";
 
 import type {
@@ -130,9 +131,18 @@ export function formatBoardVocabulary(args: {
   projectDescription?: string | null;
   sectionTitles?: string[];
   labelNames?: string[];
+  labels?: { id: string; name: string }[];
+  customFields?: TaskWriterCustomFieldDefinition[];
 }) {
   const sectionTitles = (args.sectionTitles ?? []).slice(0, 40);
   const labelNames = (args.labelNames ?? []).slice(0, 40);
+  const customFields = (args.customFields ?? []).slice(0, 50).map(({ id, name, type, options }) => ({
+    id, name, type,
+    ...(type === "Select" && Array.isArray(options) ? { options: options.map((option) => {
+      if (!option || typeof option !== "object") return null;
+      return { id: option.id, label: option.label };
+    }).filter(Boolean) } : {}),
+  }));
   const parts = [
     args.projectTitle ? `projectTitle:${escapePlain(args.projectTitle)}` : "",
     args.projectDescription
@@ -141,11 +151,25 @@ export function formatBoardVocabulary(args: {
     sectionTitles.length
       ? `columns:${escapePlain(sectionTitles.join(" | "))}`
       : "",
-    labelNames.length
+    args.labels?.length
+      ? `labels:${escapePlain(JSON.stringify(args.labels))}`
+      : labelNames.length
       ? `labels:${escapePlain(labelNames.join(" | "))}`
       : "",
   ].filter(Boolean);
-  if (parts.length === 0) return "";
-  const body = parts.join("\n").slice(0, 4000);
+  const fieldsLine = customFieldsWithinBudget(customFields);
+  if (parts.length === 0 && !fieldsLine) return "";
+  const body = [parts.join("\n").slice(0, 4000), fieldsLine].filter(Boolean).join("\n");
   return `<BOARD_VOCABULARY>\n${body}\n</BOARD_VOCABULARY>`;
+}
+
+const CUSTOM_FIELDS_BUDGET = 3000;
+
+function customFieldsWithinBudget(fields: object[]) {
+  const kept: object[] = [];
+  for (const field of fields) {
+    if (escapePlain(JSON.stringify([...kept, field])).length > CUSTOM_FIELDS_BUDGET) break;
+    kept.push(field);
+  }
+  return kept.length ? `customFields:${escapePlain(JSON.stringify(kept))}` : "";
 }

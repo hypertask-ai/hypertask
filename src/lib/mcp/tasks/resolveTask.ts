@@ -1,14 +1,43 @@
+import type { AgentTokenTeamScope } from '@/lib/mcp/auth/types';
+import { recordAgentBoardScopeMiss } from "@/lib/auth/agentScope";
+import { findIdParamOutOfRange, idOutOfRangeMessage } from '@/lib/mcp/listParams';
 import type { Prisma } from '@prisma/client';
 import prisma from '@/lib/prisma';
 import { HTPR_6868_TICKET_PREFIX_FLAG, isFeatureEnabled } from '@/lib/flags';
 import { findPrefixAliasTasks } from '@/utils/controllers/projects/findPrefixAliasTasks';
-import { getProjectWhere } from '@/utils/controllers/projects/getAllIncludes';
+import { getProjectWhere, intersectProjectTeamScope } from '@/utils/controllers/projects/getAllIncludes';
 
 export class TaskIdentifierAmbiguityError extends Error {
+  readonly status = 400;
+  readonly code = 'ambiguous_ticket_number';
+
   constructor(ticketNumber: string) {
     super(`Ticket number ${ticketNumber} is ambiguous across accessible projects; provide project_id.`);
     this.name = 'TaskIdentifierAmbiguityError';
   }
+}
+
+export class TaskIdentifierOutOfRangeError extends Error {
+  readonly status = 400;
+  readonly code = 'invalid_field';
+
+  constructor(readonly field: string) {
+    super(idOutOfRangeMessage(field));
+    this.name = 'TaskIdentifierOutOfRangeError';
+  }
+}
+
+export function taskIdentifierErrorResponse(error: unknown, field?: string): Response | null {
+  if (!(error instanceof TaskIdentifierAmbiguityError) && !(error instanceof TaskIdentifierOutOfRangeError)) return null;
+  return Response.json(
+    {
+      success: false,
+      error: error.message,
+      code: error.code,
+      ...(field ? { field: error instanceof TaskIdentifierOutOfRangeError ? error.field : field } : {}),
+    },
+    { status: error.status }
+  );
 }
 
 export async function findTaskByIdentifier(
@@ -21,12 +50,15 @@ export async function findTaskByIdentifier(
   },
   agentId?: string | null,
   projectAccess?: Prisma.ProjectWhereInput,
+  teamScope?: AgentTokenTeamScope | null,
 ) {
   const { task_id, ticket_number, unique_index, project_id } = options;
-  const projectFilter = projectAccess ?? getProjectWhere(user.id, agentId);
+  const outOfRange = findIdParamOutOfRange({ task_id, unique_index, project_id });
+  if (outOfRange) throw new TaskIdentifierOutOfRangeError(outOfRange);
+  const projectFilter = intersectProjectTeamScope(projectAccess ?? getProjectWhere(user.id, agentId), teamScope);
 
   if (task_id) {
-    return await prisma.task.findFirst({
+    const task = await prisma.task.findFirst({
       where: {
         id: task_id,
         ...(project_id ? { projectId: project_id } : {}),
@@ -35,6 +67,8 @@ export async function findTaskByIdentifier(
       },
       select: { id: true, projectId: true },
     });
+    if (task) recordAgentBoardScopeMiss(task.projectId);
+    return task;
   }
 
   if (!ticket_number && (unique_index == null || project_id == null)) return null;
@@ -51,7 +85,10 @@ export async function findTaskByIdentifier(
   if (!project_id && matches.length > 1) {
     throw new TaskIdentifierAmbiguityError(ticket_number!);
   }
-  if (matches.length) return matches[0];
+  if (matches.length) {
+    recordAgentBoardScopeMiss(matches[0].projectId);
+    return matches[0];
+  }
 
   const liveTask = await prisma.task.findFirst({
     where: { ...identityWhere, status: { not: 'Deleted' } },
@@ -88,6 +125,7 @@ export async function findTaskByIdentifier(
   if (!project_id && tasks.length > 1) {
     throw new TaskIdentifierAmbiguityError(ticket_number!);
   }
+  if (tasks[0]) recordAgentBoardScopeMiss(tasks[0].projectId);
   return tasks[0] ?? null;
 }
 
@@ -98,6 +136,8 @@ export async function resolveTaskIdOnly(options: {
   project_id?: number | null;
 }): Promise<number | null> {
   const { task_id, ticket_number, unique_index, project_id } = options;
+  const outOfRange = findIdParamOutOfRange({ task_id, unique_index, project_id });
+  if (outOfRange) throw new TaskIdentifierOutOfRangeError(outOfRange);
 
   if (task_id) {
     if (!project_id) return task_id;
@@ -143,7 +183,8 @@ export async function resolveTaskIdOnly(options: {
 export async function findTaskByStringIdentifier(
   user: { id: number },
   identifier: string,
-  agentId?: string | null
+  agentId?: string | null,
+  teamScope?: AgentTokenTeamScope | null,
 ) {
   const task = identifier.trim();
   if (!task) return null;
@@ -152,18 +193,19 @@ export async function findTaskByStringIdentifier(
     return findTaskByIdentifier(
       user,
       { ticket_number: task.toUpperCase() },
-      agentId
+      agentId, undefined, teamScope
     );
   }
 
   const numericIdentifier = Number(task);
+  if (findIdParamOutOfRange({ task: numericIdentifier })) throw new TaskIdentifierOutOfRangeError('task');
   if (!Number.isInteger(numericIdentifier) || numericIdentifier <= 0) return null;
 
   const matches = await prisma.task.findMany({
     where: {
       OR: [{ id: numericIdentifier }, { uniqueIndex: numericIdentifier }],
       status: { not: 'Deleted' },
-      project: getProjectWhere(user.id, agentId),
+      project: getProjectWhere(user.id, agentId, teamScope),
     },
     select: { id: true, projectId: true, uniqueIndex: true },
   });
@@ -171,8 +213,9 @@ export async function findTaskByStringIdentifier(
     (match) => match.uniqueIndex === numericIdentifier
   );
 
-  if (uniqueIndexMatches.length === 1) return uniqueIndexMatches[0];
-  return matches.find((match) => match.id === numericIdentifier) ?? null;
+  const resolved = uniqueIndexMatches.length === 1 ? uniqueIndexMatches[0] : matches.find((match) => match.id === numericIdentifier);
+  if (resolved) recordAgentBoardScopeMiss(resolved.projectId);
+  return resolved ?? null;
 }
 
 export function validateTaskIdentifier(params: {

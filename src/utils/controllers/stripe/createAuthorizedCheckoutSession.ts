@@ -1,4 +1,7 @@
 import prisma from "@/lib/prisma";
+import { deriveTeamBilling } from "@/lib/deriveCurrentBoardBilling";
+import { isFeatureEnabled } from "@/lib/flags";
+import { HTPR_7551_START_PLAN_CHECKOUT_FLAG } from "@/lib/flags/keys";
 import { resolveSeatQuantity } from "@/lib/resolveSeatQuantity";
 import {
   createStripeCheckout,
@@ -7,17 +10,26 @@ import {
   isLiveSubscription,
 } from "@/lib/stripe";
 import { storeSubscriptionPlans } from "@/lib/subscriptionPlans";
-import type { CreateCheckoutParams } from "@/models/model";
+import type { CreateCheckoutParams, ITeam } from "@/models/model";
 import type Stripe from "stripe";
 import {
   createCheckoutAttempt,
+  effectiveTrialDays,
+  desiredMatches,
+  billingDesiredMatches,
   withTeamCheckoutReservation,
+  readTeamCheckoutAttempt,
   type CheckoutAttempt,
   type CheckoutAttemptDesired,
   type CheckoutMode,
 } from "@/utils/controllers/stripe/checkoutReservation";
 
 type CheckoutRequestBody = {
+  intent?: unknown;
+  action?: unknown;
+  boardUrl?: unknown;
+  trialDays?: unknown;
+  quantity?: unknown;
   cancelUrl?: unknown;
   googleAccountId?: unknown;
   mode?: unknown;
@@ -30,6 +42,9 @@ type CheckoutRequestBody = {
 export type CheckoutResult = {
   status: number;
   body: {
+    canStartPlan?: boolean;
+    trialDays?: number;
+    finishing?: boolean;
     alreadySubscribed?: true;
     message?: string;
     subscriptionId?: string;
@@ -169,36 +184,6 @@ async function expireCheckoutSessions(
   }
 }
 
-function desiredMatches(
-  left: CheckoutAttemptDesired,
-  right: CheckoutAttemptDesired,
-): boolean {
-  return (
-    left.cancelUrl === right.cancelUrl &&
-    left.checkoutMode === right.checkoutMode &&
-    left.customerId === right.customerId &&
-    left.googleAccountId === right.googleAccountId &&
-    left.priceId === right.priceId &&
-    left.quantity === right.quantity &&
-    left.returnUrl === right.returnUrl &&
-    left.teamId === right.teamId
-  );
-}
-
-function billingDesiredMatches(
-  left: CheckoutAttemptDesired,
-  right: CheckoutAttemptDesired,
-): boolean {
-  return (
-    left.checkoutMode === right.checkoutMode &&
-    left.customerId === right.customerId &&
-    left.googleAccountId === right.googleAccountId &&
-    left.priceId === right.priceId &&
-    left.quantity === right.quantity &&
-    left.teamId === right.teamId
-  );
-}
-
 function sessionBillingMatchesDesired(
   session: Stripe.Checkout.Session,
   desired: CheckoutAttemptDesired,
@@ -213,6 +198,7 @@ function sessionBillingMatchesDesired(
     session.metadata?.googleAccountId === desired.googleAccountId &&
     session.metadata?.priceId === desired.priceId &&
     session.metadata?.checkoutMode === desired.checkoutMode &&
+    Number(session.metadata?.trialDays ?? (desired.checkoutMode === "Trial" ? 14 : 0)) === effectiveTrialDays(desired) &&
     session.metadata?.checkoutQuantity === String(desired.quantity)
   );
 }
@@ -225,6 +211,7 @@ function sessionMatchesDesired(
     Boolean(session.url) &&
     session.success_url === desired.returnUrl &&
     session.cancel_url === desired.cancelUrl &&
+    (session.metadata?.checkoutIntent || undefined) === desired.checkoutIntent &&
     sessionBillingMatchesDesired(session, desired)
   );
 }
@@ -274,6 +261,8 @@ function checkoutParams(
   const { desired } = attempt;
   return {
     teamTitle,
+    ...(desired.trialDays !== undefined ? { trialDays: desired.trialDays } : {}),
+    ...(desired.checkoutIntent ? { checkoutIntent: desired.checkoutIntent } : {}),
     googleAccountId: desired.googleAccountId,
     returnUrl: desired.returnUrl,
     priceId: desired.priceId,
@@ -290,6 +279,8 @@ function checkoutParams(
       checkoutMode: desired.checkoutMode,
       checkoutQuantity: String(desired.quantity),
       checkoutAttemptId: attempt.attemptId,
+      ...(desired.trialDays !== undefined ? { trialDays: String(desired.trialDays) } : {}),
+      ...(desired.checkoutIntent ? { checkoutIntent: desired.checkoutIntent } : {}),
     },
   };
 }
@@ -303,35 +294,78 @@ export async function createAuthorizedCheckoutSession(
   }
 
   const body = rawBody as CheckoutRequestBody;
+  const signupIntent = body.intent === "signup-straight-to-board";
+  const preview = signupIntent && body.action === "preview";
+  if (signupIntent && body.action !== undefined && body.action !== "preview") {
+    return { status: 400, body: { message: "Unsupported checkout action" } };
+  }
+  if (body.intent !== undefined && !signupIntent) {
+    return { status: 400, body: { message: "Unsupported checkout intent" } };
+  }
   const teamId = nonEmptyString(body.teamId);
-  const priceId = nonEmptyString(body.priceId);
-  const returnUrl = nonEmptyString(body.returnUrl);
-  const cancelUrl = nonEmptyString(body.cancelUrl);
-  const mode = checkoutMode(body.mode);
-
-  if (!teamId || !priceId || !returnUrl || !cancelUrl || !mode) {
+  let priceId = nonEmptyString(body.priceId);
+  let returnUrl = nonEmptyString(body.returnUrl);
+  let cancelUrl = nonEmptyString(body.cancelUrl);
+  let mode = checkoutMode(body.mode);
+  if (!teamId || (!signupIntent && (!priceId || !returnUrl || !cancelUrl || !mode))) {
     return { status: 400, body: { message: "Invalid checkout request" } };
   }
-
-  const allowedPriceIds =
-    mode === "Trial" ? trialCheckoutPriceIds : normalCheckoutPriceIds;
-  if (!allowedPriceIds.has(priceId)) {
-    return { status: 400, body: { message: "Unsupported checkout price" } };
+  if (signupIntent && [body.priceId, body.trialDays, body.quantity, body.stripe_customer_id,
+    body.googleAccountId, body.mode, body.returnUrl, body.cancelUrl].some((value) => value !== undefined)) {
+    return { status: 400, body: { message: "Checkout terms must be selected by the server" } };
+  }
+  if (!signupIntent) {
+    const allowedPriceIds = mode === "Trial" ? trialCheckoutPriceIds : normalCheckoutPriceIds;
+    if (!priceId || !allowedPriceIds.has(priceId)) {
+      return { status: 400, body: { message: "Unsupported checkout price" } };
+    }
   }
 
   const appOrigin = configuredAppOrigin();
-  if (!appOrigin) {
-    throw new Error("Missing or invalid application base URL");
-  }
-  if (
-    !isAllowedCheckoutReturnUrl(returnUrl, appOrigin) ||
-    !isAllowedCheckoutReturnUrl(cancelUrl, appOrigin)
-  ) {
+  if (!appOrigin) throw new Error("Missing or invalid application base URL");
+  if (signupIntent) {
+    const boardUrl = nonEmptyString(body.boardUrl);
+    if (!boardUrl || !isAllowedCheckoutReturnUrl(boardUrl, appOrigin)) {
+      return { status: 400, body: { message: "Invalid checkout board URL" } };
+    }
+    const board = new URL(boardUrl);
+    const projectId = Number(board.searchParams.get("id"));
+    if (board.pathname !== "/project" || board.username || board.password ||
+      !Number.isSafeInteger(projectId) || projectId <= 0 ||
+      board.searchParams.getAll("id").length !== 1) {
+      return { status: 400, body: { message: "Invalid checkout board URL" } };
+    }
+    const project = await prisma.project.findFirst({
+      where: { id: projectId, teamId, status: "Normal" },
+      select: { id: true },
+    });
+    if (!project) return { status: 404, body: { message: "Board not found" } };
+    returnUrl = boardUrl;
+    cancelUrl = boardUrl;
+  } else if (!isAllowedCheckoutReturnUrl(returnUrl!, appOrigin) ||
+    !isAllowedCheckoutReturnUrl(cancelUrl!, appOrigin)) {
     return { status: 400, body: { message: "Invalid checkout return URL" } };
   }
 
   const suppliedCustomerId = nonEmptyString(body.stripe_customer_id);
   const suppliedAccountId = nonEmptyString(body.googleAccountId);
+  const billingOwner = await prisma.team.findUnique({
+    where: { id: teamId },
+    select: { googleAccount: { select: { userId: true } } },
+  });
+  if (!billingOwner) return { status: 404, body: { message: "Team not found" } };
+  if (billingOwner.googleAccount.userId !== userId) {
+    return { status: 403, body: { message: "Only the team owner can update billing" } };
+  }
+  let enabled = false;
+  try {
+    enabled = await isFeatureEnabled(HTPR_7551_START_PLAN_CHECKOUT_FLAG, userId);
+  } catch {
+    console.warn("Checkout flag lookup failed; treating Start plan as disabled");
+  }
+  if (signupIntent && !enabled && !(await readTeamCheckoutAttempt(teamId))) {
+    return { status: 403, body: { message: "Start plan is not available" } };
+  }
   const stripe = getStripeInstance();
 
   return withTeamCheckoutReservation(teamId, async (reservation) => {
@@ -346,6 +380,7 @@ export async function createAuthorizedCheckoutSession(
         activeSubscriptionPlanId: true,
         googleAccount: { select: { userId: true } },
         team_activity: { select: { hasCompletedTrial: true } },
+        ...(signupIntent ? { compedUntil: true, compedPlan: true, subscriptionPlan: true } : {}),
       },
     });
     if (!team) {
@@ -368,17 +403,44 @@ export async function createAuthorizedCheckoutSession(
       return { status: 400, body: { message: "Team account mismatch" } };
     }
 
+    let attempt = await reservation.read();
+    if (attempt && attempt.desired.teamId !== team.id) {
+      await reservation.clear();
+      attempt = null;
+    }
+    const ownerChanged = attempt?.desired.ownerUserId !== undefined && attempt.desired.ownerUserId !== userId;
+    const identityChanged = attempt && attempt.desired.googleAccountId !== team.googleAccountId;
+    const staleInFlight = attempt?.state === "in_flight" &&
+      Date.now() - Date.parse(attempt.submittedAt ?? attempt.createdAt) >= 24 * 60 * 60 * 1000;
+    if (attempt && attempt.desired.customerId !== customerId) {
+      return { status: 409, body: { message: "Billing identity changed; checkout needs reconciliation" } };
+    }
+    if (attempt?.state === "in_flight" && !staleInFlight && ownerChanged) {
+      return { status: 403, body: { message: "Checkout belongs to a different owner" } };
+    }
+    if (attempt?.state === "in_flight" && !staleInFlight && identityChanged) {
+      return { status: 409, body: { message: "Billing identity changed; checkout needs reconciliation" } };
+    }
+    let oldSession: Stripe.Checkout.Session | null = null;
+    if (attempt && (ownerChanged || identityChanged)) {
+      oldSession = await reconcileAttemptSession(stripe, attempt, attempt.sessionId ? [] :
+        await listTeamCheckoutSessions(stripe, attempt.desired.customerId, team.id));
+      if (oldSession?.status === "open") {
+        await expireCheckoutSessions(stripe, [oldSession], reservation.assertHeld);
+        oldSession.status = "expired";
+      }
+      if (oldSession?.status === "complete") {
+        attempt = { ...attempt, sessionId: oldSession.id, sessionUrl: oldSession.url, state: "settled" };
+        await reservation.write(attempt);
+      } else {
+        await reservation.clear();
+        attempt = null;
+      }
+    }
+    if (signupIntent && !enabled && !attempt) {
+      return { status: 403, body: { message: "Start plan is not available" } };
+    }
     const billedQuantity = await resolveSeatQuantity(team.id, team.totalSeats);
-    const desired: CheckoutAttemptDesired = {
-      cancelUrl,
-      checkoutMode: mode,
-      customerId,
-      googleAccountId: team.googleAccountId,
-      priceId,
-      quantity: billedQuantity,
-      returnUrl,
-      teamId: team.id,
-    };
     const subscriptions = await listAllCustomerSubscriptions(
       stripe,
       customerId,
@@ -388,24 +450,40 @@ export async function createAuthorizedCheckoutSession(
       customerId,
       team.id,
     );
+    if (oldSession && !teamSessions.some((session) => session.id === oldSession?.id)) {
+      teamSessions.push(oldSession);
+    }
+    if (oldSession?.status === "complete") {
+      const oldSubscriptionId = checkoutSubscriptionId(oldSession);
+      const oldSubscription = subscriptions.find((subscription) => subscription.id === oldSubscriptionId);
+      if (!oldSubscription) {
+        return { status: preview ? 200 : 409, body: {
+          canStartPlan: false, finishing: true, message: "Finishing plan setup",
+        } };
+      }
+      if (oldSubscription.status !== "canceled" && oldSubscription.status !== "incomplete_expired") {
+        return { status: 409, body: { message: "An existing subscription needs billing recovery" } };
+      }
+      await reservation.clear();
+      attempt = null;
+    }
+    if (!enabled && attempt?.state === "in_flight" && staleInFlight &&
+      (effectiveTrialDays(attempt.desired) === 7 || attempt.desired.checkoutIntent === "signup-straight-to-board")) {
+      const staleSession = await reconcileAttemptSession(stripe, attempt, teamSessions);
+      if (staleSession) {
+        if (!teamSessions.some((session) => session.id === staleSession.id)) {
+          teamSessions.push(staleSession);
+        }
+      } else {
+        await reservation.clear();
+        attempt = null;
+      }
+    }
     const openSessions = teamSessions.filter(
       (session) => session.status === "open",
     );
     let remainingOpenSessions = openSessions;
-    let attempt = await reservation.read();
-    if (attempt && attempt.desired.teamId !== team.id) {
-      await reservation.clear();
-      attempt = null;
-    }
-    if (
-      attempt?.state === "prepared" &&
-      !desiredMatches(attempt.desired, desired)
-    ) {
-      await reservation.clear();
-      attempt = null;
-    }
-
-    if (attempt?.state === "in_flight") {
+    if (!preview && attempt?.state === "in_flight") {
       let recoveredSession = await reconcileAttemptSession(
         stripe,
         attempt,
@@ -413,6 +491,7 @@ export async function createAuthorizedCheckoutSession(
       );
       if (!recoveredSession) {
         try {
+          reservation.assertHeld();
           recoveredSession = await createStripeCheckout(
             checkoutParams(attempt, team.title ?? "Hypertask team"),
             { idempotencyKey: attempt.idempotencyKey },
@@ -443,10 +522,126 @@ export async function createAuthorizedCheckoutSession(
       }
     }
 
+    const reservedSession = attempt && await reconcileAttemptSession(stripe, attempt, teamSessions);
+    const knownSessions = reservedSession ? [...teamSessions, reservedSession] : teamSessions;
+    const awaitingPlanSubscription = knownSessions.some((session) => {
+      if (session.status !== "complete" ||
+        (session.metadata?.checkoutIntent !== "signup-straight-to-board" && session.metadata?.trialDays !== "7")) return false;
+      const subscriptionId = checkoutSubscriptionId(session);
+      return !subscriptionId || !subscriptions.some((subscription) => subscription.id === subscriptionId);
+    });
+    if (awaitingPlanSubscription) {
+      return { status: preview ? 200 : 409, body: {
+        canStartPlan: false, finishing: true, message: "Finishing plan setup",
+      } };
+    }
+    const hasCompletedTrialCheckout = knownSessions.some((session) =>
+      session.status === "complete" && session.metadata?.checkoutMode === "Trial");
+    if (mode === "Trial" && hasCompletedTrialCheckout) {
+      return { status: 409, body: { message: "Trial already used" } };
+    }
+    const rolloutAttempt = attempt && (effectiveTrialDays(attempt.desired) === 7 ||
+      attempt.desired.checkoutIntent === "signup-straight-to-board");
+    const reservedSubscription = reservedSession && subscriptions.find((subscription) =>
+      subscription.id === checkoutSubscriptionId(reservedSession));
+    if (!enabled && attempt && rolloutAttempt &&
+      (reservedSession?.status === "expired" || (attempt.state === "prepared" && !reservedSession) ||
+        (reservedSession?.status === "complete" &&
+          (reservedSubscription?.status === "canceled" || reservedSubscription?.status === "incomplete_expired")))) {
+      await reservation.clear();
+      attempt = null;
+    }
+    if (!enabled && attempt && rolloutAttempt) {
+      const savedSession = reservedSession;
+      if (signupIntent && deriveTeamBilling(team as unknown as ITeam)?.storePlanId !== "Free") {
+        return { status: 409, body: { message: "Only Free teams can start a plan" } };
+      }
+      if (subscriptions.some((subscription) => signupIntent
+        ? subscription.status !== "canceled" && subscription.status !== "incomplete_expired"
+        : isLiveSubscription(subscription))) {
+        return { status: 409, body: { message: "An existing subscription needs billing recovery" } };
+      }
+      const sameEntry = signupIntent
+        ? attempt.desired.checkoutIntent === "signup-straight-to-board"
+        : !attempt.desired.checkoutIntent && attempt.desired.checkoutMode === mode &&
+          attempt.desired.priceId === priceId && attempt.desired.ownerUserId === userId;
+      if (sameEntry && attempt.desired.returnUrl === returnUrl && attempt.desired.cancelUrl === cancelUrl &&
+        savedSession?.status === "open" && sessionMatchesDesired(savedSession, attempt.desired)) {
+        return { status: 200, body: preview
+          ? { canStartPlan: true, trialDays: effectiveTrialDays(attempt.desired) }
+          : { url: savedSession.url } };
+      }
+      return { status: 409, body: { message: "An existing checkout must be finished or cancelled before starting another" } };
+    }
+    if (!enabled && openSessions.some((session) => session.metadata?.trialDays === "7" ||
+      session.metadata?.checkoutIntent === "signup-straight-to-board")) {
+      return { status: 409, body: { message: "An existing checkout must be finished or cancelled before starting another" } };
+    }
+    if (signupIntent) {
+      if (!enabled) return { status: 403, body: { message: "Start plan is not available" } };
+      const awaitingSubscription = knownSessions.some((session) => {
+        if (session.status !== "complete") return false;
+        const subscriptionId = checkoutSubscriptionId(session);
+        return !subscriptionId || !subscriptions.some((subscription) => subscription.id === subscriptionId);
+      });
+      const freeTeam = deriveTeamBilling(team as unknown as ITeam)?.storePlanId === "Free";
+      const liveSubscription = subscriptions.some((subscription) =>
+        subscription.status !== "canceled" && subscription.status !== "incomplete_expired");
+      if (awaitingSubscription || (preview && (!freeTeam || subscriptions.some(isLiveSubscription)))) {
+        return { status: preview ? 200 : 409, body: {
+          canStartPlan: false, finishing: true, message: "Finishing plan setup",
+        } };
+      }
+      if (!freeTeam) {
+        return { status: 409, body: { message: "Only Free teams can start a plan" } };
+      }
+      if (liveSubscription) {
+        return { status: 409, body: { message: "An existing subscription needs billing recovery" } };
+      }
+      priceId = storeSubscriptionPlans.find((plan) => plan.id === "Pro")
+        ?.types.find((type) => type.title === "Monthly")?.stripePriceId ?? null;
+      const expectedProduct = process.env.STRIPE_PRO_PRODUCT_ID;
+      if (!validConfiguredPriceId(priceId ?? undefined) || !validConfiguredPriceId(expectedProduct)) {
+        return { status: 503, body: { message: "Monthly Pro price configuration is unavailable" } };
+      }
+      let price: Stripe.Price;
+      try {
+        price = await stripe.prices.retrieve(priceId!);
+      } catch {
+        return { status: 503, body: { message: "Monthly Pro price configuration is unavailable" } };
+      }
+      const productId = typeof price.product === "string" ? price.product : price.product.id;
+      if (!price.active || price.type !== "recurring" || price.recurring?.interval !== "month" ||
+        price.recurring.interval_count !== 1 || price.currency !== "usd" ||
+        price.unit_amount !== 2000 || price.billing_scheme !== "per_unit" ||
+        price.recurring.usage_type !== "licensed" || price.transform_quantity || productId !== expectedProduct) {
+        return { status: 503, body: { message: "Monthly Pro price configuration does not match $20 per user/month" } };
+      }
+      mode = team.team_activity?.hasCompletedTrial || hasHistoricalTrial(subscriptions) || hasCompletedTrialCheckout
+        ? "Normal" : "Trial";
+      if (preview) return { status: 200, body: { canStartPlan: true, trialDays: mode === "Trial" ? 7 : 0 } };
+    }
+    const desired: CheckoutAttemptDesired = {
+      cancelUrl: cancelUrl!,
+      checkoutMode: mode!,
+      customerId,
+      googleAccountId: team.googleAccountId,
+      priceId: priceId!,
+      quantity: billedQuantity,
+      returnUrl: returnUrl!,
+      teamId: team.id,
+      ...(enabled ? { ownerUserId: userId, trialDays: mode === "Trial" ? 7 : 0 } : {}),
+      ...(signupIntent ? { checkoutIntent: "signup-straight-to-board" as const } : {}),
+    };
+    if (attempt?.state === "prepared" && !desiredMatches(attempt.desired, desired)) {
+      await reservation.clear();
+      attempt = null;
+    }
+
     if (
       mode === "Trial" &&
       (team.team_activity?.hasCompletedTrial ||
-        team.activeSubscriptionPlanId ||
+        (!signupIntent && team.activeSubscriptionPlanId) ||
         subscriptions.some(isLiveSubscription) ||
         hasHistoricalTrial(subscriptions))
     ) {
@@ -469,7 +664,7 @@ export async function createAuthorizedCheckoutSession(
     }
 
     if (mode === "Normal") {
-      const duplicate = findActiveDuplicateSubscription(subscriptions, priceId);
+      const duplicate = findActiveDuplicateSubscription(subscriptions, priceId!);
       if (duplicate) {
         if (attempt && desiredMatches(attempt.desired, desired)) {
           const duplicateAttemptSession = await reconcileAttemptSession(
@@ -492,7 +687,7 @@ export async function createAuthorizedCheckoutSession(
         return {
           status: 200,
           body: {
-            url: returnUrl,
+            url: returnUrl!,
             alreadySubscribed: true,
             subscriptionId: duplicate.id,
           },
@@ -508,8 +703,11 @@ export async function createAuthorizedCheckoutSession(
       );
       if (attemptSession?.status === "complete") {
         const completedSubscriptionId = checkoutSubscriptionId(attemptSession);
+        const completedSubscription = subscriptions.find((subscription) => subscription.id === completedSubscriptionId);
         if (
           completedSubscriptionId &&
+          completedSubscription?.status !== "canceled" &&
+          completedSubscription?.status !== "incomplete_expired" &&
           billingDesiredMatches(attempt.desired, desired) &&
           sessionBillingMatchesDesired(attemptSession, desired)
         ) {
@@ -525,7 +723,7 @@ export async function createAuthorizedCheckoutSession(
           return {
             status: 200,
             body: {
-              url: returnUrl,
+              url: returnUrl!,
               alreadySubscribed: true,
               subscriptionId: completedSubscriptionId,
             },
@@ -604,7 +802,11 @@ export async function createAuthorizedCheckoutSession(
     }
 
     if (attempt.state !== "in_flight") {
-      attempt = { ...attempt, state: "in_flight" };
+      attempt = {
+        ...attempt,
+        submittedAt: attempt.submittedAt ?? (attempt.state === "prepared" ? new Date().toISOString() : attempt.createdAt),
+        state: "in_flight",
+      };
       await reservation.write(attempt);
     }
     reservation.assertHeld();

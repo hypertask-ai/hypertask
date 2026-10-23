@@ -1,3 +1,4 @@
+import { fetchWithoutBrotli } from "@/lib/net/fetchWithoutBrotli";
 import { haiku55ModelEnabled } from "@/app/api/ai/_lib/planGate";
 import { NextResponse } from "next/server";
 import { randomUUID } from "node:crypto";
@@ -154,7 +155,7 @@ export async function POST(request: Request) {
     const startedAt = Date.now();
 
     try {
-      const response = await fetch(testRequest.url, {
+      const response = await fetchWithoutBrotli(testRequest.url, {
         ...testRequest.init,
         signal: controller.signal,
       });

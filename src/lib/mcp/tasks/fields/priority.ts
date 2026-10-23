@@ -6,6 +6,7 @@ export async function updateTaskPriority(context: TaskUpdateFieldContext, task: 
         const priorityApiUrl = `${baseUrl}/api/priority/setPriority`
         const priorityResponse = await fetch(priorityApiUrl, {
             method: 'POST',
+            redirect: 'manual',
             headers: {
                 'Content-Type': 'application/json',
                 'Cookie': authCookieHeader

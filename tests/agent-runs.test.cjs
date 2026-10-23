@@ -74,6 +74,7 @@ function fakeRunTransaction(events = [
     deliveries,
     featureFlag: {},
     user: {},
+    agent: { findUnique: async () => ({ userId: 6, revokedAt: null, credentialTeamId: null, credentialTeamAccessBinding: null }) },
     agentWebhookSubscription: {
       findUnique: async () => subscription,
     },
@@ -506,6 +507,27 @@ test("browser stop requests require the app origin", () => {
   );
 });
 
+test("browser mutations still allow the actual Host and now refuse mismatched scheme, port, host and missing origins", () => {
+  const { service } = loadService();
+  const { NextRequest } = require("next/server");
+  for (const base of ["http://127.0.0.1:3100", "http://localhost:3100", "https://app.hypertask.ai"]) {
+    const url = new URL(base);
+    const otherPort = new URL(base);
+    otherPort.port = "3101";
+    const otherScheme = new URL(base);
+    otherScheme.protocol = url.protocol === "https:" ? "http:" : "https:";
+    const otherHost = base.includes("127.0.0.1") ? "http://localhost:3100" : "https://attacker.example";
+    for (const origin of [base, otherPort.origin, otherScheme.origin, otherHost, "null", undefined]) {
+      const request = new NextRequest(`${base}/api/mcp/agents/runs/run-1/stop`, {
+        method: "POST",
+        headers: { Host: url.host, "X-Forwarded-Host": "attacker.example", ...(origin ? { Origin: origin } : {}) },
+      });
+      if (base.includes("127.0.0.1")) assert.equal(request.nextUrl.hostname, "localhost");
+      assert.equal(service.browserMutationIsSameOrigin(request), origin === base, `${base} from ${origin}`);
+    }
+  }
+});
+
 test("the migration enforces one nonterminal run and exactly one context", () => {
   const migration = require("node:fs").readFileSync(
     path.join(
@@ -578,6 +600,7 @@ test("flag-off webhook updates preserve hidden run subscriptions", async () => {
   };
   let persisted;
   const transaction = {
+    agent: { findUnique: async () => ({ id: "agent-1", userId: 6, revokedAt: null, credentialTeamId: null, credentialTeamAccessBinding: null }) },
     $executeRaw: async () => 1,
     agentWebhookSubscription: {
       findUnique: async () => existing,

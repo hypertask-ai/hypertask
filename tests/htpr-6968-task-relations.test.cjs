@@ -48,7 +48,7 @@ const defaults = {
 function fixture(name, scenario) {
   const effects = [], loads = [];
   let authCalls = 0;
-  const session = scenario.noAuth ? null : { userId: 985, source: "better-auth" };
+  const session = scenario.noAuth ? null : { userId: 985, source: "better-auth", ...(name === "setDueDate" && scenario.body?.agentId === "owned" ? { agentId: "owned" } : {}) };
   const failure = kind => {
     if (kind === "lease") return new LeaseError("Task lease conflict");
     if (kind === "delete") return new DeleteError("Hard deletion in progress");
@@ -69,6 +69,7 @@ function fixture(name, scenario) {
   const recovery = { TaskHardDeleteInProgressError: DeleteError, updateTaskAndSubtasks: record("restore", task, scenario.writeThrows) };
   const dueQueue = { cancelDueDateJob: record("cancel-due", undefined, scenario.queueThrows && "Queue unavailable"), scheduleDueDateJob: record("schedule-due", undefined, scenario.scheduleThrows && "Queue unavailable") };
   const mocks = {
+    "@/lib/auth/agentScope": require("./helpers/agent-board-scope.cjs").enforcedScope,
     "date-fns": require("date-fns"),
     "@/lib/auth/getSessionUser": { getSessionUser: async () => { authCalls++; if (scenario.authThrows) throw failure("Auth unavailable"); return session; } },
     "@/lib/auth/sessionUserRecord": { loadSessionUserRecord: record("actor", actor, scenario.actorThrows && "Actor unavailable") },

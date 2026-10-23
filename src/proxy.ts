@@ -4,6 +4,9 @@ import { isMobileDevice } from './utils/serverActions';
 import { canAccessTrialPage } from './utils/helperFunctions/helperFunctions';
 import { parseSafeReturnTo } from '@/lib/auth/safeReturnTo';
 import { verifySessionEdge } from '@/lib/auth/sessionEdge';
+import { refusedContentEncoding } from '@/lib/net/contentEncoding';
+import { isAgentCookieBridgeRequestAllowed } from '@/lib/auth/agentCookieBridgeRoutes';
+import { recordServerCapture } from '@/lib/telemetry/signupAnalytics';
 import { isSessionTokenRevoked } from '@/lib/auth/sessionRevocation';
 import { verifyCookieIdentity } from '@/lib/auth/cookieIdentity';
 import { detailWithoutTicketRedirect } from '@/lib/routing/detailWithoutTicket';
@@ -20,7 +23,10 @@ const login = "/login"
 
 const CLI_LATEST_VERSION = "1.10.2"
 
-async function authMiddleware(request: NextRequest) {
+const agentCookieRefusals = new Map<string, number>();
+const HOUR_MS = 60 * 60 * 1000;
+
+async function authMiddleware(request: NextRequest, session: Awaited<ReturnType<typeof verifySessionEdge>>) {
   const currentPath = request.nextUrl.pathname;
   const isMcpBearer = (
     currentPath.startsWith('/api/mcp') ||
@@ -97,7 +103,8 @@ async function authMiddleware(request: NextRequest) {
   if (currentPath.startsWith('/oauth')) {
     const identity = await verifyCookieIdentity(
       request.cookies.get('nookies_user')?.value,
-      request.cookies.get('ht_session')?.value
+      request.cookies.get('ht_session')?.value,
+      session
     );
     if (identity.status === 'forged') {
       const loginUrl = new URL(login, request.url);
@@ -140,7 +147,8 @@ async function authMiddleware(request: NextRequest) {
     }
     const identity = await verifyCookieIdentity(
       request.cookies.get('nookies_user')?.value,
-      request.cookies.get('ht_session')?.value
+      request.cookies.get('ht_session')?.value,
+      session
     );
     if (identity.status === 'forged') {
       return NextResponse.json(
@@ -158,7 +166,6 @@ async function authMiddleware(request: NextRequest) {
   const { isValid, user } = isValidUser(cookies?.value);
 
   if (isValid && user) {
-    const session = await verifySessionEdge(request.cookies.get('ht_session')?.value);
     if (!session || Number(session.id) !== Number((user as { id?: unknown }).id)) {
       const loginUrl = new URL(login, request.url);
       const res = NextResponse.redirect(loginUrl);
@@ -379,13 +386,61 @@ async function authMiddleware(request: NextRequest) {
 }
 
 export default async function requireAuthMiddleware(request: NextRequest) {
-  const response = await authMiddleware(request);
+  const refusedEncoding = refusedContentEncoding(request.headers.get('content-encoding'));
+  if (refusedEncoding) {
+    return NextResponse.json(
+      { error: `Content-Encoding ${refusedEncoding} is not accepted`, code: 'CONTENT_ENCODING_REFUSED' },
+      { status: 415 }
+    );
+  }
+  const currentPath = request.nextUrl.pathname;
+  const token = request.cookies.get('ht_session')?.value;
+  const session = token ? await verifySessionEdge(token) : null;
+  if (session?.agentId && !isAgentCookieBridgeRequestAllowed(session, request.method, currentPath)) {
+    const now = Date.now();
+    const key = `${session.agentId}:${request.method}:${currentPath}`;
+    if ((agentCookieRefusals.get(key) ?? 0) <= now) {
+      for (const [entry, expiresAt] of agentCookieRefusals) {
+        if (expiresAt > now) break;
+        agentCookieRefusals.delete(entry);
+      }
+      agentCookieRefusals.set(key, now + HOUR_MS);
+      try {
+        recordServerCapture({
+          distinctId: String(session.id),
+          event: 'agent_cookie_route_refused',
+          properties: { agentId: session.agentId, ownerUserId: session.id, method: request.method, route: currentPath },
+        }, { onError: () => console.warn('[agent-cookie-bridge] refusal capture failed') });
+      } catch {
+        console.warn('[agent-cookie-bridge] refusal capture failed');
+      }
+    }
+    if (currentPath.startsWith('/api') || currentPath.startsWith('/.well-known') || [
+      '/mcp', '/sse', '/message', '/mcp-health', '/oauth/token', '/oauth/register', '/oauth/revoke',
+    ].includes(currentPath)) {
+      return NextResponse.json(
+        { error: 'Agent cookies are only accepted on task bridge routes', code: 'AGENT_COOKIE_ROUTE' },
+        { status: 403 }
+      );
+    }
+    return new NextResponse(null, { status: 403 });
+  }
   const forwardedHeaders = new Headers(request.headers);
   forwardedHeaders.delete('x-ht-board-document-route');
   forwardedHeaders.delete('x-ht-inbox-document-route');
-  if (request.nextUrl.pathname === '/project' || request.nextUrl.pathname === '/inbox') {
+  forwardedHeaders.delete('x-ht-ticket-document-route');
+  if (!currentPath.startsWith('/api') && currentPath.includes('.')) {
+    return NextResponse.next({ request: { headers: forwardedHeaders } });
+  }
+  const response = await authMiddleware(request, session);
+  const ticketDocument = /^\/detail\/project-\d+\/(?:\d+|[A-Za-z0-9][A-Za-z0-9_-]*-\d+)(?:\/|$)/.test(currentPath);
+  if (request.nextUrl.pathname === '/project' || request.nextUrl.pathname === '/inbox' || ticketDocument) {
     if (request.headers.get('sec-fetch-dest') === 'document') {
-      forwardedHeaders.set(request.nextUrl.pathname === '/inbox' ? 'x-ht-inbox-document-route' : 'x-ht-board-document-route', request.nextUrl.pathname + request.nextUrl.search);
+      if (ticketDocument) {
+        forwardedHeaders.set('x-ht-ticket-document-route', request.nextUrl.pathname + request.nextUrl.search);
+      } else {
+        forwardedHeaders.set(request.nextUrl.pathname === '/inbox' ? 'x-ht-inbox-document-route' : 'x-ht-board-document-route', request.nextUrl.pathname + request.nextUrl.search);
+      }
     }
     response.headers.set('Cache-Control', 'private, no-store');
     response.headers.set('CDN-Cache-Control', 'no-store');
@@ -429,7 +484,7 @@ export default async function requireAuthMiddleware(request: NextRequest) {
 
 export const config = {
   matcher: [
-    '/((?!api|_next|flask-app|files(?:/|$)|.*\\..*).*)',
+    '/((?!api|_next|flask-app|files(?:/|$)).*)',
     '/api/:path*'
   ]
 };

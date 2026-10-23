@@ -1,3 +1,4 @@
+import { useKeepAiChatClosed } from "@/hooks/General/useKeepAiChatClosed";
 import { useRecoilValue } from "@/lib/state";
 import {
   aiChatPinnedAtom,
@@ -19,6 +20,7 @@ export function usePageLoadReservations({
   authenticatedUserId,
   currentUserId,
   showAiChatInterface,
+  reserveBoardChat,
   aiChatAutoOpenSuppressed,
   commentComposerOpen,
   agentChatHidesMobileShell,
@@ -28,20 +30,22 @@ export function usePageLoadReservations({
   authenticatedUserId: number | null;
   currentUserId: number | undefined;
   showAiChatInterface: boolean;
+  reserveBoardChat: boolean;
   aiChatAutoOpenSuppressed: boolean;
   commentComposerOpen: boolean;
   agentChatHidesMobileShell: boolean;
 }) {
+  const { keepAiChatClosed, ready: chatAutoOpenReady } = useKeepAiChatClosed();
   const isTaskDetailPage = pathname?.startsWith("/detail") ?? false;
   const aiChatPinned = useRecoilValue(aiChatPinnedAtom);
   const openAiChatByDefault = useRecoilValue(openAiChatByDefaultAtom);
   const isAiChatSidebarMode = useRecoilValue(isAiChatSidebarModeAtom);
   const aiChatSidebarWidthPx = useRecoilValue(aiChatSidebarWidthPxAtom);
   const reserveAiSidebar = !mbl && isAiChatSidebarMode && (
-    showAiChatInterface || (
+    showAiChatInterface || (chatAutoOpenReady && !keepAiChatClosed && (reserveBoardChat || (
       isTaskDetailPage && authenticatedUserId !== null &&
       (aiChatPinned || (openAiChatByDefault && !aiChatAutoOpenSuppressed))
-    )
+    )))
   );
   const sidebarWidthPx = reserveAiSidebar
     ? Math.max(aiChatSidebarWidthPx, AI_CHAT_SIDEBAR_MIN_PX)

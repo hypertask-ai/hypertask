@@ -16,6 +16,7 @@ const jiti = require('jiti')(
 
 process.env.JWT_SECRET = 'mcp-token-refresh-test-secret-32-chars'
 process.env.JWT_ISSUER = 'hypertask'
+process.env.JWT_OAUTH_AUDIENCE = 'fixture-oauth-api'
 
 const { handleMcpTokenRefresh } = jiti(
   path.join(root, 'src/lib/mcp/token/refresh.ts')
@@ -28,7 +29,7 @@ const {
   verifyMcpJwtToken,
 } = jiti(path.join(root, 'src/lib/mcp/auth.ts'))
 
-const user = { id: 6, email: 'valentin@hypertask.ai' }
+const user = { id: 6, email: 'fixture@example.test' }
 const signingSecret = 'refresh-route-test-secret'
 const agentId = 'a9ced00e-1c88-4c9d-a5a4-497b5c494759'
 
@@ -80,7 +81,7 @@ function signedAgentToken(jti, secret = process.env.JWT_SECRET) {
   )
 }
 
-function signedUserToken({ jti, iat, exp, audience = 'mcp-api' } = {}) {
+function signedUserToken({ jti, iat, exp, audience = 'mcp-api', clientId } = {}) {
   return jwt.sign(
     {
       sub: user.email,
@@ -88,11 +89,12 @@ function signedUserToken({ jti, iat, exp, audience = 'mcp-api' } = {}) {
       ...(typeof iat === 'number' ? { iat } : {}),
       ...(typeof exp === 'number' ? { exp } : {}),
       ...(jti ? { jti } : {}),
+      ...(clientId ? { client_id: clientId } : {}),
     },
     process.env.JWT_SECRET,
     {
       ...(typeof exp === 'number' ? {} : { expiresIn: '30d' }),
-      issuer: 'hypertask',
+      issuer: audience === 'hypertasks-mcp' ? 'hypertasks' : 'hypertask',
       audience,
     }
   )
@@ -352,4 +354,91 @@ test('an invalid token keeps the generic invalid_token response', async () => {
   assert.equal(body.message, 'Authentication required. Please check your token and try again.')
   assert.deepEqual(deps.calls.created, [])
   assert.deepEqual(deps.calls.claimed, [])
+})
+
+test('OAuth access tokens cannot refresh into account MCP tokens', async () => {
+  for (const audience of [
+    'fixture-oauth-api',
+    'http://localhost:3001',
+    ['mcp-api', 'fixture-oauth-api'],
+    ['mcp-api', 'http://localhost:3001'],
+  ]) {
+    for (const jti of ['fixture-oauth-jti', undefined]) {
+      const token = signedUserToken({
+        audience,
+        jti,
+        clientId: jti ? 'fixture-client' : undefined,
+        iat: Date.parse('2026-08-03T00:00:00.000Z') / 1000,
+        exp: Date.parse('2100-01-01T00:00:00.000Z') / 1000,
+      })
+      const deps = dependencies({ authContext: { user, agentId: null } })
+      const response = await handleMcpTokenRefresh(requestWithToken(token), deps.value)
+      const body = await response.json()
+      assert.equal(response.status, 401)
+      assert.equal(body.reason, 'invalid_token')
+      assert.equal('token' in body, false)
+      assert.deepEqual(deps.calls.created, [])
+      assert.deepEqual(deps.calls.claimed, [])
+      assert.deepEqual(deps.calls.logged, [])
+    }
+  }
+})
+
+test('MCP refresh keeps current and legacy account token behavior', async () => {
+  for (const audience of ['mcp-api', 'hypertasks-mcp']) {
+    for (const jti of ['fixture-account-jti', undefined]) {
+      const token = signedUserToken({
+        audience,
+        jti,
+        iat: Date.parse('2026-08-03T00:00:00.000Z') / 1000,
+        exp: Date.parse('2100-01-01T00:00:00.000Z') / 1000,
+      })
+      const replacementToken = signedUserToken({ jti: 'fixture-replacement-jti' })
+      let claimed = false
+      const deps = dependencies({
+        authContext: { user, agentId: null },
+        replacementToken,
+        claimRotation: async () => {
+          if (claimed) return false
+          claimed = true
+          return true
+        },
+      })
+      const response = await handleMcpTokenRefresh(requestWithToken(token), deps.value)
+      assert.equal(response.status, 200)
+      assert.equal((await response.json()).token, replacementToken)
+      assert.deepEqual(deps.calls.created, [[user.id, user.email, '30d']])
+      assert.equal(deps.calls.claimed[0][0], jti ?? legacyTokenRevocationJti(token))
+      assert.equal(deps.calls.logged.length, 1)
+      const replay = await handleMcpTokenRefresh(requestWithToken(token), deps.value)
+      assert.equal(replay.status, 401)
+      assert.equal((await replay.json()).reason, 'token_revoked')
+      assert.equal(deps.calls.logged.length, 1)
+    }
+  }
+})
+
+test('concurrent MCP account refreshes return exactly one replacement', async () => {
+  const token = signedUserToken({ jti: 'fixture-concurrent-account-jti' })
+  const replacementToken = signedUserToken({ jti: 'fixture-concurrent-replacement-jti' })
+  let claimed = false
+  const deps = dependencies({
+    authContext: { user, agentId: null },
+    replacementToken,
+    claimRotation: async () => {
+      if (claimed) return false
+      claimed = true
+      return true
+    },
+  })
+  const responses = await Promise.all([
+    handleMcpTokenRefresh(requestWithToken(token), deps.value),
+    handleMcpTokenRefresh(requestWithToken(token), deps.value),
+  ])
+  const bodies = await Promise.all(responses.map((response) => response.json()))
+  assert.deepEqual(responses.map((response) => response.status).sort(), [200, 401])
+  assert.equal(bodies.find((body) => body.success).token, replacementToken)
+  assert.equal('token' in bodies.find((body) => body.reason === 'token_revoked'), false)
+  assert.equal(deps.calls.claimed.length, 2)
+  assert.equal(deps.calls.logged.length, 1)
 })

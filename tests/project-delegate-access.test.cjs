@@ -48,6 +48,7 @@ function userMatches(user, where) {
 function memberMatches(member, where) {
   if (where.userId !== undefined && member.userId !== where.userId) return false;
   if (where.agentId !== undefined && member.agentId !== where.agentId) return false;
+  if (where.status !== undefined && member.status !== where.status) return false;
 
   if (where.agent) {
     if (!member.agent) return false;
@@ -100,7 +101,7 @@ function project(overrides = {}) {
   };
 }
 
-test("an agent keeps the connecting human's owned boards in scope", () => {
+test("an agent cannot borrow the connecting human's owned boards", () => {
   const ownedBoard = project({
     ownerId: USER_ID,
     owner: {
@@ -111,7 +112,7 @@ test("an agent keeps the connecting human's owned boards in scope", () => {
 
   assert.equal(
     projectMatches(ownedBoard, getProjectWhere(USER_ID, AGENT_ID)),
-    true,
+    false,
   );
 });
 
@@ -121,6 +122,7 @@ test("an agent's own active board membership adds scope", () => {
       {
         userId: USER_ID,
         agentId: AGENT_ID,
+        status: "Accepted",
         agent: { userId: USER_ID, revokedAt: null },
       },
     ],
@@ -145,6 +147,7 @@ test("agent board discovery excludes the connecting human's unassigned boards", 
       {
         userId: USER_ID,
         agentId: AGENT_ID,
+        status: "Accepted",
         agent: { userId: USER_ID, revokedAt: null },
       },
     ],
@@ -176,7 +179,7 @@ test("every MCP board-discovery payload uses the narrow listing scope", () => {
     const source = fs.readFileSync(path.join(root, relativePath), "utf8");
     assert.match(
       source,
-      /getProjectListingWhere\([^)]*ctx\.agentId\)/,
+      /getProjectListingWhere\([^)]*ctx\.agentId, ctx\.teamScope\)/,
       `${relativePath} must not enumerate the connecting human's full board scope`,
     );
   }
@@ -188,6 +191,7 @@ test("agent board discovery requires an owned, active agent membership", () => {
       {
         userId: USER_ID,
         agentId: AGENT_ID,
+        status: "Accepted",
         agent: {
           userId: USER_ID,
           revokedAt: new Date("2026-08-01"),
@@ -200,6 +204,7 @@ test("agent board discovery requires an owned, active agent membership", () => {
       {
         userId: 7,
         agentId: AGENT_ID,
+        status: "Accepted",
         agent: { userId: 7, revokedAt: null },
       },
     ],
@@ -221,6 +226,7 @@ test("an agent id owned by another user grants no board access", () => {
       {
         userId: 7,
         agentId: AGENT_ID,
+        status: "Accepted",
         agent: { userId: 7, revokedAt: null },
       },
     ],
@@ -238,6 +244,7 @@ test("a revoked agent grants no board access", () => {
       {
         userId: USER_ID,
         agentId: AGENT_ID,
+        status: "Accepted",
         agent: { userId: USER_ID, revokedAt: new Date("2026-08-01") },
       },
     ],
@@ -277,6 +284,7 @@ test("task writes allow owners, human members, and owned active agents", () => {
           {
             userId: USER_ID,
             agentId: AGENT_ID,
+        status: "Accepted",
             agent: { userId: USER_ID, revokedAt: null },
           },
         ],
@@ -294,7 +302,7 @@ test("task writes allow owners, human members, and owned active agents", () => {
   }
 });
 
-test("task content keeps the connecting human's board scope for an active agent", () => {
+test("task content excludes the connecting human's unassigned boards", () => {
   const activeAgent = {
     id: AGENT_ID,
     userId: USER_ID,
@@ -316,14 +324,14 @@ test("task content keeps the connecting human's board scope for an active agent"
 
   assert.equal(
     projectMatches(ownedBoard, projectContentAccessWhere(USER_ID, AGENT_ID)),
-    true,
+    false,
   );
   assert.equal(
     projectMatches(
       humanMemberBoard,
       projectContentAccessWhere(USER_ID, AGENT_ID),
     ),
-    true,
+    false,
   );
 });
 
@@ -371,6 +379,7 @@ test("task content accepts only an owned, active agent's additional scope", () =
       {
         userId: USER_ID,
         agentId: AGENT_ID,
+        status: "Accepted",
         agent: { userId: USER_ID, revokedAt: null },
       },
     ],
@@ -380,6 +389,7 @@ test("task content accepts only an owned, active agent's additional scope", () =
       {
         userId: 7,
         agentId: AGENT_ID,
+        status: "Accepted",
         agent: { userId: 7, revokedAt: null },
       },
     ],

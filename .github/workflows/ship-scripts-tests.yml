@@ -1,0 +1,67 @@
+name: Ship scripts tests
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, ready_for_review]
+    branches: [production]
+    paths:
+      - '.claude/skills/ship/scripts/**'
+      - '.claude/skills/scriptify/scripts/**'
+      - '.claude/skills/maintain-verification-skill/scripts/**'
+      - '.claude/systemd/**'
+      - 'scripts/daily-stats*'
+      - 'scripts/proc-watchdog*'
+      - 'scripts/premerge-local.sh'
+      - '.claude/skills/verify-qa/scripts/**'
+      - '.github/workflows/ship-scripts-tests.yml'
+      - 'docs/ci-policy.yml'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ship-scripts-tests-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  ship-scripts-tests:
+    name: ship-scripts-tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: ^24.22.1
+          check-latest: true
+
+      - name: Install offline test dependencies
+        shell: bash
+        run: |
+          set -euo pipefail
+          sudo apt-get update
+          sudo apt-get install --no-install-recommends -y python3 jq git
+          mkdir -p "$RUNNER_TEMP/ship-scripts-home" "$RUNNER_TEMP/ship-scripts-bin"
+          cat > "$RUNNER_TEMP/ship-scripts-bin/gh" <<'SH'
+          #!/usr/bin/env bash
+          echo 'Unexpected gh call outside offline test fixtures' >&2
+          exit 1
+          SH
+          chmod +x "$RUNNER_TEMP/ship-scripts-bin/gh"
+          echo "$RUNNER_TEMP/ship-scripts-bin" >> "$GITHUB_PATH"
+
+      - name: Run offline ship script tests
+        env:
+          HOME: ${{ runner.temp }}/ship-scripts-home
+        shell: bash
+        run: |
+          set -euo pipefail
+          bash .claude/skills/ship/scripts/ship-check.test.sh --premerge-only
+          python3 .claude/skills/ship/scripts/premerge-evidence.test.py
+          python3 .claude/skills/ship/scripts/ci-why.test.py
+          bash .claude/skills/ship/scripts/user-unit-check.test.sh
+          python3 .claude/skills/verify-qa/scripts/evidence-prune.test.py
+          node --test .claude/skills/verify-qa/scripts/qa-identity.test.mjs

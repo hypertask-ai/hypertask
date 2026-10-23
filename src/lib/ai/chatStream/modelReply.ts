@@ -1,3 +1,4 @@
+import { downloadWithoutBrotli } from "@/lib/net/downloadWithoutBrotli";
 import { backgroundClaudeModelEnabled, haiku55ModelEnabled } from "@/app/api/ai/_lib/planGate";
 import { resolveAiFallbackCredential, getByokOrTeamGatewayApiKeyForModelOption } from "@/app/api/ai/_lib/byokKeys";
 import { isVercelAiGatewayKey } from "@/app/api/ai/_lib/modelProvider";
@@ -32,8 +33,11 @@ export async function generateModelReply(state: StreamState, inputs: { instructi
   const sameModelRetry = await backgroundClaudeModelEnabled?.(dbUser.id) ?? false;
   state.selected.resolvedModelId = resolveHaikuModelId(state.selected.resolvedModelId, haiku55Enabled);
   const chunks: string[] = [];
-  let result!: ReturnType<typeof streamText>;
+  let ranTools = false;
+  let reachedStepLimit = false;
   for (let attempt = 0; attempt < 2; attempt++) {
+    ranTools = false;
+    reachedStepLimit = false;
     let fallbackError: unknown;
     configureAiModelUsage(state.selected.model, {
       userId: dbUser.id,
@@ -44,15 +48,18 @@ export async function generateModelReply(state: StreamState, inputs: { instructi
       provider: state.selected.usageProvider,
       feature: "chat",
     });
-    result = streamText({
+    const result = streamText({
       model: state.selected.model,
+      experimental_download: downloadWithoutBrotli,
       instructions,
       messages,
       tools,
       stopWhen: stepCountIs(MAX_TOOL_STEPS),
       maxRetries: 2,
       abortSignal: state.providerAbort.signal,
-      onFinish: async ({ usage, finishReason }) => {
+      onFinish: async ({ usage, finishReason, toolCalls, steps }) => {
+        ranTools = toolCalls.length > 0;
+        reachedStepLimit = steps.length >= MAX_TOOL_STEPS;
         state.turnUsage = {
           inputTokens: usage.inputTokens ?? undefined,
           outputTokens: usage.outputTokens ?? undefined,
@@ -173,20 +180,12 @@ export async function generateModelReply(state: StreamState, inputs: { instructi
 
   let emptyCompletionError: unknown;
   let emptyCompletionRetryFailed = false;
-  let reachedStepLimit = false;
   if (!hasVisibleCompletion(chunks)) {
-    const [toolCalls, steps] = await Promise.all([
-      Promise.resolve(result.toolCalls).catch(() => []),
-      Promise.resolve(result.steps).catch(() => []),
-    ]);
-    reachedStepLimit =
-      Array.isArray(steps) && steps.length >= MAX_TOOL_STEPS;
-    if (state.errorSent) return;
-    const ranTools = Array.isArray(toolCalls) && toolCalls.length > 0;
     if (!ranTools && !state.cancelled && !state.providerAbort.signal.aborted) {
       try {
         const retry = await generateText({
           model: state.selected.model,
+          experimental_download: downloadWithoutBrotli,
           instructions,
           messages,
           tools,

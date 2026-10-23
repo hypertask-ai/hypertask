@@ -6,9 +6,6 @@ const React = require('react')
 const { JSDOM } = require('jsdom')
 const { createJiti } = require('jiti')
 const root = path.resolve(__dirname, '..')
-const layoutFlag = 'htpr-6865-search-layout'
-const labelFlag = 'htpr-6878-search-label-scope'
-const prerequisites = ['htpr-6688-search-autocomplete']
 
 async function withSearch(t, config, check) {
   const dom = new JSDOM('<div id="root"></div>', { url: 'https://example.test/search' })
@@ -22,7 +19,7 @@ async function withSearch(t, config, check) {
   const cached = new Map(Object.entries(require.cache))
   const stub = (filename, exports) => { require.cache[filename] = { id: filename, filename, loaded: true, exports } }
   const source = (file, exports) => stub(path.join(root, file), exports)
-  const flags = Object.fromEntries([...prerequisites, layoutFlag, labelFlag].map((key) => [key, true]))
+  const flags = {}
   Object.assign(flags, config.flags)
   const requests = []
   const lookups = []
@@ -48,7 +45,7 @@ async function withSearch(t, config, check) {
   try {
     source('src/utils/index.ts', { taskBaseUri: '/detail/' })
     source('src/utils/undoActions/helperFuncs.ts', { cn: (...values) => require('tailwind-merge').twMerge(require('clsx').clsx(values)) })
-    source('src/hooks/useFlag.tsx', { useFlag: (key) => flags[key] ?? false })
+    source('src/hooks/useFlag.tsx', { useFlagLoaded: () => true, useFlagReady: () => true, useFlag: (key) => flags[key] ?? false })
     source('src/lib/contexts/deviceContext.tsx', { useDeviceContext: () => false })
     const allProjects = [{ id: 7, title: 'Product Board' }, { id: 8, title: 'Other Board' }]
     source('src/hooks/MultiPages/useGetAllProjectsMinimal.ts', { useGetAllProjectsMinimal: () => ({ data: allProjects }) })
@@ -110,13 +107,14 @@ async function withSearch(t, config, check) {
   }
 }
 
-test('registry registers the label flag with Owner + QA defaults and documents it', () => {
+test('removed label-scope flag is absent from keys and definitions', () => {
   const jiti = createJiti(__filename, { interopDefault: true })
-  assert.equal(jiti(path.join(root, 'src/lib/flags/keys.ts')).HTPR_6878_SEARCH_LABEL_SCOPE_FLAG, labelFlag)
-  const registry = (fs.readFileSync(path.join(root, 'src/lib/flags.ts'), 'utf8') + require("./helpers/flag-files.cjs").source())
-  assert.match(registry, /key: HTPR_6878_SEARCH_LABEL_SCOPE_FLAG/)
-  assert.match(registry, /DEFAULT_FEATURE_FLAG_MODE: FeatureFlagMode = "OWNER_AND_QA"/)
-  assert.ok(fs.readFileSync(path.join(root, '.claude/skills/verify-qa/reference/feature-map/search.md'), 'utf8').includes(labelFlag))
+  const keys = jiti(path.join(root, 'src/lib/flags/keys.ts'))
+  assert.equal(Object.hasOwn(keys, 'HTPR_6878_SEARCH_LABEL_SCOPE_FLAG'), false)
+  assert.ok(!Object.values(keys).includes('htpr-6878-search-label-scope'))
+  assert.doesNotMatch(fs.readFileSync(path.join(root, 'src/lib/flags/keys.ts'), 'utf8'), /6878|SEARCH_LABEL_SCOPE/)
+  assert.equal(fs.existsSync(path.join(root, 'src/lib/flags/definitions/htpr-6878-search-label-scope.ts')), false)
+  assert.doesNotMatch(require('./helpers/flag-files.cjs').source(), /6878|SEARCH_LABEL_SCOPE/)
 })
 
 test('client passes positive numeric and named board chips, never negated ones or context', async (t) => {
@@ -178,32 +176,25 @@ test('client Ask AI uses the same readable chip summary and hands readable names
   await withSearch(t, { query: 'board:7 label:bug login' }, async ({ input, type, options, prompts, aiOpened }) => {
     await type('login updated')
     await React.act(async () => input().focus())
-    assert.equal(options()[0].textContent, 'Ask AIboard:#Product Board label:Bug login updated')
+    assert.equal(options()[0].textContent, 'Ask AIboard:Product Board label:Bug login updated')
     assert.doesNotMatch(options()[0].textContent, /board:7|label:bug/)
     await React.act(async () => options()[0].click())
-    assert.deepEqual(prompts, ['board:#Product Board label:Bug login updated'])
+    assert.deepEqual(prompts, ['board:Product Board label:Bug login updated'])
     assert.equal(aiOpened(), 1)
   })
 })
 
-test('client flag off keeps raw Ask AI, ID selection, no counts and no boards parameter', async (t) => {
-  await withSearch(t, { flags: { [labelFlag]: false } }, async ({ type, tick, options, press, lookups, requests, state }) => {
-    assert.deepEqual(state().availableSearchBoards, [])
+test('client permanently uses label counts and board scope for everyone', async (t) => {
+  await withSearch(t, {}, async ({ type, tick, options, press, lookups, requests, state }) => {
+    assert.deepEqual(state().availableSearchBoards.map((board) => board.id), [7, 8])
     await type('board:7 label:bu')
     await tick(180)
     assert.equal(options()[0].textContent, 'Ask AIboard:7 label:bu')
-    assert.equal(options()[1].textContent, 'Bug')
-    assert.equal(options()[1].querySelector('.ml-auto'), null)
-    assert.ok(lookups.every((params) => !params.has('boards')))
+    assert.equal(options()[1].textContent, 'Bug3')
+    assert.equal(options()[1].querySelector('.ml-auto').textContent, '3')
+    assert.equal(lookups.filter((params) => params.get('operator') === 'label').at(-1).get('boards'), '7')
     await press('Tab')
     assert.equal(requests.at(-1).body.searchQuery, 'board:7 label:bug')
   })
-  await withSearch(t, { flags: { [layoutFlag]: false } }, async ({ type, tick, lookups, state }) => {
-    assert.deepEqual(state().availableSearchBoards, [])
-    await type('board:7 label:bu')
-    await tick(180)
-    assert.equal(document.querySelector('[data-search-layout]'), null)
-    assert.equal(document.querySelector('.ml-auto'), null)
-    assert.ok(lookups.every((params) => !params.has('boards')))
-  })
+
 })

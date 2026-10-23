@@ -22,9 +22,12 @@ import type { TaskDetailEditorContext } from "./TaskDetailEditorContext";
 export function taskDetailEditorPresentation(context: TaskDetailEditorContext) {
   const { shouldShowAiTaskWriter, getDefaultMode, mobileExistingEditOpen, shouldShowInlineDraftAiRef, mode, editor, defaultContent, currentTask, editorContent, aiTriggerData, isReadOnlyContent, setCarousalItems, carouselAttachments, attachments, router, inboxFlow } = context;
 
+  const skillWriter = context.commentSkillRun &&
+    (mode === "create-comment" || mode === "read-edit-comments") &&
+    aiTriggerData.autoTrigger && /^\/[a-z0-9][a-z0-9-]*\s/.test(aiTriggerData.initialPrompt);
   const shouldShowInlineDraftAi = Boolean(
-    shouldShowAiTaskWriter && getDefaultMode() === "WriteWithAI"
-  ) || Boolean(shouldShowAiTaskWriter && mobileExistingEditOpen);
+    shouldShowAiTaskWriter && getDefaultMode() === "WriteWithAI" && !skillWriter
+  ) || Boolean(shouldShowAiTaskWriter && mobileExistingEditOpen && !skillWriter);
   shouldShowInlineDraftAiRef.current = shouldShowInlineDraftAi;
   const shouldShowFullAiTaskWriter =
     shouldShowAiTaskWriter && !shouldShowInlineDraftAi;

@@ -1,3 +1,4 @@
+import { requireAgentWriteRole } from "@/lib/mcp/agents/readRoleGuard";
 import { reportMcpOperationCrash } from "@/lib/mcp/operationCrashReport";
 import { wrapMcpRoute, checkMcpRouteRateLimit as checkMcpRateLimit, validateMcpRouteAuth as validateMcpAuth } from '@/lib/mcp/routeWrapper'
 import { CustomFieldType } from "@prisma/client";
@@ -41,6 +42,8 @@ export async function POST(request: NextRequest) {
         { status: 401 }
       );
     }
+    const roleRefusal = await requireAgentWriteRole(ctx);
+    if (roleRefusal) return roleRefusal;
 
     let body: unknown;
     try {
@@ -118,7 +121,7 @@ export async function POST(request: NextRequest) {
     const access = await validateProjectAccess(
       task.projectId,
       ctx.user.id,
-      ctx.agentId
+      ctx.agentId, ctx.teamScope
     );
     if (access.error) {
       return NextResponse.json(

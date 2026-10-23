@@ -1,3 +1,4 @@
+import type { AgentTokenTeamScope } from '@/lib/mcp/auth/types';
 import prisma from "@/lib/prisma";
 import { assertAgentAssignmentChangeAllowed } from "@/lib/mcp/tasks/agentMutationFence";
 import type { Prisma } from "@prisma/client";
@@ -8,6 +9,7 @@ interface IParams {
   creatorId: number;
   content?: string;
   agentId?: string | null;
+  teamScope?: AgentTokenTeamScope | null;
   actingUserId: number;
 }
 
@@ -36,7 +38,8 @@ const upsertTaskDescription = async (
       tx,
       taskId,
       agentId,
-      actingUserId
+      actingUserId,
+      { teamScope: data.teamScope },
     );
     await tx.$executeRaw`SELECT pg_advisory_xact_lock(${TASK_DESCRIPTION_VERSION_LOCK_CLASS}::int, ${taskId}::int)`;
     const existing = await tx.description.findUnique({

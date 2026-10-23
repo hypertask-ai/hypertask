@@ -1,6 +1,7 @@
 import { useFlag } from "@/hooks/useFlag";
 import { updateSection as writeSection } from "@/lib/api/typedClient";
 import { HTPR_6979_TYPED_WRITES_FLAG } from "@/lib/flags/keys";
+import { HTPR_6929_COMPOSE_TASK_WRITER_FLAG, HTPR_7549_FIRST_TASK_POINTER_FLAG, HTPR_7550_CONNECT_OVERLAY_FLAG } from "@/lib/flags/keys";
 
 import React, { useCallback, useContext, useMemo, useRef, useState } from "react";
 import { useRecoilValue } from "@/lib/state";
@@ -39,6 +40,9 @@ import ConfirmTaskDelete from "@/components/Modals/confirmDeleteModals/confirmtT
 import { TBoardSortingViewMode } from "@/models/Views/model";
 import { useDeviceContext } from "@/lib/contexts/deviceContext";
 import BoardEmptyState from "./BoardEmptyState";
+import { useConnectAgentOverlay } from "@/hooks/useConnectAgentOverlay";
+import { ConnectAgentOverlay } from "@/components/PageComponents/Onboarding/ConnectAgentOverlay";
+import FirstTaskPointer from "../KanbanSectionComponents/FirstTaskPointer";
 import { detectEmptyBoardState } from "@/utils/helperFunctions/Views/BoardEmptyStateHelper";
 import { getAppliedSearchedTasks } from "@/utils/helperFunctions/Views/SearchFilterHelperFunction";
 import { boardSearchAtom } from "@/store";
@@ -50,7 +54,7 @@ import axios from "axios";
 import useKanbanViews from "@/hooks/Homepage/Views/useKanbanViews";
 import useRevealFocusOnViewSwitch from "@/hooks/Homepage/Views/useRevealFocusOnViewSwitch";
 import { getActiveBoardViewId } from "@/lib/constants/builtinViews";
-import { getActiveColumnsViewFromProject } from "@/utils/helperFunctions/Views/ViewsHelperFunctions";
+import { getActiveFiltersFromProject, getActiveColumnsViewFromProject } from "@/utils/helperFunctions/Views/ViewsHelperFunctions";
 import {
   applyVisibleSectionOrder,
   getSectionId,
@@ -86,6 +90,7 @@ const HomePage = ({
   _sections,
   filteredSections,
   _activeSortingMode,
+  inlineConnectCard,
 
 }:
   {
@@ -95,6 +100,7 @@ const HomePage = ({
     _sections: ISection[],
     filteredSections: ISection[],
     _activeSortingMode: TBoardSortingViewMode,
+    inlineConnectCard?: React.ReactNode,
   }
 
 ) => {
@@ -790,6 +796,34 @@ const HomePage = ({
     ? detectEmptyBoardState(_sections, filteredSections, _currentProject)
     : null;
 
+  const composeEnabled = useFlag(HTPR_6929_COMPOSE_TASK_WRITER_FLAG);
+  const connectOverlayEnabled = useFlag(HTPR_7550_CONNECT_OVERLAY_FLAG);
+  const connectOverlay = useConnectAgentOverlay(_currentProject.id, currentUser.id);
+  const firstTaskPointerEnabled = useFlag(HTPR_7549_FIRST_TASK_POINTER_FLAG);
+  const pointerTaskIds = useMemo(() => {
+    if (!firstTaskPointerEnabled || (_currentProject.tasks?.length ?? 0) > 1) return null;
+    const ids = new Set((_currentProject.tasks ?? []).map((task) => task.id));
+    for (const section of sections) {
+      if ((section.items?.length ?? 0) > 1) return null;
+      for (const task of section.items ?? []) {
+        ids.add(task.id);
+        if (ids.size > 1) return null;
+      }
+    }
+    return Array.from(ids);
+  }, [firstTaskPointerEnabled, _currentProject.tasks, sections]);
+  const pointerFiltered = !firstTaskPointerEnabled || Boolean(
+    getActiveFiltersFromProject(_currentProject).addedFilters?.length ||
+    (searchProjectId === _currentProject.id && searchKeyword.trim()) ||
+    runningOnly ||
+    getActiveBoardViewId(_currentProject, activeBuiltinViews)?.startsWith("builtin:")
+  );
+
+  const overlaySectionId = connectOverlay.sectionId;
+  const connectOverlayActive = connectOverlayEnabled && composeEnabled && connectOverlay.open && !!overlaySectionId && tasksHydrated && secondaryStartupEnabled &&
+    Number(_currentProject.ownerId) === currentUser.id && !pointerFiltered && pointerTaskIds !== null &&
+    displaySections?.some((section, index) => (section.sectionId ?? section.id) === overlaySectionId && !hiddenSectionIndexes.has(index)) === true;
+
   const renderSections = (archivedTasks?: ITask[]) =>
     displaySections && displaySections.map((sec, index) => (
               <Draggable
@@ -821,6 +855,17 @@ const HomePage = ({
                 renderAllTasks={renderAllTasks}
                 dragDisabled={mobileBoardZoomedOut}
                 project={_currentProject}
+                firstTaskPointer={firstTaskPointerEnabled ? (
+                  <FirstTaskPointer
+                    projectId={_currentProject.id}
+                    sectionId={sec.sectionId ?? sec.id!}
+                    sectionIndex={index}
+                    taskIds={pointerTaskIds}
+                    ready={tasksHydrated && secondaryStartupEnabled}
+                    writable={Number(_currentProject.ownerId) === currentUser.id}
+                    filtered={pointerFiltered || hiddenSectionIndexes.has(index) || (connectOverlayEnabled && connectOverlay.blocked)}
+                  />
+                ) : null}
               />)}
               </Draggable>
             ));
@@ -839,6 +884,7 @@ const HomePage = ({
       onLabelTask={labelTaskForBulk}
     >
       <>
+      {!connectOverlayActive && inlineConnectCard}
       <span
         data-board-tasks-hydrated={tasksHydrated ? "true" : "false"}
         hidden
@@ -895,6 +941,9 @@ const HomePage = ({
           <HypertasksCommands contextOptions={createContextOptionsForHTC()} />
         </React.Suspense>
       )}
+      {connectOverlayActive && (
+          <ConnectAgentOverlay key={`${currentUser.id}:${_currentProject.id}`} sectionId={overlaySectionId} onClose={connectOverlay.close} />
+        )}
       {showDeleteTaskModal && tasksToDelete && <ConfirmTaskDelete confirmDelete={deleteTaskHandler} content={`Clicking confirm will delete this task${tasksToDelete?.length>1?' and its associated sub-tasks':''}! Task can be recovered within 30 days.`} loading={loading}/>}
       </>
     </KanbanBulkSelectionProvider>

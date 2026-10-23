@@ -1,3 +1,4 @@
+import { requireAgentWriteRole } from "@/lib/mcp/agents/readRoleGuard";
 import { reportMcpOperationCrash } from "@/lib/mcp/operationCrashReport";
 import { wrapMcpRoute, validateMcpRouteAuth as validateMcpAuth, checkMcpRouteRateLimit as checkMcpRateLimit } from '@/lib/mcp/routeWrapper'
 import { NextRequest, NextResponse } from "next/server";
@@ -98,7 +99,7 @@ export async function GET(request: NextRequest, props: { params: Promise<{ viewI
       );
 
     const userProjects = await prisma.project.findMany({
-      where: { status: "Normal", ...getProjectWhere(user.id, ctx.agentId) },
+      where: { status: "Normal", ...getProjectWhere(user.id, ctx.agentId, ctx.teamScope) },
       select: { id: true },
     });
     const projectIds = userProjects.map((p) => p.id);
@@ -205,6 +206,8 @@ export async function PATCH(request: NextRequest, props: { params: Promise<{ vie
         { status: 401 }
       )
     }
+    const roleRefusal = await requireAgentWriteRole(ctx)
+    if (roleRefusal) return roleRefusal
     const { viewId } = await props.params
     const body = await request.json().catch(() => ({}))
     const filtersProvided =
@@ -252,7 +255,7 @@ export async function PATCH(request: NextRequest, props: { params: Promise<{ vie
     const updated = await updateView({
       viewId,
       userId: ctx.user.id,
-      agentId: ctx.agentId,
+      agentId: ctx.agentId, teamScope: ctx.teamScope,
       title,
       visibility: body.visibility,
       filters: filtersProvided
@@ -292,8 +295,10 @@ export async function DELETE(request: NextRequest, props: { params: Promise<{ vi
         { status: 401 }
       )
     }
+    const roleRefusal = await requireAgentWriteRole(ctx)
+    if (roleRefusal) return roleRefusal
     const { viewId } = await props.params
-    const deleted = await deleteView(viewId, ctx.user.id, ctx.agentId)
+    const deleted = await deleteView(viewId, ctx.user.id, ctx.agentId, ctx.teamScope)
     return NextResponse.json({ success: true, view: deleted })
   } catch (error) {
     console.error('Error deleting view:', error)

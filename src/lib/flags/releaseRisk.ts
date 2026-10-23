@@ -6,6 +6,15 @@ export type FeatureFlagReleaseRisk = {
   risk: "none" | "small" | "new";
   reason: string;
   highRisk?: "money" | "access" | "data-deletion" | "customer-email";
+  ownerRequest?: { quote: string; ticketUrl: string };
+};
+
+export const HIGH_RISK_CATEGORIES = ["money", "access", "data-deletion", "customer-email"] as const;
+export const HIGH_RISK_LABELS: Record<NonNullable<FeatureFlagReleaseRisk["highRisk"]>, string> = {
+  money: "Money",
+  access: "Login and access",
+  "data-deletion": "Data deletion",
+  "customer-email": "Customer emails",
 };
 
 export const RELEASE_RISK_LABELS: Record<FeatureFlagReleaseRisk["risk"], string> = {

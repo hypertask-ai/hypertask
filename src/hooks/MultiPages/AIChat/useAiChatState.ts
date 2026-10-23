@@ -11,6 +11,8 @@ import { useMcpToken } from "@/components/Modals/McpToken/hooks/useMcpToken";
 import { FileItem } from "@/components/Common/AttachmentsUpload/FileUploadHandler";
 import { useAiChatModelPreference } from "./useAiChatModelPreference";
 import { useQueryClient } from "@tanstack/react-query";
+import { useFlag } from "@/hooks/useFlag";
+import { HTPR_7316_CHAT_SCOPE_TICKET_FLAG } from "@/lib/flags/keys";
 import { aiOptionsWithoutOpenRouter } from "./aiChatShared";
 
 export function useAiChatState() {
@@ -44,6 +46,16 @@ export function useAiChatState() {
   const pathname = usePathname();
   const isDetailPage = pathname?.startsWith("/detail") ?? false;
   const isFullScreenChat = pathname?.startsWith("/chat") ?? false;
+  const ticketScopeEnabled = useFlag(HTPR_7316_CHAT_SCOPE_TICKET_FLAG);
+  const ticketScopeSelected =
+    ticketScopeEnabled && !isFullScreenChat && isDetailPage &&
+    !!inViewObject?.taskId && dockedChatScope === "ticket";
+
+  useEffect(() => {
+    if (dockedChatScope === "ticket" && !ticketScopeSelected) {
+      setDockedChatScope(null);
+    }
+  }, [dockedChatScope, ticketScopeSelected, setDockedChatScope]);
 
   useEffect(() => {
     const rememberWorkspaceFocus = (event: FocusEvent) => {
@@ -108,7 +120,7 @@ export function useAiChatState() {
   const { toggleCreateTaskGlobally } = useHypertasksRecoilStates();
   const { token } = useMcpToken();
   const dockedProjectId =
-    dockedChatScope === null
+    dockedChatScope === null || dockedChatScope === "ticket"
       ? currentProject?.id
       : dockedChatScope === "all"
         ? undefined
@@ -119,7 +131,7 @@ export function useAiChatState() {
     : dockedProjectId;
   const boardScopeIsExplicit = isFullScreenChat
     ? fullScreenChatScope != null
-    : dockedChatScope !== null && dockedChatScope !== "all";
+    : typeof dockedChatScope === "number";
   const [editor, setEditor] = useState<Editor | null>(null);
   const [editorEnabled, setEditorEnabled] = useState(isFullScreenChat);
 
@@ -209,6 +221,7 @@ export function useAiChatState() {
     currentProject?.id ?? "no-board",
     currentUser?.id ?? "anonymous",
     taskId ?? "no-task",
+    ...(ticketScopeSelected ? ["ticket-scope"] : []),
     ...(sessionPagingEnabled ? ["htpr-6971-chat-history-paging"] : []),
   ].join(":");
   const setupContextRef = useRef(sessionContextKey);
@@ -242,7 +255,7 @@ export function useAiChatState() {
   setCurrentStreamingSession, isRecording, setIsRecording, displayAiOptions, contextList,
   setContextList, agentStatus, setAgentStatus, showRenameChatModal, setShowRenameChatModal,
   messageListRef, hasAttemptedRestoreRef, previousProjectIdRef, toggleCreateTaskGlobally, token,
-  dockedProjectId, scopedProjectId, boardScopeIsExplicit, editor, editorEnabled,
+  dockedProjectId, scopedProjectId, boardScopeIsExplicit, ticketScopeSelected, editor, editorEnabled,
   editorMountProps, taskId, shouldLoadChatHistory, createSession, activeSession,
   currentSession, showWelcomeScreen, isSessionPending, sessions, historySessions, hasMoreSessions, isLoadingMoreSessions, pagingError, loadMoreSessions, refreshHistorySessions, resolveHistorySession, getDisplayedSession, sessionPagingEnabled, selectSessionInHistory,
   chatHistoryReady, addMessageToSessionQuery, updateLastMessageInSessionCache, appendMessageToSessionCache, updateSessionTitle,

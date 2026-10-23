@@ -55,6 +55,7 @@ export async function persistComment(
     ownerId,
     currentUser,
     agentId,
+    teamScope,
     directReplyUserId,
     directReplySourceCommentId,
     directReplyInvocationId,
@@ -68,7 +69,7 @@ export async function persistComment(
     extraBoardWebhookEvents = [],
   } = params;
   return prisma.$transaction(async (tx) => {
-    if (agentRunReplayComment) {
+    if (agentRunReplayComment && teamScope == null) {
       return loadAgentRunReplayComment(tx.comment, {
         commentId: agentRunReplayComment.id,
         activityId: agentRunReplayComment.activityId,
@@ -93,12 +94,13 @@ export async function persistComment(
     const currentTask = await tx.task.findFirst({
       where: {
         id: taskId,
-        ...(trustedCaller
+        ...(trustedCaller && teamScope == null
           ? {}
           : {
               project: taskWriteAccessWhere(
                 accessUserId ?? currentUser.id,
                 agentId,
+                teamScope,
               ),
             }),
       },
@@ -112,6 +114,19 @@ export async function persistComment(
     });
     if (!currentTask) {
       throw new Error("Task not found or access denied");
+    }
+    if (agentRunReplayComment) {
+      return loadAgentRunReplayComment(tx.comment, {
+        commentId: agentRunReplayComment.id,
+        activityId: agentRunReplayComment.activityId,
+        taskId,
+        creatorId,
+        agentId,
+        agentWebhookDeliveryIds:
+          agentRunReplayComment.agentWebhookDeliveryIds,
+        boardWebhookDeliveryIds:
+          agentRunReplayComment.boardWebhookDeliveryIds,
+      });
     }
     if (inboundEmailId) {
       const receipt = await findInboundEmailReceipt(

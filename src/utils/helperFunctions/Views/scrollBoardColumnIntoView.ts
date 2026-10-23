@@ -38,6 +38,7 @@ const findBoardScroller = (
 export const scrollBoardColumnIntoView = (
   sectionId: number,
   documentLike?: BoardDocumentLike,
+  resetToStart = false,
 ): boolean => {
   const doc =
     documentLike ??
@@ -54,6 +55,11 @@ export const scrollBoardColumnIntoView = (
     if (!board) return false;
     const boardRect = board.getBoundingClientRect();
     return columnRect.left >= boardRect.left && columnRect.right <= boardRect.right;
+  }
+
+  if (resetToStart) {
+    scroller.scrollLeft = 0;
+    return true;
   }
 
   const scrollerRect =

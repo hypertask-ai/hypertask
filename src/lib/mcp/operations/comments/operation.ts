@@ -1,3 +1,9 @@
+import { IdempotencyAccessError } from "@/lib/mcp/idempotency/idempotencyStore"
+import type { AgentTokenTeamScope } from '@/lib/mcp/auth/types'
+import { getProjectWhere } from '@/utils/controllers/projects/getAllIncludes'
+import type { AttachmentFileInput } from "@/lib/mcp-server/validations/attachment.validation";
+import { HTPR_7514_INLINE_AGENT_IMAGES_FLAG } from "@/lib/flags/keys";
+import { inlineAgentImagesForUser } from "@/lib/media/inlineAgentImages.server";
 import { reportMcpOperationCrash } from '@/lib/mcp/operationCrashReport'
 import { wrapMcpRoute, validateMcpRouteAuth as validateMcpAuth, checkMcpRouteRateLimit as checkMcpRateLimit, mcpRouteUnauthorizedResponse as mcpUnauthorizedResponse, readMcpRouteJsonBody as readJsonBody } from '@/lib/mcp/routeWrapper'
 import { NextRequest, NextResponse } from 'next/server'
@@ -17,7 +23,7 @@ import {
 import { convertPlainTextMentionsToHtml, resolveTextMentions } from '@/utils/controllers/comments/processMentions'
 import { createCommentService } from '@/utils/controllers/comments/createCommentService'
 import { AgentInvocationNotPendingError } from '@/utils/controllers/comments/agentInvocationCorrelation'
-import { findTaskByIdentifier, TaskIdentifierAmbiguityError, validateTaskIdentifier } from '@/lib/mcp/tasks/resolveTask'
+import { findTaskByIdentifier, taskIdentifierErrorResponse, validateTaskIdentifier } from '@/lib/mcp/tasks/resolveTask'
 import { validateProjectMemberIds } from '@/lib/mcp/tasks/services'
 import { broadcastTaskComment } from '@/lib/realtime/server'
 import { sanitizeRichHtml } from '@/utils/helperFunctions/sanitizeRichHtml'
@@ -46,7 +52,7 @@ import { loadVisibleReactionAgents } from '@/lib/mcp/comments/visibleReactionAge
 import { overlayDurableAgentDisplayName } from '@/lib/agents/publicAgent'
 import { isFeatureEnabled } from '@/lib/flags'
 import { COMMENT_KINDS, parseCommentKind, routeComment, type CommentKind } from './agentChatterRouting'
-import { HTPR_6516_AGENT_ATTRIBUTION_FLAG, HTPR_7341_AGENT_CHATTER_TO_LOG_FLAG } from '@/lib/flags/keys'
+import { HTPR_6516_AGENT_ATTRIBUTION_FLAG, HTPR_7341_AGENT_CHATTER_TO_LOG_FLAG, HTPR_7512_ATTACH_KEEPS_COMMENT_FLAG } from '@/lib/flags/keys'
 import { parseNumericCursor, parseUpdatedSince, projectRows } from '@/lib/mcp/listQuery'
 import { readListQuery } from '@/lib/mcp/readListQuery'
 
@@ -98,9 +104,12 @@ export interface AddCommentRequest {
   ticket_number?: string
   unique_index?: number
   text: string
+  attachments?: AttachmentFileInput[]
+  inline_images?: boolean
   content_type?: 'html' | 'markdown'
   project_id?: number
   images?: string[]
+  has_attachments?: boolean
   mentions?: McpMentionInput[]
   reply_to_comment_id?: number
   reply_to_invocation_id?: number
@@ -109,6 +118,7 @@ export interface AddCommentRequest {
 export type AddCommentResponse = {
   success: boolean
   routedTo: 'comments'
+  visibleToPeople: true
   url: string
   idempotent_replayed?: true
   agent?: McpAgentSummary
@@ -133,6 +143,8 @@ export type AddCommentResponse = {
 } | {
   success: boolean
   routedTo: 'log'
+  visibleToPeople: false
+  notice: string
   url: string
   idempotent_replayed?: true
   activity: {
@@ -144,7 +156,7 @@ export type AddCommentResponse = {
   }
 }
 
-type AgentLogPrincipal = { userId: number; agentId: string; displayName: string; source: 'agent' }
+type AgentLogPrincipal = { userId: number; agentId: string; teamScope: AgentTokenTeamScope | null; displayName: string; source: 'agent' }
 
 async function prepareAgentLogEntry(principal: AgentLogPrincipal, html: string) {
   const { runtimeAgentRunsEnabledFor, agentRunActivitiesEnabledFor } = await import('@/lib/agentRuns/service')
@@ -305,7 +317,7 @@ export async function GET(request: NextRequest) {
         unique_index: uniqueIndex,
         project_id: projectId,
       },
-      ctx.agentId
+      ctx.agentId, undefined, ctx.teamScope
     )
 
     if (!task) {
@@ -321,6 +333,7 @@ export async function GET(request: NextRequest) {
     const commentWhere: Prisma.CommentWhereInput = includeActivity
       ? { taskId: task.id }
       : { taskId: task.id, activity: { equals: Prisma.DbNull } }
+    if (ctx.teamScope != null) commentWhere.task = { project: getProjectWhere(user.id, ctx.agentId, ctx.teamScope) }
     if (listQuery?.query) {
       commentWhere.text = { contains: listQuery.query, mode: 'insensitive' }
     }
@@ -424,9 +437,8 @@ export async function GET(request: NextRequest) {
 
     return NextResponse.json(response)
   } catch (error) {
-    if (error instanceof TaskIdentifierAmbiguityError) {
-      return NextResponse.json({ success: false, error: error.message }, { status: 400 })
-    }
+    const identifierResponse = taskIdentifierErrorResponse(error)
+    if (identifierResponse) return identifierResponse
     console.error('Error getting comments:', error)
     reportMcpOperationCrash(request, error)
     return NextResponse.json(
@@ -458,10 +470,29 @@ export async function POST(request: NextRequest) {
     const parsedBody = await readJsonBody<AddCommentRequest>(request)
     if (!parsedBody.ok) return parsedBody.response
     const body = parsedBody.body
-    const { dry_run, task_id, ticket_number, unique_index, text, content_type, project_id, images, mentions, reply_to_comment_id, reply_to_invocation_id } = body
+    if (body.inline_images !== undefined && typeof body.inline_images !== "boolean") {
+      return NextResponse.json(buildFieldError("invalid_field", "inline_images", "inline_images must be a boolean"), { status: 400 });
+    }
+    let hasImageAttachments = false;
+    if (body.attachments !== undefined && await isFeatureEnabled(HTPR_7514_INLINE_AGENT_IMAGES_FLAG, user.id)) {
+      const { inlineAttachmentsSchema } = await import("@/lib/mcp-server/validations/attachment.validation");
+      const attachmentInput = inlineAttachmentsSchema.safeParse(body.attachments);
+      if (!attachmentInput.success) {
+        return NextResponse.json(buildFieldError("invalid_field", "attachments", attachmentInput.error.issues[0]?.message ?? "Invalid attachments"), { status: 400 });
+      }
+      const { isBrowserRenderableImage } = await import("@/lib/media/browserRenderableImage");
+      hasImageAttachments = attachmentInput.data?.some((file) => isBrowserRenderableImage(file.content_type, file.filename)) ?? false;
+    }
+    const { dry_run, task_id, ticket_number, unique_index, text, content_type, project_id, images, has_attachments, mentions, reply_to_comment_id, reply_to_invocation_id } = body
     if (dry_run !== undefined && typeof dry_run !== 'boolean') {
       return NextResponse.json(
         buildFieldError('invalid_field', 'dry_run', 'dry_run must be a boolean'),
+        { status: 400 }
+      )
+    }
+    if (has_attachments !== undefined && typeof has_attachments !== 'boolean') {
+      return NextResponse.json(
+        buildFieldError('invalid_field', 'has_attachments', 'has_attachments must be a boolean'),
         { status: 400 }
       )
     }
@@ -711,7 +742,7 @@ export async function POST(request: NextRequest) {
         unique_index,
         project_id,
       },
-      ctx.agentId
+      ctx.agentId, undefined, ctx.teamScope
     )
 
     if (!task) {
@@ -813,7 +844,7 @@ export async function POST(request: NextRequest) {
       taskWithOwner.projectId,
       user.id,
     )
-    sanitizedText = sanitizeRichHtml(sanitizedText)
+    sanitizedText = await inlineAgentImagesForUser(sanitizeRichHtml(sanitizedText), user.id, { inlineImages: body.inline_images, attachments: images?.map((url: string) => ({ url })) })
     sanitizedText = normalizeBlockHtml(sanitizedText)
 
     const textMentionIds = extractTipTapContent(sanitizedText).mentions.map((id) => parseInt(id, 10))
@@ -857,6 +888,7 @@ export async function POST(request: NextRequest) {
       ? {
           userId: user.id,
           agentId: ctx.agentId,
+          teamScope: ctx.teamScope,
           displayName: userObj.displayName?.trim() || 'Hypertask agent',
           source: 'agent' as const,
         }
@@ -867,7 +899,8 @@ export async function POST(request: NextRequest) {
       replyToCommentId: reply_to_comment_id,
       replyToInvocationId: reply_to_invocation_id,
       mentionsPerson: textMentionIds.length > 0 || (mentions?.length ?? 0) > 0,
-      hasImages: (images?.length ?? 0) > 0 || /<img\b/i.test(sanitizedText),
+      hasImages: (images?.length ?? 0) > 0 || /<img\b/i.test(sanitizedText) || hasImageAttachments ||
+        (has_attachments === true && await isFeatureEnabled(HTPR_7512_ATTACH_KEEPS_COMMENT_FLAG, user.id)),
       flagEnabled: await isFeatureEnabled(HTPR_7341_AGENT_CHATTER_TO_LOG_FLAG, user.id),
     }) === 'log' && agentLogPrincipal
       ? await prepareAgentLogEntry(agentLogPrincipal, sanitizedText)
@@ -916,6 +949,8 @@ export async function POST(request: NextRequest) {
             return {
               success: true,
               routedTo: 'log' as const,
+              visibleToPeople: false,
+              notice: 'Saved to the agent log, not the ticket thread; people do not see it. Resend with kind (question|qa|done) to post for people.',
               url: buildMcpTaskUrl(taskWithOwner.projectId, taskWithOwner.uniqueIndex),
               activity: { id, runId, type, text, createdAt },
             }
@@ -930,6 +965,7 @@ export async function POST(request: NextRequest) {
           ownerId: taskWithOwner.userId,
           currentUser: userObj,
           agentId: ctx.agentId || undefined,
+          teamScope: ctx.teamScope,
           directReplySourceCommentId: ctx.agentId ? reply_to_comment_id : undefined,
           directReplyInvocationId: ctx.agentId ? reply_to_invocation_id : undefined
         })
@@ -944,7 +980,8 @@ export async function POST(request: NextRequest) {
           task.id,
           comment.id,
           'POST',
-          imageUrls
+          imageUrls,
+          { userId: user.id, agentId: ctx.agentId, teamScope: ctx.teamScope }
         )
 
         const commentWithAttachments = await prisma.comment.findUnique({
@@ -979,6 +1016,7 @@ export async function POST(request: NextRequest) {
         return {
           success: true,
           routedTo: 'comments' as const,
+          visibleToPeople: true,
           url: buildMcpTaskUrl(taskWithOwner.projectId, taskWithOwner.uniqueIndex),
           ...(sessionAgent ? { agent: sessionAgent } : {}),
           comment: {
@@ -1008,14 +1046,16 @@ export async function POST(request: NextRequest) {
             })) || []
           }
         }
-      }
+      },
+      ctx.teamScope != null ? ctx.agentId : undefined,
+      ctx.teamScope
     )
 
     return NextResponse.json(mcpResponse, { status: 201 })
   } catch (error) {
-    if (error instanceof TaskIdentifierAmbiguityError) {
-      return NextResponse.json({ success: false, error: error.message }, { status: 400 })
-    }
+    if (error instanceof IdempotencyAccessError) return NextResponse.json({ error: error.message }, { status: 404 })
+    const identifierResponse = taskIdentifierErrorResponse(error)
+    if (identifierResponse) return identifierResponse
     if (error instanceof AgentInvocationNotPendingError) {
       return NextResponse.json(
         { success: false, error: error.message },

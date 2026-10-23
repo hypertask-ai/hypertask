@@ -1,3 +1,4 @@
+import type { BoardKnowledgePrincipal } from "@/lib/rag/retrieveBoardKnowledge";
 import prisma from "@/lib/prisma";
 import { HTPR_6557_AGENT_ROOMS_FLAG, isFeatureEnabled } from "@/lib/flags";
 import { getProjectWhere } from "@/utils/controllers/projects/getAllIncludes";
@@ -20,7 +21,7 @@ export async function loadUserAgentRoom(roomId: string, userId: number) {
   });
 }
 
-export async function loadAgentTokenRoom(roomId: string, agentId: string) {
+export async function loadAgentTokenRoom(roomId: string, agentId: string, principal?: BoardKnowledgePrincipal) {
   const agent = await prisma.agent.findFirst({
     where: { id: agentId, revokedAt: null, archivedAt: null },
     select: { id: true, userId: true },
@@ -35,6 +36,7 @@ export async function loadAgentTokenRoom(roomId: string, agentId: string) {
     where: {
       id: roomId,
       project: {
+        ...(principal?.teamScope != null ? getProjectWhere(principal.userId, agentId, principal.teamScope) : {}),
         status: "Normal",
         members: {
           some: {

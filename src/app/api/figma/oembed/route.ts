@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getFigmaRequestUser } from "@/app/api/figma/_lib";
+import { getFigmaAuthenticatedUser } from "@/app/api/figma/_lib";
 import { getFigmaAccessToken } from "@/lib/figma/connection";
 import { FIGMA_API_BASE_URL } from "@/lib/figma/paths";
 import { getFigmaOAuthConfig } from "@/lib/figma/oauth";
@@ -226,7 +226,7 @@ function previewResponse(body: unknown, cacheControl = CACHE_CONTROL) {
 }
 
 export async function GET(request: NextRequest) {
-  const principal = await getFigmaRequestUser(request);
+  const principal = await getFigmaAuthenticatedUser(request);
   if (principal.status === "unauthorized") {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }

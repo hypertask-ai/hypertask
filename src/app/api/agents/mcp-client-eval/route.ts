@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getSessionUser } from "@/lib/auth/getSessionUser";
-import { HTPR_6533_MCP_CLIENT_EVAL_FLAG, isFeatureEnabled } from "@/lib/flags";
+import { isOwnerOrQaUserId } from "@/lib/flags";
 import type { McpClientEvalReport } from "@/lib/mcpClientEval/types";
 import latest from "@/lib/mcpClientEval/latest.json";
 
@@ -32,7 +32,7 @@ export async function GET(request: NextRequest) {
     );
   }
 
-  if (!(await isFeatureEnabled(HTPR_6533_MCP_CLIENT_EVAL_FLAG, session.userId))) {
+  if (!(await isOwnerOrQaUserId(session.userId))) {
     return NextResponse.json(
       { success: false, error: "Not found" },
       { status: 404 },

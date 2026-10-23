@@ -120,7 +120,7 @@ test("the auto-follow effect also watches the queued/typing revision", () => {
   const effectDeclaration = source.slice(start, source.indexOf("}, [", end) + 200);
   assert.match(
     effectDeclaration,
-    /\[visibleFeedRevision, activeFeedFilter, extraRowsRevision\]/,
+    /\[visibleFeedRevision, activeFeedFilter, extraRowsRevision, embedded\?\.active\]/,
     "the effect must re-run when the queued/typing revision changes, or a " +
       "queued send / typing row never triggers the auto-scroll",
   );

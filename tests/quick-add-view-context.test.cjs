@@ -6,7 +6,6 @@ const ts = require("typescript");
 const { load } = require("./helpers/create-view-context.cjs");
 
 const root = path.resolve(__dirname, "..");
-const flagKey = "htpr-6993-quick-add-view-context";
 const emptyFilters = { addedFilters: [], matchFilters: "ALL" };
 const constants = load("src/lib/constants/constants.ts", {
   "../configs/general.config": { generalConfig: {} },
@@ -38,7 +37,7 @@ const conditions = load("src/utils/helperFunctions/Views/FilterHelperFunctions.t
   "@/lib/constants/builtinViews": {},
 });
 
-async function create({ activeFilters = emptyFilters, flag = true, position = "bottom", view = "appliedView", fail = false, existing = true, sorting = "Manual" } = {}) {
+async function create({ activeFilters = emptyFilters, position = "bottom", view = "appliedView", fail = false, existing = true, sorting = "Manual" } = {}) {
   const project = {
     id: 15, uniqueIdentifier: "HTPR", sorting_mode: sorting, sections: [{ sectionId: 7 }],
     project_view: { user_project_views: [{ [view]: { board_filters: activeFilters } }] },
@@ -64,8 +63,6 @@ async function create({ activeFilters = emptyFilters, flag = true, position = "b
       updateActiveItemAndItemInView: (id) => { selected = id; },
     }) },
     "@/utils/helperFunctions/helperFunctions": {},
-    "@/hooks/useFlag": { useFlag: (key) => { assert.equal(key, flagKey); return flag; } },
-    "@/lib/flags/keys": { HTPR_6993_QUICK_ADD_VIEW_CONTEXT_FLAG: flagKey },
     "@/utils/helperFunctions/Views/ViewsHelperFunctions": viewHelpers,
     "@/utils/helperFunctions/Views/NewTaskViewDefaults": defaults,
     "@/lib/constants/constants": constants,
@@ -134,12 +131,6 @@ test("no view, no filters and unsupported filters preserve the exact legacy requ
     assert.deepEqual(result.posts, [{ url: "/api/tasks/create", body: { title: "Quick ticket", description: "", id: -1, sectionId: 7, section: "Bugs", assignees: [], userId: 6, projectId: 15, ranking: "rank-new", index: 1 } }]);
     assert.equal(result.cached.size, 0);
   }
-});
-
-test("flag off preserves the exact legacy request even in a filtered view", async () => {
-  const result = await create({ activeFilters: filters({ Labels: labels, Assignees: assignees, Priority: [priority], Size: [estimate] }), flag: false });
-  assert.deepEqual(result.posts, [{ url: "/api/tasks/create", body: { title: "Quick ticket", description: "", id: -1, sectionId: 7, section: "Bugs", assignees: [], userId: 6, projectId: 15, ranking: "rank-new", index: 1 } }]);
-  assert.equal(result.cached.size, 0);
 });
 
 test("label-only quick add inserts an empty assignee list without response assignments", async () => {
@@ -213,9 +204,6 @@ test("priority-top position preserves ranking and legacy Urgent unless a view pr
   }
   const explicit = await create({ activeFilters: filters({ Labels: labels, Priority: [priority] }), sorting: "Priority", position: "top" });
   assert.deepEqual(explicit.posts[0].body.priority, priority);
-  const disabled = await create({ activeFilters: filters({ Labels: labels }), sorting: "Priority", position: "top", flag: false });
-  assert.equal(disabled.posts[0].body.index, 0);
-  assert.equal(disabled.posts[0].url, "/api/tasks/create");
   for (const file of ["src/lib/api/task-writes/create-global.ts"]) {
     const source = fs.readFileSync(path.join(root, file), "utf8");
     assert.match(source, /ranking == null \|\| typeof ranking === "string"\s*\?\s*ranking\s*:/);
@@ -241,9 +229,8 @@ test("client defaults render human and agent avatars without response assignment
   }
 });
 
-test("modal stays tags-only with flag off preserving raw legacy defaults and board switches", () => {
+test("modal always inherits filtered view defaults and preserves selected tags", () => {
   const source = fs.readFileSync(path.join(root, "src/hooks/MultiPages/Tasks/useCreateTaskModalStates.ts"), "utf8");
-  assert.match(source, /quickAddViewContextEnabled = useFlag\(HTPR_6993_QUICK_ADD_VIEW_CONTEXT_FLAG\)/);
   const parsed = ts.createSourceFile("modal.ts", source, ts.ScriptTarget.Latest, true);
   let expression;
   const visit = (node) => {
@@ -257,22 +244,26 @@ test("modal stays tags-only with flag off preserving raw legacy defaults and boa
   const switchExpression = source.match(/const tags = ([\s\S]*?);/)[1];
   const activeFilters = filters({ Labels: [{ id: "no-label" }, ...labels], Assignees: assignees, Priority: [priority], Size: [estimate] });
   const project = { project_view: { user_project_views: [{ appliedView: { board_filters: activeFilters } }] } };
-  for (const flag of [false, true]) {
-    const evaluate = new Function("createTaskModal", "_currentProject", "quickAddViewContextEnabled", "getNewTaskViewDefaults", "getActiveFiltersFromProject", "normalizeCreateTaskFormDate", ts.transpileModule(`const newTaskWindowViewContextEnabled = false; return (${expression})();`, { compilerOptions: { target: ts.ScriptTarget.ES2022 } }).outputText);
-    const form = evaluate({}, project, flag, defaults.getNewTaskViewDefaults, viewHelpers.getActiveFiltersFromProject, value => value);
-    const expectedTags = flag ? labels : activeFilters.addedFilters[0].searchPayload;
-    assert.deepEqual(form.tags, expectedTags);
-    assert.deepEqual(form.assignees, []);
-    assert.equal(form.priority, undefined);
-    assert.equal(form.estimate, undefined);
-    const switchTags = new Function("project", "quickAddViewContextEnabled", "getNewTaskViewDefaults", "getActiveFiltersFromProject", `const newTaskWindowViewContextEnabled = false; const viewDefaults = getNewTaskViewDefaults(getActiveFiltersFromProject(project)); return (${switchExpression});`);
-    assert.deepEqual(switchTags(project, flag, defaults.getNewTaskViewDefaults, viewHelpers.getActiveFiltersFromProject), expectedTags);
-    const duplicate = { taskLabels: [{ label: labels[0] }], priority, estimate };
-    const duplicateForm = evaluate({ duplicate }, project, flag, defaults.getNewTaskViewDefaults, viewHelpers.getActiveFiltersFromProject, value => value);
-    assert.deepEqual(duplicateForm.tags, [labels[0]]);
-    assert.deepEqual(duplicateForm.priority, priority);
-    assert.deepEqual(duplicateForm.estimate, estimate);
-  }
+  const calls = [];
+  const getDefaults = active => { calls.push(active); return defaults.getNewTaskViewDefaults(active); };
+  const evaluate = new Function("createTaskModal", "_currentProject", "getNewTaskViewDefaults", "getActiveFiltersFromProject", "normalizeCreateTaskFormDate", ts.transpileModule(`return (${expression})();`, { compilerOptions: { target: ts.ScriptTarget.ES2022 } }).outputText);
+  const form = evaluate({}, project, getDefaults, viewHelpers.getActiveFiltersFromProject, value => value);
+  assert.deepEqual(calls, [activeFilters]);
+  assert.deepEqual(form.tags, labels);
+  assert.deepEqual(form.assignees, assignees);
+  assert.deepEqual(form.priority, priority);
+  assert.deepEqual(form.estimate, estimate);
+  const switchTags = new Function("formValuesRef", "editedViewFieldsRef", "boardChanged", "viewDefaults", `return (${switchExpression});`);
+  const viewDefaults = defaults.getNewTaskViewDefaults(activeFilters);
+  assert.deepEqual(switchTags({ current: form }, { current: {} }, true, viewDefaults), labels);
+  assert.deepEqual(switchTags({ current: { tags: [] } }, { current: { tags: true } }, true, viewDefaults), []);
+  const duplicate = { taskLabels: [{ label: labels[0] }], priority, estimate };
+  const duplicateForm = evaluate({ duplicate }, project, getDefaults, viewHelpers.getActiveFiltersFromProject, value => value);
+  assert.deepEqual(calls, [activeFilters, activeFilters]);
+  assert.deepEqual(duplicateForm.tags, [labels[0]]);
+  assert.deepEqual(duplicateForm.assignees, []);
+  assert.deepEqual(duplicateForm.priority, priority);
+  assert.deepEqual(duplicateForm.estimate, estimate);
 });
 
 test("failed filtered creation neither inserts a card nor retries without labels", async () => {

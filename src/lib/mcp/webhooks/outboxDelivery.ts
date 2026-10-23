@@ -1,4 +1,6 @@
+import { webhookCredentialAllows } from "@/lib/webhooks/credentialScope";
 import prisma from '@/lib/prisma'
+import { getProjectWhere } from '@/utils/controllers/projects/getAllIncludes'
 import { postSignedWebhook } from './delivery'
 import {
   BOARD_WEBHOOK_MAX_ATTEMPTS,
@@ -49,7 +51,38 @@ export async function deliverBoardWebhook(
   })
   if (!delivery) return { status: 'skipped' }
 
-  if (!delivery.subscription.active) {
+  const subscription = delivery.subscription
+  let authorized = subscription.active
+  if (authorized && subscription.projectId != null) {
+    authorized = subscription.createdById != null && Boolean(
+      await prisma.project.findFirst({
+        where: {
+          id: subscription.projectId,
+          OR: [
+            getProjectWhere(subscription.createdById, subscription.agentId),
+            ...(!subscription.agentId
+              ? [{ team: { googleAccount: { userId: subscription.createdById } } }]
+              : []),
+          ],
+        },
+        select: { id: true },
+      })
+    )
+    const payload = delivery.payload as { data?: { task?: { id?: number } } }
+    const taskId = payload?.data?.task?.id
+    if (authorized && taskId != null) {
+      authorized = Boolean(await prisma.task.findFirst({
+        where: { id: taskId, projectId: subscription.projectId },
+        select: { id: true },
+      }))
+    }
+  }
+
+  if (authorized) {
+    authorized = await webhookCredentialAllows(subscription.agentId, delivery.payloadBody ?? delivery.payload, subscription)
+  }
+
+  if (!authorized) {
     await prisma.boardWebhookDelivery.update({
       where: { id: delivery.id },
       data: { status: 'cancelled', processingAt: null },

@@ -1,3 +1,4 @@
+import { findIdParamOutOfRange, idOutOfRangeMessage } from '@/lib/mcp/listParams';
 import { NextRequest, NextResponse } from 'next/server';
 
 type DownloadTask = { id: number };
@@ -71,6 +72,14 @@ export function createAttachmentDownloadHandler<TContext>(
     if (!Number.isSafeInteger(taskId) || taskId <= 0 || !Number.isSafeInteger(attachmentId) || attachmentId <= 0) {
       return NextResponse.json(
         { success: false, error: 'task_id and attachment_id must be positive integers.' },
+        { status: 400 }
+      );
+    }
+
+    const outOfRange = findIdParamOutOfRange({ task_id: taskId, attachment_id: attachmentId });
+    if (outOfRange) {
+      return NextResponse.json(
+        { success: false, error: idOutOfRangeMessage(outOfRange), code: 'invalid_field' },
         { status: 400 }
       );
     }

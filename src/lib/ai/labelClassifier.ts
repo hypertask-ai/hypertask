@@ -1,4 +1,5 @@
 import { teamPlanAllowanceEnabled } from "@/app/api/ai/_lib/planAllowancePolicy";
+import { downloadWithoutBrotli } from "@/lib/net/downloadWithoutBrotli";
 import { configureAiModelUsage } from "@/app/api/ai/_lib/modelProvider";
 import { waitUntil } from "@vercel/functions";
 import { generateText } from "ai";
@@ -96,6 +97,7 @@ export async function classifyTaskAgainstLabels(
     feature: "smart-label",
   });
   const result = await generateText({
+    experimental_download: downloadWithoutBrotli,
     model,
     instructions: LABEL_CLASSIFIER_INSTRUCTIONS,
     prompt: labelClassifierPrompt(task, definitions),

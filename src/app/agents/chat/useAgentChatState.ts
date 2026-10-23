@@ -15,13 +15,14 @@ import type { TAgent } from "../AgentsRegister";
 import { IProp, TAgentChatSession, TChatMessage } from "./agentChatTypes";
 
 export function useAgentChatState(props: IProp) {
-  const { currentUser, roomsEnabled } = props;
+  const { currentUser, roomsEnabled, embedded } = props;
   const router = useRouter();
   const searchParams = useSearchParams();
   const isMbl = useContext(MobileViewContext);
   const mobileLayoutEnabled = useFlag(HTPR_6407_MOBILE_AGENT_CHAT_LAYOUT_FLAG);
   const mobileFullscreenFlag = useFlag(HTPR_6476_MOBILE_AGENT_CHAT_FULLSCREEN_FLAG);
-  const activityRowsEnabled = useFlag("htpr-6094-agent-activity-rows");
+  const activityRowsFlag = useFlag("htpr-6094-agent-activity-rows");
+  const activityRowsEnabled = !embedded && activityRowsFlag;
   const rosterStatusEnabled = useFlag("htpr-6287-agent-chat-roster-status");
   const [rosterNow, setRosterNow] = useState(() => Date.now());
   useEffect(() => {
@@ -41,7 +42,7 @@ export function useAgentChatState(props: IProp) {
   const [search, setSearch] = useState("");
   const [teamId, setTeamId] = useState<string | null>(null);
   const [selectedId, setSelectedId] = useState<string | null>(null);
-  const mobileAgentChatViewport = useMobileVisualViewport(isMbl);
+  const mobileAgentChatViewport = useMobileVisualViewport(isMbl && !embedded);
   const [session, setSession] = useState<TAgentChatSession | null>(null);
   const [sessionLoading, setSessionLoading] = useState(false);
   const [messages, setMessages] = useState<TChatMessage[] | null>(null);
@@ -122,7 +123,7 @@ export function useAgentChatState(props: IProp) {
   };
 
   return {
-    currentUser, roomsEnabled, router, searchParams, isMbl,
+    currentUser, roomsEnabled, embedded, router, searchParams, isMbl,
     mobileLayoutEnabled, mobileFullscreenFlag, activityRowsEnabled, rosterNow, liveSortEnabled,
     appShellRailOn, setMobileTopBarTitle,
     setAgentChatMobileFullscreen, agents, setAgents, rosterError, setRosterError, search, setSearch,

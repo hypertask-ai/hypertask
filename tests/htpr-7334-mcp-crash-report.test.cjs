@@ -54,7 +54,13 @@ function loadTaskList(h, { findMany = async () => [], findTaskByIdentifier = asy
     "@/lib/mcp/agents": {},
     "@/lib/agents/visibility": {},
     "@/lib/mcp/tasks/mappers": { taskMcpGetInclude: () => ({}), mapTaskToMcpGetResponse: task => task },
-    "@/lib/mcp/tasks/resolveTask": { findTaskByIdentifier, TaskIdentifierAmbiguityError },
+    "@/lib/mcp/tasks/resolveTask": {
+      findTaskByIdentifier,
+      TaskIdentifierAmbiguityError,
+      taskIdentifierErrorResponse: error => error instanceof TaskIdentifierAmbiguityError
+        ? { body: { success: false, error: error.message }, status: 400 }
+        : null,
+    },
     "@/lib/mcp/pagination/cursor": {},
     "@/lib/prisma": { __esModule: true, default: { task: { findMany } } },
     "@/lib/mcp/listQuery": {},

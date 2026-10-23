@@ -1,3 +1,4 @@
+import { loadSidebarChatRequest } from "@/lib/agents/chatAccess";
 import { loadTurnModel } from "@/lib/ai/chatStream/turnModel";
 import { createChatStream } from "@/lib/ai/chatStream/stream";
 import { NextRequest } from "next/server";
@@ -6,7 +7,7 @@ import { getCronServiceRequestUser } from "@/app/api/ai/_lib/cronServiceAuth";
 import { decodeHeartbeatTurnMessage } from "@/lib/nativeAgent/heartbeatTurnEnvelope";
 import prisma from "@/lib/prisma";
 import { isFeatureEnabled } from "@/lib/flags";
-import { HTPR_7048_CTRLJ_CHAT_LEASE_FLAG } from "@/lib/flags/keys";
+import { HTPR_7048_CTRLJ_CHAT_LEASE_FLAG, HTPR_7316_CHAT_SCOPE_TICKET_FLAG } from "@/lib/flags/keys";
 import { ensureNativeChatTurn, findNativeAssistantReplay } from "@/app/api/ai/chat/stream/ensureNativeChatTurn";
 import { resolveAiUsageTaskId } from "@/app/api/ai/_lib/currentTaskContext";
 
@@ -47,6 +48,9 @@ export async function POST(request: NextRequest) {
     return createSseErrorResponse(requestErrorMessage(error, "validation"));
   }
 
+  const sidebarAccess = await loadSidebarChatRequest(request, body.session_id ?? "");
+  if (!sidebarAccess.ok) return createSseErrorResponse(sidebarAccess.error, sidebarAccess.status);
+
   const heartbeatExecutionId = request.headers.get(
     "x-hypertask-heartbeat-execution-id"
   );
@@ -86,6 +90,25 @@ export async function POST(request: NextRequest) {
   }
   if (!dbUser) {
     return createSseErrorResponse("Unauthorized", 401);
+  }
+
+  if (body.default_context?.scope === "ticket") {
+    if (!await isFeatureEnabled(HTPR_7316_CHAT_SCOPE_TICKET_FLAG, dbUser.id)) {
+      delete body.default_context.scope;
+    }
+  }
+  const contextTaskId = await resolveAiUsageTaskId({
+    taskId: body.default_context?.task_id,
+    projectId: body.default_context?.project_id,
+    userId: dbUser.id,
+  });
+  if (body.default_context?.scope === "ticket") {
+    if (contextTaskId === null) {
+      return createSseErrorResponse("Ticket not found or access denied", 403);
+    }
+    body.context_list = [];
+    delete body.default_context.view_id;
+    delete body.default_context.view_name;
   }
 
   let userMessagePersisted = false;
@@ -164,11 +187,6 @@ export async function POST(request: NextRequest) {
     }
   }
 
-  const contextTaskId = await resolveAiUsageTaskId({
-    taskId: body.default_context?.task_id,
-    projectId: body.default_context?.project_id,
-    userId: dbUser.id,
-  });
   if (body.session_id && contextTaskId !== null) {
     try {
       await prisma.chatSession.updateMany({

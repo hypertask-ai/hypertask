@@ -1,0 +1,38 @@
+name: Feature map weekly
+
+on:
+  schedule:
+    - cron: '37 3 * * 1'
+  workflow_dispatch:
+  pull_request:
+    types: [opened, synchronize, reopened, ready_for_review]
+    branches: [production]
+    paths:
+      - '.claude/skills/maintain-verification-skill/**'
+      - '.claude/skills/verify-qa/reference/feature-map/**'
+      - '.github/workflows/feature-map-weekly.yml'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: feature-map-weekly-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  feature-map-check:
+    name: feature-map-check
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: ^24.22.1
+          check-latest: true
+      - name: Test offline fixtures
+        run: node --test .claude/skills/maintain-verification-skill/scripts/feature-map-check.test.mjs
+      - name: Check feature map
+        run: node .claude/skills/maintain-verification-skill/scripts/feature-map-check.mjs

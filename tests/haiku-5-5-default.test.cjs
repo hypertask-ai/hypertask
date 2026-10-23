@@ -17,6 +17,7 @@ const haiku = catalog.getAiModelOptionById("claude-haiku-5-5");
 const aliases = ["claude-haiku-4.5", "claude-haiku-4-5", "anthropic/claude-haiku-4.5", "anthropic/claude-haiku-4-5", "claude-haiku-4-5-20251001"];
 
 function stubbedModule(file, stubs) {
+  stubs = { "@/lib/net/downloadWithoutBrotli": { downloadWithoutBrotli: undefined }, "@/lib/flags": { isFeatureEnabled: async () => false }, "@/lib/flags/definitions/htpr-7634-openai-only-default": { HTPR_7634_OPENAI_ONLY_DEFAULT_FLAG: "htpr-7634-openai-only-default" }, ...stubs };
   const filename = path.join(root, file);
   const code = ts.transpileModule(fs.readFileSync(filename, "utf8"), {
     compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 },
@@ -134,24 +135,21 @@ test("Haiku fallback is Luna only while enabled and only before content or tools
   assert.equal(fallback.previousModelForFailedStream("gpt-6-luna", { status: 404 }, false, false, false).model, "gpt-5.6-luna");
 });
 
-test("Free plan gate admits Haiku and server flag evaluation uses the user and fails closed", async () => {
+test("Free plan gate admits Haiku and server availability preserves user checks", async () => {
   const checks = [];
-  let enabled = true;
   let fail = false;
   const api = stubbedModule("src/app/api/ai/_lib/planGate.ts", {
     "@/lib/prisma": {}, "@/lib/planFromStripePriceId": {}, "@/lib/internalCompTeams": {},
     "@/lib/teamComp": {}, "@/lib/subscriptionAccess": {},
     "@/lib/aiModelOptions": catalog,
     "@/lib/flags/keys": load(path.join(root, "src/lib/flags/keys.ts")),
-    "@/lib/flags": { isFeatureEnabled: async (name, id) => { checks.push([name, id]); if (fail) throw new Error("flag unavailable"); return name === "htpr-7010-haiku-5-5" && enabled; } },
+    "@/lib/flags": { isFeatureEnabled: async (name, id) => { checks.push([name, id]); if (fail) throw new Error("flag unavailable"); return false; } },
   });
   await api.assertModelAllowedForPlan(null, haiku, null, undefined);
   assert.equal(await api.haiku55ModelEnabled(985), true);
-  assert.deepEqual(checks, [["htpr-7038-haiku-default", 985], ["htpr-7075-background-claude", 985], ["htpr-7010-haiku-5-5", 985]]);
-  enabled = false;
-  assert.equal(await api.haiku55ModelEnabled(985), false);
+  assert.deepEqual(checks, [["htpr-7038-haiku-default", 985], ["htpr-7075-background-claude", 985]]);
   fail = true;
-  assert.equal(await api.haiku55ModelEnabled(985), false);
+  assert.equal(await api.haiku55ModelEnabled(985), true);
   assert.equal(await api.haiku55ModelEnabled(null), false);
 });
 
@@ -187,7 +185,7 @@ test("title callback dependencies refresh the model when the flag changes while 
   }
   visit(ast);
   assert.ok(callback);
-  assert.deepEqual(callback.arguments[1].elements.map((node) => node.getText(ast)), ["haiku55Enabled", "haikuDefaultEnabled", "defaultModelOption"]);
+  assert.deepEqual(callback.arguments[1].elements.map((node) => node.getText(ast)), ["haiku55Enabled", "haikuDefaultEnabled", "defaultModelOption", "defaultContext", "_currentProject?.teamId"]);
   const code = ts.transpileModule(`module.exports = ${callback.getText(ast)}`, {
     compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 },
   }).outputText;
@@ -206,7 +204,7 @@ test("title callback dependencies refresh the model when the flag changes while 
     formValuesRef.current.currentProject = { teamId: "fixture-team", billing: { storePlanId: plan, byokProviderFlags: provider ? [{ provider, enabled: true }] : [] } };
     const loaded = { exports: {} };
     vm.runInNewContext(code, {
-      module: loaded, useCallback, haiku55Enabled, haikuDefaultEnabled,
+      module: loaded, useCallback, haiku55Enabled, haikuDefaultEnabled, defaultContext: undefined, _currentProject: null,
       getDefaultAiModelOptionForPlan: catalog.getDefaultAiModelOptionForPlan, hasHaikuByokProviderFlags: flags.hasHaikuByokProviderFlags,
       defaultModelOption: haiku55Enabled ? haiku : catalog.defaultAiModelOption,
       formValuesRef, aiModelPreferencesRef: { current: {} },
@@ -299,7 +297,7 @@ test("default sites use shared plan-aware policy on client and server", () => {
       for (const plan of ["Free", "Pro", "AI", "BYOK"]) {
         for (const provider of [null, "claude", "gateway", "openrouter", "openai"]) {
           const billing = { storePlanId: plan, byokProviderFlags: provider ? [{ provider, enabled: true }] : [] };
-          const actual = vm.runInNewContext(expression, { haiku55Enabled, haikuDefaultEnabled, defaultBilling: billing, defaultAiModelOption: catalog.defaultAiModelOption, getDefaultAiModelOptionForPlan: catalog.getDefaultAiModelOptionForPlan, hasHaikuByokProviderFlags: flags.hasHaikuByokProviderFlags });
+          const actual = vm.runInNewContext(expression, { haiku55Enabled, haikuDefaultEnabled, defaultContext: undefined, defaultBilling: billing, defaultAiModelOption: catalog.defaultAiModelOption, getDefaultAiModelOptionForPlan: catalog.getDefaultAiModelOptionForPlan, hasHaikuByokProviderFlags: flags.hasHaikuByokProviderFlags });
           const expected = haikuDefaultEnabled ? haiku.id : !haiku55Enabled ? catalog.defaultAiModelOption.id : plan !== "Free" ? haiku.id : "gpt-6-luna";
           assert.equal(actual.id, expected, `${file}: ${plan}, ${provider}, ${haiku55Enabled}`);
         }
@@ -381,6 +379,7 @@ test("Android maps BYOK sources to catalog provider keys and preserves Free-plan
       for (const provider of ["claude", "gateway", "openrouter"]) {
         let input;
         const api = stubbedModule("src/app/api/android/ai/composer/route.ts", {
+          "@/lib/auth/agentScope": require("./helpers/agent-board-scope.cjs").enforcedScope,
           "next/server": { NextResponse: { json: (value) => value } },
           "@/lib/prisma": { project: { findFirst: async () => ({ id: 15, teamId: "fixture-team" }) } },
           "@/lib/mcp/auth": { checkMcpRateLimit: async () => null, validateMcpAuth: async () => ({ user: { id: 985 } }) },

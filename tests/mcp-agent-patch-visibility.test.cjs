@@ -32,6 +32,13 @@ function loadReal(relativePath) {
   const loaded = new Module(filePath, null);
   loaded.filename = filePath;
   loaded.require = (request) => {
+    if (request === "@/lib/auth/agentScope") return require("./helpers/agent-board-scope.cjs").enforcedScope;
+    if (request === "@/lib/mcp/agents/delegatedAccess") {
+      return require("./task-route-loader.cjs").load("src/lib/mcp/agents/delegatedAccess.ts", {
+        "@/lib/auth/agentScope": require("./helpers/agent-board-scope.cjs").enforcedScope,
+        "@/lib/mcp/agents/scopes": {},
+      });
+    }
     if (request === "@/lib/prisma") return { __esModule: true, default: {} };
     if (request === "@/lib/mcp/managementKeyTeamScope") {
       return { __esModule: true, agentWithinTeamWhere: () => ({}) };

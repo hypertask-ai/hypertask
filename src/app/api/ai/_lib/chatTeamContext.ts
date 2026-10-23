@@ -1,3 +1,5 @@
+import type { AgentTokenTeamScope } from '@/lib/mcp/auth/types';
+import { withAgentScopeRequest, prepareAgentScope } from "@/lib/auth/agentScope";
 import prisma from "@/lib/prisma";
 import {
   storePlanIdForTeam,
@@ -47,6 +49,7 @@ export function buildChatProviderContext(
 }
 
 type ResolveChatTeamContextInput = {
+  teamScope?: AgentTokenTeamScope | null;
   userId: number;
   requestedProjectId?: number;
   requestedTeamId?: string;
@@ -112,18 +115,23 @@ function selectAccountTeam(teams: readonly AccountTeam[]) {
   }, null);
 }
 
-export async function resolveChatTeamContext({
+export function resolveChatTeamContext(input: ResolveChatTeamContextInput): Promise<ChatTeamContext | null> {
+  return withAgentScopeRequest({ url: "/api/ai/chat/stream", method: "POST" }, () => readChatTeamContext(input));
+}
+
+async function readChatTeamContext({
   userId,
   requestedProjectId,
   requestedTeamId,
   sessionId,
+  teamScope,
 }: ResolveChatTeamContextInput): Promise<ChatTeamContext | null> {
   const findProject = (projectId: number, agentId?: string | null) =>
     prisma.project.findFirst({
       where: {
         id: projectId,
         status: "Normal",
-        ...getProjectWhere(userId, agentId),
+        ...getProjectWhere(userId, agentId, teamScope),
       },
       select: projectSelect,
     });
@@ -146,15 +154,19 @@ export async function resolveChatTeamContext({
       findProject(requestedProjectId),
       findTeam(teamId),
     ]);
-    const context = project ? projectContext(project) : null;
-    if (!context || !team || context.teamId !== team.id) return null;
-    return context;
+    if (!project || !team) return null;
+    return projectContext(project) ?? {
+      ...teamContext(team),
+      projectId: project.id,
+    };
   }
 
+  let projectId: number | null = null;
   if (requestedProjectId != null) {
     const project = await findProject(requestedProjectId);
     const context = project ? projectContext(project) : null;
     if (context) return context;
+    projectId = project?.id ?? null;
   }
 
   if (teamId) {
@@ -170,13 +182,14 @@ export async function resolveChatTeamContext({
     : null;
 
   if (session?.agentId) {
+    await prepareAgentScope(userId, session.agentId);
     const project = await prisma.project.findFirst({
       where: {
         status: "Normal",
         members: {
           some: { agentId: session.agentId, status: "Accepted" },
         },
-        ...getProjectWhere(userId, session.agentId),
+        ...getProjectWhere(userId, session.agentId, teamScope),
       },
       orderBy: { id: "asc" },
       select: {
@@ -192,9 +205,9 @@ export async function resolveChatTeamContext({
     }
   }
 
-  if (requestedProjectId != null || teamId) return null;
+  if ((requestedProjectId != null && projectId == null) || teamId) return null;
 
-  if (session?.projectId != null) {
+  if (projectId == null && session?.projectId != null) {
     const project = await findProject(session.projectId);
     const context = project ? projectContext(project) : null;
     if (context) return context;
@@ -211,5 +224,5 @@ export async function resolveChatTeamContext({
     select: accountTeamSelect,
   });
   const accountTeam = selectAccountTeam(accountTeams);
-  return accountTeam ? teamContext(accountTeam) : null;
+  return accountTeam ? { ...teamContext(accountTeam), projectId } : null;
 }

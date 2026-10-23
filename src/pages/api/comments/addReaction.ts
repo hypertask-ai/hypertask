@@ -1,3 +1,4 @@
+import { withAgentScopeRequest } from "@/lib/auth/agentScope";
 import prisma from "@/lib/prisma";
 import { IComment } from "@/models/model";
 import { sendDataNewCommentFCM } from "@/utils/controllers/FCM";
@@ -9,6 +10,7 @@ import { publishAgentWebhookDeliveries } from "@/lib/agentWebhooks/outbox";
 import { NextApiHandler, NextApiRequest, NextApiResponse } from "next";
 import { getSessionUser } from "@/lib/auth/getSessionUser";
 import { userCanAccessTaskContent } from "@/utils/controllers/tasks/assertTaskAccess";
+import { taskWriteAccessWhere } from "@/utils/controllers/projects/getAllIncludes";
 
 const isId = (value: any) => Number.isInteger(value) && value > 0;
 const isText = (value: any) => typeof value === "string" && value.trim().length > 0;
@@ -33,7 +35,11 @@ const handler: NextApiHandler = async (req: NextApiRequest, res: NextApiResponse
                 return res.status(403).json({ message: "Forbidden" });
             }
             const commentExists = await prisma.comment.findFirst({
-                where: { id: commentId, taskId: taskId },
+                where: {
+                    id: commentId,
+                    taskId: taskId,
+                    task: { project: taskWriteAccessWhere(userId, session.agentId, session.teamScope) },
+                },
                 select: { id: true },
             });
             if (!commentExists) {
@@ -193,6 +199,7 @@ const sendNotification = async(reaction:any,afterAppDomain:string,userId:number)
         notificationBody:`${(reaction.comment.text ?? "").replace(/<[^>]+>/g, '')}`,
         devices,
         payload:"",
+        taskId:reaction.taskId,
         taskTitle:reaction.comment.taskTitle,
         afterAppDomain}
 
@@ -217,4 +224,4 @@ const sendNotification = async(reaction:any,afterAppDomain:string,userId:number)
         }
 }
 
-export default handler;
+export default ((req, res) => withAgentScopeRequest(req, () => handler(req, res))) satisfies NextApiHandler;

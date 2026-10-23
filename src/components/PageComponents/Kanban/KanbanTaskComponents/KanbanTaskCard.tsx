@@ -1,5 +1,6 @@
+import { MobileViewContext } from "@/lib/contexts/mobileContext";
 import { DraggableProvided, DraggableStateSnapshot } from "@hello-pangea/dnd";
-import React from "react";
+import React, { useContext } from "react";
 import { useFirstScreenSurface } from "@/lib/firstScreen/SurfaceContext";
 import { useFlag } from "@/hooks/useFlag";
 import { HTPR_7350_CARD_TITLE_WRAP_FLAG } from "@/lib/flags/keys";
@@ -61,6 +62,7 @@ interface KanbanTaskCardProps {
     event?: React.MouseEvent<HTMLButtonElement>,
   ) => void;
   selectionMode?: boolean;
+  phoneHoldSelect?: boolean;
 }
 
 const KanbanTaskCard = ({
@@ -99,7 +101,10 @@ const KanbanTaskCard = ({
   onSubtaskClick,
   onSelectionClick,
   selectionMode = false,
-}: KanbanTaskCardProps) => (
+  phoneHoldSelect = false,
+}: KanbanTaskCardProps) => {
+  const isMobile = useContext(MobileViewContext);
+  return (
   <div
     ref={cardRef}
     tabIndex={0}
@@ -125,6 +130,7 @@ const KanbanTaskCard = ({
             groupName="kanban-selection"
             className={cn(
               "absolute left-2 top-2 z-20 bg-cardBackground",
+              phoneHoldSelect && isMobile && (selectionMode || selected) && "!flex",
               selected
                 ? "!border-hypertasks-purple !bg-hypertasks-purple"
                 : "border-light-black-border-1 hover:border-text-light-gray",
@@ -202,7 +208,8 @@ const KanbanTaskCard = ({
       />
     </TaskDraggableContainer>
   </div>
-);
+  );
+};
 
 const TaskStalenessLine = ({
   enabled,

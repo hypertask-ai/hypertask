@@ -1,3 +1,4 @@
+import { downloadWithoutBrotli } from "@/lib/net/downloadWithoutBrotli";
 import { reportError } from "@/lib/errors/reportError";
 import { renderPrompt } from "@/lib/ai/prompts/registry";
 import { NextRequest, NextResponse } from "next/server";
@@ -13,6 +14,7 @@ import {
   selectTaskWriterModel,
 } from "@/app/api/ai/_lib/editorAi";
 import { getProjectWhere } from "@/utils/controllers/projects/getAllIncludes";
+import { warnIfAllowanceRefused } from "@/app/api/ai/_lib/allowanceRefusal";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -141,6 +143,7 @@ async function generateSuggestion(task: NonNullable<ReplyContext>, userId: numbe
     userId,
   });
   const { text } = await generateText({
+    experimental_download: downloadWithoutBrotli,
     model: selected.model,
     providerOptions: selected.providerOptions,
     ...selected.settings,
@@ -190,6 +193,8 @@ export async function POST(request: NextRequest) {
 
     return NextResponse.json({ html: safeHtml });
   } catch (error) {
+    const allowanceMessage = warnIfAllowanceRefused(error, "ai/suggest-reply");
+    if (allowanceMessage) return NextResponse.json({ error: allowanceMessage }, { status: 429 });
     await reportError({
       message: error instanceof Error ? error.message : "AI request failed",
       stack: error instanceof Error ? error.stack : undefined,

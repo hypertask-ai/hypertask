@@ -78,7 +78,6 @@ stubModule("src/lib/aiModelOptions.ts", {
 });
 stubModule("src/lib/flags.ts", {
   isFeatureEnabled: async () => false,
-  PAGE_MENTIONS_FLAG: "htpr-5898-page-mentions",
 });
 stubModule("src/utils/controllers/agents/boardMembers.ts", {
   getBoardAgentMembers: async () => {

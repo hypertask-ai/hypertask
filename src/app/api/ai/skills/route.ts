@@ -8,10 +8,6 @@ import {
   ProjectAccessError,
 } from "@/app/api/ai/_lib/customInstructions";
 import {
-  HTPR_6966_SKILLS_ACCESS_DENIAL_FLAG,
-  isFeatureEnabled,
-} from "@/lib/flags";
-import {
   assertSkillScopeAccess,
   skillErrorResponse,
 } from "@/app/api/ai/_lib/skillAccess";
@@ -67,10 +63,7 @@ export async function GET(request: NextRequest) {
     });
     return NextResponse.json({ skills });
   } catch (error) {
-    if (
-      error instanceof ProjectAccessError &&
-      (await isFeatureEnabled(HTPR_6966_SKILLS_ACCESS_DENIAL_FLAG, user.id))
-    ) {
+    if (error instanceof ProjectAccessError) {
       return NextResponse.json({ error: error.message }, { status: 404 });
     }
     await reportError({
@@ -112,10 +105,7 @@ export async function POST(request: NextRequest) {
     });
     return NextResponse.json({ skill }, { status: 201 });
   } catch (error) {
-    if (
-      error instanceof ProjectAccessError &&
-      (await isFeatureEnabled(HTPR_6966_SKILLS_ACCESS_DENIAL_FLAG, user.id))
-    ) {
+    if (error instanceof ProjectAccessError) {
       return NextResponse.json({ error: error.message }, { status: 404 });
     }
     await reportError({

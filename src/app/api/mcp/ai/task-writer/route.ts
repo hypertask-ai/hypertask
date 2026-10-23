@@ -1,3 +1,4 @@
+import { AccountSkillAccessError } from "@/app/api/ai/_lib/skillAccess";
 import { wrapMcpRoute, validateMcpRouteAuth as validateMcpAuth, checkMcpRouteRateLimit as checkMcpRateLimit } from '@/lib/mcp/routeWrapper'
 import { reportError } from "@/lib/errors/reportError";
 import { NextRequest, NextResponse } from "next/server";
@@ -11,6 +12,12 @@ import {
   taskWriterRequestSchema,
 } from "@/app/api/ai/_lib/taskWriterRun";
 import { generateTaskWriterDraft } from "@/app/api/ai/_lib/taskWriterDraft";
+
+async function isAllowanceLimitMessage(message: string) {
+  if (!message.includes("AI allowance")) return false;
+  const { SHARED_AI_ALLOWANCE_EXCEEDED_MESSAGE } = await import("@/lib/aiAllowancePolicy");
+  return message === SHARED_AI_ALLOWANCE_EXCEEDED_MESSAGE;
+}
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -40,6 +47,7 @@ export async function POST(request: NextRequest) {
   try {
     input = requestSchema.parse(await request.json());
   } catch (error) {
+    if (error instanceof AccountSkillAccessError) return NextResponse.json({ success: false, error: error.message }, { status: 403 });
     return NextResponse.json(
       { success: false, error: `Invalid request: ${errorMessage(error)}` },
       { status: 400 }
@@ -56,7 +64,7 @@ export async function POST(request: NextRequest) {
       taskDescription: input.task_description,
       customInstructions: input.custom_instructions,
     });
-    const draft = await generateTaskWriterDraft(body, userId, ctx.agentId);
+    const draft = await generateTaskWriterDraft(body, userId, ctx.agentId, undefined, ctx.teamScope);
     if (!draft.success) {
       return NextResponse.json(
         { success: false, error: draft.error },
@@ -67,6 +75,8 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({
       success: true,
       html: draft.html,
+      ...(draft.labelIds ? { labelIds: draft.labelIds } : {}),
+      ...(draft.customFields?.length ? { customFields: draft.customFields } : {}),
       title: draft.title,
       priority: draft.priority,
       estimate: draft.estimate,
@@ -76,6 +86,7 @@ export async function POST(request: NextRequest) {
       skills: draft.skills,
     });
   } catch (error) {
+    if (error instanceof AccountSkillAccessError) return NextResponse.json({ success: false, error: error.message }, { status: 403 });
     if (error instanceof ProjectAccessError) {
       return NextResponse.json(
         { success: false, error: "Permission error", message: error.message },
@@ -92,6 +103,11 @@ export async function POST(request: NextRequest) {
         { success: false, error: error.message },
         { status: 403 }
       );
+    }
+    const message = errorMessage(error);
+    if (await isAllowanceLimitMessage(message)) {
+      console.warn("[mcp/ai/task-writer] refused: included AI allowance used up");
+      return NextResponse.json({ success: false, error: message }, { status: 429 });
     }
     await reportError({
       message: error instanceof Error ? error.message : "AI request failed",

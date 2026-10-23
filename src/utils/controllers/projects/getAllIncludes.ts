@@ -1,3 +1,5 @@
+import type { AgentTokenTeamScope } from '@/lib/mcp/auth/types';
+import { agentScopeEnforced } from "@/lib/auth/agentScope";
 import { Prisma, Status, ViewVisibility } from "@prisma/client";
 import { publicAgentSelect } from "@/lib/agents/publicAgent";
 import { CYCLE_WINDOW_SIZE, utcDate } from "@/lib/cycles";
@@ -22,6 +24,9 @@ const humanProjectAccessBranches = (
     ];
   }
 
+  if (agentScopeEnforced()) {
+    return [{ members: { some: { agentId, status: "Accepted", agent: { userId, revokedAt: null } } } }];
+  }
   const activeAgent = { id: agentId, userId, revokedAt: null };
   return [
     {
@@ -42,13 +47,24 @@ const humanProjectAccessBranches = (
   ];
 };
 
+export const intersectProjectTeamScope = (
+  existing: Prisma.ProjectWhereInput,
+  teamScope?: AgentTokenTeamScope | null,
+): Prisma.ProjectWhereInput => {
+  if (teamScope == null) return existing;
+  if (typeof teamScope.teamId !== "string" || !teamScope.teamId.trim() ||
+      typeof teamScope.accessBinding !== "string" || !teamScope.accessBinding.trim()) return { id: { in: [] } };
+  return { AND: [existing, { teamId: teamScope.teamId }] };
+};
+
 export const projectContentAccessWhere = (
   userId: number,
-  agentId?: string | null
-): Prisma.ProjectWhereInput => ({
+  agentId?: string | null,
+  teamScope?: AgentTokenTeamScope | null,
+): Prisma.ProjectWhereInput => intersectProjectTeamScope({
   OR: [
     ...humanProjectAccessBranches(userId, agentId),
-    ...(agentId
+    ...(agentId && !agentScopeEnforced()
       ? [
           {
             members: {
@@ -58,15 +74,16 @@ export const projectContentAccessWhere = (
         ]
       : []),
   ],
-});
+}, teamScope);
 
 export const taskWriteAccessWhere = (
   userId: number,
-  agentId?: string | null
-): Prisma.ProjectWhereInput => ({
+  agentId?: string | null,
+  teamScope?: AgentTokenTeamScope | null,
+): Prisma.ProjectWhereInput => intersectProjectTeamScope({
   OR: [
     ...humanProjectAccessBranches(userId, agentId),
-    ...(agentId
+    ...(agentId && !agentScopeEnforced()
       ? [
           {
             members: {
@@ -76,16 +93,17 @@ export const taskWriteAccessWhere = (
         ]
       : []),
   ],
-});
+}, teamScope);
 
 export const getProjectWhere = (
   userId: number,
-  agentId?: string | null
-): Prisma.ProjectWhereInput => ({
+  agentId?: string | null,
+  teamScope?: AgentTokenTeamScope | null,
+): Prisma.ProjectWhereInput => intersectProjectTeamScope({
   teamId: { not: null },
   OR: [
     ...humanProjectAccessBranches(userId, agentId),
-    ...(agentId
+    ...(agentId && !agentScopeEnforced()
       ? [
           {
             members: {
@@ -95,20 +113,23 @@ export const getProjectWhere = (
         ]
       : []),
   ],
-});
+}, teamScope);
 
 export const getProjectListingWhere = (
   userId: number,
-  agentId?: string | null
-): Prisma.ProjectWhereInput =>
+  agentId?: string | null,
+  teamScope?: AgentTokenTeamScope | null,
+): Prisma.ProjectWhereInput => intersectProjectTeamScope(
   agentId
-    ? {
+    ? agentScopeEnforced() ? getProjectWhere(userId, agentId) : {
         teamId: { not: null },
         members: {
           some: { agentId, agent: { userId, revokedAt: null } },
         },
       }
-    : getProjectWhere(userId);
+    : getProjectWhere(userId),
+  teamScope,
+);
 
 export const getTaskWhere = (): Prisma.TaskWhereInput => ({
   status: "Normal",
@@ -359,9 +380,11 @@ export const getBoardTaskInclude = (
 export const savedViewBoardAccessWhere = (
   userId: number,
   agentId?: string | null,
+  teamScope?: AgentTokenTeamScope | null,
 ): Prisma.ProjectWhereInput => {
+  if (agentId && agentScopeEnforced()) return intersectProjectTeamScope({ OR: [{ members: { some: { agentId, status: "Accepted", agent: { userId, revokedAt: null } } } }] }, teamScope);
   const activeAgent = { id: agentId!, userId, revokedAt: null };
-  return {
+  return intersectProjectTeamScope({
     OR: [
       agentId
         ? { owner: { id: userId, agents: { some: activeAgent } } }
@@ -375,7 +398,7 @@ export const savedViewBoardAccessWhere = (
         agent: { userId, revokedAt: null },
       } } }] : []),
     ],
-  };
+  }, teamScope);
 };
 
 export const getProjectViewBaseInclude = ({

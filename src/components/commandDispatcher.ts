@@ -16,15 +16,15 @@ import type { createBoardCommandActions } from "./boardCommandActions";
 import type { createGeneralCommandActions } from "./generalCommandActions";
 import type { createCommandModalCallbacks } from "./commandModalCallbacks";
 
-type Context = { newTaskWindow?: boolean } & Pick<IHTCProps, "callbackHandler"> &
-  Pick<ReturnType<typeof useCommandsState>, "copyCurrentUrlEnabled" | "boardCloseHandler" | "setShowCommands" | "setCommandMode" | "undoLatest" | "_currentProject" | "setBoardZoomedOutByProject" | "currentUser" | "openSettings" | "setShowShortcuts" | "switchToTheme" | "followTaskHandler" | "unFollowTaskHandler" | "hasBulkSelection" | "bulkSelection" | "archiveHandler" | "removeNotificationHandler" | "setShowQuickTips" | "openAnnouncements" | "setShowTaskHistory" | "setToggleAllCommentsSignal" | "saveEmptySectionsAPI" | "toggleShowArchivedOnBoard" | "paletteContextOptions" | "setArchiveBoardScope" | "toggleBoardLayout" | "onMyTasks" | "myTasksViewsEnabled" | "myTasksTableColumnsEnabled" | "setMyTasksColumnsPickerRequest" | "changeBoardLayout" | "pathname" | "goToProjectShortcut" | "router" | "setRailExpanded" | "setAppShellRail" | "inViewObject" | "toggleCreateTaskGlobally" | "duplicateTaskHandler" | "openAiWriterHandler" | "summarizeTicketHandler" | "viewSubTasksHandler" | "commentFunctionHandler" | "isMbl" | "setShowAiChatInterface" | "showAiChatInterface" | "setAiChatAutoOpenSuppressed" | "setAiChatExplicitOpenAt" | "setAiChatPinned" | "aiChatPinned" | "setIsSidebarMode" | "copyURLFunctionHandler" | "moveTaskToInboxHandler" | "starTaskHandler" | "setReminderHandler" | "myTasksSnoozeEnabled" | "removeParentHandler" | "removeSubtaskHandler" | "commentAudioSpeechToText" | "toggleTimeTrackingHandler" | "setCalendarSettings" | "endTour" | "setSelectedTourId" | "startTour"> &
+type Context = { newTaskWindow?: boolean; agentSidebarChatsEnabled: boolean } & Pick<IHTCProps, "callbackHandler"> &
+  Pick<ReturnType<typeof useCommandsState>, "boardCloseHandler" | "setShowCommands" | "setCommandMode" | "undoLatest" | "_currentProject" | "setBoardZoomedOutByProject" | "currentUser" | "openSettings" | "setShowShortcuts" | "switchToTheme" | "followTaskHandler" | "unFollowTaskHandler" | "hasBulkSelection" | "bulkSelection" | "archiveHandler" | "removeNotificationHandler" | "setShowQuickTips" | "openAnnouncements" | "setShowTaskHistory" | "setToggleAllCommentsSignal" | "saveEmptySectionsAPI" | "toggleShowArchivedOnBoard" | "paletteContextOptions" | "setArchiveBoardScope" | "toggleBoardLayout" | "onMyTasks" | "myTasksViewsEnabled" | "myTasksTableColumnsEnabled" | "setMyTasksColumnsPickerRequest" | "changeBoardLayout" | "pathname" | "goToProjectShortcut" | "router" | "setRailExpanded" | "setAppShellRail" | "inViewObject" | "toggleCreateTaskGlobally" | "duplicateTaskHandler" | "openAiWriterHandler" | "summarizeTicketHandler" | "viewSubTasksHandler" | "commentFunctionHandler" | "isMbl" | "setShowAiChatInterface" | "showAiChatInterface" | "setAiChatAutoOpenSuppressed" | "setAiChatExplicitOpenAt" | "setAiChatPinned" | "aiChatPinned" | "setIsSidebarMode" | "copyURLFunctionHandler" | "moveTaskToInboxHandler" | "starTaskHandler" | "setReminderHandler" | "myTasksSnoozeEnabled" | "removeParentHandler" | "removeSubtaskHandler" | "commentAudioSpeechToText" | "toggleTimeTrackingHandler" | "setCalendarSettings" | "endTour" | "setSelectedTourId" | "startTour"> &
   Pick<ReturnType<typeof createBoardCommandActions>, "acceptTaskHandler" | "saveTaskTemplateHandler" | "generateStatusUpdateHandler" | "toggleStalenessHandler" | "toggleStalenessViewHandler" | "toggleAutoArchiveHandler" | "sortByStalenessHandler"> &
   Pick<ReturnType<typeof createGeneralCommandActions>, "hideActiveColumn" | "markUnread" | "GoToHandler" | "toggleBoardTimeTrackingHandler" | "redirectToTrash" | "GoToOnboarding" | "copyCurrentPageURL" | "subscribeGoogleCalendar" | "copyBranchNameHandler" | "assignToMeHandler" | "deleteAllChats"> &
   Pick<ReturnType<typeof createCommandModalCallbacks>, "redirectToManageSubscriptions">;
 
 export function createCommandDispatcher(context: Context) {
   const {
-  copyCurrentUrlEnabled, boardCloseHandler, setShowCommands, setCommandMode, undoLatest,
+  boardCloseHandler, setShowCommands, setCommandMode, undoLatest,
   _currentProject, setBoardZoomedOutByProject, currentUser, openSettings, setShowShortcuts,
   switchToTheme, followTaskHandler, unFollowTaskHandler, hasBulkSelection, bulkSelection,
   archiveHandler, acceptTaskHandler, removeNotificationHandler, setShowQuickTips, openAnnouncements,
@@ -49,11 +49,6 @@ export function createCommandDispatcher(context: Context) {
       setShowCommands({ show: true, mode: CommandMode.Command, paletteTab: "compose" });
       return;
     }
-    if (mode === CommandMode.CopyViewURL && !copyCurrentUrlEnabled) {
-      boardCloseHandler();
-      return;
-    }
-
     if ([CommandMode.SelectAllOnBoard, CommandMode.SelectAllInColumn, CommandMode.ClearTaskSelection].includes(mode!)) {
       if (paletteContextOptions?.kanbanSelectAllEnabled && bulkSelection && "selectAll" in bulkSelection) {
         if (mode === CommandMode.SelectAllOnBoard) bulkSelection.selectAll();
@@ -249,7 +244,7 @@ export function createCommandDispatcher(context: Context) {
 
 function dispatchCommandGroup1(context: Context, mode?: CommandMode, action?: string) {
   const {
-  copyCurrentUrlEnabled, boardCloseHandler, setShowCommands, setCommandMode, undoLatest,
+  boardCloseHandler, setShowCommands, setCommandMode, undoLatest,
   _currentProject, setBoardZoomedOutByProject, currentUser, openSettings, setShowShortcuts,
   switchToTheme, followTaskHandler, unFollowTaskHandler, hasBulkSelection, bulkSelection,
   archiveHandler, acceptTaskHandler, removeNotificationHandler, setShowQuickTips, openAnnouncements,
@@ -473,7 +468,7 @@ function dispatchCommandGroup1(context: Context, mode?: CommandMode, action?: st
 
 function dispatchCommandGroup2(context: Context, mode?: CommandMode, action?: string) {
   const {
-  copyCurrentUrlEnabled, boardCloseHandler, setShowCommands, setCommandMode, undoLatest,
+  boardCloseHandler, setShowCommands, setCommandMode, undoLatest,
   _currentProject, setBoardZoomedOutByProject, currentUser, openSettings, setShowShortcuts,
   switchToTheme, followTaskHandler, unFollowTaskHandler, hasBulkSelection, bulkSelection,
   archiveHandler, acceptTaskHandler, removeNotificationHandler, setShowQuickTips, openAnnouncements,
@@ -677,7 +672,7 @@ function dispatchCommandGroup2(context: Context, mode?: CommandMode, action?: st
 
 function dispatchCommandGroup3(context: Context, mode?: CommandMode, action?: string) {
   const {
-  copyCurrentUrlEnabled, boardCloseHandler, setShowCommands, setCommandMode, undoLatest,
+  boardCloseHandler, setShowCommands, setCommandMode, undoLatest,
   _currentProject, setBoardZoomedOutByProject, currentUser, openSettings, setShowShortcuts,
   switchToTheme, followTaskHandler, unFollowTaskHandler, hasBulkSelection, bulkSelection,
   archiveHandler, acceptTaskHandler, removeNotificationHandler, setShowQuickTips, openAnnouncements,
@@ -828,7 +823,16 @@ function dispatchCommandGroup3(context: Context, mode?: CommandMode, action?: st
         return;
       case CommandMode.GoToAgentChat:
         boardCloseHandler();
-        router.push("/agents/chat");
+        if (context.agentSidebarChatsEnabled && _currentProject?.id) {
+          setIsSidebarMode(true);
+          setAiChatAutoOpenSuppressed(false);
+          setAiChatExplicitOpenAt(Date.now());
+          setShowAiChatInterface(true);
+          const params = new URLSearchParams(window.location.search);
+          params.set("agentSidebar", "1");
+          router.replace(`${window.location.pathname}?${params.toString()}`, { scroll: false });
+          window.dispatchEvent(new Event("ht-agent-sidebar-open"));
+        } else router.push("/agents/chat");
         return;
       case CommandMode.AgentChatNextAgent:
         boardCloseHandler();
@@ -881,7 +885,7 @@ function dispatchCommandGroup3(context: Context, mode?: CommandMode, action?: st
 
 function dispatchCommandGroup4(context: Context, mode?: CommandMode, action?: string) {
   const {
-  copyCurrentUrlEnabled, boardCloseHandler, setShowCommands, setCommandMode, undoLatest,
+  boardCloseHandler, setShowCommands, setCommandMode, undoLatest,
   _currentProject, setBoardZoomedOutByProject, currentUser, openSettings, setShowShortcuts,
   switchToTheme, followTaskHandler, unFollowTaskHandler, hasBulkSelection, bulkSelection,
   archiveHandler, acceptTaskHandler, removeNotificationHandler, setShowQuickTips, openAnnouncements,

@@ -225,6 +225,7 @@ function webhookHarness(messageId) {
     $transaction: async (operations) => Promise.all(operations),
   };
   const webhook = load("src/lib/agentWebhooks/delivery.ts", {
+    "@/lib/webhooks/credentialScope": { webhookCredentialAllows: async () => true },
     "@/lib/prisma": db,
     "@/lib/flags": { isFeatureEnabled: async () => true },
     "@/lib/agentRuns/model": { AGENT_RUN_FEATURE_FLAG: "existing-run-flag" },

@@ -3,7 +3,10 @@ set -euo pipefail
 # Never allow caller tracing to reveal disposable credentials.
 set +x
 
-usage() { echo 'Usage: scripts/premerge-local.sh [up|down|sweep|--install] [--flag key=MODE ...]' >&2; }
+usage() {
+  echo 'Not run on the VPS (Valentin 2026-10-21: no tests).' >&2
+  echo 'Usage: scripts/premerge-local.sh [up|down|sweep|--install] [--flag key=MODE ...]' >&2
+}
 action=up
 if [ "$#" -gt 0 ]; then
   case "$1" in up|down|sweep|--install) action=$1; shift ;; --flag) ;; *) usage; exit 2 ;; esac
@@ -110,6 +113,7 @@ cleanup() {
   local result=$?
   trap - EXIT INT TERM
   stop || { [ "$result" -ne 0 ] || result=1; }
+  if [ -n "${scratch:-}" ]; then rm -rf -- "$scratch"; fi
   if [ "$result" -ne 0 ]; then
     echo "Local setup failed. Private logs: $state" >&4
   fi
@@ -124,9 +128,18 @@ printf '%s %s\n' "$$" "$(sed 's/.*) //' "/proc/$$/stat" | awk '{print $20}')" >"
 # Logs can contain connection strings. Keep them private and never echo them.
 exec 3>&1
 exec >"$state/setup.log" 2>&1
-if [ ! -d node_modules ]; then npm ci --prefer-offline --no-audit --no-fund; fi
-# A hardlinked worktree install skips postinstall, so the gitignored flag index may be missing
-# or stale for this checkout; the seed and the build both import it (YPER4-303).
+source_root=$root
+scratch=$(mktemp -d /tmp/ht-premerge-build.XXXXXX)
+git ls-files -co --exclude-standard -z | while IFS= read -r -d '' file; do
+  if [ -e "$file" ] || [ -L "$file" ]; then printf '%s\0' "$file"; fi
+done | tar --null \
+  --exclude='.git' --exclude='node_modules' --exclude='.next' --exclude='build-*/*' \
+  --exclude='.env*' --exclude='e2e/smoke/.state' -T - -cf - | tar -xf - -C "$scratch"
+BUILD_ID=$(git rev-parse HEAD)
+export BUILD_ID
+root=$scratch
+cd "$root"
+npm ci --prefer-offline --no-audit --no-fund
 npm run -s flags:generate
 npx --no-install prisma generate
 secret() { node -e "console.log(require('node:crypto').randomBytes(32).toString('hex'))"; }
@@ -219,8 +232,9 @@ board_path=$(sed -n 's/^board_path=//p' "$state/fixtures.out")
 account=$(node -e 'const s=require(process.argv[1]);console.log(JSON.parse(decodeURIComponent(s.cookies.find(c=>c.name==="nookies_user").value)).id)' "$BROWSER_SMOKE_STATE_FILE")
 flags=$(node -e 'const {modes}=require(process.argv[1]);console.log(Object.entries(modes).map(([k,v])=>k+"="+v).join(", "))' "$state/flag-modes.json")
 printf 'Build URL: %s\nBoard URL: %s%s\nStorage state: %s\nCommit: %s\nAccount: %s (disposable QA, board owner)\nFlags: %s\nBoard: %s%s\nBuild: %s\n' \
-  "$url" "$url" "$board_path" "$BROWSER_SMOKE_STATE_FILE" "$(git rev-parse HEAD)" "$account" "$flags" "$url" "$board_path" "$url" >&3
+  "$url" "$url" "$board_path" "$BROWSER_SMOKE_STATE_FILE" "$(git -C "${source_root:-.}" rev-parse HEAD)" "$account" "$flags" "$url" "$board_path" "$url" >&3
 
 # Keep the owning run alive so success, interruption and explicit down share cleanup.
+printf 'Test click removed (Valentin 2026-10-21); safety is flags, revert, live QA after release and the YPER4-550 screenshot check.\n' >&3
 printf 'Local QA is ready. Keep this run open; use down when finished.\n' >&3
 wait "$pid"

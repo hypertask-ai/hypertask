@@ -20,6 +20,8 @@ Median content-visible time from `node scripts/speed/measure.mjs`, QA 2343 on pr
 
 Each path is 5x to 270x away from 50 ms. The phone board and the first ticket open are the furthest.
 
+The Board row is a **first visit on a new device**: the harness dropped the board preference the app saves after a visit, so the server never sent its ready-made board. A returning phone user saw the board in a median **1.93 s** on 2026-10-20 (N=20, against 11.9 s first visit), tracked from then on as its own path, Board returning (https://app.hypertask.ai/detail/project-4060/519).
+
 ## Milestones
 
 Work on the next open milestone first. A path counts as met once its median stays under the target on 3 daily runs in a row.

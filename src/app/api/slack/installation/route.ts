@@ -1,3 +1,6 @@
+import { withAgentScopeRequest } from "@/lib/auth/agentScope";
+import { getSessionUser } from "@/lib/auth/getSessionUser";
+import { getProjectWhere } from "@/utils/controllers/projects/getAllIncludes";
 import { NextRequest, NextResponse } from "next/server";
 
 import { getServerCookieUser } from "@/lib/auth/serverUser";
@@ -24,6 +27,10 @@ export async function GET(request: NextRequest) {
 }
 
 export async function PATCH(request: NextRequest) {
+  return withAgentScopeRequest(request, () => updateInstallation(request));
+}
+
+async function updateInstallation(request: NextRequest) {
   let body: { defaultProjectId?: unknown; teamId?: unknown };
   try {
     body = (await request.json()) as typeof body;
@@ -33,6 +40,8 @@ export async function PATCH(request: NextRequest) {
 
   const access = await getAuthorizedTeam(body.teamId);
   if (access instanceof NextResponse) return access;
+
+  const actingAgentId = (await getSessionUser(request.headers))?.agentId;
 
   let defaultProjectId: number | null = null;
   if (body.defaultProjectId !== null) {
@@ -47,6 +56,7 @@ export async function PATCH(request: NextRequest) {
       where: {
         AND: [
           extraMinimalProjectWhere(access.userId),
+          getProjectWhere(access.userId, actingAgentId),
           { id: defaultProjectId, teamId: access.teamId },
         ],
       },

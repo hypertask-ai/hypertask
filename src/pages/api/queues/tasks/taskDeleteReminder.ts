@@ -1,8 +1,9 @@
 
+import { withAgentScopeRequest, prepareAgentScope } from "@/lib/auth/agentScope";
 import { subMinutes } from "date-fns"
 
 
-import type { NextApiRequest, NextApiResponse } from 'next'
+import type { NextApiHandler, NextApiRequest, NextApiResponse } from 'next'
 import { scheduleTaskDeleteJob } from "../taskDeleteQueue";
 import Sugar from "sugar";
 import prisma from "@/lib/prisma";
@@ -31,7 +32,7 @@ export class TaskHardDeleteInProgressError extends Error {
 }
 
 
-export default async function handler(
+async function handler(
   req: NextApiRequest,
   res: NextApiResponse
 ) {
@@ -50,6 +51,7 @@ export default async function handler(
     return res.status(actingAgent.status).json({ message: actingAgent.message });
   }
   const actingAgentId = actingAgent.agentId;
+  await prepareAgentScope(session.userId, actingAgentId);
 
   const remindAtDate = Sugar.Date.create("30 Days from now")
   if (!taskId || !remindAtDate) return res.status(400).json({ message: "Missing Required Information" })
@@ -112,6 +114,8 @@ export default async function handler(
   }
 
 };
+
+export default ((req, res) => withAgentScopeRequest(req, () => handler(req, res))) satisfies NextApiHandler;
 
 export async function updateTaskAndSubtasks(
   taskUpdated: { id: number },
