@@ -47,6 +47,7 @@ export type SettingsSectionId =
   | "plans"
   | "mcp"
   | "slack"
+  | "github"
   | "webhooks"
   | "developer-access"
   | "management-keys"
@@ -193,6 +194,7 @@ export const SETTINGS_TABS: SettingsTab[] = [
         items: [
           { id: "developer-access", label: "Developer access" },
           { id: "slack", label: "Slack" },
+          { id: "github", label: "GitHub" },
           { id: "webhooks", label: "Webhooks" },
           { id: "mcp", label: "MCP" },
           { id: "management-keys", label: "Management keys" },
@@ -351,25 +353,41 @@ export const useSettingsNavigation = () => {
         setShowGuestLogin(true);
         return;
       }
-      if (section?.startsWith("board-")) {
+      let githubProjectId: number | null = null;
+      if (section?.startsWith("board-") || section === "github") {
         const projectId = boardContextFromPath(
           pathname,
           Number(searchParams?.get("id")) || currentProject?.id,
         );
-        if (projectId) {
+        if (section === "github") {
+          githubProjectId = projectId;
+          if (!githubProjectId && pathname?.startsWith(SETTINGS_BASE_PATH)) {
+            const explicitId = searchParams?.get("projectId");
+            githubProjectId = explicitId != null
+              ? /^[1-9][0-9]*$/.test(explicitId) && Number.isSafeInteger(Number(explicitId))
+                ? Number(explicitId) : null
+              : currentProject?.id ?? null;
+          }
+          if (!githubProjectId) {
+            toast.error("Open Connect GitHub from the board you want to connect");
+            return;
+          }
+        }
+        const targetProjectId = githubProjectId ?? projectId;
+        if (targetProjectId) {
           try {
-            let project = currentProject?.id === projectId ? currentProject : undefined;
+            let project = currentProject?.id === targetProjectId ? currentProject : undefined;
             if (!project) {
               project = queryClient
                 .getQueryData<IProject[]>(["projectsAllMinimal"])
-                ?.find((board) => board.id === projectId);
+                ?.find((board) => board.id === targetProjectId);
             }
             if (!project) {
               const projects = await queryClient.fetchQuery<IProject[]>({
                 queryKey: ["projectsAllMinimal"],
                 queryFn: () => getAllProjectsMinimal("ExtraMinimal"),
               });
-              project = projects.find((board) => board.id === projectId);
+              project = projects.find((board) => board.id === targetProjectId);
             }
             if (!project?.teamId) throw new Error("Board not available");
             setCurrentProject(project);
@@ -381,7 +399,8 @@ export const useSettingsNavigation = () => {
         }
       }
       rememberSettingsReturnTo(getCurrentPath(pathname, searchParams));
-      router.push(section ? getSettingsPath(section) : SETTINGS_BASE_PATH);
+      const path = section ? getSettingsPath(section) : SETTINGS_BASE_PATH;
+      router.push(githubProjectId ? `${path}?projectId=${githubProjectId}` : path);
     },
     [currentProject, pathname, queryClient, router, searchParams, setCurrentProject, setSettingsTeamId, setShowGuestLogin],
   );
@@ -392,9 +411,18 @@ export const useSettingsNavigation = () => {
 
   const setSettingsSection = useCallback(
     (section: SettingsSectionId) => {
+      if (section === "github") {
+        const explicitId = searchParams?.get("projectId");
+        const projectId = explicitId != null
+          ? /^[1-9][0-9]*$/.test(explicitId) && Number.isSafeInteger(Number(explicitId))
+            ? Number(explicitId) : null
+          : currentProject?.id;
+        router.push(`${getSettingsPath(section)}${projectId ? `?projectId=${projectId}` : ""}`);
+        return;
+      }
       router.push(getSettingsPath(section));
     },
-    [router],
+    [currentProject?.id, router, searchParams],
   );
 
   const clearSettingsSection = useCallback(() => {

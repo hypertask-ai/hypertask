@@ -1297,6 +1297,7 @@ enum GithubPullRequestLinkOrigin {
 
 model GithubInstallation {
   id           String   @id @db.VarChar(32)
+  installedByUserId Int?
   accountId    String   @db.VarChar(32)
   accountLogin String   @db.VarChar(100)
   accountType  String   @db.VarChar(32)
@@ -1307,6 +1308,7 @@ model GithubInstallation {
   repositories BoardGithubRepository[]
 
   @@index([teamId])
+  @@index([installedByUserId])
 }
 
 model BoardGithubRepository {

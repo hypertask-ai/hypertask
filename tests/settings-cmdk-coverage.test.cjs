@@ -273,11 +273,13 @@ test("unresolved shared row labels fail rather than silently dropping a setting"
 });
 
 const gatedCommands = [
+  { keys: ["settingsGithub"], flag: "githubConnectEnabled", file: "GitHubSection.tsx", uiFlag: "enabled",
+    derived: { name: "hiddenGithubCommandKey", value: (enabled) => (enabled ? null : "settingsGithub") } },
   { keys: ["settingsCalendarKeepTasksUpdated"], flag: "googleCalendarSettingsEnabled", file: "CalendarSection.tsx", uiFlag: "enabled" },
   { keys: ["settingsTaskPageSuggestDescriptionsFromTaskTitles"], flag: "autoTaskDescriptionsEnabled", file: "src/components/sidebars/RightSidebar/UserPreference.tsx", uiFlag: "autoTaskDescriptionsEnabled" },
 ];
 
-for (const { keys, flag, file, uiFlag } of gatedCommands) {
+for (const { keys, flag, file, uiFlag, derived } of gatedCommands) {
   test(`settings commands respect the UI flag: ${flag}`, () => {
     const menuFile = "src/components/Modals/commands/HTC/commands.tsx";
     const flagKey = (file, name) => {
@@ -294,22 +296,28 @@ for (const { keys, flag, file, uiFlag } of gatedCommands) {
       if (ts.isCallExpression(node) && node.expression.getText() === "useMemo" && /get(All)?Commands\(/.test(node.arguments[0].getText())) dependencies = node.arguments[1];
     });
     assert.ok(predicate, "Command availability filter missing");
-    assert.ok(dependencies.elements.some((item) => item.getText() === flag), `${flag}: missing memo dependency`);
+    const dependency = derived?.name ?? flag;
+    assert.ok(dependencies.elements.some((item) => item.getText() === dependency), `${dependency}: missing memo dependency`);
     const bindings = {
       CommandMode: new Proxy({}, { get: (_, key) => key }), showByokApiKeys: true,
       isTicketPrefixCommandVisible: () => true, currentProject: {}, boardLayout: "table",
       onMyTasks: false, myTasksViewsEnabled: false, myTasksTableColumnsEnabled: false,
       onCalendar: false,
       ...Object.fromEntries(gatedCommands.map((item) => [item.flag, false])),
+      ...Object.fromEntries(gatedCommands.filter((item) => item.derived).map((item) => [item.derived.name, item.derived.value(false)])),
+    };
+    const setFlag = (enabled) => {
+      bindings[flag] = enabled;
+      if (derived) bindings[derived.name] = derived.value(enabled);
     };
     const js = ts.transpileModule(`const filter = ${predicate.getText()};`, { compilerOptions: { module: ts.ModuleKind.CommonJS } }).outputText;
     const evaluate = () => new Function(...Object.keys(bindings), `${js}; return filter;`)(...Object.values(bindings));
     for (const key of keys) {
       assert.ok(commands.some((command) => command.key === key), `Missing gated settings command ${key}`);
       assert.equal(evaluate()({ key, commandMode: "Setting" }), false, `${key} visible while flag off`);
-      bindings[flag] = true;
+      setFlag(true);
       assert.equal(evaluate()({ key, commandMode: "Setting" }), true, `${key} absent while flag on`);
-      bindings[flag] = false;
+      setFlag(false);
     }
     assert.equal(evaluate()({ key: "settingsGeneral", commandMode: "Setting" }), true, "Unrelated settings were gated");
     if (flag === "googleCalendarSettingsEnabled") {
