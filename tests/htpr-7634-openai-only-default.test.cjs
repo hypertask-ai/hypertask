@@ -40,7 +40,7 @@ function moduleWithStubs(file, stubs) {
   return loadedModule.exports;
 }
 
-function harness({ enabled = true, plan = "Pro", saved = null, teamByok = false, managed = false, openai = false, gateway = false, openrouter = false, agentProvider = null, agentId = null, settings = {}, flagError = false, background = false } = {}) {
+function harness({ enabled = true, plan = "Pro", saved = null, teamByok = false, managed = false, openai = false, openaiGateway = false, gateway = false, openrouter = false, agentProvider = null, agentId = null, settings = {}, flagError = false, background = false } = {}) {
   const checks = [], calls = [], reservations = [], agentLookups = [], usage = [], observations = [];
   let preferenceReads = 0;
   const flags = { isFeatureEnabled: async (key, id) => {
@@ -63,6 +63,7 @@ function harness({ enabled = true, plan = "Pro", saved = null, teamByok = false,
       const credential = provider === "claude" && teamByok ? teamKey
         : provider === "managed_gateway" && managed ? managedKey
         : provider === "openai" && openai ? "fixture-direct-openai"
+        : provider === "openai" && openaiGateway ? "vck_fixture_team_openai_slot"
         : provider === "gateway" && gateway ? "vck_fixture_customer"
         : provider === "openrouter" && openrouter ? "fixture-openrouter" : null;
       return credential ? { enabled: true, ciphertext: credential } : null;
@@ -387,6 +388,58 @@ test("server context includes managed funding, not the shared key", async () => 
   }
 });
 
+test("classification uses the team's keys only, never the acting agent's", async () => {
+  const masked = harness({ openaiGateway: true, agentProvider: "openai", agentId: "fixture-agent" });
+  const maskedContext = await masked.byok.getAiDefaultModelContext({ trustedTeamId: teamId, userId, agentId: "fixture-agent" });
+  assert.equal(maskedContext.hasClaudeRoute, true, "a team gateway in the OpenAI slot stays a Claude route even when the agent has a direct OpenAI key");
+  assert.equal(maskedContext.hasDirectOpenAiKey, false);
+  assert.equal(catalog.defaultModelKeyFor(maskedContext), "claude-haiku-5-5");
+  const agentClaude = harness({ openai: true, agentProvider: "claude", agentId: "fixture-agent" });
+  const agentClaudeContext = await agentClaude.byok.getAiDefaultModelContext({ trustedTeamId: teamId, userId, agentId: "fixture-agent" });
+  assert.equal(agentClaudeContext.hasClaudeRoute, false, "an agent Claude key does not make the team Claude-capable");
+  assert.equal(agentClaudeContext.hasDirectOpenAiKey, true);
+  const agentOpenAi = harness({ agentProvider: "openai", agentId: "fixture-agent" });
+  const agentOpenAiContext = await agentOpenAi.byok.getAiDefaultModelContext({ trustedTeamId: teamId, userId, agentId: "fixture-agent" });
+  assert.equal(agentOpenAiContext.hasDirectOpenAiKey, false, "an agent OpenAI key is not the team's key");
+  assert.equal(catalog.isOpenAiOnlyPaidTeam(agentOpenAiContext), false);
+});
+
+test("conversation titles never apply the OpenAI-only default, so a supplied gateway key never runs Luna", async () => {
+  const resolved = [];
+  const title = moduleWithStubs("src/lib/ai/chatStream/title.ts", {
+    "@/lib/aiModelOptions": catalog,
+    "@/app/api/ai/_lib/byokKeys": {
+      getAiDefaultModelContext: async () => ({ haiku55Enabled: true, plan: "Pro", hasByok: false, byok: undefined, openaiOnlyDefaultEnabled: true, hasDirectOpenAiKey: true, hasClaudeRoute: false }),
+      getByokOrTeamGatewayApiKeyForProvider: async () => undefined,
+      resolveAutomaticAiModel: (provider, model, input) => { resolved.push({ provider, model, input }); return { provider, model }; },
+    },
+    "@/app/api/ai/_lib/modelProvider": { resolveAiModel: () => ({}), aiUsageProviderForCredential: () => "fixture", configureAiModelUsage: () => {}, isAiGatewayEnabled: () => true, providerOptionsForAiModel: () => ({}) },
+    "@/lib/ai/prompts/registry": { renderPrompt: () => "fixture" },
+    ai: { generateText: async () => ({ text: "Fixture title" }) },
+  });
+  await title.generateConversationTitle("Plan the launch", "Plan the launch", "vck_fixture_agent_gateway", { teamId, userId }, { userId });
+  assert.ok(resolved.length > 0);
+  assert.ok(resolved.every(({ model }) => model !== "gpt-6-luna"), JSON.stringify(resolved));
+  assert.ok(resolved.every(({ input }) => input !== "vck_fixture_agent_gateway"), JSON.stringify(resolved));
+});
+
+test("provider settings stays available with the flag off or a failing key read", async () => {
+  for (const context of [async () => ({ openaiOnlyDefaultEnabled: false, hasDirectOpenAiKey: false, hasClaudeRoute: false }), async () => { throw new Error("Fixture corrupt stored key"); }]) {
+    const route = moduleWithStubs("src/pages/api/teams/aiProviderSettings.ts", {
+      "@/lib/aiProviders": providers,
+      "@/lib/auth/getSessionUser": { getSessionUser: async () => ({ userId }) },
+      "@/lib/prisma": { __esModule: true, default: { user: { findUnique: async () => ({ id: userId }) } } },
+      "@/utils/controllers/teams/getTeamAiSettingsForViewer": { getTeamAiSettingsForViewer: async () => ({ ok: true, settings: {} }) },
+      "@/app/api/ai/_lib/byokKeys": { getOpenAiOnlyDefaultContext: context },
+    });
+    let status, body;
+    const res = { status(value) { status = value; return res; }, json(value) { body = value; return res; } };
+    await route.default({ method: "GET", headers: {}, query: { teamId } }, res);
+    assert.equal(status, 200);
+    assert.deepEqual(body.defaultModelContext, { openaiOnlyDefaultEnabled: false, hasDirectOpenAiKey: false, hasClaudeRoute: false });
+  }
+});
+
 test("picker hook consumes only the scoped server classification and obeys the client flag", () => {
   let enabled = true;
   const scopes = [];
@@ -410,7 +463,7 @@ test("provider settings exposes route booleans but never sends credentials to th
     "@/lib/auth/getSessionUser": { getSessionUser: async () => ({ userId }) },
     "@/lib/prisma": { __esModule: true, default: { user: { findUnique: async () => ({ id: userId }) } } },
     "@/utils/controllers/teams/getTeamAiSettingsForViewer": { getTeamAiSettingsForViewer: async () => ({ ok: true, settings: {} }) },
-    "@/app/api/ai/_lib/byokKeys": { getAiDefaultModelContext: async (lookup) => {
+    "@/app/api/ai/_lib/byokKeys": { getOpenAiOnlyDefaultContext: async (lookup) => {
       assert.equal(lookup.trustedTeamId, teamId);
       assert.equal(lookup.userId, userId);
       return { openaiOnlyDefaultEnabled: true, hasDirectOpenAiKey: true, hasClaudeRoute: false, byok: { credential: "fixture-secret-not-for-client" } };
