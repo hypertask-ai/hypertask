@@ -525,7 +525,7 @@ https://app.hypertask.ai/detail/project-15/7644, flag `htpr-7644-board-cards-fir
 
 An earlier 3-run probe (load 13) showed the same shape with cards 241 to 756 ms after the first commit. The card chunk (7063) had finished downloading before the first commit in 6 of 6 runs.
 
-**Cause (code).** `section.tsx` starts every non-seeded column with `taskModuleReady=false`, so the first commit draws `TaskSkeleton`; an effect then awaits `loadTask()` and sets it true; the card is `dynamic(loadTask, { ssr: false })`, a lazy wrapper that suspends once more even for a loaded module; the gaps cluster at 258 to 283 ms, which fits React throttling the reveal of content behind a committed fallback to about 300 ms (leading explanation, not watched executing). `ht-board-first-commit` and `ht-board-usable-ready` fire on the skeleton commit, so field readiness reads about 0.27 s early on network loads.
+**Cause (code).** `section.tsx` starts every non-seeded column with `taskModuleReady=false`, so the first commit draws `TaskSkeleton`; an effect then awaits `loadTask()` and sets it true; the card is `dynamic(loadTask, { ssr: false })`, a lazy wrapper that suspends once more even for a loaded module; the gaps cluster at 258 to 283 ms, which first looked like React throttling the reveal of content behind a committed fallback to about 300 ms; the live result below shows it was mostly card render work. `ht-board-first-commit` and `ht-board-usable-ready` fire on the skeleton commit, so field readiness reads about 0.27 s early on network loads.
 
 **Change.** Remember the loaded card module; a column that mounts after hydration, not server-drawn, with the module already loaded starts ready and renders the loaded component directly. Otherwise unchanged. Expected: desktop first visit about 0.27 s sooner (2018 ms daily median, 1886 to 2832); phone unmeasured (the 0.9 s from first commit to cards in the morning entry may be the same gap).
 
@@ -535,7 +535,16 @@ An earlier 3-run probe (load 13) showed the same shape with cards 241 to 756 ms 
 - Count the placeholder elements per frame, not just the target element: "first commit" can be a commit of placeholders.
 - A `next/dynamic` or `React.lazy` component whose chunk is already loaded still suspends on first render; behind a committed fallback that costs up to 300 ms of React's reveal throttle.
 
-**Next probe.** Live on/off for HTPR-7644 (rewrite the flag seed in the board document per sample, 5 interleaved pairs, desktop and phone first visit), then the phone: hydration between code arrival (about 5.6 s) and the local read (6.5 s).
+**Live result (PR 1953, merge 8650c63db, flag Everyone): placeholders gone, no measurable time difference.**
+- First visit without the board preference: placeholders still drawn in 10 of 10 (load 8.5 to 13.8). The page carries no flag seed on that path, `/api/flags` returns after the columns mount, and `useFlag` reads false until then. A follow-up taking the flag's default while flags load (PR 1960) was closed: the AI review showed an Off switch could then never stop the first draw on a new device. Seeding flags into the no-cookie board document is its own, larger change.
+- In-app `g` then `b` from My Tasks (flags loaded), 5 interleaved pairs per profile, flag picked per sample by rewriting the My Tasks document and `/api/flags`, load 10.7 to 17.7: on drew real cards with no placeholder frame in 5 of 5 desktop and 4 of 5 phone (the fifth mounted before the card code loaded and fell back correctly); same board and card list hash in all 20. Card visible: desktop off 962 ms (696 to 1217), on 966 ms (571 to 1186); phone off 2333 ms (2110 to 3511), on 2425 ms (2032 to 4039). Only failed requests: browser-cancelled route prefetches (`/project`, `/inbox`, `/agents`). Evidence: `~/.local/state/vcc-evidence/HTPR-7644/navab.mjs`, `desktop-nav.jsonl`, `phone-nav.jsonl`, `proof.md`.
+- **The cause was wrong in part.** The on arm's first commit lands about as late as the off arm's swap (off swap 130 to 500 ms after its placeholder commit). The swap was mostly card render work, not React's 300 ms reveal throttle. Removing a placeholder frame moves the same CPU into the first commit.
+
+**Lessons.**
+- Check where a flag value comes from at the moment a component reads it: on the no-cookie board path flags are not seeded, so any flag read at column mount is false on a first visit.
+- Before calling a placeholder-to-content gap "waiting", compare the first commit time with and without the placeholder; if the content commit moves later by the same amount, the gap was render work.
+
+**Next probe.** The phone limiter is still main-thread render: hydration between code arrival (about 5.6 s) and the local read (6.5 s) on the first visit, and about 2 s of CPU after `g` then `b`. Profile which card subcomponents dominate a 10-card commit on the throttled phone.
 
 ## Milliseconds saved scoreboard
 
@@ -567,6 +576,7 @@ Only matched end-to-end before/after evidence earns saved milliseconds; `unprove
 | https://app.hypertask.ai/detail/project-15/7588 | Phone page navigation, key press to /project request, daily harness N=5 | /project request 388 → 95 ms (live on/off N=5+5); content 1985 → 1947 ms, overlapping | about 290 ms to the board request, 0 to content | flag `htpr-7588-board-shortcut-from-device` Everyone, PR 1863; same board and screen in 10 of 10 |
 | https://app.hypertask.ai/detail/project-15/7617 | Phone board first visit, early layout and page script tags injected live, interleaved N=5+5 and 2+2 | 12315 ms (off) → 12354 ms (on); second run 11.8 → 13.7 s | 0, regression risk | no-go, nothing shipped; layout code started 3.2 s sooner but shares the link with the first wave |
 | https://app.hypertask.ai/detail/project-4060/615 | Phone board first visit, harness readiness, interleaved N=4+4 | 12030 ms (Playwright pre-scroll, median of 4) → 9212 ms (in-page scroll) | n/a (measurement, not app speed) | about 2.8 s of the 11.7 s baseline was the harness; board paths version 2 |
+| https://app.hypertask.ai/detail/project-15/7644 | Board cards after g then b, live on/off interleaved N=5+5 per profile, load 10.7 to 17.7 | desktop 962 → 966 ms, phone 2333 → 2425 ms (overlapping); placeholder frame 10 of 10 → 0 of 5 desktop, 1 of 5 phone | 0, no measurable difference | flag `htpr-7644-board-cards-first-draw` Everyone, PR 1953; first visit unaffected (no flag seed); same cards in all 30 samples |
 
 Confirmed, comparable saved-ms total in this seed: **not established**. Future entries must link private before/after summaries, commits, N, median/p90/range and QA proof. This deliberately avoids inventing savings absent from the history.
 
