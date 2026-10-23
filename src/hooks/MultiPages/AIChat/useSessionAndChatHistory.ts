@@ -40,7 +40,8 @@ export const useSessionAndChatHistory = (
   let composeIntro: typeof pendingComposeIntro = null;
   if (composeEnabled) composeIntro = pendingComposeIntro;
   const pendingFollowup = useRecoilValue(composeTaskSkillFollowupAtom);
-  const waitingForSkillFollowup = Boolean(taskId) && pendingFollowup?.taskId === taskId;
+  const waitingForSkillFollowup = isTaskScoped && Boolean(taskId) && pendingFollowup?.taskId === taskId;
+  const hasPendingSkillIntro = isTaskScoped && composeIntro?.skillFollowup && composeIntro.taskId === taskId;
   const consumedComposeIntro = useRef<string | null>(null);
   const currentUser = useRecoilValue(currentUserAtom);
   const pathname = usePathname();
@@ -551,14 +552,14 @@ export const useSessionAndChatHistory = (
     !isDemo &&
     currentSession === undefined &&
     (isLoadingSessions || (isFetchingSessions && Boolean(activeSession)));
-  const showWelcomeScreen = !waitingForSkillFollowup && !(composeIntro?.skillFollowup && composeIntro.taskId === taskId) && !isSessionPending && (currentSession?.messages?.length ?? 0) === 0;
+  const showWelcomeScreen = !waitingForSkillFollowup && !hasPendingSkillIntro && !isSessionPending && (currentSession?.messages?.length ?? 0) === 0;
 
   const getDisplayedSession = useCallback(() => currentSession, [currentSession]);
   const resolveHistorySession = useCallback(async (sessionId?: string, scope?: ChatSessionScope) => sessions.find((session) =>
     sessionId ? session.id === sessionId :
       (!scope?.taskId || session.taskId === scope.taskId) &&
       (!scope?.projectId || (session.projectId === scope.projectId && session.taskId === null))), [sessions]);
-  if (paged) return { ...pagedHistory, showWelcomeScreen: pagedHistory.showWelcomeScreen && !waitingForSkillFollowup && !(composeIntro?.skillFollowup && composeIntro.taskId === taskId), sessionPagingEnabled: true };
+  if (paged) return { ...pagedHistory, showWelcomeScreen: pagedHistory.showWelcomeScreen && !waitingForSkillFollowup && !hasPendingSkillIntro, sessionPagingEnabled: true };
 
   return {
     sessionPagingEnabled: false,

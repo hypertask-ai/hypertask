@@ -46,7 +46,7 @@ function questionsRoute(options = {}) {
   const route = load("src/app/api/ai/task-questions/route.ts", {
     "@/lib/auth/getSessionUser": { getSessionUser: async () => ({ agentId: options.agentId }) },
     "@/lib/auth/agentScope": { withAgentScopeRequest: (_request, run) => run() },
-    "@/lib/flags": { ...keys, isFeatureEnabled: async (key, userId) => { assert.equal(userId, 985); return key === flag ? options.enabled !== false : true; } },
+    "@/lib/flags": { ...keys, isFeatureEnabled: async (key, userId) => { assert.equal(userId, 985); return [flag].includes(key) ? options.enabled !== false : true; } },
     "@/app/api/ai/_lib/skills": { resolveSkills: (text, context, lookup) => resolver.resolveSkills(text, context, lookup ?? (async (slugs, scope) => { lookups.push({ slugs, scope }); return options.skills ?? [skill]; })) },
     "@/app/api/ai/_lib/editorAi": { getCurrentUserFromCookies: async () => options.unauthenticated ? null : ({ id: 985, displayName: "QA" }) },
     "@/app/api/ai/_lib/modelProvider": { resolveAiModel: () => ({}), configureAiModelUsage() {}, providerOptionsForAiModel: () => ({}), aiUsageProviderForCredential: () => "fixture" },
@@ -60,7 +60,7 @@ function questionsRoute(options = {}) {
     ai: { Output: { object: (value) => value }, generateText: async (input) => { calls.push(input); return { output: input.output.schema.parse({ questions, followup }) }; }, NoObjectGeneratedError: { isInstance: () => false }, NoOutputGeneratedError: { isInstance: () => false } },
     "next/server": { NextResponse: { json: Response.json } },
   }, process.env.HTPR_7319_ROUTE_ROOT ?? root);
-  return { calls, scopes, lookups, cacheInputs, post: (extra = {}) => route.POST({ headers: new Headers(), json: async () => ({ taskId: 43, kind: "new-ticket", skillFollowup: { skills: identities, originalInput: note, ...extra } }) }) };
+  return { calls, scopes, lookups, cacheInputs, post: (extra = {}, request = {}) => route.POST({ headers: new Headers(), json: async () => ({ taskId: 43, kind: "new-ticket", skillFollowup: { skills: identities, originalInput: note, ...extra }, ...request }) }) };
 }
 
 test("route captures authorized skill, cleaned original note and saved ticket in one grounded model call (production red control)", async () => {
@@ -100,6 +100,34 @@ test("route flag off retains the writing-only questions contract and does not re
   assert.equal(h.lookups.length, 0);
   assert.equal(h.calls[0].instructions, registry.renderPrompt("task-questions-writing-1"));
   assert.equal(h.calls[0].maxOutputTokens, 500);
+});
+
+test("route without skill context or with next-move kind retains its existing prompt and response", async () => {
+  for (const request of [{ skillFollowup: undefined }, { kind: "next-move" }]) {
+    const h = questionsRoute();
+    assert.deepEqual(await (await h.post({}, request)).json(), { questions });
+    assert.equal(h.lookups.length, 0);
+    assert.equal(h.calls.length, 1);
+    assert.equal(h.calls[0].maxOutputTokens, 500);
+    assert.ok(!h.calls[0].prompt.includes(body));
+    assert.ok(!h.calls[0].prompt.includes(note));
+    assert.equal(h.calls[0].instructions, registry.renderPrompt(request.kind ? "task-questions-context-1" : "task-questions-writing-1"));
+  }
+});
+
+test("route bounds follow-up input and rejects malformed identities before task or model access", async () => {
+  for (const extra of [
+    { originalInput: "a".repeat(metadata.MAX_SKILL_INPUT_LENGTH + 1) },
+    { skills: [] },
+    { skills: [{ ...identities[0], slug: "deeper /other" }] },
+    { skills: [{ ...identities[0], updatedAt: "not-a-version" }] },
+  ]) {
+    const h = questionsRoute();
+    assert.equal((await h.post(extra)).status, 400);
+    assert.deepEqual(h.scopes, []);
+    assert.deepEqual(h.lookups, []);
+    assert.deepEqual(h.calls, []);
+  }
 });
 
 function writerPreparation(options = {}) {
@@ -150,7 +178,7 @@ async function writerResponse(options = {}) {
     "@/lib/errors/reportError": { reportError: async () => {} },
     "@/app/api/ai/_lib/modelProvider": { configureAiModelUsage() {} },
     "@/app/api/ai/_lib/requestUser": { getAiRequestUser: async () => ({ id: 985 }) },
-    "@/lib/flags": { ...keys, isFeatureEnabled: async (key) => key === flag && options.enabled !== false },
+    "@/lib/flags": { ...keys, isFeatureEnabled: async (key) => [flag].includes(key) && options.enabled !== false },
     "@/app/api/ai/_lib/taskWriterProperties": properties,
     "@/app/api/ai/_lib/taskWriterRun": { taskWriterRequestSchema: z.object({}).passthrough(), missingRequiredFields: () => false, prepareTaskWriterRun: async () => ({ selected: { model: {}, settings: {} }, instructions: "Writer", messages: [], skills: options.skills ?? [skill], composeSkillsEnabled: options.optedIn !== false, splitTasks: options.json, tasksSchema: z.object({ tasks: z.array(z.object({ title: z.string(), description: z.string() })) }) }), AiFeatureDisabledError: class extends Error {}, AutoDescriptionSuggestionsDisabledError: class extends Error {}, ProjectAccessError: class extends Error {} },
     "@/app/api/ai/_lib/editorAi": { SSE_HEADERS: { "Content-Type": "text/html" }, filterOneImagePass: (text) => ({ emit: text }), createSseErrorResponse: (error, status) => Response.json({ error }, { status }), errorMessage: (error) => error.message, sseFrame: () => "event: error\n" },
@@ -213,6 +241,15 @@ test("writer metadata omits flag-off, non-opted-in, unknown and oversized skills
   assert.deepEqual(prepared.skills.map(({ slug }) => slug), ["deeper", "review"]);
 });
 
+test("writer headers preserve every resolved skill in order on both response branches", async () => {
+  const skills = [skill, { ...skill, id: 19, slug: "review", name: "Review" }];
+  for (const json of [true, false]) {
+    const response = await writerResponse({ json, skills });
+    assert.deepEqual(metadata.readTaskWriterSkills(response.headers.get(metadata.TASK_WRITER_SKILLS_HEADER)), skills.map(({ id, slug, name, updatedAt }) => ({ id, slug, name, updatedAt: updatedAt.toISOString() })));
+    await response.text();
+  }
+});
+
 async function withCompose(options, check) {
   const dom = new JSDOM("<div id='root'></div>", { url: options.existing ? "https://app.hypertask.ai/detail/project-15/7319" : "https://app.hypertask.ai/project?id=15" });
   const original = ["window", "document", "navigator", "HTMLElement", "DOMParser", "IS_REACT_ACT_ENVIRONMENT", "fetch", "setTimeout"].map((key) => [key, Object.getOwnPropertyDescriptor(global, key)]);
@@ -234,6 +271,8 @@ async function withCompose(options, check) {
   const flags = new Set([keys.HTPR_6929_COMPOSE_TASK_WRITER_FLAG, keys.HTPR_7312_CTRLJ_SKILLS_FLAG, keys.HTPR_7317_CTRLJ_TICKET_QUESTIONS_FLAG, keys.HTPR_7601_ONLY_VIEWED_TICKET_QUESTIONS_FLAG]);
   if (options.enabled !== false) flags.add(flag);
   if (options.paged) flags.add(keys.HTPR_6971_CHAT_HISTORY_PAGING_FLAG);
+  for (const key of options.extraFlags ?? []) flags.add(key);
+  for (const key of options.disabledFlags ?? []) flags.delete(key);
   if (options.batch) flags.add(keys.HTPR_7056_CTRLJ_SPLIT_TASKS_FLAG);
   if (options.existing) flags.add(keys.HTPR_6937_NEW_TASK_WINDOW_FLAG);
   const taskContext = React.createContext(options.existing ? { currentTask: { ...task, title: "", description_: { content: "" } }, setCurrentTask() {}, setDescription() {} } : undefined);
@@ -265,7 +304,7 @@ async function withCompose(options, check) {
   const paged = load("src/hooks/MultiPages/AIChat/usePagedChatHistory.ts", { ...historyMocks, "@/lib/agents/chatViewerState": { getNativeSidebarChat: () => null } });
   const { useSessionAndChatHistory } = load("src/hooks/MultiPages/AIChat/useSessionAndChatHistory.ts", { ...historyMocks, "./usePagedChatHistory": paged });
   const chatContext = { useAiChatContext: () => ({ ...history, chatMounted: true, handleMessageListScroll() {}, registerMessageListRef() {}, scrollMessagesToBottom() {}, isTyping: false, handleSendMessage: (value) => sent.push(value), isDetailPage: true, selectSession() {} }) };
-  const { MessageList } = load("src/components/AI_CHAT/MessageList.tsx", { ...basic, "@/lib/contexts/Multipages/AI_Agent/AI_Agent_Chat_Context": chatContext, "./MessageItem": { MessageItem: ({ message }) => React.createElement("div", { "data-message": message.id }, message.content) }, "./TypingIndicator": { TypingIndicator: () => React.createElement("span", { "data-typing": "" }) } });
+  const { MessageList } = load("src/components/AI_CHAT/MessageList.tsx", { ...basic, "@/lib/contexts/Multipages/AI_Agent/AI_Agent_Chat_Context": chatContext, "./MessageItem": { MessageItem: ({ message }) => React.createElement("div", { "data-message": message.id }, message.content) }, "./TypingIndicator": load("src/components/AI_CHAT/TypingIndicator.tsx") });
   const { WelcomeScreen } = load("src/components/AI_CHAT/WelcomeScreen.tsx", {
     ...basic, "@/lib/contexts/Multipages/AI_Agent/AI_Agent_Chat_Context": chatContext,
     "next/navigation": { usePathname: () => "/detail/project-15/7319" },
@@ -313,7 +352,7 @@ async function withCompose(options, check) {
     return { ok: true, json: async () => ({ questions: ["Generic retry question"] }) };
   };
   function Chat() {
-    history = useSessionAndChatHistory(selectedTask, true, true);
+    history = useSessionAndChatHistory(selectedTask, true, options.taskScoped !== false);
     return history.showWelcomeScreen ? React.createElement(WelcomeScreen) : React.createElement(MessageList);
   }
   function Harness() {
@@ -353,11 +392,11 @@ async function withCompose(options, check) {
 
 for (const paged of [false, true]) {
   test(`Compose opens before follow-up resolves with TypingIndicator, survives modal unmount, then persists one escaped intro and cached chips (${paged ? "paged" : "legacy"})`, async () => {
-    await withCompose({ paged }, async (view) => {
+    await withCompose({ paged, extraFlags: [keys.HTPR_7586_ONE_QUESTIONS_CALL_FLAG] }, async (view) => {
       assert.deepEqual(view.navigations, ["/detail/project-15/7319"]);
       assert.equal(view.get(view.atoms.showAIChatInterfaceAtom), true);
       assert.equal(document.querySelector("[data-compose-task-writer]"), null);
-      assert.ok(document.querySelector("[data-typing]"));
+      assert.ok(document.querySelector('[aria-label="AI is thinking"]'));
       assert.equal(view.history().showWelcomeScreen, false);
       assert.equal(view.introWrites.length, 0);
       assert.equal(view.persisted.length, 0);
@@ -399,7 +438,42 @@ test("Compose follow-up error falls back to exactly one generic intro and ordina
     assert.match(view.persisted[0].content, /from your note\. Want me to refine it\?/);
     assert.deepEqual(view.requests.map(({ skillFollowup, ...input }) => skillFollowup ? "followup" : input), ["followup", { taskId: 43, kind: "new-ticket" }]);
     assert.equal(document.querySelector("[role=alert]"), null);
-    assert.equal(document.querySelector("[data-typing]"), null);
+    assert.equal(document.querySelector('[aria-label="AI is thinking"]'), null);
+  });
+});
+
+test("missing follow-up output restores the normal intro and one ordinary questions fetch", async () => {
+  await withCompose({}, async (view) => {
+    assert.ok(document.querySelector('[aria-label="AI is thinking"]'));
+    await view.deliver({ questions });
+    assert.equal(view.introWrites.length, 1);
+    assert.equal(view.persisted.length, 1);
+    assert.ok(!view.persisted[0].content.includes("/deeper"));
+    assert.equal(view.requests.length, 2);
+    assert.equal(view.get(view.atoms.composeTaskSkillFollowupAtom), null);
+    assert.equal(document.querySelector("[role=alert]"), null);
+  });
+});
+
+test("skill generation suppresses competing questions even with both questions-call bugfix flags off", async () => {
+  await withCompose({ disabledFlags: [keys.HTPR_7586_ONE_QUESTIONS_CALL_FLAG, keys.HTPR_7601_ONLY_VIEWED_TICKET_QUESTIONS_FLAG] }, async (view) => {
+    assert.equal(view.requests.length, 1);
+    assert.ok(document.querySelector('[aria-label="AI is thinking"]'));
+    assert.equal(view.introWrites.length, 0);
+    await view.deliver();
+    assert.equal(view.requests.length, 1);
+    assert.equal(view.persisted.length, 1);
+  });
+});
+
+test("pending skill generation and intro do not replace a non-task-scoped welcome or persist into it", async () => {
+  await withCompose({ taskScoped: false }, async (view) => {
+    assert.equal(view.history().showWelcomeScreen, true);
+    assert.equal(view.persisted.length, 0);
+    await view.deliver();
+    assert.equal(view.history().showWelcomeScreen, true);
+    assert.equal(view.persisted.length, 0);
+    assert.equal(view.get(view.atoms.composeTaskChatIntroAtom).taskId, 43);
   });
 });
 
@@ -416,16 +490,30 @@ for (const options of [{ enabled: false }, { noSkill: true }, { writerFailed: tr
   });
 }
 
-test("keep-chat-closed still generates the first intro; opening later persists it once", async () => {
-  await withCompose({ keepClosed: true }, async (view) => {
-    assert.equal(view.get(view.atoms.showAIChatInterfaceAtom), null);
-    assert.equal(view.navigations.length, 1);
+for (const paged of [false, true]) {
+  test(`keep-chat-closed still generates the first intro; opening later persists it once (${paged ? "paged" : "legacy"})`, async () => {
+    await withCompose({ keepClosed: true, paged }, async (view) => {
+      assert.equal(view.get(view.atoms.showAIChatInterfaceAtom), null);
+      assert.equal(view.navigations.length, 1);
+      await view.deliver();
+      assert.equal(view.persisted.length, 0);
+      assert.equal(view.introWrites.length, 1);
+      await view.open();
+      assert.equal(view.persisted.length, 1);
+      assert.ok(view.persisted[0].content.includes("/deeper"));
+      assert.equal(view.requests.length, 1);
+    });
+  });
+}
+
+test("skill intro still lands when ordinary ticket-question chips are disabled", async () => {
+  await withCompose({ disabledFlags: [keys.HTPR_7317_CTRLJ_TICKET_QUESTIONS_FLAG] }, async (view) => {
+    assert.equal(view.requests.length, 1);
+    assert.ok(document.querySelector('[aria-label="AI is thinking"]'));
     await view.deliver();
-    assert.equal(view.persisted.length, 0);
-    assert.equal(view.introWrites.length, 1);
-    await view.open();
     assert.equal(view.persisted.length, 1);
     assert.ok(view.persisted[0].content.includes("/deeper"));
+    assert.equal(document.querySelectorAll("[data-compose-question]").length, 0);
     assert.equal(view.requests.length, 1);
   });
 });
@@ -457,7 +545,7 @@ test("filling an empty existing ticket gets the same one-message follow-up", asy
 test("a pending follow-up does not show a typing indicator on another viewed ticket", async () => {
   await withCompose({}, async (view) => {
     await view.viewOther();
-    assert.equal(document.querySelector("[data-typing]"), null);
+    assert.equal(document.querySelector('[aria-label="AI is thinking"]'), null);
     await view.deliver();
     assert.equal(view.persisted.length, 0);
     assert.equal(view.get(view.atoms.composeTaskChatIntroAtom).taskId, 43);
@@ -496,7 +584,7 @@ test("flag definition and generated registry use the designed Owner + QA rollout
   assert.equal(definition.releaseRisk.risk, "small");
   assert.ok(definition.releaseRisk.reason.trim());
   assert.equal(keys.HTPR_7319_SKILL_CHAT_FOLLOWUP_FLAG, flag);
-  assert.deepEqual(FEATURE_FLAG_DEFINITIONS.find(({ key }) => key === flag), definition);
+  assert.deepEqual(FEATURE_FLAG_DEFINITIONS.find(({ key }) => [flag].includes(key)), definition);
 });
 
 async function sendAfterIntro(session, question) {
@@ -535,7 +623,7 @@ async function sendAfterIntro(session, question) {
 
 test("Compose timeout queues one generic intro, resumes normal questions and never replaces it with a late follow-up", async () => {
   await withCompose({ timeout: true }, async (view) => {
-    assert.ok(document.querySelector("[data-typing]"));
+    assert.ok(document.querySelector('[aria-label="AI is thinking"]'));
     await view.expire();
     assert.equal(view.introWrites.length, 1);
     assert.equal(view.persisted.length, 1);
