@@ -2,6 +2,7 @@ import { execFileSync } from 'node:child_process';
 import { readFileSync } from 'node:fs';
 import { basename, dirname } from 'node:path';
 import { pathToFileURL } from 'node:url';
+import { GithubRateLimit, createRateLimitBudget, ghApi, rateLimitWait } from './github-rate-limit.mjs';
 
 const CONTEXT = 'ux-signoff';
 const READ_ERROR = 'Could not read the ticket; retried every 10 minutes';
@@ -433,17 +434,30 @@ export function ticketUrl(title, runUrl) {
   return project ? `https://app.hypertask.ai/detail/project-${project}/${ticket.number}` : runUrl;
 }
 
-export function createGithub({ env = process.env, fetchImpl = fetch, exec = execFileSync, sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms)) } = {}) {
-  return async (path, { method = 'GET', body } = {}) => {
+export function createGithub({ env = process.env, fetchImpl = fetch, exec = execFileSync, sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms)), now = Date.now, log = console.error } = {}) {
+  const budget = createRateLimitBudget({
+    now, maxWaitMs: Number(env.GH_API_MAX_WAIT_SECONDS || 240) * 1000,
+    timeBudgetMs: Number(env.GH_API_TIME_BUDGET_SECONDS || 480) * 1000,
+  });
+  return async (path, { method = 'GET', body, noWait = false } = {}) => {
+    const readOnly = method === 'GET' && body === undefined;
     if (!env.GH_TOKEN) {
       const args = ['api', '--method', method, path];
       if (body) args.push('--input', '-');
-      return JSON.parse(exec('gh', args, {
-        encoding: 'utf8', input: body ? JSON.stringify(body) : undefined, timeout: 30000,
-        stdio: ['pipe', 'pipe', 'pipe'],
+      return JSON.parse(await ghApi(args.slice(1), {
+        budget, now, sleep, log, env: { GH_API_NO_WAIT: noWait ? '1' : '' },
+        exec: (command, ghArgs, options) => {
+          try {
+            return { status: 0, stdout: exec(command, ghArgs, {
+              ...options, input: body ? JSON.stringify(body) : undefined, stdio: ['pipe', 'pipe', 'pipe'],
+            }) };
+          } catch (error) {
+            return { status: error.status, stdout: error.stdout, stderr: error.stderr };
+          }
+        },
       }));
     }
-    for (let attempt = 0; ; attempt++) {
+    for (let attempt = 0; ;) {
       let response;
       try {
         response = await fetchImpl(`https://api.github.com/${path}`, {
@@ -456,23 +470,31 @@ export function createGithub({ env = process.env, fetchImpl = fetch, exec = exec
           signal: AbortSignal.timeout(30000),
         });
       } catch (error) {
-        if (method !== 'GET' || attempt === 2) throw error;
-        await sleep(attempt === 0 ? 1000 : 3000);
+        if (!readOnly || attempt >= 2) throw error;
+        await sleep(attempt++ === 0 ? 1000 : 3000);
         continue;
       }
       if (response.ok) return response.json();
-      if (method !== 'GET' || attempt === 2 || (response.status !== 429 && response.status < 500)) {
+      const wait = rateLimitWait(response.status, response.headers, await response.text(), now());
+      if (wait != null) {
+        if (!readOnly || noWait) throw new GithubRateLimit(new Date(now() + wait).toISOString());
+        const ms = budget.reserve(wait);
+        log(`GitHub API rate limited; waiting ${Math.ceil(ms / 1000)}s until reset`);
+        await sleep(ms);
+        continue;
+      }
+      if (!readOnly || attempt >= 2 || response.status < 500) {
         throw new Error(`GitHub API returned HTTP ${response.status}`);
       }
-      await sleep(attempt === 0 ? 1000 : 3000);
+      await sleep(attempt++ === 0 ? 1000 : 3000);
     }
   };
 }
 
-async function githubPages(github, path) {
+async function githubPages(github, path, options) {
   const items = [];
   for (let page = 1; ; page++) {
-    const entries = await github(`${path}${path.includes('?') ? '&' : '?'}per_page=100&page=${page}`);
+    const entries = await github(`${path}${path.includes('?') ? '&' : '?'}per_page=100&page=${page}`, options);
     if (!Array.isArray(entries)) throw new Error('GitHub API returned no list');
     items.push(...entries);
     if (entries.length < 100) return items;
@@ -580,7 +602,17 @@ async function readVerdict(pr, { github, repo, env, fetchImpl, commentCache, par
   return evaluate({ ...input, comments, parentComments: await commentCache.get(parent) });
 }
 
-export async function run(args, { env = process.env, fetchImpl = fetch, github = createGithub({ env, fetchImpl }), log = console.log, now = Date.now } = {}) {
+export async function run(args, options = {}) {
+  try {
+    return await runGate(args, options);
+  } catch (error) {
+    if (!error.rateLimited) throw error;
+    (options.log ?? console.log)(`::warning::${error.message}`);
+    return error.exitCode ?? 0;
+  }
+}
+
+async function runGate(args, { env = process.env, fetchImpl = fetch, github = createGithub({ env, fetchImpl }), log = console.log, now = Date.now } = {}) {
   let reconcile = false;
   let number;
   for (let index = 0; index < args.length; index++) {
@@ -601,15 +633,21 @@ export async function run(args, { env = process.env, fetchImpl = fetch, github =
 
   const openPrs = await githubPages(github, `repos/${repo}/pulls?state=open&base=production`);
   // The ux-signoff status on each head is the sweep cursor: oldest-evaluated heads (no status first) spend the read budget first.
+  const statusCache = new Map();
   const lastEvaluated = async (pr) => {
-    const statuses = await githubPages(github, `repos/${repo}/commits/${pr.head?.sha}/statuses`).catch(() => []);
-    const newestStatus = statuses.find((status) => status.context === CONTEXT);
+    const statuses = await githubPages(github, `repos/${repo}/commits/${pr.head?.sha}/statuses`).catch((error) => {
+      if (error.rateLimited) throw error;
+      return null;
+    });
+    if (statuses) statusCache.set(pr.head?.sha, statuses);
+    const newestStatus = statuses?.find((status) => status.context === CONTEXT);
     // A deferred placeholder means the head was never evaluated, so it keeps first place.
     const time = newestStatus?.description === DEFERRED ? NaN : Date.parse(newestStatus?.updated_at);
     return Number.isNaN(time) ? -Infinity : time;
   };
   const targets = number == null ? openPrs : openPrs.filter((pr) => pr.number === number);
-  const order = await Promise.all(targets.map(async (pr) => ({ pr, time: await lastEvaluated(pr) })));
+  const order = [];
+  for (const pr of targets) order.push({ pr, time: await lastEvaluated(pr) });
   const prs = order.sort((a, b) => (a.time === b.time ? 0 : a.time < b.time ? -1 : 1)).map(({ pr }) => pr);
   let errors = false;
   for (const listed of prs) {
@@ -622,6 +660,7 @@ export async function run(args, { env = process.env, fetchImpl = fetch, github =
         try {
           verdict = await readVerdict(pr, options);
         } catch (error) {
+          if (error.rateLimited) throw error;
           if (error.deferred) {
             log(JSON.stringify({ pr: pr.number, state: 'deferred', description: error.message }));
             // Out of read budget: an evaluated head keeps its verdict until its turn comes, a new head gets pending.
@@ -630,11 +669,13 @@ export async function run(args, { env = process.env, fetchImpl = fetch, github =
             verdict = { state: 'pending', description: DEFERRED, details: [] };
           } else verdict = { state: 'error', description: env.MCP_TOKEN ? READ_ERROR : 'HYPERTASK_MCP_TOKEN is empty; configure it for UI signoff', details: [] };
         }
+        if (verdict.state === 'error') errors = true;
         if (!/^[a-f0-9]{40}$/.test(pr.head?.sha ?? '')) throw new Error('No PR head SHA to publish');
-        const statuses = await githubPages(github, `repos/${repo}/commits/${pr.head.sha}/statuses`);
+        // The serialized workflow owns this context; reuse the cursor read for unchanged heads.
+        const statuses = statusCache.get(pr.head.sha) ?? await githubPages(github, `repos/${repo}/commits/${pr.head.sha}/statuses`, { noWait: true });
         const newestStatus = statuses.find((status) => status.context === CONTEXT);
         // Keep the head read immediately before publication, including error verdicts.
-        const current = await github(`repos/${repo}/pulls/${pr.number}`);
+        const current = await github(`repos/${repo}/pulls/${pr.number}`, { noWait: true });
         if (current.state !== 'open' || current.base?.ref !== 'production') break;
         if (current.head?.sha !== pr.head.sha || current.title !== pr.title || current.base?.sha !== pr.base?.sha) {
           pr = current;
@@ -651,12 +692,16 @@ export async function run(args, { env = process.env, fetchImpl = fetch, github =
               target_url: ticketUrl(pr.title, runUrl),
             },
           });
+          statusCache.delete(pr.head.sha);
         }
-        if (verdict.state === 'error') errors = true;
         log(JSON.stringify({ pr: pr.number, ...verdict }, null, 2));
         break;
       }
     } catch (error) {
+      if (error.rateLimited) {
+        error.exitCode = errors ? 2 : 0;
+        throw error;
+      }
       errors = true;
       const reason = /^GitHub API returned (HTTP \d+|no list)$/.test(error?.message) || error?.message === 'No PR head SHA to publish'
         ? error.message : 'unexpected error';
