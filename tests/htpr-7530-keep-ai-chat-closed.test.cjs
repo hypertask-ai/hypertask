@@ -55,6 +55,7 @@ test("Task Page reuses the adjacent SettingsToggle row, preserves the other sett
     for (const saved of [false, true]) {
       const values = { open: true, closed: saved };
       const { default: Section } = load("src/components/Modals/Settings/TaskPageSection.tsx", {
+        "@/hooks/General/useAiChatOpenPreferences": { useAiChatOpenPreferences: () => ({ enabled: false }) },
         "@/components/sidebars/RightSidebar/UserPreference": inert,
         "@/lib/state": { useRecoilState: (key) => [values[key], (next) => { values[key] = next(values[key]); }] },
         "@/store": { openAiChatByDefaultAtom: "open", keepAiChatClosedAtom: "closed" },
@@ -64,7 +65,7 @@ test("Task Page reuses the adjacent SettingsToggle row, preserves the other sett
         "./SettingsToggle": { __esModule: true, default: Toggle },
       });
       const card = Section().props.children;
-      const children = React.Children.toArray(card.props.children);
+      const children = React.Children.toArray(card.props.children).flatMap((child) => child.type === React.Fragment ? React.Children.toArray(child.props.children) : [child]);
       const toggles = children.filter((child) => child.type === Toggle);
       assert.equal(toggles.length, enabled ? 2 : 1);
       assert.equal(toggles[0].props.label, "Open AI chat by default");
@@ -92,6 +93,8 @@ test("closed automatic chat reserves no empty column, but manually opened chat s
   for (const keepAiChatClosed of [false, true]) {
     for (const ready of [false, true]) {
       const { usePageLoadReservations } = load("src/hooks/General/usePageLoadReservations.ts", {
+        "@/hooks/useFlag": { useFlag: () => false },
+        "@/lib/flags/definitions/htpr-7650-ai-chat-open-switches": { HTPR_7650_AI_CHAT_OPEN_SWITCHES_FLAG: "htpr-7650-ai-chat-open-switches" },
         "@/hooks/General/useKeepAiChatClosed": { useKeepAiChatClosed: () => ({ keepAiChatClosed, ready }) },
         "@/lib/state": { useRecoilValue: (key) => ({ pinned: true, open: true, sidebar: true, width: 517 })[key] },
         "@/store": { aiChatPinnedAtom: "pinned", openAiChatByDefaultAtom: "open", isAiChatSidebarModeAtom: "sidebar", aiChatSidebarWidthPxAtom: "width" },

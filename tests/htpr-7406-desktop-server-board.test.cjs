@@ -66,6 +66,8 @@ test('chat geometry validates presence, finite width bounds and boolean mode wit
 const atoms = new Proxy({}, { get: (_, key) => key });
 function reservations(overrides = {}, width = 517, sidebar = true) {
   const { usePageLoadReservations } = load('src/hooks/General/usePageLoadReservations.ts', {
+    "@/hooks/useFlag": { useFlag: () => false },
+    "@/lib/flags/definitions/htpr-7650-ai-chat-open-switches": { HTPR_7650_AI_CHAT_OPEN_SWITCHES_FLAG: "htpr-7650-ai-chat-open-switches" },
     '@/hooks/General/useKeepAiChatClosed': { useKeepAiChatClosed: () => ({ keepAiChatClosed: false, ready: true }) },
     '@/lib/state': { useRecoilValue: atom => ({ aiChatPinnedAtom: false, openAiChatByDefaultAtom: true,
       isAiChatSidebarModeAtom: sidebar, aiChatSidebarWidthPxAtom: width })[atom] },
@@ -112,7 +114,7 @@ test('reservation latch requires the flagged authenticated desktop board snapsho
   const body = source.slice(start, source.indexOf('  const setShowAiChatInterface', start));
   const render = new Function('useState', 'useEffect', 'firstScreen', 'pathname', 'mbl', 'authenticatedUserId',
     'chatAutoOpenReady', 'keepAiChatClosed', 'aiChatPinned', 'openAiChatByDefault', 'aiChatAutoOpenSuppressed', 'showAiChatInterface',
-    'HTPR_7406_DESKTOP_SERVER_BOARD_FLAG', transpile(body) + '\nreturn reserveBoardChat;');
+    'HTPR_7406_DESKTOP_SERVER_BOARD_FLAG', 'aiChatOpenSwitchesEnabled', transpile(body) + '\nreturn reserveBoardChat;');
   const snapshot = { scope: { route: '/project' }, flags: { values: { [flagKey]: true } } };
   const initial = { firstScreen: snapshot, pathname: '/project', mbl: false, authenticatedUserId: 985,
     chatAutoOpenReady: true, keepAiChatClosed: false, aiChatPinned: false, openAiChatByDefault: true, aiChatAutoOpenSuppressed: false, showAiChatInterface: false };
@@ -122,7 +124,7 @@ test('reservation latch requires the flagged authenticated desktop board snapsho
       const input = { ...initial, ...overrides };
       const effects = [];
       const result = render(init => { if (state === undefined) state = init(); return [state, value => { state = value; }]; },
-        effect => effects.push(effect), ...Object.values(input), flagKey);
+        effect => effects.push(effect), ...Object.values(input), flagKey, false);
       effects.forEach(effect => effect());
       return result;
     };

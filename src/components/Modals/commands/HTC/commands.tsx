@@ -25,7 +25,7 @@ import { ICommandList } from "./HTCTypes";
 import CommandGroups from "./CommandGroup";
 import useHTC from "@/hooks/MultiPages/HTC/useHTC";
 import type { CommandFocusProxy } from "@/components/commandTypes";
-import { HTPR_7547_SEARCH_LAZY_CLOSED_FLAG, HTPR_7656_CTRLJ_SKILL_MENU_FLAG } from "@/lib/flags/keys";
+import { HTPR_7650_AI_CHAT_OPEN_SWITCHES_FLAG, HTPR_7547_SEARCH_LAZY_CLOSED_FLAG, HTPR_7656_CTRLJ_SKILL_MENU_FLAG } from "@/lib/flags/keys";
 import { ModalContainerCustom, ModalHintBar, ModalInput } from "@/components/Common/CommonModalComponents";
 import useHypertasksRecoilStates from "@/hooks/RecoilRoot/useHypertasksRecoilStates";
 import {
@@ -147,16 +147,17 @@ const Commands = (props: Props) => {
   const ticketPrefixEnabled = useFlag(HTPR_6868_TICKET_PREFIX_FLAG);
   const roundedEnabled = useFlag(HTPR_7328_ROUNDED_THEME_FLAG);
   const clickableComposeFooter = useFlag(HTPR_7307_CTRLJ_FOOTER_CLICKABLE_FLAG);
+  const aiChatOpenSwitchesEnabled = useFlag(HTPR_7650_AI_CHAT_OPEN_SWITCHES_FLAG);
   const keepAiChatClosedEnabled = useFlag(HTPR_7530_KEEP_AI_CHAT_CLOSED_FLAG);
   let keepAiChatClosedKeywords = "";
   if (keepAiChatClosedEnabled) keepAiChatClosedKeywords = "keep ai chat closed always";
   const getRoundedCommands = useCallback(
-    (options?: IAllCommands) => getAllCommands(options, options?.kanbanSelectAllEnabled, !isMobile, keepAiChatClosedKeywords),
-    [isMobile, keepAiChatClosedKeywords]
+    (options?: IAllCommands) => getAllCommands(options, options?.kanbanSelectAllEnabled, !isMobile, keepAiChatClosedKeywords, aiChatOpenSwitchesEnabled),
+    [isMobile, keepAiChatClosedKeywords, aiChatOpenSwitchesEnabled]
   );
   const getLegacyCommands = useCallback(
-    (options?: IAllCommands) => getAllCommands(options, options?.kanbanSelectAllEnabled, false, keepAiChatClosedKeywords),
-    [keepAiChatClosedKeywords]
+    (options?: IAllCommands) => getAllCommands(options, options?.kanbanSelectAllEnabled, false, keepAiChatClosedKeywords, aiChatOpenSwitchesEnabled),
+    [keepAiChatClosedKeywords, aiChatOpenSwitchesEnabled]
   );
   let getCommands = getLegacyCommands;
   if (roundedEnabled) getCommands = getRoundedCommands;

@@ -150,6 +150,7 @@ function loadPreferences(reset, prisma, userId) {
   const load = require("jiti")(__filename, { alias: { "@": path.join(root, "src") }, fsCache: false });
   const stubs = {
     "@/lib/ai/htpr7038ModelReset": { ensureHtpr7038ModelReset: reset },
+    "@/lib/aiChat/autoOpenPreferences": { AI_CHAT_AUTO_OPEN_KEYS: ["aiChatOpenNewTickets", "aiChatOpenTickets", "aiChatOpenBoards"] },
     "@/lib/auth/currentUser": { loadCurrentUser: async () => ({ userId, user: { id: userId } }) },
     "@/lib/flags": { isFeatureEnabled: async () => true },
     "@/lib/prisma": { __esModule: true, default: prisma },

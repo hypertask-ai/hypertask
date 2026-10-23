@@ -1,6 +1,6 @@
 import { useFlag, useFlagReady } from "@/hooks/useFlag";
-import { HTPR_7530_KEEP_AI_CHAT_CLOSED_FLAG } from "@/lib/flags/keys";
-import { activeItemAtom, idToDeleteCommentAtom, showCommandsAtom, showShortcutsAtom, inViewObjectAtom, showMentionListAtom, showAIChatInterfaceAtom, openAiChatByDefaultAtom, keepAiChatClosedAtom, aiChatAutoOpenSuppressedAtom, aiChatExplicitOpenAtAtom, aiChatPinnedAtom, showCreateTaskModalAtom, appShellRailAtom, tasksPlayListAtom } from "@/store";
+import { HTPR_7650_AI_CHAT_OPEN_SWITCHES_FLAG, HTPR_7530_KEEP_AI_CHAT_CLOSED_FLAG } from "@/lib/flags/keys";
+import { aiChatEmbeddedTicketPathAtom, activeItemAtom, idToDeleteCommentAtom, showCommandsAtom, showShortcutsAtom, inViewObjectAtom, showMentionListAtom, showAIChatInterfaceAtom, openAiChatByDefaultAtom, keepAiChatClosedAtom, aiChatAutoOpenSuppressedAtom, aiChatExplicitOpenAtAtom, aiChatPinnedAtom, showCreateTaskModalAtom, appShellRailAtom, tasksPlayListAtom } from "@/store";
 
 import { useContext, useEffect, useMemo, useRef, useState } from "react";
 
@@ -80,6 +80,15 @@ export function useTaskDetailModals(state: useTaskDetailStateValue) {
   const [inViewObject, setInViewObject] = useRecoilState(inViewObjectAtom);
   const [showAiChatInterface, setShowAiChatInterface] = useRecoilState(showAIChatInterfaceAtom);
   const hydrated = useHydrated();
+  const aiChatOpenSwitchesEnabled = useFlag(HTPR_7650_AI_CHAT_OPEN_SWITCHES_FLAG);
+  const aiChatOpenSwitchesReady = useFlagReady(HTPR_7650_AI_CHAT_OPEN_SWITCHES_FLAG);
+  const setEmbeddedTicketPath = useSetRecoilState(aiChatEmbeddedTicketPathAtom);
+  useEffect(() => {
+    if (!aiChatOpenSwitchesEnabled || !embedded) return;
+    const path = `/detail/project-${_parsedTask.projectId}/${_parsedTask.uniqueIndex}`;
+    setEmbeddedTicketPath(path);
+    return () => setEmbeddedTicketPath((previous) => previous === path ? null : previous);
+  }, [aiChatOpenSwitchesEnabled, embedded, _parsedTask.projectId, _parsedTask.uniqueIndex, setEmbeddedTicketPath]);
   const keepAiChatClosedEnabled = useFlag(HTPR_7530_KEEP_AI_CHAT_CLOSED_FLAG);
   const keepAiChatClosedReady = useFlagReady(HTPR_7530_KEEP_AI_CHAT_CLOSED_FLAG);
   const savedKeepAiChatClosed = useRecoilValue(keepAiChatClosedAtom);
@@ -113,6 +122,7 @@ export function useTaskDetailModals(state: useTaskDetailStateValue) {
     if (
       !hydrated ||
       _mbl ||
+      !aiChatOpenSwitchesReady || aiChatOpenSwitchesEnabled ||
       !chatAutoOpenReady ||
       keepAiChatClosed ||
       (!aiChatPinned && (!openAiChatByDefault || aiChatAutoOpenSuppressed))
@@ -121,6 +131,8 @@ export function useTaskDetailModals(state: useTaskDetailStateValue) {
 
   }, [
     hydrated,
+    aiChatOpenSwitchesEnabled,
+    aiChatOpenSwitchesReady,
     chatAutoOpenReady,
     keepAiChatClosed,
     _parsedTask?.id,

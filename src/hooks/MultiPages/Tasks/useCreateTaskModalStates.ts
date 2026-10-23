@@ -17,12 +17,13 @@ import { purgeLegacyCreateTaskDrafts } from "@/lib/createTaskDraftCleanup";
 import {
   currentProjectAtom,
   newTaskCreatedAtom,
+  aiChatNewTicketPathAtom,
   showCreateTaskModalAtom,
   uploadingStateCreateTaskModalAtom,
 } from "@/store";
 import createNewTaskGloballyAPIHandler from "@/utils/api/global/apiHelpers/createTaskGloballycontroller";
 import { useCallback, useMemo, useRef, useState } from "react";
-import { useRecoilState } from "@/lib/state";
+import { useRecoilState, useSetRecoilState } from "@/lib/state";
 import useAddDeleteTaskInBoards from "../useAddDeleteTaskInBoards";
 import axios from "axios";
 import { usePathname, useRouter } from "next/navigation";
@@ -262,6 +263,7 @@ const useCreateTaskModalGlobalStates = () => {
   ]);
   const { createTaskGlobally } = useAddDeleteTaskInBoards();
   const router = useRouter();
+  const setNewTicketPath = useSetRecoilState(aiChatNewTicketPathAtom);
   const sectionDefaultsRequestRef = useRef<AbortController | null>(null);
 
   const toggleRecording = (val: boolean) => setIsRecording(val);
@@ -711,6 +713,7 @@ const useCreateTaskModalGlobalStates = () => {
     setNewTaskCreated(task);
     setCreateTaskFromComment(undefined);
     const taskUrl = `/detail/project-${formValuesAtSave.currentProject?.id}/${task.uniqueIndex}`;
+    setNewTicketPath(taskUrl);
     router.prefetch(taskUrl);
     processFollowers(result, task, formValuesAtSave.assignees);
     if (result.agentMentions && result.agentMentions.length > 0) {
@@ -735,6 +738,7 @@ const useCreateTaskModalGlobalStates = () => {
     formValues.title,
     improveWritingModel,
     improveWritingSource,
+    setNewTicketPath,
   ]);
 
   const processFollowers = (

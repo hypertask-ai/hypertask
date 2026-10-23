@@ -1,7 +1,7 @@
 import { useKeepAiChatClosed } from "@/hooks/General/useKeepAiChatClosed";
 import { Suspense, useContext, useEffect, useRef, useState } from "react";
 import { useRecoilValue, useSetRecoilState } from "@/lib/state";
-import { currentProjectAtom, currentUserAtom, lastUsedBoardsAtom, composeTaskChatIntroAtom, composeTaskSkillFollowupAtom, composeTaskQuestionsTaskIdAtom, showAIChatInterfaceAtom, isAiChatSidebarModeAtom, aiChatAutoOpenSuppressedAtom, aiChatExplicitOpenAtAtom, dockedChatScopeAtom, inViewObjectAtom } from "@/store";
+import { currentProjectAtom, currentUserAtom, lastUsedBoardsAtom, composeTaskChatIntroAtom, composeTaskSkillFollowupAtom, composeTaskQuestionsTaskIdAtom, showAIChatInterfaceAtom, isAiChatSidebarModeAtom, aiChatAutoOpenSuppressedAtom, aiChatExplicitOpenAtAtom, aiChatNewTicketPathAtom, dockedChatScopeAtom, inViewObjectAtom } from "@/store";
 import { useRouter } from "next/navigation";
 import { parseCookies } from "nookies";
 import { MobileViewContext } from "@/lib/contexts/mobileContext";
@@ -27,8 +27,8 @@ import UpdateKanban from "@/hooks/MultiPages/useUpdateTaskInBoards";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { cachedTaskDetailKey } from "@/lib/navigation/cachedTaskDetail";
 import { mergeRealtimeTaskDetail, preserveTaskAssigneesChangedDuringFetch, refreshTaskDetailQueryCache, shouldPreserveTaskEditorContent } from "@/lib/realtime/taskDetailRefresh";
-import { useFlag } from "@/hooks/useFlag";
-import { HTPR_7319_SKILL_CHAT_FOLLOWUP_FLAG, HTPR_7317_CTRLJ_TICKET_QUESTIONS_FLAG, HTPR_7305_BOARD_FROM_TEXT_FLAG, HTPR_7306_CTRLJ_FOOTER_ONE_LINE_FLAG, HTPR_7312_CTRLJ_SKILLS_FLAG } from "@/lib/flags/keys";
+import { useFlag, useFlagReady } from "@/hooks/useFlag";
+import { HTPR_7650_AI_CHAT_OPEN_SWITCHES_FLAG, HTPR_7319_SKILL_CHAT_FOLLOWUP_FLAG, HTPR_7317_CTRLJ_TICKET_QUESTIONS_FLAG, HTPR_7305_BOARD_FROM_TEXT_FLAG, HTPR_7306_CTRLJ_FOOTER_ONE_LINE_FLAG, HTPR_7312_CTRLJ_SKILLS_FLAG } from "@/lib/flags/keys";
 import { matchComposeTaskBoard } from "@/lib/ai/composeTaskBoard";
 import type { CommandFocusProxy } from "@/components/commandTypes";
 import { HTPR_6891_PHONE_TASK_WRITER_SHEET_FLAG, HTPR_6929_COMPOSE_TASK_WRITER_FLAG, HTPR_6937_NEW_TASK_WINDOW_FLAG, HTPR_6951_TASK_WRITING_PROGRESS_FLAG, HTPR_7056_CTRLJ_SPLIT_TASKS_FLAG, HTPR_7085_CTRLJ_WRITER_REASON_FLAG, HTPR_7051_TASK_WRITER_IMAGE_UNFURL_FLAG, HTPR_7514_INLINE_AGENT_IMAGES_FLAG, HTPR_7053_COMPOSE_BOARD_CHIP_FLAG, HTPR_7313_CTRLJ_ALWAYS_BOARD_CHIP_FLAG, HTPR_7343_CTRLJ_WRITER_PROPERTIES_FLAG } from "@/lib/flags/keys";
@@ -49,9 +49,11 @@ export default function ComposeTaskWriter({ active, focusProxy, destinationProje
   onSearch?: () => void;
   onClose?: () => void;
 }) {
+  const aiChatOpenSwitchesEnabled = useFlag(HTPR_7650_AI_CHAT_OPEN_SWITCHES_FLAG);
+  const aiChatOpenSwitchesReady = useFlagReady(HTPR_7650_AI_CHAT_OPEN_SWITCHES_FLAG);
   const { keepAiChatClosed, ready: chatAutoOpenReady } = useKeepAiChatClosed();
   const chatAutoOpenAllowed = useRef(false);
-  chatAutoOpenAllowed.current = chatAutoOpenReady && !keepAiChatClosed;
+  chatAutoOpenAllowed.current = aiChatOpenSwitchesReady && !aiChatOpenSwitchesEnabled && chatAutoOpenReady && !keepAiChatClosed;
   const ctrljFooterOneLine = useFlag(HTPR_7306_CTRLJ_FOOTER_ONE_LINE_FLAG);
   const skillFollowupFlag = useFlag(HTPR_7319_SKILL_CHAT_FOLLOWUP_FLAG);
   let skillFollowupEnabled = false;
@@ -119,6 +121,7 @@ export default function ComposeTaskWriter({ active, focusProxy, destinationProje
   const setPendingFollowup = useSetRecoilState(composeTaskSkillFollowupAtom);
   const setIntro = useSetRecoilState(composeTaskChatIntroAtom);
   const setQuestionsTaskId = useSetRecoilState(composeTaskQuestionsTaskIdAtom);
+  const setNewTicketPath = useSetRecoilState(aiChatNewTicketPathAtom);
   const setShowChat = useSetRecoilState(showAIChatInterfaceAtom);
   const setSidebar = useSetRecoilState(isAiChatSidebarModeAtom);
   const setSuppressed = useSetRecoilState(aiChatAutoOpenSuppressedAtom);
@@ -366,7 +369,9 @@ export default function ComposeTaskWriter({ active, focusProxy, destinationProje
         setExplicitOpen(Date.now());
         setShowChat(true);
       }
-      router.push(`/detail/project-${projectId}/${task.uniqueIndex}`);
+      const taskPath = `/detail/project-${projectId}/${task.uniqueIndex}`;
+      setNewTicketPath(taskPath);
+      router.push(taskPath);
       if (!mobile || !newTaskWindow) onCreated();
     } catch (failure) {
       if (mounted.current) setError(failure instanceof Error ? failure.message : "Couldn’t create the task. Your note is still here. Try again.");

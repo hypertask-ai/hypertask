@@ -18,7 +18,7 @@ export async function fetchUserPreferenceController(userId: number) {
     const cacheKey = preferencesCacheKey(userId);
     const cached = await redis.get(cacheKey);
     if (reset !== "reset" && cached && cached !== INVALIDATED) {
-      return { status: 200, res: { ...JSON.parse(cached) } };
+      return { status: 200, res: { aiChatOpenNewTickets: null, aiChatOpenTickets: null, aiChatOpenBoards: null, ...JSON.parse(cached) } };
     }
 
     const res = await prisma.userSetting.findUnique({
@@ -43,6 +43,9 @@ export async function fetchUserPreferenceController(userId: number) {
         calendarViews: true,
         allTasksDateRange: true,
         boardSortMode: true,
+        aiChatOpenNewTickets: true,
+        aiChatOpenTickets: true,
+        aiChatOpenBoards: true,
       },
     });
 
@@ -72,6 +75,9 @@ export async function fetchUserPreferenceController(userId: number) {
           calendarViews: null,
           allTasksDateRange: null,
           boardSortMode: null,
+          aiChatOpenNewTickets: null,
+          aiChatOpenTickets: null,
+          aiChatOpenBoards: null,
         },
       };
     }
@@ -99,6 +105,9 @@ export async function fetchUserPreferenceController(userId: number) {
         calendarViews: null,
         allTasksDateRange: null,
         boardSortMode: null,
+        aiChatOpenNewTickets: null,
+        aiChatOpenTickets: null,
+        aiChatOpenBoards: null,
       },
     };
   }

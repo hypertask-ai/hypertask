@@ -1,3 +1,5 @@
+import { HTPR_7650_AI_CHAT_OPEN_SWITCHES_FLAG } from "@/lib/flags/definitions/htpr-7650-ai-chat-open-switches";
+import { AI_CHAT_AUTO_OPEN_KEYS } from "@/lib/aiChat/autoOpenPreferences";
 import { ensureHtpr7038ModelReset } from "@/lib/ai/htpr7038ModelReset";
 import { readJsonBody } from "@/lib/mcp/readJsonBody";
 import { loadCurrentUser } from "@/lib/auth/currentUser";
@@ -110,6 +112,9 @@ export async function GET(request: NextRequest) {
           inboxAdvanceOnSend: true,
           emojiFrequency: null,
           calendarViews: null,
+          aiChatOpenNewTickets: null,
+          aiChatOpenTickets: null,
+          aiChatOpenBoards: null,
         },
       },
       { status: 500 },
@@ -198,7 +203,22 @@ export async function POST(request: NextRequest) {
       emojiFrequency?: Prisma.InputJsonValue;
       allTasksDateRange?: string;
       boardSortMode?: BoardSortMode;
+      aiChatOpenNewTickets?: boolean;
+      aiChatOpenTickets?: boolean;
+      aiChatOpenBoards?: boolean;
     } = {};
+
+    for (const key of AI_CHAT_AUTO_OPEN_KEYS) {
+      if (Object.hasOwn(body, key) && typeof body[key] !== "boolean") {
+        return NextResponse.json({ success: false, error: "Invalid AI chat auto-open preference" }, { status: 400 });
+      }
+    }
+    if (AI_CHAT_AUTO_OPEN_KEYS.some((key) => Object.hasOwn(body, key)) &&
+        await isFeatureEnabled(HTPR_7650_AI_CHAT_OPEN_SWITCHES_FLAG, user.id)) {
+      for (const key of AI_CHAT_AUTO_OPEN_KEYS) {
+        if (typeof body[key] === "boolean") data[key] = body[key];
+      }
+    }
 
     if (body.displayAvatar !== undefined) {
       data.displayAvatar = body.displayAvatar as DisplayAvatar;
@@ -491,6 +511,9 @@ export async function POST(request: NextRequest) {
       calendarViews: true,
       allTasksDateRange: true,
       boardSortMode: true,
+      aiChatOpenNewTickets: true,
+      aiChatOpenTickets: true,
+      aiChatOpenBoards: true,
     } as const;
     const updateWithCalendarOperation = async () => {
       for (

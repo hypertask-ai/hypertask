@@ -1,3 +1,5 @@
+import { useFlag } from "@/hooks/useFlag";
+import { HTPR_7650_AI_CHAT_OPEN_SWITCHES_FLAG } from "@/lib/flags/definitions/htpr-7650-ai-chat-open-switches";
 import { useKeepAiChatClosed } from "@/hooks/General/useKeepAiChatClosed";
 import { useRecoilValue } from "@/lib/state";
 import {
@@ -35,6 +37,7 @@ export function usePageLoadReservations({
   commentComposerOpen: boolean;
   agentChatHidesMobileShell: boolean;
 }) {
+  const aiChatOpenSwitchesEnabled = useFlag(HTPR_7650_AI_CHAT_OPEN_SWITCHES_FLAG);
   const { keepAiChatClosed, ready: chatAutoOpenReady } = useKeepAiChatClosed();
   const isTaskDetailPage = pathname?.startsWith("/detail") ?? false;
   const aiChatPinned = useRecoilValue(aiChatPinnedAtom);
@@ -42,7 +45,7 @@ export function usePageLoadReservations({
   const isAiChatSidebarMode = useRecoilValue(isAiChatSidebarModeAtom);
   const aiChatSidebarWidthPx = useRecoilValue(aiChatSidebarWidthPxAtom);
   const reserveAiSidebar = !mbl && isAiChatSidebarMode && (
-    showAiChatInterface || (chatAutoOpenReady && !keepAiChatClosed && (reserveBoardChat || (
+    showAiChatInterface || (!aiChatOpenSwitchesEnabled && chatAutoOpenReady && !keepAiChatClosed && (reserveBoardChat || (
       isTaskDetailPage && authenticatedUserId !== null &&
       (aiChatPinned || (openAiChatByDefault && !aiChatAutoOpenSuppressed))
     )))

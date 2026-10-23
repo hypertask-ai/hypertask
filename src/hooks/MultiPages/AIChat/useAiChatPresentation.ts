@@ -1,5 +1,5 @@
 import { useFlag, useFlagReady } from "@/hooks/useFlag";
-import { HTPR_7530_KEEP_AI_CHAT_CLOSED_FLAG } from "@/lib/flags/keys";
+import { HTPR_7650_AI_CHAT_OPEN_SWITCHES_FLAG, HTPR_7530_KEEP_AI_CHAT_CLOSED_FLAG } from "@/lib/flags/keys";
 import { useEffect, useRef } from "react";
 import { useRecoilValue } from "@/lib/state";
 import { aiChatAutoOpenSuppressedAtom, keepAiChatClosedAtom } from "@/store";
@@ -16,6 +16,8 @@ type Context = Pick<ReturnType<typeof useAiChatState>, "setAiOption" | "contextL
   Pick<ReturnType<typeof useAiChatAttachments>, "handleCancelStream">;
 
 export function useAiChatPresentation(context: Context) {
+  const aiChatOpenSwitchesEnabled = useFlag(HTPR_7650_AI_CHAT_OPEN_SWITCHES_FLAG);
+  const aiChatOpenSwitchesReady = useFlagReady(HTPR_7650_AI_CHAT_OPEN_SWITCHES_FLAG);
   const keepAiChatClosedEnabled = useFlag(HTPR_7530_KEEP_AI_CHAT_CLOSED_FLAG);
   const keepAiChatClosedReady = useFlagReady(HTPR_7530_KEEP_AI_CHAT_CLOSED_FLAG);
   const savedKeepAiChatClosed = useRecoilValue(keepAiChatClosedAtom);
@@ -82,14 +84,14 @@ export function useAiChatPresentation(context: Context) {
   }, [showAiChatInterface]);
 
   useEffect(() => {
-    if (!chatAutoOpenReady || hasAttemptedRestoreRef.current || !currentUser?.id) return;
+    if (!aiChatOpenSwitchesReady || aiChatOpenSwitchesEnabled || !chatAutoOpenReady || hasAttemptedRestoreRef.current || !currentUser?.id) return;
     hasAttemptedRestoreRef.current = true;
     if (window.innerWidth < MOBILE_VIEWPORT_MAX_PX) return;
     if (!keepAiChatClosed && !aiChatAutoOpenSuppressed && readChatOpenForSession()) {
       setChatMounted(true);
       setShowAIChat(true);
     }
-  }, [currentUser?.id, chatAutoOpenReady, keepAiChatClosed, aiChatAutoOpenSuppressed]);
+  }, [currentUser?.id, aiChatOpenSwitchesEnabled, aiChatOpenSwitchesReady, chatAutoOpenReady, keepAiChatClosed, aiChatAutoOpenSuppressed]);
 
   useEffect(() => {
     if (!hasAttemptedRestoreRef.current) return;

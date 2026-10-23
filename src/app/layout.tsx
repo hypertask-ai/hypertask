@@ -1,3 +1,4 @@
+import { HTPR_7650_AI_CHAT_OPEN_SWITCHES_FLAG } from "@/lib/flags/definitions/htpr-7650-ai-chat-open-switches";
 import "@/styles/globals.scss";
 import "@/styles/tailwindThemes/rounded.css";
 import "../../tokens.css";
@@ -84,7 +85,7 @@ export default async function RootLayout(
 
   const sidebarFirstPaint = analyticsSession ? await isFeatureEnabled(HTPR_7615_SIDEBAR_FIRST_PAINT_FLAG, analyticsSession.id) : false;
   const sidebarFlags = analyticsSession && sidebarFirstPaint ? await Promise.all([
-    HTPR_7530_KEEP_AI_CHAT_CLOSED_FLAG, HTPR_7055_CHAT_OVERLAYS_TICKET_FLAG,
+    HTPR_7530_KEEP_AI_CHAT_CLOSED_FLAG, HTPR_7055_CHAT_OVERLAYS_TICKET_FLAG, HTPR_7650_AI_CHAT_OPEN_SWITCHES_FLAG,
   ].map(key => isFeatureEnabled(key, analyticsSession.id))) : null;
 
   const theme = cookieStore.get(authConfig.cookies.theme) ?? {
@@ -154,6 +155,8 @@ export default async function RootLayout(
                 __html: buildTicketSidebarBootScript({
                   keepClosed: sidebarFlags[0],
                   overlayTicket: sidebarFlags[1],
+                  autoOpenSwitches: sidebarFlags[2],
+                  userId: analyticsSession?.id ?? null,
                 }),
               }}
             />
