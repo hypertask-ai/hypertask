@@ -334,13 +334,13 @@ test("Inbox Zero uses the exact visible All-tab server scope", () => {
   assert.equal(where.agentId, null);
   // HTPR-5683: a live task, or an archived task whose reminder just returned
   // the row, both count as visible.
-  assert.deepEqual(where.AND[0].OR, [
+  assert.deepEqual(where.OR[0].AND[0].OR, [
     { task: { status: "Normal" } },
     { task: { status: "Archive" }, returnedFromReminders: true },
   ]);
   assert.equal(where.NOT.fromUserId, 6);
   assert.equal(where.NOT.fromAgentId, null);
-  assert.deepEqual(where.AND[1].OR[1], { taskId: null });
+  assert.deepEqual(where.OR[0].AND[1].OR[1], { taskId: null });
 });
 
 test("Inbox All excludes synthetic blocked rows from its denominator", () => {

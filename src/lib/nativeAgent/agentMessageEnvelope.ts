@@ -1,5 +1,6 @@
 const AGENT_MESSAGE_PREFIX = "\u001eht-agent-message:v1:";
 const UUID_LENGTH = 36;
+export const PLAN_LIMIT_MESSAGE_PREFIX = `${AGENT_MESSAGE_PREFIX}plan-limit-`;
 
 export const agentMessageMarker = (assistantMessageId: string) =>
   `${AGENT_MESSAGE_PREFIX}${assistantMessageId}:`;

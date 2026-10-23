@@ -1,3 +1,4 @@
+import { PLAN_LIMIT_MESSAGE_PREFIX } from "@/lib/nativeAgent/agentMessageEnvelope";
 import { Prisma } from "@prisma/client";
 
 import { inboxConfig } from "@/lib/configs/inbox.config";
@@ -14,36 +15,45 @@ export const visibleUserInboxWhere = (
     fromAgentId: null,
     type: { in: inboxConfig.selfTriggeredHidden },
   },
-  AND: [
+  OR: [
     {
-      OR: [
-        { task: { status: "Normal" } },
-        { task: { status: "Archive" }, returnedFromReminders: true },
-      ],
-    },
-    {
-      OR: [
+      AND: [
+        {
+          OR: [
+            { task: { status: "Normal" } },
+            { task: { status: "Archive" }, returnedFromReminders: true },
+          ],
+        },
+        {
+          OR: [
+            {
+              task: {
+                Reminders: {
+                  every: {
+                    status: { not: "Normal" },
+                  },
+                },
+              },
+            },
+            { taskId: null },
+          ],
+        },
         {
           task: {
-            Reminders: {
-              every: {
-                status: { not: "Normal" },
-              },
+            project: {
+              OR: [
+                { ownerId: userId },
+                { members: { some: { userId, agentId: null } } },
+              ],
             },
           },
         },
-        { taskId: null },
       ],
     },
     {
-      task: {
-        project: {
-          OR: [
-            { ownerId: userId },
-            { members: { some: { userId, agentId: null } } },
-          ],
-        },
-      },
+      type: "AgentMessage",
+      message: { startsWith: PLAN_LIMIT_MESSAGE_PREFIX },
+      project: { ownerId: userId },
     },
   ],
 });
