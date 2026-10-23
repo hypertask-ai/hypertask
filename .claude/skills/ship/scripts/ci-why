@@ -48,8 +48,10 @@ def pages(endpoint, key):
 
 
 def resolve_runs(target, repo):
-    url = re.fullmatch(r'https://github\.com/([^/]+/[^/]+)/actions/runs/(\d+)(?:/attempts/\d+)?/?', target)
+    url = re.fullmatch(r'https://github\.com/([^/]+/[^/]+)/actions/runs/(\d+)(/attempts/\d+)?(?:/job/\d+)?/?', target)
     if url:
+        if url[3]:
+            raise ReadError('attempt URLs are not supported; pass the run URL without /attempts/N to read its latest attempt')
         if url[1] != repo:
             raise ReadError(f'run URL belongs to {url[1]}; use --repo {url[1]}')
         return [gh_api(f'repos/{repo}/actions/runs/{url[2]}')]

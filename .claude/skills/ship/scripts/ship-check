@@ -121,7 +121,7 @@ check_ci_tests() {
     if [ "$(jq -r '.status' <<<"$production")" = completed ] \
       && [[ $(jq -r '.conclusion' <<<"$production") =~ ^(failure|cancelled|timed_out|action_required|stale)$ ]] \
       && [[ $(jq -r '.started_at' <<<"$run") < $(jq -r '.started_at' <<<"$production") ]]; then
-      fail "production ci-tests is red ($(ci_test_failures "$production")) and this PR's ci-tests passed before that on an older production; rerun ci-tests on head ${sha:0:7}"$'\n'"run ci-why $1 for the failed step"
+      fail "production ci-tests is red ($(ci_test_failures "$production")) and this PR's ci-tests passed before that on an older production; rerun ci-tests on head ${sha:0:7}"$'\n'"run ci-why $(jq -r '.html_url' <<<"$production") for the failed step"
     fi
     echo "ci-tests ok"; return 0 ;;
   esac

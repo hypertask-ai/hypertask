@@ -116,9 +116,15 @@ else:
             self.assert_diagnosis(subprocess.CompletedProcess([], 0, '', ''))
 
     def test_run_id_and_url(self):
-        for target in ('9000000001', URL):
+        for target in ('9000000001', URL, URL + '/job/101'):
             with self.subTest(target=target):
                 self.assert_diagnosis(self.invoke(target))
+
+    def test_attempt_url_is_refused_not_read_as_latest(self):
+        result = self.invoke(URL + '/attempts/1')
+        self.assertEqual(result.returncode, 2)
+        self.assertIn('attempt URLs are not supported', result.stderr)
+        self.assertNotIn('Failed step', result.stdout)
 
     def test_json_separates_passing_annotations(self):
         result = self.invoke('1771', '--json')
@@ -245,7 +251,8 @@ else:
                 else:
                     self.assertEqual(result.returncode, 1, result.stderr)
                     self.assertTrue(result.stdout.startswith('FAIL: '), result.stdout)
-                    self.assertEqual(result.stdout.splitlines()[-1], 'run ci-why 1771 for the failed step')
+                    target = production_run['html_url'] if conclusion == 'success' else '1771'
+                    self.assertEqual(result.stdout.splitlines()[-1], f'run ci-why {target} for the failed step')
 
     def calls(self):
         return [json.loads(line) for line in (self.root / 'calls').read_text().splitlines()]
