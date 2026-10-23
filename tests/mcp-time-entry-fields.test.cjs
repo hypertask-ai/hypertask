@@ -1,3 +1,4 @@
+const { withStubs } = require("./helpers/stub-map.cjs");
 const test = require("node:test");
 const assert = require("node:assert/strict");
 const fs = require("node:fs");
@@ -6,7 +7,7 @@ const ts = require("typescript");
 
 const root = path.resolve(__dirname, "..");
 function load(relativePath, stubs) {
-  stubs = { "@/lib/auth/agentScope": require("./helpers/agent-board-scope.cjs").enforcedScope, ...stubs };
+  stubs = withStubs({ "@/lib/auth/agentScope": require("./helpers/agent-board-scope.cjs").enforcedScope }, stubs);
   const javascript = ts.transpileModule(
     fs.readFileSync(path.join(root, relativePath), "utf8"),
     { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2020, esModuleInterop: true } },
@@ -14,7 +15,7 @@ function load(relativePath, stubs) {
   const loaded = { exports: {} };
   new Function("module", "exports", "require", javascript)(loaded, loaded.exports, (name) => {
     if (name === "@/lib/mcp/routeWrapper") return require("./helpers/mcp-route-wrapper.cjs").loadRouteWrapper(stubs);
-    assert.ok(Object.hasOwn(stubs, name), `Unexpected dependency: ${name}`);
+    assert.ok(name in stubs, `Unexpected dependency: ${name}`);
     return stubs[name];
   });
   return loaded.exports;

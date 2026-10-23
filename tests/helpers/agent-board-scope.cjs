@@ -1,3 +1,4 @@
+const { withStubs } = require('./stub-map.cjs');
 const path = require('node:path');
 const { load } = require('../task-route-loader.cjs');
 const root = path.resolve(__dirname, '../..');
@@ -101,7 +102,7 @@ function fixture() {
     '@/utils/controllers/projects/findPrefixAliasTasks': { findPrefixAliasTasks: async () => [] },
     '@/utils/controllers/logs/createLog': { default: async () => {} },
   };
-  return { ...state, state, prisma, mocks, scope, access: scopedAccess, run: (req, run) => scope.withAgentScopeRequest(req, async () => { await scope.prepareAgentScope(state.ctx.user.id, state.ctx.agentId); return run(); }), load: (file, extra = {}) => load(file, { ...mocks, ...extra }) };
+  return { ...state, state, prisma, mocks, scope, access: scopedAccess, run: (req, run) => scope.withAgentScopeRequest(req, async () => { await scope.prepareAgentScope(state.ctx.user.id, state.ctx.agentId); return run(); }), load: (file, extra = {}) => load(file, withStubs(mocks, extra)) };
 }
 module.exports = { access, fixture, matches, hydrate, load };
 
