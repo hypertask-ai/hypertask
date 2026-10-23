@@ -111,7 +111,7 @@ export function createUpdateTaskTool(context: ToolContext) {
         const operationKey = buildBulkOperationKey("update-tasks", [], operationChanges);
         const needsConfirmation =
           bulkPreviewsIssued.has(operationKey) ||
-          (input.confirmed === false && targets.length > 1) ||
+          input.confirmed === false ||
           updateTasksNeedConfirmation({
             targetCount: targets.length,
             update: input,

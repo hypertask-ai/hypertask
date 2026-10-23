@@ -39,12 +39,20 @@ class MemorySetRedis {
         return transaction;
       },
       exec: async () => {
-        if (this.failExpiry) return [[null, 1], [new Error("expire failed")]];
+        if (this.failExpiry) {
+          queued[0]();
+          return [[null, 1], [new Error("expire failed")]];
+        }
         queued.forEach((apply) => apply());
         return queued.map(() => [null, 1]);
       },
     };
     return transaction;
+  }
+
+  async del(key) {
+    this.expiries.delete(key);
+    return this.sets.delete(key) ? 1 : 0;
   }
 
   async srem(key, ...members) {
@@ -204,6 +212,7 @@ test("previews keep an expiring, session-bound scope", async () => {
 test("still refused: a failed expiry write leaves no usable scope", async () => {
   const redis = new MemorySetRedis({ failExpiry: true });
   await previewAll(redis, doneTaskIds, [50, 50, 28]);
+  assert.equal(redis.sets.size, 0, "a scope stored without its expiry must be deleted");
   redis.failExpiry = false;
   assert.equal(
     await updateCall(redis, doneTaskIds.slice(0, 50), { confirmed: true, request: new Set() }),
@@ -283,6 +292,24 @@ test("now works through the chat tool: 51 archives preview in two calls, one yes
   const yesTurn = loadUpdateTool(redis, archived, new Set());
   await yesTurn({ task_ids: scope.slice(0, 50), status: "Archive", confirmed: true });
   await yesTurn({ task_ids: scope.slice(50), status: "Archive", confirmed: true });
+  assert.deepEqual([...archived].sort(), [...scope].sort());
+});
+
+test("still refused through the chat tool: a one-task batch previewed first changes nothing", async () => {
+  const redis = new MemorySetRedis();
+  const scope = doneTaskIds.slice(0, 51);
+  const previewed = [];
+  const previewTurn = loadUpdateTool(redis, previewed, new Set());
+  const single = await previewTurn({ task_ids: scope.slice(0, 1), status: "Archive", confirmed: false });
+  const rest = await previewTurn({ task_ids: scope.slice(1), status: "Archive", confirmed: false });
+  assert.equal(single.confirmation_required, true);
+  assert.equal(rest.confirmation_required, true);
+  assert.deepEqual(previewed, []);
+
+  const archived = [];
+  const yesTurn = loadUpdateTool(redis, archived, new Set());
+  await yesTurn({ task_ids: scope.slice(1), status: "Archive", confirmed: true });
+  await yesTurn({ task_ids: scope.slice(0, 1), status: "Archive", confirmed: true });
   assert.deepEqual([...archived].sort(), [...scope].sort());
 });
 

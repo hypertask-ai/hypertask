@@ -13,6 +13,7 @@ type BulkConfirmationRedis = {
     ttlSeconds: number
   ): Promise<unknown>;
   srem(key: string, ...members: string[]): Promise<number>;
+  del(key: string): Promise<number>;
   multi(): ScopePreviewTransaction;
 };
 
@@ -61,7 +62,10 @@ async function requireScopedConfirmation(
         .expire(scopeKey, PREVIEW_TOKEN_TTL_SECONDS)
         .exec();
       const failed = !results || results.some(([error]) => error);
-      if (failed) throw new Error("bulk confirmation scope was not stored with its expiry");
+      if (failed) {
+        await redis.del(scopeKey);
+        throw new Error("bulk confirmation scope was not stored with its expiry");
+      }
     }
     return "preview" as const;
   };
