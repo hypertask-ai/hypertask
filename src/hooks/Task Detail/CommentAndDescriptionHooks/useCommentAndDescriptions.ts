@@ -1,6 +1,6 @@
 
 import { useFlag } from "@/hooks/useFlag";
-import { HTPR_7315_UNREAD_TICKET_OPENS_TOP_FLAG, HTPR_7611_COMMENTS_FOLD_FROM_FIRST_PAINT_FLAG } from "@/lib/flags/keys";
+import { HTPR_7315_UNREAD_TICKET_OPENS_TOP_FLAG } from "@/lib/flags/keys";
 import { useTaskContext } from "@/lib/contexts/TaskDetail/TaskProvider";
 import { IAttachment, IComment } from "@/models/model";
 import {
@@ -121,6 +121,7 @@ const useDescriptionAndCommentsStates = () => {
     setComments,
     setAgentRunActivities,
     stackData,
+    foldCommentsFromFirstPaint,
     showCommentDeleteModal,
     setShowCommentDeleteModal,
     hasDraft,
@@ -153,9 +154,8 @@ const useDescriptionAndCommentsStates = () => {
     emojiClickHandlerDescriptionr,
   } = useDescriptionReactions();
   const unreadTicketOpensTop = useFlag(HTPR_7315_UNREAD_TICKET_OPENS_TOP_FLAG);
-  const foldFromFirstPaint = useFlag(HTPR_7611_COMMENTS_FOLD_FROM_FIRST_PAINT_FLAG);
   const commentsStackedRef = useRef<boolean | undefined>(undefined);
-  commentsStackedRef.current = foldFromFirstPaint ? stackData : undefined;
+  commentsStackedRef.current = foldCommentsFromFirstPaint ? stackData : undefined;
   const _parsedTask = useMemo(() => JSON.parse(parsed_task), [parsed_task]);
   const [descriptionAttachments, setDescriptionAttachments] = useState<
     IAttachment[]
