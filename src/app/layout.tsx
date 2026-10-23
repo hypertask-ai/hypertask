@@ -24,7 +24,7 @@ import {
   resolveInitialThemeColor,
   resolveThemePreference,
 } from "@/lib/themePreferences";
-import { HTPR_7328_ROUNDED_THEME_FLAG, HTPR_7560_FLAG_READER_SUBSCRIBE_FLAG } from "@/lib/flags/keys";
+import { HTPR_7328_ROUNDED_THEME_FLAG, HTPR_7560_FLAG_READER_SUBSCRIBE_FLAG, HTPR_7627_TICKET_FIRST_SCREEN_FLAG } from "@/lib/flags/keys";
 import { buildThemeBootScript } from "@/lib/themeBootScript";
 import { buildEarlyAppShellBootstrapScript } from "@/lib/appShellBootstrap/client";
 import { getServerBoardDocument } from "@/lib/firstScreen/serverBoardDocument";
@@ -60,7 +60,10 @@ export default async function RootLayout(
   const analyticsSession = verifySession(
     cookieStore.get(SESSION_COOKIE)?.value,
   );
-  const firstScreenPromise = Promise.all([isMobileDevice(), getServerBoardDocument(), getServerInboxDocument(), getServerTicketShell()]);
+  const ticketShellPromise = analyticsSession
+    ? isFeatureEnabled(HTPR_7627_TICKET_FIRST_SCREEN_FLAG, analyticsSession.id).then(enabled => enabled ? getServerTicketShell() : null).catch(() => null)
+    : Promise.resolve(null);
+  const firstScreenPromise = Promise.all([isMobileDevice(), getServerBoardDocument(), getServerInboxDocument(), ticketShellPromise]);
   let identifyEventIds = false;
   if (analyticsSession) {
     try {

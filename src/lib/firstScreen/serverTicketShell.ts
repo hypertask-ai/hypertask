@@ -2,7 +2,7 @@ import "server-only";
 import { cache } from "react";
 import { cookies, headers } from "next/headers";
 import { getServerCookieUser } from "@/lib/auth/serverUser";
-import { featureFlagsForUser, isFeatureEnabled } from "@/lib/flags";
+import { featureFlagsForUser } from "@/lib/flags";
 import { HTPR_7627_TICKET_FIRST_SCREEN_FLAG } from "@/lib/flags/keys";
 import { BOARD_DISPLAY_COOKIE, parseBoardDisplay } from "./boardDisplay";
 import { BOARD_DOCUMENT_TIMEOUT_MS, BOARD_FIRST_SCREEN_FLAG } from "./boardDocument";
@@ -15,8 +15,8 @@ export async function readTicketShell(route: string, displayCookie: string | und
   if (!user || performance.now() > deadline) return null;
   const display = parseBoardDisplay(displayCookie, user.id, { desktopChat: true });
   if (!display) return null;
-  const [ticketSeedEnabled, flags] = await Promise.all([isFeatureEnabled(HTPR_7627_TICKET_FIRST_SCREEN_FLAG, user.id), featureFlagsForUser(user.id)]);
-  if (!ticketSeedEnabled || flags[BOARD_FIRST_SCREEN_FLAG] !== true || performance.now() > deadline) return null;
+  const flags = await featureFlagsForUser(user.id);
+  if (flags[BOARD_FIRST_SCREEN_FLAG] !== true || flags[HTPR_7627_TICKET_FIRST_SCREEN_FLAG] !== true || performance.now() > deadline) return null;
   return { accountId: user.id, flags: { accountId: user.id, evaluatedAt: new Date().toISOString(), values: flags }, display };
 }
 
