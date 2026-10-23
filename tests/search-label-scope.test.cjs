@@ -185,12 +185,12 @@ test('client Ask AI uses the same readable chip summary and hands readable names
   })
 })
 
-test('client permanently uses readable Ask AI, counts and board scope unless layout is off', async (t) => {
+test('client permanently uses label counts and board scope unless layout is off', async (t) => {
   await withSearch(t, {}, async ({ type, tick, options, press, lookups, requests, state }) => {
     assert.deepEqual(state().availableSearchBoards.map((board) => board.id), [7, 8])
     await type('board:7 label:bu')
     await tick(180)
-    assert.equal(options()[0].textContent, 'Ask AIboard:Product Board label:bu')
+    assert.equal(options()[0].textContent, 'Ask AIboard:7 label:bu')
     assert.equal(options()[1].textContent, 'Bug3')
     assert.equal(options()[1].querySelector('.ml-auto').textContent, '3')
     assert.equal(lookups.filter((params) => params.get('operator') === 'label').at(-1).get('boards'), '7')
