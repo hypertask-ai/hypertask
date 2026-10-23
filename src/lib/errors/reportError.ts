@@ -7,6 +7,7 @@ import {
   errorTicketMinimumOccurrences,
   errorFingerprint,
   isWithinErrorTicketCap,
+  redactSecrets,
 } from "./errorFingerprint";
 import { claimThresholdErrorTicket } from "./errorTicketThreshold";
 import { selectErrorBoardSection } from "./errorBoardTarget";
@@ -217,7 +218,12 @@ async function reportErrorTicket(report: ErrorReport) {
   }
 }
 
-export async function reportError(report: ErrorReport) {
+export async function reportError(unredactedReport: ErrorReport) {
+  const report: ErrorReport = {
+    ...unredactedReport,
+    message: redactSecrets(unredactedReport.message),
+    stack: unredactedReport.stack === undefined ? undefined : redactSecrets(unredactedReport.stack),
+  };
   const captured = await capturePostHogException(report);
   if (captured) {
     trace("posthog-captured");
