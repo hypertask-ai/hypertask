@@ -110,6 +110,7 @@ async function fixture(t, { mobile = true, hasDraft = false, hasDraftInit = fals
     "next/navigation": { useRouter: () => ({}), useSearchParams: () => null },
     "@/lib/contexts/TaskDetail/DescriptionProvider": { useDescriptionAndCommentsContext: () => description },
     "@/lib/taskDetailArchiveNavigation": { shouldAdvanceAfterNotificationArchive: () => false },
+    "@/lib/inboxQueryKeys": { inboxDataQueryKey: (id) => ["inbox", "data", id] },
     "@/hooks/General/useMobileVisualViewport": { useMobileVisualViewport: () => null },
     "@/hooks/useFlag": { useFlag: () => false },
   });
