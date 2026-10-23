@@ -61,7 +61,6 @@
     "@prisma/adapter-pg": "^7.10.0",
     "@prisma/client": "^7.10.0",
     "@radix-ui/react-slot": "^1.4.0",
-    "@stripe/stripe-js": "^9.17.0",
     "@tailwindcss/postcss": "^4.3.2",
     "@tanstack/query-sync-storage-persister": "^5.104.1",
     "@tanstack/react-query": "^5.104.1",
