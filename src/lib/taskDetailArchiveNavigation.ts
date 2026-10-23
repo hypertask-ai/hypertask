@@ -12,6 +12,32 @@ export function shouldAdvanceAfterNotificationArchive(
   return inboxFlow === "true";
 }
 
+type InboxMessage = {
+  id: number | string;
+  taskId: number;
+  projectId: number;
+  userId: number;
+  status: string;
+  waitingOnSynthetic?: boolean;
+};
+
+export function inboxMessageForTask<T extends InboxMessage>(
+  inboxMessages: T[] | undefined,
+  task: { id?: number; projectId?: number } | null | undefined,
+  userId: number | null | undefined,
+): T | undefined {
+  return inboxMessages?.find(
+    (message) =>
+      message.taskId === task?.id &&
+      message.projectId === task?.projectId &&
+      message.userId === userId &&
+      message.status === "Normal" &&
+      !message.waitingOnSynthetic &&
+      Number.isSafeInteger(Number(message.id)) &&
+      Number(message.id) > 0,
+  );
+}
+
 export function nextRemainingInboxTask<T extends TaskPlaylistIdentity>(
   playlist: T[],
   currentTask: TaskPlaylistIdentity,

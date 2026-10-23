@@ -32,12 +32,9 @@ import { useFirstScreenSurface } from "@/lib/firstScreen/SurfaceContext";
 import { getInboxDocument } from "@/lib/firstScreen/inboxDocument";
 import { getBoardDocument } from "@/lib/firstScreen/boardDocument";
 
-export const INBOX_QUERY_KEY = ["inbox"] as const;
+import { INBOX_QUERY_KEY, inboxAccessQueryKey, inboxDataQueryKey } from "@/lib/inboxQueryKeys";
+export { INBOX_QUERY_KEY, inboxAccessQueryKey, inboxDataQueryKey };
 export const INBOX_QUERY_STALE_TIME_MS = 30 * 1000;
-export const inboxDataQueryKey = (userId: number | null | undefined) =>
-  [...INBOX_QUERY_KEY, "data", userId] as const;
-export const inboxAccessQueryKey = (userId: number | null | undefined) =>
-  [...INBOX_QUERY_KEY, "access", userId] as const;
 
 export const fetchInboxAccessibleProjectIds = (
   queryClient: QueryClient,
