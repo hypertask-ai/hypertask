@@ -70,6 +70,11 @@ async function openInbox(page: Page, top: Item) {
   await expect(page.getByText(top.title).first()).toBeVisible({ timeout: 30_000 })
 }
 
+test('inbox cycle: a full page load of an inbox ticket still knows its place in the inbox (cold click before hydration)', async ({ page }) => {
+  await page.goto(withRealtime(`${items[0].detailPath}?inboxFlow=true`), { waitUntil: 'domcontentloaded' })
+  await expectOpenInFlow(page, items[0], /^1 \/ 5$/)
+})
+
 test('inbox cycle: open by Enter, send a comment, archive and go to the next message', async ({ page }) => {
   await openInbox(page, items[0])
   await page.waitForTimeout(1500)

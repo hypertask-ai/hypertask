@@ -69,7 +69,8 @@ try {
   await page.screenshot({ path: path.join(dir, '01-inbox.png') });
   await topSeededRow.click();
   await page.waitForURL(/\/detail\/project-\d+\/\d+/, { timeout: 30_000 });
-  step('open by click keeps inboxFlow', inFlow() && openedTask()?.id === first.id, { url: page.url(), counter: await counter() });
+  const clickCounter = await counter();
+  step('open by click keeps inboxFlow and shows the inbox counter', inFlow() && openedTask()?.id === first.id && Boolean(clickCounter), { url: page.url(), counter: clickCounter });
 
   const clicked = new URL(page.url()).pathname;
   await send(`QA inbox cycle reply ${stamp}`);

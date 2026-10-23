@@ -9,7 +9,7 @@ import {
 
 import { useFirstScreenSurface, type FirstScreenSnapshot } from "@/lib/firstScreen/SurfaceContext";
 import { projectInboxDateGroup } from "@/lib/firstScreen/inbox";
-import type { INotification, ITasksPlaylist, TRemoveFromInboxMode } from "@/models/model";
+import type { INotification, TRemoveFromInboxMode } from "@/models/model";
 import { useRouter } from "next/navigation";
 import {
   ReactNode,
@@ -52,6 +52,7 @@ import {
 import { useQueryClient } from "@tanstack/react-query";
 import { useDeviceContext } from "@/lib/contexts/deviceContext";
 import SubtaskLinkingModal from "@/components/Modals/SubtaskLinkingModal/SubtaskLinking";
+import { buildInboxTasksPlaylist } from "@/lib/inbox/inboxTasksPlaylist";
 import useCurrentUser from "@/hooks/General/useCurrentUserCheckFromCookies";
 import { useProjectQuery } from "@/hooks/General/useProjectQuery";
 import { useFlag } from "@/hooks/useFlag";
@@ -1012,24 +1013,8 @@ const InboxSplit = ({
     );
   };
 
-  const buildUniqueTasksPlaylist = (notifications: INotification[]) => {
-    const uniqueMap = new Map<string, ITasksPlaylist>();
-    for (const notification of notifications) {
-      if (notification.type === "Invited") continue;
-      const key = `${notification.projectId}-${notification.task?.uniqueIndex}`;
-      if (!uniqueMap.has(key)) {
-        uniqueMap.set(key, {
-          projectId: notification.projectId,
-          uniqueIndex: notification.task?.uniqueIndex,
-          notification,
-          ...(decisionCommentLinks && notification.decisionCommentId
-            ? { decisionCommentId: notification.decisionCommentId }
-            : {}),
-        });
-      }
-    }
-    return Array.from(uniqueMap.values());
-  };
+  const buildUniqueTasksPlaylist = (notifications: INotification[]) =>
+    buildInboxTasksPlaylist(notifications, decisionCommentLinks);
 
   const buildQueryParams = (mode: string): string => {
     switch (mode) {
@@ -1314,7 +1299,7 @@ const InboxSplit = ({
                                         inboxConfig.urls.taskDetail(
                                           notification.projectId,
                                           notification.task?.uniqueIndex,
-                                          mentionedQueryParam,
+                                          `&split=${encodeURIComponent(selectedSplit)}${mentionedQueryParam}`,
                                         ),
                                         notification.decisionCommentId,
                                         decisionCommentLinks,
