@@ -3,7 +3,7 @@ import { reportError } from "@/lib/errors/reportError";
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 
-import { getAiRequestUser } from "@/app/api/ai/_lib/requestUser";
+import { getAiRequestUser, getCliBearerChatUser } from "@/app/api/ai/_lib/requestUser";
 import { loadActingAgent } from "@/lib/ai/tools/helpers";
 import { requestAiChatCancellation } from "../stream/streamLease";
 
@@ -16,7 +16,7 @@ const cancelSchema = z.object({
 });
 
 export async function POST(request: NextRequest) {
-  const user = await getAiRequestUser(request);
+  const user = (await getAiRequestUser(request)) ?? (await getCliBearerChatUser(request, "chat-cancel"));
   if (!user?.id) return NextResponse.json({ success: false, error: "Unauthorized" }, { status: 401 });
 
   const parsed = cancelSchema.safeParse(await request.json().catch(() => null));
