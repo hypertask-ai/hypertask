@@ -56,6 +56,7 @@ Repo skills live in the app repo at `.claude/skills/`; their index is `.claude/s
 | Docs (FEATURE and IMPROVE only) | repo `update-docs` | `ship-check docs <T>` prints `docs ok` |
 | Report and close | `vcc` QA routine step 5, plus the QA record below | `ship-check done HTPR-NNNN` prints `done ok` |
 | Clean up | `clean-up` (this session's worktree and branch) | `ship-check cleaned HTPR-NNNN` prints `cleaned ok` |
+| Reflect (once, after the last ticket's Clean up) | repo `reflect` | HT Product Lead answered the Accepted list, approved rows have their own YPER4 ticket, Backlog tickets filed, or reflect skipped with the reason in the agent activity |
 
 ## Switching flags from a session (YPER4-215)
 
