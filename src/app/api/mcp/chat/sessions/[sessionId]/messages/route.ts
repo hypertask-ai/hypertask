@@ -194,8 +194,7 @@ export async function POST(
       ticketProposal?: Prisma.ChatTicketProposalGetPayload<{ select: typeof chatTicketProposalSelect }> | null
     }) => {
       if (ctx.teamScope != null && ticketProposal) {
-        const project = projectContentAccessWhere(ctx.user.id, ctx.agentId, ctx.teamScope)
-        if (!await prisma.project.findFirst({ where: { id: ticketProposal.targetProjectId, ...project }, select: { id: true } }) || ticketProposal.taskId != null && !await prisma.task.findFirst({ where: { id: ticketProposal.taskId, project }, select: { id: true } })) throw new TaskTeamScopeError()
+        if (!await prisma.project.findFirst({ where: { id: ticketProposal.targetProjectId, ...projectContentAccessWhere(ctx.user.id, ctx.agentId, ctx.teamScope) }, select: { id: true } }) || ticketProposal.taskId != null && !await prisma.task.findFirst({ where: { id: ticketProposal.taskId, project: projectContentAccessWhere(ctx.user.id, ctx.agentId, ctx.teamScope) }, select: { id: true } })) throw new TaskTeamScopeError()
       }
       return { id, role, content, createdAt, proposal: serializeChatTicketProposal(ticketProposal) }
     }

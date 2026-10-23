@@ -15,7 +15,7 @@ import {
   selectTiptapModel,
 } from "@/app/api/ai/_lib/editorAi";
 import { getProjectTeamProviderContext } from "@/app/api/ai/_lib/providerGate";
-import { projectAccessWhere } from "@/app/api/ai/_lib/taskWriterRun";
+import { projectContentAccessWhere } from "@/utils/controllers/projects/getAllIncludes";
 import { isAiFeatureEnabled } from "@/lib/systemModelLadder";
 import { toEditableHtml } from "@/app/api/mcp/ai/improve/plainText";
 import prisma from "@/lib/prisma";
@@ -47,7 +47,7 @@ export async function POST(request: NextRequest) {
     const project = await prisma.project.findFirst({
       where: {
         id: input.project_id,
-        ...projectAccessWhere(userId, ctx.agentId, ctx.teamScope),
+        ...projectContentAccessWhere(userId, ctx.agentId, ctx.teamScope),
       },
       select: { id: true },
     });

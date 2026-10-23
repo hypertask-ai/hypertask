@@ -2,6 +2,7 @@ import { wrapMcpRoute, checkMcpRouteRateLimit as checkMcpRateLimit, validateMcpR
 import { NextRequest, NextResponse } from 'next/server';
 
 import prisma from '@/lib/prisma';
+import { getProjectWhere } from '@/utils/controllers/projects/getAllIncludes';
 import { findTaskByIdentifier, taskIdentifierErrorResponse } from '@/lib/mcp/tasks/resolveTask';
 import {
   canManageLease,
@@ -184,7 +185,7 @@ export async function POST(request: NextRequest) {
 
     if (leases.length === 0) {
       const liveTask = await prisma.task.findFirst({
-        where: { id: task.id, ...(ctx.teamScope != null ? { project: (await import("@/utils/controllers/projects/getAllIncludes")).getProjectWhere(ctx.user.id, ctx.agentId, ctx.teamScope) } : {}) },
+        where: { id: task.id, ...(ctx.teamScope != null ? { project: getProjectWhere(ctx.user.id, ctx.agentId, ctx.teamScope) } : {}) },
         select: { status: true },
       });
       if (!liveTask || liveTask.status === 'Deleted') {

@@ -87,7 +87,7 @@ export async function GET(request: NextRequest) {
       where: {
         id: projectId,
         status: 'Normal',
-        ...projectAccessWhere,
+        ...getProjectWhere(ctx.user.id, ctx.agentId, ctx.teamScope),
       },
       select: {
         id: true,
@@ -129,7 +129,6 @@ export async function GET(request: NextRequest) {
 
     const where: ClaimableTaskWhereInput = {
       projectId,
-      project: projectAccessWhere,
       status: 'Normal',
       ...(section
         ? { section }
@@ -165,7 +164,7 @@ export async function GET(request: NextRequest) {
     }
 
     const tasks = await prisma.task.findMany({
-      where,
+      where: { ...where, project: getProjectWhere(ctx.user.id, ctx.agentId, ctx.teamScope) },
       select: {
         id: true,
         ticketNumber: true,
