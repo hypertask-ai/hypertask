@@ -315,9 +315,7 @@ export const getCurrentProject = (_currentProject:IProject) => {
 
 export  const convertToPlain=(html:string)=>{
     if (typeof window!=="undefined"){
-      var tempDivElement = document.createElement("div");
-
-      tempDivElement.innerHTML = html;
+      const tempDivElement = new window.DOMParser().parseFromString(html, "text/html").body;
 
       return tempDivElement.textContent || tempDivElement.innerText || "";
     }
