@@ -275,6 +275,7 @@ test("MCP section-delete endpoint reaches completion email with the verified age
     "next/server": { NextResponse: Response },
     "@/lib/prisma": { __esModule: true, default: {} },
     "@/lib/mcp/sections/services": { deleteSection: f.deleteSection },
+    "@/lib/mcp/agents/scopes": { requireRole: async () => null },
     "@/lib/realtime/server": { broadcastBoardChange: async () => {} },
   });
   const response = await DELETE(new Request("https://example.invalid/api/mcp/projects/15/sections/1", { method: "DELETE" }), {
