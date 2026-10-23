@@ -35,18 +35,25 @@ async function sendComment(page: Page, text: string) {
     return editor.innerText()
   }, { message: 'the comment text is in the current ticket comment box' }).toContain(text)
   await expect(editor).toBeFocused()
+  await editor.evaluate((element) => { element.setAttribute('data-inbox-cycle-typed', 'true') })
   const created = page.waitForRequest((request) => /\/api\/comments\/create/.test(request.url()) && request.method() === 'POST', { timeout: 5_000 }).then(() => true, () => false)
   await page.keyboard.press('Control+Enter')
   if (await created) return
   const editorText = await editor.innerText()
-  console.log(`[inbox-cycle] Control+Enter sent no comment on ${new URL(page.url()).pathname}; editor text: ${editorText}`)
+  const typedEditorStillMounted = await page.locator('[data-inbox-cycle-typed="true"]').count()
+  const editorCount = await page.locator('.ProseMirror').count()
+  const toasts = await page.locator('[role="status"]').allInnerTexts().catch(() => [])
+  console.log(`[inbox-cycle] Control+Enter sent no comment on ${new URL(page.url()).pathname}; editor text: ${editorText}; typed editor still mounted: ${typedEditorStillMounted}; editors: ${editorCount}; toasts: ${JSON.stringify(toasts)}`)
   throw new Error(`Control+Enter in a focused comment box holding "${editorText}" sent no comment`)
 }
 
 test.beforeEach(async ({ page }) => {
   page.on('request', (request) => {
     const { pathname } = new URL(request.url())
-    if (/\/api\/(notifications|comments?|tasks\/comment)/i.test(pathname) && request.method() !== 'GET') console.log(`[inbox-cycle request] ${request.method()} ${pathname} on ${new URL(page.url()).pathname}`)
+    if (pathname.startsWith('/api/') && request.method() !== 'GET') console.log(`[inbox-cycle request] ${request.method()} ${pathname} on ${new URL(page.url()).pathname}`)
+  })
+  page.on('console', (message) => {
+    if (/Saving|blank|Could not|draft/i.test(message.text())) console.log(`[inbox-cycle console] ${message.text().slice(0, 200)}`)
   })
   page.on('framenavigated', (frame) => {
     if (frame === page.mainFrame()) console.log(`[inbox-cycle url] ${new URL(frame.url()).pathname}${new URL(frame.url()).search}`)
