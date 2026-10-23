@@ -1,3 +1,5 @@
+import { sealWebhookSigningKey, webhookSigningKeyHint } from "@/lib/webhooks/signingKeyStore";
+import { SEALED_WEBHOOK_KEYS_FLAG } from "@/lib/flags/definitions/htpr-7624-sealed-webhook-keys";
 import crypto from "crypto";
 import { Prisma } from "@prisma/client";
 import prisma from "@/lib/prisma";
@@ -52,7 +54,7 @@ export function serializeAgentWebhookSubscription(sub: {
     url: sub.url,
     events: sub.events,
     active: sub.active,
-    secretHint: `whsec_…${sub.secret.slice(-4)}`,
+    secretHint: webhookSigningKeyHint(sub.secret),
     createdAt: sub.createdAt.toISOString(),
     updatedAt: sub.updatedAt.toISOString(),
     lastDeliveryAt: sub.lastDeliveryAt?.toISOString() ?? null,
@@ -214,6 +216,9 @@ export async function upsertAgentWebhook(input: {
       const secret = rotateSecret
         ? `whsec_${crypto.randomBytes(24).toString("hex")}`
         : existing.secret;
+      const storedSecret = rotateSecret && await isFeatureEnabled(SEALED_WEBHOOK_KEYS_FLAG, input.userId)
+        ? sealWebhookSigningKey(secret)
+        : secret;
       const subscription = await tx.agentWebhookSubscription.upsert({
         where: { agentId: input.agentId },
         create: {
@@ -222,14 +227,14 @@ export async function upsertAgentWebhook(input: {
           url,
           events: parsedEvents.events,
           active,
-          secret,
+          secret: storedSecret,
         },
         update: {
           projectId,
           url,
           events: parsedEvents.events,
           active,
-          ...(rotateSecret ? { secret } : {}),
+          ...(rotateSecret ? { secret: storedSecret } : {}),
         },
       });
       return { subscription, rotateSecret, secret };

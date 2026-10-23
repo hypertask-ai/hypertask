@@ -1,3 +1,6 @@
+import { sealWebhookSigningKey, webhookSigningKeyHint } from '@/lib/webhooks/signingKeyStore'
+import { isFeatureEnabled } from '@/lib/flags'
+import { SEALED_WEBHOOK_KEYS_FLAG } from '@/lib/flags/definitions/htpr-7624-sealed-webhook-keys'
 import { reportMcpOperationCrash } from '@/lib/mcp/operationCrashReport'
 import { wrapMcpRoute, checkMcpRouteRateLimit as checkMcpRateLimit, validateMcpRouteAuth as validateMcpAuth } from '@/lib/mcp/routeWrapper'
 import { NextRequest, NextResponse } from 'next/server'
@@ -34,7 +37,7 @@ function validationError(message: string, field?: string) {
 }
 
 function maskSecret(secret: string): string {
-  return `whsec_…${secret.slice(-4)}`
+  return webhookSigningKeyHint(secret)
 }
 
 function serialize(sub: {
@@ -277,7 +280,9 @@ export async function POST(request: NextRequest) {
       data: {
         projectId,
         url,
-        secret,
+        secret: await isFeatureEnabled(SEALED_WEBHOOK_KEYS_FLAG, ctx.user.id)
+          ? sealWebhookSigningKey(secret)
+          : secret,
         events,
         supportsUnassignedEvent: true,
         createdById: ctx.user.id,
