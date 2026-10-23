@@ -44,13 +44,8 @@ export function withOAuthTokenStorage<T extends DBAdapter | DBTransactionAdapter
       const method = Reflect.get(target, property, receiver)
       if (typeof method !== 'function') return method
       if (property === 'transaction') {
-        return async (callback: (tx: DBTransactionAdapter) => Promise<unknown>) => {
-          try {
-            return await method.call(target, (tx: DBTransactionAdapter) => callback(withOAuthTokenStorage(tx, options)))
-          } catch {
-            throw new Error('oauth_token_storage_failed')
-          }
-        }
+        return (callback: (tx: DBTransactionAdapter) => Promise<unknown>) =>
+          method.call(target, (tx: DBTransactionAdapter) => callback(withOAuthTokenStorage(tx, options)))
       }
       if (typeof property !== 'string' || !methods.has(property)) return method.bind(target)
       return async (input: Operation) => {
