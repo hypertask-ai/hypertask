@@ -8,6 +8,7 @@ for (const mode of ['WATCH', 'ENFORCE', 'FLAG_ERROR']) {
   for (const actor of ['bound', 'unbound']) {
     test(`${mode} ${actor}: board and agent webhook eligibility, queued delivery and replay authorize actual live projects`, async () => {
       const f = setup(mode, actor);
+      for (const subscription of f.subscriptions) subscription.createdById = f.user.id;
       const board = f.load('src/lib/mcp/webhooks/outbox.ts');
       const agent = f.load('src/lib/agentWebhooks/outbox.ts');
       const boardDelivery = f.load('src/lib/mcp/webhooks/outboxDelivery.ts');
@@ -99,6 +100,7 @@ for (const actor of ['bound', 'unbound']) {
   test(`${actor}: retained creating-agent provenance refuses an unresolvable queued board subscription without a retry`, async () => {
     const f = setup('WATCH', actor);
     const subscription = f.subscriptions[0];
+    subscription.createdById = f.user.id;
     subscription.createdByAgentId = f.agent.id;
     subscription.agentId = null;
     const now = new Date(0);
