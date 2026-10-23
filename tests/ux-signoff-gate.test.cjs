@@ -514,7 +514,7 @@ test('the parent approves only when the child has no sign-off thread, a child re
     assert.equal((await decision({ comments, parentComments: comments[0].id === 1 ? [yes()] : [wireframe()] })).state, 'failure');
   }
   assert.equal((await decision({ parentComments: [wireframe(), yes({ agent: { displayName: 'Runner 8' } })] })).state, 'failure');
-  assert.equal((await decision({ files: [added], parentComments })).state, 'failure');
+  assert.equal((await decision({ files: [added], parentComments: [wireframe({ text: '<p>https://hypertask.app/wireframes/decision-inbox</p>' }), yes()] })).state, 'failure');
   assert.equal((await decision({ files: [added], parentComments: [wireframe(), yes({ text: 'agree New elements: ExamplePanel' })] })).state, 'success');
   assert.equal((await decision({ comments: [wireframe({ id: 9, createdAt: '2026-10-11T12:00:00Z' })], parentComments })).state, 'success');
   const otherDesign = wireframe({ id: 9, text: '<p>https://claude.ai/artifact/OtherDesign1</p>', createdAt: '2026-10-11T12:00:00Z' });
