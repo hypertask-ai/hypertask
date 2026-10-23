@@ -470,6 +470,38 @@ https://app.hypertask.ai/detail/project-15/7617.
 
 **Next probe.** HTPR-7617: find why the layout and page client chunks get no early script tag on `/project` (server render of those parts or config), then an interleaved on/off live run once a measurement path exists.
 
+### 2026-10-23 morning: early board code tags are a no-go; the harness adds about 2.8 s to the phone board (HTPR-7617, YPER4-615)
+
+https://app.hypertask.ai/detail/project-15/7617 (no-go), https://app.hypertask.ai/detail/project-4060/615 (harness fix).
+
+**Daily read.** Can't verify: `--latest` is still the 2026-10-22 06:17 UTC run on 0f0854834; production is 37d953119.
+
+**Why the tags are missing (verified in Next 16.4.0 source and live HTML).** With webpack, `getLayerAssets` emits CSS only (`entryJSFiles` exists only for Turbopack), so early JS tags come solely from React's flight client calling `preinitScript` while it parses each module row during server render. On Node, Next 16.4.0 sets `__NEXT_USE_NODE_STREAMS` and reads the flight stream with `createFromNodeStream`, whose rows arrive in `stream.on("data")`. `preinitScript` needs `resolveRequest()` (the Fizz request or its AsyncLocalStorage store); an EventEmitter listener runs in the producer's context, so rows that arrive after the first chunk fall to the no-op dispatcher. Live HTML matches: rows emitted before any server I/O get tags (the error boundaries, the `/inbox` page, which renders its client part right after a cached read), rows after an await do not (the root layout on every route; the board page after `getProjectForValidation`). Same code in 16.5.0-canary.24. Leading explanation for the playbook, not watched executing.
+
+**Experiment (no deploy).** Live, QA 2343, phone profile, first visit. Both arms take `/project` through the same CDP response-stage fulfil; "on" adds `<script async>` after `main-app` for the 27 chunks the flight data names but the HTML does not. Script: `~/.local/state/vcc-evidence/HTPR-7617/abab-7617.mjs`.
+
+| Run | Off | On | Note |
+|---|---|---|---|
+| r1, 5 interleaved pairs, load 8.5 to 11 | 12315 ms (11702 to 12911) | 12354 ms (11799 to 12875) | layout chunk start 3.5 s to 0.33 s, done 5.6 s to 4.85 s |
+| seen, 2 pairs, load 5 to 9 | 11686, 11882 ms | 13830, 13521 ms | board first commit 7.6 s to 9.3 s |
+
+Result: **no-go**. The earlier start competes with the first wave for the 1.6 Mbps link and pulls in one chunk the board never loads (48932, the root error page); paired differences -346 to +2144 ms. Not filed further.
+
+**What found the real problem.** A per-frame probe of each readiness condition: the fixture card is in the page at 8.4 to 9.7 s but at top 1447 px of an 844 px screen, and only in view 3.3 s later. A wrapped `Element.prototype.scrollIntoView` saw 0 calls, so the scroll came from Playwright's `locator.scrollIntoViewIfNeeded()` in `ready()`, which waits for the card to stop moving before it scrolls. The app's own marks: `ht-board-first-commit` 7.6 s, `ht-board-usable-ready` 7.7 to 8.6 s.
+
+**Measured (4 interleaved pairs, load 5 to 11).** Playwright pre-scroll: 11786, 12556, 12274, 11682 ms. In-page scroll only: 8959, 9426, 10046, 8997 ms. The phone first-visit board baseline (11.7 s) carries about 2.8 s of harness. Fix: drop the pre-scroll; board and board-returning are path version 2 (YPER4-615).
+
+**False leads.**
+- "QA Sandbox" in `document.body.textContent` is true at about 2 s: the inline flight data in `<script>` holds the board title. That check proves nothing; the card is what gates.
+- "No timing difference means the tags are harmless": the second run shows on 2 s slower; one quiet run is not safety evidence.
+
+**Lessons.**
+- Split a readiness check into its parts and time each one per frame before treating the total as app time.
+- A Playwright actionability step (scroll, click) inside a timed window waits for stability, which a busy throttled phone delays by seconds; do in-page DOM work inside the timed loop instead.
+- Before shipping a preload, test it against bandwidth: on 1.6 Mbps an earlier start only reorders the same bytes.
+
+**Next probe.** Phone first visit after the fix is about 9.2 s: `boardTasks` returns at 2.4 s, the local read starts at 6.5 s and the first commit is 7.4 to 7.6 s, with 4.5 s of long tasks from 5.5 s. Name what hydration runs between the code arriving (about 5.6 s) and the local read (6.5 s), then the 0.9 s from first commit to cards in the page.
+
 ## Milliseconds saved scoreboard
 
 Only matched end-to-end before/after evidence earns saved milliseconds; `unproven` is not zero. Do not sum different cohorts or claim forecasts as savings.
@@ -498,6 +530,8 @@ Only matched end-to-end before/after evidence earns saved milliseconds; `unprove
 | https://app.hypertask.ai/detail/project-15/7555 | Phone tap board to ticket, JSON.stringify time, live on/off interleaved N=5+5, load 6 to 9 | 317 ms (off) → 171 ms (on) main-thread stringify; ticket text 7785 → 8097 ms (overlapping) | about 146 ms CPU, 0 to ticket text | flag `htpr-7555-persist-size-once`, PR 1838; cache, text and screenshot identical |
 | https://app.hypertask.ai/detail/project-15/7554 | Font preloads vs stylesheet URL, live login, PR 1839 | 3 of 3 unmatched → 3 of 3 unmatched; ticket-page CLS 0.127 in browser-smoke | 0, regression, reverted in PR 1846 | premise wrong (stylesheet keeps an older deployment tag) |
 | https://app.hypertask.ai/detail/project-15/7588 | Phone page navigation, key press to /project request, daily harness N=5 | /project request 388 → 95 ms (live on/off N=5+5); content 1985 → 1947 ms, overlapping | about 290 ms to the board request, 0 to content | flag `htpr-7588-board-shortcut-from-device` Everyone, PR 1863; same board and screen in 10 of 10 |
+| https://app.hypertask.ai/detail/project-15/7617 | Phone board first visit, early layout and page script tags injected live, interleaved N=5+5 and 2+2 | 12315 ms (off) → 12354 ms (on); second run 11.8 → 13.7 s | 0, regression risk | no-go, nothing shipped; layout code started 3.2 s sooner but shares the link with the first wave |
+| https://app.hypertask.ai/detail/project-4060/615 | Phone board first visit, harness readiness, interleaved N=4+4 | 12030 ms (Playwright pre-scroll, median of 4) → 9212 ms (in-page scroll) | n/a (measurement, not app speed) | about 2.8 s of the 11.7 s baseline was the harness; board paths version 2 |
 
 Confirmed, comparable saved-ms total in this seed: **not established**. Future entries must link private before/after summaries, commits, N, median/p90/range and QA proof. This deliberately avoids inventing savings absent from the history.
 
