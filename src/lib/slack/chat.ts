@@ -109,7 +109,7 @@ export async function handleSlackChat(input: {
       if (!message) return textBlock(SLACK_CHAT_HELP);
       const context = slackAppEnabled ? await loadSlackChatContext(linkedActor, input) : "";
       const action = await parseSlackIntent(message, linkedActor, context);
-      const blocks = action ? await executeSlackAction(linkedActor, action, `${input.channelId}:${input.threadTs}:${input.text}`) : textBlock(SLACK_CHAT_HELP);
+      const blocks = action ? await executeSlackAction(linkedActor, action) : textBlock(SLACK_CHAT_HELP);
       if (slackAppEnabled) {
         await saveSlackChatTurn(linkedActor, input, message, blocks)
           .catch(() => console.error("Slack chat history save failed"));

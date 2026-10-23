@@ -4,7 +4,7 @@
     "call": "prisma.comment.count({ where: commentWhere })",
     "occurrence": 1,
     "approvedIn": "https://app.hypertask.ai/detail/project-15/7179",
-    "sha256": "1d93c954358b3daa42b4ac19d7b35ae43f69dc9f73bc45361ef65dc14f7619dd",
+    "sha256": "2cd519e7f7af0c731ae3a9aa25bc2244156276a002c84d744261e7e723f716f1",
     "reason": "validateMcpAuth supplies ctx.user, ctx.agentId and ctx.teamScope. findTaskByIdentifier(user, identifier, ctx.agentId, undefined, ctx.teamScope) must authorize the task before either comment query; commentWhere fixes taskId to that task and, for team credentials, also retains task.project = getProjectWhere(user.id, ctx.agentId, ctx.teamScope). Text/date/activity filters only narrow it."
   },
   {
@@ -12,7 +12,7 @@
     "call": "prisma.comment.findMany({ where: commentWhere, include: commentInclude(user.id, task.projectId), orderBy: [ { [sortField]: effectiveSortOrder }, { id: effectiveSortOrder }, ], take: pageLimit, skip: cursorId ? 1 : offset, ...(cursorId ? { cursor: { id: cursorId } } : {}), })",
     "occurrence": 1,
     "approvedIn": "https://app.hypertask.ai/detail/project-15/7179",
-    "sha256": "1d93c954358b3daa42b4ac19d7b35ae43f69dc9f73bc45361ef65dc14f7619dd",
+    "sha256": "2cd519e7f7af0c731ae3a9aa25bc2244156276a002c84d744261e7e723f716f1",
     "reason": "validateMcpAuth supplies ctx.user, ctx.agentId and ctx.teamScope. findTaskByIdentifier(user, identifier, ctx.agentId, undefined, ctx.teamScope) must authorize the task before either comment query; commentWhere fixes taskId to that task and, for team credentials, also retains task.project = getProjectWhere(user.id, ctx.agentId, ctx.teamScope). Text/date/activity filters only narrow it."
   },
   {

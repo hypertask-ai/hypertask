@@ -1,5 +1,4 @@
 import { isPlanLimitReachedError } from "@/lib/planLimits";
-import { notifyPlanLimitOwner } from "@/lib/planLimitNotifications";
 import { downloadWithoutBrotli } from "@/lib/net/downloadWithoutBrotli";
 import { resolveAiModel as resolveLegacyAiModel } from "@/app/api/ai/_lib/modelProvider";
 import { getAiDefaultModelContext, resolveAutomaticAiModel } from "@/app/api/ai/_lib/byokKeys";
@@ -199,15 +198,6 @@ export async function createSlackTaskFromThread(
     );
   } catch (error) {
     if (isPlanLimitReachedError(error)) {
-      if (destinationProjectId !== null) {
-        await notifyPlanLimitOwner({
-          projectId: destinationProjectId,
-          title: ticketTitle,
-          sourceKey: `${install.id}:${event.channelId}:${event.threadTs}`,
-          actorUserId: actor.user.id,
-          error,
-        });
-      }
       await postSlackThreadReply(botToken, event.channelId, event.threadTs, error.message);
       return;
     }

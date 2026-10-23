@@ -1029,44 +1029,16 @@ test("split compose preserves saved tickets and surfaces the refusal for unsaved
   assert.match(branch, /return \{ task: tasks\[0\]/);
 });
 
-test("owner plan notices remain visible without a task and after recurrence archive, using existing inbox messages", async () => {
+test("owner plan notices ride the existing inbox: attached to the task, inbox queries unchanged", async () => {
   const h = notificationFixture();
   const envelope = h.load("src/lib/nativeAgent/agentMessageEnvelope.ts");
-  h.stubs["@/lib/configs/inbox.config"] = { inboxConfig: { selfTriggeredHidden: [] } };
-  const { visibleUserInboxWhere } = h.load("src/utils/controllers/notifications/visibleInboxScope.ts");
-  const where = plain(visibleUserInboxWhere(7));
-  assert.equal(where.userId, 7);
-  assert.equal(where.status, "Normal");
-  assert.deepEqual(where.OR[0].AND[0].OR, [
-    { task: { status: "Normal" } },
-    { task: { status: "Archive" }, returnedFromReminders: true },
-  ]);
-  assert.deepEqual(where.OR[1], {
-    type: "AgentMessage", message: { startsWith: envelope.PLAN_LIMIT_MESSAGE_PREFIX }, project: { ownerId: 7 },
-  });
   const error = new h.policy.PlanLimitReachedError("tickets", 250, teamScope);
-  await h.notify({ projectId: 15, title: "Slack attempt", sourceKey: "event", actorUserId: 985, error });
-  assert.equal(h.notifications[0].taskId, null);
-  assert.equal(h.notifications[0].directReply, true);
-  assert.ok(h.notifications[0].message.startsWith(envelope.PLAN_LIMIT_MESSAGE_PREFIX));
-  assert.equal(envelope.decodeAgentMessage(h.notifications[0].message), `Could not create the next ticket for "Slack attempt": ${messages.tickets}`);
-  const source = read("src/utils/controllers/notifications/getAll.ts");
-  assert.match(source, /LEFT JOIN "Task" AS t ON t.id = n\."taskId"/);
-  assert.match(source, /n\."message" LIKE \$\{`\$\{PLAN_LIMIT_MESSAGE_PREFIX\}%`\}/);
-});
-
-test("the existing inbox count includes only marked plan notices addressed to the current board owner", async () => {
-  const h = fixture();
-  const queries = [];
-  h.stubs["@/lib/configs/inbox.config"] = { inboxConfig: { selfTriggeredHidden: [] } };
-  h.stubs["@/lib/nativeAgent/agentMessageEnvelope"] = h.load("src/lib/nativeAgent/agentMessageEnvelope.ts");
-  h.db.notification.findMany = async (query) => { queries.push(plain(query)); return [{ seen: false }]; };
-  const count = h.load("src/utils/controllers/notifications/getCount.ts").default;
-  assert.deepEqual(plain(await count(7)), { status: 200, json: { all: 1, unseen: 1 } });
-  assert.equal(queries.length, 1);
-  assert.equal(queries[0].where.userId, 7);
-  assert.equal(queries[0].where.OR[1].project.ownerId, 7);
-  assert.equal(queries[0].where.OR[1].type, "AgentMessage");
+  await h.notify({ projectId: 15, taskId: 42, title: "Weekly report", actorUserId: 985, error });
+  assert.equal(h.notifications[0].taskId, 42);
+  assert.equal(envelope.decodeAgentMessage(h.notifications[0].message), `Could not create the next ticket for "Weekly report": ${messages.tickets}`);
+  for (const file of ["getAll.ts", "getCount.ts", "visibleInboxScope.ts"]) {
+    assert.doesNotMatch(read(`src/utils/controllers/notifications/${file}`), /PLAN_LIMIT/);
+  }
 });
 
 test("ticket admission re-resolves a personal destination owner after locking its project row", async () => {

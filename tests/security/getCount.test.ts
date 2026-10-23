@@ -89,7 +89,7 @@ async function demo() {
       // HTPR-5683: a reminder returned onto an archived task must still be
       // counted, mirroring visibleUserInboxWhere's archive exception.
       assert.deepEqual(
-        args.where.OR[0].AND[0].OR,
+        args.where.AND[0].OR,
         [
           { task: { status: 'Normal' } },
           { task: { status: 'Archive' }, returnedFromReminders: true },

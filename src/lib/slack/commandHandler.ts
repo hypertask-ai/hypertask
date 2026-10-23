@@ -73,7 +73,7 @@ export async function handleSlackCommand(
 
     const actor = await resolveSlackActor(payload.slackTeamId, payload.slackUserId);
     const authorized = await runAsLinkedSlackUser(actor, (linkedActor) =>
-      executeSlackAction(linkedActor, toSlackAction(parsed), payload.triggerId ?? payload.responseUrl),
+      executeSlackAction(linkedActor, toSlackAction(parsed)),
     );
     await postSlackResponseUrl(
       payload.responseUrl,

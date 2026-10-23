@@ -1,4 +1,3 @@
-import { PLAN_LIMIT_MESSAGE_PREFIX } from "@/lib/nativeAgent/agentMessageEnvelope";
 import prisma from "@/lib/prisma";
 import { inboxConfig } from "@/lib/configs/inbox.config";
 
@@ -14,37 +13,28 @@ const notificationGetCount = async (userId: number) => {
           fromAgentId: null,
           type: { in: inboxConfig.selfTriggeredHidden },
         },
-        OR: [
+        AND: [
           {
-            AND: [
-              {
-                OR: [
-                  { task: { status: "Normal" } },
-                  { task: { status: "Archive" }, returnedFromReminders: true },
-                ],
-              },
-              {
-                OR: [
-                  {
-                    task: {
-                      Reminders: {
-                        every: {
-                          status: { not: "Normal" },
-                        },
-                      },
-                    },
-                  },
-                  {
-                    taskId: null,
-                  },
-                ],
-              },
+            OR: [
+              { task: { status: "Normal" } },
+              { task: { status: "Archive" }, returnedFromReminders: true },
             ],
           },
           {
-            type: "AgentMessage",
-            message: { startsWith: PLAN_LIMIT_MESSAGE_PREFIX },
-            project: { ownerId: userId },
+            OR: [
+              {
+                task: {
+                  Reminders: {
+                    every: {
+                      status: { not: "Normal" },
+                    },
+                  },
+                },
+              },
+              {
+                taskId: null,
+              },
+            ],
           },
         ],
       },

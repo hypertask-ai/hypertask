@@ -1,4 +1,3 @@
-import { PLAN_LIMIT_MESSAGE_PREFIX } from "@/lib/nativeAgent/agentMessageEnvelope";
 import type { AgentTokenTeamScope } from '@/lib/mcp/auth/types';
 import { agentScopeEnforced } from "@/lib/auth/agentScope";
 import { notificationBoardAccessWhere } from "@/utils/controllers/notifications/boardAccess";
@@ -105,8 +104,7 @@ const visibleInboxSql = (userId: number) => {
       OR n."fromAgentId" IS NOT NULL
       OR n."type"::text NOT IN (${selfTriggeredHiddenTypes})
     )
-    AND ((
-      (
+    AND (
       t."status" = 'Normal'::"Status"
       OR (
         t."status" = 'Archive'::"Status"
@@ -136,14 +134,6 @@ const visibleInboxSql = (userId: number) => {
       WHERE r."taskId" = t.id
         AND r."status" = 'Normal'::"Status"
     )
-    ) OR (
-      n."type" = 'AgentMessage'::"NotificationType"
-      AND n."message" LIKE ${`${PLAN_LIMIT_MESSAGE_PREFIX}%`}
-      AND EXISTS (
-        SELECT 1 FROM "Project" AS p
-        WHERE p.id = n."projectId" AND p."ownerId" = ${userId}
-      )
-    ))
   `;
 };
 
@@ -169,7 +159,7 @@ export async function getInboxNotifications(
         n.id,
         n."createdAt"
       FROM "Notification" AS n
-      LEFT JOIN "Task" AS t ON t.id = n."taskId"
+      INNER JOIN "Task" AS t ON t.id = n."taskId"
       WHERE ${visibleInboxSql(userId)}
       ORDER BY
         n."taskId",
