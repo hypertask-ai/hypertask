@@ -347,6 +347,7 @@ async function withCompose(options, check) {
     "@/lib/realtime/taskDetailRefresh": { preserveTaskAssigneesChangedDuringFetch: (_current, saved) => saved, refreshTaskDetailQueryCache: async () => {}, shouldPreserveTaskEditorContent: () => false, mergeRealtimeTaskDetail: (_current, saved) => saved },
     "@/lib/ai/composeTaskBoard": {}, "./composeBoardTarget": {},
     "@/components/AI_CHAT/ChatScopeChip": {}, "@/components/Modals/MoveTaskToBoard": {},
+    "@/components/PageComponents/TaskDetail/AI Task Writer/useSkillSlashMenu": { useSkillSlashMenu: () => ({ onKeyDown: () => false, onInput() {}, onCaretMove() {}, close() {}, menu: null }) },
     "@/lib/createTaskAttachmentUploads": { discardUnboundCreateTaskUploads() {} },
   }).default;
   global.fetch = async (url, init) => {
