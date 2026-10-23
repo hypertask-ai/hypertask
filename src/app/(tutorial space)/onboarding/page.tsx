@@ -20,7 +20,7 @@ export default async function Page(
     }
     console.log("🚀 ~ teamToInviteTo:", teamToInviteTo)
     const user = await requireServerCookieUser();
-    const isUserNew = await checkIfUserIsNew(user.id)
+    const isUserNew = (await checkIfUserIsNew(user.id)) === true
     console.log("🚀 ~ Page ~ isUserNew:", isUserNew)
 
     return (
