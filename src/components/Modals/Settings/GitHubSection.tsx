@@ -45,6 +45,7 @@ type GithubSettings = {
 const SAVE_ERRORS: Record<string, string> = {
   stale: "This board’s repositories changed. Reload them and choose again.",
   repo_on_other_board: "A selected repository is already connected to another board.",
+  already_connected: "A selected repository is already connected to this board.",
   not_installer: "Only the person who installed the GitHub App can add repositories.",
   repo_not_installed: "The GitHub App no longer covers a selected repository. Reload and choose again.",
   github_unavailable: "GitHub is unavailable. Nothing changed; try again shortly.",
@@ -126,7 +127,7 @@ const GitHubSection = () => {
   return (
     <SettingsSectionShell
       title="Connect GitHub"
-      description={projectId ? `GitHub repositories for board ${projectId}` : "Open Connect GitHub from the board you want to connect."}
+      description={projectId ? "GitHub repositories connected to the selected board." : "Open Connect GitHub from the board you want to connect."}
     >
       {projectId && (
         <SettingsCard title="GitHub App">
