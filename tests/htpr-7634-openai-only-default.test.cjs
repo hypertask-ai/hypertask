@@ -40,7 +40,7 @@ function moduleWithStubs(file, stubs) {
   return loadedModule.exports;
 }
 
-function harness({ enabled = true, plan = "Pro", saved = null, teamByok = false, managed = false, openai = false, openaiGateway = false, gateway = false, openrouter = false, agentProvider = null, agentId = null, settings = {}, flagError = false, background = false } = {}) {
+function harness({ enabled = true, plan = "Pro", saved = null, teamByok = false, managed = false, openai = false, openaiGateway = false, gateway = false, openrouter = false, agentProvider = null, agentCiphertext = null, agentId = null, settings = {}, flagError = false, background = false } = {}) {
   const checks = [], calls = [], reservations = [], agentLookups = [], usage = [], observations = [];
   let preferenceReads = 0;
   const flags = { isFeatureEnabled: async (key, id) => {
@@ -70,7 +70,7 @@ function harness({ enabled = true, plan = "Pro", saved = null, teamByok = false,
     } },
     agentByokApiKey: { findUnique: async ({ where }) => {
       agentLookups.push(where.agentId_provider);
-      return agentProvider && where.agentId_provider.provider === agentProvider ? { enabled: true, ciphertext: agentProvider === "gateway" ? "vck_fixture_agent" : agentKey } : null;
+      return agentProvider && where.agentId_provider.provider === agentProvider ? { enabled: true, ciphertext: agentCiphertext ?? (agentProvider === "gateway" ? "vck_fixture_agent" : agentKey) } : null;
     } },
     userSetting: { findUnique: async () => {
       preferenceReads += 1;
@@ -388,20 +388,58 @@ test("server context includes managed funding, not the shared key", async () => 
   }
 });
 
-test("classification uses the team's keys only, never the acting agent's", async () => {
-  const masked = harness({ openaiGateway: true, agentProvider: "openai", agentId: "fixture-agent" });
-  const maskedContext = await masked.byok.getAiDefaultModelContext({ trustedTeamId: teamId, userId, agentId: "fixture-agent" });
-  assert.equal(maskedContext.hasClaudeRoute, true, "a team gateway in the OpenAI slot stays a Claude route even when the agent has a direct OpenAI key");
-  assert.equal(maskedContext.hasDirectOpenAiKey, false);
-  assert.equal(catalog.defaultModelKeyFor(maskedContext), "claude-haiku-5-5");
-  const agentClaude = harness({ openai: true, agentProvider: "claude", agentId: "fixture-agent" });
-  const agentClaudeContext = await agentClaude.byok.getAiDefaultModelContext({ trustedTeamId: teamId, userId, agentId: "fixture-agent" });
-  assert.equal(agentClaudeContext.hasClaudeRoute, false, "an agent Claude key does not make the team Claude-capable");
-  assert.equal(agentClaudeContext.hasDirectOpenAiKey, true);
-  const agentOpenAi = harness({ agentProvider: "openai", agentId: "fixture-agent" });
-  const agentOpenAiContext = await agentOpenAi.byok.getAiDefaultModelContext({ trustedTeamId: teamId, userId, agentId: "fixture-agent" });
-  assert.equal(agentOpenAiContext.hasDirectOpenAiKey, false, "an agent OpenAI key is not the team's key");
-  assert.equal(catalog.isOpenAiOnlyPaidTeam(agentOpenAiContext), false);
+test("classification uses the team's keys only, and a request carrying an agent keeps the old default", async () => {
+  const teamGatewaySlot = harness({ openaiGateway: true });
+  const teamGatewayContext = await teamGatewaySlot.byok.getAiDefaultModelContext({ trustedTeamId: teamId, userId });
+  assert.equal(teamGatewayContext.hasClaudeRoute, true, "a team gateway in the OpenAI slot is a Claude route");
+  assert.equal(teamGatewayContext.hasDirectOpenAiKey, false);
+  assert.equal(catalog.defaultModelKeyFor(teamGatewayContext), "claude-haiku-5-5");
+  for (const agentProvider of ["claude", "openai", "gateway"]) {
+    const h = harness({ openai: true, agentProvider, agentId: "fixture-agent" });
+    const context = await h.byok.getAiDefaultModelContext({ trustedTeamId: teamId, userId, agentId: "fixture-agent" });
+    assert.deepEqual([context.openaiOnlyDefaultEnabled, context.hasDirectOpenAiKey, context.hasClaudeRoute], [false, false, false], agentProvider);
+    assert.equal(catalog.isOpenAiOnlyPaidTeam(context), false);
+  }
+});
+
+async function agentTaskWriterOutcome(input) {
+  const h = harness({ openai: true, agentId: "fixture-agent", ...input });
+  const observed = () => h.calls.map(({ modelId, credential }) => ({ modelId, credential }));
+  try {
+    const selected = await h.editor.selectTaskWriterModel({ aiFeature: "taskWriter", byokProviderFlags: [], teamContext: { teamId, settings: {} }, userId, agentId: "fixture-agent" });
+    await selected.model.doGenerate({ prompt: [], providerOptions: selected.providerOptions ?? {} });
+    return { calls: observed(), reservations: h.reservations.length };
+  } catch (error) {
+    return { refused: String(error?.message ?? error), calls: observed(), reservations: h.reservations.length };
+  }
+}
+
+for (const [label, input] of [
+  ["agent Claude key", { agentProvider: "claude" }],
+  ["agent direct OpenAI key", { agentProvider: "openai" }],
+  ["agent gateway key", { agentProvider: "gateway" }],
+  ["agent OpenAI slot holding the shared gateway key", { agentProvider: "openai", agentCiphertext: sharedKey }],
+  ["agent OpenAI slot holding the managed gateway key", { agentProvider: "openai", agentCiphertext: managedKey, managed: true }],
+]) {
+  test(`team OpenAI key plus ${label}: the final model and key match the flag-off behavior and never Luna`, async () => {
+    const on = await agentTaskWriterOutcome({ ...input, enabled: true });
+    const off = await agentTaskWriterOutcome({ ...input, enabled: false });
+    assert.deepEqual(on, off);
+    assert.ok(on.calls.every(({ modelId }) => modelId !== "gpt-6-luna"), JSON.stringify(on));
+  });
+}
+
+test("team OpenAI key plus an agent Claude key still runs Haiku on the agent's Claude key", async () => {
+  const outcome = await agentTaskWriterOutcome({ agentProvider: "claude", enabled: true });
+  assert.equal(outcome.refused, undefined, JSON.stringify(outcome));
+  assert.deepEqual(outcome.calls, [{ modelId: "claude-haiku-5-5", credential: agentKey }]);
+});
+
+test("without an agent, the team OpenAI-only default runs Luna on the team's own direct key", async () => {
+  const h = harness({ openai: true });
+  const selected = await h.editor.selectTaskWriterModel({ aiFeature: "taskWriter", byokProviderFlags: [], teamContext: { teamId, settings: {} }, userId });
+  await selected.model.doGenerate({ prompt: [], providerOptions: selected.providerOptions ?? {} });
+  assert.deepEqual(h.calls.map(({ modelId, credential }) => ({ modelId, credential })), [{ modelId: "gpt-6-luna", credential: "fixture-direct-openai" }]);
 });
 
 test("conversation titles never apply the OpenAI-only default, so a supplied gateway key never runs Luna", async () => {
