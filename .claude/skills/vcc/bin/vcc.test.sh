@@ -136,7 +136,7 @@ for args in "activity" "activity --help" "activity list X-1"; do
 done
 allowed bash "$vcc" tasks get X-1
 printf 'ok unknown activity subcommands fail in vcc\n'
-question='<p><span data-type="mention" class="mention" data-id="Valentin Yeo" data-label="name-6">Valentin Yeo</span> Question: <strong>Remove the board tab row from My Tasks?</strong></p><p>Why: two rows of tabs confuse you.</p><p>Yes: a runner builds it behind a flag.</p><p>No: both rows stay.</p>'
+question='<p><span data-type="mention" class="mention" data-id="Valentin Yeo" data-label="name-6">Valentin Yeo</span> Question: <strong>Remove the board tab row from My Tasks?</strong></p><p>My recommendation: yes.</p><p>Why: two rows of tabs confuse you.</p><p>Yes: a runner builds it behind a flag.</p><p>No: both rows stay.</p>'
 export VCC_TEST_COMMENTS="$T/comments.json"
 fixture() {
   jq -n --arg text "$1" '{comments:[{id:"new",text:$text,createdAt:"2026-10-20T12:00:00Z"}]}' > "$VCC_TEST_COMMENTS"
@@ -145,8 +145,8 @@ review_refused() {
   local reason=$1; shift
   run bash "$vcc" "$@"
   [ "$status" = 5 ] || fail "expected exit 5, got $status: $*"
-  printf 'vcc: Valentin Review needs one plain Question comment first: "Question: <strong>yes/no question?</strong>", one line of why, then "Yes:" and "No:" lines. Post it with vcc comment add %s --kind question, then move.%s\n' "$3" "${reason:+ ($reason)}" > "$T/review-refusal"
-  cmp -s "$T/review-refusal" "$T/err" || fail "wrong review refusal: $*"
+  [[ $(< "$T/err") == 'vcc: Valentin Review needs one plain Question comment first:'* ]] || fail "wrong review refusal: $*"
+  [ -z "$reason" ] || [[ $(< "$T/err") == *"$reason"* ]] || fail "missing review refusal reason: $reason"
   [ ! -s "$T/out" ] || fail "review refusal produced stdout: $*"
   [[ $(< "$VCC_TEST_TRACE") == *'hypertask comments list'* ]] || fail 'comments were not read'
   [[ $(< "$VCC_TEST_TRACE") != *'hypertask task move'* && $(< "$VCC_TEST_TRACE") != *'hypertask tasks move'* ]] || fail 'refused move reached CLI'
@@ -160,7 +160,7 @@ allowed bash "$vcc" task move YPER4-512 --section 'Valentin Review'
 [[ $(< "$VCC_TEST_TRACE") == *'hypertask comments list'* ]] || fail 'review move skipped comments'
 allowed bash "$vcc" tasks move YPER4-512 '--section=  vAlEnTiN ReViEw  '
 [[ $(< "$T/out") == 'stub: <tasks> <move> <YPER4-512> <--section=  vAlEnTiN ReViEw  >' ]] || fail 'equals section arguments changed'
-fixture '<p>Question: <strong>Keep it?</strong></p><p>Why: less work.</p><p>Yes: keep it.</p><p>No: remove it.</p>'
+fixture '<p>Question: <strong>Keep it?</strong></p><p>My recommendation: yes.</p><p>Why: less work.</p><p>Yes: keep it.</p><p>No: remove it.</p>'
 allowed bash "$vcc" task move YPER4-512 --section 'Valentin Review'
 allowed bash "$vcc" task move --section 'Valentin Review' YPER4-512
 [[ $(< "$VCC_TEST_TRACE") == *'hypertask comments list'* ]] || fail 'section before ticket skipped comments'
@@ -182,7 +182,7 @@ review_refused '' task move YPER4-512 --section 'Valentin Review'
 printf 'ok newest status note refuses even with an older Question\n'
 
 for text in \
-  '<p>Question: <strong>Keep it?</strong></p><p>Why: less work.</p>' \
+  '<p>Question: <strong>Keep it?</strong></p><p>My recommendation: yes.</p><p>Why: less work.</p>' \
   '<p>Question: <strong>Keep it?</strong></p><p>Yes: keep it.</p>' \
   '<p>Question: <strong>Keep it?</strong></p><p>No: remove it.</p>' \
   '<p>Question: Keep it?</p><p>Yes: keep it.</p><p>No: remove it.</p>' \
@@ -203,4 +203,122 @@ for json in '' 'not json' '{}' '{"comments":{}}' '{"comments":[{"text":"Question
   review_refused 'cannot parse comments' task move YPER4-512 --section 'Valentin Review'
 done
 printf 'ok unreadable or malformed comments fail closed\n'
+
+
+question_refused() {
+  local reason=$1; shift
+  run bash "$vcc" "$@"
+  [ "$status" = 5 ] || fail "expected exit 5, got $status: $*"
+  [ ! -s "$T/out" ] || fail 'Question refusal produced stdout'
+  [[ $(< "$T/err") == *"$reason"* ]] || fail "missing Question refusal reason: $reason"
+  [[ $(< "$T/err") == *'rewrite it for a product owner (pospeak)'* ]] || fail 'missing product-owner guidance'
+  [[ $(< "$VCC_TEST_TRACE") != *hypertask* ]] || fail 'refused Question reached CLI'
+}
+plain='<p>Question: <strong>Keep it?</strong></p><p>Yes: keep it.</p><p>No: remove it.</p><p>My recommendation: yes.</p><p>Why: less work.</p>'
+inline_why='<p>Question: <strong>Keep it?</strong></p><p>Yes: keep it.</p><p>No: remove it.</p><p>My recommendation: yes. Why: less work.</p>'
+for text in "$plain" "$inline_why" "$question"; do
+  allowed bash "$vcc" comment add X-1 --kind question --text "$text"
+  [[ $(< "$T/out") == "stub: <comment> <add> <X-1> <--kind> <question> <--text> <$text>" ]] || fail 'Question arguments changed'
+  fixture "$text"
+  allowed bash "$vcc" task move X-1 --section 'Valentin Review'
+done
+for part in 'Yes:' 'No:' 'My recommendation:' 'Why:'; do
+  text=$(printf '%s' "$plain" | sed "s|<p>$part[^<]*</p>||")
+  question_refused "$part" comment add X-1 --kind question --text "$text"
+  fixture "$text"
+  review_refused "$part" task move X-1 --section 'Valentin Review'
+done
+question_refused 'Question:' comment add X-1 --kind question --text "${plain/Keep it?/Keep it.}"
+printf 'ok required Question parts and shared review validation\n'
+
+for word in 'src/app/page.tsx' '/api/' '/api/boards' 'page.ts' 'page.tsx' 'page.js' 'NOTES.md' endpoint ROUTE bearer OAuth prefilter regex schema migration CodeQL 'token audience' CI 'PR #123' PR123 '#123'; do
+  text="$plain<p>$word</p>"
+  question_refused "$word" comment add X-1 --kind question --text "$text"
+  fixture "$text"
+  review_refused "$word" task move X-1 --section 'Valentin Review'
+done
+question_refused CI comment add X-1 --kind question --text "$plain<p>CI and OAuth</p>"
+[[ $(< "$T/err") == *OAuth* ]] || fail 'did not name every developer word'
+for text in   "$plain<p>We can decide in Circle, with ci and circles.</p>"   "$plain<p><a href="https://example.test/src/app/page.tsx/api/OAuth/CI#123">Details</a></p>"   "$plain<p><a href="https://example.test/123">PR #123</a></p>"   "$plain<p><a href="https://example.test/123"><strong>#123</strong></a></p>"; do
+  allowed bash "$vcc" comment add X-1 --kind question --text "$text"
+done
+question_refused '#456' comment add X-1 --kind question --text "$plain<p><a href="https://example.test/123">PR #123</a> #456</p>"
+question_refused OAuth comment add X-1 --kind question --text "$plain<p><a href="https://example.test/123">OAuth</a></p>"
+printf 'ok visible developer words and unlinked references refuse without CI substring or href false positives\n'
+
+for subcommand in comment comments; do
+  for option in --text --body --text= --body=; do
+    if [[ $option == *= ]]; then
+      allowed bash "$vcc" "$subcommand" add X-1 --kind=question "$option$plain"
+      [[ $(< "$T/out") == "stub: <$subcommand> <add> <X-1> <--kind=question> <$option$plain>" ]] || fail 'equals body arguments changed'
+      question_refused 'My recommendation:' "$subcommand" add X-1 --kind=question "$option${plain/<p>My recommendation: yes.<\/p>/}"
+    else
+      allowed bash "$vcc" "$subcommand" add X-1 --kind question "$option" "$plain"
+      [[ $(< "$T/out") == "stub: <$subcommand> <add> <X-1> <--kind> <question> <$option> <$plain>" ]] || fail 'body arguments changed'
+      question_refused 'My recommendation:' "$subcommand" add X-1 --kind question "$option" "${plain/<p>My recommendation: yes.<\/p>/}"
+    fi
+  done
+done
+printf '%s\n' "$plain" > "$T/question.html"
+allowed bash "$vcc" comments add X-1 --kind question --file "$T/question.html"
+[[ $(< "$T/out") == "stub: <comments> <add> <X-1> <--kind> <question> <--file> <$T/question.html>" ]] || fail 'file arguments changed'
+allowed bash "$vcc" comment add X-1 --kind=question "--file=$T/question.html"
+printf '%s\n' "${plain/<p>My recommendation: yes.<\/p>/}" > "$T/question.html"
+question_refused 'My recommendation:' comment add X-1 --kind question --file "$T/question.html"
+question_refused 'My recommendation:' comments add X-1 --kind=question "--file=$T/question.html"
+question_refused 'cannot read --file' comment add X-1 --kind question --file "$T/missing.html"
+markdown='Question: **Keep it?**
+
+Yes: keep it.
+No: remove it.
+My recommendation: yes. Why: less work.'
+allowed bash "$vcc" comment add X-1 --kind question --markdown --text "$markdown"
+[[ $(< "$T/out") == "stub: <comment> <add> <X-1> <--kind> <question> <--markdown> <--text> <$markdown>" ]] || fail 'Markdown arguments changed'
+printf '%s\n' "$markdown" > "$T/question.md"
+allowed bash "$vcc" comments add X-1 --kind=question --markdown "--file=$T/question.md"
+question_refused 'My recommendation:' comment add X-1 --kind question --markdown --body "${markdown/My recommendation:/Suggestion:}"
+question_refused 'Question:' comment add X-1 --kind question --markdown --text "${markdown/Keep it?/Keep it.}"
+question_refused OAuth comment add X-1 --kind question --markdown --text "$markdown
+OAuth"
+allowed bash "$vcc" comment add X-1 --kind question --markdown --text "$markdown
+[PR #123](https://example.test/api/OAuth/CI)"
+printf 'ok singular/plural, text/body/file, equals options, and Markdown forms\n'
+
+for kind in qa done ''; do
+  for subcommand in comment comments; do
+    args=("$subcommand" add X-1 --text 'src/app/page.tsx /api/ CI OAuth PR #123')
+    [ -z "$kind" ] || args+=(--kind "$kind")
+    allowed bash "$vcc" "${args[@]}"
+    expected='stub:'
+    printf -v expected '%s <%s>' "$expected" "${args[0]}"
+    for arg in "${args[@]:1}"; do expected+=" <$arg>"; done
+    [[ $(< "$T/out") == "$expected" ]] || fail 'non-question arguments changed'
+  done
+done
+allowed bash "$vcc" comment add X-1 --kind=qa --file "$T/missing.html"
+printf 'ok qa, done, and untyped comments forward code words unchanged\n'
+
+old_question_7508_295851=$(cat <<'FIXTURE'
+<p><span data-type="mention" class="mention" data-id="Valentin Yeo" data-label="name-6">Valentin Yeo</span> Question: <strong>Should HT Product Lead check and approve the agent-access exceptions, with you deciding only the changes that hide data from people?</strong></p><p>Why: some of the 81 agent board reads here are already protected by a check just above them; marking them reviewed changes nothing in the app.</p><p>Yes: HT Product Lead reviews those code checks; changes that hide a board, ticket or comment from a person still come to you, one question per batch.</p><p>No: each batch of them comes to you too.</p><p>Next: claude --resume ce05d8aa-af47-49c9-8593-c7d186e29d77</p>
+FIXTURE
+)
+
+rewrite_7508_303933=$(cat <<'FIXTURE'
+<p><strong>Plain version: this ticket makes sure an AI agent only sees the boards it was given, not every board its owner can see.</strong></p>
+<p>What it is about: there are 81 places in the app where an agent reads board content. Each one should check &quot;is this agent allowed on this board?&quot;. Many already check it a few lines earlier, so they are safe today and only need to be marked as checked. The others need a real fix.</p>
+<p>Why it needs you: a real fix can make something disappear for someone, for example a board an agent could see by mistake. Taking access away is your call. Marking already-safe places as checked changes nothing anyone sees.</p>
+<p>Question: <strong>Can I (HT Product Lead) sign off the places that are already safe, so you only decide the fixes that take access away from someone?</strong></p>
+<p>My recommendation: yes. Why: those sign-offs change nothing for any user, and asking you 81 times would hold the security fix up for days. Everything that takes access away still comes to you as one plain question per batch.</p>
+<p>Yes: I sign off the already-safe places; fixes that take access away come to you in batches. (My recommendation, 👍 this comment.)</p>
+<p>No: every batch comes to you, including the ones that change nothing.</p>
+<p>Next: on your 👍, RUNNER 4 finishes the list. claude --resume fe0bb917-b08d-465a-a586-2224a26af002</p>
+FIXTURE
+)
+question_refused 'My recommendation:' comment add X-1 --kind question --text "$old_question_7508_295851"
+fixture "$old_question_7508_295851"
+review_refused 'My recommendation:' task move X-1 --section 'Valentin Review'
+allowed bash "$vcc" comment add X-1 --kind question --text "$rewrite_7508_303933"
+fixture "$rewrite_7508_303933"
+allowed bash "$vcc" task move X-1 --section 'Valentin Review'
+printf 'ok verbatim old Question refuses and real rewrite passes comment add and newest review\n'
 printf 'vcc helper guard tests passed\n'

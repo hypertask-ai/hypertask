@@ -130,7 +130,7 @@ def uploaded(log, status, ticket="HTPR-255", project=15):
 
 def full_publish(ticket="HTPR-255", move=True, **env):
     question = 'Build <this> & "that"?'
-    p, log = invoke("publish", ticket, "--question", question, **env)
+    p, log = invoke("publish", ticket, "--question", question, "--why", 'It reuses <rows> & "chips".', **env)
     calls = uploaded(log, "waiting", ticket, int(env.get("PROJECT_ID", "15")))
     assert [c["method"] for c in calls] == ["PUT", "GET"]
     assert calls[0]["headers"] == calls[1]["headers"]
@@ -143,8 +143,11 @@ def full_publish(ticket="HTPR-255", move=True, **env):
                 + f'<p><a href="{url}">{url}</a></p>'
                 + f'<p>Requested by Valentin in a Claude session, {date.today().isoformat()}.'
                 + (f' claude --resume {os.environ["CLAUDE_CODE_SESSION_ID"]}' if os.environ.get("CLAUDE_CODE_SESSION_ID") else '') + '</p>'
-                + '<p>Question: <span data-type="mention" class="mention" data-id="Valentin Yeo" data-label="name-6">Valentin Yeo</span> '
-                + html.escape(question) + '</p>')
+                + '<p><span data-type="mention" class="mention" data-id="Valentin Yeo" data-label="name-6">Valentin Yeo</span> '
+                + 'Question: <strong>' + html.escape(question) + '</strong></p>'
+                + "<p>Yes: it gets built as shown, behind the ticket's flag.</p>"
+                + '<p>No: nothing gets built; say what to change.</p>'
+                + '<p>My recommendation: Yes. Why: ' + html.escape('It reuses <rows> & "chips".') + '</p>')
     assert comment[6] == expected
     assert comment[7] == "--attach"
     png = Path(comment[8])
@@ -174,7 +177,7 @@ p, _ = invoke("new", "HTPR-255", fail=True)
 assert "already exists" in p.stderr
 ok("new copies the full kit without overwriting")
 
-for args, message in [((), "--question is required"), (("--question", "Build this"), "must end with"), (("--question", "   "), "must end with")]:
+for args, message in [((), "--question is required"), (("--question", "Build this"), "must end with"), (("--question", "   "), "must end with"), (("--question", "Build this?"), "--why is required"), (("--question", "Build this?", "--why", "  "), "--why is required")]:
     p, log = invoke("publish", "HTPR-255", *args, fail=True)
     assert message in p.stderr and not log
 ok("missing or invalid question fails before any upload or CLI call")
@@ -218,14 +221,14 @@ assert not events(log, "vcc") and not events(log, "hypertask") and not events(lo
 ok("BASE uploads only and links to project-4060/255")
 
 for env, message in [({"FAIL_HTTP": "PUT"}, "stub HTTP failure"), ({"FAIL_HTTP": "GET"}, "stub HTTP failure"), ({"MISMATCH": "1"}, "upload verification failed"), ({"FAIL_SCREENSHOT": "1"}, "returned non-zero"), ({"NO_SCREENSHOT": "1"}, "no PNG captured")]:
-    p, log = invoke("publish", "HTPR-255", "--question", "Build this?", fail=True, **env)
+    p, log = invoke("publish", "HTPR-255", "--question", "Build this?", "--why", "It is plain.", fail=True, **env)
     assert message in p.stderr and not events(log, "vcc")
     if "FAIL_SCREENSHOT" not in env and "NO_SCREENSHOT" not in env:
         assert not events(log, "npx")
 ok("upload, verification and screenshot failures prevent comments and moves")
-p, log = invoke("publish", "HTPR-255", "--question", "Build this?", fail=True, FAIL_VCC="comment")
+p, log = invoke("publish", "HTPR-255", "--question", "Build this?", "--why", "It is plain.", fail=True, FAIL_VCC="comment")
 assert len(events(log, "vcc")) == 1
-p, log = invoke("publish", "HTPR-255", "--question", "Build this?", fail=True, FAIL_VCC="task")
+p, log = invoke("publish", "HTPR-255", "--question", "Build this?", "--why", "It is plain.", fail=True, FAIL_VCC="task")
 assert len(events(log, "vcc")) == 2
 p, log = invoke("publish", "HTPR-255", "--no-comment", fail=True, FAIL_TICKET="1")
 assert "cannot read ticket" in p.stderr and not events(log, "http")
