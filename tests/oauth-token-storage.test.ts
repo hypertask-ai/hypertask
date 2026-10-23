@@ -132,7 +132,7 @@ test('now refused: numeric token increments, token sorting and non-string token 
 test('now refused: tampered stored ciphertext and injected database failures expose only sanitized categories', async t => {
   const h = fixture()
   const logs: unknown[] = []
-  for (const method of ['log', 'warn', 'error', 'debug'] as const) t.mock.method(console, method, (...args) => { logs.push(args) })
+  for (const method of ['log', 'warn', 'error', 'debug'] as const) t.mock.method(console, method, (...args: unknown[]) => { logs.push(args) })
   await h.adapter.create({ model: 'account', data: accountData })
   h.tables.BetterAuthAccount[0].accessToken = `${OAUTH_TOKEN_PREFIX}synthetic-invalid-envelope`
   await assert.rejects(h.adapter.findOne({ model: 'account', where }), error => error instanceof Error && error.message === 'oauth_token_storage_failed' && !error.cause)

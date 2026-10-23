@@ -136,6 +136,19 @@
       }
     },
     {
+      "id": "auth.token-storage",
+      "title": "Platform admin verifies stored sign-in tokens are encrypted (counts only)",
+      "matches": {
+        "api": ["^POST /api/mcp/admin/better-auth-oauth-tokens$"]
+      },
+      "exclusions": {
+        "mcp": "Only the platform admin management key may run this counts-only storage check; general MCP clients act as the human.",
+        "cli": "A one-off release check run with the platform admin key; the public CLI does not expose storage inspection.",
+        "ai_chat": "Credential storage inspection is not an AI Chat tool.",
+        "hyperai": "The embedded agent inherits the human session, which this route refuses."
+      }
+    },
+    {
       "id": "auth.session",
       "title": "Create, refresh, inspect, or clear a CLI/API session",
       "matches": {

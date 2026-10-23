@@ -140,7 +140,7 @@ test('still allowed: authenticated cron applies one batch and returns exactly ag
 
 test('route failures and captured logs contain categories only, never fixture tokens or database errors', async t => {
   const logs: unknown[] = []
-  for (const method of ['log', 'warn', 'error', 'debug'] as const) t.mock.method(console, method, (...args) => { logs.push(args) })
+  for (const method of ['log', 'warn', 'error', 'debug'] as const) t.mock.method(console, method, (...args: unknown[]) => { logs.push(args) })
   const secret = 'synthetic-access-token-40f19497'
   await admin()
   await cron('Bearer synthetic-cron-secret-aaaaaaaa')

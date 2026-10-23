@@ -1,5 +1,5 @@
 import { enqueueOutsideSaveAndProcessSoon } from "@/lib/telemetry/analyticsIntents";
-import { betterAuth } from 'better-auth'
+import { betterAuth, type BetterAuthOptions } from 'better-auth'
 import { prismaAdapter } from 'better-auth/adapters/prisma'
 import { emailOTP, magicLink, multiSession } from 'better-auth/plugins'
 import { apiKey } from '@better-auth/api-key'
@@ -131,9 +131,15 @@ async function sendOTPEmail(email: string, otp: string) {
   })
 }
 
+const TOKEN_FREE_SIGNUP_PATHS = ['/sign-in/magic-link', '/magic-link/', '/sign-in/email-otp', '/email-otp/']
+
+export function isTokenFreeSignupPath(path: string | undefined) {
+  return Boolean(path && TOKEN_FREE_SIGNUP_PATHS.some(prefix => path.startsWith(prefix)))
+}
+
 export const auth = betterAuth({
   appName: 'Hypertask',
-  database: (options) => withOAuthTokenStorage(prismaAdapter(prisma, {
+  database: (options: BetterAuthOptions) => withOAuthTokenStorage(prismaAdapter(prisma, {
     provider: 'postgresql',
     debugLogs: false,
   })(options), options),
@@ -196,8 +202,8 @@ export const auth = betterAuth({
   databaseHooks: {
     user: {
       create: {
-        before: async (user) => {
-          preflightOAuthTokenKey()
+        before: async (user, context) => {
+          if (!isTokenFreeSignupPath(context?.path)) preflightOAuthTokenKey()
           return {
             data: {
               ...user,

@@ -43,7 +43,7 @@ export async function oauthAuthFixture(transaction = false) {
     baseURL: 'https://auth.example.invalid',
     secret: 'synthetic-better-auth-secret-aaaaaaaaaaaaaaaa',
     database: transaction
-      ? opts => withOAuthTokenStorage(prismaAdapter(h.db, { provider: 'postgresql', transaction, debugLogs: false })(opts), opts)
+      ? (opts: BetterAuthOptions) => withOAuthTokenStorage(prismaAdapter(h.db, { provider: 'postgresql', transaction, debugLogs: false })(opts), opts)
       : production.database,
     user: { modelName: 'User', additionalFields: production.user?.additionalFields },
     account: { modelName: 'BetterAuthAccount', encryptOAuthTokens: production.account?.encryptOAuthTokens, accountLinking: { trustedProviders: ['google'] } },

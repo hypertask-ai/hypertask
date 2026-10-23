@@ -99,7 +99,7 @@ test('sweep processes one ascending batch of 100 and respects the write deadline
 test('success and injected failure logs/errors contain no token or ciphertext data', async t => {
   const h = fixture()
   const logs: unknown[] = []
-  for (const method of ['log', 'warn', 'error', 'debug'] as const) t.mock.method(console, method, (...args) => { logs.push(args) })
+  for (const method of ['log', 'warn', 'error', 'debug'] as const) t.mock.method(console, method, (...args: unknown[]) => { logs.push(args) })
   await sweepOAuthTokens(h.db)
   h.setFailure(new Error(tokens.accessToken + h.stable))
   await assert.rejects(sweepOAuthTokens(h.db), error => error instanceof Error && error.message === 'oauth_token_sweep_failed' && !error.cause)

@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict'
 import { afterEach, beforeEach, test } from 'node:test'
 import { decodeOAuthToken, OAUTH_TOKEN_FIELDS, OAUTH_TOKEN_PREFIX } from '../src/lib/auth/oauthTokenCipher'
-import { oauthAuthFixture } from './helpers/oauth-token-auth'
+import { oauthAuthFixture, productionAuthOptions } from './helpers/oauth-token-auth'
 
 let original: string | undefined
 beforeEach(() => { original = process.env.BYOK_CIPHER_SECRET; process.env.BYOK_CIPHER_SECRET = 'synthetic-cipher-root-aaaaaaaaaaaa' })
@@ -82,7 +82,7 @@ test('still allowed: direct ID-token linking stores access, refresh and ID only 
   const linked = await h.auth.api.linkSocialAccount({ headers: signedIn.headers, body: {
     provider: 'google', idToken: { token: h.tokens.idToken, accessToken: h.tokens.accessToken, refreshToken: h.tokens.refreshToken },
   } })
-  assert.equal(linked.status, true)
+  assert.equal((linked as { status?: boolean }).status, true)
   assert.equal(h.tables.BetterAuthAccount.length, 2)
   storedTokens(h, h.tokens, 1)
 })
@@ -124,4 +124,17 @@ test('now refused: corrupt stored tokens never reach get-access-token or the acc
   await assert.rejects(h.auth.api.getAccessToken({ headers: signedIn.headers, body: { providerId: 'google' } }))
   await assert.rejects(h.auth.api.accountInfo({ headers: signedIn.headers, query: { accountId: 'google-sub', providerId: 'google' } }))
   assert.equal(h.providerInputs.length, reads)
+})
+
+test('still allowed: magic-link and email-code signup do not need the OAuth token key', async () => {
+  const before = productionAuthOptions().databaseHooks!.user!.create!.before!
+  const user = { name: 'Synthetic', email: 'synthetic-user@example.invalid', emailVerified: true } as any
+  delete process.env.BYOK_CIPHER_SECRET
+  for (const path of ['/magic-link/verify', '/sign-in/email-otp', '/email-otp/verify-email']) {
+    const result = await before(user, { path } as any)
+    assert.ok(result && typeof result === 'object' && 'data' in result)
+  }
+  for (const path of ['/callback/google', '/sign-in/social', undefined]) {
+    await assert.rejects(Promise.resolve(before(user, (path ? { path } : undefined) as any)), /^Error: oauth_token_key_unavailable$/)
+  }
 })
