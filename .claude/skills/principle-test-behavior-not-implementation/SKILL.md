@@ -6,7 +6,7 @@ disable-model-invocation: true
 
 # Test Behavior, Not Implementation
 
-Source: pstack 0.15.9 by Lauren Tan, https://github.com/cursor/plugins/tree/main/pstack, `skills/principle-test-behavior-not-implementation/SKILL.md`. MIT License, Copyright (c) 2026 Lauren Tan (`LICENSE` here). Unchanged apart from this line (YPER4-595).
+Source: pstack 0.15.9 by Lauren Tan, https://github.com/cursor/plugins/tree/main/pstack, `skills/principle-test-behavior-not-implementation/SKILL.md`. MIT License, Copyright (c) 2026 Lauren Tan (`LICENSE` here). Unchanged apart from this line (YPER4-595) and the "Name the miss" paragraph (YPER4-603).
 
 A test calls the code the way its users do and asserts the result they observe against a literal expected value. A test that asserts which calls the code made, or restates a constant the code contains, does neither.
 
@@ -21,6 +21,8 @@ The check: before you keep a test, ask whether it would still pass if every func
 - **Self-referential.** The expected value comes from the code under test: `expect(f(a)).toBe(f(a))`, `expect(parsed.url).toBe(buildUrl(...))`.
 - **Constant pin.** The assertion restates a hand-maintained constant, config default, table row, or prompt string: `expect(LIMITS.maxTools).toBe(8)`, `expect(PROMPT).toContain("You are")`.
 - **Fixture asserts fixture.** The assertion reads data the test built or a value computed in `beforeEach`, and the subject never runs inside the body.
+
+**Name the miss before you call a test weak** (YPER4-603). The five shapes only tell you where to look; the `undefined` check decides. Before you report, rewrite or delete a test, name the concrete wrong implementation it would let through (returns `undefined`, returns everything, ignores its input) and confirm the test still passes with it. `expect(f(x)).toEqual([])` fails when `f` returns `undefined`, so it passes the check even though it matches a shape. A shape match with no named miss is a warning, not a finding.
 
 **The fix:** call the subject inside the test body with one concrete input and assert the literal output or the observable effect, `expect(slugify("Hello, World!")).toBe("hello-world")`. For an absence, assert the presence on the other input in the same test. For a constant, test the mechanism that reads it with one input instead of restating the value. For a mock, assert the payload it received or the state after the call, not that it was called. When no such assertion exists, delete the test.
 
