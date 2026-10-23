@@ -49,7 +49,7 @@ function fixture() {
   const tasks = projects.map(project => ({ id: project.id * 10, projectId: project.id, project, userId: user.id, user, status: 'Normal', title: `Task ${project.id}`, description: 'scope fixture', description_: { content: 'scope fixture' }, section: 'Todo', sectionId: project.id, uniqueIndex: 1, ticketNumber: `HTPR-${project.id}`, parentTaskId: null, parentTask: null, subTasks: [], Reminders: [], assignees: [], followers: [], taskLabels: [], attachments: [], pullRequests: [], customFieldValues: [], savedContent: [], agent: null, priority: null, estimate: null, _count: { comments: 0 }, createdAt: new Date(), updatedAt: new Date(), sectionChangedAt: new Date() }));
   const notifications = tasks.map(task => ({ id: task.id, userId: user.id, agentId: null, taskId: task.id, projectId: task.projectId, task, project: task.project, status: 'Normal', type: 'Mentioned', seen: false, archivedAt: null, fromUserId: 7, fromAgentId: null, createdAt: new Date(), fromUser: { displayName: 'Sender' }, fromAgent: null }));
   user.agents = [agent];
-  const state = { enforce: true, events: [], grantReads: 0, flagReads: 0, user, agent, projects, tasks, notifications, writes: [], ctx: { user, agentId: agent.id } };
+  const state = { enforce: true, events: [], grantReads: 0, flagReads: 0, user, agent, projects, tasks, notifications, writes: [], ctx: { user, agentId: agent.id, teamScope: null } };
   function model(rows, name) {
     return {
       findMany: async (args = {}) => rows.filter(row => matches(row, args.where)).slice(0, args.take ?? rows.length).map(row => hydrate(row, args)),

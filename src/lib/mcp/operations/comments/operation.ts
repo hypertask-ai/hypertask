@@ -1,3 +1,4 @@
+import type { AgentTokenTeamScope } from '@/lib/mcp/auth/types'
 import { getProjectWhere } from '@/utils/controllers/projects/getAllIncludes'
 import type { AttachmentFileInput } from "@/lib/mcp-server/validations/attachment.validation";
 import { HTPR_7514_INLINE_AGENT_IMAGES_FLAG } from "@/lib/flags/keys";
@@ -154,7 +155,7 @@ export type AddCommentResponse = {
   }
 }
 
-type AgentLogPrincipal = { userId: number; agentId: string; displayName: string; source: 'agent' }
+type AgentLogPrincipal = { userId: number; agentId: string; teamScope: AgentTokenTeamScope | null; displayName: string; source: 'agent' }
 
 async function prepareAgentLogEntry(principal: AgentLogPrincipal, html: string) {
   const { runtimeAgentRunsEnabledFor, agentRunActivitiesEnabledFor } = await import('@/lib/agentRuns/service')
@@ -886,12 +887,13 @@ export async function POST(request: NextRequest) {
       ? {
           userId: user.id,
           agentId: ctx.agentId,
+          teamScope: ctx.teamScope,
           displayName: userObj.displayName?.trim() || 'Hypertask agent',
           source: 'agent' as const,
         }
       : null
     const agentLogEntry = routeComment({
-      agentId: ctx.agentId, teamScope: ctx.teamScope,
+      agentId: ctx.agentId,
       kind,
       replyToCommentId: reply_to_comment_id,
       replyToInvocationId: reply_to_invocation_id,

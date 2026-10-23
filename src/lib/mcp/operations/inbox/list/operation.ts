@@ -147,7 +147,7 @@ export async function GET(request: NextRequest) {
             })
         }
 
-        const { status, json } = await notificationGetAll(user.id.toString(), { withCachedDescription })
+        const { status, json } = await notificationGetAll(user.id.toString(), { withCachedDescription }, ctx.agentId, ctx.teamScope)
 
         if (status !== 200 || !json || !('structuredData' in json)) {
             console.error('[MCP] inbox/list', {
