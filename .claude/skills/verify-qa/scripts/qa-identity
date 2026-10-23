@@ -58,6 +58,7 @@ async function main() {
 
   const cookies = [];
   const now = Date.now() / 1000;
+  let expiredAppCookies = 0;
   for (const cookie of state.cookies) {
     if (!cookie || typeof cookie.domain !== 'string' || typeof cookie.path !== 'string' ||
         !cookie.path.startsWith('/') || typeof cookie.name !== 'string' ||
@@ -72,9 +73,13 @@ async function main() {
       : appHost === domain;
     const matchesPath = endpoint === cookie.path ||
       endpoint.startsWith(cookie.path.endsWith('/') ? cookie.path : `${cookie.path}/`);
-    if (matchesDomain && matchesPath && (cookie.expires === -1 || cookie.expires > now)) {
-      cookies.push(cookie);
+    if (matchesDomain && matchesPath) {
+      if (cookie.expires === -1 || cookie.expires > now) cookies.push(cookie);
+      else expiredAppCookies += 1;
     }
+  }
+  if (!cookies.length && expiredAppCookies) {
+    return finish('identity expired: every app cookie in this state has expired', 3);
   }
   if (!cookies.length) {
     return finish('identity unreadable: no valid app cookies', 2);

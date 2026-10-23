@@ -114,7 +114,10 @@ for (const [label, overrides] of [
   });
   test(`${label} cookie alone cannot authenticate`, async t => {
     const result = await run(t, {
-      cookies: [cookie(overrides)], code: 2, expected: 'identity unreadable: no valid app cookies',
+      cookies: [cookie(overrides)],
+      ...(label === 'expired'
+        ? { code: 3, expected: 'identity expired: every app cookie in this state has expired' }
+        : { code: 2, expected: 'identity unreadable: no valid app cookies' }),
     });
     assert.equal(result.requests, 0);
   });
