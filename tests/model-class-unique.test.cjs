@@ -8,7 +8,6 @@ const load = require("jiti")(__filename, {
 });
 const catalog = load(path.join(root, "src/lib/aiModelOptions.ts"));
 const { buildComposerConfig } = load(path.join(root, "src/app/api/android/ai/composer/config.ts"));
-const { HTPR_7010_HAIKU_5_5_FLAG } = load(path.join(root, "src/lib/flags/keys.ts"));
 
 function assertUniqueModelClasses(options, isVisible = () => true) {
   const keysByClass = new Map();
@@ -40,8 +39,8 @@ test("every model definition has a non-empty modelClass, including hidden models
   assert.equal(catalog.getAiModelDefinition("kimi-k3").modelClass, "kimi-k3");
 });
 
-for (const haiku55Enabled of [false, true]) {
-  const state = `${HTPR_7010_HAIKU_5_5_FLAG}=${haiku55Enabled}`;
+for (const haiku55Enabled of [true]) {
+  const state = `haiku55Enabled=${haiku55Enabled}`;
   test(`one model per class in every picker with ${state}`, () => {
     const isVisible = (option) => catalog.isAiModelOptionVisible(option, haiku55Enabled);
     const visibleOptions = catalog.aiModelOptions.filter(isVisible);

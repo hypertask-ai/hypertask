@@ -1,7 +1,5 @@
 import { deriveCurrentBoardBilling } from "@/lib/deriveCurrentBoardBilling";
 import { hasHaikuByokProviderFlags } from "@/lib/byokSelectedProviderGate";
-import { useFlag } from "@/hooks/useFlag";
-import { HTPR_7010_HAIKU_5_5_FLAG } from "@/lib/flags/keys";
 import { useHaikuDefaultFlag } from "@/hooks/useHaikuDefaultFlag";
 import { currentProjectAtom } from '@/store';
 import { useState, useCallback } from 'react';
@@ -18,7 +16,7 @@ export const useAIResponseHandler = (defaultMode: string, flaskUrl: string) => {
   const [currentProject] = useRecoilState(currentProjectAtom);
   const { data: userPreferences } = useGetUserPreferences();
   const haikuDefaultEnabled = useHaikuDefaultFlag();
-  const haiku55Enabled = useFlag(HTPR_7010_HAIKU_5_5_FLAG) || haikuDefaultEnabled;
+  const haiku55Enabled = true;
   const defaultBilling = deriveCurrentBoardBilling(currentProject);
   const defaultModelOption = haikuDefaultEnabled || haiku55Enabled
     ? getDefaultAiModelOptionForPlan(defaultBilling?.storePlanId, hasHaikuByokProviderFlags(defaultBilling?.byokProviderFlags), true, haikuDefaultEnabled)
