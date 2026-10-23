@@ -4,7 +4,6 @@ import { HTPR_7634_OPENAI_ONLY_DEFAULT_FLAG } from "@/lib/flags/definitions/htpr
 import { decryptByokSecret } from "@/lib/crypto/byokCipher";
 import { getProjectWhere } from "@/utils/controllers/projects/getAllIncludes";
 import {
-  gatewayFundingSourceForApiKey,
   isVercelAiGatewayKey,
   registerManagedGatewayKey,
   resolveAiModel,
@@ -37,7 +36,6 @@ import {
 } from "@/lib/ai/customEndpoint";
 import { MANAGED_TEAM_GATEWAY_PROVIDER } from "@/app/api/ai/_lib/managedGatewayKeys";
 import { backgroundClaudeModelEnabled, haiku55ModelEnabled, haikuDefaultModelEnabled, storePlanIdForProject } from "@/app/api/ai/_lib/planGate";
-import { teamPlanAllowanceEnabled } from "./planAllowancePolicy";
 import { previousModelForFailedStream } from "@/app/api/ai/chat/stream/modelFallback";
 
 export type ByokProviderFlag = {
@@ -183,12 +181,8 @@ async function resolveLookupPlan(lookup?: ByokLookupContext) {
   return storePlanIdForProject(null, teamId);
 }
 
-async function getSharedIncludedAllowanceGatewayKey(plan: string | undefined, lookup?: ByokLookupContext) {
+function getSharedIncludedAllowanceGatewayKey(plan: string | undefined) {
   if (plan !== "Free" && plan !== "BYOK") return undefined;
-  if (plan === "BYOK") {
-    const teamId = await resolveLookupTeamId(lookup);
-    if (!teamId || await teamPlanAllowanceEnabled(teamId)) return undefined;
-  }
 
   const sharedGatewayKey = process.env.AI_GATEWAY_API_KEY?.trim();
   return isVercelAiGatewayKey(sharedGatewayKey)
@@ -207,19 +201,11 @@ function managedFunding(apiKey: string): TeamGatewayFunding {
 }
 
 export async function resolveAiFallbackCredential(
-  lookup: ByokLookupContext,
   loadCredential: () => Promise<AiModelCredential | undefined>,
   originalError: unknown,
 ): Promise<AiModelCredential | undefined> {
-  let strict = true;
   try {
-    const teamId = await resolveLookupTeamId(lookup);
-    strict = (teamId ? await storePlanIdForProject(null, teamId) : undefined) === "BYOK" &&
-      (!teamId || await teamPlanAllowanceEnabled(teamId));
-    const credential = await loadCredential();
-    if (strict && (!credential || (typeof credential === "string" &&
-      gatewayFundingSourceForApiKey(credential) !== "customer"))) throw originalError;
-    return credential;
+    return await loadCredential();
   } catch {
     throw originalError;
   }
@@ -339,7 +325,7 @@ export async function getTeamGatewayApiKeyForProvider(
   }
 
   if (plan === "Free" || plan === "BYOK") {
-    return getSharedIncludedAllowanceGatewayKey(plan, lookup);
+    return getSharedIncludedAllowanceGatewayKey(plan);
   }
 
   const managedGatewayKey = await resolveTeamByokSecret(
@@ -378,7 +364,7 @@ export async function getTeamGatewayFunding(
   }
 
   if (plan === "Free" || plan === "BYOK") {
-    const apiKey = await getSharedIncludedAllowanceGatewayKey(plan, lookup);
+    const apiKey = getSharedIncludedAllowanceGatewayKey(plan);
     return apiKey ? { apiKey, source: "shared" } : undefined;
   }
 
@@ -553,8 +539,9 @@ export function resolveAutomaticAiModel(
           });
           if (!team || !resolveTeamProviderEnabled(team.aiProviderSettings, "openai")) throw error;
           const option = getAiModelOptionById("gpt-6-luna")!;
-          const fallbackCredential = await resolveAiFallbackCredential(context.lookup,
-            () => getByokOrTeamGatewayApiKeyForModelOption(option, undefined, context.lookup), error);
+          const fallbackCredential = await resolveAiFallbackCredential(
+            () => getByokOrTeamGatewayApiKeyForModelOption(option, undefined, context.lookup), error,
+          );
           const fallback = resolveAiModel("openai", option.model, fallbackCredential, option);
           inheritAiModelUsage(fallback, wrapped);
           configureAiModelUsage(fallback, { provider: aiUsageProviderForCredential("openai", fallbackCredential, option) });

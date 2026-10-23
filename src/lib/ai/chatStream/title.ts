@@ -43,7 +43,7 @@ export async function generateConversationTitle(
     if ("anthropicDisabled" in defaultContext && defaultContext.anthropicDisabled) return fallback;
     const useHaiku = defaultModelKeyFor(defaultContext, "gpt-6-luna") === "claude-haiku-5-5";
     const provider = useHaiku ? defaultContext.byok?.provider === "openrouter" ? "openrouter" : "claude" : "openai";
-    const modelInput = await resolveAiFallbackCredential({ trustedTeamId: tags?.teamId, projectId: usageContext?.projectId ?? tags?.projectId, userId: usageContext?.userId ?? tags?.userId }, async () => useHaiku
+    const modelInput = await resolveAiFallbackCredential(async () => useHaiku
       ? defaultContext.byok?.credential ?? await getByokOrTeamGatewayApiKeyForProvider(provider, undefined, {
           trustedTeamId: tags?.teamId,
           projectId: usageContext?.projectId ?? tags?.projectId,

@@ -39,6 +39,7 @@ export function parseAllowanceTeamStamp(
 }
 
 export const PLAN_PAID_SEAT_AI_ALLOWANCE_USD = 5;
+export const BYOK_MEMBER_AI_ALLOWANCE_USD = 2.5;
 export const FREE_TEAM_DAILY_AI_ALLOWANCE_USD = 0.25;
 export const DEMO_GLOBAL_AI_ALLOWANCE_USD = 15;
 export const DAILY_AI_ALLOWANCE_EXCEEDED_MESSAGE =

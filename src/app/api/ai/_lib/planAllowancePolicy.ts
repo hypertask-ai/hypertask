@@ -3,10 +3,12 @@ import { getRedis } from "@/lib/redis";
 import { isFeatureEnabled } from "@/lib/flags";
 import { HTPR_7324_PLAN_AI_CAPS_FLAG } from "@/lib/flags/definitions/htpr-7324-plan-ai-caps";
 import { isInternalCompTeam } from "@/lib/internalCompTeams";
+import { storePlanIdForProject } from "@/app/api/ai/_lib/planGate";
 import { isTeamComped } from "@/lib/teamComp";
 import { pickEntitlingSubscriptionRow, subscriptionStatusGrantsAccess } from "@/lib/subscriptionAccess";
 import {
   aiAllowancePeriod,
+  BYOK_MEMBER_AI_ALLOWANCE_USD,
   FREE_TEAM_AI_ALLOWANCE_USD,
   FREE_TEAM_DAILY_AI_ALLOWANCE_USD,
   PAID_TEAM_AI_ALLOWANCE_USD,
@@ -54,12 +56,27 @@ if seats > previous then redis.call("SET", KEYS[1], seats, "EX", ARGV[2]) end
 return seats
 `;
 
-async function cachedPaidSeats(teamId: string, month: string): Promise<number> {
+async function cachedPaidSeats(teamId: string, month: string, byok: boolean): Promise<number> {
   const cached = seatSnapshots.get(teamId);
   if (cached && cached.month === month && cached.expiresAt > Date.now()) return cached.seats;
-  const seats = await paidSeats(teamId);
+  const seats = byok ? await teamMembers(teamId) : await paidSeats(teamId);
   seatSnapshots.set(teamId, { seats, month, expiresAt: Date.now() + POLICY_CACHE_TTL_MS });
   return seats;
+}
+
+async function teamMembers(teamId: string): Promise<number> {
+  const team = await prisma.team.findUnique({
+    where: { id: teamId },
+    select: {
+      googleAccount: { select: { userId: true } },
+      members: { where: { status: "Accepted" }, select: { userId: true } },
+    },
+  });
+  if (!team) throw new Error("AI allowance team is unavailable");
+  return Math.max(1, new Set([
+    team.googleAccount.userId,
+    ...team.members.map((member) => member.userId),
+  ]).size);
 }
 
 async function paidSeats(teamId: string): Promise<number> {
@@ -112,6 +129,7 @@ export async function resolveTeamAllowancePolicy(
   const legacyMonthly = fundingSource === "managed" ? PAID_TEAM_AI_ALLOWANCE_USD : FREE_TEAM_AI_ALLOWANCE_USD;
   if (mode === "legacy") return { mode, monthlyUsd: legacyMonthly, dailyUsd: null, demoGlobal: false };
   let monthlyUsd = FREE_TEAM_AI_ALLOWANCE_USD;
+  let dailyUsd: number | null = fundingSource === "managed" ? null : FREE_TEAM_DAILY_AI_ALLOWANCE_USD;
   let demoGlobal = false;
   let ownerIdentityConfirmed = false;
   try {
@@ -123,9 +141,11 @@ export async function resolveTeamAllowancePolicy(
     }
     demoGlobal = owner.uid.startsWith("guest_");
     ownerIdentityConfirmed = true;
-    if (fundingSource === "managed" && !demoGlobal) {
+    const byok = fundingSource === "shared" && !demoGlobal &&
+      await storePlanIdForProject(null, teamId) === "BYOK";
+    if ((fundingSource === "managed" || byok) && !demoGlobal) {
       const month = aiAllowancePeriod();
-      const seats = await cachedPaidSeats(teamId, month.key);
+      const seats = await cachedPaidSeats(teamId, month.key, byok);
       let cached = seatHighWaters.get(teamId);
       if (!cached || cached.month !== month.key || seats > cached.observedSeats) {
         const redis = await getRedis();
@@ -142,7 +162,8 @@ export async function resolveTeamAllowancePolicy(
         cached.expiresAt = Date.now() + POLICY_CACHE_TTL_MS;
       }
       const highWater = cached.highWater;
-      monthlyUsd = PLAN_PAID_SEAT_AI_ALLOWANCE_USD * highWater;
+      monthlyUsd = (byok ? BYOK_MEMBER_AI_ALLOWANCE_USD : PLAN_PAID_SEAT_AI_ALLOWANCE_USD) * highWater;
+      dailyUsd = null;
     }
   } catch {
     console.warn("[ai-allowance] Policy lookup failed; using strict allowance", { teamId });
@@ -159,7 +180,7 @@ export async function resolveTeamAllowancePolicy(
   return {
     mode: "plan",
     monthlyUsd: mode === "strict" ? Math.min(monthlyUsd, legacyMonthly) : monthlyUsd,
-    dailyUsd: fundingSource === "managed" && !demoGlobal ? null : FREE_TEAM_DAILY_AI_ALLOWANCE_USD,
+    dailyUsd: demoGlobal ? FREE_TEAM_DAILY_AI_ALLOWANCE_USD : dailyUsd,
     demoGlobal,
   };
 }

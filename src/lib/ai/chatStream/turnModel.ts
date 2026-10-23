@@ -202,7 +202,7 @@ export async function loadTurnModel(body: ChatRequest, dbUser: AuthedUser) {
       haiku55Enabled,
       );
       byokApiKey = await resolveAiFallbackCredential(
-        keyLookupContext, () => getSelectionApiKey(selection), new Error("This team's custom AI key is unavailable."),
+        () => getSelectionApiKey(selection), new Error("This team's custom AI key is unavailable."),
       );
     }
 
@@ -226,7 +226,7 @@ export async function loadTurnModel(body: ChatRequest, dbUser: AuthedUser) {
       haiku55Enabled,
         );
         byokApiKey = await resolveAiFallbackCredential(
-          keyLookupContext, () => getSelectionApiKey(selection), new Error("This team's OpenRouter key is unavailable."),
+          () => getSelectionApiKey(selection), new Error("This team's OpenRouter key is unavailable."),
         );
       }
     }

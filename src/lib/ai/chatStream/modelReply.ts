@@ -153,7 +153,7 @@ export async function generateModelReply(state: StreamState, inputs: { instructi
     if (previous.model === state.selected.resolvedModelId) continue;
     const fallbackProvider = previous.model === "gpt-6-luna" ? "openai" : state.selected.provider;
     const fallbackLookup = { trustedTeamId: gatewayTags.teamId, projectId: usageProjectId, userId: dbUser.id, agentId: actingAgent?.id };
-    const fallbackCredential = await resolveAiFallbackCredential(fallbackLookup, async () =>
+    const fallbackCredential = await resolveAiFallbackCredential(async () =>
       previous.model === "gpt-6-luna" && !isVercelAiGatewayKey(streamCredential)
         ? getByokOrTeamGatewayApiKeyForModelOption(
             getAiModelOptionById(previous.model)!, state.body.byokProviderFlags, fallbackLookup,

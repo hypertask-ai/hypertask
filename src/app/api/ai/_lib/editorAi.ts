@@ -744,7 +744,7 @@ export async function selectTaskWriterModel(args: {
       haiku55Enabled,
     );
     byokApiKey = await resolveAiFallbackCredential(
-      keyLookup, () => getSelectionApiKey(selection), new Error("This team's custom AI key is unavailable."),
+      () => getSelectionApiKey(selection), new Error("This team's custom AI key is unavailable."),
     );
   }
 
@@ -768,7 +768,7 @@ export async function selectTaskWriterModel(args: {
         haiku55Enabled,
       );
       byokApiKey = await resolveAiFallbackCredential(
-        keyLookup, () => getSelectionApiKey(selection), new Error("This team's OpenRouter key is unavailable."),
+        () => getSelectionApiKey(selection), new Error("This team's OpenRouter key is unavailable."),
       );
     }
   }
@@ -840,7 +840,7 @@ export async function selectTaskWriterModel(args: {
     console.warn(
       `[ai-model-fallback] ${selected.modelId} -> ${previous.model}: ${previous.status}`,
     );
-    const fallbackCredential = await resolveAiFallbackCredential(keyLookup, async () =>
+    const fallbackCredential = await resolveAiFallbackCredential(async () =>
       previous.model === "gpt-6-luna" && !isVercelAiGatewayKey(byokApiKey)
         ? getByokOrTeamGatewayApiKeyForModelOption(
             getAiModelOptionById(previous.model)!, args.byokProviderFlags, keyLookup,
