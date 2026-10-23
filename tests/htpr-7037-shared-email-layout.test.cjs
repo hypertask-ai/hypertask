@@ -155,6 +155,7 @@ async function sendFixture({ name, args }, mode, recipientUserId) {
     "@vercel/functions": { waitUntil: (work) => scheduled.push(work) },
     "@/lib/prisma": { __esModule: true, default: prisma },
     "@/lib/flags": flags,
+    "@/lib/flags/keys": { HTPR_7549_FIRST_TASK_POINTER_FLAG: "htpr-7549-first-task-pointer", HTPR_7550_CONNECT_OVERLAY_FLAG: "htpr-7550-connect-overlay" },
     "@/lib/telemetry/activationAnalytics": { trackActivation: async () => {} },
     "@/lib/redis": { getRedis: async () => ({}) },
     "@/lib/onboarding/qaArm": { isOnboardingQaArmed: async () => true },

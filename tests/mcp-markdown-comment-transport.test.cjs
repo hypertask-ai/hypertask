@@ -64,7 +64,7 @@ test("comment kind reaches the MCP POST unchanged", async () => {
 });
 
 test("log-routed MCP posts return their activity without requiring a comment", async () => {
-  const logged = { success: true, routedTo: "log", url: "https://app.hypertask.ai/detail/project-15/7341", activity: { id: "activity-1" } };
+  const logged = { success: true, routedTo: "log", visibleToPeople: false, notice: "Saved to the agent log, not the ticket thread. Resend with kind (question|qa|done) to post for people.", url: "https://app.hypertask.ai/detail/project-15/7341", activity: { id: "activity-1" } };
   const client = { makeRequest: async () => logged };
   assert.deepEqual(await new CommentService(client).addComment({ task_id: 42, text: "Progress" }), logged);
 });

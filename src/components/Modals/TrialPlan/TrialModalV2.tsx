@@ -1,3 +1,6 @@
+import { TeamStartPlanButton } from "@/components/PageComponents/Kanban/HeaderComponents/StartPlanButton";
+import { useFlag, useFlagReady } from "@/hooks/useFlag";
+import { HTPR_7551_START_PLAN_CHECKOUT_FLAG } from "@/lib/flags/keys";
 import { ModalContainerCustom } from "@/components/Common/CommonModalComponents";
 import "@/styles/AttachmentView.scss";
 import { Carousel, CarouselItem, ModalHeader } from "reactstrap";
@@ -47,6 +50,7 @@ function teamToPricingParams(team: ITeam): IPricingSearchParams {
 }
 
 const TrialModal: React.FC<ITrialModal> = ({ currentUser, callback }) => {
+  const startPlanEnabled = useFlag(HTPR_7551_START_PLAN_CHECKOUT_FLAG);
   const isMbl = useContext(MobileViewContext);
   const [currentProject, _] = useRecoilState(currentProjectAtom);
   const [currTeam, setCurrTeam] = useState<ITeam | undefined>(undefined);
@@ -109,7 +113,9 @@ const TrialModal: React.FC<ITrialModal> = ({ currentUser, callback }) => {
       <div className="max-h-[90vh] scrollbar-thin overflow-y-auto flex flex-col">
         <div className="">
           <ModalBody className="w-full flex items-center justify-center border-b-0 border-transparent pt-0">
-            <TrialBody team={currTeam} callback={callback} />
+            <TrialBody team={currTeam} callback={callback} startPlanCheckout={startPlanEnabled
+              ? <TeamStartPlanButton teamId={currTeam?.id} />
+              : undefined} />
           </ModalBody>
           <ModalFooter className="w-full items-center justify-center border-t-0 py-0 px-2">
             <TrialFooter />
@@ -123,10 +129,13 @@ const TrialModal: React.FC<ITrialModal> = ({ currentUser, callback }) => {
 const TrialBody = ({
   team,
   callback,
+  startPlanCheckout,
 }: {
   team: ITeam | undefined;
   callback: () => void;
+  startPlanCheckout?: React.ReactElement | null;
 }) => {
+  const flagReady = useFlagReady(HTPR_7551_START_PLAN_CHECKOUT_FLAG);
   const [selectedPlan, setSelectedPlan] = useState<TPlan>("Year");
   const [selectedTier, setSelectedTier] = useState<TTier>("Pro");
   const router = useRouter();
@@ -162,6 +171,9 @@ const TrialBody = ({
     router.push(url.data.url);
     callback();
   };
+
+  if (!flagReady) return null;
+  if (startPlanCheckout !== undefined) return startPlanCheckout;
 
   const onSelected = (selected: TPlan) => {
     setSelectedPlan(selected);

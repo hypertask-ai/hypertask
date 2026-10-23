@@ -150,18 +150,18 @@ test("09:58 regression: paid team without a provisioned key fails identically be
   const body = harness.taskWriterRequestSchema.parse({ projectId, PROMPT: "Draft a task" });
   await assert.rejects(harness.prepareTaskWriterRun(body, userId), (error) => {
     assert.ok(error instanceof AiGatewayKeyRequiredError);
-    assert.equal(error.message, "A dedicated team AI Gateway key or direct BYOK key is required for openai text inference.");
+    assert.equal(error.message, "A dedicated team AI Gateway key or direct BYOK key is required for claude text inference.");
     return true;
   });
   assert.ok(keyLookups.includes("managed_gateway"));
-  const message = "A dedicated team AI Gateway key or direct BYOK key is required for openai text inference.";
+  const message = "A dedicated team AI Gateway key or direct BYOK key is required for claude text inference.";
   await assertAccessResponse(mcp, mcpRequest(), message);
   await assertAccessResponse(web, request(), message);
 });
 
 test("agent-bound MCP requests return the same missing-key access error without filing production errors", async () => {
   agentId = "agent_fixture";
-  await assertAccessResponse(mcp, mcpRequest(), "A dedicated team AI Gateway key or direct BYOK key is required for openai text inference.");
+  await assertAccessResponse(mcp, mcpRequest(), "A dedicated team AI Gateway key or direct BYOK key is required for claude text inference.");
 });
 
 test("authorized Free and BYOK teams resolve the shared included allowance instead of needing a dedicated key", async () => {
@@ -172,15 +172,21 @@ test("authorized Free and BYOK teams resolve the shared included allowance inste
 });
 
 test("paid teams still resolve their managed gateway or direct BYOK key, never the shared pool", async () => {
-  for (const provider of ["managed_gateway", "openai"]) {
-    const credential = provider === "managed_gateway" ? "vck_fixture_managed" : "fixture_direct_openai";
+  for (const provider of ["managed_gateway", "claude"]) {
+    const credential = provider === "managed_gateway" ? "vck_fixture_managed" : "fixture_direct_claude";
     teamKeys = { [provider]: credential };
     const lookup = { trustedTeamId: teamId };
-    assert.equal(await getByokOrTeamGatewayApiKeyForProvider("openai", [], lookup), credential);
+    const resolved = await getByokOrTeamGatewayApiKeyForProvider("claude", [], lookup);
+    assert.equal(resolved, credential);
+    assert.notEqual(resolved, sharedKey);
     const selected = await selectTaskWriterModel({ projectId, userId, aiFeature: "taskWriter" });
-    assert.equal(selected.modelId, "gpt-6-luna");
-    assert.ok(selected.model);
+    assert.equal(selected.provider, "claude");
+    assert.equal(selected.usageProvider, provider === "managed_gateway" ? "claude" : "byok:claude");
+    assert.equal(selected.modelId, "claude-haiku-5.5");
+    assert.equal(selected.model.modelId, provider === "managed_gateway" ? "anthropic/claude-haiku-5.5" : "claude-haiku-5-5");
   }
+  assert.equal(inferenceCalls, 0);
+  assert.deepEqual(reports, []);
 });
 
 test("both writers classify typed plan and key access errors consistently, including the gateway resolver", async () => {
@@ -197,7 +203,7 @@ test("both writers classify typed plan and key access errors consistently, inclu
 });
 
 test("unexpected errors, even with the same key-error message, remain 500 and are reported once", async () => {
-  preparationError = new Error("A dedicated team AI Gateway key or direct BYOK key is required for openai text inference.");
+  preparationError = new Error("A dedicated team AI Gateway key or direct BYOK key is required for claude text inference.");
   for (const route of [mcp, web]) {
     reports.length = 0;
     const response = await route.POST(route === mcp ? mcpRequest() : request());

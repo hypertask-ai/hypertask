@@ -13,6 +13,7 @@ import type { useAgentChatState } from "./useAgentChatState";
 
 type Props = Pick<
   ReturnType<typeof useAgentChatState>,
+  | "embedded"
   | "sessionIdRef"
   | "selectedIdRef"
   | "setDeliveryNotice"
@@ -60,7 +61,7 @@ type Props = Pick<
 >;
 
 export function useAgentChatSend({
-  sessionIdRef, selectedIdRef, setDeliveryNotice, setAwaiting, setReplyTimedOut, setAwaitingSince,
+  embedded, sessionIdRef, selectedIdRef, setDeliveryNotice, setAwaiting, setReplyTimedOut, setAwaitingSince,
   setMessages, sendingRef, setSending, setAgents, blockedQueueIdRef, messageQueueRef,
   setQueuedMessages, setDraft, liveSortEnabled, awaitingRef, session, awaiting, stopping,
   setStopping, loadMessages, draft, dismissMention, composerEditorRef, composerRef, focusComposer,
@@ -87,7 +88,7 @@ export function useAgentChatSend({
     try {
       const res = await fetch(`/api/agent-chat/${targetSessionId}/messages`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: { "Content-Type": "application/json", ...(embedded ? { "x-hypertask-sidebar-project": String(embedded.projectId) } : {}) },
         body: JSON.stringify({ text }),
       });
       const data = (await res.json()) as {
@@ -127,10 +128,12 @@ export function useAgentChatSend({
       }
       toast.error(e instanceof Error ? e.message : "Failed to send message");
     } finally {
-      sendingRef.current = false;
-      setSending(false);
+      if (!embedded || sessionIdRef.current === targetSessionId) {
+        sendingRef.current = false;
+        setSending(false);
+      }
     }
-  }, [liveSortEnabled]);
+  }, [liveSortEnabled, embedded?.projectId]);
 
   const removeQueuedMessage = useCallback((id: string) => {
     messageQueueRef.current = messageQueueRef.current.filter(
@@ -160,7 +163,7 @@ export function useAgentChatSend({
     const targetSessionId = session.id;
     setStopping(true);
     try {
-      const res = await fetch(`/api/agent-chat/${targetSessionId}/stop`, { method: "POST" });
+      const res = await fetch(`/api/agent-chat/${targetSessionId}/stop`, { method: "POST", headers: embedded ? { "x-hypertask-sidebar-project": String(embedded.projectId) } : {} });
       const data = (await res.json()) as { success?: boolean; error?: string };
       if (!res.ok || !data.success) throw new Error(data.error ?? "Failed to stop agent");
       if (sessionIdRef.current !== targetSessionId) return;

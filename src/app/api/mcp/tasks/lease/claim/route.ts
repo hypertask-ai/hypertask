@@ -1,7 +1,9 @@
+import { requireAgentWriteRole } from '@/lib/mcp/agents/readRoleGuard'
 import { wrapMcpRoute, checkMcpRouteRateLimit as checkMcpRateLimit, validateMcpRouteAuth as validateMcpAuth } from '@/lib/mcp/routeWrapper'
 import { NextRequest, NextResponse } from 'next/server';
 
 import prisma from '@/lib/prisma';
+import { getProjectWhere } from '@/utils/controllers/projects/getAllIncludes';
 import { findTaskByIdentifier, taskIdentifierErrorResponse } from '@/lib/mcp/tasks/resolveTask';
 import {
   canManageLease,
@@ -9,7 +11,7 @@ import {
   isValidLeaseToken,
   isValidTaskId,
 } from '@/lib/mcp/tasks/lease';
-import { lockAgentMutationFence } from '@/lib/mcp/tasks/agentMutationFence';
+import { lockAgentMutationFence, lockTaskTeamScope, TaskTeamScopeError } from '@/lib/mcp/tasks/agentMutationFence';
 
 type LeaseRow = {
   taskId: number;
@@ -34,6 +36,8 @@ export async function POST(request: NextRequest) {
       { status: 401 }
     );
   }
+  const roleRefusal = await requireAgentWriteRole(ctx);
+  if (roleRefusal) return roleRefusal;
   if (!ctx.agentId) {
     return NextResponse.json(
       { success: false, error: 'Task mutation leases require an agent token' },
@@ -118,7 +122,7 @@ export async function POST(request: NextRequest) {
     const task = await findTaskByIdentifier(
       ctx.user,
       { task_id },
-      ctx.agentId
+      ctx.agentId, undefined, ctx.teamScope
     );
     if (!task) {
       return NextResponse.json(
@@ -132,6 +136,7 @@ export async function POST(request: NextRequest) {
 
     const leases = await prisma.$transaction(async (tx) => {
       await lockAgentMutationFence(tx, task.id);
+      await lockTaskTeamScope(tx, task.id, ctx.user.id, ctx.agentId, ctx.teamScope);
 
       const liveTask = await tx.task.findUnique({
         where: { id: task.id },
@@ -182,8 +187,8 @@ export async function POST(request: NextRequest) {
     });
 
     if (leases.length === 0) {
-      const liveTask = await prisma.task.findUnique({
-        where: { id: task.id },
+      const liveTask = await prisma.task.findFirst({
+        where: { id: task.id, ...(ctx.teamScope != null ? { project: getProjectWhere(ctx.user.id, ctx.agentId, ctx.teamScope) } : {}) },
         select: { status: true },
       });
       if (!liveTask || liveTask.status === 'Deleted') {
@@ -265,6 +270,7 @@ export async function POST(request: NextRequest) {
       { status: 200 }
     );
   } catch (error) {
+    if (error instanceof TaskTeamScopeError) return NextResponse.json({ success: false, error: error.message }, { status: 404 })
     const identifierResponse = taskIdentifierErrorResponse(error);
     if (identifierResponse) return identifierResponse;
     console.error('[MCP Task Lease Claim] Error:', error);

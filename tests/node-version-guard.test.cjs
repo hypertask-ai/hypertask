@@ -7,7 +7,7 @@ const { spawnSync } = require("node:child_process");
 const yaml = require("js-yaml");
 const { compareNodeVersions, workflowNodeVersions } = require("../.github/scripts/check-node-version.cjs");
 
-const workflows = [{ file: "ci.yml", content: "jobs:\n  test:\n    steps:\n      - uses: actions/setup-node@sha\n        with:\n          node-version: 24\n" }];
+const workflows = [{ file: "ci.yml", content: "jobs:\n  test:\n    steps:\n      - uses: actions/setup-node@sha\n        with:\n          node-version: 24\n          check-latest: true\n" }];
 
 test("matching package and workflow majors pass", () => {
   for (const engine of ["24", "24.x", "24.1.2", "^24.1.2", "~24.1.2"]) {
@@ -20,7 +20,7 @@ test("the incident's package downgrade is rejected", () => {
 });
 
 test("every workflow is checked, including quoted and inline node versions", () => {
-  const inputs = [...workflows, { file: "second.yaml", content: 'jobs: {test: {steps: [{with: {node-version: "22.x"}}, {with: {node-version: 20}}]}}' }];
+  const inputs = [...workflows, { file: "second.yaml", content: 'jobs: {test: {steps: [{with: {node-version: "22.x", check-latest: true}}, {with: {node-version: 20, check-latest: true}}]}}' }];
   const issues = compareNodeVersions("24.x", "24.x", inputs);
   assert.equal(issues.length, 2);
   assert.match(issues[0], /second.yaml.*22.x/);
@@ -28,7 +28,7 @@ test("every workflow is checked, including quoted and inline node versions", () 
 });
 
 test("job outputs named node-version are not Node settings", () => {
-  const content = 'jobs: {read: {outputs: {node-version: "${{ steps.vercel.outputs.node-version }}"}}, test: {steps: [{with: {node-version: 24}}]}}';
+  const content = 'jobs: {read: {outputs: {node-version: "${{ steps.vercel.outputs.node-version }}"}}, test: {steps: [{with: {node-version: 24, check-latest: true}}]}}';
   assert.deepEqual(compareNodeVersions("24.x", "24.x", [{ file: "guard.yml", content }]), []);
 });
 
@@ -37,7 +37,22 @@ test("the guard compares the repository workflows without mistaking its own outp
     file,
     content: fs.readFileSync(path.join(".github/workflows", file), "utf8"),
   }));
-  assert.deepEqual(compareNodeVersions("24.x", "24.x", inputs), []);
+  const { minimum } = JSON.parse(fs.readFileSync("src/lib/runtime/nodeSecurityFloor.json", "utf8"));
+  assert.deepEqual(compareNodeVersions("24.x", "24.x", inputs, minimum), []);
+});
+
+test("YPER4-614: a pin whose lowest version is below the security floor is refused, because a failed manifest lookup falls back to the runner cache", () => {
+  for (const pin of ["24", "24.x", "\"24\"", "^24.21.0", "~24.22.0", "24.21.9"]) {
+    const content = `jobs: {test: {steps: [{with: {node-version: ${pin}, check-latest: true}}]}}`;
+    assert.match(compareNodeVersions("24.x", "24.x", [{ file: "old.yml", content }], "24.22.1").join("\n"), /old.yml.*pin \^24\.22\.1 so a failed version lookup cannot fall back/, pin);
+  }
+});
+
+test("YPER4-614: pins at or above the security floor are still allowed", () => {
+  for (const pin of ["^24.22.1", "\"^24.22.1\"", "^24.23.0", "24.22.1", "~24.22.4"]) {
+    const content = `jobs: {test: {steps: [{with: {node-version: ${pin}, check-latest: true}}]}}`;
+    assert.deepEqual(compareNodeVersions("24.x", "24.x", [{ file: "new.yml", content }], "24.22.1"), [], pin);
+  }
 });
 
 test("comments and unrelated numeric inputs do not count", () => {
@@ -66,6 +81,18 @@ test("YAML aliases are checked without looping on recursive aliases", () => {
   assert.equal(versions[0].value, "22.x");
 });
 
+test("a Node pin without check-latest: true is refused, so CI cannot run an unpatched cached runtime", () => {
+  for (const extra of ["", ", check-latest: false", ', check-latest: "true"']) {
+    const content = `jobs: {test: {steps: [{with: {node-version: 24${extra}}}]}}`;
+    assert.match(compareNodeVersions("24.x", "24.x", [{ file: "stale.yml", content }]).join("\n"), /stale.yml.*check-latest: true/);
+  }
+});
+
+test("a Node pin with check-latest: true is still allowed", () => {
+  const content = "jobs: {test: {steps: [{with: {node-version: 24, check-latest: true}}]}}";
+  assert.deepEqual(compareNodeVersions("24.x", "24.x", [{ file: "fresh.yml", content }]), []);
+});
+
 test("node-version-file cannot silently bypass comparison", () => {
   assert.match(compareNodeVersions("24.x", "24.x", [{ file: "file.yml", content: 'jobs: {test: {steps: [{with: {node-version-file: ".nvmrc"}}]}}' }]).join("\n"), /node-version-file/);
 });
@@ -74,7 +101,9 @@ test("CLI reads real package/workflow files and returns a failing exit on mismat
   const root = fs.mkdtempSync(path.join(os.tmpdir(), "node-version-guard-"));
   t.after(() => fs.rmSync(root, { recursive: true, force: true }));
   fs.mkdirSync(path.join(root, ".github/workflows"), { recursive: true });
-  fs.writeFileSync(path.join(root, ".github/workflows/ci.yml"), workflows[0].content);
+  fs.writeFileSync(path.join(root, ".github/workflows/ci.yml"), workflows[0].content.replace("node-version: 24", "node-version: ^24.22.1"));
+  fs.mkdirSync(path.join(root, "src/lib/runtime"), { recursive: true });
+  fs.writeFileSync(path.join(root, "src/lib/runtime/nodeSecurityFloor.json"), JSON.stringify({ minimum: "24.22.1" }));
   const liveFile = path.join(root, "live-version");
   fs.writeFileSync(liveFile, "24.x\n");
   const script = path.resolve(".github/scripts/check-node-version.cjs");
@@ -88,6 +117,12 @@ test("CLI reads real package/workflow files and returns a failing exit on mismat
   assert.doesNotMatch(result.stdout, /guard passed/);
   fs.writeFileSync(liveFile, "");
   assert.equal(run().status, 1);
+  fs.writeFileSync(liveFile, "24.x\n");
+  fs.writeFileSync(path.join(root, "package.json"), JSON.stringify({ engines: { node: "24.x" } }));
+  fs.writeFileSync(path.join(root, ".github/workflows/ci.yml"), workflows[0].content);
+  const stale = run();
+  assert.equal(stale.status, 1);
+  assert.match(stale.stderr, /pin \^24\.22\.1 so a failed version lookup cannot fall back/);
 });
 
 test("the API request alone receives the Vercel secret and missing settings fail closed", () => {

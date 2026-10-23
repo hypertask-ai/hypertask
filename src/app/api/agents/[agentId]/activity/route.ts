@@ -1,4 +1,4 @@
-import { withAgentScopeRequest } from "@/lib/auth/agentScope";
+import { agentScopeEnforced, withAgentScopeRequest } from "@/lib/auth/agentScope";
 import { NextRequest, NextResponse } from "next/server";
 import prisma from "@/lib/prisma";
 import { getProjectWhere } from "@/utils/controllers/projects/getAllIncludes";
@@ -76,6 +76,16 @@ async function getAgentActivity(
       : DEFAULT_LIMIT;
 
   const visibleTask = { task: { project: getProjectWhere(userId) } };
+  const visibleUsageProjects =
+    actingAgentId && agentScopeEnforced()
+      ? await prisma.project.findMany({
+          where: {
+            ...getProjectWhere(userId),
+            AND: [getProjectWhere(userId, actingAgentId)],
+          },
+          select: { id: true },
+        })
+      : null;
 
   const [comments, evidence, questions, sessions, usage] = await Promise.all([
     prisma.comment.findMany({
@@ -141,7 +151,12 @@ async function getAgentActivity(
       },
     }),
     prisma.aiUsage.findMany({
-      where: { agentId: agent.id },
+      where: {
+        agentId: agent.id,
+        ...(visibleUsageProjects
+          ? { projectId: { in: visibleUsageProjects.map((project) => project.id) } }
+          : {}),
+      },
       orderBy: { createdAt: "desc" },
       take: limit,
       select: {

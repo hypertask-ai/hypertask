@@ -1,3 +1,4 @@
+const { withStubs } = require("./helpers/stub-map.cjs");
 const assert = require("node:assert/strict");
 const fs = require("node:fs");
 const path = require("node:path");
@@ -7,7 +8,7 @@ const ts = require("typescript");
 const root = path.resolve(__dirname, "..");
 
 function load(relativePath, stubs) {
-  stubs = { "@/lib/auth/agentScope": require("./helpers/agent-board-scope.cjs").enforcedScope, ...stubs };
+  stubs = withStubs({ "@/lib/auth/agentScope": require("./helpers/agent-board-scope.cjs").enforcedScope }, stubs);
   const javascript = ts.transpileModule(
     fs.readFileSync(path.join(root, relativePath), "utf8"),
     {
@@ -42,6 +43,7 @@ function harness() {
   });
   const prisma = {
     project: {
+      updateMany: async () => ({ count: 0 }),
       findFirst: async () => ({ id: 15 }),
       findUnique: async () => ({ id: 15, uniqueIdentifier: "TEST" }),
     },

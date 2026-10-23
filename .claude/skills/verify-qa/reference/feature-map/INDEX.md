@@ -15,7 +15,14 @@ each ticket only needs the one or two areas it touches.
 | Area | File | e2e/smoke id |
 |---|---|---|
 | CI Node-version guard | [ci-node-version.md](ci-node-version.md) | throwaway PR negative control, no app writes |
+| Feature-flag and UX sign-off gates | [feature-flag-and-ux-gates.md](feature-flag-and-ux-gates.md) | reconcile job logs of two consecutive production runs, no app writes |
+| Visual Regression check | [visual-regression.md](visual-regression.md) | dispatch on production one run at a time, 3 green on one commit, per-screen capture times, no app writes |
+| Production build and deploy | [production-build.md](production-build.md) | Vercel build log of the merge sha, no app writes |
+| Premerge evidence status | [premerge-evidence.md](premerge-evidence.md) | read-only status sweep of open PRs, no app writes |
+| Runner dispatch | [runner-dispatch.md](runner-dispatch.md) | read-only plan from the live copy, no --go, no app writes |
 | Agent board scope guard | [agent-scope-guard.md](agent-scope-guard.md) | throwaway PR negative control, no app writes |
+| Webhooks | [webhooks.md](webhooks.md) | no smoke id; QA 985 team-wide endpoint on team 9bca4a7c via /api/settings/webhooks, test delivery to a 2xx receiver, hint vs one-time key; delete fixtures |
+| Agents and board access | [agents-board-access.md](agents-board-access.md) | QA 985 throwaway agents on sandbox 7049; self-access 403 text, /mcp safe reason, 24/24 invite picker opens; delete fixtures |
 | Secret scan workflow installer | [secret-scan-workflow.md](secret-scan-workflow.md) | temp checkouts from merged production, no app writes |
 | PostHog error alerts | [posthog-error-alerts.md](posthog-error-alerts.md) | nightly canary workflow, closes its own ticket |
 | Signup check (hypertask.app) | [signup-check.md](signup-check.md) | Access service identity, read-only, daily counts snapshot |
@@ -35,15 +42,16 @@ each ticket only needs the one or two areas it touches.
 | Board invites | [board-invites.md](board-invites.md) | no smoke id; owner resend 200, outsider 403 on `/api/invite/reSendInvite` and `cancelInvite` |
 | Inbox | [inbox.md](inbox.md) | `view-inbox` (load-only); no write journey for archive/undo |
 | Search and filters | [search-and-filters.md](search-and-filters.md) | `view-AI-search` (load-only, capital AI); no write journey for filters |
+| Search autocomplete | [search.md](search.md) | `view-AI-search` (load-only); suggestions verify by hand |
 | Demo board | [demo-board.md](demo-board.md) | `demo` (tag `@demo`, `demo.spec.ts`) |
-| CLI install commands | [cli-install.md](cli-install.md) | no smoke id; Settings CLI shots plus a real install from the shown commands |
+| CLI install commands and login | [cli-install.md](cli-install.md) | no smoke id; Settings CLI shots, real install and read-only token-login guided start |
 | Billing and plans | [billing-and-plans.md](billing-and-plans.md) | no payment journey; open checkout and cancel without payment |
 | My Tasks | [my-tasks.md](my-tasks.md) | no write journey; verify by hand |
 | Pages | [pages.md](pages.md) | no write journey; verify by hand (flagged standalone parts through the session API) |
 | Slack app | [slack-app.md](slack-app.md) | read-only install/support pages and redirects; real workspace parity needs a human |
 | Mobile | [mobile.md](mobile.md) | any id above tagged `@mobile` (`open-board`, `open-task`, `create-task`) |
 | Legacy MCP SSE transport | [mcp-legacy-sse.md](mcp-legacy-sse.md) | no smoke id; verify requests and PostHog ingestion directly |
-| MCP task lookup | [mcp-task-lookup.md](mcp-task-lookup.md) | no smoke id; real `tools/call` with string and list identifiers |
+| MCP task lookup and hello | [mcp-task-lookup.md](mcp-task-lookup.md) | no smoke id; real `tools/call` lookups and read-only hello/catalog checks |
 | MCP token revoke | [mcp-token-revoke.md](mcp-token-revoke.md) | no smoke id; never revoke-all on QA 2343 (it runs the MCP watcher) |
 
 Load-only ids come from `prod.spec.ts`'s per-view smoke check (page loads,

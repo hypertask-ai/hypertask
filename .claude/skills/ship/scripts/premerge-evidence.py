@@ -17,7 +17,7 @@ from datetime import datetime
 HERE = Path(__file__).resolve().parent
 REPO = 'hypertask-ai/hypertask'
 CHECKER_PATH = '.claude/skills/ship/scripts/ship-check'
-REFRESH_SECONDS = 600  # ten-minute refresh for live flag changes; a new head or changed evidence re-checks at once
+REFRESH_SECONDS = 600  # ten-minute refresh; a new head or checker re-checks at once
 MISSES_BEFORE_FAILURE = 3  # consecutive sweeps (about six minutes) before one PR fails the unit
 
 
@@ -29,34 +29,20 @@ def install():
     for name in ('ship-check', 'premerge-evidence.py'):
         if HERE != target:
             shutil.copy2(HERE / name, target / name)
+    checker = HERE / 'user-unit-check'
+    if checker.resolve() != (target / 'user-unit-check').resolve():
+        shutil.copy2(checker, target / 'user-unit-check')
     for name in ('premerge-evidence', 'premerge-evidence-gh-loops'):
         for suffix in ('service', 'timer'):
             shutil.copy2(HERE / f'{name}.{suffix}', units)
+    subprocess.run([os.environ.get('USER_UNIT_CHECK', str(target / 'user-unit-check')), str(units / 'premerge-evidence.service'), str(units / 'premerge-evidence.timer'), str(units / 'premerge-evidence-gh-loops.service'), str(units / 'premerge-evidence-gh-loops.timer')], check=True)
     subprocess.run(['systemctl', '--user', 'daemon-reload'], check=True)
     for name in ('premerge-evidence', 'premerge-evidence-gh-loops'):
         subprocess.run(['systemctl', '--user', 'enable', '--now', f'{name}.timer'], check=True)
 
 
-def fingerprint(row, evidence, checker_sha):
-    ticket = row['title'].split()[0]
-    folder = evidence / ticket
-    record = folder / 'premerge.md'
-    digest = hashlib.sha256(json.dumps([row['headRefOid'], row['title'], checker_sha], sort_keys=True).encode())
-    if record.is_file():
-        text = record.read_bytes()
-        digest.update(str(record.stat().st_mtime_ns).encode())
-        digest.update(text)
-        match = re.search(rb'^Recording:\s*([^\r\n]+)', text, re.M)
-        if match:
-            video = (folder / match[1].decode().strip()).resolve()
-            if video.is_relative_to(folder.resolve()) and video.is_file():
-                stat = video.stat()
-                digest.update(json.dumps([str(video), stat.st_ino, stat.st_size, stat.st_mtime_ns, stat.st_ctime_ns]).encode())
-    binding = folder / 'pr'
-    if binding.is_file():
-        digest.update(str(binding.stat().st_mtime_ns).encode())
-        digest.update(binding.read_bytes())
-    return digest.hexdigest()
+def fingerprint(row, checker_sha):
+    return hashlib.sha256(json.dumps([row['headRefOid'], row['title'], checker_sha], sort_keys=True).encode()).hexdigest()
 
 
 def cache_dir(state):
@@ -213,7 +199,6 @@ def sweep(dry_run=False):
     if paused():
         return
     state = Path(os.environ.get('PREMERGE_STATUS_STATE', Path.home() / '.local/state/premerge-evidence'))
-    evidence = Path(os.environ.get('VCC_EVIDENCE_DIR', Path.home() / '.local/state/vcc-evidence'))
     if dry_run:
         state = state / 'dry-run'
     state.mkdir(parents=True, exist_ok=True)
@@ -245,13 +230,10 @@ def sweep(dry_run=False):
         for row in rows:
             key = str(row['number'])
             try:
-                try:
-                    signature = fingerprint(row, evidence, checker_sha)
-                except (OSError, UnicodeError):
-                    signature = None  # Let the publisher fail closed on unreadable evidence.
+                signature = fingerprint(row, checker_sha)
                 previous = cache.get(key, {})
-                # Refresh periodically too: live flags and transient read errors can change without a push.
-                if (signature is not None and previous.get('state') and previous.get('fingerprint') == signature
+                # Refresh periodically too: transient read errors can change without a push.
+                if (previous.get('state') and previous.get('fingerprint') == signature
                         and time.time() - previous.get('checked', 0) < REFRESH_SECONDS):
                     updated[key] = previous
                     continue

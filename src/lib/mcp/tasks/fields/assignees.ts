@@ -10,13 +10,14 @@ export async function updateTaskAssignees(context: TaskUpdateFieldContext, task:
                 await clearAssignees({
                     taskId: task.id,
                     user: userObj,
-                    agentId: ctx.agentId,
+                    agentId: ctx.agentId, teamScope: ctx.teamScope,
                 });
             } else {
                 const clearResult = await clearHumanAssignees(
                     userObj,
                     task.id,
-                    ctx.agentId ?? undefined
+                    ctx.agentId ?? undefined,
+                    ctx.teamScope
                 );
                 if (clearResult.status !== 200) {
                     throw new Error(
@@ -42,7 +43,7 @@ export async function updateTaskAssignees(context: TaskUpdateFieldContext, task:
                         userIds,
                         intent,
                         user: userObj,
-                        agentId: ctx.agentId,
+                        agentId: ctx.agentId, teamScope: ctx.teamScope,
                     });
                     return;
                 }

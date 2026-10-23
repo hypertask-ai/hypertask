@@ -9,12 +9,15 @@ import { useAiChatAttachments } from "./useAiChatAttachments";
 import { createAiChatSend } from "./aiChatSend";
 import { useAiChatPresentation } from "./useAiChatPresentation";
 import { useFlag } from "@/hooks/useFlag";
-import { HTPR_7337_EDIT_WITH_AI_FLAG, HTPR_6936_ASK_AI_FULLSCREEN_FLAG, HTPR_7049_RELOAD_AFTER_IMAGE_CHAT_FLAG, HTPR_7099_CHAT_CONNECTION_LOST_FLAG, HTPR_6971_CHAT_HISTORY_PAGING_FLAG } from "@/lib/flags/keys";
+import { HTPR_7518_AGENT_SIDEBAR_CHATS_FLAG, HTPR_7337_EDIT_WITH_AI_FLAG, HTPR_6936_ASK_AI_FULLSCREEN_FLAG, HTPR_7049_RELOAD_AFTER_IMAGE_CHAT_FLAG, HTPR_7099_CHAT_CONNECTION_LOST_FLAG, HTPR_6971_CHAT_HISTORY_PAGING_FLAG, HTPR_7316_CHAT_SCOPE_TICKET_FLAG } from "@/lib/flags/keys";
 
 import { useRecoilState } from "@/lib/state";
 import { aiChatEditTaskIdAtom } from "@/store";
 
 export function useAiChat() {
+  const agentSidebarChatsFlag = useFlag(HTPR_7518_AGENT_SIDEBAR_CHATS_FLAG);
+  let agentSidebarChatsEnabled = false;
+  if (agentSidebarChatsFlag) agentSidebarChatsEnabled = true;
   const editWithAiEnabled = useFlag(HTPR_7337_EDIT_WITH_AI_FLAG);
   const [editTaskId, setEditTaskId] = useRecoilState(aiChatEditTaskIdAtom);
   const [sendSettledVersion, setSendSettledVersion] = useState(0);
@@ -22,6 +25,7 @@ export function useAiChat() {
   const reloadTaskAfterChat = useFlag(HTPR_7049_RELOAD_AFTER_IMAGE_CHAT_FLAG);
   const connectionRetry = useFlag(HTPR_7099_CHAT_CONNECTION_LOST_FLAG);
   const pagingRequested = useFlag(HTPR_6971_CHAT_HISTORY_PAGING_FLAG);
+  const ticketScopeEnabled = useFlag(HTPR_7316_CHAT_SCOPE_TICKET_FLAG);
   const {
   lastWorkspaceFocusRef, queryClient, currentUser, currentProject,
   showAiChatInterface, setShowAIChat, setAiChatAutoOpenSuppressed, setAiChatExplicitOpenAt, aiChatExplicitOpenAt,
@@ -35,7 +39,7 @@ export function useAiChat() {
   setCurrentStreamingSession, isRecording, setIsRecording, displayAiOptions, contextList,
   setContextList, agentStatus, setAgentStatus, showRenameChatModal, setShowRenameChatModal,
   messageListRef, hasAttemptedRestoreRef, previousProjectIdRef, toggleCreateTaskGlobally, token,
-  dockedProjectId, scopedProjectId, boardScopeIsExplicit, editor, editorEnabled,
+  dockedProjectId, scopedProjectId, boardScopeIsExplicit, ticketScopeSelected, editor, editorEnabled,
   editorMountProps, taskId, shouldLoadChatHistory, createSession, activeSession,
   currentSession, showWelcomeScreen, isSessionPending, sessions, historySessions, hasMoreSessions, isLoadingMoreSessions, pagingError, loadMoreSessions, refreshHistorySessions, resolveHistorySession, getDisplayedSession, sessionPagingEnabled, selectSessionInHistory,
   chatHistoryReady, addMessageToSessionQuery, updateLastMessageInSessionCache, appendMessageToSessionCache, updateSessionTitle,
@@ -52,7 +56,7 @@ export function useAiChat() {
   }, [editWithAiEnabled, editTaskId, showAiChatInterface, taskId, currentSession?.messages, setEditTaskId]);
 
   const sessionContext = {
-    sessionIntentGenerationRef, sessionSetupRef, resolvedBoardSessionRef, clearMessageQueue, selectSessionInHistory,
+    agentSidebarChatsEnabled, sessionIntentGenerationRef, sessionSetupRef, resolvedBoardSessionRef, clearMessageQueue, selectSessionInHistory,
     createSession, isFullScreenChat, setDockedChatScope, currentProject, previousProjectIdRef,
     deleteSessionInHistory, messageQueueRef, setQueuedMessages, sendInFlightRef, modelBilling,
     currentAiOption, pathname, currentUser, taskId, sessionsRef,
@@ -72,6 +76,8 @@ export function useAiChat() {
     setIsTyping, setAgentStatus, chatRoute, token, editor,
     setIsRecording, addMessageToSessionQuery, scopedProjectId, ensureSessionForCurrentBoard,
   });
+  let sendTicketScope = false;
+  if (ticketScopeEnabled) sendTicketScope = ticketScopeSelected;
   const {
   handleSendMessage,
   } = createAiChatSend({
@@ -80,6 +86,7 @@ export function useAiChat() {
     setQueuedMessages, sendInFlightRef, surface, inViewObject, waitForChatSession,
     currentProject, buildGuestBoard, processAttachments, setIsTyping, addMessageToSessionQuery,
     scopedProjectId, isFullScreenChat, taskId, dockedProjectId, setAiChatBoardSessionMap,
+    ticketScopeSelected: sendTicketScope,
     modelTeamId, contextList, currentAiOption, spansAllBoards, boardScopeIsExplicit,
     pathname, currentUser, billing, isDemo, streamingSessionRef,
     streamingAssistantMessageRef, setCurrentStreamingSession, streamingRequestRef, chatRoute, token,

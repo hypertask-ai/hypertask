@@ -1,3 +1,4 @@
+const { withStubs } = require("./helpers/stub-map.cjs");
 const test = require("node:test");
 const assert = require("node:assert/strict");
 const fs = require("node:fs");
@@ -59,7 +60,7 @@ function compile(relativePath) {
 }
 
 function execute(javascript, stubs) {
-  stubs = { "@/lib/auth/agentScope": require("./helpers/agent-board-scope.cjs").enforcedScope, ...stubs };
+  stubs = withStubs({ "@/lib/auth/agentScope": require("./helpers/agent-board-scope.cjs").enforcedScope }, stubs);
   const originalLoad = Module._load;
   Module._load = (request, parent, isMain) =>
     stubs[request] ?? originalLoad(request, parent, isMain);
@@ -298,7 +299,7 @@ function loadUpdateController(
     },
     "@/utils/controllers/projects/getAllIncludes": { taskWriteAccessWhere },
     "@/lib/mcp/tasks/agentMutationFence": {
-      AgentMutationLeaseConflictError: class extends Error {},
+      TaskTeamScopeError: class extends Error {}, AgentMutationLeaseConflictError: class extends Error {},
       assertAgentAssignmentChangeAllowed: acquireTaskFence,
       cancelAgentMutationLeaseForHumanOverride: noop,
     },

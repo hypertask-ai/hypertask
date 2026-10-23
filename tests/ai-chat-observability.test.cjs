@@ -48,7 +48,7 @@ test("the stream records routed and terminal turn outcomes", () => {
   );
   assert.match(
     stream,
-    /onFinish: async \(\{ usage, finishReason \}\)[\s\S]*?generationFinishedWithError = finishReason === "error";[\s\S]*?else if \(generationFinishedWithError\) \{\s*recordTurnOutcome\("failed"/,
+    /onFinish: async \(\{ usage, finishReason\b[^}]*\}\)[\s\S]*?generationFinishedWithError = finishReason === "error";[\s\S]*?else if \(generationFinishedWithError\) \{\s*recordTurnOutcome\("failed"/,
   );
   assert.match(stream, /waitUntil\(observation\)/);
 });

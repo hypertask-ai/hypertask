@@ -13,8 +13,9 @@ export async function GET(request: NextRequest) {
     if (typeof user?.id !== "number") {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
-    if (request.nextUrl.searchParams.get("mode") === "first") {
-      const state = await getAgentConnectCardState(user.id);
+    const mode = request.nextUrl.searchParams.get("mode");
+    if (mode === "first" || mode === "overlay") {
+      const state = await getAgentConnectCardState(user.id, mode === "overlay");
       if (!state.eligible) {
         return NextResponse.json({ error: "Not found" }, { status: 404 });
       }
@@ -38,13 +39,15 @@ export async function GET(request: NextRequest) {
   }
 }
 
-export async function POST() {
+export async function POST(request?: NextRequest) {
   try {
     const user = await getCurrentUserFromCookies();
     if (typeof user?.id !== "number") {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
-    if (!(await isAgentConnectCheckEnabledFor(user.id))) {
+    const overlay = request?.nextUrl.searchParams.get("mode") === "overlay";
+    const eligible = overlay ? (await getAgentConnectCardState(user.id, true)).eligible : await isAgentConnectCheckEnabledFor(user.id);
+    if (!eligible) {
       return NextResponse.json({ error: "Not found" }, { status: 404 });
     }
     await dismissAgentConnectCard(user.id);

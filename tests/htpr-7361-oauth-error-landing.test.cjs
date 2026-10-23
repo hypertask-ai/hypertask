@@ -52,6 +52,8 @@ async function makeHarness() {
   }
   const aliases = {
     '@/lib/prisma': { default: prisma },
+    '@/lib/auth/oauthTokenCipher': { preflightOAuthTokenKey: () => {} },
+    '@/lib/auth/oauthTokenStorage': { withOAuthTokenStorage: (adapter) => adapter },
     '@/lib/auth/bridgePlugin': { bridgeSessionPlugin: () => ({ id: 'bridge-session' }) },
     '@/lib/auth/legacyCookiePlugin': { legacyCookiePlugin: () => ({ id: 'legacy-cookie' }), newGoogleSignupRequests: new WeakMap() },
     '@/lib/configs/auth.config': { default: { onboarding: {} } },

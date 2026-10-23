@@ -60,10 +60,10 @@ async function demo() {
     displayName: 'Valentin',
     mcpTokensRevokedAt: null,
   }
-  const humanCtx = { user, agentId: null }
-  const readCtx = { user, agentId: 'read-agent' }
-  const emptyCtx = { user, agentId: 'empty-agent' }
-  const nullCtx = { user, agentId: 'null-agent' }
+  const humanCtx = { teamScope: null, user, agentId: null }
+  const readCtx = { teamScope: null, user, agentId: 'read-agent' }
+  const emptyCtx = { teamScope: null, user, agentId: 'empty-agent' }
+  const nullCtx = { teamScope: null, user, agentId: 'null-agent' }
   const humanToken = createMcpToken(user.id, user.email)
   const agentTokens = new Map([
     [

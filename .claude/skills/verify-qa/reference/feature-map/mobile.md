@@ -23,8 +23,8 @@ For the New Task title, open a sandbox board at 390x844, press `C`, expand
 `Title: Add`, then tap the title field, type and save. Check the textarea itself
 has height >=24px and `elementFromPoint` at its centre hits it; the
 `htpr-6556-mobile-description-first` layout allowance must not mask a collapsed
-input. Repeat on desktop and with `htpr-6970-phone-new-task-title` off to check
-the unchanged path (https://app.hypertask.ai/detail/project-15/6970).
+input. Repeat on desktop to check
+the unchanged desktop path (https://app.hypertask.ai/detail/project-15/6970).
 
 ## What usually breaks
 

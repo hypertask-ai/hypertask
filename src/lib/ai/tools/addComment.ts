@@ -1,4 +1,6 @@
+import { inlineAgentImagesForUser } from "@/lib/media/inlineAgentImages.server";
 import { tool } from "ai";
+import { inlineAgentImageFields } from "./schemas";
 import { z } from "zod";
 import { resolveBulkTaskTargets, buildBulkOperationKey } from "@/app/api/ai/chat/stream/bulkTools";
 import { requireCrossMessageConfirmation } from "@/lib/ai/bulkConfirmation";
@@ -21,7 +23,7 @@ import { errorMessage } from "@/lib/ai/chatStream/errors";
 import type { ToolContext } from "./context";
 
 export function createAddCommentTool(context: ToolContext) {
-  const { sendStatus, user, confirmationSessionId, bulkPreviewsIssued, actingAgentId } = context;
+  const { sendStatus, user, confirmationSessionId, bulkPreviewsIssued, actingAgentId, body } = context;
   return {
     hypertask_add_comment: tool({
       description:
@@ -46,6 +48,7 @@ export function createAddCommentTool(context: ToolContext) {
           unique_index: z.coerce.number().int().positive().optional(),
           project_id: z.coerce.number().int().positive().optional(),
           text: z.string().min(1).max(5000),
+          ...inlineAgentImageFields(context.inlineAgentImagesEnabled),
           images: z.array(z.string()).optional(),
           mentions: z
             .array(
@@ -93,7 +96,11 @@ export function createAddCommentTool(context: ToolContext) {
               identifier,
               resolvedTaskId: resolution.task?.id ?? null,
             })),
-            [["text", input.text.trim()]]
+            [
+              ["text", input.text.trim()],
+              ...(input.image_urls !== undefined ? [["image_urls", input.image_urls]] : []),
+              ...(input.inline_images !== undefined ? [["inline_images", input.inline_images]] : []),
+            ]
           );
           if (
             await requireCrossMessageConfirmation({
@@ -126,6 +133,8 @@ export function createAddCommentTool(context: ToolContext) {
               success: false,
               confirmation_required: true,
               affected,
+              ...(input.image_urls !== undefined ? { image_urls: input.image_urls } : {}),
+              ...(input.inline_images !== undefined ? { inline_images: input.inline_images } : {}),
               message:
                 `This would comment on ${targets.length} tasks. Nothing has been changed yet. ` +
                 "End your turn now: list the affected tasks for the user and ask them to confirm. Only after they say yes, in a new message, call this tool again with confirmed: true.",
@@ -167,7 +176,7 @@ export function createAddCommentTool(context: ToolContext) {
             taskWithOwner.projectId,
             user.id,
           );
-          sanitizedText = toStoredHtml(sanitizedText);
+          sanitizedText = await inlineAgentImagesForUser(toStoredHtml(sanitizedText), user.id, { instructions: body?.message, inlineImages: input.inline_images, attachments: [...(input.images?.map((url: string) => ({ url })) ?? []), ...(input.image_urls?.map((url: string) => ({ url })) ?? []), ...[...(body?.images64 ?? []), ...(body?.attachments ?? [])].flatMap((file) => file.url && (input.image_urls?.includes(file.url) || input.text?.includes(file.url)) ? [{ url: file.url, fileName: file.fileName, mimeType: file.mimeType }] : [])] });
           sanitizedText = await linkifyTicketRefs(
             sanitizedText,
             user.id,

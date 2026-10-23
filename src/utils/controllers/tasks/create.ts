@@ -1,3 +1,4 @@
+import type { AgentTokenTeamScope } from '@/lib/mcp/auth/types';
 import { recordAgentBoardScopeMiss } from "@/lib/auth/agentScope";
 import { NextApiHandler, NextApiRequest, NextApiResponse } from "next"
 import { PrismaClient } from "@prisma/client"
@@ -60,6 +61,7 @@ interface IProps {
     index?:number
     currentUser: { id: number };
     agentId?: string | null;
+    teamScope?: AgentTokenTeamScope | null;
   }
 export const getUniqueTaskCount = async (
     projectId: number,
@@ -68,12 +70,12 @@ export const getUniqueTaskCount = async (
     return (await getNextUniqueTaskIndex(projectId, db)) - 1;
 };
 
-const create = async ({title, description, section, userId, ranking, projectId,sectionId,index,currentUser,agentId}:IProps) => {
+const create = async ({title, description, section, userId, ranking, projectId,sectionId,index,currentUser,agentId,teamScope}:IProps) => {
         try {
             const allowedProject = await prisma.project.findFirst({
                 where: {
                     id: projectId,
-                    ...taskWriteAccessWhere(currentUser.id, agentId),
+                    ...taskWriteAccessWhere(currentUser.id, agentId, teamScope),
                 },
                 select: { id: true },
             })
@@ -126,7 +128,7 @@ const create = async ({title, description, section, userId, ranking, projectId,s
 
                 const created = await createTaskWithBoardWebhookOutbox(prisma, taskCreatedActor, async (tx) => {
                   await tx.$executeRaw`SELECT pg_advisory_xact_lock(${TASK_UNIQUE_INDEX_ADVISORY_LOCK_CLASS}::int, ${projectId}::int)`;
-                  const getProject = await tx.project.findUnique({ where: { id: projectId }, select: { uniqueIdentifier: true } });
+                  const getProject = await tx.project.findUnique({ where: { id: projectId }, select: { uniqueIdentifier: true, firstTaskPointerTaskId: true } });
                   const nextUniqueIndex = await getNextUniqueTaskIndex(projectId, tx);
                   const row = await tx.task.create({
                     data: {
@@ -150,7 +152,7 @@ const create = async ({title, description, section, userId, ranking, projectId,s
                     }
                   })
                   await persistAgentTaskCreatedPending(tx, row.id)
-                  return { taskId: row.id, result: row, webhookTask: buildWebhookTaskSnapshot(row, sectionExists.section_title) }
+                  return { taskId: row.id, firstTaskPointerTaskId: getProject?.firstTaskPointerTaskId ?? null, result: row, webhookTask: buildWebhookTaskSnapshot(row, sectionExists.section_title) }
                 }, "web")
                 task = created.result
                 boardWebhookDeliveryIds = created.boardWebhookDeliveryIds
@@ -167,7 +169,7 @@ const create = async ({title, description, section, userId, ranking, projectId,s
             else{
                 const created = await createTaskWithBoardWebhookOutbox(prisma, taskCreatedActor, async (tx) => {
                   await tx.$executeRaw`SELECT pg_advisory_xact_lock(${TASK_UNIQUE_INDEX_ADVISORY_LOCK_CLASS}::int, ${projectId}::int)`;
-                  const getProject = await tx.project.findUnique({ where: { id: projectId }, select: { uniqueIdentifier: true } });
+                  const getProject = await tx.project.findUnique({ where: { id: projectId }, select: { uniqueIdentifier: true, firstTaskPointerTaskId: true } });
                   const nextUniqueIndex = await getNextUniqueTaskIndex(projectId, tx);
                   const row = await tx.task.create({
                     data: {
@@ -182,7 +184,7 @@ const create = async ({title, description, section, userId, ranking, projectId,s
                     }
                   })
                   await persistAgentTaskCreatedPending(tx, row.id)
-                  return { taskId: row.id, result: row, webhookTask: buildWebhookTaskSnapshot(row, sectionExists.section_title) }
+                  return { taskId: row.id, firstTaskPointerTaskId: getProject?.firstTaskPointerTaskId ?? null, result: row, webhookTask: buildWebhookTaskSnapshot(row, sectionExists.section_title) }
                 }, "web")
                 task = created.result
                 boardWebhookDeliveryIds = created.boardWebhookDeliveryIds

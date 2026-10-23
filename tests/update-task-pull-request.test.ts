@@ -85,6 +85,7 @@ async function main() {
     { method: 'POST' }
   )
   const ctx = {
+    teamScope: null,
     user: { id: 6, email: 'valentin@example.com' },
     agentId: null,
   }
@@ -172,6 +173,7 @@ async function main() {
         taskId: 1,
         userId: 6,
         agentId: null,
+        teamScope: null,
         url: canonicalUrl,
       },
     ])

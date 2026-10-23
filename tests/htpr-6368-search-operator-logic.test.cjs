@@ -83,7 +83,7 @@ test('type: picks which candidates are ranked', async () => {
   for (const [query, tasks, comments] of [['login type:ticket', 1, 0], ['login type:comment', 0, 1], ['login -type:comment', 1, 0], ['login', 1, 1]]) {
     calls.tasks = 0
     calls.comments = 0
-    const result = await rankedSearchWhere(parse(query), [7], 'Normal', 50, {}, undefined, true, false)
+    const result = await rankedSearchWhere(parse(query), [7], 'Normal', 50, {}, undefined, true)
     assert.deepEqual([calls.tasks > 0 ? 1 : 0, calls.comments > 0 ? 1 : 0], [tasks, comments], query)
     assert.ok(Array.isArray(result.rankedIds))
   }
@@ -113,29 +113,29 @@ test('type:ticket with commenter: does not return comment results', async () => 
     [commenterFilters, '', true],
   ]) {
     calls.comments = 0
-    const result = await rankedSearchWhere({ text, filters }, [7], 'Normal', 50, {}, undefined, true, true)
+    const result = await rankedSearchWhere({ text, filters }, [7], 'Normal', 50, {}, undefined, true)
     assert.equal(result.commentMode, mode)
     if (!mode) assert.equal(calls.comments, 0)
   }
 })
 
 test('type:comment without text still takes the comment payload path', async () => {
-  const result = await rankedSearchWhere(parse('type:comment'), [7], 'Normal', 50, {}, undefined, true, false)
+  const result = await rankedSearchWhere(parse('type:comment'), [7], 'Normal', 50, {}, undefined, true)
   assert.equal(result.commentMode, true)
-  const text = await rankedSearchWhere(parse('login type:comment'), [7], 'Normal', 50, {}, undefined, true, false)
+  const text = await rankedSearchWhere(parse('login type:comment'), [7], 'Normal', 50, {}, undefined, true)
   assert.equal(text.commentById.get(2).createdAt === undefined, true)
   assert.equal(text.commentById.get(2).commentText, 'hi')
 })
 
 test('comment-only enumeration requires a matching comment in the task where, page and count', async () => {
   calls.groupBy = []
-  const result = await rankedSearchWhere(parse('type:comment'), [7], 'Normal', 50, {}, undefined, true, false)
+  const result = await rankedSearchWhere(parse('type:comment'), [7], 'Normal', 50, {}, undefined, true)
   const needs = (where) => where.AND.some((part) => part.comments?.some?.activity)
   assert.ok(needs(result.where), 'returned where (used for MCP total and paging) requires a comment')
   assert.ok(needs(calls.groupBy[0].where.task.AND[0]), 'page query requires a comment')
-  const sorted = await rankedSearchWhere(parse('type:comment'), [7], 'Normal', 50, {}, undefined, true, false, [{ updatedAt: 'desc' }])
+  const sorted = await rankedSearchWhere(parse('type:comment'), [7], 'Normal', 50, {}, undefined, true, [{ updatedAt: 'desc' }])
   assert.ok(needs(sorted.where))
-  const ticketOnly = await rankedSearchWhere(parse('type:ticket'), [7], 'Normal', 50, {}, undefined, true, false)
+  const ticketOnly = await rankedSearchWhere(parse('type:ticket'), [7], 'Normal', 50, {}, undefined, true)
   assert.ok(!needs(ticketOnly.where))
 })
 
@@ -147,14 +147,14 @@ test('phrases apply to the returned item: the comment for comments, title and de
   const anyWhere = JSON.stringify((await searchFilterWhere(parse('"login page"'), [7], 'Normal')).AND)
   assert.ok(anyWhere.includes('"comments"'))
   calls.groupBy = []
-  await rankedSearchWhere(parseSearchQuery('commenter:6 "login page"', {}, true, true), [7], 'Normal', 50, {}, undefined, true, true)
+  await rankedSearchWhere(parseSearchQuery('commenter:6 "login page"', {}, true, true), [7], 'Normal', 50, {}, undefined, true)
   assert.ok(JSON.stringify(calls.groupBy[0].where).includes('login page'), 'comment predicate carries the phrase')
   calls.commentRows = [
     { id: 'a', taskId: '2', commentText: 'page login broken', creatorName: 'A' },
     { id: 'b', taskId: '3', commentText: 'the Login Page is broken', creatorName: 'A' },
   ]
   try {
-    const result = await rankedSearchWhere(parse('login page type:comment "login page"'), [7], 'Normal', 50, {}, undefined, true, false)
+    const result = await rankedSearchWhere(parse('login page type:comment "login page"'), [7], 'Normal', 50, {}, undefined, true)
     assert.deepEqual([...result.commentById.keys()], [3])
   } finally { calls.commentRows = null }
 })

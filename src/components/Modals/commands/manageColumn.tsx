@@ -1,5 +1,5 @@
 import { updateSection as writeSection } from "@/lib/api/typedClient";
-import { HTPR_6979_TYPED_WRITES_FLAG, HTPR_6980_INSTANT_COLUMN_DELETE_FLAG, HTPR_7040_LAST_COLUMN_DELETE_MESSAGE_FLAG, HTPR_7043_NO_EMPTY_BOARD_FLASH_FLAG } from "@/lib/flags/keys";
+import { HTPR_6979_TYPED_WRITES_FLAG, HTPR_7040_LAST_COLUMN_DELETE_MESSAGE_FLAG, HTPR_7043_NO_EMPTY_BOARD_FLASH_FLAG } from "@/lib/flags/keys";
 import { IMember, IProject, IProjectsAll, ISection, IUser } from "@/models/model";
 import type { IAgent } from "@/models/model";
 import { currentProjectAtom, currentUserAtom, showCommandsAtom } from "@/store";
@@ -52,7 +52,6 @@ import { MobileViewContext } from "@/lib/contexts/mobileContext";
 const ManageColumns = ({ toggleModal }: { toggleModal: (add: boolean) => void }) => {
   const queryClient = useQueryClient();
   const typedWrites = useFlag(HTPR_6979_TYPED_WRITES_FLAG);
-  const instantColumnDelete = useFlag(HTPR_6980_INSTANT_COLUMN_DELETE_FLAG);
   const lastColumnDeleteMessage = useFlag(HTPR_7040_LAST_COLUMN_DELETE_MESSAGE_FLAG);
   const noEmptyBoardFlash = useFlag(HTPR_7043_NO_EMPTY_BOARD_FLASH_FLAG);
   let typedWrite: typeof writeSection | undefined;
@@ -582,7 +581,7 @@ const ManageColumns = ({ toggleModal }: { toggleModal: (add: boolean) => void })
     : autoAssignName;
 
   const confirmDelete = async () => {
-    if (instantColumnDelete && editSection && currentProject) {
+    if (editSection && currentProject) {
       const projectId = currentProject.id;
       const queryKey = [
         globalConstants.GetAllManageColumnsPrefixKey,

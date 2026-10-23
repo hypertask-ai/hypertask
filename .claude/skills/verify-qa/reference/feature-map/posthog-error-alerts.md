@@ -11,6 +11,8 @@ Not directly. A production error reaches PostHog, PostHog calls the signed webho
 - GitHub retry and failure paths cannot be forced live: cover them with `tests/posthog-error-dispatch.test.cjs`.
 - Browser noise filters (HTPR-7399): headless Chromium with QA 985, a normal Chrome user agent and `navigator.webdriver` false, `context.route('**/api/errors')` answered 204 locally so nothing reaches PostHog. On a board, `Promise.reject` an AxiosError-shaped error (`isAxiosError`, `code: 'ECONNABORTED'`, `config.url`). `Request aborted` must send no beacon; `timeout of 1000ms exceeded` with the same code and a plain `Error('Request aborted')` must each send one.
 
+- Bare network noise (HTPR-7570): after deploy, run `node ~/.local/state/vcc-evidence/HTPR-7570/live-check.mjs` on a machine permitted to run browser QA, optionally with `QA_TICKET_URL=https://app.hypertask.ai/detail/project-7049/<existing-ticket-number>`. It uses QA 985, intercepts `/api/errors` locally, checks frame-less lowercase network notifications are filtered without replacing the ticket, then throws a render error through the deployed Next boundary and app global-error component and requires a report. This verifies telemetry filtering, not recovery from the original unidentified failure.
+
 ## What usually breaks
 
 - The webhook secret or GitHub token missing in Vercel, so every alert 503s.

@@ -1,0 +1,11 @@
+{
+  "keyv-cacheable-worm-2026-08": {
+    "advisory": "YPER4-596: keyv/cacheable npm worm, August 2026",
+    "versions": {
+      "keyv": ["6.0.0"],
+      "cacheable": ["2.5.1"],
+      "flat-cache": ["6.1.24"],
+      "file-entry-cache": ["11.1.6"]
+    }
+  }
+}

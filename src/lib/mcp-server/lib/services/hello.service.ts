@@ -1,3 +1,4 @@
+import type { getFeatureCatalog } from '@/lib/mcp/featureCatalog';
 import type { IApiClient } from '../../types/index';
 import { generateCorrelationId } from '../../utils/correlation';
 import { logger } from '../../utils/logger';
@@ -35,10 +36,22 @@ export interface HelloResponse {
     instructions: string | null;
   }>;
   conventionsTruncated: boolean;
+  agent?: { id: string; displayName: string } | null;
+  startBoard?: { id: number; title: string; boardUrl: string } | null;
+  nextSteps?: Array<{
+    step: string;
+    command: string;
+    tool: string;
+    arguments: Record<string, unknown>;
+  }>;
 }
 
 export class HelloService {
   constructor(private readonly apiClient: IApiClient) {}
+
+  async listFeatures(): Promise<{ success: boolean; scope: string; features: Awaited<ReturnType<typeof getFeatureCatalog>> }> {
+    return this.apiClient.makeRequest('/mcp/features', { method: 'GET' }, generateCorrelationId());
+  }
 
   async getHello(): Promise<HelloResponse> {
     const correlationId = generateCorrelationId();

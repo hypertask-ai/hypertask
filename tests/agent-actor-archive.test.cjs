@@ -614,7 +614,7 @@ test("MCP updateTask signs the internal session with ctx.agentId", () => {
   );
   assert.match(
     source,
-    /signSession\(\{\s*id: userObj\.id,\s*email: userObj\.email,\s*\.\.\.\(ctx\.agentId \? \{ agentId: ctx\.agentId \} : \{\}\),?\s*\}\)/,
+    /signSession\(\{\s*id: userObj\.id,\s*email: userObj\.email,\s*\.\.\.\(ctx\.agentId \? \{ agentId: ctx\.agentId \} : \{\}\),\s*teamScope: ctx\.teamScope,\s*agentTokenGeneration: ctx\.agentTokenGeneration,?\s*\}\)/,
   );
 });
 

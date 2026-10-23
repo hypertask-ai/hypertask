@@ -1,7 +1,7 @@
 
 import { useEffect, useLayoutEffect } from "react";
 import { useFlag, useFlagReady } from "@/hooks/useFlag";
-import { HTPR_7002_INBOX_E_FIRST_PRESS_FLAG, HTPR_7004_NO_LOADING_FLASH_FLAG, HTPR_7009_DEDUPE_TASK_DETAIL_READS_FLAG } from "@/lib/flags/keys";
+import { HTPR_7009_DEDUPE_TASK_DETAIL_READS_FLAG } from "@/lib/flags/keys";
 import { focusManager } from "@tanstack/react-query";
 import { useTaskContext } from "@/lib/contexts/TaskDetail/TaskProvider";
 import taskDetailConfig from "@/lib/configs/taskDetail.config";
@@ -11,10 +11,8 @@ import { consumeTaskDetailReadinessSample, TASK_DETAIL_READINESS_MAX_MS, taskDet
 import { markTaskDetailPhase, readTaskDetailPhaseTimings, TASK_DETAIL_USABLE_MARK } from "@/lib/analytics/taskDetailPhaseTimings";
 import type { useTaskDetailInitialScrollValue } from "./useTaskDetailInitialScroll";
 export function useTaskDetailReadiness(context: useTaskDetailInitialScrollValue) {
-  const inboxEFirstPress = useFlag(HTPR_7002_INBOX_E_FIRST_PRESS_FLAG);
   const flagReady = useFlagReady(HTPR_7009_DEDUPE_TASK_DETAIL_READS_FLAG);
   const dedupe = useFlag(HTPR_7009_DEDUPE_TASK_DETAIL_READS_FLAG);
-  const noLoadingFlash = useFlag(HTPR_7004_NO_LOADING_FLASH_FLAG);
   const { cachedLayout } = useTaskContext();
   const { embedded, _currentTask, _parsedTask, handleKeyDown, handleKeyUp, sharedLink, isRecording, showMentionList, currentTask, carousalItems, getTask, setNonEssentialReady, readinessTaskRef, currentUser, updateActiveItemAndItemInView, setStickyElementHeight, showAiChatInterface, onWindowFocus } = context;
 
@@ -24,14 +22,14 @@ export function useTaskDetailReadiness(context: useTaskDetailInitialScrollValue)
     document.addEventListener("keydown", handleKeyDown);
     document.addEventListener("keyup", handleKeyUp);
     const path = `/detail/project-${currentTask?.projectId}/${currentTask?.uniqueIndex}`;
-    if (inboxEFirstPress) window.dispatchEvent(new CustomEvent("htpr-7002-detail-keyboard", {
+    window.dispatchEvent(new CustomEvent("htpr-7002-detail-keyboard", {
       detail: { path, handleKeyDown, ready: currentTask?._count?.notifications !== undefined },
     }));
 
     return () => {
       document.removeEventListener("keydown", handleKeyDown);
       document.removeEventListener("keyup", handleKeyUp);
-      if (inboxEFirstPress) window.dispatchEvent(new CustomEvent("htpr-7002-detail-keyboard", {
+      window.dispatchEvent(new CustomEvent("htpr-7002-detail-keyboard", {
         detail: { path, ready: false },
       }));
     };
@@ -44,12 +42,11 @@ export function useTaskDetailReadiness(context: useTaskDetailInitialScrollValue)
     currentTask,
     carousalItems,
     embedded,
-    inboxEFirstPress,
   ]);
 
   useEffect(() => {
-    getTask(flagReady && !dedupe && !(noLoadingFlash && (cachedLayout || window.history.state?.cachedTaskDetail?.taskId === _parsedTask.id)));
-  }, [_currentTask, _parsedTask.id, noLoadingFlash, cachedLayout, dedupe, flagReady]);
+    getTask(flagReady && !dedupe && !(cachedLayout || window.history.state?.cachedTaskDetail?.taskId === _parsedTask.id));
+  }, [_currentTask, _parsedTask.id, cachedLayout, dedupe, flagReady]);
 
   useEffect(() => {
     const readinessTask = `${_parsedTask.projectId}:${_parsedTask.id}`;

@@ -1,29 +1,29 @@
 "use client";
 import { ITypedTask, IUser } from "@/models/model";
 import styles from "@/styles/search.module.scss";
-import HypertasksCommands from "@/components/commands";
 import formatDateDifference from "@/utils/generateTime";
 import { Check } from "lucide-react";
 import { searchConfig } from "@/lib/configs/search.config";
 import { useSearch } from "@/hooks/Search/useSearch";
 import { cn } from "@/utils/undoActions/helperFuncs";
-import { Fragment, KeyboardEvent, RefObject, useContext } from "react";
-import { useFlag } from "@/hooks/useFlag";
+import { Fragment, RefObject, Suspense, startTransition, useContext, useEffect, useLayoutEffect, useRef, useState } from "react";
+import { useFlag, useFlagLoaded } from "@/hooks/useFlag";
+import { useDeviceContext } from "@/lib/contexts/deviceContext";
 import { useRouter, useSearchParams } from "next/navigation";
 import { buildFullScreenChatPath } from "@/lib/aiChatDisplayMode";
 import { HTPR_6936_ASK_AI_FULLSCREEN_FLAG } from "@/lib/flags/keys";
-import { HTPR_6688_SEARCH_AUTOCOMPLETE_FLAG, HTPR_6865_SEARCH_LAYOUT_FLAG, HTPR_6878_SEARCH_LABEL_SCOPE_FLAG, HTPR_6879_SEARCH_ESC_BACK_FLAG, HTPR_6880_SEARCH_COMMENTER_FLAG } from "@/lib/flags/keys";
 import { highlightedSearchSnippet, highlightedTitle } from "@/lib/search/autocomplete";
-import { HTPR_6882_SEARCH_MATCH_HIGHLIGHTS_FLAG, HTPR_6911_SEARCH_ROW_HIGHLIGHT_FLAG } from "@/lib/flags/keys";
 import LabelWrapper from "@/components/Labels/LabelWrapper";
 import { MobileViewContext } from "@/lib/contexts/mobileContext";
 import { useRecoilValue, useSetRecoilState } from "@/lib/state";
-import { aiChatPendingPromptAtom, appShellRailAtom } from "@/store";
+import { aiChatPendingPromptAtom, appShellRailAtom, showCommandsAtom } from "@/store";
 import { useGlobalUIState } from "@/components/ProviderGlobal/useGlobalUIState";
 import AppShellRail from "@/components/PageComponents/Kanban/HeaderComponents/AppShellRail";
 import SearchChipsInput from "./SearchChipsInput";
 import "./search-autocomplete.css";
+import type { CommandFocusProxy } from "@/components/commandTypes";
 import type { ServerStartedSearch } from "@/lib/search/serverStartedSearch";
+import { HTPR_7547_SEARCH_LAZY_CLOSED_FLAG, HTPR_7618_SEARCH_ROWS_FIT_PANE_FLAG } from "@/lib/flags/keys";
 
 interface IProps {
   _searchTerm: string;
@@ -47,19 +47,18 @@ const SearchComp = ({
   searchOnce = false,
 }: IProps) => {
   const router = useRouter();
+  const lazyClosedCommands = useFlag(HTPR_7547_SEARCH_LAZY_CLOSED_FLAG);
+  const lazyClosedCommandsLoaded = useFlagLoaded(HTPR_7547_SEARCH_LAZY_CLOSED_FLAG);
+  const [HypertasksCommands, setCommands] = useState<typeof import("@/components/commands").default>();
+  const commandFocusProxy = useRef<CommandFocusProxy>({ current: null, compose: true }).current;
+  const setShowCommands = useSetRecoilState(showCommandsAtom);
+  const isApple = useDeviceContext();
   const askAiFullscreenFlagEnabled = useFlag(HTPR_6936_ASK_AI_FULLSCREEN_FLAG);
   const searchParams = useSearchParams();
   const searchTerm = askAiFullscreenEnabled && askAiFullscreenFlagEnabled
     ? searchParams?.get("searchTerm") ?? _searchTerm
     : _searchTerm;
-  const autocompleteEnabled = useFlag(HTPR_6688_SEARCH_AUTOCOMPLETE_FLAG);
-  const layoutFlagEnabled = useFlag(HTPR_6865_SEARCH_LAYOUT_FLAG);
-  const layoutEnabled = layoutFlagEnabled && autocompleteEnabled;
-  const matchHighlightsFlagEnabled = useFlag(HTPR_6882_SEARCH_MATCH_HIGHLIGHTS_FLAG);
-  const rowHighlightFlagEnabled = useFlag(HTPR_6911_SEARCH_ROW_HIGHLIGHT_FLAG);
-  const commenterFlagEnabled = useFlag(HTPR_6880_SEARCH_COMMENTER_FLAG);
-  const labelScopeFlagEnabled = useFlag(HTPR_6878_SEARCH_LABEL_SCOPE_FLAG);
-  const searchEscBackFlagEnabled = useFlag(HTPR_6879_SEARCH_ESC_BACK_FLAG);
+  const rowsFitPane = useFlag(HTPR_7618_SEARCH_ROWS_FIT_PANE_FLAG);
   const setAiChatPendingPrompt = useSetRecoilState(aiChatPendingPromptAtom);
   const { openAIChatInterface } = useGlobalUIState();
   const isMbl = useContext(MobileViewContext);
@@ -79,7 +78,6 @@ const SearchComp = ({
     handleMouseLeave,
     handleMouseMove,
     searchCache,
-    selectedHistory,
     updateSearchHistory,
     showCommands,
     setInputValue,
@@ -91,15 +89,34 @@ const SearchComp = ({
     includeArchived,
     setIncludeArchivedResults,
   } = useSearch(searchTerm, _initialTabIndex, _includeArchived, _fromProject, serverStartedSearch, searchOnce);
-  const matchSnippets = matchHighlightsFlagEnabled && layoutEnabled
-    ? typedTasks.map((task) => highlightedSearchSnippet((task.commentId ? task.commentText : task.descriptionText) ?? '', inputValue, commenterFlagEnabled && layoutEnabled))
-    : undefined;
-  const showAskAiRow =
-    !layoutEnabled && inputValue.trim().length >= 2 && typedTasks.length === 0;
+  const loadCommands = () => {
+    if (HypertasksCommands || (!showCommands.show && !lazyClosedCommandsLoaded)) return;
+    let cancelled = false;
+    void import("@/components/commands").then(({ default: Commands }) => {
+      if (!cancelled) startTransition(() => setCommands(() => Commands));
+    }).catch(() => {
+      if (!cancelled && lazyClosedCommands) setShowCommands((prev) => prev.show ? { ...prev, show: false } : prev);
+    });
+    return () => { cancelled = true; };
+  };
+  useEffect(lazyClosedCommands && !showCommands.show ? () => {} : loadCommands,
+    [HypertasksCommands, showCommands.show, lazyClosedCommands, lazyClosedCommandsLoaded]);
+  useLayoutEffect(() => {
+    if (showCommands.show && !HypertasksCommands) {
+      commandFocusProxy.current?.focus({ preventScroll: true });
+    } else if (!showCommands.show) {
+      delete commandFocusProxy.pendingEnter;
+      if (commandFocusProxy.current) {
+        if (document.activeElement === commandFocusProxy.current) commandFocusProxy.current.blur();
+        commandFocusProxy.current.value = "";
+      }
+    }
+  }, [showCommands.show, HypertasksCommands]);
+  const matchSnippets = typedTasks.map((task) => highlightedSearchSnippet((task.commentId ? task.commentText : task.descriptionText) ?? '', inputValue, true));
 
   function openAskAi(readableQuery?: string) {
-    const query = labelScopeFlagEnabled && layoutEnabled && readableQuery !== undefined ? readableQuery : inputValue.trim();
-    if (!query || (!layoutEnabled && query.length < 2)) return;
+    const query = readableQuery !== undefined ? readableQuery : inputValue.trim();
+    if (!query) return;
     if (askAiFullscreenEnabled && askAiFullscreenFlagEnabled) {
       const searchUrl = new URL(window.location.href);
       searchUrl.searchParams.set("searchTerm", inputValue);
@@ -125,45 +142,33 @@ const SearchComp = ({
         suppressHydrationWarning
         onClick={(e) => setSelectedIndex(null)}
         autoFocus={false}
-        className={cn(`py-9 min-h-screen bg-containerBackground flex-col rounded-[4px] my-0 global-view-width flex items-center  search-input  ${styles.links_modal}`, autocompleteEnabled && 'search-autocomplete')}
+        className={cn(`py-9 min-h-screen bg-containerBackground flex-col rounded-[4px] my-0 global-view-width flex items-center  search-input  ${styles.links_modal}`, 'search-autocomplete')}
       >
         <div className={cn('w-full px-0', appShellRailOn && 'pl-[64px] @xl:pl-0')}>
-          {autocompleteEnabled ? (
-            <SearchChipsInput
-              value={inputValue}
-              onChange={setInputValue}
-              onRun={updateSearchHistory}
-              boardId={_fromProject}
-              inputRef={tasksInputRef}
-              recentSearches={searchCache.history}
-              layoutEnabled={layoutEnabled}
-              availableBoards={labelScopeFlagEnabled && layoutEnabled ? availableSearchBoards : undefined}
-              onAskAi={openAskAi}
-              showSuggestions={isSearchDraft || (searchEscBackFlagEnabled && layoutEnabled && !inputValue.trim())}
-              autocompleteEnabled
-            />
-          ) : (
-            <SearchChipsInput
-              value={inputValue}
-              onChange={setInputValue}
-              onRun={updateSearchHistory}
-              boardId={_fromProject}
-              inputRef={tasksInputRef}
-            />
-          )}
+          <SearchChipsInput
+            value={inputValue}
+            onChange={setInputValue}
+            onRun={updateSearchHistory}
+            boardId={_fromProject}
+            inputRef={tasksInputRef}
+            recentSearches={searchCache.history}
+            layoutEnabled={true}
+            availableBoards={availableSearchBoards}
+            onAskAi={openAskAi}
+            showSuggestions={isSearchDraft || !inputValue.trim()}
+          />
 
           <>
               {responseMessage !== "None" &&
-              typedTasks.length === 0 &&
-              !showAskAiRow ? (
-                <div className={layoutFlagEnabled && autocompleteEnabled ? "px-4 @md:px-9 my-4" : "px-0 @md:!px-16 my-4"}>
-                  <span className={layoutEnabled ? "text-text-light-gray" : "text-[#8e9093]"}>{responseMessage}</span>
+              typedTasks.length === 0 ? (
+                <div className="px-4 @md:px-9 my-4">
+                  <span className="text-text-light-gray">{responseMessage}</span>
                 </div>
               ) : (
                 <div>
                   {results && tabs.length > 2 && (
-                    <div className={cn("hidden @md:block w-full overflow-x-auto scrollbar-none no-scrollbar @md:px-9 mt-4", layoutEnabled && "block px-4")}>
-                      <div className={layoutEnabled ? "flex grow gap-3 [flex-wrap:nowrap] md:[flex-wrap:wrap] min-h-[44px] md:min-h-0 [&>div]:shrink-0 md:[&>div]:shrink" : "flex flex-wrap grow gap-3"}>
+                    <div className={cn("hidden @md:block w-full overflow-x-auto scrollbar-none no-scrollbar @md:px-9 mt-4", "block px-4")}>
+                      <div className="flex grow gap-3 [flex-wrap:nowrap] md:[flex-wrap:wrap] min-h-[44px] md:min-h-0 [&>div]:shrink-0 md:[&>div]:shrink">
                         {tabs.map((item, index) => (
                           <SplitTitle
                             key={`split-alltasks-${index}`}
@@ -179,16 +184,13 @@ const SearchComp = ({
                       </div>
                     </div>
                   )}
-                  {(showAskAiRow || typedTasks.length > 0) && (
+                  {typedTasks.length > 0 && (
                     <ul
                       id={searchConfig.elementIds.results.id}
                       ref={ulRef}
                       onMouseMove={handleMouseMove}
-                      className={layoutEnabled ? "rounded-b-[4px] mt-3 px-4 @md:px-9 text-dense text-white-black overflow-y-auto scrollbar-none" : "rounded-b-[4px] mt-3 px-0 text-dense text-gray-200 overflow-y-auto scrollbar-none"}
+                      className="rounded-b-[4px] mt-3 px-4 @md:px-9 text-dense text-white-black overflow-y-auto scrollbar-none"
                     >
-                      {showAskAiRow && (
-                        <AskAiRow query={inputValue} onSelect={openAskAi} />
-                      )}
                       {typedTasks.length > 0 &&
                         typedTasks.map((item, index) => {
                           const showThisBoard =
@@ -211,99 +213,74 @@ const SearchComp = ({
                               key={`${searchConfig.elementIds.results.childKeys}-${index}`}
                             >
                               {showThisBoard && (
-                                <SearchGroupLabel label="This board" aligned={layoutEnabled} />
+                                <SearchGroupLabel label="This board" />
                               )}
                               {showOtherBoards && (
-                                <SearchGroupLabel label="Other boards" aligned={layoutEnabled} />
+                                <SearchGroupLabel label="Other boards" />
                               )}
                               <TaskListRow
                                 task={item}
                                 highlight={item.highlight}
-                                titleParts={autocompleteEnabled ? highlightedTitle(item.taskTitle ?? '', inputValue, commenterFlagEnabled && layoutEnabled) : undefined}
+                                titleParts={highlightedTitle(item.taskTitle ?? '', inputValue, true)}
                                 index={index}
                                 handleLinkClick={handleLinkClick}
                                 handleMouseEnter={handleMouseEnter}
                                 handleMouseLeave={handleMouseLeave}
                                 isActive={selectedIndex === index}
                                 liRef={liSelectedRef}
-                                aligned={layoutEnabled}
-                                inboxHighlight={layoutEnabled && rowHighlightFlagEnabled}
-                                snippetParts={matchSnippets?.[index]}
+                                snippetParts={matchSnippets[index]}
+                                fitPane={rowsFitPane}
                               />
                             </Fragment>
                           );
                         })}
                     </ul>
                   )}
-                  {responseMessage !== "None" &&
-                    typedTasks.length === 0 &&
-                    showAskAiRow && (
-                      <div className="px-0 @md:!px-16 my-4">
-                        <span className="text-[#8e9093]">
-                          {responseMessage}
-                        </span>
-                      </div>
-                    )}
-                  {!layoutEnabled && results && tabs.length > 2 && (
-                    <div className="flex inbox_footer @md:hidden no-scrollbar scrollbar-none gap-3 w-100 bg-hoverCardBackground  h-20 @md:h-8 inbox_title px-4">
-                      {tabs.map((item, index) => (
-                        <SplitTitle
-                          key={`split-alltasks-${index}`}
-                          isSelected={activeSplit === index}
-                          onClick={() => updateSplitAndTasks(index)}
-                          tab={{
-                            idx: index,
-                            project: item,
-                            length: results[item].length,
-                          }}
-                        />
-                      ))}
-                    </div>
-                  )}
                 </div>
               )}
-
-              {!layoutEnabled && typedTasks.length === 0 &&
-                !showAskAiRow &&
-                searchCache.history &&
-                searchCache.history.length > 0 && (
-                  <ul
-                    id={searchConfig.elementIds.history.id}
-                    ref={ulRef}
-                    onMouseMove={handleMouseMove}
-                    className="rounded-b-[4px] mt-3 px-0 text-dense text-gray-200 overflow-y-auto scrollbar-none"
-                  >
-                    {searchCache.history.map((term: string, index: number) => (
-                      <SearchHistoryRow
-                        term={term}
-                        index={index}
-                        handleMouseEnter={handleMouseEnter}
-                        handleMouseLeave={handleMouseLeave}
-                        isActive={selectedHistory === index}
-                        liRef={liSelectedRef}
-                        handleLinkClick={() => {
-                          document
-                            .getElementById(searchConfig.elementIds.input.id)
-                            ?.blur();
-                          setInputValue(String(term));
-                          updateSearchHistory(String(term));
-                        }}
-                        key={`${searchConfig.elementIds.history.childKeys}-${index}`}
-                      />
-                    ))}
-                  </ul>
-                )}
             </>
         </div>
       </div>
       {showCommands.show && (
-        <HypertasksCommands
-          callbackHandler={handleCommand}
-          contextOptions={{
-            context: "Others",
-            searchOptions: { includeArchived },
-          }}
-        />
+        <>
+          <textarea
+            ref={(input) => { commandFocusProxy.current = input; }}
+            id="search-command-focus-proxy"
+            inputMode="search"
+            autoComplete="off"
+            autoCorrect="off"
+            autoCapitalize="none"
+            spellCheck={false}
+            tabIndex={-1}
+            aria-label="Command search"
+            className="fixed left-0 top-0 h-px w-px opacity-0 pointer-events-none text-[16px]"
+            onInput={() => { delete commandFocusProxy.pendingEnter; }}
+            onKeyDown={(event) => {
+              if (event.key === "Enter" && !event.shiftKey && !event.nativeEvent.isComposing) {
+                event.preventDefault();
+                event.stopPropagation();
+                if (!event.repeat) commandFocusProxy.pendingEnter = event.currentTarget.value;
+              }
+              if (event.key === "Escape" || (event.key.toLowerCase() === "k" &&
+                ((isApple && event.metaKey) || (!isApple && event.ctrlKey)))) {
+                event.preventDefault();
+                setShowCommands((prev) => ({ ...prev, show: false }));
+              }
+            }}
+          />
+          {HypertasksCommands && (
+            <Suspense fallback={null}>
+              <HypertasksCommands
+                callbackHandler={handleCommand}
+                focusProxy={commandFocusProxy}
+                contextOptions={{
+                  context: "Others",
+                  searchOptions: { includeArchived },
+                }}
+              />
+            </Suspense>
+          )}
+        </>
       )}
     </>
   );
@@ -316,51 +293,14 @@ const SearchComp = ({
   ) : content;
 };
 
-const SearchGroupLabel = ({ label, aligned }: { label: string; aligned?: boolean }) => (
+const SearchGroupLabel = ({ label }: { label: string }) => (
   <li
     aria-hidden="true"
-    className={aligned ? "py-2 text-micro font-medium text-text-light-gray list-none" : "px-4 py-2 text-micro font-medium text-text-light-gray list-none"}
+    className="py-2 text-micro font-medium text-text-light-gray list-none"
   >
     {label}
   </li>
 );
-
-interface IAskAiRow {
-  query: string;
-  onSelect: () => void;
-}
-
-const AskAiRow = ({ query, onSelect }: IAskAiRow) => {
-  function handleKeyDown(event: KeyboardEvent<HTMLButtonElement>) {
-    if (event.key === "ArrowUp") {
-      event.preventDefault();
-      event.stopPropagation();
-      document.getElementById(searchConfig.elementIds.input.id)?.focus();
-      return;
-    }
-    if (event.key !== "Enter" && event.key !== "Tab") return;
-    event.preventDefault();
-    event.stopPropagation();
-    onSelect();
-  }
-
-  return (
-    <li className="@md:border-l-4 @md:border-l-transparent group/selection_row flex items-center gap-2 cursor-pointer text-white-black hover:bg-active-elementBg focus-within:bg-active-elementBg focus-within:border-l-selected-item-border">
-      <button
-        id={searchConfig.elementIds.askAiRow.id}
-        type="button"
-        className="flex w-full min-w-0 items-center gap-2 px-4 py-2 text-left outline-none"
-        onClick={onSelect}
-        onKeyDown={handleKeyDown}
-      >
-        <span className="shrink-0 font-semibold text-hypertasks-ai-purple">
-          Ask AI
-        </span>
-        <span className="truncate font-medium text-white-black">{query}</span>
-      </button>
-    </li>
-  );
-};
 
 interface ITaskRow {
   task: ITypedTask;
@@ -371,9 +311,8 @@ interface ITaskRow {
   isActive: boolean;
   highlight: any;
   titleParts?: ReturnType<typeof highlightedTitle>;
-  aligned?: boolean;
-  inboxHighlight?: boolean;
   snippetParts?: ReturnType<typeof highlightedSearchSnippet>;
+  fitPane?: boolean;
   liRef: RefObject<HTMLLIElement | null>;
 }
 
@@ -387,9 +326,8 @@ const TaskListRow = (props: ITaskRow) => {
     isActive,
     highlight,
     titleParts,
-    aligned,
-    inboxHighlight,
     snippetParts,
+    fitPane,
     liRef,
   } = props;
 
@@ -399,20 +337,14 @@ const TaskListRow = (props: ITaskRow) => {
       id={`task_${task.taskId}`}
       onMouseEnter={() => handleMouseEnter(index)}
       onMouseLeave={handleMouseLeave}
-      className={cn(
-        aligned ? "group/selection_row flex min-w-0 items-center gap-2 cursor-pointer" : "@md:border-l-4  sm:px-2 group/selection_row flex items-center gap-2 cursor-pointer",
-        !inboxHighlight && {
-          ["@md:bg-active-elementBg border-l-selected-item-border"]: isActive,
-          ["@md:border-l-transparent bg-transparent"]: !isActive,
-        }
-      )}
-      data-search-layout-row={inboxHighlight ? "" : undefined}
-      data-selected={inboxHighlight ? isActive : undefined}
+      className="group/selection_row flex min-w-0 items-center gap-2 cursor-pointer"
+      data-search-layout-row=""
+      data-selected={isActive}
       onClick={() => handleLinkClick(task, index)}
       ref={liRef}
     >
       <div
-        className={`font-medium ${aligned ? "min-w-0 [&>div]:min-w-0" : "px-4"} text-white-black flex flex-col @md:flex py-2 @md:items-center gap-1 @md:!gap-3 ${styles.list_container}`}
+        className={`font-medium min-w-0 [&>div]:min-w-0 text-white-black flex flex-col @md:flex py-2 @md:items-center gap-1 @md:!gap-3 ${fitPane ? styles.list_container_pane : styles.list_container}`}
       >
         <div className="flex justify-between items-center">
           <div className="flex items-center justify-center">
@@ -524,45 +456,6 @@ const TaskListRow = (props: ITaskRow) => {
 
         <div className="border-b border-[hsla(216,8%,23%,0.2)] w-[90%] mx-auto my-2 block @md:hidden" />
       </div>
-    </li>
-  );
-};
-
-interface ISearchRow {
-  term: string;
-  handleMouseEnter: (index: number) => void;
-  handleMouseLeave: () => void;
-  handleLinkClick: () => void;
-  index: number;
-  isActive: boolean;
-  liRef: RefObject<HTMLLIElement | null>;
-}
-
-const SearchHistoryRow = (props: ISearchRow) => {
-  const {
-    liRef,
-    index,
-    isActive,
-    handleLinkClick,
-    handleMouseEnter,
-    handleMouseLeave,
-    term,
-  } = props;
-  return (
-    <li
-      ref={liRef}
-      className={cn(
-        "@md:border-l-4  sm:p-inbox-horizontal group/selection_row flex items-center gap-2 cursor-pointer text-white-black",
-        {
-          ["@md:bg-active-elementBg border-l-selected-item-border"]: isActive,
-          ["@md:border-l-transparent bg-transparent"]: !isActive,
-        }
-      )}
-      onMouseEnter={() => handleMouseEnter(index)}
-      onMouseLeave={handleMouseLeave}
-      onClick={handleLinkClick}
-    >
-      <span className="px-4 py-2">{String(term)}</span>
     </li>
   );
 };

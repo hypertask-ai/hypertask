@@ -1,0 +1,105 @@
+{
+  "status": "failure",
+  "run": {
+    "id": 39719731623,
+    "name": "CI Tests",
+    "head_branch": "production",
+    "head_sha": "4b51e2e8465063bf6d64a848e2aee6afe78db98e",
+    "status": "completed",
+    "conclusion": "failure",
+    "workflow_id": 345284758,
+    "created_at": "2026-10-22T03:58:06Z",
+    "html_url": "https://github.com/hypertask-ai/hypertask/actions/runs/39719731623",
+    "job": {
+      "id": 119631186995,
+      "name": "ci-tests",
+      "status": "completed",
+      "conclusion": "failure"
+    },
+    "run_attempt": 1
+  },
+  "firstRed": {
+    "head_sha": "4b51e2e8465063bf6d64a848e2aee6afe78db98e",
+    "id": 39719731623,
+    "run_attempt": 1
+  },
+  "green": {
+    "id": 39717702716,
+    "name": "CI Tests",
+    "head_branch": "production",
+    "head_sha": "12e5f6a4c6e13e91b57c3963e587193214b68899",
+    "status": "completed",
+    "conclusion": "success",
+    "workflow_id": 345284758,
+    "created_at": "2026-10-22T03:35:46Z",
+    "html_url": "https://github.com/hypertask-ai/hypertask/actions/runs/39717702716",
+    "run_attempt": 1
+  },
+  "failures": [
+    {
+      "file": "tests/htpr-7322-agent-feature-discovery.test.cjs",
+      "error": "TypeError: pickDecisionTaskIds is not a function or its return value is not iterable"
+    }
+  ],
+  "prs": [
+    {
+      "number": 1789,
+      "title": "HTPR-7311 [FEATURE] Opening a ticket from Decisions jumps to the question",
+      "url": "https://github.com/hypertask-ai/hypertask/pull/1789",
+      "files": [
+        ".claude/skills/verify-qa/reference/feature-map/inbox.md",
+        "src/components/notifications/inboxSplit/index.tsx",
+        "src/hooks/Task Detail/useArchiveAndNavigate.ts",
+        "src/lib/flags/definitions/htpr-7311-decision-comment-link.ts",
+        "src/lib/inboxDecisions.ts",
+        "src/models/model.ts",
+        "src/utils/controllers/notifications/decisionTasks.ts",
+        "src/utils/controllers/notifications/getAllWithDecisions.ts",
+        "tests/cached-task-detail-review.test.cjs",
+        "tests/htpr-7092-decisions.test.cjs",
+        "tests/htpr-7311-decision-comment-link.test.cjs",
+        "tests/task-page-inbox-removal.test.cjs"
+      ]
+    },
+    {
+      "number": 1777,
+      "title": "HTPR-7322 [CLI/MCP/AI] Agents learn the Decisions inbox and can list live features",
+      "url": "https://github.com/hypertask-ai/hypertask/pull/1777",
+      "files": [
+        "config/parity/contract.json",
+        "config/parity/generated-inventory.json",
+        "docs/mcp-tools.md",
+        "docs/parity.md",
+        "scripts/ai-eval.cjs",
+        "src/app/api/mcp/features/route.ts",
+        "src/app/api/mcp/hello/hello.test.ts",
+        "src/lib/aiFeedback/routes.ts",
+        "src/lib/flags/definitions/htpr-7322-agent-feature-discovery.ts",
+        "src/lib/mcp-server/config/consolidated-descriptions.ts",
+        "src/lib/mcp-server/config/descriptions/user_context.json",
+        "src/lib/mcp-server/config/tool-annotations.ts",
+        "src/lib/mcp-server/config/tool-metadata.ts",
+        "src/lib/mcp-server/config/tool-summaries.ts",
+        "src/lib/mcp-server/lib/services/hello.service.ts",
+        "src/lib/mcp-server/tool-response.ts",
+        "src/lib/mcp-server/tools/index.ts",
+        "src/lib/mcp-server/tools/list-features.tool.ts",
+        "src/lib/mcp/decisionsGuidance.ts",
+        "src/lib/mcp/featureCatalog.ts",
+        "src/lib/mcp/hello/getHelloPayload.ts",
+        "src/lib/mcp/operations/features/operation.ts",
+        "src/lib/mcp/operations/index.ts",
+        "src/lib/mcp/operations/pages/create/operation.ts",
+        "tests/ai-eval.test.cjs",
+        "tests/board-rename-tools.test.cjs",
+        "tests/fixtures/ai/recorded-contract.json",
+        "tests/htpr-7122-agent-directive.test.cjs",
+        "tests/htpr-7298-consumers.test.cjs",
+        "tests/htpr-7322-agent-feature-discovery-flag.test.cjs",
+        "tests/htpr-7322-agent-feature-discovery.test.cjs",
+        "tests/mcp-consolidated-tools.test.cjs",
+        "tests/mcp-deferred-tools.test.ts"
+      ]
+    }
+  ]
+}

@@ -68,7 +68,9 @@ async function renderReloadAndMeasure({ historyOnFirstPaint = false } = {}) {
     "src/components/AI_CHAT/TypingIndicator.tsx",
   );
   const listPath = path.join(root, "src/components/AI_CHAT/MessageList.tsx");
-  const stubbed = [contextPath, itemPath, typingPath, listPath];
+  const storePath = path.join(root, "src/store/index.ts");
+  const statePath = path.join(root, "src/lib/state.tsx");
+  const stubbed = [contextPath, itemPath, typingPath, listPath, storePath, statePath];
   const previousModules = new Map(
     stubbed.map((filename) => [filename, require.cache[filename]]),
   );
@@ -146,6 +148,13 @@ async function renderReloadAndMeasure({ historyOnFirstPaint = false } = {}) {
             React.createElement("div", null, item?.content ?? ""),
         },
       };
+    }
+
+    for (const [filename, exports] of [
+      [storePath, { composeTaskQuestionsTaskIdAtom: "questionsTaskId" }],
+      [statePath, { useRecoilValue: () => null, useSetRecoilState: () => () => {} }],
+    ]) {
+      require.cache[filename] = { id: filename, filename, loaded: true, exports };
     }
 
     const jiti = createJiti(__filename, {

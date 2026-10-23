@@ -76,6 +76,7 @@ async function loadRoute() {
   stub("src/lib/mcp/auth.ts", {
     checkMcpRateLimit: async () => null,
     validateMcpAuth: async () => ({
+      user: { id: 6 }, teamScope: null,
       agentId: agentTokenIsAgent ? "agent-1" : null,
     }),
   });

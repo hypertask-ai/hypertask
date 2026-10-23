@@ -157,15 +157,15 @@ async function handleBatchGet(
   const tasks = await prisma.task.findMany({
     where: {
       id: { in: taskIds },
-      project: getProjectWhere(ctx.user.id, ctx.agentId),
+      project: getProjectWhere(ctx.user.id, ctx.agentId, ctx.teamScope),
     },
-    include: taskMcpGetInclude(ctx.user.id, ctx.agentId),
+    include: taskMcpGetInclude(ctx.user.id, ctx.agentId, ctx.teamScope),
   })
 
   const tasksById = new Map(
     tasks.map((task) => [
       task.id,
-      mapTaskToMcpGetResponse(task, ctx.user.id, ctx.agentId),
+      mapTaskToMcpGetResponse(task, ctx.user.id, ctx.agentId, ctx.teamScope),
     ])
   )
 

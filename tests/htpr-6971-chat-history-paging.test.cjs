@@ -82,7 +82,7 @@ async function withHistory(config, check) {
     new Function('require', 'module', 'exports', compiled)((name) => mocks[name] ?? require(name), loaded, loaded.exports);
     Chat = loaded.exports.default;
   }
-  function Probe() { history = useSessionAndChatHistory(taskId, true, taskId !== undefined);
+  function Probe() { history = useSessionAndChatHistory(taskId, config.historyEnabled ?? true, taskId !== undefined);
     if (useAiChatSessions) {
       const sessionsRef = React.useRef(history.sessions); sessionsRef.current = history.sessions;
       const chatHistoryReadyRef = React.useRef(history.isSuccess); chatHistoryReadyRef.current = history.isSuccess;
@@ -101,7 +101,7 @@ async function withHistory(config, check) {
   const render = async () => { await React.act(async () => root.render(React.createElement(query.QueryClientProvider, { client }, React.createElement(Probe)))); await flush(); };
   try {
     await render();
-    await check({ history: () => history, resolver: () => resolver, mapChanges, client, requests, rows, flush, render, dom, observers, intro: () => intro, setFlag: (next) => { enabled = next; }, setTask: (next) => { taskId = next; }, setUser: (next) => { user = next; }, api });
+    await check({ history: () => history, resolver: () => resolver, mapChanges, client, requests, rows, flush, render, dom, observers, intro: () => intro, setIntro: (next) => { intro = next; }, setFlag: (next) => { enabled = next; }, setTask: (next) => { taskId = next; }, setUser: (next) => { user = next; }, api });
   } finally {
     await React.act(async () => root.unmount()); client.clear(); dom.window.close();
     for (const [key, descriptor] of original) { if (descriptor) Object.defineProperty(global, key, descriptor); else delete global[key]; }
@@ -240,6 +240,28 @@ test('old task session beyond page one resolves scope before any create and Comp
     assert.equal(history().isSuccess, true);
     assert.equal(requests.filter(([type]) => type === 'message').length, 1);
     assert.equal(intro(), null);
+  });
+});
+
+test('Compose greeting stays queued while history cannot take it, then lands once', async () => {
+  const config = { taskId: 91, compose: true, rows: [session(1, { taskId: 91, messages: [] })] };
+  await withHistory(config, async ({ history, requests, setIntro, intro, render }) => {
+    assert.equal(history().currentSession.taskId, 91);
+    const greeting = { taskId: 91, content: 'I created QA-1 from your note.' };
+    config.historyEnabled = false;
+    setIntro(greeting);
+    await render();
+    assert.equal(requests.filter(([type]) => type === 'message').length, 0);
+    assert.deepEqual(intro(), greeting);
+    config.historyEnabled = true;
+    await render();
+    assert.equal(requests.filter(([type]) => type === 'message').length, 1);
+    assert.equal(history().currentSession.messages.length, 1);
+    assert.equal(history().showWelcomeScreen, false);
+    assert.equal(intro(), null);
+    setIntro(greeting);
+    await render();
+    assert.equal(requests.filter(([type]) => type === 'message').length, 1);
   });
 });
 
@@ -405,7 +427,10 @@ test('real history menu pages on end visibility/scroll, preserves list order, ex
   const mocks = {
     '@/lib/contexts/Multipages/AI_Agent/AI_Agent_Chat_Context': { useAiChatContext: () => state },
     '@tanstack/react-query': { useQueryClient: () => queryClient },
-    'next/navigation': { usePathname: () => '/chat', useRouter: () => ({ push() {} }) },
+    'next/navigation': { usePathname: () => '/chat', useRouter: () => ({ push() {} }), useSearchParams: () => new URLSearchParams() },
+    './AgentSidebarChatCommands': { AgentSidebarChatCommands: () => null },
+    '@/lib/configs/general.config': { MOBILE_TARGET: 'min-h-[44px] min-w-[44px]' },
+    '@/utils/undoActions/helperFuncs': { cn: (...values) => values.filter(Boolean).join(' ') },
     '@/hooks/useFlag': { useFlag: (key) => key === flag && enabled },
     '@/lib/flags/keys': { HTPR_6971_CHAT_HISTORY_PAGING_FLAG: flag },
     '../Common/Tooltip': { __esModule: true, default: () => null },
@@ -1202,7 +1227,7 @@ test('flag-off session setup identity is exactly the production key without a pa
   const fs = require('node:fs');
   const filename = 'src/hooks/MultiPages/AIChat/useAiChatState.ts';
   const changed = fs.readFileSync(filename, 'utf8').match(/const sessionContextKey = (\[[\s\S]*?\]\.join\(":"\))/)[1];
-  const context = { surface: 'chat', isFullScreenChat: false, boardScopeIsExplicit: false, scopedProjectId: 4, currentProject: { id: 4 }, currentUser: { id: 6, uid: 'user-6' }, taskId: undefined, sessionPagingEnabled: false };
+  const context = { surface: 'chat', isFullScreenChat: false, boardScopeIsExplicit: false, scopedProjectId: 4, currentProject: { id: 4 }, currentUser: { id: 6, uid: 'user-6' }, taskId: undefined, ticketScopeSelected: false, sessionPagingEnabled: false };
   const evaluate = (expression, values) => new Function(...Object.keys(values), `return ${expression}`)(...Object.values(values));
   for (const taskId of [undefined, 91]) {
     context.taskId = taskId;

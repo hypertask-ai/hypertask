@@ -8,7 +8,10 @@ import {
   type McpAuthContext,
 } from '@/lib/mcp/auth'
 import prisma from '@/lib/prisma'
+import { DECISIONS_GUIDANCE } from '@/lib/mcp/decisionsGuidance'
 import { getProjectListingWhere } from '@/utils/controllers/projects/getAllIncludes'
+
+import { buildGuidedStart } from './guidedStart'
 
 const BOARD_LIMIT = 50
 const PER_BOARD_TEXT_LIMIT = 2000
@@ -26,12 +29,13 @@ export const HELLO_URL_FORMATS = {
 } as const
 
 export const HELLO_CAPABILITIES = {
+  decisions: DECISIONS_GUIDANCE,
   tasks:
     'Create, read, update, search, move, archive, and relate tasks with MCP tools or /api/mcp/tasks/*, including risk level, acceptance criteria, and verify command for structured contracts.',
   batch:
     'Read or update up to 100 tasks in one request through POST /api/mcp/tasks/batch.',
   comments:
-    'Read comments and add markdown-in comments through the comment tools or /api/mcp/comments.',
+    'Without a kind, a reply target or an @mention of a person (and no images or attachments), an agent comment is saved to the hidden ticket agent log, which people do not see. To post for people, pass kind: question for a decision by a person, qa for a QA verdict, or done for the closing summary. Read comments and add markdown-in comments through the comment tools or /api/mcp/comments.',
   pages:
     'Create, read, update, list, and search task-attached pages, with markdown as the default format.',
   leases:
@@ -51,21 +55,54 @@ export const HELLO_CAPABILITIES = {
 export const HTPR_7122_HELLO_CAPABILITIES = {
   ...HELLO_CAPABILITIES,
   comments:
-    'Read comments and add markdown-in comments through the comment tools or /api/mcp/comments. To acknowledge or confirm a person\'s comment, react with an emoji instead of posting an ack comment.',
+    'Without a kind, a reply target or an @mention of a person (and no images or attachments), an agent comment is saved to the hidden ticket agent log, which people do not see. To post for people, pass kind: question for a decision by a person, qa for a QA verdict, or done for the closing summary. Read comments and add markdown-in comments through the comment tools or /api/mcp/comments. To acknowledge or confirm a person\'s comment, react with an emoji instead of posting an ack comment.',
   reactions:
     'React to a person\'s comment with a thumbs up or any emoji through POST /api/mcp/comments/{comment_id}/reactions with {"emoji":"👍","active":true} (active false removes it), or `hypertask comment react <comment_id> --emoji 👍`. Post a comment only when you have something new to say. Your reaction is saved and shown as you, the agent. An agent\'s reaction never counts as an approval or decision; only a person\'s own reaction does.',
   abilities:
     'Use all of Hypertask\'s abilities, not only comments: reactions, pages, evidence, leases, sessions, escalation, task moves and labels.',
 } as const
 
+async function helloGuidedStart(
+  ctx: McpAuthContext,
+  where: Prisma.ProjectWhereInput
+) {
+  const [{ isFeatureEnabled, HTPR_6804_MCP_TOOLS_FLAG }, { HTPR_7519_LOGIN_GUIDED_START_FLAG }] = await Promise.all([
+    import('@/lib/flags'),
+    import('@/lib/flags/definitions/htpr-7519-login-guided-start'),
+  ])
+  if (!(await isFeatureEnabled(HTPR_7519_LOGIN_GUIDED_START_FLAG, ctx.user.id))) return {}
+  const newestBoard = await prisma.project.findFirst({
+    where,
+    orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
+    select: { id: true, title: true, name: true },
+  })
+  const agent = ctx.agentId
+    ? await prisma.agent.findUnique({
+        where: { id: ctx.agentId },
+        select: { id: true, displayName: true },
+      })
+    : null
+  const { getAgentRole } = await import('@/lib/mcp/agents/scopes')
+  const consolidated = Number.isFinite(ctx.user.id) && await isFeatureEnabled(HTPR_6804_MCP_TOOLS_FLAG, ctx.user.id)
+  return { agent, ...buildGuidedStart(newestBoard, consolidated, await getAgentRole(ctx)) }
+}
+
 async function helloCapabilities(userId: number) {
-  const [{ isFeatureEnabled }, { HTPR_7122_AGENT_REACTIONS_FLAG }] = await Promise.all([
+  const [{ isFeatureEnabled }, { HTPR_7122_AGENT_REACTIONS_FLAG }, { HTPR_7322_AGENT_FEATURE_DISCOVERY_FLAG }] = await Promise.all([
     import('@/lib/flags'),
     import('@/lib/flags/definitions/htpr-7122-agent-reactions'),
+    import('@/lib/flags/definitions/htpr-7322-agent-feature-discovery'),
   ])
-  return (await isFeatureEnabled(HTPR_7122_AGENT_REACTIONS_FLAG, userId))
+  const capabilities = (await isFeatureEnabled(HTPR_7122_AGENT_REACTIONS_FLAG, userId))
     ? HTPR_7122_HELLO_CAPABILITIES
     : HELLO_CAPABILITIES
+  return {
+    ...capabilities,
+    ...(await isFeatureEnabled(HTPR_7322_AGENT_FEATURE_DISCOVERY_FLAG, userId) ? {
+      features:
+        'List every enabled feature-kind flag and core product destinations for the authenticated user, with registry descriptions, shipped dates and verified URLs where known, through hypertask_list_features (hypertask_user_context action features) or GET /api/mcp/features. Non-feature kinds and unavailable features are omitted.',
+    } : {}),
+  }
 }
 
 function truncateText(value: string): string {
@@ -116,11 +153,12 @@ function truncatePlaybook(playbook: Prisma.JsonValue): Prisma.JsonValue {
 }
 
 export async function getHelloPayload(ctx: McpAuthContext) {
+  const where: Prisma.ProjectWhereInput = {
+    status: 'Normal',
+    ...getProjectListingWhere(ctx.user.id, ctx.agentId, ctx.teamScope),
+  }
   const projects = await prisma.project.findMany({
-    where: {
-      status: 'Normal',
-      ...getProjectListingWhere(ctx.user.id, ctx.agentId),
-    },
+    where,
     select: {
       id: true,
       name: true,
@@ -194,6 +232,7 @@ export async function getHelloPayload(ctx: McpAuthContext) {
     capabilities: await helloCapabilities(ctx.user.id),
     conventions,
     conventionsTruncated,
+    ...(await helloGuidedStart(ctx, where)),
   }
 }
 

@@ -12,6 +12,7 @@ export type TAgentWorkingOn = {
 export async function workingOnByAgent(
   agentIds: string[],
   userId: number,
+  actingAgentId?: string | null,
 ): Promise<Map<string, TAgentWorkingOn>> {
   if (agentIds.length === 0) return new Map();
 
@@ -19,7 +20,12 @@ export async function workingOnByAgent(
     where: {
       agentId: { in: agentIds },
       expiresAt: { gt: new Date() },
-      task: { project: getProjectWhere(userId) },
+      task: {
+        project: {
+          ...getProjectWhere(userId),
+          AND: [getProjectWhere(userId, actingAgentId)],
+        },
+      },
     },
     orderBy: { heartbeatAt: "desc" },
     select: {

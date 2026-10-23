@@ -1,3 +1,4 @@
+import { sidebarChatHeaders } from "@/lib/agents/chatViewerState";
 import { consumeAiChatStream } from "./aiChatStream";
 import { IChatMessage, IAttachment } from "@/models/model";
 import toast from "react-hot-toast";
@@ -13,7 +14,7 @@ import type { useAiChatAttachments } from "./useAiChatAttachments";
 
 
 type Context = Pick<ReturnType<typeof useAiChatSessions>, "isByokBlocked" | "fileUpload" | "billing" | "isDemo" | "chatRoute" | "drainQueuedMessage" | "handleSendMessageRef"> &
-  Pick<ReturnType<typeof useAiChatState>, "sessionPagingEnabled" | "getDisplayedSession" | "isTyping" | "editor" | "messageQueueRef" | "setQueuedMessages" | "sendInFlightRef" | "surface" | "inViewObject" | "currentProject" | "setIsTyping" | "addMessageToSessionQuery" | "scopedProjectId" | "isFullScreenChat" | "taskId" | "dockedProjectId" | "setAiChatBoardSessionMap" | "modelTeamId" | "contextList" | "currentAiOption" | "spansAllBoards" | "boardScopeIsExplicit" | "pathname" | "currentUser" | "streamingSessionRef" | "streamingAssistantMessageRef" | "setCurrentStreamingSession" | "streamingRequestRef" | "token" | "setAgentStatus" | "updateSessionTitle" | "queryClient" | "updateLastMessageInSessionCache" | "appendMessageToSessionCache"> &
+  Pick<ReturnType<typeof useAiChatState>, "sessionPagingEnabled" | "getDisplayedSession" | "isTyping" | "editor" | "messageQueueRef" | "setQueuedMessages" | "sendInFlightRef" | "surface" | "inViewObject" | "currentProject" | "setIsTyping" | "addMessageToSessionQuery" | "scopedProjectId" | "isFullScreenChat" | "taskId" | "dockedProjectId" | "setAiChatBoardSessionMap" | "modelTeamId" | "contextList" | "currentAiOption" | "spansAllBoards" | "boardScopeIsExplicit" | "ticketScopeSelected" | "pathname" | "currentUser" | "streamingSessionRef" | "streamingAssistantMessageRef" | "setCurrentStreamingSession" | "streamingRequestRef" | "token" | "setAgentStatus" | "updateSessionTitle" | "queryClient" | "updateLastMessageInSessionCache" | "appendMessageToSessionCache"> &
   Pick<ReturnType<typeof useAiChatAttachments>, "waitForChatSession" | "buildGuestBoard" | "processAttachments"> & { reloadTaskAfterChat: boolean; connectionRetry?: boolean };
 
 export function createAiChatSend(context: Context, searchHandoff?: { preserveComposer: true; onSettled: () => void }) {
@@ -22,7 +23,7 @@ export function createAiChatSend(context: Context, searchHandoff?: { preserveCom
   setQueuedMessages, sendInFlightRef, surface, inViewObject, waitForChatSession,
   currentProject, buildGuestBoard, processAttachments, setIsTyping, addMessageToSessionQuery,
   scopedProjectId, isFullScreenChat, taskId, dockedProjectId, setAiChatBoardSessionMap,
-  modelTeamId, contextList, currentAiOption, spansAllBoards, boardScopeIsExplicit,
+  modelTeamId, contextList, currentAiOption, spansAllBoards, boardScopeIsExplicit, ticketScopeSelected,
   pathname, currentUser, billing, isDemo, streamingSessionRef,
   streamingAssistantMessageRef, setCurrentStreamingSession, streamingRequestRef, chatRoute, token,
   setAgentStatus, updateSessionTitle, queryClient, updateLastMessageInSessionCache,
@@ -89,6 +90,7 @@ export function createAiChatSend(context: Context, searchHandoff?: { preserveCom
         return true;
       }
 
+    const sidebarHeaders = sidebarChatHeaders(session.id);
     const processedAttachments = preserveComposer ? [] : await processAttachments(
       editorHtmlForAttachments,
       fileUpload.fileItems
@@ -147,7 +149,7 @@ export function createAiChatSend(context: Context, searchHandoff?: { preserveCom
       scopedProjectId
     );
 
-    if (!isFullScreenChat && taskId === undefined && dockedProjectId !== undefined) {
+    if (!session.agentId && !isFullScreenChat && taskId === undefined && dockedProjectId !== undefined) {
       setAiChatBoardSessionMap((previousMap) => ({
         ...previousMap,
         [dockedProjectId]: session.id,
@@ -176,6 +178,7 @@ export function createAiChatSend(context: Context, searchHandoff?: { preserveCom
           currentProject?.project_view?.user_project_views?.[0]?.appliedView?.title ??
           currentProject?.title,
         ...(streamTaskId ? { task_id: streamTaskId } : {}),
+        ...(ticketScopeSelected && streamTaskId ? { scope: "ticket" } : {}),
       },
       user_context: {
         id: currentUser?.id,
@@ -226,6 +229,7 @@ export function createAiChatSend(context: Context, searchHandoff?: { preserveCom
             headers: {
               "Content-Type": "application/json",
               ...mcpAuthorizationHeaders(token),
+              ...sidebarHeaders,
             },
             body: JSON.stringify(payload),
           });

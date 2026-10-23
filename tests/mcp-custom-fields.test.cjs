@@ -131,7 +131,7 @@ test('shared route preserves agent board access and auto-create-on-set', () => {
 
   assert.match(
     route,
-    /validateProjectAccess\(\s*task\.projectId,\s*ctx\.user\.id,\s*ctx\.agentId\s*\)/,
+    /validateProjectAccess\(\s*task\.projectId,\s*ctx\.user\.id,\s*ctx\.agentId,\s*ctx\.teamScope\s*\)/,
     'agent tokens must be checked against the task board'
   );
   assert.match(

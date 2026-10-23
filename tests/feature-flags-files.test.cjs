@@ -1,3 +1,4 @@
+process.env.FEATURE_FLAG_TYPESCRIPT_PATH = require.resolve("typescript");
 const assert = require("node:assert/strict");
 const fs = require("node:fs");
 const os = require("node:os");
@@ -120,6 +121,57 @@ export default { key: RISK_FLAG, shippedOn: "2026-10-20", description: "Fixture"
 });
 
 
+test("release-risk owner requests preserve the exact quote and require literal app ticket URLs", async () => {
+  const { parseFlagFile } = await import("../.github/scripts/feature-flag-registry.mjs");
+  const filename = `${folder}/htpr-7389-risk.ts`;
+  const source = (ownerRequest, extra = "") => `export const RISK_FLAG = "htpr-7389-risk";
+export default { key: RISK_FLAG, defaultMode: "OWNER_ONLY", shippedOn: "2026-10-20", description: "Fixture", releaseRisk: { risk: "new", reason: "Fixture", ownerRequest: ${ownerRequest} ${extra} } } as const;`;
+  const quote = '" Keep this Owner only for now. "';
+  const ticketUrl = '"https://app.hypertask.ai/detail/project-15/7389"';
+  const valid = `{ quote: ${quote}, ticketUrl: ${ticketUrl} }`;
+  const expected = { quote: " Keep this Owner only for now. ", ticketUrl: "https://app.hypertask.ai/detail/project-15/7389" };
+  assert.deepEqual(parseFlagFile(source(valid), filename).definition.releaseRisk.ownerRequest, expected);
+  assert.deepEqual(parseFlagFile(source(valid, ', highRisk: "access"'), filename).definition.releaseRisk,
+    { risk: "new", reason: "Fixture", highRisk: "access", ownerRequest: expected });
+  assert.deepEqual(parseFlagFile(source(`{ "ticketUrl": ${ticketUrl}, "quote": ${quote} }`), filename).definition.releaseRisk.ownerRequest, expected);
+  for (const value of ['""', '"   "', '"\\t\\n"', '42', 'null', 'undefined', 'quote', '`Owner only`']) {
+    assert.throws(() => parseFlagFile(source(`{ quote: ${value}, ticketUrl: ${ticketUrl} }`), filename),
+      /releaseRisk\.ownerRequest\.quote must be a non-blank string literal/, value);
+  }
+  for (const value of [
+    '"https://hypertask.ai/detail/project-15/7389"',
+    '"https://example.com/detail/project-15/7389"',
+    '"https://app.hypertask.ai.evil.test/detail/project-15/7389"',
+    '"https://appXhypertaskXai/detail/project-15/7389"',
+    '"http://app.hypertask.ai/detail/project-15/7389"',
+    '"https://app.hypertask.ai/detail/project-x/7389"',
+    '"https://app.hypertask.ai/detail/project-15/HTPR-7389"',
+    '"https://app.hypertask.ai/detail/project-15/7389/"',
+    '"https://app.hypertask.ai/detail/project-15/7389?view=all"',
+    '"https://app.hypertask.ai/detail/project-15/7389#comment"',
+    '" https://app.hypertask.ai/detail/project-15/7389"',
+    '"https://app.hypertask.ai/detail/project-15/7389\\n"',
+    '""', '42', 'null', 'undefined', 'ticketUrl', '`https://app.hypertask.ai/detail/project-15/7389`',
+  ]) {
+    assert.throws(() => parseFlagFile(source(`{ quote: ${quote}, ticketUrl: ${value} }`), filename),
+      /releaseRisk\.ownerRequest\.ticketUrl must be a string literal like https:\/\/app\.hypertask\.ai\/detail\/project-15\/123/, value);
+  }
+  for (const value of [
+    'null', 'undefined', 'true', '"request"', '[]', 'request', '{}',
+    `{ quote: ${quote} }`, `{ ticketUrl: ${ticketUrl} }`,
+    `{ quote: ${quote}, quote: ${quote} }`,
+    `{ quote: ${quote}, ticketUrl: ${ticketUrl}, extra: true }`,
+    `{ quote: ${quote}, url: ${ticketUrl} }`,
+    `{ quote, ticketUrl: ${ticketUrl} }`,
+    `{ ["quote"]: ${quote}, ticketUrl: ${ticketUrl} }`,
+    `{ ...request, ticketUrl: ${ticketUrl} }`,
+  ]) {
+    assert.throws(() => parseFlagFile(source(value), filename),
+      /releaseRisk\.ownerRequest needs exactly literal quote and ticketUrl fields/, value);
+  }
+  assert.throws(() => parseFlagFile(source(valid, `, ownerRequest: ${valid}`), filename), /releaseRisk needs literal/);
+});
+
 test("internal kind parses without releasing it and refuses Everyone", async () => {
   const { parseFlagFile } = await import("../.github/scripts/feature-flag-registry.mjs");
   const filename = `${folder}/htpr-7389-internal.ts`;
@@ -128,4 +180,25 @@ export default { key: INTERNAL_FLAG, kind: "internal", shippedOn: "2026-10-20", 
   assert.equal(parseFlagFile(source(), filename).definition.kind, "internal");
   assert.equal(parseFlagFile(source(', defaultMode: "OWNER_AND_QA"'), filename).definition.defaultMode, "OWNER_AND_QA");
   assert.throws(() => parseFlagFile(source(', defaultMode: "EVERYONE"'), filename), /internal flag may not default to Everyone/);
+});
+
+
+test("owner-request metadata rejects malformed evidence but still accepts the exact checkout rollout request", async () => {
+  const { parseFlagFile } = await import("../.github/scripts/feature-flag-registry.mjs");
+  const filename = "src/lib/flags/definitions/htpr-7551-start-plan-checkout.ts";
+  const source = fs.readFileSync(path.join(__dirname, "..", filename), "utf8");
+  const parsed = parseFlagFile(source, filename).definition;
+  assert.equal(parsed.defaultMode, "OWNER_ONLY");
+  assert.equal(parsed.releaseRisk.highRisk, "money");
+  assert.deepEqual(parsed.releaseRisk.ownerRequest, {
+    quote: "this one goes behind a feature flag that is only on for me at first pls. Don't release to everyone right away.",
+    ticketUrl: "https://app.hypertask.ai/detail/project-15/7511",
+  });
+  for (const replacement of ['ticketUrl: "https://evil.test/7511"', 'ticketUrl: evidence', 'quote: ""', 'quote: "ok", extra: true']) {
+    const invalid = replacement.startsWith("ticketUrl")
+      ? source.replace('ticketUrl: "https://app.hypertask.ai/detail/project-15/7511"', replacement)
+      : source.replace(/quote: "[^\n]+",/, replacement + ",");
+    assert.throws(() => parseFlagFile(invalid, filename), /ownerRequest/);
+  }
+  assert.deepEqual(parseFlagFile(source, filename).definition, parsed);
 });

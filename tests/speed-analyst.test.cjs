@@ -362,7 +362,7 @@ test('changed paths only compare with same-version history; page navigation also
   const current = landedOn({ ...await fixture(), conditions: { ...(await fixture()).conditions, pathVersions: PATH_VERSIONS } }, '6859', 'default');
   const beforeVersions = { ...await fixture(), started: '2026-10-09T12:00:00Z' };
   const baselineFor = (history, cohort) => compare(current, history).find(row => row.cohort === cohort && row.metric === 'contentMs').baseline;
-  assert.equal(baselineFor([beforeVersions], 'phone:board'), 100, 'unchanged paths keep their history');
+  assert.equal(baselineFor([beforeVersions], 'phone:ticket-cold'), 100, 'unchanged paths keep their history');
   assert.equal(baselineFor([beforeVersions], 'phone:ticket-warm'), null);
   assert.equal(baselineFor([beforeVersions], 'desktop:page-navigation'), null);
 
@@ -395,6 +395,27 @@ test('phone page navigation scrolls a below-the-fold card of the landed board in
   assert.equal(top, 300);
 });
 
+test('phone board scrolls the below-the-fold fixture card from inside the page, without a Playwright pre-scroll', async () => {
+  const { ready, compare, PATH_VERSIONS } = await analyst;
+  const { JSDOM } = await import('jsdom');
+  const dom = new JSDOM('<h1>QA Sandbox</h1><a href="/detail/project-6859/43">QA 6667 Enter verification</a>', { runScripts: 'outside-only' });
+  let clock = 0, top = 1447;
+  dom.window.innerHeight = 844;
+  dom.window.performance.now = () => ++clock * 1000;
+  dom.window.requestAnimationFrame = callback => queueMicrotask(callback);
+  dom.window.getComputedStyle = () => ({ display: 'block', visibility: 'visible', opacity: '1' });
+  dom.window.Element.prototype.getBoundingClientRect = () => ({ width: 100, height: 90, top, bottom: top + 90 });
+  dom.window.Element.prototype.scrollIntoView = () => { top = 379; };
+  const page = { evaluate: (fn, args) => dom.window.eval(`(${fn.toString()})(${JSON.stringify(args)})`) };
+  try { assert.ok(await ready(page, 'board') > 0, '2026-10-23 phone: the card sat at 1447 px for 3.3 s while locator.scrollIntoViewIfNeeded waited'); } finally { dom.window.close(); }
+  assert.equal(top, 379);
+  const current = { ...await fixture(), conditions: { ...(await fixture()).conditions, pathVersions: PATH_VERSIONS } };
+  const before = { ...await fixture(), started: '2026-10-09T12:00:00Z', samples: [] };
+  const baselineFor = cohort => compare(current, [before]).find(row => row.cohort === cohort && row.metric === 'contentMs').baseline;
+  assert.equal(baselineFor('phone:board'), null);
+  assert.equal(baselineFor('phone:board-returning'), null);
+});
+
 test('page navigation reads the landed board only once the board id is in the address', () => {
   const source = fs.readFileSync(path.join(__dirname, '../scripts/speed/measure.mjs'), 'utf8');
   assert.match(source, /waitForURL\(url => url\.pathname === '\/project' && url\.searchParams\.has\('id'\), \{ waitUntil: 'commit' \}\);\n\s+landed = safeSearch/);
@@ -425,7 +446,7 @@ test('board-returning is a new cohort and Ctrl+J since the Compose writer only c
   const current = { ...await fixture(), conditions: { ...(await fixture()).conditions, pathVersions: PATH_VERSIONS } };
   const before = { ...await fixture(), started: '2026-10-09T12:00:00Z', samples: [], groups: Object.fromEntries(Object.entries((await fixture()).groups).filter(([cohort]) => !cohort.endsWith(':board-returning'))) };
   const baselineFor = cohort => compare(current, [before]).find(row => row.cohort === cohort && row.metric === 'contentMs').baseline;
-  assert.equal(baselineFor('phone:board'), 100);
+  assert.equal(baselineFor('phone:ticket-cold'), 100);
   assert.equal(baselineFor('phone:board-returning'), null);
   assert.equal(baselineFor('phone:ctrl-j'), null);
 });
@@ -436,8 +457,45 @@ test('search starts only after the opened-before ticket page is idle, and compar
   const before = { ...await fixture(), started: '2026-10-09T12:00:00Z', samples: [] };
   const baselineFor = cohort => compare(current, [before]).find(row => row.cohort === cohort && row.metric === 'contentMs').baseline;
   assert.equal(baselineFor('phone:search'), null, '2026-10-20 phone: 3249 ms right after the ticket vs 2520 ms once it was idle (YPER4-525)');
-  assert.equal(baselineFor('phone:board'), 100);
+  assert.equal(baselineFor('phone:my-tasks'), 100);
   assert.ok(SEARCH_IDLE_PAUSE_MS >= 3000);
   const source = fs.readFileSync(path.join(__dirname, '../scripts/speed/measure.mjs'), 'utf8');
   assert.match(source, /sample\('ticket-warm'[^\n]*\n[^\n]*\n\s*const previousPage = await settleScripts\([^\n]*\n\s*await page\.waitForTimeout\(SEARCH_IDLE_PAUSE_MS\);\n\s*await sample\('search'/);
+});
+
+test('runner is recorded from GitHub Actions, including failures before browser setup', () => {
+  const root = path.join(__dirname, '..');
+  for (const [value, runner] of [['true', 'github-actions'], ['false', 'vps'], ['', 'vps']]) {
+    const result = spawnSync(process.execPath, ['--input-type=module', '-e', 'import { RUNNER } from "./scripts/speed/measure.mjs"; console.log(RUNNER)'], { cwd: root, env: { ...process.env, GITHUB_ACTIONS: value }, encoding: 'utf8' });
+    assert.equal(result.status, 0);
+    assert.equal(result.stdout.trim(), runner);
+    const home = fs.mkdtempSync(path.join(os.tmpdir(), 'speed-runner-'));
+    try {
+      const failed = spawnSync(process.execPath, ['scripts/speed/measure.mjs', '--samples', '1'], { cwd: root, env: { ...process.env, HOME: home, COMPANY_SKILLS_DIR: path.join(home, 'missing-guard'), GITHUB_ACTIONS: value, GITHUB_RUN_ID: '123', GITHUB_SHA: 'b'.repeat(40) }, encoding: 'utf8' });
+      assert.equal(failed.status, 1);
+      const [saved] = JSON.parse(fs.readFileSync(path.join(home, '.local/state/speed/history.json'), 'utf8'));
+      assert.equal(saved.status, 'failed');
+      assert.equal(saved.conditions.runner, runner);
+      assert.deepEqual(saved.github, value === 'true' ? { runId: 123, sha: 'b'.repeat(40) } : undefined);
+    } finally { fs.rmSync(home, { recursive: true, force: true }); }
+  }
+  const source = fs.readFileSync(path.join(root, 'scripts/speed/measure.mjs'), 'utf8');
+  assert.match(source, /cpus: os.availableParallelism\(\), conditions: \{ runner: RUNNER \}/);
+  assert.match(source, /run.conditions = \{ runner: RUNNER,/);
+  assert.match(source, /github: \{ runId: Number\(process.env.GITHUB_RUN_ID\), sha: process.env.GITHUB_SHA \}/);
+});
+
+test('GitHub and VPS baselines never mix; legacy history is VPS in both comparison directions', async () => {
+  const { compare } = await analyst;
+  const current = await fixture();
+  const prior = { ...await fixture(), started: '2026-10-09T12:00:00Z' };
+  const on = (run, runner) => ({ ...run, conditions: { ...run.conditions, runner } });
+  const matches = (run, history) => compare(run, history).every(row => row.days === 1);
+  const excludes = (run, history) => compare(run, history).every(row => row.baseline === null && !row.regression);
+  assert.ok(matches(on(current, 'vps'), [prior]));
+  assert.ok(matches(current, [on(prior, 'vps')]));
+  assert.ok(matches(on(current, 'github-actions'), [on(prior, 'github-actions')]));
+  assert.ok(excludes(on(current, 'github-actions'), [prior, on(prior, 'vps')]));
+  assert.ok(excludes(on(current, 'vps'), [on(prior, 'github-actions')]));
+  assert.ok(excludes(current, [on(prior, 'github-actions')]));
 });

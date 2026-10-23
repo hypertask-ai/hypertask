@@ -15,7 +15,7 @@ function harness(enabled, oldEnabled = true) {
   const actions = [];
   let writer = false;
   const mocks = {
-    "@/hooks/useFlag": { useFlag: key => key === flag ? enabled : key === oldFlag ? oldEnabled : ["compose", "new-task"].includes(key) },
+    "@/hooks/useFlag": { useFlag: key => key === flag ? enabled : key === oldFlag ? oldEnabled : ["compose", "new-task"].includes(key), useFlagLoaded: () => true },
     "@/lib/flags/keys": keys,
     "@/lib/state": { useSetRecoilState: () => value => actions.push(["commands", value]), useRecoilValue: () => true },
     "@/store": { showCommandsAtom: "commands", showAIChatInterfaceAtom: "chat" },
@@ -174,6 +174,7 @@ function globalHook(h) {
     "@/lib/agentRuns/taskActivityFeed": { mergeTaskThreadFeed: () => [] },
     "@/lib/htc/isCommentCreatedByUser": { isCommentCreatedByUser: () => true },
     "@/hooks/General/useHydrated": { useHydrated: () => false },
+    "@/lib/taskDetailCommentsStacked": { commentsStackedSetting: ({ preferenceStacked }) => preferenceStacked, foldCommentsFromFirstPaintNow: () => false },
   })("src/hooks/Task Detail/useTaskDetailGlobalStates.ts").default;
 }
 

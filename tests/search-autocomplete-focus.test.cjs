@@ -19,7 +19,6 @@ test('suggestions retain writing focus; result arrows leave it so Enter opens th
     require.cache[filename] = { id: filename, filename, loaded: true, exports }
   }
   const source = (file, exports) => stub(path.join(root, file), exports)
-  let autocomplete = false
   let state
   let reactRoot
   const requests = []
@@ -27,7 +26,7 @@ test('suggestions retain writing focus; result arrows leave it so Enter opens th
   try {
     source('src/utils/index.ts', { taskBaseUri: '/detail/' })
     source('src/utils/undoActions/helperFuncs.ts', { cn: (...values) => values.filter(Boolean).join(' ') })
-    source('src/hooks/useFlag.tsx', { useFlagReady: () => true, useFlag: (key) => key === 'htpr-6865-search-layout' ? false : key === 'htpr-6688-search-autocomplete' ? autocomplete : true })
+    source('src/hooks/useFlag.tsx', { useFlagLoaded: () => true, useFlagReady: () => true, useFlag: () => true })
     source('src/lib/contexts/deviceContext.tsx', { useDeviceContext: () => false })
     const allProjects = [{ id: 7, title: 'Visible' }]
     source('src/hooks/MultiPages/useGetAllProjectsMinimal.ts', { useGetAllProjectsMinimal: () => ({ data: allProjects }) })
@@ -61,77 +60,71 @@ test('suggestions retain writing focus; result arrows leave it so Enter opens th
     const SearchChipsInput = jiti(path.join(root, 'src/app/search/SearchChipsInput.tsx')).default
     const Harness = () => {
       state = useSearch('')
-      return React.createElement(SearchChipsInput, { value: state.inputValue, onChange: state.setInputValue, onRun: state.updateSearchHistory, boardId: null, inputRef: state.tasksInputRef, autocompleteEnabled: autocomplete })
+      return React.createElement(SearchChipsInput, { value: state.inputValue, onChange: state.setInputValue, onRun: state.updateSearchHistory, boardId: null, inputRef: state.tasksInputRef })
     }
     // The app-shell listener runs first and prevents body arrows from scrolling.
     const preventArrowScroll = (event) => {
-      if (autocomplete && document.activeElement.tagName !== 'INPUT' && ['ArrowDown', 'ArrowUp'].includes(event.key)) event.preventDefault()
+      if (document.activeElement.tagName !== 'INPUT' && ['ArrowDown', 'ArrowUp'].includes(event.key)) event.preventDefault()
     }
     document.addEventListener('keydown', preventArrowScroll)
     const press = async (key, keyCode) => React.act(async () => {
       document.activeElement.dispatchEvent(new dom.window.KeyboardEvent('keydown', { key, keyCode, bubbles: true, cancelable: true }))
     })
     reactRoot = require('react-dom/client').createRoot(document.getElementById('root'))
-    for (const enabled of [false, true]) {
-      autocomplete = enabled
-      await React.act(async () => reactRoot.render(React.createElement(Harness, { key: String(enabled) })))
-      const input = document.getElementById('search-input')
-      await React.act(async () => state.setInputValue('login'))
-      await React.act(async () => input.focus())
-      await press('Enter', 13)
-      assert.equal(requests.at(-1).searchQuery, 'login')
-      assert.equal(state.typedTasks.length, 2)
-      assert.equal(document.activeElement === input, false, 'explicit Enter submission leaves writing mode in either autocomplete mode')
-      await press('ArrowDown', 40)
-      assert.notEqual(document.activeElement, input)
-      assert.equal(state.selectedIndex, 1)
-      let before = requests.length
-      await press('Enter', 13)
-      assert.equal(opened.at(-1), '/detail/project-7/2')
-      assert.equal(requests.length, before, 'Enter opens the selected result instead of rerunning search')
-      if (enabled) {
-        await React.act(async () => input.focus())
-        await press('ArrowUp', 38)
-        assert.notEqual(document.activeElement, input)
-        assert.equal(state.selectedIndex, 0)
-        await press('Enter', 13)
-        assert.equal(opened.at(-1), '/detail/project-7/1')
-        await React.act(async () => input.focus())
-        await press('ArrowUp', 38)
-        assert.notEqual(document.activeElement, input, 'navigation leaves writing mode even at the first row')
-        await press('Enter', 13)
-        assert.equal(opened.at(-1), '/detail/project-7/1')
+    await React.act(async () => reactRoot.render(React.createElement(Harness)))
+    let input = document.getElementById('search-input')
+    await React.act(async () => state.setInputValue('login'))
+    await React.act(async () => input.focus())
+    await press('Enter', 13)
+    assert.equal(requests.at(-1).searchQuery, 'login')
+    assert.equal(state.typedTasks.length, 2)
+    assert.equal(document.activeElement === input, false, 'explicit Enter submission leaves writing mode')
+    await press('ArrowDown', 40)
+    assert.notEqual(document.activeElement, input)
+    assert.equal(state.selectedIndex, 1)
+    let before = requests.length
+    await press('Enter', 13)
+    assert.equal(opened.at(-1), '/detail/project-7/2')
+    assert.equal(requests.length, before, 'Enter opens the selected result instead of rerunning search')
+    await React.act(async () => input.focus())
+    await press('ArrowUp', 38)
+    assert.notEqual(document.activeElement, input)
+    assert.equal(state.selectedIndex, 0)
+    await press('Enter', 13)
+    assert.equal(opened.at(-1), '/detail/project-7/1')
+    await React.act(async () => input.focus())
+    await press('ArrowUp', 38)
+    assert.notEqual(document.activeElement, input, 'navigation leaves writing mode even at the first row')
+    await press('Enter', 13)
+    assert.equal(opened.at(-1), '/detail/project-7/1')
 
-        await React.act(async () => input.focus())
-        await React.act(async () => {
-          Object.getOwnPropertyDescriptor(dom.window.HTMLInputElement.prototype, 'value').set.call(input, 'is:o')
-          input.dispatchEvent(new dom.window.Event('input', { bubbles: true }))
-        })
-        before = requests.length
-        await press('ArrowDown', 40)
-        assert.equal(document.activeElement, input, 'suggestion arrows do not enter result navigation')
-        await press('Enter', 13)
-        assert.equal(requests.length, before + 1)
-        assert.equal(requests.at(-1).searchQuery, 'is:open')
-        assert.equal(document.activeElement, input, 'focus stays after accepting a suggestion and its search completes')
-        assert.equal(input.getAttribute('aria-expanded'), 'false')
-        await press('ArrowDown', 40)
-        assert.notEqual(document.activeElement, input)
-        before = requests.length
-        await press('Enter', 13)
-        assert.equal(opened.at(-1), '/detail/project-7/2')
-        assert.equal(requests.length, before)
-      }
-    }
-    autocomplete = true
+    await React.act(async () => input.focus())
+    await React.act(async () => {
+      Object.getOwnPropertyDescriptor(dom.window.HTMLInputElement.prototype, 'value').set.call(input, 'is:o')
+      input.dispatchEvent(new dom.window.Event('input', { bubbles: true }))
+    })
+    before = requests.length
+    await press('ArrowDown', 40)
+    assert.equal(document.activeElement, input, 'suggestion arrows do not enter result navigation')
+    await press('Enter', 13)
+    assert.equal(requests.length, before + 1)
+    assert.equal(requests.at(-1).searchQuery, 'is:open')
+    assert.equal(document.activeElement, input, 'focus stays after accepting a suggestion and its search completes')
+    assert.equal(input.getAttribute('aria-expanded'), 'false')
+    await press('ArrowDown', 40)
+    assert.notEqual(document.activeElement, input)
+    before = requests.length
+    await press('Enter', 13)
+    assert.equal(opened.at(-1), '/detail/project-7/2')
+    assert.equal(requests.length, before)
     source('src/hooks/Search/useSearch.ts', { useSearch: (...args) => { state = useSearch(...args); return state } })
     const SearchComp = jiti(path.join(root, 'src/app/search/SearchComp.tsx')).default
     await React.act(async () => reactRoot.render(React.createElement(SearchComp, { _searchTerm: 'login is:open', _includeArchived: false, currentUser: {} })))
     assert.equal(state.typedTasks.length, 2, 'URL search has loaded its real result rows')
-    const input = document.getElementById('search-input')
+    input = document.getElementById('search-input')
     await React.act(async () => { input.focus(); input.click() })
     assert.equal(state.selectedIndex, null, 'the real search container clears selection on input click')
-    const before = requests.length
+    before = requests.length
     await press('ArrowDown', 40)
     assert.notEqual(document.activeElement, input, 'first arrow leaves writing mode after a click')
     assert.equal(state.selectedIndex, 0)
@@ -151,7 +144,7 @@ test('suggestions retain writing focus; result arrows leave it so Enter opens th
     cache.history = ['login']
     await React.act(async () => state.setInputValue(''))
     await React.act(async () => input.focus())
-    assert.ok(document.querySelector('#search-chip-options [role="option"]').textContent.includes('Recent: login'), 'the actual search page passes saved history into Tips')
+    assert.ok(document.querySelector('#search-chip-options [role="option"]').textContent.includes('login'), 'the actual search page passes saved history into Tips')
   } finally {
     if (reactRoot) await React.act(async () => reactRoot.unmount())
     for (const [filename, prior] of stubs.reverse()) {

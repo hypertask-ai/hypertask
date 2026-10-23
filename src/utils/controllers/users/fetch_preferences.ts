@@ -42,6 +42,7 @@ export async function fetchUserPreferenceController(userId: number) {
         emojiFrequency: true,
         calendarViews: true,
         allTasksDateRange: true,
+        boardSortMode: true,
       },
     });
 
@@ -70,6 +71,7 @@ export async function fetchUserPreferenceController(userId: number) {
           emojiFrequency: null,
           calendarViews: null,
           allTasksDateRange: null,
+          boardSortMode: null,
         },
       };
     }
@@ -96,6 +98,7 @@ export async function fetchUserPreferenceController(userId: number) {
         emojiFrequency: null,
         calendarViews: null,
         allTasksDateRange: null,
+        boardSortMode: null,
       },
     };
   }

@@ -33,7 +33,7 @@ function loadTs(relativePath, mocks = {}) {
       "@/lib/redis": { getRedis: async () => { throw new Error("Unexpected Redis access in test"); } },
     };
     new Function("module", "exports", "require", javascript)(mod, mod.exports, (request) => {
-      if (Object.hasOwn(mocks, request)) return mocks[request];
+      if (request in mocks) return mocks[request];
       if (Object.hasOwn(defaults, request)) return defaults[request];
       if (request.startsWith("@/")) return load(path.join(root, "src", `${request.slice(2)}.ts`));
       if (request.startsWith(".")) return load(path.resolve(path.dirname(filename), `${request}.ts`));

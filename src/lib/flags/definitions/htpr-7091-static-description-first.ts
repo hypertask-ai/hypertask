@@ -7,7 +7,6 @@ export default {
   kind: "bugfix",
   shippedOn: "2026-10-11",
   description: "Shows a ticket's description as soon as the page loads and brings in the editor afterwards, so the first ticket open on a phone is faster.",
-  related: ["htpr-6752-instant-ticket-open"],
   releaseRisk: {
     "risk": "small",
     "reason": "The description looks the same; only the editor behind it arrives a moment later."

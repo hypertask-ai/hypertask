@@ -23,13 +23,15 @@ const jiti = createJiti(__filename, { alias: { '@': path.join(root, 'src') }, in
 const flag = 'htpr-6929-compose-task-writer';
 const newFlag = 'htpr-6937-new-task-window';
 const tooltipFlag = 'htpr-6950-tooltip-top-layer';
+const keepClosedFlag = 'htpr-7530-keep-ai-chat-closed';
 const boardChipFlag = 'htpr-7053-compose-board-chip';
 
 async function withPalette(t, config, check) {
   const dom = new JSDOM('<div id="root"></div>', { url: `https://example.test${config.url ?? '/project?id=7'}` });
   const globals = ['window', 'document', 'navigator', 'HTMLElement', 'localStorage', 'IS_REACT_ACT_ENVIRONMENT', 'File', 'requestAnimationFrame', 'fetch', 'DOMParser']
     .map((key) => [key, Object.getOwnPropertyDescriptor(global, key)]);
-  Object.assign(global, { DOMParser: dom.window.DOMParser, window: dom.window, document: dom.window.document, HTMLElement: dom.window.HTMLElement, localStorage: dom.window.localStorage, File: dom.window.File, IS_REACT_ACT_ENVIRONMENT: true, requestAnimationFrame: (fn) => fn() });
+  const animationFrames = [];
+  Object.assign(global, { DOMParser: dom.window.DOMParser, window: dom.window, document: dom.window.document, HTMLElement: dom.window.HTMLElement, localStorage: dom.window.localStorage, File: dom.window.File, IS_REACT_ACT_ENVIRONMENT: true, requestAnimationFrame: (fn) => config.deferAnimationFrames ? animationFrames.push(fn) : fn() });
   Object.defineProperty(global, 'navigator', { configurable: true, value: dom.window.navigator });
   dom.window.HTMLElement.prototype.attachEvent = () => {};
   dom.window.HTMLElement.prototype.detachEvent = () => {};
@@ -40,20 +42,29 @@ async function withPalette(t, config, check) {
     if (this.tagName === 'TEXTAREA' && focusFailures-- > 0) return;
     return focus.apply(this, args);
   };
+  const focusProxy = { current: null, compose: !config.legacyProxy, pendingEnter: config.pendingEnter };
+  if (config.bufferedText !== undefined) {
+    focusProxy.current = document.createElement('textarea');
+    focusProxy.current.value = config.bufferedText;
+    document.body.appendChild(focusProxy.current);
+    focus.call(focusProxy.current);
+    focusProxy.current.setSelectionRange(2, 5);
+  }
   const cached = new Map(Object.entries(require.cache));
   const stubbed = new Set();
   const stub = (filename, exports) => { stubbed.add(filename); require.cache[filename] = { id: filename, filename, loaded: true, exports }; };
   const source = (file, exports) => stub(path.join(root, file), exports);
-  const flags = { [flag]: config.enabled ?? true, [newFlag]: config.newWindow ?? false, 'htpr-6951-task-writing-progress': config.progress ?? config.newWindow ?? false, [tooltipFlag]: config.topLayer ?? false, [boardChipFlag]: config.boardChip ?? false };
+  const flags = { 'htpr-7547-search-lazy-closed': config.preserveColdCommandInput ?? false, [keepClosedFlag]: config.keepClosedFlag ?? false, [flag]: config.enabled ?? true, [newFlag]: config.newWindow ?? false, 'htpr-6951-task-writing-progress': config.progress ?? config.newWindow ?? false, [tooltipFlag]: config.topLayer ?? false, [boardChipFlag]: config.boardChip ?? false, 'htpr-7317-ctrlj-ticket-questions': config.ticketQuestions ?? false };
   const TaskContext = React.createContext(undefined);
-  const atomNames = ['boardLayoutAtom', 'calendarSettingsAtom', 'currentProjectAtom', 'currentUserAtom', 'frequentlyUsedHTCAton', 'tableTitleWrapAtom', 'showCommandsAtom', 'lastUsedBoardsAtom', 'composeTaskChatIntroAtom', 'showAIChatInterfaceAtom', 'isAiChatSidebarModeAtom', 'aiChatAutoOpenSuppressedAtom', 'aiChatExplicitOpenAtAtom', 'dockedChatScopeAtom', 'showCreateTaskModalAtom', 'showShortcutsAtom', 'showSidebarAtom', 'showBoardManagerAtom', 'inViewObjectAtom', 'uploadingStateCreateTaskModalAtom'];
+  const atomNames = ['keepAiChatClosedAtom', 'boardLayoutAtom', 'calendarSettingsAtom', 'currentProjectAtom', 'currentUserAtom', 'frequentlyUsedHTCAton', 'tableTitleWrapAtom', 'showCommandsAtom', 'lastUsedBoardsAtom', 'composeTaskChatIntroAtom', 'composeTaskSkillFollowupAtom', 'composeTaskQuestionsTaskIdAtom', 'showAIChatInterfaceAtom', 'isAiChatSidebarModeAtom', 'aiChatAutoOpenSuppressedAtom', 'aiChatExplicitOpenAtAtom', 'dockedChatScopeAtom', 'showCreateTaskModalAtom', 'showShortcutsAtom', 'showSidebarAtom', 'showBoardManagerAtom', 'inViewObjectAtom', 'uploadingStateCreateTaskModalAtom'];
   const atoms = Object.fromEntries(atomNames.map((name) => [name, name]));
   const project = { id: 7, title: 'QA Sandbox', uniqueIdentifier: 'QASA' };
   const values = new Map(Object.entries({
+    keepAiChatClosedAtom: config.keepClosed ?? false,
     inViewObjectAtom: config.inView ?? { taskId: null },
     currentProjectAtom: config.project === null ? null : config.project ?? project, currentUserAtom: { id: 985, uid: 'qa' },
     boardLayoutAtom: 'board', calendarSettingsAtom: {}, frequentlyUsedHTCAton: {}, lastUsedBoardsAtom: config.recency ?? {},
-    showCommandsAtom: { show: config.open ?? true, mode: 0, paletteTab: config.tab ?? 'search', composeProject: config.destinationProject }, composeTaskChatIntroAtom: null,
+    showCommandsAtom: { show: config.open ?? true, mode: 0, paletteTab: config.tab ?? 'search', composeProject: config.destinationProject }, composeTaskChatIntroAtom: null, composeTaskQuestionsTaskIdAtom: null,
   }));
   const listeners = new Set();
   const set = (atom, next) => { values.set(atom, typeof next === 'function' ? next(values.get(atom)) : next); listeners.forEach((fn) => fn()); };
@@ -141,7 +152,7 @@ async function withPalette(t, config, check) {
       useCommandCenterShortcut(Object.hasOwn(config, 'userId') ? config.userId : 985, config.apple ?? false, dom.window.location.pathname, config.trial ?? false, false, toggleShowCommands);
       return React.createElement(query.QueryClientProvider, { client: queryClient },
         React.createElement(TaskContext.Provider, { value: config.headerTask ? headerState : undefined },
-          shown.show ? React.createElement(React.Suspense, { fallback: React.createElement('div', { 'data-palette-suspended': true }) }, React.createElement(Palette, { isOpen: true })) : null,
+          shown.show ? React.createElement(React.Suspense, { fallback: React.createElement('div', { 'data-palette-suspended': true }) }, React.createElement(Palette, { isOpen: true, focusProxy: config.bufferedText !== undefined ? focusProxy : undefined })) : null,
           React.createElement(Probe)));
     }
     reactRoot = require('react-dom/client').createRoot(document.getElementById('root'));
@@ -181,7 +192,12 @@ async function withPalette(t, config, check) {
       await React.act(async () => reactRoot.render(React.createElement(config.strict ? React.StrictMode : React.Fragment, null, React.createElement(Harness))));
       assert.equal(document.getElementById('root').innerHTML, current);
     };
-    await check({ dom, input, type, press, clickTab, finish, fail, rerender, flags, values, set, requests, navigations, cacheAdds, cacheUpdates, queryClient, viewedTasks, loadedBoards, shells, capture, baseline, source, stub, jiti, mountProbe, headerState: () => headerState, legacyJ: () => legacyJ });
+    const flushAnimationFrame = () => React.act(async () => {
+      const callbacks = animationFrames.splice(0);
+      assert.ok(callbacks.length, 'a focus retry must be pending');
+      callbacks.forEach((callback) => callback());
+    });
+    await check({ dom, flushAnimationFrame, focusProxy, input, type, press, clickTab, finish, fail, rerender, flags, values, set, requests, navigations, cacheAdds, cacheUpdates, queryClient, viewedTasks, loadedBoards, shells, capture, baseline, source, stub, jiti, mountProbe, headerState: () => headerState, legacyJ: () => legacyJ });
   } finally {
     document.removeEventListener('keydown', legacy);
     try {
@@ -330,6 +346,7 @@ test('Enter sends the current board and opens its detail with regular task-scope
     await press('Enter', { code: 'Enter' });
     assert.equal(requests.length, 1);
     assert.equal(requests[0].body.project.id, 7);
+    assert.equal(requests[0].body.viewProject, values.get('currentProjectAtom'));
     assert.equal(requests[0].body.userId, 985);
     assert.equal(requests[0].body.text, 'Fix login button spacing');
     assert.match(document.body.textContent, /Writing your ticket…/);
@@ -353,11 +370,25 @@ test('Enter sends the current board and opens its detail with regular task-scope
   });
 });
 
+for (const ticketQuestions of [true, false]) {
+  test(`Ctrl+J records the questions task only when new-ticket questions are enabled: ${ticketQuestions}`, async (t) => {
+    await withPalette(t, { tab: 'compose', ticketQuestions }, async ({ type, press, finish, values }) => {
+      assert.equal(values.get('composeTaskQuestionsTaskIdAtom'), null);
+      await type('Fix login button spacing');
+      await press('Enter', { code: 'Enter' });
+      await finish();
+      assert.equal(values.get('composeTaskQuestionsTaskIdAtom'), ticketQuestions ? 91 : null);
+      assert.equal(values.get('composeTaskChatIntroAtom').taskId, 91);
+    });
+  });
+}
+
 test('non-board page uses previousBoard instead of stale currentProject and reports raw fallback in chat', async (t) => {
   await withPalette(t, { url: '/settings', previousBoard: 'project-8|&|view', tab: 'compose' }, async ({ type, press, requests, finish, navigations, values, loadedBoards }) => {
     await type('Raw note');
     await press('Enter', { code: 'Enter' });
     assert.equal(requests[0].body.project.id, 8);
+    assert.equal(requests[0].body.viewProject, undefined);
     assert.equal(loadedBoards.length, 1);
     await finish(true);
     assert.deepEqual(navigations, ['/detail/project-8/44']);
@@ -612,6 +643,7 @@ test('Ctrl+J fills only the visible new empty task when both flags are on and ne
       const fills = newWindow && title === 'Enter task title here';
       assert.equal(requests[0].body.existingTaskId, fills ? 52 : undefined);
       assert.equal(requests[0].body.project.id, fills ? 7 : 8);
+      assert.equal(requests[0].body.viewProject, undefined);
       await finish();
       assert.equal(cacheAdds.length, fills ? 0 : 1);
       assert.equal(values.get('showAIChatInterfaceAtom'), true);
@@ -723,8 +755,8 @@ test('creation-form New Task handoff preserves board and dismissal, and closes o
       const { armBackDismiss, closeBackDismissBeforeNavigation } = jiti(path.join(root, 'src/lib/mobile/backDismiss.ts'));
       const { isComposePaletteShortcut } = jiti(path.join(root, 'src/lib/constants/commandCenterShortcut.ts'));
       const { CommandMode } = jiti(path.join(root, 'src/models/enums.ts'));
-      const runEffect = new Function('useEffect', 'newTaskWindow', 'isApple', 'pathname', 'projectForContext', 'setCommands', 'CommandMode', 'isComposePaletteShortcut', 'closeHandler', 'isMbl', 'closeBackDismissBeforeNavigation', javascript);
-      function Probe() { runEffect(React.useEffect, newWindow, false, '/project', selected, (value) => set('showCommandsAtom', value), CommandMode, isComposePaletteShortcut, closeHandler, mobile, closeBackDismissBeforeNavigation); return null; }
+      const runEffect = new Function('useEffect', 'newTaskWindow', 'isApple', 'pathname', 'projectForContext', 'setCommands', 'CommandMode', 'isComposePaletteShortcut', 'closeHandler', 'isMbl', 'closeBackDismissBeforeNavigation', 'composeShortcutCapture', javascript);
+      function Probe() { runEffect(React.useEffect, newWindow, false, '/project', selected, (value) => set('showCommandsAtom', value), CommandMode, isComposePaletteShortcut, closeHandler, mobile, closeBackDismissBeforeNavigation, true); return null; }
       await mountProbe(() => React.createElement(Probe));
       await press('j', { ctrlKey: true }, document.body);
       assert.equal(legacyJ(), 0, 'only one shortcut handles the opening');
@@ -784,6 +816,7 @@ test('explicit form destination wins over URL, recency and an empty task detail'
       assert.equal(input().value, 'Create on my selected board');
       await press('Enter');
       assert.equal(requests[0].body.project, destinationProject);
+      assert.equal(requests[0].body.viewProject, undefined);
       assert.equal(requests[0].body.existingTaskId, undefined, 'the creation form must not fill the task behind it');
       await finish();
       assert.deepEqual(navigations, ['/detail/project-8/44']);
@@ -838,6 +871,26 @@ for (const writerFailed of [false, true]) test(`same-task fill updates the mount
     assert.equal(pendingFetch.signal.aborted, true, 'cancel the old snapshot before publishing the saved task');
     await React.act(async () => pendingFetch.resolve({ ok: true, status: 200, json: async () => targetTask }));
     assert.equal(document.querySelector('[data-task-title]').textContent, savedTask.title, 'a stale fetch cannot overwrite the saved title');
+  });
+});
+
+test('same-task fill preserves an assignee selected while the writer response is pending', async (t) => {
+  const targetTask = { id: 52, projectId: 7, sectionId: 12, uniqueIndex: 4, title: 'Enter task title here', assignees: [], description_: { content: '' }, project: { id: 7 } };
+  await withPalette(t, { newWindow: true, tab: 'compose', headerTask: targetTask, targetTask, url: '/detail/project-7/4', inView: { taskId: 52 } }, async ({ type, press, finish, headerState, queryClient, cacheUpdates, cacheAdds, requests }) => {
+    await type('Write this task');
+    await press('Enter');
+    assert.equal(requests.length, 1);
+    assert.equal(requests[0].body.existingTaskId, targetTask.id);
+    const assignees = [{ userId: 985 }];
+    await React.act(async () => headerState().setCurrentTask(current => ({ ...current, assignees })));
+    const savedTask = { ...targetTask, title: 'Written title', description_: { content: '<p>Written body</p>' } };
+    await finish(false, savedTask);
+    const expected = { ...savedTask, assignees };
+    assert.deepEqual(headerState().currentTask, expected);
+    assert.deepEqual(queryClient.getQueryData(['cached-task-detail', 985, 52]), expected);
+    assert.deepEqual(cacheUpdates, [[expected, 52, 7, 12]]);
+    assert.deepEqual(cacheAdds, []);
+    assert.equal(headerState().description, savedTask.description_.content);
   });
 });
 
@@ -1496,4 +1549,169 @@ test('board chip without a current or remembered board lets the user pick before
     await press('Enter', { code: 'Enter' });
     assert.equal(requests[0].body.project.id, 7);
   });
+});
+
+for (const keepClosedFlag of [false, true]) {
+  for (const keepClosed of [false, true]) {
+    test(`Ctrl+J creation: keep closed flag=${keepClosedFlag}, preference=${keepClosed}`, async (t) => {
+      await withPalette(t, { open: false, newWindow: true, keepClosedFlag, keepClosed }, async ({ press, type, finish, values, set, navigations, cacheAdds }) => {
+        await React.act(async () => {
+          set('showAIChatInterfaceAtom', false);
+          set('aiChatAutoOpenSuppressedAtom', true);
+        });
+        await press('j', { ctrlKey: true }, document.body);
+        await type('Create a task without forcing the chat open');
+        await press('Enter');
+        await finish();
+        assert.equal(cacheAdds.length, 1, 'task creation still succeeds');
+        assert.deepEqual(navigations, ['/detail/project-7/44']);
+        assert.equal(values.get('showCommandsAtom').show, false, 'creation window closes');
+        const prevented = keepClosedFlag && keepClosed;
+        assert.equal(values.get('showAIChatInterfaceAtom'), !prevented);
+        assert.equal(values.get('aiChatAutoOpenSuppressedAtom'), prevented, 'veto must not clear a previous manual close');
+        assert.equal(Boolean(values.get('aiChatExplicitOpenAtAtom')), !prevented);
+        assert.equal(values.get('keepAiChatClosedAtom'), keepClosed);
+      });
+    });
+  }
+}
+
+test('Ctrl+J uses the latest saved veto if it changes while task creation is pending', async (t) => {
+  await withPalette(t, { open: false, newWindow: true, keepClosedFlag: true }, async ({ press, type, finish, values, set, navigations }) => {
+    await press('j', { ctrlKey: true }, document.body);
+    await type('Create while the preference changes');
+    await press('Enter');
+    await React.act(async () => {
+      set('keepAiChatClosedAtom', true);
+      set('showAIChatInterfaceAtom', false);
+      set('aiChatAutoOpenSuppressedAtom', true);
+    });
+    await finish();
+    assert.deepEqual(navigations, ['/detail/project-7/44']);
+    assert.equal(values.get('showAIChatInterfaceAtom'), false);
+    assert.equal(values.get('aiChatAutoOpenSuppressedAtom'), true);
+  });
+});
+
+test('HTPR-7547 cold Compose receives text and selection from the command focus proxy', async (t) => {
+  for (const mobile of [false, true]) {
+    await withPalette(t, { tab: 'compose', mobile, preserveColdCommandInput: true, bufferedText: 'draft from cold open' }, async ({ input, focusProxy }) => {
+      assert.equal(input().value, 'draft from cold open');
+      assert.equal(document.activeElement, input());
+      assert.equal(input().selectionStart, 2);
+      assert.equal(input().selectionEnd, 5);
+      assert.equal(focusProxy.current.value, '', 'the handoff consumes the buffer');
+    });
+  }
+});
+
+
+test('HTPR-7547 flag off keeps the previous Compose focus behavior', async (t) => {
+  for (const mobile of [false, true]) {
+    await withPalette(t, { tab: 'compose', mobile, preserveColdCommandInput: false, legacyProxy: true, bufferedText: 'unconsumed legacy proxy' }, async ({ input, focusProxy }) => {
+      assert.equal(input().value, '');
+      assert.equal(focusProxy.current.value, 'unconsumed legacy proxy');
+    });
+  }
+});
+
+
+test('HTPR-7547 cold Search Compose handoff preserves drafts with the optimization On, Off or unresolved', async (t) => {
+  for (const preserveColdCommandInput of [true, false, undefined]) {
+    for (const mobile of [false, true]) {
+      const bufferedText = 'first line\nsecond line';
+      await withPalette(t, { tab: 'compose', mobile, preserveColdCommandInput, bufferedText }, async ({ input, focusProxy, requests }) => {
+        assert.equal(input().value, bufferedText);
+        assert.equal(document.activeElement, input());
+        assert.equal(input().selectionStart, 2);
+        assert.equal(input().selectionEnd, 5);
+        assert.equal(focusProxy.current.value, '');
+        assert.equal(requests.length, 0, 'transferring a draft does not submit it');
+      });
+    }
+  }
+});
+
+
+test('HTPR-7547 buffered Compose Enter submits the transferred draft once after state commits', async (t) => {
+  for (const preserveColdCommandInput of [true, false, undefined]) {
+    for (const mobile of [false, true]) {
+      const bufferedText = 'first line\nsecond line';
+      await withPalette(t, { tab: 'compose', mobile, strict: true, preserveColdCommandInput, bufferedText, pendingEnter: bufferedText }, async ({ requests, rerender, focusProxy }) => {
+        assert.equal(requests.length, 1);
+        assert.equal(requests[0].body.text, bufferedText);
+        assert.equal(focusProxy.pendingEnter, undefined);
+        await rerender();
+        assert.equal(requests.length, 1, 'rerenders and StrictMode must not resubmit');
+      });
+    }
+  }
+});
+
+
+test('HTPR-7547 buffered Search Enter selects the matching command once after filtering', async (t) => {
+  for (const mobile of [false, true]) {
+    await withPalette(t, { mobile, bufferedText: 'AI Task Writer', pendingEnter: 'AI Task Writer' }, async ({ values, focusProxy, requests }) => {
+      assert.equal(values.get('showCommandsAtom').paletteTab, 'compose');
+      assert.equal(focusProxy.pendingEnter, undefined);
+      assert.equal(requests.length, 0, 'selecting Compose is not a second Enter in Compose');
+    });
+  }
+});
+
+
+test('HTPR-7547 a mismatched queued Compose Enter is discarded at handoff, not retained for a later edit', async (t) => {
+  for (const mobile of [false, true]) {
+    await withPalette(t, { tab: 'compose', mobile, bufferedText: 'draft2', pendingEnter: 'draft' }, async ({ input, type, requests, focusProxy }) => {
+      assert.equal(input().value, 'draft2');
+      assert.equal(focusProxy.pendingEnter, undefined);
+      assert.equal(requests.length, 0);
+      await type('draft');
+      assert.equal(requests.length, 0, 'editing back to an old Enter snapshot must not submit');
+    });
+  }
+});
+
+
+test('HTPR-7547 a mismatched queued Search Enter is discarded rather than executed after editing', async (t) => {
+  for (const mobile of [false, true]) {
+    await withPalette(t, { mobile, bufferedText: 'AI Task Writer2', pendingEnter: 'AI Task Writer' }, async ({ values, focusProxy }) => {
+      assert.equal(values.get('showCommandsAtom').paletteTab, 'search');
+      assert.equal(focusProxy.pendingEnter, undefined);
+    });
+  }
+});
+
+
+test('HTPR-7547 flag On preserves the opted-in Compose handoff for existing proxy hosts', async (t) => {
+  for (const mobile of [false, true]) {
+    await withPalette(t, { tab: 'compose', mobile, preserveColdCommandInput: true, legacyProxy: true, bufferedText: 'existing host draft' }, async ({ input, focusProxy }) => {
+      assert.equal(input().value, 'existing host draft');
+      assert.equal(focusProxy.current.value, '');
+    });
+  }
+});
+
+
+test('HTPR-7547 queued Compose Enter submits once when mobile focus lands in a later animation frame', async (t) => {
+  for (const strict of [false, true]) {
+    for (const preserveColdCommandInput of [true, false, undefined]) {
+      const bufferedText = 'first line\nsecond line';
+      await withPalette(t, { tab: 'compose', mobile: true, strict, preserveColdCommandInput, bufferedText, pendingEnter: bufferedText, focusFailures: strict ? 2 : 1, deferAnimationFrames: true }, async ({ input, focusProxy, requests, flushAnimationFrame, rerender }) => {
+        assert.equal(input().value, bufferedText, 'text commits before the focus retry');
+        assert.equal(document.activeElement, focusProxy.current);
+        assert.equal(requests.length, 0, 'queued Enter waits for the focus handoff');
+        assert.equal(focusProxy.pendingEnter, bufferedText);
+        let focusLanded = false;
+        input().addEventListener('focus', () => { focusLanded = true; });
+        await flushAnimationFrame();
+        assert.equal(focusLanded, true, 'the retry focuses Compose before submitting');
+        assert.equal(requests.length, 1);
+        assert.equal(requests[0].body.text, bufferedText);
+        assert.equal(focusProxy.pendingEnter, undefined);
+        await rerender();
+        assert.equal(requests.length, 1, 'focus changes and StrictMode cannot resubmit');
+      });
+    }
+  }
 });

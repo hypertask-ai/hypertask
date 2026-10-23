@@ -20,9 +20,8 @@ type AIGeneratedAttachment = {
 };
 import type { TaskDetailEditorPresentation } from "./taskDetailEditorPresentation";
 import { useFlag as useStableLayoutFlag } from "@/hooks/useFlag";
-import { HTPR_6752_INSTANT_TICKET_OPEN_FLAG, HTPR_6899_STABLE_LAYOUT_FLAG } from "@/lib/flags/keys";
+import { HTPR_6899_STABLE_LAYOUT_FLAG } from "@/lib/flags/keys";
 export function useTaskDetailEditorEvents(context: TaskDetailEditorPresentation) {
-  const instantTicketOpen = useStableLayoutFlag(HTPR_6752_INSTANT_TICKET_OPEN_FLAG);
   const stableLayout = useStableLayoutFlag(HTPR_6899_STABLE_LAYOUT_FLAG);
   const { setShouldShowAITaskWriter, shouldTriggerAiTaskWriter, mode, reply, editor, isMbl, isSelected, handleFocus, shouldShowFullAiTaskWriter, divIds, calculatePopoverPosition, updateDrafts, editorContent, setEditorContent, defaultContent, resetDraft, discardDraft, setResetDraft, id, setAiTriggerData, currentTask, suggestReplyAbortRef, shouldShowInlineDraftAiRef, setTrigger, setEmojiGifPicker, handleOutsideClickDescription, handleOutsideClickComment } = context;
 
@@ -69,7 +68,7 @@ export function useTaskDetailEditorEvents(context: TaskDetailEditorPresentation)
       }
     }
   };
-  useEffect(stableLayout && instantTicketOpen ? () => insertReply("center", "auto") : insertReply, [editor, reply]);
+  useEffect(stableLayout ? () => insertReply("center", "auto") : insertReply, [editor, reply]);
 
   useEffect(() => {
     if (!shouldShowFullAiTaskWriter) return;

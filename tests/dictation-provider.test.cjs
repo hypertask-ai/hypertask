@@ -168,7 +168,7 @@ test("paid dictation requires write access and keeps teamless owners", () => {
     "utf8",
   );
 
-  assert.match(providerGate, /taskWriteAccessWhere\(userId\)/);
+  assert.match(providerGate, /taskWriteAccessWhere\(userId, agentId, teamScope\)/);
   assert.doesNotMatch(providerGate, /getProjectWhere\(userId\)/);
   assert.doesNotMatch(providerGate, /projectContentAccessWhere\(userId\)/);
   assert.match(providerGate, /projectId: project\?\.id \?\? null/);

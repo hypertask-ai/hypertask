@@ -42,9 +42,13 @@ test("every CI service and command-line consumer uses a pinned GHCR copy with re
   const ci = workflow("ci-tests").jobs["ci-tests"];
   assert.equal(ci.env.HTPR_PG_IMAGE, reference(images.find((image) => image.tag === "16-alpine")));
   assertLoginBefore(ci, "Pull PostgreSQL test image", "github.event_name == 'push' || steps.scope.outputs.build_needed == 'true'");
-  for (const step of ["Test", "Test with coverage collection"]) {
+  for (const step of ["Test", "Test full suite"]) {
     assertLoginBefore(ci, step, "github.event_name == 'push' || steps.scope.outputs.build_needed == 'true'");
   }
+  const nightly = workflow("coverage-nightly").jobs["coverage-nightly"];
+  assert.equal(nightly.env.HTPR_PG_IMAGE, ci.env.HTPR_PG_IMAGE);
+  assertLoginBefore(nightly, "Pull PostgreSQL test image");
+  assertLoginBefore(nightly, "Test with coverage collection");
   const guard = ci.steps.find((step) => step.name === "Guard CI image sources");
   assert.equal(guard.run, "node --test tests/ci-image-sources.test.cjs");
   assert.equal(guard.if, undefined, "guard must run even for workflow-only PRs");

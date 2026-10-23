@@ -14,12 +14,13 @@ import { createHash } from 'node:crypto'
 import path from 'node:path'
 import type { Box } from './lib/layout-lock'
 import {
-  MATRIX_CHANGE_MESSAGE, MATRIX_STATES, MATRIX_WIDTHS, composerFollowsComments, describeCombo, matrixDifferences,
-  stateKey, validateMatrixFlagChanges, type Anchor, type Anchors, type MatrixFlagChange, type MatrixState,
+  MATRIX_CHANGE_MESSAGE, MATRIX_STATES, MATRIX_WIDTHS, composerFollowsThread, describeCombo, matrixDifferences,
+  stateKey, validateMatrixFlagChanges, matrixBaselineLayout, type Anchor, type Anchors, type MatrixFlagChange, type MatrixState,
 } from './lib/layout-lock-matrix'
 import { FEATURE_FLAG_KEYS } from '../../src/lib/flags'
 import { createTask } from './lib/api'
 import { withRealtime } from './lib/realtime'
+import { scrollToBaselinePosition, waitForTicketInitialScroll } from './lib/layout-lock-scroll'
 
 const stateFile = process.env.BROWSER_SMOKE_STATE_FILE || 'e2e/smoke/.state/smoke-state.json'
 const fixturePath = path.join(path.dirname(stateFile), 'card-fixture.json')
@@ -130,15 +131,18 @@ const describeMissing = (page: Page, targets: Record<string, Target>, actual: Re
     const all = page.locator(targets[name].selector)
     return `${name}: ${await all.count()} found, ${await all.locator('visible=true').count()} visible`
   }))
-const lastCommentBottom = (page: Page) => page.evaluate(() => {
-  const comments = [...document.querySelectorAll('[data-testid="ticket-comment"]')]
-  return comments.length ? Math.round(Math.max(...comments.map(comment => comment.getBoundingClientRect().bottom))) : null
-})
-
-// Scroll offsets differ between a fresh load and a resize; every comparison starts from the top.
-const scrollToTop = (page: Page) => page.evaluate(() => {
-  for (const element of document.querySelectorAll('*')) if (element.scrollTop > 0) element.scrollTop = 0
-  window.scrollTo(0, 0)
+const threadEdges = (page: Page) => page.evaluate(() => {
+  const rendered = (selector: string) => [...document.querySelectorAll(selector)]
+    .filter(element => getComputedStyle(element).visibility !== 'hidden')
+    .map(element => element.getBoundingClientRect()).filter(box => box.width > 0 && box.height > 0)
+  const comments = rendered('[data-testid="ticket-comment"]')
+  const composers = rendered('[data-testid="comment-composer"]')
+  const descriptions = rendered('[data-testid="ticket-description"]')
+  return {
+    composerTop: composers.length === 1 ? composers[0].top : null,
+    lastCommentBottom: comments.length ? Math.max(...comments.map(box => box.bottom)) : null,
+    descriptionBottom: descriptions.length === 1 ? descriptions[0].bottom : null,
+  }
 })
 
 // Two animation frames, then the same boxes twice in a row: the layout has stopped changing.
@@ -234,6 +238,7 @@ for (const definition of selected) {
     const baseline = update && !existsSync(baselinePath) ? undefined : readBaseline()
     const recorded: Record<string, Record<string, Anchors>> = {}
     const failures: string[] = []
+    const measurements: Array<{ label: string; actual: Record<string, Box | null> }> = []
     let shots = 0
     mkdirSync(outDir, { recursive: true })
 
@@ -244,12 +249,12 @@ for (const definition of selected) {
       const { flags } = await (await flagsResponse).json() as { flags: Record<string, boolean> }
       for (const [key, enabled] of Object.entries(fixture.flags)) expect(flags[key] === true, `layout flag ${key}`).toBe(enabled)
       await definition.ready(page)
+      if (definition.thread) await waitForTicketInitialScroll(page)
       if (definition.name === 'ticket-short-thread') await expandComments(page)
       await applyState(page, state)
       for (const width of MATRIX_WIDTHS) {
         const label = describeCombo(definition.name, width, state)
         await page.setViewportSize({ width, height: 900 })
-        await scrollToTop(page)
         const expected = baseline?.pages[definition.name]?.[stateKey(state)]?.[String(width)]
         const found: string[] = []
         // HTPR-7074 hides the comment box until the thread settles (2s hard stop). Still hidden after 3s is a real failure.
@@ -258,11 +263,29 @@ for (const definition of selected) {
           found.push(`${label}: comment box still hidden 3s after the window changed width`)
         }
         const required = Object.keys(expected ?? {}).filter(name => width >= 768 || name !== 'ai-sidebar')
+        await scrollToBaselinePosition(page, matrixBaselineLayout(definition.name, width, state))
         const { actual, stable } = await settle(page, definition.targets, required)
         // On a phone the AI chat is an animated sheet over the page, not part of the layout.
         if (width < 768) actual['ai-sidebar'] = null
+        measurements.push({ label, actual })
         if (!stable) found.push(`${label}: layout never settled within 8s`)
+        if (definition.thread) {
+          // A fixed phone composer must be checked at the thread's end, not over offscreen comments.
+          if (width < 768) {
+            await page.getByTestId('ticket-thread').evaluate(thread => {
+              for (let parent = thread.parentElement; parent; parent = parent.parentElement) {
+                if (/auto|scroll/.test(getComputedStyle(parent).overflowY)) parent.scrollTop = parent.scrollHeight
+              }
+              document.scrollingElement?.scrollTo(0, document.scrollingElement.scrollHeight)
+            })
+            await page.evaluate(() => new Promise<void>(resolve => requestAnimationFrame(() => requestAnimationFrame(() => resolve()))))
+          }
+          const edges = await threadEdges(page)
+          found.push(...composerFollowsThread(label, edges.composerTop, edges.lastCommentBottom, edges.descriptionBottom))
+          if (width < 768) await scrollToBaselinePosition(page, matrixBaselineLayout(definition.name, width, state))
+        }
         if (update) {
+          expect(found, 'baseline updates must preserve the composer below the thread').toEqual([])
           recorded[stateKey(state)] ??= {}
           recorded[stateKey(state)][String(width)] = Object.fromEntries(Object.entries(actual).filter(([, box]) => box).map(([name, box]) => [name, anchorOf(definition.targets[name], width, state, box!)]))
           await page.screenshot({ path: path.join(outDir, 'before', `${slug(label)}.png`) })
@@ -271,8 +294,6 @@ for (const definition of selected) {
         if (!expected) found.push(`${label}: no baseline recorded. ${MATRIX_CHANGE_MESSAGE}`)
         else {
           found.push(...matrixDifferences(label, definition.name, expected, actual, fixture.allFlagsOn ? { entries: flagChanges, registry: FEATURE_FLAG_KEYS, flags } : undefined))
-          const composer = actual['comment-box']
-          if (definition.thread && width >= 768 && composer && expected['comment-box']) found.push(...composerFollowsComments(label, composer.y, await lastCommentBottom(page)))
         }
         if (found.length) {
           const missing = await describeMissing(page, definition.targets, Object.fromEntries(Object.entries(actual).filter(([name]) => width >= 768 || name !== 'ai-sidebar')))
@@ -285,6 +306,7 @@ for (const definition of selected) {
         }
       }
     }
+    writeFileSync(path.join(outDir, `${definition.name}-${fixture.allFlagsOn ? 'all-flags-on' : 'live-like'}-retry-${testInfo.retry}.json`), JSON.stringify({ page: definition.name, measurements, failures }, null, 2))
     await testInfo.attach('layout-matrix', { body: JSON.stringify({ page: definition.name, failures }), contentType: 'application/json' })
 
     if (update) {

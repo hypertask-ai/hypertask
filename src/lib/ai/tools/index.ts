@@ -1,3 +1,4 @@
+import type { AgentTokenTeamScope } from "@/lib/mcp/auth/types";
 import type { ToolSet } from "ai";
 import { type HeartbeatTurnMetadata } from "@/lib/nativeAgent/heartbeatTurnEnvelope";
 import { AuthedUser, ToolExecutionRecorder, ToolStartRecorder } from "@/lib/ai/chatStream/types";
@@ -99,9 +100,11 @@ export function buildTools(
   recordToolStart?: ToolStartRecorder,
   heartbeatTurn?: HeartbeatTurnMetadata,
   chatTaskWriterEnabled = false,
-  abortSignal?: AbortSignal
+  abortSignal?: AbortSignal,
+  inlineAgentImagesEnabled = false,
+  teamScope?: AgentTokenTeamScope | null
 ): ToolSet {
-  const context = createToolContext(user, body, send, recordToolExecution, actingAgentId, recordToolStart, heartbeatTurn, chatTaskWriterEnabled, abortSignal);
+  const context = createToolContext(user, body, send, recordToolExecution, actingAgentId, recordToolStart, heartbeatTurn, chatTaskWriterEnabled, abortSignal, inlineAgentImagesEnabled, teamScope);
   const tools: ToolSet = {
     hypertask_list_agents: createListAgentsTool(context).hypertask_list_agents,
     hypertask_agent_webhook: createAgentWebhookTool(context).hypertask_agent_webhook,

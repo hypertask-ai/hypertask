@@ -29,11 +29,11 @@ const query = (rows, args) => rows.filter((row) => matches(row, args.where))
   }).slice(0, args.take)
 const mocks = new Map([
   ['src/lib/auth/getSessionUser.ts', { getSessionUser: async () => state.session }],
-  ['src/lib/flags.ts', { HTPR_6688_SEARCH_AUTOCOMPLETE_FLAG: 'htpr-6688-search-autocomplete', HTPR_6865_SEARCH_LAYOUT_FLAG: 'htpr-6865-search-layout', HTPR_6878_SEARCH_LABEL_SCOPE_FLAG: 'htpr-6878-search-label-scope', HTPR_6880_SEARCH_COMMENTER_FLAG: 'htpr-6880-search-commenter', isFeatureEnabled: async (key) => key === 'htpr-6878-search-label-scope' ? false : key === 'htpr-6865-search-layout' ? state.layoutFlag : key === 'htpr-6688-search-autocomplete' ? state.autocompleteFlag : true }],
+  ['src/lib/auth/agentScope.ts', { withAgentScopeRequest: (_request, run) => run() }],
   ['src/utils/controllers/projects/getAllIncludes.ts', { getProjectWhere: (id) => ({ ownerId: id }) }],
   ['src/lib/prisma.ts', { default: {
     project: { findMany: async ({ where }) => {
-      assert.equal(where.ownerId, 6)
+      assert.deepEqual(where, { status: 'Normal', ownerId: 6, AND: [{ ownerId: 6 }] })
       return [{ id: 7, title: 'Visible' }]
     } },
     label: { findMany: async (args) => {
@@ -41,8 +41,10 @@ const mocks = new Map([
       assert.deepEqual(args.where.projectId.in, [7])
       return query(state.labels, args)
     } },
+    taskLabel: { groupBy: async () => [] },
     task: { findMany: async (args) => {
-      assert.deepEqual(args.where.projectId.in, [7])
+      assert.deepEqual(args, { where: { projectId: { in: [7] }, createdAt: { gte: args.where.createdAt.gte }, project: { ownerId: 6 } }, select: { userId: true }, orderBy: { createdAt: 'desc' }, take: 100 })
+      assert.ok(args.where.createdAt.gte instanceof Date)
       return (state.recentTasks ?? []).slice(0, args.take)
     } },
     assignees: { findMany: async (args) => {
@@ -80,20 +82,20 @@ test('lookup filters before capping 100 visible labels and people', async () => 
   const labels = Array.from({ length: 150 }, (_, i) => ({ id: `a-${i}`, value: `Alpha ${i}`, projectId: 7 }))
   labels.push({ id: 'zebra', value: 'Zebra', projectId: 7 })
   const assignee = await lookup('assignee', 'zoe', { people })
-  assert.deepEqual(assignee.res.body.candidates, [{ id: 999, name: 'Zoe' }])
+  assert.deepEqual(assignee.res.body.candidates, [{ id: 999, name: 'Zoe', email: '999@example.com' }])
   assert.equal(assignee.state.peopleScope, 7)
   assert.equal(assignee.state.peopleQueries[0].take, 100)
   assert.equal(assignee.state.peopleQueries[1].take, 99)
   assert.ok(assignee.state.peopleQueries[0].orderBy)
   const label = await lookup('label', 'zebra', { labels })
-  assert.deepEqual(label.res.body.candidates, [{ id: 'zebra', name: 'Zebra' }])
-  assert.equal(label.state.labelQueries[0].take, 100)
+  assert.deepEqual(label.res.body.candidates, [{ id: 'zebra', name: 'Zebra', count: 0, byName: true }])
+  assert.equal(label.state.labelQueries[0].take, undefined)
   assert.ok(label.state.labelQueries[0].orderBy)
   const contains = await lookup('label', 'zebra', { labels: [
     ...labels.slice(0, -1), { id: 'mid-zebra', value: 'Needs Zebra', projectId: 7 },
   ] })
-  assert.deepEqual(contains.res.body.candidates, [{ id: 'mid-zebra', name: 'Needs Zebra' }])
-  assert.equal(contains.state.labelQueries[1].where.AND[0].value.contains, 'zebra')
+  assert.deepEqual(contains.res.body.candidates, [{ id: 'mid-zebra', name: 'Needs Zebra', count: 0, byName: true }])
+  assert.equal(contains.state.labelQueries.length, 1)
 })
 test('empty assignee lookup includes people past the unordered first 100', async () => {
   const people = Array.from({ length: 150 }, (_, i) => person(i + 1, `Zoe ${String(i).padStart(3, '0')}`))
@@ -153,7 +155,7 @@ test('recent fuzzy people appear only once even when present in both sources', a
   const { res } = await lookup('from', 'kml', {
     people: [person(1, 'Kamil')], recentTasks: [{ userId: 1 }],
   })
-  assert.deepEqual(res.body.candidates, [{ id: 1, name: 'Kamil' }])
+  assert.deepEqual(res.body.candidates, [{ id: 1, name: 'Kamil', email: '1@example.com' }])
 })
 test('person hydration uses one bounded exact-name query for a long tail', async () => {
   const { state: snapshot } = await lookup('from', 'Kamil', {
@@ -163,12 +165,13 @@ test('person hydration uses one bounded exact-name query for a long tail', async
   assert.equal(exact.length, 1)
   assert.ok(exact[0].where.AND[1].OR.length <= 20)
 })
-test('fuzzy labels filter query letters before the alphabetical cap', async () => {
+test('fuzzy labels include matches beyond the old alphabetical cap', async () => {
   const labels = Array.from({ length: 500 }, (_, i) => ({ id: i, value: `A${String(i).padStart(3, '0')}`, projectId: 7 }))
   labels.push({ id: 501, value: 'Build good', projectId: 7 })
   const { res, state: snapshot } = await lookup('label', 'bug', { labels })
-  assert.deepEqual(res.body.candidates, [{ id: 501, name: 'Build good' }])
-  assert.equal(snapshot.labelQueries.at(-1).where.AND.length, 3)
+  assert.deepEqual(res.body.candidates, [{ id: 501, name: 'Build good', count: 0, byName: true }])
+  assert.equal(snapshot.labelQueries.length, 1)
+  assert.equal(snapshot.labelQueries[0].take, undefined)
 })
 test('recent collaborator beats the alphabetical cap and fuzzy scans are name-filtered', async () => {
   const people = Array.from({ length: 130 }, (_, i) => person(i + 1, `Alice ${String(i).padStart(3, '0')}`))
@@ -184,18 +187,15 @@ test('lookup requires authorization', async () => {
   assert.equal((await lookup('from', 'a', { session: null })).res.statusCode, 401)
 })
 
-test('layout people emails require every flag and retain session-scoped authorization', async () => {
+test('people emails are always included with session-scoped authorization', async () => {
   for (const operator of ['from', 'assignee']) {
-    const { res } = await lookup(operator, 'mal', { layoutFlag: true, autocompleteFlag: true, people: [person(77, 'Malcolm Stern')] })
+    const { res } = await lookup(operator, 'mal', { people: [person(77, 'Malcolm Stern')] })
     assert.deepEqual(res.body.candidates, [{ id: 77, name: 'Malcolm Stern', email: '77@example.com' }])
-    for (const disabled of ['layoutFlag', 'autocompleteFlag']) {
-      const off = await lookup(operator, 'mal', { layoutFlag: true, autocompleteFlag: true, [disabled]: false, people: [person(77, 'Malcolm Stern')] })
-      assert.deepEqual(off.res.body.candidates, [{ id: 77, name: 'Malcolm Stern' }])
-    }
+
   }
   for (const operator of ['label', 'in', 'board']) {
-    const { res } = await lookup(operator, '', { layoutFlag: true, autocompleteFlag: true, labels: [{ id: 'bug', value: 'Bug', projectId: 7 }] })
+    const { res } = await lookup(operator, '', { labels: [{ id: 'bug', value: 'Bug', projectId: 7 }] })
     assert.ok(res.body.candidates.every((row) => !('email' in row)))
   }
-  assert.equal((await lookup('from', 'mal', { session: null, layoutFlag: true })).res.statusCode, 401)
+  assert.equal((await lookup('from', 'mal', { session: null })).res.statusCode, 401)
 })

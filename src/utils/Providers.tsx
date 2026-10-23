@@ -5,12 +5,13 @@ import { getBoardDocument, type BoardDocument } from "@/lib/firstScreen/boardDoc
 import { adoptBoardDocument, excludeBoardDocumentRestore } from "@/lib/firstScreen/boardAdoption";
 import { getInboxDocument, type InboxDocument } from "@/lib/firstScreen/inboxDocument";
 import { adoptInboxDocument, excludeInboxDocumentRestore } from "@/lib/firstScreen/inboxAdoption";
+import { getTicketShellSeed, type TicketShellSeed } from "@/lib/firstScreen/ticketShell";
 import type { BoardDisplay } from "@/lib/firstScreen/boardDisplay";
 import BoardDisplayMirror from "@/lib/firstScreen/BoardDisplayMirror";
 import MobileViewFlagBridge from "@/lib/contexts/MobileViewFlagBridge";
 import { globalNotificationFocusAtom, currentUserAtom, currentProjectAtom, boardLayoutAtom, boardLayoutPreferenceAtom, appShellRailAtom,
   appShellRailExpandedAtom, showQuickTipsAtom, showEmptyViewTabsAtom, hiddenViewTabIdsAtom, viewTabsOrderAtom,
-  tableVisibleColumnsAtom, tableColumnWidthsAtom, tableTitleWrapAtom, openAiChatByDefaultAtom,
+  tableVisibleColumnsAtom, tableColumnWidthsAtom, tableTitleWrapAtom, openAiChatByDefaultAtom, keepAiChatClosedAtom,
   aiChatAutoOpenSuppressedAtom, aiChatPinnedAtom, aiChatSidebarWidthPxAtom, isAiChatSidebarModeAtom } from "@/store";
 import type { StateInitialValues } from "@/lib/state";
 import { usePathname } from "next/navigation";
@@ -28,7 +29,8 @@ import ThemeListener from "@/lib/contexts/ThemeListener";
 import { MobileBlockingProvider } from "@/lib/contexts/mobileBlockingContext";
 import { TourProvider } from "@/lib/contexts/TourContext";
 import { shouldDehydratePersistedQuery } from "@/utils/queryPersistence";
-import { FeatureFlagProvider } from "@/hooks/useFlag";
+import { FeatureFlagProvider, featureFlagsQueryKey } from "@/hooks/useFlag";
+import { HTPR_7555_PERSIST_SIZE_ONCE_FLAG } from "@/lib/flags/definitions/htpr-7555-persist-size-once";
 import {
   createQueryPersister,
   type DisposableQueryPersister,
@@ -75,7 +77,7 @@ const boardInitialValues = (snapshot: BoardDocument | null): StateInitialValues 
     [showEmptyViewTabsAtom, display.board.showEmptyViewTabs], [hiddenViewTabIdsAtom, display.board.hiddenViewTabIds],
     [viewTabsOrderAtom, display.board.viewTabsOrder], [tableVisibleColumnsAtom, display.board.tableColumns],
     [tableColumnWidthsAtom, display.board.tableWidths], [tableTitleWrapAtom, display.board.tableTitleWrap],
-    [openAiChatByDefaultAtom, display.board.openChat], [aiChatAutoOpenSuppressedAtom, display.board.chatSuppressed], [aiChatPinnedAtom, display.board.chatPinned]];
+    [keepAiChatClosedAtom, display.board.keepChatClosed ?? false], [openAiChatByDefaultAtom, display.board.openChat], [aiChatAutoOpenSuppressedAtom, display.board.chatSuppressed], [aiChatPinnedAtom, display.board.chatPinned]];
   if (display.board.chatWidth !== undefined && display.board.chatSidebarMode !== undefined) {
     values.push([aiChatSidebarWidthPxAtom, display.board.chatWidth], [isAiChatSidebarModeAtom, display.board.chatSidebarMode]);
   }
@@ -87,7 +89,21 @@ const inboxInitialValues = (snapshot: InboxDocument): StateInitialValues => {
   return [[currentUserAtom, snapshot.data.user], [globalNotificationFocusAtom, { currIdx: 0, currSplit: snapshot.selection.split ?? 0 }],
     [appShellRailAtom, display.board.railOn], [appShellRailExpandedAtom, !display.railCollapsed],
     [showQuickTipsAtom, snapshot.data.isInboxZero ? false : display.quickTips],
-    [openAiChatByDefaultAtom, display.board.openChat], [aiChatAutoOpenSuppressedAtom, display.board.chatSuppressed], [aiChatPinnedAtom, display.board.chatPinned]];
+    [keepAiChatClosedAtom, display.board.keepChatClosed ?? false], [openAiChatByDefaultAtom, display.board.openChat], [aiChatAutoOpenSuppressedAtom, display.board.chatSuppressed], [aiChatPinnedAtom, display.board.chatPinned]];
+};
+
+const shellInitialValues = (display: BoardDisplay): StateInitialValues => {
+  const values: StateInitialValues[number][] = [[boardLayoutPreferenceAtom, display.boardLayout],
+    [appShellRailAtom, display.board.railOn], [appShellRailExpandedAtom, !display.railCollapsed], [showQuickTipsAtom, display.quickTips],
+    [showEmptyViewTabsAtom, display.board.showEmptyViewTabs], [hiddenViewTabIdsAtom, display.board.hiddenViewTabIds],
+    [viewTabsOrderAtom, display.board.viewTabsOrder], [tableVisibleColumnsAtom, display.board.tableColumns],
+    [tableColumnWidthsAtom, display.board.tableWidths], [tableTitleWrapAtom, display.board.tableTitleWrap],
+    [keepAiChatClosedAtom, display.board.keepChatClosed ?? false], [openAiChatByDefaultAtom, display.board.openChat],
+    [aiChatAutoOpenSuppressedAtom, display.board.chatSuppressed], [aiChatPinnedAtom, display.board.chatPinned]];
+  if (display.board.chatWidth !== undefined && display.board.chatSidebarMode !== undefined) {
+    values.push([aiChatSidebarWidthPxAtom, display.board.chatWidth], [isAiChatSidebarModeAtom, display.board.chatSidebarMode]);
+  }
+  return values;
 };
 
 function isPublicSharePath(pathname: string | null | undefined): boolean {
@@ -118,21 +134,28 @@ export default function Provider({
   initialIsApple,
   authenticatedUserId,
   firstScreen,
+  shellSeed,
+  flagProvider: FlagProvider = FeatureFlagProvider,
 }: {
   children: ReactNode;
   initialIsMobile: boolean;
   initialIsApple: boolean;
   authenticatedUserId: number | null;
   firstScreen?: BoardDocument | InboxDocument | null;
+  shellSeed?: TicketShellSeed | null;
+  flagProvider?: typeof FeatureFlagProvider;
 }) {
   const pathname = usePathname();
   const publicShare = isPublicSharePath(pathname);
   const [initialDocument] = useState(() => getBoardDocument(firstScreen ?? null, authenticatedUserId ?? 0) ?? getInboxDocument(firstScreen ?? null, authenticatedUserId ?? 0));
   const snapshot = initialDocument?.scope.accountId === authenticatedUserId ? initialDocument : null;
+  const [initialShell] = useState(() => getTicketShellSeed(shellSeed ?? null, authenticatedUserId ?? 0));
+  const shell = getTicketShellSeed(initialShell, authenticatedUserId ?? 0);
   const initialValues = useMemo(() => {
+    if (!snapshot && shell) return shellInitialValues(shell.display);
     const inbox = getInboxDocument(snapshot, authenticatedUserId ?? 0);
     return inbox ? inboxInitialValues(inbox) : boardInitialValues(getBoardDocument(snapshot, authenticatedUserId ?? 0));
-  }, [snapshot, authenticatedUserId]);
+  }, [snapshot, shell, authenticatedUserId]);
   const queryBoundary = useMemo(
     () => createQueryBoundary(authenticatedUserId, snapshot),
     [authenticatedUserId, snapshot],
@@ -172,12 +195,17 @@ export default function Provider({
           buster: REACT_QUERY_PERSIST_BUSTER,
           maxAge: 1000 * 60 * 30,
           dehydrateOptions: {
-            shouldDehydrateQuery: shouldDehydratePersistedQuery,
+            shouldDehydrateQuery: (query) => shouldDehydratePersistedQuery(
+              query,
+              queryBoundary.client.getQueryData<Record<string, boolean>>(
+                featureFlagsQueryKey(authenticatedUserId ?? 0),
+              )?.[HTPR_7555_PERSIST_SIZE_ONCE_FLAG] === true,
+            ),
           },
         }}
       >
         <DeviceProvider initialIsApple={initialIsApple}>
-          <MobileViewProvider initialIsMobile={initialIsMobile}>
+          <MobileViewProvider initialIsMobile={shell?.display.isMobile ?? initialIsMobile}>
             <StateRoot key={`state-account-${authenticatedUserId ?? "guest"}`} initialValues={initialValues}>
               <UndoProvider>
                 <MobileBlockingProvider>
@@ -186,14 +214,14 @@ export default function Provider({
                       {publicShare ? (
                         <PublicShell><ThemeListener />{children}</PublicShell>
                       ) : (
-                        <FeatureFlagProvider userId={authenticatedUserId} initialFlags={snapshot?.flags}>
+                        <FlagProvider userId={authenticatedUserId} initialFlags={snapshot?.flags ?? shell?.flags}>
                           <ThemeListener />
                           <BoardDisplayMirror accountId={authenticatedUserId} />
                           <MobileViewFlagBridge />
                           <GlobalProvider authenticatedUserId={authenticatedUserId}>
                             {children}
                           </GlobalProvider>
-                        </FeatureFlagProvider>
+                        </FlagProvider>
                       )}
                     </TourProvider>
                   </AuthProvider>

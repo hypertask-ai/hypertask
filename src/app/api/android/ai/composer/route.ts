@@ -32,7 +32,7 @@ async function getComposer(request: NextRequest) {
       return error("project_id is required", 400);
     }
     const project = await prisma.project.findFirst({
-      where: { id: projectId, ...getProjectWhere(ctx.user.id, ctx.agentId) },
+      where: { id: projectId, ...getProjectWhere(ctx.user.id, ctx.agentId, ctx.teamScope) },
       select: { id: true, teamId: true },
     });
     if (!project) return error("Project not found or access denied", 404);
@@ -88,6 +88,7 @@ async function getComposer(request: NextRequest) {
         providersWithByok,
         haiku55Enabled: defaultContext.haiku55Enabled,
         haikuDefaultEnabled: defaultContext.haikuDefaultEnabled,
+        defaultContext,
       }),
     });
   } catch (cause) {

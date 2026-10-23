@@ -1,5 +1,6 @@
 import { wrapMcpRoute, checkMcpRouteRateLimit as checkMcpRateLimit, validateMcpRouteAuth as validateMcpAuth } from '@/lib/mcp/routeWrapper'
 import { NextRequest, NextResponse } from "next/server";
+import { projectContentAccessWhere } from "@/utils/controllers/projects/getAllIncludes";
 import prisma from "@/lib/prisma";
 
 import { HTPR_6557_AGENT_ROOMS_FLAG, isFeatureEnabled } from "@/lib/flags";
@@ -38,8 +39,10 @@ export async function GET(request: NextRequest) {
         handledAt: null,
         message: {
           stoppedAt: null,
+          ...(ctx.teamScope != null ? { OR: [{ taskId: null }, { task: { project: projectContentAccessWhere(ctx.user.id, ctx.agentId, ctx.teamScope) } }] } : {}),
           room: {
             project: {
+              ...projectContentAccessWhere(ctx.user.id, ctx.agentId, ctx.teamScope),
               status: "Normal",
               members: {
                 some: {

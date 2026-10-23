@@ -332,7 +332,7 @@ test('comment creation by authenticated agent refuses board 2128 before dedupe o
   f.prisma.comment = { findUnique: async () => null };
   const route = f.load('src/lib/mcp/operations/comments/operation.ts', {
     '@/lib/mcp/routeWrapper': { ...f.mocks['@/lib/mcp/routeWrapper'], readMcpRouteJsonBody: async req => ({ ok: true, body: await req.json() }) },
-    '@/lib/mcp/idempotency/idempotencyStore': { normalizeIdempotencyKey: () => null, withIdempotency: async (_op, _user, _key, _body, run) => run() },
+    '@/lib/mcp/idempotency/idempotencyStore': { IdempotencyAccessError: class extends Error {}, normalizeIdempotencyKey: () => null, withIdempotency: async (_op, _user, _key, _body, run) => run() },
     '@/utils/controllers/comments/createCommentService': { createCommentService: async () => { f.writes.push('comment'); return { id: 1, text: 'After', createdAt: new Date() }; } },
     '@/utils/controllers/comments/processMentions': { resolveTextMentions: async text => text },
     '@/utils/helperFunctions/multiPages': { extractTipTapContent: () => ({ mentions: [] }) },
@@ -411,7 +411,7 @@ test('MCP timer running/report and team presence forward the authenticated agent
     }
   }
   const presence = f.load('src/lib/mcp/operations/agents/presence/operation.ts').GET;
-  assert.deepEqual((await (await presence(request('/api/mcp/agents/presence?team_id=team'))).json()).agents.map(row => row.agent.id), ['other-15', 'other-4060']);
+  assert.deepEqual((await (await presence(request('/api/mcp/agents/presence?team_id=team'))).json()).agents.map(row => row.agent.id).sort(), ['other-15', 'other-4060']);
 });
 
 test('MCP cross-board move independently authorizes its source and destination', async () => {
@@ -493,7 +493,7 @@ for (const mode of ['WATCH', 'ENFORCE']) {
           f.prisma.comment = { findUnique: async () => null };
           const route = f.load('src/lib/mcp/operations/comments/operation.ts', {
             '@/lib/mcp/routeWrapper': { ...f.mocks['@/lib/mcp/routeWrapper'], readMcpRouteJsonBody: async req => ({ ok: true, body: await req.json() }) },
-            '@/lib/mcp/idempotency/idempotencyStore': { normalizeIdempotencyKey: () => null, withIdempotency: async (_op, _user, _key, _body, run) => run() },
+            '@/lib/mcp/idempotency/idempotencyStore': { IdempotencyAccessError: class extends Error {}, normalizeIdempotencyKey: () => null, withIdempotency: async (_op, _user, _key, _body, run) => run() },
             '@/utils/controllers/comments/createCommentService': { createCommentService: async () => { f.writes.push('comment'); return { id: 1, text: 'Never in telemetry', createdAt: new Date() }; } },
             '@/utils/controllers/comments/processMentions': { resolveTextMentions: async text => text },
             '@/utils/helperFunctions/multiPages': { extractTipTapContent: () => ({ mentions: [] }) },

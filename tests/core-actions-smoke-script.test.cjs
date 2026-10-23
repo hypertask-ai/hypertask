@@ -543,10 +543,23 @@ test("a credential problem fails the job without spamming the board", async () =
     posted += 1;
     return Response.json({});
   };
+  const originalWrite = process.stdout.write;
+  const stdout = [];
+  let output = "";
+  process.stdout.write = (chunk) => {
+    stdout.push(String(chunk));
+    return true;
+  };
   try {
-    await report(result);
+    await report(result, (text) => { output += text; });
     assert.equal(posted, 0);
+    assert.equal(
+      output,
+      "::error::Core-actions smoke cannot run until its credentials are fixed: HYPERTASK_MCP_TOKEN must be a user token, not an agent token\n",
+    );
+    assert.doesNotMatch(stdout.join(""), /^::error::/m);
   } finally {
+    process.stdout.write = originalWrite;
     global.fetch = originalFetch;
   }
 });

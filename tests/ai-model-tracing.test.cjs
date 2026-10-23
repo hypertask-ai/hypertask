@@ -17,6 +17,7 @@ function harness({ rejectTelemetry = false, rejectPricing = false, observationSi
   const result = { content: [{ type: 'text', text: 'private reply' }], usage, finishReason: { unified: 'stop', raw: 'end_turn' } };
   const factory = (provider) => (modelId) => ({ specificationVersion: 'v4', provider, modelId, supportedUrls: {}, doGenerate: async () => result });
   const stubs = {
+    '@/lib/net/fetchWithoutBrotli': { fetchWithoutBrotli: async () => { throw new Error('Unexpected network request'); } },
     '@vercel/functions': { waitUntil: (promise) => pending.push(promise) },
     './aiUsage': { logAiUsage: async (row) => { rows.push(row); if (rejectTelemetry) throw new Error('database unavailable'); } },
     '@/lib/ai/prompts/registry': registry,
@@ -35,7 +36,7 @@ function harness({ rejectTelemetry = false, rejectPricing = false, observationSi
       modelPricing: async () => { if (rejectPricing) throw new Error('unknown price'); return { inputUsdPerToken: 0.000003, outputUsdPerToken: 0.000015 }; },
     },
     '@/lib/aiModelOptions': { getAiModelDefinition: () => undefined, isHaiku55Model, isHaiku45Model, resolveHaikuModelId },
-    '@/lib/flags/keys': { HTPR_7010_HAIKU_5_5_FLAG: 'htpr-7010-haiku-5-5' },
+    '@/lib/flags/keys': {},
     '@/lib/aiProviders': { getAiProviderInfo: () => ({ openAiCompatibleBaseUrl: 'https://example.test/v1' }) },
     '@/lib/aiAllowancePolicy': { FREE_TEAM_AI_ALLOWANCE_USD: 1, PAID_TEAM_AI_ALLOWANCE_USD: 5 },
     '@/lib/aiUsageClassification': { isSystemAiFeature: (feature) => feature === 'summary', INCLUDED_WITH_HYPERTASK_GATEWAY_TAG: 'system' },

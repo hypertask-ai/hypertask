@@ -80,8 +80,18 @@ export const fcmAtom = atom<IFcmHookData>({
     effects_UNSTABLE: [persistAtom],
 });
 
-export const composeTaskChatIntroAtom = atom<{ taskId: number; content: string } | null>({
+export const composeTaskChatIntroAtom = atom<{ taskId: number; content: string; skillFollowup?: boolean } | null>({
     key: "composeTaskChatIntro",
+    default: null,
+});
+
+export const composeTaskSkillFollowupAtom = atom<{ taskId: number } | null>({
+    key: "composeTaskSkillFollowup",
+    default: null,
+});
+
+export const composeTaskQuestionsTaskIdAtom = atom<number | null>({
+    key: "composeTaskQuestionsTaskId",
     default: null,
 });
 
@@ -341,6 +351,12 @@ export const openAiChatByDefaultAtom = atom<boolean>({
     effects_UNSTABLE: [persistAtom],
 });
 
+export const keepAiChatClosedAtom = atom<boolean>({
+    key: "keepAiChatClosed",
+    default: false,
+    effects_UNSTABLE: [persistAtom],
+});
+
 export const aiChatAutoOpenSuppressedAtom = atom<boolean>({
     key: "aiChatAutoOpenSuppressed",
     default: false,
@@ -381,7 +397,7 @@ export const fullScreenChatScopeAtom = atom<number | null>({
     effects_UNSTABLE: [persistAtom],
 });
 
-export const dockedChatScopeAtom = atom<number | "all" | null>({
+export const dockedChatScopeAtom = atom<number | "all" | "ticket" | null>({
     key: "dockedChatScope",
     default: null,
     effects_UNSTABLE: [persistAtom],

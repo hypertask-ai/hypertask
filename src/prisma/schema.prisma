@@ -610,6 +610,7 @@ model UserSetting {
   // All Tasks date-range selector (HTPR-5678). Null = never chosen; the view
   // then opens on the Last 7 days default. Chosen value syncs across devices.
   allTasksDateRange        String?
+  boardSortMode            String?
   playGifs                 Boolean       @default(true)
   autoDescriptionSuggestions Boolean      @default(true)
   notificationMatrix       Json          @default("{}")
@@ -691,6 +692,7 @@ model Team {
   team_activity                Team_Activity?
   byokApiKeys                  TeamByokApiKey[]
   managementApiKeys            BetterAuthApiKey[]
+  githubInstallations          GithubInstallation[]
   slackInstall                 SlackInstall?
   aiProviderSettings           Json?
   webhookSubscriptions         WebhookSubscription[]
@@ -839,6 +841,9 @@ model Project {
   pages                  Page[]
   createdAt              DateTime                 @default(now())
   seeded                 Boolean                  @default(false)
+  firstTaskPointerTaskId  Int?
+  firstTaskPointerSectionId Int?
+  firstRealTaskCreatedAt  DateTime?
   members                Member[]
   sections               String[]                 @default(["Todo", "Doing", "Done"])
   section                Section[]
@@ -886,6 +891,7 @@ model Project {
   targetDate             DateTime?
   milestones             ProjectMilestone[]
   statusUpdates          ProjectStatusUpdate[]
+  githubRepositories     BoardGithubRepository[]
 
   // @@index([status, teamId]) // For WHERE status="Normal" AND teamId IS NOT NULL
   // @@index([ownerId, status]) // For owner-based queries
@@ -1281,6 +1287,52 @@ model TaskNumberAlias {
   @@index([taskId])
 }
 
+enum GithubRepositoryProvenance {
+  legacy
+  installed
+}
+
+enum GithubPullRequestLinkOrigin {
+  installed
+}
+
+model GithubInstallation {
+  id           String   @id @db.VarChar(32)
+  accountId    String   @db.VarChar(32)
+  accountLogin String   @db.VarChar(100)
+  accountType  String   @db.VarChar(32)
+  teamId       String
+  team         Team     @relation(fields: [teamId], references: [id], onDelete: Restrict)
+  createdAt    DateTime @default(now())
+  revokedAt    DateTime?
+  repositories BoardGithubRepository[]
+
+  @@index([teamId])
+}
+
+model BoardGithubRepository {
+  id             String                     @id @default(uuid())
+  projectId      Int
+  project        Project                    @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  repositoryId   String?                    @db.VarChar(32)
+  fullName       String                     @db.VarChar(201)
+  installationId String?                    @db.VarChar(32)
+  installation   GithubInstallation?        @relation(fields: [installationId], references: [id], onDelete: Restrict)
+  provenance     GithubRepositoryProvenance
+  activatedAt    DateTime                   @default(now())
+  revokedAt      DateTime?
+
+  @@index([projectId, revokedAt])
+  @@index([installationId])
+}
+
+model GithubWebhookDelivery {
+  deliveryId       String   @id @db.VarChar(100)
+  businessEventKey String   @unique @db.VarChar(255)
+  receivedAt       DateTime @default(now())
+  processedAt      DateTime?
+}
+
 model TaskPullRequest {
   id                  String   @id @default(uuid())
   taskId              Int
@@ -1289,6 +1341,7 @@ model TaskPullRequest {
   repositoryName      String   @db.VarChar(100)
   githubRepositoryId  String?  @db.VarChar(32)
   githubPullRequestId String?  @db.VarChar(32)
+  githubLinkOrigin    GithubPullRequestLinkOrigin?
   number              Int
   url                 String   @db.Text
   title               String   @db.Text
@@ -2153,6 +2206,7 @@ model WebhookSubscription {
   createdBy      User?     @relation(fields: [createdById], references: [id], onDelete: SetNull)
   agentId        String?
   agent          Agent?    @relation(fields: [agentId], references: [id], onDelete: SetNull)
+  createdByAgentId String?
   createdAt      DateTime  @default(now())
   lastDeliveryAt DateTime?
   lastDeliveryOk Boolean?

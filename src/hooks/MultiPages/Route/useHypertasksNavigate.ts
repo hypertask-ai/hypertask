@@ -7,8 +7,6 @@ import { useRecoilValue } from "@/lib/state";
 import { currentUserAtom } from "@/store";
 import { useAuth } from "@/hooks/General/useAuth";
 import type { ITask } from "@/models/model";
-import { useFlag } from "@/hooks/useFlag";
-import { HTPR_6752_INSTANT_TICKET_OPEN_FLAG, HTPR_7001_INBOX_NEXT_CACHED_FLAG } from "@/lib/flags/keys";
 import { inboxDataQueryKey } from "@/hooks/Inbox/useGetNotifications";
 import type { InboxQueryPayload } from "@/utils/helperFunctions/inboxHelpers";
 import { openCachedTaskDetail } from "@/lib/navigation/cachedTaskDetail";
@@ -38,8 +36,6 @@ type Pages =
   | "Timers";
 
 const useHypertasksNavigate = () => {
-  const instantTicketOpen = useFlag(HTPR_6752_INSTANT_TICKET_OPEN_FLAG);
-  const inboxNextCached = useFlag(HTPR_7001_INBOX_NEXT_CACHED_FLAG);
   const router = useRouter();
   const pathname = usePathname();
   const queryClient = useQueryClient();
@@ -67,7 +63,7 @@ const useHypertasksNavigate = () => {
     const finalURL = `/detail/project-${projectId}/${taskUnqIdx}` + (additionalSQuery??"");
     const entryPath = taskDetailEntryPathForRoute(pathname);
     if (entryPath) markTaskDetailNavigationStart(entryPath, finalURL);
-    if (instantTicketOpen && currentUser?.id && authenticatedUserId === currentUser.id) {
+    if (currentUser?.id && authenticatedUserId === currentUser.id) {
       if (openCachedTaskDetail({
         queryClient, accountId: currentUser.id, projectId, uniqueIndex: taskUnqIdx,
         href: finalURL, replace: pushOrReplace === "replace", task,
@@ -125,7 +121,7 @@ const useHypertasksNavigate = () => {
         break;
       case "Replace": {
         const route = typeof payload === "string" ? payload.match(/^\/detail\/project-(\d+)\/(\d+)([?#].*)?$/) : null;
-        if (inboxNextCached && route) {
+        if (route) {
           const target = new URL(payload, window.location.origin);
           const inboxFlow = target.searchParams.get("inboxFlow") ?? new URLSearchParams(window.location.search).get("inboxFlow");
           if (inboxFlow) {

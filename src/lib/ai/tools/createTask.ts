@@ -1,3 +1,4 @@
+import { inlineAgentImagesForUser } from "@/lib/media/inlineAgentImages.server";
 import { HTPR_7513_WRITER_PROJECT_LABELS_FLAG } from "@/lib/flags/keys";
 import { isFeatureEnabled } from "@/lib/flags";
 import type { TaskWriterCustomFieldValue } from "@/lib/ai/taskWriterCustomFields";
@@ -11,7 +12,7 @@ import { PriorityConstants } from "@/lib/constants/constants";
 import getMemberAndOwner from "@/utils/controllers/getMemberAndOwnerForBoard";
 import { toStoredHtml } from "@/utils/helperFunctions/toStoredHtml";
 import { buildMcpTaskUrl } from "@/lib/mcp/boards/links";
-import { createTaskItemSchema, CreateTaskItemInput } from "@/lib/ai/tools/schemas";
+import { getCreateTaskItemSchema, CreateTaskItemInput } from "@/lib/ai/tools/schemas";
 import { MAX_BULK_TOOL_TARGETS } from "@/lib/ai/tools/constants";
 import { withToolErrors, dropEmptyPadding } from "@/lib/ai/tools/execution";
 import { sanitizeForJson, mapTaskToDetail } from "@/lib/ai/tools/helpers";
@@ -24,8 +25,9 @@ import { isAgentOnBoard } from "@/utils/controllers/agents/boardMembers";
 import type { ToolContext } from "./context";
 
 export function createCreateTaskTool(context: ToolContext) {
-  const { sendStatus, user, confirmationSessionId, bulkPreviewsIssued, actingAgentId } = context;
+  const { sendStatus, user, confirmationSessionId, bulkPreviewsIssued, actingAgentId, body } = context;
   const { chatTaskWriterEnabled = false, abortSignal } = context;
+  const createTaskItemSchema = getCreateTaskItemSchema(context.inlineAgentImagesEnabled);
   const writerItemSchema = createTaskItemSchema.omit({ title: true, description: true, priority: true }).extend({
     brief: z.string().min(1).refine((value) => value.trim().length > 0, "Brief cannot be empty").describe("The user's request in their own words, unabridged, including relevant refinements. Do not pre-write a title or description."),
   });
@@ -64,6 +66,8 @@ export function createCreateTaskTool(context: ToolContext) {
                 task.project_id ?? null,
                 chatTaskWriterEnabled ? "brief" : "title",
                 (chatTaskWriterEnabled ? task.brief : task.title) ?? null,
+                ...(task.image_urls !== undefined ? [["image_urls", task.image_urls]] : []),
+                ...(task.inline_images !== undefined ? [["inline_images", task.inline_images]] : []),
               ]),
             }))
           );
@@ -82,6 +86,8 @@ export function createCreateTaskTool(context: ToolContext) {
               affected: requestedTasks.map((task) => ({
                 project_id: task.project_id,
                 ...(chatTaskWriterEnabled ? { brief: task.brief } : { title: task.title }),
+                ...(task.image_urls !== undefined ? { image_urls: task.image_urls } : {}),
+                ...(task.inline_images !== undefined ? { inline_images: task.inline_images } : {}),
               })),
               message:
                 `This would create ${requestedTasks.length} tasks. Nothing has been changed yet. ` +
@@ -208,7 +214,7 @@ export function createCreateTaskTool(context: ToolContext) {
               creationChannel: "agent",
               projectId: input.project_id,
               title,
-              description: description ? toStoredHtml(description) : "",
+              description: await inlineAgentImagesForUser(description ? toStoredHtml(description) : "", user.id, { instructions: body?.message, inlineImages: input.inline_images, attachments: [...(input.image_urls?.map((url) => ({ url })) ?? []), ...[...(body?.images64 ?? []), ...(body?.attachments ?? [])].flatMap((file) => file.url && (input.image_urls?.includes(file.url) || description?.includes(file.url)) ? [{ url: file.url, fileName: file.fileName, mimeType: file.mimeType }] : [])] }),
               sectionId: sectionCheck.section.id,
               sectionTitle: sectionCheck.section.section_title,
               userId: user.id,

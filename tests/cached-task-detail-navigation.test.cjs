@@ -13,7 +13,7 @@ const cache = jiti(path.join(root, "src/lib/navigation/cachedTaskDetail.ts"));
 const revocation = jiti(path.join(root, "src/lib/boardSync/revocationTombstone.ts"));
 const task = { id: 42, projectId: 6859, uniqueIndex: 43, title: "Cached ticket", status: "Normal", description_: { content: "<p>Already local</p>" } };
 
-function navigateHook(queryClient, router, userId = 2343, authenticatedId = userId, flagEnabled = true) {
+function navigateHook(queryClient, router, userId = 2343, authenticatedId = userId) {
   const relativePath = "src/hooks/MultiPages/Route/useHypertasksNavigate.ts";
   const source = process.env.CACHED_DETAIL_BASELINE
     ? execFileSync("git", ["show", `origin/production:${relativePath}`], { cwd: root, encoding: "utf8" })
@@ -27,8 +27,6 @@ function navigateHook(queryClient, router, userId = 2343, authenticatedId = user
     "@tanstack/react-query": { useQueryClient: () => queryClient },
     "@/lib/state": { useRecoilValue: () => ({ id: userId }) },
     "@/store": { currentUserAtom: {} },
-  "@/hooks/useFlag": { useFlag: () => flagEnabled },
-  "@/lib/flags/keys": { HTPR_6752_INSTANT_TICKET_OPEN_FLAG: "htpr-6752-instant-ticket-open", HTPR_7001_INBOX_NEXT_CACHED_FLAG: "htpr-7001-inbox-next-cached" },
     "@/hooks/General/useAuth": { useAuth: () => ({ currentUser: null, authenticatedUserId: authenticatedId }) },
     "@/hooks/Inbox/useGetNotifications": { inboxDataQueryKey: id => ["inbox", "data", id] },
     "@/lib/navigation/cachedTaskDetail": cache,
@@ -115,26 +113,6 @@ test("unscoped detail snapshots cannot be relabeled for a signed-in account", (t
   assert.equal(cache.findCachedTaskDetail(client, 2343, 6859, 43).title, task.title);
 });
 
-test("flag-off clicks use production router push and replace even with a cached body", (t) => {
-  const client = new QueryClient();
-  t.after(() => client.clear());
-  const { calls } = historyFixture(t);
-  const routerCalls = [];
-  client.setQueryData(["boardTasks", 2343, 6859], { tasks: [task] });
-  const hook = navigateHook(client, {
-    push: (href) => routerCalls.push(["push", href]),
-    replace: (href) => routerCalls.push(["replace", href]),
-  }, 2343, 2343, false);
-  hook.navigateToTask(6859, 43, "push", "?reply=true", task);
-  hook.navigateToTask(6859, 43, "replace", "?inboxFlow=true#comment-12", task);
-  assert.equal(calls.length, 0);
-  assert.deepEqual(routerCalls, [
-    ["push", "/detail/project-6859/43?reply=true"],
-    ["replace", "/detail/project-6859/43?inboxFlow=true#comment-12"],
-  ]);
-  assert.equal(client.getQueryData(cache.cachedTaskDetailKey(2343, task.id)), undefined);
-});
-
 test("uncached or old title-only snapshots retain the authorized server route", (t) => {
   const queryClient = new QueryClient();
   t.after(() => queryClient.clear());
@@ -200,12 +178,11 @@ test("card Links defer normal clicks to the cached navigator and preserve modifi
     "react": { __esModule: true, default: React, useContext: () => false, useCallback: (callback) => callback },
     "react/jsx-runtime": require("react/jsx-runtime"),
     "next/link": { __esModule: true, default: "a" },
-    "@/hooks/useFlag": { useFlag: () => flagEnabled },
-    "@/lib/flags/keys": { HTPR_6752_INSTANT_TICKET_OPEN_FLAG: "htpr-6752-instant-ticket-open", HTPR_7001_INBOX_NEXT_CACHED_FLAG: "htpr-7001-inbox-next-cached" },
+    "@/hooks/useFlag": { useFlag: () => false },
+    "@/lib/flags/keys": { HTPR_7614_SELECTED_CARD_BORDER_FLAG: "htpr-7614-selected-card-border" },
     "@/lib/contexts/mobileContext": { MobileViewContext: {} },
     "@/utils/undoActions/helperFuncs": { cn: (...classes) => classes.filter(Boolean).join(" ") },
   };
-  let flagEnabled = true;
   const exportsObject = {};
   new Function("require", "exports", compiled)((name) => {
     assert.ok(name in mocks, `Unexpected dependency: ${name}`);
@@ -224,13 +201,12 @@ test("card Links defer normal clicks to the cached navigator and preserve modifi
     assert.equal(stopped, Object.keys(modifiers).length !== 0, "modified clicks keep native browser behavior");
   }
   assert.equal(opens, 1);
-  flagEnabled = false;
-  const disabled = exportsObject.default({ taskHref: "/detail/project-6859/43", children: "Cached ticket", openDetail: () => opens++ });
-  const disabledLink = disabled.props.children.find((child) => child?.type === "a");
-  assert.equal(typeof disabledLink.props.onClick, "function", "flag-off Links must also defer to the parent navigator");
+  const rerendered = exportsObject.default({ taskHref: "/detail/project-6859/43", children: "Cached ticket", openDetail: () => opens++ });
+  const rerenderedLink = rerendered.props.children.find((child) => child?.type === "a");
+  assert.equal(typeof rerenderedLink.props.onClick, "function", "rerendered Links must still defer to the parent navigator");
   let prevented = false;
-  disabledLink.props.onClick({ button: 0, preventDefault: () => { prevented = true; } });
-  disabled.props.onClick();
+  rerenderedLink.props.onClick({ button: 0, preventDefault: () => { prevented = true; } });
+  rerendered.props.onClick();
   assert.equal(prevented, true);
   assert.equal(opens, 2);
 });
@@ -253,8 +229,8 @@ test("background history refreshes preserve the mounted cached detail, but route
     "@/lib/state": { useRecoilValue: () => ({ id: currentAccountId }) },
     "@/store": { currentUserAtom: {} },
   // useState is stubbed to one value here, so the HTPR-7129 board shell stays off.
-  "@/hooks/useFlag": { useFlag: (key) => key === "htpr-6972-subtask-link" || key === "htpr-7129-board-card-fresh-after-escape" ? false : flagEnabled },
-  "@/lib/flags/keys": { HTPR_6752_INSTANT_TICKET_OPEN_FLAG: "htpr-6752-instant-ticket-open", HTPR_6972_SUBTASK_LINK_FLAG: "htpr-6972-subtask-link", HTPR_7129_BOARD_CARD_FRESH_AFTER_ESCAPE_FLAG: "htpr-7129-board-card-fresh-after-escape" },
+  "@/hooks/useFlag": { useFlag: (key) => key === "htpr-7129-board-card-fresh-after-escape" ? false : flagEnabled },
+  "@/lib/flags/keys": { HTPR_7129_BOARD_CARD_FRESH_AFTER_ESCAPE_FLAG: "htpr-7129-board-card-fresh-after-escape" },
     "@/components/Modals/SwipeUnread/EmbeddedTaskDetail": { __esModule: true, default: Detail },
     "@/lib/navigation/cachedTaskDetail": cache,
     "@/utils/helperFunctions/helperFunctions": { returnIfModalOrInputActive: () => false },
@@ -273,9 +249,6 @@ test("background history refreshes preserve the mounted cached detail, but route
   const first = render();
   assert.equal(first.type, require("react").Suspense);
   assert.equal(first.props.children.type, Detail);
-  flagEnabled = false;
-  assert.equal(render(), "Original route", "disabled rollout never displays an existing cached marker");
-  flagEnabled = true;
   assert.equal(render().props.children.type, Detail);
   delete history.state.cachedTaskDetail;
   assert.equal(render().key, first.key, "a background RSC refresh must not remount editors or lose drafts");

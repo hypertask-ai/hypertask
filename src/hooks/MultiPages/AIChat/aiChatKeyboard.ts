@@ -117,7 +117,7 @@ export function createAiChatKeyboard(context: Context) {
       fileUpload.handleAttachmentClick();
     }
     if (e.keyCode === KeyCodes.D && cmdControl && e.shiftKey) {
-      const anchor = document.getElementById("ai-chat-audio-button");
+      const anchor = editor?.view.dom.closest("[data-ai-chat-composer-root]")?.querySelector<HTMLElement>("[data-ai-chat-recorder]");
       if (anchor) {
         e.preventDefault();
         anchor.click();

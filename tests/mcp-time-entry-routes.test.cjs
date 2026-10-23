@@ -47,11 +47,11 @@ test("both routes authenticate before touching anything", () => {
 test("both routes preserve the authenticated agent scope", () => {
   assert.match(
     update,
-    /updateEntry\([\s\S]*body\.note,\s*ctx\.agentId\s*\)/
+    /updateEntry\([\s\S]*body\.note,\s*ctx\.agentId,\s*ctx\.teamScope\s*\)/
   );
   assert.match(
     remove,
-    /deleteEntry\(ctx\.user\.id, entry\.entryId, ctx\.agentId\)/
+    /deleteEntry\(ctx\.user\.id, entry\.entryId, ctx\.agentId, ctx\.teamScope\)/
   );
 });
 

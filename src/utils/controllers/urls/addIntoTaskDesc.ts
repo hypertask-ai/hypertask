@@ -1,3 +1,4 @@
+import type { Prisma } from "@prisma/client";
 import { IUrl } from '@/models/model';
 
 import prisma from "@/lib/prisma";
@@ -5,7 +6,7 @@ import { measuredSizeString } from "@/lib/attachments/measuredSize";
 import { urlRowData } from '@/lib/attachments/urlRowData';
 
 
-export const addIntoTaskDesc = async (urlsToAdd:IUrl[], taskId:number, method:string|undefined) => {
+export const addIntoTaskDesc = async (urlsToAdd:IUrl[], taskId:number, method:string|undefined, db: Prisma.TransactionClient = prisma) => {
 if (method==="POST"){
   if (urlsToAdd.length==0 &&!taskId ) {
       return({
@@ -14,7 +15,7 @@ if (method==="POST"){
       })
   }
   try {
-    const urlRecords = await prisma.url.createMany({
+    const urlRecords = await db.url.createMany({
         data: urlsToAdd.map(urlData => urlRowData(urlData, { taskId }))
         });
     return({
@@ -39,7 +40,7 @@ else if (method==="PUT"){
       }) 
     }
 
-    const existingUrls = await prisma.url.findMany({
+    const existingUrls = await db.url.findMany({
       where: {
         TaskId: taskId,
         commentId:null
@@ -55,7 +56,7 @@ else if (method==="PUT"){
       );
 
       if (matchedUrlData) {
-        await prisma.url.update({
+        await db.url.update({
           where: { id: existingUrl.id },
           data: {
             TaskId: taskId,
@@ -67,7 +68,7 @@ else if (method==="PUT"){
           
         });
       } else {
-        await prisma.url.delete({
+        await db.url.delete({
           where: { id: existingUrl.id },
         });
       }
@@ -88,14 +89,14 @@ else if (method==="PUT"){
         TaskId: taskId,
       }));
 
-    const description = await prisma.description.findFirst({
+    const description = await db.description.findFirst({
       where:{
         taskId:taskId
       }
     })
 
     const existingAttachments = description
-      ? await prisma.attachment.findMany({
+      ? await db.attachment.findMany({
           where: { descriptionId: description.id },
           select: { id: true, fileSource: true },
         })
@@ -114,14 +115,14 @@ else if (method==="PUT"){
       .filter(({ fileSource }) => !preservedSources.has(fileSource))
       .map(({ id }) => id);
     if (replaceableAttachmentIds.length > 0) {
-      await prisma.attachment.deleteMany({
+      await db.attachment.deleteMany({
         where: { id: { in: replaceableAttachmentIds } },
       });
     }
     for (const url of urlsToAdd){
 
     if (url.Attachment&&description&&!preservedSources.has(url.urlString)){
-      const attachment_ = await prisma.attachment.create({
+      const attachment_ = await db.attachment.create({
         data: {
           fileType: url.attachmentType??"",
           fileSource: url.urlString,
@@ -139,7 +140,7 @@ else if (method==="PUT"){
     for (const newUrl of newUrlsToAdd){
       
 
-      const urlRecords = await prisma.url.create({
+      const urlRecords = await db.url.create({
         data: {
           urlString:newUrl.urlString??"",
           TaskId: taskId,

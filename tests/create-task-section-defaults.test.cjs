@@ -12,6 +12,8 @@ test("global create defaults reject invalid scope and fall back from stale secti
 
   assert.match(route, /const project_id = Number\(projectId\)/);
   assert.match(route, /taskWriteAccessWhere\(session\.userId, null\)/);
+  assert.match(route, /AND: \[taskWriteAccessWhere\(session\.userId, session\.agentId, session\.teamScope\)\]/);
+  assert.match(route, /project: taskWriteAccessWhere\(session\.userId, session\.agentId, session\.teamScope\)/);
   assert.match(route, /id: requestedSectionId,[\s\S]*projectId: project_id/);
   assert.match(route, /requestedSection \?\?[\s\S]*ranking: "asc"/);
   assert.match(route, /status\(404\)\.json\(\{ message: "No active section found" \}\)/);

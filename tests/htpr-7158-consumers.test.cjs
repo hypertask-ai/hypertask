@@ -147,6 +147,7 @@ test('getSessionUser refuses revoked cookies in both fast-path modes and fails o
       const h = await harness(state)
       const { getSessionUser } = load('src/lib/auth/getSessionUser.ts', {
         ...h.imports, 'better-auth/cookies': cookieHelpers,
+        '@/lib/prisma': { default: {} }, '@/lib/auth/agentTeamScope': {},
         '@/lib/auth/betterAuth': { auth: { api: { getSession: async () => { h.events.push('better-auth'); return { user: { id: '8' } } } } } },
       })
       const result = await getSessionUser(new Headers({ cookie: `ht_session=${h.token}` }))
@@ -158,7 +159,7 @@ test('getSessionUser refuses revoked cookies in both fast-path modes and fails o
         assert.deepEqual(h.events, flag === '0' ? ['better-auth'] : [])
       }
       if (state === 'revoked') {
-        assert.deepEqual(await getSessionUser(new Headers()), { userId: 8, source: 'better-auth' })
+        assert.deepEqual(await getSessionUser(new Headers()), { userId: 8, source: 'better-auth', teamScope: null })
       }
     }
   }

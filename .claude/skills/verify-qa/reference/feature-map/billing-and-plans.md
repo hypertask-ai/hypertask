@@ -3,7 +3,7 @@
 ## How a customer reaches it
 
 - Sign in, open an owned board, then Settings > Team > Billing (`/settings/billing`).
-- Click Manage subscription to reach Plans (`/settings/plans`); `/pricing` is a legacy entry that redirects to Plans.
+- Click Manage subscription to reach Plans (`/settings/plans`); `/pricing` is a legacy entry that defaults to Plans. Its `preSelect` query also routes `API Keys` to Bring your own key, `Billing` to Billing, `Members` to Team > Members, and `Settings` to Profile > General.
 - Billing > Payment method > Update opens the Stripe customer portal.
 
 ## How to drive it
@@ -12,11 +12,11 @@ Use `~/.config/ht-qa/state-{free,byok,pro}.json`. Select each account's own priv
 
 1. Doctor: production deployment is successful and `/my-tasks` is signed in.
 2. Open Billing and record current plan, seats, billing cycle, and payment-method controls. Reload and compare.
-3. Click Manage, record the plan cards and monthly/yearly prices, and select the monthly BYOK upgrade on the Free account.
+3. Click Manage, record the plan rows in the Plans card and monthly/yearly prices, and select the monthly BYOK upgrade on the Free account.
 4. Wait for the server checkout endpoint to return a Stripe-hosted URL and the Stripe checkout page to render. Capture its product, amount, cadence and payment form without filling any payment field. Use Stripe's back/cancel link to return and confirm the plan did not change.
 5. Open Billing again, click Update beside Payment method, and verify the Stripe customer portal renders. Return without changing anything.
 6. Repeat the identical checkout and portal path after deployment and compare with the baseline. A changed amount, cadence, product, navigation, error, or missing payment form fails the money-path comparison.
-7. Capture Billing and Plans at 1440x900 and 390x844. Check BYOK and Pro accounts read-only; if their Billing page says Free, compare with the recorded pre-existing baseline rather than treating a tier label as proof of a paid subscription.
+7. Capture Billing and Plans at 1440x900 and 390x844. Check BYOK and Pro accounts without changing subscriptions; opening Plans as owner can still provision a Stripe customer if the team has none. For a strictly read-only run, use an already-linked team; if their Billing page says Free, compare with the recorded pre-existing baseline rather than treating a tier label as proof of a paid subscription.
 
 ## What usually breaks
 
@@ -31,4 +31,4 @@ Save a checklist before testing, account ids and expected tiers (never credentia
 
 ## Cleanup and safety
 
-Never enter card details, submit a payment, cancel a subscription, change a plan, edit billing data, or alter portal settings. Cancel only the uncompleted checkout via its back link. No task fixtures are required; all account writes stay within the test account's own team and QA runner board. Never use another person's account or a shared board. Any changed money path requires stopping and Supervisor Review, not Done.
+Never enter card details, submit a payment, cancel a subscription, change a plan, edit billing data, or alter portal settings. Cancel only the uncompleted checkout via its back link. Before opening Plans, record whether the owned QA team already has a Stripe customer. If missing, Plans calls `POST /api/stripe/ensure-customer`, which creates a Stripe customer and saves the team linkage. Record any new linkage; do not delete the customer or clear billing data as cleanup. No task fixtures are required; all account writes stay within the test account's own team and QA runner board. Never use another person's account or a shared board. Any changed money path requires stopping and Supervisor Review, not Done.

@@ -170,9 +170,12 @@ test("server bootstrap derives every private slice from the verified account", (
     assert.match(source, /session\.id/);
   }
   // The minimal projects read moved into the shared handler.
-  assert.match(projectsRoute, /verifySession\(/);
-  assert.match(projectsRoute, /SESSION_COOKIE/);
-  assert.match(projectsRoute, /session\.id/);
+  assert.match(projectsRoute, /await legacyTaskWriteSession\(request\)/);
+  assert.match(projectsRoute, /getAllMinimal\(session\.userId, mode\)/);
+  const sharedRoute = read("src/lib/api/task-writes/route.ts");
+  assert.match(sharedRoute, /verifySession\(token\)/);
+  assert.match(sharedRoute, /request\.cookies\[SESSION_COOKIE\]/);
+  assert.match(sharedRoute, /userId: signed\.id/);
 });
 
 test("all app-shell readers consume the shared response before their fallback", () => {

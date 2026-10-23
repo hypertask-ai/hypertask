@@ -21,6 +21,8 @@ import { Bot, Copy, RefreshCw, Share2 } from "lucide-react";
 
 
 import { useAgents } from "@/hooks/MultiPages/useAgents";
+import { useFlag } from "@/hooks/useFlag";
+import { HTPR_7574_INVITE_PICKER_LATEST_MEMBERS_FLAG } from "@/lib/flags/keys";
 import { KeyCodes } from "@/lib/constants/keyboard-handler";
 import GuestSignupOverlay from "@/components/Common/GuestLock/GuestSignupOverlay";
 import { isGuestCookieUser } from "@/lib/demo/isGuestClient";
@@ -107,6 +109,7 @@ const InviteMember = (props: Props) => {
   >([]);
   const queryClient = useQueryClient();
   const { agents: ownedAgents } = useAgents();
+  const ignoreStaleMemberResponses = useFlag(HTPR_7574_INVITE_PICKER_LATEST_MEMBERS_FLAG);
 
   const ulRef = useRef<HTMLUListElement | null>(null);
   const debounceTimeout = useRef<NodeJS.Timeout | null>(null);
@@ -120,6 +123,7 @@ const InviteMember = (props: Props) => {
 
   useEffect(() => {
     if (!currentProject) return;
+    let superseded = false;
     const projectId = props.optionalProjectId ?? currentProject.id;
     fetch(
       `/api/members/getAll?projectId=${projectId}&teamMembers=true&teamId=${currentProject.teamId}`,
@@ -127,6 +131,7 @@ const InviteMember = (props: Props) => {
     ).then(async (response) => {
       if (response && response.ok) {
         const data = await response.json();
+        if (ignoreStaleMemberResponses && superseded) return;
         const boardAgentIds = new Set(
           (data.boardAgents ?? []).map((a: IAgent) => a.id)
         );
@@ -156,7 +161,10 @@ const InviteMember = (props: Props) => {
       }
     });
 
-  }, [ownedAgents, currentProject?.id]);
+    return () => {
+      superseded = true;
+    };
+  }, [ownedAgents, currentProject?.id, ignoreStaleMemberResponses]);
 
   const handleKeydownRef = useRef<(e: KeyboardEvent) => void>(undefined);
   handleKeydownRef.current = (e: KeyboardEvent) => {

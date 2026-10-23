@@ -19,7 +19,6 @@ Scope is the ticket's own diff, nothing else: `git diff --name-only pub/producti
    - Eliminate redundant code and abstractions.
    - Improve readability through clear variable and function names.
    - Consolidate related logic.
-   - **Comment Sicko:** keep a code comment only when it explains a non-obvious reason. Delete comments that restate the code. Stay inside this ticket's diff. Source: pstack no-comments, https://github.com/cursor/plugins/tree/main/pstack.
    - Avoid nested ternary operators — prefer switch statements or if/else chains for multiple conditions.
    - Choose clarity over brevity — explicit code is often better than overly compact code.
 5. **Maintain balance — leave these alone** (also from the source plugin, kept close to its own wording). Avoid over-simplification that could:
@@ -29,16 +28,24 @@ Scope is the ticket's own diff, nothing else: `git diff --name-only pub/producti
    - Remove helpful abstractions that improve code organization.
    - Prioritize "fewer lines" over readability (e.g. nested ternaries, dense one-liners).
    - Make the code harder to debug or extend.
-6. **Re-run the tests you ran for the fix itself.** Same command, same scope as the ticket's own test step. They must still pass with no changes to what they assert.
-7. **Commit the simplification separately from the fix**, so the reviewer can see the two apart:
+6. **Run `/no-comments` on this ticket's diff (required).** Load `.claude/skills/no-comments/SKILL.md` and pass the scope from step 1: `git diff pub/production...HEAD` plus the working tree, nothing outside it. It spawns Comment Sicko (`.claude/agents/comment-sicko.md`), which goes beyond the `local/no-comments` lint: `eslint-disable`, `@ts-ignore` and `@ts-expect-error` suppressions, workaround code and comments in every touched file, also outside `src/`. Spawn it by the newest Token ladder mode:
+   - **CLAUDE mode:** the Agent tool with `subagent_type: "Comment Sicko"`, as the skill says.
+   - **CODEX mode:** one hax helper, report only: save the diff to a scratch file, then `nice -n 19 hax --provider=codex --model=gpt-6.1-sol --effort=high --no-session -p "<prompt>"` where the prompt is the mode line, the unlazy line, the full contents of `.claude/agents/comment-sicko.md`, the diff file path, and "REPORT ONLY: edit nothing, no board access, never run tests, tsc, next or npm".
+
+   Either way, judge its report as `/no-comments` step 2 says. Fix accepted findings inside the diff; report `MUST KILL` flags outside it as open work. Source: pstack by Lauren Tan, MIT (`.claude/skills/no-comments/LICENSE`).
+7. **Check every test this diff adds or changes (required).** Load `.claude/skills/principle-test-behavior-not-implementation/SKILL.md`. For each new or changed test, ask whether it would still pass if every function it imports returned `undefined`. If yes, rewrite the assertion against a literal expected value or delete the test, inside this diff only. Source: pstack by Lauren Tan, MIT.
+8. **Re-run the tests you ran for the fix itself.** Same command, same scope as the ticket's own test step. They must still pass with no changes to what they assert, apart from step 7 rewrites.
+9. **Commit the simplification separately from the fix**, so the reviewer can see the two apart:
    ```
    git commit -m "Simplify: <PREFIX-NNN>"
    ```
-   If step 4 and 5 found nothing worth changing, skip the commit — an empty simplify commit is not evidence of anything.
-8. **Record the result in this session's notes.** If you committed a simplify pass, note the commit sha. If step 7 was skipped because there was nothing to simplify, note that reason.
+   If steps 4 to 7 found nothing worth changing, skip the commit — an empty simplify commit is not evidence of anything.
+10. **Record the result in this session's notes.** If you committed a simplify pass, note the commit sha. If step 9 was skipped because there was nothing to simplify, note that reason. Add the `/no-comments` report (deletions, `MUST KILL` flags, open work) and each test step 7 rewrote or deleted.
 
 ## Check before hand-off
 
+- [ ] `/no-comments` ran on this ticket's diff and its report is in the session notes
+- [ ] Every new or changed test would fail if its imports returned `undefined`
 - [ ] Tests are still green after the simplify pass
 - [ ] No behaviour changed, only structure, naming, and duplication
 - [ ] No new abstractions added (no helper, wrapper, or class introduced for single use)

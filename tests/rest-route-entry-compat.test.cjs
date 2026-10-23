@@ -67,8 +67,11 @@ async function run(operation, mode = 'OFF', options = {}) {
     user: { update: fn('userUpdate', actor), findUnique: fn('userFind', ({ where }) => options.noUserRow ? null : { id: where.id, displayName: 'Actor', email: 'actor@fixture.invalid', UserSetting: null, userPicture: null }) }, revokedToken: { upsert: fn('tokenRevoke', {}) },
     userSetting: { update: fn('preferencesUpdate', { playGifs: false }), findUnique: fn('preferencesFind', null) },
     agent: { findFirst: fn('agent', { id: agentId, userId, displayName: 'Agent' }) },
-    $transaction: fn('transaction', async (promises) => Promise.all(promises)),
+    $transaction: async (work) => typeof work === 'function'
+      ? record('transaction', ['callback'], await work(prisma))
+      : arrayTransaction(work),
   };
+  const arrayTransaction = fn('transaction', async (promises) => Promise.all(promises));
   const cookieValue = options.badCookie ? '{' : JSON.stringify(actor);
   const mocks = {
     'next/headers': { cookies: async () => ({ get: (name) => name === 'nookies_user' ? options.noProfile ? undefined : { value: cookieValue } : options.tokenCookie ? { value: 'token' } : undefined }) },
@@ -104,10 +107,11 @@ async function run(operation, mode = 'OFF', options = {}) {
     },
     '@/utils/controllers/users/fetch_preferences': { fetchUserPreferenceController: fn('preferencesGet', { res: { playGifs: true }, status: 200 }), invalidateUserPreferenceCache: fn('preferencesInvalidate', undefined) },
     '@/lib/aiModelPreferences': {}, '@/lib/aiModelOptions': {},
-    '@/utils/helperFunctions/sanitizeRichHtml': {}, '@/lib/dictationProvider': {}, '@/lib/configs/allTasks.config': {}, '@/models/Calendar/model': {},
+    '@/utils/helperFunctions/sanitizeRichHtml': {}, '@/lib/dictationProvider': {}, '@/lib/configs/allTasks.config': {}, '@/lib/configs/boardSortMode.config': {},
+    '@/lib/flags/definitions/htpr-7649-sidebar-view-saved': {}, '@/models/Calendar/model': {},
     '@/lib/storage/uploadTaskAttachmentToS3': {
       resolveOwnAiChatAttachmentKey: () => null, getHypertasksObjectSize: fn('objectSize', 5),
-      uploadAiChatAttachmentToS3: fn('upload', 'own-file'), deleteTaskAttachmentFromS3: fn('storageDelete', undefined),
+      uploadAiChatAttachmentToS3: fn('upload', 'own-file'), deleteTaskAttachmentFromS3: fn('storageDelete', true),
     },
     '@/utils/controllers/comments/linkifyTicketRefs': { linkifyTicketRefs: fn('linkify', 'Hello') },
     '@/lib/redis': { getRedis: async () => ({ set: fn('redisSet', 'OK') }) },
@@ -115,7 +119,7 @@ async function run(operation, mode = 'OFF', options = {}) {
     jsonwebtoken: { default: { decode: () => ({ jti: 'fixture-jti', exp: 1800000000 }) } },
     '@/lib/agents/visibility': { accessibleAgentWhere: () => ({ userId }) },
     '@/utils/controllers/agents/boardMembers': { getAgentTeamIds: async () => new Map() },
-    '@/lib/agents/chatAccess': { ensureChatParticipant: fn('participant', undefined), loadUserAgentChatSession: async () => ({ ok: true }), userTeamIds: async () => [] },
+    '@/lib/agents/chatAccess': { sidebarChatProjectId: () => undefined, loadSidebarChatRequest: async () => ({ ok: true }), ensureChatParticipant: fn('participant', undefined), loadUserAgentChatSession: async () => ({ ok: true }), userTeamIds: async () => [] },
     ...options.mocks,
   };
   const reader = load('src/lib/mcp/readJsonBody.ts', {});
@@ -363,6 +367,20 @@ const baseline = {
     ],
     "calls": [
       [
+        "sessions",
+        [
+          {
+            "where": {
+              "userId": 985,
+              "id": "session-1"
+            },
+            "select": {
+              "id": true
+            }
+          }
+        ]
+      ],
+      [
         "attachments",
         [
           {
@@ -403,14 +421,24 @@ const baseline = {
         ]
       ],
       [
-        "sessionDelete",
+        "sessionDeleteMany",
         [
           {
             "where": {
-              "id": "session-1",
-              "userId": 985
+              "userId": 985,
+              "id": {
+                "in": [
+                  "session-1"
+                ]
+              }
             }
           }
+        ]
+      ],
+      [
+        "transaction",
+        [
+          "callback"
         ]
       ],
       [
@@ -1440,11 +1468,34 @@ const baseline = {
         ]
       ],
       [
+        "scope",
+        [
+          985
+        ]
+      ],
+      [
         "project",
         [
           {
             "where": {
               "id": 15,
+              "AND": [
+                {
+                  "OR": [
+                    {
+                      "ownerId": 985
+                    },
+                    {
+                      "members": {
+                        "some": {
+                          "userId": 985,
+                          "agentId": null
+                        }
+                      }
+                    }
+                  ]
+                }
+              ],
               "OR": [
                 {
                   "ownerId": 985
@@ -1497,11 +1548,32 @@ const baseline = {
         ]
       ],
       [
+        "scope",
+        [
+          985
+        ]
+      ],
+      [
         "tasks",
         [
           {
             "where": {
               "projectId": 15,
+              "project": {
+                "OR": [
+                  {
+                    "ownerId": 985
+                  },
+                  {
+                    "members": {
+                      "some": {
+                        "userId": 985,
+                        "agentId": null
+                      }
+                    }
+                  }
+                ]
+              },
               "deletedAt": null,
               "status": {
                 "not": "Deleted"
@@ -1642,7 +1714,8 @@ const baseline = {
               "inboxAdvanceOnSend": true,
               "emojiFrequency": true,
               "calendarViews": true,
-              "allTasksDateRange": true
+              "allTasksDateRange": true,
+              "boardSortMode": true
             }
           }
         ]
@@ -1702,7 +1775,8 @@ const baseline = {
               "inboxAdvanceOnSend": true,
               "emojiFrequency": true,
               "calendarViews": true,
-              "allTasksDateRange": true
+              "allTasksDateRange": true,
+              "boardSortMode": true
             }
           }
         ]
@@ -1941,7 +2015,7 @@ if (require.main === module) {
       for (const mode of ['ON', 'OFF', 'FLAG_FAILURE', 'USER_FAILURE', 'NO_SESSION']) {
         const result = await run(operation, mode);
         assert.deepEqual(contract(result), baseline[operation]);
-        assert.equal(result.probes.filter(([kind]) => kind === 'user').length, 1);
+        assert.equal(result.probes.filter(([kind]) => kind === 'user').length, ['velocity', 'fieldValue'].includes(operation) ? 2 : 1);
         assert.deepEqual(result.probes.filter(([kind]) => kind === 'flag'), ['ON', 'OFF', 'FLAG_FAILURE'].includes(mode) ? [['flag', key, 985]] : []);
         assert.equal(result.probes[0][1], result.requestHeaders);
       }
@@ -2047,7 +2121,7 @@ if (require.main === module) {
         const result = await run(operation, 'ON', { mocks: { '@/lib/auth/getSessionUser': { getSessionUser } } });
         assert.deepEqual(contract(result), baseline[operation]);
         assert.deepEqual(result.probes, [['flag', key, 985]]);
-        assert.equal(sessionReads, process.env.AUTH_LEGACY_FAST_PATH === '1' ? 0 : 1);
+        assert.equal(sessionReads, process.env.AUTH_LEGACY_FAST_PATH === '1' ? 0 : ['velocity', 'fieldValue'].includes(operation) ? 2 : 1);
       }
     } finally {
       if (saved === undefined) delete process.env.BETTER_AUTH_ENABLED;

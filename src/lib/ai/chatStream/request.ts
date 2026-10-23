@@ -35,6 +35,7 @@ export const defaultContextSchema = z
   .object({
     project_id: z.coerce.number().int().positive().optional(),
     task_id: z.coerce.number().int().positive().optional(),
+    scope: z.literal("ticket").optional(),
     view_id: z.string().optional().nullable(),
     view_name: z.string().optional().nullable(),
     surface: z.string().optional().nullable(),

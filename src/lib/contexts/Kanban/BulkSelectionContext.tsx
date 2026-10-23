@@ -35,7 +35,7 @@ interface KanbanBulkSelectionContextValue {
   isSelected: (taskId: number) => boolean;
   toggleTaskSelection: (
     taskId: number,
-    sectionId: number,
+    sectionId?: number,
     withRange?: boolean,
   ) => void;
   clearSelection: () => void;
@@ -149,7 +149,12 @@ export const KanbanBulkSelectionProvider = ({
   }, [items, selectAllEnabled, selectedTasks, taskIdsBySection]);
 
   const toggleTaskSelection = useCallback(
-    (taskId: number, sectionId: number, withRange = false) => {
+    (
+      taskId: number,
+      sectionId = items.find((task) => task.id === taskId)?.sectionId,
+      withRange = false,
+    ) => {
+      if (sectionId == null) return;
       latestTaskIdRef.current = taskId;
       setSelectedIds((current) => {
         if (withRange && anchorRef.current?.sectionId === sectionId) {
@@ -176,7 +181,7 @@ export const KanbanBulkSelectionProvider = ({
         return next;
       });
     },
-    [taskIdsBySection],
+    [items, taskIdsBySection],
   );
 
   const openBulkCommand = useCallback(

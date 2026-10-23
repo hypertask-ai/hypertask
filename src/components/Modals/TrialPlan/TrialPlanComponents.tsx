@@ -2,7 +2,9 @@ import { IconsGlobal } from "@/components/Common/IconsGlobal";
 import { getTeamById } from "@/lib/serverActions";
 import { storeSubscriptionPlans } from "@/lib/subscriptionPlans";
 import { CreateCheckoutParams, IPricingSearchParams } from "@/models/model";
-import axios from "axios";
+import { StartPlanButton, requestCheckout } from "@/components/PageComponents/Kanban/HeaderComponents/StartPlanButton";
+import { useFlag, useFlagReady } from "@/hooks/useFlag";
+import { HTPR_7551_START_PLAN_CHECKOUT_FLAG } from "@/lib/flags/keys";
 import { useRouter } from "next/navigation";
 import React, { useEffect, useState } from "react";
 
@@ -41,10 +43,13 @@ export const RowContent: React.FC<IRowPerkTitle> = ({ AIPrefix, content, checkVa
 
 
 export const TrialsButton = ({teamId}:{teamId:string}) => {
-    const [selectedTime, setSelectedTime] = useState(0);
+    const startPlanEnabled = useFlag(HTPR_7551_START_PLAN_CHECKOUT_FLAG);
+    const flagReady = useFlagReady(HTPR_7551_START_PLAN_CHECKOUT_FLAG);
+    const [pending, setPending] = useState(false);
+    const [error, setError] = useState<string | null>(null);
     const [teamInfo, setTeamInfo] = useState<IPricingSearchParams|undefined>(undefined);
     const [fetchingInfo, setFetching ] = useState(true)
-    const CHECKOUT_SESSION_API_ENDPOINT = "/api/stripe/session/checkout";
+
     const router = useRouter()
 
     const createCheckout = async () => {
@@ -65,13 +70,21 @@ export const TrialsButton = ({teamId}:{teamId:string}) => {
                 cancelUrl: process.env.NEXT_PUBLIC_BASEURL
 
             };
-            const url = await axios.post(CHECKOUT_SESSION_API_ENDPOINT, body);
-            router.push(url.data.url)
+            if (pending) return;
+            setPending(true);
+            setError(null);
+            try {
+                router.push(await requestCheckout(body));
+            } catch {
+                setError("Could not start checkout. Please try again.");
+                setPending(false);
+            }
         }
     };
 
     useEffect(()=>{
         let cancelled = false
+        if (!flagReady || startPlanEnabled) return
 
         const fetchTeamInfo = async()=>{
             try {
@@ -101,7 +114,9 @@ export const TrialsButton = ({teamId}:{teamId:string}) => {
         return () => {
             cancelled = true
         }
-    },[teamId])
+    },[teamId, flagReady, startPlanEnabled])
+    if (!flagReady) return null;
+    if (startPlanEnabled) return <StartPlanButton teamId={teamId} />;
     if (fetchingInfo){
         return (<p className="text-[#444444] text-content sm:text-emphasis dark:text-text-light-gray font-normal">Checking plan access…</p>)
     }
@@ -110,15 +125,18 @@ export const TrialsButton = ({teamId}:{teamId:string}) => {
     }
     return (
         <>
-            <div onClick={createCheckout} className="min-w-[280px] px-10 font-semibold text-content btn btn-dark">Start 14 Day Pro Trial</div>
+            <button type="button" disabled={pending || !teamInfo} onClick={createCheckout} className="min-w-[280px] px-10 font-semibold text-content btn btn-dark">{pending ? "Opening checkout…" : "Start 14 Day Pro Trial"}</button>
+            {error && <p role="alert">{error}</p>}
         </>
     )
 }
 
 export const PlansTable = ()=>{
+    const startPlanEnabled = useFlag(HTPR_7551_START_PLAN_CHECKOUT_FLAG);
+    const flagReady = useFlagReady(HTPR_7551_START_PLAN_CHECKOUT_FLAG);
     return(
         <>
-        <h2 className="text-4xl text-center sm:text-4xl font-semibold mb-2 sm:mb-0 lg:w-3/5 ">Try the Pro plan for free for 14 days</h2>
+        <h2 className="text-4xl text-center sm:text-4xl font-semibold mb-2 sm:mb-0 lg:w-3/5 ">{!flagReady ? "Checking plan access…" : startPlanEnabled ? "Start a Hypertask plan" : "Try the Pro plan for free for 14 days"}</h2>
         <p className="font-medium  text-center text-content sm:text-emphasis text-text-light-gray lg:w-3/5">Use Hypertask as much as you want with no board or task amount limitations with unlimited AI. Risk free, cancel anytime.</p>
         <div className="py-2 sm:py-6 max-h-[58svh] max-w-[80vw] overflow-auto lg:scrollbar-none scrollbar-thin scrollbar-thumb-inherit scrollbar-track-inherit text-left font-semibold ">
                 <div className="flex xs:gap-3 lg:gap-8">

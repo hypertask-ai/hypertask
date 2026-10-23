@@ -939,7 +939,7 @@ const settings: CommandGroup = {
       name: "Settings: Open AI chat by default",
       commandMode: CommandMode.Setting,
       payload: "task-page",
-      keywords: "settings open ai chat by default task page",
+      keywords: "settings open ai chat by default keep ai chat closed always task page",
     },
     {
       key: "settingsTaskPageCollapseComments",
@@ -1299,15 +1299,15 @@ const help: CommandGroup = {
 
 export const getAllCommands = (
   commandOptions: IAllCommands = { context: "Others" },
-  agentLogNameEnabled = false,
   kanbanSelectAllEnabled = commandOptions.kanbanSelectAllEnabled,
   roundedEnabled = false,
+  keepAiChatClosedKeywords = "",
 ): CommandGroup[] => {
   const navigate = getNavigateCommands(commandOptions);
   const time = getTimeCommands(commandOptions);
   const bulk = getBulkTaskCommands({ ...commandOptions, kanbanSelectAllEnabled });
   const comment = getCommentCommands(commandOptions);
-  const task = getTaskCommands(commandOptions, agentLogNameEnabled);
+  const task = getTaskCommands(commandOptions);
   const board = getBoardCommands(commandOptions);
   const appShell = getAppShellCommands();
   const agentChat = getAgentChatCommands();
@@ -1328,7 +1328,8 @@ export const getAllCommands = (
       { key: "roundedTheme", name: "Material (follows device)", commandMode: CommandMode.ToggleRoundedTheme, keywords: "rounded round system light dark theme appearance" },
       ...appearance.commandLists.slice(5),
     ] } : appearance,
-    settings,
+    { ...settings, commandLists: settings.commandLists.map((command) => command.key === "settingsTaskPageOpenAiChatByDefault"
+      ? { ...command, keywords: keepAiChatClosedKeywords ? command.keywords : "settings open ai chat by default task page" } : command) },
     help,
   ].filter((group) => group.commandLists.length > 0);
 

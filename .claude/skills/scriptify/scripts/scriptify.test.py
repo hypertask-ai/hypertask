@@ -317,6 +317,7 @@ subprocess.run(['git', 'commit', '-m', 'script routine'], check=True)
         self.assertIn('No Codex session started', (self.directory / 'handoff.md').read_text())
 
     def test_install_isolated_units_and_executables(self):
+        self.env['USER_UNIT_CHECK'] = '/usr/bin/true'
         stub(self.bin / 'systemctl', '''import sys
 from pathlib import Path
 with (Path.home() / 'systemctl-calls').open('a') as stream:

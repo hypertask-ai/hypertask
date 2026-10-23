@@ -11,6 +11,7 @@ type OperationDefinition = {
 }
 
 const operations: OperationDefinition[] = [
+  { pattern: /^\/mcp\/features$/, params: [], methods: ["GET"], load: () => import('./features/operation') },
   { pattern: /^\/mcp\/tasks\/description-versions$/, params: [], methods: ["GET"], load: () => import('./tasks/description-versions/operation') },
   { pattern: /^\/mcp\/tasks\/description-restore$/, params: [], methods: ["POST"], load: () => import('./tasks/description-restore/operation') },
   { pattern: /^\/mcp\/custom-fields\/value$/, params: [], methods: ["POST"], load: () => import('./custom-fields/value/operation') },

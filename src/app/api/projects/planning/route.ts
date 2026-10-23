@@ -113,7 +113,7 @@ async function updatePlanning(request: NextRequest) {
   }
 
   const project = await prisma.project.findFirst({
-    where: { id: projectId, ...getProjectWhere(session.userId), AND: [getProjectWhere(session.userId, session.agentId)] },
+    where: { id: projectId, ...getProjectWhere(session.userId), AND: [getProjectWhere(session.userId, session.agentId, session.teamScope)] },
     select: { id: true },
   });
   if (!project) {
@@ -142,7 +142,7 @@ async function updatePlanning(request: NextRequest) {
       return invalid("targetDate must be a valid YYYY-MM-DD date or null");
     }
     await prisma.project.update({
-      where: { id: projectId, AND: [taskWriteAccessWhere(session.userId, session.agentId)] },
+      where: { id: projectId, AND: [taskWriteAccessWhere(session.userId, session.agentId, session.teamScope)] },
       data: { targetDate },
     });
   } else if (body.action === "create_milestone") {

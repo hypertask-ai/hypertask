@@ -17,6 +17,7 @@ function loadPost({ flagOn, knownLabelIds }) {
   let createdLabels;
   const json = (body, init) => ({ body, status: init && init.status });
   const stubs = {
+    "@/lib/media/inlineAgentImages.server": { inlineAgentImagesForUser: async (html) => html },
     "@/lib/mcp/operationCrashReport": { reportMcpOperationCrash: () => {} },
     "@/lib/mcp/routeWrapper": {
       wrapMcpRoute: (fn) => fn,
@@ -51,6 +52,7 @@ function loadPost({ flagOn, knownLabelIds }) {
     "@/lib/mcp/tasks/mappers": { mapTaskToDetail: (t) => t },
     "@/utils/helperFunctions/sanitizeRichHtml": { sanitizeRichHtml: (s) => s },
     "@/lib/mcp/idempotency/idempotencyStore": {
+      IdempotencyAccessError: class extends Error {},
       IdempotencyInProgressError: class extends Error {},
       normalizeIdempotencyKey: () => null,
       withIdempotency: async (_a, _b, _c, _d, fn) => fn(),

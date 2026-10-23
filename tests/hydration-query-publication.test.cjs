@@ -84,6 +84,13 @@ test("hydration-sensitive queries isolate their pre-hydration cache keys", () =>
     flags,
     /initialFlags\?\.accountId !== userId/,
   );
+  assert.match(flags, /if \(subscribeByKey\) return <FlagStoreProvider key=\{userId\} context=\{context\}>\{children\}<\/FlagStoreProvider>;/);
+  assert.match(flags, /<FeatureFlagsContext\.Provider value=\{context\}>\s*\{children\}\s*<\/FeatureFlagsContext\.Provider>/);
+  assert.match(flags, /subscribe: subscribeToHydration,\s*getSnapshot: getHydratedSnapshot,\s*getServerSnapshot: reader === "ready" \? getHydratedSnapshot : getHydratingSnapshot/);
+  assert.match(flags, /const subscribeToHydration = \(\) => \(\) => \{\};/);
+  assert.match(flags, /const getHydratedSnapshot = \(\) => true;/);
+  assert.match(flags, /const getHydratingSnapshot = \(\) => false;/);
+  assert.match(read("src/hooks/General/useHydrated.ts"), /const subscribe = \(\) => \(\) => \{\};\s*const getSnapshot = \(\) => true;\s*const getServerSnapshot = \(\) => false;/);
 });
 
 test("a shared query isolates late streamed consumers during hydration", { timeout: 5_000 }, async () => {

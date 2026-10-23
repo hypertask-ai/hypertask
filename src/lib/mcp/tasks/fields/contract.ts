@@ -12,7 +12,7 @@ export async function updateTaskContract(context: TaskUpdateFieldContext, task: 
                     task.id,
                     ctx.agentId,
                     user.id,
-                    { allowHumanOverride: !ctx.agentId },
+                    { allowHumanOverride: !ctx.agentId, teamScope: ctx.teamScope },
                 );
                 await tx.task.update({
                     where: { id: task.id },

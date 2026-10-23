@@ -7,6 +7,7 @@ import { AudioButton } from "@/components/RTE/Components/AudioButton";
 import { MOBILE_TARGET } from "@/lib/configs/general.config";
 import { cn } from "@/utils/undoActions/helperFuncs";
 import { ArrowLeft, ChevronLeft, ChevronRight, Info } from "lucide-react";
+import { useEffect } from "react";
 import { ActivityGroup, chatStatusText, emptyFeedText, FeedFilter, MessageBubble, ScrollToBottomButton } from "./AgentChatFeedItems";
 import type { useAgentChatComposer } from "./useAgentChatComposer";
 import type { useAgentChatFeed } from "./useAgentChatFeed";
@@ -17,7 +18,7 @@ import type { useAgentChatSession } from "./useAgentChatSession";
 import type { useAgentChatState } from "./useAgentChatState";
 import type { useAgentLifecycle } from "./useAgentLifecycle";
 
-type Props = Pick<
+type Props = { embedded?: boolean; active?: boolean } & Pick<
   ReturnType<typeof useAgentChatNavigation>,
   | "selectedAgent"
   | "mobileFullscreenChrome"
@@ -101,7 +102,7 @@ type Props = Pick<
 >;
 
 export function AgentChatPane({
-  selectedAgent, isNarrow, backToRoster, mobileFullscreenChrome, deliveryMode,
+  embedded, active = true, selectedAgent, isNarrow, backToRoster, mobileFullscreenChrome, deliveryMode,
   toggleDetails, detailsCollapsed, setDetailsSheetOpen, isExternal, openingFullChat,
   handleOpenFullChat, activityRowsEnabled, feedFilter, setFeedFilter, showScrollToBottom, isMbl,
   mobileLayoutEnabled, scrollMessagesToBottom, messageListRef, handleMessageListScroll,
@@ -113,9 +114,13 @@ export function AgentChatPane({
   composerLocked, isDictationProcessing, setIsRecording, setIsDictationProcessing, insertDictation,
   mobileFullscreenFlag, dictationProjectId, isRecording, handleSend,
 }: Props) {
+  useEffect(() => {
+    if (embedded && !active) setIsRecording(false);
+  }, [embedded, active, setIsRecording]);
+
   const chatPane = selectedAgent ? (
     <section className="flex min-h-0 min-w-0 flex-1 flex-col">
-      <header className="flex shrink-0 items-center gap-2.5 border-b border-comment-description-border px-4 py-3">
+      {!embedded && <header className="flex shrink-0 items-center gap-2.5 border-b border-comment-description-border px-4 py-3">
         {isNarrow && (
           <button
             type="button"
@@ -163,7 +168,7 @@ export function AgentChatPane({
             <Info size={16} />
           </button>
         )}
-      </header>
+      </header>}
 
       {!isExternal ? (
         <div className="flex flex-1 flex-col items-center justify-center gap-3 px-6 text-center">
@@ -266,7 +271,7 @@ export function AgentChatPane({
             )}
           </div>
           </div>
-          <div
+          {active && <div
             className={cn(
               "relative shrink-0",
               !reuseAiComposer && "bg-cardBackground px-4 pb-4 pt-1",
@@ -342,7 +347,7 @@ export function AgentChatPane({
                       ((mobileLayoutEnabled || mobileFullscreenFlag) &&
                         dictationProjectId === null),
                     projectId:
-                      mobileLayoutEnabled || mobileFullscreenFlag
+                      embedded || mobileLayoutEnabled || mobileFullscreenFlag
                         ? dictationProjectId
                         : undefined,
                     sendDisabled:
@@ -410,7 +415,7 @@ export function AgentChatPane({
                 </div>
               )}
             </div>
-          </div>
+          </div>}
         </>
       )}
     </section>

@@ -30,6 +30,8 @@ function loadRoute(comments) {
     },
   };
   const stubs = {
+    "@/utils/controllers/projects/getAllIncludes": {},
+    "@/lib/media/inlineAgentImages.server": { inlineAgentImagesForUser: async (html) => html },
     "@/lib/mcp/operationCrashReport": { reportMcpOperationCrash: () => {} },
     "next/server": {
       NextResponse: {
@@ -39,7 +41,7 @@ function loadRoute(comments) {
     "@prisma/client": { Prisma: { DbNull: Symbol("DbNull") } },
     "@/lib/mcp/auth": {
       checkMcpRateLimit: async () => null,
-      validateMcpAuth: async () => ({ user: { id: 6 }, agentId: null }),
+      validateMcpAuth: async () => ({ user: { id: 6 }, agentId: null, teamScope: null }),
     },
     "@/lib/prisma": { __esModule: true, default: prisma },
     "@/lib/mcp/agents": { mcpVisibleAgentSelect, mapVisibleMcpAgent },
@@ -113,6 +115,7 @@ function loadRoute(comments) {
     },
     "@/lib/mcp/agents/scopes": { requireRole: async () => null },
     "@/lib/mcp/idempotency/idempotencyStore": {
+      IdempotencyAccessError: class extends Error {},
       normalizeIdempotencyKey: () => null,
       withIdempotency: async (_key, fn) => fn(),
       IdempotencyInProgressError: class extends Error {},

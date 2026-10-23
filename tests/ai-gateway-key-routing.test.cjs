@@ -23,6 +23,7 @@ const stubbedModulePaths = [
   "src/app/api/ai/_lib/planGate.ts",
   "src/app/api/ai/_lib/providerGate.ts",
   "src/lib/crypto/byokCipher.ts",
+  "src/lib/net/fetchWithoutBrotli.ts",
   "src/lib/prisma.ts",
   "src/utils/controllers/projects/getAllIncludes.ts",
   "src/utils/controllers/turbopuffer/turbopufferHelper.ts",
@@ -1496,6 +1497,9 @@ test("custom instruction upload uses the authenticated project team over caller 
     ok: true,
     headers: { get: () => "text/plain" },
     text: async () => "Use the authenticated project team.",
+  });
+  stubModule("src/lib/net/fetchWithoutBrotli.ts", {
+    fetchWithoutBrotli: (...args) => global.fetch(...args),
   });
 
   stubModule("src/lib/prisma.ts", {

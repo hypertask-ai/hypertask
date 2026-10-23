@@ -135,3 +135,58 @@ test("reservation writes fail closed if the lock token is replaced", async () =>
 
   assert.equal(redis.values.get(teamLockKey), "other-owner");
 });
+
+
+test("trial fingerprints refuse seven versus fourteen days but still match historical missing-field attempts to fourteen", () => {
+  const old = { ...desired, checkoutMode: "Trial" };
+  const fourteen = { ...old, trialDays: 14 };
+  const seven = { ...old, trialDays: 7 };
+  for (const compare of [reservation.desiredMatches, reservation.billingDesiredMatches]) {
+    assert.equal(compare(seven, fourteen), false);
+    assert.equal(compare(fourteen, seven), false);
+    assert.equal(compare(old, fourteen), true);
+    assert.equal(compare(fourteen, old), true);
+    assert.equal(compare(seven, { ...seven }), true);
+    assert.equal(compare(old, seven), false);
+    assert.equal(compare(seven, { ...seven, checkoutIntent: "signup-straight-to-board" }), compare === reservation.billingDesiredMatches);
+  }
+  assert.equal(old.trialDays, undefined);
+  assert.equal(reservation.effectiveTrialDays(old), 14);
+});
+
+test("OPEN equality separates intents; completed billing still matches across intents and redirects but not changed seats", () => {
+  const frozen = { ...desired, checkoutMode: "Trial", trialDays: 7, checkoutIntent: "signup-straight-to-board", ownerUserId: 6 };
+  for (const compare of [reservation.desiredMatches, reservation.billingDesiredMatches]) {
+    assert.equal(compare(frozen, { ...frozen, quantity: 8 }), false);
+    assert.equal(compare(frozen, { ...frozen, checkoutIntent: undefined }), compare === reservation.billingDesiredMatches);
+    assert.equal(compare(frozen, structuredClone(frozen)), true);
+  }
+  const redirected = { ...frozen, returnUrl: "https://app.hypertask.ai/project?id=7" };
+  assert.equal(reservation.desiredMatches(frozen, redirected), false);
+  assert.equal(reservation.billingDesiredMatches(frozen, redirected), true);
+});
+
+test("reservation round trips never inject new fields into an old in-flight attempt", async () => {
+  redis.values.clear();
+  const old = { ...reservation.createCheckoutAttempt({ ...desired, checkoutMode: "Trial" }), state: "in_flight" };
+  await reservation.withTeamCheckoutReservation("team-owned", async (context) => {
+    await context.write(old);
+    assert.deepEqual(await context.read(), old);
+    assert.equal((await context.read()).desired.trialDays, undefined);
+  });
+});
+
+
+test("the preflight read never takes a lock or changes an existing attempt", async () => {
+  redis.values.clear();
+  assert.equal(await reservation.readTeamCheckoutAttempt("team-owned"), null);
+  assert.equal(redis.values.size, 0);
+  const attempt = reservation.createCheckoutAttempt(desired);
+  await reservation.withTeamCheckoutReservation("team-owned", async (context) => {
+    await context.write(attempt);
+  });
+  const before = [...redis.values];
+  assert.deepEqual(await reservation.readTeamCheckoutAttempt("team-owned"), attempt);
+  assert.deepEqual([...redis.values], before);
+  assert.equal(redis.values.has(teamLockKey), false);
+});

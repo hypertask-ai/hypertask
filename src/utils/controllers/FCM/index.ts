@@ -3,6 +3,7 @@ import fcmConfig from "@/utils/api/fcmConfig";
 import { FCMDeviceInfo } from "@/models/model";
 import type { Message } from "firebase-admin/messaging";
 import prisma from "@/lib/prisma";
+import { filterTaskReadersNow } from "@/lib/access/canReadTaskNow";
 import { resolveNotificationChannelPreference } from "@/utils/controllers/notifications/shouldNotify";
 import { NotificationType } from "@prisma/client";
 
@@ -36,6 +37,7 @@ interface newCommentFCM {
     afterAppDomain:string,
     creatorId?: number,
     commentId?: number,
+    taskId: number,
     data?: Record<string, string>,
     skipPreferenceFilter?: boolean,
     customPreferenceCheck?: Map<number, boolean>,
@@ -198,7 +200,14 @@ export const sendDataOnlyFcm = async (
     type: "Comment",
   });
 
-  const validDevices = devices.filter(device => device && device.userId !== creatorId);
+  const candidateDevices = devices.filter(device =>
+    device && device.userId !== creatorId && !deliveredDeviceIds.has(device.firebaseId)
+  );
+  const allowedUserIds = new Set(await filterTaskReadersNow(
+    candidateDevices.map(device => device.userId),
+    comment.taskId,
+  ));
+  const validDevices = candidateDevices.filter(device => allowedUserIds.has(device.userId));
 
   const commentPayload = fcmCommentPayload(comment, commentCreator);
   const payloadBytes = Buffer.byteLength(commentPayload, "utf8");
@@ -310,7 +319,20 @@ export const sendDataNewCommentFCM = async(props:newCommentFCM) => {
         }
     }
     
-    for (const device of props.devices){
+    let readerIds: number[];
+    try {
+        readerIds = await filterTaskReadersNow(
+            props.devices.map(device => device.userId),
+            props.taskId,
+        );
+    } catch (error) {
+        console.error("🚀 ~ sendDataNewCommentFCM ~ task access check failed, push skipped:", error);
+        return;
+    }
+    const allowedUserIds = new Set(readerIds);
+    const validDevices = props.devices.filter(device => allowedUserIds.has(device.userId));
+
+    for (const device of validDevices){
         console.log("🚀 ~ sendDataNewCommentFCM ~ device:", device.firebaseId)
         
         if (!device.sendNotifications) {

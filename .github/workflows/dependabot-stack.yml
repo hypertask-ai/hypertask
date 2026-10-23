@@ -2,7 +2,7 @@ name: Dependabot Stack Updates
 
 # Sorts every Dependabot PR into one of two lanes (Valentin, 2026-09-08):
 #
-#   small (patch + minor)  -> label `full-ci` so the test gate runs, label
+#   small (patch + minor)  -> retain the informational `full-ci` label and
 #                             `stack-minor`, turn on GitHub's native auto-merge,
 #                             and let it land the same day once checks are green.
 #                             Grouped PRs are verified bump-by-bump from the PR
@@ -36,14 +36,14 @@ jobs:
     steps:
       # Fail closed instead of degrading to github.token: labels made with
       # GITHUB_TOKEN never fire downstream `labeled` workflows, so a fallback
-      # would arm ci-tests/major-ticket on nothing and every Dependabot PR
+      # would fail to start major-ticket and every Dependabot PR
       # would silently sit unlabeled forever.
       - name: Require the labelling PAT
         env:
           PAT: ${{ secrets.AUTOMERGE_TOKEN }}
         run: |
           if [ -z "$PAT" ]; then
-            echo "::error::AUTOMERGE_TOKEN is not set. Labels made with GITHUB_TOKEN do not fire ci-tests' \`labeled\` trigger or dependabot-major-ticket.yml, so the pipeline would gate on nothing. Set the PAT instead of falling back."
+            echo "::error::AUTOMERGE_TOKEN is not set. Labels made with GITHUB_TOKEN do not fire dependabot-major-ticket.yml's \`labeled\` trigger. Set the PAT instead of falling back."
             exit 1
           fi
 
@@ -52,7 +52,7 @@ jobs:
         with:
           # A PAT, not the built-in token: GitHub refuses to start new workflow
           # runs from events authored by GITHUB_TOKEN, so labelling with it would
-          # never fire ci-tests' `labeled` trigger or dependabot-major-ticket.yml.
+          # never fire dependabot-major-ticket.yml's `labeled` trigger.
           github-token: ${{ secrets.AUTOMERGE_TOKEN }}
           script: |
             const pr = context.payload.pull_request;
@@ -158,7 +158,7 @@ jobs:
               }
             }
 
-            // `full-ci` is what makes ci-tests actually run (see ci-tests.yml).
+            // `full-ci` is informational; ci-tests runs on normal PR lifecycle events.
             // Both lanes need the test signal; only the small lane auto-merges on it.
             const lane = small ? 'stack-minor' : 'major-upgrade';
             const opposite = small ? 'major-upgrade' : 'stack-minor';

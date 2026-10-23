@@ -1,3 +1,4 @@
+import type { AgentTokenTeamScope } from '@/lib/mcp/auth/types'
 import type { Task } from '@prisma/client'
 import prisma from '@/lib/prisma'
 import { scheduleAgentFirstTaskEmailBatch } from '@/utils/controllers/notifications/agentFirstTaskEmail'
@@ -18,6 +19,7 @@ export interface CreateSectionInput {
   afterSectionId?: number
   userId: number
   agentId?: string | null
+  teamScope?: AgentTokenTeamScope | null
 }
 
 export type CreateSectionResult =
@@ -25,12 +27,12 @@ export type CreateSectionResult =
   | { status: 400 | 403 | 404 | 500; json: { message: string } | unknown }
 
 export async function createSection(input: CreateSectionInput): Promise<CreateSectionResult> {
-  const { projectId, title, ranking: explicitRanking, afterSectionId, userId, agentId } = input
+  const { projectId, title, ranking: explicitRanking, afterSectionId, userId, agentId, teamScope } = input
 
   if (!Number.isSafeInteger(projectId) || projectId <= 0 || !Number.isSafeInteger(userId) || userId <= 0) {
     return { status: 403, json: { message: 'User does not have permission to add a section to this project' } }
   }
-  const project = await prisma.project.findFirst({ where: { id: projectId, status: 'Normal', ...savedViewBoardAccessWhere(userId, agentId) }, select: { id: true } })
+  const project = await prisma.project.findFirst({ where: { id: projectId, status: 'Normal', ...savedViewBoardAccessWhere(userId, agentId, teamScope) }, select: { id: true } })
   if (!project) {
     return { status: 403, json: { message: 'User does not have permission to add a section to this project' } }
   }
@@ -109,6 +111,7 @@ export interface UpdateSectionInput {
   projectId?: number
   userId: number
   agentId?: string | null
+  teamScope?: AgentTokenTeamScope | null
 }
 
 export type UpdateSectionResult =
@@ -118,13 +121,14 @@ export type UpdateSectionResult =
 async function canAccessProject(
   projectId: number,
   userId: number,
-  agentId?: string | null
+  agentId?: string | null,
+  teamScope?: AgentTokenTeamScope | null,
 ): Promise<boolean> {
   const project = await prisma.project.findFirst({
     where: {
       id: projectId,
       status: 'Normal',
-      ...getProjectWhere(userId, agentId)
+      ...getProjectWhere(userId, agentId, teamScope)
     },
     select: { id: true }
   })
@@ -133,7 +137,7 @@ async function canAccessProject(
 }
 
 export async function updateSection(input: UpdateSectionInput): Promise<UpdateSectionResult> {
-  const { sectionId, section_title, ranking, deleted, visibility, isDone, autoAssignUserId, autoAssignAgentId, moveAfterSectionId, projectId, userId, agentId } = input
+  const { sectionId, section_title, ranking, deleted, visibility, isDone, autoAssignUserId, autoAssignAgentId, moveAfterSectionId, projectId, userId, agentId, teamScope } = input
 
   try {
     const existing = await prisma.section.findUnique({
@@ -150,7 +154,7 @@ export async function updateSection(input: UpdateSectionInput): Promise<UpdateSe
     const titleChanged =
       section_title != null && section_title !== existing.section_title
 
-    const hasAccess = await canAccessProject(existing.projectId, userId, agentId)
+    const hasAccess = await canAccessProject(existing.projectId, userId, agentId, teamScope)
     if (!hasAccess) {
       return { status: 403, json: { message: 'User does not have permission to update this section' } }
     }
@@ -249,6 +253,7 @@ export interface DeleteSectionInput {
   projectId: number
   userId: number
   agentId?: string | null
+  teamScope?: AgentTokenTeamScope | null
 }
 
 export interface DeleteSectionResult {
@@ -259,7 +264,7 @@ export interface DeleteSectionResult {
 }
 
 export async function deleteSection(input: DeleteSectionInput): Promise<DeleteSectionResult> {
-  const { sectionId, projectId, userId, agentId } = input
+  const { sectionId, projectId, userId, agentId, teamScope } = input
 
   const section = await prisma.section.findFirst({
     where: { id: sectionId, projectId }
@@ -268,7 +273,7 @@ export async function deleteSection(input: DeleteSectionInput): Promise<DeleteSe
     return { status: 404 }
   }
 
-  const hasAccess = await canAccessProject(section.projectId, userId, agentId)
+  const hasAccess = await canAccessProject(section.projectId, userId, agentId, teamScope)
   if (!hasAccess) {
     return { status: 403 }
   }

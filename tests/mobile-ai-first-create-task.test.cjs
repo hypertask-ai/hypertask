@@ -257,6 +257,7 @@ test("board create entry points keep the classic form and explicit AI shortcut",
   const moduleMocks = new Map([
     [path.join(root, "src/hooks/useFlag.tsx"), {
       useFlag: () => false,
+      useFlagLoaded: () => true,
     }],
     [path.join(root, "src/lib/state.tsx"), {
       useRecoilState: (atom) => React.useState(atom.default),
@@ -439,10 +440,6 @@ test("board create entry points keep the classic form and explicit AI shortcut",
 
     assert.deepEqual(createCalls.slice(modalCallsBeforeQuickEntry), [
       { payload: sectionPayload, defaultEditFocus: undefined },
-      {
-        payload: { sectionId: 9190, sectionTitle: "Backlog", position: "bottom" },
-        defaultEditFocus: undefined,
-      },
     ]);
   } finally {
     if (reactRoot) await React.act(async () => reactRoot.unmount());

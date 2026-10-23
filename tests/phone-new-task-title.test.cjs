@@ -7,7 +7,6 @@ const { createRoot } = require('react-dom/client');
 const { JSDOM } = require('jsdom');
 const root = path.resolve(__dirname, '..');
 const originalCache = new Map(Object.entries(require.cache));
-let flagEnabled = true;
 const noop = () => {};
 const context = {
   currentFocusedElement: null, editMode: null, setEditMode: noop,
@@ -18,7 +17,6 @@ const stub = (file, exports) => {
   const filename = path.join(root, file);
   require.cache[filename] = { id: filename, filename, loaded: true, exports };
 };
-stub('src/hooks/useFlag.tsx', { useFlag: () => flagEnabled });
 stub('src/lib/contexts/deviceContext.tsx', { useDeviceContext: () => false });
 stub('src/hooks/Task Detail/useSetStickyHeight.ts', { default: () => ({ dynamicElementRef: React.createRef() }) });
 stub('src/hooks/MultiPages/useClickOutside.ts', { default: noop });
@@ -32,7 +30,7 @@ const TaskTitleModal = titleModule.default ?? titleModule;
 for (const filename of Object.keys(require.cache)) if (!originalCache.has(filename)) delete require.cache[filename];
 for (const [filename, cached] of originalCache) require.cache[filename] = cached;
 
-async function checkExpansion({ mobile, flag }) {
+async function checkExpansion({ mobile }) {
   const dom = new JSDOM('<!doctype html><div id="root"></div>', { url: 'https://app.hypertask.ai' });
   const globals = ['window', 'document', 'navigator', 'requestAnimationFrame', 'cancelAnimationFrame', 'IS_REACT_ACT_ENVIRONMENT'];
   const previous = new Map(globals.map(key => [key, Object.getOwnPropertyDescriptor(global, key)]));
@@ -49,7 +47,6 @@ async function checkExpansion({ mobile, flag }) {
   Object.defineProperty(dom.window.HTMLTextAreaElement.prototype, 'scrollHeight', {
     get() { return this.closest('[data-title-wrapper]').style.display === 'none' ? 0 : (this.value.length > 40 ? 81 : 37); },
   });
-  flagEnabled = flag;
   context.formValues.title = '';
   const reactRoot = createRoot(document.getElementById('root'));
   const render = visible => React.createElement(MobileViewContext.Provider, { value: mobile },
@@ -62,7 +59,7 @@ async function checkExpansion({ mobile, flag }) {
     const textarea = document.querySelector('textarea');
     assert.equal(textarea.style.height, '0px', 'hidden mount measures zero');
     await act(async () => reactRoot.render(render(true)));
-    if (mobile && flag) {
+    if (mobile) {
       assert.ok(parseFloat(textarea.style.height) >= 24, 'expanded phone title must regain a real height');
       context.formValues.title = 'A long title that wraps onto several lines on the phone screen';
       await act(async () => reactRoot.render(render(true)));
@@ -71,7 +68,7 @@ async function checkExpansion({ mobile, flag }) {
       await act(async () => reactRoot.render(render(true)));
       assert.equal(textarea.style.height, '81px', 'reopening restores the wrapped title height');
     } else {
-      assert.equal(textarea.style.height, '0px', 'flag off and desktop retain the existing autosize triggers');
+      assert.equal(textarea.style.height, '0px', 'desktop retains the existing autosize triggers');
     }
   } finally {
     await act(async () => reactRoot.unmount());
@@ -83,6 +80,5 @@ async function checkExpansion({ mobile, flag }) {
   }
 }
 
-test('phone New Task title remeasures when expanded after hidden mount', () => checkExpansion({ mobile: true, flag: true }));
-test('phone New Task title flag off preserves existing behavior', () => checkExpansion({ mobile: true, flag: false }));
-test('desktop New Task title retains existing measurement triggers', () => checkExpansion({ mobile: false, flag: true }));
+test('phone New Task title remeasures when expanded after hidden mount', () => checkExpansion({ mobile: true }));
+test('desktop New Task title retains existing measurement triggers', () => checkExpansion({ mobile: false }));

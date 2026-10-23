@@ -319,15 +319,25 @@ test("task summary and description verdict share one model request", async () =>
 
   invalidStructuredText = null;
   generationError = { name: "TimeoutError" };
-  await assert.rejects(
-    () => generateAndStoreTaskSummary(42, { force: true }),
-    (error) =>
-      error instanceof SummaryGenerationTimeoutError &&
-      error instanceof SummaryRetryableError &&
-      error.cause === generationError,
-  );
+  const logged = { error: [], warn: [] };
+  const { error: consoleError, warn: consoleWarn } = console;
+  console.error = (...args) => logged.error.push(args.join(" "));
+  console.warn = (...args) => logged.warn.push(args.join(" "));
+  try {
+    await assert.rejects(
+      () => generateAndStoreTaskSummary(42, { force: true }),
+      (error) =>
+        error instanceof SummaryGenerationTimeoutError &&
+        error instanceof SummaryRetryableError &&
+        error.cause === generationError,
+    );
+  } finally {
+    Object.assign(console, { error: consoleError, warn: consoleWarn });
+  }
   assert.equal(generateCalls, 4);
   assert.equal(summaryWrites.length, 2);
   assert.equal(descriptionWrites.length, 2);
   assert.equal(redisValues.has("ai-summary:lock:42"), true);
+  assert.deepEqual(logged.warn, ["[taskSummaries] Retaining timed-out task 42 lease until TTL expiry"]);
+  assert.equal(logged.error.some((line) => line.includes("Retaining timed-out")), false);
 });

@@ -1,3 +1,4 @@
+import { requireAgentWriteRole } from '@/lib/mcp/agents/readRoleGuard'
 import { reportMcpOperationCrash } from '@/lib/mcp/operationCrashReport'
 import { wrapMcpRoute, checkMcpRouteRateLimit as checkMcpRateLimit, validateMcpRouteAuth as validateMcpAuth } from '@/lib/mcp/routeWrapper'
 import { NextRequest, NextResponse } from 'next/server'
@@ -37,7 +38,7 @@ export async function GET(
     }
 
     const project = await prisma.project.findFirst({
-      where: { id: projectId, status: 'Normal', ...getProjectWhere(ctx.user.id, ctx.agentId) },
+      where: { id: projectId, status: 'Normal', ...getProjectWhere(ctx.user.id, ctx.agentId, ctx.teamScope) },
       select: { id: true, playbook: true },
     })
     if (!project) {
@@ -72,6 +73,8 @@ export async function PUT(
     if (rateLimited) return rateLimited
     const ctx = await validateMcpAuth(request)
     if (!ctx) return unauthorized()
+    const roleRefusal = await requireAgentWriteRole(ctx)
+    if (roleRefusal) return roleRefusal
 
     const projectId = parseProjectId(rawId)
     if (projectId === null) {
@@ -94,7 +97,7 @@ export async function PUT(
     }
 
     const result = await prisma.project.updateMany({
-      where: { id: projectId, status: 'Normal', ...getProjectWhere(ctx.user.id, ctx.agentId) },
+      where: { id: projectId, status: 'Normal', ...getProjectWhere(ctx.user.id, ctx.agentId, ctx.teamScope) },
       data: { playbook: parsed.value as Prisma.InputJsonValue },
     })
     if (result.count === 0) {

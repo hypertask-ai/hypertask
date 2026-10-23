@@ -386,6 +386,7 @@ export async function selectTiptapModel(args?: {
   userId?: number | null;
   taskId?: number | null;
   agentId?: string | null;
+  teamScope?: import("@/lib/mcp/auth/types").AgentTokenTeamScope | null;
   teamContext?: { teamId: string | null; settings: unknown };
 }): Promise<SelectedModel> {
   const selected = await selectTaskWriterModel({
@@ -395,6 +396,7 @@ export async function selectTiptapModel(args?: {
     feature: "editor",
     aiFeature: "improveWriting",
     agentId: args?.agentId ?? null,
+    teamScope: args?.teamScope,
     teamContext: args?.teamContext,
   });
 
@@ -610,6 +612,7 @@ export async function selectTaskWriterModel(args: {
   teamContext?: { teamId: string | null; settings: unknown };
   agentId?: string | null;
   taskWriterAgentId?: string | null;
+  teamScope?: import("@/lib/mcp/auth/types").AgentTokenTeamScope | null;
 }) {
   let taskWriterSonnet = false;
   if (args.aiFeature === "taskWriter" && args.userId) {
@@ -619,18 +622,20 @@ export async function selectTaskWriterModel(args: {
     } catch {
     }
   }
-  const agentId = args.agentId ?? (taskWriterSonnet ? args.taskWriterAgentId : null);
+  const agentId = args.agentId ?? (args.teamScope != null || taskWriterSonnet ? args.taskWriterAgentId : null);
   const teamContext =
     args.teamContext ??
-    (await getProjectTeamProviderContext(args.projectId, args.userId));
+    (await getProjectTeamProviderContext(args.projectId, args.userId, args.agentId ?? args.taskWriterAgentId, args.teamScope));
   const keyLookup = teamContext.teamId
     ? {
         trustedTeamId: teamContext.teamId,
+        teamScope: args.teamScope,
         userId: args.userId,
         agentId: agentId ?? null,
       }
     : {
         teamId: args.teamId,
+        teamScope: args.teamScope,
         projectId: args.projectId,
         userId: args.userId,
         agentId: agentId ?? null,
@@ -656,12 +661,13 @@ export async function selectTaskWriterModel(args: {
   const haiku55Enabled = await haiku55ModelEnabled?.(args.userId) ?? false;
   const defaultContext = haiku55Enabled
     ? await getAiDefaultModelContext(keyLookup, true, storePlanId)
-    : { hasByok: false, byok: undefined, haikuDefaultEnabled: false, backgroundClaudeEnabled: false };
+    : { hasByok: false, byok: undefined, haikuDefaultEnabled: false, backgroundClaudeEnabled: false, openaiOnlyDefaultEnabled: false };
   const requestDefaultModelOption = getDefaultAiModelOptionForPlan(
     storePlanId,
     haiku55Enabled ? defaultContext.hasByok : hasEligibleByokCredential,
     haiku55Enabled,
     defaultContext.haikuDefaultEnabled,
+    defaultContext,
   );
   const personalModelOptionId = args.aiFeature && !taskWriterSonnet
     ? await getPersonalModelOptionId(
@@ -1067,6 +1073,7 @@ function commentRowToContext(row: TurbopufferCommentRow) {
 }
 
 export async function retrieveTaskWriterContext(args: {
+  principal?: import("@/lib/rag/retrieveBoardKnowledge").BoardKnowledgePrincipal;
   projectId: number;
   projectIds?: number[];
   prompt: string;
@@ -1074,6 +1081,9 @@ export async function retrieveTaskWriterContext(args: {
   taskIds?: number[];
   reserveCommentBudget?: boolean;
 }) {
+  if (args.principal?.teamScope != null) {
+    await (await import("./customInstructions")).assertProjectAccess(args.principal.userId, args.projectId, args.principal.agentId, args.principal.teamScope);
+  }
   const taskIds = (args.taskIds ?? []).filter((id) => Number.isInteger(id));
   const projectIds = args.projectIds?.length
     ? args.projectIds
@@ -1093,14 +1103,16 @@ export async function retrieveTaskWriterContext(args: {
         limit: 50,
       }),
       retrieveCustomInstructionFileContext({
+        principal: args.principal,
         projectId: args.projectId,
         prompt: args.prompt,
       }),
     ]);
 
+  const authorized = await (await import("@/lib/rag/authorizeIndexedRows")).authorizeIndexedRows(taskRowsRaw, commentRowsRaw, args.principal);
   const excluded = excludeLoadedTaskRows({
-    taskRows: taskRowsRaw,
-    commentRows: commentRowsRaw,
+    taskRows: authorized.taskRows,
+    commentRows: authorized.commentRows,
     loadedTaskIds: taskIds,
   });
   const { taskRows, commentRows } = args.reserveCommentBudget

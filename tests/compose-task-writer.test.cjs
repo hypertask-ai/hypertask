@@ -292,6 +292,7 @@ test('shared server writer gates compose before accessing a board; legacy writer
 // Loads the shared create handler (the code behind /api/tasks/createGlobally POST)
 // with strict stubs; only the packages it needs at runtime come from node_modules.
 function loadCreateGlobal(stubs) {
+  stubs['@/lib/media/inlineAgentImages.server'] = { inlineAgentImagesForUser: async (html) => html };
   stubs["@/lib/auth/agentScope"] = require("./helpers/agent-board-scope.cjs").enforcedScope;
   stubs['@/utils/controllers/tasks/parentTaskAccess'] = createJiti(__filename)(path.join(root, 'src/utils/controllers/tasks/parentTaskAccess.ts'));
   const real = new Set(['next/server', 'zod', 'better-auth/cookies']);
@@ -382,14 +383,15 @@ test('standalone dictation improvement never prefixes undefined and disabled mic
   const improve = new Function('editor', 'defaultContent', 'response', 'canDeliver', 'callbackHandler', `return async () => { const htmlContent = ${htmlContent}; const textContent = ${textContent}; ${improveBlock} };`)(null, 'Typed note', { json: async () => ({ response_html: '<p>Spoken note</p>' }) }, () => true, (...args) => delivered.push(args));
   await improve();
   assert.deepEqual(delivered, [['<p>Spoken note</p>', true]]);
-  for (const disabled of [false, true]) {
+  for (const [disabled, active] of [[false, true], [true, true], [false, false]]) {
     const stops = [];
     const javascript = ts.transpileModule(`const handler = ${keyHandler};`, { compilerOptions: { target: ts.ScriptTarget.ES2020 } }).outputText;
-    const handler = new Function('disabled', 'recordingRef', 'stopRecording', `${javascript}; return handler;`)(disabled, { current: true }, (send) => stops.push(send));
+    const handler = new Function('disabled', 'recordingRef', 'activeRef', 'stopRecording', `${javascript}; return handler;`)(disabled, { current: true }, { current: active }, (send) => stops.push(send));
     let prevented = false;
     handler({ key: 'Enter', keyCode: 13, preventDefault: () => { prevented = true; } });
-    assert.deepEqual(stops, disabled ? [] : [true]);
-    assert.equal(prevented, !disabled);
+    const handled = active && !disabled;
+    assert.deepEqual(stops, handled ? [true] : []);
+    assert.equal(prevented, handled);
   }
 });
 
@@ -487,7 +489,7 @@ test('save existing target enforces both flags, edit permissions, board match an
   assert.equal(result.body.newTask.id, 52);
   assert.deepEqual(updates[0][0], { id: 52, title: 'Written title', description: '<p>Written body</p>' });
   assert.equal(updates[0][1].id, 985);
-  assert.deepEqual(updates[0][3], { expectedTitle: target.title, expectedDescription: '', expectedProjectId: 7, expectedStatus: 'Normal' });
+  assert.deepEqual(updates[0][3], { teamScope: undefined, expectedTitle: target.title, expectedDescription: '', expectedProjectId: 7, expectedStatus: 'Normal' });
   assert.equal(broadcasts.length, 2);
 });
 

@@ -1,6 +1,6 @@
 import { useFlag } from "@/hooks/useFlag";
-import { HTPR_6929_COMPOSE_TASK_WRITER_FLAG, HTPR_7052_CHAT_NAMES_FLAG, HTPR_6971_CHAT_HISTORY_PAGING_FLAG } from "@/lib/flags/keys";
-import { currentUserAtom, composeTaskChatIntroAtom, currentProjectAtom, dockedChatScopeAtom, fullScreenChatScopeAtom } from "@/store";
+import { HTPR_6929_COMPOSE_TASK_WRITER_FLAG, HTPR_7052_CHAT_NAMES_FLAG, HTPR_6971_CHAT_HISTORY_PAGING_FLAG, HTPR_7319_SKILL_CHAT_FOLLOWUP_FLAG } from "@/lib/flags/keys";
+import { currentUserAtom, composeTaskChatIntroAtom, composeTaskSkillFollowupAtom, currentProjectAtom, dockedChatScopeAtom, fullScreenChatScopeAtom } from "@/store";
 import type { ApiResponse } from "@/utils/axiosClient";
 import {
   AI_Chat_API,
@@ -39,6 +39,12 @@ export const useSessionAndChatHistory = (
   const [pendingComposeIntro, setComposeIntro] = useRecoilState(composeTaskChatIntroAtom);
   let composeIntro: typeof pendingComposeIntro = null;
   if (composeEnabled) composeIntro = pendingComposeIntro;
+  const skillFollowupEnabled = useFlag(HTPR_7319_SKILL_CHAT_FOLLOWUP_FLAG);
+  const pendingFollowupState = useRecoilValue(composeTaskSkillFollowupAtom);
+  let pendingFollowup: typeof pendingFollowupState = null;
+  if (skillFollowupEnabled) pendingFollowup = pendingFollowupState;
+  const waitingForSkillFollowup = isTaskScoped && Boolean(taskId) && pendingFollowup?.taskId === taskId;
+  const hasPendingSkillIntro = isTaskScoped && composeIntro?.skillFollowup && composeIntro.taskId === taskId;
   const consumedComposeIntro = useRef<string | null>(null);
   const currentUser = useRecoilValue(currentUserAtom);
   const pathname = usePathname();
@@ -49,7 +55,7 @@ export const useSessionAndChatHistory = (
   const nameBoardRef = useRef<number | undefined>(undefined);
   let scopedBoardId: number | undefined = fullScreenScope ?? undefined;
   if (!(pathname?.startsWith("/chat") ?? false)) {
-    if (dockedScope === null) scopedBoardId = currentProject?.id;
+    if (dockedScope === null || dockedScope === "ticket") scopedBoardId = currentProject?.id;
     else scopedBoardId = dockedScope === "all" ? undefined : dockedScope;
   }
   if (chatNames) nameBoardRef.current = scopedBoardId;
@@ -531,32 +537,37 @@ export const useSessionAndChatHistory = (
     ? sessions.find((session) => session.id === activeSession)
     : sessions[0];
   useEffect(() => {
-    if (composeEnabled && composeIntro && isTaskScoped &&
+    if (!waitingForSkillFollowup && composeEnabled && composeIntro && isTaskScoped &&
         taskId === composeIntro.taskId && currentSession?.taskId === composeIntro.taskId) {
       const id = `compose-task-${composeIntro.taskId}`;
       if (consumedComposeIntro.current !== id && !currentSession.messages.some((message) => message.id === id)) {
-        consumedComposeIntro.current = id;
-        (paged ? pagedHistory.addMessageToSessionQuery : addMessageToSessionQuery)(currentSession.id, {
+        const greeting: IChatMessage = {
           id, sessionId: currentSession.id, role: "assistant", isDelivered: true,
           createdAt: new Date(), content: composeIntro.content,
-        });
+        };
+        if (paged) {
+          if (!pagedHistory.addMessageToSessionQuery(currentSession.id, greeting)) return;
+        } else {
+          addMessageToSessionQuery(currentSession.id, greeting);
+        }
+        consumedComposeIntro.current = id;
       }
       setComposeIntro(null);
     }
-  }, [composeEnabled, composeIntro, isTaskScoped, taskId, currentSession, addMessageToSessionQuery, setComposeIntro, paged, pagedHistory.addMessageToSessionQuery]);
+  }, [waitingForSkillFollowup, composeEnabled, composeIntro, isTaskScoped, taskId, currentSession, addMessageToSessionQuery, setComposeIntro, paged, pagedHistory.addMessageToSessionQuery]);
 
   const isSessionPending =
     !isDemo &&
     currentSession === undefined &&
     (isLoadingSessions || (isFetchingSessions && Boolean(activeSession)));
-  const showWelcomeScreen = !isSessionPending && (currentSession?.messages?.length ?? 0) === 0;
+  const showWelcomeScreen = !waitingForSkillFollowup && !hasPendingSkillIntro && !isSessionPending && (currentSession?.messages?.length ?? 0) === 0;
 
   const getDisplayedSession = useCallback(() => currentSession, [currentSession]);
   const resolveHistorySession = useCallback(async (sessionId?: string, scope?: ChatSessionScope) => sessions.find((session) =>
     sessionId ? session.id === sessionId :
       (!scope?.taskId || session.taskId === scope.taskId) &&
       (!scope?.projectId || (session.projectId === scope.projectId && session.taskId === null))), [sessions]);
-  if (paged) return { ...pagedHistory, sessionPagingEnabled: true };
+  if (paged) return { ...pagedHistory, showWelcomeScreen: pagedHistory.showWelcomeScreen && !waitingForSkillFollowup && !hasPendingSkillIntro, sessionPagingEnabled: true };
 
   return {
     sessionPagingEnabled: false,

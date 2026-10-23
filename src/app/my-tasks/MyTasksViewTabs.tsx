@@ -6,10 +6,10 @@ import SaveViewModal from "@/components/Modals/ViewModals/SaveViewModal";
 import useClickOutside from "@/hooks/MultiPages/useClickOutside";
 import { useFlag } from "@/hooks/useFlag";
 import { MOBILE_TARGET } from "@/lib/configs/general.config";
-import { HTPR_6938_MY_TASKS_ICON_CONTROLS_FLAG, HTPR_6930_MY_TASKS_KANBAN_REUSE_FLAG, MY_TASKS_VIEWS_FLAG } from "@/lib/flags/keys";
+import { HTPR_6938_MY_TASKS_ICON_CONTROLS_FLAG, MY_TASKS_VIEWS_FLAG } from "@/lib/flags/keys";
 import { MY_TASKS_OVERDUE_BADGES_FLAG } from "@/lib/flags/keys";
 import type { MyTasksSavedView } from "@/models/MyTasksView";
-import { House, MoreHorizontal, Plus } from "lucide-react";
+import { House, MoreHorizontal } from "lucide-react";
 import { useRef, useState } from "react";
 
 interface Props {
@@ -44,7 +44,6 @@ const MyTasksViewTabs = ({
   overdueByViewId = {},
 }: Props) => {
   const iconControlsEnabled = useFlag(HTPR_6938_MY_TASKS_ICON_CONTROLS_FLAG);
-  const kanbanReuseEnabled = useFlag(HTPR_6930_MY_TASKS_KANBAN_REUSE_FLAG);
   const [saveOpen, setSaveOpen] = useState(false);
   const myTasksViewsEnabled = useFlag(MY_TASKS_VIEWS_FLAG);
   const overdueBadgesEnabled = useFlag(MY_TASKS_OVERDUE_BADGES_FLAG);
@@ -65,11 +64,6 @@ const MyTasksViewTabs = ({
     ) : null;
   const overdueLabel = (name: string, count: number) =>
     overdueBadgesEnabled && count > 0 ? `${name}, ${count} overdue` : undefined;
-
-  const saveAs = () => {
-    const name = window.prompt("Name this view")?.trim();
-    if (name) onSaveAs(name);
-  };
 
   const rename = () => {
     if (!activeView) return;
@@ -127,48 +121,13 @@ const MyTasksViewTabs = ({
         })}
       </div>
 
-      {kanbanReuseEnabled && (
-        <SaveView variant="shell" dirty={dirty} busy={busy} onReset={onReset} onSaveClick={() => setSaveOpen(true)} />
-      )}
-      {kanbanReuseEnabled && saveOpen && (
+      <SaveView variant="shell" dirty={dirty} busy={busy} onReset={onReset} onSaveClick={() => setSaveOpen(true)} />
+      {saveOpen && (
         <SaveViewModal toggle={() => setSaveOpen(false)} personal={{
           canSaveCurrent: Boolean(activeView), busy,
           onSaveCurrent: onSave, onCreate: onSaveAs, onReset,
         }} />
       )}
-      {!kanbanReuseEnabled && dirty && (
-        <div className="flex shrink-0 items-center gap-1 text-meta">
-          <button
-            type="button"
-            disabled={busy}
-            onClick={onReset}
-            className="rounded-[4px] px-2 py-1 text-text-light-gray hover:bg-hover-active hover:text-white-black disabled:opacity-50"
-          >
-            Reset
-          </button>
-          {activeView && (
-            <button
-              type="button"
-              disabled={busy}
-              onClick={onSave}
-              className="rounded-[4px] bg-shadcn-primary px-2 py-1 font-medium text-primary-foreground hover:opacity-80 disabled:opacity-50"
-            >
-              Save
-            </button>
-          )}
-        </div>
-      )}
-
-      {!kanbanReuseEnabled && <button
-        type="button"
-        disabled={busy}
-        onClick={saveAs}
-        className={`${MOBILE_TARGET} h-7 gap-1 rounded-[4px] px-2 text-content text-text-light-gray hover:bg-hover-active hover:text-white-black disabled:opacity-50 @md:min-h-0 @md:min-w-0`}
-      >
-        <Plus size={14} strokeWidth={1.5} />
-        <span className="hidden @md:inline">Save as view</span>
-      </button>}
-
       {activeView && (
         <div ref={actionsRef} className="relative shrink-0">
           <button

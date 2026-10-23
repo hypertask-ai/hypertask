@@ -22,8 +22,6 @@ import { ModalBody } from "reactstrap";
 import { DragDropContext, Draggable, Droppable, DropResult } from "@hello-pangea/dnd";
 import { useQuery } from "@tanstack/react-query";
 import axios from "axios";
-import { useFlag } from "@/hooks/useFlag";
-import { HTPR_6930_MY_TASKS_KANBAN_REUSE_FLAG } from "@/lib/flags/keys";
 
 type TableColumnsPickerProps = {
   closeHandler: () => void;
@@ -70,8 +68,7 @@ const TableColumnsPicker = ({
   hideCustomFields = false,
   hideWidthReset = false,
 }: TableColumnsPickerProps) => {
-  const kanbanReuseEnabled = useFlag(HTPR_6930_MY_TASKS_KANBAN_REUSE_FLAG);
-  const checkedIcon = kanbanReuseEnabled ? <Check size={16} strokeWidth={1.75} /> : null;
+  const checkedIcon = <Check size={16} strokeWidth={1.75} />;
   const controlled = Boolean(onChange);
   const currentProject = useRecoilValue(currentProjectAtom);
   const showTimeTotals = Boolean(
@@ -251,18 +248,7 @@ const TableColumnsPicker = ({
                               )}
                               <span>{labelFor(column)}</span>
                             </span>
-                            {kanbanReuseEnabled ? (
-                              isChecked && checkedIcon
-                            ) : (
-                            <span
-                              aria-hidden="true"
-                              className={`flex h-4 w-4 items-center justify-center rounded-sm ${
-                                isChecked ? "bg-hypertasks-purple text-white" : "bg-containerBackground"
-                              }`}
-                            >
-                              {isChecked && <Check size={12} strokeWidth={2} className="keep-stroke" />}
-                            </span>
-                            )}
+                            {isChecked && checkedIcon}
                           </li>
                         )}
                       </Draggable>

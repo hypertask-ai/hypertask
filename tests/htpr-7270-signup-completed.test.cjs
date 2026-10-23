@@ -151,6 +151,8 @@ function betterAuthHarness(h) {
     'better-auth/plugins': { emailOTP: plugin, magicLink: plugin, multiSession: plugin },
     '@better-auth/api-key': { apiKey: () => ({ schema: { apikey: { fields: { referenceId: {} } } } }) },
     '@better-auth/infra': { dash: plugin }, '@better-auth/passkey': { passkey: plugin },
+    '@/lib/auth/oauthTokenCipher': { preflightOAuthTokenKey: () => {} },
+    '@/lib/auth/oauthTokenStorage': { withOAuthTokenStorage: (adapter) => adapter },
     '@/lib/auth/bridgePlugin': { bridgeSessionPlugin: plugin },
     '@/lib/auth/legacyCookiePlugin': { legacyCookiePlugin: plugin, newGoogleSignupRequests: new WeakMap() },
     '@/lib/mcp/managementPermissions': { MANAGEMENT_KEY_PERMISSIONS: {} },

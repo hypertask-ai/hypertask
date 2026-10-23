@@ -59,7 +59,6 @@ for (const filename of Object.keys(require.cache)) {
 for (const [filename, cached] of originalCache) require.cache[filename] = cached;
 
 const flagValues = (haiku) => ({
-  "htpr-7010-haiku-5-5": haiku,
   "htpr-7038-haiku-default": haiku,
 });
 
@@ -141,10 +140,10 @@ test("the composer preference hook never posts a team override during flag initi
   }, { preferenceHook: true });
 });
 
-test("loaded Off flags still persist a genuinely unavailable model fallback", async () => {
+test("Haiku remains available when the default flag is Off", async () => {
   await withPicker(async ({ chosen, update }) => {
     await update(flagValues(false));
-    assert.deepEqual(chosen, ["gpt-6-luna"]);
+    assert.deepEqual(chosen, []);
   });
 });
 

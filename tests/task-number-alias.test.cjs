@@ -1,3 +1,4 @@
+const { withStubs } = require("./helpers/stub-map.cjs");
 const test = require("node:test");
 const assert = require("node:assert/strict");
 const fs = require("node:fs");
@@ -13,7 +14,7 @@ const currentTask = {
 };
 
 function load(relativePath, stubs) {
-  stubs = { "@/lib/auth/agentScope": require("./helpers/agent-board-scope.cjs").enforcedScope, "@/lib/mcp/operationCrashReport": { reportMcpOperationCrash: () => {} }, ...stubs };
+  stubs = withStubs({ "@/lib/auth/agentScope": require("./helpers/agent-board-scope.cjs").enforcedScope, "@/lib/mcp/operationCrashReport": { reportMcpOperationCrash: () => {} } }, stubs);
   const filename = path.join(root, relativePath);
   const javascript = ts.transpileModule(fs.readFileSync(filename, "utf8"), {
     compilerOptions: {
@@ -26,7 +27,7 @@ function load(relativePath, stubs) {
   loaded.require = (request) => {
     if (request === "@/lib/mcp/routeWrapper") return require("./helpers/mcp-route-wrapper.cjs").loadRouteWrapper(stubs);
     if (request === "@/lib/tasks/sameBoardRelations") return load("src/lib/tasks/sameBoardRelations.ts", {});
-    if (Object.hasOwn(stubs, request)) return stubs[request];
+    if (request in stubs) return stubs[request];
     if (request === "@/lib/mcp/listParams") return load("src/lib/mcp/listParams.ts", {});
     if (["@prisma/client", "react", "react/jsx-runtime"].includes(request)) return require(request);
     throw new Error(`Unexpected dependency: ${request}`);
@@ -87,6 +88,7 @@ function fixture({ tasks = [currentTask], visibleProjects = [20], agentId = null
         "@/lib/agents/publicAgent": {}, "@/lib/cycles": {}, "@/lib/agents/visibility": {},
         "@/utils/controllers/notifications/visibleInboxScope": {},
       }).projectContentAccessWhere,
+      intersectProjectTeamScope: (where, scope) => { assert.equal(scope == null, true); return where; },
       getProjectWhere: (userId, requestedAgentId) => {
         assert.equal(userId, 6);
         assert.equal(requestedAgentId ?? null, agentId);
@@ -97,6 +99,7 @@ function fixture({ tasks = [currentTask], visibleProjects = [20], agentId = null
   base["@/utils/controllers/projects/findPrefixAliasTasks"] = load("src/utils/controllers/projects/findPrefixAliasTasks.ts", base);
   const resolver = load("src/lib/mcp/tasks/resolveTask.ts", {
     ...base,
+    "@/lib/flags/keys": require("./helpers/flag-files.cjs").load("src/lib/flags/keys.ts"),
     "@/lib/flags": { HTPR_6868_TICKET_PREFIX_FLAG: "htpr-6868-ticket-prefix", isFeatureEnabled: async () => true },
   });
   base["@/lib/mcp/tasks/resolveTask"] = resolver;
@@ -107,6 +110,7 @@ function fixture({ tasks = [currentTask], visibleProjects = [20], agentId = null
     "@/lib/cycles": {},
     "@/lib/pullRequests/taskPullRequests": {},
     "@/lib/agents/publicAgent": {},
+    "@/lib/flags/keys": require("./helpers/flag-files.cjs").load("src/lib/flags/keys.ts"),
     "@/lib/flags": {},
     "@/lib/agents/visibility": {},
     "@/utils/controllers/notifications/visibleInboxScope": {},
@@ -126,6 +130,7 @@ function fixture({ tasks = [currentTask], visibleProjects = [20], agentId = null
     },
     "@/lib/mcp/tasks/resolveTask": resolver,
     "@/lib/mcp/pagination/cursor": {},
+    "@/lib/flags/keys": require("./helpers/flag-files.cjs").load("src/lib/flags/keys.ts"),
     "@/lib/flags": {},
     "@/lib/mcp/listQuery": {},
     "@/lib/mcp/readListQuery": {},
@@ -139,6 +144,7 @@ function fixture({ tasks = [currentTask], visibleProjects = [20], agentId = null
       ...detail, fetchTaskDetail: async () => null, fetchCommentsForSlug: async () => [],
     },
     "@/lib/auth/serverUser": { requireServerCookieUser: async () => ({ id: 6 }) },
+    "@/lib/flags/keys": require("./helpers/flag-files.cjs").load("src/lib/flags/keys.ts"),
     "@/lib/flags": { isFeatureEnabled: async () => true },
     "next/navigation": { redirect: url => { throw new Error(`REDIRECT ${url}`); } },
     "@/lib/contexts/TaskDetail/TaskProvider": {},

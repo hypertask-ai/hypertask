@@ -62,7 +62,7 @@ test("pages create still resolves a raw task_id", () => {
   assert.match(createRoute, /validateTaskIdentifier\(identifier\)/);
   assert.match(
     createRoute,
-    /findTaskByIdentifier\(\s*ctx\.user,\s*identifier,\s*ctx\.agentId\s*\)/
+    /findTaskByIdentifier\(\s*ctx\.user,\s*identifier,\s*ctx\.agentId,\s*undefined,\s*ctx\.teamScope\s*\)/
   );
   assert.match(createRoute, /taskId: task\.id/);
 });

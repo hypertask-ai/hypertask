@@ -1,3 +1,4 @@
+import { requireAgentWriteRole } from "@/lib/mcp/agents/readRoleGuard";
 import { recordAgentBoardScopeMiss } from "@/lib/auth/agentScope";
 import { projectContentAccessWhere } from "@/utils/controllers/projects/getAllIncludes";
 import { wrapMcpRoute } from '@/lib/mcp/routeWrapper'
@@ -68,7 +69,7 @@ export async function GET(request: NextRequest) {
   try {
     const ctx = await authorize(request);
     if (ctx instanceof Response) return ctx;
-    const flags = await listFeatureFlagModes({ includeTicketTitles: true, includeLastChange: true, principal: { userId: ctx.user.id, agentId: ctx.agentId } });
+    const flags = await listFeatureFlagModes({ includeTicketTitles: true, includeLastChange: true, principal: { userId: ctx.user.id, agentId: ctx.agentId, teamScope: ctx.teamScope } });
     const key = request.nextUrl.searchParams.get("key");
     if (key !== null) {
       const flag = flags.find((flag) => flag.key === key);
@@ -88,6 +89,8 @@ export async function PATCH(request: NextRequest) {
   try {
     const ctx = await authorize(request);
     if (ctx instanceof Response) return ctx;
+    const roleRefusal = await requireAgentWriteRole(ctx);
+    if (roleRefusal) return roleRefusal;
     if (!request.headers.get("content-type")?.startsWith("application/json")) {
       return noStore({ error: "Content-Type must be application/json" }, 415);
     }
@@ -118,7 +121,7 @@ export async function PATCH(request: NextRequest) {
     }, async (tx) => {
       const commentId = Number(link[3]);
       const approval = await tx.comment.findFirst({
-        where: { id: commentId, task: { projectId: Number(link[1]), uniqueIndex: Number(link[2]), status: { not: "Deleted" }, project: projectContentAccessWhere(ctx.user.id, ctx.agentId) } },
+        where: { id: commentId, task: { projectId: Number(link[1]), uniqueIndex: Number(link[2]), status: { not: "Deleted" }, project: projectContentAccessWhere(ctx.user.id, ctx.agentId, ctx.teamScope) } },
         select: { taskId: true },
       });
       if (!approval) throw new FeatureFlagApprovalError(APPROVAL_REQUIRED_MESSAGE);
@@ -130,7 +133,7 @@ export async function PATCH(request: NextRequest) {
         where: {
           id: commentId,
           editedAt: null,
-          task: { projectId: Number(link[1]), uniqueIndex: Number(link[2]), status: { not: "Deleted" }, project: projectContentAccessWhere(ctx.user.id, ctx.agentId) },
+          task: { projectId: Number(link[1]), uniqueIndex: Number(link[2]), status: { not: "Deleted" }, project: projectContentAccessWhere(ctx.user.id, ctx.agentId, ctx.teamScope) },
           reactions: { some: {
             userId: FEATURE_FLAG_OWNER_USER_ID, agentId: null, agentDisplayName: null, isDeleted: false,
             unified: { startsWith: "1f44d" },

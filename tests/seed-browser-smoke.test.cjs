@@ -49,7 +49,7 @@ test("contract callers and boards are isolated from the browser smoke user", asy
   const boards = [];
   let nextId = 100;
   const prisma = Object.fromEntries([
-    "user", "userPicture", "user_Activity", "googleAccount", "team", "team_Activity", "member_Team", "member", "invite", "label",
+    "user", "userPicture", "user_Activity", "googleAccount", "team", "team_Activity", "member_Team", "member", "invite", "label", "agent", "chatSession", "chatMessage",
   ].map(model => {
     records[model] = [];
     return [model, {
@@ -68,8 +68,10 @@ test("contract callers and boards are isolated from the browser smoke user", asy
   const seedEnd = source.indexOf("\ntry {", seedStart);
   assert.ok(seedStart >= 0 && seedEnd > seedStart);
   const run = new (Object.getPrototypeOf(async function () {}).constructor)(
-    "prisma", "createBoard", "signSession", "SESSION_TTL_SECONDS", "path", "stateFile", "fixtureFile", "mkdir", "writeFile", "appendFile", "process", "randomUUID",
-    `const runKey = "test", localPremerge = false, contractEnabled = true;\n${source.slice(seedStart, seedEnd)}\nawait seedSessionFixtures({});`,
+    "prisma", "createBoard", "signSession", "SESSION_TTL_SECONDS", "path", "stateFile", "fixtureFile", "mkdir", "writeFile", "appendFile", "process", "randomUUID", "jiti", "root",
+    `const runKey = "test", localPremerge = false, contractEnabled = true, visual = false, VISUAL_NOW = "2026-10-01T12:00:00Z";
+${source.slice(seedStart, seedEnd)}
+await seedSessionFixtures({});`,
   );
   await run(prisma, async data => {
     const board = { ...data, id: nextId++, task: { id: nextId++, uniqueIndex: 1, title: data.title, updatedAt: new Date() }, columns: [] };
@@ -77,12 +79,35 @@ test("contract callers and boards are isolated from the browser smoke user", asy
     return board;
   }, payload => JSON.stringify(payload), 3600, path, "/fixtures/state.json", "/fixtures/card-fixture.json",
   async () => {}, async (file, content) => { files[file] = JSON.parse(content); }, async () => {},
-  { env: { GITHUB_OUTPUT: "/fixtures/output" } }, () => "invite-key");
+  { env: { GITHUB_OUTPUT: "/fixtures/output" } }, () => "invite-key", (file) => {
+    assert.equal(file, path.join(root, "src/lib/mcp/auth/verifyJwt.ts"));
+    return {
+      createMcpToken: (userId, _email, _ttl, agentId) => `${userId}:${agentId}`,
+      agentTokenCredentialFields: (token) => ({ mcpTokenHash: `hash:${token}` }),
+    };
+  }, root);
 
   const smoke = records.user.find(user => user.displayName === "Browser smoke user");
   const contract = files["/fixtures/contract-fixture.json"];
   const owner = contract.callers.owner;
   assert.notEqual(owner.id, smoke.id, "contract owner must not be the smoke user");
+  const sidebar = files["/fixtures/agent-sidebar-fixture.json"];
+  assert.equal(sidebar.projectId, boards[0].id);
+  assert.deepEqual(Object.keys(sidebar.lanes), ["Desktop", "Mobile"]);
+  for (const [lane, agents] of Object.entries(sidebar.lanes)) {
+    assert.deepEqual(agents.map(agent => agent.name), ["A", "B", "Native"].map(suffix => `Sidebar ${lane} ${suffix}`));
+    for (const fixture of agents) {
+      const agent = records.agent.find(row => row.id === fixture.id);
+      assert.equal(agent.userId, smoke.id);
+      assert.equal(agent.runtimeType, fixture.name.endsWith("Native") ? "NATIVE" : "EXTERNAL");
+      assert.equal(agent.mcpTokenHash, `hash:${fixture.token}`);
+      assert.ok(records.member.some(row => row.agentId === agent.id && row.projectId === sidebar.projectId && row.status === "Accepted"));
+      assert.ok(records.chatSession.some(row => row.id === fixture.sessionId && row.agentId === agent.id && row.teamId === boards[0].teamId));
+      const history = records.chatMessage.filter(row => row.sessionId === fixture.sessionId);
+      assert.equal(history.length, 30);
+      assert.equal(history[0].content, `${fixture.name} history 1`);
+    }
+  }
   const ownerUser = records.user.find(user => user.id === owner.id);
   const account = records.googleAccount.find(row => row.userId === owner.id);
   const team = records.team.find(row => row.googleAccountId === account.id);

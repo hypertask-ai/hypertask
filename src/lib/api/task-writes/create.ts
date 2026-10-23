@@ -1,3 +1,4 @@
+import { inlineAgentImagesForUser } from "@/lib/media/inlineAgentImages.server";
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import create from "@/utils/controllers/tasks/create";
@@ -34,7 +35,7 @@ export const POST = taskWriteRoute({
         return NextResponse.json({ newTask }, { status: 200 });
       }
       if (ranking && section) {
-        const response = await create({ title, description, section, userId, ranking, projectId, sectionId, index, currentUser: userObj, agentId });
+        const response = await create({ title, description: agentId ? await inlineAgentImagesForUser(description ?? "", session.userId, { inlineImages: body.inline_images }) : description, section, userId, ranking, projectId, sectionId, index, currentUser: userObj, agentId });
         if (response.status === 200) void broadcastBoardChange(projectId, { originUserId: userObj?.id });
         return NextResponse.json(response.json, { status: response.status });
       }

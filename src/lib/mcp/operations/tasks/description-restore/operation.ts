@@ -1,3 +1,4 @@
+import { requireAgentWriteRole } from '@/lib/mcp/agents/readRoleGuard'
 import { findIdParamOutOfRange, idOutOfRangeMessage } from '@/lib/mcp/listParams'
 import { reportMcpOperationCrash } from '@/lib/mcp/operationCrashReport'
 import { wrapMcpRoute } from '@/lib/mcp/routeWrapper'
@@ -28,6 +29,8 @@ export async function POST(request: NextRequest) {
   try {
     const ctx = await validateMcpAuth(request)
     if (!ctx) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    const roleRefusal = await requireAgentWriteRole(ctx)
+    if (roleRefusal) return roleRefusal
 
     const rateLimited = await checkMcpRateLimit(request)
     if (rateLimited) return rateLimited
@@ -86,7 +89,7 @@ export async function POST(request: NextRequest) {
       where: { id: taskId },
       select: { projectId: true },
     })
-    if (!task || (await validateProjectAccess(task.projectId, ctx.user.id, ctx.agentId)).error) {
+    if (!task || (await validateProjectAccess(task.projectId, ctx.user.id, ctx.agentId, ctx.teamScope)).error) {
       return NextResponse.json(
         buildFieldError('not_found', 'task_id', 'Task not found'),
         { status: 404 }
@@ -108,7 +111,7 @@ export async function POST(request: NextRequest) {
       taskId,
       creatorId: ctx.user.id,
       content: snapshot.contentHtml,
-      agentId: ctx.agentId,
+      agentId: ctx.agentId, teamScope: ctx.teamScope,
       actingUserId: ctx.user.id,
     })
 

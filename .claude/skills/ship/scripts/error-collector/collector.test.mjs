@@ -886,6 +886,7 @@ check('reporting', 'R11: dry-run fixture remains deterministic in the last UTC m
 }));
 
 check('install', 'units mirror precedent, installer copies modules/noise and fake systemctl enables user timer', () => withHarness(async h => {
+  h.env.USER_UNIT_CHECK = '/usr/bin/true';
   assert.ok(readdirSync(join(HERE, 'sources')).includes('fixture.mjs'));
   assert.match(readFileSync(join(HERE, 'README.md'), 'utf8'), /Backlog, section 10414/);
   const service = readFileSync(join(HERE, '../error-collector.service'), 'utf8');

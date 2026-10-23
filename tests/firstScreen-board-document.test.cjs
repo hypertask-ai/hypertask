@@ -171,3 +171,13 @@ test('desktop default-open and pinned chat board documents require the desktop s
     assert.deepEqual(calls, [[15, 985, 985]]);
   }
 });
+
+
+test('the board document is still allowed without the ticket flag and never produces a ticket shell', async () => {
+  reset();
+  const document = await getServerBoardDocument();
+  assert.ok(document);
+  assert.equal(document.flags.values['htpr-7627-ticket-first-screen'], undefined);
+  const { getServerTicketShell } = require('../src/lib/firstScreen/serverTicketShell.ts');
+  assert.equal(await getServerTicketShell(), null);
+});

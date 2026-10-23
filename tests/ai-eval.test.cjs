@@ -43,6 +43,12 @@ test('mocked LLM calls validate every top-ten schema for both surfaces', () => {
   assert.throws(() => validateCall({ id: 'bad', name: 'unknown', arguments: {} }, catalogs.chat), /Unknown tool/);
 });
 
+test('isolated MCP metadata includes the shared Decisions guidance in the recorded comment contract', () => {
+  const load = require('jiti')(__filename, { fsCache: false });
+  const { DECISIONS_GUIDANCE } = load(path.join(__dirname, '../src/lib/mcp/decisionsGuidance.ts'));
+  assert.ok(mcpTools().hypertask_add_comment_to_task.description.startsWith(DECISIONS_GUIDANCE + ' '));
+});
+
 test('chat create-task eval preserves the exact flag-off schema and validation', () => {
   const { z } = require('zod');
   const load = require('jiti')(__filename, { fsCache: false });
@@ -134,7 +140,7 @@ test('CI is path scoped, hosted and explicitly offline without credentials', () 
   const workflow = fs.readFileSync(path.join(__dirname, '../.github/workflows/ai-evals.yml'), 'utf8');
   for (const directory of ['src/app/api/ai/**', 'src/lib/mcp-server/config/**', 'src/lib/mcp-server/validations/**', 'src/lib/ai/**']) assert.ok(workflow.includes(directory));
   assert.match(workflow, /runs-on: ubuntu-latest/);
-  assert.match(workflow, /node-version: 24/);
+  assert.match(workflow, /node-version: \^24\.\d+\.\d+/);
   assert.match(workflow, /npm ci --ignore-scripts[\s\S]*?run: npx prisma generate[\s\S]*?run: node --test/);
   assert.match(workflow, /AI_EVAL_LIVE: "0"/);
   assert.match(workflow, /AI_EVAL_WRONG_TOOL_THRESHOLD: "0"/);

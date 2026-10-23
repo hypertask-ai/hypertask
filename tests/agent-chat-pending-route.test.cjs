@@ -307,3 +307,18 @@ test("pending rejects a user token", async () => {
   assert.equal(body.success, false);
   assert.match(body.error, /agent token/i);
 });
+
+test("a successful webhook delivery never becomes pending when polling asks later", async () => {
+  activeWebhook = true;
+  pendingRows[0].isDelivered = true;
+  assert.deepEqual((await fetchPending()).body.messages, []);
+  activeWebhook = false;
+  assert.deepEqual((await fetchPending()).body.messages, []);
+  assert.equal(pendingRows[0].isDelivered, true);
+});
+
+test("polling claims once and a repeated pending request cannot replay the prompt", async () => {
+  assert.equal((await fetchPending()).body.messages.length, 1);
+  assert.deepEqual((await fetchPending()).body.messages, []);
+  assert.equal(pendingRows[0].isDelivered, true);
+});

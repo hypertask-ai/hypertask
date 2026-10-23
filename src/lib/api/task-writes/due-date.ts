@@ -40,7 +40,7 @@ export const POST = taskWriteRoute({
       const { status, json: task, oldTask }: any = await updateTaskSingle(
         { id: taskId, dueDate: dueDate ?? null, dueDateNotifiedAt: null },
         userObj,
-        agentId ?? null
+        agentId ?? null, { teamScope: session.teamScope }
       );
 
       if (status !== 200) {

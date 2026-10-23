@@ -1704,7 +1704,7 @@ class OperationTests(Fixture):
         self.assertTrue(all(p.exists() for p in [old, fresh, proof, retired, npm]))
 
     def test_install_copies_script_and_replaces_old_timer_without_deleting_files(self):
-        with patch.object(disk, 'command') as calls:
+        with patch.object(disk, 'command') as calls, patch.dict(os.environ, USER_UNIT_CHECK='/usr/bin/true'):
             self.guard.install()
         installed = self.guard.state / 'disk-guard.py'
         self.assertEqual(installed.read_bytes(), (HERE / 'disk-guard.py').read_bytes())

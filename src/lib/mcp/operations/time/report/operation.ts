@@ -48,7 +48,7 @@ export async function GET(request: NextRequest) {
   if (taskParam) {
     let task;
     try {
-      task = await findTaskByStringIdentifier(ctx.user, taskParam, ctx.agentId);
+      task = await findTaskByStringIdentifier(ctx.user, taskParam, ctx.agentId, ctx.teamScope);
     } catch (error) {
       const response = taskIdentifierErrorResponse(error);
       if (response) return response;
@@ -64,7 +64,7 @@ export async function GET(request: NextRequest) {
   }
 
   const entries = await listReport(ctx.user.id, {
-    agentId: ctx.agentId,
+    agentId: ctx.agentId, teamScope: ctx.teamScope,
     teamId: params.get("team")?.trim() || undefined,
     boardId: parsePositiveInteger(params.get("board")),
     taskId,

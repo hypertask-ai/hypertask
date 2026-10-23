@@ -1,8 +1,8 @@
+import type { AgentTokenTeamScope } from '@/lib/mcp/auth/types';
 import { agentScopeEnforced } from "@/lib/auth/agentScope";
 import { notificationBoardAccessWhere } from "@/utils/controllers/notifications/boardAccess";
 import { NotificationType, Prisma } from "@prisma/client";
 import prisma from "@/lib/prisma";
-import { HTPR_6752_INSTANT_TICKET_OPEN_FLAG, isFeatureEnabled } from "@/lib/flags";
 import { getInboxTabs } from "@/utils/helperFunctions/helperFunctions";
 import { markQuietAgentMentions } from "@/utils/controllers/notifications/quietOwnerInbox";
 import { inboxConfig } from "@/lib/configs/inbox.config";
@@ -142,14 +142,12 @@ export async function getInboxNotifications(
   client: typeof prisma = prisma,
   { withCachedDescription = true }: { withCachedDescription?: boolean } = {},
   agentId?: string | null,
+  teamScope?: AgentTokenTeamScope | null,
 ) {
-  const cachedDescriptionPromise = withCachedDescription
-    ? isFeatureEnabled(HTPR_6752_INSTANT_TICKET_OPEN_FLAG, userId).catch(() => false)
-    : Promise.resolve(false);
-  if (agentId && agentScopeEnforced()) {
+  if ((teamScope != null || (agentId && agentScopeEnforced()))) {
     return client.notification.findMany({
-      where: { AND: [visibleUserInboxWhere(userId), notificationBoardAccessWhere(userId, agentId)] },
-      include: notificationInboxInclude(userId, await cachedDescriptionPromise),
+      where: { AND: [visibleUserInboxWhere(userId), notificationBoardAccessWhere(userId, agentId, teamScope)] },
+      include: notificationInboxInclude(userId, withCachedDescription),
       distinct: ["taskId", "notification_inviteId"],
       orderBy: [{ createdAt: "desc" }, { id: "desc" }],
     });
@@ -174,9 +172,8 @@ export async function getInboxNotifications(
 
   if (!selectedRows.length) return [];
 
-  const includeCachedDescription = await cachedDescriptionPromise;
   return client.notification.findMany({
-    include: notificationInboxInclude(userId, includeCachedDescription),
+    include: notificationInboxInclude(userId, withCachedDescription),
     where: {
       AND: [
         { id: { in: selectedRows.map(({ id }) => id) } },
@@ -188,10 +185,10 @@ export async function getInboxNotifications(
   });
 }
 
-const getRecentInboxActorActivity = (userId: number, agentId?: string | null) => {
-  if (agentId && agentScopeEnforced()) {
+const getRecentInboxActorActivity = (userId: number, agentId?: string | null, teamScope?: AgentTokenTeamScope | null) => {
+  if ((teamScope != null || (agentId && agentScopeEnforced()))) {
     return prisma.notification.findMany({
-      where: { AND: [visibleUserInboxWhere(userId), notificationBoardAccessWhere(userId, agentId)] },
+      where: { AND: [visibleUserInboxWhere(userId), notificationBoardAccessWhere(userId, agentId, teamScope)] },
       select: { taskId: true, type: true, fromAgentId: true, fromUserId: true, createdAt: true },
       distinct: ["taskId", "type", "fromAgentId", "fromUserId"],
       orderBy: [{ createdAt: "desc" }, { id: "desc" }],
@@ -221,11 +218,12 @@ const notificationGetAll = async (
   userId: string | string[],
   options: { withCachedDescription?: boolean } = {},
   agentId?: string | null,
+  teamScope?: AgentTokenTeamScope | null,
 ) => {
   const parsedUserId = parseInt(userId as string);
   try {
-    const inboxWhere: Prisma.NotificationWhereInput = agentId
-      ? { AND: [visibleUserInboxWhere(parsedUserId), notificationBoardAccessWhere(parsedUserId, agentId)] }
+    const inboxWhere: Prisma.NotificationWhereInput = agentId || teamScope != null
+      ? { AND: [visibleUserInboxWhere(parsedUserId), notificationBoardAccessWhere(parsedUserId, agentId, teamScope)] }
       : visibleUserInboxWhere(parsedUserId);
     const [
       notifications,
@@ -235,8 +233,8 @@ const notificationGetAll = async (
       blockedTasks,
       userSetting,
     ] = await Promise.all([
-      getInboxNotifications(parsedUserId, prisma, options, agentId),
-      getRecentInboxActorActivity(parsedUserId, agentId),
+      getInboxNotifications(parsedUserId, prisma, options, agentId, teamScope),
+      getRecentInboxActorActivity(parsedUserId, agentId, teamScope),
       prisma.notification.findMany({
         where: { ...inboxWhere, directReply: true },
         select: { taskId: true, type: true, fromAgentId: true },
@@ -248,7 +246,7 @@ const notificationGetAll = async (
           fromUserId: parsedUserId,
           type: "Mentioned",
           taskId: { not: null },
-          ...(agentId ? { AND: [notificationBoardAccessWhere(parsedUserId, agentId)] } : {}),
+          ...(agentId || teamScope != null ? { AND: [notificationBoardAccessWhere(parsedUserId, agentId, teamScope)] } : {}),
         },
         select: { taskId: true },
         distinct: ["taskId"],
@@ -257,7 +255,7 @@ const notificationGetAll = async (
         where: {
           waitingOnUserId: parsedUserId,
           status: "Normal",
-          project: projectContentAccessWhere(parsedUserId, agentId),
+          project: projectContentAccessWhere(parsedUserId, agentId, teamScope),
         },
         orderBy: { waitingOnSetAt: "asc" },
         select: {
@@ -566,7 +564,7 @@ const notificationGetAll = async (
                     seen: false,
                     taskId: { in: taskIdsWithoutReadState },
                     NOT: visibleUserInboxWhere(parsedUserId).NOT,
-                    ...(agentId ? { AND: [notificationBoardAccessWhere(parsedUserId, agentId)] } : {}),
+                    ...(agentId || teamScope != null ? { AND: [notificationBoardAccessWhere(parsedUserId, agentId, teamScope)] } : {}),
                   },
                   _count: { _all: true },
                 })

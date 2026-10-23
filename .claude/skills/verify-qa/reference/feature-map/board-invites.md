@@ -2,7 +2,7 @@
 
 ## How a customer reaches it
 
-Board settings, Members section, and the invite command dialog (`src/components/Modals/commands/inviteMember.tsx`). A pending invite shows Resend and Cancel; they call `POST /api/invite/reSendInvite` and `POST /api/invite/cancelInvite` with `{ projectId, email }` (`src/hooks/MultiPages/useInviteCallbackHandlers.ts`). New invites go through `POST /api/invite/createInviteLink`.
+Settings > Team > Members > Invite, and the invite command dialog (`src/components/Modals/commands/inviteMember.tsx`). A pending invite shows Resend and Cancel; they call `POST /api/invite/reSendInvite` and `POST /api/invite/cancelInvite` with `{ projectId, email }` (`src/hooks/MultiPages/useInviteCallbackHandlers.ts`). New invites go through `POST /api/invite/createInviteLink`.
 
 ## How to drive it
 

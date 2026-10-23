@@ -1,3 +1,4 @@
+import { downloadWithoutBrotli } from "@/lib/net/downloadWithoutBrotli";
 import { resolveAiModel as resolveLegacyAiModel } from "@/app/api/ai/_lib/modelProvider";
 import { getAiDefaultModelContext, resolveAutomaticAiModel } from "@/app/api/ai/_lib/byokKeys";
 import { configureAiModelUsage } from "@/app/api/ai/_lib/modelProvider";
@@ -93,6 +94,7 @@ export async function generateAndStoreCommentSummary(commentId: number) {
     });
     const openQuestionRules = await isFeatureEnabled(HTPR_7046_TLDR_OPEN_QUESTIONS_FLAG, comment.creatorId ?? comment.task.userId);
     const result = await generateText({
+      experimental_download: downloadWithoutBrotli,
       model,
       instructions: applyOpenQuestionSummaryRules(renderPrompt("comment-summaries-instructions-1", (targetLines === 1
     ? "Output exactly one plain single sentence. Do not add a bullet marker."

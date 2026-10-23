@@ -1,3 +1,4 @@
+const { withStubs } = require("./helpers/stub-map.cjs");
 const test = require("node:test");
 const assert = require("node:assert/strict");
 const fs = require("node:fs");
@@ -18,7 +19,7 @@ const output = '<h1 id="ai-generated-task-title">Writer title</h1><p>Writer body
 const plain = (value) => JSON.parse(JSON.stringify(value));
 
 function moduleWithStubs(file, stubs) {
-  stubs = { "@/lib/auth/agentScope": require("./helpers/agent-board-scope.cjs").enforcedScope, ...stubs };
+  stubs = withStubs({ "@/lib/net/downloadWithoutBrotli": { downloadWithoutBrotli: undefined }, "@/app/api/ai/_lib/skillAccess": { AccountSkillAccessError: class extends Error {} }, "@/lib/auth/agentScope": require("./helpers/agent-board-scope.cjs").enforcedScope }, stubs);
   const filename = path.join(root, file);
   const code = ts.transpileModule(fs.readFileSync(filename, "utf8"), {
     compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 },
@@ -29,6 +30,9 @@ function moduleWithStubs(file, stubs) {
     console: { log() {}, warn() {}, error() {} },
     require: (id) => {
       if (id in stubs) return stubs[id];
+      if (id === "@/lib/media/inlineAgentImages.server") return { inlineAgentImagesForUser: async (html) => html };
+      if (id === "@/lib/media/inlineAgentImages") return load(path.join(root, "src/lib/media/inlineAgentImages.ts"));
+      if (id === "@/lib/ai/prompts/registry") return load(path.join(root, "src/lib/ai/prompts/registry.ts"));
       if (id.startsWith("@/") || id.startsWith("./")) throw new Error(`Unstubbed dependency ${id} in ${file}`);
       return require(id);
     },
@@ -78,6 +82,10 @@ function harness(options = {}) {
     agent: { findFirst: async () => options.badAgent ? null : { id: "agent" } },
   };
   const run = moduleWithStubs("src/app/api/ai/_lib/taskWriterRun.ts", {
+    "@/lib/rag/authorizeIndexedRows": { authorizeIndexedRows: async (taskRows, commentRows, principal) => {
+      assert.equal(principal?.teamScope == null, true);
+      return { taskRows, commentRows };
+    } },
     "@/lib/prisma": { __esModule: true, default: prisma },
     "@/lib/flags": { ...keys, isFeatureEnabled: async (key) => key === keys.HTPR_7342_WEB_WRITING_TASK_WRITER_FLAG || key === keys.HTPR_7060_TASK_WRITER_EMPTY_AND_RESEARCH_FLAG },
     "@/lib/flags/keys": keys,
@@ -108,6 +116,7 @@ function harness(options = {}) {
   const errors = { errorMessage: (error) => error.message };
   const execution = moduleWithStubs("src/lib/ai/tools/execution.ts", {
     "@/lib/mcp/tasks/agentMutationLeaseAdoption": {},
+    "@/lib/ai/tools/readAgentGate": { refuseReadAgentToolCall: async () => null },
     "@/lib/prisma": { __esModule: true, default: prisma },
     "@/lib/mcp/tasks/resolveTask": {},
     "@/app/api/ai/chat/stream/bulkTools": {},
@@ -356,8 +365,9 @@ test("chat turn resolves the server flag once for the authenticated user and for
   });
   const providerAbort = new AbortController();
   await runModelTurn({ body: { user_context: { id: 999 } }, dbUser: { id: 985 }, providerAbort, send() {} }, {}, {});
-  assert.deepEqual(plain(checks), [[keys.HTPR_7363_CHAT_TASK_WRITER_FLAG, 985]]);
+  assert.deepEqual(plain(checks), [[keys.HTPR_7514_INLINE_AGENT_IMAGES_FLAG, 985], [keys.HTPR_7363_CHAT_TASK_WRITER_FLAG, 985]]);
   assert.equal(toolArgs.length, 1);
   assert.equal(toolArgs[0][7], true);
   assert.equal(toolArgs[0][8], providerAbort.signal);
+  assert.equal(toolArgs[0][9], true);
 });

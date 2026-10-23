@@ -13,6 +13,7 @@ import {
 } from "@/lib/taskDetailInboxFlow";
 import { cn } from "@/utils/undoActions/helperFuncs";
 import { toEditorHtml } from "./staticDescriptionHtml";
+import { sanitizeDescriptionHtml } from "@/utils/helperFunctions/sanitizeHtml";
 
 const PROSEMIRROR_ROOT_STYLE: CSSProperties = {
   position: "relative",
@@ -29,7 +30,7 @@ export type DescriptionIntentProps = {
 };
 
 export function StaticDescriptionBody({ html, isMbl }: { html: string; isMbl: boolean }) {
-  const content = useMemo(() => toEditorHtml(html), [html]);
+  const content = useMemo(() => sanitizeDescriptionHtml(toEditorHtml(html)), [html]);
   const text = (
     <div className="">
       <div

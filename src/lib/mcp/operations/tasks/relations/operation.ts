@@ -1,3 +1,4 @@
+import { requireAgentWriteRole } from '@/lib/mcp/agents/readRoleGuard'
 import { reportMcpOperationCrash } from '@/lib/mcp/operationCrashReport'
 import { wrapMcpRoute, checkMcpRouteRateLimit as checkMcpRateLimit, validateMcpRouteAuth as validateMcpAuth } from '@/lib/mcp/routeWrapper'
 import type { Prisma } from '@prisma/client'
@@ -56,6 +57,8 @@ export async function POST(request: NextRequest) {
       { status: 401 }
     )
   }
+  const roleRefusal = await requireAgentWriteRole(ctx)
+  if (roleRefusal) return roleRefusal
 
   let body: unknown
   try {
@@ -133,7 +136,7 @@ export async function POST(request: NextRequest) {
     sourceTask = await findTaskByIdentifier(
       ctx.user,
       sourceIdentifier,
-      ctx.agentId
+      ctx.agentId, undefined, ctx.teamScope
     )
   } catch (error) {
     const identifierResponse = taskIdentifierErrorResponse(error, 'source_ticket_number')
@@ -146,7 +149,7 @@ export async function POST(request: NextRequest) {
     targetTask = await findTaskByIdentifier(
       ctx.user,
       targetIdentifier,
-      ctx.agentId
+      ctx.agentId, undefined, ctx.teamScope
     )
   } catch (error) {
     const identifierResponse = taskIdentifierErrorResponse(error, 'target_ticket_number')
@@ -166,7 +169,7 @@ export async function POST(request: NextRequest) {
   }
 
   try {
-    const relation = await prisma.taskRelations.upsert({
+    const persist = (db: typeof prisma | Prisma.TransactionClient) => db.taskRelations.upsert({
       where: {
         sourceTaskId_targetTaskId: {
           sourceTaskId: sourceTask.id,
@@ -186,6 +189,17 @@ export async function POST(request: NextRequest) {
         relationType: true,
       },
     })
+    const relation = ctx.teamScope == null ? await persist(prisma) : await prisma.$transaction(async tx => {
+      for (const id of [sourceTask.id, targetTask.id].sort((a, b) => a - b)) {
+        await tx.$queryRaw`SELECT id FROM "Task" WHERE id = ${id} FOR UPDATE`
+      }
+      const allowed = await tx.task.count({ where: {
+        id: { in: [sourceTask.id, targetTask.id] },
+        project: getProjectWhere(ctx.user.id, ctx.agentId, ctx.teamScope),
+      } })
+      return allowed === 2 ? persist(tx) : null
+    })
+    if (!relation) return NextResponse.json({ success: false, error: 'Task not found or access denied' }, { status: 404 })
 
     return NextResponse.json({ success: true, relation })
   } catch (error) {
@@ -234,7 +248,7 @@ export async function GET(request: NextRequest) {
 
   let task
   try {
-    task = await findTaskByIdentifier(ctx.user, identifier, ctx.agentId)
+    task = await findTaskByIdentifier(ctx.user, identifier, ctx.agentId, undefined, ctx.teamScope)
   } catch (error) {
     const identifierResponse = taskIdentifierErrorResponse(error, 'ticket_number')
     if (identifierResponse) return identifierResponse
@@ -250,7 +264,7 @@ export async function GET(request: NextRequest) {
   try {
     const accessibleTaskWhere = {
       status: { not: 'Deleted' },
-      project: getProjectWhere(ctx.user.id, ctx.agentId),
+      project: getProjectWhere(ctx.user.id, ctx.agentId, ctx.teamScope),
     } satisfies Prisma.TaskWhereInput
     const relations = await prisma.taskRelations.findMany({
       where: {
@@ -317,6 +331,8 @@ export async function DELETE(request: NextRequest) {
       { status: 401 }
     )
   }
+  const roleRefusal = await requireAgentWriteRole(ctx)
+  if (roleRefusal) return roleRefusal
 
   let body: unknown
   try {
@@ -374,7 +390,7 @@ export async function DELETE(request: NextRequest) {
     sourceTask = await findTaskByIdentifier(
       ctx.user,
       sourceIdentifier,
-      ctx.agentId
+      ctx.agentId, undefined, ctx.teamScope
     )
   } catch (error) {
     const identifierResponse = taskIdentifierErrorResponse(error, 'source_ticket_number')
@@ -387,7 +403,7 @@ export async function DELETE(request: NextRequest) {
     targetTask = await findTaskByIdentifier(
       ctx.user,
       targetIdentifier,
-      ctx.agentId
+      ctx.agentId, undefined, ctx.teamScope
     )
   } catch (error) {
     const identifierResponse = taskIdentifierErrorResponse(error, 'target_ticket_number')
@@ -403,7 +419,12 @@ export async function DELETE(request: NextRequest) {
 
   try {
     const result = await prisma.taskRelations.deleteMany({
-      where: { sourceTaskId: sourceTask.id, targetTaskId: targetTask.id },
+      where: { sourceTaskId: sourceTask.id, targetTaskId: targetTask.id,
+        ...(ctx.teamScope == null ? {} : {
+          sourceTask: { project: getProjectWhere(ctx.user.id, ctx.agentId, ctx.teamScope) },
+          targetTask: { project: getProjectWhere(ctx.user.id, ctx.agentId, ctx.teamScope) },
+        }),
+      },
     })
     return NextResponse.json({ success: true, deleted: result.count })
   } catch (error) {

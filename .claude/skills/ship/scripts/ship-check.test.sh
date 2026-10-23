@@ -13,6 +13,7 @@ G() { local want=$1; shift; echo "{\"tool_input\":{\"command\":$(jq -Rn --arg c 
 DONE='--section "Done"'
 M='gh pr merge'
 
+if [ "${1:-}" != --premerge-only ]; then
 # Concatenated assignment fragments cannot bypass missing Done evidence.
 for prefix in 'FOO=pre"fix"' "FOO='a'b\"c\""; do
   G 2 "$prefix vcc task move YPER4-999 $DONE"
@@ -60,10 +61,10 @@ G 2 $M 822 -R hypertask-ai/hypertask
 G 2 FOO=1 $M 822 -R hypertask-ai/hypertask
 for prefix in 'FOO=pre"fix"' "FOO='a'b\"c\""; do
   G 2 "$prefix $M 822 -R hypertask-ai/hypertask"
-  SHIP_CHECK_PLAIN_QA_STATE=/nonexistent AGENT_TOKEN= HYPERTASKS_JWT_TOKEN= G 2 "$prefix $M 809 -R hypertask-ai/hypertask"
+  SHIP_CHECK_PLAIN_QA_STATE=/nonexistent AGENT_TOKEN= HYPERTASKS_JWT_TOKEN= G 0 "$prefix $M 838 -R hypertask-ai/hypertask"
   G 0 "$prefix $M 838 -R hypertask-ai/hypertask"
 done
-SHIP_CHECK_PLAIN_QA_STATE=/nonexistent AGENT_TOKEN= HYPERTASKS_JWT_TOKEN= G 2 $M 809 -R hypertask-ai/hypertask # No live modes or premerge evidence.
+SHIP_CHECK_PLAIN_QA_STATE=/nonexistent AGENT_TOKEN= HYPERTASKS_JWT_TOKEN= G 0 $M 838 -R hypertask-ai/hypertask # No live modes or click evidence needed.
 G 0 $M 838 -R hypertask-ai/hypertask # Skills-only PR, no product flag reads.
 G 2 $M 838 -R hypertask-ai/hypertask '&&' $M 822 -R hypertask-ai/hypertask
 G 0 grep "$M" notes.txt
@@ -177,6 +178,31 @@ for statuses in \
   [ "$?" != 0 ] && [[ $out == 'FAIL: no Production deployment'* ]] \
     && ok "non-skipped/latest-success status still requires deployment" || bad "deployment bypass: $out"
 done
+
+# A merge Vercel never built passes only when a newer successful Production deploy contains it.
+cat > "$E/mock-bin/gh" <<'MOCK'
+#!/usr/bin/env bash
+case "$1:$2" in
+  pr:view) echo '{"number":838,"title":"YPER4-999 [INFRA] Fixture","state":"MERGED","mergeCommit":{"oid":"ec45678a2"},"baseRefName":"production"}' ;;
+  api:*/status) echo '{"statuses":[]}' | jq -r "$4" ;;
+  api:*/deployments\?sha=*) echo '[]' | jq -r "$4" ;;
+  api:*/deployments\?environment=Production*) printf '%s' "$DEPLOYS_FIXTURE" | jq -r "$4" ;;
+  api:*/deployments/*/statuses) id=${2#*/deployments/}; id=${id%%/*}
+    jq -n --arg s "$(jq -r --arg id "$id" '.[$id]' <<<"$STATES_FIXTURE")" '[{state:$s}]' | jq -r "$4" ;;
+  api:*/compare/ec45678a2...*) [[ $2 == *"...$CONTAINS_SHA" ]] && echo ahead || echo behind ;;
+  *) exit 1 ;;
+esac
+MOCK
+SK() {
+  local want=$1 msg=$2 out got; shift 2
+  out=$(env PATH="$E/mock-bin:$PATH" "$@" ./ship-check deployed YPER4-999); got=$?
+  [ "$got" = "$want" ] && [[ $out == "$msg"* ]] && ok "skipped merge: $msg" || bad "skipped merge want $want '$msg' got $got: $out"
+}
+deploys='[{"id":2,"sha":"bbbbbbbbbbbb"},{"id":1,"sha":"aaaaaaaaaaaa"}]'
+SK 0 'deployed ok (live in bbbbbbbbb)' DEPLOYS_FIXTURE="$deploys" STATES_FIXTURE='{"2":"success","1":"success"}' CONTAINS_SHA=bbbbbbbbbbbb
+SK 1 'FAIL: no Production deployment for ec45678a2' DEPLOYS_FIXTURE="$deploys" STATES_FIXTURE='{"2":"success","1":"success"}' CONTAINS_SHA=none
+SK 1 'FAIL: no Production deployment for ec45678a2' DEPLOYS_FIXTURE="$deploys" STATES_FIXTURE='{"2":"failure","1":"success"}' CONTAINS_SHA=bbbbbbbbbbbb
+SK 1 'FAIL: no Production deployment for ec45678a2' DEPLOYS_FIXTURE='[]' STATES_FIXTURE='{}' CONTAINS_SHA=none
 
 # Bindings keep their repository and base when ledger commands omit the environment.
 binding_tests() {
@@ -708,30 +734,108 @@ T fail "evidence outside the current run rejected"
 sed -i '$d' "$E/HTPR-6570/proof.md"; mkdir -p "$E/x"; printf 'png' > "$E/x/a.png"; sed -i 's/^Run: .*/Run: ..\/..\/x/' "$E/HTPR-6570/proof.md"
 T fail "run folder outside the ticket rejected"
 
-# Released-flag premerge guard: deterministic GitHub and live-mode boundaries.
-mkdir -p "$E/flag-bin" "$E/flag-source" "$E/flag-http" "$E/YPER4-999"
+fi
+
+# Offline no-release deployment checks run in CI's --premerge-only mode too.
+no_release_tests() {
+  local sha=e7b957efbd6cf4e82dde9dcd73cf87407c44417e
+  local run_url=https://github.com/hypertask-ai/cli-node/actions/runs/123 green runs change comparison
+  mkdir -p "$E/no-release-bin" "$E/HTPR-7628"
+  echo 127 > "$E/HTPR-7628/pr"
+  cat > "$E/no-release-bin/gh" <<'MOCK'
+#!/usr/bin/env bash
+case "$1:$2" in
+  pr:view) printf '{"number":127,"title":"HTPR-7628 [INFRA] Fixture","state":"MERGED","mergeCommit":{"oid":"%s"},"baseRefName":"%s"}\n' "$MERGE_SHA" "$SHIP_BASE" ;;
+  release:view) [ -n "${RELEASE_TAG:-}" ] && echo "$RELEASE_TAG" ;;
+  release:list) [ "${RELEASE_ERROR:-0}" = 0 ] || exit 1; echo "${RELEASES_FIXTURE:-[]}" ;;
+  api:*/compare/*)
+    [ "${COMPARE_ERROR:-0}" = 0 ] || exit 1
+    if [ -n "${RELEASE_TAG:-}" ]; then
+      [[ $2 == "repos/$SHIP_REPO/compare/$MERGE_SHA...$RELEASE_TAG" ]] || exit 1
+    else
+      [[ $2 == "repos/$SHIP_REPO/compare/$SHIP_BASE...$MERGE_SHA" ]] || exit 1
+    fi
+    echo "${COMPARE_FIXTURE:-behind}" ;;
+  api:*/actions/runs\?*)
+    [[ $2 == "repos/$SHIP_REPO/actions/runs?head_sha=$MERGE_SHA&per_page=100" && ${3:-} == --paginate ]] || exit 1
+    [ "${RUN_ERROR:-0}" = 0 ] || exit 1; printf '%s\n' "$RUNS_FIXTURE" ;;
+  *) exit 1 ;;
+esac
+MOCK
+  chmod +x "$E/no-release-bin/gh"
+  green=$(jq -cn --arg sha "$sha" --arg url "$run_url" '{workflow_runs:[{id:123,head_sha:$sha,event:"push",head_branch:"main",status:"completed",conclusion:"success",html_url:$url}]}')
+  ND() {
+    local want=$1 expected=$2 label=$3 out got; shift 3
+    out=$(env PATH="$E/no-release-bin:$PATH" SHIP_REPO=hypertask-ai/cli-node SHIP_BASE=main SHIP_DEPLOY=release SHIP_WORKER= MERGE_SHA="$sha" RUNS_FIXTURE="$green" "$@" ./ship-check deployed HTPR-7628); got=$?
+    [ "$got" = "$want" ] && [[ $out == "$expected"* ]] && ok "$label: $out" || bad "$label: want $want $expected got $got $out"
+  }
+  for comparison in identical behind; do
+    ND 0 "deployed ok (no release: merged ${sha:0:9} on main, green run $run_url)" 'cli-node green base push evidence' COMPARE_FIXTURE="$comparison"
+  done
+  ND 0 'deployed ok (no release:' 'manual dispatch on base' RUNS_FIXTURE="$(jq '.workflow_runs[0].event = "workflow_dispatch"' <<<"$green")"
+  ND 1 'FAIL: no successful push or workflow_dispatch run' 'missing run' RUNS_FIXTURE='{"workflow_runs":[]}'
+  ND 1 'FAIL: failed workflow run' 'only failed run' RUNS_FIXTURE="$(jq '.workflow_runs[0].conclusion = "failure"' <<<"$green")"
+  for change in \
+    '.head_branch = "feature"' \
+    '.event = "pull_request"' \
+    '.event = "schedule"' \
+    '.head_sha = "other"' \
+    '.conclusion = null' \
+    '.conclusion = "cancelled"' \
+    'del(.html_url)'; do
+    ND 1 'FAIL: no successful push or workflow_dispatch run' "wrong or incomplete run: $change" RUNS_FIXTURE="$(jq ".workflow_runs[0] |= ($change)" <<<"$green")"
+  done
+  runs=$(jq '.workflow_runs += [.workflow_runs[0] | .id = 124 | .conclusion = "failure"]' <<<"$green")
+  ND 1 'FAIL: failed workflow run' 'success cannot hide a failure' RUNS_FIXTURE="$runs"
+  for running in in_progress queued; do
+    ND 1 'FAIL: workflow run for merge' "success cannot hide a $running workflow" RUNS_FIXTURE="$(jq --arg status "$running" '.workflow_runs += [.workflow_runs[0] | .id = 125 | .status = $status | .conclusion = null]' <<<"$green")"
+  done
+  ND 1 'FAIL: failed workflow run' 'failure on another branch/event still blocks' RUNS_FIXTURE="$(jq '.workflow_runs[1] |= (.head_branch = "feature" | .event = "pull_request")' <<<"$runs")"
+  ND 1 'FAIL: failed workflow run' 'failure on a later page still blocks' RUNS_FIXTURE="$(printf '%s\n%s' "$green" "$(jq '{workflow_runs:[.workflow_runs[1]]}' <<<"$runs")")"
+  ND 0 'deployed ok (no release:' 'unrelated sha failure does not block' RUNS_FIXTURE="$(jq '.workflow_runs[1].head_sha = "other"' <<<"$runs")"
+  ND 0 'deployed ok (no release:' 'explicit opt-in on another repo' SHIP_REPO=hypertask-ai/other SHIP_DEPLOY=none
+  ND 0 "deployed ok (no release: merged ${sha:0:9} on develop, green run $run_url)" 'configured base, not hardcoded main' SHIP_BASE=develop RUNS_FIXTURE="$(jq '.workflow_runs[0].head_branch = "develop"' <<<"$green")"
+  ND 1 'FAIL: failed workflow run' 'opt-in cannot hide failure' SHIP_REPO=hypertask-ai/other SHIP_DEPLOY=none RUNS_FIXTURE="$runs"
+  ND 1 'FAIL: no successful push or workflow_dispatch run' 'opt-in still needs green run' SHIP_REPO=hypertask-ai/other SHIP_DEPLOY=none RUNS_FIXTURE='{"workflow_runs":[]}'
+  ND 1 'FAIL: no release found' 'releasing repo still refused without a release' SHIP_REPO=hypertask-ai/cli
+  ND 1 'FAIL: no release found' 'unknown repo still refused without opt-in' SHIP_REPO=hypertask-ai/other
+  ND 1 'FAIL: no release found' 'only exact none opts in' SHIP_REPO=hypertask-ai/other SHIP_DEPLOY=None
+  for comparison in ahead identical; do
+    ND 0 'deployed ok (release v1)' 'releasing repo still allowed with containing release' SHIP_REPO=hypertask-ai/cli RELEASE_TAG=v1 COMPARE_FIXTURE="$comparison" RUN_ERROR=1
+    ND 0 'deployed ok (release v1)' 'cli-node uses real containing release' RELEASE_TAG=v1 COMPARE_FIXTURE="$comparison" RUN_ERROR=1
+    ND 0 'deployed ok (release v1)' 'opt-in uses real containing release' SHIP_REPO=hypertask-ai/other SHIP_DEPLOY=none RELEASE_TAG=v1 COMPARE_FIXTURE="$comparison" RUN_ERROR=1
+  done
+  ND 1 'FAIL: latest release' 'cli-node cannot bypass non-containing release' RELEASE_TAG=v1 COMPARE_FIXTURE=behind
+  ND 1 'FAIL: latest release' 'opt-in cannot bypass non-containing release' SHIP_REPO=hypertask-ai/other SHIP_DEPLOY=none RELEASE_TAG=v1 COMPARE_FIXTURE=diverged
+  ND 1 'FAIL: no release found' 'failed release view cannot bypass existing release' RELEASES_FIXTURE='[{"tagName":"v1"}]'
+  ND 1 'FAIL: no release found' 'malformed release list fails closed' RELEASES_FIXTURE='{}'
+  ND 1 'FAIL: could not read releases' 'release list error fails closed' RELEASE_ERROR=1
+  for comparison in ahead diverged; do
+    ND 1 "FAIL: merge $sha is not on main" 'merge must be on base' COMPARE_FIXTURE="$comparison"
+  done
+  ND 1 'FAIL: could not compare merge' 'compare error fails closed' COMPARE_ERROR=1
+  ND 1 'FAIL: could not read workflow runs' 'run API error fails closed' RUN_ERROR=1
+  ND 1 'FAIL: could not read workflow runs' 'invalid run JSON fails closed' RUNS_FIXTURE='invalid'
+  ND 1 'FAIL: could not read workflow runs' 'missing run array fails closed' RUNS_FIXTURE='{}'
+  unset -f ND
+}
+no_release_tests
+
+# Premerge status boundaries, without browser evidence or live flag reads.
+mkdir -p "$E/flag-bin" "$E/YPER4-999" "$PREMERGE_STATUS_STATE"
 cat > "$E/flag-bin/gh" <<'MOCK'
 #!/usr/bin/env python3
-import base64, json, os, sys, urllib.parse
+import json, os, sys
 args = sys.argv[1:]
 if os.environ.get('FLAG_LOG'):
     with open(os.environ['FLAG_LOG'], 'a') as log:
         log.write(json.dumps(args) + '\n')
-if args[:2] == ['api', '-i'] and '/pulls?' in args[2]:
-    if os.environ.get('FLAG_LIST_ERROR'):
-        sys.exit(1)
-    if args[3:] == ['-H', 'If-None-Match: "fixture"']:
-        print('HTTP/2.0 304 Not Modified\r\nEtag: "fixture"\r\n\r\n')
-        sys.exit(1)
-    print('HTTP/2.0 200 OK\r\nEtag: "fixture"\r\n\r\n' + json.dumps([{'number': 999, 'title': 'YPER4-999 [BUGFIX] Fixture', 'head': {'sha': 'a' * 40}}]))
-    sys.exit(0)
 if args[:2] == ['pr', 'view']:
-    if args[args.index('--json') + 1] == 'headRefOid,baseRefName,state':
+    fields = args[args.index('--json') + 1]
+    if fields == 'headRefOid,baseRefName,state':
         if os.environ.get('FLAG_HEAD_ERROR'):
             sys.exit(1)
-        calls = sum('headRefOid' in line for line in open(os.environ['FLAG_LOG'])) if os.environ.get('FLAG_LOG') else 1
-        if os.environ.get('FLAG_PR_STATE', 'OPEN') != 'OPEN' or os.environ.get('FLAG_BASE', 'production') != 'production' or (os.environ.get('FLAG_BASE_RACE') and calls > 1):
-            sys.exit(0)
+        calls = sum('headRefOid,baseRefName,state' in line for line in open(os.environ['FLAG_LOG'])) if os.environ.get('FLAG_LOG') else 1
         if os.environ.get('FLAG_ASSERT_LOCK'):
             import fcntl
             with open(os.environ['PREMERGE_STATUS_STATE'] + '/publish.lock', 'w') as lock:
@@ -741,30 +845,16 @@ if args[:2] == ['pr', 'view']:
                     pass
                 else:
                     sys.exit(1)
+        if os.environ.get('FLAG_PR_STATE', 'OPEN') != 'OPEN' or os.environ.get('FLAG_BASE', 'production') != 'production' or (os.environ.get('FLAG_BASE_RACE') and calls > 1):
+            sys.exit(0)
+        if os.environ.get('FLAG_REREAD_ERROR') and calls > 1:
+            sys.exit(1)
         print('c' * 40 if os.environ.get('FLAG_HEAD_RACE') and calls > 1 else os.environ.get('FLAG_HEAD', 'a' * 40))
-        sys.exit(0)
-    title = 'YPER4-999 [' + os.environ.get('FLAG_TYPE', 'BUGFIX') + '] Fixture'
-    if args[args.index('--json') + 1] == 'title':
-        print(title)
+    elif fields == 'title':
+        print('YPER4-999 [INFRA] Fixture')
     else:
-        print(json.dumps({'number': 999, 'title': title, 'state': os.environ.get('FLAG_PR_STATE', 'OPEN'), 'mergeCommit': {'oid': 'a' * 40}, 'baseRefName': 'production'}))
-    sys.exit(0)
-if any('/contents/' in a for a in args):
-    # YPER4-251: the contents API is never called; files come from local git. The call is logged above and fails the run.
-    sys.exit(99)
-if args[0] != 'api':
-    sys.exit(1)
-url = args[1]
-# Keep this suite focused on premerge evidence, with a passing current-head CI check.
-if url.endswith('/pulls/999') and '--jq' in args:
-    print(os.environ.get('FLAG_HEAD', 'a' * 40))
-    sys.exit(0)
-if '/check-runs?' in url:
-    print(json.dumps({'check_runs': [{'id': 1, 'name': 'ci-tests', 'status': 'completed', 'conclusion': 'success'}]}))
-    sys.exit(0)
-if os.environ.get('FLAG_ASSERT_FRESH') and '/pulls/' in url:
-    assert urllib.parse.parse_qs(urllib.parse.urlsplit(url).query).get('premerge'), 'mutable PR read must be fresh'
-if os.environ.get('FLAG_ASSERT_LOCK'):
+        print(json.dumps({'number': 999, 'title': 'YPER4-999 [INFRA] Fixture', 'state': os.environ.get('FLAG_PR_STATE', 'OPEN'), 'mergeCommit': None, 'baseRefName': 'production'}))
+elif args[:1] == ['api'] and '/statuses/' in args[1]:
     import fcntl
     with open(os.environ['PREMERGE_STATUS_STATE'] + '/publish.lock', 'w') as lock:
         try:
@@ -772,597 +862,93 @@ if os.environ.get('FLAG_ASSERT_LOCK'):
         except BlockingIOError:
             pass
         else:
-            sys.exit(1)
-if '/statuses/' in url:
-    if os.environ.get('FLAG_BLOCK_POST'):
-        with open(os.environ['FLAG_BLOCK_POST'] + '/ready', 'w') as ready:
-            ready.write('ready')
-        with open(os.environ['FLAG_BLOCK_POST'] + '/release') as release:
-            release.read()
+            raise AssertionError('status post must hold publisher lock')
     sys.exit(1 if os.environ.get('FLAG_POST_ERROR') else 0)
-if os.environ.get('FLAG_GH_ERROR'):
-    sys.exit(1)
-if '/files?' in url:
-    file = {'filename': os.environ.get('FLAG_FILE', 'src/card.tsx'), 'status': os.environ.get('FLAG_STATUS', 'modified')}
-    if file['status'] == 'renamed':
-        file['previous_filename'] = 'src/old-card.tsx'
-    files = [file]
-    for path in filter(None, os.environ.get('FLAG_REMOVED_DEFINITION', '').split(',')):
-        files.append({'filename': path, 'status': 'removed'})
-    print(json.dumps(files))
-    if os.environ.get('FLAG_PAGE2'):
-        print(json.dumps([{'filename': 'AGENTS.md', 'status': 'modified'}]))
+elif args[:1] == ['api'] and '/check-runs?' in args[1]:
+    print(json.dumps({'check_runs': [{'id': 1, 'name': 'ci-tests', 'status': 'completed', 'conclusion': 'success'}]}))
+elif args[:1] == ['api'] and args[1].endswith('/pulls/999') and '--jq' in args:
+    print('a' * 40)
+elif args[:1] == ['api'] and '/files?' in args[1]:
+    print(json.dumps([{'filename': os.environ.get('FLAG_FILE', 'src/components/card.tsx'), 'status': os.environ.get('FLAG_STATUS', 'modified')}]))
 else:
-    print(json.dumps({'head': {'sha': os.environ.get('FLAG_HEAD', 'a' * 40)}, 'base': {'sha': os.environ.get('FLAG_BASE_SHA', 'b' * 40)}, 'title': 'YPER4-999 [BUGFIX] Fixture', 'changed_files': int(os.environ.get('FLAG_COUNT', '1'))}))
-MOCK
-# Fake git for the local PR source cache: `fetch` marks the cache filled, `show <sha>:<path>` serves FLAG_SOURCE files.
-cat > "$E/flag-bin/fakegit" <<'MOCK'
-#!/usr/bin/env python3
-import json, os, sys
-args = sys.argv[1:]
-if os.environ.get('FLAG_LOG'):
-    with open(os.environ['FLAG_LOG'], 'a') as log:
-        log.write(json.dumps(['git'] + args) + '\n')
-if args[:2] == ['init', '--bare']:
-    os.makedirs(args[-1], exist_ok=True)
-    open(args[-1] + '/HEAD', 'w').close()
-    sys.exit(0)
-cache, cmd, rest = args[1], args[2], args[3:]
-marker = cache + '/filled'
-if cmd == 'fetch':
-    if os.environ.get('FLAG_FETCH_ERROR'):
-        sys.exit(1)
-    open(marker, 'w').close()
-    sys.exit(0)
-if cmd == 'cat-file':
-    sys.exit(0 if os.path.exists(marker) else 1)
-if cmd == 'ls-tree':
-    if os.environ.get('FLAG_SOURCE_ERROR'):
-        sys.exit(1)
-    ref, path = rest[-2], rest[-1]
-    if path.rstrip('/') != 'src/lib/flags/definitions':
-        sys.exit(1)
-    folder = os.environ['FLAG_SOURCE'] + '/flags-' + ('base' if ref == os.environ.get('FLAG_BASE_SHA', 'b' * 40) else 'head')
-    sys.stdout.write(''.join('100644 blob %s\t%s/%s\0' % ('0' * 40, path.rstrip('/'), n) for n in sorted(os.listdir(folder))))
-    sys.exit(0)
-if cmd == 'show':
-    if os.environ.get('FLAG_SOURCE_ERROR'):
-        sys.exit(1)
-    ref, path = rest[0].split(':', 1)
-    if ref.startswith('refs/premerge/production'):
-        sys.stdout.write(open('ship-check').read())
-        sys.exit(0)
-    if path.startswith('src/lib/flags/definitions/'):
-        name = 'flags-' + ('base' if ref == os.environ.get('FLAG_BASE_SHA', 'b' * 40) else 'head') + '/' + path.rsplit('/', 1)[1]
-        sys.stdout.write(open(os.environ['FLAG_SOURCE'] + '/' + name).read())
-        sys.exit(0)
-    if path == 'src/lib/flags/releaseRisk.ts':
-        risk = os.environ['FLAG_SOURCE'] + '/risk-' + ('base' if ref == os.environ.get('FLAG_BASE_SHA', 'b' * 40) else 'head')
-        if not os.path.exists(risk):
-            sys.exit(128)
-        sys.stdout.write(open(risk).read())
-        sys.exit(0)
-    name = {'src/lib/flags.ts': 'registry', 'src/lib/flags/definitions.ts': 'definitions', 'src/lib/flags/keys.ts': 'keys'}.get(path, 'base' if ref == 'b' * 40 else 'head')
-    if name == 'keys' and ref == 'a' * 40 and os.path.exists(os.environ['FLAG_SOURCE'] + '/keys-head'):
-        name = 'keys-head'
-    sys.stdout.write(open(os.environ['FLAG_SOURCE'] + '/' + name).read())
-    sys.exit(0)
-sys.exit(1)
+    raise AssertionError('unexpected GitHub call: ' + repr(args))
 MOCK
 cat > "$E/flag-bin/hypertask" <<'MOCK'
 #!/usr/bin/env bash
 echo '{"success":true,"tasks":[{"id":1}]}'
 MOCK
-cat > "$E/flag-http/sitecustomize.py" <<'MOCK'
-import io, os, urllib.request
-def live(request, timeout):
-    if request.full_url == 'https://app.hypertask.ai/api/flags':
-        assert request.get_header('Cookie') == 'session=plain'
-        if not os.environ.get('FLAG_PUBLIC'):
-            raise OSError('no plain QA view')
-        return io.BytesIO(os.environ['FLAG_PUBLIC'].encode())
-    assert request.full_url == 'https://app.hypertask.ai/api/admin/flags'
-    assert request.get_header('Authorization') == 'Bearer fixture'
-    if os.environ.get('FLAG_HTTP_ERROR'):
-        raise OSError('unreachable')
-    return io.BytesIO(os.environ.get('FLAG_HTTP', '{"flags":[{"key":"htpr-1-released","mode":"EVERYONE"}]}').encode())
-urllib.request.urlopen = live
-MOCK
-chmod +x "$E/flag-bin/gh" "$E/flag-bin/hypertask" "$E/flag-bin/fakegit"
-export SHIP_GIT="$E/flag-bin/fakegit" SHIP_GIT_CACHE="$E/git-cache" GH_PAUSE_FILE="$E/no-pause"
-printf '{"cookies":[{"name":"session","value":"plain","domain":"app.hypertask.ai"}]}' > "$E/plain-state.json"
-export SHIP_CHECK_PLAIN_QA_STATE="$E/plain-state.json"
-printf 'export const RELEASED_FLAG = "htpr-1-released";\n' > "$E/flag-source/keys"
-printf 'const FEATURE_FLAG_DEFINITIONS = [{ key: RELEASED_FLAG } ] as const;\nconst DEFAULT_FEATURE_FLAG_MODE = "OWNER_AND_QA";\n' > "$E/flag-source/registry"
-printf 'const released = useFlag(RELEASED_FLAG);\n' > "$E/flag-source/base"
-cp "$E/flag-source/base" "$E/flag-source/head"
-F() {
-  local want=$1 expected=$2 out got; shift 2
-  out=$(echo '{"tool_input":{"command":"gh pr merge 999"}}' | env PATH="$E/flag-bin:$PATH" PYTHONPATH="$E/flag-http" FLAG_SOURCE="$E/flag-source" SHIP_CHECK_PLAIN_QA_STATE="$E/plain-state.json" AGENT_TOKEN=fixture HYPERTASKS_JWT_TOKEN= "$@" ./ship-check guard 2>&1); got=$?
-  if [ "$got" = "$want" ] && [[ $out == *"$expected"* ]]; then ok "released flag: $want $expected $*"
-  else bad "released flag: want $want $expected got $got $out"; fi
-}
-F 2 'record a browser click-through'
-for type in BUGFIX INFRA REFACTOR FEATURE; do F 2 'record a browser click-through' FLAG_TYPE="$type"; done
-F 0 '' FLAG_HTTP='{"flags":[{"key":"htpr-1-released","mode":"OWNER_AND_QA"}]}'
-F 0 '' FLAG_HTTP='{"flags":[{"key":"htpr-1-released","mode":"OFF"}]}'
-F 2 'registry defaults cannot prove' FLAG_HTTP_ERROR=1
-F 2 'registry defaults cannot prove' AGENT_TOKEN=
-# The base registry may keep runtime defaults while definitions live in their own module.
-cp "$E/flag-source/registry" "$E/flag-source/definitions"
-printf 'const DEFAULT_FEATURE_FLAG_MODE = "OWNER_AND_QA";\n' > "$E/flag-source/registry"
-F 0 '' FLAG_HTTP='{"flags":[{"key":"htpr-1-released","mode":"OWNER_AND_QA"}]}'
-F 2 'record a browser click-through'
-F 2 'registry defaults cannot prove' FLAG_HTTP_ERROR=1
-printf 'export type FeatureFlagKind = "feature";\n' > "$E/flag-source/definitions"
-F 2 'cannot resolve flag registry defaults'
-printf 'const FEATURE_FLAG_DEFINITIONS = [{ key: RELEASED_FLAG } ] as const;\nconst DEFAULT_FEATURE_FLAG_MODE = "OWNER_AND_QA";\n' > "$E/flag-source/registry"
-F 0 '' FLAG_HTTP='{"flags":[{"key":"htpr-1-released","mode":"OWNER_AND_QA"}]}'
-rm "$E/flag-source/definitions"
-# Without the owner-only endpoint, the plain QA account's view decides: on for it means on for Everyone.
-F 2 'record a browser click-through' AGENT_TOKEN= FLAG_PUBLIC='{"flags":{"htpr-1-released":true}}'
-F 0 '' AGENT_TOKEN= FLAG_PUBLIC='{"flags":{"htpr-1-released":false}}'
-F 2 'registry defaults cannot prove' AGENT_TOKEN= FLAG_PUBLIC='{"flags":{"htpr-1-released":"yes"}}'
-# A dynamic read forces evidence; NOT_EVERYONE is accepted only where the plain QA read shows the flag off.
-printf 'const released = useFlag(RELEASED_FLAG);\nconst other = useFlag(dynamicKey);\n' > "$E/flag-source/head"
-printf 'Commit: %s\nAccount: 985 QA\nFlags: htpr-1-released=NOT_EVERYONE\nBoard: http://127.0.0.1:3100/projects/project-1\nBuild: http://127.0.0.1:3100\nClick: PASS opens\nRecording: v.webm\n' "$(printf 'a%.0s' {1..40})" > "$E/YPER4-999/premerge.md"; printf x > "$E/YPER4-999/v.webm"
-F 0 '' FLAG_STATUS=added AGENT_TOKEN= FLAG_PUBLIC='{"flags":{"htpr-1-released":false}}'
-F 2 'expected Flags: htpr-1-released=EVERYONE' FLAG_STATUS=added AGENT_TOKEN= FLAG_PUBLIC='{"flags":{"htpr-1-released":true}}'
-F 2 'expected Flags: htpr-1-released=EVERYONE' FLAG_STATUS=added
-rm "$E/YPER4-999/premerge.md" "$E/YPER4-999/v.webm"; cp "$E/flag-source/base" "$E/flag-source/head"
-# A flag the PR adds itself is not in the base registry and starts unreleased.
-printf 'const added = useFlag("htpr-2-new");\n' > "$E/flag-source/head"
-F 2 'unresolved flag reads' FLAG_STATUS=added AGENT_TOKEN= FLAG_PUBLIC='{"flags":{"htpr-1-released":true}}' # not defined by the PR
-printf 'export const RELEASED_FLAG = "htpr-1-released";\nexport const NEW_FLAG = "htpr-2-new";\n' > "$E/flag-source/keys-head"
-F 0 '' FLAG_STATUS=added AGENT_TOKEN= FLAG_PUBLIC='{"flags":{"htpr-1-released":true}}'
-rm "$E/flag-source/keys-head"
-cp "$E/flag-source/base" "$E/flag-source/head"
-sed -i 's/OWNER_AND_QA/EVERYONE/' "$E/flag-source/registry"
-F 2 'record a browser click-through' FLAG_HTTP_ERROR=1
-F 2 'record a browser click-through' AGENT_TOKEN=
-F 2 'record a browser click-through' FLAG_HTTP='invalid'
-F 2 'record a browser click-through' FLAG_HTTP='{"flags":[{"key":"htpr-1-released","mode":"invalid"}]}'
-F 0 '' FLAG_HTTP='{"flags":[{"key":"htpr-1-released","mode":"OWNER_ONLY"}]}'
-# Exact head, account, flag states and a recording are required.
-head=$(printf 'a%.0s' {1..40})
-premerge="$E/YPER4-999/premerge.md"
-cat > "$premerge" <<RECORD
-Commit: $head
-Account: 985 QA
-Flags: htpr-1-released=EVERYONE
-Board: https://app.hypertask.ai/projects/project-7283
-Build: http://localhost:3000
-Click: PASS card opens the expected title and body and stays open
-Recording: click.webm
-RECORD
-F 2 'recording must be non-empty'
-printf 'recording fixture' > "$E/YPER4-999/click.webm"
-F 0 ''
-F 2 'live flag modes unavailable' FLAG_HTTP_ERROR=1
-# Hookless commands use the same current-head guard; merged records stay valid.
-P() {
-  local want=$1 mode=$2 id=$3 out got; shift 3
-  out=$(env PATH="$E/flag-bin:$PATH" PYTHONPATH="$E/flag-http" FLAG_SOURCE="$E/flag-source" AGENT_TOKEN=fixture HYPERTASKS_JWT_TOKEN= "$@" ./ship-check "$mode" "$id" 2>&1); got=$?
-  if [ "$got" = "$want" ]; then ok "manual $mode: $got"
-  else bad "manual $mode: want $want got $got $out"; fi
-}
-echo 999 > "$E/YPER4-999/pr"
-P 0 premerge 999
-P 0 pr YPER4-999
-# Use the seed's board path and premerge-local's actual print block, not a hand-written URL.
-board_line=$(node - "$(cd ../../../.. && pwd)" <<'JS'
-const fs = require('node:fs');
-const { spawnSync } = require('node:child_process');
-const root = process.argv[2];
-const seed = fs.readFileSync(root + '/scripts/seed-browser-smoke.mjs', 'utf8');
-const board_path = seed.match(/board_path=([^\\]+)\\n/)[1].replace('${board.id}', '7283');
-const script = fs.readFileSync(root + '/scripts/premerge-local.sh', 'utf8');
-const start = script.indexOf("printf 'Build URL:");
-const print = script.slice(start, script.indexOf("\n# Keep the owning run alive", start));
-const result = spawnSync('bash', ['-c', print], { encoding: 'utf8', env: {
-  ...process.env, url: 'http://127.0.0.1:3100', board_path,
-  BROWSER_SMOKE_STATE_FILE: '/unused', account: '985', flags: 'htpr-1-released=EVERYONE',
-}, stdio: ['ignore', 'pipe', 'pipe', 'pipe'] });
-if (result.status !== 0) throw new Error(result.stderr);
-console.log(result.output[3].split('\n').find(line => line.startsWith('Board:')));
-JS
-)
-[ -n "$board_line" ] || bad 'premerge-local emitted no Board line'
-BOARD_LINE="$board_line" node - "$premerge" <<'JS'
-const fs = require('node:fs');
-fs.writeFileSync(process.argv[2], fs.readFileSync(process.argv[2], 'utf8').replace(/^Board:.*$/m, () => process.env.BOARD_LINE));
-JS
-P 0 premerge 999
-cp "$premerge" "$E/record"
-# The new layout resolves readers and changed definition files without a committed index.
-cp "$E/flag-source/keys" "$E/keys-legacy"; cp "$E/flag-source/registry" "$E/registry-legacy"
-mkdir -p "$E/flag-source/flags-base" "$E/flag-source/flags-head"
-printf 'export * from "./definitions/index.generated";\n' > "$E/flag-source/keys"
-printf 'export const RELEASED_FLAG = "htpr-1-released";\nexport default { key: RELEASED_FLAG, kind: "bugfix", shippedOn: "2026-10-10", description: "Fixture" } as const;\n' > "$E/flag-source/flags-base/htpr-1-released.ts"
-cp "$E/flag-source/flags-base/htpr-1-released.ts" "$E/flag-source/flags-head/htpr-1-released.ts"
-printf 'const DEFAULT_FEATURE_FLAG_MODE = "OWNER_AND_QA";\n' > "$E/flag-source/registry"
-printf 'export const FEATURE_FLAG_DEFINITIONS = FLAG_DEFINITIONS;\n' > "$E/flag-source/definitions"
-F 0 ''
-F 2 'record a browser click-through' FLAG_HTTP_ERROR=1
-F 0 '' FLAG_FILE=src/lib/flags/definitions/htpr-1-released.ts
-sed 's/Commit:.*/Commit: deadbeef/' "$E/record" > "$premerge"
-F 2 'must name PR head sha' FLAG_FILE=src/lib/flags/definitions/htpr-1-released.ts
-cp "$E/record" "$premerge"
-# A new bugfix flag defaults to Everyone, so it is released on merge and needs its own click state.
-printf 'export const NEW_FIX_FLAG = "htpr-9-newfix";\nexport default { key: NEW_FIX_FLAG, kind: "bugfix", shippedOn: "2026-10-10", description: "Fixture" } as const;\n' > "$E/flag-source/flags-head/htpr-9-newfix.ts"
-F 2 'expected Flags: htpr-9-newfix=EVERYONE' FLAG_FILE=src/lib/flags/definitions/htpr-9-newfix.ts FLAG_STATUS=added
-sed 's/^Flags:.*/&, htpr-9-newfix=EVERYONE/' "$E/record" > "$premerge"
-F 0 '' FLAG_FILE=src/lib/flags/definitions/htpr-9-newfix.ts FLAG_STATUS=added
-# New eligible definitions must explicitly declare Everyone; existing definitions keep their modes.
-for kind in feature improvement ''; do
-  printf 'export const NEW_FEATURE_FLAG = "htpr-8-newfeature";\nexport default { key: NEW_FEATURE_FLAG, %s shippedOn: "2026-10-20", description: "Fixture" } as const;\n' "${kind:+kind: \"$kind\",}" > "$E/flag-source/flags-head/htpr-8-newfeature.ts"
-  F 2 'new flag htpr-8-newfeature must set defaultMode: "EVERYONE"' FLAG_FILE=src/lib/flags/definitions/htpr-8-newfeature.ts FLAG_STATUS=added
-done
-printf 'export const NEW_FEATURE_FLAG = "htpr-8-newfeature";\nexport default { key: NEW_FEATURE_FLAG, kind: "feature", shippedOn: "2026-10-20", description: "Fixture", releaseRisk: { risk: "new", reason: "No highRisk: category applies" } } as const;\n' > "$E/flag-source/flags-head/htpr-8-newfeature.ts"
-F 2 'must set defaultMode: "EVERYONE"' FLAG_FILE=src/lib/flags/definitions/htpr-8-newfeature.ts FLAG_STATUS=added
-printf 'export const NEW_FEATURE_FLAG = "htpr-8-newfeature";\n/* highRisk: access */\nexport default { key: NEW_FEATURE_FLAG, kind: "feature", // kind: "internal"\n shippedOn: "2026-10-20", description: "Fixture" } as const;\n' > "$E/flag-source/flags-head/htpr-8-newfeature.ts"
-F 2 'must set defaultMode: "EVERYONE"' FLAG_FILE=src/lib/flags/definitions/htpr-8-newfeature.ts FLAG_STATUS=added
-printf 'export const NEW_FEATURE_FLAG = "htpr-8-newfeature";\nexport default { key: NEW_FEATURE_FLAG, kind: "feature", defaultMode: "EVERYONE", shippedOn: "2026-10-20", description: "Fixture" } as const;\n' > "$E/flag-source/flags-head/htpr-8-newfeature.ts"
-F 2 'expected Flags: htpr-8-newfeature=EVERYONE' FLAG_FILE=src/lib/flags/definitions/htpr-8-newfeature.ts FLAG_STATUS=added
-sed 's/^Flags:.*/&, htpr-8-newfeature=EVERYONE/' "$premerge" > "$E/feature-record"
-cp "$premerge" "$E/before-feature-record"; cp "$E/feature-record" "$premerge"
-F 0 '' FLAG_FILE=src/lib/flags/definitions/htpr-8-newfeature.ts FLAG_STATUS=added
-cp "$E/before-feature-record" "$premerge"
-printf 'export const NEW_FEATURE_FLAG = "htpr-8-newfeature";\nexport default { key: NEW_FEATURE_FLAG, kind: "feature", defaultMode: "OWNER_AND_QA", shippedOn: "2026-10-20", description: "Fixture", releaseRisk: { risk: "new", reason: "Fixture", highRisk: "access" } } as const;\n' > "$E/flag-source/flags-head/htpr-8-newfeature.ts"
-F 0 '' FLAG_FILE=src/lib/flags/definitions/htpr-8-newfeature.ts FLAG_STATUS=added
-sed -i 's/OWNER_AND_QA/EVERYONE/' "$E/flag-source/flags-head/htpr-8-newfeature.ts"
-F 2 'may not default to Everyone' FLAG_FILE=src/lib/flags/definitions/htpr-8-newfeature.ts FLAG_STATUS=added
-printf 'export const NEW_FEATURE_FLAG = "htpr-8-newfeature";\nexport default { key: NEW_FEATURE_FLAG, kind: "internal", shippedOn: "2026-10-20", description: "Fixture" } as const;\n' > "$E/flag-source/flags-head/htpr-8-newfeature.ts"
-F 0 '' FLAG_FILE=src/lib/flags/definitions/htpr-8-newfeature.ts FLAG_STATUS=added
-sed -i 's/kind: "internal"/kind: "internal", defaultMode: "EVERYONE"/' "$E/flag-source/flags-head/htpr-8-newfeature.ts"
-F 2 'may not default to Everyone' FLAG_FILE=src/lib/flags/definitions/htpr-8-newfeature.ts FLAG_STATUS=added
-rm "$E/flag-source/flags-head/htpr-8-newfeature.ts"
-printf 'export const RELEASED_FLAG = "htpr-1-released";\nexport default { key: RELEASED_FLAG, kind: "feature", shippedOn: "2026-10-10", description: "Fixture" } as const;\n' > "$E/flag-source/flags-base/htpr-1-released.ts"
-cp "$E/flag-source/flags-base/htpr-1-released.ts" "$E/flag-source/flags-head/htpr-1-released.ts"
-F 0 ''
-# YPER4-251: a registry of several per-flag files is listed and read through local git, with 0 contents API calls.
-for d in base head; do printf 'export const OTHER_FLAG = "htpr-2-other";\nexport default { key: OTHER_FLAG, kind: "bugfix", shippedOn: "2026-10-10", description: "Fixture" } as const;\n' > "$E/flag-source/flags-$d/htpr-2-other.ts"; done
-: > "$E/status-log"
-F 0 '' FLAG_LOG="$E/status-log"
-python3 - "$E/status-log" <<'PY' && ok 'per-flag directory: 0 contents calls, listed through git' || bad 'per-flag directory used the contents API or skipped git'
-import json, sys
-calls = [json.loads(l) for l in open(sys.argv[1])]
-assert not any('/contents/' in a for c in calls for a in c), 'contents API called'
-assert any(c[0] == 'git' and 'ls-tree' in c for c in calls), 'directory not listed through git'
-assert sum(c[0] == 'git' and 'show' in c and any('definitions/htpr-' in a for a in c) for c in calls) >= 2, 'per-flag files not read through git'
-PY
-rm "$E/flag-source/flags-base/htpr-2-other.ts" "$E/flag-source/flags-head/htpr-2-other.ts"
-cp "$E/record" "$premerge"; rm "$E/flag-source/flags-head/htpr-9-newfix.ts"
-cp "$E/keys-legacy" "$E/flag-source/keys"; cp "$E/registry-legacy" "$E/flag-source/registry"
-rm "$E/flag-source/definitions"
+chmod +x "$E/flag-bin/gh" "$E/flag-bin/hypertask"
 
-for change in \
-  's/^Commit:.*/Commit: deadbeef/|must name PR head sha' \
-  '/^Account:/d|missing Account:' \
-  's/^Account:.*/Account: /|missing Account:' \
-  '/^Flags:/d|missing Flags:; expected Flags: htpr-1-released=EVERYONE' \
-  's/=EVERYONE/=OFF/|expected Flags: htpr-1-released=EVERYONE' \
-  's/=EVERYONE/=EVERYONE-invalid/|expected Flags: htpr-1-released=EVERYONE' \
-  '/^Board:/d|missing Board:' \
-  's@^Board:.*@Board: http://127.0.0.1:3100/demo@|real board URL' \
-  's@^Board:.*@Board: http://127.0.0.1:3100/project?surface=board@|real board URL' \
-  's@^Board:.*@Board: http://127.0.0.1:3100/project?id=0@|real board URL' \
-  's@^Board:.*@Board: http://127.0.0.1:3100/project?id=1\&id=2@|real board URL' \
-  '/^Build:/d|missing Build:' \
-  's/Click: PASS/Click: FAIL/|missing passing click' \
-  '/^Recording:/d|missing passing click' \
-  's/click.webm/..\/record/|recording must be non-empty' \
-  's/click.webm/missing.webm/|recording must be non-empty'; do
-  sed "${change%%|*}" "$E/record" > "$premerge"
-  F 2 "${change#*|}"
-done
-cp "$E/record" "$premerge"
-# premerge-local records only released flags. Live non-Everyone flags may be omitted.
-printf 'const released = useFlag(RELEASED_FLAG);\nconst other = useFlag("htpr-2-other");\n' > "$E/flag-source/head"
-for mode in OFF OWNER_ONLY OWNER_AND_QA; do
-  live_modes="{\"flags\":[{\"key\":\"htpr-1-released\",\"mode\":\"EVERYONE\"},{\"key\":\"htpr-2-other\",\"mode\":\"$mode\"}]}"
-  F 0 '' FLAG_HTTP="$live_modes"
-  sed 's/htpr-1-released=EVERYONE/htpr-1-released=EVERYONE, htpr-2-other=EVERYONE/' "$E/record" > "$premerge"
-  F 2 "expected Flags: htpr-2-other=$mode" FLAG_HTTP="$live_modes"
-  sed "s/htpr-2-other=EVERYONE/htpr-2-other=$mode/" "$premerge" > "$E/matching-record"
-  cp "$E/matching-record" "$premerge"
-  F 0 '' FLAG_HTTP="$live_modes"
-  cp "$E/record" "$premerge"
-done
-F 0 '' AGENT_TOKEN= FLAG_PUBLIC='{"flags":{"htpr-1-released":true,"htpr-2-other":false}}'
-F 2 'expected Flags: htpr-2-other=EVERYONE' FLAG_HTTP='{"flags":[{"key":"htpr-1-released","mode":"EVERYONE"},{"key":"htpr-2-other","mode":"EVERYONE"}]}'
-F 2 'live state unknown for htpr-2-other'
-F 2 'live flag modes unavailable' FLAG_HTTP_ERROR=1
-F 2 'live flag modes unavailable' AGENT_TOKEN= FLAG_PUBLIC='{"flags":{"htpr-1-released":true,"htpr-2-other":"unknown"}}'
-sed 's/htpr-1-released=EVERYONE/htpr-1-released=EVERYONE, htpr-2-other=EVERYONE/' "$E/record" > "$premerge"
-F 2 'expected Flags: htpr-2-other=NOT_EVERYONE' AGENT_TOKEN= FLAG_PUBLIC='{"flags":{"htpr-1-released":true,"htpr-2-other":false}}'
-sed 's/htpr-2-other=EVERYONE/htpr-2-other=NOT_EVERYONE/' "$premerge" > "$E/matching-record"
-cp "$E/matching-record" "$premerge"
-F 0 '' AGENT_TOKEN= FLAG_PUBLIC='{"flags":{"htpr-1-released":true,"htpr-2-other":false}}'
-# Unknown live keys are still allowed only for a flag newly defined by this PR.
-printf 'export const RELEASED_FLAG = "htpr-1-released";\nexport const NEW_FLAG = "htpr-2-other";\n' > "$E/flag-source/keys-head"
-sed 's/htpr-2-other=NOT_EVERYONE/htpr-2-other=OWNER_AND_QA/' "$premerge" > "$E/matching-record"
-cp "$E/matching-record" "$premerge"
-F 0 ''
-rm "$E/flag-source/keys-head"
-cp "$E/record" "$premerge"
-# Whole files, server reads, literals, removed reads and renames are covered.
-printf 'const released = isFeatureEnabled(\n  "htpr-1-released", userId);\n' > "$E/flag-source/base"
-printf 'const changed = 1;\n' > "$E/flag-source/head"
-rm "$premerge"
-P 1 premerge 999
-P 1 pr YPER4-999
-P 0 pr YPER4-999 FLAG_PR_STATE=MERGED FLAG_GH_ERROR=1
-F 2 'record a browser click-through'
-F 2 'record a browser click-through' FLAG_STATUS=removed
-F 2 'record a browser click-through' FLAG_STATUS=renamed
-F 2 'record a browser click-through' FLAG_STATUS=renamed FLAG_FILE=docs/card.md
-F 0 '' FLAG_STATUS=added
-printf 'import { useFlag as enabled } from "@/hooks/useFlag";\nconst released = enabled(RELEASED_FLAG);\n' > "$E/flag-source/head"
-F 2 'record a browser click-through' FLAG_STATUS=added
-F 2 'record a browser click-through' FLAG_STATUS=added FLAG_COUNT=2 FLAG_PAGE2=1
-printf 'const released = useFlag(dynamicKey);\n' > "$E/flag-source/head"
-F 2 'unresolved flag reads' FLAG_STATUS=added
-printf 'const released = useFlag("htpr-2-new");\n' > "$E/flag-source/head"
-F 2 'unresolved flag reads' FLAG_STATUS=added
-printf 'export const RELEASED_FLAG = "htpr-1-released";\nexport const NEW_FLAG = "htpr-2-new";\n' > "$E/flag-source/keys-head"
-F 0 '' FLAG_STATUS=added # A flag the PR defines starts unreleased.
-rm "$E/flag-source/keys-head"
-F 2 'cannot read the PR diff' FLAG_GH_ERROR=1
-F 2 'cannot read the PR diff' FLAG_SOURCE_ERROR=1
-F 2 'complete PR diff' FLAG_COUNT=2
-F 0 '' FLAG_FILE=AGENTS.md
-F 0 '' SHIP_REPO=hypertask-ai/cli SHIP_BASE=main FLAG_GH_ERROR=1
-printf 'export function useFlag(key: string) { return true; }\n' > "$E/flag-source/base"
-cp "$E/flag-source/base" "$E/flag-source/head"
-F 0 ''
-
-# Required current-head commit status: assert the exact API endpoint and payload.
-# Control the lock oracle: the same metadata call works unlocked only when assertion is disabled.
+# The lock oracle itself must reject unlocked metadata reads.
 env FLAG_ASSERT_LOCK=1 PREMERGE_STATUS_STATE="$PREMERGE_STATUS_STATE" "$E/flag-bin/gh" pr view 999 --json headRefOid,baseRefName,state >/dev/null 2>&1 \
   && bad 'unlocked publisher accepted by lock oracle' || ok 'lock oracle rejects an unlocked publisher'
 "$E/flag-bin/gh" pr view 999 --json headRefOid,baseRefName,state >/dev/null 2>&1 \
   && ok 'lock oracle positive control' || bad 'lock oracle control failed'
+
 S() {
-  local want=$1 state=$2 description=$3 got out; shift 3
+  local name=$1 want=$2 state=$3 description=$4 got out; shift 4
   : > "$E/status-log"
-  out=$(env PATH="$E/flag-bin:$PATH" PYTHONPATH="$E/flag-http" FLAG_SOURCE="$E/flag-source" FLAG_LOG="$E/status-log" FLAG_ASSERT_LOCK=1 FLAG_ASSERT_FRESH=1 AGENT_TOKEN=fixture HYPERTASKS_JWT_TOKEN= "$@" ./ship-check premerge-status 999 2>&1); got=$?
-  if [ "$got" = "$want" ] && python3 - "$E/status-log" "$state" "$description" <<'PY'
-import json, os, sys
+  out=$(env PATH="$E/flag-bin:$PATH" FLAG_LOG="$E/status-log" FLAG_ASSERT_LOCK=1 "$@" ./ship-check premerge-status 999 2>&1); got=$?
+  if [ "$got" = "$want" ] && python3 - "$E/status-log" "$state" "$description" "$out" <<'PY'
+import json, sys
 calls = [json.loads(line) for line in open(sys.argv[1])]
 posts = [c for c in calls if c[0] == 'api' and '/statuses/' in c[1]]
 if sys.argv[2] == 'none':
-    assert not posts
+    assert not posts, posts
 else:
     assert len(posts) == 1, posts
     call = posts[0]
     assert call[1] == 'repos/hypertask-ai/hypertask/statuses/' + 'a' * 40, call
-    assert '--method' in call and call[call.index('--method') + 1] == 'POST'
-    assert 'context=premerge-evidence' in call and 'state=' + sys.argv[2] in call, call
-    description = next(c.removeprefix('description=') for c in call if c.startswith('description='))
-    assert len(description) <= 140 and sys.argv[3] in description, call
-    if 'removed-everyone' in sys.argv[3]:
-        assert description == sys.argv[3], call
-    if sys.argv[2] != 'success' or os.environ.get('EXPECT_NO_REMOVED_EVERYONE'):
-        assert 'removed-everyone' not in description, call
+    assert call[call.index('--method') + 1] == 'POST', call
+    for field in ('context=premerge-evidence', 'state=' + sys.argv[2], 'description=' + sys.argv[3]):
+        assert field in call, call
+    reads = [c for c in calls if c[:2] == ['pr', 'view']]
+    assert len(reads) == 2, reads
+    assert not any('/files?' in a or '/contents/' in a for c in calls for a in c), calls
+    if sys.argv[2] == 'success' and 'FAIL:' not in sys.argv[4]:
+        assert sys.argv[4] == 'premerge-evidence: success (' + sys.argv[3] + ')', sys.argv[4]
 PY
-  then ok "status: $state $description"; else bad "status: $state got $got $out"; fi
+  then ok "$name"; else bad "$name: want $want $state $description got $got $out"; fi
 }
-printf 'const plain = 1;\n' > "$E/flag-source/base"; cp "$E/flag-source/base" "$E/flag-source/head"
-S 0 success 'no released flag touched'
-# YPER4-251: one premerge-status run never touches the contents API and stays within a small fixed API budget.
-API_BUDGET() {
-  python3 - "$E/status-log" "$1" <<'PY' && ok "$2" || bad "$2"
-import json, sys
-calls = [json.loads(line) for line in open(sys.argv[1])]
-api = [c for c in calls if c[0] in ('api', 'pr')]
-assert not any('/contents/' in a for c in calls for a in c), 'contents API called'
-assert len(api) <= int(sys.argv[2]), (len(api), api)
-assert any(c[0] == 'git' and 'show' in c for c in calls), 'source was not read through local git'
-assert sum(c[0] == 'git' and 'fetch' in c for c in calls) <= 1, 'more than one git fetch per run'
-PY
-}
-API_BUDGET 6 'premerge-status: no contents API call, at most 6 API calls per PR'
-S 1 failure 'cannot read the PR diff' FLAG_FETCH_ERROR=1 SHIP_GIT_CACHE="$E/git-cache-cold"
-S 1 failure 'cannot read the PR diff' FLAG_GH_ERROR=1
-S 1 failure 'cannot read the PR diff' FLAG_SOURCE_ERROR=1
-S 1 failure 'complete PR diff' FLAG_COUNT=2
-S 1 failure 'unchanged PR head' FLAG_HEAD_RACE=1
-S 1 none '' FLAG_HEAD_ERROR=1
-S 1 none '' FLAG_HEAD=invalid
-S 1 none '' FLAG_BASE=main
-S 1 none '' FLAG_PR_STATE=MERGED
-S 1 none '' FLAG_PR_STATE=CLOSED
-S 1 failure 'unchanged PR head' FLAG_BASE_RACE=1
-S 1 success 'no released flag touched' FLAG_POST_ERROR=1 # POST failure must still return nonzero.
-F 2 'cannot post premerge-evidence' FLAG_POST_ERROR=1
-printf 'const released = useFlag(RELEASED_FLAG);\n' > "$E/flag-source/base"; cp "$E/flag-source/base" "$E/flag-source/head"
-S 1 failure 'htpr-1-released: record'
-cp "$E/record" "$premerge"
-EXPECT_NO_REMOVED_EVERYONE=1 S 0 success 'click record ok' # No definition deleted: no removed-everyone.
-API_BUDGET 6 'premerge-status with a released flag: no contents API call, at most 6 API calls'
-# YPER4-281: deleting a definition exempts only that absent key from Flags, not the click.
-printf 'export * from "./definitions/index.generated";\n' > "$E/flag-source/keys"
-printf 'const DEFAULT_FEATURE_FLAG_MODE = "OWNER_AND_QA";\n' > "$E/flag-source/registry"
-printf 'export const FEATURE_FLAG_DEFINITIONS = FLAG_DEFINITIONS;\n' > "$E/flag-source/definitions"
-for d in base head; do
-  printf 'export const OTHER_FLAG = "htpr-2-other";\nexport default { key: OTHER_FLAG, kind: "bugfix" } as const;\n' > "$E/flag-source/flags-$d/htpr-2-other.ts"
+removed='test click removed (Valentin 2026-10-21)'
+S screen_change_with_released_flag_and_no_record_passes 0 success "$removed" FLAG_FILE=src/components/card.tsx
+S server_only_change_passes 0 success "$removed" FLAG_FILE=src/app/api/x/route.ts
+S flag_removal_passes 0 success "$removed" FLAG_FILE=src/lib/flags/definitions/htpr-1-released.ts FLAG_STATUS=removed
+S closed_pr_gets_no_success 1 none '' FLAG_PR_STATE=CLOSED
+S non_production_base_gets_no_success 1 none '' FLAG_BASE=main
+for sha in '' abc123 invalid; do
+  S short_or_missing_sha_gets_no_success 1 none '' FLAG_HEAD="$sha"
 done
-rm "$E/flag-source/flags-head/htpr-1-released.ts"
-printf 'const removed = useFlag("htpr-1-released");\nconst other = useFlag("htpr-2-other");\n' > "$E/flag-source/base"
-printf 'const other = useFlag("htpr-2-other");\n' > "$E/flag-source/head"
-removal=(FLAG_REMOVED_DEFINITION=src/lib/flags/definitions/htpr-1-released.ts FLAG_COUNT=2 'FLAG_HTTP={"flags":[{"key":"htpr-1-released","mode":"EVERYONE"},{"key":"htpr-2-other","mode":"EVERYONE"}]}')
-sed 's/htpr-1-released=EVERYONE/htpr-2-other=EVERYONE/' "$E/record" > "$premerge"
-S 0 success 'click record ok | removed-everyone: htpr-1-released' "${removal[@]}"
-EXPECT_NO_REMOVED_EVERYONE=1 S 0 success 'click record ok' "${removal[@]}" 'FLAG_HTTP={"flags":[{"key":"htpr-1-released","mode":"OFF"},{"key":"htpr-2-other","mode":"EVERYONE"}]}'
-EXPECT_NO_REMOVED_EVERYONE=1 S 0 success 'click record ok' "${removal[@]}" AGENT_TOKEN= 'FLAG_PUBLIC={"flags":{"htpr-1-released":false,"htpr-2-other":true}}'
-S 0 success 'click record ok | removed-everyone: htpr-1-released' "${removal[@]}" AGENT_TOKEN= 'FLAG_PUBLIC={"flags":{"htpr-1-released":true,"htpr-2-other":true}}'
-S 1 failure 'unchanged PR head' "${removal[@]}" FLAG_HEAD_RACE=1
-P 0 premerge 999 "${removal[@]}"
-F 0 '' "${removal[@]}"
-# removed-everyone requires every deleted key, sorted, not merely one released key.
-for d in base head; do
-  printf 'export const UNTOUCHED_FLAG = "htpr-4-untouched";\nexport default { key: UNTOUCHED_FLAG, kind: "bugfix" } as const;\n' > "$E/flag-source/flags-$d/htpr-4-untouched.ts"
+S head_moved_between_read_and_post_fails 1 failure 'cannot confirm unchanged PR head; retry' FLAG_HEAD_RACE=1
+S merged_pr_gets_no_success 1 none '' FLAG_PR_STATE=MERGED
+S head_read_error_gets_no_success 1 none '' FLAG_HEAD_ERROR=1
+S base_moved_between_read_and_post_fails 1 failure 'cannot confirm unchanged PR head; retry' FLAG_BASE_RACE=1
+S head_reread_error_gets_no_success 1 failure 'cannot confirm unchanged PR head; retry' FLAG_REREAD_ERROR=1
+S failed_status_post_returns_nonzero 1 success "$removed" FLAG_POST_ERROR=1
+printf 'not a directory\n' > "$E/lock-blocked"
+S publisher_lock_error_gets_no_success 1 none '' PREMERGE_STATUS_STATE="$E/lock-blocked"
+
+# All public entry points stop requiring click evidence; title and CI checks remain.
+printf '999\n' > "$E/YPER4-999/pr"
+for entry in 'premerge 999' 'pr YPER4-999'; do
+  : > "$E/status-log"
+  out=$(env PATH="$E/flag-bin:$PATH" FLAG_LOG="$E/status-log" ./ship-check $entry 2>&1); got=$?
+  [ "$got" = 0 ] && [[ $out == *"$removed"* ]] && ok "$entry without click evidence" || bad "$entry: $got $out"
 done
-mv "$E/flag-source/flags-head/htpr-2-other.ts" "$E/other-definition"
-multiple=(FLAG_REMOVED_DEFINITION=src/lib/flags/definitions/htpr-2-other.ts,src/lib/flags/definitions/htpr-1-released.ts FLAG_COUNT=3)
-S 0 success 'click record ok | removed-everyone: htpr-1-released,htpr-2-other' "${removal[@]}" "${multiple[@]}"
-EXPECT_NO_REMOVED_EVERYONE=1 S 0 success 'click record ok' "${removal[@]}" "${multiple[@]}" 'FLAG_HTTP={"flags":[{"key":"htpr-1-released","mode":"EVERYONE"},{"key":"htpr-2-other","mode":"OFF"}]}'
-EXPECT_NO_REMOVED_EVERYONE=1 S 0 success 'click record ok' "${removal[@]}" "${multiple[@]}" AGENT_TOKEN= 'FLAG_PUBLIC={"flags":{"htpr-1-released":true,"htpr-2-other":false}}'
-S 1 failure 'live state unknown' "${multiple[@]}"
-mv "$E/other-definition" "$E/flag-source/flags-head/htpr-2-other.ts"
-rm "$E/flag-source/flags-"{base,head}/htpr-4-untouched.ts
-# removed-everyone is omitted, never truncated, when the entire description exceeds 140.
-for length in 140 141; do
-  prefix='click record ok | removed-everyone: '
-  key="htpr-3-$(printf '%*s' "$((length - ${#prefix} - 7))" '' | tr ' ' x)"
-  path="src/lib/flags/definitions/$key.ts"
-  printf 'export const LONG_FLAG = "%s";\nexport default { key: LONG_FLAG, kind: "bugfix" } as const;\n' "$key" > "$E/flag-source/flags-base/$key.ts"
-  if [ "$length" = 140 ]; then
-    S 0 success "$prefix$key" FLAG_FILE="$path" FLAG_STATUS=removed "FLAG_HTTP={\"flags\":[{\"key\":\"$key\",\"mode\":\"EVERYONE\"}]}"
-  else
-    EXPECT_NO_REMOVED_EVERYONE=1 S 0 success 'click record ok' FLAG_FILE="$path" FLAG_STATUS=removed "FLAG_HTTP={\"flags\":[{\"key\":\"$key\",\"mode\":\"EVERYONE\"}]}"
-  fi
-  rm "$E/flag-source/flags-base/$key.ts"
-done
-sed -i 's/htpr-2-other=EVERYONE/htpr-2-other=OFF/' "$premerge"
-S 1 failure 'expected Flags: htpr-2-other=EVERYONE' "${removal[@]}"
-cp "$E/record" "$premerge"
-S 1 failure 'expected Flags: htpr-2-other=EVERYONE' "${removal[@]}"
-sed '/^Flags:/d' "$E/record" > "$premerge"
-S 1 failure 'missing Flags:; expected Flags: htpr-2-other=EVERYONE' "${removal[@]}"
-# A removal-only diff has no touched surviving flag to record, even with an empty Flags line.
-S 0 success 'click record ok' FLAG_FILE=src/lib/flags/definitions/htpr-1-released.ts FLAG_STATUS=removed
-printf 'Flags: \n' >> "$premerge"
-S 0 success 'click record ok' FLAG_FILE=src/lib/flags/definitions/htpr-1-released.ts FLAG_STATUS=removed
-S 1 failure 'live flag modes unavailable' FLAG_FILE=src/lib/flags/definitions/htpr-1-released.ts FLAG_STATUS=removed FLAG_HTTP_ERROR=1
-sed -i 's/Commit:.*/Commit: deadbeef/' "$premerge"
-S 1 failure 'must name PR head sha' FLAG_FILE=src/lib/flags/definitions/htpr-1-released.ts FLAG_STATUS=removed
-sed '/^Flags:/d; s/Click: PASS/Click: FAIL/' "$E/record" > "$premerge"
-S 1 failure 'missing passing click' FLAG_FILE=src/lib/flags/definitions/htpr-1-released.ts FLAG_STATUS=removed
-rm "$premerge"
-S 1 failure 'record a browser click-through' FLAG_FILE=src/lib/flags/definitions/htpr-1-released.ts FLAG_STATUS=removed
-# A key that survives in the head registry is never exempt, even if GitHub reports a deleted file.
-cp "$E/flag-source/flags-base/htpr-1-released.ts" "$E/flag-source/flags-head/htpr-1-released.ts"
-sed 's/htpr-1-released=EVERYONE/htpr-2-other=EVERYONE/' "$E/record" > "$premerge"
-S 1 failure 'expected Flags: htpr-1-released=EVERYONE' "${removal[@]}"
-rm "$E/flag-source/flags-base/htpr-2-other.ts" "$E/flag-source/flags-head/htpr-2-other.ts" "$E/flag-source/definitions"
-cp "$E/keys-legacy" "$E/flag-source/keys"; cp "$E/registry-legacy" "$E/flag-source/registry"
-printf 'const released = useFlag(RELEASED_FLAG);\n' > "$E/flag-source/base"; cp "$E/flag-source/base" "$E/flag-source/head"
-cp "$E/record" "$premerge"
-sed -i 's/Click: PASS/Click: FAIL/' "$premerge"
-S 1 failure 'missing passing click'
-sed -i 's/Click: FAIL/Click: PASS/' "$premerge"
-: > "$E/status-log"
-P 0 pr YPER4-999 FLAG_LOG="$E/status-log"
 python3 - "$E/status-log" <<'PY' && ok 'pr gate posts status' || bad 'pr gate omitted status'
 import json, sys
-assert any('context=premerge-evidence' in json.loads(l) for l in open(sys.argv[1]))
+assert any('context=premerge-evidence' in json.loads(line) for line in open(sys.argv[1]))
 PY
+out=$(echo '{"tool_input":{"command":"gh pr merge 999"}}' | env PATH="$E/flag-bin:$PATH" ./ship-check guard 2>&1); got=$?
+[ "$got" = 0 ] && ok 'merge guard without click evidence' || bad "merge guard: $got $out"
+out=$(env PATH="$E/flag-bin:$PATH" FLAG_POST_ERROR=1 ./ship-check premerge-status 999 2>&1); got=$?
+[ "$got" = 1 ] && [[ $out == *'cannot post premerge-evidence'* ]] && ok 'status write error is explicit' || bad "status write error: $got $out"
 
-# The sweep uses one list call, skips unchanged heads and notices changed/deleted evidence.
-W() {
-  local want=$1 posts=$2 out got; shift 2
-  : > "$E/status-log"
-  out=$(env PATH="$E/flag-bin:$PATH" PYTHONPATH="$E/flag-http" FLAG_SOURCE="$E/flag-source" FLAG_LOG="$E/status-log" PREMERGE_STATUS_STATE="$E/sweep-state" AGENT_TOKEN=fixture HYPERTASKS_JWT_TOKEN= "$@" python3 ./premerge-evidence.py 2>&1); got=$?
-  if [ "$got" = "$want" ] && python3 - "$E/status-log" "$posts" <<'PY'
-import json, sys
-calls = [json.loads(line) for line in open(sys.argv[1])]
-assert sum(c[:2] == ['api', '-i'] for c in calls) == 1
-assert sum(c[0] == 'api' and '/statuses/' in c[1] for c in calls) == int(sys.argv[2]), calls
-PY
-  then ok "sweep: $posts posts"; else bad "sweep: want $want $posts posts got $got $out"; fi
-}
-W 0 1
-W 0 0
-sed -i 's/Click: PASS/Click: FAIL/' "$premerge"
-W 0 1
-W 0 0 FLAG_ROLLUP=FAILURE
-sed -i 's/Click: FAIL/Click: PASS/' "$premerge"
-W 0 1 FLAG_ROLLUP=FAILURE
-printf 'changed recording' > "$E/YPER4-999/click.webm"
-W 0 1
-rm "$E/YPER4-999/click.webm"
-W 0 1
-W 0 0 FLAG_ROLLUP=FAILURE
-python3 - "$E/sweep-state/cache.json" <<'PY'
-import json, sys
-path = sys.argv[1]; cache = json.load(open(path)); cache['999']['checked'] = 0
-json.dump(cache, open(path, 'w'))
-PY
-W 0 1 FLAG_ROLLUP=FAILURE
-W 1 0 FLAG_LIST_ERROR=1
-python3 - "$E/sweep-state/cache.json" <<'PY'
-import json, sys
-path = sys.argv[1]; cache = json.load(open(path)); cache['999']['checked'] = 0
-json.dump(cache, open(path, 'w'))
-PY
-W 0 1 FLAG_POST_ERROR=1
-W 0 1 FLAG_POST_ERROR=1
-W 1 1 FLAG_POST_ERROR=1
-W 0 1
-
-# YPER4-251: a sweep makes no GitHub call at all while the shared pause epoch is in the future.
-SWEEP_LOG() {
-  : > "$E/status-log"
-  env PATH="$E/flag-bin:$PATH" PYTHONPATH="$E/flag-http" FLAG_SOURCE="$E/flag-source" FLAG_LOG="$E/status-log" PREMERGE_STATUS_STATE="$E/sweep-state" AGENT_TOKEN=fixture HYPERTASKS_JWT_TOKEN= "$@" python3 ./premerge-evidence.py >/dev/null 2>&1
-}
-echo $(( $(date +%s) + 3600 )) > "$E/pause-until"
-SWEEP_LOG GH_PAUSE_FILE="$E/pause-until"; got=$?
-[ "$got" = 0 ] && [ ! -s "$E/status-log" ] && ok 'sweep exits with no calls while paused' || bad "sweep ran while paused: $got $(cat "$E/status-log")"
-echo $(( $(date +%s) - 10 )) > "$E/pause-until"
-SWEEP_LOG GH_PAUSE_FILE="$E/pause-until"; got=$?
-[ "$got" = 0 ] && grep -q '"api", "-i"' "$E/status-log" && ok 'sweep runs once the pause epoch has passed' || bad "sweep stayed idle after pause: $got"
-# An unchanged head is skipped: only the one list call and the rules fetch, no per-PR reads and no contents API.
-SWEEP_LOG FLAG_ROLLUP=FAILURE # warm the cache with the status the record really has
-SWEEP_LOG FLAG_ROLLUP=FAILURE; got=$?
-python3 - "$E/status-log" <<'PY' && [ "$got" = 0 ] && ok 'sweep skips an unchanged head: one list call, no per-PR calls' || bad 'sweep re-checked an unchanged head'
-import json, sys
-calls = [json.loads(line) for line in open(sys.argv[1])]
-api = [c for c in calls if c[0] in ('api', 'pr')]
-assert [c[:2] for c in api] == [['api', '-i']], api
-assert not any('/contents/' in a for c in calls for a in c)
-PY
-
-# YPER4-251: the real local-git source layer (no fakes): one fetch, git show, missing path, directory listing, offline re-read.
-python3 - ./ship-check <<'PY' && ok 'local git source layer: fetch once, show, ls-tree, missing path' || bad 'local git source layer'
-import json, os, re, subprocess, sys, tempfile
-from pathlib import Path
-text = open(sys.argv[1]).read()
-layer = text[text.index('# PR files come from a local bare cache'):text.index('def constants(text):')]
-root = Path(tempfile.mkdtemp())
-origin = root / 'origin'
-env = dict(os.environ, GIT_AUTHOR_NAME='t', GIT_AUTHOR_EMAIL='t@t', GIT_COMMITTER_NAME='t', GIT_COMMITTER_EMAIL='t@t')
-def run(*args, cwd=origin):
-    return subprocess.run(args, cwd=cwd, env=env, capture_output=True, text=True, check=True).stdout.strip()
-origin.mkdir()
-run('git', 'init', '-q')
-(origin / 'src/lib/flags/definitions').mkdir(parents=True)
-(origin / 'src/lib/flags/keys.ts').write_text('base\n')
-run('git', 'add', '-A'); run('git', 'commit', '-qm', 'base'); base = run('git', 'rev-parse', 'HEAD')
-(origin / 'src/lib/flags/definitions/htpr-1-x.ts').write_text('export const X = "htpr-1-x";\n')
-(origin / 'src/lib/flags/keys.ts').write_text('head\n')
-run('git', 'add', '-A'); run('git', 'commit', '-qm', 'head'); head = run('git', 'rev-parse', 'HEAD')
-run('git', 'update-ref', 'refs/pull/7/head', head)
-os.environ.update(SHIP_GIT='git', SHIP_GIT_CACHE=str(root / 'cache'), SHIP_GIT_REMOTE=str(origin))
-ns = dict(json=json, os=os, re=re, subprocess=subprocess, Path=Path, repo='hypertask-ai/hypertask')
-exec(layer, ns)
-ns['prepare']('7', head, base)
-assert ns['source']('src/lib/flags/keys.ts', head) == 'head\n'
-assert ns['source']('src/lib/flags/keys.ts', base) == 'base\n'
-assert ns['listdir']('src/lib/flags/definitions', head) == [{'name': 'htpr-1-x.ts', 'path': 'src/lib/flags/definitions/htpr-1-x.ts', 'type': 'file'}]
-assert ns['listdir']('src/lib/flags/definitions', base) == []
-try:
-    ns['source']('src/nope.ts', head); raise SystemExit('missing path was served')
-except ValueError:
-    pass
-subprocess.run(['rm', '-rf', str(origin)], check=True)  # cached: a second prepare must not need the network
-ns['prepare']('7', head, base)
-try:
-    ns['prepare']('8', 'c' * 40); raise SystemExit('unknown sha accepted')
-except ValueError:
-    pass
-PY
+if [ "${1:-}" = --premerge-only ]; then
+  echo "$passes passed, $fails failed"
+  [ "$fails" = 0 ] && echo 'premerge ship-check tests passed'
+  exit "$((fails > 0))"
+fi
 
 # Dropped path (YPER4-257): Valentin decided against a ticket, its PR is closed unmerged. Fakes: PR state and comments.
 mkdir -p "$E/drop-bin"

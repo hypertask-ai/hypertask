@@ -70,9 +70,9 @@ export async function GET(request: NextRequest) {
             )
         }
 
-        if (ctx.agentId && agentScopeEnforced()) {
+        if ((ctx.teamScope != null || (ctx.agentId && agentScopeEnforced()))) {
             const access = await prisma.project.findFirst({
-                where: { id: projectId, ...projectContentAccessWhere(ctx.user.id, ctx.agentId) },
+                where: { id: projectId, ...projectContentAccessWhere(ctx.user.id, ctx.agentId, ctx.teamScope) },
                 select: { id: true },
             })
             if (!access) return NextResponse.json({ success: false, error: 'You are not a member of this project' }, { status: 403 })
@@ -93,7 +93,7 @@ export async function GET(request: NextRequest) {
                 agentId: null,
                 task: {
                     status: 'Normal',
-                    ...(ctx.agentId && agentScopeEnforced() ? { project: projectContentAccessWhere(ctx.user.id, ctx.agentId) } : {}),
+                    ...((ctx.teamScope != null || (ctx.agentId && agentScopeEnforced())) ? { project: projectContentAccessWhere(ctx.user.id, ctx.agentId, ctx.teamScope) } : {}),
                 },
             },
             _count: { _all: true },
@@ -104,7 +104,7 @@ export async function GET(request: NextRequest) {
         )
         const tasks = taskIds.length
             ? await prisma.task.findMany({
-                  where: { id: { in: taskIds } },
+                  where: { id: { in: taskIds }, ...(ctx.teamScope != null ? { project: projectContentAccessWhere(ctx.user.id, ctx.agentId, ctx.teamScope) } : {}) },
                   select: {
                       id: true,
                       status: true,
@@ -131,7 +131,7 @@ export async function GET(request: NextRequest) {
         >()
         const doneProjectIds = new Set(rows.length ? [projectId] : [])
         for (const userId of userIds) {
-            const active = await loadActiveInboxZeroNotifications(userId)
+            const active = await loadActiveInboxZeroNotifications(userId, prisma, { userId: ctx.user.id, agentId: ctx.agentId, teamScope: ctx.teamScope })
             activeByUser.set(userId, active)
             for (const notification of active) {
                 if (notification.task) doneProjectIds.add(notification.task.projectId)

@@ -18,15 +18,18 @@ test("the public agents wiki page renders the shared QA-lane guide", () => {
   assert.match(guide, /Nothing moves to \*\*Done\*\* without QA evidence/);
 });
 
-test("the public page reads and renders the route-local guide", async () => {
+test("the public page renders the bundled guide dynamically without static prerendering", async () => {
   const load = require("jiti")(__filename, {
     alias: { "@": path.join(root, "src") },
     jsx: { runtime: "automatic" },
   });
-  const { default: AgentsWikiPage } = load(path.join(root, "src/app/wiki/agents/page.tsx"));
+  const { default: AgentsWikiPage, dynamic } = load(path.join(root, "src/app/wiki/agents/page.tsx"));
+  assert.equal(dynamic, "force-dynamic");
+  const { markdownToHtml } = load(path.join(root, "src/utils/helperFunctions/markdownToHtml.ts"));
   const page = await AgentsWikiPage();
   assert.equal(page.type, "main");
   const html = page.props.children.props.dangerouslySetInnerHTML.__html;
+  assert.equal(html, markdownToHtml(guide));
   assert.match(html, /<h1>Universal agent onboarding<\/h1>/);
   assert.match(html, /<h2>QA lane<\/h2>/);
   assert.match(html, /https:\/\/app\.hypertask\.ai\/wiki\/agents/);

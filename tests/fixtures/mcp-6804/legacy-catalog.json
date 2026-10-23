@@ -295,7 +295,7 @@
   },
   {
     "name": "hypertask_add_comment_to_task",
-    "description": "Returns the comment.",
+    "description": "Returns comment or hidden agent log; use kind question|qa|done for people; describe for routing.",
     "inputSchema": {
       "type": "object"
     }

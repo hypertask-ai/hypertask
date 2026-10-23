@@ -60,7 +60,7 @@ export const PUT = taskWriteRoute({
         section: section_title,
         ranking: ranking_,
         updatedAt: new Date(),
-      }, userObj, agentId ?? null, {
+      }, userObj, agentId ?? null, { teamScope: session.teamScope,
         taskMovedActivity: {
           fromAgent: agent,
           sendNotification: () => sendNotificationForTask(

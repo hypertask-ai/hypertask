@@ -141,7 +141,7 @@ test('blocked dismissal storage cannot escape the mirror effect or leave a misle
   const js = require('typescript').transpileModule(body, { compilerOptions: { target: 7 } }).outputText;
   const document = { documentElement: { dataset: { theme: 'porcelain' } }, cookie: 'old mirror' };
   const bindings = { document, BOARD_DISPLAY_COOKIE, parseBoardDisplay, location: { protocol: 'https:' }, window: { innerWidth: 390 }, navigator: { language: 'en-US' },
-    accountId: 985, boardLayout: 'board', railCollapsed: true, quickTips: false, fcm: { permissionStatus: 'default', statusToggleFromDB: 'false' }, ...display.board, desktopChat: false, chatWidth: 517, chatSidebarMode: true,
+    accountId: 985, boardLayout: 'board', railCollapsed: true, quickTips: false, fcm: { permissionStatus: 'default', statusToggleFromDB: 'false' }, ...display.board, keepChatClosed: false, desktopChat: false, chatWidth: 517, chatSidebarMode: true,
     localStorage: { getItem: () => { throw Error('storage blocked'); } } };
   const mirror = storage => new Function(...Object.keys(bindings), js + '\nmirror();')(...Object.values({ ...bindings, localStorage: storage }));
   assert.doesNotThrow(() => mirror(bindings.localStorage));
@@ -169,4 +169,14 @@ test('desktop chat opt-in is board-only and never authorizes the inbox document'
   assert.equal(parseBoardDisplay(value, 985), null);
   assert.equal(await readInboxDocument('/inbox', value), null);
   assert.deepEqual(calls, []);
+});
+
+
+test('the inbox document is still allowed without the ticket flag and never produces a ticket shell', async () => {
+  reset();
+  const document = await getServerInboxDocument();
+  assert.ok(document);
+  assert.equal(document.flags.values['htpr-7627-ticket-first-screen'], undefined);
+  const { getServerTicketShell } = require('../src/lib/firstScreen/serverTicketShell.ts');
+  assert.equal(await getServerTicketShell(), null);
 });
