@@ -196,7 +196,8 @@ test("Anyone share join passes the sharer to committed member tracking; Domain s
   h.projects.get(15).team = { googleAccount: { userId: 123 } };
   h.prisma.invite.updateMany = async () => ({});
   let shareType = "Anyone";
-  h.prisma.taskSharing = { findFirst: async () => ({ projectId: 15, userId: 123, shareType, user: h.users.get(123) }) };
+  h.prisma.taskSharing = { findFirst: async () => ({ projectId: 15, userId: 123, shareType, user: h.users.get(123), expired: false, expiredAt: null, task: { uniqueIndex: 1, status: "Active" } }) };
+  h.mocks["@/utils/controllers/tasks/getSharedTask"] = { isShareLinkLive: (share: any) => !share.expired && !share.expiredAt && share.task.status !== "Deleted" };
   h.mocks["@/utils/controllers/members/addExistingUserToProject"] = h.load("src/utils/controllers/members/addExistingUserToProject.ts");
   const join = h.load("src/utils/controllers/members/share.ts").default;
   assert.equal((await join(234, "share")).status, 200);

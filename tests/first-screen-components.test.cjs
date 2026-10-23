@@ -298,8 +298,9 @@ test('integration retains the old import/readiness path, offscreen policy and gl
   const section = source('src/components/PageComponents/Kanban/KanbanSectionComponents/section.tsx');
   assert.match(section, /const SeededTask = dynamic\(\(\) => import\("..\/KanbanTaskComponents\/task"\)\)/);
   assert.match(section, /const Task = dynamic\(loadTask, \{\s*ssr: false/);
-  assert.match(section, /const TaskRenderer = seeded \? SeededTask : Task/);
-  assert.match(section, /\[taskModuleReady, setTaskModuleReady\] = useState\(seeded\)/);
+  assert.match(section, /const TaskRenderer = seeded \? SeededTask : loadedTask\?\.default \?\? Task;/);
+  assert.match(section, /\[taskModuleReady, setTaskModuleReady\] = useState\(seeded \|\| loadedTask !== null\)/);
+  assert.match(section, /useState\(\(\) => \(seeded \|\| !hydrated \? null : firstDrawTask\)\)/);
   assert.match(section, /\(!seeded && typeof IntersectionObserver === "undefined"\)/);
   const global = source('src/components/ProviderGlobal/GloablProviders.tsx');
   assert.match(global, /!routeOwnsMobileChrome && <MobileTopBar/);

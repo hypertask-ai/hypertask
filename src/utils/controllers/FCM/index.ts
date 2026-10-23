@@ -3,6 +3,7 @@ import fcmConfig from "@/utils/api/fcmConfig";
 import { FCMDeviceInfo } from "@/models/model";
 import type { Message } from "firebase-admin/messaging";
 import prisma from "@/lib/prisma";
+import { filterTaskReadersNow } from "@/lib/access/canReadTaskNow";
 import { resolveNotificationChannelPreference } from "@/utils/controllers/notifications/shouldNotify";
 import { NotificationType } from "@prisma/client";
 
@@ -198,7 +199,14 @@ export const sendDataOnlyFcm = async (
     type: "Comment",
   });
 
-  const validDevices = devices.filter(device => device && device.userId !== creatorId);
+  const candidateDevices = devices.filter(device =>
+    device && device.userId !== creatorId && !deliveredDeviceIds.has(device.firebaseId)
+  );
+  const allowedUserIds = new Set(await filterTaskReadersNow(
+    candidateDevices.map(device => device.userId),
+    comment.taskId,
+  ));
+  const validDevices = candidateDevices.filter(device => allowedUserIds.has(device.userId));
 
   const commentPayload = fcmCommentPayload(comment, commentCreator);
   const payloadBytes = Buffer.byteLength(commentPayload, "utf8");
