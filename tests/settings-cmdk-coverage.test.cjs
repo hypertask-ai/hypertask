@@ -275,7 +275,7 @@ test("unresolved shared row labels fail rather than silently dropping a setting"
 const gatedCommands = [
   { keys: ["settingsApiKeysBasetenApiKey"], flag: "basetenByokEnabled", dependency: "hiddenBasetenCommandKey", file: "ApiKeysSection.tsx", uiFlag: "basetenEnabled" },
   { keys: ["settingsApiKeysXaiApiKey", "settingsAiModelsXai"], flag: "grokGemini4Enabled", dependency: "hiddenXaiCommandKeys", file: "ApiKeysSection.tsx", uiFlag: "grokGemini4Enabled" },
-  { keys: ["settingsGithub"], flag: "githubConnectEnabled", file: "GitHubSection.tsx", uiFlag: "enabled" },
+  { keys: ["settingsGithub"], flag: "githubConnectEnabled", dependency: "hiddenGithubCommandKey", file: "GitHubSection.tsx", uiFlag: "enabled" },
   { keys: ["settingsCalendarKeepTasksUpdated"], flag: "googleCalendarSettingsEnabled", file: "CalendarSection.tsx", uiFlag: "enabled" },
   { keys: ["settingsTaskPageSuggestDescriptionsFromTaskTitles"], flag: "autoTaskDescriptionsEnabled", file: "src/components/sidebars/RightSidebar/UserPreference.tsx", uiFlag: "autoTaskDescriptionsEnabled" },
 ];
@@ -305,6 +305,9 @@ for (const { keys, flag, dependency = flag, file, uiFlag } of gatedCommands) {
       onCalendar: false,
       ...Object.fromEntries(gatedCommands.map((item) => [item.flag, false])),
     };
+    const setFlag = (enabled) => {
+      bindings[flag] = enabled;
+    };
     const setup = [];
     for (const { dependency: derivedDependency } of gatedCommands.filter((item) => item.dependency && item.dependency !== item.flag)) {
       const start = setup.length;
@@ -319,9 +322,9 @@ for (const { keys, flag, dependency = flag, file, uiFlag } of gatedCommands) {
     for (const key of keys) {
       assert.ok(commands.some((command) => command.key === key), `Missing gated settings command ${key}`);
       assert.equal(evaluate()({ key, commandMode: "Setting" }), false, `${key} visible while flag off`);
-      bindings[flag] = true;
+      setFlag(true);
       assert.equal(evaluate()({ key, commandMode: "Setting" }), true, `${key} absent while flag on`);
-      bindings[flag] = false;
+      setFlag(false);
     }
     assert.equal(evaluate()({ key: "settingsGeneral", commandMode: "Setting" }), true, "Unrelated settings were gated");
     if (flag === "googleCalendarSettingsEnabled") {

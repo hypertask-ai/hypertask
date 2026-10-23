@@ -50,7 +50,7 @@ function fixture(t, { enabled = true, query = "projectId=15", data, error = null
     "next/navigation": { useSearchParams: () => new URLSearchParams(query) },
     "react-hot-toast": { success: (message) => messages.push(message), error: (message) => messages.push(message) },
     "@/hooks/useFlag": { useFlag: (key) => { assert.equal(key, FLAG); return enabled; } },
-    "@/lib/flags/keys": { HTPR_7515_CONNECT_GITHUB_PER_BOARD_FLAG: FLAG },
+    "@/lib/flags/definitions/htpr-7515-connect-github-per-board": { HTPR_7515_CONNECT_GITHUB_PER_BOARD_FLAG: FLAG },
     "@/lib/state": { useRecoilValue: () => ({ id: 10 }) },
     "@/store": { currentUserAtom: {} },
     "@tanstack/react-query": {
@@ -248,6 +248,7 @@ test("flag Off excludes GitHub from the canonical search registry and remembered
   for (const githubConnectEnabled of [false, true]) {
     const bindings = {
       ...registry, ...flags, CommandMode, githubConnectEnabled,
+      hiddenGithubCommandKey: githubConnectEnabled ? null : "settingsGithub",
       useMemo: (callback) => callback(), getCommands: registry.getAllCommands,
       appShellRailOn: false, selectedTasksFirst: false, boardLayout: "board",
       calendarSettings: { showWeekends: true }, contextOptions: {},

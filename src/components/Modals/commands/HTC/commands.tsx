@@ -30,6 +30,7 @@ import CommandGroups from "./CommandGroup";
 import useHTC from "@/hooks/MultiPages/HTC/useHTC";
 import type { CommandFocusProxy } from "@/components/commandTypes";
 import { HTPR_7650_AI_CHAT_OPEN_SWITCHES_FLAG, HTPR_7547_SEARCH_LAZY_CLOSED_FLAG, HTPR_7656_CTRLJ_SKILL_MENU_FLAG } from "@/lib/flags/keys";
+import { HTPR_7515_CONNECT_GITHUB_PER_BOARD_FLAG } from "@/lib/flags/definitions/htpr-7515-connect-github-per-board";
 import { ModalContainerCustom, ModalHintBar, ModalInput } from "@/components/Common/CommonModalComponents";
 import useHypertasksRecoilStates from "@/hooks/RecoilRoot/useHypertasksRecoilStates";
 import {
@@ -64,7 +65,6 @@ import { HTPR_7891_PALETTE_SHARE_KEY_LABELS_FLAG } from "@/lib/flags/definitions
 import { HTPR_7307_CTRLJ_FOOTER_CLICKABLE_FLAG, HTPR_7328_ROUNDED_THEME_FLAG, HTPR_7530_KEEP_AI_CHAT_CLOSED_FLAG } from "@/lib/flags/keys";
 import {
   GOOGLE_CALENDAR_FLAG,
-  HTPR_7515_CONNECT_GITHUB_PER_BOARD_FLAG,
   HTPR_7260_KANBAN_SELECT_ALL_FLAG,
   HTPR_6891_PHONE_TASK_WRITER_SHEET_FLAG,
   HTPR_6929_COMPOSE_TASK_WRITER_FLAG,
@@ -204,6 +204,8 @@ const Commands = (props: Props) => {
   let hiddenXaiCommandKeys = "";
   if (!grokGemini4Enabled) hiddenXaiCommandKeys = "settingsApiKeysXaiApiKey settingsAiModelsXai";
   const githubConnectEnabled = useFlag(HTPR_7515_CONNECT_GITHUB_PER_BOARD_FLAG);
+  let hiddenGithubCommandKey: string | null = "settingsGithub";
+  if (githubConnectEnabled) hiddenGithubCommandKey = null;
   const googleCalendarSettingsEnabled = useFlag(GOOGLE_CALENDAR_FLAG);
   const autoTaskDescriptionsEnabled = useFlag("htpr-6177-auto-task-descriptions");
   const myTasksViewsEnabled = useFlag(MY_TASKS_VIEWS_FLAG);
@@ -300,7 +302,7 @@ const Commands = (props: Props) => {
               showByokApiKeys) &&
             command.key !== hiddenBasetenCommandKey &&
             !hiddenXaiCommandKeys.split(" ").includes(command.key) &&
-            (command.key !== "settingsGithub" || githubConnectEnabled) &&
+            command.key !== hiddenGithubCommandKey &&
             (command.key !== "settingsCalendarKeepTasksUpdated" || googleCalendarSettingsEnabled) &&
             (command.key !== "settingsTaskPageSuggestDescriptionsFromTaskTitles" || autoTaskDescriptionsEnabled) &&
             isTicketPrefixCommandVisible(command) &&
@@ -450,7 +452,7 @@ const Commands = (props: Props) => {
     pagesEnabled,
     standalonePages,
     pathname,
-    githubConnectEnabled,
+    hiddenGithubCommandKey,
     googleCalendarSettingsEnabled,
     hiddenBasetenCommandKey,
     hiddenXaiCommandKeys,

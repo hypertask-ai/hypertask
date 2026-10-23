@@ -5,7 +5,8 @@ import { HTPR_7622_AI_SETTINGS_FLAG } from "@/lib/flags/definitions/htpr-7622-ai
 import { settingsScopeFromPath } from "@/lib/ai/settings/catalog";
 import { subscribeAiSettingsEvents } from "@/lib/ai/settings/client";
 import { useFlag, useFlagReady } from "@/hooks/useFlag";
-import { HTPR_7472_TASK_TEMPLATES_FLAG, HTPR_6929_COMPOSE_TASK_WRITER_FLAG, HTPR_7515_CONNECT_GITHUB_PER_BOARD_FLAG } from "@/lib/flags/keys";
+import { HTPR_7472_TASK_TEMPLATES_FLAG, HTPR_6929_COMPOSE_TASK_WRITER_FLAG } from "@/lib/flags/keys";
+import { HTPR_7515_CONNECT_GITHUB_PER_BOARD_FLAG } from "@/lib/flags/definitions/htpr-7515-connect-github-per-board";
 import dynamic from "next/dynamic";
 import { useRouter, useSearchParams } from "next/navigation";
 import {
@@ -290,9 +291,9 @@ const SettingsShell: React.FC<SettingsShellProps> = ({ section }) => {
   const githubConnectReady = useFlagReady(HTPR_7515_CONNECT_GITHUB_PER_BOARD_FLAG);
   const searchParams = useSearchParams();
   const normalizedSection = normalizeSettingsSection(section);
-  const activeSection = normalizedSection === "github" && !githubConnectEnabled
-    ? "mcp" : normalizedSection === "board-task-templates" && !taskTemplatesEnabled
-      ? "board-ai" : normalizedSection;
+  let activeSection = normalizedSection;
+  if (!githubConnectEnabled && normalizedSection === "github") activeSection = "mcp";
+  if (!taskTemplatesEnabled && normalizedSection === "board-task-templates") activeSection = "board-ai";
   const activeTab = getSettingsTabForSection(activeSection);
   const mbl = useMobileView();
   const { open: openAiChat, close: closeAiChat } = useUIStateManager("aiChatInterface");

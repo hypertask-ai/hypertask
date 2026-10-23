@@ -7,7 +7,7 @@ import toast from "react-hot-toast";
 import OptionPickerModal from "@/components/Modals/OptionPicker";
 import { useFlag } from "@/hooks/useFlag";
 import { useRecoilValue } from "@/lib/state";
-import { HTPR_7515_CONNECT_GITHUB_PER_BOARD_FLAG } from "@/lib/flags/keys";
+import { HTPR_7515_CONNECT_GITHUB_PER_BOARD_FLAG } from "@/lib/flags/definitions/htpr-7515-connect-github-per-board";
 import { currentUserAtom } from "@/store";
 import SettingsCard from "./SettingsCard";
 import { BillingActionRow, settingsActionButtonClass } from "./SettingsBillingRow";
@@ -122,9 +122,7 @@ const GitHubSection = () => {
     }
   };
 
-  if (!enabled) return null;
-
-  return (
+  return enabled ? (
     <SettingsSectionShell
       title="Connect GitHub"
       description={projectId ? "GitHub repositories connected to the selected board." : "Open Connect GitHub from the board you want to connect."}
@@ -236,7 +234,7 @@ const GitHubSection = () => {
         />
       )}
     </SettingsSectionShell>
-  );
+  ) : null;
 };
 
 export default GitHubSection;
