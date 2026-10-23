@@ -612,7 +612,7 @@ export default function GlobalProvider({
   const { goToProjectShortcut } = useProjectQuery();
   const queryClient = useQueryClient();
   useInboxEFirstPressQueue(queryClient);
-  useInboxLegacyWarm(queryClient, authenticatedUserId, pathname, mbl);
+  useInboxLegacyWarm(pathname, mbl);
   const controller: { [key: number]: { pressed: boolean } } = {
     ...globalConstants.multipleKeys,
   };

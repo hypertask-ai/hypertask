@@ -75,7 +75,6 @@
     "htpr-6979-typed-writes-sections-notifications": "EVERYONE",
     "htpr-6991-back-first-open": "EVERYONE",
     "htpr-6994-search-esc-leaves": "EVERYONE",
-    "htpr-7008-phone-first-load-js": "EVERYONE",
     "htpr-7008-phone-first-paint": "EVERYONE",
     "htpr-7009-dedupe-task-detail-reads": "EVERYONE",
     "htpr-7010-haiku-5-5": "EVERYONE",
