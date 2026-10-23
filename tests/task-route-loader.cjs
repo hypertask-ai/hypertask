@@ -21,6 +21,7 @@ function load(file, mocks) {
     }
     if (!filename) throw new Error(`Missing module: ${specifier}`);
     if (cache.has(filename)) return cache.get(filename).exports;
+    if (filename.endsWith(".json")) return JSON.parse(fs.readFileSync(filename, "utf8"));
     const loadedModule = { exports: {} };
     cache.set(filename, loadedModule);
     const compiled = ts.transpileModule(fs.readFileSync(filename, "utf8"), {
