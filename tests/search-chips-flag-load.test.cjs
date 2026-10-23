@@ -8,12 +8,14 @@ const root = path.resolve(__dirname, '..')
 
 test('URL searches preserve operators and chip keyboard ownership', async (t) => {
   const dom = new JSDOM('<div id="root"></div>', { url: 'https://app.hypertask.ai/search?searchTerm=is:open' })
-  const globals = ['window', 'document', 'navigator', 'HTMLElement', 'IS_REACT_ACT_ENVIRONMENT']
+  const globals = ['window', 'document', 'navigator', 'HTMLElement', 'localStorage', 'sessionStorage', 'IS_REACT_ACT_ENVIRONMENT']
   const previous = globals.map((name) => [name, Object.getOwnPropertyDescriptor(global, name)])
   global.window = dom.window
   global.document = dom.window.document
   Object.defineProperty(global, 'navigator', { configurable: true, value: dom.window.navigator })
   global.HTMLElement = dom.window.HTMLElement
+  global.localStorage = dom.window.localStorage
+  global.sessionStorage = dom.window.sessionStorage
   global.IS_REACT_ACT_ENVIRONMENT = true
   dom.window.HTMLElement.prototype.attachEvent = () => {}
   dom.window.HTMLElement.prototype.detachEvent = () => {}
@@ -56,7 +58,7 @@ test('URL searches preserve operators and chip keyboard ownership', async (t) =>
     require.cache[navigationPath] = { id: navigationPath, filename: navigationPath, loaded: true, exports: { useRouter: () => ({ replace() {}, push() {}, back() { backs++ } }) } }
     const queryPath = require.resolve('@tanstack/react-query')
     stubs.push([queryPath, require.cache[queryPath]])
-    require.cache[queryPath] = { id: queryPath, filename: queryPath, loaded: true, exports: { useQueryClient: () => ({ invalidateQueries() {} }) } }
+    require.cache[queryPath] = { id: queryPath, filename: queryPath, loaded: true, exports: { useQueryClient: () => ({ invalidateQueries() {}, setQueryData() {} }) } }
     const { useSearch } = createJiti(__filename, { alias: { '@': path.join(root, 'src') }, interopDefault: true })(path.join(root, 'src/hooks/Search/useSearch.ts'))
     const Search = ({ term }) => {
       searchState = useSearch(term)
@@ -85,7 +87,7 @@ test('URL searches preserve operators and chip keyboard ownership', async (t) =>
     await React.act(async () => { searchState.setSelectedIndex(0); input.focus() })
     await React.act(async () => { down() })
     assert.equal(searchState.selectedIndex, 0, 'open picker owns ArrowDown')
-    await t.test('page Back yields Escape to an open picker, then resumes when closed', async () => {
+    await t.test('Escape yields to an open picker, then restores submitted tab history', async () => {
       const escape = () => input.dispatchEvent(new dom.window.KeyboardEvent('keydown', { key: 'Escape', keyCode: 27, bubbles: true, cancelable: true }))
       await React.act(async () => searchState.setInputValue('from:val'))
       await React.act(async () => escape())
@@ -94,7 +96,10 @@ test('URL searches preserve operators and chip keyboard ownership', async (t) =>
       pickerOpen = false
       await React.act(async () => reactRoot.render(React.createElement(Search, { term: 'login' })))
       await React.act(async () => escape())
-      assert.equal(backs, 1, 'second Escape with no picker retains Back')
+      assert.equal(backs, 0, 'tab history is restored instead of browser Back')
+      assert.equal(searchState.inputValue, 'login')
+      assert.equal(posts.at(-1).searchQuery, 'login')
+      assert.equal(searchState.typedTasks.length, 2, 'restored search results are applied')
     })
   } finally {
     if (reactRoot) await React.act(async () => { reactRoot.unmount() })

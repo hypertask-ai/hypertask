@@ -6,7 +6,6 @@ const React = require('react')
 const { JSDOM } = require('jsdom')
 const { createJiti } = require('jiti')
 const root = path.resolve(__dirname, '..')
-const layoutFlag = 'htpr-6865-search-layout'
 
 async function withSearch(t, config, check) {
   const dom = new JSDOM('<div id="root"></div>', { url: 'https://example.test/search' })
@@ -20,7 +19,7 @@ async function withSearch(t, config, check) {
   const cached = new Map(Object.entries(require.cache))
   const stub = (filename, exports) => { require.cache[filename] = { id: filename, filename, loaded: true, exports } }
   const source = (file, exports) => stub(path.join(root, file), exports)
-  const flags = Object.fromEntries([layoutFlag].map((key) => [key, true]))
+  const flags = {}
   Object.assign(flags, config.flags)
   const requests = []
   const lookups = []
@@ -185,7 +184,7 @@ test('client Ask AI uses the same readable chip summary and hands readable names
   })
 })
 
-test('client permanently uses label counts and board scope unless layout is off', async (t) => {
+test('client permanently uses label counts and board scope for everyone', async (t) => {
   await withSearch(t, {}, async ({ type, tick, options, press, lookups, requests, state }) => {
     assert.deepEqual(state().availableSearchBoards.map((board) => board.id), [7, 8])
     await type('board:7 label:bu')
@@ -197,12 +196,5 @@ test('client permanently uses label counts and board scope unless layout is off'
     await press('Tab')
     assert.equal(requests.at(-1).body.searchQuery, 'board:7 label:bug')
   })
-  await withSearch(t, { flags: { [layoutFlag]: false } }, async ({ type, tick, lookups, state }) => {
-    assert.deepEqual(state().availableSearchBoards, [])
-    await type('board:7 label:bu')
-    await tick(180)
-    assert.equal(document.querySelector('[data-search-layout]'), null)
-    assert.equal(document.querySelector('.ml-auto'), null)
-    assert.ok(lookups.every((params) => !params.has('boards')))
-  })
+
 })

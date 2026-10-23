@@ -48,20 +48,19 @@ test('existing suggestion and tips footers match Escape for all four flag combin
     stub('src/components/Common/UserAvatar.tsx', { default: () => null })
     stub('src/components/AI_CHAT/MentionListComp.tsx', { MentionListRows: () => null })
     const Component = createJiti(__filename, { alias: { '@': path.join(root, 'src') }, interopDefault: true, fsCache: false, jsx: { runtime: 'automatic' } })(path.join(root, 'src/app/search/SearchChipsInput.tsx')).default
-    const Harness = ({ initial }) => {
+    const Harness = ({ initial, layout }) => {
       const [value, onChange] = React.useState(initial)
-      return React.createElement(Component, { value, onChange, onRun: () => {}, boardId: 7, layoutEnabled: true, inputRef: React.useRef(null) })
+      return React.createElement(Component, { value, onChange, onRun: () => {}, boardId: 7, layoutEnabled: layout, inputRef: React.useRef(null) })
     }
     reactRoot = require('react-dom/client').createRoot(document.getElementById('root'))
     let sequence = 0
     for (const layout of [false, true]) {
-      setFlag('htpr-6865-search-layout', layout)
       for (const [footer, leaves] of [[false, false], [false, true], [true, false], [true, true]]) {
         setFlag(footerFlag, footer)
         setFlag(leavesFlag, leaves)
         for (const initial of ['', 'is:']) {
           const context = `layout=${layout}, footer=${footer}, leaves=${leaves}, query=${initial}`
-          await React.act(async () => reactRoot.render(React.createElement(Harness, { key: sequence++, initial })))
+          await React.act(async () => reactRoot.render(React.createElement(Harness, { key: sequence++, initial, layout })))
           const input = document.querySelector('[aria-label="Search tasks"]')
           await React.act(async () => input.focus())
           assert.equal(input.getAttribute('aria-expanded'), 'true', context)
