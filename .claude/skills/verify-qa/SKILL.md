@@ -59,12 +59,12 @@ BYOK team `977c0c91-c14f-47b0-b8bc-933cc751f19d` and Pro team `2ce0d9f8-4179-489
 
 After refresh, require HTTP 200 from authenticated `POST /api/app-shell/bootstrap` and verify `slices.user.data.id` matches the table before using the state. Check plans with `POST /api/teams/getAllSidebar`; check BYOK's saved key with `GET /api/teams/byokKeys?teamId=977c0c91-c14f-47b0-b8bc-933cc751f19d` (`gateway`, `enabled: true`, `hasSecret: true`). For member tests, require the shared board in that user's sidebar, not their personal board.
 
-Never use Valentin's account, password, or cookies. If the shot is a login page, the state expired: record a failed doctor and stop the QA run. Refresh only the selected QA identity through the documented flow; if its credentials are unavailable, record it as unreachable. Do not invent a login.
+Never use Valentin's account, password, or cookies. If the shot is a login page, first run `.claude/skills/verify-qa/scripts/qa-identity <state> --expect <id from the table>` (YPER4-607, https://app.hypertask.ai/detail/project-4060/607). `identity ok` means the tool did not load the state: fix the tool call with `phone-shot.sh` or Playwright `storageState`; do not refresh or tell other runners the login expired. Only `identity expired` means refresh that one identity through the documented flow. For `identity mismatch` or `identity unreadable`, record a failed doctor and stop to resolve the identity or read failure, not refresh. If its credentials are unavailable, record it as unreachable. Do not invent a login.
 
 ## Steps
 
 0. **Pick the feature-map page** for the area the ticket touches, from `reference/feature-map/INDEX.md`. Read only that page. It says how a customer reaches the area, how to drive it, what usually breaks, what proof to collect, and the cleanup. If the area has no page, or this change altered the UI, add or update the page in the same pull request before you call the run done (maintain-verification-skill: the map stays honest with the app).
-1. **Doctor first.** Do not judge the change until both are true:
+1. **Doctor first.** On a login landing, run `.claude/skills/verify-qa/scripts/qa-identity <state> --expect <id from the table>` first: `identity ok` means fix state loading, not refresh; only `identity expired` means refresh that identity (YPER4-607, https://app.hypertask.ai/detail/project-4060/607). Do not judge the change until both are true:
    - The GitHub Production deployment for the merge sha is `success`.
    - The QA login is signed in on `https://app.hypertask.ai/my-tasks`. Shoot that page with `phone-shot.sh` and `--state ~/.config/hypertask-videos/storageState-qa.json`; it uses the repo's Playwright to load the state before navigation and refuses login landings before writing a PNG. A login page is a failed doctor, not a failed feature.
 2. **Read the ticket's acceptance criteria** and note the pull request and the merge sha.

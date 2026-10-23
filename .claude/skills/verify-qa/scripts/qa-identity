@@ -1,0 +1,119 @@
+#!/usr/bin/env node
+
+const { readFile } = require('node:fs/promises');
+
+const appHost = 'app.hypertask.ai';
+const endpoint = '/api/users/getById';
+
+function finish(message, code) {
+  console.log(message);
+  process.exitCode = code;
+}
+
+async function main() {
+  const args = process.argv.slice(2);
+  const stateFile = args.shift();
+  let expected;
+  let baseUrl = `https://${appHost}`;
+  const seen = new Set();
+
+  if (!stateFile || stateFile.startsWith('--')) {
+    return finish('identity unreadable: usage: qa-identity <state-file> [--expect <userId>]', 2);
+  }
+  while (args.length) {
+    const flag = args.shift();
+    const value = args.shift();
+    if (!value || seen.has(flag) || !['--expect', '--base-url'].includes(flag)) {
+      return finish('identity unreadable: invalid arguments', 2);
+    }
+    seen.add(flag);
+    if (flag === '--expect') {
+      expected = Number(value);
+      if (!/^\d+$/.test(value) || !Number.isSafeInteger(expected) || expected <= 0) {
+        return finish('identity unreadable: expected user id must be a positive integer', 2);
+      }
+    } else {
+      try {
+        const url = new URL(value);
+        if (url.protocol !== 'http:' || url.hostname !== '127.0.0.1' ||
+            url.username || url.password || url.pathname !== '/' || url.search || url.hash) {
+          throw new Error();
+        }
+        baseUrl = url.origin;
+      } catch {
+        return finish('identity unreadable: test base URL must be an HTTP origin on 127.0.0.1', 2);
+      }
+    }
+  }
+
+  let state;
+  try {
+    state = JSON.parse(await readFile(stateFile, 'utf8'));
+  } catch {
+    return finish('identity unreadable: cannot read a valid storage-state JSON file', 2);
+  }
+  if (!state || !Array.isArray(state.cookies)) {
+    return finish('identity unreadable: storage state must contain a cookies array', 2);
+  }
+
+  const cookies = [];
+  const now = Date.now() / 1000;
+  for (const cookie of state.cookies) {
+    if (!cookie || typeof cookie.domain !== 'string' || typeof cookie.path !== 'string' ||
+        !cookie.path.startsWith('/') || typeof cookie.name !== 'string' ||
+        !/^[!#$%&'*+\-.^_`|~0-9A-Za-z]+$/.test(cookie.name) ||
+        typeof cookie.value !== 'string' || !/^[\x21-\x3A\x3C-\x7E]*$/.test(cookie.value) ||
+        !Number.isFinite(cookie.expires)) {
+      return finish('identity unreadable: invalid storage-state cookie', 2);
+    }
+    const domain = cookie.domain.toLowerCase();
+    const matchesDomain = domain.startsWith('.')
+      ? appHost === domain.slice(1) || appHost.endsWith(domain)
+      : appHost === domain;
+    const matchesPath = endpoint === cookie.path ||
+      endpoint.startsWith(cookie.path.endsWith('/') ? cookie.path : `${cookie.path}/`);
+    if (matchesDomain && matchesPath && (cookie.expires === -1 || cookie.expires > now)) {
+      cookies.push(cookie);
+    }
+  }
+  if (!cookies.length) {
+    return finish('identity unreadable: no valid app cookies', 2);
+  }
+  cookies.sort((a, b) => b.path.length - a.path.length);
+
+  let response;
+  let data;
+  const signal = AbortSignal.timeout(15_000);
+  try {
+    response = await fetch(new URL(endpoint, baseUrl), {
+      method: 'GET',
+      headers: { Cookie: cookies.map(cookie => `${cookie.name}=${cookie.value}`).join('; ') },
+      redirect: 'manual',
+      signal,
+    });
+    if (response.status === 401 || response.status === 403) {
+      await response.body?.cancel();
+      return finish(`identity expired: the server refused this state (${response.status})`, 3);
+    }
+    if (!response.ok) {
+      await response.body?.cancel();
+      return finish(`identity unreadable: unexpected server status (${response.status})`, 2);
+    }
+    try {
+      data = await response.json();
+    } catch {
+      return finish(signal.aborted ? 'identity unreadable: request timed out' : 'identity unreadable: invalid identity response', 2);
+    }
+  } catch {
+    return finish(signal.aborted ? 'identity unreadable: request timed out' : 'identity unreadable: network error', 2);
+  }
+  if (!Number.isSafeInteger(data?.id) || data.id <= 0) {
+    return finish('identity unreadable: response has no valid user id', 2);
+  }
+  if (expected !== undefined && data.id !== expected) {
+    return finish(`identity mismatch: user ${data.id}, expected ${expected}`, 1);
+  }
+  finish(`identity ok: user ${data.id}`, 0);
+}
+
+main().catch(() => finish('identity unreadable: identity check failed', 2));
