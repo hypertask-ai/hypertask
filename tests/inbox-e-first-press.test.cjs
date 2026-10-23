@@ -228,14 +228,17 @@ for (const mobile of [false, true]) {
   });
 }
 
-test("cached-path hydrated archive advances without split navigation or refresh", t => {
+test("cached-path hydrated archive keeps split navigation and refresh before advancing", t => {
   const flow = makeFlow(t, {
     routerPathname: "/inbox",
     currentTask: { ...task, _count: { notifications: 1 }, notifications: [notification] },
   });
   flow.pressE();
   assert.deepEqual(flow.archived, [{ item: notification, mode: "Notification" }]);
-  assert.deepEqual(flow.navigations, [["Replace", "/detail/project-15/7003?inboxFlow=true"]]);
+  assert.deepEqual(flow.navigations, [
+    ["Replace", "/inbox?split=All"], ["Replace", "/inbox?split=All"], ["Refresh"],
+    ["Replace", "/detail/project-15/7003?inboxFlow=true"],
+  ]);
 });
 
 test("archiving on the actual Inbox still updates the split URL and refreshes", async t => {
