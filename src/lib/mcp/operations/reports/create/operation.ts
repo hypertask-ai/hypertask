@@ -1,3 +1,4 @@
+import { IdempotencyAccessError } from "@/lib/mcp/idempotency/idempotencyStore"
 import { reportMcpOperationCrash } from '@/lib/mcp/operationCrashReport'
 import { wrapMcpRoute } from '@/lib/mcp/routeWrapper'
 import { NextRequest, NextResponse } from 'next/server'
@@ -164,11 +165,14 @@ export async function POST(request: NextRequest) {
             url: getReportUrl(report.projectId, report.slug),
           },
         }
-      }
+      },
+      ctx.teamScope != null ? ctx.agentId : undefined,
+      ctx.teamScope
     )
 
     return NextResponse.json(response)
   } catch (error) {
+    if (error instanceof IdempotencyAccessError) return NextResponse.json({ error: error.message }, { status: 404 })
     if (error instanceof IdempotencyInProgressError) {
       return NextResponse.json({ error: error.message }, { status: 409 })
     }

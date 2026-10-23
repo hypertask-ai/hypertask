@@ -1,3 +1,4 @@
+import { IdempotencyAccessError } from "@/lib/mcp/idempotency/idempotencyStore"
 import { agentScopeEnforced, recordAgentBoardScopeMiss } from "@/lib/auth/agentScope";
 import { projectContentAccessWhere } from "@/utils/controllers/projects/getAllIncludes";
 import { reportMcpOperationCrash } from '@/lib/mcp/operationCrashReport'
@@ -247,9 +248,11 @@ export async function POST(
         clientIdempotencyKey,
         { teamId: team.id, manifest: validated.data },
         produceResponseBody,
-        ctx.agentId && agentScopeEnforced() ? ctx.agentId : undefined
+        ctx.agentId && (ctx.teamScope != null || agentScopeEnforced()) ? ctx.agentId : undefined,
+        ctx.teamScope
       )
     } catch (error) {
+      if (error instanceof IdempotencyAccessError) return NextResponse.json({ error: error.message }, { status: 404 })
       if (error instanceof IdempotencyInProgressError) {
         return NextResponse.json(
           {

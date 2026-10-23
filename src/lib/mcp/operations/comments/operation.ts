@@ -1,3 +1,4 @@
+import { IdempotencyAccessError } from "@/lib/mcp/idempotency/idempotencyStore"
 import type { AgentTokenTeamScope } from '@/lib/mcp/auth/types'
 import { getProjectWhere } from '@/utils/controllers/projects/getAllIncludes'
 import type { AttachmentFileInput } from "@/lib/mcp-server/validations/attachment.validation";
@@ -979,7 +980,8 @@ export async function POST(request: NextRequest) {
           task.id,
           comment.id,
           'POST',
-          imageUrls
+          imageUrls,
+          { userId: user.id, agentId: ctx.agentId, teamScope: ctx.teamScope }
         )
 
         const commentWithAttachments = await prisma.comment.findUnique({
@@ -1044,11 +1046,14 @@ export async function POST(request: NextRequest) {
             })) || []
           }
         }
-      }
+      },
+      ctx.teamScope != null ? ctx.agentId : undefined,
+      ctx.teamScope
     )
 
     return NextResponse.json(mcpResponse, { status: 201 })
   } catch (error) {
+    if (error instanceof IdempotencyAccessError) return NextResponse.json({ error: error.message }, { status: 404 })
     const identifierResponse = taskIdentifierErrorResponse(error)
     if (identifierResponse) return identifierResponse
     if (error instanceof AgentInvocationNotPendingError) {

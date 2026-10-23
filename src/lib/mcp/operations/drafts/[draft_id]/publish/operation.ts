@@ -127,7 +127,7 @@ export async function POST(request: NextRequest, props: { params: Promise<{ draf
         teamScope: ctx.teamScope,
       })
 
-      await persistUrlsForComment(draft.content, taskId, comment.id, 'POST')
+      await persistUrlsForComment(draft.content, taskId, comment.id, 'POST', [], { userId: user.id, agentId: ctx.agentId, teamScope: ctx.teamScope })
 
       const response: PublishDraftResponse = {
         success: true,
@@ -183,7 +183,7 @@ export async function POST(request: NextRequest, props: { params: Promise<{ draf
         )
       }
 
-      await persistUrlsForDescription(draft.content, taskId)
+      await persistUrlsForDescription(draft.content, taskId, [], { userId: user.id, agentId: ctx.agentId, teamScope: ctx.teamScope })
 
       const response: PublishDraftResponse = {
         success: true,

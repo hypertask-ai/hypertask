@@ -1,3 +1,4 @@
+import { IdempotencyAccessError } from "@/lib/mcp/idempotency/idempotencyStore"
 import { inlineAgentImagesForUser } from "@/lib/media/inlineAgentImages.server";
 import { reportMcpOperationCrash } from '@/lib/mcp/operationCrashReport';
 import { wrapMcpRoute, validateMcpRouteAuth as validateMcpAuth, checkMcpRouteRateLimit as checkMcpRateLimit, readMcpRouteJsonBody as readJsonBody } from '@/lib/mcp/routeWrapper'
@@ -273,11 +274,14 @@ export async function POST(request: NextRequest) {
                     message: 'Task created successfully',
                     ...(sessionAgent ? { agent: sessionAgent } : {}),
                 };
-            }
+            },
+            ctx.teamScope != null ? ctx.agentId : undefined,
+            ctx.teamScope
         );
 
         return NextResponse.json(response, { status: 200 });
     } catch (error) {
+        if (error instanceof IdempotencyAccessError) return NextResponse.json({ error: error.message }, { status: 404 })
         if (error instanceof IdempotencyInProgressError) {
             return NextResponse.json(
                 { success: false, error: error.message, ...(correlationId && { correlationId }) },

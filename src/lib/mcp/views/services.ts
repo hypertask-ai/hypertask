@@ -1,3 +1,4 @@
+import { savedViewBoardAccessWhere } from "@/utils/controllers/projects/getAllIncludes";
 import type { AgentTokenTeamScope } from '@/lib/mcp/auth/types';
 import prisma from '@/lib/prisma';
 import { getUniqueSlug, getViewUrl } from '@/utils/controllers/projects/views/viewsHelperAPIfunctions';
@@ -11,7 +12,6 @@ import {
     acquireBoardFilterWriteLock,
     assertViewIsNotManagedSmartSplit,
     validateBoardFilterLabelReferences,
-    withBoardFilterWriteLock,
 } from '@/utils/controllers/projects/views/boardFilterWriteLock';
 import { canonicalBoardColumns, normalizeNativeBoardFilters } from './nativeBoardSettings';
 
@@ -189,40 +189,41 @@ export async function createView(input: CreateViewInput) {
     const sortingMode = input.sorting_mode ?? 'Manual';
     const sortingStack = sanitizeSortingStack(input.sorting_stack, sortingMode);
 
-    const project_view = await prisma.project_View.upsert({
-        create: { projectId },
-        update: {},
-        where: { projectId },
-    });
-
-    const view = await withBoardFilterWriteLock(projectId, board_filters, (tx) => tx.view.create({
-        data: {
-            title,
-            project_view_id: project_view.id,
-            userId,
-            visibility: input.visibility ?? 'Public',
-            board_sorting_mode: sortingMode,
-            board_sorting_order: input.sorting_order ?? 'Descending',
-            board_sorting_stack: sortingStack as unknown as Prisma.InputJsonValue,
-            board_subtask_setting: input.subtask_setting ?? DEFAULT_SUBTASK_SETTING,
-            board_empty_sections: input.board_empty_sections ?? EmptySections.Show,
-            board_filters: board_filters as unknown as Prisma.InputJsonValue,
-            board_columns_view: boardColumns as unknown as Prisma.InputJsonValue | undefined,
-            lastUsedAt: new Date(),
-        },
-    }));
-
-    const slug = await getUniqueSlug(project_view.id, title);
-    if (slug) {
-        await prisma.view.update({ where: { id: view.id }, data: { slug } });
-    }
-
-    if (input.setAsDefault) {
-        await prisma.project_View.update({
+    const { view, slug } = await prisma.$transaction(async (tx) => {
+        if (input.teamScope != null) {
+            await tx.$queryRaw`SELECT id FROM "Project" WHERE id = ${projectId} FOR UPDATE`;
+            if (!await tx.project.findFirst({ where: { id: projectId, ...savedViewBoardAccessWhere(userId, input.agentId, input.teamScope) }, select: { id: true } })) throw new Error('Project not found or access denied');
+        }
+        const project_view = await tx.project_View.upsert({
+            create: { projectId },
+            update: {},
             where: { projectId },
-            data: { default_view_id: view.id },
         });
-    }
+        await acquireBoardFilterWriteLock(tx, projectId);
+        await validateBoardFilterLabelReferences(tx, projectId, board_filters);
+        const view = await tx.view.create({
+            data: {
+                title,
+                project_view_id: project_view.id,
+                userId,
+                visibility: input.visibility ?? 'Public',
+                board_sorting_mode: sortingMode,
+                board_sorting_order: input.sorting_order ?? 'Descending',
+                board_sorting_stack: sortingStack as unknown as Prisma.InputJsonValue,
+                board_subtask_setting: input.subtask_setting ?? DEFAULT_SUBTASK_SETTING,
+                board_empty_sections: input.board_empty_sections ?? EmptySections.Show,
+                board_filters: board_filters as unknown as Prisma.InputJsonValue,
+                board_columns_view: boardColumns as unknown as Prisma.InputJsonValue | undefined,
+                lastUsedAt: new Date(),
+            },
+        });
+        const slug = await getUniqueSlug(project_view.id, title);
+        if (slug) await tx.view.update({ where: { id: view.id }, data: { slug } });
+        if (input.setAsDefault) {
+            await tx.project_View.update({ where: { projectId }, data: { default_view_id: view.id } });
+        }
+        return { view, slug };
+    });
 
     broadcastBoardChange(projectId, { originUserId: userId });
 
@@ -414,6 +415,10 @@ export async function updateView(input: UpdateViewInput) {
         },
     } satisfies Prisma.ViewUpdateArgs;
     const updated = await prisma.$transaction(async (tx) => {
+        if (input.teamScope != null) {
+            await tx.$queryRaw`SELECT id FROM "Project" WHERE id = ${projectId} FOR UPDATE`;
+            if (!await tx.project.findFirst({ where: { id: projectId, ...savedViewBoardAccessWhere(userId, input.agentId, input.teamScope) }, select: { id: true } })) throw new Error('Project not found or access denied');
+        }
         await acquireBoardFilterWriteLock(tx, projectId);
         await assertViewIsNotManagedSmartSplit(tx, projectId, viewId);
         if (data.board_filters !== undefined) {
@@ -483,31 +488,39 @@ export async function applyView(input: { viewId: string; userId: number; agentId
     const isDefault = view.project_view.default_view_id === viewId;
     const appliedViewId = isDefault ? null : viewId;
 
-    const userProjectView = await prisma.user_Project_View.upsert({
-        create: {
-            userId,
-            project_view_id: view.project_view.id,
-            appliedViewId,
-        },
-        update: { appliedViewId },
-        where: {
-            user_project: { userId, project_view_id: view.project_view.id },
-        },
-    });
+    const apply = async (db: Prisma.TransactionClient) => {
+        if (input.teamScope != null) {
+            await db.$queryRaw`SELECT id FROM "Project" WHERE id = ${projectId} FOR UPDATE`;
+            if (!await db.project.findFirst({ where: { id: projectId, ...savedViewBoardAccessWhere(userId, agentId, input.teamScope) }, select: { id: true } })) throw new Error('Project not found or access denied');
+        }
+        const userProjectView = await db.user_Project_View.upsert({
+            create: {
+                userId,
+                project_view_id: view.project_view.id,
+                appliedViewId,
+            },
+            update: { appliedViewId },
+            where: {
+                user_project: { userId, project_view_id: view.project_view.id },
+            },
+        });
 
-    const now = new Date();
-    await prisma.view.update({ where: { id: viewId }, data: { lastUsedAt: now } });
-    await prisma.view_Last_Used.upsert({
-        create: { userId, viewId, lastUsedAt: now },
-        update: { lastUsedAt: now },
-        where: { user_view_last_used: { userId, viewId } },
-    });
+        const now = new Date();
+        await db.view.update({ where: { id: viewId }, data: { lastUsedAt: now } });
+        await db.view_Last_Used.upsert({
+            create: { userId, viewId, lastUsedAt: now },
+            update: { lastUsedAt: now },
+            where: { user_view_last_used: { userId, viewId } },
+        });
 
-    if (userProjectView.unsavedViewId && userProjectView.unsavedViewId !== viewId) {
-        await prisma.view
-            .delete({ where: { id: userProjectView.unsavedViewId } })
-            .catch(() => undefined);
-    }
+        if (userProjectView.unsavedViewId && userProjectView.unsavedViewId !== viewId) {
+            await db.view
+                .delete({ where: { id: userProjectView.unsavedViewId, ...(input.teamScope != null ? { project_view: { projectId, project: savedViewBoardAccessWhere(userId, agentId, input.teamScope) } } : {}) } })
+                .catch(() => undefined);
+        }
+    };
+    if (input.teamScope != null) await prisma.$transaction(apply);
+    else await apply(prisma);
 
     broadcastBoardChange(projectId, { originUserId: userId });
 
@@ -544,6 +557,10 @@ export async function deleteView(viewId: string, userId: number, agentId?: strin
     }
 
     await prisma.$transaction(async (tx) => {
+        if (teamScope != null) {
+            await tx.$queryRaw`SELECT id FROM "Project" WHERE id = ${view.project_view.projectId} FOR UPDATE`;
+            if (!await tx.project.findFirst({ where: { id: view.project_view.projectId, ...savedViewBoardAccessWhere(userId, agentId, teamScope) }, select: { id: true } })) throw new Error('Project not found or access denied');
+        }
         await acquireBoardFilterWriteLock(tx, view.project_view.projectId);
         await assertViewIsNotManagedSmartSplit(
             tx,

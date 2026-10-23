@@ -300,7 +300,9 @@ export async function PATCH(request: NextRequest, props: { params: Promise<{ com
       sanitizedText,
       comment.task.id,
       commentId,
-      'PUT'
+      'PUT',
+      [],
+      { userId: user.id, agentId: ctx.agentId, teamScope: ctx.teamScope }
     )
 
     const commentWithAgent = await prisma.comment.findUnique({

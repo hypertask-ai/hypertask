@@ -636,7 +636,8 @@ export async function createTask(data: {
     await persistUrlsForDescription(
         description,
         taskWithDescription.id,
-        imageUrls
+        imageUrls,
+        { userId, agentId, teamScope: data.teamScope }
     );
 
     return taskWithDescription;

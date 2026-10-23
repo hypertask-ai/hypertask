@@ -154,7 +154,7 @@ export async function createReport({
   if (!project) return null;
 
   try {
-    return await prisma.report.create({
+    const create = (db: Pick<Prisma.TransactionClient, "report">) => db.report.create({
       data: {
         projectId,
         slug: normalizedSlug,
@@ -166,7 +166,12 @@ export async function createReport({
         agentId: agentId ?? null,
       },
       include: reportInclude,
-    });
+    })
+    return teamScope != null ? await prisma.$transaction(async (tx) => {
+      await tx.$queryRaw`SELECT id FROM "Project" WHERE id = ${projectId} FOR UPDATE`;
+      if (!await tx.project.findFirst({ where: { id: projectId, ...getProjectWhere(userId, agentId, teamScope) }, select: { id: true } })) return null;
+      return create(tx);
+    }) : await create(prisma);
   } catch (error) {
     if (
       error instanceof Prisma.PrismaClientKnownRequestError &&
