@@ -52,7 +52,7 @@ function weeklyFixture(t, count = 1) {
   mkdirSync(bin, { recursive: true });
   const env = { ...process.env, HOME: home, PATH: `${bin}:${process.env.PATH}`, FIXTURE_HOME: home };
   delete env.GITHUB_STEP_SUMMARY;
-  executable(path.join(home, 'projects/token-ladder/bin/token-ladder'), 'console.log("Token ladder: CODEX mode.");');
+  executable(path.join(home, 'projects/token-ladder/bin/token-ladder'), 'console.log("Token ladder (Valentin Yeo / Hypertask): CODEX mode (Claude 26% used). Every session stays a Claude Code orchestrator.");');
   executable(path.join(bin, 'hax'), `
 const fs = require('node:fs');
 const path = require('node:path');

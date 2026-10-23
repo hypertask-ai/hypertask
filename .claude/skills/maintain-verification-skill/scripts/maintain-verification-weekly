@@ -85,9 +85,10 @@ fi
 cat "$run/checker.md"
 mapfile -t picked < "$run/picked"
 if ((${#picked[@]})); then
-  ladder=$(timeout 30 "$HOME/projects/token-ladder/bin/token-ladder" hook-prompt)
-  ladder=$(printf '%s\n' "$ladder" | sed -n '/^Token ladder:/ {p;q;}')
-  [[ -n $ladder ]] || { echo 'maintain-verification: missing Token ladder line' >&2; exit 1; }
+  mode=$(timeout 30 "$HOME/projects/token-ladder/bin/token-ladder" hook-prompt | grep -m1 -oE '(CODEX|CLAUDE) mode' || true)
+  [[ -n $mode ]] || { echo 'maintain-verification: token ladder printed no mode' >&2; exit 1; }
+  [[ $mode == 'CODEX mode' ]] || { echo "maintain-verification: token ladder is in $mode; Codex helpers wait for CODEX mode, nothing filed" >&2; exit 0; }
+  ladder="Token ladder: $mode."
 fi
 
 source_page() {
