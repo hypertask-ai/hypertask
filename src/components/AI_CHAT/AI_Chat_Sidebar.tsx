@@ -1,6 +1,7 @@
 "use client";
 
 import { useFlag } from "@/hooks/useFlag";
+import { HTPR_7688_PAST_CHATS_FIRST_FLAG } from "@/lib/flags/definitions/htpr-7688-past-chats-first";
 import { HTPR_7518_AGENT_SIDEBAR_CHATS_FLAG } from "@/lib/flags/keys";
 import AgentChatClient from "@/app/agents/chat/AgentChatClient";
 import type { TAgent } from "@/app/agents/AgentsRegister";
@@ -33,6 +34,7 @@ export const AI_Chat_Sidebar = ({
   const chat = useAiChatContext();
   const { showWelcomeScreen, minimized } = chat;
   const enabled = useFlag(HTPR_7518_AGENT_SIDEBAR_CHATS_FLAG);
+  const pastChatsFirst = useFlag(HTPR_7688_PAST_CHATS_FIRST_FLAG);
   const project = useRecoilValue(currentProjectAtom);
   const currentUser = useRecoilValue(currentUserAtom);
   const projectId = project?.id;
@@ -71,7 +73,7 @@ export const AI_Chat_Sidebar = ({
     }
   }, [enabled, projectId]);
 
-  const selectTarget = async (next: SidebarChatTarget) => {
+  const selectTarget = async (next: SidebarChatTarget, aiSessionId?: string) => {
     const intent = ++intentRef.current;
     if (next.kind !== "ai" && !sidebarEnabled) return;
     let nativeSessionId: string | null = null;
@@ -92,7 +94,7 @@ export const AI_Chat_Sidebar = ({
         setRosterError(error instanceof Error ? error.message : "Could not open chat");
         return;
       }
-    } else if (target.kind === "native-agent" && !aiSessionRef.current) {
+    } else if (target.kind === "native-agent" && !aiSessionRef.current && !aiSessionId) {
       setNativeSidebarChat(null);
       await chat.startNewSession();
     }
@@ -104,14 +106,21 @@ export const AI_Chat_Sidebar = ({
       drafts.current.set(key, { html: latest.editor?.getHTML() ?? "", files: [...latest.fileItems] });
       if (leaving.kind === "native-agent") writeDraft(currentUser.id, leaving.agent.id, latest.editor?.getText() ?? "");
     }
-    if (nativeSessionId) {
-      setNativeSidebarChat({ sessionId: nativeSessionId, projectId: projectId! });
-      latest.selectSession(nativeSessionId);
-    } else {
+    if (aiSessionId) {
+      setTarget(next);
       setNativeSidebarChat(null);
-      if (leaving.kind === "native-agent" && aiSessionRef.current) latest.selectSession(aiSessionRef.current);
+      latest.selectSession(aiSessionId);
+      aiSessionRef.current = aiSessionId;
+    } else {
+      if (nativeSessionId) {
+        setNativeSidebarChat({ sessionId: nativeSessionId, projectId: projectId! });
+        latest.selectSession(nativeSessionId);
+      } else {
+        setNativeSidebarChat(null);
+        if (leaving.kind === "native-agent" && aiSessionRef.current) latest.selectSession(aiSessionRef.current);
+      }
+      setTarget(next);
     }
-    setTarget(next);
     if (next.kind === "external-agent") {
       if (leaving.kind === "native-agent") {
         const stored = drafts.current.get("ai");
@@ -232,7 +241,7 @@ export const AI_Chat_Sidebar = ({
         )}
       >
         <ChatHeader sidebarChats={enabled && sidebarEnabled ? { projectId: projectId!, target, agents, error: rosterError,
-          onSelect: (next) => void selectTarget(next), onRetry: () => void loadRoster() } : undefined} />
+          onSelect: (next) => void selectTarget(next), onSelectSession: pastChatsFirst ? (id) => void selectTarget({ kind: "ai" }, id) : chat.selectSession, onRetry: () => void loadRoster() } : undefined} />
 
         {!minimized && (
           <div className={cn("flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden", sidebarEnabled && target.kind === "external-agent" && "hidden")}>
