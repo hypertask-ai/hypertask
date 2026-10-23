@@ -77,11 +77,12 @@ async function settled(page: Page, landmarks: Locator[]) {
       if (!box || box.width <= 0 || box.height <= 0) return false
       boxes.push(box)
     }
-    const next = JSON.stringify(boxes)
+    const pageMetrics = await page.evaluate(() => ({ height: document.documentElement.scrollHeight, scrollY: window.scrollY }))
+    const next = JSON.stringify({ boxes, pageMetrics })
     equalSamples = next === previous ? equalSamples + 1 : 1
     previous = next
     return equalSamples >= 3
-  }, { intervals: [150], timeout: 10_000, message: 'three equal landmark geometry samples' }).toBe(true)
+  }, { intervals: [150], timeout: 10_000, message: 'three equal landmark and page height samples' }).toBe(true)
 }
 
 test.beforeEach(async ({ page, context }) => {
@@ -115,6 +116,9 @@ for (const screen of screens) {
         await expect(lastComment, 'last seeded comment must be visible').toBeVisible()
       }, { timeout: 15_000 })
       if (screen === 'comment-box') {
+        await test.step('page height settles before scrolling to the last comment', async () => {
+          await settled(page, [page.locator('#title-input'), lastComment, composer])
+        }, { timeout: 15_000 })
         await test.step('scroll last seeded comment and composer into view', async () => {
           await lastComment.evaluate(comment => comment.scrollIntoView({ behavior: 'instant', block: 'center' }), undefined, { timeout: 15_000 })
           if (testInfo.project.name === 'desktop') {
