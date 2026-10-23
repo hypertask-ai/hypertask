@@ -174,13 +174,13 @@ export const storeSubscriptionPlans: ISubscriptionPlan[] = [
   },
   {
     id: "Free",
-    name: "Free Trial",
+    name: "Free",
     types: [
       {
         id: 0,
         title: "Monthly",
         price: "$0",
-        description: "/ 14 days",
+        description: "Free forever",
       }
     ],
     perks: [
@@ -203,8 +203,33 @@ export const storeSubscriptionPlans: ISubscriptionPlan[] = [
         unlimited: true,
       },
       {
-        title: "Team seats",
-        amount: "Up to 50",
+        title: "Members",
+        amount: "Unlimited",
+        unlimited: false,
+      },
+      {
+        title: "Boards",
+        amount: "Up to 2",
+        unlimited: false,
+      },
+      {
+        title: "Open tickets",
+        amount: "Up to 250",
+        unlimited: false,
+      },
+      {
+        title: "Archived tickets and archived boards",
+        amount: "Don't count, so archiving frees room",
+        unlimited: false,
+      },
+      {
+        title: "Files",
+        amount: "Up to 10 MB each",
+        unlimited: false,
+      },
+      {
+        title: "Teams already over a limit",
+        amount: "Keep everything; you just can't add more until you're under it or upgrade",
         unlimited: false,
       },
       {
