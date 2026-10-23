@@ -398,8 +398,7 @@ function stripQuotedContent(root: HTMLElement): void {
 }
 
 function renderCommentPreview(html: string) {
-    const div = document.createElement("div");
-    div.innerHTML = html;
+    const div = new window.DOMParser().parseFromString(html, "text/html").body;
     stripQuotedContent(div);
     return div.textContent?.trim() || convertToPlain(html);
 }
@@ -410,8 +409,7 @@ export function renderCommentMentionSimple(html: string, currentUserId: string |
         return preview.mention ? <>{preview.mention.before}<span className="bg-mention-highlight text-mention-highlight" style={{ borderRadius: "4px", padding: "2px 4px" }}>@{preview.mention.name}</span>{preview.mention.after}</> : preview.text;
     }
   
-    const div = document.createElement("div");
-    div.innerHTML = html;
+    const div = new window.DOMParser().parseFromString(html, "text/html").body;
     const fullText = div.textContent || '';
     stripQuotedContent(div);
     const mentionSpan = div.querySelector(`span[data-type="mention"][data-label="name-${currentUserId}"]`);

@@ -1,3 +1,4 @@
+import type { AgentTokenTeamScope } from '@/lib/mcp/auth/types';
 import { agentScopeEnforced, recordAgentBoardScopeMiss } from "@/lib/auth/agentScope";
 import type { Prisma, Status } from "@prisma/client";
 import prisma from "@/lib/prisma";
@@ -8,14 +9,15 @@ export function taskAccessWhere(
   taskId: number | undefined,
   options: {
     agentId?: string | null;
+    teamScope?: AgentTokenTeamScope | null;
     projectStatus?: Status;
     taskStatus?: Status;
     scope?: "team" | "content";
   } = {},
 ): Prisma.TaskWhereInput {
   const projectAccess = options.scope === "content"
-    ? taskWriteAccessWhere(userId, options.agentId)
-    : getProjectWhere(userId, options.agentId);
+    ? taskWriteAccessWhere(userId, options.agentId, options.teamScope)
+    : getProjectWhere(userId, options.agentId, options.teamScope);
   return {
     ...(taskId === undefined ? {} : { id: taskId }),
     ...(options.taskStatus ? { status: options.taskStatus } : {}),
@@ -30,10 +32,11 @@ export async function userCanAccessTask(
   userId: number,
   taskId: number,
   agentId?: string | null,
+  teamScope?: AgentTokenTeamScope | null,
 ): Promise<boolean> {
   if (!Number.isInteger(taskId) || taskId <= 0) return false;
   const task = await prisma.task.findFirst({
-    where: taskAccessWhere(userId, taskId, { agentId }),
+    where: taskAccessWhere(userId, taskId, { agentId, teamScope }),
     select: { id: true, ...(agentId && !agentScopeEnforced() ? { projectId: true } : {}) },
   });
   if (task) recordAgentBoardScopeMiss(task.projectId);

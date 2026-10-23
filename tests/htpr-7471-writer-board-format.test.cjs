@@ -36,6 +36,8 @@ function moduleWithStubs(file, stubs) {
     require: (id) => {
       if (id in stubs) return stubs[id];
       if (id === "@/lib/net/downloadWithoutBrotli") return { downloadWithoutBrotli: undefined };
+      if (id === "@/app/api/ai/_lib/skillAccess") return { AccountSkillAccessError: class extends Error {} };
+      if (id === "@/lib/auth/agentScope") return require("./helpers/agent-board-scope.cjs").enforcedScope;
       if (["@/lib/ai/taskWriterSkills", "./taskWriterSkills"].includes(id)) return load(path.join(root, "src/lib/ai/taskWriterSkills.ts"));
       if (id === "@/lib/media/inlineAgentImages.server") return { inlineAgentImagesForUser: async (html) => html };
       if (id === "@/lib/media/inlineAgentImages") return load(path.join(root, "src/lib/media/inlineAgentImages.ts"));
@@ -103,6 +105,10 @@ function harness(options = {}) {
     agent: { findFirst: async () => options.badAgent ? null : { id: "agent" } },
   };
   const run = moduleWithStubs("src/app/api/ai/_lib/taskWriterRun.ts", {
+    "@/lib/rag/authorizeIndexedRows": { authorizeIndexedRows: async (taskRows, commentRows, principal) => {
+      assert.equal(principal?.teamScope == null, true);
+      return { taskRows, commentRows };
+    } },
     "@/lib/prisma": { __esModule: true, default: prisma },
     "@/lib/flags": { ...keys, isFeatureEnabled: async (key, userId) => {
       checks.push([key, userId]);

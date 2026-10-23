@@ -322,6 +322,7 @@ test("a human assignment coexists with an agent owned by the same user", async (
   assert.deepEqual(calls.fenceOptions.at(-1), {
     allowHumanOverride: false,
     allowNonNormalLeaseAdoption: true,
+    teamScope: undefined,
   });
 
   const staleToggle = await assign(

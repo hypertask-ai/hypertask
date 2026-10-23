@@ -107,6 +107,7 @@ async function notifyReaction(
         notificationBody: target.text.replace(/<[^>]+>/g, '').slice(0, 500),
         devices,
         payload: '',
+        taskId: target.taskId,
         taskTitle: '',
         afterAppDomain: `detail/project-${target.projectId}/${target.taskUniqueIndex}#comment-${target.commentId}`,
       });
@@ -140,7 +141,7 @@ export const POST = wrapMcpRoute(createCommentReactionHandler({
     const task = await findTaskByIdentifier(
       ctx.user,
       { task_id: comment.taskId, ticket_number: null, unique_index: null, project_id: null },
-      ctx.agentId
+      ctx.agentId, undefined, ctx.teamScope
     );
     if (!task) return null;
     return {

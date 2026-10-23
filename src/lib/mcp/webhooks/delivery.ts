@@ -1,3 +1,4 @@
+import { webhookCredentialAllows } from "@/lib/webhooks/credentialScope";
 import crypto from 'crypto'
 import { Agent, request as undiciRequest } from 'undici'
 import prisma from '@/lib/prisma'
@@ -111,6 +112,8 @@ export async function deliverWebhook(
   sub: { id: string; url: string; secret: string },
   delivery: WebhookDelivery
 ): Promise<boolean> {
+  const subscription = await prisma.webhookSubscription.findUnique({ where: { id: sub.id } });
+  if (!subscription || !await webhookCredentialAllows(subscription.agentId, delivery, subscription)) return false;
   const deliveryId = crypto.randomUUID()
   const envelope = createWebhookEnvelope(delivery, {
     id: deliveryId,

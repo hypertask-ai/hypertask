@@ -52,7 +52,7 @@ export async function POST(request: NextRequest) {
     }
 
     if (ctx.agentId && !(await prisma.project.findFirst({
-      where: { id: projectId, ...taskWriteAccessWhere(ctx.user.id, ctx.agentId) },
+      where: { id: projectId, ...taskWriteAccessWhere(ctx.user.id, ctx.agentId, ctx.teamScope) },
       select: { id: true },
     }))) {
       return NextResponse.json({ success: false, error: 'Board not found' }, { status: 404 })
@@ -68,7 +68,7 @@ export async function POST(request: NextRequest) {
     }
 
     const project = await prisma.project.findFirst({
-      where: { id: projectId, ownerId: ctx.user.id, status: { not: 'Deleted' }, ...(ctx.agentId ? taskWriteAccessWhere(ctx.user.id, ctx.agentId) : {}) },
+      where: { id: projectId, ownerId: ctx.user.id, status: { not: 'Deleted' }, ...(ctx.agentId || ctx.teamScope != null ? taskWriteAccessWhere(ctx.user.id, ctx.agentId, ctx.teamScope) : {}) },
       select: { id: true, name: true, title: true, status: true },
     })
 

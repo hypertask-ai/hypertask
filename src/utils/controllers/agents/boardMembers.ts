@@ -1,4 +1,6 @@
 import { assertAgentBoardInviteScope } from "@/lib/mcp/agents/delegatedAccess";
+import type { AgentTokenTeamScope } from "@/lib/mcp/auth/types";
+import { getProjectWhere } from "@/utils/controllers/projects/getAllIncludes";
 import prisma from "@/lib/prisma";
 import type { Member, Prisma, User } from "@prisma/client";
 import { canAttachAgentToTeam } from "./teamScope";
@@ -11,10 +13,14 @@ import { boardAgentVisibilityWhere } from "@/lib/agents/visibility";
 export async function getAccessibleAgentBoard(
   projectId: number,
   requestingUserId: number,
+  actingAgentId?: string | null,
+  teamScope?: AgentTokenTeamScope | null,
+  database: { project: Pick<Prisma.TransactionClient["project"], "findFirst"> } = prisma,
 ) {
-  return prisma.project.findFirst({
+  return database.project.findFirst({
     where: {
       id: projectId,
+      ...(teamScope != null ? { AND: [getProjectWhere(requestingUserId, actingAgentId, teamScope)] } : {}),
       status: "Normal",
       OR: [
         { ownerId: requestingUserId },

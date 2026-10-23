@@ -1,3 +1,4 @@
+import type { AgentTokenTeamScope } from '@/lib/mcp/auth/types';
 import { taskIdentifierErrorResponse } from "@/lib/mcp/tasks/resolveTask";
 import { findIdParamOutOfRange, idOutOfRangeMessage } from "@/lib/mcp/listParams";
 import { reportMcpOperationCrash } from "@/lib/mcp/operationCrashReport";
@@ -33,7 +34,8 @@ async function findTaskByIdentifier(
     ticket_number?: string | null;
     unique_index?: number | null;
     project_id?: number | null;
-  }
+  },
+  teamScope?: AgentTokenTeamScope | null,
 ) {
   const { task_id, ticket_number, unique_index, project_id } = options;
 
@@ -42,7 +44,7 @@ async function findTaskByIdentifier(
       where: {
         id: task_id,
         status: { not: "Deleted" },
-        project: getProjectWhere(user.id, agentId),
+        project: getProjectWhere(user.id, agentId, teamScope),
       },
       select: { id: true, projectId: true },
     });
@@ -55,7 +57,7 @@ async function findTaskByIdentifier(
       where: {
         ticketNumber: reference,
         status: { not: "Deleted" },
-        project: getProjectWhere(user.id, agentId),
+        project: getProjectWhere(user.id, agentId, teamScope),
       },
       select: { id: true, projectId: true },
     });
@@ -67,7 +69,7 @@ async function findTaskByIdentifier(
           uniqueIndex: Number(reference),
           status: { not: "Deleted" },
           ...(project_id ? { projectId: project_id } : {}),
-          project: getProjectWhere(user.id, agentId),
+          project: getProjectWhere(user.id, agentId, teamScope),
         },
         select: { id: true, projectId: true },
       });
@@ -85,7 +87,7 @@ async function findTaskByIdentifier(
         projectId: project_id,
         uniqueIndex: unique_index,
         status: { not: "Deleted" },
-        project: getProjectWhere(user.id, agentId),
+        project: getProjectWhere(user.id, agentId, teamScope),
       },
       select: { id: true, projectId: true },
     });
@@ -196,7 +198,7 @@ export async function POST(request: NextRequest) {
       ticket_number: ticket_number ?? null,
       unique_index: unique_index ?? null,
       project_id: project_id ?? null,
-    });
+    }, ctx.teamScope);
 
     if (!taskRef) {
       return NextResponse.json(
@@ -208,7 +210,7 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const targetAccess = await validateProjectAccess(target_project_id, user.id, ctx.agentId);
+    const targetAccess = await validateProjectAccess(target_project_id, user.id, ctx.agentId, ctx.teamScope);
     if (targetAccess.error) {
       return NextResponse.json(
         {
@@ -274,7 +276,7 @@ export async function POST(request: NextRequest) {
           targetSectionId,
           currentProjectId: taskRef.projectId,
           currentUser,
-          agentId: ctx.agentId,
+          agentId: ctx.agentId, teamScope: ctx.teamScope,
         })
     );
 

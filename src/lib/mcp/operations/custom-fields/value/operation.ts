@@ -118,7 +118,7 @@ export async function POST(request: NextRequest) {
     const access = await validateProjectAccess(
       task.projectId,
       ctx.user.id,
-      ctx.agentId
+      ctx.agentId, ctx.teamScope
     );
     if (access.error) {
       return NextResponse.json(

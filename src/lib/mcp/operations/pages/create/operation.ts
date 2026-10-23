@@ -1,3 +1,4 @@
+import { IdempotencyAccessError } from "@/lib/mcp/idempotency/idempotencyStore"
 import { findIdParamOutOfRange, idOutOfRangeMessage } from '@/lib/mcp/listParams'
 import { reportMcpOperationCrash } from '@/lib/mcp/operationCrashReport'
 import { wrapMcpRoute } from '@/lib/mcp/routeWrapper'
@@ -221,7 +222,7 @@ export async function POST(request: NextRequest) {
     const task = await findTaskByIdentifier(
       ctx.user,
       identifier,
-      ctx.agentId
+      ctx.agentId, undefined, ctx.teamScope
     )
     if (!task || !(await canAccessProject(task.projectId, ctx))) {
       return NextResponse.json(
@@ -243,7 +244,7 @@ export async function POST(request: NextRequest) {
           contentType: contentType as PageContentType,
           parentPageId,
           userId: ctx.user.id,
-          agentId: ctx.agentId,
+          agentId: ctx.agentId, teamScope: ctx.teamScope,
         })
 
         return {
@@ -255,7 +256,9 @@ export async function POST(request: NextRequest) {
             url: getPageUrl(page.publicId),
           },
         }
-      }
+      },
+      ctx.teamScope != null ? ctx.agentId : undefined,
+      ctx.teamScope
     )
 
     const warnings = ctx.agentId
@@ -264,6 +267,7 @@ export async function POST(request: NextRequest) {
 
     return NextResponse.json({ ...response, ...(warnings.length ? { warnings } : {}) })
   } catch (error) {
+    if (error instanceof IdempotencyAccessError) return NextResponse.json({ error: error.message }, { status: 404 })
     const identifierResponse = taskIdentifierErrorResponse(error, 'ticket_number')
     if (identifierResponse) return identifierResponse
     if (error instanceof IdempotencyInProgressError) {

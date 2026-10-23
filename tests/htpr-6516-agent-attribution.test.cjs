@@ -166,6 +166,6 @@ test("MCP label writes pass the acting agent into the activity", () => {
   assert.match(services, /fromAgent\?: ActingAgent \| null/);
   assert.equal(services.match(/fromAgent,/g)?.length >= 4, true);
   const update = ["src/lib/mcp/tasks/fields/persist.ts", "src/lib/mcp/tasks/fields/labels.ts"].map(read).join("\n");
-  assert.match(update, /fromAgent: actingAgent|actingAgent\n\s*\)/);
+  assert.match(update, /fromAgent: actingAgent|actingAgent,\s*context\.ctx\.teamScope\s*\)/);
   assert.match(update, /select: actingAgentSelect/);
 });

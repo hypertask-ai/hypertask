@@ -1,3 +1,4 @@
+import { webhookCredentialAllows } from "@/lib/webhooks/credentialScope";
 import crypto from "crypto";
 import type { AgentRun, Prisma } from "@prisma/client";
 import prisma from "@/lib/prisma";
@@ -29,6 +30,7 @@ type AgentWebhookTransaction = Pick<
   | "agentRun"
   | "featureFlag"
   | "user"
+  | "agent" | "project" | "task" | "comment" | "chatSession"
 >;
 
 type EligibleAgentWebhookSubscription = {
@@ -86,7 +88,7 @@ export async function persistAgentWebhookEvent(
     input.agentId,
     input.projectId,
   );
-  if (!subscription?.events.includes(input.event)) return null;
+  if (!subscription?.events.includes(input.event) || !await webhookCredentialAllows(input.agentId, input, { projectId: subscription.projectId }, tx)) return null;
 
   return createAgentWebhookDelivery(tx, subscription.id, input.agentId, input);
 }
@@ -112,9 +114,9 @@ export async function replayAgentWebhookDelivery(input: {
 }): Promise<string | null> {
   const source = await prisma.agentWebhookDelivery.findFirst({
     where: { id: input.deliveryId, subscriptionId: input.subscriptionId },
-    select: { event: true, payload: true },
+    select: { event: true, payload: true, subscription: true },
   });
-  if (!source) return null;
+  if (!source || !await webhookCredentialAllows(source.subscription.agentId, source.payload, source.subscription)) return null;
 
   const deliveryId = crypto.randomUUID();
   const sourcePayload = source.payload as Record<string, unknown>;
@@ -400,7 +402,7 @@ export async function persistAgentRunTriggerWebhooks(
     input.agentId,
     input.projectId,
   );
-  if (!subscription) return [];
+  if (!subscription || !await webhookCredentialAllows(input.agentId, input, { projectId: subscription.projectId }, tx)) return [];
 
   const triggerSubscribed = subscription.events.includes(input.event);
   const runsEnabled = await isFeatureEnabled(
@@ -526,6 +528,7 @@ export async function persistAgentTaskRunPromptWebhooks(
       continue;
     }
 
+    if (!await webhookCredentialAllows(run.agentId, { ...input, runId: run.id }, { projectId: input.projectId }, tx)) continue;
     const updated = await tx.agentRun.updateMany({
       where: {
         id: run.id,
@@ -596,15 +599,11 @@ export async function persistAgentWebhookEvents(
         (subscription): subscription is typeof subscription & { agentId: string } =>
           typeof subscription.agentId === "string" && subscription.agentId.length > 0,
       )
-      .map((subscription) =>
-        createAgentWebhookDelivery(
-          tx,
-          subscription.id,
-          subscription.agentId,
-          eventInput,
-        ),
-      ),
-  );
+      .map(async (subscription) => {
+        if (!await webhookCredentialAllows(subscription.agentId, eventInput, { projectId: input.projectId }, tx)) return [];
+        return [await createAgentWebhookDelivery(tx, subscription.id, subscription.agentId, eventInput)];
+      }),
+  ).then((ids) => ids.flat());
 }
 
 type AgentTaskWebhookInput = {

@@ -1,3 +1,4 @@
+import type { AgentTokenTeamScope } from '@/lib/mcp/auth/types';
 import { agentScopeEnforced, recordAgentBoardScopeMiss } from "@/lib/auth/agentScope";
 import { stripForeignTaskRelations } from "@/lib/tasks/sameBoardRelations";
 import { projectContentAccessWhere } from "@/utils/controllers/projects/getAllIncludes";
@@ -166,7 +167,7 @@ export function taskDetailInclude(userId: number) {
     };
 }
 
-export function taskMcpGetInclude(userId: number, agentId?: string | null) {
+export function taskMcpGetInclude(userId: number, agentId?: string | null, teamScope?: AgentTokenTeamScope | null) {
     return {
     ...taskDetailInclude(userId),
     attachments: {
@@ -178,7 +179,7 @@ export function taskMcpGetInclude(userId: number, agentId?: string | null) {
         },
     },
     subTasks: {
-        ...(agentId && agentScopeEnforced() ? { where: { project: projectContentAccessWhere(userId, agentId) } } : {}),
+        ...((teamScope != null || (agentId && agentScopeEnforced())) ? { where: { project: projectContentAccessWhere(userId, agentId, teamScope) } } : {}),
         select: {
             id: true,
             ticketNumber: true,
@@ -188,7 +189,7 @@ export function taskMcpGetInclude(userId: number, agentId?: string | null) {
         },
     },
     parentTask: {
-        ...(agentId && agentScopeEnforced() ? { where: { project: projectContentAccessWhere(userId, agentId) } } : {}),
+        ...((teamScope != null || (agentId && agentScopeEnforced())) ? { where: { project: projectContentAccessWhere(userId, agentId, teamScope) } } : {}),
         select: {
             id: true,
             ticketNumber: true,
@@ -211,7 +212,7 @@ export function taskMcpGetInclude(userId: number, agentId?: string | null) {
     };
 }
 
-export function mapTaskToMcpGetResponse(task: any, userId: number, agentId?: string | null) {
+export function mapTaskToMcpGetResponse(task: any, userId: number, agentId?: string | null, teamScope?: AgentTokenTeamScope | null) {
     recordAgentBoardScopeMiss(task.projectId);
     task = stripForeignTaskRelations(task);
     const subTasks = Array.isArray(task.subTasks)
@@ -241,7 +242,7 @@ export function mapTaskToMcpGetResponse(task: any, userId: number, agentId?: str
         description: mapTaskDescriptionContent(task),
         boardId: task.projectId,
         boardTitle: task.project.title || '',
-        parent_id: agentId && agentScopeEnforced() && !task.parentTask ? undefined : task.parentTaskId || undefined,
+        parent_id: (teamScope != null || (agentId && agentScopeEnforced())) && !task.parentTask ? undefined : task.parentTaskId || undefined,
         parent_task: task.parentTask
             ? {
                   id: task.parentTask.id,

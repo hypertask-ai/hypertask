@@ -1,6 +1,8 @@
 import { mcpVisibleAgentSelect, mapVisibleMcpAgent } from "@/lib/mcp/agents";
 import { Prisma } from "@prisma/client";
 import prisma from "@/lib/prisma";
+import { resolveAgentTeamScope } from "@/lib/auth/agentTeamScope";
+import type { AgentTokenTeamScope } from "@/lib/mcp/auth/types";
 import { getProjectWhere } from "@/utils/controllers/projects/getAllIncludes";
 import { type IUser } from "@/models/model";
 import { PriorityConstants, EstimateConstants } from "@/lib/constants/constants";
@@ -104,6 +106,7 @@ export async function loadActingAgent(
   displayName: string;
   prompt: string | null;
   modelOptionId: string | null;
+  teamScope: AgentTokenTeamScope | null;
 } | null> {
   if (!sessionId) return null;
 
@@ -113,7 +116,7 @@ export async function loadActingAgent(
   });
   if (!session?.agentId) return null;
 
-  return prisma.agent.findFirst({
+  const agent = await prisma.agent.findFirst({
     where: {
       id: session.agentId,
       userId,
@@ -125,8 +128,13 @@ export async function loadActingAgent(
       displayName: true,
       prompt: true,
       modelOptionId: true,
+      credentialTeamId: true,
+      credentialTeamAccessBinding: true,
     },
   });
+  if (!agent) throw new Error("Agent not found or access denied");
+  const teamScope = await resolveAgentTeamScope(userId, agent);
+  return { id: agent.id, displayName: agent.displayName, prompt: agent.prompt, modelOptionId: agent.modelOptionId, teamScope };
 }
 
 export async function applyPriorityUpdate(

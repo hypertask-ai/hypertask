@@ -1,3 +1,6 @@
+import { IdempotencyAccessError } from "@/lib/mcp/idempotency/idempotencyStore"
+import type { AgentTokenTeamScope } from '@/lib/mcp/auth/types'
+import { getProjectWhere } from '@/utils/controllers/projects/getAllIncludes'
 import type { AttachmentFileInput } from "@/lib/mcp-server/validations/attachment.validation";
 import { HTPR_7514_INLINE_AGENT_IMAGES_FLAG } from "@/lib/flags/keys";
 import { inlineAgentImagesForUser } from "@/lib/media/inlineAgentImages.server";
@@ -153,7 +156,7 @@ export type AddCommentResponse = {
   }
 }
 
-type AgentLogPrincipal = { userId: number; agentId: string; displayName: string; source: 'agent' }
+type AgentLogPrincipal = { userId: number; agentId: string; teamScope: AgentTokenTeamScope | null; displayName: string; source: 'agent' }
 
 async function prepareAgentLogEntry(principal: AgentLogPrincipal, html: string) {
   const { runtimeAgentRunsEnabledFor, agentRunActivitiesEnabledFor } = await import('@/lib/agentRuns/service')
@@ -314,7 +317,7 @@ export async function GET(request: NextRequest) {
         unique_index: uniqueIndex,
         project_id: projectId,
       },
-      ctx.agentId
+      ctx.agentId, undefined, ctx.teamScope
     )
 
     if (!task) {
@@ -330,6 +333,7 @@ export async function GET(request: NextRequest) {
     const commentWhere: Prisma.CommentWhereInput = includeActivity
       ? { taskId: task.id }
       : { taskId: task.id, activity: { equals: Prisma.DbNull } }
+    if (ctx.teamScope != null) commentWhere.task = { project: getProjectWhere(user.id, ctx.agentId, ctx.teamScope) }
     if (listQuery?.query) {
       commentWhere.text = { contains: listQuery.query, mode: 'insensitive' }
     }
@@ -738,7 +742,7 @@ export async function POST(request: NextRequest) {
         unique_index,
         project_id,
       },
-      ctx.agentId
+      ctx.agentId, undefined, ctx.teamScope
     )
 
     if (!task) {
@@ -884,6 +888,7 @@ export async function POST(request: NextRequest) {
       ? {
           userId: user.id,
           agentId: ctx.agentId,
+          teamScope: ctx.teamScope,
           displayName: userObj.displayName?.trim() || 'Hypertask agent',
           source: 'agent' as const,
         }
@@ -960,6 +965,7 @@ export async function POST(request: NextRequest) {
           ownerId: taskWithOwner.userId,
           currentUser: userObj,
           agentId: ctx.agentId || undefined,
+          teamScope: ctx.teamScope,
           directReplySourceCommentId: ctx.agentId ? reply_to_comment_id : undefined,
           directReplyInvocationId: ctx.agentId ? reply_to_invocation_id : undefined
         })
@@ -974,7 +980,8 @@ export async function POST(request: NextRequest) {
           task.id,
           comment.id,
           'POST',
-          imageUrls
+          imageUrls,
+          { userId: user.id, agentId: ctx.agentId, teamScope: ctx.teamScope }
         )
 
         const commentWithAttachments = await prisma.comment.findUnique({
@@ -1039,11 +1046,14 @@ export async function POST(request: NextRequest) {
             })) || []
           }
         }
-      }
+      },
+      ctx.teamScope != null ? ctx.agentId : undefined,
+      ctx.teamScope
     )
 
     return NextResponse.json(mcpResponse, { status: 201 })
   } catch (error) {
+    if (error instanceof IdempotencyAccessError) return NextResponse.json({ error: error.message }, { status: 404 })
     const identifierResponse = taskIdentifierErrorResponse(error)
     if (identifierResponse) return identifierResponse
     if (error instanceof AgentInvocationNotPendingError) {

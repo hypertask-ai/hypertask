@@ -1,6 +1,7 @@
 import { reportMcpOperationCrash } from '@/lib/mcp/operationCrashReport'
 import { wrapMcpRoute, validateMcpRouteAuth as validateMcpAuth, checkMcpRouteRateLimit as checkMcpRateLimit } from '@/lib/mcp/routeWrapper'
 import { NextRequest, NextResponse } from 'next/server'
+import { requireRole } from '@/lib/mcp/agents/scopes'
 
 import prisma from '@/lib/prisma'
 import { updateSection, deleteSection } from '@/lib/mcp/sections/services'
@@ -37,6 +38,10 @@ export async function PATCH(
         },
         { status: 401 }
       )
+    }
+    if (ctx.agentId) {
+      const roleError = await requireRole(ctx, 'write')
+      if (roleError) return roleError
     }
     const user = ctx.user;
     const projectId = parseInt(params.projectId)
@@ -173,7 +178,7 @@ export async function PATCH(
       moveAfterSectionId,
       isDone,
       autoAssign
-    }, ctx.agentId)
+    }, ctx.agentId, ctx.teamScope)
 
     if (!result.success) {
       const payload: Record<string, unknown> = { success: false, error: result.error }
@@ -237,6 +242,10 @@ export async function DELETE(
         { status: 401 }
       )
     }
+    if (ctx.agentId) {
+      const roleError = await requireRole(ctx, 'write')
+      if (roleError) return roleError
+    }
     const user = ctx.user;
     const projectId = parseInt(params.projectId)
     const sectionId = parseInt(params.sectionId)
@@ -269,7 +278,7 @@ export async function DELETE(
       projectId,
       sectionId,
       userId: user.id
-    }, ctx.agentId)
+    }, ctx.agentId, ctx.teamScope)
 
     if (!result.success) {
       const payload: Record<string, unknown> = { success: false, error: result.error }

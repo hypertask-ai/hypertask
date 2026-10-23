@@ -1,3 +1,4 @@
+import { TaskTeamScopeError } from "@/lib/mcp/tasks/agentMutationFence"
 import { reportMcpOperationCrash } from '@/lib/mcp/operationCrashReport'
 import { wrapMcpRoute } from '@/lib/mcp/routeWrapper'
 import { NextRequest, NextResponse } from 'next/server'
@@ -69,6 +70,7 @@ export async function POST(
     if (!run) return noStore({ success: false, error: 'Task not found' }, 404)
     return noStore({ success: true, run }, 201)
   } catch (error) {
+    if (error instanceof TaskTeamScopeError) return noStore({ success: false, error: error.message }, 404)
     if (error instanceof AgentRunInputError) {
       return noStore({ success: false, error: error.message }, 400)
     }

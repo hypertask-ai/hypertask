@@ -24,7 +24,7 @@ function matches(row, where) {
 function harness({ agent = false, workspace = false } = {}) {
   const userId = 201;
   const team = { id: "team-1", googleAccount: { userId: 900 }, projects: [{ id: 101 }] };
-  const agentRow = { id: "agent-1", userId, revokedAt: null, runtimeGeneration: 0, displayName: "Agent" };
+  const agentRow = { id: "agent-1", userId, revokedAt: null, runtimeGeneration: 0, displayName: "Agent", credentialTeamId: null, credentialTeamAccessBinding: null };
   const project = {
     id: 101, teamId: team.id, team, ownerId: 100, status: "Normal",
     members: [{ userId, agentId: agent ? agentRow.id : null, status: "Accepted", agent: agentRow }],
@@ -99,6 +99,7 @@ function harness({ agent = false, workspace = false } = {}) {
     },
     boardWebhookAttempt: { create: async ({ data }) => { calls.attempts.push(data); return data; } },
     agent: {
+      findUnique: async ({ where }) => state.agent && matches(state.agent, where) ? state.agent : null,
       findFirst: async ({ where }) => state.agent && matches(state.agent, where) ? state.agent : null,
       updateMany: async () => ({ count: state.agent ? 1 : 0 }),
       delete: async () => { state.agent = null; return agentRow; },

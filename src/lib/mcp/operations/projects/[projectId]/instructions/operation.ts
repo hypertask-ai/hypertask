@@ -4,7 +4,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 
 import { createUnauthorizedResponse } from '@/lib/mcp/auth'
-import { assertProjectAccess } from "@/app/api/ai/_lib/customInstructions";
+import { assertProjectAccess, withScopedProjectWrite } from "@/app/api/ai/_lib/customInstructions";
 import { getAiModelOptionById } from "@/lib/aiModelOptions";
 import prisma from "@/lib/prisma";
 
@@ -38,7 +38,7 @@ export async function GET(
   try {
     const { projectId: rawProjectId } = await props.params;
     const projectId = parseProjectId(rawProjectId);
-    await assertProjectAccess(ctx.user.id, projectId);
+    await assertProjectAccess(ctx.user.id, projectId, ctx.agentId, ctx.teamScope);
 
     const instruction = await prisma.aI_Custom_Instructions.findFirst({
       where: { projectId },
@@ -73,12 +73,11 @@ export async function PUT(
   try {
     const { projectId: rawProjectId } = await props.params;
     const projectId = parseProjectId(rawProjectId);
-    await assertProjectAccess(ctx.user.id, projectId);
+    await assertProjectAccess(ctx.user.id, projectId, ctx.agentId, ctx.teamScope);
 
     const input = updateSchema.parse(await request.json());
-    let modelOption;
+    const modelOption = getAiModelOptionById(input.model_selected);
     if (input.model_selected !== undefined) {
-      modelOption = getAiModelOptionById(input.model_selected);
       if (!modelOption) {
         return NextResponse.json(
           {
@@ -91,33 +90,35 @@ export async function PUT(
       }
     }
 
-    const existing = await prisma.aI_Custom_Instructions.findFirst({
-      where: { projectId },
-      select: { id: true },
+    const instruction = await withScopedProjectWrite({ userId: ctx.user.id, agentId: ctx.agentId, teamScope: ctx.teamScope }, projectId, async (db) => {
+      const existing = await db.aI_Custom_Instructions.findFirst({
+        where: { projectId },
+        select: { id: true },
+      });
+
+      const modelData = modelOption
+        ? { model_selected: modelOption.id, source_selected: modelOption.source }
+        : {};
+
+      return existing
+        ? await db.aI_Custom_Instructions.update({
+            where: { id: existing.id, ...(ctx.teamScope != null ? { project: (await import("@/utils/controllers/projects/getAllIncludes")).getProjectWhere(ctx.user.id, ctx.agentId, ctx.teamScope) } : {}) },
+            data: {
+              customInstruction: input.custom_instruction,
+              ...modelData,
+              lastUpdatedAt: new Date(),
+            },
+            include: { attachments: true },
+          })
+        : await db.aI_Custom_Instructions.create({
+            data: {
+              projectId,
+              customInstruction: input.custom_instruction,
+              ...modelData,
+            },
+            include: { attachments: true },
+          });
     });
-
-    const modelData = modelOption
-      ? { model_selected: modelOption.id, source_selected: modelOption.source }
-      : {};
-
-    const instruction = existing
-      ? await prisma.aI_Custom_Instructions.update({
-          where: { id: existing.id },
-          data: {
-            customInstruction: input.custom_instruction,
-            ...modelData,
-            lastUpdatedAt: new Date(),
-          },
-          include: { attachments: true },
-        })
-      : await prisma.aI_Custom_Instructions.create({
-          data: {
-            projectId,
-            customInstruction: input.custom_instruction,
-            ...modelData,
-          },
-          include: { attachments: true },
-        });
 
     return NextResponse.json({ success: true, instruction });
   } catch (error) {

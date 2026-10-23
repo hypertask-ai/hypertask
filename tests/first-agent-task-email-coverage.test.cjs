@@ -232,8 +232,8 @@ test("section deletion succeeds while email is pending and after provider failur
 
 test("MCP, public REST and CLI section deletion retain the authenticated agent into the shared bulk move", () => {
   const operation = read("src/lib/mcp/operations/projects/[projectId]/sections/[sectionId]/operation.ts");
-  assert.match(operation, /await deleteSection\(\{\s*projectId,\s*sectionId,\s*userId: user.id\s*\}, ctx.agentId\)/);
-  assert.match(read("src/lib/mcp/sections/services.ts"), /sectionService.deleteSection\(\{ sectionId, projectId, userId, agentId \}\)/);
+  assert.match(operation, /await deleteSection\(\{\s*projectId,\s*sectionId,\s*userId: user.id\s*\}, ctx.agentId, ctx.teamScope\)/);
+  assert.match(read("src/lib/mcp/sections/services.ts"), /sectionService.deleteSection\(\{ sectionId, projectId, userId, agentId, teamScope \}\)/);
   assert.match(read("src/app/api/mcp/projects/[projectId]/sections/[sectionId]/route.ts"), /DELETE as executeDELETE/);
   assert.match(read("next.config.js"), /source: "\/api\/v1\/:path\*",\s*destination: "\/api\/mcp\/:path\*"/);
 });
@@ -275,6 +275,7 @@ test("MCP section-delete endpoint reaches completion email with the verified age
     "next/server": { NextResponse: Response },
     "@/lib/prisma": { __esModule: true, default: {} },
     "@/lib/mcp/sections/services": { deleteSection: f.deleteSection },
+    "@/lib/mcp/agents/scopes": { requireRole: async () => null },
     "@/lib/realtime/server": { broadcastBoardChange: async () => {} },
   });
   const response = await DELETE(new Request("https://example.invalid/api/mcp/projects/15/sections/1", { method: "DELETE" }), {

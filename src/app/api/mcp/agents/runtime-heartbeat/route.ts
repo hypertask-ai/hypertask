@@ -40,7 +40,7 @@ export async function POST(request: NextRequest) {
       agentId: ctx.agentId,
       userId: ctx.user.id,
       authenticatedGeneration: ctx.agentRuntimeGeneration,
-      projectWhere: getProjectWhere(ctx.user.id),
+      projectWhere: getProjectWhere(ctx.user.id, undefined, ctx.teamScope),
       body,
       db: prisma,
       save: saveAgentRuntimeSnapshot,

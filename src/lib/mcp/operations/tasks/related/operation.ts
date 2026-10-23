@@ -81,7 +81,7 @@ export async function GET(request: NextRequest) {
 
   let task
   try {
-    task = await findTaskByIdentifier(ctx.user, identifier, ctx.agentId)
+    task = await findTaskByIdentifier(ctx.user, identifier, ctx.agentId, undefined, ctx.teamScope)
   } catch (error) {
     const identifierResponse = taskIdentifierErrorResponse(error, 'ticket_number')
     if (identifierResponse) return identifierResponse
@@ -185,7 +185,7 @@ export async function POST(request: NextRequest) {
 
       let task
       try {
-        task = await findTaskByIdentifier(ctx.user, identifier, ctx.agentId)
+        task = await findTaskByIdentifier(ctx.user, identifier, ctx.agentId, undefined, ctx.teamScope)
       } catch (error) {
         const identifierResponse = taskIdentifierErrorResponse(error, 'ticket_number')
         if (identifierResponse) return identifierResponse

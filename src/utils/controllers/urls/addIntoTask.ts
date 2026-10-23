@@ -1,3 +1,4 @@
+import type { Prisma } from "@prisma/client";
 import { IUrl } from '@/models/model';
 
 import { NextApiHandler, NextApiRequest, NextApiResponse } from 'next';
@@ -6,7 +7,7 @@ import { measuredSizeString } from "@/lib/attachments/measuredSize";
 import { urlRowData } from "@/lib/attachments/urlRowData";
 
 
-const addIntoTask = async (urlsToAdd:IUrl[],commentId:number,method:string|undefined) => {
+const addIntoTask = async (urlsToAdd:IUrl[],commentId:number,method:string|undefined, db: Prisma.TransactionClient = prisma) => {
   console.log("🚀 ~ file: addIntoTask.ts:12 ~ constaddIntoTask:NextApiHandler= ~ commentId:", commentId)
   console.log("🚀 ~ file: addIntoTask.ts:12 ~ constaddIntoTask:NextApiHandler= ~ urlsToAdd:", urlsToAdd)
 
@@ -21,7 +22,7 @@ const addIntoTask = async (urlsToAdd:IUrl[],commentId:number,method:string|undef
       var response:any = []
       for (const url_ of urlsToAdd) {
         if (url_.Attachment){
-          const attachment_ = await prisma.attachment.create({
+          const attachment_ = await db.attachment.create({
             data: {
               fileType: url_.attachmentType??"",
               fileSource: url_.urlString,
@@ -36,7 +37,7 @@ const addIntoTask = async (urlsToAdd:IUrl[],commentId:number,method:string|undef
         
         }
 
-          const urlRecords = await prisma.url.create({
+          const urlRecords = await db.url.create({
             data: {
               urlString:url_.urlString??"",
               commentId: commentId,
@@ -64,7 +65,7 @@ const addIntoTask = async (urlsToAdd:IUrl[],commentId:number,method:string|undef
   
   else if (method === "PUT") {
     try {
-      const existingUrls = await prisma.url.findMany({
+      const existingUrls = await db.url.findMany({
         where: {
           commentId: commentId,
         },
@@ -78,12 +79,12 @@ const addIntoTask = async (urlsToAdd:IUrl[],commentId:number,method:string|undef
         );
 
         if (matchedUrlData) {
-          await prisma.url.update({
+          await db.url.update({
             where: { id: existingUrl.id },
             data: urlRowData(matchedUrlData),
           });
         } else {
-          await prisma.url.delete({
+          await db.url.delete({
             where: { id: existingUrl.id },
           });
         }
@@ -102,7 +103,7 @@ const addIntoTask = async (urlsToAdd:IUrl[],commentId:number,method:string|undef
         .map((urlData: IUrl) => urlRowData(urlData, { commentId }));
 
       if (newUrlsToAdd.length > 0) {
-        await prisma.url.createMany({
+        await db.url.createMany({
           data: newUrlsToAdd,
         });
       }

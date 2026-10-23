@@ -1,3 +1,4 @@
+import { agentWithinTeamWhere } from "@/lib/mcp/managementKeyTeamScope"
 import { reportMcpOperationCrash } from '@/lib/mcp/operationCrashReport'
 import { wrapMcpRoute, validateMcpRouteAuth as validateMcpAuth, checkMcpRouteRateLimit as checkMcpRateLimit } from '@/lib/mcp/routeWrapper'
 import { NextRequest, NextResponse } from 'next/server'
@@ -70,12 +71,12 @@ export async function GET(request: NextRequest) {
     const [ownedTeams, memberRows] = await Promise.all([
       dbUser?.accountId != null && dbUser.accountId.length > 0
       ? await prisma.team.findMany({
-          where: { googleAccountId: dbUser.accountId },
+          where: { googleAccountId: dbUser.accountId, ...(ctx.teamScope != null ? { id: ctx.teamScope.teamId } : {}) },
           select: { id: true, title: true }
         })
       : [],
       await prisma.member_Team.findMany({
-        where: { userId: user.id, status: 'Accepted' },
+        where: { userId: user.id, status: 'Accepted', ...(ctx.teamScope != null ? { teamId: ctx.teamScope.teamId } : {}) },
         include: {
           team: { select: { id: true, title: true } }
         }
@@ -103,7 +104,7 @@ export async function GET(request: NextRequest) {
     const projects = await prisma.project.findMany({
       where: {
         status: 'Normal',
-        ...getProjectListingWhere(user.id, ctx.agentId),
+        ...getProjectListingWhere(user.id, ctx.agentId, ctx.teamScope),
       },
       select: {
         id: true,
@@ -146,7 +147,7 @@ export async function GET(request: NextRequest) {
     })
 
     const agentsByUser = await prisma.agent.findMany({
-      where: { userId: user.id },
+      where: { userId: user.id, ...(ctx.teamScope != null ? { ...agentWithinTeamWhere(ctx.teamScope.teamId), AND: [{ members: { some: { project: getProjectListingWhere(user.id, ctx.agentId, ctx.teamScope) } } }] } : {}) },
       select: { id: true, displayName: true }
     })
 

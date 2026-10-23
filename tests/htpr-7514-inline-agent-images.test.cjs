@@ -436,7 +436,7 @@ for (const enabled of [false, true]) {
     const { POST } = load("src/lib/api/task-writes/upload-finalize.ts", {
       "@/lib/auth/agentScope": { withAgentScopeRequest: (_request, fn) => fn(), prepareAgentScope: async () => {} },
       "@/lib/auth/session": { SESSION_COOKIE: "ht_session", verifySession: () => ({ id: 985, agentId: "cookie-agent" }) },
-      "@/lib/auth/getSessionUser": { getSessionUser: async () => null },
+      "@/lib/auth/getSessionUser": { getSessionUser: async () => ({ userId: 985, agentId: "cookie-agent", teamScope: null, source: "legacy", needsBridge: true }) },
       "@/lib/flags": { isFeatureEnabled: async () => enabled },
       "@/lib/storage/uploadGrant": { verifyTaskAttachmentLinkReceipt: () => receipt },
       "@/lib/storage/linkTaskAttachment": { linkTaskAttachment: async (...args) => { calls.push(args); return { id: 1 }; }, TaskAttachmentLinkError: class extends Error {} },
@@ -446,6 +446,9 @@ for (const enabled of [false, true]) {
     });
     const response = await POST({ cookies: { ht_session: "cookie" }, headers: new Headers(), json: async () => ({ action: "link-task-attachment", taskId: 91, receipt: "receipt" }) });
     assert.equal(response.status, 200);
+    assert.deepEqual(calls, [[91, 985, receipt]]);
+    const spoofed = await POST({ cookies: { ht_session: "cookie" }, headers: new Headers(), json: async () => ({ action: "link-task-attachment", taskId: 91, receipt: "receipt", agentId: "other-agent" }) });
+    assert.equal(spoofed.status, 403);
     assert.deepEqual(calls, [[91, 985, receipt]]);
   });
 }
@@ -503,7 +506,7 @@ for (const [creatorId, expectedInline] of [[985, true], [7, false]]) {
     });
     const response = await POST(new Request("https://app.hypertask.ai/api/mcp/tasks/attachments", { method: "POST", body: "{}" }));
     assert.equal(response.status, 200);
-    assert.deepEqual(targets, [{ taskId: 91, commentId: 44, descriptionId: null, inlineImages: expectedInline }]);
+    assert.deepEqual(targets, [{ taskId: 91, userId: 985, agentId: null, teamScope: undefined, commentId: 44, descriptionId: null, inlineImages: expectedInline }]);
   });
 }
 

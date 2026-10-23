@@ -61,6 +61,7 @@ type MemberWrite = {
 type AgentBoardUpdateTransaction = {
   agent: AgentRead
   member: MemberWrite
+  project: Pick<Prisma.TransactionClient["project"], "findFirst">
 }
 
 export type AgentBoardUpdateDatabase = {
@@ -131,7 +132,8 @@ export async function updateOwnedAgentBoards(
   database: AgentBoardUpdateDatabase,
   getAccessibleBoard: (
     projectId: number,
-    userId: number
+    userId: number,
+    database: AgentBoardUpdateTransaction,
   ) => Promise<AccessibleAgentBoard | null>,
   userId: number,
   input: AgentBoardUpdateInput,
@@ -142,7 +144,8 @@ export async function updateOwnedAgentBoards(
   for (let attempt = 0; ; attempt += 1) {
     try {
       return await database.$transaction(
-        async ({ agent: agentStore, member }) => {
+        async (tx) => {
+          const { agent: agentStore, member } = tx
           const agent = await agentStore.findFirst({
             where: { ...scopeWhere, id: input.agentId, userId },
             select: {
@@ -172,7 +175,7 @@ export async function updateOwnedAgentBoards(
             )
             allowedProjects = inScope
             touched.forEach((id) => recordAgentBoardScopeMiss(id, 'write'))
-            const outside = touched.filter((id) => !inScope.has(id))
+            const outside = touched.filter((id) => !inScope.has(id) || teamId != null && agent.members.some((row) => row.projectId === id && row.project.teamId !== teamId))
             if (outside.length) {
               throw new AgentBoardUpdateError(
                 `This agent is not a member of project ${outside.join(', ')}, so it cannot grant or remove access there`,
@@ -189,7 +192,7 @@ export async function updateOwnedAgentBoards(
           const toAdd = input.addProjectIds.filter((id) => !existing.has(id))
           const additions = await Promise.all(
             toAdd.map(async (id) => {
-              const project = await getAccessibleBoard(id, userId)
+              const project = await getAccessibleBoard(id, userId, tx)
               if (!project || project.id !== id) {
                 throw new AgentBoardUpdateError(
                   `You do not have access to project ${id}`,
@@ -237,7 +240,7 @@ export async function updateOwnedAgentBoards(
             ...toAdd,
           ].filter((id) => {
             if (actingAgentId) recordAgentBoardScopeMiss(id, 'read')
-            return !actingAgentId || !agentScopeEnforced() || allowedProjects?.has(id)
+            return (!teamId || existing.get(id)?.project.teamId === teamId || additions.some((project) => project.id === id)) && (!actingAgentId || !agentScopeEnforced() || allowedProjects?.has(id))
           }).sort((a, b) => a - b)
           if (!toAdd.length && !toRemove.length) {
             return {

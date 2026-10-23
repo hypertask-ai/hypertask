@@ -77,10 +77,10 @@ export async function POST(request: NextRequest, props: { params: Promise<{ draf
 
     const project = draft.task.project
     const hasAccess = ctx.agentId && agentScopeEnforced()
-      ? await userCanAccessTask(user.id, draft.taskId, ctx.agentId)
+      ? await userCanAccessTask(user.id, draft.taskId, ctx.agentId, ctx.teamScope)
       : project.ownerId === user.id || project.members.some((m) => m.userId === user.id)
 
-    if (!hasAccess) {
+    if (!hasAccess || (ctx.teamScope != null && !await userCanAccessTask(user.id, draft.taskId, ctx.agentId, ctx.teamScope))) {
       return NextResponse.json(
         { success: false, error: 'Permission denied', message: 'You do not have access to this task' },
         { status: 403 }
@@ -124,9 +124,10 @@ export async function POST(request: NextRequest, props: { params: Promise<{ draf
         ownerId: taskWithOwner.userId,
         currentUser: userObj,
         agentId: ctx.agentId || undefined,
+        teamScope: ctx.teamScope,
       })
 
-      await persistUrlsForComment(draft.content, taskId, comment.id, 'POST')
+      await persistUrlsForComment(draft.content, taskId, comment.id, 'POST', [], { userId: user.id, agentId: ctx.agentId, teamScope: ctx.teamScope })
 
       const response: PublishDraftResponse = {
         success: true,
@@ -155,7 +156,7 @@ export async function POST(request: NextRequest, props: { params: Promise<{ draf
         displayName: userObj.displayName,
         photoURL: userObj.photoURL ?? undefined
       }))
-      const sessionToken = signSession({ id: userObj.id, email: userObj.email, ...(ctx.agentId ? { agentId: ctx.agentId } : {}) })
+      const sessionToken = signSession({ id: userObj.id, email: userObj.email, ...(ctx.agentId ? { agentId: ctx.agentId } : {}), teamScope: ctx.teamScope, agentTokenGeneration: ctx.agentTokenGeneration })
       const authCookieHeader = `nookies_user=${encodeURIComponent(userCookie)}; ${SESSION_COOKIE}=${sessionToken}`
 
       const singleResponse = await fetch(`${baseUrl}/api/tasks/single`, {
@@ -182,7 +183,7 @@ export async function POST(request: NextRequest, props: { params: Promise<{ draf
         )
       }
 
-      await persistUrlsForDescription(draft.content, taskId)
+      await persistUrlsForDescription(draft.content, taskId, [], { userId: user.id, agentId: ctx.agentId, teamScope: ctx.teamScope })
 
       const response: PublishDraftResponse = {
         success: true,

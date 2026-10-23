@@ -32,7 +32,8 @@ export async function POST(request: NextRequest) {
       resolved.ctx.agentId,
       resolved.body.date,
       resolved.body.timezone_offset_minutes,
-      resolved.body.note
+      resolved.body.note,
+      resolved.ctx.teamScope
     );
     return NextResponse.json({ success: true, entry });
   } catch (error) {

@@ -38,7 +38,7 @@ export async function DELETE(
     const access = await validateProjectAccess(
       field.projectId,
       ctx.user.id,
-      ctx.agentId
+      ctx.agentId, ctx.teamScope
     );
     if (access.error) {
       return NextResponse.json(

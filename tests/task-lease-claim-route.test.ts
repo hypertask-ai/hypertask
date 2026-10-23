@@ -116,7 +116,7 @@ async function main() {
     prismaMock.featureFlag.findUnique = async () => null;
     prismaMock.logs.create = async () => ({ id: 1 });
     prismaMock.task.findFirst = async () =>
-      taskAccessible ? { id: TASK_ID, projectId: 15 } : null;
+      taskAccessible ? { id: TASK_ID, projectId: 15, status: taskStatus } : null;
     prismaMock.task.findUnique = async () => ({ status: taskStatus });
     prismaMock.$queryRaw = async () => [
       { holder: USER_ID, agentId: conflictAgentId },

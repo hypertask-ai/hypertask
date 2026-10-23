@@ -73,7 +73,7 @@ const route = taskWriteRoute({
     const { status: writeStatus, json: updatedTask }: any = await updateTaskSingle(
       newTask,
       user as IUser,
-      agent?.id ?? null
+      agent?.id ?? null, { teamScope: session.teamScope }
     );
 
     if (writeStatus !== 200) {

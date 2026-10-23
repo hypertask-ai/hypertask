@@ -1,3 +1,4 @@
+import type { AgentTokenTeamScope } from '@/lib/mcp/auth/types';
 import { recordAgentBoardScopeMiss } from "@/lib/auth/agentScope";
 import { NextApiHandler, NextApiRequest, NextApiResponse } from "next"
 import { PrismaClient } from "@prisma/client"
@@ -60,6 +61,7 @@ interface IProps {
     index?:number
     currentUser: { id: number };
     agentId?: string | null;
+    teamScope?: AgentTokenTeamScope | null;
   }
 export const getUniqueTaskCount = async (
     projectId: number,
@@ -68,12 +70,12 @@ export const getUniqueTaskCount = async (
     return (await getNextUniqueTaskIndex(projectId, db)) - 1;
 };
 
-const create = async ({title, description, section, userId, ranking, projectId,sectionId,index,currentUser,agentId}:IProps) => {
+const create = async ({title, description, section, userId, ranking, projectId,sectionId,index,currentUser,agentId,teamScope}:IProps) => {
         try {
             const allowedProject = await prisma.project.findFirst({
                 where: {
                     id: projectId,
-                    ...taskWriteAccessWhere(currentUser.id, agentId),
+                    ...taskWriteAccessWhere(currentUser.id, agentId, teamScope),
                 },
                 select: { id: true },
             })

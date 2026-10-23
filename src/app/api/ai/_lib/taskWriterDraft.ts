@@ -1,4 +1,5 @@
 import { downloadWithoutBrotli } from "@/lib/net/downloadWithoutBrotli";
+import type { AgentTokenTeamScope } from '@/lib/mcp/auth/types';
 import { generateText } from "ai";
 import { configureAiModelUsage } from "./modelProvider";
 import { filterOneImagePass } from "./editorAi";
@@ -10,7 +11,8 @@ export async function generateTaskWriterDraft(
   body: TaskWriterRequest,
   userId: number,
   agentId?: string | null,
-  abortSignal?: AbortSignal
+  abortSignal?: AbortSignal,
+  teamScope?: AgentTokenTeamScope | null,
 ) {
   const {
     selected,
@@ -22,7 +24,7 @@ export async function generateTaskWriterDraft(
     validateDraft,
     customFieldDefinitions,
     boardLabelIds,
-  } = await prepareTaskWriterRun(body, userId, agentId);
+  } = await prepareTaskWriterRun(body, userId, agentId, teamScope);
 
   configureAiModelUsage(selected.model, {
     userId,

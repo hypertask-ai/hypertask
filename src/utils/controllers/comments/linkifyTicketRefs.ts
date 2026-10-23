@@ -1,3 +1,4 @@
+import type { AgentTokenTeamScope } from '@/lib/mcp/auth/types';
 import prisma from "@/lib/prisma";
 import { getProjectWhere } from "@/utils/controllers/projects/getAllIncludes";
 import {
@@ -9,7 +10,8 @@ import {
 export async function linkifyTicketRefs(
   html: string,
   userId: number,
-  agentId?: string | null
+  agentId?: string | null,
+  teamScope?: AgentTokenTeamScope | null,
 ): Promise<string> {
   const refs = findLinkableTicketRefs(html);
   if (refs.length === 0) return html;
@@ -18,7 +20,7 @@ export async function linkifyTicketRefs(
     where: {
       ticketNumber: { in: refs },
       status: { not: "Deleted" },
-      project: getProjectWhere(userId, agentId),
+      project: getProjectWhere(userId, agentId, teamScope),
     },
     select: { ticketNumber: true, projectId: true },
   });

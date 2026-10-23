@@ -1,3 +1,4 @@
+import type { AgentTokenTeamScope } from '@/lib/mcp/auth/types';
 import prisma from "@/lib/prisma";
 import type { Prisma } from "@prisma/client";
 import { getProjectWhere } from "@/utils/controllers/projects/getAllIncludes";
@@ -12,6 +13,7 @@ const doneNameFallback = (title: string) => columnRole(title) === "done";
 export interface MyTasksSummaryOptions {
   userId: number;
   agentId?: string | null;
+  teamScope?: AgentTokenTeamScope | null;
   projectId?: number | null;
   overdueOnly?: boolean;
   includeTasks?: boolean;
@@ -49,6 +51,7 @@ export interface MyTasksSummary {
 export async function getMyTasksSummary({
   userId,
   agentId = null,
+  teamScope,
   projectId = null,
   overdueOnly = false,
   includeTasks = true,
@@ -59,7 +62,7 @@ export async function getMyTasksSummary({
   { success: true } & MyTasksSummary | { success: false; error: string }
 > {
   const projects = await db.project.findMany({
-    where: { status: "Normal", ...getProjectWhere(userId, agentId) },
+    where: { status: "Normal", ...getProjectWhere(userId, agentId, teamScope) },
     select: { id: true, title: true, name: true },
   });
 

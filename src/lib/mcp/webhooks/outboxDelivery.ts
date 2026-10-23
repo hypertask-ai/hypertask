@@ -1,3 +1,4 @@
+import { webhookCredentialAllows } from "@/lib/webhooks/credentialScope";
 import prisma from '@/lib/prisma'
 import { getProjectWhere } from '@/utils/controllers/projects/getAllIncludes'
 import { postSignedWebhook } from './delivery'
@@ -75,6 +76,10 @@ export async function deliverBoardWebhook(
         select: { id: true },
       }))
     }
+  }
+
+  if (authorized) {
+    authorized = await webhookCredentialAllows(subscription.agentId, delivery.payloadBody ?? delivery.payload, subscription)
   }
 
   if (!authorized) {

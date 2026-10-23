@@ -35,7 +35,7 @@ export default async function AgentChatPage({
     if (!query.agent && query.projectId && /^[1-9]\d*$/.test(query.projectId)) target.set("id", query.projectId);
     if (agentId) {
       const board = await prisma.project.findFirst({
-        where: { ...getProjectWhere(sessionUser.userId, sessionUser.agentId), status: "Normal",
+        where: { ...getProjectWhere(sessionUser.userId, sessionUser.agentId, sessionUser.teamScope), status: "Normal",
           ...(query.projectId && /^[1-9]\d*$/.test(query.projectId) ? { id: Number(query.projectId) } : {}),
           AND: [{ OR: [{ ownerId: sessionUser.userId }, { members: { some: { userId: sessionUser.userId, agentId: null, status: "Accepted" } } }] }],
           members: { some: { agentId, status: "Accepted", agent: { ...accessibleAgentWhere(sessionUser.userId), revokedAt: null, archivedAt: null } } } },

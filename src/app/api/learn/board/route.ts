@@ -154,7 +154,7 @@ async function learnBoard(request: NextRequest) {
       ownerId: session.id,
       status: "Normal",
       title: BOARD_TITLE,
-      AND: [projectContentAccessWhere(session.id, session.agentId)],
+      AND: [projectContentAccessWhere(session.id, session.agentId, session.teamScope)],
     },
     orderBy: { createdAt: "asc" },
     select: { id: true },
@@ -188,7 +188,7 @@ async function learnBoard(request: NextRequest) {
               id: requestedReturnBoardId,
               status: "Normal",
               ...getProjectWhere(session.id),
-              AND: [getProjectWhere(session.id, session.agentId)],
+              AND: [getProjectWhere(session.id, session.agentId, session.teamScope)],
             },
             select: { id: true },
           })

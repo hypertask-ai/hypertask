@@ -17,7 +17,7 @@ export async function POST(request: NextRequest, props: { params: Promise<{ view
       );
     }
     const { viewId } = await props.params;
-    const result = await applyView({ viewId, userId: ctx.user.id, agentId: ctx.agentId });
+    const result = await applyView({ viewId, userId: ctx.user.id, agentId: ctx.agentId, teamScope: ctx.teamScope });
     return NextResponse.json({ success: true, ...result });
   } catch (error) {
     console.error("Error switching view:", error);

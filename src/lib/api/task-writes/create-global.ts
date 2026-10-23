@@ -91,8 +91,6 @@ const route = (requestStartedAt: number) => taskWriteRoute({
       return NextResponse.json({ message: actingAgent.message }, { status: actingAgent.status });
     }
     const agentId = actingAgent.agentId;
-    const storedDescription = agentId && typeof description === "string"
-      ? await inlineAgentImagesForUser(description, userId, { inlineImages: body.inline_images, attachments: Array.isArray(urlsToAdd) ? urlsToAdd.filter((file) => file.Attachment).map((file) => ({ url: file.urlString, fileName: file.title, mimeType: file.attachmentType })) : [] }) : description;
     if (agentId) {
       const agentOwnerId = await getActiveAgentOwnerId(agentId);
       if (agentOwnerId !== session.userId) {
@@ -109,7 +107,7 @@ const route = (requestStartedAt: number) => taskWriteRoute({
       where: {
         id: projectId,
         status: "Normal",
-        ...taskWriteAccessWhere(userId, agentId),
+        ...taskWriteAccessWhere(userId, agentId, session.teamScope),
       },
       select: { id: true },
     });
@@ -117,6 +115,8 @@ const route = (requestStartedAt: number) => taskWriteRoute({
       return NextResponse.json({ message: "Forbidden" }, { status: 403, headers: responseHeaders });
     }
     recordAgentBoardScopeMiss(authorizedProject.id, "write");
+    const storedDescription = agentId && typeof description === "string"
+      ? await inlineAgentImagesForUser(description, userId, { inlineImages: body.inline_images, attachments: Array.isArray(urlsToAdd) ? urlsToAdd.filter((file) => file.Attachment).map((file) => ({ url: file.urlString, fileName: file.title, mimeType: file.attachmentType })) : [] }) : description;
     let customFields: import("@/lib/ai/taskWriterCustomFields").TaskWriterCustomFieldValue[] = [];
     if (body.requestKind === "compose-task" && Array.isArray(body.customFields) && body.customFields.length &&
         await isFeatureEnabled(HTPR_7471_WRITER_BOARD_FORMAT_FLAG, userId)) {
@@ -143,7 +143,7 @@ const route = (requestStartedAt: number) => taskWriteRoute({
         return NextResponse.json({ message: "Invalid task id" }, { status: 400, headers: responseHeaders });
       }
       const target = await prisma.task.findFirst({
-        where: { id: taskId, projectId, status: "Normal", project: taskWriteAccessWhere(userId, agentId) },
+        where: { id: taskId, projectId, status: "Normal", project: taskWriteAccessWhere(userId, agentId, session.teamScope) },
         include: { description_: { select: { content: true } } },
       });
       if (!target) return NextResponse.json({ message: "Forbidden" }, { status: 403, headers: responseHeaders });
@@ -152,6 +152,7 @@ const route = (requestStartedAt: number) => taskWriteRoute({
       const result = await updateTaskSingle({ id: taskId, title, description: storedDescription,
         ...(writerDueDate ? { dueDate: writerDueDate, dueDateNotifiedAt: null } : {}),
       }, currentUser, agentId, {
+        teamScope: session.teamScope,
         expectedTitle: target.title,
         expectedDescription: target.description_?.content ?? "",
         expectedProjectId: target.projectId,
@@ -345,6 +346,9 @@ const route = (requestStartedAt: number) => taskWriteRoute({
     try {
       const created = await createTaskWithBoardWebhookOutbox(prisma, taskCreatedActor, async (tx) => {
         await tx.$executeRaw`SELECT pg_advisory_xact_lock(${TASK_UNIQUE_INDEX_ADVISORY_LOCK_CLASS}::int, ${projectId}::int)`;
+        if (session.teamScope != null && !await tx.project.findFirst({
+          where: { id: projectId, ...taskWriteAccessWhere(userId, agentId, session.teamScope) }, select: { id: true },
+        })) throw new TaskSectionValidationError('Project not found or access denied');
         const sectionRow = await tx.section.findFirst({
           where: sectionWhere,
           ...(sectionOrderBy ? { orderBy: sectionOrderBy } : {}),
@@ -526,7 +530,9 @@ const route = (requestStartedAt: number) => taskWriteRoute({
           relatedTasks: relationsToAdd,
           currentTaskId: newTask.id,
         },
-        currentUser.id
+        currentUser.id,
+        agentId,
+        session.teamScope
       );
     }
     if (Array.isArray(urlsToAdd) && urlsToAdd.length > 0) {

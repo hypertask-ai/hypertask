@@ -102,7 +102,7 @@ export async function GET(request: NextRequest) {
     const where: any = {
       status: status ?? 'Normal',
       AND: [
-        getProjectListingWhere(user.id, ctx.agentId),
+        getProjectListingWhere(user.id, ctx.agentId, ctx.teamScope),
         ...(search
           ? [
               {

@@ -38,7 +38,7 @@ const handler: NextApiHandler = async (req: NextApiRequest, res: NextApiResponse
                 where: {
                     id: commentId,
                     taskId: taskId,
-                    task: { project: taskWriteAccessWhere(userId, session.agentId) },
+                    task: { project: taskWriteAccessWhere(userId, session.agentId, session.teamScope) },
                 },
                 select: { id: true },
             });
@@ -199,6 +199,7 @@ const sendNotification = async(reaction:any,afterAppDomain:string,userId:number)
         notificationBody:`${(reaction.comment.text ?? "").replace(/<[^>]+>/g, '')}`,
         devices,
         payload:"",
+        taskId:reaction.taskId,
         taskTitle:reaction.comment.taskTitle,
         afterAppDomain}
 

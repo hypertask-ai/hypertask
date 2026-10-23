@@ -157,14 +157,14 @@ test("explicit inbox mouse rows use cached navigation with their own task and re
     const playlists = [];
     const open = new Function("decisionCommentLinks", "withDecisionCommentAnchor", "selectedKeyboardRow", "disableNotificationSideEffects", "disableInboxFlow", "markSeenOnOpen", "buildUniqueTasksPlaylist", "_notifications", "setTasksPlayList", "buildQueryParams", "commentIdHash", "inboxConfig", "router", "markTaskDetailNavigationStart", "navigateToTask", js)(
       false, withDecisionCommentAnchor, { item: { kind: "notification", notification: { ...notification, task: { ...task, id: 99 } } } }, false, false,
-      (row) => seen.push(row), () => [task], [notification], (list) => playlists.push(list), () => "?inboxFlow=true", (id) => `#comment-${id}`,
-      { urls: { taskDetail: (projectId, index, hash) => `/detail/project-${projectId}/${index}${hash}` } }, { push: (url) => pushes.push(url) }, () => {}, (...args) => navigations.push(args),
+      (row) => seen.push(row), () => [task], [notification], (list) => playlists.push(list), () => "", (id) => `#comment-${id}`,
+      inboxConfig, { push: (url) => pushes.push(url) }, () => {}, (...args) => navigations.push(args),
     );
     await open("view", notification);
     assert.deepEqual(seen, [notification]);
     assert.deepEqual(playlists, [[task]]);
     assert.deepEqual(pushes, []);
-    assert.deepEqual(navigations, [[15, 43, "push", "#comment-12?inboxFlow=true", task]]);
+    assert.deepEqual(navigations, [[15, 43, "push", "?inboxFlow=true#comment-12", task]]);
   }
 });
 

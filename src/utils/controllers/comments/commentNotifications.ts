@@ -1,3 +1,4 @@
+import type { AgentTokenTeamScope } from '@/lib/mcp/auth/types';
 import type { CommentDependencies } from './commentCreationTypes';
 import type { CreateCommentParams } from './commentCreationTypes';
 import { isAgentCommentFanoutFixOn } from './agentCommentFanout';
@@ -271,6 +272,8 @@ export async function processTaskReferencesFromCommentText(
   text: string,
   currentTaskId: number,
   userId: number,
+  agentId?: string | null,
+  teamScope?: AgentTokenTeamScope | null,
 ): Promise<void> {
   const { extractTaskReferencesFromCommentText, addRelatedTasks } = dependencies;
   const refs = extractTaskReferencesFromCommentText(text);
@@ -282,6 +285,8 @@ export async function processTaskReferencesFromCommentText(
       currentTaskId,
     },
     userId,
+    agentId,
+    teamScope,
   );
 
   if (result.status !== 200) {

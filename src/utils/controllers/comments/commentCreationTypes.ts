@@ -1,3 +1,4 @@
+import type { AgentTokenTeamScope } from '@/lib/mcp/auth/types';
 import type { WebhookDelivery } from '@/lib/mcp/webhooks/events';
 import type { AgentRunActivityPersistenceInput, AgentRunSelectionPersistenceInput } from '@/lib/agentRuns/persistence';
 
@@ -14,6 +15,7 @@ export interface CreateCommentParams {
     photoURL?: string | null;
   };
   agentId?: string | null;
+  teamScope?: AgentTokenTeamScope | null;
   directReplyUserId?: number | null;
   directReplySourceCommentId?: number | null;
   directReplyInvocationId?: number | null;

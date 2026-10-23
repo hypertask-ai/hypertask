@@ -1,3 +1,4 @@
+import type { AgentTokenTeamScope } from '@/lib/mcp/auth/types';
 import { agentScopeEnforced, recordAgentBoardScopeMiss } from "@/lib/auth/agentScope";
 import prisma from '@/lib/prisma'
 import { projectContentAccessWhere } from '@/utils/controllers/projects/getAllIncludes'
@@ -36,8 +37,9 @@ function classifyPresence(lastSeenAt: Date, now: number): AgentPresenceStatus {
 
 export async function getTeamAgentPresence(
   teamId: string,
-  caller?: { userId: number; agentId?: string | null },
+  caller?: { userId: number; agentId?: string | null; teamScope?: AgentTokenTeamScope | null },
 ): Promise<TeamAgentPresence[]> {
+  if (caller?.teamScope != null && caller.teamScope.teamId !== teamId) throw new TeamAgentPresenceNotFoundError(teamId)
   const team = await prisma.team.findUnique({
     where: { id: teamId },
     select: { id: true, googleAccountId: true },
@@ -48,7 +50,7 @@ export async function getTeamAgentPresence(
   }
 
   const projects = await prisma.project.findMany({
-    where: { teamId, status: 'Normal', ...(caller?.agentId && agentScopeEnforced() ? projectContentAccessWhere(caller.userId, caller.agentId) : {}) },
+    where: { teamId, status: 'Normal', ...((caller?.teamScope != null || (caller?.agentId && agentScopeEnforced())) ? projectContentAccessWhere(caller.userId, caller.agentId, caller.teamScope) : {}) },
     select: { id: true },
   })
   const projectIds = projects.map((project) => project.id)
@@ -56,7 +58,7 @@ export async function getTeamAgentPresence(
   const sessions = await prisma.taskSession.findMany({
     where: {
       agentId: { not: null },
-      task: { projectId: { in: projectIds }, ...(caller?.agentId && agentScopeEnforced() ? { project: projectContentAccessWhere(caller.userId, caller.agentId) } : {}) },
+      task: { projectId: { in: projectIds }, ...((caller?.teamScope != null || (caller?.agentId && agentScopeEnforced())) ? { project: projectContentAccessWhere(caller.userId, caller.agentId, caller.teamScope) } : {}) },
     },
     orderBy: { lastSeenAt: 'desc' },
     take: 1000,
@@ -90,7 +92,7 @@ export async function getTeamAgentPresence(
     where: {
       agentId: { not: null },
       expiresAt: { gt: nowDate },
-      task: { projectId: { in: projectIds }, ...(caller?.agentId && agentScopeEnforced() ? { project: projectContentAccessWhere(caller.userId, caller.agentId) } : {}) },
+      task: { projectId: { in: projectIds }, ...((caller?.teamScope != null || (caller?.agentId && agentScopeEnforced())) ? { project: projectContentAccessWhere(caller.userId, caller.agentId, caller.teamScope) } : {}) },
     },
     orderBy: { heartbeatAt: 'desc' },
     take: 1000,

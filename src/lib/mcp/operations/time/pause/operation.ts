@@ -12,7 +12,7 @@ export async function POST(request: NextRequest) {
     const entry = await pauseTimer(
       resolved.ctx.user.id,
       resolved.task.id,
-      resolved.ctx.agentId
+      resolved.ctx.agentId, resolved.ctx.teamScope
     );
     if (!entry) {
       return NextResponse.json(

@@ -35,7 +35,7 @@ test('flag on refuses chatter as a comment and writes a parsed thought without c
   assert.equal(calls.comments.length, 0)
   assert.equal(calls.broadcasts.length, 0)
   assert.equal(calls.urls.length, 0)
-  assert.deepEqual(calls.runs, [[{ userId: 6, agentId: 'agent-1', displayName: 'Owner', source: 'agent' }, { taskId: 99, title: null, source: 'runtime' }]])
+  assert.deepEqual(calls.runs, [[{ userId: 6, agentId: 'agent-1', teamScope: null, displayName: 'Owner', source: 'agent' }, { taskId: 99, title: null, source: 'runtime' }]])
   assert.equal(calls.activities[0][2].type, 'THOUGHT')
   assert.deepEqual(calls.flags, [{ key: flag, userId: 6 }])
 })

@@ -139,6 +139,10 @@ async function writerInstructions({ cacheOn, modelId = "claude-sonnet-5.5", spli
   if (language) on.add(keys.HTPR_7057_WRITER_HEADING_LANGUAGE_FLAG);
   const flags = { isFeatureEnabled: async (flag) => on.has(flag), ...keys };
   const run = moduleWithStubs("src/app/api/ai/_lib/taskWriterRun.ts", {
+    "@/lib/rag/authorizeIndexedRows": { authorizeIndexedRows: async (taskRows, commentRows, principal) => {
+      assert.equal(principal?.teamScope == null, true);
+      return { taskRows, commentRows };
+    } },
     "@/lib/ai/prompts/registry": { renderPrompt: () => "output language rule" },
     "@/lib/ai/taskWriterDueDate": dates, "@/lib/flags/keys": keys,
     "@/lib/ai/composeTaskTarget": {},

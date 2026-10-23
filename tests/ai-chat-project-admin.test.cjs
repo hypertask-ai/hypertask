@@ -230,7 +230,7 @@ test("hypertask_project_admin dispatches user IDs and agent UUIDs differently", 
   const source = fs.readFileSync(ROUTE, "utf8");
   const body = toolBody(source, "hypertask_project_admin");
   const accessAt = body.indexOf(
-    "validateProjectAccess(input.project_id, user.id, actingAgentId)",
+    "validateProjectAccess(input.project_id, user.id, actingAgentId, teamScope)",
   );
   const uuidAt = body.indexOf(
     "PROJECT_ADMIN_MEMBER_UUID_PATTERN.test(input.userToAdd)",

@@ -25,7 +25,7 @@ function setup(failure) {
     '@prisma/client': { Prisma: {}, DecisionRequestStatus: {} },
     '@/lib/prisma': { default: prisma },
     '@/lib/flags': { isFeatureEnabled: async () => false },
-    '@/utils/controllers/projects/getAllIncludes': { getProjectWhere: () => ({}) },
+    '@/utils/controllers/projects/getAllIncludes': { getProjectWhere: () => ({}), intersectProjectTeamScope: (where, scope) => { assert.equal(scope == null, true); return where } },
     '@/utils/controllers/projects/findPrefixAliasTasks': {},
     '@/lib/mcp/auth': auth,
     '@/lib/mcp/routeWrapper': {
@@ -49,7 +49,7 @@ function setup(failure) {
     '@/lib/mcp/agents/scopes': { requireRole: async () => null },
     '@/lib/mcp/tasks/services': {},
     '@/lib/mcp/tasks/mappers': {},
-    '@/lib/mcp/tasks/agentMutationFence': { AgentMutationLeaseConflictError: class extends Error {} },
+    '@/lib/mcp/tasks/agentMutationFence': { TaskTeamScopeError: class extends Error {}, AgentMutationLeaseConflictError: class extends Error {} },
     '@/lib/mcp/tasks/agentMutationLeaseAdoption': { withAdoptedAgentMutationLease: (_db, _actor, run) => run() },
     '@/lib/realtime/server': {},
     '@/utils/controllers/tasks/moveToDifferentBoard': {},
@@ -65,6 +65,7 @@ function setup(failure) {
     '@/utils/controllers/pages/pageService': {},
     '@/lib/mcp/idempotency/idempotencyStore': {
       normalizeIdempotencyKey: () => null,
+      IdempotencyAccessError: class extends Error {},
       IdempotencyInProgressError: class extends Error {},
     },
     '@/lib/mcp/tasks/updateTaskSelector': {

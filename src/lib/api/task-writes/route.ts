@@ -3,6 +3,8 @@ import type { NextApiHandler, NextApiRequest } from "next";
 import { NextResponse } from "next/server";
 import type { z } from "zod";
 import { getSessionUser, type SessionUser } from "@/lib/auth/getSessionUser";
+import { parseCookies } from "better-auth/cookies";
+import { SESSION_COOKIE, verifySession } from "@/lib/auth/session";
 
 export type TaskWriteRequest = Pick<Request, "headers" | "json"> & {
   cookies?: Partial<Record<string, string>>;
@@ -22,6 +24,7 @@ export function taskWriteRoute<Body, Actor = SessionUser>(options: {
   validationMessage: string;
   validateBeforeAuth?: boolean;
   allowNullBody?: boolean;
+  allowMissingBodyAgentId?: boolean;
   prepare?: (session: SessionUser) => Promise<Actor>;
   operation: (body: Body, actor: Actor, request: TaskWriteRequest) => Promise<TaskWriteResponse | undefined>;
 }): TaskWriteRoute {
@@ -63,7 +66,7 @@ export function taskWriteRoute<Body, Actor = SessionUser>(options: {
       }
     }
     const bodyAgentId = (body as { agentId?: unknown } | null)?.agentId;
-    if (session?.agentId) {
+    if (session?.agentId && (!options.allowMissingBodyAgentId || session.teamScope != null || bodyAgentId != null)) {
       if (bodyAgentId !== session.agentId) {
         return NextResponse.json({ message: "Agent id must match authenticated session" }, { status: 403 });
       }
@@ -71,6 +74,16 @@ export function taskWriteRoute<Body, Actor = SessionUser>(options: {
     if (session && typeof bodyAgentId === "string") await prepareAgentScope(session.userId, bodyAgentId);
     return options.operation(body, actor, request);
   });
+}
+
+export async function legacyTaskWriteSession(request: TaskWriteRequest, allowSessionFallback = false): Promise<SessionUser | null> {
+  const token = request.cookies ? request.cookies[SESSION_COOKIE] : parseCookies(request.headers.get("cookie") ?? "").get(SESSION_COOKIE);
+  const signed = verifySession(token);
+  if (!signed) return allowSessionFallback ? getSessionUser(request.headers) : null;
+  if (signed.agentId) {
+    return getSessionUser(new Headers({ Cookie: `${SESSION_COOKIE}=${token}` }));
+  }
+  return { userId: signed.id, teamScope: null, source: "legacy", needsBridge: true };
 }
 
 type TaskWriteRouteLoader = () => Promise<TaskWriteRoute>;

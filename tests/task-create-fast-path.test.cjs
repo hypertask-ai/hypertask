@@ -424,7 +424,7 @@ test("the global task route validates the claimed agent actor", () => {
   assert.match(source, /userId: requestedUserId/);
   assert.match(source, /const userId = session\.userId/);
   assert.match(source, /prisma\.user\.findUnique/);
-  assert.match(source, /taskWriteAccessWhere\(userId, agentId\)/);
+  assert.match(source, /taskWriteAccessWhere\(userId, agentId, session\.teamScope\)/);
   assert.match(source, /getActiveAgentOwnerId\(agentId\)/);
   assert.match(source, /agentOwnerId !== session\.userId/);
   assert.match(source, /isAgentOnBoard\(Number\(projectId\), agentId\)/);

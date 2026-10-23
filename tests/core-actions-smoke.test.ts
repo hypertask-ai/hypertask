@@ -31,7 +31,7 @@ const fixture: CoreActionsFixture = {
 };
 
 test("the operations route admits only a user token with the exact fixture", () => {
-  const user = { user: { id: fixture.userId }, agentId: null };
+  const user = { user: { id: fixture.userId }, agentId: null, teamScope: null };
 
   assert.deepEqual(decideCoreSmokeAccess(null, true), {
     ok: false,

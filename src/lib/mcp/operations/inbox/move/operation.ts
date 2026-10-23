@@ -81,7 +81,7 @@ export async function POST(request: NextRequest) {
         unique_index: unique_index ?? null,
         project_id: project_id ?? null,
       },
-      ctx.agentId
+      ctx.agentId, undefined, ctx.teamScope
     )
     if (!task) {
       return NextResponse.json(

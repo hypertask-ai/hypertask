@@ -1,3 +1,4 @@
+import type { AgentTokenTeamScope } from '@/lib/mcp/auth/types';
 import prisma from '@/lib/prisma'
 import { getProjectWhere } from '@/utils/controllers/projects/getAllIncludes'
 import * as sectionService from '@/utils/controllers/section/sectionService'
@@ -9,7 +10,8 @@ export type SectionAutoAssign = number | string | null
 async function verifyProjectAccess(
   projectId: number,
   userId: number,
-  agentId?: string | null
+  agentId?: string | null,
+    teamScope?: AgentTokenTeamScope | null,
 ): Promise<{ ok: true } | { ok: false; error: CreateSectionError }> {
   const projectExists = await prisma.project.findFirst({
     where: { id: projectId, status: 'Normal' },
@@ -24,7 +26,7 @@ async function verifyProjectAccess(
     where: {
       id: projectId,
       status: 'Normal',
-      ...getProjectWhere(userId, agentId),
+      ...getProjectWhere(userId, agentId, teamScope),
     },
     select: { id: true }
   })
@@ -66,7 +68,8 @@ export interface CreateSectionError {
 
 export async function createSection(
   params: CreateSectionParams,
-  agentId?: string | null
+  agentId?: string | null,
+    teamScope?: AgentTokenTeamScope | null,
 ): Promise<CreateSectionResult | CreateSectionError> {
   const { projectId, title, userId, afterSectionId } = params
 
@@ -83,7 +86,8 @@ export async function createSection(
     title,
     afterSectionId,
     userId,
-    agentId
+    agentId,
+    teamScope
   })
 
   if (result.status !== 200) {
@@ -132,11 +136,12 @@ export interface UpdateSectionResult {
 
 export async function updateSection(
   params: UpdateSectionParams,
-  agentId?: string | null
+  agentId?: string | null,
+    teamScope?: AgentTokenTeamScope | null,
 ): Promise<UpdateSectionResult | CreateSectionError> {
   const { projectId, sectionId, userId, title, moveAfterSectionId, isDone, autoAssign } = params
 
-  const access = await verifyProjectAccess(projectId, userId, agentId)
+  const access = await verifyProjectAccess(projectId, userId, agentId, teamScope)
   if (!access.ok) return access.error
 
   const section = await prisma.section.findFirst({
@@ -213,7 +218,8 @@ export async function updateSection(
       autoAssignProvided ? (typeof autoAssign === 'string' ? autoAssign : null) : undefined,
     projectId,
     userId,
-    agentId
+    agentId,
+    teamScope
   })
 
   if (result.status !== 200 && result.status !== 204) {
@@ -258,7 +264,8 @@ export interface DeleteSectionParams {
 
 export async function deleteSection(
   params: DeleteSectionParams,
-  agentId?: string | null
+  agentId?: string | null,
+    teamScope?: AgentTokenTeamScope | null,
 ): Promise<{
   success: true
   message: string
@@ -267,10 +274,10 @@ export async function deleteSection(
 } | CreateSectionError> {
   const { projectId, sectionId, userId } = params
 
-  const access = await verifyProjectAccess(projectId, userId, agentId)
+  const access = await verifyProjectAccess(projectId, userId, agentId, teamScope)
   if (!access.ok) return access.error
 
-  const result = await sectionService.deleteSection({ sectionId, projectId, userId, agentId })
+  const result = await sectionService.deleteSection({ sectionId, projectId, userId, agentId, teamScope })
 
   if (result.status === 404) {
     return {

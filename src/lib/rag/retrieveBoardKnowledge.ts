@@ -1,4 +1,6 @@
+import type { AgentTokenTeamScope } from '@/lib/mcp/auth/types';
 import { recordAgentBoardScopeMiss } from "@/lib/auth/agentScope";
+import { authorizeIndexedRows } from "./authorizeIndexedRows";
 import prisma from "@/lib/prisma";
 import { getProjectWhere } from "@/utils/controllers/projects/getAllIncludes";
 import {
@@ -20,7 +22,7 @@ export interface BoardKnowledgeSearchInput {
 
 export interface BoardKnowledgePrincipal {
   userId: number;
-  agentId?: string | null;
+  agentId?: string | null; teamScope?: AgentTokenTeamScope | null;
 }
 
 export type BoardKnowledgeDocument =
@@ -152,7 +154,7 @@ export async function retrieveBoardKnowledge(
   const projects = await prisma.project.findMany({
     where: {
       status: "Normal",
-      ...getProjectWhere(principal.userId, principal.agentId),
+      ...getProjectWhere(principal.userId, principal.agentId, principal.teamScope),
     },
     select: { id: true },
   });
@@ -198,13 +200,14 @@ export async function retrieveBoardKnowledge(
     }),
   ]);
 
+  const authorized = await authorizeIndexedRows(taskRowsRaw, commentRowsRaw, principal);
   const taskRows = applyMetadataFilters(
-    taskRowsRaw,
+    authorized.taskRows,
     input.metadataFilters,
     "task"
   );
   const commentRows = applyMetadataFilters(
-    commentRowsRaw,
+    authorized.commentRows,
     input.metadataFilters,
     "comment"
   );

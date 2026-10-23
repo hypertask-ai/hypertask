@@ -299,7 +299,7 @@ function loadUpdateController(
     },
     "@/utils/controllers/projects/getAllIncludes": { taskWriteAccessWhere },
     "@/lib/mcp/tasks/agentMutationFence": {
-      AgentMutationLeaseConflictError: class extends Error {},
+      TaskTeamScopeError: class extends Error {}, AgentMutationLeaseConflictError: class extends Error {},
       assertAgentAssignmentChangeAllowed: acquireTaskFence,
       cancelAgentMutationLeaseForHumanOverride: noop,
     },

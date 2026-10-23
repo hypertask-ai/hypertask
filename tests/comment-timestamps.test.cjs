@@ -315,6 +315,7 @@ function commentsRouteFixture(editorId, refetch = true) {
     '@/lib/mcp/agents': agents,
   })
   const route = load('src/lib/mcp/operations/comments/operation.ts', {
+    '@/utils/controllers/projects/getAllIncludes': {},
     'next/server': { NextResponse: { json } },
     '@prisma/client': { Prisma: { DbNull: null } },
     '@/lib/mcp/routeWrapper': { wrapMcpRoute: (handler) => handler, checkMcpRouteRateLimit: async () => null, validateMcpRouteAuth: async () => ({ user: { id: 6 }, agentId: null }), readMcpRouteJsonBody: async (request) => ({ ok: true, body: await request.json() }) },
@@ -335,7 +336,7 @@ function commentsRouteFixture(editorId, refetch = true) {
     '@/lib/mcp/tasks/validators': {},
     '@/lib/mcp/comments/activityMetadata': {},
     '@/lib/mcp/agents/scopes': { requireRole: () => null },
-    '@/lib/mcp/idempotency/idempotencyStore': { normalizeIdempotencyKey: () => null, withIdempotency: async (_operation, _userId, _key, _body, run) => run() },
+    '@/lib/mcp/idempotency/idempotencyStore': { IdempotencyAccessError: class extends Error {}, normalizeIdempotencyKey: () => null, withIdempotency: async (_operation, _userId, _key, _body, run) => run() },
     '@/lib/mcp/boards/links': { buildMcpTaskUrl: () => 'https://app.hypertask.ai/detail/project-15/321' },
     '@/lib/mcp/comments/reactionResponse': load('src/lib/mcp/comments/reactionResponse.ts'),
     '@/lib/mcp/comments/visibleReactionAgents': visibleAgents,

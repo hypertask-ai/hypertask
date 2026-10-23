@@ -143,6 +143,8 @@ test("UI rename calls the same controller and permission behavior as the API", a
       "next/server": nextServer,
       "zod": {},
       "@/lib/auth/getSessionUser": getSessionUser,
+      "better-auth/cookies": require("better-auth/cookies"),
+      "@/lib/auth/session": {},
     });
     const ui = loadTs("src/lib/api/project-writes/update.ts", {
       "next/server": nextServer,
@@ -161,3 +163,52 @@ test("UI rename calls the same controller and permission behavior as the API", a
     if (expectedStatus === 200) assert.equal(h.board.title, title.trim());
   }
 });
+
+for (const wrapper of ['off', 'on']) {
+  for (const scopeEnforced of [false, true]) {
+    const mode = `wrapper=${wrapper}, scope=${scopeEnforced ? 'ENFORCE' : 'WATCH'}`;
+    const withMode = async (run) => {
+      const previous = process.env.HTPR_6926_TEST_FLAG;
+      process.env.HTPR_6926_TEST_FLAG = wrapper;
+      try { await run(); } finally {
+        if (previous === undefined) delete process.env.HTPR_6926_TEST_FLAG;
+        else process.env.HTPR_6926_TEST_FLAG = previous;
+      }
+    };
+
+    test(`read-role accepted agent cannot rename board (${mode})`, async () => withMode(async () => {
+      const h = harness({
+        members: [agentMember()],
+        auth: { user: { id: 6 }, agentId: 'agent-owned' },
+        agentRole: 'read', scopeEnforced,
+      });
+      const response = await h.patch('New name');
+      assert.equal(response.status, 403);
+      assert.equal((await response.json()).code, 'insufficient_scope');
+      assert.equal(response.headers.has('Server-Timing'), wrapper === 'on');
+      assert.equal(h.board.title, 'Old name');
+      assert.deepEqual(h.updates, []);
+      assert.deepEqual(h.broadcasts, []);
+    }));
+
+    test(`write/admin agents and human members can still rename (${mode})`, async () => withMode(async () => {
+      for (const agentRole of ['write', 'admin', null, 'human']) {
+        const human = agentRole === 'human';
+        const h = harness({
+          members: [human ? humanMember() : agentMember()],
+          auth: { user: { id: 6 }, agentId: human ? null : 'agent-owned' },
+          agentRole: human ? 'read' : agentRole, scopeEnforced,
+        });
+        const response = await h.patch('  New name  ');
+        assert.equal(response.status, 200, String(agentRole));
+        assert.equal(response.headers.has('Server-Timing'), wrapper === 'on');
+        assert.equal(h.board.title, 'New name');
+        assert.equal(h.board.sorting_mode, 'Manual');
+        assert.equal(h.board.uniqueIdentifier, 'HTPR');
+        assert.equal(h.updates.length, 1);
+        assert.ok(h.updates[0].where.AND.OR);
+        assert.deepEqual(h.broadcasts, [[15, { originUserId: 6 }]]);
+      }
+    }));
+  }
+}
