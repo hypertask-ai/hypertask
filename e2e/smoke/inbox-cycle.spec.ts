@@ -34,16 +34,13 @@ async function sendComment(page: Page, text: string) {
     if (!(await editor.innerText()).includes(text)) await page.keyboard.insertText(text)
     return editor.innerText()
   }, { message: 'the comment text is in the current ticket comment box' }).toContain(text)
-  const commentCreated = () => page.waitForRequest((request) => /\/api\/comments\/create/.test(request.url()) && request.method() === 'POST', { timeout: 5_000 })
-  for (let attempt = 1; attempt <= 3; attempt++) {
-    await page.waitForTimeout(1000)
-    const created = commentCreated().then(() => true, () => false)
-    await editor.click()
-    await page.keyboard.press('Control+Enter')
-    if (await created) return
-    console.log(`[inbox-cycle] Control+Enter attempt ${attempt} sent no comment; editor text: ${await editor.innerText()}`)
-  }
-  throw new Error('Control+Enter never sent the comment')
+  await expect(editor).toBeFocused()
+  const created = page.waitForRequest((request) => /\/api\/comments\/create/.test(request.url()) && request.method() === 'POST', { timeout: 5_000 }).then(() => true, () => false)
+  await page.keyboard.press('Control+Enter')
+  if (await created) return
+  const editorText = await editor.innerText()
+  console.log(`[inbox-cycle] Control+Enter sent no comment on ${new URL(page.url()).pathname}; editor text: ${editorText}`)
+  throw new Error(`Control+Enter in a focused comment box holding "${editorText}" sent no comment`)
 }
 
 test.beforeEach(async ({ page }) => {
