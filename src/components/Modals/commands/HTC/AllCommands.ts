@@ -1159,6 +1159,13 @@ const settings: CommandGroup = {
       keywords: "settings board files uploads custom instructions context",
     },
     {
+      key: "settingsGithub",
+      name: "Connect GitHub",
+      commandMode: CommandMode.Setting,
+      payload: "github",
+      keywords: "GitHub repository PR connect",
+    },
+    {
       key: "settingsSlack",
       name: "Settings: Slack",
       commandMode: CommandMode.Setting,

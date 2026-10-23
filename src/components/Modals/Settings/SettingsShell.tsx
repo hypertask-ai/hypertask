@@ -1,10 +1,10 @@
 "use client";
 
 import { SettingsScopeTabs } from "./SettingsScopeTabs";
-import { useFlag } from "@/hooks/useFlag";
-import { HTPR_6929_COMPOSE_TASK_WRITER_FLAG } from "@/lib/flags/keys";
+import { useFlag, useFlagReady } from "@/hooks/useFlag";
+import { HTPR_6929_COMPOSE_TASK_WRITER_FLAG, HTPR_7515_CONNECT_GITHUB_PER_BOARD_FLAG } from "@/lib/flags/keys";
 import dynamic from "next/dynamic";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import {
   ComponentType,
   useEffect,
@@ -196,6 +196,10 @@ const SlackSection = dynamic(() => import("./SlackSection"), {
   ssr: false,
   loading: () => <SettingsSectionLoading />,
 });
+const GitHubSection = dynamic(() => import("./GitHubSection"), {
+  ssr: false,
+  loading: () => <SettingsSectionLoading />,
+});
 const WebhooksSection = dynamic(() => import("./WebhooksSection"), {
   ssr: false,
   loading: () => <SettingsSectionLoading />,
@@ -257,6 +261,7 @@ const SECTION_COMPONENTS: Record<SettingsSectionId, ComponentType> = {
   "management-keys": ManagementKeysSection,
   mcp: McpSection,
   slack: SlackSection,
+  github: GitHubSection,
   webhooks: WebhooksSection,
   "my-ai-usage": MyAiUsageSection,
   notifications: NotificationsSection,
@@ -267,7 +272,12 @@ const SECTION_COMPONENTS: Record<SettingsSectionId, ComponentType> = {
 
 const SettingsShell: React.FC<SettingsShellProps> = ({ section }) => {
   const composeTaskWriterEnabled = useFlag(HTPR_6929_COMPOSE_TASK_WRITER_FLAG);
-  const activeSection = normalizeSettingsSection(section);
+  const githubConnectEnabled = useFlag(HTPR_7515_CONNECT_GITHUB_PER_BOARD_FLAG);
+  const githubConnectReady = useFlagReady(HTPR_7515_CONNECT_GITHUB_PER_BOARD_FLAG);
+  const searchParams = useSearchParams();
+  const normalizedSection = normalizeSettingsSection(section);
+  const activeSection = normalizedSection === "github" && !githubConnectEnabled
+    ? "mcp" : normalizedSection;
   const activeTab = getSettingsTabForSection(activeSection);
   const mbl = useMobileView();
   const currentUser = useRecoilValue(currentUserAtom);
@@ -314,10 +324,11 @@ const SettingsShell: React.FC<SettingsShellProps> = ({ section }) => {
   }, [activeTab.id, section]);
 
   useEffect(() => {
+    if (normalizedSection === "github" && !githubConnectReady) return;
     if (section && section !== activeSection) {
       router.replace(getSettingsPath(activeSection));
     }
-  }, [activeSection, router, section]);
+  }, [activeSection, githubConnectReady, normalizedSection, router, section]);
 
   useEffect(() => {
     const html = document.documentElement;
@@ -355,6 +366,7 @@ const SettingsShell: React.FC<SettingsShellProps> = ({ section }) => {
           ...group,
           items: group.items.filter(
             (item) =>
+              (isSettingsNavLink(item) || item.id !== "github" || githubConnectEnabled) &&
               (isSettingsNavLink(item) ||
                 item.id !== "apiKeys" ||
                 Boolean(billing && billing.storePlanId !== "Free")) &&
@@ -375,7 +387,7 @@ const SettingsShell: React.FC<SettingsShellProps> = ({ section }) => {
       bottomGroups: filterGroups(SETTINGS_CROSS_TAB_GROUPS),
       primaryGroups: filterGroups(navigationTab.groups),
     };
-  }, [billing, navigationTab.groups, searchTerm]);
+  }, [billing, githubConnectEnabled, navigationTab.groups, searchTerm]);
 
   const isSearching = searchTerm.trim().length > 0;
   const hasVisibleGroups = primaryGroups.length > 0 || bottomGroups.length > 0;
@@ -601,7 +613,9 @@ const SettingsShell: React.FC<SettingsShellProps> = ({ section }) => {
                   mbl ? "px-4 pt-2" : "px-6 pt-5",
                 )}
               >
-                {currentUser ? <ActiveSection /> : <SettingsSectionLoading />}
+                {currentUser ? (
+                  <ActiveSection key={activeSection === "github" ? `${currentUser.id}:${searchParams?.get("projectId")}` : activeSection} />
+                ) : <SettingsSectionLoading />}
               </div>
             </SidebarContextProvider>
           </div>

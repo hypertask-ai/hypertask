@@ -37,12 +37,12 @@ export async function adoptGithubInstallation(input: {
       if (existing) {
         await tx.githubInstallation.update({
           where: { id: installation.id },
-          data: { ...identity, revokedAt: null },
+          data: { ...identity, installedByUserId: userId, revokedAt: null },
         });
         return;
       }
       await tx.githubInstallation.create({
-        data: { id: installation.id, teamId, ...identity },
+        data: { id: installation.id, teamId, ...identity, installedByUserId: userId },
       });
     });
     return "connected";

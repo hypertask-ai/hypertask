@@ -54,6 +54,7 @@ import { useFlag } from "@/hooks/useFlag";
 import { HTPR_7307_CTRLJ_FOOTER_CLICKABLE_FLAG, HTPR_7328_ROUNDED_THEME_FLAG, HTPR_7530_KEEP_AI_CHAT_CLOSED_FLAG } from "@/lib/flags/keys";
 import {
   GOOGLE_CALENDAR_FLAG,
+  HTPR_7515_CONNECT_GITHUB_PER_BOARD_FLAG,
   HTPR_7260_KANBAN_SELECT_ALL_FLAG,
   HTPR_6891_PHONE_TASK_WRITER_SHEET_FLAG,
   HTPR_6929_COMPOSE_TASK_WRITER_FLAG,
@@ -171,6 +172,7 @@ const Commands = (props: Props) => {
   const buildTimeLabel = buildId !== "dev" && !Number.isNaN(buildTime.getTime())
     ? `${buildTime.toLocaleDateString("en-GB", { day: "numeric", month: "short" })} ${buildTime.toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit", hour12: false })}`
     : "";
+  const githubConnectEnabled = useFlag(HTPR_7515_CONNECT_GITHUB_PER_BOARD_FLAG);
   const googleCalendarSettingsEnabled = useFlag(GOOGLE_CALENDAR_FLAG);
   const autoTaskDescriptionsEnabled = useFlag("htpr-6177-auto-task-descriptions");
   const myTasksViewsEnabled = useFlag(MY_TASKS_VIEWS_FLAG);
@@ -258,6 +260,7 @@ const Commands = (props: Props) => {
           (command) =>
             (command.commandMode !== CommandMode.ManageTeamAIAPIKeys ||
               showByokApiKeys) &&
+            (command.key !== "settingsGithub" || githubConnectEnabled) &&
             (command.key !== "settingsCalendarKeepTasksUpdated" || googleCalendarSettingsEnabled) &&
             (command.key !== "settingsTaskPageSuggestDescriptionsFromTaskTitles" || autoTaskDescriptionsEnabled) &&
             isTicketPrefixCommandVisible(command) &&
@@ -402,6 +405,7 @@ const Commands = (props: Props) => {
     getCommands,
     pinCommentActions,
     pageActions,
+    githubConnectEnabled,
     googleCalendarSettingsEnabled,
     autoTaskDescriptionsEnabled,
     currentProject,
