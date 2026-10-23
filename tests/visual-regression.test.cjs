@@ -168,6 +168,8 @@ test("five full-viewport screens use real theme/time, cached ticket navigation, 
   assert.match(spec, /document\.fonts\.ready/);
   assert.match(spec, /image\.decode\(\)/);
   assert.match(spec, /equalSamples >= 3/);
+  assert.match(spec, /const SETTLE_JUMP_WARNING_PX = 20/);
+  assert.match(spec, /largestJump\.pixels > SETTLE_JUMP_WARNING_PX\) \{[\s\S]*?annotations\.push\(\{ type: 'warning', description \}\)[\s\S]*?::warning title=/);
   assert.match(spec, /getByTestId\('ticket-comment'\)\.filter\(\{ hasText: 'Last layout lock comment' \}\)/);
   assert.match(spec, /expect\(lastComment, 'exactly one last seeded comment in the ticket thread'\)\.toHaveCount\(1\)/);
   assert.match(spec, /expect\(page\.getByTestId\('comment-composer'\), 'one desktop or phone composer'\)\.toHaveCount\(1\)/);
