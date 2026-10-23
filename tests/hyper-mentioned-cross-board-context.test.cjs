@@ -37,7 +37,7 @@ test("task writer context uses an optional project scope without changing the de
   );
   assert.match(
     body,
-    /retrieveCustomInstructionFileContext\(\{\s*projectId: args\.projectId/,
+    /retrieveCustomInstructionFileContext\(\{\s*principal: args\.principal,\s*projectId: args\.projectId/,
     "custom instructions must remain scoped to the current board"
   );
 });

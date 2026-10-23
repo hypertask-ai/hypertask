@@ -40,7 +40,7 @@ export async function GET(request: NextRequest, context: RouteContext) {
     const skill = await loadSkill(auth.userId, context, auth);
     return NextResponse.json({ success: true, skill });
   } catch (error) {
-    return skillErrorResponse(error);
+    return skillErrorResponse(error, auth);
   }
 
   })(request)
@@ -70,7 +70,7 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
       : await write(prisma);
     return NextResponse.json({ success: true, skill: updated });
   } catch (error) {
-    return skillErrorResponse(error);
+    return skillErrorResponse(error, auth);
   }
 
   })(request)
@@ -88,7 +88,7 @@ export async function DELETE(request: NextRequest, context: RouteContext) {
     else await remove(prisma);
     return NextResponse.json({ success: true });
   } catch (error) {
-    return skillErrorResponse(error);
+    return skillErrorResponse(error, auth);
   }
 
   })(request)

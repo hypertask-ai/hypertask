@@ -24,6 +24,7 @@ export function taskWriteRoute<Body, Actor = SessionUser>(options: {
   validationMessage: string;
   validateBeforeAuth?: boolean;
   allowNullBody?: boolean;
+  allowMissingBodyAgentId?: boolean;
   prepare?: (session: SessionUser) => Promise<Actor>;
   operation: (body: Body, actor: Actor, request: TaskWriteRequest) => Promise<TaskWriteResponse | undefined>;
 }): TaskWriteRoute {
@@ -65,7 +66,7 @@ export function taskWriteRoute<Body, Actor = SessionUser>(options: {
       }
     }
     const bodyAgentId = (body as { agentId?: unknown } | null)?.agentId;
-    if (session?.agentId) {
+    if (session?.agentId && (!options.allowMissingBodyAgentId || session.teamScope != null || bodyAgentId != null)) {
       if (bodyAgentId !== session.agentId) {
         return NextResponse.json({ message: "Agent id must match authenticated session" }, { status: 403 });
       }

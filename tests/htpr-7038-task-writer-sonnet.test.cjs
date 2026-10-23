@@ -22,6 +22,7 @@ const agentKey = "fixture-agent-anthropic";
 const output = "<p>Draft</p>";
 
 function moduleWithStubs(file, stubs) {
+  stubs = { "@/app/api/ai/_lib/skillAccess": { AccountSkillAccessError: class extends Error {} }, ...stubs };
   const filename = path.join(root, file);
   const code = ts.transpileModule(fs.readFileSync(filename, "utf8"), {
     compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 },
@@ -158,6 +159,10 @@ function harness({ enabled = false, plan = "Free", saved = null, teamByok = fals
     "@/app/api/ai/_lib/sharedAllowance": { sharedAiAllowanceErrorMessage: () => null },
   });
   const run = moduleWithStubs("src/app/api/ai/_lib/taskWriterRun.ts", {
+    "@/lib/rag/authorizeIndexedRows": { authorizeIndexedRows: async (taskRows, commentRows, principal) => {
+      assert.equal(principal?.teamScope == null, true);
+      return { taskRows, commentRows };
+    } },
     "@/lib/prisma": prisma, "@/lib/flags": flags,
     "@/lib/systemModelLadder": ladder,
     "@/utils/controllers/projects/getAllIncludes": { projectContentAccessWhere: () => ({}) },

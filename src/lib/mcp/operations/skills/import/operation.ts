@@ -69,7 +69,7 @@ export async function POST(request: NextRequest) {
       : await prisma.$transaction(writes(prisma));
     return NextResponse.json({ success: true, skills, total: skills.length });
   } catch (error) {
-    return skillErrorResponse(error);
+    return skillErrorResponse(error, { userId, agentId: ctx.agentId, teamScope: ctx.teamScope });
   }
 
   })(request)

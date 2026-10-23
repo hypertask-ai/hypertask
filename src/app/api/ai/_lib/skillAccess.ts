@@ -50,11 +50,11 @@ export async function getAccessibleSkill(userId: number, id: number, principal?:
   return skill;
 }
 
-export function skillErrorResponse(error: unknown) {
+export function skillErrorResponse(error: unknown, principal?: BoardKnowledgePrincipal) {
   const conflict =
     error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002";
   const message = error instanceof Error ? error.message : "Skill request failed";
-  const status = conflict ? 409 : message.includes("access denied") ? 403 : 400;
+  const status = conflict ? 409 : principal?.teamScope != null && message.includes("access denied") ? 403 : 400;
   return NextResponse.json(
     { error: conflict ? "A skill with this slug already exists in this scope" : message },
     { status }

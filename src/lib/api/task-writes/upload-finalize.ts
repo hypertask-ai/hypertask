@@ -52,6 +52,7 @@ const route = taskWriteRoute({
   schema: z.custom<Record<string, any>>(() => true),
   validationMessage: "Invalid request",
   allowNullBody: true,
+  allowMissingBodyAgentId: true,
   operation: async (body, session) => {
     if (body?.action === "link-task-attachment") {
       const taskId = Number(body?.taskId);

@@ -97,3 +97,16 @@ test("the retired skills access-denial flag is absent from the registry", () => 
   assert.equal(flags.HTPR_6966_SKILLS_ACCESS_DENIAL_FLAG, undefined);
   assert.equal(flags.FEATURE_FLAG_KEYS.includes("htpr-6966-skills-access-denial"), false);
 });
+
+for (const teamScope of [undefined, null, { teamId: "team-1" }]) {
+  test(`skill errors preserve legacy status unless the credential is team-bound (${JSON.stringify(teamScope)})`, async () => {
+    const { skillErrorResponse } = load("src/app/api/ai/_lib/skillAccess.ts", {
+      "@/lib/prisma": { default: {} },
+      "@/utils/controllers/projects/getAllIncludes": {},
+      "./customInstructions": {},
+    });
+    const principal = { userId: 2343, agentId: null, teamScope };
+    assert.equal(skillErrorResponse(new Error("Project not found or access denied"), principal).status, teamScope == null ? 400 : 403);
+    assert.equal(skillErrorResponse(new Error("Database unavailable"), principal).status, 400);
+  });
+}

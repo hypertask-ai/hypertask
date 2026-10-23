@@ -18,6 +18,7 @@ const output = '<h1 id="ai-generated-task-title">Writer title</h1><p>Writer body
 const plain = (value) => JSON.parse(JSON.stringify(value));
 
 function moduleWithStubs(file, stubs) {
+  stubs = { "@/app/api/ai/_lib/skillAccess": { AccountSkillAccessError: class extends Error {} }, ...stubs };
   stubs = { "@/lib/auth/agentScope": require("./helpers/agent-board-scope.cjs").enforcedScope, ...stubs };
   const filename = path.join(root, file);
   const code = ts.transpileModule(fs.readFileSync(filename, "utf8"), {
@@ -81,6 +82,10 @@ function harness(options = {}) {
     agent: { findFirst: async () => options.badAgent ? null : { id: "agent" } },
   };
   const run = moduleWithStubs("src/app/api/ai/_lib/taskWriterRun.ts", {
+    "@/lib/rag/authorizeIndexedRows": { authorizeIndexedRows: async (taskRows, commentRows, principal) => {
+      assert.equal(principal?.teamScope == null, true);
+      return { taskRows, commentRows };
+    } },
     "@/lib/prisma": { __esModule: true, default: prisma },
     "@/lib/flags": { ...keys, isFeatureEnabled: async (key) => key === keys.HTPR_7342_WEB_WRITING_TASK_WRITER_FLAG || key === keys.HTPR_7060_TASK_WRITER_EMPTY_AND_RESEARCH_FLAG },
     "@/lib/flags/keys": keys,

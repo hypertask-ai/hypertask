@@ -59,7 +59,7 @@ export async function GET(request: NextRequest) {
     });
     return NextResponse.json({ success: true, skills, total: skills.length });
   } catch (error) {
-    return skillErrorResponse(error);
+    return skillErrorResponse(error, { userId, agentId: ctx.agentId, teamScope: ctx.teamScope });
   }
 
   })(request)
@@ -90,7 +90,7 @@ export async function POST(request: NextRequest) {
       : await write(prisma);
     return NextResponse.json({ success: true, skill }, { status: 201 });
   } catch (error) {
-    return skillErrorResponse(error);
+    return skillErrorResponse(error, { userId, agentId: ctx.agentId, teamScope: ctx.teamScope });
   }
 
   })(request)
