@@ -147,10 +147,10 @@ test("migration reads only explicitly saved old values and keep-closed takes pre
 });
 
 function preferenceHarness({ legacy = {}, local = {}, server, fail = false } = {}) {
-  const h = hooks(), posts = [];
+  const h = hooks(), posts = [], invalidated = [];
   const s = stateHarness({ currentUserAtom: { id: 7 }, aiChatAutoOpenPreferencesAtom: local });
   let queryData = server, updated = server ? 1 : 0;
-  const client = { setQueryData: (_key, update) => { queryData = update(queryData); updated++; } };
+  const client = { setQueryData: (_key, update) => { queryData = update(queryData); updated++; }, invalidateQueries: ({ queryKey }) => invalidated.push(queryKey) };
   const api = load("src/hooks/General/useAiChatOpenPreferences.ts", {
     react: h.react, window: { localStorage: { getItem: () => JSON.stringify(legacy) } },
     "@/lib/state": s.state, "@/store": atoms,
@@ -168,7 +168,7 @@ function preferenceHarness({ legacy = {}, local = {}, server, fail = false } = {
     api.useSyncAiChatOpenPreferences();
     return api.useAiChatOpenPreferences();
   }));
-  return { ...s, posts, render,
+  return { ...s, posts, invalidated, render,
     values: () => render().values,
     receive(data) { queryData = data; updated++; this.render(); },
     edit(key, value) { render().setPreference(key, value); this.render(); } };
@@ -189,19 +189,20 @@ test("null server switches preserve migrated local values and save once even aft
   h.receive({ aiChatOpenNewTickets: null, aiChatOpenTickets: true, aiChatOpenBoards: null });
   await Promise.resolve();
   assert.deepEqual(h.values(), { aiChatOpenNewTickets: false, aiChatOpenTickets: true, aiChatOpenBoards: false });
-  assert.deepEqual(h.posts, [{ aiChatOpenNewTickets: false, aiChatOpenBoards: false }]);
+  assert.deepEqual(h.posts, [{ aiChatOpenIfUnset: { aiChatOpenNewTickets: false, aiChatOpenBoards: false } }]);
+  assert.deepEqual(h.invalidated, []);
 });
 test("untouched user saves the ticket defaults once and a switch edit writes only its boolean", () => {
   const h = preferenceHarness({ server: { aiChatOpenNewTickets: null, aiChatOpenTickets: null, aiChatOpenBoards: null } });
   h.render(); h.render();
-  assert.deepEqual(h.posts, [defaults]);
+  assert.deepEqual(h.posts, [{ aiChatOpenIfUnset: defaults }]);
   h.edit("aiChatOpenBoards", true);
   assert.deepEqual(h.posts[1], { aiChatOpenBoards: true });
   assert.equal(h.values().aiChatOpenBoards, true);
 });
 
-function preferencesApi(enabled, body) {
-  const writes = [], flagReads = [];
+function preferencesApi(enabled, body, stored = { aiChatOpenNewTickets: null, aiChatOpenTickets: null, aiChatOpenBoards: null }) {
+  const writes = [], flagReads = [], fills = [];
   const empty = {};
   const api = load("src/app/api/users/preferences/route.ts", {
     "@/lib/ai/htpr7038ModelReset": { ensureHtpr7038ModelReset: async () => "done" },
@@ -210,7 +211,10 @@ function preferencesApi(enabled, body) {
     "@/lib/mcp/readJsonBody": { readJsonBody: async () => ({ ok: true, body }) },
     "next/server": { NextResponse: { json: (data, options) => ({ data, status: options?.status ?? 200 }) } },
     "next/headers": empty,
-    "@/lib/prisma": { __esModule: true, default: { userSetting: { update: async ({ data }) => { writes.push(data); return data; } } } },
+    "@/lib/prisma": { __esModule: true, default: { userSetting: {
+      update: async ({ data }) => { writes.push(data); return data; },
+      updateMany: async ({ where, data }) => { fills.push({ where, data }); const key = Object.keys(data)[0]; if (stored[key] !== null) return { count: 0 }; stored[key] = data[key]; return { count: 1 }; },
+    } } },
     "@prisma/client": empty,
     "@/utils/controllers/users/fetch_preferences": { invalidateUserPreferenceCache: async () => {} },
     "@/lib/aiModelPreferences": empty, "@/lib/aiModelOptions": empty,
@@ -218,7 +222,7 @@ function preferencesApi(enabled, body) {
     "@/lib/configs/allTasks.config": empty, "@/models/Calendar/model": empty,
     "@/lib/configs/boardSortMode.config": empty, "@/lib/flags/definitions/htpr-7649-sidebar-view-saved": empty,
   });
-  return { post: () => api.POST({ headers: {} }), writes, flagReads };
+  return { post: () => api.POST({ headers: {} }), writes, flagReads, fills, stored };
 }
 for (const key of policy.AI_CHAT_AUTO_OPEN_KEYS) {
   test(`API validates ${key} as boolean even with flag off and gates valid writes by user`, async () => {
@@ -242,6 +246,30 @@ test("API rejects a mixed valid/invalid patch atomically and accepts all three b
   assert.equal((await bad.post()).status, 400); assert.deepEqual(bad.writes, []);
   const good = preferencesApi(true, defaults);
   assert.equal((await good.post()).status, 200); assert.deepEqual(good.writes, [defaults]);
+});
+test("one-time copy fills only empty switches and never overwrites a choice saved elsewhere", async () => {
+  const h = preferencesApi(true, { aiChatOpenIfUnset: { aiChatOpenNewTickets: false, aiChatOpenBoards: false } },
+    { aiChatOpenNewTickets: true, aiChatOpenTickets: true, aiChatOpenBoards: null });
+  assert.equal((await h.post()).status, 200);
+  assert.deepEqual(h.stored, { aiChatOpenNewTickets: true, aiChatOpenTickets: true, aiChatOpenBoards: false });
+  assert.deepEqual(h.fills.map((fill) => fill.where), [{ userId: 7, aiChatOpenNewTickets: null }, { userId: 7, aiChatOpenBoards: null }]);
+  assert.deepEqual(h.writes, [{}]);
+});
+test("one-time copy rejects bad shapes with 400 and writes nothing when the flag is off", async () => {
+  for (const bad of [null, true, [], "x", { aiChatOpenBoards: "no" }, { boardSortMode: true }]) {
+    const h = preferencesApi(true, { aiChatOpenIfUnset: bad });
+    assert.equal((await h.post()).status, 400); assert.deepEqual(h.fills, []); assert.deepEqual(h.writes, []);
+  }
+  const off = preferencesApi(false, { aiChatOpenIfUnset: defaults });
+  assert.equal((await off.post()).status, 200); assert.deepEqual(off.fills, []);
+  assert.deepEqual(off.stored, { aiChatOpenNewTickets: null, aiChatOpenTickets: null, aiChatOpenBoards: null });
+});
+test("a successful copy refetches the saved switches instead of guessing them", async () => {
+  const h = preferenceHarness({ server: { aiChatOpenNewTickets: null, aiChatOpenTickets: true, aiChatOpenBoards: true } });
+  h.render();
+  await Promise.resolve(); await Promise.resolve();
+  assert.deepEqual(h.posts, [{ aiChatOpenIfUnset: { aiChatOpenNewTickets: true } }]);
+  assert.deepEqual(h.invalidated, [["user-preferences", "ai-chat-auto-open", "7"]]);
 });
 
 function toggles(enabled, keepClosedFlag = true) {

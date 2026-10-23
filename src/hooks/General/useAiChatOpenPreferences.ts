@@ -56,8 +56,9 @@ export function useSyncAiChatOpenPreferences() {
     }
     setSaved((previous) => ({ ...previous, [user.id]: next }));
     if (Object.keys(missing).length) {
-      queryClient.setQueryData<IUserPreferences>(queryKey, (previous) => previous ? { ...previous, ...missing } : previous);
-      void axios.post("/api/users/preferences", missing).catch(() => {});
+      void axios.post("/api/users/preferences", { aiChatOpenIfUnset: missing })
+        .then(() => queryClient.invalidateQueries({ queryKey }))
+        .catch(() => {});
     }
   }, [enabled, ready, user?.id, isSuccess, dataUpdatedAt, data, saved, setSaved, queryClient, queryKey]);
 }

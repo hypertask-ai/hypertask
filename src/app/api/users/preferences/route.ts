@@ -1,5 +1,5 @@
 import { HTPR_7650_AI_CHAT_OPEN_SWITCHES_FLAG } from "@/lib/flags/definitions/htpr-7650-ai-chat-open-switches";
-import { AI_CHAT_AUTO_OPEN_KEYS } from "@/lib/aiChat/autoOpenPreferences";
+import { AI_CHAT_AUTO_OPEN_KEYS, type AiChatAutoOpenKey } from "@/lib/aiChat/autoOpenPreferences";
 import { ensureHtpr7038ModelReset } from "@/lib/ai/htpr7038ModelReset";
 import { readJsonBody } from "@/lib/mcp/readJsonBody";
 import { loadCurrentUser } from "@/lib/auth/currentUser";
@@ -217,6 +217,25 @@ export async function POST(request: NextRequest) {
         await isFeatureEnabled(HTPR_7650_AI_CHAT_OPEN_SWITCHES_FLAG, user.id)) {
       for (const key of AI_CHAT_AUTO_OPEN_KEYS) {
         if (typeof body[key] === "boolean") data[key] = body[key];
+      }
+    }
+    const aiChatOpenIfUnset: Partial<Record<AiChatAutoOpenKey, boolean>> = {};
+    if (body.aiChatOpenIfUnset !== undefined) {
+      const requested = body.aiChatOpenIfUnset;
+      const valid =
+        !!requested &&
+        typeof requested === "object" &&
+        !Array.isArray(requested) &&
+        Object.entries(requested).every(
+          ([key, value]) =>
+            (AI_CHAT_AUTO_OPEN_KEYS as readonly string[]).includes(key) &&
+            typeof value === "boolean",
+        );
+      if (!valid) {
+        return NextResponse.json({ success: false, error: "Invalid AI chat auto-open preference" }, { status: 400 });
+      }
+      if (await isFeatureEnabled(HTPR_7650_AI_CHAT_OPEN_SWITCHES_FLAG, user.id)) {
+        Object.assign(aiChatOpenIfUnset, requested);
       }
     }
 
@@ -566,6 +585,13 @@ export async function POST(request: NextRequest) {
         where: { userId: user.id, boardSortMode: null },
         data: { boardSortMode: boardSortModeIfUnset },
       });
+    }
+    for (const key of AI_CHAT_AUTO_OPEN_KEYS) {
+      const value = aiChatOpenIfUnset[key];
+      if (value === undefined) continue;
+      const stillUnset = { userId: user.id, [key]: null } as Prisma.UserSettingWhereInput;
+      const fill = { [key]: value } as Prisma.UserSettingUpdateManyMutationInput;
+      await prisma.userSetting.updateMany({ where: stillUnset, data: fill });
     }
     const result = calendarViewsOperation
       ? await updateWithCalendarOperation()
