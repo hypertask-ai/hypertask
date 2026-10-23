@@ -47,14 +47,14 @@ test("the startup preload, the column preload and the client-only lazy card all 
 
 test("a column draws real cards first when the card code is loaded, the board is not server-drawn, hydration is over and the flag is on or not loaded yet", () => {
   assert.match(section, /const firstDrawFlagLoaded = useFlagLoaded\(HTPR_7644_BOARD_CARDS_FIRST_DRAW_FLAG\);/);
-  assert.match(section, /if \(useFlag\(HTPR_7644_BOARD_CARDS_FIRST_DRAW_FLAG\) \|\| !firstDrawFlagLoaded\) firstDrawTask = taskModule\.loaded\(\);/);
-  assert.match(section, /const \[loadedTask\] = useState\(\(\) => \(seeded \|\| !hydrated \? null : firstDrawTask\)\);/);
+  assert.match(section, /if \(useFlag\(HTPR_7644_BOARD_CARDS_FIRST_DRAW_FLAG\) \|\| !firstDrawFlagLoaded\) loadedTask = taskLoadedAtMount;/);
+  assert.match(section, /const \[taskLoadedAtMount\] = useState\(\(\) => \(seeded \|\| !hydrated \? null : taskModule\.loaded\(\)\)\);/);
   assert.match(section, /const TaskRenderer = seeded \? SeededTask : loadedTask\?\.default \?\? Task;/);
   assert.match(section, /useState\(seeded \|\| loadedTask !== null\)/);
 });
 
-test("with the flag known Off or the card code still loading, the column keeps the placeholder first draw", () => {
-  const flagged = section.indexOf("let firstDrawTask");
+test("with the flag known Off, or switched Off after mount, or the card code still loading, the column renders the lazy card with placeholders", () => {
+  const flagged = section.indexOf("let loadedTask");
   assert.ok(flagged >= 0);
   assert.match(section.slice(flagged, flagged + 120), /= null;/);
   assert.doesNotMatch(section, /useState\(seeded\);/);

@@ -114,10 +114,10 @@ export const Section = ({
   const snapshot = useFirstScreenSurface();
   const [seeded] = useState(() => Boolean(snapshot));
   const hydrated = useHydrated();
+  const [taskLoadedAtMount] = useState(() => (seeded || !hydrated ? null : taskModule.loaded()));
   const firstDrawFlagLoaded = useFlagLoaded(HTPR_7644_BOARD_CARDS_FIRST_DRAW_FLAG);
-  let firstDrawTask: ReturnType<typeof taskModule.loaded> = null;
-  if (useFlag(HTPR_7644_BOARD_CARDS_FIRST_DRAW_FLAG) || !firstDrawFlagLoaded) firstDrawTask = taskModule.loaded();
-  const [loadedTask] = useState(() => (seeded || !hydrated ? null : firstDrawTask));
+  let loadedTask: ReturnType<typeof taskModule.loaded> = null;
+  if (useFlag(HTPR_7644_BOARD_CARDS_FIRST_DRAW_FLAG) || !firstDrawFlagLoaded) loadedTask = taskLoadedAtMount;
   const TaskRenderer = seeded ? SeededTask : loadedTask?.default ?? Task;
   const currentProject = project;
   const activeItem = useRecoilValue(activeItemAtom);

@@ -300,7 +300,7 @@ test('integration retains the old import/readiness path, offscreen policy and gl
   assert.match(section, /const Task = dynamic\(loadTask, \{\s*ssr: false/);
   assert.match(section, /const TaskRenderer = seeded \? SeededTask : loadedTask\?\.default \?\? Task;/);
   assert.match(section, /\[taskModuleReady, setTaskModuleReady\] = useState\(seeded \|\| loadedTask !== null\)/);
-  assert.match(section, /useState\(\(\) => \(seeded \|\| !hydrated \? null : firstDrawTask\)\)/);
+  assert.match(section, /useState\(\(\) => \(seeded \|\| !hydrated \? null : taskModule\.loaded\(\)\)\)/);
   assert.match(section, /\(!seeded && typeof IntersectionObserver === "undefined"\)/);
   const global = source('src/components/ProviderGlobal/GloablProviders.tsx');
   assert.match(global, /!routeOwnsMobileChrome && <MobileTopBar/);
