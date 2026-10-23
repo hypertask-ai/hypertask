@@ -1224,15 +1224,11 @@ test("narrow sidebar width is permanent and absent from the flag registry", asyn
   assert.equal((await flags.listFeatureFlagModes()).some((flag) => flag.key === "htpr-6990-narrow-sidebar-width"), false);
 });
 
-test("inbox-next-cached bugfix defaults to Everyone for plain QA and respects OFF", async () => {
-  const { HTPR_7001_INBOX_NEXT_CACHED_FLAG: key } = flags;
-  assert.equal(key, "htpr-7001-inbox-next-cached");
-  const entry = (await flags.listFeatureFlagModes()).find(entry => entry.key === key);
-  assert.equal(entry.kind, "bugfix");
-  assert.equal(entry.mode, "EVERYONE");
-  assert.equal(await flags.isFeatureEnabled(key, 2343), true);
-  row = { mode: "OFF", updatedAt: new Date() };
-  assert.equal(await flags.isFeatureEnabled(key, 2343), false);
+test("cached Inbox next navigation is permanent and its flag is no longer registered", async () => {
+  assert.equal(flags.HTPR_7001_INBOX_NEXT_CACHED_FLAG, undefined);
+  assert.equal(flags.FEATURE_FLAG_KEYS.includes("htpr-7001-inbox-next-cached"), false);
+  assert.equal(definitions.some((flag) => flag.key === "htpr-7001-inbox-next-cached"), false);
+  assert.equal((await flags.listFeatureFlagModes()).some((flag) => flag.key === "htpr-7001-inbox-next-cached"), false);
 });
 
 test("Ctrl+J chat lease fix defaults to Everyone as a bugfix and respects OFF", async () => {

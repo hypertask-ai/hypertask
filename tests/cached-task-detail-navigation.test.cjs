@@ -13,7 +13,7 @@ const cache = jiti(path.join(root, "src/lib/navigation/cachedTaskDetail.ts"));
 const revocation = jiti(path.join(root, "src/lib/boardSync/revocationTombstone.ts"));
 const task = { id: 42, projectId: 6859, uniqueIndex: 43, title: "Cached ticket", status: "Normal", description_: { content: "<p>Already local</p>" } };
 
-function navigateHook(queryClient, router, userId = 2343, authenticatedId = userId, flagEnabled = true) {
+function navigateHook(queryClient, router, userId = 2343, authenticatedId = userId) {
   const relativePath = "src/hooks/MultiPages/Route/useHypertasksNavigate.ts";
   const source = process.env.CACHED_DETAIL_BASELINE
     ? execFileSync("git", ["show", `origin/production:${relativePath}`], { cwd: root, encoding: "utf8" })
@@ -27,8 +27,6 @@ function navigateHook(queryClient, router, userId = 2343, authenticatedId = user
     "@tanstack/react-query": { useQueryClient: () => queryClient },
     "@/lib/state": { useRecoilValue: () => ({ id: userId }) },
     "@/store": { currentUserAtom: {} },
-  "@/hooks/useFlag": { useFlag: () => flagEnabled },
-  "@/lib/flags/keys": { HTPR_7001_INBOX_NEXT_CACHED_FLAG: "htpr-7001-inbox-next-cached" },
     "@/hooks/General/useAuth": { useAuth: () => ({ currentUser: null, authenticatedUserId: authenticatedId }) },
     "@/hooks/Inbox/useGetNotifications": { inboxDataQueryKey: id => ["inbox", "data", id] },
     "@/lib/navigation/cachedTaskDetail": cache,
@@ -180,12 +178,11 @@ test("card Links defer normal clicks to the cached navigator and preserve modifi
     "react": { __esModule: true, default: React, useContext: () => false, useCallback: (callback) => callback },
     "react/jsx-runtime": require("react/jsx-runtime"),
     "next/link": { __esModule: true, default: "a" },
-    "@/hooks/useFlag": { useFlag: () => flagEnabled },
-    "@/lib/flags/keys": { HTPR_7001_INBOX_NEXT_CACHED_FLAG: "htpr-7001-inbox-next-cached" },
+    "@/hooks/useFlag": { useFlag: () => false },
+    "@/lib/flags/keys": { HTPR_7614_SELECTED_CARD_BORDER_FLAG: "htpr-7614-selected-card-border" },
     "@/lib/contexts/mobileContext": { MobileViewContext: {} },
     "@/utils/undoActions/helperFuncs": { cn: (...classes) => classes.filter(Boolean).join(" ") },
   };
-  let flagEnabled = true;
   const exportsObject = {};
   new Function("require", "exports", compiled)((name) => {
     assert.ok(name in mocks, `Unexpected dependency: ${name}`);
@@ -204,13 +201,12 @@ test("card Links defer normal clicks to the cached navigator and preserve modifi
     assert.equal(stopped, Object.keys(modifiers).length !== 0, "modified clicks keep native browser behavior");
   }
   assert.equal(opens, 1);
-  flagEnabled = false;
-  const disabled = exportsObject.default({ taskHref: "/detail/project-6859/43", children: "Cached ticket", openDetail: () => opens++ });
-  const disabledLink = disabled.props.children.find((child) => child?.type === "a");
-  assert.equal(typeof disabledLink.props.onClick, "function", "flag-off Links must also defer to the parent navigator");
+  const rerendered = exportsObject.default({ taskHref: "/detail/project-6859/43", children: "Cached ticket", openDetail: () => opens++ });
+  const rerenderedLink = rerendered.props.children.find((child) => child?.type === "a");
+  assert.equal(typeof rerenderedLink.props.onClick, "function", "rerendered Links must still defer to the parent navigator");
   let prevented = false;
-  disabledLink.props.onClick({ button: 0, preventDefault: () => { prevented = true; } });
-  disabled.props.onClick();
+  rerenderedLink.props.onClick({ button: 0, preventDefault: () => { prevented = true; } });
+  rerendered.props.onClick();
   assert.equal(prevented, true);
   assert.equal(opens, 2);
 });
