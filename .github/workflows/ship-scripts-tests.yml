@@ -11,6 +11,7 @@ on:
       - '.claude/systemd/**'
       - 'scripts/daily-stats*'
       - 'scripts/proc-watchdog*'
+      - 'scripts/premerge-local.sh'
       - '.claude/skills/verify-qa/scripts/**'
       - '.github/workflows/ship-scripts-tests.yml'
       - 'docs/ci-policy.yml'
@@ -62,4 +63,5 @@ jobs:
           python3 .claude/skills/ship/scripts/premerge-evidence.test.py
           python3 .claude/skills/ship/scripts/ci-why.test.py
           bash .claude/skills/ship/scripts/user-unit-check.test.sh
+          python3 .claude/skills/verify-qa/scripts/evidence-prune.test.py
           node --test .claude/skills/verify-qa/scripts/qa-identity.test.mjs
