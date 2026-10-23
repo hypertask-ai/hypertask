@@ -14,7 +14,7 @@ const jiti = createJiti(__filename, {
   fsCache: false,
 })
 const user = { id: 42, email: 'owner@example.invalid', displayName: 'Owner' }
-const ctx: McpAuthContext = { user, agentId: 'writer' }
+const ctx: McpAuthContext = { user, agentId: 'writer', teamScope: null }
 let role: AgentRole | undefined = 'write'
 let memberTeamIds: Array<string | null> = ['team']
 let memberStatus = 'Accepted'

@@ -1,3 +1,4 @@
+import { resolveAgentTeamScope } from "@/lib/auth/agentTeamScope";
 import { withAgentScopeRequest } from "@/lib/auth/agentScope";
 import { NextRequest, NextResponse } from "next/server";
 import { isFeatureEnabled } from "@/lib/flags";
@@ -552,11 +553,18 @@ async function patchAgent(
           { status: 404 },
         );
       }
+      let teamScope
+      try {
+        teamScope = await resolveAgentTeamScope(user.id, existing)
+      } catch {
+        return NextResponse.json({ success: false, error: "Agent team grant is no longer valid" }, { status: 403 })
+      }
       reenabledToken = createMcpToken(
         user.id,
         owner.email,
         undefined,
         existing.id,
+        teamScope ?? undefined,
       );
     }
     if (isReEnabling) {
