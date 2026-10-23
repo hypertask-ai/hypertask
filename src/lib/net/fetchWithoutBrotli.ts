@@ -49,6 +49,8 @@ function decodedBody(body: Dispatcher.ResponseData["body"], encodings: string[])
   return Readable.toWeb(decoded) as ReadableStream<Uint8Array>;
 }
 
+const CREDENTIAL_HEADERS = ["authorization", "proxy-authorization", "cookie", "host"];
+
 function isRedirect(status: number) {
   return status === 301 || status === 302 || status === 303 || status === 307 || status === 308;
 }
@@ -78,8 +80,10 @@ export async function fetchWithoutBrotli(input: string | URL | Request, init: Fe
     if (isRedirect(response.statusCode) && location && init.redirect !== "manual") {
       await response.body.dump();
       if (init.redirect === "error" || redirects >= MAX_FOLLOWED_REDIRECTS) throw new Error("Too many redirects");
-      url = new URL(location, url);
-      if (response.statusCode === 303 || ((response.statusCode === 301 || response.statusCode === 302) && method === "POST")) {
+      const next = new URL(location, url);
+      if (next.origin !== url.origin) CREDENTIAL_HEADERS.forEach((name) => headers.delete(name));
+      url = next;
+      if ((response.statusCode === 303 && method !== "HEAD") || ((response.statusCode === 301 || response.statusCode === 302) && method === "POST")) {
         method = "GET";
         body = undefined;
         headers.delete("content-type");
@@ -97,13 +101,14 @@ export async function fetchWithoutBrotli(input: string | URL | Request, init: Fe
       responseHeaderList.delete("content-encoding");
       responseHeaderList.delete("content-length");
     }
-    const withoutBody = method === "HEAD" || response.statusCode === 204 || response.statusCode === 304;
+    const withoutBody = method === "HEAD" || response.statusCode === 204 || response.statusCode === 205 || response.statusCode === 304;
     if (withoutBody) await response.body.dump();
     const result = new Response(withoutBody ? null : decodedBody(response.body, encodings), {
       status: response.statusCode,
       headers: responseHeaderList,
     });
     Object.defineProperty(result, "url", { value: url.toString() });
+    Object.defineProperty(result, "redirected", { value: redirects > 0 });
     return result;
   }
 }

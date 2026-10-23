@@ -7,8 +7,12 @@ export function contentEncodings(headerValue: string | null | undefined): string
     .filter((value) => value && value !== "identity");
 }
 
+export const MAX_CONTENT_ENCODING_LAYERS = 5;
+
 export function refusedContentEncoding(headerValue: string | null | undefined): string | undefined {
-  return contentEncodings(headerValue).find(
+  const encodings = contentEncodings(headerValue);
+  if (encodings.length > MAX_CONTENT_ENCODING_LAYERS) return encodings.join(", ");
+  return encodings.find(
     (encoding) => !(DECODABLE_CONTENT_ENCODINGS as readonly string[]).includes(encoding),
   );
 }

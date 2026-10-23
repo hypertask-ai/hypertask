@@ -23,6 +23,7 @@ function harness({ content = [], finishReason = "length", failure, viewer = { id
     },
   };
   const stubs = {
+    "@/lib/net/downloadWithoutBrotli": { downloadWithoutBrotli: undefined },
     ai,
     "@/lib/auth/getSessionUser": { getSessionUser: async () => viewer ? { userId: viewer.id } : null },
     "@/lib/auth/agentScope": { withAgentScopeRequest: (_request, run) => run() },

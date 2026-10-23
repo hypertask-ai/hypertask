@@ -259,6 +259,7 @@ function loadRoute(relativePath, stubs) {
 
 function routeStubs(error, reports) {
   return {
+    "@/lib/net/downloadWithoutBrotli": { downloadWithoutBrotli: undefined },
     "next/server": { NextResponse: { json: (body, init) => Response.json(body, init) } },
     "node-html-parser": require("node-html-parser"),
     "@/utils/htmlEscape": {},

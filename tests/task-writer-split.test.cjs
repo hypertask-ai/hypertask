@@ -65,6 +65,7 @@ function harness({ enabled = true, dueDates = false, tasks = drafts, failAt = []
     "@/app/api/ai/_lib/promptCache": { cachedInstructionsForUser: async (_userId, args) => `${args.fixed}${args.suffix ?? ""}` },
   });
   const route = load("src/app/api/ai/task-writer/route.ts", {
+    "@/lib/net/downloadWithoutBrotli": { downloadWithoutBrotli: undefined },
     zod: { z },
     "@/lib/ai/taskWriterDueDate": dates, "@/lib/ai/taskWriterTicketType": ticketTypes,
     "@/utils/htmlEscape": { escapeHtml },

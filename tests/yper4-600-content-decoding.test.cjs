@@ -71,6 +71,75 @@ test("still allowed: plain, gzip and deflate responses read as before, and reque
   });
 });
 
+async function listen(handler) {
+  const server = http.createServer(handler);
+  await new Promise((resolve) => server.listen(0, "127.0.0.1", resolve));
+  return { server, base: `http://127.0.0.1:${server.address().port}` };
+}
+
+test("now refused: credentials do not follow a redirect to another origin; still allowed on the same origin", async () => {
+  const received = [];
+  const other = await listen((request, response) => {
+    received.push({ origin: "other", authorization: request.headers.authorization, cookie: request.headers.cookie });
+    response.end(text);
+  });
+  const first = await listen((request, response) => {
+    if (request.url === "/away") {
+      response.writeHead(302, { location: `${other.base}/landing` });
+      return response.end();
+    }
+    if (request.url === "/near") {
+      response.writeHead(307, { location: "/landing" });
+      return response.end();
+    }
+    received.push({ origin: "first", authorization: request.headers.authorization, cookie: request.headers.cookie });
+    response.end(text);
+  });
+  try {
+    const headers = { authorization: "Bearer fixture", cookie: "session=fixture" };
+    const away = await fetchWithoutBrotli(`${first.base}/away`, { headers });
+    assert.equal(await away.text(), text);
+    assert.equal(away.redirected, true);
+    const near = await fetchWithoutBrotli(`${first.base}/near`, { headers });
+    assert.equal(await near.text(), text);
+    assert.deepEqual(received, [
+      { origin: "other", authorization: undefined, cookie: undefined },
+      { origin: "first", authorization: "Bearer fixture", cookie: "session=fixture" },
+    ]);
+  } finally {
+    await new Promise((resolve) => other.server.close(resolve));
+    await new Promise((resolve) => first.server.close(resolve));
+  }
+});
+
+test("a 303 keeps HEAD as HEAD and a 205 has no body", async () => {
+  const methods = [];
+  const { server, base } = await listen((request, response) => {
+    methods.push(`${request.method} ${request.url}`);
+    if (request.url === "/see-other") {
+      response.writeHead(303, { location: "/reset" });
+      return response.end();
+    }
+    response.writeHead(205);
+    response.end();
+  });
+  try {
+    const head = await fetchWithoutBrotli(`${base}/see-other`, { method: "HEAD" });
+    assert.equal(head.status, 205);
+    const post = await fetchWithoutBrotli(`${base}/see-other`, { method: "POST", body: "x" });
+    assert.equal(post.status, 205);
+    assert.equal(await post.text(), "");
+    assert.deepEqual(methods, ["HEAD /see-other", "HEAD /reset", "POST /see-other", "GET /reset"]);
+  } finally {
+    await new Promise((resolve) => server.close(resolve));
+  }
+});
+
+test("now refused: more than five stacked encodings; still allowed: five", () => {
+  assert.ok(refusedContentEncoding(Array(6).fill("gzip").join(", ")));
+  assert.equal(refusedContentEncoding(Array(5).fill("gzip").join(", ")), undefined);
+});
+
 test("inbound: Brotli or unknown request encodings are refused, gzip, deflate and identity still pass", () => {
   assert.equal(refusedContentEncoding("br"), "br");
   assert.equal(refusedContentEncoding("gzip, br"), "br");

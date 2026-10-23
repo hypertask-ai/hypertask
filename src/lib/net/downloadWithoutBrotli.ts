@@ -15,7 +15,7 @@ export async function downloadUntrustedUrl(url: URL): Promise<{ data: Uint8Array
     try {
       const response = await fetchWithoutBrotli(current, { redirect: "manual", dispatcher, signal });
       const location = response.headers.get("location");
-      if (response.status >= 300 && response.status < 400 && location) {
+      if ([301, 302, 303, 307, 308].includes(response.status) && location) {
         await response.body?.cancel();
         current = new URL(location, current);
         continue;
