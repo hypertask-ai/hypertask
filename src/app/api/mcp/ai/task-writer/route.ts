@@ -13,6 +13,12 @@ import {
 } from "@/app/api/ai/_lib/taskWriterRun";
 import { generateTaskWriterDraft } from "@/app/api/ai/_lib/taskWriterDraft";
 
+async function isAllowanceLimitMessage(message: string) {
+  if (!message.includes("AI allowance")) return false;
+  const { SHARED_AI_ALLOWANCE_EXCEEDED_MESSAGE } = await import("@/lib/aiAllowancePolicy");
+  return message === SHARED_AI_ALLOWANCE_EXCEEDED_MESSAGE;
+}
+
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 export const maxDuration = 300;
@@ -97,6 +103,11 @@ export async function POST(request: NextRequest) {
         { success: false, error: error.message },
         { status: 403 }
       );
+    }
+    const message = errorMessage(error);
+    if (await isAllowanceLimitMessage(message)) {
+      console.warn("[mcp/ai/task-writer] refused: included AI allowance used up");
+      return NextResponse.json({ success: false, error: message }, { status: 429 });
     }
     await reportError({
       message: error instanceof Error ? error.message : "AI request failed",

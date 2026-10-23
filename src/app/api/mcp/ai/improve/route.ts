@@ -21,6 +21,7 @@ import { isAiFeatureEnabled } from "@/lib/systemModelLadder";
 import { toEditableHtml } from "@/app/api/mcp/ai/improve/plainText";
 import prisma from "@/lib/prisma";
 import { resolveAiUsageTaskId } from "@/app/api/ai/_lib/currentTaskContext";
+import { warnIfAllowanceRefused } from "@/app/api/ai/_lib/allowanceRefusal";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -109,6 +110,8 @@ export async function POST(request: NextRequest) {
       model: selected.modelId,
     });
   } catch (error) {
+    const allowanceMessage = warnIfAllowanceRefused(error, "mcp/ai/improve");
+    if (allowanceMessage) return NextResponse.json({ success: false, error: allowanceMessage }, { status: 429 });
     await reportError({
       message: error instanceof Error ? error.message : "AI request failed",
       stack: error instanceof Error ? error.stack : undefined,

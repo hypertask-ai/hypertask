@@ -11,7 +11,7 @@ import { waitUntil } from "@vercel/functions";
 import { recordAiChatAlertSample } from "@/lib/ai/chatAlerts/service";
 import { resolveSkillsForAiRequest } from "@/app/api/ai/_lib/chatSkillResolution";
 
-import { reportHandledChatError, errorMessage, sseFrame, userFacingErrorMessage, userFacingErrorDetails } from "@/lib/ai/chatStream/errors";
+import { reportHandledChatError, errorMessage, sseFrame, userFacingErrorMessage, userFacingErrorDetails, includedAllowanceError } from "@/lib/ai/chatStream/errors";
 
 import type { StreamState } from "./streamState";
 
@@ -224,7 +224,7 @@ export async function runChatStream(controller: ReadableStreamDefaultController<
       }
       return;
     }
-    console.error("[ai/chat/stream] stream error", error);
+    if (!includedAllowanceError(error)) console.error("[ai/chat/stream] stream error", error);
     await reportHandledChatError(error, "stream-handler", {
       model: state.selected.resolvedModelId,
       provider: state.selected.usageProvider,
