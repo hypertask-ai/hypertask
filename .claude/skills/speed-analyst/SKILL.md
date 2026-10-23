@@ -23,6 +23,10 @@ This is the map, not a parallel `/ship`. Read [PLAYBOOK.md](PLAYBOOK.md) first a
 | Learn | [PLAYBOOK.md](PLAYBOOK.md), shared `speed-check/improve-skill.md` for shared harness lessons | Record what found a real problem, false leads, each idea tried with measured result, next probe and per-ticket ms scoreboard; a script probe change gets a test and ticket/PR, never relaxed safety/budgets |
 | Weekly research | Current `package.json`, lockfile resolved versions, runtime/deploy identity, official releases and changelogs plus open-ended write-ups | Dated playbook round, scored experiments, sources, one chosen experiment or a justified no-go; prepare a plain-language weekly digest for Valentin's review on the relevant ticket via the owning runner's `vcc` |
 
+## Build scratch is not evidence
+
+Never build on the VPS. On an approved build host, use `mktemp -d /tmp/ht-qa-build.XXXXXX` for app copies, dependencies, `.next` and `build-candidate`/`build-baseline`/`build-a`/`build-profile` trees, with an EXIT trap to remove it (INT/TERM must exit through that trap). The optional `scripts/premerge-local.sh` already owns this lifecycle. Copy only small sanitized numbers, logs, screenshots and HTML reports to `~/.local/state/vcc-evidence/<TICKET>/`; never copy a build, browser cache or toolchain there. See [QA evidence storage](../verify-qa/reference/evidence-storage.md).
+
 ## Research without a fixed ceiling
 
 Start from the app's actual versions, not old docs. Investigate Next.js, React, Node, Prisma, the Neon connection driver/pooler, Vercel features, Upstash/QStash and Turbopuffer. Read official release notes, migration/breaking-change guides, limits and costs. At the initial seed the app uses `@prisma/adapter-pg`, not `@neondatabase/serverless`: a driver migration is an experiment, not an installed dependency. Expand into browser APIs, rendering, scheduling, caching, data access and serverless cold-start techniques. Study engineering write-ups from Linear and Superhuman and other fast apps; reproduce the mechanism on our workload instead of copying their UX or trusting a marketing number.

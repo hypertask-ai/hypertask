@@ -1,0 +1,10 @@
+[Unit]
+Description=Prune old QA builds and disposable scratch
+[Service]
+Type=oneshot
+Environment="PATH=%h/.local/bin:/usr/local/bin:/usr/bin:/bin"
+ExecStart=%h/.local/lib/hypertask/evidence-prune/evidence-prune --apply
+Nice=19
+IOSchedulingClass=idle
+TimeoutStartSec=1h
+UMask=0077

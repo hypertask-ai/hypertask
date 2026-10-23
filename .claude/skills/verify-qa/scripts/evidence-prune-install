@@ -1,0 +1,23 @@
+#!/usr/bin/env bash
+set -euo pipefail
+umask 077
+
+here=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)
+target="$HOME/.local/lib/hypertask/evidence-prune"
+units="$HOME/.config/systemd/user"
+mkdir -p "$target" "$units"
+for name in evidence-prune evidence-prune-install; do
+  if [[ $here/$name != "$target/$name" ]]; then cp "$here/$name" "$target/$name"; fi
+  chmod 755 "$target/$name"
+done
+checker="$here/user-unit-check"
+[[ -f $checker ]] || checker="$here/../../ship/scripts/user-unit-check"
+[[ $checker == "$target/user-unit-check" ]] || install -m 755 "$checker" "$target/user-unit-check"
+for name in evidence-prune.service evidence-prune.timer; do
+  if [[ $here/$name != "$target/$name" ]]; then cp "$here/$name" "$target/$name"; fi
+  cp "$target/$name" "$units/$name"
+done
+"${USER_UNIT_CHECK:-$target/user-unit-check}" "$units/evidence-prune.service" "$units/evidence-prune.timer"
+systemctl --user daemon-reload
+systemctl --user enable --now evidence-prune.timer
+echo 'evidence-prune: installed daily user timer; inspect one run with user-unit-check --first-run evidence-prune.service'
