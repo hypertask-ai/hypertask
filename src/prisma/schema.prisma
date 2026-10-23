@@ -610,6 +610,7 @@ model UserSetting {
   // All Tasks date-range selector (HTPR-5678). Null = never chosen; the view
   // then opens on the Last 7 days default. Chosen value syncs across devices.
   allTasksDateRange        String?
+  boardSortMode            String?
   playGifs                 Boolean       @default(true)
   autoDescriptionSuggestions Boolean      @default(true)
   notificationMatrix       Json          @default("{}")

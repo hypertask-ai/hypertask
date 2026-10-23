@@ -1,6 +1,7 @@
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import axios from "axios";
 import type { TAiModelPreferences } from "@/lib/aiModelPreferences";
+import type { BoardSortMode } from "@/lib/configs/boardSortMode.config";
 import type { ISnippet } from "@/lib/snippets";
 import type {
   DisplayAvatar,
@@ -27,6 +28,7 @@ export interface IUserPreferences {
   inboxAdvanceOnSend: boolean;
   emojiFrequency?: Record<string, number> | null;
   calendarViews: CalendarViewsPreference | null;
+  boardSortMode?: BoardSortMode | null;
 }
 
 export const DEFAULT_USER_PREFERENCES: IUserPreferences = {
@@ -45,6 +47,7 @@ export const DEFAULT_USER_PREFERENCES: IUserPreferences = {
   inboxAdvanceOnSend: true,
   emojiFrequency: null,
   calendarViews: null,
+  boardSortMode: null,
 };
 
 export const USER_PREFERENCES_QUERY_KEY = ["user-preferences"] as const;

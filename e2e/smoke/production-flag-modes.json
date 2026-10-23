@@ -219,6 +219,7 @@
     "htpr-7537-first-column-padding": "EVERYONE",
     "htpr-7544-ctrlj-sidebar-on-new-task": "EVERYONE",
     "htpr-7559-enter-runs-search": "EVERYONE",
-    "htpr-7560-flag-reader-subscribe": "OFF"
+    "htpr-7560-flag-reader-subscribe": "OFF",
+    "htpr-7649-sidebar-view-saved": "EVERYONE"
   }
 }
