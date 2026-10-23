@@ -9,7 +9,7 @@ import type { ITask } from "@/models/model";
 import { useRecoilValue } from "@/lib/state";
 import { currentUserAtom } from "@/store";
 import { useFlag } from "@/hooks/useFlag";
-import { HTPR_6991_BACK_FIRST_OPEN_FLAG, HTPR_7003_BOARD_BACK_FLAG, HTPR_7129_BOARD_CARD_FRESH_AFTER_ESCAPE_FLAG } from "@/lib/flags/keys";
+import { HTPR_6991_BACK_FIRST_OPEN_FLAG, HTPR_7129_BOARD_CARD_FRESH_AFTER_ESCAPE_FLAG } from "@/lib/flags/keys";
 import { cachedTaskDetailKey, cachedTaskDetailLocation, findCachedTaskDetail, openCachedTaskDetail, type CachedTaskDetailLocation } from "@/lib/navigation/cachedTaskDetail";
 
 let loadedTaskDetail: typeof import("@/components/Modals/SwipeUnread/EmbeddedTaskDetail").default | undefined;
@@ -49,7 +49,6 @@ export default function CachedTaskDetailNavigation({ children, accountId }: {
   const phoneFirstPaint = useFlag(HTPR_7008_PHONE_FIRST_PAINT_FLAG);
   const backFirstOpen = useFlag(HTPR_6991_BACK_FIRST_OPEN_FLAG);
   const queryClient = useQueryClient();
-  const boardBack = useFlag(HTPR_7003_BOARD_BACK_FLAG);
   const [protectedSource, setProtectedSource] = useState<HTMLDivElement | null>(null);
   const [historyDestination, setHistoryDestination] = useState<{ pathname: string } | null>(null);
   const boardCardFresh = useFlag(HTPR_7129_BOARD_CARD_FRESH_AFTER_ESCAPE_FLAG);
@@ -75,12 +74,10 @@ export default function CachedTaskDetailNavigation({ children, accountId }: {
   useEffect(() => {
     if (accountId === null || currentUser?.id !== accountId) return;
     const restoreCachedTask = (event: Event) => {
-      const sourcePath = backFirstOpen || boardBack
-        ? [...document.querySelectorAll<HTMLElement>("#title-input")]
-          .find((title) => title.getClientRects().length > 0)
-          ?.closest("[data-task-detail-path]")?.getAttribute("data-task-detail-path")
-        : location ? `/detail/project-${location.projectId}/${location.uniqueIndex}` : pathname;
-      if (boardBack && window.location.pathname === "/project" &&
+      const sourcePath = [...document.querySelectorAll<HTMLElement>("#title-input")]
+        .find((title) => title.getClientRects().length > 0)
+        ?.closest("[data-task-detail-path]")?.getAttribute("data-task-detail-path");
+      if (window.location.pathname === "/project" &&
           /^\/detail\/project-\d+\/\d+$/.test(sourcePath ?? "")) {
         (event as CustomEvent<PopStateEvent>).detail.stopImmediatePropagation();
         router.replace(window.location.pathname + window.location.search + window.location.hash);
@@ -105,7 +102,7 @@ export default function CachedTaskDetailNavigation({ children, accountId }: {
     };
     window.addEventListener("cached-task-detail-popstate", restoreCachedTask);
     return () => window.removeEventListener("cached-task-detail-popstate", restoreCachedTask);
-  }, [backFirstOpen, boardBack, accountId, currentUser?.id, queryClient, location, pathname, router]);
+  }, [backFirstOpen, accountId, currentUser?.id, queryClient, router]);
   useEffect(() => {
     if (!location) return;
     const restoreSourceRoute = (event: PopStateEvent) => {
@@ -194,12 +191,12 @@ export default function CachedTaskDetailNavigation({ children, accountId }: {
     return unsubscribe;
   }, [historyDestination, accountId, currentUser?.id, queryClient, showDetail]);
   useEffect(() => {
-    if (!historyDestination || (boardBack && historyDestination.pathname === "/project")) return;
+    if (!historyDestination || historyDestination.pathname === "/project") return;
     const timer = window.setTimeout(() => setHistoryDestination(null), 4000);
     return () => window.clearTimeout(timer);
-  }, [boardBack, historyDestination]);
+  }, [historyDestination]);
   useEffect(() => {
-    if (!boardBack || historyDestination?.pathname !== "/project") return;
+    if (historyDestination?.pathname !== "/project") return;
     const clearOnDeparture = () => {
       if (window.location.pathname !== historyDestination.pathname) setHistoryDestination(null);
     };
@@ -212,9 +209,9 @@ export default function CachedTaskDetailNavigation({ children, accountId }: {
       window.removeEventListener("cached-task-detail-popstate", clearOnDeparture);
       window.removeEventListener("cached-task-detail-navigation", clearOnDeparture);
     };
-  }, [boardBack, historyDestination, pathname, nativePathname]);
+  }, [historyDestination, pathname, nativePathname]);
   useEffect(() => {
-    if (!boardBack || historyDestination?.pathname !== "/project" || !protectedSource) return;
+    if (historyDestination?.pathname !== "/project" || !protectedSource) return;
     const source = protectedSource;
     const boardUrl = window.location.pathname + window.location.search + window.location.hash;
     const timer = window.setTimeout(() => {
@@ -234,8 +231,8 @@ export default function CachedTaskDetailNavigation({ children, accountId }: {
       window.clearTimeout(timer);
       observer.disconnect();
     };
-  }, [boardBack, historyDestination, protectedSource]);
-  const suppressPreviousTask = (backFirstOpen || (boardBack && historyDestination?.pathname === "/project")) && currentUser?.id === accountId &&
+  }, [historyDestination, protectedSource]);
+  const suppressPreviousTask = (backFirstOpen || historyDestination?.pathname === "/project") && currentUser?.id === accountId &&
     historyDestination?.pathname === nativePathname;
   if (!showDetail && suppressPreviousTask) {
     return (

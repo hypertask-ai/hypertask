@@ -570,15 +570,11 @@ test("back-first-open bugfix defaults to Everyone for plain QA and respects OFF"
   assert.equal(await flags.isFeatureEnabled(key, 2343), false);
 });
 
-test("board-back bugfix defaults to Everyone for plain QA and respects OFF", async () => {
-  const { HTPR_7003_BOARD_BACK_FLAG: key } = flags;
-  assert.equal(key, "htpr-7003-board-back");
-  const entry = (await flags.listFeatureFlagModes()).find(entry => entry.key === key);
-  assert.equal(entry.kind, "bugfix");
-  assert.equal(entry.mode, "EVERYONE");
-  assert.equal(await flags.isFeatureEnabled(key, 2343), true);
-  row = { mode: "OFF", updatedAt: new Date() };
-  assert.equal(await flags.isFeatureEnabled(key, 2343), false);
+test("board-back is no longer registered", async () => {
+  assert.equal(Object.hasOwn(flags, "HTPR_7003_BOARD_BACK_FLAG"), false);
+  assert.equal(flags.FEATURE_FLAG_KEYS.includes("htpr-7003-board-back"), false);
+  assert.equal(definitions.some(entry => entry.key === "htpr-7003-board-back"), false);
+  assert.equal((await flags.listFeatureFlagModes()).some(entry => entry.key === "htpr-7003-board-back"), false);
 });
 
 test("no-loading-flash bugfix defaults to Everyone for plain QA and respects OFF", async () => {
