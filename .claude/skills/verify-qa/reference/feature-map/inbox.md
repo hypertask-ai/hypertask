@@ -11,9 +11,12 @@
 or assign a task the QA account watches), then check it lands in the inbox,
 and that archiving/undo works.
 
+- **Core inbox cycle (YPER4-629), every app deploy and before any flag goes to Everyone:** `node .claude/skills/verify-qa/scripts/inbox-cycle-live.mjs <folder>` as QA 985 seeds three reminders on QA Sandbox, opens one by click, sends a comment with Ctrl+Enter, presses J and E, opens one by Enter, and prints `inbox-cycle ok`. The same cycle runs in the required `browser-smoke` check (`e2e/smoke/inbox-cycle.spec.ts`) with every flag on and with live-like modes.
 - With `htpr-7311-decision-comment-link` on, open Decisions by click, Enter, and Inbox Next: each ticket jumps to and highlights its latest unanswered Question mentioning the viewer; flag off and other splits keep existing navigation. https://app.hypertask.ai/detail/project-15/7311
 
 ## What usually breaks
+
+- Opening a row by mouse click dropped `?inboxFlow=true` (counter "3 / 3" instead of "1 / 3"), so sending a comment saved but stayed on the ticket ([HTPR-7655](https://app.hypertask.ai/detail/project-15/7655)). Keyboard Enter still worked, so always test the click path.
 
 - Undo restore skipping rows that are missing by the time undo runs
   ([HTPR-6527](https://app.hypertask.ai/detail/project-15/6527), "skip missing inbox rows during undo restore").
@@ -34,6 +37,4 @@ account's inbox stays empty between runs.
 
 ## Gap
 
-No `e2e/smoke` write journey covers inbox yet. This is the first area worth a
-journey if inbox tickets keep coming up; note that in the ticket if you hit
-one.
+The PR check runs on a disposable loopback app, and the live script on QA Sandbox; neither covers the phone layout yet (`--phone` exists on the live script but is not required).

@@ -28,8 +28,9 @@ const localPremerge = process.env.PREMERGE_LOCAL === "1";
 const instantOpenControl = process.argv.includes("--instant-open-control");
 const allFlagsOn = process.argv.includes("--all-flags-on");
 const liveLikeControl = process.argv.includes("--live-like-control");
+const inboxCycle = process.argv.includes("--inbox-cycle");
 if (visual && (localPremerge || contractEnabled)) throw new Error("Visual fixtures require a fresh disposable CI database");
-if ([visual, instantOpenControl, allFlagsOn, liveLikeControl].filter(Boolean).length > 1) throw new Error("Choose one browser smoke flag control");
+if ([visual, instantOpenControl, allFlagsOn, liveLikeControl, inboxCycle].filter(Boolean).length > 1) throw new Error("Choose one browser smoke flag control");
 if (visual) for (const key of visualFlags) modes[key] = "EVERYONE";
 if (instantOpenControl) modes["htpr-6752-instant-ticket-open"] = "EVERYONE";
 for (const [key, mode] of Object.entries(modes)) {
@@ -397,7 +398,54 @@ async function seedSessionFixtures(flags) {
   );
 }
 
+// YPER4-629: five fresh reminder messages on their own board, seeded only right before the inbox cycle spec
+// so the layout lock runs still see an empty inbox. Flag modes are left exactly as the previous control set them.
+async function seedInboxCycle() {
+  const fixture = JSON.parse(await readFile(fixtureFile, "utf8"));
+  const boardId = Number(/^\/detail\/project-(\d+)\//.exec(fixture.detailPath)?.[1]);
+  const board = await prisma.project.findUnique({ where: { id: boardId }, select: { ownerId: true, teamId: true, googleAccountId: true } });
+  if (!board) throw new Error("Inbox cycle needs the seeded board");
+  const userId = board.ownerId;
+  await prisma.notification.updateMany({ where: { userId, archivedAt: null }, data: { archivedAt: new Date() } });
+  const { UserSettingId } = await prisma.user.findUniqueOrThrow({ where: { id: userId }, select: { UserSettingId: true } });
+  await prisma.userSetting.update({ where: { id: UserSettingId }, data: { inboxAdvanceOnSend: true } });
+  const inboxBoard = await createBoard({
+    ownerId: userId,
+    teamId: board.teamId,
+    googleAccountId: board.googleAccountId,
+    title: "Browser smoke inbox board",
+    suffix: `inbox${randomUUID().slice(0, 6)}`,
+  });
+  const [todo] = inboxBoard.columns;
+  const items = [];
+  for (let index = 0; index < 5; index++) {
+    const uniqueIndex = index + 2;
+    const task = await prisma.task.create({
+      data: {
+        uniqueIndex,
+        ticketNumber: `${inboxBoard.uniqueIdentifier}-${uniqueIndex}`,
+        title: `Inbox cycle message ${index + 1}`,
+        description: "",
+        projectId: inboxBoard.id,
+        userId,
+        section: todo.title,
+        sectionId: todo.id,
+        ranking: `A0${300 + index}`,
+      },
+    });
+    await prisma.notification.create({
+      data: { type: "TaskReminder", userId, taskId: task.id, projectId: inboxBoard.id, createdAt: new Date(Date.now() - index * 60_000) },
+    });
+    items.push({ taskId: task.id, title: task.title, detailPath: `/detail/project-${inboxBoard.id}/${uniqueIndex}` });
+  }
+  await writeFile(path.join(path.dirname(stateFile), "inbox-cycle-fixture.json"), JSON.stringify({ items }), { mode: 0o600 });
+}
+
 try {
+  if (inboxCycle) {
+    await seedInboxCycle();
+    console.log("Seeded inbox cycle fixtures.");
+  } else {
   {
     // The generated copy can lag a new flag: a flag missing from it uses its registry default.
     const { FEATURE_FLAG_KEYS, defaultFeatureFlagMode } = jiti(path.join(root, "src/lib/flags.ts"));
@@ -441,6 +489,7 @@ try {
     await seedSessionFixtures(flags);
   }
   console.log("Seeded isolated browser smoke fixtures.");
+  }
 } finally {
   await prisma.$disconnect();
   if (process.env.REDIS_URL) {
