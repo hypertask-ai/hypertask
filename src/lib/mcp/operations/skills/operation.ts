@@ -3,7 +3,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 
 import { createUnauthorizedResponse } from '@/lib/mcp/auth'
-import { assertProjectAccess } from "@/app/api/ai/_lib/customInstructions";
+import { assertProjectAccess, withScopedProjectWrite } from "@/app/api/ai/_lib/customInstructions";
 import {
   assertSkillScopeAccess,
   skillErrorResponse,
@@ -77,7 +77,7 @@ export async function POST(request: NextRequest) {
     const input = createSchema.parse(await request.json());
     const scope = await assertSkillScopeAccess(userId, input.scope, input.project_id, { userId, agentId: ctx.agentId, teamScope: ctx.teamScope });
     const parsed = parseCreateInput(input);
-    const skill = await prisma.aI_Skill.create({
+    const write = (db: import("@prisma/client").Prisma.TransactionClient) => db.aI_Skill.create({
       data: {
         ...scope,
         ...parsed,
@@ -85,6 +85,9 @@ export async function POST(request: NextRequest) {
         createdById: userId,
       },
     });
+    const skill = ctx.teamScope != null
+      ? await withScopedProjectWrite({ userId, agentId: ctx.agentId, teamScope: ctx.teamScope }, scope.projectId!, write)
+      : await write(prisma);
     return NextResponse.json({ success: true, skill }, { status: 201 });
   } catch (error) {
     return skillErrorResponse(error);

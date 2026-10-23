@@ -1,3 +1,4 @@
+import type { Prisma } from "@prisma/client";
 import { resolveAiModel as resolveLegacyAiModel } from "@/app/api/ai/_lib/modelProvider";
 import { defaultModelKeyFor } from "@/lib/aiModelOptions";
 import { getAiDefaultModelContext, resolveAutomaticAiModel } from "@/app/api/ai/_lib/byokKeys";
@@ -58,8 +59,8 @@ export async function loadCustomInstructionText(projectId: number) {
   return instruction?.customInstruction ?? "";
 }
 
-export async function assertProjectAccess(userId: number, projectId: number, agentId?: string | null, teamScope?: AgentTokenTeamScope | null) {
-  const project = await prisma.project.findFirst({
+export async function assertProjectAccess(userId: number, projectId: number, agentId?: string | null, teamScope?: AgentTokenTeamScope | null, db: Pick<Prisma.TransactionClient, "project"> = prisma) {
+  const project = await db.project.findFirst({
     where: {
       id: projectId,
       ...getProjectWhere(userId, agentId, teamScope),
@@ -72,6 +73,19 @@ export async function assertProjectAccess(userId: number, projectId: number, age
   }
 
   return project;
+}
+
+export async function withScopedProjectWrite<T>(
+  principal: import("@/lib/rag/retrieveBoardKnowledge").BoardKnowledgePrincipal,
+  projectId: number,
+  write: (db: Prisma.TransactionClient) => Promise<T>,
+): Promise<T> {
+  if (principal.teamScope == null) return write(prisma);
+  return prisma.$transaction(async (tx) => {
+    await tx.$queryRaw`SELECT id FROM "Project" WHERE id = ${projectId} FOR UPDATE`;
+    await assertProjectAccess(principal.userId, projectId, principal.agentId, principal.teamScope, tx);
+    return write(tx);
+  });
 }
 
 export async function uploadCustomInstructionFiles(args: {

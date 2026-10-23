@@ -49,6 +49,7 @@ export type ByokLookupContext = {
   projectId?: number | null;
   userId?: number | null;
   agentId?: string | null;
+  teamScope?: import("@/lib/mcp/auth/types").AgentTokenTeamScope | null;
 };
 
 function normalizeTeamId(value: unknown): string | null {
@@ -74,12 +75,15 @@ async function resolveLookupTeamId(lookup?: ByokLookupContext) {
       where: {
         id: projectId,
         status: "Normal",
-        ...getProjectWhere(userId),
+        ...getProjectWhere(userId, lookup?.agentId, lookup?.teamScope),
       },
       select: { teamId: true },
     });
     teamId = project?.teamId ?? null;
-    if (!teamId) return undefined;
+    if (!teamId) {
+      if (lookup?.teamScope != null) throw new Error("Project not found or access denied");
+      return undefined;
+    }
   } else if (lookup?.trustedTeamId != null) {
     teamId = normalizeTeamId(lookup.trustedTeamId);
   } else {
@@ -99,6 +103,7 @@ async function resolveLookupTeamId(lookup?: ByokLookupContext) {
     teamId = accessibleTeam?.id ?? null;
   }
 
+  if (lookup?.teamScope != null && teamId !== lookup.teamScope.teamId) throw new Error("Project not found or access denied");
   return teamId;
 }
 

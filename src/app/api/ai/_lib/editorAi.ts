@@ -386,6 +386,7 @@ export async function selectTiptapModel(args?: {
   userId?: number | null;
   taskId?: number | null;
   agentId?: string | null;
+  teamScope?: import("@/lib/mcp/auth/types").AgentTokenTeamScope | null;
   teamContext?: { teamId: string | null; settings: unknown };
 }): Promise<SelectedModel> {
   const selected = await selectTaskWriterModel({
@@ -395,6 +396,7 @@ export async function selectTiptapModel(args?: {
     feature: "editor",
     aiFeature: "improveWriting",
     agentId: args?.agentId ?? null,
+    teamScope: args?.teamScope,
     teamContext: args?.teamContext,
   });
 
@@ -610,6 +612,7 @@ export async function selectTaskWriterModel(args: {
   teamContext?: { teamId: string | null; settings: unknown };
   agentId?: string | null;
   taskWriterAgentId?: string | null;
+  teamScope?: import("@/lib/mcp/auth/types").AgentTokenTeamScope | null;
 }) {
   let taskWriterSonnet = false;
   if (args.aiFeature === "taskWriter" && args.userId) {
@@ -619,18 +622,20 @@ export async function selectTaskWriterModel(args: {
     } catch {
     }
   }
-  const agentId = args.agentId ?? (taskWriterSonnet ? args.taskWriterAgentId : null);
+  const agentId = args.agentId ?? (args.teamScope != null || taskWriterSonnet ? args.taskWriterAgentId : null);
   const teamContext =
     args.teamContext ??
-    (await getProjectTeamProviderContext(args.projectId, args.userId));
+    (await getProjectTeamProviderContext(args.projectId, args.userId, args.agentId ?? args.taskWriterAgentId, args.teamScope));
   const keyLookup = teamContext.teamId
     ? {
         trustedTeamId: teamContext.teamId,
+        teamScope: args.teamScope,
         userId: args.userId,
         agentId: agentId ?? null,
       }
     : {
         teamId: args.teamId,
+        teamScope: args.teamScope,
         projectId: args.projectId,
         userId: args.userId,
         agentId: agentId ?? null,

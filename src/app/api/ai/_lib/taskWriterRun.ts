@@ -184,7 +184,7 @@ export async function prepareTaskWriterRun(
     body.aiMode === "AiTaskWriter" ? "taskWriter" : "writeWithAi";
   const teamContext = await getProjectTeamProviderContext(
     body.projectId,
-    userId
+    userId, agentId, teamScope
   );
   if (!isAiFeatureEnabled(aiFeature, teamContext.settings)) {
     throw new AiFeatureDisabledError();
@@ -201,6 +201,7 @@ export async function prepareTaskWriterRun(
     aiFeature,
     teamContext,
     taskWriterAgentId: agentId,
+    teamScope,
   });
   const projectLabelsEnabled = body.aiMode === "AiTaskWriter" &&
     await isFeatureEnabled(HTPR_7513_WRITER_PROJECT_LABELS_FLAG, userId);

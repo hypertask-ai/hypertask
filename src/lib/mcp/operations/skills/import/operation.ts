@@ -1,3 +1,4 @@
+import { withScopedProjectWrite } from "@/app/api/ai/_lib/customInstructions";
 import { wrapMcpRoute, validateMcpRouteAuth as validateMcpAuth, checkMcpRouteRateLimit as checkMcpRateLimit } from '@/lib/mcp/routeWrapper'
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
@@ -39,8 +40,7 @@ export async function POST(request: NextRequest) {
     if (input.dry_run) return NextResponse.json({ success: true, skills: parsed });
     if (selected.length === 0) throw new Error("Select at least one skill to import");
 
-    const skills = await prisma.$transaction(
-      selected.map((skill) => {
+    const writes = (db: import("@prisma/client").Prisma.TransactionClient) => selected.map((skill) => {
         const data = {
           name: skill.name,
           description: skill.description,
@@ -51,20 +51,22 @@ export async function POST(request: NextRequest) {
           createdById: userId,
         };
         return input.scope === "project"
-          ? prisma.aI_Skill.upsert({
+          ? db.aI_Skill.upsert({
               where: {
                 projectId_slug: { projectId: scope.projectId as number, slug: skill.slug },
               },
               create: { ...scope, ...data, slug: skill.slug },
               update: data,
             })
-          : prisma.aI_Skill.upsert({
+          : db.aI_Skill.upsert({
               where: { userId_slug: { userId, slug: skill.slug } },
               create: { ...scope, ...data, slug: skill.slug },
               update: data,
             });
-      })
-    );
+      });
+    const skills = ctx.teamScope != null
+      ? await withScopedProjectWrite({ userId, agentId: ctx.agentId, teamScope: ctx.teamScope }, scope.projectId!, db => Promise.all(writes(db)))
+      : await prisma.$transaction(writes(prisma));
     return NextResponse.json({ success: true, skills, total: skills.length });
   } catch (error) {
     return skillErrorResponse(error);

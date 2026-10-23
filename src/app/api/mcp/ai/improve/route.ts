@@ -72,7 +72,7 @@ export async function POST(request: NextRequest) {
 
     const teamContext = await getProjectTeamProviderContext(
       input.project_id,
-      userId
+      userId, ctx.agentId, ctx.teamScope
     );
     if (!isAiFeatureEnabled("improveWriting", teamContext.settings)) {
       return NextResponse.json(
@@ -89,7 +89,7 @@ export async function POST(request: NextRequest) {
       taskId: usageTaskId,
       agentId: ctx.agentId,
       userId,
-      teamContext,
+      teamContext, teamScope: ctx.teamScope,
     });
     const { text } = await generateText({
       model: selected.model,
