@@ -148,6 +148,9 @@ test('signed bridge re-resolves a stored-bound agent even when legacy scope is a
   f.state.noGrant = false;
   Object.assign(f.agent, { credentialTeamId: null, credentialTeamAccessBinding: null });
   assert.equal((await receiving.getSessionUser(headers({}))).teamScope, null);
+  f.agent.mcpTokenJti = null;
+  assert.equal((await receiving.getSessionUser(headers({}))).teamScope, null, 'unbound internal-agent bridges do not require an unavailable generation');
+  assert.equal(await receiving.getSessionUser(headers({ agentTokenGeneration: 'old-generation' })), null);
 });
 
 test('owner re-enable mints with the stored binding and refuses a removed grant before changing runtime state', async () => {

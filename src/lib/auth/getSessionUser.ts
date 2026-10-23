@@ -33,7 +33,7 @@ async function readSessionUser(headers: Headers): Promise<SessionUser | null> {
         where: { id: legacySession.agentId, userId: legacySession.id, revokedAt: null },
         select: { credentialTeamId: true, credentialTeamAccessBinding: true, mcpTokenJti: true },
       })
-      if (!agent || !agent.mcpTokenJti) return null
+      if (!agent) return null
       if (legacySession.agentTokenGeneration != null && legacySession.agentTokenGeneration !== agent.mcpTokenJti) return null
       const teamScope = await resolveAgentTeamScope(legacySession.id, agent)
       if (legacySession.teamScope != null &&
