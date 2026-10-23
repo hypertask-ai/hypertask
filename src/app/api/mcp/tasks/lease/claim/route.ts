@@ -9,7 +9,7 @@ import {
   isValidLeaseToken,
   isValidTaskId,
 } from '@/lib/mcp/tasks/lease';
-import { lockAgentMutationFence } from '@/lib/mcp/tasks/agentMutationFence';
+import { lockAgentMutationFence, lockTaskTeamScope, TaskTeamScopeError } from '@/lib/mcp/tasks/agentMutationFence';
 
 type LeaseRow = {
   taskId: number;
@@ -132,6 +132,7 @@ export async function POST(request: NextRequest) {
 
     const leases = await prisma.$transaction(async (tx) => {
       await lockAgentMutationFence(tx, task.id);
+      await lockTaskTeamScope(tx, task.id, ctx.user.id, ctx.agentId, ctx.teamScope);
 
       const liveTask = await tx.task.findUnique({
         where: { id: task.id },
@@ -182,8 +183,8 @@ export async function POST(request: NextRequest) {
     });
 
     if (leases.length === 0) {
-      const liveTask = await prisma.task.findUnique({
-        where: { id: task.id },
+      const liveTask = await prisma.task.findFirst({
+        where: { id: task.id, ...(ctx.teamScope != null ? { project: (await import("@/utils/controllers/projects/getAllIncludes")).getProjectWhere(ctx.user.id, ctx.agentId, ctx.teamScope) } : {}) },
         select: { status: true },
       });
       if (!liveTask || liveTask.status === 'Deleted') {
@@ -265,6 +266,7 @@ export async function POST(request: NextRequest) {
       { status: 200 }
     );
   } catch (error) {
+    if (error instanceof TaskTeamScopeError) return NextResponse.json({ success: false, error: error.message }, { status: 404 })
     const identifierResponse = taskIdentifierErrorResponse(error);
     if (identifierResponse) return identifierResponse;
     console.error('[MCP Task Lease Claim] Error:', error);

@@ -1,5 +1,7 @@
+import { lockTaskTeamScope } from "@/lib/mcp/tasks/agentMutationFence";
 import type { AgentTokenTeamScope } from '@/lib/mcp/auth/types';
 import { agentScopeEnforced, recordAgentBoardScopeMiss } from "@/lib/auth/agentScope";
+import { chatContentScopeWhere } from "@/lib/agents/chatContentScope";
 import crypto from "crypto";
 import {
   AgentRunActivityType,
@@ -7,6 +9,7 @@ import {
   type AgentRun,
   type AgentRunActivity,
   type AgentRunStatus,
+  type Prisma,
 } from "@prisma/client";
 import type { NextRequest } from "next/server";
 import { getSessionUser } from "@/lib/auth/getSessionUser";
@@ -111,14 +114,14 @@ export function browserMutationIsSameOrigin(request: NextRequest): boolean {
   return origin === requestOrigin.origin;
 }
 
-function accessibleRunWhere(principal: AgentRunPrincipal, id: string) {
+async function accessibleRunWhere(principal: AgentRunPrincipal, id: string, db: Pick<Prisma.TransactionClient, "project" | "task"> = prisma) {
   return {
     id,
     ...(principal.agentId
       ? {
           agentId: principal.agentId,
-          ...(agentScopeEnforced() ? { OR: [
-            { taskId: null },
+          ...(principal.teamScope != null || agentScopeEnforced() ? { OR: [
+            { taskId: null, ...(principal.teamScope != null ? { chatSession: await chatContentScopeWhere(principal, db) } : {}) },
             { task: { project: projectContentAccessWhere(principal.userId, principal.agentId, principal.teamScope) } },
           ] } : {}),
         }
@@ -162,11 +165,13 @@ export async function createRuntimeAgentRun(
   const agentId = principal.agentId;
 
   const result = await prisma.$transaction(async (tx) => {
+    await lockTaskTeamScope(tx, input.taskId, principal.userId, principal.agentId, principal.teamScope);
     const task = await tx.task.findFirst({
       where: {
         id: input.taskId,
         status: { not: Status.Deleted },
         project: {
+          ...projectContentAccessWhere(principal.userId, principal.agentId, principal.teamScope),
           status: { not: Status.Deleted },
           members: {
             some: { agentId, status: "Accepted" },
@@ -251,7 +256,7 @@ export async function readAgentRun(
 ) {
   return prisma.$transaction(async (tx) => {
     let run = await tx.agentRun.findFirst({
-      where: accessibleRunWhere(principal, id),
+      where: await accessibleRunWhere(principal, id, tx),
     });
     if (!run) return null;
 
@@ -269,7 +274,7 @@ export async function readAgentRun(
         run = { ...run, status: "STALE" };
       } else {
         run = await tx.agentRun.findFirst({
-          where: accessibleRunWhere(principal, id),
+          where: await accessibleRunWhere(principal, id, tx),
         });
         if (!run) return null;
       }
@@ -295,7 +300,7 @@ export async function stopAgentRun(
 ) {
   const result = await prisma.$transaction(async (tx) => {
     const run = (await tx.agentRun.findFirst({
-      where: accessibleRunWhere(principal, id),
+      where: await accessibleRunWhere(principal, id, tx),
       include: {
         task: {
           select: {
@@ -308,6 +313,11 @@ export async function stopAgentRun(
       },
     })) as RunWithContext | null;
     if (!run) return null;
+    if (run.taskId != null) await lockTaskTeamScope(tx, run.taskId, principal.userId, principal.agentId, principal.teamScope);
+    else if (principal.teamScope != null) {
+      await tx.$queryRaw`SELECT id FROM "ChatSession" WHERE id = ${run.chatSessionId} FOR UPDATE`;
+      if (!await tx.chatSession.findFirst({ where: { id: run.chatSessionId!, ...await chatContentScopeWhere(principal, tx) }, select: { id: true } })) return null;
+    }
     if (!NONTERMINAL_AGENT_RUN_STATUSES.includes(run.status)) {
       return { run: serializeAgentRun(run), deliveryIds: [] as string[] };
     }
@@ -326,7 +336,7 @@ export async function stopAgentRun(
     });
     if (stopped.count === 0) {
       const current = await tx.agentRun.findFirst({
-        where: accessibleRunWhere(principal, id),
+        where: await accessibleRunWhere(principal, id, tx),
       });
       return current
         ? { run: serializeAgentRun(current), deliveryIds: [] as string[] }
@@ -528,7 +538,7 @@ async function findActivityRun(
   id: string,
 ): Promise<ActivityRunWithContext | null> {
   return prisma.agentRun.findFirst({
-    where: accessibleRunWhere(principal, id),
+    where: await accessibleRunWhere(principal, id),
     include: {
       agent: {
         select: {
@@ -567,6 +577,7 @@ async function replayCreatedActivity(
   activity: AgentRunActivity,
   input: AgentRunActivityInput,
 ) {
+  if (principal.teamScope != null && !await findActivityRun(principal, run.id)) return null;
   if (!agentRunActivityMatchesInput(activity, input)) {
     throw new AgentRunActivityConflictError(
       "Idempotency-Key was already used with different activity data",
@@ -588,6 +599,7 @@ async function replayCreatedActivity(
       currentUser: run.agent.user,
       agentId: run.agentId,
       accessUserId: principal.userId,
+      teamScope: principal.teamScope,
       agentRunReplayComment: {
         id: activity.responseCommentId,
         activityId: activity.id,
@@ -628,7 +640,7 @@ export async function listAgentRunActivities(
   id: string,
 ) {
   const run = await prisma.agentRun.findFirst({
-    where: accessibleRunWhere(principal, id),
+    where: await accessibleRunWhere(principal, id),
     select: {
       task: { select: { projectId: true } },
       activities: {
@@ -698,6 +710,7 @@ export async function createAgentRunActivity(
 
   const persistenceInput: AgentRunActivityPersistenceInput = {
     ...input,
+    access: principal,
     id: crypto.randomUUID(),
     runId: run.id,
     agentId: run.agentId,
@@ -719,6 +732,7 @@ export async function createAgentRunActivity(
         currentUser: run.agent.user,
         agentId: run.agentId,
         accessUserId: principal.userId,
+        teamScope: principal.teamScope,
         agentRunActivity: persistenceInput,
       });
     } else if (input.type === "RESPONSE" && run.chatSession) {
@@ -833,6 +847,7 @@ export async function selectAgentRunActivity(
         ownerId: run.task.userId,
         currentUser: selectedBy,
         accessUserId: principal.userId,
+        teamScope: principal.teamScope,
         agentRunReplayComment: {
           id: activity.selectionCommentId,
           activityId: activity.id,
@@ -871,6 +886,7 @@ export async function selectAgentRunActivity(
         displayName: principal.displayName,
       },
       accessUserId: principal.userId,
+      teamScope: principal.teamScope,
       agentRunSelection: selectionInput,
     });
   } else if (run.chatSession) {

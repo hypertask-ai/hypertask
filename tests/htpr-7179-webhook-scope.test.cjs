@@ -39,13 +39,23 @@ for (const mode of ['WATCH', 'ENFORCE', 'FLAG_ERROR']) {
           assert.equal(Boolean(replayBoard), allowed); assert.equal(Boolean(replayAgent), allowed);
         }
         if (actor === 'bound') {
+          const serializedB = { id: 'serialized-b', subscriptionId: 'board-15', subscription: f.subscriptions[0], payload: f.event(15), payloadBody: JSON.stringify(f.event(25)), event: 'task.assigned', status: 'pending', processingAt: null, nextAttemptAt: new Date(0), attemptCount: 0 };
+          f.boardRows.push(serializedB);
+          const before = f.sent.length;
+          assert.equal((await boardDelivery.deliverBoardWebhook(serializedB.id)).status, 'skipped');
+          assert.equal(f.sent.length, before);
           const aTask = f.tasks[0];
           aTask.projectId = 25; aTask.project = f.projects[3];
           const stale = f.event(15);
           assert.deepEqual(await board.persistBoardWebhookEvent(f.prisma, 15, stale), []);
           assert.equal(await agent.persistAgentWebhookEvent(f.prisma, f.input(15)), null);
-          f.team.managementKeyOwnerGeneration++;
+          aTask.projectId = 15; aTask.project = f.projects[0];
           const check = f.load('src/lib/webhooks/credentialScope.ts');
+          assert.equal(await check.webhookCredentialAllows(f.agent.id, f.event(15), { projectId: 15 }), true);
+          f.team.managementKeyOwnerGeneration++;
+          assert.equal(await check.webhookCredentialAllows(f.agent.id, f.event(15), { projectId: 15 }), false);
+          f.team.managementKeyOwnerGeneration--;
+          f.prisma.team.findFirst = async () => { throw new Error('fixture grant unavailable'); };
           assert.equal(await check.webhookCredentialAllows(f.agent.id, f.event(15), { projectId: 15 }), false);
         }
       });

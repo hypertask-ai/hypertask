@@ -32,18 +32,19 @@ export async function POST(
     where: {
       messageId_agentId: { messageId, agentId: ctx.agentId },
     },
-    select: { message: { select: { roomId: true } } },
+    select: { message: { select: { roomId: true, taskId: true } } },
   });
   if (
     !delivery ||
-    !(await loadAgentTokenRoom(delivery.message.roomId, ctx.agentId))
+    !(await loadAgentTokenRoom(delivery.message.roomId, ctx.agentId, { userId: ctx.user.id, agentId: ctx.agentId, teamScope: ctx.teamScope }))
   ) {
     return NextResponse.json(
       { success: false, error: "Pending room message not found" },
       { status: 404 },
     );
   }
-  await markAgentRoomMessageHandled({ messageId, agentId: ctx.agentId });
+  if (ctx.teamScope != null && delivery.message.taskId != null && !await prisma.task.findFirst({ where: { id: delivery.message.taskId, project: (await import("@/utils/controllers/projects/getAllIncludes")).projectContentAccessWhere(ctx.user.id, ctx.agentId, ctx.teamScope) }, select: { id: true } })) return NextResponse.json({ success: false, error: "Pending room message not found" }, { status: 404 });
+  await markAgentRoomMessageHandled({ messageId, agentId: ctx.agentId, principal: { userId: ctx.user.id, agentId: ctx.agentId, teamScope: ctx.teamScope } });
   return NextResponse.json({ success: true });
 
   })(request)

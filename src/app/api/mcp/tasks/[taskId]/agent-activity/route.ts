@@ -1,3 +1,4 @@
+import { projectContentAccessWhere } from "@/utils/controllers/projects/getAllIncludes"
 import { wrapMcpRoute, checkMcpRouteRateLimit as checkMcpRateLimit, mcpRouteUnauthorizedResponse as mcpUnauthorizedResponse, validateMcpRouteAuth as validateMcpAuth } from '@/lib/mcp/routeWrapper'
 import { NextRequest, NextResponse } from 'next/server'
 
@@ -46,7 +47,7 @@ export async function GET(
       return noStore({ success: false, error: 'agent_id must not be empty' }, 400)
     }
     const rows = await prisma.agentRunActivity.findMany({
-      where: { run: { taskId: task.id, ...(agentId ? { agentId } : {}) } },
+      where: { run: { taskId: task.id, ...(ctx.teamScope != null ? { task: { project: projectContentAccessWhere(ctx.user.id, ctx.agentId, ctx.teamScope) } } : {}), ...(agentId ? { agentId } : {}) } },
       orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
       take: Math.min(limit, 100),
       select: {

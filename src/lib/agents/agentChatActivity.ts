@@ -1,4 +1,6 @@
 import type { Prisma, PrismaClient } from "@prisma/client";
+import type { AgentTokenTeamScope } from "@/lib/mcp/auth/types";
+import { chatContentScopeWhere } from "./chatContentScope";
 import prisma from "@/lib/prisma";
 import { serializeAgentRunActivity } from "@/lib/agentRuns/model";
 import { getProjectWhere } from "@/utils/controllers/projects/getAllIncludes";
@@ -298,6 +300,7 @@ export async function listAgentChatActivity(
     sessionId: string;
     userId: number;
     limit?: number;
+    teamScope?: AgentTokenTeamScope | null;
   },
   db: AgentChatActivityDatabase = prisma,
 ): Promise<AgentChatActivity[]> {
@@ -313,9 +316,9 @@ export async function listAgentChatActivity(
       )
     : MAX_AGENT_CHAT_ACTIVITY;
   const visibleTask = {
-    is: { project: getProjectWhere(input.userId) },
+    is: { project: getProjectWhere(input.userId, input.teamScope != null ? input.agentId : null, input.teamScope) },
   } satisfies Prisma.TaskNullableScalarRelationFilter;
-  const projectWhere = getProjectWhere(input.userId);
+  const projectWhere = getProjectWhere(input.userId, input.teamScope != null ? input.agentId : null, input.teamScope);
   const visibleRunWhere = {
     agentId: input.agentId,
     OR: [
@@ -323,7 +326,7 @@ export async function listAgentChatActivity(
         chatSessionId: input.sessionId,
         taskId: null,
         chatSession: {
-          is: { userId: input.userId, agentId: input.agentId },
+          is: { userId: input.userId, agentId: input.agentId, ...await chatContentScopeWhere({ userId: input.userId, agentId: input.agentId, teamScope: input.teamScope }) },
         },
       },
       { task: visibleTask },

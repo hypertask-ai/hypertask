@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { Prisma } from '@prisma/client';
+import { chatContentScopeWhere } from "@/lib/agents/chatContentScope";
 import prisma from '@/lib/prisma';
 import { checkMcpRateLimit, validateMcpAuth, type McpAuthContext } from '@/lib/mcp/auth';
 import { requireRole } from '@/lib/mcp/agents/scopes';
@@ -57,14 +58,16 @@ function serializeMessage(message: MessageRecord) {
   };
 }
 
-async function accessibleSessionWhere(ctx: McpAuthContext): Promise<Prisma.ChatSessionWhereInput> {
-  if (!ctx.agentId) return { userId: ctx.user.id };
-  const projects = await prisma.project.findMany({
+async function accessibleSessionWhere(ctx: McpAuthContext, db: Pick<Prisma.TransactionClient, "project" | "task"> = prisma): Promise<Prisma.ChatSessionWhereInput> {
+  const contentScope = await chatContentScopeWhere({ userId: ctx.user.id, agentId: ctx.agentId, teamScope: ctx.teamScope }, db);
+  if (!ctx.agentId) return { userId: ctx.user.id, ...contentScope };
+  const projects = await db.project.findMany({
     where: { status: 'Normal', ...getProjectWhere(ctx.user.id, ctx.agentId, ctx.teamScope) },
     select: { id: true },
   });
   return {
     userId: ctx.user.id,
+    ...contentScope,
     OR: [
       { projectId: { in: projects.map((project) => project.id) } },
       { projectId: null, agentId: ctx.agentId },
@@ -115,34 +118,35 @@ export const aiSessionDependencies: AiSessionHandlerDependencies<McpAuthContext>
     return session ? { session: { ...serializeSession(session), messages: messages.map(serializeMessage) }, total } : null;
   },
   create: async ({ context, userId, agentId, id, projectId, title }) => {
-    await prisma.chatSession.createMany({
-      data: [{ id, userId, projectId, agentId: projectId === null ? agentId : null, title }],
-      skipDuplicates: true,
-    });
-    const session = await prisma.chatSession.findFirst({
-      where: { ...(await accessibleSessionWhere(context)), id },
-      select: sessionSelect,
-    });
-    if (!session) return null;
-    return serializeSession(session);
+    const create = async (db: Prisma.TransactionClient) => {
+      if (context.teamScope != null && projectId != null) {
+        await db.$queryRaw`SELECT id FROM "Project" WHERE id = ${projectId} FOR UPDATE`;
+        if (!await db.project.findFirst({ where: { id: projectId, ...getProjectWhere(userId, agentId, context.teamScope) }, select: { id: true } })) return null;
+      }
+      await db.chatSession.createMany({
+        data: [{ id, userId, projectId, agentId: projectId === null ? agentId : null, title }],
+        skipDuplicates: true,
+      });
+      const session = await db.chatSession.findFirst({ where: { ...await accessibleSessionWhere(context, db), id }, select: sessionSelect });
+      return session ? serializeSession(session) : null;
+    };
+    return context.teamScope != null ? prisma.$transaction(create, { isolationLevel: 'Serializable' }) : create(prisma);
   },
   rename: async (ctx, id, title) => {
-    const where = { ...(await accessibleSessionWhere(ctx)), id };
-    const updated = await prisma.chatSession.updateMany({
-      where,
-      data: { title, updatedAt: new Date() },
-    });
-    if (updated.count === 0) return null;
-    const session = await prisma.chatSession.findFirst({
-      where,
-      select: sessionSelect,
-    });
-    if (!session) return null;
-    return serializeSession(session);
+    const rename = async (db: Prisma.TransactionClient) => {
+      if (ctx.teamScope != null) await db.$queryRaw`SELECT id FROM "ChatSession" WHERE id = ${id} FOR UPDATE`;
+      const where = { ...await accessibleSessionWhere(ctx, db), id };
+      const updated = await db.chatSession.updateMany({ where, data: { title, updatedAt: new Date() } });
+      if (updated.count === 0) return null;
+      const session = await db.chatSession.findFirst({ where, select: sessionSelect });
+      return session ? serializeSession(session) : null;
+    };
+    return ctx.teamScope != null ? prisma.$transaction(rename, { isolationLevel: 'Serializable' }) : rename(prisma);
   },
   remove: async (ctx, id) => {
-    const where = { ...(await accessibleSessionWhere(ctx)), id };
     const deleted = await prisma.$transaction(async (tx) => {
+      if (ctx.teamScope != null) await tx.$queryRaw`SELECT id FROM "ChatSession" WHERE id = ${id} FOR UPDATE`;
+      const where = { ...await accessibleSessionWhere(ctx, tx), id };
       const session = await tx.chatSession.findFirst({
         where,
         select: {
@@ -160,7 +164,7 @@ export const aiSessionDependencies: AiSessionHandlerDependencies<McpAuthContext>
       }
       await tx.chatSession.deleteMany({ where });
       return { removed: true, fileSources: attachments.map((item) => item.fileSource) };
-    });
+    }, ctx.teamScope != null ? { isolationLevel: 'Serializable' } : undefined);
     if (!deleted.removed) return;
     await Promise.allSettled(deleted.fileSources.map((fileSource) => deleteTaskAttachmentFromS3(fileSource)));
   },

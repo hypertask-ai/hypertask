@@ -1,3 +1,5 @@
+import type { BoardKnowledgePrincipal } from "@/lib/rag/retrieveBoardKnowledge";
+import { chatContentScopeWhere } from "./chatContentScope";
 import { getProjectWhere } from "@/utils/controllers/projects/getAllIncludes";
 import { HTPR_7518_AGENT_SIDEBAR_CHATS_FLAG } from "@/lib/flags/definitions/htpr-7518-agent-sidebar-chats";
 import type { Prisma } from "@prisma/client";
@@ -227,12 +229,14 @@ export async function loadAgentTokenChatSession<
   sessionId,
   agentId,
   select,
+  principal,
 }: {
   sessionId: string;
   agentId: string;
+  principal?: BoardKnowledgePrincipal;
   select: TSelect;
 }): Promise<ChatAccessResult<ChatSessionOf<TSelect>>> {
-  const session = await findChatSession({ id: sessionId }, select);
+  const session = await findChatSession({ id: sessionId, ...(principal ? await chatContentScopeWhere(principal) : {}) }, select);
   if (!session?.agentId) return notFound;
   if (session.agentId !== agentId) {
     return { ok: false, status: 403, error: AGENT_CHAT_WRONG_AGENT };

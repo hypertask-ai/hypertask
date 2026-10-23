@@ -1,3 +1,5 @@
+import { lockTaskTeamScope, TaskTeamScopeError } from "@/lib/mcp/tasks/agentMutationFence"
+import { projectContentAccessWhere } from "@/utils/controllers/projects/getAllIncludes"
 import { findIdParamOutOfRange, idOutOfRangeMessage } from '@/lib/mcp/listParams'
 import { reportMcpOperationCrash } from '@/lib/mcp/operationCrashReport'
 import { wrapMcpRoute, checkMcpRouteRateLimit as checkMcpRateLimit, validateMcpRouteAuth as validateMcpAuth } from '@/lib/mcp/routeWrapper'
@@ -126,6 +128,7 @@ export async function GET(
       decision_request: mapDecisionRequest(loaded.decisionRequest),
     })
   } catch (error) {
+    if (error instanceof TaskTeamScopeError) return NextResponse.json({ success: false, error: error.message }, { status: 404 })
     const identifierResponse = taskIdentifierErrorResponse(error)
     if (identifierResponse) return identifierResponse
     console.error('[MCP Decision Request GET by ID] Error:', error)
@@ -211,7 +214,7 @@ export async function PATCH(
 
       const [taskOwner, currentUser] = await Promise.all([
         prisma.task.findUnique({
-          where: { id: decisionRequest.taskId },
+          where: { id: decisionRequest.taskId, ...(ctx.teamScope != null ? { project: projectContentAccessWhere(ctx.user.id, ctx.agentId, ctx.teamScope) } : {}) },
           select: { userId: true },
         }),
         prisma.user.findUnique({
@@ -226,7 +229,7 @@ export async function PATCH(
         )
       }
 
-      const answeredDecisionRequest = await prisma.decisionRequest.update({
+      const answeredDecisionRequestWrite = (tx: import('@prisma/client').Prisma.TransactionClient) => tx.decisionRequest.update({
         where: { id: decisionRequest.id },
         data: {
           status: DecisionRequestStatus.Answered,
@@ -236,6 +239,10 @@ export async function PATCH(
           answeredAt: new Date(),
         },
       })
+      const answeredDecisionRequest = ctx.teamScope != null ? await prisma.$transaction(async (tx) => {
+        await lockTaskTeamScope(tx, decisionRequest.taskId, ctx.user.id, ctx.agentId, ctx.teamScope)
+        return answeredDecisionRequestWrite(tx)
+      }) : await answeredDecisionRequestWrite(prisma)
 
       await createCommentService({
         text: answeredCommentHtml(matchingOption, note),
@@ -243,6 +250,7 @@ export async function PATCH(
         taskId: decisionRequest.taskId,
         ownerId: taskOwner.userId,
         currentUser,
+        teamScope: ctx.teamScope,
       })
 
       return NextResponse.json({
@@ -252,7 +260,7 @@ export async function PATCH(
     }
 
     const taskOwner = await prisma.task.findUnique({
-      where: { id: decisionRequest.taskId },
+      where: { id: decisionRequest.taskId, ...(ctx.teamScope != null ? { project: projectContentAccessWhere(ctx.user.id, ctx.agentId, ctx.teamScope) } : {}) },
       select: { userId: true },
     })
     if (!taskOwner) {
@@ -273,16 +281,21 @@ export async function PATCH(
       )
     }
 
-    const cancelledDecisionRequest = await prisma.decisionRequest.update({
+    const cancelledDecisionRequestWrite = (tx: import('@prisma/client').Prisma.TransactionClient) => tx.decisionRequest.update({
       where: { id: decisionRequest.id },
       data: { status: DecisionRequestStatus.Cancelled },
     })
+    const cancelledDecisionRequest = ctx.teamScope != null ? await prisma.$transaction(async (tx) => {
+      await lockTaskTeamScope(tx, decisionRequest.taskId, ctx.user.id, ctx.agentId, ctx.teamScope)
+      return cancelledDecisionRequestWrite(tx)
+    }) : await cancelledDecisionRequestWrite(prisma)
 
     return NextResponse.json({
       success: true,
       decision_request: mapDecisionRequest(cancelledDecisionRequest),
     })
   } catch (error) {
+    if (error instanceof TaskTeamScopeError) return NextResponse.json({ success: false, error: error.message }, { status: 404 })
     const identifierResponse = taskIdentifierErrorResponse(error)
     if (identifierResponse) return identifierResponse
     console.error('[MCP Decision Request PATCH] Error:', error)

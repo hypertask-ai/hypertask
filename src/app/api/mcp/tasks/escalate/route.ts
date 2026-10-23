@@ -1,3 +1,5 @@
+import { TaskTeamScopeError } from "@/lib/mcp/tasks/agentMutationFence"
+import { projectContentAccessWhere } from "@/utils/controllers/projects/getAllIncludes"
 import { wrapMcpRoute, checkMcpRouteRateLimit as checkMcpRateLimit, validateMcpRouteAuth as validateMcpAuth } from '@/lib/mcp/routeWrapper'
 import { NextRequest, NextResponse } from 'next/server'
 
@@ -87,7 +89,7 @@ export async function POST(request: NextRequest) {
 
     const [taskOwner, currentUser] = await Promise.all([
       prisma.task.findUnique({
-        where: { id: task.id },
+        where: { id: task.id, ...(ctx.teamScope != null ? { project: projectContentAccessWhere(ctx.user.id, ctx.agentId, ctx.teamScope) } : {}) },
         select: { userId: true, title: true, ticketNumber: true },
       }),
       prisma.user.findUnique({
@@ -125,6 +127,7 @@ export async function POST(request: NextRequest) {
       ownerId: taskOwner.userId,
       currentUser,
       agentId: ctx.agentId ?? undefined,
+      teamScope: ctx.teamScope,
       extraBoardWebhookEvents: [escalatedEvent],
     })
 
@@ -133,6 +136,7 @@ export async function POST(request: NextRequest) {
       { status: 201 }
     )
   } catch (error) {
+    if (error instanceof TaskTeamScopeError) return NextResponse.json({ success: false, error: error.message }, { status: 404 })
     const identifierResponse = taskIdentifierErrorResponse(error)
     if (identifierResponse) return identifierResponse
     console.error('[MCP Task Escalate] Error:', error)
