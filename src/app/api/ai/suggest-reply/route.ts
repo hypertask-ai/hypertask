@@ -14,6 +14,7 @@ import {
   selectTaskWriterModel,
 } from "@/app/api/ai/_lib/editorAi";
 import { getProjectWhere } from "@/utils/controllers/projects/getAllIncludes";
+import { warnIfAllowanceRefused } from "@/app/api/ai/_lib/allowanceRefusal";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -192,6 +193,8 @@ export async function POST(request: NextRequest) {
 
     return NextResponse.json({ html: safeHtml });
   } catch (error) {
+    const allowanceMessage = warnIfAllowanceRefused(error, "ai/suggest-reply");
+    if (allowanceMessage) return NextResponse.json({ error: allowanceMessage }, { status: 429 });
     await reportError({
       message: error instanceof Error ? error.message : "AI request failed",
       stack: error instanceof Error ? error.stack : undefined,

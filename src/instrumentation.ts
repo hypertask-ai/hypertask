@@ -4,6 +4,12 @@ import { isExpectedClientAbortedRscPayload } from "./lib/errors/requestErrorFilt
 export async function register() {
   if (process.env.NEXT_RUNTIME === "nodejs") {
     process.env.AWS_SDK_JS_SUPPRESS_MAINTENANCE_MODE_MESSAGE ??= "1";
+    const { NODE_SECURITY_FLOOR, meetsNodeSecurityFloor } = await import("./lib/runtime/nodeSecurityFloor");
+    console.info("[node-runtime]", JSON.stringify({
+      version: process.version,
+      securityFloor: NODE_SECURITY_FLOOR,
+      meetsSecurityFloor: meetsNodeSecurityFloor(process.version),
+    }));
   }
   if (process.env.NEXT_RUNTIME === "edge") return;
   if (!shouldAutoEnsureSweepSchedule()) return;

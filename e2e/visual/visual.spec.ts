@@ -2,6 +2,8 @@ import { test, expect, type Locator, type Page } from '@playwright/test'
 import { readFileSync } from 'node:fs'
 import path from 'node:path'
 
+const SETTLE_JUMP_WARNING_PX = 20
+
 const fixture = JSON.parse(readFileSync(path.join(path.dirname(process.env.BROWSER_SMOKE_STATE_FILE!), 'card-fixture.json'), 'utf8')) as {
   taskId: number
   title: string
@@ -69,6 +71,9 @@ async function settled(page: Page, landmarks: Locator[]) {
   })
   let previous = ''
   let equalSamples = 0
+  const startedAt = Date.now()
+  let firstMetrics: { height: number; scrollY: number } | null = null
+  let largestJump = { pixels: 0, height: 0, scrollY: 0, afterMs: 0 }
   await expect.poll(async () => {
     const boxes = []
     for (const landmark of landmarks) {
@@ -77,11 +82,20 @@ async function settled(page: Page, landmarks: Locator[]) {
       if (!box || box.width <= 0 || box.height <= 0) return false
       boxes.push(box)
     }
-    const next = JSON.stringify(boxes)
+    const pageMetrics = await page.evaluate(() => ({ height: document.documentElement.scrollHeight, scrollY: window.scrollY }))
+    firstMetrics ??= pageMetrics
+    const pixels = Math.max(Math.abs(pageMetrics.height - firstMetrics.height), Math.abs(pageMetrics.scrollY - firstMetrics.scrollY))
+    if (pixels > largestJump.pixels) largestJump = { pixels, height: pageMetrics.height - firstMetrics.height, scrollY: pageMetrics.scrollY - firstMetrics.scrollY, afterMs: Date.now() - startedAt }
+    const next = JSON.stringify({ boxes, pageMetrics })
     equalSamples = next === previous ? equalSamples + 1 : 1
     previous = next
     return equalSamples >= 3
-  }, { intervals: [150], timeout: 10_000, message: 'three equal landmark geometry samples' }).toBe(true)
+  }, { intervals: [150], timeout: 10_000, message: 'three equal landmark and page height samples' }).toBe(true)
+  if (largestJump.pixels > SETTLE_JUMP_WARNING_PX) {
+    const description = `page moved ${largestJump.pixels}px while settling (height ${largestJump.height}px, scroll ${largestJump.scrollY}px, ${largestJump.afterMs}ms after the first sample)`
+    test.info().annotations.push({ type: 'warning', description })
+    console.log(`::warning title=${test.info().project.name} ${test.info().title} settle jump::${description}`)
+  }
 }
 
 test.beforeEach(async ({ page, context }) => {
@@ -115,6 +129,9 @@ for (const screen of screens) {
         await expect(lastComment, 'last seeded comment must be visible').toBeVisible()
       }, { timeout: 15_000 })
       if (screen === 'comment-box') {
+        await test.step('page height settles before scrolling to the last comment', async () => {
+          await settled(page, [page.locator('#title-input'), lastComment, composer])
+        }, { timeout: 15_000 })
         await test.step('scroll last seeded comment and composer into view', async () => {
           await lastComment.evaluate(comment => comment.scrollIntoView({ behavior: 'instant', block: 'center' }), undefined, { timeout: 15_000 })
           if (testInfo.project.name === 'desktop') {

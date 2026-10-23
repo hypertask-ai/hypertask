@@ -278,3 +278,27 @@ esac
   assert.deepEqual(run(["font", "font"]), { status: 1, calls: 2 });
   assert.deepEqual(run(["other", "ok"]), { status: 1, calls: 1 });
 });
+
+test("YPER4-629: required browser smoke runs the inbox cycle last, with every flag on and with live-like modes", async () => {
+  const [workflow, seed, config, spec] = await Promise.all([
+    source(".github/workflows/ci-tests.yml"),
+    source("scripts/seed-browser-smoke.mjs"),
+    source("playwright.config.smoke.ts"),
+    source("e2e/smoke/inbox-cycle.spec.ts"),
+  ]);
+  const job = workflow.slice(workflow.indexOf("  browser-smoke:"), workflow.indexOf("  production-test-warning:"));
+  const runs = [...job.matchAll(/npx playwright test[^\n]*e2e\/smoke\/inbox-cycle\.spec\.ts/g)].map((match) => match.index);
+  assert.equal(runs.length, 2);
+  const allFlagsOn = job.indexOf("--all-flags-on");
+  const liveLike = job.indexOf("--live-like-control");
+  assert.ok(allFlagsOn < runs[0] && runs[0] < liveLike && liveLike < runs[1]);
+  assert.ok(job.lastIndexOf("layout-lock-matrix.spec.ts") < runs[0], "layout lock must not see the seeded inbox");
+  for (const run of runs) assert.ok(job.lastIndexOf("--inbox-cycle", run) > job.lastIndexOf("npx playwright test", run - 1));
+  assert.match(seed, /process\.argv\.includes\("--inbox-cycle"\)/);
+  assert.match(seed, /type: "TaskReminder"/);
+  assert.match(seed, /inboxAdvanceOnSend: true/);
+  assert.match(config, /name: 'Inbox', testMatch: \/inbox-cycle\\\.spec\\\.ts\/, retries: 0/);
+  assert.match(spec, /getByText\(items\[1\]\.title\)\.first\(\)\.click\(\)/);
+  assert.match(spec, /searchParams\.get\('inboxFlow'\)/);
+  for (const key of ["'j'", "'e'", "'Control+Enter'", "'Enter'"]) assert.ok(spec.includes(key), key);
+});

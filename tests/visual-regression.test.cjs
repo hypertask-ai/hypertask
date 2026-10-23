@@ -102,7 +102,7 @@ test("workflow is informational, read-only, path-scoped and uses the smoke servi
   const credentials = text => text.slice(text.indexOf("      - name: Prepare disposable local credentials"), text.indexOf('          } >> "$GITHUB_ENV"') + '          } >> "$GITHUB_ENV"'.length)
     .split("\n").filter(line => !/^        if: /.test(line)).join("\n");
   assert.equal(credentials(workflow), credentials(smoke));
-  assert.deepEqual(job.steps.find(step => step.name === "Upload visual differences").with.path.trim().split("\n"), ["test-results/**/*.png", "test-results/**/error-context.md"]);
+  assert.deepEqual(job.steps.find(step => step.name === "Upload visual differences").with.path.trim().split("\n"), ["test-results/**/*.png", "test-results/**/error-context.md", "test-results/**/trace.zip"]);
   assert.match(workflow, /retention-days: 7/);
   assert.equal(job.steps.find(step => step.name === "Summarize failed screens").if, "always() && hashFiles('head/scripts/visual-regression-ci.mjs') != ''");
   assert.equal(job.steps.find(step => step.name === "Upload visual differences").with["if-no-files-found"], "ignore");
@@ -149,7 +149,8 @@ test("capture config has exactly two DPR1 Chromium viewports and strict non-upda
   assert.equal(config.use.timezoneId, "UTC");
   assert.equal(config.use.locale, "en-US");
   assert.equal(config.use.reducedMotion, "reduce");
-  for (const option of ["trace", "video", "screenshot"]) assert.equal(config.use[option], "off");
+  assert.equal(config.use.trace, "retain-on-failure");
+  for (const option of ["video", "screenshot"]) assert.equal(config.use[option], "off");
   assert.equal(JSON.stringify(config.expect.toHaveScreenshot), JSON.stringify({ animations: "disabled", caret: "hide", scale: "css", maxDiffPixelRatio: 0.01, threshold: 0.2 }));
 });
 
@@ -167,6 +168,8 @@ test("five full-viewport screens use real theme/time, cached ticket navigation, 
   assert.match(spec, /document\.fonts\.ready/);
   assert.match(spec, /image\.decode\(\)/);
   assert.match(spec, /equalSamples >= 3/);
+  assert.match(spec, /const SETTLE_JUMP_WARNING_PX = 20/);
+  assert.match(spec, /largestJump\.pixels > SETTLE_JUMP_WARNING_PX\) \{[\s\S]*?annotations\.push\(\{ type: 'warning', description \}\)[\s\S]*?::warning title=/);
   assert.match(spec, /getByTestId\('ticket-comment'\)\.filter\(\{ hasText: 'Last layout lock comment' \}\)/);
   assert.match(spec, /expect\(lastComment, 'exactly one last seeded comment in the ticket thread'\)\.toHaveCount\(1\)/);
   assert.match(spec, /expect\(page\.getByTestId\('comment-composer'\), 'one desktop or phone composer'\)\.toHaveCount\(1\)/);
@@ -177,7 +180,8 @@ test("five full-viewport screens use real theme/time, cached ticket navigation, 
   for (const step of ['open seeded ticket with its comments', 'scroll last seeded comment and composer into view', 'assets loaded and landmark geometry settled', 'desktop composer follows the last seeded comment']) {
     assert.ok(spec.includes(`test.step('${step}'`));
   }
-  assert.equal((spec.match(/\}, \{ timeout: 15_000 \}\)/g) || []).length, 4);
+  assert.equal((spec.match(/\}, \{ timeout: 15_000 \}\)/g) || []).length, 5);
+  assert.ok(spec.includes("test.step('page height settles before scrolling to the last comment'"));
   assert.doesNotMatch(spec, /scrollIntoViewIfNeeded|parent\.scrollTop|scrollingElement|ticket-comment'\)\.last\(\)|data-task-composer-slot/);
   assert.match(spec, /keyboard\.press\('Control\+j'\)/);
   assert.match(spec, /navigate\(page, '\/inbox'\)/);

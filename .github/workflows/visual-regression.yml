@@ -148,5 +148,6 @@ jobs:
           path: |
             test-results/**/*.png
             test-results/**/error-context.md
+            test-results/**/trace.zip
           if-no-files-found: ignore
           retention-days: 7

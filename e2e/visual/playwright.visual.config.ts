@@ -39,7 +39,7 @@ export default defineConfig({
     locale: 'en-US',
     colorScheme: 'light',
     reducedMotion: 'reduce',
-    trace: 'off',
+    trace: 'retain-on-failure',
     video: 'off',
     screenshot: 'off',
   },

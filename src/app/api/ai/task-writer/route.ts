@@ -39,6 +39,15 @@ async function isAllowanceLimitMessage(message: string) {
   return message === SHARED_AI_ALLOWANCE_EXCEEDED_MESSAGE;
 }
 
+async function logTaskWriterFailure(label: string, error: unknown) {
+  if (await isAllowanceLimitMessage(errorMessage(error))) {
+    console.warn(`[ai/task-writer] refused: included AI allowance used up (${label})`);
+    return true;
+  }
+  console.error(`[ai/task-writer] ${label}`, error);
+  return false;
+}
+
 export async function POST(request: NextRequest) {
   const requestUser = await getAiRequestUser(request);
   if (!requestUser?.id) {
@@ -196,7 +205,7 @@ export async function POST(request: NextRequest) {
               source: "handled",
               extra: { stage: "stream-empty" },
             });
-            console.error("[ai/task-writer] stream ended empty after error", error);
+            await logTaskWriterFailure("stream ended empty after error", error);
             enqueueError("error", errorMessage(error), "task-writer-stream-error");
             return;
           }
@@ -223,7 +232,7 @@ export async function POST(request: NextRequest) {
             source: "handled",
             extra: { stage: "stream" },
           });
-          console.error("[ai/task-writer] stream error", error);
+          await logTaskWriterFailure("stream error", error);
           enqueueError("error", errorMessage(error));
         } finally {
           if (!streamCompleted) {
@@ -257,7 +266,7 @@ export async function POST(request: NextRequest) {
       source: "handled",
       extra: { stage: "request" },
     });
-    console.error("[ai/task-writer] fatal error", error);
-    return NextResponse.json({ error: errorMessage(error) }, { status: 500 });
+    const allowanceUsedUp = await logTaskWriterFailure("fatal error", error);
+    return NextResponse.json({ error: errorMessage(error) }, { status: allowanceUsedUp ? 429 : 500 });
   }
 }
