@@ -12,9 +12,14 @@ type BulkConfirmationRedis = {
     expiryMode: "EX",
     ttlSeconds: number
   ): Promise<unknown>;
-  sadd(key: string, ...members: string[]): Promise<unknown>;
   srem(key: string, ...members: string[]): Promise<number>;
-  expire(key: string, ttlSeconds: number): Promise<unknown>;
+  multi(): ScopePreviewTransaction;
+};
+
+type ScopePreviewTransaction = {
+  sadd(key: string, ...members: string[]): ScopePreviewTransaction;
+  expire(key: string, ttlSeconds: number): ScopePreviewTransaction;
+  exec(): Promise<[Error | null, unknown][] | null>;
 };
 
 type RequireCrossMessageConfirmationInput = {
@@ -49,8 +54,15 @@ async function requireScopedConfirmation(
   const subjects = [...new Set(subjectKeys)];
   const preview = async () => {
     previewsIssuedThisRequest.add(operationKey);
-    if (subjects.length > 0) await redis.sadd(scopeKey, ...subjects);
-    await redis.expire(scopeKey, PREVIEW_TOKEN_TTL_SECONDS);
+    if (subjects.length > 0) {
+      const results = await redis
+        .multi()
+        .sadd(scopeKey, ...subjects)
+        .expire(scopeKey, PREVIEW_TOKEN_TTL_SECONDS)
+        .exec();
+      const failed = !results || results.some(([error]) => error);
+      if (failed) throw new Error("bulk confirmation scope was not stored with its expiry");
+    }
     return "preview" as const;
   };
 
