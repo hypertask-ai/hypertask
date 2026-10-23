@@ -32,7 +32,7 @@ for (const [file, exports] of Object.entries(stubs)) {
 after(() => {
   for (const [filename, original] of originals) { if (original) require.cache[filename] = original; else delete require.cache[filename] }
 })
-const { POST } = jiti(path.join(root, 'src/app/api/mcp/admin/better-auth-oauth-tokens/route.ts')) as any
+const { POST } = jiti(path.join(root, 'src/app/api/admin/better-auth-oauth-tokens/route.ts')) as any
 const { GET } = jiti(path.join(root, 'src/app/api/cron/oauth-token-sweep/route.ts')) as any
 let oldRoot: string | undefined
 let oldCron: string | undefined
@@ -53,7 +53,7 @@ afterEach(() => {
 })
 const managementBearer = 'Bearer htmk_synthetic-management-key-9bd113b7'
 function admin(body: unknown = {}, authorization: string | null = managementBearer) {
-  return POST(new NextRequest('https://app.example.invalid/api/mcp/admin/better-auth-oauth-tokens', {
+  return POST(new NextRequest('https://app.example.invalid/api/admin/better-auth-oauth-tokens', {
     method: 'POST', headers: { ...(authorization ? { authorization } : {}), cookie: 'synthetic-cookie-session=synthetic-session-8201d2bf', 'content-type': 'application/json' }, body: JSON.stringify(body),
   })) as Promise<Response>
 }
