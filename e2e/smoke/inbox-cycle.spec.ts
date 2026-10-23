@@ -68,24 +68,24 @@ test('inbox cycle: open by Enter, send a comment, archive and go to the next mes
   await expectOpenInFlow(page, items[1], /^2 \/ 5$/)
 })
 
-test('inbox cycle: open by click, J, send a comment, E all stay in the inbox flow', async ({ page }) => {
+test('inbox cycle: open by click, send a comment, J and E all stay in the inbox flow', async ({ page }) => {
   await openInbox(page, items[1])
   await expect(page.getByText(items[0].title), 'sending a comment after Enter archived the message').toHaveCount(0)
   await page.getByText(items[1].title).first().click()
   await expectOpenInFlow(page, items[1], /^1 \/ 4$/)
 
-  await pressOutsideEditor(page, 'j')
-  await expectOpenInFlow(page, items[2], /^2 \/ 4$/)
-
   await sendComment(page, 'Inbox cycle reply')
+  await expectOpenInFlow(page, items[2], /^\d+ \/ \d+$/)
+
+  await pressOutsideEditor(page, 'j')
   await expectOpenInFlow(page, items[3], /^\d+ \/ \d+$/)
 
   await pressOutsideEditor(page, 'e')
   await expectOpenInFlow(page, items[4], /^\d+ \/ \d+$/)
 
-  await openInbox(page, items[1])
+  await openInbox(page, items[2])
+  await expect(page.getByText(items[2].title).first(), 'J leaves the message in the inbox').toBeVisible()
   await expect(page.getByText(items[4].title).first(), 'the last opened message stays in the inbox').toBeVisible()
-  await expect(page.getByText(items[0].title), 'sending a comment after Enter archived the message').toHaveCount(0)
-  await expect(page.getByText(items[2].title), 'sending a comment after a click archived the message').toHaveCount(0)
+  await expect(page.getByText(items[1].title), 'sending a comment after a click archived the message').toHaveCount(0)
   await expect(page.getByText(items[3].title), 'E archived the message').toHaveCount(0)
 })
