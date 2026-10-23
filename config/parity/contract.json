@@ -164,13 +164,6 @@
         "cli": ["^task (list|get)$"],
         "ai_chat": ["^hypertask_(list_tasks|get_tasks|my_tasks)$", "^hypertask_show_ticket_rows$"],
         "hyperai": ["^hypertask_(list_tasks|get_tasks)$"]
-      },
-      "planned": {
-        "ai_chat": {
-          "issue": "https://app.hypertask.ai/detail/project-15/7683",
-          "expires": "2026-11-20",
-          "entries": ["hypertask_show_ticket_rows"]
-        }
       }
     },
     {
@@ -417,19 +410,6 @@
         "mcp": "AI clients already provide their own model; recursive writing tools are intentionally API/CLI-only.",
         "ai_chat": "AI Chat itself is the writing surface rather than a nested tool.",
         "hyperai": "HyperAI itself is the writing surface rather than a nested tool."
-      }
-    },
-    {
-      "id": "chat.ticket_rows",
-      "title": "Show retrieved tickets as clickable rows in AI Chat",
-      "matches": {
-        "ai_chat": ["^hypertask_show_ticket_rows$"]
-      },
-      "exclusions": {
-        "api": "Rows only display tickets the same chat turn already read through existing task tools; no new data route.",
-        "mcp": "MCP clients render task results themselves; the row layout is an AI Chat presentation step.",
-        "cli": "The CLI prints task lists directly and has no chat message layout.",
-        "hyperai": "HyperAI keeps its own message rendering and does not show AI Chat ticket rows."
       }
     },
     {

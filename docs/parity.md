@@ -15,7 +15,7 @@ Regenerate it with `node scripts/parity-contract.mjs --write --cli-capabilities 
 | **Create, revoke, and rotate managed agents or keys** | ✅ 20 | ✅ 7 | ✅ 18 | ✅ 5 | ✅ 7 |
 | **Owner-approved feature flag changes by agent sessions** | ✅ 2 (transition) | ↪ Only the flag owner's agent sessions may change release modes after recent human approval; general MCP clients cannot manage flags. | ↪ The session-only ht-flag script uses the agent identity directly; the public CLI does not expose release controls. | ↪ Feature flag release controls are restricted to approved owner agent sessions, not AI Chat tools. | ↪ The embedded agent inherits the human session and cannot use the agent-only flag route. |
 | **Create, refresh, inspect, or clear a CLI/API session** | ✅ 4 | ↪ MCP clients receive credentials out of band and do not manage interactive login. | ✅ 4 | ↪ The signed-in web session is managed by the app shell. | ↪ The embedded agent inherits the invoking human session. |
-| **List, inspect, and filter tasks** | ✅ 2 | ✅ 2 | ✅ 2 | ✅ 3 (transition) | ✅ 2 |
+| **List, inspect, and filter tasks** | ✅ 2 | ✅ 2 | ✅ 2 | ✅ 4 | ✅ 2 |
 | **Read task context, hierarchy, and description history** | ✅ 6 | ✅ 3 | ✅ 4 | ✅ 3 | ✅ 3 |
 | **Search, retrieve, and find related tasks** | ✅ 3 | ✅ 3 | ✅ 3 | ✅ 3 | ✅ 3 |
 | **Pull, lease, and coordinate the next task** | ✅ 6 | ✅ 1 | ✅ 3 | ✅ 1 | ✅ 1 |
@@ -36,7 +36,6 @@ Regenerate it with `node scripts/parity-contract.mjs --write --cli-capabilities 
 | **Create, read, update, publish, and delete drafts** | ✅ 5 | ✅ 1 | ✅ 5 | ✅ 1 | ✅ 1 |
 | **Start, stop, pause, resume, log, and report time** | ✅ 10 | ✅ 3 | ✅ 10 | ✅ 8 | ✅ 3 |
 | **Draft, improve, and inspect AI usage** | ✅ 7 | ↪ AI clients already provide their own model; recursive writing tools are intentionally API/CLI-only. | ✅ 2 | ↪ AI Chat itself is the writing surface rather than a nested tool. | ↪ HyperAI itself is the writing surface rather than a nested tool. |
-| **Show retrieved tickets as clickable rows in AI Chat** | ↪ Rows only display tickets the same chat turn already read through existing task tools; no new data route. | ↪ MCP clients render task results themselves; the row layout is an AI Chat presentation step. | ↪ The CLI prints task lists directly and has no chat message layout. | ✅ 1 | ↪ HyperAI keeps its own message rendering and does not show AI Chat ticket rows. |
 | **Search Hypertask product help** | ↪ Help search uses the public documentation service, not a user-data API route. | ✅ 1 | ↪ The CLI exposes command help locally instead of remote help-center search. | ✅ 1 | ✅ 1 |
 | **Search the public web for current information** | ↪ Public web search is an AI-runtime capability, not a board data endpoint. | ↪ MCP clients can provide their own web-search capability. | ↪ The board CLI does not proxy public web search. | ✅ 1 | ↪ HyperAI does not receive the AI Chat web-search provider. |
 | **Create, inspect, test, and delete webhooks** | ✅ 4 | ✅ 1 | ✅ 11 | ✅ 1 | ✅ 1 |
