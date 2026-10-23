@@ -4,7 +4,7 @@ import { cookies } from "next/headers"
 import { taskWriterRoute } from "@/lib/constants/APIRouteConstants"
 import { getInviteFromProjectId } from "@/utils/api/invite/generatePublicInviteController"
 import prisma from "../prisma"
-import { requireActionUser } from "./actionUser"
+import { actionUserIdOrNull } from "./actionUser"
 import { teamAiSettingsViewerWhere } from "@/utils/controllers/teams/getTeamAiSettingsForViewer"
 import { getProjectWhere } from "@/utils/controllers/projects/getAllIncludes"
 import {
@@ -15,7 +15,8 @@ import {
 
 
 export const getTeamById = async (teamId: string) => {
-  const viewer = await requireActionUser()
+  const viewer = await actionUserIdOrNull()
+  if (viewer === null) return null
   const team = await prisma.team.findFirst({
     where: teamAiSettingsViewerWhere(viewer, undefined, teamId),
     include: {
@@ -25,7 +26,9 @@ export const getTeamById = async (teamId: string) => {
   return team
 }
 export const getTeamInviteUrl = async (userId: number, teamId: string | undefined) => {
-  userId = await requireActionUser(userId)
+  const viewer = await actionUserIdOrNull(userId)
+  if (viewer === null) return null
+  userId = viewer
   if (!teamId) return "Error"
 
   const team = await prisma.team.findUnique({ where: { id: teamId } })
@@ -60,7 +63,9 @@ export const getTeamInviteUrl = async (userId: number, teamId: string | undefine
 
 
 export const updateUserSettingOnboarding = async (userId: number, state: boolean) => {
-  userId = await requireActionUser(userId)
+  const viewer = await actionUserIdOrNull(userId)
+  if (viewer === null) return null
+  userId = viewer
   const userSetting = await prisma.userSetting.update({
     where: {
       userId
@@ -74,7 +79,9 @@ export const updateUserSettingOnboarding = async (userId: number, state: boolean
 }
 
 export const updateUserSettingTutorial = async (userId: number, state: boolean) => {
-  userId = await requireActionUser(userId)
+  const viewer = await actionUserIdOrNull(userId)
+  if (viewer === null) return null
+  userId = viewer
   const userSetting = await prisma.userSetting.update({
     where: {
       userId
@@ -88,7 +95,9 @@ export const updateUserSettingTutorial = async (userId: number, state: boolean) 
 }
 
 export const updateUserSettingTrial = async (userId: number, state: boolean) => {
-  userId = await requireActionUser(userId)
+  const viewer = await actionUserIdOrNull(userId)
+  if (viewer === null) return null
+  userId = viewer
   const userSetting = await prisma.userSetting.update({
     where: {
       userId
@@ -104,7 +113,9 @@ export const updateUserSettingTrial = async (userId: number, state: boolean) => 
 
 
 export const checkIfUserIsNew = async (userId: number) => {
-  userId = await requireActionUser(userId)
+  const viewer = await actionUserIdOrNull(userId)
+  if (viewer === null) return null
+  userId = viewer
   const teamsOwned = await prisma.team.count({
     where: {
       googleAccount: {
@@ -122,7 +133,7 @@ export const checkIfUserIsNew = async (userId: number) => {
 }
 
 export async function taskWriterFetch(prompt: string) {
-  await requireActionUser()
+  if (await actionUserIdOrNull() === null) return null
   const isNativeTaskWriter = taskWriterRoute.startsWith("/")
   const baseUrl =
     process.env.NEXT_PUBLIC_BASEURL ||
@@ -152,12 +163,15 @@ export async function taskWriterFetch(prompt: string) {
   else return response
 }
 
+const uploadRefused: TReturnAIRAGUpload = { status: 403, text: "forbidden", data: null }
+
 export const uploadAttachmentToAICustomInstruction = async (props: TUploadToAICustomInstruction): Promise<TReturnAIRAGUpload> => {
-  const viewer = await requireActionUser()
+  const viewer = await actionUserIdOrNull()
+  if (viewer === null) return uploadRefused
   const instruction = await prisma.aI_Custom_Instructions.findFirst({
     where: { id: props.AI_Custom_Instructions_id, project: getProjectWhere(viewer) },
     select: { id: true },
   })
-  if (!instruction) throw new Error("Forbidden")
+  if (!instruction) return uploadRefused
   return uploadAttachment(props)
 }

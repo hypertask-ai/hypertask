@@ -1,4 +1,4 @@
-import { HTPR_7480_COMMENT_SKILL_RUN_FLAG, HTPR_7393_COMMENT_INLINE_AI_FLAG, HTPR_7337_EDIT_WITH_AI_FLAG, HTPR_6929_COMPOSE_TASK_WRITER_FLAG, HTPR_6937_NEW_TASK_WINDOW_FLAG } from "@/lib/flags/keys";
+import { HTPR_7480_COMMENT_SKILL_RUN_FLAG, HTPR_7393_COMMENT_INLINE_AI_FLAG, HTPR_7337_EDIT_WITH_AI_FLAG, HTPR_6929_COMPOSE_TASK_WRITER_FLAG, HTPR_6937_NEW_TASK_WINDOW_FLAG, HTPR_7659_ARCHIVE_EVERY_SEND_FLAG } from "@/lib/flags/keys";
 import { Dispatch, SetStateAction, useState, useRef } from "react";
 import { IAttachment, IEditorAttachmentFile, IUser, RedirectAPIParams, RedirectMode } from "@/models/model";
 import { useQueryClient } from "@tanstack/react-query";
@@ -11,7 +11,9 @@ import { useTaskContext } from "@/lib/contexts/TaskDetail/TaskProvider";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useDescriptionAndCommentsContext } from "@/lib/contexts/TaskDetail/DescriptionProvider";
 import type { EmojiGifPickerEventDetail } from "./Components/EmojiGifPicker";
-import { shouldAdvanceAfterNotificationArchive } from "@/lib/taskDetailArchiveNavigation";
+import { inboxMessageForTask, shouldAdvanceAfterNotificationArchive } from "@/lib/taskDetailArchiveNavigation";
+import type { INotificationsFromTQ } from "@/hooks/Inbox/useGlobalFocusHandler";
+import { inboxDataQueryKey } from "@/lib/inboxQueryKeys";
 import { useMobileVisualViewport } from "@/hooks/General/useMobileVisualViewport";
 import { useFlag } from "@/hooks/useFlag";
 
@@ -115,8 +117,17 @@ export function useTaskDetailEditorState({
 
   const inboxFlow = searchParams?.get("inboxFlow");
   const currentTask = JSON.parse(taskFromServer);
-  const inInbox = currentTask?._count?.notifications > 0;
   const isInboxFlow = shouldAdvanceAfterNotificationArchive(inboxFlow);
+  const archiveEverySend = useFlag(HTPR_7659_ARCHIVE_EVERY_SEND_FLAG);
+  const inInbox =
+    currentTask?._count?.notifications > 0 ||
+    (archiveEverySend &&
+      isInboxFlow &&
+      !!inboxMessageForTask(
+        queryClient.getQueryData<INotificationsFromTQ>(inboxDataQueryKey(currentUser?.id))?.notifications,
+        currentTask,
+        currentUser?.id,
+      ));
   const isReadEditMode =
     mode === "read-edit-description" || mode === "read-edit-comments";
   const isReadOnlyContent = isReadEditMode && !allowEdit;

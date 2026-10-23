@@ -157,6 +157,9 @@ jobs:
             # A challenge page or truncated body is not JSON; with set -e a failing
             # jq would abort the step before the "unverifiable" alert below runs.
             LIVE_BUILD=$(jq -r '.buildId // empty' "$HC_DIR/version.json" 2>/dev/null) || LIVE_BUILD=""
+            if [ "$(jq -r '.node.meetsSecurityFloor | tostring' "$HC_DIR/version.json" 2>/dev/null)" = "false" ]; then
+              echo "::warning::Production Node is below the security floor $(jq -r '.node.securityFloor // "unknown"' "$HC_DIR/version.json" 2>/dev/null) (YPER4-600)"
+            fi
           }
 
           for i in 1 2 3 4 5 6; do

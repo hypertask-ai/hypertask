@@ -1,3 +1,4 @@
+import { downloadWithoutBrotli } from "@/lib/net/downloadWithoutBrotli";
 import { reportError } from "@/lib/errors/reportError";
 import { NextRequest, NextResponse } from "next/server";
 import { generateText } from "ai";
@@ -82,6 +83,7 @@ async function improveTranscript(
 ) {
   const selected = await selectTiptapModel(lookup);
   const { text } = await generateText({
+    experimental_download: downloadWithoutBrotli,
     model: selected.model,
     instructions: createPromptForTiptapForwardSlash(
       "ImproveReadability",

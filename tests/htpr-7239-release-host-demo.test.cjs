@@ -24,6 +24,7 @@ const { default: proxy } = load('src/proxy.ts', {
   './utils/edgeHelpers': { isValidUser: () => ({ isValid: false, user: null }) },
   './utils/serverActions': { isMobileDevice: () => false },
   './utils/helperFunctions/helperFunctions': { canAccessTrialPage: () => true },
+  '@/lib/net/contentEncoding': { refusedContentEncoding: () => undefined },
   '@/lib/auth/safeReturnTo': { parseSafeReturnTo: () => null },
   '@/lib/auth/sessionEdge': { verifySessionEdge: async () => null },
   '@/lib/auth/cookieIdentity': { verifyCookieIdentity: async () => ({ status: 'anonymous' }) },

@@ -181,6 +181,7 @@ export const useTutorialLifecycle = (context: TutorialContext & ReturnType<typeo
             currentUser.id,
             true
           );
+          if (!newSetting) throw new Error("Tutorial status was not saved for this session");
 
           setCurrentUser((prev: any) => {
             const updatedUser = { ...prev, UserSetting: { ...newSetting } };

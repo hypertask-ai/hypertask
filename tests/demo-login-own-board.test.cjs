@@ -126,6 +126,7 @@ function makeHarness({ existing = true, membershipOnly = false, flagMode = 'EVER
     './utils/edgeHelpers': { isValidUser: (raw) => ({ isValid: !!raw, user: raw ? JSON.parse(raw) : null }) },
     './utils/serverActions': {},
     './utils/helperFunctions/helperFunctions': {},
+    '@/lib/net/contentEncoding': { refusedContentEncoding: () => undefined },
     '@/lib/auth/safeReturnTo': { parseSafeReturnTo: () => null },
     '@/lib/auth/sessionEdge': { verifySessionEdge: async () => ({ id: userId }) },
     '@/lib/auth/cookieIdentity': {},

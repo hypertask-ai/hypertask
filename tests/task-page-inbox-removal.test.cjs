@@ -55,7 +55,7 @@ const hydratedTask = {
   notifications: [notification],
 };
 
-function makeFlow(t, initialTask, currentTask, playlist = [task]) {
+function makeFlow(t, initialTask, currentTask, playlist = [task], { flags = new Set(), extraRows = [] } = {}) {
   const client = new QueryClient();
   const key = ["inbox", 6];
   const currentUser = { id: 6 };
@@ -77,6 +77,7 @@ function makeFlow(t, initialTask, currentTask, playlist = [task]) {
     { ...notification, id: 701 },
     { ...notification, id: 702, type: "Reacted" },
     { ...notification, id: 703, userId: 7 },
+    ...extraRows,
   ];
   const buildInboxQueryCache = (notifications, splitsNoImportant = [], showImportantSplit = false) => ({
     notifications,
@@ -170,8 +171,8 @@ function makeFlow(t, initialTask, currentTask, playlist = [task]) {
     "@/lib/inboxSync/mutation": mutation,
   }).default();
   const useArchive = loadSource("src/hooks/Task Detail/useArchiveAndNavigate.ts", {
-    "@/hooks/useFlag": { useFlag: () => false },
-    "@/lib/flags/keys": { HTPR_7311_DECISION_COMMENT_LINK_FLAG: "htpr-7311-decision-comment-link" },
+    "@/hooks/useFlag": { useFlag: (key) => flags.has(key) },
+    "@/lib/flags/keys": { HTPR_7311_DECISION_COMMENT_LINK_FLAG: "htpr-7311-decision-comment-link", HTPR_7659_ARCHIVE_EVERY_SEND_FLAG: "htpr-7659-archive-every-send" },
     "@/lib/inboxDecisions": { withDecisionCommentAnchor: (href, _commentId, enabled) => {
       assert.equal(enabled, false, "Decisions comment links remain off in this harness");
       return href;
@@ -233,8 +234,8 @@ test("a refreshed notification id replaces the cached id when removing from a di
   assert.deepEqual(flow.toasts, []);
 });
 
-test("a second removal cannot toggle the frozen notification back into inbox", async (t) => {
-  const flow = makeFlow(t, hydratedTask, hydratedTask);
+for (const flags of [new Set(), new Set(["htpr-7659-archive-every-send"])]) test(`a second removal cannot toggle the frozen notification back into inbox (HTPR-7659 flag ${flags.size ? "on" : "off"})`, async (t) => {
+  const flow = makeFlow(t, hydratedTask, hydratedTask, [task], { flags });
   flow.useArchive().navigateToNextTask(true, false);
   await Promise.all(flow.pending);
   assert.equal(flow.context.currentTask._count.notifications, 0);
@@ -242,4 +243,57 @@ test("a second removal cannot toggle the frozen notification back into inbox", a
   await Promise.all(flow.pending);
   assert.equal(flow.requests.length, 1, "zeroed live membership must stop the API's archive/unarchive toggle");
   assert.deepEqual(flow.client.getQueryData(flow.key).notifications, []);
+});
+
+const sendsInARow = () => [1, 2, 3].map((n) => {
+  const sent = { ...task, id: 900 + n, uniqueIndex: 7000 + n, title: `Inbox message ${n}` };
+  return { sent, row: { ...notification, id: 800 + n, taskId: sent.id, task: sent } };
+});
+
+function sendThreeInARow(t, flags) {
+  const sends = sendsInARow();
+  const playlist = sends.map(({ sent }) => sent);
+  const flow = makeFlow(t, playlist[0], playlist[0], playlist, { flags, extraRows: sends.map(({ row }) => row) });
+  for (const { sent } of sends) {
+    flow.context.currentTask = { ...sent, _count: { notifications: 0 } };
+    flow.context.currentItemInTasksPlaylist = sent;
+    flow.useArchive().navigateToNextTask(true, true, undefined, undefined, "true");
+  }
+  return flow;
+}
+
+test("HTPR-7659: three comments in a row from the inbox each archive their own message", async (t) => {
+  const flow = sendThreeInARow(t, new Set(["htpr-7659-archive-every-send"]));
+  await Promise.all(flow.pending);
+  await new Promise((resolve) => setTimeout(resolve, 20));
+  assert.deepEqual(flow.requests.map((url) => new URL(url, "https://app.hypertask.ai").searchParams.get("id")), ["801", "802", "803"]);
+  assert.deepEqual(flow.toasts, []);
+  assert.equal(flow.navigations.length, 3);
+});
+
+test("HTPR-7659: with the flag off a stale ticket count still skips the archive, the old behaviour", async (t) => {
+  const flow = sendThreeInARow(t, new Set());
+  await Promise.all(flow.pending);
+  await new Promise((resolve) => setTimeout(resolve, 20));
+  assert.equal(flow.requests.length, 0);
+});
+
+test("HTPR-7659 still allowed: a ticket with no inbox message is not archived and says so", async (t) => {
+  const outside = { ...task, id: 999, uniqueIndex: 7999, _count: { notifications: 0 } };
+  const flow = makeFlow(t, outside, outside, [outside], { flags: new Set(["htpr-7659-archive-every-send"]) });
+  assert.equal(flow.useArchive().navigateToNextTask(true, true, undefined, undefined, "true"), "stayed");
+  assert.deepEqual(flow.requests, []);
+  assert.deepEqual(flow.toasts, ["This task is not in inbox"]);
+});
+
+test("HTPR-7659: the comment writer treats a message still in the inbox list as in the inbox, behind a bugfix flag", () => {
+  const definition = fs.readFileSync(path.join(root, "src/lib/flags/definitions/htpr-7659-archive-every-send.ts"), "utf8");
+  assert.match(definition, /kind: "bugfix"/);
+  assert.match(definition, /defaultMode: "EVERYONE"/);
+  const editorState = fs.readFileSync(path.join(root, "src/components/RTE/useTaskDetailEditorState.tsx"), "utf8");
+  assert.match(editorState, /archiveEverySend &&\s*isInboxFlow &&\s*!!inboxMessageForTask\(/);
+  const [, { row, sent }] = sendsInARow();
+  assert.equal(navigation.inboxMessageForTask([row], sent, 6), row);
+  assert.equal(navigation.inboxMessageForTask([{ ...row, status: "Archive" }], sent, 6), undefined);
+  assert.equal(navigation.inboxMessageForTask([row], sent, 7), undefined);
 });

@@ -26,6 +26,7 @@ function load(file, stubs = {}) {
     if (request === "@/lib/api/task-writes/route") return loadSharedRoute(stubs["@/lib/auth/getSessionUser"]?.getSessionUser);
     if (request === "@/lib/tasks/sameBoardRelations") return load("src/lib/tasks/sameBoardRelations.ts");
     if (request in stubs) return stubs[request];
+    if (request === "@/lib/net/contentEncoding") return load("src/lib/net/contentEncoding.ts");
     if (request === "@/lib/auth/agentCookieBridgeRoutes") return load("src/lib/auth/agentCookieBridgeRoutes.ts");
     if (request === "@/lib/telemetry/signupAnalytics") return { recordServerCapture: () => {} };
     if (request === "@/lib/mcp/listParams") return load("src/lib/mcp/listParams.ts", {});

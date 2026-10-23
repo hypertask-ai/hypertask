@@ -1,3 +1,4 @@
+import { downloadWithoutBrotli } from "@/lib/net/downloadWithoutBrotli";
 import { taskWriterSkillsSchema, MAX_SKILL_INPUT_LENGTH } from "@/lib/ai/taskWriterSkills";
 import { getSessionUser } from "@/lib/auth/getSessionUser";
 import { withAgentScopeRequest } from "@/lib/auth/agentScope";
@@ -267,6 +268,7 @@ async function taskQuestions(request: NextRequest) {
     const newTicket = parsedBody.data.kind === "new-ticket";
     const writingQuestions = newTicket && await isFeatureEnabled(HTPR_7534_WRITING_QUESTIONS_FLAG, viewer.id);
     const result = await generateText({
+      experimental_download: downloadWithoutBrotli,
       model,
       instructions: await cachedInstructionsForUser(viewer.id, { modelId: systemModel.model, fixed: skillContext ? SKILL_FOLLOWUP_INSTRUCTIONS : writingQuestions ? WRITING_QUESTIONS_INSTRUCTIONS : newTicket ? NEW_TICKET_QUESTIONS_INSTRUCTIONS : TASK_QUESTIONS_INSTRUCTIONS }),
       prompt: skillContext

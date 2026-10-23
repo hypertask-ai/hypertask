@@ -48,6 +48,7 @@ function harness() {
     } },
     './utils/serverActions': { isMobileDevice: () => false },
     './utils/helperFunctions/helperFunctions': { canAccessTrialPage: () => true },
+    '@/lib/net/contentEncoding': { refusedContentEncoding: () => undefined },
     '@/lib/auth/safeReturnTo': { parseSafeReturnTo: () => null },
     '@/lib/auth/sessionEdge': edge, '@/lib/auth/cookieIdentity': identity,
     '@/lib/auth/sessionRevocation': revocation,

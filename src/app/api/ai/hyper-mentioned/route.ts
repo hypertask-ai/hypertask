@@ -1,3 +1,4 @@
+import { downloadWithoutBrotli } from "@/lib/net/downloadWithoutBrotli";
 import { withAgentScopeRequest } from "@/lib/auth/agentScope";
 import { haiku55ModelEnabled } from "@/app/api/ai/_lib/planGate";
 import { reportError } from "@/lib/errors/reportError";
@@ -358,6 +359,7 @@ async function hyperMention(request: NextRequest) {
       feature: "hyper-mentioned",
     });
     const result = await generateText({
+      experimental_download: downloadWithoutBrotli,
       model: selected.model,
       instructions: renderPrompt("hyper-mentioned-instructions-1", (HOUSE_OUTPUT_STYLE), (HYPER_AI_TOOL_COUNT), (skillResolution.systemPromptAddition
           ? `\n\n${skillResolution.systemPromptAddition}`

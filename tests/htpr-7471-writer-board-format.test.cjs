@@ -35,6 +35,7 @@ function moduleWithStubs(file, stubs) {
     console: { log() {}, warn() {}, error() {} },
     require: (id) => {
       if (id in stubs) return stubs[id];
+      if (id === "@/lib/net/downloadWithoutBrotli") return { downloadWithoutBrotli: undefined };
       if (id === "@/app/api/ai/_lib/skillAccess") return { AccountSkillAccessError: class extends Error {} };
       if (id === "@/lib/auth/agentScope") return require("./helpers/agent-board-scope.cjs").enforcedScope;
       if (["@/lib/ai/taskWriterSkills", "./taskWriterSkills"].includes(id)) return load(path.join(root, "src/lib/ai/taskWriterSkills.ts"));

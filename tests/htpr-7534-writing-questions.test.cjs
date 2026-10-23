@@ -31,6 +31,7 @@ function harness(enabled) {
   const questions = ["  Replace 'better' with precise wording  ", "", "Shorten the title", "Flag missing acceptance criteria", "Flag the missing affected screen", "Fifth"];
   const model = { id: "unchanged-model" };
   const stubs = {
+    "@/lib/net/downloadWithoutBrotli": { downloadWithoutBrotli: undefined },
     "@/lib/ai/taskWriterSkills": require("jiti")(__filename, { fsCache: false })(path.resolve(__dirname, "../src/lib/ai/taskWriterSkills.ts")),
     ai: {
       generateText: async (args) => { calls.push(args); return { output: { questions } }; },

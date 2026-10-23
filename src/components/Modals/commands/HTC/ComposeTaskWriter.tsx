@@ -32,7 +32,7 @@ import { HTPR_7319_SKILL_CHAT_FOLLOWUP_FLAG, HTPR_7317_CTRLJ_TICKET_QUESTIONS_FL
 import { matchComposeTaskBoard } from "@/lib/ai/composeTaskBoard";
 import type { CommandFocusProxy } from "@/components/commandTypes";
 import { HTPR_6891_PHONE_TASK_WRITER_SHEET_FLAG, HTPR_6929_COMPOSE_TASK_WRITER_FLAG, HTPR_6937_NEW_TASK_WINDOW_FLAG, HTPR_6951_TASK_WRITING_PROGRESS_FLAG, HTPR_7056_CTRLJ_SPLIT_TASKS_FLAG, HTPR_7085_CTRLJ_WRITER_REASON_FLAG, HTPR_7051_TASK_WRITER_IMAGE_UNFURL_FLAG, HTPR_7514_INLINE_AGENT_IMAGES_FLAG, HTPR_7053_COMPOSE_BOARD_CHIP_FLAG, HTPR_7313_CTRLJ_ALWAYS_BOARD_CHIP_FLAG, HTPR_7343_CTRLJ_WRITER_PROPERTIES_FLAG } from "@/lib/flags/keys";
-import { HTPR_7307_CTRLJ_FOOTER_CLICKABLE_FLAG } from "@/lib/flags/keys";
+import { HTPR_7307_CTRLJ_FOOTER_CLICKABLE_FLAG, HTPR_7652_CTRLJ_ENTER_QUEUE_FLAG } from "@/lib/flags/keys";
 import { resolveComposeBoardTarget } from "./composeBoardTarget";
 import { ChatScopeChip } from "@/components/AI_CHAT/ChatScopeChip";
 import MoveTaskGlobal from "@/components/Modals/MoveTaskToBoard";
@@ -70,6 +70,7 @@ export default function ComposeTaskWriter({ active, focusProxy, destinationProje
   const boardFromTextEnabled = useFlag(HTPR_7305_BOARD_FROM_TEXT_FLAG);
   const alwaysShowBoardChip = useFlag(HTPR_7313_CTRLJ_ALWAYS_BOARD_CHIP_FLAG);
   const clickableFooter = useFlag(HTPR_7307_CTRLJ_FOOTER_CLICKABLE_FLAG);
+  const queueEnterWhileBoardsLoad = useFlag(HTPR_7652_CTRLJ_ENTER_QUEUE_FLAG);
   const footerButtonClassName = "rounded-[4px] transition hover:bg-hover-active hover:text-white-black focus-visible:bg-hover-active focus-visible:outline-none";
   const [selectedBoardId, setSelectedBoardId] = useState<number>();
   const [boardPickerOpen, setBoardPickerOpen] = useState(false);
@@ -100,6 +101,7 @@ export default function ComposeTaskWriter({ active, focusProxy, destinationProje
   const [addingImages, setAddingImages] = useState(false);
   const pendingImages = useRef(0);
   const sending = useRef(false);
+  const textHeldUntilBoardsLoad = useRef<string | null>(null);
   const mounted = useRef(false);
   const input = useRef<HTMLTextAreaElement>(null);
   const composer = useRef<HTMLDivElement>(null);
@@ -121,7 +123,7 @@ export default function ComposeTaskWriter({ active, focusProxy, destinationProje
   const { updateTaskInCache } = UpdateKanban();
   const queryClient = useQueryClient();
   const { fileItems, files, fileInputRef, handleDroppedFiles, handleAttachmentClick, removeFile } = useFileUpload();
-  const { data: boards = [], isFetching: loadingBoards } = useQuery<IProject[]>({
+  const { data: boards = [], isFetching: loadingBoards, isSuccess: boardsLoaded } = useQuery<IProject[]>({
     queryKey: ["projectsAllMinimal", user?.id],
     queryFn: () => globalAPIHandlers.getAllProjectsMinimal("ExtraMinimal"),
     enabled: (boardChipEnabled || boardFromTextEnabled) && enabled && active && Boolean(user?.id),
@@ -252,6 +254,10 @@ export default function ComposeTaskWriter({ active, focusProxy, destinationProje
   };
 
   const send = async () => {
+    if (queueEnterWhileBoardsLoad && waitingForBoards && enabled && !sending.current && !dictating && text.trim()) {
+      textHeldUntilBoardsLoad.current = text;
+      return;
+    }
     if (!enabled || sending.current || pendingImages.current > 0 || waitingForBoards || dictating || !text.trim()) return;
     sending.current = true;
     setWritingHeight(showProgress ? composer.current?.offsetHeight : undefined);
@@ -368,6 +374,15 @@ export default function ComposeTaskWriter({ active, focusProxy, destinationProje
     delete focusProxy.pendingEnter;
     void send();
   }, [active, text, focusProxy, inputFocused]);
+
+  useEffect(() => {
+    const heldText = textHeldUntilBoardsLoad.current;
+    if (heldText === null) return;
+    const holdStillValid = queueEnterWhileBoardsLoad && boardFromTextEnabled && active && !dictating && text === heldText;
+    if (holdStillValid && (waitingForBoards || addingImages)) return;
+    textHeldUntilBoardsLoad.current = null;
+    if (holdStillValid && boardsLoaded) void send();
+  }, [waitingForBoards, addingImages, active, queueEnterWhileBoardsLoad, boardFromTextEnabled, boardsLoaded, dictating, text]);
 
   const attachments = fileItems.length > 0 && (
     <Suspense fallback={null}>
