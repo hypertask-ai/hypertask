@@ -6,6 +6,7 @@ import { useAiDefaultModelContext, useHaikuDefaultFlag } from "@/hooks/useHaikuD
 import {
   getDefaultAiModelOptionForPlan,
   getAiModelOptionById,
+  isOpenAiOnlyPaidTeam,
   preferredAiModelOption,
   resolveAiModelOption,
 } from "@/lib/aiModelOptions";
@@ -74,13 +75,13 @@ export function useAiModelPreference(
     currentTeamId,
   );
   const defaultContext = useAiDefaultModelContext(currentTeamId == null ? null : String(currentTeamId));
-  const planDefault = haikuDefaultEnabled || haiku55Enabled
+  const planDefaultFor = (context: typeof defaultContext) => haikuDefaultEnabled || haiku55Enabled
     ? getDefaultAiModelOptionForPlan(
         scopedBilling?.storePlanId,
         hasHaikuByokProviderFlags(scopedBilling?.byokProviderFlags),
         true,
         haikuDefaultEnabled,
-        defaultContext,
+        context,
       )
     : getDefaultAiModelOptionForPlan(
         scopedBilling?.storePlanId,
@@ -89,6 +90,19 @@ export function useAiModelPreference(
           preferredAiModelOption.source,
         ),
       );
+  const planDefault = planDefaultFor(defaultContext);
+  const chosenOptionIds = [
+    storedOptionIds.teamScoped,
+    storedOptionIds.global,
+    teamFeatureModels.data?.[surface]?.model,
+    includeBoardFallback ? boardDefaultId : undefined,
+  ];
+  const usesPlanDefault = !chosenOptionIds.some((id) => getAiModelOptionById(id, haiku55Enabled));
+  const openAiOnlyDefaultApplies = usesPlanDefault &&
+    isOpenAiOnlyPaidTeam({ ...defaultContext, plan: scopedBilling?.storePlanId });
+  const agentSessionAiOption = openAiOnlyDefaultApplies
+    ? planDefaultFor({ ...defaultContext, openaiOnlyDefaultEnabled: false })
+    : null;
   const resolveOption = useCallback(
     () =>
       resolveAiModelOption(
@@ -165,5 +179,5 @@ export function useAiModelPreference(
     [currentTeamId, haiku55Enabled, queryClient, surface, userPreferences],
   );
 
-  return { currentAiOption, setAiOption };
+  return { currentAiOption, setAiOption, usesPlanDefault, agentSessionAiOption };
 }

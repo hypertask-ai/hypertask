@@ -2,7 +2,7 @@ import { loadSidebarChatRequest } from "@/lib/agents/chatAccess";
 import { loadTurnModel } from "@/lib/ai/chatStream/turnModel";
 import { createChatStream } from "@/lib/ai/chatStream/stream";
 import { NextRequest } from "next/server";
-import { getAiRequestUser } from "@/app/api/ai/_lib/requestUser";
+import { getAiRequestUser, getCliBearerChatUser } from "@/app/api/ai/_lib/requestUser";
 import { getCronServiceRequestUser } from "@/app/api/ai/_lib/cronServiceAuth";
 import { decodeHeartbeatTurnMessage } from "@/lib/nativeAgent/heartbeatTurnEnvelope";
 import prisma from "@/lib/prisma";
@@ -28,9 +28,10 @@ export const maxDuration = 300;
 
 export async function POST(request: NextRequest) {
   const turnStartedAtMs = Date.now();
-  const requestUser =
+  const sessionOrServiceUser =
     (await getAiRequestUser(request)) ??
     (await getCronServiceRequestUser(request));
+  const requestUser = sessionOrServiceUser ?? (await getCliBearerChatUser(request, "chat-stream"));
   if (!requestUser?.id) {
     return createSseErrorResponse("Unauthorized", 401);
   }

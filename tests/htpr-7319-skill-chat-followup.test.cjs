@@ -305,7 +305,8 @@ async function withCompose(options, check) {
       addMessage: async (_id, message) => { persisted.push(message); const stored = { ...message, id: "server-intro-43" }; rows[0] = { ...rows[0], messages: [stored] }; return response({ message: stored }); },
     },
   };
-  const historyMocks = { ...basic, "next/navigation": { usePathname: () => "/detail/project-15/7319" }, "@/utils/api/ai_chat": historyApi };
+  const dockedChatScope = load("src/hooks/MultiPages/AIChat/useDockedChatScope.ts", { ...basic, "@/lib/flags/definitions/htpr-7685-chat-follows-board": { HTPR_7685_CHAT_FOLLOWS_BOARD_FLAG: "htpr-7685-chat-follows-board" } });
+  const historyMocks = { ...basic, "next/navigation": { usePathname: () => "/detail/project-15/7319" }, "@/utils/api/ai_chat": historyApi, "./useDockedChatScope": dockedChatScope };
   const paged = load("src/hooks/MultiPages/AIChat/usePagedChatHistory.ts", { ...historyMocks, "@/lib/agents/chatViewerState": { getNativeSidebarChat: () => null } });
   const { useSessionAndChatHistory } = load("src/hooks/MultiPages/AIChat/useSessionAndChatHistory.ts", { ...historyMocks, "./usePagedChatHistory": paged });
   const chatContext = { useAiChatContext: () => ({ ...history, chatMounted: true, handleMessageListScroll() {}, registerMessageListRef() {}, scrollMessagesToBottom() {}, isTyping: false, handleSendMessage: (value) => sent.push(value), isDetailPage: true, selectSession() {} }) };
@@ -347,6 +348,7 @@ async function withCompose(options, check) {
     "@/lib/realtime/taskDetailRefresh": { preserveTaskAssigneesChangedDuringFetch: (_current, saved) => saved, refreshTaskDetailQueryCache: async () => {}, shouldPreserveTaskEditorContent: () => false, mergeRealtimeTaskDetail: (_current, saved) => saved },
     "@/lib/ai/composeTaskBoard": {}, "./composeBoardTarget": {},
     "@/components/AI_CHAT/ChatScopeChip": {}, "@/components/Modals/MoveTaskToBoard": {},
+    "@/components/PageComponents/TaskDetail/AI Task Writer/useSkillSlashMenu": { useSkillSlashMenu: () => ({ onKeyDown: () => false, onInput() {}, onCaretMove() {}, close() {}, menu: null }) },
     "@/lib/createTaskAttachmentUploads": { discardUnboundCreateTaskUploads() {} },
   }).default;
   global.fetch = async (url, init) => {
@@ -601,6 +603,7 @@ async function sendAfterIntro(session, question) {
     "@/lib/aiChat/streamRefusal": {},
     "@/lib/demo/guestBoardBuild": { isGuestBoardBuild: () => false },
     "@/lib/aiChat/transportRetry": {},
+    "@/lib/aiModelOptions": { chatModelRequestFields: load("src/lib/aiModelOptions.ts").chatModelRequestFields },
   });
   const ref = () => ({ current: null });
   const noop = () => {};

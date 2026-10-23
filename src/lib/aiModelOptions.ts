@@ -552,6 +552,14 @@ export function isOpenAiOnlyPaidTeam({ openaiOnlyDefaultEnabled, plan, hasClaude
   return Boolean(openaiOnlyDefaultEnabled && (plan === "Pro" || plan === "AI") && hasClaudeRoute === false && hasDirectOpenAiKey);
 }
 
+export function chatModelRequestFields(
+  { currentOption, agentSessionOption, usesPlanDefault }: { currentOption: TAiModelOption; agentSessionOption: TAiModelOption | null; usesPlanDefault: boolean },
+  agentId: string | null | undefined,
+) {
+  if (agentId && agentSessionOption) return { modelFromDefault: true };
+  return { modelOptionId: currentOption.id, model: currentOption.model, provider: currentOption.source, modelFromDefault: usesPlanDefault };
+}
+
 export function defaultModelKeyFor(context: AiDefaultModelContext, productionDefault: TAiModelKey = "gpt-6-luna"): TAiModelKey {
   const { haiku55Enabled, haikuDefaultEnabled, backgroundClaudeEnabled, plan, hasByok } = context;
   if (isOpenAiOnlyPaidTeam(context)) return "gpt-6-luna";

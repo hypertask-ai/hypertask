@@ -1,4 +1,4 @@
-import { test, expect, type Page, type APIRequestContext, type Response } from '@playwright/test'
+import { test, expect, type Page, type Locator, type APIRequestContext, type Response } from '@playwright/test'
 import { readFileSync } from 'node:fs'
 import path from 'node:path'
 import { randomUUID } from 'node:crypto'
@@ -6,13 +6,15 @@ import { withRealtime } from './lib/realtime'
 import { waitForTicketInitialScroll } from './lib/layout-lock-scroll'
 
 const FLAG = 'htpr-7518-agent-sidebar-chats'
+const PAST_CHATS_FLAG = 'htpr-7688-past-chats-first'
 const stateFile = process.env.BROWSER_SMOKE_STATE_FILE || 'e2e/smoke/.state/smoke-state.json'
 test.use({ storageState: stateFile })
 test.describe.configure({ mode: 'serial' })
 test.skip(!process.env.BROWSER_SMOKE_PR, 'Writes only to GitHub disposable loopback fixtures')
 
 type Agent = { id: string; name: string; sessionId: string; token: string }
-type Fixture = { projectId: number; lanes: Record<string, Agent[]> }
+type PersonalChat = { id: string; title: string; updatedAt: string; message: string }
+type Fixture = { projectId: number; lanes: Record<string, Agent[]>; personalChats: PersonalChat[] }
 let fixture: Fixture
 
 test.beforeAll(() => {
@@ -64,7 +66,9 @@ async function open(page: Page) {
   await expect(page.getByRole('button', { name: 'Switch conversation', exact: true })).toBeVisible()
   const flags = await page.request.get('/api/flags')
   expect(flags.status()).toBe(200)
-  expect((await flags.json()).flags[FLAG], 'server sidebar flag in disposable fixture').toBe(true)
+  const enabledFlags = (await flags.json()).flags
+  expect(enabledFlags[FLAG], 'server sidebar flag in disposable fixture').toBe(true)
+  expect(enabledFlags[PAST_CHATS_FLAG], 'past chats flag in disposable fixture').toBe(true)
 }
 async function settledBox(locator: ReturnType<Page['locator']>) {
   let previous = await locator.boundingBox()
@@ -76,12 +80,55 @@ async function settledBox(locator: ReturnType<Page['locator']>) {
   }, { intervals: [150] }).toBe(true)
   return previous!
 }
+async function reveal(list: Locator, row: Locator) {
+  const more = list.getByRole('option', { name: /^Show (\d+ )?more$/ })
+  await expect.poll(async () => {
+    if (await row.isVisible()) return true
+    if (await more.isVisible()) await more.click()
+    return false
+  }, { timeout: 15_000 }).toBe(true)
+}
 async function choose(page: Page, name: string) {
   const list = page.getByTestId('agent-sidebar-conversations')
   if (!await list.isVisible()) await page.getByRole('button', { name: 'Switch conversation', exact: true }).click()
-  await list.locator('li').filter({ hasText: name }).click()
+  const row = list.locator('li').filter({ hasText: name }).first()
+  await reveal(list, row)
+  await row.click()
   await expect(list).toBeHidden()
 }
+
+test('past chats are listed newest first above agents and reopen', async ({ page }, info) => {
+  await open(page)
+  const title = page.getByRole('button', { name: 'Switch conversation', exact: true })
+  const list = page.getByTestId('agent-sidebar-conversations')
+  if (!await list.isVisible()) await title.click()
+  const chats = [...fixture.personalChats].sort((a, b) => Date.parse(b.updatedAt) - Date.parse(a.updatedAt))
+  await expect(list.locator('li').first()).toHaveText('AI chat')
+  for (const chat of chats) {
+    const row = list.locator(`[data-command-key="session:${chat.id}"]`)
+    await reveal(list, row)
+    await expect(row).toHaveText(chat.title)
+  }
+  const keys = await list.locator('li').evaluateAll(rows => rows.map(row => row.getAttribute('data-command-key')))
+  const positions = chats.map(chat => keys.indexOf(`session:${chat.id}`))
+  expect(positions).toEqual([...positions].sort((a, b) => a - b))
+  const agentPositions = Object.values(fixture.lanes).flat().map(agent => keys.indexOf(agent.id))
+  for (const position of positions) {
+    expect(position).toBeGreaterThan(0)
+    for (const agentPosition of agentPositions) expect(position).toBeLessThan(agentPosition)
+  }
+  const [external, , native] = fixture.lanes[info.project.name]
+  for (const [index, chat] of chats.entries()) {
+    await choose(page, index % 2 ? native.name : external.name)
+    await choose(page, chat.title)
+    await expect(page.getByTestId('ai-sidebar').getByText(chat.message, { exact: true })).toBeVisible()
+    await expect(page.locator('#ai-chat-tiptap-editor .ProseMirror:visible')).toBeVisible()
+    await expect(title).toHaveText('AI chat')
+    await choose(page, native.name)
+    await choose(page, 'AI chat')
+    await expect(page.getByTestId('ai-sidebar').getByText(chat.message, { exact: true })).toBeVisible()
+  }
+})
 
 for (const theme of ['porcelain', 'graphite', 'amoled', 'dia']) {
   test(`${theme}: anchored switch, real polling round trip, independent drafts/history and shell`, async ({ page, request }, info) => {
@@ -98,8 +145,8 @@ for (const theme of ['porcelain', 'graphite', 'amoled', 'dia']) {
     const list = page.getByTestId('agent-sidebar-conversations')
     if (!await list.isVisible()) await title.click()
     await expect(list.locator('li').first()).toHaveText('AI chat')
-    await expect(list.locator('li').filter({ hasText: a.name })).toContainText('connected')
-    await expect(list.locator('li').filter({ hasText: b.name })).toContainText('offline')
+    await expect(list.locator(`[data-command-key="${a.id}"]`)).toHaveText(`${a.name} · polling`)
+    await expect(list.locator(`[data-command-key="${b.id}"]`)).toHaveText(b.name)
     const trigger = await settledBox(title)
     if (info.project.name === 'Mobile') {
       expect(trigger.height).toBeGreaterThanOrEqual(44)

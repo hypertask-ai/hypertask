@@ -25,7 +25,7 @@ function server({ enabled = true, readable = true } = {}) {
     "@/lib/ai/chatStream/turnModel": { loadTurnModel: async () => ({}) },
     "@/lib/ai/chatStream/stream": { createChatStream: (options) => { started.push(options); return new Response("started"); } },
     "next/server": {},
-    "@/app/api/ai/_lib/requestUser": { getAiRequestUser: async () => user },
+    "@/app/api/ai/_lib/requestUser": { getAiRequestUser: async () => user, getCliBearerChatUser: async () => null },
     "@/app/api/ai/_lib/cronServiceAuth": { getCronServiceRequestUser: async () => null },
     "@/lib/nativeAgent/heartbeatTurnEnvelope": {},
     "@/lib/prisma": { default: { user: { findUnique: async () => user }, chatSession: { updateMany: async (query) => { writes.push(query); return { count: 1 }; } } } },

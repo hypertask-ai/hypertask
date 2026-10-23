@@ -286,6 +286,16 @@ async function seedSessionFixtures(flags) {
     mode: 0o600,
   });
   const { createMcpToken, agentTokenCredentialFields } = jiti(path.join(root, "src/lib/mcp/auth/verifyJwt.ts"));
+  const personalChats = [];
+  for (const [index, title] of ["Smoke chat: planning", "Smoke chat: decisions", "Smoke chat: next steps"].entries()) {
+    const updatedAt = new Date(`2026-10-22T1${index}:00:00.000Z`);
+    const message = `${title} saved conversation`;
+    const session = await prisma.chatSession.create({ data: {
+      userId: user.id, agentId: null, taskId: null, projectId: board.id, title, updatedAt,
+    } });
+    await prisma.chatMessage.createMany({ data: [{ sessionId: session.id, role: "assistant", content: message, isDelivered: true }] });
+    personalChats.push({ id: session.id, title, updatedAt: updatedAt.toISOString(), message });
+  }
   const sidebarLanes = {};
   for (const lane of ["Desktop", "Mobile"]) {
     const agents = [];
@@ -305,7 +315,7 @@ async function seedSessionFixtures(flags) {
     }
     sidebarLanes[lane] = agents;
   }
-  await writeFile(path.join(path.dirname(stateFile), "agent-sidebar-fixture.json"), JSON.stringify({ projectId: board.id, lanes: sidebarLanes }), { flag: "wx", mode: 0o600 });
+  await writeFile(path.join(path.dirname(stateFile), "agent-sidebar-fixture.json"), JSON.stringify({ projectId: board.id, lanes: sidebarLanes, personalChats }), { flag: "wx", mode: 0o600 });
   let contract;
   if (contractEnabled) {
     const callers = {};

@@ -10,7 +10,7 @@ import type { AgentRole, AgentScopes } from '@/lib/mcp/agents/scopes';
 import type { AgentTokenTeamScope, McpAuthContext, ValidateMcpAuthOptions } from './types';
 
 const JWT_SECRET = process.env.JWT_SECRET as string
-const JWT_ISSUER = process.env.JWT_ISSUER || 'hypertask'
+export const JWT_ISSUER = process.env.JWT_ISSUER || 'hypertask'
 export const JWT_MCP_AUDIENCE = 'mcp-api'
 export const JWT_LEGACY_MCP_AUDIENCE = 'hypertasks-mcp'
 const AGENT_TOKEN_GENERATION_CLAIM = 'agentTokenGeneration'

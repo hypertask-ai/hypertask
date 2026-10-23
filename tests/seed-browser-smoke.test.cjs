@@ -94,6 +94,23 @@ await seedSessionFixtures({});`,
   const sidebar = files["/fixtures/agent-sidebar-fixture.json"];
   assert.equal(sidebar.projectId, boards[0].id);
   assert.deepEqual(Object.keys(sidebar.lanes), ["Desktop", "Mobile"]);
+  assert.deepEqual(sidebar.personalChats.map(chat => chat.title), ["Smoke chat: planning", "Smoke chat: decisions", "Smoke chat: next steps"]);
+  assert.deepEqual(sidebar.personalChats.map(chat => chat.updatedAt), ["2026-10-22T10:00:00.000Z", "2026-10-22T11:00:00.000Z", "2026-10-22T12:00:00.000Z"]);
+  assert.equal(new Set(sidebar.personalChats.map(chat => chat.id)).size, 3);
+  assert.equal(new Set(sidebar.personalChats.map(chat => chat.message)).size, 3);
+  for (const fixture of sidebar.personalChats) {
+    const session = records.chatSession.find(row => row.id === fixture.id);
+    assert.equal(session.userId, smoke.id);
+    assert.equal(session.agentId, null);
+    assert.equal(session.taskId, null);
+    assert.equal(session.projectId, sidebar.projectId);
+    assert.equal(session.title, fixture.title);
+    assert.equal(session.updatedAt.toISOString(), fixture.updatedAt);
+    const history = records.chatMessage.filter(row => row.sessionId === fixture.id);
+    assert.equal(history.length, 1);
+    assert.equal(history[0].role, "assistant");
+    assert.equal(history[0].content, fixture.message);
+  }
   for (const [lane, agents] of Object.entries(sidebar.lanes)) {
     assert.deepEqual(agents.map(agent => agent.name), ["A", "B", "Native"].map(suffix => `Sidebar ${lane} ${suffix}`));
     for (const fixture of agents) {
