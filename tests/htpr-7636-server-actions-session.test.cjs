@@ -17,6 +17,8 @@ const userActions = [
   ['updateUserSettingTrial', [userId, false]],
   ['checkIfUserIsNew', [userId]],
 ];
+const uploadRefused = { status: 403, text: 'forbidden', data: null };
+const refusedResult = (name) => name === 'uploadAttachmentToAICustomInstruction' ? uploadRefused : null;
 const actions = [
   ...userActions,
   ['getTeamById', ['team']],
@@ -107,7 +109,7 @@ test('session coverage includes every exported server action', () => {
 for (const [name, args] of userActions) {
   test(`now refused: ${name} with an account that is not the session account`, async () => {
     const f = fixture({ session: { userId: 986 } });
-    await assert.rejects(f.actions[name](...args), { name: 'Error', message: 'Forbidden' });
+    assert.deepEqual(await f.actions[name](...args), refusedResult(name));
     assert.deepEqual(f.calls, []);
     assert.equal(f.sessionHeaders.length, 1);
   });
@@ -130,7 +132,7 @@ for (const [label, session] of [['signed-out', null], ['agent', { userId, agentI
         f.calls.push(['fetch']);
         return new Response('result');
       });
-      await assert.rejects(f.actions[name](...args), { name: 'Error', message: 'Forbidden' });
+      assert.deepEqual(await f.actions[name](...args), refusedResult(name));
       assert.deepEqual(f.calls, []);
       assert.equal(f.sessionHeaders.length, 1);
     });
@@ -252,7 +254,7 @@ test('still allowed: attachment creation on the caller\'s own board preserves th
 
 test('attachment creation is refused for an instruction on a board the caller cannot open', async () => {
   const f = fixture({ projectOwnerId: 986 });
-  await assert.rejects(f.actions.uploadAttachmentToAICustomInstruction(uploadProps), { name: 'Error', message: 'Forbidden' });
+  assert.deepEqual(await f.actions.uploadAttachmentToAICustomInstruction(uploadProps), uploadRefused);
   assert.deepEqual(f.calls.map(([name]) => name), ['instruction.findFirst']);
 });
 

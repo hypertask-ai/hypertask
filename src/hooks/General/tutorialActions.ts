@@ -57,6 +57,7 @@ export const useTutorialActions = (context: TutorialState) => {
         currentUser.id,
         true
       );
+      if (!newSetting) return;
 
       setCurrentUser((prev: any) => {
         const updatedUser = { ...prev, UserSetting: { ...newSetting } };
