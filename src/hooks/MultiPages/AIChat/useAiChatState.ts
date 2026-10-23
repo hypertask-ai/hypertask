@@ -3,7 +3,8 @@ import type { Editor } from "@tiptap/react";
 import { TAiModal } from "@/models/AI_Task_writer_model";
 import { useRecoilState, useRecoilValue, useSetRecoilState } from "@/lib/state";
 import { useSessionAndChatHistory } from "@/hooks/MultiPages/AIChat/useSessionAndChatHistory";
-import { currentProjectAtom, currentUserAtom, aiChatAutoOpenSuppressedAtom, aiChatBoardSessionMapAtom, aiChatExplicitOpenAtAtom, aiChatPinnedAtom, dockedChatScopeAtom, fullScreenChatScopeAtom, inViewObjectAtom, isAiChatSidebarModeAtom, recentChatBoardIdsAtom, showAIChatInterfaceAtom, showMentionListAtom } from "@/store";
+import { useDockedChatScope } from "@/hooks/MultiPages/AIChat/useDockedChatScope";
+import { currentProjectAtom, currentUserAtom, aiChatAutoOpenSuppressedAtom, aiChatBoardSessionMapAtom, aiChatExplicitOpenAtAtom, aiChatPinnedAtom, fullScreenChatScopeAtom, inViewObjectAtom, isAiChatSidebarModeAtom, recentChatBoardIdsAtom, showAIChatInterfaceAtom, showMentionListAtom } from "@/store";
 import { MentionItem, IChatSession } from "@/models/model";
 import { usePathname } from "next/navigation";
 import useHypertasksRecoilStates from "@/hooks/RecoilRoot/useHypertasksRecoilStates";
@@ -40,9 +41,7 @@ export function useAiChatState() {
   const showMentionList = useRecoilValue(showMentionListAtom);
   const inViewObject = useRecoilValue(inViewObjectAtom);
   const fullScreenChatScope = useRecoilValue(fullScreenChatScopeAtom);
-  const [dockedChatScope, setDockedChatScope] = useRecoilState(
-    dockedChatScopeAtom
-  );
+  const [dockedChatScope, setDockedChatScope] = useDockedChatScope();
   const pathname = usePathname();
   const isDetailPage = pathname?.startsWith("/detail") ?? false;
   const isFullScreenChat = pathname?.startsWith("/chat") ?? false;

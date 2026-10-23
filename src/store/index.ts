@@ -403,6 +403,11 @@ export const dockedChatScopeAtom = atom<number | "all" | "ticket" | null>({
     effects_UNSTABLE: [persistAtom],
 });
 
+export const dockedChatScopePickedOnBoardAtom = atom<{ boardId: number | null } | null>({
+    key: "dockedChatScopePickedOnBoard",
+    default: null,
+});
+
 export const recentChatBoardIdsAtom = atom<number[]>({
     key: "recentChatBoardIds",
     default: [],

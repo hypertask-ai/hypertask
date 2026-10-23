@@ -135,6 +135,8 @@ def main():
         if cmd == "publish":
             parser.add_argument("--no-comment", action="store_true")
             parser.add_argument("--question")
+            parser.add_argument("--why")
+            parser.add_argument("--recommendation", default="Yes")
         else:
             parser.add_argument("status", choices=("waiting", "approved", "rejected"))
         opts = parser.parse_args(a[1:])
@@ -146,6 +148,8 @@ def main():
                 parser.error("--question is required unless --no-comment is used")
             if opts.question is not None and not opts.question.strip().endswith("?"):
                 parser.error("--question must end with '?' before uploading")
+            if comment and not (opts.why or "").strip():
+                parser.error("--why is required: one plain sentence on why you recommend it")
         f = BASE / "base-kit.html" if base else HOME / t / "index.html"
         if cmd == "publish" and not f.is_file():
             raise SystemExit(f"local file missing: {f}; run: wireframe new {t}")
@@ -161,8 +165,11 @@ def main():
                     f"<p>Requested by Valentin in a Claude session, {date.today().isoformat()}."
                     + (f" claude --resume {html.escape(os.environ['CLAUDE_CODE_SESSION_ID'])}" if os.environ.get("CLAUDE_CODE_SESSION_ID") else "")
                     + "</p>"
-                    '<p>Question: <span data-type="mention" class="mention" data-id="Valentin Yeo" data-label="name-6">Valentin Yeo</span> '
-                    f"{html.escape(opts.question.strip())}</p>")
+                    '<p><span data-type="mention" class="mention" data-id="Valentin Yeo" data-label="name-6">Valentin Yeo</span> '
+                    f"Question: <strong>{html.escape(opts.question.strip())}</strong></p>"
+                    "<p>Yes: it gets built as shown, behind the ticket's flag.</p>"
+                    "<p>No: nothing gets built; say what to change.</p>"
+                    f"<p>My recommendation: {html.escape(opts.recommendation.strip())}. Why: {html.escape(opts.why.strip())}</p>")
             run(["vcc", "comment", "add", t, "--kind", "question", "--text", text, "--attach", str(png)])
             if ux_signoff(project_id):
                 run(["vcc", "task", "move", t, "--section", "UX Sign-off"])

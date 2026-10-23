@@ -94,6 +94,7 @@ async function withSidebar(options, check) {
     const { AI_Chat_Sidebar } = load("src/components/AI_CHAT/AI_Chat_Sidebar.tsx", {
       ...mocks, "./WelcomeScreen": { WelcomeScreen }, "./MessageList": { MessageList },
       "@/app/agents/chat/AgentChatClient": { default: () => null },
+      "@/lib/flags/definitions/htpr-7688-past-chats-first": { HTPR_7688_PAST_CHATS_FIRST_FLAG: "htpr-7688-past-chats-first" },
       "@/lib/agents/chatDrafts": { readDraft: () => "", writeDraft: () => {} },
       "@/lib/agents/chatViewerState": { getNativeSidebarChat: () => null, setNativeSidebarChat: () => {} },
       "@/utils/api/ai_chat/aiChatHelpers": { AI_Chat_API: {} },

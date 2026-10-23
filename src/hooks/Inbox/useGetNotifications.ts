@@ -27,6 +27,9 @@ import {
   type InboxReadModelRevision,
 } from "@/lib/inboxSync/revision";
 import { filterInboxReadModelByProjectAccess } from "@/lib/inboxSync/contract";
+import { isStaleInboxHydration } from "@/lib/inboxSync/hydrationStaleness";
+import { useFlag } from "@/hooks/useFlag";
+import { HTPR_7690_INBOX_HYDRATION_FLOOR_FLAG } from "@/lib/flags/definitions/htpr-7690-inbox-hydration-floor";
 import { useHydrated } from "@/hooks/General/useHydrated";
 import { useFirstScreenSurface } from "@/lib/firstScreen/SurfaceContext";
 import { getInboxDocument } from "@/lib/firstScreen/inboxDocument";
@@ -169,6 +172,10 @@ const latestNetworkRequestRevisionByAccount = new Map<
   number,
   InboxReadModelRevision
 >();
+const revisionFloorBeforeFirstNetworkRequestByAccount = new Map<
+  number,
+  InboxReadModelRevision | null
+>();
 const latestAuthorizationFailureRevisionByAccount = new Map<
   number,
   InboxReadModelRevision
@@ -202,6 +209,12 @@ const fetchInboxPayload = async (
   readinessLocalOutcome?: LocalReadinessOutcomeRef,
   requireProjectAccess = false,
 ): Promise<InboxQueryPayload> => {
+  if (!revisionFloorBeforeFirstNetworkRequestByAccount.has(userId)) {
+    revisionFloorBeforeFirstNetworkRequestByAccount.set(
+      userId,
+      currentInboxReadModelRevision(userId),
+    );
+  }
   const revision = reserveInboxReadModelRevision(userId);
   latestNetworkRequestRevisionByAccount.set(userId, revision);
   const enabled = localReadModelEnabled();
@@ -448,6 +461,7 @@ export const useGetNotifications = (userId: number) => {
     return startedAtRef.current;
   }, [userId]);
   const queryKey = useMemo(() => inboxDataQueryKey(userId), [userId]);
+  const keepHydrationFloor = useFlag(HTPR_7690_INBOX_HYDRATION_FLOOR_FLAG);
   useEffect(() => {
     if (hydrated || document) return;
     void queryClient.prefetchQuery({
@@ -550,16 +564,15 @@ export const useGetNotifications = (userId: number) => {
             "Ignored Inbox hydration after authorization failure",
           );
         }
-        const hydrationIsStale = [
-          latestObservedRevision === latestNetworkRequestRevision
-            ? null
-            : latestObservedRevision,
-          latestQueryRevision,
-        ].some(
-          (candidate) =>
-            candidate != null &&
-            compareInboxReadModelRevisions(payload.revision, candidate) < 0,
-        );
+        const hydrationIsStale = isStaleInboxHydration({
+          payloadRevision: payload.revision,
+          observedRevision: latestObservedRevision,
+          networkRequestRevision: latestNetworkRequestRevision,
+          floorBeforeNetworkRequest:
+            revisionFloorBeforeFirstNetworkRequestByAccount.get(userId) ?? null,
+          queryRevision: latestQueryRevision,
+          keepFloorBeforeNetworkRequest: keepHydrationFloor,
+        });
         if (hydrationIsStale) {
           throw new Error("Ignored stale cross-tab Inbox hydration");
         }
@@ -594,7 +607,7 @@ export const useGetNotifications = (userId: number) => {
     return () => {
       cancelled = true;
     };
-  }, [getStartedAt, hydrated, parameter, queryClient, queryKey, userId]);
+  }, [getStartedAt, hydrated, keepHydrationFloor, parameter, queryClient, queryKey, userId]);
 
   return query;
 };
