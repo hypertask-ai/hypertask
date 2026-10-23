@@ -26,18 +26,10 @@ export const useBoardSortMode = () => {
   const queryClient = useQueryClient();
   const saveQueue = useRef<Promise<unknown>>(Promise.resolve());
   const pendingSaves = useRef(0);
+  const copiedLocalChoice = useRef(false);
   const serverMode = preferences.boardSortMode;
 
-  useEffect(() => {
-    if (!enabled || !dataUpdatedAt || pendingSaves.current) return;
-    const mode = isBoardSortMode(serverMode) ? serverMode : "teams";
-    setBoardSortMode((current) => (current === mode ? current : mode));
-  }, [enabled, dataUpdatedAt, serverMode, setBoardSortMode]);
-
-  const changeBoardSortMode = (mode: BoardSortMode) => {
-    setBoardSortMode(mode);
-    if (!enabled) return;
-
+  const saveBoardSortMode = (mode: BoardSortMode) => {
     pendingSaves.current += 1;
     void queryClient.cancelQueries(
       { queryKey: USER_PREFERENCES_QUERY_KEY },
@@ -62,6 +54,21 @@ export const useBoardSortMode = () => {
             .catch((error) => console.error("Could not refresh sidebar view", error));
         }
       });
+  };
+
+  useEffect(() => {
+    if (!enabled || !dataUpdatedAt || pendingSaves.current) return;
+    if (isBoardSortMode(serverMode)) {
+      setBoardSortMode((current) => (current === serverMode ? current : serverMode));
+    } else if (boardSortMode !== "teams" && !copiedLocalChoice.current) {
+      copiedLocalChoice.current = true;
+      saveBoardSortMode(boardSortMode);
+    }
+  }, [enabled, dataUpdatedAt, serverMode, boardSortMode, setBoardSortMode]);
+
+  const changeBoardSortMode = (mode: BoardSortMode) => {
+    setBoardSortMode(mode);
+    if (enabled) saveBoardSortMode(mode);
   };
 
   return [boardSortMode, changeBoardSortMode] as const;

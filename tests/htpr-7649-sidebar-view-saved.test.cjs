@@ -116,16 +116,32 @@ test("same-browser Recent remains the first value before and after preferences a
   assert.equal(view.mode, "lastUsed");
 });
 
-test("a different server value wins and users without a saved choice default to Teams", () => {
-  for (const server of [null, undefined, "invalid", "teams"]) {
+test("a saved account choice wins over this browser's choice", () => {
+  const view = sidebar({ local: "lastUsed", server: "teams" });
+  view.render();
+  assert.equal(view.mode, "teams");
+  assert.deepEqual(view.posts, []);
+});
+
+test("an account with no saved choice keeps this browser's Recent and saves it once", async () => {
+  for (const server of [null, undefined, "invalid"]) {
     const view = sidebar({ local: "lastUsed", server });
-    view.arrive(server);
     view.render();
-    assert.equal(view.mode, "teams");
+    await tick();
+    view.render();
+    await tick();
+    view.render();
+    assert.equal(view.mode, "lastUsed");
+    assert.deepEqual(view.posts, [{ boardSortMode: "lastUsed" }]);
   }
+});
+
+test("users with no saved choice anywhere default to Teams without a write", async () => {
   const empty = sidebar({ server: null });
   assert.equal(empty.render()[0], "teams");
+  await tick();
   assert.equal(empty.mode, "teams");
+  assert.deepEqual(empty.posts, []);
 });
 
 test("choosing Recent updates the persisted atom immediately and sends the preference", async () => {
