@@ -214,12 +214,29 @@ test('agent list excludes all token material', async () => {
       revoked: false,
       created_at: '2026-08-06T10:00:00.000Z',
       visibility: 'PRIVATE',
+      team_bound: false,
       boards: [{ id: 15, name: 'Hypertask Product' }],
     },
   ])
   assert.doesNotMatch(JSON.stringify(result), /mcpToken|token|expires/i)
   assert.equal('mcpToken' in calls.findMany[0].select, false)
   assert.equal('mcpTokenExpiresAt' in calls.findMany[0].select, false)
+})
+
+test('agent list says whether the credential is bound to a team without exposing the team or binding', async () => {
+  const { database, calls } = createDatabase({
+    agents: [
+      agent({ id: 'bound-agent', credentialTeamId: 'team-a', credentialTeamAccessBinding: 'owner:binding-secretless:1' }),
+      agent({ id: 'unbound-agent', credentialTeamId: null }),
+    ],
+  })
+
+  const result = await listOwnedAgents(database, 6)
+
+  assert.deepEqual(result.map(({ id, team_bound }) => [id, team_bound]), [['bound-agent', true], ['unbound-agent', false]])
+  assert.equal(calls.findMany[0].select.credentialTeamId, true)
+  assert.equal('credentialTeamAccessBinding' in calls.findMany[0].select, false)
+  assert.doesNotMatch(JSON.stringify(result), /team-a|binding/)
 })
 
 test('collapsed agent rows do not mount token-bearing connection panels', () => {

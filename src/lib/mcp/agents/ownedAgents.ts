@@ -8,6 +8,7 @@ export type OwnedAgentRow = {
   revokedAt: Date | null
   createdAt: Date
   visibility: 'PRIVATE' | 'TEAM'
+  credentialTeamId: string | null
   members: Array<{
     project: {
       id: number
@@ -155,6 +156,7 @@ export type AgentManagementDatabase = AgentManagementTransaction & {
         revokedAt: true
         createdAt: true
         visibility: true
+        credentialTeamId: true
         members: {
           orderBy: { id: 'asc' }
           select: {
@@ -178,6 +180,7 @@ export type OwnedAgent = {
   revoked: boolean
   created_at: string
   visibility: 'PRIVATE' | 'TEAM'
+  team_bound: boolean
   boards: Array<{ id: number; name: string }>
 }
 
@@ -210,6 +213,7 @@ export async function listOwnedAgents(
       revokedAt: true,
       createdAt: true,
       visibility: true,
+      credentialTeamId: true,
       members: {
         orderBy: { id: 'asc' },
         select: {
@@ -231,6 +235,7 @@ function toOwnedAgent(agent: OwnedAgentRow): OwnedAgent {
     revoked: agent.revokedAt !== null,
     created_at: agent.createdAt.toISOString(),
     visibility: agent.visibility,
+    team_bound: agent.credentialTeamId != null,
     boards: Array.from(
       new Map(
         agent.members.map(({ project }) => [
@@ -261,6 +266,7 @@ export async function getOwnedAgent(
       revokedAt: true,
       createdAt: true,
       visibility: true,
+      credentialTeamId: true,
       prompt: true,
       members: {
         orderBy: { id: 'asc' },
