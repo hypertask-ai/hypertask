@@ -4,7 +4,12 @@ import dynamic from "next/dynamic";
 import { useFirstScreenSurface } from "@/lib/firstScreen/SurfaceContext";
 import { getViewAppliedArchivedTasks } from "@/utils/helperFunctions/Views/ArchivedTasksHelper";
 import React, { useCallback, useContext, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
-const loadTask = () => import("../KanbanTaskComponents/task");
+import { rememberLoadedModule } from "@/lib/boardStartup/loadedModule";
+import { useFlag } from "@/hooks/useFlag";
+import { useHydrated } from "@/hooks/General/useHydrated";
+import { HTPR_7644_BOARD_CARDS_FIRST_DRAW_FLAG } from "@/lib/flags/definitions/htpr-7644-board-cards-first-draw";
+const taskModule = rememberLoadedModule(() => import("../KanbanTaskComponents/task"));
+const loadTask = taskModule.load;
 if (typeof window !== "undefined") {
   void loadTask().catch(() => {});
 }
@@ -108,7 +113,11 @@ export const Section = ({
 }) => {
   const snapshot = useFirstScreenSurface();
   const [seeded] = useState(() => Boolean(snapshot));
-  const TaskRenderer = seeded ? SeededTask : Task;
+  const hydrated = useHydrated();
+  let firstDrawTask: ReturnType<typeof taskModule.loaded> = null;
+  if (useFlag(HTPR_7644_BOARD_CARDS_FIRST_DRAW_FLAG)) firstDrawTask = taskModule.loaded();
+  const [loadedTask] = useState(() => (seeded || !hydrated ? null : firstDrawTask));
+  const TaskRenderer = seeded ? SeededTask : loadedTask?.default ?? Task;
   const currentProject = project;
   const activeItem = useRecoilValue(activeItemAtom);
   const active = useRecoilValue(isActiveSectionSelector(index));
@@ -119,7 +128,7 @@ export const Section = ({
   const [revealedTaskIds, setRevealedTaskIds] = useState<Set<number>>(
     () => new Set(),
   );
-  const [taskModuleReady, setTaskModuleReady] = useState(seeded);
+  const [taskModuleReady, setTaskModuleReady] = useState(seeded || loadedTask !== null);
   const [taskModuleFailed, setTaskModuleFailed] = useState(false);
   const [mobileSectionNearViewport, setMobileSectionNearViewport] = useState(
     index === 0,
