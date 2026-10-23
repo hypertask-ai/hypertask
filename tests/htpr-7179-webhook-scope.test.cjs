@@ -70,11 +70,14 @@ for (const mode of ['WATCH', 'ENFORCE', 'FLAG_ERROR']) {
       f.prisma.comment = f.model(comments, 'comment');
       const sessions = [{ id: 'own-chat', agentId: f.agent.id, userId: f.user.id, projectId: null, taskId: null, teamId: null }];
       f.prisma.chatSession = f.model(sessions, 'session');
-      const briefModule = f.load('src/lib/agents/chatBrief.ts');
+      const briefModule = f.load('src/lib/agents/chatBrief.ts', {
+        '@/lib/mcp/boards/links': { buildMcpTaskUrl: (projectId, uniqueIndex) => `https://app.hypertask.ai/detail/project-${projectId}/${uniqueIndex}` },
+      });
       const delivery = f.load('src/lib/agentWebhooks/delivery.ts');
       await f.run(new NextRequest('http://localhost/api/mcp/webhooks'), async () => {
         const brief = await briefModule.buildAgentChatBrief({ userId: f.user.id, agentId: f.agent.id, db: f.prisma });
         assert.match(JSON.stringify(brief), /A1-sentinel/);
+        assert.equal(brief.currentTicket.url, 'https://app.hypertask.ai/detail/project-15/1');
         assert.equal(JSON.stringify(brief).includes('B1-sentinel'), actor !== 'bound');
         assert.equal(JSON.stringify(brief).includes('B-comment'), actor !== 'bound');
         const payload = { event: 'chat.message', projectId: null, taskId: null, chat: { sessionId: 'own-chat', text: 'human-provided text', messageId: 'message' }, agentBrief: brief };
@@ -86,6 +89,7 @@ for (const mode of ['WATCH', 'ENFORCE', 'FLAG_ERROR']) {
         row.id = 'old-chat'; row.status = 'pending'; row.processingAt = null;
         row.payload.agentBrief = { ...brief, recentComments: [{ text: 'B-comment', ticket: { title: 'B-title', url: 'https://app.hypertask.ai/detail/project-25/1' } }] };
         assert.equal((await delivery.deliverAgentWebhook(row.id)).status, actor === 'bound' ? 'skipped' : 'delivered');
+        assert.equal(f.sent.length, actor === 'bound' ? 1 : 2);
       });
     });
   }

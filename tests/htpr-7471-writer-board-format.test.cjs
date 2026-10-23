@@ -23,8 +23,6 @@ const fieldTools = () => optionalModule("src/lib/ai/taskWriterCustomFields.ts");
 const plain = (value) => JSON.parse(JSON.stringify(value));
 
 function moduleWithStubs(file, stubs) {
-  stubs = { "@/app/api/ai/_lib/skillAccess": { AccountSkillAccessError: class extends Error {} }, ...stubs };
-  if (!("@/lib/auth/agentScope" in stubs)) stubs = { "@/lib/auth/agentScope": require("./helpers/agent-board-scope.cjs").enforcedScope, ...stubs };
   const filename = path.join(root, file);
   const code = ts.transpileModule(fs.readFileSync(filename, "utf8"), {
     compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 },
@@ -35,6 +33,8 @@ function moduleWithStubs(file, stubs) {
     console: { log() {}, warn() {}, error() {} },
     require: (id) => {
       if (id in stubs) return stubs[id];
+      if (id === "@/app/api/ai/_lib/skillAccess") return { AccountSkillAccessError: class extends Error {} };
+      if (id === "@/lib/auth/agentScope") return require("./helpers/agent-board-scope.cjs").enforcedScope;
       if (id === "@/lib/media/inlineAgentImages.server") return { inlineAgentImagesForUser: async (html) => html };
       if (id === "@/lib/media/inlineAgentImages") return load(path.join(root, "src/lib/media/inlineAgentImages.ts"));
       if (id === "@/lib/ai/prompts/registry") return load(path.join(root, "src/lib/ai/prompts/registry.ts"));
