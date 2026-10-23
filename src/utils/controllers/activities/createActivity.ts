@@ -73,6 +73,7 @@ const createActivity = async ({
   if (shouldRunTaskSummary) {
     scheduleTaskSummaryGeneration({
       taskId,
+      activityOnly: activityBody.type !== "TaskDescriptionUpdate",
     });
   }
 
