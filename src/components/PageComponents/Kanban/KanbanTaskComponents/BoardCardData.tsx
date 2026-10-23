@@ -5,8 +5,6 @@ import { useRecoilValue } from "@/lib/state";
 import { currentUserAtom } from "@/store";
 import { useGetUserDrafts } from "@/hooks/General/useGetUserDrafts";
 import { useBoardRunningTimers } from "@/hooks/Task Detail/useTimeTracking";
-import { useFlag } from "@/hooks/useFlag";
-import { HTPR_7677_BOARD_CARD_DATA_ONCE_FLAG } from "@/lib/flags/definitions/htpr-7677-board-card-data-once";
 import type { IProject } from "@/models/model";
 
 type BoardRunningTimers = ReturnType<typeof useBoardRunningTimers>;
@@ -21,9 +19,8 @@ export type BoardCardData = {
 
 const BoardCardDataContext = createContext<BoardCardData | null>(null);
 
-export function BoardCardDataProvider({ project, children }: { project: IProject; children: ReactNode }) {
-  const flagOnAtMount = Boolean(useFlag(HTPR_7677_BOARD_CARD_DATA_ONCE_FLAG));
-  const [shared] = useState(flagOnAtMount);
+export function BoardCardDataProvider({ project, enabled, children }: { project: IProject; enabled: boolean; children: ReactNode }) {
+  const [shared] = useState(enabled);
   const currentUser = useRecoilValue(currentUserAtom);
   const { draftTaskIds } = useGetUserDrafts(shared ? currentUser?.id : undefined);
   const { showTimeTotals, timers, timeTotals } = useBoardRunningTimers(project.id, {
@@ -40,7 +37,7 @@ export function BoardCardDataProvider({ project, children }: { project: IProject
   return <BoardCardDataContext.Provider value={value}>{children}</BoardCardDataContext.Provider>;
 }
 
-export function useBoardCardData(projectId: number): BoardCardData | null {
+export function useBoardCardData(projectId: number, enabled: boolean): BoardCardData | null {
   const shared = useContext(BoardCardDataContext);
-  return shared?.projectId === projectId ? shared : null;
+  return enabled && shared?.projectId === projectId ? shared : null;
 }

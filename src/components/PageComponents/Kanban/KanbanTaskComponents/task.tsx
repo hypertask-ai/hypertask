@@ -45,6 +45,7 @@ import { usePrefetchTaskDetail } from "@/hooks/Task Detail/usePrefetchTaskDetail
 import { useGetUserDrafts } from "@/hooks/General/useGetUserDrafts";
 import KanbanTaskCard from "./KanbanTaskCard";
 import { useBoardCardData } from "./BoardCardData";
+import { HTPR_7677_BOARD_CARD_DATA_ONCE_FLAG } from "@/lib/flags/definitions/htpr-7677-board-card-data-once";
 import type { BlockerUser } from "./BlockerChip";
 import { splitAssignees } from "@/lib/assignees";
 import { useKanbanBulkSelection } from "@/lib/contexts/Kanban/BulkSelectionContext";
@@ -1048,7 +1049,8 @@ const TaskContentWithOwnDrafts = React.memo(function TaskContentWithOwnDrafts(pr
 export default function Task(props: IProps) {
   const rowShortcutsEnabled = useFlag(HTPR_6427_ROW_SHORTCUTS_FLAG);
   const phoneHoldSelect = useFlag(HTPR_7263_PHONE_HOLD_SELECT_FLAG);
-  const boardCardData = useBoardCardData(props.task.projectId);
+  const boardCardDataOnce = useFlag(HTPR_7677_BOARD_CARD_DATA_ONCE_FLAG);
+  const boardCardData = useBoardCardData(props.task.projectId, boardCardDataOnce);
   const contentProps = { ...props, rowShortcutsEnabled, phoneHoldSelect: Boolean(phoneHoldSelect) };
   return boardCardData ? (
     <MemoizedTaskContent {...contentProps} hasDraft={boardCardData.draftTaskIds.has(props.task.id)} />

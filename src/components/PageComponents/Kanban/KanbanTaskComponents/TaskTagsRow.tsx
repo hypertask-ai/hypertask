@@ -18,6 +18,7 @@ import { agentStatusIsFresh, agentStatusText, agentStepFor } from '@/lib/agentSt
 import { useMinuteClock } from '@/lib/agentStatus/minuteClock';
 import BlockerChip, { BlockerTaskChip, type BlockerUser } from './BlockerChip';
 import { useBoardCardData } from './BoardCardData';
+import { HTPR_7677_BOARD_CARD_DATA_ONCE_FLAG } from '@/lib/flags/definitions/htpr-7677-board-card-data-once';
 
 interface ITaskTopRow {
     task:ITask;
@@ -43,7 +44,8 @@ type TaskTimeOnCard = {
 }
 
 const TaskTagsRow:React.FC<ITaskTopRow> = (props) => {
-      const boardCardData = useBoardCardData(props.task.projectId)
+      const boardCardDataOnce = useFlag(HTPR_7677_BOARD_CARD_DATA_ONCE_FLAG)
+      const boardCardData = useBoardCardData(props.task.projectId, boardCardDataOnce)
       if (!boardCardData) return <TaskTagsRowWithOwnTimers {...props} />
       return (
         <TaskTagsRowContent

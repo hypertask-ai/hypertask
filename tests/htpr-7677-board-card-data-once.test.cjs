@@ -93,7 +93,7 @@ function renderBoard(tasks) {
   const client = new query.QueryClient();
   const html = renderToString(
     React.createElement(query.QueryClientProvider, { client },
-      React.createElement(BoardCardDataProvider, { project },
+      React.createElement(BoardCardDataProvider, { project, enabled: flagOn },
         tasks.map((task) =>
           React.createElement("div", { key: task.id, "data-card": task.id },
             React.createElement(TaskTagsRow, {
@@ -147,25 +147,25 @@ test("a card from another board on this board still reads its own board's timers
 test("the shared drafts reach each card as its own Draft mark", () => {
   flagOn = true;
   const DraftMark = ({ task }) => {
-    const shared = useBoardCardData(task.projectId);
+    const shared = useBoardCardData(task.projectId, true);
     return React.createElement("b", null, shared?.draftTaskIds.has(task.id) ? `draft-${task.id}` : `clean-${task.id}`);
   };
   const html = renderToString(
-    React.createElement(BoardCardDataProvider, { project },
+    React.createElement(BoardCardDataProvider, { project, enabled: true },
       cards.slice(0, 3).map((task) => React.createElement(DraftMark, { key: task.id, task }))));
   assert.equal(html, "<b>clean-1</b><b>draft-2</b><b>clean-3</b>");
 });
 
 test("the flag is read once when the board opens, so cards never switch readers while it is open", () => {
   const provider = read("src/components/PageComponents/Kanban/KanbanTaskComponents/BoardCardData.tsx");
-  assert.match(provider, /const \[shared\] = useState\(flagOnAtMount\);/);
+  assert.match(provider, /const \[shared\] = useState\(enabled\);/);
   const homepage = read("src/components/PageComponents/Kanban/KanbanHomepageComponents/Homepage.tsx");
-  assert.match(homepage, /<BoardCardDataProvider project=\{_currentProject\}>/);
+  assert.match(homepage, /<BoardCardDataProvider project=\{_currentProject\} enabled=\{boardCardDataOnce\}>/);
 });
 
 test("the card takes its Draft mark from the board when it can and keeps its own drafts read otherwise", () => {
   const task = read("src/components/PageComponents/Kanban/KanbanTaskComponents/task.tsx");
-  assert.match(task, /const boardCardData = useBoardCardData\(props\.task\.projectId\);/);
+  assert.match(task, /const boardCardData = useBoardCardData\(props\.task\.projectId, boardCardDataOnce\);/);
   assert.match(task, /hasDraft=\{boardCardData\.draftTaskIds\.has\(props\.task\.id\)\}/);
   assert.match(task, /<TaskContentWithOwnDrafts \{\.\.\.contentProps\} \/>/);
   assert.equal(task.match(/useGetUserDrafts\(/g).length, 1, "only the fallback reads drafts per card");

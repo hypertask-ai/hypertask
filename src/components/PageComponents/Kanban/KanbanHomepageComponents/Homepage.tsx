@@ -1,5 +1,6 @@
 import { useFlag } from "@/hooks/useFlag";
 import { BoardCardDataProvider } from "../KanbanTaskComponents/BoardCardData";
+import { HTPR_7677_BOARD_CARD_DATA_ONCE_FLAG } from "@/lib/flags/definitions/htpr-7677-board-card-data-once";
 import { updateSection as writeSection } from "@/lib/api/typedClient";
 import { HTPR_6979_TYPED_WRITES_FLAG } from "@/lib/flags/keys";
 import { HTPR_6929_COMPOSE_TASK_WRITER_FLAG, HTPR_7549_FIRST_TASK_POINTER_FLAG, HTPR_7550_CONNECT_OVERLAY_FLAG } from "@/lib/flags/keys";
@@ -801,6 +802,7 @@ const HomePage = ({
   const connectOverlayEnabled = useFlag(HTPR_7550_CONNECT_OVERLAY_FLAG);
   const connectOverlay = useConnectAgentOverlay(_currentProject.id, currentUser.id);
   const firstTaskPointerEnabled = useFlag(HTPR_7549_FIRST_TASK_POINTER_FLAG);
+  const boardCardDataOnce = useFlag(HTPR_7677_BOARD_CARD_DATA_ONCE_FLAG);
   const pointerTaskIds = useMemo(() => {
     if (!firstTaskPointerEnabled || (_currentProject.tasks?.length ?? 0) > 1) return null;
     const ids = new Set((_currentProject.tasks ?? []).map((task) => task.id));
@@ -873,7 +875,7 @@ const HomePage = ({
 
 
   return (
-    <BoardCardDataProvider project={_currentProject}>
+    <BoardCardDataProvider project={_currentProject} enabled={boardCardDataOnce}>
     <KanbanBulkSelectionProvider
       items={bulkSelectionItems}
       onArchiveTask={archiveTaskForBulk}
