@@ -39,10 +39,14 @@ if [[ $action == install ]]; then
     if [[ $here/$name != "$target/$name" ]]; then cp "$here/$name" "$target/$name"; fi
     chmod 755 "$target/$name"
   done
+  checker="$here/user-unit-check"
+  [[ -f $checker ]] || checker="$here/../../ship/scripts/user-unit-check"
+  [[ $checker == "$target/user-unit-check" ]] || install -m 755 "$checker" "$target/user-unit-check"
   printf '%s\n' "$repo" > "$target/repo"
   for name in maintain-verification-weekly.service maintain-verification-weekly.timer; do
     cp "$here/$name" "$units/$name"
   done
+  "${USER_UNIT_CHECK:-$target/user-unit-check}" "$units/maintain-verification-weekly.service" "$units/maintain-verification-weekly.timer"
   if [[ -f $units/verify-map-upkeep.timer ]]; then
     systemctl --user disable --now verify-map-upkeep.timer
   fi

@@ -362,8 +362,12 @@ def install():
     for name in ('proc-watchdog.py', 'proc-watchdog.service', 'proc-watchdog.timer'):
         if HERE != target:
             shutil.copy2(HERE / name, target / name)
+    checker = HERE / 'user-unit-check' if (HERE / 'user-unit-check').exists() else HERE.parent / '.claude/skills/ship/scripts/user-unit-check'
+    if checker.resolve() != (target / 'user-unit-check').resolve():
+        shutil.copy2(checker, target / 'user-unit-check')
     for suffix in ('service', 'timer'):
         shutil.copy2(target / f'proc-watchdog.{suffix}', units)
+    subprocess.run([os.environ.get('USER_UNIT_CHECK', str(target / 'user-unit-check')), str(units / 'proc-watchdog.service'), str(units / 'proc-watchdog.timer')], check=True)
     subprocess.run(['systemctl', '--user', 'daemon-reload'], check=True)
     subprocess.run(['systemctl', '--user', 'enable', '--now', 'proc-watchdog.timer'], check=True)
     # One cleaner (YPER4-280): retire the old premerge-local-sweep timer if it is still installed.

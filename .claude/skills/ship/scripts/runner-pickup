@@ -38,7 +38,7 @@ install_units() {
   unit_dir=${RUNNER_PICKUP_UNIT_DIR:-$HOME/.config/systemd/user}
   settings=${RUNNER_PICKUP_SETTINGS:-$HOME/projects/hypertask/.claude/settings.local.json}
   mkdir -p "$lib" "$unit_dir"
-  install -m 0755 "$here/runner-pickup" "$here/runner-deliver" "$here/runner-chat-reply" "$here/ship-identity" "$lib/"
+  install -m 0755 "$here/runner-pickup" "$here/runner-deliver" "$here/runner-chat-reply" "$here/ship-identity" "$here/user-unit-check" "$lib/"
   install -m 0755 "$repo/hooks/runner-inbox-stop.sh" "$lib/runner-inbox-stop.sh"
   install -m 0644 "$repo/systemd/runner-pickup@.service" "$repo/systemd/runner-pickup@.timer" "$unit_dir/"
   # Register the hooks in the runner checkout's untracked local settings (idempotent). YPER4-284: PostToolUse hands board
@@ -55,6 +55,7 @@ install_units() {
       | addhook("Stop"; "wait"; wake) | addhook("SessionStart"; "wait"; wake) | addhook("UserPromptSubmit"; "wait"; wake)
       | .hooks |= with_entries(.value |= map(.hooks |= map(if .command == ($c + " wait") then .timeout = 2000000 else . end)))' "$settings" > "$tmp" \
     && mv "$tmp" "$settings" || { rm -f "$tmp"; die "cannot update $settings"; }
+  "${USER_UNIT_CHECK:-$lib/user-unit-check}" "$unit_dir/runner-pickup@.service" "$unit_dir/runner-pickup@.timer" || die "invalid runner-pickup units"
   systemctl --user daemon-reload && systemctl --user enable --now "runner-pickup@$n.timer" || die "cannot enable runner-pickup@$n.timer"
   echo "runner-pickup: installed for RUNNER $n (timer runner-pickup@$n.timer, hooks in $settings)"
 }
@@ -66,11 +67,12 @@ install_webhook() {
   lib=$HOME/.local/lib/hypertask/runner-pickup
   unit_dir=${RUNNER_PICKUP_UNIT_DIR:-$HOME/.config/systemd/user}
   mkdir -p "$lib" "$unit_dir"
-  install -m 0755 "$here/runner-webhook" "$here/runner-deliver" "$here/runner-chat-reply" "$here/ship-identity" "$lib/"
+  install -m 0755 "$here/runner-webhook" "$here/runner-deliver" "$here/runner-chat-reply" "$here/ship-identity" "$here/user-unit-check" "$lib/"
   install -m 0644 "$repo/systemd/runner-webhook.service" "$unit_dir/"
   # The legacy agent-events receiver moves to 8795 so the runner receiver can be the front door on 8793.
   mkdir -p "$unit_dir/agent-events.service.d"
   install -m 0644 "$repo/systemd/agent-events-port.conf" "$unit_dir/agent-events.service.d/port.conf"
+  "${USER_UNIT_CHECK:-$lib/user-unit-check}" "$unit_dir/runner-webhook.service" || die "invalid runner-webhook unit"
   systemctl --user daemon-reload && systemctl --user enable --now runner-webhook.service || die 'cannot enable runner-webhook.service'
   echo 'runner-pickup: installed runner-webhook.service on 127.0.0.1:8793 (legacy agent-events moves to 8795; restart it; per-runner signing files in ~/.config/hypertask-agents/runner-webhooks/, mode 600)'
 }

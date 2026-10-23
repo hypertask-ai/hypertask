@@ -226,7 +226,7 @@ class InstallTests(unittest.TestCase):
                 patch.object(ds.shutil, 'copy2') as copy, patch.object(ds.os, 'chmod'), \
                 patch.object(ds.subprocess, 'run') as run, patch.dict(os.environ, DAILY_STATS_NO_SYSTEMD='1'):
             ds.install()
-            self.assertEqual(copy.call_count, 5)
+            self.assertEqual(copy.call_count, 6)
             run.assert_not_called()
         timer = (HERE / 'daily-stats.timer').read_text()
         self.assertIn('OnCalendar=*:00/30', timer)
