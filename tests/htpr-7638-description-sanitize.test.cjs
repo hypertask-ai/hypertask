@@ -25,15 +25,15 @@ function load(file, mocks = {}, extra = "") {
       target: ts.ScriptTarget.ES2022, esModuleInterop: true,
     },
   }).outputText;
-  const module = { exports: {} };
+  const loaded = { exports: {} };
   new Function("require", "module", "exports", compiled)((specifier) => {
     if (specifier in mocks) return { __esModule: true, ...mocks[specifier] };
     if (specifier.endsWith(".scss")) return { __esModule: true, default: {} };
     if (specifier.startsWith("@/")) return jiti(path.join(root, "src", specifier.slice(2)));
     if (specifier.startsWith(".")) return jiti(path.resolve(root, path.dirname(file), specifier));
     return require(specifier);
-  }, module, module.exports);
-  return module.exports;
+  }, loaded, loaded.exports);
+  return loaded.exports;
 }
 
 function withDom(t) {
