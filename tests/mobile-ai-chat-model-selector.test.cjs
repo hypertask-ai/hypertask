@@ -93,7 +93,7 @@ const selectedOption = (id) => {
   return option;
 };
 
-test("mobile model gauge offers the four approved choices and preserves guarded selection", async () => {
+test("mobile model gauge offers Haiku 5.5 plus the four approved choices and preserves guarded selection", async () => {
   const dom = new JSDOM("<!doctype html><div id='root'></div>", {
     url: "https://app.hypertask.ai/project",
   });
@@ -158,19 +158,20 @@ test("mobile model gauge offers the four approved choices and preserves guarded 
     assert.match(menu.className, /right-0/);
     assert.doesNotMatch(menu.className, /\bborder/);
     const rows = [...menu.querySelectorAll('[role="menuitemradio"]')];
-    assert.equal(rows.length, 4);
+    const quickModelIds = ["claude-haiku-5-5", ...MOBILE_AI_CHAT_QUICK_MODEL_IDS];
+    assert.equal(rows.length, 5);
     assert.deepEqual(
       rows.map((row) => row.textContent.trim()),
-      MOBILE_AI_CHAT_QUICK_MODEL_IDS.map((id) =>
+      quickModelIds.map((id) =>
         getMobileAiChatModelLabel(selectedOption(id)),
       ),
     );
     assert.ok(rows.every((row) => /min-h-11/.test(row.className)));
     assert.ok(rows.every((row) => /rounded-\[4px\]/.test(row.className)));
     assert.equal(rows.filter((row) => row.getAttribute("aria-checked") === "true").length, 1);
-    assert.equal(rows[0].getAttribute("aria-checked"), "true");
+    assert.equal(rows[1].getAttribute("aria-checked"), "true");
 
-    await act(async () => rows[1].click());
+    await act(async () => rows[2].click());
     await act(async () => new Promise((resolve) => dom.window.setTimeout(resolve, 0)));
     assert.equal(chosen.id, "gpt-6-luna");
     assert.equal(container.querySelector('[role="menu"]'), null);
@@ -221,7 +222,7 @@ test("mobile model gauge offers the four approved choices and preserves guarded 
     const unavailableRows = [
       ...container.querySelectorAll('[role="menuitemradio"]'),
     ];
-    assert.equal(unavailableRows.length, 4);
+    assert.equal(unavailableRows.length, 5);
     assert.ok(unavailableRows.every((row) => row.disabled));
     unavailableRows[0].click();
     assert.equal(chosen, null);
@@ -237,8 +238,8 @@ test("mobile model gauge offers the four approved choices and preserves guarded 
     await act(async () => reactRoot.render(renderPicker(lunaHigh)));
     await act(async () => trigger.click());
     const freeRows = [...container.querySelectorAll('[role="menuitemradio"]')];
-    assert.equal(freeRows[2].disabled, false);
-    await act(async () => freeRows[2].click());
+    assert.equal(freeRows[3].disabled, false);
+    await act(async () => freeRows[3].click());
     assert.equal(chosen, null, "a locked premium row must not select a model");
     assert.equal(pushedRoutes.length, 1, "a locked premium row opens plan settings");
   } finally {

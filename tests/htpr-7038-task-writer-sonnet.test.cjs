@@ -257,15 +257,16 @@ async function main() {
     for (const plan of ["Free", "Pro", "BYOK"]) {
       const h = harness({ plan });
       assert.equal((await h.post(kind)).status, 200);
-      assert.equal(h.calls.at(-1).modelId, plan !== "BYOK" ? "openai/gpt-6-luna" : "google/gemini-3.5-flash-lite");
-      assert.equal(h.calls.at(-1).params.providerOptions?.anthropic, undefined);
+      assert.equal(h.calls.at(-1).modelId, plan === "Free" ? "openai/gpt-6-luna" : "anthropic/claude-haiku-5.5");
+      if (plan === "Free") assert.equal(h.calls.at(-1).params.providerOptions?.anthropic, undefined);
+      else assert.equal(h.calls.at(-1).params.providerOptions.anthropic.thinking.type, "adaptive");
     }
     const offPremium = harness({ plan: "Free", saved: "claude-sonnet-5-5-thinking" });
     assert.equal((await offPremium.post(kind)).status, 403);
     assert.equal(offPremium.calls.length, 0);
     const flagFailure = harness({ enabled: true, plan: "Pro", flagError: true });
     assert.equal((await flagFailure.post(kind)).status, 200);
-    assert.equal(flagFailure.calls.at(-1).modelId, "openai/gpt-6-luna");
+    assert.equal(flagFailure.calls.at(-1).modelId, "anthropic/claude-haiku-5.5");
     const oldDefault = harness({ enabled: false, haiku: true });
     assert.equal((await oldDefault.post(kind)).status, 200);
     assert.equal(oldDefault.calls.at(-1).modelId, "anthropic/claude-haiku-5.5");
@@ -302,7 +303,8 @@ async function main() {
       assert.equal(h.reservations.length, 0);
     } else {
       assert.equal(h.agentLookups.length, 0);
-      assert.equal(h.calls.at(-1).modelId, "openai/gpt-6-luna");
+      assert.equal(h.calls.at(-1).modelId, "claude-haiku-5-5");
+      assert.equal(h.calls.at(-1).credential, teamKey);
     }
     assert.deepEqual(h.checks.find(([key]) => key === keys.HTPR_7038_TASK_WRITER_SONNET_FLAG), [keys.HTPR_7038_TASK_WRITER_SONNET_FLAG, userId]);
   }

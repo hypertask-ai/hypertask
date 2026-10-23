@@ -134,24 +134,21 @@ test("Haiku fallback is Luna only while enabled and only before content or tools
   assert.equal(fallback.previousModelForFailedStream("gpt-6-luna", { status: 404 }, false, false, false).model, "gpt-5.6-luna");
 });
 
-test("Free plan gate admits Haiku and server flag evaluation uses the user and fails closed", async () => {
+test("Free plan gate admits Haiku and server availability preserves user checks", async () => {
   const checks = [];
-  let enabled = true;
   let fail = false;
   const api = stubbedModule("src/app/api/ai/_lib/planGate.ts", {
     "@/lib/prisma": {}, "@/lib/planFromStripePriceId": {}, "@/lib/internalCompTeams": {},
     "@/lib/teamComp": {}, "@/lib/subscriptionAccess": {},
     "@/lib/aiModelOptions": catalog,
     "@/lib/flags/keys": load(path.join(root, "src/lib/flags/keys.ts")),
-    "@/lib/flags": { isFeatureEnabled: async (name, id) => { checks.push([name, id]); if (fail) throw new Error("flag unavailable"); return name === "htpr-7010-haiku-5-5" && enabled; } },
+    "@/lib/flags": { isFeatureEnabled: async (name, id) => { checks.push([name, id]); if (fail) throw new Error("flag unavailable"); return false; } },
   });
   await api.assertModelAllowedForPlan(null, haiku, null, undefined);
   assert.equal(await api.haiku55ModelEnabled(985), true);
-  assert.deepEqual(checks, [["htpr-7038-haiku-default", 985], ["htpr-7075-background-claude", 985], ["htpr-7010-haiku-5-5", 985]]);
-  enabled = false;
-  assert.equal(await api.haiku55ModelEnabled(985), false);
+  assert.deepEqual(checks, [["htpr-7038-haiku-default", 985], ["htpr-7075-background-claude", 985]]);
   fail = true;
-  assert.equal(await api.haiku55ModelEnabled(985), false);
+  assert.equal(await api.haiku55ModelEnabled(985), true);
   assert.equal(await api.haiku55ModelEnabled(null), false);
 });
 

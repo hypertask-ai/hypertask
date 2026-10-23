@@ -341,20 +341,10 @@ test("Haiku default is an Owner + QA feature, including system ID zero only afte
   assert.equal(await flags.isFeatureEnabled(key, 0), false);
 });
 
-test("Haiku 5.5 is an Owner + QA feature and respects OFF", async () => {
-  const flagName = flags.HTPR_7010_HAIKU_5_5_FLAG;
-  assert.equal(flagName, "htpr-7010-haiku-5-5");
-  assert.equal(flags.defaultFeatureFlagMode(flagName), "OWNER_AND_QA");
-  const entry = (await flags.listFeatureFlagModes()).find(entry => entry.key === flagName);
-  assert.equal(entry.kind, "feature");
-  assert.equal(entry.mode, "OWNER_AND_QA");
-  assert.equal(entry.shippedOn, "2026-10-08");
-  assert.equal(await flags.isFeatureEnabled(flagName, 6), true);
-  assert.equal(await flags.isFeatureEnabled(flagName, 985), true);
-  assert.equal(await flags.isFeatureEnabled(flagName, 7), false);
-  row = { mode: "OFF", updatedAt: new Date() };
-  assert.equal(await flags.isFeatureEnabled(flagName, 6), false);
-  assert.equal(await flags.isFeatureEnabled(flagName, 985), false);
+test("Haiku 5.5 is permanent and its flag is gone", async () => {
+  assert.equal(flags.HTPR_7010_HAIKU_5_5_FLAG, undefined);
+  assert.equal(definitions.some(entry => entry.key === "htpr-7010-haiku-5-5"), false);
+  assert.equal((await flags.listFeatureFlagModes()).some(entry => entry.key === "htpr-7010-haiku-5-5"), false);
 });
 
 test("invite email bugfix defaults to Everyone and respects OFF", async () => {
