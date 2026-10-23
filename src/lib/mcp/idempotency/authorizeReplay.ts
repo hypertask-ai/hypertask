@@ -41,6 +41,7 @@ export async function authorizeIdempotencyReplay(result: object, principal: Boar
       allowed = await prisma.view.findFirst({ where: { id: String(row.id), project_view: { project: savedViewBoardAccessWhere(principal.userId, principal.agentId, principal.teamScope) } }, select: { id: true } });
     } else if (kind === "activity") {
       resources++;
+      if (!principal.agentId) throw new IdempotencyAccessError();
       allowed = await prisma.agentRunActivity.findFirst({ where: { id: String(row.id), run: { agentId: principal.agentId, task: { project } } }, select: { id: true } });
     }
     if (!allowed) throw new IdempotencyAccessError();

@@ -1,8 +1,6 @@
 import { z } from "zod";
-import { taskWriteRoute, type TaskWriteRoute } from "@/lib/api/task-writes/route";
+import { legacyTaskWriteSession, taskWriteRoute, type TaskWriteRoute } from "@/lib/api/task-writes/route";
 import { viewWriteJson } from "./response";
-import { parseCookies } from "better-auth/cookies";
-import { SESSION_COOKIE, verifySession } from "@/lib/auth/session";
 import {
   parseViewOrder,
   saveDefaultViewOrder,
@@ -39,7 +37,7 @@ const route = taskWriteRoute({
 });
 
 export const POST: TaskWriteRoute = async (request) => {
-  const session = verifySession(request.cookies ? request.cookies[SESSION_COOKIE] : parseCookies(request.headers.get("cookie") ?? "").get(SESSION_COOKIE));
+  const session = await legacyTaskWriteSession(request);
   if (!session) return viewWriteJson({ message: "Unauthorized" }, 401);
-  return route(request, { userId: session.id, source: "legacy", needsBridge: true });
+  return route(request, session);
 };

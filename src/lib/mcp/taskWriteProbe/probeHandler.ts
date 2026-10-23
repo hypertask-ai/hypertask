@@ -1,3 +1,4 @@
+import type { McpAuthContext } from "@/lib/mcp/auth/types";
 import { withAgentScopeRequest, prepareAgentScope } from "@/lib/auth/agentScope";
 import { NextRequest, NextResponse } from 'next/server'
 import type { TaskWriteProbeResult, TaskWriteProbeDeps } from '@/lib/taskCardActions/writeProbe'
@@ -7,7 +8,7 @@ type NextResponseOrNull = NextResponse | null
 
 export type TaskWriteProbeHandlerDeps = {
   checkRateLimit: (request: NextRequest) => Promise<NextResponseOrNull>
-  validateAuth: (request: NextRequest) => Promise<{ user: { id: number }; agentId?: string | null } | null>
+  validateAuth: (request: NextRequest) => Promise<McpAuthContext | null>
   runProbe: (userId: number, options?: TaskWriteProbeDeps) => Promise<TaskWriteProbeResult>
 }
 
@@ -18,7 +19,7 @@ export function createTaskWriteProbeHandler(deps: TaskWriteProbeHandlerDeps) {
     if (rateLimited) return rateLimited
 
     const ctx = await deps.validateAuth(request)
-    if (!ctx?.user?.id) {
+    if (!ctx?.user?.id || (ctx.agentId && ctx.teamScope === undefined)) {
       return NextResponse.json(
         {
           success: false,

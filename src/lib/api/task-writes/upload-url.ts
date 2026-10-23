@@ -1,9 +1,6 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
-import { parseCookies } from "better-auth/cookies";
-import { getSessionUser } from "@/lib/auth/getSessionUser";
-import { taskWriteRoute, type TaskWriteRoute } from "./route";
-import { SESSION_COOKIE, verifySession } from "@/lib/auth/session";
+import { legacyTaskWriteSession, taskWriteRoute, type TaskWriteRoute } from "./route";
 import {
   DIRECT_UPLOAD_MAX_FILES,
   DIRECT_UPLOAD_URL_TTL_SECONDS,
@@ -233,10 +230,7 @@ const route = taskWriteRoute({
 });
 
 export const POST: TaskWriteRoute = async (request) => {
-  const signed = verifySession(request.cookies ? request.cookies[SESSION_COOKIE] : parseCookies(request.headers.get("cookie") ?? "").get(SESSION_COOKIE));
-  const session = signed
-    ? { userId: signed.id, source: "legacy" as const, needsBridge: true as const }
-    : await getSessionUser(request.headers);
+  const session = await legacyTaskWriteSession(request, true);
   if (!session) return NextResponse.json({ error: "Unauthorized", code: "SESSION_REQUIRED" }, { status: 401 });
   return route(request, session);
 };

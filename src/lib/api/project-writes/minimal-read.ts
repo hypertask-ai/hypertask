@@ -1,9 +1,7 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
-import { taskWriteRoute, type TaskWriteRoute } from "@/lib/api/task-writes/route";
+import { legacyTaskWriteSession, taskWriteRoute, type TaskWriteRoute } from "@/lib/api/task-writes/route";
 import getAllMinimal from "@/utils/controllers/projects/getAllMinimal";
-import { parseCookies } from "better-auth/cookies";
-import { SESSION_COOKIE, verifySession } from "@/lib/auth/session";
 import { taskReadQuery } from "@/lib/api/task-writes/read-query";
 
 const route = taskWriteRoute({
@@ -19,7 +17,7 @@ const route = taskWriteRoute({
 });
 
 export const GET: TaskWriteRoute = async (request) => {
-  const session = verifySession(request.cookies ? request.cookies[SESSION_COOKIE] : parseCookies(request.headers.get("cookie") ?? "").get(SESSION_COOKIE));
+  const session = await legacyTaskWriteSession(request);
   if (!session) return NextResponse.json({ error: "Unauthorized", code: "SESSION_REQUIRED" }, { status: 401 });
-  return route({ headers: request.headers, json: async () => taskReadQuery(request) }, { userId: session.id, source: "legacy", needsBridge: true });
+  return route({ headers: request.headers, json: async () => taskReadQuery(request) }, session);
 };
