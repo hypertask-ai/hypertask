@@ -88,6 +88,7 @@ async function getComposer(request: NextRequest) {
         providersWithByok,
         haiku55Enabled: defaultContext.haiku55Enabled,
         haikuDefaultEnabled: defaultContext.haikuDefaultEnabled,
+        defaultContext,
       }),
     });
   } catch (cause) {

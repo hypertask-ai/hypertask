@@ -8,6 +8,7 @@ import {
   pickAutoAiModelOption,
   preferredAiModelOption,
   type TAiModelOption,
+  type AiDefaultModelContext,
 } from "@/lib/aiModelOptions";
 import { getAiProviderInfo, type TAiProviderKey } from "@/lib/aiProviders";
 import {
@@ -32,6 +33,7 @@ type ComposerConfigInput = {
   providersWithByok: ReadonlySet<string>;
   haiku55Enabled?: boolean;
   haikuDefaultEnabled?: boolean;
+  defaultContext?: AiDefaultModelContext;
 };
 
 function canUseModelForPlan(
@@ -76,7 +78,7 @@ export function buildComposerConfig(input: ComposerConfigInput) {
           ),
       )
     : [];
-  const defaultContext = { haikuDefaultEnabled: input.haikuDefaultEnabled, plan: input.storePlanId, hasByok: hasHaikuByokProvider(input.providersWithByok) };
+  const defaultContext = { ...input.defaultContext, haikuDefaultEnabled: input.haikuDefaultEnabled, plan: input.storePlanId, hasByok: hasHaikuByokProvider(input.providersWithByok) };
   const boardDefault = resolveUserFacingModelOption(
     "aiChat",
     input.settings,
@@ -87,7 +89,7 @@ export function buildComposerConfig(input: ComposerConfigInput) {
       ...defaultContext,
       defaultModelOption:
         input.haiku55Enabled
-          ? getDefaultAiModelOptionForPlan(input.storePlanId, defaultContext.hasByok, true, input.haikuDefaultEnabled)
+          ? getDefaultAiModelOptionForPlan(input.storePlanId, defaultContext.hasByok, true, input.haikuDefaultEnabled, defaultContext)
           : input.storePlanId === "Free"
           ? preferredAiModelOption
           : undefined,

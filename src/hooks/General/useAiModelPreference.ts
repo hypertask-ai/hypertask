@@ -2,7 +2,7 @@ import { useCallback, useEffect, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import axios from "axios";
 import { useRecoilValue } from "@/lib/state";
-import { useHaikuDefaultFlag } from "@/hooks/useHaikuDefaultFlag";
+import { useAiDefaultModelContext, useHaikuDefaultFlag } from "@/hooks/useHaikuDefaultFlag";
 import {
   getDefaultAiModelOptionForPlan,
   getAiModelOptionById,
@@ -73,12 +73,14 @@ export function useAiModelPreference(
     surface,
     currentTeamId,
   );
+  const defaultContext = useAiDefaultModelContext(currentTeamId == null ? null : String(currentTeamId));
   const planDefault = haikuDefaultEnabled || haiku55Enabled
     ? getDefaultAiModelOptionForPlan(
         scopedBilling?.storePlanId,
         hasHaikuByokProviderFlags(scopedBilling?.byokProviderFlags),
         true,
         haikuDefaultEnabled,
+        defaultContext,
       )
     : getDefaultAiModelOptionForPlan(
         scopedBilling?.storePlanId,

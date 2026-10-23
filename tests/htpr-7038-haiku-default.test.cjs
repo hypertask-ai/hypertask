@@ -15,6 +15,7 @@ const composer = load(path.join(root, "src/app/api/android/ai/composer/config.ts
 const policy = load(path.join(root, "src/lib/aiAllowancePolicy.ts"));
 
 function moduleWithStubs(file, stubs, extra = "") {
+  stubs = { "@/lib/flags/definitions/htpr-7634-openai-only-default": { HTPR_7634_OPENAI_ONLY_DEFAULT_FLAG: "htpr-7634-openai-only-default" }, ...stubs };
   const filename = path.join(root, file);
   const code = ts.transpileModule(fs.readFileSync(filename, "utf8"), {
     compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 },

@@ -1,4 +1,4 @@
-import { useHaikuDefaultFlag, useHaikuDefaultFlagLoaded } from "@/hooks/useHaikuDefaultFlag";
+import { useAiDefaultModelContext, useHaikuDefaultFlag, useHaikuDefaultFlagLoaded } from "@/hooks/useHaikuDefaultFlag";
 import type { TeamBillingSnapshot } from "@/lib/deriveCurrentBoardBilling";
 import { useCurrentBoardBilling } from "@/hooks/General/useCurrentBoardBilling";
 import { hasHaikuByokProviderFlags, isByokProviderEnabledForSource } from "@/lib/byokSelectedProviderGate";
@@ -165,6 +165,7 @@ const AIModelDropDownList = ({
       isGuest,
     ]
   );
+  const defaultContext = useAiDefaultModelContext(settingsTeamId);
   const freePlan = scopedBilling?.storePlanId === "Free";
   const planDefaultOption = getDefaultAiModelOptionForPlan(
     scopedBilling?.storePlanId,
@@ -173,6 +174,7 @@ const AIModelDropDownList = ({
       : isByokProviderEnabledForSource(scopedBilling?.byokProviderFlags, preferredAiModelOption.source),
     haiku55Enabled,
     haikuDefaultEnabled,
+    defaultContext,
   );
   const requestedOption =
     getAiModelOptionById(aiSelected?.id, haiku55Enabled) ?? planDefaultOption;
@@ -181,7 +183,7 @@ const AIModelDropDownList = ({
       ? availableOptions.find((option) => option.id === GUEST_DEFAULT_OPTION_ID)
       : undefined) ??
     availableOptions.find((option) => option.id === planDefaultOption.id) ??
-    pickAutoAiModelOption(availableOptions, haiku55Enabled, { haikuDefaultEnabled, plan: scopedBilling?.storePlanId, hasByok: hasHaikuByokProviderFlags(scopedBilling?.byokProviderFlags) });
+    pickAutoAiModelOption(availableOptions, haiku55Enabled, { ...defaultContext, haikuDefaultEnabled, plan: scopedBilling?.storePlanId, hasByok: hasHaikuByokProviderFlags(scopedBilling?.byokProviderFlags) });
   const selectedOption =
     availableOptions.find((option) => option.id === requestedOption.id) ??
     fallbackOption ??

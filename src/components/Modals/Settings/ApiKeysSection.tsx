@@ -19,7 +19,7 @@ import {
   type TByokProviderKey,
 } from "@/lib/aiProviders";
 import { teamByokKeysQueryKey } from "@/hooks/useTeamCustomEndpoint";
-import { useTeamAiProviders } from "@/hooks/useTeamAiProviders";
+import { teamAiProvidersQueryKey, useTeamAiProviders } from "@/hooks/useTeamAiProviders";
 import { currentUserAtom } from "@/store";
 import { useRecoilValue } from "@/lib/state";
 import SettingsCard from "./SettingsCard";
@@ -179,6 +179,7 @@ const ApiKeysSectionContent = ({ visibleProviderRows }: { visibleProviderRows: P
     queryClient.invalidateQueries({ queryKey: ["projectsAll"] });
     queryClient.invalidateQueries({ queryKey: ["getAllTeamsMinimal"] });
     queryClient.invalidateQueries({ queryKey: teamByokKeysQueryKey(teamId) });
+    queryClient.invalidateQueries({ queryKey: teamAiProvidersQueryKey(teamId) });
   }, [queryClient, teamId]);
 
   const fetchKeys = useCallback(async () => {

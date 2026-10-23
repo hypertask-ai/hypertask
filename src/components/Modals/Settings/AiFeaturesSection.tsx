@@ -3,7 +3,7 @@
 import { hasHaikuByokProviderFlags } from "@/lib/byokSelectedProviderGate";
 import { teamAiFeatureModelsQueryKey } from "@/lib/aiModelPreferences";
 
-import { useHaikuDefaultFlag } from "@/hooks/useHaikuDefaultFlag";
+import { useAiDefaultModelContext, useHaikuDefaultFlag } from "@/hooks/useHaikuDefaultFlag";
 import axios from "axios";
 import { useEffect, useMemo, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
@@ -317,7 +317,8 @@ const AiFeaturesSection = () => {
   const queryClient = useQueryClient();
   const currentUser = useRecoilValue(currentUserAtom);
   const { ownerAndMembers, team, teamId, billing } = useSettingsTeam();
-  const defaultContext = { haikuDefaultEnabled, plan: billing?.storePlanId, hasByok: hasHaikuByokProviderFlags(billing?.byokProviderFlags) };
+  const credentialContext = useAiDefaultModelContext(teamId);
+  const defaultContext = { ...credentialContext, haikuDefaultEnabled, plan: billing?.storePlanId, hasByok: hasHaikuByokProviderFlags(billing?.byokProviderFlags) };
   const { isLoading: providersLoading, providers } =
     useTeamAiProviders(teamId);
   const customEndpoint = useTeamCustomEndpoint(teamId);
@@ -434,7 +435,7 @@ const AiFeaturesSection = () => {
         feature as UserFacingModelFeature,
         providerSettings,
         undefined,
-        { customEndpointConfigured: customEndpoint.configured, haiku55Enabled, ...defaultContext, ...(haiku55Enabled ? { defaultModelOption: getDefaultAiModelOptionForPlan(defaultContext.plan, defaultContext.hasByok, true, haikuDefaultEnabled) } : {}) },
+        { customEndpointConfigured: customEndpoint.configured, haiku55Enabled, ...defaultContext, ...(haiku55Enabled ? { defaultModelOption: getDefaultAiModelOptionForPlan(defaultContext.plan, defaultContext.hasByok, true, haikuDefaultEnabled, defaultContext) } : {}) },
       )?.id ?? aiModelOptions[0].id
     );
   };
