@@ -290,6 +290,7 @@ test('empty tips keep j/k typing native while arrows, Tab/Enter, Escape and firs
     }
     await press('ArrowDown')
     await press('ArrowDown')
+    await press('ArrowDown')
     assert.match(selected().textContent, /^in:/)
     await press('ArrowUp')
     await press('Tab')
@@ -1111,7 +1112,7 @@ test('layout rows share the inbox highlight without changing content insets on d
       await press('ArrowDown')
       assert.match(selected().textContent, /^from:/)
       await press('ArrowDown')
-      assert.match(selected().textContent, /^assignee:/)
+      assert.match(selected().textContent, /^commenter:/)
       assert.ok(selected().parentElement.hasAttribute('data-search-layout-tips'))
       capture(mobile ? 'highlight-phone-tips' : 'highlight-desktop-tips')
       await type('from:mal')

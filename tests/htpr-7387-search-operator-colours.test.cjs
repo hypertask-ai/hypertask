@@ -134,7 +134,7 @@ test('ticket bugfix flag defaults to Everyone and also requires the original log
   assert.match(input, /useFlag\(HTPR_6368_SEARCH_OPERATOR_LOGIC_FLAG\)/)
   assert.match(input, /useFlag\(HTPR_7387_SEARCH_OPERATOR_COLOURS_FLAG\)/)
   assert.match(input, /const logicEnabled = operatorLogicEnabled && operatorColoursEnabled;/)
-  assert.match(input, /const completion = operatorColoursEnabled\s*\? searchCompletion\(text, names, commenterEnabled, operatorLogicEnabled\)\s*: searchCompletion\(text, names, commenterEnabled\);/)
+  assert.match(input, /const completion = operatorColoursEnabled\s*\? searchCompletion\(text, names, layoutEnabled, operatorLogicEnabled\)\s*: searchCompletion\(text, names, layoutEnabled\);/)
 })
 
 test('existing input keeps autocomplete on across all four logic/colour flag combinations and accepts priority/type suggestions', async () => {
@@ -200,7 +200,7 @@ test('existing input keeps autocomplete on across all four logic/colour flag com
       }
       await render()
       const options = [...document.querySelectorAll('[role="option"]')]
-      assert.equal(options.length, SEARCH_OPERATORS.length - 1 + (enabled ? 4 : 0))
+      assert.equal(options.length, SEARCH_OPERATORS.length + (enabled ? 4 : 0))
       for (const key of ['priority', 'type', 'phrase', 'exclude']) {
         assert.equal(options.some((row) => row.textContent.includes(SEARCH_TIPS[key].example)), enabled, key)
       }
