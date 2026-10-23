@@ -18,9 +18,14 @@ test("without an undo toast only the newest toast stays", () => {
   assert.deepEqual(toastIdsToDismiss([{ id: "new", visible: true }, { id: "old", visible: true }], []), { toasts: ["old"], undoToasts: [] });
 });
 
-test("a failure message is never hidden: it replaces the undo toast and any other toast", () => {
-  const newestFirst = [{ id: "sent", visible: true }, { id: "failed", visible: true, type: "error" }, { id: "older", visible: true }];
-  assert.deepEqual(toastIdsToDismiss(newestFirst, [undo]), { toasts: ["sent", "older"], undoToasts: ["undo"] });
+test("a failure message arriving after the undo toast replaces it and any other toast", () => {
+  const newestFirst = [{ id: "sent", visible: true, createdAt: 30 }, { id: "failed", visible: true, type: "error", createdAt: 20 }, { id: "older", visible: true, createdAt: 5 }];
+  assert.deepEqual(toastIdsToDismiss(newestFirst, [{ ...undo, createdAt: 10 }]), { toasts: ["sent", "older"], undoToasts: ["undo"] });
+});
+
+test("a new undo toast replaces an older failure message, so its Undo button stays", () => {
+  const newestFirst = [{ id: "failed", visible: true, type: "error", createdAt: 10 }];
+  assert.deepEqual(toastIdsToDismiss(newestFirst, [{ ...undo, createdAt: 20 }]), { toasts: ["failed"], undoToasts: [] });
 });
 
 test("still allowed: a single toast, a lone undo toast, or nothing is left alone", () => {
