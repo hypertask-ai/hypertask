@@ -27,6 +27,7 @@ function loadTsModule(file, stubs = {}) {
 
 const { pickDecisionComments, withDecisionCommentAnchor } = loadTsModule("src/lib/inboxDecisions.ts");
 const { inboxConfig, decisionsSplitName } = loadTsModule("src/lib/configs/inbox.config.ts");
+const { buildInboxTasksPlaylist } = loadTsModule("src/lib/inbox/inboxTasksPlaylist.ts");
 const archiveNavigation = loadTsModule("src/lib/taskDetailArchiveNavigation.ts");
 const at = (hour) => new Date(`2026-10-21T${String(hour).padStart(2, "0")}:00:00Z`);
 const question = (commentId, hour, taskId = 1) => ({ taskId, commentId, text: "<p><strong>Question:</strong> proceed?</p>", commentText: null, createdAt: at(hour) });
@@ -160,7 +161,7 @@ function createInboxHarness(enabled, split, rows = [notification()], disableInbo
   const decisionGate = findNode(tree, (node) => ts.isIfStatement(node) && node.expression.getText(tree) === "decisionCommentLinkEnabled");
   assert.ok(decisionGate);
   const environment = {
-    inboxConfig, withDecisionCommentAnchor,
+    inboxConfig, withDecisionCommentAnchor, buildInboxTasksPlaylist, selectedSplit: split,
     decisionCommentLinks: evaluate(`(() => { let decisionCommentLinks = ${expression(inboxFile, "decisionCommentLinks")}; ${decisionGate.getText(tree)} return decisionCommentLinks; })()`, { decisionCommentLinkEnabled: enabled, selectedSplit: split, decisionsSplitName }),
     disableInboxFlow, disableNotificationSideEffects: true,
     _notifications: rows, selectedKeyboardRow: { item: { kind: "notification", notification: rows[0] } },
@@ -231,8 +232,11 @@ test("the row Link href uses the same anchor for ordinary and modified clicks", 
   for (const enabled of [true, false]) {
     const harness = createInboxHarness(enabled, "Decisions");
     const url = evaluate(href.initializer.expression.getText(tree), { ...harness.environment, notification: notification(), mentionedQueryParam: "" });
-    assert.equal(url, `/detail/project-15/7311?inboxFlow=true${enabled ? "#comment-30" : ""}`);
+    assert.equal(url, `/detail/project-15/7311?inboxFlow=true&split=Decisions${enabled ? "#comment-30" : ""}`);
   }
+  const mentionHarness = createInboxHarness(false, "Important");
+  const mentionUrl = evaluate(href.initializer.expression.getText(tree), { ...mentionHarness.environment, notification: notification(), mentionedQueryParam: "#comment-5" });
+  assert.equal(mentionUrl, "/detail/project-15/7311?inboxFlow=true&split=Important#comment-5", "HTPR-7680: the split stays in the query and the mention anchor stays last");
   const source = read(inboxFile);
   assert.match(source, /onClickCapture=[\s\S]*?openTask\("view", notification, globalIndex\)/);
   assert.match(source, /KeyCodes\.ENTER[\s\S]*?openTask\("view"\)/);

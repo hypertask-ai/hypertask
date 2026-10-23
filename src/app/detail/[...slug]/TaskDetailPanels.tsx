@@ -13,6 +13,9 @@ import { Suspense } from "react";
 import { ArrowLeft } from "lucide-react";
 
 import { useRecoilState } from "@/lib/state";
+import { tasksPlayListAtom } from "@/store";
+import { inboxPlaylistHoldsTask } from "@/lib/inbox/inboxTasksPlaylist";
+import InboxPlaylistRestorer from "./InboxPlaylistRestorer";
 
 const KeyboardShortcuts = dynamic(
   instrumentedDynamicImport("KeyboardShortcuts", () => import("@/components/sidebars/keyboardShortcuts")),
@@ -77,6 +80,11 @@ export function TaskDetailPanels(context: TaskDetailContext) {
   const { secondaryPanelsReady, cachedLayout, descriptionStart, liveRowsPendingFor } = useTaskContext();
   const serverRowsShown = liveRowsPendingFor(descriptionFirstFlag || descriptionStart === "server");
   const { settled: threadSettled, slotRef: composerSlotRef } = useThreadSettled(!cachedLayout && Boolean(_mbl) && !embedded, !serverRowsShown);
+  const [tasksPlayList] = useRecoilState(tasksPlayListAtom);
+  const restoreInboxPlaylist =
+    searchParams?.get(taskDetailConfig.searchParams.inboxFlow) === "true" &&
+    currentUser?.id != null &&
+    !inboxPlaylistHoldsTask(tasksPlayList, currentItemInTasksPlaylist);
   if (!currentTask) return <></>;
 
   const updateWaitingOn = (fields: {
@@ -91,6 +99,12 @@ export function TaskDetailPanels(context: TaskDetailContext) {
 
   const content = (
     <>
+      {restoreInboxPlaylist && (
+        <InboxPlaylistRestorer
+          userId={currentUser.id}
+          task={currentItemInTasksPlaylist}
+        />
+      )}
       {!embedded && showCommands.show && (
         <Suspense fallback={null}>
           <HypertasksCommands
