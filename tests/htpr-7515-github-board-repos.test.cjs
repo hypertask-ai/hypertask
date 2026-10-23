@@ -343,6 +343,14 @@ test("legacy rows on board 15 survive installed repository replacement", scenari
   assert.ok(result.connected.some((row) => row.repositoryId === "789"));
 }));
 
+test("a repo already connected to this board through the legacy path is refused as already connected", scenario(async () => {
+  world.board.id = 15;
+  world.rows = [mapping({ id: "legacy", projectId: 15, provenance: "legacy", repositoryId: null, installationId: null, fullName: "acme/web" })];
+  const initial = await service.getBoardGithubSettings(10, 15, deps);
+  await refused(service.saveBoardGithubRepositories(10, 15, { repositoryIds: ["789"], version: initial.version }, deps), 409, "already_connected", ["789"]);
+  assert.equal(world.rows.length, 1);
+}));
+
 test("invalid bodies reject non-decimal, duplicate and over-limit selections without writes", scenario(async () => {
   const { version } = await get();
   for (const body of [null, [], {}, { version }, { repositoryIds: [], version: "" }, { repositoryIds: [456], version }, { repositoryIds: ["01"], version }, { repositoryIds: ["456", "456"], version }, { repositoryIds: Array.from({ length: 51 }, (_, i) => String(i + 1)), version }]) {

@@ -169,7 +169,7 @@ export async function saveBoardGithubRepositories(
     const legacyConflicts = additions.filter((repository) => rows.some((row) =>
       row.revokedAt === null && row.provenance === "legacy" && row.fullName === repository.fullName,
     )).map((repository) => repository.id);
-    if (legacyConflicts.length > 0) throw new BoardGithubSettingsError(403, "repo_not_installed", legacyConflicts);
+    if (legacyConflicts.length > 0) throw new BoardGithubSettingsError(409, "already_connected", legacyConflicts);
   }
   try {
     await db.$transaction(async (tx) => {
