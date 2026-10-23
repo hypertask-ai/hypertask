@@ -855,6 +855,7 @@ for (const scenario of ["inactive", "active", "pending-permission"]) test({
     "@/utils/aiChat/extractPastedImageFiles", "./AiChatComposerActionRow", "./AttachmentButton",
     "./AiComposerTextarea", "@/lib/flags/keys", "./ChatScopeChip", "./SendMessageButton",
     "@/components/Common/QueuedMessagesStrip", "react-hot-toast", "@/utils/aiChat/focusRequestWindow",
+    "@/hooks/MultiPages/AIChat/useDockedChatScope",
   ].map((specifier) => [specifier, {}]));
   const chat = {
     editor: { getHTML: () => "", getText: () => "" }, isTyping: false, isRecording: false,
