@@ -32,7 +32,8 @@ import { HTPR_7319_SKILL_CHAT_FOLLOWUP_FLAG, HTPR_7317_CTRLJ_TICKET_QUESTIONS_FL
 import { matchComposeTaskBoard } from "@/lib/ai/composeTaskBoard";
 import type { CommandFocusProxy } from "@/components/commandTypes";
 import { HTPR_6891_PHONE_TASK_WRITER_SHEET_FLAG, HTPR_6929_COMPOSE_TASK_WRITER_FLAG, HTPR_6937_NEW_TASK_WINDOW_FLAG, HTPR_6951_TASK_WRITING_PROGRESS_FLAG, HTPR_7056_CTRLJ_SPLIT_TASKS_FLAG, HTPR_7085_CTRLJ_WRITER_REASON_FLAG, HTPR_7051_TASK_WRITER_IMAGE_UNFURL_FLAG, HTPR_7514_INLINE_AGENT_IMAGES_FLAG, HTPR_7053_COMPOSE_BOARD_CHIP_FLAG, HTPR_7313_CTRLJ_ALWAYS_BOARD_CHIP_FLAG, HTPR_7343_CTRLJ_WRITER_PROPERTIES_FLAG } from "@/lib/flags/keys";
-import { HTPR_7307_CTRLJ_FOOTER_CLICKABLE_FLAG, HTPR_7652_CTRLJ_ENTER_QUEUE_FLAG, HTPR_7675_CTRLJ_ENTER_BEFORE_TEXT_RENDERS_FLAG } from "@/lib/flags/keys";
+import { HTPR_7307_CTRLJ_FOOTER_CLICKABLE_FLAG, HTPR_7652_CTRLJ_ENTER_QUEUE_FLAG, HTPR_7675_CTRLJ_ENTER_BEFORE_TEXT_RENDERS_FLAG, HTPR_7656_CTRLJ_SKILL_MENU_FLAG } from "@/lib/flags/keys";
+import { useSkillSlashMenu } from "@/components/PageComponents/TaskDetail/AI Task Writer/useSkillSlashMenu";
 import { resolveComposeBoardTarget } from "./composeBoardTarget";
 import { ChatScopeChip } from "@/components/AI_CHAT/ChatScopeChip";
 import MoveTaskGlobal from "@/components/Modals/MoveTaskToBoard";
@@ -56,6 +57,9 @@ export default function ComposeTaskWriter({ active, focusProxy, destinationProje
   let skillFollowupEnabled = false;
   if (skillFollowupFlag) skillFollowupEnabled = true;
   const invokeSkills = useFlag(HTPR_7312_CTRLJ_SKILLS_FLAG);
+  const skillMenuFlag = useFlag(HTPR_7656_CTRLJ_SKILL_MENU_FLAG);
+  let skillMenuEnabled = false;
+  if (skillMenuFlag && invokeSkills) skillMenuEnabled = true;
   const phoneTaskWriterSheetEnabled = useFlag(HTPR_6891_PHONE_TASK_WRITER_SHEET_FLAG);
   const enabled = useFlag(HTPR_6929_COMPOSE_TASK_WRITER_FLAG);
   const ticketQuestionsEnabled = useFlag(HTPR_7317_CTRLJ_TICKET_QUESTIONS_FLAG);
@@ -153,6 +157,8 @@ export default function ComposeTaskWriter({ active, focusProxy, destinationProje
   const targetBoard: IProject | undefined = boards.find((board) => board.id === targetBoardId)
     ?? (destinationProject?.id === targetBoardId ? destinationProject : undefined)
     ?? (currentProject && currentProject.id === targetBoardId ? currentProject : undefined);
+  const skillMenu = useSkillSlashMenu({ textAreaRef: input, setValue: setText });
+  const skillMenuConsumedKey = useRef(false);
   const boardShortcut = getShortcutDisplay({ key: 66, modifiers: ["ctrl", "shift"], description: "Change board" }, isApple).join("+");
   const openBoardPicker = () => {
     if (!boardChipEnabled || writing || dictating) return;
@@ -405,7 +411,7 @@ export default function ComposeTaskWriter({ active, focusProxy, destinationProje
   );
 
   return enabled ? (
-    <div hidden={!active} data-compose-task-writer data-compose-board-picker-open={boardChipEnabled && active && boardPickerOpen ? "" : undefined} className={phoneTaskWriterSheet ? "flex min-h-0 flex-1 flex-col" : newTaskWindow && mobile ? "max-h-[65dvh] overflow-y-auto" : undefined}
+    <div hidden={!active} data-compose-task-writer data-compose-board-picker-open={boardChipEnabled && active && boardPickerOpen ? "" : undefined} data-compose-skill-menu-open={skillMenuEnabled && skillMenu.menu ? "" : undefined} className={phoneTaskWriterSheet ? "flex min-h-0 flex-1 flex-col" : newTaskWindow && mobile ? "max-h-[65dvh] overflow-y-auto" : undefined}
       onDragOver={(event) => { if (!writing && event.dataTransfer.types.includes("Files")) event.preventDefault(); }}
       onDrop={(event) => {
         if (!event.dataTransfer.files.length) return;
@@ -427,13 +433,22 @@ export default function ComposeTaskWriter({ active, focusProxy, destinationProje
             <AiComposerTextarea
               ref={input}
               onFocus={() => setInputFocused(true)}
-              onBlur={() => setInputFocused(false)}
+              onBlur={() => {
+                setInputFocused(false);
+                if (skillMenuEnabled) requestAnimationFrame(skillMenu.close);
+              }}
+              onClick={skillMenuEnabled ? skillMenu.onCaretMove : undefined}
+              onKeyUp={skillMenuEnabled ? (event) => {
+                if (skillMenuConsumedKey.current) return;
+                if (["ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight", "Home", "End", "PageUp", "PageDown"].includes(event.key)) skillMenu.onCaretMove();
+              } : undefined}
               value={text}
               onChange={(event) => {
                 if (focusProxy) delete focusProxy.pendingEnter;
                 typedTextNotRendered.current = event.target.value;
                 textHeldUntilRendered.current = null;
                 setText(event.target.value);
+                if (skillMenuEnabled) skillMenu.onInput(event.target.value, event.target.selectionStart ?? event.target.value.length);
               }}
               rows={mobile ? 3 : 2}
               placeholder="Describe the task"
@@ -447,6 +462,8 @@ export default function ComposeTaskWriter({ active, focusProxy, destinationProje
               }}
               disabled={dictating}
               onKeyDown={(event) => {
+                skillMenuConsumedKey.current = skillMenuEnabled && !event.nativeEvent.isComposing && skillMenu.onKeyDown(event);
+                if (skillMenuConsumedKey.current) return;
                 if (boardChipEnabled && showBoardChip && event.key === "Tab" && !event.shiftKey &&
                     !event.ctrlKey && !event.metaKey && !event.altKey && !event.nativeEvent.isComposing) {
                   event.preventDefault();
@@ -465,6 +482,7 @@ export default function ComposeTaskWriter({ active, focusProxy, destinationProje
                 }
               }}
             />
+            {skillMenuEnabled && skillMenu.menu}
             {!newTaskWindow && !phoneTaskWriterSheet && attachments}
             <div className={phoneTaskWriterSheet ? "flex w-full shrink-0 items-center justify-between pt-2" : "flex w-full items-center justify-between pt-2"}>
               <div className="flex min-w-0 flex-1 items-center gap-2">
