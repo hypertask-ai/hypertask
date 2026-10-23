@@ -67,7 +67,6 @@ function fixture(t, { enabled = true, authenticatedId = 2343, inboxAccountId = 2
     "@/store": { currentUserAtom: {} },
     "@/hooks/useFlag": { useFlag: key => {
       if (key === flags.HTPR_7001_INBOX_NEXT_CACHED_FLAG) return enabled;
-      if (key === flags.HTPR_7000_INBOX_NEXT_OPEN_FLAG) return true;
       assert.ok([flags.HTPR_6991_BACK_FIRST_OPEN_FLAG, flags.HTPR_7002_INBOX_E_FIRST_PRESS_FLAG, flags.HTPR_7003_BOARD_BACK_FLAG, flags.HTPR_7008_PHONE_FIRST_PAINT_FLAG, flags.HTPR_7129_BOARD_CARD_FRESH_AFTER_ESCAPE_FLAG].includes(key), key);
       return false;
     } },

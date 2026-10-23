@@ -12,12 +12,12 @@ const root = path.resolve(__dirname, "..");
 const jiti = require("jiti").createJiti(__filename, { alias: { "@": path.join(root, "src") } });
 const cache = jiti(path.join(root, "src/lib/navigation/cachedTaskDetail.ts"));
 const flags = jiti(path.join(root, "src/lib/flags/keys.ts"));
-const { HTPR_6991_BACK_FIRST_OPEN_FLAG, HTPR_7000_INBOX_NEXT_OPEN_FLAG, HTPR_7003_BOARD_BACK_FLAG } = flags;
+const { HTPR_6991_BACK_FIRST_OPEN_FLAG, HTPR_7003_BOARD_BACK_FLAG } = flags;
 const parent = { id: 42, projectId: 6859, uniqueIndex: 43, status: "Normal", title: "Parent title", description_: { content: "Parent body" } };
 const child = { ...parent, id: 44, uniqueIndex: 45, title: "Child title", description_: { content: "Child body" }, parentTask: parent };
 const href = task => `/detail/project-${task.projectId}/${task.uniqueIndex}`;
 
-function fixture(t, enabled, sourcePath = "/inbox") {
+function fixture(t, sourcePath = "/inbox") {
   const dom = new JSDOM('<div id="root"></div>', { url: "https://app.hypertask.ai" + sourcePath });
   const names = ["window", "document", "Event", "IS_REACT_ACT_ENVIRONMENT"];
   const previous = Object.fromEntries(names.map(name => [name, global[name]]));
@@ -53,7 +53,6 @@ function fixture(t, enabled, sourcePath = "/inbox") {
     "@/lib/state": { useRecoilValue: () => ({ id: 2343 }) },
     "@/store": { currentUserAtom: {} },
     "@/hooks/useFlag": { useFlag: key => {
-      if (key === HTPR_7000_INBOX_NEXT_OPEN_FLAG) return enabled;
       if (key === flags.HTPR_7002_INBOX_E_FIRST_PRESS_FLAG || key === flags.HTPR_7008_PHONE_FIRST_PAINT_FLAG) return false;
       if (key === flags.HTPR_7129_BOARD_CARD_FRESH_AFTER_ESCAPE_FLAG) return true;
       assert.ok([HTPR_6991_BACK_FIRST_OPEN_FLAG, HTPR_7003_BOARD_BACK_FLAG].includes(key));
@@ -97,52 +96,44 @@ function fixture(t, enabled, sourcePath = "/inbox") {
 
 for (const method of ["pushState", "replaceState"]) {
   for (const preserveMarker of [false, true]) {
-    for (const enabled of [false, true]) {
-      test(`router ${method} after render ${preserveMarker ? "retains" : "strips"} the marker: bugfix ${enabled ? "on yields to the next task" : "off retains old behavior"}`, async t => {
-        const f = fixture(t, enabled);
-        await React.act(async () => f.render());
-        await React.act(async () => { assert.equal(f.open(parent), true); f.settle(parent); });
-        assert.equal(document.querySelector("article").dataset.taskId, String(parent.id));
-        const state = preserveMarker ? window.history.state : { __NA: true, __PRIVATE_NEXTJS_INTERNALS_TREE: ["next-task"] };
-        let notifications = 0;
-        window.addEventListener("cached-task-detail-navigation", () => notifications++);
-        await React.act(async () => f.navigate(method, state));
-        assert.equal(window.location.pathname, href(child));
-        assert.equal(document.querySelector("article").dataset.taskId, String(enabled ? child.id : parent.id));
-        assert.equal(document.querySelector("article").textContent, enabled ? child.title : parent.title);
-        assert.equal(notifications > 0, enabled, "only the new flag publishes committed router paths");
-        if (!enabled) {
-          await React.act(async () => window.dispatchEvent(new Event("cached-task-detail-navigation")));
-          assert.equal(document.querySelector("article").dataset.taskId, String(child.id), "the old behavior needs an explicit location notification");
-        }
-      });
-    }
+    test(`router ${method} after render ${preserveMarker ? "retains" : "strips"} the marker: yields to the next task`, async t => {
+      const f = fixture(t);
+      await React.act(async () => f.render());
+      await React.act(async () => { assert.equal(f.open(parent), true); f.settle(parent); });
+      assert.equal(document.querySelector("article").dataset.taskId, String(parent.id));
+      const state = preserveMarker ? window.history.state : { __NA: true, __PRIVATE_NEXTJS_INTERNALS_TREE: ["next-task"] };
+      let notifications = 0;
+      window.addEventListener("cached-task-detail-navigation", () => notifications++);
+      await React.act(async () => f.navigate(method, state));
+      assert.equal(window.location.pathname, href(child));
+      assert.equal(document.querySelector("article").dataset.taskId, String(child.id));
+      assert.equal(document.querySelector("article").textContent, child.title);
+      assert.equal(notifications, 1, "committed router paths publish one location notification");
+    });
   }
 }
 
-for (const enabled of [false, true]) {
-  test(`cached board and subtask opens, same-path refresh and Back/Forward remain intact with bugfix ${enabled ? "on" : "off"}`, async t => {
-    const f = fixture(t, enabled, "/project");
-    await React.act(async () => f.render());
-    await React.act(async () => { assert.equal(f.open(parent), true); f.settle(parent); });
-    const composer = document.querySelector("textarea");
-    composer.value = "Unsent draft";
-    await React.act(async () => { window.history.replaceState({}, "", window.location.href); f.render(); });
-    assert.equal(document.querySelector("textarea"), composer);
-    assert.equal(composer.value, "Unsent draft");
-    await React.act(async () => { assert.equal(f.open(child), true); f.settle(child); });
-    assert.equal(document.querySelector("article").dataset.taskId, String(child.id));
-    const { traverse } = f;
-    await traverse("back");
-    assert.equal(window.location.pathname, href(parent));
-    assert.equal(document.querySelector("article").dataset.taskId, String(parent.id));
-    await traverse("forward");
-    assert.equal(window.location.pathname, href(child));
-    assert.equal(document.querySelector("article").dataset.taskId, String(child.id));
-    await traverse("back");
-    await traverse("back");
-    assert.equal(window.location.pathname, "/project");
-    assert.equal(document.querySelector("article"), null);
-    assert.equal(document.body.textContent, "Source rows");
-  });
-}
+test("cached board and subtask opens, same-path refresh and Back/Forward remain intact", async t => {
+  const f = fixture(t, "/project");
+  await React.act(async () => f.render());
+  await React.act(async () => { assert.equal(f.open(parent), true); f.settle(parent); });
+  const composer = document.querySelector("textarea");
+  composer.value = "Unsent draft";
+  await React.act(async () => { window.history.replaceState({}, "", window.location.href); f.render(); });
+  assert.equal(document.querySelector("textarea"), composer);
+  assert.equal(composer.value, "Unsent draft");
+  await React.act(async () => { assert.equal(f.open(child), true); f.settle(child); });
+  assert.equal(document.querySelector("article").dataset.taskId, String(child.id));
+  const { traverse } = f;
+  await traverse("back");
+  assert.equal(window.location.pathname, href(parent));
+  assert.equal(document.querySelector("article").dataset.taskId, String(parent.id));
+  await traverse("forward");
+  assert.equal(window.location.pathname, href(child));
+  assert.equal(document.querySelector("article").dataset.taskId, String(child.id));
+  await traverse("back");
+  await traverse("back");
+  assert.equal(window.location.pathname, "/project");
+  assert.equal(document.querySelector("article"), null);
+  assert.equal(document.body.textContent, "Source rows");
+});

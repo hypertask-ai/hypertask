@@ -90,7 +90,10 @@ test("real history Back replaces Next's stale source tree after detail RSC; Forw
     serverChildren = detail;
     render();
   });
+  const committedPaths = [];
+  window.addEventListener("cached-task-detail-navigation", () => committedPaths.push(window.location.pathname));
   await React.act(async () => render());
+  assert.deepEqual(committedPaths, ["/project"], "route commits publish their location even when every remaining flag is off");
   await React.act(async () => {
     cache.openCachedTaskDetail({ queryClient: client, accountId: 985, projectId: 7049, uniqueIndex: 31, href: "/detail/project-7049/31", task: { id: 42, projectId: 7049, uniqueIndex: 31, title: "Cached", description_: { content: "Body" } } });
     nextPath = "/detail/project-7049/31";
