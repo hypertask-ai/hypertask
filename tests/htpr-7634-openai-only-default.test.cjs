@@ -226,7 +226,7 @@ function harness({ enabled = true, plan = "Pro", saved = null, teamByok = false,
     await Promise.all(observations);
     return { status: response.status, content };
   };
-  return { post, editor, gate, byok, checks, calls, reservations, agentLookups, usage, preferenceReads: () => preferenceReads };
+  return { post, editor, gate, byok, modelApi, checks, calls, reservations, agentLookups, usage, preferenceReads: () => preferenceReads };
 }
 
 const test = require("node:test");
@@ -440,6 +440,80 @@ test("without an agent, the team OpenAI-only default runs Luna on the team's own
   const selected = await h.editor.selectTaskWriterModel({ aiFeature: "taskWriter", byokProviderFlags: [], teamContext: { teamId, settings: {} }, userId });
   await selected.model.doGenerate({ prompt: [], providerOptions: selected.providerOptions ?? {} });
   assert.deepEqual(h.calls.map(({ modelId, credential }) => ({ modelId, credential })), [{ modelId: "gpt-6-luna", credential: "fixture-direct-openai" }]);
+});
+
+function chatTurnModule(h, actingAgentId) {
+  const selectors = moduleWithStubs("src/lib/ai/chatStream/models.ts", {
+    "@/lib/aiModelOptions": catalog, "@/lib/systemModelLadder": ladder, "@/lib/aiProviders": providers,
+    "@/app/api/ai/_lib/providerGate": { filterModelOptionForTeam: (entry) => entry },
+    "@/app/api/ai/_lib/modelProvider": h.modelApi,
+    "@/lib/ai/chatStream/prompt": { CLAUDE_TEMPERATURE_UNSUPPORTED_PREFIXES: ["claude-haiku-5"] },
+    "@/lib/ai/tools/constants": load(path.join(root, "src/lib/ai/tools/constants.ts")),
+  });
+  return moduleWithStubs("src/lib/ai/chatStream/turnModel.ts", {
+    "next/server": { NextResponse: { json: Response.json } },
+    "@/lib/prisma": { __esModule: true, default: { chatSession: { findFirst: async () => ({ agent: actingAgentId ? { runtimeType: "NATIVE" } : null }) }, userSetting: { findUnique: async () => null } } },
+    "@/lib/ai/htpr7038ModelReset": { ensureHtpr7038ModelReset: async () => "disabled" },
+    "@/lib/aiModelOptions": catalog, "@/lib/systemModelLadder": ladder, "@/lib/aiProviders": providers,
+    "@/lib/aiModelPreferences": load(path.join(root, "src/lib/aiModelPreferences.ts")),
+    "@/app/api/ai/_lib/modelProvider": h.modelApi,
+    "@/app/api/ai/_lib/planGate": { storePlanIdForProject: async () => "Pro", haiku55ModelEnabled: async () => true, assertModelAllowedForPlan: async () => {} },
+    "@/app/api/ai/_lib/byokKeys": h.byok,
+    "@/app/api/ai/_lib/chatTeamContext": {
+      resolveChatTeamContext: async () => ({ teamId, projectId, aiProviderSettings: {} }),
+      buildChatProviderContext: () => ({ planGateProjectId: projectId, keyLookupContext: { trustedTeamId: teamId, userId } }),
+    },
+    "@/lib/nativeAgent/modelPin": load(path.join(root, "src/lib/nativeAgent/modelPin.ts")),
+    "@/app/api/ai/_lib/providerGate": { filterModelOptionForTeam: (entry) => entry },
+    "@/lib/ai/chatStream/errors": { reportHandledChatError: async () => {}, errorMessage: (error) => error.message, createSseErrorResponse: (message) => ({ refused: message }) },
+    "@/lib/ai/tools/helpers": { loadActingAgent: async () => actingAgentId ? { id: actingAgentId } : null },
+    "@/lib/ai/chatStream/models": selectors,
+  });
+}
+
+const lunaOption = catalog.getAiModelOptionById("gpt-6-luna", true);
+const haikuOption = catalog.getAiModelOptionById("claude-haiku-5-5", true);
+const browserLunaDefault = { aiFeature: "aiChat", session_id: "fixture-session", modelOptionId: lunaOption.id, model: lunaOption.model, provider: lunaOption.source, modelFromDefault: true };
+
+async function chatTurnOutcome(input, body, actingAgentId = "fixture-agent") {
+  const h = harness({ openai: true, agentId: actingAgentId, ...input });
+  const turn = await chatTurnModule(h, actingAgentId).loadTurnModel(body, { id: userId });
+  return turn.refused ? { refused: turn.refused } : { modelId: turn.selected.modelId, credential: turn.streamCredential };
+}
+
+test("chat payload: an agent session sends the flag-off default, a team session the OpenAI-only default", () => {
+  const fields = { currentOption: lunaOption, agentSessionOption: haikuOption, usesPlanDefault: true };
+  assert.deepEqual(catalog.chatModelRequestFields(fields, "fixture-agent"), { modelOptionId: haikuOption.id, model: haikuOption.model, provider: haikuOption.source, modelFromDefault: true });
+  assert.deepEqual(catalog.chatModelRequestFields(fields, null), { modelOptionId: lunaOption.id, model: lunaOption.model, provider: lunaOption.source, modelFromDefault: true });
+  const saved = { currentOption: lunaOption, agentSessionOption: null, usesPlanDefault: false };
+  assert.deepEqual(catalog.chatModelRequestFields(saved, "fixture-agent"), { modelOptionId: lunaOption.id, model: lunaOption.model, provider: lunaOption.source, modelFromDefault: false });
+});
+
+for (const [label, input] of [
+  ["agent Claude key", { agentProvider: "claude" }],
+  ["agent direct OpenAI key", { agentProvider: "openai" }],
+  ["agent OpenAI slot holding the shared gateway key", { agentProvider: "openai", agentCiphertext: sharedKey }],
+  ["agent OpenAI slot holding the managed gateway key", { agentProvider: "openai", agentCiphertext: managedKey, managed: true }],
+]) {
+  test(`agent chat with ${label}: a browser Luna default never runs Luna and matches the flag-off server default`, async () => {
+    const guarded = await chatTurnOutcome(input, browserLunaDefault);
+    const flagOffDefault = await chatTurnOutcome({ ...input, enabled: false }, { aiFeature: "aiChat", session_id: "fixture-session", modelFromDefault: true });
+    assert.notEqual(guarded.modelId, "gpt-6-luna", JSON.stringify(guarded));
+    assert.deepEqual(guarded, flagOffDefault);
+  });
+}
+
+test("agent chat with an agent Claude key runs Haiku on the agent's key even when the browser sent the Luna default", async () => {
+  const outcome = await chatTurnOutcome({ agentProvider: "claude" }, browserLunaDefault);
+  assert.equal(catalog.isHaiku55Model(outcome.modelId), true, JSON.stringify(outcome));
+  assert.equal(outcome.credential, agentKey);
+});
+
+test("agent chat keeps a hand-picked Luna, and a team chat keeps the OpenAI-only default on the team key", async () => {
+  const picked = await chatTurnOutcome({ agentProvider: "claude" }, { ...browserLunaDefault, modelFromDefault: false });
+  assert.equal(picked.modelId, "gpt-6-luna");
+  const teamChat = await chatTurnOutcome({}, browserLunaDefault, null);
+  assert.deepEqual(teamChat, { modelId: "gpt-6-luna", credential: "fixture-direct-openai" });
 });
 
 test("conversation titles never apply the OpenAI-only default, so a supplied gateway key never runs Luna", async () => {

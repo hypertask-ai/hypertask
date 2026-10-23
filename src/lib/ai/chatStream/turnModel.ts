@@ -5,13 +5,14 @@ import prisma from "@/lib/prisma";
 
 import { type LanguageModel } from "ai";
 import { type AiProviderOptions, type AiModelCredential, type AiGatewayTags, isCustomEndpointConfig, isVercelAiGatewayKey } from "@/app/api/ai/_lib/modelProvider";
-import { type TAiModelOption, preferredAiModelOption, getDefaultAiModelOptionForPlan, isLunaBlockedForPlan } from "@/lib/aiModelOptions";
+import { type TAiModelOption, preferredAiModelOption, getDefaultAiModelOptionForPlan, isLunaBlockedForPlan, getAiModelOptionById, isOpenAiOnlyPaidTeam } from "@/lib/aiModelOptions";
+import type { StorePlanKind } from "@/lib/planFromStripePriceId";
 import { resolveChatTeamContext, buildChatProviderContext } from "@/app/api/ai/_lib/chatTeamContext";
 import { isAiFeatureEnabled } from "@/lib/systemModelLadder";
 import { resolveTeamProviderEnabled } from "@/lib/aiProviders";
 import { getAiModelPreferenceIds, type TAiModelPreferences, type TAiModelPreferenceSurface } from "@/lib/aiModelPreferences";
 import { storePlanIdForProject, haiku55ModelEnabled, assertModelAllowedForPlan } from "@/app/api/ai/_lib/planGate";
-import { getAiDefaultModelContext, getByokOrTeamGatewayApiKeyForModelOption, getTeamGatewayApiKey, getByokOrTeamGatewayApiKeyForProvider } from "@/app/api/ai/_lib/byokKeys";
+import { type ByokLookupContext, getAiDefaultModelContext, getOpenAiOnlyDefaultContext, getByokOrTeamGatewayApiKeyForModelOption, getTeamGatewayApiKey, getByokOrTeamGatewayApiKeyForProvider } from "@/app/api/ai/_lib/byokKeys";
 import { resolveAgentModelPin } from "@/lib/nativeAgent/modelPin";
 import { filterModelOptionForTeam } from "@/app/api/ai/_lib/providerGate";
 
@@ -21,6 +22,13 @@ import { AuthedUser, ProviderId } from "@/lib/ai/chatStream/types";
 
 import { loadActingAgent } from "@/lib/ai/tools/helpers";
 import { resolveModelSelection, selectionFromModelOption, ModelSelection, defaultModelSelection, selectModel } from "@/lib/ai/chatStream/models";
+
+async function isAgentTurnOnOpenAiOnlyBrowserDefault(body: ChatRequest, agentId: string | null | undefined, lookup: ByokLookupContext, plan: StorePlanKind | null | undefined) {
+  if (!agentId || body.modelFromDefault !== true) return false;
+  if (getAiModelOptionById(body.modelOptionId ?? body.model, true)?.modelKey !== "gpt-6-luna") return false;
+  const teamOnlyContext = await getOpenAiOnlyDefaultContext({ ...lookup, agentId: null }, plan);
+  return isOpenAiOnlyPaidTeam({ ...teamOnlyContext, plan });
+}
 
 export async function loadTurnModel(body: ChatRequest, dbUser: AuthedUser) {
 
@@ -134,14 +142,17 @@ export async function loadTurnModel(body: ChatRequest, dbUser: AuthedUser) {
       defaultContext.haikuDefaultEnabled,
       defaultContext,
     );
+    const requestedModel = await isAgentTurnOnOpenAiOnlyBrowserDefault(body, actingAgent?.id, keyLookupContext, storePlanId)
+      ? { modelOptionId: null, model: null, provider: null }
+      : body;
     const modelOptionIdForTurn = resolveAgentModelPin({
-      requestedModelOptionId: body.modelOptionId,
-      requestedModel: body.model,
+      requestedModelOptionId: requestedModel.modelOptionId,
+      requestedModel: requestedModel.model,
       agentModelOptionId: actingAgent?.modelOptionId,
     });
     let selection = resolveModelSelection(
-      body.provider,
-      body.model,
+      requestedModel.provider,
+      requestedModel.model,
       modelOptionIdForTurn,
       teamProviderSettings,
       body.aiFeature,

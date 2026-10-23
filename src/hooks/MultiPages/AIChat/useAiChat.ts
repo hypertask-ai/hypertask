@@ -87,7 +87,7 @@ export function useAiChat() {
     currentProject, buildGuestBoard, processAttachments, setIsTyping, addMessageToSessionQuery,
     scopedProjectId, isFullScreenChat, taskId, dockedProjectId, setAiChatBoardSessionMap,
     ticketScopeSelected: sendTicketScope,
-    modelTeamId, contextList, currentAiOption, spansAllBoards, boardScopeIsExplicit,
+    modelTeamId, contextList, currentAiOption, usesPlanDefault, agentSessionAiOption, spansAllBoards, boardScopeIsExplicit,
     pathname, currentUser, billing, isDemo, streamingSessionRef,
     streamingAssistantMessageRef, setCurrentStreamingSession, streamingRequestRef, chatRoute, token,
     setAgentStatus, updateSessionTitle, queryClient, updateLastMessageInSessionCache,
