@@ -1,4 +1,4 @@
-import { IProject, ISection, ITask } from "@/models/model";
+import { IProject, ISection, ITask, ChatTicketRow } from "@/models/model";
 import type { MyTasksSortField, MyTasksViewConfig } from "@/models/MyTasksView";
 import { TBoardSortingViewMode } from "@/models/Views/model";
 import type { SortingOrder } from "@prisma/client";
@@ -223,7 +223,7 @@ export const getSortComparator = (
 };
 
 
-export const renderAssigneeAvatarsContent = (task: ITask) => {
+export const renderAssigneeAvatarsContent = (task: { assignees?: ChatTicketRow["assignees"] }) => {
   const assignees = task.assignees || [];
   if (!assignees.length) return null;
 
@@ -262,5 +262,5 @@ export const renderAssigneeAvatarsContent = (task: ITask) => {
 };
 
 
-export const renderAssigneeAvatars = (task: ITask) =>
+export const renderAssigneeAvatars = (task: { assignees?: ChatTicketRow["assignees"] }) =>
   renderAssigneeAvatarsContent(task);

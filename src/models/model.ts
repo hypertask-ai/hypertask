@@ -47,6 +47,23 @@ export interface IChatSession {
   messages: IChatMessage[];
 }
 
+export type ChatTicketGroupReferences = {
+  version: 1;
+  groups: { label?: string; taskIds: number[] }[];
+};
+
+export type ChatTicketRow = Pick<ITask, "id" | "title" | "ticketNumber" | "uniqueIndex" | "projectId" | "section"> & {
+  priority: Pick<IPriority, "id" | "priority_index" | "Priority_Value"> | null;
+  url: string;
+  assignees: {
+    id: number;
+    user?: { displayName?: string | null; photoURL?: string | null } | null;
+    agent?: { id: string; displayName: string; photoURL?: string | null } | null;
+  }[];
+};
+
+export type ChatTicketGroup = { label?: string; tasks: ChatTicketRow[] };
+
 export interface IChatMessage {
   id: string;
   createdAt: Date;
@@ -57,6 +74,7 @@ export interface IChatMessage {
   isDelivered: boolean;
   attachments?: IAttachment[];
   statusSteps?: string[];
+  ticketGroups?: ChatTicketGroup[];
   authorAgent?: { displayName: string } | null;
 }
 

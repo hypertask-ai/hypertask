@@ -351,6 +351,9 @@ test("new feature flag is registered as Owner + QA; ordinary tool contexts defau
 test("chat turn resolves the server flag once for the authenticated user and forwards cancellation", async () => {
   const checks = [], toolArgs = [];
   const { runModelTurn } = moduleWithStubs("src/lib/ai/chatStream/modelTurn.ts", {
+    "@/lib/flags/definitions/htpr-7683-ai-chat-ticket-rows": { HTPR_7683_AI_CHAT_TICKET_ROWS_FLAG: "htpr-7683-ai-chat-ticket-rows" },
+    "./ticketGroups": {},
+    "@/lib/ai/tools/showTicketRows": { TICKET_ROWS_PROMPT: "Ticket rows prompt" },
     "@/lib/prisma": {},
     "@/lib/flags": { isFeatureEnabled: async (...args) => { checks.push(args); return true; } },
     "@/lib/flags/keys": keys,
@@ -369,7 +372,7 @@ test("chat turn resolves the server flag once for the authenticated user and for
   });
   const providerAbort = new AbortController();
   await runModelTurn({ body: { user_context: { id: 999 } }, dbUser: { id: 985 }, selected: { model: "test-model" }, providerAbort, send() {} }, {}, {});
-  assert.deepEqual(plain(checks), [[keys.HTPR_7514_INLINE_AGENT_IMAGES_FLAG, 985], [keys.HTPR_7363_CHAT_TASK_WRITER_FLAG, 985]]);
+  assert.deepEqual(plain(checks), [[keys.HTPR_7514_INLINE_AGENT_IMAGES_FLAG, 985], ["htpr-7683-ai-chat-ticket-rows", 985], [keys.HTPR_7363_CHAT_TASK_WRITER_FLAG, 985]]);
   assert.equal(toolArgs.length, 1);
   assert.equal(toolArgs[0][7], true);
   assert.equal(toolArgs[0][8], providerAbort.signal);

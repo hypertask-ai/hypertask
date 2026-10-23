@@ -1,3 +1,6 @@
+import { createShowTicketRowsTool } from "./showTicketRows";
+import type { ChatTicketGroupReferences } from "@/models/model";
+import type { ToolExecution } from "@/lib/ai/chatStream/types";
 import type { AgentTokenTeamScope } from "@/lib/mcp/auth/types";
 import type { ToolSet } from "ai";
 import { type HeartbeatTurnMetadata } from "@/lib/nativeAgent/heartbeatTurnEnvelope";
@@ -102,7 +105,8 @@ export function buildTools(
   chatTaskWriterEnabled = false,
   abortSignal?: AbortSignal,
   inlineAgentImagesEnabled = false,
-  teamScope?: AgentTokenTeamScope | null
+  teamScope?: AgentTokenTeamScope | null,
+  ticketRows?: { executions: ToolExecution[]; setGroups: (groups: ChatTicketGroupReferences) => void },
 ): ToolSet {
   const context = createToolContext(user, body, send, recordToolExecution, actingAgentId, recordToolStart, heartbeatTurn, chatTaskWriterEnabled, abortSignal, inlineAgentImagesEnabled, teamScope);
   const tools: ToolSet = {
@@ -191,6 +195,8 @@ export function buildTools(
     web_search: createWebSearchTool(context).web_search,
     search_help_docs: createSearchHelpDocsTool(context).search_help_docs,
   };
+
+  if (ticketRows) tools.hypertask_show_ticket_rows = createShowTicketRowsTool(ticketRows.executions, ticketRows.setGroups);
 
   Object.seal(tools);
 

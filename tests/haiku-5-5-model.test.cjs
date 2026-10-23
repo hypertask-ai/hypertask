@@ -582,6 +582,8 @@ function chatWithFallback(h, { enabled = true, settings = {}, provider = "claude
     recordTurnOutcome: () => {},
   };
   const route = moduleWithStubs("src/app/api/ai/chat/stream/route.ts", {
+    "@/lib/flags/definitions/htpr-7683-ai-chat-ticket-rows": { HTPR_7683_AI_CHAT_TICKET_ROWS_FLAG: "htpr-7683-ai-chat-ticket-rows" },
+    "@/lib/ai/chatStream/ticketGroups": {},
     "@/lib/agents/chatAccess": { loadSidebarChatRequest: async (request) => { assert.equal(request.headers.get("x-hypertask-sidebar-project"), null); return { ok: true }; } },
     "@/lib/ai/chatStream/turnModel": { loadTurnModel: async () => ({ ...state, teamProviderSettings: settings }) },
     "@/lib/ai/chatStream/stream": { createChatStream: (options) => {
