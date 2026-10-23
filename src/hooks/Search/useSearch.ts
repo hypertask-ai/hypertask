@@ -203,7 +203,6 @@ export function useSearch(
     setResponseMessage(message);
     setTypedTasks([]);
     setSelectedIndex(null);
-    setSelectedHistory(null);
     setTabs([]);
     setActiveSplit(0);
     setResults(null);
@@ -634,7 +633,6 @@ export function useSearch(
       document.activeElement?.id !== searchConfig.elementIds.input.id
     )
       setSelectedAndInView(typedTasks[currentIndex], currentIndex);
-    else if (searchCache.history.length > 0) setSelectedHistory(currentIndex);
     clearTimeout(debounceTimeout.current);
     debounceTimeout.current = null;
   }
