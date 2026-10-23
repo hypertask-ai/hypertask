@@ -105,7 +105,7 @@ test('session coverage includes every exported server action', () => {
 });
 
 for (const [name, args] of userActions) {
-  test(`${name} requires the supplied account to match the session`, async () => {
+  test(`now refused: ${name} with an account that is not the session account`, async () => {
     const f = fixture({ session: { userId: 986 } });
     await assert.rejects(f.actions[name](...args), { name: 'Error', message: 'Forbidden' });
     assert.deepEqual(f.calls, []);
@@ -236,7 +236,7 @@ test('team reads retain null for a missing team', async () => {
   assert.equal(await f.actions.getTeamById('missing'), null);
 });
 
-test('authenticated attachment creation preserves the upload result', async () => {
+test('still allowed: attachment creation on the caller\'s own board preserves the upload result', async () => {
   const f = fixture();
   const data = {
     fileType: 'text/plain', fileSource: uploadProps.S3URL, fileName: 'instruction.txt',
