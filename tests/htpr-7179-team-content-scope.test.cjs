@@ -47,6 +47,8 @@ function teamFixture(mode, actor = 'bound') {
   f.prisma.comment = model(comments, 'comment');
   const agents = { getMcpSessionAgentSummary: async () => null, mapVisibleMcpAgent: () => null, mcpVisibleAgentSelect: () => ({ id: true }), loadVisibleMcpAgents: async () => new Map() };
   Object.assign(f.mocks, {
+    '@/utils/controllers/comments/processMentions': { convertPlainTextMentionsToHtml: text => text, resolveTextMentions: async text => text },
+    '@/utils/helperFunctions/multiPages': { extractTipTapContent: () => ({ mentions: [] }) },
     '@/lib/mcp/agents': agents,
     '@/lib/mcp/agents/scopes': { requireRole: async () => null },
     '@/utils/controllers/activities/createLabelActivity': {},

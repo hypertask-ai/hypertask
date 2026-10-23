@@ -81,7 +81,7 @@ for (const mode of ['WATCH', 'ENFORCE', 'FLAG_ERROR']) {
         await f.run(new NextRequest('http://localhost/api/mcp/view'), async () => {
           const create = () => views.createView({ projectId, userId: f.user.id, agentId: f.agent.id, teamScope: f.state.ctx.teamScope, title: 'Fixture' });
           if (projectId === 25 && actor === 'bound') {
-            await assert.rejects(create(), /not found|access denied/i);
+            await assert.rejects(create(), { message: 'User does not have permission to create tasks in this project' });
             assert.deepEqual(trace, []);
           } else {
             assert.equal((await create()).id, 'view');

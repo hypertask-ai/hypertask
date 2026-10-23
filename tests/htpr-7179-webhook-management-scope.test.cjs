@@ -16,6 +16,7 @@ for (const mode of ['WATCH', 'ENFORCE', 'FLAG_ERROR']) {
             '@/lib/webhooks/signingKeyStore': { openWebhookSigningKey: () => 'fixture', webhookSigningKeyHint: () => 'fixture', sealWebhookSigningKey: () => 'fixture' },
             undici: { Agent: class { async close() {} }, request: async (_url, input) => { sent.push(JSON.parse(input.body)); return { statusCode: 200, body: { dump: async () => {} } }; } },
           };
+          extra['./ssrfGuard'] = extra['@/lib/mcp/webhooks/ssrfGuard'];
           const delivery = f.load('src/lib/mcp/webhooks/delivery.ts', extra);
           const route = f.load('src/lib/mcp/operations/webhooks/operation.ts', extra);
           const testRoute = f.load('src/app/api/mcp/webhooks/[id]/test/route.ts', { ...extra, '@/lib/mcp/webhooks/delivery': delivery });

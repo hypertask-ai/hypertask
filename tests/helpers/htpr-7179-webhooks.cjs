@@ -17,10 +17,12 @@ function setup(mode, actor) {
   const sent = [];
   const queued = [];
   Object.assign(f.mocks, {
+    './queue': { queueBoardWebhookDelivery: async id => queued.push(id), queueAgentWebhookDelivery: async id => queued.push(id) },
     '@/lib/mcp/webhooks/queue': { queueBoardWebhookDelivery: async id => queued.push(id) },
     '@/lib/agentWebhooks/queue': { queueAgentWebhookDelivery: async id => queued.push(id) },
     '@/lib/mcp/webhooks/delivery': { postSignedWebhook: async input => { sent.push(JSON.parse(input.body)); return { ok: true, statusCode: 200, durationMs: 1 }; } },
   });
+  f.mocks['./delivery'] = f.mocks['@/lib/mcp/webhooks/delivery'];
   f.mocks['@/lib/agentWebhooks/outbox'] = f.load('src/lib/agentWebhooks/outbox.ts');
   const event = projectId => ({ event: 'task.assigned', data: { task: { id: projectId * 10, projectId, ticketNumber: `T-${projectId}`, title: `${projectId === 15 ? 'A' : 'B'}-title` }, action: 'assigned', assignee: { userId: f.user.id, agentId: f.agent.id }, actor: { userId: f.user.id, agentId: null } } });
   const input = projectId => ({ event: 'task.assigned', agentId: f.agent.id, projectId, taskId: projectId * 10, taskTitle: `${projectId === 15 ? 'A' : 'B'}-title`, ticketNumber: `T-${projectId}`, actor: { userId: f.user.id, displayName: 'Owner' } });

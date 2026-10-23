@@ -33,9 +33,11 @@ for (const mode of ['WATCH', 'ENFORCE', 'FLAG_ERROR']) {
       });
       const editor = f.load('src/app/api/ai/_lib/editorAi.ts');
       f.mocks['@/app/api/ai/_lib/editorAi'] = { ...editor, selectTaskWriterModel: async () => ({ model: {}, modelId: 'fixture', usageProvider: 'fixture', settings: {} }) };
+      f.mocks['./editorAi'] = f.mocks['@/app/api/ai/_lib/editorAi'];
+      f.mocks['./modelProvider'] = f.mocks['@/app/api/ai/_lib/modelProvider'];
       f.prisma.taskTemplate = f.model([], 'templates');
       const run = f.load('src/app/api/ai/_lib/taskWriterRun.ts');
-      const draft = f.load('src/app/api/ai/_lib/taskWriterDraft.ts', { '@/app/api/ai/_lib/taskWriterRun': run });
+      const draft = f.load('src/app/api/ai/_lib/taskWriterDraft.ts', { './taskWriterRun': run });
       const rag = f.load('src/lib/rag/retrieveBoardKnowledge.ts');
       await f.run(new NextRequest('http://localhost/api/mcp/ai/task-writer'), async () => {
         const body = run.taskWriterRequestSchema.parse({ projectId: 15, PROMPT: 'Draft a ticket' });

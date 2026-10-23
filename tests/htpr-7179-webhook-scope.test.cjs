@@ -63,10 +63,10 @@ for (const mode of ['WATCH', 'ENFORCE', 'FLAG_ERROR']) {
 
     test(`${mode} ${actor}: agent brief and addressed chat webhook payload contain only permitted derived content`, async () => {
       const f = setup(mode, actor);
-      const assignments = [f.tasks[0], f.tasks[3]].map(task => ({ agentId: f.agent.id, assignedAt: new Date('2026-01-01'), id: task.id, task: { ...task, section: 'In Progress' } }));
+      const assignments = [f.tasks[0], f.tasks[3]].map(task => ({ agentId: f.agent.id, assignedAt: new Date('2026-01-01'), id: task.id, task: { ...task, deletedAt: null, section: 'In Progress' } }));
       f.prisma.assignees = f.model(assignments, 'assignment');
-      f.prisma.taskPullRequest = f.model([f.tasks[0], f.tasks[3]].map(task => ({ id: task.id, lifecycle: 'open', task: { ...task, assignees: [{ agentId: f.agent.id, user: f.user }] }, number: task.id, title: `${task.projectId === 15 ? 'A' : 'B'}-PR`, url: `https://example.invalid/pr/${task.id}`, repositoryOwner: 'fixture', repositoryName: 'repo', checkState: 'passing' })), 'pull-request');
-      const comments = [f.tasks[0], f.tasks[3]].map(task => ({ id: task.id, agentId: f.agent.id, taskId: task.id, task, commentText: `${task.projectId === 15 ? 'A' : 'B'}-comment`, text: '', createdAt: new Date('2026-01-01') }));
+      f.prisma.taskPullRequest = f.model([f.tasks[0], f.tasks[3]].map(task => ({ id: task.id, lifecycle: 'open', task: { ...task, deletedAt: null, assignees: [{ agentId: f.agent.id, user: f.user }] }, number: task.id, title: `${task.projectId === 15 ? 'A' : 'B'}-PR`, url: `https://example.invalid/pr/${task.id}`, repositoryOwner: 'fixture', repositoryName: 'repo', checkState: 'passing' })), 'pull-request');
+      const comments = [f.tasks[0], f.tasks[3]].map(task => ({ id: task.id, agentId: f.agent.id, taskId: task.id, task: { ...task, deletedAt: null }, commentText: `${task.projectId === 15 ? 'A' : 'B'}-comment`, text: '', createdAt: new Date('2026-01-01') }));
       f.prisma.comment = f.model(comments, 'comment');
       const sessions = [{ id: 'own-chat', agentId: f.agent.id, userId: f.user.id, projectId: null, taskId: null, teamId: null }];
       f.prisma.chatSession = f.model(sessions, 'session');

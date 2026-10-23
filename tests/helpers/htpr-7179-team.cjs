@@ -1,4 +1,15 @@
-const { fixture, matches, hydrate } = require('./agent-board-scope.cjs');
+const { fixture, matches: matchWhere, hydrate } = require('./agent-board-scope.cjs');
+function normalizeWhere(value) {
+  if (Array.isArray(value)) return value.map(normalizeWhere);
+  if (!value || typeof value !== 'object' || value instanceof Date) return value;
+  return Object.fromEntries(Object.entries(value).map(([key, operand]) => {
+    if (key === 'isEmpty') return [operand ? 'none' : 'some', {}];
+    if (key === 'has') return ['some', { equals: operand }];
+    if (key === 'lt') return ['NOT', { gte: operand }];
+    return [key, normalizeWhere(operand)];
+  }));
+}
+const matches = (row, where) => matchWhere(row, normalizeWhere(where));
 const teamScope = { teamId: 'team-a', accessBinding: 'owner:account-a:0' };
 function teamFixture(mode, actor = 'bound') {
   const f = fixture();

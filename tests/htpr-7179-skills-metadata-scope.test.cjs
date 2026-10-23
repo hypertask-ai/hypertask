@@ -12,9 +12,11 @@ for (const mode of ['WATCH', 'ENFORCE', 'FLAG_ERROR']) {
         { id: 1, userId: f.user.id, projectId: null, project: null, slug: 'personal', name: 'Personal', enabled: true, body: 'global-sentinel' },
         ...[f.projects[0], f.projects[3]].map(project => ({ id: project.id, userId: null, projectId: project.id, project, slug: 'project', name: project.name, enabled: true, body: `${project.name}-skill` })),
       ];
+      const instructions = [f.projects[0], f.projects[3]].map(project => ({ id: project.id, projectId: project.id, project, customInstruction: `${project.name}-instructions`, attachments: [] }));
+      for (const row of [...skills, ...instructions]) Object.defineProperty(row, 'project', { enumerable: false });
       f.prisma.$queryRaw = async () => [];
       f.prisma.aI_Skill = f.model(skills, 'skill');
-      f.prisma.aI_Custom_Instructions = f.model([f.projects[0], f.projects[3]].map(project => ({ id: project.id, projectId: project.id, project, customInstruction: `${project.name}-instructions` })), 'instructions');
+      f.prisma.aI_Custom_Instructions = f.model(instructions, 'instructions');
       let imports = 0;
       Object.assign(f.mocks, {
         '@/app/api/ai/_lib/modelProvider': {}, '@/app/api/ai/_lib/byokKeys': {},
