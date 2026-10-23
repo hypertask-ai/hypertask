@@ -15,7 +15,7 @@ Regenerate it with `node scripts/parity-contract.mjs --write --cli-capabilities 
 | **Create, revoke, and rotate managed agents or keys** | ✅ 20 | ✅ 7 | ✅ 18 | ✅ 5 | ✅ 7 |
 | **Owner-approved feature flag changes by agent sessions** | ✅ 2 (transition) | ↪ Only the flag owner's agent sessions may change release modes after recent human approval; general MCP clients cannot manage flags. | ↪ The session-only ht-flag script uses the agent identity directly; the public CLI does not expose release controls. | ↪ Feature flag release controls are restricted to approved owner agent sessions, not AI Chat tools. | ↪ The embedded agent inherits the human session and cannot use the agent-only flag route. |
 | **Create, refresh, inspect, or clear a CLI/API session** | ✅ 4 | ↪ MCP clients receive credentials out of band and do not manage interactive login. | ✅ 4 | ↪ The signed-in web session is managed by the app shell. | ↪ The embedded agent inherits the invoking human session. |
-| **List, inspect, and filter tasks** | ✅ 2 | ✅ 2 | ✅ 2 | ✅ 3 | ✅ 2 |
+| **List, inspect, and filter tasks** | ✅ 2 | ✅ 2 | ✅ 2 | ✅ 3 (transition) | ✅ 2 |
 | **Read task context, hierarchy, and description history** | ✅ 6 | ✅ 3 | ✅ 4 | ✅ 3 | ✅ 3 |
 | **Search, retrieve, and find related tasks** | ✅ 3 | ✅ 3 | ✅ 3 | ✅ 3 | ✅ 3 |
 | **Pull, lease, and coordinate the next task** | ✅ 6 | ✅ 1 | ✅ 3 | ✅ 1 | ✅ 1 |
