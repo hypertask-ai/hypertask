@@ -394,16 +394,12 @@ test("Inbox E first press is permanent and no longer registered", async () => {
   assert.equal(Object.hasOwn(snapshot.modes, "htpr-7002-inbox-e-first-press"), false);
 });
 
-test("phone board cold-start bugfix defaults to Everyone and respects OFF", async () => {
-  const key = flags.HTPR_7016_PHONE_BOARD_COLD_START_FLAG;
-  assert.equal(key, "htpr-7016-phone-board-cold-start");
-  const entry = (await flags.listFeatureFlagModes()).find(entry => entry.key === key);
-  assert.equal(entry.kind, "bugfix");
-  assert.equal(entry.mode, "EVERYONE");
-  assert.equal(await flags.isFeatureEnabled(key, 2343), true);
-  row = { mode: "OFF", updatedAt: new Date() };
-  assert.equal(await flags.isFeatureEnabled(key, 985), false);
-  assert.equal(await flags.isFeatureEnabled(key, 2343), false);
+test("phone board cold-start is permanent and no longer registered", async () => {
+  assert.equal(Object.hasOwn(flags, "HTPR_7016_PHONE_BOARD_COLD_START_FLAG"), false);
+  assert.equal(definitions.some(entry => entry.key === "htpr-7016-phone-board-cold-start"), false);
+  assert.equal((await flags.listFeatureFlagModes()).some(entry => entry.key === "htpr-7016-phone-board-cold-start"), false);
+  const snapshot = require("../e2e/smoke/production-flag-modes.json");
+  assert.equal(Object.hasOwn(snapshot.modes, "htpr-7016-phone-board-cold-start"), false);
 });
 
 test("demo login own-board bugfix defaults to Everyone and respects OFF", async () => {
