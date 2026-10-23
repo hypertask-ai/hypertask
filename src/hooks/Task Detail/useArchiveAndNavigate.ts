@@ -11,7 +11,7 @@ import { MobileViewContext } from "@/lib/contexts/mobileContext";
 import useHypertasksNavigate from '../MultiPages/Route/useHypertasksNavigate';
 import { useSearchParams } from 'next/navigation';
 import { useFlag } from '@/hooks/useFlag';
-import { HTPR_7002_INBOX_E_FIRST_PRESS_FLAG, HTPR_7311_DECISION_COMMENT_LINK_FLAG } from '@/lib/flags/keys';
+import { HTPR_7311_DECISION_COMMENT_LINK_FLAG } from '@/lib/flags/keys';
 import { withDecisionCommentAnchor } from '@/lib/inboxDecisions';
 import { inboxDataQueryKey } from '../Inbox/useGetNotifications';
 import {
@@ -22,7 +22,6 @@ import {
 } from '@/lib/taskDetailArchiveNavigation';
 
 const useArchiveAndNavigate = () => {
-  const inboxEFirstPress = useFlag(HTPR_7002_INBOX_E_FIRST_PRESS_FLAG);
   const decisionCommentLinkEnabled = useFlag(HTPR_7311_DECISION_COMMENT_LINK_FLAG);
   const queryClient = useQueryClient();
   const { undoAction} = useUndoContext();
@@ -49,7 +48,7 @@ const setNotificationCountNull = (undo?:boolean)=> {
 const navigateToNextTask = (archiveNotification?:boolean,shouldNavigate?:boolean, remindMe?:boolean, force?:"forceNavigate", inboxFlow?:string|null): TaskArchiveNavigationOutcome=>{
   const indexOf = tasksPlayList?.findIndex(obj =>obj.projectId === currentItemInTasksPlaylist.projectId && obj.uniqueIndex === currentItemInTasksPlaylist.uniqueIndex);
   const activeInboxFlow = inboxFlow ?? searchParams?.get("inboxFlow")
-  const earlyInboxMembership = inboxEFirstPress && archiveNotification && activeInboxFlow === "true" &&
+  const earlyInboxMembership = archiveNotification && activeInboxFlow === "true" &&
     currentTask?._count?.notifications === undefined
   const inInbox = earlyInboxMembership
     ? queryClient.getQueryData<INotificationsFromTQ>(inboxDataQueryKey(currentUser.id))?.notifications.find(notification =>

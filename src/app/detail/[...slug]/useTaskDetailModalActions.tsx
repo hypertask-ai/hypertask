@@ -4,7 +4,7 @@ import globalAPIHandlers from "@/utils/api/global";
 import taskDetailConfig from "@/lib/configs/taskDetail.config";
 import type { TaskDetailContext } from "./TaskDetailContext";
 import { useFlag } from "@/hooks/useFlag";
-import { HTPR_7002_INBOX_E_FIRST_PRESS_FLAG, HTPR_7009_DEDUPE_TASK_DETAIL_READS_FLAG } from "@/lib/flags/keys";
+import { HTPR_7009_DEDUPE_TASK_DETAIL_READS_FLAG } from "@/lib/flags/keys";
 import { refreshTaskDetailReadAfterWrite } from "@/lib/taskDetailReads";
 import UpdateKanban from "@/hooks/MultiPages/useUpdateTaskInBoards";
 import { HTPR_7185_DELETE_TASK_UNDO_FLAG } from "@/lib/flags/definitions/htpr-7185-delete-task-undo";
@@ -13,7 +13,6 @@ export function useTaskDetailModalActions(getContext: () => TaskDetailContext) {
   const deleteTaskUndo = useFlag(HTPR_7185_DELETE_TASK_UNDO_FLAG);
   const deleteCancelCloses = useFlag(HTPR_7473_DELETE_CANCEL_CLOSES_FLAG);
   const { deleteTodo } = UpdateKanban();
-  const inboxEFirstPress = useFlag(HTPR_7002_INBOX_E_FIRST_PRESS_FLAG);
   const dedupe = useFlag(HTPR_7009_DEDUPE_TASK_DETAIL_READS_FLAG);
   const { showPriorityModal, currentTask, setShowPriorityModal, queryClient, activeItem, setShowRemindMeModal, searchParams, navigateToNextTask, showEstimateModal, setShowEstimateModal, setCurrentTask, setShowDueDateModal, setShowRemoveSubtaskModal, onGoback, navigate, _parsedTask, setCurrentProject, followers, currentUser, followerKeyPrefix, removeRelation } = getContext();
 
@@ -93,7 +92,7 @@ export function useTaskDetailModalActions(getContext: () => TaskDetailContext) {
   };
 
   const getTask = async (refresh = true) => {
-    if (refresh && !(inboxEFirstPress && window.history.state?.cachedTaskDetail &&
+    if (refresh && !(window.history.state?.cachedTaskDetail &&
       new URLSearchParams(window.location.search).get("inboxFlow") === "true")) {
       navigate(taskDetailConfig.navigation.refresh);
     }
