@@ -31,7 +31,7 @@ function taskController(h: ReturnType<typeof activationHarness>) {
     "@/lib/ai/labelClassifier": { scheduleClassifyTaskAiLabels: noop },
     "@/utils/controllers/tasks/spawnRecurrence": {},
     "@/utils/controllers/projects/getAllIncludes": { taskWriteAccessWhere: () => ({}) },
-    "@/lib/mcp/tasks/agentMutationFence": { assertAgentAssignmentChangeAllowed: noop, cancelAgentMutationLeaseForHumanOverride: noop, AgentMutationLeaseConflictError: class extends Error {} },
+    "@/lib/mcp/tasks/agentMutationFence": { assertAgentAssignmentChangeAllowed: noop, cancelAgentMutationLeaseForHumanOverride: noop, AgentMutationLeaseConflictError: class extends Error {}, TaskTeamScopeError: class extends Error {} },
     "@/utils/controllers/tasks/invokeTaskDelete": {},
     "@/lib/mcp/webhooks/outbox": { persistBoardWebhookEvent: async () => [], publishBoardWebhookDeliveries: noop },
     "@/lib/agentWebhooks/outbox": { persistAgentTaskUpdatedWebhook: async () => [], publishAgentWebhookDeliveries: noop },
