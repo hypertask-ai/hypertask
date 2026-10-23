@@ -405,7 +405,8 @@ export function evaluate({ title, author, files, comments = [], parentComments =
     ...(question ? newElements.map((name) => name.toLowerCase().replace(/[^a-z0-9]/g, '')) : []),
   ] : []);
   const missingNames = newElements.filter((name) => !approvedNames.has(name.toLowerCase().replace(/[^a-z0-9]/g, '')));
-  const exempt = ticket.type === 'BUGFIX' || ticket.prefix === 'YPER4';
+  const reusesExistingUi = newElements.length === 0;
+  const exempt = ticket.type === 'BUGFIX' || ticket.prefix === 'YPER4' || reusesExistingUi;
   const details = [];
   if (!exempt && (!wireframe || !approved)) {
     details.push(`UI change needs Valentin's yes on a wireframe on ${ticket.key}`);
@@ -424,6 +425,7 @@ export function evaluate({ title, author, files, comments = [], parentComments =
     }
     return { state: 'failure', description: details[0].slice(0, 140), details };
   }
+  if (reusesExistingUi) return success('No new component file; reused UI ships behind its flag without a wireframe');
   return success(exempt ? 'Wireframe exempt; new elements approved' : 'Wireframe and new elements have UX signoff');
 }
 

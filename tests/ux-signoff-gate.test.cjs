@@ -10,13 +10,13 @@ const modified = { filename: 'src/components/x/Foo.tsx', status: 'modified' };
 const added = { filename: 'src/components/notifications/ExamplePanel.tsx', status: 'added' };
 const title = 'HTPR-7072 [FEATURE] Decision inbox';
 const wireframe = (overrides = {}) => ({
-  id: 1, text: '<p><a href="https://hypertask.app/wireframes/decision-inbox">Wireframe</a></p>',
+  id: 1, text: '<p><a href="https://hypertask.app/wireframes/decision-inbox">Wireframe</a></p><p>New elements: ExamplePanel</p>',
   createdAt: '2026-10-10T12:00:00Z', creatorId: 6, agent: { id: 'agent' }, reactions: [], ...overrides,
 });
 const yes = (overrides = {}) => ({
   id: 2, text: '<p>yes go</p>', createdAt: '2026-10-10T12:01:00Z', creatorId: 6, agent: null, reactions: [], ...overrides,
 });
-const input = (overrides = {}) => ({ title, author: 'builder', files: [modified], comments: [], ...overrides });
+const input = (overrides = {}) => ({ title, author: 'builder', files: [modified, added], comments: [], ...overrides });
 async function decision(overrides) {
   const result = (await gate).evaluate(input(overrides));
   assert.ok(result.description.length <= 140);
@@ -287,7 +287,7 @@ test('PR 1271 shape fails both wireframe and new element rules', async () => {
 });
 
 test('BUGFIX modifies existing UI without signoff but cannot add an unapproved element', async () => {
-  assert.equal((await decision({ title: 'HTPR-1 [BUGFIX] Repair' })).state, 'success');
+  assert.equal((await decision({ title: 'HTPR-1 [BUGFIX] Repair', files: [modified] })).state, 'success');
   const result = await decision({ title: 'HTPR-1 [BUGFIX] Repair', files: [{ ...added, filename: 'src/components/x/NewThing.tsx' }] });
   assert.equal(result.state, 'failure');
   assert.equal(result.details.length, 1);
@@ -535,7 +535,7 @@ test('mentions are removed and HTML and basic entities are decoded before matchi
 test('new elements need normalized names in approved wireframes or approving human comments', async () => {
   const approved = wireframe({ text: 'https://hypertask.app/explorations/decision_inbox New elements: Example Panel', reactions: [{ userId: 6, emoji: '👍' }] });
   assert.equal((await decision({ files: [added], comments: [approved] })).state, 'success');
-  assert.equal((await decision({ files: [added], comments: [wireframe({ reactions: [{ userId: 6, emoji: '👍' }] })] })).state, 'failure');
+  assert.equal((await decision({ files: [added], comments: [wireframe({ text: '<p>https://hypertask.app/wireframes/decision-inbox</p>', reactions: [{ userId: 6, emoji: '👍' }] })] })).state, 'failure');
   const inQuestion = wireframe({ text: '<p>https://hypertask.app/wireframes/htpr-7072</p><p>Question: build it? New elements: ExamplePanel.</p><p>Next: wait</p>', reactions: [{ userId: 6, emoji: '👍' }] });
   assert.equal((await decision({ files: [added], comments: [inQuestion] })).state, 'success');
   assert.equal((await decision({ files: [added], comments: [wireframe(), yes({ text: 'yes\nNew elements: Example_Panel' })] })).state, 'success');
@@ -560,7 +560,8 @@ test('API, tests, stories and unrelated paths are not visible UI', async () => {
   for (const filename of ['src/app/api/inbox/route.tsx', 'src/components/x/Foo.test.tsx', 'src/components/x/Foo.spec.jsx', 'src/components/x/Foo.stories.tsx', 'src/app/__tests__/page.tsx', 'src/lib/Foo.tsx', 'src/components/x/Foo.ts', 'src/application/Foo.tsx']) {
     assert.deepEqual(await decision({ files: [{ filename, status: 'added' }] }), { state: 'success', description: 'No visible UI change', details: [] });
   }
-  assert.equal((await decision({ files: [{ ...added, status: 'removed' }] })).state, 'failure');
+  assert.equal((await decision({ files: [{ ...added, status: 'removed' }] })).state, 'success');
+  assert.equal((await decision({ files: [{ ...added, status: 'removed' }, added] })).state, 'failure');
   assert.equal((await decision({ author: 'dependabot[bot]', title: 'Bump package', files: [added] })).state, 'success');
 });
 
@@ -1004,7 +1005,8 @@ test('item 4: exemptions precede ticket reads and secret checks', async () => {
 test('item 5: legacy pages, shared styles and removed UI are visible but APIs are not', async () => {
   for (const filename of ['src/pages/home.tsx', 'src/pages/account/index.jsx', 'src/styles/globals.css', 'src/styles/theme.scss', modified.filename, 'src/app/settings/page.tsx']) {
     for (const status of ['modified', 'removed']) {
-      assert.equal((await decision({ files: [{ filename, status }] })).state, 'failure', filename);
+      assert.equal((await decision({ files: [{ filename, status }, added] })).state, 'failure', filename);
+      assert.equal((await decision({ files: [{ filename, status }] })).state, 'success', filename);
       assert.equal((await decision({ title: 'HTPR-1 [BUGFIX] Restore', files: [{ filename, status }] })).state, 'success', filename);
     }
   }
@@ -1214,4 +1216,21 @@ test('YPER4-622: New elements with a bracketed note and "and" still name each el
   const refused = await decision({ files: [section, unnamed], comments: [htpr7515, valentinYes] });
   assert.equal(refused.state, 'failure', 'still refused: an element the comment does not name');
   assert.match(refused.description, /GitLabSection needs Valentin's yes by name/);
+});
+
+test('YPER4-627: reused UI with no new component file passes without a wireframe; a new component still needs his yes by name', async () => {
+  for (const files of [[modified], [{ filename: 'src/app/settings/page.tsx', status: 'modified' }], [{ ...added, filename: 'src/app/inbox/page.tsx' }]]) {
+    const reused = await decision({ files });
+    assert.equal(reused.state, 'success', `now passes: ${files[0].filename}`);
+    assert.match(reused.description, /No new component file/);
+  }
+  const unapproved = await decision({ files: [modified, added] });
+  assert.equal(unapproved.state, 'failure', 'still refused: a new component with no wireframe');
+  assert.match(unapproved.details[0], /yes on a wireframe on HTPR-7072/);
+  assert.match(unapproved.details[1], /ExamplePanel needs Valentin's yes by name/);
+  const unnamed = await decision({ files: [modified, added], comments: [wireframe({ text: '<p>https://hypertask.app/wireframes/decision-inbox</p>' }), yes()] });
+  assert.equal(unnamed.state, 'failure', 'still refused: a wireframe yes that does not name the new component');
+  assert.match(unnamed.description, /ExamplePanel needs Valentin's yes by name/);
+  assert.equal((await decision({ files: [modified, added], comments: [wireframe(), yes()] })).state, 'success', 'still allowed: the named component after his yes');
+  assert.equal((await decision({ title: 'No ticket here', files: [modified] })).state, 'failure', 'still refused: a title with no ticket');
 });
