@@ -1,6 +1,6 @@
 import { parseSearchQuery } from "@/lib/search/operators";
 import { searchConfig } from "@/lib/configs/search.config";
-import { HTPR_6865_SEARCH_LAYOUT_FLAG, HTPR_6878_SEARCH_LABEL_SCOPE_FLAG, HTPR_6880_SEARCH_COMMENTER_FLAG, HTPR_6994_SEARCH_ESC_LEAVES_FLAG } from "@/lib/flags/keys";
+import { HTPR_6865_SEARCH_LAYOUT_FLAG, HTPR_6880_SEARCH_COMMENTER_FLAG, HTPR_6994_SEARCH_ESC_LEAVES_FLAG } from "@/lib/flags/keys";
 import { useFlag, useFlagReady } from "@/hooks/useFlag";
 import { HTPR_7558_SLASH_SEARCH_FOCUS_FLAG } from "@/lib/flags/definitions/htpr-7558-slash-search-focus";
 import { isServerSearchFor, type ServerStartedSearch } from "@/lib/search/serverStartedSearch";
@@ -89,7 +89,6 @@ export function useSearch(
   const queryClient = useQueryClient();
   const isApple = useDeviceContext();
   const searchLayoutEnabled = useFlag(HTPR_6865_SEARCH_LAYOUT_FLAG);
-  const searchLabelScopeFlagEnabled = useFlag(HTPR_6878_SEARCH_LABEL_SCOPE_FLAG);
   const searchEscLeavesEnabled = useFlag(HTPR_6994_SEARCH_ESC_LEAVES_FLAG);
   const slashSearchFocusEnabled = useFlag(HTPR_7558_SLASH_SEARCH_FOCUS_FLAG);
   const searchFlagsReady = useFlagReady(HTPR_6865_SEARCH_LAYOUT_FLAG);
@@ -798,7 +797,7 @@ export function useSearch(
   }, [inputValue, includeArchived, projects, _fromProject, searchLayoutEnabled]);
 
   return {
-    availableSearchBoards: searchLabelScopeFlagEnabled && searchLayoutEnabled ? projects : [],
+    availableSearchBoards: searchLayoutEnabled ? projects : [],
     setSelectedIndex,
     selectedIndex,
     tasksInputRef,

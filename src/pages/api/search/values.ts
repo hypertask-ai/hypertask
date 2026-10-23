@@ -3,7 +3,7 @@ import { Prisma } from '@prisma/client'
 import { getSessionUser } from '@/lib/auth/getSessionUser'
 import { withAgentScopeRequest } from '@/lib/auth/agentScope'
 import { isFeatureEnabled } from '@/lib/flags'
-import { HTPR_6865_SEARCH_LAYOUT_FLAG, HTPR_6878_SEARCH_LABEL_SCOPE_FLAG, HTPR_6880_SEARCH_COMMENTER_FLAG } from '@/lib/flags'
+import { HTPR_6865_SEARCH_LAYOUT_FLAG, HTPR_6880_SEARCH_COMMENTER_FLAG } from '@/lib/flags'
 import prisma from '@/lib/prisma'
 import { getProjectWhere } from '@/utils/controllers/projects/getAllIncludes'
 
@@ -26,8 +26,7 @@ const handler: NextApiHandler = async (req, res) => {
   if (!ids.length) return res.status(200).json({ candidates: [] })
   const activeBoardId = ids.includes(boardId) ? boardId : null
   const layoutEnabled = await isFeatureEnabled(HTPR_6865_SEARCH_LAYOUT_FLAG, session.userId)
-  const labelScopeEnabled = operator === 'label' && layoutEnabled &&
-    await isFeatureEnabled(HTPR_6878_SEARCH_LABEL_SCOPE_FLAG, session.userId)
+  const labelScopeEnabled = operator === 'label' && layoutEnabled
   const pickedBoardIds = labelScopeEnabled ? String(req.query.boards ?? '').split(',')
     .filter((id) => /^\d+$/.test(id)).map(Number).filter((id) => Number.isSafeInteger(id) && id > 0) : []
   let candidates: { id: string | number; name: string; email?: string; count?: number; byName?: boolean; preferred: boolean; recent: number }[]
