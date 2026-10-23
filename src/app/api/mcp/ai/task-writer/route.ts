@@ -6,13 +6,18 @@ import { z } from "zod";
 
 import { createUnauthorizedResponse } from '@/lib/mcp/auth'
 import { errorMessage } from "@/app/api/ai/_lib/editorAi";
-import { SHARED_AI_ALLOWANCE_EXCEEDED_MESSAGE } from "@/lib/aiAllowancePolicy";
 import {
   AiFeatureDisabledError,
   ProjectAccessError,
   taskWriterRequestSchema,
 } from "@/app/api/ai/_lib/taskWriterRun";
 import { generateTaskWriterDraft } from "@/app/api/ai/_lib/taskWriterDraft";
+
+async function isAllowanceLimitMessage(message: string) {
+  if (!message.includes("AI allowance")) return false;
+  const { SHARED_AI_ALLOWANCE_EXCEEDED_MESSAGE } = await import("@/lib/aiAllowancePolicy");
+  return message === SHARED_AI_ALLOWANCE_EXCEEDED_MESSAGE;
+}
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -100,7 +105,7 @@ export async function POST(request: NextRequest) {
       );
     }
     const message = errorMessage(error);
-    if (message === SHARED_AI_ALLOWANCE_EXCEEDED_MESSAGE) {
+    if (await isAllowanceLimitMessage(message)) {
       console.warn("[mcp/ai/task-writer] refused: included AI allowance used up");
       return NextResponse.json({ success: false, error: message }, { status: 429 });
     }
