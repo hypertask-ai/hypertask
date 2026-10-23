@@ -98,7 +98,7 @@ test("progressive placeholders preserve navigation and focus identity", () => {
   assert.match(placeholder, /onReveal\(task\.id, true\)/);
   assert.match(placeholder, /onOpen\(task\)/);
   assert.match(section, /setTasksPlayList\(tasksPlayList\)/);
-  assert.match(section, /navigateToTask\(task\.projectId, task\.uniqueIndex, "push", undefined, includeCachedTask \? task : undefined\)/);
+  assert.match(section, /navigateToTask\(task\.projectId, task\.uniqueIndex, "push", undefined, task\)/);
   assert.match(section, /pendingFocusTaskId/);
   assert.match(section, /new MutationObserver/);
   assert.doesNotMatch(section, /attempts < 10/);

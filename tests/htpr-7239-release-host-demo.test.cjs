@@ -12,6 +12,8 @@ function load(relativePath, imports = {}) {
   const mod = { exports: {} }
   new Function('module', 'exports', 'require', javascript)(mod, mod.exports, (name) => {
     if (name in imports) return imports[name]
+    if (name === '@/lib/auth/agentCookieBridgeRoutes') return load('src/lib/auth/agentCookieBridgeRoutes.ts')
+    if (name === '@/lib/telemetry/signupAnalytics') return { recordServerCapture: () => {} }
     throw new Error(`Unexpected import: ${name}`)
   })
   return mod.exports
@@ -22,6 +24,7 @@ const { default: proxy } = load('src/proxy.ts', {
   './utils/edgeHelpers': { isValidUser: () => ({ isValid: false, user: null }) },
   './utils/serverActions': { isMobileDevice: () => false },
   './utils/helperFunctions/helperFunctions': { canAccessTrialPage: () => true },
+  '@/lib/net/contentEncoding': { refusedContentEncoding: () => undefined },
   '@/lib/auth/safeReturnTo': { parseSafeReturnTo: () => null },
   '@/lib/auth/sessionEdge': { verifySessionEdge: async () => null },
   '@/lib/auth/cookieIdentity': { verifyCookieIdentity: async () => ({ status: 'anonymous' }) },

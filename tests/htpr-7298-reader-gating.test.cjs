@@ -44,6 +44,7 @@ function fixture(enabled) {
     '@/lib/mcp/idempotency/idempotencyStore': {
       normalizeIdempotencyKey: () => null,
       withIdempotency: async (_op, _user, _key, _body, fn) => fn(),
+      IdempotencyAccessError: class extends Error {},
       IdempotencyInProgressError: class extends Error {},
     },
     '@/utils/controllers/pages/htmlToMarkdown': { htmlToMarkdown: (html) => html },
@@ -52,7 +53,7 @@ function fixture(enabled) {
     '@/lib/ai/tools/helpers': { sanitizeForJson: (value) => value, getAccessibleProjectIds: async () => [1, 2, 3] },
   };
   // Use a real human/agent membership for the MCP board predicate.
-  for (const board of h.state.projects.slice(0, 2)) board.members.push({ userId: 3, agentId: 'credential-agent', agent: { userId: 3, revokedAt: null } });
+  for (const board of h.state.projects.slice(0, 2)) board.members.push({ userId: 3, agentId: 'credential-agent', status: 'Accepted', agent: { userId: 3, revokedAt: null } });
   return {
     ...h, effects, flagCalls,
     async call(boundary, operation, query = 'id=page', input = {}) {
@@ -136,7 +137,7 @@ for (const query of ['all', 'Page']) {
       const mentions = load('src/utils/controllers/tasks/taskSearchByParam.ts', {
         '@/lib/prisma': { default: h.prisma },
         '@/app/api/ai/_lib/planGate': { haiku55ModelEnabled: async () => false },
-        '@/lib/flags': { PAGE_MENTIONS_FLAG: 'mentions', isFeatureEnabled: async (key, userId) => { assert.equal(userId, 3); return key === flag ? enabled : true; } },
+        '@/lib/flags': { isFeatureEnabled: async (key, userId) => { assert.equal(userId, 3); return key === flag ? enabled : true; } },
         '@/lib/aiModelOptions': { aiImageModelDefinitions: [], aiModelDefinitions: [] },
         '@/utils/controllers/agents/boardMembers': { getBoardAgentMembers: async () => [] },
         '../search/document': { turbopufferFetchMentionTasks: async () => [] },

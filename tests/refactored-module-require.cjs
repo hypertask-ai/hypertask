@@ -5,7 +5,7 @@ const ts = require("typescript");
 function createRefactoredModuleRequire(directory, mocks) {
   const cache = new Map();
   function load(specifier, parentDirectory) {
-    if (Object.hasOwn(mocks, specifier)) return mocks[specifier];
+    if (specifier in mocks) return mocks[specifier];
     if (!specifier.startsWith(".")) return require(specifier);
     const base = path.resolve(parentDirectory, specifier);
     const file = [base, `${base}.ts`, `${base}.tsx`].find((candidate) =>

@@ -12,6 +12,8 @@ function load(relativePath, imports = {}) {
   const mod = { exports: {} }
   new Function('module', 'exports', 'require', javascript)(mod, mod.exports, (name) => {
     if (name in imports) return imports[name]
+    if (name === '@/lib/auth/agentCookieBridgeRoutes') return load('src/lib/auth/agentCookieBridgeRoutes.ts')
+    if (name === '@/lib/telemetry/signupAnalytics') return { recordServerCapture: () => {} }
     if (name === 'crypto') return require('node:crypto')
     throw new Error(`Unexpected import: ${name}`)
   })
@@ -46,6 +48,7 @@ function harness() {
     } },
     './utils/serverActions': { isMobileDevice: () => false },
     './utils/helperFunctions/helperFunctions': { canAccessTrialPage: () => true },
+    '@/lib/net/contentEncoding': { refusedContentEncoding: () => undefined },
     '@/lib/auth/safeReturnTo': { parseSafeReturnTo: () => null },
     '@/lib/auth/sessionEdge': edge, '@/lib/auth/cookieIdentity': identity,
     '@/lib/auth/sessionRevocation': revocation,

@@ -5,103 +5,12 @@ const fixture = require('./fixtures/htpr-7341-igsh-266.json')
 const flag = 'htpr-7341-agent-chatter-to-log'
 const routing = load('src/lib/mcp/operations/comments/agentChatterRouting.ts', {})
 
-function setup(options = {}) {
-  const calls = { comments: [], runs: [], activities: [], broadcasts: [], urls: [], flags: [], idempotency: [] }
-  const user = { id: 6, displayName: 'Owner' }
-  const ctx = { user, agentId: options.human ? null : 'agent-1' }
-  const cache = new Map()
-  const stubs = {
-    '@/lib/mcp/operationCrashReport': { reportMcpOperationCrash: () => {} },
-    '@/lib/mcp/routeWrapper': {
-      wrapMcpRoute: (handler) => handler,
-      checkMcpRouteRateLimit: async () => null,
-      validateMcpRouteAuth: async () => ctx,
-      mcpRouteUnauthorizedResponse: async () => ({ status: 401 }),
-      readMcpRouteJsonBody: async (request) => ({ ok: true, body: request.body }),
-    },
-    'next/server': { NextResponse: { json: (body, init = {}) => ({ body, status: init.status ?? 200 }) } },
-    '@prisma/client': { Prisma: { DbNull: null } },
-    '@/lib/prisma': { default: {
-      task: { findUnique: async () => ({ userId: 6, projectId: 15, uniqueIndex: 7341 }) },
-      user: { findUnique: async () => user },
-      comment: { findUnique: async () => null },
-    } },
-    '@/lib/mcp/agents': { getMcpSessionAgentSummary: async () => null, mcpVisibleAgentSelect: () => ({}) },
-    '@/utils/controllers/urls/extractUrlsFromContent': {
-      buildMcpImageUrls: () => [],
-      persistUrlsForComment: async (...args) => calls.urls.push(args),
-    },
-    '@/utils/controllers/comments/processMentions': {
-      convertPlainTextMentionsToHtml: (text) => text,
-      resolveTextMentions: async (text) => text,
-    },
-    '@/utils/controllers/comments/createCommentService': {
-      createCommentService: async (params) => {
-        calls.comments.push(params)
-        return { id: 42, text: params.text, kind: params.kind ?? null, createdAt: new Date('2026-10-19T12:00:00Z') }
-      },
-    },
-    '@/utils/controllers/comments/agentInvocationCorrelation': { AgentInvocationNotPendingError: class extends Error {} },
-    '@/lib/mcp/tasks/resolveTask': {
-      validateTaskIdentifier: () => ({ valid: true }),
-      findTaskByIdentifier: async () => options.noTask ? null : ({ id: 99, projectId: 15 }),
-    },
-    '@/lib/mcp/tasks/services': { validateProjectMemberIds: async () => ({ invalidIds: [] }) },
-    '@/lib/realtime/server': { broadcastTaskComment: async (...args) => calls.broadcasts.push(args) },
-    '@/utils/helperFunctions/sanitizeRichHtml': { sanitizeRichHtml: (text) => text },
-    '@/utils/helperFunctions/multiPages': { extractTipTapContent: () => ({ mentions: options.textMentions ?? [] }) },
-    '@/lib/mcp/normalizeBlockHtml': { normalizeBlockHtml: (text) => text },
-    '@/utils/helperFunctions/markdownToHtml': { formatRichTextInput: (text) => options.formattedText ?? text },
-    '@/lib/mcp/tasks/validators': { CONTENT_TYPE_ALLOWED_VALUES: ['html', 'markdown'] },
-    '@/lib/mcp/comments/activityMetadata': {},
-    '@/lib/mcp/agents/scopes': { requireRole: async () => null },
-    '@/lib/mcp/idempotency/idempotencyStore': {
-      IdempotencyInProgressError: class extends Error {},
-      normalizeIdempotencyKey: (key) => key,
-      withIdempotency: async (operation, userId, key, body, handler) => {
-        calls.idempotency.push({ operation, userId, key, body })
-        if (key && cache.has(key)) return { ...cache.get(key), idempotent_replayed: true }
-        const result = await handler()
-        if (key) cache.set(key, result)
-        return result
-      },
-    },
-    '@/lib/mcp/boards/links': { buildMcpTaskUrl: () => 'https://app.hypertask.ai/detail/project-15/7341' },
-    '@/lib/mcp/comments/reactionResponse': {},
-    '@/lib/mcp/comments/visibleReactionAgents': { loadVisibleReactionAgents: async () => new Map() },
-    '@/lib/agents/publicAgent': {},
-    '@/lib/flags': { isFeatureEnabled: async (key, userId) => {
-      calls.flags.push({ key, userId })
-      return key === flag && options.flag !== false
-    } },
-    '@/lib/mcp/listQuery': {},
-    '@/lib/mcp/readListQuery': {},
-    '@/lib/agentRuns/service': {
-      runtimeAgentRunsEnabledFor: async () => options.runtime !== false,
-      agentRunActivitiesEnabledFor: async () => options.activities !== false,
-      createRuntimeAgentRun: async (...args) => {
-        calls.runs.push(args)
-        return options.noRun ? null : { id: 'run-1' }
-      },
-      createAgentRunActivity: async (...args) => {
-        calls.activities.push(args)
-        return options.noActivity ? null : { activity: {
-          id: 'activity-1', runId: args[1], type: args[2].type.toLowerCase(),
-          text: args[2].text, createdAt: '2026-10-19T12:00:00.000Z',
-        } }
-      },
-    },
-  }
-  const { POST } = load('src/lib/mcp/operations/comments/operation.ts', stubs)
-  return {
-    calls,
-    post: (body = {}, key = null) => POST({ body: { task_id: 99, text: '<p>Progress &amp; next step</p>', ...body }, headers: new Headers(key ? { 'Idempotency-Key': key } : {}) }),
-  }
-}
+const { setup } = require('./helpers/comment-routing.cjs')
 
 function assertComment(response, calls, kind) {
   assert.equal(response.status, 201)
   assert.equal(response.body.routedTo, 'comments')
+  assert.equal(response.body.visibleToPeople, true)
   assert.equal(response.body.comment.kind, kind ?? null)
   assert.equal(calls.comments.length, 1)
   assert.equal(calls.comments[0].kind, kind)
@@ -114,13 +23,19 @@ test('flag on refuses chatter as a comment and writes a parsed thought without c
   const response = await post()
   assert.equal(response.status, 201)
   assert.equal(response.body.routedTo, 'log')
+  assert.equal(response.body.visibleToPeople, false)
+  assert.match(response.body.notice, /agent log, not the ticket thread/)
+  assert.match(response.body.notice, /people do not see it/)
+  assert.match(response.body.notice, /Resend with kind \(question\|qa\|done\)/)
+  assert.equal(response.body.url, 'https://app.hypertask.ai/detail/project-15/7341')
+  assert.ok(response.body.activity.id)
   assert.equal(response.body.activity.type, 'thought')
   assert.equal(response.body.activity.text, 'Progress & next step')
   assert.equal(response.body.comment, undefined)
   assert.equal(calls.comments.length, 0)
   assert.equal(calls.broadcasts.length, 0)
   assert.equal(calls.urls.length, 0)
-  assert.deepEqual(calls.runs, [[{ userId: 6, agentId: 'agent-1', displayName: 'Owner', source: 'agent' }, { taskId: 99, title: null, source: 'runtime' }]])
+  assert.deepEqual(calls.runs, [[{ userId: 6, agentId: 'agent-1', teamScope: null, displayName: 'Owner', source: 'agent' }, { taskId: 99, title: null, source: 'runtime' }]])
   assert.equal(calls.activities[0][2].type, 'THOUGHT')
   assert.deepEqual(calls.flags, [{ key: flag, userId: 6 }])
 })
@@ -182,6 +97,7 @@ for (const options of [{ noRun: true }, { runtime: false }, { activities: false 
     const response = await post()
     assert.equal(response.status, 201)
     assert.equal(response.body.routedTo, 'comments')
+    assert.equal(response.body.visibleToPeople, true)
     assert.equal(calls.comments.length, 1)
   })
 }
@@ -216,6 +132,8 @@ test('idempotent retry writes the thought once and passes the client key through
   const retry = await post({}, 'request-1')
   assert.equal(first.body.routedTo, 'log')
   assert.equal(retry.body.routedTo, 'log')
+  assert.equal(retry.body.visibleToPeople, false)
+  assert.equal(retry.body.notice, first.body.notice)
   assert.equal(retry.body.idempotent_replayed, true)
   assert.equal(calls.runs.length, 1)
   assert.equal(calls.activities.length, 1)
@@ -310,3 +228,17 @@ test('ticket flag is registered by generated keys and definitions with the reque
   assert.equal(definition.shippedOn, '2026-10-19')
   assert.ok(definition.releaseRisk.reason)
 })
+
+for (const enabled of [false, true]) {
+  test(`image routing ignores forged booleans and uses same-call attachments, flag ${enabled}`, async () => {
+    const forged = setup({ inlineImages: enabled });
+    assert.equal((await forged.post({ has_image_attachments: true })).body.routedTo, "log");
+    const image = setup({ inlineImages: enabled });
+    const response = await image.post({ attachments: [{ filename: "image.png", content_type: "image/png", url: "https://files.hypertask.app/image.png" }] });
+    assert.equal(response.body.routedTo, enabled ? "comments" : "log");
+    const document = setup({ inlineImages: enabled });
+    assert.equal((await document.post({ attachments: [{ filename: "report.pdf", content_type: "application/pdf", url: "https://files.hypertask.app/report.pdf" }] })).body.routedTo, "log");
+    const invalid = setup({ inlineImages: enabled });
+    assert.equal((await invalid.post({ attachments: [{ filename: "image.png", content_type: "image/png" }] })).status, enabled ? 400 : 201);
+  });
+}

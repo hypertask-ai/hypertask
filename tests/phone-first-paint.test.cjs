@@ -6,7 +6,6 @@ const ts = require('typescript');
 require('tsx/cjs');
 
 const root = path.resolve(__dirname, '..');
-const phoneFlag = 'htpr-7008-phone-first-paint';
 const keys = require("./helpers/flag-files.cjs").load("src/lib/flags/keys.ts");
 const user = { id: 2343, displayName: 'Disposable QA', UserSetting: { notification: true } };
 
@@ -23,10 +22,12 @@ function load(relative, mocks) {
   return loaded.exports;
 }
 
-async function warming({ mobile, enabled, pathname, saveData = false, boardPainted = false }) {
-  const effects = [], frames = [], idle = [], timers = [], listeners = new Map(), imports = [];
+async function warming({ mobile, pathname, saveData = false }) {
+  const effects = [], frames = [], idle = [], timers = [], listeners = new Map(), historyListeners = new Map(), imports = [], navigationEvents = [];
   const previousWindow = global.window, previousDocument = global.document;
   global.window = { innerWidth: mobile ? 390 : 1440, location: { pathname }, history: { state: {} }, navigator: { connection: { saveData, effectiveType: '4g' } },
+    addEventListener: (name, fn) => historyListeners.set(name, fn), removeEventListener: name => historyListeners.delete(name),
+    Event: global.Event, dispatchEvent: event => navigationEvents.push(event),
     requestAnimationFrame: fn => { frames.push(fn); return frames.length; }, cancelAnimationFrame: () => {},
     requestIdleCallback: fn => { idle.push(fn); return idle.length; }, cancelIdleCallback: () => {},
     setTimeout: fn => { timers.push(fn); return timers.length; }, clearTimeout: () => {},
@@ -39,7 +40,7 @@ async function warming({ mobile, enabled, pathname, saveData = false, boardPaint
     'next/navigation': { usePathname: () => pathname, useRouter: () => ({}) },
     '@tanstack/react-query': { useQueryClient: () => ({}) },
     '@/lib/state': { useRecoilValue: () => user }, '@/store': {},
-    '@/hooks/useFlag': { useFlag: key => key === phoneFlag ? enabled : key === keys.HTPR_6752_INSTANT_TICKET_OPEN_FLAG },
+    '@/hooks/useFlag': { useFlag: () => false },
     '@/lib/flags/keys': keys,
     '@/lib/navigation/cachedTaskDetail': { cachedTaskDetailLocation: () => undefined },
     '@/utils/helperFunctions/helperFunctions': {}, '@/lib/constants/constants': {},
@@ -59,13 +60,17 @@ async function warming({ mobile, enabled, pathname, saveData = false, boardPaint
   try {
     const Component = load('src/components/PageComponents/TaskDetail/CachedTaskDetailNavigation.tsx', mocks).default;
     const children = { realContent: true };
-    assert.equal(Component({ children, accountId: user.id, boardPainted }), children, 'warming never hides or replaces real content');
+    assert.equal(Component({ children, accountId: user.id }), children, 'warming never hides or replaces real content');
     for (const effect of effects) { const cleanup = effect(); if (cleanup) cleanups.push(cleanup); }
+    assert.equal(navigationEvents.length, 1, 'route commits publish a location notification regardless of other flags');
+    assert.ok(navigationEvents[0] instanceof window.Event);
+    assert.equal(navigationEvents[0].type, 'cached-task-detail-navigation');
     while (frames.length) frames.shift()();
     while (idle.length) idle.shift()();
     while (timers.length) timers.shift()();
     await Promise.resolve(); await Promise.resolve();
     const automatic = imports.length;
+    assert.equal(typeof historyListeners.get('cached-task-detail-popstate'), 'function', 'authorized navigation always registers history recovery');
     assert.equal(typeof listeners.get('pointerdown'), 'function');
     listeners.get('pointerdown')();
     await Promise.resolve(); await Promise.resolve();
@@ -73,34 +78,26 @@ async function warming({ mobile, enabled, pathname, saveData = false, boardPaint
   } finally {
     cleanups.reverse().forEach(fn => fn());
     assert.equal(listeners.has('pointerdown'), false, 'unmount removes the warming listener');
+    assert.equal(historyListeners.has('cached-task-detail-popstate'), false, 'unmount removes history recovery');
     global.window = previousWindow; global.document = previousDocument;
   }
 }
 
 for (const pathname of ['/project', '/inbox']) {
   test(`${pathname}: optional editor, reactions, emoji and Firebase imports wait for phone intent`, async () => {
-    const result = await warming({ pathname, mobile: true, enabled: true });
+    const result = await warming({ pathname, mobile: true });
     assert.equal(result.automatic, 0);
     assert.equal(result.afterIntent, 10, 'all existing shared features still load on intent');
   });
-  test(`${pathname}: flag-off and desktop warming retain all existing automatic imports`, async () => {
-    for (const [mobile, enabled] of [[true, false], [false, true], [false, false]]) {
-      const result = await warming({ pathname, mobile, enabled });
-      assert.equal(result.automatic, 10, 'positive control for the no-import assertion');
-      assert.equal(result.afterIntent, 10, 'warming stays deduplicated');
-    }
+  test(`${pathname}: desktop warming retains all existing automatic imports`, async () => {
+    const result = await warming({ pathname, mobile: false });
+    assert.equal(result.automatic, 10, 'positive control for the no-import assertion');
+    assert.equal(result.afterIntent, 10, 'warming stays deduplicated');
   });
 }
-test('HTPR-7395: a painted phone board warms the ticket code before the first tap; the board start and the inbox still wait', async () => {
-  const phone = { mobile: true, enabled: true };
-  assert.equal((await warming({ ...phone, pathname: '/project', boardPainted: true })).automatic, 10);
-  assert.equal((await warming({ ...phone, pathname: '/project', boardPainted: false })).automatic, 0, 'nothing competes with the board first paint');
-  assert.equal((await warming({ ...phone, pathname: '/inbox', boardPainted: true })).automatic, 0, 'the inbox start keeps HTPR-7008');
-  assert.match(fs.readFileSync(path.join(__dirname, '../src/components/ProviderGlobal/GloablProviders.tsx'), 'utf8'), /boardPainted=\{phoneBoardWarmsTicket && secondaryStartupEnabled\}/, 'flag off never reports a painted board, so HTPR-7008 stays');
-  assert.equal((await warming({ ...phone, pathname: '/project', boardPainted: true, saveData: true })).automatic, 0, 'data saver still skips warming');
-});
-
 test('My Tasks and data-saving connections retain their existing warming policy', async () => {
-  assert.equal((await warming({ pathname: '/my-tasks', mobile: true, enabled: true })).automatic, 10);
-  assert.equal((await warming({ pathname: '/project', mobile: true, enabled: false, saveData: true })).automatic, 0);
+  assert.equal((await warming({ pathname: '/my-tasks', mobile: true })).automatic, 10);
+  const result = await warming({ pathname: '/project', mobile: false, saveData: true });
+  assert.equal(result.automatic, 0);
+  assert.equal(result.afterIntent, 10, 'data saving still allows deliberate warming');
 });

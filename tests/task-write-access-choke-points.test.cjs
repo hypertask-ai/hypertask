@@ -15,7 +15,7 @@ function assertBefore(source, first, second, message) {
 
 test("creating a task on a foreign board is refused at the shared controller", () => {
   const controller = read("src/utils/controllers/tasks/create.ts");
-  assert.ok(controller.includes("taskWriteAccessWhere(currentUser.id, agentId)"));
+  assert.ok(controller.includes("taskWriteAccessWhere(currentUser.id, agentId, teamScope)"));
   assertBefore(
     controller,
     "const allowedProject",
@@ -50,7 +50,7 @@ test("task creation still permits an owned live board agent", () => {
   const access = read("src/utils/controllers/projects/getAllIncludes.ts");
   assert.ok(access.includes("agent: { userId, revokedAt: null }"));
   const globalCreate = read("src/lib/api/task-writes/create-global.ts");
-  assert.ok(globalCreate.includes("taskWriteAccessWhere(userId, agentId)"));
+  assert.ok(globalCreate.includes("taskWriteAccessWhere(userId, agentId, session.teamScope)"));
 });
 
 test("global task creation refuses a foreign project before its transaction", () => {

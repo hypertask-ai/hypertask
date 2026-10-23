@@ -4,7 +4,6 @@ import { readFileSync } from "node:fs";
 import { errorQuery, isReleaseWatchSpike, parseAddedDefinitions, releaseGroups, runReleaseWatch, RELEASE_WATCH } from "./flag-release-watch.mjs";
 
 const now = Date.parse("2026-10-20T12:00:00Z");
-const policy = { key: "htpr-7389-flag-release-policy", mode: "OWNER_AND_QA", releasedAt: null };
 const flag = (key = "htpr-123-feature", minutes = 40, extra = {}) => ({ key, mode: "EVERYONE", releasedAt: new Date(now - minutes * 60_000).toISOString(), ...extra });
 function fake(flags, counts = [4, 12]) {
   const calls = [];
@@ -21,7 +20,7 @@ function fake(flags, counts = [4, 12]) {
           return Response.json({ results: [counts] });
         }
         assert.equal(init.headers.Authorization, "Bearer agent-token");
-        return Response.json(init.method === "PATCH" ? { flag: { mode: "OFF" } } : { flags: [policy, ...flags] });
+        return Response.json(init.method === "PATCH" ? { flag: { mode: "OFF" } } : { flags });
       },
     },
   };
@@ -40,7 +39,7 @@ test("a spike switches every flag in the release window Off with own ticket link
   const queries = calls.filter(call => call.url.includes("posthog.com"));
   assert.equal(queries.length, 1);
   const patches = calls.filter(call => call.method === "PATCH");
-  assert.deepEqual(patches.map(call => call.body), flags.map((row, index) => ({ key: row.key, mode: "OFF", reason: `https://app.hypertask.ai/detail/project-15/${index ? 456 : 123}`, watch: { before: 4, after: 12, windowMinutes: 40 } })));
+  assert.deepEqual(patches.map(call => call.body), flags.map((row, index) => ({ key: row.key, mode: "OFF", reason: `https://app.hypertask.ai/detail/project-15/${index ? 456 : 123}`, watch: { before: 4, after: 12, windowMinutes: 40, releasedAt: row.releasedAt } })));
 });
 
 for (const counts of [[0, 9], [5, 10], [10, 12], [0, 0]]) test(`no spike ${counts} means no PATCH`, async () => {
@@ -50,10 +49,8 @@ for (const counts of [[0, 9], [5, 10], [10, 12], [0, 0]]) test(`no spike ${count
   assert.equal(calls.length, 2);
 });
 
-test("policy Off does nothing, including no git discovery", async () => {
-  const { calls, options } = fake([flag()]);
-  options.additions = () => { throw new Error("discovery must not run"); };
-  options.fetchImpl = async (url, init) => { calls.push({ url, ...init }); return Response.json({ flags: [{ ...policy, mode: "OFF" }, flag()] }); };
+test("Off and protected flags are never candidates", async () => {
+  const { calls, options } = fake([flag(undefined, 40, { mode: "OFF" }), flag("htpr-456-other", 40, { mode: "OWNER_AND_QA" })]);
   assert.deepEqual(await runReleaseWatch(options), []);
   assert.equal(calls.length, 1);
 });
@@ -119,13 +116,12 @@ test("workflow is production-only, serialized, bounded and uses the existing sec
   for (const part of ['cron: "*/10 * * * *"', "workflow_dispatch:", "contents: read", "group: flag-release-watch", "cancel-in-progress: false", "timeout-minutes: 5", "fetch-depth: 0", "github.ref == 'refs/heads/production'", "secrets.HYPERTASK_MCP_TOKEN", "secrets.POSTHOG_FULL_API_KEY", "node .github/scripts/flag-release-watch.mjs"]) assert.ok(workflow.includes(part), part);
 });
 
-test("the policy flag is switched Off last so its batch can finish", async () => {
-  const { calls, options } = fake([]);
-  const fetchImpl = options.fetchImpl;
-  options.fetchImpl = async (url, init) => {
-    if (!init.method) return Response.json({ flags: [flag(policy.key, 50), flag("htpr-123-feature", 50), flag("htpr-456-other", 40)] });
-    return fetchImpl(url, init);
-  };
-  assert.deepEqual(await runReleaseWatch(options), ["htpr-456-other", "htpr-123-feature", policy.key]);
-  assert.equal(calls.at(-1).body.key, policy.key);
-});
+for (const stats of [{ results: [] }, { results: [[4, 12]], hasMore: true }, { results: [[4, 12], [4, 12]] }]) {
+  test(`missing or truncated statistics fail closed: ${JSON.stringify(stats)}`, async () => {
+    const { calls, options } = fake([flag()]);
+    const fetchImpl = options.fetchImpl;
+    options.fetchImpl = (url, init) => url.includes("posthog.com") ? Response.json(stats) : fetchImpl(url, init);
+    await assert.rejects(runReleaseWatch(options), /counts are missing or truncated/);
+    assert.equal(calls.some(call => call.method === "PATCH"), false);
+  });
+}

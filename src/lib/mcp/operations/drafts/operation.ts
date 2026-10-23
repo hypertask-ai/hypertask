@@ -3,7 +3,7 @@ import { wrapMcpRoute, validateMcpRouteAuth as validateMcpAuth, checkMcpRouteRat
 import { NextRequest, NextResponse } from 'next/server'
 
 import prisma from '@/lib/prisma'
-import { findTaskByIdentifier, validateTaskIdentifier } from '@/lib/mcp/tasks/resolveTask'
+import { findTaskByIdentifier, validateTaskIdentifier, taskIdentifierErrorResponse } from '@/lib/mcp/tasks/resolveTask'
 
 export interface DraftItem {
   id: number
@@ -113,7 +113,7 @@ export async function POST(request: NextRequest) {
     const task = await findTaskByIdentifier(
       user,
       { task_id, ticket_number, unique_index, project_id },
-      ctx.agentId
+      ctx.agentId, undefined, ctx.teamScope
     )
     if (!task) {
       return NextResponse.json({ success: false, error: 'Task not found or access denied' }, { status: 404 })
@@ -176,6 +176,8 @@ export async function POST(request: NextRequest) {
 
     return NextResponse.json(response, { status: 201 })
   } catch (error) {
+    const identifierResponse = taskIdentifierErrorResponse(error)
+    if (identifierResponse) return identifierResponse
     console.error('[MCP POST Draft] Error:', error)
     reportMcpOperationCrash(request, error)
     return NextResponse.json(
@@ -231,7 +233,7 @@ export async function GET(request: NextRequest) {
         unique_index: uniqueIndex,
         project_id: projectId,
       },
-      ctx.agentId
+      ctx.agentId, undefined, ctx.teamScope
     )
 
     if (!task) {
@@ -256,6 +258,8 @@ export async function GET(request: NextRequest) {
 
     return NextResponse.json(response)
   } catch (error) {
+    const identifierResponse = taskIdentifierErrorResponse(error)
+    if (identifierResponse) return identifierResponse
     console.error('[MCP GET Drafts] Error:', error)
     reportMcpOperationCrash(request, error)
     return NextResponse.json(

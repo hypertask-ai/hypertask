@@ -46,8 +46,13 @@ const isCommandMenuRoute = (pathname: string | null) =>
     (route) => pathname === route || pathname?.startsWith(`${route}/`),
   );
 
-export const shouldRenderGlobalCommandMenu = (pathname: string | null) =>
+export const shouldRenderGlobalCommandMenu = (
+  pathname: string | null,
+  myTasksSingleCommandCenter = false,
+) =>
   isCommandMenuRoute(pathname) &&
+  !(myTasksSingleCommandCenter &&
+    (pathname === "/my-tasks" || pathname?.startsWith("/my-tasks/"))) &&
   !COMMAND_MENU_ROUTE_HOSTS.some(
     (route) => pathname === route || pathname?.startsWith(`${route}/`),
   );

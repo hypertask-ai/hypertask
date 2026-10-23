@@ -41,6 +41,7 @@ interface IProp {
   mobilePrimaryTone?: MobileMicPrimaryTone;
   dictationCoordinator?: DictationCoordinator;
   disabled?: boolean;
+  active?: boolean;
   projectId?: number | null;
 }
 
@@ -72,7 +73,10 @@ export const AudioButton = ({
   mobilePrimaryTone = "default",
   dictationCoordinator,
   disabled = false,
+  active = true,
 }: IProp) => {
+  const activeRef = useRef(active);
+  activeRef.current = active;
   const [recording, setRecording] = useState(false);
   const [isProcessing, setIsProcessing] = useState(false);
   const micTap = useRef(createTapGuard()).current;
@@ -104,7 +108,8 @@ export const AudioButton = ({
     isMobileView && id === "ai-writer-audio-button";
   const isMobileNewTask =
     isMobileView && id === "create-task-modal-audio-button";
-  const isMobileAiChat = isMobileView && id === "ai-chat-audio-button";
+  const isAiChat = id === "ai-chat-audio-button" || id.startsWith("ai-chat-audio-button-");
+  const isMobileAiChat = isMobileView && isAiChat;
   const isKeyboardAccessible =
     isMobileTaskWriter || Boolean(ariaLabel || idleLabel);
   const dictationAriaLabel = isKeyboardAccessible
@@ -112,12 +117,11 @@ export const AudioButton = ({
     : undefined;
   const isDesktopAiMic =
     !isMobileView &&
-    [
+    (isAiChat || [
       "create-comment-audio-button",
       "ai-writer-audio-button",
-      "ai-chat-audio-button",
       "inline-draft-ai-audio-button",
-    ].includes(id);
+    ].includes(id));
   const currentProject = useRecoilValue(currentProjectAtom);
   const resolvedProjectId =
     projectIdProp === undefined ? currentProject?.id : projectIdProp ?? undefined;
@@ -287,15 +291,16 @@ export const AudioButton = ({
   };
 
   const startRecording = async (improve: boolean = false) => {
-    if (disabled || recordingRef.current || isProcessing) return;
+    if (!activeRef.current || disabled || recordingRef.current || isProcessing) return;
     const lease = dictationCoordinator?.acquire();
     if (dictationCoordinator && !lease) return;
     if (lease) dictationLeaseRef.current = lease;
     try {
       shouldImprove.current = improve;
       const stream = await ensureStream(selectedDeviceIdRef.current);
-      if (lease && !dictationCoordinator?.owns(lease)) {
+      if (!activeRef.current || (lease && !dictationCoordinator?.owns(lease))) {
         stopStream();
+        releaseDictationLease(lease);
         return;
       }
 
@@ -418,8 +423,8 @@ export const AudioButton = ({
       }
 
       const canDeliver = () =>
-        !dictationCoordinator ||
-        Boolean(lease && dictationCoordinator.owns(lease));
+        activeRef.current &&
+        (!dictationCoordinator || Boolean(lease && dictationCoordinator.owns(lease)));
 
       if (shouldImprove.current) {
         const data = await response.json();
@@ -465,7 +470,7 @@ export const AudioButton = ({
   };
 
   const handleKeydown = (e: KeyboardEvent) => {
-    if (disabled) return;
+    if (!activeRef.current || disabled) return;
     if (e.key === "Escape" && recordingRef.current) {
       e.preventDefault();
       stopRecording(false);
@@ -530,10 +535,15 @@ export const AudioButton = ({
   };
 
   const openMenu = async () => {
+    if (!activeRef.current) return;
     menuOpenRef.current = true;
     setMenuOpen(true);
     try {
       await ensureStream(selectedDeviceIdRef.current);
+      if (!activeRef.current) {
+        stopStream();
+        return;
+      }
       await listDevices();
       ensureLoop();
     } catch (error) {
@@ -546,6 +556,12 @@ export const AudioButton = ({
     setMenuOpen(false);
     if (!recordingRef.current) stopStream();
   };
+
+  useEffect(() => {
+    if (active) return;
+    if (recordingRef.current) closeHandler();
+    closeMenu();
+  }, [active]);
 
   const selectDevice = async (deviceId: string) => {
     setSelectedDeviceId(deviceId);
@@ -632,6 +648,7 @@ export const AudioButton = ({
             return (
               <div
                 id={id}
+                data-ai-chat-recorder={isAiChat || undefined}
                 className={cn(
                   "group relative flex cursor-pointer items-center touch-manipulation",
                   prominent ? prominentClassName : "h-[32px]",
@@ -705,7 +722,7 @@ export const AudioButton = ({
                 )}
                 {hover &&
                   !isProcessing &&
-                  id !== "ai-chat-audio-button" &&
+                  !isAiChat &&
                   id !== "inline-draft-ai-audio-button" && (
                   <>
                     <Tooltip

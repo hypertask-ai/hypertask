@@ -1,3 +1,5 @@
+import type { AgentTokenTeamScope } from "@/lib/mcp/auth/types";
+import { notificationBoardAccessWhere } from "./boardAccess";
 import { createHash } from "node:crypto";
 
 import { NotificationType, Prisma } from "@prisma/client";
@@ -94,10 +96,11 @@ export const parseInboxZeroRules = (value: unknown): InboxZeroRules | null => {
 
 export const loadActiveInboxZeroNotifications = ( // trufflehog:ignore
   userId: number,
-  db: InboxZeroDb = prisma
+  db: InboxZeroDb = prisma,
+  principal?: { userId: number; agentId?: string | null; teamScope?: AgentTokenTeamScope | null },
 ) =>
   db.notification.findMany({
-    where: visibleUserInboxWhere(userId),
+    where: { AND: [visibleUserInboxWhere(userId), notificationBoardAccessWhere(principal?.userId ?? userId, principal?.agentId, principal?.teamScope)] },
     orderBy: [{ createdAt: "desc" }, { id: "desc" }],
     select: inboxZeroNotificationSelect,
   });

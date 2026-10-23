@@ -629,7 +629,7 @@ const AgentsRegister = (props: IProp) => {
           </div>
         )}
 
-        <McpClientEvalPanel />
+        <McpClientEvalPanel currentUser={currentUser} />
       </div>
     </div>
   );

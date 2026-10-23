@@ -1,8 +1,9 @@
+import { lockTaskTeamScope, TaskTeamScopeError } from "@/lib/mcp/tasks/agentMutationFence"
 import { wrapMcpRoute, checkMcpRouteRateLimit as checkMcpRateLimit, validateMcpRouteAuth as validateMcpAuth } from '@/lib/mcp/routeWrapper'
 import { NextRequest, NextResponse } from 'next/server';
 
 import prisma from '@/lib/prisma';
-import { findTaskByIdentifier } from '@/lib/mcp/tasks/resolveTask';
+import { findTaskByIdentifier, taskIdentifierErrorResponse } from '@/lib/mcp/tasks/resolveTask';
 import { isValidLeaseToken, isValidTaskId } from '@/lib/mcp/tasks/lease';
 
 export async function POST(request: NextRequest) {
@@ -54,21 +55,21 @@ export async function POST(request: NextRequest) {
     );
   }
 
-  const task = await findTaskByIdentifier(
-    ctx.user,
-    { task_id },
-    ctx.agentId
-  );
-  if (!task) {
-    return NextResponse.json(
-      { success: false, error: 'Task not found or access denied' },
-      { status: 404 }
-    );
-  }
-  const leaseToken = lease_token ?? null;
-
   try {
-    const deleted = await prisma.$executeRaw`
+    const task = await findTaskByIdentifier(
+      ctx.user,
+      { task_id },
+      ctx.agentId, undefined, ctx.teamScope
+    );
+    if (!task) {
+      return NextResponse.json(
+        { success: false, error: 'Task not found or access denied' },
+        { status: 404 }
+      );
+    }
+    const leaseToken = lease_token ?? null;
+
+    const mutate = (tx: import("@prisma/client").Prisma.TransactionClient) => tx.$executeRaw`
       DELETE FROM "TaskLease"
       WHERE "taskId" = ${task.id}
         AND "holder" = ${ctx.user.id}
@@ -76,6 +77,10 @@ export async function POST(request: NextRequest) {
         AND (${ctx.agentId}::text IS NULL OR "token" IS NOT DISTINCT FROM ${leaseToken})
         AND "expiresAt" > now()
     `;
+    const deleted = ctx.teamScope != null ? await prisma.$transaction(async (tx) => {
+      await lockTaskTeamScope(tx, task.id, ctx.user.id, ctx.agentId, ctx.teamScope);
+      return mutate(tx);
+    }) : await mutate(prisma);
 
     if (deleted === 0) {
       return NextResponse.json(
@@ -96,6 +101,9 @@ export async function POST(request: NextRequest) {
       { status: 200 }
     );
   } catch (error) {
+    if (error instanceof TaskTeamScopeError) return NextResponse.json({ success: false, error: error.message }, { status: 404 })
+    const identifierResponse = taskIdentifierErrorResponse(error);
+    if (identifierResponse) return identifierResponse;
     console.error('[MCP Task Lease Release] Error:', error);
     return NextResponse.json(
       { success: false, error: 'Failed to release task lease' },

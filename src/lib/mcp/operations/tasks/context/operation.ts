@@ -15,7 +15,7 @@ import {
   mapTaskToMcpGetResponse,
   taskMcpGetInclude,
 } from '@/lib/mcp/tasks/mappers';
-import { findTaskByIdentifier } from '@/lib/mcp/tasks/resolveTask';
+import { findTaskByIdentifier, taskIdentifierErrorResponse } from '@/lib/mcp/tasks/resolveTask';
 import { mapVisibleMcpAgent, mcpVisibleAgentSelect } from '@/lib/mcp/agents';
 import { resolvePublicAgentDisplayName } from '@/lib/agents/publicAgent';
 import { HTPR_6516_AGENT_ATTRIBUTION_FLAG, isFeatureEnabled } from '@/lib/flags';
@@ -109,7 +109,7 @@ export async function GET(request: NextRequest) {
     const resolvedTask = await findTaskByIdentifier(
       ctx.user,
       { task_id: taskId },
-      ctx.agentId
+      ctx.agentId, undefined, ctx.teamScope
     );
     if (!resolvedTask || resolvedTask.projectId !== projectId) {
       return NextResponse.json(
@@ -124,7 +124,7 @@ export async function GET(request: NextRequest) {
     } satisfies Prisma.CommentWhereInput;
     const relatedTaskAccess = {
       status: { not: 'Deleted' },
-      project: getProjectWhere(ctx.user.id, ctx.agentId),
+      project: getProjectWhere(ctx.user.id, ctx.agentId, ctx.teamScope),
     } satisfies Prisma.TaskWhereInput;
     const commentLimit = summary
       ? SUMMARY_COMMENT_LIMIT
@@ -135,11 +135,12 @@ export async function GET(request: NextRequest) {
         prisma.task.findFirst({
           where: {
             id: resolvedTask.id,
+            project: getProjectWhere(ctx.user.id, ctx.agentId, ctx.teamScope),
             projectId,
             status: { not: 'Deleted' },
           },
           include: {
-            ...taskMcpGetInclude(ctx.user.id),
+            ...taskMcpGetInclude(ctx.user.id, ctx.agentId, ctx.teamScope),
             pullRequests: {
               orderBy: { createdAt: 'asc' },
               select: {
@@ -222,7 +223,7 @@ export async function GET(request: NextRequest) {
       );
     }
 
-    const mappedTask = mapTaskToMcpGetResponse(task, ctx.user.id);
+    const mappedTask = mapTaskToMcpGetResponse(task, ctx.user.id, ctx.agentId, ctx.teamScope);
     const attributionEnabled = await isFeatureEnabled(
       HTPR_6516_AGENT_ATTRIBUTION_FLAG,
       ctx.user.id
@@ -315,6 +316,8 @@ export async function GET(request: NextRequest) {
       truncated: commentCount > commentLimit,
     });
   } catch (error) {
+    const identifierResponse = taskIdentifierErrorResponse(error);
+    if (identifierResponse) return identifierResponse;
     console.error('[MCP Task Context] Error:', error);
     reportMcpOperationCrash(request, error);
     return NextResponse.json(

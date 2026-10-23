@@ -11,6 +11,7 @@ function loadBoardController(prisma) {
   const cache = new Map();
   const stubs = {
     "@/lib/prisma": { __esModule: true, default: prisma },
+    "@/lib/flags/keys": require("./helpers/flag-files.cjs").load("src/lib/flags/keys.ts"),
     "@/lib/flags": { isFeatureEnabled: async () => false },
     "@/utils/controllers/tasks/attachOpenBlockingTasks": {
       attachOpenBlockingTasks: async (tasks) => tasks,
@@ -67,13 +68,13 @@ async function boardQuery() {
   return query;
 }
 
-test("real board query excludes hidden project text and keeps every other project scalar", async () => {
+test("real board query excludes hidden project text and pointer eligibility and keeps every other project scalar", async () => {
   const query = await boardQuery();
   assert.ok(query.select, "board metadata must use an explicit projection");
   assert.equal(query.include, undefined);
   const project = Prisma.dmmf.datamodel.models.find((model) => model.name === "Project");
   for (const field of project.fields.filter((field) => field.kind !== "object")) {
-    if (["description", "playbook"].includes(field.name)) {
+    if (["description", "playbook", "firstTaskPointerTaskId", "firstTaskPointerSectionId", "firstRealTaskCreatedAt"].includes(field.name)) {
       assert.equal(query.select[field.name], undefined, `${field.name} must not load`);
     } else {
       assert.equal(query.select[field.name], true, `${field.name} must remain`);

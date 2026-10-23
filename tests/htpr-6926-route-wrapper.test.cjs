@@ -1,3 +1,4 @@
+const { withStubs } = require('./helpers/stub-map.cjs')
 const test = require('node:test')
 const assert = require('node:assert/strict')
 const fs = require('node:fs')
@@ -7,10 +8,14 @@ const ts = require('typescript')
 const jwt = require('jsonwebtoken')
 const { NextRequest, NextResponse } = require('next/server')
 const root = path.resolve(__dirname, '..')
+const agentScope = require('./task-route-loader.cjs').load('src/lib/auth/agentScope.ts', {
+  '@/lib/flags': { isFeatureEnabled: async () => true },
+  '@/lib/telemetry/signupAnalytics': { recordServerCapture: () => {} },
+})
 const dbTiming = require('./task-route-loader.cjs').load('src/lib/mcp/dbTiming.ts', {})
 
 function load(file, stubs, extra = '', env = {}, clock = performance) {
-  stubs = { './operationCrashReport': { reportUnexplainedMcpServerError: () => {} }, './dbTiming': dbTiming, '@/lib/aiFeedback/automatic': { queueRestFailure: () => {} }, ...stubs }
+  stubs = withStubs({ '@/lib/auth/agentScope': agentScope, './operationCrashReport': { reportUnexplainedMcpServerError: () => {} }, './dbTiming': dbTiming, '@/lib/aiFeedback/automatic': { queueRestFailure: () => {} } }, stubs)
   const source = fs.readFileSync(path.join(root, file), 'utf8')
   const code = ts.transpileModule(source, { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2020, esModuleInterop: true } }).outputText
   const mod = { exports: {} }
@@ -293,7 +298,7 @@ test('bounded auth logs cap unverified strings and arrays, throttle identical JW
       assert.equal(output.length, before + 2)
     } finally { Date.now = now }
     h.verify.verifyMcpJwtToken(invalid)
-    assert.ok(output.some(args => args[1]?.sub?.length === 1000), 'legacy logging must remain uncapped')
+    assert.ok(output.some(args => args[0] === '[MCP Auth] Token has an unsupported audience:' && args[1]?.length === 1000), 'legacy logging must remain uncapped')
   } finally { console.log = original }
 })
 
@@ -382,6 +387,7 @@ test('all adopted REST methods preserve legacy wire results and scaffold order w
               '@/lib/flags': { isFeatureEnabled: async () => false },
               '@/lib/flags/keys': {},
               '@/lib/mcp/agents/scopes': { requireRole: async () => null },
+              '@/lib/mcp/agents/readRoleGuard': { requireAgentWriteRole: async () => null },
               '@/lib/mcp/readJsonBody': json,
               '@/lib/mcp/tasks/agentMutationLeaseAdoption': lease,
             })

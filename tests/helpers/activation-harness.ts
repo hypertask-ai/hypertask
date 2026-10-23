@@ -46,7 +46,12 @@ export function activationHarness() {
       count: async ({ where }: any) => [...projects.values()].filter((row) => row.ownerId === where.ownerId).length,
       create: async ({ data }: any) => { const project = { ...data, id: 20 + projects.size, owner: users.get(data.ownerId), team: { title: "Team" } }; projects.set(project.id, project); return project; },
       update: async ({ where, data }: any) => Object.assign(projects.get(where.id), data),
-      updateMany: async ({ where, data }: any) => { for (const id of where.id.in) Object.assign(projects.get(id), data); return { count: where.id.in.length }; },
+      updateMany: async ({ where, data }: any) => {
+        const ids = typeof where.id === "number" ? [where.id] : where.id.in;
+        const rows = ids.map((id: number) => projects.get(id)).filter((row: any) => row && matches(row, { ...where, id: row.id }));
+        for (const row of rows) Object.assign(row, data);
+        return { count: rows.length };
+      },
     },
     task: {
       findUnique: async ({ where }: any) => ({ ...tasks.get(where.id) }),
@@ -142,6 +147,7 @@ export function activationHarness() {
   const flagChecks: { key: string; userId: number }[] = [];
   const noop = async () => undefined;
   const mocks: Record<string, any> = {
+    "@/lib/auth/agentScope": nativeRequire("./agent-board-scope.cjs").enforcedScope,
     "server-only": {},
     "@/lib/prisma": { default: prisma },
     "@/lib/flags": { FEATURE_FLAG_QA_USER_ID: 985, FEATURE_FLAG_OWNER_USER_ID: 6, HTPR_7034_ACTIVATION_ANALYTICS_FLAG: "htpr-7034-activation-analytics", HTPR_7268_INVITE_SEAT_ANALYTICS_FLAG: "htpr-7268-invite-seat-analytics", HTPR_7271_SAVED_WORK_EVENTS_FLAG: "htpr-7271-saved-work-events", HTPR_7272_PAYMENT_LOGIN_AGENT_EVENTS_FLAG: "htpr-7272-payment-login-agent-events", HTPR_7273_COLUMN_EVENTS_FLAG: "htpr-7273-column-events", HTPR_7292_SHARED_ACCOUNT_CATEGORY_FLAG: "htpr-7292-shared-account-category", isFeatureEnabled: async (key: string, userId: number) => { flagChecks.push({ key, userId }); return enabled && !disabledFlags.has(key); } },
@@ -195,7 +201,7 @@ export function activationHarness() {
       if (name.startsWith(".")) key = "@/" + path.relative(path.join(root, "src"), path.resolve(path.dirname(absolute), name)).replace(/\.ts$/, "");
       if (key in mocks) return { __esModule: true, ...mocks[key] };
       if (key.startsWith("@/")) {
-        const allowed = ["@/lib/flags/definitions/", "@/lib/analytics/", "@/lib/telemetry/", "@/lib/demo/guest", "@/lib/mcp/clientTelemetry", "@/lib/mcp/oauthTokenContract", "@/lib/mcp/boards/columnRole", "@/lib/mcp/tasks/humanMutationOverride"];
+        const allowed = ["@/lib/mcp/agents/delegatedAccess", "@/lib/mcp/agents/scopes", "@/lib/flags/definitions/", "@/lib/analytics/", "@/lib/telemetry/", "@/lib/demo/guest", "@/lib/mcp/clientTelemetry", "@/lib/mcp/oauthTokenContract", "@/lib/mcp/boards/columnRole", "@/lib/mcp/tasks/humanMutationOverride"];
         if (!allowed.some((prefix) => key.startsWith(prefix))) throw Error(`Unmocked dependency ${key}`);
         return load(`src/${key.slice(2)}.ts`);
       }

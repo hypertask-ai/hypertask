@@ -6,7 +6,7 @@ const { NextRequest } = require("next/server");
 
 const root = path.resolve(__dirname, "..");
 const protectedKey = "htpr-6072-shallow-board-switch";
-const registeredKey = "htpr-6136-figma-connect";
+const registeredKey = "htpr-3533-google-calendar";
 const removedKey = "htpr-6561-preserve-ai-edited-description-structure";
 let dueFlags = [];
 let candidates = [];
@@ -132,15 +132,4 @@ test("the conditional claim rejects an unregistered key returned in the candidat
   assert.deepEqual(filed.map(({ title }) => title), [`Remove feature flag ${registeredKey}`]);
   assert.deepEqual(removed, before);
   assert.deepEqual(writes, [registeredKey, registeredKey]);
-});
-
-test("internal flags never get removal tickets even when stored Everyone and overdue", async () => {
-  const internal = { ...dueFlags[3], key: "htpr-6536-qa-login" };
-  dueFlags.unshift(internal);
-  extraCandidate = internal;
-  const response = await GET(new NextRequest("https://app.hypertask.ai/api/cron/feature-flag-removals", { headers: { authorization: "Bearer test-cron-secret" } }));
-  assert.equal(response.status, 200);
-  assert.deepEqual(candidates.map(flag => flag.key), [registeredKey]);
-  assert.deepEqual(filed.map(flag => flag.title), [`Remove feature flag ${registeredKey}`]);
-  assert.equal(internal.removalTaskId, null);
 });

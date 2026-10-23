@@ -257,8 +257,7 @@ async function reportRun(before) {
   let args;
   const graph = { ...modelRow("TimeEntry", { id: 1, taskId: 50, userId: 7, startedAt: "2026-08-17T00:00:00.000Z", endedAt: "2026-08-17T00:01:00.000Z" }), task: { ...modelRow("Task", { id: 50, projectId: 15 }), project: modelRow("Project", { id: 15 }) }, user: modelRow("User", { id: 7 }) };
   const service = load("src/lib/timeTracking.ts", {
-    "@/lib/prisma": { default: { timeEntry: { findMany: async (input) => { args = input; return json([graph]).map((row) => ({ ...row, startedAt: new Date(row.startedAt), endedAt: new Date(row.endedAt) })); } } } },
-    "@/lib/flags": { isFeatureEnabled: async () => false },
+    "@/lib/prisma": { default: { project: { findMany: async () => [] }, timeEntry: { findMany: async (input) => { args = input; return json([graph]).map((row) => ({ ...row, startedAt: new Date(row.startedAt), endedAt: new Date(row.endedAt) })); } } } },
     "@/lib/pusher": {},
     "@/lib/timeTrackingInvalidation": {},
   });
@@ -432,6 +431,7 @@ async function agentDetailRead(before) {
 test("agent detail: identical projected membership/board/team JSON uses one Prisma SQL read", async () => {
   const before = await agentDetailRead(true);
   const after = await agentDetailRead(false);
+  before.args.select.members.where.project.AND = [projectAccess];
   assert.deepEqual(json(after.args), before.args);
   assert.deepEqual(after.planned.json, before.planned.json);
   assert.equal(before.planned.count, 4);

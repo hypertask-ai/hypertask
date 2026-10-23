@@ -6,8 +6,6 @@ const React = require('react')
 const { JSDOM } = require('jsdom')
 const { createJiti } = require('jiti')
 const root = path.resolve(__dirname, '..')
-const layoutFlag = 'htpr-6865-search-layout'
-const prerequisites = ['htpr-6688-search-autocomplete']
 
 async function withSearch(t, config, check) {
   const dom = new JSDOM('<div id="root"></div>', { url: config.url ?? 'https://example.test/search' })
@@ -21,7 +19,7 @@ async function withSearch(t, config, check) {
   const cached = new Map(Object.entries(require.cache))
   const stub = (filename, exports) => { require.cache[filename] = { id: filename, filename, loaded: true, exports } }
   const source = (file, exports) => stub(path.join(root, file), exports)
-  const flags = Object.fromEntries([...prerequisites, layoutFlag].map((key) => [key, true]))
+  const flags = {}
   Object.assign(flags, config.flags)
   const requests = []
   const lookups = []
@@ -47,10 +45,10 @@ async function withSearch(t, config, check) {
   try {
     source('src/utils/index.ts', { taskBaseUri: '/detail/' })
     source('src/utils/undoActions/helperFuncs.ts', { cn: (...values) => require('tailwind-merge').twMerge(require('clsx').clsx(values)) })
-    source('src/hooks/useFlag.tsx', { useFlag: (key) => flags[key] ?? false })
+    source('src/hooks/useFlag.tsx', { useFlagLoaded: () => true, useFlagReady: () => config.flagsReady?.() ?? true, useFlag: (key) => (config.flagsBeforeReady && !(config.flagsReady?.() ?? true) ? config.flagsBeforeReady[key] : flags[key]) ?? false })
     source('src/lib/contexts/deviceContext.tsx', { useDeviceContext: () => false })
     const allProjects = [{ id: 7, title: 'Product Board' }]
-    source('src/hooks/MultiPages/useGetAllProjectsMinimal.ts', { useGetAllProjectsMinimal: () => ({ data: allProjects }) })
+    source('src/hooks/MultiPages/useGetAllProjectsMinimal.ts', { useGetAllProjectsMinimal: () => ({ data: config.projects?.() ?? allProjects, refetch: () => config.refetch?.() ?? Promise.resolve({ data: allProjects }) }) })
     source('src/hooks/RecoilRoot/useHypertasksRecoilStates.ts', { default: () => ({ toggleShowCommands() {} }) })
     const SearchTaskIndexAtom = {}
     source('src/lib/state.tsx', {
@@ -61,7 +59,7 @@ async function withSearch(t, config, check) {
     source('src/components/ProviderGlobal/useGlobalUIState.ts', { useGlobalUIState: () => ({ openAIChatInterface() { aiOpened++ } }) })
     source('src/components/commands.tsx', { default: () => null })
     source('src/components/PageComponents/Kanban/HeaderComponents/AppShellRail.tsx', { default: () => null })
-    source('src/styles/search.module.scss', { default: { links_modal: 'links_modal', list_container: 'list_container', links_list: 'links_list' } })
+    source('src/styles/search.module.scss', { default: { links_modal: 'links_modal', list_container: 'list_container', list_container_pane: 'list_container_pane', links_list: 'links_list' } })
     source('src/app/search/search-autocomplete.css', {})
     source('src/store/index.ts', { inViewObjectAtom: {}, SearchTaskIndexAtom, showCommandsAtom: {}, tasksPlayListAtom: {}, aiChatPendingPromptAtom: {}, appShellRailAtom: {} })
     source('src/hooks/Search/useSearchCache.ts', { useGetSearchCache: () => ({ data: cache }) })
@@ -70,19 +68,17 @@ async function withSearch(t, config, check) {
     source('src/lib/constants/keyboard-handler.ts', { KeyCodes: { ARROW_DOWN: 40, ARROW_UP: 38, ENTER: 13, ESCAPE: 27, J: 74, K: 75, TAB: 9, FORWARD_SLASH: 191 } })
     const post = (_url, body) => new Promise((resolve) => requests.push({ body, resolve }))
     stub(require.resolve('axios'), { default: { post }, post })
-    stub(require.resolve('next/navigation'), { useSearchParams: () => new URLSearchParams(dom.window.location.search), useRouter: () => ({ replace(url) { navigations.push(url) }, push(url) { navigations.push(url); if (config.browserHistory) dom.window.history.pushState(null, '', url) }, back() {} }) })
+    stub(require.resolve('next/navigation'), { useSearchParams: () => new URLSearchParams(dom.window.location.search), useRouter: () => ({ replace(url) { navigations.push(url) }, push(url) { navigations.push(url); if (config.browserHistory) dom.window.history.pushState(null, '', url) }, back() { navigations.push('back') } }) })
     stub(require.resolve('@tanstack/react-query'), { useQueryClient: () => ({ invalidateQueries() {}, setQueryData(_key, data) { cache.history = data.history } }) })
-    const baseline = config.baseline && process.env.SEARCH_LAYOUT_BASELINE_DIR
-    const jiti = createJiti(__filename, { alias: { ...(baseline ? { '@/lib/search': path.join(baseline, 'search') } : {}), '@': path.join(root, 'src') }, interopDefault: true, fsCache: false, jsx: { runtime: 'automatic' } })
-    if (baseline) stub(path.join(baseline, 'search-autocomplete.css'), {})
-    const { useSearch } = jiti(baseline ? path.join(baseline, 'useSearch.ts') : path.join(root, 'src/hooks/Search/useSearch.ts'))
+    const jiti = createJiti(__filename, { alias: { '@': path.join(root, 'src') }, interopDefault: true, fsCache: false, jsx: { runtime: 'automatic' } })
+    const { useSearch } = jiti(path.join(root, 'src/hooks/Search/useSearch.ts'))
     source('src/hooks/Search/useSearch.ts', { useSearch: (...args) => { state = useSearch(...args); return state } })
-    const SearchComp = jiti(baseline ? path.join(baseline, 'SearchComp.tsx') : path.join(root, 'src/app/search/SearchComp.tsx')).default
+    const SearchComp = jiti(path.join(root, 'src/app/search/SearchComp.tsx')).default
     reactRoot = require('react-dom/client').createRoot(document.getElementById('root'))
     let counter = 0
     const render = async (query = config.query ?? '', reset = false) => React.act(async () => {
       if (reset) counter++
-      reactRoot.render(React.createElement(SearchComp, { key: counter, _searchTerm: query, _includeArchived: false, currentUser: {}, askAiFullscreenEnabled: config.askAiFullscreenEnabled }))
+      reactRoot.render(React.createElement(SearchComp, { key: counter, _searchTerm: query, _includeArchived: false, currentUser: {}, askAiFullscreenEnabled: config.askAiFullscreenEnabled, serverStartedSearch: config.serverStartedSearch, searchOnce: config.searchOnce }))
     })
     await render()
     t.mock.timers.enable({ apis: ['setTimeout'] })
@@ -116,46 +112,6 @@ async function withSearch(t, config, check) {
     dom.window.close()
   }
 }
-
-test('layout flag registry uses Owner + QA defaults', () => {
-  const jiti = createJiti(__filename, { interopDefault: true })
-  const keys = jiti(path.join(root, 'src/lib/flags/keys.ts'))
-  assert.equal(keys.HTPR_6865_SEARCH_LAYOUT_FLAG, layoutFlag)
-  const registry = (fs.readFileSync(path.join(root, 'src/lib/flags.ts'), 'utf8') + require("./helpers/flag-files.cjs").source())
-  assert.match(registry, /key: HTPR_6865_SEARCH_LAYOUT_FLAG/)
-  assert.match(registry, /DEFAULT_FEATURE_FLAG_MODE: FeatureFlagMode = "OWNER_AND_QA"/)
-})
-
-test('flag off retains the floating popover, duplicate legacy history, Ask AI and live search', async (t) => {
-  await withSearch(t, { flags: { [layoutFlag]: false }, history: ['login'], baseline: true }, async ({ input, type, tick, complete, requests, capture }) => {
-    const list = document.getElementById('search-chip-options')
-    assert.match(list.className, /w-\[18rem\].*max-h-\[14rem\]/)
-    assert.match(list.parentElement.className, /absolute left-4 top-full/)
-    assert.ok(document.getElementById('history-list'))
-    assert.match(document.body.textContent, /Recent: login/)
-    assert.equal(document.querySelector('[data-search-layout]'), null)
-    capture('off-empty')
-    await type('fr')
-    capture('off-prefix')
-    await type('from:mal')
-    await tick(180)
-    capture('off-value')
-    await type('login')
-    assert.equal(input().value, 'login')
-    assert.equal(document.querySelectorAll('#ask-ai-row').length, 1)
-    await tick(299)
-    assert.equal(requests.length, 0)
-    await tick(1)
-    assert.equal(requests.length, 1)
-    await complete()
-    const row = document.getElementById('task_1')
-    assert.match(row.className, /@md:border-l-4.*sm:px-2/)
-    assert.match(row.className, /@md:bg-active-elementBg border-l-selected-item-border/)
-    assert.equal(row.hasAttribute('data-selected'), false)
-    assert.equal(document.querySelector('[data-search-layout-row]'), null)
-    capture('off-results')
-  })
-})
 
 test('result Tab cycles board splits in both directions outside the input and never traps it', async (t) => {
   await withSearch(t, {}, async ({ input, type, press, complete, state, navigations, requests, dom }) => {
@@ -195,18 +151,16 @@ test('result Tab cycles board splits in both directions outside the input and ne
   })
 })
 
-test('result Tab keeps current split state when two tabs share the same task list in either layout', async (t) => {
-  for (const enabled of [true, false]) {
-    await withSearch(t, { query: 'login', flags: { [layoutFlag]: enabled } }, async ({ complete, state, dom }) => {
-      const tasks = [{ taskId: 1, projectId: 7, projectTitle: 'Product Board', uniqueIndex: 1, taskTitle: 'Result', highlight: {} }]
-      await complete(undefined, tasks, { All: tasks, 'Product Board': tasks })
-      await React.act(async () => document.activeElement.blur())
-      for (const index of [1, 0, 1, 0]) {
-        await React.act(async () => document.body.dispatchEvent(new dom.window.KeyboardEvent('keydown', { key: 'Tab', keyCode: 9, bubbles: true, cancelable: true })))
-        assert.equal(state().activeSplit, index)
-      }
-    })
-  }
+test('result Tab keeps current split state when two tabs share the same task list', async (t) => {
+  await withSearch(t, { query: 'login' }, async ({ complete, state, dom }) => {
+    const tasks = [{ taskId: 1, projectId: 7, projectTitle: 'Product Board', uniqueIndex: 1, taskTitle: 'Result', highlight: {} }]
+    await complete(undefined, tasks, { All: tasks, 'Product Board': tasks })
+    await React.act(async () => document.activeElement.blur())
+    for (const index of [1, 0, 1, 0]) {
+      await React.act(async () => document.body.dispatchEvent(new dom.window.KeyboardEvent('keydown', { key: 'Tab', keyCode: 9, bubbles: true, cancelable: true })))
+      assert.equal(state().activeSplit, index)
+    }
+  })
 })
 
 test('result Tab leaves modifiers, composition and other text fields alone; draft suggestions retain Tab', async (t) => {
@@ -242,31 +196,6 @@ test('result Tab leaves modifiers, composition and other text fields alone; draf
   })
 })
 
-test('layout-off result Tab remains native in the search field and cycles only after blur', async (t) => {
-  await withSearch(t, { query: 'login', flags: { [layoutFlag]: false } }, async ({ input, complete, state, dom }) => {
-    const tasks = [{ taskId: 1, projectId: 7, projectTitle: 'Product Board', uniqueIndex: 1, taskTitle: 'Result', highlight: {} }]
-    await complete(undefined, tasks, { All: tasks, 'Product Board': tasks })
-    const event = new dom.window.KeyboardEvent('keydown', { key: 'Tab', keyCode: 9, bubbles: true, cancelable: true })
-    await React.act(async () => input().dispatchEvent(event))
-    assert.equal(event.defaultPrevented, false)
-    assert.equal(state().activeSplit, 0)
-    await React.act(async () => input().blur())
-    await React.act(async () => document.body.dispatchEvent(new dom.window.KeyboardEvent('keydown', { key: 'Tab', keyCode: 9, bubbles: true, cancelable: true })))
-    assert.equal(state().activeSplit, 1)
-  })
-})
-
-test('layout requires every autocomplete prerequisite flag', async (t) => {
-  for (const key of prerequisites) {
-    await withSearch(t, { flags: { [key]: false } }, async ({ type, tick, requests }) => {
-      assert.equal(document.querySelector('[data-search-layout]'), null)
-      await type('login')
-      await tick()
-      assert.equal(requests.length, 0)
-    })
-  }
-})
-
 test('recents appear once with readable chips in-flow, tips follow in responsive columns', async (t) => {
   await withSearch(t, { history: ['label:Bug chat', 'from:77 ab test', 'label:Bug chat'] }, async ({ options, capture }) => {
     const list = document.querySelector('[data-search-layout]')
@@ -281,7 +210,7 @@ test('recents appear once with readable chips in-flow, tips follow in responsive
     assert.deepEqual([...list.querySelectorAll('h2')].map((node) => node.textContent), ['Recent searches', 'Tips'])
     const tipsHeading = list.querySelectorAll('h2')[1]
     assert.ok(options().slice(0, 2).every((row) => row.compareDocumentPosition(tipsHeading) & 4))
-    assert.equal(tipsHeading.nextElementSibling.children.length, 10)
+    assert.equal(tipsHeading.nextElementSibling.children.length, 11)
     assert.match(tipsHeading.nextElementSibling.className, /grid-cols-1.*@md:grid-cols-2/)
     assert.ok(tipsHeading.nextElementSibling.lastElementChild.textContent.includes('Has an attachment'))
     assert.ok(options().slice(2).every((row) => row.querySelector('strong')))
@@ -300,6 +229,7 @@ test('empty tips keep j/k typing native while arrows, Tab/Enter, Escape and firs
       assert.match(selected().textContent, /^from:/)
       assert.equal(document.activeElement, input())
     }
+    await press('ArrowDown')
     await press('ArrowDown')
     await press('ArrowDown')
     assert.match(selected().textContent, /^in:/)
@@ -389,33 +319,20 @@ test('layout explicit Escape, value acceptance and search submission still dismi
   })
 })
 
-test('result pointer leave retains layout row focus and selection but keeps legacy blur behavior', async (t) => {
-  for (const enabled of [true, false]) {
-    await withSearch(t, { query: 'login', flags: { [layoutFlag]: enabled } }, async ({ complete, state, tick, dom }) => {
-      await complete()
-      const row = document.getElementById('task_1')
-      row.tabIndex = -1
-      await React.act(async () => {
-        row.focus()
-        row.dispatchEvent(new dom.window.MouseEvent('mouseover', { bubbles: true }))
-        row.dispatchEvent(new dom.window.MouseEvent('mouseout', { bubbles: true, relatedTarget: null }))
-      })
-      const index = state().selectedIndex
-      await tick(100)
-      assert.equal(document.activeElement === row, enabled)
-      assert.equal(state().selectedIndex, index)
+test('result pointer leave retains layout row focus and selection', async (t) => {
+  await withSearch(t, { query: 'login' }, async ({ complete, state, tick, dom }) => {
+    await complete()
+    const row = document.getElementById('task_1')
+    row.tabIndex = -1
+    await React.act(async () => {
+      row.focus()
+      row.dispatchEvent(new dom.window.MouseEvent('mouseover', { bubbles: true }))
+      row.dispatchEvent(new dom.window.MouseEvent('mouseout', { bubbles: true, relatedTarget: null }))
     })
-  }
-})
-
-test('legacy input blur still dismisses its floating suggestions', async (t) => {
-  await withSearch(t, { flags: { [layoutFlag]: false } }, async ({ input, type, tick }) => {
-    await type('board:')
-    await tick(180)
-    assert.equal(input().getAttribute('aria-expanded'), 'true')
-    await React.act(async () => input().blur())
-    assert.equal(input().getAttribute('aria-expanded'), 'false')
-    assert.equal(document.getElementById('search-chip-options'), null)
+    const index = state().selectedIndex
+    await tick(100)
+    assert.equal(document.activeElement === row, true)
+    assert.equal(state().selectedIndex, index)
   })
 })
 
@@ -529,19 +446,6 @@ test('ordinary Enter still submits task search with the fullscreen flag on or of
       assert.deepEqual(prompts, [])
       assert.equal(aiOpened(), 0)
       assert.ok(navigations.every((url) => url.startsWith('/search?')))
-    })
-  }
-})
-
-test('legacy Ask AI row also uses the fullscreen gate without changing the old off path', async (t) => {
-  const flag = 'htpr-6936-ask-ai-fullscreen'
-  for (const enabled of [true, false]) {
-    await withSearch(t, { flags: { [flag]: enabled, [layoutFlag]: false }, askAiFullscreenEnabled: enabled }, async ({ type, prompts, aiOpened, navigations }) => {
-      await type('help me find work')
-      await React.act(async () => document.getElementById('ask-ai-row').click())
-      assert.deepEqual(prompts, enabled ? [{ query: 'help me find work', fullScreen: true }] : ['help me find work'])
-      assert.equal(aiOpened(), enabled ? 0 : 1)
-      assert.equal(navigations.length, enabled ? 1 : 0)
     })
   }
 })
@@ -703,58 +607,54 @@ for (const [key, keyCode] of [['Enter', 13], ['Tab', 9]]) {
   })
 }
 
-for (const enabled of [true, false]) {
-  for (const operator of enabled ? ['commenter', 'assignee', 'label'] : ['assignee', 'label']) {
-    for (const [freeText, acceptKey] of [['', 'Enter'], ['', 'Tab'], ['qzxw6913', 'Enter'], ['qzxw6913', 'Tab']]) {
-      test(`chip Enter submits and releases focus: ${operator}, layout ${enabled}, text ${Boolean(freeText)}, accepted with ${acceptKey}`, async (t) => {
-        await withSearch(t, { flags: { [layoutFlag]: enabled, 'htpr-6880-search-commenter': true } }, async ({ input, type, tick, press, selected, options, requests, prompts, aiOpened, complete, state, dom }) => {
-          await type(`${operator}:${operator === 'commenter' ? '@' : ''}`)
+for (const operator of ['commenter', 'assignee', 'label']) {
+  for (const [freeText, acceptKey] of [['', 'Enter'], ['', 'Tab'], ['qzxw6913', 'Enter'], ['qzxw6913', 'Tab']]) {
+    test(`chip Enter submits and releases focus: ${operator}, text ${Boolean(freeText)}, accepted with ${acceptKey}`, async (t) => {
+      await withSearch(t, {}, async ({ input, type, tick, press, selected, options, requests, prompts, aiOpened, complete, state, dom }) => {
+        await type(`${operator}:${operator === 'commenter' ? '@' : ''}`)
+        await tick(180)
+        assert.match(selected().textContent, operator === 'label' ? /Bug/ : /Malcolm Stern/)
+        await press(acceptKey, { keyCode: acceptKey === 'Enter' ? 13 : 9 })
+        const chip = document.querySelector('[aria-label^="Remove "]')
+        assert.ok(chip, 'highlighted value is accepted as a chip')
+        assert.equal(input().value, '')
+        assert.ok(document.activeElement === input(), 'accepting a highlighted suggestion keeps writing focus')
+        const chipQuery = `${operator}:${operator === 'label' ? 'bug' : '77'}`
+        assert.equal(requests.at(-1).body.searchQuery, chipQuery)
+        await complete()
+        assert.ok(document.activeElement === input(), 'accepted suggestion results do not steal focus')
+        if (freeText) {
+          await type(freeText)
           await tick(180)
-          assert.match(selected().textContent, operator === 'label' ? /Bug/ : /Malcolm Stern/)
-          await press(acceptKey, { keyCode: acceptKey === 'Enter' ? 13 : 9 })
-          const chip = document.querySelector('[aria-label^="Remove "]')
-          assert.ok(chip, 'highlighted value is accepted as a chip')
-          assert.equal(input().value, '')
-          assert.ok(document.activeElement === input(), 'accepting a highlighted suggestion keeps writing focus')
-          const chipQuery = `${operator}:${operator === 'label' ? 'bug' : '77'}`
-          assert.equal(requests.at(-1).body.searchQuery, chipQuery)
-          await complete()
-          assert.ok(document.activeElement === input(), 'accepted suggestion results do not steal focus')
-          if (freeText) {
-            await type(freeText)
-            await tick(180)
-            if (enabled) {
-              assert.equal(options().length, 1, 'completed query has only Ask AI, not a completion')
-              await press('ArrowUp')
-              assert.match(selected().textContent, /^Ask AI/)
-            }
-          }
-          const before = requests.length
-          await press('Enter', { keyCode: 13 })
-          const query = [chipQuery, freeText].filter(Boolean).join(' ')
-          assert.equal(requests.length, before + 1, 'Enter submits instead of handing a complete query to AI')
-          assert.equal(requests.at(-1).body.searchQuery, query)
-          assert.ok(document.activeElement === document.body, 'Enter releases search input focus')
-          assert.equal(input().getAttribute('aria-expanded'), 'false')
-          assert.deepEqual(prompts, [])
-          assert.equal(aiOpened(), 0)
-          assert.ok(document.querySelector('[aria-label^="Remove "]') === chip, 'submission retains the committed chip')
-          await complete(undefined, [1, 2, 3].map((taskId) => ({ taskId, projectId: 7, uniqueIndex: taskId, projectTitle: 'Product Board', taskTitle: 'Result', highlight: {} })))
-          const resultKey = async (key, keyCode) => React.act(async () => document.activeElement.dispatchEvent(new dom.window.KeyboardEvent('keydown', { key, keyCode, bubbles: true, cancelable: true })))
-          for (const [key, code, index] of [['j', 74, 1], ['j', 74, 2], ['k', 75, 1]]) {
-            await resultKey(key, code)
-            assert.equal(state().selectedIndex, index)
-            assert.equal(state().inputValue, query)
-            assert.equal(input().value, freeText)
-          }
-          await resultKey('/', 191)
-          assert.ok(document.activeElement === input(), 'refocus restores editing')
-          await React.act(async () => input().blur())
-          await React.act(async () => input().parentElement.parentElement.click())
-          assert.ok(document.activeElement === input(), 'refocus restores editing')
-        })
+          assert.equal(options().length, 1, 'completed query has only Ask AI, not a completion')
+          await press('ArrowUp')
+          assert.match(selected().textContent, /^Ask AI/)
+        }
+        const before = requests.length
+        await press('Enter', { keyCode: 13 })
+        const query = [chipQuery, freeText].filter(Boolean).join(' ')
+        assert.equal(requests.length, before + 1, 'Enter submits instead of handing a complete query to AI')
+        assert.equal(requests.at(-1).body.searchQuery, query)
+        assert.ok(document.activeElement === document.body, 'Enter releases search input focus')
+        assert.equal(input().getAttribute('aria-expanded'), 'false')
+        assert.deepEqual(prompts, [])
+        assert.equal(aiOpened(), 0)
+        assert.ok(document.querySelector('[aria-label^="Remove "]') === chip, 'submission retains the committed chip')
+        await complete(undefined, [1, 2, 3].map((taskId) => ({ taskId, projectId: 7, uniqueIndex: taskId, projectTitle: 'Product Board', taskTitle: 'Result', highlight: {} })))
+        const resultKey = async (key, keyCode) => React.act(async () => document.activeElement.dispatchEvent(new dom.window.KeyboardEvent('keydown', { key, keyCode, bubbles: true, cancelable: true })))
+        for (const [key, code, index] of [['j', 74, 1], ['j', 74, 2], ['k', 75, 1]]) {
+          await resultKey(key, code)
+          assert.equal(state().selectedIndex, index)
+          assert.equal(state().inputValue, query)
+          assert.equal(input().value, freeText)
+        }
+        await resultKey('/', 191)
+        assert.ok(document.activeElement === input(), 'refocus restores editing')
+        await React.act(async () => input().blur())
+        await React.act(async () => input().parentElement.parentElement.click())
+        assert.ok(document.activeElement === input(), 'refocus restores editing')
       })
-    }
+    })
   }
 }
 
@@ -775,23 +675,21 @@ test('lone Ask AI Enter submits plain text even when the row is explicitly highl
   })
 })
 
-test('URL results retain legacy focus, but explicit Enter releases it in either layout', async (t) => {
-  for (const enabled of [true, false]) {
-    await withSearch(t, { query: 'login', flags: { [layoutFlag]: enabled } }, async ({ input, complete }) => {
-      await complete()
-      assert.equal(document.activeElement, enabled ? document.body : input())
-    })
-    await withSearch(t, { flags: { [layoutFlag]: enabled } }, async ({ input }) => {
-      assert.ok(document.activeElement === input(), 'refocus restores editing')
-    })
-  }
+test('URL results retain result navigation focus, and explicit Enter releases it', async (t) => {
+  await withSearch(t, { query: 'login' }, async ({ input, complete }) => {
+    await complete()
+    assert.equal(document.activeElement, document.body)
+  })
+  await withSearch(t, {}, async ({ input }) => {
+    assert.ok(document.activeElement === input(), 'refocus restores editing')
+  })
   await withSearch(t, { query: 'login' }, async ({ input, complete }) => {
     assert.equal(document.activeElement, document.body, 'URL search starts in result navigation mode')
     await React.act(async () => input().focus())
     await complete()
     assert.equal(document.activeElement, input(), 'URL results do not steal restored editing focus')
   })
-  await withSearch(t, { flags: { [layoutFlag]: false } }, async ({ input, type, press, complete }) => {
+  await withSearch(t, {}, async ({ input, type, press, complete }) => {
     await type('login')
     await press('Enter', { keyCode: 13 })
     assert.ok(document.activeElement === document.body, 'Enter releases search input focus')
@@ -823,10 +721,9 @@ test('recent acceptance and URL load run search, with results aligned to the inp
   })
 })
 
-test('URL search survives flags arriving after mount and results are not mistaken for a draft', async (t) => {
-  await withSearch(t, { query: 'login', flags: { [layoutFlag]: false } }, async ({ flags, render, requests, complete, state }) => {
+test('URL search survives a rerender and results are not mistaken for a draft', async (t) => {
+  await withSearch(t, { query: 'login' }, async ({ render, requests, complete, state }) => {
     assert.equal(requests.length, 1)
-    flags[layoutFlag] = true
     await render('login')
     await complete()
     assert.equal(state().isSearchDraft, false)
@@ -865,7 +762,7 @@ for (const [query, operator, leftover] of [
   ['-from valentin', 'from', ''],
 ]) {
   test(`HTPR-6935 Enter absorbs only recognised operator phrases: ${query}`, async (t) => {
-    await withSearch(t, { people: [{ id: 6, name: 'Valentin Yeo', email: 'valentin@example.test' }], flags: { 'htpr-6880-search-commenter': true } }, async ({ type, tick, selected, press, input, requests }) => {
+    await withSearch(t, { people: [{ id: 6, name: 'Valentin Yeo', email: 'valentin@example.test' }] }, async ({ type, tick, selected, press, input, requests }) => {
       await type(query)
       await tick(180)
       assert.match(selected().textContent, /Valentin Yeo/)
@@ -948,13 +845,12 @@ test('typing after chip removal or archive changes remains a draft until Enter',
   })
 })
 
-const matchFlag = 'htpr-6882-search-match-highlights'
 const matchTask = { taskId: 1, projectId: 7, projectTitle: 'Product Board', uniqueIndex: 1, ticketNumber: 'HTPR-1',
   taskTitle: 'Login <script>alert(1)</script>', descriptionText: 'Login needs login help', highlight: {},
   searchMatch: { people: ['Valentin Yeo'], labels: ['Bug'], board: 'Product Board' } }
 
 test('match results reuse inbox mention and board label pills with safe title and snippet marks', async (t) => {
-  await withSearch(t, { query: 'login from:6 label:bug in:7', flags: { [matchFlag]: true } }, async ({ complete, requests, capture }) => {
+  await withSearch(t, { query: 'login from:6 label:bug in:7' }, async ({ complete, requests, capture }) => {
     await complete(requests[0], [matchTask])
     const row = document.getElementById('task_1')
     const matches = row.querySelector('[data-search-match-highlights]')
@@ -971,7 +867,7 @@ test('match results reuse inbox mention and board label pills with safe title an
 })
 
 test('comment result author is an inbox pill before the safely highlighted snippet, including late matches', async (t) => {
-  await withSearch(t, { query: 'login', flags: { [matchFlag]: true } }, async ({ complete, requests }) => {
+  await withSearch(t, { query: 'login' }, async ({ complete, requests }) => {
     await complete(requests[0], [{ ...matchTask, commentId: 44, commentText: `${'before '.repeat(80)}Login <img src=x onerror=alert(1)>`,
       searchMatch: { commentAuthor: 'Comment Writer' } }])
     const matches = document.querySelector('[data-search-match-highlights]')
@@ -983,45 +879,24 @@ test('comment result author is an inbox pill before the safely highlighted snipp
   })
 })
 
-test('commenter snippet and author pill use both flags without highlighting the operator or injecting HTML', async (t) => {
-  for (const commenter of [false, true]) {
-    for (const highlights of [false, true]) {
-      await withSearch(t, { query: 'login commenter:77', flags: { [matchFlag]: highlights, 'htpr-6880-search-commenter': commenter } }, async ({ complete, requests }) => {
-        const text = 'Login commenter:77 <img src=x onerror=alert(1)>'
-        await complete(requests[0], [{ ...matchTask, commentId: 44,
-          commentText: text,
-          searchMatch: { commentAuthor: 'Malcolm Stern' } }])
-        const row = document.getElementById('task_1')
-        const matches = row.querySelector('[data-search-match-highlights]')
-        assert.equal(Boolean(matches), highlights)
-        assert.equal(row.querySelector('img'), null)
-        assert.match(row.textContent, /<img src=x onerror=alert\(1\)>/)
-        if (highlights) {
-          assert.equal(matches.firstElementChild.textContent, '@Malcolm Stern')
-          assert.deepEqual([...matches.querySelectorAll('mark')].map((mark) => mark.textContent), commenter ? ['Login'] : ['Login', 'commenter:77'])
-        }
-      })
-    }
-  }
-})
-
-test('match flag and layout prerequisites off retain byte-identical row HTML despite match metadata', async (t) => {
-  for (const disabled of [matchFlag, layoutFlag, ...prerequisites]) {
-    await withSearch(t, { query: 'login', flags: { [matchFlag]: true, [disabled]: false }, baseline: true }, async ({ complete, requests, render, capture }) => {
-      const { searchMatch, ...legacy } = matchTask
-      await complete(requests[0], [legacy])
-      const before = document.getElementById('task_1').outerHTML
-      await render('login', true)
-      await complete(requests.at(-1), [matchTask])
-      assert.equal(document.getElementById('task_1').outerHTML, before)
-      assert.equal(document.querySelector('[data-search-match-highlights]'), null)
-      capture(`match-off-${disabled}`)
-    })
-  }
+test('permanent commenter highlights omit the operator without injecting HTML', async (t) => {
+  await withSearch(t, { query: 'login commenter:77' }, async ({ complete, requests }) => {
+    const text = 'Login commenter:77 <img src=x onerror=alert(1)>'
+    await complete(requests[0], [{ ...matchTask, commentId: 44,
+      commentText: text,
+      searchMatch: { commentAuthor: 'Malcolm Stern' } }])
+    const row = document.getElementById('task_1')
+    const matches = row.querySelector('[data-search-match-highlights]')
+    assert.ok(matches)
+    assert.equal(row.querySelector('img'), null)
+    assert.match(row.textContent, /<img src=x onerror=alert\(1\)>/)
+    assert.equal(matches.firstElementChild.textContent, '@Malcolm Stern')
+    assert.deepEqual([...matches.querySelectorAll('mark')].map((mark) => mark.textContent), ['Login'])
+  })
 })
 
 test('commenter tip, people email, grey completion and exact person chip reuse the layout picker', async (t) => {
-  await withSearch(t, { flags: { 'htpr-6880-search-commenter': true } }, async ({ input, type, press, tick, complete, options, requests, lookups, navigations }) => {
+  await withSearch(t, {}, async ({ input, type, press, tick, complete, options, requests, lookups, navigations }) => {
     await React.act(async () => input().focus())
     assert.ok(options().some((row) => row.textContent === 'commenter:@HichamCommented by this person'))
     await type('comm')
@@ -1045,59 +920,44 @@ test('commenter tip, people email, grey completion and exact person chip reuse t
   })
 })
 
-test('commenter is literal text without its flag or without search layout; no tip, chip or people lookup', async (t) => {
-  for (const flags of [{ 'htpr-6880-search-commenter': false }, { 'htpr-6880-search-commenter': true, [layoutFlag]: false }]) {
-    await withSearch(t, { flags }, async ({ input, type, tick, options, lookups }) => {
-      await React.act(async () => input().focus())
-      assert.ok(!options().some((row) => row.textContent.includes('commenter:')))
-      await type('comm')
-      assert.ok(!options().some((row) => row.textContent === 'commenter:'))
-      await type('commenter:mal')
-      await tick(180)
-      assert.equal(input().value, 'commenter:mal')
-      assert.equal(document.querySelector('[aria-label^="Remove commenter:"]'), null)
-      assert.ok(!lookups.some((params) => params.get('operator') === 'commenter'))
-    })
-  }
-})
-
-
-test('commenter flag off preserves the baseline rendered HTML byte for byte', async (t) => {
-  const snapshots = []
-  for (const baseline of [true, false]) {
-    await withSearch(t, { baseline, flags: { 'htpr-6880-search-commenter': false }, history: ['from:77 login'] }, async ({ input, type, tick, lookups }) => {
-      await React.act(async () => input().focus())
-      const empty = document.getElementById('root').innerHTML
-      await type('commenter:mal')
-      await tick(180)
-      snapshots.push([empty, document.getElementById('root').innerHTML, lookups.map((params) => params.toString())])
-    })
-  }
-  assert.deepEqual(snapshots[1], snapshots[0])
-})
-
-test('one-board results hide the tab row only when its flag is on; two boards keep it', async (t) => {
-  const tabNames = () => [...document.querySelectorAll('.footer_tags')].map((node) => node.textContent)
+test('one-board results always hide the tab rows; two boards keep working tabs on desktop and phone', async (t) => {
   const tasks = [{ taskId: 1, projectId: 7, projectTitle: 'Product Board', uniqueIndex: 1, taskTitle: 'Result', highlight: {} }]
   const both = [...tasks, { taskId: 2, projectId: 8, projectTitle: 'Other Board', uniqueIndex: 2, taskTitle: 'Second', highlight: {} }]
-  for (const enabled of [false, true]) {
-    await withSearch(t, { flags: { 'htpr-6909-search-one-board-tabs': enabled } }, async ({ type, press, complete }) => {
-      await type('login')
-      await press('Enter')
-      await complete(undefined, tasks, ['All', 'Product Board'])
-      assert.equal(tabNames().includes('Product Board'), !enabled)
+  for (const mobile of [false, true]) {
+    await withSearch(t, { query: 'login', mobile }, async ({ complete, render }) => {
+      for (const tabs of [['All'], ['All', 'Product Board']]) {
+        await complete(undefined, tasks, tabs)
+        assert.equal(document.querySelector('.footer_tags, .inbox_footer'), null)
+        assert.ok(document.getElementById('task_1'))
+        await render('login', true)
+      }
+      await complete(undefined, both, ['All', 'Product Board', 'Other Board'])
+      const labels = [...document.querySelectorAll('span.footer_tags')]
+      assert.deepEqual([...new Set(labels.map((node) => node.textContent))], ['All', 'Product Board', 'Other Board'])
+      await React.act(async () => labels.find((node) => node.textContent === 'Other Board').parentElement.parentElement.click())
+      assert.equal(document.getElementById('task_1'), null)
+      assert.ok(document.getElementById('task_2'))
     })
   }
-  await withSearch(t, { flags: { 'htpr-6909-search-one-board-tabs': true } }, async ({ type, press, complete }) => {
-    await type('login')
-    await press('Enter')
-    await complete(undefined, both, ['All', 'Product Board', 'Other Board'])
-    assert.ok(tabNames().includes('Other Board'))
+})
+
+test('one-board results keep open and archived split tabs', async (t) => {
+  await withSearch(t, { query: 'login' }, async ({ complete }) => {
+    const tasks = [
+      { taskId: 1, projectId: 7, projectTitle: 'Product Board', uniqueIndex: 1, taskTitle: 'Open result', highlight: {}, status: 'Normal' },
+      { taskId: 2, projectId: 7, projectTitle: 'Product Board', uniqueIndex: 2, taskTitle: 'Archived result', highlight: {}, status: 'Archive' },
+    ]
+    await complete(undefined, tasks, { All: tasks, Open: [tasks[0]], Archived: [tasks[1]], 'Product Board': tasks })
+    const labels = [...document.querySelectorAll('span.footer_tags')]
+    assert.deepEqual([...new Set(labels.map((node) => node.textContent))], ['All', 'Open', 'Archived', 'Product Board'])
+    await React.act(async () => labels.find((node) => node.textContent === 'Archived').parentElement.parentElement.click())
+    assert.equal(document.getElementById('task_1'), null)
+    assert.ok(document.getElementById('task_2'))
   })
 })
 
 test('Escape closes retained layout suggestions after focus moved elsewhere, keeping the query', async (t) => {
-  await withSearch(t, { flags: { 'htpr-6879-search-esc-back': true } }, async ({ input, type, tick, dom }) => {
+  await withSearch(t, {}, async ({ input, type, tick, dom }) => {
     await type('board:')
     await tick(180)
     assert.equal(input().getAttribute('aria-expanded'), 'true')
@@ -1116,7 +976,7 @@ test('Escape closes retained layout suggestions after focus moved elsewhere, kee
 
 test('layout rows share the inbox highlight without changing content insets on desktop and phone', async (t) => {
   for (const mobile of [false, true]) {
-    await withSearch(t, { mobile, history: ['login'], flags: { 'htpr-6911-search-row-highlight': true } }, async ({ options, selected, type, tick, press, complete, capture, state }) => {
+    await withSearch(t, { mobile, history: ['login'] }, async ({ options, selected, type, tick, press, complete, capture, state }) => {
       const assertRow = (row) => {
         assert.ok(row.hasAttribute('data-search-layout-row'))
         assert.doesNotMatch(row.className, /rounded-sm|bg-active-elementBg|border-l-4/)
@@ -1127,7 +987,7 @@ test('layout rows share the inbox highlight without changing content insets on d
       await press('ArrowDown')
       assert.match(selected().textContent, /^from:/)
       await press('ArrowDown')
-      assert.match(selected().textContent, /^assignee:/)
+      assert.match(selected().textContent, /^commenter:/)
       assert.ok(selected().parentElement.hasAttribute('data-search-layout-tips'))
       capture(mobile ? 'highlight-phone-tips' : 'highlight-desktop-tips')
       await type('from:mal')
@@ -1200,17 +1060,8 @@ test('shared highlight uses inbox theme tokens and extends behind both tip colum
   }
 })
 
-test('row highlight flag off keeps the previous inset highlight', async (t) => {
-  await withSearch(t, { history: ['login'], flags: { 'htpr-6911-search-row-highlight': false } }, async ({ selected }) => {
-    assert.ok(selected())
-    assert.equal(selected().hasAttribute('data-search-layout-row'), false)
-    assert.match(selected().className, /rounded-sm/)
-    assert.match(selected().className, /bg-active-elementBg/)
-  })
-})
-
 test('phone layout keeps board tabs in scrollable flow under the search input and selecting a board filters results', async (t) => {
-  await withSearch(t, { flags: { 'htpr-6909-search-one-board-tabs': true } }, async ({ input, type, press, complete, state, dom }) => {
+  await withSearch(t, {}, async ({ input, type, press, complete, state, dom }) => {
     Object.defineProperties(dom.window, { innerWidth: { value: 390 }, innerHeight: { value: 844 } })
     await type('login')
     await press('Enter')
@@ -1241,16 +1092,280 @@ test('phone layout keeps board tabs in scrollable flow under the search input an
   })
 })
 
-test('layout flag off retains the original desktop row and fixed mobile footer', async (t) => {
-  await withSearch(t, { flags: { [layoutFlag]: false } }, async ({ type, tick, complete }) => {
-    await type('login')
-    await tick()
-    await complete(undefined, undefined, ['All', 'Product Board'])
-    const footer = document.querySelector('.inbox_footer')
-    assert.equal(footer.className, 'flex inbox_footer @md:hidden no-scrollbar scrollbar-none gap-3 w-100 bg-hoverCardBackground  h-20 @md:h-8 inbox_title px-4')
-    const desktop = [...document.querySelectorAll('span.footer_tags')][0].parentElement.parentElement.parentElement.parentElement
-    assert.equal(desktop.className, 'hidden @md:block w-full overflow-x-auto scrollbar-none no-scrollbar @md:px-9 mt-4')
-    assert.equal(desktop.firstElementChild.className, 'flex flex-wrap grow gap-3')
-    assert.ok(document.getElementById('tasks-list').compareDocumentPosition(footer) & 4)
+const serverTasks = [
+  { taskId: 1, projectId: 7, projectTitle: 'Product Board', uniqueIndex: 1, taskTitle: 'Result', highlight: {}, status: 'Normal' },
+  { taskId: 2, projectId: 7, projectTitle: 'Product Board', uniqueIndex: 2, taskTitle: 'Second result', highlight: {}, status: 'Normal' },
+]
+const serverSearch = (overrides = {}) => ({
+  searchQuery: 'Result', includeArchived: false, fromProject: null, projectIds: [7], status: 200,
+  data: { processedData: { All: serverTasks, 'Product Board': serverTasks }, tabs: ['All', 'Product Board'] }, ...overrides,
+})
+const flush = () => React.act(async () => { await new Promise((resolve) => setImmediate(resolve)) })
+
+async function searchPageHtml(t, config, run) {
+  let html
+  await withSearch(t, { query: 'Result', ...config }, async (tools) => {
+    await run(tools)
+    html = document.getElementById('root').innerHTML
   })
+  return html
+}
+
+test('HTPR-7501 a server-started search shows the same page as the page search, without a search request', async (t) => {
+  const today = await searchPageHtml(t, {}, async ({ requests, complete }) => {
+    assert.equal(requests.length, 1)
+    assert.deepEqual(requests[0].body, { projectIds: [7], searchQuery: 'Result', archive: 'Normal', contextProjectId: null })
+    await complete(requests[0], serverTasks, ['All', 'Product Board'])
+  })
+  let projects = []
+  const started = await searchPageHtml(t, { projects: () => projects, serverStartedSearch: Promise.resolve(serverSearch()) }, async ({ requests, render }) => {
+    await flush()
+    assert.equal(requests.length, 0, 'no search request while the board list is still loading')
+    projects = [{ id: 7, title: 'Product Board' }]
+    await render('Result')
+    await flush()
+    assert.equal(requests.length, 0, 'the board list arriving does not search again')
+  })
+  assert.ok(today.includes('id="task_2"'), 'both results are on the page')
+  assert.equal(started, today)
+})
+
+for (const [name, started] of [
+  ['failed', Promise.resolve(null)],
+  ['rejected by the API', Promise.resolve(serverSearch({ status: 403, data: { message: 'Project access denied' } }))],
+  ['for another query', Promise.resolve(serverSearch({ searchQuery: 'Other' }))],
+  ['for archived results', Promise.resolve(serverSearch({ includeArchived: true }))],
+]) {
+  test(`HTPR-7501 a server search that is ${name} falls back to the page search`, async (t) => {
+    let projects = []
+    await withSearch(t, { query: 'Result', projects: () => projects, serverStartedSearch: started }, async ({ render, requests, complete }) => {
+      await flush()
+      assert.equal(document.getElementById('task_2'), null)
+      assert.equal(requests.length, 0)
+      projects = [{ id: 7, title: 'Product Board' }]
+      await render('Result')
+      assert.equal(requests.length, 1)
+      assert.deepEqual(requests[0].body, { projectIds: [7], searchQuery: 'Result', archive: 'Normal', contextProjectId: null })
+      await complete(requests[0], serverTasks, ['All', 'Product Board'])
+      assert.ok(document.getElementById('task_2'))
+    })
+  })
+}
+
+for (const [name, result, requestCount] of [['for the same boards', serverSearch(), 0], ['that failed', null, 1]]) {
+  test(`HTPR-7501 the board list arriving before a server result ${name} waits for it once`, async (t) => {
+    let resolveServer
+    let projects = []
+    await withSearch(t, { query: 'Result', projects: () => projects, serverStartedSearch: new Promise((resolve) => { resolveServer = resolve }) }, async ({ render, requests, complete }) => {
+      await flush()
+      projects = [{ id: 7, title: 'Product Board' }]
+      await render('Result')
+      assert.equal(requests.length, 0, 'no request while the server result is on its way')
+      await React.act(async () => resolveServer(result))
+      await flush()
+      assert.equal(requests.length, requestCount)
+      if (requestCount) await complete(requests[0], serverTasks, ['All', 'Product Board'])
+      assert.ok(document.getElementById('task_2'))
+    })
+  })
+}
+
+test('HTPR-7501 with the board list already loaded, a server result for the same boards replaces the page request', async (t) => {
+  const today = await searchPageHtml(t, {}, async ({ requests, complete }) => complete(requests[0], serverTasks, ['All', 'Product Board']))
+  const started = await searchPageHtml(t, { serverStartedSearch: Promise.resolve(serverSearch()) }, async ({ requests }) => {
+    await flush()
+    assert.equal(requests.length, 0)
+  })
+  assert.equal(started, today)
+})
+
+for (const [name, config] of [
+  ['for other boards', { serverStartedSearch: Promise.resolve(serverSearch({ projectIds: [7, 8] })) }],
+]) {
+  test(`HTPR-7501 with the board list already loaded, a server result ${name} keeps the page request`, async (t) => {
+    await withSearch(t, { query: 'Result', ...config }, async ({ requests, complete }) => {
+      await flush()
+      assert.equal(requests.length, 1)
+      assert.deepEqual(requests[0].body, { projectIds: [7], searchQuery: 'Result', archive: 'Normal', contextProjectId: null })
+      await complete(requests[0], serverTasks, ['All', 'Product Board'])
+      assert.ok(document.getElementById('task_2'))
+    })
+  })
+}
+
+for (const searchOnce of [false, true]) test(`HTPR-7501 a search the user starts while the server result is pending wins (HTPR-7502 ${searchOnce ? 'on' : 'off'})`, async (t) => {
+  let resolveServer
+  let resolveBoards
+  let ready = false
+  const projects = []
+  const refetch = () => new Promise((resolve) => { resolveBoards = () => resolve({ data: [{ id: 7, title: 'Product Board' }] }) })
+  await withSearch(t, { query: 'Result', projects: () => projects, refetch, flagsReady: () => ready, searchOnce, serverStartedSearch: new Promise((resolve) => { resolveServer = resolve }) }, async ({ type, press, tick, render, requests, complete }) => {
+    await flush()
+    await type('Other')
+    await press('Enter')
+    await tick()
+    await flush()
+    assert.equal(requests.length, 0, 'the user search waits for the board list')
+    ready = true
+    await render('Result')
+    await React.act(async () => resolveServer(serverSearch()))
+    await flush()
+    assert.equal(document.getElementById('task_2'), null, 'the server result does not replace the user search')
+    await React.act(async () => resolveBoards())
+    await flush()
+    assert.equal(requests.length, 1)
+    assert.equal(requests[0].body.searchQuery, 'Other')
+    await complete(requests[0], [serverTasks[0]], ['All'])
+    assert.ok(document.getElementById('task_1'))
+    assert.equal(document.getElementById('task_2'), null, 'the server result for the old query is not shown')
+    assert.equal(requests.length, 1)
+  })
+})
+
+async function freshTab(t, config, run) {
+  let ready = false
+  await withSearch(t, { query: 'Result', flagsBeforeReady: {}, flagsReady: () => ready, ...config }, async (tools) => {
+    await flush()
+    const before = tools.requests.length
+    ready = true
+    await tools.render('Result')
+    await flush()
+    await run({ ...tools, before })
+  })
+}
+
+test('HTPR-7502 a fresh tab with the board list loaded shows the server result before feature settings load without a request', async (t) => {
+  const today = await searchPageHtml(t, {}, async ({ requests, complete }) => complete(requests[0], serverTasks, ['All', 'Product Board']))
+  let html
+  await freshTab(t, { searchOnce: true, serverStartedSearch: Promise.resolve(serverSearch()) }, async ({ requests, before }) => {
+    assert.equal(before, 0, 'no request before feature settings load')
+    assert.equal(requests.length, 0, 'the server result is used')
+    html = document.getElementById('root').innerHTML
+  })
+  assert.equal(html, today)
+})
+
+test('HTPR-7502 a fresh tab whose server result is for other boards sends the page search once', async (t) => {
+  await freshTab(t, { searchOnce: true, serverStartedSearch: Promise.resolve(serverSearch({ projectIds: [7, 8] })) }, async ({ requests, before, complete }) => {
+    assert.equal(before, 1, 'layout is available before feature settings load')
+    assert.equal(requests.length, 1)
+    assert.deepEqual(requests[0].body, { projectIds: [7], searchQuery: 'Result', archive: 'Normal', contextProjectId: null })
+    await complete(requests[0], serverTasks, ['All', 'Product Board'])
+    assert.ok(document.getElementById('task_2'))
+  })
+})
+
+test('HTPR-7502 a fresh tab without a server result searches once', async (t) => {
+  await freshTab(t, { searchOnce: true }, async ({ requests, before, complete }) => {
+    assert.equal(before, 1, 'the page search does not wait for feature settings')
+    assert.equal(requests.length, 1, 'feature settings loading does not resend it')
+    await complete(requests[0], serverTasks, ['All', 'Product Board'])
+    assert.ok(document.getElementById('task_2'))
+  })
+})
+
+for (const [name, config, requestCount] of [['with a server result', { serverStartedSearch: Promise.resolve(serverSearch()) }, 0], ['without a server result', {}, 1]]) {
+  test(`HTPR-7502 flag off: a fresh tab ${name} does not wait for layout hydration`, async (t) => {
+    await freshTab(t, { searchOnce: false, ...config }, async ({ requests, complete }) => {
+      assert.equal(requests.length, requestCount)
+      if (requestCount) await complete(requests.at(-1), serverTasks, ['All', 'Product Board'])
+      assert.ok(document.getElementById('task_2'))
+    })
+  })
+}
+
+for (const enabled of [true, false]) {
+  for (const query of ['', 'a']) {
+    test(`HTPR-7558 flag ${enabled ? 'on' : 'off'}: a short query ${JSON.stringify(query)} ${enabled ? 'keeps' : 'retains the legacy loss of'} initial writing focus`, async (t) => {
+      let resolveServer
+      let projects = []
+      await withSearch(t, {
+        query,
+        flags: { 'htpr-7558-slash-search-focus': enabled },
+        projects: () => projects,
+        serverStartedSearch: new Promise((resolve) => { resolveServer = resolve }),
+      }, async ({ input, dom, render, state, requests }) => {
+        assert.equal(document.activeElement, enabled ? input() : document.body, 'focus is decided before the server promise settles')
+        await React.act(async () => resolveServer(null))
+        assert.equal(document.activeElement, enabled ? input() : document.body, 'a null server result must not take writing focus')
+        projects = [{ id: 7, title: 'Product Board' }]
+        await render(query)
+        assert.equal(document.activeElement, enabled ? input() : document.body, 'loading the board list must not change focus')
+        assert.equal(requests.length, 0, 'opening search does not submit an empty or one-character query')
+        if (enabled) {
+          await React.act(async () => {
+            Object.getOwnPropertyDescriptor(dom.window.HTMLInputElement.prototype, 'value').set.call(document.activeElement, 'focusprobe')
+            document.activeElement.dispatchEvent(new dom.window.Event('input', { bubbles: true }))
+          })
+          assert.equal(input().value, 'focusprobe', 'typing goes into the search box without focus() or a click')
+          assert.equal(state().inputValue, 'focusprobe')
+        }
+      })
+    })
+  }
+}
+
+test('HTPR-7558 keeps Enter result navigation and one-Escape exit after opening an empty search', async (t) => {
+  let projects = []
+  await withSearch(t, {
+    flags: { 'htpr-7558-slash-search-focus': true, 'htpr-6994-search-esc-leaves': true },
+    projects: () => projects,
+    serverStartedSearch: Promise.resolve(null),
+  }, async ({ input, render, dom, press, requests, complete, state, navigations }) => {
+    assert.equal(document.activeElement, input())
+    projects = [{ id: 7, title: 'Product Board' }]
+    await render()
+    await React.act(async () => {
+      Object.getOwnPropertyDescriptor(dom.window.HTMLInputElement.prototype, 'value').set.call(document.activeElement, 'qzxw7558')
+      document.activeElement.dispatchEvent(new dom.window.Event('input', { bubbles: true }))
+    })
+    await press('Enter', { keyCode: 13 })
+    assert.equal(requests.at(-1).body.searchQuery, 'qzxw7558')
+    await complete(requests.at(-1), serverTasks)
+    assert.equal(document.activeElement, document.body, 'Enter still leaves writing mode')
+    const key = async (key, keyCode) => React.act(async () => {
+      document.activeElement.dispatchEvent(new dom.window.KeyboardEvent('keydown', { key, keyCode, bubbles: true, cancelable: true }))
+    })
+    await key('j', 74)
+    assert.equal(state().selectedIndex, 1)
+    await key('k', 75)
+    assert.equal(state().selectedIndex, 0)
+    await key('Escape', 27)
+    assert.equal(navigations.at(-1), 'back')
+    assert.equal(navigations.filter((url) => url === 'back').length, 1)
+  })
+})
+
+test('HTPR-7558 still starts a populated URL search in result-navigation mode', async (t) => {
+  const projects = []
+  await withSearch(t, {
+    query: 'Result',
+    flags: { 'htpr-7558-slash-search-focus': true },
+    projects: () => projects,
+    serverStartedSearch: Promise.resolve(serverSearch()),
+  }, async ({ state, requests }) => {
+    await flush()
+    assert.equal(document.activeElement, document.body)
+    assert.equal(document.getElementById('task_2').textContent.includes('Second result'), true)
+    assert.equal(state().selectedIndex, 0)
+    assert.equal(requests.length, 0)
+  })
+})
+
+test('HTPR-7618 result rows follow the search pane width only while the bugfix flag is on', async (t) => {
+  for (const enabled of [true, false]) {
+    await withSearch(t, { query: 'login', flags: { 'htpr-7618-search-rows-fit-pane': enabled } }, async ({ complete }) => {
+      await complete()
+      const grid = document.getElementById('task_1').firstElementChild
+      assert.equal(grid.classList.contains('list_container_pane'), enabled)
+      assert.equal(grid.classList.contains('list_container'), !enabled)
+    })
+  }
+})
+
+test('HTPR-7618 pane rows switch to the wide grid by container width, the old rows by window width', () => {
+  const css = require('sass').compile(path.join(root, 'src/styles/search.module.scss')).css
+  assert.match(css, /@container \(min-width: 768px\)\s*\{\s*\.links_modal \.list_container_pane \{\s*display: grid;/)
+  assert.match(css, /@media \(min-width: 768px\)\s*\{\s*\.links_modal \.list_container \{\s*display: grid;/)
+  assert.match(css, /\.links_modal \.list_container_pane \{[^}]*display: flex;[^}]*flex-direction: column;/)
 })

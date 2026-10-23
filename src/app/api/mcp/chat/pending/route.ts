@@ -1,6 +1,8 @@
 import { wrapMcpRoute, checkMcpRouteRateLimit as checkMcpRateLimit, validateMcpRouteAuth as validateMcpAuth } from '@/lib/mcp/routeWrapper'
 import { NextRequest, NextResponse } from "next/server";
 
+import { Prisma } from "@prisma/client";
+import { chatContentScopeWhere } from "@/lib/agents/chatContentScope";
 import prisma from "@/lib/prisma";
 
 export const runtime = "nodejs";
@@ -54,6 +56,10 @@ export async function GET(request: NextRequest) {
       });
       if (subscription?.active) return { found: true, messages: [] };
 
+      const allowedSessions = ctx.teamScope != null ? await tx.chatSession.findMany({
+        where: { agentId, ...await chatContentScopeWhere({ userId: ctx.user.id, agentId, teamScope: ctx.teamScope }, tx) }, select: { id: true },
+      }) : null;
+      const sessionScope = allowedSessions === null ? Prisma.empty : allowedSessions.length ? Prisma.sql`AND session.id IN (${Prisma.join(allowedSessions.map(({ id }) => id))})` : Prisma.sql`AND FALSE`;
       const messages = await tx.$queryRaw<PendingChatMessage[]>`
         WITH pending AS (
           SELECT
@@ -67,6 +73,7 @@ export async function GET(request: NextRequest) {
           JOIN "User" owner ON owner."id" = session."userId"
           LEFT JOIN "User" author ON author."id" = message."authorUserId"
           WHERE session."agentId" = ${agentId}
+            ${sessionScope}
             AND message."role" = 'human'::"ChatRole"
             AND message."isDelivered" = false
             AND NOT EXISTS (
@@ -90,7 +97,7 @@ export async function GET(request: NextRequest) {
         ORDER BY pending."createdAt" ASC, pending."id" ASC
       `;
       return { found: true, messages };
-    });
+    }, ctx.teamScope != null ? { isolationLevel: "Serializable" } : undefined);
 
     if (!result.found) {
       return NextResponse.json(

@@ -1,3 +1,4 @@
+import { loadSidebarChatRequest } from "@/lib/agents/chatAccess";
 import { readJsonBody } from "@/lib/mcp/readJsonBody";
 import { checkRestRateLimit } from "@/lib/api/rateLimit";
 import { loadCurrentUser } from "@/lib/auth/currentUser";
@@ -99,6 +100,8 @@ export async function POST(request: NextRequest) {
       body = await request.json();
     }
     const { sessionId, message: messageData } = body;
+    const sidebarAccess = await loadSidebarChatRequest(request, sessionId);
+    if (!sidebarAccess.ok) return NextResponse.json({ success: false, error: sidebarAccess.error }, { status: sidebarAccess.status });
     const incomingAttachments: IncomingAttachment[] = Array.isArray(
       messageData?.attachments
     )

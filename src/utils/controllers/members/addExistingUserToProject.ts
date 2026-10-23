@@ -1,3 +1,4 @@
+import { AgentBoardInviteScopeError, assertAgentBoardInviteScope } from "@/lib/mcp/agents/delegatedAccess";
 import { processAnalyticsIntentSoon } from "@/lib/telemetry/analyticsIntents";
 import { LogType, Status, type Prisma } from "@prisma/client";
 
@@ -38,6 +39,7 @@ export async function addExistingUserToProject(
   projectId: number,
   userId: number,
   inviterUserId: number | null = null,
+  actingAgentId?: string | null,
 ): Promise<AddExistingUserToProjectResult> {
   const targetUser = await prisma.user.findUnique({
     where: { id: userId },
@@ -87,7 +89,8 @@ export async function addExistingUserToProject(
     select: { id: true },
   });
   if (existingMember) {
-    await expirePendingInvites(projectId, targetUser.email).catch((error) => {
+    await expirePendingInvites(projectId, targetUser.email, inviterUserId, actingAgentId).catch((error) => {
+      if (error instanceof AgentBoardInviteScopeError) throw error;
       console.error(
         "[addExistingUserToProject] failed to expire pending invites:",
         error,
@@ -135,6 +138,7 @@ export async function addExistingUserToProject(
         assertHeld();
         try {
           const joined = await prisma.$transaction(async (tx) => {
+            await assertAgentBoardInviteScope(tx.member, projectId, inviterUserId!, actingAgentId);
             assertHeld();
             const { member: memberTeam, created } = await ensureTeamMembership(
               {
@@ -201,7 +205,7 @@ export async function addExistingUserToProject(
               outcome: "added" as const,
               created,
             };
-          });
+          }, actingAgentId ? { isolationLevel: "Serializable" } : undefined);
 
           if (joined.analyticsKey) processAnalyticsIntentSoon(joined.analyticsKey);
           return {
@@ -212,6 +216,7 @@ export async function addExistingUserToProject(
             sync: joined.created,
           };
         } catch (error) {
+          if (error instanceof AgentBoardInviteScopeError) throw error;
           console.error(
             "[addExistingUserToProject] transactional join failed:",
             error,
@@ -239,7 +244,8 @@ export async function addExistingUserToProject(
       };
     }
 
-    await expirePendingInvites(projectId, targetUser.email).catch((error) => {
+    await expirePendingInvites(projectId, targetUser.email, inviterUserId, actingAgentId).catch((error) => {
+      if (error instanceof AgentBoardInviteScopeError) throw error;
       console.error(
         "[addExistingUserToProject] failed to expire pending invites:",
         error,
@@ -282,6 +288,7 @@ export async function addExistingUserToProject(
 
   await withTeamSeatBillingLock(teamId, async (assertHeld) => {
     const joined = await prisma.$transaction(async (tx) => {
+      await assertAgentBoardInviteScope(tx.member, projectId, inviterUserId!, actingAgentId);
       const result = await ensureProjectMemberRow(tx, {
         assertHeld,
         projectId,
@@ -292,7 +299,7 @@ export async function addExistingUserToProject(
       const analyticsKey = result.outcome === "added" && result.memberId !== null
         ? await enqueueMemberJoined(tx, result.memberId, userId, projectId, null, inviterUserId) : null;
       return { result, analyticsKey };
-    });
+    }, actingAgentId ? { isolationLevel: "Serializable" } : undefined);
     join = joined.result;
     if (joined.analyticsKey) processAnalyticsIntentSoon(joined.analyticsKey);
   });
@@ -307,7 +314,8 @@ export async function addExistingUserToProject(
     };
   }
 
-  await expirePendingInvites(projectId, targetUser.email).catch((error) => {
+  await expirePendingInvites(projectId, targetUser.email, inviterUserId, actingAgentId).catch((error) => {
+    if (error instanceof AgentBoardInviteScopeError) throw error;
     console.error(
       "[addExistingUserToProject] failed to expire pending invites:",
       error,
@@ -381,9 +389,11 @@ async function ensureProjectMemberRow(db: Prisma.TransactionClient, input: {
 async function expirePendingInvites(
   projectId: number,
   email: string | null,
+  inviterUserId: number | null,
+  actingAgentId?: string | null,
 ): Promise<void> {
   if (!email) return;
-  await prisma.invite.updateMany({
+  const expire = (database: Pick<Prisma.TransactionClient, "invite">) => database.invite.updateMany({
     where: {
       projectId,
       expired: false,
@@ -391,4 +401,12 @@ async function expirePendingInvites(
     },
     data: { expired: true },
   });
+  if (actingAgentId) {
+    await prisma.$transaction(async (tx) => {
+      await assertAgentBoardInviteScope(tx.member, projectId, inviterUserId!, actingAgentId);
+      await expire(tx);
+    }, { isolationLevel: "Serializable" });
+  } else {
+    await expire(prisma);
+  }
 }

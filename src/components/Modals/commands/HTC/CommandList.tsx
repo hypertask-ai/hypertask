@@ -9,7 +9,7 @@ import { MobileCommandIcon } from "./MobileCommandIcon";
 
 
 
-const CommandList: React.FC<CommandListProps> = ({ onClickHandler, commandLists, selectedCommand, handleMouseLeave, handleMouseEnter, commandRef, groupIndex, isMobile = false }) => {
+const CommandList: React.FC<CommandListProps> = ({ onClickHandler, commandLists, selectedCommand, handleMouseLeave, handleMouseEnter, commandRef, groupIndex, isMobile = false, inline = false }) => {
     const [_currentProject, _] = useRecoilState(currentProjectAtom)
 
 
@@ -22,15 +22,18 @@ const CommandList: React.FC<CommandListProps> = ({ onClickHandler, commandLists,
 
                 if (isOwner || !command.checkOwnerShip) {
                     return (
-                        // eslint-disable-next-line react/jsx-key
                         <li
+                            key={command.key}
+                            data-command-key={command.key}
+                            role={inline ? "option" : undefined}
+                            aria-selected={inline ? selectedCommand === command : undefined}
                             ref={commandRef as any}
                             onMouseLeave={handleMouseLeave}
                             onMouseEnter={() => handleMouseEnter(command, index, groupIndex)}
                             className={isMobile
                                 ? `flex min-h-[52px] cursor-pointer items-center gap-3 border-b border-light-black-border-1 px-4 text-content transition-colors duration-75 ${selectedCommand===command?"bg-active-modal-element":""}`
                                 : `h-[36px] cursor-pointer transition-all gap-3 duration-75 mx-1.5 rounded-sm px-3 text-dense ${selectedCommand===command?"bg-active-modal-element":""}`}
-                            id={`command-${groupIndex}-${index}`}
+                            id={inline ? `agent-sidebar-command-${command.key}` : `command-${groupIndex}-${index}`}
                             onClick={() => onClickHandler(command)}
                             style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}
                         >

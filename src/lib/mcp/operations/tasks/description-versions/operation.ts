@@ -6,7 +6,7 @@ import prisma from '@/lib/prisma'
 import { buildFieldError } from '@/lib/mcp/fieldError'
 import { checkMcpRateLimit, validateMcpAuth } from '@/lib/mcp/auth'
 import { validateProjectAccess } from '@/lib/mcp/tasks/services'
-import { resolveTaskIdOnly } from '@/lib/mcp/tasks/resolveTask'
+import { resolveTaskIdOnly, taskIdentifierErrorResponse } from '@/lib/mcp/tasks/resolveTask'
 import { htmlToMarkdown } from '@/utils/controllers/pages/htmlToMarkdown'
 
 export async function GET(request: NextRequest) {
@@ -43,7 +43,7 @@ export async function GET(request: NextRequest) {
       where: { id: taskId },
       select: { projectId: true },
     })
-    if (!task || (await validateProjectAccess(task.projectId, ctx.user.id, ctx.agentId)).error) {
+    if (!task || (await validateProjectAccess(task.projectId, ctx.user.id, ctx.agentId, ctx.teamScope)).error) {
       return NextResponse.json(
         buildFieldError('not_found', 'task_id', 'Task not found'),
         { status: 404 }
@@ -76,6 +76,8 @@ export async function GET(request: NextRequest) {
       })),
     })
   } catch (error) {
+    const identifierResponse = taskIdentifierErrorResponse(error)
+    if (identifierResponse) return identifierResponse
     console.error('[MCP Task Description Versions] Error:', error)
     reportMcpOperationCrash(request, error)
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 })

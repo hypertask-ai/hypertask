@@ -17,6 +17,21 @@
     }
   }
 
+  .list_container_pane {
+    overflow-wrap: normal;
+    display: flex;
+    flex-direction: column;
+    width: 100%;
+  }
+
+  @container (min-width: 768px) {
+    .list_container_pane {
+      display: grid;
+      grid-template-columns: minmax(5%, 15%) 29% 6fr 1fr minmax(30px, 55px);
+      flex-direction: row;
+    }
+  }
+
   .links_list {
     display: -webkit-box;
     -webkit-line-clamp: 1;

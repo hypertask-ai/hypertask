@@ -21,6 +21,13 @@ export const MATRIX_TOLERANCE = 8
 const EDGE = 2
 export const MATRIX_CHANGE_MESSAGE = "Layout moved. If the ticket asked for this change, update e2e/smoke/layout-lock-matrix.baseline.json, add the page to its approvedIn map with the ticket where Valentin approved it, and put 'Layout change approved: <that ticket URL>' in the PR body."
 
+export type BaselineScrollLayout = 'desktop' | 'phone' | 'phone-top'
+export function matrixBaselineLayout(page: string, width: number, state: MatrixState): BaselineScrollLayout {
+  if (width >= 768 || !page.startsWith('ticket-')) return 'desktop'
+  if (page === 'ticket-long-thread' && state.ai === 'open' && state.rail === 'expanded') return 'phone-top'
+  return 'phone'
+}
+
 export const stateKey = (state: MatrixState) => `ai-${state.ai}|rail-${state.rail}`
 export function describeCombo(page: string, width: number, state: MatrixState) {
   return `${page} @ ${width}px, AI sidebar ${state.ai === 'open' ? 'open' : 'closed'}, left sidebar ${state.rail}`
@@ -121,10 +128,56 @@ export function validateMatrixFlagChanges(entries: readonly MatrixFlagChange[], 
   return failures
 }
 
-// The composer is the last thing of a ticket thread: no comment may end below its top edge.
-export function composerFollowsComments(label: string, composerTop: number, lastCommentBottom: number | null): string[] {
-  if (lastCommentBottom === null) return []
-  return lastCommentBottom > composerTop + EDGE
-    ? [`${label}: composer is no longer the last part of the thread (last comment ends at ${lastCommentBottom}px, composer starts at ${composerTop}px)`]
+// The composer is the last thing of a ticket thread, including when only the description is rendered.
+export function composerFollowsThread(label: string, composerTop: number | null, lastCommentBottom: number | null, descriptionBottom: number | null): string[] {
+  if (composerTop === null) return [`${label}: comment composer is missing`]
+  const threadBottom = lastCommentBottom ?? descriptionBottom
+  if (threadBottom === null) return [`${label}: no rendered comment or description to check before the composer`]
+  return threadBottom > composerTop
+    ? [`${label}: composer is no longer the last part of the thread (${lastCommentBottom === null ? 'description' : 'last comment'} ends at ${threadBottom}px, composer starts at ${composerTop}px)`]
     : []
+}
+
+// Self-contained so Playwright can serialize it; injected readers/frames keep its unit cases pure.
+export async function waitForStableScroll({
+  baselineLayout,
+  read = () => {
+    const offsets = [[window.scrollX, window.scrollY]]
+    for (let element = document.querySelector('[data-testid="ticket-thread"]'); element; element = element.parentElement) {
+      offsets.push([element.scrollLeft, element.scrollTop, element.scrollWidth, element.scrollHeight, element.clientWidth, element.clientHeight])
+    }
+    return JSON.stringify(offsets)
+  },
+  frame = () => new Promise<void>(resolve => requestAnimationFrame(() => resolve())),
+  maxFrames = 120,
+}: { baselineLayout?: BaselineScrollLayout; read?: () => string; frame?: () => Promise<void>; maxFrames?: number } = {}): Promise<void> {
+  const sample = () => {
+    if (baselineLayout) {
+      const ticketContainer = baselineLayout === 'phone-top'
+        ? document.querySelector('[data-testid="ticket-thread"]')?.closest('[data-task-detail-path]')
+        : null
+      const elements = baselineLayout === 'phone-top' ? (ticketContainer ? [ticketContainer] : []) : document.querySelectorAll('*')
+      for (const element of elements) {
+        if (element.scrollTop > 0 || element.scrollHeight > element.clientHeight) {
+          element.scrollTo({ top: baselineLayout === 'phone' ? element.scrollHeight - element.clientHeight : 0, behavior: 'instant' })
+        }
+      }
+      window.scrollTo({
+        top: baselineLayout === 'phone' ? document.documentElement.scrollHeight - document.documentElement.clientHeight : 0,
+        left: 0,
+        behavior: 'instant',
+      })
+    }
+    return read()
+  }
+  let previous = sample()
+  let stableFrames = 0
+  for (let index = 0; index < maxFrames; index++) {
+    await frame()
+    const current = sample()
+    stableFrames = current === previous ? stableFrames + 1 : 0
+    if (stableFrames === 2) return
+    previous = current
+  }
+  throw new Error('Layout lock: ticket scroll did not stabilize across two animation frames')
 }

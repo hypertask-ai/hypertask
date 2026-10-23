@@ -1,3 +1,4 @@
+import { canReadTaskNow } from "@/lib/access/canReadTaskNow";
 import { sendEmail } from "@/lib/email/sendEmail";
 import { HTPR_7031_INVITE_EMAIL_FLAG, isFeatureEnabled } from "@/lib/flags";
 import {
@@ -27,6 +28,14 @@ export const sendEmailNotification = async (
   }
 
   try {
+    const taskId = body.taskId ?? body.replyTaskId;
+    if (
+      type !== "Invite" &&
+      typeof taskId === "number" &&
+      (typeof body.userId !== "number" ||
+        !(await canReadTaskNow(body.userId, taskId)))
+    ) return true;
+
     const inviteContext = type === "Invite" &&
       await isFeatureEnabled(HTPR_7031_INVITE_EMAIL_FLAG, body.senderUserId ?? 0);
     if (inviteContext) {

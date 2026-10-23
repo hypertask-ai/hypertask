@@ -222,6 +222,24 @@ test('agent list excludes all token material', async () => {
   assert.equal('mcpTokenExpiresAt' in calls.findMany[0].select, false)
 })
 
+test('agent list says whether each agent is team-bound only when asked, without the team or binding', async () => {
+  const { database, calls } = createDatabase({
+    agents: [
+      agent({ id: 'bound-agent', credentialTeamId: 'team-a', credentialTeamAccessBinding: 'owner:fixture:1' }),
+      agent({ id: 'unbound-agent', credentialTeamId: null }),
+    ],
+  })
+
+  const shown = await listOwnedAgents(database, 6, undefined, { teamBound: true })
+  const hidden = await listOwnedAgents(database, 6)
+
+  assert.deepEqual(shown.map(({ id, team_bound }) => [id, team_bound]), [['bound-agent', true], ['unbound-agent', false]])
+  assert.equal(hidden.some((row) => 'team_bound' in row), false)
+  assert.equal(calls.findMany[0].select.credentialTeamId, true)
+  assert.equal('credentialTeamAccessBinding' in calls.findMany[0].select, false)
+  assert.doesNotMatch(JSON.stringify(shown), /team-a|owner:fixture/)
+})
+
 test('collapsed agent rows do not mount token-bearing connection panels', () => {
   const source = fs.readFileSync(
     path.join(root, 'src/components/Modals/Agent/manage.modal.tsx'),

@@ -1,7 +1,7 @@
 "use client";
 import { useFlag } from "@/hooks/useFlag";
 import { useHydrated } from "@/hooks/General/useHydrated";
-import { HTPR_6752_INSTANT_TICKET_OPEN_FLAG, HTPR_6899_STABLE_LAYOUT_FLAG, HTPR_7367_SERVER_DESCRIPTION_FIRST_FLAG } from "@/lib/flags/keys";
+import { HTPR_6899_STABLE_LAYOUT_FLAG, HTPR_7367_SERVER_DESCRIPTION_FIRST_FLAG } from "@/lib/flags/keys";
 import { useThreadSettled } from "@/hooks/Task Detail/useThreadSettled";
 import React, { Suspense, useEffect, useMemo } from "react";
 import { MobileViewContext } from "@/lib/contexts/mobileContext";
@@ -59,7 +59,6 @@ const CommentAndDescriptionContainer = (props: ITaskInfoContainer) => {
   const _mbl = useContext(MobileViewContext);
   const { uploadingDescription, comments, stacked } =
     useDescriptionAndCommentsContext();
-  const instantTicketOpen = useFlag(HTPR_6752_INSTANT_TICKET_OPEN_FLAG);
   const stableLayout = useFlag(HTPR_6899_STABLE_LAYOUT_FLAG);
   const {
     currentTask,
@@ -77,6 +76,7 @@ const CommentAndDescriptionContainer = (props: ITaskInfoContainer) => {
     allowPerks,
     descriptionStart,
     liveRowsPendingFor,
+    newCommentsSnapshotReady,
     showLiveRows,
   } = useTaskContext();
   const descriptionFirstFlag = useFlag(HTPR_7367_SERVER_DESCRIPTION_FIRST_FLAG);
@@ -135,6 +135,7 @@ const CommentAndDescriptionContainer = (props: ITaskInfoContainer) => {
     >
       <RichTextPersonHovercards projectId={allowPerks ? currentTask?.projectId : undefined} />
       <div
+        data-ticket-initial-scroll-ready={newCommentsSnapshotReady && !serverRowsShown}
         style={{
           height: _mbl && (!cachedLayout || numberOfComments || numberOfUploadingComments) ? `${virtualizer.getTotalSize()}px` : undefined,
           ...(stableLayout && cachedLayout && _mbl ? {
@@ -206,7 +207,7 @@ const CommentAndDescriptionContainer = (props: ITaskInfoContainer) => {
                     i={commentIndex}
                     isStacked={stacked[commentIndex]}
                   >
-                    {instantTicketOpen ? <Suspense fallback={null}><CommentsContainer /></Suspense> : <CommentsContainer />}
+                    <Suspense fallback={null}><CommentsContainer /></Suspense>
                   </CommentsProvider>
                 );
               }
@@ -311,7 +312,6 @@ const Description = ({
   projectId?: number;
   subject: import("@/models/personHovercard").PersonHovercardSubject | null;
 }) => {
-  const instantTicketOpen = useFlag(HTPR_6752_INSTANT_TICKET_OPEN_FLAG);
   const stableLayout = useFlag(HTPR_6899_STABLE_LAYOUT_FLAG);
   const { cachedLayout } = useTaskContext();
   return (
@@ -330,7 +330,7 @@ const Description = ({
           <div data-task-reactions-slot className="flow-root min-h-[38px]">
             <Suspense fallback={null}><DescriptionReactions /></Suspense>
           </div>
-        ) : instantTicketOpen ? <Suspense fallback={null}><DescriptionReactions /></Suspense> : <DescriptionReactions />}
+        ) : <Suspense fallback={null}><DescriptionReactions /></Suspense>}
         {isUploadingDescription || hasDraft ? null : cachedLayout ? (
           <DescriptionSubTask />
         ) : (

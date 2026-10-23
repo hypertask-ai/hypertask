@@ -33,6 +33,7 @@ import {
   useContext,
   useEffect,
   useMemo,
+  useId,
   useRef,
   useState,
 } from "react";
@@ -52,7 +53,7 @@ import { AiChatComposerActionRow } from "./AiChatComposerActionRow";
 import { AttachmentButton } from "./AttachmentButton";
 import { AiComposerTextarea } from "./AiComposerTextarea";
 import { useFlag } from "@/hooks/useFlag";
-import { HTPR_6929_COMPOSE_TASK_WRITER_FLAG, HTPR_7053_COMPOSE_BOARD_CHIP_FLAG } from "@/lib/flags/keys";
+import { HTPR_6929_COMPOSE_TASK_WRITER_FLAG, HTPR_7053_COMPOSE_BOARD_CHIP_FLAG, HTPR_7316_CHAT_SCOPE_TICKET_FLAG } from "@/lib/flags/keys";
 import { ChatScopeChip } from "./ChatScopeChip";
 import { SendMessageButton } from "./SendMessageButton";
 export { SendMessageButton } from "./SendMessageButton";
@@ -92,11 +93,18 @@ type ControlledComposer = {
 
 export function AI_Tiptap_Container({
   controlledComposer,
+  disabled = false,
+  active = true,
 }: {
   controlledComposer?: ControlledComposer;
+  disabled?: boolean;
+  active?: boolean;
 } = {}) {
   const composeTaskWriterEnabled = useFlag(HTPR_6929_COMPOSE_TASK_WRITER_FLAG);
   const composeBoardChipFlag = useFlag(HTPR_7053_COMPOSE_BOARD_CHIP_FLAG);
+  const ticketScopeFlag = useFlag(HTPR_7316_CHAT_SCOPE_TICKET_FLAG);
+  let ticketScopeEnabled = false;
+  if (ticketScopeFlag) ticketScopeEnabled = true;
   let composeBoardChipEnabled = false;
   if (composeBoardChipFlag) composeBoardChipEnabled = true;
   const ComposerTextarea = composeTaskWriterEnabled ? AiComposerTextarea : "textarea";
@@ -170,6 +178,7 @@ export function AI_Tiptap_Container({
     aiChatExplicitOpenAtAtom
   );
   const focusRootRef = useRef<HTMLDivElement>(null);
+  const audioButtonId = `ai-chat-audio-button-${useId()}`;
   useEffect(() => {
     if (
       explicitOpenAt === null ||
@@ -202,7 +211,7 @@ export function AI_Tiptap_Container({
   }, []);
 
   useEffect(() => {
-    if (isMbl) return;
+    if (isMbl || !active || disabled) return;
     const onKeyDown = (e: KeyboardEvent) => {
       const cmdControl = e.metaKey || e.ctrlKey;
       if (!cmdControl || !e.shiftKey) return;
@@ -217,14 +226,14 @@ export function AI_Tiptap_Container({
           active!.isContentEditable);
       if (inOtherField) return;
       if (e.keyCode === 70) return;
-      const anchor = document.getElementById("ai-chat-audio-button");
+      const anchor = focusRootRef.current?.querySelector<HTMLElement>(`[id="${audioButtonId}"]`);
       if (!anchor) return;
       e.preventDefault();
       anchor.click();
     };
     document.addEventListener("keydown", onKeyDown);
     return () => document.removeEventListener("keydown", onKeyDown);
-  }, [isMbl]);
+  }, [isMbl, active, disabled, audioButtonId]);
 
   const isEditorEmpty =
     useEditorState({
@@ -244,7 +253,15 @@ export function AI_Tiptap_Container({
   }
 
   return (
-    <div className={`p-2 relative`} ref={focusRootRef}>
+    <div className={`p-2 relative`} ref={focusRootRef} data-ai-chat-composer-root inert={disabled || !active || undefined}
+      onKeyDownCapture={controlledComposer ? (event) => {
+        if (isMbl || !active || disabled || !(event.metaKey || event.ctrlKey) || !event.shiftKey || event.keyCode !== 68) return;
+        const recorder = focusRootRef.current?.querySelector<HTMLElement>(`[id="${audioButtonId}"]`);
+        if (!recorder) return;
+        event.preventDefault();
+        event.stopPropagation();
+        recorder.click();
+      } : undefined}>
       {!controlledComposer && showScrollUpIndicator && !isTyping && (
         <ScrollToTopButton onClick={scrollMessagesToBottom} />
       )}
@@ -259,7 +276,7 @@ export function AI_Tiptap_Container({
           data-ai-chat-mobile-context-row
           className="mb-2 flex min-w-0 items-center gap-2"
         >
-          {!pathname?.startsWith("/chat") && <ChatScopeDropdown mobile reuseChip={composeBoardChipEnabled} />}
+          {!pathname?.startsWith("/chat") && <ChatScopeDropdown mobile reuseChip={composeBoardChipEnabled} ticketScopeEnabled={ticketScopeEnabled} />}
           <div
             data-ai-chat-mobile-context-scroll
             className="flex min-w-0 flex-1 items-center gap-2 overflow-x-auto scrollbar-none"
@@ -372,7 +389,7 @@ export function AI_Tiptap_Container({
                     pathname?.startsWith("/chat") ? undefined : "hidden"
                   }
                 />
-                {!pathname?.startsWith("/chat") && <ChatScopeDropdown reuseChip={composeBoardChipEnabled} />}
+                {!pathname?.startsWith("/chat") && <ChatScopeDropdown reuseChip={composeBoardChipEnabled} ticketScopeEnabled={ticketScopeEnabled} />}
               </>
             )
           }
@@ -414,7 +431,8 @@ export function AI_Tiptap_Container({
                 <AudioButton
                   callbackHandler={controlledComposer.onDictation}
                   editor={controlledEditor}
-                  id="ai-chat-audio-button"
+                  id={audioButtonId}
+                  active={active}
                   toggleRecording={controlledComposer.onRecordingChange}
                   globalRecording={controlledComposer.isRecording}
                   hasText={hasComposerText}
@@ -431,7 +449,8 @@ export function AI_Tiptap_Container({
               <AudioButton
                 callbackHandler={controlledComposer.onDictation}
                 editor={null}
-                id="ai-chat-audio-button"
+                id={audioButtonId}
+                active={active}
                 toggleRecording={controlledComposer.onRecordingChange}
                 globalRecording={controlledComposer.isRecording}
                 hasText={hasComposerText}
@@ -449,7 +468,8 @@ export function AI_Tiptap_Container({
               <AudioButton
                 callbackHandler={audioTiptapCallback}
                 editor={editor}
-                id="ai-chat-audio-button"
+                id={audioButtonId}
+                active={active}
                 toggleRecording={toggleRecording!}
                 globalRecording={isRecording}
                 hasText={hasComposerText}
@@ -513,7 +533,7 @@ export function AI_Tiptap_Container({
   );
 }
 
-function ChatScopeDropdown({ mobile = false, reuseChip = false }: { mobile?: boolean; reuseChip?: boolean }) {
+function ChatScopeDropdown({ mobile = false, reuseChip = false, ticketScopeEnabled = false }: { mobile?: boolean; reuseChip?: boolean; ticketScopeEnabled?: boolean }) {
   const pathname = usePathname();
   const currentUser = useRecoilValue(currentUserAtom);
   const currentProject = useRecoilValue(currentProjectAtom);
@@ -547,7 +567,7 @@ function ChatScopeDropdown({ mobile = false, reuseChip = false }: { mobile?: boo
       ? { kind: "boards", label: "All boards", title: "All boards" }
       : typeof dockedScope === "number"
         ? { kind: "board", label: pickedBoardName, title: pickedBoardName }
-        : onTask && inViewObject.taskTicketNumber
+        : onTask && (!ticketScopeEnabled || dockedScope === "ticket") && inViewObject.taskTicketNumber
           ? {
               kind: "task",
               label: inViewObject.taskTicketNumber,
@@ -568,7 +588,7 @@ function ChatScopeDropdown({ mobile = false, reuseChip = false }: { mobile?: boo
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, [isOpen]);
 
-  const selectScope = (projectId: number | "all" | null) => {
+  const selectScope = (projectId: number | "all" | "ticket" | null) => {
     if (typeof projectId === "number") {
       setRecentChatBoardIds((previousIds) =>
         [projectId, ...previousIds.filter((id) => id !== projectId)].slice(
@@ -631,6 +651,13 @@ function ChatScopeDropdown({ mobile = false, reuseChip = false }: { mobile?: boo
           role="menu"
           className="absolute bottom-[calc(100%+6px)] left-0 z-50 max-h-60 w-64 overflow-y-auto rounded-md bg-modalBackground py-1 shadow-lg scrollbar-thin hover:scrollbar-thumb-gray-500 scrollbar-thumb-gray-500 scrollbar-track-kanban-column-scrollbar dark:scrollbar-thumb-[#4F5766]"
         >
+          {ticketScopeEnabled && onTask && (
+            <ScopeMenuRow
+              label="Current ticket"
+              selected={dockedScope === "ticket"}
+              onClick={() => selectScope("ticket")}
+            />
+          )}
           <ScopeMenuRow
             label="Current board"
             selected={dockedScope === null}

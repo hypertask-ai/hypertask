@@ -107,6 +107,7 @@ function reservations(state) {
     isAiChatSidebarModeAtom: "isAiChatSidebarMode", aiChatSidebarWidthPxAtom: "aiChatSidebarWidthPx",
   };
   const { usePageLoadReservations } = load("src/hooks/General/usePageLoadReservations.ts", {
+    "@/hooks/General/useKeepAiChatClosed": { useKeepAiChatClosed: () => ({ keepAiChatClosed: state.keepAiChatClosed ?? false, ready: true }) },
     "@/lib/state": { useRecoilValue: (atom) => state[atom] },
     "@/store": atoms,
     "@/lib/configs/style.config": { AI_CHAT_SIDEBAR_MIN_PX: 340 },
@@ -138,7 +139,7 @@ function renderWorkspace({ pathname, mobile = false, topBar = false, dock = fals
     shouldMountChatRuntime: true, Suspense: React.Suspense,
     AIChatPanels: () => panels,
     CachedTaskDetailNavigation: ({ children }) => children,
-    authenticatedUserId: 985, secondaryStartupEnabled: true, phoneBoardWarmsTicket: true, children: React.createElement("div", { "data-page": true }, "Page content"),
+    authenticatedUserId: 985, children: React.createElement("div", { "data-page": true }, "Page content"),
   }, "<AIChatClosedLayout>");
 }
 
@@ -205,7 +206,7 @@ test("task auto-open reserves the lazy desktop sidebar width without affecting c
     const slot = pending.querySelector("[data-ai-chat-slot]");
     assert.ok(slot, "the slot must exist even before the lazy runtime or panels load");
     assert.equal(slot.style.width, `${Math.max(width, 340)}px`);
-    assert.equal(slot.className, "shrink-0");
+    assert.equal(slot.className, "shrink-0 max-md:fixed max-md:right-0 max-md:top-0 max-md:z-[51]");
     const readySlot = ready.querySelector("[data-ai-chat-slot]");
     assert.equal(slot.style.width, readySlot.style.width);
     assert.equal(slot.className, readySlot.className);
@@ -384,13 +385,15 @@ test("a disabled board's empty Time row is absent before and after its summary l
   assert.equal(timer.props.timeTrackingEnabled, false, "use the board setting already present in the task snapshot");
 });
 
-function editorPanels(flag) {
+function editorPanels(cachedStaticFirst = false) {
   return load("src/components/RTE/TaskDetailEditorPanels.tsx", {
-    useFlag: (key) => key === "instant" && flag,
-    HTPR_6752_INSTANT_TICKET_OPEN_FLAG: "instant",
+    useFlag: (key) => key === "cached-static-first" && cachedStaticFirst,
+
     HTPR_7091_STATIC_DESCRIPTION_FIRST_FLAG: "static-first",
+    HTPR_7395_CACHED_STATIC_FIRST_FLAG: "cached-static-first",
     HTPR_6929_COMPOSE_TASK_WRITER_FLAG: "compose",
     HTPR_7337_EDIT_WITH_AI_FLAG: "edit-with-ai",
+    HTPR_7393_COMMENT_INLINE_AI_FLAG: "comment-inline-ai",
     HTPR_6937_NEW_TASK_WINDOW_FLAG: "new-task",
     useSetRecoilState: () => noop,
     useRecoilValue: () => false,
@@ -412,8 +415,8 @@ function editorPanels(flag) {
 }
 
 test("with instant open, the description reserves its real content before the editor exists", () => {
-  for (const flag of [true]) {
-    const Panels = editorPanels(flag);
+  for (const cachedStaticFirst of [false, true]) {
+    const Panels = editorPanels(cachedStaticFirst);
     const context = {
       divIds: {}, currentTask: { id: 42 }, inViewObject: {},
       mode: "read-edit-description", id: "description", defaultContent: "Long cached description",
@@ -435,7 +438,7 @@ function threadRender({ hydrated, mobile = false, measured = false, comments = f
     MobileViewContext: React.createContext(mobile),
     useDescriptionAndCommentsContext: () => ({ comments: [{ text: "Existing comment" }], stacked: [] }),
     useFlag: () => true,
-    HTPR_6752_INSTANT_TICKET_OPEN_FLAG: "instant",
+
     HTPR_6899_STABLE_LAYOUT_FLAG: "stable",
     HTPR_7074_TICKET_PAGE_CLS_FLAG: "cls",
     HTPR_7367_SERVER_DESCRIPTION_FIRST_FLAG: "server-description",

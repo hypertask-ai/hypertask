@@ -1,17 +1,12 @@
+import { withAgentScopeRequest } from "@/lib/auth/agentScope";
 import { readJsonBody } from "@/lib/mcp/readJsonBody";
 import { checkRestRateLimit } from "@/lib/api/rateLimit";
 import prisma from "@/lib/prisma";
 import { getSessionUser } from "@/lib/auth/getSessionUser";
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
-import { accessibleAgentWhere } from "@/lib/agents/visibility";
-import { getAgentTeamIds } from "@/utils/controllers/agents/boardMembers";
-import {
-  ensureChatParticipant,
-  loadUserAgentChatSession,
-  userTeamIds,
-} from "@/lib/agents/chatAccess";
-import { isFeatureEnabled, SHARED_AGENT_CHAT_FLAG, HTPR_6924_REST_COMPAT_FLAG } from "@/lib/flags";
+import { openAgentChat } from "@/lib/agents/chatService";
+import { isFeatureEnabled, HTPR_6924_REST_COMPAT_FLAG } from "@/lib/flags";
 import { HTPR_7052_CHAT_NAMES_FLAG } from "@/lib/flags/keys";
 import { initialChatTitle } from "@/lib/ai/chatNames";
 import { taskAccessWhere } from "@/utils/controllers/tasks/assertTaskAccess";
@@ -26,8 +21,14 @@ const createSessionSchema = z.object({
 });
 
 export async function POST(request: NextRequest) {
+  return withAgentScopeRequest(request, () => createSession(request));
+}
+
+async function createSession(request: NextRequest) {
   try {
-    const userId = (await getSessionUser(request.headers))?.userId;
+    const sessionUser = await getSessionUser(request.headers);
+    const userId = sessionUser?.userId;
+    const actingAgentId = sessionUser?.agentId;
     if (!userId) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
@@ -72,69 +73,9 @@ export async function POST(request: NextRequest) {
     }
 
     if (parsed.data.agentId) {
-      const agent = await prisma.agent.findFirst({
-        where: {
-          id: parsed.data.agentId,
-          revokedAt: null,
-          ...accessibleAgentWhere(userId),
-        },
-        select: { id: true, displayName: true, userId: true },
-      });
-      if (!agent) {
-        return NextResponse.json(
-          { error: "Agent not found" },
-          { status: 404 }
-        );
-      }
-
-      const [agentTeamIds, sharedConversationEnabled] = await Promise.all([
-        getAgentTeamIds([agent.id]),
-        isFeatureEnabled(SHARED_AGENT_CHAT_FLAG, agent.userId),
-      ]);
-      const teamId = agentTeamIds.get(agent.id) ?? null;
-      const teamIds =
-        sharedConversationEnabled && agent.userId !== userId
-          ? await userTeamIds(userId)
-          : [];
-      const mayOpen =
-        agent.userId === userId ||
-        (sharedConversationEnabled &&
-          teamId !== null &&
-          teamIds.includes(teamId));
-      if (!mayOpen) {
-        return NextResponse.json({ error: "Agent not found" }, { status: 404 });
-      }
-      const session = await prisma.chatSession.upsert({
-        where: { userId_agentId: { userId: agent.userId, agentId: agent.id } },
-        update: {},
-        create: {
-          userId: agent.userId,
-          agentId: agent.id,
-          teamId,
-          title: agent.displayName,
-        },
-        select: { id: true, teamId: true },
-      });
-      if (session.teamId === null && teamId !== null) {
-        await prisma.chatSession.updateMany({
-          where: { id: session.id, teamId: null },
-          data: { teamId },
-        });
-      }
-
-      const access = await loadUserAgentChatSession({
-        sessionId: session.id,
-        userId,
-        select: {},
-      });
-      if (!access.ok) {
-        return NextResponse.json({ error: "Agent not found" }, { status: 404 });
-      }
-      await ensureChatParticipant(session.id, userId);
-      return NextResponse.json(
-        { success: true, session: { id: session.id } },
-        { status: 200 }
-      );
+      const access = await openAgentChat({ userId, agentId: parsed.data.agentId });
+      if (!access.ok) return NextResponse.json({ error: access.error }, { status: access.status });
+      return NextResponse.json({ success: true, session: access.session });
     }
 
     let initialTitle: string | null = null;
@@ -143,10 +84,18 @@ export async function POST(request: NextRequest) {
       if (chatNames) {
         const [task, project] = await Promise.all([
           parsed.data.taskId
-            ? prisma.task.findFirst({ where: taskAccessWhere(userId, parsed.data.taskId), select: { title: true } })
+            ? prisma.task.findFirst({
+                where: {
+                  AND: [
+                    taskAccessWhere(userId, parsed.data.taskId, { agentId: actingAgentId }),
+                    { project: getProjectWhere(userId) },
+                  ],
+                },
+                select: { title: true },
+              })
             : null,
           parsed.data.projectId
-            ? prisma.project.findFirst({ where: { id: parsed.data.projectId, ...getProjectWhere(userId) }, select: { name: true, title: true } })
+            ? prisma.project.findFirst({ where: { id: parsed.data.projectId, ...getProjectWhere(userId), AND: [getProjectWhere(userId, actingAgentId)] }, select: { name: true, title: true } })
             : null,
         ]);
         initialTitle = initialChatTitle(true, { taskTitle: task?.title, boardName: project?.title || project?.name });

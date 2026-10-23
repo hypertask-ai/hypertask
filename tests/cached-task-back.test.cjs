@@ -19,7 +19,7 @@ const parent = { id: 42, projectId: 6859, uniqueIndex: 43, title: "Parent title"
 const child = { ...parent, id: 44, uniqueIndex: 45, title: "Child title", description_: { content: "Child body" } };
 const href = task => `/detail/project-${task.projectId}/${task.uniqueIndex}`;
 
-function fixture(t, { enabled = true, cachedParent = true, coldViewer = false, stableChildren = false, outerSuspense = false, boardBack = true, boardColumns = true, inboxNextOpen = true } = {}) {
+function fixture(t, { enabled = true, cachedParent = true, coldViewer = false, stableChildren = false, outerSuspense = false, boardColumns = true } = {}) {
   const dom = new JSDOM('<div id="root"></div>', { url: "https://app.hypertask.ai" + href(parent) });
   const names = ["window", "document", "Event", "IS_REACT_ACT_ENVIRONMENT"];
   const previous = Object.fromEntries(names.map(name => [name, global[name]]));
@@ -77,7 +77,7 @@ function fixture(t, { enabled = true, cachedParent = true, coldViewer = false, s
     "next/navigation": { usePathname: () => nextPath, useRouter: () => ({ replace: url => routerCalls.push(url), refresh: () => routerCalls.push("refresh") }) },
     "@tanstack/react-query": { useQueryClient: () => client },
     "@/lib/state": { useRecoilValue: () => ({ id: 2343 }) }, "@/store": { currentUserAtom: {} },
-    "@/hooks/useFlag": { useFlag: key => key === flags.HTPR_6991_BACK_FIRST_OPEN_FLAG ? enabled : key === flags.HTPR_7003_BOARD_BACK_FLAG ? boardBack : key === flags.HTPR_7000_INBOX_NEXT_OPEN_FLAG ? inboxNextOpen : true },
+    "@/hooks/useFlag": { useFlag: key => key === flags.HTPR_6991_BACK_FIRST_OPEN_FLAG ? enabled : true },
     "@/lib/flags/keys": flags, "@/lib/navigation/cachedTaskDetail": cache,
     "@/utils/helperFunctions/helperFunctions": { returnIfModalOrInputActive: () => false },
     "@/lib/constants/constants": { REACT_QUERY_KEYS: { uploadStates: ["Uploading_States"] } },
@@ -410,21 +410,20 @@ test("same-task modal popstate keeps the task and unsent composer mounted", asyn
   assert.equal(f.observed().loading, undefined);
 });
 
-test("native detail seeds cache readiness with the Back flag independently of subtask links", () => {
+test("native detail always seeds authorized non-embedded routes", () => {
   const nativeSource = fs.readFileSync(path.join(root, "src/app/detail/[...slug]/useTaskDetailState.tsx"), "utf8");
-  const body = nativeSource.slice(nativeSource.indexOf("  const subtaskLink =")).match(/useEffect\(\(\) => \{([\s\S]*?)\n  \}, \[/)?.[1];
+  const body = nativeSource.slice(nativeSource.indexOf("  const { authenticatedUserId }")).match(/useEffect\(\(\) => \{([\s\S]*?)\n  \}, \[/)?.[1];
   assert.ok(body);
-  const seed = new Function("subtaskLink", "backFirstOpen", "embedded", "authenticatedUserId", "currentUser", "_parsedTask", "queryClient", "cachedTaskDetailKey", body);
-  for (const subtaskLink of [false, true]) for (const backFirstOpen of [false, true]) {
-    const client = new QueryClient();
-    seed(subtaskLink, backFirstOpen, false, 2343, { id: 2343 }, parent, client, cache.cachedTaskDetailKey);
-    assert.equal(client.getQueryData(cache.cachedTaskDetailKey(2343, parent.id)), subtaskLink || backFirstOpen ? parent : undefined);
-    client.clear();
-  }
+  const seed = new Function("embedded", "authenticatedUserId", "currentUser", "_parsedTask", "queryClient", "cachedTaskDetailKey", body);
   const client = new QueryClient();
-  seed(false, true, true, 2343, { id: 2343 }, parent, client, cache.cachedTaskDetailKey);
-  seed(false, true, false, 2344, { id: 2343 }, parent, client, cache.cachedTaskDetailKey);
+  seed(false, 2343, { id: 2343 }, parent, client, cache.cachedTaskDetailKey);
+  assert.equal(client.getQueryData(cache.cachedTaskDetailKey(2343, parent.id)), parent);
+  client.clear();
+  seed(true, 2343, { id: 2343 }, parent, client, cache.cachedTaskDetailKey);
+  seed(false, 2344, { id: 2343 }, parent, client, cache.cachedTaskDetailKey);
+  seed(false, 2343, { id: 2343 }, { ...parent, id: 0 }, client, cache.cachedTaskDetailKey);
   assert.equal(client.getQueryData(cache.cachedTaskDetailKey(2343, parent.id)), undefined);
+  assert.equal(client.getQueryData(cache.cachedTaskDetailKey(2343, 0)), undefined);
   client.clear();
 });
 
@@ -444,20 +443,20 @@ test("flagged detail misses reach native traversal instead of repairing the sour
   }
 });
 
-for (const boardBack of [true, false]) for (const stableChildren of [true, false]) {
-  test(`board Back never exposes the background ticket route (7003=${boardBack}, stable children=${stableChildren})`, async t => {
-    const f = fixture(t, { boardBack, stableChildren });
+for (const stableChildren of [true, false]) {
+  test(`board Back never exposes the background ticket route (stable children=${stableChildren})`, async t => {
+    const f = fixture(t, { stableChildren });
     await f.openFromBoard();
     await f.refreshBoardOpen();
     assert.equal(f.observed().title, child.title);
     await f.traverse("back");
     assert.equal(window.location.pathname, "/project");
-    assert.equal(f.observed().title, boardBack ? undefined : child.title);
-    assert.equal(f.checkpoints.at(-1).title, boardBack ? undefined : child.title);
+    assert.equal(f.observed().title, undefined);
+    assert.equal(f.checkpoints.at(-1).title, undefined);
     assert.equal(f.observed().loading, undefined);
     assert.equal(document.querySelector(".kanban-column-title"), null);
-    assert.deepEqual(f.routerCalls, boardBack ? ["/project"] : ["/project", "refresh"], "flagged board repair must not refresh and reset its scroll");
-    if (boardBack) assert.equal(f.nextTraversals(), 0, "do not replay the stale native tree");
+    assert.deepEqual(f.routerCalls, ["/project"], "board repair must not refresh and reset its scroll");
+    assert.equal(f.nextTraversals(), 0, "do not replay the stale native tree");
     await f.serverBoard();
     assert.equal(f.observed().title, undefined);
     assert.equal(document.querySelector(".kanban-column-title").closest("[hidden]"), null);
@@ -491,7 +490,7 @@ test("Forward during protected board Back restores the cached ticket despite a l
 
 for (const method of ["cached-task-detail-navigation", "popstate", "pathname"]) {
   test(`protected board Back clears on ${method} departure and remains visible on a delayed revisit`, async t => {
-    const f = fixture(t, { stableChildren: true, inboxNextOpen: false });
+    const f = fixture(t, { stableChildren: true });
     await f.openFromBoard(); await f.refreshBoardOpen(); await f.traverse("back");
     assert.ok(document.getElementById("title-input").closest("[hidden]"));
     assert.equal(f.hasBoardRecovery(), true);
@@ -514,7 +513,7 @@ test("board Back never schedules the four-second stale-children reveal", async t
 });
 
 test("board protection hard-navigates after six seconds, never reveals stale children, and cancels on ready or departure", () => {
-  const body = source.match(/if \(!boardBack \|\| historyDestination\?\.pathname !== "\/project" \|\| !protectedSource\) return;\n([\s\S]*?)\n  \}, \[boardBack, historyDestination, protectedSource\]\);/)?.[1];
+  const body = source.match(/if \(historyDestination\?\.pathname !== "\/project" \|\| !protectedSource\) return;\n([\s\S]*?)\n  \}, \[historyDestination, protectedSource\]\);/)?.[1];
   assert.ok(body);
   const protect = new Function("window", "historyDestination", "protectedSource", "setHistoryDestination", "setBoardShell", body);
   for (const outcome of ["timeout", "ready", "forward", "different board"]) {

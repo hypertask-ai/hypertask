@@ -1,3 +1,4 @@
+import { recordAgentBoardScopeMiss } from "@/lib/auth/agentScope";
 import { reportMcpOperationCrash } from '@/lib/mcp/operationCrashReport'
 import { wrapMcpRoute, validateMcpRouteAuth as validateMcpAuth, checkMcpRouteRateLimit as checkMcpRateLimit } from '@/lib/mcp/routeWrapper'
 import { NextRequest, NextResponse } from 'next/server'
@@ -61,7 +62,7 @@ export async function GET(request: NextRequest) {
                     fromUserId: { not: generalConfig.hyperAiId },
                     task: {
                         status: 'Normal',
-                        project: getProjectListingWhere(user.id, ctx.agentId),
+                        project: getProjectListingWhere(user.id, ctx.agentId, ctx.teamScope),
                     },
                 },
                 orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
@@ -93,10 +94,11 @@ export async function GET(request: NextRequest) {
 
         if (ctx.agentId) {
             const [userInboxResult, agentInbox] = await Promise.all([
-                notificationGetAll(user.id.toString(), { withCachedDescription }),
+                notificationGetAll(user.id.toString(), { withCachedDescription }, ctx.agentId, ctx.teamScope),
                 getStructuredInboxForAgent({
                     userId: user.id,
-                    agentId: ctx.agentId,
+                    agentId: ctx.agentId, teamScope: ctx.teamScope,
+                    scopeToAgentBoards: true,
                 }),
             ])
 
@@ -133,6 +135,7 @@ export async function GET(request: NextRequest) {
                 )
             }
 
+            for (const notification of [...json.notifications, ...agentInbox.notifications]) recordAgentBoardScopeMiss(notification.projectId, "read");
             return NextResponse.json({
                 success: true,
                 user_structured_data: json.structuredData,
@@ -144,7 +147,7 @@ export async function GET(request: NextRequest) {
             })
         }
 
-        const { status, json } = await notificationGetAll(user.id.toString(), { withCachedDescription })
+        const { status, json } = await notificationGetAll(user.id.toString(), { withCachedDescription }, ctx.agentId, ctx.teamScope)
 
         if (status !== 200 || !json || !('structuredData' in json)) {
             console.error('[MCP] inbox/list', {

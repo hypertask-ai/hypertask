@@ -7,7 +7,7 @@ import {
 } from '@/lib/mcp/tasks/relatedTasks'
 import {
   findTaskByIdentifier,
-  TaskIdentifierAmbiguityError,
+  taskIdentifierErrorResponse,
   validateTaskIdentifier,
 } from '@/lib/mcp/tasks/resolveTask'
 
@@ -81,11 +81,10 @@ export async function GET(request: NextRequest) {
 
   let task
   try {
-    task = await findTaskByIdentifier(ctx.user, identifier, ctx.agentId)
+    task = await findTaskByIdentifier(ctx.user, identifier, ctx.agentId, undefined, ctx.teamScope)
   } catch (error) {
-    if (error instanceof TaskIdentifierAmbiguityError) {
-      return validationError(`ticket_number: ${error.message}`)
-    }
+    const identifierResponse = taskIdentifierErrorResponse(error, 'ticket_number')
+    if (identifierResponse) return identifierResponse
     throw error
   }
   if (!task) {
@@ -186,11 +185,10 @@ export async function POST(request: NextRequest) {
 
       let task
       try {
-        task = await findTaskByIdentifier(ctx.user, identifier, ctx.agentId)
+        task = await findTaskByIdentifier(ctx.user, identifier, ctx.agentId, undefined, ctx.teamScope)
       } catch (error) {
-        if (error instanceof TaskIdentifierAmbiguityError) {
-          return validationError(`ticket_number: ${error.message}`)
-        }
+        const identifierResponse = taskIdentifierErrorResponse(error, 'ticket_number')
+        if (identifierResponse) return identifierResponse
         throw error
       }
       if (!task) {

@@ -1,6 +1,4 @@
-import { useFlag, useFlagLoaded } from "@/hooks/useFlag";
-import { HTPR_7010_HAIKU_5_5_FLAG } from "@/lib/flags/keys";
-import { useHaikuDefaultFlag, useHaikuDefaultFlagLoaded } from "@/hooks/useHaikuDefaultFlag";
+import { useAiDefaultModelContext, useHaikuDefaultFlag, useHaikuDefaultFlagLoaded } from "@/hooks/useHaikuDefaultFlag";
 import type { TeamBillingSnapshot } from "@/lib/deriveCurrentBoardBilling";
 import { useCurrentBoardBilling } from "@/hooks/General/useCurrentBoardBilling";
 import { hasHaikuByokProviderFlags, isByokProviderEnabledForSource } from "@/lib/byokSelectedProviderGate";
@@ -97,9 +95,8 @@ const AIModelDropDownList = ({
   haiku55Enabled: boolean;
   haikuDefaultEnabled: boolean;
 }) => {
-  const haiku55Loaded = useFlagLoaded(HTPR_7010_HAIKU_5_5_FLAG);
   const haikuDefaultLoaded = useHaikuDefaultFlagLoaded();
-  const modelFlagsLoaded = haiku55Loaded && haikuDefaultLoaded;
+  const modelFlagsLoaded = haikuDefaultLoaded;
   const quickModelIds = haiku55Enabled
     ? ["claude-haiku-5-5", ...MOBILE_AI_CHAT_QUICK_MODEL_IDS]
     : MOBILE_AI_CHAT_QUICK_MODEL_IDS;
@@ -168,6 +165,7 @@ const AIModelDropDownList = ({
       isGuest,
     ]
   );
+  const defaultContext = useAiDefaultModelContext(settingsTeamId);
   const freePlan = scopedBilling?.storePlanId === "Free";
   const planDefaultOption = getDefaultAiModelOptionForPlan(
     scopedBilling?.storePlanId,
@@ -176,6 +174,7 @@ const AIModelDropDownList = ({
       : isByokProviderEnabledForSource(scopedBilling?.byokProviderFlags, preferredAiModelOption.source),
     haiku55Enabled,
     haikuDefaultEnabled,
+    defaultContext,
   );
   const requestedOption =
     getAiModelOptionById(aiSelected?.id, haiku55Enabled) ?? planDefaultOption;
@@ -184,7 +183,7 @@ const AIModelDropDownList = ({
       ? availableOptions.find((option) => option.id === GUEST_DEFAULT_OPTION_ID)
       : undefined) ??
     availableOptions.find((option) => option.id === planDefaultOption.id) ??
-    pickAutoAiModelOption(availableOptions, haiku55Enabled, { haikuDefaultEnabled, plan: scopedBilling?.storePlanId, hasByok: hasHaikuByokProviderFlags(scopedBilling?.byokProviderFlags) });
+    pickAutoAiModelOption(availableOptions, haiku55Enabled, { ...defaultContext, haikuDefaultEnabled, plan: scopedBilling?.storePlanId, hasByok: hasHaikuByokProviderFlags(scopedBilling?.byokProviderFlags) });
   const selectedOption =
     availableOptions.find((option) => option.id === requestedOption.id) ??
     fallbackOption ??
@@ -800,9 +799,7 @@ type AIModelDropDownButtonProps = Omit<
 
 const AIModelDropDownButton = (props: AIModelDropDownButtonProps) => {
   const haikuDefaultEnabled = useHaikuDefaultFlag();
-  const haiku55Enabled = useFlag(
-    HTPR_7010_HAIKU_5_5_FLAG,
-  ) || haikuDefaultEnabled;
+  const haiku55Enabled = true;
   const visibleModelOptions = haikuDefaultEnabled || haiku55Enabled
     ? aiModelOptions.filter((option) => isAiModelOptionVisible(option, true))
     : aiModelOptions.filter((option) => isAiModelOptionVisible(option, false));

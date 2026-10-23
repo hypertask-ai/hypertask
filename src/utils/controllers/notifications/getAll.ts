@@ -1,6 +1,8 @@
+import type { AgentTokenTeamScope } from '@/lib/mcp/auth/types';
+import { agentScopeEnforced } from "@/lib/auth/agentScope";
+import { notificationBoardAccessWhere } from "@/utils/controllers/notifications/boardAccess";
 import { NotificationType, Prisma } from "@prisma/client";
 import prisma from "@/lib/prisma";
-import { HTPR_6752_INSTANT_TICKET_OPEN_FLAG, isFeatureEnabled } from "@/lib/flags";
 import { getInboxTabs } from "@/utils/helperFunctions/helperFunctions";
 import { markQuietAgentMentions } from "@/utils/controllers/notifications/quietOwnerInbox";
 import { inboxConfig } from "@/lib/configs/inbox.config";
@@ -139,10 +141,17 @@ export async function getInboxNotifications(
   userId: number,
   client: typeof prisma = prisma,
   { withCachedDescription = true }: { withCachedDescription?: boolean } = {},
+  agentId?: string | null,
+  teamScope?: AgentTokenTeamScope | null,
 ) {
-  const cachedDescriptionPromise = withCachedDescription
-    ? isFeatureEnabled(HTPR_6752_INSTANT_TICKET_OPEN_FLAG, userId).catch(() => false)
-    : Promise.resolve(false);
+  if ((teamScope != null || (agentId && agentScopeEnforced()))) {
+    return client.notification.findMany({
+      where: { AND: [visibleUserInboxWhere(userId), notificationBoardAccessWhere(userId, agentId, teamScope)] },
+      include: notificationInboxInclude(userId, withCachedDescription),
+      distinct: ["taskId", "notification_inviteId"],
+      orderBy: [{ createdAt: "desc" }, { id: "desc" }],
+    });
+  }
   const selectedRows = await client.$queryRaw<{ id: number }[]>(Prisma.sql`
     SELECT selected.id
     FROM (
@@ -163,9 +172,8 @@ export async function getInboxNotifications(
 
   if (!selectedRows.length) return [];
 
-  const includeCachedDescription = await cachedDescriptionPromise;
   return client.notification.findMany({
-    include: notificationInboxInclude(userId, includeCachedDescription),
+    include: notificationInboxInclude(userId, withCachedDescription),
     where: {
       AND: [
         { id: { in: selectedRows.map(({ id }) => id) } },
@@ -177,7 +185,15 @@ export async function getInboxNotifications(
   });
 }
 
-const getRecentInboxActorActivity = (userId: number) => {
+const getRecentInboxActorActivity = (userId: number, agentId?: string | null, teamScope?: AgentTokenTeamScope | null) => {
+  if ((teamScope != null || (agentId && agentScopeEnforced()))) {
+    return prisma.notification.findMany({
+      where: { AND: [visibleUserInboxWhere(userId), notificationBoardAccessWhere(userId, agentId, teamScope)] },
+      select: { taskId: true, type: true, fromAgentId: true, fromUserId: true, createdAt: true },
+      distinct: ["taskId", "type", "fromAgentId", "fromUserId"],
+      orderBy: [{ createdAt: "desc" }, { id: "desc" }],
+    });
+  }
   return prisma.$queryRaw<InboxActorActivityRow[]>(Prisma.sql`
     SELECT DISTINCT ON (n."taskId", n."type", n."fromAgentId", n."fromUserId")
       n."taskId" AS "taskId",
@@ -201,10 +217,14 @@ const getRecentInboxActorActivity = (userId: number) => {
 const notificationGetAll = async (
   userId: string | string[],
   options: { withCachedDescription?: boolean } = {},
+  agentId?: string | null,
+  teamScope?: AgentTokenTeamScope | null,
 ) => {
   const parsedUserId = parseInt(userId as string);
   try {
-    const inboxWhere = visibleUserInboxWhere(parsedUserId);
+    const inboxWhere: Prisma.NotificationWhereInput = agentId || teamScope != null
+      ? { AND: [visibleUserInboxWhere(parsedUserId), notificationBoardAccessWhere(parsedUserId, agentId, teamScope)] }
+      : visibleUserInboxWhere(parsedUserId);
     const [
       notifications,
       actorActivityRows,
@@ -213,8 +233,8 @@ const notificationGetAll = async (
       blockedTasks,
       userSetting,
     ] = await Promise.all([
-      getInboxNotifications(parsedUserId, prisma, options),
-      getRecentInboxActorActivity(parsedUserId),
+      getInboxNotifications(parsedUserId, prisma, options, agentId, teamScope),
+      getRecentInboxActorActivity(parsedUserId, agentId, teamScope),
       prisma.notification.findMany({
         where: { ...inboxWhere, directReply: true },
         select: { taskId: true, type: true, fromAgentId: true },
@@ -226,6 +246,7 @@ const notificationGetAll = async (
           fromUserId: parsedUserId,
           type: "Mentioned",
           taskId: { not: null },
+          ...(agentId || teamScope != null ? { AND: [notificationBoardAccessWhere(parsedUserId, agentId, teamScope)] } : {}),
         },
         select: { taskId: true },
         distinct: ["taskId"],
@@ -234,7 +255,7 @@ const notificationGetAll = async (
         where: {
           waitingOnUserId: parsedUserId,
           status: "Normal",
-          project: projectContentAccessWhere(parsedUserId),
+          project: projectContentAccessWhere(parsedUserId, agentId, teamScope),
         },
         orderBy: { waitingOnSetAt: "asc" },
         select: {
@@ -542,7 +563,8 @@ const notificationGetAll = async (
                     agentId: null,
                     seen: false,
                     taskId: { in: taskIdsWithoutReadState },
-                    NOT: inboxWhere.NOT,
+                    NOT: visibleUserInboxWhere(parsedUserId).NOT,
+                    ...(agentId || teamScope != null ? { AND: [notificationBoardAccessWhere(parsedUserId, agentId, teamScope)] } : {}),
                   },
                   _count: { _all: true },
                 })

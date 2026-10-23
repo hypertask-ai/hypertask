@@ -1,3 +1,6 @@
+import { IdempotencyAccessError } from "@/lib/mcp/idempotency/idempotencyStore"
+import { agentScopeEnforced, recordAgentBoardScopeMiss } from "@/lib/auth/agentScope";
+import { projectContentAccessWhere } from "@/utils/controllers/projects/getAllIncludes";
 import { reportMcpOperationCrash } from '@/lib/mcp/operationCrashReport'
 import { getMcpOperationContext } from '@/lib/mcp/operationContext'
 import { wrapMcpRoute, validateMcpRouteAuth as validateMcpAuth, checkMcpRouteRateLimit as checkMcpRateLimit } from '@/lib/mcp/routeWrapper'
@@ -12,7 +15,9 @@ import {
   normalizeIdempotencyKey,
   withIdempotency
 } from '@/lib/mcp/idempotency/idempotencyStore'
-import { requireRole } from '@/lib/mcp/agents/scopes'
+import { getAgentRole, requireRole } from '@/lib/mcp/agents/scopes'
+import { isFeatureEnabled } from '@/lib/flags'
+import { HTPR_7509_WRITE_AGENTS_CREATE_BOARDS_FLAG } from '@/lib/flags/keys'
 
 export const runtime = 'nodejs'
 
@@ -49,7 +54,8 @@ export async function POST(
       )
     }
     if (ctx.agentId) {
-      const scopeError = await requireRole(ctx, 'admin')
+      const writeAgentsCreateBoards = await isFeatureEnabled(HTPR_7509_WRITE_AGENTS_CREATE_BOARDS_FLAG, ctx.user.id)
+      const scopeError = await requireRole(ctx, writeAgentsCreateBoards ? 'write' : 'admin')
       if (scopeError) return scopeError
     }
     const user = ctx.user;
@@ -67,6 +73,9 @@ export async function POST(
       )
     }
 
+    if (ctx.teamScope != null && (teamId !== ctx.teamScope.teamId || !ctx.teamScope.accessBinding?.trim())) {
+      return NextResponse.json({ success: false, error: 'Forbidden' }, { status: 403 })
+    }
     const dbUser = await prisma.user.findUnique({
       where: { id: user.id },
       select: {
@@ -130,6 +139,29 @@ export async function POST(
         },
         { status: 403 }
       )
+    }
+
+    if (ctx.agentId && await getAgentRole(ctx) !== 'admin') {
+      const agent = await prisma.agent.findFirst({
+        where: {
+          id: ctx.agentId,
+          userId: user.id,
+          members: { some: { status: 'Accepted', project: { teamId: team.id } } },
+        },
+        select: { id: true },
+      })
+      if (!agent) {
+        return NextResponse.json(
+          {
+            success: false,
+            error: 'Forbidden',
+            message: 'Agent cannot create boards on this team',
+            details: { field: 'teamId', code: 'forbidden' },
+            ...(correlationId && { correlationId })
+          },
+          { status: 403 }
+        )
+      }
     }
 
     let body: unknown
@@ -215,9 +247,12 @@ export async function POST(
         user.id,
         clientIdempotencyKey,
         { teamId: team.id, manifest: validated.data },
-        produceResponseBody
+        produceResponseBody,
+        ctx.agentId && (ctx.teamScope != null || agentScopeEnforced()) ? ctx.agentId : undefined,
+        ctx.teamScope
       )
     } catch (error) {
+      if (error instanceof IdempotencyAccessError) return NextResponse.json({ error: error.message }, { status: 404 })
       if (error instanceof IdempotencyInProgressError) {
         return NextResponse.json(
           {
@@ -243,6 +278,14 @@ export async function POST(
       throw error
     }
 
+    if (responseBody.idempotent_replayed) {
+      const board = await prisma.project.findFirst({
+        where: { id: responseBody.board.id, teamId: team.id, ...projectContentAccessWhere(user.id, ctx.agentId, ctx.teamScope) },
+        select: { id: true },
+      })
+      if (!board) return NextResponse.json({ success: false, error: 'Board not accessible' }, { status: 403 })
+      if (ctx.agentId) recordAgentBoardScopeMiss(board.id, 'read')
+    }
     return NextResponse.json(
       {
         ...responseBody,

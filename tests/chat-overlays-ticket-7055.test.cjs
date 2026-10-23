@@ -25,9 +25,7 @@ function frame(flags, pathname) {
     "@/utils/undoActions/helperFuncs": { cn: (...parts) => parts.filter(Boolean).join(" ") },
     "@/hooks/useFlag": { useFlag: (key) => flags[key] ?? false, useFlagLoaded: () => true },
     "@/lib/flags/keys": {
-      HTPR_6990_NARROW_SIDEBAR_WIDTH_FLAG: "htpr-6990-narrow-sidebar-width",
       HTPR_7055_CHAT_OVERLAYS_TICKET_FLAG: KEY,
-      HTPR_7074_PHONE_WORKSPACE_WIDTH_FLAG: "htpr-7074-phone-workspace-width",
     },
   };
   const exports = {};
@@ -60,8 +58,7 @@ async function overlays(Frame, viewport, sidebar = 420) {
   }
 }
 
-const base = { "htpr-6990-narrow-sidebar-width": true };
-const on = { ...base, [KEY]: true };
+const on = { [KEY]: true };
 const detail = "/detail/project-15/7055";
 
 test("ticket page: chat overlays below sidebar + 944, pushes at or above it", async () => {
@@ -80,7 +77,7 @@ test("other pages keep the 768 / sidebar + 340 rule", async () => {
 });
 
 test("flag off: ticket page keeps the old rule", async () => {
-  const Frame = frame(base, detail);
+  const Frame = frame({}, detail);
   assert.equal(await overlays(Frame, 1127, 340), false);
   assert.equal(await overlays(Frame, 767, 420), true);
   assert.equal(await overlays(Frame, 768, 420), false);

@@ -1,3 +1,4 @@
+import { downloadWithoutBrotli } from "@/lib/net/downloadWithoutBrotli";
 import { reportError } from "@/lib/errors/reportError";
 import { createGateway, streamText, type ModelMessage } from "ai";
 import { NextRequest } from "next/server";
@@ -220,6 +221,7 @@ export async function POST(request: NextRequest) {
 
       try {
         const result = streamText({
+          experimental_download: downloadWithoutBrotli,
           model,
           system: SYSTEM,
           messages,

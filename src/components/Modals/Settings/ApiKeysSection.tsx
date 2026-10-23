@@ -1,7 +1,5 @@
 "use client";
 
-import { useFlag } from "@/hooks/useFlag";
-import { HTPR_7010_HAIKU_5_5_FLAG } from "@/lib/flags/keys";
 import { useHaikuDefaultFlag } from "@/hooks/useHaikuDefaultFlag";
 
 import type { CSSProperties } from "react";
@@ -21,7 +19,7 @@ import {
   type TByokProviderKey,
 } from "@/lib/aiProviders";
 import { teamByokKeysQueryKey } from "@/hooks/useTeamCustomEndpoint";
-import { useTeamAiProviders } from "@/hooks/useTeamAiProviders";
+import { teamAiProvidersQueryKey, useTeamAiProviders } from "@/hooks/useTeamAiProviders";
 import { currentUserAtom } from "@/store";
 import { useRecoilValue } from "@/lib/state";
 import SettingsCard from "./SettingsCard";
@@ -181,6 +179,7 @@ const ApiKeysSectionContent = ({ visibleProviderRows }: { visibleProviderRows: P
     queryClient.invalidateQueries({ queryKey: ["projectsAll"] });
     queryClient.invalidateQueries({ queryKey: ["getAllTeamsMinimal"] });
     queryClient.invalidateQueries({ queryKey: teamByokKeysQueryKey(teamId) });
+    queryClient.invalidateQueries({ queryKey: teamAiProvidersQueryKey(teamId) });
   }, [queryClient, teamId]);
 
   const fetchKeys = useCallback(async () => {
@@ -775,7 +774,7 @@ const ApiKeysSectionContent = ({ visibleProviderRows }: { visibleProviderRows: P
 
 const ApiKeysSection = () => {
   const haikuDefaultEnabled = useHaikuDefaultFlag();
-  const haiku55Enabled = useFlag(HTPR_7010_HAIKU_5_5_FLAG) || haikuDefaultEnabled;
+  const haiku55Enabled = true;
   const visibleProviderRows = haikuDefaultEnabled || haiku55Enabled
     ? providerRows.map((row) => ({ ...row, modelLabels: row.modelLabels.filter((label) => label !== "Haiku 4.5") }))
     : providerRows;

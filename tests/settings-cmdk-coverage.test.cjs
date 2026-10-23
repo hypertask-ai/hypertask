@@ -297,7 +297,7 @@ for (const { keys, flag, file, uiFlag } of gatedCommands) {
     assert.ok(dependencies.elements.some((item) => item.getText() === flag), `${flag}: missing memo dependency`);
     const bindings = {
       CommandMode: new Proxy({}, { get: (_, key) => key }), showByokApiKeys: true,
-      copyCurrentUrlEnabled: true, isTicketPrefixCommandVisible: () => true, currentProject: {}, boardLayout: "table",
+      isTicketPrefixCommandVisible: () => true, currentProject: {}, boardLayout: "table",
       onMyTasks: false, myTasksViewsEnabled: false, myTasksTableColumnsEnabled: false,
       onCalendar: false,
       ...Object.fromEntries(gatedCommands.map((item) => [item.flag, false])),

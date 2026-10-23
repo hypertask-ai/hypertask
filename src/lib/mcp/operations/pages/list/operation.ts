@@ -7,7 +7,7 @@ import { checkMcpRateLimit, validateMcpAuth } from '@/lib/mcp/auth'
 import { buildFieldError } from '@/lib/mcp/fieldError'
 import {
   findTaskByIdentifier,
-  TaskIdentifierAmbiguityError,
+  taskIdentifierErrorResponse,
   validateTaskIdentifier,
 } from '@/lib/mcp/tasks/resolveTask'
 import { listPages } from '@/utils/controllers/pages/pageService'
@@ -134,7 +134,7 @@ export async function GET(request: NextRequest) {
       const task = await findTaskByIdentifier(
         ctx.user,
         identifier,
-        ctx.agentId
+        ctx.agentId, undefined, ctx.teamScope
       )
       if (!task || !(await canAccessProject(task.projectId, ctx))) {
         return NextResponse.json(
@@ -147,7 +147,7 @@ export async function GET(request: NextRequest) {
         )
       }
 
-      const pages = await listPages({ taskId: task.id, userId: ctx.user.id, standalonePagesEnabled: await standalonePagesEnabled(ctx.user.id), agentId: ctx.agentId })
+      const pages = await listPages({ taskId: task.id, userId: ctx.user.id, standalonePagesEnabled: await standalonePagesEnabled(ctx.user.id), agentId: ctx.agentId, teamScope: ctx.teamScope })
       return NextResponse.json({ pages })
     }
 
@@ -170,19 +170,11 @@ export async function GET(request: NextRequest) {
       )
     }
 
-    const pages = await listPages({ projectId, userId: ctx.user.id, standalonePagesEnabled: await standalonePagesEnabled(ctx.user.id), agentId: ctx.agentId })
+    const pages = await listPages({ projectId, userId: ctx.user.id, standalonePagesEnabled: await standalonePagesEnabled(ctx.user.id), agentId: ctx.agentId, teamScope: ctx.teamScope })
     return NextResponse.json({ pages })
   } catch (error) {
-    if (error instanceof TaskIdentifierAmbiguityError) {
-      return NextResponse.json(
-        buildFieldError(
-          'invalid_field',
-          'ticket_number',
-          'Ticket number is ambiguous across accessible projects; use task_id or (project_id + unique_index)'
-        ),
-        { status: 400 }
-      )
-    }
+    const identifierResponse = taskIdentifierErrorResponse(error, 'ticket_number')
+    if (identifierResponse) return identifierResponse
 
     console.error('[MCP List Pages] Error:', error)
     reportMcpOperationCrash(request, error)

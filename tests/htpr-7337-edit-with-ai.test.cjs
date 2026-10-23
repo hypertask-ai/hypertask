@@ -73,7 +73,7 @@ function welcome(enabled, editTaskId = 123) {
     "next/navigation": { usePathname: () => "/detail/project-15/123" },
     "@tanstack/react-query": { useQuery: ({ queryKey }) => ({ data: queryKey[0] === "task-questions" ? { questions: ["Generated question"] } : [{ id: "old-thread", title: "Previous thread" }] }) },
     "@/lib/state": { useRecoilValue: (atom) => ({ task: { taskId: 123, taskTicketNumber: "HTPR-123" }, edit: editTaskId, ready: true })[atom] },
-    "@/store": { inViewObjectAtom: "task", aiChatEditTaskIdAtom: "edit", taskDetailNonEssentialReadyAtom: "ready" },
+    "@/store": { composeTaskQuestionsTaskIdAtom: "questionsTaskId", inViewObjectAtom: "task", aiChatEditTaskIdAtom: "edit", taskDetailNonEssentialReadyAtom: "ready" },
     "@/lib/demo/isGuestClient": { isGuestCookieUser: () => false },
     "@/lib/demo/guestBoardBuild": { isGuestBoardBuild: () => false },
     "./GuestBoardSpotlight": { GuestBoardSpotlight: () => null },
@@ -172,24 +172,6 @@ test("edit mode clears after typed or chip messages, close, task navigation, or 
   assert.deepEqual(editModeCleanup({}), []);
   for (const state of [{ messages: [{ role: "human", content: "typed message" }] }, { open: false }, { taskId: 999 }, { taskId: null }, { enabled: false }]) {
     assert.deepEqual(editModeCleanup(state), [null]);
-  }
-});
-
-test("AI triggers gate the legacy writer, preserve the mounted mobile draft, and keep Ctrl+J for new tickets", () => {
-  const state = read("src/components/RTE/useTaskDetailEditorState.tsx");
-  assert.match(state, /let shouldShowAiTaskWriter = writerOpen;/);
-  assert.match(state, /if \(editWithAiEnabled\) shouldShowAiTaskWriter = false;/);
-  const save = read("src/components/RTE/useTaskDetailEditorSave.tsx");
-  assert.match(save, /if \(editWithAiEnabled\) \{[\s\S]*?editTicketWithAi\(currentTask.id\);[\s\S]*?return;/);
-  const events = read("src/components/RTE/useTaskDetailEditorEvents.tsx");
-  assert.match(events, /if \(editWithAiEnabled\)[\s\S]*?event.detail.targetId === id[\s\S]*?editTicketWithAi\(currentTask.id\)/);
-  const panels = read("src/components/RTE/TaskDetailEditorPanels.tsx");
-  assert.match(panels, /data-mobile-existing-content-editor\s+hidden=\{editWithAiEnabled && chatHandoffOpen && showAiChatInterface\}/);
-  assert.match(panels, /if \(!editWithAiEnabled \|\| !showAiChatInterface \|\| !mobileExistingEditOpen\) setChatHandoffOpen\(false\)/);
-  assert.match(save, /if \(mobileExistingEditOpen\) setChatHandoffOpen\(true\)/);
-  assert.match(panels, /if \(editWithAiEnabled\) toggleAiTaskWriter\(\)/);
-  for (const file of ["src/components/RTE/useTaskDetailEditorKeyboard.tsx", "src/components/PageComponents/TaskDetail/TopRow/TaskTitle.tsx", "src/app/detail/[...slug]/taskDetailNavigationKeymap.ts", "src/hooks/Task Detail/useTaskDetailGlobalStates.ts"]) {
-    assert.match(read(file), /editWithAiEnabled[\s\S]*?paletteTab: "compose"/);
   }
 });
 

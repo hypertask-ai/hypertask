@@ -6,11 +6,6 @@ const React = require('react')
 const { JSDOM } = require('jsdom')
 const { createJiti } = require('jiti')
 const root = path.resolve(__dirname, '..')
-const escFlag = 'htpr-6879-search-esc-back'
-const commenterFlag = 'htpr-6880-search-commenter'
-const labelFlag = 'htpr-6878-search-label-scope'
-const layoutFlag = 'htpr-6865-search-layout'
-const prerequisites = ['htpr-6688-search-autocomplete']
 
 async function withSearch(t, config, check) {
   const dom = new JSDOM('<div id="root"></div>', { url: 'https://example.test/search' })
@@ -25,7 +20,7 @@ async function withSearch(t, config, check) {
   const stub = (filename, exports) => { require.cache[filename] = { id: filename, filename, loaded: true, exports } }
   const source = (file, exports) => stub(path.join(root, file), exports)
   if (config.storedHistory !== undefined) sessionStorage.setItem('htpr-6879-search-history', config.storedHistory)
-  const flags = Object.fromEntries([...prerequisites, layoutFlag, escFlag].map((key) => [key, true]))
+  const flags = {}
   Object.assign(flags, config.flags)
   const requests = []
   const lookups = []
@@ -51,7 +46,7 @@ async function withSearch(t, config, check) {
   try {
     source('src/utils/index.ts', { taskBaseUri: '/detail/' })
     source('src/utils/undoActions/helperFuncs.ts', { cn: (...values) => require('tailwind-merge').twMerge(require('clsx').clsx(values)) })
-    source('src/hooks/useFlag.tsx', { useFlag: (key) => flags[key] ?? false })
+    source('src/hooks/useFlag.tsx', { useFlagLoaded: () => true, useFlagReady: () => true, useFlag: (key) => flags[key] ?? false })
     source('src/lib/contexts/deviceContext.tsx', { useDeviceContext: () => false })
     const allProjects = [{ id: 7, title: 'Product Board' }]
     source('src/hooks/MultiPages/useGetAllProjectsMinimal.ts', { useGetAllProjectsMinimal: () => ({ data: allProjects }) })
@@ -77,11 +72,9 @@ async function withSearch(t, config, check) {
     stub(require.resolve('next/navigation'), { useSearchParams: () => new URLSearchParams(dom.window.location.search), useRouter: () => ({ replace(url) { navigations.push(url) }, push() {}, back() { navigations.push('back') } }) })
     stub(require.resolve('@tanstack/react-query'), { useQueryClient: () => ({ invalidateQueries() {}, setQueryData(_key, data) { cache.history = data.history } }) })
     const jiti = createJiti(__filename, { alias: { '@': path.join(root, 'src') }, interopDefault: true, fsCache: false, jsx: { runtime: 'automatic' } })
-    const baseline = config.baseline && process.env.SEARCH_ESC_BASELINE_DIR
-    if (baseline) stub(path.join(baseline, 'search-autocomplete.css'), {})
-    const { useSearch } = jiti(baseline ? path.join(baseline, 'useSearch.ts') : path.join(root, 'src/hooks/Search/useSearch.ts'))
+    const { useSearch } = jiti(path.join(root, 'src/hooks/Search/useSearch.ts'))
     source('src/hooks/Search/useSearch.ts', { useSearch: (...args) => { state = useSearch(...args); return state } })
-    const SearchComp = jiti(baseline ? path.join(baseline, 'SearchComp.tsx') : path.join(root, 'src/app/search/SearchComp.tsx')).default
+    const SearchComp = jiti(path.join(root, 'src/app/search/SearchComp.tsx')).default
     reactRoot = require('react-dom/client').createRoot(document.getElementById('root'))
     let counter = 0
     const render = async (query = config.query ?? '', reset = false) => React.act(async () => {
@@ -255,41 +248,36 @@ test('Escape from draft C restores submitted B without popping it, then A, then 
   })
 })
 
-for (const lateHydration of [false, true]) {
-  test(`empty-route remount restores persisted tab history before Escape (late flag hydration: ${lateHydration})`, async (t) => {
-    await withSearch(t, { storedHistory: '["search A","search B"]', history: ['other tab search'], flags: { [escFlag]: !lateHydration } }, async ({ type, press, complete, render, input, state, requests, navigations, flags }) => {
-      await render('', true)
-      if (lateHydration) {
-        flags[escFlag] = true
-        await render('')
-      }
-      assert.equal(requests.length, 0)
-      await type('draft C')
-      assert.equal(input().getAttribute('aria-expanded'), 'true')
+test('empty-route remount restores persisted tab history before Escape', async (t) => {
+  await withSearch(t, { storedHistory: '["search A","search B"]', history: ['other tab search'] }, async ({ type, press, complete, render, input, state, requests, navigations }) => {
+    await render('', true)
+
+    assert.equal(requests.length, 0)
+    await type('draft C')
+    assert.equal(input().getAttribute('aria-expanded'), 'true')
+    await press('Escape')
+    assert.equal(state().inputValue, 'draft C')
+    assert.equal(requests.length, 0)
+    assert.equal(sessionStorage.getItem('htpr-6879-search-history'), '["search A","search B"]')
+    for (const [query, history] of [['search B', ['search A', 'search B']], ['search A', ['search A']]]) {
       await press('Escape')
-      assert.equal(state().inputValue, 'draft C')
-      assert.equal(requests.length, 0)
-      assert.equal(sessionStorage.getItem('htpr-6879-search-history'), '["search A","search B"]')
-      for (const [query, history] of [['search B', ['search A', 'search B']], ['search A', ['search A']]]) {
-        await press('Escape')
-        assert.equal(state().inputValue, query)
-        assert.equal(input().value, query)
-        assert.equal(requests.at(-1).body.searchQuery, query)
-        assert.equal(new URL(navigations.at(-1), 'https://example.test').searchParams.get('searchTerm'), query)
-        assert.deepEqual(JSON.parse(sessionStorage.getItem('htpr-6879-search-history')), history)
-        await complete()
-        await render(query)
-      }
-      await press('Escape')
-      assert.equal(input().value, '')
-      assert.equal(sessionStorage.getItem('htpr-6879-search-history'), '[]')
-      assert.deepEqual(headings(), ['Recent searches', 'Tips'])
-      await render('')
-      await press('Escape')
-      assert.equal(requests.length, 2, 'exhausted history must not reload stale persisted searches')
-    })
+      assert.equal(state().inputValue, query)
+      assert.equal(input().value, query)
+      assert.equal(requests.at(-1).body.searchQuery, query)
+      assert.equal(new URL(navigations.at(-1), 'https://example.test').searchParams.get('searchTerm'), query)
+      assert.deepEqual(JSON.parse(sessionStorage.getItem('htpr-6879-search-history')), history)
+      await complete()
+      await render(query)
+    }
+    await press('Escape')
+    assert.equal(input().value, '')
+    assert.equal(sessionStorage.getItem('htpr-6879-search-history'), '[]')
+    assert.deepEqual(headings(), ['Recent searches', 'Tips'])
+    await render('')
+    await press('Escape')
+    assert.equal(requests.length, 2, 'exhausted history must not reload stale persisted searches')
   })
-}
+})
 
 test('board and in chips keep their icon, omit text hash and still accept hash picker and prefixed input', async (t) => {
   await withSearch(t, { history: ['in:#inne recent', 'board:#inne recent'] }, async ({ type, press, tick, input, requests, options, complete, render }) => {
@@ -358,10 +346,9 @@ test('malformed or unavailable session storage does not strand search on a blank
   })
 })
 
-test('late flag hydration records the current URL before Escape restores tab history', async (t) => {
-  await withSearch(t, { query: 'current', flags: { [escFlag]: false }, storedHistory: '["previous"]' }, async ({ complete, flags, render, press, requests, state }) => {
+test('URL load records the current URL before Escape restores tab history', async (t) => {
+  await withSearch(t, { query: 'current', storedHistory: '["previous"]' }, async ({ complete, render, press, requests, state }) => {
     await complete()
-    flags[escFlag] = true
     await render('current')
     await complete()
     assert.deepEqual(JSON.parse(sessionStorage.getItem('htpr-6879-search-history')), ['previous', 'current'])
@@ -390,102 +377,56 @@ test('searches with no matches remain in tab history, and cleared search rejects
   })
 })
 
-for (const labelEnabled of [false, true]) {
-  for (const escEnabled of [false, true]) {
-    test(`label scope ${labelEnabled}, Esc back ${escEnabled}: independent scopes, counts, readable AI and history`, async (t) => {
-      await withSearch(t, { query: 'board:7 first', flags: { [labelFlag]: labelEnabled, [escFlag]: escEnabled } }, async ({ complete, type, tick, options, lookups, press, requests, state, prompts }) => {
-        await complete()
-        assert.equal(document.querySelector('[aria-label^="Remove board:"] span').textContent, escEnabled ? 'board:inne' : 'board:#inne')
-        await type('label:bu')
-        await tick(180)
-        assert.equal(lookups.filter((params) => params.get('operator') === 'label').at(-1).get('boards'), labelEnabled ? '7' : null)
-        assert.equal(options()[1].querySelector('.ml-auto')?.textContent ?? null, labelEnabled ? '3' : null)
-        const aiQuery = labelEnabled ? `board:${escEnabled ? '' : '#'}inne label:bu` : 'board:7 label:bu'
-        assert.equal(options()[0].textContent, `Ask AI${aiQuery}`)
-        await React.act(async () => options()[0].click())
-        assert.deepEqual(prompts, [aiQuery])
-        await type('second')
-        await press('Enter')
-        await complete()
-        await press('Escape')
-        if (escEnabled) {
-          assert.equal(state().inputValue, 'board:7 first')
-          assert.equal(requests.at(-1).body.searchQuery, 'board:7 first')
-          await complete()
-          await press('Escape')
-          assert.equal(state().inputValue, '')
-          assert.deepEqual(headings(), ['Recent searches', 'Tips'])
-        } else {
-          assert.equal(state().inputValue, 'board:7 second')
-          assert.equal(sessionStorage.getItem('htpr-6879-search-history'), null)
-        }
-      })
-    })
-  }
-}
-
-for (const commenterEnabled of [false, true]) {
-  for (const escEnabled of [false, true]) {
-    for (const labelEnabled of [false, true]) {
-      test(`commenter ${commenterEnabled}, Esc back ${escEnabled}, label scope ${labelEnabled}: independent chips, picker and history`, async (t) => {
-        const query = 'board:7 commenter:77 first'
-        await withSearch(t, { query, flags: { [commenterFlag]: commenterEnabled, [escFlag]: escEnabled, [labelFlag]: labelEnabled } }, async ({ complete, type, tick, options, lookups, press, requests, state, navigations }) => {
-          await complete()
-          assert.equal(document.querySelector('[aria-label^="Remove board:"] span').textContent, escEnabled ? 'board:inne' : 'board:#inne')
-          const chip = document.querySelector('[aria-label^="Remove commenter:"]')
-          if (commenterEnabled) assert.match(chip.textContent, /commenter:@Malcolm Stern/)
-          else assert.equal(chip, null)
-          await type('commenter:mal')
-          await tick(180)
-          assert.equal(lookups.some((params) => params.get('operator') === 'commenter'), commenterEnabled)
-          assert.equal(options().some((row) => row.textContent.includes('malstern@aol.com')), commenterEnabled)
-          await type('second')
-          await press('Escape')
-          await press('Enter')
-          assert.equal(requests.at(-1).body.searchQuery, `board:7 ${commenterEnabled ? 'commenter:77 ' : ''}second`)
-          await complete()
-          await press('Escape')
-          if (escEnabled) {
-            assert.equal(state().inputValue, query)
-            assert.equal(requests.at(-1).body.searchQuery, query)
-            await complete()
-            assert.equal(document.querySelector('[aria-label^="Remove commenter:"]') !== null, commenterEnabled)
-            await press('Escape')
-            assert.equal(state().inputValue, '')
-            assert.deepEqual(headings(), ['Recent searches', 'Tips'])
-            assert.equal(options().some((row) => row.textContent.startsWith('commenter:@Hicham')), commenterEnabled)
-            assert.equal(sessionStorage.getItem('htpr-6879-search-history'), '[]')
-          } else {
-            assert.equal(navigations.at(-1), 'back')
-            assert.equal(sessionStorage.getItem('htpr-6879-search-history'), null)
-          }
-        })
-      })
-    }
-  }
-}
-
-for (const disabled of [escFlag, layoutFlag]) {
-  test(`${disabled} off preserves browser-back Escape, extra hash and dismissible empty suggestions`, async (t) => {
-    await withSearch(t, { query: 'board:#inne login', flags: { [disabled]: false }, baseline: true }, async ({ complete, press, navigations, input, type, state, capture }) => {
-      await complete()
-      capture(`${disabled}-results`)
-      assert.equal(document.querySelector('[aria-label="Remove board:#inne filter"] span').textContent, 'board:#inne')
-      await press('Escape')
-      assert.equal(navigations.at(-1), 'back')
-      assert.equal(state().inputValue, 'board:#inne login')
-      assert.equal(sessionStorage.getItem('htpr-6879-search-history'), null)
-      await type('draft')
-      capture(`${disabled}-draft`)
-      await press('Escape')
-      capture(`${disabled}-dismissed-draft`)
-      await type('')
-      capture(`${disabled}-empty`)
-      await press('Escape')
-      capture(`${disabled}-dismissed-empty`)
-      assert.equal(input().getAttribute('aria-expanded'), 'false')
-      assert.equal(document.querySelector('[data-search-layout]'), null)
-    })
+test('permanent label scope: independent scopes, counts, readable AI and history', async (t) => {
+  await withSearch(t, { query: 'board:7 first' }, async ({ complete, type, tick, options, lookups, press, requests, state, prompts }) => {
+    await complete()
+    assert.equal(document.querySelector('[aria-label^="Remove board:"] span').textContent, 'board:inne')
+    await type('label:bu')
+    await tick(180)
+    assert.equal(lookups.filter((params) => params.get('operator') === 'label').at(-1).get('boards'), '7')
+    assert.equal(options()[1].querySelector('.ml-auto')?.textContent ?? null, '3')
+    const aiQuery = 'board:inne label:bu'
+    assert.equal(options()[0].textContent, `Ask AI${aiQuery}`)
+    await React.act(async () => options()[0].click())
+    assert.deepEqual(prompts, [aiQuery])
+    await type('second')
+    await press('Enter')
+    await complete()
+    await press('Escape')
+    assert.equal(state().inputValue, 'board:7 first')
+    assert.equal(requests.at(-1).body.searchQuery, 'board:7 first')
+    await complete()
+    await press('Escape')
+    assert.equal(state().inputValue, '')
+    assert.deepEqual(headings(), ['Recent searches', 'Tips'])
   })
-}
+})
 
+test('permanent commenter and label scope: independent chips, picker and history', async (t) => {
+  const query = 'board:7 commenter:77 first'
+  await withSearch(t, { query }, async ({ complete, type, tick, options, lookups, press, requests, state }) => {
+    await complete()
+    assert.equal(document.querySelector('[aria-label^="Remove board:"] span').textContent, 'board:inne')
+    const chip = document.querySelector('[aria-label^="Remove commenter:"]')
+    assert.match(chip.textContent, /commenter:@Malcolm Stern/)
+    await type('commenter:mal')
+    await tick(180)
+    assert.equal(lookups.some((params) => params.get('operator') === 'commenter'), true)
+    assert.equal(options().some((row) => row.textContent.includes('malstern@aol.com')), true)
+    await type('second')
+    await press('Escape')
+    await press('Enter')
+    assert.equal(requests.at(-1).body.searchQuery, 'board:7 commenter:77 second')
+    await complete()
+    await press('Escape')
+    assert.equal(state().inputValue, query)
+    assert.equal(requests.at(-1).body.searchQuery, query)
+    await complete()
+    assert.equal(document.querySelector('[aria-label^="Remove commenter:"]') !== null, true)
+    await press('Escape')
+    assert.equal(state().inputValue, '')
+    assert.deepEqual(headings(), ['Recent searches', 'Tips'])
+    assert.equal(options().some((row) => row.textContent.startsWith('commenter:@Hicham')), true)
+    assert.equal(sessionStorage.getItem('htpr-6879-search-history'), '[]')
+  })
+})

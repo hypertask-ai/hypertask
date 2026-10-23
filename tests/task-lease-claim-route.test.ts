@@ -31,6 +31,8 @@ async function main() {
     userFindUnique: prismaMock.user.findUnique,
     revokedTokenFindFirst: prismaMock.revokedToken.findFirst,
     agentFindFirst: prismaMock.agent.findFirst,
+    memberFindMany: prismaMock.member.findMany,
+    featureFlagFindUnique: prismaMock.featureFlag.findUnique,
     logsCreate: prismaMock.logs.create,
     taskFindFirst: prismaMock.task.findFirst,
     taskFindUnique: prismaMock.task.findUnique,
@@ -110,9 +112,11 @@ async function main() {
         runtimeGeneration: 1,
       };
     };
+    prismaMock.member.findMany = async () => [{ projectId: 15 }];
+    prismaMock.featureFlag.findUnique = async () => null;
     prismaMock.logs.create = async () => ({ id: 1 });
     prismaMock.task.findFirst = async () =>
-      taskAccessible ? { id: TASK_ID, projectId: 15 } : null;
+      taskAccessible ? { id: TASK_ID, projectId: 15, status: taskStatus } : null;
     prismaMock.task.findUnique = async () => ({ status: taskStatus });
     prismaMock.$queryRaw = async () => [
       { holder: USER_ID, agentId: conflictAgentId },
@@ -146,6 +150,8 @@ async function main() {
     prismaMock.user.findUnique = originals.userFindUnique;
     prismaMock.revokedToken.findFirst = originals.revokedTokenFindFirst;
     prismaMock.agent.findFirst = originals.agentFindFirst;
+    prismaMock.member.findMany = originals.memberFindMany;
+    prismaMock.featureFlag.findUnique = originals.featureFlagFindUnique;
     prismaMock.logs.create = originals.logsCreate;
     prismaMock.task.findFirst = originals.taskFindFirst;
     prismaMock.task.findUnique = originals.taskFindUnique;

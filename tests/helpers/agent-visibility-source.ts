@@ -13,6 +13,7 @@ export async function assertAgentVisibilitySources() {
     inboxPage,
     taskDetailLoad,
     createSessionRoute,
+    chatServiceModule,
     existingSessionRoute,
     existingSessionMessagesRoute,
     chatAccessModule,
@@ -27,6 +28,7 @@ export async function assertAgentVisibilitySources() {
     readFile("src/app/inbox/agent/[agentId]/page.tsx", "utf8"),
     readFile("src/utils/controllers/taskDetail/load.ts", "utf8"),
     readFile("src/app/api/ai-chat/create-session/route.ts", "utf8"),
+    readFile("src/lib/agents/chatService.ts", "utf8"),
     readFile("src/app/api/agent-chat/[sessionId]/route.ts", "utf8"),
     readFile("src/app/api/agent-chat/[sessionId]/messages/route.ts", "utf8"),
     readFile("src/lib/agents/chatAccess.ts", "utf8"),
@@ -92,7 +94,10 @@ export async function assertAgentVisibilitySources() {
     taskDetailLoad,
     /SELECT t\.id, t\."projectId" FROM "Task" t[\s\S]*?task_row AS \(SELECT id AS "taskId", "projectId" FROM authorized_task\)/,
   );
-  assert.match(createSessionRoute, /\.\.\.accessibleAgentWhere\(userId\)/);
+  assert.match(createSessionRoute, /openAgentChat\(\{ userId, agentId: parsed\.data\.agentId \}\)/);
+  assert.doesNotMatch(createSessionRoute, /prisma\.agent\.findFirst\(/);
+  assert.match(chatServiceModule, /\.\.\.accessibleAgentWhere\(userId\)/);
+  assert.match(chatServiceModule, /loadUserAgentChatSession\(/);
   // HTPR-6002 moved this rule out of each route into one shared module, so the
   // routes are checked for delegation and the rule itself is checked once,
   // where it now lives. revokedAt must come after the spread: the other order

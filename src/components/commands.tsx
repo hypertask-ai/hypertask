@@ -1,5 +1,5 @@
 import { createSection } from "@/lib/api/typedClient";
-import { HTPR_6979_TYPED_WRITES_FLAG } from "@/lib/flags/keys";
+import { HTPR_7518_AGENT_SIDEBAR_CHATS_FLAG, HTPR_6979_TYPED_WRITES_FLAG } from "@/lib/flags/keys";
 import { renderCommandModals1 } from "./commandModalPanels1";
 import { renderCommandModals2 } from "./commandModalPanels2";
 
@@ -61,6 +61,9 @@ import "./Modals/commands/HTC/AllCommands";
 
 
 const HypertasksCommands = ({ callbackHandler, contextOptions, focusProxy }: IHTCProps) => {
+  const agentSidebarChatsFlag = useFlag(HTPR_7518_AGENT_SIDEBAR_CHATS_FLAG);
+  let agentSidebarChatsEnabled = false;
+  if (agentSidebarChatsFlag) agentSidebarChatsEnabled = true;
   const roundedEnabled = useFlag(HTPR_7328_ROUNDED_THEME_FLAG);
   const kanbanSelectAllEnabled = useFlag(HTPR_7260_KANBAN_SELECT_ALL_FLAG);
   const composeEnabled = useFlag(HTPR_6929_COMPOSE_TASK_WRITER_FLAG);
@@ -72,7 +75,7 @@ const HypertasksCommands = ({ callbackHandler, contextOptions, focusProxy }: IHT
   if (typedWrites) createSectionWriter = createSection;
   const ticketPrefixEnabled = useFlag(HTPR_6868_TICKET_PREFIX_FLAG);
   const {
-  queryClient, copyCurrentUrlEnabled, rowShortcutsEnabled, myTasksViewsEnabled, myTasksTableColumnsEnabled,
+  queryClient, rowShortcutsEnabled, myTasksViewsEnabled, myTasksTableColumnsEnabled,
   myTasksSnoozeEnabled, myTasksBulkSelectionEnabled, activeSectionId, updateTaskInCache, moveItem,
   removeFromListWithStatus, renameBoard, getProjectIdxAndAllData, updateProjectView, removeMemberFromBoard,
   addAgentToBoard, removeAgentFromBoard, inviteNewMembersToBoard, reSendInvite, cancelInvite,
@@ -139,8 +142,8 @@ const HypertasksCommands = ({ callbackHandler, contextOptions, focusProxy }: IHT
   const {
   handleAction,
   } = createCommandDispatcher({
-    newTaskWindow,
-    copyCurrentUrlEnabled, boardCloseHandler, setShowCommands, setCommandMode, undoLatest,
+    agentSidebarChatsEnabled, newTaskWindow,
+    boardCloseHandler, setShowCommands, setCommandMode, undoLatest,
     _currentProject, setBoardZoomedOutByProject, currentUser, openSettings, setShowShortcuts,
     switchToTheme: switchCommandTheme,
     followTaskHandler, unFollowTaskHandler, hasBulkSelection, bulkSelection,

@@ -388,6 +388,7 @@ export function getUpdateTaskBaseSchema() {
         .optional()
         .describe('Task description. HTML or structural markdown; content_type can explicitly select either format.'),
       content_type: taskContentTypeSchema,
+      inline_images: z.boolean().optional(),
       priority: priorityIndexSchema,
       estimate: estimateIndexOptionalSchema,
       status: statusFilterSchema,
@@ -592,6 +593,7 @@ export function getCreateTaskInputSchema() {
         .optional()
         .describe('Task description. HTML or structural markdown; content_type can explicitly select either format.'),
       content_type: taskContentTypeSchema,
+      inline_images: z.boolean().optional(),
       section_id: z.coerce
         .number()
         .int()

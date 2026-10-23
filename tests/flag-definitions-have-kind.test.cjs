@@ -22,7 +22,7 @@ function assertLegacyDefaults(definitions) {
 
 test("every flag definition declares its kind", () => {
   assert.ok(files.length > 0);
-  const missing = files.filter((name) => !/^\s{2}kind:\s*"(feature|bugfix|improvement|internal)",$/m.test(fs.readFileSync(path.join(folder, name), "utf8")));
+  const missing = files.filter((name) => !/^\s{2}kind:\s*"(feature|bugfix|improvement)",$/m.test(fs.readFileSync(path.join(folder, name), "utf8")));
   assert.deepEqual(missing, []);
 });
 

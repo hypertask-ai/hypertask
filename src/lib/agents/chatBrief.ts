@@ -1,3 +1,4 @@
+import { resolveAgentTeamScope } from "@/lib/auth/agentTeamScope";
 import type { Prisma } from "@prisma/client";
 import prisma from "@/lib/prisma";
 import { doneColumnTitles, isDoneColumn } from "@/lib/doneColumns";
@@ -52,7 +53,7 @@ const taskSelect = {
 type BriefTask = Prisma.TaskGetPayload<{ select: typeof taskSelect }>;
 type BriefDatabase = Pick<
   typeof prisma,
-  "assignees" | "comment" | "taskPullRequest"
+  "agent" | "assignees" | "comment" | "taskPullRequest"
 >;
 
 const clipped = (value: string | null | undefined, limit: number): string => {
@@ -120,6 +121,12 @@ export async function buildAgentChatBrief({
   agentId: string;
   db?: BriefDatabase;
 }): Promise<AgentWebhookChatBrief> {
+  const credential = await db.agent.findFirst({
+    where: { id: agentId, userId, revokedAt: null },
+    select: { credentialTeamId: true, credentialTeamAccessBinding: true },
+  });
+  if (!credential) throw new Error("Agent not found");
+  const teamScope = await resolveAgentTeamScope(userId, credential);
   const currentAssignment = await db.assignees.findFirst({
     where: {
       agentId,
@@ -127,7 +134,7 @@ export async function buildAgentChatBrief({
         status: "Normal",
         deletedAt: null,
         section: AGENT_CURRENT_WORK_SECTION,
-        project: getProjectWhere(userId),
+        project: getProjectWhere(userId, teamScope != null ? agentId : null, teamScope),
       },
     },
     orderBy: [{ assignedAt: "desc" }, { id: "desc" }],
@@ -137,7 +144,7 @@ export async function buildAgentChatBrief({
   const visibleTask = {
     status: { not: "Deleted" as const },
     deletedAt: null,
-    project: getProjectWhere(userId),
+    project: getProjectWhere(userId, teamScope != null ? agentId : null, teamScope),
   };
 
   const [recentTicketComments, pullRequests, recentComments] = await Promise.all([

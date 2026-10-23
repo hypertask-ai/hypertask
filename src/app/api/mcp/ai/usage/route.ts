@@ -300,7 +300,7 @@ export async function GET(request: NextRequest) {
     }
 
     const project = await prisma.project.findFirst({
-      where: { id: projectId, ...getProjectWhere(ctx.user.id, ctx.agentId) },
+      where: { id: projectId, ...getProjectWhere(ctx.user.id, ctx.agentId, ctx.teamScope) },
       select: { id: true },
     })
     if (!project) {

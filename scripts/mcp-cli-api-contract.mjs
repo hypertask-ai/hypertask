@@ -265,6 +265,7 @@ export async function runContract() {
     // HTPR-7341 sends an agent comment without a kind to the agent log, so the agent posts a QA comment.
     const added = await call(token, "comments", "add", { task_id: id, text, ...(role === "write-agent" ? { kind: "qa" } : {}) });
     requireThat(Number.isInteger(added.comment?.id), `${role}: invalid comment receipt`);
+    requireThat(added.routedTo === "comments" && added.visibleToPeople === true, `${role}: comment visibility receipt missing`);
     for (const comments of [await call(token, "comments", "list", { task_id: id }), await rest(`/comments?task_id=${id}`, token)]) {
       requireThat(comments.comments?.some(row => row.id === added.comment.id && row.text.includes(text)), `${role}: comment readback missing content`);
     }

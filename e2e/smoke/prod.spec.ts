@@ -143,15 +143,18 @@ test(`My Tasks Tab keeps the chosen split without server navigation (${groupBy} 
   await page.goto('/my-tasks?view=all', { waitUntil: 'load' })
   await listResponse
   if (groupBy === 'board') {
-    const groupControl = page.getByRole('button', { name: 'Group My Tasks', exact: true })
-    await groupControl.click()
-    await groupControl.locator('..').getByRole('button', { name: 'Board', exact: true }).click()
+    // Phones reach Group by through Commands, which dispatches this event; desktop uses the toolbar control.
+    if (testInfo.project.name === 'Mobile') await page.evaluate(() => window.dispatchEvent(new Event('my-tasks-group-picker')))
+    else await page.getByRole('button', { name: 'Group My Tasks', exact: true }).click()
+    await page.locator('[id^="option-picker-"]', { hasText: /^Board$/ }).click()
+    await expect(page.locator('[id^="option-picker-"]'), 'Group picker must close and hand focus back before the Tab checks').toHaveCount(0)
   }
   const splits = page.locator('.footer_tags_main:visible:not(.table-hscroll .footer_tags_main)')
   const selected = splits.locator('.font-semibold > span.footer_tags')
   await expect(splits).toHaveCount(boards.length + 1)
   await expect(selected).toHaveText('All')
   await page.evaluate(() => (document.activeElement as HTMLElement).blur())
+  await expect(page.locator('body'), 'the page body must hold focus before the first Tab').toBeFocused()
 
   let serverNavigations = 0
   let releaseNavigation!: () => void

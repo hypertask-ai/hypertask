@@ -1,3 +1,4 @@
+const { withStubs } = require('./helpers/stub-map.cjs')
 const test = require('node:test')
 const assert = require('node:assert/strict')
 const fs = require('node:fs')
@@ -13,12 +14,11 @@ const guestId = 900
 const connectTaskTitle = 'Connect Hypertask to Claude or ChatGPT'
 
 function loadTs(relativePath, aliases) {
-  aliases = {
+  aliases = withStubs({
     '@/lib/auth/signupAttributionContext': { createSignupContext: async () => null, consumeSignupContext: async () => null, consumeSignupCookie: async () => null, consumeGoogleSignupContext: async () => null, bindSignupCodeContext: async () => {}, takeSignupCodeContext: async () => null },
     '@/lib/analytics/signupIdentityClient': { attachSignupContext: async () => {}, getSignupContextInput: async () => ({}) },
     '@/lib/telemetry/signupIdentityLink': { recordSignupIdentityLink: async () => null },
-    ...aliases,
-  }
+  }, aliases)
 
   if (/src\/lib\/flags\/(?:keys|definitions)\.ts$/.test(relativePath)) return require("./helpers/flag-files.cjs").load(relativePath);
   const javascript = ts.transpileModule(fs.readFileSync(path.join(root, relativePath), 'utf8'), {
@@ -71,6 +71,7 @@ function makeHarness({ guestBoard = false, ownedBoard = false, memberships = 0, 
     $transaction: async (callback) => callback(prisma),
     featureFlag: {
       findUnique: async ({ where }) => {
+        if (where.key === 'htpr-7549-first-task-pointer') return { mode: 'OFF' }
         calls.flags.push(where.key)
         if (failFlag) throw new Error('test flag failure')
         return flagMode === null ? null : { mode: flagMode }
@@ -116,6 +117,8 @@ function makeHarness({ guestBoard = false, ownedBoard = false, memberships = 0, 
     '@better-auth/infra': { dash: pluginStub },
     '@better-auth/passkey': { passkey: pluginStub },
     'better-auth/api': { createAuthMiddleware: (handler) => handler, createAuthEndpoint: (route, options, handler) => handler, getOAuthState: async () => null },
+    '@/lib/auth/oauthTokenCipher': { preflightOAuthTokenKey: () => {} },
+    '@/lib/auth/oauthTokenStorage': { withOAuthTokenStorage: (adapter) => adapter },
     '@/lib/auth/bridgePlugin': { bridgeSessionPlugin: pluginStub },
     '@/lib/email/sendEmail': {},
     '@/lib/onboarding/emails/welcome': { maybeSendWelcomeEmail: async () => 'flag_off' },

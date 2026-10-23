@@ -1,3 +1,4 @@
+import type { AgentTokenTeamScope } from '@/lib/mcp/auth/types'
 import prisma from '@/lib/prisma'
 import { projectContentAccessWhere } from '@/utils/controllers/projects/getAllIncludes'
 import { upsertCommentToTurbopuffer } from '@/utils/controllers/turbopuffer/turbopufferHelper'
@@ -13,6 +14,7 @@ export interface UpdateCommentParams {
   commentId: number
   text: string
   userId: number
+  teamScope?: AgentTokenTeamScope | null
   agentId?: string | null
   attachments?: Array<{
     fileType: string
@@ -24,11 +26,11 @@ export interface UpdateCommentParams {
 }
 
 export async function updateCommentService(params: UpdateCommentParams) {
-  const { commentId, text: inputText, userId, agentId, attachments, replaceAttachments } = params
+  const { commentId, text: inputText, userId, agentId, teamScope, attachments, replaceAttachments } = params
   const text = normalizeBlockHtml(inputText)
 
   const comment = await prisma.comment.findFirst({
-    where: { id: commentId, creatorId: userId, task: { project: projectContentAccessWhere(userId, agentId) } },
+    where: { id: commentId, creatorId: userId, task: { project: projectContentAccessWhere(userId, agentId, teamScope) } },
     select: { id: true, taskId: true, text: true, task: { select: { projectId: true } } }
   })
 
@@ -39,6 +41,13 @@ export async function updateCommentService(params: UpdateCommentParams) {
   await invalidateHyperAiCommentOrigin(commentId)
   const textChanged = text !== normalizeBlockHtml(comment.text)
   const updatedComment = await prisma.$transaction(async (transaction) => {
+    if (teamScope != null) {
+      await transaction.$queryRaw`SELECT id FROM "Task" WHERE id = ${comment.taskId} FOR UPDATE`
+      const allowed = await transaction.comment.findFirst({
+        where: { id: commentId, creatorId: userId, task: { project: projectContentAccessWhere(userId, agentId, teamScope) } }, select: { id: true },
+      })
+      if (!allowed) throw new Error('Comment not found or access denied')
+    }
     if (attachments && replaceAttachments) {
       const existingAttachments = await transaction.attachment.findMany({
         where: { commentId },

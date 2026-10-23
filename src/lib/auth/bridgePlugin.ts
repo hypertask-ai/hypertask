@@ -27,6 +27,13 @@ export function bridgeSessionPlugin() {
             })
           }
 
+          if (legacySession.agentId) {
+            throw APIError.fromStatus('FORBIDDEN', {
+              message: 'Agent cookies cannot create human sessions',
+              code: 'AGENT_COOKIE_ROUTE',
+            })
+          }
+
           ctx.setHeader('cache-control', 'private, no-store')
           ctx.setHeader('pragma', 'no-cache')
           const bootstrapPromise = getAppShellBootstrap(legacySession.id).catch(

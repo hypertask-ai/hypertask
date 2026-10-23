@@ -1,4 +1,7 @@
+import { requireAgentWriteRole } from "@/lib/mcp/agents/readRoleGuard";
+import { recordAgentBoardScopeMiss } from "@/lib/auth/agentScope";
 import { reportMcpOperationCrash } from '@/lib/mcp/operationCrashReport'
+import { taskWriteAccessWhere } from "@/utils/controllers/projects/getAllIncludes"
 import { wrapMcpRoute, validateMcpRouteAuth as validateMcpAuth, checkMcpRouteRateLimit as checkMcpRateLimit } from '@/lib/mcp/routeWrapper'
 import { NextRequest, NextResponse } from 'next/server'
 
@@ -22,6 +25,8 @@ export async function POST(request: NextRequest) {
         { status: 401 }
       )
     }
+    const roleRefusal = await requireAgentWriteRole(ctx)
+    if (roleRefusal) return roleRefusal
 
     let body: { project_id?: unknown; status?: unknown }
     try {
@@ -49,6 +54,14 @@ export async function POST(request: NextRequest) {
       )
     }
 
+    if (ctx.agentId && !(await prisma.project.findFirst({
+      where: { id: projectId, ...taskWriteAccessWhere(ctx.user.id, ctx.agentId, ctx.teamScope) },
+      select: { id: true },
+    }))) {
+      return NextResponse.json({ success: false, error: 'Board not found' }, { status: 404 })
+    }
+
+    if (ctx.agentId) recordAgentBoardScopeMiss(projectId, "write");
     if (status === 'Deleted') {
       if (!(await isFeatureEnabled(HTPR_6470_PROJECT_DELETE_FLAG, ctx.user.id))) {
         return NextResponse.json({ success: false, error: 'Not found' }, { status: 404 })
@@ -58,7 +71,7 @@ export async function POST(request: NextRequest) {
     }
 
     const project = await prisma.project.findFirst({
-      where: { id: projectId, ownerId: ctx.user.id, status: { not: 'Deleted' } },
+      where: { id: projectId, ownerId: ctx.user.id, status: { not: 'Deleted' }, ...(ctx.agentId || ctx.teamScope != null ? taskWriteAccessWhere(ctx.user.id, ctx.agentId, ctx.teamScope) : {}) },
       select: { id: true, name: true, title: true, status: true },
     })
 

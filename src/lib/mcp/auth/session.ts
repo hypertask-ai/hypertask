@@ -1,3 +1,4 @@
+import { prepareAgentScope } from "@/lib/auth/agentScope";
 import { enqueueOutsideSaveAndProcessSoon } from "@/lib/telemetry/analyticsIntents";
 import { enqueueAuthenticatedConnection } from "@/lib/telemetry/activationOccurrences";
 import { NextRequest } from 'next/server';
@@ -20,7 +21,13 @@ export function extractBearerToken(authHeader: string | null): string | null {
   return authHeader?.match(/^Bearer\s+(.+)$/i)?.[1] ?? null
 }
 
-export async function validateMcpAuth(
+export async function validateMcpAuth(request: NextRequest, options: ValidateMcpAuthOptions = {}): Promise<McpAuthContext | null> {
+  const ctx = await readMcpAuth(request, options);
+  if (ctx) await prepareAgentScope(ctx.user.id, ctx.agentId);
+  return ctx;
+}
+
+async function readMcpAuth(
   request: NextRequest,
   options: ValidateMcpAuthOptions = {}
 ): Promise<McpAuthContext | null> {
@@ -140,6 +147,7 @@ async function validateApiKey(token: string): Promise<{ context: McpAuthContext;
           displayName: apiKey.user.displayName ?? undefined,
         },
         agentId: null,
+        teamScope: null,
       },
     }
   } catch {
@@ -227,7 +235,7 @@ export async function validateManagementOrSessionAuth(
 
   const { getSessionUser } = await import('@/lib/auth/getSessionUser')
   const session = await getSessionUser(request.headers)
-  if (!session) return null
+  if (!session || session.agentId) return null
 
   const user = await prisma.user.findUnique({
     where: { id: session.userId },
@@ -246,6 +254,7 @@ export async function validateManagementOrSessionAuth(
       displayName: user.displayName ?? undefined,
     },
     agentId: null,
+    teamScope: null,
   }
 }
 
@@ -325,6 +334,7 @@ export async function validateManagementApiKey(token: string): Promise<McpAuthCo
         displayName: user.displayName ?? undefined,
       },
       agentId: null,
+      teamScope: teamId && teamAccessBinding ? { teamId, accessBinding: teamAccessBinding } : null,
       management: {
         keyId: String(result.key.id),
         permissions: parseManagementPermissions(result.key.permissions),

@@ -2,7 +2,7 @@ import create from "@/utils/controllers/tasks/create";
 import generateRank from "@/utils/generateRank";
 import prisma from "@/lib/prisma";
 
-export const createFullScreenTaskAndReturn = async(projectId:number, userId:number, projectIdentifier:number, title:string, currentUser:{id:number}, agentId?:string | null, description?:string)=>{
+export const createFullScreenTaskAndReturn = async(projectId:number, userId:number, projectIdentifier:number, title:string, currentUser:{id:number}, agentId?:string | null)=>{
     try {
 
         const section = await prisma.section.findFirst({

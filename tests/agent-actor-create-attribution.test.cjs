@@ -175,7 +175,7 @@ test("MCP createTask signs the internal hop with the authenticated agentId", () 
   const source = read("src/lib/mcp/tasks/services.ts");
   assert.match(
     source,
-    /signSession\(\{\s*id: user\.id,\s*email: user\.email,\s*\.\.\.\(agentId \? \{ agentId \} : \{\}\),\s*\}\)/,
+    /signSession\(\{\s*id: user\.id,\s*email: user\.email,\s*\.\.\.\(agentId \? \{ agentId \} : \{\}\),\s*teamScope: data\.teamScope,\s*agentTokenGeneration: data\.agentTokenGeneration,\s*\}\)/,
   );
 });
 

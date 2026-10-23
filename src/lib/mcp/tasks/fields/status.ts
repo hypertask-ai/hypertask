@@ -13,6 +13,7 @@ export async function updateTaskStatus(context: TaskUpdateFieldContext, task: Ta
         const archiveUrl = `${baseUrl}/api/tasks/(un)archive`
         const archiveResponse = await fetch(archiveUrl, {
             method: 'POST',
+            redirect: 'manual',
             ...fetchOpts,
             body: JSON.stringify({
                 taskId: task.id,

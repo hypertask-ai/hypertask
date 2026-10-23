@@ -30,6 +30,16 @@ const stubSourceModule = (relativePath, exports) =>
 stubModule(require.resolve("next/navigation"), {
   useRouter: () => ({ push: () => {} }),
   usePathname: () => "/project",
+  useSearchParams: () => new URLSearchParams(),
+});
+stubSourceModule("src/lib/configs/general.config.ts", {
+  MOBILE_TARGET: "min-h-[44px] min-w-[44px] shrink-0 flex items-center justify-center",
+});
+stubSourceModule("src/utils/undoActions/helperFuncs.ts", {
+  cn: (...values) => values.filter(Boolean).join(" "),
+});
+stubSourceModule("src/components/AI_CHAT/AgentSidebarChatCommands.tsx", {
+  AgentSidebarChatCommands: () => null,
 });
 stubSourceModule("src/hooks/useFlag.tsx", {
   useFlag: () => false,
@@ -148,14 +158,14 @@ test("mobile new chat blocks repeated requests and recovers after rejection", as
   };
   const container = document.getElementById("root");
   const reactRoot = createRoot(container);
-  const renderHeader = () =>
+  const renderHeader = (sidebarChats) =>
     React.createElement(
       MobileViewContext.Provider,
       { value: true },
       React.createElement(
         TestChatContext.Provider,
         { value: context },
-        React.createElement(ChatHeader),
+        React.createElement(ChatHeader, { sidebarChats }),
       ),
     );
 
@@ -163,6 +173,17 @@ test("mobile new chat blocks repeated requests and recovers after rejection", as
     toastErrors.length = 0;
     await act(async () => reactRoot.render(renderHeader()));
     assert.match(container.textContent, /Active chat/);
+    assert.equal(container.querySelector('[title="Active chat"]').textContent.trim(), "Active chat");
+    const historyButton = container.querySelector('[aria-label="Chat history"]');
+    let propagatedMouseDowns = 0;
+    const onMouseDown = () => { propagatedMouseDowns++; };
+    document.addEventListener("mousedown", onMouseDown);
+    try {
+      await act(async () => historyButton.dispatchEvent(new dom.window.MouseEvent("mousedown", { bubbles: true })));
+      assert.equal(propagatedMouseDowns, 1, "flag-Off History retains document mousedown propagation");
+    } finally {
+      document.removeEventListener("mousedown", onMouseDown);
+    }
     assert.doesNotMatch(container.textContent, /First chat/);
     assert.match(
       container.querySelector("[data-ai-chat-mobile-model-label]").textContent,
@@ -203,6 +224,21 @@ test("mobile new chat blocks repeated requests and recovers after rejection", as
       await Promise.resolve();
     });
     assert.equal(newChatButton.disabled, false);
+
+    await act(async () => reactRoot.render(renderHeader({ projectId: 15, target: { kind: "ai" }, agents: [], onSelect: () => {} })));
+    const conversationTitle = container.querySelector('[aria-label="Switch conversation"]');
+    assert.ok(conversationTitle);
+    assert.ok(conversationTitle.classList.contains("min-h-[44px]"));
+    assert.ok(conversationTitle.classList.contains("min-w-[44px]"));
+    let sidebarMouseDowns = 0;
+    const onSidebarMouseDown = () => { sidebarMouseDowns++; };
+    document.addEventListener("mousedown", onSidebarMouseDown);
+    try {
+      await act(async () => container.querySelector('[aria-label="Chat history"]').dispatchEvent(new dom.window.MouseEvent("mousedown", { bubbles: true })));
+      assert.equal(sidebarMouseDowns, 0, "sidebar History still isolates its picker interaction");
+    } finally {
+      document.removeEventListener("mousedown", onSidebarMouseDown);
+    }
   } finally {
     await act(async () => reactRoot.unmount());
     global.window = previousWindow;

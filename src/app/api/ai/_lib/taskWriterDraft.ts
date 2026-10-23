@@ -1,3 +1,5 @@
+import { downloadWithoutBrotli } from "@/lib/net/downloadWithoutBrotli";
+import type { AgentTokenTeamScope } from '@/lib/mcp/auth/types';
 import { generateText } from "ai";
 import { configureAiModelUsage } from "./modelProvider";
 import { filterOneImagePass } from "./editorAi";
@@ -9,7 +11,8 @@ export async function generateTaskWriterDraft(
   body: TaskWriterRequest,
   userId: number,
   agentId?: string | null,
-  abortSignal?: AbortSignal
+  abortSignal?: AbortSignal,
+  teamScope?: AgentTokenTeamScope | null,
 ) {
   const {
     selected,
@@ -19,7 +22,9 @@ export async function generateTaskWriterDraft(
     skills,
     usageTaskId,
     validateDraft,
-  } = await prepareTaskWriterRun(body, userId, agentId);
+    customFieldDefinitions,
+    boardLabelIds,
+  } = await prepareTaskWriterRun(body, userId, agentId, teamScope);
 
   configureAiModelUsage(selected.model, {
     userId,
@@ -31,6 +36,7 @@ export async function generateTaskWriterDraft(
     feature: "task-writer",
   });
   const { text } = await generateText({
+    experimental_download: downloadWithoutBrotli,
     model: selected.model,
     instructions,
     messages,
@@ -44,13 +50,17 @@ export async function generateTaskWriterDraft(
   const filtered = allowedImgSrcs
     ? filterOneImagePass(text, allowedImgSrcs).emit
     : text;
+  const fieldTools = customFieldDefinitions ? await import("@/lib/ai/taskWriterCustomFields") : null;
+  const fieldDraft = fieldTools?.readTaskWriterCustomFields(filtered);
+  const draftHtml = fieldDraft?.html ?? filtered;
   const properties =
     body.aiMode === "AiTaskWriter"
-      ? extractTaskWriterProperties(filtered, {
+      ? extractTaskWriterProperties(draftHtml, {
+          boardLabelIds,
           fallbackTitle:
             body.taskTitle.trim() || taskTitleFromBrief(body.PROMPT),
         })
-      : { title: null, description: filtered };
+      : { title: null, description: draftHtml };
 
   if (validateDraft && !hasUsableTaskWriterDraft(properties.description)) {
     return { success: false as const, error: TASK_WRITER_EMPTY_DRAFT_MESSAGE };
@@ -58,6 +68,8 @@ export async function generateTaskWriterDraft(
 
   return {
     success: true as const,
+    ...(fieldDraft && customFieldDefinitions?.length ? { customFields: fieldTools!.validateTaskWriterCustomFields(customFieldDefinitions, fieldDraft.customFields) } : {}),
+    ...("labelIds" in properties && properties.labelIds ? { labelIds: properties.labelIds } : {}),
     html: properties.description,
     title: properties.title,
     priority: "priority" in properties ? properties.priority : undefined,

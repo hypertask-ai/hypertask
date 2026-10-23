@@ -2,7 +2,6 @@ import { randomBytes } from "node:crypto";
 import { Prisma } from "@prisma/client";
 
 import { decryptSecret, encryptSecret } from "@/lib/crypto/byokCipher";
-import { FIGMA_CONNECT_FLAG, isFeatureEnabled } from "@/lib/flags";
 import prisma from "@/lib/prisma";
 import {
   FigmaOAuthRequestError,
@@ -21,9 +20,6 @@ type ConnectedToken = FigmaToken & {
   refreshToken: string;
   userId: string;
 };
-
-export const figmaConnectEnabledFor = (userId: number) =>
-  isFeatureEnabled(FIGMA_CONNECT_FLAG, userId);
 
 async function withFigmaConnectionLock<T>(
   userId: number,

@@ -172,6 +172,10 @@ export function createUserPrompt(
       ? `\n                CURRENT TICKET CONTEXT (the ticket the user is viewing — read this before answering questions about "this ticket"; do NOT search for it):\n${currentTaskContext}\n`
       : ""
     }
+                ${body.default_context?.scope === "ticket"
+      ? "SCOPE: Current ticket only. Use only the current ticket title, description and comments as ticket context. Do not search or load other tickets or board-wide context. This explicit scope overrides the default task_id navigation guidance."
+      : ""
+    }
                 User query: ${body.message}
                 CHAT HISTORY: ${formatChatHistory(body.chat_history)}
                 context_list: ${stringifyForPrompt(body.context_list)}

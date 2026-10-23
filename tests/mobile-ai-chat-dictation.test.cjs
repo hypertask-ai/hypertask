@@ -140,6 +140,7 @@ stubSourceModule("src/components/RTE/Components/AudioButton.tsx", {
       className: ["audio-recorder", wrapperClassName, visualizerClassName]
         .filter(Boolean)
         .join(" "),
+      id,
       "data-control": "recorder",
       "data-recorder-id": id,
       "data-global-recording": String(globalRecording),
@@ -269,6 +270,7 @@ test("real mobile microphones apply each composer presentation state", async () 
     "ai-writer-audio-button",
     "create-task-modal-audio-button",
     "ai-chat-audio-button",
+    "ai-chat-audio-button-instance",
   ];
 
   try {
@@ -628,9 +630,9 @@ test("controlled Agent Chat mode uses the real mobile AI composer frame", async 
 
     assert.ok(container.querySelector("[data-agent-chat-ai-composer]"));
     assert.equal(container.querySelector("textarea").value, "Reply");
-    assert.equal(
+    assert.match(
       container.querySelector('[data-control="recorder"]').dataset.recorderId,
-      "ai-chat-audio-button",
+      /^ai-chat-audio-button-/,
     );
     assert.equal(container.querySelector("[data-ai-chat-mobile-overflow]"), null);
     await act(async () =>
@@ -723,6 +725,70 @@ test("controlled Agent Chat TipTap mode uses EditorContent instead of a textarea
       delete global.IS_REACT_ACT_ENVIRONMENT;
     } else {
       global.IS_REACT_ACT_ENVIRONMENT = previousActEnvironment;
+    }
+  }
+});
+
+test("retained composers route dictation only to the active root and keep recorder ids unique", async () => {
+  const dom = new JSDOM("<!doctype html><button id='outside'>Board</button><div id='root'></div>");
+  const keys = ["window", "document", "React", "IS_REACT_ACT_ENVIRONMENT"];
+  const previous = new Map(keys.map((key) => [key, { exists: Object.hasOwn(global, key), value: global[key] }]));
+  Object.assign(global, { window: dom.window, document: dom.window.document, React, IS_REACT_ACT_ENVIRONMENT: true });
+  const container = document.getElementById("root");
+  const reactRoot = createRoot(container);
+  const controlledComposer = {
+    value: "Reply", inputRef: React.createRef(), onChange: () => {}, onKeyDown: () => {},
+    placeholder: "Message Agent", ariaLabel: "Message Agent", isRecording: false, isProcessing: false,
+    onRecordingChange: () => {}, onProcessingChange: () => {}, onDictation: () => {},
+    sendDisabled: false, onSend: () => {},
+  };
+  const render = (agentActive, disabled = false, mobile = false) => React.createElement(
+    MobileViewContext.Provider, { value: mobile },
+    React.createElement(TestChatContext.Provider, { value: chatContextValue(false) },
+      React.createElement("div", { hidden: agentActive }, React.createElement(AI_Tiptap_Container, { active: !agentActive, disabled })),
+      React.createElement("div", { hidden: !agentActive }, React.createElement(AI_Tiptap_Container, { controlledComposer, active: agentActive, disabled })),
+    ),
+  );
+  const shortcut = (target = document.getElementById("outside")) => {
+    target.focus();
+    target.dispatchEvent(new dom.window.KeyboardEvent("keydown", { bubbles: true, cancelable: true, ctrlKey: true, shiftKey: true, key: "D", keyCode: 68 }));
+  };
+  try {
+    await act(async () => reactRoot.render(render(true)));
+    const recorders = [...container.querySelectorAll('[data-control="recorder"]')];
+    assert.equal(recorders.length, 2);
+    assert.equal(new Set(recorders.map((node) => node.id)).size, 2);
+    const clicks = [0, 0];
+    recorders.forEach((node, index) => node.addEventListener("click", () => { clicks[index]++; }));
+    await act(async () => shortcut());
+    assert.deepEqual(clicks, [0, 1], "board focus must dictate into the visible agent, not hidden general chat");
+    await act(async () => shortcut(container.querySelector("textarea")));
+    assert.deepEqual(clicks, [0, 2], "agent editor focus must resolve its own recorder exactly once");
+    await act(async () => reactRoot.render(render(false)));
+    await act(async () => shortcut());
+    assert.deepEqual(clicks, [1, 2], "returning to general chat must disable the retained agent listener");
+    await act(async () => reactRoot.render(render(false, true)));
+    await act(async () => shortcut());
+    assert.deepEqual(clicks, [1, 2], "disabled composers must not handle dictation");
+    await act(async () => reactRoot.render(render(true, false, true)));
+    await act(async () => shortcut());
+    assert.deepEqual(clicks, [1, 2], "mobile must not register desktop shortcuts");
+    await act(async () => reactRoot.render(React.createElement(MobileViewContext.Provider, { value: false },
+      React.createElement(TestChatContext.Provider, { value: chatContextValue(false) }, React.createElement(AI_Tiptap_Container)))));
+    const legacy = container.querySelector('[data-control="recorder"]');
+    let legacyClicks = 0;
+    legacy.addEventListener("click", () => { legacyClicks++; });
+    await act(async () => shortcut());
+    assert.equal(legacyClicks, 1, "the default single composer keeps its existing shortcut");
+    await act(async () => reactRoot.unmount());
+    await act(async () => shortcut());
+    assert.equal(legacyClicks, 1, "unmount removes listeners");
+  } finally {
+    if (container.firstChild) await act(async () => reactRoot.unmount());
+    dom.window.close();
+    for (const [key, saved] of previous) {
+      if (saved.exists) global[key] = saved.value;
+      else delete global[key];
     }
   }
 });

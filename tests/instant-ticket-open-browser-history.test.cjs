@@ -11,7 +11,6 @@ const ts = require("typescript");
 const { QueryClient } = require("@tanstack/react-query");
 const root = path.resolve(__dirname, "..");
 const cache = require("jiti").createJiti(__filename, { alias: { "@": path.join(root, "src") } })(path.join(root, "src/lib/navigation/cachedTaskDetail.ts"));
-const flag = "htpr-6752-instant-ticket-open";
 function load(file, mocks) {
   const exports = {};
   const source = process.env.INSTANT_OPEN_BASELINE
@@ -25,7 +24,7 @@ function load(file, mocks) {
   return exports;
 }
 
-test("real history Back replaces Next's stale source tree after detail RSC; Forward and flag off retain router traversal", async (t) => {
+test("real history Back hides the stale ticket without refresh; Forward restores cached detail", async (t) => {
   const dom = new JSDOM('<div id="root"></div>', { url: "https://app.hypertask.ai/project?id=7049#board" });
   const names = ["window", "document", "Event", "IS_REACT_ACT_ENVIRONMENT"];
   const previous = Object.fromEntries(names.map((name) => [name, global[name]]));
@@ -33,6 +32,16 @@ test("real history Back replaces Next's stale source tree after detail RSC; Forw
   window.scrollTo = () => {};
   window.requestAnimationFrame = () => 1;
   window.cancelAnimationFrame = () => {};
+  dom.window.HTMLElement.prototype.getClientRects = function () { return this.closest("[hidden]") ? [] : [{}]; };
+  let settleTraversal;
+  window.addEventListener("popstate", () => {
+    const done = settleTraversal;
+    settleTraversal = undefined;
+    if (done) setImmediate(done);
+  }, true);
+  const historyScript = fs.readFileSync(path.join(root, "src/app/layout.tsx"), "utf8").match(/id="ht-cached-task-history"\s+dangerouslySetInnerHTML=\{\{\s+__html: "([^"]+)"/)?.[1];
+  assert.ok(historyScript);
+  new Function("window", "CustomEvent", historyScript)(window, window.CustomEvent);
   const client = new QueryClient();
   const renderer = createRoot(document.getElementById("root"));
   t.after(async () => {
@@ -42,10 +51,10 @@ test("real history Back replaces Next's stale source tree after detail RSC; Forw
     dom.window.close();
   });
   let nextPath = "/project";
-  let enabled = true;
-  let serverChildren = React.createElement("ul", { id: "board" }, React.createElement("li", null, "Board row"));
+  let serverChildren = React.createElement("ul", { id: "kanban-page-container" }, React.createElement("li", null, "Board row"));
   const board = serverChildren;
-  const detail = React.createElement("article", { id: "server-detail" }, "Server detail");
+  const detail = React.createElement("article", { id: "server-detail", "data-task-detail-path": "/detail/project-7049/31" },
+    React.createElement("h1", { id: "title-input" }, "Server detail"));
   const replacements = [];
   const traversals = [];
   let refreshes = 0;
@@ -57,7 +66,6 @@ test("real history Back replaces Next's stale source tree after detail RSC; Forw
     },
     refresh: () => {
       refreshes++;
-      serverChildren = board;
       render();
     },
   };
@@ -69,9 +77,10 @@ test("real history Back replaces Next's stale source tree after detail RSC; Forw
     "@tanstack/react-query": { useQueryClient: () => client },
     "@/lib/state": { useRecoilValue: () => ({ id: 985 }) },
     "@/store": { currentUserAtom: {} },
-    "@/hooks/useFlag": { useFlag: (key) => key === flag && enabled },
-    "@/lib/flags/keys": { HTPR_6752_INSTANT_TICKET_OPEN_FLAG: flag, HTPR_6972_SUBTASK_LINK_FLAG: "htpr-6972-subtask-link" },
-    "@/components/Modals/SwipeUnread/EmbeddedTaskDetail": { __esModule: true, default: () => React.createElement("article", { id: "cached-detail" }, "Cached detail") },
+    "@/hooks/useFlag": { useFlag: (key) => false },
+    "@/lib/flags/keys": require("./helpers/flag-files.cjs").load("src/lib/flags/keys.ts"),
+    "@/components/Modals/SwipeUnread/EmbeddedTaskDetail": { __esModule: true, default: ({ projectId, uniqueIndex }) => React.createElement("article", { id: "cached-detail", "data-task-detail-path": `/detail/project-${projectId}/${uniqueIndex}` },
+      React.createElement("h1", { id: "title-input" }, "Cached detail")) },
     "@/lib/navigation/cachedTaskDetail": cache,
     "@/utils/helperFunctions/helperFunctions": { returnIfModalOrInputActive: () => false },
     "@/lib/constants/constants": { REACT_QUERY_KEYS: { uploadStates: ["Uploading_States"] } },
@@ -92,7 +101,10 @@ test("real history Back replaces Next's stale source tree after detail RSC; Forw
     serverChildren = detail;
     render();
   });
+  const committedPaths = [];
+  window.addEventListener("cached-task-detail-navigation", () => committedPaths.push(window.location.pathname));
   await React.act(async () => render());
+  assert.deepEqual(committedPaths, ["/project"], "route commits publish their location even when every remaining flag is off");
   await React.act(async () => {
     cache.openCachedTaskDetail({ queryClient: client, accountId: 985, projectId: 7049, uniqueIndex: 31, href: "/detail/project-7049/31", task: { id: 42, projectId: 7049, uniqueIndex: 31, title: "Cached", description_: { content: "Body" } } });
     nextPath = "/detail/project-7049/31";
@@ -106,39 +118,42 @@ test("real history Back replaces Next's stale source tree after detail RSC; Forw
   });
   const traverse = (method) => React.act(async () => {
     await new Promise((resolve) => {
-      window.addEventListener("cached-task-detail-navigation", resolve, { once: true });
-      window.addEventListener("popstate", () => setImmediate(resolve), { once: true, capture: true });
+      settleTraversal = resolve;
       window.history[method]();
     });
   });
   await traverse("back");
   assert.deepEqual(replacements, ["/project?id=7049#board"]);
-  assert.equal(refreshes, 1, "replacing the URL alone reuses the poisoned source route payload");
+  assert.equal(refreshes, 0, "board repair must not refresh and reset its scroll");
   assert.deepEqual(traversals, [], "capture must prevent Next from traversing the stale tree");
-  assert.ok(document.querySelector("#board li"));
-  assert.equal(document.querySelector("#server-detail"), null);
+  assert.ok(document.querySelector("#server-detail").closest("[hidden]"), "the stale ticket stays hidden until the board arrives");
   assert.equal(document.querySelector("#cached-detail"), null);
+  await React.act(async () => { serverChildren = board; render(); });
+  assert.ok(document.querySelector("#kanban-page-container li"));
+  assert.equal(document.querySelector("#kanban-page-container").closest("[hidden]"), null);
+  assert.equal(document.querySelector("#server-detail"), null);
   await traverse("forward");
-  assert.deepEqual(traversals, ["/detail/project-7049/31"]);
-  assert.ok(document.querySelector("#server-detail"));
-  await React.act(async () => { enabled = false; render(); });
-  await traverse("back");
-  assert.equal(replacements.length, 1, "flag off must not replace the original router traversal");
-  assert.equal(refreshes, 1, "flag off must not refresh the original router traversal");
-  assert.equal(traversals.at(-1), "/project");
+  assert.deepEqual(traversals, [], "cached Forward must also prevent stale native traversal");
+  assert.ok(document.querySelector("#cached-detail"));
+  assert.equal(document.querySelector("#server-detail"), null);
+  assert.deepEqual(replacements, ["/project?id=7049#board"]);
+  assert.equal(refreshes, 0);
 });
 
-test("pending AI header is quiet only for flagged ticket routes; resolved titles and flag-off loading are unchanged", () => {
-  let enabled = true;
+test("pending AI header is quiet on ticket routes; resolved titles and other routes are unchanged", () => {
   let pathname = "/detail/project-7049/31";
   let currentSession;
   const noop = () => null;
   const Header = load("src/components/AI_CHAT/ChatHeader.tsx", {
     react: React,
     "react/jsx-runtime": require("react/jsx-runtime"),
-    "next/navigation": { usePathname: () => pathname, useRouter: () => ({}) },
-    "@/hooks/useFlag": { useFlag: () => enabled },
-    "@/lib/flags/keys": { HTPR_6752_INSTANT_TICKET_OPEN_FLAG: flag },
+    "next/navigation": { usePathname: () => pathname, useRouter: () => ({}), useSearchParams: () => new URLSearchParams() },
+    "./AgentSidebarChatCommands": { AgentSidebarChatCommands: noop },
+    "@/lib/configs/general.config": { MOBILE_TARGET: "min-h-[44px] min-w-[44px]" },
+    "@/utils/undoActions/helperFuncs": { cn: (...values) => values.filter(Boolean).join(" ") },
+    "@/lib/flags/keys": require("./helpers/flag-files.cjs").load("src/lib/flags/keys.ts"),
+    "@/hooks/useFlag": { useFlag: () => false },
+
     "@/lib/contexts/Multipages/AI_Agent/AI_Agent_Chat_Context": { useAiChatContext: () => ({ sessions: [], currentSession, isSessionPending: true, isSidebarMode: true }) },
     "lucide-react": Object.fromEntries(["Check", "ChevronDown", "ChevronRight", "Ellipsis", "History", "Maximize2", "Minus", "PanelRight", "Pencil", "PictureInPicture2", "Pin", "PinOff", "SquarePen", "Trash2", "X"].map((name) => [name, noop])),
     "../Common/Tooltip": { __esModule: true, default: ({ children }) => children },
@@ -155,9 +170,6 @@ test("pending AI header is quiet only for flagged ticket routes; resolved titles
   const render = () => renderToString(React.createElement(Header));
   assert.doesNotMatch(render(), /Loading\.\.\./);
   assert.match(render(), /AI Chat/);
-  enabled = false;
-  assert.match(render(), /Loading\.\.\./, "positive control exercises the original loading state");
-  enabled = true;
   pathname = "/project";
   assert.match(render(), /Loading\.\.\./, "other routes retain the original behavior");
   pathname = "/detail/project-7049/31";

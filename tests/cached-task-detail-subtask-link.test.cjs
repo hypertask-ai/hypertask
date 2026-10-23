@@ -24,8 +24,8 @@ child.parentTask = { ...parent, subTasks: [{ ...child, parentTask: null }] };
 const parentWithChild = { ...parent, subTasks: [child] };
 const href = task => `/detail/project-${task.projectId}/${task.uniqueIndex}`;
 
-function load(file, mocks, legacy = false) {
-  const source = fs.readFileSync(legacy ? path.join(__dirname, "fixtures/htpr-6972/CachedTaskDetailNavigation.tsx.txt") : path.join(root, file), "utf8");
+function load(file, mocks) {
+  const source = fs.readFileSync(path.join(root, file), "utf8");
   const compiled = ts.transpileModule(source, { compilerOptions: { jsx: ts.JsxEmit.ReactJSX, module: ts.ModuleKind.CommonJS } }).outputText;
   const exports = {};
   new Function("require", "exports", "queueMicrotask", compiled)(name => {
@@ -35,7 +35,7 @@ function load(file, mocks, legacy = false) {
   return exports.default;
 }
 
-function fixture(t, { enabled = true, direct = false, legacy = false } = {}) {
+function fixture(t, { direct = false } = {}) {
   const dom = new JSDOM('<div id="root"></div>', { url: "https://app.hypertask.ai" + (direct ? href(parent) : "/project") });
   const names = ["window", "document", "Event", "IS_REACT_ACT_ENVIRONMENT"];
   const previous = Object.fromEntries(names.map(name => [name, global[name]]));
@@ -84,7 +84,7 @@ function fixture(t, { enabled = true, direct = false, legacy = false } = {}) {
     "@/lib/state": { useRecoilValue: () => ({ id: account }), useRecoilState: () => [[], value => playlists.push(value)] },
     "@/store": { currentUserAtom: {}, tasksPlayListAtom: {} },
     "@/hooks/General/useAuth": { useAuth: () => ({ authenticatedUserId: authenticated }) },
-    "@/hooks/useFlag": { useFlag: key => key === flags.HTPR_6972_SUBTASK_LINK_FLAG ? enabled : instant },
+    "@/hooks/useFlag": { useFlag: () => instant },
     "@/lib/flags/keys": flags, "@/lib/navigation/cachedTaskDetail": cache, "@/lib/taskDetailInboxFlow": inbox,
     "@/utils/helperFunctions/helperFunctions": { returnIfModalOrInputActive: () => false },
     "@/lib/constants/constants": { REACT_QUERY_KEYS: { uploadStates: ["Uploading_States"] } },
@@ -111,7 +111,7 @@ function fixture(t, { enabled = true, direct = false, legacy = false } = {}) {
   };
   const ServerDetail = () => React.createElement(Detail, { initialTask: serverTask });
   mocks["@/components/Modals/SwipeUnread/EmbeddedTaskDetail"] = { __esModule: true, default: Detail };
-  const Navigation = load(navigationFile, mocks, legacy);
+  const Navigation = load(navigationFile, mocks);
   let children = direct ? React.createElement(ServerDetail) : "Board";
   let navigationKey = 0;
   const render = () => renderer.render(React.createElement(React.StrictMode, null, React.createElement(Navigation, { accountId: 2343, key: navigationKey }, React.isValidElement(children) ? React.cloneElement(children) : children)));
@@ -188,6 +188,19 @@ for (const direct of [false, true]) {
   });
 }
 
+test("subtask and parent links and cached history work with every remaining flag off", async t => {
+  const f = fixture(t, { direct: true });
+  f.instant(false);
+  await React.act(async () => f.render());
+  f.client.setQueryData(cache.cachedTaskDetailKey(2343, parent.id), parentWithChild);
+  await f.click(child); f.assertContent(child);
+  await f.click(parent); f.assertContent(parent);
+  await f.traverse("back"); f.assertContent(child);
+  await f.traverse("forward"); f.assertContent(parent);
+  assert.equal(f.nextTraversals(), 0);
+  assert.equal(f.syncCommits(), 2);
+});
+
 test("cached traversal survives an unmarked matching Next page without a remembered location", async t => {
   const f = fixture(t, { direct: true });
   await React.act(async () => f.render());
@@ -247,25 +260,7 @@ test("same-task modal history after a normal Next navigation does not replace th
   assert.equal(window.history.state.cachedTaskDetail, undefined);
 });
 
-for (const legacy of [false, true]) {
-  test(`flag-off cached navigation preserves pre-1131 behavior (${legacy ? "legacy fixture" : "candidate"})`, async t => {
-    const f = fixture(t, { enabled: false, legacy });
-    await React.act(async () => f.render());
-    await React.act(async () => f.open(parentWithChild));
-    const link = document.querySelector("a");
-    const event = new window.MouseEvent("click", { bubbles: true, cancelable: true });
-    await React.act(async () => link.dispatchEvent(event));
-    assert.equal(event.defaultPrevented, false);
-    await React.act(async () => f.server(child));
-    assert.equal(document.querySelector("h1").textContent, parent.title, "old cached overlay remains until native navigation publishes a new address");
-    await React.act(async () => window.history.pushState({}, "", href(child)));
-    assert.equal(document.querySelector("h1").textContent, parent.title);
-    await React.act(async () => window.dispatchEvent(new Event("cached-task-detail-navigation")));
-    f.assertContent(child);
-  });
-}
-
-test("links preserve modified clicks and fallback for missing descriptions, disabled flags and mismatched accounts", async t => {
+test("links preserve modified clicks and fallback for missing descriptions and mismatched accounts", async t => {
   const f = fixture(t, { direct: true });
   await React.act(async () => f.render());
   const dispatch = async (target, options) => {
@@ -276,8 +271,7 @@ test("links preserve modified clicks and fallback for missing descriptions, disa
   };
   const link = () => document.querySelector("a");
   for (const options of [{ ctrlKey: true }, { metaKey: true }, { shiftKey: true }, { altKey: true }, { button: 1 }]) await dispatch(link(), options);
-  f.instant(false); await React.act(async () => f.render()); await dispatch(link());
-  f.instant(true); f.authenticated(985); await React.act(async () => f.render()); await dispatch(link());
+  f.authenticated(985); await React.act(async () => f.render()); await dispatch(link());
   f.authenticated(2343); f.account(985); await React.act(async () => f.render()); await dispatch(link());
   f.account(2343);
   const compactChild = { id: child.id, projectId: child.projectId, uniqueIndex: child.uniqueIndex, title: child.title };

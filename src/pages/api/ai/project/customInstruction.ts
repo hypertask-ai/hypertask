@@ -123,7 +123,7 @@ export default async function handler(
             const selectedModelOption = hasModelSelection
                 ? getAiModelOptionById(modelOptionId, haiku55Enabled) ??
                   getAiModelOptionById(modelSelected, haiku55Enabled) ??
-                  (haiku55Enabled ? getDefaultAiModelOptionForPlan(defaultContext?.plan, defaultContext?.hasByok, true, defaultContext?.haikuDefaultEnabled) : defaultAiModelOption)
+                  (haiku55Enabled ? getDefaultAiModelOptionForPlan(defaultContext?.plan, defaultContext?.hasByok, true, defaultContext?.haikuDefaultEnabled, defaultContext) : defaultAiModelOption)
                 : undefined;
 
             var customInstructions;

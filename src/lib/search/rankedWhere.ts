@@ -13,7 +13,6 @@ export async function rankedSearchWhere(
   extraWhere: Prisma.TaskWhereInput = {},
   cursorId?: number | null,
   scanAll = false,
-  commenterEnabled = false,
   taskOrderBy?: Prisma.TaskOrderByWithRelationInput[],
 ) {
   const where = await searchFilterWhere(parsed, projectIds, status)
@@ -94,9 +93,7 @@ export async function rankedSearchWhere(
       }
       seen.add(id)
       if (description) descriptionById.set(id, description)
-      if (comment) commentById.set(id, (commenterEnabled || commentOnly)
-        ? { id: comment.id, commentText: comment.commentText, creatorName: comment.creatorName, createdAt: comment.createdAt ? new Date(comment.createdAt) : undefined }
-        : comment)
+      if (comment) commentById.set(id, { id: comment.id, commentText: comment.commentText, creatorName: comment.creatorName, createdAt: comment.createdAt ? new Date(comment.createdAt) : undefined })
       return true
     })
     if (fresh.length) {

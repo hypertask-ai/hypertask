@@ -1,5 +1,4 @@
 import { useCallback, useEffect } from "react";
-import { HTPR_6914_SHIFT_C_QUICK_ADD_FLAG, HTPR_6902_N_QUICK_ADD_FLAG } from "@/lib/flags/keys";
 import { returnIfModalOrInputActive } from "@/utils/helperFunctions/helperFunctions";
 import { isFavoriteBoardShortcut } from "@/lib/constants/shortcuts";
 import { KeyCodes } from "@/lib/constants/keyboard-handler";
@@ -7,7 +6,6 @@ import { shouldRunArchiveShortcut } from "@/lib/keyboard/archiveShortcutGuard";
 import { shouldIgnoreTaskShortcutTarget } from "@/lib/keyboard/taskShortcuts";
 import { createTaskFromTableSelection } from "./tableCreateTask";
 import useAddDeleteTaskInBoards from "@/hooks/MultiPages/useAddDeleteTaskInBoards";
-import { useFlag } from "@/hooks/useFlag";
 import type { TableViewProps } from "./tableViewShared";
 import type { useTableRows } from "./useTableRows";
 import type { useTableState } from "./useTableState";
@@ -29,8 +27,6 @@ export function useTableKeyboard(context: Context) {
   } = context;
 
 
-  const nQuickAddEnabled = useFlag(HTPR_6902_N_QUICK_ADD_FLAG);
-  const shiftCQuickAddEnabled = useFlag(HTPR_6914_SHIFT_C_QUICK_ADD_FLAG);
   const { createItem } = useAddDeleteTaskInBoards();
   const quickCreateTask = (
     title: string,
@@ -170,12 +166,12 @@ export function useTableKeyboard(context: Context) {
     document.addEventListener("keydown", handleKeyDown);
     return () => document.removeEventListener("keydown", handleKeyDown);
   }, [_currentProject, _sections, archiveTaskFromTable, assignTask, changeBoardLayout, createTaskInCurrentTableContext, enableMyTasksBulkSelection, expandSection, focusTo, handleBoardChange, myTasksBulk, openTask, rows, rowShortcutsEnabled, runTaskShortcut, selectedIndex, setShowCommands, showCommands.show, toggleSelectedTaskTimer]);
-  const registerQuickAdd = (allowShiftC: boolean) => {
+  const registerQuickAdd = () => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if (
         !_currentProject ||
         !((e.key.toLowerCase() === "n" && !e.shiftKey) ||
-          (allowShiftC && e.key.toLowerCase() === "c" && e.shiftKey)) ||
+          (e.key.toLowerCase() === "c" && e.shiftKey)) ||
         e.ctrlKey || e.metaKey || e.altKey || e.repeat || e.isComposing ||
         showCommands.show || assignTask || returnIfModalOrInputActive() ||
         shouldIgnoreTaskShortcutTarget(e.target as HTMLElement | null) ||
@@ -187,9 +183,7 @@ export function useTableKeyboard(context: Context) {
     document.addEventListener("keydown", handleKeyDown);
     return () => document.removeEventListener("keydown", handleKeyDown);
   };
-  useEffect(nQuickAddEnabled
-    ? (shiftCQuickAddEnabled ? () => registerQuickAdd(true) : () => registerQuickAdd(false))
-    : () => {}, [_currentProject, nQuickAddEnabled, shiftCQuickAddEnabled, showCommands.show, assignTask]);
+  useEffect(registerQuickAdd, [_currentProject, showCommands.show, assignTask]);
 
   return {
   quickCreateTask,

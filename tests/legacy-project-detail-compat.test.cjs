@@ -2,8 +2,10 @@ const assert = require("node:assert/strict");
 const test = require("node:test");
 const { load } = require("./task-route-loader.cjs");
 const { pages } = require("./legacy-task-relations-fixture.cjs");
+const scope = { ...require("./helpers/agent-board-scope.cjs").enforcedScope, agentScopeEnforced: () => false };
 const frozen = require("./htpr-6509-query-contracts.json").project;
 const { projectContentAccessWhere } = load("src/utils/controllers/projects/getAllIncludes.ts", {
+  "@/lib/auth/agentScope": scope,
   "@/lib/agents/publicAgent": {}, "@/lib/cycles": {}, "@/lib/agents/visibility": {},
   "@/utils/controllers/notifications/visibleInboxScope": {},
 });
@@ -22,7 +24,8 @@ const { signSession } = load("src/lib/auth/session.ts", {});
 function fixture({ enabled = false, compat, userId = 7, failFlag = false, failAuth = false, project = frozen.json.json, failQuery = false, realAuth = false, token } = {}) {
   const calls = { flags: [], queries: [], auth: [] };
   const handler = load("src/pages/api/projects/detail.ts", {
-    "@/lib/prisma": { default: { project: { findFirst: async (args) => {
+    "@/lib/auth/agentScope": scope,
+    "@/lib/prisma": { default: { agent: { findFirst: async () => ({ credentialTeamId: null, credentialTeamAccessBinding: null, mcpTokenJti: null }) }, project: { findFirst: async (args) => {
       calls.queries.push(args);
       if (failQuery) throw new Error("synthetic project failure");
       return project;

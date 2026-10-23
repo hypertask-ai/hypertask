@@ -12,7 +12,7 @@ function loadSharedRoute(getSessionUser = async () => null) {
     fs.readFileSync(path.join(root, "src/lib/api/task-writes/route.ts"), "utf8"),
     { compilerOptions: { esModuleInterop: true, module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2020 } },
   ).outputText;
-  const stubs = { "@/lib/auth/getSessionUser": { getSessionUser } };
+  const stubs = { "@/lib/auth/session": require("./agent-board-scope.cjs").load("src/lib/auth/session.ts", {}), "@/lib/auth/getSessionUser": { getSessionUser }, "@/lib/auth/agentScope": require("./agent-board-scope.cjs").enforcedScope };
   const mod = { exports: {} };
   new Function("module", "exports", "require", javascript)(
     mod,

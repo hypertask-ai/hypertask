@@ -6,7 +6,6 @@ const React = require("react");
 const ts = require("typescript");
 
 const root = path.resolve(__dirname, "..");
-const flag = "htpr-6978-size-label-click";
 const estimates = [
   { estimate_index: 0, estimate_value: "No size", estimate_full_value: "No size" },
   { estimate_index: 3, estimate_value: "M", estimate_full_value: "Medium" },
@@ -28,14 +27,13 @@ function load(relative, dependencies) {
   return exports;
 }
 
-function picker(enabled, mode = "Task") {
+function picker(mode = "Task") {
   const writes = [], closes = [], refreshes = [];
   const constants = { __esModule: true, default: { EstimateConstants: estimates, CommentsTQPrefixKey: "comments" } };
-  const keys = { HTPR_6978_SIZE_LABEL_CLICK_FLAG: flag, HTPR_6975_TYPED_WRITES_FLAG: "htpr-6975-typed-writes", HTPR_7129_BOARD_CARD_FRESH_AFTER_ESCAPE_FLAG: "htpr-7129-board-card-fresh-after-escape" };
+  const keys = { HTPR_6975_TYPED_WRITES_FLAG: "htpr-6975-typed-writes", HTPR_7129_BOARD_CARD_FRESH_AFTER_ESCAPE_FLAG: "htpr-7129-board-card-fresh-after-escape" };
   const useFlag = key => {
-    if (key === keys.HTPR_6975_TYPED_WRITES_FLAG || key === keys.HTPR_7129_BOARD_CARD_FRESH_AFTER_ESCAPE_FLAG) return false;
-    assert.equal(key, flag);
-    return enabled;
+    assert.ok(Object.values(keys).includes(key), `Unexpected flag: ${key}`);
+    return false;
   };
   const hook = load("src/hooks/MultiPages/Tasks/useEstimateModal.ts", {
     "@/hooks/useFlag": { useFlag },
@@ -68,53 +66,45 @@ function picker(enabled, mode = "Task") {
     "@/hooks/General/useHandleMouse": { __esModule: true, default: () => ({ handleMouseLeave: noop, handleMouseMove: noop }) },
     "@/hooks/MultiPages/Tasks/useEstimateModal": hook,
     "./EstimateLabelComponent": { __esModule: true, default: Label },
-    "@/hooks/useFlag": { useFlag },
-    "@/lib/flags/keys": keys,
   }).default;
   const tree = Modal({ mode, closeHandler: value => closes.push(value) });
   const rows = tree.props.children[1].props.children[1].props.children;
   return { rows, Label, writes, closes, refreshes };
 }
 
-for (const enabled of [true, false]) {
-  for (const index of [0, 1]) {
-    test(`flag ${enabled ? "ON" : "OFF"}: clicking ${estimates[index].estimate_value} label words`, async () => {
-      const { rows, Label, writes, closes, refreshes } = picker(enabled);
-      const label = rows[index].props.children[0].props.children[1];
-      assert.equal(label.type, Label);
-      const wrapper = Label.type(label.props);
-      let prevented = false, stopped = false;
-      const click = () => wrapper.props.onClick({
-        preventDefault: () => { prevented = true; },
-        stopPropagation: () => { stopped = true; },
-      });
-      if (enabled) click();
-      else {
-        assert.equal(label.props.onClick, undefined);
-        assert.throws(click, /onClick is not a function/);
-      }
-      await new Promise(resolve => setImmediate(resolve));
-      assert.equal(prevented, true);
-      assert.equal(stopped, true);
-      assert.deepEqual(writes, enabled ? [{ url: "/api/estimate/setEstimate", body: {
-        taskId: 42, estimate_index: estimates[index].estimate_index, estimate_value: estimates[index].estimate_value,
-      } }] : []);
-      assert.deepEqual(closes, enabled ? [true] : []);
-      assert.deepEqual(refreshes, enabled ? [{ queryKey: ["comments", 42] }] : []);
+for (const index of [0, 1]) {
+  test(`clicking ${estimates[index].estimate_value} label words sets size`, async () => {
+    const { rows, Label, writes, closes, refreshes } = picker();
+    const label = rows[index].props.children[0].props.children[1];
+    assert.equal(label.type, Label);
+    const wrapper = Label.type(label.props);
+    let prevented = false, stopped = false;
+    wrapper.props.onClick({
+      preventDefault: () => { prevented = true; },
+      stopPropagation: () => { stopped = true; },
     });
-  }
-  test(`flag ${enabled ? "ON" : "OFF"}: row clicks still set size`, async () => {
-    const { rows, writes, closes } = picker(enabled);
-    await rows[1].props.onClick();
-    assert.equal(writes.length, 1);
-    assert.equal(writes[0].body.estimate_index, 3);
+    await new Promise(resolve => setImmediate(resolve));
+    assert.equal(prevented, true);
+    assert.equal(stopped, true);
+    assert.deepEqual(writes, [{ url: "/api/estimate/setEstimate", body: {
+      taskId: 42, estimate_index: estimates[index].estimate_index, estimate_value: estimates[index].estimate_value,
+    } }]);
     assert.deepEqual(closes, [true]);
+    assert.deepEqual(refreshes, [{ queryKey: ["comments", 42] }]);
   });
 }
 
+test("row clicks still set size", async () => {
+  const { rows, writes, closes } = picker();
+  await rows[1].props.onClick();
+  assert.equal(writes.length, 1);
+  assert.equal(writes[0].body.estimate_index, 3);
+  assert.deepEqual(closes, [true]);
+});
+
 for (const mode of ["Filter", "Filter-Calendar", "TaskModalGlobally"]) {
-  test(`flag ON: ${mode} label uses its existing selection handler`, () => {
-    const { rows, Label, writes, closes } = picker(true, mode);
+  test(`${mode} label uses its existing selection handler`, () => {
+    const { rows, Label, writes, closes } = picker(mode);
     const label = rows[1].props.children[0].props.children[1];
     Label.type(label.props).props.onClick({ preventDefault: noop, stopPropagation: noop });
     assert.deepEqual(closes, [estimates[1]]);

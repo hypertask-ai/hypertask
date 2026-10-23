@@ -1,6 +1,6 @@
 
 import { useFlag } from "@/hooks/useFlag";
-import { HTPR_6752_INSTANT_TICKET_OPEN_FLAG, HTPR_6962_KEEP_ASSIGNEE_FLAG, HTPR_7315_UNREAD_TICKET_OPENS_TOP_FLAG } from "@/lib/flags/keys";
+import { HTPR_7315_UNREAD_TICKET_OPENS_TOP_FLAG } from "@/lib/flags/keys";
 import { useTaskContext } from "@/lib/contexts/TaskDetail/TaskProvider";
 import { IAttachment, IComment } from "@/models/model";
 import {
@@ -121,6 +121,7 @@ const useDescriptionAndCommentsStates = () => {
     setComments,
     setAgentRunActivities,
     stackData,
+    foldCommentsFromFirstPaint,
     showCommentDeleteModal,
     setShowCommentDeleteModal,
     hasDraft,
@@ -152,9 +153,9 @@ const useDescriptionAndCommentsStates = () => {
     toggleEmojiPickerDescription,
     emojiClickHandlerDescriptionr,
   } = useDescriptionReactions();
-  const instantTicketOpen = useFlag(HTPR_6752_INSTANT_TICKET_OPEN_FLAG);
   const unreadTicketOpensTop = useFlag(HTPR_7315_UNREAD_TICKET_OPENS_TOP_FLAG);
-  const keepAssignee = useFlag(HTPR_6962_KEEP_ASSIGNEE_FLAG);
+  const commentsStackedRef = useRef<boolean | undefined>(undefined);
+  commentsStackedRef.current = foldCommentsFromFirstPaint ? stackData : undefined;
   const _parsedTask = useMemo(() => JSON.parse(parsed_task), [parsed_task]);
   const [descriptionAttachments, setDescriptionAttachments] = useState<
     IAttachment[]
@@ -162,11 +163,11 @@ const useDescriptionAndCommentsStates = () => {
   const preserveEditorContent = shouldPreserveTaskEditorContent({
     hasDraft, hasDraftInit, editMode, uploadingDescription,
   });
-  useEffect(instantTicketOpen ? () => {
+  useEffect(() => {
     if (!preserveEditorContent) {
       setDescriptionAttachments(currentTask?.description_?.attachments ?? []);
     }
-  } : () => {}, [currentTask?.description_]);
+  }, [currentTask?.description_]);
   const [_, setIdToDelete] = useRecoilState<any>(idToDeleteCommentAtom);
   const [resetDraft, setResetDraft] = useState<
     "Comment" | "Description" | undefined
@@ -209,7 +210,7 @@ const useDescriptionAndCommentsStates = () => {
     () => normalizeCommentsQueryPayload(commentsFromQueryTQ),
     [commentsFromQueryTQ]
   );
-  const commentsListFromQuery = instantTicketOpen && commentsFromQueryTQ === undefined ? undefined : commentsQueryPayload.comments;
+  const commentsListFromQuery = commentsFromQueryTQ === undefined ? undefined : commentsQueryPayload.comments;
   const lastReadAtFromQuery = commentsQueryPayload.lastReadAt;
   const agentRunActivitiesFromQuery = commentsQueryPayload.agentRunActivities;
   const unreadSnapshotRef = useRef<{
@@ -225,7 +226,6 @@ const useDescriptionAndCommentsStates = () => {
     taskUniqueIndex: _parsedTask?.uniqueIndex,
     currentTaskTitle: currentTask?.title,
     currentTaskAssignees: currentTask?.assignees,
-    keepAssignee,
     hasPullRequests: (_parsedTask?.pullRequests?.length ?? 0) > 0,
     setCurrentTask,
     setDescription,
@@ -313,7 +313,7 @@ const useDescriptionAndCommentsStates = () => {
         const initialMap = processComments(
           commentsList,
           currentUser.id,
-          stack_?.stack,
+          commentsStackedRef.current ?? stack_?.stack,
           hash,
           newCommentIdsRef.current
         );
@@ -825,17 +825,13 @@ const useDescriptionAndCommentsStates = () => {
     }
   }, [comments]);
 
-  useEffect(instantTicketOpen ? () => {
+  useEffect(() => {
     if (!preserveEditorContent) setDescription(_parsedTask?.description_?.content ?? "");
-  } : () => {
-    setDescription(_parsedTask?.description_?.content);
   }, [_parsedTask?.description_?.content]);
-  useEffect(instantTicketOpen ? () => {
+  useEffect(() => {
     if (!preserveEditorContent) {
       setDescriptionAttachments(_parsedTask?.description_?.attachments ?? []);
     }
-  } : () => {
-    setDescriptionAttachments(_parsedTask?.description_?.attachments);
   }, [_parsedTask?.description_?.attachments]);
 
   useEffect(() => {

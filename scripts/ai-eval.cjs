@@ -23,6 +23,7 @@ const toolFiles = {
 function chatTools() {
   const scope = {
     z,
+    context: { inlineAgentImagesEnabled: false },
     ...load(path.join(root, 'src/lib/ai/chatStream/request.ts')),
     ...load(path.join(root, 'src/lib/ai/tools/constants.ts')),
     ...load(path.join(root, 'src/lib/ai/tools/schemas.ts')),
@@ -84,7 +85,10 @@ function mcpTools() {
   // Load metadata only, not its report-service import or any production database code.
   const filename = path.join(root, 'src/lib/mcp-server/config/tool-metadata.ts');
   const source = ts.createSourceFile(filename, fs.readFileSync(filename, 'utf8'), ts.ScriptTarget.Latest, true);
-  const scope = load(path.join(root, 'src/lib/mcp-server/config/mcp-standards.ts'));
+  const scope = {
+    ...load(path.join(root, 'src/lib/mcp-server/config/mcp-standards.ts')),
+    ...load(path.join(root, 'src/lib/mcp/decisionsGuidance.ts')),
+  };
   const metadata = {};
   const visit = (node) => {
     if (ts.isPropertyAssignment(node) && Object.hasOwn(schemas, node.name.getText(source))) {

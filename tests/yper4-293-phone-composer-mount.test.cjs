@@ -22,9 +22,7 @@ test("phone cached composer keeps its draft and focus when Next publishes the de
     "@/utils/undoActions/helperFuncs": { cn: (...parts) => parts.filter(Boolean).join(" ") },
     "@/hooks/useFlag": { useFlag: () => true, useFlagLoaded: () => true },
     "@/lib/flags/keys": {
-      HTPR_6990_NARROW_SIDEBAR_WIDTH_FLAG: "htpr-6990-narrow-sidebar-width",
       HTPR_7055_CHAT_OVERLAYS_TICKET_FLAG: "htpr-7055-chat-overlays-ticket",
-      HTPR_7074_PHONE_WORKSPACE_WIDTH_FLAG: "htpr-7074-phone-workspace-width",
     },
   };
   const source = fs.readFileSync(path.join(__dirname, "../src/components/AI_CHAT/AI_Chat_Closed_Layout.tsx"), "utf8");

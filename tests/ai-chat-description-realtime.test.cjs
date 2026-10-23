@@ -93,6 +93,8 @@ function fixture(overrides = {}) {
     toStoredHtml,
     user: { id: USER_ID },
     actingAgentId: null,
+    body: {},
+    inlineAgentImagesForUser: async (html) => html,
     sendStatus() {},
     errorMessage: (error) => error.message,
     sanitizeForJson: (value) => value,

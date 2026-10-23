@@ -33,6 +33,9 @@ function setup(findTask) {
     '@/utils/controllers/comments/agentInvocationCorrelation': { AgentInvocationNotPendingError: class extends Error {} },
     '@/lib/mcp/tasks/resolveTask': {
       TaskIdentifierAmbiguityError,
+      taskIdentifierErrorResponse: (error) => error instanceof TaskIdentifierAmbiguityError
+        ? { body: { success: false, error: error.message }, status: 400 }
+        : null,
       validateTaskIdentifier: () => ({ valid: true }),
       findTaskByIdentifier: findTask,
     },
@@ -46,6 +49,7 @@ function setup(findTask) {
     '@/lib/mcp/comments/activityMetadata': {},
     '@/lib/mcp/agents/scopes': { requireRole: async () => null },
     '@/lib/mcp/idempotency/idempotencyStore': {
+      IdempotencyAccessError: class extends Error {},
       IdempotencyInProgressError: class extends Error {},
       normalizeIdempotencyKey: (key) => key,
       withIdempotency: async (_operation, _userId, _key, _body, handler) => handler(),

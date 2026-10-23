@@ -43,6 +43,7 @@ function fixture(name, scenario = {}, controllerFactory) {
   };
   const body = Object.hasOwn(scenario, "body") ? scenario.body : endpoints[name].body;
   const mocks = {
+    "@/lib/auth/agentScope": require("./helpers/agent-board-scope.cjs").enforcedScope,
     "@/lib/auth/getSessionUser": { getSessionUser: async headers => {
       auth.push(headers.get("cookie"));
       if (scenario.authThrows) throw new Error("Auth unavailable");

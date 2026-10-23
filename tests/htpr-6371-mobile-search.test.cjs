@@ -114,7 +114,7 @@ test('real input, composition and native beforeinput events complete phone chips
     const Component = createJiti(__filename, { alias: { '@': path.join(root, 'src') }, interopDefault: true, fsCache: false, jsx: { runtime: 'automatic' } })(path.join(root, 'src/app/search/SearchChipsInput.tsx')).default
     const Harness = () => {
       const [value, setValue] = React.useState('')
-      return React.createElement(Component, { value, onChange: setValue, onRun: (query) => runs.push(query), boardId: 7, autocompleteEnabled: true, layoutEnabled: true, inputRef: React.useRef(null) })
+      return React.createElement(Component, { value, onChange: setValue, onRun: (query) => runs.push(query), boardId: 7, layoutEnabled: true, inputRef: React.useRef(null) })
     }
     reactRoot = require('react-dom/client').createRoot(document.getElementById('root'))
     await React.act(async () => reactRoot.render(React.createElement(Harness)))
@@ -157,10 +157,9 @@ test('real input, composition and native beforeinput events complete phone chips
   }
 })
 
-
-test('phone picker fills the keyboard-safe list even when the separate search layout flag is off', () => {
+test('phone picker fills the keyboard-safe list independently of the requested input layout', () => {
   assert.match(input, /mobileEnabled \? "w-full h-full max-h-full max-w-full \[&_button\]:min-h-\[44px\]"/)
-  assert.match(input, /autocompleteEnabled && !mobileEnabled && <div/)
+  assert.match(input, /!mobileEnabled && <div/)
   assert.match(input, /mobileEnabled && pickerRef\.current\?\.querySelector<HTMLElement>\(`/)
   assert.match(input, /onPointerDown=\{\(event\) => \{ if \(mobileEnabled\) event\.preventDefault\(\); \}\}/)
 })

@@ -12,7 +12,7 @@ const narrowLayout = chat.slice(
   chat.indexOf("const content =", chat.indexOf("if (isNarrow)")),
 );
 
-test("mobile Agent Chat always follows the keyboard-visible viewport", () => {
+test("non-embedded mobile Agent Chat always follows the keyboard-visible viewport", () => {
   const retired = /htpr-6129-mobile-agent-chat-viewport|mobileAgentChatViewportEnabled/;
   assert.throws(() => assert.doesNotMatch("mobileAgentChatViewportEnabled", retired));
   assert.doesNotMatch(chat, retired);
@@ -20,7 +20,8 @@ test("mobile Agent Chat always follows the keyboard-visible viewport", () => {
     require("./helpers/flag-files.cjs").source(),
     retired,
   );
-  assert.match(chat, /useMobileVisualViewport\(isMbl\)/);
+  assert.match(chat, /useMobileVisualViewport\(isMbl && !embedded\)/);
+  assert.doesNotMatch(chat, /useMobileVisualViewport\(isMbl\)/);
   assert.match(chat, /const mobileChromeAwareHeight = isMbl;/);
   assert.match(
     narrowLayout,

@@ -1,7 +1,11 @@
 "use client";
 
 import { setNotificationSeen } from "@/lib/api/typedClient";
-import { HTPR_6979_TYPED_WRITES_FLAG } from "@/lib/flags/keys";
+import {
+  HTPR_6979_TYPED_WRITES_FLAG,
+  HTPR_7311_DECISION_COMMENT_LINK_FLAG,
+  SHORTCUT_NUDGES_FLAG,
+} from "@/lib/flags/keys";
 
 import { useFirstScreenSurface, type FirstScreenSnapshot } from "@/lib/firstScreen/SurfaceContext";
 import { projectInboxDateGroup } from "@/lib/firstScreen/inbox";
@@ -24,7 +28,6 @@ import {
   globalNotificationFocusAtom,
   currentProjectAtom,
 } from "@/store";
-import { SHORTCUT_NUDGES_FLAG } from "@/lib/flags/keys";
 import { useShortcutTipsSetting } from "@/hooks/useShortcutTipsSetting";
 import {
   clearArchiveShortcutNudge,
@@ -49,17 +52,18 @@ import {
 import { useQueryClient } from "@tanstack/react-query";
 import { useDeviceContext } from "@/lib/contexts/deviceContext";
 import SubtaskLinkingModal from "@/components/Modals/SubtaskLinkingModal/SubtaskLinking";
+import { buildInboxTasksPlaylist } from "@/lib/inbox/inboxTasksPlaylist";
 import useCurrentUser from "@/hooks/General/useCurrentUserCheckFromCookies";
 import { useProjectQuery } from "@/hooks/General/useProjectQuery";
 import { useFlag } from "@/hooks/useFlag";
-import { HTPR_6752_INSTANT_TICKET_OPEN_FLAG } from "@/lib/flags/keys";
 import useHypertasksNavigate from "@/hooks/MultiPages/Route/useHypertasksNavigate";
 import { BulkAction, useBulkActions } from "@/hooks/MultiPages/useBulkActions";
 import { KeyCodes, KeyValues } from "@/lib/constants/keyboard-handler";
 import BulkActionsInbox from "./bulk-actions-inbox";
 import SelectionCheckbox from "@/components/Common/selection-checkbox";
 import { useBulkSelectionContext } from "@/lib/contexts/Inbox/BulkSelectionContext";
-import { inboxConfig } from "@/lib/configs/inbox.config";
+import { decisionsSplitName, inboxConfig } from "@/lib/configs/inbox.config";
+import { withDecisionCommentAnchor } from "@/lib/inboxDecisions";
 import { cn } from "@/utils/undoActions/helperFuncs";
 import InboxZeroState from "@/components/Common/InboxZeroState";
 import { useInboxZero } from "@/lib/contexts/InboxZeroContext";
@@ -76,7 +80,6 @@ import {
   jumpToInboxBoundary,
   reconcileInboxKeyboardRow,
 } from "@/lib/inboxKeyboardNavigation";
-import { markTaskDetailNavigationStart } from "@/lib/analytics/taskDetailReadiness";
 import toast from "react-hot-toast";
 
 interface Props {
@@ -334,7 +337,11 @@ const InboxSplit = ({
   const [showSubtaskLinkingModal, setShowSubtaskLinkingModal] =
     useState<boolean>(false);
   const currentUser = useCurrentUser() ?? inboxDocument?.data.user;
-  const instantTicketOpen = useFlag(HTPR_6752_INSTANT_TICKET_OPEN_FLAG);
+  const decisionCommentLinkEnabled = useFlag(HTPR_7311_DECISION_COMMENT_LINK_FLAG);
+  let decisionCommentLinks = false;
+  if (decisionCommentLinkEnabled) {
+    decisionCommentLinks = selectedSplit === decisionsSplitName;
+  }
   const { navigate, navigateToTask } = useHypertasksNavigate();
   const taskRef = useRef<HTMLDivElement>(null);
   const activeSplitRef = useRef<HTMLDivElement>(null);
@@ -916,8 +923,7 @@ const InboxSplit = ({
     );
   };
 
-  const openTaskWithCachedData = async (
-    includeCachedTask: boolean,
+  const openTask = async (
     mode: string,
     notification: INotification | null = null,
     index?: number,
@@ -962,39 +968,34 @@ const InboxSplit = ({
     setTasksPlayList(tasksPlayList);
 
     const queryParams = buildQueryParams(mode);
-
-    if (notification) {
-      const mentionedQueryParam =
-        notification.type === "Mentioned" && notification.commentId
-          ? commentIdHash(notification.commentId)
-          : "";
-      const finalUrl =
-        inboxConfig.urls.taskDetail(
-          notification.projectId,
-          notification.task?.uniqueIndex,
-          mentionedQueryParam,
-        ) + (disableInboxFlow ? "" : queryParams);
-      if (includeCachedTask) {
-        return navigateToTask(
-          notification.projectId,
-          notification.task?.uniqueIndex,
-          "push",
-          `${mentionedQueryParam}${disableInboxFlow ? "" : queryParams}`,
-          notification.task,
-        );
-      }
-      markTaskDetailNavigationStart("inbox", finalUrl);
-      return router.push(finalUrl);
-    }
-
-    if (!selectedInbox) return;
-    const projectName = selectedInbox.project?.name;
-    const taskIndex = selectedInbox.task?.uniqueIndex;
     const inboxFlowQuery = disableInboxFlow
       ? ""
       : queryParams
         ? `?${inboxConfig.urls.queryParams.inboxFlow}&${queryParams.slice(1)}`
         : `?${inboxConfig.urls.queryParams.inboxFlow}`;
+
+    if (notification) {
+      const decisionCommentId = decisionCommentLinks ? notification.decisionCommentId : undefined;
+      const mentionedQueryParam =
+        !decisionCommentId && notification.type === "Mentioned" && notification.commentId
+          ? commentIdHash(notification.commentId)
+          : "";
+      return navigateToTask(
+        notification.projectId,
+        notification.task?.uniqueIndex,
+        "push",
+        withDecisionCommentAnchor(
+          `${inboxFlowQuery}${mentionedQueryParam}`,
+          notification.decisionCommentId,
+          decisionCommentLinks,
+        ),
+        notification.task,
+      );
+    }
+
+    if (!selectedInbox) return;
+    const projectName = selectedInbox.project?.name;
+    const taskIndex = selectedInbox.task?.uniqueIndex;
     const mentionedQueryParam =
       selectedInbox.type === "Mentioned" && selectedInbox.commentId
         ? commentIdHash(selectedInbox.commentId)
@@ -1003,33 +1004,17 @@ const InboxSplit = ({
       selectedInbox.project?.id ?? selectedInbox.projectId,
       taskIndex,
       "push",
-      `${inboxFlowQuery}${mentionedQueryParam}`,
-      includeCachedTask ? selectedInbox.task : undefined,
+      withDecisionCommentAnchor(
+        `${inboxFlowQuery}${mentionedQueryParam}`,
+        selectedInbox.decisionCommentId,
+        decisionCommentLinks,
+      ),
+      selectedInbox.task,
     );
   };
 
-  const openTask = instantTicketOpen
-    ? openTaskWithCachedData.bind(null, true)
-    : openTaskWithCachedData.bind(null, false);
-
-  const buildUniqueTasksPlaylist = (notifications: INotification[]) => {
-    const uniqueMap = new Map<
-      string,
-      { projectId: number; uniqueIndex: number; notification: any }
-    >();
-    for (const notification of notifications) {
-      if (notification.type === "Invited") continue;
-      const key = `${notification.projectId}-${notification.task?.uniqueIndex}`;
-      if (!uniqueMap.has(key)) {
-        uniqueMap.set(key, {
-          projectId: notification.projectId,
-          uniqueIndex: notification.task?.uniqueIndex,
-          notification,
-        });
-      }
-    }
-    return Array.from(uniqueMap.values());
-  };
+  const buildUniqueTasksPlaylist = (notifications: INotification[]) =>
+    buildInboxTasksPlaylist(notifications, decisionCommentLinks);
 
   const buildQueryParams = (mode: string): string => {
     switch (mode) {
@@ -1053,6 +1038,7 @@ const InboxSplit = ({
     };
   }, [
     _notifications,
+    decisionCommentLinks,
     activeDrafts,
     keyboardRows,
     selectedKeyboardRow?.key,
@@ -1292,7 +1278,7 @@ const InboxSplit = ({
                                 className={
                                   appShellRail ? "min-w-0 flex-1" : "w-full"
                                 }
-                                onClickCapture={instantTicketOpen && notification.type !== "Invited" ? (event) => {
+                                onClickCapture={notification.type !== "Invited" ? (event) => {
                                   if (!event.currentTarget.contains(event.target as Node)) return;
                                   const control = (event.target as Element).closest("button, input, select, textarea, a");
                                   if (control && control !== event.currentTarget) return;
@@ -1309,10 +1295,14 @@ const InboxSplit = ({
                                 }
                                 href={
                                   notification.type !== "Invited"
-                                    ? inboxConfig.urls.taskDetail(
-                                        notification.projectId,
-                                        notification.task?.uniqueIndex,
-                                        mentionedQueryParam,
+                                    ? withDecisionCommentAnchor(
+                                        inboxConfig.urls.taskDetail(
+                                          notification.projectId,
+                                          notification.task?.uniqueIndex,
+                                          `&split=${encodeURIComponent(selectedSplit)}${mentionedQueryParam}`,
+                                        ),
+                                        notification.decisionCommentId,
+                                        decisionCommentLinks,
                                       )
                                     : (notification.notification_invite
                                         ?.inviteURL ?? "")

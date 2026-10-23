@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { checkMcpRateLimit, validateMcpAuth } from '@/lib/mcp/auth'
 import prisma from '@/lib/prisma'
-import { findTaskByIdentifier } from '@/lib/mcp/tasks/resolveTask'
+import { findTaskByIdentifier, taskIdentifierErrorResponse } from '@/lib/mcp/tasks/resolveTask'
 import { setTaskMovedToInboxState } from '@/lib/taskCardActions/inboxState'
 import { withTaskStarWriteLock } from '@/lib/taskCardActions/writeLocks'
 
@@ -36,7 +36,7 @@ const defaultDependencies: CardActionDependencies = {
   checkRateLimit: checkMcpRateLimit,
   validateAuth: validateMcpAuth,
   findTask: async (ctx, taskId) =>
-    findTaskByIdentifier(ctx.user, { task_id: taskId }, ctx.agentId),
+    findTaskByIdentifier(ctx.user, { task_id: taskId }, ctx.agentId, undefined, ctx.teamScope),
   setStarred: async (userId, taskId, projectId, active) => {
     const savedContent = await withTaskStarWriteLock(taskId, async (tx) => {
       const lockedTask = await tx.$queryRaw<Array<{ projectId: number }>>`
@@ -92,6 +92,7 @@ const defaultDependencies: CardActionDependencies = {
       projectId,
       fromUserId: ctx.user.id,
       fromAgentId: ctx.agentId ?? null,
+      teamScope: ctx.teamScope,
     }
     const activeAfterWrite = await setTaskMovedToInboxState(recipient, active)
     return { active: activeAfterWrite }
@@ -142,7 +143,14 @@ export function createTaskCardActionHandler(
       )
     }
 
-    const task = await dependencies.findTask(ctx, taskId)
+    let task
+    try {
+      task = await dependencies.findTask(ctx, taskId)
+    } catch (error) {
+      const identifierResponse = taskIdentifierErrorResponse(error)
+      if (identifierResponse) return identifierResponse
+      throw error
+    }
     if (!task || task.projectId !== projectId) {
       return NextResponse.json(
         { success: false, error: 'Task not found or access denied' },

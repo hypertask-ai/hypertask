@@ -1,3 +1,4 @@
+const { withStubs } = require("./helpers/stub-map.cjs");
 const assert = require("node:assert/strict");
 const fs = require("node:fs");
 const path = require("node:path");
@@ -7,6 +8,7 @@ const ts = require("typescript");
 const root = path.resolve(__dirname, "..");
 
 function transpile(file, stubs) {
+  stubs = withStubs({ "@/lib/auth/agentScope": require("./helpers/agent-board-scope.cjs").enforcedScope }, stubs);
   const filename = path.join(root, file);
   const javascript = ts.transpileModule(fs.readFileSync(filename, "utf8"), {
     compilerOptions: {
@@ -35,6 +37,7 @@ function loadRoute(verifySession) {
   const taskWrites = transpile("src/lib/api/task-writes/route.ts", {
     "next/server": nextServer,
     "@/lib/auth/getSessionUser": { getSessionUser: async () => null },
+    "@/lib/auth/session": { SESSION_COOKIE: "ht_session", verifySession },
   });
   const shared = transpile("src/lib/api/project-writes/remove-member.ts", {
     "next/server": nextServer,

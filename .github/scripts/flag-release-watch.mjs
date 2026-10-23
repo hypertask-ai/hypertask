@@ -4,7 +4,6 @@ import { RELEASE_WATCH, isReleaseWatchSpike } from "../../src/lib/flags/releaseW
 
 export { RELEASE_WATCH, isReleaseWatchSpike };
 const APP = "https://app.hypertask.ai";
-const POLICY = "htpr-7389-flag-release-policy";
 const FLAG_FILE = /^src\/lib\/flags\/definitions\/(htpr-[1-9]\d*-[a-z0-9]+(?:-[a-z0-9]+)*)\.ts$/;
 
 export function parseAddedDefinitions(log) {
@@ -56,12 +55,9 @@ export async function runReleaseWatch({ fetchImpl = fetch, token = process.env.H
   const headers = { Authorization: `Bearer ${token}`, "Content-Type": "application/json" };
   const { flags } = await json(fetchImpl, `${APP}/api/mcp/flags`, { headers });
   if (!Array.isArray(flags)) throw new Error("Release watch flag list is missing");
-  const policy = flags.find((flag) => flag.key === POLICY);
-  if (!policy) throw new Error("Release watch policy flag is missing");
-  if (policy.mode === "OFF") return [];
   const groups = releaseGroups(flags, typeof additions === "function" ? additions() : additions, now);
   const switched = [];
-  for (const [release, keys] of [...groups].sort(([, left], [, right]) => Number(left.includes(POLICY)) - Number(right.includes(POLICY)))) {
+  for (const [release, keys] of groups) {
     const stats = await json(fetchImpl, "https://eu.posthog.com/api/projects/236160/query/", {
       method: "POST", headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" },
       body: JSON.stringify({ query: { kind: "HogQLQuery", query: errorQuery(release, now) }, refresh: "force_blocking" }),
@@ -70,11 +66,11 @@ export async function runReleaseWatch({ fetchImpl = fetch, token = process.env.H
     const [before, after] = stats.results[0];
     if (![before, after].every((count) => Number.isSafeInteger(count) && count >= 0)) throw new Error("Release watch error counts are invalid");
     if (!isReleaseWatchSpike(before, after)) continue;
-    for (const key of keys.toSorted((left, right) => Number(left === POLICY) - Number(right === POLICY))) {
+    for (const key of keys) {
       const ticket = /^htpr-([1-9]\d*)-/.exec(key)[1];
       await json(fetchImpl, `${APP}/api/mcp/flags`, {
         method: "PATCH", headers,
-        body: JSON.stringify({ key, mode: "OFF", reason: `${APP}/detail/project-15/${ticket}`, watch: { before, after, windowMinutes: Math.floor((now - release) / 60_000) } }),
+        body: JSON.stringify({ key, mode: "OFF", reason: `${APP}/detail/project-15/${ticket}`, watch: { before, after, windowMinutes: Math.floor((now - release) / 60_000), releasedAt: new Date(release).toISOString() } }),
       });
       switched.push(key);
     }

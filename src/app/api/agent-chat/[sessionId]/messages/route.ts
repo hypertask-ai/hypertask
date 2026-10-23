@@ -8,6 +8,7 @@ import { NextRequest, NextResponse } from "next/server";
 import {
   ensureChatParticipant,
   loadUserAgentChatSession,
+  sidebarChatProjectId,
 } from "@/lib/agents/chatAccess";
 import { broadcastChatSession } from "@/lib/agents/chatBroadcast";
 import { buildAgentChatBrief } from "@/lib/agents/chatBrief";
@@ -28,7 +29,8 @@ export async function POST(
   { params }: { params: Promise<{ sessionId: string }> }
 ) {
   try {
-    const userId = (await getSessionUser(request.headers))?.userId;
+    const sessionUser = await getSessionUser(request.headers);
+    const userId = sessionUser?.userId;
     if (!userId) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
@@ -49,6 +51,8 @@ export async function POST(
     const access = await loadUserAgentChatSession({
       sessionId,
       userId,
+      sidebarProjectId: sidebarChatProjectId(request.headers),
+      actingAgentId: sessionUser?.agentId,
       select: {
         agent: { select: { runtimeType: true } },
       },

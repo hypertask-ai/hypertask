@@ -1,3 +1,4 @@
+import { downloadWithoutBrotli } from "@/lib/net/downloadWithoutBrotli";
 import { resolveAiModel as resolveLegacyAiModel } from "@/app/api/ai/_lib/modelProvider";
 import { defaultModelKeyFor } from "@/lib/aiModelOptions";
 import { getAiDefaultModelContext, resolveAutomaticAiModel } from "@/app/api/ai/_lib/byokKeys";
@@ -57,6 +58,7 @@ export async function generateConversationTitle(
       feature: "chat",
     });
     const result = await generateText({
+      experimental_download: downloadWithoutBrotli,
       model,
       instructions:
         renderPrompt("title-instructions-1"),

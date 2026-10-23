@@ -1,3 +1,5 @@
+import { prepareAgentScope, withAgentScopeRequest } from "@/lib/auth/agentScope";
+import { getProjectWhere } from "@/utils/controllers/projects/getAllIncludes";
 import { NextRequest, NextResponse } from "next/server";
 
 import { auth } from "@/lib/auth/betterAuth";
@@ -143,6 +145,7 @@ function setGuestCookies(
 async function getExistingGuest(request: NextRequest) {
   const session = verifySession(request.cookies.get(SESSION_COOKIE)?.value);
   if (!session) return null;
+  await prepareAgentScope(session.id, session.agentId);
 
   const user = await prisma.user.findUnique({
     where: { id: session.id },
@@ -157,7 +160,12 @@ async function getExistingGuest(request: NextRequest) {
   }
 
   const project = await prisma.project.findFirst({
-    where: { ownerId: user.id, status: "Normal", teamId: { not: null } },
+    where: {
+      ownerId: user.id,
+      status: "Normal",
+      teamId: { not: null },
+      AND: [getProjectWhere(session.id, session.agentId, session.teamScope)],
+    },
     orderBy: { createdAt: "desc" },
     select: {
       id: true,
@@ -218,6 +226,10 @@ async function existingGuestResponse(
 }
 
 export async function POST(request: NextRequest) {
+  return withAgentScopeRequest(request, () => guest(request));
+}
+
+async function guest(request: NextRequest) {
   const sessionUser = await getSessionUser(request.headers);
   if (sessionUser) {
     const user = await prisma.user.findUnique({

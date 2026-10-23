@@ -3,8 +3,7 @@ import { notFound } from "next/navigation";
 
 import { shouldShowMobileTabBar } from "@/components/Global/mobileShellVisibility";
 import { isQaLoginConfigured, QA_LOGIN_USER_ID } from "@/lib/auth/qaLogin";
-import { isFeatureEnabled } from "@/lib/flags";
-import { HTPR_6536_QA_LOGIN_FLAG } from "@/lib/flags/keys";
+import { isOwnerOrQaUserId } from "@/lib/flags";
 import { QaLoginForm } from "./QaLoginForm";
 
 export const dynamic = "force-dynamic";
@@ -18,11 +17,8 @@ export default async function QaLoginPage() {
   if (!isQaLoginConfigured()) notFound();
 
   try {
-    const flagged = await isFeatureEnabled(
-      HTPR_6536_QA_LOGIN_FLAG,
-      QA_LOGIN_USER_ID,
-    );
-    if (!flagged) notFound();
+    const allowed = await isOwnerOrQaUserId(QA_LOGIN_USER_ID);
+    if (!allowed) notFound();
   } catch {
     notFound();
   }

@@ -273,23 +273,3 @@ test("All resets multi-selects without changing unrelated params or search", asy
     assert.equal(document.querySelector('[role="status"]').textContent, "Showing 4 of 4 flags");
   });
 });
-
-test("internal flags do not enter any dropdown counts or gain an Internal choice", async () => {
-  const internal = { ...rows[0], key: "htpr-6536-qa-login", kind: "internal" };
-  rows.push(internal);
-  try {
-    await withAdmin("", async ({ document, open }) => {
-      assert.equal(document.querySelector('[role="status"]').textContent, "Showing 4 of 4 flags");
-      assert.equal(document.querySelectorAll('[id^="flag-"][tabindex]').length, 4);
-      assert.deepEqual(await open("Status"), ["All (4)", "Unreleased (2)", "Only me (1)", "Owner + QA (1)", "Everyone (1)", "Off (1)"]);
-      assert.deepEqual(await open("Type"), ["All (4)", "Feature (2)", "Improvement (1)", "Bug (1)"]);
-      assert.deepEqual(await open("Release risk"), ["All (4)", "No visible change (1)", "Small change (1)", "New feature (1)"]);
-      assert.deepEqual(await open("Sort"), ["Release risk first (4)", "Newest first (4)", "Oldest first (4)"]);
-    });
-    await withAdmin("", async ({ document }) => {
-      assert.equal(document.querySelector("code").textContent, internal.key);
-    }, { flagKey: internal.key });
-  } finally {
-    rows.pop();
-  }
-});

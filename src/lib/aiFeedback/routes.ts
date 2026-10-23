@@ -25,6 +25,7 @@ export const MCP_FEEDBACK_ROUTE_TEMPLATES = [
   '/api/mcp/custom-fields/value',
   '/api/mcp/decisions',
   '/api/mcp/drafts',
+  '/api/mcp/features',
   '/api/mcp/feedback',
   '/api/mcp/flags',
   '/api/mcp/hello',

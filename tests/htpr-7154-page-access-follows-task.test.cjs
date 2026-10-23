@@ -1,3 +1,4 @@
+const { withStubs } = require('./helpers/stub-map.cjs');
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
@@ -7,7 +8,7 @@ const ts = require('typescript');
 const root = path.resolve(__dirname, '..');
 
 function loadModule(file, stubs) {
-  stubs = { '@/lib/mcp/operationCrashReport': { reportMcpOperationCrash: () => {} }, ...stubs };
+  stubs = withStubs({ '@/lib/mcp/operationCrashReport': { reportMcpOperationCrash: () => {} } }, stubs);
   const filename = path.join(root, file);
   const code = ts.transpileModule(fs.readFileSync(filename, 'utf8'), {
     compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022, esModuleInterop: true },
@@ -16,7 +17,7 @@ function loadModule(file, stubs) {
   vm.runInNewContext(code, {
     module: loaded, exports: loaded.exports,
     require: (id) => {
-      if (id === '@/lib/mcp/routeWrapper') return require('./helpers/mcp-route-wrapper.cjs').loadRouteWrapper({ ...stubs, '@/lib/aiFeedback/automatic': { queueRestFailure: () => {} } });
+      if (id === '@/lib/mcp/routeWrapper') return require('./helpers/mcp-route-wrapper.cjs').loadRouteWrapper(withStubs(stubs, { '@/lib/aiFeedback/automatic': { queueRestFailure: () => {} } }));
       assert.ok(id in stubs, `Unexpected import: ${id}`);
       return stubs[id];
     },
@@ -278,7 +279,7 @@ test('page mentions filter on the owning page board without ticket metadata', as
     '@/utils/controllers/agents/boardMembers': { getBoardAgentMembers: async () => [] },
     '../search/document': { turbopufferFetchMentionTasks: async () => [] },
     '@/utils/controllers/pages/standalonePagesEnabled': { standalonePagesEnabled: async () => true },
-    '@/lib/flags': { isFeatureEnabled: async () => true, PAGE_MENTIONS_FLAG: 'pages' },
+    '@/lib/flags': { isFeatureEnabled: async () => true },
     '@/utils/helperFunctions/mentionSearch': { matchesMentionName: () => true, selectMentionAgents: () => [] },
   });
   const result = await loaded.default('', 7, 2);

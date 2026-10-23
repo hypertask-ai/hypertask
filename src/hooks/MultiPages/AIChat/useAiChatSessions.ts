@@ -1,3 +1,4 @@
+import { getNativeSidebarChat } from "@/lib/agents/chatViewerState";
 import { useCallback, useEffect, useRef } from "react";
 import globalConstants from "@/lib/constants";
 import { IChatSession } from "@/models/model";
@@ -7,7 +8,7 @@ import { shouldBlockAiDueToByokProvider } from "@/lib/byokSelectedProviderGate";
 import { isGuestCookieUser } from "@/lib/demo/isGuestClient";
 import type { useAiChatState } from "./useAiChatState";
 
-type Context = Pick<ReturnType<typeof useAiChatState>, "sessionIntentGenerationRef" | "sessionSetupRef" | "resolvedBoardSessionRef" | "clearMessageQueue" | "selectSessionInHistory" | "createSession" | "isFullScreenChat" | "setDockedChatScope" | "currentProject" | "previousProjectIdRef" | "deleteSessionInHistory" | "messageQueueRef" | "setQueuedMessages" | "sendInFlightRef" | "modelBilling" | "currentAiOption" | "pathname" | "currentUser" | "taskId" | "sessionsRef" | "dockedChatScope" | "sessionContextKey" | "chatHistoryReadyRef" | "aiChatBoardSessionMap" | "setAiChatBoardSessionMap" | "setRecentChatBoardIds" | "shouldLoadChatHistory" | "resolveHistorySession" | "getDisplayedSession" | "sessionPagingEnabled">;
+type Context = { agentSidebarChatsEnabled: boolean } & Pick<ReturnType<typeof useAiChatState>, "sessionIntentGenerationRef" | "sessionSetupRef" | "resolvedBoardSessionRef" | "clearMessageQueue" | "selectSessionInHistory" | "createSession" | "isFullScreenChat" | "setDockedChatScope" | "currentProject" | "previousProjectIdRef" | "deleteSessionInHistory" | "messageQueueRef" | "setQueuedMessages" | "sendInFlightRef" | "modelBilling" | "currentAiOption" | "pathname" | "currentUser" | "taskId" | "sessionsRef" | "dockedChatScope" | "sessionContextKey" | "chatHistoryReadyRef" | "aiChatBoardSessionMap" | "setAiChatBoardSessionMap" | "setRecentChatBoardIds" | "shouldLoadChatHistory" | "resolveHistorySession" | "getDisplayedSession" | "sessionPagingEnabled">;
 
 export function useAiChatSessions(context: Context) {
   const {
@@ -105,6 +106,12 @@ export function useAiChatSessions(context: Context) {
   const ensureSessionForCurrentBoard = useCallback(async (timeoutMs = 5000) => {
     const projectId = currentProject?.id;
     const userId = currentUser?.id;
+    const sidebarNative = context.agentSidebarChatsEnabled ? getNativeSidebarChat() : null;
+    if (sidebarNative && sidebarNative.projectId === projectId) {
+      return sessionPagingEnabled
+        ? await resolveHistorySession(sidebarNative.sessionId)
+        : sessionsRef.current.find((session) => session.id === sidebarNative.sessionId);
+    }
 
     if (taskId !== undefined) {
       if (sessionPagingEnabled) {
@@ -196,7 +203,7 @@ export function useAiChatSessions(context: Context) {
           (session) => session.id === mappedSessionId
         ) ?? (sessionPagingEnabled ? await resolveHistorySession(mappedSessionId) : undefined);
         if (!isCurrentIntent()) return undefined;
-        if (mappedSession && (!sessionPagingEnabled || (mappedSession.taskId === null && mappedSession.projectId === projectId))) {
+        if (mappedSession && !mappedSession.agentId && (!sessionPagingEnabled || (mappedSession.taskId === null && mappedSession.projectId === projectId))) {
           if (mappedSession.id !== currentSessions[0].id) {
             resolvedBoardSessionRef.current = {
               projectId,
@@ -222,7 +229,7 @@ export function useAiChatSessions(context: Context) {
       if (sessionPagingEnabled) {
         const scopedSession = await resolveHistorySession(undefined, { projectId });
         if (!isCurrentIntent()) return undefined;
-        if (scopedSession) {
+        if (scopedSession && !scopedSession.agentId) {
           resolvedBoardSessionRef.current = { projectId, session: scopedSession };
           await selectSessionInHistory(scopedSession.id);
           if (!isCurrentIntent()) return undefined;
@@ -234,7 +241,7 @@ export function useAiChatSessions(context: Context) {
       if (sessionPagingEnabled) {
         const emptySession = await resolveHistorySession(undefined, undefined, true);
         if (!isCurrentIntent()) return undefined;
-        if (emptySession) {
+        if (emptySession && !emptySession.agentId) {
           resolvedBoardSessionRef.current = { projectId, session: emptySession };
           await selectSessionInHistory(emptySession.id);
           if (!isCurrentIntent()) return undefined;
@@ -242,14 +249,14 @@ export function useAiChatSessions(context: Context) {
           return getDisplayedSession();
         }
       }
-      if (sessionPagingEnabled && getDisplayedSession()?.id !== currentSessions[0]?.id) return getDisplayedSession();
-      if ((!sessionPagingEnabled || currentSessions[0].taskId === null) && (currentSessions[0].messages?.length ?? 0) === 0) {
+      if (sessionPagingEnabled && getDisplayedSession()?.id !== currentSessions[0]?.id && !getDisplayedSession()?.agentId) return getDisplayedSession();
+      if (!currentSessions[0].agentId && (!sessionPagingEnabled || currentSessions[0].taskId === null) && (currentSessions[0].messages?.length ?? 0) === 0) {
         previousProjectIdRef.current = projectId;
         return sessionPagingEnabled ? getDisplayedSession() : currentSessions[0];
       }
 
       const emptySession = currentSessions.find(
-        (session) => (!sessionPagingEnabled || session.taskId === null) && (session.messages?.length ?? 0) === 0
+        (session) => !session.agentId && (!sessionPagingEnabled || session.taskId === null) && (session.messages?.length ?? 0) === 0
       );
       if (emptySession) {
         resolvedBoardSessionRef.current = { projectId, session: emptySession };
@@ -278,6 +285,7 @@ export function useAiChatSessions(context: Context) {
     return promise;
   }, [
     aiChatBoardSessionMap,
+    context.agentSidebarChatsEnabled,
     createSession,
     currentProject?.id,
     currentUser?.id,

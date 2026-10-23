@@ -7,7 +7,8 @@ export type CookieIdentity =
 
 export async function verifyCookieIdentity(
   nookiesUser: string | undefined,
-  htSession: string | undefined
+  htSession: string | undefined,
+  verifiedSession?: Awaited<ReturnType<typeof verifySessionEdge>>,
 ): Promise<CookieIdentity> {
   if (!nookiesUser) return { status: 'unauthenticated' }
 
@@ -23,7 +24,7 @@ export async function verifyCookieIdentity(
   const claimed = Number(claimedId)
   if (!Number.isFinite(claimed)) return { status: 'forged' }
 
-  const session = await verifySessionEdge(htSession)
+  const session = verifiedSession === undefined ? await verifySessionEdge(htSession) : verifiedSession
   if (!session || Number(session.id) !== claimed) return { status: 'forged' }
 
   return { status: 'verified', id: claimed }

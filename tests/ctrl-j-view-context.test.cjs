@@ -7,7 +7,6 @@ const { load } = require("./helpers/create-view-context.cjs");
 const { loadSharedRoute } = require("./helpers/groupb-route.cjs");
 
 const root = path.resolve(__dirname, "..");
-const flagKey = "htpr-6999-ctrl-j-view-context";
 const emptyFilters = { addedFilters: [], matchFilters: "ALL" };
 const constants = load("src/lib/constants/constants.ts", {
   "../configs/general.config": { generalConfig: {} },
@@ -89,11 +88,11 @@ async function withComposer(check, { writerFails = false } = {}) {
   };
   try { await check(api); } finally { global.fetch = original; }
 }
-async function send(api, { flag = true, currentProject = project(), destinationProject, pathname = "/project", existingTaskId } = {}) {
+async function send(api, { currentProject = project(), destinationProject, pathname = "/project", existingTaskId } = {}) {
   const mounted = { current: true };
   const calls = [];
   const context = {
-    enabled: true, boardChipEnabled: false, targetBoardId: undefined, writerReasonEnabled: false, applyWriterProperties: false, sending: { current: false }, pendingImages: { current: 0 }, dictating: false,
+    enabled: true, boardChipEnabled: false, targetBoardId: undefined, waitingForBoards: false, queueEnterWhileBoardsLoad: true, textHeldUntilBoardsLoad: { current: null }, textBoardId: undefined, invokeSkills: false, writerReasonEnabled: false, applyWriterProperties: false, sending: { current: false }, pendingImages: { current: 0 }, dictating: false,
     text: "Describe this task", files: [], showProgress: false, composer: { current: null },
     setWritingHeight() {}, setWriting() {}, setStage() {}, onBusyChange() {}, setError(error) { if (error) throw new Error(error); },
     taskContextRef: { current: null }, newTaskWindow: Boolean(existingTaskId), destinationProject,
@@ -102,7 +101,7 @@ async function send(api, { flag = true, currentProject = project(), destinationP
     axios: { get: async () => ({ data: { id: existingTaskId, projectId: 15, uniqueIndex: 1 } }) },
     isEmptyComposeTarget: () => true, composeTaskBoardId: api.composeTaskBoardId,
     parseCookies: () => ({ previousBoard: "project-15|&|todo" }), lastUsedBoards: {},
-    user: { id: 985 }, unfurlImageUrls: false, currentProject, globalAPIHandlers: { getAllProjectsMinimal: async () => [project()] }, mounted,
+    user: { id: 985 }, unfurlImageUrls: false, inlineAgentImages: false, currentProject, globalAPIHandlers: { getAllProjectsMinimal: async () => [project()] }, mounted,
     createComposedTask: async body => {
       calls.push(body);
       const result = await api.createComposedTask(body);
@@ -110,10 +109,6 @@ async function send(api, { flag = true, currentProject = project(), destinationP
       return result;
     },
   };
-  context.viewContextEnabled = evaluate(initializer("viewContextEnabled"), {
-    useFlag: key => { assert.equal(key, flagKey); return flag; },
-    HTPR_6999_CTRL_J_VIEW_CONTEXT_FLAG: flagKey,
-  });
   await evaluate(initializer("send"), context)();
   return calls;
 }
@@ -126,7 +121,9 @@ const legacyBody = (boardId = 15, existingTaskId) => ({
 
 test("same-board new ticket inherits all active view defaults through the actual composer send", async () => {
   await withComposer(async api => {
-    await send(api);
+    const calls = await send(api);
+    assert.equal(calls.length, 1);
+    assert.equal(calls[0].viewProject, calls[0].project);
     assert.deepEqual(api.creates[0], { ...legacyBody(), tags: labels, assignees, priority, estimate });
     assert.equal(api.helperCalls, 1);
     assert.equal(api.writes[0].body.requestKind, "compose-task");
@@ -168,7 +165,6 @@ for (const [name, config] of [
   ["fill-existing", { pathname: "/detail/project-15/1", existingTaskId: 91 }],
   ["no view", { currentProject: { id: 15, uniqueIdentifier: "HTPR" } }],
   ["empty filters", { currentProject: project(emptyFilters) }],
-  ["flag off", { flag: false }],
   ["stale board context outside a board", { pathname: "/inbox" }],
 ]) {
   test(`${name} preserves today's create payload byte for byte`, async () => {

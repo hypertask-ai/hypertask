@@ -5,7 +5,7 @@ const { createJiti } = require("jiti");
 const { NextRequest } = require("next/server");
 
 const root = path.resolve(__dirname, "..");
-const key = "htpr-6136-figma-connect";
+const key = "htpr-3533-google-calendar";
 let state;
 const prisma = {
   featureFlag: {
@@ -23,7 +23,7 @@ const prisma = {
     findFirst: async () => null,
     findUnique: async ({ where }) => state.task?.id === where.id ? state.task : null,
     create: async ({ data }) => {
-      state.task = { id: 99, ...data, priority: null };
+      state.task = { id: 99, ...data, project: { teamId: null, firstTaskPointerTaskId: null }, priority: null };
       return state.task;
     },
   },

@@ -10,10 +10,9 @@ const task = { id: 42, projectId: 15, uniqueIndex: 7002, _count: { comments: 3 }
 const nextTask = { id: 43, projectId: 15, uniqueIndex: 7003 };
 const notification = { id: "701", taskId: 42, projectId: 15, userId: 2343, status: "Normal", archivedAt: null };
 const inboxKey = ["inbox", "data", 2343];
-const firstPressFlag = "htpr-7002-inbox-e-first-press";
 
 function makeFlow(t, {
-  enabled = true, currentTask = task, inboxFlow = "true", notifications = [notification],
+  currentTask = task, inboxFlow = "true", notifications = [notification],
   playlist = [task, nextTask], mobile = false, routerPathname = `/detail/project-${task.projectId}/${task.uniqueIndex}`,
   nativePathname = `/detail/project-${task.projectId}/${task.uniqueIndex}`,
 } = {}) {
@@ -26,6 +25,7 @@ function makeFlow(t, {
   queryClient.setQueryData(inboxKey, buildInboxQueryCache(notifications));
   const archived = [];
   const navigations = [];
+  const cachedOpens = [];
   const toasts = [];
   const pending = [];
   const atoms = { currentUserAtom: {}, tasksPlayListAtom: {}, globalNotificationFocusAtom: {} };
@@ -67,7 +67,7 @@ function makeFlow(t, {
     assert.equal(params.get("userId"), "2343");
     return { ok: true };
   };
-  const useFlag = key => key === firstPressFlag && enabled;
+  const useFlag = () => false;
   const optimistic = load("src/lib/inboxSync/optimistic.ts", {
     "@/lib/boardSync/pilot": {},
     "@/utils/helperFunctions/helperFunctions": { buildInboxQueryCache },
@@ -91,14 +91,17 @@ function makeFlow(t, {
   }).default;
   const useNavigate = load("src/hooks/MultiPages/Route/useHypertasksNavigate.ts", {
     "@/lib/constants": { default: {} },
-    "@/hooks/useFlag": { useFlag, useFlagLoaded: () => true },
+    "@/hooks/Inbox/useGetNotifications": { inboxDataQueryKey: id => ["inbox", "data", id] },
     "next/navigation": nextNavigation,
     "@tanstack/react-query": { useQueryClient: () => queryClient },
     "@/lib/state": state,
     "@/store": atoms,
     "@/hooks/General/useAuth": { useAuth: () => ({ authenticatedUserId: 2343 }) },
     "react-hot-toast": { default: message => toasts.push(message) },
-    "@/lib/navigation/cachedTaskDetail": {},
+    "@/lib/navigation/cachedTaskDetail": { openCachedTaskDetail: options => {
+      cachedOpens.push(options);
+      return false;
+    } },
     "@/utils/api/Homepage": {},
     "@/lib/firstScreen/SurfaceContext": {},
   }).default;
@@ -165,7 +168,7 @@ function makeFlow(t, {
   function pressE(handler = keyboard().handleKeyDown) {
     handler({ key: "e", keyCode: 69, ctrlKey: false, metaKey: false, shiftKey: false, altKey: false, preventDefault: () => {} });
   }
-  return { queryClient, archived, navigations, toasts, context, activeElement, keyboard, pressE,
+  return { queryClient, archived, navigations, cachedOpens, toasts, context, activeElement, keyboard, pressE,
     archiveNotification: (...args) => useFocus().archiveNotificationGetter(...args),
     ...useNavigate(),
   };
@@ -178,7 +181,22 @@ test("E immediately after an Inbox cached open archives before detail membership
   flow.pressE();
   assert.deepEqual(flow.archived, [{ item: notification, mode: "Notification" }]);
   assert.deepEqual(flow.navigations, [["Replace", "/detail/project-15/7003?inboxFlow=true"]]);
+  assert.deepEqual(flow.cachedOpens, [{
+    queryClient: flow.queryClient, accountId: 2343, projectId: 15, uniqueIndex: 7003,
+    href: "/detail/project-15/7003?inboxFlow=true", replace: true, task: undefined,
+  }]);
   assert.deepEqual(flow.toasts, []);
+});
+
+test("Inbox replacement inherits its flow before falling back when no cached detail is available", t => {
+  const flow = makeFlow(t);
+  flow.navigate("Replace", "/detail/project-15/7003");
+  assert.deepEqual(flow.cachedOpens, [{
+    queryClient: flow.queryClient, accountId: 2343, projectId: 15, uniqueIndex: 7003,
+    href: "/detail/project-15/7003?inboxFlow=true", replace: true, task: undefined,
+  }]);
+  assert.deepEqual(flow.navigations, [["Replace", "/detail/project-15/7003?inboxFlow=true"]]);
+  assert.equal(window.location.search, "?inboxFlow=true");
 });
 
 for (const mobile of [false, true]) {
@@ -210,9 +228,9 @@ for (const mobile of [false, true]) {
   });
 }
 
-test("flag off preserves cached-path split navigation and refresh after hydrated archive", t => {
+test("cached-path hydrated archive keeps split navigation and refresh before advancing", t => {
   const flow = makeFlow(t, {
-    enabled: false, routerPathname: "/inbox",
+    routerPathname: "/inbox",
     currentTask: { ...task, _count: { notifications: 1 }, notifications: [notification] },
   });
   flow.pressE();
@@ -230,18 +248,6 @@ test("archiving on the actual Inbox still updates the split URL and refreshes", 
   assert.deepEqual(flow.navigations, [
     ["Replace", "/inbox?split=All"], ["Replace", "/inbox?split=All"], ["Refresh"],
   ]);
-});
-
-test("flag off preserves the early no-op and the hydrated archive path", t => {
-  const flow = makeFlow(t, { enabled: false });
-  flow.pressE();
-  assert.deepEqual(flow.archived, []);
-  assert.deepEqual(flow.navigations, []);
-  assert.deepEqual(flow.toasts, ["This task is not in inbox"]);
-  flow.context.currentTask = { ...task, _count: { notifications: 1 }, notifications: [notification] };
-  flow.pressE();
-  assert.deepEqual(flow.archived, [{ item: notification, mode: "Notification" }]);
-  assert.equal(flow.navigations.length, 1);
 });
 
 test("early E reads current cache membership at press time, not when the handler was created", t => {
@@ -304,7 +310,7 @@ test("the early fallback only consults the current account's Inbox cache", t => 
   assert.deepEqual(flow.navigations, []);
 });
 
-test("membership already loaded in the detail uses the existing archive path with the flag on", t => {
+test("membership already loaded in the detail uses the existing archive path", t => {
   const flow = makeFlow(t, { notifications: [], currentTask: { ...task, _count: { notifications: 1 }, notifications: [notification] } });
   flow.pressE();
   assert.deepEqual(flow.archived, [{ item: notification, mode: "Notification" }]);
@@ -350,8 +356,8 @@ const cachedNavigation = "src/components/PageComponents/TaskDetail/CachedTaskDet
 const queueHook = "src/hooks/useInboxEFirstPressQueue.ts";
 const queueSource = fs.existsSync(path.resolve(__dirname, "..", queueHook)) ? queueHook : cachedNavigation;
 
-function queuedFlow(t, { enabled = true, noRAF = false, deferQueue = false, ...options } = {}) {
-  const flow = makeFlow(t, { enabled, ...options });
+function queuedFlow(t, { noRAF = false, deferQueue = false, ...options } = {}) {
+  const flow = makeFlow(t, options);
   const listeners = new Map();
   const frames = new Map();
   const scheduled = new Set();
@@ -362,7 +368,7 @@ function queuedFlow(t, { enabled = true, noRAF = false, deferQueue = false, ...o
     target.removeEventListener = (type, handler, capture) => listeners.delete(`${type}:${!!capture}`);
   }
   const mountQueue = sourceCallback(queueSource, {
-    inboxEFirstPress: enabled, window, document, queryClient: flow.queryClient,
+    window, document, queryClient: flow.queryClient,
     REACT_QUERY_KEYS: sourceCallback("src/lib/constants/constants.ts", {}, "REACT_QUERY_KEYS"),
     returnIfModalOrInputActive: () => ["INPUT", "TEXTAREA"].includes(flow.activeElement.tagName) ||
       !!flow.activeElement.closest(".ProseMirror") || !!flow.activeElement.closest(".chatwindow"),
@@ -389,7 +395,7 @@ function queuedFlow(t, { enabled = true, noRAF = false, deferQueue = false, ...o
   function mountKeyboard() {
     readinessCleanup?.();
     readinessCleanup = sourceCallback("src/app/detail/[...slug]/useTaskDetailReadiness.tsx", {
-      embedded: false, inboxEFirstPress: enabled, currentTask: flow.context.currentTask, window, document, CustomEvent,
+      embedded: false, currentTask: flow.context.currentTask, window, document, CustomEvent,
       ...flow.keyboard(),
     })();
   }
@@ -408,80 +414,78 @@ function queuedFlow(t, { enabled = true, noRAF = false, deferQueue = false, ...o
   return { ...flow, mountKeyboard, mountQueue, press, poll, cleanup, scheduled, cancelled };
 }
 
-for (const enabled of [false, true]) {
-  test(`phone route commit ${enabled ? "on" : "off"}: early E survives the real workspace frame route change only behind the flag`, t => {
-    const React = require("react");
-    const { createRoot } = require("react-dom/client");
-    const { JSDOM } = require("jsdom");
-    const flow = queuedFlow(t, { enabled, mobile: true, deferQueue: true });
-    const dom = new JSDOM("<!doctype html><div id='root'></div>");
-    const previousAct = global.IS_REACT_ACT_ENVIRONMENT;
-    global.IS_REACT_ACT_ENVIRONMENT = true;
-    function act(callback) {
-      const previousWindow = global.window, previousDocument = global.document;
-      global.window = dom.window; global.document = dom.window.document;
-      try { React.act(callback); } finally { global.window = previousWindow; global.document = previousDocument; }
-    }
-    let pathname = "/inbox", mounts = 0;
-    const frameMocks = {
-      "next/navigation": { usePathname: () => pathname },
-      "@/lib/contexts/mobileContext": { MobileViewContext: React.createContext(true) },
-      "@/hooks/useFlag": { useFlag: () => false, useFlagLoaded: () => true },
-      "@/utils/undoActions/helperFuncs": { cn: (...classes) => classes.filter(Boolean).join(" ") },
-      "@/components/Common/Tooltip": { __esModule: true, default: () => null },
-      "@/lib/flags/keys": {},
-    };
-    const frameModule = { exports: {} };
-    const frameSource = ts.transpileModule(fs.readFileSync(path.resolve(__dirname, "..", "src/components/AI_CHAT/AI_Chat_Closed_Layout.tsx"), "utf8"), {
-      compilerOptions: { jsx: ts.JsxEmit.ReactJSX, module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022, esModuleInterop: true },
-    }).outputText;
-    new Function("require", "module", "exports", frameSource)(specifier => frameMocks[specifier] ?? require(specifier), frameModule, frameModule.exports);
-    const Frame = frameModule.exports.default;
-    const tree = ts.createSourceFile(globalProvider, fs.readFileSync(path.resolve(__dirname, "..", globalProvider), "utf8"), ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX);
-    let shell;
-    function visit(node) {
-      if (ts.isJsxElement(node) && node.openingElement.tagName.getText(tree) === "AIChatClosedLayout") shell = node.getText(tree);
-      ts.forEachChild(node, visit);
-    }
-    visit(tree);
-    assert.ok(shell, "exercise the actual global provider workspace subtree");
-    const compiled = ts.transpileModule(`const Shell = ({children}) => ${shell};`, {
-      compilerOptions: { jsx: ts.JsxEmit.React, target: ts.ScriptTarget.ES2022 },
-    }).outputText;
-    function Navigation({ children }) {
-      React.useEffect(() => { mounts++; }, []);
-      React.useEffect(() => queueSource === cachedNavigation ? flow.mountQueue() : undefined, []);
-      return children;
-    }
-    const env = {
-      React, AIChatClosedLayout: Frame, CachedTaskDetailNavigation: Navigation, authenticatedUserId: 2343, secondaryStartupEnabled: true, phoneBoardWarmsTicket: true,
-      showMobileTabBar: false, mobileBottomInsetVisible: false, mobilePullCommandVisible: false,
-      openAIChatInterface: () => {}, showAiChatInterface: false, sidebarWidthPx: 0,
-      shouldMountChatRuntime: false, Suspense: React.Suspense, AIChatPanels: () => null,
-    };
-    const Shell = new Function(...Object.keys(env), `${compiled}\nreturn Shell;`)(...Object.values(env));
-    function Provider() {
-      React.useEffect(() => queueSource === queueHook ? flow.mountQueue() : undefined, []);
-      return React.createElement(Shell, null, React.createElement("article"));
-    }
-    const renderer = createRoot(dom.window.document.getElementById("root"));
-    act(() => renderer.render(React.createElement(Provider)));
-    t.after(() => {
-      act(() => renderer.unmount());
-      global.IS_REACT_ACT_ENVIRONMENT = previousAct;
-      dom.window.close();
-    });
-    flow.press();
-    pathname = window.location.pathname;
-    act(() => renderer.render(React.createElement(Provider)));
-    // YPER4-293: the phone Inbox-to-detail switch keeps the same workspace ancestors, so navigation is not remounted.
-    assert.equal(mounts, 1, "the phone Inbox-to-detail switch keeps navigation mounted");
-    flow.context.currentTask = { ...task, _count: { notifications: 1 }, notifications: [notification] };
-    flow.mountKeyboard(); flow.poll();
-    assert.deepEqual(flow.archived, enabled ? [{ item: notification, mode: "Notification" }] : []);
-    assert.deepEqual(flow.navigations, enabled ? [["Replace", "/detail/project-15/7003?inboxFlow=true"]] : []);
+test("phone route commit: early E survives the real workspace frame route change", t => {
+  const React = require("react");
+  const { createRoot } = require("react-dom/client");
+  const { JSDOM } = require("jsdom");
+  const flow = queuedFlow(t, { mobile: true, deferQueue: true });
+  const dom = new JSDOM("<!doctype html><div id='root'></div>");
+  const previousAct = global.IS_REACT_ACT_ENVIRONMENT;
+  global.IS_REACT_ACT_ENVIRONMENT = true;
+  function act(callback) {
+    const previousWindow = global.window, previousDocument = global.document;
+    global.window = dom.window; global.document = dom.window.document;
+    try { React.act(callback); } finally { global.window = previousWindow; global.document = previousDocument; }
+  }
+  let pathname = "/inbox", mounts = 0;
+  const frameMocks = {
+    "next/navigation": { usePathname: () => pathname },
+    "@/lib/contexts/mobileContext": { MobileViewContext: React.createContext(true) },
+    "@/hooks/useFlag": { useFlag: () => false, useFlagLoaded: () => true },
+    "@/utils/undoActions/helperFuncs": { cn: (...classes) => classes.filter(Boolean).join(" ") },
+    "@/components/Common/Tooltip": { __esModule: true, default: () => null },
+    "@/lib/flags/keys": {},
+  };
+  const frameModule = { exports: {} };
+  const frameSource = ts.transpileModule(fs.readFileSync(path.resolve(__dirname, "..", "src/components/AI_CHAT/AI_Chat_Closed_Layout.tsx"), "utf8"), {
+    compilerOptions: { jsx: ts.JsxEmit.ReactJSX, module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022, esModuleInterop: true },
+  }).outputText;
+  new Function("require", "module", "exports", frameSource)(specifier => frameMocks[specifier] ?? require(specifier), frameModule, frameModule.exports);
+  const Frame = frameModule.exports.default;
+  const tree = ts.createSourceFile(globalProvider, fs.readFileSync(path.resolve(__dirname, "..", globalProvider), "utf8"), ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX);
+  let shell;
+  function visit(node) {
+    if (ts.isJsxElement(node) && node.openingElement.tagName.getText(tree) === "AIChatClosedLayout") shell = node.getText(tree);
+    ts.forEachChild(node, visit);
+  }
+  visit(tree);
+  assert.ok(shell, "exercise the actual global provider workspace subtree");
+  const compiled = ts.transpileModule(`const Shell = ({children}) => ${shell};`, {
+    compilerOptions: { jsx: ts.JsxEmit.React, target: ts.ScriptTarget.ES2022 },
+  }).outputText;
+  function Navigation({ children }) {
+    React.useEffect(() => { mounts++; }, []);
+    React.useEffect(() => queueSource === cachedNavigation ? flow.mountQueue() : undefined, []);
+    return children;
+  }
+  const env = {
+    React, AIChatClosedLayout: Frame, CachedTaskDetailNavigation: Navigation, authenticatedUserId: 2343,
+    showMobileTabBar: false, mobileBottomInsetVisible: false, mobilePullCommandVisible: false,
+    openAIChatInterface: () => {}, showAiChatInterface: false, sidebarWidthPx: 0,
+    shouldMountChatRuntime: false, Suspense: React.Suspense, AIChatPanels: () => null,
+  };
+  const Shell = new Function(...Object.keys(env), `${compiled}\nreturn Shell;`)(...Object.values(env));
+  function Provider() {
+    React.useEffect(() => queueSource === queueHook ? flow.mountQueue() : undefined, []);
+    return React.createElement(Shell, null, React.createElement("article"));
+  }
+  const renderer = createRoot(dom.window.document.getElementById("root"));
+  act(() => renderer.render(React.createElement(Provider)));
+  t.after(() => {
+    act(() => renderer.unmount());
+    global.IS_REACT_ACT_ENVIRONMENT = previousAct;
+    dom.window.close();
   });
-}
+  flow.press();
+  pathname = window.location.pathname;
+  act(() => renderer.render(React.createElement(Provider)));
+  // YPER4-293: the phone Inbox-to-detail switch keeps the same workspace ancestors, so navigation is not remounted.
+  assert.equal(mounts, 1, "the phone Inbox-to-detail switch keeps navigation mounted");
+  flow.context.currentTask = { ...task, _count: { notifications: 1 }, notifications: [notification] };
+  flow.mountKeyboard(); flow.poll();
+  assert.deepEqual(flow.archived, [{ item: notification, mode: "Notification" }]);
+  assert.deepEqual(flow.navigations, [["Replace", "/detail/project-15/7003?inboxFlow=true"]]);
+});
 
 test("no rAF environment: idle cleanup cancels nothing", t => {
   const flow = queuedFlow(t, { noRAF: true });
@@ -647,14 +651,6 @@ test("a fully ready E stays on the existing detail keyboard path", t => {
   assert.equal(flow.navigations.length, 1);
 });
 
-test("flag off installs no handoff and preserves the early detail no-op", t => {
-  const flow = queuedFlow(t, { enabled: false });
-  flow.mountKeyboard();
-  assert.equal(flow.press().stopped, false);
-  assert.deepEqual(flow.archived, []);
-  assert.deepEqual(flow.navigations, []);
-});
-
 for (const focus of [
   { tagName: "INPUT" }, { tagName: "TEXTAREA" },
   { closest: selector => selector === ".ProseMirror" ? {} : null },
@@ -668,18 +664,16 @@ for (const focus of [
   });
 }
 
-for (const enabled of [false, true]) {
-  test(`cached Inbox mount refresh ${enabled ? "on" : "off"}: prevents replaying the source URL only behind the bugfix flag`, async t => {
-    const flow = makeFlow(t, { enabled });
-    window.history = { state: { cachedTaskDetail: { taskId: task.id } } };
-    const getTask = sourceCallback("src/app/detail/[...slug]/useTaskDetailModalActions.tsx", {
-      inboxEFirstPress: enabled, navigate: flow.navigate, _parsedTask: task, setCurrentProject: () => {},
-      taskDetailConfig: { navigation: { refresh: "Refresh" }, taskIds: { newTask: -1 } },
-    }, "getTask");
-    await getTask();
-    assert.deepEqual(flow.navigations, enabled ? [] : [["Refresh"]]);
-    window.history.state = {};
-    await getTask();
-    assert.deepEqual(flow.navigations.at(-1), ["Refresh"], "native detail still refreshes normally");
-  });
-}
+test("cached Inbox mount refresh prevents replaying the source URL", async t => {
+  const flow = makeFlow(t);
+  window.history = { state: { cachedTaskDetail: { taskId: task.id } } };
+  const getTask = sourceCallback("src/app/detail/[...slug]/useTaskDetailModalActions.tsx", {
+    navigate: flow.navigate, _parsedTask: task, setCurrentProject: () => {},
+    taskDetailConfig: { navigation: { refresh: "Refresh" }, taskIds: { newTask: -1 } },
+  }, "getTask");
+  await getTask();
+  assert.deepEqual(flow.navigations, []);
+  window.history.state = {};
+  await getTask();
+  assert.deepEqual(flow.navigations, [["Refresh"]], "native detail still refreshes normally");
+});

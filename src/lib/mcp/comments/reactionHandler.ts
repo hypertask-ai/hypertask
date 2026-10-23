@@ -1,3 +1,5 @@
+import { findIdParamOutOfRange, idOutOfRangeMessage } from '@/lib/mcp/listParams';
+import { taskIdentifierErrorResponse } from '@/lib/mcp/tasks/resolveTask';
 import { NextRequest, NextResponse } from 'next/server';
 
 export type CommentReactionTarget = {
@@ -87,6 +89,14 @@ export function createCommentReactionHandler<TContext>(
       );
     }
 
+    const outOfRange = findIdParamOutOfRange({ comment_id: commentId });
+    if (outOfRange) {
+      return NextResponse.json(
+        { success: false, error: idOutOfRangeMessage(outOfRange), code: 'invalid_field' },
+        { status: 400 }
+      );
+    }
+
     let body: unknown;
     try {
       body = await request.json();
@@ -107,7 +117,14 @@ export function createCommentReactionHandler<TContext>(
       return NextResponse.json({ success: false, error: 'active must be a boolean.' }, { status: 400 });
     }
 
-    const target = await dependencies.findTarget(context, commentId);
+    let target;
+    try {
+      target = await dependencies.findTarget(context, commentId);
+    } catch (error) {
+      const identifierResponse = taskIdentifierErrorResponse(error);
+      if (identifierResponse) return identifierResponse;
+      throw error;
+    }
     if (!target) {
       return NextResponse.json(
         { success: false, error: 'Comment not found or access denied.' },

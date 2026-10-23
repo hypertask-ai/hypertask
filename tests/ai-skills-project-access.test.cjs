@@ -3,9 +3,7 @@ const test = require("node:test");
 const { NextRequest } = require("next/server");
 const { load } = require("./task-route-loader.cjs");
 
-const flagKey = "htpr-6966-skills-access-denial";
-
-function harness({ mode = null, denied = true, failure, user = { id: 2343 } } = {}) {
+function harness({ denied = true, failure, user = { id: 2343 } } = {}) {
   const calls = [];
   const prisma = {
     project: {
@@ -13,12 +11,6 @@ function harness({ mode = null, denied = true, failure, user = { id: 2343 } } = 
         calls.push(["access", query]);
         if (failure) throw failure;
         return denied ? null : { id: query.where.id, teamId: "team-1" };
-      },
-    },
-    featureFlag: {
-      findUnique: async ({ where }) => {
-        calls.push(["flag", where.key]);
-        return mode ? { mode } : null;
       },
     },
     aI_Skill: {
@@ -58,32 +50,23 @@ for (const method of ["GET", "POST"]) {
     const response = await h.route[method](request(method));
     assert.equal(response.status, 404);
     assert.deepEqual(await response.json(), { error: "Project not found or access denied" });
-    assert.deepEqual(h.calls.map(([kind]) => kind), ["access", "flag"]);
+    assert.deepEqual(h.calls.map(([kind]) => kind), ["access"]);
     assert.equal(h.calls[0][1].where.id, 15);
     assert.equal(h.calls[0][1].where.members.some.userId, 2343);
-    assert.equal(h.calls[1][1], flagKey);
   });
 
-  test(`${method}: flag Off preserves the legacy 400 and handled error report`, async () => {
-    const h = harness({ mode: "OFF" });
-    const response = await h.route[method](request(method));
-    assert.equal(response.status, 400);
-    assert.deepEqual(await response.json(), { error: "Project not found or access denied" });
-    assert.deepEqual(h.calls.map(([kind]) => kind), ["access", "flag", "report"]);
-    const report = h.calls.at(-1)[1];
-    assert.equal(report.message, "Project not found or access denied");
-    assert.equal(report.source, "handled");
-    assert.equal(report.url, "/api/ai/skills");
-    assert.deepEqual(report.extra, { stage: "request" });
-  });
-
-  test(`${method}: unexpected database errors remain reported, without consulting the flag`, async () => {
+  test(`${method}: unexpected database errors remain reported`, async () => {
     const failure = new Error("Database unavailable");
     const h = harness({ failure });
     const response = await h.route[method](request(method));
     assert.equal(response.status, 400);
     assert.deepEqual(h.calls.map(([kind]) => kind), ["access", "report"]);
-    assert.equal(h.calls.at(-1)[1].stack, failure.stack);
+    const report = h.calls.at(-1)[1];
+    assert.equal(report.stack, failure.stack);
+    assert.equal(report.message, failure.message);
+    assert.equal(report.source, "handled");
+    assert.equal(report.url, "/api/ai/skills");
+    assert.deepEqual(report.extra, { stage: "request" });
   });
 
   test(`${method}: matching text on a generic error is not mistaken for a typed access denial`, async () => {
@@ -101,19 +84,29 @@ for (const method of ["GET", "POST"]) {
     assert.equal(h.calls[0][1].where.id, 15);
   });
 
-  test(`${method}: unauthenticated callers still get 401 without accessing data or flags`, async () => {
+  test(`${method}: unauthenticated callers still get 401 without accessing data`, async () => {
     const h = harness({ user: null });
     assert.equal((await h.route[method](request(method))).status, 401);
     assert.deepEqual(h.calls, []);
   });
 }
 
-test("the real flag registry declares a bugfix that defaults to Everyone and respects stored Off", async () => {
+test("the retired skills access-denial flag is absent from the registry", () => {
   const h = harness();
   const flags = load("src/lib/flags.ts", h.mocks);
-  assert.equal(flags.HTPR_6966_SKILLS_ACCESS_DENIAL_FLAG, flagKey);
-  assert.equal(await flags.isFeatureEnabled(flagKey, 2343), true);
-  assert.equal(await flags.featureFlagCandidateUserIds(flagKey), null);
-  const off = harness({ mode: "OFF" });
-  assert.equal(await load("src/lib/flags.ts", off.mocks).isFeatureEnabled(flagKey, 2343), false);
+  assert.equal(flags.HTPR_6966_SKILLS_ACCESS_DENIAL_FLAG, undefined);
+  assert.equal(flags.FEATURE_FLAG_KEYS.includes("htpr-6966-skills-access-denial"), false);
 });
+
+for (const teamScope of [undefined, null, { teamId: "team-1" }]) {
+  test(`skill errors preserve legacy status unless the credential is team-bound (${JSON.stringify(teamScope)})`, async () => {
+    const { skillErrorResponse } = load("src/app/api/ai/_lib/skillAccess.ts", {
+      "@/lib/prisma": { default: {} },
+      "@/utils/controllers/projects/getAllIncludes": {},
+      "./customInstructions": {},
+    });
+    const principal = { userId: 2343, agentId: null, teamScope };
+    assert.equal(skillErrorResponse(new Error("Project not found or access denied"), principal).status, teamScope == null ? 400 : 403);
+    assert.equal(skillErrorResponse(new Error("Database unavailable"), principal).status, 400);
+  });
+}

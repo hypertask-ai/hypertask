@@ -1,6 +1,7 @@
 // Assert-based demo because this repository has no Vitest setup.
 // Run after installing dependencies: npx tsx tests/agent-access-delegation.test.ts
 import assert from 'node:assert/strict'
+import type { McpAuthContext } from '../src/lib/mcp/auth/types'
 
 async function json(response: Response | null) {
   assert.ok(response, 'expected a rejection response')
@@ -33,15 +34,16 @@ async function demo() {
     permissions: role ? { role } : {},
   })
 
-  const ctx = {
+  const ctx: McpAuthContext = {
+    teamScope: null,
     user: { id: 6, email: 'owner@example.com' },
     agentId: 'ceo',
-  } as any
+  }
 
   try {
     // Humans and management keys are untouched by this check.
     assert.equal(
-      await checkAgentBoardDelegation({ ...ctx, agentId: undefined }, 'x'),
+      await checkAgentBoardDelegation({ ...ctx, agentId: null }, 'x'),
       null
     )
 
@@ -56,7 +58,8 @@ async function demo() {
     // An agent cannot widen its own access.
     const self = await json(await checkAgentBoardDelegation(ctx, 'ceo'))
     assert.equal(self.status, 403)
-    assert.equal(self.body.error, 'An agent cannot change its own board access')
+    assert.equal(self.body.error, 'An agent cannot change its own board access. Ask the person who owns this agent to open Agents, pick this agent, and add the board under Board access.')
+    assert.equal(self.body.code, 'forbidden')
 
     // Write-role agents keep the old rejection path via insufficient_scope.
     role = 'write'

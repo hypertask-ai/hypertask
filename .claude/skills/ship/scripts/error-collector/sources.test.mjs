@@ -193,7 +193,8 @@ test('every h1 group replays through core: REAL/INFRA pending, noise stays noise
     assert.equal(matched.length > 0, group.classification === 'NOISE', `research group ${group.id}`);
     if (group.classification === 'NOISE') noiseCount += group.count;
   }
-  await collect({ env: { ...env, ERROR_COLLECTOR_STATE_DIR: root, ERROR_COLLECTOR_HOURLY_CAP: '0' }, now: Date.parse(until), sources: [{ name: 'research', fetch: async () => groups }] });
+  // This classification replay spans a full day; keep all groups inside its filing window.
+  await collect({ env: { ...env, ERROR_COLLECTOR_STATE_DIR: root, ERROR_COLLECTOR_HOURLY_CAP: '0', ERROR_COLLECTOR_STALE_HOURS: '24' }, now: Date.parse(until), sources: [{ name: 'research', fetch: async () => groups }] });
   const state = JSON.parse(readFileSync(join(root, 'state.json')));
   const expected = [...new Set(groups.filter(group => group.classification !== 'NOISE').map(group => fingerprint(group.service, group.message, group.route)))].sort();
   assert.deepEqual(Object.keys(state.pending).filter(fp => !state.pending[fp].noiseRule).sort(), expected);

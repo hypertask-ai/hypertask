@@ -1,3 +1,5 @@
+import { withAgentScopeRequest } from "@/lib/auth/agentScope";
+import { getSessionUser } from "@/lib/auth/getSessionUser";
 import { loadCurrentUser } from "@/lib/auth/currentUser";
 import { HTPR_6924_REST_COMPAT_FLAG, isFeatureEnabled } from "@/lib/flags";
 import prisma from "@/lib/prisma";
@@ -27,6 +29,11 @@ async function getCurrentUserFromCookies(): Promise<CookieUser | null> {
 }
 
 export async function GET(request: NextRequest) {
+  return withAgentScopeRequest(request, () => getVelocityReport(request));
+}
+
+async function getVelocityReport(request: NextRequest) {
+  const session = await getSessionUser(request.headers).catch(() => null);
   const currentUser = await loadCurrentUser(request.headers, true).catch(() => null);
   let restCompat = false;
   if (currentUser) {
@@ -42,6 +49,9 @@ export async function GET(request: NextRequest) {
   if (!Number.isInteger(userId) || userId <= 0) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
+
+  const actingUserId = session?.agentId ? session.userId : userId;
+  const actingAgentId = session?.agentId;
 
   const projectId = Number(request.nextUrl.searchParams.get("projectId"));
   if (!Number.isInteger(projectId) || projectId <= 0) {
@@ -59,6 +69,7 @@ export async function GET(request: NextRequest) {
       where: {
         id: projectId,
         ...getProjectWhere(userId),
+        AND: [getProjectWhere(actingUserId, actingAgentId)],
       },
       select: {
         staleWarnDays: true,
@@ -95,6 +106,7 @@ export async function GET(request: NextRequest) {
       prisma.task.findMany({
         where: {
           projectId,
+          project: getProjectWhere(actingUserId, actingAgentId),
           deletedAt: null,
           status: { not: "Deleted" },
           OR: [

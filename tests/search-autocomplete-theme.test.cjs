@@ -21,7 +21,7 @@ const dark = {
   border: ['#a78bfa', '#60a5fa', '#fb7185', '#34d399', '#fbbf24', '#22d3ee'],
 }
 
-test('search semantic tokens retain all six palettes and apply only inside the flagged container', () => {
+test('search semantic tokens retain all six palettes and apply only inside the search container', () => {
   for (const theme of ['light', 'dia', 'porcelain', 'dark', 'amoled', 'graphite']) {
     const dom = new JSDOM(`<style>${css}</style><div id="enabled" class="search-autocomplete"></div><div id="disabled"></div>`)
     try {
@@ -33,7 +33,7 @@ test('search semantic tokens retain all six palettes and apply only inside the f
         for (const kind of ['bg', 'border']) {
           const token = `--${kind}-search-filter-${type}`
           assert.equal(enabled.getPropertyValue(token).trim(), palette[kind][index], `${theme} ${token}`)
-          assert.equal(disabled.getPropertyValue(token), '', `${theme} flag off: ${token}`)
+          assert.equal(disabled.getPropertyValue(token), '', `${theme} outside search: ${token}`)
         }
       }
       assert.equal(enabled.getPropertyValue('--bg-search-highlight').trim(), 'var(--bg-mention-highlight)')
@@ -73,6 +73,6 @@ test('filter utilities and title highlighting resolve semantic theme variables, 
   assert.equal(config.theme.extend.backgroundColor['search-highlight'], 'var(--bg-search-highlight)')
   const source = fs.readFileSync(path.join(root, 'src/app/search/SearchComp.tsx'), 'utf8')
   assert.match(source, /import "\.\/search-autocomplete\.css";/)
-  assert.match(source, /autocompleteEnabled && 'search-autocomplete'/)
+  assert.match(source, /'search-autocomplete'/)
   assert.match(source, /className="rounded-\[2px\] bg-search-highlight text-inherit"/)
 })

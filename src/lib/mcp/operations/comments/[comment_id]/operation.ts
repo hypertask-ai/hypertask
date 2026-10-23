@@ -1,4 +1,8 @@
+import { requireAgentWriteRole } from "@/lib/mcp/agents/readRoleGuard";
+import { inlineAgentImagesForUser } from "@/lib/media/inlineAgentImages.server";
+import { agentScopeEnforced, recordAgentBoardScopeMiss } from "@/lib/auth/agentScope";
 import { reportMcpOperationCrash } from '@/lib/mcp/operationCrashReport'
+import { userCanAccessTask } from "@/utils/controllers/tasks/assertTaskAccess"
 import { wrapMcpRoute, validateMcpRouteAuth as validateMcpAuth, checkMcpRouteRateLimit as checkMcpRateLimit } from '@/lib/mcp/routeWrapper'
 import { NextRequest, NextResponse } from 'next/server'
 
@@ -31,6 +35,7 @@ export interface McpMentionInput {
 
 export interface UpdateCommentRequest {
   text: string
+  inline_images?: boolean
   content_type?: 'html' | 'markdown'
   mentions?: McpMentionInput[]
 }
@@ -66,6 +71,8 @@ export async function PATCH(request: NextRequest, props: { params: Promise<{ com
         { status: 401 }
       )
     }
+    const roleRefusal = await requireAgentWriteRole(ctx)
+    if (roleRefusal) return roleRefusal
     const user = ctx.user;
     const commentId = parseInt(params.comment_id)
     if (isNaN(commentId) || commentId <= 0) {
@@ -93,6 +100,9 @@ export async function PATCH(request: NextRequest, props: { params: Promise<{ com
       )
     }
 
+    if (body.inline_images !== undefined && typeof body.inline_images !== "boolean") {
+      return NextResponse.json({ success: false, error: "inline_images must be a boolean" }, { status: 400 });
+    }
     const { text, content_type, mentions } = body
 
     if (!text || typeof text !== 'string' || text.trim().length === 0) {
@@ -188,10 +198,11 @@ export async function PATCH(request: NextRequest, props: { params: Promise<{ com
 
     const project = comment.task.project
     const hasAccess =
-      project.ownerId === user.id ||
-      project.members.some((m) => m.userId === user.id)
+      ctx.agentId && agentScopeEnforced()
+        ? await userCanAccessTask(user.id, comment.task.id, ctx.agentId, ctx.teamScope)
+        : project.ownerId === user.id || project.members.some((m) => m.userId === user.id)
 
-    if (!hasAccess) {
+    if (!hasAccess || (ctx.teamScope != null && !await userCanAccessTask(user.id, comment.task.id, ctx.agentId, ctx.teamScope))) {
       return NextResponse.json(
         {
           success: false,
@@ -201,6 +212,7 @@ export async function PATCH(request: NextRequest, props: { params: Promise<{ com
         { status: 403 }
       )
     }
+    recordAgentBoardScopeMiss(comment.task.projectId, "write");
 
     if (comment.creatorId !== user.id) {
       return NextResponse.json(
@@ -248,7 +260,7 @@ export async function PATCH(request: NextRequest, props: { params: Promise<{ com
     if (mentions && mentions.length > 0) {
       sanitizedText = convertPlainTextMentionsToHtml(sanitizedText, mentions)
     }
-    sanitizedText = sanitizeRichHtml(sanitizedText)
+    sanitizedText = await inlineAgentImagesForUser(sanitizeRichHtml(sanitizedText), user.id, { inlineImages: body.inline_images })
     sanitizedText = normalizeBlockHtml(sanitizedText)
 
     const textMentionIds = extractTipTapContent(sanitizedText).mentions.map((id) => parseInt(id, 10))
@@ -284,14 +296,16 @@ export async function PATCH(request: NextRequest, props: { params: Promise<{ com
       commentId,
       text: sanitizedText,
       userId: user.id,
-      agentId: ctx.agentId,
+      agentId: ctx.agentId, teamScope: ctx.teamScope,
     })
 
     await persistUrlsForComment(
       sanitizedText,
       comment.task.id,
       commentId,
-      'PUT'
+      'PUT',
+      [],
+      { userId: user.id, agentId: ctx.agentId, teamScope: ctx.teamScope }
     )
 
     const commentWithAgent = await prisma.comment.findUnique({
@@ -389,6 +403,8 @@ export async function DELETE(request: NextRequest, props: { params: Promise<{ co
         { status: 401 }
       )
     }
+    const roleRefusal = await requireAgentWriteRole(ctx)
+    if (roleRefusal) return roleRefusal
     const user = ctx.user;
     const commentId = parseInt(params.comment_id)
     if (isNaN(commentId) || commentId <= 0) {
@@ -432,10 +448,11 @@ export async function DELETE(request: NextRequest, props: { params: Promise<{ co
 
     const project = comment.task.project
     const hasAccess =
-      project.ownerId === user.id ||
-      project.members.some((m) => m.userId === user.id)
+      ctx.agentId && agentScopeEnforced()
+        ? await userCanAccessTask(user.id, comment.task.id, ctx.agentId, ctx.teamScope)
+        : project.ownerId === user.id || project.members.some((m) => m.userId === user.id)
 
-    if (!hasAccess) {
+    if (!hasAccess || (ctx.teamScope != null && !await userCanAccessTask(user.id, comment.task.id, ctx.agentId, ctx.teamScope))) {
       return NextResponse.json(
         {
           success: false,
@@ -445,6 +462,7 @@ export async function DELETE(request: NextRequest, props: { params: Promise<{ co
         { status: 403 }
       )
     }
+    recordAgentBoardScopeMiss(comment.task.projectId, "write");
 
     const hyperAiId = parseInt(
       process.env.NEXT_PUBLIC_HYPERAI_ID || '332',

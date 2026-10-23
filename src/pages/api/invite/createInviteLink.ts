@@ -1,3 +1,5 @@
+import { assertAgentBoardInviteScope } from "@/lib/mcp/agents/delegatedAccess";
+import type { Prisma } from "@prisma/client";
 import { enqueueOutsideSaveAndProcessSoon, processAnalyticsIntentSoon } from "@/lib/telemetry/analyticsIntents";
 import { enqueueInviteSent, enqueueMemberJoined } from "@/lib/telemetry/inviteAnalytics";
 import { NextApiHandler, NextApiRequest, NextApiResponse } from "next";
@@ -63,6 +65,7 @@ export const addMemberController = async (
   userId: number,
   projectId: number,
   emails: string[],
+  actingAgentId?: string | null,
 ) => {
   try {
     const currentProject = await prisma.project.findFirst({
@@ -108,8 +111,8 @@ export const addMemberController = async (
         "Is user already in the team? " + `${isInTeamAlready ? "Yes" : "No"}`,
       );
 
-      if (!isInTeamAlready) await sendInviteToNonMember(userId, projectId, email);
-      else await sendInviteToAlreadyExistingMember(email, currentProject.id, userId);
+      if (!isInTeamAlready) await sendInviteToNonMember(userId, projectId, email, actingAgentId);
+      else await sendInviteToAlreadyExistingMember(email, currentProject.id, userId, actingAgentId);
     }
 
     return {
@@ -117,6 +120,7 @@ export const addMemberController = async (
       json: emailsToInvite,
     };
   } catch (error) {
+    if (actingAgentId) throw error;
     console.log("🚀 ~ addMemberController ~ error:", error)
     prisma.invite.deleteMany({
       where: { projectId },
@@ -132,9 +136,10 @@ async function sendInviteToNonMember(
   userId: number,
   projectId: number,
   email: string,
+  actingAgentId?: string | null,
 ) {
   console.log("User isn't in the team, sending invite to join team");
-  const invite = await prisma.invite.create({
+  const createInvite = (database: Pick<Prisma.TransactionClient, "invite">) => database.invite.create({
     data: {
       userId,
       projectId,
@@ -161,6 +166,12 @@ async function sendInviteToNonMember(
       },
     },
   });
+  const invite = actingAgentId
+    ? await prisma.$transaction(async (tx) => {
+        await assertAgentBoardInviteScope(tx.member, projectId, userId, actingAgentId);
+        return createInvite(tx);
+      }, { isolationLevel: "Serializable" })
+    : await createInvite(prisma);
   let viewSlug: string | undefined;
   const activeView = getViewFromProject(invite.project);
   viewSlug = setViewSlug(activeView);
@@ -289,10 +300,12 @@ const sendInviteToAlreadyExistingMember = async (
   email: string,
   projectId: number,
   inviterUserId: number,
+  actingAgentId?: string | null,
 ) => {
   const user = await prisma.user.findFirst({ where: { email } });
   if (user) {
     const { member, analyticsKey } = await prisma.$transaction(async (tx) => {
+      await assertAgentBoardInviteScope(tx.member, projectId, inviterUserId, actingAgentId);
       const member = await tx.member.create({
         data: {
           userId: user.id,
@@ -304,7 +317,7 @@ const sendInviteToAlreadyExistingMember = async (
       });
       const analyticsKey = await enqueueMemberJoined(tx, member.id, user.id, projectId, null, inviterUserId);
       return { member, analyticsKey };
-    });
+    }, actingAgentId ? { isolationLevel: "Serializable" } : undefined);
     processAnalyticsIntentSoon(analyticsKey);
     console.log("Member created: ", member);
   }

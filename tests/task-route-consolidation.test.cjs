@@ -102,7 +102,7 @@ for (const file of [versionsPath, restorePath]) {
     }
     assert.equal(calls.queries.length, 0);
     await route[method](request(method, { version_id: 31 }), context());
-    assert.deepEqual(calls.queries[0].args.where, { id: 50, project: { status: "Normal", teamId: { not: null }, membership: 7 } });
+    assert.deepEqual(calls.queries[0].args.where, { id: 50, project: { status: "Normal", teamId: { not: null }, membership: 7 }, AND: [{ project: { teamId: { not: null }, membership: 7 } }] });
   });
 }
 
@@ -167,7 +167,7 @@ test("description restore keeps success, cookie actor, optimistic lock, and real
 test("cycle GET pins success, scope, pagination, and validation", async () => {
   const { route, calls } = fixture(cyclePath);
   await responseEquals(await route.GET(request("GET")), 200, { enabled: true, assignedCycle: cycle, cycles: [{ ...cycle, assignable: true }, { ...nextCycle, assignable: true }], nextCursor: null });
-  assert.deepEqual(calls.queries[0].args.where, { id: 50, status: "Normal", project: { status: "Normal", writeAccessFor: 7 } });
+  assert.deepEqual(calls.queries[0].args.where, { id: 50, status: "Normal", project: { status: "Normal", writeAccessFor: 7 }, AND: [{ project: { writeAccessFor: 7 } }] });
   for (const id of ["", "0", "1a", "2147483648"]) {
     await responseEquals(await route.GET(request("GET", undefined, `taskId=${id}`)), 400, { error: "A valid taskId is required" });
   }

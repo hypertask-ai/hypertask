@@ -40,7 +40,7 @@ test("pause on a running timer sets pausedAt and reports success", () => {
   assert.match(pauseWriter, /return \{ \.\.\.runningEntry, pausedAt: now \}/);
   assert.match(
     pauseRoute,
-    /pauseTimer\(\s*resolved\.ctx\.user\.id,\s*resolved\.task\.id,\s*resolved\.ctx\.agentId\s*\)/
+    /pauseTimer\(\s*resolved\.ctx\.user\.id,\s*resolved\.task\.id,\s*resolved\.ctx\.agentId,\s*resolved\.ctx\.teamScope\s*\)/
   );
   assert.match(pauseRoute, /NextResponse\.json\(\{ success: true, entry \}\)/);
 });
@@ -60,7 +60,7 @@ test("pause with no running timer returns a 404 failure", () => {
 test("resume on a paused timer clears pausedAt", () => {
   assert.match(
     resumeLib,
-    /resumeTimerOnActiveBoard\(\s*timeWriteClient,\s*userId,\s*taskId,\s*getProjectWhere\(userId, agentId\)\s*\)/
+    /resumeTimerOnActiveBoard\(\s*timeWriteClient,\s*userId,\s*taskId,\s*getProjectWhere\(userId, agentId, teamScope\)\s*\)/
   );
   assert.match(resumeWriter, /pausedAt: \{ not: null \}/);
   assert.match(resumeWriter, /data: \{ startedAt, pausedAt: null \}/);
@@ -70,7 +70,7 @@ test("resume on a paused timer clears pausedAt", () => {
   );
   assert.match(
     resumeRoute,
-    /resumeTimer\(\s*resolved\.ctx\.user\.id,\s*resolved\.task\.id,\s*resolved\.ctx\.agentId\s*\)/
+    /resumeTimer\(\s*resolved\.ctx\.user\.id,\s*resolved\.task\.id,\s*resolved\.ctx\.agentId,\s*resolved\.ctx\.teamScope\s*\)/
   );
   assert.match(resumeRoute, /NextResponse\.json\(\{ success: true, entry \}\)/);
 });

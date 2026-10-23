@@ -59,7 +59,7 @@ test("relations GET accepts every shared task identifier", () => {
   assert.match(relationsGet, /validateTaskIdentifier\(identifier\)/);
   assert.match(
     relationsGet,
-    /findTaskByIdentifier\(ctx\.user, identifier, ctx\.agentId\)/
+    /findTaskByIdentifier\(ctx\.user, identifier, ctx\.agentId, undefined, ctx\.teamScope\)/
   );
   assert.match(
     taskService,
@@ -91,7 +91,7 @@ test("relations POST and DELETE accept independent source identifier trios", () 
     assert.match(route, /validateTaskIdentifier\(sourceIdentifier\)/);
     assert.match(
       route,
-      /findTaskByIdentifier\(\s*ctx\.user,\s*sourceIdentifier,\s*ctx\.agentId\s*\)/
+      /findTaskByIdentifier\(\s*ctx\.user,\s*sourceIdentifier,\s*ctx\.agentId,\s*undefined,\s*ctx\.teamScope\s*\)/
     );
   }
 });
@@ -120,7 +120,7 @@ test("relations POST and DELETE accept independent target identifier trios", () 
     assert.match(route, /validateTaskIdentifier\(targetIdentifier\)/);
     assert.match(
       route,
-      /findTaskByIdentifier\(\s*ctx\.user,\s*targetIdentifier,\s*ctx\.agentId\s*\)/
+      /findTaskByIdentifier\(\s*ctx\.user,\s*targetIdentifier,\s*ctx\.agentId,\s*undefined,\s*ctx\.teamScope\s*\)/
     );
   }
 });
@@ -141,13 +141,13 @@ test("relations preserves shared project_id and not-found/access-denied errors",
 });
 
 test("relations ambiguity responses are 400s naming the exact endpoint field", () => {
-  assert.match(relationsGet, /ticket_number: \$\{error\.message\}/);
+  assert.match(relationsGet, /taskIdentifierErrorResponse\(error, 'ticket_number'\)/);
   for (const route of [relationsPost, relationsDelete]) {
-    assert.match(route, /source_ticket_number: \$\{error\.message\}/);
-    assert.match(route, /target_ticket_number: \$\{error\.message\}/);
+    assert.match(route, /taskIdentifierErrorResponse\(error, 'source_ticket_number'\)/);
+    assert.match(route, /taskIdentifierErrorResponse\(error, 'target_ticket_number'\)/);
   }
   assert.ok(
-    (relationsRoute.match(/error instanceof TaskIdentifierAmbiguityError/g) || [])
+    (relationsRoute.match(/taskIdentifierErrorResponse\(error,/g) || [])
       .length >= 5
   );
 });
@@ -166,11 +166,11 @@ test("related GET and POST accept all task identifiers while POST keeps text sea
     assert.match(route, /validateTaskIdentifier\(identifier\)/);
     assert.match(
       route,
-      /findTaskByIdentifier\(ctx\.user, identifier, ctx\.agentId\)/
+      /findTaskByIdentifier\(ctx\.user, identifier, ctx\.agentId, undefined, ctx\.teamScope\)/
     );
     assert.match(route, /Task not found or access denied/);
     assert.match(route, /status: 404/);
-    assert.match(route, /ticket_number: \$\{error\.message\}/);
+    assert.match(route, /taskIdentifierErrorResponse\(error, 'ticket_number'\)/);
   }
   assert.match(relatedPost, /return handleRelatedTasksPost\(request, ctx, body\)/);
 });

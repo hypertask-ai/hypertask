@@ -1,3 +1,4 @@
+import { downloadWithoutBrotli } from "@/lib/net/downloadWithoutBrotli";
 import { applyTaskWriterDueDate, validateTaskWriterDueDate } from "@/lib/ai/taskWriterDueDate";
 import { normalizeTaskWriterTicketType, readTaskWriterTicketType, ticketTypeSafeCut, TICKET_TYPE_HEADER } from "@/lib/ai/taskWriterTicketType";
 import { reportError as reportErrorToBoard } from "@/lib/errors/reportError";
@@ -13,7 +14,7 @@ import {
   SSE_HEADERS,
 } from "@/app/api/ai/_lib/editorAi";
 import { getAiRequestUser } from "@/app/api/ai/_lib/requestUser";
-import { extractTaskWriterProperties, hasUsableTaskWriterDraft, TASK_WRITER_EMPTY_DRAFT_MESSAGE } from "@/app/api/ai/_lib/taskWriterProperties";
+import { normalizeTaskWriterLabels, validateTaskWriterLabelIds, extractTaskWriterProperties, hasUsableTaskWriterDraft, TASK_WRITER_EMPTY_DRAFT_MESSAGE } from "@/app/api/ai/_lib/taskWriterProperties";
 import {
   AiFeatureDisabledError,
   AutoDescriptionSuggestionsDisabledError,
@@ -21,7 +22,6 @@ import {
   missingRequiredFields,
   prepareTaskWriterRun,
   taskWriterRequestSchema,
-  tasksOutputSchema,
   type TaskWriterRequest,
 } from "@/app/api/ai/_lib/taskWriterRun";
 
@@ -37,6 +37,15 @@ async function isAllowanceLimitMessage(message: string) {
   if (!message.includes("AI allowance")) return false;
   const { SHARED_AI_ALLOWANCE_EXCEEDED_MESSAGE } = await import("@/lib/aiAllowancePolicy");
   return message === SHARED_AI_ALLOWANCE_EXCEEDED_MESSAGE;
+}
+
+async function logTaskWriterFailure(label: string, error: unknown) {
+  if (await isAllowanceLimitMessage(errorMessage(error))) {
+    console.warn(`[ai/task-writer] refused: included AI allowance used up (${label})`);
+    return true;
+  }
+  console.error(`[ai/task-writer] ${label}`, error);
+  return false;
 }
 
 export async function POST(request: NextRequest) {
@@ -71,27 +80,47 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const { selected, instructions, messages, allowedImgSrcs, usageTaskId, splitTasks, validateDraft, dueDateContext, ticketTypeEnabled } =
+    const { selected, instructions, messages, allowedImgSrcs, usageTaskId, splitTasks, validateDraft, dueDateContext, ticketTypeEnabled, customFieldDefinitions, tasksSchema, boardLabelIds, skills, composeSkillsEnabled } =
       await prepareTaskWriterRun(body, userId);
-    const typeHeaders: Record<string, string> = ticketTypeEnabled ? { [TICKET_TYPE_HEADER]: "enabled" } : {};
+    let skillsHeader: string | undefined;
+    if (composeSkillsEnabled && skills.length) {
+      const { HTPR_7319_SKILL_CHAT_FOLLOWUP_FLAG, isFeatureEnabled } = await import("@/lib/flags");
+      if (await isFeatureEnabled(HTPR_7319_SKILL_CHAT_FOLLOWUP_FLAG, userId)) {
+        const { encodeTaskWriterSkills } = await import("@/lib/ai/taskWriterSkills");
+        skillsHeader = encodeTaskWriterSkills(skills.map(({ id, slug, name, updatedAt }) => ({
+          id, slug, name, updatedAt: updatedAt.toISOString(),
+        })));
+      }
+    }
+    const typeHeaders: Record<string, string> = {
+      ...(skillsHeader ? { "X-Task-Writer-Skills": skillsHeader } : {}),
+      ...(ticketTypeEnabled ? { [TICKET_TYPE_HEADER]: "enabled" } : {}),
+      ...(boardLabelIds ? { "X-Task-Writer-Labels": "enabled" } : {}),
+    };
     if (splitTasks) {
       configureAiModelUsage(selected.model, {
         userId, teamId: selected.teamId, projectId: body.projectId,
         taskId: usageTaskId, provider: selected.usageProvider, feature: "task-writer",
       });
       const result = await generateText({
+        experimental_download: downloadWithoutBrotli,
         model: selected.model, instructions, messages, tools: selected.tools,
         maxRetries: 2, providerOptions: selected.providerOptions, ...selected.settings,
-        output: Output.object({ schema: tasksOutputSchema }),
+        output: Output.object({ schema: tasksSchema }),
       });
-      const { tasks } = tasksOutputSchema.parse({ tasks: result.output.tasks.slice(0, 10) });
-      return NextResponse.json({ tasks: tasks.map(({ dueDate: modelDueDate, ...task }) => {
+      const fieldTools = customFieldDefinitions?.length ? await import("@/lib/ai/taskWriterCustomFields") : null;
+      const { tasks } = tasksSchema.parse({ tasks: result.output.tasks.slice(0, 10) });
+      return NextResponse.json({ tasks: tasks.map(({ dueDate: modelDueDate, ...draft }) => {
+        const { customFields: modelCustomFields, labelIds: modelLabelIds, ...task } = draft as typeof draft & { customFields?: unknown; labelIds?: unknown };
+        const customFields = customFieldDefinitions?.length
+          ? fieldTools!.validateTaskWriterCustomFields(customFieldDefinitions, modelCustomFields) : [];
+        const fieldValues = { ...(customFields.length ? { customFields } : {}), ...(boardLabelIds ? { labelIds: validateTaskWriterLabelIds(modelLabelIds, boardLabelIds) } : {}) };
         const filtered = allowedImgSrcs ? filterOneImagePass(task.description, allowedImgSrcs).emit : task.description;
         const description = ticketTypeEnabled ? normalizeTaskWriterTicketType(filtered) : filtered;
-        if (!dueDateContext) return { ...task, description };
+        if (!dueDateContext) return { ...task, description, ...fieldValues };
         const dueDate = validateTaskWriterDueDate(modelDueDate, dueDateContext.today);
-        return { ...task, description, ...(dueDate ? { dueDate } : {}) };
-      }) }, dueDateContext || ticketTypeEnabled
+        return { ...task, description, ...fieldValues, ...(dueDate ? { dueDate } : {}) };
+      }) }, dueDateContext || ticketTypeEnabled || boardLabelIds || skillsHeader
         ? { headers: { ...(dueDateContext ? { "X-Task-Writer-Due-Date": "enabled" } : {}), ...typeHeaders } }
         : undefined);
     }
@@ -107,8 +136,8 @@ export async function POST(request: NextRequest) {
 
         let held = "";
         const enqueueText = (text: string) => {
-          if (validateDraft || dueDateContext || ticketTypeEnabled) draft += text;
-          if (!text || dueDateContext) return;
+          if (validateDraft || dueDateContext || ticketTypeEnabled || boardLabelIds) draft += text;
+          if (!text || dueDateContext || boardLabelIds) return;
           if (!ticketTypeEnabled) {
             controller.enqueue(encoder.encode(text));
             return;
@@ -137,6 +166,7 @@ export async function POST(request: NextRequest) {
             feature: "task-writer",
           });
           const result = streamText({
+            experimental_download: downloadWithoutBrotli,
             model: selected.model,
             instructions,
             messages,
@@ -175,7 +205,7 @@ export async function POST(request: NextRequest) {
               source: "handled",
               extra: { stage: "stream-empty" },
             });
-            console.error("[ai/task-writer] stream ended empty after error", error);
+            await logTaskWriterFailure("stream ended empty after error", error);
             enqueueError("error", errorMessage(error), "task-writer-stream-error");
             return;
           }
@@ -186,8 +216,9 @@ export async function POST(request: NextRequest) {
             enqueueError("error", TASK_WRITER_EMPTY_DRAFT_MESSAGE, "empty-task-writer-draft");
             return;
           }
-          if (dueDateContext) {
-            const dated = applyTaskWriterDueDate(draft, dueDateContext).html;
+          if (dueDateContext || boardLabelIds) {
+            const labeled = boardLabelIds ? normalizeTaskWriterLabels(draft, boardLabelIds) : draft;
+            const dated = dueDateContext ? applyTaskWriterDueDate(labeled, dueDateContext).html : labeled;
             controller.enqueue(encoder.encode(ticketTypeEnabled ? normalizeTaskWriterTicketType(dated) : dated));
           } else if (ticketTypeEnabled && held) {
             controller.enqueue(encoder.encode(normalizeTaskWriterTicketType(held)));
@@ -201,7 +232,7 @@ export async function POST(request: NextRequest) {
             source: "handled",
             extra: { stage: "stream" },
           });
-          console.error("[ai/task-writer] stream error", error);
+          await logTaskWriterFailure("stream error", error);
           enqueueError("error", errorMessage(error));
         } finally {
           if (!streamCompleted) {
@@ -213,7 +244,7 @@ export async function POST(request: NextRequest) {
       },
     });
 
-    const headers = dueDateContext || ticketTypeEnabled
+    const headers = dueDateContext || ticketTypeEnabled || boardLabelIds || skillsHeader
       ? { ...SSE_HEADERS, ...(dueDateContext ? { "X-Task-Writer-Due-Date": "enabled" } : {}), ...typeHeaders }
       : SSE_HEADERS;
     return new Response(stream, { headers });
@@ -235,7 +266,7 @@ export async function POST(request: NextRequest) {
       source: "handled",
       extra: { stage: "request" },
     });
-    console.error("[ai/task-writer] fatal error", error);
-    return NextResponse.json({ error: errorMessage(error) }, { status: 500 });
+    const allowanceUsedUp = await logTaskWriterFailure("fatal error", error);
+    return NextResponse.json({ error: errorMessage(error) }, { status: allowanceUsedUp ? 429 : 500 });
   }
 }

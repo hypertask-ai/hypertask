@@ -87,6 +87,7 @@ export interface CreateTaskBody {
     dry_run?: boolean;
     description?: string;
     content_type?: 'html' | 'markdown';
+    inline_images?: boolean;
     section_id?: number;
     priority?: number;
     estimate?: number;

@@ -1,5 +1,5 @@
 
-import { uploadAttachmentToAICustomInstruction } from '@/lib/serverActions';
+import { uploadAttachmentToAICustomInstruction } from '@/lib/serverActions/uploadAttachmentToAICustomInstruction';
 import {
   getHypertasksS3Client,
   getHypertasksStoragePublicUrl,

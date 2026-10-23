@@ -82,6 +82,13 @@ function loadPusherAuth({
       }
     : null;
   const handler = loadTypeScript("src/pages/api/pusher/auth.ts", {
+    "@/lib/auth/agentScope": { withAgentScopeRequest: (_request, run) => run() },
+    "@/utils/controllers/projects/getAllIncludes": {
+      getProjectWhere: (userId, agentId) => {
+        assert.equal(agentId, null);
+        return { teamId: { not: null }, OR: [{ ownerId: userId }, { members: { some: { userId, agentId: null } } }] };
+      },
+    },
     "@/utils/edgeHelpers": {
       isValidUser: () => ({ user, isValid: Boolean(user) }),
     },
@@ -200,7 +207,10 @@ test("task channels inherit access from the task's board", async () => {
 
     assert.equal(result.status, 200, channel);
     assert.deepEqual(allowed.calls.taskLookup, [
-      { where: { id: 42 }, select: { projectId: true } },
+      {
+        where: { id: 42, project: { teamId: { not: null }, OR: [{ ownerId: 6 }, { members: { some: { userId: 6, agentId: null } } }] } },
+        select: { projectId: true },
+      },
     ]);
     assert.deepEqual(allowed.calls.projectAccess, [[15, 6, null]]);
     assert.deepEqual(allowed.calls.authorize, [["123.456", channel]]);

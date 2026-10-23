@@ -48,6 +48,7 @@ interface TaskContextProps {
   isShareView?: boolean;
   embedded?: boolean;
   cachedNavigation?: boolean;
+  cachedEditorAfterPaint?: boolean;
   scrollElementRef?: RefObject<HTMLDivElement | null>;
 }
 
@@ -168,6 +169,7 @@ interface GlobalStates extends TaskContextProps {
   ) => void;
   listRef: React.MutableRefObject<HTMLDivElement | null>;
   stackData: boolean;
+  foldCommentsFromFirstPaint: boolean;
   showHistory: boolean;
   toggleHistory: () => void;
   visibleCommentIndices: number[];

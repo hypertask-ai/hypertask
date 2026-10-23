@@ -65,7 +65,15 @@ function fixture(kind, scenario) {
   const db = {
     user: { findUnique: record("user", scenario.noUser ? null : actor) },
     agent: { findFirst: record("agent", scenario.unownedAgent ? null : { id: "owned", userId: 985, displayName: "Agent" }) },
-    project: { findFirst: record("project", scenario.denied ? null : { id: 15 }), findUnique: record("project-index", { uniqueIdentifier: "HTPR" }) },
+    project: {
+      findFirst: record("project", scenario.denied ? null : { id: 15 }),
+      findUnique: async (args) => {
+        // Assert the added enrollment projection separately; keep every old query field byte-pinned.
+        const { firstTaskPointerTaskId, ...select } = args.select;
+        assert.equal(firstTaskPointerTaskId, true);
+        return record("project-index", { uniqueIdentifier: "HTPR", firstTaskPointerTaskId: null })({ ...args, select });
+      },
+    },
     section: { findFirst: record("section", scenario.missingSection ? null : section, scenario.sectionThrows ? "Section unavailable" : null) },
     task: {
       findFirst: record("rank-task", scenario.noRankTask ? null : scenario.emptyTarget ? { ...task, title: "", description_: { content: "" } } : task),
@@ -91,6 +99,7 @@ function fixture(kind, scenario) {
     cancelDueDateJob: record("cancel-due", undefined, scenario.queueThrows ? "Queue unavailable" : null),
   };
   const mocks = {
+    "@/lib/auth/agentScope": require("./helpers/agent-board-scope.cjs").enforcedScope,
     "@prisma/client": { Prisma: { PrismaClientKnownRequestError: KnownError } },
     "@vercel/functions": { waitUntil: (promise) => { effects.push(["waitUntil"]); background.push(promise); } },
     "@/lib/prisma": { default: db },
@@ -298,6 +307,14 @@ test("createGlobally GET keeps the pinned section and rank defaults", async () =
   try {
     global.performance = { now: () => 1 };
     const response = await invoke(after, {}, "current", {}, "GET");
-    pin("global-get", "global GET", { response: response === undefined ? null : response, effects: clean(after.effects) });
+    assert.deepEqual({ response, effects: clean(after.effects) }, {
+      response: { status: 200, body: { section: "Todo", ranking: "new-rank", sectionId: 8 }, headers: { "server-timing": "total;dur=0.0" } },
+      effects: [
+        ["project", { where: { id: 15, status: "Normal", ownerId: 985, agentId: null, AND: [{ ownerId: 985 }] }, select: { id: true } }],
+        ["section", { where: { id: 8, projectId: 15, visibility: true, deleted: false } }],
+        ["rank-task", { where: { sectionId: 8, projectId: 15, status: "Normal", project: { ownerId: 985 } }, orderBy: { ranking: "asc" } }],
+        ["rank", null, "old-rank"],
+      ],
+    });
   } finally { global.performance = oldPerformance; }
 });

@@ -1,3 +1,5 @@
+import { downloadWithoutBrotli } from "@/lib/net/downloadWithoutBrotli";
+import { withAgentScopeRequest } from "@/lib/auth/agentScope";
 import { resolveAiModel as resolveLegacyAiModel } from "@/app/api/ai/_lib/modelProvider";
 import { getAiDefaultModelContext, resolveAutomaticAiModel } from "@/app/api/ai/_lib/byokKeys";
 import { configureAiModelUsage } from "@/app/api/ai/_lib/modelProvider";
@@ -70,6 +72,10 @@ ${section("Risks and blockers", update.risks)}
 }
 
 export async function POST(request: NextRequest) {
+  return withAgentScopeRequest(request, () => generateStatusUpdate(request));
+}
+
+async function generateStatusUpdate(request: NextRequest) {
   const session = await getSessionUser(request.headers);
   if (!session) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
@@ -85,7 +91,7 @@ export async function POST(request: NextRequest) {
   }
 
   const project = await prisma.project.findFirst({
-    where: { id: projectId, ...getProjectWhere(session.userId) },
+    where: { id: projectId, ...getProjectWhere(session.userId), AND: [getProjectWhere(session.userId, session.agentId, session.teamScope)] },
     select: {
       id: true,
       title: true,
@@ -130,6 +136,7 @@ export async function POST(request: NextRequest) {
     prisma.task.findMany({
       where: {
         projectId,
+        project: getProjectWhere(session.userId, session.agentId, session.teamScope),
         deletedAt: null,
         status: { not: "Deleted" },
         OR: [
@@ -158,6 +165,7 @@ export async function POST(request: NextRequest) {
     prisma.task.findMany({
       where: {
         projectId,
+        project: getProjectWhere(session.userId, session.agentId, session.teamScope),
         deletedAt: null,
         status: { not: "Deleted" },
         sectionChangedAt: { gte: windowStart },
@@ -237,6 +245,7 @@ export async function POST(request: NextRequest) {
       feature: "summary",
     });
     const result = await generateText({
+      experimental_download: downloadWithoutBrotli,
       model,
       output: Output.object({ schema: statusSchema }),
       maxRetries: 2,

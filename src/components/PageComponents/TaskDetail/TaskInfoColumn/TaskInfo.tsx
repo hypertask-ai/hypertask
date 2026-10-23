@@ -48,7 +48,7 @@ import {
 import DueDateLabel from "@/components/Labels/DueDateLabel";
 import { EstimateConstants } from "@/lib/constants/constants";
 import taskDetailConfig from "@/lib/configs/taskDetail.config";
-import TaskTime from "./TaskTime";
+import TaskTime, { useTimerNow } from "./TaskTime";
 import { daysSince, stalenessLevel } from "@/lib/staleness";
 import { cn } from "@/utils/undoActions/helperFuncs";
 import { showCommandsAtom } from "@/store";
@@ -149,7 +149,7 @@ const TaskInfo = (props: ITaskInfoContainer) => {
     updateWaitingOn,
     updateCycle,
   } = props;
-  const { cachedLayout } = useTaskContext();
+  const { cachedLayout, serverTaskSeed } = useTaskContext();
   const queryClient = useQueryClient();
   const [showCyclePicker, setShowCyclePicker] = useState(false);
   const [, setShowCommands] = useRecoilState(showCommandsAtom);
@@ -170,13 +170,13 @@ const TaskInfo = (props: ITaskInfoContainer) => {
     ];
     return users.find((user) => user.id === currentTask.waitingOnUserId);
   }, [currentTask.waitingOnUserId, membersAndOwner]);
-  const [waitingOnNow] = useState(() => Date.now());
+  const now = useTimerNow(true, serverTaskSeed?.updatedAt, 60_000);
   const waitingOnAge = formatWaitingOnAge(
     currentTask.waitingOnSetAt,
-    waitingOnNow
+    now
   );
   const waitingOnIsOverdue = currentTask.waitingOnSetAt
-    ? waitingOnNow - new Date(currentTask.waitingOnSetAt).getTime() >
+    ? now - new Date(currentTask.waitingOnSetAt).getTime() >
       WAITING_ON_OVERDUE_MS
     : false;
   const [pullRequests, setPullRequests] = useState<ITaskPullRequest[]>(
@@ -206,10 +206,11 @@ const TaskInfo = (props: ITaskInfoContainer) => {
     }
   };
   const inColumnDays = daysSince(
-    currentTask.sectionChangedAt ?? currentTask.createdAt
+    currentTask.sectionChangedAt ?? currentTask.createdAt,
+    now
   );
-  const lastCommentDays = daysSince(currentTask.lastCommentAt);
-  const onBoardDays = daysSince(currentTask.createdAt);
+  const lastCommentDays = daysSince(currentTask.lastCommentAt, now);
+  const onBoardDays = daysSince(currentTask.createdAt, now);
   const commentDays = lastCommentDays ?? onBoardDays;
   const staleLevel = stalenessLevel(
     Math.max(inColumnDays ?? 0, commentDays ?? 0),

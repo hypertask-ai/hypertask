@@ -1,6 +1,9 @@
-import { useContext } from "react";
+import { useContext, useEffect } from "react";
 import { X } from "lucide-react";
-import { toast, Toaster } from "react-hot-toast";
+import { toast, Toaster, useToasterStore } from "react-hot-toast";
+import { useFlag } from "@/hooks/useFlag";
+import { HTPR_7657_ONE_TOAST_FLAG } from "@/lib/flags/keys";
+import { toastIdsToDismiss } from "@/lib/toastIdsToDismiss";
 import { APP_SHELL_RAIL_OFFSET } from "@/lib/constants/appShellRail";
 import { MobileViewContext } from "@/lib/contexts/mobileContext";
 import { MOBILE_TARGET } from "@/lib/configs/general.config";
@@ -14,16 +17,34 @@ export const SingleUndoToaster = ({
 }: {
   mobile: boolean;
   appShellRailOn: boolean;
-}) => (
-  <Toaster
-    toasterId={SINGLE_UNDO_TOASTER_ID}
-    position="bottom-left"
-    containerStyle={{
-      left: appShellRailOn ? APP_SHELL_RAIL_OFFSET : 16,
-      bottom: mobile ? "calc(72px + env(safe-area-inset-bottom))" : 16,
-    }}
-  />
-);
+}) => {
+  const oneToastAtATime = useFlag(HTPR_7657_ONE_TOAST_FLAG);
+  return (
+    <>
+      <Toaster
+        toasterId={SINGLE_UNDO_TOASTER_ID}
+        position="bottom-left"
+        containerStyle={{
+          left: appShellRailOn ? APP_SHELL_RAIL_OFFSET : 16,
+          bottom: mobile ? "calc(72px + env(safe-area-inset-bottom))" : 16,
+        }}
+      />
+      {oneToastAtATime && <KeepOneToastVisible />}
+    </>
+  );
+};
+
+const KeepOneToastVisible = () => {
+  const undoToasts = useToasterStore(undefined, SINGLE_UNDO_TOASTER_ID).toasts;
+  const { toasts } = useToasterStore();
+  const staleIds = JSON.stringify(toastIdsToDismiss(toasts, undoToasts));
+  useEffect(() => {
+    const stale = JSON.parse(staleIds) as ReturnType<typeof toastIdsToDismiss>;
+    for (const id of stale.toasts) toast.dismiss(id);
+    for (const id of stale.undoToasts) toast.dismiss(id, SINGLE_UNDO_TOASTER_ID);
+  }, [staleIds]);
+  return null;
+};
 
 export const UNDO_ACTION_WINDOW_MS = 15_000;
 export const MOBILE_UNDO_ACTION_WINDOW_MS = 7_500;

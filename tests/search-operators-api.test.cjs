@@ -26,7 +26,7 @@ function eligible(row, where) {
 const db = {
   project: { findMany: async ({ select }) => select.title
     ? [{ title: 'Visible board' }] : state.boards.map((id) => ({ id })) },
-  label: { findMany: async () => { state.labelQueries++; return state.labels ?? [{ value: 'bug' }] } },
+  label: { findMany: async () => { state.labelQueries++; return state.labels ?? [{ id: 'bug', value: 'bug' }] } },
   user: { findMany: async () => [{ displayName: 'Kamil Grzegorzewicz' }] },
   section: { findMany: async ({ where }) => (state.sections ?? [{ projectId: 7, section_title: 'Done', isDone: true }])
     .filter((section) => where.deleted !== false || !section.deleted) },
@@ -42,15 +42,7 @@ const mocks = new Map([
   ['src/lib/prisma.ts', { default: db }],
   ['src/lib/flags.ts', {
     HTPR_6881_SEARCH_FUZZY_PERSON_FLAG: 'htpr-6881-search-fuzzy-person',
-    HTPR_6878_SEARCH_LABEL_SCOPE_FLAG: 'htpr-6878-search-label-scope',
-    HTPR_6880_SEARCH_COMMENTER_FLAG: 'htpr-6880-search-commenter',
-    HTPR_6882_SEARCH_MATCH_HIGHLIGHTS_FLAG: 'htpr-6882-search-match-highlights',
-    HTPR_6865_SEARCH_LAYOUT_FLAG: 'htpr-6865-search-layout',
-    HTPR_6688_SEARCH_AUTOCOMPLETE_FLAG: 'htpr-6688-search-autocomplete',
-    isFeatureEnabled: async (key) => key === 'htpr-6881-search-fuzzy-person' ? false
-      : key === 'htpr-6878-search-label-scope' ? state.labelFlag ?? false
-      : key === 'htpr-6882-search-match-highlights' ? state.matchFlag
-      : key !== state.disabledFlag,
+    isFeatureEnabled: async (key) => key !== 'htpr-6881-search-fuzzy-person',
   }],
   ['src/utils/controllers/projects/getAllIncludes.ts', {
     projectContentAccessWhere: (userId) => ({ ownerId: userId }),
@@ -85,7 +77,7 @@ function row(id, projectId = 7, label = 'bug') {
 }
 async function search(searchQuery, overrides = {}) {
   state = { session: { userId: 6 }, boards: [7], rows: [row(123), row(8, 8)],
-    taskHits: [], commentHits: [], windows: [], commentWindows: [], legacyCalls: 0, labelQueries: 0, selects: [], matchFlag: false, ...overrides }
+    taskHits: [], commentHits: [], windows: [], commentWindows: [], legacyCalls: 0, labelQueries: 0, selects: [], ...overrides }
   const res = response()
   await handler({ method: 'POST', headers: {}, body: {
     searchQuery, projectIds: overrides.requested ?? [7], archive: null,
@@ -117,7 +109,7 @@ test('from and assignee match the email shown for a user without a display name'
   const person = { displayName: null, email: 'kamila@example.com' }
   const task = { ...row(123), userId: 4, user: person, assignees: [{ userId: 4, user: person }] }
   for (const operator of ['from', 'assignee']) {
-    const { res } = await search(`${operator}:kamila@example.com`, { rows: [task], matchFlag: true })
+    const { res } = await search(`${operator}:kamila@example.com`, { rows: [task] })
     assert.equal(res.statusCode, 200)
     assert.deepEqual(res.body.processedData.All.map((item) => item.taskId), [123])
     assert.deepEqual(res.body.processedData.All[0].searchMatch.people, ['kamila@example.com'])
@@ -170,7 +162,7 @@ test('rare filters stop after bounded windows and expose a partial result', asyn
 
 test('repeated prefixes are looked up once; oversized queries are rejected', async () => {
   const repeated = await search('label:BUG label:bug label:BUG')
-  assert.equal(repeated.state.labelQueries, 1)
+  assert.equal(repeated.state.labelQueries, 2, 'one prefix resolution and one permanent label-scope lookup')
   const clauses = await search('label:bug '.repeat(13))
   assert.equal(clauses.res.statusCode, 400)
   assert.equal(clauses.state.labelQueries, 0)
@@ -231,7 +223,7 @@ test('match highlights fetch names in the existing query and show only positivel
     ['board:"Visible board"', { people: [], labels: [], board: 'Visible board' }],
     ['-from:9 -assignee:10 -label:nope -in:8', { people: [], labels: [] }],
   ]) {
-    const { res, state } = await search(query, { rows: [task], matchFlag: true })
+    const { res, state } = await search(query, { rows: [task] })
     assert.equal(res.statusCode, 200, query)
     assert.deepEqual(res.body.processedData.All[0].searchMatch, expected, query)
     assert.equal(state.selects.length, 1, 'no per-row query')
@@ -239,37 +231,21 @@ test('match highlights fetch names in the existing query and show only positivel
   }
 })
 
-test('label scope and match highlights work independently in every flag combination', async () => {
+test('label scope works independently with permanent match highlights', async () => {
   const labels = [{ id: 'padded-bug', value: ' Bug ' }, { id: 'plain-bug', value: 'Bug' }]
   const rows = labels.map((label, index) => ({ ...row(123 + index, 7, label.id), taskLabels: [{ label }] }))
-  for (const labelFlag of [false, true]) {
-    for (const matchFlag of [false, true]) {
-      const { res } = await search('label:bug', { labels, rows, labelFlag, matchFlag })
-      assert.equal(res.statusCode, 200)
-      const results = res.body.processedData.All
-      assert.deepEqual(results.map((task) => task.taskId), labelFlag ? [123, 124] : [124])
-      assert.deepEqual(results.map((task) => task.searchMatch?.labels), matchFlag ? (labelFlag ? [[' Bug '], ['Bug']] : [['Bug']]) : results.map(() => undefined))
-    }
-  }
+  const { res } = await search('label:bug', { labels, rows })
+  assert.equal(res.statusCode, 200)
+  const results = res.body.processedData.All
+  assert.deepEqual(results.map((task) => task.taskId), [123, 124])
+  assert.deepEqual(results.map((task) => task.searchMatch?.labels), [[' Bug '], ['Bug']])
 })
 
-test('filtered comment-only matches preserve the actual comment author and snippet only when enabled', async () => {
+test('filtered comment-only matches preserve author and snippet with permanent highlights', async () => {
   const commentHits = [{ id: '44', taskId: '123', commentText: 'webhook failed', creatorName: 'Comment Writer' }]
-  const on = await search('webhook from:6', { commentHits, matchFlag: true })
+  const on = await search('webhook from:6', { commentHits })
   assert.equal(on.res.body.processedData.All[0].commentId, 44)
   assert.equal(on.res.body.processedData.All[0].commentText, 'webhook failed')
   assert.equal(on.res.body.processedData.All[0].searchMatch.commentAuthor, 'Comment Writer')
-  const off = await search('webhook from:6', { commentHits })
-  assert.equal(off.res.body.processedData.All[0].commentId, undefined)
-})
 
-test('match flag and every layout prerequisite off preserve legacy response bytes and do not select names', async () => {
-  const baseline = JSON.stringify((await search('from:6')).res.body)
-  for (const disabledFlag of ['htpr-6865-search-layout', 'htpr-6688-search-autocomplete']) {
-    const { res, state } = await search('from:6', { matchFlag: true, disabledFlag })
-    assert.equal(JSON.stringify(res.body), baseline)
-    assert.equal(state.selects[0].user, undefined)
-    assert.equal(state.selects[0].assignees, undefined)
-    assert.equal(state.selects[0].taskLabels, undefined)
-  }
 })

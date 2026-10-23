@@ -5,6 +5,7 @@ import path from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { isDeepStrictEqual } from 'node:util';
 
+export const RUNNER = process.env.GITHUB_ACTIONS === 'true' ? 'github-actions' : 'vps';
 export const STATE = path.join(os.homedir(), '.local/state/speed');
 // Real-phone context (2026-10-11): the shared setup only sets viewport, isMobile and hasTouch, which renders the ticket page at
 // innerWidth 780 and document width 834. A mobile user agent and deviceScaleFactor 3 give the real 390 wide layout (iPhone 13).
@@ -18,7 +19,7 @@ export function withPhoneProfile(browser) {
   return { newContext: options => browser.newContext({ ...options, ...PHONE_PROFILE }) };
 }
 
-export const PATHS = ['board', 'ticket-cold', 'ticket-warm', 'search', 'my-tasks', 'ctrl-j', 'page-navigation'];
+export const PATHS = ['board', 'board-returning', 'ticket-cold', 'ticket-warm', 'search', 'my-tasks', 'ctrl-j', 'page-navigation'];
 export const METRICS = ['contentMs', 'requestCount', 'bytes', 'longTaskMs'];
 const BASE = 'https://app.hypertask.ai';
 const BOARD = '/project?id=6859&view=default';
@@ -43,11 +44,18 @@ export function summarize(samples) {
 }
 
 // A path whose measurement changed gets a new version; only same-version history is its baseline.
-export const PATH_VERSIONS = { 'ticket-warm': 2, 'page-navigation': 2 };
+// Board paths version 2 (2026-10-23, YPER4-615): the page scrolls the card itself; Playwright's pre-scroll waited about 3 s on a busy phone.
+export const PATH_VERSIONS = { board: 2, 'board-returning': 2, 'ticket-warm': 2, search: 2, 'page-navigation': 2, 'ctrl-j': 2 };
+export const SEARCH_IDLE_PAUSE_MS = 3000;
+
+// Saved by the app after a board visit; with it the server sends a ready-made board (HTPR-6934). The QA login filter drops it.
+export const BOARD_PREFERENCE_COOKIE = 'ht_board_display_v1';
+
+export const servedBoardFromServer = (requests, contentMs) => !requests.some(request => request.path === '/api/projects/boardTasks' && request.startMs <= contentMs);
 
 const pathVersion = (conditions, cohort) => conditions.pathVersions?.[cohort.split(':')[1]] ?? 1;
 
-const sharedConditions = ({ pathVersions, ...conditions }) => conditions;
+const sharedConditions = ({ pathVersions, runner = 'vps', ...conditions }) => ({ ...conditions, runner });
 
 export function landedBoards(run, profile) {
   return run.samples.filter(sample => sample.profile === profile && sample.path === 'page-navigation').map(sample => `${sample.landed?.id}|${sample.landed?.view ?? ''}`).sort();
@@ -125,8 +133,6 @@ export function browserObserver() {
 export const boardCardPrefix = boardId => `/detail/project-${boardId}/`;
 
 export async function ready(page, surface, landedBoard) {
-  // view=default bypasses saved filters; scrolling keeps newer QA cards from hiding task 43 below the viewport.
-  if (surface === 'board') await page.locator(`a[href="${TASK}"]`).first().scrollIntoViewIfNeeded();
   return page.evaluate(async ({ surface, task, title, cardPrefix }) => {
     const visible = element => {
       if (!element) return false;
@@ -147,7 +153,7 @@ export async function ready(page, surface, landedBoard) {
       }
       if (surface === 'board') {
         const card = document.querySelector(`a[href="${task}"]`);
-        // Late board reflows can push the already-scrolled card below the viewport again.
+        // view=default bypasses saved filters; newer QA cards and late reflows push task 43 below a phone screen, so scroll it here.
         if (card && !visible(card)) card.scrollIntoView({ block: 'center' });
         return visible(card) && document.body.textContent.includes('QA Sandbox');
       }
@@ -265,7 +271,7 @@ export function hostNetworkChanged(requests) {
 }
 
 export async function measurePhases(measurePhase, run, profile, index) {
-  for (const phase of ['board', 'other']) {
+  for (const phase of ['board', 'board-returning', 'other']) {
     const kept = run.samples.length;
     try {
       await measurePhase(phase);
@@ -284,9 +290,33 @@ function measure(shared, browser, profile, index, run) {
   return measurePhases(phase => measurePhase(shared, browser, profile, index, run, phase), run, profile, index);
 }
 
+// Null when the app declines to save one: on desktop it refuses while AI chat opens by default, which is the default setting.
+export async function savedBoardPreference(context, page, pollMs = 250, capMs = 5000) {
+  for (let waited = 0; waited <= capMs; waited += pollMs) {
+    const preference = (await context.cookies()).find(cookie => cookie.name === BOARD_PREFERENCE_COOKIE);
+    if (preference?.value) return preference;
+    await page.waitForTimeout(pollMs);
+  }
+  return null;
+}
+
+async function boardPreference(shared, browser, mobile) {
+  const context = await shared.setup(mobile ? withPhoneProfile(browser) : browser, mobile);
+  try {
+    const page = await context.newPage();
+    page.setDefaultTimeout(60000);
+    await page.goto(BASE + BOARD, { waitUntil: 'domcontentloaded' });
+    await ready(page, 'board');
+    return await savedBoardPreference(context, page);
+  } finally { await context.close(); }
+}
+
 async function measurePhase(shared, browser, profile, index, run, phase) {
   const mobile = profile === 'phone';
+  // Untimed and unthrottled: a returning user saved the preference on an earlier visit. The timed context stays cold otherwise.
+  const preference = phase === 'board-returning' ? await boardPreference(shared, browser, mobile) : null;
   const context = await shared.setup(mobile ? withPhoneProfile(browser) : browser, mobile);
+  if (preference) await context.addCookies([preference]);
   const page = await context.newPage();
   page.setDefaultTimeout(60000);
   const cdp = await context.newCDPSession(page);
@@ -310,7 +340,7 @@ async function measurePhase(shared, browser, profile, index, run, phase) {
     blocked.length = 0;
     await page.evaluate(() => { if (window.__analyst) window.__analyst.start = performance.now(); });
     await operation();
-    const contentAt = await ready(page, surface, landed.id);
+    const contentAt = await ready(page, surface === 'board-returning' ? 'board' : surface, landed.id);
     const origin = document ? 0 : await page.evaluate(() => window.__analyst.start);
     // Same two-second observation tail as speed-check; not part of content-visible timing.
     await page.waitForTimeout(2000);
@@ -320,15 +350,15 @@ async function measurePhase(shared, browser, profile, index, run, phase) {
     }, { origin, contentAt });
     const requests = [...net.requests.values()].filter(row => row.wall >= metrics.actionEpoch).map(({ wall, start, ...row }) => ({ ...row, startMs: wall - metrics.actionEpoch }));
     delete metrics.actionEpoch;
-    const row = { profile, path: surface, index, ...metrics, requestCount: requests.filter(request => !request.blocked).length, bytes: requests.filter(request => !request.blocked).reduce((sum, request) => sum + request.bytes, 0), requests, blocked: [...blocked], ...(surface === 'page-navigation' ? { landed } : {}) };
+    const row = { profile, path: surface, index, ...metrics, requestCount: requests.filter(request => !request.blocked).length, bytes: requests.filter(request => !request.blocked).reduce((sum, request) => sum + request.bytes, 0), requests, blocked: [...blocked], ...(surface === 'page-navigation' ? { landed } : {}), ...(surface.startsWith('board') ? { serverBoard: servedBoardFromServer(requests, metrics.contentMs) } : {}), ...(surface === 'board-returning' ? { boardPreference: Boolean(preference) } : {}) };
     run.samples.push(row);
     if (mobile && row.innerWidth !== 390) throw new Error(`Phone layout is ${row.innerWidth} wide, expected 390`);
     if (row.requests.some(requestFailed)) throw new Error('Measured request failed');
     console.log(`Measured ${profile}:${surface} ${index}: ${Math.round(row.contentMs)}ms`);
   };
   try {
-    if (phase === 'board') {
-      await sample('board', () => navigate(BOARD));
+    if (phase.startsWith('board')) {
+      await sample(phase, () => navigate(BOARD));
       return;
     }
     // Direct ticket is cold in a fresh context; the board primes only the warm click below.
@@ -339,7 +369,11 @@ async function measurePhase(shared, browser, profile, index, run, phase) {
     await navigate(BOARD);
     await ready(page, 'board');
     await sample('ticket-warm', () => shared.action(page, () => page.locator(`a[href="${TASK}"]`).first().click(), run.actions, 'client', TASK), false);
+    // Outside timing: a fast opened-before ticket still loads its deferred parts after the tail, which holds the next hard navigation back (YPER4-525).
+    const previousPage = await settleScripts(net.requests, ms => page.waitForTimeout(ms), timeout => idleMs(page, timeout));
+    await page.waitForTimeout(SEARCH_IDLE_PAUSE_MS);
     await sample('search', () => navigate(`/search?searchTerm=${encodeURIComponent(TITLE)}`));
+    Object.assign(run.samples.at(-1), { previousPageSettleMs: previousPage.settleMs, previousPagePendingScripts: previousPage.pendingScripts });
     await sample('my-tasks', () => navigate('/my-tasks'));
     await page.evaluate(() => document.activeElement?.blur());
     await sample('page-navigation', () => shared.action(page, async () => {
@@ -348,7 +382,7 @@ async function measurePhase(shared, browser, profile, index, run, phase) {
       landed = safeSearch(page.url());
       await page.evaluate(board => window.history.replaceState(null, '', board), BOARD);
     }, run.actions, 'client', BOARD), false);
-    // Plain QA uses the existing board Ctrl+J writer, not the Owner + QA palette on My Tasks.
+    // Since 2026-10-20 plain QA opens the Compose writer inside the Commands sheet (ctrl-j path version 2).
     await page.locator('.section-container').first().click({ position: { x: 2, y: 2 } });
     await page.locator('.section-container').first().focus();
     // The iPhone user agent selects Apple's Cmd modifier for the same writer shortcut.
@@ -391,7 +425,7 @@ async function main() {
   const lock = path.join(STATE, 'measure.lock');
   const handle = fs.openSync(lock, 'wx', 0o600);
   let browser;
-  const run = { schema: PROTOCOL, started: new Date().toISOString(), base: BASE, accountId: 2343, status: 'failed', hostLoad: os.loadavg(), cpus: os.availableParallelism(), samples: [], groups: {}, actions: [] };
+  const run = { schema: PROTOCOL, started: new Date().toISOString(), base: BASE, accountId: 2343, status: 'failed', hostLoad: os.loadavg(), cpus: os.availableParallelism(), conditions: { runner: RUNNER }, ...(process.env.GITHUB_ACTIONS === 'true' ? { github: { runId: Number(process.env.GITHUB_RUN_ID), sha: process.env.GITHUB_SHA } } : {}), samples: [], groups: {}, actions: [] };
   try {
     const company = process.env.COMPANY_SKILLS_DIR || path.join(os.homedir(), 'projects/company-skills');
     const shared = await import(pathToFileURL(path.join(company, 'skills/speed-check/scripts/common.mjs')).href);
@@ -401,7 +435,7 @@ async function main() {
     shared.readPosts.add('/api/search/document');
     shared.readGets.add('/api/search/values');
     browser = await shared.playwright().chromium.launch({ headless: true });
-    run.conditions = { protocol: PROTOCOL, node: process.version, browser: browser.version(), samples, fixture: 'qa-normal-2343-project-6859-task-43', profiles: ['desktop-unthrottled-1440x900', PHONE_PROFILE_KEY], observationTailMs: 2000, serviceWorkers: 'blocked', pathVersions: PATH_VERSIONS };
+    run.conditions = { runner: RUNNER, protocol: PROTOCOL, node: process.version, browser: browser.version(), samples, fixture: 'qa-normal-2343-project-6859-task-43', profiles: ['desktop-unthrottled-1440x900', PHONE_PROFILE_KEY], observationTailMs: 2000, serviceWorkers: 'blocked', pathVersions: PATH_VERSIONS };
     const doctor = await shared.setup(browser, false);
     try {
       const identity = await doctor.request.post(BASE + '/api/app-shell/bootstrap');

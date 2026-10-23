@@ -111,8 +111,6 @@ function fixture(name, scenario = {}) {
       if (scenario.authThrows) throw new Error("Auth unavailable");
       return session;
     } },
-    // The independent bulk-undo bugfix flag stays off for these tests.
-    "@/lib/flags": { HTPR_6989_BULK_ARCHIVE_UNDO_FLAG: "htpr-6989-bulk-archive-undo", isFeatureEnabled: async () => false },
     "@/lib/prisma": { default: db },
     "@/utils/controllers/projects/getAllIncludes": { projectContentAccessWhere: userId => ({ ownerId: userId }) },
     "@/lib/realtime/server": realtime,
@@ -179,7 +177,21 @@ async function invoke(fx, name, scenario = {}, target = "current") {
 // Runs the Pages adapter, pins wire, effects and stored rows, then checks the shared Web handler agrees.
 async function parity(name, scenario = {}, key = `${name}: ${JSON.stringify(scenario)}`) {
   const old = fixture(name, scenario), expected = await invoke(old, name, scenario, "current");
-  pin(key, { expected, effects: old.effects, rows: clean(old.rows) });
+  const pinned = { expected, effects: clean(old.effects), rows: clean(old.rows) };
+  if (name === "(un)archiveBulk" && scenario.body?.status === "Normal" && expected.status === 200) {
+    for (const [label, args] of old.effects) {
+      if (label !== "updateMany") continue;
+      assert.equal(args.data.status, "Normal");
+      assert.equal(args.data.archivedAt, null, "bulk undo clears the persisted archive timestamp");
+      for (const row of old.rows.filter(row => row.id === args.where.id && row.userId === args.where.userId && row.status !== "Deleted")) {
+        assert.equal(row.archivedAt, null, "restored rows are visible after reload");
+        pinned.rows.find(entry => entry.id === row.id).archivedAt = timestamp;
+      }
+    }
+    // Keep historical pins for unchanged fields after asserting the permanent undo behavior.
+    for (const [label, args] of pinned.effects) if (label === "updateMany") args.data.archivedAt = timestamp;
+  }
+  pin(key, pinned);
   assert.equal(old.loads.length, 1, "listed method always loads the shared route");
   const fx = fixture(name, scenario);
   assert.deepEqual(await invoke(fx, name, scenario, "web"), expected, `${name}: web wire`);
@@ -286,6 +298,7 @@ test("bulk archive scopes representative and siblings, never another user or Del
   assert.equal(clean(old.rows[0].archivedAt), timestamp); assert.equal(clean(old.rows[1].archivedAt), timestamp);
   const undo = await parity("(un)archiveBulk", branchCases["(un)archiveBulk"][5], "bulk archive undo");
   assert.equal(undo.old.effects.filter(([label]) => label === "updateMany").length, 1);
+  assert.equal(undo.old.rows.find(row => row.id === 20).archivedAt, null);
 });
 test("archive undo restores only same-batch siblings before realtime; tutorial archives only representative", async () => {
   const scenario = { notification: { status: "Archive", archivedAt } };

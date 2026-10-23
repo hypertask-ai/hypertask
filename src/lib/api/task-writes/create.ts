@@ -1,3 +1,4 @@
+import { inlineAgentImagesForUser } from "@/lib/media/inlineAgentImages.server";
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import create from "@/utils/controllers/tasks/create";
@@ -7,6 +8,7 @@ import { broadcastBoardChange } from "@/lib/realtime/server";
 import { loadSessionUserRecord } from "@/lib/auth/sessionUserRecord";
 import { createFullScreenTaskAndReturn } from "./create-fullscreen";
 import { taskWriteRoute } from "./route";
+import { resolveActingAgent } from "@/lib/auth/resolveActingAgent";
 
 const schema = z.custom<Record<string, any>>(
   (body) => !!((body as any)?.fullScreenTask || ((body as any)?.title && (body as any)?.projectId)),
@@ -15,10 +17,16 @@ const schema = z.custom<Record<string, any>>(
 export const POST = taskWriteRoute({
   schema,
   validationMessage: "Missing Required Information",
-  prepare: (session) => loadSessionUserRecord(session.userId),
-  operation: async (body, userObj) => {
+  prepare: async (session) => ({ user: await loadSessionUserRecord(session.userId), session }),
+  operation: async (body, { user: userObj, session }) => {
     try {
-      const { title, description, section, userId, ranking, projectId, sectionId, index, fullScreenTask, projectIdentifier, agentId } = body;
+      const { title, description, section, userId, ranking, projectId, sectionId, index, fullScreenTask, projectIdentifier, agentId: requestedAgentId } = body;
+      const actingAgent = resolveActingAgent({ sessionAgentId: session.agentId, bodyAgentId: requestedAgentId });
+      if (!actingAgent.ok) {
+        return NextResponse.json({ message: actingAgent.message }, { status: actingAgent.status });
+      }
+      const agentId = actingAgent.agentId ?? undefined;
+
       if (fullScreenTask) {
         const newTask = await createFullScreenTaskAndReturn(projectId, userId, projectIdentifier, title, userObj, agentId);
         if (newTask.error && newTask.status) return NextResponse.json({ message: newTask.message }, { status: newTask.status });
@@ -27,7 +35,7 @@ export const POST = taskWriteRoute({
         return NextResponse.json({ newTask }, { status: 200 });
       }
       if (ranking && section) {
-        const response = await create({ title, description, section, userId, ranking, projectId, sectionId, index, currentUser: userObj, agentId });
+        const response = await create({ title, description: agentId ? await inlineAgentImagesForUser(description ?? "", session.userId, { inlineImages: body.inline_images }) : description, section, userId, ranking, projectId, sectionId, index, currentUser: userObj, agentId });
         if (response.status === 200) void broadcastBoardChange(projectId, { originUserId: userObj?.id });
         return NextResponse.json(response.json, { status: response.status });
       }

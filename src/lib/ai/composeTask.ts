@@ -1,3 +1,6 @@
+import { readTaskWriterSkills, TASK_WRITER_SKILLS_HEADER, MAX_SKILL_INPUT_LENGTH, type TaskWriterSkills } from "./taskWriterSkills";
+import { inlineAgentImages as embedAgentImages, imageEmbeddingOptOut } from "@/lib/media/inlineAgentImages";
+import type { TaskWriterCustomFieldValue } from "@/lib/ai/taskWriterCustomFields";
 import { isBrowserRenderableImage } from "@/lib/media/browserRenderableImage";
 import type { IProject, ITask } from "@/models/model";
 import axios from "axios";
@@ -30,19 +33,20 @@ export function composeTaskBoardId(
     .map(([id]) => Number(id)).find((id) => Number.isInteger(id) && id > 0);
 }
 
-export function composeTaskAssistantMessage(ticket: string, writerFailed = false, filledExistingTask = false, batch?: { tasks: ITask[]; failedTitles: string[] }, writerFailureReason?: string): string {
+export function composeTaskAssistantMessage(ticket: string, writerFailed = false, filledExistingTask = false, batch?: { tasks: ITask[]; failedTitles: string[] }, writerFailureReason?: string, followup?: string): string {
+  const enrichment = followup ? `<p>${escapeHtml(followup).replace(/\n/g, "<br>")}</p>` : "";
   if (batch && (batch.tasks.length > 1 || batch.failedTitles.length)) {
     const links = batch.tasks.map((task) => `<li><a href="/detail/project-${task.projectId}/${task.uniqueIndex}">${escapeHtml(task.ticketNumber ?? `TASK-${task.uniqueIndex}`)}: ${escapeHtml(task.title ?? "")}</a></li>`).join("");
     const failures = batch.failedTitles.length
       ? `<p>Could not save these tasks. Only the linked tickets were saved:</p><ul>${batch.failedTitles.map((title) => `<li>${escapeHtml(title)}</li>`).join("")}</ul>` : "";
-    return `<p>I ${filledExistingTask ? "saved" : "created"} ${batch.tasks.length} tickets from your note.</p><ul>${links}</ul>${failures}`;
+    return `<p>I ${filledExistingTask ? "saved" : "created"} ${batch.tasks.length} tickets from your note.</p><ul>${links}</ul>${failures}${enrichment}`;
   }
   const greeting = `I ${filledExistingTask ? "filled in" : "created"} ${ticket} from your note. Want me to refine it? I can tighten the title, add acceptance criteria or split it into sub-tasks.`;
   return writerFailed
     ? writerFailureReason
       ? `${greeting}\n\nThe task writer was unavailable: ${writerFailureReason.trim().replace(/[.!?]*$/, ".")} I kept your original text as the title and description.`
       : `${greeting}\n\nThe task writer was unavailable, so I kept your original text as the title and description.`
-    : greeting;
+    : greeting + enrichment;
 }
 
 function stripWriterMarkers(html: string): string {
@@ -58,17 +62,19 @@ function writerProperties({ priority, estimate }: Pick<ReturnType<typeof extract
 export type ComposeTaskStage = "Reading past tickets" | "Understanding the context" | "Writing the ticket" | "Saving the ticket";
 
 export async function createComposedTask({
-  text, files, project, userId, existingTaskId, onProgress, viewProject, fields, explainWriterFailure, unfurlImageUrls = false,
-  applyWriterProperties = false,
+  text, files, project, userId, existingTaskId, onProgress, viewProject, fields, explainWriterFailure, unfurlImageUrls = false, inlineAgentImages = false,
+  applyWriterProperties = false, invokeSkills = false,
 }: {
   text: string; files: File[]; project: IProject; userId: number; existingTaskId?: number;
+  invokeSkills?: boolean;
   unfurlImageUrls?: boolean;
+  inlineAgentImages?: boolean;
   applyWriterProperties?: boolean;
   onProgress?: (stage: ComposeTaskStage) => void;
   viewProject?: IProject;
   explainWriterFailure?: boolean;
   fields?: Partial<Pick<Parameters<typeof createNewTaskGloballyAPIHandler>[0], "tags" | "assignees" | "priority" | "estimate">>;
-}): Promise<{ task: ITask; writerFailed: boolean; writerFailureReason?: string; tasks: ITask[]; failedTitles: string[] }> {
+}): Promise<{ task: ITask; writerFailed: boolean; writerFailureReason?: string; skills?: TaskWriterSkills; tasks: ITask[]; failedTitles: string[] }> {
   let defaults = existingTaskId ? null : await axios.get("/api/tasks/createGlobally", {
     params: { projectId: project.id, position: "top" },
   });
@@ -83,19 +89,21 @@ export async function createComposedTask({
     return { fileName: file.name, url, mimeType: file.type };
   }));
   const nextMediaToken = createTaskWriterMediaTokenFactory(text, ...uploads.flatMap(({ url, fileName }) => [url, fileName]));
-  const promptMedia = unfurlImageUrls ? extractTaskWriterPromptMedia(text, nextMediaToken) : { html: text, media: [] };
+  const optedOut = inlineAgentImages && imageEmbeddingOptOut(text);
+  const promptMedia = unfurlImageUrls && !inlineAgentImages ? extractTaskWriterPromptMedia(text, nextMediaToken) : { html: text, media: [] };
   const draftDescription = `<p>${escapeHtml(promptMedia.html).replace(/\n/g, "<br>")}</p>` +
-    uploads.map(({ url, fileName, mimeType }) => isBrowserRenderableImage(mimeType, fileName)
+    uploads.map(({ url, fileName, mimeType }) => !optedOut && isBrowserRenderableImage(mimeType, fileName)
       ? `<p><img src="${escapeHtml(url)}" alt="${escapeHtml(fileName)}"></p>`
       : `<p><a href="${escapeHtml(url)}">${escapeHtml(fileName)}</a></p>`).join("");
-  const uploadMedia = extractTaskWriterMedia(draftDescription, nextMediaToken);
+  const uploadMedia = extractTaskWriterMedia(embedAgentImages(draftDescription, { enabled: inlineAgentImages, instructions: text, attachments: uploads }), nextMediaToken);
   const media = { html: uploadMedia.html, media: [...promptMedia.media, ...uploadMedia.media] };
   const rawDescription = restoreTaskWriterMedia(media.html, media.media);
   let title = text;
   let description = rawDescription;
   let writerFailed = false;
+  let skills: TaskWriterSkills | undefined;
   let writerFailureReason: string | undefined;
-  let drafts: ({ title: string; description: string; writerDueDate?: string; ticketType?: TaskWriterTicketType } & Partial<ReturnType<typeof writerProperties>>)[] = [];
+  let drafts: ({ title: string; description: string; writerDueDate?: string; writerLabelIds?: string[]; customFields?: TaskWriterCustomFieldValue[]; ticketType?: TaskWriterTicketType } & Partial<ReturnType<typeof writerProperties>>)[] = [];
   const writerTimeZone = Intl.DateTimeFormat().resolvedOptions().timeZone;
   try {
     onProgress?.("Reading past tickets");
@@ -111,6 +119,7 @@ export async function createComposedTask({
         modelSelected: project.ai_custom_instructions?.[0]?.model_selected ?? undefined,
         aiMode: "AiTaskWriter",
         requestKind: "compose-task",
+        ...(invokeSkills ? { invokeSkills } : {}),
         timeZone: writerTimeZone,
         ...(existingTaskId ? { existingTaskId } : {}),
         images64: uploads.filter((file) => isBrowserRenderableImage(file.mimeType, file.fileName)),
@@ -146,6 +155,7 @@ export async function createComposedTask({
       html = await response.text();
     }
     const typedWriter = response.headers?.get(TICKET_TYPE_HEADER) === "enabled";
+    const writerLabels = response.headers?.get("X-Task-Writer-Labels") === "enabled";
     if (/^event:\s*(?:error|done)\b/m.test(html)) {
       if (explainWriterFailure) writerFailureReason = describeTaskWriterStreamFailure(html) ?? undefined;
       throw new Error("Task writer interrupted");
@@ -153,7 +163,7 @@ export async function createComposedTask({
     if (response.headers?.get("content-type")?.includes("application/json")) {
       const output = JSON.parse(html);
       if (!Array.isArray(output.tasks) || !output.tasks.length) throw new Error("Task writer returned no tickets");
-      drafts = output.tasks.slice(0, 10).map((draft: { title: string; description: string; dueDate?: string }) => {
+      drafts = output.tasks.slice(0, 10).map((draft: { title: string; description: string; dueDate?: string; labelIds?: string[]; customFields?: TaskWriterCustomFieldValue[] }) => {
         if (typeof draft?.title !== "string" || !draft.title.trim() ||
             typeof draft.description !== "string" || !draft.description.trim()) {
           throw new Error("Task writer returned an incomplete ticket");
@@ -162,30 +172,50 @@ export async function createComposedTask({
         const written = applyWriterProperties ? extractTaskProperties(typed ? typed.html : draft.description) : null;
         const body = written ? written.description : typed ? stripWriterMarkers(typed.html) : draft.description;
         return { title: draft.title, description: body,
+          ...(writerLabels && Array.isArray(draft.labelIds) ? { writerLabelIds: draft.labelIds } : {}),
+          ...(draft.customFields?.length ? { customFields: draft.customFields } : {}),
           ...(written ? writerProperties(written) : {}),
           ...(typed?.type ? { ticketType: typed.type } : {}),
           ...(response.headers?.get("X-Task-Writer-Due-Date") === "enabled" && draft.dueDate ? { writerDueDate: draft.dueDate } : {}),
         };
       });
     } else {
-      const typed = typedWriter ? readTaskWriterTicketType(html) : null;
-      const written = extractTitleAndDescription(typed ? typed.html : html);
+      const fieldDraft = html.includes("ai-generated-task-custom-fields")
+        ? (await import("@/lib/ai/taskWriterCustomFields")).readTaskWriterCustomFields(html) : null;
+      const fieldHtml = fieldDraft?.html ?? html;
+      const typed = typedWriter ? readTaskWriterTicketType(fieldHtml) : null;
+      const written = extractTitleAndDescription(typed ? typed.html : fieldHtml);
       if (!written.title || !written.description.trim()) throw new Error("Task writer returned an incomplete ticket");
       const writerDueDate = response.headers?.get("X-Task-Writer-Due-Date") === "enabled"
         ? new DOMParser().parseFromString(html, "text/html").getElementById("ai-generated-task-due-date")?.textContent?.trim() || undefined
         : undefined;
-      drafts = [{ title: written.title, description: written.description, ...(writerDueDate ? { writerDueDate } : {}), ...(typed?.type ? { ticketType: typed.type } : {}),
+      drafts = [{ title: written.title, description: written.description,
+        ...(writerLabels ? { writerLabelIds: new DOMParser().parseFromString(html, "text/html").getElementById("ai-generated-task-tags")?.textContent?.split(",").map((id) => id.trim()).filter(Boolean) ?? [] } : {}),
+        ...(Array.isArray(fieldDraft?.customFields) && fieldDraft.customFields.length ? { customFields: fieldDraft.customFields } : {}), ...(writerDueDate ? { writerDueDate } : {}), ...(typed?.type ? { ticketType: typed.type } : {}),
         ...(applyWriterProperties ? writerProperties(extractTaskProperties(html)) : {}) }];
     }
     drafts = drafts.map((draft) => {
       let body = restoreTaskWriterMedia(draft.description, media.media);
+      if (optedOut) body = body.replace(/<img\b[^>]*>/gi, "");
+      if (inlineAgentImages && /<img\b/i.test(body)) {
+        const doc = new DOMParser().parseFromString(body, "text/html");
+        const sources = new Set<string>();
+        let duplicate = false;
+        doc.querySelectorAll("img[src]").forEach((image) => {
+          const src = image.getAttribute("src")!;
+          if (sources.has(src)) { image.remove(); duplicate = true; }
+          sources.add(src);
+        });
+        if (duplicate) body = doc.body.innerHTML;
+      }
       for (const file of uploads) {
-        if (!isBrowserRenderableImage(file.mimeType, file.fileName) && !body.includes(file.url)) {
+        if ((optedOut || !isBrowserRenderableImage(file.mimeType, file.fileName)) && !body.includes(file.url)) {
           body += `<p><a href="${escapeHtml(file.url)}">${escapeHtml(file.fileName)}</a></p>`;
         }
       }
       return { ...draft, title: stripTaskWriterMediaTokens(draft.title) || text.trim(), description: body };
     });
+    skills = readTaskWriterSkills(response.headers?.get(TASK_WRITER_SKILLS_HEADER));
     title = drafts[0].title;
     description = drafts[0].description;
   } catch {
@@ -236,6 +266,8 @@ export async function createComposedTask({
         sectionId: placement?.sectionId, section_title: placement?.section,
         ranking: placement?.ranking, ...taskFields, ...writerFields, requestKind: "compose-task",
         ...(fillsExistingTask ? { existingTaskId } : {}),
+        ...(!taskFields.tags?.length && draft.writerLabelIds?.length ? { writerLabelIds: draft.writerLabelIds } : {}),
+        ...(draft.customFields?.length ? { customFields: draft.customFields } : {}),
         ...(draft.writerDueDate ? { writerDueDate: draft.writerDueDate, writerTimeZone } : {}),
       });
       const task = created?.resposne?.newTask;
@@ -248,5 +280,33 @@ export async function createComposedTask({
     }
   }
   if (!tasks.length) throw new Error("Couldn’t create the tasks. Your note is still here. Try again.");
-  return { task: tasks[0], writerFailed, ...(writerFailureReason ? { writerFailureReason } : {}), tasks, failedTitles };
+  return { task: tasks[0], writerFailed, ...(!writerFailed && skills ? { skills } : {}), ...(writerFailureReason ? { writerFailureReason } : {}), tasks, failedTitles };
+}
+
+export async function requestComposeSkillFollowup(taskId: number, skills: TaskWriterSkills, originalInput: string): Promise<{ questions: string[]; followup: string } | null> {
+  const controller = new AbortController();
+  let timeout: ReturnType<typeof setTimeout> | undefined;
+  try {
+    return await Promise.race([
+      (async () => {
+        const response = await fetch("/api/ai/task-questions", {
+          method: "POST", credentials: "include", signal: controller.signal,
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ taskId, kind: "new-ticket", skillFollowup: { skills, originalInput: originalInput.slice(0, MAX_SKILL_INPUT_LENGTH) } }),
+        });
+        if (!response.ok) return null;
+        const data = await response.json();
+        if (typeof data.followup !== "string" || !data.followup.trim() || data.followup.length > 12000 ||
+            !Array.isArray(data.questions) || !data.questions.every((question: unknown) => typeof question === "string")) return null;
+        return { followup: data.followup.trim(), questions: data.questions.slice(0, 4) };
+      })(),
+      new Promise<null>((resolve) => {
+        timeout = setTimeout(() => { resolve(null); controller.abort(); }, 30000);
+      }),
+    ]);
+  } catch {
+    return null;
+  } finally {
+    clearTimeout(timeout);
+  }
 }

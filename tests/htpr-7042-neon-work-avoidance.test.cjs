@@ -6,7 +6,7 @@ const vm = require("node:vm");
 const ts = require("typescript");
 const root = path.resolve(__dirname, "..");
 const read = (file) => fs.readFileSync(path.join(root, file), "utf8");
-const flag = "htpr-7042-neon-work-avoidance", target = "htpr-6136-figma-connect";
+const flag = "htpr-7042-neon-work-avoidance", target = "htpr-3533-google-calendar";
 function load(file, mocks = {}, modules = new Map()) {
   if (modules.has(file)) return modules.get(file).exports;
   const javascript = ts.transpileModule(read(file), { compilerOptions: { esModuleInterop: true, module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2020 } }).outputText;

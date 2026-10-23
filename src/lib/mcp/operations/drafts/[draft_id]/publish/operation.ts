@@ -1,4 +1,7 @@
+import { requireAgentWriteRole } from "@/lib/mcp/agents/readRoleGuard";
+import { agentScopeEnforced, recordAgentBoardScopeMiss } from "@/lib/auth/agentScope";
 import { reportMcpOperationCrash } from '@/lib/mcp/operationCrashReport'
+import { userCanAccessTask } from "@/utils/controllers/tasks/assertTaskAccess"
 import { wrapMcpRoute, validateMcpRouteAuth as validateMcpAuth, checkMcpRouteRateLimit as checkMcpRateLimit } from '@/lib/mcp/routeWrapper'
 import { NextRequest, NextResponse } from 'next/server'
 
@@ -50,6 +53,8 @@ export async function POST(request: NextRequest, props: { params: Promise<{ draf
         { status: 401 }
       );
     }
+    const roleRefusal = await requireAgentWriteRole(ctx);
+    if (roleRefusal) return roleRefusal;
     const user = ctx.user;
 
     if (!user) {
@@ -74,14 +79,17 @@ export async function POST(request: NextRequest, props: { params: Promise<{ draf
     }
 
     const project = draft.task.project
-    const hasAccess = project.ownerId === user.id || project.members.some((m) => m.userId === user.id)
+    const hasAccess = ctx.agentId && agentScopeEnforced()
+      ? await userCanAccessTask(user.id, draft.taskId, ctx.agentId, ctx.teamScope)
+      : project.ownerId === user.id || project.members.some((m) => m.userId === user.id)
 
-    if (!hasAccess) {
+    if (!hasAccess || (ctx.teamScope != null && !await userCanAccessTask(user.id, draft.taskId, ctx.agentId, ctx.teamScope))) {
       return NextResponse.json(
         { success: false, error: 'Permission denied', message: 'You do not have access to this task' },
         { status: 403 }
       )
     }
+    recordAgentBoardScopeMiss(draft.task.projectId, "write");
 
     if (draft.userId !== user.id) {
       return NextResponse.json(
@@ -119,9 +127,10 @@ export async function POST(request: NextRequest, props: { params: Promise<{ draf
         ownerId: taskWithOwner.userId,
         currentUser: userObj,
         agentId: ctx.agentId || undefined,
+        teamScope: ctx.teamScope,
       })
 
-      await persistUrlsForComment(draft.content, taskId, comment.id, 'POST')
+      await persistUrlsForComment(draft.content, taskId, comment.id, 'POST', [], { userId: user.id, agentId: ctx.agentId, teamScope: ctx.teamScope })
 
       const response: PublishDraftResponse = {
         success: true,
@@ -150,11 +159,12 @@ export async function POST(request: NextRequest, props: { params: Promise<{ draf
         displayName: userObj.displayName,
         photoURL: userObj.photoURL ?? undefined
       }))
-      const sessionToken = signSession({ id: userObj.id, email: userObj.email })
+      const sessionToken = signSession({ id: userObj.id, email: userObj.email, ...(ctx.agentId ? { agentId: ctx.agentId } : {}), teamScope: ctx.teamScope, agentTokenGeneration: ctx.agentTokenGeneration })
       const authCookieHeader = `nookies_user=${encodeURIComponent(userCookie)}; ${SESSION_COOKIE}=${sessionToken}`
 
       const singleResponse = await fetch(`${baseUrl}/api/tasks/single`, {
         method: 'PUT',
+        redirect: 'manual',
         headers: {
           'Content-Type': 'application/json',
           Cookie: authCookieHeader
@@ -176,7 +186,7 @@ export async function POST(request: NextRequest, props: { params: Promise<{ draf
         )
       }
 
-      await persistUrlsForDescription(draft.content, taskId)
+      await persistUrlsForDescription(draft.content, taskId, [], { userId: user.id, agentId: ctx.agentId, teamScope: ctx.teamScope })
 
       const response: PublishDraftResponse = {
         success: true,

@@ -1,6 +1,8 @@
+import { TaskTeamScopeError } from "@/lib/mcp/tasks/agentMutationFence";
 import { wrapMcpRoute, checkMcpRouteRateLimit as checkMcpRateLimit, validateMcpRouteAuth as validateMcpAuth } from '@/lib/mcp/routeWrapper'
 import { NextRequest, NextResponse } from "next/server";
 
+import { chatContentScopeWhere } from "@/lib/agents/chatContentScope";
 import prisma from "@/lib/prisma";
 import { MANAGER_LOOP_ACTIVITY_FLAG, isFeatureEnabled } from "@/lib/flags";
 import { broadcastChatSession } from "@/lib/agents/chatBroadcast";
@@ -74,8 +76,9 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    const contentScope = await chatContentScopeWhere({ userId: ctx.user.id, agentId: ctx.agentId, teamScope: ctx.teamScope });
     let session = await prisma.chatSession.findFirst({
-      where: { userId: agent.userId, agentId: agent.id },
+      where: { userId: agent.userId, agentId: agent.id, ...contentScope },
       select: { id: true },
     });
     if (!session) {
@@ -84,53 +87,64 @@ export async function POST(request: NextRequest) {
         skipDuplicates: true,
       });
       session = await prisma.chatSession.findFirst({
-        where: { userId: agent.userId, agentId: agent.id },
+        where: { userId: agent.userId, agentId: agent.id, ...contentScope },
         select: { id: true },
       });
       if (!session) {
         return NextResponse.json(
-          { success: false, error: "Failed to open the agent chat session" },
-          { status: 500 }
+          { success: false, error: "Session not found" },
+          { status: 404 }
         );
       }
     }
 
     const messageId = `${ACTIVITY_ID_PREFIX}${tokenAgentId}-${clientMessageId}`;
-    const inserted = await prisma.chatMessage.createMany({
-      data: [
-        {
-          id: messageId,
-          sessionId: session.id,
-          content: text,
-          role: "assistant",
-          isDelivered: true,
-          authorAgentId: tokenAgentId,
-        },
-      ],
-      skipDuplicates: true,
-    });
-
-    if (inserted.count === 0) {
-      const existing = await prisma.chatMessage.findUnique({
-        where: { id: messageId },
-        select: { sessionId: true },
-      });
-      if (existing?.sessionId !== session.id) {
-        return NextResponse.json(
-          { success: false, error: "clientMessageId already used" },
-          { status: 409 }
-        );
+    const sessionId = session.id;
+    const persist = async (db: import("@prisma/client").Prisma.TransactionClient) => {
+      if (ctx.teamScope != null) {
+        await db.$queryRaw`SELECT id FROM "ChatSession" WHERE id = ${sessionId} FOR UPDATE`;
+        if (!await db.chatSession.findFirst({ where: { id: sessionId, ...await chatContentScopeWhere({ userId: ctx.user.id, agentId: ctx.agentId, teamScope: ctx.teamScope }, db) }, select: { id: true } })) throw new TaskTeamScopeError();
       }
-    }
+      const inserted = await db.chatMessage.createMany({
+        data: [
+          {
+            id: messageId,
+            sessionId: sessionId,
+            content: text,
+            role: "assistant",
+            isDelivered: true,
+            authorAgentId: tokenAgentId,
+          },
+        ],
+        skipDuplicates: true,
+      });
 
-    await prisma.chatSession.update({
-      where: { id: session.id },
-      data: { updatedAt: new Date() },
-    });
+      if (inserted.count === 0) {
+        const existing = await db.chatMessage.findUnique({
+          where: { id: messageId },
+          select: { sessionId: true },
+        });
+        if (existing?.sessionId !== sessionId) {
+          return NextResponse.json(
+            { success: false, error: "clientMessageId already used" },
+            { status: 409 }
+          );
+        }
+      }
+
+      await db.chatSession.update({
+        where: { id: sessionId },
+        data: { updatedAt: new Date() },
+      });
+      return inserted;
+    };
+    const inserted = ctx.teamScope != null ? await prisma.$transaction(persist, { isolationLevel: 'Serializable' }) : await persist(prisma);
+    if (inserted instanceof NextResponse) return inserted;
     await broadcastChatSession(session.id, [agent.userId]);
 
     return NextResponse.json({ success: true, duplicate: inserted.count === 0 });
   } catch (error: unknown) {
+    if (error instanceof TaskTeamScopeError) return NextResponse.json({ success: false, error: error.message }, { status: 404 });
     console.error("[mcp chat] POST activity failed:", error);
     return NextResponse.json(
       { success: false, error: "Failed to add chat activity" },

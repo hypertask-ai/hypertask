@@ -281,7 +281,7 @@ export const getCommentCommands = (commandOptions?: IAllCommands): CommandGroup 
 };
 
 
-export const getTaskCommands = (commandOptions?: IAllCommands, agentLogNameEnabled = false): CommandGroup => {
+export const getTaskCommands = (commandOptions?: IAllCommands): CommandGroup => {
   const taskProps = commandOptions?.taskOptions;
   const browsableTaskCommands = commandOptions?.context === "Task"
     ? baseTaskCommands.filter((command) =>
@@ -458,7 +458,7 @@ export const getTaskCommands = (commandOptions?: IAllCommands, agentLogNameEnabl
           getTaskCommand("duplicateTaskToBoard"),
           {
             key: "toggleHistory",
-            name: `${taskProps?.showHistory ? "Hide" : "Show"} ${agentLogNameEnabled ? "agent log" : "history"}`,
+            name: `${taskProps?.showHistory ? "Hide" : "Show"} agent log`,
             commandMode: CommandMode.ToggleHistory,
             keyboard: ["CTRL", "SHIFT", "H"],
             keywords:

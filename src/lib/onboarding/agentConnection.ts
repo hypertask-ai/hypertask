@@ -1,6 +1,7 @@
 import { LogType, Status } from "@prisma/client";
 import prisma from "@/lib/prisma";
 import { FEATURE_FLAG_QA_USER_ID, HTPR_7026_AGENT_CONNECT_CHECK_FLAG, HTPR_7037_SHARED_EMAIL_LAYOUT_FLAG, isFeatureEnabled } from "@/lib/flags";
+import { HTPR_7549_FIRST_TASK_POINTER_FLAG, HTPR_7550_CONNECT_OVERLAY_FLAG } from "@/lib/flags/keys";
 import { isOnboardingQaArmed } from "@/lib/onboarding/qaArm";
 import { getRedis } from "@/lib/redis";
 import { sendEmail } from "@/lib/email/sendEmail";
@@ -104,8 +105,10 @@ export async function sendFirstAgentConnectedEmail(userId: number, logId: number
   }
 }
 
-export async function getAgentConnectCardState(userId: number) {
-  const eligible = await isAgentConnectCheckEnabledFor(userId);
+export async function getAgentConnectCardState(userId: number, overlay = false) {
+  const eligible = overlay
+    ? await isFeatureEnabled(HTPR_7549_FIRST_TASK_POINTER_FLAG, userId) && await isFeatureEnabled(HTPR_7550_CONNECT_OVERLAY_FLAG, userId)
+    : await isAgentConnectCheckEnabledFor(userId);
   if (!eligible) return { eligible, connected: false, dismissed: false };
   const [connection, dismissed, board] = await Promise.all([
     getFirstAgentConnection(userId),

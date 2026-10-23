@@ -171,7 +171,7 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    const existingPage = await getPage({ ...identifier, userId: ctx.user.id, standalonePagesEnabled: await standalonePagesEnabled(ctx.user.id), agentId: ctx.agentId })
+    const existingPage = await getPage({ ...identifier, userId: ctx.user.id, standalonePagesEnabled: await standalonePagesEnabled(ctx.user.id), agentId: ctx.agentId, teamScope: ctx.teamScope })
     if (
       !existingPage ||
       !(await canAccessProject(existingPage.projectId, ctx))
@@ -192,7 +192,7 @@ export async function POST(request: NextRequest) {
         ifVersion,
         note: body.note as string | undefined,
         userId: ctx.user.id,
-        agentId: ctx.agentId,
+        agentId: ctx.agentId, teamScope: ctx.teamScope,
       })
 
       return NextResponse.json({

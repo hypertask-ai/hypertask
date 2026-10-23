@@ -1,0 +1,825 @@
+import { parseSearchQuery } from "@/lib/search/operators";
+import { searchConfig } from "@/lib/configs/search.config";
+import { HTPR_6865_SEARCH_LAYOUT_FLAG, HTPR_6994_SEARCH_ESC_LEAVES_FLAG } from "@/lib/flags/keys";
+import { useFlag, useFlagReady } from "@/hooks/useFlag";
+import { HTPR_7558_SLASH_SEARCH_FOCUS_FLAG } from "@/lib/flags/definitions/htpr-7558-slash-search-focus";
+import { isServerSearchFor, type ServerStartedSearch } from "@/lib/search/serverStartedSearch";
+import { useDeviceContext } from "@/lib/contexts/deviceContext";
+import { useQueryClient } from "@tanstack/react-query";
+import axios from "axios";
+import { useRouter } from "next/navigation";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
+import { useGetAllProjectsMinimal } from "../MultiPages/useGetAllProjectsMinimal";
+import useHypertasksRecoilStates from "../RecoilRoot/useHypertasksRecoilStates";
+import { useRecoilState } from "@/lib/state";
+import { IProject, ITypedTask } from "@/models/model";
+import {
+  inViewObjectAtom,
+  SearchTaskIndexAtom,
+  showCommandsAtom,
+  tasksPlayListAtom,
+} from "@/store";
+import { searchDocumentsRoute } from "@/lib/constants/APIRouteConstants";
+import { KeyCodes } from "@/lib/constants/keyboard-handler";
+import toast from "react-hot-toast";
+import { useGetSearchCache } from "./useSearchCache";
+import globalConstants from "@/lib/constants";
+import {
+  buildSearchUrl,
+  defaultSearchArchiveStatus,
+  SearchRequestGate,
+} from "@/lib/searchArchive";
+
+export function useSearch(
+  _searchTerm: string,
+  _initialTabIndex?: number,
+  _includeArchived = false,
+  _fromProject: number | null = null,
+  serverStartedSearch?: Promise<ServerStartedSearch | null>,
+  searchOnce = false
+) {
+  const { data: searchCache } = useGetSearchCache();
+  const { data: allProjects, refetch: refetchProjects } = useGetAllProjectsMinimal([
+    "projectsAllMinimal",
+  ]);
+  const [searchTaskIndex, setSearchTaskIndex] =
+    useRecoilState(SearchTaskIndexAtom);
+  const [_, setInViewObject] = useRecoilState(inViewObjectAtom);
+  const [__, setTasksPlayList] = useRecoilState(tasksPlayListAtom);
+  const [showCommands, ___] = useRecoilState(showCommandsAtom);
+  const [inputValue, setInputValue] = useState<string>(_searchTerm ?? "");
+  const [submittedQuery, setSubmittedQuery] = useState<string | null>(null);
+  const [typedTasks, setTypedTasks] = useState<ITypedTask[]>([]);
+  const [tempInput, setTempInput] = useState<string>("");
+  const [selectedHistory, setSelectedHistory] = useState<number | null>(null);
+  const [selectedIndex, setSelectedIndex] = useState<number | null>(
+    searchTaskIndex ?? null
+  );
+  const [projects, setProjects] = useState<IProject[] | []>([]);
+  const [responseMessage, setResponseMessage] = useState<string>(
+    searchConfig.responseMessages.default
+  );
+  const [activeSplit, setActiveSplit] = useState<number>(0);
+  const [explicitTabIndex, setExplicitTabIndex] = useState<
+    number | undefined
+  >(_initialTabIndex);
+  const [tabs, setTabs] = useState<string[]>([]);
+  const [results, setResults] = useState<Record<string, any[]> | null>(null);
+  const [includeArchived, setIncludeArchived] =
+    useState<boolean>(_includeArchived);
+
+  const tasksInputRef = useRef<HTMLInputElement>(null);
+  const ulRef = useRef<HTMLUListElement | null>(null);
+  const liSelectedRef = useRef<HTMLLIElement | null>(null);
+  const debounceTimeout = useRef<NodeJS.Timeout | null>(null);
+  const currentHoveredDiv = useRef<number | null>(null);
+  const lastgClick = useRef<number | null>(null);
+  const searchRequestGate = useRef(new SearchRequestGate()).current;
+  const lastSearchKey = useRef<string | null>(null);
+  const tabSearchHistory = useRef<string[] | null>(null);
+  const pendingServerSearch = useRef(serverStartedSearch);
+  const mountSearchAwaitsFlags = useRef(false);
+  const controller: { [key: number]: { pressed: boolean } } = {
+    ...globalConstants.multipleKeys,
+  };
+
+  const { toggleShowCommands } = useHypertasksRecoilStates();
+  const router = useRouter();
+  const queryClient = useQueryClient();
+  const isApple = useDeviceContext();
+  const searchLayoutEnabled = useFlag(HTPR_6865_SEARCH_LAYOUT_FLAG);
+  const searchEscLeavesEnabled = useFlag(HTPR_6994_SEARCH_ESC_LEAVES_FLAG);
+  const slashSearchFocusEnabled = useFlag(HTPR_7558_SLASH_SEARCH_FOCUS_FLAG);
+  const searchFlagsReady = useFlagReady(HTPR_6865_SEARCH_LAYOUT_FLAG);
+  const isSearchDraft = searchLayoutEnabled && submittedQuery !== inputValue.trim();
+
+  function currentSearchKey(searchTerm: string, showArchived: boolean, searchProjects = projects) {
+    return JSON.stringify([
+      searchTerm.trim(),
+      showArchived,
+      _fromProject,
+      searchProjects.map((project) => project.id),
+    ]);
+  }
+
+  function getTabSearchHistory() {
+    if (tabSearchHistory.current === null) {
+      try {
+        const stored: unknown = JSON.parse(sessionStorage.getItem("htpr-6879-search-history") ?? "[]");
+        tabSearchHistory.current = Array.isArray(stored) ? stored.filter((term): term is string => typeof term === "string" && term.trim().length >= 2) : [];
+      } catch { tabSearchHistory.current = []; }
+    }
+    return tabSearchHistory.current;
+  }
+
+  function beginSearch(searchTerm: string, showArchived: boolean) {
+    pendingServerSearch.current = undefined;
+    recordSearch(searchTerm, showArchived);
+    return searchRequestGate.begin();
+  }
+
+  function recordSearch(searchTerm: string, showArchived: boolean) {
+    if (searchLayoutEnabled) {
+      const history = getTabSearchHistory();
+      const term = searchTerm.trim();
+      if (term.length >= 2 && history.at(-1) !== term) {
+        history.push(term);
+        try { sessionStorage.setItem("htpr-6879-search-history", JSON.stringify(history)); } catch {}
+      }
+    }
+    setSubmittedQuery(searchTerm.trim());
+    lastSearchKey.current = currentSearchKey(searchTerm, showArchived);
+  }
+
+  async function showServerStartedSearch(started: Promise<ServerStartedSearch | null>, isCurrent: () => boolean) {
+    const searchesBeforeWait = searchRequestGate.latestRequest();
+    if (searchLayoutEnabled) tasksInputRef.current?.blur();
+    const search = await started;
+    if (!isCurrent() || pendingServerSearch.current !== started || !searchRequestGate.isLatest(searchesBeforeWait) ||
+      !isServerSearchFor(search, _searchTerm, _includeArchived, _fromProject)) return;
+    pendingServerSearch.current = undefined;
+    searchRequestGate.begin();
+    recordSearch(_searchTerm, _includeArchived);
+    lastSearchKey.current = currentSearchKey(_searchTerm, _includeArchived, search.projectIds.map((id) => ({ id }) as IProject));
+    const processedData = search.data.processedData as Record<string, ITypedTask[]>;
+    if (processedData["All"].length > 0) {
+      applySearchResults(processedData, search.data.tabs);
+    } else {
+      handleStatesOnResponse(searchConfig.responseMessages.fail);
+    }
+  }
+
+  async function mountSearchResponse(showArchived: boolean, started: Promise<ServerStartedSearch | null> | undefined) {
+    const search = started ? await started : null;
+    if (isServerSearchFor(search, _searchTerm, showArchived, _fromProject) &&
+      search.projectIds.join() === projects.map((item) => item.id).join()) {
+      return { status: 200, data: search.data };
+    }
+    return axios.post(searchDocumentsRoute, {
+      projectIds: projects.map((item) => item.id),
+      searchQuery: _searchTerm,
+      archive: defaultSearchArchiveStatus(showArchived),
+      contextProjectId: _fromProject,
+    });
+  }
+
+  async function handleSearchOnMount(showArchived = includeArchived) {
+    if (_searchTerm && _searchTerm.length >= 2) {
+      const serverSearch = searchFlagsReady ? pendingServerSearch.current : undefined;
+      const requestId = beginSearch(_searchTerm, showArchived);
+      if (searchLayoutEnabled) tasksInputRef.current?.blur();
+      try {
+        const response = await mountSearchResponse(showArchived, serverSearch);
+
+        if (!searchRequestGate.isLatest(requestId)) return;
+
+        if (response.status === 200) {
+          const { processedData, tabs: splits } = response.data;
+          if (processedData["All"].length > 0) {
+            applySearchResults(processedData, splits);
+          } else {
+            handleStatesOnResponse(searchConfig.responseMessages.fail);
+          }
+        } else {
+          handleStatesOnResponse(searchConfig.responseMessages.fail);
+        }
+      } catch (error) {
+        if (!searchRequestGate.isLatest(requestId)) return;
+        console.error("🤔 ~ handleSearchOnMount ~ error:", error);
+        handleStatesOnResponse(searchConfig.responseMessages.error);
+      }
+    }
+  }
+
+  async function handleLinkClick(task: ITypedTask) {
+    const tasksPlayList = typedTasks.map((item) => ({
+      projectId: item.projectId,
+      uniqueIndex: item.uniqueIndex,
+    }));
+    setTasksPlayList(tasksPlayList);
+    const url = searchConfig.urls.taskDetail(task.projectId, task.uniqueIndex);
+    if (searchLayoutEnabled && task.commentId &&
+      parseSearchQuery(inputValue, {}, true).filters.commenter?.some((filter) => !filter.negated)) {
+      router.push(`${url}?commentId=comment-${task.commentId}`);
+    } else {
+      router.push(url);
+    }
+  }
+
+  function handleStatesOnResponse(message: string) {
+    setResponseMessage(message);
+    setTypedTasks([]);
+    setSelectedIndex(null);
+    setSelectedHistory(null);
+    setTabs([]);
+    setActiveSplit(0);
+    setResults(null);
+  }
+
+  function updateSplitAndTasks(index: number) {
+    if (!results) return;
+    setExplicitTabIndex(index);
+    setActiveSplit(index);
+    setTypedTasks(results[tabs[index]]);
+    setSelectedAndInView(results[tabs[index]][0], 0);
+    router.replace(searchUrl(inputValue, index), { scroll: false });
+  }
+
+  function getInitialSplitIndex(splits: string[]) {
+    if (
+      explicitTabIndex !== undefined &&
+      explicitTabIndex >= 0 &&
+      explicitTabIndex < splits.length
+    ) {
+      return explicitTabIndex;
+    }
+
+    if (explicitTabIndex !== undefined) return 0;
+
+    const openTabIndex = splits.indexOf("Open");
+    return openTabIndex > -1 ? openTabIndex : 0;
+  }
+
+  function applySearchResults(
+    processedData: Record<string, ITypedTask[]>,
+    splits: string[],
+    preferredIndex?: number
+  ) {
+    const splitIndex = preferredIndex ?? getInitialSplitIndex(splits);
+    const splitName = splits[splitIndex] ?? "All";
+    const splitTasks = processedData[splitName] ?? processedData["All"];
+
+    setTabs(splits);
+    setTypedTasks(splitTasks);
+    setActiveSplit(splitIndex);
+    setResults(processedData);
+    setResponseMessage(searchConfig.responseMessages.default);
+
+    if (splitTasks.length > 0) {
+      setSelectedAndInView(splitTasks[0], 0);
+    } else {
+      setSelectedIndex(null);
+    }
+  }
+
+  function searchUrl(
+    searchTerm: string,
+    tabIndex: number | null | undefined = explicitTabIndex,
+    showArchived = includeArchived
+  ) {
+    return buildSearchUrl(searchTerm, tabIndex, showArchived, _fromProject);
+  }
+
+  function updateSearchHistory(searchTerm: string) {
+    if (searchTerm.length < 2) {
+      searchRequestGate.invalidate();
+      if (searchLayoutEnabled) { setSubmittedQuery(null); setResponseMessage(searchConfig.responseMessages.default); }
+      router.replace(searchUrl(searchTerm, null, includeArchived));
+      setTypedTasks([]);
+      setSelectedIndex(null);
+      setTabs([]);
+      setResults(null);
+      return;
+    }
+
+    const currentHistory: any[] = searchCache.history;
+    const term = (searchTerm || "").trim();
+    if (!term) return;
+    const withoutDupes = currentHistory.filter((t: string) => t !== term);
+    const updated = [term, ...withoutDupes];
+
+    executeSearch(searchTerm, updated.slice(0, 10));
+  }
+
+  async function executeSearch(
+    searchTerm: string,
+    updatedHistory: string[],
+    options?: { showArchived?: boolean; resetTab?: boolean; live?: boolean }
+  ) {
+    const showArchived = options?.showArchived ?? includeArchived;
+    const requestId = beginSearch(searchTerm, showArchived);
+    try {
+      const searchProjects: IProject[] = projects.length > 0
+        ? projects
+        : (await refetchProjects({ throwOnError: true })).data ?? [];
+      if (!searchRequestGate.isLatest(requestId)) return;
+      if (searchProjects.length === 0)
+        return handleStatesOnResponse(searchConfig.responseMessages.fail);
+      lastSearchKey.current = currentSearchKey(searchTerm, showArchived, searchProjects);
+
+      if (!options?.live) router.replace(
+        searchUrl(
+          searchTerm,
+          options?.resetTab ? null : explicitTabIndex,
+          showArchived
+        )
+      );
+      const response = await axios.post(searchDocumentsRoute, {
+        projectIds: searchProjects.map((item) => item.id),
+        searchQuery: searchTerm,
+        archive: defaultSearchArchiveStatus(showArchived),
+        contextProjectId: _fromProject,
+      });
+
+      if (!searchRequestGate.isLatest(requestId)) return;
+
+      if (response.status === 204)
+        return handleStatesOnResponse(searchConfig.responseMessages.fail);
+      if (response.status === 200) {
+        const { processedData, tabs: splits } = response.data;
+        if (processedData["All"].length > 0) {
+          const newData = {
+            history: updatedHistory,
+            results: [],
+          };
+
+          if (!options?.live) {
+            queryClient.setQueryData(["Search"], newData);
+            localStorage.setItem("searchCache", JSON.stringify(newData));
+          }
+          applySearchResults(
+            processedData,
+            splits,
+            options?.resetTab ? 0 : undefined
+          );
+        } else handleStatesOnResponse(searchConfig.responseMessages.fail);
+      }
+    } catch (error) {
+      if (!searchRequestGate.isLatest(requestId)) return;
+      console.error("🤔 ~ executeSearch ~ error:", error);
+      toast.error(searchConfig.responseMessages.error);
+      handleStatesOnResponse(searchConfig.responseMessages.error);
+    }
+  }
+
+  function setIncludeArchivedResults(showArchived: boolean) {
+    setIncludeArchived(showArchived);
+    setExplicitTabIndex(undefined);
+    if (isSearchDraft) return;
+    const term = inputValue.trim();
+    if (term.length < 2) {
+      searchRequestGate.invalidate();
+      handleStatesOnResponse(searchConfig.responseMessages.default);
+      router.replace(searchUrl(inputValue, null, showArchived), {
+        scroll: false,
+      });
+      return;
+    }
+    void executeSearch(term, searchCache.history ?? [], {
+      showArchived,
+      resetTab: true,
+    });
+  }
+
+  function setSelectedAndInView(task: ITypedTask, index: number) {
+    setSelectedIndex(index);
+    setInViewObject({
+      taskId: task.taskId,
+      taskProjectId: task?.projectId ?? null,
+      sectionId: null,
+      taskTicketNumber: task?.ticketNumber ?? null,
+      sectionTitle: null,
+      taskTitle: task?.taskTitle ?? null,
+    });
+  }
+
+  function handleKeyUp(event: KeyboardEvent) {
+    if (controller[event.keyCode]) {
+      controller[event.keyCode].pressed = false;
+    }
+  }
+
+  function handleKeyDown(event: KeyboardEvent) {
+    const resultArrow =
+      document.activeElement === document.body &&
+      !event.ctrlKey && !event.metaKey && !event.altKey &&
+      ["ArrowDown", "ArrowUp"].includes(event.key);
+    if ((event.defaultPrevented && !resultArrow) ||
+      (event.key === "Escape" && !searchEscLeavesEnabled && tasksInputRef.current?.getAttribute("aria-expanded") === "true")) return;
+    const cycleSearchTabs = searchLayoutEnabled && !isSearchDraft && event.key === "Tab" &&
+      !event.isComposing && !event.ctrlKey && !event.metaKey && !event.altKey &&
+      tasksInputRef.current?.getAttribute("aria-expanded") !== "true";
+    if (document.activeElement === tasksInputRef.current &&
+      (["Enter", "Backspace"].includes(event.key) || (event.key === "Tab" && !cycleSearchTabs) ||
+        (["ArrowDown", "ArrowUp"].includes(event.key) && tasksInputRef.current?.getAttribute("aria-expanded") === "true"))) return;
+    let cmdControl = (isApple && event.metaKey) || (!isApple && event.ctrlKey);
+    if (controller[event.keyCode]) {
+      controller[event.keyCode].pressed = true;
+    }
+
+    const isInputFocused = ["input", "textarea"].includes(
+      (document.activeElement as HTMLElement)?.tagName?.toLowerCase()
+    );
+
+    if (event.keyCode === KeyCodes.ESCAPE && !showCommands.show) {
+      event.preventDefault();
+      if (searchLayoutEnabled && !searchEscLeavesEnabled) {
+        const history = getTabSearchHistory();
+        if (!isSearchDraft) history.pop();
+        const previous = history.at(-1) ?? "";
+        try { sessionStorage.setItem("htpr-6879-search-history", JSON.stringify(history)); } catch {}
+        setInputValue(previous);
+        setExplicitTabIndex(undefined);
+        handleStatesOnResponse(searchConfig.responseMessages.default);
+        if (previous) void executeSearch(previous, searchCache.history ?? [], { resetTab: true });
+        else updateSearchHistory("");
+        tasksInputRef.current?.focus();
+        return;
+      }
+      return router.back();
+    }
+
+    if (
+      showCommands.show ||
+      document?.activeElement?.role === "dialog" ||
+      document?.activeElement?.id === "modalButtons" ||
+      document.activeElement?.id === "htc" ||
+      searchConfig.handleKeyDown.classNamesToReturnFrom.includes(
+        document?.activeElement?.className
+      ) ||
+      document.activeElement?.id === "boardManager"
+    )
+      return;
+
+    if (isSearchDraft && [KeyCodes.ARROW_DOWN, KeyCodes.ARROW_UP, KeyCodes.J, KeyCodes.K, KeyCodes.TAB].some((key) => key === event.keyCode) && !cmdControl) return;
+
+    if (event.keyCode === KeyCodes.K && cmdControl) {
+      event.preventDefault();
+      toggleShowCommands();
+    }
+    if (event.keyCode === KeyCodes.FORWARD_SLASH) {
+      event.preventDefault();
+      document.getElementById(searchConfig.elementIds.input.id)?.focus();
+      if (searchLayoutEnabled) tasksInputRef.current?.setSelectionRange(tasksInputRef.current.value.length, tasksInputRef.current.value.length);
+      setSelectedIndex(null);
+    }
+
+    if (event.keyCode === KeyCodes.ENTER) {
+      if (isInputFocused) {
+        updateSearchHistory(inputValue);
+      } else {
+        if (typedTasks.length > 0 && selectedIndex !== null)
+          handleLinkClick(typedTasks[selectedIndex]);
+        else if (inputValue.length >= 2) updateSearchHistory(inputValue);
+      }
+    }
+
+    if (
+      (event.keyCode === KeyCodes.J && !isInputFocused) ||
+      event.keyCode === KeyCodes.ARROW_DOWN
+    ) {
+      const historyList = document.getElementById(
+        searchConfig.elementIds.history.id
+      );
+
+      if (!!historyList) {
+        if (selectedHistory === null) {
+          setSelectedHistory(0);
+          setTempInput(inputValue);
+          setInputValue(searchCache.history[0]);
+          document.getElementById(searchConfig.elementIds.input.id)?.blur();
+        } else {
+          if (
+            selectedHistory === -1 ||
+            selectedHistory === searchCache.history.length - 1
+          ) {
+          } else {
+            setSelectedHistory(selectedHistory + 1);
+            setInputValue(searchCache.history[selectedHistory + 1]);
+          }
+        }
+      }
+
+      if (typedTasks.length > 0) {
+        event.preventDefault();
+        tasksInputRef.current?.blur();
+        if (selectedIndex === null) {
+          setSelectedAndInView(typedTasks[0], 0);
+        } else if (selectedIndex === -1 || selectedIndex === typedTasks.length - 1) {
+        } else {
+          setSelectedAndInView(
+            typedTasks[selectedIndex + 1],
+            selectedIndex + 1
+          );
+
+          document
+            .getElementById(`task_${typedTasks[selectedIndex + 1].taskId}`)
+            ?.scrollIntoView({ behavior: "instant" as ScrollBehavior, block: "nearest" });
+        }
+      }
+    }
+
+    if (
+      (event.keyCode === KeyCodes.K && !isInputFocused) ||
+      event.keyCode === KeyCodes.ARROW_UP
+    ) {
+      const historyList = document.getElementById(
+        searchConfig.elementIds.history.id
+      );
+
+      if (!!historyList) {
+        if (selectedHistory === null) {
+        } else {
+          if (selectedHistory <= 0) {
+            setSelectedHistory(null);
+            setInputValue(tempInput);
+            setTempInput("");
+            document.getElementById(searchConfig.elementIds.input.id)?.focus();
+          } else {
+            setSelectedHistory(selectedHistory - 1);
+            setInputValue(searchCache.history[selectedHistory - 1]);
+          }
+        }
+      }
+
+      if (typedTasks.length > 0) {
+        event.preventDefault();
+        tasksInputRef.current?.blur();
+        if (selectedIndex === null) {
+          setSelectedAndInView(typedTasks[typedTasks.length - 1], typedTasks.length - 1);
+        } else if (selectedIndex <= 0) {
+        } else {
+          setSelectedAndInView(
+            typedTasks[selectedIndex - 1],
+            selectedIndex - 1
+          );
+          document
+            .getElementById(`task_${typedTasks[selectedIndex - 1].taskId}`)
+            ?.scrollIntoView({ behavior: "instant" as ScrollBehavior, block: "nearest" });
+        }
+      }
+    }
+
+    if (
+      (event.keyCode === KeyCodes.TAB || cycleSearchTabs) && tabs.length > 0 &&
+      (searchLayoutEnabled
+        ? cycleSearchTabs && !isInputFocused && tabs.length > 1
+        : !isInputFocused)
+    ) {
+      event.preventDefault();
+      let newValue;
+      if (event.shiftKey) {
+        newValue = activeSplit !== 0 ? activeSplit - 1 : tabs.length - 1;
+      } else {
+        newValue = activeSplit !== tabs.length - 1 ? activeSplit + 1 : 0;
+      }
+
+      updateSplitAndTasks(newValue);
+    }
+
+    if (
+      event.keyCode === KeyCodes.G &&
+      !isInputFocused &&
+      !event.ctrlKey &&
+      !event.metaKey &&
+      !event.altKey &&
+      !event.shiftKey &&
+      !event.repeat
+    ) {
+      if (!lastgClick.current) {
+        const now = new Date().getTime();
+        lastgClick.current = now;
+        setTimeout(() => {
+          lastgClick.current = null;
+        }, globalConstants.gThenKeyDelay);
+        return;
+      }
+    }
+
+    if (
+      lastgClick.current &&
+      event.keyCode === KeyCodes.X &&
+      !isInputFocused &&
+      !event.ctrlKey &&
+      !event.metaKey &&
+      !event.altKey &&
+      !event.shiftKey
+    ) {
+      const now = new Date().getTime();
+      if (now - lastgClick.current < globalConstants.gThenKeyDelay) {
+        event.preventDefault();
+        lastgClick.current = null;
+        setIncludeArchivedResults(!includeArchived);
+        return;
+      }
+    }
+
+    if (
+      lastgClick.current &&
+      controller[KeyCodes.G]?.pressed &&
+      typedTasks.length > 0 &&
+      event.keyCode === KeyCodes.G
+    ) {
+      const now = new Date().getTime();
+      if (now - lastgClick.current < globalConstants.gThenKeyDelay) {
+        lastgClick.current = null;
+        if (event.shiftKey) {
+          setSelectedAndInView(
+            typedTasks[typedTasks.length - 1],
+            typedTasks.length - 1
+          );
+          document
+            .getElementById(`task_${typedTasks[typedTasks.length - 1].taskId}`)
+            ?.scrollIntoView({ behavior: "smooth", block: "center" });
+        } else {
+          setSelectedAndInView(typedTasks[0], 0);
+          document
+            .getElementById(`task_${typedTasks[0].taskId}`)
+            ?.scrollIntoView({ behavior: "smooth", block: "center" });
+        }
+        return;
+      }
+    }
+
+    if (
+      lastgClick.current &&
+      controller[KeyCodes.D]?.pressed &&
+      event.keyCode === KeyCodes.D
+    ) {
+      const now = new Date().getTime();
+      if (now - lastgClick.current < globalConstants.gThenKeyDelay) {
+        lastgClick.current = null;
+        router.push(globalConstants.draftsRoute);
+        return;
+      }
+    }
+
+    if (
+      lastgClick.current &&
+      controller[KeyCodes.U]?.pressed &&
+      event.keyCode === KeyCodes.U
+    ) {
+      const now = new Date().getTime();
+      if (now - lastgClick.current < globalConstants.gThenKeyDelay) {
+        lastgClick.current = null;
+        router.push("/scheduled");
+        return;
+      }
+    }
+  }
+
+  function handleMouseLeave() {
+    if (debounceTimeout.current) {
+      clearTimeout(debounceTimeout.current);
+      debounceTimeout.current = null;
+    }
+
+    debounceTimeout.current = setTimeout(() => {
+      if (currentHoveredDiv.current !== null && liSelectedRef.current) {
+        if (!searchLayoutEnabled) (liSelectedRef.current as HTMLLIElement)?.blur();
+        currentHoveredDiv.current = null;
+      }
+    }, 100);
+  }
+
+  function handleMouseEnter(index: number) {
+    currentHoveredDiv.current = index;
+  }
+
+  function handleMouseMove() {
+    if (!debounceTimeout.current) return;
+    const currentIndex = currentHoveredDiv.current
+      ? currentHoveredDiv.current
+      : 0;
+    if (
+      typedTasks.length > 0 &&
+      document.activeElement?.id !== searchConfig.elementIds.input.id
+    )
+      setSelectedAndInView(typedTasks[currentIndex], currentIndex);
+    else if (searchCache.history.length > 0) setSelectedHistory(currentIndex);
+    clearTimeout(debounceTimeout.current);
+    debounceTimeout.current = null;
+  }
+
+  useLayoutEffect(() => {
+    setSearchTaskIndex(0);
+    if (typedTasks.length > 0) {
+      document
+        ?.getElementById(`task_${typedTasks[0]?.taskId}`)
+        ?.scrollIntoView({
+          behavior: "instant" as ScrollBehavior,
+          block: "center",
+        });
+      tasksInputRef.current?.blur();
+    } else tasksInputRef.current?.focus();
+    queryClient.invalidateQueries({ queryKey: ["projectsAll"] });
+  }, []);
+
+  useEffect(() => {
+    document.addEventListener("keydown", handleKeyDown);
+    document.addEventListener("keyup", handleKeyUp);
+    return () => {
+      document.removeEventListener("keydown", handleKeyDown);
+      document.removeEventListener("keyup", handleKeyUp);
+    };
+  }, [
+    typedTasks,
+    showCommands.show,
+    selectedIndex,
+    inputValue,
+    searchCache,
+    selectedHistory,
+    includeArchived,
+    searchLayoutEnabled,
+    searchEscLeavesEnabled,
+    isSearchDraft,
+    activeSplit,
+    tabs,
+    results,
+  ]);
+
+  useEffect(() => setProjects(allProjects), [allProjects]);
+
+  const hasProjects = projects.length > 0;
+  useEffect(() => {
+    const started = pendingServerSearch.current;
+    if (!started || !searchFlagsReady || hasProjects || (slashSearchFocusEnabled && _searchTerm.length < 2)) return;
+    let current = true;
+    void showServerStartedSearch(started, () => current);
+    return () => {
+      current = false;
+    };
+  }, [searchFlagsReady, hasProjects, _searchTerm, _includeArchived, _fromProject, slashSearchFocusEnabled]);
+
+  useEffect(() => {
+    setExplicitTabIndex(_initialTabIndex);
+  }, [_initialTabIndex]);
+
+  useEffect(() => {
+    setIncludeArchived(_includeArchived);
+    setInputValue(_searchTerm);
+    if (projects.length > 0 && _searchTerm.length >= 2) {
+      const key = currentSearchKey(_searchTerm, _includeArchived);
+      const sameSearchMissingFromHistory = lastSearchKey.current === key && searchLayoutEnabled &&
+        getTabSearchHistory().at(-1) !== _searchTerm.trim();
+      const serverSearchAwaitsFlags = !!pendingServerSearch.current && !searchFlagsReady;
+      if (searchOnce && sameSearchMissingFromHistory) recordSearch(_searchTerm, _includeArchived);
+      else if (searchOnce && serverSearchAwaitsFlags && lastSearchKey.current !== key) mountSearchAwaitsFlags.current = true;
+      else if (lastSearchKey.current !== key || sameSearchMissingFromHistory) void handleSearchOnMount(_includeArchived);
+      return;
+    }
+    if (_searchTerm.length < 2) {
+      searchRequestGate.invalidate();
+      lastSearchKey.current = currentSearchKey("", _includeArchived);
+      handleStatesOnResponse(searchConfig.responseMessages.default);
+    }
+  }, [_searchTerm.length >= 2 ? projects : null, _includeArchived, _searchTerm, _fromProject, searchLayoutEnabled]);
+
+  useEffect(() => {
+    if (!searchFlagsReady || !mountSearchAwaitsFlags.current) return;
+    mountSearchAwaitsFlags.current = false;
+    if (pendingServerSearch.current) void handleSearchOnMount(_includeArchived);
+  }, [searchFlagsReady]);
+
+  useEffect(() => {
+    if (!projects.length) return;
+    const term = inputValue.trim();
+    const key = currentSearchKey(term, includeArchived);
+    if (lastSearchKey.current === key) return;
+    searchRequestGate.invalidate();
+    lastSearchKey.current = null;
+    if (searchLayoutEnabled) {
+      setSubmittedQuery(null);
+      handleStatesOnResponse(searchConfig.responseMessages.default);
+      return;
+    }
+    if (term.length < 2) {
+      handleStatesOnResponse(searchConfig.responseMessages.default);
+      return;
+    }
+    const timer = setTimeout(() => {
+      if (lastSearchKey.current !== key) {
+        void executeSearch(term, searchCache.history ?? [], { live: true });
+      }
+    }, 300);
+    return () => clearTimeout(timer);
+  }, [inputValue, includeArchived, projects, _fromProject, searchLayoutEnabled]);
+
+  return {
+    availableSearchBoards: searchLayoutEnabled ? projects : [],
+    setSelectedIndex,
+    selectedIndex,
+    tasksInputRef,
+    inputValue,
+    responseMessage: isSearchDraft ? searchConfig.responseMessages.default : responseMessage,
+    typedTasks: isSearchDraft ? [] : typedTasks,
+    isSearchDraft,
+    ulRef,
+    handleLinkClick,
+    handleMouseEnter,
+    handleMouseLeave,
+    handleMouseMove,
+    searchCache,
+    selectedHistory,
+    updateSearchHistory,
+    showCommands,
+    setInputValue,
+    liSelectedRef,
+    tabs,
+    activeSplit,
+    updateSplitAndTasks,
+    results: isSearchDraft ? null : results,
+    includeArchived,
+    setIncludeArchivedResults,
+  };
+}

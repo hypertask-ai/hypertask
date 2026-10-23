@@ -824,11 +824,15 @@ def install():
         src, dst = HERE / name, INSTALL_DIR / name
         if src.resolve() != dst.resolve():
             shutil.copy2(src, dst)
+    checker = HERE / 'user-unit-check' if (HERE / 'user-unit-check').exists() else HERE.parent / '.claude/skills/ship/scripts/user-unit-check'
+    if checker.resolve() != (INSTALL_DIR / 'user-unit-check').resolve():
+        shutil.copy2(checker, INSTALL_DIR / 'user-unit-check')
     os.chmod(INSTALL_DIR / 'daily-stats.py', 0o755)
     for suffix in ('service', 'timer'):
         shutil.copy2(INSTALL_DIR / f'daily-stats.{suffix}', UNIT_DIR / f'daily-stats.{suffix}')
     if os.environ.get('DAILY_STATS_NO_SYSTEMD') == '1':
         return
+    subprocess.run([os.environ.get('USER_UNIT_CHECK', str(INSTALL_DIR / 'user-unit-check')), str(UNIT_DIR / 'daily-stats.service'), str(UNIT_DIR / 'daily-stats.timer')], check=True)
     subprocess.run(['systemctl', '--user', 'daemon-reload'], check=True)
     subprocess.run(['systemctl', '--user', 'enable', '--now', 'daily-stats.timer'], check=True)
 

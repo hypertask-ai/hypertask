@@ -84,13 +84,24 @@ function spyTools() {
 }
 
 test('catalog flag off preserves the entire current deferred list exactly', async () => {
-  const originalLegacy = legacy.filter((tool) => tool.name !== 'hypertask_report_feedback')
+  const deferred = selectMcpTools(legacy, false)
+  assert.ok(toolNamed(deferred, 'hypertask_list_features'))
+  assert.ok((await rpc(deferred, 'tools/list')).result.tools.some(({ name }) => name === 'hypertask_list_features'))
+  assert.equal(definitions.find(({ name }) => name === 'hypertask_user_context').actions.features.tool, 'hypertask_list_features')
+  const originalLegacy = legacy.filter((tool) => !['hypertask_report_feedback', 'hypertask_list_features'].includes(tool.name))
   const selected = selectMcpTools(originalLegacy, false, { managementPermissions: { management: ['read'] } })
   assert.equal(selected, originalLegacy)
   const listed = (await rpc(selected, 'tools/list')).result.tools
   const baseline = JSON.parse(fs.readFileSync(path.join(__dirname, 'fixtures/mcp-6804/legacy-catalog.json')))
   assert.deepEqual(listed, baseline)
   assert.deepEqual(baseline.filter((tool) => !['hypertask_search_tools', 'hypertask_describe_tool'].includes(tool.name)).map((tool) => tool.name), originalLegacy.map((tool) => tool.name))
+})
+
+test('user_context features dispatches to the deferred feature tool', async () => {
+  const { calls, tools } = spyTools()
+  const result = await rpc(tools, 'tools/call', { name: 'hypertask_user_context', arguments: { action: 'features' } })
+  assert.notEqual(result.result.isError, true)
+  assert.equal(calls.at(-1).name, 'hypertask_list_features')
 })
 
 test('catalog flag on advertises 15 to 25 consolidated tools, with no duplicate names', async () => {
@@ -587,4 +598,30 @@ test('inventory documentation covers every legacy tool and explains missing usag
   assert.match(doc, /6505/)
   assert.match(doc, /6506/)
   assert.match(doc, /Owner \+ QA/)
+})
+
+test('legacy and consolidated comment catalogs explain hidden logs and human-facing kinds', async () => {
+  for (const consolidated of [false, true]) {
+    const selected = selectMcpTools(legacy, consolidated)
+    const catalog = (await rpc(selected, 'tools/list')).result.tools
+    const name = consolidated ? 'hypertask_comments' : 'hypertask_add_comment_to_task'
+    let tool = toolNamed(catalog, name)
+    if (!consolidated) {
+      assert.match(tool.description, /hidden agent log/)
+      assert.match(tool.description, /kind question\|qa\|done for people/)
+      const described = await rpc(selected, 'tools/call', { name: 'hypertask_describe_tool', arguments: { name } })
+      tool = JSON.parse(described.result.content[0].text)
+    }
+    assert.ok(tool, name)
+    const schema = consolidated
+      ? tool.inputSchema.oneOf.find((variant) => variant.properties.action.const === 'add').properties.input
+      : tool.inputSchema
+    for (const text of [tool.description, schema.properties.kind.description]) {
+      assert.match(text, /Without a kind, a reply target or an @mention of a person/)
+      assert.match(text, /hidden ticket agent log, which people do not see/)
+      assert.match(text, /question for a decision by a person/)
+      assert.match(text, /qa for a QA verdict/)
+      assert.match(text, /done for the closing summary/)
+    }
+  }
 })

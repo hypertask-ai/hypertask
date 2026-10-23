@@ -1,3 +1,4 @@
+import { downloadWithoutBrotli } from "@/lib/net/downloadWithoutBrotli";
 import { resolveAiModel as resolveLegacyAiModel } from "@/app/api/ai/_lib/modelProvider";
 import { getAiDefaultModelContext, resolveAutomaticAiModel } from "@/app/api/ai/_lib/byokKeys";
 import { configureAiModelUsage } from "@/app/api/ai/_lib/modelProvider";
@@ -108,6 +109,7 @@ export async function buildSlackThreadSummaryComment(
     feature: "summary",
   });
   const result = await generateText({
+    experimental_download: downloadWithoutBrotli,
     model,
     output: Output.object({ schema: slackSummarySchema }),
     maxRetries: 2,

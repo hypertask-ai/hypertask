@@ -46,7 +46,19 @@ export function reportClientError(payload: ClientErrorPayload) {
     /^TypeError: network error(?:\n|$)/.test(payload.stack || '') &&
     /\bHypertaskApp\b/.test(navigator.userAgent)
   ) return
+  if (
+    (payload.source === 'global-error' || payload.source === 'unhandledrejection') &&
+    payload.message === 'network error' &&
+    /^(?:(?:Type)?Error: network error)?\s*$/.test(payload.stack || '') &&
+    !payload.componentStack?.trim() &&
+    !payload.digest
+  ) return
   if (payload.message === 'Network Error') return
+  if (
+    payload.source === 'unhandledrejection' &&
+    payload.message === 'Request aborted' &&
+    payload.extra?.axiosCode === 'ECONNABORTED'
+  ) return
   if (/\bRequest failed with status code 401\b/.test(payload.message || '')) return
   if (navigator.webdriver === true || /HeadlessChrome/i.test(navigator.userAgent)) return
   if (

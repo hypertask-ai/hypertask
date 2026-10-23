@@ -1,6 +1,5 @@
 import { hasHaikuByokProviderFlags } from "@/lib/byokSelectedProviderGate";
-import { HTPR_7010_HAIKU_5_5_FLAG } from "@/lib/flags/keys";
-import { useHaikuDefaultFlag } from "@/hooks/useHaikuDefaultFlag";
+import { useAiDefaultModelContext, useHaikuDefaultFlag } from "@/hooks/useHaikuDefaultFlag";
 
 import {
   processHtmlForTaskId,
@@ -32,11 +31,6 @@ import useHypertasksRecoilStates from "@/hooks/RecoilRoot/useHypertasksRecoilSta
 import { shouldShowGuestWriterIntro } from "@/lib/demo/guestBoardBuild";
 import { getActiveFiltersFromProject } from "@/utils/helperFunctions/Views/ViewsHelperFunctions";
 import { getNewTaskViewDefaults } from "@/utils/helperFunctions/Views/NewTaskViewDefaults";
-import { useFlag } from "@/hooks/useFlag";
-import {
-  HTPR_6993_QUICK_ADD_VIEW_CONTEXT_FLAG,
-  HTPR_6997_NEW_TASK_WINDOW_VIEW_CONTEXT_FLAG,
-} from "@/lib/flags/keys";
 import useCurrentUser from "@/hooks/General/useCurrentUserCheckFromCookies";
 import { useGetAllProjectsMinimal } from "../useGetAllProjectsMinimal";
 import { useHyperMention } from "./useHyperMention";
@@ -152,10 +146,11 @@ const useCreateTaskModalGlobalStates = () => {
   const { postHyperMention } = useHyperMention();
   const { data: userPreferences } = useGetUserPreferences();
   const haikuDefaultEnabled = useHaikuDefaultFlag();
-  const haiku55Enabled = useFlag(HTPR_7010_HAIKU_5_5_FLAG) || haikuDefaultEnabled;
+  const haiku55Enabled = true;
   const defaultBilling = deriveCurrentBoardBilling(_currentProject);
+  const defaultContext = useAiDefaultModelContext(defaultBilling?.teamId);
   const defaultModelOption = haikuDefaultEnabled || haiku55Enabled
-    ? getDefaultAiModelOptionForPlan(defaultBilling?.storePlanId, hasHaikuByokProviderFlags(defaultBilling?.byokProviderFlags), true, haikuDefaultEnabled)
+    ? getDefaultAiModelOptionForPlan(defaultBilling?.storePlanId, hasHaikuByokProviderFlags(defaultBilling?.byokProviderFlags), true, haikuDefaultEnabled, defaultContext)
     : defaultAiModelOption;
   const improveWritingOptionIds = getAiModelPreferenceIds(
     userPreferences.aiModelPreferences,
@@ -177,18 +172,14 @@ const useCreateTaskModalGlobalStates = () => {
   const { goToProjectShortcut } = useProjectQuery()
   const pathname = usePathname();
 
-  const quickAddViewContextEnabled = useFlag(HTPR_6993_QUICK_ADD_VIEW_CONTEXT_FLAG);
-  const newTaskWindowViewContextEnabled = useFlag(HTPR_6997_NEW_TASK_WINDOW_VIEW_CONTEXT_FLAG);
   const defaultFormValues: IForm = useMemo(
     () => {
-      const viewProject = newTaskWindowViewContextEnabled &&
+      const viewProject =
         createTaskModal.column_payload?.projectId !== undefined &&
         createTaskModal.column_payload.projectId !== _currentProject?.id
           ? undefined
           : _currentProject;
-      const viewDefaults = newTaskWindowViewContextEnabled || quickAddViewContextEnabled
-        ? getNewTaskViewDefaults(getActiveFiltersFromProject(viewProject))
-        : undefined;
+      const viewDefaults = getNewTaskViewDefaults(getActiveFiltersFromProject(viewProject));
       return {
         title:
           createTaskModal.duplicate?.title ??
@@ -198,8 +189,8 @@ const useCreateTaskModalGlobalStates = () => {
           createTaskModal.duplicate?.description ??
           createTaskModal.column_payload?.prefilledDescription ??
           "<p></p>",
-        assignees: newTaskWindowViewContextEnabled && !createTaskModal.duplicate
-          ? createTaskModal.column_payload?.assignees ?? viewDefaults?.assignees ?? []
+        assignees: !createTaskModal.duplicate
+          ? createTaskModal.column_payload?.assignees ?? viewDefaults.assignees
           : [],
         attachments:
           createTaskModal.column_payload?.prefilledAttachments?.map(
@@ -215,12 +206,12 @@ const useCreateTaskModalGlobalStates = () => {
         priority:
           createTaskModal.duplicate?.priority ??
           createTaskModal.column_payload?.priority ??
-          (newTaskWindowViewContextEnabled && !createTaskModal.duplicate
-            ? viewDefaults?.priority
+          (!createTaskModal.duplicate
+            ? viewDefaults.priority
             : undefined),
         estimate: createTaskModal.duplicate?.estimate ??
-          (newTaskWindowViewContextEnabled && !createTaskModal.duplicate
-            ? createTaskModal.column_payload?.estimate ?? viewDefaults?.estimate
+          (!createTaskModal.duplicate
+            ? createTaskModal.column_payload?.estimate ?? viewDefaults.estimate
             : undefined),
         dueDate: normalizeCreateTaskFormDate(
           createTaskModal.column_payload?.prefilledDueDate,
@@ -230,11 +221,7 @@ const useCreateTaskModalGlobalStates = () => {
           createTaskModal.duplicate?.taskLabels.map(
             (taskLabel: any) => taskLabel.label
           ) ??
-          (newTaskWindowViewContextEnabled || quickAddViewContextEnabled
-            ? viewDefaults?.tags
-            : getActiveFiltersFromProject(_currentProject).addedFilters.find(
-                (filter) => filter.type === "Labels"
-              )?.searchPayload),
+          viewDefaults.tags,
         currentProject: _currentProject ?? undefined,
       };
     },
@@ -242,8 +229,6 @@ const useCreateTaskModalGlobalStates = () => {
       createTaskModal.duplicate,
       createTaskModal.column_payload,
       _currentProject,
-      quickAddViewContextEnabled,
-      newTaskWindowViewContextEnabled,
     ]
   );
 
@@ -254,18 +239,18 @@ const useCreateTaskModalGlobalStates = () => {
   const [formValues, setFormValues] = useState<IForm>(defaultFormValues);
   const formValuesRef = useRef(formValues);
   formValuesRef.current = formValues;
-  const defaultViewFieldOwnership = newTaskWindowViewContextEnabled ? {
+  const defaultViewFieldOwnership = {
     assignees: !!createTaskModal.duplicate || createTaskModal.column_payload?.assignees !== undefined,
     priority: !!createTaskModal.duplicate || createTaskModal.column_payload?.priority !== undefined,
     estimate: !!createTaskModal.duplicate || createTaskModal.column_payload?.estimate !== undefined,
     tags: !!createTaskModal.duplicate,
-  } : {};
+  };
   const editedViewFieldsRef = useRef<Partial<Record<TFormKey, boolean>>>({ ...defaultViewFieldOwnership });
-  const openingViewDefaultsRef = useRef<IForm>(newTaskWindowViewContextEnabled ? {
+  const openingViewDefaultsRef = useRef<IForm>({
     ...defaultFormValues,
     assignees: [...defaultFormValues.assignees],
     tags: defaultFormValues.tags?.slice(),
-  } : defaultFormValues);
+  });
   const aiModelPreferencesRef = useRef(userPreferences.aiModelPreferences);
   aiModelPreferencesRef.current = userPreferences.aiModelPreferences;
   const [canSave, setUploadingStateCreateTaskModal] = useRecoilState(
@@ -295,11 +280,11 @@ const useCreateTaskModalGlobalStates = () => {
     lastDescriptionTextRef.current = descriptionText(defaultFormValues.description);
     formValuesRef.current = defaultFormValues;
     editedViewFieldsRef.current = { ...defaultViewFieldOwnership };
-    openingViewDefaultsRef.current = newTaskWindowViewContextEnabled ? {
+    openingViewDefaultsRef.current = {
       ...defaultFormValues,
       assignees: [...defaultFormValues.assignees],
       tags: defaultFormValues.tags?.slice(),
-    } : defaultFormValues;
+    };
     setIsGeneratingTitle(false);
     setTaskWriterFilled(false);
     setFormValues(defaultFormValues);
@@ -307,7 +292,7 @@ const useCreateTaskModalGlobalStates = () => {
 
   const handleChange = (key: TFormKey, value: any) => {
     if (key === "assignees" || key === "priority" || key === "estimate" ||
-      (newTaskWindowViewContextEnabled && key === "tags")) {
+      key === "tags") {
       editedViewFieldsRef.current[key] = true;
     }
     if (key === "title") {
@@ -368,8 +353,11 @@ const useCreateTaskModalGlobalStates = () => {
       getAiModelOptionById(titleOptionIds.global, haiku55Enabled) ??
       (haiku55Enabled ? getAiModelOptionById(project.ai_custom_instructions?.[0]?.model_selected, true) : undefined);
     const titleBilling = deriveCurrentBoardBilling(project);
+    const titleDefaultContext = defaultContext && project.teamId === _currentProject?.teamId
+      ? defaultContext
+      : undefined;
     const titleDefaultOption = haiku55Enabled
-      ? getDefaultAiModelOptionForPlan(titleBilling?.storePlanId, hasHaikuByokProviderFlags(titleBilling?.byokProviderFlags), true, haikuDefaultEnabled)
+      ? getDefaultAiModelOptionForPlan(titleBilling?.storePlanId, hasHaikuByokProviderFlags(titleBilling?.byokProviderFlags), true, haikuDefaultEnabled, titleDefaultContext)
       : defaultModelOption;
     const titleModel =
       titleOption?.id ??
@@ -411,7 +399,7 @@ const useCreateTaskModalGlobalStates = () => {
       .trim();
     if (!generatedTitle) throw new Error("No title was generated");
     return generatedTitle.slice(0, 80);
-  }, [haiku55Enabled, haikuDefaultEnabled, defaultModelOption]);
+  }, [haiku55Enabled, haikuDefaultEnabled, defaultModelOption, defaultContext, _currentProject?.teamId]);
 
   const scheduleTitleGeneration = useCallback((description: string) => {
     const plainDescription = descriptionText(description);
@@ -468,30 +456,23 @@ const useCreateTaskModalGlobalStates = () => {
     setIsGeneratingTitle(false);
     generatedTitleTrackerRef.current.reset();
     const clearGeneratedTitle = autoTitleCoordinator.boardChanged();
-    const viewDefaults = newTaskWindowViewContextEnabled || quickAddViewContextEnabled
-      ? getNewTaskViewDefaults(getActiveFiltersFromProject(project))
-      : undefined;
+    const viewDefaults = getNewTaskViewDefaults(getActiveFiltersFromProject(project));
     const boardChanged = formValuesRef.current.currentProject?.id !== project.id;
-    const tags = newTaskWindowViewContextEnabled &&
-      (editedViewFieldsRef.current.tags || (!boardChanged && formValuesRef.current.tags?.length))
+    const tags = editedViewFieldsRef.current.tags || (!boardChanged && formValuesRef.current.tags?.length)
       ? formValuesRef.current.tags
-      : newTaskWindowViewContextEnabled || quickAddViewContextEnabled
-        ? viewDefaults?.tags
-        : getActiveFiltersFromProject(project).addedFilters.find(
-            (filter) => filter.type === "Labels"
-          )?.searchPayload;
-    const viewFields = newTaskWindowViewContextEnabled ? {
+      : viewDefaults.tags;
+    const viewFields = {
       assignees: editedViewFieldsRef.current.assignees ||
         (!boardChanged && formValuesRef.current.assignees.length > 0)
           ? formValuesRef.current.assignees
-          : viewDefaults?.assignees ?? [],
+          : viewDefaults.assignees,
       priority: editedViewFieldsRef.current.priority
         ? formValuesRef.current.priority
-        : boardChanged ? viewDefaults?.priority : formValuesRef.current.priority ?? viewDefaults?.priority,
+        : boardChanged ? viewDefaults.priority : formValuesRef.current.priority ?? viewDefaults.priority,
       estimate: editedViewFieldsRef.current.estimate
         ? formValuesRef.current.estimate
-        : boardChanged ? viewDefaults?.estimate : formValuesRef.current.estimate ?? viewDefaults?.estimate,
-    } : { assignees: [] };
+        : boardChanged ? viewDefaults.estimate : formValuesRef.current.estimate ?? viewDefaults.estimate,
+    };
     formValuesRef.current = {
       ...formValuesRef.current,
       title: clearGeneratedTitle ? "" : formValuesRef.current.title,
@@ -500,15 +481,13 @@ const useCreateTaskModalGlobalStates = () => {
       tags,
       status: undefined,
     };
-    if (newTaskWindowViewContextEnabled) {
-      for (const key of ["assignees", "priority", "estimate", "tags"] as const) {
-        if (!editedViewFieldsRef.current[key]) {
-          const value = formValuesRef.current[key];
-          openingViewDefaultsRef.current = {
-            ...openingViewDefaultsRef.current,
-            [key]: Array.isArray(value) ? [...value] : value,
-          };
-        }
+    for (const key of ["assignees", "priority", "estimate", "tags"] as const) {
+      if (!editedViewFieldsRef.current[key]) {
+        const value = formValuesRef.current[key];
+        openingViewDefaultsRef.current = {
+          ...openingViewDefaultsRef.current,
+          [key]: Array.isArray(value) ? [...value] : value,
+        };
       }
     }
     setFormValues((prev) => ({
@@ -550,39 +529,24 @@ const useCreateTaskModalGlobalStates = () => {
 
   const hasUnsavedChanges = useCallback(() => {
     const currentFormValues = formValuesRef.current;
-    if (newTaskWindowViewContextEnabled) {
-      const openingDefaults = openingViewDefaultsRef.current;
-      return !(
-        currentFormValues.assignees.length === openingDefaults.assignees.length &&
-        currentFormValues.assignees.every(assignee =>
-          openingDefaults.assignees.some(value => value.id === assignee.id)) &&
-        currentFormValues.priority?.priority_index === openingDefaults.priority?.priority_index &&
-        currentFormValues.estimate?.estimate_index === openingDefaults.estimate?.estimate_index &&
-        (currentFormValues.tags?.length ?? 0) === (openingDefaults.tags?.length ?? 0) &&
-        (currentFormValues.tags ?? []).every(tag =>
-          openingDefaults.tags?.some(value => value.id === tag.id)) &&
-        currentFormValues.attachments.length === 0 &&
-        currentFormValues.description?.replace(/(<p><\/p>)+/g, "") === "" &&
-        currentFormValues.title.trim().length === 0 &&
-        !currentFormValues.dueDate &&
-        !currentFormValues.startDate &&
-        currentFormValues.status?.sectionId === defaultFormValues.status?.sectionId
-      );
-    }
-    const areFormValuesEqualToDefault =
-      currentFormValues.assignees.length === 0 &&
+    const openingDefaults = openingViewDefaultsRef.current;
+    return !(
+      currentFormValues.assignees.length === openingDefaults.assignees.length &&
+      currentFormValues.assignees.every(assignee =>
+        openingDefaults.assignees.some(value => value.id === assignee.id)) &&
+      currentFormValues.priority?.priority_index === openingDefaults.priority?.priority_index &&
+      currentFormValues.estimate?.estimate_index === openingDefaults.estimate?.estimate_index &&
+      (currentFormValues.tags?.length ?? 0) === (openingDefaults.tags?.length ?? 0) &&
+      (currentFormValues.tags ?? []).every(tag =>
+        openingDefaults.tags?.some(value => value.id === tag.id)) &&
       currentFormValues.attachments.length === 0 &&
       currentFormValues.description?.replace(/(<p><\/p>)+/g, "") === "" &&
       currentFormValues.title.trim().length === 0 &&
       !currentFormValues.dueDate &&
       !currentFormValues.startDate &&
-      !currentFormValues.priority?.priority_index &&
-      !currentFormValues.estimate &&
-      (!currentFormValues.tags || currentFormValues.tags.length === 0) &&
-      currentFormValues.status?.sectionId === defaultFormValues.status?.sectionId;
-
-    return !areFormValuesEqualToDefault;
-  }, [defaultFormValues, newTaskWindowViewContextEnabled]);
+      currentFormValues.status?.sectionId === defaultFormValues.status?.sectionId
+    );
+  }, [defaultFormValues]);
 
   useEffect(() => {
     purgeLegacyCreateTaskDrafts();

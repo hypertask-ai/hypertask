@@ -17,10 +17,10 @@ import ConfirmModal from '../Common Modals/ConfirmActionModal'
 import { useTourContext } from '@/lib/contexts/TourContext'
 import { DIV_ID_CONSTANTS } from '@/lib/configs/general.config'
 import { KeyCodes } from '@/lib/constants/keyboard-handler'
-import { armBackDismiss } from '@/lib/mobile/backDismiss'
-import { usePathname } from 'next/navigation'
+import { armBackDismiss, closeBackDismissBeforeNavigation } from '@/lib/mobile/backDismiss'
+import { usePathname, useRouter } from 'next/navigation'
 import { useFlag } from '@/hooks/useFlag'
-import { HTPR_6556_MOBILE_DESCRIPTION_FIRST_FLAG } from '@/lib/flags/keys'
+import { HTPR_6556_MOBILE_DESCRIPTION_FIRST_FLAG, HTPR_7544_CTRLJ_SIDEBAR_ON_NEW_TASK_FLAG } from '@/lib/flags/keys'
 const Tooltip = dynamic(() => import("@/components/Common/Tooltip"), { ssr: false })
 
 const attachmentButtonId = "create-task-modal-attachmentUpload"
@@ -37,8 +37,39 @@ const CreateTaskModalBody: React.FC<IProps> = ({ }) => {
         currentFocusedElement, closeHandler,
         showAssignModal, setShowAssignModal, uploadInProgress, showConfirmationModal, onConfirmDiscard, onCancelDiscard,
         userInput: userPrompt, parentTaskInfo, isRecording, hasUnsavedChanges,
-        formValues, titleGenerationError,
+        formValues, titleGenerationError, CreateTaskAndDescription, setUploadInProgress,
     } = useContextCreateTaskModal()
+    const ctrlJSidebarOnNewTask = useFlag(HTPR_7544_CTRLJ_SIDEBAR_ON_NEW_TASK_FLAG)
+    const router = useRouter()
+    const sidebarHandoffPending = useRef(false)
+    useEffect(ctrlJSidebarOnNewTask ? () => {
+        const openNewTaskSidebar = async (event: KeyboardEvent) => {
+            const cmdControl = (isApple && event.metaKey) || (!isApple && event.ctrlKey)
+            if (!document.getElementById("createTaskModal") || event.key.toLowerCase() !== "j" || !cmdControl || event.shiftKey || event.altKey || event.isComposing || isRecording || showAssignModal || showConfirmationModal) return
+            if (document.activeElement?.closest("#htc, .chatwindow, [data-ai-chat-panel]") || document.querySelector("#htc")) return
+            event.preventDefault()
+            event.stopImmediatePropagation()
+            if (event.repeat || sidebarHandoffPending.current || uploadInProgress) return
+            if (!formValues.currentProject) return
+            sidebarHandoffPending.current = true
+            setUploadInProgress(true)
+            try {
+                const taskUrl = await CreateTaskAndDescription(undefined, formValues.title.trim() || "New Task")
+                if (!taskUrl) throw new Error("Task could not be created")
+                const closeBeforeNavigation = _mbl && window.location.pathname !== "/new"
+                if (closeBeforeNavigation) await closeBackDismissBeforeNavigation(window, "createTaskModal", () => closeHandler(true))
+                router.push(`${taskUrl}?newTaskAi=1`)
+                if (!closeBeforeNavigation) closeHandler(true)
+            } catch {
+                sidebarHandoffPending.current = false
+                toast.error("Could not open AI chat. Your task draft is still here.")
+            } finally {
+                setUploadInProgress(false)
+            }
+        }
+        window.addEventListener("keydown", openNewTaskSidebar, true)
+        return () => window.removeEventListener("keydown", openNewTaskSidebar, true)
+    } : () => {}, [ctrlJSidebarOnNewTask, _mbl, isApple, isRecording, showAssignModal, showConfirmationModal, uploadInProgress, formValues, CreateTaskAndDescription, setUploadInProgress, router, closeHandler])
 
     const {
         toggleMoveModal, toggleShowSizeModal, toggleDueDateModal,

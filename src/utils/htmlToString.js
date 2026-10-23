@@ -1,7 +1,5 @@
 const convertToPlain=(html)=>{
-    var tempDivElement = document.createElement("div");
-
-    tempDivElement.innerHTML = html;
+    const tempDivElement = new window.DOMParser().parseFromString(html, "text/html").body;
 
     return tempDivElement.textContent || tempDivElement.innerText || "";
 }

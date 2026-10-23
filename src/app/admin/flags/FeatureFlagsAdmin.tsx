@@ -25,14 +25,11 @@ import { FLAG_FILTER_KINDS, flagDaysWaiting, matchesFlagKind, matchesFlagRisk, u
 
 import { FEATURE_FLAG_RELEASE_RISKS, RELEASE_RISK_LABELS, RELEASE_RISK_ORDER } from "@/lib/flags/releaseRisk";
 
-import { HTPR_7389_FLAG_RELEASE_POLICY_FLAG } from "@/lib/flags/keys";
-
 const ADMIN_FLAGS_ROUTE = "/api/admin/flags";
 const KIND_LABELS: Record<FeatureFlagKind, string> = {
   bugfix: "Bug",
   feature: "Feature",
   improvement: "Improvement",
-  internal: "Internal",
 };
 const OPTIONS: { mode: FeatureFlagMode; label: string }[] = [
   { mode: "OWNER_ONLY", label: "Only me" },
@@ -139,7 +136,6 @@ export default function FeatureFlagsAdmin({
   flagKey?: string;
 }) {
   const queryClient = useQueryClient();
-  const releasePolicyEnabled = useFlag(HTPR_7389_FLAG_RELEASE_POLICY_FLAG);
   const discoveryEnabled = useFlag(HTPR_6964_FLAGS_PAGE_TYPE_SEARCH_FLAG);
   const dropdownFiltersEnabled = useFlag(HTPR_7069_FLAGS_DROPDOWN_FILTERS_FLAG);
   const existingUrlFiltersEnabled = useFlag(HTPR_7058_FLAGS_PAGE_URL_FILTERS_FLAG);
@@ -187,20 +183,16 @@ export default function FeatureFlagsAdmin({
     onSettled: () => queryClient.invalidateQueries({ queryKey: ADMIN_FEATURE_FLAGS_QUERY_KEY }),
   });
 
-  const allRows = releasePolicyEnabled && !flagKey
-    ? (flags.data?.flags ?? []).filter((flag) => flag.kind !== "internal")
-    : flags.data?.flags ?? [];
-
   const counts = useMemo(
-    () => countFeatureFlagsByAudience(allRows, urlFiltersEnabled),
-    [allRows, urlFiltersEnabled],
+    () => countFeatureFlagsByAudience(flags.data?.flags ?? [], urlFiltersEnabled),
+    [flags.data?.flags, urlFiltersEnabled],
   );
   const clusters = useMemo(
     () => {
       if (flagKey) {
-        return [["", allRows.filter((flag) => flag.key === flagKey)] as [string, FeatureFlagRow[]]];
+        return [["", (flags.data?.flags ?? []).filter((flag) => flag.key === flagKey)] as [string, FeatureFlagRow[]]];
       }
-      const rows = allRows;
+      const rows = flags.data?.flags ?? [];
       return clusterFeatureFlagsByReleaseDate(
         rows.filter((flag) => (
           (!(discoveryEnabled || urlFiltersEnabled) || matchesFeatureFlagSearch(flag, search))
@@ -211,10 +203,11 @@ export default function FeatureFlagsAdmin({
         { shippedOnly: urlFiltersEnabled && sortDirection !== "desc", unreleasedOnly: urlFiltersEnabled },
       );
     },
-    [flagKey, allRows, sortDirection, audienceFilter, discoveryEnabled, urlFiltersEnabled, search, kinds, risk],
+    [flagKey, flags.data?.flags, sortDirection, audienceFilter, discoveryEnabled, urlFiltersEnabled, search, kinds, risk],
   );
 
   const shownCount = clusters.reduce((total, [, rows]) => total + rows.length, 0);
+  const allRows = flags.data?.flags ?? [];
   const selectedRisks = risk === null ? [] : Array.isArray(risk) ? risk : [risk];
   const searchedRows = allRows.filter((flag) => matchesFeatureFlagSearch(flag, search));
   const inAudience = (flag: FeatureFlagRow) => audienceFilter === "ALL" ? true
@@ -429,7 +422,7 @@ export default function FeatureFlagsAdmin({
             const ticket = /^(htpr|yper4)-([1-9]\d*)-[a-z0-9]+(?:-[a-z0-9]+)*$/.exec(flag.key);
             const releaseRisk = urlFiltersEnabled ? FEATURE_FLAG_RELEASE_RISKS[flag.key] : undefined;
             const daysWaiting = urlFiltersEnabled ? flagDaysWaiting(flag) : null;
-            const related = discoveryEnabled ? relatedFeatureFlags(flag, allRows) : [];
+            const related = discoveryEnabled ? relatedFeatureFlags(flag, flags.data?.flags ?? []) : [];
             let cardClassName = "flex flex-col gap-3 border-b border-border-light-gray-thin p-4 last:border-b-0 sm:flex-row sm:items-center sm:justify-between";
             if (discoveryEnabled) cardClassName += " scroll-mt-24";
             if (discoveryEnabled && highlightedKey === flag.key) cardClassName += " bg-hover-active";

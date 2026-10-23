@@ -20,10 +20,11 @@ import ReplyToComment from "./CommentOptions/ReplyToComment";
 import SwipeableCommentRow from "./SwipeableCommentRow";
 import { Reply } from "lucide-react";
 import { useFlag } from "@/hooks/useFlag";
-import { HTPR_6752_INSTANT_TICKET_OPEN_FLAG, HTPR_7044_DOUBLE_CLICK_TO_EDIT_FLAG } from "@/lib/flags/keys";
+import { HTPR_7044_DOUBLE_CLICK_TO_EDIT_FLAG, HTPR_7611_COMMENT_PARTS_ONE_PASS_FLAG } from "@/lib/flags/keys";
 import { isTaskDetailEditTarget } from "@/lib/taskDetailEditTarget";
 import { isCommentCreatedByUser } from "@/lib/htc/isCommentCreatedByUser";
-const CommentReactions = dynamic(() => import("./CommentReactions"));
+import CommentReactionsInOnePass from "./CommentReactions";
+const CommentReactionsLoadedLater = dynamic(() => import("./CommentReactions"));
 
 const CommentReadReceipts = () => {
   const { comment } = useCommentsContext();
@@ -82,8 +83,8 @@ const CommentsContainer = () => {
     useDescriptionAndCommentsContext();
   const [currentUser, _setCurrentUser] = useRecoilState(currentUserAtom);
   const [, setShowCommands] = useRecoilState(showCommandsAtom);
-  const instantTicketOpen = useFlag(HTPR_6752_INSTANT_TICKET_OPEN_FLAG);
   const doubleClickToEdit = useFlag(HTPR_7044_DOUBLE_CLICK_TO_EDIT_FLAG);
+  const CommentReactions = useFlag(HTPR_7611_COMMENT_PARTS_ONE_PASS_FLAG) ? CommentReactionsInOnePass : CommentReactionsLoadedLater;
   const bind = useDoubleTap(handleDoubleTap, 200, {
     onSingleTap: handleSingleTap,
     shouldHandleEvent: doubleClickToEdit
@@ -191,7 +192,7 @@ const CommentsContainer = () => {
         onClick={handleSingleTap}
         onDoubleClick={handleDesktopDoubleClick}
       >
-        <Suspense fallback={instantTicketOpen ? null : <>loading...</>}>
+        <Suspense fallback={null}>
           {!comment.activity ? (
             <>
               <CommentBodyDesktop>

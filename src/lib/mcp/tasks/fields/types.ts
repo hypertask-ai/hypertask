@@ -57,6 +57,7 @@ export interface UpdateTaskBody {
     estimate?: number;
     description?: string;
     content_type?: 'html' | 'markdown';
+    inline_images?: boolean;
     title?: string;
     sectionId?: number;
     status?: typeof VALID_STATUSES[number];
@@ -90,6 +91,7 @@ export type TaskUpdateAssigneeHandler = (input: {
         photoURL: string | null;
     };
     agentId: string | null;
+    teamScope?: McpAuthContext["teamScope"];
 }) => Promise<void>;
 
 export type TaskClearAssigneesHandler = (input: {
@@ -101,6 +103,7 @@ export type TaskClearAssigneesHandler = (input: {
         photoURL: string | null;
     };
     agentId: string | null;
+    teamScope?: McpAuthContext["teamScope"];
 }) => Promise<void>;
 
 export interface ExecuteTaskUpdateOptions {

@@ -132,6 +132,7 @@ export async function loadTurnModel(body: ChatRequest, dbUser: AuthedUser) {
       haiku55Enabled ? defaultContext.hasByok : hasEligibleByokCredential,
       haiku55Enabled,
       defaultContext.haikuDefaultEnabled,
+      defaultContext,
     );
     const modelOptionIdForTurn = resolveAgentModelPin({
       requestedModelOptionId: body.modelOptionId,

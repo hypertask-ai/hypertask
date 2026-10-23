@@ -1,3 +1,4 @@
+process.env.FEATURE_FLAG_TYPESCRIPT_PATH = require.resolve("typescript");
 const assert = require("node:assert/strict");
 const test = require("node:test");
 const path = require("node:path");
@@ -1168,7 +1169,7 @@ test("workflow covers metadata changes, uses trusted code, and reconciles old PR
   assert.match(parserLock.packages["node_modules/typescript"].integrity, /^sha512-/);
   assert.equal((workflow.match(/ref: production/g) || []).length, 2);
   assert.match(workflow, /persist-credentials: false/);
-  assert.match(workflow, /gh api "repos\/\$REPO\/pulls\/\$PR_NUMBER"/);
+  assert.match(workflow, /gh_api "repos\/\$REPO\/pulls\/\$PR_NUMBER"/);
   assert.match(workflow, /git fetch --no-tags origin \+refs\/heads\/production:refs\/remotes\/origin\/production "refs\/pull\/\$PR_NUMBER\/head"/);
   assert.equal((workflow.match(/git fetch --no-tags origin \+refs\/heads\/production:refs\/remotes\/origin\/production/g) || []).length, 2);
   assert.match(workflow, /--argjson labels "\$FEATURE_FLAG_PR_LABELS"/);
@@ -1190,11 +1191,11 @@ test("workflow covers metadata changes, uses trusted code, and reconciles old PR
   assert.match(workflow, /\$current\.state == \$state and \$current\.description == \$description/);
   assert.doesNotMatch(workflow, /feature-flag-gate is reconciling this pull request/);
   assert.match(workflow, /could not refresh pull-request heads/);
-  assert.ok(workflow.indexOf('state: "pending"') < workflow.indexOf('gh api "repos/$REPO/pulls/$PR_NUMBER"'));
+  assert.ok(workflow.indexOf('state: "pending"') < workflow.indexOf('gh_api "repos/$REPO/pulls/$PR_NUMBER"'));
   assert.ok(workflow.indexOf("open-heads.txt") < workflow.lastIndexOf('npm ci --prefix "$parser_dir"'));
   assert.ok(workflow.indexOf('state: "pending"') < workflow.indexOf("elif node .github/scripts/feature-flag-gate.mjs"));
   assert.match(workflow, /statuses\/\$head_sha/);
-  assert.match(workflow, /gh api --paginate --slurp/);
+  assert.match(workflow, /gh_api --paginate --slurp/);
   assert.equal((workflow.match(/elif node \.github\/scripts\/feature-flag-gate\.mjs/g) || []).length, 2);
   assert.doesNotMatch(workflow, /^\s+node \.github\/scripts\/feature-flag-gate\.mjs/m);
   assert.match(workflow, /head_pr_count.*flatten\[\].*\.head\.sha == \$sha/);
@@ -1583,6 +1584,39 @@ function perFlagLayout(dir) {
   writeFile(dir, "src/lib/flags/definitions/htpr-1-other.ts", 'export const OTHER_FLAG = "htpr-1-other";\nexport default { key: OTHER_FLAG, description: "Fixture", shippedOn: "2026-10-09" } as const;\n');
 }
 
+test("runtime flag keys must come from their own registered definition or a supported barrel", async (t) => {
+  const { dir, git } = makeRepo(t);
+  perFlagLayout(dir);
+  writeFile(dir, "src/lib/flags/definitions/htpr-2-new.ts", 'export const NEW_FLAG = "htpr-2-new";\nexport default { key: NEW_FLAG, description: "Another flag", shippedOn: "2026-10-10" } as const;\n');
+  for (const filename of ["src/lib/flagsx.ts", "src/lib/flags/definitions-fake/htpr-1-other.ts", "src/components/flag-key.ts"]) {
+    writeFile(dir, filename, 'export const OTHER_FLAG = "htpr-1-other";\n');
+  }
+  const base = commit(git, "registered flags and look-alike modules");
+  for (const [moduleName, pass] of [
+    ["@/lib/flags/definitions/htpr-1-other", true],
+    ["@/lib/flags/definitions/htpr-1-other.ts", true],
+    ["../lib/flags/definitions/htpr-1-other", true],
+    ["../lib/flags/definitions/htpr-1-other.ts", true],
+    ["@/lib/flags/keys", true],
+    ["@/lib/flags", true],
+    ["@/lib/flagsx", false],
+    ["@/lib/flags/definitions-fake/htpr-1-other", false],
+    ["./flag-key", false],
+    ["../lib/flagsx", false],
+    ["@/lib/flags/definitions/htpr-2-new", false],
+    ["../lib/flags/definitions/htpr-2-new", false],
+    ["@/lib/flags/definitions/htpr-1-missing", false],
+    ["../lib/flags/definitions/htpr-1-missing", false],
+  ]) {
+    writeFile(dir, "src/components/Widget.tsx", `import { OTHER_FLAG as ticketFlag } from "${moduleName}";\nimport { useFlag } from "@/hooks/useFlag";\nexport const Widget = () => useFlag(ticketFlag) ? <div>Widget</div> : null;\n`);
+    const head = commit(git, `import from ${moduleName}`);
+    const result = await evaluate("HTPR-1 [FEATURE] Widget", base, head, dir);
+    assert.equal(result.pass, pass, `${moduleName}: ${result.reason}`);
+    if (pass) assert.equal(result.ownerReview, "feature-gated-ui");
+    else assert.match(result.reason, /without a feature flag/);
+  }
+});
+
 test("per-flag registry handles legacy inline and extracted base refs without a generated index", async (t) => {
   for (const extracted of [false, true]) {
     const { dir, git } = makeRepo(t);
@@ -1961,12 +1995,27 @@ test("first placement of an existing local component needs a flag", async (t) =>
 test("added-file default policy preserves existing flags and requires explicit Everyone only for new eligible definitions", async (t) => {
   const risk = 'releaseRisk: { risk: "new", reason: "Fixture" }';
   const sensitive = 'releaseRisk: { risk: "new", reason: "Fixture", highRisk: "access" }';
+  const ownerRequest = 'ownerRequest: { quote: "Keep this Owner only for now.", ticketUrl: "https://app.hypertask.ai/detail/project-15/2" }';
+  const requested = `releaseRisk: { risk: "new", reason: "Fixture", ${ownerRequest} }`;
   for (const [extra, pass, message] of [
     [risk, false, /new flag htpr-2-new must set defaultMode: "EVERYONE"/],
     [`kind: "feature", ${risk}`, false],
     [`kind: "improvement", ${risk}`, false],
     [`kind: "feature", defaultMode: "EVERYONE", ${risk}`, true],
     [`kind: "improvement", defaultMode: "EVERYONE", ${risk}`, true],
+    [`defaultMode: "OWNER_ONLY", ${requested}`, true],
+    [`kind: "feature", defaultMode: "OWNER_ONLY", ${requested}`, true],
+    [`kind: "improvement", defaultMode: "OWNER_ONLY", ${requested}`, true],
+    [`defaultMode: "OWNER_ONLY", ${risk}`, false, /OWNER_ONLY.*releaseRisk\.ownerRequest.*quote.*ticketUrl/],
+    [`defaultMode: "OWNER_ONLY", ${requested.replace('"Keep this Owner only for now."', '""')}`, false, /ownerRequest\.quote must be a non-blank string literal/],
+    [`defaultMode: "OWNER_ONLY", ${requested.replace('"Keep this Owner only for now."', '"   "')}`, false, /ownerRequest\.quote must be a non-blank string literal/],
+    [`defaultMode: "OWNER_ONLY", ${requested.replace("app.hypertask.ai", "hypertask.ai")}`, false, /ownerRequest\.ticketUrl must be a string literal like https:\/\/app\.hypertask\.ai\/detail\/project-15\/123/],
+    [`defaultMode: "OWNER_AND_QA", ${requested}`, false, /must set defaultMode: "EVERYONE"/],
+    [`defaultMode: "OFF", ${requested}`, false, /must set defaultMode: "EVERYONE"/],
+    [requested, false, /must set defaultMode: "EVERYONE"/],
+    [`defaultMode: "EVERYONE", ${requested}`, true],
+    [`defaultMode: "OWNER_AND_QA", releaseRisk: { risk: "new", reason: "Fixture", highRisk: "access", ${ownerRequest} }`, true],
+    [`defaultMode: "EVERYONE", releaseRisk: { risk: "new", reason: "Fixture", highRisk: "access", ${ownerRequest} }`, false, /releaseRisk\.highRisk may not default to Everyone/],
     [`kind: "bugfix", ${risk}`, true],
     [`kind: "feature", defaultMode: "OWNER_AND_QA", ${sensitive}`, true],
     [`kind: "feature", defaultMode: "EVERYONE", ${sensitive}`, false],
@@ -1992,17 +2041,24 @@ export default { key: NEW_FLAG, shippedOn: "2026-10-20", description: "Fixture",
   assert.equal(result.pass, true, result.reason);
 });
 
-test("legacy registry accepts internal kinds but refuses Everyone defaults", async (t) => {
-  const { dir, git } = makeRepo(t);
-  const base = commit(git, "base");
-  const source = flagsSource().replace('description: "fixture"', 'description: "fixture", kind: "internal"');
-  writeFile(dir, "src/lib/flags.ts", source);
-  writeFile(dir, "src/components/Widget.tsx", "export const Widget = () => <div />;\n");
-  const valid = commit(git, "internal kind");
-  assert.equal((await evaluate("HTPR-1 [BUGFIX] widget", base, valid, dir)).pass, true);
-  writeFile(dir, "src/lib/flags.ts", source.replace('kind: "internal"', 'kind: "internal", defaultMode: "EVERYONE"'));
-  const invalid = commit(git, "internal default invalid");
-  const result = await evaluate("HTPR-1 [BUGFIX] widget", base, invalid, dir);
-  assert.equal(result.pass, false);
-  assert.match(result.reason, /internal flag may not default to Everyone/);
+test("sidebar lazy-runtime gating is visible at the exported entry, not hidden inside an effect callback", async (t) => {
+  const provider = fs.readFileSync(path.join(root, "src/components/ProviderGlobal/GloablProviders.tsx"), "utf8");
+  const effect = provider.slice(provider.indexOf("  useEffect(agentSidebarChatsEnabled ?"), provider.indexOf("  const [chatRuntimeMounted"));
+  assert.match(effect, /useEffect\(agentSidebarChatsEnabled \?/);
+  for (const [name, source, expected] of [
+    ["current provider effect", effect, true],
+    ["old hidden effect branch", 'useEffect(() => { if (!agentSidebarChatsEnabled) return; setSidebarRequested(new URLSearchParams(window.location.search).has("agentSidebar")); }, [agentSidebarChatsEnabled]);', false],
+  ]) {
+    const fixture = makeRepo(t), base = commit(fixture.git, "base");
+    writeFile(fixture.dir, "src/components/Provider.tsx", `import { useEffect } from "react";
+import { useFlag } from "@/hooks/useFlag";
+import { OTHER_FLAG } from "@/lib/flags/keys";
+export function Provider() {
+  const agentSidebarChatsEnabled = useFlag(OTHER_FLAG);
+  ${source}
+  return <div />;
+}`);
+    const result = await evaluate("HTPR-1 [FEATURE] sidebar startup", base, commit(fixture.git, name), fixture.dir);
+    assert.equal(result.pass, expected, `${name}: ${result.reason}`);
+  }
 });

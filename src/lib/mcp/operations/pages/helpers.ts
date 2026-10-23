@@ -118,7 +118,7 @@ export async function canAccessProject(
   const projectCheck = await validateProjectAccess(
     projectId,
     ctx.user.id,
-    ctx.agentId
+    ctx.agentId, ctx.teamScope
   )
 
   return projectCheck.error === null

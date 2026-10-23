@@ -1,5 +1,6 @@
 
 "use client";
+import { HTPR_7530_KEEP_AI_CHAT_CLOSED_FLAG, HTPR_7569_MY_TASKS_SINGLE_COMMAND_CENTER_FLAG } from "@/lib/flags/keys";
 import {
   lazy,
   ReactNode,
@@ -33,7 +34,11 @@ import {
   announcementSlideAtom,
   aiChatExplicitOpenAtAtom,
   aiChatAutoOpenSuppressedAtom,
+  aiChatPinnedAtom,
+  openAiChatByDefaultAtom,
+  keepAiChatClosedAtom,
   showAIChatInterfaceAtom,
+  isAiChatSidebarModeAtom,
   mobileCommentComposerOpenAtom,
   showAccountSwitcherAtom,
   appShellRailAtom,
@@ -174,11 +179,13 @@ import useGlobalPathCheck from "@/hooks/General/useGlobalPathCheck";
 import { useGetAllProjectsMinimal } from "@/hooks/MultiPages/useGetAllProjectsMinimal";
 import { useProjectQuery } from "@/hooks/General/useProjectQuery";
 import { markBoardSwitchIntent } from "@/lib/analytics/boardSwitchLatency";
+import { boardFromDeviceFirst, boardFromFreshList } from "@/lib/keyboard/boardShortcutTarget";
+import { HTPR_7588_BOARD_SHORTCUT_FROM_DEVICE_FLAG } from "@/lib/flags/definitions/htpr-7588-board-shortcut-from-device";
 import { useEmojiFrequencyHydration } from "@/hooks/General/useEmojiFrequencyHydration";
-import { useFlag } from "@/hooks/useFlag";
+import { useFlag, useFlagReady } from "@/hooks/useFlag";
 import { useTaskBoxOutlinesFlag } from "@/hooks/useTaskBoxOutlinesFlag";
 import { useInboxLegacyWarm } from "@/hooks/useInboxLegacyWarm";
-import { MY_TASKS_SHORTCUTS_WIDTH_FLAG, HTPR_6476_MOBILE_AGENT_CHAT_FULLSCREEN_FLAG, HTPR_7395_PHONE_BOARD_WARMS_TICKET_FLAG } from "@/lib/flags/keys";
+import { HTPR_7518_AGENT_SIDEBAR_CHATS_FLAG, MY_TASKS_SHORTCUTS_WIDTH_FLAG, HTPR_6476_MOBILE_AGENT_CHAT_FULLSCREEN_FLAG } from "@/lib/flags/keys";
 
 import AIChatClosedLayout from "../AI_CHAT/AI_Chat_Closed_Layout";
 import FullScreenChatLoading from "../AI_CHAT/FullScreenChatLoading";
@@ -292,6 +299,7 @@ const NO_CHAT_RESTORE_ROUTES = [
   "/verify-email",
 ];
 
+import { HTPR_7406_DESKTOP_SERVER_BOARD_FLAG } from "@/lib/flags/keys";
 import { useFirstScreenSurface } from "@/lib/firstScreen/SurfaceContext";
 
 export default function GlobalProvider({
@@ -305,12 +313,15 @@ export default function GlobalProvider({
   useMobileToastAutoDismiss(SINGLE_UNDO_TOASTER_ID);
   useTaskBoxOutlinesFlag();
   const composeTaskWriterEnabled = useFlag("htpr-6929-compose-task-writer");
+  const myTasksSingleCommandCenter = useFlag(HTPR_7569_MY_TASKS_SINGLE_COMMAND_CENTER_FLAG);
   const isApple = useDeviceContext();
   const mbl = useContext(MobileViewContext);
   const pathname = usePathname();
-  const routeOwnsMobileChrome = Boolean(useFirstScreenSurface(authenticatedUserId));
+  const firstScreen = useFirstScreenSurface(authenticatedUserId);
+  const routeOwnsMobileChrome = Boolean(firstScreen);
   const myTasksShortcutsWidthEnabled = useFlag(MY_TASKS_SHORTCUTS_WIDTH_FLAG);
-  const phoneBoardWarmsTicket = useFlag(HTPR_7395_PHONE_BOARD_WARMS_TICKET_FLAG);
+  let boardShortcutLookup = boardFromFreshList;
+  if (useFlag(HTPR_7588_BOARD_SHORTCUT_FROM_DEVICE_FLAG)) boardShortcutLookup = boardFromDeviceFirst;
   useAppShellSurfaceShortcuts();
   const startupUser = useRecoilValue(currentUserAtom);
   const currentProject = useRecoilValue(currentProjectAtom);
@@ -387,6 +398,23 @@ export default function GlobalProvider({
   } = useGlobalUIState();
   const [, setAiChatExplicitOpenAt] = useRecoilState(aiChatExplicitOpenAtAtom);
   const aiChatAutoOpenSuppressed = useRecoilValue(aiChatAutoOpenSuppressedAtom);
+  const aiChatPinned = useRecoilValue(aiChatPinnedAtom);
+  const openAiChatByDefault = useRecoilValue(openAiChatByDefaultAtom);
+  const keepAiChatClosedEnabled = useFlag(HTPR_7530_KEEP_AI_CHAT_CLOSED_FLAG);
+  const keepAiChatClosedReady = useFlagReady(HTPR_7530_KEEP_AI_CHAT_CLOSED_FLAG);
+  const savedKeepAiChatClosed = useRecoilValue(keepAiChatClosedAtom);
+  const chatAutoOpenReady = !savedKeepAiChatClosed || keepAiChatClosedReady;
+  let keepAiChatClosed = false;
+  if (keepAiChatClosedEnabled) keepAiChatClosed = savedKeepAiChatClosed;
+  const [reserveBoardChat, setReserveBoardChat] = useState(() =>
+    firstScreen?.scope.route === "/project" && pathname?.startsWith("/project") === true &&
+    firstScreen.flags.values[HTPR_7406_DESKTOP_SERVER_BOARD_FLAG] === true &&
+    !mbl && authenticatedUserId !== null && chatAutoOpenReady && !keepAiChatClosed &&
+    (aiChatPinned || (openAiChatByDefault && !aiChatAutoOpenSuppressed))
+  );
+  useEffect(() => {
+    if (showAiChatInterface || !pathname?.startsWith("/project")) setReserveBoardChat(false);
+  }, [showAiChatInterface, pathname]);
   const setShowAiChatInterface = useSetRecoilState(showAIChatInterfaceAtom);
   const { openSettings } = useSettingsNavigation();
 
@@ -424,12 +452,27 @@ export default function GlobalProvider({
   );
   const shouldMountAgentChatRuntime =
     isAgentChatPage && mbl && agentChatMobileFullscreenFlag;
+  const agentSidebarChatsEnabled = useFlag(HTPR_7518_AGENT_SIDEBAR_CHATS_FLAG);
+  const [sidebarRequested, setSidebarRequested] = useState(false);
+  const setSidebarMode = useSetRecoilState(isAiChatSidebarModeAtom);
+  const setAiChatAutoOpenSuppressed = useSetRecoilState(aiChatAutoOpenSuppressedAtom);
+  useEffect(agentSidebarChatsEnabled ? () => {
+    const requested = new URLSearchParams(window.location.search).has("agentSidebar");
+    setSidebarRequested(requested);
+    if (!requested) return;
+    setSidebarMode(true);
+    setAiChatAutoOpenSuppressed(false);
+    setShowAiChatInterface(true);
+  } : () => {
+    setSidebarRequested(false);
+  }, [agentSidebarChatsEnabled, pathname, setSidebarMode, setAiChatAutoOpenSuppressed, setShowAiChatInterface]);
   const [chatRuntimeMounted, setChatRuntimeMounted] = useState(
     isFullScreenChat || showAiChatInterface,
   );
   const hasAttemptedChatRestoreRef = useRef(false);
   const shouldMountChatRuntime =
     chatRuntimeMounted ||
+    sidebarRequested ||
     isFullScreenChat ||
     shouldMountAgentChatRuntime ||
     isTaskDetailPage ||
@@ -453,6 +496,7 @@ export default function GlobalProvider({
 
   useEffect(() => {
     if (
+      !chatAutoOpenReady ||
       hasAttemptedChatRestoreRef.current ||
       !currentUser?.id ||
       !pathname ||
@@ -462,12 +506,12 @@ export default function GlobalProvider({
     }
     hasAttemptedChatRestoreRef.current = true;
     if (window.innerWidth < 768) return;
-    if (!aiChatAutoOpenSuppressed && readChatOpenForSession()) {
+    if (!keepAiChatClosed && !aiChatAutoOpenSuppressed && readChatOpenForSession()) {
       setChatRuntimeMounted(true);
       setShowAiChatInterface(true);
       setAiChatExplicitOpenAt(null);
     }
-  }, [currentUser?.id, aiChatAutoOpenSuppressed, pathname, setShowAiChatInterface, setAiChatExplicitOpenAt]);
+  }, [currentUser?.id, chatAutoOpenReady, keepAiChatClosed, aiChatAutoOpenSuppressed, pathname, setShowAiChatInterface, setAiChatExplicitOpenAt]);
 
   useEffect(() => {
     if (!hasAttemptedChatRestoreRef.current) return;
@@ -539,12 +583,15 @@ export default function GlobalProvider({
     (agentChatMobileFullscreenFlag && agentChatMobileFullscreenAtomOn) ||
     (agentChatMobileFullscreenFlag && isAgentChatPath(pathname));
   const commentComposerOpen = useRecoilValue(mobileCommentComposerOpenAtom);
+  let reserveFlaggedBoardChat = false;
+  if (useFlag(HTPR_7406_DESKTOP_SERVER_BOARD_FLAG)) reserveFlaggedBoardChat = reserveBoardChat;
   const { sidebarWidthPx, showMobileShellPath, showMobileTabBar, showMobileBottomInset, showMobileBottomNav } = usePageLoadReservations({
     mbl,
     pathname,
     authenticatedUserId,
     currentUserId: currentUser?.id,
     showAiChatInterface,
+    reserveBoardChat: reserveFlaggedBoardChat,
     aiChatAutoOpenSuppressed,
     commentComposerOpen,
     agentChatHidesMobileShell,
@@ -565,7 +612,7 @@ export default function GlobalProvider({
   const { goToProjectShortcut } = useProjectQuery();
   const queryClient = useQueryClient();
   useInboxEFirstPressQueue(queryClient);
-  useInboxLegacyWarm(queryClient, authenticatedUserId, pathname, mbl);
+  useInboxLegacyWarm(pathname, mbl);
   const controller: { [key: number]: { pressed: boolean } } = {
     ...globalConstants.multipleKeys,
   };
@@ -597,20 +644,12 @@ export default function GlobalProvider({
           .split("|&|")[0]
           ?.replace("project-", ""),
       );
-      const availableBoards = currentUser?.id
-        ? await queryClient
-            .fetchQuery<IProject[]>({
-              queryKey: ["projectsAllMinimal", currentUser.id],
-              queryFn: () =>
-                globalAPIHandlers.getAllProjectsMinimal("ExtraMinimal"),
-              staleTime: 60_000,
-            })
-            .catch(() => [])
-        : [];
-      const boardId = [_currentProject?.id, previousBoardId].find(
-        (candidate) =>
-          Number.isInteger(candidate) &&
-          availableBoards.some((project) => project.id === candidate),
+      const boardId = await boardShortcutLookup(
+        queryClient,
+        currentUser?.id,
+        [_currentProject?.id, previousBoardId],
+        (): Promise<IProject[]> =>
+          globalAPIHandlers.getAllProjectsMinimal("ExtraMinimal"),
       );
       if (boardId) {
         markBoardSwitchIntent({ surface: "keyboard_shortcut", projectId: boardId });
@@ -621,6 +660,7 @@ export default function GlobalProvider({
     },
     [
       _currentProject?.id,
+      boardShortcutLookup,
       currentUser?.id,
       goToProjectShortcut,
       navigate,
@@ -907,20 +947,14 @@ export default function GlobalProvider({
             .split("|&|")[0]
             ?.replace("project-", ""),
         );
-        const availableBoards = currentUser?.id
-          ? await queryClient
-              .fetchQuery<IProject[]>({
-                queryKey: ["projectsAllMinimal", currentUser.id],
-                queryFn: () =>
-                  globalAPIHandlers.getAllProjectsMinimal("ExtraMinimal"),
-                staleTime: 60_000,
-              })
-              .catch(() => [])
-          : [];
-        const boardId = [_currentProject?.id, previousBoardId].find(
-          (candidate) =>
-            Number.isInteger(candidate) &&
-            availableBoards.some((project) => project.id === candidate),
+        const boardCandidates = [_currentProject?.id, previousBoardId];
+        const fetchBoardList = (): Promise<IProject[]> =>
+          globalAPIHandlers.getAllProjectsMinimal("ExtraMinimal");
+        const boardId = await boardShortcutLookup(
+          queryClient,
+          currentUser?.id,
+          boardCandidates,
+          fetchBoardList,
         );
         if (boardId) {
           markBoardSwitchIntent({ surface: "keyboard_shortcut", projectId: boardId });
@@ -1312,7 +1346,7 @@ export default function GlobalProvider({
 
       {authenticatedUserId !== null &&
         showCommands.show &&
-        shouldRenderGlobalCommandMenu(pathname) && <HypertasksCommands />}
+        shouldRenderGlobalCommandMenu(pathname, myTasksSingleCommandCenter) && <HypertasksCommands />}
 
       {composeTaskWriterEnabled && authenticatedUserId !== null && showCommands.show && pathname === "/new" && <HypertasksCommands />}
 
@@ -1347,7 +1381,7 @@ export default function GlobalProvider({
                 ) : undefined
               }
             >
-              <CachedTaskDetailNavigation accountId={authenticatedUserId} boardPainted={phoneBoardWarmsTicket && secondaryStartupEnabled}>
+              <CachedTaskDetailNavigation accountId={authenticatedUserId}>
                 {children}
               </CachedTaskDetailNavigation>
             </AIChatClosedLayout>

@@ -92,10 +92,8 @@ export function preserveTaskAssigneesChangedDuringFetch<
   currentTask: T | null,
   fetchedTask: T,
   assigneesAtFetchStart: T["assignees"],
-  keepAssignee: boolean,
 ): T {
-  return keepAssignee &&
-    currentTask &&
+  return currentTask &&
     currentTask.id === fetchedTask.id &&
     currentTask.projectId === fetchedTask.projectId &&
     (currentTask.assignees !== assigneesAtFetchStart ||

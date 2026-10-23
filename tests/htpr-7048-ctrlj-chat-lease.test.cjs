@@ -28,6 +28,8 @@ function load(relativePath, stubs, globals = {}) {
     module: loadedModule, exports: loadedModule.exports,
     require(id) {
       if (Object.hasOwn(stubs, id)) return stubs[id];
+      if (id === "./taskWriterSkills") return require("jiti")(__filename, { fsCache: false })(path.join(root, "src/lib/ai/taskWriterSkills.ts"));
+      if (id === "@/lib/media/inlineAgentImages") return require("jiti")(__filename, { alias: { "@": path.join(root, "src") }, interopDefault: true })(path.join(root, "src/lib/media/inlineAgentImages.ts"));
       if (id.startsWith("node:")) return require(id);
       throw new Error(`Unstubbed import: ${id}`);
     },
@@ -95,6 +97,7 @@ function harness({ enabled = true } = {}) {
   };
   const next = { NextResponse: { json: (body, options) => Response.json(body, options) } };
   const route = load("src/app/api/ai/chat/stream/route.ts", {
+    "@/lib/agents/chatAccess": { loadSidebarChatRequest: async (request) => { assert.equal(request.headers.get("x-hypertask-sidebar-project"), null); return { ok: true }; } },
     "@/lib/ai/chatStream/turnModel": { loadTurnModel: async (body) => ({ actingAgent: body.session_id === agentSession ? { id: agentId } : null }) },
     "@/lib/ai/chatStream/stream": { createChatStream: (options) => { started.push(options); return new Response("reply started"); } },
     "next/server": next,
@@ -113,6 +116,7 @@ function harness({ enabled = true } = {}) {
     "@/lib/ai/tools/constants": { SSE_HEADERS: {} },
   });
   const cancel = load("src/app/api/ai/chat/cancel/route.ts", {
+    "@/lib/agents/chatAccess": { loadSidebarChatRequest: async (request) => { assert.equal(request.headers.get("x-hypertask-sidebar-project"), null); return { ok: true }; } },
     "@/lib/errors/reportError": { reportError: async () => {} },
     "next/server": next,
     zod: { z },
@@ -127,7 +131,7 @@ function harness({ enabled = true } = {}) {
     headers: new Headers(heartbeat ? { "x-hypertask-heartbeat-execution-id": streamId, "x-hypertask-heartbeat-agent-id": agentId, "x-hypertask-heartbeat-claimed-at": "2026-10-09T00:00:00.000Z" } : {}),
     json: async () => ({ message: "Refine the saved task", session_id: sessionId, stream_id: streamId, user_message_id: assistantId, assistant_message_id: assistantId, ...(heartbeat ? { heartbeat_execution_id: streamId } : {}), ...extra }),
   });
-  const stop = (sessionId) => cancel.POST({ json: async () => ({ session_id: sessionId, stream_id: streamId, assistant_message_id: assistantId }) });
+  const stop = (sessionId) => cancel.POST({ headers: new Headers(), json: async () => ({ session_id: sessionId, stream_id: streamId, assistant_message_id: assistantId }) });
   return { redis, leases, started, checks, send, stop, setEnabled: (value) => { enabled = value; } };
 }
 

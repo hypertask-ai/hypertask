@@ -1,3 +1,7 @@
+import type { BoardKnowledgePrincipal } from "@/lib/rag/retrieveBoardKnowledge";
+import prisma from "@/lib/prisma";
+import { lockTaskTeamScope, TaskTeamScopeError } from "@/lib/mcp/tasks/agentMutationFence";
+import { taskWriteAccessWhere } from "@/utils/controllers/projects/getAllIncludes";
 import { parse, HTMLElement } from 'node-html-parser';
 import { IUrl } from '@/models/model';
 import addIntoTask from '@/utils/controllers/urls/addIntoTask';
@@ -162,25 +166,42 @@ export async function persistUrlsForComment(
   taskId: number,
   commentId: number,
   method: 'POST' | 'PUT',
-  extraUrls: IUrl[] = []
+  extraUrls: IUrl[] = [],
+  principal?: BoardKnowledgePrincipal,
 ): Promise<void> {
   const extracted = extractUrlsFromContent(text, taskId);
   const urlsToAdd = mergeUrls(extracted, extraUrls);
 
   if (urlsToAdd.length === 0) return;
 
+  if (principal?.teamScope != null) {
+    await prisma.$transaction(async (tx) => {
+      await lockTaskTeamScope(tx, taskId, principal.userId, principal.agentId, principal.teamScope);
+      if (!await tx.comment.findFirst({ where: { id: commentId, taskId, task: { project: taskWriteAccessWhere(principal.userId, principal.agentId, principal.teamScope) } }, select: { id: true } })) throw new TaskTeamScopeError();
+      await addIntoTask(urlsToAdd.map((url) => ({ ...url, TaskId: taskId })), commentId, method, tx);
+    });
+    return;
+  }
   await addIntoTask(urlsToAdd, commentId, method);
 }
 
 export async function persistUrlsForDescription(
   text: string,
   taskId: number,
-  extraUrls: IUrl[] = []
+  extraUrls: IUrl[] = [],
+  principal?: BoardKnowledgePrincipal,
 ): Promise<void> {
   const extracted = extractUrlsFromContent(text, taskId);
   const urlsToAdd = mergeUrls(extracted, extraUrls);
 
   if (urlsToAdd.length === 0) return;
 
+  if (principal?.teamScope != null) {
+    await prisma.$transaction(async (tx) => {
+      await lockTaskTeamScope(tx, taskId, principal.userId, principal.agentId, principal.teamScope);
+      await addIntoTaskDesc(urlsToAdd.map((url) => ({ ...url, TaskId: taskId })), taskId, 'PUT', tx);
+    });
+    return;
+  }
   await addIntoTaskDesc(urlsToAdd, taskId, 'PUT');
 }

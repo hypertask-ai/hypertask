@@ -34,7 +34,7 @@ if [ -L "$lock_dir" ] || [ ! -d "$lock_dir" ] || [ ! -O "$lock_dir" ]; then
   exit 2
 fi
 chmod 700 "$lock_dir"
-niceness=${HT_HEAVY_NICE:-10}
+niceness=${HT_HEAVY_NICE:-19}
 if [[ ! $niceness =~ ^(1?[0-9])$ ]]; then echo 'HT_HEAVY_NICE must be 0 to 19.' >&2; exit 2; fi
 if [ "$exclusive" = true ]; then
   if [ -L "$lock_dir/exclusive" ]; then echo 'Refusing symlink heavy-job exclusive lock.' >&2; exit 2; fi
@@ -54,7 +54,9 @@ while :; do
     if flock -n 8; then
       check_disk
       # The command inherits the locks, including if this wrapper is interrupted.
-      exec nice -n "$niceness" "$@"
+      if command -v ionice >/dev/null 2>&1; then set -- ionice -c3 "$@"; fi
+      if command -v nice >/dev/null 2>&1; then set -- nice -n "$niceness" "$@"; fi
+      exec "$@"
     fi
     exec 8>&-
   done

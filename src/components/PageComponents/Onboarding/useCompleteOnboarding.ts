@@ -15,7 +15,8 @@ export const useCompleteOnboarding = () => {
   const completeOnboarding = useCallback(async () => {
     if (!currentUser) return false;
     if (!currentUser.UserSetting.onboardingTourStatus) {
-      await updateUserSettingOnboarding(currentUser.id, true);
+      const savedSetting = await updateUserSettingOnboarding(currentUser.id, true);
+      if (!savedSetting) return false;
 
       const payload = {
         email: currentUser.email,

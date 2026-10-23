@@ -30,7 +30,7 @@ type UpdatePlan = Exclude<Awaited<ReturnType<typeof validate>>, NextResponse>
 
 async function preflight(options: ExecuteTaskUpdateOptions, plan: UpdatePlan) {
   const { ctx, requestBody, dryRun = false } = options
-  const tasks = await findTasksByIdentifier(ctx.user, plan.identifiers, ctx.agentId)
+  const tasks = await findTasksByIdentifier(ctx.user, plan.identifiers, ctx.agentId, ctx.teamScope)
   const would = { task_ids: tasks.map((task) => task.id), request: plan.identifiers.normalizedRequestBody }
   if (!tasks.length) {
     return {
@@ -63,7 +63,7 @@ async function preflight(options: ExecuteTaskUpdateOptions, plan: UpdatePlan) {
   const userCookie = JSON.stringify(slimUserForCookie({
     id: userObj.id, email: userObj.email, displayName: userObj.displayName, photoURL: userObj.photoURL ?? undefined,
   }))
-  const sessionToken = signSession({ id: userObj.id, email: userObj.email, ...(ctx.agentId ? { agentId: ctx.agentId } : {}) })
+  const sessionToken = signSession({ id: userObj.id, email: userObj.email, ...(ctx.agentId ? { agentId: ctx.agentId } : {}), teamScope: ctx.teamScope, agentTokenGeneration: ctx.agentTokenGeneration })
   if (sectionResult.status === 'rejected') throw sectionResult.reason
   const sectionInfo = sectionResult.value ?? undefined
   if (dryRun) {

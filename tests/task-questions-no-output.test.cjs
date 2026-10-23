@@ -23,7 +23,12 @@ function harness({ content = [], finishReason = "length", failure, viewer = { id
     },
   };
   const stubs = {
+    "@/lib/net/downloadWithoutBrotli": { downloadWithoutBrotli: undefined },
+    "@/lib/ai/taskWriterSkills": require("jiti")(__filename, { fsCache: false })(path.resolve(__dirname, "../src/lib/ai/taskWriterSkills.ts")),
     ai,
+    "@/lib/auth/getSessionUser": { getSessionUser: async () => viewer ? { userId: viewer.id } : null },
+    "@/lib/auth/agentScope": { withAgentScopeRequest: (_request, run) => run() },
+    "@/lib/flags": { HTPR_7534_WRITING_QUESTIONS_FLAG: "htpr-7534-writing-questions", isFeatureEnabled: async () => false },
     zod: { z },
     "next/server": { NextResponse: { json: (body, options) => Response.json(body, options) } },
     "@/app/api/ai/_lib/modelProvider": {

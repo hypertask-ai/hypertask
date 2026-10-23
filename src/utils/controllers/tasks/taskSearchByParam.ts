@@ -8,7 +8,6 @@ import {
 } from "@/lib/aiModelOptions";
 import { getBoardAgentMembers } from "@/utils/controllers/agents/boardMembers";
 import { turbopufferFetchMentionTasks } from "../search/document";
-import { isFeatureEnabled, PAGE_MENTIONS_FLAG } from "@/lib/flags";
 import {
   matchesMentionName,
   selectMentionAgents,
@@ -21,7 +20,7 @@ const taskSearchByParam = async (
 ) => {
   try {
     const hyperAiId = parseInt(process.env.NEXT_PUBLIC_HYPERAI_ID || "332");
-    const [projectIds, owner_members, hyperAI, pageMentionsEnabled, haiku55Enabled, standaloneEnabled] = await Promise.all([
+    const [projectIds, owner_members, hyperAI, haiku55Enabled, standaloneEnabled] = await Promise.all([
       fetchidlist(userid),
       prisma.project.findFirst({
         where: {
@@ -44,7 +43,6 @@ const taskSearchByParam = async (
           id: hyperAiId,
         },
       }),
-      isFeatureEnabled(PAGE_MENTIONS_FLAG, userid).catch(() => false),
       haiku55ModelEnabled(userid),
       standalonePagesEnabled(userid),
     ]);
@@ -54,8 +52,6 @@ const taskSearchByParam = async (
     }
 
     let hyperAIObject = { ...hyperAI, displayName: "HyperAI" };
-
-    const canMentionPages = pageMentionsEnabled && projectIds.includes(projectId);
 
     const param = cleanQuery(rawParam);
     const wordsInQuery = getQueryWords(param);
@@ -131,7 +127,7 @@ const taskSearchByParam = async (
           },
         }),
         getBoardAgentMembers(projectId, userid),
-        fetchMentionPages(canMentionPages, projectId, "", standaloneEnabled),
+        fetchMentionPages(projectId, "", standaloneEnabled),
       ]);
 
       const updatedtask = task?.map((item: any) => ({
@@ -232,7 +228,7 @@ const taskSearchByParam = async (
           },
         }),
         getBoardAgentMembers(projectId, userid),
-        fetchMentionPages(canMentionPages, projectId, param, standaloneEnabled),
+        fetchMentionPages(projectId, param, standaloneEnabled),
       ]);
 
       const updatedProjects = projects?.map((item: any) => ({
@@ -296,12 +292,10 @@ interface MentionPage {
 }
 
 const fetchMentionPages = async (
-  enabled: boolean,
   projectId: number,
   titleQuery: string,
   standaloneEnabled: boolean,
 ): Promise<MentionPage[]> => {
-  if (!enabled) return [];
   try {
     const pages = await prisma.page.findMany({
       take: 5,

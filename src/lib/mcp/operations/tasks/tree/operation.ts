@@ -1,9 +1,10 @@
+import type { AgentTokenTeamScope } from '@/lib/mcp/auth/types';
 import { reportMcpOperationCrash } from "@/lib/mcp/operationCrashReport";
 import { wrapMcpRoute, validateMcpRouteAuth as validateMcpAuth, checkMcpRouteRateLimit as checkMcpRateLimit } from '@/lib/mcp/routeWrapper'
 import { NextRequest, NextResponse } from "next/server";
 
 import prisma from "@/lib/prisma";
-import { findTaskByIdentifier } from "@/lib/mcp/tasks/resolveTask";
+import { findTaskByIdentifier, taskIdentifierErrorResponse } from "@/lib/mcp/tasks/resolveTask";
 import { getProjectWhere } from "@/utils/controllers/projects/getAllIncludes";
 
 export interface TaskTreeNode {
@@ -83,7 +84,8 @@ function parseTreeQuery(searchParams: URLSearchParams):
 async function findRootTaskId(
   anchorTaskId: number,
   userId: number,
-  agentId?: string | null
+  agentId?: string | null,
+  teamScope?: AgentTokenTeamScope | null,
 ): Promise<{ rootId: number } | { error: string }> {
   const visited = new Set<number>();
   let currentId = anchorTaskId;
@@ -97,7 +99,7 @@ async function findRootTaskId(
     const task = await prisma.task.findFirst({
       where: {
         id: currentId,
-        project: getProjectWhere(userId, agentId),
+        project: getProjectWhere(userId, agentId, teamScope),
       },
       select: { id: true, parentTaskId: true },
     });
@@ -120,12 +122,13 @@ async function buildTreeNode(
   taskId: number,
   userId: number,
   remainingDepth: number | undefined,
-  agentId?: string | null
+  agentId?: string | null,
+  teamScope?: AgentTokenTeamScope | null,
 ): Promise<TaskTreeNode> {
   const task = await prisma.task.findFirst({
     where: {
       id: taskId,
-      project: getProjectWhere(userId, agentId),
+      project: getProjectWhere(userId, agentId, teamScope),
     },
     select: {
       id: true,
@@ -158,7 +161,7 @@ async function buildTreeNode(
     where: {
       parentTaskId: taskId,
       status: { not: "Deleted" },
-      project: getProjectWhere(userId, agentId),
+      project: getProjectWhere(userId, agentId, teamScope),
     },
     select: { id: true },
     orderBy: { uniqueIndex: "asc" },
@@ -171,7 +174,7 @@ async function buildTreeNode(
   const nextDepth =
     remainingDepth === undefined ? undefined : remainingDepth - 1;
   const children = await Promise.all(
-    childrenRows.map((row) => buildTreeNode(row.id, userId, nextDepth, agentId))
+    childrenRows.map((row) => buildTreeNode(row.id, userId, nextDepth, agentId, teamScope))
   );
 
   return { ...node, children };
@@ -209,7 +212,7 @@ export async function GET(request: NextRequest) {
         unique_index: null,
         project_id: null,
       },
-      ctx.agentId
+      ctx.agentId, undefined, ctx.teamScope
     );
 
     if (!anchor) {
@@ -219,7 +222,7 @@ export async function GET(request: NextRequest) {
       );
     }
 
-    const rootResult = await findRootTaskId(anchor.id, user.id, ctx.agentId);
+    const rootResult = await findRootTaskId(anchor.id, user.id, ctx.agentId, ctx.teamScope);
     if ("error" in rootResult) {
       const status =
         rootResult.error.includes("cycle") ||
@@ -236,7 +239,7 @@ export async function GET(request: NextRequest) {
       rootResult.rootId,
       user.id,
       parsed.depth,
-      ctx.agentId
+      ctx.agentId, ctx.teamScope
     );
 
     const body: TaskTreeResponse = {
@@ -245,6 +248,8 @@ export async function GET(request: NextRequest) {
     };
     return NextResponse.json(body);
   } catch (error) {
+    const identifierResponse = taskIdentifierErrorResponse(error);
+    if (identifierResponse) return identifierResponse;
     console.error("Error building task tree:", error);
     reportMcpOperationCrash(request, error);
     return NextResponse.json(
