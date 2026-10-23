@@ -27,7 +27,7 @@ Read the "when to load" column, open that SKILL.md, and follow it, including its
 | benchmark-checklist | Before reporting any speed number, inside fix-slow-page and speed-analyst: seven questions from limiter to "did the work happen" (pstack by Lauren Tan, MIT) | .claude/skills/benchmark-checklist/SKILL.md |
 | speed-analyst | SPEED RUNNER only: takes speed work only, reads daily measurements, investigates one bottleneck, updates its playbook and researches performance weekly | .claude/skills/speed-analyst/SKILL.md |
 | ship-feature-behind-flag | The fix, when it adds behaviour the user has not seen | .claude/skills/ship-feature-behind-flag/SKILL.md |
-| interrogate | Before coding, only for `valentin-review`: money, login and access, security, data that cannot be undone; never for ordinary `ai-review` | .claude/skills/interrogate/SKILL.md |
+| interrogate | Before coding, only for `valentin-review`: money, login and access, security, data that cannot be undone, approval readers and merge or release gates; never for ordinary `ai-review` | .claude/skills/interrogate/SKILL.md |
 | blast-radius | Before the PR for anything outside the usual lane | .claude/skills/blast-radius/SKILL.md |
 | simplify-before-pr | Before the PR | .claude/skills/simplify-before-pr/SKILL.md |
 | principle-test-behavior-not-implementation | Before the PR, inside simplify-before-pr: every new or changed test must fail if its imports returned `undefined` (pstack by Lauren Tan, MIT) | .claude/skills/principle-test-behavior-not-implementation/SKILL.md |
