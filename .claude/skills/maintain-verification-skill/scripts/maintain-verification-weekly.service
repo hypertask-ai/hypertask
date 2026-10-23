@@ -1,0 +1,11 @@
+[Unit]
+Description=Source-only feature-map upkeep and drift ticket
+[Service]
+Type=oneshot
+Environment="PATH=%h/.local/bin:/usr/local/bin:/usr/bin:/bin"
+ExecStart=%h/.local/lib/hypertask/maintain-verification/maintain-verification-weekly
+Nice=19
+IOSchedulingClass=idle
+MemoryMax=2G
+TimeoutStartSec=3h
+UMask=0077

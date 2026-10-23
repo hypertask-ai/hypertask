@@ -1,5 +1,5 @@
 version: 8
-last_updated: 2026-10-22
+last_updated: 2026-10-23
 purpose: "Fixed-cost CI with fast releases and a provider-neutral AI review gate. App CI runs on GitHub-hosted runners; the repo is public, so hosted minutes are free. The canonical reader-facing contract is docs/ci.md; this file is the machine-readable companion."
 
 topology:
@@ -91,6 +91,23 @@ ship_scripts_tests:
     - bash .claude/skills/ship/scripts/ship-check.test.sh --premerge-only
     - python3 .claude/skills/ship/scripts/premerge-evidence.test.py
   fixtures: offline_with_temporary_home_and_no_secrets
+
+feature_map_weekly:
+  context: feature-map-check
+  workflow: .github/workflows/feature-map-weekly.yml
+  runs_on: ubuntu-latest
+  required: false
+  cron_utc: "37 3 * * 1"
+  triggers: [schedule, workflow_dispatch, pull_request]
+  pull_request_base: production
+  paths: [".claude/skills/maintain-verification-skill/**", ".claude/skills/verify-qa/reference/feature-map/**", ".github/workflows/feature-map-weekly.yml"]
+  node_major: 24
+  permissions: [contents_read]
+  commands:
+    - node --test .claude/skills/maintain-verification-skill/scripts/feature-map-check.test.mjs
+    - node .claude/skills/maintain-verification-skill/scripts/feature-map-check.mjs
+  fixtures: offline_with_temporary_home_and_no_secrets
+  app_driving: false
 
 ux_signoff:
   context: ux-signoff

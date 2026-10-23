@@ -3,7 +3,7 @@
 ## How a customer reaches it
 
 `https://app.hypertask.ai/login`, or any deep link that redirects there when
-signed out (`src/middleware.ts` gates routes). Google OAuth via Firebase, or
+signed out (`src/proxy.ts` gates routes). Google OAuth via Firebase, or
 an email magic link (15-minute expiry, audience `email-link`).
 
 ## How to drive it

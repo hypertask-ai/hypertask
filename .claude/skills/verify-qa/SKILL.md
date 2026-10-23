@@ -115,13 +115,7 @@ Never use Valentin's account, password, or cookies. If the shot is a login page,
 
 ## Weekly map upkeep
 
-Run `.claude/skills/verify-qa/scripts/map-upkeep --install` from the app repo to install and enable `verify-map-upkeep.timer` in the systemd user manager. It runs weekly with missed-run catch-up. The copied script uses the main checkout, so deleting a finished ticket worktree does not break the job. `--dry-run` prints the Codex command without fetching, creating a worktree or running hax.
-
-Each run fetches `origin/production`, creates a fresh detached worktree, checks every map against source and the live app read-only, and writes `~/.local/state/verify-map-upkeep/<date>.md`. It leaves the worktree for inspection. It never edits maps, opens a PR or writes to the board. Confirmed drift needs a separate ticket before any fix. No Valentin login, no live writes; blocked paths stay unreachable in the report. This report does not replace ticket QA.
-
-Test: `bash .claude/skills/verify-qa/scripts/map-upkeep.test.sh`. Check the schedule with `systemctl --user list-timers verify-map-upkeep.timer`; stop it with `systemctl --user disable --now verify-map-upkeep.timer`.
-
-Source: adapted from pstack maintain-verification-skill, https://github.com/cursor/plugins/tree/main/pstack.
+For source-only weekly feature-map upkeep and ticket-owned live recipes, use [maintain-verification-skill](../maintain-verification-skill/SKILL.md).
 
 ## Notes
 
