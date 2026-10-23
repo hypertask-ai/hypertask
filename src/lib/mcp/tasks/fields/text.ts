@@ -46,7 +46,7 @@ export async function updateTaskText(context: TaskUpdateFieldContext, task: Task
         await singleResponse.json().catch(() => null)
 
         if (sanitizedDescription) {
-            await persistUrlsForDescription(sanitizedDescription, task.id)
+            await persistUrlsForDescription(sanitizedDescription, task.id, [], { userId: ctx.user.id, agentId: ctx.agentId, teamScope: ctx.teamScope })
         }
     }
 }

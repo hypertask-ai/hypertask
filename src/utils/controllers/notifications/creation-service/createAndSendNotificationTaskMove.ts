@@ -110,6 +110,7 @@ async function notifyUsers(
           notificationBody: `"${task?.title}" moved to "${task?.section}"`,
           devices,
           payload: notificationCreated,
+          taskId: task.id,
           taskTitle: task?.title ?? "",
           afterAppDomain: `detail/project-${task?.projectId}/${task?.uniqueIndex}`,
         };
@@ -123,6 +124,7 @@ async function notifyUsers(
           notificationBody: `"${task?.title}" has been ${archivebody}.`,
           devices,
           payload: notificationCreated,
+          taskId: task.id,
           taskTitle: task?.title ?? "",
           afterAppDomain: `detail/project-${task?.projectId}/${task?.uniqueIndex}`,
         };
@@ -144,6 +146,7 @@ async function notifyUsers(
           notificationBody,
           devices,
           payload: notificationCreated,
+          taskId: task.id,
           taskTitle: task?.title ?? "",
           afterAppDomain: `detail/project-${task?.projectId}/${task?.uniqueIndex}`,
         };
@@ -156,6 +159,7 @@ async function notifyUsers(
           notificationBody: `"${task?.title}" description has been updated`,
           devices,
           payload: notificationCreated,
+          taskId: task.id,
           taskTitle: task?.title ?? "",
           afterAppDomain: `detail/project-${task?.projectId}/${task?.uniqueIndex}`,
         };

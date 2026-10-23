@@ -1,3 +1,4 @@
+const { withStubs } = require("./helpers/stub-map.cjs");
 const test = require("node:test");
 const assert = require("node:assert/strict");
 const fs = require("node:fs");
@@ -7,8 +8,8 @@ const ts = require("typescript");
 const root = path.resolve(__dirname, "..");
 const read = (file) => fs.readFileSync(path.join(root, file), "utf8");
 function load(file, stubs = {}) {
-  stubs = { "@/lib/media/inlineAgentImages.server": { inlineAgentImagesForUser: async (html) => html }, ...stubs };
-  stubs = { "@/lib/auth/agentScope": require("./helpers/agent-board-scope.cjs").enforcedScope, ...stubs };
+  stubs = withStubs({ "@/lib/media/inlineAgentImages.server": { inlineAgentImagesForUser: async (html) => html } }, stubs);
+  stubs = withStubs({ "@/lib/auth/agentScope": require("./helpers/agent-board-scope.cjs").enforcedScope }, stubs);
   const javascript = ts.transpileModule(read(file), {
     compilerOptions: { esModuleInterop: true, module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2020 },
   }).outputText;
@@ -66,7 +67,7 @@ function updateHarness(initial = {}, parents = []) {
     "./spawnRecurrence": { sectionIsDone: () => false, spawnNextRecurrence: noop },
     "../notifications/agentFirstTaskEmail": { scheduleAgentFirstTaskEmail: noop },
     "@/utils/controllers/projects/getAllIncludes": { taskWriteAccessWhere: () => ({}) },
-    "@/lib/mcp/tasks/agentMutationFence": { AgentMutationLeaseConflictError: class extends Error {}, assertAgentAssignmentChangeAllowed: noop, cancelAgentMutationLeaseForHumanOverride: noop },
+    "@/lib/mcp/tasks/agentMutationFence": { TaskTeamScopeError: class extends Error {}, AgentMutationLeaseConflictError: class extends Error {}, assertAgentAssignmentChangeAllowed: noop, cancelAgentMutationLeaseForHumanOverride: noop },
     "./invokeTaskDelete": {},
     "@/lib/mcp/webhooks/outbox": { persistBoardWebhookEvent: async () => [], publishBoardWebhookDeliveries: noop },
     "@/lib/agentWebhooks/outbox": { persistAgentTaskUpdatedWebhook: async () => [], publishAgentWebhookDeliveries: noop },

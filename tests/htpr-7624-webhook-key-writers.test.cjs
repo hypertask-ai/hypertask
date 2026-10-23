@@ -41,7 +41,7 @@ function fixture(enabled) {
     webhookSubscription: delegate,
     agentWebhookSubscription: delegate,
     team: { findFirst: async () => ({ id: 'team' }) },
-    agent: { findFirst: async () => ({ id: 'agent' }) },
+    agent: { findFirst: async () => ({ id: 'agent' }), findUnique: async () => ({ userId: 42, revokedAt: null, credentialTeamId: null, credentialTeamAccessBinding: null }) },
     project: { findFirst: async () => ({ id: 17 }) },
     $executeRaw: async () => {},
   };

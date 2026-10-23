@@ -65,7 +65,9 @@ async function fixture(t, { enabled = true, stable = false, legacyStatic = false
     "@/lib/contexts/mobileContext": { MobileViewContext },
     "@/lib/contexts/TaskDetail/DescriptionProvider": { useDescriptionAndCommentsContext: () => description },
   };
-  const { isPlainDescriptionHtml, toEditorHtml } = require("jiti").createJiti(__filename, { fsCache: false, alias: { "@": path.join(root, "src") } })(path.join(root, dir, "staticDescriptionHtml.ts"));
+  const jiti = require("jiti").createJiti(__filename, { fsCache: false, alias: { "@": path.join(root, "src") } });
+  const { isPlainDescriptionHtml, toEditorHtml } = jiti(path.join(root, dir, "staticDescriptionHtml.ts"));
+  const sanitizeHtml = jiti(path.join(root, "src/utils/helperFunctions/sanitizeHtml.ts"));
   const styles = new Proxy({}, { get: (_, key) => String(key) });
   const shell = load(dir + "StaticDescriptionShell.tsx", {
     "next/navigation": { useRouter: () => ({ push: noop }), useSearchParams: () => null },
@@ -75,6 +77,7 @@ async function fixture(t, { enabled = true, stable = false, legacyStatic = false
     "@/lib/taskDetailInboxFlow": {},
     "@/utils/undoActions/helperFuncs": { cn: (...values) => values.filter(Boolean).join(" ") },
     "./staticDescriptionHtml": { toEditorHtml },
+    "@/utils/helperFunctions/sanitizeHtml": sanitizeHtml,
   }, baseline);
   let resolveModule;
   const editorModule = new Promise(resolve => { resolveModule = resolve; });

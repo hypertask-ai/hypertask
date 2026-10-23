@@ -165,7 +165,7 @@ test("skill prompts reach AITaskWriter rather than the draft editor that drops i
 });
 
 test("writer prompt retains the slash token until the server expands the chosen skill", async () => {
-  const load = loader();
+  const load = loader({ "./skillAccess": { AccountSkillAccessError: class extends Error {} } });
   const { buildTaskWriterPrompt } = load("src/lib/ai/autoDescriptionSuggestion.ts");
   const { resolveSkills } = load("src/app/api/ai/_lib/skills.ts");
   const view = mount();

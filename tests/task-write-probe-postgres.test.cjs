@@ -670,7 +670,7 @@ test("the probe runs as the authenticated principal", async () => {
   const seen = [];
   const GET = state.probeHandler.createTaskWriteProbeHandler({
     checkRateLimit: async () => null,
-    validateAuth: async () => ({ user: { id: 4242, email: "ops@example.test" }, agentId: null }),
+    validateAuth: async () => ({ teamScope: null, user: { id: 4242, email: "ops@example.test" }, agentId: null }),
     runProbe: async (userId) => {
       seen.push(userId);
       return { status: "healthy", rolledBack: true, lockedTaskId: 1, probeRowId: "p" };
@@ -688,7 +688,7 @@ test("the probe runs as the authenticated principal", async () => {
 // Bonus: the HTTP boundary distinguishes the three verdicts for the workflow —
 // healthy 200, inconclusive 200 (but never `success: true`), broken 500.
 test("the handler maps healthy/inconclusive/misconfigured/broken to distinct responses", async () => {
-  const ctx = { user: { id: 6, email: "owner@example.test" }, agentId: null };
+  const ctx = { teamScope: null, user: { id: 6, email: "owner@example.test" }, agentId: null };
   const make = (runProbe) =>
     state.probeHandler.createTaskWriteProbeHandler({
       checkRateLimit: async () => null,

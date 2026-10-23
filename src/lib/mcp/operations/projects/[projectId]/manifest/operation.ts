@@ -43,7 +43,7 @@ export async function GET(
       where: {
         id: projectId,
         status: 'Normal',
-        ...getProjectWhere(ctx.user.id, ctx.agentId),
+        ...getProjectWhere(ctx.user.id, ctx.agentId, ctx.teamScope),
       },
       select: {
         id: true,

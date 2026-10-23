@@ -267,7 +267,7 @@ test("integration uses committed fenced task state and excludes trusted backgrou
   assert.doesNotMatch(source, /await scheduleAgentFirstTaskEmail/);
   assert.match(read("src/lib/mcp/tasks/updateTask.ts"), /ctx.agentId \? \{ agentId: ctx.agentId \}/);
   assert.match(read("src/lib/mcp/auth/verifyJwt.ts"), /id: rawAgentId,\s*userId: user.id,\s*revokedAt: null/);
-  assert.match(read("src/lib/api/task-writes/update.ts"), /updateTaskSingle\(newTask, currentUser, actingAgentId\)/);
+  assert.match(read("src/lib/api/task-writes/update.ts"), /updateTaskSingle\(newTask, currentUser, actingAgentId, \{ teamScope: session\.teamScope \}\)/);
 });
 
 test("email models stay unchanged and flag defaults to Owner + QA", () => {

@@ -43,7 +43,7 @@ export async function GET(request: NextRequest) {
       where: { id: taskId },
       select: { projectId: true },
     })
-    if (!task || (await validateProjectAccess(task.projectId, ctx.user.id, ctx.agentId)).error) {
+    if (!task || (await validateProjectAccess(task.projectId, ctx.user.id, ctx.agentId, ctx.teamScope)).error) {
       return NextResponse.json(
         buildFieldError('not_found', 'task_id', 'Task not found'),
         { status: 404 }

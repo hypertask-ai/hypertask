@@ -197,15 +197,31 @@ test("flag off and every other split keep byte-identical open URLs and playlists
         const row = notification();
         const harness = createInboxHarness(enabled, split, [row]);
         await harness.open("view", clicked ? row : null);
-        assert.deepEqual(harness.calls, [`/detail/project-15/7311${clicked ? "" : "?inboxFlow=true"}`]);
+        assert.deepEqual(harness.calls, ["/detail/project-15/7311?inboxFlow=true"]);
         assert.deepEqual(harness.playlist(), [{ projectId: 15, uniqueIndex: 7311, notification: row }]);
       }
     }
     const mentioned = notification({ type: "Mentioned", commentId: 99 });
     const harness = createInboxHarness(enabled, split, [mentioned]);
     await harness.open("view", mentioned);
-    assert.deepEqual(harness.calls, ["/detail/project-15/7311#comment-99"]);
+    assert.deepEqual(harness.calls, ["/detail/project-15/7311?inboxFlow=true#comment-99"]);
   }
+});
+
+test("a mouse click on an inbox row keeps the inbox flow so sending a comment moves to the next message", async () => {
+  for (const [mode, suffix] of [["view", ""], ["reply", "&reply=true"], ["audio", "&audio=true"]]) {
+    const row = notification({ decisionCommentId: undefined });
+    const clicked = createInboxHarness(false, "Important", [row, notification({ id: "2", taskId: 2, task: { id: 2, projectId: 15, uniqueIndex: 7312 } })]);
+    await clicked.open(mode, row);
+    const keyboard = createInboxHarness(false, "Important", [row]);
+    await keyboard.open(mode, null);
+    assert.deepEqual(clicked.calls, [`/detail/project-15/7311?inboxFlow=true${suffix}`]);
+    assert.deepEqual(clicked.calls, keyboard.calls, "click and Enter open the same address");
+    assert.deepEqual(clicked.playlist().map((item) => item.uniqueIndex), [7311, 7312]);
+  }
+  const optedOut = createInboxHarness(false, "Important", [notification({ decisionCommentId: undefined })], true);
+  await optedOut.open("view", notification({ decisionCommentId: undefined }));
+  assert.deepEqual(optedOut.calls, ["/detail/project-15/7311"], "still allowed: callers that disable the inbox flow keep a plain address");
 });
 
 test("the row Link href uses the same anchor for ordinary and modified clicks", () => {

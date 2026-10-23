@@ -54,7 +54,7 @@ function loadSetter(file, field) {
     '@/lib/prisma': { __esModule: true, default: prisma },
     '@/utils/controllers/activities/CreatePriorityActivity': activity,
     '@/utils/controllers/activities/createEstimateActivity': activity,
-    '@/lib/auth/getSessionUser': { getSessionUser: async () => ({ userId: 7 }) },
+    '@/lib/auth/getSessionUser': { getSessionUser: async () => ({ userId: 7, teamScope: null }) },
     '@/lib/auth/sessionUserRecord': { loadSessionUserRecord: async () => ({ id: 7 }) },
     '@/utils/controllers/projects/getAllIncludes': {
       taskWriteAccessWhere: (...args) => { accessArgs.push(args); return WRITE_ACCESS; },
@@ -76,7 +76,7 @@ test('an agent acting for the user is checked as that user\'s own agent', async 
   const { call, accessArgs } = loadSetter('src/pages/api/priority/setPriority.ts', 'priority');
   await call({ taskId: 10, priority_index: 4, Priority_Value: 'Low', agentId: 'agent-1' });
   await call({ taskId: 10, priority_index: 4, Priority_Value: 'Low', agentId: { id: 'x' } });
-  assert.deepEqual(accessArgs, [[7, 'agent-1'], [7, null]]);
+  assert.deepEqual(accessArgs, [[7, 'agent-1', null], [7, null, null]]);
 });
 
 const SETTERS = [

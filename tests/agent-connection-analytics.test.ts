@@ -32,7 +32,7 @@ function authenticated(h: ReturnType<typeof harness>) {
     ACCOUNT_MANAGEMENT_KEY_PREFIX: "ht_mgmt_", TEAM_MANAGEMENT_KEY_PREFIX: "ht_team_",
   };
   h.mocks["@/lib/mcp/auth/verifyJwt"] = {
-    validateJwtToken: async (token: string) => ({ user, agentId: token.includes("second-agent") ? "second-agent" : "agent-one" }),
+    validateJwtToken: async (token: string) => ({ teamScope: null, user, agentId: token.includes("second-agent") ? "second-agent" : "agent-one" }),
   };
   h.mocks["@/lib/mcp/operationContext"] = { getMcpOperationContext: () => null };
   h.mocks["@/lib/auth/betterAuth"] = { auth: { api: { verifyApiKey: async ({ body }: any) => ({

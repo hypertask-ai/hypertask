@@ -1,13 +1,11 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
-import { taskWriteRoute, type TaskWriteRoute } from "./route";
-import { parseCookies } from "better-auth/cookies";
+import { legacyTaskWriteSession, taskWriteRoute, type TaskWriteRoute } from "./route";
 import {
   linkTaskPullRequest,
   PullRequestLinkError,
 } from "@/lib/pullRequests/taskPullRequests";
 import { AgentMutationLeaseConflictError } from "@/lib/mcp/tasks/agentMutationFence";
-import { SESSION_COOKIE, verifySession } from "@/lib/auth/session";
 import { broadcastTaskChange } from "@/lib/realtime/server";
 
 const route = taskWriteRoute({
@@ -51,7 +49,7 @@ const route = taskWriteRoute({
 });
 
 export const POST: TaskWriteRoute = async (request) => {
-  const session = verifySession(request.cookies ? request.cookies[SESSION_COOKIE] : parseCookies(request.headers.get("cookie") ?? "").get(SESSION_COOKIE));
+  const session = await legacyTaskWriteSession(request);
   if (!session) return NextResponse.json({ message: "Unauthorized" }, { status: 401 });
-  return route(request, { userId: session.id, source: "legacy", needsBridge: true });
+  return route(request, session);
 };

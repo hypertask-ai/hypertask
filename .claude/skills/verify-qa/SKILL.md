@@ -21,7 +21,7 @@ Test click removed (Valentin 2026-10-21); safety is flags, revert, live QA after
 
 `scripts/premerge-local.sh` remains optional for manual use outside the VPS. Do not run it on the VPS (Valentin, 2026-10-21: no tests).
 
-The command refuses worktrees containing `.env` files and ignores inherited service credentials. It installs dependencies with `npm ci` when `node_modules` is absent and refuses a symlinked `node_modules`. To reuse the main checkout's install, run `scripts/worktree-node-modules.sh <main checkout> <worktree>` (a hardlinked copy); never symlink `node_modules`, because `npm ci` through a symlink empties the shared install. It reads `/api/flags` with the plain QA storage state at `~/.config/hypertask-videos/storageState-qa-normal.json`, preserving Everyone flags and setting every other registry flag to Owner + QA in the disposable database. The seeded account has the QA identity only in that database. Repeat `--flag key=MODE` to override local modes; never count an overridden released mode as live-state proof. `Flags:` prints the resulting modes. The real app board route is `/project?id=N`; ship-check also accepts older `/projects/project-N` records.
+The command refuses worktrees containing `.env` files and ignores inherited service credentials. It copies the current source (including local edits, excluding dependencies, builds and env files) into `mktemp -d /tmp/ht-premerge-build.XXXXXX`, installs dependencies there with `npm ci`, and builds there. EXIT, INT and TERM remove that scratch tree after stopping the app; `down` still targets the original checkout. Do not put app copies, `.next`, `node_modules`, `build-*`, browser caches or Node toolchains in evidence. Only small sanitized logs, numbers, screenshots and reports belong there. It reads `/api/flags` with the plain QA storage state at `~/.config/hypertask-videos/storageState-qa-normal.json`, preserving Everyone flags and setting every other registry flag to Owner + QA in the disposable database. The seeded account has the QA identity only in that database. Repeat `--flag key=MODE` to override local modes; never count an overridden released mode as live-state proof. `Flags:` prints the resulting modes. The real app board route is `/project?id=N`; ship-check also accepts older `/projects/project-N` records.
 
 MinIO uses a random loopback port, throwaway local credentials, a tmpfs `premerge-attachments` bucket and browser CORS for the build origin. All five `R2_*` settings point uploads, public previews and downloads at it before build/start; `down` removes its container and any anonymous volumes.
 
@@ -67,6 +67,7 @@ Never use Valentin's account, password, or cookies. If the shot is a login page,
 1. **Doctor first.** On a login landing, run `.claude/skills/verify-qa/scripts/qa-identity <state> --expect <id from the table>` first: `identity ok` means fix state loading, not refresh; only `identity expired` means refresh that identity (YPER4-607, https://app.hypertask.ai/detail/project-4060/607). Do not judge the change until both are true:
    - The GitHub Production deployment for the merge sha is `success`.
    - The QA login is signed in on `https://app.hypertask.ai/my-tasks`. Shoot that page with `phone-shot.sh` and `--state ~/.config/hypertask-videos/storageState-qa.json`; it uses the repo's Playwright to load the state before navigation and refuses login landings before writing a PNG. A login page is a failed doctor, not a failed feature.
+   - **Core inbox cycle, every app deploy** (Valentin, 2026-10-23, YPER4-629: "please make this a core test upon releasing stuff ... The inbox cycle is incredibly important."): run `node .claude/skills/verify-qa/scripts/inbox-cycle-live.mjs <run folder>/inbox-cycle` as QA 985. It must print `inbox-cycle ok`: open by click and by Enter keep `?inboxFlow=true`, sending a comment archives and opens the next message, J opens the next, E archives. Add it as a `## Cases` line. A FAIL here is a FAIL of the release, whatever the ticket was; a flagged cause gets its flag switched Off first (HT Product Lead).
 2. **Read the ticket's acceptance criteria** and note the pull request and the merge sha.
 3. **Exercise every entry point the feature-map page lists.** On these pages that means every route and action under "How a customer reaches it" and "How to drive it", plus every success, cancel, error, empty, and persistence-after-reload path this change can affect. Drive `https://app.hypertask.ai` with `agent-browser` or `phone-shot.sh`. Prove side effects: the data is saved, and a reload keeps it. A screenshot of pixels alone is not proof. Mocks, a unit test, and a preview do not count.
 4. **Name each unreachable path** with the concrete reason (auth, plan, flag, missing data) and cover the closest real path you can reach. Record that path as `UNREACHABLE`, not as a skip you forget.
@@ -112,6 +113,13 @@ Never use Valentin's account, password, or cookies. If the shot is a login page,
 10. **If Valentin @mentioned you, reply with an @mention back**, using `<span data-type="mention" class="mention" data-id="Valentin Yeo" data-label="name-6">Valentin Yeo</span>`.
 11. **Say which skill you used** in the comment (`verify-qa`).
 12. **A correction goes into this file**, not into chat memory. When a check is corrected, edit this SKILL.md and say on the ticket which file changed.
+
+## Evidence storage and daily cleanup
+
+Follow [evidence-storage.md](reference/evidence-storage.md): keep proof, checklists,
+Markdown, JSON, PNG and HTML reports outside build directories. The daily pruner
+is dry-run by default; its user timer applies only the allowlisted age rules.
+The runner installs it after merge and verifies the first real service run.
 
 ## Weekly map upkeep
 

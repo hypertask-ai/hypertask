@@ -46,7 +46,7 @@ async function getAccessibleProjectIds(ctx: McpAuthContext) {
   const accessibleProjects = await prisma.project.findMany({
     where: {
       status: 'Normal',
-      ...getProjectWhere(ctx.user.id, ctx.agentId),
+      ...getProjectWhere(ctx.user.id, ctx.agentId, ctx.teamScope),
     },
     select: { id: true },
   })
@@ -60,7 +60,7 @@ async function scopeRelatedRows(ctx: McpAuthContext, rows: TurbopufferTaskRow[])
     where: {
       id: { in: rows.map(row => Number(row.id)) },
       status: 'Normal',
-      project: getProjectWhere(ctx.user.id, ctx.agentId),
+      project: getProjectWhere(ctx.user.id, ctx.agentId, ctx.teamScope),
     },
     select: { id: true, projectId: true, ticketNumber: true, title: true, uniqueIndex: true },
   });
@@ -105,14 +105,14 @@ export async function handleRelatedTasksGet(
     const resolved = await findTaskByIdentifier(
       ctx.user,
       { task_id: input.taskId },
-      ctx.agentId
+      ctx.agentId, undefined, ctx.teamScope
     )
     if (!resolved) {
       return errorResponse('Task not found or access denied', 404)
     }
 
     const task = await prisma.task.findFirst({
-      where: { id: resolved.id, ...(ctx.agentId ? { project: getProjectWhere(ctx.user.id, ctx.agentId) } : {}) },
+      where: { id: resolved.id, ...(ctx.agentId || ctx.teamScope != null ? { project: getProjectWhere(ctx.user.id, ctx.agentId, ctx.teamScope) } : {}) },
       select: {
         title: true,
         description_: {

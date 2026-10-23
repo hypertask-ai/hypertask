@@ -93,7 +93,8 @@ export async function runModelTurn(state: StreamState, resolvedBody: ChatRequest
     heartbeatTurn?.metadata,
     await isFeatureEnabled(HTPR_7363_CHAT_TASK_WRITER_FLAG, dbUser.id),
     state.providerAbort.signal,
-    inlineAgentImagesEnabled
+    inlineAgentImagesEnabled,
+    actingAgent ? actingAgent.teamScope : null
   );
   if (
     heartbeatExecutionId &&

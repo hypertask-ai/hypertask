@@ -1,3 +1,4 @@
+import { requireAgentWriteRole } from '@/lib/mcp/agents/readRoleGuard'
 import { wrapMcpRoute, checkMcpRouteRateLimit as checkMcpRateLimit, validateMcpRouteAuth as validateMcpAuth } from '@/lib/mcp/routeWrapper'
 import { NextRequest, NextResponse } from "next/server";
 
@@ -24,6 +25,8 @@ export async function DELETE(
         { status: 401 }
       );
     }
+    const roleRefusal = await requireAgentWriteRole(ctx);
+    if (roleRefusal) return roleRefusal;
 
     const { fieldId } = await props.params;
 
@@ -38,7 +41,7 @@ export async function DELETE(
     const access = await validateProjectAccess(
       field.projectId,
       ctx.user.id,
-      ctx.agentId
+      ctx.agentId, ctx.teamScope
     );
     if (access.error) {
       return NextResponse.json(

@@ -1,3 +1,4 @@
+import { fetchWithoutBrotli } from "@/lib/net/fetchWithoutBrotli";
 import { randomUUID } from "node:crypto";
 import { waitUntil } from "@vercel/functions";
 import { logAiUsage, type AiUsageRecord } from "./aiUsage";
@@ -268,6 +269,7 @@ function resolveUntracedAiModel(
       return createOpenAI({
         apiKey: customEndpoint.apiKey,
         baseURL: customEndpoint.baseUrl,
+        fetch: fetchWithoutBrotli,
       }).chat(customEndpoint.modelId);
     }
   }

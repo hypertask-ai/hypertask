@@ -26,6 +26,7 @@ function fakeDatabase(
       if (transactionAttempts <= serializationFailures) throw { code: 'P2034' }
       return run({
         agent: { findFirst: async () => agent },
+        project: { findFirst: () => { throw new Error('Unexpected project delegate access') } },
         member: {
           findMany: async ({ where }) =>
             actingAgentProjects

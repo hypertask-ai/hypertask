@@ -14,7 +14,7 @@ const jiti = createJiti(__filename, {
   fsCache: false,
 })
 const user = { id: 42, email: 'owner@example.invalid', displayName: 'Owner' }
-const ctx: McpAuthContext = { user, agentId: 'writer' }
+const ctx: McpAuthContext = { user, agentId: 'writer', teamScope: null }
 let role: AgentRole | undefined = 'write'
 let memberTeamIds: Array<string | null> = ['team']
 let memberStatus = 'Accepted'
@@ -56,6 +56,7 @@ const stubs = {
   },
   'src/lib/mcp/boards/createBoardFromManifest.ts': { createBoardFromManifest: () => assert.fail('use injected creator') },
   'src/lib/mcp/idempotency/idempotencyStore.ts': {
+    IdempotencyAccessError: class extends Error {},
     IdempotencyInProgressError: class extends Error {},
     normalizeIdempotencyKey: () => null,
     withIdempotency: async (_operation: string, _userId: number, _key: null, _input: unknown, run: () => Promise<unknown>) => run(),

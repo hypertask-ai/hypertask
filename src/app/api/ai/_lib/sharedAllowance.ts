@@ -1,4 +1,5 @@
 import { randomUUID } from "node:crypto";
+import { findSharedAiAllowanceError, SHARED_AI_ALLOWANCE_ERROR_NAME } from "@/app/api/ai/_lib/allowanceError";
 import type { ImageModelMiddleware, LanguageModelMiddleware } from "ai";
 
 import { getRedis } from "@/lib/redis";
@@ -48,39 +49,13 @@ export class SharedAiAllowanceExceededError extends Error {
 
   constructor(periodKey: string) {
     super(SHARED_AI_ALLOWANCE_EXCEEDED_MESSAGE);
-    this.name = "SharedAiAllowanceExceededError";
+    this.name = SHARED_AI_ALLOWANCE_ERROR_NAME;
     this.periodKey = periodKey;
   }
 }
 
 export function sharedAiAllowanceErrorMessage(error: unknown): string | null {
-  let current: unknown = error;
-  const visited = new Set<unknown>();
-  for (
-    let depth = 0;
-    depth < 8 && current && !visited.has(current);
-    depth += 1
-  ) {
-    visited.add(current);
-    if (current instanceof Error) {
-      if (current.name === "SharedAiAllowanceExceededError") {
-        return current.message;
-      }
-      const wrapped = current as Error & {
-        cause?: unknown;
-        lastError?: unknown;
-      };
-      current = wrapped.cause ?? wrapped.lastError;
-      continue;
-    }
-    if (typeof current === "object") {
-      const wrapped = current as { cause?: unknown; lastError?: unknown };
-      current = wrapped.cause ?? wrapped.lastError;
-      continue;
-    }
-    break;
-  }
-  return null;
+  return findSharedAiAllowanceError(error)?.message ?? null;
 }
 
 type ModelPricing = {

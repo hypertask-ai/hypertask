@@ -1,7 +1,7 @@
 import { useKeepAiChatClosed } from "@/hooks/General/useKeepAiChatClosed";
 import { Suspense, useContext, useEffect, useRef, useState } from "react";
 import { useRecoilValue, useSetRecoilState } from "@/lib/state";
-import { currentProjectAtom, currentUserAtom, lastUsedBoardsAtom, composeTaskChatIntroAtom, composeTaskQuestionsTaskIdAtom, showAIChatInterfaceAtom, isAiChatSidebarModeAtom, aiChatAutoOpenSuppressedAtom, aiChatExplicitOpenAtAtom, dockedChatScopeAtom, inViewObjectAtom } from "@/store";
+import { currentProjectAtom, currentUserAtom, lastUsedBoardsAtom, composeTaskChatIntroAtom, composeTaskSkillFollowupAtom, composeTaskQuestionsTaskIdAtom, showAIChatInterfaceAtom, isAiChatSidebarModeAtom, aiChatAutoOpenSuppressedAtom, aiChatExplicitOpenAtAtom, dockedChatScopeAtom, inViewObjectAtom } from "@/store";
 import { useRouter } from "next/navigation";
 import { parseCookies } from "nookies";
 import { MobileViewContext } from "@/lib/contexts/mobileContext";
@@ -19,7 +19,7 @@ import { AiComposerTextarea } from "@/components/AI_CHAT/AiComposerTextarea";
 import FullScreenChatLoading from "@/components/AI_CHAT/FullScreenChatLoading";
 import { HintKey } from "@/components/Common/CommonModalComponents";
 import { extractPastedImageFiles } from "@/utils/aiChat/extractPastedImageFiles";
-import { composeTaskBoardId, composeTaskAssistantMessage, createComposedTask, type ComposeTaskStage } from "@/lib/ai/composeTask";
+import { composeTaskBoardId, composeTaskAssistantMessage, createComposedTask, requestComposeSkillFollowup, type ComposeTaskStage } from "@/lib/ai/composeTask";
 import globalAPIHandlers from "@/utils/api/global";
 import useAddDeleteTaskInBoards from "@/hooks/MultiPages/useAddDeleteTaskInBoards";
 import { useProjectQuery } from "@/hooks/General/useProjectQuery";
@@ -28,11 +28,11 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { cachedTaskDetailKey } from "@/lib/navigation/cachedTaskDetail";
 import { mergeRealtimeTaskDetail, preserveTaskAssigneesChangedDuringFetch, refreshTaskDetailQueryCache, shouldPreserveTaskEditorContent } from "@/lib/realtime/taskDetailRefresh";
 import { useFlag } from "@/hooks/useFlag";
-import { HTPR_7317_CTRLJ_TICKET_QUESTIONS_FLAG, HTPR_7305_BOARD_FROM_TEXT_FLAG, HTPR_7306_CTRLJ_FOOTER_ONE_LINE_FLAG, HTPR_7312_CTRLJ_SKILLS_FLAG } from "@/lib/flags/keys";
+import { HTPR_7319_SKILL_CHAT_FOLLOWUP_FLAG, HTPR_7317_CTRLJ_TICKET_QUESTIONS_FLAG, HTPR_7305_BOARD_FROM_TEXT_FLAG, HTPR_7306_CTRLJ_FOOTER_ONE_LINE_FLAG, HTPR_7312_CTRLJ_SKILLS_FLAG } from "@/lib/flags/keys";
 import { matchComposeTaskBoard } from "@/lib/ai/composeTaskBoard";
 import type { CommandFocusProxy } from "@/components/commandTypes";
 import { HTPR_6891_PHONE_TASK_WRITER_SHEET_FLAG, HTPR_6929_COMPOSE_TASK_WRITER_FLAG, HTPR_6937_NEW_TASK_WINDOW_FLAG, HTPR_6951_TASK_WRITING_PROGRESS_FLAG, HTPR_7056_CTRLJ_SPLIT_TASKS_FLAG, HTPR_7085_CTRLJ_WRITER_REASON_FLAG, HTPR_7051_TASK_WRITER_IMAGE_UNFURL_FLAG, HTPR_7514_INLINE_AGENT_IMAGES_FLAG, HTPR_7053_COMPOSE_BOARD_CHIP_FLAG, HTPR_7313_CTRLJ_ALWAYS_BOARD_CHIP_FLAG, HTPR_7343_CTRLJ_WRITER_PROPERTIES_FLAG } from "@/lib/flags/keys";
-import { HTPR_7307_CTRLJ_FOOTER_CLICKABLE_FLAG } from "@/lib/flags/keys";
+import { HTPR_7307_CTRLJ_FOOTER_CLICKABLE_FLAG, HTPR_7652_CTRLJ_ENTER_QUEUE_FLAG } from "@/lib/flags/keys";
 import { resolveComposeBoardTarget } from "./composeBoardTarget";
 import { ChatScopeChip } from "@/components/AI_CHAT/ChatScopeChip";
 import MoveTaskGlobal from "@/components/Modals/MoveTaskToBoard";
@@ -52,6 +52,9 @@ export default function ComposeTaskWriter({ active, focusProxy, destinationProje
   const chatAutoOpenAllowed = useRef(false);
   chatAutoOpenAllowed.current = chatAutoOpenReady && !keepAiChatClosed;
   const ctrljFooterOneLine = useFlag(HTPR_7306_CTRLJ_FOOTER_ONE_LINE_FLAG);
+  const skillFollowupFlag = useFlag(HTPR_7319_SKILL_CHAT_FOLLOWUP_FLAG);
+  let skillFollowupEnabled = false;
+  if (skillFollowupFlag) skillFollowupEnabled = true;
   const invokeSkills = useFlag(HTPR_7312_CTRLJ_SKILLS_FLAG);
   const phoneTaskWriterSheetEnabled = useFlag(HTPR_6891_PHONE_TASK_WRITER_SHEET_FLAG);
   const enabled = useFlag(HTPR_6929_COMPOSE_TASK_WRITER_FLAG);
@@ -67,6 +70,7 @@ export default function ComposeTaskWriter({ active, focusProxy, destinationProje
   const boardFromTextEnabled = useFlag(HTPR_7305_BOARD_FROM_TEXT_FLAG);
   const alwaysShowBoardChip = useFlag(HTPR_7313_CTRLJ_ALWAYS_BOARD_CHIP_FLAG);
   const clickableFooter = useFlag(HTPR_7307_CTRLJ_FOOTER_CLICKABLE_FLAG);
+  const queueEnterWhileBoardsLoad = useFlag(HTPR_7652_CTRLJ_ENTER_QUEUE_FLAG);
   const footerButtonClassName = "rounded-[4px] transition hover:bg-hover-active hover:text-white-black focus-visible:bg-hover-active focus-visible:outline-none";
   const [selectedBoardId, setSelectedBoardId] = useState<number>();
   const [boardPickerOpen, setBoardPickerOpen] = useState(false);
@@ -97,6 +101,7 @@ export default function ComposeTaskWriter({ active, focusProxy, destinationProje
   const [addingImages, setAddingImages] = useState(false);
   const pendingImages = useRef(0);
   const sending = useRef(false);
+  const textHeldUntilBoardsLoad = useRef<string | null>(null);
   const mounted = useRef(false);
   const input = useRef<HTMLTextAreaElement>(null);
   const composer = useRef<HTMLDivElement>(null);
@@ -104,6 +109,7 @@ export default function ComposeTaskWriter({ active, focusProxy, destinationProje
   const user = useRecoilValue(currentUserAtom);
   const currentProject = useRecoilValue(currentProjectAtom);
   const lastUsedBoards = useRecoilValue(lastUsedBoardsAtom);
+  const setPendingFollowup = useSetRecoilState(composeTaskSkillFollowupAtom);
   const setIntro = useSetRecoilState(composeTaskChatIntroAtom);
   const setQuestionsTaskId = useSetRecoilState(composeTaskQuestionsTaskIdAtom);
   const setShowChat = useSetRecoilState(showAIChatInterfaceAtom);
@@ -117,7 +123,7 @@ export default function ComposeTaskWriter({ active, focusProxy, destinationProje
   const { updateTaskInCache } = UpdateKanban();
   const queryClient = useQueryClient();
   const { fileItems, files, fileInputRef, handleDroppedFiles, handleAttachmentClick, removeFile } = useFileUpload();
-  const { data: boards = [], isFetching: loadingBoards } = useQuery<IProject[]>({
+  const { data: boards = [], isFetching: loadingBoards, isSuccess: boardsLoaded } = useQuery<IProject[]>({
     queryKey: ["projectsAllMinimal", user?.id],
     queryFn: () => globalAPIHandlers.getAllProjectsMinimal("ExtraMinimal"),
     enabled: (boardChipEnabled || boardFromTextEnabled) && enabled && active && Boolean(user?.id),
@@ -248,6 +254,10 @@ export default function ComposeTaskWriter({ active, focusProxy, destinationProje
   };
 
   const send = async () => {
+    if (queueEnterWhileBoardsLoad && waitingForBoards && enabled && !sending.current && !dictating && text.trim()) {
+      textHeldUntilBoardsLoad.current = text;
+      return;
+    }
     if (!enabled || sending.current || pendingImages.current > 0 || waitingForBoards || dictating || !text.trim()) return;
     sending.current = true;
     setWritingHeight(showProgress ? composer.current?.offsetHeight : undefined);
@@ -282,7 +292,7 @@ export default function ComposeTaskWriter({ active, focusProxy, destinationProje
       }
       if (!mounted.current) return;
       if (!project) throw new Error("Your last board is unavailable. Open a board and try again.");
-      const { task: savedTask, writerFailed, writerFailureReason, tasks: splitResult, failedTitles } = await createComposedTask({
+      const { task: savedTask, writerFailed, writerFailureReason, tasks: splitResult, failedTitles, skills } = await createComposedTask({
         text, files, project, userId: user.id, explainWriterFailure: writerReasonEnabled, unfurlImageUrls, ...(inlineAgentImages ? { inlineAgentImages } : {}), ...(invokeSkills ? { invokeSkills } : {}), ...(applyWriterProperties ? { applyWriterProperties } : {}), ...(existingTaskId ? { existingTaskId } : {}),
         ...(currentProject?.id === projectId && !existingTaskId &&
           /^\/project(?:\/|$)/.test(window.location.pathname) ? { viewProject: currentProject } : {}),
@@ -327,7 +337,18 @@ export default function ComposeTaskWriter({ active, focusProxy, destinationProje
       if (mobile && newTaskWindow) await onCreated();
       const content = composeTaskAssistantMessage(task.ticketNumber ?? `${project.uniqueIdentifier ?? "TASK"}-${task.uniqueIndex}`, writerFailed, Boolean(existingTaskId), splitTasksEnabled && splitResult ? { tasks: splitResult, failedTitles } : undefined, writerFailureReason);
       if (ticketQuestionsEnabled && / from your note\. Want me to refine it\?/.test(content)) setQuestionsTaskId(task.id);
-      setIntro({ taskId: task.id, content });
+      if (skillFollowupEnabled && !writerFailed && skills?.length) {
+        setPendingFollowup({ taskId: task.id });
+        void (async () => {
+          const result = await requestComposeSkillFollowup(task.id, skills, text);
+          if (result) queryClient.setQueryData(["task-questions", "new-ticket", task.id], { questions: result.questions });
+          const enriched = result
+            ? composeTaskAssistantMessage(task.ticketNumber ?? `${project.uniqueIdentifier ?? "TASK"}-${task.uniqueIndex}`, false, Boolean(existingTaskId), splitTasksEnabled && splitResult ? { tasks: splitResult, failedTitles } : undefined, undefined, result.followup)
+            : content;
+          setIntro({ taskId: task.id, content: enriched, skillFollowup: true });
+          setPendingFollowup((pending) => pending?.taskId === task.id ? null : pending);
+        })();
+      } else setIntro({ taskId: task.id, content });
       updateActiveItemAndItemInView(task);
       setScope(projectId);
       if (chatAutoOpenAllowed.current) {
@@ -353,6 +374,15 @@ export default function ComposeTaskWriter({ active, focusProxy, destinationProje
     delete focusProxy.pendingEnter;
     void send();
   }, [active, text, focusProxy, inputFocused]);
+
+  useEffect(() => {
+    const heldText = textHeldUntilBoardsLoad.current;
+    if (heldText === null) return;
+    const holdStillValid = queueEnterWhileBoardsLoad && boardFromTextEnabled && active && !dictating && text === heldText;
+    if (holdStillValid && (waitingForBoards || addingImages)) return;
+    textHeldUntilBoardsLoad.current = null;
+    if (holdStillValid && boardsLoaded) void send();
+  }, [waitingForBoards, addingImages, active, queueEnterWhileBoardsLoad, boardFromTextEnabled, boardsLoaded, dictating, text]);
 
   const attachments = fileItems.length > 0 && (
     <Suspense fallback={null}>

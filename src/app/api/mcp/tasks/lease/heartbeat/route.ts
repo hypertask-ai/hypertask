@@ -1,3 +1,5 @@
+import { requireAgentWriteRole } from "@/lib/mcp/agents/readRoleGuard"
+import { lockTaskTeamScope, TaskTeamScopeError } from "@/lib/mcp/tasks/agentMutationFence"
 import { wrapMcpRoute, checkMcpRouteRateLimit as checkMcpRateLimit, validateMcpRouteAuth as validateMcpAuth } from '@/lib/mcp/routeWrapper'
 import { NextRequest, NextResponse } from 'next/server';
 
@@ -32,6 +34,8 @@ export async function POST(request: NextRequest) {
       { status: 401 }
     );
   }
+  const roleRefusal = await requireAgentWriteRole(ctx);
+  if (roleRefusal) return roleRefusal;
 
   let body: unknown;
   try {
@@ -81,7 +85,7 @@ export async function POST(request: NextRequest) {
     const task = await findTaskByIdentifier(
       ctx.user,
       { task_id },
-      ctx.agentId
+      ctx.agentId, undefined, ctx.teamScope
     );
     if (!task) {
       return NextResponse.json(
@@ -93,7 +97,7 @@ export async function POST(request: NextRequest) {
     const ttlSeconds = clampLeaseTtlSeconds(ttl_seconds as number | undefined);
     const leaseToken = lease_token ?? null;
 
-    const leases = await prisma.$queryRaw<LeaseRow[]>`
+    const mutate = (tx: import("@prisma/client").Prisma.TransactionClient) => tx.$queryRaw<LeaseRow[]>`
       UPDATE "TaskLease"
       SET
         "expiresAt" = now() + (${ttlSeconds} * INTERVAL '1 second'),
@@ -105,6 +109,10 @@ export async function POST(request: NextRequest) {
         AND "expiresAt" > now()
       RETURNING "taskId", "holder", "agentId", "token", "expiresAt", "heartbeatAt"
     `;
+    const leases = ctx.teamScope != null ? await prisma.$transaction(async (tx) => {
+      await lockTaskTeamScope(tx, task.id, ctx.user.id, ctx.agentId, ctx.teamScope);
+      return mutate(tx);
+    }) : await mutate(prisma);
 
     if (leases.length === 0) {
       return NextResponse.json(
@@ -131,6 +139,7 @@ export async function POST(request: NextRequest) {
       { status: 200 }
     );
   } catch (error) {
+    if (error instanceof TaskTeamScopeError) return NextResponse.json({ success: false, error: error.message }, { status: 404 })
     const identifierResponse = taskIdentifierErrorResponse(error);
     if (identifierResponse) return identifierResponse;
     console.error('[MCP Task Lease Heartbeat] Error:', error);

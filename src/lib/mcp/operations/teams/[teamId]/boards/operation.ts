@@ -1,3 +1,4 @@
+import { IdempotencyAccessError } from "@/lib/mcp/idempotency/idempotencyStore"
 import { agentScopeEnforced, recordAgentBoardScopeMiss } from "@/lib/auth/agentScope";
 import { projectContentAccessWhere } from "@/utils/controllers/projects/getAllIncludes";
 import { reportMcpOperationCrash } from '@/lib/mcp/operationCrashReport'
@@ -72,6 +73,9 @@ export async function POST(
       )
     }
 
+    if (ctx.teamScope != null && (teamId !== ctx.teamScope.teamId || !ctx.teamScope.accessBinding?.trim())) {
+      return NextResponse.json({ success: false, error: 'Forbidden' }, { status: 403 })
+    }
     const dbUser = await prisma.user.findUnique({
       where: { id: user.id },
       select: {
@@ -244,9 +248,11 @@ export async function POST(
         clientIdempotencyKey,
         { teamId: team.id, manifest: validated.data },
         produceResponseBody,
-        ctx.agentId && agentScopeEnforced() ? ctx.agentId : undefined
+        ctx.agentId && (ctx.teamScope != null || agentScopeEnforced()) ? ctx.agentId : undefined,
+        ctx.teamScope
       )
     } catch (error) {
+      if (error instanceof IdempotencyAccessError) return NextResponse.json({ error: error.message }, { status: 404 })
       if (error instanceof IdempotencyInProgressError) {
         return NextResponse.json(
           {
@@ -274,7 +280,7 @@ export async function POST(
 
     if (responseBody.idempotent_replayed) {
       const board = await prisma.project.findFirst({
-        where: { id: responseBody.board.id, teamId: team.id, ...projectContentAccessWhere(user.id, ctx.agentId) },
+        where: { id: responseBody.board.id, teamId: team.id, ...projectContentAccessWhere(user.id, ctx.agentId, ctx.teamScope) },
         select: { id: true },
       })
       if (!board) return NextResponse.json({ success: false, error: 'Board not accessible' }, { status: 403 })

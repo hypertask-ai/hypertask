@@ -1,3 +1,4 @@
+const { withStubs } = require('./helpers/stub-map.cjs')
 const test = require('node:test')
 const assert = require('node:assert/strict')
 const fs = require('node:fs')
@@ -12,13 +13,12 @@ const userId = 100
 const demoBoardId = 42
 
 function loadTs(relativePath, aliases) {
-  aliases = {
+  aliases = withStubs({
     "@/lib/auth/agentCookieBridgeRoutes": require("./task-route-loader.cjs").load("src/lib/auth/agentCookieBridgeRoutes.ts", {}),
     "@/lib/telemetry/signupAnalytics": { recordServerCapture: () => {} },
     "@/lib/auth/agentScope": require("./helpers/agent-board-scope.cjs").enforcedScope,
     '@/lib/auth/signupAttributionContext': { createSignupContext: async () => null, consumeSignupContext: async () => null, consumeSignupCookie: async () => null, consumeGoogleSignupContext: async () => null, bindSignupCodeContext: async () => {}, takeSignupCodeContext: async () => null },
-    ...aliases,
-  }
+  }, aliases)
 
   if (/src\/lib\/flags\/(?:keys|definitions)\.ts$/.test(relativePath)) return require("./helpers/flag-files.cjs").load(relativePath);
   const javascript = ts.transpileModule(fs.readFileSync(path.join(root, relativePath), 'utf8'), {
@@ -126,6 +126,7 @@ function makeHarness({ existing = true, membershipOnly = false, flagMode = 'EVER
     './utils/edgeHelpers': { isValidUser: (raw) => ({ isValid: !!raw, user: raw ? JSON.parse(raw) : null }) },
     './utils/serverActions': {},
     './utils/helperFunctions/helperFunctions': {},
+    '@/lib/net/contentEncoding': { refusedContentEncoding: () => undefined },
     '@/lib/auth/safeReturnTo': { parseSafeReturnTo: () => null },
     '@/lib/auth/sessionEdge': { verifySessionEdge: async () => ({ id: userId }) },
     '@/lib/auth/cookieIdentity': {},

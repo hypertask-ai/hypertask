@@ -34,6 +34,10 @@ function moduleWithStubs(file, stubs) {
 function harness({ enabled = true, skills = available } = {}) {
   const checks = [], resolutions = [], lookups = [], retrieval = [], parts = [];
   const run = moduleWithStubs('src/app/api/ai/_lib/taskWriterRun.ts', {
+    '@/lib/rag/authorizeIndexedRows': { authorizeIndexedRows: async (taskRows, commentRows, principal) => {
+      assert.equal(principal?.teamScope == null, true);
+      return { taskRows, commentRows };
+    } },
     '@/lib/flags/keys': keys,
     '@/lib/flags': { ...keys, isFeatureEnabled: async (key, userId) => {
       checks.push([key, userId]);
@@ -98,7 +102,7 @@ for (const [slug, note, cleaned] of [
     assert.deepEqual(h.retrieval, [cleaned]);
     assert.ok(h.checks.some(([key, userId]) => key === flag && userId === 985));
     assert.equal(h.lookups.length, 1, 'secondary note copies reuse the authorized lookup result');
-    for (const { context } of h.resolutions) assert.deepEqual(context, { userId: 985, projectId: 15 });
+    for (const { context } of h.resolutions) assert.deepEqual(context, { userId: 985, agentId: undefined, teamScope: undefined, projectId: 15 });
   });
 }
 

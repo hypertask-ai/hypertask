@@ -1,3 +1,4 @@
+const { withStubs } = require("./helpers/stub-map.cjs");
 const assert = require("node:assert/strict");
 const fs = require("node:fs");
 const path = require("node:path");
@@ -8,7 +9,7 @@ const root = path.resolve(__dirname, "..");
 const jiti = require("jiti")(__filename, { alias: { "@": path.join(root, "src") } });
 
 function load(file, stubs) {
-  stubs = { "@/lib/mcp/operationCrashReport": { reportMcpOperationCrash: () => {} }, ...stubs };
+  stubs = withStubs({ "@/lib/mcp/operationCrashReport": { reportMcpOperationCrash: () => {} } }, stubs);
   const source = ts.transpileModule(fs.readFileSync(path.join(root, file), "utf8"), {
     compilerOptions: {
       esModuleInterop: true,

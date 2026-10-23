@@ -1,3 +1,4 @@
+import { requireAgentWriteRole } from "@/lib/mcp/agents/readRoleGuard";
 import { inlineAgentImagesForUser } from "@/lib/media/inlineAgentImages.server";
 import { agentScopeEnforced, recordAgentBoardScopeMiss } from "@/lib/auth/agentScope";
 import { reportMcpOperationCrash } from '@/lib/mcp/operationCrashReport'
@@ -70,6 +71,8 @@ export async function PATCH(request: NextRequest, props: { params: Promise<{ com
         { status: 401 }
       )
     }
+    const roleRefusal = await requireAgentWriteRole(ctx)
+    if (roleRefusal) return roleRefusal
     const user = ctx.user;
     const commentId = parseInt(params.comment_id)
     if (isNaN(commentId) || commentId <= 0) {
@@ -196,10 +199,10 @@ export async function PATCH(request: NextRequest, props: { params: Promise<{ com
     const project = comment.task.project
     const hasAccess =
       ctx.agentId && agentScopeEnforced()
-        ? await userCanAccessTask(user.id, comment.task.id, ctx.agentId)
+        ? await userCanAccessTask(user.id, comment.task.id, ctx.agentId, ctx.teamScope)
         : project.ownerId === user.id || project.members.some((m) => m.userId === user.id)
 
-    if (!hasAccess) {
+    if (!hasAccess || (ctx.teamScope != null && !await userCanAccessTask(user.id, comment.task.id, ctx.agentId, ctx.teamScope))) {
       return NextResponse.json(
         {
           success: false,
@@ -293,14 +296,16 @@ export async function PATCH(request: NextRequest, props: { params: Promise<{ com
       commentId,
       text: sanitizedText,
       userId: user.id,
-      agentId: ctx.agentId,
+      agentId: ctx.agentId, teamScope: ctx.teamScope,
     })
 
     await persistUrlsForComment(
       sanitizedText,
       comment.task.id,
       commentId,
-      'PUT'
+      'PUT',
+      [],
+      { userId: user.id, agentId: ctx.agentId, teamScope: ctx.teamScope }
     )
 
     const commentWithAgent = await prisma.comment.findUnique({
@@ -398,6 +403,8 @@ export async function DELETE(request: NextRequest, props: { params: Promise<{ co
         { status: 401 }
       )
     }
+    const roleRefusal = await requireAgentWriteRole(ctx)
+    if (roleRefusal) return roleRefusal
     const user = ctx.user;
     const commentId = parseInt(params.comment_id)
     if (isNaN(commentId) || commentId <= 0) {
@@ -442,10 +449,10 @@ export async function DELETE(request: NextRequest, props: { params: Promise<{ co
     const project = comment.task.project
     const hasAccess =
       ctx.agentId && agentScopeEnforced()
-        ? await userCanAccessTask(user.id, comment.task.id, ctx.agentId)
+        ? await userCanAccessTask(user.id, comment.task.id, ctx.agentId, ctx.teamScope)
         : project.ownerId === user.id || project.members.some((m) => m.userId === user.id)
 
-    if (!hasAccess) {
+    if (!hasAccess || (ctx.teamScope != null && !await userCanAccessTask(user.id, comment.task.id, ctx.agentId, ctx.teamScope))) {
       return NextResponse.json(
         {
           success: false,

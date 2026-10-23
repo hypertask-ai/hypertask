@@ -23,6 +23,8 @@ function harness({ content = [], finishReason = "length", failure, viewer = { id
     },
   };
   const stubs = {
+    "@/lib/net/downloadWithoutBrotli": { downloadWithoutBrotli: undefined },
+    "@/lib/ai/taskWriterSkills": require("jiti")(__filename, { fsCache: false })(path.resolve(__dirname, "../src/lib/ai/taskWriterSkills.ts")),
     ai,
     "@/lib/auth/getSessionUser": { getSessionUser: async () => viewer ? { userId: viewer.id } : null },
     "@/lib/auth/agentScope": { withAgentScopeRequest: (_request, run) => run() },

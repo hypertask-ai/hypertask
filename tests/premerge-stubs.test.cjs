@@ -29,6 +29,7 @@ function harness(env = local) {
   };
   const neverProvider = () => { throw new Error("A real provider must not be constructed"); };
   const mocks = {
+    "@/lib/net/fetchWithoutBrotli": { fetchWithoutBrotli: async () => { throw new Error("Unexpected network request"); } },
     ai,
     "@vercel/functions": { waitUntil: (promise) => pending.push(promise) },
     "./aiUsage": { logAiUsage: async () => {} },

@@ -1,3 +1,4 @@
+const { withStubs } = require("./helpers/stub-map.cjs");
 const test = require("node:test");
 const assert = require("node:assert/strict");
 const fs = require("node:fs");
@@ -25,7 +26,7 @@ const fieldTools = () => optionalModule("src/lib/ai/taskWriterCustomFields.ts");
 const plain = (value) => JSON.parse(JSON.stringify(value));
 
 function moduleWithStubs(file, stubs) {
-  if (!("@/lib/auth/agentScope" in stubs)) stubs = { "@/lib/auth/agentScope": require("./helpers/agent-board-scope.cjs").enforcedScope, ...stubs };
+  if (!("@/lib/auth/agentScope" in stubs)) stubs = withStubs({ "@/lib/auth/agentScope": require("./helpers/agent-board-scope.cjs").enforcedScope }, stubs);
   const filename = path.join(root, file);
   const code = ts.transpileModule(fs.readFileSync(filename, "utf8"), {
     compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 },
@@ -36,6 +37,10 @@ function moduleWithStubs(file, stubs) {
     console: { log() {}, warn() {}, error() {} },
     require: (id) => {
       if (id in stubs) return stubs[id];
+      if (id === "@/lib/net/downloadWithoutBrotli") return { downloadWithoutBrotli: undefined };
+      if (id === "@/app/api/ai/_lib/skillAccess") return { AccountSkillAccessError: class extends Error {} };
+      if (id === "@/lib/auth/agentScope") return require("./helpers/agent-board-scope.cjs").enforcedScope;
+      if (["@/lib/ai/taskWriterSkills", "./taskWriterSkills"].includes(id)) return load(path.join(root, "src/lib/ai/taskWriterSkills.ts"));
       if (id === "@/lib/media/inlineAgentImages.server") return { inlineAgentImagesForUser: async (html) => html };
       if (id === "@/lib/media/inlineAgentImages") return load(path.join(root, "src/lib/media/inlineAgentImages.ts"));
       if (id === "@/lib/ai/prompts/registry") return load(path.join(root, "src/lib/ai/prompts/registry.ts"));
@@ -106,6 +111,10 @@ function harness(options = {}) {
     agent: { findFirst: async () => options.badAgent ? null : { id: "agent" } },
   };
   const run = moduleWithStubs("src/app/api/ai/_lib/taskWriterRun.ts", {
+    "@/lib/rag/authorizeIndexedRows": { authorizeIndexedRows: async (taskRows, commentRows, principal) => {
+      assert.equal(principal?.teamScope == null, true);
+      return { taskRows, commentRows };
+    } },
     "@/lib/prisma": { __esModule: true, default: prisma },
     "@/lib/flags": { ...keys, isFeatureEnabled: async (key, userId) => {
       checks.push([key, userId]);
@@ -140,6 +149,7 @@ function harness(options = {}) {
   const errors = { errorMessage: (error) => error.message };
   const execution = moduleWithStubs("src/lib/ai/tools/execution.ts", {
     "@/lib/mcp/tasks/agentMutationLeaseAdoption": {},
+    "@/lib/ai/tools/readAgentGate": { refuseReadAgentToolCall: async () => null },
     "@/lib/prisma": { __esModule: true, default: prisma },
     "@/lib/mcp/tasks/resolveTask": {},
     "@/app/api/ai/chat/stream/bulkTools": {},

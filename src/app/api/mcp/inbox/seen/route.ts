@@ -75,7 +75,7 @@ export async function POST(request: NextRequest) {
       where: {
         id: { in: notificationIds },
         userId: ctx.user.id,
-        ...(ctx.agentId ? { AND: [notificationBoardAccessWhere(ctx.user.id, ctx.agentId)] } : {}),
+        ...(ctx.agentId || ctx.teamScope != null ? { AND: [notificationBoardAccessWhere(ctx.user.id, ctx.agentId, ctx.teamScope)] } : {}),
         seen: false,
       },
       data: { seen: true },

@@ -1,3 +1,4 @@
+import { downloadWithoutBrotli } from "@/lib/net/downloadWithoutBrotli";
 import { getSessionUser } from "@/lib/auth/getSessionUser";
 import { projectContentAccessWhere } from "@/utils/controllers/projects/getAllIncludes";
 import { withAgentScopeRequest } from "@/lib/auth/agentScope";
@@ -20,6 +21,7 @@ import { resolveAiUsageTaskId } from "@/app/api/ai/_lib/currentTaskContext";
 import { projectAccessWhere } from "@/app/api/ai/_lib/taskWriterRun";
 import prisma from "@/lib/prisma";
 import { tiptapForwardSlashRequestSchema } from "./requestSchema";
+import { warnIfAllowanceRefused } from "@/app/api/ai/_lib/allowanceRefusal";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -92,6 +94,7 @@ async function tiptapForwardslash(request: NextRequest) {
       teamContext,
     });
     const { text } = await generateText({
+      experimental_download: downloadWithoutBrotli,
       model: selected.model,
       instructions: createPromptForTiptapForwardSlash(
         body.command,
@@ -117,6 +120,8 @@ async function tiptapForwardslash(request: NextRequest) {
       { status: 200 }
     );
   } catch (error) {
+    const allowanceMessage = warnIfAllowanceRefused(error, "ai/tiptap-forwardslash");
+    if (allowanceMessage) return NextResponse.json({ error: allowanceMessage }, { status: 429 });
     await reportError({
       message: error instanceof Error ? error.message : "AI request failed",
       stack: error instanceof Error ? error.stack : undefined,

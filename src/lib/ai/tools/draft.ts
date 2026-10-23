@@ -60,7 +60,7 @@ export function createDraftTool(context: ToolContext) {
 
           if (input.action === "list") {
             const drafts = await prisma.drafts.findMany({
-              where: { taskId: task.id, content: { not: "<p></p>" } },
+              where: { taskId: task.id, userId: user.id, content: { not: "<p></p>" } },
               include: {
                 task: { select: { ticketNumber: true } },
                 user: { select: { id: true, email: true, displayName: true } },

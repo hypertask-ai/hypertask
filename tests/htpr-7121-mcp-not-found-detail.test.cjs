@@ -52,6 +52,7 @@ function loadPost({ flagOn, knownLabelIds }) {
     "@/lib/mcp/tasks/mappers": { mapTaskToDetail: (t) => t },
     "@/utils/helperFunctions/sanitizeRichHtml": { sanitizeRichHtml: (s) => s },
     "@/lib/mcp/idempotency/idempotencyStore": {
+      IdempotencyAccessError: class extends Error {},
       IdempotencyInProgressError: class extends Error {},
       normalizeIdempotencyKey: () => null,
       withIdempotency: async (_a, _b, _c, _d, fn) => fn(),

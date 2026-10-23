@@ -1,3 +1,4 @@
+const { withStubs } = require('./stub-map.cjs');
 const path = require('node:path');
 const { load } = require('../task-route-loader.cjs');
 const root = path.resolve(__dirname, '../..');
@@ -44,12 +45,12 @@ function hydrate(row, args = {}) {
 }
 function fixture() {
   const user = { id: 6, email: 'scope@example.invalid', displayName: 'Owner', photoURL: null, mcpTokensRevokedAt: null };
-  const agent = { id: 'scope-agent', userId: user.id, revokedAt: null, runtimeGeneration: 1, permissions: { role: 'write' } };
+  const agent = { id: 'scope-agent', userId: user.id, revokedAt: null, credentialTeamId: null, credentialTeamAccessBinding: null, mcpTokenJti: null, runtimeGeneration: 1, permissions: { role: 'write' } };
   const projects = [15, 4060, 2128].map(id => ({ id, ownerId: user.id, owner: user, createdAt: new Date(), section: [], labels: [], _count: { members: 1, tasks: 1 }, teamId: 'team', status: 'Normal', title: `Board ${id}`, name: `Board ${id}`, members: id === 2128 ? [] : [{ userId: user.id, agentId: agent.id, status: 'Accepted', agent }] }));
   const tasks = projects.map(project => ({ id: project.id * 10, projectId: project.id, project, userId: user.id, user, status: 'Normal', title: `Task ${project.id}`, description: 'scope fixture', description_: { content: 'scope fixture' }, section: 'Todo', sectionId: project.id, uniqueIndex: 1, ticketNumber: `HTPR-${project.id}`, parentTaskId: null, parentTask: null, subTasks: [], Reminders: [], assignees: [], followers: [], taskLabels: [], attachments: [], pullRequests: [], customFieldValues: [], savedContent: [], agent: null, priority: null, estimate: null, _count: { comments: 0 }, createdAt: new Date(), updatedAt: new Date(), sectionChangedAt: new Date() }));
   const notifications = tasks.map(task => ({ id: task.id, userId: user.id, agentId: null, taskId: task.id, projectId: task.projectId, task, project: task.project, status: 'Normal', type: 'Mentioned', seen: false, archivedAt: null, fromUserId: 7, fromAgentId: null, createdAt: new Date(), fromUser: { displayName: 'Sender' }, fromAgent: null }));
   user.agents = [agent];
-  const state = { enforce: true, events: [], grantReads: 0, flagReads: 0, user, agent, projects, tasks, notifications, writes: [], ctx: { user, agentId: agent.id } };
+  const state = { enforce: true, events: [], grantReads: 0, flagReads: 0, user, agent, projects, tasks, notifications, writes: [], ctx: { user, agentId: agent.id, teamScope: null } };
   function model(rows, name) {
     return {
       findMany: async (args = {}) => rows.filter(row => matches(row, args.where)).slice(0, args.take ?? rows.length).map(row => hydrate(row, args)),
@@ -101,7 +102,7 @@ function fixture() {
     '@/utils/controllers/projects/findPrefixAliasTasks': { findPrefixAliasTasks: async () => [] },
     '@/utils/controllers/logs/createLog': { default: async () => {} },
   };
-  return { ...state, state, prisma, mocks, scope, access: scopedAccess, run: (req, run) => scope.withAgentScopeRequest(req, async () => { await scope.prepareAgentScope(state.ctx.user.id, state.ctx.agentId); return run(); }), load: (file, extra = {}) => load(file, { ...mocks, ...extra }) };
+  return { ...state, state, prisma, mocks, scope, access: scopedAccess, run: (req, run) => scope.withAgentScopeRequest(req, async () => { await scope.prepareAgentScope(state.ctx.user.id, state.ctx.agentId); return run(); }), load: (file, extra = {}) => load(file, withStubs(mocks, extra)) };
 }
 module.exports = { access, fixture, matches, hydrate, load };
 

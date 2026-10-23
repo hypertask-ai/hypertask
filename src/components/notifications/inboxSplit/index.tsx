@@ -967,12 +967,14 @@ const InboxSplit = ({
     setTasksPlayList(tasksPlayList);
 
     const queryParams = buildQueryParams(mode);
+    const inboxFlowQuery = disableInboxFlow
+      ? ""
+      : queryParams
+        ? `?${inboxConfig.urls.queryParams.inboxFlow}&${queryParams.slice(1)}`
+        : `?${inboxConfig.urls.queryParams.inboxFlow}`;
 
     if (notification) {
       const decisionCommentId = decisionCommentLinks ? notification.decisionCommentId : undefined;
-      const cachedInboxFlow = decisionCommentId && !disableInboxFlow
-        ? `?${inboxConfig.urls.queryParams.inboxFlow}`
-        : "";
       const mentionedQueryParam =
         !decisionCommentId && notification.type === "Mentioned" && notification.commentId
           ? commentIdHash(notification.commentId)
@@ -982,7 +984,7 @@ const InboxSplit = ({
         notification.task?.uniqueIndex,
         "push",
         withDecisionCommentAnchor(
-          `${cachedInboxFlow}${mentionedQueryParam}${disableInboxFlow ? "" : queryParams}`,
+          `${inboxFlowQuery}${mentionedQueryParam}`,
           notification.decisionCommentId,
           decisionCommentLinks,
         ),
@@ -993,11 +995,6 @@ const InboxSplit = ({
     if (!selectedInbox) return;
     const projectName = selectedInbox.project?.name;
     const taskIndex = selectedInbox.task?.uniqueIndex;
-    const inboxFlowQuery = disableInboxFlow
-      ? ""
-      : queryParams
-        ? `?${inboxConfig.urls.queryParams.inboxFlow}&${queryParams.slice(1)}`
-        : `?${inboxConfig.urls.queryParams.inboxFlow}`;
     const mentionedQueryParam =
       selectedInbox.type === "Mentioned" && selectedInbox.commentId
         ? commentIdHash(selectedInbox.commentId)

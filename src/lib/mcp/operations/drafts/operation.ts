@@ -113,7 +113,7 @@ export async function POST(request: NextRequest) {
     const task = await findTaskByIdentifier(
       user,
       { task_id, ticket_number, unique_index, project_id },
-      ctx.agentId
+      ctx.agentId, undefined, ctx.teamScope
     )
     if (!task) {
       return NextResponse.json({ success: false, error: 'Task not found or access denied' }, { status: 404 })
@@ -233,7 +233,7 @@ export async function GET(request: NextRequest) {
         unique_index: uniqueIndex,
         project_id: projectId,
       },
-      ctx.agentId
+      ctx.agentId, undefined, ctx.teamScope
     )
 
     if (!task) {

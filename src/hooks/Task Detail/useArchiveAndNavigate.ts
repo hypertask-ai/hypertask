@@ -11,10 +11,11 @@ import { MobileViewContext } from "@/lib/contexts/mobileContext";
 import useHypertasksNavigate from '../MultiPages/Route/useHypertasksNavigate';
 import { useSearchParams } from 'next/navigation';
 import { useFlag } from '@/hooks/useFlag';
-import { HTPR_7311_DECISION_COMMENT_LINK_FLAG } from '@/lib/flags/keys';
+import { HTPR_7311_DECISION_COMMENT_LINK_FLAG, HTPR_7659_ARCHIVE_EVERY_SEND_FLAG } from "@/lib/flags/keys";
 import { withDecisionCommentAnchor } from '@/lib/inboxDecisions';
 import { inboxDataQueryKey } from '../Inbox/useGetNotifications';
 import {
+  inboxMessageForTask,
   nextRemainingInboxTask,
   resolveTaskPlaylistNavigation,
   shouldApplyLocalArchivedStatus,
@@ -23,6 +24,7 @@ import {
 
 const useArchiveAndNavigate = () => {
   const decisionCommentLinkEnabled = useFlag(HTPR_7311_DECISION_COMMENT_LINK_FLAG);
+  const archiveEverySend = useFlag(HTPR_7659_ARCHIVE_EVERY_SEND_FLAG);
   const queryClient = useQueryClient();
   const { undoAction} = useUndoContext();
   const _mbl = useContext(MobileViewContext);
@@ -49,12 +51,13 @@ const navigateToNextTask = (archiveNotification?:boolean,shouldNavigate?:boolean
   const indexOf = tasksPlayList?.findIndex(obj =>obj.projectId === currentItemInTasksPlaylist.projectId && obj.uniqueIndex === currentItemInTasksPlaylist.uniqueIndex);
   const activeInboxFlow = inboxFlow ?? searchParams?.get("inboxFlow")
   const earlyInboxMembership = archiveNotification && activeInboxFlow === "true" &&
-    currentTask?._count?.notifications === undefined
+    (archiveEverySend || currentTask?._count?.notifications === undefined)
   const inInbox = earlyInboxMembership
-    ? queryClient.getQueryData<INotificationsFromTQ>(inboxDataQueryKey(currentUser.id))?.notifications.find(notification =>
-        notification.taskId === currentTask?.id && notification.projectId === currentTask?.projectId &&
-        notification.userId === currentUser.id && notification.status === "Normal" &&
-        !notification.waitingOnSynthetic && Number.isSafeInteger(Number(notification.id)) && Number(notification.id) > 0)
+    ? inboxMessageForTask(
+        queryClient.getQueryData<INotificationsFromTQ>(inboxDataQueryKey(currentUser.id))?.notifications,
+        currentTask,
+        currentUser.id,
+      ) ?? (archiveEverySend && currentTask?._count?.notifications ? currentTask?.notifications?.[0] : undefined)
     : currentTask?.notifications&&currentTask?.notifications[0]
   const missingInboxTarget = activeInboxFlow && indexOf === -1 && tasksPlayList
     ? nextRemainingInboxTask(tasksPlayList, currentItemInTasksPlaylist)
@@ -63,7 +66,10 @@ const navigateToNextTask = (archiveNotification?:boolean,shouldNavigate?:boolean
 
   if (archiveNotification && currentTask){
 
-    if (!(earlyInboxMembership ? inInbox : currentTask._count?.notifications)){
+    const stillInInbox = earlyInboxMembership
+      ? inInbox || (archiveEverySend && currentTask._count?.notifications)
+      : currentTask._count?.notifications
+    if (!stillInInbox){
       console.log("🚀 ~ navigateToNextTask ~ currentTask:", currentTask)
       if (force==="forceNavigate") moveIdxDown()
       else{

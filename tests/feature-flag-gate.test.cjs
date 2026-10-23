@@ -1,3 +1,4 @@
+process.env.FEATURE_FLAG_TYPESCRIPT_PATH = require.resolve("typescript");
 const assert = require("node:assert/strict");
 const test = require("node:test");
 const path = require("node:path");
@@ -1168,7 +1169,7 @@ test("workflow covers metadata changes, uses trusted code, and reconciles old PR
   assert.match(parserLock.packages["node_modules/typescript"].integrity, /^sha512-/);
   assert.equal((workflow.match(/ref: production/g) || []).length, 2);
   assert.match(workflow, /persist-credentials: false/);
-  assert.match(workflow, /gh api "repos\/\$REPO\/pulls\/\$PR_NUMBER"/);
+  assert.match(workflow, /gh_api "repos\/\$REPO\/pulls\/\$PR_NUMBER"/);
   assert.match(workflow, /git fetch --no-tags origin \+refs\/heads\/production:refs\/remotes\/origin\/production "refs\/pull\/\$PR_NUMBER\/head"/);
   assert.equal((workflow.match(/git fetch --no-tags origin \+refs\/heads\/production:refs\/remotes\/origin\/production/g) || []).length, 2);
   assert.match(workflow, /--argjson labels "\$FEATURE_FLAG_PR_LABELS"/);
@@ -1190,11 +1191,11 @@ test("workflow covers metadata changes, uses trusted code, and reconciles old PR
   assert.match(workflow, /\$current\.state == \$state and \$current\.description == \$description/);
   assert.doesNotMatch(workflow, /feature-flag-gate is reconciling this pull request/);
   assert.match(workflow, /could not refresh pull-request heads/);
-  assert.ok(workflow.indexOf('state: "pending"') < workflow.indexOf('gh api "repos/$REPO/pulls/$PR_NUMBER"'));
+  assert.ok(workflow.indexOf('state: "pending"') < workflow.indexOf('gh_api "repos/$REPO/pulls/$PR_NUMBER"'));
   assert.ok(workflow.indexOf("open-heads.txt") < workflow.lastIndexOf('npm ci --prefix "$parser_dir"'));
   assert.ok(workflow.indexOf('state: "pending"') < workflow.indexOf("elif node .github/scripts/feature-flag-gate.mjs"));
   assert.match(workflow, /statuses\/\$head_sha/);
-  assert.match(workflow, /gh api --paginate --slurp/);
+  assert.match(workflow, /gh_api --paginate --slurp/);
   assert.equal((workflow.match(/elif node \.github\/scripts\/feature-flag-gate\.mjs/g) || []).length, 2);
   assert.doesNotMatch(workflow, /^\s+node \.github\/scripts\/feature-flag-gate\.mjs/m);
   assert.match(workflow, /head_pr_count.*flatten\[\].*\.head\.sha == \$sha/);

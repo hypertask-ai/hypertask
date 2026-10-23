@@ -1,3 +1,6 @@
+import type { BoardKnowledgePrincipal } from "@/lib/rag/retrieveBoardKnowledge";
+import { lockTaskTeamScope } from "@/lib/mcp/tasks/agentMutationFence";
+import { chatContentScopeWhere } from "@/lib/agents/chatContentScope";
 import type { AgentRun, Prisma } from "@prisma/client";
 import {
   AgentRunNotActiveError,
@@ -10,7 +13,7 @@ import {
 
 type AgentRunActivityTransaction = Pick<
   Prisma.TransactionClient,
-  "agentRun" | "agentRunActivity"
+  "agentRun" | "agentRunActivity" | "project" | "task" | "chatSession" | "$queryRaw"
 >;
 
 export type AgentRunActivityPersistenceInput = AgentRunActivityInput & {
@@ -19,6 +22,7 @@ export type AgentRunActivityPersistenceInput = AgentRunActivityInput & {
   agentId: string;
   context: AgentRunContext;
   idempotencyKey: string | null;
+  access?: BoardKnowledgePrincipal;
   createdAt: Date;
 };
 
@@ -29,8 +33,17 @@ async function recordRunHeartbeat(
     agentId: string;
     context: AgentRunContext;
     at: Date;
+    access?: BoardKnowledgePrincipal;
   },
 ) {
+  if (input.access?.teamScope != null) {
+    if (input.context.taskId != null) {
+      await lockTaskTeamScope(tx as Prisma.TransactionClient, input.context.taskId, input.access.userId, input.access.agentId, input.access.teamScope);
+    } else {
+      await tx.$queryRaw`SELECT id FROM "ChatSession" WHERE id = ${input.context.chatSessionId} FOR UPDATE`;
+      if (!await tx.chatSession.findFirst({ where: { id: input.context.chatSessionId!, ...await chatContentScopeWhere(input.access, tx) }, select: { id: true } })) throw new AgentRunNotActiveError("Run is no longer available");
+    }
+  }
   let heartbeat = await tx.agentRun.updateMany({
     where: {
       id: input.runId,
@@ -66,6 +79,7 @@ export async function persistAgentRunActivity(
     agentId: input.agentId,
     context: input.context,
     at: input.createdAt,
+    access: input.access,
   });
 
   return tx.agentRunActivity.create({

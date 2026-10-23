@@ -1,3 +1,4 @@
+const { withStubs } = require("./helpers/stub-map.cjs");
 const test = require("node:test");
 const assert = require("node:assert/strict");
 const fs = require("node:fs");
@@ -13,7 +14,7 @@ const currentTask = {
 };
 
 function load(relativePath, stubs) {
-  stubs = { "@/lib/auth/agentScope": require("./helpers/agent-board-scope.cjs").enforcedScope, "@/lib/mcp/operationCrashReport": { reportMcpOperationCrash: () => {} }, ...stubs };
+  stubs = withStubs({ "@/lib/auth/agentScope": require("./helpers/agent-board-scope.cjs").enforcedScope, "@/lib/mcp/operationCrashReport": { reportMcpOperationCrash: () => {} } }, stubs);
   const filename = path.join(root, relativePath);
   const javascript = ts.transpileModule(fs.readFileSync(filename, "utf8"), {
     compilerOptions: {
@@ -26,7 +27,7 @@ function load(relativePath, stubs) {
   loaded.require = (request) => {
     if (request === "@/lib/mcp/routeWrapper") return require("./helpers/mcp-route-wrapper.cjs").loadRouteWrapper(stubs);
     if (request === "@/lib/tasks/sameBoardRelations") return load("src/lib/tasks/sameBoardRelations.ts", {});
-    if (Object.hasOwn(stubs, request)) return stubs[request];
+    if (request in stubs) return stubs[request];
     if (request === "@/lib/mcp/listParams") return load("src/lib/mcp/listParams.ts", {});
     if (["@prisma/client", "react", "react/jsx-runtime"].includes(request)) return require(request);
     throw new Error(`Unexpected dependency: ${request}`);
@@ -87,6 +88,7 @@ function fixture({ tasks = [currentTask], visibleProjects = [20], agentId = null
         "@/lib/agents/publicAgent": {}, "@/lib/cycles": {}, "@/lib/agents/visibility": {},
         "@/utils/controllers/notifications/visibleInboxScope": {},
       }).projectContentAccessWhere,
+      intersectProjectTeamScope: (where, scope) => { assert.equal(scope == null, true); return where; },
       getProjectWhere: (userId, requestedAgentId) => {
         assert.equal(userId, 6);
         assert.equal(requestedAgentId ?? null, agentId);

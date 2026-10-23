@@ -37,7 +37,7 @@ test('desktop Enter submits plain text unless a suggestion is explicitly selecte
     stubs.push([filename, require.cache[filename]])
     require.cache[filename] = { id: filename, filename, loaded: true, exports }
   }
-  const flags = new Set(['htpr-6865-search-layout', 'htpr-6371-mobile-search', flagKey])
+  const flags = new Set(['htpr-6371-mobile-search', flagKey])
   const lookups = []
   global.fetch = async (url) => {
     const params = new URL(url, 'https://example.test').searchParams

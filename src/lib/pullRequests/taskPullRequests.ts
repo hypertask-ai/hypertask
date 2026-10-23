@@ -1,3 +1,4 @@
+import type { AgentTokenTeamScope } from '@/lib/mcp/auth/types';
 import { Prisma } from "@prisma/client";
 import prisma from "@/lib/prisma";
 import { sanitizeAgentCredentials } from "@/lib/agents/publicAgent";
@@ -52,6 +53,7 @@ interface LinkTaskPullRequestInput {
   taskId: number;
   userId: number;
   agentId?: string | null;
+  teamScope?: AgentTokenTeamScope | null;
   url: string;
   fetchMetadata?: (
     parsed: ParsedGithubPullRequestUrl,
@@ -270,6 +272,7 @@ export async function linkTaskPullRequest({
   taskId,
   userId,
   agentId = null,
+  teamScope,
   url,
   fetchMetadata = fetchGithubPullRequest,
   db = prisma,
@@ -290,7 +293,7 @@ export async function linkTaskPullRequest({
     where: {
       id: taskId,
       status: { not: "Deleted" },
-      project: taskWriteAccessWhere(userId, agentId),
+      project: taskWriteAccessWhere(userId, agentId, teamScope),
     },
     select: { id: true },
   });
@@ -321,11 +324,12 @@ export async function linkTaskPullRequest({
 
   try {
     return await db.$transaction(async (transaction) => {
+      if (teamScope != null) await transaction.$queryRaw`SELECT id FROM "Task" WHERE id = ${taskId} FOR UPDATE`;
       const task = await transaction.task.findFirst({
         where: {
           id: taskId,
           status: { not: "Deleted" },
-          project: taskWriteAccessWhere(userId, agentId),
+          project: taskWriteAccessWhere(userId, agentId, teamScope),
         },
         select: { id: true, updatedByUserIds: true },
       });

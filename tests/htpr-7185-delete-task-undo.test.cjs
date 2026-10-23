@@ -46,6 +46,9 @@ function boardActions(env) {
 const undoToast = load("src/components/undoToast/index.tsx", {
   "@/lib/contexts/mobileContext": { MobileViewContext: mobileContext },
   "@/lib/configs/general.config": { MOBILE_TARGET: "min-h-[44px] min-w-[44px]" },
+  "@/hooks/useFlag": { useFlag: () => false },
+  "@/lib/flags/keys": { HTPR_7657_ONE_TOAST_FLAG: "htpr-7657-one-toast" },
+  "@/lib/toastIdsToDismiss": { toastIdsToDismiss: () => [] },
   "@/lib/constants/appShellRail": { APP_SHELL_RAIL_OFFSET: "48px" },
 });
 const undoWindow = load("src/hooks/General/undoWindow.ts", {});

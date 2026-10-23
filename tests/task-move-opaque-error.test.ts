@@ -42,6 +42,7 @@ async function main() {
         method: 'POST',
       }),
       ctx: {
+        teamScope: null,
         user: { id: 6, email: 'valentin@example.com' },
         agentId: null,
       },

@@ -40,6 +40,8 @@ export default defineConfig({
     { name: 'Mobile', testMatch: /(?:prod|layout-lock|agent-sidebar-chats)\.spec\.ts/, use: { ...devices['iPhone 13'], browserName: 'chromium' } },
     // YPER4-252: the layout lock matrix sets its own window width, so it runs once, on a desktop browser.
     { name: 'Matrix', testMatch: /layout-lock-matrix\.spec\.ts/, use: { ...devices['Desktop Chrome'] } },
+    // YPER4-629: the inbox cycle consumes its seeded messages, so it runs once, on desktop, with no retry.
+    { name: 'Inbox', testMatch: /inbox-cycle\.spec\.ts/, retries: 0, use: { ...devices['Desktop Chrome'] } },
 
     // HTPR-6636 phase 2, customer journeys, opt-in via HT_QA_JOURNEYS=1
     // (every test here self-skips otherwise, so this is harmless in

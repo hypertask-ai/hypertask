@@ -1,3 +1,4 @@
+import { downloadWithoutBrotli } from "@/lib/net/downloadWithoutBrotli";
 import { withAgentScopeRequest } from "@/lib/auth/agentScope";
 import { resolveAiModel as resolveLegacyAiModel } from "@/app/api/ai/_lib/modelProvider";
 import { getAiDefaultModelContext, resolveAutomaticAiModel } from "@/app/api/ai/_lib/byokKeys";
@@ -90,7 +91,7 @@ async function generateStatusUpdate(request: NextRequest) {
   }
 
   const project = await prisma.project.findFirst({
-    where: { id: projectId, ...getProjectWhere(session.userId), AND: [getProjectWhere(session.userId, session.agentId)] },
+    where: { id: projectId, ...getProjectWhere(session.userId), AND: [getProjectWhere(session.userId, session.agentId, session.teamScope)] },
     select: {
       id: true,
       title: true,
@@ -135,7 +136,7 @@ async function generateStatusUpdate(request: NextRequest) {
     prisma.task.findMany({
       where: {
         projectId,
-        project: getProjectWhere(session.userId, session.agentId),
+        project: getProjectWhere(session.userId, session.agentId, session.teamScope),
         deletedAt: null,
         status: { not: "Deleted" },
         OR: [
@@ -164,7 +165,7 @@ async function generateStatusUpdate(request: NextRequest) {
     prisma.task.findMany({
       where: {
         projectId,
-        project: getProjectWhere(session.userId, session.agentId),
+        project: getProjectWhere(session.userId, session.agentId, session.teamScope),
         deletedAt: null,
         status: { not: "Deleted" },
         sectionChangedAt: { gte: windowStart },
@@ -244,6 +245,7 @@ async function generateStatusUpdate(request: NextRequest) {
       feature: "summary",
     });
     const result = await generateText({
+      experimental_download: downloadWithoutBrotli,
       model,
       output: Output.object({ schema: statusSchema }),
       maxRetries: 2,

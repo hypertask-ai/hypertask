@@ -124,9 +124,16 @@ function CliAuthContent() {
     setConnected(null);
     setStep('loading');
     try {
+      const callbackPort = Number(port);
+      if (
+        port.length > 5 || /[^0-9]/.test(port) ||
+        !Number.isInteger(callbackPort) || callbackPort < 1 || callbackPort > 65535
+      ) {
+        throw new Error('Invalid CLI callback port');
+      }
       const response = await axios.post('/api/cli/generate-code');
       const code = response.data.code as string;
-      const callbackUrl = `http://localhost:${port}/callback?code=${code}`;
+      const callbackUrl = `http://localhost:${callbackPort}/callback?code=${encodeURIComponent(code)}`;
 
       const rawNext = localStorage.getItem(POST_CLI_NEXT_REDIRECT_KEY);
       const nextPath = parseSafePostCliRedirect(rawNext);

@@ -86,13 +86,14 @@ ship_scripts_tests:
   runs_on: ubuntu-latest
   required: false
   pull_request_base: production
-  paths: [".claude/skills/ship/scripts/**", ".claude/skills/verify-qa/scripts/**", ".claude/skills/scriptify/scripts/**", ".claude/skills/maintain-verification-skill/scripts/**", ".claude/systemd/**", "scripts/daily-stats*", "scripts/proc-watchdog*", ".github/workflows/ship-scripts-tests.yml", "docs/ci-policy.yml"]
+  paths: [".claude/skills/ship/scripts/**", ".claude/skills/verify-qa/scripts/**", ".claude/skills/scriptify/scripts/**", ".claude/skills/maintain-verification-skill/scripts/**", ".claude/systemd/**", "scripts/daily-stats*", "scripts/proc-watchdog*", "scripts/premerge-local.sh", ".github/workflows/ship-scripts-tests.yml", "docs/ci-policy.yml"]
   node_major: 24
   commands:
     - bash .claude/skills/ship/scripts/ship-check.test.sh --premerge-only
     - python3 .claude/skills/ship/scripts/premerge-evidence.test.py
     - python3 .claude/skills/ship/scripts/ci-why.test.py
     - bash .claude/skills/ship/scripts/user-unit-check.test.sh
+    - python3 .claude/skills/verify-qa/scripts/evidence-prune.test.py
     - node --test .claude/skills/verify-qa/scripts/qa-identity.test.mjs
   fixtures: offline_with_temporary_home_and_no_secrets
 
@@ -120,12 +121,25 @@ ux_signoff:
   # HT Product Lead flips this after statuses are seeded on all open PRs.
   required: false
 
+light_gate_dependencies:
+  workflow: .github/workflows/node-version-guard.yml
+  job: node-version-guard
+  test: tests/light-gate-dependencies.test.cjs
+  command: node --test tests/light-gate-dependencies.test.cjs
+  parser_locks: [.github/scripts/node-version-guard/package-lock.json, .github/scripts/feature-flag-parser/package-lock.json]
+  scope: per_job_transitive_imports_of_light_gate_node_scripts
+  excludes: [visual_runner_full_installs, private_scheduled_speed_measurements]
+  missing_install_negative_control: feature_flag_gate_both_jobs
+  parser_load_failures: [unset_path, missing_file]
+
 feature_flag_gate:
   workflow: .github/workflows/feature-flag-gate.yml
   decision_script: .github/scripts/feature-flag-gate.mjs
   runs_on: ubuntu-latest
   trusted_script_source: production_base_commit
   parser_lock: .github/scripts/feature-flag-parser/package-lock.json
+  parser_path_env: FEATURE_FLAG_TYPESCRIPT_PATH
+  missing_parser_exit_code: 2
   required_for_ui_changes: true
   api_only_changes: outside_ui_gate_scope
   owner_merge_for_flagged_ui: true

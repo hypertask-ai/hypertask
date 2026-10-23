@@ -140,7 +140,8 @@ const baseline = {
                 "inboxAdvanceOnSend": true,
                 "emojiFrequency": true,
                 "calendarViews": true,
-                "allTasksDateRange": true
+                "allTasksDateRange": true,
+                "boardSortMode": true
               }
             }
           ]
@@ -288,7 +289,8 @@ const baseline = {
                 "inboxAdvanceOnSend": true,
                 "emojiFrequency": true,
                 "calendarViews": true,
-                "allTasksDateRange": true
+                "allTasksDateRange": true,
+                "boardSortMode": true
               }
             }
           ]

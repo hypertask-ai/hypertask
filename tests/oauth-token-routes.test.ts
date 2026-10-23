@@ -40,7 +40,7 @@ beforeEach(() => {
   oldRoot = process.env.BYOK_CIPHER_SECRET; oldCron = process.env.CRON_SECRET
   process.env.BYOK_CIPHER_SECRET = 'synthetic-cipher-root-aaaaaaaaaaaa'
   process.env.CRON_SECRET = 'synthetic-cron-secret-aaaaaaaa'
-  context = { user: { id: 6, email: 'valentin.yeo@gmail.com' }, agentId: null, management: { keyId: 'synthetic-key-id', permissions: { management: ['write'] } } }
+  context = { user: { id: 6, email: 'valentin.yeo@gmail.com' }, agentId: null, teamScope: null, management: { keyId: 'synthetic-key-id', permissions: { management: ['write'] } } }
   authCalls = 0; limited = false; action = undefined; h.calls.length = 0; h.setFailure()
   h.tables.BetterAuthAccount.splice(0, h.tables.BetterAuthAccount.length,
     { id: 1, updatedAt: new Date(), accessToken: 'synthetic-access-token-40f19497', refreshToken: null, idToken: '' },

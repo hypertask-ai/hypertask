@@ -163,7 +163,7 @@ for (const model of ['board', 'agent']) {
 
 test('MCP direct test delivery records a refused key through the same boundary', async () => {
   const health = [];
-  const h = transport({ webhookSubscription: { update: async ({ data }) => health.push(data) } });
+  const h = transport({ webhookSubscription: { findUnique: async () => ({ agentId: null }), update: async ({ data }) => health.push(data) } });
   const ok = await h.deliverWebhook({ id: 'sub', url: input('').url, secret: 'enc:v2:invalid' }, { event: 'ping', data: { projectId: 1, message: 'test' } });
   assert.equal(ok, false);
   assert.equal(h.requests.length, 0);
@@ -174,7 +174,7 @@ test('MCP direct test delivery records a refused key through the same boundary',
 for (const format of ['legacy', 'sealed']) {
   test(`MCP direct test delivery from a ${format} row signs with the original key`, async () => {
     const health = [];
-    const h = transport({ webhookSubscription: { update: async ({ data }) => health.push(data) } });
+    const h = transport({ webhookSubscription: { findUnique: async () => ({ agentId: null }), update: async ({ data }) => health.push(data) } });
     const stored = format === 'legacy' ? plain : store.sealWebhookSigningKey(plain);
     assert.equal(await h.deliverWebhook({ id: 'sub', url: input('').url, secret: stored }, { event: 'ping', data: { projectId: 1, message: 'test' } }), true);
     const sent = h.requests[0];

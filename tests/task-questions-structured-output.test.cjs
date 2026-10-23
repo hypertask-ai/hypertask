@@ -12,7 +12,7 @@ const route = fs.readFileSync(
 );
 
 test("task questions use structured output, not JSON.parse of model text", () => {
-  assert.match(route, /output:\s*Output\.object\(\{\s*schema:\s*taskQuestionsOutputSchema\s*\}\)/);
+  assert.match(route, /output:\s*Output\.object\(\{\s*schema:\s*skillContext \? skillFollowupOutputSchema : taskQuestionsOutputSchema\s*\}\)/);
   assert.match(route, /questions:\s*z\.array\(z\.string\(\)\)/);
   assert.doesNotMatch(route, /JSON\.parse\(/);
   assert.match(route, /result\.output\.questions/);

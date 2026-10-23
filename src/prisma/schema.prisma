@@ -610,6 +610,7 @@ model UserSetting {
   // All Tasks date-range selector (HTPR-5678). Null = never chosen; the view
   // then opens on the Last 7 days default. Chosen value syncs across devices.
   allTasksDateRange        String?
+  boardSortMode            String?
   playGifs                 Boolean       @default(true)
   autoDescriptionSuggestions Boolean      @default(true)
   notificationMatrix       Json          @default("{}")
@@ -2205,6 +2206,7 @@ model WebhookSubscription {
   createdBy      User?     @relation(fields: [createdById], references: [id], onDelete: SetNull)
   agentId        String?
   agent          Agent?    @relation(fields: [agentId], references: [id], onDelete: SetNull)
+  createdByAgentId String?
   createdAt      DateTime  @default(now())
   lastDeliveryAt DateTime?
   lastDeliveryOk Boolean?

@@ -38,7 +38,7 @@ const handler: NextApiHandler = async (
     const task = await prisma.task.findFirst({
       where: {
         id: requestedTaskId,
-        project: projectContentAccessWhere(userId, session.agentId),
+        project: projectContentAccessWhere(userId, session.agentId, session.teamScope),
         AND: [{ project: projectContentAccessWhere(userId) }],
       },
       select: { id: true, projectId: true },
@@ -49,7 +49,7 @@ const handler: NextApiHandler = async (
             where: {
               id: commentId,
               taskId: task.id,
-              task: { project: projectContentAccessWhere(userId, session.agentId) },
+              task: { project: projectContentAccessWhere(userId, session.agentId, session.teamScope) },
             },
             select: { id: true },
           })

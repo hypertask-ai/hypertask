@@ -29,7 +29,7 @@ const routeJavascript = ts.transpileModule(routeSource, {
 }).outputText
 
 function loadCommentsRoute({
-  authContext = { user: { id: 6 }, agentId: null },
+  authContext = { user: { id: 6 }, agentId: null, teamScope: null },
   task = { id: 42, projectId: 15 },
   taskRecord = null,
   taskResolver = null,
@@ -177,6 +177,7 @@ function loadCommentsRoute({
   }
   const routeModule = { exports: {} }
   const modules = {
+    '@/utils/controllers/projects/getAllIncludes': {},
     '@/lib/media/inlineAgentImages.server': { inlineAgentImagesForUser: async (html) => html },
     '@/lib/mcp/operationCrashReport': { reportMcpOperationCrash: () => {} },
     'next/server': { NextResponse: { json: (body, init = {}) => ({ body, status: init.status ?? 200 }) } },
@@ -267,6 +268,7 @@ function loadCommentsRoute({
     '@/lib/mcp/tasks/validators': { CONTENT_TYPE_ALLOWED_VALUES: ['html', 'markdown'] },
     '@/lib/mcp/agents/scopes': { requireRole: async () => null },
     '@/lib/mcp/idempotency/idempotencyStore': {
+      IdempotencyAccessError: class extends Error {},
       IdempotencyInProgressError: class extends Error {}, normalizeIdempotencyKey: () => null,
       withIdempotency: async (_operation, _userId, _key, _body, handler) => handler(),
     },
@@ -411,7 +413,7 @@ test('MCP comments response includes mapped active reactions', async () => {
 })
 
 test('MCP comments keeps private agent identity for its owner', async () => {
-  const route = loadCommentsRoute({ authContext: { user: { id: 9 }, agentId: null } })
+  const route = loadCommentsRoute({ authContext: { user: { id: 9 }, agentId: null, teamScope: null } })
   const response = await route.GET({
     nextUrl: { searchParams: new URLSearchParams({ task_id: '42' }) },
   })

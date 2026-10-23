@@ -154,7 +154,7 @@ test('existing input keeps autocomplete on across all four logic/colour flag com
     stubs.push([filename, require.cache[filename]])
     require.cache[filename] = { id: filename, filename, loaded: true, exports }
   }
-  const flags = new Set(['htpr-6865-search-layout'])
+  const flags = new Set()
   const requests = []
   const runs = []
   global.fetch = async (url) => {

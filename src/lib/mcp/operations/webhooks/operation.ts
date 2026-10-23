@@ -1,3 +1,4 @@
+import { requireAgentWriteRole } from '@/lib/mcp/agents/readRoleGuard'
 import { sealWebhookSigningKey, webhookSigningKeyHint } from '@/lib/webhooks/signingKeyStore'
 import { isFeatureEnabled } from '@/lib/flags'
 import { SEALED_WEBHOOK_KEYS_FLAG } from '@/lib/flags/definitions/htpr-7624-sealed-webhook-keys'
@@ -90,6 +91,7 @@ export async function GET(request: NextRequest) {
         return NextResponse.json(
           await manageAgentWebhook({
             userId: ctx.user.id,
+            principal: { userId: ctx.user.id, agentId: ctx.agentId, teamScope: ctx.teamScope },
             agentId,
             action: 'get',
           })
@@ -111,7 +113,7 @@ export async function GET(request: NextRequest) {
     }
 
     const project = await prisma.project.findFirst({
-      where: { id: projectId, ...getProjectWhere(ctx.user.id, ctx.agentId) },
+      where: { id: projectId, ...getProjectWhere(ctx.user.id, ctx.agentId, ctx.teamScope) },
       select: { id: true },
     })
     if (!project) {
@@ -154,6 +156,8 @@ export async function POST(request: NextRequest) {
         { status: 401 }
       )
     }
+    const roleRefusal = await requireAgentWriteRole(ctx)
+    if (roleRefusal) return roleRefusal
 
     let body: Record<string, unknown>
     try {
@@ -194,6 +198,7 @@ export async function POST(request: NextRequest) {
       try {
         const result = await manageAgentWebhook({
           userId: ctx.user.id,
+          principal: { userId: ctx.user.id, agentId: ctx.agentId, teamScope: ctx.teamScope },
           agentId,
           action: requestedAction as AgentWebhookManagementAction,
           url: body.url,
@@ -257,7 +262,7 @@ export async function POST(request: NextRequest) {
     const events = parsedEvents.events
 
     const project = await prisma.project.findFirst({
-      where: { id: projectId, ...getProjectWhere(ctx.user.id, ctx.agentId) },
+      where: { id: projectId, ...getProjectWhere(ctx.user.id, ctx.agentId, ctx.teamScope) },
       select: { id: true },
     })
     if (!project) {
@@ -287,6 +292,7 @@ export async function POST(request: NextRequest) {
         supportsUnassignedEvent: true,
         createdById: ctx.user.id,
         agentId: ctx.agentId ?? null,
+        createdByAgentId: ctx.agentId ?? null,
       },
     })
 
@@ -315,6 +321,8 @@ export async function DELETE(request: NextRequest) {
         { status: 401 }
       )
     }
+    const roleRefusal = await requireAgentWriteRole(ctx)
+    if (roleRefusal) return roleRefusal
 
     const requestedAgentId = request.nextUrl.searchParams.get('agent_id')
     if (requestedAgentId) {
@@ -329,6 +337,7 @@ export async function DELETE(request: NextRequest) {
         return NextResponse.json(
           await manageAgentWebhook({
             userId: ctx.user.id,
+            principal: { userId: ctx.user.id, agentId: ctx.agentId, teamScope: ctx.teamScope },
             agentId,
             action: 'delete',
           })
@@ -361,12 +370,17 @@ export async function DELETE(request: NextRequest) {
           { status: 404 }
         )
       }
-      await prisma.agentWebhookSubscription.delete({ where: { id } })
+      try {
+        await manageAgentWebhook({ userId: ctx.user.id, agentId: agentSubscription.agentId, action: 'delete', principal: { userId: ctx.user.id, agentId: ctx.agentId, teamScope: ctx.teamScope } })
+      } catch (error) {
+        if (error instanceof AgentWebhookInputError) return NextResponse.json({ success: false, error: error.message }, { status: error.status })
+        throw error
+      }
       return NextResponse.json({ success: true, deleted: id })
     }
 
     const result = await prisma.webhookSubscription.deleteMany({
-      where: { id, project: getProjectWhere(ctx.user.id, ctx.agentId) },
+      where: { id, project: getProjectWhere(ctx.user.id, ctx.agentId, ctx.teamScope) },
     })
     if (result.count === 0) {
       return NextResponse.json(

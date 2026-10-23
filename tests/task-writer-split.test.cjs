@@ -42,6 +42,10 @@ function harness({ enabled = true, dueDates = false, tasks = drafts, failAt = []
     SSE_HEADERS: { "content-type": "text/event-stream" }, sseFrame: () => "event: error\n",
   };
   const run = load("src/app/api/ai/_lib/taskWriterRun.ts", {
+    "@/lib/rag/authorizeIndexedRows": { authorizeIndexedRows: async (taskRows, commentRows, principal) => {
+      assert.equal(principal?.teamScope == null, true);
+      return { taskRows, commentRows };
+    } },
     zod: { z }, "@/lib/flags": flags,
     "@/lib/ai/prompts/registry": { renderPrompt: () => "output language rule" },
     "@/lib/flags/keys": { HTPR_7054_CTRLJ_DUE_DATE_FLAG: dueDateFlag },
@@ -65,6 +69,7 @@ function harness({ enabled = true, dueDates = false, tasks = drafts, failAt = []
     "@/app/api/ai/_lib/promptCache": { cachedInstructionsForUser: async (_userId, args) => `${args.fixed}${args.suffix ?? ""}` },
   });
   const route = load("src/app/api/ai/task-writer/route.ts", {
+    "@/lib/net/downloadWithoutBrotli": { downloadWithoutBrotli: undefined },
     zod: { z },
     "@/lib/ai/taskWriterDueDate": dates, "@/lib/ai/taskWriterTicketType": ticketTypes,
     "@/utils/htmlEscape": { escapeHtml },
@@ -301,11 +306,11 @@ test("actual composer send caches every saved ticket and publishes the complete 
   assert.ok(send);
   const cache = [], intros = [], navigations = [], questionsTaskIds = [];
   const context = {
-    enabled: true, boardChipEnabled: false, targetBoardId: undefined, waitingForBoards: false, textBoardId: undefined, invokeSkills: false, sending: { current: false }, pendingImages: { current: 0 }, dictating: false, text: multiPrompt,
+    enabled: true, boardChipEnabled: false, targetBoardId: undefined, waitingForBoards: false, queueEnterWhileBoardsLoad: true, textHeldUntilBoardsLoad: { current: null }, textBoardId: undefined, invokeSkills: false, sending: { current: false }, pendingImages: { current: 0 }, dictating: false, text: multiPrompt,
     files: [], showProgress: false, composer: { current: null }, setWritingHeight() {}, setWriting() {}, setStage() {}, onBusyChange() {},
     setError(error) { if (error) throw new Error(error); }, taskContextRef: { current: null }, newTaskWindow: true, destinationProject: board,
     window: { location: { pathname: "/project", href: "https://app.hypertask.ai/project?id=15" } }, inView: null,
-    user: { id: 985 }, currentProject: board, mounted: { current: true }, writerReasonEnabled: false, unfurlImageUrls: false, inlineAgentImages: false, applyWriterProperties: false, splitTasksEnabled: true,
+    user: { id: 985 }, currentProject: board, mounted: { current: true }, writerReasonEnabled: false, unfurlImageUrls: false, inlineAgentImages: false, applyWriterProperties: false, splitTasksEnabled: true, skillFollowupEnabled: false,
     createComposedTask: async () => result,
     createTaskGlobally: body => cache.push(body.task), mobile: false, onCreated() {},
     ticketQuestionsEnabled: true, setQuestionsTaskId: value => questionsTaskIds.push(value),

@@ -4,6 +4,7 @@ import { isMobileDevice } from './utils/serverActions';
 import { canAccessTrialPage } from './utils/helperFunctions/helperFunctions';
 import { parseSafeReturnTo } from '@/lib/auth/safeReturnTo';
 import { verifySessionEdge } from '@/lib/auth/sessionEdge';
+import { refusedContentEncoding } from '@/lib/net/contentEncoding';
 import { isAgentCookieBridgeRequestAllowed } from '@/lib/auth/agentCookieBridgeRoutes';
 import { recordServerCapture } from '@/lib/telemetry/signupAnalytics';
 import { isSessionTokenRevoked } from '@/lib/auth/sessionRevocation';
@@ -385,6 +386,13 @@ async function authMiddleware(request: NextRequest, session: Awaited<ReturnType<
 }
 
 export default async function requireAuthMiddleware(request: NextRequest) {
+  const refusedEncoding = refusedContentEncoding(request.headers.get('content-encoding'));
+  if (refusedEncoding) {
+    return NextResponse.json(
+      { error: `Content-Encoding ${refusedEncoding} is not accepted`, code: 'CONTENT_ENCODING_REFUSED' },
+      { status: 415 }
+    );
+  }
   const currentPath = request.nextUrl.pathname;
   const token = request.cookies.get('ht_session')?.value;
   const session = token ? await verifySessionEdge(token) : null;

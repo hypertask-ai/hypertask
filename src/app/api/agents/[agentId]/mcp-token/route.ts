@@ -1,3 +1,4 @@
+import { resolveAgentTeamScope } from "@/lib/auth/agentTeamScope";
 import { NextRequest, NextResponse } from "next/server";
 import prisma from "@/lib/prisma";
 import { agentTokenCredentialFields, createMcpToken } from "@/lib/mcp/auth";
@@ -20,7 +21,7 @@ export async function POST(request: NextRequest, props: { params: Promise<{ agen
       revokedAt: null,
       runtimeType: "EXTERNAL",
     },
-    select: { id: true },
+    select: { id: true, credentialTeamId: true, credentialTeamAccessBinding: true },
   });
 
   if (!agent) {
@@ -42,7 +43,13 @@ export async function POST(request: NextRequest, props: { params: Promise<{ agen
     );
   }
 
-  const token = createMcpToken(userId, user.email, undefined, agent.id);
+  let teamScope
+  try {
+    teamScope = await resolveAgentTeamScope(userId, agent)
+  } catch {
+    return NextResponse.json({ success: false, error: "Agent team grant is no longer valid" }, { status: 403 })
+  }
+  const token = createMcpToken(userId, user.email, undefined, agent.id, teamScope ?? undefined);
 
   await prisma.agent.update({
     where: { id: agent.id },

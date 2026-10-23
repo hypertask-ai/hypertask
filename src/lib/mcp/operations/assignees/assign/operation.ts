@@ -1,3 +1,5 @@
+import { requireAgentWriteRole } from '@/lib/mcp/agents/readRoleGuard';
+import type { AgentTokenTeamScope } from '@/lib/mcp/auth/types';
 import { taskIdentifierErrorResponse } from "@/lib/mcp/tasks/resolveTask";
 import { findIdParamOutOfRange, idOutOfRangeMessage } from "@/lib/mcp/listParams";
 import { reportMcpOperationCrash } from "@/lib/mcp/operationCrashReport";
@@ -53,7 +55,8 @@ async function findTaskByIdentifier(
     unique_index?: number | null;
     project_id?: number | null;
     allowNonNormalStatus?: boolean;
-  }
+  },
+  teamScope?: AgentTokenTeamScope | null,
 ) {
   const { task_id, ticket_number, unique_index, project_id, allowNonNormalStatus } =
     options;
@@ -93,7 +96,7 @@ async function findTaskByIdentifier(
     where: {
       OR: orConditions,
       ...(statusFilter ? { status: statusFilter } : {}),
-      project: getProjectWhere(user.id, agentId),
+      project: getProjectWhere(user.id, agentId, teamScope),
     },
     select: { id: true, projectId: true },
     take: 1,
@@ -117,6 +120,8 @@ export async function POST(request: NextRequest) {
         { status: 401 }
       );
     }
+    const roleRefusal = await requireAgentWriteRole(ctx);
+    if (roleRefusal) return roleRefusal;
     const user = ctx.user;
 
     let body: AssignBody;
@@ -220,7 +225,7 @@ export async function POST(request: NextRequest) {
       unique_index: unique_index ?? null,
       project_id: project_id ?? null,
       allowNonNormalStatus: assignIntent === "unassign",
-    });
+    }, ctx.teamScope);
 
     if (!task) {
       return NextResponse.json(
@@ -291,7 +296,7 @@ export async function POST(request: NextRequest) {
             task.id,
             ctx.agentId ?? undefined,
             ctx.agentId ?? undefined,
-            { intent: assignIntent }
+            { intent: assignIntent, teamScope: ctx.teamScope }
           )
       );
       if (response.status !== 200) {
@@ -326,7 +331,7 @@ export async function POST(request: NextRequest) {
             task.id,
             targetAgentId,
             ctx.agentId ?? undefined,
-            { intent: assignIntent }
+            { intent: assignIntent, teamScope: ctx.teamScope }
           )
       );
       if (response.status !== 200) {
@@ -388,6 +393,7 @@ export async function POST(request: NextRequest) {
           () =>
             assigneesAssign(currentUser, uid, task.id, undefined, ctx.agentId ?? undefined, {
               intent: assignIntent,
+              teamScope: ctx.teamScope,
             })
         );
         if (response.status !== 200) {

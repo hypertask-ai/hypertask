@@ -25,7 +25,7 @@ function fixture({ enabled = false, compat, userId = 7, failFlag = false, failAu
   const calls = { flags: [], queries: [], auth: [] };
   const handler = load("src/pages/api/projects/detail.ts", {
     "@/lib/auth/agentScope": scope,
-    "@/lib/prisma": { default: { project: { findFirst: async (args) => {
+    "@/lib/prisma": { default: { agent: { findFirst: async () => ({ credentialTeamId: null, credentialTeamAccessBinding: null, mcpTokenJti: null }) }, project: { findFirst: async (args) => {
       calls.queries.push(args);
       if (failQuery) throw new Error("synthetic project failure");
       return project;

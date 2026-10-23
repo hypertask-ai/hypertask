@@ -42,7 +42,7 @@ test("ticket-scoped AI entry points pass their task attribution", () => {
 test("agent attribution survives MCP calls and summary debounce/retry", () => {
   assert.match(
     read("src/app/api/mcp/ai/task-writer/route.ts"),
-    /generateTaskWriterDraft\(body, userId, ctx\.agentId\)/,
+    /generateTaskWriterDraft\(body, userId, ctx\.agentId, undefined, ctx\.teamScope\)/,
   );
   assert.match(
     read("src/app/api/ai/_lib/taskWriterDraft.ts"),
@@ -96,7 +96,7 @@ test("caller-supplied task attribution is project- and access-scoped", () => {
   assert.match(context, /projectId: Number\(args\.projectId\)/);
   assert.match(
     context,
-    /project: projectContentAccessWhere\(args\.userId, args\.agentId\)/,
+    /project: projectContentAccessWhere\(args\.userId, args\.agentId, args\.teamScope\)/,
   );
   assert.match(taskWriter, /resolveAiUsageTaskId\(\{/);
   assert.match(mcpImprove, /Task not found in this project/);

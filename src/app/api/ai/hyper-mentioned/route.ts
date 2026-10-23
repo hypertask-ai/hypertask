@@ -1,3 +1,4 @@
+import { downloadWithoutBrotli } from "@/lib/net/downloadWithoutBrotli";
 import { withAgentScopeRequest } from "@/lib/auth/agentScope";
 import { haiku55ModelEnabled } from "@/app/api/ai/_lib/planGate";
 import { reportError } from "@/lib/errors/reportError";
@@ -45,6 +46,7 @@ import {
   createHyperAiTools,
   HYPER_AI_TOOL_COUNT,
 } from "@/app/api/ai/_lib/hyperAiTools";
+import { warnIfAllowanceRefused } from "@/app/api/ai/_lib/allowanceRefusal";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -358,6 +360,7 @@ async function hyperMention(request: NextRequest) {
       feature: "hyper-mentioned",
     });
     const result = await generateText({
+      experimental_download: downloadWithoutBrotli,
       model: selected.model,
       instructions: renderPrompt("hyper-mentioned-instructions-1", (HOUSE_OUTPUT_STYLE), (HYPER_AI_TOOL_COUNT), (skillResolution.systemPromptAddition
           ? `\n\n${skillResolution.systemPromptAddition}`
@@ -441,6 +444,8 @@ async function hyperMention(request: NextRequest) {
 
     return NextResponse.json({ success: true }, { status: 200 });
   } catch (error) {
+    const allowanceMessage = warnIfAllowanceRefused(error, "ai/hyper-mentioned");
+    if (allowanceMessage) return NextResponse.json({ error: allowanceMessage }, { status: 429 });
     await reportError({
       message: error instanceof Error ? error.message : "AI request failed",
       stack: error instanceof Error ? error.stack : undefined,

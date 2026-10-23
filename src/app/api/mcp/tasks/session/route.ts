@@ -1,3 +1,5 @@
+import { requireAgentWriteRole } from "@/lib/mcp/agents/readRoleGuard"
+import { lockTaskTeamScope, TaskTeamScopeError } from "@/lib/mcp/tasks/agentMutationFence"
 import { wrapMcpRoute, checkMcpRouteRateLimit as checkMcpRateLimit, validateMcpRouteAuth as validateMcpAuth } from '@/lib/mcp/routeWrapper'
 import { NextRequest, NextResponse } from 'next/server'
 
@@ -40,6 +42,8 @@ export async function POST(request: NextRequest) {
     if (rateLimited) return rateLimited
     const ctx = await validateMcpAuth(request)
     if (!ctx) return unauthorized()
+    const roleRefusal = await requireAgentWriteRole(ctx)
+    if (roleRefusal) return roleRefusal
 
     let body: Record<string, unknown>
     try {
@@ -87,7 +91,7 @@ export async function POST(request: NextRequest) {
     const task = await findTaskByIdentifier(
       ctx.user,
       { task_id: taskId, ticket_number: ticketNumber, project_id: projectId },
-      ctx.agentId
+      ctx.agentId, undefined, ctx.teamScope
     )
     if (!task) {
       return NextResponse.json(
@@ -96,77 +100,28 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    const existing = await prisma.taskSession.findUnique({
-      where: { sessionId },
-      select: { startedById: true, agentId: true, taskId: true },
-    })
-    if (existing) {
-      if (existing.taskId !== task.id) {
-        return NextResponse.json(
-          { success: false, error: 'Session not found or access denied' },
-          { status: 404 }
-        )
-      }
-      const ownedByCaller = ctx.agentId !== null
-        ? existing.agentId === ctx.agentId
-        : existing.startedById === ctx.user.id
-      if (!ownedByCaller) {
-        return NextResponse.json(
-          { success: false, error: 'This session belongs to a different owner' },
-          { status: 403 }
-        )
-      }
-      const session = await prisma.taskSession.update({
+    const reconcile = async (db: import("@prisma/client").Prisma.TransactionClient) => {
+      const existing = await db.taskSession.findUnique({
         where: { sessionId },
-        data: {
-          status,
-          lastSeenAt: new Date(),
-          ...(resumeCommand !== undefined ? { resumeCommand } : {}),
-        },
-        select: SESSION_SELECT,
+        select: { startedById: true, agentId: true, taskId: true },
       })
-      return NextResponse.json({ success: true, session })
-    }
-
-    try {
-      const session = await prisma.taskSession.create({
-        data: {
-          sessionId,
-          taskId: task.id,
-          resumeCommand,
-          status,
-          agentId: ctx.agentId ?? null,
-          startedById: ctx.user.id,
-        },
-        select: SESSION_SELECT,
-      })
-      return NextResponse.json({ success: true, session })
-    } catch (err) {
-      if (
-        err &&
-        typeof err === 'object' &&
-        (err as { code?: string }).code === 'P2002'
-      ) {
-        const owned = await prisma.taskSession.findUnique({
-          where: { sessionId },
-          select: { startedById: true, agentId: true, taskId: true },
-        })
-        if (!owned || owned.taskId !== task.id) {
+      if (existing) {
+        if (existing.taskId !== task.id) {
           return NextResponse.json(
             { success: false, error: 'Session not found or access denied' },
             { status: 404 }
           )
         }
         const ownedByCaller = ctx.agentId !== null
-          ? owned.agentId === ctx.agentId
-          : owned.startedById === ctx.user.id
+          ? existing.agentId === ctx.agentId
+          : existing.startedById === ctx.user.id
         if (!ownedByCaller) {
           return NextResponse.json(
             { success: false, error: 'This session belongs to a different owner' },
             { status: 403 }
           )
         }
-        const session = await prisma.taskSession.update({
+        const session = await db.taskSession.update({
           where: { sessionId },
           data: {
             status,
@@ -177,9 +132,66 @@ export async function POST(request: NextRequest) {
         })
         return NextResponse.json({ success: true, session })
       }
-      throw err
+
+      try {
+        const session = await db.taskSession.create({
+          data: {
+            sessionId,
+            taskId: task.id,
+            resumeCommand,
+            status,
+            agentId: ctx.agentId ?? null,
+            startedById: ctx.user.id,
+          },
+          select: SESSION_SELECT,
+        })
+        return NextResponse.json({ success: true, session })
+      } catch (err) {
+        if (
+          err &&
+          typeof err === 'object' &&
+          (err as { code?: string }).code === 'P2002'
+        ) {
+          const owned = await db.taskSession.findUnique({
+            where: { sessionId },
+            select: { startedById: true, agentId: true, taskId: true },
+          })
+          if (!owned || owned.taskId !== task.id) {
+            return NextResponse.json(
+              { success: false, error: 'Session not found or access denied' },
+              { status: 404 }
+            )
+          }
+          const ownedByCaller = ctx.agentId !== null
+            ? owned.agentId === ctx.agentId
+            : owned.startedById === ctx.user.id
+          if (!ownedByCaller) {
+            return NextResponse.json(
+              { success: false, error: 'This session belongs to a different owner' },
+              { status: 403 }
+            )
+          }
+          const session = await db.taskSession.update({
+            where: { sessionId },
+            data: {
+              status,
+              lastSeenAt: new Date(),
+              ...(resumeCommand !== undefined ? { resumeCommand } : {}),
+            },
+            select: SESSION_SELECT,
+          })
+          return NextResponse.json({ success: true, session })
+        }
+        throw err
+      }
     }
+    return ctx.teamScope != null ? await prisma.$transaction(async (tx) => {
+      await lockTaskTeamScope(tx, task.id, ctx.user.id, ctx.agentId, ctx.teamScope)
+      return reconcile(tx)
+    }) : await reconcile(prisma)
+
   } catch (error) {
+    if (error instanceof TaskTeamScopeError) return NextResponse.json({ success: false, error: error.message }, { status: 404 })
     const identifierResponse = taskIdentifierErrorResponse(error)
     if (identifierResponse) return identifierResponse
     console.error('[MCP Task Session] POST Error:', error)
@@ -208,7 +220,7 @@ export async function GET(request: NextRequest) {
     const task = await findTaskByIdentifier(
       ctx.user,
       { task_id: taskId, ticket_number: ticketNumber, project_id: projectId },
-      ctx.agentId
+      ctx.agentId, undefined, ctx.teamScope
     )
     if (!task) {
       return NextResponse.json(
@@ -218,13 +230,14 @@ export async function GET(request: NextRequest) {
     }
 
     const sessions = await prisma.taskSession.findMany({
-      where: { taskId: task.id },
+      where: { taskId: task.id, ...(ctx.teamScope != null ? { task: { project: (await import("@/utils/controllers/projects/getAllIncludes")).getProjectWhere(ctx.user.id, ctx.agentId, ctx.teamScope) } } : {}) },
       select: SESSION_SELECT,
       orderBy: { lastSeenAt: 'desc' },
     })
 
     return NextResponse.json({ success: true, taskId: task.id, sessions })
   } catch (error) {
+    if (error instanceof TaskTeamScopeError) return NextResponse.json({ success: false, error: error.message }, { status: 404 })
     const identifierResponse = taskIdentifierErrorResponse(error)
     if (identifierResponse) return identifierResponse
     console.error('[MCP Task Session] GET Error:', error)

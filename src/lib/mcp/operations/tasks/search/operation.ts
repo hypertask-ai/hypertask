@@ -163,7 +163,7 @@ export async function GET(request: NextRequest) {
     const accessibleProjects = await prisma.project.findMany({
       where: {
         status: 'Normal',
-        ...getProjectWhere(user.id, ctx.agentId),
+        ...getProjectWhere(user.id, ctx.agentId, ctx.teamScope),
       },
       select: { id: true }
     })
@@ -179,7 +179,7 @@ export async function GET(request: NextRequest) {
 
     const where: any = {
       projectId: { in: accessibleProjectIds },
-      ...(ctx.agentId ? { project: getProjectWhere(user.id, ctx.agentId) } : {}),
+      ...(ctx.agentId || ctx.teamScope != null ? { project: getProjectWhere(user.id, ctx.agentId, ctx.teamScope) } : {}),
       status
     }
 

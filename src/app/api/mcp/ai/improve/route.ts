@@ -1,3 +1,4 @@
+import { downloadWithoutBrotli } from "@/lib/net/downloadWithoutBrotli";
 import { wrapMcpRoute, validateMcpRouteAuth as validateMcpAuth, checkMcpRouteRateLimit as checkMcpRateLimit } from '@/lib/mcp/routeWrapper'
 import { reportError } from "@/lib/errors/reportError";
 import { NextRequest, NextResponse } from "next/server";
@@ -15,11 +16,12 @@ import {
   selectTiptapModel,
 } from "@/app/api/ai/_lib/editorAi";
 import { getProjectTeamProviderContext } from "@/app/api/ai/_lib/providerGate";
-import { projectAccessWhere } from "@/app/api/ai/_lib/taskWriterRun";
+import { projectContentAccessWhere } from "@/utils/controllers/projects/getAllIncludes";
 import { isAiFeatureEnabled } from "@/lib/systemModelLadder";
 import { toEditableHtml } from "@/app/api/mcp/ai/improve/plainText";
 import prisma from "@/lib/prisma";
 import { resolveAiUsageTaskId } from "@/app/api/ai/_lib/currentTaskContext";
+import { warnIfAllowanceRefused } from "@/app/api/ai/_lib/allowanceRefusal";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -47,7 +49,7 @@ export async function POST(request: NextRequest) {
     const project = await prisma.project.findFirst({
       where: {
         id: input.project_id,
-        ...projectAccessWhere(userId, ctx.agentId),
+        ...projectContentAccessWhere(userId, ctx.agentId, ctx.teamScope),
       },
       select: { id: true },
     });
@@ -61,7 +63,7 @@ export async function POST(request: NextRequest) {
       taskId: input.task_id,
       projectId: input.project_id,
       userId,
-      agentId: ctx.agentId,
+      agentId: ctx.agentId, teamScope: ctx.teamScope,
     });
     if (input.task_id && usageTaskId === null) {
       return NextResponse.json(
@@ -72,7 +74,7 @@ export async function POST(request: NextRequest) {
 
     const teamContext = await getProjectTeamProviderContext(
       input.project_id,
-      userId
+      userId, ctx.agentId, ctx.teamScope
     );
     if (!isAiFeatureEnabled("improveWriting", teamContext.settings)) {
       return NextResponse.json(
@@ -89,9 +91,10 @@ export async function POST(request: NextRequest) {
       taskId: usageTaskId,
       agentId: ctx.agentId,
       userId,
-      teamContext,
+      teamContext, teamScope: ctx.teamScope,
     });
     const { text } = await generateText({
+      experimental_download: downloadWithoutBrotli,
       model: selected.model,
       instructions: createPromptForTiptapForwardSlash(input.command, stripped),
       prompt: `Follow the provided instructions for the following content: ${stripped}`,
@@ -107,6 +110,8 @@ export async function POST(request: NextRequest) {
       model: selected.modelId,
     });
   } catch (error) {
+    const allowanceMessage = warnIfAllowanceRefused(error, "mcp/ai/improve");
+    if (allowanceMessage) return NextResponse.json({ success: false, error: allowanceMessage }, { status: 429 });
     await reportError({
       message: error instanceof Error ? error.message : "AI request failed",
       stack: error instanceof Error ? error.stack : undefined,

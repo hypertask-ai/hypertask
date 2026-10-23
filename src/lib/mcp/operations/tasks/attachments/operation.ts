@@ -37,7 +37,7 @@ export const GET = wrapMcpRoute(createAttachmentDownloadHandler({
   findTask: (ctx, taskId) => findTaskByIdentifier(
     ctx.user,
     { task_id: taskId, ticket_number: null, unique_index: null, project_id: null },
-    ctx.agentId
+    ctx.agentId, undefined, ctx.teamScope
   ),
   findAttachment: (taskId, attachmentId) => prisma.attachment.findFirst({
     where: { id: attachmentId, taskId },
@@ -118,7 +118,7 @@ export async function POST(request: NextRequest) {
         unique_index: parsed.unique_index ?? null,
         project_id: parsed.project_id ?? null,
       },
-      ctx.agentId
+      ctx.agentId, undefined, ctx.teamScope
     );
   } catch (error) {
     const response = taskIdentifierErrorResponse(error);
@@ -172,6 +172,9 @@ export async function POST(request: NextRequest) {
       { taskId: task.id, targetKey },
       {
         taskId: task.id,
+        userId: ctx.user.id,
+        agentId: ctx.agentId,
+        teamScope: ctx.teamScope,
         commentId,
         descriptionId,
         inlineImages: mayRewriteTargetText && parsed.inline_images !== false && await isFeatureEnabled(HTPR_7514_INLINE_AGENT_IMAGES_FLAG, user.id),

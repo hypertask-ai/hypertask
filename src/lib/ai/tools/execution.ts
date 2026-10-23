@@ -6,6 +6,7 @@ import { findTaskByIdentifier, validateTaskIdentifier, TaskIdentifierAmbiguityEr
 import { type ToolTaskIdentifierInput, decideTaskIdentifierMatch } from "@/app/api/ai/chat/stream/bulkTools";
 import { ToolExecutionRecorder, ToolStartRecorder, AuthedUser } from "@/lib/ai/chatStream/types";
 import { errorMessage } from "@/lib/ai/chatStream/errors";
+import { refuseReadAgentToolCall } from "@/lib/ai/tools/readAgentGate";
 
 export function trackToolSetExecutions(
   tools: ToolSet,
@@ -22,6 +23,11 @@ export function trackToolSetExecutions(
     const execute = trackedTool.execute;
     trackedTool.execute = (...args: unknown[]) => withAgentScopeRequest({ url: "/api/ai/chat/stream", method: "POST" }, async () => {
       if (leaseActor) await prepareAgentScope(leaseActor.userId, leaseActor.agentId);
+      const refusal = leaseActor ? await refuseReadAgentToolCall(leaseActor, name, args[0]) : null;
+      if (refusal) {
+        recordToolExecution({ name, result: refusal });
+        return refusal;
+      }
       const release = await recordToolStart?.(name);
       try {
         const result = await withAdoptedAgentMutationLease(

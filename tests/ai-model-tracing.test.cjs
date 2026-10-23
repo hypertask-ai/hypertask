@@ -17,6 +17,7 @@ function harness({ rejectTelemetry = false, rejectPricing = false, observationSi
   const result = { content: [{ type: 'text', text: 'private reply' }], usage, finishReason: { unified: 'stop', raw: 'end_turn' } };
   const factory = (provider) => (modelId) => ({ specificationVersion: 'v4', provider, modelId, supportedUrls: {}, doGenerate: async () => result });
   const stubs = {
+    '@/lib/net/fetchWithoutBrotli': { fetchWithoutBrotli: async () => { throw new Error('Unexpected network request'); } },
     '@vercel/functions': { waitUntil: (promise) => pending.push(promise) },
     './aiUsage': { logAiUsage: async (row) => { rows.push(row); if (rejectTelemetry) throw new Error('database unavailable'); } },
     '@/lib/ai/prompts/registry': registry,

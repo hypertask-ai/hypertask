@@ -5,6 +5,9 @@ const test = require("node:test");
 const ts = require("typescript");
 
 const root = path.resolve(__dirname, "..");
+const loadReal = require("jiti")(__filename, { alias: { "@": path.join(root, "src") }, fsCache: false });
+const allowanceRefusal = loadReal(path.join(root, "src/app/api/ai/_lib/allowanceRefusal.ts"));
+const { SHARED_AI_ALLOWANCE_EXCEEDED_MESSAGE } = loadReal(path.join(root, "src/lib/aiAllowancePolicy.ts"));
 
 function walk(directory) {
   return fs.readdirSync(directory, { withFileTypes: true }).flatMap((entry) => {
@@ -235,7 +238,7 @@ test("new report payloads use only error diagnostics and literal route/stage met
   assert.ok(reports > 0, "The payload audit must inspect real reporting calls");
 });
 
-function loadRoute(relativePath, stubs) {
+function loadRoute(relativePath, stubs, logs = []) {
   const filename = path.join(root, relativePath);
   const javascript = ts.transpileModule(fs.readFileSync(filename, "utf8"), {
     compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 },
@@ -248,7 +251,7 @@ function loadRoute(relativePath, stubs) {
       assert.ok(Object.hasOwn(stubs, name), `Missing stub for ${name}`);
       return stubs[name];
     },
-    console: { error() {} },
+    console: { error: (...args) => logs.push(["error", ...args]), warn: (...args) => logs.push(["warn", ...args]) },
     Error,
     Response,
     ReadableStream,
@@ -259,6 +262,7 @@ function loadRoute(relativePath, stubs) {
 
 function routeStubs(error, reports) {
   return {
+    "@/lib/net/downloadWithoutBrotli": { downloadWithoutBrotli: undefined },
     "next/server": { NextResponse: { json: (body, init) => Response.json(body, init) } },
     "node-html-parser": require("node-html-parser"),
     "@/utils/htmlEscape": {},
@@ -295,6 +299,9 @@ function routeStubs(error, reports) {
     "@/app/api/ai/_lib/currentTaskContext": { resolveAiUsageTaskId: async () => null },
     "@/lib/prisma": { default: {} },
     "./requestSchema": { tiptapForwardSlashRequestSchema: { safeParse: (data) => ({ success: true, data }) } },
+    "@/app/api/ai/_lib/allowanceRefusal": allowanceRefusal,
+    "@/lib/aiAllowancePolicy": { SHARED_AI_ALLOWANCE_EXCEEDED_MESSAGE },
+    "@/lib/flags": { HTPR_7086_SKIP_ALLOWANCE_REPORT_FLAG: "htpr-7086-skip-allowance-report", isFeatureEnabled: async () => true },
   };
 }
 
@@ -325,6 +332,24 @@ test("Task Writer and Improve with AI keep their 500 responses and report withou
       assert.equal(reports.length, 1);
       assertSafeReport(reports[0], error, `/api/ai/${routeName}`);
     }
+  }
+});
+
+test("now refused cleanly: a used-up AI allowance is a 429 with the allowance message and a warning, not a logged 500", async (t) => {
+  const error = Object.assign(new Error(SHARED_AI_ALLOWANCE_EXCEEDED_MESSAGE), { name: "SharedAiAllowanceExceededError" });
+  for (const routeName of ["task-writer", "tiptap-forwardslash"]) {
+    const reports = [], logs = [];
+    const processWarn = t.mock.method(console, "warn", (...args) => logs.push(["warn", ...args]));
+    const stubs = routeStubs(error, reports);
+    stubs["@/app/api/ai/_lib/editorAi"].errorMessage = (value) => value.message;
+    const { POST } = loadRoute(`src/app/api/ai/${routeName}/route.ts`, stubs, logs);
+    const response = await POST({ json: async () => ({ content: "private prompt", command: "ImproveReadability" }) });
+    assert.equal(response.status, 429, routeName);
+    assert.deepEqual(await response.json(), { error: SHARED_AI_ALLOWANCE_EXCEEDED_MESSAGE });
+    assert.deepEqual(logs.map(([level]) => level), ["warn"], routeName);
+    assert.match(logs[0][1], /refused: included AI allowance used up/);
+    processWarn.mock.restore();
+    assert.equal(reports.length, 0, routeName);
   }
 });
 
