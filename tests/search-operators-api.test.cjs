@@ -26,7 +26,7 @@ function eligible(row, where) {
 const db = {
   project: { findMany: async ({ select }) => select.title
     ? [{ title: 'Visible board' }] : state.boards.map((id) => ({ id })) },
-  label: { findMany: async () => { state.labelQueries++; return state.labels ?? [{ value: 'bug' }] } },
+  label: { findMany: async () => { state.labelQueries++; return state.labels ?? [{ id: 'bug', value: 'bug' }] } },
   user: { findMany: async () => [{ displayName: 'Kamil Grzegorzewicz' }] },
   section: { findMany: async ({ where }) => (state.sections ?? [{ projectId: 7, section_title: 'Done', isDone: true }])
     .filter((section) => where.deleted !== false || !section.deleted) },
@@ -42,11 +42,8 @@ const mocks = new Map([
   ['src/lib/prisma.ts', { default: db }],
   ['src/lib/flags.ts', {
     HTPR_6881_SEARCH_FUZZY_PERSON_FLAG: 'htpr-6881-search-fuzzy-person',
-    HTPR_6878_SEARCH_LABEL_SCOPE_FLAG: 'htpr-6878-search-label-scope',
-    HTPR_6880_SEARCH_COMMENTER_FLAG: 'htpr-6880-search-commenter',
     HTPR_6865_SEARCH_LAYOUT_FLAG: 'htpr-6865-search-layout',
     isFeatureEnabled: async (key) => key === 'htpr-6881-search-fuzzy-person' ? false
-      : key === 'htpr-6878-search-label-scope' ? state.labelFlag ?? false
       : key !== state.disabledFlag,
   }],
   ['src/utils/controllers/projects/getAllIncludes.ts', {
@@ -167,7 +164,7 @@ test('rare filters stop after bounded windows and expose a partial result', asyn
 
 test('repeated prefixes are looked up once; oversized queries are rejected', async () => {
   const repeated = await search('label:BUG label:bug label:BUG')
-  assert.equal(repeated.state.labelQueries, 1)
+  assert.equal(repeated.state.labelQueries, 2, 'one prefix resolution and one permanent label-scope lookup')
   const clauses = await search('label:bug '.repeat(13))
   assert.equal(clauses.res.statusCode, 400)
   assert.equal(clauses.state.labelQueries, 0)
@@ -239,13 +236,11 @@ test('match highlights fetch names in the existing query and show only positivel
 test('label scope works independently with permanent match highlights', async () => {
   const labels = [{ id: 'padded-bug', value: ' Bug ' }, { id: 'plain-bug', value: 'Bug' }]
   const rows = labels.map((label, index) => ({ ...row(123 + index, 7, label.id), taskLabels: [{ label }] }))
-  for (const labelFlag of [false, true]) {
-    const { res } = await search('label:bug', { labels, rows, labelFlag })
-    assert.equal(res.statusCode, 200)
-    const results = res.body.processedData.All
-    assert.deepEqual(results.map((task) => task.taskId), labelFlag ? [123, 124] : [124])
-    assert.deepEqual(results.map((task) => task.searchMatch?.labels), labelFlag ? [[' Bug '], ['Bug']] : [['Bug']])
-  }
+  const { res } = await search('label:bug', { labels, rows })
+  assert.equal(res.statusCode, 200)
+  const results = res.body.processedData.All
+  assert.deepEqual(results.map((task) => task.taskId), [123, 124])
+  assert.deepEqual(results.map((task) => task.searchMatch?.labels), [[' Bug '], ['Bug']])
 })
 
 test('filtered comment-only matches preserve author and snippet unless a layout prerequisite is off', async () => {

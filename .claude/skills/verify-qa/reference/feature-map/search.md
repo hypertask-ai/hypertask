@@ -3,7 +3,7 @@
 Ticket: https://app.hypertask.ai/detail/project-15/6688
 Autocomplete is always available; its rollout switch has been removed. No new endpoint or permission is added: entity values use the existing access-scoped `/api/search/values` route; statuses, dates and `has:` values are local suggestions for already supported server filters.
 
-Flag `htpr-6880-search-commenter` (Owner + QA): with search layout on, pick `commenter:@Hicham` for an exact person or type a name/email using the fuzzy-person flag; results show that person’s newest matching comment and open at it, text matches only their comments, and `-commenter:` excludes their tickets without exposing inaccessible boards.
+Commenter search is on for everyone (no feature flag): with search layout on, pick `commenter:@Hicham` for an exact person or type a name/email using the fuzzy-person flag; results show that person’s newest matching comment and open at it, text matches only their comments, and `-commenter:` excludes their tickets without exposing inaccessible boards.
 Flag `htpr-6881-search-fuzzy-person` (Owner + QA): typed `from:`/`assignee:` names or emails match every case/accent-insensitive substring in accessible requested boards; numeric chips stay exact and negation excludes all matches.
 
 ## Reach it
@@ -15,7 +15,7 @@ Open `https://app.hypertask.ai/search` (or use the existing `/` search shortcut)
 
 Layout flag `htpr-6865-search-layout` (default Owner + QA): suggestions are one in-flow list aligned with the input instead of the floating 18rem box. Empty bar shows Recent searches once, then Tips below them. Typing shows Ask AI, matching operators, then people (name plus email), labels or boards with matched letters bold. Entity values get grey inline completion (`from:Val` shows `entin Yeo`); Tab accepts into a chip. No live results while typing: results load only after accepting a suggestion or recent, pressing Enter, or loading a `searchTerm` URL. Verify the off path with user 2343 (old floating box) and the on path with user 985.
 
-Label flag `htpr-6878-search-label-scope` (Owner + QA; requires layout): positive board chips scope labels, muted ticket counts put unused labels last, unscoped same-name labels combine and filter by name, and Ask AI shows readable chip names.
+Label scope (permanent; requires layout): positive board chips scope labels, muted ticket counts put unused labels last, unscoped same-name labels combine and filter by name, and Ask AI shows readable chip names.
 Match highlights apply when search layout is enabled: verify from/assignee amber inbox name pills, matching label/board pills, safely marked title/snippet words and comment author before the snippet; desktop stays one truncated line, phone stacks, light/dark inherit inbox colours, and disabling layout preserves legacy rows.
 
 With search layout enabled (`htpr-6865-search-layout`) and `htpr-6994-search-esc-leaves` off: Esc with suggestions closed restores the previous search in this tab, or empty recents + tips; empty searches always show that list, and board chips omit the extra text `#` while the icon and typed `#` picker remain.

@@ -293,12 +293,13 @@ function install() {
   const lib = path.join(os.homedir(), '.local/lib/hypertask/production-red-alert');
   const unitDir = path.join(os.homedir(), '.config/systemd/user');
   for (const dir of [lib, unitDir, STATE]) fs.mkdirSync(dir, { recursive: true, mode: 0o700 });
-  for (const file of ['production-red-alert', 'ci-test-failures.py']) {
+  for (const file of ['production-red-alert', 'ci-test-failures.py', 'user-unit-check']) {
     fs.copyFileSync(path.join(__dirname, file), path.join(lib, file)); fs.chmodSync(path.join(lib, file), 0o755);
   }
   const u = units(lib);
   fs.writeFileSync(path.join(unitDir, 'production-red-alert.service'), u.service);
   fs.writeFileSync(path.join(unitDir, 'production-red-alert.timer'), u.timer);
+  command(process.env.USER_UNIT_CHECK || path.join(lib, 'user-unit-check'), [path.join(unitDir, 'production-red-alert.service'), path.join(unitDir, 'production-red-alert.timer')]);
   command('systemctl', ['--user', 'daemon-reload']);
   command('systemctl', ['--user', 'enable', '--now', 'production-red-alert.timer']);
   console.log('production-red-alert: installed production-red-alert.timer (5 minutes, error backoff to 1 hour)');

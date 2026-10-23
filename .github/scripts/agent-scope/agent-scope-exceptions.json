@@ -60,7 +60,7 @@
     "call": "prisma.task.count({ where })",
     "occurrence": 1,
     "approvedIn": "https://app.hypertask.ai/detail/project-15/7179",
-    "sha256": "319b6b604ffd2f6825978a34e9cdaff7bd2cb0e591ad21894a6bf11e3af4c758",
+    "sha256": "f90ad9915fe55c696831c9d9dc5e10cdbe5d29ca303d81f80e2a901ecd1342fc",
     "reason": "validateMcpAuth supplies ctx.user.id, ctx.agentId and ctx.teamScope. accessibleProjectIds come from getProjectWhere(user.id, ctx.agentId, ctx.teamScope); where retains those IDs and, for agents or team credentials, the same helper-scoped project relation. Requested targets must belong to accessibleProjectIds. Ranked/operator and legacy search only add search restrictions or narrow task IDs; spread hydration preserves projectId and project."
   },
   {
@@ -68,7 +68,7 @@
     "call": "prisma.task.findMany({ where: filtered.paged || rankedResults && !sortField ? { ...where, id: { in: primaryIds } } : where, select: { id: true, ticketNumber: true, uniqueIndex: true, title: true, description: true, section: true, projectId: true, project: { select: { id: true, title: true } }, dueDate: true, createdAt: true, updatedAt: true, agent: { select: mcpVisibleAgentSelect(user.id), }, }, ...(!rankedResults || sortField ? { orderBy: sortField ? [{ [sortField]: sortOrder }, { id: 'asc' as const }] : [{ updatedAt: 'desc' as const }, { id: 'asc' as const }] } : {}), ...(filtered.paged || rankedResults && !sortField ? {} : { take: limit, skip: cursorId ? 1 : 0, ...(cursorId ? { cursor: { id: cursorId } } : {}), }), })",
     "occurrence": 1,
     "approvedIn": "https://app.hypertask.ai/detail/project-15/7179",
-    "sha256": "319b6b604ffd2f6825978a34e9cdaff7bd2cb0e591ad21894a6bf11e3af4c758",
+    "sha256": "f90ad9915fe55c696831c9d9dc5e10cdbe5d29ca303d81f80e2a901ecd1342fc",
     "reason": "validateMcpAuth supplies ctx.user.id, ctx.agentId and ctx.teamScope. accessibleProjectIds come from getProjectWhere(user.id, ctx.agentId, ctx.teamScope); where retains those IDs and, for agents or team credentials, the same helper-scoped project relation. Requested targets must belong to accessibleProjectIds. Ranked/operator and legacy search only add search restrictions or narrow task IDs; spread hydration preserves projectId and project."
   },
   {
@@ -76,7 +76,7 @@
     "call": "prisma.task.count({ where })",
     "occurrence": 2,
     "approvedIn": "https://app.hypertask.ai/detail/project-15/7179",
-    "sha256": "319b6b604ffd2f6825978a34e9cdaff7bd2cb0e591ad21894a6bf11e3af4c758",
+    "sha256": "f90ad9915fe55c696831c9d9dc5e10cdbe5d29ca303d81f80e2a901ecd1342fc",
     "reason": "validateMcpAuth supplies ctx.user.id, ctx.agentId and ctx.teamScope. accessibleProjectIds come from getProjectWhere(user.id, ctx.agentId, ctx.teamScope); where retains those IDs and, for agents or team credentials, the same helper-scoped project relation. Requested targets must belong to accessibleProjectIds. Ranked/operator and legacy search only add search restrictions or narrow task IDs; spread hydration preserves projectId and project."
   },
   {
@@ -84,7 +84,7 @@
     "call": "prisma.task.findMany({ where, select: { id: true, ticketNumber: true, uniqueIndex: true, title: true, description: true, section: true, projectId: true, project: { select: { id: true, title: true } }, dueDate: true, createdAt: true, updatedAt: true, agent: { select: mcpVisibleAgentSelect(user.id), }, }, ...(orderBy ? { orderBy } : {}), ...(useTurbopufferWindow ? {} : { take: limit, skip: cursorId ? 1 : 0, ...(cursorId ? { cursor: { id: cursorId } } : {}), }), })",
     "occurrence": 1,
     "approvedIn": "https://app.hypertask.ai/detail/project-15/7179",
-    "sha256": "319b6b604ffd2f6825978a34e9cdaff7bd2cb0e591ad21894a6bf11e3af4c758",
+    "sha256": "f90ad9915fe55c696831c9d9dc5e10cdbe5d29ca303d81f80e2a901ecd1342fc",
     "reason": "validateMcpAuth supplies ctx.user.id, ctx.agentId and ctx.teamScope. accessibleProjectIds come from getProjectWhere(user.id, ctx.agentId, ctx.teamScope); where retains those IDs and, for agents or team credentials, the same helper-scoped project relation. Requested targets must belong to accessibleProjectIds. Ranked/operator and legacy search only add search restrictions or narrow task IDs; spread hydration preserves projectId and project."
   }
 ]

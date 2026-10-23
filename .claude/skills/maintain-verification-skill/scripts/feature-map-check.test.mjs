@@ -284,6 +284,7 @@ test('user-wide flock refuses a concurrent runner', async t => {
 
 test('install copies durable scripts and units, records main checkout and retires legacy timer without live systemd', t => {
   const f = weeklyFixture(t);
+  f.env.USER_UNIT_CHECK = '/usr/bin/true';
   executable(path.join(f.bin, 'systemctl'), `require('node:fs').appendFileSync(process.env.FIXTURE_HOME + '/systemctl-calls', process.argv.slice(2).join(' ') + '\\n');`);
   const units = path.join(f.home, '.config/systemd/user');
   mkdirSync(units, { recursive: true });

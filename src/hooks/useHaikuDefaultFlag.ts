@@ -1,3 +1,5 @@
+import { HTPR_7634_OPENAI_ONLY_DEFAULT_FLAG } from "@/lib/flags/definitions/htpr-7634-openai-only-default";
+import { useTeamAiProviders } from "@/hooks/useTeamAiProviders";
 import { useFlag, useFlagLoaded } from "@/hooks/useFlag";
 import {
   HTPR_7038_HAIKU_DEFAULT_FLAG,
@@ -12,4 +14,10 @@ export function useHaikuDefaultFlag(): boolean {
 
 export function useHaikuDefaultFlagLoaded(): boolean {
   return useFlagLoaded(HTPR_7038_HAIKU_DEFAULT_FLAG);
+}
+
+export function useAiDefaultModelContext(teamId: string | null | undefined) {
+  const enabled = useFlag(HTPR_7634_OPENAI_ONLY_DEFAULT_FLAG);
+  const { defaultModelContext } = useTeamAiProviders(enabled ? teamId : null);
+  return enabled ? defaultModelContext : undefined;
 }

@@ -1190,6 +1190,9 @@ class Guard:
         target = self.state / 'disk-guard.py'
         if Path(__file__).resolve() != target:
             shutil.copy2(__file__, target)
+        checker = Path(__file__).resolve().parent / 'user-unit-check'
+        if checker != self.state / 'user-unit-check':
+            shutil.copy2(checker, self.state / 'user-unit-check')
         units = self.home / '.config/systemd/user'
         units.mkdir(parents=True, exist_ok=True)
         (units / 'disk-guard.service').write_text(
@@ -1200,6 +1203,8 @@ class Guard:
         (units / 'disk-guard.timer').write_text(
             '[Unit]\nDescription=Check server disk every 15 minutes\n[Timer]\n'
             'OnCalendar=*-*-* *:00/15:00\nPersistent=true\n[Install]\nWantedBy=timers.target\n')
+        subprocess.run([os.environ.get('USER_UNIT_CHECK', str(self.state / 'user-unit-check')),
+                        str(units / 'disk-guard.service'), str(units / 'disk-guard.timer')], check=True)
         command(['systemctl', '--user', 'daemon-reload'])
         command(['systemctl', '--user', 'disable', '--now', 'host-disk-sweep.timer'])
         command(['systemctl', '--user', 'stop', 'host-disk-sweep.service'])

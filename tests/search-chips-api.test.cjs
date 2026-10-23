@@ -33,7 +33,7 @@ function eligible(row, where) {
 const db = {
   project: { findMany: async ({ select }) => select.title
     ? [{ title: 'Visible board' }] : state.boards.map((id) => ({ id })) },
-  label: { findMany: async ({ where }) => { state.labelQueries++; return [{ value: 'bug' }, { value: 'needs design' }].filter(({ value }) => value.startsWith(where.value.startsWith.toLowerCase())) } },
+  label: { findMany: async ({ where }) => { state.labelQueries++; return [{ id: 'bug', value: 'bug' }, { id: 'needs design', value: 'needs design' }].filter(({ value }) => !where.value || value.startsWith(where.value.startsWith.toLowerCase())) } },
   user: { findMany: async () => [{ displayName: 'Kamil Grzegorzewicz' }] },
   section: { findMany: async ({ where }) => (state.sections ?? [{ projectId: 7, section_title: 'Done', isDone: true }])
     .filter((section) => where.deleted !== false || !section.deleted) },
@@ -48,10 +48,8 @@ const mocks = new Map([
   ['src/lib/prisma.ts', { default: db }],
   ['src/lib/flags.ts', {
     HTPR_6881_SEARCH_FUZZY_PERSON_FLAG: 'htpr-6881-search-fuzzy-person',
-    HTPR_6878_SEARCH_LABEL_SCOPE_FLAG: 'htpr-6878-search-label-scope',
-    HTPR_6880_SEARCH_COMMENTER_FLAG: 'htpr-6880-search-commenter',
     HTPR_6865_SEARCH_LAYOUT_FLAG: 'htpr-6865-search-layout',
-    isFeatureEnabled: async (key) => ['htpr-6878-search-label-scope', 'htpr-6881-search-fuzzy-person'].includes(key) ? false : true,
+    isFeatureEnabled: async (key) => key !== 'htpr-6881-search-fuzzy-person',
   }],
   ['src/utils/controllers/projects/getAllIncludes.ts', {
     projectContentAccessWhere: (userId) => ({ ownerId: userId }),
@@ -195,7 +193,7 @@ test('rare filters stop after bounded windows and expose a partial result', asyn
 
 test('repeated prefixes are looked up once; oversized queries are rejected', async () => {
   const repeated = await search('label:BUG label:bug label:BUG')
-  assert.equal(repeated.state.labelQueries, 1)
+  assert.equal(repeated.state.labelQueries, 2, 'one prefix resolution and one permanent label-scope lookup')
   const clauses = await search('label:bug '.repeat(13))
   assert.equal(clauses.res.statusCode, 400)
   assert.equal(clauses.state.labelQueries, 0)

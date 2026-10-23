@@ -661,12 +661,13 @@ export async function selectTaskWriterModel(args: {
   const haiku55Enabled = await haiku55ModelEnabled?.(args.userId) ?? false;
   const defaultContext = haiku55Enabled
     ? await getAiDefaultModelContext(keyLookup, true, storePlanId)
-    : { hasByok: false, byok: undefined, haikuDefaultEnabled: false, backgroundClaudeEnabled: false };
+    : { hasByok: false, byok: undefined, haikuDefaultEnabled: false, backgroundClaudeEnabled: false, openaiOnlyDefaultEnabled: false };
   const requestDefaultModelOption = getDefaultAiModelOptionForPlan(
     storePlanId,
     haiku55Enabled ? defaultContext.hasByok : hasEligibleByokCredential,
     haiku55Enabled,
     defaultContext.haikuDefaultEnabled,
+    defaultContext,
   );
   const personalModelOptionId = args.aiFeature && !taskWriterSonnet
     ? await getPersonalModelOptionId(

@@ -8,12 +8,11 @@ import { parseSearchQuery } from '../src/lib/search/operators'
 
 const require = createRequire(import.meta.url)
 const root = path.resolve(__dirname, '..')
-const flag = 'htpr-6878-search-label-scope'
 const layoutFlag = 'htpr-6865-search-layout'
 type Label = { id: string; value: string; projectId: number }
 type Link = { labelId: string; task: { projectId: number; status: string } }
 let state: { flags: Record<string, boolean>; labels: Label[]; links: Link[]; labelQueries: any[]; countQueries: any[]; searchWhere?: any; session: { userId: number } | null }
-const defaults = { [layoutFlag]: true, [flag]: true }
+const defaults = { [layoutFlag]: true }
 const matches = (row: Label, where: any): boolean => {
   if (where.projectId && !where.projectId.in.includes(row.projectId)) return false
   if (where.AND && !where.AND.every((part: any) => matches(row, part))) return false
@@ -32,9 +31,7 @@ for (const [file, exports] of [
   ['src/lib/auth/agentScope.ts', { withAgentScopeRequest: (_request: any, run: () => any) => run() }],
   ['src/lib/flags.ts', {
     HTPR_6865_SEARCH_LAYOUT_FLAG: layoutFlag,
-    HTPR_6878_SEARCH_LABEL_SCOPE_FLAG: flag,
     HTPR_6881_SEARCH_FUZZY_PERSON_FLAG: 'htpr-6881-search-fuzzy-person',
-    HTPR_6880_SEARCH_COMMENTER_FLAG: 'htpr-6880-search-commenter',
     isFeatureEnabled: async (key: string, userId: number) => { assert.equal(userId, 6); return state.flags[key] ?? false },
   }],
   ['src/utils/controllers/projects/getAllIncludes.ts', { getProjectWhere: (userId: number) => ({ ownerId: userId }), projectContentAccessWhere: (userId: number) => ({ ownerId: userId }) }],
@@ -142,7 +139,7 @@ test('dedupe trims case-insensitive names, sums counts and preserves all duplica
 test('dedupe name selection searches all case and whitespace variants through the real exact-name filters', async () => {
   const documentHandler = jiti(path.join(root, 'src/pages/api/search/document.ts')).default as any
   const rows = [...labels, { id: 'padded', value: ' Bug ', projectId: 8 }]
-  for (const disabled of [null, flag, layoutFlag]) {
+  for (const disabled of [null, layoutFlag]) {
     await lookup({}, { labels: rows, flags: { ...defaults, ...(disabled ? { [disabled]: false } : {}) } })
     state.labelQueries = []
     const response = { status(code: number) { assert.equal(code, 204); return this }, json() { return this } }
@@ -159,12 +156,10 @@ test('dedupe does not merge IDs after a board is explicitly picked', async () =>
   assert.ok(result.body.candidates.every((row: any) => row.byName === undefined))
 })
 
-test('flag off preserves legacy response bytes, ignores boards and never queries counts', async () => {
-  for (const disabled of [flag, layoutFlag]) {
-    const result = await lookup({ boards: '7', boardId: '7', value: 'bu' }, { labels, flags: { ...defaults, [disabled]: false } })
-    assert.equal(JSON.stringify(result.body), JSON.stringify({ candidates: [{ id: 'one', name: 'Bug' }, { id: 'two', name: 'bug' }] }))
-    assert.equal(result.countQueries.length, 0)
-  }
+test('layout off preserves legacy response bytes, ignores boards and never queries counts', async () => {
+  const result = await lookup({ boards: '7', boardId: '7', value: 'bu' }, { labels, flags: { ...defaults, [layoutFlag]: false } })
+  assert.equal(JSON.stringify(result.body), JSON.stringify({ candidates: [{ id: 'one', name: 'Bug' }, { id: 'two', name: 'bug' }] }))
+  assert.equal(result.countQueries.length, 0)
 })
 
 test('scope still requires a session', async () => {

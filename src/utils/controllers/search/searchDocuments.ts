@@ -1,5 +1,5 @@
 import { isFeatureEnabled } from "@/lib/flags";
-import { HTPR_6865_SEARCH_LAYOUT_FLAG, HTPR_6878_SEARCH_LABEL_SCOPE_FLAG, HTPR_6881_SEARCH_FUZZY_PERSON_FLAG, HTPR_6880_SEARCH_COMMENTER_FLAG } from "@/lib/flags";
+import { HTPR_6865_SEARCH_LAYOUT_FLAG, HTPR_6881_SEARCH_FUZZY_PERSON_FLAG } from "@/lib/flags";
 import { HTPR_6368_SEARCH_OPERATOR_LOGIC_FLAG } from "@/lib/flags";
 import { MAX_SEARCH_OPERATOR_CLAUSES, searchOperatorClauseCount, type SearchFilter } from "@/lib/search/operators";
 import { parseSearchWithChipNames } from "@/lib/search/serverOperators";
@@ -38,12 +38,10 @@ export async function searchDocuments(
 
   const fuzzyPersonEnabled = await isFeatureEnabled(HTPR_6881_SEARCH_FUZZY_PERSON_FLAG, userId);
   const matchHighlightsEnabled = await isFeatureEnabled(HTPR_6865_SEARCH_LAYOUT_FLAG, userId);
-  const commenterEnabled = await isFeatureEnabled(HTPR_6880_SEARCH_COMMENTER_FLAG, userId);
   const logicEnabled = await isFeatureEnabled(HTPR_6368_SEARCH_OPERATOR_LOGIC_FLAG, userId);
-  const parsed = await parseSearchWithChipNames(normalizedSearchQuery, requestedProjectIds, fuzzyPersonEnabled, requestedProjectIds, commenterEnabled, logicEnabled);
+  const parsed = await parseSearchWithChipNames(normalizedSearchQuery, requestedProjectIds, fuzzyPersonEnabled, requestedProjectIds, logicEnabled);
   if (parsed.filters.label &&
     ![...(parsed.filters.in ?? []), ...(parsed.filters.board ?? [])].some((filter) => !filter.negated) &&
-    await isFeatureEnabled(HTPR_6878_SEARCH_LABEL_SCOPE_FLAG, userId) &&
     await isFeatureEnabled(HTPR_6865_SEARCH_LAYOUT_FLAG, userId)) {
     const labels = await prisma.label.findMany({
       where: { projectId: { in: requestedProjectIds } }, select: { id: true, value: true },
@@ -57,7 +55,7 @@ export async function searchDocuments(
   if (Object.keys(parsed.filters).length) {
     const { where, rankedIds, descriptionById, commentById, partial, commentMode } = await rankedSearchWhere(
       parsed, requestedProjectIds, archive === "Normal" || archive === "Archive" ? archive : null,
-      50, {}, undefined, false, commenterEnabled,
+      50, {}, undefined, false,
     );
     const matchSelect = {
       userId: true, user: { select: { displayName: true, email: true } },
@@ -104,7 +102,7 @@ export async function searchDocuments(
         ...(comment ? {
           commentId: Number(comment.id),
           commentText: comment.commentText,
-          ...(commenterEnabled && comment.createdAt ? { updatedAt: new Date(comment.createdAt).toISOString() } : {}),
+          ...(comment.createdAt ? { updatedAt: new Date(comment.createdAt).toISOString() } : {}),
         } : {}),
       };
     });

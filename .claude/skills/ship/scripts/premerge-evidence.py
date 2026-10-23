@@ -29,9 +29,13 @@ def install():
     for name in ('ship-check', 'premerge-evidence.py'):
         if HERE != target:
             shutil.copy2(HERE / name, target / name)
+    checker = HERE / 'user-unit-check'
+    if checker.resolve() != (target / 'user-unit-check').resolve():
+        shutil.copy2(checker, target / 'user-unit-check')
     for name in ('premerge-evidence', 'premerge-evidence-gh-loops'):
         for suffix in ('service', 'timer'):
             shutil.copy2(HERE / f'{name}.{suffix}', units)
+    subprocess.run([os.environ.get('USER_UNIT_CHECK', str(target / 'user-unit-check')), str(units / 'premerge-evidence.service'), str(units / 'premerge-evidence.timer'), str(units / 'premerge-evidence-gh-loops.service'), str(units / 'premerge-evidence-gh-loops.timer')], check=True)
     subprocess.run(['systemctl', '--user', 'daemon-reload'], check=True)
     for name in ('premerge-evidence', 'premerge-evidence-gh-loops'):
         subprocess.run(['systemctl', '--user', 'enable', '--now', f'{name}.timer'], check=True)
