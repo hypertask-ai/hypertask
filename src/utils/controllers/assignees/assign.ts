@@ -609,6 +609,7 @@ const createAssignee = async ({
         notificationBody: task.title,
         devices: devices,
         payload: assign.user,
+        taskId,
         taskTitle: task.title,
         afterAppDomain: afterAppDomain,
       };
@@ -1035,6 +1036,7 @@ const finishRemovingAssignee = async ({
       notificationBody: task.title,
       devices: devices,
       payload: { id: assign.id },
+      taskId,
       taskTitle: task.title,
       afterAppDomain: afterAppDomain,
     };

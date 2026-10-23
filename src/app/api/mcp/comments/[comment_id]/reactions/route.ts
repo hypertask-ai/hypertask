@@ -107,6 +107,7 @@ async function notifyReaction(
         notificationBody: target.text.replace(/<[^>]+>/g, '').slice(0, 500),
         devices,
         payload: '',
+        taskId: target.taskId,
         taskTitle: '',
         afterAppDomain: `detail/project-${target.projectId}/${target.taskUniqueIndex}#comment-${target.commentId}`,
       });

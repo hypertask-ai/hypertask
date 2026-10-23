@@ -171,6 +171,7 @@ const sendNotification = async(reaction:any,afterAppDomain:string,userId:number)
                 notificationBody,
                 devices,
                 payload:"",
+                taskId:reaction.taskId,
                 taskTitle:reaction.task.title,
                 afterAppDomain
             }

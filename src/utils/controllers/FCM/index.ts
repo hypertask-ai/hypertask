@@ -37,6 +37,7 @@ interface newCommentFCM {
     afterAppDomain:string,
     creatorId?: number,
     commentId?: number,
+    taskId: number,
     data?: Record<string, string>,
     skipPreferenceFilter?: boolean,
     customPreferenceCheck?: Map<number, boolean>,
@@ -318,7 +319,13 @@ export const sendDataNewCommentFCM = async(props:newCommentFCM) => {
         }
     }
     
-    for (const device of props.devices){
+    const allowedUserIds = new Set(await filterTaskReadersNow(
+        props.devices.map(device => device.userId),
+        props.taskId,
+    ));
+    const validDevices = props.devices.filter(device => allowedUserIds.has(device.userId));
+
+    for (const device of validDevices){
         console.log("🚀 ~ sendDataNewCommentFCM ~ device:", device.firebaseId)
         
         if (!device.sendNotifications) {

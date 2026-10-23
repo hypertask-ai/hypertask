@@ -167,6 +167,7 @@ const handler: NextApiHandler = async (req: NextApiRequest, res: NextApiResponse
                             type: "mention",
                             devices: devices,
                             payload: {},
+                            taskId,
                             taskTitle: task.title,
                             afterAppDomain: link,
                             data: mentionData,
