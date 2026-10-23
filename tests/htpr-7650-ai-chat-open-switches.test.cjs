@@ -120,7 +120,7 @@ test("a pinned chat stays open on pages whose switch is off, but not on phone", 
   assert.equal(h.values.showAIChatInterfaceAtom, true);
   h.navigate("/detail/project-15/2");
   assert.equal(h.values.showAIChatInterfaceAtom, true);
-  const phone = pageHarness(allOff, { state: { aiChatPinnedAtom: true, showAIChatInterfaceAtom: true } });
+  const phone = pageHarness(allOff, { state: { aiChatPinnedAtom: true, showAIChatInterfaceAtom: true, aiChatAutoOpenPageAtom: "7:/inbox::" } });
   phone.navigate("/detail/project-15/2", true);
   assert.equal(phone.values.showAIChatInterfaceAtom, false);
 });
@@ -241,7 +241,7 @@ test("null server switches preserve migrated local values and save once even aft
   assert.deepEqual(h.posts, [{ aiChatOpenIfUnset: { aiChatOpenNewTickets: false, aiChatOpenBoards: false } }]);
   assert.deepEqual(h.invalidated, []);
 });
-const flushWrites = async () => { for (let i = 0; i < 6; i++) await Promise.resolve(); };
+const flushWrites = async () => { for (let i = 0; i < 20; i++) await new Promise((resolve) => setImmediate(resolve)); };
 test("untouched user saves the ticket defaults once and a switch edit writes only its boolean", async () => {
   const h = preferenceHarness({ server: { aiChatOpenNewTickets: null, aiChatOpenTickets: null, aiChatOpenBoards: null } });
   h.render(); h.render();
@@ -340,7 +340,7 @@ function toggles(enabled, keepClosedFlag = true) {
     "@/lib/state": { useRecoilState: () => [false, () => {}] }, "@/store": {},
     "@/hooks/useFlag": { useFlag: (key) => key === flag ? enabled : keepClosedFlag },
     "@/lib/flags/keys": { HTPR_7650_AI_CHAT_OPEN_SWITCHES_FLAG: flag, HTPR_7530_KEEP_AI_CHAT_CLOSED_FLAG: "htpr-7530-keep-ai-chat-closed" },
-    "./SettingsCard": inert, "./SettingsScrollPicker": inert, "./SettingsSectionShell": inert, "./SettingsToggle": { default: Toggle },
+    "./SettingsCard": inert, "./SettingsScrollPicker": inert, "./SettingsSectionShell": inert, "./SettingsToggle": { __esModule: true, default: Toggle },
   });
   const rows = [];
   function visit(node) { React.Children.forEach(node, (child) => { if (!React.isValidElement(child)) return; if (child.type === Toggle) rows.push(child.props); else visit(child.props.children); }); }

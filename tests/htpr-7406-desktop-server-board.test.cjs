@@ -144,11 +144,12 @@ test('reservation latch requires the flagged authenticated desktop board snapsho
     assert.equal(update(), false);
   }
   const guard = source.slice(source.indexOf('  let reserveFlaggedBoardChat'), source.indexOf('  const { sidebarWidthPx'));
-  const reserve = new Function('useFlag', 'reserveBoardChat', 'HTPR_7406_DESKTOP_SERVER_BOARD_FLAG',
+  const reserve = new Function('useFlag', 'reserveBoardChat', 'HTPR_7406_DESKTOP_SERVER_BOARD_FLAG', 'aiChatOpenSwitchesEnabled',
     transpile(guard) + '\nreturn reserveFlaggedBoardChat;');
-  assert.equal(reserve(() => false, true, flagKey), false);
-  assert.equal(reserve(() => true, false, flagKey), false);
-  assert.equal(reserve(() => true, true, flagKey), true);
+  assert.equal(reserve(() => false, true, flagKey, false), false);
+  assert.equal(reserve(() => true, false, flagKey, false), false);
+  assert.equal(reserve(() => true, true, flagKey, false), true);
+  assert.equal(reserve(() => true, true, flagKey, true), false);
 });
 
 test('server board reservation renders the existing empty chat slot at its final width before panels exist', () => {

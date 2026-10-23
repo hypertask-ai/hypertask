@@ -7,7 +7,7 @@ const React = require("react");
 const ts = require("typescript");
 const root = path.resolve(__dirname, "..");
 const flagKey = "htpr-7530-keep-ai-chat-closed";
-const flagModule = { HTPR_7530_KEEP_AI_CHAT_CLOSED_FLAG: flagKey };
+const flagModule = { HTPR_7530_KEEP_AI_CHAT_CLOSED_FLAG: flagKey, HTPR_7650_AI_CHAT_OPEN_SWITCHES_FLAG: "htpr-7650-ai-chat-open-switches" };
 const read = (file) => fs.readFileSync(path.join(root, file), "utf8");
 function load(file, mocks) {
   const loadedModule = { exports: {} };
@@ -59,7 +59,7 @@ test("Task Page reuses the adjacent SettingsToggle row, preserves the other sett
         "@/components/sidebars/RightSidebar/UserPreference": inert,
         "@/lib/state": { useRecoilState: (key) => [values[key], (next) => { values[key] = next(values[key]); }] },
         "@/store": { openAiChatByDefaultAtom: "open", keepAiChatClosedAtom: "closed" },
-        "@/hooks/useFlag": { useFlag: (key) => { assert.equal(key, flagKey); return enabled; } },
+        "@/hooks/useFlag": { useFlag: (key) => { if (key === flagModule.HTPR_7650_AI_CHAT_OPEN_SWITCHES_FLAG) return false; assert.equal(key, flagKey); return enabled; } },
         "@/lib/flags/keys": flagModule,
         "./SettingsCard": inert, "./SettingsScrollPicker": inert, "./SettingsSectionShell": inert,
         "./SettingsToggle": { __esModule: true, default: Toggle },

@@ -282,7 +282,7 @@ async function withCompose(options, check) {
   if (options.existing) flags.add(keys.HTPR_6937_NEW_TASK_WINDOW_FLAG);
   const taskContext = React.createContext(options.existing ? { currentTask: { ...task, title: "", description_: { content: "" } }, setCurrentTask() {}, setDescription() {} } : undefined);
   const mobileContext = React.createContext(false);
-  const basic = { "@/lib/state": state, "@/store": atoms, "@/hooks/useFlag": { useFlag: (key) => flags.has(key) } };
+  const basic = { "@/lib/state": state, "@/store": atoms, "@/hooks/useFlag": { useFlag: (key) => flags.has(key), useFlagReady: () => true } };
   const api = composeApi();
   let visible = true, history, reactRoot, selectedTask = 43;
   const pending = deferred();
