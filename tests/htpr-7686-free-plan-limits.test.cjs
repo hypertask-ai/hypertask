@@ -1068,3 +1068,24 @@ test("the existing inbox count includes only marked plan notices addressed to th
   assert.equal(queries[0].where.OR[1].project.ownerId, 7);
   assert.equal(queries[0].where.OR[1].type, "AgentMessage");
 });
+
+test("ticket admission re-resolves a personal destination owner after locking its project row", async () => {
+  const h = fixture();
+  const project = h.projects.find((row) => row.id === 30);
+  h.tasks.push(...Array.from({ length: 250 }, (_, index) => ({ id: 2000 + index, projectId: 30, status: "Normal" })));
+  let reads = 0;
+  h.db.project.findUniqueOrThrow = async () => {
+    reads += 1;
+    if (reads === 1) {
+      const beforeAdoption = { ...project };
+      project.ownerId = 8;
+      return beforeAdoption;
+    }
+    return { ...project };
+  };
+  await assert.rejects(h.policy.assertProjectTicketRoom(h.db, 30, 1, actor), (error) => {
+    assert.deepEqual(plain(error.scope), { kind: "personal", ownerId: 8 });
+    return error.code === "PLAN_LIMIT_REACHED";
+  });
+  assert.equal(h.logs.length, 1);
+});

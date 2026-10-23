@@ -150,9 +150,11 @@ export async function assertProjectTicketRoom(tx: Prisma.TransactionClient, proj
   if (!await isFreeScope(scope)) return;
   await lockPlanLimitScope(tx, scope);
   await tx.$executeRaw`SELECT id FROM "Project" WHERE id = ${projectId} FOR SHARE`;
-  const currentProject = await tx.project.findUniqueOrThrow({ where: { id: projectId }, select: { status: true } });
+  const currentProject = await tx.project.findUniqueOrThrow({ where: { id: projectId }, select: { teamId: true, ownerId: true, status: true } });
+  const currentScope = scopeForProject(currentProject);
+  if (scopeKey(currentScope) !== scopeKey(scope)) await lockPlanLimitScope(tx, currentScope);
   if (currentProject.status !== "Normal") return;
-  await assertTicketRoom(tx, scope, delta, ctx);
+  await assertTicketRoom(tx, currentScope, delta, ctx);
 }
 
 export async function assertTaskCountTransition(
@@ -168,13 +170,16 @@ export async function assertTaskCountTransition(
     where: { id: after.projectId },
     select: { teamId: true, ownerId: true, status: true },
   });
-  const scope = scopeForProject(destination);
+  let scope = scopeForProject(destination);
   if (!await isFreeScope(scope)) return;
   await lockPlanLimitScope(tx, scope);
   for (const projectId of [...new Set([before.projectId, after.projectId])].sort((a, b) => a - b)) {
     await tx.$executeRaw`SELECT id FROM "Project" WHERE id = ${projectId} FOR SHARE`;
   }
-  const currentDestination = await tx.project.findUniqueOrThrow({ where: { id: after.projectId }, select: { status: true } });
+  const currentDestination = await tx.project.findUniqueOrThrow({ where: { id: after.projectId }, select: { teamId: true, ownerId: true, status: true } });
+  const currentScope = scopeForProject(currentDestination);
+  if (scopeKey(currentScope) !== scopeKey(scope)) await lockPlanLimitScope(tx, currentScope);
+  scope = currentScope;
   if (currentDestination.status !== "Normal") return;
   if (before.status === "Normal") {
     const source = before.projectId === after.projectId ? { ...destination, status: currentDestination.status } : await tx.project.findUniqueOrThrow({
