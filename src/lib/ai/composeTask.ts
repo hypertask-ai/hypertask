@@ -1,3 +1,4 @@
+import { readTaskWriterSkills, TASK_WRITER_SKILLS_HEADER, MAX_SKILL_INPUT_LENGTH, type TaskWriterSkills } from "./taskWriterSkills";
 import { inlineAgentImages as embedAgentImages, imageEmbeddingOptOut } from "@/lib/media/inlineAgentImages";
 import type { TaskWriterCustomFieldValue } from "@/lib/ai/taskWriterCustomFields";
 import { isBrowserRenderableImage } from "@/lib/media/browserRenderableImage";
@@ -32,19 +33,20 @@ export function composeTaskBoardId(
     .map(([id]) => Number(id)).find((id) => Number.isInteger(id) && id > 0);
 }
 
-export function composeTaskAssistantMessage(ticket: string, writerFailed = false, filledExistingTask = false, batch?: { tasks: ITask[]; failedTitles: string[] }, writerFailureReason?: string): string {
+export function composeTaskAssistantMessage(ticket: string, writerFailed = false, filledExistingTask = false, batch?: { tasks: ITask[]; failedTitles: string[] }, writerFailureReason?: string, followup?: string): string {
+  const enrichment = followup ? `<p>${escapeHtml(followup).replace(/\n/g, "<br>")}</p>` : "";
   if (batch && (batch.tasks.length > 1 || batch.failedTitles.length)) {
     const links = batch.tasks.map((task) => `<li><a href="/detail/project-${task.projectId}/${task.uniqueIndex}">${escapeHtml(task.ticketNumber ?? `TASK-${task.uniqueIndex}`)}: ${escapeHtml(task.title ?? "")}</a></li>`).join("");
     const failures = batch.failedTitles.length
       ? `<p>Could not save these tasks. Only the linked tickets were saved:</p><ul>${batch.failedTitles.map((title) => `<li>${escapeHtml(title)}</li>`).join("")}</ul>` : "";
-    return `<p>I ${filledExistingTask ? "saved" : "created"} ${batch.tasks.length} tickets from your note.</p><ul>${links}</ul>${failures}`;
+    return `<p>I ${filledExistingTask ? "saved" : "created"} ${batch.tasks.length} tickets from your note.</p><ul>${links}</ul>${failures}${enrichment}`;
   }
   const greeting = `I ${filledExistingTask ? "filled in" : "created"} ${ticket} from your note. Want me to refine it? I can tighten the title, add acceptance criteria or split it into sub-tasks.`;
   return writerFailed
     ? writerFailureReason
       ? `${greeting}\n\nThe task writer was unavailable: ${writerFailureReason.trim().replace(/[.!?]*$/, ".")} I kept your original text as the title and description.`
       : `${greeting}\n\nThe task writer was unavailable, so I kept your original text as the title and description.`
-    : greeting;
+    : greeting + enrichment;
 }
 
 function stripWriterMarkers(html: string): string {
@@ -72,7 +74,7 @@ export async function createComposedTask({
   viewProject?: IProject;
   explainWriterFailure?: boolean;
   fields?: Partial<Pick<Parameters<typeof createNewTaskGloballyAPIHandler>[0], "tags" | "assignees" | "priority" | "estimate">>;
-}): Promise<{ task: ITask; writerFailed: boolean; writerFailureReason?: string; tasks: ITask[]; failedTitles: string[] }> {
+}): Promise<{ task: ITask; writerFailed: boolean; writerFailureReason?: string; skills?: TaskWriterSkills; tasks: ITask[]; failedTitles: string[] }> {
   let defaults = existingTaskId ? null : await axios.get("/api/tasks/createGlobally", {
     params: { projectId: project.id, position: "top" },
   });
@@ -99,6 +101,7 @@ export async function createComposedTask({
   let title = text;
   let description = rawDescription;
   let writerFailed = false;
+  let skills: TaskWriterSkills | undefined;
   let writerFailureReason: string | undefined;
   let drafts: ({ title: string; description: string; writerDueDate?: string; writerLabelIds?: string[]; customFields?: TaskWriterCustomFieldValue[]; ticketType?: TaskWriterTicketType } & Partial<ReturnType<typeof writerProperties>>)[] = [];
   const writerTimeZone = Intl.DateTimeFormat().resolvedOptions().timeZone;
@@ -212,6 +215,7 @@ export async function createComposedTask({
       }
       return { ...draft, title: stripTaskWriterMediaTokens(draft.title) || text.trim(), description: body };
     });
+    skills = readTaskWriterSkills(response.headers?.get(TASK_WRITER_SKILLS_HEADER));
     title = drafts[0].title;
     description = drafts[0].description;
   } catch {
@@ -276,5 +280,33 @@ export async function createComposedTask({
     }
   }
   if (!tasks.length) throw new Error("Couldn’t create the tasks. Your note is still here. Try again.");
-  return { task: tasks[0], writerFailed, ...(writerFailureReason ? { writerFailureReason } : {}), tasks, failedTitles };
+  return { task: tasks[0], writerFailed, ...(!writerFailed && skills ? { skills } : {}), ...(writerFailureReason ? { writerFailureReason } : {}), tasks, failedTitles };
+}
+
+export async function requestComposeSkillFollowup(taskId: number, skills: TaskWriterSkills, originalInput: string): Promise<{ questions: string[]; followup: string } | null> {
+  const controller = new AbortController();
+  let timeout: ReturnType<typeof setTimeout> | undefined;
+  try {
+    return await Promise.race([
+      (async () => {
+        const response = await fetch("/api/ai/task-questions", {
+          method: "POST", credentials: "include", signal: controller.signal,
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ taskId, kind: "new-ticket", skillFollowup: { skills, originalInput: originalInput.slice(0, MAX_SKILL_INPUT_LENGTH) } }),
+        });
+        if (!response.ok) return null;
+        const data = await response.json();
+        if (typeof data.followup !== "string" || !data.followup.trim() || data.followup.length > 12000 ||
+            !Array.isArray(data.questions) || !data.questions.every((question: unknown) => typeof question === "string")) return null;
+        return { followup: data.followup.trim(), questions: data.questions.slice(0, 4) };
+      })(),
+      new Promise<null>((resolve) => {
+        timeout = setTimeout(() => { resolve(null); controller.abort(); }, 30000);
+      }),
+    ]);
+  } catch {
+    return null;
+  } finally {
+    clearTimeout(timeout);
+  }
 }
