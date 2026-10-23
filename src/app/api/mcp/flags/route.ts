@@ -102,6 +102,9 @@ export async function PATCH(request: NextRequest) {
     if (usesReview && body.mode !== "EVERYONE") {
       throw new FeatureFlagApprovalError("A review can only switch a flag to Everyone");
     }
+    if (usesReview && FEATURE_FLAG_RELEASE_RISKS[body.key]?.highRisk) {
+      throw new FeatureFlagApprovalError("A review cannot switch a high-risk flag; use a Question with Valentin's thumbs-up");
+    }
     if (usesFailure) {
       if (typeof body.failure !== "string" || body.failure.length > 300
         || !URL.canParse(body.failure) || new URL(body.failure).protocol !== "https:") {

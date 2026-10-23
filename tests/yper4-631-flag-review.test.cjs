@@ -404,11 +404,20 @@ test("record still allows maximum-length evidence and a known stored legacy flag
   const legacy = "legacy-rollout"; stored.set(legacy, { key: legacy, mode: "OFF" });
   assert.equal((await record({ ...evidence, key: legacy, independentReview: "x".repeat(300), liveQaUrl: "https://qa.test/".padEnd(300, "x") })).status, 201);
 });
-test("review still allows a high-risk flag to switch Everyone on", async () => {
+for (const category of ["money", "access", "data-deletion", "customer-email"]) {
+  test(`review refuses high-risk ${category}`, async () => {
+    const high = definitions.find((flag) => flag.releaseRisk?.highRisk === category);
+    stored.set(high.key, { key: high.key, mode: "OWNER_AND_QA" });
+    await seedReview({ key: high.key });
+    const response = await switchFlag({ key: high.key, mode: "EVERYONE", review: 1 });
+    assert.equal(response.status, 403); assert.match(response.body.error, /high-risk/); assertNoChange();
+  });
+}
+test("Question plus human thumbs-up still allows a high-risk flag to switch Everyone on", async () => {
   const high = definitions.find((flag) => flag.releaseRisk?.highRisk);
-  stored.set(high.key, { key: high.key, mode: "OWNER_AND_QA" });
-  await seedReview({ key: high.key });
-  assert.equal((await switchFlag({ key: high.key, mode: "EVERYONE", review: 1 })).status, 200);
+  stored.set(high.key, { key: high.key, mode: "OWNER_AND_QA" }); policy = null; legacyKey = high.key;
+  const reason = "https://app.hypertask.ai/detail/project-4060/215#comment-123";
+  assert.equal((await switchFlag({ key: high.key, mode: "EVERYONE", reason })).status, 200);
 });
 test("Question plus human thumbs-up still allows Off without policy approval", async () => {
   policy = null;
