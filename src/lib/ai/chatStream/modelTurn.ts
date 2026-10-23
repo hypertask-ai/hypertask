@@ -1,3 +1,7 @@
+import { HTPR_7683_AI_CHAT_TICKET_ROWS_FLAG } from "@/lib/flags/definitions/htpr-7683-ai-chat-ticket-rows";
+import { hydrateTicketGroups } from "./ticketGroups";
+import { TICKET_ROWS_PROMPT } from "@/lib/ai/tools/showTicketRows";
+import type { ChatTicketGroupReferences } from "@/models/model";
 
 
 import { renderPrompt } from "@/lib/ai/prompts/registry";
@@ -46,6 +50,8 @@ export async function runModelTurn(state: StreamState, resolvedBody: ChatRequest
   const chatOpensTaskEnabled = await isFeatureEnabled(HTPR_7756_CHAT_OPENS_TASK_FLAG, dbUser.id);
   const bulkScopeConfirmationEnabled = await isFeatureEnabled(HTPR_7755_BULK_PREVIEW_CONFIRMATION_FLAG, dbUser.id);
   const skillDraftsEnabled = await isFeatureEnabled(HTPR_7768_CHAT_SKILL_DRAFTS_FLAG, dbUser.id);
+  const ticketRowsEnabled = await isFeatureEnabled(HTPR_7683_AI_CHAT_TICKET_ROWS_FLAG, dbUser.id);
+  let ticketGroups: ChatTicketGroupReferences | undefined;
   const instructions = [
     AGENT_SYSTEM_PROMPT,
     skillDraftsEnabled ? renderPrompt("chat-skill-drafts") : null,
@@ -59,6 +65,7 @@ export async function runModelTurn(state: StreamState, resolvedBody: ChatRequest
     inlineAgentImagesEnabled ? renderPrompt("inline-agent-images") : null,
     skillResolution.systemPromptAddition,
     agentPromptAddition,
+    ticketRowsEnabled ? TICKET_ROWS_PROMPT : null,
   ]
     .filter(Boolean)
     .join("\n\n");
@@ -123,7 +130,8 @@ export async function runModelTurn(state: StreamState, resolvedBody: ChatRequest
     inlineAgentImagesEnabled,
     actingAgent ? actingAgent.teamScope : null,
     bulkScopeConfirmationEnabled,
-    skillDraftsEnabled
+    skillDraftsEnabled,
+    ticketRowsEnabled ? { executions: toolExecutions, setGroups: (groups) => { ticketGroups = groups; } } : undefined,
   );
   if (
     heartbeatExecutionId &&
@@ -157,6 +165,7 @@ export async function runModelTurn(state: StreamState, resolvedBody: ChatRequest
   const chunks = taskProgress.length ? streamedContent : reply?.chunks ?? [];
   if (!reply) chunks.push("<p>Reply stopped. Your saved ticket remains.</p>");
 
+  const ticketRowsAllowed = reply?.ticketRowsAllowed ?? false;
   state.turnDeadline?.clear();
 
   let completionFenceToken: string | null = null;
@@ -194,6 +203,7 @@ export async function runModelTurn(state: StreamState, resolvedBody: ChatRequest
         userId: dbUser.id,
         content: chunks.join(""),
         linkify: linkifyTicketRefs,
+        ...(ticketGroups && ticketRowsAllowed ? { ticketGroups } : {}),
       });
     } catch (error) {
       console.error(
@@ -278,8 +288,18 @@ export async function runModelTurn(state: StreamState, resolvedBody: ChatRequest
     }
   }
 
+  let hydratedTicketGroups;
+  if (assistantPersisted && ticketGroups && ticketRowsAllowed) {
+    try {
+      hydratedTicketGroups = await hydrateTicketGroups(ticketGroups.groups, dbUser.id, actingAgent);
+    } catch (error) {
+      console.error("[ai/chat/stream] ticket row hydration failed", error);
+    }
+  }
+
   state.finish("complete", {
     user_message_persisted: userMessagePersisted,
     assistant_persisted: assistantPersisted,
+    ...(hydratedTicketGroups ? { ticketGroups: hydratedTicketGroups } : {}),
   });
 }

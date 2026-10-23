@@ -14,7 +14,7 @@ export type NativeChatTurnPersistence = "persisted" | "conflict";
 
 export type NativeAssistantReplay =
   | { status: "missing" }
-  | { status: "completed"; content: string }
+  | { status: "completed"; content: string; ticketGroups?: unknown }
   | { status: "conflict" };
 
 type FindNativeAssistantReplayArgs = {
@@ -36,6 +36,7 @@ export async function findNativeAssistantReplay({
       sessionId: true,
       role: true,
       content: true,
+      ticketGroups: true,
       session: { select: { userId: true } },
     },
   });
@@ -47,7 +48,7 @@ export async function findNativeAssistantReplay({
   ) {
     return { status: "conflict" };
   }
-  return { status: "completed", content: stored.content };
+  return { status: "completed", content: stored.content, ...(stored.ticketGroups ? { ticketGroups: stored.ticketGroups } : {}) };
 }
 
 export async function ensureNativeChatTurn({

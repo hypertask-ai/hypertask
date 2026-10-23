@@ -2571,6 +2571,7 @@ model ChatMessage {
   createdAt DateTime @default(now())
   content String
   context Json?
+  ticketGroups Json?
   role ChatRole
   sessionId String
   session ChatSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)

@@ -239,7 +239,8 @@ export async function generateModelReply(state: StreamState, inputs: { instructi
     }
   }
   if (state.errorSent) return;
-  if (!hasVisibleCompletion(chunks)) {
+  const completedWithVisibleReply = hasVisibleCompletion(chunks);
+  if (!completedWithVisibleReply) {
     await reportEmptyCompletion(
       emptyCompletionRetryFailed,
       emptyCompletionError
@@ -263,5 +264,5 @@ export async function generateModelReply(state: StreamState, inputs: { instructi
   } else {
     state.recordTurnOutcome("ok");
   }
-  return { chunks };
+  return { chunks, ticketRowsAllowed: completedWithVisibleReply && !state.generationFinishedWithError };
 }

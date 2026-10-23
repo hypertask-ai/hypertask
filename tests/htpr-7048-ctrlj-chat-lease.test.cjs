@@ -99,6 +99,8 @@ function harness({ enabled = true } = {}) {
   };
   const next = { NextResponse: { json: (body, options) => Response.json(body, options) } };
   const route = load("src/app/api/ai/chat/stream/route.ts", {
+    "@/lib/flags/definitions/htpr-7683-ai-chat-ticket-rows": { HTPR_7683_AI_CHAT_TICKET_ROWS_FLAG: "htpr-7683-ai-chat-ticket-rows" },
+    "@/lib/ai/chatStream/ticketGroups": {},
     "@/lib/agents/chatAccess": { loadSidebarChatRequest: async (request) => { assert.equal(request.headers.get("x-hypertask-sidebar-project"), null); return { ok: true }; } },
     "@/lib/ai/chatStream/turnModel": { loadTurnModel: async (body) => ({ actingAgent: body.session_id === agentSession ? { id: agentId } : null }) },
     "@/lib/ai/chatStream/stream": { createChatStream: (options) => { started.push(options); return new Response("reply started"); } },

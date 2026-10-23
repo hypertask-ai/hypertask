@@ -12,6 +12,7 @@ export const NATIVE_READ_ONLY_TOOLS: ReadonlySet<string> = new Set([
   "hypertask_list_custom_fields",
   "hypertask_list_tasks",
   "hypertask_get_tasks",
+  "hypertask_show_ticket_rows",
   "hypertask_my_tasks",
   "hypertask_search_tasks",
   "hypertask_task_context",

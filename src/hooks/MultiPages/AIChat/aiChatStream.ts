@@ -233,6 +233,7 @@ export async function consumeAiChatStream(context: Context) {
                       const initialAssistantMessage: IChatMessage = {
                         id: assistantMessageId,
                         content: aiContent,
+                        ...(parsed.assistant_persisted === true && Array.isArray(parsed.ticketGroups) ? { ticketGroups: parsed.ticketGroups } : {}),
                         role: "assistant",
                         createdAt: new Date(),
                         sessionId: session.id,

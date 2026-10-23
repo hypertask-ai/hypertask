@@ -1,3 +1,6 @@
+import { useFlag } from "@/hooks/useFlag";
+import AiChatTicketRows from "./AiChatTicketRows";
+import { HTPR_7683_AI_CHAT_TICKET_ROWS_FLAG } from "@/lib/flags/definitions/htpr-7683-ai-chat-ticket-rows";
 import AttachmentView from "@/components/Common/AttachmentsView";
 import { IMessageItemProps } from "@/models/AICHATMODELS";
 import { IChatMessage, TCarousalItems } from "@/models/model";
@@ -264,6 +267,7 @@ const AssistantStreamingStatus: FC<AssistantStreamingStatusProps> = ({
 };
 
 const SubMessage = ({ message }: { message: IChatMessage }) => {
+  const ticketRowsEnabled = useFlag(HTPR_7683_AI_CHAT_TICKET_ROWS_FLAG);
   const hasAnimated = useRef(false);
   const [showCursor, setShowCursor] = useState(!message.isDelivered);
   const router = useRouter();
@@ -310,6 +314,7 @@ const SubMessage = ({ message }: { message: IChatMessage }) => {
           className={`content-html ${contentClass}`}
           dangerouslySetInnerHTML={{ __html: messageHtmlWithTableScroll }}
         />
+        {ticketRowsEnabled && message.role === "assistant" && message.isDelivered && message.ticketGroups?.length ? <AiChatTicketRows groups={message.ticketGroups} onNavigate={(url) => { router.push(url); revealNavigationTarget(); }} /> : null}
         {message.role === "assistant" && !message.isDelivered && (
           <AssistantStreamingStatus
             agentStatus={agentStatus}
