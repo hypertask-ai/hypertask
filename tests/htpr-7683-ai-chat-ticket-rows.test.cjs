@@ -393,3 +393,14 @@ test("replay route sends reauthorized rows in done without starting inference; O
     assert.equal(h.queries.length, enabled ? 1 : 0);
   }
 });
+
+test("the next turn's history names the shown rows in order, and plain answers stay unchanged", () => {
+  const { historyContent } = jiti(path.join(root, "src/lib/ai/ticketRowsHistory.ts"));
+  const message = {
+    content: "<p>Here are two overdue bugs.</p>",
+    ticketGroups: [{ label: "Done", tasks: [{ id: 7, ticketNumber: "HTPR-1", uniqueIndex: 1, title: "First" }] }, { tasks: [{ id: 8, uniqueIndex: 2, title: "Second" }] }],
+  };
+  assert.equal(historyContent(message), "<p>Here are two overdue bugs.</p>\n\nTicket rows shown, in order:\n- [Done] HTPR-1 (task_id 7): First\n- #2 (task_id 8): Second");
+  assert.equal(historyContent({ content: "<p>Hi</p>" }), "<p>Hi</p>");
+  assert.equal(historyContent({ content: "<p>Hi</p>", ticketGroups: [] }), "<p>Hi</p>");
+});
