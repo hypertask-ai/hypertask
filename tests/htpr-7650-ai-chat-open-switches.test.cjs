@@ -67,7 +67,7 @@ function stateHarness(initial) {
     assert.fail("hook did not settle");
   } };
 }
-const atomNames = ["currentUserAtom", "aiChatAutoOpenPreferencesAtom", "aiChatAutoOpenPageAtom", "aiChatNewTicketPathAtom", "aiChatAutoOpenSuppressedAtom", "aiChatExplicitOpenAtAtom", "aiChatEmbeddedTicketPathAtom", "showAIChatInterfaceAtom"];
+const atomNames = ["currentUserAtom", "aiChatAutoOpenPreferencesAtom", "aiChatAutoOpenPageAtom", "aiChatNewTicketPathAtom", "aiChatAutoOpenSuppressedAtom", "aiChatExplicitOpenAtAtom", "aiChatEmbeddedTicketPathAtom", "showAIChatInterfaceAtom", "aiChatPinnedAtom"];
 const atoms = Object.fromEntries(atomNames.map((key) => [key, key]));
 function pageHarness(values = defaults, options = {}) {
   const h = hooks();
@@ -91,6 +91,47 @@ for (const [url, key] of [["/detail/project-15/1", "aiChatOpenNewTickets"], ["/d
     assert.equal(h.values.showAIChatInterfaceAtom, on);
   });
 }
+test("chat space is reserved from the switch on first render, so the page does not jump when the chat opens", () => {
+  for (const on of [false, true]) {
+    const h = pageHarness({ ...allOff, aiChatOpenTickets: on });
+    h.navigate("/detail/project-15/2");
+    assert.equal(h.render().reserve, on);
+  }
+  const phone = pageHarness({ ...allOff, aiChatOpenTickets: true });
+  phone.navigate("/detail/project-15/2", true);
+  assert.equal(phone.render().reserve, false);
+  const closed = pageHarness({ ...allOff, aiChatOpenTickets: true });
+  closed.navigate("/detail/project-15/2"); closed.close();
+  assert.equal(closed.render().reserve, false);
+  closed.navigate("/detail/project-15/3");
+  assert.equal(closed.render().reserve, true);
+});
+test("a pinned chat stays open on pages whose switch is off, but not on phone", () => {
+  const h = pageHarness(allOff, { state: { aiChatPinnedAtom: true } });
+  h.navigate("/project?id=15");
+  assert.equal(h.values.showAIChatInterfaceAtom, true);
+  h.navigate("/detail/project-15/2");
+  assert.equal(h.values.showAIChatInterfaceAtom, true);
+  const phone = pageHarness(allOff, { state: { aiChatPinnedAtom: true, showAIChatInterfaceAtom: true } });
+  phone.navigate("/detail/project-15/2", true);
+  assert.equal(phone.values.showAIChatInterfaceAtom, false);
+});
+test("an account choice of off that arrives after the chat opened closes it on the same page", () => {
+  let values = { ...allOff, aiChatOpenTickets: true };
+  const h = pageHarness(new Proxy({}, { get: (_target, key) => values[key] }));
+  h.navigate("/detail/project-15/2");
+  assert.equal(h.values.showAIChatInterfaceAtom, true);
+  values = allOff; h.render();
+  assert.equal(h.values.showAIChatInterfaceAtom, false);
+});
+test("an opened chat the user opened by hand is not closed by an account choice of off", () => {
+  let values = allOff;
+  const h = pageHarness(new Proxy({}, { get: (_target, key) => values[key] }));
+  h.navigate("/detail/project-15/2");
+  h.manualOpen();
+  values = { ...allOff }; h.render();
+  assert.equal(h.values.showAIChatInterfaceAtom, true);
+});
 test("board switch also covers demo, My Tasks, inbox and calendar; unrelated pages do not auto-open", () => {
   for (const url of ["/demo", "/my-tasks", "/inbox", "/calendar", "/settings"]) {
     const h = pageHarness({ ...allOff, aiChatOpenBoards: true });
@@ -192,13 +233,23 @@ test("null server switches preserve migrated local values and save once even aft
   assert.deepEqual(h.posts, [{ aiChatOpenIfUnset: { aiChatOpenNewTickets: false, aiChatOpenBoards: false } }]);
   assert.deepEqual(h.invalidated, []);
 });
-test("untouched user saves the ticket defaults once and a switch edit writes only its boolean", () => {
+const flushWrites = async () => { for (let i = 0; i < 6; i++) await Promise.resolve(); };
+test("untouched user saves the ticket defaults once and a switch edit writes only its boolean", async () => {
   const h = preferenceHarness({ server: { aiChatOpenNewTickets: null, aiChatOpenTickets: null, aiChatOpenBoards: null } });
   h.render(); h.render();
   assert.deepEqual(h.posts, [{ aiChatOpenIfUnset: defaults }]);
   h.edit("aiChatOpenBoards", true);
+  await flushWrites();
   assert.deepEqual(h.posts[1], { aiChatOpenBoards: true });
   assert.equal(h.values().aiChatOpenBoards, true);
+});
+test("quick toggles are saved one after another so the last choice is the one kept", async () => {
+  const h = preferenceHarness({ server: allOff });
+  h.render();
+  h.edit("aiChatOpenBoards", true); h.edit("aiChatOpenBoards", false); h.edit("aiChatOpenBoards", true);
+  assert.deepEqual(h.posts, []);
+  await flushWrites();
+  assert.deepEqual(h.posts, [{ aiChatOpenBoards: true }, { aiChatOpenBoards: false }, { aiChatOpenBoards: true }]);
 });
 
 function preferencesApi(enabled, body, stored = { aiChatOpenNewTickets: null, aiChatOpenTickets: null, aiChatOpenBoards: null }) {

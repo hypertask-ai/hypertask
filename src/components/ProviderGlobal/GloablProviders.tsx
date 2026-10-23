@@ -401,7 +401,7 @@ export default function GlobalProvider({
   const aiChatAutoOpenSuppressed = useRecoilValue(aiChatAutoOpenSuppressedAtom);
   const aiChatPinned = useRecoilValue(aiChatPinnedAtom);
   const openAiChatByDefault = useRecoilValue(openAiChatByDefaultAtom);
-  const aiChatOpenSwitchesEnabled = useAiChatAutoOpen(mbl);
+  const { active: aiChatOpenSwitchesEnabled, reserve: aiChatSwitchReserve } = useAiChatAutoOpen(mbl);
   const keepAiChatClosedEnabled = useFlag(HTPR_7530_KEEP_AI_CHAT_CLOSED_FLAG);
   const keepAiChatClosedReady = useFlagReady(HTPR_7530_KEEP_AI_CHAT_CLOSED_FLAG);
   const savedKeepAiChatClosed = useRecoilValue(keepAiChatClosedAtom);
@@ -595,6 +595,7 @@ export default function GlobalProvider({
     currentUserId: currentUser?.id,
     showAiChatInterface,
     reserveBoardChat: reserveFlaggedBoardChat,
+    aiChatSwitchReserve: aiChatOpenSwitchesEnabled ? aiChatSwitchReserve : undefined,
     aiChatAutoOpenSuppressed,
     commentComposerOpen,
     agentChatHidesMobileShell,

@@ -11,6 +11,8 @@ import { AI_CHAT_AUTO_OPEN_DEFAULTS, AI_CHAT_AUTO_OPEN_KEYS, readLocalAiChatAuto
 import { useHydrated } from "./useHydrated";
 import { useGetUserPreferences, type IUserPreferences } from "./useGetUserPreferences";
 
+let preferenceWrites: Promise<unknown> = Promise.resolve();
+
 export function useAiChatOpenPreferences() {
   const enabled = useFlag(HTPR_7650_AI_CHAT_OPEN_SWITCHES_FLAG);
   const flagReady = useFlagReady(HTPR_7650_AI_CHAT_OPEN_SWITCHES_FLAG);
@@ -25,7 +27,9 @@ export function useAiChatOpenPreferences() {
     setSaved((previous) => ({ ...previous, [user.id]: { ...migrated, ...previous[user.id], [key]: value } }));
     queryClient.setQueryData<IUserPreferences>(["user-preferences", "ai-chat-auto-open", String(user.id)], (previous) =>
       previous ? { ...previous, [key]: value } : previous);
-    void axios.post("/api/users/preferences", { [key]: value }).catch(() => {});
+    preferenceWrites = preferenceWrites
+      .then(() => axios.post("/api/users/preferences", { [key]: value }))
+      .catch(() => {});
   }, [enabled, user?.id, migrated, setSaved, queryClient]);
   return { enabled, flagReady, ready: hydrated && flagReady, values, setPreference };
 }
@@ -42,7 +46,8 @@ export function useSyncAiChatOpenPreferences() {
 
   useEffect(() => {
     if (!enabled || !ready || !user?.id || !isSuccess || !dataUpdatedAt || !data) return;
-    if (applied.current?.userId === user.id && applied.current.data === data) return;
+    const last = applied.current;
+    if (last && last.userId === user.id && last.data === data) return;
     applied.current = { userId: user.id, data };
     const local = { ...readLocalAiChatAutoOpenPreferences(), ...saved[user.id] };
     const next: AiChatAutoOpenPreferences = { ...local };

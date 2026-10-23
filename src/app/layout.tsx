@@ -85,8 +85,10 @@ export default async function RootLayout(
 
   const sidebarFirstPaint = analyticsSession ? await isFeatureEnabled(HTPR_7615_SIDEBAR_FIRST_PAINT_FLAG, analyticsSession.id) : false;
   const sidebarFlags = analyticsSession && sidebarFirstPaint ? await Promise.all([
-    HTPR_7530_KEEP_AI_CHAT_CLOSED_FLAG, HTPR_7055_CHAT_OVERLAYS_TICKET_FLAG, HTPR_7650_AI_CHAT_OPEN_SWITCHES_FLAG,
-  ].map(key => isFeatureEnabled(key, analyticsSession.id))) : null;
+    isFeatureEnabled(HTPR_7530_KEEP_AI_CHAT_CLOSED_FLAG, analyticsSession.id),
+    isFeatureEnabled(HTPR_7055_CHAT_OVERLAYS_TICKET_FLAG, analyticsSession.id),
+    isFeatureEnabled(HTPR_7650_AI_CHAT_OPEN_SWITCHES_FLAG, analyticsSession.id),
+  ]) : null;
 
   const theme = cookieStore.get(authConfig.cookies.theme) ?? {
     value: authConfig.cookies.defaultTheme,

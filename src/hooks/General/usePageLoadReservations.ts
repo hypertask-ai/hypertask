@@ -23,6 +23,7 @@ export function usePageLoadReservations({
   currentUserId,
   showAiChatInterface,
   reserveBoardChat,
+  aiChatSwitchReserve,
   aiChatAutoOpenSuppressed,
   commentComposerOpen,
   agentChatHidesMobileShell,
@@ -33,6 +34,7 @@ export function usePageLoadReservations({
   currentUserId: number | undefined;
   showAiChatInterface: boolean;
   reserveBoardChat: boolean;
+  aiChatSwitchReserve?: boolean;
   aiChatAutoOpenSuppressed: boolean;
   commentComposerOpen: boolean;
   agentChatHidesMobileShell: boolean;
@@ -45,10 +47,10 @@ export function usePageLoadReservations({
   const isAiChatSidebarMode = useRecoilValue(isAiChatSidebarModeAtom);
   const aiChatSidebarWidthPx = useRecoilValue(aiChatSidebarWidthPxAtom);
   const reserveAiSidebar = !mbl && isAiChatSidebarMode && (
-    showAiChatInterface || (!aiChatOpenSwitchesEnabled && chatAutoOpenReady && !keepAiChatClosed && (reserveBoardChat || (
+    showAiChatInterface || (aiChatSwitchReserve ?? (!aiChatOpenSwitchesEnabled && chatAutoOpenReady && !keepAiChatClosed && (reserveBoardChat || (
       isTaskDetailPage && authenticatedUserId !== null &&
       (aiChatPinned || (openAiChatByDefault && !aiChatAutoOpenSuppressed))
-    )))
+    ))))
   );
   const sidebarWidthPx = reserveAiSidebar
     ? Math.max(aiChatSidebarWidthPx, AI_CHAT_SIDEBAR_MIN_PX)
