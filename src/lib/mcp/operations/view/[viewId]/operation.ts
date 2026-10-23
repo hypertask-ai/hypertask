@@ -1,3 +1,4 @@
+import { requireAgentWriteRole } from "@/lib/mcp/agents/readRoleGuard";
 import { reportMcpOperationCrash } from "@/lib/mcp/operationCrashReport";
 import { wrapMcpRoute, validateMcpRouteAuth as validateMcpAuth, checkMcpRouteRateLimit as checkMcpRateLimit } from '@/lib/mcp/routeWrapper'
 import { NextRequest, NextResponse } from "next/server";
@@ -205,6 +206,8 @@ export async function PATCH(request: NextRequest, props: { params: Promise<{ vie
         { status: 401 }
       )
     }
+    const roleRefusal = await requireAgentWriteRole(ctx)
+    if (roleRefusal) return roleRefusal
     const { viewId } = await props.params
     const body = await request.json().catch(() => ({}))
     const filtersProvided =
@@ -292,6 +295,8 @@ export async function DELETE(request: NextRequest, props: { params: Promise<{ vi
         { status: 401 }
       )
     }
+    const roleRefusal = await requireAgentWriteRole(ctx)
+    if (roleRefusal) return roleRefusal
     const { viewId } = await props.params
     const deleted = await deleteView(viewId, ctx.user.id, ctx.agentId, ctx.teamScope)
     return NextResponse.json({ success: true, view: deleted })

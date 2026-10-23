@@ -1,3 +1,4 @@
+import { requireAgentWriteRole } from "@/lib/mcp/agents/readRoleGuard"
 import { lockTaskTeamScope, TaskTeamScopeError } from "@/lib/mcp/tasks/agentMutationFence"
 import { wrapMcpRoute, checkMcpRouteRateLimit as checkMcpRateLimit, validateMcpRouteAuth as validateMcpAuth } from '@/lib/mcp/routeWrapper'
 import { NextRequest, NextResponse } from 'next/server'
@@ -41,6 +42,8 @@ export async function POST(request: NextRequest) {
     if (rateLimited) return rateLimited
     const ctx = await validateMcpAuth(request)
     if (!ctx) return unauthorized()
+    const roleRefusal = await requireAgentWriteRole(ctx)
+    if (roleRefusal) return roleRefusal
 
     let body: Record<string, unknown>
     try {

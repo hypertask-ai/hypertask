@@ -1,3 +1,4 @@
+import { requireAgentWriteRole } from "@/lib/mcp/agents/readRoleGuard";
 import { haiku55ModelEnabled } from "@/app/api/ai/_lib/planGate";
 import { wrapMcpRoute, validateMcpRouteAuth as validateMcpAuth, checkMcpRouteRateLimit as checkMcpRateLimit } from '@/lib/mcp/routeWrapper'
 import { NextRequest, NextResponse } from "next/server";
@@ -69,6 +70,8 @@ export async function PUT(
   if (rateLimited) return rateLimited;
   const ctx = await validateMcpAuth(request);
   if (!ctx) return createUnauthorizedResponse();
+  const roleRefusal = await requireAgentWriteRole(ctx);
+  if (roleRefusal) return roleRefusal;
 
   try {
     const { projectId: rawProjectId } = await props.params;

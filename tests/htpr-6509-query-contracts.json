@@ -263,6 +263,7 @@
           "snippets": null,
           "muteAnnouncements": null,
           "allTasksDateRange": null,
+          "boardSortMode": null,
           "playGifs": null,
           "autoDescriptionSuggestions": null,
           "notificationMatrix": null,

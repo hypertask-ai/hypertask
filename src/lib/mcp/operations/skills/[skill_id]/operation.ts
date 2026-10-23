@@ -1,3 +1,4 @@
+import { requireAgentWriteRole } from '@/lib/mcp/agents/readRoleGuard'
 import { wrapMcpRoute, validateMcpRouteAuth as validateMcpAuth, checkMcpRouteRateLimit as checkMcpRateLimit } from '@/lib/mcp/routeWrapper'
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
@@ -48,7 +49,7 @@ export async function GET(request: NextRequest, context: RouteContext) {
 
 export async function PATCH(request: NextRequest, context: RouteContext) {
   return wrapMcpRoute(async (request: NextRequest) => {
-  const auth = await authenticate(request);
+  const auth = await authenticate(request, true);
   if (auth instanceof NextResponse) return auth;
 
   try {
@@ -78,7 +79,7 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
 
 export async function DELETE(request: NextRequest, context: RouteContext) {
   return wrapMcpRoute(async (request: NextRequest) => {
-  const auth = await authenticate(request);
+  const auth = await authenticate(request, true);
   if (auth instanceof NextResponse) return auth;
 
   try {
@@ -94,11 +95,15 @@ export async function DELETE(request: NextRequest, context: RouteContext) {
   })(request)
 }
 
-async function authenticate(request: NextRequest) {
+async function authenticate(request: NextRequest, requiresWrite = false) {
   const rateLimited = await checkMcpRateLimit(request);
   if (rateLimited) return rateLimited;
   const ctx = await validateMcpAuth(request);
   if (!ctx) return createUnauthorizedResponse();
+  if (requiresWrite) {
+    const roleRefusal = await requireAgentWriteRole(ctx);
+    if (roleRefusal) return roleRefusal;
+  }
   return { userId: ctx.user.id, agentId: ctx.agentId, teamScope: ctx.teamScope };
 }
 

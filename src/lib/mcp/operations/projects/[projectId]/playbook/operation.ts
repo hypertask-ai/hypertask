@@ -1,3 +1,4 @@
+import { requireAgentWriteRole } from '@/lib/mcp/agents/readRoleGuard'
 import { reportMcpOperationCrash } from '@/lib/mcp/operationCrashReport'
 import { wrapMcpRoute, checkMcpRouteRateLimit as checkMcpRateLimit, validateMcpRouteAuth as validateMcpAuth } from '@/lib/mcp/routeWrapper'
 import { NextRequest, NextResponse } from 'next/server'
@@ -72,6 +73,8 @@ export async function PUT(
     if (rateLimited) return rateLimited
     const ctx = await validateMcpAuth(request)
     if (!ctx) return unauthorized()
+    const roleRefusal = await requireAgentWriteRole(ctx)
+    if (roleRefusal) return roleRefusal
 
     const projectId = parseProjectId(rawId)
     if (projectId === null) {

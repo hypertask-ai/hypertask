@@ -1,3 +1,4 @@
+import { requireAgentWriteRole } from '@/lib/mcp/agents/readRoleGuard'
 import { wrapMcpRoute, checkMcpRouteRateLimit as checkMcpRateLimit, validateMcpRouteAuth as validateMcpAuth } from '@/lib/mcp/routeWrapper'
 import { NextRequest, NextResponse } from 'next/server';
 
@@ -35,6 +36,8 @@ export async function POST(request: NextRequest) {
       { status: 401 }
     );
   }
+  const roleRefusal = await requireAgentWriteRole(ctx);
+  if (roleRefusal) return roleRefusal;
   if (!ctx.agentId) {
     return NextResponse.json(
       { success: false, error: 'Task mutation leases require an agent token' },

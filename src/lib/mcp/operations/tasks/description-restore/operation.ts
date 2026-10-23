@@ -1,3 +1,4 @@
+import { requireAgentWriteRole } from '@/lib/mcp/agents/readRoleGuard'
 import { findIdParamOutOfRange, idOutOfRangeMessage } from '@/lib/mcp/listParams'
 import { reportMcpOperationCrash } from '@/lib/mcp/operationCrashReport'
 import { wrapMcpRoute } from '@/lib/mcp/routeWrapper'
@@ -28,6 +29,8 @@ export async function POST(request: NextRequest) {
   try {
     const ctx = await validateMcpAuth(request)
     if (!ctx) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    const roleRefusal = await requireAgentWriteRole(ctx)
+    if (roleRefusal) return roleRefusal
 
     const rateLimited = await checkMcpRateLimit(request)
     if (rateLimited) return rateLimited

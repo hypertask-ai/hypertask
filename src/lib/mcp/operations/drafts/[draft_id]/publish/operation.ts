@@ -1,3 +1,4 @@
+import { requireAgentWriteRole } from "@/lib/mcp/agents/readRoleGuard";
 import { agentScopeEnforced, recordAgentBoardScopeMiss } from "@/lib/auth/agentScope";
 import { reportMcpOperationCrash } from '@/lib/mcp/operationCrashReport'
 import { userCanAccessTask } from "@/utils/controllers/tasks/assertTaskAccess"
@@ -52,6 +53,8 @@ export async function POST(request: NextRequest, props: { params: Promise<{ draf
         { status: 401 }
       );
     }
+    const roleRefusal = await requireAgentWriteRole(ctx);
+    if (roleRefusal) return roleRefusal;
     const user = ctx.user;
 
     if (!user) {

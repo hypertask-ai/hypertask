@@ -1,3 +1,4 @@
+import { requireAgentWriteRole } from "@/lib/mcp/agents/readRoleGuard";
 import { recordAgentBoardScopeMiss } from "@/lib/auth/agentScope";
 import { reportMcpOperationCrash } from '@/lib/mcp/operationCrashReport'
 import { taskWriteAccessWhere } from "@/utils/controllers/projects/getAllIncludes"
@@ -24,6 +25,8 @@ export async function POST(request: NextRequest) {
         { status: 401 }
       )
     }
+    const roleRefusal = await requireAgentWriteRole(ctx)
+    if (roleRefusal) return roleRefusal
 
     let body: { project_id?: unknown; status?: unknown }
     try {

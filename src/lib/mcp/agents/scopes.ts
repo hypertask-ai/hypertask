@@ -27,13 +27,14 @@ export async function getAgentRole(
   return (agent?.permissions as AgentScopes | null)?.role ?? 'write'
 }
 
-export async function requireRole(
-  ctx: McpAuthContext,
-  minRole: AgentRole
-): Promise<NextResponse | null> {
-  const role = await getAgentRole(ctx)
-  if (ROLE_RANK[role] >= ROLE_RANK[minRole]) return null
+export function roleMeets(role: AgentRole, minRole: AgentRole): boolean {
+  return ROLE_RANK[role] >= ROLE_RANK[minRole]
+}
 
+export function insufficientScopeResponse(
+  role: AgentRole,
+  minRole: AgentRole
+): NextResponse {
   return NextResponse.json(
     {
       success: false,
@@ -42,4 +43,14 @@ export async function requireRole(
     },
     { status: 403 }
   )
+}
+
+export async function requireRole(
+  ctx: McpAuthContext,
+  minRole: AgentRole
+): Promise<NextResponse | null> {
+  const role = await getAgentRole(ctx)
+  if (roleMeets(role, minRole)) return null
+
+  return insufficientScopeResponse(role, minRole)
 }
