@@ -9,6 +9,8 @@ description: SPEED RUNNER only, read daily live speed numbers, investigate and s
 
 **Work toward [GOALS.md](GOALS.md)**: 50 ms in-app navigation, next open milestone first. The runner dispatcher sends you the top free `[SPEED]` ticket, or a research round every 6 hours when none is free.
 
+**Explain every number before you report it (required).** Before any speed number goes into a ticket, PR, playbook row or weekly digest, load `.claude/skills/principle-explain-the-number/SKILL.md` and `.claude/skills/benchmark-checklist/SKILL.md` and answer all seven questions: limiter, tuning, limits, errors, repeatability, end-to-end relevance and whether the work happened. Report run count, range and limiter with the number, or call it inconclusive (pstack by Lauren Tan, MIT).
+
 This is the map, not a parallel `/ship`. Read [PLAYBOOK.md](PLAYBOOK.md) first and update it **after every investigation and every weekly research round**, including no-win and failed experiments. Source: https://app.hypertask.ai/detail/project-4060/232.
 
 | Step | Load / do | Done when |
