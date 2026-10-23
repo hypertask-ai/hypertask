@@ -89,7 +89,7 @@ db.$transaction = async (callback, options) => {
   }
 }
 stub('src/lib/prisma.ts', { default: db })
-stub('src/utils/controllers/tasks/createTaskCore.ts', { createTaskCore: async (options) => {
+stub('src/utils/controllers/tasks/createTaskCore.ts', { createProvisionedTaskCore: async (options) => {
   if (onTaskCreate) await onTaskCreate(options)
   if (failWrite) throw new Error('write failed')
   created.push(options)

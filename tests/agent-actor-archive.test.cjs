@@ -37,6 +37,7 @@ function compile(relativePath) {
 }
 
 function execute(javascript, stubs) {
+  stubs = require("./helpers/stub-map.cjs").withStubs({ "@/lib/planLimits": { isPlanLimitReachedError: () => false, isPlanLimitsEnabled: async () => false, assertTaskCountTransition: async () => {}, assertProjectTicketRoom: async () => {} } }, stubs);
   const originalLoad = Module._load;
   Module._load = (request, parent, isMain) =>
     stubs[request] ?? originalLoad(request, parent, isMain);

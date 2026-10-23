@@ -18,6 +18,7 @@ function loadModule(file, stubs) {
     module: loaded, exports: loaded.exports,
     require: (id) => {
       if (id === '@/lib/mcp/routeWrapper') return require('./helpers/mcp-route-wrapper.cjs').loadRouteWrapper(withStubs(stubs, { '@/lib/aiFeedback/automatic': { queueRestFailure: () => {} } }));
+      if (id === "@/lib/planLimits") return { isPlanLimitReachedError: () => false, isPlanLimitsEnabled: async () => false, assertTaskCountTransition: async () => {}, assertTicketRoom: async () => {}, assertProjectTicketRoom: async () => {}, assertBoardRoom: async () => {} };
       assert.ok(id in stubs, `Unexpected import: ${id}`);
       return stubs[id];
     },

@@ -29,6 +29,7 @@ function moduleWithStubs(file, stubs) {
   const mod = { exports: {} };
   new Function('module', 'exports', 'require', code)(mod, mod.exports, (id) => {
     if (Object.hasOwn(stubs, id)) return stubs[id];
+    if (id === "@/lib/api/errorMessage") return moduleWithStubs("src/lib/api/errorMessage.ts", {});
     if (!id.startsWith('@/') && !id.startsWith('.')) return require(id);
     throw new Error(`Unexpected dependency: ${id}`);
   });

@@ -18,6 +18,7 @@ function load(file, mocks = {}) {
   }).outputText;
   new Function("require", "module", "exports", compiled)((name) => {
     if (Object.hasOwn(mocks, name)) return { __esModule: true, ...mocks[name] };
+    if (name === "@/lib/api/errorMessage") return load("src/lib/api/errorMessage.ts", {});
     if (name.startsWith("@/") || name.startsWith("./")) throw new Error(`Unstubbed dependency: ${name}`);
     return require(name);
   }, mod, mod.exports);

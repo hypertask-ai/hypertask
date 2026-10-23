@@ -32,6 +32,7 @@ function load(file, mocks = {}, sourceRoot = root) {
   const mod = { exports: {} };
   new Function("require", "module", "exports", compiled)((id) => {
     if (Object.hasOwn(mocks, id)) return { __esModule: true, ...mocks[id] };
+    if (id === "@/lib/api/errorMessage") return load("src/lib/api/errorMessage.ts", {});
     if (["./taskWriterSkills", "@/lib/ai/taskWriterSkills"].includes(id)) return metadata;
     if (id === "@/lib/flags/keys") return keys;
     if (id === "@/lib/net/downloadWithoutBrotli") return { downloadWithoutBrotli: undefined };

@@ -239,6 +239,7 @@ test("new report payloads use only error diagnostics and literal route/stage met
 });
 
 function loadRoute(relativePath, stubs, logs = []) {
+  stubs = { "@/lib/planLimits": { isPlanLimitReachedError: () => false }, ...stubs };
   const filename = path.join(root, relativePath);
   const javascript = ts.transpileModule(fs.readFileSync(filename, "utf8"), {
     compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 },

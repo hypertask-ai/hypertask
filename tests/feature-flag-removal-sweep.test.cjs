@@ -54,7 +54,7 @@ function stubModule(relativePath, exports) {
 stubModule("src/lib/prisma.ts", { __esModule: true, default: prisma });
 stubModule("src/lib/auth/getSessionUser.ts", { getSessionUser: async () => null });
 stubModule("src/utils/controllers/tasks/createTaskCore.ts", {
-  createTaskCore: async (options) => {
+  createProvisionedTaskCore: async (options) => {
     filed.push(options);
     return { task: { id: 99 } };
   },

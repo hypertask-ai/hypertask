@@ -97,7 +97,7 @@ stubModule("src/lib/auth/getSessionUser.ts", { getSessionUser: async () => null 
 stubModule("src/utils/controllers/tasks/create.ts", { getUniqueTaskCount: async () => 10 });
 stubModule("src/utils/generateRank.ts", { __esModule: true, default: () => "a" });
 stubModule("src/lib/mcp/webhooks/taskEvents.ts", {
-  createTaskWithBoardWebhookOutbox: async (db, _actor, callback) => ({
+  createProvisionedTaskWithBoardWebhookOutbox: async (db, _actor, callback) => ({
     ...await callback(db), boardWebhookDeliveryIds: [],
   }),
 });
