@@ -29,6 +29,10 @@ function isBrowserLunaDefaultUnqualifiedHere(body: ChatRequest, serverContext: A
   return !isOpenAiOnlyPaidTeam({ ...serverContext, plan });
 }
 
+function isServerChosenDefaultTurn(body: ChatRequest, requested: { modelOptionId?: string | null; model?: string | null }) {
+  return body.modelFromDefault === true && !requested.modelOptionId && !requested.model;
+}
+
 export async function loadTurnModel(body: ChatRequest, dbUser: AuthedUser) {
 
   let selected: {
@@ -147,7 +151,7 @@ export async function loadTurnModel(body: ChatRequest, dbUser: AuthedUser) {
     const modelOptionIdForTurn = resolveAgentModelPin({
       requestedModelOptionId: requestedModel.modelOptionId,
       requestedModel: requestedModel.model,
-      agentModelOptionId: actingAgent?.modelOptionId,
+      agentModelOptionId: isServerChosenDefaultTurn(body, requestedModel) ? null : actingAgent?.modelOptionId,
     });
     let selection = resolveModelSelection(
       requestedModel.provider,

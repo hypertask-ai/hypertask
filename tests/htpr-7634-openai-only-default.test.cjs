@@ -441,7 +441,7 @@ test("without an agent, the team OpenAI-only default runs Luna on the team's own
   assert.deepEqual(h.calls.map(({ modelId, credential }) => ({ modelId, credential })), [{ modelId: "gpt-6-luna", credential: "fixture-direct-openai" }]);
 });
 
-function chatTurnModule(h, actingAgentId) {
+function chatTurnModule(h, actingAgentId, agentPin = null) {
   const selectors = moduleWithStubs("src/lib/ai/chatStream/models.ts", {
     "@/lib/aiModelOptions": catalog, "@/lib/systemModelLadder": ladder, "@/lib/aiProviders": providers,
     "@/app/api/ai/_lib/providerGate": { filterModelOptionForTeam: (entry) => entry },
@@ -465,7 +465,7 @@ function chatTurnModule(h, actingAgentId) {
     "@/lib/nativeAgent/modelPin": load(path.join(root, "src/lib/nativeAgent/modelPin.ts")),
     "@/app/api/ai/_lib/providerGate": { filterModelOptionForTeam: (entry) => entry },
     "@/lib/ai/chatStream/errors": { reportHandledChatError: async () => {}, errorMessage: (error) => error.message, createSseErrorResponse: (message) => ({ refused: message }) },
-    "@/lib/ai/tools/helpers": { loadActingAgent: async () => actingAgentId ? { id: actingAgentId } : null },
+    "@/lib/ai/tools/helpers": { loadActingAgent: async () => actingAgentId ? { id: actingAgentId, modelOptionId: agentPin } : null },
     "@/lib/ai/chatStream/models": selectors,
   });
 }
@@ -474,10 +474,10 @@ const lunaOption = catalog.getAiModelOptionById("gpt-6-luna", true);
 const haikuOption = catalog.getAiModelOptionById("claude-haiku-5-5", true);
 const browserLunaDefault = { aiFeature: "aiChat", session_id: "fixture-session", modelOptionId: lunaOption.id, model: lunaOption.model, provider: lunaOption.source, modelFromDefault: true };
 
-async function chatTurnOutcome({ registerManaged, ...input }, body, actingAgentId = "fixture-agent") {
+async function chatTurnOutcome({ registerManaged, agentPin, ...input }, body, actingAgentId = "fixture-agent") {
   const h = harness({ openai: true, agentId: actingAgentId, ...input });
   if (registerManaged) h.modelApi.registerManagedGatewayKey(managedKey);
-  const turn = await chatTurnModule(h, actingAgentId).loadTurnModel(body, { id: userId });
+  const turn = await chatTurnModule(h, actingAgentId, agentPin).loadTurnModel(body, { id: userId });
   return turn.refused ? { refused: turn.refused } : { modelId: turn.selected.modelId, credential: turn.streamCredential };
 }
 
@@ -506,6 +506,28 @@ for (const [label, input] of [
 test("agent chat without its own key on an OpenAI-only team runs Luna on the team's direct key when the browser leaves the default to the server", async () => {
   const outcome = await chatTurnOutcome({}, { aiFeature: "aiChat", session_id: "fixture-session", modelFromDefault: true });
   assert.deepEqual(outcome, { modelId: "gpt-6-luna", credential: "fixture-direct-openai" });
+});
+
+const serverDefaultTurn = { aiFeature: "aiChat", session_id: "fixture-session", modelFromDefault: true };
+for (const [label, input] of [
+  ["a shared gateway key in its OpenAI slot", { agentProvider: "openai", agentCiphertext: sharedKey }],
+  ["a registered managed key in its OpenAI slot", { agentProvider: "openai", agentCiphertext: managedKey, registerManaged: true }],
+  ["its own direct OpenAI key", { agentProvider: "openai" }],
+  ["its own Claude key", { agentProvider: "claude" }],
+]) {
+  for (const body of [serverDefaultTurn, browserLunaDefault]) {
+    test(`agent pinned to Luna with ${label}: a default turn (${body.model ? "browser Luna" : "server chosen"}) ignores the pin and never runs Luna`, async () => {
+      const pinned = await chatTurnOutcome({ ...input, agentPin: lunaOption.id }, body);
+      const unpinned = await chatTurnOutcome(input, body);
+      assert.notEqual(pinned.modelId, "gpt-6-luna", JSON.stringify(pinned));
+      assert.deepEqual(pinned, unpinned);
+    });
+  }
+}
+
+test("still allowed: an agent pin applies to a turn that names no default", async () => {
+  const pinned = await chatTurnOutcome({ agentProvider: "openai", agentPin: lunaOption.id }, { aiFeature: "aiChat", session_id: "fixture-session" });
+  assert.equal(pinned.modelId, "gpt-6-luna", JSON.stringify(pinned));
 });
 
 test("agent chat with an agent Claude key runs Haiku on the agent's key even when the browser sent the Luna default", async () => {
