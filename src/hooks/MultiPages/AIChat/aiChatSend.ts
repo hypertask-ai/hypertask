@@ -15,6 +15,7 @@ import type { useAiChatSessions } from "./useAiChatSessions";
 import type { useAiChatState } from "./useAiChatState";
 import type { useAiChatAttachments } from "./useAiChatAttachments";
 import type { QueuedAiChatMessage, SessionMessageQueue } from "@/lib/aiChat/sessionMessageQueue";
+import { historyContent } from "@/lib/ai/ticketRowsHistory";
 
 
 type Context = Pick<ReturnType<typeof useAiChatSessions>, "isByokBlocked" | "fileUpload" | "billing" | "isDemo" | "chatRoute" | "drainQueuedMessage" | "handleSendMessageRef"> &
@@ -211,7 +212,7 @@ export function createAiChatSend(context: Context, searchHandoff?: { preserveCom
     };
 
     const chatHistory = session.messages.map((message) => ({
-      content: message.content,
+      content: historyContent(message),
       role: message.role,
     }));
 
