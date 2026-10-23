@@ -605,14 +605,14 @@ function ChatScopeDropdown({ mobile = false, reuseChip = false, ticketScopeEnabl
     <div
       ref={rootRef}
       data-ai-chat-mobile-scope={mobile || undefined}
+      data-ai-chat-scope
       className="relative inline-block min-w-0 max-w-full shrink-0 text-left"
     >
       {reuseChip ? (
-        <ChatScopeChip data-ai-chat-scope-chip kind={scopeChip.kind} label={scopeChip.label} title={scopeChip.title}
+        <ChatScopeChip kind={scopeChip.kind} label={scopeChip.label} title={scopeChip.title}
           mobile={mobile} isOpen={isOpen} onClick={() => setIsOpen((open) => !open)} />
       ) : <button
         type="button"
-        data-ai-chat-scope-chip
         aria-haspopup="menu"
         aria-expanded={isOpen}
         className={`inline-flex w-full min-w-0 items-center text-dense leading-normal text-white-black outline-none transition-colors hover:bg-hover-active ${

@@ -231,7 +231,7 @@ test('docked AI chat follows the viewed board and keeps hand picks board-local',
     localStorage.setItem('recoil-persist', JSON.stringify({ ...saved, dockedChatScope: boardId }))
   }, b.id)
   const sidebar = page.getByTestId('ai-sidebar')
-  const chip = sidebar.locator('[data-ai-chat-scope-chip]:visible')
+  const chip = sidebar.locator('[data-ai-chat-scope]:visible > button').first()
   const opener = page.getByRole('button', { name: mobile ? 'AI' : 'Open AI chat', exact: true })
   const assertScope = async (title: string) => {
     await expect(page.locator('.kanban-column-title').first()).toBeVisible()
