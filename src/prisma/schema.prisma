@@ -1295,6 +1295,24 @@ enum GithubPullRequestLinkOrigin {
   installed
 }
 
+model GithubAppCredential {
+  id              String    @id @default(uuid())
+  appId           String    @db.VarChar(32)
+  slug            String    @db.VarChar(100)
+  clientId        String    @db.VarChar(256)
+  ownerLogin      String    @db.VarChar(100)
+  htmlUrl         String    @db.VarChar(256)
+  clientSecret    String    @db.Text
+  privateKey      String    @db.Text
+  webhookSecret   String    @db.Text
+  stateSecret     String    @db.Text
+  createdByUserId Int
+  createdAt       DateTime  @default(now())
+  revokedAt       DateTime?
+
+  @@index([revokedAt])
+}
+
 model GithubInstallation {
   id           String   @id @db.VarChar(32)
   installedByUserId Int?

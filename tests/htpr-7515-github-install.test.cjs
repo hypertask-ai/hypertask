@@ -161,7 +161,11 @@ const redis = {
 };
 
 const response = load("src/lib/googleCalendar/response.ts", {});
-const appConfig = load("src/lib/github/appConfig.ts", {});
+const credentialCipher = load("src/lib/github/appCredentialCipher.ts", {});
+const appConfig = load("src/lib/github/appConfig.ts", {
+  "@/lib/prisma": { githubAppCredential: { findFirst: async () => null } },
+  "./appCredentialCipher": credentialCipher,
+});
 const oauthState = load("src/lib/github/oauthState.ts", { "@/lib/redis": redis });
 const userApi = load("src/lib/github/userApi.ts", { "@/lib/googleCalendar/response": response });
 const isProjectAdmin = load("src/utils/controllers/projects/isProjectAdmin.ts", { "@/lib/prisma": prisma });

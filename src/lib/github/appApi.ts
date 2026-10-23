@@ -2,7 +2,7 @@ import { createPrivateKey, sign } from "node:crypto";
 
 import { readBoundedGoogleJson } from "@/lib/googleCalendar/response";
 
-import { getGithubAppConfig } from "./appConfig";
+import { getGithubAppConfig, getGithubAppPrivateKey } from "./appConfig";
 import { GithubRequestError } from "./userApi";
 
 const GITHUB_API_URL = "https://api.github.com";
@@ -18,9 +18,9 @@ export type GithubInstallationRepository = {
   isFork: boolean;
 };
 
-function createAppJwt(): string {
-  const config = getGithubAppConfig();
-  const privateKey = process.env.GITHUB_APP_PRIVATE_KEY?.trim().replace(/\\n/g, "\n");
+async function createAppJwt(): Promise<string> {
+  const config = await getGithubAppConfig();
+  const privateKey = await getGithubAppPrivateKey();
   if (!config || !privateKey) throw new GithubRequestError(503);
   const key = createPrivateKey(privateKey);
   if (key.asymmetricKeyType !== "rsa") throw new GithubRequestError(503);
@@ -73,7 +73,7 @@ export async function fetchInstallationToken(
     if (!githubId(installationId)) throw new GithubRequestError(400);
     const body = await appRequest(
       `/app/installations/${installationId}/access_tokens`,
-      createAppJwt(),
+      await createAppJwt(),
       "POST",
       fetcher,
     );

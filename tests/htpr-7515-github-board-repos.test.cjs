@@ -112,7 +112,10 @@ const responseReader = load("src/lib/googleCalendar/response.ts", {});
 const userApi = load("src/lib/github/userApi.ts", { "@/lib/googleCalendar/response": responseReader });
 const appApi = load("src/lib/github/appApi.ts", {
   "@/lib/googleCalendar/response": responseReader,
-  "./appConfig": { getGithubAppConfig: () => world.config },
+  "./appConfig": {
+    getGithubAppConfig: async () => world.config,
+    getGithubAppPrivateKey: async () => process.env.GITHUB_APP_PRIVATE_KEY?.trim().replace(/\\n/g, "\n") || null,
+  },
   "./userApi": userApi,
 });
 const authority = load("src/lib/github/installAuthority.ts", {
