@@ -53,7 +53,15 @@ const { SESSION_TTL_SECONDS, signSession } = jiti(
 
 const runKey = `${process.env.GITHUB_RUN_ID ?? process.pid}-${process.env.GITHUB_RUN_ATTEMPT ?? "1"}-${randomUUID()}`;
 
-async function createBoard({ ownerId, teamId, googleAccountId, title, suffix, longThread = false }) {
+const AGENT_DESCRIPTION_HTML = [
+  "<p>**Bug: the description jumps while the ticket opens.**</p>",
+  "<p>What happened:\n1. Opened a ticket.\n2. Every line had blank space below it.\n3. Then the text moved into place.</p>",
+  "<p>Expected: the text shows at its final spacing from the first frame.</p>",
+  "<ul>\n<li>First point</li>\n<li>Second point</li>\n</ul>",
+  "<p>Last paragraph   with  extra   spaces.</p>",
+].join("\n\n");
+
+async function createBoard({ ownerId, teamId, googleAccountId, title, suffix, longThread = false, descriptionHtml = "<p>This seeded ticket must open from its board card.</p>" }) {
   const sectionTitles = ["To do", "Done"];
   const project = await prisma.project.create({
     data: {
@@ -91,7 +99,7 @@ async function createBoard({ ownerId, teamId, googleAccountId, title, suffix, lo
       ...(visual ? { createdAt: new Date(VISUAL_NOW), sectionChangedAt: new Date(VISUAL_NOW) } : {}),
       description: "",
       description_: {
-        create: { content: "<p>This seeded ticket must open from its board card.</p>", creatorId: ownerId },
+        create: { content: descriptionHtml, creatorId: ownerId },
       },
       projectId: project.id,
       userId: ownerId,
@@ -225,6 +233,14 @@ async function seedSessionFixtures(flags) {
     title: "Browser smoke long thread board",
     suffix: "thread",
     longThread: true,
+  });
+  const agentDescriptionBoard = await createBoard({
+    ownerId: user.id,
+    teamId: team.id,
+    googleAccountId: googleAccount.id,
+    title: "Browser smoke agent description board",
+    suffix: "agentdesc",
+    descriptionHtml: AGENT_DESCRIPTION_HTML,
   });
 
   const sessionUser = await prisma.user.findUnique({
@@ -377,6 +393,7 @@ async function seedSessionFixtures(flags) {
     description: "This seeded ticket must open from its board card.",
     detailPath: `/detail/project-${board.id}/${board.task.uniqueIndex}`,
     longThreadDetailPath: `/detail/project-${threadBoard.id}/${threadBoard.task.uniqueIndex}`,
+    agentDescriptionDetailPath: `/detail/project-${agentDescriptionBoard.id}/${agentDescriptionBoard.task.uniqueIndex}`,
     flags,
     ...((localPremerge || contractEnabled || visual) ? { searchRows: [board, demoBoard, ...(contract?.boards ?? [])].map(project => ({
       id: String(project.task.id),
