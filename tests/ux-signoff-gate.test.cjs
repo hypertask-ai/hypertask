@@ -1385,7 +1385,7 @@ test('PR 1771 reads the API parent of HTPR-7549 and accepts Valentin’s artifac
 
 test('approved child needs no parent read, and missing or inaccessible parent metadata fails closed', async () => {
   const { run } = await gate;
-  const fixture = () => apiFixture({ prs: [pr(1, { title })], files: [modified, added] });
+  const fixture = () => apiFixture({ prs: [pr(1, { title })], files: [added] });
   assert.equal(await run(['--pr', '1'], { env, github: fixture().github, fetchImpl: async (url) => {
     assert.equal(new URL(String(url)).pathname, '/api/mcp/comments');
     return response({ comments: [wireframe(), yes()] });
@@ -1644,12 +1644,12 @@ test('missing secret only affects gated PRs and metadata errors leave heads unto
   const fixture = apiFixture({ prs: [pr(1), pr(2)], prError: 1 });
   assert.equal(await run(['--reconcile'], { env, github: fixture.github, fetchImpl: commentsFetch, log: () => {} }), 2);
   assert.deepEqual(fixture.calls.filter((call) => call.method === 'POST').map((call) => call.body.state), ['success']);
-  const missing = apiFixture({ prs: [pr(1, { title })], files: [modified, added] });
+  const missing = apiFixture({ prs: [pr(1, { title })], files: [added] });
   assert.equal(await run(['--reconcile', '--pr', '1'], { env: { ...env, MCP_TOKEN: '' }, github: missing.github, fetchImpl: () => assert.fail('must not fetch'), log: () => {} }), 2);
   const posted = missing.calls.find((call) => call.method === 'POST');
   assert.equal(posted.body.state, 'error');
   assert.match(posted.body.description, /HYPERTASK_MCP_TOKEN.*configure/);
-  const readFailure = apiFixture({ prs: [pr(1, { title })], files: [modified, added] });
+  const readFailure = apiFixture({ prs: [pr(1, { title })], files: [added] });
   assert.equal(await run(['--reconcile'], { env, github: readFailure.github, fetchImpl: async () => response({}, 503), log: () => {} }), 0);
   assert.deepEqual(readFailure.calls.filter((call) => call.method === 'POST').map((call) => call.body.state), ['pending']);
 });
