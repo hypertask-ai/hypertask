@@ -121,7 +121,7 @@ check_ci_tests() {
     if [ "$(jq -r '.status' <<<"$production")" = completed ] \
       && [[ $(jq -r '.conclusion' <<<"$production") =~ ^(failure|cancelled|timed_out|action_required|stale)$ ]] \
       && [[ $(jq -r '.started_at' <<<"$run") < $(jq -r '.started_at' <<<"$production") ]]; then
-      fail "production ci-tests is red ($(ci_test_failures "$production")) and this PR's ci-tests passed before that on an older production; rerun ci-tests on head ${sha:0:7}"
+      fail "production ci-tests is red ($(ci_test_failures "$production")) and this PR's ci-tests passed before that on an older production; rerun ci-tests on head ${sha:0:7}"$'\n'"run ci-why $1 for the failed step"
     fi
     echo "ci-tests ok"; return 0 ;;
   esac
@@ -137,7 +137,7 @@ check_ci_tests() {
         reason+="; production ci-tests is also red ($details), so check whether your change broke it or it was already broken" ;;
     esac
   fi
-  fail "$reason"
+  fail "$reason"$'\n'"run ci-why $1 for the failed step"
 }
 
 # Newest PR for the ticket into BASE, as "number state mergeSha". Exits 1 if GitHub cannot be read.

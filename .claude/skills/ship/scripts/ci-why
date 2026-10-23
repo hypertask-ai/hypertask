@@ -1,0 +1,202 @@
+#!/usr/bin/env python3
+import argparse
+from contextlib import redirect_stdout
+from datetime import datetime, timedelta
+from io import StringIO
+import json
+from pathlib import Path
+import re
+import runpy
+import subprocess
+import sys
+
+
+ADVICE = "Fix the failed step above; a credential or secret is only the cause if the failed step's own error names it."
+
+
+class ReadError(Exception):
+    pass
+
+
+def gh_api(endpoint, raw=False):
+    try:
+        result = subprocess.run(['gh', 'api', endpoint], capture_output=True, text=True, timeout=120)
+    except (OSError, subprocess.TimeoutExpired) as error:
+        raise ReadError(f'cannot read GitHub API {endpoint}: {error}') from error
+    if result.returncode:
+        raise ReadError(f'cannot read GitHub API {endpoint}: {result.stderr.strip()}')
+    if raw:
+        return result.stdout
+    try:
+        return json.loads(result.stdout)
+    except ValueError as error:
+        raise ReadError(f'cannot read GitHub API {endpoint}: invalid JSON') from error
+
+
+def pages(endpoint, key):
+    rows = []
+    page = 1
+    while True:
+        data = gh_api(f'{endpoint}{"&" if "?" in endpoint else "?"}per_page=100&page={page}')
+        batch = data[key]
+        if not isinstance(batch, list):
+            raise ReadError(f'cannot read GitHub API {endpoint}: invalid {key}')
+        rows.extend(batch)
+        if len(batch) < 100:
+            return rows
+        page += 1
+
+
+def resolve_runs(target, repo):
+    url = re.fullmatch(r'https://github\.com/([^/]+/[^/]+)/actions/runs/(\d+)(?:/attempts/\d+)?/?', target)
+    if url:
+        if url[1] != repo:
+            raise ReadError(f'run URL belongs to {url[1]}; use --repo {url[1]}')
+        return [gh_api(f'repos/{repo}/actions/runs/{url[2]}')]
+    if not target.isdecimal() or int(target) < 1:
+        raise ReadError('expected a PR number, run id or GitHub Actions run URL')
+    try:
+        pr = gh_api(f'repos/{repo}/pulls/{target}')
+    except ReadError as error:
+        if 'HTTP 404' not in str(error):
+            raise
+        return [gh_api(f'repos/{repo}/actions/runs/{target}')]
+    sha = pr['head']['sha']
+    runs = pages(f'repos/{repo}/actions/runs?head_sha={sha}', 'workflow_runs')
+    latest = {}
+    for run in runs:
+        key = run.get('workflow_id', run['name'])
+        if key not in latest or (run['id'], run.get('run_attempt', 1)) > (latest[key]['id'], latest[key].get('run_attempt', 1)):
+            latest[key] = run
+    return sorted(latest.values(), key=lambda run: run['id'])
+
+
+def timestamp(value):
+    return datetime.fromisoformat(value.replace('Z', '+00:00'))
+
+
+def step_sections(log, steps):
+    executed = sorted((step for step in steps if step['conclusion'] != 'skipped'), key=lambda step: step['number'])
+    sections = {step['number']: [] for step in executed}
+    if not executed:
+        return sections
+    current = executed[0]
+    headers = set()
+    depth = 0
+    for raw_line in log.splitlines():
+        line = re.sub(r'\x1b\[[0-9;]*m', '', raw_line)
+        match = re.match(r'^(\d{4}-\d\d-\d\dT\S+)\s?(.*)', line)
+        moment = timestamp(match[1]) if match else None
+        line = match[2] if match else line
+        candidates = [step for step in executed if step['number'] >= current['number']]
+        if moment:
+            candidates = [step for step in candidates if step.get('started_at') and step.get('completed_at')
+                          and timestamp(step['started_at']) <= moment < timestamp(step['completed_at']) + timedelta(seconds=1)]
+        is_group = line.startswith('##[group]')
+        title = line.removeprefix('##[group]')
+        if line == 'Post job cleanup.':
+            post_steps = [step for step in candidates if step['number'] > current['number']
+                          and step['name'].startswith('Post ')]
+            if post_steps:
+                current = post_steps[0]
+                headers.add(current['number'])
+        if is_group and depth == 0:
+            next_steps = [step for step in candidates if step['number'] not in headers]
+            named = [step for step in next_steps if title == step['name']]
+            if named:
+                current = named[0]
+                headers.add(current['number'])
+            elif title.startswith('Run '):
+                runnable = [step for step in next_steps if step['name'] not in ('Set up job', 'Complete job')
+                            and not step['name'].startswith('Post ')]
+                if runnable:
+                    current = runnable[0]
+                    headers.add(current['number'])
+        if candidates and current not in candidates:
+            current = candidates[0]
+        sections[current['number']].append(line)
+        if is_group:
+            depth += 1
+        elif line.startswith('##[endgroup]'):
+            depth = max(0, depth - 1)
+    return {number: '\n'.join(lines) for number, lines in sections.items()}
+
+
+def parsed_failures(log):
+    parser = Path(__file__).resolve().with_name('ci-test-failures.py')
+    original_stdin = sys.stdin
+    try:
+        sys.stdin = StringIO(log)
+        with redirect_stdout(StringIO()):
+            parsed = runpy.run_path(str(parser))
+    finally:
+        sys.stdin = original_stdin
+    return '; '.join(parsed['unique'].values())
+
+
+def diagnose(run, repo):
+    findings = []
+    for job in pages(f'repos/{repo}/actions/runs/{run["id"]}/jobs?filter=latest', 'jobs'):
+        if job['conclusion'] not in ('failure', 'cancelled', 'timed_out'):
+            continue
+        steps = sorted(job['steps'], key=lambda step: step['number'])
+        failed = next((step for step in steps if step['conclusion'] == 'failure'), None)
+        log = gh_api(f'repos/{repo}/actions/jobs/{job["id"]}/logs', raw=True)
+        sections = step_sections(log, steps)
+        failed_log = sections.get(failed['number'], '') if failed else ''
+        passing = []
+        for step in steps:
+            if step['conclusion'] == 'success':
+                annotations = [line for line in sections.get(step['number'], '').splitlines()
+                               if '::error::' in line or '##[error]' in line]
+                if annotations:
+                    passing.append({'step': step['name'], 'number': step['number'], 'annotations': annotations})
+        findings.append({'job': job['name'], 'url': job['html_url'], 'conclusion': job['conclusion'],
+                         'failed_step': {'name': failed['name'], 'number': failed['number']} if failed else None,
+                         'failures': parsed_failures(failed_log) if failed else '',
+                         'errors': [line for line in failed_log.splitlines() if '::error::' in line or '##[error]' in line],
+                         'passing_step_annotations': passing})
+    return findings
+
+
+def main():
+    parser = argparse.ArgumentParser(description='Name the failed CI step before diagnosing its cause.')
+    parser.add_argument('target', help='PR number, run id or run URL')
+    parser.add_argument('--repo', default='hypertask-ai/hypertask')
+    parser.add_argument('--json', action='store_true')
+    args = parser.parse_args()
+    if not re.fullmatch(r'[\w.-]+/[\w.-]+', args.repo):
+        parser.error('--repo must be owner/repo')
+    try:
+        findings = [finding for run in resolve_runs(args.target, args.repo) for finding in diagnose(run, args.repo)]
+    except (ReadError, KeyError, TypeError, ValueError, subprocess.TimeoutExpired) as error:
+        print(f'ci-why: cannot diagnose CI: {error}', file=sys.stderr)
+        return 2
+    if args.json:
+        print(json.dumps({'jobs': findings, 'message': 'failed jobs' if findings else 'no failed jobs', 'advice': ADVICE}, indent=2))
+        return 0
+    if not findings:
+        print('no failed jobs')
+        return 0
+    for finding in findings:
+        print(f'{finding["job"]} ({finding["conclusion"]}) — {finding["url"]}')
+        step = finding['failed_step']
+        if step:
+            print(f'Failed step {step["number"]}: {step["name"]}')
+            print(f'Test failures: {finding["failures"] or "none parsed; inspect the failed step log"}')
+            for error in finding['errors']:
+                print(f'  {error}')
+        else:
+            print('No step concluded failure; the job was cancelled or stopped outside a failed step.')
+        if finding['passing_step_annotations']:
+            print('Not the failure (from passing steps)')
+            for passing in finding['passing_step_annotations']:
+                print(f'  Step {passing["number"]}: {passing["step"]}')
+                for annotation in passing['annotations']:
+                    print(f'    {annotation}')
+    print(ADVICE)
+    return 0
+
+
+if __name__ == '__main__':
+    raise SystemExit(main())
