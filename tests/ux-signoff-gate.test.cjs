@@ -1201,3 +1201,17 @@ test('an agent-edited refusal still blocks an earlier yes or thumbs up until a f
   assert.equal((await decision({ comments: [wireframe({ reactions: [{ userId: 6, emoji: '👍' }] }), agentEditedNo] })).state, 'failure');
   assert.equal((await decision({ comments: [wireframe(), yes(), agentEditedNo, yes({ id: 4, createdAt: '2026-10-10T12:04:00Z' })] })).state, 'success');
 });
+
+test('YPER4-622: New elements with a bracketed note and "and" still name each element', async () => {
+  const section = { filename: 'src/components/Modals/Settings/GitHubSection.tsx', status: 'added' };
+  const htpr7515 = wireframe({
+    id: 296044,
+    text: '<p>Wireframe ready.</p><p>https://hypertask.app/wireframes/htpr-7515</p><p>Question: <span data-type="mention">Valentin Yeo</span></p><p>New elements: GitHubSection (Connect settings page) and a Connect GitHub row in Commands. Build Connect GitHub this way?</p>',
+  });
+  const valentinYes = yes({ id: 296782, text: '<p>Yes. That works.</p>' });
+  assert.equal((await decision({ files: [section], comments: [htpr7515, valentinYes] })).state, 'success', 'still allowed: a named element with a note');
+  const unnamed = { filename: 'src/components/Modals/Settings/GitLabSection.tsx', status: 'added' };
+  const refused = await decision({ files: [section, unnamed], comments: [htpr7515, valentinYes] });
+  assert.equal(refused.state, 'failure', 'still refused: an element the comment does not name');
+  assert.match(refused.description, /GitLabSection needs Valentin's yes by name/);
+});

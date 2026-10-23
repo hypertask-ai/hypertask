@@ -433,6 +433,7 @@ export async function prepareTaskWriterRun(
     allowedImgSrcs,
     validateDraft,
     skills: skillResolution.skills,
+    composeSkillsEnabled,
     usageTaskId,
     dueDateContext,
     ticketTypeEnabled,

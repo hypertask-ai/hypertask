@@ -58,6 +58,47 @@ export async function deliverAgentWebhook(
   }
 
   const payload = delivery.payload;
+  const content =
+    typeof payload === "object" && payload !== null && !Array.isArray(payload)
+      ? payload
+      : null;
+  const projectId = content?.projectId ?? delivery.subscription.projectId;
+  const taskId = content?.taskId;
+  if (projectId != null || taskId != null) {
+    let authorized = false;
+    if (
+      typeof projectId === "number" &&
+      (delivery.subscription.projectId == null ||
+        delivery.subscription.projectId === projectId)
+    ) {
+      authorized = Boolean(await prisma.project.findFirst({
+        where: {
+          id: projectId,
+          status: { not: "Deleted" },
+          members: { some: { agentId: delivery.subscription.agentId } },
+        },
+        select: { id: true },
+      }));
+      if (authorized && taskId != null) {
+        authorized = typeof taskId === "number" && Boolean(await prisma.task.findFirst({
+          where: {
+            id: taskId,
+            projectId,
+            status: { not: "Deleted" },
+          },
+          select: { id: true },
+        }));
+      }
+    }
+    if (!authorized) {
+      await prisma.agentWebhookDelivery.update({
+        where: { id: delivery.id },
+        data: { status: "cancelled", processingAt: null },
+      });
+      return { status: "skipped" };
+    }
+  }
+
   const carriesRun =
     delivery.event.startsWith("run.") ||
     (typeof payload === "object" &&
