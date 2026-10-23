@@ -41,7 +41,7 @@ export function createRateLimitBudget({ now = Date.now, maxWaitMs = 240000, time
 export function parseGhResponse(output) {
   let status = 0;
   let headers = new Map();
-  const body = output.replace(/HTTP\/\S+ (\d{3})[^\r\n]*\r?\n((?:[^\r\n]+\r?\n)*)\r?\n/g, (_, code, lines) => {
+  const body = output.replace(/(?<=^|[[\]{},\n])HTTP\/[\d.]+ (\d{3})[^\r\n]*\r?\n((?:[^\r\n]+\r?\n)*)\r?\n/g, (_, code, lines) => {
     status = Number(code);
     headers = new Map(lines.trim().split(/\r?\n/).map((line) => {
       const colon = line.indexOf(':');
