@@ -655,7 +655,7 @@ export async function selectTaskWriterModel(args: {
   }
   const haiku55Enabled = await haiku55ModelEnabled?.(args.userId) ?? false;
   const defaultContext = haiku55Enabled
-    ? await getAiDefaultModelContext(keyLookup, true, storePlanId)
+    ? await getAiDefaultModelContext(keyLookup, true, storePlanId, args.byokProviderFlags)
     : { hasByok: false, byok: undefined, haikuDefaultEnabled: false, backgroundClaudeEnabled: false, openaiOnlyDefaultEnabled: false };
   const requestDefaultModelOption = getDefaultAiModelOptionForPlan(
     storePlanId,

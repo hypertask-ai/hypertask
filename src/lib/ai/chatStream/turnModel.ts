@@ -5,7 +5,7 @@ import prisma from "@/lib/prisma";
 
 import { type LanguageModel } from "ai";
 import { type AiProviderOptions, type AiModelCredential, type AiGatewayTags, isCustomEndpointConfig, isVercelAiGatewayKey } from "@/app/api/ai/_lib/modelProvider";
-import { type TAiModelOption, preferredAiModelOption, getDefaultAiModelOptionForPlan, isLunaBlockedForPlan, getAiModelOptionById, isOpenAiOnlyPaidTeam } from "@/lib/aiModelOptions";
+import { type TAiModelOption, type AiDefaultModelContext, preferredAiModelOption, getDefaultAiModelOptionForPlan, isLunaBlockedForPlan, getAiModelOptionById, isOpenAiOnlyPaidTeam } from "@/lib/aiModelOptions";
 import type { StorePlanKind } from "@/lib/planFromStripePriceId";
 import { resolveChatTeamContext, buildChatProviderContext } from "@/app/api/ai/_lib/chatTeamContext";
 import { isAiFeatureEnabled } from "@/lib/systemModelLadder";
@@ -23,11 +23,12 @@ import { AuthedUser, ProviderId } from "@/lib/ai/chatStream/types";
 import { loadActingAgent } from "@/lib/ai/tools/helpers";
 import { resolveModelSelection, selectionFromModelOption, ModelSelection, defaultModelSelection, selectModel } from "@/lib/ai/chatStream/models";
 
-async function isAgentTurnOnOpenAiOnlyBrowserDefault(body: ChatRequest, agentId: string | null | undefined, lookup: ByokLookupContext, plan: StorePlanKind | null | undefined) {
-  if (!agentId || body.modelFromDefault !== true) return false;
+async function isBrowserOpenAiOnlyDefaultUnfundedHere(body: ChatRequest, serverContext: AiDefaultModelContext, lookup: ByokLookupContext, plan: StorePlanKind | null | undefined) {
+  if (body.modelFromDefault !== true) return false;
   if (getAiModelOptionById(body.modelOptionId ?? body.model, true)?.modelKey !== "gpt-6-luna") return false;
-  const teamOnlyContext = await getOpenAiOnlyDefaultContext({ ...lookup, agentId: null }, plan);
-  return isOpenAiOnlyPaidTeam({ ...teamOnlyContext, plan });
+  if (isOpenAiOnlyPaidTeam({ ...serverContext, plan })) return false;
+  const browserContext = await getOpenAiOnlyDefaultContext({ ...lookup, agentId: null }, plan);
+  return isOpenAiOnlyPaidTeam({ ...browserContext, plan });
 }
 
 export async function loadTurnModel(body: ChatRequest, dbUser: AuthedUser) {
@@ -133,7 +134,7 @@ export async function loadTurnModel(body: ChatRequest, dbUser: AuthedUser) {
     }
     const haiku55Enabled = await haiku55ModelEnabled?.(dbUser.id) ?? false;
     const defaultContext = haiku55Enabled
-      ? await getAiDefaultModelContext(keyLookupContext, true, storePlanId)
+      ? await getAiDefaultModelContext(keyLookupContext, true, storePlanId, body.byokProviderFlags)
       : { hasByok: false, byok: undefined, haikuDefaultEnabled: false, backgroundClaudeEnabled: false };
     const requestDefaultModelOption = getDefaultAiModelOptionForPlan(
       storePlanId,
@@ -142,7 +143,7 @@ export async function loadTurnModel(body: ChatRequest, dbUser: AuthedUser) {
       defaultContext.haikuDefaultEnabled,
       defaultContext,
     );
-    const requestedModel = await isAgentTurnOnOpenAiOnlyBrowserDefault(body, actingAgent?.id, keyLookupContext, storePlanId)
+    const requestedModel = await isBrowserOpenAiOnlyDefaultUnfundedHere(body, defaultContext, keyLookupContext, storePlanId)
       ? { modelOptionId: null, model: null, provider: null }
       : body;
     const modelOptionIdForTurn = resolveAgentModelPin({

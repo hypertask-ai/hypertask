@@ -463,26 +463,24 @@ async function openAiOnlyDefaultFlagEnabled(userId: number | null | undefined) {
 
 const OPENAI_ONLY_DEFAULT_OFF = { openaiOnlyDefaultEnabled: false, hasDirectOpenAiKey: false, hasClaudeRoute: false } as const;
 
-function lookupActsForAgent(lookup: ByokLookupContext) {
-  return typeof lookup.agentId === "string" && lookup.agentId.trim() !== "";
-}
-
-export async function getOpenAiOnlyDefaultContext(lookup: ByokLookupContext, plan?: AiDefaultModelContext["plan"]) {
-  if (lookupActsForAgent(lookup)) return OPENAI_ONLY_DEFAULT_OFF;
+export async function getOpenAiOnlyDefaultContext(lookup: ByokLookupContext, plan?: AiDefaultModelContext["plan"], suppliedFlags?: ByokProviderFlag[] | null) {
   if (!await openAiOnlyDefaultFlagEnabled(lookup.userId)) return OPENAI_ONLY_DEFAULT_OFF;
   const storePlanId = plan ?? await storePlanIdForProject(lookup.projectId, normalizeTeamId(lookup.trustedTeamId ?? lookup.teamId));
   if (storePlanId !== "Pro" && storePlanId !== "AI") return { ...OPENAI_ONLY_DEFAULT_OFF, openaiOnlyDefaultEnabled: true };
-  const teamKey = (provider: TByokProviderKey) => getByokApiKeyForProvider(provider, undefined, lookup, { resolveWithoutFlag: true });
-  const openaiKey = await teamKey("openai");
-  const hasClaudeRoute = Boolean(await teamKey("claude")) ||
-    Boolean(await teamKey("gateway")) ||
-    (Boolean(await teamKey("openrouter")) && await teamOpenRouterEnabled(lookup)) ||
-    isVercelAiGatewayKey(openaiKey) ||
-    isVercelAiGatewayKey(await resolveTeamByokSecret(MANAGED_TEAM_GATEWAY_PROVIDER, lookup));
-  return { openaiOnlyDefaultEnabled: true, hasDirectOpenAiKey: Boolean(openaiKey && !isVercelAiGatewayKey(openaiKey)), hasClaudeRoute };
+  const teamLookup: ByokLookupContext = { ...lookup, agentId: null };
+  const storedTeamKey = await getByokApiKeyForProvider("openai", undefined, teamLookup, { resolveWithoutFlag: true });
+  const requestKey = (provider: TByokProviderKey) => getByokApiKeyForProvider(provider, suppliedFlags, lookup, { resolveWithoutFlag: true });
+  const hasClaudeRoute = Boolean(await requestKey("claude")) ||
+    Boolean(await requestKey("gateway")) ||
+    (Boolean(await requestKey("openrouter")) && await teamOpenRouterEnabled(lookup)) ||
+    isVercelAiGatewayKey(storedTeamKey) ||
+    isVercelAiGatewayKey(await resolveTeamByokSecret(MANAGED_TEAM_GATEWAY_PROVIDER, teamLookup));
+  const lunaCredential = await getByokOrTeamGatewayApiKeyForModelOption(getAiModelOptionById("gpt-6-luna")!, suppliedFlags, lookup);
+  const lunaRunsOnStoredDirectTeamKey = typeof storedTeamKey === "string" && !isVercelAiGatewayKey(storedTeamKey) && lunaCredential === storedTeamKey;
+  return { openaiOnlyDefaultEnabled: true, hasDirectOpenAiKey: lunaRunsOnStoredDirectTeamKey, hasClaudeRoute };
 }
 
-export async function getAiDefaultModelContext(lookup: ByokLookupContext, haiku55Enabled?: boolean, plan?: AiDefaultModelContext["plan"]) {
+export async function getAiDefaultModelContext(lookup: ByokLookupContext, haiku55Enabled?: boolean, plan?: AiDefaultModelContext["plan"], suppliedFlags?: ByokProviderFlag[] | null) {
   const haikuDefaultEnabled = await haikuDefaultModelEnabled(lookup.userId);
   const backgroundClaudeEnabled = await backgroundClaudeModelEnabled?.(lookup.userId) ?? false;
   const enabled = haikuDefaultEnabled || (haiku55Enabled ?? (await haiku55ModelEnabled?.(lookup.userId) ?? false));
@@ -497,7 +495,7 @@ export async function getAiDefaultModelContext(lookup: ByokLookupContext, haiku5
       }
     }
   }
-  const openAiOnlyContext = await getOpenAiOnlyDefaultContext(lookup, storePlanId);
+  const openAiOnlyContext = await getOpenAiOnlyDefaultContext(lookup, storePlanId, suppliedFlags);
   const anthropicDisabled = backgroundClaudeEnabled && await isAnthropicDisabledForLookup(lookup);
   return { haiku55Enabled: enabled, haikuDefaultEnabled, backgroundClaudeEnabled, anthropicDisabled, plan: storePlanId, hasByok: Boolean(byok), byok, ...openAiOnlyContext };
 }

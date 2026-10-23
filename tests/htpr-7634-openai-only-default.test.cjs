@@ -388,7 +388,7 @@ test("server context includes managed funding, not the shared key", async () => 
   }
 });
 
-test("classification uses the team's keys only, and a request carrying an agent keeps the old default", async () => {
+test("the OpenAI-only default needs Luna to run on the team's stored direct key, so agent keys never qualify", async () => {
   const teamGatewaySlot = harness({ openaiGateway: true });
   const teamGatewayContext = await teamGatewaySlot.byok.getAiDefaultModelContext({ trustedTeamId: teamId, userId });
   assert.equal(teamGatewayContext.hasClaudeRoute, true, "a team gateway in the OpenAI slot is a Claude route");
@@ -397,8 +397,7 @@ test("classification uses the team's keys only, and a request carrying an agent 
   for (const agentProvider of ["claude", "openai", "gateway"]) {
     const h = harness({ openai: true, agentProvider, agentId: "fixture-agent" });
     const context = await h.byok.getAiDefaultModelContext({ trustedTeamId: teamId, userId, agentId: "fixture-agent" });
-    assert.deepEqual([context.openaiOnlyDefaultEnabled, context.hasDirectOpenAiKey, context.hasClaudeRoute], [false, false, false], agentProvider);
-    assert.equal(catalog.isOpenAiOnlyPaidTeam(context), false);
+    assert.equal(catalog.isOpenAiOnlyPaidTeam(context), false, agentProvider);
   }
 });
 
@@ -475,8 +474,9 @@ const lunaOption = catalog.getAiModelOptionById("gpt-6-luna", true);
 const haikuOption = catalog.getAiModelOptionById("claude-haiku-5-5", true);
 const browserLunaDefault = { aiFeature: "aiChat", session_id: "fixture-session", modelOptionId: lunaOption.id, model: lunaOption.model, provider: lunaOption.source, modelFromDefault: true };
 
-async function chatTurnOutcome(input, body, actingAgentId = "fixture-agent") {
+async function chatTurnOutcome({ registerManaged, ...input }, body, actingAgentId = "fixture-agent") {
   const h = harness({ openai: true, agentId: actingAgentId, ...input });
+  if (registerManaged) h.modelApi.registerManagedGatewayKey(managedKey);
   const turn = await chatTurnModule(h, actingAgentId).loadTurnModel(body, { id: userId });
   return turn.refused ? { refused: turn.refused } : { modelId: turn.selected.modelId, credential: turn.streamCredential };
 }
@@ -493,7 +493,7 @@ for (const [label, input] of [
   ["agent Claude key", { agentProvider: "claude" }],
   ["agent direct OpenAI key", { agentProvider: "openai" }],
   ["agent OpenAI slot holding the shared gateway key", { agentProvider: "openai", agentCiphertext: sharedKey }],
-  ["agent OpenAI slot holding the managed gateway key", { agentProvider: "openai", agentCiphertext: managedKey, managed: true }],
+  ["agent OpenAI slot holding a registered managed gateway key", { agentProvider: "openai", agentCiphertext: managedKey, registerManaged: true }],
 ]) {
   test(`agent chat with ${label}: a browser Luna default never runs Luna and matches the flag-off server default`, async () => {
     const guarded = await chatTurnOutcome(input, browserLunaDefault);
@@ -514,6 +514,34 @@ test("agent chat keeps a hand-picked Luna, and a team chat keeps the OpenAI-only
   assert.equal(picked.modelId, "gpt-6-luna");
   const teamChat = await chatTurnOutcome({}, browserLunaDefault, null);
   assert.deepEqual(teamChat, { modelId: "gpt-6-luna", credential: "fixture-direct-openai" });
+});
+
+test("a request-supplied shared or managed key is refused the Luna default", async () => {
+  const suppliedFlags = [{ provider: "openai", enabled: true, ciphertext: sharedKey }];
+  const h = harness({ openai: true });
+  const supplied = await h.byok.getAiDefaultModelContext({ trustedTeamId: teamId, userId }, true, "Pro", suppliedFlags);
+  assert.equal(catalog.isOpenAiOnlyPaidTeam(supplied), false);
+  const sameKey = await h.byok.getAiDefaultModelContext({ trustedTeamId: teamId, userId }, true, "Pro", [{ provider: "openai", enabled: true, ciphertext: "fixture-direct-openai" }]);
+  assert.equal(catalog.isOpenAiOnlyPaidTeam(sameKey), true, "supplying the team's own stored key changes nothing");
+  const disabledFlag = await h.byok.getAiDefaultModelContext({ trustedTeamId: teamId, userId }, true, "Pro", [{ provider: "openai", enabled: false, ciphertext: sharedKey }]);
+  assert.equal(catalog.isOpenAiOnlyPaidTeam(disabledFlag), true, "a disabled supplied key changes nothing");
+  for (const register of [false, true]) {
+    const outcome = async (enabled) => {
+      const run = harness({ openai: true, enabled });
+      if (register) run.modelApi.registerManagedGatewayKey(managedKey);
+      const flags = [{ provider: "openai", enabled: true, ciphertext: register ? managedKey : sharedKey }];
+      try {
+        const selected = await run.editor.selectTaskWriterModel({ aiFeature: "taskWriter", byokProviderFlags: flags, teamContext: { teamId, settings: {} }, userId });
+        await selected.model.doGenerate({ prompt: [], providerOptions: selected.providerOptions ?? {} });
+      } catch (error) {
+        return { refused: String(error?.message ?? error), calls: run.calls.map(({ modelId, credential }) => ({ modelId, credential })), reservations: run.reservations.length };
+      }
+      return { calls: run.calls.map(({ modelId, credential }) => ({ modelId, credential })), reservations: run.reservations.length };
+    };
+    const on = await outcome(true);
+    assert.deepEqual(on, await outcome(false));
+    assert.ok(on.calls.every(({ modelId }) => modelId !== "gpt-6-luna"), JSON.stringify(on));
+  }
 });
 
 test("conversation titles never apply the OpenAI-only default, so a supplied gateway key never runs Luna", async () => {
