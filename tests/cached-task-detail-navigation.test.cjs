@@ -178,6 +178,8 @@ test("card Links defer normal clicks to the cached navigator and preserve modifi
     "react": { __esModule: true, default: React, useContext: () => false, useCallback: (callback) => callback },
     "react/jsx-runtime": require("react/jsx-runtime"),
     "next/link": { __esModule: true, default: "a" },
+    "@/hooks/useFlag": { useFlag: () => false },
+    "@/lib/flags/keys": { HTPR_7614_SELECTED_CARD_BORDER_FLAG: "htpr-7614-selected-card-border" },
     "@/lib/contexts/mobileContext": { MobileViewContext: {} },
     "@/utils/undoActions/helperFuncs": { cn: (...classes) => classes.filter(Boolean).join(" ") },
   };

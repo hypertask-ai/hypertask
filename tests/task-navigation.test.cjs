@@ -83,6 +83,8 @@ function fixture(t, { mobile = false, cached = false, openDetail } = {}) {
     react: React,
     "react/jsx-runtime": require("react/jsx-runtime"),
     "next/link": linkModule.exports,
+    "@/hooks/useFlag": { useFlag: () => false },
+    "@/lib/flags/keys": { HTPR_7614_SELECTED_CARD_BORDER_FLAG: "htpr-7614-selected-card-border" },
     "@/lib/contexts/mobileContext": { MobileViewContext: React.createContext(mobile) },
     "@/utils/undoActions/helperFuncs": { cn: (...classes) => classes.filter(Boolean).join(" ") },
   });
