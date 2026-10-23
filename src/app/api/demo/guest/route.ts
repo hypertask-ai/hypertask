@@ -164,7 +164,7 @@ async function getExistingGuest(request: NextRequest) {
       ownerId: user.id,
       status: "Normal",
       teamId: { not: null },
-      AND: [getProjectWhere(session.id, session.agentId)],
+      AND: [getProjectWhere(session.id, session.agentId, session.teamScope)],
     },
     orderBy: { createdAt: "desc" },
     select: {

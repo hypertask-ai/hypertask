@@ -29,7 +29,7 @@ export function createTaskWriteProbeHandler(deps: TaskWriteProbeHandlerDeps) {
     }
 
     await prepareAgentScope(ctx.user.id, ctx.agentId)
-    const result = await deps.runProbe(ctx.user.id, { agentId: ctx.agentId })
+    const result = await deps.runProbe(ctx.user.id, { agentId: ctx.agentId, teamScope: ctx.teamScope })
 
     const body =
       result.status === 'healthy'

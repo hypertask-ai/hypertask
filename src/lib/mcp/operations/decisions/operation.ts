@@ -153,7 +153,7 @@ export async function POST(request: NextRequest) {
         project_id: projectId,
         unique_index: uniqueIndex,
       },
-      ctx.agentId
+      ctx.agentId, undefined, ctx.teamScope
     )
     if (!task) {
       return NextResponse.json(
@@ -279,7 +279,7 @@ export async function GET(request: NextRequest) {
         project_id: projectId,
         unique_index: uniqueIndex,
       },
-      ctx.agentId
+      ctx.agentId, undefined, ctx.teamScope
     )
     if (!task) {
       return NextResponse.json(

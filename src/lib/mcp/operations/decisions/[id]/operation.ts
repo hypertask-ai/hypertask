@@ -97,7 +97,7 @@ async function loadAccessibleDecisionRequest(
   const task = await findTaskByIdentifier(
     ctx.user,
     { task_id: decisionRequest.taskId },
-    ctx.agentId
+    ctx.agentId, undefined, ctx.teamScope
   )
   if (!task) {
     return {

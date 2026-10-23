@@ -47,7 +47,7 @@ export async function GET(request: NextRequest, props: { params: Promise<{ proje
       );
     }
 
-    const access = await validateProjectAccess(projectId, user.id, ctx.agentId);
+    const access = await validateProjectAccess(projectId, user.id, ctx.agentId, ctx.teamScope);
     if (access.error) {
       const message =
         access.error.status === 403
@@ -131,7 +131,7 @@ export async function POST(request: NextRequest, props: { params: Promise<{ proj
       );
     }
 
-    const access = await validateProjectAccess(projectId, user.id, ctx.agentId);
+    const access = await validateProjectAccess(projectId, user.id, ctx.agentId, ctx.teamScope);
     if (access.error) {
       const message =
         access.error.status === 403

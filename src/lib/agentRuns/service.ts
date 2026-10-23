@@ -1,3 +1,4 @@
+import type { AgentTokenTeamScope } from '@/lib/mcp/auth/types';
 import { agentScopeEnforced, recordAgentBoardScopeMiss } from "@/lib/auth/agentScope";
 import crypto from "crypto";
 import {
@@ -59,6 +60,7 @@ import {
 export type AgentRunPrincipal = {
   userId: number;
   agentId: string | null;
+  teamScope?: AgentTokenTeamScope | null;
   displayName: string;
   source: "agent" | "browser";
   sdk?: "typescript";
@@ -79,6 +81,7 @@ export async function authenticateAgentRunRequest(
     return {
       userId: context.user.id,
       agentId: context.agentId,
+      teamScope: context.teamScope,
       displayName: context.user.displayName?.trim() || "Hypertask agent",
       source: "agent",
       ...(sdk ? { sdk } : {}),
@@ -116,7 +119,7 @@ function accessibleRunWhere(principal: AgentRunPrincipal, id: string) {
           agentId: principal.agentId,
           ...(agentScopeEnforced() ? { OR: [
             { taskId: null },
-            { task: { project: projectContentAccessWhere(principal.userId, principal.agentId) } },
+            { task: { project: projectContentAccessWhere(principal.userId, principal.agentId, principal.teamScope) } },
           ] } : {}),
         }
       : { agent: { userId: principal.userId } }),

@@ -1,3 +1,4 @@
+import { getProjectWhere } from '@/utils/controllers/projects/getAllIncludes'
 import type { AttachmentFileInput } from "@/lib/mcp-server/validations/attachment.validation";
 import { HTPR_7514_INLINE_AGENT_IMAGES_FLAG } from "@/lib/flags/keys";
 import { inlineAgentImagesForUser } from "@/lib/media/inlineAgentImages.server";
@@ -314,7 +315,7 @@ export async function GET(request: NextRequest) {
         unique_index: uniqueIndex,
         project_id: projectId,
       },
-      ctx.agentId
+      ctx.agentId, undefined, ctx.teamScope
     )
 
     if (!task) {
@@ -330,6 +331,7 @@ export async function GET(request: NextRequest) {
     const commentWhere: Prisma.CommentWhereInput = includeActivity
       ? { taskId: task.id }
       : { taskId: task.id, activity: { equals: Prisma.DbNull } }
+    if (ctx.teamScope != null) commentWhere.task = { project: getProjectWhere(user.id, ctx.agentId, ctx.teamScope) }
     if (listQuery?.query) {
       commentWhere.text = { contains: listQuery.query, mode: 'insensitive' }
     }
@@ -738,7 +740,7 @@ export async function POST(request: NextRequest) {
         unique_index,
         project_id,
       },
-      ctx.agentId
+      ctx.agentId, undefined, ctx.teamScope
     )
 
     if (!task) {
@@ -889,7 +891,7 @@ export async function POST(request: NextRequest) {
         }
       : null
     const agentLogEntry = routeComment({
-      agentId: ctx.agentId,
+      agentId: ctx.agentId, teamScope: ctx.teamScope,
       kind,
       replyToCommentId: reply_to_comment_id,
       replyToInvocationId: reply_to_invocation_id,
@@ -960,6 +962,7 @@ export async function POST(request: NextRequest) {
           ownerId: taskWithOwner.userId,
           currentUser: userObj,
           agentId: ctx.agentId || undefined,
+          teamScope: ctx.teamScope,
           directReplySourceCommentId: ctx.agentId ? reply_to_comment_id : undefined,
           directReplyInvocationId: ctx.agentId ? reply_to_invocation_id : undefined
         })

@@ -1,3 +1,4 @@
+import type { AgentTokenTeamScope } from '@/lib/mcp/auth/types';
 import prisma from "@/lib/prisma";
 import { projectContentAccessWhere } from "@/utils/controllers/projects/getAllIncludes";
 import { assertSafeWebhookTarget } from "@/lib/mcp/webhooks/ssrfGuard";
@@ -6,7 +7,7 @@ export async function loadCurrentTaskContext(
   taskIds: Array<number | null | undefined>,
   userId: number | null | undefined,
   agentId?: string | null,
-  options?: { role?: "primary" | "related"; projectId?: number | null }
+  options?: { role?: "primary" | "related"; projectId?: number | null; teamScope?: AgentTokenTeamScope | null }
 ): Promise<string> {
   const ids = Array.from(
     new Set(
@@ -21,7 +22,7 @@ export async function loadCurrentTaskContext(
     where: {
       id: { in: ids },
       project: {
-        ...projectContentAccessWhere(userId, agentId),
+        ...projectContentAccessWhere(userId, agentId, options?.teamScope),
         ...(options?.projectId ? { id: options.projectId } : {}),
       },
     },
@@ -55,7 +56,7 @@ export async function resolveAiUsageTaskId(args: {
   taskId?: number | null;
   projectId?: number | null;
   userId: number;
-  agentId?: string | null;
+  agentId?: string | null; teamScope?: AgentTokenTeamScope | null;
 }): Promise<number | null> {
   if (
     !Number.isInteger(args.taskId) ||
@@ -70,7 +71,7 @@ export async function resolveAiUsageTaskId(args: {
     where: {
       id: Number(args.taskId),
       projectId: Number(args.projectId),
-      project: projectContentAccessWhere(args.userId, args.agentId),
+      project: projectContentAccessWhere(args.userId, args.agentId, args.teamScope),
     },
     select: { id: true },
   });

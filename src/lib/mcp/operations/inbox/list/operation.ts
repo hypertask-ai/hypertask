@@ -62,7 +62,7 @@ export async function GET(request: NextRequest) {
                     fromUserId: { not: generalConfig.hyperAiId },
                     task: {
                         status: 'Normal',
-                        project: getProjectListingWhere(user.id, ctx.agentId),
+                        project: getProjectListingWhere(user.id, ctx.agentId, ctx.teamScope),
                     },
                 },
                 orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
@@ -94,10 +94,10 @@ export async function GET(request: NextRequest) {
 
         if (ctx.agentId) {
             const [userInboxResult, agentInbox] = await Promise.all([
-                notificationGetAll(user.id.toString(), { withCachedDescription }, ctx.agentId),
+                notificationGetAll(user.id.toString(), { withCachedDescription }, ctx.agentId, ctx.teamScope),
                 getStructuredInboxForAgent({
                     userId: user.id,
-                    agentId: ctx.agentId,
+                    agentId: ctx.agentId, teamScope: ctx.teamScope,
                     scopeToAgentBoards: true,
                 }),
             ])

@@ -232,7 +232,7 @@ export async function createCommentService(params: CreateCommentParams) {
   } catch (error) {
     if (error instanceof DirectReplyAlreadyHandledError) {
       return prisma.comment.findUniqueOrThrow({
-        where: { id: error.commentId },
+        where: { id: error.commentId, ...(teamScope == null ? {} : { task: { project: taskWriteAccessWhere(accessUserId ?? currentUser.id, agentId, teamScope) } }) },
       });
     }
     throw error;

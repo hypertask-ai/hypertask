@@ -69,6 +69,19 @@ export async function persistComment(
     extraBoardWebhookEvents = [],
   } = params;
   return prisma.$transaction(async (tx) => {
+    if (agentRunReplayComment && teamScope == null) {
+      return loadAgentRunReplayComment(tx.comment, {
+        commentId: agentRunReplayComment.id,
+        activityId: agentRunReplayComment.activityId,
+        taskId,
+        creatorId,
+        agentId,
+        agentWebhookDeliveryIds:
+          agentRunReplayComment.agentWebhookDeliveryIds,
+        boardWebhookDeliveryIds:
+          agentRunReplayComment.boardWebhookDeliveryIds,
+      });
+    }
       const lockedTask = await tx.$queryRaw<Array<{ id: number }>>`
         SELECT "id"
         FROM "Task"

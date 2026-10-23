@@ -242,7 +242,7 @@ export async function POST(
         const projectCheck = await validateProjectAccess(
           parsedProposal.proposal.targetProjectId,
           session.userId,
-          ctx.agentId
+          ctx.agentId, ctx.teamScope
         )
         if (projectCheck.error) {
           return NextResponse.json(

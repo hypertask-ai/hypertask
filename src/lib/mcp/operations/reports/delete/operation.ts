@@ -72,7 +72,7 @@ export async function POST(request: NextRequest) {
 
     const report = await deleteReport({
       userId: ctx.user.id,
-      agentId: ctx.agentId,
+      agentId: ctx.agentId, teamScope: ctx.teamScope,
       projectId,
       slug: body.slug,
     })

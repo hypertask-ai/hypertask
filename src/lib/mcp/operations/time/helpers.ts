@@ -63,7 +63,7 @@ export async function resolveMcpTimeTask(
 
   let task;
   try {
-    task = await findTaskByStringIdentifier(ctx.user, body.task, ctx.agentId);
+    task = await findTaskByStringIdentifier(ctx.user, body.task, ctx.agentId, ctx.teamScope);
   } catch (error) {
     const response = taskIdentifierErrorResponse(error);
     if (response) return { ctx, task: null, body, response };
@@ -76,7 +76,7 @@ export async function resolveMcpTimeTask(
           status: options.allowArchived
             ? { in: ["Normal", "Archive"] }
             : "Normal",
-          ...getProjectWhere(ctx.user.id, ctx.agentId),
+          ...getProjectWhere(ctx.user.id, ctx.agentId, ctx.teamScope),
         },
         select: { id: true },
       })

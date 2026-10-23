@@ -38,7 +38,7 @@ const handler: NextApiHandler = async (req: NextApiRequest, res: NextApiResponse
                 where: {
                     id: commentId,
                     taskId: taskId,
-                    task: { project: taskWriteAccessWhere(userId, session.agentId) },
+                    task: { project: taskWriteAccessWhere(userId, session.agentId, session.teamScope) },
                 },
                 select: { id: true },
             });

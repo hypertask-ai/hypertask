@@ -97,7 +97,7 @@ export async function GET(request: NextRequest) {
     const access = await validateProjectAccess(
       projectId,
       auth.ctx.user.id,
-      auth.ctx.agentId
+      auth.ctx.agentId, auth.ctx.teamScope
     );
     if (access.error) {
       return NextResponse.json(
@@ -187,7 +187,7 @@ export async function POST(request: NextRequest) {
     const access = await validateProjectAccess(
       project_id,
       auth.ctx.user.id,
-      auth.ctx.agentId
+      auth.ctx.agentId, auth.ctx.teamScope
     );
     if (access.error) {
       return NextResponse.json(

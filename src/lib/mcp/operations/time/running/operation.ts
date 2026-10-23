@@ -16,7 +16,7 @@ export async function GET(request: NextRequest) {
   }
 
   const now = new Date();
-  const entries = await listRunning(ctx.user.id, ctx.agentId);
+  const entries = await listRunning(ctx.user.id, ctx.agentId, ctx.teamScope);
   const timers = entries.map((entry) => ({
     id: entry.id,
     startedAt: entry.startedAt,

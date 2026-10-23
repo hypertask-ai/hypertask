@@ -620,7 +620,7 @@ export async function createTask(data: {
     }
 
     const taskWithDescription = await prisma.task.findUnique({
-        where: { id: result.newTask.id },
+        where: { id: result.newTask.id, ...(data.teamScope == null ? {} : { project: getProjectWhere(userId, agentId, data.teamScope) }) },
         include: taskDetailInclude(userId)
     });
 

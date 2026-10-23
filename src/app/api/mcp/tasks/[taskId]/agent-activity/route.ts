@@ -37,7 +37,7 @@ export async function GET(
     const task = await findTaskByIdentifier(
       ctx.user,
       ticketNumber ? { ticket_number: identifier.toUpperCase() } : { task_id: numericId },
-      ctx.agentId,
+      ctx.agentId, undefined, ctx.teamScope
     )
     if (!task) return noStore({ success: false, error: 'Task not found or access denied' }, 404)
 

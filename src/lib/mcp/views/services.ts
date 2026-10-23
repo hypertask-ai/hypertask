@@ -166,8 +166,10 @@ async function buildBoardFilters(projectId: number, filters?: CreateViewFilters)
 
 export async function createView(input: CreateViewInput) {
     const { projectId, userId, title } = input;
-    const access = await validateProjectAccess(projectId, userId, input.agentId, input.teamScope);
-    if (access.error) throw new Error(access.error.message);
+    if (input.teamScope != null) {
+        const access = await validateProjectAccess(projectId, userId, input.agentId, input.teamScope);
+        if (access.error) throw new Error(access.error.message);
+    }
     assertEmptySections(input.board_empty_sections);
 
     const existing = await prisma.view.findFirst({

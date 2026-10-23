@@ -105,7 +105,7 @@ export async function persistTaskUpdates(context: TaskUpdateFieldContext, tasks:
     }
 
     const updatedTasks = await prisma.task.findMany({
-        where: { id: { in: updatedTaskIds }, project: getProjectWhere(user.id, ctx.agentId, ctx.teamScope) },
+        where: { id: { in: updatedTaskIds }, ...(ctx.teamScope == null ? {} : { project: getProjectWhere(user.id, ctx.agentId, ctx.teamScope) }) },
         include: taskDetailInclude(user.id)
     })
 

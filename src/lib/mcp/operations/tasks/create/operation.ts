@@ -105,7 +105,7 @@ export async function POST(request: NextRequest) {
 
         const { project_id, title, description, section_id, priority, estimate, due_date, images, labels, parent_task_id, assignee_ids } = validation.data;
 
-        const projectCheck = await validateProjectAccess(project_id, user.id, ctx.agentId);
+        const projectCheck = await validateProjectAccess(project_id, user.id, ctx.agentId, ctx.teamScope);
         if (projectCheck.error) {
             return NextResponse.json(
                 {
@@ -261,7 +261,7 @@ export async function POST(request: NextRequest) {
                     labels: labelIds || [],
                     parentTaskId: parent_task_id || undefined,
                     assigneeIds: assignee_ids && assignee_ids.length > 0 ? assignee_ids : undefined,
-                    agentId: ctx.agentId || undefined,
+                    agentId: ctx.agentId || undefined, teamScope: ctx.teamScope, agentTokenGeneration: ctx.agentTokenGeneration,
                     creationChannel: getMcpOperationContext(request) ? 'mcp' : 'api',
                 });
 

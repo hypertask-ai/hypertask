@@ -54,7 +54,7 @@ export async function POST(request: NextRequest) {
     const task = await findTaskByIdentifier(
       ctx.user,
       { task_id: taskId, ticket_number: ticketNumber, project_id: projectId },
-      ctx.agentId
+      ctx.agentId, undefined, ctx.teamScope
     )
     if (!task) {
       return NextResponse.json(
@@ -108,7 +108,7 @@ export async function GET(request: NextRequest) {
     const task = await findTaskByIdentifier(
       ctx.user,
       { task_id: taskId, ticket_number: ticketNumber, project_id: projectId },
-      ctx.agentId
+      ctx.agentId, undefined, ctx.teamScope
     )
     if (!task) {
       return NextResponse.json(

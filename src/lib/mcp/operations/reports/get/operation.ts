@@ -53,7 +53,7 @@ export async function GET(request: NextRequest) {
 
     const report = await getReport({
       userId: ctx.user.id,
-      agentId: ctx.agentId,
+      agentId: ctx.agentId, teamScope: ctx.teamScope,
       projectId,
       slug,
     })

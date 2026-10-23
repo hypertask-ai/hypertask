@@ -221,7 +221,7 @@ export async function POST(request: NextRequest) {
     const task = await findTaskByIdentifier(
       ctx.user,
       identifier,
-      ctx.agentId
+      ctx.agentId, undefined, ctx.teamScope
     )
     if (!task || !(await canAccessProject(task.projectId, ctx))) {
       return NextResponse.json(
@@ -243,7 +243,7 @@ export async function POST(request: NextRequest) {
           contentType: contentType as PageContentType,
           parentPageId,
           userId: ctx.user.id,
-          agentId: ctx.agentId,
+          agentId: ctx.agentId, teamScope: ctx.teamScope,
         })
 
         return {

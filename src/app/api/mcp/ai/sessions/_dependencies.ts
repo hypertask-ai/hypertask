@@ -60,7 +60,7 @@ function serializeMessage(message: MessageRecord) {
 async function accessibleSessionWhere(ctx: McpAuthContext): Promise<Prisma.ChatSessionWhereInput> {
   if (!ctx.agentId) return { userId: ctx.user.id };
   const projects = await prisma.project.findMany({
-    where: { status: 'Normal', ...getProjectWhere(ctx.user.id, ctx.agentId) },
+    where: { status: 'Normal', ...getProjectWhere(ctx.user.id, ctx.agentId, ctx.teamScope) },
     select: { id: true },
   });
   return {
@@ -79,8 +79,8 @@ export const aiSessionDependencies: AiSessionHandlerDependencies<McpAuthContext>
   authorizeWrite: async (ctx) => ctx.agentId ? requireRole(ctx, 'write') : null,
   actorUserId: (ctx) => ctx.user.id,
   actorAgentId: (ctx) => ctx.agentId,
-  validateProject: async (userId, agentId, projectId) => {
-    const result = await validateProjectAccess(projectId, userId, agentId);
+  validateProject: async (userId, agentId, projectId, ctx) => {
+    const result = await validateProjectAccess(projectId, userId, agentId, ctx.teamScope);
     return result.error
       ? NextResponse.json({ success: false, error: result.error.message }, { status: result.error.status })
       : null;

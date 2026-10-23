@@ -97,7 +97,7 @@ export async function GET(request: NextRequest) {
       )
     }
 
-    const agents = await getTeamAgentPresence(team.id, { userId: ctx.user.id, agentId: ctx.agentId })
+    const agents = await getTeamAgentPresence(team.id, { userId: ctx.user.id, agentId: ctx.agentId, teamScope: ctx.teamScope })
     return NextResponse.json({ success: true, agents })
   } catch (error) {
     if (error instanceof TeamAgentPresenceNotFoundError) {

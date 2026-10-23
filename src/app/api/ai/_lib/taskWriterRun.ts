@@ -1,3 +1,4 @@
+import type { AgentTokenTeamScope } from '@/lib/mcp/auth/types';
 import { HTPR_7312_CTRLJ_SKILLS_FLAG, HTPR_7513_WRITER_PROJECT_LABELS_FLAG } from "@/lib/flags/keys";
 import { taskWriterDateContext, taskWriterDueDateInstructions } from "@/lib/ai/taskWriterDueDate";
 import { HTPR_7500_WRITER_OLD_STRUCTURE_FLAG } from "@/lib/flags/keys";
@@ -139,14 +140,15 @@ export function missingRequiredFields(body: TaskWriterRequest) {
   return !body.projectId || !body.PROMPT;
 }
 
-export function projectAccessWhere(userId: number, agentId?: string | null) {
-  return projectContentAccessWhere(userId, agentId);
+export function projectAccessWhere(userId: number, agentId?: string | null, teamScope?: AgentTokenTeamScope | null) {
+  return projectContentAccessWhere(userId, agentId, teamScope);
 }
 
 export async function prepareTaskWriterRun(
   body: TaskWriterRequest,
   userId: number,
-  agentId?: string | null
+  agentId?: string | null,
+  teamScope?: AgentTokenTeamScope | null,
 ) {
   if (body.requestKind === "compose-task" &&
       !(await isFeatureEnabled(HTPR_6929_COMPOSE_TASK_WRITER_FLAG, userId))) {
@@ -161,14 +163,14 @@ export async function prepareTaskWriterRun(
       throw new AiFeatureDisabledError();
     }
     const target = await prisma.task.findFirst({
-      where: { id: body.existingTaskId, projectId: body.projectId, status: "Normal", project: taskWriteAccessWhere(userId, agentId) },
+      where: { id: body.existingTaskId, projectId: body.projectId, status: "Normal", project: taskWriteAccessWhere(userId, agentId, teamScope) },
       include: { description_: { select: { content: true } } },
     });
     if (!target || !isEmptyComposeTarget(target)) throw new ProjectAccessError();
   }
 
   const project = await prisma.project.findFirst({
-    where: { id: body.projectId, ...projectAccessWhere(userId, agentId) },
+    where: { id: body.projectId, ...projectAccessWhere(userId, agentId, teamScope) },
     select: { id: true },
   });
   if (!project) throw new ProjectAccessError();

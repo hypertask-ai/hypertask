@@ -138,7 +138,7 @@ export async function POST(request: NextRequest) {
       async () => {
         const report = await createReport({
           userId: ctx.user.id,
-          agentId: ctx.agentId,
+          agentId: ctx.agentId, teamScope: ctx.teamScope,
           projectId,
           slug: body.slug as string,
           title: body.title as string,

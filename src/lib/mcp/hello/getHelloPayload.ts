@@ -155,7 +155,7 @@ function truncatePlaybook(playbook: Prisma.JsonValue): Prisma.JsonValue {
 export async function getHelloPayload(ctx: McpAuthContext) {
   const where: Prisma.ProjectWhereInput = {
     status: 'Normal',
-    ...getProjectListingWhere(ctx.user.id, ctx.agentId),
+    ...getProjectListingWhere(ctx.user.id, ctx.agentId, ctx.teamScope),
   }
   const projects = await prisma.project.findMany({
     where,

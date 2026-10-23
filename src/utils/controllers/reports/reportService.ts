@@ -221,7 +221,7 @@ export async function updateReport({
   }
 
   return prisma.report.update({
-    where: { id: report.id, project: getProjectWhere(userId, agentId, teamScope) },
+    where: { id: report.id, ...(teamScope == null ? {} : { project: getProjectWhere(userId, agentId, teamScope) }) },
     data,
     include: reportInclude,
   });
@@ -274,7 +274,7 @@ export async function listReports({
   if (!project) return null;
 
   return prisma.report.findMany({
-    where: { projectId, project: getProjectWhere(userId, agentId, teamScope) },
+    where: { projectId, ...(teamScope == null ? {} : { project: getProjectWhere(userId, agentId, teamScope) }) },
     include: reportInclude,
     orderBy: { updatedAt: "desc" },
   });
@@ -304,7 +304,7 @@ export async function deleteReport({
   });
   if (!report) return null;
 
-  return prisma.report.delete({ where: { id: report.id, project: getProjectWhere(userId, agentId, teamScope) } });
+  return prisma.report.delete({ where: { id: report.id, ...(teamScope == null ? {} : { project: getProjectWhere(userId, agentId, teamScope) }) } });
 }
 
 export function getReportUrl(projectId: number, slug: string): string {

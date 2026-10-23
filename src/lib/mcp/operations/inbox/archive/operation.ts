@@ -91,7 +91,7 @@ export async function POST(request: NextRequest) {
       where: {
         id: { in: notificationIds },
         userId: user.id,
-        ...(ctx.agentId ? { AND: [notificationBoardAccessWhere(user.id, ctx.agentId)] } : {}),
+        ...(ctx.agentId || ctx.teamScope != null ? { AND: [notificationBoardAccessWhere(user.id, ctx.agentId, ctx.teamScope)] } : {}),
         ...(remindAt ? { status: 'Normal' as const } : {}),
       },
       select: {
@@ -119,7 +119,7 @@ export async function POST(request: NextRequest) {
           await tx.$executeRaw`SELECT pg_advisory_xact_lock(${REMINDER_LOCK_CLASS}::int, ${candidateTaskId}::int)`
         }
         const lockedNotifications = await tx.notification.findMany({
-          where: { id: { in: notificationIds }, userId: user.id, status: 'Normal', ...(ctx.agentId ? { AND: [notificationBoardAccessWhere(user.id, ctx.agentId)] } : {}) },
+          where: { id: { in: notificationIds }, userId: user.id, status: 'Normal', ...(ctx.agentId || ctx.teamScope != null ? { AND: [notificationBoardAccessWhere(user.id, ctx.agentId, ctx.teamScope)] } : {}) },
           select: { id: true, taskId: true, projectId: true },
         })
         if (
@@ -175,7 +175,7 @@ export async function POST(request: NextRequest) {
           }
         }
         await tx.notification.updateMany({
-          where: { userId: user.id, taskId: { in: tasks.map((item) => item.taskId!) }, status: 'Normal', ...(ctx.agentId ? { AND: [notificationBoardAccessWhere(user.id, ctx.agentId)] } : {}) },
+          where: { userId: user.id, taskId: { in: tasks.map((item) => item.taskId!) }, status: 'Normal', ...(ctx.agentId || ctx.teamScope != null ? { AND: [notificationBoardAccessWhere(user.id, ctx.agentId, ctx.teamScope)] } : {}) },
           data: { status: 'Archive', archivedAt: new Date() },
         })
         return saved
@@ -212,7 +212,7 @@ export async function POST(request: NextRequest) {
         id:{notIn:notificationIds},
         taskId:{in:taskIds},
         userId:user.id,
-        ...(ctx.agentId ? { AND: [notificationBoardAccessWhere(user.id, ctx.agentId)] } : {}),
+        ...(ctx.agentId || ctx.teamScope != null ? { AND: [notificationBoardAccessWhere(user.id, ctx.agentId, ctx.teamScope)] } : {}),
         status:{not:"Deleted"}
       },
       data:{
@@ -224,7 +224,7 @@ export async function POST(request: NextRequest) {
       where: {
         id: { in: notificationIds },
         userId: user.id,
-        ...(ctx.agentId ? { AND: [notificationBoardAccessWhere(user.id, ctx.agentId)] } : {}),
+        ...(ctx.agentId || ctx.teamScope != null ? { AND: [notificationBoardAccessWhere(user.id, ctx.agentId, ctx.teamScope)] } : {}),
       },
       data: {
         status: 'Archive',

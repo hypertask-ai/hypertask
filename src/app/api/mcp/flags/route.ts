@@ -118,7 +118,7 @@ export async function PATCH(request: NextRequest) {
     }, async (tx) => {
       const commentId = Number(link[3]);
       const approval = await tx.comment.findFirst({
-        where: { id: commentId, task: { projectId: Number(link[1]), uniqueIndex: Number(link[2]), status: { not: "Deleted" }, project: projectContentAccessWhere(ctx.user.id, ctx.agentId) } },
+        where: { id: commentId, task: { projectId: Number(link[1]), uniqueIndex: Number(link[2]), status: { not: "Deleted" }, project: projectContentAccessWhere(ctx.user.id, ctx.agentId, ctx.teamScope) } },
         select: { taskId: true },
       });
       if (!approval) throw new FeatureFlagApprovalError(APPROVAL_REQUIRED_MESSAGE);
@@ -130,7 +130,7 @@ export async function PATCH(request: NextRequest) {
         where: {
           id: commentId,
           editedAt: null,
-          task: { projectId: Number(link[1]), uniqueIndex: Number(link[2]), status: { not: "Deleted" }, project: projectContentAccessWhere(ctx.user.id, ctx.agentId) },
+          task: { projectId: Number(link[1]), uniqueIndex: Number(link[2]), status: { not: "Deleted" }, project: projectContentAccessWhere(ctx.user.id, ctx.agentId, ctx.teamScope) },
           reactions: { some: {
             userId: FEATURE_FLAG_OWNER_USER_ID, agentId: null, agentDisplayName: null, isDeleted: false,
             unified: { startsWith: "1f44d" },

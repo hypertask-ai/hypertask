@@ -39,7 +39,7 @@ export async function GET(request: NextRequest) {
 
     const reports = await listReports({
       userId: ctx.user.id,
-      agentId: ctx.agentId,
+      agentId: ctx.agentId, teamScope: ctx.teamScope,
       projectId,
     })
     if (!reports) {

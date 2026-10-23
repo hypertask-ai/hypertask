@@ -19,7 +19,7 @@ const handler: NextApiHandler = async (req, res) => {
     return res.status(400).json({ error: 'Unknown operator' })
   }
   const boards = await prisma.project.findMany({
-    where: { status: 'Normal', ...getProjectWhere(session.userId), AND: [getProjectWhere(session.userId, session.agentId)] },
+    where: { status: 'Normal', ...getProjectWhere(session.userId), AND: [getProjectWhere(session.userId, session.agentId, session.teamScope)] },
     select: { id: true, title: true },
   })
   const ids = boards.map((board) => board.id)
@@ -134,7 +134,7 @@ const handler: NextApiHandler = async (req, res) => {
       ] },
     ] })
     const recentIds = [
-      ...await prisma.task.findMany({ where: { projectId: { in: scope }, createdAt: { gte: recent }, project: getProjectWhere(session.userId, session.agentId) }, select: { userId: true }, orderBy: { createdAt: 'desc' }, take: 100 }),
+      ...await prisma.task.findMany({ where: { projectId: { in: scope }, createdAt: { gte: recent }, project: getProjectWhere(session.userId, session.agentId, session.teamScope) }, select: { userId: true }, orderBy: { createdAt: 'desc' }, take: 100 }),
       ...await prisma.assignees.findMany({ where: { task: { projectId: { in: scope } }, assignedAt: { gte: recent } }, select: { userId: true }, orderBy: { assignedAt: 'desc' }, take: 100 }),
     ].map((row) => row.userId)
     const recentPeople = recentIds.length ? await prisma.user.findMany({

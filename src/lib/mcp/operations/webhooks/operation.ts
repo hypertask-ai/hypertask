@@ -111,7 +111,7 @@ export async function GET(request: NextRequest) {
     }
 
     const project = await prisma.project.findFirst({
-      where: { id: projectId, ...getProjectWhere(ctx.user.id, ctx.agentId) },
+      where: { id: projectId, ...getProjectWhere(ctx.user.id, ctx.agentId, ctx.teamScope) },
       select: { id: true },
     })
     if (!project) {
@@ -257,7 +257,7 @@ export async function POST(request: NextRequest) {
     const events = parsedEvents.events
 
     const project = await prisma.project.findFirst({
-      where: { id: projectId, ...getProjectWhere(ctx.user.id, ctx.agentId) },
+      where: { id: projectId, ...getProjectWhere(ctx.user.id, ctx.agentId, ctx.teamScope) },
       select: { id: true },
     })
     if (!project) {
@@ -366,7 +366,7 @@ export async function DELETE(request: NextRequest) {
     }
 
     const result = await prisma.webhookSubscription.deleteMany({
-      where: { id, project: getProjectWhere(ctx.user.id, ctx.agentId) },
+      where: { id, project: getProjectWhere(ctx.user.id, ctx.agentId, ctx.teamScope) },
     })
     if (result.count === 0) {
       return NextResponse.json(

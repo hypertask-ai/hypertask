@@ -541,7 +541,6 @@ async function patchAgent(
         console.warn("[Agent runtime] Snapshot invalidation failed:", error);
       }
     };
-    if (isReEnabling) await clearRuntimeBestEffort();
     if (isReEnabling && existing.runtimeType === "EXTERNAL") {
       const owner = await prisma.user.findUnique({
         where: { id: user.id },
@@ -568,6 +567,7 @@ async function patchAgent(
       );
     }
     if (isReEnabling) {
+      await clearRuntimeBestEffort();
       const transition = await prisma.agent.updateMany({
         where: {
           id: existing.id,

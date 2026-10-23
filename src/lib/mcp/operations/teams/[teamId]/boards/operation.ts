@@ -72,6 +72,9 @@ export async function POST(
       )
     }
 
+    if (ctx.teamScope != null && (teamId !== ctx.teamScope.teamId || !ctx.teamScope.accessBinding?.trim())) {
+      return NextResponse.json({ success: false, error: 'Forbidden' }, { status: 403 })
+    }
     const dbUser = await prisma.user.findUnique({
       where: { id: user.id },
       select: {
@@ -274,7 +277,7 @@ export async function POST(
 
     if (responseBody.idempotent_replayed) {
       const board = await prisma.project.findFirst({
-        where: { id: responseBody.board.id, teamId: team.id, ...projectContentAccessWhere(user.id, ctx.agentId) },
+        where: { id: responseBody.board.id, teamId: team.id, ...projectContentAccessWhere(user.id, ctx.agentId, ctx.teamScope) },
         select: { id: true },
       })
       if (!board) return NextResponse.json({ success: false, error: 'Board not accessible' }, { status: 403 })

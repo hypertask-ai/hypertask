@@ -47,7 +47,7 @@ export async function POST(request: NextRequest) {
     const project = await prisma.project.findFirst({
       where: {
         id: input.project_id,
-        ...projectAccessWhere(userId, ctx.agentId),
+        ...projectAccessWhere(userId, ctx.agentId, ctx.teamScope),
       },
       select: { id: true },
     });

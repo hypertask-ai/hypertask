@@ -33,7 +33,7 @@ export async function PATCH(
       )
     }
     const user = await loadSessionUserRecord(ctx.user.id)
-    const result = await updateProject(Number(projectId), body?.title, undefined, undefined, user, ctx.agentId)
+    const result = await updateProject(Number(projectId), body?.title, undefined, undefined, user, ctx.agentId, ctx.teamScope)
     if (result.status !== 200 || !('id' in result.json)) {
       const message = 'message' in result.json ? result.json.message : 'Unable to rename board'
       return NextResponse.json(

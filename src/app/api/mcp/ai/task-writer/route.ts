@@ -56,7 +56,7 @@ export async function POST(request: NextRequest) {
       taskDescription: input.task_description,
       customInstructions: input.custom_instructions,
     });
-    const draft = await generateTaskWriterDraft(body, userId, ctx.agentId);
+    const draft = await generateTaskWriterDraft(body, userId, ctx.agentId, undefined, ctx.teamScope);
     if (!draft.success) {
       return NextResponse.json(
         { success: false, error: draft.error },

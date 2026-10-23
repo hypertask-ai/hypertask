@@ -11,7 +11,7 @@ export async function POST(request: NextRequest) {
   const entry = readEntryId(body);
   if (entry.response) return entry.response;
 
-  const deleted = await deleteEntry(ctx.user.id, entry.entryId, ctx.agentId);
+  const deleted = await deleteEntry(ctx.user.id, entry.entryId, ctx.agentId, ctx.teamScope);
 
   if (!deleted) {
     return NextResponse.json(

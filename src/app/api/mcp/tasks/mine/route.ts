@@ -58,6 +58,7 @@ export async function GET(request: NextRequest) {
     const result = await getMyTasksSummary({
       userId: ctx.user.id,
       agentId: ctx.agentId,
+      teamScope: ctx.teamScope,
       projectId: parsePositiveInteger(projectIdRaw),
       overdueOnly: searchParams.get('overdue_only') === 'true',
       includeTasks: searchParams.get('include_tasks') !== 'false',

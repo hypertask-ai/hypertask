@@ -35,7 +35,7 @@ export const addRelatedTasks = async (relations: any, userId: number, agentId?: 
     const accessibleProjects = await prisma.project.findMany({
       where: {
         status: "Normal",
-        ...getProjectWhere(userId, agentId, teamScope),
+        ...(teamScope == null ? getProjectWhere(userId) : getProjectWhere(userId, agentId, teamScope)),
       },
       select: {
         id: true,

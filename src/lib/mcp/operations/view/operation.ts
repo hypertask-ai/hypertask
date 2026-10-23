@@ -136,12 +136,12 @@ export async function GET(request: NextRequest) {
 
     if (projectId !== undefined) {
       const board = await prisma.project.findFirst({
-        where: { id: projectId, ...savedViewBoardAccessWhere(user.id, ctx.agentId) },
+        where: { id: projectId, ...savedViewBoardAccessWhere(user.id, ctx.agentId, ctx.teamScope) },
         select: { id: true },
       })
       if (!board) return NextResponse.json({ success: false, error: 'Project not found' }, { status: 404 })
       const viewWhere: any = {
-        project_view: { projectId, project: savedViewBoardAccessWhere(user.id, ctx.agentId) },
+        project_view: { projectId, project: savedViewBoardAccessWhere(user.id, ctx.agentId, ctx.teamScope) },
         OR: [
           { visibility: 'Public' },
           { visibility: 'Private', userId: user.id },
@@ -181,7 +181,7 @@ export async function GET(request: NextRequest) {
       })
     } else {
       const userProjects = await prisma.project.findMany({
-        where: { status: 'Normal', ...savedViewBoardAccessWhere(user.id, ctx.agentId) },
+        where: { status: 'Normal', ...savedViewBoardAccessWhere(user.id, ctx.agentId, ctx.teamScope) },
         select: { id: true },
       })
       const projectIds = userProjects.map(p => p.id)
@@ -300,7 +300,7 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    const access = await validateProjectAccess(projectId, user.id, ctx.agentId)
+    const access = await validateProjectAccess(projectId, user.id, ctx.agentId, ctx.teamScope)
     if (access.error) {
       return NextResponse.json(
         { success: false, error: access.error.message },
@@ -309,6 +309,7 @@ export async function POST(request: NextRequest) {
     }
 
     const view = await createView({
+      agentId: ctx.agentId, teamScope: ctx.teamScope,
       projectId,
       userId: user.id,
       title,

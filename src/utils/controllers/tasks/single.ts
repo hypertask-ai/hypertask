@@ -247,18 +247,10 @@ export async function updateTaskSingle(
             teamScope: options.teamScope,
           },
         );
-        if (options.teamScope != null) {
-          await tx.$queryRaw`SELECT id FROM "Task" WHERE id = ${newTask.id} FOR UPDATE`
-          const allowed = await tx.task.findFirst({
-            where: { id: newTask.id, project: taskWriteAccessWhere(currentUser.id, agentId, options.teamScope) },
-            select: { id: true },
-          })
-          if (!allowed) throw new TaskTargetChangedError()
-          if (requestedMutation.projectId !== undefined && !await tx.project.findFirst({
-            where: { id: requestedMutation.projectId as number, ...taskWriteAccessWhere(currentUser.id, agentId, options.teamScope) },
-            select: { id: true },
-          })) throw new TaskTargetChangedError()
-        }
+        if (options.teamScope != null && requestedMutation.projectId !== undefined && !await tx.project.findFirst({
+          where: { id: requestedMutation.projectId as number, ...taskWriteAccessWhere(currentUser.id, agentId, options.teamScope) },
+          select: { id: true },
+        })) throw new TaskTeamScopeError()
         const currentState = await tx.task.findUnique({
           where: { id: newTask.id },
           include: { description_: { select: { content: true } } },
