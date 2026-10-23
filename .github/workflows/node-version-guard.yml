@@ -53,6 +53,13 @@ jobs:
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
           node-version: 24
+          check-latest: true
+      - name: CI runs patched Node at or above the security floor
+        run: node .github/scripts/check-node-security-floor.cjs
+      - name: Lockfiles contain no known-bad package release
+        run: |
+          node --test tests/known-bad-packages.test.cjs
+          node .github/scripts/check-known-bad-packages.cjs
       - name: Install only the workflow parser
         run: npm ci --prefix .github/scripts/node-version-guard --ignore-scripts --no-audit --no-fund
       - name: Test comparison logic

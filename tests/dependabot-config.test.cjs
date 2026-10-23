@@ -65,3 +65,8 @@ test("the Better Auth ignore sits on the update, not inside the group", async ()
   // as small and arms auto-merge on.
   assert.equal(update.groups["stack-minor"].ignore, undefined);
 });
+
+test("npm updates wait 7 days so a freshly published worm release is never proposed", async () => {
+  const update = await npmRootUpdate();
+  assert.ok(update.cooldown?.["default-days"] >= 7, "npm update has no cooldown of at least 7 days (YPER4-596)");
+});
