@@ -10,6 +10,8 @@ import { consumeGoogleSignupContext, consumeSignupCookie } from '@/lib/auth/sign
 import { recordSignupIdentityLink } from '@/lib/telemetry/signupIdentityLink'
 import { randomUUID } from 'crypto'
 
+import { preflightOAuthTokenKey } from '@/lib/auth/oauthTokenCipher'
+import { withOAuthTokenStorage } from '@/lib/auth/oauthTokenStorage'
 import { bridgeSessionPlugin } from '@/lib/auth/bridgePlugin'
 import authConfig from '@/lib/configs/auth.config'
 import { legacyCookiePlugin, newGoogleSignupRequests } from '@/lib/auth/legacyCookiePlugin'
@@ -131,9 +133,10 @@ async function sendOTPEmail(email: string, otp: string) {
 
 export const auth = betterAuth({
   appName: 'Hypertask',
-  database: prismaAdapter(prisma, {
+  database: (options) => withOAuthTokenStorage(prismaAdapter(prisma, {
     provider: 'postgresql',
-  }),
+    debugLogs: false,
+  })(options), options),
   secret: process.env.BETTER_AUTH_SECRET,
   baseURL: process.env.BETTER_AUTH_URL ?? 'https://app.hypertask.ai',
   onAPIError: { errorURL: '/login' },
@@ -182,6 +185,7 @@ export const auth = betterAuth({
   },
   account: {
     modelName: 'BetterAuthAccount',
+    encryptOAuthTokens: false,
     accountLinking: {
       trustedProviders: ['google'],
     },
@@ -192,12 +196,15 @@ export const auth = betterAuth({
   databaseHooks: {
     user: {
       create: {
-        before: async (user) => ({
-          data: {
-            ...user,
-            uid: `ba_${randomUUID()}`,
-          },
-        }),
+        before: async (user) => {
+          preflightOAuthTokenKey()
+          return {
+            data: {
+              ...user,
+              uid: `ba_${randomUUID()}`,
+            },
+          }
+        },
         after: async (user, context) => {
           try {
             const userId = Number(user.id)
