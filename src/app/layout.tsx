@@ -14,7 +14,7 @@ import authConfig from "@/lib/configs/auth.config";
 import { DIV_ID_CONSTANTS } from "@/lib/configs/general.config";
 import { inter, INTER_LATIN_FONT_HREF } from "@/lib/fonts/inter";
 import { newsreader, NEWSREADER_LATIN_FONT_HREFS } from "@/lib/fonts/newsreader";
-import { HTPR_7016_PHONE_BOARD_COLD_START_FLAG, HTPR_7272_PAYMENT_LOGIN_AGENT_EVENTS_FLAG, HTPR_7278_MEMORY_ONLY_TRACKING_FLAG } from "@/lib/flags/keys";
+import { HTPR_7272_PAYMENT_LOGIN_AGENT_EVENTS_FLAG, HTPR_7278_MEMORY_ONLY_TRACKING_FLAG } from "@/lib/flags/keys";
 import { isFeatureEnabled } from "@/lib/flags";
 import { ibmPlexSans, IBM_PLEX_SANS_LATIN_FONT_HREF } from "@/lib/fonts/ibmPlexSans";
 import { SESSION_COOKIE, verifySession } from "@/lib/auth/session";
@@ -75,7 +75,7 @@ export default async function RootLayout(
   const ticketShellEnabled = await isFeatureEnabled(HTPR_7627_TICKET_FIRST_SCREEN_FLAG, analyticsSession?.id ?? -1);
   const shellSeed = ticketShellEnabled ? await getServerTicketShell() : null;
   const firstScreen = boardDocument ?? inboxDocument;
-  const deferUnusedBoardFonts = boardDocument?.flags.values[HTPR_7016_PHONE_BOARD_COLD_START_FLAG] === true &&
+  const deferUnusedBoardFonts = boardDocument &&
     (boardDocument.display as BoardDisplay).isMobile &&
     ["amoled", "graphite", "porcelain"].includes(boardDocument.display.theme);
   const analyticsIsGuest =
