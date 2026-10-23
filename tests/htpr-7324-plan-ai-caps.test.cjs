@@ -23,6 +23,7 @@ let flagCalls = [];
 let prismaCalls = { team: 0, user: 0 };
 let highWaterWrites = 0;
 let projectReads = 0;
+let memberQueries = [];
 let daySpend = 0;
 let monthSpend = 0;
 let demoSpend = 0;
@@ -46,6 +47,7 @@ stub("src/lib/prisma.ts", { default: {
   project: { findFirst: async () => { projectReads++; return { teamId: "project-team" }; } },
   team: { findUnique: async ({ select }) => {
     prismaCalls.team++;
+    if (select?.members) memberQueries.push(select.members);
     if (ownerFailure) throw new Error("owner lookup unavailable");
     return {
       id: "team", googleAccount: { userId: 7324 }, members: [{ userId: 7324 }, { userId: 9 }, { userId: 9 }, { userId: 10 }],
@@ -176,7 +178,7 @@ function mockFetch() {
 }
 
 test.beforeEach(() => {
-  prismaCalls = { team: 0, user: 0 }; highWaterWrites = 0; projectReads = 0;
+  prismaCalls = { team: 0, user: 0 }; highWaterWrites = 0; projectReads = 0; memberQueries = [];
   redis = fakeRedis(); flag = true; ownerFailure = false; identityFailure = false; ownerUid = "owner"; plan = "Pro"; seats = 3;
   teamOverride = {}; flagCalls = []; reports = []; daySpend = 0; monthSpend = 0; demoSpend = 0;
   keyRows = {}; keyReads = []; providerCalls = []; managed.clear();
@@ -406,24 +408,118 @@ test("plan batch admission is false; flag-off managed funding still uses batches
   }
 });
 
-test("BYOK broken key preserves original failure and never uses shared or managed credentials; customer fallback still works", async () => {
+for (const [members, monthlyUsd] of [[3, 7.5], [10, 25]]) {
+  test(`BYOK shared key gets $${monthlyUsd} for ${members} distinct accepted members and no daily cap`, async () => {
+    plan = "BYOK"; seats = 99;
+    teamOverride.members = [{ userId: 7324 }, ...Array.from({ length: members - 1 }, (_, i) => ({ userId: i + 1 })), { userId: 1 }];
+    const teamId = `byok-members-${members}`;
+    const byokPolicy = await policy.resolveTeamAllowancePolicy(teamId, "shared");
+    assert.deepEqual(byokPolicy, { mode: "plan", monthlyUsd, dailyUsd: null, demoGlobal: false });
+    assert.deepEqual(memberQueries, [{ where: { status: "Accepted" }, select: { userId: true } }]);
+    assert.equal(await redis.get(`ai-allowance:${constants.aiAllowancePeriod().key}:${teamId}:seats-high`), String(members));
+    daySpend = 1;
+    const reservation = await reserve({ teamId, policy: byokPolicy, amountUsd: 1 });
+    assert.equal(reservation.scopes.length, 1, "spending more than the Free daily cap uses only the monthly scope");
+    assert.ok(!reservation.scopes[0].committedKey.includes(":day:"));
+    assert.equal(reports.length, 1, "no daily spend report is seeded");
+    await allowance.settlePlanAllowance(reservation, 1);
+    assert.equal((await allowance.teamAllowanceSnapshot(teamId, monthlyUsd, byokPolicy)).usedUsd, 1);
+  });
+}
+
+test("BYOK accepted-member high-water survives decreases, observes increases and resets next UTC month", async () => {
+  plan = "BYOK";
+  const RealDate = global.Date;
+  let now = new RealDate("2026-11-30T23:00:00Z").getTime();
+  global.Date = class extends RealDate {
+    constructor(...args) { super(...(args.length ? args : [now])); }
+    static now() { return now; }
+  };
+  const members = (count) => [{ userId: 7324 }, ...Array.from({ length: count - 1 }, (_, i) => ({ userId: i + 1 }))];
+  try {
+    teamOverride.members = members(10);
+    assert.equal((await policy.resolveTeamAllowancePolicy("byok-member-high-water", "shared")).monthlyUsd, 25);
+    teamOverride.members = members(3); now += 5 * 60 * 1000;
+    assert.equal((await policy.resolveTeamAllowancePolicy("byok-member-high-water", "shared")).monthlyUsd, 25);
+    assert.equal(highWaterWrites, 1);
+    teamOverride.members = members(12); now += 5 * 60 * 1000;
+    assert.equal((await policy.resolveTeamAllowancePolicy("byok-member-high-water", "shared")).monthlyUsd, 30);
+    assert.equal(highWaterWrites, 2);
+    teamOverride.members = members(3);
+    now = new RealDate("2026-12-01T00:01:00Z").getTime();
+    assert.equal((await policy.resolveTeamAllowancePolicy("byok-member-high-water", "shared")).monthlyUsd, 7.5);
+    assert.equal(highWaterWrites, 3);
+  } finally { global.Date = RealDate; }
+});
+
+test("BYOK shared-key call over $25 is refused; the same team's own-key call still works and never counts", async () => {
+  plan = "BYOK"; monthSpend = 25.01;
+  teamOverride.members = [{ userId: 7324 }, ...Array.from({ length: 9 }, (_, i) => ({ userId: i + 1 }))];
+  const teamId = "byok-cap-own-key";
+  const calls = [];
+  const observations = [];
+  const options = load(path.join(root, "src/lib/aiModelOptions.ts"));
+  const providers = moduleWithStubs("src/app/api/ai/_lib/modelProvider.ts", {
+    "@/app/api/ai/_lib/sharedAllowance": allowance,
+    "./planAllowancePolicy": policy,
+    "@/lib/aiAllowancePolicy": constants,
+    "@/lib/aiModelOptions": options,
+    "@/lib/ai/customEndpoint": { isCustomEndpointConfig: () => false },
+    "@/lib/ai/prompts/registry": { identifyPrompt: () => ({}) },
+    "./aiUsage": { logAiUsage: async () => {} },
+    "@/lib/telemetry/aiChatObservability": { recordAiChatTurn: async () => {} },
+    "@/lib/errors/reportError": { reportError: async () => {} },
+    "@vercel/functions": { waitUntil: (observation) => observations.push(observation) },
+    ai: { ...require("ai"), createGateway: ({ apiKey }) => (modelId) => ({
+      specificationVersion: "v4", provider: "gateway", modelId, supportedUrls: {},
+      doGenerate: async () => {
+        calls.push(apiKey);
+        return { content: [{ type: "text", text: "OK" }], finishReason: { unified: "stop" }, usage: { inputTokens: { total: 100 }, outputTokens: { total: 100 } }, warnings: [] };
+      },
+    }) },
+  });
+  const params = { prompt: [], maxOutputTokens: 1, providerOptions: { gateway: { tags: [`team:${teamId}`] } } };
+  const shared = providers.resolveAiModel("openai", "test", process.env.AI_GATEWAY_API_KEY);
+  const byokPolicy = await policy.resolveTeamAllowancePolicy(teamId, "shared");
+  assert.equal(byokPolicy.monthlyUsd, 25);
+  await assert.rejects(shared.doGenerate(params), refusal("month"));
+  assert.deepEqual(calls, [], "shared-key refusal happens before provider inference");
+  const before = await allowance.teamAllowanceSnapshot(teamId, 25, byokPolicy);
+  assert.equal(before.usedUsd, 25.01);
+  const reportCount = reports.length;
+  const flagCount = flagCalls.length;
+  const own = providers.resolveAiModel("openai", "test", "vck_customer_test");
+  assert.equal((await own.doGenerate(params)).content[0].text, "OK");
+  await Promise.all(observations);
+  assert.deepEqual(calls, ["vck_customer_test"]);
+  assert.equal(reports.length, reportCount, "customer-key use makes no allowance spend lookup");
+  assert.equal(flagCalls.length, flagCount, "customer-key use bypasses plan allowance resolution");
+  assert.deepEqual(await allowance.teamAllowanceSnapshot(teamId, 25, byokPolicy), before);
+  for (const set of redis.sets.values()) assert.equal(set.size, 0);
+  await assert.rejects(shared.doGenerate(params), refusal("month"));
+  await Promise.all(observations);
+  assert.deepEqual(calls, ["vck_customer_test"], "customer-key success does not reopen shared-key access");
+});
+
+test("BYOK fallback accepts shared, managed and customer credentials; loader failures preserve the original error", async () => {
   plan = "BYOK";
   const lookup = { trustedTeamId: "byok-team" };
   const original = new Error("customer key rejected");
-  managed.add("vck_managed");
-  for (const credential of [undefined, "vck_shared_test", "vck_managed"]) {
-    await assert.rejects(byok.resolveAiFallbackCredential(lookup, async () => credential, original), (error) => error === original);
+  managed.add("vck_managed_test");
+  for (const credential of [undefined, "vck_shared_test", "vck_managed_test", "sk_customer"]) {
+    assert.equal(await byok.resolveAiFallbackCredential(async () => credential, original), credential);
   }
-  await assert.rejects(byok.resolveAiFallbackCredential(lookup, async () => { throw new Error("fallback resolution failed"); }, original), (error) => error === original);
-  assert.equal(await byok.getTeamGatewayApiKey(lookup), undefined);
+  await assert.rejects(byok.resolveAiFallbackCredential(async () => { throw new Error("fallback resolution failed"); }, original), (error) => error === original);
+  assert.equal(await byok.getTeamGatewayApiKey(lookup), "vck_shared_test");
+  assert.deepEqual(await byok.getTeamGatewayFunding(lookup), { apiKey: "vck_shared_test", source: "shared" });
   assert.ok(!keyReads.includes("managed_gateway"));
   assert.equal(providerCalls.length, 0);
-  assert.equal(await byok.resolveAiFallbackCredential(lookup, async () => "sk_customer", original), "sk_customer");
-  keyRows.gateway = "vck_customer";
-  assert.equal(await byok.getTeamGatewayApiKey(lookup), "vck_customer");
+  keyRows.gateway = "vck_customer_test";
+  assert.equal(await byok.getTeamGatewayApiKey(lookup), "vck_customer_test");
+  assert.deepEqual(await byok.getTeamGatewayFunding(lookup), { apiKey: "vck_customer_test", source: "customer" });
   flag = new Error("flag unavailable"); keyRows = {};
-  assert.equal(await byok.getTeamGatewayApiKey(lookup), undefined);
-  await assert.rejects(byok.resolveAiFallbackCredential(lookup, async () => "vck_shared_test", original), (error) => error === original);
+  assert.equal(await byok.getTeamGatewayApiKey(lookup), "vck_shared_test");
+  assert.equal(await byok.resolveAiFallbackCredential(async () => "vck_shared_test", original), "vck_shared_test");
 });
 
 test("fallback credential lookup failures never escape with credential-bearing diagnostics", async () => {
@@ -432,30 +528,31 @@ test("fallback credential lookup failures never escape with credential-bearing d
     const original = new Error("customer model unavailable");
     const sensitiveValue = require("node:crypto").randomUUID();
     const sensitiveFailure = Object.assign(new Error(`credential lookup failed: ${sensitiveValue}`), { apiKey: sensitiveValue });
-    await assert.rejects(byok.resolveAiFallbackCredential({ trustedTeamId: `lookup-failure-${enabled}` }, async () => {
+    await assert.rejects(byok.resolveAiFallbackCredential(async () => {
       throw sensitiveFailure;
     }, original), (error) => error === original && !("apiKey" in error) && !error.message.includes(sensitiveValue));
   }
 });
 
-test("broken BYOK automatic model call rethrows the actual customer error without platform inference", async () => {
+test("broken BYOK automatic model call falls back to the shared key; a customer fallback still works", async () => {
   plan = "BYOK";
   const lookup = { trustedTeamId: "byok-model-team" };
   const model = byok.resolveAutomaticAiModel("claude", "claude-haiku-5-5", "sk_broken_customer", { haiku55Enabled: true, lookup, feature: "summary" });
-  await assert.rejects(model.doGenerate({ prompt: [] }), (error) => error === customerFailure);
-  assert.deepEqual(providerCalls.map((call) => call.credential), ["sk_broken_customer"]);
+  assert.equal((await model.doGenerate({ prompt: [] })).content[0].text, "OK");
+  assert.deepEqual(providerCalls.map((call) => call.credential), ["sk_broken_customer", process.env.AI_GATEWAY_API_KEY]);
+  assert.deepEqual(providerCalls.map((call) => call.provider), ["claude", "openai"]);
   assert.ok(!keyReads.includes("managed_gateway"));
   keyRows.openai = "sk_customer_fallback";
   const working = byok.resolveAutomaticAiModel("claude", "claude-haiku-5-5", "sk_broken_customer", { haiku55Enabled: true, lookup, feature: "summary" });
   assert.equal((await working.doGenerate({ prompt: [] })).content[0].text, "OK");
-  assert.deepEqual(providerCalls.map((call) => call.credential), ["sk_broken_customer", "sk_broken_customer", "sk_customer_fallback"]);
+  assert.deepEqual(providerCalls.map((call) => call.credential), ["sk_broken_customer", process.env.AI_GATEWAY_API_KEY, "sk_broken_customer", "sk_customer_fallback"]);
 });
 
 test("flag-off retains BYOK shared-key fallback and the legacy $1/$40 and 10x policies", async () => {
   flag = false; plan = "BYOK";
   assert.equal(await byok.getTeamGatewayApiKey({ trustedTeamId: "legacy-byok" }), "vck_shared_test");
   const original = new Error("key rejected");
-  assert.equal(await byok.resolveAiFallbackCredential({ trustedTeamId: "legacy-byok" }, async () => "vck_shared_test", original), "vck_shared_test");
+  assert.equal(await byok.resolveAiFallbackCredential(async () => "vck_shared_test", original), "vck_shared_test");
   assert.equal((await policy.resolveTeamAllowancePolicy("legacy-free", "shared")).monthlyUsd, 1);
   assert.equal((await policy.resolveTeamAllowancePolicy("legacy-paid", "managed")).monthlyUsd, 40);
   assert.equal(allowance.SYSTEM_AI_ALLOWANCE_MULTIPLIER, 10);
@@ -469,7 +566,7 @@ function moduleWithStubs(file, stubs) {
   require("node:vm").runInNewContext(code, {
     module: loaded, exports: loaded.exports,
     require: (id) => id in stubs ? stubs[id] : id.startsWith("@/") || id.startsWith("./") ? {} : require(id),
-    Error, Response, Request, URL, URLSearchParams, AbortController, console, Date, setTimeout, clearTimeout, process,
+    Error, Response, Request, URL, URLSearchParams, AbortController, console, Date, performance, setTimeout, clearTimeout, process,
     fetch: (...args) => global.fetch(...args),
   }, { filename });
   return loaded.exports;
@@ -544,26 +641,26 @@ test("personal shares use the plan cap and include background spend rather than 
   ]);
 });
 
-test("BYOK title without a customer credential skips AI; a customer credential still generates a title", async () => {
+test("BYOK titles use shared or customer credentials", async () => {
   plan = "BYOK";
-  let calls = 0;
+  const credentials = [];
   const titles = moduleWithStubs("src/lib/ai/chatStream/title.ts", {
     "@/app/api/ai/_lib/byokKeys": {
       resolveAiFallbackCredential: byok.resolveAiFallbackCredential,
       getAiDefaultModelContext: async () => ({ haiku55Enabled: false, plan: "BYOK" }),
     },
     "@/app/api/ai/_lib/modelProvider": {
-      isAiGatewayEnabled: () => true, resolveAiModel: () => { calls++; return {}; },
+      isAiGatewayEnabled: () => true, resolveAiModel: (_provider, _model, credential) => { credentials.push(credential); return {}; },
       providerOptionsForAiModel: () => ({}),
     },
     "@/lib/aiModelOptions": { defaultModelKeyFor: () => "gpt-6-luna" },
     "@/lib/ai/prompts/registry": { renderPrompt: () => "title instructions" },
-    ai: { generateText: async () => ({ text: "Customer funded title" }) },
+    ai: { generateText: async () => ({ text: "Generated title" }) },
   });
-  assert.equal(await titles.generateConversationTitle("Content", "Local fallback", "vck_shared_test", { teamId: "title-team" }), "Local fallback");
-  assert.equal(calls, 0);
-  assert.equal(await titles.generateConversationTitle("Content", "Local fallback", "sk_customer", { teamId: "title-team" }), "Customer funded title");
-  assert.equal(calls, 1);
+  assert.equal(await titles.generateConversationTitle("Content", "Local fallback", "vck_shared_test", { teamId: "title-team" }), "Generated title");
+  assert.deepEqual(credentials, ["vck_shared_test"]);
+  assert.equal(await titles.generateConversationTitle("Content", "Local fallback", "sk_customer", { teamId: "title-team" }), "Generated title");
+  assert.deepEqual(credentials, ["vck_shared_test", "sk_customer"]);
 });
 
 async function realRedis(t) {
@@ -642,8 +739,15 @@ test("real Redis Lua: concurrent lanes, all scopes, seeding, refusal atomicity, 
   const broken = byok.resolveAutomaticAiModel("claude", "claude-haiku-5-5", "sk_broken_customer", {
     haiku55Enabled: true, lookup: { trustedTeamId: "real-byok" }, feature: "summary",
   });
-  await assert.rejects(broken.doGenerate({ prompt: [] }), (error) => error === customerFailure);
-  assert.deepEqual(providerCalls.map((call) => call.credential), ["sk_broken_customer"]);
+  assert.equal((await broken.doGenerate({ prompt: [] })).content[0].text, "OK");
+  assert.deepEqual(providerCalls.map((call) => call.credential), ["sk_broken_customer", process.env.AI_GATEWAY_API_KEY]);
+  const byokPolicy = await policy.resolveTeamAllowancePolicy("real-byok", "shared");
+  assert.deepEqual(byokPolicy, { mode: "plan", monthlyUsd: 7.5, dailyUsd: null, demoGlobal: false });
+  const byokReservation = await reserve({ teamId: "real-byok", policy: byokPolicy, amountUsd: 6 });
+  assert.equal(byokReservation.scopes.length, 1);
+  await assert.rejects(reserve({ teamId: "real-byok", policy: byokPolicy, amountUsd: 0.5, lane: "system" }), refusal("month"));
+  await allowance.settlePlanAllowance(byokReservation, 6);
+  assert.equal((await allowance.teamAllowanceSnapshot("real-byok", 7.5, byokPolicy)).usedUsd, 7.1);
 
   flag = false; plan = "Pro";
   for (const [funding, cap] of [["shared", 1], ["managed", 40]]) {
@@ -734,10 +838,17 @@ test("owner uid stays cached with its id for five minutes, then refreshes", asyn
   } finally { Date.now = realNow; }
 });
 
-test("fallback resolves project/team only once and flag-off behavior stays permissive", async () => {
-  plan = "BYOK"; flag = false;
-  assert.equal(await byok.resolveAiFallbackCredential({ projectId: 7324, userId: 7324 }, async () => "vck_shared_test", new Error("customer failed")), "vck_shared_test");
-  assert.equal(projectReads, 1);
+test("fallback runs its loader exactly once in either flag mode", async () => {
+  plan = "BYOK";
+  for (const enabled of [true, false]) {
+    flag = enabled;
+    let loads = 0;
+    assert.equal(await byok.resolveAiFallbackCredential(async () => {
+      loads++;
+      return byok.getTeamGatewayApiKey({ projectId: 7324, userId: 7324 });
+    }, new Error("customer failed")), "vck_shared_test");
+    assert.equal(loads, 1);
+  }
 });
 
 for (const sweeper of ["refusal", "other-team", "demo-only", "legacy"]) {
@@ -771,7 +882,7 @@ for (const sweeper of ["refusal", "other-team", "demo-only", "legacy"]) {
 for (const entry of ["editor", "chat"]) {
   for (const missing of ["custom", "openrouter"]) {
     for (const credential of ["sk_customer_default", "vck_shared_test", undefined]) {
-      test(`${entry} missing ${missing} allows only customer-funded default (${credential ? credential.startsWith("sk_") ? "customer" : "platform" : "missing"})`, async () => {
+      test(`${entry} missing ${missing} uses shared/customer defaults and refuses a missing default credential (${credential ? credential.startsWith("sk_") ? "customer" : "platform" : "missing"})`, async () => {
         plan = "BYOK";
         const options = load(path.join(root, "src/lib/aiModelOptions.ts"));
         const fallback = options.getAiModelOptionById("gpt-6-luna");
@@ -781,7 +892,12 @@ for (const entry of ["editor", "chat"]) {
         const providers = {
           isCustomEndpointConfig: (value) => !!value && typeof value === "object",
           isVercelAiGatewayKey: (value) => typeof value === "string" && value.startsWith("vck_"),
-          resolveAiModel: (_provider, _model, key) => { selectedCredentials.push(key); return {}; },
+          resolveAiModel: (provider, model, key) => {
+            if (key === undefined) return moduleWithStubs("src/app/api/ai/_lib/modelProvider.ts", {
+              "@/lib/ai/customEndpoint": { isCustomEndpointConfig: () => false },
+            }).resolveAiModel(provider, model, key);
+            selectedCredentials.push(key); return {};
+          },
           aiUsageProviderForCredential: () => "test", providerOptionsForAiModel: () => ({}),
           configureAiModelUsage() {}, inheritAiModelUsage() {},
         };
@@ -805,8 +921,8 @@ for (const entry of ["editor", "chat"]) {
         if (entry === "editor") {
           const editor = moduleWithStubs("src/app/api/ai/_lib/editorAi.ts", stubs);
           const call = editor.selectTaskWriterModel({ sourceSelected: missing, modelSelected: missing, modelOptionId: missing === "custom" ? "custom" : undefined, teamContext: { teamId: lookup.trustedTeamId, settings: {} } });
-          if (credential === "sk_customer_default") result = await call;
-          else await assert.rejects(call, new RegExp(`${missing === "custom" ? "custom AI" : "OpenRouter"} key is unavailable`));
+          if (credential !== undefined) result = await call;
+          else await assert.rejects(call, /dedicated team AI Gateway key or direct BYOK key is required/);
         } else {
           const models = moduleWithStubs("src/lib/ai/chatStream/models.ts", {
             ...stubs, "@/lib/ai/tools/constants": { OPENAI_MODELS: new Set([fallback.model]), DEFAULT_MODEL: fallback.model },
@@ -826,12 +942,12 @@ for (const entry of ["editor", "chat"]) {
             "@/lib/ai/chatStream/errors": { reportHandledChatError: async () => {}, errorMessage: (error) => error.message, createSseErrorResponse: (message) => Response.json({ error: message }, { status: 400 }) },
           });
           result = await chat.loadTurnModel({ provider: missing, model: missing, modelOptionId: missing === "custom" ? "custom" : undefined, aiFeature: "aiChat" }, { id: 7324 });
-          if (credential !== "sk_customer_default") {
+          if (credential === undefined) {
             assert.equal(result.status, 400);
-            assert.match((await result.json()).error, new RegExp(`${missing === "custom" ? "custom AI" : "OpenRouter"} key is unavailable`));
+            assert.match((await result.json()).error, /dedicated team AI Gateway key or direct BYOK key is required/);
           }
         }
-        if (credential === "sk_customer_default") {
+        if (credential !== undefined) {
           assert.equal((result.selected ?? result).provider, "openai");
           assert.deepEqual(selectedCredentials, [credential]);
         } else assert.deepEqual(selectedCredentials, []);

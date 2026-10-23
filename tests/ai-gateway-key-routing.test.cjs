@@ -1591,7 +1591,7 @@ test("editor models retry unavailable Luna once before output, but not after out
   const usageContexts = [];
   stubModule("src/utils/controllers/projects/getAllIncludes.ts", {});
   stubModule("src/app/api/ai/_lib/byokKeys.ts", {
-    resolveAiFallbackCredential: async (_lookup, load) => load(),
+    resolveAiFallbackCredential: async (load) => load(),
     getByokOrTeamGatewayApiKeyForModelOption: async () => "vck_test",
   });
   stubModule("src/app/api/ai/_lib/providerGate.ts", {

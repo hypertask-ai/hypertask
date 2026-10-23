@@ -351,7 +351,7 @@ test("server title default sites retain Free Luna and route paid or compatible B
           "@/app/api/ai/_lib/byokKeys": {
             getAiDefaultModelContext: async () => ({ haiku55Enabled, plan, hasByok: plan !== "Free" && Boolean(provider), byok: haiku55Enabled && plan !== "Free" && provider ? { provider, credential: "fixture-byok" } : undefined }),
             getByokOrTeamGatewayApiKeyForProvider: async () => "fixture-team",
-            resolveAiFallbackCredential: async (_lookup, load) => load(),
+            resolveAiFallbackCredential: async (load) => load(),
             resolveAutomaticAiModel: (source, model, credential) => { requests.push({ source, model, credential }); return {}; },
           },
           "@/app/api/ai/_lib/modelProvider": {
