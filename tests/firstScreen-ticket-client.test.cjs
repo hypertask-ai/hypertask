@@ -1,10 +1,8 @@
 const watchdog = setTimeout(() => {
-  console.error('[htpr-7627 watchdog] still alive after 5 minutes', __filename, JSON.stringify(process.getActiveResourcesInfo()),
-    process._getActiveHandles().map(handle => handle?.constructor?.name));
+  console.error('Ticket client test still running after 5 minutes; open resources:', JSON.stringify(process.getActiveResourcesInfo()));
   process.exit(1);
 }, 5 * 60_000);
 watchdog.unref();
-console.error('[htpr-7627 watchdog] start', __filename);
 const assert = require('node:assert/strict');
 const test = require('node:test');
 const fs = require('node:fs');
@@ -22,7 +20,7 @@ function load(relative, mocks = {}) {
     compilerOptions: { jsx: ts.JsxEmit.ReactJSX, module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 },
   }).outputText;
   const exports = {};
-  new Function('require', 'exports', compiled)(name => name in mocks ? mocks[name] : require(name), exports);
+  new Function('require', 'exports', compiled)(name => name in mocks ? { __esModule: true, ...mocks[name] } : require(name), exports);
   return exports;
 }
 const hydration = load('src/hooks/General/useHydrated.ts');
@@ -90,8 +88,6 @@ const tree = (FlagProvider, shellSeed = seed, accountId = 985) => React.createEl
 const expected = (accepted) => ({ flag: accepted, loaded: accepted, isMobile: accepted,
   rail: accepted ? false : null, expanded: accepted ? false : null, width: accepted ? 517 : null, user: null, project: null, surface: null });
 function clearClients() { for (const client of clients.splice(0)) client.clear(); }
-console.error('[htpr-7627 watchdog] modules loaded');
-test.after(() => console.error('[htpr-7627 watchdog] tests finished', JSON.stringify(process.getActiveResourcesInfo())));
 
 test('both real flag readers seed flags/mobile/preferences but never route data, and reject another account', { timeout: 60_000 }, () => {
   try {

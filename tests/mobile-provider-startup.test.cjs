@@ -19,7 +19,7 @@ test("request device flags seed the client providers before hydration", () => {
   assert.match(providers, /<DeviceProvider initialIsApple=\{initialIsApple\}>/);
   assert.match(
     providers,
-    /<MobileViewProvider initialIsMobile=\{initialIsMobile\}>/,
+    /<MobileViewProvider initialIsMobile=\{shell\?\.display\.isMobile \?\? initialIsMobile\}>/,
   );
 
   assert.doesNotMatch(device, /isMobileDevice|useLayoutEffect/);
