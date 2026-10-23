@@ -33,7 +33,7 @@ function sidebar(options = {}) {
   let preferences = { boardSortMode: server, playGifs: false };
   let updatedAt = loaded ? 1 : 0;
   const effects = [], refs = [], dependencies = [];
-  const posts = [], reads = [], paints = [];
+  const posts = [], reads = [], paints = [], cancels = [];
   let index = 0;
   const atom = {};
   const setMode = (next) => {
@@ -41,7 +41,7 @@ function sidebar(options = {}) {
     storage.set("recoil-persist", JSON.stringify({ boardSortModeAtom: mode }));
   };
   const queryClient = {
-    cancelQueries: async () => {},
+    cancelQueries: async (filters) => { cancels.push(filters.queryKey); },
     setQueryData: (key, update) => {
       assert.deepEqual(key, preferenceKey);
       preferences = update(preferences);
@@ -84,7 +84,7 @@ function sidebar(options = {}) {
     },
   });
   return {
-    posts, reads, paints, storage,
+    posts, reads, paints, cancels, storage,
     render() {
       index = 0;
       const value = useBoardSortMode();
@@ -134,8 +134,21 @@ test("an account with no saved choice keeps this browser's Recent and saves it o
     await tick();
     view.render();
     assert.equal(view.mode, "lastUsed");
-    assert.deepEqual(view.posts, [{ boardSortMode: "lastUsed" }]);
+    assert.deepEqual(view.posts, [{ boardSortModeIfUnset: "lastUsed" }]);
+    assert.deepEqual(view.cancels, [], "copying this browser's choice must not overwrite the account cache");
   }
+});
+
+test("choosing before account preferences load sends the choice without touching the shared preferences fetch", async () => {
+  const view = sidebar({ server: null, loaded: false });
+  const [, change] = view.render();
+  change("lastUsed");
+  await tick();
+  assert.equal(view.mode, "lastUsed");
+  assert.deepEqual(view.posts, [{ boardSortMode: "lastUsed" }]);
+  assert.deepEqual(view.cancels, []);
+  assert.equal(view.preferences.boardSortMode, null);
+  assert.equal(view.preferences.playGifs, false);
 });
 
 test("users with no saved choice anywhere default to Teams without a write", async () => {
@@ -188,8 +201,9 @@ test("flag off leaves local Recent untouched, disables preference reads and make
   assert.equal(view.preferences.boardSortMode, "teams");
 });
 
-function preferencesApi(enabled = true) {
-  const writes = [], invalidations = [];
+function preferencesApi(enabled = true, stored = null) {
+  const writes = [], invalidations = [], conditionalWrites = [];
+  const saved = { boardSortMode: stored };
   const route = load("src/app/api/users/preferences/route.ts", {
     "@/lib/ai/htpr7038ModelReset": { ensureHtpr7038ModelReset: async () => "disabled" },
     "@/lib/mcp/readJsonBody": {},
@@ -201,7 +215,15 @@ function preferencesApi(enabled = true) {
     } },
     "next/server": { NextResponse: { json: (body, options) => ({ body, status: options?.status ?? 200 }) } },
     "next/headers": { cookies: async () => ({ get: () => ({ value: '{"id":7}' }) }) },
-    "@/lib/prisma": { __esModule: true, default: { userSetting: { update: async (args) => { writes.push(args); return args.data; } } } },
+    "@/lib/prisma": { __esModule: true, default: { userSetting: {
+      update: async (args) => { writes.push(args); Object.assign(saved, args.data); return args.data; },
+      updateMany: async (args) => {
+        conditionalWrites.push(args);
+        const matches = Object.entries(args.where).every(([key, value]) => key === "userId" ? value === 7 : saved[key] === value);
+        if (matches) Object.assign(saved, args.data);
+        return { count: matches ? 1 : 0 };
+      },
+    } } },
     "@prisma/client": {},
     "@/utils/controllers/users/fetch_preferences": {
       invalidateUserPreferenceCache: async (id) => invalidations.push(id),
@@ -215,7 +237,7 @@ function preferencesApi(enabled = true) {
     "@/lib/flags/definitions/htpr-7649-sidebar-view-saved": flag,
     "@/models/Calendar/model": {},
   });
-  return { writes, invalidations, post: (body) => route.POST({ json: async () => body }) };
+  return { writes, invalidations, conditionalWrites, saved, post: (body) => route.POST({ json: async () => body }) };
 }
 
 test("preferences API accepts both choices and existing preferences and invalidates the account cache", async () => {
@@ -246,6 +268,40 @@ test("server flag off does not save boardSortMode but still saves existing prefe
   const response = await api.post({ boardSortMode: "lastUsed", playGifs: false });
   assert.equal(response.status, 200);
   assert.deepEqual(api.writes[0].data, { playGifs: false });
+});
+
+test("copying a browser's choice never overwrites a choice already saved on the account", async () => {
+  const api = preferencesApi(true, "teams");
+  const response = await api.post({ boardSortModeIfUnset: "lastUsed" });
+  assert.equal(response.status, 200);
+  assert.deepEqual(api.conditionalWrites[0].where, { userId: 7, boardSortMode: null });
+  assert.equal(api.saved.boardSortMode, "teams");
+  assert.equal(Object.hasOwn(api.writes[0].data, "boardSortMode"), false);
+  assert.deepEqual(api.invalidations, [7]);
+});
+
+test("copying a browser's choice fills an empty account and explicit choices still overwrite", async () => {
+  const empty = preferencesApi(true, null);
+  await empty.post({ boardSortModeIfUnset: "lastUsed" });
+  assert.equal(empty.saved.boardSortMode, "lastUsed");
+  const chosen = preferencesApi(true, "lastUsed");
+  await chosen.post({ boardSortMode: "teams" });
+  assert.equal(chosen.saved.boardSortMode, "teams");
+  assert.deepEqual(chosen.conditionalWrites, []);
+});
+
+test("copy requests are validated and skipped with the flag off", async () => {
+  for (const boardSortModeIfUnset of ["recent", null, 1]) {
+    const api = preferencesApi();
+    const response = await api.post({ boardSortModeIfUnset });
+    assert.equal(response.status, 400);
+    assert.deepEqual(api.conditionalWrites, []);
+    assert.deepEqual(api.writes, []);
+  }
+  const off = preferencesApi(false, null);
+  assert.equal((await off.post({ boardSortModeIfUnset: "lastUsed" })).status, 200);
+  assert.deepEqual(off.conditionalWrites, []);
+  assert.equal(off.saved.boardSortMode, null);
 });
 
 test("shared preferences controller exposes the choice to bootstrap and GET", async () => {

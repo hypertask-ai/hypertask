@@ -15,6 +15,10 @@ import {
   type IUserPreferences,
 } from "./useGetUserPreferences";
 
+type BoardSortModeSave =
+  | { boardSortMode: BoardSortMode }
+  | { boardSortModeIfUnset: BoardSortMode };
+
 export const useBoardSortMode = () => {
   const enabled = useFlag(HTPR_7649_SIDEBAR_VIEW_SAVED_FLAG);
   const [boardSortMode, setBoardSortMode] = useRecoilState(boardSortModeAtom);
@@ -29,22 +33,24 @@ export const useBoardSortMode = () => {
   const copiedLocalChoice = useRef(false);
   const serverMode = preferences.boardSortMode;
 
-  const saveBoardSortMode = (mode: BoardSortMode) => {
+  const saveBoardSortMode = (save: BoardSortModeSave) => {
     pendingSaves.current += 1;
-    void queryClient.cancelQueries(
-      { queryKey: USER_PREFERENCES_QUERY_KEY },
-      { revert: false },
-    );
-    queryClient.setQueryData<IUserPreferences>(
-      USER_PREFERENCES_QUERY_KEY,
-      (current) => ({
-        ...(current ?? preferences),
-        boardSortMode: mode,
-      }),
-    );
+    if ("boardSortMode" in save && dataUpdatedAt) {
+      void queryClient.cancelQueries(
+        { queryKey: USER_PREFERENCES_QUERY_KEY },
+        { revert: false },
+      );
+      queryClient.setQueryData<IUserPreferences>(
+        USER_PREFERENCES_QUERY_KEY,
+        (current) => ({
+          ...(current ?? preferences),
+          boardSortMode: save.boardSortMode,
+        }),
+      );
+    }
     saveQueue.current = saveQueue.current
       .catch(() => {})
-      .then(() => axios.post("/api/users/preferences", { boardSortMode: mode }))
+      .then(() => axios.post("/api/users/preferences", save))
       .catch((error) => console.error("Could not save sidebar view", error))
       .finally(() => {
         pendingSaves.current -= 1;
@@ -62,13 +68,13 @@ export const useBoardSortMode = () => {
       setBoardSortMode((current) => (current === serverMode ? current : serverMode));
     } else if (boardSortMode !== "teams" && !copiedLocalChoice.current) {
       copiedLocalChoice.current = true;
-      saveBoardSortMode(boardSortMode);
+      saveBoardSortMode({ boardSortModeIfUnset: boardSortMode });
     }
   }, [enabled, dataUpdatedAt, serverMode, boardSortMode, setBoardSortMode]);
 
   const changeBoardSortMode = (mode: BoardSortMode) => {
     setBoardSortMode(mode);
-    if (enabled) saveBoardSortMode(mode);
+    if (enabled) saveBoardSortMode({ boardSortMode: mode });
   };
 
   return [boardSortMode, changeBoardSortMode] as const;

@@ -250,6 +250,18 @@ export async function POST(request: NextRequest) {
         data.boardSortMode = body.boardSortMode;
       }
     }
+    let boardSortModeIfUnset: BoardSortMode | undefined;
+    if (body.boardSortModeIfUnset !== undefined) {
+      if (!isBoardSortMode(body.boardSortModeIfUnset)) {
+        return NextResponse.json(
+          { success: false, error: "Invalid board sort mode" },
+          { status: 400 },
+        );
+      }
+      if (await isFeatureEnabled(HTPR_7649_SIDEBAR_VIEW_SAVED_FLAG, user.id)) {
+        boardSortModeIfUnset = body.boardSortModeIfUnset;
+      }
+    }
     if (body.allTasksDateRange !== undefined) {
       if (!isAllTasksDateRange(body.allTasksDateRange)) {
         return NextResponse.json(
@@ -526,6 +538,12 @@ export async function POST(request: NextRequest) {
       }
       throw new Error("Unable to save calendar views");
     };
+    if (boardSortModeIfUnset) {
+      await prisma.userSetting.updateMany({
+        where: { userId: user.id, boardSortMode: null },
+        data: { boardSortMode: boardSortModeIfUnset },
+      });
+    }
     const result = calendarViewsOperation
       ? await updateWithCalendarOperation()
       : await prisma.userSetting.update({
