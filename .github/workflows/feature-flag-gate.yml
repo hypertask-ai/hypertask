@@ -175,7 +175,7 @@ jobs:
           fi
 
           if [ "$result" -eq 2 ]; then gh_api_failed=2; fi
-          if ! gh_api --paginate --slurp "repos/$REPO/pulls?state=open&base=production&per_page=100" >"$fresh_heads_json" ||
+          if ! GH_API_NO_WAIT=1 gh_api --paginate --slurp "repos/$REPO/pulls?state=open&base=production&per_page=100" >"$fresh_heads_json" ||
              ! fresh_head_pr_count=$(jq -er --arg sha "$head_sha" '[flatten[] | select(.head.sha == $sha)] | length' "$fresh_heads_json"); then
             echo "::error::Cannot re-check whether the head commit is shared before publishing its result."
             publish_error_status "feature-flag-gate could not refresh pull-request heads" ||
@@ -186,7 +186,7 @@ jobs:
             echo "This head commit is shared by multiple open production pull requests; use a unique head commit." >"$reason_file"
             result=1
           fi
-          if ! gh_api "repos/$REPO/pulls/$PR_NUMBER" >"$current_json"; then
+          if ! GH_API_NO_WAIT=1 gh_api "repos/$REPO/pulls/$PR_NUMBER" >"$current_json"; then
             echo "::error::Cannot re-read pull request #$PR_NUMBER before publishing its result."
             publish_error_status "feature-flag-gate could not refresh this pull request" ||
               echo "::error::Cannot replace the pending feature-flag-gate status."
@@ -431,7 +431,7 @@ jobs:
             fi
 
             if [ "$result" -eq 2 ]; then failures=$((failures + 1)); fi
-            if ! gh_api --paginate --slurp "repos/$REPO/pulls?state=open&base=production&per_page=100" >"$fresh_heads_json" ||
+            if ! GH_API_NO_WAIT=1 gh_api --paginate --slurp "repos/$REPO/pulls?state=open&base=production&per_page=100" >"$fresh_heads_json" ||
                ! fresh_head_pr_count=$(jq -er --arg sha "$head_sha" '[flatten[] | select(.head.sha == $sha)] | length' "$fresh_heads_json"); then
               echo "::error::Cannot re-check whether pull request #$number shares its head commit."
               publish_reconciliation_error "$head_sha" "$payload" "feature-flag-gate could not refresh pull-request heads" "$statuses_file" ||
@@ -443,7 +443,7 @@ jobs:
               echo "This head commit is shared by multiple open production pull requests; use a unique head commit." >"$reason_file"
               result=1
             fi
-            gh_api "repos/$REPO/pulls/$number" >"$gate_tmp/current.json" || {
+            GH_API_NO_WAIT=1 gh_api "repos/$REPO/pulls/$number" >"$gate_tmp/current.json" || {
               echo "::error::Cannot re-read pull request #$number before publishing its result."
               publish_reconciliation_error "$head_sha" "$payload" "feature-flag-gate could not refresh pull request #$number" "$statuses_file" ||
                 echo "::error::Cannot publish the feature-flag-gate error for #$number."

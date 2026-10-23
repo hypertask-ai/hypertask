@@ -66,6 +66,25 @@ for (const args of [
   }
 }
 
+test('a read after the verdict (GH_API_NO_WAIT=1) skips without sleeping, so no check can go stale', async () => {
+  const { ghApi } = await gate;
+  let calls = 0;
+  await assert.rejects(ghApi(['repos/fixture/repo/pulls/42'], {
+    env: { GH_API_NO_WAIT: '1' },
+    now: () => 1000000,
+    sleep: () => assert.fail('post-verdict reads must not sleep'),
+    exec: () => { calls++; return http(429, 'Retry-After: 5\r\n'); },
+  }), (error) => error.rateLimited);
+  assert.equal(calls, 1);
+});
+
+test('the shell reaches the post-verdict reads with GH_API_NO_WAIT=1', () => {
+  const workflow = require('node:fs').readFileSync(require('node:path').join(__dirname, '../.github/workflows/feature-flag-gate.yml'), 'utf8');
+  assert.equal(workflow.match(/GH_API_NO_WAIT=1 gh_api --paginate --slurp "repos\/\$REPO\/pulls\?state=open/g)?.length, 2);
+  assert.match(workflow, /GH_API_NO_WAIT=1 gh_api "repos\/\$REPO\/pulls\/\$PR_NUMBER" >"\$current_json"/);
+  assert.match(workflow, /GH_API_NO_WAIT=1 gh_api "repos\/\$REPO\/pulls\/\$number"/);
+});
+
 for (const args of [[], ['-X', 'GET'], ['--method', 'GET'], ['-XGET'], ['--method=GET']]) {
   test(`read ${args.join(' ') || 'implicit GET'} still waits and retries`, async () => {
     const { ghApi } = await gate;
