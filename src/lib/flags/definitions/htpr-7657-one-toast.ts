@@ -7,7 +7,7 @@ export default {
   kind: "bugfix",
   defaultMode: "EVERYONE",
   shippedOn: "2026-10-23",
-  description: "Only one toast shows at a time: a newer message replaces the older one, and an undo toast closes any other toast so the two never overlap.",
+  description: "Only one toast shows at a time: a newer message replaces the older one, an undo toast closes any other toast, and a failure message replaces the undo toast so it is never hidden.",
   releaseRisk: {
     risk: "small",
     reason: "Only dismisses toasts that were already on screen behind a newer one or behind an undo toast; no toast content, timing or undo action changes. Off restores stacked toasts.",

@@ -7,20 +7,27 @@ const { createJiti } = require("jiti");
 const root = path.resolve(__dirname, "..");
 const jiti = createJiti(__filename, { fsCache: false });
 const { toastIdsToDismiss } = jiti(path.join(root, "src/lib/toastIdsToDismiss.ts"));
+const undo = { id: "undo", visible: true };
 
 test("an undo toast closes every other visible toast so they never overlap", () => {
   const newestFirst = [{ id: "comment-sent", visible: true }, { id: "older", visible: true }, { id: "leaving", visible: false }];
-  assert.deepEqual(toastIdsToDismiss(newestFirst, true), ["comment-sent", "older"]);
+  assert.deepEqual(toastIdsToDismiss(newestFirst, [undo]), { toasts: ["comment-sent", "older"], undoToasts: [] });
 });
 
 test("without an undo toast only the newest toast stays", () => {
-  assert.deepEqual(toastIdsToDismiss([{ id: "new", visible: true }, { id: "old", visible: true }], false), ["old"]);
+  assert.deepEqual(toastIdsToDismiss([{ id: "new", visible: true }, { id: "old", visible: true }], []), { toasts: ["old"], undoToasts: [] });
 });
 
-test("still allowed: a single toast, or none, is left alone", () => {
-  assert.deepEqual(toastIdsToDismiss([{ id: "only", visible: true }], false), []);
-  assert.deepEqual(toastIdsToDismiss([{ id: "leaving", visible: false }], false), []);
-  assert.deepEqual(toastIdsToDismiss([], true), []);
+test("a failure message is never hidden: it replaces the undo toast and any other toast", () => {
+  const newestFirst = [{ id: "sent", visible: true }, { id: "failed", visible: true, type: "error" }, { id: "older", visible: true }];
+  assert.deepEqual(toastIdsToDismiss(newestFirst, [undo]), { toasts: ["sent", "older"], undoToasts: ["undo"] });
+});
+
+test("still allowed: a single toast, a lone undo toast, or nothing is left alone", () => {
+  assert.deepEqual(toastIdsToDismiss([{ id: "only", visible: true }], []), { toasts: [], undoToasts: [] });
+  assert.deepEqual(toastIdsToDismiss([{ id: "leaving", visible: false }], [undo]), { toasts: [], undoToasts: [] });
+  assert.deepEqual(toastIdsToDismiss([{ id: "failed", visible: true, type: "error" }], []), { toasts: [], undoToasts: [] });
+  assert.deepEqual(toastIdsToDismiss([], [{ id: "undo-leaving", visible: false }]), { toasts: [], undoToasts: [] });
 });
 
 test("the guard runs next to the undo toaster behind the bugfix flag, default Everyone", () => {
@@ -30,5 +37,6 @@ test("the guard runs next to the undo toaster behind the bugfix flag, default Ev
   const toaster = fs.readFileSync(path.join(root, "src/components/undoToast/index.tsx"), "utf8");
   assert.match(toaster, /useFlag\(HTPR_7657_ONE_TOAST_FLAG\)/);
   assert.match(toaster, /useToasterStore\(undefined, SINGLE_UNDO_TOASTER_ID\)/);
+  assert.match(toaster, /toast\.dismiss\(id, SINGLE_UNDO_TOASTER_ID\)/);
   assert.match(toaster, /oneToastAtATime && <KeepOneToastVisible \/>/);
 });

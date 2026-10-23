@@ -35,11 +35,13 @@ export const SingleUndoToaster = ({
 };
 
 const KeepOneToastVisible = () => {
-  const undoToastShowing = useToasterStore(undefined, SINGLE_UNDO_TOASTER_ID).toasts.some((item) => item.visible);
+  const undoToasts = useToasterStore(undefined, SINGLE_UNDO_TOASTER_ID).toasts;
   const { toasts } = useToasterStore();
-  const staleIds = JSON.stringify(toastIdsToDismiss(toasts, undoToastShowing));
+  const staleIds = JSON.stringify(toastIdsToDismiss(toasts, undoToasts));
   useEffect(() => {
-    for (const id of JSON.parse(staleIds) as string[]) toast.dismiss(id);
+    const stale = JSON.parse(staleIds) as ReturnType<typeof toastIdsToDismiss>;
+    for (const id of stale.toasts) toast.dismiss(id);
+    for (const id of stale.undoToasts) toast.dismiss(id, SINGLE_UNDO_TOASTER_ID);
   }, [staleIds]);
   return null;
 };
