@@ -463,6 +463,19 @@
       }
     },
     {
+      "id": "chat.ticket_rows",
+      "title": "Show retrieved tickets as clickable rows in AI Chat",
+      "matches": {
+        "ai_chat": ["^hypertask_show_ticket_rows$"]
+      },
+      "exclusions": {
+        "api": "Rows only display tickets the same chat turn already read through existing task tools; no new data route.",
+        "mcp": "MCP clients render task results themselves; the row layout is an AI Chat presentation step.",
+        "cli": "The CLI prints task lists directly and has no chat message layout.",
+        "hyperai": "HyperAI keeps its own message rendering and does not show AI Chat ticket rows."
+      }
+    },
+    {
       "id": "help.search",
       "title": "Search Hypertask product help",
       "matches": {

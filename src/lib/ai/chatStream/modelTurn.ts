@@ -50,7 +50,7 @@ export async function runModelTurn(state: StreamState, resolvedBody: ChatRequest
   const chatOpensTaskEnabled = await isFeatureEnabled(HTPR_7756_CHAT_OPENS_TASK_FLAG, dbUser.id);
   const bulkScopeConfirmationEnabled = await isFeatureEnabled(HTPR_7755_BULK_PREVIEW_CONFIRMATION_FLAG, dbUser.id);
   const skillDraftsEnabled = await isFeatureEnabled(HTPR_7768_CHAT_SKILL_DRAFTS_FLAG, dbUser.id);
-  const ticketRowsEnabled = await isFeatureEnabled(HTPR_7683_AI_CHAT_TICKET_ROWS_FLAG, dbUser.id);
+  const ticketRowsEnabled = Boolean(body.session_id && body.assistant_message_id) && await isFeatureEnabled(HTPR_7683_AI_CHAT_TICKET_ROWS_FLAG, dbUser.id);
   let ticketGroups: ChatTicketGroupReferences | undefined;
   const instructions = [
     AGENT_SYSTEM_PROMPT,
@@ -90,7 +90,7 @@ export async function runModelTurn(state: StreamState, resolvedBody: ChatRequest
   const toolExecutions: ToolExecution[] = [];
   const taskProgress: string[] = [];
   const streamedContent: string[] = [];
-  const tools = buildTools(
+  const catalogTools = buildTools(
     dbUser,
     resolvedBody,
     (event, data) => {
@@ -133,6 +133,8 @@ export async function runModelTurn(state: StreamState, resolvedBody: ChatRequest
     skillDraftsEnabled,
     ticketRowsEnabled ? { executions: toolExecutions, setGroups: (groups) => { ticketGroups = groups; } } : undefined,
   );
+  const tools = ticketRowsEnabled ? catalogTools
+    : Object.fromEntries(Object.entries(catalogTools).filter(([name]) => name !== "hypertask_show_ticket_rows"));
   if (
     heartbeatExecutionId &&
     body.session_id &&

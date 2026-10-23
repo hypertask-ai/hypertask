@@ -196,9 +196,8 @@ export function buildTools(
     rag_retrieval: createRagRetrievalTool(context).rag_retrieval,
     web_search: createWebSearchTool(context).web_search,
     search_help_docs: createSearchHelpDocsTool(context).search_help_docs,
+    hypertask_show_ticket_rows: createShowTicketRowsTool(ticketRows?.executions ?? [], ticketRows?.setGroups ?? (() => undefined)),
   };
-
-  if (ticketRows) tools.hypertask_show_ticket_rows = createShowTicketRowsTool(ticketRows.executions, ticketRows.setGroups);
 
   Object.seal(tools);
 
