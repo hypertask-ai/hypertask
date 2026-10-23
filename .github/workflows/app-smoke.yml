@@ -12,8 +12,8 @@ on:
 permissions: {}
 
 concurrency:
-  group: ${{ github.event_name == 'push' && 'app-smoke-production-cache' || format('app-smoke-{0}-{1}', github.event.workflow_run.head_repository.full_name, github.event.workflow_run.head_branch) }}
-  cancel-in-progress: true
+  group: ${{ github.event_name == 'push' && 'app-smoke-production-cache' || format('app-smoke-{0}', github.event.workflow_run.head_sha) }}
+  cancel-in-progress: ${{ github.event_name == 'push' }}
 
 jobs:
   warm-dependencies:
@@ -142,6 +142,9 @@ jobs:
     needs: validate
     runs-on: ubuntu-latest
     if: needs.validate.outputs.superseded != 'true'
+    concurrency:
+      group: app-smoke-pr-${{ needs.validate.outputs.head-repository }}-${{ needs.validate.outputs.pr }}
+      cancel-in-progress: true
     timeout-minutes: 15
     permissions:
       contents: read
