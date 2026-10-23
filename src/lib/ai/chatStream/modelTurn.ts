@@ -20,6 +20,7 @@ import { ChatRequest } from "@/lib/ai/chatStream/request";
 import { ToolExecution } from "@/lib/ai/chatStream/types";
 
 import { AGENT_SYSTEM_PROMPT } from "@/lib/ai/chatStream/prompt";
+import { aiPromptCachingEnabled, configureAiModelUsage } from "@/app/api/ai/_lib/modelProvider";
 import { createUserContent } from "@/lib/ai/chatStream/content";
 import { writeToolNames } from "@/lib/ai/tools/metadata";
 import { generateConversationTitle } from "@/lib/ai/chatStream/title";
@@ -55,10 +56,15 @@ export async function runModelTurn(state: StreamState, resolvedBody: ChatRequest
     undefined,
     { projectId: body.default_context?.project_id },
   );
+  configureAiModelUsage(state.selected.model, {
+    initiatingUserId: dbUser.id,
+    trustedChatSessionId: state.trustedChatSessionId,
+  });
+  const promptCachingEnabled = await aiPromptCachingEnabled(state.selected.model);
   const messages: ModelMessage[] = [
     {
       role: "user",
-      content: createUserContent(resolvedBody, dbUser, currentTaskContext),
+      content: createUserContent(resolvedBody, dbUser, currentTaskContext, promptCachingEnabled),
     },
   ];
   const toolExecutions: ToolExecution[] = [];

@@ -10,7 +10,7 @@ import { type ModelMessage, type ToolSet, streamText, stepCountIs, generateText 
 
 import { failHeartbeatExecution } from "@/app/api/ai/_lib/heartbeatExecution";
 
-import { configureAiModelUsage } from "@/app/api/ai/_lib/modelProvider";
+import { configureAiModelUsage, inheritAiModelUsage } from "@/app/api/ai/_lib/modelProvider";
 import { previousModelForFailedStream } from "@/app/api/ai/chat/stream/modelFallback";
 import { hasVisibleCompletion, buildEmptyCompletionSummary } from "@/app/api/ai/chat/stream/bulkTools";
 import { reportHandledChatError, errorMessage, userFacingErrorMessage, userFacingErrorDetails, reportEmptyCompletion } from "@/lib/ai/chatStream/errors";
@@ -166,6 +166,7 @@ export async function generateModelReply(state: StreamState, inputs: { instructi
         : streamModelOption ? { ...streamModelOption, directModel: undefined } : undefined,
       gatewayTags,
     );
+    inheritAiModelUsage(fallback.model, state.selected.model);
     state.selected = {
       ...state.selected,
       ...fallback,
