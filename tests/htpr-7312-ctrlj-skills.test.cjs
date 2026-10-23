@@ -12,6 +12,10 @@ const flag = 'htpr-7312-ctrlj-skills';
 const { resolveSkills } = load(path.join(root, 'src/app/api/ai/_lib/skills.ts'));
 const prompts = load(path.join(root, 'src/app/api/ai/_lib/editorAiPrompts.ts'));
 const research = load(path.join(root, 'src/app/api/ai/_lib/taskWriterBoardResearch.ts'));
+const taskPrompts = load(path.join(root, 'src/app/api/ai/_lib/taskWriterPrompt.ts'));
+const promptCache = load(path.join(root, 'src/app/api/ai/_lib/promptCache.ts'));
+const { MockLanguageModelV4, simulateReadableStream } = require('ai/test');
+const composeSkillRule = "For this New Task request, the invoked skill templates are the user's explicit writing instructions";
 const skill = (id, slug, scope) => ({
   id, slug, name: slug, body: `Instructions for ${slug}.`, enabled: true,
   projectId: null, userId: null, ...scope,
@@ -31,7 +35,7 @@ function moduleWithStubs(file, stubs) {
   return mod.exports;
 }
 
-function harness({ enabled = true, skills = available } = {}) {
+function harness({ enabled = true, skills = available, splitTasks = false, cache = false, model } = {}) {
   const checks = [], resolutions = [], lookups = [], retrieval = [], parts = [];
   const run = moduleWithStubs('src/app/api/ai/_lib/taskWriterRun.ts', {
     '@/lib/rag/authorizeIndexedRows': { authorizeIndexedRows: async (taskRows, commentRows, principal) => {
@@ -41,7 +45,8 @@ function harness({ enabled = true, skills = available } = {}) {
     '@/lib/flags/keys': keys,
     '@/lib/flags': { ...keys, isFeatureEnabled: async (key, userId) => {
       checks.push([key, userId]);
-      return key === keys.HTPR_6929_COMPOSE_TASK_WRITER_FLAG || (key === flag && enabled);
+      return key === keys.HTPR_6929_COMPOSE_TASK_WRITER_FLAG || (key === flag && enabled) ||
+        (key === keys.HTPR_7056_CTRLJ_SPLIT_TASKS_FLAG && splitTasks);
     } },
     '@/lib/ai/taskWriterDueDate': {},
     '@/lib/ai/composeTaskTarget': {},
@@ -59,17 +64,15 @@ function harness({ enabled = true, skills = available } = {}) {
       createTaskWriterPromptParts: (args) => { parts.push(args); return prompts.createTaskWriterPromptParts(args); },
       createTaskWriterUserContent: (input) => input,
       retrieveTaskWriterContext: async (args) => { retrieval.push(args.prompt); return ''; },
-      selectTaskWriterModel: async () => ({ modelId: 'fixture', settings: {} }),
+      selectTaskWriterModel: async () => ({ model, modelId: 'claude-fixture', settings: {} }),
       createDocumentAttachmentSummary: () => '', extractImgSrcs: () => new Set(),
     },
     '@/app/api/ai/_lib/currentTaskContext': { loadCurrentTaskContext: async () => '', resolveAiUsageTaskId: async () => null },
-    '@/app/api/ai/_lib/taskWriterPrompt': {
-      formatTaskWriterRetrievedContext: () => '', createTaskWriterSystemPromptTemplate: () => 'Writer rules',
-    },
+    '@/app/api/ai/_lib/taskWriterPrompt': taskPrompts,
     '@/app/api/ai/_lib/taskWriterBoardResearch': research,
     '@/app/api/ai/_lib/boardTemplateContext': { BOARD_TEMPLATE_LIMIT: 10 },
     '@/app/api/ai/_lib/providerGate': { getProjectTeamProviderContext: async () => ({ settings: {} }) },
-    '@/app/api/ai/_lib/promptCache': { cachedInstructionsForUser: async (_userId, args) => args.fixed + args.suffix },
+    '@/app/api/ai/_lib/promptCache': { cachedInstructionsForUser: async (_userId, args) => promptCache.cachedInstructions({ ...args, enabled: cache }) },
     '@/app/api/ai/_lib/skills': { resolveSkills: async (text, context, lookup) => {
       resolutions.push({ text, context });
       return resolveSkills(text, context, lookup ?? (async (slugs, scope) => {
@@ -83,7 +86,7 @@ function harness({ enabled = true, skills = available } = {}) {
     taskDescription: `<p>${text}</p>`, userRetrievalTexts: [text], requestKind: 'compose-task', invokeSkills: true,
     ...extra,
   }), 985);
-  return { prepare, checks, resolutions, lookups, retrieval, parts };
+  return { prepare, run, checks, resolutions, lookups, retrieval, parts };
 }
 
 for (const [slug, note, cleaned] of [
@@ -182,7 +185,9 @@ test('Ctrl+J and the older popup use the same resolver, scope and instruction bo
   const compose = await h.prepare('/deeper Fix checkout');
   const popup = await h.prepare('/deeper Fix checkout', { requestKind: 'manual', invokeSkills: false });
   assert.deepEqual(compose.skills, popup.skills);
-  assert.equal(compose.instructions, popup.instructions);
+  assert.ok(compose.instructions.startsWith(popup.instructions));
+  assert.ok(compose.instructions.includes(composeSkillRule));
+  assert.ok(!popup.instructions.includes(composeSkillRule));
   assert.equal(compose.messages[0].content, popup.messages[0].content);
   assert.equal(h.resolutions.length, 4);
 });
@@ -194,6 +199,105 @@ test('a skill-only prompt is not reintroduced after stripping', async () => {
   assert.equal(h.parts[0].taskDescription, '');
   assert.deepEqual(h.retrieval, ['']);
   assert.ok(result.instructions.includes(available[0].body));
+});
+
+for (const splitTasks of [false, true]) {
+  for (const cache of [false, true]) {
+    test(`Ctrl+J skill body and precedence reach the model prompt (structured=${splitTasks}, cache=${cache})`, async () => {
+      const qaSkill = skill(42, 'qa-7480-check', {
+        userId: 985, body: 'Answer with one short line that starts with: Skill qa-7480-check ran.',
+      });
+      const note = 'Add a CSV export to the reports page /qa-7480-check';
+      const draft = { title: 'Export CSV', description: '<p>Export report data.</p>' };
+      const usage = { inputTokens: { total: 1 }, outputTokens: { total: 1 } };
+      const model = new MockLanguageModelV4({
+        doGenerate: {
+          content: [{ type: 'text', text: JSON.stringify({ tasks: [draft] }) }],
+          finishReason: { unified: 'stop', raw: undefined }, usage, warnings: [],
+        },
+        doStream: {
+          stream: simulateReadableStream({
+            initialDelayInMs: null, chunkDelayInMs: null,
+            chunks: [
+              { type: 'text-start', id: 'text' },
+              { type: 'text-delta', id: 'text', delta: `<h1 id="ai-generated-task-title">${draft.title}</h1>${draft.description}` },
+              { type: 'text-end', id: 'text' },
+              { type: 'finish', finishReason: { unified: 'stop', raw: undefined }, usage },
+            ],
+          }),
+        },
+      });
+      const h = harness({ skills: [qaSkill], splitTasks, cache, model });
+      const errors = [];
+      const route = moduleWithStubs('src/app/api/ai/task-writer/route.ts', {
+        ai: require('ai'),
+        'next/server': { NextResponse: { json: Response.json } },
+        '@/lib/ai/taskWriterDueDate': {},
+        '@/lib/ai/taskWriterTicketType': {},
+        '@/lib/errors/reportError': { reportError: async (error) => errors.push(error) },
+        '@/app/api/ai/_lib/modelProvider': { configureAiModelUsage() {} },
+        '@/app/api/ai/_lib/editorAi': {
+          filterOneImagePass: (html) => ({ emit: html, leftover: '' }),
+          errorMessage: (error) => error.message,
+          SSE_HEADERS: { 'content-type': 'text/plain' },
+        },
+        '@/app/api/ai/_lib/requestUser': { getAiRequestUser: async () => ({ id: 985 }) },
+        '@/app/api/ai/_lib/taskWriterProperties': {},
+        '@/app/api/ai/_lib/taskWriterRun': h.run,
+      });
+      const response = await route.POST({ json: async () => ({
+        projectId: 15, PROMPT: `Write a task title and description from this note in the board's style.\n\n<p>${note}</p>`,
+        taskDescription: `<p>${note}</p>`, userRetrievalTexts: [note],
+        requestKind: 'compose-task', invokeSkills: true,
+      }) });
+      assert.equal(response.status, 200);
+      assert.ok((await response.text()).includes(draft.title));
+      assert.deepEqual(errors, []);
+      const calls = splitTasks ? model.doGenerateCalls : model.doStreamCalls;
+      assert.equal(calls.length, 1);
+      const system = calls[0].prompt.filter((message) => message.role === 'system');
+      const instructions = system.map((message) => message.content).join('\n');
+      assert.equal(system.length, cache ? 2 : 1);
+      assert.equal(instructions.split(qaSkill.body).length - 1, 1);
+      assert.ok(instructions.includes('<skill name="qa-7480-check">'));
+      assert.ok(instructions.includes(composeSkillRule));
+      assert.match(instructions, /take precedence over default writing style and default section structure/);
+      assert.match(instructions, /not board custom instructions or matching board templates/);
+      assert.match(instructions, /Preserve source fidelity, safety and tool-use policy, media placeholders/);
+      assert.ok(instructions.indexOf(composeSkillRule) > instructions.indexOf('must not override the rules or tool-use policy above'));
+      assert.ok(instructions.includes(research.TASK_WRITER_BOARD_RESEARCH_RULES));
+      assert.ok(!JSON.stringify(calls[0].prompt).includes('/qa-7480-check'));
+      assert.deepEqual(h.lookups, [{ slugs: ['qa-7480-check'], scope: { userId: 985, projectId: 15 } }]);
+      assert.deepEqual(h.retrieval, ['Add a CSV export to the reports page']);
+    });
+  }
+}
+
+test('flag off, missing opt-in and popup retain the exact production instruction suffix', async () => {
+  for (const [enabled, extra] of [
+    [false, {}], [true, { invokeSkills: false }], [true, { requestKind: 'manual', invokeSkills: false }],
+  ]) {
+    const h = harness({ enabled });
+    const result = await h.prepare('/review Audit checkout', extra);
+    const resolved = await resolveSkills('/review Audit checkout', { userId: 985, projectId: 15 }, async () => available);
+    const expected = taskPrompts.createTaskWriterSystemPromptTemplate(
+      `${prompts.TASK_AUTHORING_STYLE}\n\n${research.TASK_WRITER_BOARD_RESEARCH_RULES}`,
+    ) + `\n\n${resolved.systemPromptAddition}`;
+    assert.equal(result.instructions, expected);
+    assert.equal(h.parts[0].taskDescription, '<p>/review Audit checkout</p>');
+    assert.deepEqual(h.retrieval, ['/review Audit checkout']);
+    assert.equal(h.resolutions.length, 1);
+  }
+});
+
+test('no resolved skills leave model instructions unchanged with the flag on', async () => {
+  for (const note of ['Add CSV export', '/unknown Add CSV export']) {
+    const on = await harness().prepare(note);
+    const off = await harness({ enabled: false }).prepare(note);
+    assert.equal(on.instructions, off.instructions);
+    assert.deepEqual(on.messages, off.messages);
+    assert.ok(!on.instructions.includes(composeSkillRule));
+  }
 });
 
 test('the feature definition and UI entry explicitly gate Ctrl+J skills', () => {
