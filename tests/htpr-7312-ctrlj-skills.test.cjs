@@ -269,7 +269,7 @@ for (const splitTasks of [false, true]) {
       assert.ok(instructions.indexOf(composeSkillRule) > instructions.indexOf('must not override the rules or tool-use policy above'));
       assert.ok(instructions.includes(research.TASK_WRITER_BOARD_RESEARCH_RULES));
       assert.ok(!JSON.stringify(calls[0].prompt).includes('/qa-7480-check'));
-      assert.deepEqual(h.lookups, [{ slugs: ['qa-7480-check'], scope: { userId: 985, projectId: 15 } }]);
+      assert.deepEqual(h.lookups, [{ slugs: ['qa-7480-check'], scope: { userId: 985, agentId: undefined, teamScope: undefined, projectId: 15 } }]);
       assert.deepEqual(h.retrieval, ['Add a CSV export to the reports page']);
     });
   }
