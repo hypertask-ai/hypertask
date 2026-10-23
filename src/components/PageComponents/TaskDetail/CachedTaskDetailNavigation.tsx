@@ -3,7 +3,6 @@
 import { usePathname, useRouter } from "next/navigation";
 import { useQueryClient } from "@tanstack/react-query";
 import { Suspense, useEffect, useRef, useState, useSyncExternalStore, type ReactNode } from "react";
-import { HTPR_7008_PHONE_FIRST_PAINT_FLAG } from "@/lib/flags/keys";
 import { flushSync } from "react-dom";
 import type { ITask } from "@/models/model";
 import { useRecoilValue } from "@/lib/state";
@@ -46,7 +45,6 @@ export default function CachedTaskDetailNavigation({ children, accountId }: {
   children: ReactNode;
   accountId: number | null;
 }) {
-  const phoneFirstPaint = useFlag(HTPR_7008_PHONE_FIRST_PAINT_FLAG);
   const backFirstOpen = useFlag(HTPR_6991_BACK_FIRST_OPEN_FLAG);
   const queryClient = useQueryClient();
   const [protectedSource, setProtectedSource] = useState<HTMLDivElement | null>(null);
@@ -135,7 +133,7 @@ export default function CachedTaskDetailNavigation({ children, accountId }: {
       void warmTaskDetail().catch(() => { warming = false; });
     };
     document.addEventListener("pointerdown", warm, { capture: true, passive: true });
-    const deferPhoneWarm = phoneFirstPaint && window.innerWidth < 768 && ["/project", "/inbox"].includes(pathname);
+    const deferPhoneWarm = window.innerWidth < 768 && ["/project", "/inbox"].includes(pathname);
     if (!deferPhoneWarm && !connection?.saveData && !["slow-2g", "2g", "3g"].includes(connection?.effectiveType ?? "")) {
       frame = window.requestAnimationFrame(() => {
         frame = window.requestAnimationFrame(() => {
@@ -150,7 +148,7 @@ export default function CachedTaskDetailNavigation({ children, accountId }: {
       if (idle !== undefined) window.cancelIdleCallback(idle);
       if (timer !== undefined) window.clearTimeout(timer);
     };
-  }, [accountId, currentUser?.id, pathname, phoneFirstPaint]);
+  }, [accountId, currentUser?.id, pathname]);
   const task = location && queryClient.getQueryData<ITask>(
     cachedTaskDetailKey(location.accountId, location.taskId),
   );
