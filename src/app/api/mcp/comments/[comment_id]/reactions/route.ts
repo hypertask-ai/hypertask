@@ -9,6 +9,7 @@ import {
   CommentReactionTarget,
   createCommentReactionHandler,
 } from '@/lib/mcp/comments/reactionHandler';
+import { lockCommentReactions } from '@/lib/mcp/comments/reactionLock';
 import { writeCommentReaction, type ReactionAgent } from '@/lib/mcp/comments/reactionStore';
 import { mapReactionWriteResult } from '@/lib/mcp/comments/reactionResponse';
 import { loadVisibleReactionAgents } from '@/lib/mcp/comments/visibleReactionAgents';
@@ -17,8 +18,6 @@ import { publishAgentWebhookDeliveries } from '@/lib/agentWebhooks/outbox';
 import { broadcastTaskComment } from '@/lib/realtime/server';
 import checkReminderAndCreateNotification from '@/utils/controllers/notifications/creation-service/check-reminder_create-notification';
 import { sendDataNewCommentFCM } from '@/utils/controllers/FCM';
-
-const REACTION_LOCK_CLASS = 1_309_542_515;
 
 async function reactionAgent(agentId: string | null): Promise<ReactionAgent | null> {
   if (!agentId) return null;
@@ -45,9 +44,7 @@ async function setReaction(
   const preparedWebhook = await prepareCommentReactionWebhook(webhookInput);
   let deliveryIds: string[] = [];
   const result = await prisma.$transaction(async (tx) => {
-    await tx.$executeRaw`
-      SELECT pg_advisory_xact_lock(${REACTION_LOCK_CLASS}::int, ${target.commentId}::int)
-    `;
+    await lockCommentReactions(tx, target.commentId);
     const { wasActive, reaction, reactions } = await writeCommentReaction(tx, {
       commentId: target.commentId,
       taskId: target.taskId,

@@ -546,6 +546,22 @@ model FeatureFlagChange {
   @@index([key, createdAt])
 }
 
+model FeatureFlagReview {
+  id                Int             @id @default(autoincrement())
+  key               String
+  mode              FeatureFlagMode
+  reviewerUserId    Int
+  reviewerAgentId   String
+  aiReviewUrl       String          @db.VarChar(300)
+  independentReview String          @db.VarChar(300)
+  liveQaUrl         String          @db.VarChar(300)
+  inboxCyclePassed  Boolean
+  deployedSha       String?
+  createdAt         DateTime        @default(now())
+  usedAt            DateTime?
+  usedByChangeId    Int?
+}
+
 model FigmaConnection {
   userId                Int      @id
   user                  User     @relation(fields: [userId], references: [id], onDelete: Cascade)
