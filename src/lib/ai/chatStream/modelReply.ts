@@ -49,8 +49,8 @@ export async function generateModelReply(state: StreamState, inputs: { instructi
       feature: "chat",
     });
     const result = streamText({
-      experimental_download: downloadWithoutBrotli,
       model: state.selected.model,
+      experimental_download: downloadWithoutBrotli,
       instructions,
       messages,
       tools,
@@ -183,8 +183,8 @@ export async function generateModelReply(state: StreamState, inputs: { instructi
     if (!ranTools && !state.cancelled && !state.providerAbort.signal.aborted) {
       try {
         const retry = await generateText({
-          experimental_download: downloadWithoutBrotli,
           model: state.selected.model,
+          experimental_download: downloadWithoutBrotli,
           instructions,
           messages,
           tools,

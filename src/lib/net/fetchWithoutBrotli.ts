@@ -94,7 +94,7 @@ export async function fetchWithoutBrotli(input: string | URL | Request, init: Fe
     try {
       assertDecodableContentEncoding(responseHeaderList.get("content-encoding"));
     } catch (error) {
-      response.body.destroy();
+      await response.body.dump({ limit: 1 }).catch(() => undefined);
       throw error;
     }
     if (encodings.length > 0) {
