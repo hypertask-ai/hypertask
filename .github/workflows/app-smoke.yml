@@ -142,9 +142,6 @@ jobs:
     needs: validate
     runs-on: ubuntu-latest
     if: needs.validate.outputs.superseded != 'true'
-    concurrency:
-      group: app-smoke-pr-${{ needs.validate.outputs.head-repository }}-${{ needs.validate.outputs.pr }}
-      cancel-in-progress: true
     timeout-minutes: 15
     permissions:
       contents: read
