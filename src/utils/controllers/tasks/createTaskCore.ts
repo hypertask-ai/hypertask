@@ -7,7 +7,7 @@ import generateRank from '@/utils/generateRank';
 import upsertTaskDescription from '@/utils/controllers/description/common-description-create';
 import { PriorityConstants, EstimateConstants } from '@/lib/constants/constants';
 import { autoAssignForSection } from '@/utils/controllers/assignees/autoAssignForSection';
-import { createTaskWithBoardWebhookOutbox } from '@/lib/mcp/webhooks/taskEvents';
+import { createTaskWithBoardWebhookOutbox, createProvisionedTaskWithBoardWebhookOutbox } from '@/lib/mcp/webhooks/taskEvents';
 import type { CreationChannel } from '@/lib/telemetry/savedWork';
 import { publishBoardWebhookDeliveries } from '@/lib/mcp/webhooks/outbox';
 import {
@@ -20,6 +20,8 @@ export interface CreateTaskCoreOptions {
     title: string;
     description: string;
     userId: number;
+    actingUserId?: number;
+    actingAgentId?: string | null;
     agentId?: string | null;
     creationChannel: CreationChannel;
     projectId: number;
@@ -43,6 +45,14 @@ export interface CreateTaskCoreResult {
 }
 
 export async function createTaskCore(options: CreateTaskCoreOptions): Promise<CreateTaskCoreResult> {
+    return createTaskCoreWithWriter(options, createTaskWithBoardWebhookOutbox);
+}
+
+export async function createProvisionedTaskCore(options: CreateTaskCoreOptions): Promise<CreateTaskCoreResult> {
+    return createTaskCoreWithWriter(options, createProvisionedTaskWithBoardWebhookOutbox);
+}
+
+async function createTaskCoreWithWriter(options: CreateTaskCoreOptions, writeTask: typeof createTaskWithBoardWebhookOutbox): Promise<CreateTaskCoreResult> {
     const {
         title,
         description,
@@ -139,8 +149,8 @@ export async function createTaskCore(options: CreateTaskCoreOptions): Promise<Cr
         }
     }
 
-    const taskCreatedActor = { userId, agentId: agentId ?? null };
-    const createdTask = await createTaskWithBoardWebhookOutbox(prisma, taskCreatedActor, async (tx) => {
+    const taskCreatedActor = { userId, agentId: agentId ?? null, actingUserId: options.actingUserId, actingAgentId: options.actingAgentId };
+    const createdTask = await writeTask(prisma, taskCreatedActor, async (tx) => {
         const created = await tx.task.create({
             data: taskData,
             include: {
@@ -178,7 +188,7 @@ export async function createTaskCore(options: CreateTaskCoreOptions): Promise<Cr
                     : null
             }
         };
-    }, creationChannel);
+    }, creationChannel, null, projectId);
     const newTask = createdTask.result;
     const boardWebhookDeliveryIds = createdTask.boardWebhookDeliveryIds;
     await publishBoardWebhookDeliveries(boardWebhookDeliveryIds);
