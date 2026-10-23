@@ -24,7 +24,9 @@ const flag = load(flagFile);
 const preferenceKey = ["user-preferences"];
 const tick = () => new Promise((resolve) => setImmediate(resolve));
 
-function sidebar({ local, server = "lastUsed", loaded = true, enabled = true, post } = {}) {
+function sidebar(options = {}) {
+  const { local, loaded = true, enabled = true, post } = options;
+  const server = Object.hasOwn(options, "server") ? options.server : "lastUsed";
   const storage = new Map();
   if (local) storage.set("recoil-persist", JSON.stringify({ boardSortModeAtom: local }));
   let mode = JSON.parse(storage.get("recoil-persist") ?? "{}").boardSortModeAtom ?? "teams";
@@ -62,7 +64,7 @@ function sidebar({ local, server = "lastUsed", loaded = true, enabled = true, po
         }
       },
     },
-    axios: { default: { post: async (url, body) => {
+    axios: { __esModule: true, default: { post: async (url, body) => {
       assert.equal(url, "/api/users/preferences");
       posts.push(body);
       return post ? post(body) : { status: 200, data: { settings: body } };
@@ -199,7 +201,7 @@ function preferencesApi(enabled = true) {
     } },
     "next/server": { NextResponse: { json: (body, options) => ({ body, status: options?.status ?? 200 }) } },
     "next/headers": { cookies: async () => ({ get: () => ({ value: '{"id":7}' }) }) },
-    "@/lib/prisma": { default: { userSetting: { update: async (args) => { writes.push(args); return args.data; } } } },
+    "@/lib/prisma": { __esModule: true, default: { userSetting: { update: async (args) => { writes.push(args); return args.data; } } } },
     "@prisma/client": {},
     "@/utils/controllers/users/fetch_preferences": {
       invalidateUserPreferenceCache: async (id) => invalidations.push(id),
@@ -249,7 +251,7 @@ test("server flag off does not save boardSortMode but still saves existing prefe
 test("shared preferences controller exposes the choice to bootstrap and GET", async () => {
   const controller = load("src/utils/controllers/users/fetch_preferences.ts", {
     "@/lib/ai/htpr7038ModelReset": { ensureHtpr7038ModelReset: async () => "disabled" },
-    "@/lib/prisma": { default: { userSetting: { findUnique: async ({ where, select }) => {
+    "@/lib/prisma": { __esModule: true, default: { userSetting: { findUnique: async ({ where, select }) => {
       assert.equal(where.userId, 7);
       assert.equal(select.boardSortMode, true);
       return { boardSortMode: "lastUsed" };
@@ -267,7 +269,7 @@ test("preferences query carries the saved choice from bootstrap or its API fallb
     const preferences = { boardSortMode: "lastUsed" };
     const query = load("src/hooks/General/useGetUserPreferences.tsx", {
       "@tanstack/react-query": { useQuery: (options) => options },
-      axios: { default: { get: async (url) => {
+      axios: { __esModule: true, default: { get: async (url) => {
         assert.equal(url, "/api/users/preferences");
         apiReads += 1;
         return { status: 200, data: { settings: preferences } };
