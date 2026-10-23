@@ -59,8 +59,13 @@ function installFetch() {
   };
 }
 
-async function freshTeam(committedMicroUsd) {
+const JOURNAL_OLD_ENOUGH_MS = 26 * 60 * 1000;
+
+async function freshTeam(committedMicroUsd, { journalAgeMs = JOURNAL_OLD_ENOUGH_MS } = {}) {
   await client.flushall();
+  if (journalAgeMs !== null) {
+    await client.set(`${prefix}:recent-settled-since`, String(Date.now() - journalAgeMs));
+  }
   await client.set(`${prefix}:system-split-v1`, String(Date.now()));
   await client.set(`${prefix}:legacy-reconcile-complete`, "1");
   await client.set(committedKey, String(committedMicroUsd));
@@ -201,19 +206,54 @@ async function stopStreamAfter(characters) {
   await reader.cancel("user stopped");
 }
 
-test("a stopped answer counts what was streamed, not the whole reservation", async () => {
+const fullReservation = Math.ceil(((2 * 0.000001 + 16_000 * 0.00005) * 1.5 + 0.01) * 1_000_000);
+
+async function ageJournal(minutes) {
+  const journalKey = `${prefix}:recent-settled`;
+  const members = await client.zrange(journalKey, 0, -1);
+  for (const member of members) {
+    await client.zadd(journalKey, Date.now() - minutes * 60 * 1000, member);
+  }
+}
+
+test("a stopped answer still counts the whole reservation, since hidden reasoning is billed", async () => {
   await freshTeam(0);
   await stopStreamAfter(300);
-  const expected = Math.ceil((2 * 0.000001 + 100 * 0.00005) * 1_000_000);
-  assert.equal(await committed(), expected);
+  assert.equal(await committed(), fullReservation);
   assert.equal(await client.zcard(reservationsKey), 0);
 });
 
-test("with the flag off a stopped answer still counts the whole reservation", async () => {
-  resyncFlagOn = false;
-  await freshTeam(0);
+test("refused: a stopped answer inside the report-delay window keeps its full charge", async () => {
+  await freshTeam(CAP_MICRO_USD - fullReservation);
   await stopStreamAfter(300);
-  assert.ok(await committed() > 1_000_000);
+  gateway.teamSpendUsd = (CAP_MICRO_USD - fullReservation) / 1_000_000;
+  await assert.rejects(answer(), /used its included AI allowance/);
+  assert.equal(await committed(), CAP_MICRO_USD);
+});
+
+test("allowed: a stopped answer's over-count is corrected once it leaves the report-delay window", async () => {
+  await freshTeam(CAP_MICRO_USD - fullReservation);
+  await stopStreamAfter(300);
+  await ageJournal(16);
+  gateway.teamSpendUsd = CAP_USD * 0.5;
+  await answer();
+  const after = await committed();
+  assert.ok(after >= CAP_MICRO_USD * 0.5 && after < CAP_MICRO_USD * 0.5 + 1_000, `committed ${after}`);
+});
+
+test("refused: a journal younger than the report delay never lowers the counter", async () => {
+  await freshTeam(CAP_MICRO_USD, { journalAgeMs: 5 * 60 * 1000 });
+  gateway.teamSpendUsd = CAP_USD * 0.4;
+  await assert.rejects(answer(), /used its included AI allowance/);
+  assert.equal(await committed(), CAP_MICRO_USD);
+});
+
+test("refused: the first resync after switching on only starts the journal and keeps pre-flag spend", async () => {
+  await freshTeam(CAP_MICRO_USD, { journalAgeMs: null });
+  gateway.teamSpendUsd = CAP_USD * 0.4;
+  await assert.rejects(answer(), /used its included AI allowance/);
+  assert.equal(await committed(), CAP_MICRO_USD);
+  assert.ok(Number(await client.get(`${prefix}:recent-settled-since`)) > Date.now() - 60_000);
 });
 
 test("a finished answer still counts its real usage", async () => {
@@ -222,10 +262,10 @@ test("a finished answer still counts its real usage", async () => {
   assert.equal(await committed(), Math.ceil((2 * 0.000001 + 1_000 * 0.00005) * 1_000_000));
 });
 
-test("an expired reservation counts its input only; an old-format one still counts in full", async () => {
-  await freshTeam(0);
-  await client.zadd(reservationsKey, 1, "expired-new|7|900000", 1, "expired-old|400000");
-  await answer();
-  const settledAnswer = Math.ceil((2 * 0.000001 + 0.00005) * 1_000_000);
-  assert.equal(await committed(), 7 + 400_000 + settledAnswer);
+test("with the flag off a refusal never asks the gateway", async () => {
+  resyncFlagOn = false;
+  await freshTeam(CAP_MICRO_USD);
+  await assert.rejects(answer(), /used its included AI allowance/);
+  assert.equal(gateway.reportCalls, 0);
+  assert.equal(await committed(), CAP_MICRO_USD);
 });

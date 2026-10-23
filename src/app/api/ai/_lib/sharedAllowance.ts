@@ -28,7 +28,6 @@ const LEGACY_RECONCILIATION_WINDOW_MS = 15 * 60 * 1000;
 const LEGACY_RECONCILIATION_INTERVAL_SECONDS = 60;
 const GATEWAY_RESYNC_INTERVAL_SECONDS = 60;
 const GATEWAY_REPORT_DELAY_WINDOW_MS = 15 * 60 * 1000;
-const STREAMED_CHARACTERS_PER_TOKEN = 3;
 export const SYSTEM_AI_ALLOWANCE_MULTIPLIER = 10;
 
 type AllowanceLane = "visible" | "system";
@@ -104,7 +103,6 @@ type AllowanceReservation = {
   committedKey: string;
   id: string;
   inputOnlyMicroUsd: number | null;
-  inputTokensUpperBound: number;
   pricing: ModelPricing;
   recentSettledKey: string | null;
   reservationsKey: string;
@@ -307,11 +305,6 @@ async function allowanceFollowsRealSpend(): Promise<boolean> {
   }
 }
 
-function streamedChunkCharacters(chunk: unknown): number {
-  const delta = (chunk as { delta?: unknown } | null)?.delta;
-  return typeof delta === "string" ? delta.length : 0;
-}
-
 function settledUsageMicroUsd(
   usage: GatewayUsage | undefined,
   pricing: ModelPricing,
@@ -452,8 +445,7 @@ const RESERVE_SCRIPT = `
 local committed = tonumber(redis.call("GET", KEYS[1]) or "0")
 local expired = redis.call("ZRANGEBYSCORE", KEYS[2], "-inf", ARGV[1])
 for _, member in ipairs(expired) do
-  local inputOnly = string.match(member, "|(%d+)|%d+$")
-  local amount = inputOnly or string.match(member, "|(%d+)$")
+  local amount = string.match(member, "|(%d+)$")
   if amount then committed = committed + tonumber(amount) end
 end
 if #expired > 0 then
@@ -492,10 +484,13 @@ redis.call("EXPIRE", KEYS[1], ARGV[3])
 redis.call("ZADD", KEYS[3], ARGV[4], ARGV[1] .. "|" .. ARGV[2])
 redis.call("ZREMRANGEBYSCORE", KEYS[3], "-inf", ARGV[5])
 redis.call("EXPIRE", KEYS[3], ARGV[3])
+redis.call("SET", KEYS[4], ARGV[4], "EX", ARGV[3], "NX")
 return 1
 `;
 
 const RESYNC_TO_GATEWAY_SCRIPT = `
+redis.call("SET", KEYS[3], ARGV[5], "EX", ARGV[4], "NX")
+local journalCoversDelay = tonumber(redis.call("GET", KEYS[3])) <= tonumber(ARGV[3])
 redis.call("ZREMRANGEBYSCORE", KEYS[2], "-inf", ARGV[2])
 local recentlySettled = 0
 for _, member in ipairs(redis.call("ZRANGE", KEYS[2], 0, -1)) do
@@ -504,17 +499,19 @@ for _, member in ipairs(redis.call("ZRANGE", KEYS[2], 0, -1)) do
 end
 local committed = tonumber(redis.call("GET", KEYS[1]) or "0")
 local observed = tonumber(ARGV[1])
-local resynced = math.max(observed, math.min(committed, observed + recentlySettled))
+local resynced = math.max(observed, committed)
+if journalCoversDelay then
+  resynced = math.max(observed, math.min(committed, observed + recentlySettled))
+end
 redis.call("SET", KEYS[1], resynced, "EX", ARGV[4])
-if ARGV[3] == "1" then redis.call("SET", KEYS[3], "0", "EX", ARGV[4]) end
 return committed - resynced
 `;
 
 async function resyncToGatewaySpend(args: {
   committedKey: string;
   gatewayApiKey: string;
+  journalStartedKey: string;
   lane: AllowanceLane;
-  legacyPendingKey: string;
   lockKey: string;
   month: ReturnType<typeof aiAllowancePeriod>;
   recentSettledKey: string;
@@ -540,22 +537,24 @@ async function resyncToGatewaySpend(args: {
   } catch {
     return false;
   }
-  const lowered = await args.redis.eval(
+  const now = Date.now();
+  await args.redis.eval(
     RESYNC_TO_GATEWAY_SCRIPT,
     3,
     args.committedKey,
     args.recentSettledKey,
-    args.legacyPendingKey,
+    args.journalStartedKey,
     String(
       args.lane === "system"
         ? observedSpend.systemMicroUsd
         : observedSpend.visibleMicroUsd,
     ),
-    String(Date.now() - GATEWAY_REPORT_DELAY_WINDOW_MS),
-    args.lane === "visible" ? "1" : "0",
+    String(now - GATEWAY_REPORT_DELAY_WINDOW_MS),
+    String(now - GATEWAY_REPORT_DELAY_WINDOW_MS - RESERVATION_TTL_MS),
     String(args.month.ttlSeconds),
+    String(now),
   );
-  return Number(lowered) > 0;
+  return true;
 }
 
 async function reconcileLegacySplit(args: {
@@ -693,9 +692,7 @@ async function reserveSharedAllowance(args: {
     ? inputOnlyMicroUsd(pricing, args.prompt)
     : null;
   const id = randomUUID();
-  const member = followsRealSpend
-    ? `${id}|${inputOnlyMicroUsd(pricing, args.prompt)}|${amountMicroUsd}`
-    : `${id}|${amountMicroUsd}`;
+  const member = `${id}|${amountMicroUsd}`;
   const expiresAt = Date.now() + RESERVATION_TTL_MS;
   const reserve = () => redis.eval(
     RESERVE_SCRIPT,
@@ -723,8 +720,8 @@ async function reserveSharedAllowance(args: {
     (await resyncToGatewaySpend({
       committedKey,
       gatewayApiKey: args.gatewayApiKey,
+      journalStartedKey: `${lanePrefix}:recent-settled-since`,
       lane: args.lane,
-      legacyPendingKey,
       lockKey: `${lanePrefix}:gateway-resync-lock`,
       month,
       recentSettledKey: `${lanePrefix}:recent-settled`,
@@ -743,7 +740,6 @@ async function reserveSharedAllowance(args: {
     committedKey,
     id: member,
     inputOnlyMicroUsd: inputOnly,
-    inputTokensUpperBound: estimatePromptTokenUpperBound(args.prompt),
     pricing,
     recentSettledKey: followsRealSpend ? `${lanePrefix}:recent-settled` : null,
     reservationsKey,
@@ -760,10 +756,11 @@ async function commitReservation(
     const now = Date.now();
     await redis.eval(
       SETTLE_AND_REMEMBER_SCRIPT,
-      3,
+      4,
       reservation.committedKey,
       reservation.reservationsKey,
       reservation.recentSettledKey,
+      `${reservation.recentSettledKey}-since`,
       reservation.id,
       String(settledMicroUsd),
       String(reservation.ttlSeconds),
@@ -801,41 +798,6 @@ async function settleReservation(
 
 async function releaseUnavailableReservation(reservation: AllowanceReservation) {
   await commitReservation(reservation, 0);
-}
-
-function streamedOutputMicroUsd(
-  reservation: AllowanceReservation,
-  streamedCharacters: number,
-): number {
-  return Math.min(
-    reservation.amountMicroUsd,
-    usdToMicroUsd(
-      modelCostUsd(
-        reservation.pricing,
-        reservation.inputTokensUpperBound,
-        Math.ceil(streamedCharacters / STREAMED_CHARACTERS_PER_TOKEN),
-      ),
-    ),
-  );
-}
-
-async function settleUnfinishedStream(
-  reservation: AllowanceReservation,
-  hasOutput: boolean,
-  streamedCharacters: number,
-) {
-  if (!hasOutput || !reservation.recentSettledKey) {
-    await settleAfterInference(reservation, undefined, !hasOutput);
-    return;
-  }
-  try {
-    await commitReservation(
-      reservation,
-      streamedOutputMicroUsd(reservation, streamedCharacters),
-    );
-  } catch {
-    await settleAfterInference(reservation);
-  }
 }
 
 async function settleAfterInference(
@@ -906,12 +868,11 @@ export function createSharedAllowanceMiddleware(args: {
     },
     wrapStream: async ({ doStream, params }) => {
       const reservation = await beforeCall(params);
-      let streamedCharacters = 0;
       const releaseIfUnavailable = async (error: unknown, hasOutput: boolean) => {
         if (previousModelForFailedStream(args.modelSlug.split("/").at(-1)!, error, hasOutput, false, isHaiku55Model(args.modelSlug))) {
           await releaseUnavailableReservation(reservation);
         } else {
-          await settleUnfinishedStream(reservation, hasOutput, streamedCharacters);
+          await settleAfterInference(reservation, undefined, !hasOutput);
         }
       };
       try {
@@ -928,7 +889,7 @@ export function createSharedAllowanceMiddleware(args: {
                 if (item.done) {
                   if (!settled) {
                     settled = true;
-                    await settleUnfinishedStream(reservation, hasOutput, streamedCharacters);
+                    await settleAfterInference(reservation, undefined, !hasOutput);
                   }
                   controller.close();
                   return;
@@ -942,7 +903,6 @@ export function createSharedAllowanceMiddleware(args: {
                   await releaseIfUnavailable(chunk.error, hasOutput);
                 } else if (chunk.type !== "stream-start" && chunk.type !== "response-metadata") {
                   hasOutput = true;
-                  streamedCharacters += streamedChunkCharacters(chunk);
                 }
                 controller.enqueue(chunk);
               } catch (error) {
@@ -959,7 +919,7 @@ export function createSharedAllowanceMiddleware(args: {
               } finally {
                 if (!settled) {
                   settled = true;
-                  await settleUnfinishedStream(reservation, hasOutput, streamedCharacters);
+                  await settleAfterInference(reservation, undefined, !hasOutput);
                 }
               }
             },
