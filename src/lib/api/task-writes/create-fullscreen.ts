@@ -1,3 +1,4 @@
+import { isPlanLimitReachedError } from "@/lib/planLimits";
 import create from "@/utils/controllers/tasks/create";
 import generateRank from "@/utils/generateRank";
 import prisma from "@/lib/prisma";
@@ -48,6 +49,7 @@ export const createFullScreenTaskAndReturn = async(projectId:number, userId:numb
             currentUser,
             agentId,
         })
+        if (isPlanLimitReachedError(response.json)) throw response.json;
         if (response.status !== 200) {
             return {message:(response.json as {message:string}).message, error:true, status:response.status}
         }
@@ -62,6 +64,7 @@ export const createFullScreenTaskAndReturn = async(projectId:number, userId:numb
         return {message:"Created a new task", newTask:{...newTask, description_}, error:false}
 
     } catch (error) {
+        if (isPlanLimitReachedError(error)) throw error;
         console.log("🚀 ~ createFullScreenTaskAndReturn ~ error:", error)
         return {message:"The project must have at least one section before creating a task", error:true}
     }

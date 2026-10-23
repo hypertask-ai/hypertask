@@ -610,7 +610,11 @@ export async function createTask(data: {
 
     if (!response.ok) {
         const errorData = await response.json().catch(() => ({ message: 'Failed to create task' }));
-        throw new Error(errorData.message || `API call failed with status ${response.status}`);
+        throw Object.assign(
+            new Error(errorData.message || errorData.error || `API call failed with status ${response.status}`),
+            errorData,
+            { status: response.status, statusCode: response.status },
+        );
     }
 
     const result = await response.json();

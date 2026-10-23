@@ -1,3 +1,4 @@
+import { isPlanLimitReachedError, planLimitResponse } from "@/lib/planLimits";
 import type { IApiClient } from '../../types/index';
 import {
   DeleteCommentInputSchema,
@@ -11,6 +12,7 @@ import { buildPaginationMetadata } from '../../utils/pagination';
 import {
   attachFilesAfterMutation,
   type AttachmentUploadItem,
+  type InlineAttachmentOutcome,
 } from './attachment.service';
 import {
   idempotencyKeyForInvocation,
@@ -18,7 +20,7 @@ import {
 } from '../../utils/invocation-idempotency';
 import { appendListQueryParams } from '@/lib/mcp/listQuery';
 
-export interface CommentResponse {
+export interface CommentResponse extends Partial<InlineAttachmentOutcome> {
   success: boolean;
   routedTo?: 'comments';
   visibleToPeople?: true;
@@ -100,7 +102,7 @@ export class CommentService {
     params: unknown,
     invocation?: McpInvocationIdentity,
     options: { inlineAgentImages?: boolean } = {}
-  ): Promise<CommentResponse | LoggedCommentResponse> {
+  ): Promise<CommentResponse | LoggedCommentResponse | (ReturnType<typeof planLimitResponse>["body"] & { status: 402 })> {
     const correlationId = generateCorrelationId();
 
     try {
@@ -164,6 +166,11 @@ export class CommentService {
 
       return response;
     } catch (error) {
+      const body = (error as { httpResponse?: unknown })?.httpResponse ?? error;
+      if (isPlanLimitReachedError(body)) {
+        const refusal = planLimitResponse(body);
+        return { ...refusal.body, status: refusal.status };
+      }
       logger.failure('Failed to add comment', error, {
         correlationId,
       });
@@ -248,7 +255,7 @@ export class CommentService {
     }
   }
 
-  async updateComment(params: unknown): Promise<CommentResponse> {
+  async updateComment(params: unknown): Promise<CommentResponse | (ReturnType<typeof planLimitResponse>["body"] & { status: 402 })> {
     const correlationId = generateCorrelationId();
 
     try {
@@ -281,6 +288,11 @@ export class CommentService {
 
       return response;
     } catch (error) {
+      const body = (error as { httpResponse?: unknown })?.httpResponse ?? error;
+      if (isPlanLimitReachedError(body)) {
+        const refusal = planLimitResponse(body);
+        return { ...refusal.body, status: refusal.status };
+      }
       logger.failure('Failed to update comment', error, {
         correlationId,
       });

@@ -1,3 +1,4 @@
+import { isPlanLimitReachedError, planLimitResponse } from "@/lib/planLimits";
 import { inlineAgentImagesForUser } from "@/lib/media/inlineAgentImages.server";
 import { HTPR_7513_WRITER_PROJECT_LABELS_FLAG } from "@/lib/flags/keys";
 import { isFeatureEnabled } from "@/lib/flags";
@@ -240,6 +241,7 @@ export function createCreateTaskTool(context: ToolContext) {
               url: buildMcpTaskUrl(task.projectId, task.uniqueIndex),
             });
           } catch (error) {
+            if (isPlanLimitReachedError(error)) return planLimitResponse(error).body;
             return { success: false, error: errorMessage(error) };
           }
         };
@@ -248,6 +250,7 @@ export function createCreateTaskTool(context: ToolContext) {
           try {
             return await createOneTask(taskInput);
           } catch (error) {
+            if (isPlanLimitReachedError(error)) return planLimitResponse(error).body;
             return { success: false, error: errorMessage(error) };
           }
         };
@@ -268,6 +271,7 @@ export function createCreateTaskTool(context: ToolContext) {
               project_id: requestedTasks[index].project_id,
               ...(chatTaskWriterEnabled ? { brief: requestedTasks[index].brief } : { title: requestedTasks[index].title }),
               error: "error" in result ? result.error : "Task creation failed",
+              ...(isPlanLimitReachedError(result) ? planLimitResponse(result).body : {}),
             }]
         );
         return sanitizeForJson({ success: tasks.length > 0, tasks, failures });
