@@ -356,8 +356,9 @@ function newest(comments) {
 
 function elementNames(comment) {
   const normalize = (name) => name.toLowerCase().replace(/[^a-z0-9]/g, '');
-  return [...plainText(comment.text).matchAll(/\bNew elements:[ \t]*([^\r\n.?;]*)/gi)]
-    .flatMap((match) => match[1].split(',').map(normalize)).filter((name) => name && name !== 'none');
+  const withoutNotes = plainText(comment.text).replace(/\([^()\r\n]*\)/g, '');
+  return [...withoutNotes.matchAll(/\bNew elements:[ \t]*([^\r\n.?;]*)/gi)]
+    .flatMap((match) => match[1].split(/,|\s+and\s+/i).map(normalize)).filter((name) => name && name !== 'none');
 }
 
 export function evaluate({ title, author, files, comments = [], parentComments = [], productionModes, sources }) {
