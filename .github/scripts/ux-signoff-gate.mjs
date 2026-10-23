@@ -70,13 +70,18 @@ function patchedSource(source, file) {
 
 function scanFlagSource(source) {
   // This is deliberately not a JS parser: unsupported syntax keeps normal sign-off.
-  if (/`|\\\r?\n/.test(source)) return null;
+  if (/\\\n|[\r\u2028\u2029]/.test(source)) return null;
   const code = new Set();
   const containers = new Map();
   const blocks = new Map();
   const elements = new Map();
+  const attributes = new Map();
+  const parentheses = new Map();
+  const groups = new Map();
   let cursor = 0;
   let depth = 0;
+  const comments = [];
+  const regexes = [];
 
   function quoted(attribute = false) {
     const quote = source[cursor++];
@@ -103,12 +108,14 @@ function scanFlagSource(source) {
       if (/[})\]]/.test(char)) return false;
       if (source.startsWith('//', cursor)) {
         const newline = source.indexOf('\n', cursor + 2);
+        comments.push([cursor, newline < 0 ? source.length : newline]);
         cursor = newline < 0 ? source.length : newline + 1;
         continue;
       }
       if (source.startsWith('/*', cursor)) {
         const close = source.indexOf('*/', cursor + 2);
         if (close < 0) return false;
+        comments.push([cursor, close + 2]);
         cursor = close + 2;
         continue;
       }
@@ -117,10 +124,47 @@ function scanFlagSource(source) {
         previous = 'value';
         continue;
       }
-      // A slash in code could start a regex. Division is also outside this subset.
-      if (char === '/' || char === '\\') return false;
-      if (char === '<') {
-        if (!['block-open', 'block-close', ';', '(', '[', '=', '=>', 'return', '&&', '||', '?', ':', ',', ''].includes(previous) || !element()) return false;
+      if (char === '`') {
+        const start = cursor++;
+        let closed = false;
+        while (cursor < source.length) {
+          if (source[cursor] === '\\') { cursor += 2; continue; }
+          if (source[cursor] === '`') { cursor++; closed = true; break; }
+          if (source.startsWith('${', cursor)) {
+            cursor += 2;
+            if (!expression('}', false)) return false;
+          } else cursor++;
+        }
+        if (!closed) return false;
+        groups.set(start, cursor);
+        previous = 'value';
+        continue;
+      }
+      if (char === '/') {
+        regexes.push(cursor);
+        if (!['', '=>', '=', '(', '[', ',', ':', '?', 'return', '&&', '||', '!'].includes(previous)) return false;
+        cursor++;
+        let characterClass = false;
+        let closed = false;
+        while (cursor < source.length) {
+          const next = source[cursor++];
+          if (/[\r\n]/.test(next)) return false;
+          if (next === '\\') { cursor++; continue; }
+          if (next === '[') { if (characterClass) return false; characterClass = true; }
+          if (next === ']') characterClass = false;
+          if (next === '/' && !characterClass) { closed = true; break; }
+        }
+        if (!closed) return false;
+        const flagsStart = cursor;
+        while (/[a-z]/i.test(source[cursor] ?? '') && cursor < source.length) cursor++;
+        const flags = source.slice(flagsStart, cursor);
+        if (/[^dgimsuy]/.test(flags) || new Set(flags).size !== flags.length) return false;
+        previous = 'value';
+        continue;
+      }
+      if (char === '\\') return false;
+      if (char === '<' && ['block-open', 'block-close', ';', '(', '[', '=', '=>', 'return', '&&', '||', '?', ':', ',', ''].includes(previous)) {
+        if (!element()) return false;
         previous = 'value';
         continue;
       }
@@ -128,11 +172,13 @@ function scanFlagSource(source) {
       code.add(cursor++);
       if (/[A-Za-z_$0-9]/.test(char)) {
         while (cursor < source.length && /[\w$]/.test(source[cursor])) code.add(cursor++);
-        previous = source.slice(start, cursor);
+        previous = previous === '.' ? 'value' : source.slice(start, cursor);
       } else if (char === '(' || char === '[' || char === '{') {
         const isBlock = char === '{' && ['block-open', 'block-close', ';', ')', '=>', 'else', 'try', 'finally'].includes(previous);
         if (!expression({ '(': ')', '[': ']', '{': '}' }[char], isBlock)) return false;
+        groups.set(start, cursor);
         if (isBlock) blocks.set(start, cursor);
+        if (char === '(') parentheses.set(start, cursor);
         previous = isBlock ? 'block-close' : { '(': ')', '[': ']', '{': 'value' }[char];
       } else {
         const pair = source.slice(start, cursor + 1);
@@ -168,6 +214,7 @@ function scanFlagSource(source) {
       }
       if (/\s/.test(source[cursor])) { cursor++; continue; }
       if (source[cursor] === '{') { if (!container()) return false; continue; }
+      const attributeStart = cursor;
       const attribute = /^[A-Za-z_:][\w:.-]*/.exec(source.slice(cursor));
       if (!attribute) return false;
       cursor += attribute[0].length;
@@ -178,6 +225,7 @@ function scanFlagSource(source) {
       if (source[cursor] === '"' || source[cursor] === "'") { if (!quoted(true)) return false; }
       else if (source[cursor] === '{') { if (!container()) return false; }
       else return false;
+      attributes.set(attributeStart, cursor);
     }
     if (source[cursor++] !== '>') return false;
     while (cursor < source.length) {
@@ -197,26 +245,59 @@ function scanFlagSource(source) {
     return false;
   }
 
-  return expression() ? { code, containers, blocks, elements } : null;
+  return expression() ? { code, containers, blocks, elements, attributes, parentheses, groups, comments, regexes } : null;
+}
+
+function listItems(source, scanned, start, end) {
+  const items = [];
+  let first = start;
+  for (let cursor = start; cursor < end; cursor++) {
+    const close = scanned.groups.get(cursor);
+    if (close != null) { cursor = close - 1; continue; }
+    if (!scanned.code.has(cursor)) continue;
+    if (source[cursor] === ',') { items.push([first, cursor]); first = cursor + 1; }
+  }
+  if (source.slice(first, end).trim()) items.push([first, end]);
+  return items;
+}
+
+function blankComments(source) {
+  const scanned = scanFlagSource(source);
+  if (!scanned) return null;
+  let blanked = source;
+  for (const [start, end] of scanned.comments) {
+    blanked = blanked.slice(0, start) + blanked.slice(start, end).replace(/[^\n]/g, ' ') + blanked.slice(end);
+  }
+  return blanked;
 }
 
 function projectFlagOn(source, symbols) {
   const initial = scanFlagSource(source);
-  if (!initial) return null;
-  const imports = [...source.matchAll(/^import \{ ([A-Za-z_$][\w$]*(?:, [A-Za-z_$][\w$]*)*) \} from (["'])(@\/lib\/flags(?:\/keys)?|@\/hooks\/useFlag)\2;\n/gm)].filter((match) => initial.code.has(match.index));
+  if (!initial || [...source.matchAll(/\b(?:eval|with)\b/g)].some((match) => initial.code.has(match.index))) return null;
+  const imports = [...source.matchAll(/^import \{ ([A-Za-z_$][\w$]*(?:, [A-Za-z_$][\w$]*)*) \} from (["'])(@\/lib\/flags(?:\/keys)?|@\/hooks\/useFlag)\2;?\n/gm)].filter((match) => initial.code.has(match.index));
   const importedSymbols = new Set(imports.filter((match) => match[3].startsWith('@/lib/flags')).flatMap((match) => match[1].split(', ')));
   const importedHooks = new Set(imports.flatMap((match) => match[1].split(', ').filter((name) =>
     (name === 'useFlag' && match[3] === '@/hooks/useFlag') || (name === 'isFeatureEnabled' && match[3] === '@/lib/flags'))));
-  const withoutImports = imports.reduce((text, match) => text.replace(match[0], ''), source);
-  if (/\b(?:useFlag|isFeatureEnabled)\b/.test(withoutImports.replace(/\b(?:useFlag|isFeatureEnabled)(?=\([A-Z][A-Z0-9_]*[,)])/g, ''))) return null;
+  for (const match of source.matchAll(/\b(?:useFlag|isFeatureEnabled)\b/g)) {
+    if (!initial.code.has(match.index) || imports.some((item) => item.index <= match.index && match.index < item.index + item[0].length)) continue;
+    if (!/^\([A-Z][A-Z0-9_]*[,)]/.test(source.slice(match.index + match[0].length)) ||
+      !/(?:^|[=(:,;{\[]|\bawait)\s*$/.test(source.slice(0, match.index))) return null;
+    const end = initial.parentheses.get(match.index + match[0].length);
+    if (end == null || /^\s*(?::[^{};=]+)?\s*(?:=>|\{)/.test(source.slice(end))) return null;
+  }
   const aliases = [];
-  let projected = source.replace(/^([ \t]*)const ([A-Za-z_][A-Za-z0-9_]*) = (useFlag\(([A-Z][A-Z0-9_]*)\)|await isFeatureEnabled\(([A-Z][A-Z0-9_]*), [A-Za-z_$][\w$.]*\));\n/gm,
+  let projected = source.replace(/^([ \t]*)const ([A-Za-z_][A-Za-z0-9_]*) = (useFlag\(([A-Z][A-Z0-9_]*)\)|await isFeatureEnabled\(([A-Z][A-Z0-9_]*), [A-Za-z_$][\w$.]*\));?\n/gm,
     (line, indent, alias, call, clientSymbol, serverSymbol, offset) => {
       const symbol = clientSymbol ?? serverSymbol;
-      if (!initial.code.has(offset + indent.length) || !symbols.has(symbol) || !importedSymbols.has(symbol) || !importedHooks.has(clientSymbol ? 'useFlag' : 'isFeatureEnabled') || source.slice(0, offset).includes('<')) return line;
+      if (!initial.code.has(offset + indent.length) || !symbols.has(symbol) || !importedSymbols.has(symbol) || !importedHooks.has(clientSymbol ? 'useFlag' : 'isFeatureEnabled')) return line;
+      const scope = [...initial.blocks].filter(([start, end]) => start < offset && offset < end).sort(([a], [b]) => b - a)[0];
+      if (!scope || [...source.matchAll(new RegExp(`\\b${alias}\\b`, 'g'))].some((match) => initial.code.has(match.index) &&
+        (match.index < offset || match.index >= scope[1]))) return line;
+      if (/^\s*[\[(`+\-/]/.test(source.slice(offset + line.length)) && !/(?:^|[;{])\s*$/.test(source.slice(0, offset))) return line;
       aliases.push(alias);
       return '';
     });
+  if (aliases.length && initial.regexes.length) return null;
   let unwrapped = 0;
   for (const alias of aliases) {
     const scanned = scanFlagSource(projected);
@@ -231,29 +312,136 @@ function projectFlagOn(source, symbols) {
       if (!rows.length || rows.some((line) => !line.startsWith(indent + '  '))) return whole;
       // Only a single JSX element can lose these parentheses without changing evaluation.
       const bodyStart = offset + whole.indexOf('\n') + 1;
+      if ([...scanned.groups].some(([start, end]) => bodyStart <= start && end <= bodyStart + body.length &&
+        projected[start] === '`' && /[\r\n]/.test(projected.slice(start, end)))) return whole;
       const elementStart = bodyStart + body.search(/\S/);
       const elementEnd = scanned.elements.get(elementStart);
       if (elementEnd == null || projected.slice(elementEnd, bodyStart + body.length).trim()) return whole;
       unwrapped++;
       return rows.map((line) => indent + line.slice(indent.length + 2)).join('\n') + '\n';
     });
-    if (new RegExp(`\\b${alias}\\b`).test(projected)) return null;
+    {
+      let current = scanFlagSource(projected);
+      if (!current) return null;
+      projected = projected.replace(new RegExp(String.raw`^([ \t]*)if \(!${alias}\) return;\n`, 'gm'), (whole, indent, offset) => {
+        if (!current.code.has(offset + indent.length) || !/[;{]\s*$/.test(projected.slice(0, offset)) || /^\s*(?:else\b|\/)/.test(projected.slice(offset + whole.length))) return whole;
+        unwrapped++;
+        return '';
+      });
+      current = scanFlagSource(projected);
+      if (!current) return null;
+      projected = projected.replace(new RegExp(String.raw`\bif \(${alias}\) (?=[A-Za-z_$][\w$]*(?:\.[A-Za-z_$][\w$]*)*\()`, 'g'), (whole, offset) => {
+        if (!current.code.has(offset)) return whole;
+        const callStart = projected.indexOf('(', offset + whole.length);
+        const callEnd = current.parentheses.get(callStart);
+        if (callEnd == null || projected[callEnd] !== ';' || /^;\s*(?:else\b|\/)/.test(projected.slice(callEnd))) return whole;
+        const prefix = projected.slice(0, offset);
+        if (!/(?:^|[;{}])\s*$/.test(prefix)) return whole;
+        unwrapped++;
+        return '';
+      });
+    }
+    const atom = String.raw`(?:[A-Za-z_$][\w$]*(?:\??\.[A-Za-z_$][\w$]*)*|"(?:[^"\\\r\n]|\\.)*"|'(?:[^'\\\r\n]|\\.)*')`;
+    const expressionStart = (text) => /(?:[({\[,:]|(?<!\?)\?|(?<![=<>!+*/%&|^?\-])=|\breturn)\s*$/.test(text);
+    {
+      for (const [pattern, replacement, allowLogicalPrefix] of [
+        [new RegExp(String.raw`(!?)\b${alias} \? (${atom}) : (${atom})(?=\s*[,;)}\]])`, 'g'), (match) => match[1] ? match[3] : match[2]],
+        [new RegExp(String.raw`\b${alias} && `, 'g'), () => '', true],
+      ]) {
+        const current = scanFlagSource(projected);
+        if (!current) return null;
+        const text = projected;
+        projected = text.replace(pattern, (...args) => {
+          const offset = args.at(-2);
+          if (current.regexes.length) return args[0];
+          if ([...current.parentheses].some(([start, end]) => start < offset && offset < end &&
+            (!/(?:[({\[,:=!?&|]|\b[A-Za-z_$][\w$]*)\s*$/.test(text.slice(0, start)) ||
+              /\b(?:typeof|delete|new)\s*$/.test(text.slice(0, start)) ||
+              !/^\s*(?:[,;)}\]{]|$)/.test(text.slice(end))))) return args[0];
+          const prefix = text.slice(0, offset);
+          if (!current.code.has(offset) || !(expressionStart(prefix) || (allowLogicalPrefix && /(?:&&|\|\|)\s*$/.test(prefix)))) return args[0];
+          if (/^(?:[ \t]*[\r\n]|\s*(?:function\b|class\b|async\s+function\b|\{|let\s*\[))/.test(text.slice(offset + args[0].length))) return args[0];
+          unwrapped++;
+          return replacement(args);
+        });
+      }
+    }
+    const current = scanFlagSource(projected);
+    if (!current) return null;
+    const text = projected;
+    for (const [start, end] of [...current.attributes].sort(([a], [b]) => b - a)) {
+      const attribute = text.slice(start, end);
+      const direct = new RegExp(String.raw`^([A-Za-z_:][\w:.-]*)=\{${alias}\}$`).exec(attribute);
+      if (!direct) continue;
+      projected = projected.slice(0, start) + `${direct[1]}={true}` + projected.slice(end);
+      unwrapped++;
+    }
+    {
+      const current = scanFlagSource(projected);
+      if (!current) return null;
+      const edits = [];
+      for (const match of projected.matchAll(/\b(useEffect)\(/g)) {
+        if (!current.code.has(match.index)) continue;
+        const start = match.index + match[0].length - 1;
+        const end = current.parentheses.get(start);
+        if (end == null) continue;
+        const hookImport = new RegExp(String.raw`^import \{ (?:[A-Za-z_$][\w$]*, )*${match[1]}(?:, [A-Za-z_$][\w$]*)* \} from ["']react["'];$`, 'm').exec(projected);
+        if (!hookImport || !current.code.has(hookImport.index) ||
+          [...projected.matchAll(new RegExp(String.raw`\b${match[1]}\b`, 'g'))].some((reference) => {
+            if (!current.code.has(reference.index) || (hookImport.index <= reference.index && reference.index < hookImport.index + hookImport[0].length)) return false;
+            const call = reference.index + reference[0].length;
+            const close = current.parentheses.get(call);
+            return close == null || projected[close] !== ';' || !/(?:^|[;{}])\s*$/.test(projected.slice(0, reference.index));
+          })) continue;
+        const args = listItems(projected, current, start + 1, end - 1);
+        if (args.length !== 2) continue;
+        const [left, right] = args[1];
+        const arrayStart = left + projected.slice(left, right).search(/\S/);
+        const arrayEnd = current.groups.get(arrayStart);
+        if (projected[arrayStart] !== '[' || arrayEnd == null || projected.slice(arrayEnd, right).trim()) continue;
+        const deps = listItems(projected, current, arrayStart + 1, arrayEnd - 1);
+        for (let index = 0; index < deps.length; index++) {
+          const [a, b] = deps[index];
+          if (projected.slice(a, b).trim() !== alias) continue;
+          const next = deps[index + 1]?.[0];
+          if (next != null) edits.push([a, index === 0 && !projected.slice(a, b).includes('\n') ? next + projected.slice(next, arrayEnd).search(/\S/) : next, '']);
+          else if (projected[b] === ',') edits.push([a, b + 1, '']);
+          else edits.push([index ? deps[index - 1][1] : a, b, '']);
+          unwrapped++;
+        }
+      }
+      for (const [a, b, replacement] of edits.sort(([a], [b]) => b - a)) projected = projected.slice(0, a) + replacement + projected.slice(b);
+    }
+    const remaining = scanFlagSource(projected);
+    if (!remaining || [...projected.matchAll(new RegExp(`\\b${alias}\\b`, 'g'))].some((match) => remaining.code.has(match.index))) return null;
   }
   const final = scanFlagSource(projected);
   if (!final) return null;
   const removable = new Set([...symbols, 'useFlag', 'isFeatureEnabled']);
-  projected = projected.replace(/^import \{ ([A-Za-z_$][\w$]*(?:, [A-Za-z_$][\w$]*)*) \} from (["'])(@\/lib\/flags(?:\/keys)?|@\/hooks\/useFlag)\2;\n/gm,
+  projected = projected.replace(/^import \{ ([A-Za-z_$][\w$]*(?:, [A-Za-z_$][\w$]*)*) \} from (["'])(@\/lib\/flags(?:\/keys)?|@\/hooks\/useFlag)\2;?\n/gm,
     (line, names, quote, module, offset) => {
       if (!final.code.has(offset)) return line;
       const kept = names.split(', ').filter((name) => {
         if (!removable.has(name)) return true;
         const rest = projected.replace(line, '');
-        return new RegExp(`\\b${name}\\b`).test(rest);
+        const scanned = scanFlagSource(rest);
+        return !scanned || [...rest.matchAll(new RegExp(`\\b${name}\\b`, 'g'))].some((match) => scanned.code.has(match.index));
       });
-      return kept.length ? `import { ${kept.join(', ')} } from ${quote}${module}${quote};\n` : '';
+      return kept.length ? `import { ${kept.join(', ')} } from ${quote}${module}${quote}${line.endsWith(';\n') ? ';' : ''}\n` : '';
     });
-  if ([...symbols].some((symbol) => new RegExp(`\\b${symbol}\\b`).test(projected))) return null;
+  const checked = scanFlagSource(projected);
+  if (!checked || [...symbols].some((symbol) => [...projected.matchAll(new RegExp(`\\b${symbol}\\b`, 'g'))].some((match) => checked.code.has(match.index)))) return null;
   return { source: projected, unwrapped };
+}
+
+function normalizeTrueProps(source) {
+  const scanned = scanFlagSource(source);
+  if (!scanned) return null;
+  for (const [start, end] of [...scanned.attributes].sort(([a], [b]) => b - a)) {
+    const attribute = source.slice(start, end);
+    if (/^[A-Za-z_:][\w:.-]*=\{true\}$/.test(attribute)) source = source.slice(0, start) + attribute.slice(0, -7) + source.slice(end);
+  }
+  return source;
 }
 
 export function flagRemovalOnly(files, productionModes, sources = {}) {
@@ -281,6 +469,22 @@ export function flagRemovalOnly(files, productionModes, sources = {}) {
       } catch { return []; }
       continue;
     }
+    if (file.filename === '.github/scripts/agent-scope/agent-scope-exceptions.json') {
+      try {
+        const before = JSON.parse(sources[file.filename]);
+        const after = JSON.parse(patchedSource(sources[file.filename], file));
+        if (file.status !== 'modified' || !Array.isArray(before) || !Array.isArray(after) || before.length !== after.length) return [];
+        for (let index = 0; index < before.length; index++) {
+          const old = before[index];
+          const next = after[index];
+          if (JSON.stringify(old) === JSON.stringify(next)) continue;
+          if (!files.some((changed) => changed.filename === old.path && changed.status === 'modified') ||
+            !/^https:\/\/app\.hypertask\.ai\/detail\/project-\d+\/\d+$/.test(next.approvedIn) || !/^[a-f0-9]{64}$/.test(next.sha256) ||
+            JSON.stringify({ ...next, approvedIn: old.approvedIn, sha256: old.sha256 }) !== JSON.stringify(old)) return [];
+        }
+      } catch { return []; }
+      continue;
+    }
     if (/^src\/prisma\/migrations\/[^/]+\/migration\.sql$/.test(file.filename)) {
       const rows = file.patch?.split('\n').slice(1);
       if (file.status !== 'added' || file.deletions !== 0 || rows?.length !== file.additions ||
@@ -288,18 +492,22 @@ export function flagRemovalOnly(files, productionModes, sources = {}) {
       continue;
     }
     if (file.status !== 'modified' || !/^src\//.test(file.filename) || !/\.[jt]sx?$/.test(file.filename)) return [];
-    const source = sources[file.filename];
-    const after = patchedSource(source, file);
-    if (after == null) return [];
+    const patched = patchedSource(sources[file.filename], file);
+    if (patched == null) return [];
+    const source = blankComments(sources[file.filename]);
+    const after = blankComments(patched);
+    if (source == null || after == null) return [];
     const projection = projectFlagOn(source, symbols);
-    if (!projection || projection.source !== after) return [];
+    if (!projection) return [];
+    const normalized = normalizeTrueProps(projection.source);
+    if (normalized == null || normalized !== normalizeTrueProps(after)) return [];
     unwrapped += projection.unwrapped;
   }
   return unwrapped ? keys.sort() : [];
 }
 
 function readProductionFile(filename) {
-  if (!/^[A-Za-z0-9_./-]+$/.test(filename) || filename.split('/').includes('..')) return null;
+  if (!/^[A-Za-z0-9_./ \[\]-]+$/.test(filename) || filename.startsWith('/') || filename.split('/').some((part) => !part || part === '.' || part === '..')) return null;
   try { return readFileSync(new URL(`../../${filename}`, import.meta.url), 'utf8'); }
   catch { return null; }
 }
@@ -580,7 +788,7 @@ async function readVerdict(pr, { github, repo, env, fetchImpl, commentCache, par
   if (files.some((file) => FLAG_DEFINITION.test(file.filename) && file.status === 'removed')) {
     try { productionModes = JSON.parse(readProductionFile(PRODUCTION_MODES)); } catch { /* Missing modes never exempt. */ }
     for (const file of files) {
-      if (file.filename.startsWith('src/') || file.filename === PRODUCTION_MODES) sources[file.filename] = readProductionFile(file.filename);
+      if (file.filename.startsWith('src/') || file.filename === PRODUCTION_MODES || file.filename === '.github/scripts/agent-scope/agent-scope-exceptions.json') sources[file.filename] = readProductionFile(file.filename);
     }
   }
   const input = { title: pr.title, author: pr.user.login, files, productionModes, sources };

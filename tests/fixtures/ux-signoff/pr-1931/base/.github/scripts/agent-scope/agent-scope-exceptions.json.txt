@@ -1,0 +1,106 @@
+[
+  {
+    "path": "src/lib/mcp/operations/comments/operation.ts",
+    "call": "prisma.comment.count({ where: commentWhere })",
+    "occurrence": 1,
+    "approvedIn": "https://app.hypertask.ai/detail/project-15/7583",
+    "sha256": "8e65ed0b8b8c08af5dc634a45e0e7ac15d7c8596a9baeffe02a857267c3d984a",
+    "reason": "validateMcpAuth supplies ctx.user and ctx.agentId. findTaskByIdentifier(user, identifier, ctx.agentId) must return a task before these calls; commentWhere fixes taskId to that authorized task and later filters only narrow it."
+  },
+  {
+    "path": "src/lib/mcp/operations/comments/operation.ts",
+    "call": "prisma.comment.findMany({ where: commentWhere, include: commentInclude(user.id, task.projectId), orderBy: [ { [sortField]: effectiveSortOrder }, { id: effectiveSortOrder }, ], take: pageLimit, skip: cursorId ? 1 : offset, ...(cursorId ? { cursor: { id: cursorId } } : {}), })",
+    "occurrence": 1,
+    "approvedIn": "https://app.hypertask.ai/detail/project-15/7583",
+    "sha256": "8e65ed0b8b8c08af5dc634a45e0e7ac15d7c8596a9baeffe02a857267c3d984a",
+    "reason": "validateMcpAuth supplies ctx.user and ctx.agentId. findTaskByIdentifier(user, identifier, ctx.agentId) must return a task before these calls; commentWhere fixes taskId to that authorized task and later filters only narrow it."
+  },
+  {
+    "path": "src/lib/mcp/operations/decisions/[id]/operation.ts",
+    "call": "prisma.task.findUnique({ where: { id: decisionRequest.taskId }, select: { userId: true }, })",
+    "occurrence": 1,
+    "approvedIn": "https://app.hypertask.ai/detail/project-15/7496",
+    "sha256": "7e7b819fd1a7e5e2f3db3f0863624a0942f666b47b3c7943f0ae2e3c742131f2",
+    "reason": "validateMcpAuth supplies ctx.user and ctx.agentId. PATCH returns on loadAccessibleDecisionRequest failure; that loader resolves decisionRequest.taskId through findTaskByIdentifier(ctx.user, ..., ctx.agentId) before either owner-only hydration. Answer additionally rejects agents; cancel retains the same preauthorized task ID."
+  },
+  {
+    "path": "src/lib/mcp/operations/decisions/[id]/operation.ts",
+    "call": "prisma.task.findUnique({ where: { id: decisionRequest.taskId }, select: { userId: true }, })",
+    "occurrence": 2,
+    "approvedIn": "https://app.hypertask.ai/detail/project-15/7496",
+    "sha256": "7e7b819fd1a7e5e2f3db3f0863624a0942f666b47b3c7943f0ae2e3c742131f2",
+    "reason": "validateMcpAuth supplies ctx.user and ctx.agentId. PATCH returns on loadAccessibleDecisionRequest failure; that loader resolves decisionRequest.taskId through findTaskByIdentifier(ctx.user, ..., ctx.agentId) before either owner-only hydration. Answer additionally rejects agents; cancel retains the same preauthorized task ID."
+  },
+  {
+    "path": "src/lib/mcp/operations/projects/operation.ts",
+    "call": "prisma.project.count({ where })",
+    "occurrence": 1,
+    "approvedIn": "https://app.hypertask.ai/detail/project-15/7496",
+    "sha256": "13477f8351a7a36a167dc206dfd5e8f3d25a0762bf3314063907411dc87c50b5",
+    "reason": "validateMcpAuth supplies ctx.user.id and ctx.agentId. Both calls consume where with AND getProjectListingWhere(user.id, ctx.agentId); subsequent filters only narrow it."
+  },
+  {
+    "path": "src/lib/mcp/operations/projects/operation.ts",
+    "call": "prisma.project.findMany({ where, select: { id: true, title: true, description: true, name: true, uniqueIdentifier: true, ownerId: true, owner: { select: { id: true, email: true, displayName: true } }, status: true, sections: true, section: { select: { id: true, section_title: true } }, labels: { select: { id: true, value: true } }, createdAt: true, _count: { select: { members: true, tasks: { where: { status: 'Normal' } } } } }, orderBy: [orderBy, { id: 'asc' as const }], take: limit, skip: cursorId ? 1 : offset, ...(cursorId ? { cursor: { id: cursorId } } : {}), })",
+    "occurrence": 1,
+    "approvedIn": "https://app.hypertask.ai/detail/project-15/7496",
+    "sha256": "13477f8351a7a36a167dc206dfd5e8f3d25a0762bf3314063907411dc87c50b5",
+    "reason": "validateMcpAuth supplies ctx.user.id and ctx.agentId. Both calls consume where with AND getProjectListingWhere(user.id, ctx.agentId); subsequent filters only narrow it."
+  },
+  {
+    "path": "src/lib/mcp/operations/tasks/operation.ts",
+    "call": "prisma.task.findMany({ where, include })",
+    "occurrence": 1,
+    "approvedIn": "https://app.hypertask.ai/detail/project-15/7496",
+    "sha256": "5e34baee7493a57e1b1484603bacc20da119a77f200c12b2e8c03058ec18c35f",
+    "reason": "validateMcpAuth supplies ctx.user.id and ctx.agentId. The identifier branch fixes where.project to getProjectWhere(user.id, ctx.agentId); the listing branch fixes projectId to IDs returned by that helper-scoped project query and checks requested targets against those IDs. Later filters only narrow access."
+  },
+  {
+    "path": "src/lib/mcp/operations/tasks/operation.ts",
+    "call": "prisma.task.count({ where })",
+    "occurrence": 1,
+    "approvedIn": "https://app.hypertask.ai/detail/project-15/7496",
+    "sha256": "5e34baee7493a57e1b1484603bacc20da119a77f200c12b2e8c03058ec18c35f",
+    "reason": "validateMcpAuth supplies ctx.user.id and ctx.agentId. The identifier branch fixes where.project to getProjectWhere(user.id, ctx.agentId); the listing branch fixes projectId to IDs returned by that helper-scoped project query and checks requested targets against those IDs. Later filters only narrow access."
+  },
+  {
+    "path": "src/lib/mcp/operations/tasks/operation.ts",
+    "call": "prisma.task.findMany({ where, select: { id: true, ticketNumber: true, uniqueIndex: true, title: true, section: true, description_:true, sectionId: true, parentTaskId: true, projectId: true, project: { select: { id: true, title: true, staleWarnDays: true, staleHotDays: true, } }, parentTask: { ...(ctx.agentId && agentScopeEnforced() ? { where: { project: getProjectWhere(user.id, ctx.agentId) } } : {}), select: { id: true, ticketNumber: true, title: true, uniqueIndex: true, projectId: true } }, status: true, priority: { select: { Priority_Value: true } }, dueDate: true, createdAt: true, updatedAt: true, permanentlyDeleteAt: true, sectionChangedAt: true, lastCommentAt: true, agent: { select: mcpVisibleAgentSelect(user.id), }, assignees: { where: { OR: [ { agentId: null }, { agent: accessibleAgentWhere(user.id) }, ], }, include: { user: { select: { id: true, email: true, displayName: true, }, }, agent: { select: mcpVisibleAgentSelect(user.id) }, agentAssigner: { select: mcpVisibleAgentSelect(user.id) }, }, }, taskLabels: { select: { label: { select: mcpTaskLabelSelect, }, }, }, savedContent: { where: { userId: ctx.agentId ? -1 : user.id, commentId: null, type: 'Private' }, select: { id: true, type: true }, }, _count: { select: { taskLabels: true, comments: mcpTaskUserCommentCount, }, }, subTasks: { where: { ...(ctx.agentId && agentScopeEnforced() ? { project: getProjectWhere(user.id, ctx.agentId) } : {}), status: { not: \"Deleted\", }, }, select:{ id: true, ticketNumber: true, title: true, uniqueIndex: true, projectId: true }, orderBy: { createdAt: \"asc\", }, }, }, orderBy, take: limit, ...(cursorId ? { cursor: { id: cursorId }, skip: 1 } : { skip: usesCursor ? 0 : offset }), })",
+    "occurrence": 1,
+    "approvedIn": "https://app.hypertask.ai/detail/project-15/7496",
+    "sha256": "5e34baee7493a57e1b1484603bacc20da119a77f200c12b2e8c03058ec18c35f",
+    "reason": "validateMcpAuth supplies ctx.user.id and ctx.agentId. The identifier branch fixes where.project to getProjectWhere(user.id, ctx.agentId); the listing branch fixes projectId to IDs returned by that helper-scoped project query and checks requested targets against those IDs. Later filters only narrow access."
+  },
+  {
+    "path": "src/lib/mcp/operations/tasks/search/operation.ts",
+    "call": "prisma.task.count({ where })",
+    "occurrence": 1,
+    "approvedIn": "https://app.hypertask.ai/detail/project-15/7496",
+    "sha256": "3ab50c2d1aeeda4bd65dc0d791b8bba13170f8e3a8b0eb4cb7d1bdf4fefed052",
+    "reason": "validateMcpAuth supplies ctx.user.id and ctx.agentId. accessibleProjectIds come from getProjectWhere(user.id, ctx.agentId); where retains those projectIds and an agent-aware project relation. Target overrides require inclusion; subsequent search filters and spread hydration only narrow it."
+  },
+  {
+    "path": "src/lib/mcp/operations/tasks/search/operation.ts",
+    "call": "prisma.task.findMany({ where: filtered.paged || rankedResults && !sortField ? { ...where, id: { in: primaryIds } } : where, select: { id: true, ticketNumber: true, uniqueIndex: true, title: true, description: true, section: true, projectId: true, project: { select: { id: true, title: true } }, dueDate: true, createdAt: true, updatedAt: true, agent: { select: mcpVisibleAgentSelect(user.id), }, }, ...(!rankedResults || sortField ? { orderBy: sortField ? [{ [sortField]: sortOrder }, { id: 'asc' as const }] : [{ updatedAt: 'desc' as const }, { id: 'asc' as const }] } : {}), ...(filtered.paged || rankedResults && !sortField ? {} : { take: limit, skip: cursorId ? 1 : 0, ...(cursorId ? { cursor: { id: cursorId } } : {}), }), })",
+    "occurrence": 1,
+    "approvedIn": "https://app.hypertask.ai/detail/project-15/7496",
+    "sha256": "3ab50c2d1aeeda4bd65dc0d791b8bba13170f8e3a8b0eb4cb7d1bdf4fefed052",
+    "reason": "validateMcpAuth supplies ctx.user.id and ctx.agentId. accessibleProjectIds come from getProjectWhere(user.id, ctx.agentId); where retains those projectIds and an agent-aware project relation. Target overrides require inclusion; subsequent search filters and spread hydration only narrow it."
+  },
+  {
+    "path": "src/lib/mcp/operations/tasks/search/operation.ts",
+    "call": "prisma.task.count({ where })",
+    "occurrence": 2,
+    "approvedIn": "https://app.hypertask.ai/detail/project-15/7496",
+    "sha256": "3ab50c2d1aeeda4bd65dc0d791b8bba13170f8e3a8b0eb4cb7d1bdf4fefed052",
+    "reason": "validateMcpAuth supplies ctx.user.id and ctx.agentId. accessibleProjectIds come from getProjectWhere(user.id, ctx.agentId); where retains those projectIds and an agent-aware project relation. Target overrides require inclusion; subsequent search filters and spread hydration only narrow it."
+  },
+  {
+    "path": "src/lib/mcp/operations/tasks/search/operation.ts",
+    "call": "prisma.task.findMany({ where, select: { id: true, ticketNumber: true, uniqueIndex: true, title: true, description: true, section: true, projectId: true, project: { select: { id: true, title: true } }, dueDate: true, createdAt: true, updatedAt: true, agent: { select: mcpVisibleAgentSelect(user.id), }, }, ...(orderBy ? { orderBy } : {}), ...(useTurbopufferWindow ? {} : { take: limit, skip: cursorId ? 1 : 0, ...(cursorId ? { cursor: { id: cursorId } } : {}), }), })",
+    "occurrence": 1,
+    "approvedIn": "https://app.hypertask.ai/detail/project-15/7496",
+    "sha256": "3ab50c2d1aeeda4bd65dc0d791b8bba13170f8e3a8b0eb4cb7d1bdf4fefed052",
+    "reason": "validateMcpAuth supplies ctx.user.id and ctx.agentId. accessibleProjectIds come from getProjectWhere(user.id, ctx.agentId); where retains those projectIds and an agent-aware project relation. Target overrides require inclusion; subsequent search filters and spread hydration only narrow it."
+  }
+]
