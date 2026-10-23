@@ -1,4 +1,4 @@
-import { test, expect, type Page, type APIRequestContext, type Response } from '@playwright/test'
+import { test, expect, type Page, type Locator, type APIRequestContext, type Response } from '@playwright/test'
 import { readFileSync } from 'node:fs'
 import path from 'node:path'
 import { randomUUID } from 'node:crypto'
@@ -80,13 +80,20 @@ async function settledBox(locator: ReturnType<Page['locator']>) {
   }, { intervals: [150] }).toBe(true)
   return previous!
 }
+async function reveal(list: Locator, row: Locator) {
+  const more = list.getByRole('option', { name: /^Show (\d+ )?more$/ })
+  await expect.poll(async () => {
+    if (await row.isVisible()) return true
+    if (await more.isVisible()) await more.click()
+    return false
+  }, { timeout: 15_000 }).toBe(true)
+}
 async function choose(page: Page, name: string) {
   const list = page.getByTestId('agent-sidebar-conversations')
   if (!await list.isVisible()) await page.getByRole('button', { name: 'Switch conversation', exact: true }).click()
-  const row = list.locator('li').filter({ hasText: name })
-  const more = list.getByRole('option', { name: /^Show \d+ more$/ })
-  if (!await row.first().isVisible() && await more.isVisible()) await more.click()
-  await row.first().click()
+  const row = list.locator('li').filter({ hasText: name }).first()
+  await reveal(list, row)
+  await row.click()
   await expect(list).toBeHidden()
 }
 
@@ -97,9 +104,11 @@ test('past chats are listed newest first above agents and reopen', async ({ page
   if (!await list.isVisible()) await title.click()
   const chats = [...fixture.personalChats].sort((a, b) => Date.parse(b.updatedAt) - Date.parse(a.updatedAt))
   await expect(list.locator('li').first()).toHaveText('AI chat')
-  const more = list.getByRole('option', { name: /^Show \d+ more$/ })
-  if (await more.isVisible()) await more.click()
-  for (const chat of chats) await expect(list.locator(`[data-command-key="session:${chat.id}"]`)).toHaveText(chat.title)
+  for (const chat of chats) {
+    const row = list.locator(`[data-command-key="session:${chat.id}"]`)
+    await reveal(list, row)
+    await expect(row).toHaveText(chat.title)
+  }
   const keys = await list.locator('li').evaluateAll(rows => rows.map(row => row.getAttribute('data-command-key')))
   const positions = chats.map(chat => keys.indexOf(`session:${chat.id}`))
   expect(positions).toEqual([...positions].sort((a, b) => a - b))
