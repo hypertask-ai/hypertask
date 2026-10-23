@@ -25,7 +25,7 @@ export default function AiChatTicketRows({ groups, onNavigate }: { groups: ChatT
                     if (event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
                     event.preventDefault();
                     onNavigate(task.url);
-                  }} className="grid grid-cols-[78px_minmax(0,1fr)_auto] items-start gap-x-2 gap-y-1 rounded-md px-1 py-2 text-dense !no-underline hover:bg-hover-active focus-visible:bg-active-elementBg">
+                  }} className="grid grid-cols-[78px_minmax(0,1fr)_auto] items-start gap-x-2 gap-y-1 rounded-sm px-1 py-2 text-dense !no-underline hover:bg-hover-active focus-visible:bg-active-elementBg">
                     <TableTicketCell ticket={task.ticketNumber || `#${task.uniqueIndex}`} className="overflow-hidden text-ellipsis text-[11px]" />
                     <span className="col-span-2 min-w-0"><TableTitleCell task={task} compact /></span>
                     <span className="flex min-w-0 items-center">{renderAssigneeAvatars(task)}</span>
@@ -36,7 +36,7 @@ export default function AiChatTicketRows({ groups, onNavigate }: { groups: ChatT
               ))}
               {hidden > 0 && (
                 <li>
-                  <button type="button" onClick={() => setExpanded((previous) => new Set(previous).add(index))} className="cursor-pointer rounded-md px-[20px] py-[8px] text-dense text-text-light-gray hover:bg-hover-active" aria-label={`Show ${hidden} more${group.label ? ` in ${group.label}` : ""}`}>
+                  <button type="button" onClick={() => setExpanded((previous) => new Set(previous).add(index))} className="cursor-pointer rounded-sm px-[20px] py-[8px] text-dense text-text-light-gray hover:bg-hover-active" aria-label={`Show ${hidden} more${group.label ? ` in ${group.label}` : ""}`}>
                     +{hidden} more
                   </button>
                 </li>

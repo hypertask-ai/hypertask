@@ -161,7 +161,7 @@ test("persistence stores references atomically, duplicate equality includes grou
   assert.equal(h.queries.length, 1);
 });
 
-function modelTurn(enabled, { persisted = true, failed = false } = {}) {
+function modelTurn(enabled, { persisted = true, failed = false, stateless = false } = {}) {
   const events = [], captured = [];
   const h = hydration();
   const d = display([{ name: "hypertask_get_tasks", result: { success: true, tasks: [{ id: 1 }] } }]);
@@ -184,7 +184,7 @@ function modelTurn(enabled, { persisted = true, failed = false } = {}) {
     "@/lib/ai/chatStream/title": {},
     "@/lib/ai/tools": { buildTools: (...args) => {
       const options = args[11];
-      return options ? { hypertask_show_ticket_rows: d.createShowTicketRowsTool([{ name: "hypertask_get_tasks", result: { success: true, tasks: [{ id: 1 }] } }], options.setGroups) } : {};
+      return { hypertask_get_tasks: {}, hypertask_show_ticket_rows: d.createShowTicketRowsTool([{ name: "hypertask_get_tasks", result: { success: true, tasks: [{ id: 1 }] } }], options?.setGroups ?? (() => undefined)) };
     } },
     "./modelReply": { generateModelReply: async (_, inputs) => {
       captured.push(inputs);
@@ -194,7 +194,7 @@ function modelTurn(enabled, { persisted = true, failed = false } = {}) {
     "./chatNames": { nameChatFromFirstMessage: async () => null },
   });
   return { events, captured, run: () => runModelTurn({
-    body: { session_id: "s", assistant_message_id: "m" }, dbUser: { id: 985 }, userMessagePersisted: true,
+    body: stateless ? {} : { session_id: "s", assistant_message_id: "m" }, dbUser: { id: 985 }, userMessagePersisted: true,
     gatewayTags: {}, streamLease: {}, providerAbort: new AbortController(), generationFinishedWithError: failed,
     finish: (status, payload) => { events.push(["done", status, payload]); }, send() {},
   }, {}, {}) };
@@ -204,7 +204,7 @@ test("flag Off keeps the original prompt, tool set, persistence and done payload
   const h = modelTurn(false);
   await h.run();
   assert.equal(h.captured[0].instructions, "original prompt");
-  assert.equal(Object.hasOwn(h.captured[0].tools, "hypertask_show_ticket_rows"), false);
+  assert.deepEqual(Object.keys(h.captured[0].tools), ["hypertask_get_tasks"]);
   assert.equal(Object.hasOwn(h.events[0][1], "ticketGroups"), false);
   assert.deepEqual(h.events.at(-1), ["done", "complete", { user_message_persisted: true, assistant_persisted: true }]);
 });
@@ -222,6 +222,14 @@ test("flag On changes prompt and delivers hydrated rows only after successful pe
     assert.equal(Object.hasOwn(failure.events.at(-1)[2], "ticketGroups"), false);
     assert.equal(failure.events.includes("hydrate"), false);
   }
+});
+
+test("flag On turn without persistence IDs keeps the original prompt and tool set", async () => {
+  const h = modelTurn(true, { stateless: true });
+  await h.run();
+  assert.equal(h.captured[0].instructions, "original prompt");
+  assert.deepEqual(Object.keys(h.captured[0].tools), ["hypertask_get_tasks"]);
+  assert.equal(h.events.includes("hydrate"), false);
 });
 
 function descendants(element) {
@@ -271,7 +279,7 @@ test("five-row boundary and +N more expand only that group and reuse table cells
   }
 });
 
-test("actual tool registration includes display only when enabled and allows read-role agents", () => {
+test("actual tool registration always lists display for the parity catalog and allows read-role agents", () => {
   const source = fs.readFileSync(path.join(root, "src/lib/ai/tools/index.ts"), "utf8");
   const mocks = {};
   const ast = ts.createSourceFile("index.ts", source, ts.ScriptTarget.Latest, true);
@@ -286,10 +294,10 @@ test("actual tool registration includes display only when enabled and allows rea
   mocks["@/lib/ai/tools/execution"] = { trackToolSetExecutions: (tools) => tools };
   const { buildTools } = load("src/lib/ai/tools/index.ts", mocks);
   const off = buildTools({ id: 985 }, {}, () => {}, () => {});
-  assert.equal(Object.hasOwn(off, "hypertask_show_ticket_rows"), false);
+  assert.equal(typeof off.hypertask_show_ticket_rows.execute, "function");
   const on = buildTools({ id: 985 }, {}, () => {}, () => {}, null, undefined, undefined, false, undefined, false, null, { executions: [], setGroups() {} });
   assert.equal(typeof on.hypertask_show_ticket_rows.execute, "function");
-  assert.deepEqual(Object.keys(on).filter((name) => name !== "hypertask_show_ticket_rows"), Object.keys(off));
+  assert.deepEqual(Object.keys(on), Object.keys(off));
   const { isNativeReadOnlyCall } = load("src/lib/ai/tools/readAgentGate.ts", { "@/lib/mcp/agents/readRoleGuard": {} });
   assert.equal(isNativeReadOnlyCall("hypertask_show_ticket_rows", {}), true);
   assert.equal(isNativeReadOnlyCall("hypertask_create_task", {}), false);

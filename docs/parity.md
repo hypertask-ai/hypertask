@@ -4,7 +4,7 @@
 
 The first landing is bootstrapped by the pre-existing, exact-head GitHub AI Review (`ai-review`) required check plus manual sensitive-path merge. After landing, `parity-contract-trusted` evaluates candidate source with the verifier and policy from the protected base branch; PR code cannot replace or relax the rules judging that PR.
 
-Regenerate it with `node scripts/parity-contract.mjs --write --cli-capabilities <production-capabilities.json>`. Inventory: api: 173, mcp: 76, cli: 156, ai_chat: 84, hyperai: 76. A number is the count of concrete routes, tools, or leaf commands implementing the canonical job. ↪ records an intentional exclusion; 🛠 is a reviewed, temporary two-step transition and must be removed by its implementation PR. The CLI inventory is pinned to `@hypertask/hypertask_cli@2.0.10`; HyperAI keys are independently validated as the identity projection of the canonical MCP registry.
+Regenerate it with `node scripts/parity-contract.mjs --write --cli-capabilities <production-capabilities.json>`. Inventory: api: 173, mcp: 76, cli: 156, ai_chat: 85, hyperai: 76. A number is the count of concrete routes, tools, or leaf commands implementing the canonical job. ↪ records an intentional exclusion; 🛠 is a reviewed, temporary two-step transition and must be removed by its implementation PR. The CLI inventory is pinned to `@hypertask/hypertask_cli@2.0.10`; HyperAI keys are independently validated as the identity projection of the canonical MCP registry.
 
 | Job | api | mcp | cli | ai_chat | hyperai |
 |---|---|---|---|---|---|
@@ -36,6 +36,7 @@ Regenerate it with `node scripts/parity-contract.mjs --write --cli-capabilities 
 | **Create, read, update, publish, and delete drafts** | ✅ 5 | ✅ 1 | ✅ 5 | ✅ 1 | ✅ 1 |
 | **Start, stop, pause, resume, log, and report time** | ✅ 10 | ✅ 3 | ✅ 10 | ✅ 8 | ✅ 3 |
 | **Draft, improve, and inspect AI usage** | ✅ 7 | ↪ AI clients already provide their own model; recursive writing tools are intentionally API/CLI-only. | ✅ 2 | ↪ AI Chat itself is the writing surface rather than a nested tool. | ↪ HyperAI itself is the writing surface rather than a nested tool. |
+| **Show retrieved tickets as clickable rows in AI Chat** | ↪ Rows only display tickets the same chat turn already read through existing task tools; no new data route. | ↪ MCP clients render task results themselves; the row layout is an AI Chat presentation step. | ↪ The CLI prints task lists directly and has no chat message layout. | ✅ 1 | ↪ HyperAI keeps its own message rendering and does not show AI Chat ticket rows. |
 | **Search Hypertask product help** | ↪ Help search uses the public documentation service, not a user-data API route. | ✅ 1 | ↪ The CLI exposes command help locally instead of remote help-center search. | ✅ 1 | ✅ 1 |
 | **Search the public web for current information** | ↪ Public web search is an AI-runtime capability, not a board data endpoint. | ↪ MCP clients can provide their own web-search capability. | ↪ The board CLI does not proxy public web search. | ✅ 1 | ↪ HyperAI does not receive the AI Chat web-search provider. |
 | **Create, inspect, test, and delete webhooks** | ✅ 4 | ✅ 1 | ✅ 11 | ✅ 1 | ✅ 1 |

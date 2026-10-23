@@ -46,7 +46,7 @@ export async function runModelTurn(state: StreamState, resolvedBody: ChatRequest
     (actingAgent.prompt ? ` Follow these instructions:\n${actingAgent.prompt}` : "")
     : null;
   const inlineAgentImagesEnabled = await isFeatureEnabled(HTPR_7514_INLINE_AGENT_IMAGES_FLAG, dbUser.id);
-  const ticketRowsEnabled = await isFeatureEnabled(HTPR_7683_AI_CHAT_TICKET_ROWS_FLAG, dbUser.id);
+  const ticketRowsEnabled = Boolean(body.session_id && body.assistant_message_id) && await isFeatureEnabled(HTPR_7683_AI_CHAT_TICKET_ROWS_FLAG, dbUser.id);
   let ticketGroups: ChatTicketGroupReferences | undefined;
   const instructions = [
     AGENT_SYSTEM_PROMPT,
@@ -75,7 +75,7 @@ export async function runModelTurn(state: StreamState, resolvedBody: ChatRequest
     },
   ];
   const toolExecutions: ToolExecution[] = [];
-  const tools = buildTools(
+  const catalogTools = buildTools(
     dbUser,
     resolvedBody,
     state.send,
@@ -110,6 +110,8 @@ export async function runModelTurn(state: StreamState, resolvedBody: ChatRequest
     actingAgent ? actingAgent.teamScope : null,
     ticketRowsEnabled ? { executions: toolExecutions, setGroups: (groups) => { ticketGroups = groups; } } : undefined,
   );
+  const tools = ticketRowsEnabled ? catalogTools
+    : Object.fromEntries(Object.entries(catalogTools).filter(([name]) => name !== "hypertask_show_ticket_rows"));
   if (
     heartbeatExecutionId &&
     body.session_id &&
