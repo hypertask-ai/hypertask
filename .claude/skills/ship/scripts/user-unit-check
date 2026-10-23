@@ -22,6 +22,7 @@ if args.timeout <= 0:
 
 home = Path.home()
 checked = {}
+TICKET_WORKTREE = re.compile(r'^hypertask-(?:(?:htpr|yper4|hyfa)-)?\d+(?:[-_.].*)?$', re.IGNORECASE)
 
 
 def durable(raw):
@@ -34,7 +35,7 @@ def durable(raw):
             raise ValueError(f'disposable path: {raw} (.worktrees)')
         projects = home / 'projects'
         if candidate.is_relative_to(projects) and candidate.relative_to(projects).parts:
-            if candidate.relative_to(projects).parts[0].startswith('hypertask-'):
+            if TICKET_WORKTREE.match(candidate.relative_to(projects).parts[0]):
                 raise ValueError(f'disposable path: {raw} (ticket worktree)')
         for temporary in {Path('/tmp'), Path(os.environ.get('TMPDIR') or '/tmp').resolve()}:
             if candidate.is_relative_to(temporary):
