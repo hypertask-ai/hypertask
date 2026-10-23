@@ -15,7 +15,7 @@ import { ArrowLeft } from "lucide-react";
 import { useRecoilState } from "@/lib/state";
 import { tasksPlayListAtom } from "@/store";
 import { inboxPlaylistHoldsTask } from "@/lib/inbox/inboxTasksPlaylist";
-import InboxPlaylistRestorer from "./InboxPlaylistRestorer";
+import InboxPlaylistRestorer from "@/lib/inbox/InboxPlaylistRestorer";
 
 const KeyboardShortcuts = dynamic(
   instrumentedDynamicImport("KeyboardShortcuts", () => import("@/components/sidebars/keyboardShortcuts")),
