@@ -233,6 +233,7 @@ for (const splitTasks of [false, true]) {
         ai: require('ai'),
         'next/server': { NextResponse: { json: Response.json } },
         '@/lib/net/downloadWithoutBrotli': { downloadWithoutBrotli: undefined },
+        '@/lib/flags': { isFeatureEnabled: async () => false },
         '@/lib/ai/taskWriterDueDate': {},
         '@/lib/ai/taskWriterTicketType': {},
         '@/lib/errors/reportError': { reportError: async (error) => errors.push(error) },
