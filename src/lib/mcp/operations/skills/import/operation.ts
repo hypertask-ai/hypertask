@@ -1,3 +1,4 @@
+import { requireAgentWriteRole } from "@/lib/mcp/agents/readRoleGuard";
 import { withScopedProjectWrite } from "@/app/api/ai/_lib/customInstructions";
 import { wrapMcpRoute, validateMcpRouteAuth as validateMcpAuth, checkMcpRouteRateLimit as checkMcpRateLimit } from '@/lib/mcp/routeWrapper'
 import { NextRequest, NextResponse } from "next/server";
@@ -28,6 +29,8 @@ export async function POST(request: NextRequest) {
   if (rateLimited) return rateLimited;
   const ctx = await validateMcpAuth(request);
   if (!ctx) return createUnauthorizedResponse();
+  const roleRefusal = await requireAgentWriteRole(ctx);
+  if (roleRefusal) return roleRefusal;
   const userId = ctx.user.id;
 
   try {

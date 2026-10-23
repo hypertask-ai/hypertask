@@ -1,3 +1,4 @@
+import { requireAgentWriteRole } from "@/lib/mcp/agents/readRoleGuard";
 import { reportMcpOperationCrash } from "@/lib/mcp/operationCrashReport";
 import { wrapMcpRoute, checkMcpRouteRateLimit as checkMcpRateLimit, validateMcpRouteAuth as validateMcpAuth } from '@/lib/mcp/routeWrapper'
 import { CustomFieldType } from "@prisma/client";
@@ -125,6 +126,8 @@ export async function POST(request: NextRequest) {
   try {
     const auth = await authenticate(request);
     if (!auth.ctx) return auth.response!;
+    const roleRefusal = await requireAgentWriteRole(auth.ctx);
+    if (roleRefusal) return roleRefusal;
 
     let body: unknown;
     try {

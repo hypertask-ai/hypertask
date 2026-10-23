@@ -116,6 +116,7 @@ function harness(options = {}) {
   const errors = { errorMessage: (error) => error.message };
   const execution = moduleWithStubs("src/lib/ai/tools/execution.ts", {
     "@/lib/mcp/tasks/agentMutationLeaseAdoption": {},
+    "@/lib/ai/tools/readAgentGate": { refuseReadAgentToolCall: async () => null },
     "@/lib/prisma": { __esModule: true, default: prisma },
     "@/lib/mcp/tasks/resolveTask": {},
     "@/app/api/ai/chat/stream/bulkTools": {},

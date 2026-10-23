@@ -1,3 +1,4 @@
+import { requireAgentWriteRole } from '@/lib/mcp/agents/readRoleGuard';
 import type { AgentTokenTeamScope } from '@/lib/mcp/auth/types';
 import { taskIdentifierErrorResponse } from "@/lib/mcp/tasks/resolveTask";
 import { findIdParamOutOfRange, idOutOfRangeMessage } from "@/lib/mcp/listParams";
@@ -106,6 +107,8 @@ export async function POST(request: NextRequest) {
     if (!ctx) {
       return await mcpUnauthorizedResponse(request);
     }
+    const roleRefusal = await requireAgentWriteRole(ctx);
+    if (roleRefusal) return roleRefusal;
     const user = ctx.user;
     let body: MoveTaskBody;
     try {
