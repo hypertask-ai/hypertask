@@ -128,9 +128,8 @@ export function useAiChatPresentation(context: Context) {
   async function copyResponse(message: IChatMessage) {
     try {
       const html = message.content?.toString() ?? "";
-      const div = document.createElement("div");
-      div.innerHTML = html;
-      const plain = div.innerText;
+      const doc = new window.DOMParser().parseFromString(html, "text/html");
+      const plain = doc.body.textContent ?? "";
 
       if (
         navigator.clipboard &&
