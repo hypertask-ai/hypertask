@@ -446,6 +446,13 @@ async function isAnthropicDisabledForLookup(lookup: ByokLookupContext) {
   return !resolveTeamProviderEnabled(team?.aiProviderSettings, "anthropic");
 }
 
+async function byokRouteUsable(provider: "claude" | "gateway" | "openrouter", lookup: ByokLookupContext) {
+  if (provider !== "openrouter") return true;
+  const teamId = await resolveLookupTeamId(lookup);
+  const team = teamId ? await prisma.team.findUnique({ where: { id: teamId }, select: { aiProviderSettings: true } }) : null;
+  return resolveTeamProviderEnabled(team?.aiProviderSettings, "openrouter");
+}
+
 export async function getAiDefaultModelContext(lookup: ByokLookupContext, haiku55Enabled?: boolean, plan?: AiDefaultModelContext["plan"]) {
   const haikuDefaultEnabled = await haikuDefaultModelEnabled(lookup.userId);
   const backgroundClaudeEnabled = await backgroundClaudeModelEnabled?.(lookup.userId) ?? false;
@@ -457,14 +464,11 @@ export async function getAiDefaultModelContext(lookup: ByokLookupContext, haiku5
     openaiOnlyDefaultEnabled = await isFeatureEnabled(HTPR_7634_OPENAI_ONLY_DEFAULT_FLAG, lookup.userId ?? 0);
   } catch {
   }
-  const teamId = openaiOnlyDefaultEnabled ? await resolveLookupTeamId(lookup) : undefined;
-  const team = teamId ? await prisma.team.findUnique({ where: { id: teamId }, select: { aiProviderSettings: true } }) : undefined;
   let hasDirectOpenAiKey = false;
   let hasClaudeRoute = false;
   let byok: { provider: "claude" | "gateway" | "openrouter"; credential: string } | undefined;
   if (enabled && storePlanId && storePlanId !== "Free") {
     for (const provider of ["claude", "gateway", "openrouter"] as const) {
-      if (openaiOnlyDefaultEnabled && provider === "openrouter" && !resolveTeamProviderEnabled(team?.aiProviderSettings, "openrouter")) continue;
       const credential = await getByokApiKeyForProvider(provider, undefined, lookup, { resolveWithoutFlag: true });
       if (credential) {
         byok = { provider, credential };
@@ -475,15 +479,9 @@ export async function getAiDefaultModelContext(lookup: ByokLookupContext, haiku5
   if (openaiOnlyDefaultEnabled && storePlanId && storePlanId !== "Free") {
     const openaiKey = await getByokApiKeyForProvider("openai", undefined, lookup, { resolveWithoutFlag: true });
     hasDirectOpenAiKey = Boolean(openaiKey && !isVercelAiGatewayKey(openaiKey));
-    if (!byok) {
-      const managedKey = await resolveTeamByokSecret(MANAGED_TEAM_GATEWAY_PROVIDER, lookup);
-      const gatewayKey = isVercelAiGatewayKey(managedKey) ? managedKey : isVercelAiGatewayKey(openaiKey) ? openaiKey : undefined;
-      if (gatewayKey) {
-        if (gatewayKey === managedKey) registerManagedGatewayKey(gatewayKey);
-        byok = { provider: "gateway", credential: gatewayKey };
-      }
-    }
-    hasClaudeRoute = Boolean(byok);
+    hasClaudeRoute = (byok !== undefined && await byokRouteUsable(byok.provider, lookup)) ||
+      isVercelAiGatewayKey(openaiKey) ||
+      isVercelAiGatewayKey(await resolveTeamByokSecret(MANAGED_TEAM_GATEWAY_PROVIDER, lookup));
   }
   const anthropicDisabled = backgroundClaudeEnabled && await isAnthropicDisabledForLookup(lookup);
   return { haiku55Enabled: enabled, haikuDefaultEnabled, backgroundClaudeEnabled, anthropicDisabled, plan: storePlanId, hasByok: Boolean(byok), byok, openaiOnlyDefaultEnabled, hasDirectOpenAiKey, hasClaudeRoute };
