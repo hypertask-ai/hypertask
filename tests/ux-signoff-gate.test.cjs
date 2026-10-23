@@ -1084,7 +1084,7 @@ test('item 8: re-read immediately before posting and evaluate changed heads with
       }
       return fixture.github(endpoint, options);
     };
-    assert.equal(await run(['--reconcile'], { env, github, fetchImpl: commentsFetch, log: () => {} }), 0);
+    assert.equal(await run(['--reconcile'], { env, github, fetchImpl: commentsFetch, log: () => {} }), oldError ? 2 : 0);
     assert.equal(filesReads, 2);
     const posts = fixture.calls.filter((call) => call.method === 'POST');
     assert.equal(posts.length, 1);
@@ -1203,8 +1203,8 @@ test('an agent-edited refusal still blocks an earlier yes or thumbs up until a f
   assert.equal((await decision({ comments: [wireframe(), yes(), agentEditedNo, yes({ id: 4, createdAt: '2026-10-10T12:04:00Z' })] })).state, 'success');
 });
 
-for (const method of ['GET', 'POST']) {
-  test(`GitHub ${method} rate limit waits until reset then succeeds`, async () => {
+for (const status of [403, 429]) {
+  test(`GitHub GET rate limit HTTP ${status} still waits until reset then succeeds`, async () => {
     const { createGithub } = await gate;
     let clock = 1000000;
     let calls = 0;
@@ -1212,17 +1212,40 @@ for (const method of ['GET', 'POST']) {
     const github = createGithub({ env, now: () => clock, log: () => {},
       sleep: async (ms) => { waits.push(ms); clock += ms; },
       fetchImpl: async () => {
-        if (++calls === 1) return response({ message: 'API rate limit exceeded for installation' }, 403, {
+        if (++calls === 1) return response({ message: 'API rate limit exceeded for installation' }, status, {
           'x-ratelimit-remaining': '0', 'x-ratelimit-reset': '1005',
         });
         assert.equal(clock, 1005000);
         return response({ ok: true });
       },
     });
-    assert.deepEqual(await github('repos/fixture/repo/statuses/sha', { method }), { ok: true });
+    assert.deepEqual(await github('repos/fixture/repo/pulls/1'), { ok: true });
     assert.deepEqual(waits, [5000]);
     assert.equal(calls, 2);
   });
+}
+
+for (const options of [
+  { method: 'POST', body: { state: 'success' } }, { method: 'PATCH' },
+  { method: 'GET', body: { state: 'success' } },
+]) {
+  for (const [status, limited] of [[403, true], [429, true], [403, false], [404, false], [500, false]]) {
+    test(`REST ${options.method} with body=${!!options.body} HTTP ${status} limited=${limited} never sleeps or retries`, async () => {
+      const { createGithub } = await gate;
+      let calls = 0;
+      const github = createGithub({ env, now: () => 1000000,
+        sleep: () => assert.fail('writes must not wait'),
+        fetchImpl: async () => {
+          calls++;
+          return response({}, status, limited ? { 'x-ratelimit-remaining': '0', 'x-ratelimit-reset': '1005' } : {});
+        },
+      });
+      await assert.rejects(github('repos/fixture/repo/statuses/sha', options), (error) => limited
+        ? error.rateLimited && /skipped: GitHub rate limited until 1970-01-01T00:16:45.000Z;/.test(error.message)
+        : !error.rateLimited && error.message === `GitHub API returned HTTP ${status}`);
+      assert.equal(calls, 1, 'no second write can publish a stale approval');
+    });
+  }
 }
 
 for (const stage of ['list', 'cursor', 'files', 'publish']) {
@@ -1250,7 +1273,7 @@ for (const stage of ['list', 'cursor', 'files', 'publish']) {
   });
 }
 
-for (const status of [403, 500]) {
+for (const status of [403, 404, 500]) {
   test(`UX non-rate-limit ${status} still refused next to reset recovery now allowed`, async () => {
     const { createGithub, run } = await gate;
     const github = createGithub({ env, sleep: async () => {}, fetchImpl: async () => response({ message: 'Forbidden' }, status) });
@@ -1273,26 +1296,67 @@ test('UX reuses cursor status reads on unchanged heads but refreshes a changed h
   assert.ok(posts[0].endpoint.endsWith(updated.head.sha));
 });
 
-test('gh fallback retries rejected status posts at reset without leaking error output', async () => {
-  const { createGithub } = await gate;
-  let calls = 0;
-  let clock = 1000000;
-  const waits = [];
-  const github = createGithub({ env: {}, now: () => clock, log: () => {},
-    sleep: async (ms) => { waits.push(ms); clock += ms; },
-    exec: (_, args, options) => {
-      assert.ok(args.includes('--include'));
-      assert.equal(options.input, '{"state":"success"}');
-      if (++calls === 1) throw Object.assign(new Error('private gh error'), {
-        status: 1, stdout: 'HTTP/2.0 403 Forbidden\r\nX-Ratelimit-Remaining: 0\r\nX-Ratelimit-Reset: 1005\r\n\r\n{}',
-      });
-      return 'HTTP/2.0 201 Created\r\nContent-Type: application/json\r\n\r\n{"ok":true}';
-    },
+for (const method of ['GET', 'POST']) {
+  test(`gh fallback ${method} ${method === 'GET' ? 'still waits and retries' : 'skips without waiting or a second POST'}`, async () => {
+    const { createGithub } = await gate;
+    let calls = 0;
+    let clock = 1000000;
+    const waits = [];
+    const github = createGithub({ env: {}, now: () => clock, log: () => {},
+      sleep: async (ms) => {
+        assert.equal(method, 'GET', 'writes must not sleep');
+        waits.push(ms); clock += ms;
+      },
+      exec: (_, args, options) => {
+        assert.ok(args.includes('--include'));
+        assert.equal(options.input, method === 'POST' ? '{"state":"success"}' : undefined);
+        if (++calls === 1) throw Object.assign(new Error('private gh error'), {
+          status: 1, stdout: 'HTTP/2.0 403 Forbidden\r\nX-Ratelimit-Remaining: 0\r\nX-Ratelimit-Reset: 1005\r\n\r\n{}',
+        });
+        return 'HTTP/2.0 200 OK\r\nContent-Type: application/json\r\n\r\n{"ok":true}';
+      },
+    });
+    const result = github('repos/fixture/repo/statuses/sha', { method, ...(method === 'POST' ? { body: { state: 'success' } } : {}) });
+    if (method === 'GET') assert.deepEqual(await result, { ok: true });
+    else await assert.rejects(result, (error) => error.rateLimited && /skipped: GitHub rate limited until 1970-01-01T00:16:45.000Z;/.test(error.message));
+    assert.deepEqual(waits, method === 'GET' ? [5000] : []);
+    assert.equal(calls, method === 'GET' ? 2 : 1);
   });
-  assert.deepEqual(await github('repos/fixture/repo/statuses/sha', { method: 'POST', body: { state: 'success' } }), { ok: true });
-  assert.deepEqual(waits, [5000]);
-  assert.equal(calls, 2);
-});
+}
+
+for (const stage of ['statuses', 'current PR', 'publish']) {
+  test(`UX evaluation error before rate-limited ${stage} remains exit 2`, async () => {
+    const { createGithub, run } = await gate;
+    const fixture = apiFixture({ prs: [pr(1, { title })] });
+    const output = [];
+    let statusReads = 0;
+    let prReads = 0;
+    const github = createGithub({ env, now: () => 1000000, log: () => {},
+      sleep: () => assert.fail('no write retry or over-budget read wait'),
+      fetchImpl: async (url, options) => {
+        const endpoint = url.replace('https://api.github.com/', '');
+        let limited = false;
+        if (stage === 'statuses' && endpoint.includes('/statuses?')) {
+          if (++statusReads === 1) return response({}, 403);
+          limited = true;
+        }
+        if (stage === 'current PR' && endpoint.endsWith('/pulls/1')) limited = ++prReads > 1;
+        if (stage === 'publish' && options.method === 'POST') limited = true;
+        if (limited) return response({}, 403, {
+          'x-ratelimit-remaining': '0', 'x-ratelimit-reset': stage === 'publish' ? '1005' : '5000',
+        });
+        return response(await fixture.github(endpoint, options));
+      },
+    });
+    assert.equal(await run(['--reconcile'], {
+      env: { ...env, MCP_TOKEN: '' }, github,
+      fetchImpl: () => assert.fail('missing MCP token must produce an evaluation error'),
+      log: (line) => output.push(line),
+    }), 2);
+    assert.match(output.at(-1), /::warning::skipped: GitHub rate limited until/);
+    assert.ok(fixture.calls.every((call) => call.method !== 'POST'));
+  });
+}
 
 test('an earlier genuine UX failure is not hidden by a later rate-limit skip', async () => {
   const { createGithub, run } = await gate;

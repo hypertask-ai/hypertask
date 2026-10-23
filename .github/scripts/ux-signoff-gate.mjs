@@ -2,7 +2,7 @@ import { execFileSync } from 'node:child_process';
 import { readFileSync } from 'node:fs';
 import { basename, dirname } from 'node:path';
 import { pathToFileURL } from 'node:url';
-import { createRateLimitBudget, ghApi, rateLimitWait } from './github-rate-limit.mjs';
+import { GithubRateLimit, createRateLimitBudget, ghApi, rateLimitWait } from './github-rate-limit.mjs';
 
 const CONTEXT = 'ux-signoff';
 const READ_ERROR = 'Could not read the ticket; retried every 10 minutes';
@@ -439,6 +439,7 @@ export function createGithub({ env = process.env, fetchImpl = fetch, exec = exec
     timeBudgetMs: Number(env.GH_API_TIME_BUDGET_SECONDS || 480) * 1000,
   });
   return async (path, { method = 'GET', body } = {}) => {
+    const readOnly = method === 'GET' && body === undefined;
     if (!env.GH_TOKEN) {
       const args = ['api', '--method', method, path];
       if (body) args.push('--input', '-');
@@ -468,19 +469,20 @@ export function createGithub({ env = process.env, fetchImpl = fetch, exec = exec
           signal: AbortSignal.timeout(30000),
         });
       } catch (error) {
-        if (method !== 'GET' || attempt >= 2) throw error;
+        if (!readOnly || attempt >= 2) throw error;
         await sleep(attempt++ === 0 ? 1000 : 3000);
         continue;
       }
       if (response.ok) return response.json();
       const wait = rateLimitWait(response.status, response.headers, await response.text(), now());
       if (wait != null) {
+        if (!readOnly) throw new GithubRateLimit(new Date(now() + wait).toISOString());
         const ms = budget.reserve(wait);
         log(`GitHub API rate limited; waiting ${Math.ceil(ms / 1000)}s until reset`);
         await sleep(ms);
         continue;
       }
-      if (method !== 'GET' || attempt >= 2 || response.status < 500) {
+      if (!readOnly || attempt >= 2 || response.status < 500) {
         throw new Error(`GitHub API returned HTTP ${response.status}`);
       }
       await sleep(attempt++ === 0 ? 1000 : 3000);
@@ -666,6 +668,7 @@ async function runGate(args, { env = process.env, fetchImpl = fetch, github = cr
             verdict = { state: 'pending', description: DEFERRED, details: [] };
           } else verdict = { state: 'error', description: env.MCP_TOKEN ? READ_ERROR : 'HYPERTASK_MCP_TOKEN is empty; configure it for UI signoff', details: [] };
         }
+        if (verdict.state === 'error') errors = true;
         if (!/^[a-f0-9]{40}$/.test(pr.head?.sha ?? '')) throw new Error('No PR head SHA to publish');
         // The serialized workflow owns this context; reuse the cursor read for unchanged heads.
         const statuses = statusCache.get(pr.head.sha) ?? await githubPages(github, `repos/${repo}/commits/${pr.head.sha}/statuses`);
@@ -679,7 +682,6 @@ async function runGate(args, { env = process.env, fetchImpl = fetch, github = cr
           continue;
         }
         if (deferred && newestStatus) break;
-        if (verdict.state === 'error') errors = true;
         // Unchanged verdicts are re-posted hourly so the cursor moves while statuses per head stay bounded.
         const stale = Date.parse(newestStatus?.updated_at) < now() - HEARTBEAT_MS;
         if (stale || newestStatus?.state !== verdict.state || newestStatus?.description !== verdict.description) {

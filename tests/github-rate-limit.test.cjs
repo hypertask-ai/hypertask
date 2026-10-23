@@ -42,16 +42,56 @@ test('too-long reset is a typed no-result skip without waiting or retrying', asy
   assert.equal(calls, 1);
 });
 
-for (const status of [403, 500]) {
-  test(`non-rate-limit HTTP ${status} still refused next to rate-limit recovery now allowed`, async () => {
+for (const args of [
+  ['-X', 'POST'], ['--method', 'POST'], ['-XPOST'], ['--method=POST'],
+  ['--input', '-'], ['--input=payload.json'], ['--method', 'GET', '--input', '-'],
+  ['-f', 'state=success'], ['--raw-field=state=success'], ['-Fstate=success'],
+  ['--field', 'state=success'], ['-X', 'PATCH'], ['--method', 'DELETE'],
+]) {
+  for (const status of [403, 429]) {
+    test(`rate-limited write ${args.join(' ')} HTTP ${status} skips without sleeping or retrying`, async () => {
+      const { ghApi } = await gate;
+      let calls = 0;
+      await assert.rejects(ghApi(['repos/fixture/repo/statuses/sha', ...args], {
+        now: () => 1000000,
+        sleep: () => assert.fail('writes must not sleep'),
+        save: () => assert.fail('writes must not spend the read retry budget'),
+        exec: () => {
+          calls++;
+          return http(status, 'X-Ratelimit-Remaining: 0\r\nX-Ratelimit-Reset: 1005\r\n');
+        },
+      }), (error) => error.rateLimited && /skipped: GitHub rate limited until 1970-01-01T00:16:45.000Z;/.test(error.message));
+      assert.equal(calls, 1, 'no second POST can publish the stale approval');
+    });
+  }
+}
+
+for (const args of [[], ['-X', 'GET'], ['--method', 'GET'], ['-XGET'], ['--method=GET']]) {
+  test(`read ${args.join(' ') || 'implicit GET'} still waits and retries`, async () => {
     const { ghApi } = await gate;
     let calls = 0;
-    await assert.rejects(ghApi(['repos/fixture/repo/pulls'], {
-      exec: () => { calls++; return http(status, '', '{"message":"Forbidden"}'); },
-      sleep: () => assert.fail('ordinary API failure must not wait'),
-    }), new RegExp(`HTTP ${status}`));
-    assert.equal(calls, 1);
+    const waits = [];
+    assert.equal(await ghApi(['repos/fixture/repo/pulls', ...args], {
+      now: () => 1000000, log: () => {}, sleep: async (ms) => waits.push(ms),
+      exec: () => ++calls === 1 ? http(429, 'Retry-After: 5\r\n') : http(200),
+    }), '{}');
+    assert.equal(calls, 2);
+    assert.deepEqual(waits, [5000]);
   });
+}
+
+for (const status of [403, 404, 500]) {
+  for (const method of ['GET', 'POST']) {
+    test(`non-rate-limit ${method} HTTP ${status} still refused next to rate-limit recovery now allowed`, async () => {
+      const { ghApi } = await gate;
+      let calls = 0;
+      await assert.rejects(ghApi(['repos/fixture/repo/pulls', '--method', method], {
+        exec: () => { calls++; return http(status, '', '{"message":"Forbidden"}'); },
+        sleep: () => assert.fail('ordinary API failure must not wait'),
+      }), new RegExp(`HTTP ${status}`));
+      assert.equal(calls, 1);
+    });
+  }
 }
 
 test('rate-limit detection requires 403/429 and a rate-limit signal for 403', async () => {

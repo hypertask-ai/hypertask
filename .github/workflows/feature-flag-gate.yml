@@ -66,10 +66,11 @@ jobs:
           pending_payload="$gate_tmp/pending-status.json"
           payload="$gate_tmp/status.json"
           head_sha="$EVENT_HEAD_SHA"
+          fingerprint=""
 
           publish_error_status() {
             if [[ "$1" != *"waiting for"* ]]; then gh_api_failed=2; fi
-            jq -n --arg description "$1" --arg target_url "$RUN_URL" '{
+            jq -n --arg description "$1" --arg target_url "$RUN_URL${fingerprint:+#$fingerprint}" '{
               state: "error",
               context: "feature-flag-gate",
               description: $description,
@@ -113,6 +114,7 @@ jobs:
 
           title=$(jq -r '.title' "$pr_json")
           base_sha=$(jq -r '.base.sha' "$pr_json")
+          fingerprint="ffg=$base_sha.$(printf %s "$title" | sha256sum | cut -c1-16)"
           api_head_sha=$(jq -r '.head.sha' "$pr_json")
           head_repo=$(jq -r '.head.repo.full_name' "$pr_json")
           export FEATURE_FLAG_PR_LABELS
@@ -172,6 +174,7 @@ jobs:
 
           fi
 
+          if [ "$result" -eq 2 ]; then gh_api_failed=2; fi
           if ! gh_api "repos/$REPO/pulls/$PR_NUMBER" >"$current_json"; then
             echo "::error::Cannot re-read pull request #$PR_NUMBER before publishing its result."
             publish_error_status "feature-flag-gate could not refresh this pull request" ||
@@ -216,13 +219,12 @@ jobs:
             cat "$error_file"
           fi
 
-          jq -n --arg state "$state" --arg description "$description" --arg target_url "$RUN_URL" '{
+          jq -n --arg state "$state" --arg description "$description" --arg target_url "$RUN_URL#$fingerprint" '{
             state: $state,
             context: "feature-flag-gate",
             description: $description,
             target_url: $target_url
           }' >"$payload"
-          if [ "$state" = error ]; then gh_api_failed=2; fi
           if ! gh_api -X POST "repos/$REPO/statuses/$head_sha" --input "$payload" >/dev/null; then
             echo "::error::Cannot publish feature-flag-gate for pull request #$PR_NUMBER."
             exit 2
@@ -281,22 +283,31 @@ jobs:
           rows="$gate_tmp/pulls.jsonl"
           fresh_heads_json="$gate_tmp/fresh-heads.json"
           failures=0
+          evaluated=0
+          skipped=0
+          fingerprint=""
 
           publish_status_if_changed() {
             local head_sha="$1"
             local payload="$2"
-            local latest state description
-            if ! gh_api "repos/$REPO/commits/$head_sha/statuses?per_page=100" >"$gate_tmp/latest-statuses.json"; then
-              echo "::warning::Cannot read existing feature-flag-gate statuses for $head_sha; publishing without deduplication."
-              gh_api -X POST "repos/$REPO/statuses/$head_sha" --input "$payload" >/dev/null
-              return
+            local statuses_file="${3:-}"
+            local latest state description status_fingerprint
+            if [ -z "$statuses_file" ]; then
+              statuses_file="$gate_tmp/latest-statuses.json"
+              if ! gh_api "repos/$REPO/commits/$head_sha/statuses?per_page=100" >"$statuses_file"; then
+                echo "::warning::Cannot read existing feature-flag-gate statuses for $head_sha; publishing without deduplication."
+                gh_api -X POST "repos/$REPO/statuses/$head_sha" --input "$payload" >/dev/null
+                return
+              fi
             fi
-            latest=$(cat "$gate_tmp/latest-statuses.json")
+            latest=$(cat "$statuses_file")
             state=$(jq -r '.state' "$payload") || return 1
             description=$(jq -r '.description' "$payload") || return 1
-            if jq -e --arg state "$state" --arg description "$description" '
+            status_fingerprint=$(jq -r '.target_url | split("#")[1:] | join("#")' "$payload") || return 1
+            if jq -e --arg state "$state" --arg description "$description" --arg fingerprint "$status_fingerprint" '
               map(select(.context == "feature-flag-gate"))[0] as $current |
-              $current.state == $state and $current.description == $description
+              $current.state == $state and $current.description == $description and
+              ($current.target_url // "" | split("#")[1:] | join("#")) == $fingerprint
             ' <<<"$latest" >/dev/null; then
               return 0
             fi
@@ -305,13 +316,13 @@ jobs:
 
           publish_reconciliation_error() {
             if [[ "$3" != *"waiting for"* ]]; then gh_api_failed=2; fi
-            jq -n --arg description "$3" --arg target_url "$RUN_URL" '{
+            jq -n --arg description "$3" --arg target_url "$RUN_URL${fingerprint:+#$fingerprint}" '{
               state: "error",
               context: "feature-flag-gate",
               description: $description,
               target_url: $target_url
             }' >"$2"
-            publish_status_if_changed "$1" "$2"
+            publish_status_if_changed "$1" "$2" "${4:-}"
           }
 
           parser_dir="$gate_tmp/parser"
@@ -352,6 +363,7 @@ jobs:
           export FEATURE_FLAG_TYPESCRIPT_PATH="$parser_dir/node_modules/typescript/lib/typescript.js"
 
           while IFS= read -r pull; do
+            fingerprint=""
             if ! jq -e '
               (.number | type == "number") and (.title | type == "string") and
               (.base.sha | test("^[0-9a-f]{40}$")) and (.head.sha | test("^[0-9a-f]{40}$")) and
@@ -379,6 +391,24 @@ jobs:
             error_file="$gate_tmp/error-$number.txt"
             payload="$gate_tmp/status-$number.json"
             result=2
+            fingerprint="ffg=$base_sha.$(printf %s "$title" | sha256sum | cut -c1-16)"
+            statuses_file="$gate_tmp/latest-statuses-$number.json"
+            if ! gh_api "repos/$REPO/commits/$head_sha/statuses?per_page=100" >"$statuses_file"; then
+              echo "::warning::Cannot read existing feature-flag-gate statuses for $head_sha; evaluating without deduplication."
+              printf '[]\n' >"$statuses_file"
+            fi
+            if [ "$head_pr_count" -eq 1 ] && jq -e --arg fingerprint "$fingerprint" --argjson rejudge_minutes 30 '
+              map(select(.context == "feature-flag-gate"))[0] as $current |
+              ($current.state == "success" or $current.state == "failure") and
+              (($current.updated_at // "1970-01-01T00:00:00Z" | fromdateiso8601) > (now - ($rejudge_minutes * 60))) and
+              ($current.description // "" | startswith("This head commit is shared by multiple open production pull requests;") | not) and
+              ($current.target_url // "" | split("#")[1:] | join("#")) == $fingerprint
+            ' "$statuses_file" >/dev/null; then
+              echo "skip #$number: unchanged since its last status under 30 minutes ago"
+              skipped=$((skipped + 1))
+              continue
+            fi
+            evaluated=$((evaluated + 1))
 
             if [ "$head_pr_count" -ne 1 ]; then
               echo "This head commit is shared by multiple open production pull requests; use a unique head commit." >"$reason_file"
@@ -400,9 +430,10 @@ jobs:
               result=$(( $? == 1 ? 1 : 2 ))
             fi
 
+            if [ "$result" -eq 2 ]; then failures=$((failures + 1)); fi
             gh_api "repos/$REPO/pulls/$number" >"$gate_tmp/current.json" || {
               echo "::error::Cannot re-read pull request #$number before publishing its result."
-              publish_reconciliation_error "$head_sha" "$payload" "feature-flag-gate could not refresh pull request #$number" ||
+              publish_reconciliation_error "$head_sha" "$payload" "feature-flag-gate could not refresh pull request #$number" "$statuses_file" ||
                 echo "::error::Cannot publish the feature-flag-gate error for #$number."
               failures=$((failures + 1))
               continue
@@ -415,14 +446,14 @@ jobs:
                [ "$(jq -r '.head.sha' <<<"$current")" != "$head_sha" ] ||
                ! jq -e --argjson labels "$FEATURE_FLAG_PR_LABELS" '([.labels[]?.name // empty] | sort) == ($labels | sort)' <<<"$current" >/dev/null; then
               echo "Pull request #$number changed during reconciliation; its queued event will evaluate the new state."
-              publish_reconciliation_error "$head_sha" "$payload" "feature-flag-gate is waiting for the updated pull request" ||
+              publish_reconciliation_error "$head_sha" "$payload" "feature-flag-gate is waiting for the updated pull request" "$statuses_file" ||
                 echo "::error::Cannot publish the feature-flag-gate error for #$number."
               continue
             fi
             if ! gh_api --paginate --slurp "repos/$REPO/pulls?state=open&base=production&per_page=100" >"$fresh_heads_json" ||
                ! fresh_head_pr_count=$(jq -er --arg sha "$head_sha" '[flatten[] | select(.head.sha == $sha)] | length' "$fresh_heads_json"); then
               echo "::error::Cannot re-check whether pull request #$number shares its head commit."
-              publish_reconciliation_error "$head_sha" "$payload" "feature-flag-gate could not refresh pull-request heads" ||
+              publish_reconciliation_error "$head_sha" "$payload" "feature-flag-gate could not refresh pull-request heads" "$statuses_file" ||
                 echo "::error::Cannot publish the feature-flag-gate error for #$number."
               failures=$((failures + 1))
               continue
@@ -445,21 +476,21 @@ jobs:
               state=error
               description="feature-flag-gate could not evaluate this pull request"
               cat "$error_file"
-              failures=$((failures + 1))
             fi
 
-            jq -n --arg state "$state" --arg description "$description" --arg target_url "$RUN_URL" '{
+            jq -n --arg state "$state" --arg description "$description" --arg target_url "$RUN_URL#$fingerprint" '{
               state: $state,
               context: "feature-flag-gate",
               description: $description,
               target_url: $target_url
             }' >"$payload"
-            if ! publish_status_if_changed "$head_sha" "$payload"; then
+            if ! publish_status_if_changed "$head_sha" "$payload" "$statuses_file"; then
               echo "::error::Cannot publish feature-flag-gate for pull request #$number."
               failures=$((failures + 1))
             fi
           done <"$rows"
 
+          echo "evaluated $evaluated, skipped $skipped"
           if [ "$failures" -gt 0 ]; then
             echo "::error::Feature flag reconciliation had $failures infrastructure failure(s)."
             exit 2

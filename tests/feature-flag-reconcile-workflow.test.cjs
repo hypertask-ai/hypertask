@@ -4,6 +4,7 @@ const fs = require("node:fs");
 const os = require("node:os");
 const path = require("node:path");
 const { spawnSync } = require("node:child_process");
+const { createHash } = require("node:crypto");
 
 const workflow = fs.readFileSync(path.join(__dirname, "../.github/workflows/feature-flag-gate.yml"), "utf8");
 const reconciliation = workflow.split("  reconcile-open-pull-requests:")[1];
@@ -71,7 +72,20 @@ test("reconciliation fails closed when mktemp cannot create private scratch", (t
 const singlePullRequest = workflow.split("  reconcile-open-pull-requests:")[0];
 const waitingDescription = "feature-flag-gate is waiting for the run on the newer production commit";
 
-function runWorkflow(t, { job = reconciliation, drift = false, missingHead = false, apiFailure, gateScript = 'console.log("ok");\n' } = {}) {
+function featureFlagStatus(pull, overrides = {}) {
+  const titleHash = createHash("sha256").update(pull.title).digest("hex").slice(0, 16);
+  return {
+    context: "feature-flag-gate", state: "success", description: "ok", updated_at: new Date().toISOString(),
+    target_url: `https://example.invalid/actions/runs/previous#ffg=${pull.base.sha}.${titleHash}`,
+    ...overrides,
+  };
+}
+
+function runWorkflow(t, {
+  job = reconciliation, drift = false, missingHead = false, apiFailure,
+  gateScript = 'console.log("ok");\n', statuses = () => ({}), sharedHead = false,
+  refreshedPull = (pull) => pull, freshSharedHead = false,
+} = {}) {
   const fixture = fs.mkdtempSync(path.join(os.tmpdir(), "flag-gate-drift-"));
   t.after(() => fs.rmSync(fixture, { recursive: true, force: true }));
   const origin = path.join(fixture, "origin.git");
@@ -99,6 +113,10 @@ function runWorkflow(t, { job = reconciliation, drift = false, missingHead = fal
     PR_NUMBER: "42",
     GITHUB_STEP_SUMMARY: path.join(fixture, "summary.md"),
     FIXTURE_PR: path.join(fixture, "pull.json"),
+    FIXTURE_STATUSES: path.join(fixture, "statuses.json"),
+    FIXTURE_CURRENT_PR: path.join(fixture, "current-pull.json"),
+    FIXTURE_SHARED_HEAD: String(sharedHead),
+    FIXTURE_FRESH_SHARED_HEAD: String(freshSharedHead),
     FIXTURE_POSTS: path.join(fixture, "posts.jsonl"),
     FIXTURE_API_FAILURE: JSON.stringify(apiFailure || null),
     FIXTURE_API_CALLS: path.join(fixture, "api-calls.jsonl"),
@@ -146,14 +164,17 @@ function runWorkflow(t, { job = reconciliation, drift = false, missingHead = fal
     assert.notEqual(git(checkout, "rev-parse", "HEAD"), git(seed, "rev-parse", "HEAD"));
   }
   env.EVENT_HEAD_SHA = head;
-  fs.writeFileSync(env.FIXTURE_PR, JSON.stringify({
+  const pull = {
     number: 42,
     state: "open",
     title: "YPER4-442 [INFRA] fixture",
     base: { ref: "production", sha: base },
     head: { sha: head, repo: { full_name: env.REPO } },
     labels: [],
-  }));
+  };
+  fs.writeFileSync(env.FIXTURE_PR, JSON.stringify(pull));
+  fs.writeFileSync(env.FIXTURE_STATUSES, JSON.stringify(statuses(pull)));
+  fs.writeFileSync(env.FIXTURE_CURRENT_PR, JSON.stringify(refreshedPull(pull)));
   fs.writeFileSync(path.join(bin, "gh"), `#!/usr/bin/env node
 const fs = require("node:fs");
 const assert = require("node:assert/strict");
@@ -167,6 +188,7 @@ const previous = fs.readFileSync(process.env.FIXTURE_API_CALLS, "utf8").trim().s
 fs.appendFileSync(process.env.FIXTURE_API_CALLS, JSON.stringify({ endpoint, args }) + "\\n");
 if (failure && (!failure.endpoint || endpoint.includes(failure.endpoint)) &&
     (!failure.method || args.includes(failure.method)) &&
+    (!failure.after || previous.filter((call) => call.endpoint === endpoint).length >= failure.after) &&
     (!failure.once || !previous.some((call) => call.endpoint === endpoint))) {
   console.log("HTTP/2.0 " + failure.status + " Forbidden\\n" +
     (failure.rate ? "X-Ratelimit-Remaining: 0\\nX-Ratelimit-Reset: " + Math.floor(Date.now() / 1000 + failure.reset) + "\\n" : "") +
@@ -183,11 +205,15 @@ if (args.includes("POST")) {
   console.log("{}");
 } else if (endpoint === repo + "/pulls?state=open&base=production&per_page=100") {
   assert.ok(args.includes("--paginate") && args.includes("--slurp"));
-  console.log(JSON.stringify([[pull]]));
-} else if (endpoint === repo + "/pulls/42") {
-  console.log(JSON.stringify(pull));
+  const shared = process.env.FIXTURE_SHARED_HEAD === "true" ||
+    (process.env.FIXTURE_FRESH_SHARED_HEAD === "true" && previous.some((call) => call.endpoint === endpoint));
+  console.log(JSON.stringify([shared ? [pull, { ...pull, number: 43 }] : [pull]]));
+} else if (endpoint === repo + "/pulls/42" || endpoint === repo + "/pulls/43") {
+  const current = JSON.parse(fs.readFileSync(process.env.FIXTURE_CURRENT_PR, "utf8"));
+  console.log(JSON.stringify({ ...current, number: endpoint.endsWith("/43") ? 43 : 42 }));
 } else if (endpoint === repo + "/commits/" + pull.head.sha + "/statuses?per_page=100") {
-  console.log("[]");
+  const statuses = JSON.parse(fs.readFileSync(process.env.FIXTURE_STATUSES, "utf8"));
+  console.log(JSON.stringify(statuses[pull.head.sha] || []));
 } else {
   throw new Error("Unexpected gh arguments: " + JSON.stringify(args));
 }
@@ -216,8 +242,127 @@ exit 1
   const posts = fs.readFileSync(env.FIXTURE_POSTS, "utf8").trim().split("\n").filter(Boolean)
     .map((line) => JSON.parse(line).payload);
   const calls = fs.readFileSync(env.FIXTURE_API_CALLS, "utf8").trim().split("\n").filter(Boolean).map(JSON.parse);
-  return { result, output, posts, calls };
+  return { result, output, posts, calls, pull };
 }
+
+for (const state of ["success", "failure"]) {
+  test(`reconcile: unchanged ${state} fingerprint now skips with exactly one per-PR read and no POST`, (t) => {
+    const { result, output, posts, calls, pull } = runWorkflow(t, {
+      statuses: (pull) => ({ [pull.head.sha]: [
+        { context: "another-gate", state: "pending" },
+        featureFlagStatus(pull, { state }),
+      ] }),
+      gateScript: 'throw new Error("unchanged PR must not be evaluated");\n',
+    });
+    assert.equal(result.status, 0, output);
+    assert.match(output, /skip #42: unchanged since its last status under 30 minutes ago/);
+    assert.match(output, /evaluated 0, skipped 1/);
+    assert.deepEqual(posts, []);
+    assert.deepEqual(calls.map((call) => call.endpoint), [
+      "repos/fixture/repository/pulls?state=open&base=production&per_page=100",
+      `repos/fixture/repository/commits/${pull.head.sha}/statuses?per_page=100`,
+    ]);
+  });
+}
+
+for (const change of ["base", "title", "head", "error", "pending", "missing fingerprint", "old format", "red older than 30 minutes"]) {
+  test(`reconcile: ${change} still evaluates and refreshes the fingerprint without another status read`, (t) => {
+    const { result, output, posts, calls, pull } = runWorkflow(t, {
+      statuses: (pull) => {
+        const prior = structuredClone(pull);
+        if (change === "base") prior.base.sha = "a".repeat(40);
+        if (change === "title") prior.title += " changed";
+        if (change === "head") prior.head.sha = "b".repeat(40);
+        const status = featureFlagStatus(prior);
+        if (change === "error" || change === "pending") status.state = change;
+        if (change === "missing fingerprint") status.target_url = null;
+        if (change === "old format") status.target_url = "https://example.invalid/actions/runs/previous";
+        if (change === "red older than 30 minutes") {
+          status.state = "failure";
+          status.updated_at = new Date(Date.now() - 31 * 60 * 1000).toISOString();
+        }
+        return { [prior.head.sha]: [status] };
+      },
+    });
+    assert.equal(result.status, 0, output);
+    assert.match(output, /evaluated 1, skipped 0/);
+    assert.doesNotMatch(output, /skip #42/);
+    assert.equal(posts.length, 1);
+    assert.equal(posts[0].state, "success");
+    assert.equal(posts[0].description, "ok");
+    assert.equal(new URL(posts[0].target_url).hash, new URL(featureFlagStatus(pull).target_url).hash);
+    assert.equal(calls.filter((call) => call.endpoint.includes("/commits/")).length, 1);
+    assert.equal(calls.filter((call) => call.endpoint.endsWith("/pulls/42")).length, 1);
+    assert.equal(calls.filter((call) => call.endpoint.includes("/pulls?")).length, 2);
+  });
+}
+
+test("reconcile: newest context status wins over an older matching success", (t) => {
+  const { result, output, posts } = runWorkflow(t, {
+    statuses: (pull) => ({ [pull.head.sha]: [
+      featureFlagStatus(pull, { state: "pending" }), featureFlagStatus(pull),
+    ] }),
+  });
+  assert.equal(result.status, 0, output);
+  assert.match(output, /evaluated 1, skipped 0/);
+  assert.equal(posts[0].state, "success");
+});
+
+for (const state of ["success", "failure"]) {
+  test(`reconcile: shared-head PRs still refuse a matching ${state} fingerprint`, (t) => {
+    const { result, output, posts, calls } = runWorkflow(t, {
+      sharedHead: true,
+      statuses: (pull) => ({ [pull.head.sha]: [featureFlagStatus(pull, { state })] }),
+    });
+    assert.equal(result.status, 0, output);
+    assert.match(output, /evaluated 2, skipped 0/);
+    assert.equal(posts.length, 2);
+    assert.ok(posts.every((post) => post.state === "failure" && /shared by multiple/.test(post.description)));
+    assert.equal(calls.filter((call) => call.endpoint.includes("/commits/")).length, 2);
+  });
+}
+
+test("reconcile: a now-unique head recovers from its earlier shared-head failure", (t) => {
+  const { result, output, posts } = runWorkflow(t, {
+    statuses: (pull) => ({ [pull.head.sha]: [featureFlagStatus(pull, {
+      state: "failure",
+      description: "This head commit is shared by multiple open production pull requests; use a unique head commit.",
+    })] }),
+  });
+  assert.equal(result.status, 0, output);
+  assert.match(output, /evaluated 1, skipped 0/);
+  assert.equal(posts.length, 1);
+  assert.equal(posts[0].state, "success");
+});
+
+test("reconcile: evaluated PR still rechecks current metadata before publishing", (t) => {
+  const { result, output, posts } = runWorkflow(t, {
+    refreshedPull: (pull) => ({ ...pull, title: pull.title + " changed" }),
+  });
+  assert.equal(result.status, 0, output);
+  assert.match(output, /changed during reconciliation/);
+  assert.equal(posts.length, 1);
+  assert.equal(posts[0].state, "error");
+  assert.match(posts[0].description, /waiting for the updated pull request/);
+});
+
+test("reconcile: evaluated PR still rechecks fresh shared heads before publishing", (t) => {
+  const { result, output, posts } = runWorkflow(t, { freshSharedHead: true });
+  assert.equal(result.status, 0, output);
+  assert.equal(posts.length, 1);
+  assert.equal(posts[0].state, "failure");
+  assert.match(posts[0].description, /shared by multiple/);
+});
+
+test("per-PR: final verdict posts the current base/title fingerprint and unchanged description", (t) => {
+  const { result, output, posts, pull } = runWorkflow(t, { job: singlePullRequest });
+  assert.equal(result.status, 0, output);
+  assert.equal(posts.length, 2);
+  assert.equal(posts.at(-1).state, "success");
+  assert.equal(posts.at(-1).description, "ok");
+  assert.equal(posts.at(-1).target_url,
+    "https://example.invalid/actions/runs/1" + new URL(featureFlagStatus(pull).target_url).hash);
+});
 
 test("reconcile drift: production moved mid-run posts pending and exits 0", (t) => {
   const { result, output, posts } = runWorkflow(t, { drift: true });
@@ -280,9 +425,9 @@ for (const job of [reconciliation, singlePullRequest]) {
     assert.equal(calls.length, 1, 'exhaustion stops the whole shell, including pending publication');
   });
 
-  test(`${name}: short reset now allowed then publishes the ordinary verdict`, (t) => {
+  test(`${name}: short GET reset now allowed then publishes the ordinary verdict`, (t) => {
     const { result, output, posts } = runWorkflow(t, {
-      job, apiFailure: { status: 429, rate: true, reset: 0, once: true },
+      job, apiFailure: { endpoint: '/pulls?', status: 429, rate: true, reset: 0, once: true },
     });
     assert.equal(result.status, 0, output);
     assert.match(output, /rate limited; waiting 1s until reset/);
@@ -290,7 +435,31 @@ for (const job of [reconciliation, singlePullRequest]) {
     assert.ok(posts.every((post) => post.state !== 'error'));
   });
 
-  for (const status of [403, 500]) {
+  test(`${name}: rate-limited verdict POST skips immediately without a second POST`, (t) => {
+    const { result, output, posts, calls } = runWorkflow(t, {
+      job, apiFailure: { method: 'POST', status: 429, rate: true, reset: 0, after: job === singlePullRequest ? 1 : 0 },
+    });
+    assert.equal(result.status, 0, output);
+    assert.match(output, /::warning::skipped: GitHub rate limited until/);
+    assert.doesNotMatch(output, /waiting .*until reset|::error::/);
+    assert.equal(calls.filter((call) => call.args.includes('POST')).length, job === singlePullRequest ? 2 : 1);
+    assert.ok(posts.every((post) => post.state === 'pending'), 'no stale verdict published');
+  });
+
+  for (const endpoint of ['/pulls/42', '/pulls?', '/statuses/']) {
+    test(`${name}: evaluation exit 2 before rate limit at ${endpoint} remains exit 2`, (t) => {
+      const after = job === singlePullRequest || endpoint === '/pulls?' ? 1 : 0;
+      const { result, output, posts } = runWorkflow(t, {
+        job, gateScript: 'process.exit(2);\n',
+        apiFailure: { endpoint, after, status: 403, rate: true, reset: 3600 },
+      });
+      assert.equal(result.status, 2, output);
+      assert.match(output, /::warning::skipped: GitHub rate limited until/);
+      assert.ok(posts.every((post) => post.state === 'pending'), 'evaluation error precedes the skip, not an error-status post');
+    });
+  }
+
+  for (const status of [403, 404, 500]) {
     test(`${name}: ordinary HTTP ${status} still refused`, (t) => {
       const { result, output } = runWorkflow(t, { job, apiFailure: { status } });
       assert.equal(result.status, 2, output);

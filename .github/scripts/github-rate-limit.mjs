@@ -54,6 +54,12 @@ export function parseGhResponse(output) {
 
 export async function ghApi(args, { exec = spawnSync, sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms)),
   now = Date.now, budget = createRateLimitBudget({ now }), save = () => {}, log = console.error } = {}) {
+  const readOnly = !args.some((arg, index) => {
+    if (arg === '-X' || arg === '--method') return args[index + 1]?.toUpperCase() !== 'GET';
+    if (arg.startsWith('-X')) return arg.slice(2).toUpperCase() !== 'GET';
+    if (arg.startsWith('--method=')) return arg.slice(9).toUpperCase() !== 'GET';
+    return /^(--input(?:=|$)|--(?:raw-)?field(?:=|$)|-[fF])/.test(arg);
+  });
   for (;;) {
     const response = exec('gh', ['api', '--include', ...args], {
       encoding: 'utf8', timeout: 30000, maxBuffer: 32 * 1024 * 1024,
@@ -63,6 +69,7 @@ export async function ghApi(args, { exec = spawnSync, sleep = (ms) => new Promis
     const status = parsed.status || Number(/HTTP (\d{3})/.exec(response.stderr || '')?.[1]);
     const wait = rateLimitWait(status, parsed.headers, parsed.body + (response.stderr || ''), now());
     if (wait == null) throw new Error(`GitHub API returned HTTP ${status || 'unknown'}`);
+    if (!readOnly) throw new GithubRateLimit(new Date(now() + wait).toISOString());
     const ms = budget.reserve(wait);
     save(budget.state);
     log(`GitHub API rate limited; waiting ${Math.ceil(ms / 1000)}s until reset`);
