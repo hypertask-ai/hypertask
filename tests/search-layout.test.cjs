@@ -269,7 +269,7 @@ test('recents appear once with readable chips in-flow, tips follow in responsive
     assert.deepEqual([...list.querySelectorAll('h2')].map((node) => node.textContent), ['Recent searches', 'Tips'])
     const tipsHeading = list.querySelectorAll('h2')[1]
     assert.ok(options().slice(0, 2).every((row) => row.compareDocumentPosition(tipsHeading) & 4))
-    assert.equal(tipsHeading.nextElementSibling.children.length, 10)
+    assert.equal(tipsHeading.nextElementSibling.children.length, 11)
     assert.match(tipsHeading.nextElementSibling.className, /grid-cols-1.*@md:grid-cols-2/)
     assert.ok(tipsHeading.nextElementSibling.lastElementChild.textContent.includes('Has an attachment'))
     assert.ok(options().slice(2).every((row) => row.querySelector('strong')))

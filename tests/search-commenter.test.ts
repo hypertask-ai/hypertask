@@ -366,7 +366,7 @@ test('ordinary indexed comments retain snippets and use their comment timestamps
   state.indexComments = [hit]
   const parsed = await parseSearchWithNames('needle from:3', [7], false, [7])
   const ranked = await rankedSearchWhere(parsed, [7], 'Normal', 50, {}, null, false)
-  assert.deepEqual(ranked.commentById.get(101), { ...hit, createdAt: new Date(hit.createdAt) })
+  assert.deepEqual(ranked.commentById.get(101), { id: hit.id, commentText: hit.commentText, creatorName: hit.creatorName, createdAt: new Date(hit.createdAt) })
   const api = await search('needle from:3')
   const row = api.body.processedData.All[0]
   assert.equal(row.updatedAt, hit.createdAt)

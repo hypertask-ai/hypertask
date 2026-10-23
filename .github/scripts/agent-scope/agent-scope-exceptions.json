@@ -75,32 +75,32 @@
     "path": "src/lib/mcp/operations/tasks/search/operation.ts",
     "call": "prisma.task.count({ where })",
     "occurrence": 1,
-    "approvedIn": "https://app.hypertask.ai/detail/project-15/7496",
-    "sha256": "3ab50c2d1aeeda4bd65dc0d791b8bba13170f8e3a8b0eb4cb7d1bdf4fefed052",
+    "approvedIn": "https://app.hypertask.ai/detail/project-15/7633",
+    "sha256": "e3906f51493b25907217629dbf579b3c3411e636dadad8c485958e6c5857ca63",
     "reason": "validateMcpAuth supplies ctx.user.id and ctx.agentId. accessibleProjectIds come from getProjectWhere(user.id, ctx.agentId); where retains those projectIds and an agent-aware project relation. Target overrides require inclusion; subsequent search filters and spread hydration only narrow it."
   },
   {
     "path": "src/lib/mcp/operations/tasks/search/operation.ts",
     "call": "prisma.task.findMany({ where: filtered.paged || rankedResults && !sortField ? { ...where, id: { in: primaryIds } } : where, select: { id: true, ticketNumber: true, uniqueIndex: true, title: true, description: true, section: true, projectId: true, project: { select: { id: true, title: true } }, dueDate: true, createdAt: true, updatedAt: true, agent: { select: mcpVisibleAgentSelect(user.id), }, }, ...(!rankedResults || sortField ? { orderBy: sortField ? [{ [sortField]: sortOrder }, { id: 'asc' as const }] : [{ updatedAt: 'desc' as const }, { id: 'asc' as const }] } : {}), ...(filtered.paged || rankedResults && !sortField ? {} : { take: limit, skip: cursorId ? 1 : 0, ...(cursorId ? { cursor: { id: cursorId } } : {}), }), })",
     "occurrence": 1,
-    "approvedIn": "https://app.hypertask.ai/detail/project-15/7496",
-    "sha256": "3ab50c2d1aeeda4bd65dc0d791b8bba13170f8e3a8b0eb4cb7d1bdf4fefed052",
+    "approvedIn": "https://app.hypertask.ai/detail/project-15/7633",
+    "sha256": "e3906f51493b25907217629dbf579b3c3411e636dadad8c485958e6c5857ca63",
     "reason": "validateMcpAuth supplies ctx.user.id and ctx.agentId. accessibleProjectIds come from getProjectWhere(user.id, ctx.agentId); where retains those projectIds and an agent-aware project relation. Target overrides require inclusion; subsequent search filters and spread hydration only narrow it."
   },
   {
     "path": "src/lib/mcp/operations/tasks/search/operation.ts",
     "call": "prisma.task.count({ where })",
     "occurrence": 2,
-    "approvedIn": "https://app.hypertask.ai/detail/project-15/7496",
-    "sha256": "3ab50c2d1aeeda4bd65dc0d791b8bba13170f8e3a8b0eb4cb7d1bdf4fefed052",
+    "approvedIn": "https://app.hypertask.ai/detail/project-15/7633",
+    "sha256": "e3906f51493b25907217629dbf579b3c3411e636dadad8c485958e6c5857ca63",
     "reason": "validateMcpAuth supplies ctx.user.id and ctx.agentId. accessibleProjectIds come from getProjectWhere(user.id, ctx.agentId); where retains those projectIds and an agent-aware project relation. Target overrides require inclusion; subsequent search filters and spread hydration only narrow it."
   },
   {
     "path": "src/lib/mcp/operations/tasks/search/operation.ts",
     "call": "prisma.task.findMany({ where, select: { id: true, ticketNumber: true, uniqueIndex: true, title: true, description: true, section: true, projectId: true, project: { select: { id: true, title: true } }, dueDate: true, createdAt: true, updatedAt: true, agent: { select: mcpVisibleAgentSelect(user.id), }, }, ...(orderBy ? { orderBy } : {}), ...(useTurbopufferWindow ? {} : { take: limit, skip: cursorId ? 1 : 0, ...(cursorId ? { cursor: { id: cursorId } } : {}), }), })",
     "occurrence": 1,
-    "approvedIn": "https://app.hypertask.ai/detail/project-15/7496",
-    "sha256": "3ab50c2d1aeeda4bd65dc0d791b8bba13170f8e3a8b0eb4cb7d1bdf4fefed052",
+    "approvedIn": "https://app.hypertask.ai/detail/project-15/7633",
+    "sha256": "e3906f51493b25907217629dbf579b3c3411e636dadad8c485958e6c5857ca63",
     "reason": "validateMcpAuth supplies ctx.user.id and ctx.agentId. accessibleProjectIds come from getProjectWhere(user.id, ctx.agentId); where retains those projectIds and an agent-aware project relation. Target overrides require inclusion; subsequent search filters and spread hydration only narrow it."
   }
 ]
