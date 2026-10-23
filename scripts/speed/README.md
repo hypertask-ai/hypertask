@@ -36,7 +36,9 @@ All app writes and unknown API reads are blocked by the shared CDP policy. Revie
 
 ## History and interpretation
 
-**Path versions.** `conditions.pathVersions` gives ticket-warm, search, page navigation and Ctrl+J version 2 (2026-10-20). The seven-day baseline for a path uses only history with the same path version (older runs count as version 1); page navigation also needs the same set of landed board and view. Other paths keep their full history. A cold ticket whose scripts are still pending at the 30 s settle cap fails the run instead of measuring a partly cold warm tap.
+**Path versions.** `conditions.pathVersions` gives ticket-warm, search, page navigation and Ctrl+J version 2 (2026-10-20), board and board-returning version 2 (2026-10-23). The seven-day baseline for a path uses only history with the same path version (older runs count as version 1); page navigation also needs the same set of landed board and view. Other paths keep their full history. A cold ticket whose scripts are still pending at the 30 s settle cap fails the run instead of measuring a partly cold warm tap.
+
+**Board before 2026-10-23 is not comparable (YPER4-615).** The board path scrolled task 43 into view with Playwright's `scrollIntoViewIfNeeded`, which waits for the card to stop moving. On a throttled phone the card sat below the screen (top 1447 px of 844) for about 3.3 s while that wait ran, although no page script blocked scrolling. The readiness loop now scrolls the card itself. Phone first visit, production 37d953119, 4 interleaved pairs, load 5 to 11: 11682 to 12556 ms with the old step, 8959 to 10046 ms without it. Board-returning gets the same change.
 
 **Page navigation before 2026-10-20 is not comparable.** `g` then `b` opens the shared QA account's previous board under its saved view, which other QA sessions change (2026-10-20: board 8778, and 6859 under another session's saved view). It now completes on any visible card of the board it opened and records that board's `id` and `view` as `landed`; it no longer waits for task 43.
 
