@@ -1,6 +1,7 @@
 import { reportMcpOperationCrash } from '@/lib/mcp/operationCrashReport'
 import { wrapMcpRoute, validateMcpRouteAuth as validateMcpAuth, checkMcpRouteRateLimit as checkMcpRateLimit } from '@/lib/mcp/routeWrapper'
 import { NextRequest, NextResponse } from 'next/server'
+import { requireRole } from '@/lib/mcp/agents/scopes'
 
 import { loadSessionUserRecord } from '@/lib/auth/sessionUserRecord'
 import updateProject from '@/utils/controllers/projects/update'
@@ -20,6 +21,11 @@ export async function PATCH(
         { success: false, error: 'Invalid or expired token' },
         { status: 401 }
       )
+    }
+
+    if (ctx.agentId) {
+      const roleError = await requireRole(ctx, 'write')
+      if (roleError) return roleError
     }
 
     const { projectId } = await props.params
