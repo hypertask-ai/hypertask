@@ -23,12 +23,13 @@
 #   ship-check done <T>          ticket is in Done
 #   ship-check cleaned <T>       no worktree, local branch or GitHub branch is left for the ticket's PR
 #   ship-check guard             hook mode: reads the hook JSON on stdin, exit 2 blocks the command
-# CLI work: SHIP_REPO=hypertask-ai/cli SHIP_BASE=main ship-check ...
+# CLI work: SHIP_REPO=hypertask-ai/cli SHIP_BASE=main ship-check ...; non-releasing repos can opt in with SHIP_DEPLOY=none.
 # Every gate binds to the PR recorded with `bind` (required), so another
 # PR's merge never stands in for this fix, and every GitHub lookup fails closed.
 set -uo pipefail
 REPO=${SHIP_REPO:-hypertask-ai/hypertask}
 BASE=${SHIP_BASE:-production}
+readonly -a NON_RELEASING_REPOS=(hypertask-ai/cli-node)
 EVID=${VCC_EVIDENCE_DIR:-$HOME/.local/state/vcc-evidence}
 TITLE_RE='^(HTPR|HYFA|YPER4)-[0-9]+ \[(BUGFIX|FEATURE|IMPROVE|CLI/MCP/AI|SPEED|FEEDBACK|DASH|QA|BOARD|COST|PLAN|INFRA|REFACTOR)\] [^ ]'
 
@@ -324,6 +325,34 @@ check_deployed() {
   if [ "$REPO" != hypertask-ai/hypertask ]; then
     local tag cmp releases runs jobs
     if ! tag=$(gh release view -R "$REPO" --json tagName --jq .tagName 2>/dev/null); then
+      local no_release=false repo run_url
+      for repo in "${NON_RELEASING_REPOS[@]}"; do
+        [ "$REPO" != "$repo" ] || no_release=true
+      done
+      if [[ $no_release == true || ${SHIP_DEPLOY:-} == none ]]; then
+        releases=$(gh release list -R "$REPO" --limit 1 --json tagName 2>/dev/null) || fail "could not read releases in $REPO"
+        jq -e 'type == "array" and length == 0' <<<"$releases" >/dev/null || fail "no release found in $REPO"
+        cmp=$(gh api "repos/$REPO/compare/$BASE...$sha" --jq .status 2>/dev/null) || fail "could not compare merge $sha with $BASE"
+        [[ $cmp == identical || $cmp == behind ]] || fail "merge $sha is not on $BASE"
+        # Paginate so a green first page cannot hide a failed workflow for the same merge.
+        runs=$(gh api "repos/$REPO/actions/runs?head_sha=$sha&per_page=100" --paginate 2>/dev/null) \
+          || fail "could not read workflow runs for $sha"
+        runs=$(jq -cs 'if length > 0 and all(.[]; (.workflow_runs | type) == "array") then
+          [.[].workflow_runs[]] else error("invalid workflow runs") end' <<<"$runs" 2>/dev/null) \
+          || fail "could not read workflow runs for $sha"
+        if jq -e --arg sha "$sha" 'any(.[]; .head_sha == $sha and .conclusion == "failure")' <<<"$runs" >/dev/null; then
+          fail "failed workflow run for merge $sha; no-release deployment requires no failures"
+        fi
+        if jq -e --arg sha "$sha" 'any(.[]; .head_sha == $sha and .status != "completed")' <<<"$runs" >/dev/null; then
+          fail "workflow run for merge $sha is still running; wait until every run finishes"
+        fi
+        run_url=$(jq -r --arg sha "$sha" --arg base "$BASE" '[.[] | select(.head_sha == $sha
+          and (.event == "push" or .event == "workflow_dispatch") and .head_branch == $base
+          and .conclusion == "success")] | first | .html_url // empty' <<<"$runs") \
+          || fail "could not read successful workflow run for $sha"
+        [ -n "$run_url" ] || fail "no successful push or workflow_dispatch run for merge $sha on $BASE"
+        echo "deployed ok (no release: merged ${sha:0:9} on $BASE, green run $run_url)"; return
+      fi
       if [ -n "${SHIP_WORKER:-}" ]; then
         releases=$(gh release list -R "$REPO" --limit 1 --json tagName 2>/dev/null) || fail "could not read releases in $REPO"
         jq -e 'length == 0' <<<"$releases" >/dev/null || fail "no release found in $REPO"
@@ -579,9 +608,9 @@ guard() {
   local cmd seg rest t c pr out checks setting v part unquoted input cwd target explicit unresolved moved=false
   local fragment="(\"[^\"]*\"|'[^']*'|[^[:space:]\"']+)" assignment
   assignment="^([A-Za-z_][A-Za-z0-9_]*)=($fragment*)[[:space:]]+"
-  local checkout=${SHIP_CHECKOUT:-} worker=${SHIP_WORKER:-}
-  local SHIP_CHECKOUT=$checkout SHIP_WORKER=$worker
-  export SHIP_CHECKOUT SHIP_WORKER
+  local checkout=${SHIP_CHECKOUT:-} worker=${SHIP_WORKER:-} deploy=${SHIP_DEPLOY:-}
+  local SHIP_CHECKOUT=$checkout SHIP_WORKER=$worker SHIP_DEPLOY=$deploy
+  export SHIP_CHECKOUT SHIP_WORKER SHIP_DEPLOY
   local merge='gh[[:space:]]+pr[[:space:]]+merge([[:space:]]|$)'
   local done="vcc[[:space:]]+tasks?[[:space:]]+move[[:space:]]+[\"']?((HTPR|HYFA|YPER4)-[0-9]+)[\"']?[[:space:]].*--section[[:space:]=]+[\"']?Done"
   input=$(cat)
@@ -592,7 +621,7 @@ guard() {
   # Reset to process defaults so segment overrides cannot leak into later commands.
   while IFS= read -r seg; do
     REPO=${SHIP_REPO:-hypertask-ai/hypertask}; BASE=${SHIP_BASE:-production}
-    SHIP_CHECKOUT=$checkout; SHIP_WORKER=$worker
+    SHIP_CHECKOUT=$checkout; SHIP_WORKER=$worker; SHIP_DEPLOY=$deploy
     explicit=false; [ "${SHIP_REPO+x}" != x ] || explicit=true
     [[ $seg =~ ^[[:space:]]* ]]; rest=${seg:${#BASH_REMATCH[0]}}
     while [[ $rest =~ $assignment ]]; do
@@ -607,7 +636,7 @@ guard() {
       case $setting in
         SHIP_REPO) REPO=$unquoted; explicit=true ;;
         SHIP_BASE) BASE=$unquoted ;;
-        SHIP_CHECKOUT|SHIP_WORKER) printf -v "$setting" '%s' "$unquoted" ;;
+        SHIP_CHECKOUT|SHIP_WORKER|SHIP_DEPLOY) printf -v "$setting" '%s' "$unquoted" ;;
       esac
     done
     # A cd earlier in the command means the hook cwd no longer names the merge repo.
