@@ -33,8 +33,8 @@ function matches(row, where) {
   if (where.assignees?.some && !row.assignees.some((person) => matches(person, where.assignees.some))) return false
   return true
 }
-function reset(fuzzy = true, layoutEnabled = false) {
-  state = { fuzzy, layoutEnabled, poolQueries: 0, flagCalls: [], taskQueries: [] }
+function reset(fuzzy = true) {
+  state = { fuzzy, poolQueries: 0, flagCalls: [], taskQueries: [] }
 }
 const tasks = people.map((person) => ({
   id: 100 + person.id, userId: person.id, user: person, projectId: person.boards[0],
@@ -73,12 +73,10 @@ const mocks = new Map([
   ['src/lib/mcp/auth.ts', { validateMcpAuth: async () => ({ user: { id: 42 }, agentId: null }), checkMcpRateLimit: async () => null }],
   ['src/lib/flags.ts', {
     HTPR_6881_SEARCH_FUZZY_PERSON_FLAG: flag,
-    HTPR_6865_SEARCH_LAYOUT_FLAG: 'htpr-6865-search-layout',
     isFeatureEnabled: async (key, userId) => {
       state.flagCalls.push([key, userId])
       assert.equal(userId, 42)
       return key === flag ? state.fuzzy
-        : key === 'htpr-6865-search-layout' ? state.layoutEnabled
         : false
     },
   }],
@@ -179,19 +177,17 @@ for (const surface of ['API', 'MCP']) {
     }
   })
 }
-test('fuzzy people are independent of layout prerequisites', async () => {
+test('fuzzy and exact people always include match highlights', async () => {
   for (const operator of ['from', 'assignee']) {
     for (const fuzzy of [false, true]) {
-      for (const layoutEnabled of [false, true]) {
-        reset(fuzzy, layoutEnabled)
-        const res = { status(code) { this.code = code; return this }, json(body) { this.body = body; return this } }
-        await handler({ method: 'POST', headers: {}, body: { searchQuery: `${operator}:valentin`, projectIds: [7], archive: 'Normal' } }, res)
-        assert.equal(res.code, 200)
-        const rows = res.body.processedData.All
-        const expected = fuzzy ? people.slice(0, 3) : [people[1]]
-        assert.deepEqual(rows.map((row) => row.taskId), expected.map((person) => 100 + person.id))
-        assert.deepEqual(rows.map((row) => row.searchMatch?.people), expected.map((person) => layoutEnabled ? [person.displayName] : undefined))
-      }
+      reset(fuzzy)
+      const res = { status(code) { this.code = code; return this }, json(body) { this.body = body; return this } }
+      await handler({ method: 'POST', headers: {}, body: { searchQuery: `${operator}:valentin`, projectIds: [7], archive: 'Normal' } }, res)
+      assert.equal(res.code, 200)
+      const rows = res.body.processedData.All
+      const expected = fuzzy ? people.slice(0, 3) : [people[1]]
+      assert.deepEqual(rows.map((row) => row.taskId), expected.map((person) => 100 + person.id))
+      assert.deepEqual(rows.map((row) => row.searchMatch?.people), expected.map((person) => [person.displayName]))
     }
   }
 })

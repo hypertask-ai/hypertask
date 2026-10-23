@@ -62,6 +62,12 @@ jobs:
           node .github/scripts/check-known-bad-packages.cjs
       - name: Install only the workflow parser
         run: npm ci --prefix .github/scripts/node-version-guard --ignore-scripts --no-audit --no-fund
+      - name: Install only the gate parser
+        run: npm ci --prefix .github/scripts/feature-flag-parser --ignore-scripts --no-audit --no-fund
+      - name: Light gate dependency contract
+        env:
+          NODE_PATH: ${{ github.workspace }}/.github/scripts/node-version-guard/node_modules:${{ github.workspace }}/.github/scripts/feature-flag-parser/node_modules
+        run: node --test tests/light-gate-dependencies.test.cjs
       - name: Test comparison logic
         env:
           NODE_PATH: ${{ github.workspace }}/.github/scripts/node-version-guard/node_modules

@@ -2,8 +2,6 @@ import type { NextApiHandler } from 'next'
 import { Prisma } from '@prisma/client'
 import { getSessionUser } from '@/lib/auth/getSessionUser'
 import { withAgentScopeRequest } from '@/lib/auth/agentScope'
-import { isFeatureEnabled } from '@/lib/flags'
-import { HTPR_6865_SEARCH_LAYOUT_FLAG } from '@/lib/flags'
 import prisma from '@/lib/prisma'
 import { getProjectWhere } from '@/utils/controllers/projects/getAllIncludes'
 
@@ -24,8 +22,7 @@ const handler: NextApiHandler = async (req, res) => {
   const ids = boards.map((board) => board.id)
   if (!ids.length) return res.status(200).json({ candidates: [] })
   const activeBoardId = ids.includes(boardId) ? boardId : null
-  const layoutEnabled = await isFeatureEnabled(HTPR_6865_SEARCH_LAYOUT_FLAG, session.userId)
-  const labelScopeEnabled = operator === 'label' && layoutEnabled
+  const labelScopeEnabled = operator === 'label'
   const pickedBoardIds = labelScopeEnabled ? String(req.query.boards ?? '').split(',')
     .filter((id) => /^\d+$/.test(id)).map(Number).filter((id) => Number.isSafeInteger(id) && id > 0) : []
   let candidates: { id: string | number; name: string; email?: string; count?: number; byName?: boolean; preferred: boolean; recent: number }[]
@@ -40,72 +37,38 @@ const handler: NextApiHandler = async (req, res) => {
       .sort((a, b) => b.length - a.length)[0]
   } else if (operator === 'label') {
     const scope = { projectId: { in: ids } }
-    if (labelScopeEnabled) {
-      scope.projectId.in = pickedBoardIds.length ? ids.filter((id) => pickedBoardIds.includes(id)) : ids
-      const labels = await prisma.label.findMany({
-        where: scope, select: { id: true, value: true, projectId: true },
-        orderBy: [{ value: 'asc' }, { id: 'asc' }],
-      })
-      const counts = await prisma.taskLabel.groupBy({
-        by: ['labelId'],
-        where: { labelId: { in: labels.map((label) => label.id) }, task: { status: 'Normal', projectId: scope.projectId } },
-        _count: { _all: true },
-      })
-      const countById = new Map(counts.map((row) => [row.labelId, row._count._all]))
-      candidates = labels.map((label) => ({
-        id: label.id, name: label.value ?? '', count: countById.get(label.id) ?? 0,
-        preferred: label.projectId === activeBoardId, recent: 0,
-      }))
-      if (!pickedBoardIds.length) {
-        const unique = new Map<string, typeof candidates[number]>()
-        for (const candidate of candidates) {
-          const name = candidate.name.trim()
-          const key = name.toLowerCase()
-          const previous = unique.get(key)
-          if (previous) {
-            previous.count! += candidate.count!
-            previous.preferred ||= candidate.preferred
-          } else unique.set(key, { ...candidate, name, byName: true })
-        }
-        candidates = [...unique.values()]
+    scope.projectId.in = pickedBoardIds.length ? ids.filter((id) => pickedBoardIds.includes(id)) : ids
+    const labels = await prisma.label.findMany({
+      where: scope, select: { id: true, value: true, projectId: true },
+      orderBy: [{ value: 'asc' }, { id: 'asc' }],
+    })
+    const counts = await prisma.taskLabel.groupBy({
+      by: ['labelId'],
+      where: { labelId: { in: labels.map((label) => label.id) }, task: { status: 'Normal', projectId: scope.projectId } },
+      _count: { _all: true },
+    })
+    const countById = new Map(counts.map((row) => [row.labelId, row._count._all]))
+    candidates = labels.map((label) => ({
+      id: label.id, name: label.value ?? '', count: countById.get(label.id) ?? 0,
+      preferred: label.projectId === activeBoardId, recent: 0,
+    }))
+    if (!pickedBoardIds.length) {
+      const unique = new Map<string, typeof candidates[number]>()
+      for (const candidate of candidates) {
+        const name = candidate.name.trim()
+        const key = name.toLowerCase()
+        const previous = unique.get(key)
+        if (previous) {
+          previous.count! += candidate.count!
+          previous.preferred ||= candidate.preferred
+        } else unique.set(key, { ...candidate, name, byName: true })
       }
-      if (rawTail) {
-        const exact = labels.filter((label) => variants.some((part) => part === label.id || part.toLowerCase() === label.value?.toLowerCase()))
-        resolved = exact.map((label) => label.value ?? '').sort((a, b) => b.length - a.length)[0]
-        resolvedId = exact.find((label) => label.value === resolved && variants.includes(label.id))?.id
-      }
-    } else {
-      const prefix = await prisma.label.findMany({
-        where: { ...scope, value: { startsWith: value, mode: 'insensitive' } },
-        select: { id: true, value: true, projectId: true },
-        orderBy: [{ value: 'asc' }, { id: 'asc' }],
-        take: 100,
-      })
-      const contains = prefix.length < 100 && value ? await prisma.label.findMany({
-        where: { ...scope, AND: [
-          { value: { contains: value, mode: 'insensitive' } },
-          { NOT: { value: { startsWith: value, mode: 'insensitive' } } },
-        ] },
-        select: { id: true, value: true, projectId: true },
-        orderBy: [{ value: 'asc' }, { id: 'asc' }],
-        take: 100 - prefix.length,
-      }) : []
-      const seen = new Set([...prefix, ...contains].map((label) => label.id))
-      const fuzzy = value.length >= 2 && seen.size < 10 ? await prisma.label.findMany({
-        where: { ...scope, AND: [...new Set(value)].map((letter) => ({ value: { contains: letter, mode: 'insensitive' as const } })) },
-        select: { id: true, value: true, projectId: true },
-        orderBy: [{ value: 'asc' }, { id: 'asc' }], take: 500,
-      }) : []
-      candidates = [...prefix, ...contains].map((label) => ({ id: label.id, name: label.value ?? '', preferred: label.projectId === activeBoardId, recent: 0 }))
-      candidates.push(...fuzzy.filter((label) => !seen.has(label.id)).map((label) => ({ id: label.id, name: label.value ?? '', preferred: label.projectId === activeBoardId, recent: 0 })))
-      if (rawTail) {
-        const exact = await prisma.label.findMany({
-          where: { ...scope, OR: variants.flatMap((part) => [{ value: { equals: part, mode: 'insensitive' as const } }, { id: part }]) },
-          select: { id: true, value: true }, take: variants.length,
-        })
-        resolved = exact.map((label) => label.value ?? '').sort((a, b) => b.length - a.length)[0]
-        resolvedId = exact.find((label) => label.value === resolved && variants.includes(label.id))?.id
-      }
+      candidates = [...unique.values()]
+    }
+    if (rawTail) {
+      const exact = labels.filter((label) => variants.some((part) => part === label.id || part.toLowerCase() === label.value?.toLowerCase()))
+      resolved = exact.map((label) => label.value ?? '').sort((a, b) => b.length - a.length)[0]
+      resolvedId = exact.find((label) => label.value === resolved && variants.includes(label.id))?.id
     }
   } else {
     const scope = activeBoardId ? [activeBoardId] : ids
@@ -159,7 +122,7 @@ const handler: NextApiHandler = async (req, res) => {
     people.splice(0, people.length, ...unique.values())
     candidates = people.map((person) => ({
       id: person.id, name: person.displayName || person.email,
-      ...(layoutEnabled ? { email: person.email } : {}),
+      email: person.email,
       preferred: person.members.length > 0,
       recent: Math.max(person.tasks[0]?.createdAt.getTime() ?? 0, person.assignees[0]?.assignedAt.getTime() ?? 0),
     }))

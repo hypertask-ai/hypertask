@@ -375,7 +375,7 @@ https://app.hypertask.ai/detail/project-15/7395, PR 1759 (flag `htpr-7395-cached
 **Lessons.**
 - A screenshot hash per sample catches a layout difference that timings miss; keep it in every on/off QA.
 - A description of 5 characters (highlighted text) broke a `> 20` characters readiness wait; wait for non-empty.
-- `feature-flag-gate` does not count a flag read inside a `useCallback` body or a ternary that picks between a function and `null`; a flag expression passed as a call argument at hook level counts (`deferredEditorReadyCheck(flag && ...)`). Run `.github/scripts/feature-flag-gate.mjs "<title>" origin/production HEAD` locally before pushing.
+- `feature-flag-gate` does not count a flag read inside a `useCallback` body or a ternary that picks between a function and `null`; a flag expression passed as a call argument at hook level counts (`deferredEditorReadyCheck(flag && ...)`). Run `FEATURE_FLAG_TYPESCRIPT_PATH="$(node -p 'require.resolve("typescript")')" node .github/scripts/feature-flag-gate.mjs "<title>" origin/production HEAD` locally before pushing.
 - A `git reset --soft` onto a newer production folds production's newer changes into the commit as reversions; rebuild from only the changed files.
 
 **Next probe.** The remaining 7.4 s is the phone's main thread (HTPR-7395 CPU profile: React render 5.4 s); HTPR-7560 and research ideas 2, 3 and 5 target it.

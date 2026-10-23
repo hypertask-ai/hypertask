@@ -1,10 +1,6 @@
 import { writeFileSync } from "node:fs";
-import { createRequire } from "node:module";
 import { posix as pathPosix } from "node:path";
-import { git, parseFlagRegistry, parseDefinitions, unwrapExpr, isBindingWrite, assertAddedFlagReleaseRisks, flagDefinitionPaths, parseFlagFile } from "./feature-flag-registry.mjs";
-
-const require = createRequire(import.meta.url);
-const typescript = require(process.env.FEATURE_FLAG_TYPESCRIPT_PATH || "typescript");
+import { typescript, git, parseFlagRegistry, parseDefinitions, unwrapExpr, isBindingWrite, assertAddedFlagReleaseRisks, flagDefinitionPaths, parseFlagFile } from "./feature-flag-registry.mjs";
 
 const EXEMPT_TAGS = new Set(["BUGFIX", "INFRA", "AI CHAT"]);
 const CROSS_CHECK_LINE_BUDGET = 150;

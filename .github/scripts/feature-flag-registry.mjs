@@ -2,7 +2,15 @@ import { createRequire } from "node:module";
 import { execFileSync } from "node:child_process";
 
 const require = createRequire(import.meta.url);
-const typescript = require(process.env.FEATURE_FLAG_TYPESCRIPT_PATH || "typescript");
+let typescript;
+try {
+  if (!process.env.FEATURE_FLAG_TYPESCRIPT_PATH) throw new Error("missing parser path");
+  typescript = require(process.env.FEATURE_FLAG_TYPESCRIPT_PATH);
+} catch {
+  console.error(`Missing TypeScript parser: FEATURE_FLAG_TYPESCRIPT_PATH=${process.env.FEATURE_FLAG_TYPESCRIPT_PATH || "<unset>"}`);
+  process.exit(2);
+}
+export { typescript };
 
 export function git(args) {
   return execFileSync("git", args, {

@@ -1,7 +1,6 @@
 const assert = require('node:assert/strict')
 const test = require('node:test')
 const { fixture, matches, hydrate } = require('./helpers/agent-board-scope.cjs')
-const keys = require('./helpers/flag-files.cjs').load(require('node:path').resolve(__dirname, '../src/lib/flags/keys.ts'))
 
 function lookupMatches(row, where = {}) {
   return Object.entries(where).every(([key, value]) => {
@@ -16,7 +15,7 @@ function lookupMatches(row, where = {}) {
   })
 }
 
-function harness({ actor = 'agent', enforce = true, grant = 'none', authenticated = true, layout = true, bypassProducer = false } = {}) {
+function harness({ actor = 'agent', enforce = true, grant = 'none', authenticated = true, bypassProducer = false } = {}) {
   const f = fixture()
   f.state.enforce = enforce
   if (actor !== 'agent') f.state.ctx.agentId = null
@@ -63,10 +62,7 @@ function harness({ actor = 'agent', enforce = true, grant = 'none', authenticate
       await f.scope.prepareAgentScope(f.user.id, f.state.ctx.agentId)
       return { userId: f.user.id, agentId: f.state.ctx.agentId }
     } },
-    '@/lib/flags': { ...keys, isFeatureEnabled: async key => {
-      if (key === keys.HTPR_6865_SEARCH_LAYOUT_FLAG) return layout
-      throw new Error(`Unexpected route flag: ${key}`)
-    } },
+
   }).default
   async function request(operator = 'board', query = {}, method = 'GET') {
     const res = { status(code) { this.statusCode = code; return this }, json(body) { this.body = body; return this } }
@@ -187,28 +183,21 @@ test('label selected-board scope intersects eligible boards and preserves all-bo
   assert.deepEqual(candidateIds(await h.request('label', { boards: '15,2128,999' })), ['label-2128'])
 })
 
-test('layout flag off retains all eligible boards without label counts', async () => {
-  const h = harness({ actor: 'owner', layout: false })
-  const res = await h.request('label', { boards: '15,999' })
-  assert.deepEqual(candidateIds(res), expectedIds('label', ids))
-  assert.ok(res.body.candidates.every(item => item.count === undefined && item.byName === undefined))
-})
-
-test('people and legacy labels retain prefix, contains, fuzzy and exact-resolution branches within scope', async () => {
+test('people and labels retain prefix, contains, fuzzy and exact resolution within scope', async () => {
   for (const actor of ['owner', 'member', 'guest']) {
     for (const operator of ['from', 'assignee', 'commenter', 'label']) {
       for (const value of operator === 'label' ? ['label', 'abel', 'lb'] : ['person', 'erson', 'ps']) {
-        const h = harness({ actor, layout: false })
+        const h = harness({ actor })
         const name = operator === 'label' ? 'Label 2128' : 'Person 2128'
         const res = await h.request(operator, { value, resolve: `${name} trailing` })
         assert.equal(res.body.resolved, name)
         assert.deepEqual(candidateIds(res), expectedIds(operator, ids))
-        assert.ok(h.queries.some(query => query.model === (operator === 'label' ? 'label' : 'user') && query.where.AND))
+        assert.ok(h.queries.some(query => query.model === (operator === 'label' ? 'label' : 'user') && (operator === 'label' ? query.where.projectId : query.where.AND)))
       }
     }
   }
   for (const operator of ['from', 'assignee', 'commenter', 'label']) {
-    const h = harness({ grant: 'accepted', layout: false })
+    const h = harness({ grant: 'accepted' })
     assert.deepEqual(candidateIds(await h.request(operator, { value: operator === 'label' ? 'lb' : 'ps' })), expectedIds(operator, [2128]))
   }
 })
@@ -254,7 +243,7 @@ test('method, authentication and operator errors retain exact status and body', 
 })
 
 test('commenter values remain available with all remaining search flags off', async () => {
-  const h = harness({ actor: 'owner', layout: false })
+  const h = harness({ actor: 'owner' })
   const res = await h.request('commenter')
   assert.equal(res.statusCode, 200)
   assert.deepEqual(candidateIds(res), expectedIds('commenter', ids))

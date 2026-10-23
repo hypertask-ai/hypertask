@@ -8,7 +8,6 @@ export default {
   defaultMode: "EVERYONE",
   shippedOn: "2026-10-21",
   description: "Starts the search on the server when a search page is opened as a full page load, so its results show sooner.",
-  related: ["htpr-6865-search-layout"],
   releaseRisk: {
     risk: "small",
     reason: "Same results, tabs and order from the same search; the page falls back to its own search when the server result is missing or for another query.",

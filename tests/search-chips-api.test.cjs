@@ -48,7 +48,6 @@ const mocks = new Map([
   ['src/lib/prisma.ts', { default: db }],
   ['src/lib/flags.ts', {
     HTPR_6881_SEARCH_FUZZY_PERSON_FLAG: 'htpr-6881-search-fuzzy-person',
-    HTPR_6865_SEARCH_LAYOUT_FLAG: 'htpr-6865-search-layout',
     isFeatureEnabled: async (key) => key !== 'htpr-6881-search-fuzzy-person',
   }],
   ['src/utils/controllers/projects/getAllIncludes.ts', {

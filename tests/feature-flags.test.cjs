@@ -1376,3 +1376,13 @@ test("stored modes override registry defaults for declared and legacy keys in ev
     }
   }
 });
+
+test("search layout is permanent and no longer registered", async () => {
+  const key = ["htpr", "6865", "search", "layout"].join("-");
+  const identifier = ["HTPR", "6865", "SEARCH", "LAYOUT", "FLAG"].join("_");
+  assert.equal(flags[identifier], undefined);
+  assert.equal(definitions.some(definition => definition.key === key), false);
+  assert.equal((await flags.listFeatureFlagModes()).some(entry => entry.key === key), false);
+  const snapshot = require("../e2e/smoke/production-flag-modes.json");
+  assert.equal(Object.hasOwn(snapshot.modes, key), false);
+});

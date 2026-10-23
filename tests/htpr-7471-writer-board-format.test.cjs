@@ -1,3 +1,4 @@
+const { withStubs } = require("./helpers/stub-map.cjs");
 const test = require("node:test");
 const assert = require("node:assert/strict");
 const fs = require("node:fs");
@@ -23,6 +24,7 @@ const fieldTools = () => optionalModule("src/lib/ai/taskWriterCustomFields.ts");
 const plain = (value) => JSON.parse(JSON.stringify(value));
 
 function moduleWithStubs(file, stubs) {
+  if (!("@/lib/auth/agentScope" in stubs)) stubs = withStubs({ "@/lib/auth/agentScope": require("./helpers/agent-board-scope.cjs").enforcedScope }, stubs);
   const filename = path.join(root, file);
   const code = ts.transpileModule(fs.readFileSync(filename, "utf8"), {
     compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 },

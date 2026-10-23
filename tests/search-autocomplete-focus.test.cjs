@@ -26,7 +26,7 @@ test('suggestions retain writing focus; result arrows leave it so Enter opens th
   try {
     source('src/utils/index.ts', { taskBaseUri: '/detail/' })
     source('src/utils/undoActions/helperFuncs.ts', { cn: (...values) => values.filter(Boolean).join(' ') })
-    source('src/hooks/useFlag.tsx', { useFlagLoaded: () => true, useFlagReady: () => true, useFlag: (key) => key !== 'htpr-6865-search-layout' })
+    source('src/hooks/useFlag.tsx', { useFlagLoaded: () => true, useFlagReady: () => true, useFlag: () => true })
     source('src/lib/contexts/deviceContext.tsx', { useDeviceContext: () => false })
     const allProjects = [{ id: 7, title: 'Visible' }]
     source('src/hooks/MultiPages/useGetAllProjectsMinimal.ts', { useGetAllProjectsMinimal: () => ({ data: allProjects }) })
@@ -144,7 +144,7 @@ test('suggestions retain writing focus; result arrows leave it so Enter opens th
     cache.history = ['login']
     await React.act(async () => state.setInputValue(''))
     await React.act(async () => input.focus())
-    assert.ok(document.querySelector('#search-chip-options [role="option"]').textContent.includes('Recent: login'), 'the actual search page passes saved history into Tips')
+    assert.ok(document.querySelector('#search-chip-options [role="option"]').textContent.includes('login'), 'the actual search page passes saved history into Tips')
   } finally {
     if (reactRoot) await React.act(async () => reactRoot.unmount())
     for (const [filename, prior] of stubs.reverse()) {

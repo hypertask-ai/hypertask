@@ -1,3 +1,4 @@
+const { withStubs } = require("./helpers/stub-map.cjs");
 const assert = require("node:assert/strict");
 const fs = require("node:fs");
 const path = require("node:path");
@@ -10,7 +11,7 @@ const { JSDOM } = require("jsdom");
 const root = path.resolve(__dirname, "..");
 const noop = () => {};
 function load(file, mocks = {}, runtime = {}) {
-  mocks = { "@/lib/auth/agentScope": require("./helpers/agent-board-scope.cjs").enforcedScope, ...mocks };
+  mocks = withStubs({ "@/lib/auth/agentScope": require("./helpers/agent-board-scope.cjs").enforcedScope }, mocks);
   const target = { exports: {} };
   const compiled = ts.transpileModule(fs.readFileSync(path.join(root, file), "utf8"), {
     compilerOptions: { jsx: ts.JsxEmit.ReactJSX, module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022, esModuleInterop: true },

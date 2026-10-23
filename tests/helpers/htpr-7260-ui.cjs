@@ -19,7 +19,7 @@ function loader(mocks = {}) {
       jsx: ts.JsxEmit.ReactJSX, esModuleInterop: true,
     } }).outputText;
     new Function("require", "exports", "React", compiled)((specifier) => {
-      if (Object.hasOwn(mocks, specifier)) return { __esModule: true, ...mocks[specifier] };
+      if (specifier in mocks) return { __esModule: true, ...mocks[specifier] };
       if (specifier.endsWith(".scss")) return {};
       if (!specifier.startsWith("@/") && !specifier.startsWith(".")) return require(specifier);
       const base = specifier.startsWith("@/") ? `src/${specifier.slice(2)}` :

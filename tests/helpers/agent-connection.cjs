@@ -13,7 +13,7 @@ function load(file, mocks = {}) {
   const loaded = new Module(filename);
   loaded.filename = filename;
   loaded.paths = Module._nodeModulePaths(path.dirname(filename));
-  loaded.require = (id) => Object.hasOwn(mocks, id) ? mocks[id] : require(require.resolve(id, { paths: loaded.paths }));
+  loaded.require = (id) => id in mocks ? mocks[id] : require(require.resolve(id, { paths: loaded.paths }));
   loaded._compile(compiled, filename);
   return loaded.exports;
 }

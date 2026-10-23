@@ -285,7 +285,7 @@ test("flag on shows shared kind labels, sticky search, all-word reduction, empty
   discoveryEnabled = true;
   const flags = [
     fixture("htpr-6853-fast-open", { kind: "bugfix", ticketId: "HTPR-6853", ticketTitle: "Instant details", description: "Comment editor ready" }),
-    fixture("htpr-6865-search", { kind: undefined }),
+    fixture("htpr-0001-search", { kind: undefined }),
     fixture("htpr-6885-undo", { kind: "improvement" }),
   ];
   await withAdmin({}, { flags, detailsEnabled: true }, async ({ document, calls }) => {
@@ -345,7 +345,6 @@ test("detail related links point to anchored cards on the overview", async () =>
     assert.equal(document.querySelector('input[type="search"]'), null);
   });
 });
-
 
 test("flagged page restores type and risk filters, excludes Off from waiting, and displays risk reasons", async () => {
   urlFiltersEnabled = true;

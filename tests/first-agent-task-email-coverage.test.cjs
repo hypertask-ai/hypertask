@@ -1,3 +1,4 @@
+const { withStubs } = require("./helpers/stub-map.cjs");
 const test = require("node:test");
 const assert = require("node:assert/strict");
 const fs = require("node:fs");
@@ -8,14 +9,14 @@ const root = path.resolve(__dirname, "..");
 const serviceFile = "src/utils/controllers/section/sectionService.ts";
 const read = (file) => fs.readFileSync(path.join(root, file), "utf8");
 function load(file, stubs) {
-  stubs = { "@/lib/mcp/operationCrashReport": { reportMcpOperationCrash: () => {} }, ...stubs };
+  stubs = withStubs({ "@/lib/mcp/operationCrashReport": { reportMcpOperationCrash: () => {} } }, stubs);
   const mod = { exports: {} };
   const source = read(file);
   const js = ts.transpileModule(source, {
     compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2020, esModuleInterop: true },
   }).outputText;
   new Function("module", "exports", "require", js)(mod, mod.exports, (name) => {
-    assert.ok(Object.hasOwn(stubs, name), `Unstubbed dependency: ${name}`);
+    assert.ok(name in stubs, `Unstubbed dependency: ${name}`);
     return stubs[name];
   });
   return mod.exports;

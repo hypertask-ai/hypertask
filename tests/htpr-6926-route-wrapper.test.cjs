@@ -1,3 +1,4 @@
+const { withStubs } = require('./helpers/stub-map.cjs')
 const test = require('node:test')
 const assert = require('node:assert/strict')
 const fs = require('node:fs')
@@ -14,7 +15,7 @@ const agentScope = require('./task-route-loader.cjs').load('src/lib/auth/agentSc
 const dbTiming = require('./task-route-loader.cjs').load('src/lib/mcp/dbTiming.ts', {})
 
 function load(file, stubs, extra = '', env = {}, clock = performance) {
-  stubs = { '@/lib/auth/agentScope': agentScope, './operationCrashReport': { reportUnexplainedMcpServerError: () => {} }, './dbTiming': dbTiming, '@/lib/aiFeedback/automatic': { queueRestFailure: () => {} }, ...stubs }
+  stubs = withStubs({ '@/lib/auth/agentScope': agentScope, './operationCrashReport': { reportUnexplainedMcpServerError: () => {} }, './dbTiming': dbTiming, '@/lib/aiFeedback/automatic': { queueRestFailure: () => {} } }, stubs)
   const source = fs.readFileSync(path.join(root, file), 'utf8')
   const code = ts.transpileModule(source, { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2020, esModuleInterop: true } }).outputText
   const mod = { exports: {} }

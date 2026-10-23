@@ -47,7 +47,7 @@ test('real search input and reused list work keyboard-only', async (t) => {
       await React.act(async () => reactRoot.render(React.createElement(Harness, { key: ++counter })))
       input = document.getElementById('search-input')
       await React.act(async () => input.focus())
-      assert.equal(document.querySelector('[data-search-layout]'), null, 'the layout prop cannot bypass the disabled runtime flag')
+      assert.ok(document.querySelector('[data-search-layout]'), 'the layout prop enables the permanent layout without a feature flag')
     }
     const type = async (value) => React.act(async () => {
       Object.getOwnPropertyDescriptor(dom.window.HTMLInputElement.prototype, 'value').set.call(input, value)
@@ -60,15 +60,15 @@ test('real search input and reused list work keyboard-only', async (t) => {
 
     await t.test('focused empty input offers every tip, with examples and plain meanings; clicking inserts only the operator', async () => {
       await reset()
-      assert.match(document.body.textContent, /Search tips/)
-      assert.equal(options().length, 10)
-      assert.ok(options().every((option) => option.textContent.includes(' - ')))
-      for (let i = 0; i < 9; i++) await press('ArrowDown')
+      assert.deepEqual([...document.querySelectorAll('[data-search-layout] h2')].map((heading) => heading.textContent), ['Recent searches', 'Tips'])
+      assert.equal(options().length, 11)
+      assert.ok(options().every((option) => option.querySelector('strong') && option.querySelector('.text-meta')))
+      for (let i = 0; i < 10; i++) await press('ArrowDown')
       assert.ok(selected().textContent.startsWith('has:'))
-      assert.equal(scrolled.at(-1), 'mention-button-9', 'keyboard selection scrolls hidden tips into view')
+      assert.equal(scrolled.at(-1), 'mention-button-10', 'keyboard selection scrolls hidden tips into view')
       await React.act(async () => options().find((option) => option.textContent.startsWith('is:')).click())
       assert.equal(input.value, 'is:')
-      assert.deepEqual(options().map((option) => option.textContent), ['open', 'done', 'archived'])
+      assert.deepEqual(options().map((option) => option.textContent), ['Ask AIis:', 'open', 'done', 'archived'])
       assert.ok(document.querySelector('[data-search-filter-frame]'))
     })
     await t.test('prefix ghost, arrows, Tab and Enter accept an operator then its value without losing focus', async () => {
@@ -93,14 +93,16 @@ test('real search input and reused list work keyboard-only', async (t) => {
       assert.equal(input.value, '')
       assert.equal(document.activeElement, input)
       assert.match(document.querySelector('[aria-label^="Remove after:"]').className, /bg-search-filter-date/)
+      const submitted = runs.length
       await press('Backspace')
-      assert.equal(runs.at(-1), '')
+      assert.equal(document.querySelector('[aria-label^="Remove after:"]'), null)
+      assert.equal(runs.length, submitted, 'removing a chip waits for explicit submission')
     })
-    await t.test('j/k navigate empty Tips but stay ordinary letters in a nonempty query', async () => {
+    await t.test('arrows navigate empty Tips while j/k remain ordinary typing', async () => {
       await reset()
-      await press('j')
-      assert.ok(selected().textContent.startsWith('assignee:'))
-      await press('k')
+      await press('ArrowDown')
+      assert.ok(selected().textContent.startsWith('commenter:'))
+      await press('ArrowUp')
       assert.ok(selected().textContent.startsWith('from:'))
       assert.equal(input.value, '')
       await type('a')
@@ -117,7 +119,7 @@ test('real search input and reused list work keyboard-only', async (t) => {
       const listener = (event) => { if (event.key === 'Escape') escaped++ }
       document.addEventListener('keydown', listener)
       try {
-        for (const value of ['', 'fr', 'is:o', 'after:yest']) {
+        for (const value of ['fr', 'is:o', 'after:yest']) {
           await reset()
           await type(value)
           assert.equal(input.getAttribute('aria-expanded'), 'true')
@@ -159,7 +161,7 @@ test('real search input and reused list work keyboard-only', async (t) => {
       }
       await reset()
       await type('on:2026-02-30')
-      assert.equal(options().length, 0, 'invalid dates are never suggested')
+      assert.deepEqual(options().map((row) => row.textContent), ['Ask AIon:2026-02-30'], 'invalid dates are never suggested')
       await press('Tab')
       assert.equal(input.value, 'on:2026-02-30')
     })
@@ -188,11 +190,12 @@ test('real search input and reused list work keyboard-only', async (t) => {
         await type(input.value.slice(0, -1))
         assert.ok(chip(), 'deleting free text must not turn a committed filter into a draft')
         assert.equal(input.value, 'login'.slice(0, remaining))
-        if (remaining === 0) assert.equal(input.getAttribute('aria-expanded'), 'false')
+        if (remaining === 0) assert.equal(input.getAttribute('aria-expanded'), 'true', 'an empty draft keeps recents and tips visible')
       }
+      const submitted = runs.length
       await press('Backspace')
       assert.equal(chip(), null, 'Backspace on an empty draft still removes the last chip')
-      assert.equal(runs.at(-1), '')
+      assert.equal(runs.length, submitted, 'chip removal does not submit')
     })
     await t.test('IME Enter and Shift+Tab do not accidentally accept suggestions', async () => {
       await reset()

@@ -10,11 +10,14 @@
 // modes), otherwise from two /api/flags views: the plain QA user (Everyone or not) and the QA
 // account itself (also sees Owner + QA). Together they tell Everyone, Owner + QA and Off apart. CI never calls
 // either: it only runs --check, which reads the repo alone.
+import { createRequire } from "node:module";
 import { readdirSync, readFileSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { FLAG_DEFINITIONS_DIRECTORY, parseFlagFiles } from "../../.github/scripts/feature-flag-registry.mjs";
 import { localFlagModes, readPlainQaFlags } from "../premerge-local-flags.mjs";
+
+process.env.FEATURE_FLAG_TYPESCRIPT_PATH = createRequire(import.meta.url).resolve("typescript");
+const { FLAG_DEFINITIONS_DIRECTORY, parseFlagFiles } = await import("../../.github/scripts/feature-flag-registry.mjs");
 
 export const SNAPSHOT_PATH = "e2e/smoke/production-flag-modes.json";
 export const SNAPSHOT_SOURCE = "https://app.hypertask.ai/api/admin/flags";
