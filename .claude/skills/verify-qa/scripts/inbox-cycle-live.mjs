@@ -97,7 +97,10 @@ try {
 } catch (error) {
   step('run', false, error.message.split('\n')[0]);
 } finally {
-  for (const task of result.created) await api('POST', '/api/queues/tasks/taskDeleteReminder', { taskId: task.id }).catch(() => {});
+  for (const task of result.created) {
+    await api('POST', '/api/queues/tasks/taskDeleteReminder', { taskId: task.id }).catch(() => {});
+    await api('GET', `/api/notifications/markAsDone?taskId=${task.id}&userId=${QA}`).catch(() => {});
+  }
   await fs.writeFile(path.join(dir, 'result.json'), JSON.stringify(result, null, 2));
   await browser.close();
 }
