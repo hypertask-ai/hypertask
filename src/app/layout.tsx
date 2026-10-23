@@ -49,6 +49,16 @@ export async function generateViewport() {
   };
 }
 
+async function readTicketShellSeed(userId: number | undefined) {
+  if (userId === undefined) return null;
+  try {
+    if (!(await isFeatureEnabled(HTPR_7627_TICKET_FIRST_SCREEN_FLAG, userId))) return null;
+    return await getServerTicketShell();
+  } catch {
+    return null;
+  }
+}
+
 export default async function RootLayout(
   {
     children,
@@ -60,10 +70,7 @@ export default async function RootLayout(
   const analyticsSession = verifySession(
     cookieStore.get(SESSION_COOKIE)?.value,
   );
-  const ticketShellPromise = analyticsSession
-    ? isFeatureEnabled(HTPR_7627_TICKET_FIRST_SCREEN_FLAG, analyticsSession.id).then(enabled => enabled ? getServerTicketShell() : null).catch(() => null)
-    : Promise.resolve(null);
-  const firstScreenPromise = Promise.all([isMobileDevice(), getServerBoardDocument(), getServerInboxDocument(), ticketShellPromise]);
+  const firstScreenPromise = Promise.all([isMobileDevice(), getServerBoardDocument(), getServerInboxDocument(), readTicketShellSeed(analyticsSession?.id)]);
   let identifyEventIds = false;
   if (analyticsSession) {
     try {
