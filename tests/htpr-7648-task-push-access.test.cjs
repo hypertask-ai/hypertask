@@ -305,7 +305,23 @@ for (const preferences of [
 test("task push: unavailable access check now refused", async () => {
   const h = harness();
   h.state.accessError = true;
-  await assert.rejects(h.direct(), /Access unavailable/);
+  await h.direct();
+  assertSent(h, []);
+});
+
+test("task push: unavailable access check in a fire-and-forget task move now refused without an unhandled rejection", async () => {
+  const h = harness();
+  h.state.beforePush = () => { h.state.accessError = true; };
+  const unhandled = [];
+  const onUnhandled = (reason) => unhandled.push(reason);
+  process.on("unhandledRejection", onUnhandled);
+  try {
+    await h.run("task move");
+    await new Promise((resolve) => setImmediate(resolve));
+  } finally {
+    process.off("unhandledRejection", onUnhandled);
+  }
+  assert.deepEqual(unhandled, []);
   assertSent(h, []);
 });
 

@@ -319,10 +319,17 @@ export const sendDataNewCommentFCM = async(props:newCommentFCM) => {
         }
     }
     
-    const allowedUserIds = new Set(await filterTaskReadersNow(
-        props.devices.map(device => device.userId),
-        props.taskId,
-    ));
+    let readerIds: number[];
+    try {
+        readerIds = await filterTaskReadersNow(
+            props.devices.map(device => device.userId),
+            props.taskId,
+        );
+    } catch (error) {
+        console.error("🚀 ~ sendDataNewCommentFCM ~ task access check failed, push skipped:", error);
+        return;
+    }
+    const allowedUserIds = new Set(readerIds);
     const validDevices = props.devices.filter(device => allowedUserIds.has(device.userId));
 
     for (const device of validDevices){
