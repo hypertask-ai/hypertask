@@ -30,7 +30,7 @@ const query = (rows, args) => rows.filter((row) => matches(row, args.where))
 const mocks = new Map([
   ['src/lib/auth/getSessionUser.ts', { getSessionUser: async () => state.session }],
   ['src/lib/auth/agentScope.ts', { withAgentScopeRequest: (_request, run) => run() }],
-  ['src/lib/flags.ts', { HTPR_6865_SEARCH_LAYOUT_FLAG: 'htpr-6865-search-layout', HTPR_6880_SEARCH_COMMENTER_FLAG: 'htpr-6880-search-commenter', isFeatureEnabled: async (key) => key === 'htpr-6865-search-layout' ? state.layoutFlag : true }],
+  ['src/lib/flags.ts', { HTPR_6865_SEARCH_LAYOUT_FLAG: 'htpr-6865-search-layout', isFeatureEnabled: async (key) => key === 'htpr-6865-search-layout' ? state.layoutFlag : true }],
   ['src/utils/controllers/projects/getAllIncludes.ts', { getProjectWhere: (id) => ({ ownerId: id }) }],
   ['src/lib/prisma.ts', { default: {
     project: { findMany: async ({ where }) => {

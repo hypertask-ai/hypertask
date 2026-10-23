@@ -16,7 +16,7 @@ function lookupMatches(row, where = {}) {
   })
 }
 
-function harness({ actor = 'agent', enforce = true, grant = 'none', authenticated = true, layout = true, commenter = true, bypassProducer = false } = {}) {
+function harness({ actor = 'agent', enforce = true, grant = 'none', authenticated = true, layout = true, bypassProducer = false } = {}) {
   const f = fixture()
   f.state.enforce = enforce
   if (actor !== 'agent') f.state.ctx.agentId = null
@@ -65,7 +65,6 @@ function harness({ actor = 'agent', enforce = true, grant = 'none', authenticate
     } },
     '@/lib/flags': { ...keys, isFeatureEnabled: async key => {
       if (key === keys.HTPR_6865_SEARCH_LAYOUT_FLAG) return layout
-      if (key === keys.HTPR_6880_SEARCH_COMMENTER_FLAG) return commenter
       throw new Error(`Unexpected route flag: ${key}`)
     } },
   }).default
@@ -244,16 +243,21 @@ test('method, authentication and operator errors retain exact status and body', 
   const unauthorized = await unauthenticated.request()
   assert.equal(unauthorized.statusCode, 401)
   assert.deepEqual(unauthorized.body, { error: 'Unauthorized' })
-  const h = harness({ actor: 'owner', commenter: false })
+  const h = harness({ actor: 'owner' })
   const method = await h.request('board', {}, 'POST')
   assert.equal(method.statusCode, 405)
   assert.deepEqual(method.body, { error: 'Method not allowed' })
-  for (const operator of ['unknown', 'commenter']) {
-    const res = await h.request(operator)
-    assert.equal(res.statusCode, 400)
-    assert.deepEqual(res.body, { error: 'Unknown operator' })
-  }
+  const unknown = await h.request('unknown')
+  assert.equal(unknown.statusCode, 400)
+  assert.deepEqual(unknown.body, { error: 'Unknown operator' })
   assert.deepEqual(h.queries, [])
+})
+
+test('commenter values remain available with all remaining search flags off', async () => {
+  const h = harness({ actor: 'owner', layout: false })
+  const res = await h.request('commenter')
+  assert.equal(res.statusCode, 200)
+  assert.deepEqual(candidateIds(res), expectedIds('commenter', ids))
 })
 
 test('HTTP tagged-agent cookies remain refused before the handler in WATCH and ENFORCE', async () => {

@@ -386,6 +386,14 @@ test("Ctrl+J view context is permanent and its flag is gone", async () => {
   assert.equal(Object.hasOwn(snapshot.modes, "htpr-6999-ctrl-j-view-context"), false);
 });
 
+test("Commenter search is permanent and no longer registered", async () => {
+  assert.equal(flags.HTPR_6880_SEARCH_COMMENTER_FLAG, undefined);
+  assert.equal(definitions.some(definition => definition.key === "htpr-6880-search-commenter"), false);
+  assert.equal((await flags.listFeatureFlagModes()).some(entry => entry.key === "htpr-6880-search-commenter"), false);
+  const snapshot = require("../e2e/smoke/production-flag-modes.json");
+  assert.equal(Object.hasOwn(snapshot.modes, "htpr-6880-search-commenter"), false);
+});
+
 test("Inbox E first press is permanent and no longer registered", async () => {
   assert.equal(flags.HTPR_7002_INBOX_E_FIRST_PRESS_FLAG, undefined);
   assert.equal(definitions.some(definition => definition.key === "htpr-7002-inbox-e-first-press"), false);

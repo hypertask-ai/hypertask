@@ -269,7 +269,7 @@ test('recents appear once with readable chips in-flow, tips follow in responsive
     assert.deepEqual([...list.querySelectorAll('h2')].map((node) => node.textContent), ['Recent searches', 'Tips'])
     const tipsHeading = list.querySelectorAll('h2')[1]
     assert.ok(options().slice(0, 2).every((row) => row.compareDocumentPosition(tipsHeading) & 4))
-    assert.equal(tipsHeading.nextElementSibling.children.length, 10)
+    assert.equal(tipsHeading.nextElementSibling.children.length, 11)
     assert.match(tipsHeading.nextElementSibling.className, /grid-cols-1.*@md:grid-cols-2/)
     assert.ok(tipsHeading.nextElementSibling.lastElementChild.textContent.includes('Has an attachment'))
     assert.ok(options().slice(2).every((row) => row.querySelector('strong')))
@@ -288,6 +288,7 @@ test('empty tips keep j/k typing native while arrows, Tab/Enter, Escape and firs
       assert.match(selected().textContent, /^from:/)
       assert.equal(document.activeElement, input())
     }
+    await press('ArrowDown')
     await press('ArrowDown')
     await press('ArrowDown')
     assert.match(selected().textContent, /^in:/)
@@ -695,7 +696,7 @@ for (const enabled of [true, false]) {
   for (const operator of enabled ? ['commenter', 'assignee', 'label'] : ['assignee', 'label']) {
     for (const [freeText, acceptKey] of [['', 'Enter'], ['', 'Tab'], ['qzxw6913', 'Enter'], ['qzxw6913', 'Tab']]) {
       test(`chip Enter submits and releases focus: ${operator}, layout ${enabled}, text ${Boolean(freeText)}, accepted with ${acceptKey}`, async (t) => {
-        await withSearch(t, { flags: { [layoutFlag]: enabled, 'htpr-6880-search-commenter': true } }, async ({ input, type, tick, press, selected, options, requests, prompts, aiOpened, complete, state, dom }) => {
+        await withSearch(t, { flags: { [layoutFlag]: enabled } }, async ({ input, type, tick, press, selected, options, requests, prompts, aiOpened, complete, state, dom }) => {
           await type(`${operator}:${operator === 'commenter' ? '@' : ''}`)
           await tick(180)
           assert.match(selected().textContent, operator === 'label' ? /Bug/ : /Malcolm Stern/)
@@ -853,7 +854,7 @@ for (const [query, operator, leftover] of [
   ['-from valentin', 'from', ''],
 ]) {
   test(`HTPR-6935 Enter absorbs only recognised operator phrases: ${query}`, async (t) => {
-    await withSearch(t, { people: [{ id: 6, name: 'Valentin Yeo', email: 'valentin@example.test' }], flags: { 'htpr-6880-search-commenter': true } }, async ({ type, tick, selected, press, input, requests }) => {
+    await withSearch(t, { people: [{ id: 6, name: 'Valentin Yeo', email: 'valentin@example.test' }] }, async ({ type, tick, selected, press, input, requests }) => {
       await type(query)
       await tick(180)
       assert.match(selected().textContent, /Valentin Yeo/)
@@ -970,22 +971,20 @@ test('comment result author is an inbox pill before the safely highlighted snipp
   })
 })
 
-test('permanent highlights respect commenter on and off without highlighting the operator or injecting HTML', async (t) => {
-  for (const commenter of [false, true]) {
-    await withSearch(t, { query: 'login commenter:77', flags: { 'htpr-6880-search-commenter': commenter } }, async ({ complete, requests }) => {
-      const text = 'Login commenter:77 <img src=x onerror=alert(1)>'
-      await complete(requests[0], [{ ...matchTask, commentId: 44,
-        commentText: text,
-        searchMatch: { commentAuthor: 'Malcolm Stern' } }])
-      const row = document.getElementById('task_1')
-      const matches = row.querySelector('[data-search-match-highlights]')
-      assert.ok(matches)
-      assert.equal(row.querySelector('img'), null)
-      assert.match(row.textContent, /<img src=x onerror=alert\(1\)>/)
-      assert.equal(matches.firstElementChild.textContent, '@Malcolm Stern')
-      assert.deepEqual([...matches.querySelectorAll('mark')].map((mark) => mark.textContent), commenter ? ['Login'] : ['Login', 'commenter:77'])
-    })
-  }
+test('permanent commenter highlights omit the operator without injecting HTML', async (t) => {
+  await withSearch(t, { query: 'login commenter:77' }, async ({ complete, requests }) => {
+    const text = 'Login commenter:77 <img src=x onerror=alert(1)>'
+    await complete(requests[0], [{ ...matchTask, commentId: 44,
+      commentText: text,
+      searchMatch: { commentAuthor: 'Malcolm Stern' } }])
+    const row = document.getElementById('task_1')
+    const matches = row.querySelector('[data-search-match-highlights]')
+    assert.ok(matches)
+    assert.equal(row.querySelector('img'), null)
+    assert.match(row.textContent, /<img src=x onerror=alert\(1\)>/)
+    assert.equal(matches.firstElementChild.textContent, '@Malcolm Stern')
+    assert.deepEqual([...matches.querySelectorAll('mark')].map((mark) => mark.textContent), ['Login'])
+  })
 })
 
 test('layout off retains byte-identical row HTML despite match metadata', async (t) => {
@@ -1004,7 +1003,7 @@ test('layout off retains byte-identical row HTML despite match metadata', async 
 })
 
 test('commenter tip, people email, grey completion and exact person chip reuse the layout picker', async (t) => {
-  await withSearch(t, { flags: { 'htpr-6880-search-commenter': true } }, async ({ input, type, press, tick, complete, options, requests, lookups, navigations }) => {
+  await withSearch(t, {}, async ({ input, type, press, tick, complete, options, requests, lookups, navigations }) => {
     await React.act(async () => input().focus())
     assert.ok(options().some((row) => row.textContent === 'commenter:@HichamCommented by this person'))
     await type('comm')
@@ -1028,35 +1027,18 @@ test('commenter tip, people email, grey completion and exact person chip reuse t
   })
 })
 
-test('commenter is literal text without its flag or without search layout; no tip, chip or people lookup', async (t) => {
-  for (const flags of [{ 'htpr-6880-search-commenter': false }, { 'htpr-6880-search-commenter': true, [layoutFlag]: false }]) {
-    await withSearch(t, { flags }, async ({ input, type, tick, options, lookups }) => {
-      await React.act(async () => input().focus())
-      assert.ok(!options().some((row) => row.textContent.includes('commenter:')))
-      await type('comm')
-      assert.ok(!options().some((row) => row.textContent === 'commenter:'))
-      await type('commenter:mal')
-      await tick(180)
-      assert.equal(input().value, 'commenter:mal')
-      assert.equal(document.querySelector('[aria-label^="Remove commenter:"]'), null)
-      assert.ok(!lookups.some((params) => params.get('operator') === 'commenter'))
-    })
-  }
-})
-
-
-test('commenter flag off preserves the baseline rendered HTML byte for byte', async (t) => {
-  const snapshots = []
-  for (const baseline of [true, false]) {
-    await withSearch(t, { baseline, flags: { 'htpr-6880-search-commenter': false }, history: ['from:77 login'] }, async ({ input, type, tick, lookups }) => {
-      await React.act(async () => input().focus())
-      const empty = document.getElementById('root').innerHTML
-      await type('commenter:mal')
-      await tick(180)
-      snapshots.push([empty, document.getElementById('root').innerHTML, lookups.map((params) => params.toString())])
-    })
-  }
-  assert.deepEqual(snapshots[1], snapshots[0])
+test('commenter remains literal text without search layout; no tip, chip or people lookup', async (t) => {
+  await withSearch(t, { flags: { [layoutFlag]: false } }, async ({ input, type, tick, options, lookups }) => {
+    await React.act(async () => input().focus())
+    assert.ok(!options().some((row) => row.textContent.includes('commenter:')))
+    await type('comm')
+    assert.ok(!options().some((row) => row.textContent === 'commenter:'))
+    await type('commenter:mal')
+    await tick(180)
+    assert.equal(input().value, 'commenter:mal')
+    assert.equal(document.querySelector('[aria-label^="Remove commenter:"]'), null)
+    assert.ok(!lookups.some((params) => params.get('operator') === 'commenter'))
+  })
 })
 
 test('one-board results always hide the tab rows; two boards keep working tabs in either layout on desktop and phone', async (t) => {
@@ -1130,7 +1112,7 @@ test('layout rows share the inbox highlight without changing content insets on d
       await press('ArrowDown')
       assert.match(selected().textContent, /^from:/)
       await press('ArrowDown')
-      assert.match(selected().textContent, /^assignee:/)
+      assert.match(selected().textContent, /^commenter:/)
       assert.ok(selected().parentElement.hasAttribute('data-search-layout-tips'))
       capture(mobile ? 'highlight-phone-tips' : 'highlight-desktop-tips')
       await type('from:mal')
