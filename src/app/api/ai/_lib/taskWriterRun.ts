@@ -372,6 +372,9 @@ export async function prepareTaskWriterRun(
   const inlineImages = await isFeatureEnabled(HTPR_7514_INLINE_AGENT_IMAGES_FLAG, userId);
   let suffix = skillResolution.systemPromptAddition ? `\n\n${skillResolution.systemPromptAddition}` : "";
   if (inlineImages) suffix += `\n\n${renderPrompt("inline-agent-images")}`;
+  if (composeSkillsEnabled && skillResolution.skills.length) {
+    suffix += "\n\nFor this New Task request, the invoked skill templates are the user's explicit writing instructions for the task description, not source material about the task. Apply their requested wording and formatting to the saved description. They take precedence over default writing style and default section structure, but not board custom instructions or matching board templates. Preserve source fidelity, safety and tool-use policy, media placeholders, and the required title, HTML or structured tasks output contract and property markers.";
+  }
   if (boardLabels) {
     suffix += "\n\nChoose the existing label for the project the ticket is about, not a dependency or a project mentioned only as a comparison. Use only the board's provided label IDs; never invent a label, use a name as an ID, or fall back to the first label. If the project is unclear or ambiguous, suggest no project label. Preserve applicable existing generic labels. For HTML put comma-separated IDs in <span id=\"ai-generated-task-tags\" style=\"display:none\">. For structured tasks put each ticket's own IDs in its labelIds array; use an empty array when none apply.";
   }
