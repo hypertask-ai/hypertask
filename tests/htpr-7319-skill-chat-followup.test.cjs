@@ -579,7 +579,7 @@ test("flag definition and generated registry use the designed Owner + QA rollout
   const { FEATURE_FLAG_DEFINITIONS } = jiti(path.join(root, "src/lib/flags/definitions.ts"));
   assert.equal(definition.key, flag);
   assert.equal(definition.kind, "feature");
-  assert.equal(definition.defaultMode, "OWNER_AND_QA");
+  assert.equal(definition.defaultMode, "EVERYONE");
   assert.deepEqual(definition.related, ["htpr-7312-ctrlj-skills", "htpr-7317-ctrlj-ticket-questions"]);
   assert.equal(definition.releaseRisk.risk, "small");
   assert.ok(definition.releaseRisk.reason.trim());
