@@ -38,7 +38,8 @@ export const MessageList: React.FC<MessageListProps> = ({ sidebarKey, active = t
   const sessionIsAnotherTicket = onlyViewedTicket && Boolean(viewedTaskId) && viewedTaskId !== newTicketId;
   const skillFollowupEnabled = useFlag(HTPR_7319_SKILL_CHAT_FOLLOWUP_FLAG);
   const pendingFollowupState = useRecoilValue(composeTaskSkillFollowupAtom);
-  const pendingFollowup = skillFollowupEnabled ? pendingFollowupState : null;
+  let pendingFollowup: typeof pendingFollowupState = null;
+  if (skillFollowupEnabled) pendingFollowup = pendingFollowupState;
   const waitingForSkillFollowup = Boolean(pendingFollowup) &&
     pendingFollowup?.taskId === (viewedTaskId ?? newTicketId);
   const showTicketQuestions = !waitingForSkillFollowup && ticketQuestionsEnabled && Boolean(newTicketId) && !sessionIsAnotherTicket && messages.length === 1 &&

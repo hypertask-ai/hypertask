@@ -41,7 +41,8 @@ export const useSessionAndChatHistory = (
   if (composeEnabled) composeIntro = pendingComposeIntro;
   const skillFollowupEnabled = useFlag(HTPR_7319_SKILL_CHAT_FOLLOWUP_FLAG);
   const pendingFollowupState = useRecoilValue(composeTaskSkillFollowupAtom);
-  const pendingFollowup = skillFollowupEnabled ? pendingFollowupState : null;
+  let pendingFollowup: typeof pendingFollowupState = null;
+  if (skillFollowupEnabled) pendingFollowup = pendingFollowupState;
   const waitingForSkillFollowup = isTaskScoped && Boolean(taskId) && pendingFollowup?.taskId === taskId;
   const hasPendingSkillIntro = isTaskScoped && composeIntro?.skillFollowup && composeIntro.taskId === taskId;
   const consumedComposeIntro = useRef<string | null>(null);

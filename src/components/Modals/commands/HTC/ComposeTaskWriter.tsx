@@ -52,7 +52,9 @@ export default function ComposeTaskWriter({ active, focusProxy, destinationProje
   const chatAutoOpenAllowed = useRef(false);
   chatAutoOpenAllowed.current = chatAutoOpenReady && !keepAiChatClosed;
   const ctrljFooterOneLine = useFlag(HTPR_7306_CTRLJ_FOOTER_ONE_LINE_FLAG);
-  const skillFollowupEnabled = useFlag(HTPR_7319_SKILL_CHAT_FOLLOWUP_FLAG);
+  const skillFollowupFlag = useFlag(HTPR_7319_SKILL_CHAT_FOLLOWUP_FLAG);
+  let skillFollowupEnabled = false;
+  if (skillFollowupFlag) skillFollowupEnabled = true;
   const invokeSkills = useFlag(HTPR_7312_CTRLJ_SKILLS_FLAG);
   const phoneTaskWriterSheetEnabled = useFlag(HTPR_6891_PHONE_TASK_WRITER_SHEET_FLAG);
   const enabled = useFlag(HTPR_6929_COMPOSE_TASK_WRITER_FLAG);

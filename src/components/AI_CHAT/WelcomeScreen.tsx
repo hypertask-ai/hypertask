@@ -116,7 +116,8 @@ export const WelcomeScreen = () => {
   const questionsTaskId = useRecoilValue(composeTaskQuestionsTaskIdAtom);
   const skillFollowupEnabled = useFlag(HTPR_7319_SKILL_CHAT_FOLLOWUP_FLAG);
   const pendingFollowupState = useRecoilValue(composeTaskSkillFollowupAtom);
-  const pendingFollowup = skillFollowupEnabled ? pendingFollowupState : null;
+  let pendingFollowup: typeof pendingFollowupState = null;
+  if (skillFollowupEnabled) pendingFollowup = pendingFollowupState;
   const hasPendingTicketQuestions = pendingFollowup?.taskId === taskId || oneQuestionsCallEnabled && questionsTaskId === taskId;
   const taskQuestions = useQuery({
     queryKey: ["task-questions", taskId],
