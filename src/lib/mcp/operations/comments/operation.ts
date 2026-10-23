@@ -1,3 +1,4 @@
+import { isPlanLimitReachedError, planLimitResponse } from '@/lib/planLimits';
 import { IdempotencyAccessError } from "@/lib/mcp/idempotency/idempotencyStore"
 import type { AgentTokenTeamScope } from '@/lib/mcp/auth/types'
 import { getProjectWhere } from '@/utils/controllers/projects/getAllIncludes'
@@ -1053,6 +1054,10 @@ export async function POST(request: NextRequest) {
 
     return NextResponse.json(mcpResponse, { status: 201 })
   } catch (error) {
+    if (isPlanLimitReachedError(error)) {
+      const response = planLimitResponse(error);
+      return NextResponse.json(response.body, { status: response.status });
+    }
     if (error instanceof IdempotencyAccessError) return NextResponse.json({ error: error.message }, { status: 404 })
     const identifierResponse = taskIdentifierErrorResponse(error)
     if (identifierResponse) return identifierResponse

@@ -1,3 +1,4 @@
+import { assertFileSizeForProject, isPlanLimitsEnabled, isPlanLimitReachedError } from "@/lib/planLimits";
 import { Prisma } from "@prisma/client";
 import prisma from "@/lib/prisma";
 import { persistAttachmentRows } from "@/lib/mcp/attachments/persistBatch";
@@ -20,8 +21,8 @@ export class TaskAttachmentLinkError extends Error {
   }
 }
 
-async function lockAttachmentReceipt(
-  tx: Prisma.TransactionClient,
+export async function lockAttachmentReceipt(
+  tx: Pick<Prisma.TransactionClient, "$queryRaw">,
   key: string,
 ) {
   await tx.$queryRaw(
@@ -54,6 +55,7 @@ export async function linkTaskAttachment(
     throw new TaskAttachmentLinkError("Invalid attachment receipt", 400);
   }
 
+  const planLimitsEnabled = await isPlanLimitsEnabled(userId);
   return prisma.$transaction(
     async (tx) => {
       await lockAttachmentReceipt(tx, receipt.key);
@@ -67,6 +69,7 @@ export async function linkTaskAttachment(
         },
         select: {
           id: true,
+          projectId: true,
           description_: { select: { id: true } },
         },
       });
@@ -76,7 +79,13 @@ export async function linkTaskAttachment(
 
       const fileSource = getHypertasksStoragePublicUrl(receipt.key);
       const existing = await tx.attachment.findFirst({
-        where: { fileSource },
+        where: planLimitsEnabled ? {
+          OR: [
+            { fileSource },
+            { fileSource: { endsWith: `/${receipt.key}` } },
+            { fileSource: { contains: `/${receipt.key}?` } },
+          ],
+        } : { fileSource },
         select: {
           id: true,
           createdAt: true,
@@ -100,11 +109,31 @@ export async function linkTaskAttachment(
         throw new TaskAttachmentLinkError("This upload is already linked", 409);
       }
 
+      let measuredBytes: number | undefined;
       try {
-        await getHypertasksS3Client()
+        const head = await getHypertasksS3Client()
           .headObject({ Bucket: HYPERTASKS_S3_BUCKET, Key: receipt.key })
           .promise();
+        if (planLimitsEnabled) {
+          if (head.ContentLength == null) {
+            throw new TaskAttachmentLinkError("That upload could not be verified", 409);
+          }
+          measuredBytes = head.ContentLength;
+          await assertFileSizeForProject(task.projectId, measuredBytes, {
+            actorUserId: userId, entryPoint: "tasks.uploadFinalize.link",
+          });
+        }
       } catch (error) {
+        if (isPlanLimitReachedError(error)) {
+          try {
+            await getHypertasksS3Client()
+              .deleteObject({ Bucket: HYPERTASKS_S3_BUCKET, Key: receipt.key })
+              .promise();
+          } catch (cleanupError) {
+            console.error("[plan-limit] staged attachment cleanup failed", cleanupError);
+          }
+          throw error;
+        }
         if (isStorageNotFound(error)) {
           throw new TaskAttachmentLinkError("This upload is no longer available", 409);
         }
@@ -117,7 +146,7 @@ export async function linkTaskAttachment(
           {
             filename: receipt.fileName,
             contentType: receipt.contentType,
-            fileSize: receipt.fileSize,
+            fileSize: measuredBytes ?? receipt.fileSize,
             url: fileSource,
           },
         ],
@@ -166,18 +195,28 @@ export async function discardTaskAttachment(
     throw new TaskAttachmentLinkError("Invalid attachment receipt", 400);
   }
 
+  return discardUnlinkedTaskAttachment(receipt.key);
+}
+
+export async function discardUnlinkedTaskAttachment(key: string, matchStorageAliases = false): Promise<boolean> {
   return prisma.$transaction(
     async (tx) => {
-      await lockAttachmentReceipt(tx, receipt.key);
+      await lockAttachmentReceipt(tx, key);
       const linked = await tx.attachment.findFirst({
-        where: { fileSource: getHypertasksStoragePublicUrl(receipt.key) },
+        where: matchStorageAliases ? {
+          OR: [
+            { fileSource: getHypertasksStoragePublicUrl(key) },
+            { fileSource: { endsWith: `/${key}` } },
+            { fileSource: { contains: `/${key}?` } },
+          ],
+        } : { fileSource: getHypertasksStoragePublicUrl(key) },
         select: { id: true },
       });
       if (linked) return false;
 
       try {
         await getHypertasksS3Client()
-          .deleteObject({ Bucket: HYPERTASKS_S3_BUCKET, Key: receipt.key })
+          .deleteObject({ Bucket: HYPERTASKS_S3_BUCKET, Key: key })
           .promise();
       } catch {
         throw new TaskAttachmentLinkError("Could not discard attachment", 502);

@@ -1,3 +1,5 @@
+import { verifyTaskAttachmentLinks } from "@/lib/storage/verifyTaskAttachmentLinks";
+import { isPlanLimitReachedError, planLimitResponse } from "@/lib/planLimits";
 import { inlineAgentImagesForUser } from "@/lib/media/inlineAgentImages.server";
 import { HTPR_7513_WRITER_PROJECT_LABELS_FLAG } from "@/lib/flags/keys";
 import { recordAgentBoardScopeMiss } from "@/lib/auth/agentScope";
@@ -115,6 +117,19 @@ const route = (requestStartedAt: number) => taskWriteRoute({
       return NextResponse.json({ message: "Forbidden" }, { status: 403, headers: responseHeaders });
     }
     recordAgentBoardScopeMiss(authorizedProject.id, "write");
+    if (Array.isArray(urlsToAdd) && urlsToAdd.some((url) => url.Attachment)) {
+      try {
+        await verifyTaskAttachmentLinks(prisma, urlsToAdd.filter((url) => url.Attachment).map((url) => url.urlString), { projectId: authorizedProject.id }, {
+          actorUserId: userId, agentId, entryPoint: "tasks.createGlobally.attachments",
+        });
+      } catch (error) {
+        if (isPlanLimitReachedError(error)) {
+          const response = planLimitResponse(error);
+          return NextResponse.json(response.body, { status: response.status });
+        }
+        throw error;
+      }
+    }
     const storedDescription = agentId && typeof description === "string"
       ? await inlineAgentImagesForUser(description, userId, { inlineImages: body.inline_images, attachments: Array.isArray(urlsToAdd) ? urlsToAdd.filter((file) => file.Attachment).map((file) => ({ url: file.urlString, fileName: file.title, mimeType: file.attachmentType })) : [] }) : description;
     let customFields: import("@/lib/ai/taskWriterCustomFields").TaskWriterCustomFieldValue[] = [];
@@ -473,13 +488,17 @@ const route = (requestStartedAt: number) => taskWriteRoute({
               : null,
           },
         };
-      }, creationChannelFromHeader(request.headers.get(CREATION_CHANNEL_HEADER)), analyticsAgentId);
+      }, creationChannelFromHeader(request.headers.get(CREATION_CHANNEL_HEADER)), analyticsAgentId, projectId);
       newTask = created.result.task as TaskCreatedGlobally;
       boardWebhookDeliveryIds = created.boardWebhookDeliveryIds;
       priorityCreated = created.result.priority;
       tagsCreated = created.result.taskLabels;
       assignmentsCreated = created.result.assignments;
     } catch (e) {
+      if (isPlanLimitReachedError(e)) {
+        const refusal = planLimitResponse(e);
+        return NextResponse.json(refusal.body, { status: refusal.status, headers: responseHeaders });
+      }
       if (e instanceof ParentTaskNotFoundError) {
         return NextResponse.json({ message: "Parent task not found" }, { status: 404, headers: responseHeaders });
       }
@@ -539,7 +558,17 @@ const route = (requestStartedAt: number) => taskWriteRoute({
       const { default: addIntoTaskDesc } = await import(
         "@/utils/controllers/urls/addIntoTaskDesc"
       );
-      await addIntoTaskDesc(urlsToAdd, newTask.id, "PUT");
+      try {
+        await addIntoTaskDesc(urlsToAdd, newTask.id, "PUT", prisma, {
+          actorUserId: userId, agentId, entryPoint: "tasks.createGlobally.attachments",
+        });
+      } catch (error) {
+        if (isPlanLimitReachedError(error)) {
+          const response = planLimitResponse(error);
+          return NextResponse.json(response.body, { status: response.status });
+        }
+        throw error;
+      }
     }
     for (const assignment of assignmentsCreated) {
       await createAssigneeActivityAndNotification(

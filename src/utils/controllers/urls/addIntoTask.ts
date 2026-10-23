@@ -1,3 +1,5 @@
+import { verifyTaskAttachmentLinks } from "@/lib/storage/verifyTaskAttachmentLinks";
+import { isPlanLimitReachedError, isPlanLimitsEnabled, type PlanLimitContext } from "@/lib/planLimits";
 import type { Prisma } from "@prisma/client";
 import { IUrl } from '@/models/model';
 
@@ -7,9 +9,16 @@ import { measuredSizeString } from "@/lib/attachments/measuredSize";
 import { urlRowData } from "@/lib/attachments/urlRowData";
 
 
-const addIntoTask = async (urlsToAdd:IUrl[],commentId:number,method:string|undefined, db: Prisma.TransactionClient = prisma) => {
+const addIntoTask = async (urlsToAdd:IUrl[],commentId:number,method:string|undefined, db: Prisma.TransactionClient = prisma, planLimitContext?: PlanLimitContext): Promise<{ status: number; json: any }> => {
   console.log("🚀 ~ file: addIntoTask.ts:12 ~ constaddIntoTask:NextApiHandler= ~ commentId:", commentId)
   console.log("🚀 ~ file: addIntoTask.ts:12 ~ constaddIntoTask:NextApiHandler= ~ urlsToAdd:", urlsToAdd)
+
+  if (db === prisma && planLimitContext && method === "POST" && urlsToAdd.some((url) => url.Attachment) && await isPlanLimitsEnabled(planLimitContext.actorUserId)) {
+  return prisma.$transaction((tx) => addIntoTask(urlsToAdd, commentId, method, tx, planLimitContext), { timeout: 10_000 });
+}
+const measuredSizes = planLimitContext && method === "POST"
+    ? await verifyTaskAttachmentLinks(db, urlsToAdd.filter((url) => url.Attachment).map((url) => url.urlString), { commentId }, planLimitContext)
+    : new Map<string, number>();
 
   if (method === "POST") {
     try {
@@ -27,7 +36,7 @@ const addIntoTask = async (urlsToAdd:IUrl[],commentId:number,method:string|undef
               fileType: url_.attachmentType??"",
               fileSource: url_.urlString,
               fileName: url_.title ?? "",
-              fileSize: measuredSizeString(url_.fileSize),
+              fileSize: measuredSizeString(measuredSizes.get(url_.urlString) ?? url_.fileSize),
               commentId: commentId,
               taskId: url_.TaskId,
             }
@@ -55,6 +64,7 @@ const addIntoTask = async (urlsToAdd:IUrl[],commentId:number,method:string|undef
         json:response
       })
     } catch (error) {
+    if (isPlanLimitReachedError(error)) throw error;
       console.error('Error:', error);
       return({
         status:300,
@@ -113,6 +123,7 @@ const addIntoTask = async (urlsToAdd:IUrl[],commentId:number,method:string|undef
         json:{success:true}
       })
     } catch (error) {
+    if (isPlanLimitReachedError(error)) throw error;
       console.error('Error:', error);
       return({
         status:500,
