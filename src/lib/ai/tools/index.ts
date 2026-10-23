@@ -1,6 +1,5 @@
 import { createShowTicketRowsTool } from "./showTicketRows";
-import type { ChatTicketGroupReferences } from "@/models/model";
-import type { ToolExecution } from "@/lib/ai/chatStream/types";
+import type { TicketRowsSink } from "./context";
 import type { AgentTokenTeamScope } from "@/lib/mcp/auth/types";
 import type { ToolSet } from "ai";
 import { type HeartbeatTurnMetadata } from "@/lib/nativeAgent/heartbeatTurnEnvelope";
@@ -106,9 +105,9 @@ export function buildTools(
   abortSignal?: AbortSignal,
   inlineAgentImagesEnabled = false,
   teamScope?: AgentTokenTeamScope | null,
-  ticketRows?: { executions: ToolExecution[]; setGroups: (groups: ChatTicketGroupReferences) => void },
+  ticketRows?: TicketRowsSink,
 ): ToolSet {
-  const context = createToolContext(user, body, send, recordToolExecution, actingAgentId, recordToolStart, heartbeatTurn, chatTaskWriterEnabled, abortSignal, inlineAgentImagesEnabled, teamScope);
+  const context = createToolContext(user, body, send, recordToolExecution, actingAgentId, recordToolStart, heartbeatTurn, chatTaskWriterEnabled, abortSignal, inlineAgentImagesEnabled, teamScope, ticketRows);
   const tools: ToolSet = {
     hypertask_list_agents: createListAgentsTool(context).hypertask_list_agents,
     hypertask_agent_webhook: createAgentWebhookTool(context).hypertask_agent_webhook,
@@ -194,7 +193,7 @@ export function buildTools(
     rag_retrieval: createRagRetrievalTool(context).rag_retrieval,
     web_search: createWebSearchTool(context).web_search,
     search_help_docs: createSearchHelpDocsTool(context).search_help_docs,
-    hypertask_show_ticket_rows: createShowTicketRowsTool(ticketRows?.executions ?? [], ticketRows?.setGroups ?? (() => undefined)),
+    hypertask_show_ticket_rows: createShowTicketRowsTool(context).hypertask_show_ticket_rows,
   };
 
   Object.seal(tools);

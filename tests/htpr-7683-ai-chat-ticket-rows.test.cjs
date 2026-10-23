@@ -53,8 +53,9 @@ function display(executions = []) {
     "ai": { tool: (options) => options }, "@/lib/ai/chatStream/ticketGroups": h,
   });
   let selected;
-  const tool = createShowTicketRowsTool(executions, (groups) => { selected = groups; });
-  return { tool, prompt: TICKET_ROWS_PROMPT, selected: () => selected, createShowTicketRowsTool };
+  const rowsTool = (toolExecutions, setGroups) => createShowTicketRowsTool({ ticketRows: { executions: toolExecutions, setGroups } }).hypertask_show_ticket_rows;
+  const tool = rowsTool(executions, (groups) => { selected = groups; });
+  return { tool, prompt: TICKET_ROWS_PROMPT, selected: () => selected, rowsTool, createShowTicketRowsTool };
 }
 
 const refs = { version: 1, groups: [{ label: "Done", taskIds: [1, 2, 9] }, { label: "New", taskIds: [3] }] };
@@ -184,7 +185,7 @@ function modelTurn(enabled, { persisted = true, failed = false, stateless = fals
     "@/lib/ai/chatStream/title": {},
     "@/lib/ai/tools": { buildTools: (...args) => {
       const options = args[11];
-      return { hypertask_get_tasks: {}, hypertask_show_ticket_rows: d.createShowTicketRowsTool([{ name: "hypertask_get_tasks", result: { success: true, tasks: [{ id: 1 }] } }], options?.setGroups ?? (() => undefined)) };
+      return { hypertask_get_tasks: {}, hypertask_show_ticket_rows: d.rowsTool([{ name: "hypertask_get_tasks", result: { success: true, tasks: [{ id: 1 }] } }], options?.setGroups ?? (() => undefined)) };
     } },
     "./modelReply": { generateModelReply: async (_, inputs) => {
       captured.push(inputs);
