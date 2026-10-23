@@ -34,7 +34,7 @@ export function useAiChat() {
   pathname, isDetailPage, isFullScreenChat, surface, spansAllBoards,
   chatMounted, setChatMounted, minimized, setMinimized, isTyping,
   setIsTyping, queuedMessages, setQueuedMessages, messageQueueRef, showScrollUpIndicator,
-  setShowScrollUpIndicator, currentAiOption, setAiOption, modelTeamId, modelBilling,
+  setShowScrollUpIndicator, currentAiOption, setAiOption, modelTeamId, modelBilling, usesPlanDefault, agentSessionAiOption,
   streamingSessionRef, streamingAssistantMessageRef, streamingRequestRef, sendInFlightRef, currentStreamingSession,
   setCurrentStreamingSession, isRecording, setIsRecording, displayAiOptions, contextList,
   setContextList, agentStatus, setAgentStatus, showRenameChatModal, setShowRenameChatModal,
