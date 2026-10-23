@@ -232,6 +232,7 @@ for (const splitTasks of [false, true]) {
       const route = moduleWithStubs('src/app/api/ai/task-writer/route.ts', {
         ai: require('ai'),
         'next/server': { NextResponse: { json: Response.json } },
+        '@/lib/net/downloadWithoutBrotli': { downloadWithoutBrotli: undefined },
         '@/lib/ai/taskWriterDueDate': {},
         '@/lib/ai/taskWriterTicketType': {},
         '@/lib/errors/reportError': { reportError: async (error) => errors.push(error) },
