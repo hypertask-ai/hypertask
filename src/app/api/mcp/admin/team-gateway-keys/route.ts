@@ -10,15 +10,11 @@ import {
   createUnauthorizedResponse,
   validateManagementOrSessionAuth,
 } from "@/lib/mcp/auth";
+import { isPlatformGatewayAdmin } from "@/lib/auth/platformGatewayAdmin";
 import prisma from "@/lib/prisma";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
-
-const PLATFORM_GATEWAY_ADMIN = {
-  userId: 6,
-  email: "valentin.yeo@gmail.com",
-} as const;
 
 const targetSchema = z
   .object({
@@ -52,13 +48,6 @@ type TeamIdentity = {
   title: string | null;
   ownerEmail: string;
 };
-
-function isPlatformGatewayAdmin(user: { id: number; email: string }) {
-  return (
-    user.id === PLATFORM_GATEWAY_ADMIN.userId &&
-    user.email.trim().toLowerCase() === PLATFORM_GATEWAY_ADMIN.email
-  );
-}
 
 function fingerprint(apiKey: string) {
   return createHash("sha256").update(apiKey).digest("hex").slice(0, 16);
