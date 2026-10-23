@@ -90,6 +90,7 @@ export async function createCommentService(params: CreateCommentParams) {
     ownerId,
     currentUser,
     agentId,
+    teamScope,
     directReplyUserId,
     directReplySourceCommentId,
     directReplyInvocationId,
@@ -127,12 +128,13 @@ export async function createCommentService(params: CreateCommentParams) {
   const task = await prisma.task.findFirst({
     where: {
       id: taskId,
-      ...(trustedCaller
+      ...(trustedCaller && teamScope == null
         ? {}
         : {
             project: taskWriteAccessWhere(
               accessUserId ?? currentUser.id,
               agentId,
+              teamScope,
             ),
           }),
     },

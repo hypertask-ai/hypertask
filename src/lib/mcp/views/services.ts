@@ -1,3 +1,4 @@
+import type { AgentTokenTeamScope } from '@/lib/mcp/auth/types';
 import prisma from '@/lib/prisma';
 import { getUniqueSlug, getViewUrl } from '@/utils/controllers/projects/views/viewsHelperAPIfunctions';
 import { matchLabelIds, validateProjectAccess, validateProjectMemberIds } from '@/lib/mcp/tasks/services';
@@ -21,6 +22,8 @@ export type CreateViewFilters = {
 };
 
 export type CreateViewInput = {
+    agentId?: string | null;
+    teamScope?: AgentTokenTeamScope | null;
     projectId: number;
     userId: number;
     title: string;
@@ -163,6 +166,8 @@ async function buildBoardFilters(projectId: number, filters?: CreateViewFilters)
 
 export async function createView(input: CreateViewInput) {
     const { projectId, userId, title } = input;
+    const access = await validateProjectAccess(projectId, userId, input.agentId, input.teamScope);
+    if (access.error) throw new Error(access.error.message);
     assertEmptySections(input.board_empty_sections);
 
     const existing = await prisma.view.findFirst({
@@ -241,6 +246,7 @@ export type UpdateViewInput = {
     viewId: string;
     userId: number;
     agentId?: string | null;
+    teamScope?: AgentTokenTeamScope | null;
     title?: string;
     visibility?: ViewVisibility;
     filters?: CreateViewFilters;
@@ -275,7 +281,7 @@ export async function updateView(input: UpdateViewInput) {
     if (!view) throw new Error('View does not exist');
 
     const projectId = view.project_view.projectId;
-    const access = await validateProjectAccess(projectId, userId, agentId);
+    const access = await validateProjectAccess(projectId, userId, agentId, input.teamScope);
     if (access.error) throw new Error(access.error.message);
 
     if (view.visibility === 'Private' && view.userId !== userId) {
@@ -447,7 +453,7 @@ export async function updateView(input: UpdateViewInput) {
     };
 }
 
-export async function applyView(input: { viewId: string; userId: number; agentId?: string | null }) {
+export async function applyView(input: { viewId: string; userId: number; agentId?: string | null; teamScope?: AgentTokenTeamScope | null }) {
     const { viewId, userId, agentId } = input;
 
     const view = await prisma.view.findUnique({
@@ -465,7 +471,7 @@ export async function applyView(input: { viewId: string; userId: number; agentId
     if (!view) throw new Error('View does not exist');
 
     const projectId = view.project_view.projectId;
-    const access = await validateProjectAccess(projectId, userId, agentId);
+    const access = await validateProjectAccess(projectId, userId, agentId, input.teamScope);
     if (access.error) throw new Error(access.error.message);
 
     if (view.visibility === 'Private' && view.userId !== userId) {
@@ -510,7 +516,7 @@ export async function applyView(input: { viewId: string; userId: number; agentId
     };
 }
 
-export async function deleteView(viewId: string, userId: number, agentId?: string | null) {
+export async function deleteView(viewId: string, userId: number, agentId?: string | null, teamScope?: AgentTokenTeamScope | null) {
     const view = await prisma.view.findUnique({
         where: { id: viewId },
         select: {
@@ -523,7 +529,7 @@ export async function deleteView(viewId: string, userId: number, agentId?: strin
     });
     if (!view) throw new Error('View does not exist');
 
-    const access = await validateProjectAccess(view.project_view.projectId, userId, agentId);
+    const access = await validateProjectAccess(view.project_view.projectId, userId, agentId, teamScope);
     if (access.error) throw new Error(access.error.message);
 
     if (view.visibility === 'Private' && view.userId !== userId) {

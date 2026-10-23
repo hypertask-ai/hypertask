@@ -1,3 +1,4 @@
+import type { AgentTokenTeamScope } from '@/lib/mcp/auth/types';
 import prisma from "@/lib/prisma";
 import { Prisma, type Task } from "@prisma/client";
 import getMemberAndOwner from "@/utils/controllers/getMemberAndOwnerForBoard";
@@ -63,6 +64,7 @@ async function moveTaskWithDestinationIdentity({
   parentTaskId,
   currentUser,
   agentId,
+  teamScope,
 }: {
   taskId: number;
   projectId: number;
@@ -72,6 +74,7 @@ async function moveTaskWithDestinationIdentity({
   parentTaskId: number | null;
   currentUser: IUser;
   agentId?: string | null;
+  teamScope?: AgentTokenTeamScope | null;
 }) {
   for (let attempt = 0; ; attempt++) {
     const [nextUniqueIndex, ranking] = await Promise.all([
@@ -96,6 +99,7 @@ async function moveTaskWithDestinationIdentity({
       agentId,
       {
         allowProjectChange: true,
+        teamScope,
         onProjectChangedInTx: async (tx, before, after) => {
           movedPageIds = await syncTaskPagesInTx(tx, before, after);
         },
@@ -212,7 +216,8 @@ async function moveAllSubtasksRecursively(
   projectIdentifier: string,
   parentTaskId: number,
   currentUser: IUser,
-  agentId?: string | null
+  agentId?: string | null,
+  teamScope?: AgentTokenTeamScope | null,
 ) {
   const section = await prisma.section.findUnique({ where: { id: sectionId } });
   for (const subtask of subtasks) {
@@ -225,6 +230,7 @@ async function moveAllSubtasksRecursively(
       parentTaskId,
       currentUser,
       agentId,
+      teamScope,
     });
     if (result.status !== 200) {
       throw new Error(toErrorMessage(result.json, "Failed to move subtask"));
@@ -237,7 +243,8 @@ async function moveAllSubtasksRecursively(
         projectIdentifier,
         subtask.id,
         currentUser,
-        agentId
+        agentId,
+        teamScope
       );
     }
   }
@@ -408,6 +415,7 @@ export interface MoveTaskToDifferentBoardParams {
   currentProjectId: number;
   currentUser: IUser;
   agentId?: string | null;
+  teamScope?: AgentTokenTeamScope | null;
 }
 
 export interface MoveTaskToDifferentBoardResult {
@@ -427,6 +435,7 @@ export async function moveTaskToDifferentBoard(
     currentProjectId,
     currentUser,
     agentId,
+    teamScope,
   } = params;
 
   const taskToMove = await getTaskWithNestedSubtasks(taskId);
@@ -449,7 +458,7 @@ export async function moveTaskToDifferentBoard(
   const canWriteTarget = await prisma.project.findFirst({
     where: {
       id: targetProjectId,
-      ...taskWriteAccessWhere(currentUser.id, agentId),
+      ...taskWriteAccessWhere(currentUser.id, agentId, teamScope),
     },
     select: { id: true },
   });
@@ -467,7 +476,8 @@ export async function moveTaskToDifferentBoard(
         updatedAt: new Date(),
       },
       currentUser,
-      agentId
+      agentId,
+      { teamScope }
     );
     if (result.status !== 200) {
       return {
@@ -508,6 +518,7 @@ export async function moveTaskToDifferentBoard(
     parentTaskId: parentAlreadyInTarget ? taskToMove.parentTaskId : null,
     currentUser,
     agentId,
+    teamScope,
   });
   if (result.status !== 200) {
     return {
@@ -527,7 +538,8 @@ export async function moveTaskToDifferentBoard(
       projectIdentifier,
       updatedTask.id,
       currentUser,
-      agentId
+      agentId,
+      teamScope
     );
   }
 

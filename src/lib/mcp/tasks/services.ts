@@ -1,3 +1,4 @@
+import type { AgentTokenTeamScope } from '@/lib/mcp/auth/types';
 import { recordAgentBoardScopeMiss } from "@/lib/auth/agentScope";
 import prisma from '@/lib/prisma';
 import { CREATION_AGENT_HEADER, CREATION_CHANNEL_HEADER, type CreationChannel } from '@/lib/telemetry/savedWork';
@@ -56,7 +57,8 @@ async function emitAgentLabelChangeWebhook(
 export async function validateProjectAccess(
     projectId: number,
     userId: number,
-    agentId?: string | null
+    agentId?: string | null,
+    teamScope?: AgentTokenTeamScope | null,
 ): Promise<{ project: any; error: null } | { project: null; error: { status: number; message: string } }> {
     const projectExists = await prisma.project.findFirst({
         where: { id: projectId, status: 'Normal' },
@@ -74,7 +76,7 @@ export async function validateProjectAccess(
         where: {
             id: projectId,
             status: 'Normal',
-            ...getProjectWhere(userId, agentId),
+            ...getProjectWhere(userId, agentId, teamScope),
         },
         select: {
             id: true,
@@ -246,6 +248,9 @@ async function assertTaskBelongsToProject(
     tx: Prisma.TransactionClient,
     taskId: number,
     projectId: number,
+    userId: number,
+    agentId?: string | null,
+    teamScope?: AgentTokenTeamScope | null,
 ): Promise<void> {
     const rows = await tx.$queryRaw<Array<{ projectId: number }>>`
         SELECT "projectId"
@@ -254,7 +259,7 @@ async function assertTaskBelongsToProject(
           AND "projectId" = ${projectId}
         FOR UPDATE
     `;
-    if (rows.length === 0) {
+    if (rows.length === 0 || (teamScope != null && !await tx.task.findFirst({ where: { id: taskId, project: getProjectWhere(userId, agentId, teamScope) }, select: { id: true } }))) {
         throw new TaskProjectScopeError(taskId);
     }
 }
@@ -265,10 +270,11 @@ export async function setTaskLabels(
     labelIds: (string | number)[],
     userObj: { id: number; email: string; displayName?: string | null; photoURL?: string | null },
     fromAgent?: ActingAgent | null,
+    teamScope?: AgentTokenTeamScope | null,
 ): Promise<void> {
     const resolvedIds = await resolveLabelIds(projectId, labelIds);
     const deliveryIds = await prisma.$transaction(async (tx) => {
-        await assertTaskBelongsToProject(tx, taskId, projectId);
+        await assertTaskBelongsToProject(tx, taskId, projectId, userObj.id, fromAgent?.id, teamScope);
         const existingTaskLabels = await tx.taskLabel.findMany({
             where: { taskId },
             include: { label: true }
@@ -345,12 +351,13 @@ export async function mutateTaskLabels(
     },
     userObj: { id: number; email: string; displayName?: string | null; photoURL?: string | null },
     fromAgent?: ActingAgent | null,
+    teamScope?: AgentTokenTeamScope | null,
 ): Promise<void> {
     const addIds = await resolveLabelIds(projectId, changes.add ?? []);
     const removeIds = await resolveLabelIds(projectId, changes.remove ?? []);
     const skipIfPresentIds = await resolveLabelIds(projectId, changes.skipIfPresent ?? []);
     const deliveryIds = await prisma.$transaction(async (tx) => {
-        await assertTaskBelongsToProject(tx, taskId, projectId);
+        await assertTaskBelongsToProject(tx, taskId, projectId, userObj.id, fromAgent?.id, teamScope);
         const existing = await tx.taskLabel.findMany({
             where: { taskId },
             include: { label: true },
@@ -431,6 +438,8 @@ export async function createTask(data: {
     parentTaskId?: number;
     assigneeIds?: number[];
     agentId?: string | null;
+    teamScope?: AgentTokenTeamScope | null;
+    agentTokenGeneration?: string | null;
     creationChannel: CreationChannel;
     analyticsAgentId?: string | null;
 }) {
@@ -535,6 +544,8 @@ export async function createTask(data: {
         id: user.id,
         email: user.email,
         ...(agentId ? { agentId } : {}),
+        teamScope: data.teamScope,
+        agentTokenGeneration: data.agentTokenGeneration,
     });
     const authCookieHeader = `nookies_user=${encodeURIComponent(userCookie)}; ${SESSION_COOKIE}=${sessionToken}`;
 

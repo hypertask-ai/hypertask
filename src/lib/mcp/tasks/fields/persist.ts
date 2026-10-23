@@ -1,3 +1,4 @@
+import { getProjectWhere } from '@/utils/controllers/projects/getAllIncludes';
 import { getMcpSessionAgentSummary } from "@/lib/mcp/agents";
 import prisma from "@/lib/prisma";
 import { mapTaskToDetail, taskDetailInclude } from "@/lib/mcp/tasks/mappers";
@@ -41,7 +42,8 @@ export async function persistTaskUpdates(context: TaskUpdateFieldContext, tasks:
                         tx,
                         task.id,
                         actingAgentId,
-                        user.id
+                        user.id,
+                        { teamScope: ctx.teamScope },
                     )
                 )
             }
@@ -103,7 +105,7 @@ export async function persistTaskUpdates(context: TaskUpdateFieldContext, tasks:
     }
 
     const updatedTasks = await prisma.task.findMany({
-        where: { id: { in: updatedTaskIds } },
+        where: { id: { in: updatedTaskIds }, project: getProjectWhere(user.id, ctx.agentId, ctx.teamScope) },
         include: taskDetailInclude(user.id)
     })
 

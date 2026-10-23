@@ -1,3 +1,5 @@
+import type { AgentTokenTeamScope } from '@/lib/mcp/auth/types'
+import { taskWriteAccessWhere } from '@/utils/controllers/projects/getAllIncludes'
 import { randomUUID } from 'node:crypto'
 
 import type { Prisma } from '@prisma/client'
@@ -38,6 +40,16 @@ export class AgentMutationLeaseMissingError extends AgentMutationLeaseConflictEr
       'Caller holds no agent mutation lease for this task. Claim one with POST /mcp/tasks/lease/claim before this write.'
     )
     this.name = 'AgentMutationLeaseMissingError'
+  }
+}
+
+export class TaskTeamScopeError extends Error {
+  readonly status = 404
+  readonly code = 'task_not_found'
+
+  constructor() {
+    super('Task not found or access denied')
+    this.name = 'TaskTeamScopeError'
   }
 }
 
@@ -158,10 +170,18 @@ export async function assertAgentAssignmentChangeAllowed(
   actingUserId?: number | null,
   options: {
     allowHumanOverride?: boolean
+    teamScope?: AgentTokenTeamScope | null
     allowNonNormalLeaseAdoption?: boolean
   } = {}
 ): Promise<void> {
   await lockAgentMutationFence(tx, taskId)
+  if (options.teamScope != null) {
+    await tx.$queryRaw`SELECT id FROM "Task" WHERE id = ${taskId} FOR UPDATE`
+    if (actingUserId == null || !await tx.task.findFirst({
+      where: { id: taskId, project: taskWriteAccessWhere(actingUserId, actingAgentId, options.teamScope) },
+      select: { id: true },
+    })) throw new TaskTeamScopeError()
+  }
   const [lease] = await tx.$queryRaw<ActiveTaskLeaseRow[]>`
     SELECT "agentId", "token", "adoptionCount"
     FROM "TaskLease"

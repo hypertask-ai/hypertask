@@ -1,3 +1,4 @@
+import type { AgentTokenTeamScope } from '@/lib/mcp/auth/types';
 import { inlineAgentImages } from "@/lib/media/inlineAgentImages";
 import type { Prisma } from '@prisma/client';
 import type {
@@ -13,7 +14,7 @@ export type AttachmentPersistenceClient = Pick<
 export async function persistAttachmentRows(
   db: AttachmentPersistenceClient,
   uploads: UploadedAttachmentSpec[],
-  target: { taskId: number; commentId: number | null; descriptionId: string | null; inlineImages?: boolean }
+  target: { taskId: number; commentId: number | null; descriptionId: string | null; inlineImages?: boolean; userId?: number; agentId?: string | null; teamScope?: AgentTokenTeamScope | null }
 ): Promise<StoredAttachmentResult[]> {
   const stored: StoredAttachmentResult[] = [];
 

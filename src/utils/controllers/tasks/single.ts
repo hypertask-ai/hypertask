@@ -1,3 +1,4 @@
+import type { AgentTokenTeamScope } from '@/lib/mcp/auth/types';
 import { recordAgentBoardScopeMiss } from "@/lib/auth/agentScope";
 import { processAnalyticsIntentSoon } from "@/lib/telemetry/analyticsIntents";
 import { stripForeignTaskRelations } from "@/lib/tasks/sameBoardRelations";
@@ -27,6 +28,7 @@ import { scheduleAgentFirstTaskEmail } from "../notifications/agentFirstTaskEmai
 import { taskWriteAccessWhere } from "@/utils/controllers/projects/getAllIncludes";
 import {
   AgentMutationLeaseConflictError,
+  TaskTeamScopeError,
   assertAgentAssignmentChangeAllowed,
   cancelAgentMutationLeaseForHumanOverride,
 } from "@/lib/mcp/tasks/agentMutationFence";
@@ -60,6 +62,7 @@ import {
 } from "@/lib/cycleService";
 
 type UpdateTaskSingleOptions = {
+  teamScope?: AgentTokenTeamScope | null;
   allowProjectChange?: boolean;
   onProjectChangedInTx?: (
     tx: Prisma.TransactionClient,
@@ -137,11 +140,11 @@ export async function updateTaskSingle(
       };
     }
 
-    if (!options.trustedCaller) {
+    if (!options.trustedCaller || options.teamScope != null) {
       const allowed = await prisma.project.findFirst({
         where: {
           id: oldTask.projectId,
-          ...taskWriteAccessWhere(currentUser.id, agentId),
+          ...taskWriteAccessWhere(currentUser.id, agentId, options.teamScope),
         },
         select: { id: true },
       });
@@ -241,8 +244,21 @@ export async function updateTaskSingle(
           currentUser.id,
           {
             allowHumanOverride: isHumanOverride,
+            teamScope: options.teamScope,
           },
         );
+        if (options.teamScope != null) {
+          await tx.$queryRaw`SELECT id FROM "Task" WHERE id = ${newTask.id} FOR UPDATE`
+          const allowed = await tx.task.findFirst({
+            where: { id: newTask.id, project: taskWriteAccessWhere(currentUser.id, agentId, options.teamScope) },
+            select: { id: true },
+          })
+          if (!allowed) throw new TaskTargetChangedError()
+          if (requestedMutation.projectId !== undefined && !await tx.project.findFirst({
+            where: { id: requestedMutation.projectId as number, ...taskWriteAccessWhere(currentUser.id, agentId, options.teamScope) },
+            select: { id: true },
+          })) throw new TaskTargetChangedError()
+        }
         const currentState = await tx.task.findUnique({
           where: { id: newTask.id },
           include: { description_: { select: { content: true } } },
@@ -701,6 +717,7 @@ export async function updateTaskSingle(
       moveActivity,
     };
   } catch (error) {
+    if (error instanceof TaskTeamScopeError) return { status: 404, json: { message: error.message } };
     if (error instanceof ParentTaskNotFoundError) {
       return {
         status: 404,

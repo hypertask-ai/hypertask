@@ -1,3 +1,4 @@
+import type { AgentTokenTeamScope } from '@/lib/mcp/auth/types';
 import { agentScopeEnforced, recordAgentBoardScopeMiss } from "@/lib/auth/agentScope";
 import prisma from "@/lib/prisma";
 import { Prisma } from "@prisma/client";
@@ -152,13 +153,14 @@ const timeWriteClient: TimeWriteClient = {
 export async function startTimer(
   userId: number,
   taskId: number,
-  agentId?: string | null
+  agentId?: string | null,
+  teamScope?: AgentTokenTeamScope | null,
 ) {
   const started = await startTimerOnActiveBoard(
     timeWriteClient,
     userId,
     taskId,
-    getProjectWhere(userId, agentId)
+    getProjectWhere(userId, agentId, teamScope)
   );
   notifyTimeChange(taskId, started.projectId);
   return started.entry;
@@ -167,13 +169,14 @@ export async function startTimer(
 export async function stopTimer(
   userId: number,
   taskId: number,
-  agentId?: string | null
+  agentId?: string | null,
+  teamScope?: AgentTokenTeamScope | null,
 ) {
   const entry = await stopTimerOnAccessibleBoard(
     timeWriteClient,
     userId,
     taskId,
-    getProjectWhere(userId, agentId)
+    getProjectWhere(userId, agentId, teamScope)
   );
   if (!entry) return null;
   notifyTimeChange(taskId);
@@ -183,13 +186,14 @@ export async function stopTimer(
 export async function pauseTimer(
   userId: number,
   taskId: number,
-  agentId?: string | null
+  agentId?: string | null,
+  teamScope?: AgentTokenTeamScope | null,
 ) {
   const entry = await pauseTimerOnActiveBoard(
     timeWriteClient,
     userId,
     taskId,
-    getProjectWhere(userId, agentId)
+    getProjectWhere(userId, agentId, teamScope)
   );
   if (!entry) return null;
   notifyTimeChange(taskId);
@@ -199,13 +203,14 @@ export async function pauseTimer(
 export async function resumeTimer(
   userId: number,
   taskId: number,
-  agentId?: string | null
+  agentId?: string | null,
+  teamScope?: AgentTokenTeamScope | null,
 ) {
   const entry = await resumeTimerOnActiveBoard(
     timeWriteClient,
     userId,
     taskId,
-    getProjectWhere(userId, agentId)
+    getProjectWhere(userId, agentId, teamScope)
   );
   if (!entry) return null;
   notifyTimeChange(taskId);
@@ -219,7 +224,8 @@ export async function logMinutes(
   agentId?: string | null,
   date?: string,
   timezoneOffsetMinutes?: number,
-  note?: string | null
+  note?: string | null,
+  teamScope?: AgentTokenTeamScope | null,
 ) {
   if (!Number.isInteger(minutes) || minutes <= 0 || minutes > 1440) {
     throw new RangeError("Minutes must be an integer from 1 to 1440");
@@ -239,7 +245,7 @@ export async function logMinutes(
       startedAt,
       endedAt,
     },
-    getProjectWhere(userId, agentId)
+    getProjectWhere(userId, agentId, teamScope)
   );
   notifyTimeChange(taskId);
   return entry;
@@ -251,7 +257,8 @@ export async function createManualEntry(
   date: string,
   minutes: number,
   timezoneOffsetMinutes?: number,
-  note?: string | null
+  note?: string | null,
+  teamScope?: AgentTokenTeamScope | null,
 ) {
   const { startedAt, endedAt } = manualEntryTimes(
     date,
@@ -268,13 +275,13 @@ export async function createManualEntry(
       startedAt,
       endedAt,
     },
-    getProjectWhere(userId)
+    getProjectWhere(userId, null, teamScope)
   );
   notifyTimeChange(taskId);
   return entry;
 }
 
-export async function listRunning(userId: number, agentId?: string | null) {
+export async function listRunning(userId: number, agentId?: string | null, teamScope?: AgentTokenTeamScope | null) {
   const entries = await prisma.timeEntry.findMany({
     where: {
       userId,
@@ -282,7 +289,7 @@ export async function listRunning(userId: number, agentId?: string | null) {
       task: {
         status: { not: "Deleted" },
         project: {
-          ...getProjectWhere(userId, agentId && agentScopeEnforced() ? agentId : null),
+          ...getProjectWhere(userId, agentId && agentScopeEnforced() ? agentId : null, teamScope),
           status: { in: ["Normal", "Archive"] },
         },
       },
@@ -347,6 +354,7 @@ export async function listReport(
   userId: number,
   options: {
     agentId?: string | null;
+    teamScope?: AgentTokenTeamScope | null;
     teamId?: string;
     boardId?: number;
     boardIds?: number[];
@@ -399,7 +407,7 @@ export async function listReport(
             ? { projectId: options.boardId }
             : {}),
         project: {
-          ...getProjectWhere(userId, options.agentId && agentScopeEnforced() ? options.agentId : null),
+          ...getProjectWhere(userId, options.agentId && agentScopeEnforced() ? options.agentId : null, options.teamScope),
           status: { in: ["Normal", "Archive"] },
           ...(options.teamId ? { teamId: options.teamId } : {}),
         },
@@ -486,7 +494,8 @@ export async function updateEntry(
   date?: string,
   timezoneOffsetMinutes?: number,
   note?: string | null,
-  agentId?: string | null
+  agentId?: string | null,
+  teamScope?: AgentTokenTeamScope | null,
 ) {
   if (minutes !== undefined && (!Number.isInteger(minutes) || minutes <= 0 || minutes > 1440)) {
     throw new RangeError("Minutes must be an integer from 1 to 1440");
@@ -498,7 +507,7 @@ export async function updateEntry(
 
   const result = await updateTimeEntryOnActiveBoard(
     timeWriteClient,
-    { userId, entryId, projectWhere: getProjectWhere(userId, agentId) },
+    { userId, entryId, projectWhere: getProjectWhere(userId, agentId, teamScope) },
     (entry) => {
       const startedAt = date === undefined
         ? entry.startedAt
@@ -527,12 +536,13 @@ export async function updateEntry(
 export async function deleteEntry(
   userId: number,
   entryId: number,
-  agentId?: string | null
+  agentId?: string | null,
+  teamScope?: AgentTokenTeamScope | null,
 ) {
   const result = await deleteTimeEntryOnActiveBoard(timeWriteClient, {
     userId,
     entryId,
-    projectWhere: getProjectWhere(userId, agentId),
+    projectWhere: getProjectWhere(userId, agentId, teamScope),
   });
   if (!result) return null;
 

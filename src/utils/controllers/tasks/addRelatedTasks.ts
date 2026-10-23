@@ -1,3 +1,4 @@
+import type { AgentTokenTeamScope } from '@/lib/mcp/auth/types';
 import prisma from "@/lib/prisma";
 import { getProjectWhere } from "@/utils/controllers/projects/getAllIncludes";
 
@@ -16,7 +17,7 @@ export const isTaskRelationType = (
   typeof relationType === "string" &&
   taskRelationTypes.includes(relationType as TaskRelationType);
 
-export const addRelatedTasks = async (relations: any, userId: number) => {
+export const addRelatedTasks = async (relations: any, userId: number, agentId?: string | null, teamScope?: AgentTokenTeamScope | null) => {
   try {
     console.log("🚀 ~ addRelatedTasks ~ relations:", relations);
     const relatedTasks = relations.relatedTasks;
@@ -34,7 +35,7 @@ export const addRelatedTasks = async (relations: any, userId: number) => {
     const accessibleProjects = await prisma.project.findMany({
       where: {
         status: "Normal",
-        ...getProjectWhere(userId),
+        ...getProjectWhere(userId, agentId, teamScope),
       },
       select: {
         id: true,
@@ -47,6 +48,7 @@ export const addRelatedTasks = async (relations: any, userId: number) => {
       where: {
         id: parseInt(relations.currentTaskId),
         projectId: { in: accessibleProjectIds },
+        ...(teamScope == null ? {} : { project: getProjectWhere(userId, agentId, teamScope) }),
       },
       select: {
         id: true,
@@ -74,6 +76,7 @@ export const addRelatedTasks = async (relations: any, userId: number) => {
           where: {
             uniqueIndex: parseInt(related.uniqueIndex),
             projectId: relatedProjectId,
+            ...(teamScope == null ? {} : { project: getProjectWhere(userId, agentId, teamScope) }),
           },
           select: {
             id: true,
