@@ -33,6 +33,8 @@ for (const mode of ['WATCH', 'ENFORCE', 'FLAG_ERROR']) {
       assert.equal(unbound.task.title, 'B-cached'); assert.equal(writes, 1);
       for (const [operation, aResult, bResult] of [
         ['create_task', { task: { id: 150 } }, old],
+        ['nested-parent', { task: { id: 150, parent_task: { id: 160 } } }, { task: { id: 150, parent_task: { id: 250, title: 'B-cached' } } }],
+        ['nested-child', { task: { id: 150, sub_tasks: [{ id: 160 }] } }, { task: { id: 150, sub_tasks: [{ id: 250, title: 'B-cached' }] } }],
         ['update_task', { tasks: [{ id: 150 }] }, { tasks: [{ id: 250, title: 'B-cached' }] }],
         ['create_page', { page: { publicId: 'page-15' } }, { page: { publicId: 'page-25', title: 'B-cached' } }],
         ['create_report', { report: { id: 150 } }, { report: { id: 250, body_html: 'B-cached' } }],
@@ -47,6 +49,11 @@ for (const mode of ['WATCH', 'ENFORCE', 'FLAG_ERROR']) {
         await assert.rejects(cache.withIdempotency(operation, f.user.id, 'legacy', {}, producer, f.agent.id, teamScope), cache.IdempotencyAccessError);
         assert.equal(writes, 1, 'a refusal cannot fall through to the producer');
       }
+      f.pages[0].taskId = 250; f.pages[0].task = f.tasks[3];
+      const pageKey = cache.createIdempotencyRedisKey('create_page', f.user.id, 'legacy', {}, f.agent.id, teamScope);
+      cached.set(pageKey, JSON.stringify({ page: { publicId: 'page-15' } }));
+      await assert.rejects(cache.withIdempotency('create_page', f.user.id, 'legacy', {}, producer, f.agent.id, teamScope), cache.IdempotencyAccessError);
+      assert.equal(writes, 1);
       const lookup = f.prisma.task.findFirst;
       f.prisma.task.findFirst = async () => { throw new Error('fixture lookup unavailable'); };
       await assert.rejects(cache.withIdempotency('create_task', f.user.id, 'fixture', {}, producer, f.agent.id, teamScope), cache.IdempotencyAccessError);

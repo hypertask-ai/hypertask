@@ -21,12 +21,12 @@ export async function authorizeIdempotencyReplay(result: object, principal: Boar
     }
     const row = value as Record<string, unknown>;
     let allowed: unknown = true;
-    if (["task", "tasks", "parentTask", "subTasks", "relatedTasks"].includes(kind ?? "") && row.id != null) {
+    if (["task", "tasks", "parentTask", "parent_task", "subTasks", "sub_tasks", "relatedTasks", "related_tasks"].includes(kind ?? "") && row.id != null) {
       resources++;
       allowed = Number.isSafeInteger(row.id) && await prisma.task.findFirst({ where: { id: Number(row.id), project, ...(row.projectId != null ? { projectId: Number(row.projectId) } : {}) }, select: { id: true } });
     } else if (kind === "page") {
       resources++;
-      allowed = await prisma.page.findFirst({ where: { ...(row.publicId ? { publicId: String(row.publicId) } : { id: Number(row.id) }), project }, select: { id: true } });
+      allowed = await prisma.page.findFirst({ where: { ...(row.publicId ? { publicId: String(row.publicId) } : { id: Number(row.id) }), project, OR: [{ taskId: null }, { task: { project } }] }, select: { id: true } });
     } else if (kind === "report") {
       resources++;
       allowed = await prisma.report.findFirst({ where: { id: Number(row.id), project }, select: { id: true } });
@@ -45,7 +45,7 @@ export async function authorizeIdempotencyReplay(result: object, principal: Boar
     }
     if (!allowed) throw new IdempotencyAccessError();
     for (const [key, child] of Object.entries(row)) {
-      if (["parentTaskId", "taskId", "task_id"].includes(key) && child != null) {
+      if (["parentTaskId", "parent_task_id", "parent_id", "taskId", "task_id"].includes(key) && child != null) {
         resources++;
         if (!Number.isSafeInteger(child) || !await prisma.task.findFirst({ where: { id: Number(child), project }, select: { id: true } })) throw new IdempotencyAccessError();
       }
