@@ -1,3 +1,4 @@
+import { TaskTeamScopeError } from "@/lib/mcp/tasks/agentMutationFence"
 import { wrapMcpRoute } from '@/lib/mcp/routeWrapper'
 import { NextRequest, NextResponse } from "next/server";
 import {
@@ -72,6 +73,7 @@ export async function GET(
     }
     return noStore({ success: true, activities });
   } catch (error) {
+    if (error instanceof TaskTeamScopeError) return noStore({ success: false, error: error.message }, 404)
     console.error("[agent-run] activity list failed", error);
     return noStore({ success: false, error: "Failed to list run activities" }, 500);
   }
@@ -118,6 +120,7 @@ export async function POST(
     }
     return noStore({ success: true, ...result });
   } catch (error) {
+    if (error instanceof TaskTeamScopeError) return noStore({ success: false, error: error.message }, 404)
     if (error instanceof AgentRunActivityInputError) {
       return noStore({ success: false, error: error.message }, 400);
     }

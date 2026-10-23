@@ -1,3 +1,4 @@
+import type { AgentTokenTeamScope } from '@/lib/mcp/auth/types'
 import { recordAgentBoardScopeMiss } from "@/lib/auth/agentScope";
 import { projectContentAccessWhere } from "@/utils/controllers/projects/getAllIncludes";
 import { randomUUID } from 'crypto'
@@ -12,6 +13,7 @@ export type TaskWriteProbeLock = <T>(
 ) => Promise<T>
 
 export interface TaskWriteProbeDeps {
+  teamScope?: AgentTokenTeamScope | null
   agentId?: string | null
   lock?: TaskWriteProbeLock
   verifyRollback?: (probeRowId: string) => Promise<{ id: string } | null>
@@ -51,12 +53,12 @@ export const probeProjectName = (userId: number) => `ht-task-write-probe-u${user
 const fixtureMissing = (userId: number) =>
   `probe fixture missing; run \`node scripts/ensure-task-write-probe-fixture.mjs ${userId}\` against production`
 
-const probeTaskWhere = (userId: number, agentId?: string | null) => ({
+const probeTaskWhere = (userId: number, agentId?: string | null, teamScope?: AgentTokenTeamScope | null) => ({
   userId,
   title: PROBE_TASK_TITLE,
   status: 'Archive' as const,
   project: {
-    ...projectContentAccessWhere(userId, agentId),
+    ...projectContentAccessWhere(userId, agentId, teamScope),
     name: probeProjectName(userId),
     ownerId: userId,
     status: 'Archive' as const,
@@ -66,11 +68,12 @@ const probeTaskWhere = (userId: number, agentId?: string | null) => ({
 async function resolveProbeTask(
   userId: number,
   agentId?: string | null,
+  teamScope?: AgentTokenTeamScope | null,
 ): Promise<{ id: number; projectId: number } | { status: 'misconfigured' | 'broken'; message: string }> {
   try {
     const existing = await prisma.task.findFirst({
       select: { id: true, projectId: true },
-      where: probeTaskWhere(userId, agentId),
+      where: probeTaskWhere(userId, agentId, teamScope),
       orderBy: { id: 'asc' },
     })
     return existing ?? { status: 'misconfigured', message: fixtureMissing(userId) }
@@ -140,7 +143,7 @@ export async function runTaskWriteProbe(
     ((probeRowId: string) =>
       prisma.savedContent.findUnique({ where: { id: probeRowId } }))
 
-  const target = await resolveProbeTask(userId, deps.agentId)
+  const target = await resolveProbeTask(userId, deps.agentId, deps.teamScope)
   if ('status' in target) {
     return target.status === 'broken'
       ? { status: 'broken', error: target.message }
@@ -153,7 +156,7 @@ export async function runTaskWriteProbe(
   try {
     await lock(target.id, async (tx) => {
       const current = await tx.task.findFirst({
-        where: { id: target.id, ...probeTaskWhere(userId, deps.agentId) },
+        where: { id: target.id, ...probeTaskWhere(userId, deps.agentId, deps.teamScope) },
         select: { id: true, userId: true, projectId: true },
       })
       if (!current) {
@@ -161,7 +164,7 @@ export async function runTaskWriteProbe(
       }
 
       const written = await tx.task.updateMany({
-        where: { id: current.id, ...probeTaskWhere(userId, deps.agentId) },
+        where: { id: current.id, ...probeTaskWhere(userId, deps.agentId, deps.teamScope) },
         data: { updatedAt: new Date() },
       })
       if (written.count !== 1) {

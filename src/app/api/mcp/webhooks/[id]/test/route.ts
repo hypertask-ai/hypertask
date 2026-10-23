@@ -27,7 +27,7 @@ export async function POST(
     }
 
     const sub = await prisma.webhookSubscription.findFirst({
-      where: { id, project: getProjectWhere(ctx.user.id, ctx.agentId) },
+      where: { id, project: getProjectWhere(ctx.user.id, ctx.agentId, ctx.teamScope) },
       select: { id: true, url: true, secret: true, projectId: true, active: true },
     })
     if (!sub) {

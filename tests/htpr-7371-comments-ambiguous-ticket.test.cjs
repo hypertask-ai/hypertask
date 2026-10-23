@@ -49,6 +49,7 @@ function setup(findTask) {
     '@/lib/mcp/comments/activityMetadata': {},
     '@/lib/mcp/agents/scopes': { requireRole: async () => null },
     '@/lib/mcp/idempotency/idempotencyStore': {
+      IdempotencyAccessError: class extends Error {},
       IdempotencyInProgressError: class extends Error {},
       normalizeIdempotencyKey: (key) => key,
       withIdempotency: async (_operation, _userId, _key, _body, handler) => handler(),

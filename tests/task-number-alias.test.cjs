@@ -88,6 +88,7 @@ function fixture({ tasks = [currentTask], visibleProjects = [20], agentId = null
         "@/lib/agents/publicAgent": {}, "@/lib/cycles": {}, "@/lib/agents/visibility": {},
         "@/utils/controllers/notifications/visibleInboxScope": {},
       }).projectContentAccessWhere,
+      intersectProjectTeamScope: (where, scope) => { assert.equal(scope == null, true); return where; },
       getProjectWhere: (userId, requestedAgentId) => {
         assert.equal(userId, 6);
         assert.equal(requestedAgentId ?? null, agentId);

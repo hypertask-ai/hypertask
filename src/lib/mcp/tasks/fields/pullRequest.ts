@@ -6,7 +6,7 @@ export async function updateTaskPullRequest(context: TaskUpdateFieldContext, tas
         await linkPullRequest({
             taskId: task.id,
             userId: user.id,
-            agentId: ctx.agentId,
+            agentId: ctx.agentId, teamScope: ctx.teamScope,
             url: parsedPullRequest.url,
         });
     }

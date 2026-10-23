@@ -1,3 +1,4 @@
+import type { AgentTokenTeamScope } from '@/lib/mcp/auth/types';
 import { Prisma } from "@prisma/client";
 
 import prisma from "@/lib/prisma";
@@ -81,10 +82,11 @@ export function validateSlug(slug: string): string {
 async function getAccessibleProject(
   userId: number,
   projectId: number,
-  agentId?: string | null
+  agentId?: string | null,
+  teamScope?: AgentTokenTeamScope | null,
 ) {
   return prisma.project.findFirst({
-    where: { id: projectId, ...getProjectWhere(userId, agentId) },
+    where: { id: projectId, ...getProjectWhere(userId, agentId, teamScope) },
     select: { id: true, title: true, name: true },
   });
 }
@@ -128,6 +130,7 @@ function reportCreator(report: ReportWithCreator): ReportCreator {
 export async function createReport({
   userId,
   agentId,
+  teamScope,
   projectId,
   slug,
   title,
@@ -136,6 +139,7 @@ export async function createReport({
 }: {
   userId: number;
   agentId?: string | null;
+  teamScope?: AgentTokenTeamScope | null;
   projectId: number;
   slug: string;
   title: string;
@@ -146,11 +150,11 @@ export async function createReport({
   const normalizedSlug = validateSlug(slug);
   validateReportBody(bodyHtml);
 
-  const project = await getAccessibleProject(userId, projectId, agentId);
+  const project = await getAccessibleProject(userId, projectId, agentId, teamScope);
   if (!project) return null;
 
   try {
-    return await prisma.report.create({
+    const create = (db: Pick<Prisma.TransactionClient, "report">) => db.report.create({
       data: {
         projectId,
         slug: normalizedSlug,
@@ -162,7 +166,12 @@ export async function createReport({
         agentId: agentId ?? null,
       },
       include: reportInclude,
-    });
+    })
+    return teamScope != null ? await prisma.$transaction(async (tx) => {
+      await tx.$queryRaw`SELECT id FROM "Project" WHERE id = ${projectId} FOR UPDATE`;
+      if (!await tx.project.findFirst({ where: { id: projectId, ...getProjectWhere(userId, agentId, teamScope) }, select: { id: true } })) return null;
+      return create(tx);
+    }) : await create(prisma);
   } catch (error) {
     if (
       error instanceof Prisma.PrismaClientKnownRequestError &&
@@ -180,6 +189,7 @@ export async function createReport({
 export async function updateReport({
   userId,
   agentId,
+  teamScope,
   projectId,
   slug,
   title,
@@ -188,6 +198,7 @@ export async function updateReport({
 }: {
   userId: number;
   agentId?: string | null;
+  teamScope?: AgentTokenTeamScope | null;
   projectId: number;
   slug: string;
   title?: string;
@@ -199,7 +210,7 @@ export async function updateReport({
     where: {
       projectId,
       slug: normalizedSlug,
-      project: getProjectWhere(userId, agentId),
+      project: getProjectWhere(userId, agentId, teamScope),
     },
     select: { id: true },
   });
@@ -215,7 +226,7 @@ export async function updateReport({
   }
 
   return prisma.report.update({
-    where: { id: report.id },
+    where: { id: report.id, ...(teamScope == null ? {} : { project: getProjectWhere(userId, agentId, teamScope) }) },
     data,
     include: reportInclude,
   });
@@ -224,11 +235,13 @@ export async function updateReport({
 export async function getReport({
   userId,
   agentId,
+  teamScope,
   projectId,
   slug,
 }: {
   userId: number;
   agentId?: string | null;
+  teamScope?: AgentTokenTeamScope | null;
   projectId: number;
   slug: string;
 }) {
@@ -237,7 +250,7 @@ export async function getReport({
     where: {
       projectId,
       slug: normalizedSlug,
-      project: getProjectWhere(userId, agentId),
+      project: getProjectWhere(userId, agentId, teamScope),
     },
     include: reportInclude,
   });
@@ -254,17 +267,19 @@ export async function getReport({
 export async function listReports({
   userId,
   agentId,
+  teamScope,
   projectId,
 }: {
   userId: number;
   agentId?: string | null;
+  teamScope?: AgentTokenTeamScope | null;
   projectId: number;
 }) {
-  const project = await getAccessibleProject(userId, projectId, agentId);
+  const project = await getAccessibleProject(userId, projectId, agentId, teamScope);
   if (!project) return null;
 
   return prisma.report.findMany({
-    where: { projectId },
+    where: { projectId, ...(teamScope == null ? {} : { project: getProjectWhere(userId, agentId, teamScope) }) },
     include: reportInclude,
     orderBy: { updatedAt: "desc" },
   });
@@ -273,11 +288,13 @@ export async function listReports({
 export async function deleteReport({
   userId,
   agentId,
+  teamScope,
   projectId,
   slug,
 }: {
   userId: number;
   agentId?: string | null;
+  teamScope?: AgentTokenTeamScope | null;
   projectId: number;
   slug: string;
 }) {
@@ -286,13 +303,13 @@ export async function deleteReport({
     where: {
       projectId,
       slug: normalizedSlug,
-      project: getProjectWhere(userId, agentId),
+      project: getProjectWhere(userId, agentId, teamScope),
     },
     select: { id: true },
   });
   if (!report) return null;
 
-  return prisma.report.delete({ where: { id: report.id } });
+  return prisma.report.delete({ where: { id: report.id, ...(teamScope == null ? {} : { project: getProjectWhere(userId, agentId, teamScope) }) } });
 }
 
 export function getReportUrl(projectId: number, slug: string): string {

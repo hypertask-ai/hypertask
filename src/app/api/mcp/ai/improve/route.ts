@@ -15,7 +15,7 @@ import {
   selectTiptapModel,
 } from "@/app/api/ai/_lib/editorAi";
 import { getProjectTeamProviderContext } from "@/app/api/ai/_lib/providerGate";
-import { projectAccessWhere } from "@/app/api/ai/_lib/taskWriterRun";
+import { projectContentAccessWhere } from "@/utils/controllers/projects/getAllIncludes";
 import { isAiFeatureEnabled } from "@/lib/systemModelLadder";
 import { toEditableHtml } from "@/app/api/mcp/ai/improve/plainText";
 import prisma from "@/lib/prisma";
@@ -47,7 +47,7 @@ export async function POST(request: NextRequest) {
     const project = await prisma.project.findFirst({
       where: {
         id: input.project_id,
-        ...projectAccessWhere(userId, ctx.agentId),
+        ...projectContentAccessWhere(userId, ctx.agentId, ctx.teamScope),
       },
       select: { id: true },
     });
@@ -61,7 +61,7 @@ export async function POST(request: NextRequest) {
       taskId: input.task_id,
       projectId: input.project_id,
       userId,
-      agentId: ctx.agentId,
+      agentId: ctx.agentId, teamScope: ctx.teamScope,
     });
     if (input.task_id && usageTaskId === null) {
       return NextResponse.json(
@@ -72,7 +72,7 @@ export async function POST(request: NextRequest) {
 
     const teamContext = await getProjectTeamProviderContext(
       input.project_id,
-      userId
+      userId, ctx.agentId, ctx.teamScope
     );
     if (!isAiFeatureEnabled("improveWriting", teamContext.settings)) {
       return NextResponse.json(
@@ -89,7 +89,7 @@ export async function POST(request: NextRequest) {
       taskId: usageTaskId,
       agentId: ctx.agentId,
       userId,
-      teamContext,
+      teamContext, teamScope: ctx.teamScope,
     });
     const { text } = await generateText({
       model: selected.model,

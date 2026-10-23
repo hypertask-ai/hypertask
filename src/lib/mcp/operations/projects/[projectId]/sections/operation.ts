@@ -135,7 +135,7 @@ export async function POST(request: NextRequest, props: { params: Promise<{ proj
         userId: user.id,
         afterSectionId,
       },
-      ctx.agentId
+      ctx.agentId, ctx.teamScope
     )
 
     if (!result.success) {
@@ -227,7 +227,7 @@ export async function GET(request: NextRequest, props: { params: Promise<{ proje
       where: {
         id: projectId,
         status: 'Normal',
-        ...getProjectWhere(user.id, ctx.agentId),
+        ...getProjectWhere(user.id, ctx.agentId, ctx.teamScope),
       },
       select: {
         id: true

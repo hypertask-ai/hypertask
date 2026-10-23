@@ -286,6 +286,7 @@ function pageEndpoint(agentId, warningModule = catalog({ [decisionsKey]: true })
     '@/lib/mcp/featureCatalog': warningModule,
     '@/lib/mcp/operationCrashReport': { reportMcpOperationCrash: () => {} },
     '@/lib/mcp/idempotency/idempotencyStore': {
+      IdempotencyAccessError: class extends Error {},
       IdempotencyInProgressError: class extends Error {},
       normalizeIdempotencyKey: (key) => key,
       withIdempotency: async (_operation, _userId, key, _body, create) => {

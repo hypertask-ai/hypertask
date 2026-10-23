@@ -74,6 +74,7 @@ function fakeRunTransaction(events = [
     deliveries,
     featureFlag: {},
     user: {},
+    agent: { findUnique: async () => ({ userId: 6, revokedAt: null, credentialTeamId: null, credentialTeamAccessBinding: null }) },
     agentWebhookSubscription: {
       findUnique: async () => subscription,
     },
@@ -599,6 +600,7 @@ test("flag-off webhook updates preserve hidden run subscriptions", async () => {
   };
   let persisted;
   const transaction = {
+    agent: { findUnique: async () => ({ id: "agent-1", userId: 6, revokedAt: null, credentialTeamId: null, credentialTeamAccessBinding: null }) },
     $executeRaw: async () => 1,
     agentWebhookSubscription: {
       findUnique: async () => existing,

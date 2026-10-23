@@ -15,7 +15,7 @@ import { sanitizeForJson } from "@/lib/ai/tools/helpers";
 import type { ToolContext } from "./context";
 
 export function createProjectAdminTool(context: ToolContext) {
-  const { sendStatus, user, confirmationSessionId, bulkPreviewsIssued, actingAgentId } = context;
+  const { sendStatus, user, confirmationSessionId, bulkPreviewsIssued, actingAgentId, teamScope } = context;
   return {
     hypertask_project_admin: tool({
       description:
@@ -138,7 +138,7 @@ export function createProjectAdminTool(context: ToolContext) {
         }
 
         const access = actingAgentId
-          ? await validateProjectAccess(input.project_id, user.id, actingAgentId)
+          ? await validateProjectAccess(input.project_id, user.id, actingAgentId, teamScope)
           : await validateProjectAccess(input.project_id, user.id);
         if (access.error) {
           return {
@@ -154,7 +154,7 @@ export function createProjectAdminTool(context: ToolContext) {
           if (!(await isProjectAdmin(user.id, input.project_id))) {
             return { success: false, error: "Only the board owner or a project admin can add members" };
           }
-          const ctx = { user, agentId: actingAgentId };
+          const ctx = { user, agentId: actingAgentId, teamScope };
           const delegationError = typeof input.userToAdd === "string" && PROJECT_ADMIN_MEMBER_UUID_PATTERN.test(input.userToAdd)
             ? await checkAgentBoardDelegation(ctx, input.userToAdd)
             : await requireRole(ctx, "admin");

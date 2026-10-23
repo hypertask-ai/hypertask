@@ -36,7 +36,7 @@ const defaultDependencies: CardActionDependencies = {
   checkRateLimit: checkMcpRateLimit,
   validateAuth: validateMcpAuth,
   findTask: async (ctx, taskId) =>
-    findTaskByIdentifier(ctx.user, { task_id: taskId }, ctx.agentId),
+    findTaskByIdentifier(ctx.user, { task_id: taskId }, ctx.agentId, undefined, ctx.teamScope),
   setStarred: async (userId, taskId, projectId, active) => {
     const savedContent = await withTaskStarWriteLock(taskId, async (tx) => {
       const lockedTask = await tx.$queryRaw<Array<{ projectId: number }>>`
@@ -92,6 +92,7 @@ const defaultDependencies: CardActionDependencies = {
       projectId,
       fromUserId: ctx.user.id,
       fromAgentId: ctx.agentId ?? null,
+      teamScope: ctx.teamScope,
     }
     const activeAfterWrite = await setTaskMovedToInboxState(recipient, active)
     return { active: activeAfterWrite }

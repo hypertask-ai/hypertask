@@ -1,3 +1,4 @@
+import { IdempotencyAccessError } from "@/lib/mcp/idempotency/idempotencyStore"
 import { inlineAgentImagesForUser } from "@/lib/media/inlineAgentImages.server";
 import { reportMcpOperationCrash } from '@/lib/mcp/operationCrashReport';
 import { wrapMcpRoute, validateMcpRouteAuth as validateMcpAuth, checkMcpRouteRateLimit as checkMcpRateLimit, readMcpRouteJsonBody as readJsonBody } from '@/lib/mcp/routeWrapper'
@@ -105,7 +106,7 @@ export async function POST(request: NextRequest) {
 
         const { project_id, title, description, section_id, priority, estimate, due_date, images, labels, parent_task_id, assignee_ids } = validation.data;
 
-        const projectCheck = await validateProjectAccess(project_id, user.id, ctx.agentId);
+        const projectCheck = await validateProjectAccess(project_id, user.id, ctx.agentId, ctx.teamScope);
         if (projectCheck.error) {
             return NextResponse.json(
                 {
@@ -261,7 +262,7 @@ export async function POST(request: NextRequest) {
                     labels: labelIds || [],
                     parentTaskId: parent_task_id || undefined,
                     assigneeIds: assignee_ids && assignee_ids.length > 0 ? assignee_ids : undefined,
-                    agentId: ctx.agentId || undefined,
+                    agentId: ctx.agentId || undefined, teamScope: ctx.teamScope, agentTokenGeneration: ctx.agentTokenGeneration,
                     creationChannel: getMcpOperationContext(request) ? 'mcp' : 'api',
                 });
 
@@ -273,11 +274,14 @@ export async function POST(request: NextRequest) {
                     message: 'Task created successfully',
                     ...(sessionAgent ? { agent: sessionAgent } : {}),
                 };
-            }
+            },
+            ctx.teamScope != null ? ctx.agentId : undefined,
+            ctx.teamScope
         );
 
         return NextResponse.json(response, { status: 200 });
     } catch (error) {
+        if (error instanceof IdempotencyAccessError) return NextResponse.json({ error: error.message }, { status: 404 })
         if (error instanceof IdempotencyInProgressError) {
             return NextResponse.json(
                 { success: false, error: error.message, ...(correlationId && { correlationId }) },

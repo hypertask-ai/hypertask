@@ -1,10 +1,11 @@
+import type { AgentTokenTeamScope } from '@/lib/mcp/auth/types';
 import { recordAgentBoardScopeMiss } from "@/lib/auth/agentScope";
 import { findIdParamOutOfRange, idOutOfRangeMessage } from '@/lib/mcp/listParams';
 import type { Prisma } from '@prisma/client';
 import prisma from '@/lib/prisma';
 import { HTPR_6868_TICKET_PREFIX_FLAG, isFeatureEnabled } from '@/lib/flags';
 import { findPrefixAliasTasks } from '@/utils/controllers/projects/findPrefixAliasTasks';
-import { getProjectWhere } from '@/utils/controllers/projects/getAllIncludes';
+import { getProjectWhere, intersectProjectTeamScope } from '@/utils/controllers/projects/getAllIncludes';
 
 export class TaskIdentifierAmbiguityError extends Error {
   readonly status = 400;
@@ -49,11 +50,12 @@ export async function findTaskByIdentifier(
   },
   agentId?: string | null,
   projectAccess?: Prisma.ProjectWhereInput,
+  teamScope?: AgentTokenTeamScope | null,
 ) {
   const { task_id, ticket_number, unique_index, project_id } = options;
   const outOfRange = findIdParamOutOfRange({ task_id, unique_index, project_id });
   if (outOfRange) throw new TaskIdentifierOutOfRangeError(outOfRange);
-  const projectFilter = projectAccess ?? getProjectWhere(user.id, agentId);
+  const projectFilter = intersectProjectTeamScope(projectAccess ?? getProjectWhere(user.id, agentId), teamScope);
 
   if (task_id) {
     const task = await prisma.task.findFirst({
@@ -181,7 +183,8 @@ export async function resolveTaskIdOnly(options: {
 export async function findTaskByStringIdentifier(
   user: { id: number },
   identifier: string,
-  agentId?: string | null
+  agentId?: string | null,
+  teamScope?: AgentTokenTeamScope | null,
 ) {
   const task = identifier.trim();
   if (!task) return null;
@@ -190,7 +193,7 @@ export async function findTaskByStringIdentifier(
     return findTaskByIdentifier(
       user,
       { ticket_number: task.toUpperCase() },
-      agentId
+      agentId, undefined, teamScope
     );
   }
 
@@ -202,7 +205,7 @@ export async function findTaskByStringIdentifier(
     where: {
       OR: [{ id: numericIdentifier }, { uniqueIndex: numericIdentifier }],
       status: { not: 'Deleted' },
-      project: getProjectWhere(user.id, agentId),
+      project: getProjectWhere(user.id, agentId, teamScope),
     },
     select: { id: true, projectId: true, uniqueIndex: true },
   });

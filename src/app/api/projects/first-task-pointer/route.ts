@@ -19,7 +19,7 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ eligible: false });
   }
   const project = await prisma.project.findFirst({
-    where: { id: projectId, ownerId: session.userId, seeded: true, status: "Normal", AND: [projectContentAccessWhere(session.userId, session.agentId)] },
+    where: { id: projectId, ownerId: session.userId, seeded: true, status: "Normal", AND: [projectContentAccessWhere(session.userId, session.agentId, session.teamScope)] },
     select: { firstTaskPointerTaskId: true, firstTaskPointerSectionId: true, firstRealTaskCreatedAt: true },
   });
   if (!project) return NextResponse.json({ eligible: false }, { status: request.nextUrl.searchParams.get("connectOverlay") === "1" ? 200 : 404 });
@@ -29,7 +29,7 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ eligible: false });
   }
   const [realTaskCount, section] = await Promise.all([
-    prisma.task.count({ where: { projectId, id: { not: starterTaskId }, project: projectContentAccessWhere(session.userId, session.agentId) } }),
+    prisma.task.count({ where: { projectId, id: { not: starterTaskId }, project: projectContentAccessWhere(session.userId, session.agentId, session.teamScope) } }),
     prisma.section.findFirst({ where: { id: sectionId, projectId }, select: { id: true } }),
   ]);
   const eligible = !!section && realTaskCount === 0;

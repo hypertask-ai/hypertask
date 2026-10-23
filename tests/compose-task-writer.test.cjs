@@ -489,7 +489,7 @@ test('save existing target enforces both flags, edit permissions, board match an
   assert.equal(result.body.newTask.id, 52);
   assert.deepEqual(updates[0][0], { id: 52, title: 'Written title', description: '<p>Written body</p>' });
   assert.equal(updates[0][1].id, 985);
-  assert.deepEqual(updates[0][3], { expectedTitle: target.title, expectedDescription: '', expectedProjectId: 7, expectedStatus: 'Normal' });
+  assert.deepEqual(updates[0][3], { teamScope: undefined, expectedTitle: target.title, expectedDescription: '', expectedProjectId: 7, expectedStatus: 'Normal' });
   assert.equal(broadcasts.length, 2);
 });
 

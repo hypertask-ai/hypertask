@@ -45,6 +45,8 @@ const { signSession, SESSION_COOKIE } = realSessionModule;
 function loadGetSessionUser(getSession) {
   const mod = { exports: {} };
   const mockRequire = (request) => {
+    if (request === "@/lib/prisma") return { default: {} };
+    if (request === "@/lib/auth/agentTeamScope") return {};
     if (request === "@/lib/auth/agentScope") return jiti(path.join(root, "src/lib/auth/agentScope.ts"));
     if (request === "better-auth/cookies") return realCookiesModule;
     if (request === "@/lib/auth/betterAuth") {
@@ -111,7 +113,7 @@ test("row 1: legacy absent, Better Auth valid -> Better Auth wins, unaffected by
           user: { id: "8" },
         }));
         const result = await getSessionUser(headersWithCookies({}));
-        assert.deepEqual(result, { userId: 8, source: "better-auth" });
+        assert.deepEqual(result, { userId: 8, source: "better-auth", teamScope: null });
       },
     );
   }
@@ -128,6 +130,7 @@ test("row 2: legacy valid, Better Auth absent -> legacy wins, skips Better Auth 
       assert.deepEqual(result, {
         userId: 6,
         source: "legacy",
+        teamScope: null,
         needsBridge: true,
       });
     },
@@ -164,6 +167,7 @@ test("row 4: legacy and Better Auth disagree (account switch, HTPR-4170) -> lega
         assert.deepEqual(result, {
           userId: 7,
           source: "legacy",
+          teamScope: null,
           needsBridge: true,
         });
       },
@@ -194,6 +198,7 @@ test("row 5: a valid guest legacy cookie plus a valid, different real Better Aut
         assert.deepEqual(result, {
           userId: guestId,
           source: "legacy",
+          teamScope: null,
           needsBridge: true,
         });
       },
@@ -227,7 +232,7 @@ test("row 7: tampered legacy signature -> falls through to the unchanged full lo
       );
       // legacySession is null (tampered), so the fast-path gate never fires;
       // Better Auth resolves it, exactly like today.
-      assert.deepEqual(result, { userId: 8, source: "better-auth" });
+      assert.deepEqual(result, { userId: 8, source: "better-auth", teamScope: null });
     },
   );
 });
@@ -243,7 +248,7 @@ test("row 8: expired legacy session -> falls through to the unchanged full looku
       const result = await getSessionUser(
         headersWithCookies({ [SESSION_COOKIE]: expired }),
       );
-      assert.deepEqual(result, { userId: 8, source: "better-auth" });
+      assert.deepEqual(result, { userId: 8, source: "better-auth", teamScope: null });
     },
   );
 });

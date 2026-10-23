@@ -139,6 +139,10 @@ function writerHarness(enabled, output = html, fail = false) {
     sseFrame: (event, payload) => `event: ${event}\ndata: ${JSON.stringify(payload)}\n\n`,
   };
   const run = moduleWithStubs("src/app/api/ai/_lib/taskWriterRun.ts", {
+    "@/lib/rag/authorizeIndexedRows": { authorizeIndexedRows: async (taskRows, commentRows, principal) => {
+      assert.equal(principal?.teamScope == null, true);
+      return { taskRows, commentRows };
+    } },
     "@/lib/ai/prompts/registry": { renderPrompt: () => "output language rule" },
     "@/lib/ai/taskWriterDueDate": dates, "@/lib/ai/taskWriterTicketType": ticketTypes, "@/lib/flags/keys": keys,
     "@/lib/ai/composeTaskTarget": {},

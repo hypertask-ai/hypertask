@@ -13,6 +13,7 @@ import {
   slugifySkill,
 } from "@/app/api/ai/_lib/skillMarkdown";
 import prisma from "@/lib/prisma";
+import { withScopedProjectWrite } from "@/app/api/ai/_lib/customInstructions";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -36,10 +37,10 @@ export async function GET(request: NextRequest, context: RouteContext) {
   if (auth instanceof NextResponse) return auth;
 
   try {
-    const skill = await loadSkill(auth.userId, context);
+    const skill = await loadSkill(auth.userId, context, auth);
     return NextResponse.json({ success: true, skill });
   } catch (error) {
-    return skillErrorResponse(error);
+    return skillErrorResponse(error, auth);
   }
 
   })(request)
@@ -51,22 +52,25 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
   if (auth instanceof NextResponse) return auth;
 
   try {
-    const skill = await loadSkill(auth.userId, context);
+    const skill = await loadSkill(auth.userId, context, auth);
     const input = updateSchema.parse(await request.json());
     const markdown = input.markdown ?? input.raw_markdown;
     const data = markdown
       ? parseSkillMarkdown(markdown)
       : parseUpdateFields(input, skill.slug);
-    const updated = await prisma.aI_Skill.update({
-      where: { id: skill.id },
+    const write = async (db: import("@prisma/client").Prisma.TransactionClient) => db.aI_Skill.update({
+      where: { id: skill.id, ...(auth.teamScope != null ? { project: { is: (await import("@/utils/controllers/projects/getAllIncludes")).getProjectWhere(auth.userId, auth.agentId, auth.teamScope) } } : {}) },
       data: {
         ...data,
         ...(input.enabled === undefined ? {} : { enabled: input.enabled }),
       },
     });
+    const updated = auth.teamScope != null
+      ? await withScopedProjectWrite({ userId: auth.userId, agentId: auth.agentId, teamScope: auth.teamScope }, skill.projectId!, write)
+      : await write(prisma);
     return NextResponse.json({ success: true, skill: updated });
   } catch (error) {
-    return skillErrorResponse(error);
+    return skillErrorResponse(error, auth);
   }
 
   })(request)
@@ -78,11 +82,13 @@ export async function DELETE(request: NextRequest, context: RouteContext) {
   if (auth instanceof NextResponse) return auth;
 
   try {
-    const skill = await loadSkill(auth.userId, context);
-    await prisma.aI_Skill.delete({ where: { id: skill.id } });
+    const skill = await loadSkill(auth.userId, context, auth);
+    const remove = async (db: import("@prisma/client").Prisma.TransactionClient) => db.aI_Skill.delete({ where: { id: skill.id, ...(auth.teamScope != null ? { projectId: skill.projectId, project: { is: (await import("@/utils/controllers/projects/getAllIncludes")).getProjectWhere(auth.userId, auth.agentId, auth.teamScope) } } : {}) } });
+    if (auth.teamScope != null) await withScopedProjectWrite({ userId: auth.userId, agentId: auth.agentId, teamScope: auth.teamScope }, skill.projectId!, remove);
+    else await remove(prisma);
     return NextResponse.json({ success: true });
   } catch (error) {
-    return skillErrorResponse(error);
+    return skillErrorResponse(error, auth);
   }
 
   })(request)
@@ -93,14 +99,14 @@ async function authenticate(request: NextRequest) {
   if (rateLimited) return rateLimited;
   const ctx = await validateMcpAuth(request);
   if (!ctx) return createUnauthorizedResponse();
-  return { userId: ctx.user.id };
+  return { userId: ctx.user.id, agentId: ctx.agentId, teamScope: ctx.teamScope };
 }
 
-async function loadSkill(userId: number, context: RouteContext) {
+async function loadSkill(userId: number, context: RouteContext, principal: import("@/lib/rag/retrieveBoardKnowledge").BoardKnowledgePrincipal) {
   const { skill_id: rawId } = await context.params;
   const id = Number(rawId);
   if (!Number.isInteger(id) || id <= 0) throw new Error("Invalid skill id");
-  return getAccessibleSkill(userId, id);
+  return getAccessibleSkill(userId, id, principal);
 }
 
 function parseUpdateFields(input: z.infer<typeof updateSchema>, currentSlug: string) {

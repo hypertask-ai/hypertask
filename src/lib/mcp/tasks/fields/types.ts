@@ -91,6 +91,7 @@ export type TaskUpdateAssigneeHandler = (input: {
         photoURL: string | null;
     };
     agentId: string | null;
+    teamScope?: McpAuthContext["teamScope"];
 }) => Promise<void>;
 
 export type TaskClearAssigneesHandler = (input: {
@@ -102,6 +103,7 @@ export type TaskClearAssigneesHandler = (input: {
         photoURL: string | null;
     };
     agentId: string | null;
+    teamScope?: McpAuthContext["teamScope"];
 }) => Promise<void>;
 
 export interface ExecuteTaskUpdateOptions {

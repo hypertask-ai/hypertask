@@ -147,6 +147,7 @@ async function validateApiKey(token: string): Promise<{ context: McpAuthContext;
           displayName: apiKey.user.displayName ?? undefined,
         },
         agentId: null,
+        teamScope: null,
       },
     }
   } catch {
@@ -234,7 +235,7 @@ export async function validateManagementOrSessionAuth(
 
   const { getSessionUser } = await import('@/lib/auth/getSessionUser')
   const session = await getSessionUser(request.headers)
-  if (!session) return null
+  if (!session || session.agentId) return null
 
   const user = await prisma.user.findUnique({
     where: { id: session.userId },
@@ -253,6 +254,7 @@ export async function validateManagementOrSessionAuth(
       displayName: user.displayName ?? undefined,
     },
     agentId: null,
+    teamScope: null,
   }
 }
 
@@ -332,6 +334,7 @@ export async function validateManagementApiKey(token: string): Promise<McpAuthCo
         displayName: user.displayName ?? undefined,
       },
       agentId: null,
+      teamScope: teamId && teamAccessBinding ? { teamId, accessBinding: teamAccessBinding } : null,
       management: {
         keyId: String(result.key.id),
         permissions: parseManagementPermissions(result.key.permissions),

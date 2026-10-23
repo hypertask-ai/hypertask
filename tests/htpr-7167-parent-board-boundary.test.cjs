@@ -67,7 +67,7 @@ function updateHarness(initial = {}, parents = []) {
     "./spawnRecurrence": { sectionIsDone: () => false, spawnNextRecurrence: noop },
     "../notifications/agentFirstTaskEmail": { scheduleAgentFirstTaskEmail: noop },
     "@/utils/controllers/projects/getAllIncludes": { taskWriteAccessWhere: () => ({}) },
-    "@/lib/mcp/tasks/agentMutationFence": { AgentMutationLeaseConflictError: class extends Error {}, assertAgentAssignmentChangeAllowed: noop, cancelAgentMutationLeaseForHumanOverride: noop },
+    "@/lib/mcp/tasks/agentMutationFence": { TaskTeamScopeError: class extends Error {}, AgentMutationLeaseConflictError: class extends Error {}, assertAgentAssignmentChangeAllowed: noop, cancelAgentMutationLeaseForHumanOverride: noop },
     "./invokeTaskDelete": {},
     "@/lib/mcp/webhooks/outbox": { persistBoardWebhookEvent: async () => [], publishBoardWebhookDeliveries: noop },
     "@/lib/agentWebhooks/outbox": { persistAgentTaskUpdatedWebhook: async () => [], publishAgentWebhookDeliveries: noop },

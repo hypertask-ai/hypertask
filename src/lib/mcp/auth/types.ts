@@ -1,7 +1,9 @@
 export type McpAuthContext = {
   user: { id: number; email: string; displayName?: string | null }
+  teamScope: AgentTokenTeamScope | null
   agentId: string | null
   agentDisplayName?: string | null
+  agentTokenGeneration?: string | null
   agentRuntimeGeneration?: number | null
   management?: {
     keyId: string

@@ -18,10 +18,10 @@ async function handler(
 
   const access = {
     ...projectContentAccessWhere(session.userId),
-    AND: [projectContentAccessWhere(session.userId, session.agentId)],
+    AND: [projectContentAccessWhere(session.userId, session.agentId, session.teamScope)],
   };
   const project = await prisma.project.findFirst({
-    where: { AND: [{ id }, projectContentAccessWhere(session.userId), projectContentAccessWhere(session.userId, session.agentId)] },
+    where: { AND: [{ id }, projectContentAccessWhere(session.userId), projectContentAccessWhere(session.userId, session.agentId, session.teamScope)] },
     select: { id: true },
   });
   if (!project) return res.status(404).json({ message: "Project not found" });

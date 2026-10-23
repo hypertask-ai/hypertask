@@ -16,7 +16,7 @@ async function roomAgent(
   roomId: string,
 ): Promise<
   | { response: NextResponse; agentId: null }
-  | { response: null; agentId: string }
+  | { response: null; agentId: string; principal: import("@/lib/rag/retrieveBoardKnowledge").BoardKnowledgePrincipal }
 > {
   const rateLimited = await checkMcpRateLimit(request);
   if (rateLimited) return { response: rateLimited, agentId: null };
@@ -39,7 +39,7 @@ async function roomAgent(
       agentId: null,
     };
   }
-  if (!(await loadAgentTokenRoom(roomId, ctx.agentId))) {
+  if (!(await loadAgentTokenRoom(roomId, ctx.agentId, { userId: ctx.user.id, agentId: ctx.agentId, teamScope: ctx.teamScope }))) {
     return {
       response: NextResponse.json(
         { success: false, error: "Room not found" },
@@ -48,7 +48,7 @@ async function roomAgent(
       agentId: null,
     };
   }
-  return { response: null, agentId: ctx.agentId };
+  return { response: null, agentId: ctx.agentId, principal: { userId: ctx.user.id, agentId: ctx.agentId, teamScope: ctx.teamScope } };
 }
 
 export async function GET(
@@ -60,7 +60,7 @@ export async function GET(
   const auth = await roomAgent(request, roomId);
   if (auth.response) return auth.response;
   try {
-    return NextResponse.json({ success: true, ...(await listAgentRoom(roomId)) });
+    return NextResponse.json({ success: true, ...(await listAgentRoom(roomId, new Date(), auth.principal)) });
   } catch (error) {
     console.error("[mcp agent-room] transcript failed", error);
     return NextResponse.json(
@@ -85,6 +85,7 @@ export async function POST(
     const result = await createAgentRoomReply({
       roomId,
       agentId: auth.agentId,
+      principal: auth.principal,
       text: typeof body?.text === "string" ? body.text : "",
       replyToMessageId:
         typeof body?.replyToMessageId === "string"

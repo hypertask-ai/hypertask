@@ -43,6 +43,7 @@ export class RagRetrievalService {
       {
         userId: ctx.user.id,
         agentId: ctx.agentId,
+        teamScope: ctx.teamScope,
       }
     )
     })

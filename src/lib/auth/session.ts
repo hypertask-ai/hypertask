@@ -1,3 +1,4 @@
+import type { AgentTokenTeamScope } from '@/lib/mcp/auth/types'
 import { createHmac, randomBytes, timingSafeEqual } from 'crypto'
 
 export const SESSION_COOKIE = 'ht_session'
@@ -8,6 +9,8 @@ type SessionPayload = {
   id: number
   email?: string
   agentId?: string
+  teamScope?: AgentTokenTeamScope | null
+  agentTokenGeneration?: string | null
 }
 
 type SignedSessionPayload = SessionPayload & {
@@ -55,6 +58,8 @@ export function signSession(
     id: payload.id,
     ...(payload.email !== undefined ? { email: payload.email } : {}),
     ...(payload.agentId !== undefined ? { agentId: payload.agentId } : {}),
+    ...(payload.teamScope !== undefined ? { teamScope: payload.teamScope } : {}),
+    ...(payload.agentTokenGeneration !== undefined ? { agentTokenGeneration: payload.agentTokenGeneration } : {}),
     iat: now,
     jti: randomBytes(12).toString('base64url'),
     exp: now + ttlSeconds,
@@ -102,6 +107,11 @@ function verifiedSessionPayload(token: string | undefined): SignedSessionPayload
       (payload.email !== undefined && typeof payload.email !== 'string') ||
       (payload.agentId !== undefined &&
         (typeof payload.agentId !== 'string' || payload.agentId.length === 0)) ||
+      (payload.teamScope != null &&
+        (typeof payload.teamScope.teamId !== 'string' || !payload.teamScope.teamId.trim() ||
+          typeof payload.teamScope.accessBinding !== 'string' || !payload.teamScope.accessBinding.trim())) ||
+      (payload.agentTokenGeneration != null && typeof payload.agentTokenGeneration !== 'string') ||
+      ((!payload.agentId) && (payload.teamScope != null || payload.agentTokenGeneration != null)) ||
       typeof payload.exp !== 'number' ||
       !Number.isFinite(payload.exp) ||
       payload.exp <= Math.floor(Date.now() / 1000)
@@ -123,6 +133,8 @@ export function verifySession(token: string | undefined): SessionPayload | null 
     id: payload.id,
     ...(payload.email !== undefined ? { email: payload.email } : {}),
     ...(payload.agentId !== undefined ? { agentId: payload.agentId } : {}),
+    ...(payload.teamScope !== undefined ? { teamScope: payload.teamScope } : {}),
+    ...(payload.agentTokenGeneration !== undefined ? { agentTokenGeneration: payload.agentTokenGeneration } : {}),
   }
 }
 

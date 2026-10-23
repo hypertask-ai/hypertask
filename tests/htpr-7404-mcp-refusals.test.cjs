@@ -79,6 +79,7 @@ function harness(t, { v2, tasks = [task(42)], leases = new Map(), writeError, ca
     "@/lib/mcp/tasks/agentMutationLeaseAdoption": adoption,
     "./agentMutationLeaseAdoption": adoption,
     "@/lib/mcp/idempotency/idempotencyStore": {
+      IdempotencyAccessError: class extends Error {},
       IdempotencyInProgressError: class extends Error {},
       normalizeIdempotencyKey: () => null,
       withIdempotency: async (_operation, _userId, _key, _body, run) => run(),

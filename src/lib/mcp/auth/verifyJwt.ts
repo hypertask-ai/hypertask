@@ -315,9 +315,11 @@ export async function validateJwtToken(token: string, options: ValidateMcpAuthOp
       }
     }
 
+    let teamScope: AgentTokenTeamScope | null = null
     let agentId: string | null = null
     let agentDisplayName: string | undefined
     let agentRuntimeGeneration: number | null = null
+    let agentTokenGeneration: string | null = null
     const rawAgentId = decoded.agentId
     if (Object.hasOwn(decoded, "agentId") && (typeof rawAgentId !== "string" || rawAgentId.trim().length === 0)) {
       return null
@@ -349,9 +351,10 @@ export async function validateJwtToken(token: string, options: ValidateMcpAuthOp
           return null
         }
         const team = await getManagementKeyTeam(user.id, agentTeamId)
-        if (!team || team.accessBinding !== rawAgentTeamAccessBinding) {
+        if (!team || team.id !== agentTeamId || team.accessBinding !== rawAgentTeamAccessBinding) {
           return null
         }
+        teamScope = { teamId: team.id, accessBinding: team.accessBinding }
       }
       const agent = await timeDbRead(options, () => prisma.agent.findFirst({
         where: {
@@ -366,12 +369,18 @@ export async function validateJwtToken(token: string, options: ValidateMcpAuthOp
           mcpTokenHash: true,
           mcpTokenJti: true,
           runtimeGeneration: true,
+          credentialTeamId: true,
+          credentialTeamAccessBinding: true,
         },
       }))
       if (!agent) {
         log('[MCP Auth] Invalid or revoked agent on token:', rawAgentId)
         return null
       }
+      if (
+        (agent.credentialTeamId ?? null) !== (teamScope?.teamId ?? null) ||
+        (agent.credentialTeamAccessBinding ?? null) !== (teamScope?.accessBinding ?? null)
+      ) return null
       if (options.failureSnapshot) {
         options.failureSnapshot.agent = { id: agent.id, mcpTokenJti: agent.mcpTokenJti, revokedAt: null }
       }
@@ -402,6 +411,7 @@ export async function validateJwtToken(token: string, options: ValidateMcpAuthOp
       agentId = agent.id
       agentDisplayName = agent.displayName
       agentRuntimeGeneration = agent.runtimeGeneration
+      agentTokenGeneration = storedGeneration
     }
 
     const now = Date.now()
@@ -430,8 +440,10 @@ export async function validateJwtToken(token: string, options: ValidateMcpAuthOp
         displayName: user.displayName ?? undefined,
       },
       agentId,
+      teamScope,
       ...(agentDisplayName ? { agentDisplayName } : {}),
       agentRuntimeGeneration,
+      agentTokenGeneration,
     }
   } catch (error) {
     return null

@@ -27,7 +27,7 @@ async function handler(
       where: {
         id: Number(taskId),
         project: projectContentAccessWhere(session.userId),
-        AND: [{ project: projectContentAccessWhere(session.userId, session.agentId) }],
+        AND: [{ project: projectContentAccessWhere(session.userId, session.agentId, session.teamScope) }],
       },
       select: { id: true },
     });

@@ -41,7 +41,8 @@ export async function POST(request: NextRequest) {
       body.date,
       body.timezone_offset_minutes,
       body.note,
-      ctx.agentId
+      ctx.agentId,
+      ctx.teamScope
     );
 
     if (!updated) {

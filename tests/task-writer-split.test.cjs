@@ -42,6 +42,10 @@ function harness({ enabled = true, dueDates = false, tasks = drafts, failAt = []
     SSE_HEADERS: { "content-type": "text/event-stream" }, sseFrame: () => "event: error\n",
   };
   const run = load("src/app/api/ai/_lib/taskWriterRun.ts", {
+    "@/lib/rag/authorizeIndexedRows": { authorizeIndexedRows: async (taskRows, commentRows, principal) => {
+      assert.equal(principal?.teamScope == null, true);
+      return { taskRows, commentRows };
+    } },
     zod: { z }, "@/lib/flags": flags,
     "@/lib/ai/prompts/registry": { renderPrompt: () => "output language rule" },
     "@/lib/flags/keys": { HTPR_7054_CTRLJ_DUE_DATE_FLAG: dueDateFlag },

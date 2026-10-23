@@ -1,3 +1,4 @@
+import type { AgentTokenTeamScope } from '@/lib/mcp/auth/types';
 import { findIdParamOutOfRange } from '@/lib/mcp/listParams';
 import { TaskIdentifierOutOfRangeError } from '@/lib/mcp/tasks/resolveTask';
 import prisma from '@/lib/prisma';
@@ -11,7 +12,8 @@ export async function findTasksByIdentifier(
         unique_index?: number | null
         project_id?: number | null
     },
-    agentId?: string | null
+    agentId?: string | null,
+    teamScope?: AgentTokenTeamScope | null,
 ) {
     const { task_id, ticket_number, unique_index, project_id } = options
 
@@ -56,7 +58,7 @@ export async function findTasksByIdentifier(
     const tasks = await prisma.task.findMany({
         where: {
             OR: orConditions,
-            project: getProjectWhere(user.id, agentId)
+            project: getProjectWhere(user.id, agentId, teamScope)
         },
         select: { id: true, sectionId: true, projectId: true, status: true }
     })

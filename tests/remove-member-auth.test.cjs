@@ -37,6 +37,7 @@ function loadRoute(verifySession) {
   const taskWrites = transpile("src/lib/api/task-writes/route.ts", {
     "next/server": nextServer,
     "@/lib/auth/getSessionUser": { getSessionUser: async () => null },
+    "@/lib/auth/session": { SESSION_COOKIE: "ht_session", verifySession },
   });
   const shared = transpile("src/lib/api/project-writes/remove-member.ts", {
     "next/server": nextServer,

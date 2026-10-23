@@ -1,6 +1,7 @@
 export type CoreSmokePrincipal = {
   user: { id: number };
   agentId: string | null;
+  teamScope?: import("@/lib/mcp/auth/types").AgentTokenTeamScope | null;
 };
 
 const PRODUCTION_ORIGIN = "https://app.hypertask.ai";
@@ -29,7 +30,7 @@ export function decideCoreSmokeAccess(
   fixtureMatches: boolean,
 ): CoreSmokeAccessDecision {
   if (!principal) return { ok: false, status: 401, error: "Unauthorized" };
-  if (principal.agentId !== null) {
+  if (principal.agentId !== null || principal.teamScope != null) {
     return {
       ok: false,
       status: 403,

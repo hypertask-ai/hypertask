@@ -1,3 +1,5 @@
+import type { AgentTokenTeamScope } from "@/lib/mcp/auth/types"
+import { lockTaskTeamScope } from "@/lib/mcp/tasks/agentMutationFence"
 import type { NotificationType, Prisma } from '@prisma/client'
 import { broadcastInboxChange } from '@/lib/realtime/server'
 import checkReminderAndCreateNotification from '@/utils/controllers/notifications/creation-service/check-reminder_create-notification'
@@ -10,6 +12,7 @@ type InboxIdentity = {
   projectId: number
   fromUserId?: number | null
   fromAgentId?: string | null
+  teamScope?: AgentTokenTeamScope | null
 }
 
 type InboxPayload = InboxIdentity & Record<string, unknown>
@@ -32,6 +35,7 @@ async function assertCurrentTaskProject(
     WHERE id = ${input.taskId} AND status <> 'Deleted'
     FOR UPDATE
   `
+  await lockTaskTeamScope(tx, input.taskId, input.userId, input.agentId, input.teamScope)
   if (task[0]?.projectId !== input.projectId) {
     throw new Error('Task changed boards before Inbox reconciliation')
   }

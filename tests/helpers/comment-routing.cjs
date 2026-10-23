@@ -3,7 +3,7 @@ const { load } = require('../task-route-loader.cjs')
 function setup(options = {}) {
   const calls = { comments: [], runs: [], activities: [], broadcasts: [], urls: [], flags: [], idempotency: [] }
   const user = { id: 6, displayName: 'Owner' }
-  const ctx = { user, agentId: options.human ? null : 'agent-1' }
+  const ctx = { user, agentId: options.human ? null : 'agent-1', teamScope: null }
   const cache = new Map()
   const stubs = {
     '@/lib/mcp/operationCrashReport': { reportMcpOperationCrash: () => {} },
@@ -51,6 +51,7 @@ function setup(options = {}) {
     '@/lib/mcp/comments/activityMetadata': {},
     '@/lib/mcp/agents/scopes': { requireRole: async () => null },
     '@/lib/mcp/idempotency/idempotencyStore': {
+      IdempotencyAccessError: class extends Error {},
       IdempotencyInProgressError: class extends Error {},
       normalizeIdempotencyKey: (key) => key,
       withIdempotency: async (operation, userId, key, body, handler) => {

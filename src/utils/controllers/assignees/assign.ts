@@ -1,3 +1,4 @@
+import type { AgentTokenTeamScope } from '@/lib/mcp/auth/types';
 import { sendDataNewCommentFCM } from "../FCM";
 import { IAssignees, IFCMReqBody, ITask, IUser } from "@/models/model";
 import prisma from "@/lib/prisma";
@@ -51,6 +52,7 @@ const assigneesAssign = async (
   agentAssignerId?: string,
   options?: {
     intent?: AssigneeIntent;
+    teamScope?: AgentTokenTeamScope | null;
     expectedProjectId?: number;
     expectedSectionId?: number | null;
     allowHumanOverride?: boolean;
@@ -208,6 +210,7 @@ const assigneesAssign = async (
       agentId,
       agentAssignerId,
       expectedProjectId: options?.expectedProjectId,
+      teamScope: options?.teamScope,
       expectedSectionId: options?.expectedSectionId,
       allowHumanOverride,
       allowNonNormalLeaseAdoption: intent === "unassign",
@@ -369,6 +372,7 @@ interface ICreateAssigneeProps {
   expectedProjectId?: number;
   expectedSectionId?: number | null;
   allowHumanOverride?: boolean;
+  teamScope?: AgentTokenTeamScope | null;
   allowNonNormalLeaseAdoption?: boolean;
 }
 const createAssignee = async ({
@@ -384,6 +388,7 @@ const createAssignee = async ({
   expectedProjectId,
   expectedSectionId,
   allowHumanOverride,
+  teamScope,
 }: ICreateAssigneeProps) => {
   const assigneeIdentity = agentId
     ? { agentId }
@@ -396,7 +401,7 @@ const createAssignee = async ({
       taskId,
       agentAssignerId,
       currentUser.id,
-      { allowHumanOverride }
+      { allowHumanOverride, teamScope }
     );
 
     const existingIdentity = agentId
@@ -678,6 +683,7 @@ const removeMatchingAssignees = async ({
   expectedProjectId,
   expectedSectionId,
   allowHumanOverride,
+  teamScope,
   allowNonNormalLeaseAdoption,
 }: IRemoveMatchingAssigneesProps) => {
   const removal = await prisma.$transaction(async (tx) => {
@@ -686,7 +692,7 @@ const removeMatchingAssignees = async ({
       taskId,
       agentAssignerId,
       currentUser.id,
-      { allowHumanOverride, allowNonNormalLeaseAdoption }
+      { allowHumanOverride, allowNonNormalLeaseAdoption, teamScope }
     );
     if (expectedProjectId !== undefined || expectedSectionId !== undefined) {
       const currentTask = await tx.task.findUnique({
@@ -826,6 +832,7 @@ const removeMatchingAssignees = async ({
       expectedProjectId,
       expectedSectionId,
       allowHumanOverride,
+      teamScope,
     });
     if (activityCommentId != null) activityCommentIds.push(activityCommentId);
   }
@@ -846,6 +853,7 @@ const removeAssignee = async ({
   expectedProjectId,
   expectedSectionId,
   allowHumanOverride,
+  teamScope,
   allowNonNormalLeaseAdoption,
 }: IRemoveAssigneeProps) => {
   const removal = await prisma.$transaction(async (tx) => {
@@ -854,7 +862,7 @@ const removeAssignee = async ({
       taskId,
       agentAssignerId,
       currentUser.id,
-      { allowHumanOverride, allowNonNormalLeaseAdoption }
+      { allowHumanOverride, allowNonNormalLeaseAdoption, teamScope }
     );
     if (expectedProjectId !== undefined || expectedSectionId !== undefined) {
       const currentTask = await tx.task.findUnique({
@@ -962,6 +970,7 @@ const removeAssignee = async ({
     expectedProjectId,
     expectedSectionId,
     allowHumanOverride,
+    teamScope,
   });
   return {
     outcome: "removed" as const,
@@ -1063,7 +1072,8 @@ export const clearHumanAssignees = async (
     photoURL?: string | null;
   },
   taskId: number,
-  agentAssignerId?: string
+  agentAssignerId?: string,
+  teamScope?: AgentTokenTeamScope | null,
 ) => {
   try {
     const actor: IUser = {
@@ -1092,7 +1102,7 @@ export const clearHumanAssignees = async (
                 taskId,
                 agentAssignerId,
                 currentUser.id,
-                { allowHumanOverride: !agentAssignerId }
+                { allowHumanOverride: !agentAssignerId, teamScope }
               );
               const current = await tx.assignees.findMany({
                 where: { taskId, agentId: null },

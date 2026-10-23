@@ -1,3 +1,4 @@
+import type { AgentTokenTeamScope } from '@/lib/mcp/auth/types';
 import { withAgentScopeRequest, prepareAgentScope } from "@/lib/auth/agentScope";
 import prisma from "@/lib/prisma";
 import {
@@ -48,6 +49,7 @@ export function buildChatProviderContext(
 }
 
 type ResolveChatTeamContextInput = {
+  teamScope?: AgentTokenTeamScope | null;
   userId: number;
   requestedProjectId?: number;
   requestedTeamId?: string;
@@ -122,13 +124,14 @@ async function readChatTeamContext({
   requestedProjectId,
   requestedTeamId,
   sessionId,
+  teamScope,
 }: ResolveChatTeamContextInput): Promise<ChatTeamContext | null> {
   const findProject = (projectId: number, agentId?: string | null) =>
     prisma.project.findFirst({
       where: {
         id: projectId,
         status: "Normal",
-        ...getProjectWhere(userId, agentId),
+        ...getProjectWhere(userId, agentId, teamScope),
       },
       select: projectSelect,
     });
@@ -186,7 +189,7 @@ async function readChatTeamContext({
         members: {
           some: { agentId: session.agentId, status: "Accepted" },
         },
-        ...getProjectWhere(userId, session.agentId),
+        ...getProjectWhere(userId, session.agentId, teamScope),
       },
       orderBy: { id: "asc" },
       select: {

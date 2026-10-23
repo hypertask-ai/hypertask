@@ -50,7 +50,7 @@ export async function executeTaskUpdate({
             unique_index,
             project_id,
         },
-        ctx.agentId
+        ctx.agentId, ctx.teamScope
     )
 
     if (tasks.length === 0) {
@@ -148,7 +148,7 @@ export async function executeTaskUpdate({
     const sessionToken = signSession({
         id: userObj.id,
         email: userObj.email,
-        ...(ctx.agentId ? { agentId: ctx.agentId } : {}),
+        ...(ctx.agentId ? { agentId: ctx.agentId } : {}), teamScope: ctx.teamScope, agentTokenGeneration: ctx.agentTokenGeneration,
     });
     const authCookieHeader = `nookies_user=${encodeURIComponent(userCookie)}; ${SESSION_COOKIE}=${sessionToken}`;
 

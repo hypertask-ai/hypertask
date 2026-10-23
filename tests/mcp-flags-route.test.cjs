@@ -51,7 +51,7 @@ stubModule("src/lib/flags.ts", {
     return batchFlagOn;
   },
   isFeatureFlagOwnerUserId: async (userId) => { calls.push("owner"); return owner && userId === 6; },
-  listFeatureFlagModes: async (options) => { calls.push("list"); assert.deepEqual(options, { includeTicketTitles: true, includeLastChange: true, principal: { userId: ctx.user.id, agentId: ctx.agentId } }); return rows; },
+  listFeatureFlagModes: async (options) => { calls.push("list"); assert.deepEqual(options, { includeTicketTitles: true, includeLastChange: true, principal: { userId: ctx.user.id, agentId: ctx.agentId, teamScope: ctx.teamScope } }); return rows; },
   setFeatureFlagMode: async (...args) => {
     if (writeError) throw writeError;
     assert.equal(typeof args[3], "function");

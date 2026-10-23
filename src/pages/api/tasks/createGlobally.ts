@@ -35,7 +35,7 @@ const loadDefaults: NextApiHandler = async (
           id: project_id,
           status: "Normal",
           ...taskWriteAccessWhere(session.userId, null),
-          AND: [taskWriteAccessWhere(session.userId, session.agentId)],
+          AND: [taskWriteAccessWhere(session.userId, session.agentId, session.teamScope)],
         },
         select: { id: true },
       });
@@ -73,7 +73,7 @@ const loadDefaults: NextApiHandler = async (
           sectionId: section.id,
           projectId: project_id,
           status: "Normal",
-          project: taskWriteAccessWhere(session.userId, session.agentId),
+          project: taskWriteAccessWhere(session.userId, session.agentId, session.teamScope),
         },
         orderBy: {
           ranking: position === "top" ? "asc" : "desc",

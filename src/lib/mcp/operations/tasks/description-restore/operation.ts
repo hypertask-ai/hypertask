@@ -86,7 +86,7 @@ export async function POST(request: NextRequest) {
       where: { id: taskId },
       select: { projectId: true },
     })
-    if (!task || (await validateProjectAccess(task.projectId, ctx.user.id, ctx.agentId)).error) {
+    if (!task || (await validateProjectAccess(task.projectId, ctx.user.id, ctx.agentId, ctx.teamScope)).error) {
       return NextResponse.json(
         buildFieldError('not_found', 'task_id', 'Task not found'),
         { status: 404 }
@@ -108,7 +108,7 @@ export async function POST(request: NextRequest) {
       taskId,
       creatorId: ctx.user.id,
       content: snapshot.contentHtml,
-      agentId: ctx.agentId,
+      agentId: ctx.agentId, teamScope: ctx.teamScope,
       actingUserId: ctx.user.id,
     })
 

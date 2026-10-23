@@ -83,7 +83,7 @@ function fakeTransaction() {
     },
     agent: {
       findUnique: async ({ where }) =>
-        where.id === "agent-a" ? { displayName: "Agent A" } : null,
+        ({ ...(where.id === "agent-a" ? { displayName: "Agent A" } : {}), userId: 6, revokedAt: null, credentialTeamId: null, credentialTeamAccessBinding: null }),
     },
     label: {
       findMany: async ({ where }) =>
@@ -109,6 +109,7 @@ function fakeSingleEventTransaction(subscription) {
   const tx = {
     rows,
     membersWhere,
+    agent: { findUnique: async () => ({ userId: 6, revokedAt: null, credentialTeamId: null, credentialTeamAccessBinding: null }) },
     agentWebhookSubscription: {
       findUnique: async ({ select }) => {
         membersWhere.push(select.agent.select.members.where);

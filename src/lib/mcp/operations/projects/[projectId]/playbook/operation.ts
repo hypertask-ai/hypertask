@@ -37,7 +37,7 @@ export async function GET(
     }
 
     const project = await prisma.project.findFirst({
-      where: { id: projectId, status: 'Normal', ...getProjectWhere(ctx.user.id, ctx.agentId) },
+      where: { id: projectId, status: 'Normal', ...getProjectWhere(ctx.user.id, ctx.agentId, ctx.teamScope) },
       select: { id: true, playbook: true },
     })
     if (!project) {
@@ -94,7 +94,7 @@ export async function PUT(
     }
 
     const result = await prisma.project.updateMany({
-      where: { id: projectId, status: 'Normal', ...getProjectWhere(ctx.user.id, ctx.agentId) },
+      where: { id: projectId, status: 'Normal', ...getProjectWhere(ctx.user.id, ctx.agentId, ctx.teamScope) },
       data: { playbook: parsed.value as Prisma.InputJsonValue },
     })
     if (result.count === 0) {

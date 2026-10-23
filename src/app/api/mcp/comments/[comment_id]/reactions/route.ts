@@ -141,7 +141,7 @@ export const POST = wrapMcpRoute(createCommentReactionHandler({
     const task = await findTaskByIdentifier(
       ctx.user,
       { task_id: comment.taskId, ticket_number: null, unique_index: null, project_id: null },
-      ctx.agentId
+      ctx.agentId, undefined, ctx.teamScope
     );
     if (!task) return null;
     return {

@@ -44,6 +44,7 @@ function fixture(enabled) {
     '@/lib/mcp/idempotency/idempotencyStore': {
       normalizeIdempotencyKey: () => null,
       withIdempotency: async (_op, _user, _key, _body, fn) => fn(),
+      IdempotencyAccessError: class extends Error {},
       IdempotencyInProgressError: class extends Error {},
     },
     '@/utils/controllers/pages/htmlToMarkdown': { htmlToMarkdown: (html) => html },

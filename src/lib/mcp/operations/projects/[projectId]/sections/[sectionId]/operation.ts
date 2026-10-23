@@ -178,7 +178,7 @@ export async function PATCH(
       moveAfterSectionId,
       isDone,
       autoAssign
-    }, ctx.agentId)
+    }, ctx.agentId, ctx.teamScope)
 
     if (!result.success) {
       const payload: Record<string, unknown> = { success: false, error: result.error }
@@ -278,7 +278,7 @@ export async function DELETE(
       projectId,
       sectionId,
       userId: user.id
-    }, ctx.agentId)
+    }, ctx.agentId, ctx.teamScope)
 
     if (!result.success) {
       const payload: Record<string, unknown> = { success: false, error: result.error }

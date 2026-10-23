@@ -2205,6 +2205,7 @@ model WebhookSubscription {
   createdBy      User?     @relation(fields: [createdById], references: [id], onDelete: SetNull)
   agentId        String?
   agent          Agent?    @relation(fields: [agentId], references: [id], onDelete: SetNull)
+  createdByAgentId String?
   createdAt      DateTime  @default(now())
   lastDeliveryAt DateTime?
   lastDeliveryOk Boolean?

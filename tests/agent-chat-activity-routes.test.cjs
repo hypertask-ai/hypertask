@@ -88,6 +88,7 @@ stub("src/lib/mcp/auth.ts", {
   checkMcpRateLimit: async () => null,
   validateMcpAuth: async () => ({
     agentId: "agent-1",
+    teamScope: null,
     user: { id: 6, displayName: "Agent" },
   }),
 });
@@ -210,7 +211,7 @@ test("MCP adds at most ten activity facts only for an explicit activity question
     createdAt: "2026-09-04T12:00:50.000Z",
   });
   assert.deepEqual(activityCalls, [
-    { agentId: "agent-1", sessionId: "session-1", userId: 6 },
+    { agentId: "agent-1", sessionId: "session-1", userId: 6, teamScope: null },
   ]);
 });
 

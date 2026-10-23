@@ -90,7 +90,7 @@ async function generateStatusUpdate(request: NextRequest) {
   }
 
   const project = await prisma.project.findFirst({
-    where: { id: projectId, ...getProjectWhere(session.userId), AND: [getProjectWhere(session.userId, session.agentId)] },
+    where: { id: projectId, ...getProjectWhere(session.userId), AND: [getProjectWhere(session.userId, session.agentId, session.teamScope)] },
     select: {
       id: true,
       title: true,
@@ -135,7 +135,7 @@ async function generateStatusUpdate(request: NextRequest) {
     prisma.task.findMany({
       where: {
         projectId,
-        project: getProjectWhere(session.userId, session.agentId),
+        project: getProjectWhere(session.userId, session.agentId, session.teamScope),
         deletedAt: null,
         status: { not: "Deleted" },
         OR: [
@@ -164,7 +164,7 @@ async function generateStatusUpdate(request: NextRequest) {
     prisma.task.findMany({
       where: {
         projectId,
-        project: getProjectWhere(session.userId, session.agentId),
+        project: getProjectWhere(session.userId, session.agentId, session.teamScope),
         deletedAt: null,
         status: { not: "Deleted" },
         sectionChangedAt: { gte: windowStart },

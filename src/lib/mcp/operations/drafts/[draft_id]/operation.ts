@@ -1,3 +1,4 @@
+import { getProjectWhere } from '@/utils/controllers/projects/getAllIncludes'
 import { agentScopeEnforced, recordAgentBoardScopeMiss } from "@/lib/auth/agentScope";
 import { reportMcpOperationCrash } from '@/lib/mcp/operationCrashReport'
 import { userCanAccessTask } from "@/utils/controllers/tasks/assertTaskAccess"
@@ -127,10 +128,10 @@ export async function PATCH(request: NextRequest, props: { params: Promise<{ dra
 
     const project = draft.task.project
     const hasAccess = ctx.agentId && agentScopeEnforced()
-      ? await userCanAccessTask(user.id, draft.taskId, ctx.agentId)
+      ? await userCanAccessTask(user.id, draft.taskId, ctx.agentId, ctx.teamScope)
       : project.ownerId === user.id || project.members.some((m) => m.userId === user.id)
 
-    if (!hasAccess) {
+    if (!hasAccess || (ctx.teamScope != null && !await userCanAccessTask(user.id, draft.taskId, ctx.agentId, ctx.teamScope))) {
       return NextResponse.json(
         { success: false, error: 'Permission denied', message: 'You do not have access to this task' },
         { status: 403 }
@@ -146,7 +147,7 @@ export async function PATCH(request: NextRequest, props: { params: Promise<{ dra
     }
 
     const updatedDraft = await prisma.drafts.update({
-      where: { id: draftId },
+      where: { id: draftId, ...(ctx.teamScope == null ? {} : { task: { project: getProjectWhere(user.id, ctx.agentId, ctx.teamScope) } }) },
       data: {
         content: text,
         updatedAt: new Date()
@@ -217,10 +218,10 @@ export async function DELETE(request: NextRequest, props: { params: Promise<{ dr
 
     const project = draft.task.project
     const hasAccess = ctx.agentId && agentScopeEnforced()
-      ? await userCanAccessTask(user.id, draft.taskId, ctx.agentId)
+      ? await userCanAccessTask(user.id, draft.taskId, ctx.agentId, ctx.teamScope)
       : project.ownerId === user.id || project.members.some((m) => m.userId === user.id)
 
-    if (!hasAccess) {
+    if (!hasAccess || (ctx.teamScope != null && !await userCanAccessTask(user.id, draft.taskId, ctx.agentId, ctx.teamScope))) {
       return NextResponse.json(
         { success: false, error: 'Permission denied', message: 'You do not have access to this task' },
         { status: 403 }
@@ -235,7 +236,7 @@ export async function DELETE(request: NextRequest, props: { params: Promise<{ dr
       )
     }
 
-    await prisma.drafts.delete({ where: { id: draftId } })
+    await prisma.drafts.delete({ where: { id: draftId, ...(ctx.teamScope == null ? {} : { task: { project: getProjectWhere(user.id, ctx.agentId, ctx.teamScope) } }) } })
 
     const response: DeleteDraftResponse = {
       success: true,
