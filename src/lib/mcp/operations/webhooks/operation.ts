@@ -90,6 +90,7 @@ export async function GET(request: NextRequest) {
         return NextResponse.json(
           await manageAgentWebhook({
             userId: ctx.user.id,
+            principal: { userId: ctx.user.id, agentId: ctx.agentId, teamScope: ctx.teamScope },
             agentId,
             action: 'get',
           })
@@ -194,6 +195,7 @@ export async function POST(request: NextRequest) {
       try {
         const result = await manageAgentWebhook({
           userId: ctx.user.id,
+          principal: { userId: ctx.user.id, agentId: ctx.agentId, teamScope: ctx.teamScope },
           agentId,
           action: requestedAction as AgentWebhookManagementAction,
           url: body.url,
@@ -287,6 +289,7 @@ export async function POST(request: NextRequest) {
         supportsUnassignedEvent: true,
         createdById: ctx.user.id,
         agentId: ctx.agentId ?? null,
+        createdByAgentId: ctx.agentId ?? null,
       },
     })
 
@@ -329,6 +332,7 @@ export async function DELETE(request: NextRequest) {
         return NextResponse.json(
           await manageAgentWebhook({
             userId: ctx.user.id,
+            principal: { userId: ctx.user.id, agentId: ctx.agentId, teamScope: ctx.teamScope },
             agentId,
             action: 'delete',
           })
@@ -361,7 +365,12 @@ export async function DELETE(request: NextRequest) {
           { status: 404 }
         )
       }
-      await prisma.agentWebhookSubscription.delete({ where: { id } })
+      try {
+        await manageAgentWebhook({ userId: ctx.user.id, agentId: agentSubscription.agentId, action: 'delete', principal: { userId: ctx.user.id, agentId: ctx.agentId, teamScope: ctx.teamScope } })
+      } catch (error) {
+        if (error instanceof AgentWebhookInputError) return NextResponse.json({ success: false, error: error.message }, { status: error.status })
+        throw error
+      }
       return NextResponse.json({ success: true, deleted: id })
     }
 

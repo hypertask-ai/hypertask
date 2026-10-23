@@ -1,3 +1,4 @@
+import { webhookCredentialAllows } from "@/lib/webhooks/credentialScope";
 import prisma from '@/lib/prisma'
 import { postSignedWebhook } from './delivery'
 import {
@@ -49,7 +50,7 @@ export async function deliverBoardWebhook(
   })
   if (!delivery) return { status: 'skipped' }
 
-  if (!delivery.subscription.active) {
+  if (!delivery.subscription.active || !await webhookCredentialAllows(delivery.subscription.agentId, delivery.payloadBody ?? delivery.payload, delivery.subscription)) {
     await prisma.boardWebhookDelivery.update({
       where: { id: delivery.id },
       data: { status: 'cancelled', processingAt: null },

@@ -188,6 +188,7 @@ function fakeDb() {
   return {
     calls,
     db: {
+      agent: { findFirst: async () => ({ credentialTeamId: null, credentialTeamAccessBinding: null }) },
       assignees: {
         findFirst: async (query) => {
           calls.current = query;
@@ -343,6 +344,7 @@ test("brief keeps the required history inside the UTF-8 payload cap", async () =
     }),
   );
   const db = {
+    agent: { findFirst: async () => ({ credentialTeamId: null, credentialTeamAccessBinding: null }) },
     assignees: { findFirst: async () => ({ task: current }) },
     comment: {
       findMany: async (query) =>

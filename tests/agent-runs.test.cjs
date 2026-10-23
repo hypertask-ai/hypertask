@@ -74,6 +74,7 @@ function fakeRunTransaction(events = [
     deliveries,
     featureFlag: {},
     user: {},
+    agent: { findUnique: async () => ({ userId: 6, revokedAt: null, credentialTeamId: null, credentialTeamAccessBinding: null }) },
     agentWebhookSubscription: {
       findUnique: async () => subscription,
     },

@@ -1,3 +1,4 @@
+import { webhookCredentialAllows } from "@/lib/webhooks/credentialScope";
 import crypto from 'crypto'
 import type { Prisma } from '@prisma/client'
 import type { WebhookDelivery } from './events'
@@ -5,7 +6,7 @@ import { WORKSPACE_WEBHOOK_EVENTS, createWebhookEnvelope } from './events'
 import { queueBoardWebhookDelivery } from './queue'
 
 
-type BoardWebhookDb = {
+type BoardWebhookDb = Pick<Prisma.TransactionClient, "agent" | "project" | "task" | "comment" | "chatSession" | "agentRun"> & {
   webhookSubscription: { findMany: (args: any) => Promise<any> }
   boardWebhookDelivery: { create: (args: any) => Promise<any> }
 }
@@ -81,19 +82,24 @@ export async function persistBoardWebhookEvent(
   const subscriptions: Array<{
     id: string
     supportsUnassignedEvent: boolean
+    agentId: string | null
+    createdByAgentId: string | null
+    projectId: number | null
+    teamId: string | null
   }> =
     await tx.webhookSubscription.findMany({
       where: {
         active: true,
         AND: [{ OR: eventSelection }, { OR: scopes }],
       },
-      select: { id: true, supportsUnassignedEvent: true },
+      select: { id: true, supportsUnassignedEvent: true, agentId: true, createdByAgentId: true, projectId: true, teamId: true },
     })
   if (subscriptions.length === 0) return []
 
   const occurredAt = new Date().toISOString()
   const deliveryIds: string[] = []
   for (const subscription of subscriptions) {
+    if (!await webhookCredentialAllows(subscription.agentId, delivery, subscription, tx)) continue
     const deliveryId = crypto.randomUUID()
     const stored = persistedDelivery({
       delivery: eventForSubscription(
@@ -192,14 +198,13 @@ export async function retryBoardWebhookDelivery(input: {
     },
     select: { id: true },
   })
-  if (existing) return existing.id
-
   const source = await prisma.boardWebhookDelivery.findFirst({
     where: { id: input.deliveryId, subscriptionId: input.subscriptionId },
-    select: { event: true, payload: true, payloadHash: true },
+    select: { event: true, payload: true, payloadHash: true, subscription: true },
   })
-  if (!source) return null
+  if (!source || !await webhookCredentialAllows(source.subscription.agentId, source.payload, source.subscription)) return null
 
+  if (existing) return existing.id
   const deliveryId = crypto.randomUUID()
   const sourcePayload = source.payload as Record<string, unknown>
   const payload = {

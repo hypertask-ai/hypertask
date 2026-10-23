@@ -4,7 +4,7 @@ import type { WebhookDelivery, WebhookTaskStatus } from './events'
 import { enqueueTaskCreated, processAnalyticsIntentSoon, type CreationChannel } from '../../telemetry/savedWork'
 
 
-type TaskCreatedDb = {
+type TaskCreatedDb = Pick<Prisma.TransactionClient, "agent" | "project" | "task" | "comment" | "chatSession" | "agentRun"> & {
   webhookSubscription: { findMany: (args: any) => Promise<any> }
   boardWebhookDelivery: { create: (args: any) => Promise<any> }
 }

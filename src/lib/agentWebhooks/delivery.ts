@@ -1,3 +1,4 @@
+import { webhookCredentialAllows } from "@/lib/webhooks/credentialScope";
 import prisma from "@/lib/prisma";
 import { isFeatureEnabled } from "@/lib/flags";
 import { AGENT_RUN_FEATURE_FLAG } from "@/lib/agentRuns/model";
@@ -46,7 +47,8 @@ export async function deliverAgentWebhook(
 
   if (
     !delivery.subscription.active ||
-    delivery.subscription.agent.revokedAt != null
+    delivery.subscription.agent.revokedAt != null ||
+    !await webhookCredentialAllows(delivery.subscription.agentId, delivery.payload, delivery.subscription)
   ) {
     await prisma.agentWebhookDelivery.update({
       where: { id: delivery.id },
