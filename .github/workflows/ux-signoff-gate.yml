@@ -39,6 +39,8 @@ jobs:
 
       - name: Reconcile UX signoff from ticket comments
         env:
+          GH_API_MAX_WAIT_SECONDS: '240'
+          GH_API_TIME_BUDGET_SECONDS: '480'
           GH_TOKEN: ${{ github.token }}
           MCP_TOKEN: ${{ secrets.HYPERTASK_MCP_TOKEN }}
           MCP_BASE_URL: https://app.hypertask.ai
