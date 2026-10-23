@@ -346,6 +346,7 @@ test('Enter sends the current board and opens its detail with regular task-scope
     await press('Enter', { code: 'Enter' });
     assert.equal(requests.length, 1);
     assert.equal(requests[0].body.project.id, 7);
+    assert.equal(requests[0].body.viewProject, values.get('currentProjectAtom'));
     assert.equal(requests[0].body.userId, 985);
     assert.equal(requests[0].body.text, 'Fix login button spacing');
     assert.match(document.body.textContent, /Writing your ticket…/);
@@ -387,6 +388,7 @@ test('non-board page uses previousBoard instead of stale currentProject and repo
     await type('Raw note');
     await press('Enter', { code: 'Enter' });
     assert.equal(requests[0].body.project.id, 8);
+    assert.equal(requests[0].body.viewProject, undefined);
     assert.equal(loadedBoards.length, 1);
     await finish(true);
     assert.deepEqual(navigations, ['/detail/project-8/44']);
@@ -641,6 +643,7 @@ test('Ctrl+J fills only the visible new empty task when both flags are on and ne
       const fills = newWindow && title === 'Enter task title here';
       assert.equal(requests[0].body.existingTaskId, fills ? 52 : undefined);
       assert.equal(requests[0].body.project.id, fills ? 7 : 8);
+      assert.equal(requests[0].body.viewProject, undefined);
       await finish();
       assert.equal(cacheAdds.length, fills ? 0 : 1);
       assert.equal(values.get('showAIChatInterfaceAtom'), true);
@@ -813,6 +816,7 @@ test('explicit form destination wins over URL, recency and an empty task detail'
       assert.equal(input().value, 'Create on my selected board');
       await press('Enter');
       assert.equal(requests[0].body.project, destinationProject);
+      assert.equal(requests[0].body.viewProject, undefined);
       assert.equal(requests[0].body.existingTaskId, undefined, 'the creation form must not fill the task behind it');
       await finish();
       assert.deepEqual(navigations, ['/detail/project-8/44']);
