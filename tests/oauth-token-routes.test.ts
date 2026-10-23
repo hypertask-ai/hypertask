@@ -138,6 +138,17 @@ test('still allowed: authenticated cron applies one batch and returns exactly ag
   assert.ok(h.tables.BetterAuthAccount[0].accessToken.startsWith(OAUTH_TOKEN_PREFIX))
 })
 
+test('still allowed: cron logs one counts-only line with verify counts once nothing is pending', async t => {
+  const logs: unknown[][] = []
+  t.mock.method(console, 'log', (...args: unknown[]) => { logs.push(args) })
+  await cron('Bearer synthetic-cron-secret-aaaaaaaa')
+  assert.equal(logs.length, 1)
+  assert.equal(logs[0][0], 'oauth_token_sweep')
+  const line = JSON.parse(String(logs[0][1]))
+  assert.deepEqual(line, { scanned: 1, encrypted: 1, conflicts: 0, invalid: 0, remaining: 0, verify: { total: 3, encrypted: 2, plaintextLeft: 0, failures: 1 } })
+  for (const fragment of ['synthetic-access-token', OAUTH_TOKEN_PREFIX, 'valentin']) assert.equal(JSON.stringify(logs).includes(fragment), false)
+})
+
 test('route failures and captured logs contain categories only, never fixture tokens or database errors', async t => {
   const logs: unknown[] = []
   for (const method of ['log', 'warn', 'error', 'debug'] as const) t.mock.method(console, method, (...args: unknown[]) => { logs.push(args) })
