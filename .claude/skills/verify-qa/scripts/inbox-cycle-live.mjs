@@ -62,10 +62,12 @@ try {
   }
 
   await page.goto('/inbox?realtime=on', { waitUntil: 'domcontentloaded' });
-  const first = result.created[0];
-  await page.getByText(first.title).first().waitFor({ timeout: 60_000 });
+  const topSeededRow = page.getByText(new RegExp(`\\[qa-runner\\] inbox cycle \\d ${stamp}`)).first();
+  await topSeededRow.waitFor({ timeout: 60_000 });
+  const topSeededTitle = (await topSeededRow.textContent()).match(/\[qa-runner\] inbox cycle \d \d+/)[0];
+  const first = result.created.find((task) => task.title === topSeededTitle);
   await page.screenshot({ path: path.join(dir, '01-inbox.png') });
-  await page.getByText(first.title).first().click();
+  await topSeededRow.click();
   await page.waitForURL(/\/detail\/project-\d+\/\d+/, { timeout: 30_000 });
   step('open by click keeps inboxFlow', inFlow() && openedTask()?.id === first.id, { url: page.url(), counter: await counter() });
 
