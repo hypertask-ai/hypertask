@@ -49,16 +49,6 @@ export async function generateViewport() {
   };
 }
 
-async function readTicketShellSeed(userId: number | undefined) {
-  if (userId === undefined) return null;
-  try {
-    if (!(await isFeatureEnabled(HTPR_7627_TICKET_FIRST_SCREEN_FLAG, userId))) return null;
-    return await getServerTicketShell();
-  } catch {
-    return null;
-  }
-}
-
 export default async function RootLayout(
   {
     children,
@@ -70,7 +60,8 @@ export default async function RootLayout(
   const analyticsSession = verifySession(
     cookieStore.get(SESSION_COOKIE)?.value,
   );
-  const firstScreenPromise = Promise.all([isMobileDevice(), getServerBoardDocument(), getServerInboxDocument(), readTicketShellSeed(analyticsSession?.id)]);
+  const firstScreenPromise = Promise.all([isMobileDevice(), getServerBoardDocument(), getServerInboxDocument(), getServerTicketShell(),
+    analyticsSession ? isFeatureEnabled(HTPR_7627_TICKET_FIRST_SCREEN_FLAG, analyticsSession.id).catch(() => false) : false]);
   let identifyEventIds = false;
   if (analyticsSession) {
     try {
@@ -81,7 +72,7 @@ export default async function RootLayout(
       if (enabled) identifyEventIds = true;
     } catch {}
   }
-  const [device, boardDocument, inboxDocument, shellSeed] = await firstScreenPromise;
+  const [device, boardDocument, inboxDocument, ticketShell, ticketShellEnabled] = await firstScreenPromise;
   const firstScreen = boardDocument ?? inboxDocument;
   const deferUnusedBoardFonts = boardDocument?.flags.values[HTPR_7016_PHONE_BOARD_COLD_START_FLAG] === true &&
     (boardDocument.display as BoardDisplay).isMobile &&
@@ -200,7 +191,7 @@ export default async function RootLayout(
           initialIsApple={device.isApple}
           authenticatedUserId={analyticsSession?.id ?? null}
           firstScreen={firstScreen}
-          shellSeed={shellSeed}
+          shellSeed={ticketShellEnabled ? ticketShell : null}
           flagProvider={flagReaderSubscribe ? SubscribedFeatureFlagProvider : FeatureFlagProvider}
         >
           {children}
