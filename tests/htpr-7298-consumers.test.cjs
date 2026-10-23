@@ -1,3 +1,4 @@
+const { withStubs } = require('./helpers/stub-map.cjs');
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
@@ -13,7 +14,7 @@ const nextServer = {
 };
 
 function load(file, stubs = {}) {
-  stubs = { '@/lib/mcp/operationCrashReport': { reportMcpOperationCrash: () => {} }, ...stubs };
+  stubs = withStubs({ '@/lib/mcp/operationCrashReport': { reportMcpOperationCrash: () => {} } }, stubs);
   const filename = path.join(root, file);
   const code = ts.transpileModule(fs.readFileSync(filename, 'utf8'), {
     compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022, esModuleInterop: true },
@@ -22,7 +23,7 @@ function load(file, stubs = {}) {
   vm.runInNewContext(code, {
     module: loaded, exports: loaded.exports,
     require(id) {
-      assert.ok(Object.hasOwn(stubs, id), `Unexpected import: ${id}`);
+      assert.ok(id in stubs, `Unexpected import: ${id}`);
       return stubs[id];
     },
     URLSearchParams, Date, console,

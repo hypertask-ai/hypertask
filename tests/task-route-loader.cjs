@@ -1,3 +1,4 @@
+const { withStubs } = require("./helpers/stub-map.cjs");
 const fs = require("node:fs");
 const path = require("node:path");
 const ts = require("typescript");
@@ -6,7 +7,7 @@ const root = path.resolve(__dirname, "..");
 function load(file, mocks) {
   const cache = new Map();
   function requireSource(specifier, directory) {
-    if (Object.hasOwn(mocks, specifier)) {
+    if (specifier in mocks) {
       const mock = mocks[specifier];
       return Object.hasOwn(mock, "default") ? { __esModule: true, ...mock } : mock;
     }
@@ -35,4 +36,4 @@ function load(file, mocks) {
 }
 
 
-module.exports = { load };
+module.exports = { load, withStubs };

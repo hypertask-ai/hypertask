@@ -1,3 +1,4 @@
+const { withStubs } = require('./helpers/stub-map.cjs')
 const test = require('node:test')
 const assert = require('node:assert/strict')
 const fs = require('node:fs')
@@ -6,7 +7,7 @@ const ts = require('typescript')
 const root = path.resolve(__dirname, '..')
 
 function load(file, stubs) {
-  stubs = { '@/lib/auth/agentScope': () => require('./helpers/agent-board-scope.cjs').enforcedScope, ...stubs }
+  stubs = withStubs({ '@/lib/auth/agentScope': () => require('./helpers/agent-board-scope.cjs').enforcedScope }, stubs)
   const source = fs.readFileSync(path.join(root, file), 'utf8')
   const code = ts.transpileModule(source, { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2020, esModuleInterop: true } }).outputText
   const imports = []

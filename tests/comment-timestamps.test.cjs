@@ -1,3 +1,4 @@
+const { withStubs } = require('./helpers/stub-map.cjs')
 const test = require('node:test')
 const assert = require('node:assert/strict')
 const fs = require('node:fs')
@@ -13,7 +14,7 @@ class FixedDate extends Date {
 const json = (body, init = {}) => ({ body: JSON.parse(JSON.stringify(body)), status: init.status ?? 200 })
 
 function load(relativePath, modules = {}) {
-  modules = { '@/lib/auth/agentScope': require('./helpers/agent-board-scope.cjs').enforcedScope, '@/lib/mcp/operationCrashReport': { reportMcpOperationCrash: () => {} }, ...modules }
+  modules = withStubs({ '@/lib/auth/agentScope': require('./helpers/agent-board-scope.cjs').enforcedScope, '@/lib/mcp/operationCrashReport': { reportMcpOperationCrash: () => {} } }, modules)
   const source = fs.readFileSync(path.join(root, relativePath), 'utf8')
   const javascript = ts.transpileModule(source, {
     compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2020, esModuleInterop: true },
@@ -21,7 +22,7 @@ function load(relativePath, modules = {}) {
   const loadedModule = { exports: {} }
   new Function('module', 'exports', 'require', 'Date', javascript)(loadedModule, loadedModule.exports, (name) => {
     if (name === './agentChatterRouting') return load('src/lib/mcp/operations/comments/agentChatterRouting.ts')
-    if (Object.hasOwn(modules, name)) return modules[name]
+    if (name in modules) return modules[name]
     if (name === "@/lib/media/inlineAgentImages.server") return { inlineAgentImagesForUser: async (html) => html }
     throw new Error(`Unexpected import: ${name}`)
   }, FixedDate)
