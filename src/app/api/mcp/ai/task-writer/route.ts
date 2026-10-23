@@ -1,3 +1,4 @@
+import { AccountSkillAccessError } from "@/app/api/ai/_lib/skillAccess";
 import { wrapMcpRoute, validateMcpRouteAuth as validateMcpAuth, checkMcpRouteRateLimit as checkMcpRateLimit } from '@/lib/mcp/routeWrapper'
 import { reportError } from "@/lib/errors/reportError";
 import { NextRequest, NextResponse } from "next/server";
@@ -40,6 +41,7 @@ export async function POST(request: NextRequest) {
   try {
     input = requestSchema.parse(await request.json());
   } catch (error) {
+    if (error instanceof AccountSkillAccessError) return NextResponse.json({ success: false, error: error.message }, { status: 403 });
     return NextResponse.json(
       { success: false, error: `Invalid request: ${errorMessage(error)}` },
       { status: 400 }
@@ -78,6 +80,7 @@ export async function POST(request: NextRequest) {
       skills: draft.skills,
     });
   } catch (error) {
+    if (error instanceof AccountSkillAccessError) return NextResponse.json({ success: false, error: error.message }, { status: 403 });
     if (error instanceof ProjectAccessError) {
       return NextResponse.json(
         { success: false, error: "Permission error", message: error.message },

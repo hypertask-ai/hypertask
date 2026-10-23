@@ -52,6 +52,7 @@ import { doneColumnTitles } from "@/lib/doneColumns";
 import prisma from "@/lib/prisma";
 import { projectContentAccessWhere } from "@/utils/controllers/projects/getAllIncludes";
 import { BOARD_TEMPLATE_LIMIT } from "@/app/api/ai/_lib/boardTemplateContext";
+import { authorizeIndexedRows } from "@/lib/rag/authorizeIndexedRows";
 import { searchTasks } from "@/utils/controllers/turbopuffer/turbopufferHelper";
 import { cachedInstructionsForUser } from "@/app/api/ai/_lib/promptCache";
 
@@ -222,7 +223,7 @@ export async function prepareTaskWriterRun(
     : undefined;
 
   const skillResolution = await resolveSkills(body.PROMPT, {
-    userId,
+    userId, agentId, teamScope,
     projectId: body.projectId,
   });
   const composeSkillsEnabled = body.requestKind === "compose-task" && body.invokeSkills &&
@@ -231,7 +232,7 @@ export async function prepareTaskWriterRun(
     const [description, ...retrievalTexts] = await Promise.all(
       [body.taskDescription, ...body.userRetrievalTexts].map((text) => resolveSkills(
         text,
-        { userId, projectId: body.projectId },
+        { userId, agentId, teamScope, projectId: body.projectId },
         async () => skillResolution.skills,
       )),
     );
@@ -259,13 +260,14 @@ export async function prepareTaskWriterRun(
     usageTaskId,
   ] = await Promise.all([
     loadCurrentTaskContext(primaryTaskIds, userId, agentId, {
-      projectId: body.projectId,
+      projectId: body.projectId, teamScope,
     }),
     loadCurrentTaskContext(relatedTaskIds, userId, agentId, {
       role: "related",
-      projectId: body.projectId,
+      projectId: body.projectId, teamScope,
     }),
     retrieveTaskWriterContext({
+      principal: { userId, agentId, teamScope },
       projectId: body.projectId,
       prompt: retrievalQuery,
       aiMode: body.aiMode,
@@ -283,7 +285,8 @@ export async function prepareTaskWriterRun(
               5
           ),
         })
-          .then((rows) => {
+          .then(async (indexedRows) => {
+            const { taskRows: rows } = await authorizeIndexedRows(indexedRows, [], { userId, agentId, teamScope });
             const loaded = new Set(body.taskIds.map(String));
             return formatRelatedTicketCandidates(
               rows
@@ -297,13 +300,13 @@ export async function prepareTaskWriterRun(
           })
       : Promise.resolve(""),
     boardResearchEnabled
-      ? loadTaskWriterStyleExamples(body.projectId).catch((error) => {
+      ? loadTaskWriterStyleExamples(body.projectId, { userId, agentId, teamScope }).catch((error) => {
           console.error("[ai/task-writer] style examples failed", error);
           return "";
         })
       : Promise.resolve(""),
     boardResearchEnabled
-      ? loadTaskWriterBoardVocabulary(body.projectId, customFieldDefinitions, boardLabels).catch((error) => {
+      ? loadTaskWriterBoardVocabulary(body.projectId, customFieldDefinitions, boardLabels, { userId, agentId, teamScope }).catch((error) => {
           console.error("[ai/task-writer] board vocabulary failed", error);
           return "";
         })
@@ -321,7 +324,7 @@ export async function prepareTaskWriterRun(
       taskId: primaryTaskIds[0],
       projectId: body.projectId,
       userId,
-      agentId,
+      agentId, teamScope,
     }),
   ]);
   const retrievedContext = formatTaskWriterRetrievedContext({
@@ -438,9 +441,9 @@ export async function prepareTaskWriterRun(
   };
 }
 
-async function loadTaskWriterBoardVocabulary(projectId: number, customFields?: TaskWriterCustomFieldDefinition[], boardLabels?: { id: string; value: string | null }[]) {
+async function loadTaskWriterBoardVocabulary(projectId: number, customFields?: TaskWriterCustomFieldDefinition[], boardLabels?: { id: string; value: string | null }[], principal?: import("@/lib/rag/retrieveBoardKnowledge").BoardKnowledgePrincipal) {
   const project = await prisma.project.findFirst({
-    where: { id: projectId },
+    where: { id: projectId, ...(principal?.teamScope != null ? projectContentAccessWhere(principal.userId, principal.agentId, principal.teamScope) : {}) },
     select: {
       title: true,
       description: true,
@@ -465,7 +468,7 @@ async function loadTaskWriterBoardVocabulary(projectId: number, customFields?: T
   });
 }
 
-async function loadTaskWriterStyleExamples(projectId: number) {
+async function loadTaskWriterStyleExamples(projectId: number, principal?: import("@/lib/rag/retrieveBoardKnowledge").BoardKnowledgePrincipal) {
   const sections = await prisma.section.findMany({
     where: { projectId, deleted: false },
     select: { section_title: true, isDone: true },
@@ -479,6 +482,7 @@ async function loadTaskWriterStyleExamples(projectId: number) {
   const tasks = await prisma.task.findMany({
     where: {
       projectId,
+      ...(principal?.teamScope != null ? { project: projectContentAccessWhere(principal.userId, principal.agentId, principal.teamScope) } : {}),
       status: "Normal",
       section: { in: doneSectionTitles },
     },

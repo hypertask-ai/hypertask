@@ -38,7 +38,7 @@ export async function GET(
   try {
     const { projectId: rawProjectId } = await props.params;
     const projectId = parseProjectId(rawProjectId);
-    await assertProjectAccess(ctx.user.id, projectId);
+    await assertProjectAccess(ctx.user.id, projectId, ctx.agentId, ctx.teamScope);
 
     const instruction = await prisma.aI_Custom_Instructions.findFirst({
       where: { projectId },
@@ -73,7 +73,7 @@ export async function PUT(
   try {
     const { projectId: rawProjectId } = await props.params;
     const projectId = parseProjectId(rawProjectId);
-    await assertProjectAccess(ctx.user.id, projectId);
+    await assertProjectAccess(ctx.user.id, projectId, ctx.agentId, ctx.teamScope);
 
     const input = updateSchema.parse(await request.json());
     let modelOption;
@@ -102,7 +102,7 @@ export async function PUT(
 
     const instruction = existing
       ? await prisma.aI_Custom_Instructions.update({
-          where: { id: existing.id },
+          where: { id: existing.id, ...(ctx.teamScope != null ? { project: (await import("@/utils/controllers/projects/getAllIncludes")).getProjectWhere(ctx.user.id, ctx.agentId, ctx.teamScope) } : {}) },
           data: {
             customInstruction: input.custom_instruction,
             ...modelData,

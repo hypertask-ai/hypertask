@@ -31,7 +31,7 @@ export async function POST(request: NextRequest) {
 
   try {
     const input = importSchema.parse(await request.json());
-    const scope = await assertSkillScopeAccess(userId, input.scope, input.project_id);
+    const scope = await assertSkillScopeAccess(userId, input.scope, input.project_id, { userId, agentId: ctx.agentId, teamScope: ctx.teamScope });
     const parsed = await importSkillsFromGitHub(input.url);
     const selected = input.slugs
       ? parsed.filter((skill) => input.slugs?.includes(skill.slug))

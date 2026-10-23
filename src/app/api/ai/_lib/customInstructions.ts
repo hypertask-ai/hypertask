@@ -6,6 +6,7 @@ import { configureAiModelUsage } from "@/app/api/ai/_lib/modelProvider";
 import { generateText, type UserContent } from "ai";
 import { parse } from "node-html-parser";
 
+import type { AgentTokenTeamScope } from "@/lib/mcp/auth/types";
 import prisma from "@/lib/prisma";
 import { getProjectWhere } from "@/utils/controllers/projects/getAllIncludes";
 import { getByokOrTeamGatewayApiKeyForProvider } from "@/app/api/ai/_lib/byokKeys";
@@ -57,11 +58,11 @@ export async function loadCustomInstructionText(projectId: number) {
   return instruction?.customInstruction ?? "";
 }
 
-export async function assertProjectAccess(userId: number, projectId: number) {
+export async function assertProjectAccess(userId: number, projectId: number, agentId?: string | null, teamScope?: AgentTokenTeamScope | null) {
   const project = await prisma.project.findFirst({
     where: {
       id: projectId,
-      ...getProjectWhere(userId),
+      ...getProjectWhere(userId, agentId, teamScope),
     },
     select: { id: true, teamId: true },
   });
@@ -176,7 +177,9 @@ export async function deleteCustomInstructionFile(args: {
 export async function retrieveCustomInstructionFileContext(args: {
   projectId: number;
   prompt: string;
+  principal?: import("@/lib/rag/retrieveBoardKnowledge").BoardKnowledgePrincipal;
 }) {
+  if (args.principal?.teamScope != null) await assertProjectAccess(args.principal.userId, args.projectId, args.principal.agentId, args.principal.teamScope);
   let boardMemoryEnabled = false;
   try {
     const configRows = await listCustomInstructionFileRows({
@@ -199,6 +202,7 @@ export async function retrieveCustomInstructionFileContext(args: {
   if (rows.length === 0) return "";
 
   return rows
+    .filter((row) => args.principal?.teamScope == null || row.projectId === args.projectId && row.teamId === args.principal.teamScope.teamId)
     .map(
       (row) => isBoardMemoryFactRow(row)
         ? formatBoardMemoryPromptContext(row.content)

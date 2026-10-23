@@ -1067,6 +1067,7 @@ function commentRowToContext(row: TurbopufferCommentRow) {
 }
 
 export async function retrieveTaskWriterContext(args: {
+  principal?: import("@/lib/rag/retrieveBoardKnowledge").BoardKnowledgePrincipal;
   projectId: number;
   projectIds?: number[];
   prompt: string;
@@ -1074,6 +1075,9 @@ export async function retrieveTaskWriterContext(args: {
   taskIds?: number[];
   reserveCommentBudget?: boolean;
 }) {
+  if (args.principal?.teamScope != null) {
+    await (await import("./customInstructions")).assertProjectAccess(args.principal.userId, args.projectId, args.principal.agentId, args.principal.teamScope);
+  }
   const taskIds = (args.taskIds ?? []).filter((id) => Number.isInteger(id));
   const projectIds = args.projectIds?.length
     ? args.projectIds
@@ -1093,14 +1097,16 @@ export async function retrieveTaskWriterContext(args: {
         limit: 50,
       }),
       retrieveCustomInstructionFileContext({
+        principal: args.principal,
         projectId: args.projectId,
         prompt: args.prompt,
       }),
     ]);
 
+  const authorized = await (await import("@/lib/rag/authorizeIndexedRows")).authorizeIndexedRows(taskRowsRaw, commentRowsRaw, args.principal);
   const excluded = excludeLoadedTaskRows({
-    taskRows: taskRowsRaw,
-    commentRows: commentRowsRaw,
+    taskRows: authorized.taskRows,
+    commentRows: authorized.commentRows,
     loadedTaskIds: taskIds,
   });
   const { taskRows, commentRows } = args.reserveCommentBudget

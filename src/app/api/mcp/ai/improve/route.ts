@@ -61,7 +61,7 @@ export async function POST(request: NextRequest) {
       taskId: input.task_id,
       projectId: input.project_id,
       userId,
-      agentId: ctx.agentId,
+      agentId: ctx.agentId, teamScope: ctx.teamScope,
     });
     if (input.task_id && usageTaskId === null) {
       return NextResponse.json(

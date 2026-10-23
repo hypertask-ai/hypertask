@@ -1,5 +1,6 @@
 import type { AgentTokenTeamScope } from '@/lib/mcp/auth/types';
 import { recordAgentBoardScopeMiss } from "@/lib/auth/agentScope";
+import { authorizeIndexedRows } from "./authorizeIndexedRows";
 import prisma from "@/lib/prisma";
 import { getProjectWhere } from "@/utils/controllers/projects/getAllIncludes";
 import {
@@ -199,13 +200,14 @@ export async function retrieveBoardKnowledge(
     }),
   ]);
 
+  const authorized = await authorizeIndexedRows(taskRowsRaw, commentRowsRaw, principal);
   const taskRows = applyMetadataFilters(
-    taskRowsRaw,
+    authorized.taskRows,
     input.metadataFilters,
     "task"
   );
   const commentRows = applyMetadataFilters(
-    commentRowsRaw,
+    authorized.commentRows,
     input.metadataFilters,
     "comment"
   );
