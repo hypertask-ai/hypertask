@@ -1,11 +1,17 @@
 const assert = require('node:assert/strict');
-const { readFileSync } = require('node:fs');
+const { readFileSync, existsSync, mkdtempSync, mkdirSync, writeFileSync, rmSync } = require('node:fs');
+const { createHash } = require('node:crypto');
+const { tmpdir } = require('node:os');
+const { execFileSync, spawnSync } = require('node:child_process');
 const path = require('node:path');
+const fixtureName = (filename) => filename.replaceAll('.test.', '.case.') + '.txt';
 const { pathToFileURL } = require('node:url');
-const { test } = require('node:test');
+const { test: nodeTest } = require('node:test');
+const only = process.argv.find((arg) => arg.startsWith('--only='))?.slice(7) ?? (process.argv.includes('--historical-only') ? 'real PR ' : null);
+const test = (name, fn) => nodeTest(name, { skip: only != null && !name.includes(only) }, fn);
 
 const root = path.resolve(__dirname, '..');
-const gate = import(pathToFileURL(path.join(root, '.github/scripts/ux-signoff-gate.mjs')));
+const gate = import(pathToFileURL(process.env.UX_SIGNOFF_GATE_PATH || path.join(root, '.github/scripts/ux-signoff-gate.mjs')));
 const modified = { filename: 'src/components/x/Foo.tsx', status: 'modified' };
 const added = { filename: 'src/components/notifications/ExamplePanel.tsx', status: 'added' };
 const title = 'HTPR-7072 [FEATURE] Decision inbox';
@@ -22,6 +28,133 @@ async function decision(overrides) {
   assert.ok(result.description.length <= 140);
   return result;
 }
+
+function historicalRemovalFixture(number) {
+  const directory = path.join(__dirname, 'fixtures/ux-signoff', `pr-${number}`);
+  const metadata = JSON.parse(readFileSync(path.join(directory, 'pr.json'), 'utf8'));
+  const sources = Object.fromEntries(metadata.files.filter((file) => file.status !== 'added').map((file) =>
+    [file.filename, readFileSync(path.join(directory, 'base', fixtureName(file.filename)), 'utf8')]));
+  return { ...metadata, sources, productionModes: JSON.parse(sources['e2e/smoke/production-flag-modes.json']) };
+}
+
+for (const number of [1910, 1931]) {
+  test(`real PR ${number}: complete historical flag-removal replay`, async () => {
+    const fixture = historicalRemovalFixture(number);
+    const result = await decision(fixture);
+    assert.equal(result.state, 'success', JSON.stringify(result));
+    if (number === 1910) {
+      assert.match(result.description, /^Flag removal only:/);
+      assert.deepEqual(result.details, []);
+    } else {
+      assert.doesNotMatch(result.description, /^Flag removal only:/);
+      assert.deepEqual((await gate).flagRemovalOnly(fixture.files, fixture.productionModes, fixture.sources), []);
+    }
+    const directory = mkdtempSync(path.join(tmpdir(), 'ux-signoff-pr-'));
+    try {
+      const script = path.join(directory, '.github/scripts/ux-signoff-gate.mjs');
+      mkdirSync(path.dirname(script), { recursive: true });
+      writeFileSync(script, readFileSync(process.env.UX_SIGNOFF_GATE_PATH || path.join(root, '.github/scripts/ux-signoff-gate.mjs')));
+      writeFileSync(path.join(path.dirname(script), 'github-rate-limit.mjs'), readFileSync(path.join(root, '.github/scripts/github-rate-limit.mjs')));
+      for (const [filename, source] of Object.entries(fixture.sources)) {
+        const target = path.join(directory, filename);
+        mkdirSync(path.dirname(target), { recursive: true });
+        writeFileSync(target, source);
+      }
+      const isolated = await import(pathToFileURL(script));
+      const output = [];
+      assert.equal(await isolated.run(['--pr', String(number)], {
+        env: number === 1910 ? {} : env,
+        github: async (endpoint) => endpoint.includes('/files?') ? fixture.files : {
+          number, title: fixture.title, user: { login: fixture.author }, changed_files: fixture.files.length,
+        },
+        fetchImpl: number === 1910 ? () => assert.fail('proven full PR must not need ticket approval') : commentsFetch,
+        log: (line) => output.push(JSON.parse(line)),
+      }), 0);
+      assert.deepEqual(output, [result]);
+    } finally {
+      rmSync(directory, { recursive: true, force: true });
+    }
+  });
+}
+
+test('historical fixtures reproduce every full base/head blob and complete PR patch', () => {
+  for (const number of [1910, 1931]) {
+    const fixture = historicalRemovalFixture(number);
+    const directory = path.join(__dirname, 'fixtures/ux-signoff', `pr-${number}`);
+    assert.match(fixture.baseRefOid, /^[a-f0-9]{40}$/);
+    assert.match(fixture.headRefOid, /^[a-f0-9]{40}$/);
+    for (const file of fixture.files) {
+      const blobs = {};
+      for (const side of ['base', 'head']) {
+        const filename = path.join(directory, side, fixtureName(file.filename));
+        const absent = side === 'base' ? file.status === 'added' : file.status === 'removed';
+        assert.equal(existsSync(filename), !absent, `${number} ${side} ${file.filename}`);
+        blobs[side] = absent ? '' : readFileSync(filename, 'utf8');
+        assert.equal(absent ? null : createHash('sha256').update(blobs[side]).digest('hex'), file.blobs[side]);
+      }
+      const lines = blobs.base ? blobs.base.slice(0, -1).split('\n') : [];
+      const output = [];
+      let cursor = 0;
+      let additions = 0;
+      let deletions = 0;
+      for (const hunk of file.patch.split(/(?=^@@ )/m)) {
+        const [header, ...rows] = hunk.replace(/\n$/, '').split('\n');
+        const match = /^@@ -(\d+)(?:,(\d+))? \+(\d+)(?:,(\d+))? @@/.exec(header);
+        assert.ok(match, header);
+        const start = Math.max(0, Number(match[1]) - 1);
+        assert.ok(start >= cursor);
+        output.push(...lines.slice(cursor, start));
+        cursor = start;
+        let oldCount = 0;
+        let newCount = 0;
+        for (const row of rows) {
+          assert.match(row, /^[ +-]/);
+          if (row[0] !== '+') { assert.equal(lines[cursor++], row.slice(1)); oldCount++; }
+          if (row[0] !== '-') { output.push(row.slice(1)); newCount++; }
+          if (row[0] === '+') additions++;
+          if (row[0] === '-') deletions++;
+        }
+        assert.equal(oldCount, Number(match[2] ?? 1));
+        assert.equal(newCount, Number(match[4] ?? 1));
+      }
+      output.push(...lines.slice(cursor));
+      assert.equal(output.length ? output.join('\n') + '\n' : '', blobs.head, `${number} ${file.filename}`);
+      assert.equal(additions, file.additions);
+      assert.equal(deletions, file.deletions);
+    }
+  }
+});
+
+if (process.argv.includes('--git-fixtures')) {
+  test('historical fixture Git provenance matches both complete changed-file lists and every blob', () => {
+    let blobs = 0;
+    for (const number of [1910, 1931]) {
+      const fixture = historicalRemovalFixture(number);
+      const changed = execFileSync('git', ['diff', '--no-renames', '--name-only', '-z', fixture.baseRefOid, fixture.headRefOid], { cwd: root, encoding: 'utf8' }).split('\0').filter(Boolean).sort();
+      assert.deepEqual(changed, fixture.files.map((file) => file.filename).sort());
+      for (const file of fixture.files) {
+        for (const side of ['base', 'head']) {
+          const result = spawnSync('git', ['show', `${fixture[side + 'RefOid']}:${file.filename}`], { cwd: root });
+          if (file.blobs[side] === null) assert.notEqual(result.status, 0);
+          else {
+            assert.equal(result.status, 0);
+            assert.deepEqual(result.stdout, readFileSync(path.join(__dirname, 'fixtures/ux-signoff', `pr-${number}`, side, fixtureName(file.filename))));
+            blobs++;
+          }
+        }
+      }
+    }
+    console.log(`Git fixture provenance: ${blobs} exact blobs verified`);
+  });
+}
+
+const patch = (filename, source, target, status) => {
+  const oldLines = source.slice(0, -1).split('\n');
+  const newLines = target ? target.slice(0, -1).split('\n') : [];
+  return { filename, status, additions: newLines.length, deletions: oldLines.length,
+    patch: [`@@ -1,${oldLines.length} +${newLines.length ? 1 : 0},${newLines.length} @@`,
+      ...oldLines.map((line) => `-${line}`), ...newLines.map((line) => `+${line}`)].join('\n') };
+};
 
 function removalFixture({ mode = 'EVERYONE', before: original, after, call = 'useFlag(HTPR_1_PANEL_FLAG)', module = '@/hooks/useFlag' } = {}) {
   const key = 'htpr-1-panel';
@@ -53,13 +186,7 @@ function removalFixture({ mode = 'EVERYONE', before: original, after, call = 'us
     '',
   ].join('\n');
   const definitionSource = `export const HTPR_1_PANEL_FLAG = "${key}";\nexport default { key: HTPR_1_PANEL_FLAG };\n`;
-  const patch = (filename, source, target, status) => {
-    const oldLines = source.slice(0, -1).split('\n');
-    const newLines = target ? target.slice(0, -1).split('\n') : [];
-    return { filename, status, additions: newLines.length, deletions: oldLines.length,
-      patch: [`@@ -1,${oldLines.length} +${newLines.length ? 1 : 0},${newLines.length} @@`,
-        ...oldLines.map((line) => `-${line}`), ...newLines.map((line) => `+${line}`)].join('\n') };
-  };
+
   return {
     files: [patch(definition, definitionSource, '', 'removed'), patch(filename, before, retained, 'modified')],
     sources: { [filename]: before, [definition]: definitionSource },
@@ -91,6 +218,611 @@ test('EVERYONE flag removal keeps the existing flag-on JSX and needs no wirefram
   await assertRemovalProven(server);
 });
 
+for (const [name, beforeText, afterText, expected] of [
+  ['unchanged interpolation', '`Open ${task.id}`', '`Open ${task.id}`', 'success'],
+  ['unchanged flag-like template text', '`useFlag HTPR_1_PANEL_FLAG panelEnabled`', '`useFlag HTPR_1_PANEL_FLAG panelEnabled`', 'success'],
+  ['nested unchanged template', '`Open ${`task-${task.id}`}`', '`Open ${`task-${task.id}`}`', 'success'],
+  ['only the flag branch changes', '`${panelEnabled ? "Existing" : "Legacy"}`', '`${"Existing"}`', 'success'],
+  ['new visible template text', '`Open ${task.id}`', '`New action ${task.id}`', 'failure'],
+  ['new visible interpolation', '`${panelEnabled ? "Existing" : "Legacy"}`', '`${"New copy"}`', 'failure'],
+  ['template text is not code', '`panelEnabled && Existing`', '`Existing`', 'failure'],
+  ['unterminated template', '`Existing ${task.id}', '`Existing ${task.id}', 'failure'],
+  ['unsupported interpolation division', '`Value ${total / count}`', '`Value ${total / count}`', 'failure'],
+  ['unchanged regex still keeps sign-off next to a folded flag', '/[{}]/', '/[{}]/', 'failure'],
+  ['regex text is not code', '/panelEnabled && Existing/', '/Existing/', 'failure'],
+  ['unsupported nested regex class', '/[[a]--[b]]/v', '/[[a]--[b]]/v', 'failure'],
+]) {
+  test(`template and regex proof: ${name}`, async () => {
+    const imports = 'import { useFlag } from "@/hooks/useFlag";\nimport { HTPR_1_PANEL_FLAG } from "@/lib/flags/keys";\n';
+    const body = (text, enabled) => `  const label = ${text};\n  return <ExistingPanel label={label} enabled={${enabled}} />;\n}\n`;
+    const before = imports + 'export function Panel() {\n  const panelEnabled = useFlag(HTPR_1_PANEL_FLAG);\n' + body(beforeText, 'panelEnabled && layoutEnabled');
+    const after = 'export function Panel() {\n' + body(afterText, 'layoutEnabled');
+    assert[expected === 'success' ? 'match' : 'doesNotMatch']((await decision({ ...removalFixture({ before, after }), title: 'HTPR-1 [REFACTOR] Remove flag' })).description, /^Flag removal only/);
+  });
+}
+
+test('production source reader accepts normal route folders and spaces, not traversal or shell syntax', async () => {
+  for (const [filename, expected] of [
+    ['src/app/detail/[...slug]/Panel.tsx', 0],
+    ['src/app/detail/[id]/Panel.tsx', 0],
+    ['src/app/Task Detail/Panel.tsx', 0],
+    ['src/app/../Panel.tsx', 1],
+    ['src/app/$(touch marker)/Panel.tsx', 1],
+  ]) {
+    const fixture = removalFixture();
+    const old = fixture.files[1].filename;
+    fixture.files[1].filename = filename;
+    fixture.sources[filename] = fixture.sources[old];
+    delete fixture.sources[old];
+    const directory = mkdtempSync(path.join(tmpdir(), 'ux-signoff-route-'));
+    try {
+      const script = path.join(directory, '.github/scripts/ux-signoff-gate.mjs');
+      mkdirSync(path.dirname(script), { recursive: true });
+      writeFileSync(script, readFileSync(path.join(root, '.github/scripts/ux-signoff-gate.mjs')));
+      writeFileSync(path.join(path.dirname(script), 'github-rate-limit.mjs'), readFileSync(path.join(root, '.github/scripts/github-rate-limit.mjs')));
+      const sources = { ...fixture.sources, 'e2e/smoke/production-flag-modes.json': JSON.stringify(fixture.productionModes) };
+      for (const [relative, source] of Object.entries(sources)) {
+        const target = path.join(directory, relative);
+        mkdirSync(path.dirname(target), { recursive: true });
+        writeFileSync(target, source);
+      }
+      const isolated = await import(pathToFileURL(script));
+      const lines = [];
+      assert.equal(await isolated.run(['--pr', '1'], {
+        env,
+        github: async (endpoint) => endpoint.includes('/files?') ? fixture.files : {
+          number: 1, title: 'HTPR-1 [REFACTOR] Remove flag', user: { login: 'builder' }, changed_files: fixture.files.length,
+        },
+        fetchImpl: commentsFetch,
+        log: (line) => lines.push(JSON.parse(line)),
+      }), 0, filename);
+      assert[expected ? 'doesNotMatch' : 'match'](lines.at(-1).description, /^Flag removal only/, filename);
+      assert.equal(existsSync(path.join(directory, 'marker')), false);
+    } finally {
+      rmSync(directory, { recursive: true, force: true });
+    }
+  }
+});
+
+for (const number of [1910, 1931]) {
+  for (const addition of ['<aside>New visible element</aside>', 'New user-facing copy']) {
+    test(`real fixture mixed change still refused: PR ${number} plus ${addition}`, async () => {
+      const fixture = historicalRemovalFixture(number);
+      const filename = number === 1910 ? 'src/app/detail/[...slug]/useTaskDetailModalActions.tsx' : 'src/app/search/SearchChipsInput.tsx';
+      const after = readFileSync(path.join(__dirname, 'fixtures/ux-signoff', `pr-${number}`, 'head', fixtureName(filename)), 'utf8') + `export const NewContent = () => <div>${addition}</div>;\n`;
+      fixture.files = fixture.files.map((file) => file.filename === filename ? patch(filename, fixture.sources[filename], after, 'modified') : file);
+      assert.doesNotMatch((await decision(fixture)).description, /^Flag removal only/);
+    });
+  }
+}
+
+test('full historical proof still refuses changed server text, unproven call arguments and scope metadata', async () => {
+  for (const [filename, change] of [
+    ['src/lib/search/serverOperators.ts', (text) => text + 'export const newLabel = "New visible copy";\n'],
+    ['.github/scripts/agent-scope/agent-scope-exceptions.json', (text) => text.replace('validateMcpAuth supplies', 'Unreviewed scope change supplies')],
+    ['src/lib/search/rankedWhere.ts', (text) => text.replace('scanAll = false,', 'scanAll = true,')],
+  ]) {
+    const fixture = historicalRemovalFixture(1931);
+    const after = change(readFileSync(path.join(__dirname, 'fixtures/ux-signoff/pr-1931/head', fixtureName(filename)), 'utf8'));
+    fixture.files = fixture.files.map((file) => file.filename === filename ? patch(filename, fixture.sources[filename], after, 'modified') : file);
+    assert.doesNotMatch((await decision(fixture)).description, /^Flag removal only/, filename);
+  }
+  const fixture = historicalRemovalFixture(1931);
+  const filename = 'src/lib/mcp/operations/tasks/search/operation.ts';
+  const before = fixture.sources[filename].replace('personProjectIds, commenterEnabled, logicEnabled)', 'personProjectIds, false, logicEnabled)');
+  const after = readFileSync(path.join(__dirname, 'fixtures/ux-signoff/pr-1931/head', fixtureName(filename)), 'utf8');
+  fixture.sources[filename] = before;
+  fixture.files = fixture.files.map((file) => file.filename === filename ? patch(filename, before, after, 'modified') : file);
+  assert.doesNotMatch((await decision(fixture)).description, /^Flag removal only/);
+});
+
+test('a parameter with the same name as a flag is not proof without a flag-on caller', async () => {
+  const fixture = removalFixture({ call: 'await isFeatureEnabled(HTPR_1_PANEL_FLAG, userId)', module: '@/lib/flags' });
+  const filename = 'src/lib/unrelated.ts';
+  const before = 'export async function unrelated(value, panelEnabled = false) {\n  return present(value, panelEnabled);\n}\n';
+  const after = 'export async function unrelated(value) {\n  return present(value, true);\n}\n';
+  fixture.sources[filename] = before;
+  fixture.files.push(patch(filename, before, after, 'modified'));
+  assert.doesNotMatch((await decision(fixture)).description, /^Flag removal only/);
+});
+
+test('exported parameter specialization refuses indirect callers', async () => {
+  const before = 'import { isFeatureEnabled } from "@/lib/flags";\n' +
+    'import { HTPR_1_PANEL_FLAG } from "@/lib/flags/keys";\n' +
+    'import { renderLabel } from "@/lib/label";\n' +
+    'export async function Panel() {\n' +
+    '  const panelEnabled = await isFeatureEnabled(HTPR_1_PANEL_FLAG, userId);\n' +
+    '  const run = renderLabel;\n' +
+    '  const label = await renderLabel("value", panelEnabled);\n' +
+    '  const other = await run("value");\n' +
+    '  return <ExistingPanel label={label} other={other} enabled={panelEnabled} />;\n}\n';
+  const after = before.replace(/^import .*flags[^\n]*\n/gm, '').replace(/^  const panelEnabled = .*\n/m, '')
+    .replace('"value", panelEnabled', '"value"').replace('enabled={panelEnabled}', 'enabled={true}');
+  const fixture = removalFixture({ before, after });
+  const filename = 'src/lib/label.ts';
+  const original = 'export async function renderLabel(value, panelEnabled = false) {\n  return present(value, panelEnabled);\n}\n';
+  const retained = 'export async function renderLabel(value) {\n  return present(value, true);\n}\n';
+  fixture.sources[filename] = original;
+  fixture.files.push(patch(filename, original, retained, 'modified'));
+  const control = structuredClone(fixture);
+  control.sources['src/components/Panel.tsx'] = before.replace('  const run = renderLabel;\n', '').replace('await run("value")', 'label');
+  control.files[1] = patch('src/components/Panel.tsx', control.sources['src/components/Panel.tsx'],
+    after.replace('  const run = renderLabel;\n', '').replace('await run("value")', 'label'), 'modified');
+  assert.doesNotMatch((await decision(control)).description, /^Flag removal only/);
+  assert.deepEqual((await gate).flagRemovalOnly(control.files, control.productionModes, control.sources), []);
+  for (const [reference, invocation, extraImport = ''] of [
+    ['const run = renderLabel;', 'run("value")'],
+    ['const run = { renderLabel };', 'run.renderLabel("value")'],
+    ['', 'invoke(renderLabel, "value")'],
+    ['', 'renderLabel.call(null, "value")'],
+    ['', 'run("value")', 'import { renderLabel as run } from "@/lib/label";\n'],
+    ['', 'labels["render" + "Label"]("value")', 'import * as labels from "@/lib/label";\n'],
+    ['const labels = await import("@/lib/label");', 'labels["renderLabel"]("value")'],
+  ]) {
+    const changed = structuredClone(fixture);
+    const rewrite = (text) => extraImport + text.replace('const run = renderLabel;', reference).replace('run("value")', invocation);
+    changed.sources['src/components/Panel.tsx'] = rewrite(before);
+    changed.files[1] = patch('src/components/Panel.tsx', rewrite(before), rewrite(after), 'modified');
+    assert.deepEqual((await gate).flagRemovalOnly(changed.files, changed.productionModes, changed.sources), [], invocation);
+    assert.doesNotMatch((await decision(changed)).description, /^Flag removal only/, invocation);
+  }
+});
+
+test('round 4: unchanged callers are excluded from contract proof', async () => {
+  const before = 'import { isFeatureEnabled } from "@/lib/flags";\n' +
+    'import { HTPR_1_PANEL_FLAG } from "@/lib/flags/keys";\n' +
+    'import { renderLabel } from "@/lib/label";\n' +
+    'export async function Panel() {\n' +
+    '  const panelEnabled = await isFeatureEnabled(HTPR_1_PANEL_FLAG, userId);\n' +
+    '  const label = await renderLabel("value", panelEnabled);\n' +
+    '  return <ExistingPanel label={label} enabled={panelEnabled} />;\n}\n';
+  const after = before.replace(/^import .*flags[^\n]*\n/gm, '').replace(/^  const panelEnabled = .*\n/m, '')
+    .replace('"value", panelEnabled', '"value"').replace('enabled={panelEnabled}', 'enabled={true}');
+  const fixture = removalFixture({ before, after });
+  const filename = 'src/lib/label.ts';
+  const original = 'export async function renderLabel(value, panelEnabled = false) {\n  return present(value, panelEnabled);\n}\n';
+  const retained = 'export async function renderLabel(value) {\n  return present(value, true);\n}\n';
+  fixture.sources[filename] = original;
+  fixture.files.push(patch(filename, original, retained, 'modified'));
+  const directory = mkdtempSync(path.join(tmpdir(), 'ux-signoff-unchanged-'));
+  try {
+    const script = path.join(directory, '.github/scripts/ux-signoff-gate.mjs');
+    mkdirSync(path.dirname(script), { recursive: true });
+    writeFileSync(script, readFileSync(process.env.UX_SIGNOFF_GATE_PATH || path.join(root, '.github/scripts/ux-signoff-gate.mjs')));
+    writeFileSync(path.join(path.dirname(script), 'github-rate-limit.mjs'), readFileSync(path.join(root, '.github/scripts/github-rate-limit.mjs')));
+    for (const [relative, source] of Object.entries({ ...fixture.sources,
+      'e2e/smoke/production-flag-modes.json': JSON.stringify(fixture.productionModes),
+      'src/components/Unchanged.tsx': 'import { renderLabel } from "@/lib/label";\nexport const Unchanged = () => renderLabel("value");\n',
+    })) {
+      const target = path.join(directory, relative);
+      mkdirSync(path.dirname(target), { recursive: true });
+      writeFileSync(target, source);
+    }
+    const isolated = await import(pathToFileURL(script));
+    const output = [];
+    assert.equal(await isolated.run(['--pr', '1'], {
+      env,
+      github: async (endpoint) => endpoint.includes('/files?') ? fixture.files : {
+        number: 1, title: 'HTPR-1 [REFACTOR] Remove flag', user: { login: 'builder' }, changed_files: fixture.files.length,
+      },
+      fetchImpl: commentsFetch,
+      log: (line) => output.push(JSON.parse(line)),
+    }), 0);
+    assert.doesNotMatch(output[0].description, /^Flag removal only/);
+  } finally {
+    rmSync(directory, { recursive: true, force: true });
+  }
+});
+
+test('round 4: OR folding can change a function receiver', async () => {
+  for (const [expression, retained] of [
+    ['((panelEnabled || fallback) && settings.tag)()', '(settings.tag)()'],
+    ['((panelEnabled || fallback) && settings.tag)`text`', '(settings.tag)`text`'],
+    ['((panelEnabled || fallback) && settings.tag)?.()', '(settings.tag)?.()'],
+    ['((panelEnabled || fallback) && settings.tag).name', '(settings.tag).name'],
+    ['new ((panelEnabled || fallback) && settings.Tag)()', 'new (settings.Tag)()'],
+    ['delete ((panelEnabled || fallback) && settings.value)', 'delete (settings.value)'],
+    ['typeof ((panelEnabled || fallback) && missing)', 'typeof (missing)'],
+  ]) {
+    const fixture = booleanRemovalFixture(expression, retained);
+    assert.deepEqual((await gate).flagRemovalOnly(fixture.files, fixture.productionModes, fixture.sources), [], expression);
+    assert.doesNotMatch((await decision(fixture)).description, /^Flag removal only/, expression);
+  }
+});
+
+test('round 5: logical folding keeps statement-position expressions as expressions', async () => {
+  for (const [statement, retained] of [
+    ['panelEnabled && function render() { return "new"; };', 'function render() { return "new"; };'],
+    ['panelEnabled && class render {};', 'class render {};'],
+    ['panelEnabled && async function render() {};', 'async function render() {};'],
+  ]) {
+    const before = 'import { useFlag } from "@/hooks/useFlag";\n' +
+      'import { HTPR_1_PANEL_FLAG } from "@/lib/flags/keys";\n' +
+      'export function Panel({ render }) {\n  const panelEnabled = useFlag(HTPR_1_PANEL_FLAG);\n' +
+      `  {\n    ${statement}\n    return <ExistingPanel render={render} />;\n  }\n}\n`;
+    const after = before.replace(/^import .*\n/gm, '').replace(/^  const panelEnabled = .*\n/m, '').replace(statement, retained);
+    const fixture = removalFixture({ before, after });
+    assert.deepEqual((await gate).flagRemovalOnly(fixture.files, fixture.productionModes, fixture.sources), [], statement);
+    assert.doesNotMatch((await decision(fixture)).description, /^Flag removal only/, statement);
+  }
+});
+
+test('round 5: removing a flag declaration cannot join the statements around it', async () => {
+  const panel = (consume, next) => {
+    const before = 'import { useFlag } from "@/hooks/useFlag";\n' +
+      'import { HTPR_1_PANEL_FLAG } from "@/lib/flags/keys";\n' +
+      `export function Panel({ value, render, consume }) {\n  ${consume}\n  const panelEnabled = useFlag(HTPR_1_PANEL_FLAG);\n` +
+      `  ${next}\n  return <ExistingPanel />;\n}\n`;
+    const after = before.replace(/^import .*\n/gm, '').replace(/^  const panelEnabled = .*\n/m, '').replace('panelEnabled && ', '');
+    return removalFixture({ before, after });
+  };
+  for (const next of ['[panelEnabled && value].forEach(render);', '(panelEnabled && value).forEach(render);']) {
+    const fixture = panel('consume()', next);
+    assert.deepEqual((await gate).flagRemovalOnly(fixture.files, fixture.productionModes, fixture.sources), [], next);
+    assert.doesNotMatch((await decision(fixture)).description, /^Flag removal only/, next);
+  }
+  const allowed = panel('consume();', '[panelEnabled && value].forEach(render);');
+  assert.deepEqual((await gate).flagRemovalOnly(allowed.files, allowed.productionModes, allowed.sources), ['htpr-1-panel']);
+});
+
+test('round 6: comments cannot stand in for code boundaries or operators', async () => {
+  const header = 'import { useFlag } from "@/hooks/useFlag";\n' +
+    'import { HTPR_1_PANEL_FLAG } from "@/lib/flags/keys";\n';
+  for (const [body, change] of [
+    ['export function Panel({ render }) {\n  const panelEnabled = useFlag(HTPR_1_PANEL_FLAG);\n  {\n' +
+      '    panelEnabled && /* keep */ function render() { return "new"; };\n    return <ExistingPanel render={render} />;\n  }\n}\n',
+    (text) => text.replace('panelEnabled && ', '')],
+    ['export function Panel({ value, render, consume }) {\n  consume() // ;\n  const panelEnabled = useFlag(HTPR_1_PANEL_FLAG);\n' +
+      '  [panelEnabled && value].forEach(render);\n  return <ExistingPanel />;\n}\n',
+    (text) => text.replace('panelEnabled && ', '')],
+    ['export function Panel({ x, value }) {\n  const panelEnabled = useFlag(HTPR_1_PANEL_FLAG);\n' +
+      '  const total = x + // return\n    panelEnabled && value;\n  return <ExistingPanel total={total} />;\n}\n',
+    (text) => text.replace('panelEnabled && ', '')],
+  ]) {
+    const before = header + body;
+    const after = change(body.replace(/^  const panelEnabled = .*\n/m, ''));
+    const fixture = removalFixture({ before, after });
+    assert.deepEqual((await gate).flagRemovalOnly(fixture.files, fixture.productionModes, fixture.sources), [], body);
+    assert.doesNotMatch((await decision(fixture)).description, /^Flag removal only/, body);
+  }
+});
+
+test('round 7: logical folding never leaves a line break right after the removed flag', async () => {
+  for (const tail of ['// keep\n    <ExistingPanel />', '/* keep\n */ <ExistingPanel />']) {
+    const before = 'import { useFlag } from "@/hooks/useFlag";\n' +
+      'import { HTPR_1_PANEL_FLAG } from "@/lib/flags/keys";\n' +
+      'export function Panel() {\n  const panelEnabled = useFlag(HTPR_1_PANEL_FLAG);\n' +
+      `  return panelEnabled && ${tail};\n}\n`;
+    const after = before.replace(/^import .*\n/gm, '').replace(/^  const panelEnabled = .*\n/m, '').replace('panelEnabled && ', '');
+    const fixture = removalFixture({ before, after });
+    assert.deepEqual((await gate).flagRemovalOnly(fixture.files, fixture.productionModes, fixture.sources), [], tail);
+    assert.doesNotMatch((await decision(fixture)).description, /^Flag removal only/, tail);
+  }
+});
+
+test('round 8: carriage returns and Unicode line separators keep normal sign-off', async () => {
+  for (const terminator of ['\r', '\u2028', '\u2029']) {
+    const before = 'import { useFlag } from "@/hooks/useFlag";\n' +
+      'import { HTPR_1_PANEL_FLAG } from "@/lib/flags/keys";\n' +
+      'export function Panel() {\n  const panelEnabled = useFlag(HTPR_1_PANEL_FLAG);\n' +
+      `  return panelEnabled && /* keep${terminator} */ <ExistingPanel />;\n}\n`;
+    const after = before.replace(/^import .*\n/gm, '').replace(/^  const panelEnabled = .*\n/m, '').replace('panelEnabled && ', '');
+    const fixture = removalFixture({ before, after });
+    assert.deepEqual((await gate).flagRemovalOnly(fixture.files, fixture.productionModes, fixture.sources), [], JSON.stringify(terminator));
+    assert.doesNotMatch((await decision(fixture)).description, /^Flag removal only/, JSON.stringify(terminator));
+  }
+});
+
+test('round 9: a property named return is a value, so the slash after it divides', async () => {
+  for (const property of ['obj.return', 'obj?.return', 'obj. return']) {
+    const before = 'import { useFlag } from "@/hooks/useFlag";\n' +
+      'import { HTPR_1_PANEL_FLAG } from "@/lib/flags/keys";\n' +
+      'export function Panel({ obj, text }) {\n  const panelEnabled = useFlag(HTPR_1_PANEL_FLAG);\n' +
+      `  const ratio = ${property} / /return panelEnabled && return/.test(text) / 1;\n  return <ExistingPanel ratio={ratio} />;\n}\n`;
+    const after = before.replace(/^import .*\n/gm, '').replace(/^  const panelEnabled = .*\n/m, '').replace('panelEnabled && ', '');
+    const fixture = removalFixture({ before, after });
+    assert.deepEqual((await gate).flagRemovalOnly(fixture.files, fixture.productionModes, fixture.sources), [], property);
+    assert.doesNotMatch((await decision(fixture)).description, /^Flag removal only/, property);
+  }
+});
+
+test('round 10: files with a regex keep normal sign-off for logical and ternary folding', async () => {
+  for (const [line, change] of [
+    ['  const ratio = value! / Number(/ return panelEnabled && return/.test(text)) / 1;\n  return <ExistingPanel ratio={ratio} />;\n', (text) => text.replace('panelEnabled && ', '')],
+    ['  const ok = /x/.test(text);\n  return <ExistingPanel ok={ok} visible={panelEnabled && value} />;\n', (text) => text.replace('panelEnabled && ', '')],
+    ['  const ok = /x/.test(text);\n  return <ExistingPanel ok={ok} label={panelEnabled ? "on" : "off"} />;\n', (text) => text.replace('panelEnabled ? "on" : "off"', '"on"')],
+  ]) {
+    const before = 'import { useFlag } from "@/hooks/useFlag";\n' +
+      'import { HTPR_1_PANEL_FLAG } from "@/lib/flags/keys";\n' +
+      'export function Panel({ value, text }) {\n  const panelEnabled = useFlag(HTPR_1_PANEL_FLAG);\n' + line + '}\n';
+    const after = change(before.replace(/^import .*\n/gm, '').replace(/^  const panelEnabled = .*\n/m, ''));
+    const fixture = removalFixture({ before, after });
+    assert.deepEqual((await gate).flagRemovalOnly(fixture.files, fixture.productionModes, fixture.sources), [], line);
+    assert.doesNotMatch((await decision(fixture)).description, /^Flag removal only/, line);
+  }
+});
+
+test('round 4: derived aliases can capture shadowed bindings', async () => {
+  for (const binding of [
+    'const { other } = data;', 'const [other] = data;', 'let other = data;',
+    'function other() {}', 'class other {}', 'const child = (other) => other;',
+    'try {} catch (other) {}', 'for (const other of data) {}', 'for (const other in data) {}',
+    'const child = function other() {};', 'const child = class other {};',
+  ]) {
+    const before = 'import { useFlag } from "@/hooks/useFlag";\n' +
+      'import { HTPR_1_PANEL_FLAG } from "@/lib/flags/keys";\n' +
+      'export function Panel() {\n' +
+      '  const panelEnabled = useFlag(HTPR_1_PANEL_FLAG);\n' +
+      '  const other = false;\n  const visible = panelEnabled && other;\n' +
+      `  { ${binding}\n    return <ExistingPanel enabled={visible} />;\n  }\n}\n`;
+    const after = before.replace(/^import .*\n/gm, '').replace(/^  const panelEnabled = .*\n/m, '')
+      .replace('  const visible = panelEnabled && other;\n', '').replace('enabled={visible}', 'enabled={other}');
+    const fixture = removalFixture({ before, after });
+    assert.deepEqual((await gate).flagRemovalOnly(fixture.files, fixture.productionModes, fixture.sources), [], binding);
+    assert.doesNotMatch((await decision(fixture)).description, /^Flag removal only/, binding);
+  }
+});
+
+test('projection audit: local flag reads cannot escape their declaration scope', async () => {
+  const before = 'import { useFlag } from "@/hooks/useFlag";\n' +
+    'import { HTPR_1_PANEL_FLAG } from "@/lib/flags/keys";\n' +
+    'export function First() {\n  const panelEnabled = useFlag(HTPR_1_PANEL_FLAG);\n' +
+    '  return <ExistingPanel enabled={panelEnabled} />;\n}\n' +
+    'export function Second() {\n  return <ExistingPanel enabled={panelEnabled} />;\n}\n';
+  const after = before.replace(/^import .*\n/gm, '').replace(/^  const panelEnabled = .*\n/m, '')
+    .replaceAll('enabled={panelEnabled}', 'enabled={true}');
+  assert.doesNotMatch((await decision(removalFixture({ before, after }))).description, /^Flag removal only/);
+});
+
+test('projection audit: flag and React hook shadow bindings are refused', async () => {
+  const base = removalFixture();
+  for (const binding of [
+    'function useFlag(HTPR_1_PANEL_FLAG) { return false; }',
+    'function Child(useFlag) {}',
+    'function /* comment */ useFlag(OTHER_FLAG) /* comment */ { return false; }',
+    'const { useFlag } = hooks;',
+    'function useEffect(callback, deps) { return deps.length; }',
+    'const { useEffect } = hooks;',
+    'const useEffect = customEffect;',
+  ]) {
+    const before = base.sources['src/components/Panel.tsx']
+      .replace('export default async function Panel() {',
+        'import { useEffect } from "react";\nexport default async function Panel() {\n  ' + binding)
+      .replace('  return (', '  useEffect(() => {}, [panelEnabled]);\n  return (');
+    const after = before.replace(/^import .*flags[^\n]*\n/gm, '').replace(/^import .*useFlag[^\n]*\n/gm, '')
+      .replace(/^  const panelEnabled = .*\n/m, '').replace('[panelEnabled]', '[]')
+      .replace('      {panelEnabled && (\n        <button>Existing action</button>\n      )}\n',
+        '      <button>Existing action</button>\n');
+    assert.doesNotMatch((await decision(removalFixture({ before, after }))).description, /^Flag removal only/, binding);
+  }
+});
+
+test('projection audit: member hook calls do not prove dependency-array cleanup', async () => {
+  for (const callee of ['hooks.useEffect', 'hooks . useEffect', 'hooks?.useEffect', 'hooks. /* comment */ useEffect']) {
+    const base = removalFixture();
+    const before = base.sources['src/components/Panel.tsx'].replace('export default', 'import { useEffect } from "react";\nexport default')
+      .replace('  return (', `  ${callee}(() => {}, [panelEnabled]);\n  return (`);
+    const after = before.replace(/^import .*flags[^\n]*\n/gm, '').replace(/^import .*useFlag[^\n]*\n/gm, '')
+      .replace(/^  const panelEnabled = .*\n/m, '').replace('[panelEnabled]', '[]')
+      .replace('      {panelEnabled && (\n        <button>Existing action</button>\n      )}\n',
+        '      <button>Existing action</button>\n');
+    assert.doesNotMatch((await decision(removalFixture({ before, after }))).description, /^Flag removal only/, callee);
+  }
+});
+
+test('projection audit: reductions require plain value-consuming parentheses', async () => {
+  for (const [expression, retained] of [
+    ['delete /* comment */ (panelEnabled && settings.value)', 'delete /* comment */ (settings.value)'],
+    ['typeof /* comment */ (panelEnabled ? missing : fallback)', 'typeof /* comment */ (missing)'],
+    ['(panelEnabled && settings.method)!()', '(settings.method)!()'],
+    ['(panelEnabled && settings.method as Callable)()', '(settings.method as Callable)()'],
+    ['new /* comment */ (panelEnabled && settings.Constructor)()', 'new /* comment */ (settings.Constructor)()'],
+  ]) {
+    assert.doesNotMatch((await decision(booleanRemovalFixture(expression, retained))).description, /^Flag removal only/, expression);
+  }
+});
+
+test('projection audit: dynamic lexical references are refused', async () => {
+  const base = removalFixture();
+  for (const statement of ['  const label = eval("panelEnabled");\n', '  with (data) { consume(panelEnabled); }\n']) {
+    const before = base.sources['src/components/Panel.tsx'].replace('  return (', statement + '  return (');
+    const after = before.replace(/^import .*\n/gm, '').replace(/^  const panelEnabled = .*\n/m, '')
+      .replace('      {panelEnabled && (\n        <button>Existing action</button>\n      )}\n',
+        '      <button>Existing action</button>\n');
+    assert.doesNotMatch((await decision(removalFixture({ before, after }))).description, /^Flag removal only/, statement);
+  }
+});
+
+test('object ternary folding refuses comparison operands', async () => {
+  for (const operator of ['===', '==', '!==', '!=', '<=', '>=', '+=', '^=']) {
+    const fixture = removalFixture();
+    const filename = 'src/components/Panel.tsx';
+    const before = fixture.sources[filename].replace('  return (', `  const label = value ${operator} true ? { label: "A" } : fallback;\n  return (`);
+    const after = 'export default async function Panel() {\n' +
+      `  const label = value ${operator} { label: "A" };\n` +
+      '  return (\n    <main>\n      <button>Existing action</button>\n    </main>\n  );\n}\n';
+    const changed = removalFixture({ before, after });
+    assert.deepEqual((await gate).flagRemovalOnly(changed.files, changed.productionModes, changed.sources), [], operator);
+    assert.doesNotMatch((await decision(changed)).description, /^Flag removal only/, operator);
+  }
+});
+
+test('ternary reduction refuses receiver-sensitive tagged templates', async () => {
+  for (const condition of ['panelEnabled ? settings.tag : fallback', 'panelEnabled && settings.tag']) {
+    for (const suffix of ['`text`', ' `text`', '\n`text`', '/* tag */`text`']) {
+      const fixture = booleanRemovalFixture(`(${condition})${suffix}`, `(settings.tag)${suffix}`);
+      assert.deepEqual((await gate).flagRemovalOnly(fixture.files, fixture.productionModes, fixture.sources), [], condition + suffix);
+      assert.doesNotMatch((await decision(fixture)).description, /^Flag removal only/, condition + suffix);
+    }
+  }
+});
+
+test('ternary reduction refuses nullish coalescing boundaries', async () => {
+  for (const [expression, retained] of [
+    ['value ?? panelEnabled ? "A" : "B"', 'value ?? "A"'],
+    ['value ?? !panelEnabled ? "B" : "A"', 'value ?? "A"'],
+  ]) {
+    const fixture = booleanRemovalFixture(expression, retained);
+    assert.deepEqual((await gate).flagRemovalOnly(fixture.files, fixture.productionModes, fixture.sources), [], expression);
+    assert.doesNotMatch((await decision(fixture)).description, /^Flag removal only/, expression);
+  }
+});
+
+test('JSX unwrapping refuses multiline template whitespace changes', async () => {
+  const fixture = removalFixture();
+  const filename = 'src/components/Panel.tsx';
+  const before = fixture.sources[filename].replace('<button>Existing action</button>', '<pre>{`first\n          second`}</pre>');
+  const after = 'export default async function Panel() {\n' +
+    '  return (\n    <main>\n      <pre>{`first\n        second`}</pre>\n    </main>\n  );\n}\n';
+  const changed = removalFixture({ before, after });
+  assert.deepEqual((await gate).flagRemovalOnly(changed.files, changed.productionModes, changed.sources), []);
+  assert.doesNotMatch((await decision(changed)).description, /^Flag removal only/);
+});
+
+function booleanRemovalFixture(expression, retained, { derived = false } = {}) {
+  const imports = 'import { useFlag } from "@/hooks/useFlag";\nimport { HTPR_1_PANEL_FLAG } from "@/lib/flags/keys";\n';
+  const declaration = '  const panelEnabled = useFlag(HTPR_1_PANEL_FLAG);\n';
+  const stable = derived ? '  const layoutEnabled = true;\n' : '';
+  const body = (value) => `  return <ExistingPanel enabled={${value}} />;\n}\n`;
+  const before = imports + 'export function Panel() {\n' + declaration + stable +
+    (derived ? `  const enabled = ${expression};\n` + body('enabled') : body(expression));
+  return removalFixture({ before, after: 'export function Panel() {\n' + stable + body(retained) });
+}
+
+for (const [name, fixture] of [
+  ['PR 1910: inbox flag removed from a nested boolean guard', () => {
+    const before = 'import { useFlag } from "@/hooks/useFlag";\n' +
+      'import { HTPR_1_PANEL_FLAG } from "@/lib/flags/keys";\n' +
+      'export function Panel() {\n' +
+      '  const inboxEFirstPress = useFlag(HTPR_1_PANEL_FLAG);\n' +
+      '  if (refresh && !(inboxEFirstPress && window.history.state?.cachedTaskDetail &&\n' +
+      '    new URLSearchParams(window.location.search).get("inboxFlow") === "true")) {\n' +
+      '    navigate(refreshPath);\n  }\n' +
+      '  return <ExistingPanel />;\n}\n';
+    const after = before.replace(/^import .*\n/gm, '')
+      .replace(/^  const inboxEFirstPress = .*\n/m, '').replace('inboxEFirstPress && ', '');
+    return removalFixture({ before, after });
+  }],
+  ['PR 1931: boolean branch unthreaded from a JSX prop call', () => {
+    const before = 'import { useFlag } from "@/hooks/useFlag";\n' +
+      'import { HTPR_1_PANEL_FLAG } from "@/lib/flags/keys";\n' +
+      'export function Panel() {\n' +
+      '  const commenterFlagEnabled = useFlag(HTPR_1_PANEL_FLAG);\n' +
+      '  return <TaskListRow titleParts={highlightedTitle(task.title, inputValue, commenterFlagEnabled && layoutEnabled)} />;\n}\n';
+    const after = before.replace(/^import .*\n/gm, '')
+      .replace(/^  const commenterFlagEnabled = .*\n/m, '').replace('commenterFlagEnabled && ', '');
+    return removalFixture({ before, after });
+  }],
+  ['boolean prop retains true', () => booleanRemovalFixture('panelEnabled', 'true')],
+  ['boolean prop retains shorthand true', () => {
+    const fixture = booleanRemovalFixture('panelEnabled', 'true');
+    fixture.files[1].patch = fixture.files[1].patch.replace('+  return <ExistingPanel enabled={true}', '+  return <ExistingPanel enabled');
+    return fixture;
+  }],
+  ['and branch', () => booleanRemovalFixture('panelEnabled && layoutEnabled', 'layoutEnabled')],
+  ['true ternary branch', () => booleanRemovalFixture('panelEnabled ? "Existing" : "Legacy"', '"Existing"')],
+  ['negated ternary false branch', () => booleanRemovalFixture('!panelEnabled ? "Legacy" : "Existing"', '"Existing"')],
+]) {
+  test(`boolean removal now passes: ${name}`, async () => {
+    const result = await decision({ ...fixture(), title: 'HTPR-1 [REFACTOR] Remove flag' });
+    assert.deepEqual(result, {
+      state: 'success', description: 'Flag removal only: htpr-1-panel already on for everyone', details: [],
+    });
+  });
+}
+
+test('derived boolean substitution is refused even without shadowing', async () => {
+  const fixture = booleanRemovalFixture('panelEnabled && layoutEnabled', 'layoutEnabled', { derived: true });
+  assert.deepEqual((await gate).flagRemovalOnly(fixture.files, fixture.productionModes, fixture.sources), []);
+  assert.doesNotMatch((await decision(fixture)).description, /^Flag removal only/);
+});
+
+for (const [name, expression, retained] of [
+  ['and expression must not become a method reference', '(panelEnabled && settings.method)()', '(settings.method)()'],
+  ['ternary must not become a method reference', '(panelEnabled ? settings.method : fallback)()', '(settings.method)()'],
+  ['conditional delete must not become a property deletion', 'delete (panelEnabled && settings.value)', 'delete (settings.value)'],
+  ['typeof must still evaluate the conditional operand', 'typeof (panelEnabled ? missing : fallback)', 'typeof (missing)'],
+  ['wrong side', 'panelEnabled ? "Existing" : "Legacy"', '"Legacy"'],
+  ['new visible string', 'panelEnabled ? "Existing" : "Legacy"', '"New copy"'],
+  ['ternary after or', 'other || panelEnabled ? left : right', 'other || left'],
+  ['ternary after and', 'other && panelEnabled ? left : right', 'other && left'],
+  ['equality is not an expression boundary', 'other === panelEnabled && layoutEnabled', 'other === layoutEnabled'],
+  ['operator precedence', 'panelEnabled ? left : right || fallback', 'left || fallback'],
+  ['negated and', '!panelEnabled && layoutEnabled', 'layoutEnabled'],
+  ['member access is not the flag', 'settings.panelEnabled && layoutEnabled', 'layoutEnabled'],
+  ['write is not a read', 'panelEnabled = false', 'true'],
+  ['unknown call', 'transform(panelEnabled)', 'true'],
+]) {
+  test(`boolean removal still refused: ${name}`, async () => {
+    assert.doesNotMatch((await decision({ ...booleanRemovalFixture(expression, retained), title: 'HTPR-1 [REFACTOR] Remove flag' })).description, /^Flag removal only/);
+  });
+}
+
+test('flag reads and derived prop reads before initialization remain refused', async () => {
+  for (const derived of [false, true]) {
+    const fixture = booleanRemovalFixture('panelEnabled && layoutEnabled', 'layoutEnabled', { derived });
+    let before = fixture.sources['src/components/Panel.tsx'];
+    const declaration = derived ? '  const enabled = panelEnabled && layoutEnabled;\n' : '  const panelEnabled = useFlag(HTPR_1_PANEL_FLAG);\n';
+    before = before.replace(declaration, '').replace(' />;\n', ` />;\n${declaration}`);
+    const after = before.replace(/^import .*\n/gm, '').replace(/^  const panelEnabled = .*\n/m, '')
+      .replace(/^  const enabled = .*\n/m, '').replace(derived ? 'enabled={enabled}' : 'enabled={panelEnabled && layoutEnabled}', 'enabled={layoutEnabled}');
+    assert.doesNotMatch((await decision({ ...removalFixture({ before, after }), title: 'HTPR-1 [REFACTOR] Remove flag' })).description, /^Flag removal only/);
+  }
+});
+
+test('boolean prop omission without a proven default is refused', async () => {
+  const fixture = booleanRemovalFixture('panelEnabled', 'true');
+  fixture.files[1].patch = fixture.files[1].patch.replace('+  return <ExistingPanel enabled={true}', '+  return <ExistingPanel');
+  assert.doesNotMatch((await decision({ ...fixture, title: 'HTPR-1 [REFACTOR] Remove flag' })).description, /^Flag removal only/);
+});
+
+for (const [name, rewrite] of [
+  ['mutable retained binding', (source) => source.replace('const layoutEnabled = true', 'let layoutEnabled = true')],
+  ['retained binding in another scope', (source) => source.replace('  const layoutEnabled = true;\n', '').replace('export function Panel()', 'const layoutEnabled = true;\nexport function Panel()')],
+  ['retained name shadowed in a nested function', (source) => source.replace('  return <ExistingPanel', '  function Child(layoutEnabled) {\n  return <ExistingPanel').replace(' />;\n}', ' />;\n  }\n}')],
+  ['flag name shadowed in a nested function', (source) => source.replace('  return <ExistingPanel', '  function Child(panelEnabled) {\n  return <ExistingPanel').replace(' />;\n}', ' />;\n  }\n}')],
+]) {
+  test(`derived boolean remains fail-closed: ${name}`, async () => {
+    const fixture = booleanRemovalFixture('panelEnabled && layoutEnabled', 'layoutEnabled', { derived: true });
+    const before = rewrite(fixture.sources['src/components/Panel.tsx']);
+    const after = before.replace(/^import .*\n/gm, '').replace(/^  const panelEnabled = .*\n/m, '')
+      .replace(/^  const enabled = .*\n/m, '').replace('enabled={enabled}', 'enabled={layoutEnabled}');
+    assert.doesNotMatch((await decision({ ...removalFixture({ before, after }), title: 'HTPR-1 [REFACTOR] Remove flag' })).description, /^Flag removal only/);
+  });
+}
+
+for (const [name, use, retained] of [
+  ['object shorthand keeps its key', 'const result = { enabled };', 'const result = { layoutEnabled };'],
+  ['postfix writes are not reads', 'enabled++;', 'layoutEnabled++;'],
+  ['compound writes are not reads', 'enabled ||= false;', 'layoutEnabled ||= false;'],
+]) {
+  test(`derived boolean still refuses ${name}`, async () => {
+    const fixture = booleanRemovalFixture('panelEnabled && layoutEnabled', 'layoutEnabled', { derived: true });
+    const before = fixture.sources['src/components/Panel.tsx'].replace('  return ', `  ${use}\n  return `);
+    const after = before.replace(/^import .*\n/gm, '').replace(/^  const panelEnabled = .*\n/m, '').replace(/^  const enabled = .*\n/m, '').replace(use, retained).replace('enabled={enabled}', 'enabled={layoutEnabled}');
+    assert.doesNotMatch((await decision({ ...removalFixture({ before, after }), title: 'HTPR-1 [REFACTOR] Remove flag' })).description, /^Flag removal only/);
+  });
+}
+
+test('removing a flag guard cannot rebind an else through a comment or an outer condition', async () => {
+  const imports = 'import { useFlag } from "@/hooks/useFlag";\nimport { HTPR_1_PANEL_FLAG } from "@/lib/flags/keys";\n';
+  for (const outer of ['', '  if (outer)\n']) {
+    const body = outer + '    if (panelEnabled) perform();\n    /* */ else fallback();\n  return <ExistingPanel />;\n}\n';
+    const before = imports + 'export function Panel() {\n  const panelEnabled = useFlag(HTPR_1_PANEL_FLAG);\n' + body;
+    const after = 'export function Panel() {\n' + body.replace('if (panelEnabled) ', '');
+    assert.doesNotMatch((await decision({ ...removalFixture({ before, after }), title: 'HTPR-1 [REFACTOR] Remove flag' })).description, /^Flag removal only/);
+  }
+});
+
+test('boolean cleanup cannot hide new JSX, a renamed component or visible text', async () => {
+  for (const retained of ['layoutEnabled', 'layoutEnabled} /><aside>New</aside><ExistingPanel enabled={layoutEnabled']) {
+    const fixture = booleanRemovalFixture('panelEnabled && layoutEnabled', retained);
+    if (retained === 'layoutEnabled') fixture.files[1].patch = fixture.files[1].patch.replace('+  return <ExistingPanel', '+  return <NewPanel');
+    assert.doesNotMatch((await decision({ ...fixture, title: 'HTPR-1 [REFACTOR] Remove flag' })).description, /^Flag removal only/);
+  }
+  assert.doesNotMatch((await decision({ title: 'HTPR-1 [REFACTOR] Change UI', files: [modified] })).description, /^Flag removal only/);
+});
+
 for (const [context, open, close] of [
   ['double-quoted JSX attribute', '<main title="', '">'],
   ['single-quoted JSX attribute', "<main title='", "'>"],
@@ -117,7 +849,7 @@ test('the built-in scanner exempts real removals with no TypeScript available', 
   const original = process.env.FEATURE_FLAG_TYPESCRIPT_PATH;
   try {
     process.env.FEATURE_FLAG_TYPESCRIPT_PATH = path.join(root, 'missing-ux-signoff-typescript.cjs');
-    const withoutTypescript = await import(`${pathToFileURL(path.join(root, '.github/scripts/ux-signoff-gate.mjs'))}?no-typescript`);
+    const withoutTypescript = await import(`${pathToFileURL(process.env.UX_SIGNOFF_GATE_PATH || path.join(root, '.github/scripts/ux-signoff-gate.mjs'))}?no-typescript`);
     const fixture = removalFixture();
     assert.deepEqual(withoutTypescript.flagRemovalOnly(fixture.files, fixture.productionModes, fixture.sources), ['htpr-1-panel']);
     assert.match(withoutTypescript.evaluate(input(removalFixture())).description, /^Flag removal only/);
@@ -141,7 +873,6 @@ test('the scanner keeps quoted JSX text, ordinary strings, comments and expressi
 });
 
 for (const [context, rewrite] of [
-  ['regex literal', (source) => source.replace('  return (', '  const pattern = /[{}]/;\n  return (')],
   ['unbalanced brace', (source) => source.replace('  return (', '  {\n  return (')],
   ['unbalanced parenthesis', (source) => source.replace('  return (', '  (\n  return (')],
   ['line continuation', (source) => source.replace('  return (', '  const text = "line' + '\\' + '\n' + 'continuation";\n  return (')],
