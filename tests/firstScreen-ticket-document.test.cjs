@@ -26,6 +26,10 @@ mock('src/lib/flags.ts', { featureFlagsForUser: async id => {
   calls.push(['flags', id]); assert.equal(id, 985);
   if (failRead) throw Error('Flags unavailable');
   return resolveFlags ? new Promise(resolve => { resolveFlags.release = () => resolve(flags); }) : flags;
+}, isFeatureEnabled: async (key, id) => {
+  assert.equal(id, 985);
+  if (failRead) throw Error('Flags unavailable');
+  return flags[key] === true;
 } });
 const { signSession } = require('../src/lib/auth/session.ts');
 const { DEFAULT_TABLE_COLUMNS } = require('../src/utils/helperFunctions/Views/TableColumnsHelperFunctions.ts');
