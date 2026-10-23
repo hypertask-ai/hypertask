@@ -26,6 +26,7 @@ function makeFlow(t, {
   queryClient.setQueryData(inboxKey, buildInboxQueryCache(notifications));
   const archived = [];
   const navigations = [];
+  const cachedOpens = [];
   const toasts = [];
   const pending = [];
   const atoms = { currentUserAtom: {}, tasksPlayListAtom: {}, globalNotificationFocusAtom: {} };
@@ -91,14 +92,17 @@ function makeFlow(t, {
   }).default;
   const useNavigate = load("src/hooks/MultiPages/Route/useHypertasksNavigate.ts", {
     "@/lib/constants": { default: {} },
-    "@/hooks/useFlag": { useFlag, useFlagLoaded: () => true },
+    "@/hooks/Inbox/useGetNotifications": { inboxDataQueryKey: id => ["inbox", "data", id] },
     "next/navigation": nextNavigation,
     "@tanstack/react-query": { useQueryClient: () => queryClient },
     "@/lib/state": state,
     "@/store": atoms,
     "@/hooks/General/useAuth": { useAuth: () => ({ authenticatedUserId: 2343 }) },
     "react-hot-toast": { default: message => toasts.push(message) },
-    "@/lib/navigation/cachedTaskDetail": {},
+    "@/lib/navigation/cachedTaskDetail": { openCachedTaskDetail: options => {
+      cachedOpens.push(options);
+      return false;
+    } },
     "@/utils/api/Homepage": {},
     "@/lib/firstScreen/SurfaceContext": {},
   }).default;
@@ -165,7 +169,7 @@ function makeFlow(t, {
   function pressE(handler = keyboard().handleKeyDown) {
     handler({ key: "e", keyCode: 69, ctrlKey: false, metaKey: false, shiftKey: false, altKey: false, preventDefault: () => {} });
   }
-  return { queryClient, archived, navigations, toasts, context, activeElement, keyboard, pressE,
+  return { queryClient, archived, navigations, cachedOpens, toasts, context, activeElement, keyboard, pressE,
     archiveNotification: (...args) => useFocus().archiveNotificationGetter(...args),
     ...useNavigate(),
   };
@@ -178,7 +182,22 @@ test("E immediately after an Inbox cached open archives before detail membership
   flow.pressE();
   assert.deepEqual(flow.archived, [{ item: notification, mode: "Notification" }]);
   assert.deepEqual(flow.navigations, [["Replace", "/detail/project-15/7003?inboxFlow=true"]]);
+  assert.deepEqual(flow.cachedOpens, [{
+    queryClient: flow.queryClient, accountId: 2343, projectId: 15, uniqueIndex: 7003,
+    href: "/detail/project-15/7003?inboxFlow=true", replace: true, task: undefined,
+  }]);
   assert.deepEqual(flow.toasts, []);
+});
+
+test("Inbox replacement inherits its flow before falling back when no cached detail is available", t => {
+  const flow = makeFlow(t);
+  flow.navigate("Replace", "/detail/project-15/7003");
+  assert.deepEqual(flow.cachedOpens, [{
+    queryClient: flow.queryClient, accountId: 2343, projectId: 15, uniqueIndex: 7003,
+    href: "/detail/project-15/7003?inboxFlow=true", replace: true, task: undefined,
+  }]);
+  assert.deepEqual(flow.navigations, [["Replace", "/detail/project-15/7003?inboxFlow=true"]]);
+  assert.equal(window.location.search, "?inboxFlow=true");
 });
 
 for (const mobile of [false, true]) {

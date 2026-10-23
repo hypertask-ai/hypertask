@@ -34,7 +34,7 @@ function loadSource(relativePath, mocks) {
   return loaded.exports.default;
 }
 
-function fixture(t, { inboxNextCached = false, mobile = false, cached = false, openDetail } = {}) {
+function fixture(t, { mobile = false, cached = false, openDetail } = {}) {
   const dom = new JSDOM("<!doctype html><div id='root'></div>", { url: `https://app.hypertask.ai${boardHref}` });
   const originals = new Map();
   for (const [name, value] of Object.entries({ window: dom.window, document: dom.window.document, location: dom.window.location, Event: dom.window.Event, IS_REACT_ACT_ENVIRONMENT: true })) {
@@ -57,8 +57,6 @@ function fixture(t, { inboxNextCached = false, mobile = false, cached = false, o
     "@/lib/state": { useRecoilValue: () => ({ id: 2343 }) },
     "@/store": { currentUserAtom: {} },
     "@/hooks/General/useAuth": { useAuth: () => ({ authenticatedUserId: 2343 }) },
-    "@/hooks/useFlag": { useFlag: () => inboxNextCached },
-    "@/lib/flags/keys": { HTPR_7001_INBOX_NEXT_CACHED_FLAG: "htpr-7001-inbox-next-cached" },
     "@/hooks/Inbox/useGetNotifications": { inboxDataQueryKey: id => ["inbox", "data", id] },
     "@/lib/navigation/cachedTaskDetail": cache,
     "@/lib/analytics/taskDetailReadiness": { taskDetailEntryPathForRoute: () => "board", markTaskDetailNavigationStart: () => {} },
@@ -85,8 +83,6 @@ function fixture(t, { inboxNextCached = false, mobile = false, cached = false, o
     react: React,
     "react/jsx-runtime": require("react/jsx-runtime"),
     "next/link": linkModule.exports,
-    "@/hooks/useFlag": { useFlag: () => inboxNextCached },
-    "@/lib/flags/keys": { HTPR_7001_INBOX_NEXT_CACHED_FLAG: "htpr-7001-inbox-next-cached" },
     "@/lib/contexts/mobileContext": { MobileViewContext: React.createContext(mobile) },
     "@/utils/undoActions/helperFuncs": { cn: (...classes) => classes.filter(Boolean).join(" ") },
   });
@@ -130,9 +126,9 @@ function fixture(t, { inboxNextCached = false, mobile = false, cached = false, o
 }
 
 for (const mobile of [false, true]) {
-  for (const [inboxNextCached, cached] of [[false, false], [true, false], [true, true]]) {
-    test(`one card click adds one history entry (${mobile ? "phone" : "desktop"}, inbox-cache=${inboxNextCached}, cached=${cached})`, async (t) => {
-      const f = fixture(t, { mobile, inboxNextCached, cached });
+  for (const cached of [false, true]) {
+    test(`one card click adds one history entry (${mobile ? "phone" : "desktop"}, cached=${cached})`, async (t) => {
+      const f = fixture(t, { mobile, cached });
       await f.render();
       const documentBefore = f.dom.window.document;
       const event = await f.click();
@@ -151,28 +147,26 @@ for (const mobile of [false, true]) {
   }
 }
 
-for (const inboxNextCached of [false, true]) {
-  test(`modifier clicks keep the native link without opening the current tab (inbox-cache=${inboxNextCached})`, async (t) => {
-    const f = fixture(t, { inboxNextCached });
-    await f.render();
-    for (const modifiers of [{ ctrlKey: true }, { metaKey: true }, { shiftKey: true }, { altKey: true }, { button: 1 }]) {
-      const event = await f.click("#title", modifiers);
-      assert.equal(event.defaultPrevented, false, "cmd/ctrl and other modified clicks retain the browser action");
-      assert.deepEqual(f.calls, [], "modified clicks must not bubble into the parent's task opener");
-    }
-    assert.equal(f.dom.window.document.querySelector("a").getAttribute("href"), taskHref);
-    assert.equal(f.dom.window.history.length, 1);
-  });
+test("modifier clicks keep the native link without opening the current tab", async (t) => {
+  const f = fixture(t);
+  await f.render();
+  for (const modifiers of [{ ctrlKey: true }, { metaKey: true }, { shiftKey: true }, { altKey: true }, { button: 1 }]) {
+    const event = await f.click("#title", modifiers);
+    assert.equal(event.defaultPrevented, false, "cmd/ctrl and other modified clicks retain the browser action");
+    assert.deepEqual(f.calls, [], "modified clicks must not bubble into the parent's task opener");
+  }
+  assert.equal(f.dom.window.document.querySelector("a").getAttribute("href"), taskHref);
+  assert.equal(f.dom.window.history.length, 1);
+});
 
-  test(`the card leaves modal/side-panel and stopped child actions to their owner (inbox-cache=${inboxNextCached})`, async (t) => {
-    let opens = 0;
-    const f = fixture(t, { inboxNextCached, openDetail: () => opens++ });
-    await f.render(React.createElement("button", { id: "selection", onClick: (event) => event.stopPropagation() }, "Select"));
-    await f.click("#selection");
-    assert.equal(opens, 0);
-    await f.click();
-    assert.equal(opens, 1, "a non-routing task opener is invoked exactly once");
-    assert.deepEqual(f.calls, [], "the Link must not upgrade the caller's modal/panel action to a page navigation");
-    assert.equal(f.dom.window.history.length, 1);
-  });
-}
+test("the card leaves modal/side-panel and stopped child actions to their owner", async (t) => {
+  let opens = 0;
+  const f = fixture(t, { openDetail: () => opens++ });
+  await f.render(React.createElement("button", { id: "selection", onClick: (event) => event.stopPropagation() }, "Select"));
+  await f.click("#selection");
+  assert.equal(opens, 0);
+  await f.click();
+  assert.equal(opens, 1, "a non-routing task opener is invoked exactly once");
+  assert.deepEqual(f.calls, [], "the Link must not upgrade the caller's modal/panel action to a page navigation");
+  assert.equal(f.dom.window.history.length, 1);
+});

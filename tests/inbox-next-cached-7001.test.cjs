@@ -34,7 +34,7 @@ function compile(file, mocks) {
   return exports.default;
 }
 
-function fixture(t, { enabled = true, authenticatedId = 2343, inboxAccountId = 2343, cached = true, upload = false, realDetail = false } = {}) {
+function fixture(t, { authenticatedId = 2343, inboxAccountId = 2343, cached = true, upload = false, realDetail = false } = {}) {
   const dom = new JSDOM('<div id="root"></div>', { url: "https://app.hypertask.ai/inbox" });
   const names = ["window", "document", "Event", "IS_REACT_ACT_ENVIRONMENT"];
   const previous = Object.fromEntries(names.map(name => [name, global[name]]));
@@ -66,7 +66,6 @@ function fixture(t, { enabled = true, authenticatedId = 2343, inboxAccountId = 2
     "@/lib/state": { useRecoilValue: () => ({ id: 2343 }) },
     "@/store": { currentUserAtom: {} },
     "@/hooks/useFlag": { useFlag: key => {
-      if (key === flags.HTPR_7001_INBOX_NEXT_CACHED_FLAG) return enabled;
       assert.ok([flags.HTPR_6991_BACK_FIRST_OPEN_FLAG, flags.HTPR_7002_INBOX_E_FIRST_PRESS_FLAG, flags.HTPR_7003_BOARD_BACK_FLAG, flags.HTPR_7008_PHONE_FIRST_PAINT_FLAG, flags.HTPR_7129_BOARD_CARD_FRESH_AFTER_ESCAPE_FLAG].includes(key), key);
       return false;
     } },
@@ -170,15 +169,6 @@ for (const suffix of ["?inboxFlow=true", ""]) {
     assert.equal(new URLSearchParams(window.location.search).get("inboxFlow"), "true");
   });
 }
-
-test("bugfix OFF keeps the exact server Replace route and old view until server commit", async t => {
-  const f = fixture(t, { enabled: false });
-  await f.start();
-  await f.move(href(next));
-  assert.deepEqual(f.calls, [["replace", href(next)]]);
-  assert.equal(window.location.pathname, href(first));
-  assert.equal(document.querySelector("article").dataset.taskId, String(first.id));
-});
 
 for (const options of [{ authenticatedId: 999 }, { inboxAccountId: 999 }, { cached: false }]) {
   test(`unsafe or unavailable cache falls back to server without publishing another task: ${JSON.stringify(options)}`, async t => {
