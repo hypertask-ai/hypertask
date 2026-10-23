@@ -24,6 +24,7 @@ import { lockCommentReactions } from "@/lib/mcp/comments/reactionLock";
 import prisma from "@/lib/prisma";
 import { broadcastFeatureFlagsChange } from "@/lib/realtime/server";
 
+const FLAG_REVIEW_POLICY_COMMENT_ID = 302454;
 const APPROVAL_REQUIRED_MESSAGE = "Valentin must thumbs-up that comment within 7 days, the comment must be unedited, and the whole comment must be: Question: Switch <flag-key> to <mode>?";
 const MODE_APPROVAL_WORDS: Record<FeatureFlagMode, string> = {
   OWNER_ONLY: "Only me",
@@ -144,7 +145,7 @@ export async function PATCH(request: NextRequest) {
             throw new FeatureFlagApprovalError("The review must be recorded by a different agent");
           }
         }
-        const commentId = 302454;
+        const commentId = FLAG_REVIEW_POLICY_COMMENT_ID;
         await lockCommentReactions(tx, commentId);
         const locked = await tx.$queryRaw<Array<{ id: number }>>`SELECT c.id FROM "Comment" c JOIN "Task" t ON t.id = c."taskId" WHERE c.id = ${commentId} FOR UPDATE`;
         if (!locked.length) throw new FeatureFlagApprovalError("Valentin's policy thumbs-up is required on comment 302454");
