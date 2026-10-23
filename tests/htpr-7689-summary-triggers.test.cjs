@@ -187,7 +187,7 @@ for (const enabled of [false, true]) {
     assert.equal(h.requests.length, 2);
     assert.match(h.requests[1].prompt, /Human decision 2/);
     h.task.description_.content = "<p>Changed description</p>";
-    await h.scheduler({ taskId: 42, activityOnly: false });
+    await h.scheduler({ taskId: 42, activityOnlyOwnerId: null });
     await h.generateAndStoreTaskSummary(42);
     assert.equal(h.requests.length, 3);
     assert.match(h.requests[2].prompt, /Changed description/);
@@ -214,7 +214,7 @@ for (const enabled of [false, true]) {
       ...h.stubs,
       "@/lib/prisma": { __esModule: true, default: {
         comment: { create: async ({ data }) => ({ id: 1, ...data }) },
-        task: { findUnique: async () => ({ updatedByUserIds: [6] }) },
+        task: { findUnique: async () => ({ updatedByUserIds: [6], userId: 123 }) },
       } },
       "@/pages/api/queues/FAST/generateSummary": { __esModule: true, default: schedule },
       "@/lib/agents/publicAgent": { sanitizeAgentCredentials: (value) => value },

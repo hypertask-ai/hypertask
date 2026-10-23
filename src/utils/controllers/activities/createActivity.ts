@@ -52,7 +52,7 @@ const createActivity = async ({
   });
   const task = await client.task.findUnique({
     where: { id: taskId },
-    select: { updatedByUserIds: true },
+    select: { updatedByUserIds: true, userId: true },
   });
 
   const fromUserId =
@@ -73,7 +73,7 @@ const createActivity = async ({
   if (shouldRunTaskSummary) {
     scheduleTaskSummaryGeneration({
       taskId,
-      activityOnly: activityBody.type !== "TaskDescriptionUpdate",
+      activityOnlyOwnerId: activityBody.type === "TaskDescriptionUpdate" ? null : task?.userId,
     });
   }
 

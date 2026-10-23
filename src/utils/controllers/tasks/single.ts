@@ -696,11 +696,13 @@ export async function updateTaskSingle(
     scheduleTaskSummaryGeneration({
       taskId: newTask.id,
       agentId: agentId ?? null,
-      activityOnly:
+      activityOnlyOwnerId:
         !titleChanged &&
         !descriptionChanged &&
         requestedMutation.ticketNumber === undefined &&
-        requestedMutation.projectId === undefined,
+        requestedMutation.projectId === undefined
+          ? taskBeforeWrite.userId
+          : null,
     });
     if (titleChanged || descriptionChanged) {
       scheduleClassifyTaskAiLabels(task.id, task.projectId);
