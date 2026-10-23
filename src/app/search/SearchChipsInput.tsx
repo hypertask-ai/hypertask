@@ -5,7 +5,7 @@ import { MobileViewContext } from "@/lib/contexts/mobileContext";
 import { HTPR_6371_MOBILE_SEARCH_FLAG, HTPR_6368_SEARCH_OPERATOR_LOGIC_FLAG, HTPR_7387_SEARCH_OPERATOR_COLOURS_FLAG, HTPR_7563_SEARCH_ESC_FOOTER_FLAG, HTPR_7559_ENTER_RUNS_SEARCH_FLAG } from "@/lib/flags/keys";
 import { isMobileSearchSubmit, mobileSearchPickerBounds } from "@/lib/search/mobile";
 import { useFlag } from "@/hooks/useFlag";
-import { HTPR_6865_SEARCH_LAYOUT_FLAG, HTPR_6994_SEARCH_ESC_LEAVES_FLAG } from "@/lib/flags/keys";
+import { HTPR_6994_SEARCH_ESC_LEAVES_FLAG } from "@/lib/flags/keys";
 import { MentionListRows } from "@/components/AI_CHAT/MentionListComp";
 import { candidateQuery, chipQuery, searchChipText, splitSearchChips } from "@/lib/search/chips";
 import { operatorMatches, parseSearchTokens, SEARCH_OPERATORS, LOGIC_OPERATORS, type Names, type SearchToken } from "@/lib/search/operators";
@@ -39,8 +39,7 @@ export default function SearchChipsInput({ value, onChange, onRun, boardId, inpu
   const [composing, setComposing] = useState(false);
   const composingRef = useRef(false);
   const [mobileBounds, setMobileBounds] = useState<(ReturnType<typeof mobileSearchPickerBounds> & { left: number; width: number }) | null>(null);
-  const layoutFlagEnabled = useFlag(HTPR_6865_SEARCH_LAYOUT_FLAG);
-  const layoutEnabled = layoutFlagEnabled && layoutRequested;
+  const layoutEnabled = layoutRequested;
   const enterRunsSearchFlagEnabled = useFlag(HTPR_7559_ENTER_RUNS_SEARCH_FLAG);
   const enterRunsSearchEnabled = enterRunsSearchFlagEnabled && layoutEnabled && !mobileEnabled;
   const labelScopeEnabled = layoutEnabled;
@@ -506,7 +505,7 @@ export default function SearchChipsInput({ value, onChange, onRun, boardId, inpu
         />
         </div>
       </div>
-      {open && layoutFlagEnabled && layoutRequested ? (
+      {open && layoutRequested ? (
         <div ref={pickerRef} id={listId} role="listbox" aria-label="Search suggestions" data-search-layout
           style={pickerStyle} className={`w-full min-w-0 ${mobileOverlay ? "bg-containerBackground" : "mt-4"}`} onMouseDown={(event) => event.preventDefault()}>
           {tips ? <>

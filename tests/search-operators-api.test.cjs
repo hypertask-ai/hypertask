@@ -42,9 +42,7 @@ const mocks = new Map([
   ['src/lib/prisma.ts', { default: db }],
   ['src/lib/flags.ts', {
     HTPR_6881_SEARCH_FUZZY_PERSON_FLAG: 'htpr-6881-search-fuzzy-person',
-    HTPR_6865_SEARCH_LAYOUT_FLAG: 'htpr-6865-search-layout',
-    isFeatureEnabled: async (key) => key === 'htpr-6881-search-fuzzy-person' ? false
-      : key !== state.disabledFlag,
+    isFeatureEnabled: async (key) => key !== 'htpr-6881-search-fuzzy-person',
   }],
   ['src/utils/controllers/projects/getAllIncludes.ts', {
     projectContentAccessWhere: (userId) => ({ ownerId: userId }),
@@ -243,26 +241,11 @@ test('label scope works independently with permanent match highlights', async ()
   assert.deepEqual(results.map((task) => task.searchMatch?.labels), [[' Bug '], ['Bug']])
 })
 
-test('filtered comment-only matches preserve author and snippet unless a layout prerequisite is off', async () => {
+test('filtered comment-only matches preserve author and snippet with permanent highlights', async () => {
   const commentHits = [{ id: '44', taskId: '123', commentText: 'webhook failed', creatorName: 'Comment Writer' }]
   const on = await search('webhook from:6', { commentHits })
   assert.equal(on.res.body.processedData.All[0].commentId, 44)
   assert.equal(on.res.body.processedData.All[0].commentText, 'webhook failed')
   assert.equal(on.res.body.processedData.All[0].searchMatch.commentAuthor, 'Comment Writer')
-  for (const disabledFlag of ['htpr-6865-search-layout']) {
-    const off = await search('webhook from:6', { commentHits, disabledFlag })
-    assert.equal(off.res.body.processedData.All[0].commentId, undefined)
-    assert.equal(off.res.body.processedData.All[0].searchMatch, undefined)
-  }
-})
 
-test('layout off preserves legacy response bytes and does not select names', async () => {
-  const baseline = JSON.stringify((await search('from:6', { disabledFlag: 'htpr-6865-search-layout' })).res.body)
-  for (const disabledFlag of ['htpr-6865-search-layout']) {
-    const { res, state } = await search('from:6', { disabledFlag })
-    assert.equal(JSON.stringify(res.body), baseline)
-    assert.equal(state.selects[0].user, undefined)
-    assert.equal(state.selects[0].assignees, undefined)
-    assert.equal(state.selects[0].taskLabels, undefined)
-  }
 })

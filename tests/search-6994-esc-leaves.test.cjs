@@ -6,7 +6,6 @@ const { JSDOM } = require('jsdom')
 const { createJiti } = require('jiti')
 const root = path.resolve(__dirname, '..')
 const leavesFlag = 'htpr-6994-search-esc-leaves'
-const layoutFlag = 'htpr-6865-search-layout'
 
 async function withSearch(t, config, check) {
   const dom = new JSDOM('<div id="root"></div>', { url: 'https://example.test/search' })
@@ -21,7 +20,7 @@ async function withSearch(t, config, check) {
   const stub = (filename, exports) => { require.cache[filename] = { id: filename, filename, loaded: true, exports } }
   const source = (file, exports) => stub(path.join(root, file), exports)
   if (config.storedHistory !== undefined) sessionStorage.setItem('htpr-6879-search-history', config.storedHistory)
-  const flags = Object.fromEntries([layoutFlag, leavesFlag].map((key) => [key, true]))
+  const flags = { [leavesFlag]: true }
   Object.assign(flags, config.flags)
   const requests = []
   const lookups = []

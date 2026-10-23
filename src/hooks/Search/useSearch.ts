@@ -1,7 +1,7 @@
 import { parseSearchQuery } from "@/lib/search/operators";
 import { searchConfig } from "@/lib/configs/search.config";
-import { HTPR_6865_SEARCH_LAYOUT_FLAG, HTPR_6994_SEARCH_ESC_LEAVES_FLAG } from "@/lib/flags/keys";
-import { useFlag, useFlagReady } from "@/hooks/useFlag";
+import { HTPR_6994_SEARCH_ESC_LEAVES_FLAG } from "@/lib/flags/keys";
+import { useFlag } from "@/hooks/useFlag";
 import { HTPR_7558_SLASH_SEARCH_FOCUS_FLAG } from "@/lib/flags/definitions/htpr-7558-slash-search-focus";
 import { isServerSearchFor, type ServerStartedSearch } from "@/lib/search/serverStartedSearch";
 import { useDeviceContext } from "@/lib/contexts/deviceContext";
@@ -50,8 +50,6 @@ export function useSearch(
   const [inputValue, setInputValue] = useState<string>(_searchTerm ?? "");
   const [submittedQuery, setSubmittedQuery] = useState<string | null>(null);
   const [typedTasks, setTypedTasks] = useState<ITypedTask[]>([]);
-  const [tempInput, setTempInput] = useState<string>("");
-  const [selectedHistory, setSelectedHistory] = useState<number | null>(null);
   const [selectedIndex, setSelectedIndex] = useState<number | null>(
     searchTaskIndex ?? null
   );
@@ -78,7 +76,6 @@ export function useSearch(
   const lastSearchKey = useRef<string | null>(null);
   const tabSearchHistory = useRef<string[] | null>(null);
   const pendingServerSearch = useRef(serverStartedSearch);
-  const mountSearchAwaitsFlags = useRef(false);
   const controller: { [key: number]: { pressed: boolean } } = {
     ...globalConstants.multipleKeys,
   };
@@ -87,11 +84,9 @@ export function useSearch(
   const router = useRouter();
   const queryClient = useQueryClient();
   const isApple = useDeviceContext();
-  const searchLayoutEnabled = useFlag(HTPR_6865_SEARCH_LAYOUT_FLAG);
   const searchEscLeavesEnabled = useFlag(HTPR_6994_SEARCH_ESC_LEAVES_FLAG);
   const slashSearchFocusEnabled = useFlag(HTPR_7558_SLASH_SEARCH_FOCUS_FLAG);
-  const searchFlagsReady = useFlagReady(HTPR_6865_SEARCH_LAYOUT_FLAG);
-  const isSearchDraft = searchLayoutEnabled && submittedQuery !== inputValue.trim();
+  const isSearchDraft = submittedQuery !== inputValue.trim();
 
   function currentSearchKey(searchTerm: string, showArchived: boolean, searchProjects = projects) {
     return JSON.stringify([
@@ -119,13 +114,11 @@ export function useSearch(
   }
 
   function recordSearch(searchTerm: string, showArchived: boolean) {
-    if (searchLayoutEnabled) {
-      const history = getTabSearchHistory();
-      const term = searchTerm.trim();
-      if (term.length >= 2 && history.at(-1) !== term) {
-        history.push(term);
-        try { sessionStorage.setItem("htpr-6879-search-history", JSON.stringify(history)); } catch {}
-      }
+    const history = getTabSearchHistory();
+    const term = searchTerm.trim();
+    if (term.length >= 2 && history.at(-1) !== term) {
+      history.push(term);
+      try { sessionStorage.setItem("htpr-6879-search-history", JSON.stringify(history)); } catch {}
     }
     setSubmittedQuery(searchTerm.trim());
     lastSearchKey.current = currentSearchKey(searchTerm, showArchived);
@@ -133,7 +126,7 @@ export function useSearch(
 
   async function showServerStartedSearch(started: Promise<ServerStartedSearch | null>, isCurrent: () => boolean) {
     const searchesBeforeWait = searchRequestGate.latestRequest();
-    if (searchLayoutEnabled) tasksInputRef.current?.blur();
+    tasksInputRef.current?.blur();
     const search = await started;
     if (!isCurrent() || pendingServerSearch.current !== started || !searchRequestGate.isLatest(searchesBeforeWait) ||
       !isServerSearchFor(search, _searchTerm, _includeArchived, _fromProject)) return;
@@ -165,9 +158,9 @@ export function useSearch(
 
   async function handleSearchOnMount(showArchived = includeArchived) {
     if (_searchTerm && _searchTerm.length >= 2) {
-      const serverSearch = searchFlagsReady ? pendingServerSearch.current : undefined;
+      const serverSearch = pendingServerSearch.current;
       const requestId = beginSearch(_searchTerm, showArchived);
-      if (searchLayoutEnabled) tasksInputRef.current?.blur();
+      tasksInputRef.current?.blur();
       try {
         const response = await mountSearchResponse(showArchived, serverSearch);
 
@@ -198,7 +191,7 @@ export function useSearch(
     }));
     setTasksPlayList(tasksPlayList);
     const url = searchConfig.urls.taskDetail(task.projectId, task.uniqueIndex);
-    if (searchLayoutEnabled && task.commentId &&
+    if (task.commentId &&
       parseSearchQuery(inputValue, {}, true).filters.commenter?.some((filter) => !filter.negated)) {
       router.push(`${url}?commentId=comment-${task.commentId}`);
     } else {
@@ -210,7 +203,6 @@ export function useSearch(
     setResponseMessage(message);
     setTypedTasks([]);
     setSelectedIndex(null);
-    setSelectedHistory(null);
     setTabs([]);
     setActiveSplit(0);
     setResults(null);
@@ -273,7 +265,8 @@ export function useSearch(
   function updateSearchHistory(searchTerm: string) {
     if (searchTerm.length < 2) {
       searchRequestGate.invalidate();
-      if (searchLayoutEnabled) { setSubmittedQuery(null); setResponseMessage(searchConfig.responseMessages.default); }
+      setSubmittedQuery(null);
+      setResponseMessage(searchConfig.responseMessages.default);
       router.replace(searchUrl(searchTerm, null, includeArchived));
       setTypedTasks([]);
       setSelectedIndex(null);
@@ -294,7 +287,7 @@ export function useSearch(
   async function executeSearch(
     searchTerm: string,
     updatedHistory: string[],
-    options?: { showArchived?: boolean; resetTab?: boolean; live?: boolean }
+    options?: { showArchived?: boolean; resetTab?: boolean }
   ) {
     const showArchived = options?.showArchived ?? includeArchived;
     const requestId = beginSearch(searchTerm, showArchived);
@@ -307,7 +300,7 @@ export function useSearch(
         return handleStatesOnResponse(searchConfig.responseMessages.fail);
       lastSearchKey.current = currentSearchKey(searchTerm, showArchived, searchProjects);
 
-      if (!options?.live) router.replace(
+      router.replace(
         searchUrl(
           searchTerm,
           options?.resetTab ? null : explicitTabIndex,
@@ -333,10 +326,8 @@ export function useSearch(
             results: [],
           };
 
-          if (!options?.live) {
-            queryClient.setQueryData(["Search"], newData);
-            localStorage.setItem("searchCache", JSON.stringify(newData));
-          }
+          queryClient.setQueryData(["Search"], newData);
+          localStorage.setItem("searchCache", JSON.stringify(newData));
           applySearchResults(
             processedData,
             splits,
@@ -396,7 +387,7 @@ export function useSearch(
       ["ArrowDown", "ArrowUp"].includes(event.key);
     if ((event.defaultPrevented && !resultArrow) ||
       (event.key === "Escape" && !searchEscLeavesEnabled && tasksInputRef.current?.getAttribute("aria-expanded") === "true")) return;
-    const cycleSearchTabs = searchLayoutEnabled && !isSearchDraft && event.key === "Tab" &&
+    const cycleSearchTabs = !isSearchDraft && event.key === "Tab" &&
       !event.isComposing && !event.ctrlKey && !event.metaKey && !event.altKey &&
       tasksInputRef.current?.getAttribute("aria-expanded") !== "true";
     if (document.activeElement === tasksInputRef.current &&
@@ -413,7 +404,7 @@ export function useSearch(
 
     if (event.keyCode === KeyCodes.ESCAPE && !showCommands.show) {
       event.preventDefault();
-      if (searchLayoutEnabled && !searchEscLeavesEnabled) {
+      if (!searchEscLeavesEnabled) {
         const history = getTabSearchHistory();
         if (!isSearchDraft) history.pop();
         const previous = history.at(-1) ?? "";
@@ -450,7 +441,7 @@ export function useSearch(
     if (event.keyCode === KeyCodes.FORWARD_SLASH) {
       event.preventDefault();
       document.getElementById(searchConfig.elementIds.input.id)?.focus();
-      if (searchLayoutEnabled) tasksInputRef.current?.setSelectionRange(tasksInputRef.current.value.length, tasksInputRef.current.value.length);
+      tasksInputRef.current?.setSelectionRange(tasksInputRef.current.value.length, tasksInputRef.current.value.length);
       setSelectedIndex(null);
     }
 
@@ -468,28 +459,6 @@ export function useSearch(
       (event.keyCode === KeyCodes.J && !isInputFocused) ||
       event.keyCode === KeyCodes.ARROW_DOWN
     ) {
-      const historyList = document.getElementById(
-        searchConfig.elementIds.history.id
-      );
-
-      if (!!historyList) {
-        if (selectedHistory === null) {
-          setSelectedHistory(0);
-          setTempInput(inputValue);
-          setInputValue(searchCache.history[0]);
-          document.getElementById(searchConfig.elementIds.input.id)?.blur();
-        } else {
-          if (
-            selectedHistory === -1 ||
-            selectedHistory === searchCache.history.length - 1
-          ) {
-          } else {
-            setSelectedHistory(selectedHistory + 1);
-            setInputValue(searchCache.history[selectedHistory + 1]);
-          }
-        }
-      }
-
       if (typedTasks.length > 0) {
         event.preventDefault();
         tasksInputRef.current?.blur();
@@ -513,25 +482,6 @@ export function useSearch(
       (event.keyCode === KeyCodes.K && !isInputFocused) ||
       event.keyCode === KeyCodes.ARROW_UP
     ) {
-      const historyList = document.getElementById(
-        searchConfig.elementIds.history.id
-      );
-
-      if (!!historyList) {
-        if (selectedHistory === null) {
-        } else {
-          if (selectedHistory <= 0) {
-            setSelectedHistory(null);
-            setInputValue(tempInput);
-            setTempInput("");
-            document.getElementById(searchConfig.elementIds.input.id)?.focus();
-          } else {
-            setSelectedHistory(selectedHistory - 1);
-            setInputValue(searchCache.history[selectedHistory - 1]);
-          }
-        }
-      }
-
       if (typedTasks.length > 0) {
         event.preventDefault();
         tasksInputRef.current?.blur();
@@ -552,9 +502,7 @@ export function useSearch(
 
     if (
       (event.keyCode === KeyCodes.TAB || cycleSearchTabs) && tabs.length > 0 &&
-      (searchLayoutEnabled
-        ? cycleSearchTabs && !isInputFocused && tabs.length > 1
-        : !isInputFocused)
+      cycleSearchTabs && !isInputFocused && tabs.length > 1
     ) {
       event.preventDefault();
       let newValue;
@@ -666,7 +614,6 @@ export function useSearch(
 
     debounceTimeout.current = setTimeout(() => {
       if (currentHoveredDiv.current !== null && liSelectedRef.current) {
-        if (!searchLayoutEnabled) (liSelectedRef.current as HTMLLIElement)?.blur();
         currentHoveredDiv.current = null;
       }
     }, 100);
@@ -686,7 +633,6 @@ export function useSearch(
       document.activeElement?.id !== searchConfig.elementIds.input.id
     )
       setSelectedAndInView(typedTasks[currentIndex], currentIndex);
-    else if (searchCache.history.length > 0) setSelectedHistory(currentIndex);
     clearTimeout(debounceTimeout.current);
     debounceTimeout.current = null;
   }
@@ -718,9 +664,7 @@ export function useSearch(
     selectedIndex,
     inputValue,
     searchCache,
-    selectedHistory,
     includeArchived,
-    searchLayoutEnabled,
     searchEscLeavesEnabled,
     isSearchDraft,
     activeSplit,
@@ -733,13 +677,13 @@ export function useSearch(
   const hasProjects = projects.length > 0;
   useEffect(() => {
     const started = pendingServerSearch.current;
-    if (!started || !searchFlagsReady || hasProjects || (slashSearchFocusEnabled && _searchTerm.length < 2)) return;
+    if (!started || hasProjects || (slashSearchFocusEnabled && _searchTerm.length < 2)) return;
     let current = true;
     void showServerStartedSearch(started, () => current);
     return () => {
       current = false;
     };
-  }, [searchFlagsReady, hasProjects, _searchTerm, _includeArchived, _fromProject, slashSearchFocusEnabled]);
+  }, [hasProjects, _searchTerm, _includeArchived, _fromProject, slashSearchFocusEnabled]);
 
   useEffect(() => {
     setExplicitTabIndex(_initialTabIndex);
@@ -750,11 +694,9 @@ export function useSearch(
     setInputValue(_searchTerm);
     if (projects.length > 0 && _searchTerm.length >= 2) {
       const key = currentSearchKey(_searchTerm, _includeArchived);
-      const sameSearchMissingFromHistory = lastSearchKey.current === key && searchLayoutEnabled &&
+      const sameSearchMissingFromHistory = lastSearchKey.current === key &&
         getTabSearchHistory().at(-1) !== _searchTerm.trim();
-      const serverSearchAwaitsFlags = !!pendingServerSearch.current && !searchFlagsReady;
       if (searchOnce && sameSearchMissingFromHistory) recordSearch(_searchTerm, _includeArchived);
-      else if (searchOnce && serverSearchAwaitsFlags && lastSearchKey.current !== key) mountSearchAwaitsFlags.current = true;
       else if (lastSearchKey.current !== key || sameSearchMissingFromHistory) void handleSearchOnMount(_includeArchived);
       return;
     }
@@ -763,13 +705,7 @@ export function useSearch(
       lastSearchKey.current = currentSearchKey("", _includeArchived);
       handleStatesOnResponse(searchConfig.responseMessages.default);
     }
-  }, [_searchTerm.length >= 2 ? projects : null, _includeArchived, _searchTerm, _fromProject, searchLayoutEnabled]);
-
-  useEffect(() => {
-    if (!searchFlagsReady || !mountSearchAwaitsFlags.current) return;
-    mountSearchAwaitsFlags.current = false;
-    if (pendingServerSearch.current) void handleSearchOnMount(_includeArchived);
-  }, [searchFlagsReady]);
+  }, [_searchTerm.length >= 2 ? projects : null, _includeArchived, _searchTerm, _fromProject]);
 
   useEffect(() => {
     if (!projects.length) return;
@@ -778,25 +714,12 @@ export function useSearch(
     if (lastSearchKey.current === key) return;
     searchRequestGate.invalidate();
     lastSearchKey.current = null;
-    if (searchLayoutEnabled) {
-      setSubmittedQuery(null);
-      handleStatesOnResponse(searchConfig.responseMessages.default);
-      return;
-    }
-    if (term.length < 2) {
-      handleStatesOnResponse(searchConfig.responseMessages.default);
-      return;
-    }
-    const timer = setTimeout(() => {
-      if (lastSearchKey.current !== key) {
-        void executeSearch(term, searchCache.history ?? [], { live: true });
-      }
-    }, 300);
-    return () => clearTimeout(timer);
-  }, [inputValue, includeArchived, projects, _fromProject, searchLayoutEnabled]);
+    setSubmittedQuery(null);
+    handleStatesOnResponse(searchConfig.responseMessages.default);
+  }, [inputValue, includeArchived, projects, _fromProject]);
 
   return {
-    availableSearchBoards: searchLayoutEnabled ? projects : [],
+    availableSearchBoards: projects,
     setSelectedIndex,
     selectedIndex,
     tasksInputRef,
@@ -810,7 +733,6 @@ export function useSearch(
     handleMouseLeave,
     handleMouseMove,
     searchCache,
-    selectedHistory,
     updateSearchHistory,
     showCommands,
     setInputValue,

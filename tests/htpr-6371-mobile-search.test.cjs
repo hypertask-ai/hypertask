@@ -157,8 +157,7 @@ test('real input, composition and native beforeinput events complete phone chips
   }
 })
 
-
-test('phone picker fills the keyboard-safe list even when the separate search layout flag is off', () => {
+test('phone picker fills the keyboard-safe list independently of the requested input layout', () => {
   assert.match(input, /mobileEnabled \? "w-full h-full max-h-full max-w-full \[&_button\]:min-h-\[44px\]"/)
   assert.match(input, /!mobileEnabled && <div/)
   assert.match(input, /mobileEnabled && pickerRef\.current\?\.querySelector<HTMLElement>\(`/)

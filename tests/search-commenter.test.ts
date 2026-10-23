@@ -156,8 +156,7 @@ const documentHandler = jiti(path.join(root, 'src/pages/api/search/document.ts')
 const valuesHandler = jiti(path.join(root, 'src/pages/api/search/values.ts')).default as any
 const { GET } = jiti(path.join(root, 'src/lib/mcp/operations/tasks/search/operation.ts')) as any
 function reset(overrides: any = {}) {
-  state = { session: { userId: 42 }, flags: { [fuzzyFlag]: true,
-    [keys.HTPR_6865_SEARCH_LAYOUT_FLAG]: true },
+  state = { session: { userId: 42 }, flags: { [fuzzyFlag]: true },
     indexComments: [], countQueries: [], anchorQueries: [], peopleQueries: [], taskQueries: [], commentQueries: [], detailQueries: [], flagCalls: [], deleted: [], indexCalls: 0, ...overrides }
 }
 const response = () => ({ code: 0, body: undefined as any, status(code: number) { this.code = code; return this }, json(body: any) { this.body = body; return this } })
@@ -252,20 +251,13 @@ test('permanent highlights preserve matching commenter snippets and author metad
   assert.equal(state.indexCalls, 0)
 })
 
-test('comment author pill falls back to email and highlight prerequisites do not disable commenter filtering', async () => {
+test('comment author pill falls back to email with permanent highlights', async () => {
   const displayName = people[0].displayName
   try {
     people[0].displayName = ''
     reset()
     assert.equal((await search('needle commenter:1')).body.processedData.All[0].searchMatch.commentAuthor, 'one@example.test')
-    for (const prerequisite of [keys.HTPR_6865_SEARCH_LAYOUT_FLAG]) {
-      reset()
-      state.flags[prerequisite] = false
-      const row = (await search('needle commenter:1')).body.processedData.All[0]
-      assert.equal(row.commentId, 2)
-      assert.equal(row.searchMatch, undefined)
-      assert.equal(row.commentText, comments[1].commentText)
-    }
+
   } finally {
     people[0].displayName = displayName
   }
@@ -336,7 +328,6 @@ test('MCP shares authorization, parser, comment snippets and newest-comment pagi
   const denied = await GET(new NextRequest('http://localhost/api/mcp/tasks/search?q=commenter:1&board_id=999'))
   assert.equal(denied.status, 403)
 })
-
 
 test('API and MCP retain the fuzzy-person flag for permanent commenter search', async () => {
   for (const fuzzy of [false, true]) {

@@ -28,7 +28,6 @@ const query = (rows, args) => rows.filter((row) => matches(row, args.where))
 const mocks = new Map([
   ['src/lib/auth/getSessionUser.ts', { getSessionUser: async () => state.session }],
   ['src/lib/auth/agentScope.ts', { withAgentScopeRequest: (_request, run) => run() }],
-  ['src/lib/flags.ts', { HTPR_6865_SEARCH_LAYOUT_FLAG: 'htpr-6865-search-layout', isFeatureEnabled: async () => false }],
   ['src/utils/controllers/projects/getAllIncludes.ts', { getProjectWhere: (id) => ({ ownerId: id }) }],
   ['src/lib/prisma.ts', { default: {
     project: { findMany: async ({ where }) => {
@@ -40,6 +39,7 @@ const mocks = new Map([
       assert.deepEqual(args.where.projectId.in, [7])
       return query(state.labels, args)
     } },
+    taskLabel: { groupBy: async () => [] },
     task: { findMany: async (args) => {
       assert.deepEqual(args, { where: { projectId: { in: [7] }, createdAt: { gte: args.where.createdAt.gte }, project: { ownerId: 6 } }, select: { userId: true }, orderBy: { createdAt: 'desc' }, take: 100 })
       assert.ok(args.where.createdAt.gte instanceof Date)
@@ -74,20 +74,20 @@ test('lookup filters before capping 100 visible labels and people', async () => 
   const labels = Array.from({ length: 150 }, (_, i) => ({ id: `a-${i}`, value: `Alpha ${i}`, projectId: 7 }))
   labels.push({ id: 'zebra', value: 'Zebra', projectId: 7 })
   const assignee = await lookup('assignee', 'zoe', { people })
-  assert.deepEqual(assignee.res.body.candidates, [{ id: 999, name: 'Zoe' }])
+  assert.deepEqual(assignee.res.body.candidates, [{ id: 999, name: 'Zoe', email: '999@example.com' }])
   assert.equal(assignee.state.peopleScope, 7)
   assert.equal(assignee.state.peopleQueries[0].take, 100)
   assert.equal(assignee.state.peopleQueries[1].take, 99)
   assert.ok(assignee.state.peopleQueries[0].orderBy)
   const label = await lookup('label', 'zebra', { labels })
-  assert.deepEqual(label.res.body.candidates, [{ id: 'zebra', name: 'Zebra' }])
-  assert.equal(label.state.labelQueries[0].take, 100)
+  assert.deepEqual(label.res.body.candidates, [{ id: 'zebra', name: 'Zebra', count: 0, byName: true }])
+  assert.equal(label.state.labelQueries[0].take, undefined)
   assert.ok(label.state.labelQueries[0].orderBy)
   const contains = await lookup('label', 'zebra', { labels: [
     ...labels.slice(0, -1), { id: 'mid-zebra', value: 'Needs Zebra', projectId: 7 },
   ] })
-  assert.deepEqual(contains.res.body.candidates, [{ id: 'mid-zebra', name: 'Needs Zebra' }])
-  assert.equal(contains.state.labelQueries[1].where.AND[0].value.contains, 'zebra')
+  assert.deepEqual(contains.res.body.candidates, [{ id: 'mid-zebra', name: 'Needs Zebra', count: 0, byName: true }])
+  assert.equal(contains.state.labelQueries.length, 1)
 })
 test('empty assignee lookup includes people past the unordered first 100', async () => {
   const people = Array.from({ length: 150 }, (_, i) => person(i + 1, `Zoe ${String(i).padStart(3, '0')}`))

@@ -18,8 +18,7 @@ let taskRows: any[] = []
 let commentRows: any[] = []
 let databaseRows: any[] = []
 const flags = {
-  HTPR_6865_SEARCH_LAYOUT_FLAG: 'layout',
-  isFeatureEnabled: async (flag: string) => flag === 'layout',
+  isFeatureEnabled: async () => false,
 }
 for (const [file, exports] of [
   ['src/lib/prisma.ts', { default: {
