@@ -13,6 +13,7 @@ Read the "when to load" column, open that SKILL.md, and follow it, including its
 | Skill | When to load (/ship step) | Path |
 |---|---|---|
 | ship | Start of every session (`/ship <ticket>`): the map of steps, the proof checklist, the merge and Done block | .claude/skills/ship/SKILL.md |
+| maintain-verification-skill | Weekly source-only timer and GitHub feature-map check; runner-owned live QA (pstack by Lauren Tan, MIT) | .claude/skills/maintain-verification-skill/SKILL.md |
 | scriptify | Weekly routine discovery, deterministic scripts and runner handoff | .claude/skills/scriptify/SKILL.md |
 | setup-runner | `/setup-runner [number]` in a fresh session: set up its runner login and identity, then follow /ship without a ticket | .claude/skills/setup-runner/SKILL.md |
 | clean-up | After Done (from /ship), or by hand with `/clean-up`: removes this session's own finished worktrees and branches | .claude/skills/clean-up/SKILL.md |
