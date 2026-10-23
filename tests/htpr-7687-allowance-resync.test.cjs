@@ -18,11 +18,13 @@ function stubModule(relativePath, exports) {
 let client;
 let resyncFlagOn = true;
 stubModule("src/lib/redis.ts", { getRedis: async () => client });
+const resyncFlagUsers = [];
 stubModule("src/lib/flags.ts", {
-  isFeatureEnabled: async (key) =>
-    key === "htpr-7687-allowance-resync"
-      ? resyncFlagOn
-      : key === "htpr-7079-failed-ai-allowance",
+  isFeatureEnabled: async (key, userId) => {
+    if (key !== "htpr-7687-allowance-resync") return key === "htpr-7079-failed-ai-allowance";
+    resyncFlagUsers.push(userId);
+    return resyncFlagOn;
+  },
 });
 
 const jiti = require("jiti")(path.join(root, "tests/htpr-7687-allowance-resync.cjs"), {
@@ -278,13 +280,35 @@ test("refused: an expired reservation swept into the counter is journaled, so a 
   assert.equal(await committed(), 5_000_000);
 });
 
-test("refused: switching the flag off and on restarts the journal, so spend made while off is kept", async () => {
+test("allowed: reported legacy pending spend is not counted twice by a resync", async () => {
+  await freshTeam(2_500_000);
+  await client.set(`${prefix}:legacy-pending`, "2500000");
+  gateway.teamSpendUsd = 4;
+  await answer();
+  const after = await committed();
+  assert.ok(after >= 1_500_000 && after < 1_510_000, `committed ${after}`);
+});
+
+test("refused: spend settled while the flag is off is journaled too, so a lagging gateway cannot erase it", async () => {
   await freshTeam(CAP_MICRO_USD - 1_300_000);
   resyncFlagOn = false;
   await answer(26_000);
-  assert.equal(await client.get(`${prefix}:recent-settled-since`), null);
+  assert.equal(await client.zcard(`${prefix}:recent-settled`), 1);
   resyncFlagOn = true;
   gateway.teamSpendUsd = (CAP_MICRO_USD - 1_300_000) / 1_000_000;
   await assert.rejects(answer(20_000), /used its included AI allowance/);
   assert.ok(await committed() >= CAP_MICRO_USD);
+});
+
+test("the flag is read for the user who makes the call, so Owner + QA reaches Valentin and QA", async () => {
+  await freshTeam(0);
+  resyncFlagUsers.length = 0;
+  await middleware().wrapGenerate({
+    params: { ...params, providerOptions: { gateway: { tags: [`team:${TEAM}`, "user:985"] } } },
+    model: {},
+    doStream: async () => { throw new Error("unused"); },
+    doGenerate: async () => ({ content: [], usage: { inputTokens: { total: 2 }, outputTokens: { total: 1 } } }),
+  });
+  await answer();
+  assert.deepEqual(resyncFlagUsers, [985, 0]);
 });

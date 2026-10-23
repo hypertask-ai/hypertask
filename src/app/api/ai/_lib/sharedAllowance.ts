@@ -104,7 +104,7 @@ type AllowanceReservation = {
   id: string;
   inputOnlyMicroUsd: number | null;
   pricing: ModelPricing;
-  recentSettledKey: string | null;
+  recentSettledKey: string;
   reservationsKey: string;
   ttlSeconds: number;
 };
@@ -147,6 +147,16 @@ function teamTagFromProviderOptions(providerOptions: unknown): string | null {
     return match?.[1] ? [match[1]] : [];
   });
   return teamIds.length === 1 ? teamIds[0] : null;
+}
+
+function userIdFromProviderOptions(providerOptions: unknown): number | null {
+  const tags = (providerOptions as { gateway?: { tags?: unknown } } | null)?.gateway?.tags;
+  if (!Array.isArray(tags)) return null;
+  const userIds = tags.flatMap((tag) => {
+    const match = typeof tag === "string" ? /^user:(\d+)$/.exec(tag.trim()) : null;
+    return match ? [Number(match[1])] : [];
+  });
+  return userIds.length === 1 ? userIds[0] : null;
 }
 
 function allowanceLaneFromProviderOptions(
@@ -297,9 +307,9 @@ async function failedCallsCountInputOnly(): Promise<boolean> {
   }
 }
 
-async function allowanceFollowsRealSpend(): Promise<boolean> {
+async function allowanceFollowsRealSpend(userId: number | null): Promise<boolean> {
   try {
-    return await isFeatureEnabled(HTPR_7687_ALLOWANCE_RESYNC_FLAG, 0);
+    return await isFeatureEnabled(HTPR_7687_ALLOWANCE_RESYNC_FLAG, userId ?? 0);
   } catch {
     return false;
   }
@@ -447,12 +457,12 @@ local expired = redis.call("ZRANGEBYSCORE", KEYS[2], "-inf", ARGV[1])
 for _, member in ipairs(expired) do
   local amount = string.match(member, "|(%d+)$")
   if amount then committed = committed + tonumber(amount) end
-  if KEYS[4] then redis.call("ZADD", KEYS[4], ARGV[1], member) end
+  redis.call("ZADD", KEYS[4], ARGV[1], member)
 end
 if #expired > 0 then
   redis.call("ZREMRANGEBYSCORE", KEYS[2], "-inf", ARGV[1])
   redis.call("SET", KEYS[1], committed)
-  if KEYS[4] then redis.call("EXPIRE", KEYS[4], ARGV[6]) end
+  redis.call("EXPIRE", KEYS[4], ARGV[6])
 end
 local active = redis.call("ZRANGE", KEYS[2], 0, -1)
 local reserved = 0
@@ -467,14 +477,6 @@ if committed + reserved + pending + requested > cap then return 0 end
 redis.call("ZADD", KEYS[2], ARGV[4], ARGV[5])
 redis.call("EXPIRE", KEYS[1], ARGV[6])
 redis.call("EXPIRE", KEYS[2], ARGV[6])
-return 1
-`;
-
-const SETTLE_SCRIPT = `
-local removed = redis.call("ZREM", KEYS[2], ARGV[1])
-if removed == 0 then return 0 end
-redis.call("INCRBY", KEYS[1], ARGV[2])
-redis.call("EXPIRE", KEYS[1], ARGV[3])
 return 1
 `;
 
@@ -500,7 +502,8 @@ for _, member in ipairs(redis.call("ZRANGE", KEYS[2], 0, -1)) do
   if amount then recentlySettled = recentlySettled + tonumber(amount) end
 end
 local committed = tonumber(redis.call("GET", KEYS[1]) or "0")
-local observed = tonumber(ARGV[1])
+local legacyPending = KEYS[4] and tonumber(redis.call("GET", KEYS[4]) or "0") or 0
+local observed = math.max(tonumber(ARGV[1]) - legacyPending, 0)
 local resynced = math.max(observed, committed)
 if journalCoversDelay then
   resynced = math.max(observed, math.min(committed, observed + recentlySettled))
@@ -514,6 +517,7 @@ async function resyncToGatewaySpend(args: {
   gatewayApiKey: string;
   journalStartedKey: string;
   lane: AllowanceLane;
+  legacyPendingKey: string;
   lockKey: string;
   month: ReturnType<typeof aiAllowancePeriod>;
   recentSettledKey: string;
@@ -542,10 +546,11 @@ async function resyncToGatewaySpend(args: {
   const now = Date.now();
   await args.redis.eval(
     RESYNC_TO_GATEWAY_SCRIPT,
-    3,
+    args.lane === "visible" ? 4 : 3,
     args.committedKey,
     args.recentSettledKey,
     args.journalStartedKey,
+    ...(args.lane === "visible" ? [args.legacyPendingKey] : []),
     String(
       args.lane === "system"
         ? observedSpend.systemMicroUsd
@@ -619,6 +624,7 @@ async function reserveSharedAllowance(args: {
   modelSlug: string;
   prompt: unknown;
   teamId: string;
+  userId: number | null;
 }): Promise<AllowanceReservation> {
   const now = new Date();
   const month = aiAllowancePeriod(now);
@@ -637,7 +643,7 @@ async function reserveSharedAllowance(args: {
   const reservationsKey =
     args.lane === "system" ? systemReservationsKey : visibleReservationsKey;
   const lanePrefix = args.lane === "system" ? `${keyPrefix}:system` : keyPrefix;
-  const followsRealSpend = await allowanceFollowsRealSpend();
+  const followsRealSpend = await allowanceFollowsRealSpend(args.userId);
   const redis = await getRedis();
 
   let initialized = false;
@@ -698,14 +704,13 @@ async function reserveSharedAllowance(args: {
   const expiresAt = Date.now() + RESERVATION_TTL_MS;
   const recentSettledKey = `${lanePrefix}:recent-settled`;
   const journalStartedKey = `${recentSettledKey}-since`;
-  if (!followsRealSpend) await redis.del(journalStartedKey);
   const reserve = () => redis.eval(
     RESERVE_SCRIPT,
-    followsRealSpend ? 4 : 3,
+    4,
     committedKey,
     reservationsKey,
     legacyPendingKey,
-    ...(followsRealSpend ? [recentSettledKey] : []),
+    recentSettledKey,
     String(Date.now()),
     String(amountMicroUsd),
     String(
@@ -728,6 +733,7 @@ async function reserveSharedAllowance(args: {
       gatewayApiKey: args.gatewayApiKey,
       journalStartedKey,
       lane: args.lane,
+      legacyPendingKey,
       lockKey: `${lanePrefix}:gateway-resync-lock`,
       month,
       recentSettledKey,
@@ -747,7 +753,7 @@ async function reserveSharedAllowance(args: {
     id: member,
     inputOnlyMicroUsd: inputOnly,
     pricing,
-    recentSettledKey: followsRealSpend ? recentSettledKey : null,
+    recentSettledKey,
     reservationsKey,
     ttlSeconds: month.ttlSeconds,
   };
@@ -758,31 +764,19 @@ async function commitReservation(
   settledMicroUsd: number,
 ) {
   const redis = await getRedis();
-  if (reservation.recentSettledKey) {
-    const now = Date.now();
-    await redis.eval(
-      SETTLE_AND_REMEMBER_SCRIPT,
-      4,
-      reservation.committedKey,
-      reservation.reservationsKey,
-      reservation.recentSettledKey,
-      `${reservation.recentSettledKey}-since`,
-      reservation.id,
-      String(settledMicroUsd),
-      String(reservation.ttlSeconds),
-      String(now),
-      String(now - GATEWAY_REPORT_DELAY_WINDOW_MS),
-    );
-    return;
-  }
+  const now = Date.now();
   await redis.eval(
-    SETTLE_SCRIPT,
-    2,
+    SETTLE_AND_REMEMBER_SCRIPT,
+    4,
     reservation.committedKey,
     reservation.reservationsKey,
+    reservation.recentSettledKey,
+    `${reservation.recentSettledKey}-since`,
     reservation.id,
     String(settledMicroUsd),
     String(reservation.ttlSeconds),
+    String(now),
+    String(now - GATEWAY_REPORT_DELAY_WINDOW_MS),
   );
 }
 
@@ -845,6 +839,7 @@ export function createSharedAllowanceMiddleware(args: {
       modelSlug: args.modelSlug,
       prompt: params.prompt,
       teamId,
+      userId: userIdFromProviderOptions(params.providerOptions),
     });
   };
 
@@ -962,6 +957,7 @@ export function createImageAllowanceMiddleware(args: {
         modelSlug: args.modelSlug,
         prompt: params.prompt,
         teamId,
+        userId: userIdFromProviderOptions(params.providerOptions),
       });
       try {
         const result = await doGenerate();

@@ -111,8 +111,8 @@ function fakeRedis() {
         if (finalReconciliation === "1") values.set(completedKey, "1");
         return fromPending + fromVisible;
       }
-      if (args.length === 3) {
-        const [member, amount] = args.map(String);
+      if (keyCount === 4 && args.length === 7) {
+        const [, , member, amount] = args.map(String);
         const removed =
           reservations.get(reservationsKey)?.delete(member) ?? false;
         if (!removed) return 0;
@@ -124,6 +124,7 @@ function fakeRedis() {
       }
       const [
         pendingKey,
+        ,
         now,
         requested,
         cap,
@@ -892,7 +893,7 @@ test("settlement failures retain the reservation against the cap", async () => {
   const redis = fakeRedis();
   const originalEval = redis.eval;
   redis.eval = async (...args) => {
-    if (args.length < 9) {
+    if (args[1] === 4 && args.length === 11) {
       throw new Error("Redis settlement unavailable");
     }
     return originalEval(...args);
