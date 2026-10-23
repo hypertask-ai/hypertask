@@ -1,3 +1,4 @@
+import { downloadWithoutBrotli } from "@/lib/net/downloadWithoutBrotli";
 import { resolveAiModel as resolveLegacyAiModel } from "@/app/api/ai/_lib/modelProvider";
 import { getAiDefaultModelContext, resolveAutomaticAiModel } from "@/app/api/ai/_lib/byokKeys";
 import { renderPrompt } from "@/lib/ai/prompts/registry";
@@ -463,6 +464,7 @@ async function generateTaskSummary(args: {
   });
   try {
     const result = await generateText({
+      experimental_download: downloadWithoutBrotli,
       model,
       output: Output.object({ schema: taskSummaryResultSchema }),
       system: renderPrompt("task-summaries-system-2"),

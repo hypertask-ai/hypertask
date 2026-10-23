@@ -1,3 +1,4 @@
+import { downloadWithoutBrotli } from "@/lib/net/downloadWithoutBrotli";
 import { applyTaskWriterDueDate, validateTaskWriterDueDate } from "@/lib/ai/taskWriterDueDate";
 import { normalizeTaskWriterTicketType, readTaskWriterTicketType, ticketTypeSafeCut, TICKET_TYPE_HEADER } from "@/lib/ai/taskWriterTicketType";
 import { reportError as reportErrorToBoard } from "@/lib/errors/reportError";
@@ -82,6 +83,7 @@ export async function POST(request: NextRequest) {
         taskId: usageTaskId, provider: selected.usageProvider, feature: "task-writer",
       });
       const result = await generateText({
+        experimental_download: downloadWithoutBrotli,
         model: selected.model, instructions, messages, tools: selected.tools,
         maxRetries: 2, providerOptions: selected.providerOptions, ...selected.settings,
         output: Output.object({ schema: tasksSchema }),
@@ -144,6 +146,7 @@ export async function POST(request: NextRequest) {
             feature: "task-writer",
           });
           const result = streamText({
+            experimental_download: downloadWithoutBrotli,
             model: selected.model,
             instructions,
             messages,

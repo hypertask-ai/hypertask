@@ -1,3 +1,4 @@
+import { downloadWithoutBrotli } from "@/lib/net/downloadWithoutBrotli";
 import { wrapMcpRoute, validateMcpRouteAuth as validateMcpAuth, checkMcpRouteRateLimit as checkMcpRateLimit } from '@/lib/mcp/routeWrapper'
 import { reportError } from "@/lib/errors/reportError";
 import { NextRequest, NextResponse } from "next/server";
@@ -92,6 +93,7 @@ export async function POST(request: NextRequest) {
       teamContext,
     });
     const { text } = await generateText({
+      experimental_download: downloadWithoutBrotli,
       model: selected.model,
       instructions: createPromptForTiptapForwardSlash(input.command, stripped),
       prompt: `Follow the provided instructions for the following content: ${stripped}`,

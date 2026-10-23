@@ -1,3 +1,4 @@
+import { downloadWithoutBrotli } from "@/lib/net/downloadWithoutBrotli";
 import { getSessionUser } from "@/lib/auth/getSessionUser";
 import { projectContentAccessWhere } from "@/utils/controllers/projects/getAllIncludes";
 import { withAgentScopeRequest } from "@/lib/auth/agentScope";
@@ -92,6 +93,7 @@ async function tiptapForwardslash(request: NextRequest) {
       teamContext,
     });
     const { text } = await generateText({
+      experimental_download: downloadWithoutBrotli,
       model: selected.model,
       instructions: createPromptForTiptapForwardSlash(
         body.command,

@@ -1,3 +1,4 @@
+import { downloadWithoutBrotli } from "@/lib/net/downloadWithoutBrotli";
 import { reportError } from "@/lib/errors/reportError";
 import { renderPrompt } from "@/lib/ai/prompts/registry";
 import { NextRequest, NextResponse } from "next/server";
@@ -226,6 +227,7 @@ async function generateBoardManifest({
   const priorityList = priorityValues.join(", ");
 
   const { output } = await generateText({
+    experimental_download: downloadWithoutBrotli,
     model: selected.model,
     output: Output.object({ schema: generatedBoardSchema }),
     maxRetries: 1,

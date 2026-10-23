@@ -1,3 +1,4 @@
+import { downloadWithoutBrotli } from "@/lib/net/downloadWithoutBrotli";
 import { withAgentScopeRequest } from "@/lib/auth/agentScope";
 import { resolveAiModel as resolveLegacyAiModel } from "@/app/api/ai/_lib/modelProvider";
 import { getAiDefaultModelContext, resolveAutomaticAiModel } from "@/app/api/ai/_lib/byokKeys";
@@ -244,6 +245,7 @@ async function generateStatusUpdate(request: NextRequest) {
       feature: "summary",
     });
     const result = await generateText({
+      experimental_download: downloadWithoutBrotli,
       model,
       output: Output.object({ schema: statusSchema }),
       maxRetries: 2,

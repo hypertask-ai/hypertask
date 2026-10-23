@@ -1,3 +1,4 @@
+import { downloadWithoutBrotli } from "@/lib/net/downloadWithoutBrotli";
 import { backgroundClaudeModelEnabled, haiku55ModelEnabled } from "@/app/api/ai/_lib/planGate";
 import { getByokOrTeamGatewayApiKeyForModelOption } from "@/app/api/ai/_lib/byokKeys";
 import { isVercelAiGatewayKey } from "@/app/api/ai/_lib/modelProvider";
@@ -48,6 +49,7 @@ export async function generateModelReply(state: StreamState, inputs: { instructi
       feature: "chat",
     });
     const result = streamText({
+      experimental_download: downloadWithoutBrotli,
       model: state.selected.model,
       instructions,
       messages,
@@ -181,6 +183,7 @@ export async function generateModelReply(state: StreamState, inputs: { instructi
     if (!ranTools && !state.cancelled && !state.providerAbort.signal.aborted) {
       try {
         const retry = await generateText({
+          experimental_download: downloadWithoutBrotli,
           model: state.selected.model,
           instructions,
           messages,

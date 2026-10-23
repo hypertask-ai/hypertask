@@ -1,3 +1,4 @@
+import { downloadWithoutBrotli } from "@/lib/net/downloadWithoutBrotli";
 import { resolveAiModel as resolveLegacyAiModel } from "@/app/api/ai/_lib/modelProvider";
 import { defaultModelKeyFor } from "@/lib/aiModelOptions";
 import { getAiDefaultModelContext, resolveAutomaticAiModel } from "@/app/api/ai/_lib/byokKeys";
@@ -199,6 +200,7 @@ export async function learnBoardMemoryFromSignal(args: {
       feature: "custom-instructions",
     });
     const result = await generateText({
+      experimental_download: downloadWithoutBrotli,
       model,
       output: Output.object({ schema: learnedFactsSchema }),
       maxRetries: 2,

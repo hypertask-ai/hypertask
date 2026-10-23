@@ -1,3 +1,5 @@
+import { fetchWithoutBrotli } from "@/lib/net/fetchWithoutBrotli";
+import { downloadWithoutBrotli } from "@/lib/net/downloadWithoutBrotli";
 import { resolveAiModel as resolveLegacyAiModel } from "@/app/api/ai/_lib/modelProvider";
 import { defaultModelKeyFor } from "@/lib/aiModelOptions";
 import { getAiDefaultModelContext, resolveAutomaticAiModel } from "@/app/api/ai/_lib/byokKeys";
@@ -218,7 +220,7 @@ async function extractCustomInstructionText(
   }
 ) {
   const fileName = getFileNameFromUrl(url);
-  const response = await fetch(url);
+  const response = await fetchWithoutBrotli(url);
   if (!response.ok) {
     throw new Error(`Failed to download ${url}: ${response.status}`);
   }
@@ -316,6 +318,7 @@ async function extractBinaryDocumentTextWithOpenAI(
     feature: "custom-instructions",
   });
   const result = await generateText({
+    experimental_download: downloadWithoutBrotli,
     model,
     messages: [{ role: "user", content }],
     maxRetries: 2,

@@ -1,3 +1,4 @@
+import { downloadWithoutBrotli } from "@/lib/net/downloadWithoutBrotli";
 import { generateText } from "ai";
 import { configureAiModelUsage } from "./modelProvider";
 import { filterOneImagePass } from "./editorAi";
@@ -33,6 +34,7 @@ export async function generateTaskWriterDraft(
     feature: "task-writer",
   });
   const { text } = await generateText({
+    experimental_download: downloadWithoutBrotli,
     model: selected.model,
     instructions,
     messages,
