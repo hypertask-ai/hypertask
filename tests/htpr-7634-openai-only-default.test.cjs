@@ -481,9 +481,9 @@ async function chatTurnOutcome({ registerManaged, ...input }, body, actingAgentI
   return turn.refused ? { refused: turn.refused } : { modelId: turn.selected.modelId, credential: turn.streamCredential };
 }
 
-test("chat payload: an agent session leaves the default to the server, a team session sends the OpenAI-only default", () => {
+test("chat payload: an agent session sends the flag-off default, a team session the OpenAI-only default", () => {
   const fields = { currentOption: lunaOption, agentSessionOption: haikuOption, usesPlanDefault: true };
-  assert.deepEqual({ ...catalog.chatModelRequestFields(fields, "fixture-agent") }, { modelFromDefault: true });
+  assert.deepEqual(catalog.chatModelRequestFields(fields, "fixture-agent"), { modelOptionId: haikuOption.id, model: haikuOption.model, provider: haikuOption.source, modelFromDefault: true });
   assert.deepEqual(catalog.chatModelRequestFields(fields, null), { modelOptionId: lunaOption.id, model: lunaOption.model, provider: lunaOption.source, modelFromDefault: true });
   const saved = { currentOption: lunaOption, agentSessionOption: null, usesPlanDefault: false };
   assert.deepEqual(catalog.chatModelRequestFields(saved, "fixture-agent"), { modelOptionId: lunaOption.id, model: lunaOption.model, provider: lunaOption.source, modelFromDefault: false });
@@ -502,11 +502,6 @@ for (const [label, input] of [
     assert.deepEqual(guarded, flagOffDefault);
   });
 }
-
-test("agent chat without its own key on an OpenAI-only team runs Luna on the team's direct key when the browser leaves the default to the server", async () => {
-  const outcome = await chatTurnOutcome({}, { aiFeature: "aiChat", session_id: "fixture-session", modelFromDefault: true });
-  assert.deepEqual(outcome, { modelId: "gpt-6-luna", credential: "fixture-direct-openai" });
-});
 
 test("agent chat with an agent Claude key runs Haiku on the agent's key even when the browser sent the Luna default", async () => {
   const outcome = await chatTurnOutcome({ agentProvider: "claude" }, browserLunaDefault);

@@ -556,8 +556,8 @@ export function chatModelRequestFields(
   { currentOption, agentSessionOption, usesPlanDefault }: { currentOption: TAiModelOption; agentSessionOption: TAiModelOption | null; usesPlanDefault: boolean },
   agentId: string | null | undefined,
 ) {
-  if (agentId && agentSessionOption) return { modelFromDefault: true };
-  return { modelOptionId: currentOption.id, model: currentOption.model, provider: currentOption.source, modelFromDefault: usesPlanDefault };
+  const option = agentId && agentSessionOption ? agentSessionOption : currentOption;
+  return { modelOptionId: option.id, model: option.model, provider: option.source, modelFromDefault: usesPlanDefault };
 }
 
 export function defaultModelKeyFor(context: AiDefaultModelContext, productionDefault: TAiModelKey = "gpt-6-luna"): TAiModelKey {
