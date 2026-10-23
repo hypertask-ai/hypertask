@@ -53,14 +53,6 @@ const { SESSION_TTL_SECONDS, signSession } = jiti(
 
 const runKey = `${process.env.GITHUB_RUN_ID ?? process.pid}-${process.env.GITHUB_RUN_ATTEMPT ?? "1"}-${randomUUID()}`;
 
-const AGENT_DESCRIPTION_HTML = [
-  "<p>**Bug: the description jumps while the ticket opens.**</p>",
-  "<p>What happened:\n1. Opened a ticket.\n2. Every line had blank space below it.\n3. Then the text moved into place.</p>",
-  "<p>Expected: the text shows at its final spacing from the first frame.</p>",
-  "<ul>\n<li>First point</li>\n<li>Second point</li>\n</ul>",
-  "<p>Last paragraph   with  extra   spaces.</p>",
-].join("\n\n");
-
 async function createBoard({ ownerId, teamId, googleAccountId, title, suffix, longThread = false, descriptionHtml = "<p>This seeded ticket must open from its board card.</p>" }) {
   const sectionTitles = ["To do", "Done"];
   const project = await prisma.project.create({
@@ -240,7 +232,13 @@ async function seedSessionFixtures(flags) {
     googleAccountId: googleAccount.id,
     title: "Browser smoke agent description board",
     suffix: "agentdesc",
-    descriptionHtml: AGENT_DESCRIPTION_HTML,
+    descriptionHtml: [
+      "<p>**Bug: the description jumps while the ticket opens.**</p>",
+      "<p>What happened:\n1. Opened a ticket.\n2. Every line had blank space below it.\n3. Then the text moved into place.</p>",
+      "<p>Expected: the text shows at its final spacing from the first frame.</p>",
+      "<ul>\n<li>First point</li>\n<li>Second point</li>\n</ul>",
+      "<p>Last paragraph   with  extra   spaces.</p>",
+    ].join("\n\n"),
   });
 
   const sessionUser = await prisma.user.findUnique({

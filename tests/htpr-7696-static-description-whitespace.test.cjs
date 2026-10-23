@@ -24,7 +24,7 @@ test("code blocks keep their own line breaks in the static first paint", () => {
 });
 
 test("browser smoke seeds an agent-style description and pins its first-paint height", () => {
-  assert.match(seed, /AGENT_DESCRIPTION_HTML = \[[\s\S]*\\n[\s\S]*\]\.join\("\\n\\n"\)/);
+  assert.match(seed, /suffix: "agentdesc",\s*descriptionHtml: \[[\s\S]*?\\n[\s\S]*?\]\.join\("\\n\\n"\)/);
   assert.match(seed, /agentDescriptionDetailPath/);
   assert.match(layoutLock, /an agent-written description keeps its height from first paint to the live editor/);
 });
