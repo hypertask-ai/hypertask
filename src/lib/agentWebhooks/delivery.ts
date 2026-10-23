@@ -1,4 +1,3 @@
-import { Status } from "@prisma/client";
 import prisma from "@/lib/prisma";
 import { isFeatureEnabled } from "@/lib/flags";
 import { AGENT_RUN_FEATURE_FLAG } from "@/lib/agentRuns/model";
@@ -73,7 +72,7 @@ export async function deliverAgentWebhook(
       authorized = Boolean(await prisma.project.findFirst({
         where: {
           id: projectId,
-          status: { not: Status.Deleted },
+          status: { not: "Deleted" },
           members: { some: { agentId: delivery.subscription.agentId } },
         },
         select: { id: true },
@@ -83,7 +82,7 @@ export async function deliverAgentWebhook(
           where: {
             id: taskId,
             projectId,
-            status: { not: Status.Deleted },
+            status: { not: "Deleted" },
           },
           select: { id: true },
         }));
