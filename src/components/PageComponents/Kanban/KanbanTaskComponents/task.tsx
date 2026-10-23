@@ -44,6 +44,7 @@ import {
 import { usePrefetchTaskDetail } from "@/hooks/Task Detail/usePrefetchTaskDetail";
 import { useGetUserDrafts } from "@/hooks/General/useGetUserDrafts";
 import KanbanTaskCard from "./KanbanTaskCard";
+import { useBoardCardData } from "./BoardCardData";
 import type { BlockerUser } from "./BlockerChip";
 import { splitAssignees } from "@/lib/assignees";
 import { useKanbanBulkSelection } from "@/lib/contexts/Kanban/BulkSelectionContext";
@@ -75,7 +76,7 @@ interface IProps {
   dragSnapshot?: DraggableStateSnapshot;
 }
 
-type TaskContentProps = IProps & { rowShortcutsEnabled: boolean; phoneHoldSelect: boolean };
+type TaskContentProps = IProps & { rowShortcutsEnabled: boolean; phoneHoldSelect: boolean; hasDraft: boolean };
 
 const TaskContent = ({
   task,
@@ -98,6 +99,7 @@ const TaskContent = ({
   dragSnapshot,
   rowShortcutsEnabled,
   phoneHoldSelect,
+  hasDraft,
 }: TaskContentProps) => {
   const isApple = useDeviceContext();
   const {
@@ -143,7 +145,6 @@ const TaskContent = ({
 
   const setActiveSection = useSetRecoilState(activeSectionAtom);
   const [currentUser, ______] = useRecoilState(currentUserAtom);
-  const { draftTaskIds } = useGetUserDrafts(currentUser?.id);
   const setTasksPlayList = useSetRecoilState(tasksPlayListAtom);
   const [hover, setHover] = useState<boolean>(false);
   const prefetchHoverTimeout = useRef<ReturnType<typeof setTimeout> | null>(
@@ -948,7 +949,7 @@ const TaskContent = ({
       active={active || isActive}
       selected={isBulkSelected(task.id)}
       hover={hover}
-      hasDraft={draftTaskIds.has(task.id)}
+      hasDraft={hasDraft}
       isArchivedOnBoard={isArchivedOnBoard}
       provided={provided}
       snapshot={snapshot}
@@ -1036,12 +1037,22 @@ const TaskContent = ({
 
 const MemoizedTaskContent = React.memo(TaskContent);
 
+type TaskContentWithoutDraftProps = Omit<TaskContentProps, "hasDraft">;
+
+const TaskContentWithOwnDrafts = React.memo(function TaskContentWithOwnDrafts(props: TaskContentWithoutDraftProps) {
+  const currentUser = useRecoilValue(currentUserAtom);
+  const { draftTaskIds } = useGetUserDrafts(currentUser?.id);
+  return <MemoizedTaskContent {...props} hasDraft={draftTaskIds.has(props.task.id)} />;
+});
+
 export default function Task(props: IProps) {
   const rowShortcutsEnabled = useFlag(HTPR_6427_ROW_SHORTCUTS_FLAG);
   const phoneHoldSelect = useFlag(HTPR_7263_PHONE_HOLD_SELECT_FLAG);
-  return phoneHoldSelect ? (
-    <MemoizedTaskContent {...props} rowShortcutsEnabled={rowShortcutsEnabled} phoneHoldSelect />
+  const boardCardData = useBoardCardData(props.task.projectId);
+  const contentProps = { ...props, rowShortcutsEnabled, phoneHoldSelect: Boolean(phoneHoldSelect) };
+  return boardCardData ? (
+    <MemoizedTaskContent {...contentProps} hasDraft={boardCardData.draftTaskIds.has(props.task.id)} />
   ) : (
-    <MemoizedTaskContent {...props} rowShortcutsEnabled={rowShortcutsEnabled} phoneHoldSelect={false} />
+    <TaskContentWithOwnDrafts {...contentProps} />
   );
 }

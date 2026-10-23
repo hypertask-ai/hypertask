@@ -1,4 +1,5 @@
 import { useFlag } from "@/hooks/useFlag";
+import { BoardCardDataProvider } from "../KanbanTaskComponents/BoardCardData";
 import { updateSection as writeSection } from "@/lib/api/typedClient";
 import { HTPR_6979_TYPED_WRITES_FLAG } from "@/lib/flags/keys";
 import { HTPR_6929_COMPOSE_TASK_WRITER_FLAG, HTPR_7549_FIRST_TASK_POINTER_FLAG, HTPR_7550_CONNECT_OVERLAY_FLAG } from "@/lib/flags/keys";
@@ -872,6 +873,7 @@ const HomePage = ({
 
 
   return (
+    <BoardCardDataProvider project={_currentProject}>
     <KanbanBulkSelectionProvider
       items={bulkSelectionItems}
       onArchiveTask={archiveTaskForBulk}
@@ -947,6 +949,7 @@ const HomePage = ({
       {showDeleteTaskModal && tasksToDelete && <ConfirmTaskDelete confirmDelete={deleteTaskHandler} content={`Clicking confirm will delete this task${tasksToDelete?.length>1?' and its associated sub-tasks':''}! Task can be recovered within 30 days.`} loading={loading}/>}
       </>
     </KanbanBulkSelectionProvider>
+    </BoardCardDataProvider>
   );
 };
 
