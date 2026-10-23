@@ -67,7 +67,7 @@ for (const agentId of [null, "agent-1"]) {
         "@/lib/mcp/routeWrapper": {
           wrapMcpRoute: (handler) => handler,
           checkMcpRouteRateLimit: async () => null,
-          validateMcpRouteAuth: async () => ({ user: { id: 985, email: "qa@example.test" }, agentId }),
+          validateMcpRouteAuth: async () => ({ user: { id: 985, email: "qa@example.test" }, agentId, teamScope: null }),
         },
         "@/lib/mcp/auth": { createUnauthorizedResponse: () => { throw new Error("unexpected unauthorized request"); } },
         "@/lib/mcp/agents": {},
@@ -92,7 +92,7 @@ for (const agentId of [null, "agent-1"]) {
       assert.equal(response.status, 200);
       assert.equal((await response.json()).success, true);
       assert.deepEqual(flagCalls, [[slimFlag, 985]]);
-      assert.deepEqual(inboxCalls, [["985", { withCachedDescription: state !== true }, ...(agentId ? [agentId] : [])]]);
+      assert.deepEqual(inboxCalls, [["985", { withCachedDescription: state !== true }, agentId, null]]);
     });
   }
 }

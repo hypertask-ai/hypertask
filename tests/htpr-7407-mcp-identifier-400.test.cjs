@@ -49,7 +49,7 @@ function setup(failure) {
     '@/lib/mcp/agents/scopes': { requireRole: async () => null },
     '@/lib/mcp/tasks/services': {},
     '@/lib/mcp/tasks/mappers': {},
-    '@/lib/mcp/tasks/agentMutationFence': { AgentMutationLeaseConflictError: class extends Error {} },
+    '@/lib/mcp/tasks/agentMutationFence': { TaskTeamScopeError: class extends Error {}, AgentMutationLeaseConflictError: class extends Error {} },
     '@/lib/mcp/tasks/agentMutationLeaseAdoption': { withAdoptedAgentMutationLease: (_db, _actor, run) => run() },
     '@/lib/realtime/server': {},
     '@/utils/controllers/tasks/moveToDifferentBoard': {},

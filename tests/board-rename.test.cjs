@@ -143,6 +143,8 @@ test("UI rename calls the same controller and permission behavior as the API", a
       "next/server": nextServer,
       "zod": {},
       "@/lib/auth/getSessionUser": getSessionUser,
+      "better-auth/cookies": require("better-auth/cookies"),
+      "@/lib/auth/session": {},
     });
     const ui = loadTs("src/lib/api/project-writes/update.ts", {
       "next/server": nextServer,

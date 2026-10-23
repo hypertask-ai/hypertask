@@ -209,6 +209,9 @@ const parser = require("node-html-parser");
 const canvas = load("src/utils/controllers/pages/htmlCanvas.ts", { "node-html-parser": parser });
 const urls = load("src/utils/controllers/urls/extractUrlsFromContent.ts", {
   "node-html-parser": parser,
+  "@/lib/prisma": {},
+  "@/lib/mcp/tasks/agentMutationFence": {},
+  "@/utils/controllers/projects/getAllIncludes": access,
   "@/utils/controllers/urls/addIntoTask": {}, "@/utils/controllers/urls/addIntoTaskDesc": {},
 });
 const fileSource = "https://files.example.test/uploads/private.png";

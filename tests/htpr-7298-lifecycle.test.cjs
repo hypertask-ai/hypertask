@@ -188,7 +188,7 @@ function harness({ tasks = [task(20)], pages = [page(10)], links = [link(10, 20)
     },
   };
   for (const name of ["reaction", "attachment", "comment", "taskLabel", "priority", "estimate", "reminder", "drafts", "assignees", "follower", "notification", "description", "taskSharing", "taskRelations", "task_Summary", "taskReadState", "savedContent", "taskMute", "customFieldValue", "readStatus"]) prisma[name] = empty;
-  const fence = { assertAgentAssignmentChangeAllowed: noop, cancelAgentMutationLeaseForHumanOverride: noop, AgentMutationLeaseConflictError: class extends Error {} };
+  const fence = { assertAgentAssignmentChangeAllowed: noop, cancelAgentMutationLeaseForHumanOverride: noop, TaskTeamScopeError: class extends Error {}, AgentMutationLeaseConflictError: class extends Error {} };
   const stubs = {
     "@/lib/prisma": { __esModule: true, default: prisma }, "@prisma/client": client,
     "@/lib/tasks/sameBoardRelations": {},
