@@ -1,3 +1,5 @@
+import { isPlanLimitReachedError } from "@/lib/planLimits";
+import { notifyPlanLimitOwner } from "@/lib/planLimitNotifications";
 import { downloadWithoutBrotli } from "@/lib/net/downloadWithoutBrotli";
 import { resolveAiModel as resolveLegacyAiModel } from "@/app/api/ai/_lib/modelProvider";
 import { getAiDefaultModelContext, resolveAutomaticAiModel } from "@/app/api/ai/_lib/byokKeys";
@@ -88,6 +90,8 @@ export async function createSlackTaskFromThread(
     return;
   }
 
+  let destinationProjectId: number | null = null;
+  let ticketTitle = "Slack thread";
   try {
     const project = await prisma.project.findFirst({
       where: {
@@ -139,6 +143,8 @@ export async function createSlackTaskFromThread(
       teamId: install.teamId,
       transcript: source.transcript,
     });
+    destinationProjectId = project.id;
+    ticketTitle = draft.title;
     const task = await createTask({
       creationChannel: "api",
       projectId: project.id,
@@ -192,6 +198,19 @@ export async function createSlackTaskFromThread(
       `Created ${buildTaskLink(task.projectId, task.uniqueIndex)}`,
     );
   } catch (error) {
+    if (isPlanLimitReachedError(error)) {
+      if (destinationProjectId !== null) {
+        await notifyPlanLimitOwner({
+          projectId: destinationProjectId,
+          title: ticketTitle,
+          sourceKey: `${install.id}:${event.channelId}:${event.threadTs}`,
+          actorUserId: actor.user.id,
+          error,
+        });
+      }
+      await postSlackThreadReply(botToken, event.channelId, event.threadTs, error.message);
+      return;
+    }
     console.error("Slack task creation failed", error);
     await postSlackThreadReply(
       botToken,

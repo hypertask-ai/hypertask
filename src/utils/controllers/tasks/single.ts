@@ -1,3 +1,4 @@
+import { assertTaskCountTransition, isPlanLimitReachedError, planLimitResponse } from "@/lib/planLimits";
 import type { AgentTokenTeamScope } from '@/lib/mcp/auth/types';
 import { recordAgentBoardScopeMiss } from "@/lib/auth/agentScope";
 import { processAnalyticsIntentSoon } from "@/lib/telemetry/analyticsIntents";
@@ -217,18 +218,7 @@ export async function updateTaskSingle(
       analyticsKey,
     } = await prisma.$transaction(
       async (tx) => {
-        if (options.allowProjectChange && requestedMutation.projectId !== undefined) {
-          const projectIds = [...new Set([oldTask.projectId, requestedMutation.projectId as number])].sort((a, b) => a - b);
-          for (const projectId of projectIds) {
-            await tx.$executeRaw`SELECT pg_advisory_xact_lock(9428471::int, ${projectId}::int)`;
-          }
-          const destination = await tx.project.findUnique({
-            where: { id: requestedMutation.projectId as number },
-            select: { uniqueIdentifier: true },
-          });
-          if (!destination?.uniqueIdentifier) throw new Error("Destination board has no ticket prefix");
-          requestedMutation.ticketNumber = `${destination.uniqueIdentifier}-${requestedMutation.uniqueIndex ?? oldTask.uniqueIndex}`;
-        }
+
 
         if (typeof requestedMutation.cycleId === "number") {
           await assertCycleAssignable(
@@ -385,6 +375,24 @@ export async function updateTaskSingle(
         }
         if (sectionChanged) updateData.sectionChangedAt = new Date();
         updateData.updatedAt = new Date();
+
+        await assertTaskCountTransition(tx, currentState, updateData, {
+          actorUserId: currentUser.id,
+          agentId,
+          entryPoint: "task.update",
+        });
+        if (options.allowProjectChange && requestedMutation.projectId !== undefined) {
+          const projectIds = [...new Set([currentState.projectId, requestedMutation.projectId as number])].sort((a, b) => a - b);
+          for (const projectId of projectIds) {
+            await tx.$executeRaw`SELECT pg_advisory_xact_lock(9428471::int, ${projectId}::int)`;
+          }
+          const destination = await tx.project.findUnique({
+            where: { id: requestedMutation.projectId as number },
+            select: { uniqueIdentifier: true },
+          });
+          if (!destination?.uniqueIdentifier) throw new Error("Destination board has no ticket prefix");
+          updateData.ticketNumber = `${destination.uniqueIdentifier}-${requestedMutation.uniqueIndex ?? currentState.uniqueIndex}`;
+        }
 
         if (
           updateData.projectId !== currentState.projectId ||
@@ -670,7 +678,7 @@ export async function updateTaskSingle(
           becameArchived ||
           (sectionIdChanged && (await sectionIsDone(task.sectionId)))
         ) {
-          await spawnNextRecurrence(task.id, taskBeforeWrite.dueDate);
+          await spawnNextRecurrence(task.id, taskBeforeWrite.dueDate, currentUser.id, agentId);
         }
       } catch (error) {
         console.log("🤔 ~ updateTaskSingle ~ recurrence spawn error:", error);
@@ -709,6 +717,10 @@ export async function updateTaskSingle(
       moveActivity,
     };
   } catch (error) {
+    if (isPlanLimitReachedError(error)) {
+      const refusal = planLimitResponse(error);
+      return { status: refusal.status, json: refusal.body };
+    }
     if (error instanceof TaskTeamScopeError) return { status: 404, json: { message: error.message } };
     if (error instanceof ParentTaskNotFoundError) {
       return {

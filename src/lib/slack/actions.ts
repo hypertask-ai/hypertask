@@ -1,3 +1,5 @@
+import { isPlanLimitReachedError } from "@/lib/planLimits";
+import { notifyPlanLimitOwner } from "@/lib/planLimitNotifications";
 import type { Prisma, Status } from "@prisma/client";
 
 import { PriorityConstants } from "@/lib/constants/constants";
@@ -64,10 +66,11 @@ export type SlackAction =
 export async function executeSlackAction(
   actor: SlackActor,
   command: SlackAction,
+  invocationKey?: string,
 ): Promise<SlackBlock[]> {
   switch (command.action) {
     case "create_task":
-      return createTask(actor, command.params);
+      return createTask(actor, command.params, invocationKey);
     case "get_task":
       return getTask(actor, requiredString(command.params.ticket, "Ticket number"));
     case "list_tasks":
@@ -122,6 +125,7 @@ export async function executeSlackAction(
 async function createTask(
   actor: SlackActor,
   params: Record<string, unknown>,
+  sourceKey?: string,
 ): Promise<SlackBlock[]> {
   const title = requiredString(params.title, "Title");
   const projectRef = requiredString(params.project, "Project");
@@ -151,7 +155,9 @@ async function createTask(
   const priorityIndex = priorityToIndex(optionalString(params.priority));
   const activityUser = toActivityUser(actor);
   const description = optionalString(params.description);
-  const result = await createTaskCore({
+  let result;
+  try {
+    result = await createTaskCore({
     creationChannel: "api",
     title,
     description: description ? toStoredHtml(description) : "",
@@ -162,7 +168,12 @@ async function createTask(
     projectIdentifier: project.uniqueIdentifier,
     priorityIndex,
     dueDate,
-  });
+    });
+  } catch (error) {
+    if (!isPlanLimitReachedError(error)) throw error;
+    await notifyPlanLimitOwner({ projectId: project.id, title, sourceKey, actorUserId: actor.user.id, error });
+    return errorBlock(error.message);
+  }
 
   const labels = optionalStringArray(params.labels);
   if (labels.length) await setTaskLabels(result.task.id, project.id, labels, actor.user);

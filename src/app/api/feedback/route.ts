@@ -4,7 +4,7 @@ import { IUser } from "@/models/model";
 import { broadcastInboxChange } from "@/lib/realtime/server";
 import { escapeHtml } from "@/utils/htmlEscape";
 import assigneesAssign from "@/utils/controllers/assignees/assign";
-import { createTaskCore } from "@/utils/controllers/tasks/createTaskCore";
+import { createProvisionedTaskCore } from "@/utils/controllers/tasks/createTaskCore";
 import { HYPERTASKS_STORAGE_PUBLIC_BASE_URL } from "@/lib/storage/hypertasksS3";
 import { NextRequest, NextResponse } from "next/server";
 
@@ -233,7 +233,7 @@ export async function POST(request: NextRequest) {
     const titleSource = isHtml
       ? text.replace(/<[^>]*>/g, " ").replace(/\s+/g, " ").trim()
       : text;
-    const { task } = await createTaskCore({
+    const { task } = await createProvisionedTaskCore({
       creationChannel: "web",
       title: `${kind}: ${titleSource.split(/\r\n?|\n/, 1)[0].trim()}`.slice(
         0,

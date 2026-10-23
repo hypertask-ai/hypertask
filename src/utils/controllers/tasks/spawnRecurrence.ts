@@ -1,3 +1,5 @@
+import { isPlanLimitReachedError } from "@/lib/planLimits";
+import { notifyPlanLimitOwner } from "@/lib/planLimitNotifications";
 import prisma from "@/lib/prisma";
 import { createTaskCore } from "./createTaskCore";
 import { isRecurrenceRule, nextOccurrence } from "@/lib/recurrence";
@@ -7,7 +9,9 @@ import { scheduleDueDateJob } from "@/pages/api/queues/duedateQueue";
 
 export async function spawnNextRecurrence(
   taskId: number,
-  anchorDate?: Date | null,
+  anchorDate: Date | null | undefined,
+  actingUserId: number,
+  actingAgentId?: string | null,
 ): Promise<number | null> {
   const task = await prisma.task.findUnique({
     where: { id: taskId },
@@ -68,6 +72,8 @@ export async function spawnNextRecurrence(
       title: task.title,
       description: task.description_?.content ?? "",
       userId: task.userId,
+      actingUserId,
+      actingAgentId,
       projectId: task.projectId,
       sectionId: target.id,
       sectionTitle: target.section_title,
@@ -88,6 +94,16 @@ export async function spawnNextRecurrence(
         data: { recurrence: rule },
       })
       .catch(() => undefined);
+    if (isPlanLimitReachedError(error)) {
+      await notifyPlanLimitOwner({
+        projectId: task.projectId,
+        taskId,
+        title: task.title,
+        actorUserId: actingUserId,
+        error,
+      });
+      return null;
+    }
     throw error;
   }
 
