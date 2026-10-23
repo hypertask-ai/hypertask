@@ -45,6 +45,52 @@ for (const mode of ['WATCH', 'ENFORCE', 'FLAG_ERROR']) {
       });
     });
 
+    test(`${mode} ${actor}: view creation locks and rechecks before all project-view side effects`, async () => {
+      for (const projectId of [15, 25]) {
+        const f = teamFixture(mode, actor);
+        const trace = [];
+        let locked = false;
+        let inTransaction = false;
+        let move;
+        const project = f.projects.find(row => row.id === projectId);
+        const read = f.prisma.project.findFirst;
+        f.prisma.project.findFirst = async args => {
+          const result = await read(args);
+          if (inTransaction) {
+            trace.push('final-read');
+            const change = () => { project.teamId = 'team-b'; trace.push('move'); };
+            if (locked) move = change; else change();
+          }
+          return result;
+        };
+        f.prisma.$queryRaw = async strings => { assert.match(String(strings), /Project.*FOR UPDATE/); locked = true; trace.push('lock'); return []; };
+        f.prisma.$transaction = async run => {
+          inTransaction = true;
+          try { return await run(f.prisma); }
+          finally { locked = false; inTransaction = false; trace.push('unlock'); move?.(); }
+        };
+        f.prisma.project_View = { upsert: async () => { trace.push('project-view-write'); return { id: 'project-view' }; } };
+        f.prisma.view = { findFirst: async () => null, create: async ({ data }) => {
+          if (actor === 'bound') assert.equal(project.teamId, 'team-a');
+          trace.push('view-write'); return { id: 'view', ...data };
+        } };
+        const views = f.load('src/lib/mcp/views/services.ts', {
+          '@/utils/controllers/projects/views/viewsHelperAPIfunctions': { getUniqueSlug: async () => null },
+          '@/utils/controllers/projects/views/boardFilterWriteLock': { acquireBoardFilterWriteLock: async () => {}, validateBoardFilterLabelReferences: async () => {} },
+        });
+        await f.run(new NextRequest('http://localhost/api/mcp/view'), async () => {
+          const create = () => views.createView({ projectId, userId: f.user.id, agentId: f.agent.id, teamScope: f.state.ctx.teamScope, title: 'Fixture' });
+          if (projectId === 25 && actor === 'bound') {
+            await assert.rejects(create(), /not found|access denied/i);
+            assert.deepEqual(trace, []);
+          } else {
+            assert.equal((await create()).id, 'view');
+            assert.deepEqual(trace, actor === 'bound' ? ['lock', 'final-read', 'project-view-write', 'view-write', 'unlock', 'move'] : ['project-view-write', 'view-write', 'unlock']);
+          }
+        });
+      }
+    });
+
     test(`${mode} ${actor}: secondary URL and attachment reconciliation rechecks the current task/comment scope`, async () => {
       const f = teamFixture(mode, actor);
       f.prisma.$queryRaw = async () => [];

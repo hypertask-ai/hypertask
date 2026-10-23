@@ -12,6 +12,7 @@ for (const mode of ['WATCH', 'ENFORCE', 'FLAG_ERROR']) {
       set: async (key, value, ...options) => { if (options.includes('NX') && cached.has(key)) return null; cached.set(key, value); return 'OK'; },
       del: async key => cached.delete(key),
     };
+    f.prisma.view = f.model(f.projects.map(project => ({ id: `view-${project.id}`, project_view: { projectId: project.id, project } })), 'view');
     f.prisma.report = f.model(f.tasks.map(task => ({ id: task.id, project: task.project })), 'report');
     const cache = f.load('src/lib/mcp/idempotency/idempotencyStore.ts', { '@/lib/redis': { getRedis: async () => redis } });
     const key = (...scope) => cache.createIdempotencyRedisKey('create_task', f.user.id, 'fixture', {}, ...scope);
@@ -36,6 +37,7 @@ for (const mode of ['WATCH', 'ENFORCE', 'FLAG_ERROR']) {
         ['create_page', { page: { publicId: 'page-15' } }, { page: { publicId: 'page-25', title: 'B-cached' } }],
         ['create_report', { report: { id: 150 } }, { report: { id: 250, body_html: 'B-cached' } }],
         ['create_comment', { comment: { id: 150 } }, { comment: { id: 250, text: 'B-cached' } }],
+        ['view', { view: { id: 'view-15' } }, { view: { id: 'view-25', title: 'B-cached' } }],
         ['create_board', { board: { id: 15 } }, { board: { id: 25, title: 'B-cached' } }],
       ]) {
         const replayKey = cache.createIdempotencyRedisKey(operation, f.user.id, 'legacy', {}, f.agent.id, teamScope);
