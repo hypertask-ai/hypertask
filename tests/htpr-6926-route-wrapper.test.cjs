@@ -387,6 +387,7 @@ test('all adopted REST methods preserve legacy wire results and scaffold order w
               '@/lib/flags': { isFeatureEnabled: async () => false },
               '@/lib/flags/keys': {},
               '@/lib/mcp/agents/scopes': { requireRole: async () => null },
+              '@/lib/mcp/agents/readRoleGuard': { requireAgentWriteRole: async () => null },
               '@/lib/mcp/readJsonBody': json,
               '@/lib/mcp/tasks/agentMutationLeaseAdoption': lease,
             })

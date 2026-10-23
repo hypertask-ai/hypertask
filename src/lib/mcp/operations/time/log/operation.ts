@@ -1,3 +1,4 @@
+import { requireAgentWriteRole } from '@/lib/mcp/agents/readRoleGuard'
 import { wrapMcpRoute } from '@/lib/mcp/routeWrapper'
 import { logMinutes, TimeTrackingDisabledError } from "@/lib/timeTracking";
 import { parseTimeMinutes } from "@/lib/timeManualEntry";
@@ -8,6 +9,8 @@ export async function POST(request: NextRequest) {
   return wrapMcpRoute(async (request: NextRequest) => {
   const resolved = await resolveMcpTimeTask(request);
   if (resolved.response) return resolved.response;
+  const roleRefusal = await requireAgentWriteRole(resolved.ctx);
+  if (roleRefusal) return roleRefusal;
 
   const minutes = parseTimeMinutes(resolved.body?.minutes);
   if (minutes === null) {

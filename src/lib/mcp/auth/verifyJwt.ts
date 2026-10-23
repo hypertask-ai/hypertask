@@ -6,6 +6,7 @@ import { LogType, Prisma, Status } from '@prisma/client';
 import { isOAuthAccessTokenPayload, JWT_LEGACY_OAUTH_AUDIENCE, JWT_OAUTH_AUDIENCE, JWT_OAUTH_ISSUER, oauthClientIdFromPayload, OAUTH_CLIENT_ID_CLAIM, oauthLegacyRevocationJti } from '@/lib/mcp/oauthTokenContract';
 import { HTPR_6542_TEAM_SCOPED_MANAGEMENT_KEYS_FLAG, isFeatureEnabled } from '@/lib/flags';
 import { agentWithinTeamWhere, getManagementKeyTeam } from '@/lib/mcp/managementKeyTeamScope';
+import type { AgentRole, AgentScopes } from '@/lib/mcp/agents/scopes';
 import type { AgentTokenTeamScope, McpAuthContext, ValidateMcpAuthOptions } from './types';
 
 const JWT_SECRET = process.env.JWT_SECRET as string
@@ -319,6 +320,7 @@ export async function validateJwtToken(token: string, options: ValidateMcpAuthOp
     let agentId: string | null = null
     let agentDisplayName: string | undefined
     let agentRuntimeGeneration: number | null = null
+    let agentRole: AgentRole | undefined
     let agentTokenGeneration: string | null = null
     const rawAgentId = decoded.agentId
     if (Object.hasOwn(decoded, "agentId") && (typeof rawAgentId !== "string" || rawAgentId.trim().length === 0)) {
@@ -371,6 +373,7 @@ export async function validateJwtToken(token: string, options: ValidateMcpAuthOp
           runtimeGeneration: true,
           credentialTeamId: true,
           credentialTeamAccessBinding: true,
+          permissions: true,
         },
       }))
       if (!agent) {
@@ -411,6 +414,7 @@ export async function validateJwtToken(token: string, options: ValidateMcpAuthOp
       agentId = agent.id
       agentDisplayName = agent.displayName
       agentRuntimeGeneration = agent.runtimeGeneration
+      agentRole = (agent.permissions as AgentScopes | null)?.role ?? 'write'
       agentTokenGeneration = storedGeneration
     }
 
@@ -440,6 +444,7 @@ export async function validateJwtToken(token: string, options: ValidateMcpAuthOp
         displayName: user.displayName ?? undefined,
       },
       agentId,
+      ...(agentRole ? { agentRole } : {}),
       teamScope,
       ...(agentDisplayName ? { agentDisplayName } : {}),
       agentRuntimeGeneration,

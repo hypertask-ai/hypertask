@@ -62,6 +62,7 @@ function harness({ authenticated = true, limited = false, accessible = true, ena
     },
     "@/utils/controllers/projects/isProjectAdmin": { __esModule: true, default: async () => false },
     "@/lib/flags": {},
+    "@/lib/mcp/agents/readRoleGuard": { requireAgentWriteRole: async () => null },
     "@/lib/mcp/auth": {
       checkMcpRateLimit: async () => limited ? { status: 429 } : null,
       validateMcpAuth: async () => authenticated ? { user: { id: 6 }, agentId: "agent-1" } : null,

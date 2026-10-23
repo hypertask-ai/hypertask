@@ -1,3 +1,4 @@
+import { requireAgentWriteRole } from "@/lib/mcp/agents/readRoleGuard";
 import { inlineAgentImagesForUser } from "@/lib/media/inlineAgentImages.server";
 import { agentScopeEnforced, recordAgentBoardScopeMiss } from "@/lib/auth/agentScope";
 import { reportMcpOperationCrash } from '@/lib/mcp/operationCrashReport'
@@ -70,6 +71,8 @@ export async function PATCH(request: NextRequest, props: { params: Promise<{ com
         { status: 401 }
       )
     }
+    const roleRefusal = await requireAgentWriteRole(ctx)
+    if (roleRefusal) return roleRefusal
     const user = ctx.user;
     const commentId = parseInt(params.comment_id)
     if (isNaN(commentId) || commentId <= 0) {
@@ -400,6 +403,8 @@ export async function DELETE(request: NextRequest, props: { params: Promise<{ co
         { status: 401 }
       )
     }
+    const roleRefusal = await requireAgentWriteRole(ctx)
+    if (roleRefusal) return roleRefusal
     const user = ctx.user;
     const commentId = parseInt(params.comment_id)
     if (isNaN(commentId) || commentId <= 0) {

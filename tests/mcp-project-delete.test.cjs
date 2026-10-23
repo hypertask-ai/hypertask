@@ -21,6 +21,7 @@ function loadRoute({ authenticated = true, enabled = true, result } = {}) {
   const stubs = {
     "@/lib/auth/agentScope": require("./helpers/agent-board-scope.cjs").enforcedScope,
     "@/lib/mcp/operationCrashReport": { reportMcpOperationCrash: () => {} },
+    "@/lib/mcp/agents/readRoleGuard": { requireAgentWriteRole: async () => null },
     "@/utils/controllers/projects/getAllIncludes": require("./helpers/agent-board-scope.cjs").access,
     "next/server": {
       NextResponse: {

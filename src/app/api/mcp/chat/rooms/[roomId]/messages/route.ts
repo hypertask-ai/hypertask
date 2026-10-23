@@ -1,4 +1,6 @@
+import { requireAgentWriteRole } from '@/lib/mcp/agents/readRoleGuard'
 import { wrapMcpRoute, checkMcpRouteRateLimit as checkMcpRateLimit, validateMcpRouteAuth as validateMcpAuth } from '@/lib/mcp/routeWrapper'
+import type { McpAuthContext } from '@/lib/mcp/auth/types'
 import { NextRequest, NextResponse } from "next/server";
 
 import { loadAgentTokenRoom } from "@/lib/agents/roomAccess";
@@ -16,7 +18,7 @@ async function roomAgent(
   roomId: string,
 ): Promise<
   | { response: NextResponse; agentId: null }
-  | { response: null; agentId: string; principal: import("@/lib/rag/retrieveBoardKnowledge").BoardKnowledgePrincipal }
+  | { response: null; agentId: string; ctx: McpAuthContext; principal: import("@/lib/rag/retrieveBoardKnowledge").BoardKnowledgePrincipal }
 > {
   const rateLimited = await checkMcpRateLimit(request);
   if (rateLimited) return { response: rateLimited, agentId: null };
@@ -48,7 +50,7 @@ async function roomAgent(
       agentId: null,
     };
   }
-  return { response: null, agentId: ctx.agentId, principal: { userId: ctx.user.id, agentId: ctx.agentId, teamScope: ctx.teamScope } };
+  return { response: null, agentId: ctx.agentId, ctx, principal: { userId: ctx.user.id, agentId: ctx.agentId, teamScope: ctx.teamScope } };
 }
 
 export async function GET(
@@ -80,6 +82,8 @@ export async function POST(
   const { roomId } = await params;
   const auth = await roomAgent(request, roomId);
   if (auth.response) return auth.response;
+  const roleRefusal = await requireAgentWriteRole(auth.ctx);
+  if (roleRefusal) return roleRefusal;
   try {
     const body = await request.json().catch(() => null);
     const result = await createAgentRoomReply({
