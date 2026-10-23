@@ -1367,7 +1367,7 @@ for (const method of ['GET', 'POST']) {
 for (const stage of ['statuses', 'current PR', 'publish']) {
   test(`UX evaluation error before rate-limited ${stage} remains exit 2`, async () => {
     const { createGithub, run } = await gate;
-    const fixture = apiFixture({ prs: [pr(1, { title })] });
+    const fixture = apiFixture({ prs: [pr(1, { title })], files: [added] });
     const output = [];
     let statusReads = 0;
     let prReads = 0;
@@ -1397,6 +1397,30 @@ for (const stage of ['statuses', 'current PR', 'publish']) {
     assert.ok(fixture.calls.every((call) => call.method !== 'POST'));
   });
 }
+
+test('still allowed: reused UI needs no ticket read, so a later rate-limit skip exits 0', async () => {
+  const { createGithub, run } = await gate;
+  const fixture = apiFixture({ prs: [pr(1, { title })], files: [modified] });
+  const output = [];
+  let prReads = 0;
+  const github = createGithub({ env, now: () => 1000000, log: () => {},
+    sleep: () => assert.fail('no over-budget read wait'),
+    fetchImpl: async (url, options) => {
+      const endpoint = url.replace('https://api.github.com/', '');
+      if (endpoint.endsWith('/pulls/1') && ++prReads > 1) {
+        return response({}, 403, { 'x-ratelimit-remaining': '0', 'x-ratelimit-reset': '5000' });
+      }
+      return response(await fixture.github(endpoint, options));
+    },
+  });
+  assert.equal(await run(['--reconcile'], {
+    env: { ...env, MCP_TOKEN: '' }, github,
+    fetchImpl: () => assert.fail('reused UI must not read the ticket'),
+    log: (line) => output.push(line),
+  }), 0);
+  assert.match(output.at(-1), /::warning::skipped: GitHub rate limited until/);
+  assert.ok(fixture.calls.every((call) => call.method !== 'POST'));
+});
 
 test('an earlier genuine UX failure is not hidden by a later rate-limit skip', async () => {
   const { createGithub, run } = await gate;
