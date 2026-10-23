@@ -213,6 +213,67 @@ test(`My Tasks Tab keeps the chosen split without server navigation (${groupBy} 
 })
 }
 
+test('docked AI chat follows the viewed board and keeps hand picks board-local', { tag: ['@id:chat-follows-board'] }, async ({ page }, testInfo) => {
+  test.skip(!process.env.BROWSER_SMOKE_PR, 'isolated PR fixtures only')
+  const mobile = testInfo.project.name === 'Mobile'
+  await page.setViewportSize(mobile ? { width: 390, height: 844 } : { width: 1440, height: 900 })
+  const boards = [process.env.SMOKE_BOARD_PATH!, process.env.SMOKE_DEMO_BOARD_PATH!].map((boardPath, index) => ({
+    path: boardPath,
+    id: Number(new URL(boardPath, 'http://localhost').searchParams.get('id')),
+    title: index === 0 ? 'Browser smoke board' : 'Browser smoke demo board',
+  }))
+  const [a, b] = boards
+  expect(a.id).toBeGreaterThan(0)
+  expect(b.id).toBeGreaterThan(0)
+  expect(a.id).not.toBe(b.id)
+  await page.addInitScript((boardId) => {
+    const saved = JSON.parse(localStorage.getItem('recoil-persist') || '{}')
+    localStorage.setItem('recoil-persist', JSON.stringify({ ...saved, dockedChatScope: boardId }))
+  }, b.id)
+  const sidebar = page.getByTestId('ai-sidebar')
+  const chip = sidebar.locator('[data-ai-chat-scope-chip]:visible')
+  const opener = page.getByRole('button', { name: mobile ? 'AI' : 'Open AI chat', exact: true })
+  const assertScope = async (title: string) => {
+    await expect(page.locator('.kanban-column-title').first()).toBeVisible()
+    await expect(page.locator('[data-testid="ai-sidebar"]:visible').or(opener).first()).toBeVisible()
+    if (!(await sidebar.isVisible())) await opener.click()
+    await expect(chip).toBeVisible()
+    await expect(chip).toHaveAttribute('title', title)
+    await expect(chip).toContainText(title)
+  }
+  const switchBoard = async (board: typeof a) => {
+    if (mobile) {
+      await page.getByRole('button', { name: 'Close AI chat', exact: true }).click()
+      await expect(sidebar).toBeHidden()
+      await page.getByRole('button', { name: 'Switch board', exact: true }).click()
+      await page.locator(`#mobile-board-option-${board.id}`).click()
+    } else {
+      await page.evaluate(() => (document.activeElement as HTMLElement)?.blur())
+      await page.keyboard.press('Control+b')
+      await page.locator(`#project-${board.id}:visible`).click()
+    }
+    await expect(page).toHaveURL((url) => url.pathname === '/project' && url.searchParams.get('id') === String(board.id))
+    await expect(page.locator('[id^="task-"]').filter({ hasText: `${board.title} fixture` }).first()).toBeVisible()
+  }
+  await page.goto(withRealtime(a.path), { waitUntil: 'load' })
+  await assertScope(a.title)
+  let documentRequests = 0
+  page.on('request', (request) => {
+    if (request.isNavigationRequest() && request.frame() === page.mainFrame()) documentRequests++
+  })
+  await switchBoard(b)
+  await assertScope(b.title)
+  await chip.click()
+  await sidebar.getByRole('menuitemradio', { name: a.title, exact: true }).click()
+  await expect(chip).toHaveAttribute('title', a.title)
+  await expect(chip).toContainText(a.title)
+  await switchBoard(a)
+  await assertScope(a.title)
+  await switchBoard(b)
+  await assertScope(b.title)
+  expect(documentRequests, 'board switches must preserve client state rather than reload it').toBe(0)
+})
+
 test('seeded board card opens a ticket and stays open', { tag: ['@id:board-card-click'] }, async ({ page }, testInfo) => {
   test.skip(!process.env.BROWSER_SMOKE_PR, 'isolated PR fixtures only')
   const fixture = JSON.parse(readFileSync(path.join(__dirname, '.state', 'card-fixture.json'), 'utf8')) as {

@@ -1,4 +1,4 @@
-import { useCallback } from "react";
+import { useCallback, useEffect } from "react";
 import { useRecoilState, useRecoilValue, useSetRecoilState } from "@/lib/state";
 import { currentProjectAtom, dockedChatScopeAtom, dockedChatScopePickedOnBoardAtom } from "@/store";
 import { useFlag } from "@/hooks/useFlag";
@@ -12,8 +12,12 @@ export function useDockedChatScope() {
   const [savedScope, setSavedScope] = useRecoilState(dockedChatScopeAtom);
   const pickedOn = useRecoilValue(dockedChatScopePickedOnBoardAtom);
   const setPickedOn = useSetRecoilState(dockedChatScopePickedOnBoardAtom);
+  const pickIsForAnotherBoard = pickedOn?.boardId !== currentBoardId;
   let dockedScope: DockedChatScope = savedScope;
-  if (followsBoard && pickedOn?.boardId !== currentBoardId) dockedScope = null;
+  if (followsBoard && pickIsForAnotherBoard) dockedScope = null;
+  useEffect(() => {
+    if (pickedOn && pickIsForAnotherBoard) setPickedOn(null);
+  }, [pickedOn, pickIsForAnotherBoard, setPickedOn]);
   const setDockedScope = useCallback((scope: DockedChatScope) => {
     setPickedOn({ boardId: currentBoardId });
     setSavedScope(scope);

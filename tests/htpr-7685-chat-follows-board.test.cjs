@@ -26,7 +26,7 @@ function chat({ enabled = true, savedScope = null, board = 1 } = {}) {
   const values = new Map([["currentProject", { id: board }], ["dockedChatScope", savedScope], ["pickedOn", null]]);
   const setter = (atom) => (next) => values.set(atom, typeof next === "function" ? next(values.get(atom)) : next);
   const { useDockedChatScope } = load("src/hooks/MultiPages/AIChat/useDockedChatScope.ts", {
-    react: { useCallback: (fn) => fn },
+    react: { useCallback: (fn) => fn, useEffect: (effect) => { effect(); } },
     "@/lib/state": {
       useRecoilState: (atom) => [values.get(atom), setter(atom)],
       useRecoilValue: (atom) => values.get(atom),
@@ -62,6 +62,16 @@ test("a hand pick applies on the board where it was made and not on the next boa
   view.pick("ticket");
   assert.equal(view.scope(), "ticket");
   view.visit(1);
+  assert.equal(view.scope(), null);
+});
+
+test("a hand pick does not come back when you return to the board where it was made", () => {
+  const view = chat({ board: 2 });
+  view.pick(1);
+  assert.equal(view.scope(), 1);
+  view.visit(1);
+  assert.equal(view.scope(), null);
+  view.visit(2);
   assert.equal(view.scope(), null);
 });
 
