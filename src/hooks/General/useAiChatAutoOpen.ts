@@ -7,6 +7,11 @@ import { aiChatAutoOpenPageAtom, aiChatAutoOpenSuppressedAtom, aiChatPinnedAtom,
 import { aiChatAutoOpenPage } from "@/lib/aiChat/autoOpenPreferences";
 import { useAiChatOpenPreferences, useSyncAiChatOpenPreferences } from "./useAiChatOpenPreferences";
 
+function pageChangedSinceLastVisit(previous: string | null, lastSaved: string | null, pageKey: string) {
+  const neverRecorded = previous === null && lastSaved === null;
+  return !neverRecorded && (previous ?? lastSaved) !== pageKey;
+}
+
 export function useAiChatAutoOpen(mobile: boolean) {
   useSyncAiChatOpenPreferences();
   const { enabled, ready, flagReady, values } = useAiChatOpenPreferences();
@@ -34,7 +39,7 @@ export function useAiChatAutoOpen(mobile: boolean) {
       previousPage.current = null;
       return;
     }
-    const changed = (previousPage.current ?? lastPage) !== pageKey;
+    const changed = pageChangedSinceLastVisit(previousPage.current, lastPage, pageKey);
     if (lastPage !== pageKey) setLastPage(pageKey);
     previousPage.current = pageKey;
     if (pathname === newTicketPath) visitedNewTicket.current = true;
@@ -56,7 +61,7 @@ export function useAiChatAutoOpen(mobile: boolean) {
   }, [enabled, ready, pathname, pageKey, page, newTicketPath, manualOpen, allowed, mobile, user?.id, suppressed, setSuppressed, setOpen, setExplicitOpenAt, setNewTicketPath, lastPage, setLastPage]);
 
   const active = enabled || !flagReady;
-  const pageChanged = (previousPage.current ?? lastPage) !== pageKey;
+  const pageChanged = pageChangedSinceLastVisit(previousPage.current, lastPage, pageKey);
   const reserve = active && !mobile && allowed && !(suppressed && !pageChanged);
   return { active, reserve };
 }

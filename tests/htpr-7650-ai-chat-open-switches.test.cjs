@@ -106,6 +106,14 @@ test("chat space is reserved from the switch on first render, so the page does n
   closed.navigate("/detail/project-15/3");
   assert.equal(closed.render().reserve, true);
 });
+test("a chat closed before the switches existed stays closed on the first ticket after the update, then follows the switch", () => {
+  const h = pageHarness({ ...allOff, aiChatOpenTickets: true }, { state: { aiChatAutoOpenSuppressedAtom: true } });
+  h.navigate("/detail/project-15/2");
+  assert.equal(h.values.showAIChatInterfaceAtom, false);
+  assert.equal(h.render().reserve, false);
+  h.navigate("/detail/project-15/3");
+  assert.equal(h.values.showAIChatInterfaceAtom, true);
+});
 test("a pinned chat stays open on pages whose switch is off, but not on phone", () => {
   const h = pageHarness(allOff, { state: { aiChatPinnedAtom: true } });
   h.navigate("/project?id=15");
@@ -380,6 +388,8 @@ test("pre-hydration ticket reservation honors user-scoped preferences and explic
     [{ openAiChatByDefault: true, aiChatAutoOpenPreferences: { 7: allOff } }, "closed"],
     [{ aiChatAutoOpenPreferences: { 8: { ...defaults, aiChatOpenTickets: true } } }, "closed"],
     [{ openAiChatByDefault: true, aiChatAutoOpenPage: "7:/detail/project-15/2::", aiChatAutoOpenSuppressed: true }, "closed"],
+    [{ openAiChatByDefault: true, aiChatAutoOpenSuppressed: true }, "closed"],
+    [{ openAiChatByDefault: true, aiChatAutoOpenPage: "7:/detail/project-15/9::", aiChatAutoOpenSuppressed: true }, "reserved"],
   ]) {
     const script = buildTicketSidebarBootScript({ keepClosed: true, overlayTicket: true, autoOpenSwitches: true, userId: 7 });
     const dom = new JSDOM(`<html><head><script>${script}</script></head></html>`, {

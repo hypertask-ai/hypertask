@@ -939,7 +939,7 @@ const settings: CommandGroup = {
       name: "Settings: Open AI chat by default",
       commandMode: CommandMode.Setting,
       payload: "task-page",
-      keywords: "settings open ai chat by default keep ai chat closed always task page",
+      keywords: "settings open ai chat by default keep ai chat closed always task page on newly created tickets when i open a ticket boards",
     },
     {
       key: "settingsTaskPageCollapseComments",
@@ -1332,7 +1332,7 @@ export const getAllCommands = (
     { ...settings, commandLists: settings.commandLists.map((command) => command.key === "settingsTaskPageOpenAiChatByDefault"
       ? aiChatOpenSwitchesEnabled
         ? { ...command, name: "Settings: AI chat auto-open", keywords: "settings open ai chat on newly created tickets when I open a ticket boards task page" }
-        : { ...command, keywords: keepAiChatClosedKeywords ? command.keywords : "settings open ai chat by default task page" } : command) },
+        : { ...command, keywords: keepAiChatClosedKeywords ? "settings open ai chat by default keep ai chat closed always task page" : "settings open ai chat by default task page" } : command) },
     help,
   ].filter((group) => group.commandLists.length > 0);
 

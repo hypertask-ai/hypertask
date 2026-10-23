@@ -41,7 +41,7 @@ export function buildTicketSidebarBootScript({
       var prefs=(s.aiChatAutoOpenPreferences||{})[${userId}];
       var enabled=prefs&&typeof prefs.aiChatOpenTickets==='boolean'?prefs.aiChatOpenTickets:
         s.keepAiChatClosed!==true&&Object.prototype.hasOwnProperty.call(s,'openAiChatByDefault')&&s.openAiChatByDefault===true;
-      var samePage=s.aiChatAutoOpenPage===String(${userId})+':'+location.pathname+':'+(new URLSearchParams(location.search).get('id')||'')+':'+(new URLSearchParams(location.search).get('view')||'');
+      var samePage=s.aiChatAutoOpenPage==null||s.aiChatAutoOpenPage===String(${userId})+':'+location.pathname+':'+(new URLSearchParams(location.search).get('id')||'')+':'+(new URLSearchParams(location.search).get('view')||'');
       open=s.isAiChatSidebarMode!==false&&enabled&&!(samePage&&s.aiChatAutoOpenSuppressed===true);
     }
     var width=typeof s.aiChatSidebarWidthPx==='number'&&Number.isFinite(s.aiChatSidebarWidthPx)
