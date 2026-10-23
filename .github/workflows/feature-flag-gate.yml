@@ -114,11 +114,11 @@ jobs:
 
           title=$(jq -r '.title' "$pr_json")
           base_sha=$(jq -r '.base.sha' "$pr_json")
-          fingerprint="ffg=$base_sha.$(printf %s "$title" | sha256sum | cut -c1-16)"
           api_head_sha=$(jq -r '.head.sha' "$pr_json")
           head_repo=$(jq -r '.head.repo.full_name' "$pr_json")
           export FEATURE_FLAG_PR_LABELS
           FEATURE_FLAG_PR_LABELS=$(jq -c '[.labels[]?.name // empty]' "$pr_json")
+          fingerprint="ffg=$base_sha.$(printf '%s\n%s' "$title" "$(jq -c 'sort' <<<"$FEATURE_FLAG_PR_LABELS")" | sha256sum | cut -c1-16)"
           result=2
 
           if [ "$api_head_sha" != "$head_sha" ]; then
@@ -175,6 +175,17 @@ jobs:
           fi
 
           if [ "$result" -eq 2 ]; then gh_api_failed=2; fi
+          if ! gh_api --paginate --slurp "repos/$REPO/pulls?state=open&base=production&per_page=100" >"$fresh_heads_json" ||
+             ! fresh_head_pr_count=$(jq -er --arg sha "$head_sha" '[flatten[] | select(.head.sha == $sha)] | length' "$fresh_heads_json"); then
+            echo "::error::Cannot re-check whether the head commit is shared before publishing its result."
+            publish_error_status "feature-flag-gate could not refresh pull-request heads" ||
+              echo "::error::Cannot replace the pending feature-flag-gate status."
+            exit 2
+          fi
+          if [ "$fresh_head_pr_count" -ne 1 ]; then
+            echo "This head commit is shared by multiple open production pull requests; use a unique head commit." >"$reason_file"
+            result=1
+          fi
           if ! gh_api "repos/$REPO/pulls/$PR_NUMBER" >"$current_json"; then
             echo "::error::Cannot re-read pull request #$PR_NUMBER before publishing its result."
             publish_error_status "feature-flag-gate could not refresh this pull request" ||
@@ -191,17 +202,6 @@ jobs:
             publish_error_status "feature-flag-gate is waiting for the updated pull request" ||
               echo "::error::Cannot replace the pending feature-flag-gate status."
             exit 0
-          fi
-          if ! gh_api --paginate --slurp "repos/$REPO/pulls?state=open&base=production&per_page=100" >"$fresh_heads_json" ||
-             ! fresh_head_pr_count=$(jq -er --arg sha "$head_sha" '[flatten[] | select(.head.sha == $sha)] | length' "$fresh_heads_json"); then
-            echo "::error::Cannot re-check whether the head commit is shared before publishing its result."
-            publish_error_status "feature-flag-gate could not refresh pull-request heads" ||
-              echo "::error::Cannot replace the pending feature-flag-gate status."
-            exit 2
-          fi
-          if [ "$fresh_head_pr_count" -ne 1 ]; then
-            echo "This head commit is shared by multiple open production pull requests; use a unique head commit." >"$reason_file"
-            result=1
           fi
 
           if [ "$result" -eq 0 ]; then
@@ -391,7 +391,7 @@ jobs:
             error_file="$gate_tmp/error-$number.txt"
             payload="$gate_tmp/status-$number.json"
             result=2
-            fingerprint="ffg=$base_sha.$(printf %s "$title" | sha256sum | cut -c1-16)"
+            fingerprint="ffg=$base_sha.$(printf '%s\n%s' "$title" "$(jq -c 'sort' <<<"$FEATURE_FLAG_PR_LABELS")" | sha256sum | cut -c1-16)"
             statuses_file="$gate_tmp/latest-statuses-$number.json"
             if ! gh_api "repos/$REPO/commits/$head_sha/statuses?per_page=100" >"$statuses_file"; then
               echo "::warning::Cannot read existing feature-flag-gate statuses for $head_sha; evaluating without deduplication."
@@ -431,6 +431,18 @@ jobs:
             fi
 
             if [ "$result" -eq 2 ]; then failures=$((failures + 1)); fi
+            if ! gh_api --paginate --slurp "repos/$REPO/pulls?state=open&base=production&per_page=100" >"$fresh_heads_json" ||
+               ! fresh_head_pr_count=$(jq -er --arg sha "$head_sha" '[flatten[] | select(.head.sha == $sha)] | length' "$fresh_heads_json"); then
+              echo "::error::Cannot re-check whether pull request #$number shares its head commit."
+              publish_reconciliation_error "$head_sha" "$payload" "feature-flag-gate could not refresh pull-request heads" "$statuses_file" ||
+                echo "::error::Cannot publish the feature-flag-gate error for #$number."
+              failures=$((failures + 1))
+              continue
+            fi
+            if [ "$fresh_head_pr_count" -ne 1 ]; then
+              echo "This head commit is shared by multiple open production pull requests; use a unique head commit." >"$reason_file"
+              result=1
+            fi
             gh_api "repos/$REPO/pulls/$number" >"$gate_tmp/current.json" || {
               echo "::error::Cannot re-read pull request #$number before publishing its result."
               publish_reconciliation_error "$head_sha" "$payload" "feature-flag-gate could not refresh pull request #$number" "$statuses_file" ||
@@ -449,18 +461,6 @@ jobs:
               publish_reconciliation_error "$head_sha" "$payload" "feature-flag-gate is waiting for the updated pull request" "$statuses_file" ||
                 echo "::error::Cannot publish the feature-flag-gate error for #$number."
               continue
-            fi
-            if ! gh_api --paginate --slurp "repos/$REPO/pulls?state=open&base=production&per_page=100" >"$fresh_heads_json" ||
-               ! fresh_head_pr_count=$(jq -er --arg sha "$head_sha" '[flatten[] | select(.head.sha == $sha)] | length' "$fresh_heads_json"); then
-              echo "::error::Cannot re-check whether pull request #$number shares its head commit."
-              publish_reconciliation_error "$head_sha" "$payload" "feature-flag-gate could not refresh pull-request heads" "$statuses_file" ||
-                echo "::error::Cannot publish the feature-flag-gate error for #$number."
-              failures=$((failures + 1))
-              continue
-            fi
-            if [ "$fresh_head_pr_count" -ne 1 ]; then
-              echo "This head commit is shared by multiple open production pull requests; use a unique head commit." >"$reason_file"
-              result=1
             fi
 
             if [ "$result" -eq 0 ]; then

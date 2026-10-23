@@ -73,7 +73,8 @@ const singlePullRequest = workflow.split("  reconcile-open-pull-requests:")[0];
 const waitingDescription = "feature-flag-gate is waiting for the run on the newer production commit";
 
 function featureFlagStatus(pull, overrides = {}) {
-  const titleHash = createHash("sha256").update(pull.title).digest("hex").slice(0, 16);
+  const labels = JSON.stringify((pull.labels ?? []).map((label) => label.name).sort());
+  const titleHash = createHash("sha256").update(`${pull.title}\n${labels}`).digest("hex").slice(0, 16);
   return {
     context: "feature-flag-gate", state: "success", description: "ok", updated_at: new Date().toISOString(),
     target_url: `https://example.invalid/actions/runs/previous#ffg=${pull.base.sha}.${titleHash}`,
@@ -265,13 +266,14 @@ for (const state of ["success", "failure"]) {
   });
 }
 
-for (const change of ["base", "title", "head", "error", "pending", "missing fingerprint", "old format", "red older than 30 minutes"]) {
+for (const change of ["base", "title", "head", "error", "pending", "missing fingerprint", "old format", "red older than 30 minutes", "labels"]) {
   test(`reconcile: ${change} still evaluates and refreshes the fingerprint without another status read`, (t) => {
     const { result, output, posts, calls, pull } = runWorkflow(t, {
       statuses: (pull) => {
         const prior = structuredClone(pull);
         if (change === "base") prior.base.sha = "a".repeat(40);
         if (change === "title") prior.title += " changed";
+        if (change === "labels") prior.labels = [{ name: "AI CHAT" }];
         if (change === "head") prior.head.sha = "b".repeat(40);
         const status = featureFlagStatus(prior);
         if (change === "error" || change === "pending") status.state = change;
