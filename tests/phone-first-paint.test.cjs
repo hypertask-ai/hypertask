@@ -6,7 +6,6 @@ const ts = require('typescript');
 require('tsx/cjs');
 
 const root = path.resolve(__dirname, '..');
-const phoneFlag = 'htpr-7008-phone-first-paint';
 const keys = require("./helpers/flag-files.cjs").load("src/lib/flags/keys.ts");
 const user = { id: 2343, displayName: 'Disposable QA', UserSetting: { notification: true } };
 
@@ -23,7 +22,7 @@ function load(relative, mocks) {
   return loaded.exports;
 }
 
-async function warming({ mobile, enabled, pathname, saveData = false }) {
+async function warming({ mobile, pathname, saveData = false }) {
   const effects = [], frames = [], idle = [], timers = [], listeners = new Map(), historyListeners = new Map(), imports = [], navigationEvents = [];
   const previousWindow = global.window, previousDocument = global.document;
   global.window = { innerWidth: mobile ? 390 : 1440, location: { pathname }, history: { state: {} }, navigator: { connection: { saveData, effectiveType: '4g' } },
@@ -41,7 +40,7 @@ async function warming({ mobile, enabled, pathname, saveData = false }) {
     'next/navigation': { usePathname: () => pathname, useRouter: () => ({}) },
     '@tanstack/react-query': { useQueryClient: () => ({}) },
     '@/lib/state': { useRecoilValue: () => user }, '@/store': {},
-    '@/hooks/useFlag': { useFlag: key => key === phoneFlag ? enabled : false },
+    '@/hooks/useFlag': { useFlag: () => false },
     '@/lib/flags/keys': keys,
     '@/lib/navigation/cachedTaskDetail': { cachedTaskDetailLocation: () => undefined },
     '@/utils/helperFunctions/helperFunctions': {}, '@/lib/constants/constants': {},
@@ -86,19 +85,19 @@ async function warming({ mobile, enabled, pathname, saveData = false }) {
 
 for (const pathname of ['/project', '/inbox']) {
   test(`${pathname}: optional editor, reactions, emoji and Firebase imports wait for phone intent`, async () => {
-    const result = await warming({ pathname, mobile: true, enabled: true });
+    const result = await warming({ pathname, mobile: true });
     assert.equal(result.automatic, 0);
     assert.equal(result.afterIntent, 10, 'all existing shared features still load on intent');
   });
-  test(`${pathname}: flag-off and desktop warming retain all existing automatic imports`, async () => {
-    for (const [mobile, enabled] of [[true, false], [false, true], [false, false]]) {
-      const result = await warming({ pathname, mobile, enabled });
-      assert.equal(result.automatic, 10, 'positive control for the no-import assertion');
-      assert.equal(result.afterIntent, 10, 'warming stays deduplicated');
-    }
+  test(`${pathname}: desktop warming retains all existing automatic imports`, async () => {
+    const result = await warming({ pathname, mobile: false });
+    assert.equal(result.automatic, 10, 'positive control for the no-import assertion');
+    assert.equal(result.afterIntent, 10, 'warming stays deduplicated');
   });
 }
 test('My Tasks and data-saving connections retain their existing warming policy', async () => {
-  assert.equal((await warming({ pathname: '/my-tasks', mobile: true, enabled: true })).automatic, 10);
-  assert.equal((await warming({ pathname: '/project', mobile: true, enabled: false, saveData: true })).automatic, 0);
+  assert.equal((await warming({ pathname: '/my-tasks', mobile: true })).automatic, 10);
+  const result = await warming({ pathname: '/project', mobile: false, saveData: true });
+  assert.equal(result.automatic, 0);
+  assert.equal(result.afterIntent, 10, 'data saving still allows deliberate warming');
 });
