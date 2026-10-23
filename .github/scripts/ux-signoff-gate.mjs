@@ -439,13 +439,13 @@ export function createGithub({ env = process.env, fetchImpl = fetch, exec = exec
     now, maxWaitMs: Number(env.GH_API_MAX_WAIT_SECONDS || 240) * 1000,
     timeBudgetMs: Number(env.GH_API_TIME_BUDGET_SECONDS || 480) * 1000,
   });
-  return async (path, { method = 'GET', body } = {}) => {
+  return async (path, { method = 'GET', body, noWait = false } = {}) => {
     const readOnly = method === 'GET' && body === undefined;
     if (!env.GH_TOKEN) {
       const args = ['api', '--method', method, path];
       if (body) args.push('--input', '-');
       return JSON.parse(await ghApi(args.slice(1), {
-        budget, now, sleep, log,
+        budget, now, sleep, log, env: { GH_API_NO_WAIT: noWait ? '1' : '' },
         exec: (command, ghArgs, options) => {
           try {
             return { status: 0, stdout: exec(command, ghArgs, {
@@ -477,7 +477,7 @@ export function createGithub({ env = process.env, fetchImpl = fetch, exec = exec
       if (response.ok) return response.json();
       const wait = rateLimitWait(response.status, response.headers, await response.text(), now());
       if (wait != null) {
-        if (!readOnly) throw new GithubRateLimit(new Date(now() + wait).toISOString());
+        if (!readOnly || noWait) throw new GithubRateLimit(new Date(now() + wait).toISOString());
         const ms = budget.reserve(wait);
         log(`GitHub API rate limited; waiting ${Math.ceil(ms / 1000)}s until reset`);
         await sleep(ms);
@@ -491,10 +491,10 @@ export function createGithub({ env = process.env, fetchImpl = fetch, exec = exec
   };
 }
 
-async function githubPages(github, path) {
+async function githubPages(github, path, options) {
   const items = [];
   for (let page = 1; ; page++) {
-    const entries = await github(`${path}${path.includes('?') ? '&' : '?'}per_page=100&page=${page}`);
+    const entries = await github(`${path}${path.includes('?') ? '&' : '?'}per_page=100&page=${page}`, options);
     if (!Array.isArray(entries)) throw new Error('GitHub API returned no list');
     items.push(...entries);
     if (entries.length < 100) return items;
@@ -672,10 +672,10 @@ async function runGate(args, { env = process.env, fetchImpl = fetch, github = cr
         if (verdict.state === 'error') errors = true;
         if (!/^[a-f0-9]{40}$/.test(pr.head?.sha ?? '')) throw new Error('No PR head SHA to publish');
         // The serialized workflow owns this context; reuse the cursor read for unchanged heads.
-        const statuses = statusCache.get(pr.head.sha) ?? await githubPages(github, `repos/${repo}/commits/${pr.head.sha}/statuses`);
+        const statuses = statusCache.get(pr.head.sha) ?? await githubPages(github, `repos/${repo}/commits/${pr.head.sha}/statuses`, { noWait: true });
         const newestStatus = statuses.find((status) => status.context === CONTEXT);
         // Keep the head read immediately before publication, including error verdicts.
-        const current = await github(`repos/${repo}/pulls/${pr.number}`);
+        const current = await github(`repos/${repo}/pulls/${pr.number}`, { noWait: true });
         if (current.state !== 'open' || current.base?.ref !== 'production') break;
         if (current.head?.sha !== pr.head.sha || current.title !== pr.title || current.base?.sha !== pr.base?.sha) {
           pr = current;

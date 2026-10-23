@@ -737,6 +737,28 @@ test('GitHub GET retries transient HTTP failures then succeeds', async () => {
   }
 });
 
+test('a post-verdict GET (noWait) skips on a rate limit instead of waiting, on both transports', async () => {
+  const { createGithub } = await gate;
+  let calls = 0;
+  const github = createGithub({ env, sleep: () => assert.fail('post-verdict reads must not sleep'), fetchImpl: async () => {
+    calls++;
+    return response({ message: 'rate limit' }, 429, { 'retry-after': '5' });
+  } });
+  await assert.rejects(github('repos/fixture/repo/pulls/1', { noWait: true }), (error) => error.rateLimited);
+  assert.equal(calls, 1);
+  let execCalls = 0;
+  const fallback = createGithub({ env: {}, sleep: () => assert.fail('post-verdict reads must not sleep'), exec: () => {
+    execCalls++;
+    const error = new Error('HTTP 429');
+    error.status = 1;
+    error.stdout = 'HTTP/2.0 429 Too Many Requests\r\nRetry-After: 5\r\n\r\n{"message":"rate limit"}';
+    error.stderr = 'gh: HTTP 429';
+    throw error;
+  } });
+  await assert.rejects(fallback('repos/fixture/repo/pulls/1', { noWait: true }), (error) => error.rateLimited);
+  assert.equal(execCalls, 1);
+});
+
 test('GitHub GET retries a network failure then succeeds', async () => {
   const { createGithub } = await gate;
   let calls = 0;

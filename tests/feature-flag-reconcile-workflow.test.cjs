@@ -85,7 +85,7 @@ function featureFlagStatus(pull, overrides = {}) {
 function runWorkflow(t, {
   job = reconciliation, drift = false, missingHead = false, apiFailure,
   gateScript = 'console.log("ok");\n', statuses = () => ({}), sharedHead = false,
-  refreshedPull = (pull) => pull, freshSharedHead = false,
+  refreshedPull = (pull) => pull, freshSharedHead = false, forkHead = false,
 } = {}) {
   const fixture = fs.mkdtempSync(path.join(os.tmpdir(), "flag-gate-drift-"));
   t.after(() => fs.rmSync(fixture, { recursive: true, force: true }));
@@ -170,7 +170,7 @@ function runWorkflow(t, {
     state: "open",
     title: "YPER4-442 [INFRA] fixture",
     base: { ref: "production", sha: base },
-    head: { sha: head, repo: { full_name: env.REPO } },
+    head: { sha: head, repo: { full_name: forkHead ? "someone/fork" : env.REPO } },
     labels: [],
   };
   fs.writeFileSync(env.FIXTURE_PR, JSON.stringify(pull));
@@ -265,6 +265,18 @@ for (const state of ["success", "failure"]) {
     ]);
   });
 }
+
+test("reconcile: a fork PR with a matching recent success is still judged and refused", (t) => {
+  const { result, output, posts } = runWorkflow(t, {
+    forkHead: true,
+    statuses: (pull) => ({ [pull.head.sha]: [featureFlagStatus(pull)] }),
+  });
+  assert.equal(result.status, 0, output);
+  assert.doesNotMatch(output, /skip #42/);
+  assert.match(output, /evaluated 1, skipped 0/);
+  assert.equal(posts.at(-1).state, "failure");
+  assert.match(posts.at(-1).description, /Fork pull requests require owner review/);
+});
 
 for (const change of ["base", "title", "head", "error", "pending", "missing fingerprint", "old format", "red older than 30 minutes", "labels"]) {
   test(`reconcile: ${change} still evaluates and refreshes the fingerprint without another status read`, (t) => {
