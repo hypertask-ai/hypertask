@@ -173,6 +173,7 @@ async function main() {
         taskId: 1,
         userId: 6,
         agentId: null,
+        teamScope: null,
         url: canonicalUrl,
       },
     ])
