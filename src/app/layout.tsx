@@ -72,7 +72,7 @@ export default async function RootLayout(
     } catch {}
   }
   const [device, boardDocument, inboxDocument, ticketShell] = await firstScreenPromise;
-  const ticketShellEnabled = analyticsSession && ticketShell ? await isFeatureEnabled(HTPR_7627_TICKET_FIRST_SCREEN_FLAG, analyticsSession.id) : false;
+  const ticketShellEnabled = analyticsSession ? await isFeatureEnabled(HTPR_7627_TICKET_FIRST_SCREEN_FLAG, analyticsSession.id) : false;
   const shellSeed = ticketShellEnabled ? await getServerTicketShell() : null;
   const firstScreen = boardDocument ?? inboxDocument;
   const deferUnusedBoardFonts = boardDocument?.flags.values[HTPR_7016_PHONE_BOARD_COLD_START_FLAG] === true &&
