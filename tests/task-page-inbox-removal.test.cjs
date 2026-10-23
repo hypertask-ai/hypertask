@@ -265,6 +265,7 @@ function sendThreeInARow(t, flags) {
 test("HTPR-7659: three comments in a row from the inbox each archive their own message", async (t) => {
   const flow = sendThreeInARow(t, new Set(["htpr-7659-archive-every-send"]));
   await Promise.all(flow.pending);
+  await new Promise((resolve) => setTimeout(resolve, 20));
   assert.deepEqual(flow.requests.map((url) => new URL(url, "https://app.hypertask.ai").searchParams.get("id")), ["801", "802", "803"]);
   assert.deepEqual(flow.toasts, []);
   assert.equal(flow.navigations.length, 3);
@@ -273,6 +274,7 @@ test("HTPR-7659: three comments in a row from the inbox each archive their own m
 test("HTPR-7659: with the flag off a stale ticket count still skips the archive, the old behaviour", async (t) => {
   const flow = sendThreeInARow(t, new Set());
   await Promise.all(flow.pending);
+  await new Promise((resolve) => setTimeout(resolve, 20));
   assert.equal(flow.requests.length, 0);
 });
 
