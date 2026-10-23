@@ -26,7 +26,7 @@ const plans = [
     unit: "free forever",
     note: "",
     features: [
-      "Collaborative boards, unlimited tasks",
+      "Unlimited members, up to 2 boards and 250 open tickets",
       "Starter AI allowance on fast budget models",
       "CLI + MCP included",
       "Upgrade anytime for full AI power",
