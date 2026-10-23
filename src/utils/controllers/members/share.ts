@@ -1,4 +1,5 @@
 import prisma from "@/lib/prisma";
+import { isShareLinkLive } from "@/utils/controllers/tasks/getSharedTask";
 import { addExistingUserToProject } from "./addExistingUserToProject";
 
 const membersShare = async (userId: number, shareId: string) => {
@@ -30,6 +31,7 @@ const membersShare = async (userId: number, shareId: string) => {
         task: {
           select: {
             uniqueIndex: true,
+            status: true,
           },
         },
         user: true,
@@ -37,7 +39,7 @@ const membersShare = async (userId: number, shareId: string) => {
     });
 
 
-    if (taskShared) {
+    if (taskShared && isShareLinkLive(taskShared)) {
       if (taskShared.shareType === "Domain") {
         const project = await prisma.project.findFirst({
           where: {
