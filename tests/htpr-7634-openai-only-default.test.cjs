@@ -576,7 +576,7 @@ test("provider settings stays available with the flag off or a failing key read"
     const res = { status(value) { status = value; return res; }, json(value) { body = value; return res; } };
     await route.default({ method: "GET", headers: {}, query: { teamId } }, res);
     assert.equal(status, 200);
-    assert.deepEqual(body.defaultModelContext, { openaiOnlyDefaultEnabled: false, hasDirectOpenAiKey: false, hasClaudeRoute: false });
+    assert.deepEqual({ ...body.defaultModelContext }, { openaiOnlyDefaultEnabled: false, hasDirectOpenAiKey: false, hasClaudeRoute: false });
   }
 });
 

@@ -320,8 +320,9 @@ test("chat request model selection wins before the plan-aware fallback", () => {
 
   assert.match(
     chatRoute,
-    /resolveModelSelection\(\s*body\.provider,\s*body\.model,\s*modelOptionIdForTurn,/,
+    /resolveModelSelection\(\s*requestedModel\.provider,\s*requestedModel\.model,\s*modelOptionIdForTurn,/,
   );
+  assert.match(chatRoute, /const requestedModel = await isBrowserOpenAiOnlyDefaultUnfundedHere\([\s\S]*?\n\s*: body;/);
   assert.match(
     chatRoute,
     /modelOptionIdForTurn = resolveAgentModelPin\(\{[\s\S]*agentModelOptionId: actingAgent\?\.modelOptionId,/,
