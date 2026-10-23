@@ -488,12 +488,16 @@ async function install(env) {
     for (const name of ['collector.mjs', 'io.mjs', 'noise.json']) await fs.copyFile(join(HERE, name), join(target, name));
     await fs.cp(join(HERE, 'sources'), join(target, 'sources'), { recursive: true });
   }
+  const checker = join(HERE, HERE === target ? '' : '..', 'user-unit-check');
+  if (checker !== join(target, 'user-unit-check')) await fs.copyFile(checker, join(target, 'user-unit-check'));
+  await fs.chmod(join(target, 'user-unit-check'), 0o755);
   await fs.chmod(join(target, 'collector.mjs'), 0o755);
   for (const suffix of ['service', 'timer']) {
     const name = `error-collector.${suffix}`;
     if (HERE !== target) await fs.copyFile(join(HERE, '..', name), join(target, name));
     await fs.copyFile(join(target, name), join(units, name));
   }
+  command(env.USER_UNIT_CHECK || join(target, 'user-unit-check'), [join(units, 'error-collector.service'), join(units, 'error-collector.timer')], env);
   command('systemctl', ['--user', 'daemon-reload'], env);
   command('systemctl', ['--user', 'enable', '--now', 'error-collector.timer'], env);
   console.log('Installed error-collector user timer');

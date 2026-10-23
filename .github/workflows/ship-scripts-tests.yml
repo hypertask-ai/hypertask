@@ -6,7 +6,13 @@ on:
     branches: [production]
     paths:
       - '.claude/skills/ship/scripts/**'
+      - '.claude/skills/scriptify/scripts/**'
+      - '.claude/skills/maintain-verification-skill/scripts/**'
+      - '.claude/systemd/**'
+      - 'scripts/daily-stats*'
+      - 'scripts/proc-watchdog*'
       - '.github/workflows/ship-scripts-tests.yml'
+      - 'docs/ci-policy.yml'
 
 permissions:
   contents: read
@@ -49,3 +55,4 @@ jobs:
           bash .claude/skills/ship/scripts/ship-check.test.sh --premerge-only
           python3 .claude/skills/ship/scripts/premerge-evidence.test.py
           python3 .claude/skills/ship/scripts/ci-why.test.py
+          bash .claude/skills/ship/scripts/user-unit-check.test.sh

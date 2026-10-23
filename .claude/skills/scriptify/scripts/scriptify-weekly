@@ -34,9 +34,13 @@ def install(repo):
     for name in ('scriptify-scan', 'scriptify-weekly'):
         shutil.copyfile(HERE / name, lib / name)
         (lib / name).chmod(0o755)
+    checker = HERE / 'user-unit-check' if (HERE / 'user-unit-check').exists() else HERE.parents[1] / 'ship/scripts/user-unit-check'
+    if checker.resolve() != (lib / 'user-unit-check').resolve():
+        shutil.copy2(checker, lib / 'user-unit-check')
     (lib / 'repo').write_text(str(repo) + '\n')
     for name in ('scriptify.service', 'scriptify.timer'):
         shutil.copyfile(HERE / name, units / name)
+    subprocess.run([os.environ.get('USER_UNIT_CHECK', str(lib / 'user-unit-check')), str(units / 'scriptify.service'), str(units / 'scriptify.timer')], check=True)
     run(['systemctl', '--user', 'daemon-reload'])
     run(['systemctl', '--user', 'enable', '--now', 'scriptify.timer'])
     print('scriptify: installed weekly user timer')

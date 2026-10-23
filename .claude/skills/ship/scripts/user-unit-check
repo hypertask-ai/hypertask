@@ -1,0 +1,129 @@
+#!/usr/bin/env bash
+set -euo pipefail
+exec python3 - "$@" <<'PY'
+import argparse
+import os
+from pathlib import Path
+import re
+import shlex
+import subprocess
+import sys
+import time
+
+parser = argparse.ArgumentParser(prog='user-unit-check')
+parser.add_argument('--first-run', metavar='SERVICE')
+parser.add_argument('--timeout', type=float, default=600, metavar='SECONDS')
+parser.add_argument('units', nargs='*', metavar='UNIT')
+args = parser.parse_args()
+if not args.units and not args.first_run:
+    parser.error('provide unit files or --first-run SERVICE')
+if args.timeout <= 0:
+    parser.error('--timeout must be positive')
+
+home = Path.home()
+checked = {}
+
+
+def durable(raw):
+    raw = raw.replace('%h', str(home)).replace('%%', '%')
+    if not raw.startswith('/'):
+        return
+    path = Path(os.path.normpath(raw))
+    for candidate in {path, path.resolve()}:
+        if '.worktrees' in candidate.parts:
+            raise ValueError(f'disposable path: {raw} (.worktrees)')
+        projects = home / 'projects'
+        if candidate.is_relative_to(projects) and candidate.relative_to(projects).parts:
+            if candidate.relative_to(projects).parts[0].startswith('hypertask-'):
+                raise ValueError(f'disposable path: {raw} (ticket worktree)')
+        for temporary in {Path('/tmp'), Path(os.environ.get('TMPDIR') or '/tmp').resolve()}:
+            if candidate.is_relative_to(temporary):
+                raise ValueError(f'disposable path: {raw} (temporary directory)')
+        directory = candidate
+        while not directory.is_dir() and directory != directory.parent:
+            directory = directory.parent
+        if directory not in checked:
+            result = subprocess.run(['git', '-C', str(directory), 'rev-parse', '--absolute-git-dir', '--git-common-dir'],
+                                    capture_output=True, text=True)
+            lines = result.stdout.splitlines()
+            checked[directory] = result.returncode == 0 and len(lines) == 2 and (
+                (directory / lines[0]).resolve() != (directory / lines[1]).resolve())
+        if checked[directory]:
+            raise ValueError(f'disposable path: {raw} (linked git worktree)')
+
+
+def paths(unit):
+    section = ''
+    text = re.sub(r'\\\n\s*', ' ', unit.read_text())
+    for line in text.splitlines():
+        line = line.strip()
+        if not line or line.startswith(('#', ';')):
+            continue
+        if line.startswith('['):
+            section = line
+            continue
+        if section != '[Service]' or '=' not in line:
+            continue
+        key, value = line.split('=', 1)
+        key, value = key.strip(), value.strip().replace('%h', str(home))
+        if key == 'WorkingDirectory':
+            durable(value.lstrip('-').strip('"\''))
+        elif key in ('ExecStart', 'ExecStartPre'):
+            for token in shlex.split(value):
+                durable(token.lstrip('-+!:@'))
+                for path in re.findall(r'/(?:[^\s\"\'`;|&<>():]|\\ )+', token):
+                    durable(path)
+        elif key == 'Environment':
+            for token in shlex.split(value):
+                if token.startswith('PATH='):
+                    for entry in token[5:].split(':'):
+                        durable(entry)
+
+
+failed = False
+for name in args.units:
+    unit = Path(name).absolute()
+    try:
+        result = subprocess.run(['systemd-analyze', '--user', '--recursive-errors=no', 'verify', str(unit)],
+                                capture_output=True, text=True)
+        message = result.stdout + result.stderr
+        if message:
+            print(message, end='' if message.endswith('\n') else '\n', file=sys.stderr)
+        if result.returncode:
+            raise ValueError('systemd verification failed (nonzero exit with --recursive-errors=no; unrelated unit warnings do not decide the result)')
+        if message:
+            print('systemd warnings only: verifier exited zero with --recursive-errors=no', file=sys.stderr)
+        paths(unit)
+        print(f'unit ok: {unit.name}')
+    except (OSError, ValueError) as error:
+        print(f'unit refused: {unit.name}: {error}', file=sys.stderr)
+        failed = True
+
+if failed:
+    sys.exit(1)
+if args.first_run:
+    service = args.first_run
+    try:
+        deadline = time.monotonic() + args.timeout
+        subprocess.run(['systemctl', '--user', 'start', '--no-block', service], check=True,
+                       timeout=max(0.01, deadline - time.monotonic()))
+        while True:
+            remaining = deadline - time.monotonic()
+            if remaining <= 0:
+                raise ValueError(f'timed out after {args.timeout:g}s')
+            result = subprocess.run(['systemctl', '--user', 'show', service, '-p', 'ActiveState', '-p', 'SubState', '-p', 'Result', '-p', 'Job'],
+                                    check=True, capture_output=True, text=True, timeout=remaining)
+            state = dict(line.split('=', 1) for line in result.stdout.splitlines() if '=' in line)
+            if state.get('ActiveState') == 'failed':
+                raise ValueError(f'Result={state.get("Result", "missing")}')
+            if state.get('ActiveState') == 'inactive' and state.get('Job', '') in ('', '0'):
+                if state.get('Result') != 'success':
+                    raise ValueError(f'Result={state.get("Result", "missing")}')
+                print(f'first run ok: {service} (Result=success)')
+                break
+            time.sleep(min(1, remaining))
+    except (OSError, ValueError, subprocess.SubprocessError) as error:
+        print(f'first run failed: {service}: {error}', file=sys.stderr)
+        subprocess.run(['journalctl', '--user', '-u', service, '-n', '20', '--no-pager'], check=False)
+        sys.exit(1)
+PY

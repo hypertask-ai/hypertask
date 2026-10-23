@@ -45,15 +45,16 @@ install_timer() {
   local repo
   repo=$(cd "$HERE/../../.." && pwd)
   mkdir -p "$UNITS" "$LIB"
-  install -m 0755 "$HERE/runner-selfupdate" "$LIB/"
+  install -m 0755 "$HERE/runner-selfupdate" "$HERE/user-unit-check" "$LIB/"
   install -m 0644 "$repo/systemd/runner-selfupdate.service" "$repo/systemd/runner-selfupdate.timer" "$UNITS/"
+  "${USER_UNIT_CHECK:-$LIB/user-unit-check}" "$UNITS/runner-selfupdate.service" "$UNITS/runner-selfupdate.timer"
   "$SYSTEMCTL" --user daemon-reload
   "$SYSTEMCTL" --user enable --now runner-selfupdate.timer
 }
 
 run() {
   local scripts source changed=0 webhook_changed=0 enabled n dirty i
-  local shell_files=(runner-pickup runner-deliver runner-chat-reply ship-identity runner-selfupdate)
+  local shell_files=(runner-pickup runner-deliver runner-chat-reply ship-identity runner-selfupdate user-unit-check)
   local unit_files=(runner-pickup@.service runner-pickup@.timer runner-webhook.service runner-selfupdate.service runner-selfupdate.timer)
   local sources=() targets=()
   mkdir -p "$STATE"
@@ -150,6 +151,7 @@ install_files() (
   install -m 0755 "$scripts/runner-selfupdate" "$LIB/"
   install -D -m 0755 "$scripts/runner-dispatch" "$DISPATCH"
   install -m 0644 "$LIVE/.claude/systemd/runner-selfupdate.service" "$LIVE/.claude/systemd/runner-selfupdate.timer" "$UNITS/"
+  "${USER_UNIT_CHECK:-$LIB/user-unit-check}" "$UNITS/runner-selfupdate.service" "$UNITS/runner-selfupdate.timer" || exit 1
   systemctl --user daemon-reload
 )
 

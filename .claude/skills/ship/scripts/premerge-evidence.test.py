@@ -28,7 +28,7 @@ class PosterTests(unittest.TestCase):
         self.log = self.root / 'calls'
         for leaked in ('SHIP_GIT', 'SHIP_GIT_CACHE', 'SHIP_GIT_REMOTE', 'GH_PAUSE_FILE'):
             os.environ.pop(leaked, None)
-        self.env = dict(os.environ, HOME=str(self.root),
+        self.env = dict(os.environ, HOME=str(self.root), USER_UNIT_CHECK='/usr/bin/true',
                         PATH=f'{self.bin}:{os.environ["PATH"]}',
                         PREMERGE_STATUS_STATE=str(self.state),
                         POSTER_TEST_ROOT=str(self.root))

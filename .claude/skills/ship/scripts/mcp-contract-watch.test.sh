@@ -845,6 +845,7 @@ class WatcherTests(unittest.TestCase):
         self.assertIn('%h/.local/lib/hypertask/mcp-contract-watch/mcp-contract-watch --once', service)
         self.assertIn('UMask=0077', service)
         # Test the installer with a fake systemctl, never the user's service manager.
+        self.h.env['USER_UNIT_CHECK'] = '/usr/bin/true'
         control = self.h.bin / 'systemctl'
         control.write_text('#!/usr/bin/env python3\nimport json, sys\nfrom pathlib import Path\nwith (Path.home() / "systemctl.jsonl").open("a") as out: out.write(json.dumps(sys.argv[1:]) + "\\n")\n')
         control.chmod(0o755)

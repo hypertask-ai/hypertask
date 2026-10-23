@@ -6,6 +6,7 @@ SCRIPT=$HERE/runner-selfupdate
 REPO=$(cd "$HERE/../../../.." && pwd)
 T=$(mktemp -d)
 trap 'rm -rf "$T"' EXIT
+export USER_UNIT_CHECK=/usr/bin/true
 export GIT_CONFIG_NOSYSTEM=1 GIT_CONFIG_GLOBAL=/dev/null
 fails=0; passes=0
 ok() { echo "ok   $*"; passes=$((passes + 1)); }
@@ -26,7 +27,7 @@ setup() {
   mkdir -p "$TMPDIR"
   mkdir -p "$HOME" "$C/source/.claude/skills/ship/scripts" "$C/source/.claude/hooks" "$C/source/.claude/systemd" "$C/lib" "$C/units/agent-events.service.d"
   S=$C/source/.claude/skills/ship/scripts
-  cp "$HERE/runner-pickup" "$SCRIPT" "$S/"
+  cp "$HERE/runner-pickup" "$HERE/user-unit-check" "$SCRIPT" "$S/"
   for file in runner-chat-reply ship-identity; do printf '#!/usr/bin/env bash\nexit 0\n' > "$S/$file"; done
   printf '#!/usr/bin/env bash\nexit 0\n' > "$C/source/.claude/hooks/runner-inbox-stop.sh"
   for file in runner-webhook runner-dispatch; do printf '#!/usr/bin/env python3\nprint("fixture")\n' > "$S/$file"; done
