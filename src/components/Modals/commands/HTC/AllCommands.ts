@@ -1302,7 +1302,7 @@ export const getAllCommands = (
   kanbanSelectAllEnabled = commandOptions.kanbanSelectAllEnabled,
   roundedEnabled = false,
   keepAiChatClosedKeywords = "",
-  aiChatOpenSwitchesEnabled = false,
+  aiChatAutoOpenCommandName = "",
 ): CommandGroup[] => {
   const navigate = getNavigateCommands(commandOptions);
   const time = getTimeCommands(commandOptions);
@@ -1330,8 +1330,8 @@ export const getAllCommands = (
       ...appearance.commandLists.slice(5),
     ] } : appearance,
     { ...settings, commandLists: settings.commandLists.map((command) => command.key === "settingsTaskPageOpenAiChatByDefault"
-      ? aiChatOpenSwitchesEnabled
-        ? { ...command, name: "Settings: AI chat auto-open", keywords: "settings open ai chat on newly created tickets when I open a ticket boards task page" }
+      ? aiChatAutoOpenCommandName
+        ? { ...command, name: aiChatAutoOpenCommandName, keywords: "settings open ai chat on newly created tickets when I open a ticket boards task page" }
         : { ...command, keywords: keepAiChatClosedKeywords ? "settings open ai chat by default keep ai chat closed always task page" : "settings open ai chat by default task page" } : command) },
     help,
   ].filter((group) => group.commandLists.length > 0);

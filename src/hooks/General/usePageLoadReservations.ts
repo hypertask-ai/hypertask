@@ -41,13 +41,15 @@ export function usePageLoadReservations({
 }) {
   const aiChatOpenSwitchesEnabled = useFlag(HTPR_7650_AI_CHAT_OPEN_SWITCHES_FLAG);
   const { keepAiChatClosed, ready: chatAutoOpenReady } = useKeepAiChatClosed();
+  let legacyChatReservationReady = false;
+  if (!aiChatOpenSwitchesEnabled) legacyChatReservationReady = chatAutoOpenReady;
   const isTaskDetailPage = pathname?.startsWith("/detail") ?? false;
   const aiChatPinned = useRecoilValue(aiChatPinnedAtom);
   const openAiChatByDefault = useRecoilValue(openAiChatByDefaultAtom);
   const isAiChatSidebarMode = useRecoilValue(isAiChatSidebarModeAtom);
   const aiChatSidebarWidthPx = useRecoilValue(aiChatSidebarWidthPxAtom);
   const reserveAiSidebar = !mbl && isAiChatSidebarMode && (
-    showAiChatInterface || (aiChatSwitchReserve ?? (!aiChatOpenSwitchesEnabled && chatAutoOpenReady && !keepAiChatClosed && (reserveBoardChat || (
+    showAiChatInterface || (aiChatSwitchReserve ?? (legacyChatReservationReady && !keepAiChatClosed && (reserveBoardChat || (
       isTaskDetailPage && authenticatedUserId !== null &&
       (aiChatPinned || (openAiChatByDefault && !aiChatAutoOpenSuppressed))
     ))))

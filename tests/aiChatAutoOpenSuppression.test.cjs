@@ -48,6 +48,7 @@ function effectFrom(relative, identifies, extraNames = []) {
     const { aiChatOpenSwitchesReady = true, aiChatOpenSwitchesEnabled = false, hydrated, slugs, _parsedTask, openAiChatByDefault, aiChatAutoOpenSuppressed, keepAiChatClosed, chatAutoOpenReady,
       aiChatPinned, isMblForChat, _mbl, isGuest, setShowAiChatInterface,
       ${extraNames.join(", ")} } = values;
+    const legacyAutoOpenReady = aiChatOpenSwitchesReady && !aiChatOpenSwitchesEnabled;
     ${effects[0]}; }`).run;
 }
 

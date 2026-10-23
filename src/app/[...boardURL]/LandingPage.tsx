@@ -1,5 +1,4 @@
 'use client'
-
 import { HTPR_7650_AI_CHAT_OPEN_SWITCHES_FLAG, HTPR_7530_KEEP_AI_CHAT_CLOSED_FLAG } from "@/lib/flags/keys";
 import type { useLandingSectionState } from "./useLandingSectionState";
 import { completeBoardReadinessTrace, emitBoardReadinessAfterPaint, markBoardReadinessPhase } from "@/lib/analytics/boardReadinessPhases";
@@ -1024,6 +1023,8 @@ const  LandingPage= ({
   const hydrated = useHydrated();
   const aiChatOpenSwitchesEnabled = useFlag(HTPR_7650_AI_CHAT_OPEN_SWITCHES_FLAG);
   const aiChatOpenSwitchesReady = useFlagReady(HTPR_7650_AI_CHAT_OPEN_SWITCHES_FLAG);
+  let legacyAutoOpenReady = false;
+  if (!aiChatOpenSwitchesEnabled) legacyAutoOpenReady = aiChatOpenSwitchesReady;
   const keepAiChatClosedEnabled = useFlag(HTPR_7530_KEEP_AI_CHAT_CLOSED_FLAG);
   const keepAiChatClosedReady = useFlagReady(HTPR_7530_KEEP_AI_CHAT_CLOSED_FLAG);
   const savedKeepAiChatClosed = useRecoilValue(keepAiChatClosedAtom);
@@ -1033,21 +1034,17 @@ const  LandingPage= ({
 
 useEffect(() => {
   if (
-    !hydrated ||
-    isMblForChat ||
-    !aiChatOpenSwitchesReady || aiChatOpenSwitchesEnabled ||
-    !chatAutoOpenReady ||
-    keepAiChatClosed ||
-    (!isGuest &&
-      !aiChatPinned &&
-      (!openAiChatByDefault || aiChatAutoOpenSuppressed))
-  ) return;
-  setShowAiChatInterface(true);
+    hydrated &&
+    !isMblForChat &&
+    legacyAutoOpenReady &&
+    chatAutoOpenReady &&
+    !keepAiChatClosed &&
+    (isGuest || aiChatPinned || (openAiChatByDefault && !aiChatAutoOpenSuppressed))
+  ) setShowAiChatInterface(true);
 
 }, [
   hydrated,
-  aiChatOpenSwitchesEnabled,
-  aiChatOpenSwitchesReady,
+  legacyAutoOpenReady,
   chatAutoOpenReady,
   keepAiChatClosed,
   slugs,

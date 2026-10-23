@@ -338,7 +338,8 @@ function toggles(enabled, keepClosedFlag = true) {
     "@/hooks/General/useAiChatOpenPreferences": { useAiChatOpenPreferences: () => ({ enabled, values: defaults, setPreference: (key, value) => changes.push([key, value]) }) },
     "@/components/sidebars/RightSidebar/UserPreference": inert,
     "@/lib/state": { useRecoilState: () => [false, () => {}] }, "@/store": {},
-    "@/hooks/useFlag": { useFlag: () => keepClosedFlag }, "@/lib/flags/keys": {},
+    "@/hooks/useFlag": { useFlag: (key) => key === flag ? enabled : keepClosedFlag },
+    "@/lib/flags/keys": { HTPR_7650_AI_CHAT_OPEN_SWITCHES_FLAG: flag, HTPR_7530_KEEP_AI_CHAT_CLOSED_FLAG: "htpr-7530-keep-ai-chat-closed" },
     "./SettingsCard": inert, "./SettingsScrollPicker": inert, "./SettingsSectionShell": inert, "./SettingsToggle": { default: Toggle },
   });
   const rows = [];
@@ -366,7 +367,7 @@ test("palette uses the new settings command only with the new flag and preserves
   const jiti = createJiti(__filename, { alias: { "@": path.join(root, "src") } });
   const { getAllCommands } = jiti(path.join(root, "src/components/Modals/commands/HTC/AllCommands.ts"));
   for (const enabled of [false, true, false]) {
-    const command = getAllCommands(undefined, undefined, false, "keep ai chat closed always", enabled)
+    const command = getAllCommands(undefined, undefined, false, "keep ai chat closed always", enabled ? "Settings: AI chat auto-open" : "")
       .flatMap((group) => group.commandLists).find((item) => item.key === "settingsTaskPageOpenAiChatByDefault");
     assert.equal(command.name, enabled ? "Settings: AI chat auto-open" : "Settings: Open AI chat by default");
     assert.equal(command.payload, "task-page");

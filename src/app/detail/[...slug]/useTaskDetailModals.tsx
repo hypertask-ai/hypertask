@@ -82,6 +82,8 @@ export function useTaskDetailModals(state: useTaskDetailStateValue) {
   const hydrated = useHydrated();
   const aiChatOpenSwitchesEnabled = useFlag(HTPR_7650_AI_CHAT_OPEN_SWITCHES_FLAG);
   const aiChatOpenSwitchesReady = useFlagReady(HTPR_7650_AI_CHAT_OPEN_SWITCHES_FLAG);
+  let legacyAutoOpenReady = false;
+  if (!aiChatOpenSwitchesEnabled) legacyAutoOpenReady = aiChatOpenSwitchesReady;
   const setEmbeddedTicketPath = useSetRecoilState(aiChatEmbeddedTicketPathAtom);
   useEffect(() => {
     if (!aiChatOpenSwitchesEnabled || !embedded) return;
@@ -122,7 +124,7 @@ export function useTaskDetailModals(state: useTaskDetailStateValue) {
     if (
       !hydrated ||
       _mbl ||
-      !aiChatOpenSwitchesReady || aiChatOpenSwitchesEnabled ||
+      !legacyAutoOpenReady ||
       !chatAutoOpenReady ||
       keepAiChatClosed ||
       (!aiChatPinned && (!openAiChatByDefault || aiChatAutoOpenSuppressed))
@@ -131,8 +133,7 @@ export function useTaskDetailModals(state: useTaskDetailStateValue) {
 
   }, [
     hydrated,
-    aiChatOpenSwitchesEnabled,
-    aiChatOpenSwitchesReady,
+    legacyAutoOpenReady,
     chatAutoOpenReady,
     keepAiChatClosed,
     _parsedTask?.id,

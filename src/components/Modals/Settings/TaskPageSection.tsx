@@ -5,14 +5,15 @@ import UserPreferenceSidebar from "@/components/sidebars/RightSidebar/UserPrefer
 import { useRecoilState } from "@/lib/state";
 import { keepAiChatClosedAtom, openAiChatByDefaultAtom } from "@/store";
 import { useFlag } from "@/hooks/useFlag";
-import { HTPR_7530_KEEP_AI_CHAT_CLOSED_FLAG } from "@/lib/flags/keys";
+import { HTPR_7530_KEEP_AI_CHAT_CLOSED_FLAG, HTPR_7650_AI_CHAT_OPEN_SWITCHES_FLAG } from "@/lib/flags/keys";
 import SettingsCard from "./SettingsCard";
 import SettingsScrollPicker from "./SettingsScrollPicker";
 import SettingsSectionShell from "./SettingsSectionShell";
 import SettingsToggle from "./SettingsToggle";
 
 const TaskPageSection = () => {
-  const { enabled: aiChatOpenSwitchesEnabled, values, setPreference } = useAiChatOpenPreferences();
+  const aiChatOpenSwitchesEnabled = useFlag(HTPR_7650_AI_CHAT_OPEN_SWITCHES_FLAG);
+  const { values, setPreference } = useAiChatOpenPreferences();
   const [openAiChatByDefault, setOpenAiChatByDefault] = useRecoilState(
     openAiChatByDefaultAtom
   );

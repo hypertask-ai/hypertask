@@ -53,7 +53,8 @@ export default function ComposeTaskWriter({ active, focusProxy, destinationProje
   const aiChatOpenSwitchesReady = useFlagReady(HTPR_7650_AI_CHAT_OPEN_SWITCHES_FLAG);
   const { keepAiChatClosed, ready: chatAutoOpenReady } = useKeepAiChatClosed();
   const chatAutoOpenAllowed = useRef(false);
-  chatAutoOpenAllowed.current = aiChatOpenSwitchesReady && !aiChatOpenSwitchesEnabled && chatAutoOpenReady && !keepAiChatClosed;
+  chatAutoOpenAllowed.current = false;
+  if (!aiChatOpenSwitchesEnabled) chatAutoOpenAllowed.current = aiChatOpenSwitchesReady && chatAutoOpenReady && !keepAiChatClosed;
   const ctrljFooterOneLine = useFlag(HTPR_7306_CTRLJ_FOOTER_ONE_LINE_FLAG);
   const skillFollowupFlag = useFlag(HTPR_7319_SKILL_CHAT_FOLLOWUP_FLAG);
   let skillFollowupEnabled = false;

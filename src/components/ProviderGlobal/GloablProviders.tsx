@@ -1,7 +1,7 @@
 
 "use client";
 import { useAiChatAutoOpen } from "@/hooks/General/useAiChatAutoOpen";
-import { HTPR_7530_KEEP_AI_CHAT_CLOSED_FLAG, HTPR_7569_MY_TASKS_SINGLE_COMMAND_CENTER_FLAG } from "@/lib/flags/keys";
+import { HTPR_7530_KEEP_AI_CHAT_CLOSED_FLAG, HTPR_7569_MY_TASKS_SINGLE_COMMAND_CENTER_FLAG, HTPR_7650_AI_CHAT_OPEN_SWITCHES_FLAG } from "@/lib/flags/keys";
 import {
   lazy,
   ReactNode,
@@ -401,7 +401,9 @@ export default function GlobalProvider({
   const aiChatAutoOpenSuppressed = useRecoilValue(aiChatAutoOpenSuppressedAtom);
   const aiChatPinned = useRecoilValue(aiChatPinnedAtom);
   const openAiChatByDefault = useRecoilValue(openAiChatByDefaultAtom);
-  const { active: aiChatOpenSwitchesEnabled, reserve: aiChatSwitchReserve } = useAiChatAutoOpen(mbl);
+  const { reserve: aiChatSwitchReserve } = useAiChatAutoOpen(mbl);
+  let aiChatOpenSwitchesEnabled = !useFlagReady(HTPR_7650_AI_CHAT_OPEN_SWITCHES_FLAG);
+  if (useFlag(HTPR_7650_AI_CHAT_OPEN_SWITCHES_FLAG)) aiChatOpenSwitchesEnabled = true;
   const keepAiChatClosedEnabled = useFlag(HTPR_7530_KEEP_AI_CHAT_CLOSED_FLAG);
   const keepAiChatClosedReady = useFlagReady(HTPR_7530_KEEP_AI_CHAT_CLOSED_FLAG);
   const savedKeepAiChatClosed = useRecoilValue(keepAiChatClosedAtom);

@@ -87,8 +87,11 @@ export default async function RootLayout(
   const sidebarFlags = analyticsSession && sidebarFirstPaint ? await Promise.all([
     isFeatureEnabled(HTPR_7530_KEEP_AI_CHAT_CLOSED_FLAG, analyticsSession.id),
     isFeatureEnabled(HTPR_7055_CHAT_OVERLAYS_TICKET_FLAG, analyticsSession.id),
-    isFeatureEnabled(HTPR_7650_AI_CHAT_OPEN_SWITCHES_FLAG, analyticsSession.id),
   ]) : null;
+  let autoOpenSwitchesUserId: number | null = null;
+  if (analyticsSession && sidebarFlags && await isFeatureEnabled(HTPR_7650_AI_CHAT_OPEN_SWITCHES_FLAG, analyticsSession.id)) {
+    autoOpenSwitchesUserId = analyticsSession.id;
+  }
 
   const theme = cookieStore.get(authConfig.cookies.theme) ?? {
     value: authConfig.cookies.defaultTheme,
@@ -157,8 +160,8 @@ export default async function RootLayout(
                 __html: buildTicketSidebarBootScript({
                   keepClosed: sidebarFlags[0],
                   overlayTicket: sidebarFlags[1],
-                  autoOpenSwitches: sidebarFlags[2],
-                  userId: analyticsSession?.id ?? null,
+                  autoOpenSwitches: autoOpenSwitchesUserId !== null,
+                  userId: autoOpenSwitchesUserId,
                 }),
               }}
             />

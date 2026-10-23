@@ -148,16 +148,18 @@ const Commands = (props: Props) => {
   const roundedEnabled = useFlag(HTPR_7328_ROUNDED_THEME_FLAG);
   const clickableComposeFooter = useFlag(HTPR_7307_CTRLJ_FOOTER_CLICKABLE_FLAG);
   const aiChatOpenSwitchesEnabled = useFlag(HTPR_7650_AI_CHAT_OPEN_SWITCHES_FLAG);
+  let aiChatAutoOpenCommandName = "";
+  if (aiChatOpenSwitchesEnabled) aiChatAutoOpenCommandName = "Settings: AI chat auto-open";
   const keepAiChatClosedEnabled = useFlag(HTPR_7530_KEEP_AI_CHAT_CLOSED_FLAG);
   let keepAiChatClosedKeywords = "";
   if (keepAiChatClosedEnabled) keepAiChatClosedKeywords = "keep ai chat closed always";
   const getRoundedCommands = useCallback(
-    (options?: IAllCommands) => getAllCommands(options, options?.kanbanSelectAllEnabled, !isMobile, keepAiChatClosedKeywords, aiChatOpenSwitchesEnabled),
-    [isMobile, keepAiChatClosedKeywords, aiChatOpenSwitchesEnabled]
+    (options?: IAllCommands) => getAllCommands(options, options?.kanbanSelectAllEnabled, !isMobile, keepAiChatClosedKeywords, aiChatAutoOpenCommandName),
+    [isMobile, keepAiChatClosedKeywords, aiChatAutoOpenCommandName]
   );
   const getLegacyCommands = useCallback(
-    (options?: IAllCommands) => getAllCommands(options, options?.kanbanSelectAllEnabled, false, keepAiChatClosedKeywords, aiChatOpenSwitchesEnabled),
-    [keepAiChatClosedKeywords, aiChatOpenSwitchesEnabled]
+    (options?: IAllCommands) => getAllCommands(options, options?.kanbanSelectAllEnabled, false, keepAiChatClosedKeywords, aiChatAutoOpenCommandName),
+    [keepAiChatClosedKeywords, aiChatAutoOpenCommandName]
   );
   let getCommands = getLegacyCommands;
   if (roundedEnabled) getCommands = getRoundedCommands;

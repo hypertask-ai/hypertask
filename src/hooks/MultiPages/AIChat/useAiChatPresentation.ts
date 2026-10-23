@@ -18,6 +18,8 @@ type Context = Pick<ReturnType<typeof useAiChatState>, "setAiOption" | "contextL
 export function useAiChatPresentation(context: Context) {
   const aiChatOpenSwitchesEnabled = useFlag(HTPR_7650_AI_CHAT_OPEN_SWITCHES_FLAG);
   const aiChatOpenSwitchesReady = useFlagReady(HTPR_7650_AI_CHAT_OPEN_SWITCHES_FLAG);
+  let legacyAutoOpenReady = false;
+  if (!aiChatOpenSwitchesEnabled) legacyAutoOpenReady = aiChatOpenSwitchesReady;
   const keepAiChatClosedEnabled = useFlag(HTPR_7530_KEEP_AI_CHAT_CLOSED_FLAG);
   const keepAiChatClosedReady = useFlagReady(HTPR_7530_KEEP_AI_CHAT_CLOSED_FLAG);
   const savedKeepAiChatClosed = useRecoilValue(keepAiChatClosedAtom);
@@ -84,14 +86,14 @@ export function useAiChatPresentation(context: Context) {
   }, [showAiChatInterface]);
 
   useEffect(() => {
-    if (!aiChatOpenSwitchesReady || aiChatOpenSwitchesEnabled || !chatAutoOpenReady || hasAttemptedRestoreRef.current || !currentUser?.id) return;
+    if (!legacyAutoOpenReady || !chatAutoOpenReady || hasAttemptedRestoreRef.current || !currentUser?.id) return;
     hasAttemptedRestoreRef.current = true;
     if (window.innerWidth < MOBILE_VIEWPORT_MAX_PX) return;
     if (!keepAiChatClosed && !aiChatAutoOpenSuppressed && readChatOpenForSession()) {
       setChatMounted(true);
       setShowAIChat(true);
     }
-  }, [currentUser?.id, aiChatOpenSwitchesEnabled, aiChatOpenSwitchesReady, chatAutoOpenReady, keepAiChatClosed, aiChatAutoOpenSuppressed]);
+  }, [currentUser?.id, legacyAutoOpenReady, chatAutoOpenReady, keepAiChatClosed, aiChatAutoOpenSuppressed]);
 
   useEffect(() => {
     if (!hasAttemptedRestoreRef.current) return;

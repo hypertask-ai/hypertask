@@ -63,5 +63,5 @@ export function useAiChatAutoOpen(mobile: boolean) {
   const active = enabled || !flagReady;
   const pageChanged = pageChangedSinceLastVisit(previousPage.current, lastPage, pageKey);
   const reserve = active && !mobile && allowed && !(suppressed && !pageChanged);
-  return { active, reserve };
+  return { reserve };
 }
