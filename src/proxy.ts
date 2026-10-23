@@ -417,16 +417,22 @@ export default async function requireAuthMiddleware(request: NextRequest) {
     }
     return new NextResponse(null, { status: 403 });
   }
-  if (!currentPath.startsWith('/api') && currentPath.includes('.')) {
-    return NextResponse.next();
-  }
-  const response = await authMiddleware(request, session);
   const forwardedHeaders = new Headers(request.headers);
   forwardedHeaders.delete('x-ht-board-document-route');
   forwardedHeaders.delete('x-ht-inbox-document-route');
-  if (request.nextUrl.pathname === '/project' || request.nextUrl.pathname === '/inbox') {
+  forwardedHeaders.delete('x-ht-ticket-document-route');
+  if (!currentPath.startsWith('/api') && currentPath.includes('.')) {
+    return NextResponse.next({ request: { headers: forwardedHeaders } });
+  }
+  const response = await authMiddleware(request, session);
+  const ticketDocument = /^\/detail\/project-\d+\/(?:\d+|[A-Za-z0-9][A-Za-z0-9_-]*-\d+)(?:\/|$)/.test(currentPath);
+  if (request.nextUrl.pathname === '/project' || request.nextUrl.pathname === '/inbox' || ticketDocument) {
     if (request.headers.get('sec-fetch-dest') === 'document') {
-      forwardedHeaders.set(request.nextUrl.pathname === '/inbox' ? 'x-ht-inbox-document-route' : 'x-ht-board-document-route', request.nextUrl.pathname + request.nextUrl.search);
+      if (ticketDocument) {
+        forwardedHeaders.set('x-ht-ticket-document-route', request.nextUrl.pathname + request.nextUrl.search);
+      } else {
+        forwardedHeaders.set(request.nextUrl.pathname === '/inbox' ? 'x-ht-inbox-document-route' : 'x-ht-board-document-route', request.nextUrl.pathname + request.nextUrl.search);
+      }
     }
     response.headers.set('Cache-Control', 'private, no-store');
     response.headers.set('CDN-Cache-Control', 'no-store');

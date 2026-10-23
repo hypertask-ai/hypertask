@@ -170,3 +170,13 @@ test('desktop chat opt-in is board-only and never authorizes the inbox document'
   assert.equal(await readInboxDocument('/inbox', value), null);
   assert.deepEqual(calls, []);
 });
+
+
+test('the inbox document is still allowed without the ticket flag and never produces a ticket shell', async () => {
+  reset();
+  const document = await getServerInboxDocument();
+  assert.ok(document);
+  assert.equal(document.flags.values['htpr-7627-ticket-first-screen'], undefined);
+  const { getServerTicketShell } = require('../src/lib/firstScreen/serverTicketShell.ts');
+  assert.equal(await getServerTicketShell(), null);
+});
