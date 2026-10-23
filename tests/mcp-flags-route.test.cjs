@@ -26,6 +26,12 @@ let approvalQueries;
 let lockQueries;
 let batchFlagOn;
 let commentLockLost;
+let storedFlag;
+let defaultMode;
+let comments;
+let commentFails;
+let ticketWritable;
+let ticketQueries;
 class FeatureFlagInputError extends Error {}
 class FeatureFlagApprovalError extends Error {}
 const key = "htpr-3533-google-calendar";
@@ -44,8 +50,9 @@ stubModule("src/lib/flags.ts", {
   FEATURE_FLAG_MODES: ["OWNER_ONLY", "OWNER_AND_QA", "EVERYONE", "OFF"],
   FeatureFlagInputError,
   FeatureFlagApprovalError,
-  defaultFeatureFlagMode: () => "OWNER_AND_QA",
+  defaultFeatureFlagMode: () => defaultMode,
   isFeatureEnabled: async (flagKey, userId) => {
+    if (flagKey === "htpr-7665-agent-read-role-guard") return true;
     assert.equal(flagKey, "htpr-7364-batch-flag-approval");
     assert.equal(userId, 6);
     return batchFlagOn;
@@ -65,6 +72,7 @@ stubModule("src/lib/flags.ts", {
   },
 });
 const tx = {
+  featureFlag: { findUnique: async () => storedFlag },
   $queryRaw: async (strings, commentId, taskId, projectId) => {
     const sql = strings.join("?");
     const commentLock = lockQueries.length % 2 === 0;
@@ -112,7 +120,14 @@ const tx = {
 };
 stubModule("src/lib/prisma.ts", {
   default: {
+    task: { findFirst: async (query) => {
+      ticketQueries.push(query);
+      assert.deepEqual(query, { where: { projectId: 15, uniqueIndex: 3533, status: { not: "Deleted" }, project: ctx.teamScope ? { AND: [{ OR: [{ members: { some: { agentId: "runner-3", status: "Accepted", agent: { userId: 6, revokedAt: null } } } }] }, { teamId: ctx.teamScope.teamId }] } : { OR: [{ members: { some: { agentId: "runner-3", status: "Accepted", agent: { userId: 6, revokedAt: null } } } }] } }, select: { id: true, userId: true } });
+      return ticketWritable ? { id: 42, userId: 6 } : null;
+    } },
+    user: { findUniqueOrThrow: async () => ({ id: 6, displayName: "Valentin", email: "owner@test" }) },
     agent: {
+      findUnique: async () => ({ permissions: { role: ctx.agentRole } }),
       findUniqueOrThrow: async (query) => {
         assert.deepEqual(query, { where: { id: "runner-3" }, select: { displayName: true } });
         calls.push("agent");
@@ -127,6 +142,11 @@ stubModule("src/lib/realtime/server.ts", {
     if (broadcastFails) throw new Error("broadcast unavailable");
   },
 });
+stubModule("src/utils/controllers/comments/createCommentService.ts", { createCommentService: async (input) => {
+  if (commentFails) throw new Error("comment unavailable");
+  comments.push(input);
+  return { id: 1 };
+} });
 const jiti = createJiti(__filename, { interopDefault: true, alias: { "@": path.join(root, "src") } });
 const { GET, PATCH } = jiti(path.join(root, "src/app/api/mcp/flags/route.ts"));
 function request(method = "GET", body, query = "", contentType = "application/json") {
@@ -141,7 +161,9 @@ async function result(response) {
   return { status: response.status, body: await response.json() };
 }
 test.beforeEach(() => {
-  ctx = { user: { id: 6, email: "valentin.yeo@gmail.com" }, agentId: "runner-3" };
+  ctx = { user: { id: 6, email: "valentin.yeo@gmail.com" }, agentId: "runner-3", agentRole: "write" };
+  storedFlag = { mode: "EVERYONE", releasedAt: new Date(Date.now() - 40 * 60_000) };
+  defaultMode = "OWNER_AND_QA"; comments = []; commentFails = false; ticketWritable = true; ticketQueries = [];
   owner = true; limited = null; writes = []; calls = []; broadcasts = 0;
   broadcastFails = false; writeError = null; previousMode = "OWNER_AND_QA";
   approvalQueries = []; lockQueries = []; batchFlagOn = false; commentLockLost = false;
@@ -415,4 +437,94 @@ test("PATCH stops before reaction locks when the verified comment/task binding c
   assert.equal(lockQueries.length, 1);
   assert.equal(approvalQueries.length, 0);
   assert.equal(writes.length, 0);
+});
+
+const watchBody = () => ({ key, mode: "OFF", reason: "https://app.hypertask.ai/detail/project-15/3533", watch: { before: 4, after: 11, windowMinutes: 40, releasedAt: storedFlag?.releasedAt?.toISOString() ?? new Date(Date.now() - 40 * 60_000).toISOString() } });
+
+test("release watch switches a recent Everyone flag Off and comments as the scoped caller", async () => {
+  previousMode = "EVERYONE";
+  ctx.teamScope = { teamId: "team-1", accessBinding: "binding-1" };
+  const response = await result(await PATCH(request("PATCH", watchBody())));
+  assert.equal(response.status, 200);
+  assert.equal(response.body.previousMode, "EVERYONE");
+  assert.equal(approvalQueries.length, 0);
+  assert.equal(writes.length, 1);
+  assert.match(writes[0][2].reason, /^release watch: errors 4 -> 11 in 40 min; https:\/\/app.hypertask.ai\/detail\/project-15\/3533$/);
+  assert.equal(comments.length, 1);
+  assert.deepEqual({ ...comments[0], text: undefined }, { text: undefined, creatorId: 6, agentId: "runner-3", teamScope: ctx.teamScope, taskId: 42, ownerId: 6, currentUser: { id: 6, displayName: "Valentin", email: "owner@test" } });
+  assert.match(comments[0].text, /Switched htpr-3533-google-calendar Off/);
+  assert.match(comments[0].text, /4 before \/ 11 after, each over 40 minutes/);
+  assert.match(comments[0].text, /data-id="Valentin Yeo" data-label="name-6"/);
+  assert.equal(broadcasts, 1);
+});
+
+for (const stored of [false, true]) test(`release watch accepts a recent default-Everyone release with ${stored ? "a timestamp-less row" : "no stored row"}`, async () => {
+  storedFlag = stored ? { mode: "EVERYONE", releasedAt: null } : null;
+  defaultMode = "EVERYONE"; previousMode = null;
+  assert.equal((await result(await PATCH(request("PATCH", watchBody())))).status, 200);
+  assert.equal(comments.length, 1);
+});
+
+for (const [name, change] of [
+  ["under ten errors", body => { body.watch.after = 9; }],
+  ["exactly double", body => { body.watch.before = 6; body.watch.after = 12; }],
+  ["negative count", body => { body.watch.before = -1; }],
+  ["fractional count", body => { body.watch.after = 11.5; }],
+  ["string count", body => { body.watch.before = "4"; }],
+  ["old release", body => { body.watch.releasedAt = new Date(Date.now() - 120 * 60_000).toISOString(); }],
+  ["future release", body => { body.watch.releasedAt = new Date(Date.now() + 60_000).toISOString(); }],
+  ["missing release time", body => { delete body.watch.releasedAt; }],
+  ["invalid release time", body => { body.watch.releasedAt = "invalid"; }],
+  ["release changed since discovery", () => { storedFlag.releasedAt = new Date(Date.now() - 35 * 60_000); }],
+  ["stored Off", () => { storedFlag.mode = "OFF"; }],
+  ["stored protected mode", () => { storedFlag.mode = "OWNER_AND_QA"; }],
+  ["unstored protected default", () => { storedFlag = null; }],
+  ["timestamp-less protected default", () => { storedFlag.releasedAt = null; }],
+  ["target Everyone", body => { body.mode = "EVERYONE"; }],
+  ["management key", () => { ctx.management = { keyId: "htmk_test" }; }],
+  ["non-owner agent", () => { ctx.user.id = 7; }],
+  ["missing watch", body => { delete body.watch; }],
+  ["wrong ticket", body => { body.reason = "https://app.hypertask.ai/detail/project-15/123"; }],
+  ["short window", body => { body.watch.windowMinutes = 29; }],
+  ["long window", body => { body.watch.windowMinutes = 61; }],
+  ["fractional window", body => { body.watch.windowMinutes = 40.5; }],
+  ["window inconsistent with release", body => { body.watch.windowMinutes = 30; }],
+  ["unwritable ticket", () => { ticketWritable = false; }],
+]) test(`release watch refuses ${name}`, async () => {
+  const body = watchBody(); change(body);
+  assert.ok((await result(await PATCH(request("PATCH", body)))).status >= 400);
+  assert.equal(writes.length, 0);
+  assert.equal(comments.length, 0);
+});
+
+test("release watch refuses read-role agents before any flag or ticket write", async () => {
+  ctx.agentRole = "read";
+  const response = await PATCH(request("PATCH", watchBody()));
+  assert.equal(response.status, 403);
+  assert.equal((await response.json()).code, "insufficient_scope");
+  assert.equal(writes.length, 0);
+  assert.equal(ticketQueries.length, 0);
+});
+
+for (const minutes of [30, 60]) test(`release watch accepts the ${minutes}-minute boundary and minimum spike`, async () => {
+  storedFlag.releasedAt = new Date(Date.now() - minutes * 60_000);
+  const body = watchBody(); body.watch.windowMinutes = minutes; body.watch.after = 10;
+  assert.equal((await result(await PATCH(request("PATCH", body)))).status, 200);
+  assert.equal(comments.length, 1);
+});
+
+test("missing watch still requires Valentin's original thumbs up", async () => {
+  approvalComment.reactions = [];
+  assert.equal((await result(await PATCH(request("PATCH", { key, mode: "OFF", reason })))).status, 403);
+  assert.equal(writes.length, 0);
+  assert.equal(comments.length, 0);
+});
+
+test("a failed watch comment surfaces failure after Off has been audited and broadcast", async (t) => {
+  t.mock.method(console, "error", () => {});
+  commentFails = true;
+  assert.equal((await result(await PATCH(request("PATCH", watchBody())))).status, 500);
+  assert.equal(writes.length, 1);
+  assert.equal(broadcasts, 1);
+  assert.equal(comments.length, 0);
 });
