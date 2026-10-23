@@ -12,7 +12,7 @@ import { isAiFeatureEnabled } from "@/lib/systemModelLadder";
 import { resolveTeamProviderEnabled } from "@/lib/aiProviders";
 import { getAiModelPreferenceIds, type TAiModelPreferences, type TAiModelPreferenceSurface } from "@/lib/aiModelPreferences";
 import { storePlanIdForProject, haiku55ModelEnabled, assertModelAllowedForPlan } from "@/app/api/ai/_lib/planGate";
-import { type ByokLookupContext, getAiDefaultModelContext, getOpenAiOnlyDefaultContext, getByokOrTeamGatewayApiKeyForModelOption, getTeamGatewayApiKey, getByokOrTeamGatewayApiKeyForProvider } from "@/app/api/ai/_lib/byokKeys";
+import { getAiDefaultModelContext, getByokOrTeamGatewayApiKeyForModelOption, getTeamGatewayApiKey, getByokOrTeamGatewayApiKeyForProvider } from "@/app/api/ai/_lib/byokKeys";
 import { resolveAgentModelPin } from "@/lib/nativeAgent/modelPin";
 import { filterModelOptionForTeam } from "@/app/api/ai/_lib/providerGate";
 
@@ -23,12 +23,10 @@ import { AuthedUser, ProviderId } from "@/lib/ai/chatStream/types";
 import { loadActingAgent } from "@/lib/ai/tools/helpers";
 import { resolveModelSelection, selectionFromModelOption, ModelSelection, defaultModelSelection, selectModel } from "@/lib/ai/chatStream/models";
 
-async function isBrowserOpenAiOnlyDefaultUnfundedHere(body: ChatRequest, serverContext: AiDefaultModelContext, lookup: ByokLookupContext, plan: StorePlanKind | null | undefined) {
+function isBrowserLunaDefaultUnqualifiedHere(body: ChatRequest, serverContext: AiDefaultModelContext, plan: StorePlanKind | null | undefined) {
   if (body.modelFromDefault !== true) return false;
   if (getAiModelOptionById(body.modelOptionId ?? body.model, true)?.modelKey !== "gpt-6-luna") return false;
-  if (isOpenAiOnlyPaidTeam({ ...serverContext, plan })) return false;
-  const browserContext = await getOpenAiOnlyDefaultContext({ ...lookup, agentId: null }, plan);
-  return isOpenAiOnlyPaidTeam({ ...browserContext, plan });
+  return !isOpenAiOnlyPaidTeam({ ...serverContext, plan });
 }
 
 export async function loadTurnModel(body: ChatRequest, dbUser: AuthedUser) {
@@ -143,7 +141,7 @@ export async function loadTurnModel(body: ChatRequest, dbUser: AuthedUser) {
       defaultContext.haikuDefaultEnabled,
       defaultContext,
     );
-    const requestedModel = await isBrowserOpenAiOnlyDefaultUnfundedHere(body, defaultContext, keyLookupContext, storePlanId)
+    const requestedModel = isBrowserLunaDefaultUnqualifiedHere(body, defaultContext, storePlanId)
       ? { modelOptionId: null, model: null, provider: null }
       : body;
     const modelOptionIdForTurn = resolveAgentModelPin({

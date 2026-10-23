@@ -516,6 +516,23 @@ test("agent chat keeps a hand-picked Luna, and a team chat keeps the OpenAI-only
   assert.deepEqual(teamChat, { modelId: "gpt-6-luna", credential: "fixture-direct-openai" });
 });
 
+for (const [label, server] of [["flag off", { enabled: false }], ["flag read failing", { flagError: true }]]) {
+  for (const [keyLabel, key, registerManaged] of [["shared gateway key", sharedKey, false], ["registered managed key", managedKey, true]]) {
+    test(`team chat with the server ${label} and a supplied ${keyLabel}: a browser Luna default matches the flag-off server default`, async () => {
+      const body = { ...browserLunaDefault, byokProviderFlags: [{ provider: "openai", enabled: true, ciphertext: key }] };
+      const guarded = await chatTurnOutcome({ ...server, registerManaged }, body, null);
+      const flagOffDefault = await chatTurnOutcome({ enabled: false, registerManaged }, { ...body, modelOptionId: undefined, model: undefined, provider: undefined }, null);
+      assert.notEqual(guarded.modelId, "gpt-6-luna", JSON.stringify(guarded));
+      assert.deepEqual(guarded, flagOffDefault);
+    });
+  }
+}
+
+test("still allowed: a hand-picked Luna with the server flag off keeps Luna", async () => {
+  const picked = await chatTurnOutcome({ enabled: false }, { ...browserLunaDefault, modelFromDefault: false }, null);
+  assert.equal(picked.modelId, "gpt-6-luna");
+});
+
 test("a request-supplied shared or managed key is refused the Luna default", async () => {
   const suppliedFlags = [{ provider: "openai", enabled: true, ciphertext: sharedKey }];
   const h = harness({ openai: true });

@@ -322,7 +322,7 @@ test("chat request model selection wins before the plan-aware fallback", () => {
     chatRoute,
     /resolveModelSelection\(\s*requestedModel\.provider,\s*requestedModel\.model,\s*modelOptionIdForTurn,/,
   );
-  assert.match(chatRoute, /const requestedModel = await isBrowserOpenAiOnlyDefaultUnfundedHere\([\s\S]*?\n\s*: body;/);
+  assert.match(chatRoute, /const requestedModel = isBrowserLunaDefaultUnqualifiedHere\(body, defaultContext, storePlanId\)\s*\? \{ modelOptionId: null, model: null, provider: null \}\s*: body;/);
   assert.match(
     chatRoute,
     /modelOptionIdForTurn = resolveAgentModelPin\(\{[\s\S]*agentModelOptionId: actingAgent\?\.modelOptionId,/,
