@@ -11,6 +11,7 @@ import type { useAgentChatState } from "./useAgentChatState";
 
 type Props = Pick<
   ReturnType<typeof useAgentChatState>,
+  | "embedded"
   | "agents"
   | "selectedId"
   | "mobileFullscreenFlag"
@@ -25,7 +26,7 @@ type Props = Pick<
 >;
 
 export function useAgentChatNavigation({
-  agents, selectedId, mobileFullscreenFlag, isMbl, mobileLayoutEnabled, teamId,
+  embedded, agents, selectedId, mobileFullscreenFlag, isMbl, mobileLayoutEnabled, teamId,
   setAgentChatMobileFullscreen, setMobileTopBarTitle, setTeamId, search, liveSortEnabled,
 }: Props) {
   const selectedAgent = useMemo(
@@ -34,24 +35,25 @@ export function useAgentChatNavigation({
   );
   const isExternal = selectedAgent?.runtimeType === "EXTERNAL";
   const mobileFullscreenChrome = Boolean(
-    mobileFullscreenFlag && isMbl && selectedAgent,
+    !embedded && mobileFullscreenFlag && isMbl && selectedAgent,
   );
-  const reuseAiComposer = Boolean(mobileFullscreenFlag && isMbl);
+  const reuseAiComposer = Boolean(embedded || (mobileFullscreenFlag && isMbl));
   const dictationProjectId = useMemo(
     () =>
-      isMbl && (mobileLayoutEnabled || mobileFullscreenFlag)
+      embedded ? embedded.projectId : isMbl && (mobileLayoutEnabled || mobileFullscreenFlag)
         ? agentDictationProjectId(selectedAgent, teamId)
         : null,
-    [isMbl, mobileLayoutEnabled, mobileFullscreenFlag, selectedAgent, teamId],
+    [embedded?.projectId, isMbl, mobileLayoutEnabled, mobileFullscreenFlag, selectedAgent, teamId],
   );
 
   useEffect(() => {
+    if (embedded) return;
     setAgentChatMobileFullscreen(mobileFullscreenChrome);
     return () => setAgentChatMobileFullscreen(false);
   }, [mobileFullscreenChrome, setAgentChatMobileFullscreen]);
 
   useEffect(() => {
-    if (!mobileLayoutEnabled || !isMbl || mobileFullscreenChrome) return;
+    if (embedded || !mobileLayoutEnabled || !isMbl || mobileFullscreenChrome) return;
     setMobileTopBarTitle(selectedAgent?.displayName ?? "Agents");
     return () => setMobileTopBarTitle(null);
   }, [

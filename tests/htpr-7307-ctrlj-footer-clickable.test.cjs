@@ -78,6 +78,7 @@ test('Send click and Enter call the same existing send, preserving empty-input a
     await click(button('Send'));
     assert.equal(ui.requests.length, 1);
     const clicked = ui.requests[0].body;
+    assert.equal(clicked.viewProject, ui.values.get('currentProjectAtom'));
     for (const name of ['Send', 'Attach files', 'Board', 'Close']) assert.equal(button(name).disabled, true);
     assert.equal(button('Search').disabled, false, 'Search stays available while writing, like Ctrl+K');
     await click(button('Close'));
@@ -137,6 +138,7 @@ test('Search click uses the existing mode switch, keeps the draft and destinatio
     await ui.press('j', { ctrlKey: true }, document.body);
     await click(button('Send'));
     assert.equal(ui.requests[0].body.project.id, 8);
+    assert.equal(ui.requests[0].body.viewProject, undefined);
     await ui.fail();
   });
 });
@@ -168,6 +170,7 @@ for (const apple of [false, true]) {
       assert.deepEqual([ui.input().selectionStart, ui.input().selectionEnd, ui.input().selectionDirection], [5, 9, 'backward']);
       await click(button('Send'));
       assert.equal(ui.requests[0].body.project.id, 8);
+      assert.equal(ui.requests[0].body.viewProject, undefined);
       await ui.fail();
     });
   });

@@ -62,6 +62,7 @@ export function Shell({ pathname, children, ChatRuntime }) {
   const shouldMountAgentChatRuntime = false;
   const authenticatedUserId = 2343;
   const chatRuntimeMounted = false;
+  const sidebarRequested = null;
   const showAiChatInterface = false;
   const sidebarWidthPx = 0;
   const shouldMountChatRuntime = ${mountPolicy};

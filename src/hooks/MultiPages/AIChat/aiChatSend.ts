@@ -1,3 +1,4 @@
+import { sidebarChatHeaders } from "@/lib/agents/chatViewerState";
 import { consumeAiChatStream } from "./aiChatStream";
 import { IChatMessage, IAttachment } from "@/models/model";
 import toast from "react-hot-toast";
@@ -89,6 +90,7 @@ export function createAiChatSend(context: Context, searchHandoff?: { preserveCom
         return true;
       }
 
+    const sidebarHeaders = sidebarChatHeaders(session.id);
     const processedAttachments = preserveComposer ? [] : await processAttachments(
       editorHtmlForAttachments,
       fileUpload.fileItems
@@ -147,7 +149,7 @@ export function createAiChatSend(context: Context, searchHandoff?: { preserveCom
       scopedProjectId
     );
 
-    if (!isFullScreenChat && taskId === undefined && dockedProjectId !== undefined) {
+    if (!session.agentId && !isFullScreenChat && taskId === undefined && dockedProjectId !== undefined) {
       setAiChatBoardSessionMap((previousMap) => ({
         ...previousMap,
         [dockedProjectId]: session.id,
@@ -227,6 +229,7 @@ export function createAiChatSend(context: Context, searchHandoff?: { preserveCom
             headers: {
               "Content-Type": "application/json",
               ...mcpAuthorizationHeaders(token),
+              ...sidebarHeaders,
             },
             body: JSON.stringify(payload),
           });

@@ -21,6 +21,7 @@ type Props = Pick<
 > &
   Pick<
   ReturnType<typeof useAgentChatState>,
+  | "embedded"
   | "openingFullChat"
   | "setOpeningFullChat"
   | "router"
@@ -71,7 +72,7 @@ type Props = Pick<
 >;
 
 export function useAgentLifecycle({
-  selectedAgent, openingFullChat, setOpeningFullChat, router, setDetailsCollapsed,
+  embedded, selectedAgent, openingFullChat, setOpeningFullChat, router, setDetailsCollapsed,
   clearSelectionState, newAgentName, creatingAgent, setCreatingAgent, setCreateAgentError,
   setNewAgentToken, setShowCreateAgent, setNewAgentName, rosterGenRef, loadAgents, setAgents,
   setRosterError, selectAgent, mentionOpen, showCreateAgent, detailsSheetOpen, draftRef, draft,
@@ -172,11 +173,12 @@ export function useAgentLifecycle({
     if (selectedId) writeDraft(currentUser.id, selectedId, draft);
     const activeSessionId = sessionIdRef.current;
     if (activeSessionId && draftHydratedRef.current === activeSessionId) {
-      saveDraftToServer(activeSessionId, draft);
+      saveDraftToServer(activeSessionId, draft, embedded?.projectId);
     }
-  }, [draft, selectedId, currentUser.id]);
+  }, [draft, selectedId, currentUser.id, embedded?.projectId]);
 
   useEffect(() => {
+    if (embedded) return;
     const onKeyDown = (e: globalThis.KeyboardEvent) => {
       if (overlayOpen) return;
       const isCycleKey =
@@ -220,6 +222,7 @@ export function useAgentLifecycle({
   }, [overlayOpen, cycleAgent, openLatestReplyLinks]);
 
   useEffect(() => {
+    if (embedded) return;
     const onPaletteCommand = (e: Event) => {
       const detail = (e as CustomEvent<TAgentChatCommand>).detail;
       switch (detail) {
@@ -252,6 +255,7 @@ export function useAgentLifecycle({
   }, [cycleAgent, openLatestReplyLinks, stepTeamCycle]);
 
   useEffect(() => {
+    if (embedded) return;
     if (isExternal && session && !composerLocked) composerRef.current?.focus();
     if (isExternal && session && !composerLocked) focusComposer();
   }, [isExternal, session, composerLocked, selectedId]);

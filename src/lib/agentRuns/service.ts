@@ -103,7 +103,9 @@ export async function authenticateAgentRunRequest(
 
 export function browserMutationIsSameOrigin(request: NextRequest): boolean {
   const origin = request.headers.get("origin");
-  return origin === request.nextUrl.origin;
+  const requestOrigin = new URL(request.nextUrl.origin);
+  requestOrigin.host = request.headers.get("host") ?? requestOrigin.host;
+  return origin === requestOrigin.origin;
 }
 
 function accessibleRunWhere(principal: AgentRunPrincipal, id: string) {

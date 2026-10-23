@@ -388,20 +388,12 @@ test("new-task window view context is no longer registered", async () => {
   assert.equal(Object.hasOwn(snapshot.modes, "htpr-6997-new-task-window-view-context"), false);
 });
 
-test("Ctrl+J view context defaults to Everyone as a bugfix and respects OFF", async () => {
-  const key = flags.HTPR_6999_CTRL_J_VIEW_CONTEXT_FLAG;
-  assert.equal(key, "htpr-6999-ctrl-j-view-context");
-  assert.equal(definitions.find((definition) => definition.key === key).kind, "bugfix");
-  assert.equal(flags.defaultFeatureFlagMode(key), "EVERYONE");
-  const entry = (await flags.listFeatureFlagModes()).find(entry => entry.key === key);
-  assert.equal(entry.kind, "bugfix");
-  assert.equal(entry.mode, "EVERYONE");
-  assert.equal(await flags.isFeatureEnabled(key, 7), true);
-  row = { mode: "OFF", updatedAt: new Date() };
-  assert.equal(await flags.isFeatureEnabled(key, 6), false);
-  assert.equal(await flags.isFeatureEnabled(key, 7), false);
+test("Ctrl+J view context is permanent and its flag is gone", async () => {
+  assert.equal(flags.HTPR_6999_CTRL_J_VIEW_CONTEXT_FLAG, undefined);
+  assert.equal(definitions.some(entry => entry.key === "htpr-6999-ctrl-j-view-context"), false);
+  assert.equal((await flags.listFeatureFlagModes()).some(entry => entry.key === "htpr-6999-ctrl-j-view-context"), false);
   const snapshot = require("../e2e/smoke/production-flag-modes.json");
-  assert.equal(snapshot.modes[key], "EVERYONE");
+  assert.equal(Object.hasOwn(snapshot.modes, "htpr-6999-ctrl-j-view-context"), false);
 });
 
 test("Inbox E first press defaults to Everyone as a bugfix and respects OFF", async () => {

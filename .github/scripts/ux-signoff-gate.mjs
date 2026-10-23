@@ -326,7 +326,7 @@ function commentVerdict(comment) {
   if (comment.editedAt != null && !(comment.editedBy && humanValentin(comment.editedBy, 'userId'))) return 'reject';
   const text = plainText(comment.text).trim().toLowerCase().replace(/[’‘]/g, "'");
   if (/^(?:no|nope|not|reject|don't)\b|\b(?:no|not|but|change|instead)\b|n't/.test(text)) return 'reject';
-  return /^(?:(?:yes|yep|yeah|go|ok|okay|agree|approve|approved|lgtm|looks good|ship it)\b|👍)/u.test(text) ? 'approve' : null;
+  return /^(?:(?:yes|yep|yeah|go|ok|okay|agree|agreed|approve|approved|lgtm|looks good|ship it)\b|👍)/u.test(text) ? 'approve' : null;
 }
 
 function asksYesToShipElements(comment, wireframeLink, designIds, newElements) {

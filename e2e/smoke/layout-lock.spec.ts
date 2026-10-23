@@ -147,6 +147,7 @@ for (const name of [...screens, 'ticket from board card']) {
     }
     await page.evaluate(() => document.fonts.ready)
     const targets = landmarks(screen, phone)
+    if (screen === 'board') await expect(page.locator(targets.toolbar.selector)).toBeVisible()
     if (screen === 'ticket') {
       await waitForTicketInitialScroll(page)
       await scrollToBaselinePosition(page, phone ? 'phone' : 'desktop')

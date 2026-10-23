@@ -38,6 +38,7 @@ import {
   openAiChatByDefaultAtom,
   keepAiChatClosedAtom,
   showAIChatInterfaceAtom,
+  isAiChatSidebarModeAtom,
   mobileCommentComposerOpenAtom,
   showAccountSwitcherAtom,
   appShellRailAtom,
@@ -184,7 +185,7 @@ import { useEmojiFrequencyHydration } from "@/hooks/General/useEmojiFrequencyHyd
 import { useFlag, useFlagReady } from "@/hooks/useFlag";
 import { useTaskBoxOutlinesFlag } from "@/hooks/useTaskBoxOutlinesFlag";
 import { useInboxLegacyWarm } from "@/hooks/useInboxLegacyWarm";
-import { MY_TASKS_SHORTCUTS_WIDTH_FLAG, HTPR_6476_MOBILE_AGENT_CHAT_FULLSCREEN_FLAG } from "@/lib/flags/keys";
+import { HTPR_7518_AGENT_SIDEBAR_CHATS_FLAG, MY_TASKS_SHORTCUTS_WIDTH_FLAG, HTPR_6476_MOBILE_AGENT_CHAT_FULLSCREEN_FLAG } from "@/lib/flags/keys";
 
 import AIChatClosedLayout from "../AI_CHAT/AI_Chat_Closed_Layout";
 import FullScreenChatLoading from "../AI_CHAT/FullScreenChatLoading";
@@ -451,12 +452,27 @@ export default function GlobalProvider({
   );
   const shouldMountAgentChatRuntime =
     isAgentChatPage && mbl && agentChatMobileFullscreenFlag;
+  const agentSidebarChatsEnabled = useFlag(HTPR_7518_AGENT_SIDEBAR_CHATS_FLAG);
+  const [sidebarRequested, setSidebarRequested] = useState(false);
+  const setSidebarMode = useSetRecoilState(isAiChatSidebarModeAtom);
+  const setAiChatAutoOpenSuppressed = useSetRecoilState(aiChatAutoOpenSuppressedAtom);
+  useEffect(agentSidebarChatsEnabled ? () => {
+    const requested = new URLSearchParams(window.location.search).has("agentSidebar");
+    setSidebarRequested(requested);
+    if (!requested) return;
+    setSidebarMode(true);
+    setAiChatAutoOpenSuppressed(false);
+    setShowAiChatInterface(true);
+  } : () => {
+    setSidebarRequested(false);
+  }, [agentSidebarChatsEnabled, pathname, setSidebarMode, setAiChatAutoOpenSuppressed, setShowAiChatInterface]);
   const [chatRuntimeMounted, setChatRuntimeMounted] = useState(
     isFullScreenChat || showAiChatInterface,
   );
   const hasAttemptedChatRestoreRef = useRef(false);
   const shouldMountChatRuntime =
     chatRuntimeMounted ||
+    sidebarRequested ||
     isFullScreenChat ||
     shouldMountAgentChatRuntime ||
     isTaskDetailPage ||

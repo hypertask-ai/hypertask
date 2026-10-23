@@ -536,7 +536,7 @@ jobs:
           npx playwright test -c playwright.config.smoke.ts e2e/smoke/prod.spec.ts --grep 'seeded board card opens'
           # Layout lock must also cover unreleased and newly registered flags.
           BROWSER_SMOKE_STATE_FILE=e2e/smoke/.state/smoke-state.json node scripts/seed-browser-smoke.mjs --all-flags-on
-          npx playwright test -c playwright.config.smoke.ts e2e/smoke/layout-lock.spec.ts e2e/smoke/layout-lock-matrix.spec.ts
+          npx playwright test -c playwright.config.smoke.ts e2e/smoke/layout-lock.spec.ts e2e/smoke/layout-lock-matrix.spec.ts e2e/smoke/agent-sidebar-chats.spec.ts
       # Failing parts are listed in the job log; their "after" screenshots (baseline boxes outlined) are here.
       - name: Upload layout lock screenshots
         if: failure() && (github.event_name == 'push' || steps.scope.outputs.build_needed == 'true')

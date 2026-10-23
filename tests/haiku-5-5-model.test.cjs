@@ -593,6 +593,7 @@ function chatWithFallback(h, { enabled = true, settings = {}, provider = "claude
     recordTurnOutcome: () => {},
   };
   const route = moduleWithStubs("src/app/api/ai/chat/stream/route.ts", {
+    "@/lib/agents/chatAccess": { loadSidebarChatRequest: async (request) => { assert.equal(request.headers.get("x-hypertask-sidebar-project"), null); return { ok: true }; } },
     "@/lib/ai/chatStream/turnModel": { loadTurnModel: async () => ({ ...state, teamProviderSettings: settings }) },
     "@/lib/ai/chatStream/stream": { createChatStream: (options) => {
       Object.assign(state, options);

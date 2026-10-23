@@ -11,6 +11,7 @@ import type { useAgentChatState } from "./useAgentChatState";
 
 type Props = Pick<
   ReturnType<typeof useAgentChatState>,
+  | "embedded"
   | "awaiting"
   | "session"
   | "setAwaitingSince"
@@ -36,11 +37,12 @@ type Props = Pick<
 >;
 
 export function useAgentChatStream({
-  awaiting, session, setAwaitingSince, setReplyTimedOut, messages, deliveryNotice, awaitingSince,
+  embedded, awaiting, session, setAwaitingSince, setReplyTimedOut, messages, deliveryNotice, awaitingSince,
   loadMessages, activityRowsEnabled, currentUser, sessionIdRef, selectedIdRef,
   setAgents, rosterGenRef, loadAgents, liveSortEnabled,
 }: Props) {
   useEffect(() => {
+    if (embedded && !embedded.active) return;
     if (!awaiting || !session) {
       setAwaitingSince(null);
       setReplyTimedOut(false);
@@ -55,9 +57,10 @@ export function useAgentChatStream({
             at: Number.isNaN(latestMessageAt) ? Date.now() : latestMessageAt,
           },
     );
-  }, [awaiting, messages, session]);
+  }, [awaiting, messages, session, embedded?.active]);
 
   useEffect(() => {
+    if (embedded && !embedded.active) return;
     if (!awaiting || !session) return;
     if (deliveryNotice) return;
     const sinceAt =
@@ -72,7 +75,7 @@ export function useAgentChatStream({
       return;
     }
     const id = setInterval(
-      () => void loadMessages(session.id),
+      () => { if (!embedded || document.visibilityState === "visible") void loadMessages(session.id); },
       AWAITING_POLL_MS,
     );
     const stop = setTimeout(() => {
@@ -84,6 +87,7 @@ export function useAgentChatStream({
       clearTimeout(stop);
     };
   }, [
+    embedded?.active,
     awaiting,
     session,
     deliveryNotice,
@@ -92,11 +96,21 @@ export function useAgentChatStream({
   ]);
 
   useEffect(() => {
+    if (!embedded?.active || !awaiting || !session) return;
+    const onVisibility = () => {
+      if (document.visibilityState === "visible") void loadMessages(session.id);
+    };
+    document.addEventListener("visibilitychange", onVisibility);
+    return () => document.removeEventListener("visibilitychange", onVisibility);
+  }, [embedded?.active, awaiting, session, loadMessages]);
+
+  useEffect(() => {
+    if (embedded && !embedded.active) return;
     if (!session || !activityRowsEnabled) return;
     let id: ReturnType<typeof setInterval> | undefined;
     const start = () => {
       if (id === undefined) {
-        id = setInterval(() => void loadMessages(session.id), ACTIVITY_POLL_MS);
+        id = setInterval(() => { if (document.visibilityState === "visible") void loadMessages(session.id); }, ACTIVITY_POLL_MS);
       }
     };
     const stop = () => {
@@ -114,15 +128,16 @@ export function useAgentChatStream({
       document.removeEventListener("visibilitychange", onVisibility);
       stop();
     };
-  }, [session, activityRowsEnabled, loadMessages]);
+  }, [session, activityRowsEnabled, loadMessages, embedded?.active]);
 
   useEffect(() => {
+    if (embedded && !embedded.active) return;
     if (!session || awaiting || activityRowsEnabled) return;
     let id: ReturnType<typeof setInterval> | undefined;
     const start = () => {
       if (id === undefined) {
         id = setInterval(
-          () => void loadMessages(session.id),
+          () => { if (document.visibilityState === "visible") void loadMessages(session.id); },
           CHAT_AVAILABILITY_POLL_MS,
         );
       }
@@ -143,6 +158,7 @@ export function useAgentChatStream({
       stop();
     };
   }, [
+    embedded?.active,
     activityRowsEnabled,
     awaiting,
     loadMessages,
@@ -150,6 +166,7 @@ export function useAgentChatStream({
   ]);
 
   useEffect(() => {
+    if (embedded && !embedded.active) return;
     let cancelled = false;
     let unsubscribe: (() => void) | undefined;
 
@@ -203,6 +220,6 @@ export function useAgentChatStream({
       cancelled = true;
       unsubscribe?.();
     };
-  }, [currentUser.id, loadMessages, loadAgents, activityRowsEnabled, liveSortEnabled]);
+  }, [currentUser.id, loadMessages, loadAgents, activityRowsEnabled, liveSortEnabled, embedded?.active]);
 
 }

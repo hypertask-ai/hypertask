@@ -1,3 +1,4 @@
+import { loadSidebarChatRequest, sidebarChatProjectId } from "@/lib/agents/chatAccess";
 import { randomUUID } from "node:crypto";
 import { getRedis } from "@/lib/redis";
 import { HTPR_6924_REST_COMPAT_FLAG, isFeatureEnabled } from "@/lib/flags";
@@ -120,6 +121,17 @@ export async function GET(request: NextRequest) {
     const currentUser = await loadCurrentUser(request.headers, true);
     if (!currentUser) return unauthorized();
     const { user } = currentUser;
+    if (sidebarChatProjectId(request.headers) !== undefined) {
+      const sessionId = new URL(request.url).searchParams.get("sessionId") ?? "";
+      const access = await loadSidebarChatRequest(request, sessionId);
+      if (!access.ok) return NextResponse.json({ success: false, error: access.error }, { status: access.status });
+      const session = await prisma.chatSession.findFirst({
+        where: { id: sessionId, userId: currentUser.userId, agent: { runtimeType: "NATIVE" } },
+        include: transcriptInclude,
+      });
+      return session ? NextResponse.json({ success: true, session }, { headers: { "Cache-Control": "private, no-store" } })
+        : NextResponse.json({ success: false, error: "Session not found" }, { status: 404 });
+    }
 
     let restCompat = false;
     try {

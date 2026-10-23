@@ -34,10 +34,10 @@ export default defineConfig({
   },
   globalSetup: './e2e/smoke/global-setup.ts',
   projects: [
-    { name: 'Desktop', testMatch: /(?:prod|layout-lock)\.spec\.ts/, use: { ...devices['Desktop Chrome'] } },
+    { name: 'Desktop', testMatch: /(?:prod|layout-lock|agent-sidebar-chats)\.spec\.ts/, use: { ...devices['Desktop Chrome'] } },
     // browserName pinned: the iPhone 13 device descriptor defaults to WebKit,
     // but the workflow only installs the Chromium binary (HTPR-6199 review).
-    { name: 'Mobile', testMatch: /(?:prod|layout-lock)\.spec\.ts/, use: { ...devices['iPhone 13'], browserName: 'chromium' } },
+    { name: 'Mobile', testMatch: /(?:prod|layout-lock|agent-sidebar-chats)\.spec\.ts/, use: { ...devices['iPhone 13'], browserName: 'chromium' } },
     // YPER4-252: the layout lock matrix sets its own window width, so it runs once, on a desktop browser.
     { name: 'Matrix', testMatch: /layout-lock-matrix\.spec\.ts/, use: { ...devices['Desktop Chrome'] } },
 

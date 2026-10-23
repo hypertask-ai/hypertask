@@ -1,3 +1,4 @@
+import { sidebarChatHeaders } from "@/lib/agents/chatViewerState";
 import globalConstants from "@/lib/constants";
 import { IChatMessage, IChatSession } from "@/models/model";
 import axiosClient, { ApiResponse, isCancel } from "@/utils/axiosClient";
@@ -77,7 +78,7 @@ export const AI_Chat_API = {
     return axiosClient.post<
       { message: IChatMessage },
       { sessionId: string; message: IChatMessage }
-    >(globalConstants.addMessageToSessionRoute, { sessionId, message });
+    >(globalConstants.addMessageToSessionRoute, { sessionId, message }, { headers: sidebarChatHeaders(sessionId) });
   },
 
   getAllSessions: async (): Promise<ApiResponse<TAllChatSessionsResponse>> => {
@@ -91,10 +92,10 @@ export const AI_Chat_API = {
       params: { compat: "htpr-6924", limit: 30, ...options }, signal,
     }),
 
-  getSessionTranscript: async (sessionId: string, signal?: AbortSignal): Promise<IChatSession | null> => {
+  getSessionTranscript: async (sessionId: string, signal?: AbortSignal, sidebarProjectId?: number): Promise<IChatSession | null> => {
     const response = await axiosClient.get<{ success: boolean; session: IChatSession } | TAllChatSessionsResponse>(
       globalConstants.getAllAiChatSessionsRoute,
-      { params: { compat: "htpr-6924", sessionId }, signal }
+      { params: { compat: "htpr-6924", sessionId }, signal, headers: sidebarProjectId ? { "x-hypertask-sidebar-project": String(sidebarProjectId) } : sidebarChatHeaders(sessionId) }
     );
     if ("session" in response.data) return response.data.session;
     const legacy = await AI_Chat_API.getAllSessions();

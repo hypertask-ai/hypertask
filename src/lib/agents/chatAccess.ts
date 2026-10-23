@@ -1,3 +1,5 @@
+import { getProjectWhere } from "@/utils/controllers/projects/getAllIncludes";
+import { HTPR_7518_AGENT_SIDEBAR_CHATS_FLAG } from "@/lib/flags/definitions/htpr-7518-agent-sidebar-chats";
 import type { Prisma } from "@prisma/client";
 import prisma from "@/lib/prisma";
 import { accessibleAgentWhere } from "@/lib/agents/visibility";
@@ -126,15 +128,68 @@ async function findChatSession<TSelect extends Prisma.ChatSessionSelect>(
     | null;
 }
 
+export const SIDEBAR_CHAT_PROJECT_HEADER = "x-hypertask-sidebar-project";
+
+export function sidebarChatProjectId(headers: Headers): number | undefined {
+  const value = headers.get(SIDEBAR_CHAT_PROJECT_HEADER);
+  if (value === null) return undefined;
+  const id = Number(value);
+  return Number.isSafeInteger(id) && id > 0 ? id : 0;
+}
+
+export async function loadSidebarChatBoard(
+  userId: number,
+  projectId: number,
+  actingAgentId?: string | null,
+) {
+  if (actingAgentId || !Number.isSafeInteger(projectId) || projectId <= 0 ||
+      !(await isFeatureEnabled(HTPR_7518_AGENT_SIDEBAR_CHATS_FLAG, userId))) return null;
+  return prisma.project.findFirst({
+    where: {
+      ...getProjectWhere(userId, actingAgentId),
+      id: projectId,
+      status: "Normal",
+      AND: [{ OR: [
+        { ownerId: userId },
+        { members: { some: { userId, agentId: null, status: "Accepted" } } },
+      ] }],
+    },
+    select: { id: true },
+  });
+}
+
+export async function loadSidebarChatAgent(
+  userId: number,
+  projectId: number,
+  agentId: string,
+  actingAgentId?: string | null,
+) {
+  if (!(await loadSidebarChatBoard(userId, projectId, actingAgentId))) return null;
+  return prisma.agent.findFirst({
+    where: {
+      id: agentId,
+      revokedAt: null,
+      archivedAt: null,
+      ...accessibleAgentWhere(userId),
+      members: { some: { projectId, status: "Accepted" } },
+    },
+    select: { id: true, userId: true, displayName: true },
+  });
+}
+
 export async function loadUserAgentChatSession<
   TSelect extends Prisma.ChatSessionSelect,
 >({
   sessionId,
   userId,
   select,
+  sidebarProjectId,
+  actingAgentId,
 }: {
   sessionId: string;
   userId: number;
+  sidebarProjectId?: number;
+  actingAgentId?: string | null;
   select: TSelect;
 }): Promise<ChatAccessResult<ChatSessionOf<TSelect>>> {
   const identity = await findChatSession(
@@ -142,6 +197,9 @@ export async function loadUserAgentChatSession<
     { agent: { select: { userId: true } } },
   );
   if (!identity?.agentId || !identity.agent) return notFound;
+  if (sidebarProjectId !== undefined && !(await loadSidebarChatAgent(
+    userId, sidebarProjectId, identity.agentId, actingAgentId,
+  ))) return notFound;
   const sharedConversationEnabled = await isFeatureEnabled(
     SHARED_AGENT_CHAT_FLAG,
     identity.agent.userId,
@@ -184,4 +242,14 @@ export async function loadAgentTokenChatSession<
     session: session as ChatSessionOf<TSelect>,
     agentId: session.agentId,
   };
+}
+
+export async function loadSidebarChatRequest(request: { headers: Headers }, sessionId: string) {
+  const projectId = sidebarChatProjectId(request.headers);
+  if (projectId === undefined) return { ok: true as const };
+  const { getSessionUser } = await import("@/lib/auth/getSessionUser");
+  const viewer = await getSessionUser(request.headers);
+  if (!viewer || viewer.agentId) return notFound;
+  return loadUserAgentChatSession({ sessionId, userId: viewer.userId,
+    actingAgentId: viewer.agentId, sidebarProjectId: projectId, select: {} });
 }

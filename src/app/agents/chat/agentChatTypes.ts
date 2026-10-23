@@ -26,6 +26,30 @@ export type TAgentChatSession = { id: string; agentId: string };
 export interface IProp {
   currentUser: IUser;
   roomsEnabled: boolean;
+  embedded?: { projectId: number; agent: import("../AgentsRegister").TAgent; active: boolean; requestId?: number };
+}
+
+export type SidebarChatAgent = {
+  id: string;
+  displayName: string;
+  photoURL: string | null;
+  runtimeType: "NATIVE" | "EXTERNAL";
+  sessionId: string | null;
+  status: "connected" | "working" | "waiting" | "stalled" | "offline";
+  deliveryMode: "webhook" | "polling" | null;
+};
+
+export type SidebarChatTarget =
+  | { kind: "ai" }
+  | { kind: "external-agent" | "native-agent"; agent: SidebarChatAgent };
+
+export interface SidebarChatContext {
+  projectId: number;
+  target: SidebarChatTarget;
+  agents: SidebarChatAgent[];
+  error: string | null;
+  onSelect: (target: SidebarChatTarget) => void;
+  onRetry: () => void;
 }
 
 

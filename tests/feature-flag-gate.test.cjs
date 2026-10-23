@@ -2039,3 +2039,25 @@ export default { key: NEW_FLAG, shippedOn: "2026-10-20", description: "Fixture",
   const result = await evaluate("HTPR-1 [FEATURE] Existing flag", base, commit(git, "unchanged definition"), dir);
   assert.equal(result.pass, true, result.reason);
 });
+
+test("sidebar lazy-runtime gating is visible at the exported entry, not hidden inside an effect callback", async (t) => {
+  const provider = fs.readFileSync(path.join(root, "src/components/ProviderGlobal/GloablProviders.tsx"), "utf8");
+  const effect = provider.slice(provider.indexOf("  useEffect(agentSidebarChatsEnabled ?"), provider.indexOf("  const [chatRuntimeMounted"));
+  assert.match(effect, /useEffect\(agentSidebarChatsEnabled \?/);
+  for (const [name, source, expected] of [
+    ["current provider effect", effect, true],
+    ["old hidden effect branch", 'useEffect(() => { if (!agentSidebarChatsEnabled) return; setSidebarRequested(new URLSearchParams(window.location.search).has("agentSidebar")); }, [agentSidebarChatsEnabled]);', false],
+  ]) {
+    const fixture = makeRepo(t), base = commit(fixture.git, "base");
+    writeFile(fixture.dir, "src/components/Provider.tsx", `import { useEffect } from "react";
+import { useFlag } from "@/hooks/useFlag";
+import { OTHER_FLAG } from "@/lib/flags/keys";
+export function Provider() {
+  const agentSidebarChatsEnabled = useFlag(OTHER_FLAG);
+  ${source}
+  return <div />;
+}`);
+    const result = await evaluate("HTPR-1 [FEATURE] sidebar startup", base, commit(fixture.git, name), fixture.dir);
+    assert.equal(result.pass, expected, `${name}: ${result.reason}`);
+  }
+});

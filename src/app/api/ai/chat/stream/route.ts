@@ -1,3 +1,4 @@
+import { loadSidebarChatRequest } from "@/lib/agents/chatAccess";
 import { loadTurnModel } from "@/lib/ai/chatStream/turnModel";
 import { createChatStream } from "@/lib/ai/chatStream/stream";
 import { NextRequest } from "next/server";
@@ -46,6 +47,9 @@ export async function POST(request: NextRequest) {
   } catch (error) {
     return createSseErrorResponse(requestErrorMessage(error, "validation"));
   }
+
+  const sidebarAccess = await loadSidebarChatRequest(request, body.session_id ?? "");
+  if (!sidebarAccess.ok) return createSseErrorResponse(sidebarAccess.error, sidebarAccess.status);
 
   const heartbeatExecutionId = request.headers.get(
     "x-hypertask-heartbeat-execution-id"
