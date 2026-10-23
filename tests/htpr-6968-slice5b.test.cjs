@@ -1,10 +1,22 @@
 const test = require("node:test");
 const assert = require("node:assert/strict");
-const ts = require("typescript");
 const http = require("node:http");
 const { apiResolver } = require("next/dist/server/api-utils/node/api-resolver");
 const { load } = require("./task-route-loader.cjs");
-const { slice5bRoutes, slice5bLegacySources } = require("./htpr-6923-verify.cjs");
+// Responses, effects and HTTP bytes are pinned by digest from the pre-retirement handlers (HTPR-6992).
+const { pins } = require("./helpers/htpr-6992-pins.cjs");
+const pin = pins("a1-slice5b");
+const slice5bRoutes = {
+  getArchivedTasks: { module: "archived-read", method: "GET" },
+  getArchivedTasksByProject: { module: "archived-project-read", method: "GET" },
+  getTask: { module: "task-read", method: "GET" },
+  getTaskMinimal: { module: "minimal-read", method: "READ" },
+  getUnscheduled: { module: "unscheduled-read", method: "GET" },
+  detailMeta: { module: "detail-meta-read", method: "GET" },
+  searchAll: { module: "search-all", method: "POST" },
+  searchByParam: { module: "search-by-param", method: "GET" },
+  searchOrphans: { module: "search-orphans", method: "GET" },
+};
 const clean = value => value === undefined ? undefined : JSON.parse(JSON.stringify(value));
 const fullTask = {
   id: 42, projectId: 15, title: "Task", ranking: "z", description: "Full body",
@@ -33,19 +45,8 @@ const endpoints = {
   searchByParam: { query: { param: "all", projectId: "15" } },
   searchOrphans: { query: { projectId: "15", currentTaskId: "42", searchQuery: "term" } },
 };
-const sources = slice5bLegacySources();
-function compileOriginal(source, mocks) {
-  const compiled = ts.transpileModule(source, { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022, esModuleInterop: true } }).outputText;
-  const mod = { exports: {} };
-  new Function("require", "module", "exports", compiled)(specifier => {
-    assert.ok(Object.hasOwn(mocks, specifier), `Unexpected original dependency: ${specifier}`);
-    const mock = mocks[specifier];
-    return Object.hasOwn(mock, "default") ? { __esModule: true, ...mock } : mock;
-  }, mod, mod.exports);
-  return mod.exports.default;
-}
-function fixture(name, scenario = {}, mode = false) {
-  const effects = [], flags = [], loads = [], auth = [];
+function fixture(name, scenario = {}) {
+  const effects = [], loads = [], auth = [];
   const session = scenario.noAuth ? null : { userId: scenario.userId ?? 985, source: scenario.source ?? "better-auth" };
   const actor = { id: session?.userId ?? 985, displayName: "QA", email: "qa@example.invalid", photoURL: "qa.png" };
   const record = (label, value, fail = false) => async (...args) => {
@@ -60,12 +61,6 @@ function fixture(name, scenario = {}, mode = false) {
       auth.push(headers.get("cookie"));
       if (scenario.authThrows) throw new Error("Auth unavailable");
       return session;
-    } },
-    "@/lib/flags/keys": { HTPR_6923_APP_ROUTER_WRITES_FLAG: "htpr-6923-app-router-writes" },
-    "@/lib/flags": { isFeatureEnabled: async (key, userId) => {
-      flags.push([key, userId]);
-      if (mode === "outage") throw new Error("Flag unavailable");
-      return mode === true;
     } },
     "@/lib/auth/sessionUserRecord": { loadSessionUserRecord: record("actor", actor, scenario.actorThrows) },
     "@/utils/controllers/projects/getAllIncludes": { getProjectWhere: userId => ({ ownerId: userId }), projectContentAccessWhere: userId => ({ ownerId: userId }) },
@@ -103,7 +98,7 @@ function fixture(name, scenario = {}, mode = false) {
     if (scenario.loadThrows) throw new Error("Route load unavailable");
     return web;
   } };
-  return { legacy: compileOriginal(sources[name], mocks), current: load(`src/pages/api/tasks/${name}.ts`, mocks).default, web, mocks, effects, flags, loads, auth };
+  return { current: load(`src/pages/api/tasks/${name}.ts`, mocks).default, web, mocks, effects, loads, auth };
 }
 function input(name, scenario) {
   return {
@@ -214,25 +209,30 @@ for (const name of Object.keys(endpoints)) {
     ["auth resolver throws", { authThrows: true }], ["legacy session", { source: "legacy" }],
     ["different signed user", { userId: 2343 }],
     ...(!endpoints[name].public ? [["auth before validation", { noAuth: true, query: {}, body: {}, status: 401 }]] : []),
-  ]) test(`${name}: ${label} matches original, Off, outage, On and Web`, async () => {
-    const old = fixture(name, scenario);
-    const expected = await invoke(old, name, scenario, "legacy");
-    if (scenario.status) assert.equal(expected.status, scenario.status);
-    for (const mode of [false, "outage", true, "web"]) {
-      const fx = fixture(name, scenario, mode);
-      assert.deepEqual(await invoke(fx, name, scenario, mode === "web" ? "web" : "current"), expected, `${label}: ${mode}`);
-      assert.deepEqual(fx.effects, old.effects, `${label}: ${mode} effects`);
-      assert.equal(fx.loads.length, mode === true && !scenario.noAuth && !scenario.authThrows ? 1 : 0);
-      if (fx.flags.length) assert.deepEqual(fx.flags, [["htpr-6923-app-router-writes", scenario.userId ?? 985]]);
+  ]) test(`${name}: ${label} matches the pinned contract (Pages adapter and Web)`, async () => {
+    let expected;
+    for (const mode of ["current", "web"]) {
+      const fx = fixture(name, scenario);
+      const response = clean(await invoke(fx, name, scenario, mode));
+      if (mode === "current") {
+        if (scenario.status) assert.equal(response.status, scenario.status);
+        expected = pin(name, `${name}: ${label}`, { response, effects: clean(fx.effects) });
+        assert.equal(fx.loads.length, 1);
+      } else {
+        assert.deepEqual(response, expected.response, `${label}: ${mode}`);
+        assert.deepEqual(clean(fx.effects), expected.effects, `${label}: ${mode} effects`);
+      }
     }
   });
-  if (name !== "getTaskMinimal") test(`${name}: unsupported methods bypass all preflight`, async () => {
-    const scenario = { method: "PATCH" }, old = fixture(name, scenario), current = fixture(name, scenario, true);
-    assert.deepEqual(await invoke(current, name, scenario, "current"), await invoke(old, name, scenario, "legacy"));
-    assert.deepEqual(current.flags, []); assert.deepEqual(current.loads, []); assert.deepEqual(current.auth, []);
+  if (name !== "getTaskMinimal") test(`${name}: unsupported methods answer 405 before any session lookup`, async () => {
+    const scenario = { method: "PATCH" }, current = fixture(name, scenario);
+    const response = clean(await invoke(current, name, scenario, "current"));
+    assert.equal(response.status, 405);
+    assert.deepEqual(current.loads, []); assert.deepEqual(current.auth, []);
+    pin("m405", `m405 ${name}`, { response, effects: clean(current.effects), auth: current.auth });
   });
-  test(`${name}: load failure never retries legacy`, async () => {
-    const scenario = { loadThrows: true }, fx = fixture(name, scenario, true);
+  test(`${name}: load failure rejects without any fallback`, async () => {
+    const scenario = { loadThrows: true }, fx = fixture(name, scenario);
     const result = await invoke(fx, name, scenario, "current");
     assert.equal(result.throws, "Error: Route load unavailable");
     assert.deepEqual(fx.effects, []); assert.equal(fx.loads.length, 1);
@@ -267,28 +267,26 @@ for (const name of Object.keys(endpoints)) test(`${name}: real Pages resolver pr
   const log = console.log;
   console.log = () => {};
   try {
-    for (const scenario of [{}, { noAuth: true }, { denied: true }, { query: {}, body: {} }, { operationThrows: true }]) {
-      const old = fixture(name, scenario), expected = await httpInvoke(old.legacy, name, scenario);
-      assert.ok(expected.headers["content-type"]?.includes("application/json"), JSON.stringify({ name, scenario, expected }));
-      assert.equal(Number(expected.headers["content-length"]), Buffer.byteLength(expected.text));
-      for (const mode of [false, "outage", true]) {
-        const fx = fixture(name, scenario, mode);
-        assert.deepEqual(await httpInvoke(fx.current, name, scenario), expected);
-        assert.deepEqual(fx.effects, old.effects);
-      }
+    const scenarios = [{}, { noAuth: true }, { denied: true }, { query: {}, body: {} }, { operationThrows: true }];
+    for (const [index, scenario] of scenarios.entries()) {
+      const fx = fixture(name, scenario);
+      const response = await httpInvoke(fx.current, name, scenario);
+      assert.ok(response.headers["content-type"]?.includes("application/json"), JSON.stringify({ name, scenario, response }));
+      assert.equal(Number(response.headers["content-length"]), Buffer.byteLength(response.text));
+      pin(`http ${name}`, `http ${name} ${index}`, { response, effects: clean(fx.effects) });
     }
   } finally { console.log = log; }
 });
 
 test("archive query parsing, full actor preparation and scoped metadata filters have independent expectations", async () => {
-  const archive = fixture("getArchivedTasks", {}, true);
+  const archive = fixture("getArchivedTasks", {});
   await invoke(archive, "getArchivedTasks", { query: { projectId: ["15tail", "99"], cursor: ["42", "43"], q: [" first ", "second"], boardScope: ["all", "archived"], mode: ["meta"] } }, "current");
   assert.deepEqual(archive.effects, [["archive", 985, 42, 15, "all", "first"]]);
-  const task = fixture("getTask", {}, true);
+  const task = fixture("getTask", {});
   const result = await invoke(task, "getTask", {}, "current");
   assert.deepEqual(result.body, fullTask);
   assert.deepEqual(task.effects, [["actor", 985], ["task", "project-15", "42", { id: 985, displayName: "QA", email: "qa@example.invalid", photoURL: "qa.png" }]]);
-  const meta = fixture("detailMeta", { agentCreator: true }, true);
+  const meta = fixture("detailMeta", { agentCreator: true });
   const detail = await invoke(meta, "detailMeta", {}, "current");
   assert.deepEqual(detail.body.followers.map(row => row.id), [1, 2]);
   assert.deepEqual(meta.effects[0], ["task-scope", { where: { id: 42, project: { ownerId: 985 } }, select: { userId: true, agentId: true } }]);
@@ -296,24 +294,24 @@ test("archive query parsing, full actor preparation and scoped metadata filters 
 
 test("search adapters never reorder or narrow ranked fixtures, and normalize scope exactly", async () => {
   for (const name of ["searchAll", "searchByParam", "searchOrphans"]) {
-    const fx = fixture(name, {}, true), result = await invoke(fx, name, {}, "current");
+    const fx = fixture(name, {}), result = await invoke(fx, name, {}, "current");
     const rows = name === "searchOrphans" ? result.body.json : result.body;
     assert.deepEqual(rows.map(row => row.id), [70, 11, 92]);
     assert.equal(JSON.stringify(rows), JSON.stringify(ranked));
     assert.ok(rows[0].subTasks[0].description); assert.ok(rows[0].parentTask.subTasks);
   }
-  const fx = fixture("searchAll", {}, true);
+  const fx = fixture("searchAll", {});
   await invoke(fx, "searchAll", { body: { projectIds: ["15", 99, 0, -1, "bad", 1.5, "15"], searchQuery: "term" } }, "current");
   assert.deepEqual(fx.effects, [["boards", { where: { id: { in: [15, 99, 15] }, ownerId: 985 }, select: { id: true } }], ["search", [15], "term"]]);
 });
 
-test("real searchAll ranking keeps exact first, descending recency, stable ties and deduplication through old/new handlers", async () => {
+test("real searchAll ranking keeps exact first, descending recency, stable ties and deduplication through the Pages adapter and the Web handler", async () => {
   const row = (id, updatedAt) => ({ ...fullTask, id, updatedAt });
   const exact = [row(70, "2026-01-01")];
   const mentions = [row(11, "2026-10-07"), row(92, "2026-10-06"), row(70, "2026-01-01")];
   const matches = [row(93, "2026-10-06"), row(11, "2026-10-07"), row(99, null)];
-  for (const target of ["legacy", "current", "web"]) {
-    const fx = fixture("searchAll", {}, true);
+  for (const target of ["current", "web"]) {
+    const fx = fixture("searchAll", {});
     const controller = load("src/utils/controllers/tasks/searchAll.ts", {
       "@/lib/prisma": { default: { task: { findMany: async args => args.where.uniqueIndex ? exact : matches } } },
       "./taskMentionSearch": { default: async () => mentions },
@@ -322,7 +320,6 @@ test("real searchAll ranking keeps exact first, descending recency, stable ties 
     const web = load("src/lib/api/task-writes/search-all.ts", fx.mocks).POST;
     fx.web = web;
     fx.mocks["@/lib/api/task-writes/search-all"] = { POST: web };
-    fx.legacy = compileOriginal(sources.searchAll, fx.mocks);
     fx.current = load("src/pages/api/tasks/searchAll.ts", fx.mocks).default;
     const result = await invoke(fx, "searchAll", { body: { projectIds: [15], searchQuery: "70" } }, target);
     assert.equal(result.status, 200);
@@ -333,22 +330,24 @@ test("real searchAll ranking keeps exact first, descending recency, stable ties 
 
 test("real orphan query preserves createdAt ranking, full subtasks and the nested response envelope", async () => {
   const queries = [];
-  for (const target of ["legacy", "current", "web"]) {
-    const fx = fixture("searchOrphans", {}, true);
+  const orphanRows = ranked.map(row => ({
+    ...row, parentTask: null, subTasks: row.subTasks.map(child => ({ ...child, projectId: row.projectId })),
+  }));
+  for (const target of ["current", "web"]) {
+    const fx = fixture("searchOrphans", {});
     const controller = load("src/utils/controllers/tasks/getOrphanTasks.ts", {
-      "@/lib/prisma": { default: { task: { findMany: async query => { queries.push(query); return ranked; } } } },
+      "@/lib/prisma": { default: { task: { findMany: async query => { queries.push(query); return orphanRows; } } } },
     }).default;
     fx.mocks["@/utils/controllers/tasks/getOrphanTasks"] = { default: controller };
     fx.web = load("src/lib/api/task-writes/search-orphans.ts", fx.mocks).GET;
     fx.mocks["@/lib/api/task-writes/search-orphans"] = { GET: fx.web };
-    fx.legacy = compileOriginal(sources.searchOrphans, fx.mocks);
     fx.current = load("src/pages/api/tasks/searchOrphans.ts", fx.mocks).default;
     const result = await invoke(fx, "searchOrphans", {}, target);
-    assert.equal(JSON.stringify(result.body), JSON.stringify({ status: 200, json: ranked }));
+    assert.equal(JSON.stringify(result.body), JSON.stringify({ status: 200, json: orphanRows }));
     assert.deepEqual(queries.at(-1).orderBy, { createdAt: "desc" });
     assert.equal(queries.at(-1).select.subTasks, true);
   }
-  assert.deepEqual(queries[0], queries[1]); assert.deepEqual(queries[0], queries[2]);
+  assert.deepEqual(queries[0], queries[1]);
 });
 
 test("private headers survive auth and actor failures through the real Pages resolver", async () => {
@@ -356,14 +355,12 @@ test("private headers survive auth and actor failures through the real Pages res
   console.error = () => {};
   try {
     for (const name of ["getTask", "detailMeta"]) {
-      for (const scenario of [{ authThrows: true }, ...(name === "getTask" ? [{ actorThrows: true }] : [])]) {
-        const expected = await httpInvoke(fixture(name, scenario).legacy, name, scenario);
+      for (const [index, scenario] of [{ authThrows: true }, ...(name === "getTask" ? [{ actorThrows: true }] : [])].entries()) {
+        const expected = await httpInvoke(fixture(name, scenario).current, name, scenario);
         assert.equal(expected.status, 500);
         assert.equal(expected.headers["cache-control"], "private, no-store");
         assert.equal(expected.headers.vary, "Cookie");
-        for (const mode of [false, "outage", true]) {
-          assert.deepEqual(await httpInvoke(fixture(name, scenario, mode).current, name, scenario), expected);
-        }
+        pin("private", `private ${name} ${index}`, { response: expected });
       }
     }
   } finally { console.error = error; }
@@ -371,7 +368,7 @@ test("private headers survive auth and actor failures through the real Pages res
 
 test("unscheduled query retains membership, limits, saved content and the search/nonsearch ordering", async () => {
   for (const query of [{ searchQuery: "term" }, {}]) {
-    const fx = fixture("getUnscheduled", {}, true);
+    const fx = fixture("getUnscheduled", {});
     await invoke(fx, "getUnscheduled", { query }, "current");
     assert.deepEqual(fx.effects[0], ["boards", { where: { ownerId: 985 }, select: { id: true } }]);
     const args = fx.effects[1][1];

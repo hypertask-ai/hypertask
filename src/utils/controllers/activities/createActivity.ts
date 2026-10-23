@@ -29,7 +29,6 @@ interface IProps {
   transaction?: Prisma.TransactionClient;
 }
 
-// Correctly use the interface to type the function parameters
 const createActivity = async ({
   activityBody,
   taskId,
@@ -44,35 +43,28 @@ const createActivity = async ({
   const safeActivityBody = sanitizeAgentCredentials(activityBody);
   const comment = await client.comment.create({
     data: {
-      text: "", // Consider providing a meaningful text or removing this field if not needed
+      text: "",
       taskId: taskId,
       activity: safeActivityBody as any,
-      // Provenance: the acting agent is stamped on the row itself, not only
-      // inside the activity JSON, so a change can be traced back to the agent
-      // that made it the same way agent comments and page versions already are.
       agentId: activityAgentId(safeActivityBody),
-      // Deleting the agent clears agentId, so the name is copied now rather
-      // than backfilled at delete time: a retired agent still reads as itself.
       agentDisplayName: activityAgentDisplayName(safeActivityBody),
     },
   });
-  // Get the current updatedByUserIds for the task
   const task = await client.task.findUnique({
     where: { id: taskId },
     select: { updatedByUserIds: true },
   });
 
-  // Add fromUserId only if not already present
   const fromUserId =
     (safeActivityBody as any).data.fromUserId ??
-    (safeActivityBody as any).data.fromUser?.id; // Use data.fromUserId if available, otherwise use fromUser.id
+    (safeActivityBody as any).data.fromUser?.id;
   if (fromUserId && !task?.updatedByUserIds?.includes(fromUserId)) {
     await client.task.update({
       where: { id: taskId },
       data: {
         updatedAt: new Date(),
         updatedByUserIds: {
-          push: fromUserId, // Use data.fromUserId if available, otherwise use fromUserId
+          push: fromUserId,
         },
       },
     });

@@ -42,7 +42,9 @@ export function filterModelOptionForTeam(
 
 export async function getProjectTeamProviderContext(
   projectId: number | null | undefined,
-  userId: number | null | undefined
+  userId: number | null | undefined,
+  agentId?: string | null,
+  teamScope?: import("@/lib/mcp/auth/types").AgentTokenTeamScope | null,
 ): Promise<{
   projectId: number | null;
   teamId: string | null;
@@ -56,9 +58,7 @@ export async function getProjectTeamProviderContext(
     where: {
       id: projectId,
       status: "Normal",
-      // Platform-funded inference requires write-capable board membership.
-      // Public/share-only content access must never bill the owning team.
-      ...taskWriteAccessWhere(userId),
+      ...taskWriteAccessWhere(userId, agentId, teamScope),
     },
     select: {
       id: true,
@@ -67,6 +67,7 @@ export async function getProjectTeamProviderContext(
     },
   });
 
+  if (teamScope != null && !project) throw new Error("Project not found or access denied");
   return {
     projectId: project?.id ?? null,
     teamId: project?.teamId ?? null,

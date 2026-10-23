@@ -1,3 +1,8 @@
+import { requireAgentWriteRole } from '@/lib/mcp/agents/readRoleGuard'
+import { sealWebhookSigningKey, webhookSigningKeyHint } from '@/lib/webhooks/signingKeyStore'
+import { isFeatureEnabled } from '@/lib/flags'
+import { SEALED_WEBHOOK_KEYS_FLAG } from '@/lib/flags/definitions/htpr-7624-sealed-webhook-keys'
+import { reportMcpOperationCrash } from '@/lib/mcp/operationCrashReport'
 import { wrapMcpRoute, checkMcpRouteRateLimit as checkMcpRateLimit, validateMcpRouteAuth as validateMcpAuth } from '@/lib/mcp/routeWrapper'
 import { NextRequest, NextResponse } from 'next/server'
 import crypto from 'crypto'
@@ -32,9 +37,8 @@ function validationError(message: string, field?: string) {
   )
 }
 
-// Never return the raw secret on reads - it is shown once at creation only.
 function maskSecret(secret: string): string {
-  return `whsec_…${secret.slice(-4)}`
+  return webhookSigningKeyHint(secret)
 }
 
 function serialize(sub: {
@@ -61,10 +65,6 @@ function serialize(sub: {
   }
 }
 
-/**
- * GET /api/mcp/webhooks?project_id=
- * List a board's outbound webhook subscriptions. Secrets are masked.
- */
 export async function GET(request: NextRequest) {
   return wrapMcpRoute(async (request: NextRequest) => {
   try {
@@ -91,6 +91,7 @@ export async function GET(request: NextRequest) {
         return NextResponse.json(
           await manageAgentWebhook({
             userId: ctx.user.id,
+            principal: { userId: ctx.user.id, agentId: ctx.agentId, teamScope: ctx.teamScope },
             agentId,
             action: 'get',
           })
@@ -112,7 +113,7 @@ export async function GET(request: NextRequest) {
     }
 
     const project = await prisma.project.findFirst({
-      where: { id: projectId, ...getProjectWhere(ctx.user.id, ctx.agentId) },
+      where: { id: projectId, ...getProjectWhere(ctx.user.id, ctx.agentId, ctx.teamScope) },
       select: { id: true },
     })
     if (!project) {
@@ -136,18 +137,13 @@ export async function GET(request: NextRequest) {
     })
   } catch (error) {
     console.error('[MCP Webhooks] GET error:', error)
+    reportMcpOperationCrash(request, error)
     return NextResponse.json({ success: false, error: 'Internal server error' }, { status: 500 })
   }
 
   })(request)
 }
 
-/**
- * POST /api/mcp/webhooks
- * Register a signed outbound webhook for a board.
- * Body: { project_id, url, events? }. `events` omitted/empty = all events.
- * Returns the generated `secret` ONCE (used to verify the HMAC signature).
- */
 export async function POST(request: NextRequest) {
   return wrapMcpRoute(async (request: NextRequest) => {
   try {
@@ -160,6 +156,8 @@ export async function POST(request: NextRequest) {
         { status: 401 }
       )
     }
+    const roleRefusal = await requireAgentWriteRole(ctx)
+    if (roleRefusal) return roleRefusal
 
     let body: Record<string, unknown>
     try {
@@ -200,6 +198,7 @@ export async function POST(request: NextRequest) {
       try {
         const result = await manageAgentWebhook({
           userId: ctx.user.id,
+          principal: { userId: ctx.user.id, agentId: ctx.agentId, teamScope: ctx.teamScope },
           agentId,
           action: requestedAction as AgentWebhookManagementAction,
           url: body.url,
@@ -236,15 +235,12 @@ export async function POST(request: NextRequest) {
     } catch {
       return validationError('url must be a valid absolute URL', 'url')
     }
-    // https only: the signature protects integrity, not confidentiality - a
-    // plaintext http receiver would leak the payload in transit.
     if (parsedUrl.protocol !== 'https:') {
       return validationError('url must use https', 'url')
     }
     if (url.length > 2000) {
       return validationError('url must be 2000 characters or less', 'url')
     }
-    // SSRF guard: reject targets that resolve to private/reserved addresses.
     const safe = await assertSafeWebhookTarget(url)
     if (!safe.ok) {
       return validationError(safe.reason, 'url')
@@ -266,7 +262,7 @@ export async function POST(request: NextRequest) {
     const events = parsedEvents.events
 
     const project = await prisma.project.findFirst({
-      where: { id: projectId, ...getProjectWhere(ctx.user.id, ctx.agentId) },
+      where: { id: projectId, ...getProjectWhere(ctx.user.id, ctx.agentId, ctx.teamScope) },
       select: { id: true },
     })
     if (!project) {
@@ -289,31 +285,30 @@ export async function POST(request: NextRequest) {
       data: {
         projectId,
         url,
-        secret,
+        secret: await isFeatureEnabled(SEALED_WEBHOOK_KEYS_FLAG, ctx.user.id)
+          ? sealWebhookSigningKey(secret)
+          : secret,
         events,
         supportsUnassignedEvent: true,
         createdById: ctx.user.id,
         agentId: ctx.agentId ?? null,
+        createdByAgentId: ctx.agentId ?? null,
       },
     })
 
-    // Return the full secret exactly once, alongside the masked view.
     return NextResponse.json(
       { success: true, subscription: serialize(sub), secret },
       { status: 201 }
     )
   } catch (error) {
     console.error('[MCP Webhooks] POST error:', error)
+    reportMcpOperationCrash(request, error)
     return NextResponse.json({ success: false, error: 'Internal server error' }, { status: 500 })
   }
 
   })(request)
 }
 
-/**
- * DELETE /api/mcp/webhooks?id=
- * Remove a subscription the caller can access (scoped by board access).
- */
 export async function DELETE(request: NextRequest) {
   return wrapMcpRoute(async (request: NextRequest) => {
   try {
@@ -326,6 +321,8 @@ export async function DELETE(request: NextRequest) {
         { status: 401 }
       )
     }
+    const roleRefusal = await requireAgentWriteRole(ctx)
+    if (roleRefusal) return roleRefusal
 
     const requestedAgentId = request.nextUrl.searchParams.get('agent_id')
     if (requestedAgentId) {
@@ -340,6 +337,7 @@ export async function DELETE(request: NextRequest) {
         return NextResponse.json(
           await manageAgentWebhook({
             userId: ctx.user.id,
+            principal: { userId: ctx.user.id, agentId: ctx.agentId, teamScope: ctx.teamScope },
             agentId,
             action: 'delete',
           })
@@ -372,13 +370,17 @@ export async function DELETE(request: NextRequest) {
           { status: 404 }
         )
       }
-      await prisma.agentWebhookSubscription.delete({ where: { id } })
+      try {
+        await manageAgentWebhook({ userId: ctx.user.id, agentId: agentSubscription.agentId, action: 'delete', principal: { userId: ctx.user.id, agentId: ctx.agentId, teamScope: ctx.teamScope } })
+      } catch (error) {
+        if (error instanceof AgentWebhookInputError) return NextResponse.json({ success: false, error: error.message }, { status: error.status })
+        throw error
+      }
       return NextResponse.json({ success: true, deleted: id })
     }
 
-    // Delete only if the subscription's board is one the caller can access.
     const result = await prisma.webhookSubscription.deleteMany({
-      where: { id, project: getProjectWhere(ctx.user.id, ctx.agentId) },
+      where: { id, project: getProjectWhere(ctx.user.id, ctx.agentId, ctx.teamScope) },
     })
     if (result.count === 0) {
       return NextResponse.json(
@@ -390,6 +392,7 @@ export async function DELETE(request: NextRequest) {
     return NextResponse.json({ success: true, deleted: id })
   } catch (error) {
     console.error('[MCP Webhooks] DELETE error:', error)
+    reportMcpOperationCrash(request, error)
     return NextResponse.json({ success: false, error: 'Internal server error' }, { status: 500 })
   }
 

@@ -2,6 +2,7 @@
 """Tests for proc-watchdog.py (YPER4-278). Real throwaway processes, scoped to a temp dir so nothing else is touched."""
 import json
 import os
+import signal
 from pathlib import Path
 import subprocess
 import sys
@@ -55,7 +56,7 @@ with tempfile.TemporaryDirectory(prefix='pwd-test-') as tmp:
     def start_all():
         test = subprocess.Popen(['node', str(t / 'tests/hang.test.cjs'), str(t / 'child.pid')])
         server = subprocess.Popen(['node', str(t / 'server.js')])
-        shell = subprocess.Popen(['bash', '-c', f'sleep 300; echo {tmp} next build'])
+        shell = subprocess.Popen(['bash', '-c', f'sleep 300; echo {tmp} next build'], start_new_session=True)
         session = subprocess.Popen([str(t / 'claude'), '-c', 'import time; time.sleep(300)', f'{tmp}/tests/x.test.cjs'])
         premerge = subprocess.Popen([sys.executable, '-c', 'import time; time.sleep(300)', f'{tmp}/scripts/premerge-local-search.mjs'])
         # A worktree premerge server: no premerge path, only the PREMERGE_LOCAL=1 marker in its environment.
@@ -95,10 +96,14 @@ with tempfile.TemporaryDirectory(prefix='pwd-test-') as tmp:
     lines = [json.loads(x) for x in (t / 'state/kills.log').read_text().splitlines()]
     check('log has one line per stopped tree', sorted(x['kind'] for x in lines) == ['premerge', 'premerge', 'test'])
     check('log says why', all('running' in x['reason'] for x in lines) and lines[0]['processes'] >= 1)
-    check('INFRA MANAGER warned once', (t / 'notify.target').read_text().strip() == 'infra-manager'
+    check('HT Product Lead warned once', (t / 'notify.target').read_text().strip() == 'infra-manager'
           and 'stopped 3 runaway' in (t / 'notify.msg').read_text())
     for p in (server, shell, session):
-        p.kill()
+        # Killing just bash leaves its sleep child holding the test runner's output pipe.
+        if p is shell:
+            os.killpg(p.pid, signal.SIGKILL)
+        else:
+            p.kill()
     for f in ('notify.msg', 'notify.target', 'child.pid'):
         (t / f).unlink(missing_ok=True)
 
@@ -112,7 +117,10 @@ with tempfile.TemporaryDirectory(prefix='pwd-test-') as tmp:
     check('server still running under the memory rule', alive(procs[1]))
     for p in list(procs[:5]) + procs_extra:
         if alive(p):
-            p.kill()
+            if p is procs[2]:
+                os.killpg(p.pid, signal.SIGKILL)
+            else:
+                p.kill()
 
     # 5. Secrets in command lines never reach the log or the warning.
     sec = subprocess.Popen(['node', str(t / 'tests/hang.test.cjs'), str(t / 'child.pid'), '--token=abc123secret'])
@@ -167,6 +175,8 @@ esac
     pw = importlib.util.module_from_spec(spec)
     os.environ.pop('PROC_WATCHDOG_ONLY', None)
     spec.loader.exec_module(pw)
+    check('warning documentation names HT Product Lead', 'HT Product Lead' in pw.__doc__
+          and 'HT Product Lead' in pw.notify.__doc__)
     k = lambda cmd, name='node': pw.kind_of({'cmd': cmd, 'name': name})
     check('node test file', k('node tests/compose-task-palette.test.cjs') == 'test')
     check('node --test', k('node --test tests/') == 'test')
@@ -178,11 +188,60 @@ esac
     check('astro dev is not a build', k('/usr/bin/node /p/node_modules/astro/bin/astro.mjs dev --port 4399') is None)
     check('claude never matches', k('claude --resume x tests/a.test.cjs', 'claude') is None)
     r = pw.redact(['curl', '-H', 'Authorization: Bearer abcVALUE1', '--api-key', 'abcVALUE2', 'X_TOKEN=abcVALUE3',
-                   'https://u:abcVALUE4@h/x', 'Bearer', 'abcVALUE5', '--key=abcVALUE6', 'tests/a.test.cjs'])
+                   'https://u:' + 'abcVALUE4@h/x', 'Bearer', 'abcVALUE5', '--key=abcVALUE6', 'tests/a.test.cjs'])
     check('whole sensitive arguments and flag values are hidden', 'abcVALUE' not in r and 'tests/a.test.cjs' in r)
     check('a value starting with a dash is hidden too', '-abcVALUE' not in pw.redact(['--token', '-abcVALUE7', 'x']))
     check('a server under a path named premerge-local is not a premerge job',
           k('node /srv/premerge-local-notes/server.js') is None)
     check('next start from a disposable premerge copy is', k('node /tmp/premerge-local-fds-a/node_modules/next/dist/bin/next start') == 'premerge')
+
+    # 7. Synthetic /proc trees exercise GiB limits without allocating large amounts of RAM.
+    fake = t / 'proc'
+    fake.mkdir()
+    (fake / 'uptime').write_text('10000 0\n')
+    pw.PROC = fake
+
+    def fixture(pid, ppid, rss, cmd, marker=b'', age=60, name='node'):
+        entry = fake / str(pid)
+        entry.mkdir(exist_ok=True)
+        fields = ['S', str(ppid)] + ['0'] * 17 + [str(int((10000 - age) * pw.clock_ticks()))]
+        (entry / 'stat').write_text(f'{pid} ({name}) ' + ' '.join(fields))
+        (entry / 'status').write_text(f'VmRSS:\t{rss} kB\n')
+        (entry / 'cmdline').write_bytes(cmd.replace(' ', '\0').encode() + b'\0')
+        (entry / 'environ').write_bytes(marker)
+
+    gib = 1024 * 1024
+    fixture(100, 1, gib, 'npm exec next build --webpack', b'PREMERGE_NEXT_BUILD=1\0', name='npm exec next')
+    fixture(101, 100, 7 * gib, 'node /w/node_modules/next/dist/compiled/jest-worker/processChild.js')
+    check('premerge tree at 7 GiB is kept, including an unmarked descendant', pw.over_limit(pw.read_procs()) == [])
+    fixture(100, 1, gib, 'npm exec next build --webpack', name='npm exec next')
+    hits = pw.over_limit(pw.read_procs())
+    check('normal tree at 7 GiB is selected for killing as one whole tree',
+          len(hits) == 1 and hits[0]['pid'] == 100 and hits[0]['rss_kb'] == 7 * gib
+          and {pid for pid, _ in hits[0]['tree']} == {100, 101})
+    fixture(100, 1, gib, 'npm exec next build --webpack', b'PREMERGE_LOCAL=1\0', name='npm exec next')
+    check('broad premerge marker does not grant the build exception', len(pw.over_limit(pw.read_procs())) == 1)
+    fixture(100, 1, gib, 'npm exec next build --webpack', b'OTHER=PREMERGE_NEXT_BUILD=1\0', name='npm exec next')
+    check('marker text inside another variable does not grant the exception', len(pw.over_limit(pw.read_procs())) == 1)
+    fixture(100, 1, gib, 'npm exec next build --webpack', b'PREMERGE_NEXT_BUILD=0\0', name='npm exec next')
+    check('disabled build marker does not grant the exception', len(pw.over_limit(pw.read_procs())) == 1)
+    fixture(100, 1, gib, 'npm exec next build --webpack', b'PREMERGE_NEXT_BUILD=1\0', name='npm exec next')
+    fixture(101, 100, 8 * gib, 'node /w/node_modules/next/dist/compiled/jest-worker/processChild.js')
+    check('premerge tree exactly at 8 GiB is kept', pw.over_limit(pw.read_procs()) == [])
+    fixture(101, 100, 8 * gib + 1, 'node /w/node_modules/next/dist/compiled/jest-worker/processChild.js')
+    hits = pw.over_limit(pw.read_procs())
+    check('premerge tree over 8 GiB is selected for killing', len(hits) == 1 and 'using' in hits[0]['reason'])
+    fixture(101, 100, 7 * gib, 'node /w/node_modules/next/dist/compiled/jest-worker/processChild.js')
+    fixture(100, 1, gib, 'npm exec next build --webpack', b'PREMERGE_NEXT_BUILD=1\0', age=7201, name='npm exec next')
+    hits = pw.over_limit(pw.read_procs())
+    check('premerge tree over 2 h is selected for killing despite the memory exception',
+          len(hits) == 1 and 'running' in hits[0]['reason'] and 'using' not in hits[0]['reason'])
+    fixture(100, 1, gib, 'npm exec next build --webpack', age=7201, name='npm exec next')
+    check('normal tree keeps its 2 h limit', len(pw.over_limit(pw.read_procs())) == 1)
+    fixture(100, 1, gib, 'npm exec next build --webpack', name='npm exec next')
+    fixture(101, 100, 6 * gib, 'node /w/node_modules/next/dist/compiled/jest-worker/processChild.js', b'PREMERGE_NEXT_BUILD=1\0')
+    check('normal tree exactly at 6 GiB is kept even with group RSS over 6 GiB', pw.over_limit(pw.read_procs()) == [])
+    fixture(101, 100, 6 * gib + 1, 'node /w/node_modules/next/dist/compiled/jest-worker/processChild.js', b'PREMERGE_NEXT_BUILD=1\0')
+    check('a marked descendant cannot raise an unmarked root limit', len(pw.over_limit(pw.read_procs())) == 1)
 
 sys.exit(1 if fails else print('ALL PASS') or 0)

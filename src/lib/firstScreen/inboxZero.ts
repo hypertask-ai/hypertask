@@ -1,4 +1,3 @@
-// Desktop images - wider, more landscape-oriented
 const desktopImages = [
   "https://images.pexels.com/photos/10094885/pexels-photo-10094885.jpeg",
   "https://images.pexels.com/photos/30313136/pexels-photo-30313136.jpeg",
@@ -11,7 +10,6 @@ const desktopImages = [
     "https://files.hypertask.app/tasks/attachments/1761047605558pexels-eberhardgross-1612351.jpg",
 ];
 
-// Mobile images - more portrait-oriented or square
 const mobileImages = [
   "https://images.pexels.com/photos/34341804/pexels-photo-34341804.jpeg",
   "https://images.pexels.com/photos/1327786/pexels-photo-1327786.jpeg",

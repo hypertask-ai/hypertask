@@ -1,3 +1,5 @@
+import type { AgentTokenTeamScope } from '@/lib/mcp/auth/types'
+import { taskWriteAccessWhere } from '@/utils/controllers/projects/getAllIncludes'
 import { randomUUID } from 'node:crypto'
 
 import type { Prisma } from '@prisma/client'
@@ -9,9 +11,6 @@ import {
   recordAgentMutationLeaseToken,
 } from './agentMutationLeaseAdoption'
 
-// Assignment changes and autonomous mutation leases take the same transaction
-// lock. This closes the read-check-write gap without holding a database
-// connection for the duration of an agent action.
 const AGENT_MUTATION_LOCK_NAMESPACE = 1213482324
 
 type ActiveTaskLeaseRow = {
@@ -21,6 +20,9 @@ type ActiveTaskLeaseRow = {
 }
 
 export class AgentMutationLeaseConflictError extends Error {
+  readonly status = 409
+  readonly code: string = 'agent_mutation_lease_conflict'
+
   constructor(message?: string) {
     super(
       message ??
@@ -30,16 +32,24 @@ export class AgentMutationLeaseConflictError extends Error {
   }
 }
 
-// An agent that holds no lease and an agent blocked by someone else's lease are
-// different failures with different remedies: claim a lease, or wait. Reporting
-// both as an active conflict makes a caller that simply never claimed back off
-// as though the task were owned elsewhere.
 export class AgentMutationLeaseMissingError extends AgentMutationLeaseConflictError {
+  readonly code = 'agent_mutation_lease_missing'
+
   constructor() {
     super(
       'Caller holds no agent mutation lease for this task. Claim one with POST /mcp/tasks/lease/claim before this write.'
     )
     this.name = 'AgentMutationLeaseMissingError'
+  }
+}
+
+export class TaskTeamScopeError extends Error {
+  readonly status = 404
+  readonly code = 'task_not_found'
+
+  constructor() {
+    super('Task not found or access denied')
+    this.name = 'TaskTeamScopeError'
   }
 }
 
@@ -55,13 +65,6 @@ export async function lockAgentMutationFence(
   `
 }
 
-// Adopts a lease for the current request, under the fence lock the caller
-// already holds. Only reachable when the fence found no live lease and the
-// request boundary opted in, and only for the first fenced transaction of that
-// request. The insert keeps the claim endpoint's conditions by default: the
-// task must still be Normal, and an unexpired row is never overwritten.
-// Unassign may opt into Archive/Deleted adoption so cleanup does not require a
-// status round-trip or an explicit claim (HTPR-6428).
 async function adoptAgentMutationLease(
   tx: Prisma.TransactionClient,
   taskId: number,
@@ -102,8 +105,6 @@ async function adoptAgentMutationLease(
   `
   const adopted = rows.length > 0
   if (adopted) {
-    // Remember which lease instance we created so the hand-back deletes that
-    // exact row, not one the same agent later claimed explicitly.
     recordAgentMutationLeaseToken(
       agentId,
       userId,
@@ -115,9 +116,6 @@ async function adoptAgentMutationLease(
   return adopted
 }
 
-// An overlapping invocation from the same agent joins the adopted row instead
-// of merely trusting another call's reference. Its hand-back will decrement the
-// count, so no invocation can expire the lease while another still uses it.
 async function joinAdoptedAgentMutationLease(
   tx: Prisma.TransactionClient,
   taskId: number,
@@ -165,6 +163,21 @@ async function joinAdoptedAgentMutationLease(
   return joined
 }
 
+export async function lockTaskTeamScope(
+  tx: Prisma.TransactionClient,
+  taskId: number,
+  userId: number,
+  agentId?: string | null,
+  teamScope?: AgentTokenTeamScope | null,
+): Promise<void> {
+  if (teamScope == null) return
+  await tx.$queryRaw`SELECT id FROM "Task" WHERE id = ${taskId} FOR UPDATE`
+  if (!await tx.task.findFirst({
+    where: { id: taskId, project: taskWriteAccessWhere(userId, agentId, teamScope) },
+    select: { id: true },
+  })) throw new TaskTeamScopeError()
+}
+
 export async function assertAgentAssignmentChangeAllowed(
   tx: Prisma.TransactionClient,
   taskId: number,
@@ -172,12 +185,18 @@ export async function assertAgentAssignmentChangeAllowed(
   actingUserId?: number | null,
   options: {
     allowHumanOverride?: boolean
+    teamScope?: AgentTokenTeamScope | null
     allowNonNormalLeaseAdoption?: boolean
   } = {}
 ): Promise<void> {
   await lockAgentMutationFence(tx, taskId)
-  // Leases are issued with PostgreSQL now(), so expiry must use that same
-  // clock. Comparing with the API host clock can open the fence under skew.
+  if (options.teamScope != null) {
+    await tx.$queryRaw`SELECT id FROM "Task" WHERE id = ${taskId} FOR UPDATE`
+    if (actingUserId == null || !await tx.task.findFirst({
+      where: { id: taskId, project: taskWriteAccessWhere(actingUserId, actingAgentId, options.teamScope) },
+      select: { id: true },
+    })) throw new TaskTeamScopeError()
+  }
   const [lease] = await tx.$queryRaw<ActiveTaskLeaseRow[]>`
     SELECT "agentId", "token", "adoptionCount"
     FROM "TaskLease"
@@ -202,17 +221,9 @@ export async function assertAgentAssignmentChangeAllowed(
   }
   const activeLease = lease != null
   if (actingAgentId) {
-    // Agent identity is never sufficient on its own. Every autonomous write
-    // must still hold the live lease acquired for this operation. In
-    // particular, a human cancellation removes the lease under this same
-    // advisory lock, so a later transaction from a stale compound request is
-    // rejected instead of treating the missing lease as permission.
     if (activeLease && lease.agentId === verifiedActingAgentId) {
       if (verifiedActingAgentId && actingUserId != null) {
         if (lease.token && lease.adoptionCount > 0) {
-          // Internal child requests run outside the parent AsyncLocalStorage
-          // scope. The parent cannot hand back until that request returns, so
-          // it is safe for the child to use the parent's still-live reference.
           if (
             !hasAgentMutationLeaseAdoptionScope(
               verifiedActingAgentId,
@@ -245,8 +256,6 @@ export async function assertAgentAssignmentChangeAllowed(
           throw new AgentMutationLeaseConflictError()
         }
 
-        // Explicit claims have no active adoption references. Spend this
-        // request's grant so cancellation still prevents a later re-adoption.
         consumeAgentMutationLeaseAdoption(
           verifiedActingAgentId,
           actingUserId,
@@ -256,9 +265,6 @@ export async function assertAgentAssignmentChangeAllowed(
       return
     }
     if (!activeLease) {
-      // One implicit adoption per request, for the agent this request
-      // authenticated. Anything later in the same request must find the lease
-      // that adoption created, so a human cancellation still fails closed.
       if (
         verifiedActingAgentId &&
         (await adoptAgentMutationLease(
@@ -282,9 +288,6 @@ export async function assertAgentAssignmentChangeAllowed(
     options.allowHumanOverride &&
     actingUserId != null
   ) {
-    // The caller may proceed to validate its intended human override while it
-    // holds this transaction fence. It must cancel the lease only after proving
-    // the mutation is still applicable, immediately before the write.
     return
   }
   throw new AgentMutationLeaseConflictError()
@@ -298,9 +301,6 @@ export async function cancelAgentMutationLeaseForHumanOverride(
   if (!Number.isInteger(actingUserId) || actingUserId <= 0) {
     throw new AgentMutationLeaseConflictError()
   }
-  // Re-taking a transaction-scoped advisory lock is safe and makes this helper
-  // fail closed if a future caller forgets that validation and cancellation
-  // must share the same transaction.
   await lockAgentMutationFence(tx, taskId)
   await tx.taskLease.deleteMany({ where: { taskId } })
 }

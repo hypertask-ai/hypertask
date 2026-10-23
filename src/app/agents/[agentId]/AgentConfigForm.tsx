@@ -1,7 +1,5 @@
 "use client";
 
-import { useFlag } from "@/hooks/useFlag";
-import { HTPR_7010_HAIKU_5_5_FLAG } from "@/lib/flags/keys";
 import { useHaikuDefaultFlag } from "@/hooks/useHaikuDefaultFlag";
 import { aiModelOptions, getAiModelOptionById, isAiModelOptionVisible } from "@/lib/aiModelOptions";
 import { canPinModelOption } from "@/lib/nativeAgent/modelPin";
@@ -55,9 +53,7 @@ export function AgentConfigForm({
   handleImportantToggle, currentUser,
 }: Props) {
   const haikuDefaultEnabled = useHaikuDefaultFlag();
-  const haiku55Enabled = useFlag(
-    HTPR_7010_HAIKU_5_5_FLAG,
-  ) || haikuDefaultEnabled;
+  const haiku55Enabled = true;
   const visibleModelOptions = haikuDefaultEnabled || haiku55Enabled
     ? aiModelOptions.filter((option) => isAiModelOptionVisible(option, true))
     : aiModelOptions.filter((option) => isAiModelOptionVisible(option, false));
@@ -103,9 +99,6 @@ export function AgentConfigForm({
                     ? "Hypertask · native"
                     : "Your own runtime"}
                 </InfoRow>
-                {/* Only a native agent's turns run on Hypertask's models, so
-                    an external agent gets no picker rather than one that
-                    saves and changes nothing. */}
                 {agent.runtimeType === "NATIVE" && (
                   <InfoRow label="Model">
                     <AgentSelect
@@ -115,8 +108,6 @@ export function AgentConfigForm({
                       ariaLabel="Model this agent runs on"
                     >
                       <AgentOption value="">Team default</AgentOption>
-                      {/* Same list the PATCH route enforces, so the picker can
-                        never offer something the API will reject. */}
                       {visibleModelOptions
                         .filter((option) => canPinModelOption(option.id))
                         .map((option) => (
@@ -127,9 +118,6 @@ export function AgentConfigForm({
                     </AgentSelect>
                   </InfoRow>
                 )}
-                {/* Team key by default. Pasting a key here moves this agent's
-                    spend onto that provider account, which is what makes its
-                    cost an invoice instead of an estimate. */}
                 <InfoRow label="Provider key">
                   {editingProviderKey ? (
                     <input

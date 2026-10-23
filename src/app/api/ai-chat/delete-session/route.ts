@@ -9,34 +9,21 @@ import { NextRequest, NextResponse } from "next/server";
 
 export const runtime = "nodejs";
 
-//Tis simple. We get the attachments in the sessions. We delete them from the bucket and then the db. 
-async function removeChatAttachmentsForSessions(sessionIds: string[]) {
-  if (sessionIds.length === 0) return;
-
-  const rows = await prisma.attachment.findMany({
-    where: {
-      chatMessage: {
-        sessionId: { in: sessionIds },
-      },
-    },
-    select: {
-      id: true,
-      fileSource: true,
-    },
-  });
-
-  if (rows.length === 0) return;
-
-  await Promise.all(rows.map((row) => deleteTaskAttachmentFromS3(row.fileSource)));
-
-  await prisma.attachment.deleteMany({
-    where: {
-      id: { in: rows.map((r) => r.id) },
-    },
-  });
+async function warnIfSessionBelongsToAnotherUser(sessionId: string, callerId: number) {
+  if (sessionId === "ALL") return;
+  try {
+    const session = await prisma.chatSession.findFirst({
+      where: { id: sessionId },
+      select: { userId: true },
+    });
+    if (session && session.userId !== callerId) {
+      console.warn("[ai-chat/delete-session] refused delete of another user's chat", { callerId, sessionId });
+    }
+  } catch (error) {
+    console.error("[ai-chat/delete-session] foreign-chat check failed", error);
+  }
 }
 
-// Template for handling DELETE request to remove a chat session
 export async function DELETE(req: NextRequest) {
   try {
     const cookieStore = await cookies();
@@ -49,7 +36,6 @@ export async function DELETE(req: NextRequest) {
       try {
         restCompat = await isFeatureEnabled(HTPR_6924_REST_COMPAT_FLAG, currentUser.userId);
       } catch {
-        // Flag lookup failure preserves the legacy entry path.
       }
     }
     const { isValid, user } = restCompat && currentUser
@@ -75,60 +61,64 @@ export async function DELETE(req: NextRequest) {
       );
     }
 
-    if (toDelete === "ALL") {
-      const sessions = await prisma.chatSession.findMany({
-        where: {
-          userId: user.id,
-        },
-        select: {
-          id: true,
-        },
-      });
+    const sessions = await prisma.chatSession.findMany({
+      where: {
+        userId: user.id,
+        ...(toDelete === "ALL" ? {} : { id: toDelete }),
+      },
+      select: { id: true },
+    });
+    if (toDelete !== "ALL" && sessions.length === 0) {
+      await warnIfSessionBelongsToAnotherUser(toDelete, user.id);
+      return NextResponse.json({ error: "Session not found" }, { status: 404 });
+    }
 
-      await removeChatAttachmentsForSessions(sessions.map((s) => s.id));
+    const sessionIds = sessions.map((session) => session.id);
+    const attachments = await prisma.attachment.findMany({
+      where: { chatMessage: { sessionId: { in: sessionIds } } },
+      select: { id: true, fileSource: true },
+    });
 
-      const deleted = await prisma.chatSession.deleteMany({
-        where: {
-          userId: user.id,
-        },
-      });
+    const removedAttachmentIds: number[] = [];
+    await Promise.all(attachments.map(async (row) => {
+      try {
+        if (await deleteTaskAttachmentFromS3(row.fileSource)) {
+          removedAttachmentIds.push(row.id);
+        } else {
+          console.error("[ai-chat/delete-session] attachment storage cleanup failed", row.id);
+        }
+      } catch {
+        console.error("[ai-chat/delete-session] attachment storage cleanup failed", row.id);
+      }
+    }));
 
-      console.log("🚀 ~ DELETE ~ Number of sessions deleted:", deleted.count);
-      await prisma.chatSession.create({
-        data: {
-          userId: user.id,
-        },
-      });
-    } else {
-      await removeChatAttachmentsForSessions([toDelete]);
+    if (removedAttachmentIds.length !== attachments.length) {
+      return NextResponse.json(
+        { error: "Could not remove chat files, please try again" },
+        { status: 503 }
+      );
+    }
 
-      await prisma.chatSession.delete({
-        where: {
-          id: toDelete,
-          userId: user.id,
-        },
-      });
-
-      const numSessions = await prisma.chatSession.count({
-        where: {
-          userId: user.id,
-        },
-      });
-
-      console.log("🚀 ~ DELETE ~ Number of sessions remaining:", numSessions);
-
-      if (numSessions === 0) {
-        await prisma.chatSession.create({
-          data: {
-            userId: user.id,
-          },
+    await prisma.$transaction(async (tx) => {
+      if (removedAttachmentIds.length > 0) {
+        await tx.attachment.deleteMany({
+          where: { id: { in: removedAttachmentIds } },
         });
       }
+      await tx.chatSession.deleteMany({
+        where: { userId: user.id, id: { in: sessionIds } },
+      });
+    });
 
-      return NextResponse.json(
-        { message: `Session ${toDelete} deleted successfully` },
-        { status: 200 }
-      );
+    try {
+      const numSessions = await prisma.chatSession.count({
+        where: { userId: user.id },
+      });
+      if (numSessions === 0) {
+        await prisma.chatSession.create({ data: { userId: user.id } });
+      }
+    } catch (error) {
+      console.error("[ai-chat/delete-session] replacement session creation failed after deletion", error);
     }
 
     return NextResponse.json(

@@ -1,6 +1,5 @@
 import { useEffect, useRef, useState } from "react";
 import { Bot, Check } from "lucide-react";
- // Import a robot icon for agents
 import { ModalBody } from "reactstrap";
 import { useRecoilValue } from "@/lib/state";
 import styles from "@/styles/linksModal.module.scss";
@@ -33,11 +32,9 @@ import {
   sortAssigneeOptionsByRecency,
 } from "@/lib/assigneeRecency";
 import UserAvatar from "@/components/Common/UserAvatar";
-import { useFlag } from "@/hooks/useFlag";
-import { HTPR_6930_MY_TASKS_KANBAN_REUSE_FLAG, HTPR_6567_COMMAND_SCOPE_PICKER_FLAG } from "@/lib/flags/keys";
 
 interface IProps {
-  onClose: any; // Change 'any' to the specific function type if possible
+  onClose: any;
   project?: IProject;
   task?: {
     id: number;
@@ -74,11 +71,8 @@ const AssignModal = ({
   extraUsers = [],
   bulkTaskIds,
   onBulkAssign,
-  boardPicker: boardPickerProp,
+  boardPicker,
 }: IProps) => {
-  const commandScopePickerEnabled = useFlag(HTPR_6567_COMMAND_SCOPE_PICKER_FLAG);
-  const kanbanReuseEnabled = useFlag(HTPR_6930_MY_TASKS_KANBAN_REUSE_FLAG);
-  const boardPicker = commandScopePickerEnabled || kanbanReuseEnabled ? boardPickerProp : undefined;
   const [selectedIndex, setSelectedIndex] = useState(0);
   const [hoveredIndex, setHoveredIndex] = useState<number | null>(null);
   const { handleMouseEnter, handleMouseLeave, handleMouseMove } =
@@ -92,10 +86,6 @@ const AssignModal = ({
   const [assignKeyword, setAssignKeyword] = useState<string>("");
   const [finalArray, setFinalArray] = useState<(IUser | IAgent)[]>([]);
   const [filteredUsers, setFilteredUsers] = useState<(IUser | IAgent)[]>([]);
-  // Mirror of finalArray, plus a counter identifying the newest assign request.
-  // Toggles paint before the server replies, so the next toggle can start while
-  // the previous one is still in flight and has to build on the optimistic list
-  // rather than on a stale render closure.
   const listRef = useRef<(IUser | IAgent)[]>([]);
   const lastRequest = useRef(0);
   const applyList = (list: (IUser | IAgent)[]) => {
@@ -155,11 +145,6 @@ const AssignModal = ({
         list.map((u) =>
           u.id === user.id ? { ...u, assigned: !u.assigned } : u,
         );
-      // Paint the toggle first. /api/assignees/assign also writes an activity
-      // row and a notification and awaits an FCM push before it answers, so
-      // waiting on it left the checkmark and the avatars seconds behind the
-      // click. Update the task behind the menu but keep the menu open, so
-      // several people can be assigned/removed in one go.
       const intent = assigneeIntentForOption(
         listRef.current.find((option) => option.id === user.id) ?? user,
       );
@@ -171,17 +156,9 @@ const AssignModal = ({
       const finishAssigneeWrite = beginTaskAssigneeWrite(task.id);
       try {
         const updatedAssignees = await assignTaskUser(user, task.id, intent);
-        // Reconcile with the authoritative rows, but only from the newest
-        // request. Responses can land out of order, and an older one still
-        // describes the task as it was before the later toggles, so applying
-        // it would flicker them back out.
         if (request === lastRequest.current) onClose(updatedAssignees, true);
       } catch (error) {
         console.error("🚀 ~ onAssignUser ~ error:", error);
-        // Same guard as the success branch. A newer toggle has either already
-        // applied the server's rows, which are authoritative and need no
-        // rollback, or is still in flight and will. Undoing this toggle on top
-        // of that would flip the wrong person back.
         if (request !== lastRequest.current) return;
         const rolledBack = flip(listRef.current);
         applyList(rolledBack);
@@ -198,13 +175,11 @@ const AssignModal = ({
     const members: IUser[] =
       membersAndOwner.members?.map(({ user }: { user: IUser }) => user) || [];
     const owner: IUser | undefined = membersAndOwner.owner;
-    // Create a Map to track unique users by their unique identifier (e.g., user.id)
     const uniqueUsersMap = new Map<number, IUser>();
     const uniqueAgentsMap = new Map<string, IAgent>();
     if (includePeople) {
       extraUsers.forEach((user) => uniqueUsersMap.set(user.id, user));
     }
-    // Add assignees to the uniqueUsersMap with assigned: true
     assignees.forEach((assignee) => {
       if (isAgentOption(assignee)) {
         if (includeAgents) {
@@ -227,12 +202,10 @@ const AssignModal = ({
       }
     });
 
-    // Add members to the uniqueUsersMap with assigned: false
     if (includePeople) {
       members.forEach((user) => {
         if (user) {
           const selected = selectedUserIds.includes(user.id);
-          // Only add the user if they are not already in the Map
           if (!uniqueUsersMap.has(user.id))
             uniqueUsersMap.set(user.id, { ...user, assigned: selected });
           else if (selected)
@@ -244,7 +217,6 @@ const AssignModal = ({
       });
     }
 
-    // Add owner to the uniqueUsersMap with assigned: false if it's not already present
     if (includePeople && owner && !uniqueUsersMap.has(owner.id)) {
       uniqueUsersMap.set(owner.id, {
         ...owner,
@@ -252,10 +224,6 @@ const AssignModal = ({
       });
     }
 
-    // Keep People before Agents while floating assigned entries within each
-    // section, then order the rest by this user's most recent selections.
-    // The stable fallback preserves the server's existing order for people
-    // who have not been selected on this device yet.
     const recentKeys = readRecentAssigneeKeys(
       getAssigneeRecencyStorage(),
       currentUser?.id,
@@ -271,9 +239,6 @@ const AssignModal = ({
       ),
     ];
     applyList(allOptions);
-    // Re-apply the current keyword: the members refetch re-runs this after
-    // mount, and resetting to the full list mid-typing made Enter hit the
-    // wrong row (HTPR-3731).
     setFilteredUsers(
       assignKeyword
         ? allOptions.filter((user) =>
@@ -443,7 +408,7 @@ const AssignModal = ({
           handleMouseMove={handleMouseMove}
           id="assignees-list"
         >
-          {(commandScopePickerEnabled || kanbanReuseEnabled) && boardPicker ? (
+          {boardPicker ? (
             <div>
               <h3 className="px-4 pt-2.5 pb-1 text-text-light-gray font-semibold text-micro uppercase tracking-wider">Boards</h3>
               {filteredBoards?.map((board, index) => (

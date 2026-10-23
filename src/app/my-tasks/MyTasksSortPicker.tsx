@@ -1,8 +1,6 @@
 "use client";
 
 import BoardPriorityMode, { type PickerSortingLevel } from "@/components/Modals/Kanban/BoardPriorityMode";
-import { useFlag } from "@/hooks/useFlag";
-import { HTPR_6930_MY_TASKS_KANBAN_REUSE_FLAG } from "@/lib/flags/keys";
 import type { MyTasksViewConfig } from "@/models/MyTasksView";
 import type { SortingMode } from "@prisma/client";
 
@@ -21,12 +19,11 @@ export default function MyTasksSortPicker({ sort, onSortChange, onClose }: {
   onSortChange: (sort: MyTasksViewConfig["sort"]) => void;
   onClose: () => void;
 }) {
-  const kanbanReuseEnabled = useFlag(HTPR_6930_MY_TASKS_KANBAN_REUSE_FLAG);
   const level: PickerSortingLevel<"board"> = {
     mode: sort.field === "board" ? "board" : modes[sort.field],
     order: sort.direction === "asc" ? "Ascending" : "Descending",
   };
-  return kanbanReuseEnabled ? (
+  return (
     <BoardPriorityMode
       sort={level}
       onSortChange={(next) => {
@@ -41,5 +38,5 @@ export default function MyTasksSortPicker({ sort, onSortChange, onClose }: {
       maxLevels={1}
       closeHandler={onClose}
     />
-  ) : null;
+  );
 }

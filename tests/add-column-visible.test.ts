@@ -81,13 +81,13 @@ test("Add Column does not compute its own rank from getProjectSections", () => {
 });
 
 test("the create route accepts a column with no ranking", () => {
-  const route = read("src/pages/api/section/create.ts");
+  const route = read("src/lib/api/section-writes/create.ts");
   assert.ok(
     !route.includes("Missing ranking or after_section_id"),
     "omitting ranking must append the column, not fail the request",
   );
   assert.ok(
-    route.includes('return res.status(400).json({ message: "Missing projectId or title" })'),
+    route.includes('return NextResponse.json({ message: "Missing projectId or title" }, { status: 400 })'),
     "projectId and title stay required",
   );
 });

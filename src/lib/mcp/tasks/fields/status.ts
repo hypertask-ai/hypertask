@@ -9,11 +9,11 @@ export async function updateTaskStatus(context: TaskUpdateFieldContext, task: Ta
             'Cookie': authCookieHeader
         }
     }
-    // 2. Status change: use (un)archive for activity + notifications
     if (requestBody.status) {
         const archiveUrl = `${baseUrl}/api/tasks/(un)archive`
         const archiveResponse = await fetch(archiveUrl, {
             method: 'POST',
+            redirect: 'manual',
             ...fetchOpts,
             body: JSON.stringify({
                 taskId: task.id,
@@ -23,12 +23,16 @@ export async function updateTaskStatus(context: TaskUpdateFieldContext, task: Ta
         })
         if (!archiveResponse.ok) {
             const errorData = await archiveResponse.json().catch(() => null)
-            throw new Error(
+            const error = new Error(
                 toErrorMessage(
                     errorData,
                     `Archive/status update failed: ${archiveResponse.status}`
                 )
             )
+            if (archiveResponse.status >= 400 && archiveResponse.status < 500 && typeof errorData?.code === 'string') {
+                throw Object.assign(error, { status: archiveResponse.status, code: errorData.code })
+            }
+            throw error
         }
         await archiveResponse.json().catch(() => null)
     }

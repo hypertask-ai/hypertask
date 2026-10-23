@@ -1,7 +1,6 @@
 import React, { createContext, useContext, useState, ReactNode } from "react";
 import { MobileViewContext } from "../../mobileContext";
 
-// Define the type for the modal state
 interface ModalState {
   showTagsModal: boolean;
   setShowTagsModal: React.Dispatch<React.SetStateAction<boolean>>;
@@ -24,10 +23,8 @@ interface ModalState {
   toggleProjectsModal: () => void;
 }
 
-// Create a context
 const ModalContext = createContext<ModalState | undefined>(undefined);
 
-// Create a provider component
 interface ModalProviderProps {
   children: ReactNode;
 }
@@ -82,7 +79,6 @@ export const CreateTaskInfoColumnProvider: React.FC<ModalProviderProps> = ({
   );
 };
 
-// Create a custom hook to consume the context
 export const useContextCreateTaskInfoColumn = (): ModalState => {
   const context = useContext(ModalContext);
 

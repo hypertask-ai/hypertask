@@ -1,3 +1,10 @@
+import { IdempotencyAccessError } from "@/lib/mcp/idempotency/idempotencyStore"
+import type { AgentTokenTeamScope } from '@/lib/mcp/auth/types'
+import { getProjectWhere } from '@/utils/controllers/projects/getAllIncludes'
+import type { AttachmentFileInput } from "@/lib/mcp-server/validations/attachment.validation";
+import { HTPR_7514_INLINE_AGENT_IMAGES_FLAG } from "@/lib/flags/keys";
+import { inlineAgentImagesForUser } from "@/lib/media/inlineAgentImages.server";
+import { reportMcpOperationCrash } from '@/lib/mcp/operationCrashReport'
 import { wrapMcpRoute, validateMcpRouteAuth as validateMcpAuth, checkMcpRouteRateLimit as checkMcpRateLimit, mcpRouteUnauthorizedResponse as mcpUnauthorizedResponse, readMcpRouteJsonBody as readJsonBody } from '@/lib/mcp/routeWrapper'
 import { NextRequest, NextResponse } from 'next/server'
 import { Prisma } from '@prisma/client'
@@ -16,7 +23,7 @@ import {
 import { convertPlainTextMentionsToHtml, resolveTextMentions } from '@/utils/controllers/comments/processMentions'
 import { createCommentService } from '@/utils/controllers/comments/createCommentService'
 import { AgentInvocationNotPendingError } from '@/utils/controllers/comments/agentInvocationCorrelation'
-import { findTaskByIdentifier, validateTaskIdentifier } from '@/lib/mcp/tasks/resolveTask'
+import { findTaskByIdentifier, taskIdentifierErrorResponse, validateTaskIdentifier } from '@/lib/mcp/tasks/resolveTask'
 import { validateProjectMemberIds } from '@/lib/mcp/tasks/services'
 import { broadcastTaskComment } from '@/lib/realtime/server'
 import { sanitizeRichHtml } from '@/utils/helperFunctions/sanitizeRichHtml'
@@ -44,7 +51,8 @@ import {
 import { loadVisibleReactionAgents } from '@/lib/mcp/comments/visibleReactionAgents'
 import { overlayDurableAgentDisplayName } from '@/lib/agents/publicAgent'
 import { isFeatureEnabled } from '@/lib/flags'
-import { HTPR_6516_AGENT_ATTRIBUTION_FLAG } from '@/lib/flags/keys'
+import { COMMENT_KINDS, parseCommentKind, routeComment, type CommentKind } from './agentChatterRouting'
+import { HTPR_6516_AGENT_ATTRIBUTION_FLAG, HTPR_7341_AGENT_CHATTER_TO_LOG_FLAG, HTPR_7512_ATTACH_KEEPS_COMMENT_FLAG } from '@/lib/flags/keys'
 import { parseNumericCursor, parseUpdatedSince, projectRows } from '@/lib/mcp/listQuery'
 import { readListQuery } from '@/lib/mcp/readListQuery'
 
@@ -53,9 +61,9 @@ export interface CommentItem {
   text: string
   commentText: string
   createdAt: string
-  /** Present only when include_activity=true so callers can distinguish row kinds. */
+  editedAt: string | null
+  editedBy: { userId: number; agentId: string | null; isAgent?: true } | null
   type?: 'comment' | 'activity'
-  /** Raw activity payload, matching the app comment endpoint. Present only when include_activity=true. */
   activity?: Prisma.JsonValue | null
   creatorId?: number
   creator?: {
@@ -64,14 +72,13 @@ export interface CommentItem {
     displayName?: string
   }
   agent?: McpAgentSummary
-  /** Preserved display name when the comment's managed agent was deleted. */
   agent_display_name?: string
   attachments?: Array<{
     id: number
     fileName: string
     fileType: string
     fileSize: number | string
-    fileSource: string // URL to the attachment
+    fileSource: string
   }>
   reactions?: McpCommentReaction[]
 }
@@ -92,35 +99,36 @@ export interface McpMentionInput {
 
 export interface AddCommentRequest {
   dry_run?: boolean
+  kind?: CommentKind
   task_id?: number
   ticket_number?: string
   unique_index?: number
   text: string
+  attachments?: AttachmentFileInput[]
+  inline_images?: boolean
   content_type?: 'html' | 'markdown'
   project_id?: number
-  images?: string[] // Array of S3 image URLs
-  /** Optional: when MCP sends plain text like "@John Doe", pass mentions to convert to HTML and trigger notifications */
+  images?: string[]
+  has_attachments?: boolean
   mentions?: McpMentionInput[]
-  /** Source comment ID when an authenticated agent directly answers a request. */
   reply_to_comment_id?: number
-  /**
-   * Durable invocation token when an authenticated agent directly answers a
-   * request: the agent's `Mentioned` notification ID. Use this for description
-   * mentions, which have no source comment.
-   */
   reply_to_invocation_id?: number
 }
 
-export interface AddCommentResponse {
+export type AddCommentResponse = {
   success: boolean
+  routedTo: 'comments'
+  visibleToPeople: true
   url: string
   idempotent_replayed?: true
-  /** MCP session agent that performed this action */
   agent?: McpAgentSummary
   comment: {
+    kind: string | null
     id: number
     text: string
     createdAt: string
+    editedAt: string | null
+    editedBy: { userId: number; agentId: string | null; isAgent?: true } | null
     creatorId?: number
     agent?: McpAgentSummary
     agent_display_name?: string
@@ -132,9 +140,48 @@ export interface AddCommentResponse {
       fileSource?: string
     }>
   }
+} | {
+  success: boolean
+  routedTo: 'log'
+  visibleToPeople: false
+  notice: string
+  url: string
+  idempotent_replayed?: true
+  activity: {
+    id: string
+    runId: string
+    type: string
+    text: string
+    createdAt: string
+  }
 }
 
-// Shared comment include structure
+type AgentLogPrincipal = { userId: number; agentId: string; teamScope: AgentTokenTeamScope | null; displayName: string; source: 'agent' }
+
+async function prepareAgentLogEntry(principal: AgentLogPrincipal, html: string) {
+  const { runtimeAgentRunsEnabledFor, agentRunActivitiesEnabledFor } = await import('@/lib/agentRuns/service')
+  if (!(await runtimeAgentRunsEnabledFor(principal)) || !(await agentRunActivitiesEnabledFor(principal))) return null
+  const { AGENT_RUN_ACTIVITY_TEXT_MAX_LENGTH } = await import('@/lib/agentRuns/model')
+  const text = (await htmlToLogText(html)).slice(0, AGENT_RUN_ACTIVITY_TEXT_MAX_LENGTH).replace(/[\uD800-\uDBFF]$/, '')
+  return text ? { principal, text } : null
+}
+
+async function htmlToLogText(html: string) {
+  const { parse } = await import('node-html-parser')
+  const root = parse(html)
+  for (const anchor of root.querySelectorAll('a')) {
+    const href = anchor.getAttribute('href')?.trim()
+    const label = anchor.text.trim()
+    if (!href || href === label) continue
+    anchor.set_content(escapeHtmlText(label ? `${label} (${href})` : href))
+  }
+  return root.structuredText.trim()
+}
+
+function escapeHtmlText(value: string) {
+  return value.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+}
+
 const commentInclude = (userId: number, projectId: number) => ({
   creator: {
     select: {
@@ -158,8 +205,6 @@ const commentInclude = (userId: number, projectId: number) => ({
   reactions: commentReactionInclude
 })
 
-// Helper function to map comment to response format. Activity-inclusive responses
-// retain the app endpoint's raw activity payload and add an explicit row type.
 function mapCommentToResponse(
   comment: any,
   userId: number,
@@ -177,6 +222,14 @@ function mapCommentToResponse(
     text: comment.text,
     commentText: comment.commentText || comment.text,
     createdAt: comment.createdAt.toISOString(),
+    editedAt: comment.editedAt?.toISOString() ?? null,
+    editedBy: comment.editedByUserId != null
+      ? {
+          userId: comment.editedByUserId,
+          agentId: comment.editedByAgentId && reactionAgents.has(comment.editedByAgentId) ? comment.editedByAgentId : null,
+          ...(comment.editedByAgentId ? { isAgent: true as const } : {})
+        }
+      : null,
     creatorId: comment.creatorId || undefined,
     creator: comment.creator ? {
       id: comment.creator.id,
@@ -219,17 +272,9 @@ function applyDurableCommentAttribution<T extends object>(
   })
 }
 
-/**
- * GET /api/mcp/comments
- *
- * Gets all user comments for a specific task. Activity logs (assignments, moves, etc.) are excluded
- * unless include_activity=true. Activity-inclusive history matches the app endpoint's chronological order.
- * Supports pagination and sorting by creation date for the default comments-only response.
- */
 export async function GET(request: NextRequest) {
   return wrapMcpRoute(async (request: NextRequest) => {
   try {
-    // Validate authentication
     const rateLimited = await checkMcpRateLimit(request)
     if (rateLimited) return rateLimited
     const ctx = await validateMcpAuth(request)
@@ -237,7 +282,6 @@ export async function GET(request: NextRequest) {
       return await mcpUnauthorizedResponse(request)
     }
     const user = ctx.user;
-    // Parse query parameters
     const searchParams = request.nextUrl.searchParams
     const taskId = searchParams.get('task_id') ? parseInt(searchParams.get('task_id')!) : null
     const ticketNumber = searchParams.get('ticket_number') || undefined
@@ -254,7 +298,6 @@ export async function GET(request: NextRequest) {
     if (parsedListQuery.error) return parsedListQuery.error
     const listQuery = parsedListQuery.listQuery
 
-    // Validate task identifier
     const validation = validateTaskIdentifier({ task_id: taskId, ticket_number: ticketNumber, unique_index: uniqueIndex, project_id: projectId })
     if (!validation.valid) {
       return NextResponse.json(
@@ -266,7 +309,6 @@ export async function GET(request: NextRequest) {
       )
     }
 
-    // Find task
     const task = await findTaskByIdentifier(
       user,
       {
@@ -275,7 +317,7 @@ export async function GET(request: NextRequest) {
         unique_index: uniqueIndex,
         project_id: projectId,
       },
-      ctx.agentId
+      ctx.agentId, undefined, ctx.teamScope
     )
 
     if (!task) {
@@ -288,10 +330,10 @@ export async function GET(request: NextRequest) {
       )
     }
 
-    // Keep the existing comments-only filter unless activity was explicitly requested.
     const commentWhere: Prisma.CommentWhereInput = includeActivity
       ? { taskId: task.id }
       : { taskId: task.id, activity: { equals: Prisma.DbNull } }
+    if (ctx.teamScope != null) commentWhere.task = { project: getProjectWhere(user.id, ctx.agentId, ctx.teamScope) }
     if (listQuery?.query) {
       commentWhere.text = { contains: listQuery.query, mode: 'insensitive' }
     }
@@ -333,13 +375,10 @@ export async function GET(request: NextRequest) {
       )
     }
 
-    // Count the same row set returned below so pagination metadata stays accurate.
     const total = await prisma.comment.count({
       where: commentWhere
     })
 
-    // History reads oldest-first, like the app endpoint, unless the caller asked
-    // for an order explicitly. An explicit sort_order always wins over shared sort.
     const sortField = listQuery?.sortBy === 'id' ? 'id' : 'createdAt'
     const effectiveSortOrder = requestedSortOrder
       ? (requestedSortOrder as 'asc' | 'desc')
@@ -364,12 +403,14 @@ export async function GET(request: NextRequest) {
     )
 
     const reactionAgents = await loadVisibleReactionAgents(
-      reactionAgentIds(comments),
+      [...new Set([
+        ...reactionAgentIds(comments),
+        ...comments.flatMap((comment) => comment.editedByAgentId ? [comment.editedByAgentId] : [])
+      ])],
       user.id,
       task.projectId
     )
 
-    // Transform to response format
     const commentList: CommentItem[] = comments.map((comment) =>
       mapCommentToResponse(comment, user.id, task.projectId, includeActivity, reactionAgents)
     ).map((mapped, index) =>
@@ -396,7 +437,10 @@ export async function GET(request: NextRequest) {
 
     return NextResponse.json(response)
   } catch (error) {
+    const identifierResponse = taskIdentifierErrorResponse(error)
+    if (identifierResponse) return identifierResponse
     console.error('Error getting comments:', error)
+    reportMcpOperationCrash(request, error)
     return NextResponse.json(
       {
         success: false,
@@ -409,15 +453,9 @@ export async function GET(request: NextRequest) {
   })(request)
 }
 
-/**
- * POST /api/mcp/comments
- *
- * Adds a comment to a task.
- */
 export async function POST(request: NextRequest) {
   return wrapMcpRoute(async (request: NextRequest) => {
   try {
-    // Validate authentication
     const rateLimited = await checkMcpRateLimit(request)
     if (rateLimited) return rateLimited
     const ctx = await validateMcpAuth(request)
@@ -429,18 +467,45 @@ export async function POST(request: NextRequest) {
       if (scopeError) return scopeError
     }
     const user = ctx.user;
-    // Parse request body
     const parsedBody = await readJsonBody<AddCommentRequest>(request)
     if (!parsedBody.ok) return parsedBody.response
     const body = parsedBody.body
-    const { dry_run, task_id, ticket_number, unique_index, text, content_type, project_id, images, mentions, reply_to_comment_id, reply_to_invocation_id } = body
+    if (body.inline_images !== undefined && typeof body.inline_images !== "boolean") {
+      return NextResponse.json(buildFieldError("invalid_field", "inline_images", "inline_images must be a boolean"), { status: 400 });
+    }
+    let hasImageAttachments = false;
+    if (body.attachments !== undefined && await isFeatureEnabled(HTPR_7514_INLINE_AGENT_IMAGES_FLAG, user.id)) {
+      const { inlineAttachmentsSchema } = await import("@/lib/mcp-server/validations/attachment.validation");
+      const attachmentInput = inlineAttachmentsSchema.safeParse(body.attachments);
+      if (!attachmentInput.success) {
+        return NextResponse.json(buildFieldError("invalid_field", "attachments", attachmentInput.error.issues[0]?.message ?? "Invalid attachments"), { status: 400 });
+      }
+      const { isBrowserRenderableImage } = await import("@/lib/media/browserRenderableImage");
+      hasImageAttachments = attachmentInput.data?.some((file) => isBrowserRenderableImage(file.content_type, file.filename)) ?? false;
+    }
+    const { dry_run, task_id, ticket_number, unique_index, text, content_type, project_id, images, has_attachments, mentions, reply_to_comment_id, reply_to_invocation_id } = body
     if (dry_run !== undefined && typeof dry_run !== 'boolean') {
       return NextResponse.json(
         buildFieldError('invalid_field', 'dry_run', 'dry_run must be a boolean'),
         { status: 400 }
       )
     }
+    if (has_attachments !== undefined && typeof has_attachments !== 'boolean') {
+      return NextResponse.json(
+        buildFieldError('invalid_field', 'has_attachments', 'has_attachments must be a boolean'),
+        { status: 400 }
+      )
+    }
     const dryRun = dry_run ?? false
+    let kind: CommentKind | undefined
+    try {
+      kind = parseCommentKind(body.kind)
+    } catch (error) {
+      return NextResponse.json(
+        buildFieldError('invalid_field', 'kind', error instanceof Error ? error.message : 'Invalid kind', COMMENT_KINDS),
+        { status: 400 }
+      )
+    }
     const { dry_run: _dryRun, ...idempotencyBody } = body
 
     if (
@@ -490,8 +555,6 @@ export async function POST(request: NextRequest) {
         { status: 400 }
       )
     }
-    // Both identify the same invocation. Accepting two conflicting pointers
-    // would let one reply claim a request it was not answering.
     if (
       reply_to_invocation_id !== undefined &&
       reply_to_comment_id !== undefined
@@ -525,7 +588,6 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // Validate input
     if (!text || typeof text !== 'string' || text.trim().length === 0) {
       return NextResponse.json(
         {
@@ -565,7 +627,6 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // Validate task identifier
     const validation = validateTaskIdentifier({ task_id, ticket_number, unique_index, project_id })
     if (!validation.valid) {
       return NextResponse.json(
@@ -577,7 +638,6 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // Validate ticket_number format if provided
     if (ticket_number && !/^[a-zA-Z0-9_-]+$/.test(ticket_number)) {
       return NextResponse.json(
         {
@@ -592,7 +652,6 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // Validate images (optional array of S3 URLs)
     if (images !== undefined) {
       if (!Array.isArray(images)) {
         return NextResponse.json(
@@ -608,7 +667,6 @@ export async function POST(request: NextRequest) {
         )
       }
 
-      // Validate each image URL is a string and looks like a URL
       for (let i = 0; i < images.length; i++) {
         const imageUrl = images[i]
         if (typeof imageUrl !== 'string' || imageUrl.trim().length === 0) {
@@ -625,7 +683,6 @@ export async function POST(request: NextRequest) {
           )
         }
 
-        // Basic URL validation (should start with http:// or https://)
         if (!imageUrl.startsWith('http://') && !imageUrl.startsWith('https://')) {
           return NextResponse.json(
             {
@@ -677,7 +734,6 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    // Find task
     const task = await findTaskByIdentifier(
       user,
       {
@@ -686,7 +742,7 @@ export async function POST(request: NextRequest) {
         unique_index,
         project_id,
       },
-      ctx.agentId
+      ctx.agentId, undefined, ctx.teamScope
     )
 
     if (!task) {
@@ -703,7 +759,6 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // Get task owner for the API call
     const taskWithOwner = await prisma.task.findUnique({
       where: { id: task.id },
       select: { userId: true, projectId: true, uniqueIndex: true }
@@ -755,7 +810,6 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    // Get user object for createCommentService (needs id, email, displayName, photoURL)
     const userObj = await prisma.user.findUnique({
       where: { id: user.id },
       select: {
@@ -776,25 +830,21 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // Sanitize text (trim and normalize line endings)
     let sanitizedText = formatRichTextInput(
       text.trim().replace(/\r\n/g, '\n').replace(/\r/g, '\n'),
       content_type
     )
 
-    // Convert plain text @mentions to HTML when mentions array is provided (MCP format)
     if (mentions && mentions.length > 0) {
       sanitizedText = convertPlainTextMentionsToHtml(sanitizedText, mentions)
     }
 
-    // Resolve any remaining plain "@Name" / "@<id>" tokens against project
-    // members so CLI/MCP callers don't have to hand-write mention spans (HTPR-3783).
     sanitizedText = await resolveTextMentions(
       sanitizedText,
       taskWithOwner.projectId,
       user.id,
     )
-    sanitizedText = sanitizeRichHtml(sanitizedText)
+    sanitizedText = await inlineAgentImagesForUser(sanitizeRichHtml(sanitizedText), user.id, { inlineImages: body.inline_images, attachments: images?.map((url: string) => ({ url })) })
     sanitizedText = normalizeBlockHtml(sanitizedText)
 
     const textMentionIds = extractTipTapContent(sanitizedText).mentions.map((id) => parseInt(id, 10))
@@ -834,6 +884,29 @@ export async function POST(request: NextRequest) {
       }
     }
 
+    const agentLogPrincipal = ctx.agentId
+      ? {
+          userId: user.id,
+          agentId: ctx.agentId,
+          teamScope: ctx.teamScope,
+          displayName: userObj.displayName?.trim() || 'Hypertask agent',
+          source: 'agent' as const,
+        }
+      : null
+    const agentLogEntry = routeComment({
+      agentId: ctx.agentId,
+      kind,
+      replyToCommentId: reply_to_comment_id,
+      replyToInvocationId: reply_to_invocation_id,
+      mentionsPerson: textMentionIds.length > 0 || (mentions?.length ?? 0) > 0,
+      hasImages: (images?.length ?? 0) > 0 || /<img\b/i.test(sanitizedText) || hasImageAttachments ||
+        (has_attachments === true && await isFeatureEnabled(HTPR_7512_ATTACH_KEEPS_COMMENT_FLAG, user.id)),
+      flagEnabled: await isFeatureEnabled(HTPR_7341_AGENT_CHATTER_TO_LOG_FLAG, user.id),
+    }) === 'log' && agentLogPrincipal
+      ? await prepareAgentLogEntry(agentLogPrincipal, sanitizedText)
+      : null
+    const routedTo = agentLogEntry ? 'log' as const : 'comments' as const
+
     if (dryRun) {
       return NextResponse.json(
         {
@@ -841,6 +914,8 @@ export async function POST(request: NextRequest) {
           dry_run: true,
           valid: true,
           would: {
+            routedTo,
+            ...(kind === undefined ? {} : { kind }),
             task_id: task.id,
             text: sanitizedText,
             content_type: 'html',
@@ -862,13 +937,35 @@ export async function POST(request: NextRequest) {
       clientIdempotencyKey,
       idempotencyBody,
       async (): Promise<AddCommentResponse> => {
+        if (agentLogEntry) {
+          const { createRuntimeAgentRun, createAgentRunActivity } = await import('@/lib/agentRuns/service')
+          const { parseAgentRunActivityInput } = await import('@/lib/agentRuns/model')
+          const run = await createRuntimeAgentRun(agentLogEntry.principal, { taskId: task.id, title: null, source: 'runtime' })
+          const result = run
+            ? await createAgentRunActivity(agentLogEntry.principal, run.id, parseAgentRunActivityInput({ type: 'thought', text: agentLogEntry.text }), clientIdempotencyKey)
+            : null
+          if (result) {
+            const { id, runId, type, text, createdAt } = result.activity
+            return {
+              success: true,
+              routedTo: 'log' as const,
+              visibleToPeople: false,
+              notice: 'Saved to the agent log, not the ticket thread; people do not see it. Resend with kind (question|qa|done) to post for people.',
+              url: buildMcpTaskUrl(taskWithOwner.projectId, taskWithOwner.uniqueIndex),
+              activity: { id, runId, type, text, createdAt },
+            }
+          }
+        }
+
         const comment = await createCommentService({
+          kind,
           text: sanitizedText,
           creatorId: user.id,
           taskId: task.id,
           ownerId: taskWithOwner.userId,
           currentUser: userObj,
           agentId: ctx.agentId || undefined,
+          teamScope: ctx.teamScope,
           directReplySourceCommentId: ctx.agentId ? reply_to_comment_id : undefined,
           directReplyInvocationId: ctx.agentId ? reply_to_invocation_id : undefined
         })
@@ -883,10 +980,10 @@ export async function POST(request: NextRequest) {
           task.id,
           comment.id,
           'POST',
-          imageUrls
+          imageUrls,
+          { userId: user.id, agentId: ctx.agentId, teamScope: ctx.teamScope }
         )
 
-        // Fetch comment with attachments for response
         const commentWithAttachments = await prisma.comment.findUnique({
           where: { id: comment.id },
           include: commentInclude(user.id, task.projectId)
@@ -896,8 +993,13 @@ export async function POST(request: NextRequest) {
           HTPR_6516_AGENT_ATTRIBUTION_FLAG,
           user.id
         )
+        const editorAgents = await loadVisibleReactionAgents(
+          comment.editedByAgentId ? [comment.editedByAgentId] : [],
+          user.id,
+          task.projectId
+        )
         const mappedComment = commentWithAttachments
-          ? mapCommentToResponse(commentWithAttachments, user.id, task.projectId)
+          ? mapCommentToResponse(commentWithAttachments, user.id, task.projectId, false, editorAgents)
           : null
         const attributedComment = mappedComment
           ? applyDurableCommentAttribution(
@@ -913,12 +1015,23 @@ export async function POST(request: NextRequest) {
 
         return {
           success: true,
+          routedTo: 'comments' as const,
+          visibleToPeople: true,
           url: buildMcpTaskUrl(taskWithOwner.projectId, taskWithOwner.uniqueIndex),
           ...(sessionAgent ? { agent: sessionAgent } : {}),
           comment: {
+            kind: comment.kind ?? null,
             id: comment.id,
             text: comment.text || sanitizedText,
             createdAt: (comment.createdAt instanceof Date ? comment.createdAt : new Date()).toISOString(),
+            editedAt: comment.editedAt?.toISOString() ?? null,
+            editedBy: comment.editedByUserId != null
+              ? {
+                  userId: comment.editedByUserId,
+                  agentId: comment.editedByAgentId && editorAgents.has(comment.editedByAgentId) ? comment.editedByAgentId : null,
+                  ...(comment.editedByAgentId ? { isAgent: true as const } : {})
+                }
+              : null,
             creatorId: comment.creatorId || user.id,
             ...(attributedComment?.agent ? { agent: attributedComment.agent } : {}),
             ...(attributedComment?.agent_display_name
@@ -933,11 +1046,16 @@ export async function POST(request: NextRequest) {
             })) || []
           }
         }
-      }
+      },
+      ctx.teamScope != null ? ctx.agentId : undefined,
+      ctx.teamScope
     )
 
     return NextResponse.json(mcpResponse, { status: 201 })
   } catch (error) {
+    if (error instanceof IdempotencyAccessError) return NextResponse.json({ error: error.message }, { status: 404 })
+    const identifierResponse = taskIdentifierErrorResponse(error)
+    if (identifierResponse) return identifierResponse
     if (error instanceof AgentInvocationNotPendingError) {
       return NextResponse.json(
         { success: false, error: error.message },
@@ -951,6 +1069,7 @@ export async function POST(request: NextRequest) {
       )
     }
     console.error('Error adding comment:', error)
+    reportMcpOperationCrash(request, error)
     return NextResponse.json(
       {
         success: false,

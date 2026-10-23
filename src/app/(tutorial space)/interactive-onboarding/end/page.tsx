@@ -12,21 +12,14 @@ const TutorialEndPage = () => {
   const searchParams = useSearchParams()
 
 
-  // if user is coming from funnel this will become like a signup page, when a user from funnel completes his tutorial we show login button here
-  // otherwise it will be a normal tutorial end page.
   if (searchParams?.get('funnel_completed') ) {
     return <FunnelCase />
   }
 
-  // Normal tutorial end page for users who are not coming from funnel and completed their interactive tutorial.
 
   return (
     <div
       className="min-h-screen flex flex-col items-center justify-center p-4 text-center"
-    // style={{
-    //   background:
-    //     "linear-gradient(135deg, rgb(76, 81, 153) 0%, rgb(102, 82, 144) 100%)",
-    // }}
     >
       <div className="space-y-4 max-w-2xl text-white-black">
         <h1 className="text-4xl md:text-6xl font-medium">
@@ -63,8 +56,6 @@ const FunnelCase = () => {
 
       <Image
         src={effectiveTheme ? (effectiveTheme !== "dark" ? HTCLogo.src : "/loginLogoMain.png") : "/loginLogoMain.png"}
-        // className="my-4 px-6 h-[28px] w-auto "
-        // style={{ objectFit: "contain" }}
         width={80}
         height={80}
         alt=""

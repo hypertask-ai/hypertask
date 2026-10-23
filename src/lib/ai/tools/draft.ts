@@ -1,4 +1,6 @@
+import { inlineAgentImagesForUser } from "@/lib/media/inlineAgentImages.server";
 import { tool } from "ai";
+import { inlineAgentImageFields } from "./schemas";
 import { z } from "zod";
 import prisma from "@/lib/prisma";
 import { toStoredHtml } from "@/utils/helperFunctions/toStoredHtml";
@@ -16,7 +18,7 @@ import { sanitizeForJson, mapDraftToResponse, validateMentionUserIds, findDraftW
 import type { ToolContext } from "./context";
 
 export function createDraftTool(context: ToolContext) {
-  const { sendStatus, user, actingAgentId } = context;
+  const { sendStatus, user, actingAgentId, body } = context;
   return {
     hypertask_draft: tool({
       description:
@@ -35,6 +37,7 @@ export function createDraftTool(context: ToolContext) {
         draft_id: z.coerce.number().int().positive().optional(),
         draft_type: z.enum(["description", "comment"]).optional(),
         text: z.string().max(20000).optional(),
+        ...inlineAgentImageFields(context.inlineAgentImagesEnabled),
       }),
       execute: withToolErrors(async (input) => {
         sendStatus("hypertask_draft");
@@ -57,7 +60,7 @@ export function createDraftTool(context: ToolContext) {
 
           if (input.action === "list") {
             const drafts = await prisma.drafts.findMany({
-              where: { taskId: task.id, content: { not: "<p></p>" } },
+              where: { taskId: task.id, userId: user.id, content: { not: "<p></p>" } },
               include: {
                 task: { select: { ticketNumber: true } },
                 user: { select: { id: true, email: true, displayName: true } },
@@ -74,7 +77,7 @@ export function createDraftTool(context: ToolContext) {
           if (!input.draft_type) {
             return { success: false, error: "draft_type is required to create a draft" };
           }
-          let text = input.text?.trim() ? toStoredHtml(input.text) : undefined;
+          let text = input.text?.trim() ? await inlineAgentImagesForUser(toStoredHtml(input.text), user.id, { instructions: body?.message, inlineImages: input.inline_images, attachments: [...(input.image_urls?.map((url: string) => ({ url })) ?? []), ...[...(body?.images64 ?? []), ...(body?.attachments ?? [])].flatMap((file) => file.url && (input.image_urls?.includes(file.url) || input.text?.includes(file.url)) ? [{ url: file.url, fileName: file.fileName, mimeType: file.mimeType }] : [])] }) : undefined;
           if (!text) {
             return { success: false, error: "text is required to create a draft" };
           }
@@ -166,7 +169,7 @@ export function createDraftTool(context: ToolContext) {
         }
 
         if (input.action === "update") {
-          let text = input.text?.trim() ? toStoredHtml(input.text) : undefined;
+          let text = input.text?.trim() ? await inlineAgentImagesForUser(toStoredHtml(input.text), user.id, { instructions: body?.message, inlineImages: input.inline_images, attachments: [...(input.image_urls?.map((url: string) => ({ url })) ?? []), ...[...(body?.images64 ?? []), ...(body?.attachments ?? [])].flatMap((file) => file.url && (input.image_urls?.includes(file.url) || input.text?.includes(file.url)) ? [{ url: file.url, fileName: file.fileName, mimeType: file.mimeType }] : [])] }) : undefined;
           if (!text) {
             return { success: false, error: "text is required to update a draft" };
           }
@@ -210,6 +213,7 @@ export function createDraftTool(context: ToolContext) {
           });
         }
 
+        draft.content = await inlineAgentImagesForUser(draft.content ?? "", user.id, { instructions: body?.message, inlineImages: input.inline_images, attachments: [...(input.image_urls?.map((url: string) => ({ url })) ?? []), ...[...(body?.images64 ?? []), ...(body?.attachments ?? [])].flatMap((file) => file.url && (input.image_urls?.includes(file.url) || draft.content?.includes(file.url)) ? [{ url: file.url, fileName: file.fileName, mimeType: file.mimeType }] : [])] });
         const taskId = draft.taskId;
         const taskTicketNumber = draft.task.ticketNumber || `Task #${taskId}`;
 

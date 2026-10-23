@@ -1,5 +1,3 @@
-// Assert-based demo because this repository has no Vitest setup.
-// Run after installing dependencies: npx tsx src/app/api/mcp/tasks/batch/batch.test.ts
 import assert from 'node:assert/strict'
 import { NextRequest } from 'next/server'
 
@@ -70,6 +68,7 @@ async function demo() {
     }
   )
   const ctx = {
+    teamScope: null,
     user: { id: 6, email: 'valentin@example.com' },
     agentId: null,
   }
@@ -97,8 +96,6 @@ async function demo() {
 
     const getResponse = await handleBatchBody(request, ctx, {
       op: 'get',
-      // The scoped query deliberately resolves neither the missing task 2 nor
-      // the inaccessible task 3; callers must receive the same result for both.
       task_ids: [1, 2, 3],
     })
     const getBody = await json(getResponse)

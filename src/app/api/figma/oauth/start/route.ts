@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 
 import {
   figmaRedirectUri,
-  getFigmaRequestUser,
+  getFigmaAuthenticatedUser,
   noStore,
   setFigmaOAuthAttemptCookie,
 } from "@/app/api/figma/_lib";
@@ -26,12 +26,9 @@ function settingsError(request: NextRequest, error: string): URL {
 }
 
 export async function GET(request: NextRequest) {
-  const principal = await getFigmaRequestUser(request);
+  const principal = await getFigmaAuthenticatedUser(request);
   if (principal.status === "unauthorized") {
     return noStore({ error: "Unauthorized" }, 401);
-  }
-  if (principal.status === "disabled") {
-    return noStore({ error: "Not found" }, 404);
   }
   if (principal.status === "error") {
     return noStore({ error: "Figma connection is unavailable" }, 503);

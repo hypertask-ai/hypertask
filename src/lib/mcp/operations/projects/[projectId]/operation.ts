@@ -1,11 +1,12 @@
+import { reportMcpOperationCrash } from '@/lib/mcp/operationCrashReport'
 import { wrapMcpRoute, validateMcpRouteAuth as validateMcpAuth, checkMcpRouteRateLimit as checkMcpRateLimit } from '@/lib/mcp/routeWrapper'
 import { NextRequest, NextResponse } from 'next/server'
+import { requireRole } from '@/lib/mcp/agents/scopes'
 
 import { loadSessionUserRecord } from '@/lib/auth/sessionUserRecord'
 import updateProject from '@/utils/controllers/projects/update'
 import { broadcastBoardChange } from '@/lib/realtime/server'
 
-/** PATCH /api/mcp/projects/:projectId with { title: string }. */
 export async function PATCH(
   request: NextRequest,
   props: { params: Promise<{ projectId: string }> }
@@ -22,6 +23,11 @@ export async function PATCH(
       )
     }
 
+    if (ctx.agentId) {
+      const roleError = await requireRole(ctx, 'write')
+      if (roleError) return roleError
+    }
+
     const { projectId } = await props.params
     let body: { title?: unknown }
     try {
@@ -33,7 +39,7 @@ export async function PATCH(
       )
     }
     const user = await loadSessionUserRecord(ctx.user.id)
-    const result = await updateProject(Number(projectId), body?.title, undefined, undefined, user, ctx.agentId)
+    const result = await updateProject(Number(projectId), body?.title, undefined, undefined, user, ctx.agentId, ctx.teamScope)
     if (result.status !== 200 || !('id' in result.json)) {
       const message = 'message' in result.json ? result.json.message : 'Unable to rename board'
       return NextResponse.json(
@@ -47,6 +53,7 @@ export async function PATCH(
     return NextResponse.json({ success: true, project: { id, title, name } })
   } catch (error) {
     console.error('Error renaming board:', error)
+    reportMcpOperationCrash(request, error)
     return NextResponse.json(
       { success: false, error: 'An unexpected error occurred while renaming the board' },
       { status: 500 }

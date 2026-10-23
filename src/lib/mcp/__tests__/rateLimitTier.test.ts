@@ -1,5 +1,3 @@
-// Assert-based demo because this repository has no Vitest setup.
-// Run after installing dependencies: npx tsx src/lib/mcp/__tests__/rateLimitTier.test.ts
 import assert from 'node:assert/strict'
 import {
   classifyMcpRateLimitCount,
@@ -13,6 +11,7 @@ const humanCtx: McpAuthContext = {
     email: 'human@example.com',
   },
   agentId: null,
+  teamScope: null,
 }
 
 function demo() {
@@ -46,6 +45,7 @@ function demo() {
       email: 'agent-owner@example.com',
     },
     agentId: 'agent-123',
+    teamScope: null,
   }
   assert.equal(
     resolveMcpRateLimit(agentCtx, 'any-token-string'),
@@ -83,6 +83,7 @@ function demo() {
       email: 'admin@example.com',
     },
     agentId: null,
+    teamScope: null,
     management: {
       keyId: 'management-key-123',
       permissions: {

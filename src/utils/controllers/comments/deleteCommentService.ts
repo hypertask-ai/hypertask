@@ -1,18 +1,15 @@
-/**
- * Shared comment delete logic used by both Pages API and MCP route.
- * Single source of truth for: notifications, attachments, comment delete, search index.
- */
+import type { AgentTokenTeamScope } from '@/lib/mcp/auth/types'
+import { projectContentAccessWhere } from '@/utils/controllers/projects/getAllIncludes'
 import prisma from '@/lib/prisma'
 import { deleteCommentInTurbopuffer } from '@/utils/controllers/turbopuffer/turbopufferHelper'
 
 export interface DeleteCommentParams {
   commentId: number
+  userId?: number
+  agentId?: string | null
+  teamScope?: AgentTokenTeamScope | null
 }
 
-/**
- * Deletes a comment and all related data.
- * Caller must ensure: comment exists and user has task/project access.
- */
 export async function deleteCommentService(params: DeleteCommentParams) {
   const { commentId } = params
 
@@ -25,19 +22,23 @@ export async function deleteCommentService(params: DeleteCommentParams) {
     throw new Error('Comment not found')
   }
 
-  // Mark notifications as Deleted
-  await prisma.notification.updateMany({
+  const remove = async (db: typeof prisma | import('@prisma/client').Prisma.TransactionClient) => {
+    if (params.teamScope != null) {
+      await db.$queryRaw`SELECT id FROM "Task" WHERE id = ${comment.taskId} FOR UPDATE`
+      if (params.userId == null || !await db.comment.findFirst({
+        where: { id: commentId, task: { project: projectContentAccessWhere(params.userId, params.agentId, params.teamScope) } }, select: { id: true },
+      })) throw new Error('Comment not found or access denied')
+    }
+  await db.notification.updateMany({
     where: { commentId },
     data: { status: 'Deleted' }
   })
 
-  // Delete attachments for this comment
-  await prisma.attachment.deleteMany({
+  await db.attachment.deleteMany({
     where: { commentId }
   })
 
-  // Delete comment
-  const deleteResult = await prisma.comment.deleteMany({
+  const deleteResult = await db.comment.deleteMany({
     where: {
       id: commentId
     }
@@ -47,13 +48,16 @@ export async function deleteCommentService(params: DeleteCommentParams) {
     throw new Error('Comment not found')
   }
 
-  // Only real user/agent comments (creatorId IS NOT NULL) are counted
   if (comment.taskId !== null && comment.creatorId !== null) {
-    await prisma.task.update({
+    await db.task.update({
       where: { id: comment.taskId },
       data: { totalComments: { decrement: 1 } },
     })
   }
+
+  }
+  if (params.teamScope != null) await prisma.$transaction(remove)
+  else await remove(prisma)
 
   await deleteCommentInTurbopuffer(commentId)
 

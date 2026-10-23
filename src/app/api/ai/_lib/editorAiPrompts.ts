@@ -1,5 +1,5 @@
 import { renderPrompt } from "@/lib/ai/prompts/registry";
-import { I_HAVE_ADHD_SKILL, STRUCTURED_WRITING_STYLE, UNSLOP_SKILL } from "@/app/api/ai/_lib/writingSkills";
+import { I_HAVE_ADHD_SKILL, STRUCTURED_WRITING_STYLE, UNSLOP_SKILL, WEB_WRITING_SKILL } from "@/app/api/ai/_lib/writingSkills";
 import { createTaskWriterSystemPromptTemplate, wrapTaskWriterContext } from "@/app/api/ai/_lib/taskWriterPrompt";
 import { createBoardTemplatesBlock, type BoardTemplateContext } from "@/app/api/ai/_lib/boardTemplateContext";
 
@@ -7,13 +7,18 @@ export const NVC_STYLE_RULE = renderPrompt("nvc-style-rule");
 
 export const HOUSE_OUTPUT_STYLE = renderPrompt("house-output-style", (NVC_STYLE_RULE));
 
-// HTPR-5606: the authoring style for the AI Task Writer and Write with AI.
-// Same two skill files as the Improve button, verbatim, plus the two rules
-// that only matter when the model AUTHORS rather than rewrites: it must not
-// write content the brief never gave it, and it must not drop content the
-// brief did give it. A demo run on INNE-1576 invented 95 words of German and
-// English subheadlines the source never contained; that is what these stop.
-export const TASK_AUTHORING_STYLE = renderPrompt("task-authoring-style", (UNSLOP_SKILL), (I_HAVE_ADHD_SKILL));
+export const TASK_AUTHORING_STYLE = renderPrompt("task-authoring-style", (UNSLOP_SKILL), (I_HAVE_ADHD_SKILL), "");
+
+export const TASK_AUTHORING_WEB_STYLE = renderPrompt("task-authoring-web-style", (WEB_WRITING_SKILL), (UNSLOP_SKILL), "");
+
+export function createTaskAuthoringStyle(webWriting: boolean, boardFormat: boolean, oldStructure = false) {
+  const rule = boardFormat ? renderPrompt("task-writer-board-format-rule") : "";
+  return webWriting
+    ? oldStructure
+      ? renderPrompt("task-authoring-web-old-structure-style", WEB_WRITING_SKILL, UNSLOP_SKILL, rule)
+      : renderPrompt("task-authoring-web-style", WEB_WRITING_SKILL, UNSLOP_SKILL, rule)
+    : renderPrompt("task-authoring-style", UNSLOP_SKILL, I_HAVE_ADHD_SKILL, rule);
+}
 
 export function createPromptForTiptapForwardSlash(
   mode = "FixSpellingAndGrammar",
@@ -66,13 +71,13 @@ export function createPromptForTiptapForwardSlash(
   return renderPrompt("editor-ai-prompts-context-13");
 }
 
-export function createKanbanSystemPrompt(mode = "default") {
+export function createKanbanSystemPrompt(mode = "default", authoringStyle = TASK_AUTHORING_STYLE) {
   if (mode === "task_writer") {
-    return createTaskWriterSystemPromptTemplate(TASK_AUTHORING_STYLE);
+    return createTaskWriterSystemPromptTemplate(authoringStyle);
   }
 
   if (mode === "write_with_ai") {
-    return renderPrompt("editor-ai-prompts-context-14", (TASK_AUTHORING_STYLE));
+    return renderPrompt("editor-ai-prompts-context-14", (authoringStyle));
   }
 
   return renderPrompt("editor-ai-prompts-context-15");
@@ -116,6 +121,7 @@ export function createTaskWriterPromptParts(args: {
   retrievedContext: string;
   uploadedDocumentContext?: string;
   input: string;
+  authoringStyle?: string;
 }) {
   const promptMode =
     args.aiMode === "AiTaskWriter"
@@ -124,13 +130,9 @@ export function createTaskWriterPromptParts(args: {
         ? "write_with_ai"
         : "default";
 
-  const instructions = createKanbanSystemPrompt(promptMode);
+  const instructions = createKanbanSystemPrompt(promptMode, args.authoringStyle);
 
   const reminderParts: string[] = [];
-  // Board custom instructions apply in every AI entry point, WriteWithAI
-  // included. A board sets policy there ("never claim disease prevention in ad
-  // copy"), and policy that holds in one entry point but not another is a
-  // compliance footgun, not a feature (HTPR-4356).
   const customInstructions = args.customInstructions
     ? `<CUSTOM_INSTRUCTION>${args.customInstructions}</CUSTOM_INSTRUCTION>`
     : "";
@@ -158,9 +160,6 @@ export function createTaskWriterPromptParts(args: {
       reminderParts.join("\n") +
       "\n</system-reminder>\n\n"
     : "";
-  // Retrieved ticket text is user-authored data. Keep it in the user message,
-  // below the actual system instructions, so a comment cannot become policy by
-  // imitating one of the prompt's XML-like delimiters.
   const retrievedContext = args.retrievedContext
     ? wrapTaskWriterContext(args.retrievedContext) + "\n\n"
     : "";

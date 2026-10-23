@@ -119,8 +119,6 @@ export function formatChatHistory(chatHistory: ChatRequest["chat_history"]) {
   return parts.join("\n");
 }
 
-// Raise the provider's reasoning effort for a retry after an empty completion.
-// Instant/low effort is the usual cause of an empty agentic completion.
 export function withHigherEffort(
   providerOptions: Record<string, Record<string, any>> | undefined
 ): Record<string, Record<string, any>> | undefined {
@@ -172,6 +170,10 @@ export function createUserPrompt(
                 ${formatTemporalContext()}
                 ${currentTaskContext
       ? `\n                CURRENT TICKET CONTEXT (the ticket the user is viewing — read this before answering questions about "this ticket"; do NOT search for it):\n${currentTaskContext}\n`
+      : ""
+    }
+                ${body.default_context?.scope === "ticket"
+      ? "SCOPE: Current ticket only. Use only the current ticket title, description and comments as ticket context. Do not search or load other tickets or board-wide context. This explicit scope overrides the default task_id navigation guidance."
       : ""
     }
                 User query: ${body.message}

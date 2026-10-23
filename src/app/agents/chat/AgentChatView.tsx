@@ -32,7 +32,6 @@ type Props = Pick<
   | "selectedId"
   | "rosterNow"
   | "currentUser"
-  | "pollingChatEnabled"
   | "deliveryMode"
   | "detailsCollapsed"
   | "setDetailsSheetOpen"
@@ -139,7 +138,7 @@ type Props = Pick<
 export function AgentChatView({
   isNarrow, setShowCreateAgent, roomsEnabled, router, search, setSearch, teams, teamId,
   setTeamFilter, rosterError, agents, roster, selectedId, selectAgent, rosterNow, selectedAgent,
-  currentUser, backToRoster, mobileFullscreenChrome, pollingChatEnabled, deliveryMode,
+  currentUser, backToRoster, mobileFullscreenChrome, deliveryMode,
   toggleDetails, detailsCollapsed, setDetailsSheetOpen, isExternal, openingFullChat,
   handleOpenFullChat, activityRowsEnabled, feedFilter, setFeedFilter, showScrollToBottom, isMbl,
   mobileLayoutEnabled, scrollMessagesToBottom, messageListRef, handleMessageListScroll,
@@ -189,7 +188,6 @@ export function AgentChatView({
               isNarrow={isNarrow}
               backToRoster={backToRoster}
               mobileFullscreenChrome={mobileFullscreenChrome}
-              pollingChatEnabled={pollingChatEnabled}
               deliveryMode={deliveryMode}
               toggleDetails={toggleDetails}
               detailsCollapsed={detailsCollapsed}
@@ -255,8 +253,6 @@ export function AgentChatView({
       aria-label="Agent details"
       onClose={() => setDetailsSheetOpen(false)}
       onClick={(e) => {
-        // Clicks inside the panel land on the panel; a click that reaches the
-        // dialog itself is the strip beside it, i.e. the backdrop.
         if (e.target === detailsDialogRef.current) closeDetailsSheet();
       }}
       className="m-0 h-full max-h-none w-full max-w-none border-0 bg-transparent p-0 backdrop:bg-black/60"
@@ -300,8 +296,6 @@ export function AgentChatView({
   let mobileAgentChatHeight: string | undefined;
   const mobileChromeAwareHeight = isMbl;
   if (mobileChromeAwareHeight) {
-    // Full visible viewport with top/dock padding inside the same border-box
-    // (AI chat pattern). Avoids h-screen oversizing and mid-screen composer gap.
     mobileAgentChatHeight = mobileAgentChatViewport
       ? `${mobileAgentChatViewport.visibleHeight}px`
       : "100dvh";
@@ -331,8 +325,6 @@ export function AgentChatView({
           "flex flex-col overflow-hidden bg-pageBackground text-white-black text-[14px]",
           !(isMbl && (mobileLayoutEnabled || mobileFullscreenChrome)) &&
             "h-screen",
-          // Flag-off: reserve app top bar + dock. Flag-on with an agent open:
-          // no shell chrome; keep safe-area only when the keyboard is closed.
           isMbl &&
             !hideDockInset &&
             "mobile-tab-bar-content pt-[var(--mobile-top-bar-h)] pb-[max(var(--mobile-dock-h,64px),64px)]",

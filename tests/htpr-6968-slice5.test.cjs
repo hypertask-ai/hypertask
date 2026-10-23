@@ -5,7 +5,14 @@ const ts = require("typescript");
 const http = require("node:http");
 const { apiResolver } = require("next/dist/server/api-utils/node/api-resolver");
 const { load } = require("./task-route-loader.cjs");
-const { slice5Routes, slice5LegacySources } = require("./htpr-6923-verify.cjs");
+// Responses, effects and HTTP bytes are pinned by digest from the pre-retirement handlers (HTPR-6992).
+const { pins } = require("./helpers/htpr-6992-pins.cjs");
+const pin = pins("a1-slice5");
+const slice5Routes = {
+  single: { module: "single-read-delete" },
+  markRead: { module: "mark-read" },
+  "move-task-to-different-board": { module: "move-to-different-board" },
+};
 const clean = value => value === undefined ? undefined : JSON.parse(JSON.stringify(value));
 const fullTask = {
   id: 42, projectId: 15, title: "Task", description_: { content: "<p>Retained body</p>" },
@@ -19,18 +26,8 @@ const endpoints = {
   mark: { page: "markRead", method: "POST", body: { taskId: 42 } },
   move: { page: "move-task-to-different-board", method: "POST", body: { id: 42, projectId: 99, sectionId: 8, currentProjectId: 15 } },
 };
-function compileOriginal(source, mocks) {
-  const compiled = ts.transpileModule(source, { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022, esModuleInterop: true } }).outputText;
-  const mod = { exports: {} };
-  new Function("require", "module", "exports", compiled)(specifier => {
-    assert.ok(Object.hasOwn(mocks, specifier), `Unexpected original dependency: ${specifier}`);
-    const mock = mocks[specifier];
-    return Object.hasOwn(mock, "default") ? { __esModule: true, ...mock } : mock;
-  }, mod, mod.exports);
-  return mod.exports.default;
-}
-function fixture(kind, scenario, mode) {
-  const effects = [], flags = [], loads = [], auth = [];
+function fixture(kind, scenario) {
+  const effects = [], loads = [], auth = [];
   const { page, method } = endpoints[kind];
   const session = scenario.noAuth ? null : { userId: scenario.userId ?? 985, source: scenario.source ?? "better-auth" };
   const actor = { id: session?.userId ?? 985, displayName: "QA", email: "qa@example.invalid", photoURL: "qa.png" };
@@ -40,16 +37,11 @@ function fixture(kind, scenario, mode) {
     return value;
   };
   const mocks = {
+    "@/lib/auth/agentScope": require("./helpers/agent-board-scope.cjs").enforcedScope,
     "@/lib/auth/getSessionUser": { getSessionUser: async headers => {
       auth.push(headers.get("cookie"));
       if (scenario.authThrows) throw new Error("Auth unavailable");
       return session;
-    } },
-    "@/lib/flags/keys": { HTPR_6923_APP_ROUTER_WRITES_FLAG: "htpr-6923-app-router-writes" },
-    "@/lib/flags": { isFeatureEnabled: async (key, userId) => {
-      flags.push([key, userId]);
-      if (mode === "outage") throw new Error("Flag unavailable");
-      return mode === true;
     } },
     "@/lib/auth/sessionUserRecord": { loadSessionUserRecord: record("actor", actor, scenario.actorThrows) },
     "@/utils/controllers/projects/getAllIncludes": { taskWriteAccessWhere: (userId, agentId) => ({ ownerId: userId, agentId }) },
@@ -79,9 +71,8 @@ function fixture(kind, scenario, mode) {
     return web;
   } };
   return {
-    legacy: compileOriginal(slice5LegacySources()[page], mocks),
     current: load(`src/pages/api/tasks/${page}.ts`, mocks).default,
-    web, effects, flags, loads, auth,
+    web, effects, loads, auth,
   };
 }
 async function invoke(fx, kind, scenario, target, method = endpoints[kind].method) {
@@ -169,25 +160,28 @@ for (const kind of Object.keys(endpoints)) {
   for (const [label, scenario] of [...cases[kind],
     ["unauthenticated", { noAuth: true, status: 401 }], ["auth resolver throws", { authThrows: true }],
     ["legacy session", { source: "legacy" }], ["different signed user", { userId: 2343 }],
-  ]) test(`${kind}: ${label} matches original, Off, outage, On and Web`, async () => {
-    const baseline = fixture(kind, scenario, false);
-    const expected = await invoke(baseline, kind, scenario, "legacy");
-    if (scenario.status) assert.equal(expected.status, scenario.status);
-    for (const mode of [false, "outage", true, "web"]) {
-      const fx = fixture(kind, scenario, mode);
-      assert.deepEqual(await invoke(fx, kind, scenario, mode === "web" ? "web" : "current"), expected, `${label}: ${mode}`);
-      assert.deepEqual(fx.effects, baseline.effects, `${label}: ${mode} effects`);
-      assert.equal(fx.loads.length, mode === true && !scenario.noAuth && !scenario.authThrows ? 1 : 0);
-      if (fx.flags.length) assert.deepEqual(fx.flags, [["htpr-6923-app-router-writes", scenario.userId ?? 985]]);
+  ]) test(`${kind}: ${label} matches the pinned contract (Pages adapter and Web)`, async () => {
+    let expected;
+    for (const mode of ["current", "web"]) {
+      const fx = fixture(kind, scenario);
+      const response = clean(await invoke(fx, kind, scenario, mode));
+      if (mode === "current") {
+        if (scenario.status) assert.equal(response.status, scenario.status);
+        expected = pin(kind, `${kind}: ${label}`, { response, effects: clean(fx.effects) });
+        assert.equal(fx.loads.length, 1);
+      } else {
+        assert.deepEqual(response, expected.response, `${label}: ${mode}`);
+        assert.deepEqual(clean(fx.effects), expected.effects, `${label}: ${mode} effects`);
+      }
     }
   });
-  test(`${kind}: other methods bypass preflight and preserve 405`, async () => {
-    const old = fixture(kind, {}, false), current = fixture(kind, {}, true);
-    assert.deepEqual(await invoke(current, kind, {}, "current", "PATCH"), await invoke(old, kind, {}, "legacy", "PATCH"));
-    assert.deepEqual(current.flags, []); assert.deepEqual(current.loads, []); assert.deepEqual(current.auth, []);
+  test(`${kind}: other methods answer 405 without loading the operation`, async () => {
+    const current = fixture(kind, {});
+    assert.deepEqual(await invoke(current, kind, {}, "current", "PATCH"), { status: 405, body: { message: "Method not allowed" }, headers: {} });
+    assert.deepEqual(current.loads, []); assert.deepEqual(current.auth, [], "no session lookup for an unlisted method");
   });
-  test(`${kind}: loading failure never retries legacy`, async () => {
-    const scenario = { loadThrows: true }, fx = fixture(kind, scenario, true);
+  test(`${kind}: loading failure rejects without any fallback`, async () => {
+    const scenario = { loadThrows: true }, fx = fixture(kind, scenario);
     assert.deepEqual(await invoke(fx, kind, scenario, "current"), { throws: "Error: Route load unavailable" });
     assert.deepEqual(fx.effects, []); assert.equal(fx.loads.length, 1);
   });
@@ -200,12 +194,17 @@ test("single GET and DELETE use the real controller's full relation query and pe
   assert.equal(functions.length, 2);
   const compiled = ts.transpileModule(functions.map(node => node.getText(parsed)).join("\n"), { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 } }).outputText;
   const queries = [], deletes = [], exports = {};
+  const task = {
+    ...fullTask,
+    parentTask: { ...fullTask.parentTask, projectId: 15, subTasks: fullTask.parentTask.subTasks.map(row => ({ ...row, projectId: 15 })) },
+  };
   let deletion = "success";
-  new Function("prisma", "permanentlyDeleteTask", "exports", compiled)(
-    { task: { findUnique: async query => { queries.push(query); return fullTask; } } },
-    async (...args) => { deletes.push(args); return deletion; }, exports,
+  new Function("prisma", "permanentlyDeleteTask", "stripForeignTaskRelations", "exports", compiled)(
+    { task: { findUnique: async query => { queries.push(query); return task; } } },
+    async (...args) => { deletes.push(args); return deletion; },
+    load("src/lib/tasks/sameBoardRelations.ts", {}).stripForeignTaskRelations, exports,
   );
-  assert.deepEqual(await exports.getTaskSingle(42), { status: 200, json: fullTask });
+  assert.deepEqual(await exports.getTaskSingle(42), { status: 200, json: task });
   assert.deepEqual(queries, [{ where: { id: 42 }, include: {
     taskLabels: { select: { label: true, labelId: true, id: true, taskId: true } }, estimate: true, priority: true,
     description_: { select: { content: true } },
@@ -254,15 +253,11 @@ for (const kind of Object.keys(endpoints)) test(`${kind}: real Pages resolver pr
       ? [{ moveResult: { success: false, statusCode: 403, error: "Forbidden" } }]
       : [{ beacon: true, body: '{"taskId":42}' }, { beacon: true, body: "{" }]),
   ];
-  for (const scenario of scenarios) {
-    const baseline = fixture(kind, scenario, false);
-    const expected = await httpInvoke(baseline.legacy, kind, scenario);
-    assert.ok(expected.headers["content-type"].includes("application/json"));
-    assert.equal(Number(expected.headers["content-length"]), Buffer.byteLength(expected.text));
-    for (const mode of [false, "outage", true]) {
-      const fx = fixture(kind, scenario, mode);
-      assert.deepEqual(await httpInvoke(fx.current, kind, scenario), expected);
-      assert.deepEqual(fx.effects, baseline.effects);
-    }
+  for (const [index, scenario] of scenarios.entries()) {
+    const fx = fixture(kind, scenario);
+    const response = await httpInvoke(fx.current, kind, scenario);
+    assert.ok(response.headers["content-type"].includes("application/json"));
+    assert.equal(Number(response.headers["content-length"]), Buffer.byteLength(response.text));
+    pin(`http ${kind}`, `http ${kind} ${index}`, { response, effects: clean(fx.effects) });
   }
 });

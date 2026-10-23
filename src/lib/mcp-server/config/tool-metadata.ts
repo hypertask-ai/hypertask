@@ -1,13 +1,5 @@
-/**
- * Tool Metadata Configuration
- * 
- * Single source of truth for all MCP tool names and descriptions.
- * Import these constants in tool definitions to maintain consistency.
- * 
- * Following MCP best practice: Name Tools for Discovery
- * All tool names are prefixed with service name for better discovery.
- */
 
+import { DECISIONS_GUIDANCE } from '@/lib/mcp/decisionsGuidance';
 import { buildToolName } from './mcp-standards';
 import { REPORT_CAPABILITIES } from '@/utils/controllers/reports/reportService';
 import { TOOL_SUMMARIES } from './tool-summaries';
@@ -18,15 +10,19 @@ export interface ToolMetadata {
 }
 
   
-/**
- * All tool metadata in one place
- * Tool names are automatically prefixed with service prefix following MCP best practices
- */
 const RAW_TOOL_METADATA = {
+  REPORT_FEEDBACK: {
+    name: buildToolName('report_feedback'),
+    description: 'Call this ON YOUR OWN, without being asked, when a Hypertask tool call fails, returns something unexpected (including an empty tools list or a result that should not be empty), or the user says something in Hypertask does not work. Report only the tool, HTTP status, error code and category (call_failed, empty_result, unexpected_result, auth_failed, slow, user_reported_broken or other; default other). Never include task, board or comment content, request bodies or tool arguments. Free-form note and error are accepted for compatibility but never stored. Structured fields must not contain credentials. The server files anonymous, deduplicated feedback.',
+  },
+  LIST_FEATURES: {
+    name: buildToolName('list_features'),
+    description: 'List every enabled feature-kind flag and core product destinations for the authenticated user, with live descriptions, shipped dates and verified URLs where known. Non-feature kinds and unavailable features are omitted; availability for another person is not reported.',
+  },
   HELLO: {
     name: buildToolName('hello'),
     description:
-      "Call this tool FIRST, immediately after connecting and before calling anything else. It returns a welcome map of the current user, their accessible boards, Hypertask capabilities, task-link templates, and board-specific house conventions so you can orient before taking action.",
+      "Call this tool FIRST, immediately after connecting and before calling anything else. It returns a welcome map of the current user, their accessible boards, Hypertask capabilities, task-link templates, and board-specific house conventions so you can orient before taking action. It also returns urlFormats for canonical app links, and for a new connection the signed-in agent, a startBoard and 3 nextSteps (tool plus arguments) to guide the user through setup: tell the user who they are signed in as and offer those steps.",
   },
 
   AGENT_PRESENCE: {
@@ -110,7 +106,7 @@ const RAW_TOOL_METADATA = {
   GET_TASKS: {
     name: buildToolName('get_tasks'),
     description:
-      'Gets detailed information about one or more tasks including assignees, followers, priority, estimate, due date, labels, attachments, and comment count. Provide task_id as an array of numbers or ticket_number as an array of strings. Tasks are retrieved in parallel for efficiency. Each task includes a "link" field with the task URL: https://app.hypertask.ai/detail/project-{projectId}/{uniqueIndex} where uniqueIndex is extracted from the ticket number (e.g., "HTPR-3550" → 3550).',
+      'Gets detailed information about one or more tasks including assignees, followers, priority, estimate, due date, labels, attachments, and comment count. Provide task_id as one number or a list of numbers, or ticket_number as one string or a list of strings. Tasks are retrieved in parallel for efficiency. Each task includes a "link" field with the task URL: https://app.hypertask.ai/detail/project-{projectId}/{uniqueIndex} where uniqueIndex is extracted from the ticket number (e.g., "HTPR-3550" → 3550).',
   },
 
   TASK_CONTEXT: {
@@ -273,8 +269,8 @@ Technical: Requires team_id from get_user_context.teams (UUID string or number).
 
   ADD_COMMENT: {
     name: buildToolName('add_comment_to_task'),
-    description:
-      'Add, update, or delete a comment. Use action: add (create comment, requires task_id or ticket_number + text), update (edit comment, requires comment_id + text), delete (remove comment, requires comment_id only). For update/delete, call get_comments_for_task first to obtain comment_id. For add or update, text may be HTML or structural markdown; content_type can explicitly select either format. When an agent answers a request, pass the invoking comment ID as reply_to_comment_id so the requester receives the answer in Important. When the mention was in the task description (no comment ID), pass the agent Mentioned notification ID as reply_to_invocation_id instead; never pass both. For @mentions: use @DisplayName in text, then call list_project_members to resolve each name to { user_id, display_name } and pass in the mentions array. For action=add, optional attachments[] uploads files to the new comment; each file needs filename, content_type, and exactly one of data=base64 bytes or url=https. The comment keeps success=true if only attachments fail; inspect attachment_status and the task before retrying attachments, and never repeat the add operation.',
+    description: DECISIONS_GUIDANCE + ' ' +
+      'Without a kind, a reply target or an @mention of a person (and no images or attachments), an agent comment is saved to the hidden ticket agent log, which people do not see. To post for people, pass kind: question for a decision by a person, qa for a QA verdict, or done for the closing summary. Add, update, or delete a comment. Optional has_attachments: true keeps a post as a comment when files will be attached after creation. Use action: add (create comment, requires task_id or ticket_number + text), update (edit comment, requires comment_id + text), delete (remove comment, requires comment_id only). For update/delete, call get_comments_for_task first to obtain comment_id. For add or update, text may be HTML or structural markdown; content_type can explicitly select either format. When an agent answers a request, pass the invoking comment ID as reply_to_comment_id so the requester receives the answer in Important. When the mention was in the task description (no comment ID), pass the agent Mentioned notification ID as reply_to_invocation_id instead; never pass both. For @mentions: use @DisplayName in text, then call list_project_members to resolve each name to { user_id, display_name } and pass in the mentions array. For action=add, optional attachments[] uploads files to the new comment; each file needs filename, content_type, and exactly one of data=base64 bytes or url=https. The comment keeps success=true if only attachments fail; inspect attachment_status and the task before retrying attachments, and never repeat the add operation.',
   },
 
   UPDATE_COMMENT: {
@@ -467,7 +463,7 @@ Technical: Requires team_id from get_user_context.teams (UUID string or number).
   DECISION_REQUEST: {
     name: buildToolName('decision_request'),
     description:
-      'Create and resolve durable requests for a human decision. Use action: create (task identifier + question + 2-10 distinct options), list (task identifier + optional status), get (decision_request_id), answer (decision_request_id + selected_option + optional note), or cancel (decision_request_id). selected_option must exactly match one option returned by create/get/list. Agents cannot answer decision requests; answer requires a human user token.',
+      'Create and resolve durable requests for a human decision. Use action: create (task identifier + question + 2-10 distinct options), list (task identifier + optional status), get (decision_request_id), answer (decision_request_id + selected_option + optional note), or cancel (decision_request_id). selected_option must exactly match one option returned by create/get/list. Agents cannot answer decision requests; answer requires a human user token. ' + DECISIONS_GUIDANCE,
   },
   DRAFT_CRUD: {
     name: buildToolName('draft'),
@@ -487,14 +483,8 @@ assertToolSummaries(RAW_TOOL_METADATA as Record<string, ToolMetadata>)
 
 export const TOOL_METADATA = RAW_TOOL_METADATA;
 
-/**
- * Extract just the names for easy iteration
- */
 export const TOOL_NAMES: string[] = Object.values(TOOL_METADATA).map((tool) => tool.name);
 
-/**
- * Helper to get tool metadata by name
- */
 export function getToolMetadata(name: string): ToolMetadata | undefined {
   return Object.values(TOOL_METADATA).find((tool) => tool.name === name);
 }

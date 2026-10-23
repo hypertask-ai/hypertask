@@ -5,7 +5,7 @@
 # hands it over as its own message between tool calls, at turn end, or by waking the idle session. Nothing is typed.
 # Only a live session without the hook (its slot not listed in $STATE/events-hook.enabled, or no $STATE/<slot>.hook-alive
 # naming its pid) still gets the old tmux typing, and every such use is logged to $STATE/typing-fallback.log.
-# Falls back to the "INFRA MANAGER" session with a "No live Runner <n>:" prefix; if neither is live the message is
+# Falls back to the "HT Product Lead" session with a "No live Runner <n>:" prefix; if neither is live the message is
 # queued in $STATE/runner-<n>.pending.jsonl for the next runner-pickup tick. Exit 0 delivered, 3 queued, 2 usage,
 # 5 a hooked session's inbox could not be written (never typed; the event stays undelivered).
 # $RUNNER_DELIVER_ID names the event: the same id never enters an inbox twice. Without it every call is a new event.
@@ -17,13 +17,14 @@ SESSIONS=${RUNNER_PICKUP_SESSIONS_DIR:-$HOME/.claude/sessions}
 MAXLEN=${RUNNER_DELIVER_MAXLEN:-3000}
 EVENT_ID=${RUNNER_DELIVER_ID:-}
 FALLBACK_LOG=$STATE/typing-fallback.log
-# <target> is a runner number or a named slug. Slug table: "slug|session name|fall back to INFRA MANAGER (1/0)".
-SLUGS='infra-manager|INFRA MANAGER|0
+# <target> is a runner number or a named slug. ht-product-lead normalizes to the infra-manager alias. Slug table: "slug|session name|fall back to HT Product Lead (1/0)".
+SLUGS='infra-manager|HT Product Lead|0
 speed-runner|SPEED RUNNER|1'
 n=${1:-}; fallback=1
+[ "$n" != ht-product-lead ] || n=infra-manager
 if [[ $n =~ ^[1-9][0-9]*$ ]]; then session="RUNNER $n"
 elif row=$(grep "^$n|" <<<"$SLUGS" 2>/dev/null) && [ -n "$n" ]; then IFS='|' read -r _ session fallback <<<"$row"
-else echo 'usage: runner-deliver <runner number|infra-manager|speed-runner> < message' >&2; exit 2; fi
+else echo 'usage: runner-deliver <runner number|ht-product-lead|infra-manager|speed-runner> < message' >&2; exit 2; fi
 
 # Single literal line: control characters out, whitespace collapsed, capped.
 text=$(head -c 20000 | tr '\000-\037\177' ' ' | tr -s ' ')
@@ -33,18 +34,22 @@ text=${text# }; text=${text% }
 
 # Live claude pid of the session named $1 (user-given name, text after " | " ignored).
 find_pid() {
-  local f name pid
-  for f in "$SESSIONS"/*.json; do
-    [ -f "$f" ] || continue
-    name=$(jq -r 'select(.nameSource == "user") | .name // empty' "$f" 2>/dev/null) || continue
-    [ "${name%% | *}" = "$1" ] || continue
-    pid=$(jq -r '.pid // empty' "$f" 2>/dev/null); [[ $pid =~ ^[0-9]+$ ]] || pid=$(basename "$f" .json)
-    if [[ $pid =~ ^[0-9]+$ ]] && kill -0 "$pid" 2>/dev/null; then echo "$pid"; return 0; fi
+  local f name pid wanted
+  local names=("$1")
+  [ "$1" != "HT Product Lead" ] || names+=("INFRA MANAGER")
+  for wanted in "${names[@]}"; do
+    for f in "$SESSIONS"/*.json; do
+      [ -f "$f" ] || continue
+      name=$(jq -r 'select(.nameSource == "user") | .name // empty' "$f" 2>/dev/null) || continue
+      [ "${name%% | *}" = "$wanted" ] || continue
+      pid=$(jq -r '.pid // empty' "$f" 2>/dev/null); [[ $pid =~ ^[0-9]+$ ]] || pid=$(basename "$f" .json)
+      if [[ $pid =~ ^[0-9]+$ ]] && kill -0 "$pid" 2>/dev/null; then echo "$pid"; return 0; fi
+    done
   done
   return 1
 }
-# Inbox slot for a session name: RUNNER <n> -> runner-<n>, INFRA MANAGER -> infra-manager, SPEED RUNNER -> speed-runner.
-slot_for() { case "$1" in "RUNNER "*) echo "runner-${1#RUNNER }" ;; *) local s=${1,,}; echo "${s// /-}" ;; esac; }
+# Inbox slot for a session name: RUNNER <n> -> runner-<n>, HT Product Lead -> infra-manager, SPEED RUNNER -> speed-runner.
+slot_for() { case "$1" in "HT Product Lead") echo infra-manager ;; "RUNNER "*) echo "runner-${1#RUNNER }" ;; *) local s=${1,,}; echo "${s// /-}" ;; esac; }
 # True when the session with pid $2 runs the events hook: its slot is enabled and its hook-alive marker names that pid.
 # Such a session is never typed into, waiter or not.
 hook_alive() {
@@ -61,14 +66,14 @@ waiter_live() {
   ! ( flock -n 9 ) 9<"$lock" 2>/dev/null
 }
 # When an event enters the inbox of session $1 (slot $2, pid $3) while no waiter holds its lock, it is handed over at that
-# session's next prompt, tool call or turn end (never typed). Logged, and INFRA MANAGER gets one notice per slot and pid
+# session's next prompt, tool call or turn end (never typed). Logged, and HT Product Lead gets one notice per slot and pid
 # (inbox dedupe by id) unless it is that session itself; if it is not hooked, the log line is the notice.
 no_waiter_log() {
   waiter_live "$2" "$3" && return 0
   printf '%s queued in the %s inbox with no live waiter: handed over at its next activity\n' "$(date -Is)" "$1" >> "$FALLBACK_LOG" 2>/dev/null
   [ "$2" != infra-manager ] || return 0
   local ipid
-  if ipid=$(find_pid "INFRA MANAGER") && hook_alive infra-manager "$ipid"; then
+  if ipid=$(find_pid "HT Product Lead") && hook_alive infra-manager "$ipid"; then
     inbox_add infra-manager "$2 has undelivered board events and no live waiter; its session is idle; next activity delivers them" "nowaiter-$2-$3" || true
   fi
 }
@@ -132,7 +137,7 @@ queue() {
 }
 
 pane=""; prefix=""
-if [ "$session" != "INFRA MANAGER" ]; then
+if [ "$session" != "HT Product Lead" ]; then
   if pid=$(find_pid "$session"); then
     slot=$(slot_for "$session")
     if hook_alive "$slot" "$pid"; then inbox_add_or_die "$slot" "$text"; no_waiter_log "$session" "$slot" "$pid"; echo "delivered to the $session inbox"; exit 0; fi
@@ -145,11 +150,11 @@ if [ "$session" != "INFRA MANAGER" ]; then
   fi
   pane=""; prefix="No live ${session,,}: "; [[ $n =~ ^[1-9] ]] && prefix="No live Runner $n: "
 fi
-if [ "$fallback" = 1 ] || [ "$session" = "INFRA MANAGER" ]; then
-  if pid=$(find_pid "INFRA MANAGER"); then
-    if hook_alive infra-manager "$pid"; then inbox_add_or_die infra-manager "$prefix$text"; no_waiter_log "INFRA MANAGER" infra-manager "$pid"; echo "delivered to the INFRA MANAGER inbox"; exit 0; fi
+if [ "$fallback" = 1 ] || [ "$session" = "HT Product Lead" ]; then
+  if pid=$(find_pid "HT Product Lead"); then
+    if hook_alive infra-manager "$pid"; then inbox_add_or_die infra-manager "$prefix$text"; no_waiter_log "HT Product Lead" infra-manager "$pid"; echo "delivered to the HT Product Lead inbox"; exit 0; fi
     pane=$(find_pane "$pid") || pane=""
   fi
-  if [ -n "$pane" ] && send "$pane" "$prefix$text"; then fallback_log "INFRA MANAGER" "$pane"; echo "delivered to INFRA MANAGER"; exit 0; fi
+  if [ -n "$pane" ] && send "$pane" "$prefix$text"; then fallback_log "HT Product Lead" "$pane"; echo "delivered to HT Product Lead"; exit 0; fi
 fi
 queue

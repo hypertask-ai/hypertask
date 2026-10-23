@@ -8,12 +8,9 @@ import { parseSearchQuery } from '../src/lib/search/operators'
 
 const require = createRequire(import.meta.url)
 const root = path.resolve(__dirname, '..')
-const flag = 'htpr-6878-search-label-scope'
-const layoutFlag = 'htpr-6865-search-layout'
 type Label = { id: string; value: string; projectId: number }
 type Link = { labelId: string; task: { projectId: number; status: string } }
 let state: { flags: Record<string, boolean>; labels: Label[]; links: Link[]; labelQueries: any[]; countQueries: any[]; searchWhere?: any; session: { userId: number } | null }
-const defaults = { 'htpr-6369-search-operators': true, 'htpr-6370-search-chips': true, 'htpr-6688-search-autocomplete': true, [layoutFlag]: true, [flag]: true }
 const matches = (row: Label, where: any): boolean => {
   if (where.projectId && !where.projectId.in.includes(row.projectId)) return false
   if (where.AND && !where.AND.every((part: any) => matches(row, part))) return false
@@ -29,12 +26,9 @@ const matches = (row: Label, where: any): boolean => {
 }
 for (const [file, exports] of [
   ['src/lib/auth/getSessionUser.ts', { getSessionUser: async () => state.session }],
+  ['src/lib/auth/agentScope.ts', { withAgentScopeRequest: (_request: any, run: () => any) => run() }],
   ['src/lib/flags.ts', {
-    HTPR_6369_SEARCH_OPERATORS_FLAG: 'htpr-6369-search-operators', HTPR_6370_SEARCH_CHIPS_FLAG: 'htpr-6370-search-chips',
-    HTPR_6688_SEARCH_AUTOCOMPLETE_FLAG: 'htpr-6688-search-autocomplete', HTPR_6865_SEARCH_LAYOUT_FLAG: layoutFlag,
-    HTPR_6878_SEARCH_LABEL_SCOPE_FLAG: flag,
     HTPR_6881_SEARCH_FUZZY_PERSON_FLAG: 'htpr-6881-search-fuzzy-person',
-    HTPR_6880_SEARCH_COMMENTER_FLAG: 'htpr-6880-search-commenter',
     isFeatureEnabled: async (key: string, userId: number) => { assert.equal(userId, 6); return state.flags[key] ?? false },
   }],
   ['src/utils/controllers/projects/getAllIncludes.ts', { getProjectWhere: (userId: number) => ({ ownerId: userId }), projectContentAccessWhere: (userId: number) => ({ ownerId: userId }) }],
@@ -42,12 +36,15 @@ for (const [file, exports] of [
   ['src/lib/search/rankedWhere.ts', { rankedSearchWhere: async (parsed: any, ids: number[], status: any) => {
     const { searchFilterWhere } = jiti(path.join(root, 'src/lib/search/filters.ts')) as any
     state.searchWhere = await searchFilterWhere(parsed, ids, status)
-    return { where: state.searchWhere, rankedIds: [], descriptionById: new Map(), partial: false }
+    return { where: state.searchWhere, rankedIds: [], descriptionById: new Map(), commentById: new Map(), partial: false }
   } }],
   ['src/utils/controllers/turbopuffer/turbopufferHelper.ts', { searchPreviewText: (text: string) => text }],
   ['src/utils/controllers/search/document.ts', { turbopufferGetDocuments: async () => ({ status: 200 }) }],
   ['src/lib/prisma.ts', { default: {
-    project: { findMany: async ({ where }: any) => { assert.equal(where.ownerId, 6); return [{ id: 7, title: 'One' }, { id: 8, title: 'Two' }] } },
+    project: { findMany: async ({ where, select }: any) => {
+      assert.deepEqual(where, select.title ? { status: 'Normal', ownerId: 6, AND: [{ ownerId: 6 }] } : { id: { in: [7, 8] }, status: 'Normal', ownerId: 6 })
+      return [{ id: 7, title: 'One' }, { id: 8, title: 'Two' }]
+    } },
     label: { findMany: async (args: any) => {
       state.labelQueries.push(args)
       return state.labels.filter((row) => matches(row, args.where))
@@ -75,7 +72,7 @@ for (const [file, exports] of [
 const jiti = createJiti(__filename, { alias: { '@': path.join(root, 'src') }, interopDefault: true, fsCache: false })
 const handler = jiti(path.join(root, 'src/pages/api/search/values.ts')).default as any
 async function lookup(query: Record<string, string> = {}, overrides: Partial<typeof state> = {}) {
-  state = { flags: { ...defaults }, session: { userId: 6 }, labels: [], links: [], labelQueries: [], countQueries: [], ...overrides }
+  state = { flags: {}, session: { userId: 6 }, labels: [], links: [], labelQueries: [], countQueries: [], ...overrides }
   const response = { code: 0, body: undefined as any, status(code: number) { this.code = code; return this }, json(body: any) { this.body = body; return this } }
   await handler({ method: 'GET', headers: {}, query: { operator: 'label', value: '', ...query } }, response)
   return { ...response, ...state }
@@ -139,15 +136,13 @@ test('dedupe trims case-insensitive names, sums counts and preserves all duplica
 test('dedupe name selection searches all case and whitespace variants through the real exact-name filters', async () => {
   const documentHandler = jiti(path.join(root, 'src/pages/api/search/document.ts')).default as any
   const rows = [...labels, { id: 'padded', value: ' Bug ', projectId: 8 }]
-  for (const disabled of [null, flag, layoutFlag]) {
-    await lookup({}, { labels: rows, flags: { ...defaults, ...(disabled ? { [disabled]: false } : {}) } })
-    state.labelQueries = []
-    const response = { status(code: number) { assert.equal(code, 204); return this }, json() { return this } }
-    await documentHandler({ method: 'POST', headers: {}, body: { searchQuery: 'label:Bug', projectIds: [7, 8], archive: 'Normal' } }, response)
-    const alternatives = state.searchWhere.AND[0].OR.map((part: any) => part.taskLabels.some.label.OR[0].id)
-    assert.deepEqual(alternatives.sort(), disabled ? ['Bug'] : ['one', 'padded', 'two'])
-    assert.equal(state.labelQueries.length, disabled ? 0 : 1)
-  }
+  await lookup({}, { labels: rows, flags: {} })
+  state.labelQueries = []
+  const response = { status(code: number) { assert.equal(code, 204); return this }, json() { return this } }
+  await documentHandler({ method: 'POST', headers: {}, body: { searchQuery: 'label:Bug', projectIds: [7, 8], archive: 'Normal' } }, response)
+  const alternatives = state.searchWhere.AND[0].OR.map((part: any) => part.taskLabels.some.label.OR[0].id)
+  assert.deepEqual(alternatives.sort(), ['one', 'padded', 'two'])
+  assert.equal(state.labelQueries.length, 1)
 })
 
 test('dedupe does not merge IDs after a board is explicitly picked', async () => {
@@ -156,15 +151,6 @@ test('dedupe does not merge IDs after a board is explicitly picked', async () =>
   assert.ok(result.body.candidates.every((row: any) => row.byName === undefined))
 })
 
-test('flag off preserves legacy response bytes, ignores boards and never queries counts', async () => {
-  for (const disabled of [flag, layoutFlag, 'htpr-6370-search-chips', 'htpr-6688-search-autocomplete']) {
-    const result = await lookup({ boards: '7', boardId: '7', value: 'bu' }, { labels, flags: { ...defaults, [disabled]: false } })
-    assert.equal(JSON.stringify(result.body), JSON.stringify({ candidates: disabled === 'htpr-6370-search-chips' ? [{ id: 'one', name: 'Bug' }] : [{ id: 'one', name: 'Bug' }, { id: 'two', name: 'bug' }] }))
-    assert.equal(result.countQueries.length, 0)
-  }
-})
-
-test('scope still requires a session and the operators flag', async () => {
+test('scope still requires a session', async () => {
   assert.equal((await lookup({}, { session: null })).code, 401)
-  assert.equal((await lookup({}, { flags: { ...defaults, 'htpr-6369-search-operators': false } })).code, 404)
 })

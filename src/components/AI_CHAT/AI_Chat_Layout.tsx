@@ -19,12 +19,6 @@ import {
 
 declare global {
   interface Window {
-    /**
-     * Back-press handshake with the Android shell. Any surface that can be
-     * dismissed registers this while it's open and returns true once it has
-     * closed itself; the shell only falls back to page-back / exiting the app
-     * when it's absent or returns false.
-     */
     __htHandleBack?: () => boolean;
   }
 }
@@ -51,18 +45,8 @@ const AppSheet = React.lazy(
     })),
 );
 
-// Clear the dock when it's showing. While typing the dock hides and publishes
-// --mobile-dock-h: 0px, so this collapses and the composer sits right above the
-// keyboard. Default 64px only applies before the dock has measured.
 const aiChatMobileComposerPad = "pb-[var(--mobile-dock-h,64px)]";
 
-/**
- * The chat's own UI (sidebar, mobile sheet, floating window, rename modal and
- * the desktop "open chat" chevron). It renders beside the page inside
- * AI_Chat_Closed_Layout, never around it: wrapping the page made React rebuild
- * the whole route the moment chat loaded, so an open board lost its columns
- * and refetched (HTPR-6751).
- */
 const AI_Chat_Panels: React.FC = () => {
   const chat = useOptionalAiChatContext();
   return chat ? <ChatPanelsContent chat={chat} /> : null;
@@ -81,18 +65,10 @@ const ChatPanelsContent = ({ chat }: { chat: ChatContextType }) => {
   } = chat;
   const { toggleAIChatInterface } = useGlobalUIState();
 
-  // Android back closes the mobile chat. The chat is an overlay, not a route, so
-  // the app shell can't tell from history whether back should dismiss something
-  // or leave the page — pushing a fake history entry to fake it proved unreliable
-  // (back still exited the app). Instead the shell ASKS the page: on back press it
-  // calls window.__htHandleBack(), and only does its own thing when that returns
-  // false. Registering here means back dismisses the chat exactly while it's open.
   const togglePopoverRef = useRef(togglePopover);
   togglePopoverRef.current = togglePopover;
   useEffect(() => {
     if (!isMbl || !showAiChatInterface) return;
-    // Keep any handler already registered by an overlay above/below this one and
-    // restore it on close, so nested dismissables unwind in order.
     const previous = window.__htHandleBack;
     window.__htHandleBack = () => {
       togglePopoverRef.current();
@@ -108,9 +84,6 @@ const ChatPanelsContent = ({ chat }: { chat: ChatContextType }) => {
           <AppSheet
             onClose={togglePopover}
             ariaLabel="AI Chat"
-            // Show the grab bar rather than the collapsed, disableDrag header this
-            // used: that header removed both the visual affordance AND swipe-down
-            // to dismiss, which (with the dock hidden) left the chat with no exit.
             defaultLibraryHeader={false}
             zIndex={MOBILE_OVERLAY_SHEET_Z}
             panelClassName={cn(mobileOverlayAppSheetPanelClass)}
@@ -122,8 +95,6 @@ const ChatPanelsContent = ({ chat }: { chat: ChatContextType }) => {
             <AI_Chat_Sidebar inOffcanvas />
           </AppSheet>
         )}
-      {/* Chat closed on desktop: mirror of the collapsed rail's ">" expand
-          chevron, on the opposite edge. Same size, same top, same quiet style. */}
       {!showAiChatInterface && !isMbl && (
         <button
           tabIndex={-1}

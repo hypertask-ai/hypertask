@@ -1,0 +1,11 @@
+[Unit]
+Description=Check allowed-user MCP access and report one incident
+
+[Service]
+Type=oneshot
+UMask=0077
+Environment="PATH=%h/.local/bin:/usr/local/bin:/usr/bin:/bin"
+Environment="SHIP_SESSION_NAME=MCP Contract Watcher"
+ExecStartPre=/usr/bin/mkdir -p %h/.local/state/mcp-contract-watch
+ExecStart=/usr/bin/flock --nonblock %h/.local/state/mcp-contract-watch/timer.lock %h/.local/lib/hypertask/mcp-contract-watch/mcp-contract-watch --once
+TimeoutStartSec=210s

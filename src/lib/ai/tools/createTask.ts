@@ -1,3 +1,7 @@
+import { inlineAgentImagesForUser } from "@/lib/media/inlineAgentImages.server";
+import { HTPR_7513_WRITER_PROJECT_LABELS_FLAG } from "@/lib/flags/keys";
+import { isFeatureEnabled } from "@/lib/flags";
+import type { TaskWriterCustomFieldValue } from "@/lib/ai/taskWriterCustomFields";
 import { tool } from "ai";
 import { z } from "zod";
 import { buildBulkOperationKey } from "@/app/api/ai/chat/stream/bulkTools";
@@ -8,23 +12,35 @@ import { PriorityConstants } from "@/lib/constants/constants";
 import getMemberAndOwner from "@/utils/controllers/getMemberAndOwnerForBoard";
 import { toStoredHtml } from "@/utils/helperFunctions/toStoredHtml";
 import { buildMcpTaskUrl } from "@/lib/mcp/boards/links";
-import { createTaskItemSchema, CreateTaskItemInput } from "@/lib/ai/tools/schemas";
+import { getCreateTaskItemSchema, CreateTaskItemInput } from "@/lib/ai/tools/schemas";
 import { MAX_BULK_TOOL_TARGETS } from "@/lib/ai/tools/constants";
 import { withToolErrors, dropEmptyPadding } from "@/lib/ai/tools/execution";
 import { sanitizeForJson, mapTaskToDetail } from "@/lib/ai/tools/helpers";
 import { errorMessage } from "@/lib/ai/chatStream/errors";
 
+import { generateTaskWriterDraft } from "@/app/api/ai/_lib/taskWriterDraft";
+import { taskWriterRequestSchema } from "@/app/api/ai/_lib/taskWriterRun";
+import { isAgentOnBoard } from "@/utils/controllers/agents/boardMembers";
+
 import type { ToolContext } from "./context";
 
 export function createCreateTaskTool(context: ToolContext) {
-  const { sendStatus, user, confirmationSessionId, bulkPreviewsIssued, actingAgentId } = context;
+  const { sendStatus, user, confirmationSessionId, bulkPreviewsIssued, actingAgentId, body } = context;
+  const { chatTaskWriterEnabled = false, abortSignal } = context;
+  const createTaskItemSchema = getCreateTaskItemSchema(context.inlineAgentImagesEnabled);
+  const writerItemSchema = createTaskItemSchema.omit({ title: true, description: true, priority: true }).extend({
+    brief: z.string().min(1).refine((value) => value.trim().length > 0, "Brief cannot be empty").describe("The user's request in their own words, unabridged, including relevant refinements. Do not pre-write a title or description."),
+  });
+  const itemSchema = chatTaskWriterEnabled ? writerItemSchema : createTaskItemSchema;
+  type TaskInput = Partial<CreateTaskItemInput> & { brief?: string };
   return {
     hypertask_create_task: tool({
-      description:
-        "Create one or many tasks, up to 50 per call. For multiple tasks, pass tasks with each task's project_id and fields in one call instead of looping. Returns created tasks and per-task failures.",
-      inputSchema: createTaskItemSchema.partial().extend({
+      description: chatTaskWriterEnabled
+        ? "Create one or many tasks through Task Writer, up to 50 per call. Pass each user request verbatim and unabridged as brief; Task Writer supplies title, description, priority and size. For multiple tasks, use tasks in one call. Returns created tasks and per-task failures."
+        : "Create one or many tasks, up to 50 per call. For multiple tasks, pass tasks with each task's project_id and fields in one call instead of looping. Returns created tasks and per-task failures.",
+      inputSchema: itemSchema.partial().extend({
         tasks: z
-          .array(createTaskItemSchema)
+          .array(itemSchema)
           .max(MAX_BULK_TOOL_TARGETS)
           .optional()
           .describe("Tasks to create in one call. Prefer this over repeated tool calls."),
@@ -38,7 +54,7 @@ export function createCreateTaskTool(context: ToolContext) {
       execute: withToolErrors(async (rawInput) => {
         sendStatus("hypertask_create_task");
         const { tasks: bulkTasks, confirmed, ...singleTask } = rawInput;
-        const requestedTasks: Partial<CreateTaskItemInput>[] = bulkTasks?.length
+        const requestedTasks: TaskInput[] = bulkTasks?.length
           ? bulkTasks
           : [singleTask];
         if (requestedTasks.length >= 4) {
@@ -48,8 +64,10 @@ export function createCreateTaskTool(context: ToolContext) {
               key: JSON.stringify([
                 "project",
                 task.project_id ?? null,
-                "title",
-                task.title ?? null,
+                chatTaskWriterEnabled ? "brief" : "title",
+                (chatTaskWriterEnabled ? task.brief : task.title) ?? null,
+                ...(task.image_urls !== undefined ? [["image_urls", task.image_urls]] : []),
+                ...(task.inline_images !== undefined ? [["inline_images", task.inline_images]] : []),
               ]),
             }))
           );
@@ -67,7 +85,9 @@ export function createCreateTaskTool(context: ToolContext) {
               confirmation_required: true,
               affected: requestedTasks.map((task) => ({
                 project_id: task.project_id,
-                title: task.title,
+                ...(chatTaskWriterEnabled ? { brief: task.brief } : { title: task.title }),
+                ...(task.image_urls !== undefined ? { image_urls: task.image_urls } : {}),
+                ...(task.inline_images !== undefined ? { inline_images: task.inline_images } : {}),
               })),
               message:
                 `This would create ${requestedTasks.length} tasks. Nothing has been changed yet. ` +
@@ -76,8 +96,8 @@ export function createCreateTaskTool(context: ToolContext) {
           }
         }
 
-        const createOneTask = async (taskInput: Partial<CreateTaskItemInput>) => {
-          const parsed = createTaskItemSchema.safeParse(
+        const createOneTask = async (taskInput: TaskInput) => {
+          const parsed = itemSchema.safeParse(
             dropEmptyPadding(taskInput, [
               "description",
               "labels",
@@ -90,6 +110,11 @@ export function createCreateTaskTool(context: ToolContext) {
             return { success: false, error: parsed.error.issues[0]?.message ?? "Invalid task" };
           }
           const input = parsed.data;
+          let customFields: TaskWriterCustomFieldValue[] | undefined;
+          let title = "title" in input ? input.title : "";
+          let description = "description" in input ? input.description : undefined;
+          let estimateIndex = 0;
+          let labels = input.labels || [];
           const projectCheck = await validateProjectAccess(input.project_id, user.id);
           if (projectCheck.error) {
             return { success: false, error: projectCheck.error.message };
@@ -129,7 +154,7 @@ export function createCreateTaskTool(context: ToolContext) {
             return { success: false, error: parentCheck.error.message };
           }
 
-          const priorityIndex = input.priority
+          let priorityIndex = "priority" in input && input.priority
             ? PriorityConstants.find((p) => p.Priority_Value === input.priority)
               ?.priority_index ?? 0
             : 0;
@@ -138,7 +163,6 @@ export function createCreateTaskTool(context: ToolContext) {
             return { success: false, error: `Invalid due_date: "${input.due_date}". Use an ISO-8601 date.` };
           }
 
-          // Assignees must be project owner/members — same check hypertask_assign_user does.
           if (input.assignee_ids?.length) {
             const allowedMemberIds = await getMemberAndOwner(input.project_id);
             if (typeof allowedMemberIds === "string") {
@@ -155,23 +179,60 @@ export function createCreateTaskTool(context: ToolContext) {
           }
 
           try {
+            if (chatTaskWriterEnabled && "brief" in input) {
+              if (actingAgentId) {
+                const agent = await prisma.agent.findFirst({
+                  where: { id: actingAgentId, userId: user.id, revokedAt: null },
+                  select: { id: true },
+                });
+                if (!agent || !(await isAgentOnBoard(input.project_id, actingAgentId))) {
+                  return { success: false, error: "This agent is not an active owned member of this board." };
+                }
+              }
+              abortSignal?.throwIfAborted();
+              const draft = await generateTaskWriterDraft(taskWriterRequestSchema.parse({
+                projectId: input.project_id,
+                aiMode: "AiTaskWriter",
+                requestKind: "manual",
+                PROMPT: input.brief,
+                userRetrievalTexts: [input.brief],
+              }), user.id, actingAgentId, abortSignal);
+              if (!draft.success) return { success: false, error: draft.error };
+              if (!draft.title?.trim()) return { success: false, error: "Task Writer returned an empty title. Try again." };
+              if (!labels.length && draft.labelIds?.length &&
+                  await isFeatureEnabled(HTPR_7513_WRITER_PROJECT_LABELS_FLAG, user.id)) {
+                labels = draft.labelIds;
+              }
+              customFields = draft.customFields;
+              title = draft.title;
+              description = draft.html;
+              priorityIndex = draft.priority ?? 0;
+              estimateIndex = draft.estimate ?? 0;
+              abortSignal?.throwIfAborted();
+            }
             const task = await createTask({
+              creationChannel: "agent",
               projectId: input.project_id,
-              title: input.title,
-              description: input.description ? toStoredHtml(input.description) : "",
+              title,
+              description: await inlineAgentImagesForUser(description ? toStoredHtml(description) : "", user.id, { instructions: body?.message, inlineImages: input.inline_images, attachments: [...(input.image_urls?.map((url) => ({ url })) ?? []), ...[...(body?.images64 ?? []), ...(body?.attachments ?? [])].flatMap((file) => file.url && (input.image_urls?.includes(file.url) || description?.includes(file.url)) ? [{ url: file.url, fileName: file.fileName, mimeType: file.mimeType }] : [])] }),
               sectionId: sectionCheck.section.id,
               sectionTitle: sectionCheck.section.section_title,
               userId: user.id,
               priorityIndex,
-              estimateIndex: 0,
+              estimateIndex,
               dueDate: input.due_date ? new Date(input.due_date) : undefined,
               projectUniqueIdentifier: projectCheck.project.uniqueIdentifier,
               teamId: projectCheck.project.teamId,
-              labels: input.labels || [],
+              labels,
               assigneeIds: input.assignee_ids,
               parentTaskId: input.parent_task_id ?? undefined,
               agentId: actingAgentId,
             });
+
+            if (customFields?.length) {
+              const { saveWriterCustomFieldValues } = await import("@/utils/controllers/customFields");
+              await saveWriterCustomFieldValues(task.id, customFields);
+            }
 
             return sanitizeForJson({
               success: true,
@@ -183,15 +244,18 @@ export function createCreateTaskTool(context: ToolContext) {
           }
         };
 
-        const results = await Promise.all(
-          requestedTasks.map(async (taskInput: Partial<CreateTaskItemInput>) => {
-            try {
-              return await createOneTask(taskInput);
-            } catch (error) {
-              return { success: false, error: errorMessage(error) };
-            }
-          })
-        );
+        const runOne = async (taskInput: TaskInput) => {
+          try {
+            return await createOneTask(taskInput);
+          } catch (error) {
+            return { success: false, error: errorMessage(error) };
+          }
+        };
+        const results: Awaited<ReturnType<typeof runOne>>[] = [];
+        const batchSize = chatTaskWriterEnabled ? 3 : requestedTasks.length;
+        for (let offset = 0; offset < requestedTasks.length; offset += batchSize) {
+          results.push(...await Promise.all(requestedTasks.slice(offset, offset + batchSize).map(runOne)));
+        }
         if (!bulkTasks?.length) return results[0];
 
         const tasks = results.flatMap((result) =>
@@ -202,7 +266,7 @@ export function createCreateTaskTool(context: ToolContext) {
             ? []
             : [{
               project_id: requestedTasks[index].project_id,
-              title: requestedTasks[index].title,
+              ...(chatTaskWriterEnabled ? { brief: requestedTasks[index].brief } : { title: requestedTasks[index].title }),
               error: "error" in result ? result.error : "Task creation failed",
             }]
         );

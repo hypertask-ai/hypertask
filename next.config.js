@@ -44,7 +44,12 @@ const nextConfig = {
   // jsdom reads its stylesheet relative to its module, not a bundled server chunk.
   // The sanitizer's jsdom is pinned in npm overrides to avoid requiring ESM in
   // serverless runtimes where Node's optional require(esm) support is disabled.
-  serverExternalPackages: ["isomorphic-dompurify", "jsdom"],
+  // Keep legacy URL parsers in node_modules, where Node 24 exempts them from DEP0169.
+  serverExternalPackages: ["isomorphic-dompurify", "jsdom", "pusher", "aws-sdk"],
+  // The public onboarding page reads this markdown relative to process.cwd().
+  outputFileTracingIncludes: {
+    "/wiki/agents": ["./src/app/wiki/agents/agents.md"],
+  },
   productionBrowserSourceMaps: true,
   reactStrictMode: false,
   images: {
@@ -101,7 +106,7 @@ const nextConfig = {
     // Otherwise webpack stays in the main process through the peak (YPER4-184).
     webpackBuildWorker: true,
     webpackMemoryOptimizations: true,
-    cpus: 2,
+    cpus: 1,
     // The smoke build runs server tracing beside the client compiler to stay
     // below ten minutes. Production keeps tracing sequential to limit memory.
     parallelServerBuildTraces: process.env.CORE_APP_SMOKE === "true",

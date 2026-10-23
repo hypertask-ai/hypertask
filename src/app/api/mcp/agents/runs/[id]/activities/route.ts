@@ -1,3 +1,5 @@
+import { TaskTeamScopeError } from "@/lib/mcp/tasks/agentMutationFence"
+import { wrapMcpRoute } from '@/lib/mcp/routeWrapper'
 import { NextRequest, NextResponse } from "next/server";
 import {
   agentRunActivitiesEnabledFor,
@@ -55,6 +57,7 @@ export async function GET(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> },
 ) {
+  return wrapMcpRoute(async (request: NextRequest, { params }: { params: Promise<{ id: string }> }) => {
   const rateLimited = await checkMcpRateLimit(request);
   if (rateLimited) return rateLimited;
 
@@ -70,15 +73,19 @@ export async function GET(
     }
     return noStore({ success: true, activities });
   } catch (error) {
+    if (error instanceof TaskTeamScopeError) return noStore({ success: false, error: error.message }, 404)
     console.error("[agent-run] activity list failed", error);
     return noStore({ success: false, error: "Failed to list run activities" }, 500);
   }
+
+  })(request, { params })
 }
 
 export async function POST(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> },
 ) {
+  return wrapMcpRoute(async (request: NextRequest, { params }: { params: Promise<{ id: string }> }) => {
   const rateLimited = await checkMcpRateLimit(request);
   if (rateLimited) return rateLimited;
 
@@ -113,6 +120,7 @@ export async function POST(
     }
     return noStore({ success: true, ...result });
   } catch (error) {
+    if (error instanceof TaskTeamScopeError) return noStore({ success: false, error: error.message }, 404)
     if (error instanceof AgentRunActivityInputError) {
       return noStore({ success: false, error: error.message }, 400);
     }
@@ -135,4 +143,6 @@ export async function POST(
     console.error("[agent-run] activity create failed", error);
     return noStore({ success: false, error: "Failed to create run activity" }, 500);
   }
+
+  })(request, { params })
 }

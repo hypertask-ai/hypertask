@@ -1,9 +1,13 @@
+import { requireAgentWriteRole } from "@/lib/mcp/agents/readRoleGuard"
+import { lockTaskTeamScope, TaskTeamScopeError } from "@/lib/mcp/tasks/agentMutationFence"
+import { projectContentAccessWhere } from "@/utils/controllers/projects/getAllIncludes"
+import { reportMcpOperationCrash } from '@/lib/mcp/operationCrashReport'
 import { wrapMcpRoute, checkMcpRouteRateLimit as checkMcpRateLimit, validateMcpRouteAuth as validateMcpAuth } from '@/lib/mcp/routeWrapper'
 import type { DecisionRequest } from '@prisma/client'
 import { DecisionRequestStatus } from '@prisma/client'
 import { NextRequest, NextResponse } from 'next/server'
 
-import { findTaskByIdentifier, validateTaskIdentifier } from '@/lib/mcp/tasks/resolveTask'
+import { findTaskByIdentifier, validateTaskIdentifier, taskIdentifierErrorResponse } from '@/lib/mcp/tasks/resolveTask'
 import prisma from '@/lib/prisma'
 import { createCommentService } from '@/utils/controllers/comments/createCommentService'
 import { sanitizeRichHtml } from '@/utils/helperFunctions/sanitizeRichHtml'
@@ -76,6 +80,8 @@ export async function POST(request: NextRequest) {
         { status: 401 }
       )
     }
+    const roleRefusal = await requireAgentWriteRole(ctx)
+    if (roleRefusal) return roleRefusal
 
     let body: Record<string, unknown>
     try {
@@ -152,7 +158,7 @@ export async function POST(request: NextRequest) {
         project_id: projectId,
         unique_index: uniqueIndex,
       },
-      ctx.agentId
+      ctx.agentId, undefined, ctx.teamScope
     )
     if (!task) {
       return NextResponse.json(
@@ -162,7 +168,7 @@ export async function POST(request: NextRequest) {
     }
 
     const [taskOwner, currentUser] = await Promise.all([
-      prisma.task.findUnique({ where: { id: task.id }, select: { userId: true } }),
+      prisma.task.findUnique({ where: { id: task.id, ...(ctx.teamScope != null ? { project: projectContentAccessWhere(ctx.user.id, ctx.agentId, ctx.teamScope) } : {}) }, select: { userId: true } }),
       prisma.user.findUnique({
         where: { id: ctx.user.id },
         select: { id: true, email: true, displayName: true, photoURL: true },
@@ -175,7 +181,7 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    const decisionRequest = await prisma.decisionRequest.create({
+    const decisionRequestWrite = (tx: import('@prisma/client').Prisma.TransactionClient) => tx.decisionRequest.create({
       data: {
         taskId: task.id,
         question,
@@ -185,6 +191,10 @@ export async function POST(request: NextRequest) {
         agentId: ctx.agentId ?? null,
       },
     })
+    const decisionRequest = ctx.teamScope != null ? await prisma.$transaction(async (tx) => {
+      await lockTaskTeamScope(tx, task.id, ctx.user.id, ctx.agentId, ctx.teamScope)
+      return decisionRequestWrite(tx)
+    }) : await decisionRequestWrite(prisma)
 
     const comment = await createCommentService({
       text: decisionCommentHtml(question, options),
@@ -193,12 +203,17 @@ export async function POST(request: NextRequest) {
       ownerId: taskOwner.userId,
       currentUser,
       agentId: ctx.agentId ?? undefined,
+      teamScope: ctx.teamScope,
     })
 
-    const savedDecisionRequest = await prisma.decisionRequest.update({
+    const savedDecisionRequestWrite = (tx: import('@prisma/client').Prisma.TransactionClient) => tx.decisionRequest.update({
       where: { id: decisionRequest.id },
       data: { commentId: comment.id },
     })
+    const savedDecisionRequest = ctx.teamScope != null ? await prisma.$transaction(async (tx) => {
+      await lockTaskTeamScope(tx, task.id, ctx.user.id, ctx.agentId, ctx.teamScope)
+      return savedDecisionRequestWrite(tx)
+    }) : await savedDecisionRequestWrite(prisma)
 
     return NextResponse.json(
       {
@@ -209,7 +224,11 @@ export async function POST(request: NextRequest) {
       { status: 201 }
     )
   } catch (error) {
+    if (error instanceof TaskTeamScopeError) return NextResponse.json({ success: false, error: error.message }, { status: 404 })
+    const identifierResponse = taskIdentifierErrorResponse(error)
+    if (identifierResponse) return identifierResponse
     console.error('[MCP Decision Request POST] Error:', error)
+    reportMcpOperationCrash(request, error)
     return NextResponse.json(
       { success: false, error: 'Internal server error' },
       { status: 500 }
@@ -275,7 +294,7 @@ export async function GET(request: NextRequest) {
         project_id: projectId,
         unique_index: uniqueIndex,
       },
-      ctx.agentId
+      ctx.agentId, undefined, ctx.teamScope
     )
     if (!task) {
       return NextResponse.json(
@@ -297,7 +316,11 @@ export async function GET(request: NextRequest) {
       decision_requests: decisionRequests.map(mapDecisionRequest),
     })
   } catch (error) {
+    if (error instanceof TaskTeamScopeError) return NextResponse.json({ success: false, error: error.message }, { status: 404 })
+    const identifierResponse = taskIdentifierErrorResponse(error)
+    if (identifierResponse) return identifierResponse
     console.error('[MCP Decision Request GET] Error:', error)
+    reportMcpOperationCrash(request, error)
     return NextResponse.json(
       { success: false, error: 'Internal server error' },
       { status: 500 }

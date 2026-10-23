@@ -28,6 +28,12 @@ For the new catalog, invalid arguments, unsupported actions, authorization failu
 
 HTTP and existing legacy SSE share catalog selection and the flagged output/error behavior. Already-open SSE sessions evaluate the current server flag and relayed credential scope for every tool list or call; switching the flag Off restores the original SDK handlers without reconnecting. Invocation identity retains the SSE session id. Only the response bindings change; transport, OAuth, annotations and Directory work belong to https://app.hypertask.ai/detail/project-15/6478. The eval harness and CI integration belong to https://app.hypertask.ai/detail/project-15/6505; `tests/fixtures/mcp-6804/golden-tasks.json` contains 25 seeded, realistic tasks as data only. Run mutating tasks only against an isolated fixture environment, never production or shared previews. Chat tool extraction belongs to https://app.hypertask.ai/detail/project-15/6506 and can consume this catalog later; it is not changed here.
 
+## Comment timestamps
+
+`GET /api/mcp/comments`, `POST /api/mcp/comments` and `PATCH /api/mcp/comments/:comment_id` include `editedAt` on each returned comment: an ISO timestamp of its latest text edit, or `null` if it has never been edited. Existing comments are not backfilled. Reactions and other non-text changes do not mark a comment edited. `editedBy` is `{ userId, agentId }` for the latest editor, or `null` when never edited; `agentId` is `null` for a human edit. An agent editing its owner's comment is recorded as the editor without changing the comment's original author. Editor names are not included because there is no existing editor-agent relation to select.
+
+Each reaction in the comments list includes its `createdAt` ISO timestamp. `POST /api/mcp/comments/:comment_id/reactions` includes the same field in both `reaction` (when present) and `reactions`. This is the stored reaction's original creation time; reviving a removed reaction preserves it. Existing reactor attribution is unchanged: `userId` identifies the human or agent owner, and agent reactions also carry `isAgent: true` and the visibility-filtered `agent` object.
+
 ## Complete resource inventory
 
 | Advertised tool | Actions | Existing implementation names |
@@ -44,7 +50,7 @@ HTTP and existing legacy SSE share catalog selection and the flagged output/erro
 | `hypertask_skills` | `list`, `get`, `create`, `update`, `delete`, `import` | `hypertask_list_skills`, `hypertask_get_skill`, `hypertask_create_skill`, `hypertask_update_skill`, `hypertask_delete_skill`, `hypertask_import_skills` |
 | `hypertask_agents` | `list`, `presence`, `create`, `revoke`, `archive`, `delete` | `hypertask_list_agents`, `hypertask_agent_presence`, `hypertask_create_agent`, `hypertask_revoke_agent`, `hypertask_archive_agent`, `hypertask_delete_agent` |
 | `hypertask_comments` | `list`, `add`, `update`, `delete` | `hypertask_get_comments_for_task`, `hypertask_add_comment_to_task`, `hypertask_update_comment`, `hypertask_delete_comment` |
-| `hypertask_user_context` | `hello`, `get`, `profile`, `connections` | `hypertask_hello`, `hypertask_get_user_context`, `hypertask_update_profile`, `hypertask_list_connections` |
+| `hypertask_user_context` | `hello`, `features`, `get`, `profile`, `connections` | `hypertask_hello`, `hypertask_list_features`, `hypertask_get_user_context`, `hypertask_update_profile`, `hypertask_list_connections` |
 | `hypertask_pages` | `create`, `get`, `update`, `list`, `search`, `versions`, `restore`, `archive` | `hypertask_create_page`, `hypertask_get_page`, `hypertask_update_page`, `hypertask_list_pages`, `hypertask_search_pages`, `hypertask_page_history` |
 | `hypertask_reports` | `list`, `get`, `create`, `update`, `delete` | `hypertask_report` |
 | `hypertask_projects` | `list`, `manifest`, `playbook`, `create`, `rename`, `members`, `archive`, `invite_member`, `get_playbook`, `set_playbook`, `get_instructions`, `set_instructions` | `hypertask_list_projects`, `hypertask_board_manifest`, `hypertask_get_board_playbook`, `hypertask_create_board`, `hypertask_rename_board`, `hypertask_list_project_members`, `hypertask_project_admin`, `hypertask_board_config` |
@@ -52,3 +58,21 @@ HTTP and existing legacy SSE share catalog selection and the flagged output/erro
 | `hypertask_labels` | `list`, `create` | `hypertask_list_labels`, `hypertask_create_label` |
 | `hypertask_search` | `tasks`, `semantic`, `related`, `help` | `hypertask_search_tasks`, `hypertask_rag_retrieval`, `hypertask_find_related_tasks`, `hypertask_search_help_docs` |
 | `hypertask_drafts` | `create`, `list`, `update`, `publish`, `delete` | `hypertask_draft` |
+
+## Feature discovery
+
+`hypertask_list_features`, `hypertask_user_context` action `features`, and `GET /api/mcp/features` return enabled feature-kind flags and core destinations for the authenticated user, with descriptions, shipped dates and verified URLs where known. `htpr-7322-agent-feature-discovery` defaults to Everyone; switching it Off disables catalog reads, hides discovery guidance from hello, and suppresses agent page-creation warnings, including on idempotent replays. Page creation itself remains available.
+
+## Autonomous anonymous feedback
+
+`hypertask_report_feedback` lets an AI client report a failed or unexpected Hypertask operation on its own, without being asked. Never send task, board or comment content, request bodies or tool arguments. The server stores structured fields including an optional category (call_failed, empty_result, unexpected_result, auth_failed, slow, user_reported_broken or other; default other), reporting display names and client slugs. Free-form error and note remain accepted for compatibility but are never stored. Credential-shaped tool, client and errorCode values are rejected. This tool is available only to the audience of `htpr-7195-ai-feedback`, a feature flag defaulting to Owner + QA. It adds one tool to either catalog; with feedback off, the existing legacy and consolidated catalogs stay unchanged.
+
+REST clients use `POST /api/mcp/feedback` with the existing bearer authentication and JSON `{surface, client?, tool?, status?, errorCode?, category?, error?, note?}`. `surface` is `mcp`, `cli`, `api` or `agent`; tool names are bounded technical identifiers, status is an integer from 100 to 599, client and errorCode are slugs up to 40 characters, and error/note accept up to 5000 characters but are never persisted. Reports show `Category: <value>` and, when free text was supplied, `Free text was supplied and not stored, for privacy.` Credential-shaped structured fields return 400; automatic reporting drops those fields. Repeat reports preserve the original report and human triage, changing only reporting metadata and Last seen. Destination writes retry lock acquisition up to 20 times, 250 ms apart, before returning 503. Unknown fields are rejected. Success returns `{success:true,ticketNumber,url,deduped,count}` with the board-15 ticket URL. Invalid input returns 400, unauthenticated calls 401, disabled calls 404, hourly quota exhaustion 429, and unavailable feedback storage 503. The MCP surface and client attribution are set by the server, using clientInfo when available.
+
+Reports land in board 15, Bugs, with the ai-feedback label and Medium priority. A structured failure fingerprint bumps an existing open report instead of creating another. Reporting display names and client lists are deduped and capped at 10 each. Per-account rolling hourly quotas permit 10 new tickets and 30 bumps. Anonymous MCP authentication failures are enabled only in Everyone mode and share one 20-report hourly bucket. Redis holds quota reservations, sanitized client metadata for one hour, and a short destination write lock. If Redis is unavailable, filing fails closed; it never bypasses the quota. A reserved attempt is not refunded on failure because ticket creation may already have committed before a side effect failed. Automatic reporting uses waitUntil, never copies exception messages or response content, and does not change or await the original response.
+
+## Agent comment visibility
+
+An agent comment without `kind`, a reply target, a person @mention, images or attachments goes to the hidden ticket agent log, not the conversation people read. For people, use `kind: "question"` for a decision, `"qa"` for a QA verdict, or `"done"` for a closing summary. This documents the existing routing; it does not change it.
+
+Comment-create receipts retain `routedTo`, `url` and either `activity` or `comment`. They also return `visibleToPeople: false` plus a resend `notice` for the log, or `visibleToPeople: true` for the comment thread.

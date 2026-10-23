@@ -1,3 +1,4 @@
+import { downloadWithoutBrotli } from "@/lib/net/downloadWithoutBrotli";
 import { reportError } from "@/lib/errors/reportError";
 import { NextRequest, NextResponse } from "next/server";
 import { generateText } from "ai";
@@ -27,6 +28,7 @@ import {
   MAX_DICTATION_AUDIO_BYTES,
   transcribeAudioFile,
 } from "@/lib/services/dictation/transcriptionProviders";
+import { warnIfAllowanceRefused } from "@/app/api/ai/_lib/allowanceRefusal";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -61,7 +63,6 @@ async function transcribeAudio(
   if (context.teamId) tags.push(`team:${context.teamId}`);
   if (context.userId) tags.push(`user:${context.userId}`);
 
-  // Only read language here; model selection resets saved picks if improvement runs.
   const prefs = context.userId
     ? await prisma.userSetting.findUnique({
         where: { userId: context.userId },
@@ -83,6 +84,7 @@ async function improveTranscript(
 ) {
   const selected = await selectTiptapModel(lookup);
   const { text } = await generateText({
+    experimental_download: downloadWithoutBrotli,
     model: selected.model,
     instructions: createPromptForTiptapForwardSlash(
       "ImproveReadability",
@@ -170,8 +172,6 @@ export async function POST(request: NextRequest) {
     const stream = new ReadableStream<Uint8Array>({
       async start(controller) {
         try {
-          // One SSE payload: the client inserts the full transcript in a single
-          // editor operation instead of animating word-by-word (HTPR-5691).
           const normalized = normalizeDictationTranscriptForSse(transcript);
           controller.enqueue(encoder.encode(`data: ${normalized}\n\n`));
         } catch (error) {
@@ -198,6 +198,8 @@ export async function POST(request: NextRequest) {
     if (error instanceof DictationAudioTooLargeError) {
       return NextResponse.json({ error: error.message }, { status: 413 });
     }
+    const allowanceMessage = warnIfAllowanceRefused(error, "ai/audio-transcript");
+    if (allowanceMessage) return NextResponse.json({ error: allowanceMessage }, { status: 429 });
     await reportError({
       message: error instanceof Error ? error.message : "AI request failed",
       stack: error instanceof Error ? error.stack : undefined,

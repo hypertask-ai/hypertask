@@ -2,9 +2,11 @@ import { currentProjectAtom, currentUserAtom } from "@/store";
 import type { IAgent } from "@/models/model";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useRecoilValue } from "@/lib/state";
+import { useFlag } from "@/hooks/useFlag";
+import { HTPR_7509_AGENT_ROLE_SCREEN_FLAG } from "@/lib/flags/keys";
 
-export const agentsQueryKey = (userId: number, teamId: string) =>
-  ["agents", userId, teamId] as const;
+export const agentsQueryKey = (userId: number, teamId: string, agentRolesEnabled: boolean) =>
+  ["agents", userId, teamId, agentRolesEnabled] as const;
 
 export const boardAgentsQueryKey = (projectId: number) =>
   ["boardAgents", projectId] as const;
@@ -25,7 +27,6 @@ async function fetchAgents(teamId: string): Promise<IAgent[]> {
   return data.agents;
 }
 
-/** Agents explicitly added to the current board via Member.agentId */
 async function fetchBoardAgents(projectId: number): Promise<IAgent[]> {
   const res = await fetch("/api/agents/all?projectId=" + projectId);
   const data = (await res.json()) as {
@@ -78,16 +79,13 @@ function mergeAgentRevocation(
   );
 }
 
-/**
- * Shared TanStack cache for `/api/agents` plus mutations (create, update, revoke).
- * `allAgents` = agents on the current board (board-scoped).
- */
 export function useAgents(
   options: {
     projectId?: number | null;
     teamId?: string | null;
   } = {},
 ) {
+  const agentRolesEnabled = useFlag(HTPR_7509_AGENT_ROLE_SCREEN_FLAG);
   const currentUser = useRecoilValue(currentUserAtom);
   const currentProject = useRecoilValue(currentProjectAtom);
   const userId = currentUser?.id;
@@ -100,7 +98,7 @@ export function useAgents(
   const listQuery = useQuery({
     queryKey:
       typeof userId === "number" && teamId
-        ? agentsQueryKey(userId, teamId)
+        ? agentsQueryKey(userId, teamId, agentRolesEnabled)
         : ["agents", "none"],
     queryFn: () => fetchAgents(teamId!),
     enabled: typeof userId === "number" && Boolean(teamId),
@@ -120,7 +118,7 @@ export function useAgents(
   const invalidate = () => {
     if (typeof userId === "number" && teamId) {
       void queryClient.invalidateQueries({
-        queryKey: agentsQueryKey(userId, teamId),
+        queryKey: ["agents", userId, teamId],
       });
     }
     if (typeof projectId === "number") {
@@ -177,6 +175,38 @@ export function useAgents(
     },
   });
 
+  const changeAgentRole = useMutation({
+    mutationFn: async ({ id, role }: { id: string; role: NonNullable<IAgent["role"]> }) => {
+      if (!agentRolesEnabled) throw new Error("Agent role changes are not available");
+      if (!teamId) throw new Error("Select a team before changing an agent role");
+      const res = await fetch(`/api/agents/${id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ teamId, role }),
+      });
+      const data = (await res.json()) as {
+        success?: boolean;
+        agent?: Pick<IAgent, "id" | "role">;
+        error?: string;
+      };
+      if (!res.ok || !data.success || !data.agent) {
+        throw new Error(data.error ?? "Could not change agent role");
+      }
+      return { ...data.agent, teamId };
+    },
+    onSuccess: (updatedAgent) => {
+      if (typeof userId === "number") {
+        queryClient.setQueryData<IAgent[]>(
+          agentsQueryKey(userId, updatedAgent.teamId, agentRolesEnabled),
+          (agents) => agents?.map((agent) =>
+            agent.id === updatedAgent.id ? { ...agent, role: updatedAgent.role } : agent,
+          ),
+        );
+      }
+      invalidate();
+    },
+  });
+
   const revokeAgent = useMutation({
     mutationFn: async ({
       agentId,
@@ -202,11 +232,9 @@ export function useAgents(
       return { ...data.agent, token: data.token ?? null };
     },
     onSuccess: (updatedAgent) => {
-      // Reflect the server result before the confirmation closes. Waiting for
-      // invalidation left disabled agents visible long enough to look unchanged.
       if (typeof userId === "number" && teamId) {
         queryClient.setQueryData<IAgent[]>(
-          agentsQueryKey(userId, teamId),
+          agentsQueryKey(userId, teamId, agentRolesEnabled),
           (agents) => mergeAgentRevocation(agents, updatedAgent),
         );
       }
@@ -250,6 +278,7 @@ export function useAgents(
     refetch: listQuery.refetch,
     createAgent,
     updateAgent,
+    changeAgentRole,
     revokeAgent,
     addAgentToBoard,
     allAgents: boardQuery.data ?? [],

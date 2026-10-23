@@ -91,7 +91,7 @@ test("tutorial inbox rendering is filtered to authenticated notification ids", (
 
 test("archive completion is published only after persistence succeeds", () => {
   const focusHandler = readSource("src/hooks/Inbox/useGlobalFocusHandler.tsx");
-  const archiveRoute = readSource("src/pages/api/notifications/markAsDone.ts");
+  const archiveRoute = readSource("src/lib/api/notification-writes/mark-done.ts");
   assert.match(focusHandler, /persisted = await archiveHandler/);
   assert.match(focusHandler, /Number\.isSafeInteger\(notificationId\)/);
   assert.match(focusHandler, /if \(!notificationResponse\.ok\) return false/);

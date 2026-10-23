@@ -1,9 +1,10 @@
+import { requireAgentWriteRole } from '@/lib/mcp/agents/readRoleGuard'
 import { wrapMcpRoute, validateMcpRouteAuth as validateMcpAuth, checkMcpRouteRateLimit as checkMcpRateLimit } from '@/lib/mcp/routeWrapper'
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 
 import { createUnauthorizedResponse } from '@/lib/mcp/auth'
-import { assertProjectAccess } from "@/app/api/ai/_lib/customInstructions";
+import { assertProjectAccess, withScopedProjectWrite } from "@/app/api/ai/_lib/customInstructions";
 import {
   assertSkillScopeAccess,
   skillErrorResponse,
@@ -18,9 +19,6 @@ import prisma from "@/lib/prisma";
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-// Mirrors the web skills API (src/app/api/ai/skills/route.ts) but authenticates
-// with the MCP bearer token so the hypertask CLI, `ht`, and MCP tools can list
-// and create skills. Params are snake_case to match the other /api/mcp/* routes.
 const createSchema = z.object({
   scope: z.enum(["user", "project"]).default("user"),
   project_id: z.coerce.number().int().positive().optional(),
@@ -48,12 +46,13 @@ export async function GET(request: NextRequest) {
     if (projectIdValue && (!Number.isInteger(projectId) || Number(projectId) <= 0)) {
       throw new Error("project_id must be a positive integer");
     }
-    if (projectId) await assertProjectAccess(userId, projectId);
+    if (!projectId && ctx.teamScope != null) throw new Error("Account-global skills access denied");
+    if (projectId) await assertProjectAccess(userId, projectId, ctx.agentId, ctx.teamScope);
 
     const skills = await prisma.aI_Skill.findMany({
       where: {
         OR: [
-          { userId, projectId: null },
+          ...(ctx.teamScope != null ? [] : [{ userId, projectId: null }]),
           ...(projectId ? [{ projectId, userId: null }] : []),
         ],
       },
@@ -61,7 +60,7 @@ export async function GET(request: NextRequest) {
     });
     return NextResponse.json({ success: true, skills, total: skills.length });
   } catch (error) {
-    return skillErrorResponse(error);
+    return skillErrorResponse(error, { userId, agentId: ctx.agentId, teamScope: ctx.teamScope });
   }
 
   })(request)
@@ -73,13 +72,15 @@ export async function POST(request: NextRequest) {
   if (rateLimited) return rateLimited;
   const ctx = await validateMcpAuth(request);
   if (!ctx) return createUnauthorizedResponse();
+  const roleRefusal = await requireAgentWriteRole(ctx);
+  if (roleRefusal) return roleRefusal;
   const userId = ctx.user.id;
 
   try {
     const input = createSchema.parse(await request.json());
-    const scope = await assertSkillScopeAccess(userId, input.scope, input.project_id);
+    const scope = await assertSkillScopeAccess(userId, input.scope, input.project_id, { userId, agentId: ctx.agentId, teamScope: ctx.teamScope });
     const parsed = parseCreateInput(input);
-    const skill = await prisma.aI_Skill.create({
+    const write = (db: import("@prisma/client").Prisma.TransactionClient) => db.aI_Skill.create({
       data: {
         ...scope,
         ...parsed,
@@ -87,9 +88,12 @@ export async function POST(request: NextRequest) {
         createdById: userId,
       },
     });
+    const skill = ctx.teamScope != null
+      ? await withScopedProjectWrite({ userId, agentId: ctx.agentId, teamScope: ctx.teamScope }, scope.projectId!, write)
+      : await write(prisma);
     return NextResponse.json({ success: true, skill }, { status: 201 });
   } catch (error) {
-    return skillErrorResponse(error);
+    return skillErrorResponse(error, { userId, agentId: ctx.agentId, teamScope: ctx.teamScope });
   }
 
   })(request)

@@ -1,3 +1,4 @@
+import { standalonePagesEnabled } from "@/utils/controllers/pages/standalonePagesEnabled";
 import { tool } from "ai";
 import { z } from "zod";
 import { getPage, updatePage, PageConflictError } from "@/utils/controllers/pages/pageService";
@@ -30,8 +31,8 @@ export function createUpdatePageTool(context: ToolContext) {
         sendStatus("hypertask_update_page");
         const existingPage = await getPage(
           typeof input.id === "number"
-            ? { id: input.id }
-            : { publicId: input.id }
+            ? { id: input.id, userId: user.id, standalonePagesEnabled: await standalonePagesEnabled(user.id), agentId: null }
+            : { publicId: input.id, userId: user.id, standalonePagesEnabled: await standalonePagesEnabled(user.id), agentId: null }
         );
         if (!existingPage) {
           return { success: false, error: "Page not found" };

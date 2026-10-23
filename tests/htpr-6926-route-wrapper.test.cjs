@@ -1,3 +1,4 @@
+const { withStubs } = require('./helpers/stub-map.cjs')
 const test = require('node:test')
 const assert = require('node:assert/strict')
 const fs = require('node:fs')
@@ -7,8 +8,14 @@ const ts = require('typescript')
 const jwt = require('jsonwebtoken')
 const { NextRequest, NextResponse } = require('next/server')
 const root = path.resolve(__dirname, '..')
+const agentScope = require('./task-route-loader.cjs').load('src/lib/auth/agentScope.ts', {
+  '@/lib/flags': { isFeatureEnabled: async () => true },
+  '@/lib/telemetry/signupAnalytics': { recordServerCapture: () => {} },
+})
+const dbTiming = require('./task-route-loader.cjs').load('src/lib/mcp/dbTiming.ts', {})
 
 function load(file, stubs, extra = '', env = {}, clock = performance) {
+  stubs = withStubs({ '@/lib/auth/agentScope': agentScope, './operationCrashReport': { reportUnexplainedMcpServerError: () => {} }, './dbTiming': dbTiming, '@/lib/aiFeedback/automatic': { queueRestFailure: () => {} } }, stubs)
   const source = fs.readFileSync(path.join(root, file), 'utf8')
   const code = ts.transpileModule(source, { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2020, esModuleInterop: true } }).outputText
   const mod = { exports: {} }
@@ -47,7 +54,8 @@ function harness({ enabled = true, count = 1, revoked = false, agent = false, us
   }, 'module.exports.__maps = { boundedJwtLogThrottle, boundedConnectionLogThrottle, mcpConnectionLogThrottle };', { JWT_SECRET: secret })
   const telemetry = load('src/lib/mcp/clientTelemetry.ts', { crypto })
   const session = load('src/lib/mcp/auth/session.ts', {
-    '@/lib/telemetry/activationOccurrences': { recordAuthenticatedConnection: () => {} },
+    '@/lib/telemetry/analyticsIntents': { enqueueAnalyticsIntent: async () => "intent-key", processAnalyticsIntentSoon: () => {}, enqueueOutsideSaveAndProcessSoon: async (enqueue) => { await enqueue() } },
+    '@/lib/telemetry/activationOccurrences': { enqueueAuthenticatedConnection: async () => null },
     'next/server': { NextRequest }, '@/lib/prisma': db, jsonwebtoken: jwt,
     '@/lib/apiKeys': {}, '@/lib/auth/betterAuth': {}, '@/lib/auth/getSessionUser': {},
     '@/lib/mcp/managementPermissions': permissions, '@/lib/mcp/clientTelemetry': telemetry,
@@ -63,6 +71,8 @@ function harness({ enabled = true, count = 1, revoked = false, agent = false, us
   const decision = load('src/lib/mcp/rateLimitDecision.ts', {})
   const rate = load('src/lib/mcp/auth/rateLimit.ts', {
     'next/server': { NextRequest, NextResponse }, crypto,
+    '@/lib/flags/keys': { HTPR_7133_MCP_RATELIMIT_FAST_FLAG: 'htpr-7133-mcp-ratelimit-fast' },
+    '@/lib/flags': { featureFlagCandidateUserIds: async () => [] },
     '@/lib/redis': { getRedis: async () => ({ incr: async () => { events.push('rate'); return count }, expire: async () => {} }) },
     '@/lib/mcp/rateLimitDecision': decision, './session': { ...session, validateMcpAuth: async request => { authCalls++; return session.validateMcpAuth(request) } },
     '../operationContext': context,
@@ -288,7 +298,7 @@ test('bounded auth logs cap unverified strings and arrays, throttle identical JW
       assert.equal(output.length, before + 2)
     } finally { Date.now = now }
     h.verify.verifyMcpJwtToken(invalid)
-    assert.ok(output.some(args => args[1]?.sub?.length === 1000), 'legacy logging must remain uncapped')
+    assert.ok(output.some(args => args[0] === '[MCP Auth] Token has an unsupported audience:' && args[1]?.length === 1000), 'legacy logging must remain uncapped')
   } finally { console.log = original }
 })
 
@@ -337,7 +347,7 @@ test('all adopted REST methods preserve legacy wire results and scaffold order w
   const json = require('./task-route-loader.cjs').load('src/lib/mcp/readJsonBody.ts', {})
   const lease = require('./task-route-loader.cjs').load('src/lib/mcp/tasks/agentMutationLeaseAdoption.ts', {})
   const authForwarder = Object.fromEntries(['checkMcpRateLimit', 'validateMcpAuth', 'mcpUnauthorizedResponse', 'createUnauthorizedResponse'].map(name => [name, (...args) => activeAuth[name](...args)]))
-  const wrappers = Object.fromEntries(['off', 'on'].map(mode => [mode, loadRouteWrapper({ '@/lib/mcp/auth': authForwarder, '@/lib/mcp/readJsonBody': json, '@/lib/mcp/tasks/agentMutationLeaseAdoption': lease })]))
+  const wrappers = Object.fromEntries(['off', 'on'].map(mode => [mode, loadRouteWrapper({ '@/lib/aiFeedback/automatic': { queueRestFailure: () => {} }, '@/lib/mcp/auth': authForwarder, '@/lib/mcp/readJsonBody': json, '@/lib/mcp/tasks/agentMutationLeaseAdoption': lease })]))
   const originalMode = process.env.HTPR_6926_TEST_FLAG
   let legacyBase = null
   try { legacyBase = cp.execFileSync('git', ['merge-base', 'HEAD', 'origin/production'], { cwd: root, encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] }).trim() || null } catch {}
@@ -373,9 +383,11 @@ test('all adopted REST methods preserve legacy wire results and scaffold order w
             Object.assign(mocks, {
               'next/server': { NextRequest, NextResponse },
               '@/lib/mcp/auth': auth,
+              '@/lib/mcp/operationCrashReport': { reportMcpOperationCrash: () => {} },
               '@/lib/flags': { isFeatureEnabled: async () => false },
               '@/lib/flags/keys': {},
               '@/lib/mcp/agents/scopes': { requireRole: async () => null },
+              '@/lib/mcp/agents/readRoleGuard': { requireAgentWriteRole: async () => null },
               '@/lib/mcp/readJsonBody': json,
               '@/lib/mcp/tasks/agentMutationLeaseAdoption': lease,
             })
@@ -406,8 +418,8 @@ test('all adopted REST methods preserve legacy wire results and scaffold order w
     if (originalMode === undefined) delete process.env.HTPR_6926_TEST_FLAG
     else process.env.HTPR_6926_TEST_FLAG = originalMode
   })
-  assert.equal(files.length, 69)
-  assert.equal(compared, 97)
+  assert.equal(files.length, 109)
+  assert.equal(compared, 147)
 })
 
 
@@ -431,7 +443,7 @@ test('wrapped responses carry existing and diagnostic Server-Timing names withou
   const req = h.request()
   const response = await scaffold(h)(req)
   const header = response.headers.get('Server-Timing')
-  assert.match(header, /^auth;dur=\d+\.\d, auth_jwt;dur=\d+\.\d, auth_db;dur=\d+\.\d, ratelimit;dur=\d+\.\d, handler;dur=\d+\.\d, wrap_flag;dur=\d+\.\d, total;dur=\d+\.\d, age;dur=\d+\.\d, inst;desc="[0-9a-f]{8}", region;desc="unknown"$/)
+  assert.match(header, /^auth;dur=\d+\.\d, auth_jwt;dur=\d+\.\d, auth_db;dur=\d+\.\d, ratelimit;dur=\d+\.\d, handler;dur=\d+\.\d, wrap_flag;dur=\d+\.\d, total;dur=\d+\.\d, age;dur=\d+\.\d, inst;desc="[0-9a-f]{8}", region;desc="unknown", db_q;dur=0\.0;desc="0", db_max;dur=0\.0, db_conn;dur=0\.0;desc="0", db_wait;dur=0\.0$/)
   const bearer = req.headers.get('Authorization').slice('Bearer '.length)
   const assertPrivate = value => {
     assert.equal(value.includes(bearer), false)
@@ -455,13 +467,13 @@ test('flag latency is included in total but not handler, and instance age advanc
   assert.equal(await run(h.request()), response)
   const first = response.headers.get('Server-Timing')
   const id = first.match(/inst;desc="([0-9a-f]{8})"/)[1]
-  assert.equal(first, `handler;dur=25.0, wrap_flag;dur=1100.0, total;dur=1125.0, age;dur=1175.0, inst;desc="${id}", region;desc="iad1"`)
+  assert.equal(first, `handler;dur=25.0, wrap_flag;dur=1100.0, total;dur=1125.0, age;dur=1175.0, inst;desc="${id}", region;desc="iad1", db_q;dur=0.0;desc="0", db_max;dur=0.0, db_conn;dur=0.0;desc="0", db_wait;dur=0.0`)
   assert.equal(response.status, 201)
   assert.equal(response.headers.get('X-Fixture'), 'kept')
   assert.deepEqual(await response.json(), { unchanged: true })
   now += 10
   const second = await h.wrapper.wrapMcpRoute(async () => { now += 5; return NextResponse.json({}) })(h.request())
-  assert.equal(second.headers.get('Server-Timing'), `handler;dur=5.0, wrap_flag;dur=0.0, total;dur=5.0, age;dur=1190.0, inst;desc="${id}", region;desc="iad1"`)
+  assert.equal(second.headers.get('Server-Timing'), `handler;dur=5.0, wrap_flag;dur=0.0, total;dur=5.0, age;dur=1190.0, inst;desc="${id}", region;desc="iad1", db_q;dur=0.0;desc="0", db_max;dur=0.0, db_conn;dur=0.0;desc="0", db_wait;dur=0.0`)
   assert.equal(h.counts().flagCalls, 1)
 })
 
@@ -486,7 +498,7 @@ test('region description escapes quotes and backslashes without injecting timing
   const h = harness({ env: { VERCEL_REGION: 'iad1"\\, injected;dur=9\r\n\u2603' } })
   const response = await h.wrapper.wrapMcpRoute(async () => NextResponse.json({}))(h.request())
   const header = response.headers.get('Server-Timing')
-  assert.ok(header.endsWith('region;desc="iad1\\"\\\\, injected;dur=9"'))
+  assert.ok(header.includes('region;desc="iad1\\"\\\\, injected;dur=9"'))
   assert.doesNotMatch(header, /[\r\n\u2603]/)
 })
 

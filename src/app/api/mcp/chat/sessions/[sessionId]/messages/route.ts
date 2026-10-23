@@ -1,3 +1,6 @@
+import { chatContentScopeWhere } from "@/lib/agents/chatContentScope"
+import { projectContentAccessWhere } from "@/utils/controllers/projects/getAllIncludes"
+import { TaskTeamScopeError } from "@/lib/mcp/tasks/agentMutationFence"
 import { wrapMcpRoute, checkMcpRouteRateLimit as checkMcpRateLimit, validateMcpRouteAuth as validateMcpAuth } from '@/lib/mcp/routeWrapper'
 import { NextRequest, NextResponse } from 'next/server'
 
@@ -30,12 +33,6 @@ function requireAgentToken(ctxAgentId: string | null): NextResponse | null {
   )
 }
 
-/**
- * GET /api/mcp/chat/sessions/[sessionId]/messages
- *
- * Agent-readable transcript of one Agent Chat session. Only the session's own
- * agent (the agentId on the bearer token) may read it.
- */
 export async function GET(
   request: NextRequest,
   { params }: { params: Promise<{ sessionId: string }> }
@@ -53,12 +50,11 @@ export async function GET(
     }
     const agentGate = requireAgentToken(ctx.agentId)
     if (agentGate) return agentGate
-    // Proven non-null by the gate above; the helper returns a response, not a
-    // type predicate, so the narrowing has to be restated here.
     const tokenAgentId = ctx.agentId as string
 
     const { sessionId } = await params
     const access = await loadAgentTokenChatSession({
+      principal: { userId: ctx.user.id, agentId: ctx.agentId, teamScope: ctx.teamScope },
       sessionId,
       agentId: tokenAgentId,
       select: { userId: true, user: { select: { displayName: true } } },
@@ -71,11 +67,11 @@ export async function GET(
     }
     const session = access.session
 
-    // Last 50, oldest first: page desc from the tail, then flip.
     const messages = (
       await prisma.chatMessage.findMany({
         where: {
           sessionId: session.id,
+          ...(ctx.teamScope != null ? { session: await chatContentScopeWhere({ userId: ctx.user.id, agentId: ctx.agentId, teamScope: ctx.teamScope }) } : {}),
           NOT: { role: 'assistant', isDelivered: false, content: { in: [...AGENT_CHAT_SYSTEM_MESSAGES] } },
         },
         orderBy: { createdAt: 'desc' },
@@ -99,7 +95,8 @@ export async function GET(
       const activity = await listAgentChatActivity({
         agentId: tokenAgentId,
         sessionId: session.id,
-        userId: session.userId,
+        userId: ctx.user.id,
+        teamScope: ctx.teamScope,
       })
       const activityContext = activityContextMessages(
         activity,
@@ -121,6 +118,7 @@ export async function GET(
       messages: transcript,
     })
   } catch (error: any) {
+    if (error instanceof TaskTeamScopeError) return NextResponse.json({ success: false, error: error.message }, { status: 404 })
     console.error('[mcp chat] GET messages failed:', error)
     return NextResponse.json(
       { success: false, error: error?.message || 'Failed to load chat messages' },
@@ -137,13 +135,6 @@ type PostChatMessageBody = {
   proposal?: unknown
 }
 
-/**
- * POST /api/mcp/chat/sessions/[sessionId]/messages
- *
- * The agent runtime posts its reply here. `replyToMessageId` is the
- * idempotency key: a retried POST with the same value returns the already
- * stored reply instead of creating a second one.
- */
 export async function POST(
   request: NextRequest,
   { params }: { params: Promise<{ sessionId: string }> }
@@ -161,8 +152,6 @@ export async function POST(
     }
     const agentGate = requireAgentToken(ctx.agentId)
     if (agentGate) return agentGate
-    // Proven non-null by the gate above; the helper returns a response, not a
-    // type predicate, so the narrowing has to be restated here.
     const tokenAgentId = ctx.agentId as string
 
     const { sessionId } = await params
@@ -184,6 +173,7 @@ export async function POST(
     }
 
     const access = await loadAgentTokenChatSession({
+      principal: { userId: ctx.user.id, agentId: ctx.agentId, teamScope: ctx.teamScope },
       sessionId,
       agentId: tokenAgentId,
       select: { userId: true },
@@ -196,14 +186,18 @@ export async function POST(
     }
     const session = access.session
 
-    const serialize = ({ id, role, content, createdAt, ticketProposal }: {
+    const serialize = async ({ id, role, content, createdAt, ticketProposal }: {
       id: string
       role: 'human' | 'assistant'
       content: string
       createdAt: Date
-      ticketProposal?: Parameters<typeof serializeChatTicketProposal>[0]
-    }) => ({ id, role, content, createdAt,
-      proposal: serializeChatTicketProposal(ticketProposal) })
+      ticketProposal?: Prisma.ChatTicketProposalGetPayload<{ select: typeof chatTicketProposalSelect }> | null
+    }) => {
+      if (ctx.teamScope != null && ticketProposal) {
+        if (!await prisma.project.findFirst({ where: { id: ticketProposal.targetProjectId, ...projectContentAccessWhere(ctx.user.id, ctx.agentId, ctx.teamScope) }, select: { id: true } }) || ticketProposal.taskId != null && !await prisma.task.findFirst({ where: { id: ticketProposal.taskId, project: projectContentAccessWhere(ctx.user.id, ctx.agentId, ctx.teamScope) }, select: { id: true } })) throw new TaskTeamScopeError()
+      }
+      return { id, role, content, createdAt, proposal: serializeChatTicketProposal(ticketProposal) }
+    }
 
     const target = await prisma.chatMessage.findFirst({
       where: { id: replyToMessageId, sessionId: session.id, role: 'human' },
@@ -229,16 +223,11 @@ export async function POST(
       if (isAgentChatSystemMessage(existing)) return NextResponse.json({ success: false, error: 'This chat turn is no longer active' }, { status: 409 })
       return NextResponse.json({
         success: true,
-        message: serialize(existing),
+        message: await serialize(existing),
         duplicate: true,
       })
     }
 
-    // A proposal is the whole point of the confirm-before-side-effects boundary:
-    // the agent asks for a ticket instead of doing the work. Everything is
-    // checked before anything is stored, so a rejected proposal creates nothing.
-    // This runs after the replay check above: a retry of an already stored
-    // reply must not be refused because the agent's rights narrowed since.
     const parsedProposal = parseChatTicketProposal(body?.proposal)
     if (parsedProposal.error) {
       return NextResponse.json(
@@ -255,21 +244,17 @@ export async function POST(
       targetSectionTitle: string
     } | null = null
     if (parsedProposal.proposal) {
-      // Flag off: keep the reply, drop the card. Rejecting the whole POST would
-      // break the turn for every user who does not have the feature yet.
       const enabled = await isFeatureEnabled(
         AGENT_CHAT_TICKET_CONFIRM_FLAG,
         session.userId
       )
       if (enabled) {
-        // The ticket the user confirms is created with the agent's write role
-        // and the chat user's board rights: the intersection, never either alone.
         const scopeError = await requireRole(ctx, 'write')
         if (scopeError) return scopeError
         const projectCheck = await validateProjectAccess(
           parsedProposal.proposal.targetProjectId,
           session.userId,
-          ctx.agentId
+          ctx.agentId, ctx.teamScope
         )
         if (projectCheck.error) {
           return NextResponse.json(
@@ -304,9 +289,14 @@ export async function POST(
     }> | null = null
     try {
       message = await prisma.$transaction(async (tx) => {
-        // This update is first on purpose: it takes the ChatSession row lock, so
-        // a reply cannot race a timeout, cancellation, or another reply. Session
-        // access above already proves this token belongs to the addressed agent.
+        if (ctx.teamScope != null) {
+          await tx.$queryRaw`SELECT id FROM "ChatSession" WHERE id = ${session.id} FOR UPDATE`
+          if (!await tx.chatSession.findFirst({ where: { id: session.id, ...await chatContentScopeWhere({ userId: ctx.user.id, agentId: ctx.agentId, teamScope: ctx.teamScope }, tx) }, select: { id: true } })) throw new TaskTeamScopeError()
+          if (proposalData) {
+            await tx.$queryRaw`SELECT id FROM "Project" WHERE id = ${proposalData.targetProjectId} FOR UPDATE`
+            if (!await tx.project.findFirst({ where: { id: proposalData.targetProjectId, ...projectContentAccessWhere(ctx.user.id, ctx.agentId, ctx.teamScope) }, select: { id: true } })) throw new TaskTeamScopeError()
+          }
+        }
         await tx.chatSession.update({ where: { id: session.id }, data: { updatedAt: new Date() } })
         if (await tx.chatMessage.findUnique({ where: { replyToMessageId } })) throw Object.assign(new Error('Concurrent reply'), { code: 'P2002' })
         const created = await tx.chatMessage.create({
@@ -319,8 +309,6 @@ export async function POST(
             authorAgentId: tokenAgentId,
           },
         })
-        // Same transaction, and messageId is unique: one reply carries at most
-        // one proposal, and a retried POST can never add a second.
         if (proposalData) {
           createdProposal = await tx.chatTicketProposal.create({
             data: { messageId: created.id, ...proposalData },
@@ -328,9 +316,9 @@ export async function POST(
           })
         }
         return created
-      })
+      }, ctx.teamScope != null ? { isolationLevel: 'Serializable' } : undefined)
     } catch (error: any) {
-      // Lost a race against a concurrent reply with the same idempotency key.
+      if (error instanceof TaskTeamScopeError) return NextResponse.json({ success: false, error: error.message }, { status: 404 })
       if (error?.code !== 'P2002') throw error
       const existing = await prisma.chatMessage.findUnique({
         where: { replyToMessageId },
@@ -340,7 +328,7 @@ export async function POST(
       if (isAgentChatSystemMessage(existing)) return NextResponse.json({ success: false, error: 'This chat turn is no longer active' }, { status: 409 })
       return NextResponse.json({
         success: true,
-        message: serialize(existing),
+        message: await serialize(existing),
         duplicate: true,
       })
     }
@@ -350,16 +338,14 @@ export async function POST(
         createdProposal
     }
 
-    // Every open Agent Chat tab on this thread refetches it. The agent's reply
-    // is the message a teammate is actually waiting on, so it cannot go only to
-    // the person whose name is on the session row.
     await broadcastChatSession(session.id, [session.userId])
 
     return NextResponse.json({
       success: true,
-      message: serialize(message),
+      message: await serialize(message),
     })
   } catch (error: any) {
+    if (error instanceof TaskTeamScopeError) return NextResponse.json({ success: false, error: error.message }, { status: 404 })
     console.error('[mcp chat] POST message failed:', error)
     return NextResponse.json(
       { success: false, error: error?.message || 'Failed to add chat message' },

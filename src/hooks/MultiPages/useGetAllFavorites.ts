@@ -12,8 +12,6 @@ export const useGetAllFavorites = (
   return useQuery({
     queryKey: favoritesQueryKey(userSettingId),
     queryFn: () => globalAPIHandlers.getAllFavorites(userSettingId),
-    // HTPR-6401: callers used to pass currentUser.id as initialData, which
-    // seeded the shared cache with a number and crashed findIndex on /project.
     select: selectFavorites,
     enabled: options?.enabled ?? true,
     initialData: [],

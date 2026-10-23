@@ -3,12 +3,10 @@ import fcmConfig from "@/utils/api/fcmConfig";
 import { FCMDeviceInfo } from "@/models/model";
 import type { Message } from "firebase-admin/messaging";
 import prisma from "@/lib/prisma";
+import { filterTaskReadersNow } from "@/lib/access/canReadTaskNow";
 import { resolveNotificationChannelPreference } from "@/utils/controllers/notifications/shouldNotify";
 import { NotificationType } from "@prisma/client";
 
-// Call sites pass a mix of enum values and legacy free-form strings; map the
-// known ones so the per-category matrix can govern push. Unmapped types keep
-// the old all-or-nothing behaviour.
 const fcmTypeToNotificationType: Record<string, NotificationType> = {
     Comment: "Comment",
     newComment: "Comment",
@@ -37,31 +35,22 @@ interface newCommentFCM {
     payload:any,
     taskTitle:string,
     afterAppDomain:string,
-    creatorId?: number, // Optional: if provided, will filter based on user preferences
-    commentId?: number, // Optional: if provided, will check for "Mentioned" notifications
-    data?: Record<string, string>, // Optional: custom data field for the FCM message (e.g., for mentions)
-    skipPreferenceFilter?: boolean, // Optional: if true, skip preference filtering and use all devices
-    customPreferenceCheck?: Map<number, boolean>, // Optional: pre-computed preference map to use instead of filtering
+    creatorId?: number,
+    commentId?: number,
+    taskId: number,
+    data?: Record<string, string>,
+    skipPreferenceFilter?: boolean,
+    customPreferenceCheck?: Map<number, boolean>,
 }
 
 interface FilterDevicesByPreferencesParams {
     devices: Array<{ userId: number; [key: string]: any }>;
     creatorId: number;
-    commentId?: number; // Optional: if provided, checks for "Mentioned" notifications
+    commentId?: number;
     isHyperAI: boolean;
-    type?: string; // Event type; when recognized, the per-category matrix decides
+    type?: string;
 }
 
-/**
- * Filters devices based on user preferences and mention status.
- * Returns a map of userId -> shouldSend boolean.
- * 
- * Logic:
- * - Filters out creator
- * - If user is mentioned (and commentId provided), they should NOT get regular notification
- * - For non-mentioned users: "all" = send, "direct"/"nothing" = don't send
- * - Defaults to false for users without settings
- */
 export const filterDevicesByPreferences = async ({
     devices,
     creatorId,
@@ -69,7 +58,6 @@ export const filterDevicesByPreferences = async ({
     isHyperAI = false,
     type,
 }: FilterDevicesByPreferencesParams): Promise<Map<number, boolean>> => {
-    // Filter out creator and get unique user IDs
     const validDevices = devices.filter(device => device && device.userId !== creatorId);
     const uniqueUserIds = [...new Set(validDevices.map(device => device.userId))];
     
@@ -77,7 +65,6 @@ export const filterDevicesByPreferences = async ({
         return new Map();
     }
     
-    // Check which users have "Mentioned" type notifications for this comment (if commentId provided)
     const queries: Promise<any>[] = [
         prisma.userSetting.findMany({
             where: {
@@ -113,23 +100,17 @@ export const filterDevicesByPreferences = async ({
     
     const mentionedUserIds = new Set(mentionedNotifications.map((n: any) => n.userId));
     
-    // Create a map of userId -> shouldSend
     const userPreferenceMap = new Map<number, boolean>();
     
     for (const setting of userSettings) {
         const preference = setting.notificationPreference ?? "direct";
         const isMentioned = mentionedUserIds.has(setting.userId);
         
-        // If user is mentioned, they should NOT get the regular notification
-        // They'll get the "mentioned you" notification instead
         if (isMentioned) {
             userPreferenceMap.set(setting.userId, false);
             continue;
         }
         
-        // For recognized event types the per-category matrix (with legacy
-        // preference fallback) decides; unmapped types keep the old
-        // all-or-nothing rule.
         const notificationType = type ? fcmTypeToNotificationType[type] : undefined;
         let shouldSend = false;
         if (isHyperAI) {
@@ -147,9 +128,6 @@ export const filterDevicesByPreferences = async ({
         userPreferenceMap.set(setting.userId, shouldSend);
     }
     
-    // A user with no UserSetting row behaves as the schema default
-    // (notificationPreference "all" -> send). Defaulting them to false would
-    // silently drop push for legacy accounts that predate the settings table.
     for (const userId of uniqueUserIds) {
         if (!userPreferenceMap.has(userId)) {
             userPreferenceMap.set(userId, true);
@@ -159,11 +137,6 @@ export const filterDevicesByPreferences = async ({
     return userPreferenceMap;
 }
 
-// FCM rejects any message whose data payload exceeds 4KB. The whole comment was
-// packed into data.comment, so a long comment meant no push at all, and the
-// rejection was logged as an ordinary error while the caller reported success
-// (HTPR-4668). The payload only has to carry enough for the notification; the
-// app fetches the real comment when it opens the link.
 const FCM_DATA_LIMIT_BYTES = 4096;
 const FCM_COMMENT_TEXT_BUDGET = 1500;
 
@@ -200,10 +173,6 @@ function firebaseMessagingErrorCode(error: unknown): string | undefined {
   return typeof errorInfo.code === "string" ? errorInfo.code : undefined;
 }
 
-/**
- * Sends FCM push notifications for new comments to assignees, followers, and task owner.
- * Used by both Pages API and MCP via createCommentService.
- */
 export const sendDataOnlyFcm = async (
   devices: any[],
   commentCreator: any,
@@ -231,11 +200,16 @@ export const sendDataOnlyFcm = async (
     type: "Comment",
   });
 
-  const validDevices = devices.filter(device => device && device.userId !== creatorId);
+  const candidateDevices = devices.filter(device =>
+    device && device.userId !== creatorId && !deliveredDeviceIds.has(device.firebaseId)
+  );
+  const allowedUserIds = new Set(await filterTaskReadersNow(
+    candidateDevices.map(device => device.userId),
+    comment.taskId,
+  ));
+  const validDevices = candidateDevices.filter(device => allowedUserIds.has(device.userId));
 
   const commentPayload = fcmCommentPayload(comment, commentCreator);
-  // Same payload for every device, so one check covers the whole loop. Nothing
-  // to shorten beyond the comment itself: the rest is a title, a body and a link.
   const payloadBytes = Buffer.byteLength(commentPayload, "utf8");
   if (payloadBytes > FCM_DATA_LIMIT_BYTES) {
     console.error(
@@ -279,8 +253,6 @@ export const sendDataOnlyFcm = async (
       console.log("🚀 ~ sendDataOnlyFcm ~ response:", response);
       deliveryResolved = true;
     } catch (error) {
-      // Loud: a swallowed rejection here is a push nobody ever receives, and
-      // the caller goes on to log success (HTPR-4668).
       console.error("🚀 ~ sendDataOnlyFcm ~ send failed:", error);
       await removeDeadDeviceToken(error, device.firebaseId);
       if (
@@ -302,8 +274,6 @@ export const sendDataOnlyFcm = async (
   }
 };
 
-// FCM says the token no longer exists (app reinstalled, browser data cleared),
-// so the row is permanent garbage: every future send to it would fail too.
 const removeDeadDeviceToken = async (error: unknown, firebaseId: string) => {
   if (
     firebaseMessagingErrorCode(error) !==
@@ -319,16 +289,12 @@ const removeDeadDeviceToken = async (error: unknown, firebaseId: string) => {
   }
 };
 
-// ================== GET ARCHIVED PROJECTS
 export const sendDataNewCommentFCM = async(props:newCommentFCM) => {
     const link = process.env.NEXT_PUBLIC_BASEURL + '/' + props.afterAppDomain
     
     const creatorId = props.creatorId;
     const commentId = props.commentId;
 
-    // A recognized event type must run through the per-category matrix even when
-    // the caller passes no creatorId (assign, follower, reaction, task-move
-    // callers don't). Object.hasOwn keeps inherited keys like "toString" out.
     const isRecognizedType =
         typeof props.type === "string" &&
         Object.hasOwn(fcmTypeToNotificationType, props.type);
@@ -339,7 +305,6 @@ export const sendDataNewCommentFCM = async(props:newCommentFCM) => {
             userPreferenceMap = props.customPreferenceCheck;
         } else if (creatorId !== undefined || isRecognizedType) {
             try {
-                // -1 never matches a real userId, so no device is dropped.
                 userPreferenceMap = await filterDevicesByPreferences({
                     devices: props.devices,
                     creatorId: creatorId ?? -1,
@@ -348,25 +313,32 @@ export const sendDataNewCommentFCM = async(props:newCommentFCM) => {
                     type: props.type,
                 });
             } catch (error) {
-                // On a settings-query failure, fall back to the device-level
-                // gate (userPreferenceMap stays null) rather than throwing an
-                // unhandled rejection into the fire-and-forget callers.
                 console.log("🚀 ~ sendDataNewCommentFCM ~ preference filter error:", error);
                 userPreferenceMap = null;
             }
         }
     }
     
-    // console.log("🚀 ~ file: index.ts:21 ~ sendDataNewCommentFCM ~ props:", props)
-    for (const device of props.devices){
+    let readerIds: number[];
+    try {
+        readerIds = await filterTaskReadersNow(
+            props.devices.map(device => device.userId),
+            props.taskId,
+        );
+    } catch (error) {
+        console.error("🚀 ~ sendDataNewCommentFCM ~ task access check failed, push skipped:", error);
+        return;
+    }
+    const allowedUserIds = new Set(readerIds);
+    const validDevices = props.devices.filter(device => allowedUserIds.has(device.userId));
+
+    for (const device of validDevices){
         console.log("🚀 ~ sendDataNewCommentFCM ~ device:", device.firebaseId)
         
-        // Check device-level notification setting
         if (!device.sendNotifications) {
             continue;
         }
         
-        // Check user preferences if available
         if (userPreferenceMap !== null && !props.skipPreferenceFilter) {
             const shouldSend = userPreferenceMap.get(device.userId);
             if (!shouldSend) {
@@ -388,8 +360,6 @@ export const sendDataNewCommentFCM = async(props:newCommentFCM) => {
             },
           };
         
-        // Always carry the deep link in `data` so the service worker can
-        // navigate to the task on click (not just focus the open window).
         payload.data = { ...(props.data || {}), click_action: link };
         
         try {
@@ -400,9 +370,6 @@ export const sendDataNewCommentFCM = async(props:newCommentFCM) => {
             console.log("🚀 ~ sendDataNewCommentFCM ~ error:", error)
             await removeDeadDeviceToken(error, device.firebaseId);
         }
-        // console.log("🚀 ~ file: index.ts:20 ~ sendDataNewCommentFCM ~ body:", body)
-    //    const response = await axios.post("https://fcm.googleapis.com/fcm/send", body, fcmConfig)
-    //    console.log("🚀 ~ sendDataNewCommentFCM ~ response:", response.status)
     }
 }
 

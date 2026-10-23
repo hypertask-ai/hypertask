@@ -1092,7 +1092,7 @@ test("the Inbox integration hydrates, reconciles, persists confirmed data, measu
   const revisionSource = read("src/lib/inboxSync/revision.ts");
   const clear = read("src/lib/localReadModels/clear.ts");
   const signout = read("src/hooks/MultiPages/HTC/useSignout.ts");
-  const accessRoute = read("src/pages/api/notifications/access.ts");
+  const accessRoute = read("src/lib/api/notification-writes/access.ts");
   const accessController = read(
     "src/utils/controllers/notifications/getAccessibleProjectIds.ts",
   );
@@ -1237,7 +1237,7 @@ test("the Inbox integration hydrates, reconciles, persists confirmed data, measu
   assert.doesNotMatch(indexedDb, /objectStore\(STORE_NAME\)\.delete/);
   assert.match(indexedDb, /isInboxReadModelSnapshotV1\(existing, accountId\)/);
   assert.match(optimistic, /updateInboxOptimistically/);
-  assert.match(optimistic, /Agent and legacy Inbox queries/);
+  assert.match(optimistic, /if \(!currentPayload\) \{[\s\S]*const legacyBase =[\s\S]*applyInboxReadModelMutation\(/);
   assert.match(optimistic, /reserveInboxReadModelRevision\(accountId\)/);
   assert.match(optimistic, /persistRevisionFence\(accountId, revision\)/);
   assert.doesNotMatch(optimistic, /mutateInboxReadModel/);

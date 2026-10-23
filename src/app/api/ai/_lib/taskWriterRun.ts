@@ -1,28 +1,25 @@
+import type { AgentTokenTeamScope } from '@/lib/mcp/auth/types';
+import { HTPR_7312_CTRLJ_SKILLS_FLAG, HTPR_7513_WRITER_PROJECT_LABELS_FLAG } from "@/lib/flags/keys";
 import { taskWriterDateContext, taskWriterDueDateInstructions } from "@/lib/ai/taskWriterDueDate";
+import { HTPR_7500_WRITER_OLD_STRUCTURE_FLAG } from "@/lib/flags/keys";
+import { HTPR_7471_WRITER_BOARD_FORMAT_FLAG } from "@/lib/flags/keys";
+import type { TaskWriterCustomFieldDefinition } from "@/lib/ai/taskWriterCustomFields";
 import { HTPR_7054_CTRLJ_DUE_DATE_FLAG } from "@/lib/flags/keys";
 import { taskWriteAccessWhere } from "@/utils/controllers/projects/getAllIncludes";
 import { isEmptyComposeTarget } from "@/lib/ai/composeTaskTarget";
-/**
- * @fileoverview
- * Shared AI Task Writer / Write with AI harness.
- *
- * Everything between "here is a prompt" and "call the model" lives here so the
- * browser route (SSE, src/app/api/ai/task-writer/route.ts) and the CLI route
- * (JSON, src/app/api/mcp/ai/task-writer/route.ts) produce identical output for
- * the same input: same feature gate, same model selection, same /skill
- * resolution, same retrieved context, same prompt parts.
- */
 
 import { z } from "zod";
 
 import {
   createDocumentAttachmentSummary,
+  createTaskAuthoringStyle,
   createTaskWriterPromptParts,
   createTaskWriterUserContent,
   extractImgSrcs,
   retrieveTaskWriterContext,
   selectTaskWriterModel,
   TASK_AUTHORING_STYLE,
+  TASK_AUTHORING_WEB_STYLE,
 } from "@/app/api/ai/_lib/editorAi";
 import {
   loadCurrentTaskContext,
@@ -41,18 +38,21 @@ import {
   formatRelatedTicketCandidates,
   formatStyleExamples,
   TASK_WRITER_BOARD_RESEARCH_RULES,
+  TASK_WRITER_BOARD_RESEARCH_WEB_RULES,
   TASK_WRITER_RELATED_CANDIDATE_LIMIT,
   TASK_WRITER_STYLE_EXAMPLE_LIMIT,
 } from "@/app/api/ai/_lib/taskWriterBoardResearch";
 import { resolveSkills } from "@/app/api/ai/_lib/skills";
 import { getProjectTeamProviderContext } from "@/app/api/ai/_lib/providerGate";
 import { isAiFeatureEnabled } from "@/lib/systemModelLadder";
-import { isFeatureEnabled, HTPR_6929_COMPOSE_TASK_WRITER_FLAG, HTPR_6937_NEW_TASK_WINDOW_FLAG, HTPR_7056_CTRLJ_SPLIT_TASKS_FLAG, HTPR_7060_TASK_WRITER_EMPTY_AND_RESEARCH_FLAG, HTPR_7057_WRITER_HEADING_LANGUAGE_FLAG, HTPR_7123_WRITER_TICKET_TYPE_FLAG } from "@/lib/flags";
+import { isFeatureEnabled, HTPR_6929_COMPOSE_TASK_WRITER_FLAG, HTPR_6937_NEW_TASK_WINDOW_FLAG, HTPR_7056_CTRLJ_SPLIT_TASKS_FLAG, HTPR_7060_TASK_WRITER_EMPTY_AND_RESEARCH_FLAG, HTPR_7057_WRITER_HEADING_LANGUAGE_FLAG, HTPR_7123_WRITER_TICKET_TYPE_FLAG, HTPR_7342_WEB_WRITING_TASK_WRITER_FLAG } from "@/lib/flags";
+import { HTPR_7514_INLINE_AGENT_IMAGES_FLAG } from "@/lib/flags/keys";
 import { renderPrompt } from "@/lib/ai/prompts/registry";
 import { doneColumnTitles } from "@/lib/doneColumns";
 import prisma from "@/lib/prisma";
 import { projectContentAccessWhere } from "@/utils/controllers/projects/getAllIncludes";
 import { BOARD_TEMPLATE_LIMIT } from "@/app/api/ai/_lib/boardTemplateContext";
+import { authorizeIndexedRows } from "@/lib/rag/authorizeIndexedRows";
 import { searchTasks } from "@/utils/controllers/turbopuffer/turbopufferHelper";
 import { cachedInstructionsForUser } from "@/app/api/ai/_lib/promptCache";
 
@@ -93,10 +93,10 @@ export const taskWriterRequestSchema = z.object({
   taskIds: z.array(z.coerce.number().int()).optional().default([]),
   taskDescription: z.string().optional().default(""),
   taskTitle: z.string().optional().default(""),
-  /** User-authored briefs only; used for board search when research is on. */
   userRetrievalTexts: z.array(z.string()).max(20).optional().default([]),
   byokProviderFlags: z.array(byokProviderFlagSchema).optional().default([]),
   existingTaskId: z.number().int().positive().optional(),
+  invokeSkills: z.boolean().optional().default(false),
   requestKind: z.enum(["manual", "auto-description", "compose-task"]).optional().default("manual"),
 });
 
@@ -108,9 +108,14 @@ export const tasksOutputSchema = z.object({
   })).min(1).max(10),
 });
 
+export const boardFormatTasksOutputSchema = tasksOutputSchema.extend({
+  tasks: z.array(tasksOutputSchema.shape.tasks.element.extend({
+    customFields: z.array(z.object({ fieldId: z.string(), value: z.union([z.string(), z.number()]) })).max(50).optional(),
+  })).min(1).max(10),
+});
+
 export type TaskWriterRequest = z.infer<typeof taskWriterRequestSchema>;
 
-/** Thrown when the team has switched this AI feature off. Callers map it to 403. */
 export class AiFeatureDisabledError extends Error {
   constructor() {
     super("This AI feature is turned off for your team");
@@ -118,7 +123,6 @@ export class AiFeatureDisabledError extends Error {
   }
 }
 
-/** Thrown for legacy requests to the removed automatic description draft. */
 export class AutoDescriptionSuggestionsDisabledError extends Error {
   constructor() {
     super("Automatic description suggestions are turned off");
@@ -126,7 +130,6 @@ export class AutoDescriptionSuggestionsDisabledError extends Error {
   }
 }
 
-/** Thrown when the caller cannot reach the project they asked to write for. */
 export class ProjectAccessError extends Error {
   constructor() {
     super("Project not found or access denied");
@@ -138,23 +141,15 @@ export function missingRequiredFields(body: TaskWriterRequest) {
   return !body.projectId || !body.PROMPT;
 }
 
-/**
- * Can this caller read this board? Owner or member, and for an agent-bound MCP
- * token the agent's own membership, not its owner's broader access.
- */
-export function projectAccessWhere(userId: number, agentId?: string | null) {
-  return projectContentAccessWhere(userId, agentId);
+export function projectAccessWhere(userId: number, agentId?: string | null, teamScope?: AgentTokenTeamScope | null) {
+  return projectContentAccessWhere(userId, agentId, teamScope);
 }
 
-/**
- * Resolve the feature gate, model, skills and context for one task-writer run.
- * Returns everything `streamText`/`generateText` needs, so both callers only
- * differ in how they deliver the model output.
- */
 export async function prepareTaskWriterRun(
   body: TaskWriterRequest,
   userId: number,
-  agentId?: string | null
+  agentId?: string | null,
+  teamScope?: AgentTokenTeamScope | null,
 ) {
   if (body.requestKind === "compose-task" &&
       !(await isFeatureEnabled(HTPR_6929_COMPOSE_TASK_WRITER_FLAG, userId))) {
@@ -169,29 +164,18 @@ export async function prepareTaskWriterRun(
       throw new AiFeatureDisabledError();
     }
     const target = await prisma.task.findFirst({
-      where: { id: body.existingTaskId, projectId: body.projectId, status: "Normal", project: taskWriteAccessWhere(userId, agentId) },
+      where: { id: body.existingTaskId, projectId: body.projectId, status: "Normal", project: taskWriteAccessWhere(userId, agentId, teamScope) },
       include: { description_: { select: { content: true } } },
     });
     if (!target || !isEmptyComposeTarget(target)) throw new ProjectAccessError();
   }
 
-  // The retrieval below searches by projectId alone, so membership has to be
-  // proven here. getProjectTeamProviderContext does not: it returns an empty
-  // context for an unreachable project, which reads as "no AI settings" and
-  // sails through the feature gate. Without this check any bearer token could
-  // pull another team's tasks and comments into the prompt by guessing an id.
-  //
-  // Deliberately NOT getProjectWhere: that helper also requires teamId != null,
-  // which is a listing rule, not an authorization rule. A third of all boards
-  // are teamless, and their owners have always been able to run the AI writer
-  // on them.
   const project = await prisma.project.findFirst({
-    where: { id: body.projectId, ...projectAccessWhere(userId, agentId) },
+    where: { id: body.projectId, ...projectAccessWhere(userId, agentId, teamScope) },
     select: { id: true },
   });
   if (!project) throw new ProjectAccessError();
 
-  // Older tabs can still send the removed new-task draft request. Keep it off.
   if (body.requestKind === "auto-description") {
     throw new AutoDescriptionSuggestionsDisabledError();
   }
@@ -200,7 +184,7 @@ export async function prepareTaskWriterRun(
     body.aiMode === "AiTaskWriter" ? "taskWriter" : "writeWithAi";
   const teamContext = await getProjectTeamProviderContext(
     body.projectId,
-    userId
+    userId, agentId, teamScope
   );
   if (!isAiFeatureEnabled(aiFeature, teamContext.settings)) {
     throw new AiFeatureDisabledError();
@@ -217,20 +201,46 @@ export async function prepareTaskWriterRun(
     aiFeature,
     teamContext,
     taskWriterAgentId: agentId,
+    teamScope,
   });
-  // Bring AI-chat's /skill invocation to the task writer: a prompt like
-  // "/minimalist-review draft this" strips the token and appends the board
-  // skill's body to the instructions. Same resolver chat/hyper-mentioned use.
+  const projectLabelsEnabled = body.aiMode === "AiTaskWriter" &&
+    await isFeatureEnabled(HTPR_7513_WRITER_PROJECT_LABELS_FLAG, userId);
+  const boardLabels = projectLabelsEnabled ? await prisma.label.findMany({
+    where: { projectId: body.projectId },
+    select: { id: true, value: true },
+  }) : undefined;
+  const boardFormatEnabled = body.aiMode === "AiTaskWriter" &&
+    await isFeatureEnabled(HTPR_7471_WRITER_BOARD_FORMAT_FLAG, userId);
+  const customInstructions = boardFormatEnabled && !body.customInstructions.trim()
+    ? await (await import("@/app/api/ai/_lib/customInstructions")).loadCustomInstructionText(body.projectId)
+    : body.customInstructions;
+  const customFieldDefinitions: TaskWriterCustomFieldDefinition[] | undefined = boardFormatEnabled
+    ? await prisma.customField.findMany({
+        where: { projectId: body.projectId },
+        orderBy: { ranking: "asc" },
+        take: 50,
+        select: { id: true, name: true, type: true, options: true },
+      })
+    : undefined;
+
   const skillResolution = await resolveSkills(body.PROMPT, {
-    userId,
+    userId, agentId, teamScope,
     projectId: body.projectId,
   });
-  // "/foo" alone strips to empty; fall back to the raw prompt so retrieval and
-  // the model query are never blank (the skill body still carries the intent).
-  const effectivePrompt = skillResolution.cleanedText || body.PROMPT;
+  const composeSkillsEnabled = body.requestKind === "compose-task" && body.invokeSkills &&
+    await isFeatureEnabled(HTPR_7312_CTRLJ_SKILLS_FLAG, userId);
+  if (composeSkillsEnabled) {
+    const [description, ...retrievalTexts] = await Promise.all(
+      [body.taskDescription, ...body.userRetrievalTexts].map((text) => resolveSkills(
+        text,
+        { userId, agentId, teamScope, projectId: body.projectId },
+        async () => skillResolution.skills,
+      )),
+    );
+    body = { ...body, taskDescription: description.cleanedText, userRetrievalTexts: retrievalTexts.map((result) => result.cleanedText) };
+  }
+  const effectivePrompt = composeSkillsEnabled ? skillResolution.cleanedText : skillResolution.cleanedText || body.PROMPT;
   const boardResearchEnabled = body.aiMode === "AiTaskWriter";
-  // Search uses user-authored text only when research is on. The model still
-  // receives the full conversation prompt via body.PROMPT / effectivePrompt.
   const retrievalQuery = boardResearchEnabled
     ? buildTaskWriterRetrievalQuery({
         prompt: effectivePrompt,
@@ -250,16 +260,15 @@ export async function prepareTaskWriterRun(
     boardTemplates,
     usageTaskId,
   ] = await Promise.all([
-    // Load the referenced/current tickets in full so the writer always sees
-    // them, instead of relying on the semantic search to surface them.
     loadCurrentTaskContext(primaryTaskIds, userId, agentId, {
-      projectId: body.projectId,
+      projectId: body.projectId, teamScope,
     }),
     loadCurrentTaskContext(relatedTaskIds, userId, agentId, {
       role: "related",
-      projectId: body.projectId,
+      projectId: body.projectId, teamScope,
     }),
     retrieveTaskWriterContext({
+      principal: { userId, agentId, teamScope },
       projectId: body.projectId,
       prompt: retrievalQuery,
       aiMode: body.aiMode,
@@ -270,7 +279,6 @@ export async function prepareTaskWriterRun(
       ? searchTasks({
           searchQuery: retrievalQuery,
           projectIds: [body.projectId],
-          // Over-fetch so excluding the open ticket still leaves up to 8 peers.
           topK: Math.min(
             TASK_WRITER_RELATED_CANDIDATE_LIMIT + 8,
             TASK_WRITER_RELATED_CANDIDATE_LIMIT +
@@ -278,7 +286,8 @@ export async function prepareTaskWriterRun(
               5
           ),
         })
-          .then((rows) => {
+          .then(async (indexedRows) => {
+            const { taskRows: rows } = await authorizeIndexedRows(indexedRows, [], { userId, agentId, teamScope });
             const loaded = new Set(body.taskIds.map(String));
             return formatRelatedTicketCandidates(
               rows
@@ -292,13 +301,13 @@ export async function prepareTaskWriterRun(
           })
       : Promise.resolve(""),
     boardResearchEnabled
-      ? loadTaskWriterStyleExamples(body.projectId).catch((error) => {
+      ? loadTaskWriterStyleExamples(body.projectId, { userId, agentId, teamScope }).catch((error) => {
           console.error("[ai/task-writer] style examples failed", error);
           return "";
         })
       : Promise.resolve(""),
     boardResearchEnabled
-      ? loadTaskWriterBoardVocabulary(body.projectId).catch((error) => {
+      ? loadTaskWriterBoardVocabulary(body.projectId, customFieldDefinitions, boardLabels, { userId, agentId, teamScope }).catch((error) => {
           console.error("[ai/task-writer] board vocabulary failed", error);
           return "";
         })
@@ -316,7 +325,7 @@ export async function prepareTaskWriterRun(
       taskId: primaryTaskIds[0],
       projectId: body.projectId,
       userId,
-      agentId,
+      agentId, teamScope,
     }),
   ]);
   const retrievedContext = formatTaskWriterRetrievedContext({
@@ -328,9 +337,19 @@ export async function prepareTaskWriterRun(
     styleExamples,
     boardVocabulary,
   });
+  const webWriting = await isFeatureEnabled(HTPR_7342_WEB_WRITING_TASK_WRITER_FLAG, userId);
+  const oldStructure = await isFeatureEnabled(HTPR_7500_WRITER_OLD_STRUCTURE_FLAG, userId);
+  const authoringStyle = boardFormatEnabled || oldStructure
+    ? createTaskAuthoringStyle(webWriting, boardFormatEnabled, oldStructure)
+    : webWriting ? TASK_AUTHORING_WEB_STYLE : TASK_AUTHORING_STYLE;
+  const boardResearchRules = webWriting
+    ? oldStructure
+      ? renderPrompt("task-writer-board-research-web-old-structure-rules")
+      : TASK_WRITER_BOARD_RESEARCH_WEB_RULES
+    : TASK_WRITER_BOARD_RESEARCH_RULES;
   const { instructions: baseInstructions, input } = createTaskWriterPromptParts({
     aiMode: body.aiMode,
-    customInstructions: body.customInstructions,
+    customInstructions,
     boardTemplates,
     modelSelected: selected.modelId,
     taskIds: body.taskIds,
@@ -339,18 +358,29 @@ export async function prepareTaskWriterRun(
     retrievedContext,
     uploadedDocumentContext,
     input: effectivePrompt,
+    authoringStyle,
   });
   const researchInstructions = boardResearchEnabled
       ? createTaskWriterSystemPromptTemplate(
-          `${TASK_AUTHORING_STYLE}\n\n${TASK_WRITER_BOARD_RESEARCH_RULES}`
+          `${authoringStyle}\n\n${boardResearchRules}`
         )
       : null;
   const validateDraft = await isFeatureEnabled(HTPR_7060_TASK_WRITER_EMPTY_AND_RESEARCH_FLAG, userId);
   const splitTasks = body.requestKind === "compose-task" && body.aiMode === "AiTaskWriter" &&
     await isFeatureEnabled(HTPR_7056_CTRLJ_SPLIT_TASKS_FLAG, userId);
   const fixedInstructions = researchInstructions ?? baseInstructions;
-  // HTPR-7076: everything below varies per call or flag, so it follows the cached fixed part.
+  const inlineImages = await isFeatureEnabled(HTPR_7514_INLINE_AGENT_IMAGES_FLAG, userId);
   let suffix = skillResolution.systemPromptAddition ? `\n\n${skillResolution.systemPromptAddition}` : "";
+  if (inlineImages) suffix += `\n\n${renderPrompt("inline-agent-images")}`;
+  if (composeSkillsEnabled && skillResolution.skills.length) {
+    suffix += "\n\nFor this New Task request, the invoked skill templates are the user's explicit writing instructions for the task description, not source material about the task. Apply their requested wording and formatting to the saved description. They take precedence over default writing style and default section structure, but not board custom instructions or matching board templates. Preserve source fidelity, safety and tool-use policy, media placeholders, and the required title, HTML or structured tasks output contract and property markers.";
+  }
+  if (boardLabels) {
+    suffix += "\n\nChoose the existing label for the project the ticket is about, not a dependency or a project mentioned only as a comparison. Use only the board's provided label IDs; never invent a label, use a name as an ID, or fall back to the first label. If the project is unclear or ambiguous, suggest no project label. Preserve applicable existing generic labels. For HTML put comma-separated IDs in <span id=\"ai-generated-task-tags\" style=\"display:none\">. For structured tasks put each ticket's own IDs in its labelIds array; use an empty array when none apply.";
+  }
+  if (customFieldDefinitions?.length) {
+    suffix += `\n\n${renderPrompt("task-writer-custom-fields-output")}`;
+  }
   if (splitTasks) {
     suffix += "\n\nFor this New Task request, replace the single HTML output contract with the structured tasks object. Return 1 to 10 tasks, each with a plain-text title and HTML description. Split only when the user's note clearly requests several separate, independently deliverable tasks (for example search focus, CSV export, and a typo fix). Keep sub-steps, acceptance criteria, and implementation details of one deliverable together in exactly one task, even for a long note. If uncertain, return one task. If more than 10 independent tasks are requested, return only the first 10 in request order. Preserve the board's style and all source details within each task; do not invent tasks. Do not include the title in the description.";
   }
@@ -369,11 +399,9 @@ export async function prepareTaskWriterRun(
   if (headingLanguageEnabled) {
     suffix += `\n\n${renderPrompt("task-writer-output-language")}`;
   }
-  // HTPR-7123: tell improvements and features apart from bugs, after the cached fixed part.
   let ticketTypeEnabled = false;
   if (body.aiMode === "AiTaskWriter" && (await isFeatureEnabled(HTPR_7123_WRITER_TICKET_TYPE_FLAG, userId))) {
     suffix += `\n\n${TASK_WRITER_TICKET_TYPE_RULE}`;
-    // Ctrl+J creating a new ticket also states the type, so compose can pick the matching column.
     if (body.requestKind === "compose-task" && body.existingTaskId == null) {
       ticketTypeEnabled = true;
       suffix += `\n\n${TASK_WRITER_TICKET_TYPE_MARKER}`;
@@ -391,10 +419,13 @@ export async function prepareTaskWriterRun(
       content: createTaskWriterUserContent(input, files),
     },
   ];
-  // Browser task-writer descriptions carry placeholders; API clients may still
-  // send raw media. In either case, reject image sources absent from the request.
   const allowedImgSrcs =
     body.aiMode === "AiTaskWriter" ? extractImgSrcs(body.taskDescription) : null;
+
+  const baseTasksSchema = customFieldDefinitions?.length ? boardFormatTasksOutputSchema : tasksOutputSchema;
+  const tasksSchema = boardLabels ? baseTasksSchema.extend({
+    tasks: z.array(baseTasksSchema.shape.tasks.element.extend({ labelIds: z.array(z.string()).optional() })).min(1).max(10),
+  }) : baseTasksSchema;
 
   return {
     aiFeature,
@@ -405,15 +436,19 @@ export async function prepareTaskWriterRun(
     allowedImgSrcs,
     validateDraft,
     skills: skillResolution.skills,
+    composeSkillsEnabled,
     usageTaskId,
     dueDateContext,
     ticketTypeEnabled,
+    customFieldDefinitions,
+    boardLabelIds: boardLabels?.map((label) => label.id),
+    tasksSchema,
   };
 }
 
-async function loadTaskWriterBoardVocabulary(projectId: number) {
+async function loadTaskWriterBoardVocabulary(projectId: number, customFields?: TaskWriterCustomFieldDefinition[], boardLabels?: { id: string; value: string | null }[], principal?: import("@/lib/rag/retrieveBoardKnowledge").BoardKnowledgePrincipal) {
   const project = await prisma.project.findFirst({
-    where: { id: projectId },
+    where: { id: projectId, ...(principal?.teamScope != null ? projectContentAccessWhere(principal.userId, principal.agentId, principal.teamScope) : {}) },
     select: {
       title: true,
       description: true,
@@ -427,6 +462,8 @@ async function loadTaskWriterBoardVocabulary(projectId: number) {
   });
   if (!project) return "";
   return formatBoardVocabulary({
+    customFields,
+    labels: boardLabels?.map(({ id, value }) => ({ id, name: value ?? "" })),
     projectTitle: project.title,
     projectDescription: project.description,
     sectionTitles: project.section.map((row) => row.section_title),
@@ -436,7 +473,7 @@ async function loadTaskWriterBoardVocabulary(projectId: number) {
   });
 }
 
-async function loadTaskWriterStyleExamples(projectId: number) {
+async function loadTaskWriterStyleExamples(projectId: number, principal?: import("@/lib/rag/retrieveBoardKnowledge").BoardKnowledgePrincipal) {
   const sections = await prisma.section.findMany({
     where: { projectId, deleted: false },
     select: { section_title: true, isDone: true },
@@ -450,6 +487,7 @@ async function loadTaskWriterStyleExamples(projectId: number) {
   const tasks = await prisma.task.findMany({
     where: {
       projectId,
+      ...(principal?.teamScope != null ? { project: projectContentAccessWhere(principal.userId, principal.agentId, principal.teamScope) } : {}),
       status: "Normal",
       section: { in: doneSectionTitles },
     },

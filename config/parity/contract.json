@@ -3,18 +3,18 @@
   "title": "Hypertask five-surface catalog parity contract",
   "cliPackage": {
     "name": "@hypertask/hypertask_cli",
-    "version": "2.0.9"
+    "version": "2.0.10"
   },
   "jobs": [
     {
       "id": "identity.context",
       "title": "Discover identity and accessible workspace context",
       "matches": {
-        "api": ["^(GET|POST) /api/mcp/hello$", "^GET /api/mcp/user/context$"],
-        "mcp": ["^hypertask_(hello|get_user_context)$"],
+        "api": ["^(GET|POST) /api/mcp/hello$", "^GET /api/mcp/user/context$", "^GET /api/mcp/features$"],
+        "mcp": ["^hypertask_(hello|get_user_context)$", "^hypertask_list_features$"],
         "cli": ["^(context|status)$"],
         "ai_chat": ["^hypertask_get_user_context$"],
-        "hyperai": ["^hypertask_(hello|get_user_context)$"]
+        "hyperai": ["^hypertask_(hello|get_user_context)$", "^hypertask_list_features$"]
       }
     },
     {
@@ -120,6 +120,19 @@
           "^hypertask_revoke_token$",
           "^hypertask_list_connections$"
         ]
+      }
+    },
+    {
+      "id": "flags.manage",
+      "title": "Owner-approved feature flag changes by agent sessions",
+      "matches": {
+        "api": ["^(GET|PATCH) /api/mcp/flags$"]
+      },
+      "exclusions": {
+        "mcp": "Only the flag owner's agent sessions may change release modes after recent human approval; general MCP clients cannot manage flags.",
+        "cli": "The session-only ht-flag script uses the agent identity directly; the public CLI does not expose release controls.",
+        "ai_chat": "Feature flag release controls are restricted to approved owner agent sessions, not AI Chat tools.",
+        "hyperai": "The embedded agent inherits the human session and cannot use the agent-only flag route."
       }
     },
     {
@@ -259,23 +272,23 @@
       },
       "planned": {
         "mcp": {
-          "issue": "https://app.hypertask.ai/detail/project-15/5127",
-          "expires": "2026-10-14",
+          "issue": "https://app.hypertask.ai/detail/project-4060/397",
+          "expires": "2026-11-13",
           "entries": ["hypertask_update_label"]
         },
         "cli": {
-          "issue": "https://app.hypertask.ai/detail/project-15/5127",
-          "expires": "2026-10-14",
+          "issue": "https://app.hypertask.ai/detail/project-4060/397",
+          "expires": "2026-11-13",
           "entries": ["labels update", "project label update"]
         },
         "ai_chat": {
-          "issue": "https://app.hypertask.ai/detail/project-15/5127",
-          "expires": "2026-10-14",
+          "issue": "https://app.hypertask.ai/detail/project-4060/397",
+          "expires": "2026-11-13",
           "entries": ["hypertask_update_label"]
         },
         "hyperai": {
-          "issue": "https://app.hypertask.ai/detail/project-15/5127",
-          "expires": "2026-10-14",
+          "issue": "https://app.hypertask.ai/detail/project-4060/397",
+          "expires": "2026-11-13",
           "entries": ["hypertask_update_label"]
         }
       }
@@ -439,6 +452,32 @@
         ],
         "ai_chat": ["^hypertask_agent_webhook$"],
         "hyperai": ["^hypertask_agent_webhook$"]
+      }
+    },
+    {
+      "id": "feedback.report",
+      "title": "Report anonymous, deduplicated AI feedback",
+      "matches": {
+        "api": ["^POST /api/mcp/feedback$"],
+        "mcp": ["^hypertask_report_feedback$"],
+        "hyperai": ["^hypertask_report_feedback$"]
+      },
+      "exclusions": {
+        "cli": "The hypertask feedback command ships in hypertask-ai/cli and calls the REST endpoint; the pinned CLI inventory predates it.",
+        "ai_chat": "Native AI Chat keeps the existing in-app feedback surface rather than exposing the MCP feedback tool."
+      }
+    },
+    {
+      "id": "cli.error-report",
+      "title": "The CLI reports its own unexpected failures (command and error type only)",
+      "matches": {
+        "api": ["^POST /api/mcp/cli-error$"]
+      },
+      "exclusions": {
+        "mcp": "Only the CLI binary reports its own crashes; MCP clients already have hypertask_report_feedback.",
+        "cli": "The CLI calls this endpoint automatically after a failed command; it is not a user command.",
+        "ai_chat": "AI Chat runs in the app, whose errors already reach the runtime logs directly.",
+        "hyperai": "HyperAI runs in the app, whose errors already reach the runtime logs directly."
       }
     },
     {

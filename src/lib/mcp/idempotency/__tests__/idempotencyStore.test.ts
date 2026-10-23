@@ -1,4 +1,3 @@
-// Run: node --experimental-test-module-mocks --import tsx --test src/lib/mcp/idempotency/__tests__/idempotencyStore.test.ts
 import assert from 'node:assert/strict'
 import test, { before, beforeEach, mock } from 'node:test'
 

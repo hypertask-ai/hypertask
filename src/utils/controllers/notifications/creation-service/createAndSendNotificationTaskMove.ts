@@ -34,7 +34,6 @@ const sendNotificationForTask = async (
   const task = await prisma.task.findUnique({ where: { id: taskId } });
   if (!task) return false;
 
-  // Get list of userIds to notify
   const userIds = await idsToSendNotificationsTo(
     taskId,
     senderId,
@@ -58,13 +57,11 @@ const sendNotificationForTask = async (
       result = await notifyUsers(userIds, task, senderId, projectId, fromAgentId, "TaskUpdateDescription");
       break;
     default:
-      // no-op
       break;
   }
   return result;
 };
 
-// ==================== Notification dispatcher
 async function notifyUsers(
   userIds: number[],
   task: any,
@@ -73,7 +70,6 @@ async function notifyUsers(
   fromAgentId: string | null | undefined,
   type: NotificationType,
 ) {
-  // Spam protection
   const spamming = await avoidSpamNotification(userIds, task.id);
   const bouncing = !spamming && (await isBounceBackNotification(task, type));
 
@@ -93,7 +89,6 @@ async function notifyUsers(
       include: { user: true },
     });
 
-    // Create notification body variants by type
     let body: IFCMReqBody;
     let emailBody: ITaskMoveEmailBody | undefined;
 
@@ -115,6 +110,7 @@ async function notifyUsers(
           notificationBody: `"${task?.title}" moved to "${task?.section}"`,
           devices,
           payload: notificationCreated,
+          taskId: task.id,
           taskTitle: task?.title ?? "",
           afterAppDomain: `detail/project-${task?.projectId}/${task?.uniqueIndex}`,
         };
@@ -128,6 +124,7 @@ async function notifyUsers(
           notificationBody: `"${task?.title}" has been ${archivebody}.`,
           devices,
           payload: notificationCreated,
+          taskId: task.id,
           taskTitle: task?.title ?? "",
           afterAppDomain: `detail/project-${task?.projectId}/${task?.uniqueIndex}`,
         };
@@ -143,14 +140,13 @@ async function notifyUsers(
           notificationCreated?.fromUser?.displayName?.trim() || "Someone";
         body = {
           type,
-          // Title has to track the body: it used to claim a date was set even
-          // when the change was a removal.
           notificationTitle: hasDueDate
             ? `${dueDateActor} set a due date on "${task?.title}"`
             : `${dueDateActor} removed the due date on "${task?.title}"`,
           notificationBody,
           devices,
           payload: notificationCreated,
+          taskId: task.id,
           taskTitle: task?.title ?? "",
           afterAppDomain: `detail/project-${task?.projectId}/${task?.uniqueIndex}`,
         };
@@ -163,6 +159,7 @@ async function notifyUsers(
           notificationBody: `"${task?.title}" description has been updated`,
           devices,
           payload: notificationCreated,
+          taskId: task.id,
           taskTitle: task?.title ?? "",
           afterAppDomain: `detail/project-${task?.projectId}/${task?.uniqueIndex}`,
         };
@@ -184,7 +181,6 @@ async function notifyUsers(
   return true;
 }
 
-// ==================== Email + Device Notification
 async function emailAndDeviceNotification(
   spamming: boolean,
   notificationCreated: any,
@@ -194,7 +190,6 @@ async function emailAndDeviceNotification(
   emailBody?: ITaskMoveEmailBody,
 ) {
   if (spamming) return;
-  // Email notification (for TaskMoved)
   if (
     emailBody &&
     await shouldNotify(userId, "TaskMoved", "email")
@@ -209,11 +204,9 @@ async function emailAndDeviceNotification(
       taskId: task?.id,
     });
   }
-  // FCM notification
   sendDataNewCommentFCM(fcmBody);
 }
 
-// ==================== Create notification
 async function createNotification(data: ICreateNotification) {
   return await checkReminderAndCreateNotification(
     data.userId,
@@ -226,10 +219,9 @@ async function createNotification(data: ICreateNotification) {
   );
 }
 
-// ==================== Anti-spam logic: returns true if recently sent/must suppress
 async function avoidSpamNotification(userIds: number[], taskId: number) {
   const currentDate = new Date();
-  const spamTime = new Date(currentDate.getTime() - 8000); // 8 seconds
+  const spamTime = new Date(currentDate.getTime() - 8000);
   const notifications = await prisma.notification.findMany({
     where: {
       createdAt: {
@@ -251,21 +243,13 @@ async function avoidSpamNotification(userIds: number[], taskId: number) {
   return false;
 }
 
-// ==================== Bounce-back guard: suppress email/push when the task is
-// landing on a section/status that was already announced within the window
-// (A->B->A flapping). One-way triage moves still notify. The activity comment
-// written on every move/archive is the only destination history available —
-// Notification rows do not record the section.
-const BOUNCE_BACK_WINDOW_MS = 15 * 60 * 1000; // 15 minutes
+const BOUNCE_BACK_WINDOW_MS = 15 * 60 * 1000;
 
 async function isBounceBackNotification(
   task: { id: number; sectionId: number | null; status: string | null },
   type: NotificationType,
 ) {
   if (type !== "TaskMoved" && type !== "TaskArchived") return false;
-  // Only look at activities from before the 8s spam window: the activity for
-  // the current move may already be committed (it is on the archive path),
-  // and without this grace period every notification would match itself.
   const now = Date.now();
   const activities = await prisma.comment.findMany({
     where: {

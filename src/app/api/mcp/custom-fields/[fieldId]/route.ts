@@ -1,3 +1,4 @@
+import { requireAgentWriteRole } from '@/lib/mcp/agents/readRoleGuard'
 import { wrapMcpRoute, checkMcpRouteRateLimit as checkMcpRateLimit, validateMcpRouteAuth as validateMcpAuth } from '@/lib/mcp/routeWrapper'
 import { NextRequest, NextResponse } from "next/server";
 
@@ -5,7 +6,6 @@ import { NextRequest, NextResponse } from "next/server";
 import { validateProjectAccess } from "@/lib/mcp/tasks/services";
 import { deleteCustomField, getCustomFieldById } from "@/utils/controllers/customFields";
 
-/** DELETE /api/mcp/custom-fields/[fieldId] */
 export async function DELETE(
   request: NextRequest,
   props: { params: Promise<{ fieldId: string }> }
@@ -25,6 +25,8 @@ export async function DELETE(
         { status: 401 }
       );
     }
+    const roleRefusal = await requireAgentWriteRole(ctx);
+    if (roleRefusal) return roleRefusal;
 
     const { fieldId } = await props.params;
 
@@ -39,7 +41,7 @@ export async function DELETE(
     const access = await validateProjectAccess(
       field.projectId,
       ctx.user.id,
-      ctx.agentId
+      ctx.agentId, ctx.teamScope
     );
     if (access.error) {
       return NextResponse.json(

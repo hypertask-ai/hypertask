@@ -1,3 +1,6 @@
+import { isFeatureEnabled } from "@/lib/flags";
+import { HTPR_7514_INLINE_AGENT_IMAGES_FLAG } from "@/lib/flags/keys";
+import { getMcpExecutionContext } from "@/lib/mcp/operationContext";
 import {
   validateAndSanitizeAddCommentCrudInput,
   getAddCommentCrudBaseSchema,
@@ -8,11 +11,6 @@ import { executeWithService } from '../utils/executeWithService';
 import { TOOL_METADATA } from '../config/tool-metadata';
 import { normalizeTaskInput } from '../utils/normalize-task-input';
 
-/**
- * Tool: add_comment
- * Add, update, or delete a comment. Use action: add (create), update (edit), delete (remove).
- * For update/delete, call get_comments_for_task first to obtain comment_id.
- */
 const AddCommentCrudBaseSchema = getAddCommentCrudBaseSchema();
 
 export const addCommentTool = {
@@ -27,7 +25,6 @@ export const addCommentTool = {
     const rawArgs = args as Record<string, any>;
     const action = rawArgs?.action ?? 'add';
 
-    // Only normalize task input when action is add (update/delete use comment_id only)
     const normalizedArgs =
       action === 'add' ? normalizeTaskInput(rawArgs) : rawArgs;
 
@@ -43,14 +40,20 @@ export const addCommentTool = {
             ticket_number: validatedInput.ticket_number,
             project_id: validatedInput.project_id,
             unique_index: validatedInput.unique_index,
+            kind: validatedInput.kind,
+            has_attachments: validatedInput.has_attachments,
             text: validatedInput.text,
             content_type: validatedInput.content_type,
+            inline_images: validatedInput.inline_images,
             mentions: validatedInput.mentions,
             attachments: validatedInput.attachments,
             reply_to_comment_id: validatedInput.reply_to_comment_id,
             reply_to_invocation_id: validatedInput.reply_to_invocation_id,
           });
-          const result = await service.addComment(addParams, invocation);
+          const userId = typeof context === "string" ? getMcpExecutionContext(context)?.user.id : undefined;
+          const inlineAgentImages = userId && addParams.attachments?.length && addParams.inline_images !== false
+            ? await isFeatureEnabled(HTPR_7514_INLINE_AGENT_IMAGES_FLAG, userId) : false;
+          const result = await service.addComment(addParams, invocation, { inlineAgentImages });
           return result;
         }
 
@@ -59,6 +62,7 @@ export const addCommentTool = {
             comment_id: validatedInput.comment_id!,
             text: validatedInput.text!,
             content_type: validatedInput.content_type,
+            inline_images: validatedInput.inline_images,
             mentions: validatedInput.mentions,
           });
           return { success: true, comment: result.comment };

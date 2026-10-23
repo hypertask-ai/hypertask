@@ -1,0 +1,13 @@
+# Feature flags
+
+Add one client-safe file in `src/lib/flags/definitions/<flag-key>.ts`, exporting the key constant and a default definition. Type-only imports are allowed; runtime imports and side effects are not. Keep key, kind (if present), explicit defaultMode, shippedOn, description and related keys in that file. Include `releaseRisk: { risk, reason }` for flags first shipped from `RELEASE_RISK_REQUIRED_FROM` (2026-10-11). Use literal related keys so files stay independent. Add per-flag tests in their own test file, not shared key listings.
+
+Do not edit shared keys, definitions or risk maps to add a flag. `scripts/generate-flag-index.mjs` validates and sorts the flag files and writes gitignored `index.generated.ts`. Never commit that index. Postinstall covers direct CI `tsc` after `npm ci`; npm prebuild, predev, pretypecheck, prelint and pretest hooks regenerate after local file additions. Next config also generates for direct Next builds/typegen, including installs using `--ignore-scripts`. The two isolated eval workflows explicitly generate after their `--ignore-scripts` installs, before direct Node tests. No manual step is needed. Direct `tsc` after an `--ignore-scripts` install must use `npm run typecheck`, not bypass its generator.
+
+Existing keys.ts, definitions.ts, releaseRisk.ts and flags.ts imports remain supported. Agent run constants are re-exported from their flag files by agentRuns/model.ts. Non-flag reply guidance stays in keys.ts.
+
+New feature and improvement flags set `defaultMode: "EVERYONE"` in their definition file unless `releaseRisk.highRisk` is set (`money`, `access`, `data-deletion`, `customer-email`) or kind is `internal`. High-risk flags set `defaultMode: "OWNER_AND_QA"`; internal flags retain Owner + QA unless explicitly restricted further. Neither may default to Everyone. Bugfix flags inherit Everyone by kind unless high risk, which requires explicit Owner + QA. Existing flags keep their current mode (HTPR-7389). Infra tickets do not add a flag.
+
+Only for Valentin's own explicit request, a new flag may instead use `defaultMode: "OWNER_ONLY"` with `releaseRisk.ownerRequest: { quote: "<his exact request>", ticketUrl: "<ticket link>" }`: the quote must be non-blank and the link must match `^https://app\.hypertask\.ai/detail/project-\d+/\d+$`. This exception permits only Owner only, not Owner + QA or Off, and does not replace required `releaseRisk.highRisk` metadata.
+
+Test click removed (Valentin 2026-10-21); safety is flags, revert, live QA after release and the YPER4-550 screenshot check.

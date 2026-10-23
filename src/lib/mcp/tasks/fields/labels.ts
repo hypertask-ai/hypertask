@@ -3,7 +3,6 @@ import type { TaskUpdateFieldContext, TaskUpdateTarget, TaskUpdateActingAgent } 
 
 export async function updateTaskLabels(context: TaskUpdateFieldContext, task: TaskUpdateTarget, actingAgent: TaskUpdateActingAgent) {
     const { requestBody, hasLabels, hasLabelMutation, userObj } = context;
-    // Handle labels (replace all)
     if (hasLabels) {
         try {
             await setTaskLabels(
@@ -11,7 +10,8 @@ export async function updateTaskLabels(context: TaskUpdateFieldContext, task: Ta
                 task.projectId,
                 requestBody.labels!,
                 userObj,
-                actingAgent
+                actingAgent,
+                context.ctx.teamScope
             );
         } catch (labelError) {
             console.warn(`[MCP Update Task] Failed to update labels for task ${task.id}:`, labelError);
@@ -19,7 +19,6 @@ export async function updateTaskLabels(context: TaskUpdateFieldContext, task: Ta
         }
     }
 
-    // Handle additive/subtractive label changes (leaves other labels intact)
     if (hasLabelMutation) {
         try {
             await mutateTaskLabels(
@@ -31,7 +30,8 @@ export async function updateTaskLabels(context: TaskUpdateFieldContext, task: Ta
                     skipIfPresent: requestBody.skip_if_labels_present,
                 },
                 userObj,
-                actingAgent
+                actingAgent,
+                context.ctx.teamScope
             );
         } catch (labelError) {
             console.warn(`[MCP Update Task] Failed to mutate labels for task ${task.id}:`, labelError);

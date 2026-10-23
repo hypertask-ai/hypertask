@@ -20,6 +20,9 @@ import { appendListQueryParams } from '@/lib/mcp/listQuery';
 
 export interface CommentResponse {
   success: boolean;
+  routedTo?: 'comments';
+  visibleToPeople?: true;
+  url?: string;
   comment: {
     id: number;
     text: string;
@@ -33,6 +36,15 @@ export interface CommentResponse {
   cleanup_confirmed?: boolean;
   retry_note?: string;
   message?: string;
+}
+
+export interface LoggedCommentResponse {
+  success: boolean;
+  routedTo: 'log';
+  visibleToPeople: false;
+  notice: string;
+  url: string;
+  activity: { id: string; runId: string; type: string; text: string; createdAt: string };
 }
 
 export interface CommentDetail {
@@ -81,23 +93,22 @@ export interface DeleteCommentResponse {
   message?: string;
 }
 
-/**
- * Service for adding, updating, and deleting comments on tasks.
- * Validates input and makes API requests.
- */
 export class CommentService {
   constructor(private readonly apiClient: IApiClient) {}
 
   async addComment(
     params: unknown,
-    invocation?: McpInvocationIdentity
-  ): Promise<CommentResponse> {
+    invocation?: McpInvocationIdentity,
+    options: { inlineAgentImages?: boolean } = {}
+  ): Promise<CommentResponse | LoggedCommentResponse> {
     const correlationId = generateCorrelationId();
 
     try {
-      // Validate and sanitize input
       const validatedInput = validateAndSanitizeAddCommentInput(params);
       const { attachments, ...commentInput } = validatedInput;
+      if (attachments?.length) {
+        commentInput.has_attachments = true;
+      }
 
       logger.debug('Adding comment', {
         correlationId,
@@ -108,17 +119,16 @@ export class CommentService {
         textLength: validatedInput.text.length,
       });
 
-      // Make API request
       const idempotencyKey = idempotencyKeyForInvocation(
         'create_comment',
         invocation,
         validatedInput
       );
-      const response = await this.apiClient.makeRequest<CommentResponse>(
+      const response = await this.apiClient.makeRequest<CommentResponse | LoggedCommentResponse>(
         '/mcp/comments',
         {
           method: 'POST',
-          body: JSON.stringify(commentInput),
+          body: JSON.stringify({ ...commentInput, ...(options.inlineAgentImages && attachments?.length ? { attachments } : {}) }),
           ...(idempotencyKey
             ? { headers: { 'Idempotency-Key': idempotencyKey } }
             : {}),
@@ -126,14 +136,6 @@ export class CommentService {
         correlationId
       );
 
-      // logger.info('Comment added successfully', {
-      //   correlationId,
-      //   commentId: response.comment.id,
-      //   taskId: validatedInput.task_id,
-      //   ticketNumber: validatedInput.ticket_number,
-      //   projectId: validatedInput.project_id,
-      //   uniqueIndex: validatedInput.unique_index,
-      // });
 
       if (attachments !== undefined) {
         const attachmentOutcome = await attachFilesAfterMutation(
@@ -151,19 +153,19 @@ export class CommentService {
               : {
                   unique_index: commentInput.unique_index,
                 }),
-            comment_id: response.comment.id,
+            ...('comment' in response ? { comment_id: response.comment.id } : {}),
             files: attachments,
+            inline_images: commentInput.inline_images,
           },
-          `Comment ${response.comment.id} creation`
+          'comment' in response ? `Comment ${response.comment.id} creation` : `Agent activity ${response.activity.id} creation`
         );
         return { ...response, ...attachmentOutcome };
       }
 
       return response;
     } catch (error) {
-      logger.error('Failed to add comment', {
+      logger.failure('Failed to add comment', error, {
         correlationId,
-        error: error instanceof Error ? error.message : String(error),
       });
       throw error;
     }
@@ -173,7 +175,6 @@ export class CommentService {
     const correlationId = generateCorrelationId();
 
     try {
-      // Validate input
       const validatedInput = GetCommentsInputSchema.parse(params);
 
       logger.debug('Getting comments', {
@@ -187,7 +188,6 @@ export class CommentService {
         includeActivity: validatedInput.include_activity,
       });
 
-      // Build query parameters
       const queryParams = new URLSearchParams();
 
       if (validatedInput.task_id) {
@@ -195,7 +195,6 @@ export class CommentService {
       } else if (validatedInput.ticket_number) {
         queryParams.append('ticket_number', validatedInput.ticket_number);
       } else if (validatedInput.unique_index !== undefined && validatedInput.project_id !== undefined) {
-        // Efficient lookup by project_id + unique_index
         queryParams.append('project_id', String(validatedInput.project_id));
         queryParams.append('unique_index', String(validatedInput.unique_index));
       } else {
@@ -203,7 +202,6 @@ export class CommentService {
       }
 
       if (validatedInput.project_id && validatedInput.unique_index === undefined) {
-        // Only add project_id if not using unique_index lookup (it's already added above)
         queryParams.append('project_id', String(validatedInput.project_id));
       }
       if (validatedInput.limit !== undefined) {
@@ -228,7 +226,6 @@ export class CommentService {
         correlationId
       );
 
-      // Add pagination metadata following MCP best practices
       const offset = validatedInput.offset || 0;
       const limit = validatedInput.limit || response.limit || response.comments.length;
       const paginationMetadata = buildPaginationMetadata({
@@ -238,21 +235,14 @@ export class CommentService {
         itemsCount: response.comments.length,
       });
 
-      // logger.info('Comments retrieved successfully', {
-      //   correlationId,
-      //   commentCount: response.comments.length,
-      //   total: response.total,
-      //   hasMore: paginationMetadata.has_more,
-      // });
 
       return {
         ...response,
         ...paginationMetadata,
       };
     } catch (error) {
-      logger.error('Failed to get comments', {
+      logger.failure('Failed to get comments', error, {
         correlationId,
-        error: error instanceof Error ? error.message : String(error),
       });
       throw error;
     }
@@ -277,6 +267,7 @@ export class CommentService {
           body: JSON.stringify({
             text: validatedInput.text,
             content_type: validatedInput.content_type,
+            inline_images: validatedInput.inline_images,
             mentions: validatedInput.mentions,
           }),
         },
@@ -290,9 +281,8 @@ export class CommentService {
 
       return response;
     } catch (error) {
-      logger.error('Failed to update comment', {
+      logger.failure('Failed to update comment', error, {
         correlationId,
-        error: error instanceof Error ? error.message : String(error),
       });
       throw error;
     }
@@ -324,9 +314,8 @@ export class CommentService {
 
       return response;
     } catch (error) {
-      logger.error('Failed to delete comment', {
+      logger.failure('Failed to delete comment', error, {
         correlationId,
-        error: error instanceof Error ? error.message : String(error),
       });
       throw error;
     }

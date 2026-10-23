@@ -1,8 +1,11 @@
+import { requireAgentWriteRole } from "@/lib/mcp/agents/readRoleGuard"
+import { TaskTeamScopeError } from "@/lib/mcp/tasks/agentMutationFence"
+import { projectContentAccessWhere } from "@/utils/controllers/projects/getAllIncludes"
 import { wrapMcpRoute, checkMcpRouteRateLimit as checkMcpRateLimit, validateMcpRouteAuth as validateMcpAuth } from '@/lib/mcp/routeWrapper'
 import { NextRequest, NextResponse } from 'next/server'
 
 import prisma from '@/lib/prisma'
-import { findTaskByIdentifier } from '@/lib/mcp/tasks/resolveTask'
+import { findTaskByIdentifier, taskIdentifierErrorResponse } from '@/lib/mcp/tasks/resolveTask'
 import { createCommentService } from '@/utils/controllers/comments/createCommentService'
 import { sanitizeRichHtml } from '@/utils/helperFunctions/sanitizeRichHtml'
 import { buildEscalationCommentHtml } from '@/lib/mcp/tasks/escalationHtml'
@@ -22,13 +25,6 @@ const ticketFor = (v: unknown): string | null =>
 const MAX_REASON = 2000
 const MAX_SUMMARY = 5000
 
-/**
- * POST /api/mcp/tasks/escalate
- * A stuck agent asks a human for help: posts a flagged escalation comment on the
- * task (which fires the normal owner/assignee/follower notifications) with the
- * reason and a summary of what was already tried, so nothing fails silently.
- * Body: { task_id | ticket_number, project_id?, reason, attempts_summary? }.
- */
 export async function POST(request: NextRequest) {
   return wrapMcpRoute(async (request: NextRequest) => {
   try {
@@ -41,6 +37,8 @@ export async function POST(request: NextRequest) {
         { status: 401 }
       )
     }
+    const roleRefusal = await requireAgentWriteRole(ctx)
+    if (roleRefusal) return roleRefusal
 
     let body: Record<string, unknown>
     try {
@@ -83,7 +81,7 @@ export async function POST(request: NextRequest) {
     const task = await findTaskByIdentifier(
       ctx.user,
       { task_id: taskId, ticket_number: ticketNumber, project_id: projectId },
-      ctx.agentId
+      ctx.agentId, undefined, ctx.teamScope
     )
     if (!task) {
       return NextResponse.json(
@@ -94,7 +92,7 @@ export async function POST(request: NextRequest) {
 
     const [taskOwner, currentUser] = await Promise.all([
       prisma.task.findUnique({
-        where: { id: task.id },
+        where: { id: task.id, ...(ctx.teamScope != null ? { project: projectContentAccessWhere(ctx.user.id, ctx.agentId, ctx.teamScope) } : {}) },
         select: { userId: true, title: true, ticketNumber: true },
       }),
       prisma.user.findUnique({
@@ -111,14 +109,6 @@ export async function POST(request: NextRequest) {
 
     const html = sanitizeRichHtml(buildEscalationCommentHtml({ reason, attemptsSummary }))
 
-    // createCommentService is the single source of truth for comment + owner/
-    // assignee/follower notifications + email + FCM, so escalating this way reaches
-    // the human through every channel they already receive comments on.
-    // HTPR-4530: the comment already fires comment.created; escalation is a
-    // distinct signal, so board subscribers also get task.escalated. It rides
-    // the comment's own transaction, so the event cannot be lost after the
-    // comment commits, and a retry that hits the comment idempotency path does
-    // not emit a second time.
     const escalatedEvent: WebhookDelivery = {
       event: 'task.escalated',
       data: {
@@ -140,6 +130,7 @@ export async function POST(request: NextRequest) {
       ownerId: taskOwner.userId,
       currentUser,
       agentId: ctx.agentId ?? undefined,
+      teamScope: ctx.teamScope,
       extraBoardWebhookEvents: [escalatedEvent],
     })
 
@@ -148,6 +139,9 @@ export async function POST(request: NextRequest) {
       { status: 201 }
     )
   } catch (error) {
+    if (error instanceof TaskTeamScopeError) return NextResponse.json({ success: false, error: error.message }, { status: 404 })
+    const identifierResponse = taskIdentifierErrorResponse(error)
+    if (identifierResponse) return identifierResponse
     console.error('[MCP Task Escalate] Error:', error)
     return NextResponse.json({ success: false, error: 'Internal server error' }, { status: 500 })
   }

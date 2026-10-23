@@ -1,3 +1,4 @@
+import { fetchWithoutBrotli } from "@/lib/net/fetchWithoutBrotli";
 import { randomUUID } from "node:crypto";
 import { waitUntil } from "@vercel/functions";
 import { logAiUsage, type AiUsageRecord } from "./aiUsage";
@@ -22,6 +23,7 @@ import {
   modelPricing,
   modelCostUsd,
   sharedAiAllowanceErrorMessage,
+  teamAllowanceSnapshot,
 } from "@/app/api/ai/_lib/sharedAllowance";
 import {
   getAiModelDefinition,
@@ -100,11 +102,6 @@ export type GatewayFundingSource = "customer" | "managed" | "shared";
 
 const managedGatewayKeys = new Set<string>();
 
-/**
- * Marks a decrypted key as platform-funded for this server process. Key
- * resolution always happens before model construction, so no secret or source
- * marker needs to travel through client input or provider metadata.
- */
 export function registerManagedGatewayKey(apiKey: string) {
   const normalized = apiKey.trim();
   if (isVercelAiGatewayKey(normalized)) managedGatewayKeys.add(normalized);
@@ -119,25 +116,29 @@ export function gatewayFundingSourceForApiKey(
   return "customer";
 }
 
+const allowanceFundedModels = new WeakMap<object, number>();
+
 function gatewayLanguageModel(modelSlug: string, gatewayApiKey: string) {
   const model = createGateway({ apiKey: gatewayApiKey })(
     gatewayCatalogModelSlug(modelSlug),
   );
   const fundingSource = gatewayFundingSourceForApiKey(gatewayApiKey);
-  return fundingSource !== "customer"
-    ? wrapLanguageModel({
-        model,
-        providerId: "gateway",
-        middleware: createSharedAllowanceMiddleware({
-          allowanceUsd:
-            fundingSource === "shared"
-              ? FREE_TEAM_AI_ALLOWANCE_USD
-              : PAID_TEAM_AI_ALLOWANCE_USD,
-          gatewayApiKey,
-          modelSlug,
-        }),
-      })
-    : model;
+  if (fundingSource === "customer") return model;
+  const allowanceUsd =
+    fundingSource === "shared"
+      ? FREE_TEAM_AI_ALLOWANCE_USD
+      : PAID_TEAM_AI_ALLOWANCE_USD;
+  const funded = wrapLanguageModel({
+    model,
+    providerId: "gateway",
+    middleware: createSharedAllowanceMiddleware({
+      allowanceUsd,
+      gatewayApiKey,
+      modelSlug,
+    }),
+  });
+  allowanceFundedModels.set(funded, allowanceUsd);
+  return funded;
 }
 
 function gatewayImageModel(modelSlug: string, gatewayApiKey: string) {
@@ -268,6 +269,7 @@ function resolveUntracedAiModel(
       return createOpenAI({
         apiKey: customEndpoint.apiKey,
         baseURL: customEndpoint.baseUrl,
+        fetch: fetchWithoutBrotli,
       }).chat(customEndpoint.modelId);
     }
   }
@@ -312,7 +314,7 @@ async function generationCostUsd(modelId: string, provider: string, inputTokens:
   }
 }
 
-export function createUsageTracingMiddleware(context: ModelUsageContext, modelId: string): LanguageModelMiddleware {
+export function createUsageTracingMiddleware(context: ModelUsageContext, modelId: string, allowanceUsd?: number): LanguageModelMiddleware {
   const start = (prompt: unknown) => {
     const startedAt = performance.now();
     const attribution = { ...context };
@@ -324,7 +326,6 @@ export function createUsageTracingMiddleware(context: ModelUsageContext, modelId
       recorded = true;
       const inputTokens = usage?.inputTokens.total ?? 0;
       const outputTokens = usage?.outputTokens.total ?? 0;
-      // HTPR-7076: null when the provider reports no cache breakdown, a number (maybe 0) when it does.
       const cachedInputTokens = usage?.inputTokens.cacheRead ?? null;
       const cacheWriteInputTokens = usage?.inputTokens.cacheWrite ?? null;
       const row: AiUsageRecord = {
@@ -356,9 +357,27 @@ export function createUsageTracingMiddleware(context: ModelUsageContext, modelId
         ? failure.statusCode : null;
       const observation = (async () => {
         row.costUsd = await generationCostUsd(modelId, row.provider, inputTokens, outputTokens, cachedInputTokens ?? undefined, cacheWriteInputTokens ?? undefined);
+        let allowanceSnapshot: Awaited<ReturnType<typeof teamAllowanceSnapshot>> = null;
+        let timer: ReturnType<typeof setTimeout> | undefined;
+        try {
+          if (row.teamId && allowanceUsd !== undefined) {
+            allowanceSnapshot = await Promise.race([
+              teamAllowanceSnapshot(row.teamId, allowanceUsd),
+              new Promise<null>((resolve) => { timer = setTimeout(() => resolve(null), 1500); }),
+            ]);
+          }
+        } finally {
+          if (timer) clearTimeout(timer);
+        }
         await Promise.allSettled([
           logAiUsage(row),
-          recordAiChatTurn({ ...row, traceId, latencyMs: row.latencyMs!, outcome, error: outcome === "failed" ? "AI model generation failed" : undefined }),
+          recordAiChatTurn({
+            ...row, traceId, latencyMs: row.latencyMs!, outcome,
+            teamId: row.teamId,
+            teamAllowanceUsd: allowanceSnapshot?.allowanceUsd ?? null,
+            teamAllowanceUsedUsd: allowanceSnapshot?.usedUsd ?? null,
+            error: outcome === "failed" ? "AI model generation failed" : undefined,
+          }),
           ...(outcome === "failed" && !sharedAiAllowanceErrorMessage(error) ? [reportError({
             message: "AI model generation failed",
             source: "server",
@@ -367,21 +386,18 @@ export function createUsageTracingMiddleware(context: ModelUsageContext, modelId
           })] : []),
         ]);
       })().catch(() => undefined);
-      try { waitUntil(observation); } catch { /* Non-Vercel runtimes keep the same best-effort telemetry. */ }
+      try { waitUntil(observation); } catch {}
     };
   };
   return {
     specificationVersion: "v4",
     transformParams: async ({ params }) => {
       if (!isHaiku55Model(modelId)) return params;
-      // Check at inference so raw ids, saved choices and BYOK cannot bypass the flag.
       const enabled = await import("@/app/api/ai/_lib/planGate")
         .then(({ haiku55ModelEnabled }) => haiku55ModelEnabled(context.userId))
         .catch(() => false);
       if (!enabled) throw new Error("This AI model is unavailable.");
       const { temperature: _temperature, topP: _topP, topK: _topK, ...supportedParams } = params;
-      // Adaptive thinking shares maxOutputTokens with the answer and can exhaust
-      // these small budgets before emitting any text or structured output.
       const directOutput = params.responseFormat?.type === "json" ||
         (params.maxOutputTokens != null && params.maxOutputTokens <= 1200);
       return {
@@ -466,10 +482,9 @@ function traceLanguageModel(
   const context: ModelUsageContext = { provider };
   let traced = wrapLanguageModel({
     model,
-    middleware: createUsageTracingMiddleware(context, model.modelId),
+    middleware: createUsageTracingMiddleware(context, model.modelId, allowanceFundedModels.get(model)),
   });
   if (replacement && isHaiku45Model(model.modelId)) {
-    // Resolve before the original model's allowance and tracing middleware run.
     const upgradedModel = async () => {
       const enabled = await import("@/app/api/ai/_lib/planGate")
         .then(({ haiku55ModelEnabled }) => haiku55ModelEnabled(context.userId))
@@ -559,9 +574,6 @@ export function aiUsageProviderForCredential(
   return `byok:${providerInfo?.byokKey ?? provider}`;
 }
 
-// The caller must supply the plan-aware credential resolved for the owning
-// team. Free/BYOK teams deliberately supply the capped shared key; paid teams
-// supply a capped managed key; customer BYOK remains outside either pool.
 function resolveUntracedGatewayModel(
   modelSlug: string,
   gatewayApiKey?: string,
@@ -618,9 +630,6 @@ export function gatewayProviderOptionsForModel(
   if (systemFeature) gatewayTags.push(INCLUDED_WITH_HYPERTASK_GATEWAY_TAG);
   if (tags?.teamId) gatewayTags.push(`team:${tags.teamId}`);
   if (tags?.projectId != null) gatewayTags.push(`board:${tags.projectId}`);
-  // Automatic features belong to the team, not the member whose action
-  // happened to trigger them. Keeping user tags off these calls prevents
-  // included system spend from appearing in personal allowance bars.
   if (!systemFeature && tags?.userId != null) {
     gatewayTags.push(`user:${tags.userId}`);
   }

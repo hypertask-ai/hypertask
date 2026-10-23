@@ -32,7 +32,7 @@ const EditCommentButton = compile(`${base}CommentContainer/CommentOptions/EditCo
 const globalStates = fs.readFileSync(path.join(root, "src/hooks/Task Detail/useTaskDetailGlobalStates.ts"), "utf8");
 const descriptionAction = globalStates.slice(
   globalStates.indexOf("  const editDescriptionHandler ="),
-  globalStates.indexOf("  // ------------------ [ENTER]"),
+  globalStates.indexOf("const replyToCommentHandler = (currentIndex"),
 );
 assert.match(descriptionAction, /setEditMode\(editModeToSelect\)/);
 const { createDescriptionEditAction } = compile("description-action.ts", {}, `
@@ -96,7 +96,7 @@ async function mount(t, { surface, mobile = false, enabled = true, guest = false
     "@/lib/contexts/TaskDetail/TaskProvider": { useTaskContext: () => React.useContext(Task) },
     "@/lib/contexts/mobileContext": { MobileViewContext: Mobile },
     "@/hooks/useFlag": { useFlag: (key) => key === "htpr-7044-double-click-to-edit" ? enabled : false },
-    "@/lib/flags/keys": { HTPR_7044_DOUBLE_CLICK_TO_EDIT_FLAG: "htpr-7044-double-click-to-edit", HTPR_6752_INSTANT_TICKET_OPEN_FLAG: "instant" },
+    "@/lib/flags/keys": { HTPR_7044_DOUBLE_CLICK_TO_EDIT_FLAG: "htpr-7044-double-click-to-edit", },
     "@/lib/taskDetailEditTarget": editTarget,
     "@/hooks/MultiPages/useDoubleTap": doubleTap,
     "@/lib/constants/TaskDetail": { descriptionContainerId: "description-container", DELIBERATE_DOUBLE_CLICK_MS: 500 },
@@ -118,6 +118,7 @@ async function mount(t, { surface, mobile = false, enabled = true, guest = false
     "./CommentCreatedBy": { default: () => null },
     "./CommentText": { default: Text },
     "./CommentOptions": { CommentOptions: Controls },
+    "./CommentReactions": { default: () => null },
     "./CommentTaskActivity": { default: () => null },
     "./CommentOptions/ReplyToComment": { default: () => null },
     "./SwipeableCommentRow": { default: ({ children }) => children },

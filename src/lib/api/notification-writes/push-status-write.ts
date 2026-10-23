@@ -25,7 +25,6 @@ const postRoute = taskWriteRoute({
     if (deviceStatus.count === 0) {
         return notificationWriteJson({ message: "Device not found" }, 404);
     }
-    // console.log("🚀 ~ file: changePushNotificationStatus.ts:20 ~ consthandler:NextApiHandler= ~ deviceStatus:", deviceStatus)
 
     return notificationWriteJson({message:"success"}, 200);
   },

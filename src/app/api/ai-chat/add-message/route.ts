@@ -1,3 +1,4 @@
+import { loadSidebarChatRequest } from "@/lib/agents/chatAccess";
 import { readJsonBody } from "@/lib/mcp/readJsonBody";
 import { checkRestRateLimit } from "@/lib/api/rateLimit";
 import { loadCurrentUser } from "@/lib/auth/currentUser";
@@ -62,7 +63,6 @@ export async function POST(request: NextRequest) {
       try {
         restCompat = await isFeatureEnabled(HTPR_6924_REST_COMPAT_FLAG, currentUser.userId);
       } catch {
-        // Flag lookup failure preserves the legacy entry path.
       }
     }
     const { isValid, user } = restCompat && currentUser
@@ -80,7 +80,6 @@ export async function POST(request: NextRequest) {
 
     let body: Awaited<ReturnType<typeof request.json>>;
     if (restCompat) {
-      // Capture once: preserve accepted non-objects and the original parse error/fallback.
       let jsonError: unknown;
       const result = await readJsonBody<typeof body>({
         json: async () => {
@@ -101,6 +100,8 @@ export async function POST(request: NextRequest) {
       body = await request.json();
     }
     const { sessionId, message: messageData } = body;
+    const sidebarAccess = await loadSidebarChatRequest(request, sessionId);
+    if (!sidebarAccess.ok) return NextResponse.json({ success: false, error: sidebarAccess.error }, { status: sidebarAccess.status });
     const incomingAttachments: IncomingAttachment[] = Array.isArray(
       messageData?.attachments
     )
@@ -134,14 +135,6 @@ export async function POST(request: NextRequest) {
       const fileName =
         attachment.fileName || `chat-attachment-${Date.now()}-${index}`;
 
-      // An inline editor image was already uploaded when it was pasted, so it arrives as a
-      // URL rather than bytes: the browser cannot turn it back into base64 because the
-      // attachment host serves no CORS header (HTPR-4735). Record the object we already
-      // hold instead of demanding a second copy of it.
-      //
-      // The key decides this, not the HEAD. Only this session's own AI chat folder is
-      // accepted, so a client cannot smuggle in someone else's file, and a storage blip
-      // cannot be mistaken for a rejected attachment and cost the user their message.
       const ownKey = resolveOwnAiChatAttachmentKey(source, sessionId);
       if (ownKey) {
         const existingSize = await getHypertasksObjectSize(ownKey);
@@ -171,7 +164,6 @@ export async function POST(request: NextRequest) {
       });
     }
 
-    // Linkify is enrichment only — never let it fail the message persist.
     const content =
       messageData.role === "assistant"
         ? await linkifyTicketRefs(messageData.content, user.id).catch((err) => {
@@ -193,9 +185,6 @@ export async function POST(request: NextRequest) {
           content,
           role: messageData.role,
           isDelivered: true,
-          // The person owns their own turns; a reply in a native agent's
-          // session is that agent's. A plain AI reply has no Agent row and
-          // stays unattributed.
           authorUserId: messageData.role === "human" ? user.id : null,
           authorAgentId:
             messageData.role === "assistant" ? session.agentId : null,

@@ -40,7 +40,7 @@ export const TaskListRow = (props: IProps) => {
     compactMobile = false,
   } = props;
 
-  const isBulkSelected = false; // Not using bulk selection in scheduled view
+  const isBulkSelected = false;
   const isStarred = !!(task.savedContent && task.savedContent.length > 0);
   const isSeen =
     task.notifications && task.notifications.length > 0
@@ -50,7 +50,6 @@ export const TaskListRow = (props: IProps) => {
   if (!isSeen) mobileDotColor = "bg-[#5896F1]";
   else if (isStarred) mobileDotColor = "bg-[#FFCB33]";
 
-  // Get assignee name or task owner name
   const assigneeName =
     task.assignees && task.assignees.length > 0
       ? task.assignees
@@ -114,7 +113,6 @@ export const TaskListRow = (props: IProps) => {
         </div>
       )}
 
-      {/* First column: StarredDot & Notification Dot | Assignee Name | Comment Count */}
       <div
         className={cn(
           "flex @md:space-x-6 @md:min-w-[15%]",
@@ -152,7 +150,6 @@ export const TaskListRow = (props: IProps) => {
               <></>
             )}
           </div>
-          {/* Mobile timestamp */}
           <span
             className={cn(
               inboxConfig.bulkSelectionStyling.timestamp(isBulkSelected),
@@ -171,14 +168,12 @@ export const TaskListRow = (props: IProps) => {
         </div>
       </div>
 
-      {/* Second column: Title Container (ticket number, title, labels) | Description */}
       <div
         className={cn(
           "flex min-w-0 flex-grow mt-2 @sm:mt-0 gap-2 items-baseline @md:items-center @md:w-[40%] flex-col @md:flex-row",
           compactMobile && "hidden @md:flex"
         )}
       >
-        {/* ============ title =================  */}
         <div
           suppressHydrationWarning
           className="min-w-0 flex-1 flex-column @sm:flex-initial"
@@ -188,7 +183,6 @@ export const TaskListRow = (props: IProps) => {
             style={{
               fontSize: 13 }}
           >
-            {/* ================== priority label ============== */}
 
             <span className="font-bold text-icon-dark-gray text-nowrap">
               {task.ticketNumber}
@@ -199,7 +193,6 @@ export const TaskListRow = (props: IProps) => {
           </span>
         </div>
 
-        {/* ============ description content =========== */}
         <div
           suppressHydrationWarning
           className={cn(
@@ -221,14 +214,12 @@ export const TaskListRow = (props: IProps) => {
         </div>
       </div>
 
-      {/* Third column: Archive status | Due date Label | Time */}
       <div
         className={cn(
           "flex items-center justify-end gap-2 @md:min-w-[120px]",
           compactMobile && "hidden @md:flex"
         )}
       >
-        {/* Archive status */}
         <div className="hidden @md:flex items-center">
           <Check
             size={15}
@@ -237,7 +228,6 @@ export const TaskListRow = (props: IProps) => {
           />
         </div>
 
-        {/* Desktop timestamp */}
         <span
           className={cn(
             inboxConfig.bulkSelectionStyling.timestamp(isBulkSelected),

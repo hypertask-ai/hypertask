@@ -33,7 +33,7 @@ const inboxStateSource = require('node:fs').readFileSync(
   'utf8',
 )
 const webInboxSource = require('node:fs').readFileSync(
-  path.join(root, 'src/pages/api/notifications/moveTaskToInbox.ts'),
+  path.join(root, 'src/lib/api/notification-writes/move-task-to-inbox.ts'),
   'utf8',
 )
 const webStarSource = require('node:fs').readFileSync(

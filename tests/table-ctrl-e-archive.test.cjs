@@ -14,8 +14,8 @@ const tableView = fs.readFileSync(
 const archiveHelperStart = tableView.indexOf("const archiveTaskFromTable");
 const archiveHelperEnd = tableView.indexOf("useEffect(() =>", archiveHelperStart);
 const archiveHelper = tableView.slice(archiveHelperStart, archiveHelperEnd);
-const shortcutStart = tableView.indexOf("// [ctrl/cmd]+[e]");
-const nextShortcut = tableView.indexOf("// [c] creates a task", shortcutStart);
+const shortcutStart = tableView.indexOf("if ((e.ctrlKey || e.metaKey) && e.keyCode");
+const nextShortcut = tableView.indexOf("if (_currentProject && e.key ===", shortcutStart);
 const ctrlEBranch = tableView.slice(shortcutStart, nextShortcut);
 
 test("Table view owns Ctrl/Cmd+E and archives only the selected task once", () => {
@@ -58,7 +58,7 @@ test("Table archive supports both board rows and cross-board My Tasks rows", () 
   assert.match(tableView, /excludedTaskIds/);
   assert.match(
     tableView,
-    /Drop optimistic exclusions once the server list no longer contains them/,
+    /if \(presentIds\.has\(id\)\) next\.add\(id\);[\s\S]*else changed = true;[\s\S]*return changed \? next : previous;/,
   );
 });
 
@@ -67,7 +67,7 @@ test("Table rows take DOM focus on hover so Ctrl+E is not blocked by leftover ch
   assert.match(tableView, /tabIndex=\{-1\}/);
   assert.match(
     tableView,
-    /Kanban cards take DOM focus on hover[\s\S]*HTPR-6445/,
+    /const focusRowElement[\s\S]*element instanceof HTMLElement[\s\S]*element\.focus\(\{ preventScroll: true \}\)/,
   );
   const mouseEnterStart = tableView.indexOf("const handleMouseEnter");
   const mouseEnterEnd = tableView.indexOf("const handleMouseLeave", mouseEnterStart);

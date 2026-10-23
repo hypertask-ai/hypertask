@@ -7,12 +7,6 @@ import { isValidUser } from '@/utils/edgeHelpers'
 import prisma from '@/lib/prisma'
 import jwt from 'jsonwebtoken'
 
-/**
- * POST /api/connections/revoke
- * Revokes access for a specific OAuth client for the current user
- * 
- * Body: { client_id: string, agent_id?: string }
- */
 export async function POST(request: NextRequest) {
   try {
     const cookieStore = await cookies()
@@ -23,7 +17,6 @@ export async function POST(request: NextRequest) {
       try {
         restCompat = await isFeatureEnabled(HTPR_6924_REST_COMPAT_FLAG, currentUser.userId)
       } catch {
-        // Flag lookup failure preserves the legacy entry path.
       }
     }
     const { isValid, user } = restCompat && currentUser
@@ -39,7 +32,6 @@ export async function POST(request: NextRequest) {
 
     let body: Awaited<ReturnType<typeof request.json>>
     if (restCompat) {
-      // Capture once: preserve accepted non-objects and the original parse error/fallback.
       let jsonError: unknown
       const result = await readJsonBody<typeof body>({
         json: async () => {
@@ -68,7 +60,6 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // Verify the client exists
     const client = await prisma.oAuthClient.findUnique({
       where: { client_id }
     })
@@ -80,8 +71,6 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // Delete authorization codes for this user/client pair.
-    // If agent_id is provided, scope revocation to that specific agent.
     await prisma.oAuthAuthorizationCode.deleteMany({
       where: {
         user_id: user.id,
@@ -92,29 +81,21 @@ export async function POST(request: NextRequest) {
       }
     })
 
-    // HTPR-6200: forget the consent screen approval too, so reconnecting this
-    // client asks the user again instead of going through silently.
     await prisma.oAuthClientGrant.deleteMany({
       where: { user_id: user.id, client_id: client_id },
     })
 
-    // Set user-level token revocation timestamp to invalidate ALL tokens
-    // This ensures old tokens without jti are also revoked
     await prisma.user.update({
       where: { id: user.id },
       data: { mcpTokensRevokedAt: new Date() },
     })
 
-    // Also revoke the MCP bearer token if it exists
-    // MCP bearer tokens are user-specific, so revoking them will disconnect all clients using bearer tokens
     let tokenRevoked = false
     const mcpTokenCookie = cookieStore.get('mcp_token')
     if (mcpTokenCookie?.value) {
       try {
-        // Decode the token to get its jti
         const decoded = jwt.decode(mcpTokenCookie.value, { complete: false }) as jwt.JwtPayload | null
         if (decoded?.jti && decoded.exp) {
-          // Revoke the token by adding it to the revoked tokens list
           await prisma.revokedToken.upsert({
             where: { jti: decoded.jti },
             create: {
@@ -131,7 +112,6 @@ export async function POST(request: NextRequest) {
         }
       } catch (error) {
         console.error('Error revoking MCP token:', error)
-        // Continue even if token revocation fails
       }
     }
 
@@ -141,7 +121,6 @@ export async function POST(request: NextRequest) {
       tokenRevoked,
     })
 
-    // Delete the bearer token cookie if it was revoked
     if (tokenRevoked) {
       response.cookies.delete('mcp_token')
     }

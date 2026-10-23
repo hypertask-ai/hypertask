@@ -1,14 +1,7 @@
-/**
- * Tool Registry
- * 
- * All MCP tools are exported from here.
- * To add a new tool:
- * 1. Create a new tool file (e.g., my-tool.tool.ts)
- * 2. Export the tool definition
- * 3. Import and add it to the tools array below
- */
 
+import { reportFeedbackTool } from './report-feedback.tool';
 import { helloTool } from './hello.tool';
+import { listFeaturesTool } from './list-features.tool';
 import { agentPresenceTool } from './agent-presence.tool';
 import { listAgentsTool } from './list-agents.tool';
 import { agentWebhookTool } from './agent-webhook.tool';
@@ -83,12 +76,10 @@ import { updateViewTool } from './update-view.tool';
 import { deleteViewTool } from './delete-view.tool';
 import { switchViewTool } from './switch-view.tool';
 
-/**
- * Array of all available MCP tools
- * FastMCP will register these automatically
- */
 export const MCP_TOOLS = [
+  reportFeedbackTool,
   helloTool,
+  listFeaturesTool,
   agentPresenceTool,
   listAgentsTool,
   agentWebhookTool,

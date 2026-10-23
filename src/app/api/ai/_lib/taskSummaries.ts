@@ -1,7 +1,8 @@
+import { downloadWithoutBrotli } from "@/lib/net/downloadWithoutBrotli";
 import { resolveAiModel as resolveLegacyAiModel } from "@/app/api/ai/_lib/modelProvider";
 import { getAiDefaultModelContext, resolveAutomaticAiModel } from "@/app/api/ai/_lib/byokKeys";
 import { renderPrompt } from "@/lib/ai/prompts/registry";
-import { generateObject, NoObjectGeneratedError } from "ai";
+import { generateText, NoObjectGeneratedError, Output } from "ai";
 import { createHash, randomUUID } from "node:crypto";
 import { z } from "zod";
 
@@ -106,7 +107,7 @@ export async function generateAndStoreTaskSummary(
   } catch (error) {
     if (error instanceof SummaryGenerationTimeoutError) {
       releaseLease = false;
-      console.error(
+      console.warn(
         `[taskSummaries] Retaining timed-out task ${taskId} lease until TTL expiry`,
       );
     }
@@ -256,8 +257,6 @@ async function generateAndStoreTaskSummaryWithLease(
       teamId: task.project.teamId,
       projectId: task.projectId,
       taskId: task.id,
-      // Explicit null means a human triggered the debounced job. Only direct
-      // legacy callers that omit the actor fall back to the task creator.
       agentId: options.agentId === undefined ? task.agentId : options.agentId,
       abortSignal,
     });
@@ -337,8 +336,6 @@ async function scheduleSummaryRetry(taskId: number, agentId?: string | null) {
     const scheduled = await scheduleJobById({
       jobId: `ai-summary-retry-for-taskId:${taskId}`,
       path: SUMMARY_RETRY_PATH,
-      // Preserve omitted versus explicit null across retries. Omitted allows
-      // the worker to recover the legacy task-agent attribution fallback.
       body: agentId === undefined ? { taskId } : { taskId, agentId },
       notBefore: Math.floor(Date.now() / 1000) + delaySeconds,
     });
@@ -466,9 +463,10 @@ async function generateTaskSummary(args: {
     feature: "summary",
   });
   try {
-    const result = await generateObject({
+    const result = await generateText({
+      experimental_download: downloadWithoutBrotli,
       model,
-      schema: taskSummaryResultSchema,
+      output: Output.object({ schema: taskSummaryResultSchema }),
       system: renderPrompt("task-summaries-system-2"),
       prompt: renderPrompt("task-summaries-prompt-3", (args.title), (args.ticketNumber), (args.description || "(empty)"), (formatSources(args.sources))),
       maxRetries: 2,
@@ -482,9 +480,9 @@ async function generateTaskSummary(args: {
     });
 
     return {
-      summary: result.object.summary.trim() || "Not enough content for summary",
+      summary: result.output.summary.trim() || "Not enough content for summary",
       descriptionGoodEnough:
-        Boolean(args.description) && result.object.descriptionGoodEnough,
+        Boolean(args.description) && result.output.descriptionGoodEnough,
     };
   } catch (error) {
     if (!NoObjectGeneratedError.isInstance(error)) throw error;
@@ -518,7 +516,6 @@ function recoverSummaryText(text?: string) {
       return completeRecoveredSummary(parsed.summary);
     }
   } catch {
-    // Some providers return the usable markdown even when structured parsing fails.
   }
 
   const summaryStart = unfenced.indexOf("## What this is");

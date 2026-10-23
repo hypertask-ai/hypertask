@@ -1,4 +1,5 @@
-import { createHmac, timingSafeEqual } from 'crypto'
+import type { AgentTokenTeamScope } from '@/lib/mcp/auth/types'
+import { createHmac, randomBytes, timingSafeEqual } from 'crypto'
 
 export const SESSION_COOKIE = 'ht_session'
 export const SESSION_TTL_SECONDS = 600 * 60 * 24 * 7
@@ -7,13 +8,14 @@ const TOKEN_PART_PATTERN = /^[A-Za-z0-9_-]+$/
 type SessionPayload = {
   id: number
   email?: string
-  // Optional managed-agent claim for internal MCP→legacy hops. Browser
-  // sessions omit it; an agent JWT is not reinvented here.
   agentId?: string
+  teamScope?: AgentTokenTeamScope | null
+  agentTokenGeneration?: string | null
 }
 
 type SignedSessionPayload = SessionPayload & {
   iat: number
+  jti?: string
   exp: number
 }
 
@@ -56,7 +58,10 @@ export function signSession(
     id: payload.id,
     ...(payload.email !== undefined ? { email: payload.email } : {}),
     ...(payload.agentId !== undefined ? { agentId: payload.agentId } : {}),
+    ...(payload.teamScope !== undefined ? { teamScope: payload.teamScope } : {}),
+    ...(payload.agentTokenGeneration !== undefined ? { agentTokenGeneration: payload.agentTokenGeneration } : {}),
     iat: now,
+    jti: randomBytes(12).toString('base64url'),
     exp: now + ttlSeconds,
   }
   const encodedPayload = base64UrlEncode(JSON.stringify(signedPayload))
@@ -65,7 +70,7 @@ export function signSession(
   return `${encodedPayload}.${encodedSignature}`
 }
 
-export function verifySession(token: string | undefined): SessionPayload | null {
+function verifiedSessionPayload(token: string | undefined): SignedSessionPayload | null {
   try {
     if (!token) {
       return null
@@ -102,6 +107,11 @@ export function verifySession(token: string | undefined): SessionPayload | null 
       (payload.email !== undefined && typeof payload.email !== 'string') ||
       (payload.agentId !== undefined &&
         (typeof payload.agentId !== 'string' || payload.agentId.length === 0)) ||
+      (payload.teamScope != null &&
+        (typeof payload.teamScope.teamId !== 'string' || !payload.teamScope.teamId.trim() ||
+          typeof payload.teamScope.accessBinding !== 'string' || !payload.teamScope.accessBinding.trim())) ||
+      (payload.agentTokenGeneration != null && typeof payload.agentTokenGeneration !== 'string') ||
+      ((!payload.agentId) && (payload.teamScope != null || payload.agentTokenGeneration != null)) ||
       typeof payload.exp !== 'number' ||
       !Number.isFinite(payload.exp) ||
       payload.exp <= Math.floor(Date.now() / 1000)
@@ -109,14 +119,27 @@ export function verifySession(token: string | undefined): SessionPayload | null 
       return null
     }
 
-    return {
-      id: payload.id,
-      ...(payload.email !== undefined ? { email: payload.email } : {}),
-      ...(payload.agentId !== undefined ? { agentId: payload.agentId } : {}),
-    }
+    return payload
   } catch {
     return null
   }
+}
+
+export function verifySession(token: string | undefined): SessionPayload | null {
+  const payload = verifiedSessionPayload(token)
+  if (!payload) return null
+
+  return {
+    id: payload.id,
+    ...(payload.email !== undefined ? { email: payload.email } : {}),
+    ...(payload.agentId !== undefined ? { agentId: payload.agentId } : {}),
+    ...(payload.teamScope !== undefined ? { teamScope: payload.teamScope } : {}),
+    ...(payload.agentTokenGeneration !== undefined ? { agentTokenGeneration: payload.agentTokenGeneration } : {}),
+  }
+}
+
+export function verifiedSessionExpiry(token: string | undefined): number | null {
+  return verifiedSessionPayload(token)?.exp ?? null
 }
 
 export function sessionCookieOptions(maxAgeSeconds: number) {
@@ -129,10 +152,6 @@ export function sessionCookieOptions(maxAgeSeconds: number) {
   }
 }
 
-// Better Auth's session cookie is httpOnly, so a legacy login cannot clear it
-// client-side. Left in place it belongs to the PREVIOUS user and the app keeps
-// acting as them (HTPR-4170). Call this from every legacy login response; the
-// bridge then mints a fresh Better Auth session for the new user.
 export function clearBetterAuthSessionCookies(response: {
   cookies: { set: (name: string, value: string, options: Record<string, unknown>) => void }
 }) {

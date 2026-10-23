@@ -1,4 +1,6 @@
+import { agentScopeEnforced, recordAgentBoardScopeMiss } from "@/lib/auth/agentScope";
 import type { Prisma } from '@prisma/client'
+import { getAgentBoardScope } from '@/lib/mcp/agents/delegatedAccess'
 
 import { agentWithinTeamWhere } from '@/lib/mcp/managementKeyTeamScope'
 
@@ -44,7 +46,7 @@ type AgentRead = {
 }
 type MemberWrite = {
   findMany(args: {
-    where: { agentId: string; projectId: { in: number[] } }
+    where: { agentId: string; projectId: { in: number[] }; status?: 'Accepted'; agent?: { userId: number; revokedAt: null } }
     select: { projectId: true }
   }): Promise<Array<{ projectId: number }>>
   deleteMany(args: {
@@ -59,6 +61,7 @@ type MemberWrite = {
 type AgentBoardUpdateTransaction = {
   agent: AgentRead
   member: MemberWrite
+  project: Pick<Prisma.TransactionClient["project"], "findFirst">
 }
 
 export type AgentBoardUpdateDatabase = {
@@ -129,40 +132,20 @@ export async function updateOwnedAgentBoards(
   database: AgentBoardUpdateDatabase,
   getAccessibleBoard: (
     projectId: number,
-    userId: number
+    userId: number,
+    database: AgentBoardUpdateTransaction,
   ) => Promise<AccessibleAgentBoard | null>,
   userId: number,
   input: AgentBoardUpdateInput,
   teamId?: string,
-  // HTPR-6348: set when an agent credential makes the change. Every project
-  // touched must be one that agent is on, checked inside the transaction so a
-  // concurrent removal of the acting agent cannot slip through.
   actingAgentId?: string
 ) {
   const scopeWhere = teamId ? agentWithinTeamWhere(teamId) : {}
   for (let attempt = 0; ; attempt += 1) {
     try {
       return await database.$transaction(
-        async ({ agent: agentStore, member }) => {
-          if (actingAgentId) {
-            const touched = [...input.addProjectIds, ...input.removeProjectIds]
-            const inScope = new Set(
-              (
-                await member.findMany({
-                  where: { agentId: actingAgentId, projectId: { in: touched } },
-                  select: { projectId: true },
-                })
-              ).map((row) => row.projectId)
-            )
-            const outside = touched.filter((id) => !inScope.has(id))
-            if (outside.length) {
-              throw new AgentBoardUpdateError(
-                `This agent is not a member of project ${outside.join(', ')}, so it cannot grant or remove access there`,
-                403,
-                'project_ids'
-              )
-            }
-          }
+        async (tx) => {
+          const { agent: agentStore, member } = tx
           const agent = await agentStore.findFirst({
             where: { ...scopeWhere, id: input.agentId, userId },
             select: {
@@ -181,6 +164,26 @@ export async function updateOwnedAgentBoards(
             )
           }
 
+          let allowedProjects: Set<number> | undefined
+          if (actingAgentId) {
+            const touched = [...input.addProjectIds, ...input.removeProjectIds]
+            const inScope = await getAgentBoardScope(
+              member,
+              actingAgentId,
+              userId,
+              [...touched, ...agent.members.map((row) => row.projectId)]
+            )
+            allowedProjects = inScope
+            touched.forEach((id) => recordAgentBoardScopeMiss(id, 'write'))
+            const outside = touched.filter((id) => !inScope.has(id) || teamId != null && agent.members.some((row) => row.projectId === id && row.project.teamId !== teamId))
+            if (outside.length) {
+              throw new AgentBoardUpdateError(
+                `This agent is not a member of project ${outside.join(', ')}, so it cannot grant or remove access there`,
+                403,
+                'project_ids'
+              )
+            }
+          }
           const existing = new Map(
             agent.members.map((membership) => [membership.projectId, membership])
           )
@@ -189,7 +192,7 @@ export async function updateOwnedAgentBoards(
           const toAdd = input.addProjectIds.filter((id) => !existing.has(id))
           const additions = await Promise.all(
             toAdd.map(async (id) => {
-              const project = await getAccessibleBoard(id, userId)
+              const project = await getAccessibleBoard(id, userId, tx)
               if (!project || project.id !== id) {
                 throw new AgentBoardUpdateError(
                   `You do not have access to project ${id}`,
@@ -215,7 +218,6 @@ export async function updateOwnedAgentBoards(
             })
           )
 
-          // Removal-only updates can clean up legacy teamless or mixed-team rows.
           if (additions.length) {
             const finalTeams = [
               ...agent.members
@@ -236,7 +238,10 @@ export async function updateOwnedAgentBoards(
           const projectIds = [
             ...[...existing.keys()].filter((id) => !removedSet.has(id)),
             ...toAdd,
-          ].sort((a, b) => a - b)
+          ].filter((id) => {
+            if (actingAgentId) recordAgentBoardScopeMiss(id, 'read')
+            return (!teamId || existing.get(id)?.project.teamId === teamId || additions.some((project) => project.id === id)) && (!actingAgentId || !agentScopeEnforced() || allowedProjects?.has(id))
+          }).sort((a, b) => a - b)
           if (!toAdd.length && !toRemove.length) {
             return {
               agentId: agent.id,

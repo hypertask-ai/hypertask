@@ -1,12 +1,23 @@
 import prisma from "@/lib/prisma";
+import { deletePageFromTurbopuffer } from "@/utils/controllers/turbopuffer/turbopufferHelper";
 import { googleCalendarDisconnectData } from "@/lib/googleCalendar/connection";
 
 import { GUEST_UID_PREFIX } from "./guest";
 
 export const GUEST_MAX_AGE_HOURS = 24;
 
-// Delete one board without touching its guest owner, team, or session. The
-// guest-owner check keeps this helper safe for the regeneration path.
+async function deleteRemainingTaskChildren(taskIds: number[]): Promise<void> {
+  const inTasks = { in: taskIds };
+  await prisma.drafts.deleteMany({ where: { taskId: inTasks } });
+  await prisma.task_Summary.deleteMany({ where: { taskId: inTasks } });
+  await prisma.customFieldValue.deleteMany({ where: { taskId: inTasks } });
+  await prisma.readStatus.deleteMany({ where: { taskId: inTasks } });
+  await prisma.attachment.deleteMany({ where: { taskId: inTasks } });
+  await prisma.taskRelations.deleteMany({
+    where: { OR: [{ sourceTaskId: inTasks }, { targetTaskId: inTasks }] },
+  });
+}
+
 export async function deleteGuestProjectCascade(
   projectId: number,
 ): Promise<void> {
@@ -29,7 +40,8 @@ export async function deleteGuestProjectCascade(
   });
   const taskIds = tasks.map((task) => task.id);
 
-  // --- task leaves (reactions before the comments they point at)
+  await deleteRemainingTaskChildren(taskIds);
+
   await prisma.reaction.deleteMany({ where: { taskId: { in: taskIds } } });
   await prisma.savedContent.deleteMany({ where: { projectId } });
   await prisma.comment.deleteMany({ where: { taskId: { in: taskIds } } });
@@ -40,7 +52,6 @@ export async function deleteGuestProjectCascade(
   await prisma.taskReadState.deleteMany({ where: { taskId: { in: taskIds } } });
   await prisma.follower.deleteMany({ where: { taskId: { in: taskIds } } });
 
-  // --- remaining task-referencing tables
   await prisma.priority.deleteMany({
     where: { OR: [{ projectId }, { taskId: { in: taskIds } }] },
   });
@@ -53,11 +64,14 @@ export async function deleteGuestProjectCascade(
   await prisma.taskMute.deleteMany({ where: { taskId: { in: taskIds } } });
   await prisma.invite.deleteMany({ where: { projectId } });
 
-  // --- board-scoped leaves that also reference tasks
+  const pages = await prisma.page.findMany({ where: { projectId }, select: { id: true } });
+  await prisma.page.deleteMany({ where: { projectId } });
+  await Promise.all(pages.map(({ id }) => deletePageFromTurbopuffer(id).catch((error) => {
+    console.error("Page index cleanup failed for guest board", error);
+  })));
   await prisma.task.deleteMany({ where: { projectId } });
   await prisma.label.deleteMany({ where: { projectId } });
 
-  // --- views: clear the default_view back-reference before deleting views
   await prisma.project_View.updateMany({
     where: { projectId },
     data: { default_view_id: null },
@@ -73,20 +87,11 @@ export async function deleteGuestProjectCascade(
   });
   await prisma.project_View.deleteMany({ where: { projectId } });
 
-  // --- board skeleton
   await prisma.section.deleteMany({ where: { projectId } });
   await prisma.member.deleteMany({ where: { projectId } });
   await prisma.project.deleteMany({ where: { id: projectId } });
 }
 
-// HTPR-4303: guests are throwaway rows on the live DB; this cascade removes a
-// guest and everything the demo (or the guest playing with the board) created.
-// The schema declares onDelete: Cascade only for the BetterAuth tables, so
-// children are deleted manually, leaves first. Every delete is scoped to the
-// guest's own userId / projectIds / teamIds — nothing unscoped, ever.
-// ponytail: sequential deletes, no wrapping transaction — Prisma's 5s
-// interactive-tx cap is too tight for a busy board, and a mid-way failure
-// just leaves an idempotent retry for the next hourly run.
 export async function deleteGuestCascade(userId: number): Promise<void> {
   const guest = await prisma.user.findUnique({
     where: { id: userId },
@@ -116,7 +121,8 @@ export async function deleteGuestCascade(userId: number): Promise<void> {
   });
   const taskIds = tasks.map((task) => task.id);
 
-  // --- task/user leaves (reactions before the comments they point at)
+  await deleteRemainingTaskChildren(taskIds);
+
   await prisma.reaction.deleteMany({
     where: { OR: [{ userId }, { taskId: { in: taskIds } }] },
   });
@@ -152,8 +158,6 @@ export async function deleteGuestCascade(userId: number): Promise<void> {
   await prisma.subscribedDevices.deleteMany({ where: { userId } });
   await prisma.userAnnouncement.deleteMany({ where: { userId } });
 
-  // --- remaining task-referencing tables (Priority is created for every
-  // prioritized task by createTaskCore; the rest appear once a guest plays)
   await prisma.priority.deleteMany({
     where: {
       OR: [{ addedByUserId: userId }, { taskId: { in: taskIds } }],
@@ -182,23 +186,18 @@ export async function deleteGuestCascade(userId: number): Promise<void> {
 
   await prisma.task.deleteMany({ where: { userId } });
 
-  // --- any user-owned view/member rows outside their owned demo boards
   await prisma.view_Last_Used.deleteMany({ where: { userId } });
   await prisma.user_Project_View.deleteMany({ where: { userId } });
   await prisma.view.deleteMany({ where: { userId } });
   await prisma.calendar_View.deleteMany({ where: { userId } });
   await prisma.member.deleteMany({ where: { userId } });
 
-  // --- team + account scaffolding
   await prisma.member_Team.deleteMany({
     where: { OR: [{ userId }, { teamId: { in: teamIds } }] },
   });
   await prisma.team_Activity.deleteMany({ where: { teamId: { in: teamIds } } });
   await prisma.team.deleteMany({ where: { id: { in: teamIds } } });
 
-  // Agents the guest owns (the demo seeds a "Hyper AI" agent for the inbox).
-  // Agent.userId is RESTRICT, so leaving these blocks the user delete and the
-  // whole hourly sweep silently stops draining guests (HTPR-5486).
   const agents = await prisma.agent.findMany({
     where: { userId },
     select: { id: true },
@@ -219,7 +218,6 @@ export async function deleteGuestCascade(userId: number): Promise<void> {
     await prisma.agent.deleteMany({ where: { id: { in: agentIds } } });
   }
 
-  // User.UserSettingId / User.accountId point AT these rows; null them first.
   await prisma.user.update({
     where: { id: userId },
     data: { UserSettingId: null, accountId: null },
@@ -229,14 +227,11 @@ export async function deleteGuestCascade(userId: number): Promise<void> {
   await prisma.user_Activity.deleteMany({ where: { userId } });
   await prisma.googleAccount.deleteMany({ where: { userId } });
 
-  // Keep the grant row after user deletion so the calendar sweep can remove
-  // Hypertask's remote data and revoke the Google token.
   await prisma.googleCalendarConnection.updateMany({
     where: { userId },
     data: googleCalendarDisconnectData(),
   });
 
-  // BetterAuthSession/BetterAuthAccount cascade from the user row itself.
   await prisma.user.delete({ where: { id: userId } });
 }
 

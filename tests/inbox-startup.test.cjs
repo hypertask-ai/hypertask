@@ -19,7 +19,7 @@ function callbacks(source, bindings) {
 }
 
 function initialRead(bindings) {
-  const start = hook.indexOf("  // Start the existing fenced read on the first client commit");
+  const start = hook.indexOf("useEffect(() => {\n    if (hydrated");
   const end = hook.indexOf("  const query = useQuery", start);
   assert.ok(start >= 0 && end > start);
   return callbacks(hook.slice(start, end), { document: null, requireProjectAccess: false, ...bindings })[0];
@@ -97,7 +97,7 @@ function warmFixture({ fetched = true, ready = true, idle = true } = {}) {
     setTimeout: (callback, delay) => { assert.equal(delay, 2000); const id = next++; timers.set(id, callback); return id; },
     clearTimeout: (id) => timers.delete(id),
   };
-  const start = inbox.indexOf("  useEffect(() => {\n    // Fetch the visible split");
+  const start = inbox.indexOf("useEffect(() => {\n    void");
   const end = inbox.indexOf("  const [__notifications", start);
   assert.ok(start >= 0 && end > start);
   const effects = callbacks(inbox.slice(start, end), {

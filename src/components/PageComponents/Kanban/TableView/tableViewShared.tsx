@@ -44,13 +44,10 @@ export type TableViewProps = {
   handleBoardChange?: (index: number, sectionsFromCallback: ISection[]) => void;
   myTasksSort?: MyTasksViewConfig["sort"];
   myTasksSortKey?: number | null;
-  /** HTPR-6461: My Tasks Remind Me also hides the row until that date. */
   myTasksSnoozeActive?: boolean;
   onMyTasksSortChange?: (sort: MyTasksViewConfig["sort"]) => void;
-  /** Controlled My Tasks columns. When set, never reads/writes the board localStorage atom. */
   myTasksVisibleColumns?: string[];
   onMyTasksVisibleColumnsChange?: (columns: string[]) => void;
-  /** Explicit My Tasks opt-in. Never inferred from a null project (HTPR-6444). */
   enableMyTasksBulkSelection?: boolean;
 };
 
@@ -108,18 +105,12 @@ export const tableColumns: TableColumn[] = [
 
 export const tableColumnByKey = new Map(tableColumns.map((column) => [column.key, column]));
 
-// The Created column shows a real date rather than an age: "oldest ticket" is
-// the question it exists to answer, and "412d" does not answer it (HTPR-5129).
 export const createdAtMs = (task: ITask): number => {
   const value = task.createdAt ? new Date(task.createdAt).getTime() : NaN;
   return Number.isNaN(value) ? 0 : value;
 };
 
 
-// Extracts the numeric px a column's default CSS width track starts from,
-// whether it's a plain "90px" or the title's "minmax(200px,1fr)" — used both
-// as the fallback when no drag-resize override is stored and to size the
-// horizontal-scroll min-width below.
 export const baseColumnWidthPx = (width: string): number => {
   const raw = width.startsWith("minmax(") ? width.slice(7) : width;
   const parsed = parseInt(raw, 10);
@@ -127,10 +118,6 @@ export const baseColumnWidthPx = (width: string): number => {
 };
 
 
-// The DB stores generic strings (already validated server-side); re-check
-// against the table's own column keys before trusting them as SortState.
-// Only the primary (level 1) sort persists to the view today; secondary
-// tie-break levels added via shift-click are local-only, see toggleSort.
 export const resolveSortState = (project?: IProject | null): SortState => {
   const active = getActiveTableSortFromProject(project);
   if (!active) return [];
@@ -177,13 +164,6 @@ export const taskNoCommentDays = (t: ITask, now?: number) => daysSince(t.lastCom
 export const taskOnBoardDays = (t: ITask, now?: number) => daysSince(t.createdAt, now);
 
 
-// tieBreakByRanking must be false for every level except the last: ranking is unique per task, so
-// leaving it on makes the priority/size comparators never report a tie and the levels below them
-// would never get a say.
-// Direction is handled here, not by negating the result: priority/size/due/updated
-// keep empty values last in BOTH directions, and negating the whole comparator
-// would flip that "missing last" branch too, floating the blanks to the top
-// (HTPR-4629). Only the columns with no empty state get the cheap flip.
 export const getCustomFieldValue = (task: ITask, fieldId: string) =>
   (task as ITask & { customFieldValues?: CustomFieldValue[] }).customFieldValues?.find((value) => value.fieldId === fieldId);
 
@@ -238,9 +218,6 @@ export const getSortComparator = (
       (displayedBoardTimeSeconds(timeTotals.get(a.id), nowMs) -
         displayedBoardTimeSeconds(timeTotals.get(b.id), nowMs));
   }
-  // Sorts on the raw timestamp, not the rendered string, so a year-less label
-  // never orders "02 Jan" above "12 Dec" of the previous year. Unparseable dates
-  // fall to 0 and sort as oldest rather than scattering.
   if (column === "created") return (a: ITask, b: ITask) => flip * (createdAtMs(a) - createdAtMs(b));
   return sortByUpdatedAtOrder(order);
 };
@@ -256,8 +233,6 @@ export const renderAssigneeAvatarsContent = (task: ITask) => {
   return (
     <div className="flex min-w-0 items-center">
       {visibleAssignees.map((assignee, index) => {
-        // Agent first, like the Kanban/calendar cards: an agent assignment
-        // also carries its owning user, who is not the real assignee.
         const user = assignee.agent ?? assignee.user;
         const displayName = user?.displayName || "";
         const label = displayName || "Assignee";

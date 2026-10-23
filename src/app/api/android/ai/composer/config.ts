@@ -8,6 +8,7 @@ import {
   pickAutoAiModelOption,
   preferredAiModelOption,
   type TAiModelOption,
+  type AiDefaultModelContext,
 } from "@/lib/aiModelOptions";
 import { getAiProviderInfo, type TAiProviderKey } from "@/lib/aiProviders";
 import {
@@ -30,22 +31,18 @@ type ComposerConfigInput = {
   customEndpointConfigured: boolean;
   storePlanId: StorePlanKind;
   providersWithByok: ReadonlySet<string>;
-  // HTPR-6722 flag: Luna is included on Free plans.
-  lunaFree?: boolean;
   haiku55Enabled?: boolean;
   haikuDefaultEnabled?: boolean;
+  defaultContext?: AiDefaultModelContext;
 };
 
 function canUseModelForPlan(
   option: TAiModelOption,
   storePlanId: StorePlanKind,
   providersWithByok: ReadonlySet<string>,
-  lunaFree = false,
 ) {
   const definition = getAiModelDefinition(option.modelKey);
-  // Custom endpoints are intentionally non-premium and were already gated by
-  // isAiFeatureModelEnabled(customEndpointConfigured) before this plan check.
-  if (!isPremiumAiModelDefinition(definition, lunaFree)) return true;
+  if (!isPremiumAiModelDefinition(definition, storePlanId === "Free")) return true;
   if (storePlanId === "Free") return false;
   if (storePlanId !== "BYOK") return true;
   const provider = definition?.provider;
@@ -64,8 +61,6 @@ function toComposerModel(option: TAiModelOption): ComposerModel {
 
 export function buildComposerConfig(input: ComposerConfigInput) {
   const enabled = isAiFeatureEnabled("aiChat", input.settings);
-  // Luna is included for Free plans only; BYOK still needs its own key.
-  const lunaFree = Boolean(input.lunaFree) && input.storePlanId === "Free";
   const allowedOptions = enabled
     ? aiModelOptions.filter(
         (option) =>
@@ -80,11 +75,10 @@ export function buildComposerConfig(input: ComposerConfigInput) {
             option,
             input.storePlanId,
             input.providersWithByok,
-            lunaFree,
           ),
       )
     : [];
-  const defaultContext = { haikuDefaultEnabled: input.haikuDefaultEnabled, plan: input.storePlanId, hasByok: hasHaikuByokProvider(input.providersWithByok) };
+  const defaultContext = { ...input.defaultContext, haikuDefaultEnabled: input.haikuDefaultEnabled, plan: input.storePlanId, hasByok: hasHaikuByokProvider(input.providersWithByok) };
   const boardDefault = resolveUserFacingModelOption(
     "aiChat",
     input.settings,
@@ -95,8 +89,8 @@ export function buildComposerConfig(input: ComposerConfigInput) {
       ...defaultContext,
       defaultModelOption:
         input.haiku55Enabled
-          ? getDefaultAiModelOptionForPlan(input.storePlanId, defaultContext.hasByok, lunaFree, true, input.haikuDefaultEnabled)
-          : lunaFree
+          ? getDefaultAiModelOptionForPlan(input.storePlanId, defaultContext.hasByok, true, input.haikuDefaultEnabled, defaultContext)
+          : input.storePlanId === "Free"
           ? preferredAiModelOption
           : undefined,
     },

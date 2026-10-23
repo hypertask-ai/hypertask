@@ -15,21 +15,44 @@ each ticket only needs the one or two areas it touches.
 | Area | File | e2e/smoke id |
 |---|---|---|
 | CI Node-version guard | [ci-node-version.md](ci-node-version.md) | throwaway PR negative control, no app writes |
+| Feature-flag and UX sign-off gates | [feature-flag-and-ux-gates.md](feature-flag-and-ux-gates.md) | reconcile job logs of two consecutive production runs, no app writes |
+| Visual Regression check | [visual-regression.md](visual-regression.md) | dispatch on production one run at a time, 3 green on one commit, per-screen capture times, no app writes |
+| Production build and deploy | [production-build.md](production-build.md) | Vercel build log of the merge sha, no app writes |
+| Premerge evidence status | [premerge-evidence.md](premerge-evidence.md) | read-only status sweep of open PRs, no app writes |
+| Runner dispatch | [runner-dispatch.md](runner-dispatch.md) | read-only plan from the live copy, no --go, no app writes |
+| Agent board scope guard | [agent-scope-guard.md](agent-scope-guard.md) | throwaway PR negative control, no app writes |
+| Webhooks | [webhooks.md](webhooks.md) | no smoke id; QA 985 team-wide endpoint on team 9bca4a7c via /api/settings/webhooks, test delivery to a 2xx receiver, hint vs one-time key; delete fixtures |
+| Agents and board access | [agents-board-access.md](agents-board-access.md) | QA 985 throwaway agents on sandbox 7049; self-access 403 text, /mcp safe reason, 24/24 invite picker opens; delete fixtures |
+| Secret scan workflow installer | [secret-scan-workflow.md](secret-scan-workflow.md) | temp checkouts from merged production, no app writes |
+| PostHog error alerts | [posthog-error-alerts.md](posthog-error-alerts.md) | nightly canary workflow, closes its own ticket |
+| Signup check (hypertask.app) | [signup-check.md](signup-check.md) | Access service identity, read-only, daily counts snapshot |
 | Login | [login.md](login.md) | `login` (write journey) |
 | Boards and views | [boards-and-views.md](boards-and-views.md) | `open-board`, `switch-boards` (write); `view-board-list`, `view-kanban-board` (load-only, `prod.spec.ts`) |
 | Task detail and description | [task-detail-and-description.md](task-detail-and-description.md) | `open-task`, `edit-description` (write); `view-task-detail` (load-only) |
+| Create task attachments | [create-task-attachments.md](create-task-attachments.md) | `create-task` covers save only; attachments verify by hand |
+| Quick entry cards | [quick-entry-cards.md](quick-entry-cards.md) | `create-task` (column + inline box); N and table New task verify by hand |
+| Figma connect | [figma-connect.md](figma-connect.md) | none; verify by hand on Settings > Accounts |
 | Comments and mentions | [comments-and-mentions.md](comments-and-mentions.md) | `add-comment` (write journey) |
 | Drag and drop | [drag-and-drop.md](drag-and-drop.md) | `drag-card` (write journey) |
 | AI chat | [ai-chat.md](ai-chat.md) | `ai-chat` (write journey) |
 | Announcements admin API | [announcements-admin-api.md](announcements-admin-api.md) | no smoke id; no-login 401 checks on the three admin routes |
+| Feature flag switch API | [feature-flags-api.md](feature-flags-api.md) | no smoke id; agent `ht-flag get` and a refused `ht-flag set` |
+| Task share links | [task-share-links.md](task-share-links.md) | no smoke id; no-login 401 and signed-in join checks on `/api/members/share` |
+| Board member list | [board-member-list.md](board-member-list.md) | no smoke id; query `teamId` ignored on `/api/members/getAll` |
+| Board invites | [board-invites.md](board-invites.md) | no smoke id; owner resend 200, outsider 403 on `/api/invite/reSendInvite` and `cancelInvite` |
 | Inbox | [inbox.md](inbox.md) | `view-inbox` (load-only); no write journey for archive/undo |
 | Search and filters | [search-and-filters.md](search-and-filters.md) | `view-AI-search` (load-only, capital AI); no write journey for filters |
+| Search autocomplete | [search.md](search.md) | `view-AI-search` (load-only); suggestions verify by hand |
 | Demo board | [demo-board.md](demo-board.md) | `demo` (tag `@demo`, `demo.spec.ts`) |
+| CLI install commands and login | [cli-install.md](cli-install.md) | no smoke id; Settings CLI shots, real install and read-only token-login guided start |
 | Billing and plans | [billing-and-plans.md](billing-and-plans.md) | no payment journey; open checkout and cancel without payment |
 | My Tasks | [my-tasks.md](my-tasks.md) | no write journey; verify by hand |
+| Pages | [pages.md](pages.md) | no write journey; verify by hand (flagged standalone parts through the session API) |
 | Slack app | [slack-app.md](slack-app.md) | read-only install/support pages and redirects; real workspace parity needs a human |
 | Mobile | [mobile.md](mobile.md) | any id above tagged `@mobile` (`open-board`, `open-task`, `create-task`) |
 | Legacy MCP SSE transport | [mcp-legacy-sse.md](mcp-legacy-sse.md) | no smoke id; verify requests and PostHog ingestion directly |
+| MCP task lookup and hello | [mcp-task-lookup.md](mcp-task-lookup.md) | no smoke id; real `tools/call` lookups and read-only hello/catalog checks |
+| MCP token revoke | [mcp-token-revoke.md](mcp-token-revoke.md) | no smoke id; never revoke-all on QA 2343 (it runs the MCP watcher) |
 
 Load-only ids come from `prod.spec.ts`'s per-view smoke check (page loads,
 no error, right selector present). Real, but shallower than a write journey.
@@ -51,7 +74,7 @@ always reload-and-re-read-from-the-server, never "watch it update live" (see
 each area file's "what proof to collect"). Pass `--state` explicitly:
 `~/.config/hypertask-videos/storageState-qa.json` (user 985) for a flagged
 path, `storageState-qa-normal.json` (user 2343) for the flag-off path.
-`zsb` is Valentin's visible browser; use it only when he needs to watch.
+**Runner browser policy.** A runner (any session not named HT Product Lead) never opens pages in Valentin's browser: no `zsb` navigate/open/activate. Links to tickets, pages, reports and wireframes go in ticket comments only. Browser QA and checks use headless Playwright with QA account 985, following `verify-qa`, never his browser. Only the session he talks to (HT Product Lead) opens a page for him, and only when it mentions that page to him in chat. (Valentin, 2026-10-12): "i never look a the runner sessoins they don't need to do that i reply to ticket in the inbox and via you thats it" and "but should the even try to open pages?"
 
 ## Plan accounts
 

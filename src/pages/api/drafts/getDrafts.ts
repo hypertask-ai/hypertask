@@ -1,4 +1,3 @@
-// Next.js API route support: https://nextjs.org/docs/api-routes/introduction
 
 import type { NextApiRequest, NextApiResponse } from 'next'
 import getDraftsController from '@/utils/controllers/drafts/getDraftsController';
@@ -28,7 +27,6 @@ export default  async function handler(
     });
     if (!task) return res.status(404).json({ message: "Task not found" });
     const drafts = await getDraftsController(task.id, userId)
-    // console.log("🚀 ~ drafts:", drafts)
     return res.status(200).json(drafts)
     
   } catch (error) {

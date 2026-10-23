@@ -283,6 +283,7 @@ model User {
   updatedAt          DateTime       @default(now()) @updatedAt
   googleCalendarGeneration Int @default(0)
   mcpTokensRevokedAt DateTime?     // Timestamp when all MCP tokens were revoked for this user
+  featureFlagChanges FeatureFlagChange[]
   tasks              Task[]
   comments           Comment[]
   assignees          Assignees[]    @relation("assignees")
@@ -335,6 +336,7 @@ model User {
   timeEntries               TimeEntry[]
   taskMutes                 TaskMute[]
   projectMutes              ProjectMute[]
+  pageTaskLinksCreated PageTaskLink[]
   pagesCreated              Page[]                      @relation("PageCreatedBy")
   docVersions              DocVersion[]                @relation("DocVersionAuthor")
   taskLeases               TaskLease[]
@@ -528,6 +530,22 @@ model FeatureFlag {
   removalTaskId Int?
 }
 
+model FeatureFlagChange {
+  id        Int             @id @default(autoincrement())
+  key       String
+  oldMode   FeatureFlagMode?
+  newMode   FeatureFlagMode
+  userId    Int
+  user      User            @relation(fields: [userId], references: [id])
+  agentId   String?
+  agentName String?
+  reason    String?
+  source    String
+  createdAt DateTime        @default(now())
+
+  @@index([key, createdAt])
+}
+
 model FigmaConnection {
   userId                Int      @id
   user                  User     @relation(fields: [userId], references: [id], onDelete: Cascade)
@@ -592,6 +610,7 @@ model UserSetting {
   // All Tasks date-range selector (HTPR-5678). Null = never chosen; the view
   // then opens on the Last 7 days default. Chosen value syncs across devices.
   allTasksDateRange        String?
+  boardSortMode            String?
   playGifs                 Boolean       @default(true)
   autoDescriptionSuggestions Boolean      @default(true)
   notificationMatrix       Json          @default("{}")
@@ -673,6 +692,7 @@ model Team {
   team_activity                Team_Activity?
   byokApiKeys                  TeamByokApiKey[]
   managementApiKeys            BetterAuthApiKey[]
+  githubInstallations          GithubInstallation[]
   slackInstall                 SlackInstall?
   aiProviderSettings           Json?
   webhookSubscriptions         WebhookSubscription[]
@@ -820,6 +840,10 @@ model Project {
   tasks                  Task[]
   pages                  Page[]
   createdAt              DateTime                 @default(now())
+  seeded                 Boolean                  @default(false)
+  firstTaskPointerTaskId  Int?
+  firstTaskPointerSectionId Int?
+  firstRealTaskCreatedAt  DateTime?
   members                Member[]
   sections               String[]                 @default(["Todo", "Doing", "Done"])
   section                Section[]
@@ -867,6 +891,7 @@ model Project {
   targetDate             DateTime?
   milestones             ProjectMilestone[]
   statusUpdates          ProjectStatusUpdate[]
+  githubRepositories     BoardGithubRepository[]
 
   // @@index([status, teamId]) // For WHERE status="Normal" AND teamId IS NOT NULL
   // @@index([ownerId, status]) // For owner-based queries
@@ -1216,6 +1241,7 @@ model Task {
   agentTaskCreatedEmittedAt DateTime?
   timeEntries         TimeEntry[]
   taskMutes           TaskMute[]
+  pageLinks PageTaskLink[]
   pages               Page[]
   taskLease           TaskLease?
   agentRuns           AgentRun[]
@@ -1237,6 +1263,8 @@ model Task {
   @@index([status, permanentlyDeleteAt])
   @@index([status, permanentlyDeleteAt, hardDeleteProcessingAt])
   @@index([dueDate, dueDateNotifiedAt])
+  // MCP my-tasks orders undated work by updatedAt before applying its row cap.
+  @@index([dueDate, updatedAt(sort: Desc)])
   @@index([waitingOnUserId])
   @@index([agentTaskCreatedPendingAt, agentTaskCreatedReadyAt, agentTaskCreatedEmittedAt])
   // Backs the ticketNumber lookup in linkifyTicketRefs.ts (AI responses linkify
@@ -1259,6 +1287,52 @@ model TaskNumberAlias {
   @@index([taskId])
 }
 
+enum GithubRepositoryProvenance {
+  legacy
+  installed
+}
+
+enum GithubPullRequestLinkOrigin {
+  installed
+}
+
+model GithubInstallation {
+  id           String   @id @db.VarChar(32)
+  accountId    String   @db.VarChar(32)
+  accountLogin String   @db.VarChar(100)
+  accountType  String   @db.VarChar(32)
+  teamId       String
+  team         Team     @relation(fields: [teamId], references: [id], onDelete: Restrict)
+  createdAt    DateTime @default(now())
+  revokedAt    DateTime?
+  repositories BoardGithubRepository[]
+
+  @@index([teamId])
+}
+
+model BoardGithubRepository {
+  id             String                     @id @default(uuid())
+  projectId      Int
+  project        Project                    @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  repositoryId   String?                    @db.VarChar(32)
+  fullName       String                     @db.VarChar(201)
+  installationId String?                    @db.VarChar(32)
+  installation   GithubInstallation?        @relation(fields: [installationId], references: [id], onDelete: Restrict)
+  provenance     GithubRepositoryProvenance
+  activatedAt    DateTime                   @default(now())
+  revokedAt      DateTime?
+
+  @@index([projectId, revokedAt])
+  @@index([installationId])
+}
+
+model GithubWebhookDelivery {
+  deliveryId       String   @id @db.VarChar(100)
+  businessEventKey String   @unique @db.VarChar(255)
+  receivedAt       DateTime @default(now())
+  processedAt      DateTime?
+}
+
 model TaskPullRequest {
   id                  String   @id @default(uuid())
   taskId              Int
@@ -1267,6 +1341,7 @@ model TaskPullRequest {
   repositoryName      String   @db.VarChar(100)
   githubRepositoryId  String?  @db.VarChar(32)
   githubPullRequestId String?  @db.VarChar(32)
+  githubLinkOrigin    GithubPullRequestLinkOrigin?
   number              Int
   url                 String   @db.Text
   title               String   @db.Text
@@ -1394,8 +1469,9 @@ model Page {
   title        String    @default("Untitled")
   contentHtml  String    @db.Text @default("")
   contentText  String    @db.Text @default("")
-  taskId       Int
-  task         Task      @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  taskId       Int?
+  task         Task?     @relation(fields: [taskId], references: [id], onDelete: SetNull)
+  links        PageTaskLink[]
   parentPageId Int?
   parentPage   Page?     @relation("SubPages", fields: [parentPageId], references: [id])
   subPages     Page[]    @relation("SubPages")
@@ -1413,6 +1489,29 @@ model Page {
   @@index([taskId, archived])
   @@index([projectId])
   @@index([parentPageId])
+}
+
+model PageTaskLink {
+  id          Int       @id @default(autoincrement())
+  pageId      Int
+  page        Page      @relation(fields: [pageId], references: [id], onDelete: Cascade)
+  taskId      Int
+  task        Task      @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  createdById Int?
+  createdBy   User?     @relation(fields: [createdById], references: [id], onDelete: SetNull)
+  agentId     String?
+  createdAt   DateTime  @default(now())
+  removedAt   DateTime?
+
+  @@unique([pageId, taskId])
+  @@index([taskId])
+}
+
+model Htpr7298PageProjectBackup {
+  id        Int @id
+  projectId Int
+
+  @@map("_htpr7298_page_project_backup")
 }
 
 model DocVersion {
@@ -1736,6 +1835,7 @@ model Follower {
 }
 
 model Comment {
+  kind          String?
   id            Int            @id @default(autoincrement())
   text          String
   summary       String?
@@ -1750,6 +1850,9 @@ model Comment {
   agentDisplayName    String?
 
   createdAt     DateTime       @default(now())
+  editedAt      DateTime?
+  editedByUserId Int?
+  editedByAgentId String?
   notifications Notification[]
   commentText   String         @default("") // just text no html
   seen          Int[]          @default([])
@@ -1769,6 +1872,7 @@ model Comment {
   // createdAt threshold; the migration builds this index concurrently.
   @@index([taskId, createdAt])
   @@index([taskId, creatorId]) // For comment counting
+  @@index([creatorId])
 }
 
 model InboundEmailReceipt {
@@ -1844,6 +1948,8 @@ model Description {
 
   taskId Int  @unique
   task   Task @relation(fields: [taskId], references: [id])
+
+  @@index([creatorId])
 }
 
 model Attachment {
@@ -1957,6 +2063,8 @@ model Notification {
   @@index([userId, status, agentId, createdAt])
   @@index([userId, status, archivedAt])
   @@index([agentId, taskId, type, agentReplyConsumedAt])
+  @@index([assignId])
+  @@index([commentId])
 }
 
 model Reminder {
@@ -2098,6 +2206,7 @@ model WebhookSubscription {
   createdBy      User?     @relation(fields: [createdById], references: [id], onDelete: SetNull)
   agentId        String?
   agent          Agent?    @relation(fields: [agentId], references: [id], onDelete: SetNull)
+  createdByAgentId String?
   createdAt      DateTime  @default(now())
   lastDeliveryAt DateTime?
   lastDeliveryOk Boolean?
@@ -2756,4 +2865,35 @@ model TaskSession {
   lastSeenAt    DateTime      @default(now())
 
   @@index([taskId])
+}
+
+model AnalyticsOutbox {
+  id            String    @id @default(cuid())
+  key           String    @unique
+  userId        Int
+  event         String
+  uuid          String
+  properties    Json
+  occurredAt    DateTime
+  attempts      Int       @default(0)
+  nextAttemptAt DateTime  @default(now())
+  deliveredAt   DateTime?
+  lastError     String?
+  createdAt     DateTime  @default(now())
+
+  @@index([deliveredAt, nextAttemptAt])
+}
+
+model AnalyticsIntent {
+  id            String    @id @default(cuid())
+  key           String    @unique
+  kind          String
+  payload       Json
+  attempts      Int       @default(0)
+  nextAttemptAt DateTime  @default(now())
+  processedAt   DateTime?
+  lastError     String?
+  createdAt     DateTime  @default(now())
+
+  @@index([processedAt, nextAttemptAt])
 }

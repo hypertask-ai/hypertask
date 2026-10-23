@@ -1,3 +1,5 @@
+import { sanitizeProjectBoardFilters } from "@/utils/helperFunctions/Views/BoardFilterSanitizer";
+import { stripForeignTaskRelations } from "@/lib/tasks/sameBoardRelations";
 import prisma from "@/lib/prisma";
 import { IProject, ISection, ITask } from "@/models/model";
 import { getCurrentProject } from "@/utils/helperFunctions/helperFunctions";
@@ -6,7 +8,6 @@ import { getAppliedSubtaskSections } from "@/utils/helperFunctions/Views/Subtask
 import { getFilteredEmptySections } from "@/utils/helperFunctions/Views/EmptySectionsHelperFunction";
 import { getProjectViewBaseInclude } from "../projects/getAllIncludes";
 
-//We are using the invite id as the share Id
 export default async function getProject(shareId: string) {
     try {
         const inviteObj = await prisma.invite.findFirst({
@@ -35,10 +36,9 @@ export default async function getProject(shareId: string) {
         }
 
 
-        // Extract project ID from invite object
         const projectId = inviteObj.projectId;
 
-        const project = await prisma.project.findFirst({
+        const loadedProject = await prisma.project.findFirst({
             where: {
                 id: projectId,
             },
@@ -130,13 +130,11 @@ export default async function getProject(shareId: string) {
                         ranking: "asc"
                     }
                 },
-                // The public board only applies the sharer's active/default
-                // view. It never renders the saved-view library, billing,
-                // Google integration, or team activity metadata.
                 project_view: getProjectViewBaseInclude({currentUserId:inviteObj.userId}),
             },
         })
 
+        const project = sanitizeProjectBoardFilters(loadedProject, undefined, true);
         if (!project) {
             return ({
                 status: 404,
@@ -144,7 +142,8 @@ export default async function getProject(shareId: string) {
             })
         }
 
-        // Process sections using the same logic as getAllProjects
+        if (project.tasks) project.tasks = project.tasks.map(stripForeignTaskRelations);
+
         const projectAsIProject = project as unknown as IProject;
         const sections = getCurrentProject(projectAsIProject);
 
@@ -154,11 +153,9 @@ export default async function getProject(shareId: string) {
                 firstTask: ITask | null;
             };
 
-            // Set the sections attribute inside the project
             projectAsIProject.sections = _sections;
             projectAsIProject.firstTask = firstTask;
 
-            // Apply the same filtering functions as in getAllProjects
             projectAsIProject.filteredSections = getFilteredSections(_sections, projectAsIProject);
             projectAsIProject.filteredSections = getAppliedSubtaskSections(projectAsIProject.filteredSections, projectAsIProject);
             projectAsIProject.filteredSections = getFilteredEmptySections(projectAsIProject.filteredSections, projectAsIProject);

@@ -8,9 +8,6 @@ import { normalizeImageSource } from "@/utils/helperFunctions/normalizeImageSour
 declare module "@tiptap/core" {
   interface Commands<ReturnType> {
     resizableMedia: {
-      /**
-       * Set media
-       */
       setMedia: (options: {
         "media-type": "img" | "video";
         src: string;
@@ -50,7 +47,6 @@ export const ResizableMedia = Node.create<MediaOptions>({
     return {
       HTMLAttributes: {},
       uploadFn: async (file: File) => {
-        // Default implementation returns empty string
         console.warn("No upload function provided to ResizableMedia extension");
         return "";
       },
@@ -82,10 +78,10 @@ export const ResizableMedia = Node.create<MediaOptions>({
         default: "auto",
       },
       dataAlign: {
-        default: "left", // 'left' | 'center' | 'right'
+        default: "left",
       },
       dataFloat: {
-        default: null, // 'left' | 'right'
+        default: null,
       },
       isLoading: {
         default: false,
@@ -103,15 +99,6 @@ export const ResizableMedia = Node.create<MediaOptions>({
       uploadId: {
         default: null,
       },
-      /**
-       * The untouched file this image is a preview of (HTPR-6264).
-       *
-       * A HEIC cannot be painted, so `src` points at the JPEG copy generated at
-       * upload time. The photo the user attached is still in storage, and this
-       * is where its URL lives, so the download action can hand back the real
-       * file rather than the copy. Null for everything else, where `src` is
-       * already the original.
-       */
       originalSrc: {
         default: null,
         parseHTML: (element) => element.getAttribute("data-original-src"),

@@ -8,6 +8,7 @@ export const useGetBoardInviteURL = (projectId:number, userId: number,initialDat
     return useQuery({
         queryKey:[prefixInviteForProject, projectId], 
         queryFn:() => getProjectInviteURL(projectId, userId),
+        enabled: !!projectId && !!userId,
         gcTime: 60 * MINUTE,
         refetchOnWindowFocus:true,
         refetchOnMount:true,

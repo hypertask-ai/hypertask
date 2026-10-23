@@ -1,17 +1,12 @@
 const test = require("node:test");
 const assert = require("node:assert/strict");
-const path = require("node:path");
+const { loader } = require("./htpr-6927-fixtures.cjs");
 
-const root = path.resolve(__dirname, "..");
 const originalMcpUrl = process.env.NEXT_PUBLIC_MCP_SERVER_URL;
 process.env.NEXT_PUBLIC_MCP_SERVER_URL = "https://mcp.hypertask.ai/mcp";
 
-const jiti = require("jiti")(__filename, {
-  interopDefault: true,
-  cache: false,
-});
-const { GET } = jiti(
-  path.join(root, "src/app/.well-known/oauth-protected-resource/route.ts"),
+const { GET } = loader({ "@/lib/flags": { isFeatureEnabled: async () => false } })(
+  "src/app/.well-known/oauth-protected-resource/route.ts",
 );
 
 test.after(() => {
@@ -19,8 +14,8 @@ test.after(() => {
   else process.env.NEXT_PUBLIC_MCP_SERVER_URL = originalMcpUrl;
 });
 
-test("protected-resource metadata uses the canonical MCP resource, not the request host", async () => {
-  const response = GET();
+test("protected-resource metadata uses the canonical MCP resource with the host fix off", async () => {
+  const response = await GET(new Request("https://app.hypertask.ai/.well-known/oauth-protected-resource"));
   const body = await response.json();
 
   assert.equal(body.resource, "https://mcp.hypertask.ai/mcp");

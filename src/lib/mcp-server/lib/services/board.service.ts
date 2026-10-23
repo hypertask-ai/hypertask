@@ -45,9 +45,6 @@ export interface CreateBoardResponse {
   message?: string;
 }
 
-/**
- * Batch board creation from an agent-built manifest (HTPR-3142).
- */
 export class BoardService {
   constructor(private readonly apiClient: IApiClient) {}
 

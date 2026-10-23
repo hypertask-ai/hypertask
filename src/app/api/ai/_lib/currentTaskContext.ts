@@ -1,23 +1,13 @@
+import type { AgentTokenTeamScope } from '@/lib/mcp/auth/types';
 import prisma from "@/lib/prisma";
 import { projectContentAccessWhere } from "@/utils/controllers/projects/getAllIncludes";
 import { assertSafeWebhookTarget } from "@/lib/mcp/webhooks/ssrfGuard";
 
-// Load the full content (title, description, all comments) of specific tickets so
-// AI surfaces always have the ticket the user is looking at — instead of relying on
-// a semantic search that can miss it. Used by the @mention bot, the sidebar chat and
-// the task writer.
-//
-// SECURITY: task ids come from the client, so the fetch is scoped to projects the
-// user actually belongs to. A crafted request cannot read a ticket from another
-// team this way. Pass agentId for agent-bound MCP tokens: an agent is only on some
-// of its owner's boards, so scoping by the human alone would let it read tickets
-// from boards it was never added to. The access helper deliberately supports
-// owned legacy teamless boards.
 export async function loadCurrentTaskContext(
   taskIds: Array<number | null | undefined>,
   userId: number | null | undefined,
   agentId?: string | null,
-  options?: { role?: "primary" | "related"; projectId?: number | null }
+  options?: { role?: "primary" | "related"; projectId?: number | null; teamScope?: AgentTokenTeamScope | null }
 ): Promise<string> {
   const ids = Array.from(
     new Set(
@@ -32,7 +22,7 @@ export async function loadCurrentTaskContext(
     where: {
       id: { in: ids },
       project: {
-        ...projectContentAccessWhere(userId, agentId),
+        ...projectContentAccessWhere(userId, agentId, options?.teamScope),
         ...(options?.projectId ? { id: options.projectId } : {}),
       },
     },
@@ -62,15 +52,11 @@ export async function loadCurrentTaskContext(
     .join("\n\n");
 }
 
-/**
- * Resolve an untrusted task id only when it belongs to the attributed project
- * and the human/agent actor can access that project.
- */
 export async function resolveAiUsageTaskId(args: {
   taskId?: number | null;
   projectId?: number | null;
   userId: number;
-  agentId?: string | null;
+  agentId?: string | null; teamScope?: AgentTokenTeamScope | null;
 }): Promise<number | null> {
   if (
     !Number.isInteger(args.taskId) ||
@@ -85,19 +71,13 @@ export async function resolveAiUsageTaskId(args: {
     where: {
       id: Number(args.taskId),
       projectId: Number(args.projectId),
-      project: projectContentAccessWhere(args.userId, args.agentId),
+      project: projectContentAccessWhere(args.userId, args.agentId, args.teamScope),
     },
     select: { id: true },
   });
   return task?.id ?? null;
 }
 
-// Extract every <img> the user can see on the ticket — from the description AND all
-// comments — so a mention like "what's wrong in this screenshot?" reaches the model.
-// The client only sends the triggering comment's own attachments; description images
-// and images posted in earlier comments were previously invisible to HyperAI.
-// Returns URL file-parts (the provider fetches them); same access-scoping as above.
-// ponytail: capped at 12 images to bound cost; older images drop first.
 export async function loadCurrentTaskImages(
   taskIds: Array<number | null | undefined>,
   userId: number | null | undefined
@@ -131,14 +111,6 @@ export async function loadCurrentTaskImages(
     }
   }
 
-  // HTPR-4459: these URLs come from ticket HTML, which anyone can write — the
-  // markdown image rule accepts any remote URL. Handing them on unchecked asks
-  // for a fetch of whatever the author names, including http://169.254.169.254
-  // and other internal addresses, with the result described back to them.
-  // assertSafeWebhookTarget is the guard we already use for webhook targets:
-  // https only, no localhost/.local/.internal, and DNS resolved with private and
-  // reserved ranges rejected. Checked here rather than at the fetch because the
-  // fetch may happen in the model provider, out of our reach.
   const candidates = Array.from(urls).slice(0, 12);
   const verdicts = await Promise.all(
     candidates.map((url) => assertSafeWebhookTarget(url))
@@ -157,7 +129,6 @@ function extractImageUrls(html: string | null | undefined): string[] {
   let match: RegExpExecArray | null;
   while ((match = IMG_SRC_RE.exec(html)) !== null) {
     const url = match[1];
-    // Only http(s) URLs the provider can fetch — skip data: URIs and relative src.
     if (url && /^https?:\/\//i.test(url)) out.push(url);
   }
   return out;

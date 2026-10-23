@@ -126,11 +126,10 @@ type AgentManagementTransaction = {
   }
   webhookSubscription: {
     updateMany(args: {
-      where: { agentId: string }
-      data: { agentId: null }
+      where: { agentId: string; projectId?: { not: null } }
+      data: { agentId: null } | { active: false }
     }): Promise<WriteCount>
   }
-  // Prisma keeps the OAuth acronym casing: oAuthAuthorizationCode, not oauth…
   oAuthAuthorizationCode: {
     updateMany(args: {
       where: { agent_id: string }
@@ -156,6 +155,7 @@ export type AgentManagementDatabase = AgentManagementTransaction & {
         revokedAt: true
         createdAt: true
         visibility: true
+        credentialTeamId: true
         members: {
           orderBy: { id: 'asc' }
           select: {
@@ -165,7 +165,7 @@ export type AgentManagementDatabase = AgentManagementTransaction & {
           }
         }
       }
-    }): Promise<OwnedAgentRow[]>
+    }): Promise<Array<OwnedAgentRow & { credentialTeamId: string | null }>>
   }
   $transaction<T>(
     callback: (transaction: AgentManagementTransaction) => Promise<T>,
@@ -180,6 +180,7 @@ export type OwnedAgent = {
   created_at: string
   visibility: 'PRIVATE' | 'TEAM'
   boards: Array<{ id: number; name: string }>
+  team_bound?: boolean
 }
 
 export type OwnedAgentDetail = OwnedAgent & {
@@ -196,7 +197,8 @@ export type DeleteOwnedAgentResult = {
 export async function listOwnedAgents(
   database: AgentManagementDatabase,
   userId: number,
-  teamId?: string
+  teamId?: string,
+  options: { teamBound?: boolean } = {}
 ): Promise<OwnedAgent[]> {
   const agents = await database.agent.findMany({
     where: {
@@ -211,6 +213,7 @@ export async function listOwnedAgents(
       revokedAt: true,
       createdAt: true,
       visibility: true,
+      credentialTeamId: true,
       members: {
         orderBy: { id: 'asc' },
         select: {
@@ -222,7 +225,11 @@ export async function listOwnedAgents(
     },
   })
 
-  return agents.map(toOwnedAgent)
+  return agents.map((agent) =>
+    options.teamBound
+      ? { ...toOwnedAgent(agent), team_bound: agent.credentialTeamId != null }
+      : toOwnedAgent(agent)
+  )
 }
 
 function toOwnedAgent(agent: OwnedAgentRow): OwnedAgent {
@@ -286,11 +293,6 @@ function isSerializationConflict(error: unknown): boolean {
   )
 }
 
-/**
- * Hard-deletes one owned agent in one serializable transaction. Every optional
- * agent reference is detached first; comments retain a display-name tombstone
- * because their author is historical data, not disposable agent state.
- */
 export async function deleteOwnedAgent(
   database: AgentManagementDatabase,
   userId: number,
@@ -322,8 +324,6 @@ export async function deleteOwnedAgent(
           const deletedAssignments = await transaction.assignees.deleteMany({
             where: { agentId: agent.id },
           })
-          // Keep assignments made by this agent when another principal owns the
-          // assignment; only the historical assigner link needs clearing.
           await transaction.assignees.updateMany({
             where: { agentAssignerId: agent.id },
             data: { agentAssignerId: null },
@@ -334,8 +334,6 @@ export async function deleteOwnedAgent(
           await transaction.follower.deleteMany({
             where: { agentId: agent.id },
           })
-          // A lease has no FK-backed agent relation, so release it explicitly
-          // instead of leaving an operational row pointing at a deleted actor.
           await transaction.taskLease.deleteMany({
             where: { agentId: agent.id },
           })
@@ -388,6 +386,10 @@ export async function deleteOwnedAgent(
             data: { fromAgentId: null },
           })
           await transaction.webhookSubscription.updateMany({
+            where: { agentId: agent.id, projectId: { not: null } },
+            data: { active: false },
+          })
+          await transaction.webhookSubscription.updateMany({
             where: { agentId: agent.id },
             data: { agentId: null },
           })
@@ -423,8 +425,6 @@ export async function deleteOwnedAgent(
     try {
       await invalidateRuntime(deleted.id, deleted.runtime_generation + 1)
     } catch (error) {
-      // The database is authoritative after deletion. A stale Redis snapshot is
-      // inaccessible and expires; do not report a failed delete after commit.
       console.warn('[Agent runtime] Snapshot invalidation failed:', error)
     }
   }

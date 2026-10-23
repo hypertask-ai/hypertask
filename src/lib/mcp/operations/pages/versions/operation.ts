@@ -1,3 +1,6 @@
+import { reportMcpOperationCrash } from '@/lib/mcp/operationCrashReport'
+import { standalonePagesEnabled } from '@/utils/controllers/pages/standalonePagesEnabled'
+import { wrapMcpRoute } from '@/lib/mcp/routeWrapper'
 import { NextRequest, NextResponse } from 'next/server'
 
 import { checkMcpRateLimit, validateMcpAuth } from '@/lib/mcp/auth'
@@ -12,6 +15,7 @@ import {
 } from '@/lib/mcp/operations/pages/helpers'
 
 export async function GET(request: NextRequest) {
+  return wrapMcpRoute(async (request: NextRequest) => {
   try {
     const ctx = await validateMcpAuth(request)
     if (!ctx) {
@@ -32,7 +36,7 @@ export async function GET(request: NextRequest) {
     }
     const { identifier, field: identifierField } = identifierResult
 
-    const page = await getPage(identifier)
+    const page = await getPage({ ...identifier, userId: ctx.user.id, standalonePagesEnabled: await standalonePagesEnabled(ctx.user.id), agentId: ctx.agentId, teamScope: ctx.teamScope })
     if (!page || !(await canAccessProject(page.projectId, ctx))) {
       return NextResponse.json(
         buildFieldError('not_found', identifierField, 'Page not found'),
@@ -40,7 +44,7 @@ export async function GET(request: NextRequest) {
       )
     }
 
-    const versions = (await listPageVersions({ pageId: page.id })).map(
+    const versions = (await listPageVersions({ pageId: page.id, userId: ctx.user.id, agentId: ctx.agentId, teamScope: ctx.teamScope })).map(
       (version) => ({
         id: version.id,
         version: version.version,
@@ -54,7 +58,11 @@ export async function GET(request: NextRequest) {
 
     return NextResponse.json({ versions })
   } catch (error) {
+    if (error instanceof Error && error.message.includes('not found')) return NextResponse.json({ error: 'Page not found' }, { status: 404 })
     console.error('[MCP List Page Versions] Error:', error)
+    reportMcpOperationCrash(request, error)
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
   }
+
+  })(request)
 }

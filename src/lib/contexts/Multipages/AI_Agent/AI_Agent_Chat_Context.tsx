@@ -9,8 +9,6 @@ import { aiChatPendingPromptAtom } from "@/store";
 import type { TeamBillingSnapshot } from "@/lib/deriveCurrentBoardBilling";
 import { TAiModal } from "@/models/AI_Task_writer_model";
 import { IChatMessage, IChatSession, MentionItem } from "@/models/model";
-// Type-only: a value import here would pull tiptap back into every page's
-// initial chunk and defeat the dynamic mount below (HTPR-4508).
 import type { Editor } from "@tiptap/react";
 import dynamic from "next/dynamic";
 import { usePathname } from "next/navigation";
@@ -37,7 +35,6 @@ export interface Message {
   timestamp: Date;
 }
 
-// Define the context type
 export interface ChatContextType {
   isTyping: boolean;
   sendSettledVersion: number;
@@ -72,6 +69,16 @@ export interface ChatContextType {
     onEditor: (editor: Editor | null) => void;
   };
   sessions: IChatSession[];
+  sessionPagingEnabled: boolean;
+  historySessions: (Pick<IChatSession, "id" | "title" | "updatedAt" | "createdAt" | "projectId" | "agentId"> & {
+    hasMessages?: boolean;
+    messages?: IChatMessage[];
+  })[];
+  hasMoreSessions: boolean;
+  isLoadingMoreSessions: boolean;
+  pagingError: boolean;
+  loadMoreSessions: () => Promise<void>;
+  refreshHistorySessions: () => Promise<void>;
   currentSession: IChatSession | undefined;
   showWelcomeScreen: boolean;
   isSessionPending: boolean;
@@ -101,7 +108,7 @@ export interface ChatContextType {
   retryStream: (message?: IChatMessage) => void
   audioTiptapCallback: (text: string, setContent?: boolean) => void;
   toggleRecording: (val: boolean) => void;
-  startNewSession: () => Promise<void>;
+  startNewSession: () => Promise<IChatSession | undefined>;
   selectSession: (sessionId: string) => void;
   toggleRenameChatModal: () => void;
   renameChat: (newTitle: string) => void;
@@ -119,20 +126,11 @@ export interface ChatContextType {
   handleAttachmentClick: (e?: unknown) => void;
 }
 
-// ponytail: ChatProvider wraps every route, so building the chat editor inline
-// put the whole tiptap/ProseMirror stack (~250 KB) in the initial chunk of every
-// page even with the chat closed. It loads here instead, and only after the chat
-// has been opened once — the flag latches, so closing the chat keeps the draft
-// alive rather than paying to rebuild the editor (HTPR-4508).
 const AiChatEditorMount = dynamic(
   () => import("@/hooks/MultiPages/AIChat/AiChatEditorMount"),
   { ssr: false }
 );
 
-// Runs the chat hook graph. It provides the context to its own children (pages
-// that need chat from their first render) and hands the same value to the
-// app shell's provider, which holds every other page beside it. Loading it
-// therefore never remounts a page that is already on screen (HTPR-6751).
 export const ChatRuntime = memo(function ChatRuntime({
   onValue,
   children,
@@ -145,9 +143,6 @@ export const ChatRuntime = memo(function ChatRuntime({
   layoutKeydownRef.current = contextProps.layoutKeydown;
 
   useEffect(() => {
-    // Tiptap consumes Control+Q before a bubbling document listener can see it.
-    // Route only this established focus shortcut during capture; every other AI
-    // shortcut keeps the existing bubble-phase behavior (HTPR-5204 follow-up).
     const handleLayoutKeydownCapture = (event: KeyboardEvent) => {
       if (!isControlQFocusShortcut(event)) return;
 
@@ -165,12 +160,6 @@ export const ChatRuntime = memo(function ChatRuntime({
     };
   }, []);
 
-  // Consume a query handed over from Search's "Ask AI": send it into this single
-  // general chat, then clear it. Done here (the one ChatProvider instance) rather
-  // than in the composer so it can't double-send across mounts. Wait until the
-  // chat is ready — a session exists (handleSendMessage resolves its own), BYOK
-  // isn't blocking, and nothing is streaming — so the query is never dropped or
-  // overlapped; the effect re-runs and fires once readiness flips.
   const [pendingAiChatPrompt, setPendingAiChatPrompt] = useRecoilState(
     aiChatPendingPromptAtom
   );
@@ -204,17 +193,16 @@ export const ChatRuntime = memo(function ChatRuntime({
       !pendingAiChatPrompt ||
       contextProps.isByokBlocked ||
       contextProps.isTyping ||
-      !contextProps.sessions.length
+      !contextProps.sessions.length ||
+      (contextProps.sessionPagingEnabled && !contextProps.chatHistoryReady)
     ) {
       return;
     }
     if (typeof pendingAiChatPrompt !== "string") {
-      // A warm side-panel runtime must not consume this before /chat is ready.
       if (pathname !== "/chat" || !contextProps.chatHistoryReady) return;
       if (pendingFullScreenSessionRef.current?.prompt !== pendingAiChatPrompt) {
         pendingFullScreenSessionRef.current = {
           prompt: pendingAiChatPrompt,
-          // Cold phone history exposes the current session before activeSession is set.
           previousSessionId: contextProps.currentSession?.id ?? contextProps.activeSession,
           sending: false,
         };
@@ -241,7 +229,6 @@ export const ChatRuntime = memo(function ChatRuntime({
         setPendingAiChatPrompt((pending) => pending === pendingAiChatPrompt ? null : pending);
         setFailedFullScreenQuery(query);
       };
-      // A manual send may have filled the fresh conversation while we waited.
       if (contextProps.currentSession!.messages.length > 0) {
         recoverQuestion();
         return;
@@ -250,7 +237,7 @@ export const ChatRuntime = memo(function ChatRuntime({
       void handleSendMessageRef.current(query, { preserveComposer: true }).then((accepted) => {
         if (pendingFullScreenSessionRef.current !== handoff) return;
         handoff.sending = false;
-        if (!accepted) return; // Retry only when readiness or sender settlement changes.
+        if (!accepted) return;
         pendingFullScreenSessionRef.current = null;
         setPendingAiChatPrompt((pending) => pending === pendingAiChatPrompt ? null : pending);
       }).catch(recoverQuestion);
@@ -258,11 +245,6 @@ export const ChatRuntime = memo(function ChatRuntime({
     }
     pendingFullScreenSessionRef.current = null;
     setPendingAiChatPrompt(null);
-    // handleSendMessage() sends the composer's existing attachments and clears
-    // its editor, so only auto-send when the composer is CLEAN — otherwise we'd
-    // mis-send the user's attachments or wipe their unsent draft. With an empty
-    // composer that only has attachments, drop the query in for review; with a
-    // real draft present, leave everything untouched (the chat is already open).
     const hasDraft = !!editor && !editor.isEmpty;
     const hasAttachments = fileItems.length > 0;
     if (!hasDraft && !hasAttachments) {
@@ -272,7 +254,7 @@ export const ChatRuntime = memo(function ChatRuntime({
       editor.commands.focus("end");
     }
   }, [
-    pendingAiChatPrompt,
+    pendingAiChatPrompt, contextProps.sessionPagingEnabled,
     askAiFullscreenEnabled,
     contextProps.isByokBlocked,
     contextProps.isTyping,

@@ -44,8 +44,6 @@ interface ISingleFile {
     variant = "default",
     backgroundTaskUpload = false,
   }) => {
-    // if upload is true, we will display a progress bar here, and show its progress.
-    // upon 100 percent completion, we will do a callback and send it back.
     const [progressPercentage, setProgressBar] = useState<number>(0);
     const previewImageRef = useRef<HTMLImageElement>(null);
     const backgroundUploadIdRef = useRef<string | undefined>(undefined);
@@ -62,20 +60,12 @@ interface ISingleFile {
       };
     }, [callback, handleRemove, reportUploadFailure]);
 
-    // "image/" alone is the wrong question: it says yes to a HEIC, which no
-    // browser can paint, and no to a Mac photo that arrived with no MIME type
-    // at all. Ask whether it can actually be shown, or whether a JPEG copy of
-    // it exists (HTPR-6264); anything else keeps the paperclip.
     const isImage =
       isBrowserRenderableImage(file.type, file.name) ||
       settledPreviewFor(file) !== null;
 
     useEffect(() => {
       if (!isImage || file.source) return;
-      // A Mac photo is shown through its JPEG copy (HTPR-6264). The copy is
-      // already decoded by the time the file reaches the tray, so this is a
-      // lookup rather than work; a file with no copy falls back to itself and
-      // is caught by the renderable check above.
       const url = URL.createObjectURL(settledPreviewFor(file) ?? file);
       if (previewImageRef.current) previewImageRef.current.src = url;
       return () => URL.revokeObjectURL(url);
@@ -173,7 +163,6 @@ interface ISingleFile {
               : "h-full justify-end p-1 sm:p-2"
           }`}
         >
-          {/* Preview: same square frame for images and PDFs/docs in chat */}
           <div
             className={
               isChat
@@ -246,7 +235,6 @@ interface ISingleFile {
                 pathColor: "#C2CFA5",
                 trailColor: "#27292D",
               })}
-              // indicatorColor='#191A1F'
             />
           </div>
         }

@@ -1,4 +1,3 @@
-// Next.js API route support: https://nextjs.org/docs/api-routes/introduction
 
 import type { NextApiRequest, NextApiResponse } from 'next'
 import prisma from "@/lib/prisma";
@@ -39,7 +38,6 @@ export default  async function handler(
       displayName: userRow.displayName ?? undefined,
     } as IUser;
 
-    // ============== post body
     const {taskId, projectId, value, ai_prompt, CreateLabelAndReturn} = req.body;
     if (!projectId || !value) return res.status(400).json({message:"Missing Required Information"})
     if (typeof ai_prompt === "string" && ai_prompt.length > MAX_AI_PROMPT_LENGTH) {
@@ -48,17 +46,12 @@ export default  async function handler(
     const aiPrompt = typeof ai_prompt === "string" && ai_prompt.trim()
       ? ai_prompt.trim()
       : null;
-    // Smart labels run an LLM classification pass on every task in the
-    // project (cost), so require project membership before setting one.
-    if (aiPrompt) {
-      const memberCheck = await validateProjectMemberIds(projectId, [userObj.id]);
-      if (memberCheck.error || memberCheck.invalidIds?.length) {
-        return res.status(403).json({ message: "Forbidden" });
-      }
+    const memberCheck = await validateProjectMemberIds(projectId, [userObj.id]);
+    if (memberCheck.error || memberCheck.invalidIds?.length) {
+      return res.status(403).json({ message: "Forbidden" });
     }
 
 
-    // check if same projectid and value exists
     const check = await prisma.label.findFirst({
         where:{
             AND:[
@@ -69,7 +62,6 @@ export default  async function handler(
     })
     if (check) return res.status(400).json({message:"Duplicate found"})
     
-    // ---------- create label
 
     if (CreateLabelAndReturn){
         const createdLabel= await prisma.label.create({
@@ -83,8 +75,6 @@ export default  async function handler(
         void broadcastBoardChange(projectId, { originUserId: userObj.id })
         return res.status(200).json(createdLabel)
     }
-    // The project-only branch returned above. This branch always attaches the
-    // new label to a task, so a missing taskId is invalid here.
     if (taskId == null) {
       return res.status(400).json({ message: "taskId is required" });
     }

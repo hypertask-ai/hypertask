@@ -18,6 +18,9 @@ function load(relativePath, mocks) {
   return exports;
 }
 const extractor = load("src/utils/controllers/urls/extractUrlsFromContent.ts", {
+  "@/lib/prisma": { default: {} },
+  "@/lib/mcp/tasks/agentMutationFence": {},
+  "@/utils/controllers/projects/getAllIncludes": {},
   "node-html-parser": require("node-html-parser"),
   "@/utils/controllers/urls/addIntoTask": {},
   "@/utils/controllers/urls/addIntoTaskDesc": {},

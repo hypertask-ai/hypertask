@@ -9,6 +9,22 @@ function major(version, label) {
   return Number(match[1]);
 }
 
+function lowestVersion(value) {
+  const match = /^[v^~]?(\d+)(?:\.(\d+|x))?(?:\.(\d+|x))?$/.exec(String(value));
+  if (!match) return null;
+  return match.slice(1).map((part) => (part === undefined || part === "x" ? 0 : Number(part)));
+}
+
+function belowFloor(value, floor) {
+  const lowest = lowestVersion(value);
+  const required = lowestVersion(floor);
+  if (!lowest || !required) return true;
+  for (let index = 0; index < 3; index += 1) {
+    if (lowest[index] !== required[index]) return lowest[index] < required[index];
+  }
+  return false;
+}
+
 function workflowNodeVersions(content) {
   const versions = [];
   const workflow = yaml.load(content, { schema: yaml.JSON_SCHEMA });
@@ -16,7 +32,7 @@ function workflowNodeVersions(content) {
     for (const [index, step] of (config.steps ?? []).entries()) {
       for (const [key, value] of Object.entries(step.with ?? {})) {
         if (key === "node-version" || key === "node-version-file") {
-          versions.push({ key, value, location: `workflow.jobs.${job}.steps.${index}.with.${key}` });
+          versions.push({ key, value, checkLatest: step.with["check-latest"], location: `workflow.jobs.${job}.steps.${index}.with.${key}` });
         }
       }
     }
@@ -24,7 +40,7 @@ function workflowNodeVersions(content) {
   return versions;
 }
 
-function compareNodeVersions(liveVersion, engine, workflows) {
+function compareNodeVersions(liveVersion, engine, workflows, securityFloor) {
   const expected = major(liveVersion, "Vercel nodeVersion");
   const issues = [];
   function compare(value, label) {
@@ -39,7 +55,11 @@ function compareNodeVersions(liveVersion, engine, workflows) {
     for (const entry of workflowNodeVersions(content)) {
       const label = `${file} ${entry.location}`;
       if (entry.key === "node-version-file") issues.push(`${label}: use an explicit node-version so its major can be compared with Vercel`);
-      else compare(entry.value, label);
+      else {
+        compare(entry.value, label);
+        if (securityFloor && belowFloor(entry.value, securityFloor)) issues.push(`${label} is ${entry.value}: pin ^${securityFloor} so a failed version lookup cannot fall back to a cached Node below the ${securityFloor} security floor`);
+        if (entry.checkLatest !== true) issues.push(`${label}: add check-latest: true so CI always runs the newest patched Node ${expected}.x, not the runner's cached copy`);
+      }
     }
   }
   return issues;
@@ -53,9 +73,10 @@ if (require.main === module) {
       file,
       content: fs.readFileSync(path.join(".github/workflows", file), "utf8"),
     }));
-    const issues = compareNodeVersions(liveVersion, pkg.engines?.node, workflows);
+    const { minimum } = JSON.parse(fs.readFileSync("src/lib/runtime/nodeSecurityFloor.json", "utf8"));
+    const issues = compareNodeVersions(liveVersion, pkg.engines?.node, workflows, minimum);
     if (issues.length) throw new Error(issues.join("\n"));
-    console.log(`Node version guard passed: package.json and all workflow pins match live Vercel ${liveVersion}`);
+    console.log(`Node version guard passed: package.json and all workflow pins match live Vercel ${liveVersion} and the Node security floor`);
   } catch (error) {
     console.error(error.message);
     process.exitCode = 1;

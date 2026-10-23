@@ -1,6 +1,10 @@
 
 
+import { renderPrompt } from "@/lib/ai/prompts/registry";
+import { HTPR_7514_INLINE_AGENT_IMAGES_FLAG } from "@/lib/flags/keys";
 import prisma from "@/lib/prisma";
+import { isFeatureEnabled } from "@/lib/flags";
+import { HTPR_7363_CHAT_TASK_WRITER_FLAG } from "@/lib/flags/keys";
 
 import { loadCurrentTaskContext } from "@/app/api/ai/_lib/currentTaskContext";
 import { type ModelMessage } from "ai";
@@ -28,7 +32,6 @@ import { nameChatFromFirstMessage } from "./chatNames";
 export async function runModelTurn(state: StreamState, resolvedBody: ChatRequest, skillResolution: Awaited<ReturnType<typeof resolveSkillsForAiRequest>>) {
   const { body, dbUser, heartbeatExecutionId, heartbeatTurn, userMessagePersisted, contextTaskId, titleByokApiKey, gatewayTags, usageProjectId, actingAgent, streamId, streamLease, firstTurn, requestMessage } = state;
 
-  // HTPR-7052: undefined = flag off (legacy); null = keep a manual title; string = title just written.
   const chatNameGuardTitle = await nameChatFromFirstMessage({ enabled: firstTurn && !heartbeatTurn, sessionId: body.session_id, userId: dbUser.id, message: requestMessage });
 
   const agentPromptAddition = actingAgent
@@ -37,15 +40,15 @@ export async function runModelTurn(state: StreamState, resolvedBody: ChatRequest
     `agent, not the human you're talking to.` +
     (actingAgent.prompt ? ` Follow these instructions:\n${actingAgent.prompt}` : "")
     : null;
+  const inlineAgentImagesEnabled = await isFeatureEnabled(HTPR_7514_INLINE_AGENT_IMAGES_FLAG, dbUser.id);
   const instructions = [
     AGENT_SYSTEM_PROMPT,
+    inlineAgentImagesEnabled ? renderPrompt("inline-agent-images") : null,
     skillResolution.systemPromptAddition,
     agentPromptAddition,
   ]
     .filter(Boolean)
     .join("\n\n");
-  // Always load the ticket the user is viewing so the chat can answer
-  // about "this ticket" without depending on the model choosing to search.
   const currentTaskContext = await loadCurrentTaskContext(
     contextTaskId ? [contextTaskId] : [],
     dbUser.id,
@@ -68,8 +71,6 @@ export async function runModelTurn(state: StreamState, resolvedBody: ChatRequest
     },
     actingAgent?.id ?? null,
     async (toolName) => {
-      // Stop is cooperative: an operation already committed cannot be
-      // undone, but no later tool may begin after cancellation lands.
       assertAiChatToolCanStart(state.cancelled, state.providerAbort.signal);
       const release = body.session_id && streamId
         ? await acquireAiChatToolFence(
@@ -81,8 +82,6 @@ export async function runModelTurn(state: StreamState, resolvedBody: ChatRequest
         : undefined;
       try {
         if (heartbeatExecutionId && writeToolNames.has(toolName)) {
-          // Persist the unsafe-to-replay boundary BEFORE a mutating tool
-          // begins. If Redis cannot record it, the tool does not run.
           await markHeartbeatMutationStarted(heartbeatExecutionId);
         }
         return release;
@@ -91,16 +90,17 @@ export async function runModelTurn(state: StreamState, resolvedBody: ChatRequest
         throw error;
       }
     },
-    heartbeatTurn?.metadata
+    heartbeatTurn?.metadata,
+    await isFeatureEnabled(HTPR_7363_CHAT_TASK_WRITER_FLAG, dbUser.id),
+    state.providerAbort.signal,
+    inlineAgentImagesEnabled,
+    actingAgent ? actingAgent.teamScope : null
   );
   if (
     heartbeatExecutionId &&
     body.session_id &&
     body.user_message_id
   ) {
-    // This durable phase flip happens immediately before the model can
-    // execute tools. Recovery can retry an unstarted reservation, but
-    // never treats a started turn as safe to replay after Redis loss.
     const started = await prisma.chatMessage.updateMany({
       where: {
         id: body.user_message_id,
@@ -115,14 +115,11 @@ export async function runModelTurn(state: StreamState, resolvedBody: ChatRequest
       throw new Error("Heartbeat durable reservation could not start");
     }
   }
-  // $ai_latency measures the generation itself, not the turn setup.
   state.generationStartedAt = Date.now();
   const reply = await generateModelReply(state, { instructions, messages, tools, toolExecutions });
   if (!reply) return;
   const { chunks } = reply;
 
-  // The provider/tool phase is over: a deadline from here on must not
-  // misclassify a persist-phase failure as a timeout.
   state.turnDeadline?.clear();
 
   let completionFenceToken: string | null = null;
@@ -188,8 +185,6 @@ export async function runModelTurn(state: StreamState, resolvedBody: ChatRequest
             );
           }
         } catch (error) {
-          // Persistence already has its own durable outcome. Redis
-          // cleanup must never turn that outcome into a retryable write.
           console.error(
             "[ai/chat/stream] completion fence will expire automatically",
             error,
@@ -211,8 +206,6 @@ export async function runModelTurn(state: StreamState, resolvedBody: ChatRequest
     state.heartbeatExecutionTerminal = true;
   }
 
-  // The completed reply is durable before title enrichment begins. A
-  // title-provider or metadata-write failure must never cost the answer.
   if (firstTurn) {
     const generatedTitle = await generateConversationTitle(
       chunks.join(""),

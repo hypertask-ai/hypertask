@@ -89,6 +89,24 @@
       "where": {
         "userSetting": {
           "userId": 7
+        },
+        "project": {
+          "teamId": {
+            "not": null
+          },
+          "OR": [
+            {
+              "ownerId": 7
+            },
+            {
+              "members": {
+                "some": {
+                  "userId": 7,
+                  "agentId": null
+                }
+              }
+            }
+          ]
         }
       },
       "include": {
@@ -245,6 +263,7 @@
           "snippets": null,
           "muteAnnouncements": null,
           "allTasksDateRange": null,
+          "boardSortMode": null,
           "playGifs": null,
           "autoDescriptionSuggestions": null,
           "notificationMatrix": null,
@@ -263,7 +282,20 @@
         "publicId": "fixture-page"
       },
       "include": {
+        "_count": {
+          "select": {
+            "links": true
+          }
+        },
         "task": {
+          "where": {
+            "status": {
+              "not": "Deleted"
+            },
+            "project": {
+              "status": "Normal"
+            }
+          },
           "select": {
             "id": true,
             "ticketNumber": true,
@@ -276,8 +308,44 @@
           "select": {
             "id": true,
             "title": true,
-            "publicId": true
+            "publicId": true,
+            "projectId": true
+          },
+          "where": {
+            "archived": false
           }
+        },
+        "links": {
+          "where": {
+            "removedAt": null,
+            "task": {
+              "status": {
+                "not": "Deleted"
+              },
+              "project": {
+                "status": "Normal"
+              }
+            }
+          },
+          "select": {
+            "task": {
+              "select": {
+                "id": true,
+                "ticketNumber": true,
+                "title": true,
+                "projectId": true,
+                "uniqueIndex": true
+              }
+            }
+          },
+          "orderBy": [
+            {
+              "createdAt": "asc"
+            },
+            {
+              "id": "asc"
+            }
+          ]
         }
       }
     },
@@ -309,9 +377,18 @@
           "title": null,
           "publicId": "fixture-child"
         }
+      ],
+      "linkedTasks": [
+        {
+          "id": 50,
+          "ticketNumber": null,
+          "title": null,
+          "projectId": 15,
+          "uniqueIndex": null
+        }
       ]
     },
-    "queryCount": 3
+    "queryCount": 5
   },
   "project": {
     "args": {
@@ -324,7 +401,13 @@
           "include": {
             "assignees": {
               "include": {
-                "user": true
+                "user": {
+                  "select": {
+                    "id": true,
+                    "displayName": true,
+                    "photoURL": true
+                  }
+                }
               }
             }
           },
@@ -341,7 +424,13 @@
             "ranking": "asc"
           }
         },
-        "owner": true,
+        "owner": {
+          "select": {
+            "id": true,
+            "displayName": true,
+            "photoURL": true
+          }
+        },
         "ai_custom_instructions": true
       }
     },
@@ -354,6 +443,10 @@
         "description": null,
         "ownerId": 7,
         "createdAt": null,
+        "seeded": null,
+        "firstTaskPointerTaskId": null,
+        "firstTaskPointerSectionId": null,
+        "firstRealTaskCreatedAt": null,
         "sections": [],
         "status": "Normal",
         "googleAccountId": null,
@@ -424,18 +517,8 @@
                 "snoozeUntil": null,
                 "user": {
                   "id": 7,
-                  "uid": null,
                   "displayName": "Fixture User",
-                  "photoURL": null,
-                  "email": null,
-                  "joinedAt": null,
-                  "emailVerified": null,
-                  "updatedAt": null,
-                  "googleCalendarGeneration": null,
-                  "mcpTokensRevokedAt": null,
-                  "stripe_customer_id": null,
-                  "UserSettingId": "70",
-                  "accountId": null
+                  "photoURL": null
                 }
               }
             ]
@@ -456,18 +539,8 @@
         ],
         "owner": {
           "id": 7,
-          "uid": null,
           "displayName": "Fixture User",
-          "photoURL": null,
-          "email": null,
-          "joinedAt": null,
-          "emailVerified": null,
-          "updatedAt": null,
-          "googleCalendarGeneration": null,
-          "mcpTokensRevokedAt": null,
-          "stripe_customer_id": null,
-          "UserSettingId": "70",
-          "accountId": null
+          "photoURL": null
         },
         "ai_custom_instructions": [
           {

@@ -1,8 +1,14 @@
 const test = require("node:test");
 const assert = require("node:assert/strict");
-const ts = require("typescript");
 const { load } = require("./task-route-loader.cjs");
-const { attachmentRoutes, attachmentLegacySources } = require("./htpr-6923-verify.cjs");
+// Responses and effects are pinned by digest from the pre-retirement handlers (HTPR-6992).
+const { pins } = require("./helpers/htpr-6992-pins.cjs");
+const pin = pins("a1-attachments");
+const attachmentRoutes = {
+  uploadUrl: { module: "upload-url", method: "POST" },
+  uploadFinalize: { module: "upload-finalize", method: "POST" },
+  downloadAttachment: { module: "download-attachment", method: "GET" },
+};
 const direct = load("src/lib/storage/directUpload.ts", {});
 const keys = ["tasks/attachments/one.txt", "tasks/attachments/two.txt", "tasks/attachments/three.txt"];
 const clean = (value) => value === undefined ? undefined : JSON.parse(JSON.stringify(value, (_key, item) => item instanceof Set ? [...item] : item));
@@ -14,8 +20,8 @@ const defaults = {
   uploadFinalize: { grant: "grant", keep: [keys[0]], discard: [] },
   downloadAttachment: undefined,
 };
-function fixture(name, scenario, mode) {
-  const effects = [], flags = [], loads = [];
+function fixture(name, scenario) {
+  const effects = [], loads = [];
   const session = scenario.noAuth ? null : scenario.noBetterAuth
     ? { userId: scenario.signedUser ?? 985, source: "legacy", needsBridge: true }
     : { userId: scenario.signedUser ?? 985, source: "better-auth" };
@@ -32,16 +38,9 @@ function fixture(name, scenario, mode) {
       effects.push(["signed-session", token]);
       return scenario.noAuth || scenario.noSigned ? null : { id: scenario.signedUser ?? 985 };
     } },
-    "@/lib/flags/keys": { HTPR_6923_APP_ROUTER_WRITES_FLAG: "htpr-6923-app-router-writes" },
     "@/lib/flags": { isFeatureEnabled: async (key, userId) => {
-      if (key === "htpr-6923-app-router-writes") {
-        flags.push([key, userId]);
-        if (mode === "outage") throw new Error("Flag unavailable");
-        return mode === true;
-      }
       effects.push(["upload-feature", key, userId]);
-      if (scenario.uploadFlagThrows) throw new Error("Upload flag unavailable");
-      return !scenario.uploadFlagOff;
+      return true;
     } },
     "@/lib/storage/directUpload": direct,
     "@/lib/storage/hypertasksS3": {
@@ -98,14 +97,7 @@ function fixture(name, scenario, mode) {
   const { module: operation, method } = attachmentRoutes[name];
   const web = load(`src/lib/api/task-writes/${operation}.ts`, mocks)[method];
   mocks[`@/lib/api/task-writes/${operation}`] = { get [method]() { loads.push(operation); if (scenario.loadThrows) throw new Error("Route load unavailable"); return web; } };
-  const source = attachmentLegacySources()[name];
-  const compiled = ts.transpileModule(source, { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022, esModuleInterop: true } }).outputText;
-  const mod = { exports: {} };
-  new Function("require", "module", "exports", compiled)(specifier => {
-    assert.ok(Object.hasOwn(mocks, specifier), `Unexpected original dependency: ${specifier}`);
-    const mock = mocks[specifier]; return Object.hasOwn(mock, "default") ? { __esModule: true, ...mock } : mock;
-  }, mod, mod.exports);
-  return { legacy: mod.exports.default, current: load(`src/pages/api/tasks/${name}.ts`, mocks).default, web, effects, flags, loads };
+  return { current: load(`src/pages/api/tasks/${name}.ts`, mocks).default, web, effects, loads };
 }
 async function invoke(fx, name, scenario, target, method = attachmentRoutes[name].method) {
   const body = Object.hasOwn(scenario, "body") ? scenario.body : defaults[name];
@@ -151,8 +143,6 @@ const cases = {
     ["duplicate preview", { body: { files: [{ name: "p.heic", size: 4 }, { name: "p.jpg", size: 2, previewOfIndex: 0 }, { name: "p2.jpg", size: 2, previewOfIndex: 0 }] }, status: 400 }],
     ["invalid purpose", { body: { ...defaults.uploadUrl, purpose: "bad" }, status: 400 }],
     ["task-link grant", { body: { ...defaults.uploadUrl, purpose: "task-attachment-link" } }],
-    ["purpose permission denied", { body: { ...defaults.uploadUrl, purpose: "task-attachment-link" }, uploadFlagOff: true, status: 403 }],
-    ["purpose flag outage", { body: { ...defaults.uploadUrl, purpose: "task-attachment-link" }, uploadFlagThrows: true, status: 500 }],
     ["sign failure", { storageThrows: true, status: 500 }],
   ],
   uploadFinalize: [
@@ -176,8 +166,6 @@ const cases = {
     ["link permission denied", { body: { action: "link-task-attachment", taskId: 42, receipt: "receipt" }, denied: true, status: 403 }],
     ["link other user", { body: { action: "link-task-attachment", taskId: 42, receipt: "receipt" }, otherUser: true, status: 403 }],
     ["link invalid task", { body: { action: "link-task-attachment", taskId: 0, receipt: "receipt" }, status: 400 }],
-    ["link flag off", { body: { action: "link-task-attachment", taskId: 42, receipt: "receipt" }, uploadFlagOff: true, status: 403 }],
-    ["link flag outage", { body: { action: "link-task-attachment", taskId: 42, receipt: "receipt" }, uploadFlagThrows: true, status: 500 }],
     ["link failure after dispatch", { body: { action: "link-task-attachment", taskId: 42, receipt: "receipt" }, linkThrows: true, status: 500 }],
     ["discard success", { body: { action: "discard-task-attachment", receipt: "receipt" } }],
     ["discard linked stays", { body: { action: "discard-task-attachment", receipt: "receipt" }, alreadyLinked: true }],
@@ -203,35 +191,40 @@ const cases = {
 };
 for (const name of Object.keys(attachmentRoutes)) {
   const authCases = [["unauthenticated", { noAuth: true, status: 401 }], ["Better Auth only", { noSigned: true }], ["legacy only", { noBetterAuth: true }], ["auth resolver throws", { noSigned: true, authThrows: true }]];
-  for (const [label, scenario] of [...cases[name], ...authCases]) test(`${name}: ${label} matches old, Off, outage, On and Web`, async () => {
-    const baseline = fixture(name, scenario, false);
-    const expected = await invoke(baseline, name, scenario, "legacy");
-    if (scenario.status) assert.equal(expected.status, scenario.status);
-    for (const mode of [false, "outage", true, "web"]) {
-      const fx = fixture(name, scenario, mode);
-      assert.deepEqual(await invoke(fx, name, scenario, mode === "web" ? "web" : "current"), expected, `${name} ${label} ${mode}`);
-      assert.deepEqual(fx.effects, baseline.effects, `${name} ${label} side effects ${mode}`);
-      assert.equal(fx.loads.length, mode === true && !scenario.noAuth && !scenario.authThrows ? 1 : 0);
-      if (fx.flags.length) assert.deepEqual(fx.flags, [["htpr-6923-app-router-writes", scenario.signedUser ?? 985]], "only session identity selects migration flag");
+  for (const [label, scenario] of [...cases[name], ...authCases]) test(`${name}: ${label} matches the pinned contract (Pages adapter and Web)`, async () => {
+    let expected;
+    for (const mode of ["current", "web"]) {
+      const fx = fixture(name, scenario);
+      const response = clean(await invoke(fx, name, scenario, mode));
+      if (mode === "current") {
+        if (scenario.status) assert.equal(response.status, scenario.status);
+        expected = pin(name, `${name}: ${label}`, { response, effects: clean(fx.effects) });
+      } else {
+        assert.deepEqual(response, expected.response, `${name} ${label} ${mode}`);
+        assert.deepEqual(clean(fx.effects), expected.effects, `${name} ${label} side effects ${mode}`);
+      }
+      if (mode === "current") assert.equal(fx.loads.length, 1, "the shared operation loads once");
     }
   });
-  for (const noAuth of [false, true]) test(`${name}: other method bypasses flag preflight; unauthenticated=${noAuth}`, async () => {
-    const scenario = { noAuth };
-    const old = fixture(name, scenario, false), current = fixture(name, scenario, true);
+  test(`${name}: other method answers 405 without loading the operation`, async () => {
     const method = name === "downloadAttachment" ? "POST" : "GET";
-    assert.deepEqual(await invoke(current, name, scenario, "current", method), await invoke(old, name, scenario, "legacy", method));
-    assert.deepEqual(current.flags, []); assert.deepEqual(current.loads, []);
+    for (const noAuth of [false, true]) {
+      const current = fixture(name, { noAuth });
+      assert.deepEqual(await invoke(current, name, { noAuth }, "current", method), { status: 405, body: name === "downloadAttachment" ? { message: "Method not allowed" } : { error: "Method not allowed" }, transport: "json", headers: {} });
+      assert.deepEqual(current.loads, []);
+      assert.deepEqual(current.effects, []);
+    }
   });
-  test(`${name}: loading failure never retries legacy`, async () => {
-    const fx = fixture(name, { loadThrows: true }, true);
+  test(`${name}: loading failure rejects without any fallback`, async () => {
+    const fx = fixture(name, { loadThrows: true });
     assert.deepEqual(await invoke(fx, name, { loadThrows: true }, "current"), { throws: "Error: Route load unavailable" });
     assert.equal(fx.loads.length, 1);
-    assert.deepEqual(fx.effects, [], "legacy auth/storage must not execute after dispatch");
+    assert.deepEqual(fx.effects, [], "no auth or storage work after a failed load");
   });
 }
 test("signed upload binds exact byte length, MIME, expiry and grant user", async () => {
   const scenario = {};
-  const fx = fixture("uploadUrl", scenario, true);
+  const fx = fixture("uploadUrl", scenario);
   const result = await invoke(fx, "uploadUrl", scenario, "current");
   assert.equal(result.status, 200);
   const signature = fx.effects.find(([label]) => label === "upload-sign");
@@ -240,7 +233,7 @@ test("signed upload binds exact byte length, MIME, expiry and grant user", async
 });
 test("download preserves 60-second disposition and no-cache headers", async () => {
   const scenario = { attachment: { task: { projectId: 15 } } };
-  const fx = fixture("downloadAttachment", scenario, true);
+  const fx = fixture("downloadAttachment", scenario);
   const result = await invoke(fx, "downloadAttachment", scenario, "current");
   assert.deepEqual(result.headers, { "cache-control": "no-store", pragma: "no-cache", expires: "0" });
   assert.deepEqual(fx.effects.find(([label]) => label === "download-sign"), ["download-sign", "getObject", { Bucket: "bucket", Key: keys[0], Expires: 60, ResponseContentDisposition: "attachment; filename=one%20caf%C3%A9.txt" }]);

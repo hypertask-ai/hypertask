@@ -33,7 +33,6 @@ type UseTaskCommentsRealtimeOptions = {
   taskUniqueIndex?: number | string | null;
   currentTaskTitle?: string;
   currentTaskAssignees?: ITask["assignees"];
-  keepAssignee?: boolean;
   setCurrentTask?: Dispatch<SetStateAction<ITask | null>>;
   setDescription?: Dispatch<SetStateAction<string>>;
   setDescriptionAttachments?: Dispatch<SetStateAction<IAttachment[]>>;
@@ -41,7 +40,6 @@ type UseTaskCommentsRealtimeOptions = {
   hasPullRequests?: boolean;
 };
 
-/** Exported for the HTPR-6281 regression that asserts no-store on this path. */
 export const TASK_DETAIL_REALTIME_FETCH_CACHE = "no-store" as const;
 
 async function fetchTaskDetailForRealtime(
@@ -49,11 +47,6 @@ async function fetchTaskDetailForRealtime(
   uniqueIndex: number | string,
   signal?: AbortSignal,
 ): Promise<ITask | null> {
-  // cache: "no-store" is required: a default GET can reuse a pre-change
-  // response, so the side panel stays on the mount-time section/title/due
-  // date while comments (a different URL) still update (HTPR-6281 QA).
-  // `_=` busts intermediary caches that ignore request Cache-Control and
-  // key only on the URL (getTask used to answer `public` — HTPR-6281 QA #2).
   const response = await fetch(
     `/api/tasks/getTask?project=project-${projectId}&uniqueIndex=${uniqueIndex}&_=${Date.now()}`,
     { cache: TASK_DETAIL_REALTIME_FETCH_CACHE, credentials: "same-origin", ...(signal ? { signal } : {}) }
@@ -62,9 +55,6 @@ async function fetchTaskDetailForRealtime(
   return response.json();
 }
 
-// Subscribes the open task view to its realtime channel. On any comment event
-// it refetches the comments query immediately (no timer; speed rules ban
-// event-to-refetch delays, HTPR-5594) so all viewers see new comments live.
 export function useTaskCommentsRealtime(
   taskId: number | null | undefined,
   options: UseTaskCommentsRealtimeOptions = {}
@@ -82,7 +72,6 @@ export function useTaskCommentsRealtime(
     setCurrentTask,
     setDescription,
     setDescriptionAttachments,
-    keepAssignee = false,
     preserveEditorContent = false,
     hasPullRequests = false,
   } = options;
@@ -134,9 +123,6 @@ export function useTaskCommentsRealtime(
         taskUniqueIndex != null
       ) {
         try {
-          // Realtime means the cache is stale. fetchQuery can dedupe onto an
-          // in-flight prefetch and return pre-change data (e.g. Archive status
-          // missing after another tab archived the task — HTPR-5690).
           const task = await refreshTaskDetailQueryCache({
             queryClient,
             taskId,
@@ -162,10 +148,7 @@ export function useTaskCommentsRealtime(
                 currentTask,
                 mergeRealtimeTaskDetail(currentTask, task, includeTaskContentSync),
                 assigneesAtFetchStart,
-                keepAssignee,
               );
-              // A pre-rename response must not reset the title and feed the
-              // old value into the title editor's pending autosave.
               return currentTask &&
                 titleAtFetchStart !== undefined &&
                 currentTask.title !== titleAtFetchStart
@@ -240,12 +223,10 @@ export function useTaskCommentsRealtime(
         );
         fallbackWarningLogged = true;
       }
-      // A cached open or authorized server seed already supplies this initial read.
       const initialRead = dedupe && !wasConnected.current && reason === "unavailable" && currentUserId
         ? queryClient.getQueryState(taskDetailReadKey(currentUserId, activeTaskId)) : undefined;
       if (!initialRead || !(initialRead.fetchStatus === "fetching" ||
         (initialRead.status === "success" && !shouldRefetchDetailOnMount({ state: initialRead })))) {
-        // Initial metadata queries own their reads; only later reconciliation needs satellite invalidation.
         skipInitialSatelliteRefresh = dedupe && !wasConnected.current && reason === "unavailable" && canReconcile();
         runFallbackCycle();
       }
@@ -319,7 +300,6 @@ export function useTaskCommentsRealtime(
           if (cancelled) return;
           const recovered = fallbackActive;
           stopFallback();
-          // GitHub may finish refreshing the saved PR snapshot before we subscribe.
           if (recovered || hasPullRequests) refetch(true, !preserveEditorContent);
         };
         const onSubscriptionError = () => {
@@ -343,14 +323,8 @@ export function useTaskCommentsRealtime(
         channel.bind("pusher:subscription_succeeded", onSubscriptionSucceeded);
         channel.bind("pusher:subscription_error", onSubscriptionError);
         client.connection.bind("state_change", onConnectionStateChange);
-        // Reconnect safety-net: pull once after a dropped connection recovers.
-        // Skipped on the INITIAL connection (HTPR-3998) — the queries are already
-        // fetching on mount, so refetching there just doubled every page load.
-        // Mounted while already connected (e.g. view opened later in the session):
-        // count that as connected so a real drop+recover still refetches.
         if (client.connection.state === "connected") wasConnected.current = true;
         const onConnected = () => {
-          // Hidden mounts may miss changes before their deferred first connection.
           if (
             !fallbackActive &&
             (wasConnected.current || startedWhileHidden)
@@ -405,7 +379,6 @@ export function useTaskCommentsRealtime(
     setCurrentTask,
     setDescription,
     setDescriptionAttachments,
-    keepAssignee,
     preserveEditorContent,
     hasPullRequests,
     dedupe,

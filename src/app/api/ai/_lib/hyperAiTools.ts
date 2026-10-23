@@ -52,8 +52,6 @@ const ACCOUNT_MANAGEMENT_TOOLS = new Set<string>([
 
 const HYPER_AI_SECRET_WEBHOOK_ACTIONS = new Set(["configure", "rotate"]);
 
-// This is intentionally an allowlist: every current or future registry entry
-// not proven read-only is treated as a mutation and requires confirmation.
 const READ_ONLY_TOOLS = new Set<string>([
   TOOL_METADATA.HELLO.name,
   TOOL_METADATA.AGENT_PRESENCE.name,
@@ -157,11 +155,6 @@ function errorMessage(error: unknown) {
   return error instanceof Error ? error.message : String(error);
 }
 
-/**
- * Adapts the canonical MCP registry for HyperAI. MCP remains the capability
- * source of truth; this layer only adds the stronger confirmation contract
- * required for writes initiated from a ticket mention.
- */
 export function createHyperAiTools({
   user,
   actingAgentId,

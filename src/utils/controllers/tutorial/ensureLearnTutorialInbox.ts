@@ -10,9 +10,6 @@ export type LearnTutorialInboxTarget = {
   taskId: number;
 };
 
-// Native inbox creation leaves this nullable field null, while reminder rows
-// use true. False is therefore a schema-compatible marker reserved for the
-// two disposable tutorial notifications.
 const TUTORIAL_NOTIFICATION_MARKER = false as const;
 
 const tutorialNotificationKey = ({
@@ -81,10 +78,6 @@ const isRetryableConflict = (error: unknown) =>
     error.code === "P2002" ||
     (error.code === "P2010" && error.meta?.code === "23505"));
 
-/**
- * Keep exactly the two practice tasks addressable by the tutorial without
- * relying on, or mutating, any unrelated inbox activity.
- */
 export async function ensureLearnTutorialInbox({
   projectId,
   userId,

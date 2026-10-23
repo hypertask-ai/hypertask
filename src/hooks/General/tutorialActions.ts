@@ -41,15 +41,13 @@ export const useTutorialActions = (context: TutorialState) => {
 
   const exitTutorial = useCallback(async () => {
     if (!isLoggedIn && isFunnelUser) {
-      // Funnel user flow - set completion cookie
       nookies.set(null, "funnel_tutorial_completed", "true", {
-        maxAge: 60 * 60 * 24 * 30, // 30 days
+        maxAge: 60 * 60 * 24 * 30,
         path: "/",
         secure: process.env.NODE_ENV === "production",
         sameSite: "lax",
       });
 
-      // Redirect to signup for funnel users
       router.push("/login");
       return;
     }
@@ -59,6 +57,7 @@ export const useTutorialActions = (context: TutorialState) => {
         currentUser.id,
         true
       );
+      if (!newSetting) return;
 
       setCurrentUser((prev: any) => {
         const updatedUser = { ...prev, UserSetting: { ...newSetting } };
@@ -67,7 +66,7 @@ export const useTutorialActions = (context: TutorialState) => {
           "nookies_user",
           JSON.stringify(slimUserForCookie(updatedUser)),
           {
-            maxAge: 600 * 60 * 24 * 7, // 1 week
+            maxAge: 600 * 60 * 24 * 7,
             path: "/",
           },
         );
@@ -75,8 +74,6 @@ export const useTutorialActions = (context: TutorialState) => {
       });
     }
 
-    // Consume the onboarding-return cookie so a later standalone tutorial (Ctrl+K)
-    // doesn't wrongly redirect back into the onboarding sequence.
     nookies.destroy(null, "onboarding_return", { path: "/" });
 
     console.log("Exit tutorial was called2");
@@ -91,14 +88,12 @@ export const useTutorialActions = (context: TutorialState) => {
     activeScene,
   ]);
 
-  //------------------------------------------------MULTI KEY PRESS CONTROLLER
   const controller: { [key: number]: { pressed: boolean } } = useMemo(() => {
     return {
       ...multipleKeys,
     };
   }, []);
 
-  //------------------------------------------------HINT SHAKE SETTER
   const errorShake = () => {
     setShake(true);
     setTimeout(() => {
@@ -106,7 +101,6 @@ export const useTutorialActions = (context: TutorialState) => {
     }, 500);
   };
 
-  //------------------------------------------------INPUT HANDLERS
   const isInputValid = (input: string) => {
     const cleanedInput = input.replace(/\s+/g, "");
     return cleanedInput.length > 0;
@@ -163,7 +157,6 @@ export const useTutorialActions = (context: TutorialState) => {
     if (newTitle) setTitle(newTitle);
   };
 
-  //------------------------------------------------SCENE UPDATERS
   const updateHint = useCallback(
     (increment: number = 1) => {
       setShake(false);

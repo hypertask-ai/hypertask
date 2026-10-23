@@ -1,4 +1,4 @@
-/* eslint-disable react-hooks/exhaustive-deps */
+
 import {
   ModalContainerCustom,
   ModalHeaderComp,
@@ -7,15 +7,10 @@ import {
   ModalRowElementContainer,
 } from "@/components/Common/CommonModalComponents";
 import useHandleMouseGlobal from "@/hooks/General/useHandleMouse";
-import { useFlag } from "@/hooks/useFlag";
-import { HTPR_6930_MY_TASKS_KANBAN_REUSE_FLAG } from "@/lib/flags/keys";
 import { Check } from "lucide-react";
 import { ChangeEvent, useEffect, useMemo, useState } from "react";
 import { ModalBody } from "reactstrap";
 
-// HTPR-4885/4886: the house filterable-list submodal, extracted so recurrence
-// presets and task templates share one keyboard-driven picker instead of each
-// re-implementing the CreateLabel/MoveTaskToBoard pattern.
 
 export interface PickerOption {
   id: string | number | null;
@@ -41,8 +36,7 @@ const OptionPickerModal: React.FC<Props> = ({
   onSelect,
   onClose,
 }) => {
-  const kanbanReuseEnabled = useFlag(HTPR_6930_MY_TASKS_KANBAN_REUSE_FLAG);
-  const checkedIcon = kanbanReuseEnabled ? <Check size={16} strokeWidth={1.75} /> : null;
+  const checkedIcon = <Check size={16} strokeWidth={1.75} />;
   const [keyword, setKeyword] = useState("");
   const [selectedIndex, setSelectedIndex] = useState(0);
   const { handleMouseEnter, handleMouseLeave, handleMouseMove, elRef } =
@@ -88,7 +82,6 @@ const OptionPickerModal: React.FC<Props> = ({
       event.preventDefault();
       selectAt(selectedIndex);
     } else if (event.key === "Escape") {
-      // Own the Escape so page-level back handlers (My Tasks) do not also fire.
       event.preventDefault();
       event.stopImmediatePropagation();
       onClose();

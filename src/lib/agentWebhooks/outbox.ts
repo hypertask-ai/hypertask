@@ -1,3 +1,4 @@
+import { webhookCredentialAllows } from "@/lib/webhooks/credentialScope";
 import crypto from "crypto";
 import type { AgentRun, Prisma } from "@prisma/client";
 import prisma from "@/lib/prisma";
@@ -29,6 +30,7 @@ type AgentWebhookTransaction = Pick<
   | "agentRun"
   | "featureFlag"
   | "user"
+  | "agent" | "project" | "task" | "comment" | "chatSession"
 >;
 
 type EligibleAgentWebhookSubscription = {
@@ -77,7 +79,6 @@ async function findEligibleAgentWebhookSubscription(
   return subscription;
 }
 
-/** Persist one event inside the caller's domain transaction. */
 export async function persistAgentWebhookEvent(
   tx: AgentWebhookTransaction,
   input: AgentWebhookEventInput,
@@ -87,12 +88,11 @@ export async function persistAgentWebhookEvent(
     input.agentId,
     input.projectId,
   );
-  if (!subscription?.events.includes(input.event)) return null;
+  if (!subscription?.events.includes(input.event) || !await webhookCredentialAllows(input.agentId, input, { projectId: subscription.projectId }, tx)) return null;
 
   return createAgentWebhookDelivery(tx, subscription.id, input.agentId, input);
 }
 
-/** Publish only after the transaction commits; a failure remains sweepable. */
 export async function publishAgentWebhookDeliveries(
   deliveryIds: Array<string | null>,
 ): Promise<void> {
@@ -114,9 +114,9 @@ export async function replayAgentWebhookDelivery(input: {
 }): Promise<string | null> {
   const source = await prisma.agentWebhookDelivery.findFirst({
     where: { id: input.deliveryId, subscriptionId: input.subscriptionId },
-    select: { event: true, payload: true },
+    select: { event: true, payload: true, subscription: true },
   });
-  if (!source) return null;
+  if (!source || !await webhookCredentialAllows(source.subscription.agentId, source.payload, source.subscription)) return null;
 
   const deliveryId = crypto.randomUUID();
   const sourcePayload = source.payload as Record<string, unknown>;
@@ -170,7 +170,6 @@ export type AgentWebhookActorInput = {
   displayName?: string | null;
 };
 
-/** Record the recoverable post-create handoff in the task's creation transaction. */
 export async function persistAgentTaskCreatedPending(
   tx: Prisma.TransactionClient,
   taskId: number,
@@ -185,7 +184,6 @@ export async function persistAgentTaskCreatedPending(
   });
 }
 
-/** Mark the handoff ready only after post-create assignment has completed. */
 export async function markAgentTaskCreatedReady(taskId: number): Promise<boolean> {
   const updated = await prisma.$executeRaw`
     UPDATE "Task"
@@ -198,7 +196,6 @@ export async function markAgentTaskCreatedReady(taskId: number): Promise<boolean
   return updated > 0;
 }
 
-/** Requeue a failed handoff so repeated failures do not starve newer rows. */
 export async function ensurePendingAgentTaskCreatedWebhook(
   taskId: number,
 ): Promise<boolean> {
@@ -211,7 +208,6 @@ export async function ensurePendingAgentTaskCreatedWebhook(
   return updated > 0;
 }
 
-// Broadcast targets always carry a real board: task events are board scoped.
 type AgentWebhookBroadcastInput = Omit<AgentWebhookEventInput, "agentId" | "projectId"> & {
   projectId: number;
 } &
@@ -263,10 +259,6 @@ async function filterTaskLabelsForProject(
   });
   const labelsById = new Map(projectLabels.map((label) => [label.id, label]));
 
-  // Map the original array so valid duplicate entries keep their order and
-  // cardinality. A historical label remains in the payload while it resolves
-  // to this project. Omit deleted or cross-project rows instead of leaking
-  // unverified label data into a board-scoped webhook.
   const filteredLabels = labels.flatMap(({ id }) => {
     const label = labelsById.get(id);
     return label ? [{ id: label.id, value: label.value }] : [];
@@ -286,8 +278,6 @@ function taskLabelsWereRedacted(
   original: readonly AgentWebhookTaskLabel[],
   filtered: readonly AgentWebhookTaskLabel[],
 ): boolean {
-  // filterTaskLabelsForProject preserves order and duplicates. A shorter
-  // result therefore means that one or more rows were omitted.
   return original.length !== filtered.length;
 }
 
@@ -381,8 +371,6 @@ async function createOrReactivateAgentRun(
       data: { status: "ACTIVE", lastActivityAt: now, chatPromptMessageId: data.chatPromptMessageId },
     });
     if (reactivated.count === 0) {
-      // A stop can win between the skipped insert and guarded update. In that
-      // ordering this interaction starts a new run rather than reviving STOPPED.
       inserted = await tx.agentRun.createMany({ data: [data], skipDuplicates: true });
       created = inserted.count === 1;
       if (!created) {
@@ -404,10 +392,6 @@ async function createOrReactivateAgentRun(
   return { created, run };
 }
 
-/**
- * Persist a trigger plus its run lifecycle event in the source transaction.
- * Feature-off callers retain the legacy payload and one-delivery return shape.
- */
 export async function persistAgentRunTriggerWebhooks(
   tx: AgentWebhookTransaction,
   input: AgentRunTriggerEventInput,
@@ -418,7 +402,7 @@ export async function persistAgentRunTriggerWebhooks(
     input.agentId,
     input.projectId,
   );
-  if (!subscription) return [];
+  if (!subscription || !await webhookCredentialAllows(input.agentId, input, { projectId: subscription.projectId }, tx)) return [];
 
   const triggerSubscribed = subscription.events.includes(input.event);
   const runsEnabled = await isFeatureEnabled(
@@ -486,7 +470,6 @@ export type AgentTaskRunPromptInput = {
   excludeAgentIds?: readonly string[];
 };
 
-/** Prompt every still-addressable run on a task after a human follow-up. */
 export async function persistAgentTaskRunPromptWebhooks(
   tx: AgentWebhookTransaction,
   input: AgentTaskRunPromptInput,
@@ -545,6 +528,7 @@ export async function persistAgentTaskRunPromptWebhooks(
       continue;
     }
 
+    if (!await webhookCredentialAllows(run.agentId, { ...input, runId: run.id }, { projectId: input.projectId }, tx)) continue;
     const updated = await tx.agentRun.updateMany({
       where: {
         id: run.id,
@@ -578,7 +562,6 @@ export async function persistAgentTaskRunPromptWebhooks(
   return deliveryIds;
 }
 
-/** Persist the terminal lifecycle callback after a guarded stop update. */
 export async function persistAgentRunStoppedWebhook(
   tx: AgentWebhookTransaction,
   input: Omit<AgentWebhookEventInput, "event">,
@@ -586,7 +569,6 @@ export async function persistAgentRunStoppedWebhook(
   return persistAgentWebhookEvent(tx, { ...input, event: "run.stopped" });
 }
 
-/** Persist one event for every active agent subscription in the task's board scope. */
 export async function persistAgentWebhookEvents(
   tx: AgentWebhookTransaction,
   input: AgentWebhookBroadcastInput,
@@ -604,9 +586,6 @@ export async function persistAgentWebhookEvents(
       ...(targetAgentIds ? { agentId: { in: targetAgentIds } } : {}),
       agent: {
         revokedAt: null,
-        // Match the legacy single-target rule for every subscription: a
-        // subscription project narrows delivery, and membership grants access.
-        // A null subscription project is an explicit all-board subscription.
         members: { some: { projectId: input.projectId } },
       },
       OR: [{ projectId: null }, { projectId: input.projectId }],
@@ -620,15 +599,11 @@ export async function persistAgentWebhookEvents(
         (subscription): subscription is typeof subscription & { agentId: string } =>
           typeof subscription.agentId === "string" && subscription.agentId.length > 0,
       )
-      .map((subscription) =>
-        createAgentWebhookDelivery(
-          tx,
-          subscription.id,
-          subscription.agentId,
-          eventInput,
-        ),
-      ),
-  );
+      .map(async (subscription) => {
+        if (!await webhookCredentialAllows(subscription.agentId, eventInput, { projectId: input.projectId }, tx)) return [];
+        return [await createAgentWebhookDelivery(tx, subscription.id, subscription.agentId, eventInput)];
+      }),
+  ).then((ids) => ids.flat());
 }
 
 type AgentTaskWebhookInput = {
@@ -645,8 +620,6 @@ export async function persistAgentTaskUpdatedWebhook(
   tx: Prisma.TransactionClient,
   input: AgentTaskWebhookInput & { changes: AgentWebhookTaskChanges },
 ): Promise<string[]> {
-  // The task row supplies the only project scope used below. Callers pass a
-  // task ID, not a second project ID that could disagree with this row.
   if (Object.keys(input.changes).length === 0) return [];
   const task = await tx.task.findUnique({
     where: { id: input.taskId },
@@ -691,11 +664,6 @@ export async function persistAgentTaskCreatedWebhook(
   tx: Prisma.TransactionClient,
   input: AgentTaskCreatedWebhookInput,
 ): Promise<string[]> {
-  // Lock the task while building the outbox rows. The emitted marker is set
-  // only after those rows exist in this transaction. A concurrent request or
-  // sweep waits for the lock, then sees the committed marker and does nothing.
-  // Any failure before commit rolls back both the rows and the marker, so the
-  // recovery sweep can retry the handoff.
   const claimed = await tx.$queryRaw<Array<{ id: number }>>`
     SELECT "id"
     FROM "Task"
@@ -707,8 +675,6 @@ export async function persistAgentTaskCreatedWebhook(
   `;
   if (claimed.length === 0) return [];
 
-  // Read the task and derive its project inside the caller's transaction so a
-  // stale task ID cannot redirect this event to a caller-supplied board.
   const task = await tx.task.findUnique({
     where: { id: input.taskId },
     select: {
@@ -728,8 +694,6 @@ export async function persistAgentTaskCreatedWebhook(
   });
   if (!task) return [];
 
-  // Request paths pass the triggering actor explicitly. Recovery sweeps omit
-  // it and intentionally use the task creator stored on the task row.
   const actorInput = input.actor ?? {
     userId: task.userId,
     agentId: task.agentId,

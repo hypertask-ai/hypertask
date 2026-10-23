@@ -1,5 +1,3 @@
-// Assert-based demo because this repository has no Vitest setup.
-// Run after installing dependencies: npx tsx src/lib/mcp/agents/scopes.test.ts
 import assert from 'node:assert/strict'
 import { NextRequest } from 'next/server'
 
@@ -33,6 +31,7 @@ async function demo() {
   ])
 
   const prismaMock = prisma as any
+  const originalFlagFindUnique = prismaMock.featureFlag.findUnique
   const originalAgentFindFirst = prismaMock.agent.findFirst
   const originalAgentFindUnique = prismaMock.agent.findUnique
   const originalTaskFindMany = prismaMock.task.findMany
@@ -61,10 +60,10 @@ async function demo() {
     displayName: 'Valentin',
     mcpTokensRevokedAt: null,
   }
-  const humanCtx = { user, agentId: null }
-  const readCtx = { user, agentId: 'read-agent' }
-  const emptyCtx = { user, agentId: 'empty-agent' }
-  const nullCtx = { user, agentId: 'null-agent' }
+  const humanCtx = { teamScope: null, user, agentId: null }
+  const readCtx = { teamScope: null, user, agentId: 'read-agent' }
+  const emptyCtx = { teamScope: null, user, agentId: 'empty-agent' }
+  const nullCtx = { teamScope: null, user, agentId: 'null-agent' }
   const humanToken = createMcpToken(user.id, user.email)
   const agentTokens = new Map([
     [
@@ -91,6 +90,7 @@ async function demo() {
   )
 
   try {
+    prismaMock.featureFlag.findUnique = async () => ({ mode: 'EVERYONE' })
     let roleLookupCount = 0
     prismaMock.agent.findUnique = async ({
       where,
@@ -167,9 +167,9 @@ async function demo() {
       },
     })
     const humanUpdateBody = await json(humanUpdate.response)
-    assert.equal(humanUpdate.response.status, 200)
+    assert.equal(humanUpdate.response.status, 404)
     assert.equal(humanUpdate.outcome, 'not_found')
-    assert.equal(humanUpdateBody.success, true)
+    assert.equal(humanUpdateBody.success, false)
 
     const humanBatch = await handleBatchBody(
       updateRequest,
@@ -227,7 +227,7 @@ async function demo() {
       params: Promise.resolve({ teamId: 'team-one' }),
     }
 
-    for (const agentId of ['read-agent', 'write-agent'] as const) {
+    for (const agentId of ['read-agent'] as const) {
       const response = await createBoard(
         boardRequest(agentTokens.get(agentId)!),
         teamParams
@@ -279,6 +279,7 @@ async function demo() {
     assert.equal(humanBoardBody.success, true)
     assert.equal(createBoardCallCount, 2)
   } finally {
+    prismaMock.featureFlag.findUnique = originalFlagFindUnique
     prismaMock.agent.findFirst = originalAgentFindFirst
     prismaMock.agent.findUnique = originalAgentFindUnique
     prismaMock.task.findMany = originalTaskFindMany

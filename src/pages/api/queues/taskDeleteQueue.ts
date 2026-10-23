@@ -22,12 +22,8 @@ export async function cancelTaskDeleteJob(taskId: number) {
 }
 
 async function handler(req: NextApiRequest, res: NextApiResponse) {
-    // This callback has no request user: its QStash signature authenticates the
-    // job, and the claim only accepts a due task scheduled by the gated delete path.
     const job = req.body as string;
     console.log("🚀 ~ job:", job)
-    // job = 'task-id-119'
-    // ================== job execution time *-*, you finally recieve the notification
 
     try {
       const taskId = parseInt(job.split("-")[2]);

@@ -18,10 +18,7 @@ const mocks = new Map([
   }],
   ['src/lib/flags.ts', {
     HTPR_6881_SEARCH_FUZZY_PERSON_FLAG: 'htpr-6881-search-fuzzy-person',
-    HTPR_6369_SEARCH_OPERATORS_FLAG: 'htpr-6369-search-operators',
-    HTPR_6370_SEARCH_CHIPS_FLAG: 'htpr-6370-search-chips',
-    HTPR_6880_SEARCH_COMMENTER_FLAG: 'htpr-6880-search-commenter',
-    isFeatureEnabled: async (key) => key === 'htpr-6881-search-fuzzy-person' ? false : key === 'htpr-6369-search-operators' ? state.flag : state.listFlag,
+    isFeatureEnabled: async (key) => key === 'htpr-6881-search-fuzzy-person' ? false : state.listFlag,
   }],
   ['src/lib/mcp/readListQuery.ts', { readListQuery: (params) => ({ listQuery: state.listFlag
     ? { query: null, cursor: params.get('cursor'), filter: {}, fields: [], sortBy: state.sortBy, sortOrder: state.sortOrder }
@@ -59,7 +56,7 @@ const mocks = new Map([
     },
   } }],
 ])
-mocks.get('src/lib/flags.ts').isFeatureEnabled = async (key) => key === 'htpr-6881-search-fuzzy-person' ? false : key === 'htpr-6369-search-operators' ? state.flag : key === 'htpr-6370-search-chips' ? state.chipsFlag : state.listFlag
+mocks.get('src/lib/flags.ts').isFeatureEnabled = async (key) => key === 'htpr-6881-search-fuzzy-person' ? false : state.listFlag
 mocks.get('src/lib/prisma.ts').default.project.findMany = async ({ select }) => select.title ? [{ title: 'Visible' }] : [{ id: 7 }]
 for (const [file, exports] of mocks) {
   const filename = path.join(root, file)
@@ -74,7 +71,7 @@ function row(id, projectId = 7, updatedAt = new Date('2026-09-01')) {
     createdAt: new Date('2026-08-01'), updatedAt, dueDate: null }
 }
 async function search(query, overrides = {}, options = '') {
-  state = { flag: true, listFlag: false, legacyCalls: 0, windows: [], taskHits: [], commentHits: [], queries: [],
+  state = { listFlag: false, legacyCalls: 0, windows: [], taskHits: [], commentHits: [], queries: [],
     rows: [row(8, 8), row(123)], ...overrides }
   const response = await GET(new NextRequest(`http://localhost/api/mcp/tasks/search?q=${encodeURIComponent(query)}${options}`))
   return { response, body: await response.json(), state }
@@ -133,15 +130,7 @@ test('MCP capped results mark total and sorted page as partial', async () => {
   assert.ok(state.queries.filter(({ where }) => where.id?.in).every(({ where }) => where.id.in.length <= 1600))
 })
 
-test('MCP hash board lookup stays behind the chips flag', async () => {
-  const off = await search('in:#Visible', { chipsFlag: false })
-  assert.deepEqual(off.body.tasks, [])
-  const on = await search('in:#Visible', { chipsFlag: true })
+test('MCP hash board lookup resolves accessible boards', async () => {
+  const on = await search('in:#Visible')
   assert.deepEqual(on.body.tasks.map((item) => item.id), [123])
-})
-test('MCP flag off preserves current search contract', async () => {
-  const { response, state } = await search('label:bug', { flag: false })
-  assert.equal(response.status, 200)
-  assert.equal(state.legacyCalls, 1)
-  assert.equal(state.where.AND, undefined)
 })

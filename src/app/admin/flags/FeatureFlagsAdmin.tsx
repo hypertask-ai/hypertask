@@ -52,7 +52,6 @@ type FlagFilterDropdown = {
   onChange: (selected: string[]) => void;
 };
 
-// Trigger button plus the shared OptionPickerModal. Single selects close on pick; multi selects stay open.
 function FlagFilterPicker({ label, multiple, selected, allCount, options, onChange }: FlagFilterDropdown) {
   const [open, setOpen] = useState(false);
   const trigger = useRef<HTMLButtonElement>(null);
@@ -210,7 +209,6 @@ export default function FeatureFlagsAdmin({
   const shownCount = clusters.reduce((total, [, rows]) => total + rows.length, 0);
   const allRows = flags.data?.flags ?? [];
   const selectedRisks = risk === null ? [] : Array.isArray(risk) ? risk : [risk];
-  // Each dropdown counts what its options would show with every other filter and the search applied.
   const searchedRows = allRows.filter((flag) => matchesFeatureFlagSearch(flag, search));
   const inAudience = (flag: FeatureFlagRow) => audienceFilter === "ALL" ? true
     : audienceFilter === "UNRELEASED" ? (urlFiltersEnabled ? isUnreleasedFeatureFlag(flag) : flag.mode !== "EVERYONE")
@@ -509,6 +507,16 @@ export default function FeatureFlagsAdmin({
                       </span>
                     ))}
                   </p>
+                )}
+                {flag.lastChange && (
+                  <div className="mt-2">
+                    <span className="text-dense text-text-light-gray">
+                      Last change: {OPTIONS.find(({ mode }) => mode === flag.lastChange?.oldMode)?.label ?? "Default"} → {OPTIONS.find(({ mode }) => mode === flag.lastChange?.newMode)?.label} by {flag.lastChange.actorName}, {new Date(flag.lastChange.createdAt).toLocaleString(undefined, { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" })}
+                      {flag.lastChange.reason && (
+                        <> <a href={flag.lastChange.reason} target="_blank" rel="noreferrer" className="text-content font-medium text-white-black underline-offset-2 hover:underline focus-visible:underline">reason</a></>
+                      )}
+                    </span>
+                  </div>
                 )}
                 {(() => {
                     const removal = featureFlagRemovalState(flag);

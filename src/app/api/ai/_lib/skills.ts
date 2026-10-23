@@ -1,3 +1,4 @@
+import { AccountSkillAccessError } from "./skillAccess";
 import type { AI_Skill } from "@prisma/client";
 
 import { STRUCTURED_WRITING_STYLE } from "@/app/api/ai/_lib/writingSkills";
@@ -5,6 +6,8 @@ import { STRUCTURED_WRITING_STYLE } from "@/app/api/ai/_lib/writingSkills";
 type SkillContext = {
   userId: number;
   projectId?: number;
+  agentId?: string | null;
+  teamScope?: import("@/lib/mcp/auth/types").AgentTokenTeamScope | null;
 };
 type SkillLookup = (
   slugs: string[],
@@ -53,7 +56,7 @@ export async function resolveSkills(
   const bySlug = new Map<string, AI_Skill>();
 
   for (const skill of available) {
-    if (skill.userId === context.userId) bySlug.set(skill.slug, skill);
+    if (context.teamScope == null && skill.userId === context.userId) bySlug.set(skill.slug, skill);
   }
   for (const skill of available) {
     if (context.projectId && skill.projectId === context.projectId) {
@@ -69,7 +72,6 @@ export async function resolveSkills(
   const skills = tokens
     .map((match) => bySlug.get(match[2]))
     .filter((skill): skill is AI_Skill => Boolean(skill))
-    // "/foo ... /foo" resolves the same skill twice; inject its body once.
     .filter((skill) => (seen.has(skill.id) ? false : (seen.add(skill.id), true)));
   if (skills.length === 0) return emptyResolution(text);
 
@@ -84,9 +86,6 @@ export async function resolveSkills(
   );
   if (removedAtStart) cleanedText = cleanedText.replace(/^\s/, "");
   if (!cleanedText.trim()) cleanedText = "";
-  // Persisted skill bodies are user-authored and can be imported from arbitrary
-  // GitHub repos, so they are DATA, not policy. Built-ins are also fenced so no
-  // prompt template can override the system rules or tool-use policy above.
   const systemPromptAddition = skills
     .map((skill) => {
       const provenance =
@@ -105,24 +104,30 @@ async function lookupSkills(slugs: string[], context: SkillContext) {
     import("@/lib/prisma"),
     import("@/utils/controllers/projects/getAllIncludes"),
   ]);
-  return prisma.aI_Skill.findMany({
+  if (context.teamScope != null && !context.projectId) throw new AccountSkillAccessError();
+  const skills = await prisma.aI_Skill.findMany({
     where: {
       enabled: true,
       slug: { in: slugs },
       OR: [
-        { userId: context.userId, projectId: null },
+        ...(context.teamScope != null ? [] : [{ userId: context.userId, projectId: null }]),
         ...(context.projectId
           ? [
               {
                 projectId: context.projectId,
                 userId: null,
-                project: { is: getProjectWhere(context.userId) },
+                project: { is: getProjectWhere(context.userId, context.agentId, context.teamScope) },
               },
             ]
           : []),
       ],
     },
   });
+  if (context.teamScope != null) {
+    const missing = slugs.filter((slug) => !skills.some((skill) => skill.slug === slug));
+    if (missing.length && await prisma.aI_Skill.findFirst({ where: { userId: context.userId, projectId: null, enabled: true, slug: { in: missing } }, select: { id: true } })) throw new AccountSkillAccessError();
+  }
+  return skills;
 }
 
 function emptyResolution(text: string) {

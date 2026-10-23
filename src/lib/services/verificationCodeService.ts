@@ -10,28 +10,20 @@ export interface VerificationCode {
   used: boolean
 }
 
-// Rate limiting storage (in production, use Redis or database)
 const lastRequestTime = new Map<string, number>()
 
 export class VerificationCodeService {
-  /**
-   * Generate a secure 6-digit verification code
-   */
   static generateCode(): string {
     return randomInt(100000, 1000000).toString()
   }
 
-  /**
-   * Store a verification code in the database with rate limiting and security measures
-   */
   static async storeCode(code: string, email: string, expiresInMinutes: number = 30): Promise<void> {
     const normalizedEmail = email.trim().toLowerCase()
     
-    // Rate limiting: 1 minute cooldown between requests per email
     const now = Date.now()
     const lastRequest = lastRequestTime.get(normalizedEmail) || 0
     
-    if (now - lastRequest < 60000) { // 1 minute cooldown
+    if (now - lastRequest < 60000) {
       const waitTime = Math.ceil((60000 - (now - lastRequest)) / 1000)
       throw new Error(`Please wait ${waitTime} seconds before requesting another code`)
     }
@@ -39,7 +31,6 @@ export class VerificationCodeService {
     const expiresAt = new Date(Date.now() + expiresInMinutes * 60 * 1000)
     
     try {
-      // The email key identifies the sole row, so upsert replaces active and expired codes.
       await prisma.verificationCode.upsert({
         where: { email: normalizedEmail },
         update: {
@@ -56,20 +47,18 @@ export class VerificationCodeService {
         }
       })
       
-      // Update rate limiting after successful storage
       lastRequestTime.set(normalizedEmail, now)
       
       console.log(`🔐 Stored verification code for ${normalizedEmail}, expires at ${expiresAt.toISOString()}`)
     } catch (error) {
       console.error('❌ Failed to store verification code:', error)
       
-      // Specific error handling
       if (error instanceof Error) {
         if (error.message.includes('unique constraint')) {
           throw new Error('A verification code is already active for this email')
         }
         if (error.message.includes('Please wait')) {
-          throw error // Re-throw rate limit errors
+          throw error
         }
       }
       
@@ -77,9 +66,6 @@ export class VerificationCodeService {
     }
   }
 
-  /**
-   * Verify and consume a verification code with comprehensive security checks
-   */
   static async verifyCode(code: string, email: string): Promise<string | null> {
     if (!code || code.length !== 6 || !/^\d{6}$/.test(code)) {
       return null
@@ -89,9 +75,6 @@ export class VerificationCodeService {
     if (!normalizedEmail) return null
 
     try {
-      // One conditional write binds the code to its email and consumes it once.
-      // Concurrent requests can read nothing useful ahead of this gate: only
-      // one update can change the matching row from unused to used.
       const result = await prisma.verificationCode.updateMany({
         where: {
           code,
@@ -109,19 +92,15 @@ export class VerificationCodeService {
     }
   }
 
-  /**
-   * Clean up expired codes with audit trail preservation
-   */
   static async cleanupExpiredCodes(): Promise<void> {
     try {
       const oneDayAgo = new Date(Date.now() - 24 * 60 * 60 * 1000)
       
-      // Only delete codes that are both expired AND older than 24 hours (for audit trail)
       const result = await prisma.verificationCode.deleteMany({
         where: {
           AND: [
-            { expiresAt: { lt: new Date() } }, // Expired
-            { createdAt: { lt: oneDayAgo } }   // Older than 24 hours
+            { expiresAt: { lt: new Date() } },
+            { createdAt: { lt: oneDayAgo } }
           ]
         }
       })
@@ -134,9 +113,6 @@ export class VerificationCodeService {
     }
   }
 
-  /**
-   * Get comprehensive verification code stats for monitoring
-   */
   static async getStats() {
     try {
       const now = new Date()
@@ -179,9 +155,6 @@ export class VerificationCodeService {
     }
   }
 
-  /**
-   * Check if an email is currently rate limited
-   */
   static isRateLimited(email: string): { limited: boolean; waitTime: number } {
     const normalizedEmail = email.trim().toLowerCase()
     const lastRequest = lastRequestTime.get(normalizedEmail) || 0
@@ -198,9 +171,6 @@ export class VerificationCodeService {
     return { limited: false, waitTime: 0 }
   }
 
-  /**
-   * Clean up rate limiting memory periodically
-   */
   static cleanupRateLimit(): void {
     const oneHourAgo = Date.now() - 60 * 60 * 1000
     

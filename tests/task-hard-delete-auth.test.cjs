@@ -38,8 +38,6 @@ function projectMatches(project, where) {
 function loadRoute({ session = null, task = null, deleteOutcome = "success" } = {}) {
   const calls = { taskLookups: [], deletes: [], broadcasts: [] };
   const stubs = {
-    "@/lib/flags": { isFeatureEnabled: async () => false },
-    "@/lib/flags/keys": { HTPR_6923_APP_ROUTER_WRITES_FLAG: "htpr-6923-app-router-writes" },
     "@/lib/auth/getSessionUser": {
       getSessionUser: async () => session,
     },

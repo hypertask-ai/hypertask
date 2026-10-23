@@ -3,10 +3,6 @@ import { executeWithService } from '../utils/executeWithService';
 import { TOOL_METADATA } from '../config/tool-metadata';
 import { getInboxListBaseSchema } from '../validations/inbox.validation';
 
-/**
- * Tool: inbox_list
- * Lists inbox tasks for a user, categorized by notification type.
- */
 export const inboxListTool = {
   name: TOOL_METADATA.INBOX_LIST.name,
   description: TOOL_METADATA.INBOX_LIST.description,

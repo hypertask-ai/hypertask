@@ -17,6 +17,8 @@ function loadPost({ flagOn, knownLabelIds }) {
   let createdLabels;
   const json = (body, init) => ({ body, status: init && init.status });
   const stubs = {
+    "@/lib/media/inlineAgentImages.server": { inlineAgentImagesForUser: async (html) => html },
+    "@/lib/mcp/operationCrashReport": { reportMcpOperationCrash: () => {} },
     "@/lib/mcp/routeWrapper": {
       wrapMcpRoute: (fn) => fn,
       validateMcpRouteAuth: async () => ({ user: { id: 1 } }),
@@ -50,6 +52,7 @@ function loadPost({ flagOn, knownLabelIds }) {
     "@/lib/mcp/tasks/mappers": { mapTaskToDetail: (t) => t },
     "@/utils/helperFunctions/sanitizeRichHtml": { sanitizeRichHtml: (s) => s },
     "@/lib/mcp/idempotency/idempotencyStore": {
+      IdempotencyAccessError: class extends Error {},
       IdempotencyInProgressError: class extends Error {},
       normalizeIdempotencyKey: () => null,
       withIdempotency: async (_a, _b, _c, _d, fn) => fn(),
@@ -58,7 +61,9 @@ function loadPost({ flagOn, knownLabelIds }) {
       buildFieldError: (code, field, message) => ({ success: false, error: message, code, field }),
     },
     "@/lib/mcp/agents/scopes": { requireRole: async () => null },
+    "@/utils/controllers/agents/boardMembers": { isAgentOnBoard: async () => true },
     "@/lib/mcp/agents": { getMcpSessionAgentSummary: async () => null },
+    "@/lib/mcp/operationContext": { getMcpOperationContext: () => undefined },
     "@/lib/flags": { isFeatureEnabled: async () => flagOn },
     "@/lib/prisma": {
       __esModule: true,

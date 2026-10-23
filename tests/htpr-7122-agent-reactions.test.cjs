@@ -46,7 +46,7 @@ function fakeTx(rows) {
         return pick(row, select);
       },
       create: async ({ data, select }) => {
-        const row = { id: `r${nextId++}`, isDeleted: false, agentId: null, agentDisplayName: null, ...data };
+        const row = { id: `r${nextId++}`, createdAt, isDeleted: false, agentId: null, agentDisplayName: null, ...data };
         rows.push(row);
         return pick(row, select);
       },
@@ -59,9 +59,11 @@ function fakeTx(rows) {
   };
 }
 
+const createdAt = new Date("2026-10-11T06:00:00.000Z");
 const RUNNER = { id: "agent-runner-5", displayName: "Runner 5" };
 const ownerThumb = () => ({
   id: "owner-1",
+  createdAt,
   commentId: 7,
   taskId: 42,
   userId: 6,
@@ -129,8 +131,8 @@ test("the MCP route reacts as the calling agent and names it on the inbox notifi
 
 test("a reaction write response hides agents, and survives a rejected agent lookup", async () => {
   const { mapReactionWriteResult } = loadTs("src/lib/mcp/comments/reactionResponse.ts");
-  const agentRow = { id: "r1", emoji: "👍", userId: 6, agentId: RUNNER.id, agentDisplayName: "Runner 5" };
-  const human = { id: "r2", emoji: "👍", userId: 7, agentId: null, agentDisplayName: null };
+  const agentRow = { createdAt, id: "r1", emoji: "👍", userId: 6, agentId: RUNNER.id, agentDisplayName: "Runner 5" };
+  const human = { createdAt, id: "r2", emoji: "👍", userId: 7, agentId: null, agentDisplayName: null };
   const result = { changed: true, reaction: agentRow, reactions: [agentRow, human] };
 
   const seen = [];
@@ -166,17 +168,18 @@ test("MCP reads mark an agent reaction and never attach the owner's user", () =>
   assert.equal(commentReactionInclude.select.agentId, true);
   const agentRow = {
     id: "r2", emoji: "\u{1F44D}", userId: 6, agentId: RUNNER.id, agentDisplayName: "Runner 5",
+    createdAt,
     user: { id: 6, displayName: "Valentin Yeo" },
   };
   assert.deepEqual(mapMcpCommentReaction(agentRow, new Map([[RUNNER.id, "Runner 5"]])), {
-    id: "r2", emoji: "\u{1F44D}", userId: 6, isAgent: true, agent: { id: RUNNER.id, displayName: "Runner 5" },
+    createdAt: createdAt.toISOString(), id: "r2", emoji: "\u{1F44D}", userId: 6, isAgent: true, agent: { id: RUNNER.id, displayName: "Runner 5" },
   });
   assert.deepEqual(mapMcpCommentReaction(agentRow), {
-    id: "r2", emoji: "\u{1F44D}", userId: 6, isAgent: true, agent: { displayName: "Private agent" },
+    createdAt: createdAt.toISOString(), id: "r2", emoji: "\u{1F44D}", userId: 6, isAgent: true, agent: { displayName: "Private agent" },
   });
-  const human = { id: "r1", emoji: "\u{1F44D}", userId: 6, agentId: null, user: { id: 6, displayName: "Valentin Yeo" } };
+  const human = { createdAt, id: "r1", emoji: "\u{1F44D}", userId: 6, agentId: null, user: { id: 6, displayName: "Valentin Yeo" } };
   assert.deepEqual(mapMcpCommentReaction(human), {
-    id: "r1", emoji: "\u{1F44D}", userId: 6, user: { id: 6, displayName: "Valentin Yeo" },
+    createdAt: createdAt.toISOString(), id: "r1", emoji: "\u{1F44D}", userId: 6, user: { id: 6, displayName: "Valentin Yeo" },
   });
   assert.deepEqual(reactionAgentIds([{ reactions: [agentRow, human, agentRow] }, {}]), [RUNNER.id]);
 });

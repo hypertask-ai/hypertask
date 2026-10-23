@@ -1,7 +1,11 @@
 "use client";
 
 import { setNotificationSeen } from "@/lib/api/typedClient";
-import { HTPR_6979_TYPED_WRITES_FLAG } from "@/lib/flags/keys";
+import {
+  HTPR_6979_TYPED_WRITES_FLAG,
+  HTPR_7311_DECISION_COMMENT_LINK_FLAG,
+  SHORTCUT_NUDGES_FLAG,
+} from "@/lib/flags/keys";
 
 import { useFirstScreenSurface, type FirstScreenSnapshot } from "@/lib/firstScreen/SurfaceContext";
 import { projectInboxDateGroup } from "@/lib/firstScreen/inbox";
@@ -20,12 +24,11 @@ import { useRecoilState } from "@/lib/state";
 import {
   archiveShortcutNudgeAtom,
   showCommandsAtom,
-  showQuickTipsAtom,
   tasksPlayListAtom,
   globalNotificationFocusAtom,
   currentProjectAtom,
 } from "@/store";
-import { SHORTCUT_NUDGES_FLAG } from "@/lib/flags/keys";
+import { useShortcutTipsSetting } from "@/hooks/useShortcutTipsSetting";
 import {
   clearArchiveShortcutNudge,
   recordArchiveShortcutAction,
@@ -49,17 +52,18 @@ import {
 import { useQueryClient } from "@tanstack/react-query";
 import { useDeviceContext } from "@/lib/contexts/deviceContext";
 import SubtaskLinkingModal from "@/components/Modals/SubtaskLinkingModal/SubtaskLinking";
+import { buildInboxTasksPlaylist } from "@/lib/inbox/inboxTasksPlaylist";
 import useCurrentUser from "@/hooks/General/useCurrentUserCheckFromCookies";
 import { useProjectQuery } from "@/hooks/General/useProjectQuery";
 import { useFlag } from "@/hooks/useFlag";
-import { HTPR_6752_INSTANT_TICKET_OPEN_FLAG } from "@/lib/flags/keys";
 import useHypertasksNavigate from "@/hooks/MultiPages/Route/useHypertasksNavigate";
 import { BulkAction, useBulkActions } from "@/hooks/MultiPages/useBulkActions";
 import { KeyCodes, KeyValues } from "@/lib/constants/keyboard-handler";
 import BulkActionsInbox from "./bulk-actions-inbox";
 import SelectionCheckbox from "@/components/Common/selection-checkbox";
 import { useBulkSelectionContext } from "@/lib/contexts/Inbox/BulkSelectionContext";
-import { inboxConfig } from "@/lib/configs/inbox.config";
+import { decisionsSplitName, inboxConfig } from "@/lib/configs/inbox.config";
+import { withDecisionCommentAnchor } from "@/lib/inboxDecisions";
 import { cn } from "@/utils/undoActions/helperFuncs";
 import InboxZeroState from "@/components/Common/InboxZeroState";
 import { useInboxZero } from "@/lib/contexts/InboxZeroContext";
@@ -76,7 +80,6 @@ import {
   jumpToInboxBoundary,
   reconcileInboxKeyboardRow,
 } from "@/lib/inboxKeyboardNavigation";
-import { markTaskDetailNavigationStart } from "@/lib/analytics/taskDetailReadiness";
 import toast from "react-hot-toast";
 
 interface Props {
@@ -135,7 +138,6 @@ interface GroupedInboxItems {
 const commentIdHash = (commentId: number) =>
   inboxConfig.urls.commentHash(commentId);
 
-// Date grouping utility functions
 const getDateGroup = (date: Date): string => {
   const now = new Date();
   const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
@@ -154,18 +156,16 @@ const getDateGroup = (date: Date): string => {
   if (daysDiff === 0) return "today";
   if (daysDiff === 1) return "yesterday";
 
-  // Calculate start of current week (Monday)
   const currentWeekStart = new Date(today);
-  const dayOfWeek = today.getDay(); // 0 = Sunday, 1 = Monday, ..., 6 = Saturday
-  const daysToMonday = dayOfWeek === 0 ? 6 : dayOfWeek - 1; // If Sunday, go back 6 days to Monday
+  const dayOfWeek = today.getDay();
+  const daysToMonday = dayOfWeek === 0 ? 6 : dayOfWeek - 1;
   currentWeekStart.setDate(today.getDate() - daysToMonday);
 
-  // Calculate start of last week (Monday of previous week)
   const lastWeekStart = new Date(currentWeekStart);
   lastWeekStart.setDate(currentWeekStart.getDate() - 7);
 
   const lastWeekEnd = new Date(currentWeekStart);
-  lastWeekEnd.setDate(currentWeekStart.getDate() - 1); // Sunday of last week
+  lastWeekEnd.setDate(currentWeekStart.getDate() - 1);
 
   if (notificationDate >= currentWeekStart && notificationDate < yesterday) {
     return "thisWeek";
@@ -175,13 +175,10 @@ const getDateGroup = (date: Date): string => {
     return "lastWeek";
   }
 
-  // For older dates, return month-year format as a consistent key
-  // Use format: "month-year" for grouping, but display differently
   return `${date.getMonth()}-${date.getFullYear()}`;
 };
 
 const getDateGroupLabel = (group: string): string => {
-  // If it's a predefined label, return it
   if (
     inboxConfig.dateGrouping.labels[
       group as keyof typeof inboxConfig.dateGrouping.labels
@@ -192,7 +189,6 @@ const getDateGroupLabel = (group: string): string => {
     ];
   }
 
-  // If it's a month-year format (e.g., "5-2025"), convert to readable format
   const monthYearMatch = group.match(/^(\d+)-(\d+)$/);
   if (monthYearMatch) {
     const monthIndex = parseInt(monthYearMatch[1]);
@@ -229,17 +225,14 @@ const groupInboxItemsByDate = (
     );
   });
 
-  // Separate predefined groups from month-year groups
   const monthYearGroups: string[] = [];
 
-  // Find all month-year groups and sort them
   Object.keys(groupedByDate).forEach((key) => {
     if (!inboxConfig.dateGrouping.order.includes(key)) {
       monthYearGroups.push(key);
     }
   });
 
-  // Sort month-year groups in descending order (most recent first)
   monthYearGroups.sort((a, b) => {
     const [monthA, yearA] = a.split("-").map(Number);
     const [monthB, yearB] = b.split("-").map(Number);
@@ -250,7 +243,6 @@ const groupInboxItemsByDate = (
     return oldestFirst ? monthA - monthB : monthB - monthA;
   });
 
-  // Process predefined groups first
   const predefinedOrder = oldestFirst
     ? [...inboxConfig.dateGrouping.order].reverse()
     : inboxConfig.dateGrouping.order;
@@ -263,7 +255,6 @@ const groupInboxItemsByDate = (
     }
   });
 
-  // Then process month-year groups
   monthYearGroups.forEach((groupKey) => {
     if (groupedByDate[groupKey] && groupedByDate[groupKey].length > 0) {
       groups[groupKey] = {
@@ -276,7 +267,6 @@ const groupInboxItemsByDate = (
   return groups;
 };
 
-/** Swipe actions are touch-only, so desktop keeps the plain row untouched. */
 const MaybeSwipeable = ({
   enabled,
   onArchive,
@@ -319,7 +309,6 @@ const InboxSplit = ({
   const snapshot = useFirstScreenSurface();
   const inboxDocument = getInboxDocument(snapshot, snapshot?.scope.accountId ?? 0);
   const isMbl = useContext(MobileViewContext);
-  // Notification whose snooze picker is open, set by a right swipe.
   const [snoozeTarget, setSnoozeTarget] = useState<INotification | null>(null);
   const [globalFocus, setGlobalFocus] = useRecoilState(
     globalNotificationFocusAtom,
@@ -339,7 +328,7 @@ const InboxSplit = ({
   const [showCommands, ____] = useRecoilState(showCommandsAtom);
   const [_, setTasksPlayList] = useRecoilState(tasksPlayListAtom);
   const [currentProject, _____] = useRecoilState(currentProjectAtom);
-  const [tipsEnabled] = useRecoilState(showQuickTipsAtom);
+  const { tipsEnabled } = useShortcutTipsSetting();
   const [, setArchiveNudge] = useRecoilState(archiveShortcutNudgeAtom);
   const typedWrites = useFlag(HTPR_6979_TYPED_WRITES_FLAG);
   let typedWrite: typeof setNotificationSeen | undefined;
@@ -348,7 +337,11 @@ const InboxSplit = ({
   const [showSubtaskLinkingModal, setShowSubtaskLinkingModal] =
     useState<boolean>(false);
   const currentUser = useCurrentUser() ?? inboxDocument?.data.user;
-  const instantTicketOpen = useFlag(HTPR_6752_INSTANT_TICKET_OPEN_FLAG);
+  const decisionCommentLinkEnabled = useFlag(HTPR_7311_DECISION_COMMENT_LINK_FLAG);
+  let decisionCommentLinks = false;
+  if (decisionCommentLinkEnabled) {
+    decisionCommentLinks = selectedSplit === decisionsSplitName;
+  }
   const { navigate, navigateToTask } = useHypertasksNavigate();
   const taskRef = useRef<HTMLDivElement>(null);
   const activeSplitRef = useRef<HTMLDivElement>(null);
@@ -503,11 +496,6 @@ const InboxSplit = ({
     selectedIdsArray.length > 0 ? (
       <>
         <SelectionCheckbox
-          // mr-2: unlike a row's gutter (checkbox + gap-2 + Seen dot before the
-          // text), this gutter holds only the checkbox, so with no sibling to
-          // push it off the right edge it sits flush against the group label
-          // (HTPR-6206). Match the row's spacing explicitly instead of relying
-          // on an element that isn't here.
           className="!border-white-black mr-2"
           alwaysVisible
           isChecked={isAllSelected}
@@ -530,12 +518,6 @@ const InboxSplit = ({
       </>
     ) : null;
 
-  // Only the split the user is actually looking at gets to say whether the
-  // inbox is empty. Every split renders its own <InboxSplit> and they are all
-  // mounted at once, so without this check one emptied split flipped the shared
-  // flag and painted INBOX ZERO over the splits that still had items
-  // (HTPR-4872). `value === index` is the same active-split test already used
-  // for keyboard shortcuts below.
   const isActiveSplit = value === index;
   useEffect(() => {
     if (!isActiveSplit) return;
@@ -584,7 +566,6 @@ const InboxSplit = ({
   const toggleSubtaskLinking = () => {
     setShowSubtaskLinkingModal((prev) => !prev);
   };
-  // Define bulk actions for inbox
   const bulkActions: BulkAction<number>[] = [
     {
       key: "archive",
@@ -597,13 +578,10 @@ const InboxSplit = ({
       label: "Set Reminder",
       keyboardShortcut: [KeyCodes.H],
       handler: (selectedNotifications) => {
-        // Set reminders for all selected notifications
-        // Implementation depends on your reminder API
         console.log("Setting reminders for:", selectedNotifications);
       },
     },
   ];
-  // In InboxSplit component
   const {
     selectedIds,
     selectedCount,
@@ -632,7 +610,6 @@ const InboxSplit = ({
         ? undefined
         : bulkHandleKeyDown(e, selectedKeyboardNotificationIndex);
 
-    // If bulk action handled it, check if we need to update focus
     if (e.defaultPrevented) {
       if (
         bulkResult?.newFocusIndex !== undefined &&
@@ -659,9 +636,7 @@ const InboxSplit = ({
     )
       return;
 
-    // --- G key sequence handling start ---
 
-    // Helper: check if a g-sequence is available and matches a target key
     const gSequenceActive = () => {
       const now = new Date().getTime();
       return (
@@ -670,7 +645,6 @@ const InboxSplit = ({
       );
     };
 
-    // [g] then [g]: Jump to top/bottom row
     if (
       controller[KeyCodes.G]?.pressed &&
       e.keyCode === KeyCodes.G &&
@@ -694,11 +668,9 @@ const InboxSplit = ({
         );
         if (targetRow) focusKeyboardRow(targetRow);
       }
-      // Prevent further G combos after this triggers
       return;
     }
 
-    // [g] then [t]: Go to project page
     if (
       controller[KeyCodes.T]?.pressed &&
       e.keyCode === KeyCodes.T &&
@@ -712,11 +684,9 @@ const InboxSplit = ({
       if (!focusedProjectId || focusedProjectId === currentProject?.id)
         router.push("/");
       else goToProjectShortcut(focusedProjectId, true);
-      // Prevent further G combos after this triggers
       return;
     }
 
-    // [g] then [d]: Go to drafts
     if (
       controller[KeyCodes.D]?.pressed &&
       e.keyCode === KeyCodes.D &&
@@ -727,7 +697,6 @@ const InboxSplit = ({
       return;
     }
 
-    // [g] then [u]: Go to scheduled tasks
     if (
       controller[KeyCodes.U]?.pressed &&
       e.keyCode === KeyCodes.U &&
@@ -738,17 +707,15 @@ const InboxSplit = ({
       return;
     }
 
-    // [g] - capture sequence initiation only if previous was NOT G or T combo
     if (e.keyCode === KeyCodes.G) {
       const now = new Date().getTime();
       lastgClick.current = now;
       setTimeout(() => {
         lastgClick.current = null;
       }, inboxConfig.interactions.keyboard.gKeyDelayMs);
-      return; // Do not let a plain [g] fall through to [enter] or others
+      return;
     }
 
-    // --- G key sequence handling end ---
 
     if (e.keyCode === KeyCodes.ENTER) {
       e.preventDefault();
@@ -760,7 +727,6 @@ const InboxSplit = ({
       return;
     }
 
-    // pressing r for reply
     if (e.keyCode === KeyCodes.R && cmdControl) {
       e.preventDefault();
       if (selectedKeyboardRow?.item.kind === "draft") {
@@ -769,7 +735,6 @@ const InboxSplit = ({
       }
       openTask("reply");
     }
-    // [alt][v] for audio reply
     else if (
       e.keyCode === KeyCodes.V &&
       e.altKey &&
@@ -777,7 +742,6 @@ const InboxSplit = ({
       selectedKeyboardRow?.item.kind === "notification"
     )
       openTask("audio");
-    // ================ arrow for down movement, [j]
     else if (e.keyCode === KeyCodes.J || e.keyCode === KeyCodes.ARROW_DOWN) {
       e.preventDefault();
       const targetRow = getAdjacentInboxKeyboardRow(
@@ -788,7 +752,6 @@ const InboxSplit = ({
       if (targetRow) focusKeyboardRow(targetRow, 1);
       return;
     }
-    // ================ arrow for up movement, [k]
     else if (
       (e.keyCode === KeyCodes.K || e.keyCode === KeyCodes.ARROW_UP) &&
       !cmdControl
@@ -805,24 +768,12 @@ const InboxSplit = ({
 
     if (selectedKeyboardRow?.item.kind !== "notification") return;
 
-    // // [t] to go to project page
-    // if (e.keyCode === KeyCodes.T && lastgClick.current !== null) {
-    //   if (_notifications[globalFocus.currIdx].projectId === currentProject?.id)
-    //     router.push("/");
-    //   else
-    //     goToProjectShortcut(
-    //       _notifications[globalFocus.currIdx].projectId,
-    //       true
-    //     );
-    // }
 
-    // [cmd/ctrl][shift][o] createSubTask
     if (e.keyCode === KeyCodes.O && e.shiftKey && cmdControl) {
       e.preventDefault();
       toggleSubtaskLinking();
     }
 
-    // [u] for unread
     const selectedNotification = selectedKeyboardRow.item.notification;
     if (e.keyCode === KeyCodes.U && selectedNotification.id) {
       updateNotification(selectedNotification.id);
@@ -851,8 +802,6 @@ const InboxSplit = ({
     }
   };
 
-  // =============== [e] mark as done handler
-  //This is where the error is coming from ofcourse.
   const eHandler = async (
     cmdControl: boolean,
     specificIndex: number | undefined,
@@ -951,13 +900,6 @@ const InboxSplit = ({
     [clearPrefetchHoverTimeout, prefetchInboxTaskDetail],
   );
 
-  // const handleMouseMove = () => {
-  //   if (debounceTimeout.current) {
-  //     setGlobalFocus((prev) => ({ ...prev, currIdx: currentHoveredDiv.current ? currentHoveredDiv.current : 0 }))
-  //     clearTimeout(debounceTimeout.current)
-  //     debounceTimeout.current = null
-  //   }
-  // }
 
   const markSeenOnOpen = (notification: INotification) => {
     if (notification.seen || !notification.id) return;
@@ -981,9 +923,7 @@ const InboxSplit = ({
     );
   };
 
-  // ==================== OPEN TASK ==========================
-  const openTaskWithCachedData = async (
-    includeCachedTask: boolean,
+  const openTask = async (
     mode: string,
     notification: INotification | null = null,
     index?: number,
@@ -992,9 +932,6 @@ const InboxSplit = ({
       selectedKeyboardRow?.item.kind === "notification"
         ? selectedKeyboardRow.item.notification
         : undefined;
-    // Mouse input owns an exact row; keyboard input falls back to focus.
-    // Resolve this before any type-specific branch so a focused invitation
-    // cannot override a clicked AgentMessage (or vice versa).
     const clickTarget = notification ?? selectedInbox;
     if (!clickTarget) return;
 
@@ -1006,9 +943,6 @@ const InboxSplit = ({
     }
 
     if (clickTarget.type === "AgentMessage" && clickTarget.fromAgentId) {
-      // Reuses create-session's upsert on (userId, agentId): this always
-      // resolves to the same session the heartbeat posted from, never forks
-      // a new thread.
       if (!disableNotificationSideEffects) {
         markSeenOnOpen(clickTarget);
       }
@@ -1020,10 +954,6 @@ const InboxSplit = ({
       const data = (await res.json().catch(() => null)) as {
         session?: { id: string };
       } | null;
-      // Either way, this branch owns the click: never fall through into the
-      // task-navigation path below, which assumes a task exists. On failure
-      // (e.g. the agent was revoked between notification and click) this is
-      // a clean no-op rather than a broken navigation.
       if (data?.session?.id) {
         router.push(`/chat/${data.session.id}`);
       }
@@ -1038,39 +968,34 @@ const InboxSplit = ({
     setTasksPlayList(tasksPlayList);
 
     const queryParams = buildQueryParams(mode);
-
-    if (notification) {
-      const mentionedQueryParam =
-        notification.type === "Mentioned" && notification.commentId
-          ? commentIdHash(notification.commentId)
-          : "";
-      const finalUrl =
-        inboxConfig.urls.taskDetail(
-          notification.projectId,
-          notification.task?.uniqueIndex,
-          mentionedQueryParam,
-        ) + (disableInboxFlow ? "" : queryParams);
-      if (includeCachedTask) {
-        return navigateToTask(
-          notification.projectId,
-          notification.task?.uniqueIndex,
-          "push",
-          `${mentionedQueryParam}${disableInboxFlow ? "" : queryParams}`,
-          notification.task,
-        );
-      }
-      markTaskDetailNavigationStart("inbox", finalUrl);
-      return router.push(finalUrl);
-    }
-
-    if (!selectedInbox) return;
-    const projectName = selectedInbox.project?.name;
-    const taskIndex = selectedInbox.task?.uniqueIndex;
     const inboxFlowQuery = disableInboxFlow
       ? ""
       : queryParams
         ? `?${inboxConfig.urls.queryParams.inboxFlow}&${queryParams.slice(1)}`
         : `?${inboxConfig.urls.queryParams.inboxFlow}`;
+
+    if (notification) {
+      const decisionCommentId = decisionCommentLinks ? notification.decisionCommentId : undefined;
+      const mentionedQueryParam =
+        !decisionCommentId && notification.type === "Mentioned" && notification.commentId
+          ? commentIdHash(notification.commentId)
+          : "";
+      return navigateToTask(
+        notification.projectId,
+        notification.task?.uniqueIndex,
+        "push",
+        withDecisionCommentAnchor(
+          `${inboxFlowQuery}${mentionedQueryParam}`,
+          notification.decisionCommentId,
+          decisionCommentLinks,
+        ),
+        notification.task,
+      );
+    }
+
+    if (!selectedInbox) return;
+    const projectName = selectedInbox.project?.name;
+    const taskIndex = selectedInbox.task?.uniqueIndex;
     const mentionedQueryParam =
       selectedInbox.type === "Mentioned" && selectedInbox.commentId
         ? commentIdHash(selectedInbox.commentId)
@@ -1079,33 +1004,17 @@ const InboxSplit = ({
       selectedInbox.project?.id ?? selectedInbox.projectId,
       taskIndex,
       "push",
-      `${inboxFlowQuery}${mentionedQueryParam}`,
-      includeCachedTask ? selectedInbox.task : undefined,
+      withDecisionCommentAnchor(
+        `${inboxFlowQuery}${mentionedQueryParam}`,
+        selectedInbox.decisionCommentId,
+        decisionCommentLinks,
+      ),
+      selectedInbox.task,
     );
   };
 
-  const openTask = instantTicketOpen
-    ? openTaskWithCachedData.bind(null, true)
-    : openTaskWithCachedData.bind(null, false);
-
-  const buildUniqueTasksPlaylist = (notifications: INotification[]) => {
-    const uniqueMap = new Map<
-      string,
-      { projectId: number; uniqueIndex: number; notification: any }
-    >();
-    for (const notification of notifications) {
-      if (notification.type === "Invited") continue;
-      const key = `${notification.projectId}-${notification.task?.uniqueIndex}`;
-      if (!uniqueMap.has(key)) {
-        uniqueMap.set(key, {
-          projectId: notification.projectId,
-          uniqueIndex: notification.task?.uniqueIndex,
-          notification,
-        });
-      }
-    }
-    return Array.from(uniqueMap.values());
-  };
+  const buildUniqueTasksPlaylist = (notifications: INotification[]) =>
+    buildInboxTasksPlaylist(notifications, decisionCommentLinks);
 
   const buildQueryParams = (mode: string): string => {
     switch (mode) {
@@ -1129,6 +1038,7 @@ const InboxSplit = ({
     };
   }, [
     _notifications,
+    decisionCommentLinks,
     activeDrafts,
     keyboardRows,
     selectedKeyboardRow?.key,
@@ -1144,8 +1054,6 @@ const InboxSplit = ({
 
   useEffect(() => {
     if (value !== index) return;
-    // Debounced: holding J/K sweeps focus across many rows; prefetch only
-    // once focus rests, not per row passed (HTPR-3998).
     const t = setTimeout(
       () => prefetchInboxTaskDetail(globalFocus.currIdx),
       150,
@@ -1162,7 +1070,6 @@ const InboxSplit = ({
       <div
         ref={activeSplitRef}
         data-testid="inbox-list"
-        // onMouseMove={handleMouseMove}
         hidden={inboxConfig.visibility.hidden(value, index)}
         style={{
           flex: 1,
@@ -1172,9 +1079,6 @@ const InboxSplit = ({
           overflowY: "auto",
         }}
         className={cn(
-          // no z-index: this is a normal-flow scroll wrapper, not an overlay.
-          // A stray z-100 here used to bury the fixed app-shell rail (z-[60]
-          // < 100) under this container's stacking context (HTPR-4906).
           "flex flex-col-reverse relative md:mt-4",
           !inboxConfig.visibility.showBulkActions(selectedCount) && "",
         )}
@@ -1197,10 +1101,7 @@ const InboxSplit = ({
           value == index &&
           groupedInboxEntries.map(([groupKey, group]) => (
             <div key={groupKey} className="date-group">
-              {/* Date Group Header */}
               <div className="top-0 z-10 flex items-center py-2 text-icon-hover-gray backdrop-blur-sm">
-                {/* Match the row's 4px focus rail + control gutter so the
-                    checkbox and date label align with row controls and text. */}
                 <div
                   className="hidden w-1 shrink-0 md:block"
                   aria-hidden="true"
@@ -1213,7 +1114,6 @@ const InboxSplit = ({
                 </h3>
               </div>
 
-              {/* Inbox activity and drafts in this group */}
               <div className="">
                 {group.items.map((item) => {
                   if (item.kind === "draft") {
@@ -1276,11 +1176,8 @@ const InboxSplit = ({
                         >
                           <div
                             className={cn(
-                              // gap-[8px] not gap-2: Bootstrap's .gap-2 is !important and unkillable (HTPR-4921)
                               "group/selection_row relative flex items-center gap-[8px] sm:p-inbox-horizontal md:gap-[0px] md:border-l-4 md:p-0",
                               {
-                                // Mirror the fixed desktop gutter on the right so row
-                                // content stays centred within the available panel.
                                 ["sm:pr-[39px] md:pr-[calc(var(--inbox-text-left-offset)-4px)]"]:
                                   !disableRowButtons && !disableBulkActions,
                                 [`!bg-[#2178ca] border-[#c5c5c5] !text-white`]:
@@ -1297,8 +1194,6 @@ const InboxSplit = ({
                             onMouseLeave={handleMouseLeave}
                             onTouchStart={() => handleTouchStart(globalIndex)}
                           >
-                            {/* Preserve the existing tablet layout; desktop uses the
-                             fixed gutter below so controls never move sender text. */}
                             {!disableRowButtons &&
                               !disableBulkActions &&
                               isWaitingOnSynthetic && (
@@ -1311,12 +1206,6 @@ const InboxSplit = ({
                               !disableBulkActions &&
                               !isWaitingOnSynthetic && (
                                 <SelectionCheckbox
-                                  // Only emit a bare `visible` while a bulk selection is
-                                  // active. At rest the component would default to
-                                  // alwaysVisible, whose `visible` class Bootstrap's global
-                                  // `.visible{visibility:visible!important}` hijacks, pinning
-                                  // the checkbox on. Matches Inbox.tsx / AgentInbox so it's
-                                  // hover-only until you start selecting.
                                   alwaysVisible={selectedIdsArray.length > 0}
                                   className={cn(
                                     "bg-transparent border-opacity-30 md:!hidden",
@@ -1364,14 +1253,6 @@ const InboxSplit = ({
                               <Seen notification={notification} />
                             </div>
                             {notification.type === "AgentMessage" ? (
-                              // No task URL exists for this type (null
-                              // projectId, no task) -- the wrapping Link
-                              // below would race its own malformed
-                              // navigation against openTask's chat redirect.
-                              // NotificationRow's own click handling (via
-                              // TaskRowContainer's cursor-pointer div) is
-                              // enough on its own, same as any non-link
-                              // clickable row elsewhere in this file.
                               <div
                                 className={
                                   appShellRail ? "min-w-0 flex-1" : "w-full"
@@ -1397,8 +1278,7 @@ const InboxSplit = ({
                                 className={
                                   appShellRail ? "min-w-0 flex-1" : "w-full"
                                 }
-                                onClickCapture={instantTicketOpen && notification.type !== "Invited" ? (event) => {
-                                  // React capture also reaches portals rendered outside this row.
+                                onClickCapture={notification.type !== "Invited" ? (event) => {
                                   if (!event.currentTarget.contains(event.target as Node)) return;
                                   const control = (event.target as Element).closest("button, input, select, textarea, a");
                                   if (control && control !== event.currentTarget) return;
@@ -1415,10 +1295,14 @@ const InboxSplit = ({
                                 }
                                 href={
                                   notification.type !== "Invited"
-                                    ? inboxConfig.urls.taskDetail(
-                                        notification.projectId,
-                                        notification.task?.uniqueIndex,
-                                        mentionedQueryParam,
+                                    ? withDecisionCommentAnchor(
+                                        inboxConfig.urls.taskDetail(
+                                          notification.projectId,
+                                          notification.task?.uniqueIndex,
+                                          `&split=${encodeURIComponent(selectedSplit)}${mentionedQueryParam}`,
+                                        ),
+                                        notification.decisionCommentId,
+                                        decisionCommentLinks,
                                       )
                                     : (notification.notification_invite
                                         ?.inviteURL ?? "")

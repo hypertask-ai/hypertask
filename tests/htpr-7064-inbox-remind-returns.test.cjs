@@ -16,6 +16,7 @@ function matchesWhere(row, where) {
       if ("not" in value) return row[key] !== value.not;
       if ("in" in value) return value.in.includes(row[key]);
       if ("every" in value) return row[key].every((part) => matchesWhere(part, value.every));
+      if ("some" in value) return row[key].some((part) => matchesWhere(part, value.some));
       return row[key] != null && matchesWhere(row[key], value);
     }
     return row[key] === value;
@@ -145,7 +146,7 @@ function fixture({ enabled = true, fallbackEnabled = true, existing = true, mute
   const scope = visibleUserInboxWhere(7);
   return {
     rows, calls, assignment, remindAt,
-    visible: () => rows.filter((row) => matchesWhere({ ...row, task: { status: taskStatus, Reminders: saved ? [saved] : [] } }, scope)),
+    visible: () => rows.filter((row) => matchesWhere({ ...row, task: { status: taskStatus, Reminders: saved ? [saved] : [], project: { ownerId: 1, members: [{ userId: 7, agentId: null }] } } }, scope)),
     async schedule() {
       const response = { statusCode: 0, status(code) { this.statusCode = code; return this; }, json(body) { this.body = body; return this; } };
       await handler({ headers: {}, body: { taskId: 99, userId: 7, projectId: 15, remindAt: remindAt.toISOString() } }, response);

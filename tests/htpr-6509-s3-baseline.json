@@ -799,6 +799,89 @@
       ],
       "writes": [
         [
+          "drafts.deleteMany",
+          {
+            "where": {
+              "taskId": {
+                "in": [
+                  50
+                ]
+              }
+            }
+          }
+        ],
+        [
+          "task_Summary.deleteMany",
+          {
+            "where": {
+              "taskId": {
+                "in": [
+                  50
+                ]
+              }
+            }
+          }
+        ],
+        [
+          "customFieldValue.deleteMany",
+          {
+            "where": {
+              "taskId": {
+                "in": [
+                  50
+                ]
+              }
+            }
+          }
+        ],
+        [
+          "readStatus.deleteMany",
+          {
+            "where": {
+              "taskId": {
+                "in": [
+                  50
+                ]
+              }
+            }
+          }
+        ],
+        [
+          "attachment.deleteMany",
+          {
+            "where": {
+              "taskId": {
+                "in": [
+                  50
+                ]
+              }
+            }
+          }
+        ],
+        [
+          "taskRelations.deleteMany",
+          {
+            "where": {
+              "OR": [
+                {
+                  "sourceTaskId": {
+                    "in": [
+                      50
+                    ]
+                  }
+                },
+                {
+                  "targetTaskId": {
+                    "in": [
+                      50
+                    ]
+                  }
+                }
+              ]
+            }
+          }
+        ],
+        [
           "reaction.deleteMany",
           {
             "where": {
@@ -1277,6 +1360,7 @@
             "snippets": null,
             "muteAnnouncements": null,
             "allTasksDateRange": null,
+            "boardSortMode": null,
             "playGifs": null,
             "autoDescriptionSuggestions": null,
             "notificationMatrix": null,
@@ -1382,6 +1466,7 @@
               "snippets": null,
               "muteAnnouncements": null,
               "allTasksDateRange": null,
+              "boardSortMode": null,
               "playGifs": null,
               "autoDescriptionSuggestions": null,
               "notificationMatrix": null,
@@ -1510,6 +1595,7 @@
               "snippets": null,
               "muteAnnouncements": null,
               "allTasksDateRange": null,
+              "boardSortMode": null,
               "playGifs": null,
               "autoDescriptionSuggestions": null,
               "notificationMatrix": null,

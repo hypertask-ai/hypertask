@@ -18,9 +18,9 @@ import type { IAttachment } from "@/models/model";
 import { linkifyHtml } from "@/utils/helperFunctions/linkifyHtml";
 import { useFlag } from "@/hooks/useFlag";
 import {
-  HTPR_6752_INSTANT_TICKET_OPEN_FLAG,
   HTPR_7091_STATIC_DESCRIPTION_FIRST_FLAG,
   HTPR_7110_APP_SAVED_STATIC_DESCRIPTION_FLAG,
+  HTPR_7395_CACHED_STATIC_FIRST_FLAG,
 } from "@/lib/flags/keys";
 
 const DescriptonBody = ({ draftTQ }: any) => {
@@ -28,6 +28,7 @@ const DescriptonBody = ({ draftTQ }: any) => {
   const {
     secondaryPanelsReady,
     cachedLayout,
+    cachedEditorAfterPaint,
     parsedTask,
     currentTask,
     editMode,
@@ -38,11 +39,10 @@ const DescriptonBody = ({ draftTQ }: any) => {
     setCarousalItems,
   } = useTaskContext();
   const task = useMemo(() => JSON.parse(parsedTask), [parsedTask]);
-  const instantTicketOpen = useFlag(HTPR_6752_INSTANT_TICKET_OPEN_FLAG);
-  // HTPR-7091: keep the editor code out of the first load; show the static description meanwhile.
   const staticFirstFlag = useFlag(HTPR_7091_STATIC_DESCRIPTION_FIRST_FLAG);
   const appSavedStatic = useFlag(HTPR_7110_APP_SAVED_STATIC_DESCRIPTION_FLAG);
-  const creator = instantTicketOpen ? currentTask?.user : task.user;
+  const cachedStaticFirst = useFlag(HTPR_7395_CACHED_STATIC_FIRST_FLAG);
+  const creator = currentTask?.user;
   const {
     description,
     descriptionAttachments,
@@ -53,15 +53,12 @@ const DescriptonBody = ({ draftTQ }: any) => {
   const isEditing =
     editMode === "description" ||
     editMode === "description-ai" ||
-    // Restoring a draft must not open the phone modal or arm its Back guard.
     (!isMbl && (hasDraft || hasDraftInit));
   const content =
     uploadingDescription?.content ??
     draftTQ?.find((draft: IDraft) => isMeaningfulDescriptionDraft(draft))
       ?.content ??
     description;
-  // HTPR-6802: the editor only linkifies typed or pasted URLs, so bare URLs
-  // in CLI/API-written descriptions stayed plain text here.
   const linkedContent = useMemo(() => (content ? linkifyHtml(content) : content), [content]);
   const addLinkedAttachment = useCallback(
     (attachment: IAttachment) => {
@@ -80,10 +77,10 @@ const DescriptonBody = ({ draftTQ }: any) => {
 
   return (
     <>
-      {/* A passive editor swap reflows already-painted cached HTML. Mount it only for editing. */}
       {secondaryPanelsReady !== false && (!cachedLayout || isEditing) ? <DescriptionEditorSlot
         key={task.id}
-        lazy={staticFirstFlag ? instantTicketOpen && !isEditing && (appSavedStatic
+        afterPaint={cachedStaticFirst && !!cachedEditorAfterPaint && !isEditing && isPlainDescriptionHtml(linkedContent, true, true)}
+        lazy={staticFirstFlag ? !isEditing && (appSavedStatic
           ? isPlainDescriptionHtml(linkedContent, true)
           : isPlainDescriptionHtml(linkedContent)) : false}
         allowPerks={allowPerks}

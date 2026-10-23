@@ -4,13 +4,10 @@ import React, {useContext, useState} from 'react'
 import dynamic from "next/dynamic";
 const DescriptionEmojiButton = dynamic(()=>import("./DescriptionEmojiButton"))
 
-// import DescriptionEmojiButton from './DescriptionEmojiButton'
 import { useDescriptionAndCommentsContext } from '@/lib/contexts/TaskDetail/DescriptionProvider'
 import { MobileViewContext } from '@/lib/contexts/mobileContext';
 import AIWriterButton from '@/components/Common/AIWriterButton';
 import TimeTooltip from '@/components/Common/TimeTooltip';
-import { useFlag } from '@/hooks/useFlag';
-import { HTPR_6752_INSTANT_TICKET_OPEN_FLAG } from '@/lib/flags/keys';
 
 const DescriptionTopRight = () => {
     const {currentTask, editMode} =useTaskContext()
@@ -21,12 +18,9 @@ const DescriptionTopRight = () => {
     const {toggleEmojiPickerDescription, emojiClickHandlerDescriptionr, showEmojiPickerDescription, handleClickOutside}= useDescriptionAndCommentsContext()
     
     const toggleAiTaskWriter = () => {
-        // Trigger the TipTapTaskDetail's toggleAiTaskWriter by clicking the hidden button
-        // The button ID is "popover-button-description" based on the divIds pattern
         document.getElementById("popover-button-description")?.click();
     }
   const shouldShowAiWriterButton = isMbl && (editMode === "description" || editMode === "description-ai")
-  const instantTicketOpen = useFlag(HTPR_6752_INSTANT_TICKET_OPEN_FLAG);
   const emojiButton = <DescriptionEmojiButton
     showEmojiPickerDescription={showEmojiPickerDescription}
     handleClickOutside={handleClickOutside}
@@ -35,12 +29,11 @@ const DescriptionTopRight = () => {
   />;
   return (
     <div data-task-detail-actions className='flex gap-1 items-center'>
-      {/* A cold reaction control must not suspend the cached title and body. */}
-      {!isMbl && (instantTicketOpen ? (
+      {!isMbl && (
         <span className="inline-flex h-[14px] w-[14px]">
           <React.Suspense fallback={null}>{emojiButton}</React.Suspense>
         </span>
-      ) : emojiButton)}
+      )}
       {
         shouldShowAiWriterButton ?
             <AIWriterButton 
@@ -51,8 +44,8 @@ const DescriptionTopRight = () => {
             />
             :
           <span className='text-meta text-text-light-gray relative group cursor-default'
-          onMouseEnter={() => setIsHovered(true)} // Set isHovered to true on mouse enter
-          onMouseLeave={() => setIsHovered(false)} // Set isHovered to false on mouse leave
+          onMouseEnter={() => setIsHovered(true)}
+          onMouseLeave={() => setIsHovered(false)}
           >
                   <RelativeTime date={currentTask?.createdAt} />
                   {isHovered && <TimeTooltip time={date} left={55} bottom={-5} />}

@@ -1,3 +1,6 @@
+import { reportMcpOperationCrash } from '@/lib/mcp/operationCrashReport'
+import { standalonePagesEnabled } from '@/utils/controllers/pages/standalonePagesEnabled'
+import { wrapMcpRoute } from '@/lib/mcp/routeWrapper'
 import { NextRequest, NextResponse } from 'next/server'
 
 import prisma from '@/lib/prisma'
@@ -10,6 +13,7 @@ const MAX_QUERY_LENGTH = 200
 const SNIPPET_LENGTH = 200
 
 export async function GET(request: NextRequest) {
+  return wrapMcpRoute(async (request: NextRequest) => {
   try {
     const ctx = await validateMcpAuth(request)
     if (!ctx) {
@@ -41,7 +45,7 @@ export async function GET(request: NextRequest) {
     const projects = await prisma.project.findMany({
       where: {
         status: 'Normal',
-        ...getProjectWhere(ctx.user.id, ctx.agentId),
+        ...getProjectWhere(ctx.user.id, ctx.agentId, ctx.teamScope),
       },
       select: { id: true },
     })
@@ -49,6 +53,9 @@ export async function GET(request: NextRequest) {
     const matches = await searchPages({
       query,
       projectIds: projects.map((project) => project.id),
+      userId: ctx.user.id,
+      standalonePagesEnabled: await standalonePagesEnabled(ctx.user.id),
+      agentId: ctx.agentId, teamScope: ctx.teamScope,
     })
 
     const pages = matches.map(({ contentText, ...page }) => ({
@@ -59,6 +66,9 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ pages })
   } catch (error) {
     console.error('[MCP Search Pages] Error:', error)
+    reportMcpOperationCrash(request, error)
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
   }
+
+  })(request)
 }

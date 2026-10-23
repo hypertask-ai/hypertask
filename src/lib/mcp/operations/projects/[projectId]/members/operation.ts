@@ -1,3 +1,4 @@
+import { reportMcpOperationCrash } from "@/lib/mcp/operationCrashReport";
 import { wrapMcpRoute, validateMcpRouteAuth as validateMcpAuth, checkMcpRouteRateLimit as checkMcpRateLimit, readMcpRouteJsonBody as readJsonBody } from '@/lib/mcp/routeWrapper'
 import { NextRequest, NextResponse } from "next/server";
 
@@ -7,6 +8,8 @@ import prisma from "@/lib/prisma";
 import { addMemberController } from "@/pages/api/invite/createInviteLink";
 import { addAgentToBoard } from "@/utils/controllers/agents/boardMembers";
 import { addExistingUserToProject } from "@/utils/controllers/members/addExistingUserToProject";
+import { AgentBoardInviteScopeError, assertAgentBoardInviteScope, checkAgentBoardDelegation } from "@/lib/mcp/agents/delegatedAccess";
+import { requireRole } from "@/lib/mcp/agents/scopes";
 import isProjectAdmin from "@/utils/controllers/projects/isProjectAdmin";
 
 import {
@@ -15,21 +18,6 @@ import {
   resolveMcpAddMemberTarget,
 } from "@/lib/mcp/projects/addMemberTarget";
 
-/**
- * GET /api/mcp/projects/:projectId/members
- *
- * Returns ONLY members of the requested project (owner + project members).
- * Used for @mention resolution and assignee selection.
- *
- * SECURITY (CRITICAL):
- * - Strict project scoping: returns ONLY users who are members of :project_id
- * - Access control: verifies requesting user has permission to view this project
- * - Response integrity: projectId in response matches requested :project_id
- * - Do NOT return users from other projects, workspaces, or boards
- *
- * Auth: MCP JWT (Bearer token)
- * Errors: 401 (invalid/missing JWT), 403 (no permission), 404 (project not found)
- */
 export async function GET(request: NextRequest, props: { params: Promise<{ projectId: string }> }) {
   return wrapMcpRoute(async (request: NextRequest) => {
   const params = await props.params;
@@ -59,7 +47,7 @@ export async function GET(request: NextRequest, props: { params: Promise<{ proje
       );
     }
 
-    const access = await validateProjectAccess(projectId, user.id, ctx.agentId);
+    const access = await validateProjectAccess(projectId, user.id, ctx.agentId, ctx.teamScope);
     if (access.error) {
       const message =
         access.error.status === 403
@@ -74,10 +62,6 @@ export async function GET(request: NextRequest, props: { params: Promise<{ proje
       );
     }
 
-    // HTPR-3805: this is a "list members" endpoint, not an assignee picker -
-    // excludeUserId must not be the caller. Passing it excluded the owner
-    // whenever the owner is also the requester (boards with zero Member
-    // rows then returned an empty list even though the owner has full access).
     const requestingUserId = user.id;
     const result = await getProjectMembers(
       projectId,
@@ -105,6 +89,7 @@ export async function GET(request: NextRequest, props: { params: Promise<{ proje
     );
   } catch (err) {
     console.error("[MCP List Project Members] Error:", err);
+    reportMcpOperationCrash(request, err);
     return NextResponse.json(
       {
         success: false,
@@ -146,7 +131,7 @@ export async function POST(request: NextRequest, props: { params: Promise<{ proj
       );
     }
 
-    const access = await validateProjectAccess(projectId, user.id, ctx.agentId);
+    const access = await validateProjectAccess(projectId, user.id, ctx.agentId, ctx.teamScope);
     if (access.error) {
       const message =
         access.error.status === 403
@@ -161,8 +146,6 @@ export async function POST(request: NextRequest, props: { params: Promise<{ proj
       );
     }
 
-    // Match board remove-member: owner or project Admin may change membership.
-    // validateProjectAccess alone only proves read/use access.
     if (!(await isProjectAdmin(user.id, projectId))) {
       return NextResponse.json(
         {
@@ -189,8 +172,16 @@ export async function POST(request: NextRequest, props: { params: Promise<{ proj
       );
     }
 
+    if (ctx.agentId) {
+      const delegationError = target.kind === "agent"
+        ? await checkAgentBoardDelegation(ctx, target.agentId)
+        : await requireRole(ctx, "admin");
+      if (delegationError) return delegationError;
+      await assertAgentBoardInviteScope(prisma.member, projectId, user.id, ctx.agentId);
+    }
+
     if (target.kind === "agent") {
-      const result = await addAgentToBoard(projectId, target.agentId, ctx.user.id);
+      const result = await addAgentToBoard(projectId, target.agentId, ctx.user.id, ctx.agentId);
 
       if (!result.ok) {
         return NextResponse.json(
@@ -217,8 +208,7 @@ export async function POST(request: NextRequest, props: { params: Promise<{ proj
     }
 
     if (target.kind === "user_id") {
-      // HTPR-6408: numeric IDs are direct adds. Email invites stay consent-based.
-      const result = await addExistingUserToProject(projectId, target.userId);
+      const result = await addExistingUserToProject(projectId, target.userId, ctx.user.id, ctx.agentId);
       if (!result.ok) {
         return NextResponse.json(
           {
@@ -250,7 +240,7 @@ export async function POST(request: NextRequest, props: { params: Promise<{ proj
         })
       : null;
 
-    const result = await addMemberController(ctx.user.id, projectId, [emailToAdd]);
+    const result = await addMemberController(ctx.user.id, projectId, [emailToAdd], ctx.agentId);
 
     if (result.status !== 200) {
       return NextResponse.json(
@@ -279,7 +269,6 @@ export async function POST(request: NextRequest, props: { params: Promise<{ proj
       );
     }
 
-    // Email belonged to an existing team member; addMemberController added them.
     if (existingEmailUser) {
       const member =
         existingEmailMember ??
@@ -313,7 +302,11 @@ export async function POST(request: NextRequest, props: { params: Promise<{ proj
       { status: 500 }
     );
   } catch (err) {
+    if (err instanceof AgentBoardInviteScopeError) {
+      return NextResponse.json({ success: false, error: err.message }, { status: err.status });
+    }
     console.error("[MCP Add Project Member] Error:", err);
+    reportMcpOperationCrash(request, err);
     return NextResponse.json(
       {
         success: false,

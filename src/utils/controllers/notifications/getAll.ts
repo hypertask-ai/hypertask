@@ -1,6 +1,8 @@
+import type { AgentTokenTeamScope } from '@/lib/mcp/auth/types';
+import { agentScopeEnforced } from "@/lib/auth/agentScope";
+import { notificationBoardAccessWhere } from "@/utils/controllers/notifications/boardAccess";
 import { NotificationType, Prisma } from "@prisma/client";
 import prisma from "@/lib/prisma";
-import { HTPR_6752_INSTANT_TICKET_OPEN_FLAG, isFeatureEnabled } from "@/lib/flags";
 import { getInboxTabs } from "@/utils/helperFunctions/helperFunctions";
 import { markQuietAgentMentions } from "@/utils/controllers/notifications/quietOwnerInbox";
 import { inboxConfig } from "@/lib/configs/inbox.config";
@@ -11,6 +13,7 @@ import {
   getSplitsNoImportant,
 } from "@/lib/inboxSplitSettings";
 import { visibleUserInboxWhere } from "@/utils/controllers/notifications/visibleInboxScope";
+import { projectContentAccessWhere } from "@/utils/controllers/projects/getAllIncludes";
 import {
   buildRecentInboxActors,
   normalizeInboxActorActivityRows,
@@ -22,7 +25,6 @@ import {
   directReplyTypesByTask,
 } from "@/utils/controllers/notifications/agentImportantPermission";
 
-/** Prisma include for inbox notification rows — fields match inbox UI usage only. */
 export function inboxTaskSelect(userId: number, includeCachedDescription = false): Prisma.TaskSelect {
   return {
     _count: {
@@ -109,6 +111,23 @@ const visibleInboxSql = (userId: number) => {
         AND n."returnedFromReminders" = true
       )
     )
+    -- Mirror projectContentAccessWhere(userId): a removed member's old
+    -- notifications must not keep returning the task (HTPR-7182).
+    AND EXISTS (
+      SELECT 1
+      FROM "Project" AS p
+      WHERE p.id = t."projectId"
+        AND (
+          p."ownerId" = ${userId}
+          OR EXISTS (
+            SELECT 1
+            FROM "Member" AS m
+            WHERE m."projectId" = p.id
+              AND m."userId" = ${userId}
+              AND m."agentId" IS NULL
+          )
+        )
+    )
     AND NOT EXISTS (
       SELECT 1
       FROM "Reminder" AS r
@@ -118,17 +137,21 @@ const visibleInboxSql = (userId: number) => {
   `;
 };
 
-/**
- * Select one lightweight row per Inbox item before loading its deep relations.
- * Prisma applies `distinct` after a relation-join query, which made PostgreSQL
- * build task, comment, label, and assignee JSON for every historical
- * notification before Node discarded duplicates.
- */
 export async function getInboxNotifications(
   userId: number,
   client: typeof prisma = prisma,
+  { withCachedDescription = true }: { withCachedDescription?: boolean } = {},
+  agentId?: string | null,
+  teamScope?: AgentTokenTeamScope | null,
 ) {
-  const cachedDescriptionPromise = isFeatureEnabled(HTPR_6752_INSTANT_TICKET_OPEN_FLAG, userId).catch(() => false);
+  if ((teamScope != null || (agentId && agentScopeEnforced()))) {
+    return client.notification.findMany({
+      where: { AND: [visibleUserInboxWhere(userId), notificationBoardAccessWhere(userId, agentId, teamScope)] },
+      include: notificationInboxInclude(userId, withCachedDescription),
+      distinct: ["taskId", "notification_inviteId"],
+      orderBy: [{ createdAt: "desc" }, { id: "desc" }],
+    });
+  }
   const selectedRows = await client.$queryRaw<{ id: number }[]>(Prisma.sql`
     SELECT selected.id
     FROM (
@@ -149,9 +172,8 @@ export async function getInboxNotifications(
 
   if (!selectedRows.length) return [];
 
-  const includeCachedDescription = await cachedDescriptionPromise;
   return client.notification.findMany({
-    include: notificationInboxInclude(userId, includeCachedDescription),
+    include: notificationInboxInclude(userId, withCachedDescription),
     where: {
       AND: [
         { id: { in: selectedRows.map(({ id }) => id) } },
@@ -159,19 +181,19 @@ export async function getInboxNotifications(
       ],
     },
     orderBy: [{ createdAt: "desc" }, { id: "desc" }],
-    // The ID reduction above keeps this deep relation join bounded to the rows
-    // that the response will actually return.
     relationLoadStrategy: "join",
   });
 }
 
-/**
- * Return one newest notification per task/type/actor pair for Inbox splits and
- * the actor strip.
- * DISTINCT ON keeps newest-row selection in PostgreSQL and returns the compact
- * actor/type shape directly.
- */
-const getRecentInboxActorActivity = (userId: number) => {
+const getRecentInboxActorActivity = (userId: number, agentId?: string | null, teamScope?: AgentTokenTeamScope | null) => {
+  if ((teamScope != null || (agentId && agentScopeEnforced()))) {
+    return prisma.notification.findMany({
+      where: { AND: [visibleUserInboxWhere(userId), notificationBoardAccessWhere(userId, agentId, teamScope)] },
+      select: { taskId: true, type: true, fromAgentId: true, fromUserId: true, createdAt: true },
+      distinct: ["taskId", "type", "fromAgentId", "fromUserId"],
+      orderBy: [{ createdAt: "desc" }, { id: "desc" }],
+    });
+  }
   return prisma.$queryRaw<InboxActorActivityRow[]>(Prisma.sql`
     SELECT DISTINCT ON (n."taskId", n."type", n."fromAgentId", n."fromUserId")
       n."taskId" AS "taskId",
@@ -192,10 +214,17 @@ const getRecentInboxActorActivity = (userId: number) => {
   `);
 };
 
-const notificationGetAll = async (userId: string | string[]) => {
+const notificationGetAll = async (
+  userId: string | string[],
+  options: { withCachedDescription?: boolean } = {},
+  agentId?: string | null,
+  teamScope?: AgentTokenTeamScope | null,
+) => {
   const parsedUserId = parseInt(userId as string);
   try {
-    const inboxWhere = visibleUserInboxWhere(parsedUserId);
+    const inboxWhere: Prisma.NotificationWhereInput = agentId || teamScope != null
+      ? { AND: [visibleUserInboxWhere(parsedUserId), notificationBoardAccessWhere(parsedUserId, agentId, teamScope)] }
+      : visibleUserInboxWhere(parsedUserId);
     const [
       notifications,
       actorActivityRows,
@@ -204,21 +233,20 @@ const notificationGetAll = async (userId: string | string[]) => {
       blockedTasks,
       userSetting,
     ] = await Promise.all([
-      getInboxNotifications(parsedUserId, prisma),
-      getRecentInboxActorActivity(parsedUserId),
+      getInboxNotifications(parsedUserId, prisma, options, agentId, teamScope),
+      getRecentInboxActorActivity(parsedUserId, agentId, teamScope),
       prisma.notification.findMany({
         where: { ...inboxWhere, directReply: true },
         select: { taskId: true, type: true, fromAgentId: true },
         distinct: ["taskId", "type", "fromAgentId"],
       }),
-      // Tasks where you @mentioned HyperAI. Its replies there are answers to you, so
-      // they stay Important; everywhere else it is working on its own.
       prisma.notification.findMany({
         where: {
           userId: generalConfig.hyperAiId,
           fromUserId: parsedUserId,
           type: "Mentioned",
           taskId: { not: null },
+          ...(agentId || teamScope != null ? { AND: [notificationBoardAccessWhere(parsedUserId, agentId, teamScope)] } : {}),
         },
         select: { taskId: true },
         distinct: ["taskId"],
@@ -227,6 +255,7 @@ const notificationGetAll = async (userId: string | string[]) => {
         where: {
           waitingOnUserId: parsedUserId,
           status: "Normal",
+          project: projectContentAccessWhere(parsedUserId, agentId, teamScope),
         },
         orderBy: { waitingOnSetAt: "asc" },
         select: {
@@ -289,7 +318,6 @@ const notificationGetAll = async (userId: string | string[]) => {
       )
     );
 
-    // Actor permissions determine earning events; unread counts only need task IDs.
     const [actorEnrichment, counts] = await Promise.all([
       (async () => {
         const [pageAgents, actorAndWaitingUsers] = await Promise.all([
@@ -334,8 +362,6 @@ const notificationGetAll = async (userId: string | string[]) => {
           hyperAiInvites.map((invite) => invite.taskId)
         );
         const activeNotificationTypesByTaskId: Record<number, NotificationType[]> = {};
-        // A type counts as agent-only when no human authored that event on the task, so a
-        // human comment is never demoted just because an agent also touched the task.
         const humanAuthoredTypes = new Set<string>();
         const agentAuthoredTypes = new Set<string>();
         const mutedAuthoredTypes = new Set<string>();
@@ -347,9 +373,6 @@ const notificationGetAll = async (userId: string | string[]) => {
             activeNotificationTypesByTaskId[row.taskId].push(row.type);
           }
           const key = `${row.taskId}:${row.type}`;
-          // HyperAI posts under its own user account rather than an Agent record, so it has
-          // to be recognised here or its autonomous work (GitHub webhooks, board moves)
-          // reads as a person's. Once you invite it into a task it is answering you.
           const byAgent =
             !!row.fromAgentId ||
             (row.fromUserId === generalConfig.hyperAiId &&
@@ -389,8 +412,6 @@ const notificationGetAll = async (userId: string | string[]) => {
 
           return {
             ...notification,
-            // A later row can represent the task after a direct answer. Preserve the
-            // addressed marker while any active direct-reply row remains in the inbox.
             ...directReplyState,
           };
         });
@@ -432,13 +453,6 @@ const notificationGetAll = async (userId: string | string[]) => {
           };
         });
 
-        // Show the event that EARNED the row its place, not the newest event. A task can
-        // sit in Important because of a mention or its own overdue state while a due-date
-        // bot bump is the newest row; displaying the bump makes Important read as bot
-        // noise (HTPR-4769). Mirror getInboxTabs' strongest-active-event pick (chores
-        // skipped) and swap the display fields to the newest row of that type;
-        // id/seen/createdAt/unreadCount stay the representative's so archive, read state,
-        // sorting and date groups keep working.
         const splitPickOrder: NotificationType[] = [
           ...inboxConfig.mentionedSplit,
           ...inboxConfig.importantSplit,
@@ -528,8 +542,6 @@ const notificationGetAll = async (userId: string | string[]) => {
                         })),
                       },
                       {
-                        // own comments don't count, unless agent-authored
-                        // (agent comments carry the token owner's creatorId)
                         OR: [
                           { creatorId: null },
                           { creatorId: { not: parsedUserId } },
@@ -551,8 +563,8 @@ const notificationGetAll = async (userId: string | string[]) => {
                     agentId: null,
                     seen: false,
                     taskId: { in: taskIdsWithoutReadState },
-                    // Rows hidden from the inbox must not show up in its unread count.
-                    NOT: inboxWhere.NOT,
+                    NOT: visibleUserInboxWhere(parsedUserId).NOT,
+                    ...(agentId || teamScope != null ? { AND: [notificationBoardAccessWhere(parsedUserId, agentId, teamScope)] } : {}),
                   },
                   _count: { _all: true },
                 })
@@ -609,8 +621,6 @@ const notificationGetAll = async (userId: string | string[]) => {
         `${notification.taskId}:${wantedType}`
       );
       if (!earner) return notification;
-      // The actor strip must lead with the callout's author, or the row reads as
-      // the bot having mentioned you.
       const earnerActor = earner.fromAgent
         ? { displayName: earner.fromAgent.displayName ?? "", photoURL: earner.fromAgent.photoURL ?? null }
         : earner.fromUser
@@ -635,8 +645,6 @@ const notificationGetAll = async (userId: string | string[]) => {
         fromAgent: earner.fromAgent,
         directReply: notification.directReply,
         recentActors,
-        // When the earning event happened, for the Done-survival check; createdAt
-        // stays the representative's so sorting and date groups do not move.
         earnedAt: earner.createdAt,
       };
     });
@@ -669,9 +677,6 @@ const notificationGetAll = async (userId: string | string[]) => {
     const quietRows = await markQuietAgentMentions(prisma, parsedUserId, displayedNotifications);
     const inboxRows = [...quietRows, ...blockedByYouRows];
 
-    // Process the notifications to keep only one notification per task.
-    // getInboxTabs recognizes the task-backed synthetic rows and keeps them only
-    // in the dedicated split, including when the client rebuilds its cache.
     const structuredData = getInboxTabs(
       inboxRows as any,
       splitsNoImportant,
@@ -695,10 +700,5 @@ const notificationGetAll = async (userId: string | string[]) => {
     })
   }
 };
-
-
-
-// please export this from a different file, migraine right now cba
-// i dont understand exporting this from a different file. But I do understand migraine. 
 
 export default notificationGetAll;

@@ -1,8 +1,9 @@
+import { reportMcpOperationCrash } from '@/lib/mcp/operationCrashReport'
 import { wrapMcpRoute, validateMcpRouteAuth as validateMcpAuth, checkMcpRouteRateLimit as checkMcpRateLimit } from '@/lib/mcp/routeWrapper'
 import { NextRequest, NextResponse } from 'next/server'
 
 import prisma from '@/lib/prisma'
-import { findTaskByIdentifier, validateTaskIdentifier } from '@/lib/mcp/tasks/resolveTask'
+import { findTaskByIdentifier, validateTaskIdentifier, taskIdentifierErrorResponse } from '@/lib/mcp/tasks/resolveTask'
 
 export interface DraftItem {
   id: number
@@ -112,7 +113,7 @@ export async function POST(request: NextRequest) {
     const task = await findTaskByIdentifier(
       user,
       { task_id, ticket_number, unique_index, project_id },
-      ctx.agentId
+      ctx.agentId, undefined, ctx.teamScope
     )
     if (!task) {
       return NextResponse.json({ success: false, error: 'Task not found or access denied' }, { status: 404 })
@@ -136,8 +137,6 @@ export async function POST(request: NextRequest) {
         data:{
           content: text,
           saved: false,
-          // Drafts.updatedAt is @default(now()) with no @updatedAt, so an update
-          // keeps the original timestamp unless we set it here.
           updatedAt: new Date(),
         },
         include: {
@@ -177,7 +176,10 @@ export async function POST(request: NextRequest) {
 
     return NextResponse.json(response, { status: 201 })
   } catch (error) {
+    const identifierResponse = taskIdentifierErrorResponse(error)
+    if (identifierResponse) return identifierResponse
     console.error('[MCP POST Draft] Error:', error)
+    reportMcpOperationCrash(request, error)
     return NextResponse.json(
       { success: false, error: 'Internal server error' },
       { status: 500 }
@@ -231,7 +233,7 @@ export async function GET(request: NextRequest) {
         unique_index: uniqueIndex,
         project_id: projectId,
       },
-      ctx.agentId
+      ctx.agentId, undefined, ctx.teamScope
     )
 
     if (!task) {
@@ -239,8 +241,6 @@ export async function GET(request: NextRequest) {
     }
 
     const drafts = await prisma.drafts.findMany({
-      // Drafts are private, unpublished text. Every other draft route already
-      // refuses to touch someone else's; listing leaked theirs in full.
       where: { taskId: task.id, userId: user.id, content: { not: "<p></p>" }},
       include: {
         task: { select: { ticketNumber: true } },
@@ -258,7 +258,10 @@ export async function GET(request: NextRequest) {
 
     return NextResponse.json(response)
   } catch (error) {
+    const identifierResponse = taskIdentifierErrorResponse(error)
+    if (identifierResponse) return identifierResponse
     console.error('[MCP GET Drafts] Error:', error)
+    reportMcpOperationCrash(request, error)
     return NextResponse.json(
       { success: false, error: 'Internal server error' },
       { status: 500 }

@@ -1,5 +1,4 @@
 import { NextApiHandler, NextApiRequest, NextApiResponse } from "next";
-// import getAllUsers from "@/utils/controllers/users/getAll";
 
 
 import prisma from "@/lib/prisma";

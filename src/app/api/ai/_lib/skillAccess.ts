@@ -1,3 +1,4 @@
+import type { BoardKnowledgePrincipal } from "@/lib/rag/retrieveBoardKnowledge";
 import { Prisma } from "@prisma/client";
 import { NextResponse } from "next/server";
 
@@ -6,28 +7,41 @@ import { getProjectWhere } from "@/utils/controllers/projects/getAllIncludes";
 
 import { assertProjectAccess } from "./customInstructions";
 
+export class AccountSkillAccessError extends Error {
+  readonly status = 403;
+  constructor() { super("Account-global skills access denied"); }
+}
+
 export type SkillScope = "user" | "project";
 
 export async function assertSkillScopeAccess(
   userId: number,
   scope: SkillScope,
-  projectId?: number
+  projectId?: number,
+  principal?: BoardKnowledgePrincipal,
 ) {
-  if (scope === "user") return { userId, projectId: null };
+  if (scope === "user") {
+    if (principal?.teamScope != null) throw new AccountSkillAccessError();
+    return { userId, projectId: null };
+  }
   if (!projectId) throw new Error("projectId is required for project skills");
-  await assertProjectAccess(userId, projectId);
+  await assertProjectAccess(userId, projectId, principal?.agentId, principal?.teamScope);
   return { userId: null, projectId };
 }
 
-export async function getAccessibleSkill(userId: number, id: number) {
+export async function getAccessibleSkill(userId: number, id: number, principal?: BoardKnowledgePrincipal) {
+  if (principal?.teamScope != null) {
+    const global = await prisma.aI_Skill.findFirst({ where: { id, userId, projectId: null }, select: { id: true } });
+    if (global) throw new AccountSkillAccessError();
+  }
   const skill = await prisma.aI_Skill.findFirst({
     where: {
       id,
       OR: [
-        { userId, projectId: null },
+        ...(principal?.teamScope != null ? [] : [{ userId, projectId: null }]),
         {
           userId: null,
-          project: { is: getProjectWhere(userId) },
+          project: { is: getProjectWhere(userId, principal?.agentId, principal?.teamScope) },
         },
       ],
     },
@@ -36,11 +50,11 @@ export async function getAccessibleSkill(userId: number, id: number) {
   return skill;
 }
 
-export function skillErrorResponse(error: unknown) {
+export function skillErrorResponse(error: unknown, principal?: BoardKnowledgePrincipal) {
   const conflict =
     error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002";
   const message = error instanceof Error ? error.message : "Skill request failed";
-  const status = conflict ? 409 : 400;
+  const status = conflict ? 409 : principal?.teamScope != null && message.includes("access denied") ? 403 : 400;
   return NextResponse.json(
     { error: conflict ? "A skill with this slug already exists in this scope" : message },
     { status }

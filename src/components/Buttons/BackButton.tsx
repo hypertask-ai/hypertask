@@ -11,7 +11,7 @@ import { appShellRailAtom } from "@/store";
 import { APP_SHELL_RAIL_OFFSET } from "@/lib/constants/appShellRail";
 
 interface BackButtonProps {
-  left?: number | string; // The '?' makes 'left' optional,
+  left?: number | string;
   right?: number;
   top?: number;
   goBackHandler?: any;
@@ -25,8 +25,6 @@ const BackButton: FC<BackButtonProps> = ({
 }) => {
   const _mbl = useContext(MobileViewContext);
   const appShellRailOn = useRecoilValue(appShellRailAtom);
-  // The rail widens when expanded, so track its live width rather than a
-  // fixed offset that leaves this button buried underneath it.
   const left = appShellRailOn ? APP_SHELL_RAIL_OFFSET : leftProp;
 
   const router = useRouter();

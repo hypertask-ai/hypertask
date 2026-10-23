@@ -7,6 +7,10 @@ description: SPEED RUNNER only, read daily live speed numbers, investigate and s
 
 **SPEED RUNNER takes speed work only.** Route non-speed work to another runner. Measuring is deterministic; choosing causes and experiments needs a high-capability model at high reasoning effort. Use `/intensity` when available. Do not turn analysis into a script or a second bot.
 
+**Work toward [GOALS.md](GOALS.md)**: 50 ms in-app navigation, next open milestone first. The runner dispatcher sends you the top free `[SPEED]` ticket, or a research round every 6 hours when none is free.
+
+**Explain every number before you report it (required).** Before any speed number goes into a ticket, PR, playbook row or weekly digest, load `.claude/skills/principle-explain-the-number/SKILL.md` and `.claude/skills/benchmark-checklist/SKILL.md` and answer all seven questions: limiter, tuning, limits, errors, repeatability, end-to-end relevance and whether the work happened. Report run count, range and limiter with the number, or call it inconclusive (pstack by Lauren Tan, MIT).
+
 This is the map, not a parallel `/ship`. Read [PLAYBOOK.md](PLAYBOOK.md) first and update it **after every investigation and every weekly research round**, including no-win and failed experiments. Source: https://app.hypertask.ai/detail/project-4060/232.
 
 | Step | Load / do | Done when |
@@ -18,6 +22,10 @@ This is the map, not a parallel `/ship`. Read [PLAYBOOK.md](PLAYBOOK.md) first a
 | Fix and prove | `/ship <full ticket URL>` and `fix-slow-page` | Smallest behavior-preserving fix, failing regression test, same-condition five cold/five warm before and after, no dropped slow runs, uncertainty explicit; existing `performance/evidence` and app budgets retained; deploy and live `verify-qa` pass before close |
 | Learn | [PLAYBOOK.md](PLAYBOOK.md), shared `speed-check/improve-skill.md` for shared harness lessons | Record what found a real problem, false leads, each idea tried with measured result, next probe and per-ticket ms scoreboard; a script probe change gets a test and ticket/PR, never relaxed safety/budgets |
 | Weekly research | Current `package.json`, lockfile resolved versions, runtime/deploy identity, official releases and changelogs plus open-ended write-ups | Dated playbook round, scored experiments, sources, one chosen experiment or a justified no-go; prepare a plain-language weekly digest for Valentin's review on the relevant ticket via the owning runner's `vcc` |
+
+## Build scratch is not evidence
+
+Never build on the VPS. On an approved build host, use `mktemp -d /tmp/ht-qa-build.XXXXXX` for app copies, dependencies, `.next` and `build-candidate`/`build-baseline`/`build-a`/`build-profile` trees, with an EXIT trap to remove it (INT/TERM must exit through that trap). The optional `scripts/premerge-local.sh` already owns this lifecycle. Copy only small sanitized numbers, logs, screenshots and HTML reports to `~/.local/state/vcc-evidence/<TICKET>/`; never copy a build, browser cache or toolchain there. See [QA evidence storage](../verify-qa/reference/evidence-storage.md).
 
 ## Research without a fixed ceiling
 

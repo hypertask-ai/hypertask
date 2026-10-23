@@ -80,7 +80,6 @@ export default async function Page({
   myTasks = undefined as unknown as Awaited<ReturnType<typeof getMyTasks>>;
 
   if (!scopesEnabled) {
-    // Assigned-only query does not need saved view config; load in parallel.
     const [tasksResult, viewsResult] = await Promise.all([
       getMyTasks(sessionUser.userId, viewsEnabled),
       viewsEnabled

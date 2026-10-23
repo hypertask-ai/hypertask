@@ -18,6 +18,13 @@ for (const role of ["Member", "Admin"]) {
   });
 }
 
+test("renaming a board does not load every task row (YPER4-388)", async () => {
+  const h = harness({ ownerId: 6 });
+  assert.equal((await h.patch("Renamed")).status, 200);
+  assert.equal(h.updates.length, 1);
+  assert.equal(h.updates[0].include?.tasks, undefined, "rename must not include the board's tasks");
+});
+
 test("board owner can rename a legacy teamless board", async () => {
   const h = harness({ ownerId: 6 });
   assert.equal((await h.patch("Owner rename")).status, 200);
@@ -35,7 +42,7 @@ for (const role of ["Member", "Admin"]) {
 }
 
 for (const scope of ["owner", "member"]) {
-  test(`an active managed agent delegates its human's board ${scope} permission`, async () => {
+  test(`an active managed agent cannot borrow its human's board ${scope} permission`, async () => {
     const agent = { id: "agent-owned", userId: 6, revokedAt: null };
     const h = harness({
       ...(scope === "owner"
@@ -43,8 +50,8 @@ for (const scope of ["owner", "member"]) {
         : { members: [humanMember("Member", { user: { agents: [agent] } })] }),
       auth: { user: { id: 6 }, agentId: agent.id },
     });
-    assert.equal((await h.patch("Delegated rename")).status, 200);
-    assert.equal(h.updates.length, 1);
+    assert.equal((await h.patch("Delegated rename")).status, 403);
+    assert.equal(h.updates.length, 0);
   });
 }
 
@@ -130,16 +137,78 @@ test("UI rename calls the same controller and permission behavior as the API", a
     [true, "x".repeat(200), 200],
   ]) {
     const h = harness({ members: allowed ? [humanMember()] : [] });
-    const ui = loadTs("src/pages/api/projects/update.ts", {
-      "@/lib/api/task-writes/route": { withTaskWriteFlag: (handler) => handler },
+    const getSessionUser = { getSessionUser: async () => ({ userId: 6 }) };
+    const nextServer = { NextResponse: Response };
+    const sharedRoute = loadTs("src/lib/api/task-writes/route.ts", {
+      "next/server": nextServer,
+      "zod": {},
+      "@/lib/auth/getSessionUser": getSessionUser,
+      "better-auth/cookies": require("better-auth/cookies"),
+      "@/lib/auth/session": {},
+    });
+    const ui = loadTs("src/lib/api/project-writes/update.ts", {
+      "next/server": nextServer,
+      "zod": require("zod"),
+      "@/lib/api/task-writes/route": sharedRoute,
       "@/utils/controllers/projects/update": h.controller,
-      "@/lib/auth/getSessionUser": { getSessionUser: async () => ({ userId: 6 }) },
       "@/lib/auth/sessionUserRecord": h.userRecord,
-    }).default;
-    const response = { status(code) { this.code = code; return this; }, json(body) { this.body = body; } };
-    await ui({ method: "POST", headers: {}, body: { projectId: 15, title } }, response);
+    }).POST;
+    const result = await ui({
+      headers: new Headers(),
+      json: async () => ({ projectId: 15, title }),
+    });
+    const response = { code: result.status, body: await result.json() };
     assert.equal(response.code, expectedStatus);
     assert.equal(h.updates.length, expectedStatus === 200 ? 1 : 0);
     if (expectedStatus === 200) assert.equal(h.board.title, title.trim());
   }
 });
+
+for (const wrapper of ['off', 'on']) {
+  for (const scopeEnforced of [false, true]) {
+    const mode = `wrapper=${wrapper}, scope=${scopeEnforced ? 'ENFORCE' : 'WATCH'}`;
+    const withMode = async (run) => {
+      const previous = process.env.HTPR_6926_TEST_FLAG;
+      process.env.HTPR_6926_TEST_FLAG = wrapper;
+      try { await run(); } finally {
+        if (previous === undefined) delete process.env.HTPR_6926_TEST_FLAG;
+        else process.env.HTPR_6926_TEST_FLAG = previous;
+      }
+    };
+
+    test(`read-role accepted agent cannot rename board (${mode})`, async () => withMode(async () => {
+      const h = harness({
+        members: [agentMember()],
+        auth: { user: { id: 6 }, agentId: 'agent-owned' },
+        agentRole: 'read', scopeEnforced,
+      });
+      const response = await h.patch('New name');
+      assert.equal(response.status, 403);
+      assert.equal((await response.json()).code, 'insufficient_scope');
+      assert.equal(response.headers.has('Server-Timing'), wrapper === 'on');
+      assert.equal(h.board.title, 'Old name');
+      assert.deepEqual(h.updates, []);
+      assert.deepEqual(h.broadcasts, []);
+    }));
+
+    test(`write/admin agents and human members can still rename (${mode})`, async () => withMode(async () => {
+      for (const agentRole of ['write', 'admin', null, 'human']) {
+        const human = agentRole === 'human';
+        const h = harness({
+          members: [human ? humanMember() : agentMember()],
+          auth: { user: { id: 6 }, agentId: human ? null : 'agent-owned' },
+          agentRole: human ? 'read' : agentRole, scopeEnforced,
+        });
+        const response = await h.patch('  New name  ');
+        assert.equal(response.status, 200, String(agentRole));
+        assert.equal(response.headers.has('Server-Timing'), wrapper === 'on');
+        assert.equal(h.board.title, 'New name');
+        assert.equal(h.board.sorting_mode, 'Manual');
+        assert.equal(h.board.uniqueIdentifier, 'HTPR');
+        assert.equal(h.updates.length, 1);
+        assert.ok(h.updates[0].where.AND.OR);
+        assert.deepEqual(h.broadcasts, [[15, { originUserId: 6 }]]);
+      }
+    }));
+  }
+}

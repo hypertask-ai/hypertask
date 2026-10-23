@@ -51,8 +51,6 @@ const SwitchAccountModal: React.FC<ISwitchAccountModal> = ({ closeHandler }) => 
     };
   }, []);
 
-  // Always show the account you're currently signed in as, even if its session
-  // predates multi-session and so isn't in listDeviceSessions yet.
   const items = useMemo<SwitchAccount[]>(
     () => mergeCurrentAccount(accounts),
     [accounts],
@@ -79,7 +77,6 @@ const SwitchAccountModal: React.FC<ISwitchAccountModal> = ({ closeHandler }) => 
     [activeId, closeHandler, refreshAccounts],
   );
 
-  // While the picker is open, plain number keys 1-9 select an account.
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (e.shiftKey || e.ctrlKey || e.altKey || e.metaKey) return;

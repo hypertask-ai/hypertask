@@ -1,8 +1,3 @@
-/**
- * HTTP Status Code Configuration
- * Based on RFC 9110 and MDN Web Docs
- * @see https://developer.mozilla.org/en-US/docs/Web/HTTP/Reference/Status
- */
 
 export type HttpStatusCategory =
   | "informational"
@@ -12,12 +7,10 @@ export type HttpStatusCategory =
   | "server_error";
 
 export type HttpStatusCode =
-  // Informational (1xx)
   | 100
   | 101
   | 102
   | 103
-  // Success (2xx)
   | 200
   | 201
   | 202
@@ -28,7 +21,6 @@ export type HttpStatusCode =
   | 207
   | 208
   | 226
-  // Redirection (3xx)
   | 300
   | 301
   | 302
@@ -36,7 +28,6 @@ export type HttpStatusCode =
   | 304
   | 307
   | 308
-  // Client Error (4xx)
   | 400
   | 401
   | 402
@@ -66,7 +57,6 @@ export type HttpStatusCode =
   | 429
   | 431
   | 451
-  // Server Error (5xx)
   | 500
   | 501
   | 502
@@ -98,7 +88,6 @@ type PartialHttpStatusConfig = {
 };
 
 export const httpStatusConfig = {
-  // Category definitions
   informational: [100, 101, 102, 103] as HttpStatusCode[],
   success: [
     200, 201, 202, 203, 204, 205, 206, 207, 208, 226,
@@ -112,15 +101,11 @@ export const httpStatusConfig = {
     500, 501, 502, 503, 504, 505, 506, 507, 508, 510, 511,
   ] as HttpStatusCode[],
 
-  // Retryable status codes
   retryable: [408, 429, 500, 502, 503, 504] as HttpStatusCode[],
 
-  // Deprecated status codes
   deprecated: [102, 305, 306] as HttpStatusCode[],
 
-  // Status code details
   statusCodes: {
-    // Informational responses (1xx)
     100: {
       code: 100,
       name: "Continue",
@@ -155,7 +140,6 @@ export const httpStatusConfig = {
       userMessage: "Preparing response...",
     },
 
-    // Successful responses (2xx)
     200: {
       code: 200,
       name: "OK",
@@ -228,7 +212,6 @@ export const httpStatusConfig = {
       userMessage: "Success with transformations.",
     },
 
-    // Redirection messages (3xx)
     300: {
       code: 300,
       name: "Multiple Choices",
@@ -290,7 +273,6 @@ export const httpStatusConfig = {
       userMessage: "Permanently redirecting...",
     },
 
-    // Client error responses (4xx)
     400: {
       code: 400,
       name: "Bad Request",
@@ -533,7 +515,6 @@ export const httpStatusConfig = {
       retryable: false,
     },
 
-    // Server error responses (5xx)
     500: {
       code: 500,
       name: "Internal Server Error",
@@ -630,5 +611,4 @@ export const httpStatusConfig = {
   } as Record<HttpStatusCode, StatusCodeInfo>,
 } satisfies PartialHttpStatusConfig & Record<string, unknown>;
 
-// Type exports
 export type HttpStatusConfig = typeof httpStatusConfig;

@@ -6,7 +6,6 @@ import TaskDetailMainContainer from '@/components/PageComponents/TaskDetail/Task
 import { MobileViewContext } from '@/lib/contexts/mobileContext';
 import { useRecoilState } from '@/lib/state'
 import { currentProjectAtom } from '@/store'
-// import AssigneesContainerCreateTaskGlobally from './AssigneesTaskGlobal/AssigneesContainerCreateTaskGlobally'
 import { useDeviceContext } from '@/lib/contexts/deviceContext'
 import { ArrowLeft, ChevronDown, X } from "lucide-react";
 import dynamic from 'next/dynamic'
@@ -18,13 +17,11 @@ import ConfirmModal from '../Common Modals/ConfirmActionModal'
 import { useTourContext } from '@/lib/contexts/TourContext'
 import { DIV_ID_CONSTANTS } from '@/lib/configs/general.config'
 import { KeyCodes } from '@/lib/constants/keyboard-handler'
-import { armBackDismiss } from '@/lib/mobile/backDismiss'
-import { usePathname } from 'next/navigation'
+import { armBackDismiss, closeBackDismissBeforeNavigation } from '@/lib/mobile/backDismiss'
+import { usePathname, useRouter } from 'next/navigation'
 import { useFlag } from '@/hooks/useFlag'
-import { HTPR_6556_MOBILE_DESCRIPTION_FIRST_FLAG } from '@/lib/flags/keys'
+import { HTPR_6556_MOBILE_DESCRIPTION_FIRST_FLAG, HTPR_7544_CTRLJ_SIDEBAR_ON_NEW_TASK_FLAG } from '@/lib/flags/keys'
 const Tooltip = dynamic(() => import("@/components/Common/Tooltip"), { ssr: false })
-// const AssigneesContainerCreateTaskGlobally = dynamic(() => import("./AssigneesTaskGlobal/AssigneesContainerCreateTaskGlobally"), { ssr: false })
-// const DescriptionCreateTaskModal = dynamic(()=>import("./DescriptionCreateTaskModal"),{ssr:false})
 
 const attachmentButtonId = "create-task-modal-attachmentUpload"
 
@@ -32,9 +29,6 @@ interface IProps {
     children?: ReactNode
 }
 
-// =========== please fix how we get the sections later, right now i'm short on a deadline and i need to just get it done.
-// not my proudest but no performance impacts, gets the job done.
-// its just not clean is all
 const CreateTaskModalBody: React.FC<IProps> = ({ }) => {
     const _mbl = useContext(MobileViewContext);
     const isApple = useDeviceContext()
@@ -43,8 +37,39 @@ const CreateTaskModalBody: React.FC<IProps> = ({ }) => {
         currentFocusedElement, closeHandler,
         showAssignModal, setShowAssignModal, uploadInProgress, showConfirmationModal, onConfirmDiscard, onCancelDiscard,
         userInput: userPrompt, parentTaskInfo, isRecording, hasUnsavedChanges,
-        formValues, titleGenerationError,
+        formValues, titleGenerationError, CreateTaskAndDescription, setUploadInProgress,
     } = useContextCreateTaskModal()
+    const ctrlJSidebarOnNewTask = useFlag(HTPR_7544_CTRLJ_SIDEBAR_ON_NEW_TASK_FLAG)
+    const router = useRouter()
+    const sidebarHandoffPending = useRef(false)
+    useEffect(ctrlJSidebarOnNewTask ? () => {
+        const openNewTaskSidebar = async (event: KeyboardEvent) => {
+            const cmdControl = (isApple && event.metaKey) || (!isApple && event.ctrlKey)
+            if (!document.getElementById("createTaskModal") || event.key.toLowerCase() !== "j" || !cmdControl || event.shiftKey || event.altKey || event.isComposing || isRecording || showAssignModal || showConfirmationModal) return
+            if (document.activeElement?.closest("#htc, .chatwindow, [data-ai-chat-panel]") || document.querySelector("#htc")) return
+            event.preventDefault()
+            event.stopImmediatePropagation()
+            if (event.repeat || sidebarHandoffPending.current || uploadInProgress) return
+            if (!formValues.currentProject) return
+            sidebarHandoffPending.current = true
+            setUploadInProgress(true)
+            try {
+                const taskUrl = await CreateTaskAndDescription(undefined, formValues.title.trim() || "New Task")
+                if (!taskUrl) throw new Error("Task could not be created")
+                const closeBeforeNavigation = _mbl && window.location.pathname !== "/new"
+                if (closeBeforeNavigation) await closeBackDismissBeforeNavigation(window, "createTaskModal", () => closeHandler(true))
+                router.push(`${taskUrl}?newTaskAi=1`)
+                if (!closeBeforeNavigation) closeHandler(true)
+            } catch {
+                sidebarHandoffPending.current = false
+                toast.error("Could not open AI chat. Your task draft is still here.")
+            } finally {
+                setUploadInProgress(false)
+            }
+        }
+        window.addEventListener("keydown", openNewTaskSidebar, true)
+        return () => window.removeEventListener("keydown", openNewTaskSidebar, true)
+    } : () => {}, [ctrlJSidebarOnNewTask, _mbl, isApple, isRecording, showAssignModal, showConfirmationModal, uploadInProgress, formValues, CreateTaskAndDescription, setUploadInProgress, router, closeHandler])
 
     const {
         toggleMoveModal, toggleShowSizeModal, toggleDueDateModal,
@@ -59,7 +84,6 @@ const CreateTaskModalBody: React.FC<IProps> = ({ }) => {
 
     const [_currentProject, __] = useRecoilState(currentProjectAtom)
     
-    // Continue tour when modal opens if tour is active
     useEffect(() => {
         if (isTourActive()) {
             continueTourInModal();
@@ -104,20 +128,16 @@ const CreateTaskModalBody: React.FC<IProps> = ({ }) => {
 
 
     const ArrowRightHandler = () => {
-        // if (editMode) return
         setEditMode(null)
         switch (currentFocusedElement) {
             case "Title":
                 focusOn("Description")
-                // setEditMode("Description")
                 break;
             case "Description":
                 focusOn("Title")
-                // setEditMode("title")
                 break;
             default:
                 focusOn("Title")
-                // setEditMode("title")
                 break;
         }
     }
@@ -137,11 +157,9 @@ const CreateTaskModalBody: React.FC<IProps> = ({ }) => {
             "ProseMirror",
         ].includes((document.activeElement as HTMLElement)?.tagName?.toLowerCase());
         const tipTapClassName: string = "tiptap ProseMirror ProseMirror-focused";
-        // if (editMode!=="assignees") return "allowTab"
         console.log("returning")
         return document.activeElement?.className === tipTapClassName || isInputFocused || showConfirmationModal
     }
-    // ============================= [ENTER] handler
     const EnterHandler = useCallback(() => {
         if (currentFocusedElement === "Description" && editMode !== "Description-ai") {
             setEditMode("Description")
@@ -155,20 +173,10 @@ const CreateTaskModalBody: React.FC<IProps> = ({ }) => {
     }, [currentFocusedElement, setEditMode, editMode])
 
 
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+
     const handleKeyDown = (e: KeyboardEvent) => {
-        // e.stopPropagation()
-        // console.log("🚀 ~ handleKeyDown ~ e:", e)
         var cmdControl = isApple && e.metaKey || !isApple && e.ctrlKey;
         if (uploadInProgress) return toast("Upload in progress! Please wait")
-        // console.log("document active el: ", document.activeElement)
-        // const mode = editMode && ["title", "Description", "Description-ai"].includes(editMode) ? "Editing" : currentFocusedElement ? "Navigating" : "Modal"
-        // console.log("🚀 ~ handleKeyDown ~ mode:", mode)
-        // console.log("🚀 ~ handleKeyDown ~ currentFocusedElement:", currentFocusedElement)
-        // console.log("🚀 ~ handleKeyDown ~ editMode:", editMode)
-
-
-        // ============== keydown operations for when mode is "EDITING"
 
         if (showAssignModal) return
 
@@ -182,40 +190,33 @@ const CreateTaskModalBody: React.FC<IProps> = ({ }) => {
             setEditMode("Description")
             setCurrentFocusedElement("Description")
         }
-        // [a]
         if (!e.shiftKey && !cmdControl && e.keyCode === KeyCodes.A) return toggleAssignModalHandler(e)
 
-        // [p] for set priority
         if (e.keyCode === KeyCodes.P && !cmdControl) {
             e.preventDefault()
             return togglePriorityModal()
         }
 
-        // [shift]+[d] for due date 
         if (e.keyCode === KeyCodes.D && !e.ctrlKey) {
             e.preventDefault()
             return toggleDueDateModal()
         }
-        // [m]
         if (e.keyCode === KeyCodes.M && !cmdControl && !e.shiftKey) {
             e.preventDefault()
             return toggleMoveModal();
         }
 
-        // [s] for size / estimate
         if (e.keyCode === KeyCodes.S) {
             e.preventDefault()
             return toggleShowSizeModal()
 
         }
 
-        // [shift]+[m] for board/project 
         if (e.keyCode === 77 && !cmdControl && e.shiftKey) {
             e.preventDefault()
             return toggleProjectsModal()
         }
 
-        // [t] 
         if (e.keyCode === KeyCodes.T) {
             e.preventDefault()
             return toggleShowTagsModal()
@@ -224,7 +225,6 @@ const CreateTaskModalBody: React.FC<IProps> = ({ }) => {
         if (e.key === "ArrowLeft" || e.key === "ArrowUp" || (e.shiftKey && e.key === "Tab")) return ArrowRightHandler()
         if (e.key === "Enter" && !cmdControl) return EnterHandler()
 
-        // [ctrl] + [d] []
         if (e.keyCode === KeyCodes.D && cmdControl) {
             e.preventDefault()
             setEditMode("Description")
@@ -233,7 +233,6 @@ const CreateTaskModalBody: React.FC<IProps> = ({ }) => {
 
         console.log("made it till here")
 
-        // press [cmd/ctrl][j]
         if (e.keyCode === KeyCodes.J && cmdControl) {
             e.preventDefault()
             endTour()
@@ -243,7 +242,6 @@ const CreateTaskModalBody: React.FC<IProps> = ({ }) => {
             return true
         }
 
-        // [Audio button] cmd/ctrl + shift + d
         if (e.shiftKey && cmdControl && e.keyCode === KeyCodes.D) {
             e.preventDefault();
             if (isRecording) return;
@@ -253,7 +251,6 @@ const CreateTaskModalBody: React.FC<IProps> = ({ }) => {
             document.getElementById(elementId)?.click();
         }
 
-        // [Audio button with improve] cmd/ctrl + shift + f
         if (e.shiftKey && cmdControl && e.keyCode === KeyCodes.F) {
             e.preventDefault();
             if (isRecording) return;
@@ -262,7 +259,6 @@ const CreateTaskModalBody: React.FC<IProps> = ({ }) => {
             let elementId = "create-task-modal-audio-button-improve"
             document.getElementById(elementId)?.click();
         }
-            // [Audio button] alt+v
         if (e.altKey && e.keyCode === KeyCodes.V) {
             e.preventDefault();
             if (isRecording) return;
@@ -279,32 +275,24 @@ const CreateTaskModalBody: React.FC<IProps> = ({ }) => {
         };
     }, [editMode, showAssignModal, showConfirmationModal, closeHandler, ArrowRightHandler, currentFocusedElement, userPrompt]);
 
-    // The mobile modal is full screen: no backdrop to tap, so the system back
-    // gesture must dismiss it. Keep the latest handlers in a ref so the entry is
-    // pushed once per open, not again on every keystroke.
     const isNewTaskPage = usePathname() === "/new"
     const backHandlersRef = useRef({ closeHandler, hasUnsavedChanges })
     backHandlersRef.current = { closeHandler, hasUnsavedChanges }
 
     useEffect(() => {
-        // On the /new page the modal IS the route, so closing already navigates
-        // and the browser's own back works. Arming there would pop twice.
         if (!_mbl || isNewTaskPage || typeof window === "undefined") return;
         return armBackDismiss(window, {
             key: "createTaskModal",
             onBack: () => backHandlersRef.current.closeHandler(false),
-            // An unsaved draft opens the discard confirmation instead of
-            // closing, so the modal is still up and back must keep working.
             shouldRearm: () => backHandlersRef.current.hasUnsavedChanges(),
         });
     }, [_mbl, isNewTaskPage]);
 
-    // Warn user before closing tab/window if there are unsaved changes
     useEffect(() => {
         const handleBeforeUnload = (event: BeforeUnloadEvent) => {
             if (hasUnsavedChanges()) {
                 event.preventDefault();
-                event.returnValue = ''; // Standard way to trigger the browser's default confirmation
+                event.returnValue = '';
             }
         };
 
@@ -411,11 +399,8 @@ const CreateTaskModalBody: React.FC<IProps> = ({ }) => {
                             <TaskInfoColumnGloballyCreate />
                         </TaskInfoColumnContainer>
                     ))}
-                    {/* ======================= Left half ================= */}
                     <DescriptionCreateTaskModal />
-                    {/* ======================= Right half ================= */}
 
-                    {/* ======================== task status ================== */}
                     {!_mbl && (
                         <TaskInfoColumnContainer heightVariant="fit">
                             <TaskInfoColumnGloballyCreate />
@@ -423,7 +408,6 @@ const CreateTaskModalBody: React.FC<IProps> = ({ }) => {
                     )}
 
                 </div>
-                {/* <SaveChanges/> */}
 
             </TaskDetailMainContainer>
             {showConfirmationModal && (
@@ -442,14 +426,6 @@ const CreateTaskModalBody: React.FC<IProps> = ({ }) => {
 
 export default CreateTaskModalBody
 
-
-
-// please for the love of lord, refactor this and you can make it reusabel so easily.
-// im handling 3.5 fucking projects in one day, so i dont havce the energy. 
-// just export it with these props.
-// 1. onClickHandler
-// 2. shouldShowToolTip
-// 3. toolTip content.
 const BackButton = () => {
     const { closeHandler } = useContextCreateTaskModal()
 
@@ -486,10 +462,6 @@ const BackButton = () => {
                 </div>
             </div>
 
-            {/* The mobile Back pill is gone (HTPR-5147). It was fixed at bottom
-                right and landed on top of the AI writer's send button, and the
-                sheet already closes by dragging down or tapping the backdrop, so
-                it cost a control and bought nothing. Desktop keeps its arrow. */}
         </>
 
     )

@@ -1,3 +1,4 @@
+import { reportMcpOperationCrash } from '@/lib/mcp/operationCrashReport'
 import { wrapMcpRoute, checkMcpRouteRateLimit as checkMcpRateLimit, validateMcpRouteAuth as validateMcpAuth } from '@/lib/mcp/routeWrapper'
 import type { Prisma } from '@prisma/client'
 import { NextRequest, NextResponse } from 'next/server'
@@ -13,7 +14,6 @@ const LABEL_ID_UUID_RE =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 
 
-// Upper bound on claimable tasks pulled into memory before scoring/sorting.
 const CANDIDATE_LIMIT = 500
 const mcpDoneNameFallback = (title: string) => columnRole(title) === 'done'
 
@@ -47,11 +47,6 @@ type ClaimableTaskWhereInput = Prisma.TaskWhereInput & {
   }
 }
 
-/**
- * GET /api/mcp/tasks/next
- *
- * Returns the highest-priority unleased tasks in one accessible project.
- */
 export async function GET(request: NextRequest) {
   return wrapMcpRoute(async (request: NextRequest) => {
   try {
@@ -87,12 +82,12 @@ export async function GET(request: NextRequest) {
     }
     const limit = Math.min(parsedLimit, 50)
 
-    const projectAccessWhere = getProjectWhere(ctx.user.id, ctx.agentId)
+    const projectAccessWhere = getProjectWhere(ctx.user.id, ctx.agentId, ctx.teamScope)
     const project = await prisma.project.findFirst({
       where: {
         id: projectId,
         status: 'Normal',
-        ...projectAccessWhere,
+        ...getProjectWhere(ctx.user.id, ctx.agentId, ctx.teamScope),
       },
       select: {
         id: true,
@@ -132,12 +127,9 @@ export async function GET(request: NextRequest) {
     )
     const projectDoneTitles = doneTitlesByProject.get(projectId)
 
-    // isNot also matches tasks with no lease relation.
     const where: ClaimableTaskWhereInput = {
       projectId,
-      project: projectAccessWhere,
       status: 'Normal',
-      // An explicit section is intentional, even when the board marks it finished.
       ...(section
         ? { section }
         : projectDoneTitles && projectDoneTitles.size > 0
@@ -172,7 +164,7 @@ export async function GET(request: NextRequest) {
     }
 
     const tasks = await prisma.task.findMany({
-      where,
+      where: { ...where, project: getProjectWhere(ctx.user.id, ctx.agentId, ctx.teamScope) },
       select: {
         id: true,
         ticketNumber: true,
@@ -196,30 +188,19 @@ export async function GET(request: NextRequest) {
           },
           orderBy: { labelId: 'asc' },
         },
-        // Blocking relations for the exclude_blocked filter. A task is blocked
-        // if it is the SOURCE of a BlockedBy row (T blocked by target) or the
-        // TARGET of a BlockedTo row (source blocks T) - both directions, matching
-        // getTaskCountSelect's convention. Selected unconditionally so the row
-        // type stays stable; the filter below only consults it when asked.
         relatedFromTasks: {
-          where: { relationType: 'BlockedBy' },
+          where: { relationType: 'BlockedBy', ...(ctx.teamScope == null ? {} : { targetTask: { project: projectAccessWhere } }) },
           select: {
             targetTask: { select: { status: true, section: true, projectId: true } },
           },
         },
         relatedToTasks: {
-          where: { relationType: 'BlockedTo' },
+          where: { relationType: 'BlockedTo', ...(ctx.teamScope == null ? {} : { sourceTask: { project: projectAccessWhere } }) },
           select: {
             sourceTask: { select: { status: true, section: true, projectId: true } },
           },
         },
       },
-      // Bound the candidate set so a busy board can't turn this into an
-      // unbounded fetch. Oldest-first matches the score tie-break; the score
-      // itself is applied in code below.
-      // ponytail: hard cap. If a board ever holds >CANDIDATE_LIMIT claimable
-      // tasks, an urgent one past the cap could be missed - move scoring into
-      // SQL (ORDER BY priority, dueDate) at that point.
       orderBy: { createdAt: 'asc' },
       take: CANDIDATE_LIMIT,
     })
@@ -240,8 +221,6 @@ export async function GET(request: NextRequest) {
       })
     }
 
-    // Drop tasks with an open blocker (either direction) using each blocker's
-    // own board's resolved finished columns.
     const candidates = excludeBlocked
       ? tasks.filter((task) => {
           const blockers = [
@@ -288,6 +267,7 @@ export async function GET(request: NextRequest) {
     })
   } catch (error) {
     console.error('[MCP] tasks/next', { error })
+    reportMcpOperationCrash(request, error)
     return NextResponse.json(
       {
         success: false,

@@ -1,3 +1,5 @@
+import type { AgentTokenTeamScope } from '@/lib/mcp/auth/types';
+import { agentScopeEnforced, recordAgentBoardScopeMiss } from "@/lib/auth/agentScope";
 import prisma from "@/lib/prisma";
 import { Prisma } from "@prisma/client";
 import { elapsedSeconds, resumedStartedAt } from "@/lib/timeDuration";
@@ -5,10 +7,6 @@ import { broadcastTimeChange } from "@/lib/realtime/server";
 import { getProjectWhere } from "@/utils/controllers/projects/getAllIncludes";
 import { manualEntryTimes } from "@/lib/timeManualEntry";
 import isProjectAdmin from "@/utils/controllers/projects/isProjectAdmin";
-import {
-  HTPR_4228_ADMIN_ONLY_TIME_REPORTS_FLAG,
-  isFeatureEnabled,
-} from "@/lib/flags";
 import {
   createTimeEntryOnActiveBoard,
   deleteTimeEntryOnActiveBoard,
@@ -133,9 +131,6 @@ export async function boardTimeSummary(userId: number, projectId: number) {
   };
 }
 
-// Fire-and-forget, like every other broadcast caller: a timer must not fail
-// or hang because the pub/sub hop is slow. broadcast() keeps the serverless
-// instance alive on its own via waitUntil.
 function notifyTimeChange(taskId: number, projectId?: number) {
   void (async () => {
     const project =
@@ -158,15 +153,15 @@ const timeWriteClient: TimeWriteClient = {
 export async function startTimer(
   userId: number,
   taskId: number,
-  agentId?: string | null
+  agentId?: string | null,
+  teamScope?: AgentTokenTeamScope | null,
 ) {
   const started = await startTimerOnActiveBoard(
     timeWriteClient,
     userId,
     taskId,
-    getProjectWhere(userId, agentId)
+    getProjectWhere(userId, agentId, teamScope)
   );
-  // Every caller starts through here, so task tabs receive one notification.
   notifyTimeChange(taskId, started.projectId);
   return started.entry;
 }
@@ -174,13 +169,14 @@ export async function startTimer(
 export async function stopTimer(
   userId: number,
   taskId: number,
-  agentId?: string | null
+  agentId?: string | null,
+  teamScope?: AgentTokenTeamScope | null,
 ) {
   const entry = await stopTimerOnAccessibleBoard(
     timeWriteClient,
     userId,
     taskId,
-    getProjectWhere(userId, agentId)
+    getProjectWhere(userId, agentId, teamScope)
   );
   if (!entry) return null;
   notifyTimeChange(taskId);
@@ -190,13 +186,14 @@ export async function stopTimer(
 export async function pauseTimer(
   userId: number,
   taskId: number,
-  agentId?: string | null
+  agentId?: string | null,
+  teamScope?: AgentTokenTeamScope | null,
 ) {
   const entry = await pauseTimerOnActiveBoard(
     timeWriteClient,
     userId,
     taskId,
-    getProjectWhere(userId, agentId)
+    getProjectWhere(userId, agentId, teamScope)
   );
   if (!entry) return null;
   notifyTimeChange(taskId);
@@ -206,13 +203,14 @@ export async function pauseTimer(
 export async function resumeTimer(
   userId: number,
   taskId: number,
-  agentId?: string | null
+  agentId?: string | null,
+  teamScope?: AgentTokenTeamScope | null,
 ) {
   const entry = await resumeTimerOnActiveBoard(
     timeWriteClient,
     userId,
     taskId,
-    getProjectWhere(userId, agentId)
+    getProjectWhere(userId, agentId, teamScope)
   );
   if (!entry) return null;
   notifyTimeChange(taskId);
@@ -226,7 +224,8 @@ export async function logMinutes(
   agentId?: string | null,
   date?: string,
   timezoneOffsetMinutes?: number,
-  note?: string | null
+  note?: string | null,
+  teamScope?: AgentTokenTeamScope | null,
 ) {
   if (!Number.isInteger(minutes) || minutes <= 0 || minutes > 1440) {
     throw new RangeError("Minutes must be an integer from 1 to 1440");
@@ -246,7 +245,7 @@ export async function logMinutes(
       startedAt,
       endedAt,
     },
-    getProjectWhere(userId, agentId)
+    getProjectWhere(userId, agentId, teamScope)
   );
   notifyTimeChange(taskId);
   return entry;
@@ -258,7 +257,8 @@ export async function createManualEntry(
   date: string,
   minutes: number,
   timezoneOffsetMinutes?: number,
-  note?: string | null
+  note?: string | null,
+  teamScope?: AgentTokenTeamScope | null,
 ) {
   const { startedAt, endedAt } = manualEntryTimes(
     date,
@@ -275,13 +275,13 @@ export async function createManualEntry(
       startedAt,
       endedAt,
     },
-    getProjectWhere(userId)
+    getProjectWhere(userId, null, teamScope)
   );
   notifyTimeChange(taskId);
   return entry;
 }
 
-export async function listRunning(userId: number) {
+export async function listRunning(userId: number, agentId?: string | null, teamScope?: AgentTokenTeamScope | null) {
   const entries = await prisma.timeEntry.findMany({
     where: {
       userId,
@@ -289,7 +289,7 @@ export async function listRunning(userId: number) {
       task: {
         status: { not: "Deleted" },
         project: {
-          ...getProjectWhere(userId),
+          ...getProjectWhere(userId, agentId && agentScopeEnforced() ? agentId : null, teamScope),
           status: { in: ["Normal", "Archive"] },
         },
       },
@@ -309,6 +309,7 @@ export async function listRunning(userId: number) {
     },
   });
 
+  entries.forEach(entry => recordAgentBoardScopeMiss(entry.task.projectId, "read"));
   return entries.map(({ task, ...entry }) => ({
     ...entry,
     task: {
@@ -352,6 +353,8 @@ export async function listEntries(userId: number, taskId: number) {
 export async function listReport(
   userId: number,
   options: {
+    agentId?: string | null;
+    teamScope?: AgentTokenTeamScope | null;
     teamId?: string;
     boardId?: number;
     boardIds?: number[];
@@ -361,25 +364,16 @@ export async function listReport(
     from?: Date;
     to?: Date;
     runningOnly?: boolean;
-    // Precomputed by the web route to avoid a second identical query; the
-    // MCP and AI-chat callers omit it and the query runs here.
     adminProjectIds?: number[];
   } = {}
 ) {
-  const reportsEnabled = await isFeatureEnabled(
-    HTPR_4228_ADMIN_ONLY_TIME_REPORTS_FLAG,
-    userId
-  );
-  const adminProjectIds = reportsEnabled
-    ? (options.adminProjectIds ??
-      (await administeredProjectIds(userId, {
-        teamId: options.teamId,
-        boardIds: options.boardIds ?? (options.boardId ? [options.boardId] : undefined),
-      })))
-    : [];
+  const adminProjectIds = options.adminProjectIds ??
+    (await administeredProjectIds(userId, {
+      teamId: options.teamId,
+      agentId: options.agentId, teamScope: options.teamScope,
+      boardIds: options.boardIds ?? (options.boardId ? [options.boardId] : undefined),
+    }));
   const adminSet = new Set(adminProjectIds);
-  // Other people's entries are protected data. The flag may grant reports to
-  // an owner or admin, but disabling it must fall back to the caller's history.
   const seesOthers = adminProjectIds.length > 0;
 
   const entries = await prisma.timeEntry.findMany({
@@ -392,8 +386,7 @@ export async function listReport(
           : options.filterUserId
             ? { userId: options.filterUserId }
             : {}
-        : // A member without other-user scope never gets anyone else's rows,
-          // whatever filter the caller passed.
+        :
           { userId }),
       ...(options.from || options.to
         ? {
@@ -415,7 +408,7 @@ export async function listReport(
             ? { projectId: options.boardId }
             : {}),
         project: {
-          ...getProjectWhere(userId),
+          ...getProjectWhere(userId, options.agentId && agentScopeEnforced() ? options.agentId : null, options.teamScope),
           status: { in: ["Normal", "Archive"] },
           ...(options.teamId ? { teamId: options.teamId } : {}),
         },
@@ -434,8 +427,6 @@ export async function listReport(
       },
       user: { select: { displayName: true } },
     },
-    // Pin every running timer ahead of completed entries before applying the
-    // report cap, including timers that started more than 1000 entries ago.
     orderBy: [
       { endedAt: { sort: "asc", nulls: "first" } },
       { startedAt: "desc" },
@@ -448,6 +439,7 @@ export async function listReport(
     return runningDifference || b.startedAt.getTime() - a.startedAt.getTime();
   });
 
+  entries.forEach(entry => recordAgentBoardScopeMiss(entry.task.projectId, "read"));
   const manageableProjectIds = adminSet;
 
   return entries.map(({ task, user, ...entry }) => ({
@@ -472,16 +464,14 @@ export async function listReport(
   }));
 }
 
-// HTPR-4228: boards in the report scope that the caller owns or administers.
-// Everyone else's entries are only visible on these.
 export async function administeredProjectIds(
   userId: number,
-  scope: { teamId?: string; boardIds?: number[] } = {}
+  scope: { teamId?: string; boardIds?: number[]; agentId?: string | null; teamScope?: AgentTokenTeamScope | null } = {}
 ) {
   const projects = await prisma.project.findMany({
     where: {
       status: { in: ["Normal", "Archive"] },
-      ...getProjectWhere(userId),
+      ...getProjectWhere(userId, scope.agentId, scope.teamScope),
       ...(scope.boardIds?.length ? { id: { in: scope.boardIds } } : {}),
       ...(scope.teamId ? { teamId: scope.teamId } : {}),
       OR: [
@@ -505,7 +495,8 @@ export async function updateEntry(
   date?: string,
   timezoneOffsetMinutes?: number,
   note?: string | null,
-  agentId?: string | null
+  agentId?: string | null,
+  teamScope?: AgentTokenTeamScope | null,
 ) {
   if (minutes !== undefined && (!Number.isInteger(minutes) || minutes <= 0 || minutes > 1440)) {
     throw new RangeError("Minutes must be an integer from 1 to 1440");
@@ -517,12 +508,11 @@ export async function updateEntry(
 
   const result = await updateTimeEntryOnActiveBoard(
     timeWriteClient,
-    { userId, entryId, projectWhere: getProjectWhere(userId, agentId) },
+    { userId, entryId, projectWhere: getProjectWhere(userId, agentId, teamScope) },
     (entry) => {
       const startedAt = date === undefined
         ? entry.startedAt
         : manualEntryTimes(date, minutes ?? 1, timezoneOffsetMinutes).startedAt;
-      // Date-only edits retain exact timer duration, including partial minutes.
       const duration = minutes === undefined
         ? entry.endedAt!.getTime() - entry.startedAt.getTime()
         : minutes * 60 * 1000;
@@ -547,12 +537,13 @@ export async function updateEntry(
 export async function deleteEntry(
   userId: number,
   entryId: number,
-  agentId?: string | null
+  agentId?: string | null,
+  teamScope?: AgentTokenTeamScope | null,
 ) {
   const result = await deleteTimeEntryOnActiveBoard(timeWriteClient, {
     userId,
     entryId,
-    projectWhere: getProjectWhere(userId, agentId),
+    projectWhere: getProjectWhere(userId, agentId, teamScope),
   });
   if (!result) return null;
 
@@ -560,16 +551,16 @@ export async function deleteEntry(
   return true;
 }
 
-export async function taskSummary(userId: number, taskId: number) {
-  const task = await prisma.task.findUnique({
-    where: { id: taskId },
-    select: {
-      project: { select: { status: true, timeTrackingEnabled: true } },
-    },
-  });
+export async function taskSummary(userId: number, taskId: number, agentId?: string | null, teamScope?: AgentTokenTeamScope | null) {
+  const select = { project: { select: { status: true, timeTrackingEnabled: true } } } as const;
+  const task = teamScope != null
+    ? await prisma.task.findFirst({ where: { id: taskId, project: getProjectWhere(userId, agentId, teamScope) }, select })
+    : await prisma.task.findUnique({ where: { id: taskId }, select });
+  if (teamScope != null && !task) throw new TimeTrackingDisabledError();
   const entries = await prisma.timeEntry.findMany({
     where: {
       taskId,
+      ...(teamScope != null ? { task: { project: getProjectWhere(userId, agentId, teamScope) } } : {}),
       ...(task?.project.status === "Normal" ? {} : { endedAt: null }),
     },
     orderBy: { startedAt: "asc" },
@@ -598,9 +589,6 @@ export async function taskSummary(userId: number, taskId: number) {
         total + elapsedSeconds(entry.startedAt, entry.endedAt, entry.pausedAt, now),
       0
     ),
-    // Every entry except the caller's own running one, so a client can tell
-    // "this run" from everything else without subtracting a server timestamp
-    // from a browser clock (HTPR-4701). Includes other users' running timers.
     otherEntriesSeconds: entries.reduce(
       (total, entry) =>
         entry.id === runningEntry?.id

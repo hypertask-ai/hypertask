@@ -207,8 +207,6 @@ export async function fanOutCommentNotifications(context: CommentFanoutContext) 
     }
 
     const notificationWork = [
-      // Run-generated comments are not composer submissions, so they must not
-      // consume the user's draft.
       isAgentRunComment
         ? Promise.resolve()
         : prisma.drafts.deleteMany({
@@ -234,6 +232,8 @@ export async function fanOutCommentNotifications(context: CommentFanoutContext) 
             committedText,
             taskId,
             currentUser.id,
+            agentId,
+            context.teamScope,
           ).catch((err) =>
             console.warn(
               "[createCommentService] processTaskReferences failed:",
@@ -253,8 +253,6 @@ export async function fanOutCommentNotifications(context: CommentFanoutContext) 
       throw error;
     });
 
-    // Publish only after mention notifications exist. Agent replies can then
-    // claim the persisted invocation identified by reply_to_comment_id.
     if (isAgentRunComment) await renewNotificationClaim();
     await publishAgentWebhookDeliveries(webhookDeliveryIds);
     if (isAgentRunComment) await renewNotificationClaim();

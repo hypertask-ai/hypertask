@@ -1,4 +1,4 @@
-import { HTPR_6937_NEW_TASK_WINDOW_FLAG, HTPR_7045_SHORTCUTS_HELP_PHONE_FLAG } from "@/lib/flags/keys";
+import { HTPR_6937_NEW_TASK_WINDOW_FLAG, HTPR_7045_SHORTCUTS_HELP_PHONE_FLAG, HTPR_7564_PHONE_SHORTCUTS_HEADER_FLAG } from "@/lib/flags/keys";
 import { useContext, useEffect, useState } from "react";
 import { X } from "lucide-react";
 import { useRecoilState, useRecoilValue } from "@/lib/state";
@@ -13,10 +13,11 @@ import {
 import { getKeyboardShortcuts } from "@/lib/constants/shortcuts";
 import { MobileViewContext } from "@/lib/contexts/mobileContext";
 import { useFlag } from "@/hooks/useFlag";
-import { HTPR_6662_AGENT_LOG_NAME_FLAG, HTPR_6929_COMPOSE_TASK_WRITER_FLAG } from "@/lib/flags/keys";
+import { HTPR_6929_COMPOSE_TASK_WRITER_FLAG } from "@/lib/flags/keys";
 
 const KeyboardShortcuts = () => {
   const shortcutsHelpPhone = useFlag(HTPR_7045_SHORTCUTS_HELP_PHONE_FLAG);
+  const phoneShortcutsHeader = useFlag(HTPR_7564_PHONE_SHORTCUTS_HEADER_FLAG);
   const panelClassName = "fixed bg-sidebar text-white-black top-0  right-0 w-[26vw] lg:w-min-[30vw] md:w-min-[32vw] overflow-y-auto h-SVH-full z-[100] pt-[env(safe-area-inset-top)]";
   const rowClassName = shortcutsHelpPhone
     ? "flex flex-row items-center mb-2 gap-2 max-sm:flex-wrap"
@@ -31,17 +32,12 @@ const KeyboardShortcuts = () => {
   const isMbl = useContext(MobileViewContext);
   const appShellRailOn = useRecoilValue(appShellRailAtom) && !isMbl;
   const composeTaskWriterEnabled = useFlag(HTPR_6929_COMPOSE_TASK_WRITER_FLAG);
-  // Keep the runtime branch local so CI can trace shortcut UI coverage.
   let includeComposeTaskShortcut = false;
   if (composeTaskWriterEnabled) includeComposeTaskShortcut = true;
   const newTaskWindowFlag = useFlag(HTPR_6937_NEW_TASK_WINDOW_FLAG);
   let newTaskWindow = false;
   if (composeTaskWriterEnabled && newTaskWindowFlag) newTaskWindow = true;
-  const agentLogNameEnabled = useFlag(HTPR_6662_AGENT_LOG_NAME_FLAG);
-  let historyToggleLabel = "Toggle history events";
-  if (agentLogNameEnabled) {
-    historyToggleLabel = "Toggle agent log";
-  }
+  const historyToggleLabel = "Toggle agent log";
   const [_showShortcuts, setShowShortcuts] = useRecoilState(showShortcutsAtom);
   const [keyword, setKeyword] = useState("");
   const mainData = getKeyboardShortcuts(
@@ -52,12 +48,10 @@ const KeyboardShortcuts = () => {
     newTaskWindow,
   );
 
-  // ====================== ON INPUT KEY CHANGE
   const onKeyChange = (e: any) => {
     setKeyword(e.target.value);
   };
 
-  // ======================== keydown handler
   const keyPressHandler = (e: any) => {
     const isInputFocused = [
       "input",
@@ -72,43 +66,34 @@ const KeyboardShortcuts = () => {
     }
   };
 
-  // Derive the filtered list each render so flag changes also update visible labels.
   const searchTermLower = keyword.toLowerCase();
   const filteredShortcuts = mainData
       .map((group) => {
-        // Check if the group has a 'sub' property
         if (group.sub) {
-          // Check if the section title matches the search term
           const sectionTitleMatches = group.title
             .toLowerCase()
             .includes(searchTermLower);
 
-          // If section title matches, show all shortcuts in that section
           if (sectionTitleMatches) {
             return { ...group, sub: group.sub };
           }
 
-          // Otherwise, filter shortcuts based on the search term in the 'shortTitle' property
           const filteredshortcuts_ = group.sub.filter((subItem: any) =>
             subItem.shortTitle
               .toLowerCase()
               .includes(searchTermLower)
           );
 
-          // Check if there are shortcuts after filtering
           if (filteredshortcuts_.length > 0) {
-            // Return the group with filtered shortcuts
             return { ...group, sub: filteredshortcuts_ };
           }
 
-          // If no shortcuts after filtering, return null
           return null;
         }
 
-        // If the group doesn't have 'sub', return as is
         return group;
       })
-      .filter(Boolean); // Remove null values from the array
+      .filter(Boolean);
 
   function handleClick(event: any) {
     try {
@@ -119,9 +104,7 @@ const KeyboardShortcuts = () => {
       const isClickInside = container?.contains(event?.target);
 
       if (!isClickInside) {
-        // The click was outside the container, perform your action here
         console.log("Clicked outside the container");
-        // Optionally, hide the container
         setShowShortcuts(false);
       }
     } catch (error) {
@@ -139,7 +122,7 @@ const KeyboardShortcuts = () => {
   }, [keyPressHandler, keyword]);
 
   return (
-    <BackDropContainer>
+    <BackDropContainer className={phoneShortcutsHeader ? "max-sm:!z-[9990]" : undefined}>
       <div
         id={DIV_ID_CONSTANTS.keyboardShortcuts}
         style={{ fontSize: 14 }}

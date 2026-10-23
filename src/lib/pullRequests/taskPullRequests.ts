@@ -1,3 +1,4 @@
+import type { AgentTokenTeamScope } from '@/lib/mcp/auth/types';
 import { Prisma } from "@prisma/client";
 import prisma from "@/lib/prisma";
 import { sanitizeAgentCredentials } from "@/lib/agents/publicAgent";
@@ -52,6 +53,7 @@ interface LinkTaskPullRequestInput {
   taskId: number;
   userId: number;
   agentId?: string | null;
+  teamScope?: AgentTokenTeamScope | null;
   url: string;
   fetchMetadata?: (
     parsed: ParsedGithubPullRequestUrl,
@@ -206,8 +208,6 @@ export async function refreshTaskPullRequests(
   }: Pick<LinkTaskPullRequestInput, "db" | "fetchMetadata"> & { now?: Date } = {},
 ) {
   return Promise.all(pullRequests.map(async (pullRequest) => {
-    // Webhook delivery is configured per repository, so a linked repo may
-    // never send its merge. Successful observations stay fresh for a minute.
     if (
       pullRequest.lifecycle === "merged" ||
       now.getTime() - pullRequest.updatedAt.getTime() < 60_000
@@ -235,7 +235,6 @@ export async function refreshTaskPullRequests(
         sourceUpdatedAt: metadata.sourceUpdatedAt,
         updatedAt: now,
       };
-      // A webhook or check-suite update that raced the fetch must win.
       const updated = await db.taskPullRequest.updateMany({
         where: {
           id: pullRequest.id,
@@ -273,6 +272,7 @@ export async function linkTaskPullRequest({
   taskId,
   userId,
   agentId = null,
+  teamScope,
   url,
   fetchMetadata = fetchGithubPullRequest,
   db = prisma,
@@ -293,7 +293,7 @@ export async function linkTaskPullRequest({
     where: {
       id: taskId,
       status: { not: "Deleted" },
-      project: taskWriteAccessWhere(userId, agentId),
+      project: taskWriteAccessWhere(userId, agentId, teamScope),
     },
     select: { id: true },
   });
@@ -324,11 +324,12 @@ export async function linkTaskPullRequest({
 
   try {
     return await db.$transaction(async (transaction) => {
+      if (teamScope != null) await transaction.$queryRaw`SELECT id FROM "Task" WHERE id = ${taskId} FOR UPDATE`;
       const task = await transaction.task.findFirst({
         where: {
           id: taskId,
           status: { not: "Deleted" },
-          project: taskWriteAccessWhere(userId, agentId),
+          project: taskWriteAccessWhere(userId, agentId, teamScope),
         },
         select: { id: true, updatedByUserIds: true },
       });

@@ -5,12 +5,14 @@ import { getBoardDocument, type BoardDocument } from "@/lib/firstScreen/boardDoc
 import { adoptBoardDocument, excludeBoardDocumentRestore } from "@/lib/firstScreen/boardAdoption";
 import { getInboxDocument, type InboxDocument } from "@/lib/firstScreen/inboxDocument";
 import { adoptInboxDocument, excludeInboxDocumentRestore } from "@/lib/firstScreen/inboxAdoption";
+import { getTicketShellSeed, type TicketShellSeed } from "@/lib/firstScreen/ticketShell";
 import type { BoardDisplay } from "@/lib/firstScreen/boardDisplay";
 import BoardDisplayMirror from "@/lib/firstScreen/BoardDisplayMirror";
+import MobileViewFlagBridge from "@/lib/contexts/MobileViewFlagBridge";
 import { globalNotificationFocusAtom, currentUserAtom, currentProjectAtom, boardLayoutAtom, boardLayoutPreferenceAtom, appShellRailAtom,
   appShellRailExpandedAtom, showQuickTipsAtom, showEmptyViewTabsAtom, hiddenViewTabIdsAtom, viewTabsOrderAtom,
-  tableVisibleColumnsAtom, tableColumnWidthsAtom, tableTitleWrapAtom, openAiChatByDefaultAtom,
-  aiChatAutoOpenSuppressedAtom, aiChatPinnedAtom } from "@/store";
+  tableVisibleColumnsAtom, tableColumnWidthsAtom, tableTitleWrapAtom, openAiChatByDefaultAtom, keepAiChatClosedAtom,
+  aiChatAutoOpenSuppressedAtom, aiChatPinnedAtom, aiChatSidebarWidthPxAtom, isAiChatSidebarModeAtom } from "@/store";
 import type { StateInitialValues } from "@/lib/state";
 import { usePathname } from "next/navigation";
 import { Toaster } from "react-hot-toast";
@@ -27,7 +29,8 @@ import ThemeListener from "@/lib/contexts/ThemeListener";
 import { MobileBlockingProvider } from "@/lib/contexts/mobileBlockingContext";
 import { TourProvider } from "@/lib/contexts/TourContext";
 import { shouldDehydratePersistedQuery } from "@/utils/queryPersistence";
-import { FeatureFlagProvider } from "@/hooks/useFlag";
+import { FeatureFlagProvider, featureFlagsQueryKey } from "@/hooks/useFlag";
+import { HTPR_7555_PERSIST_SIZE_ONCE_FLAG } from "@/lib/flags/definitions/htpr-7555-persist-size-once";
 import {
   createQueryPersister,
   type DisposableQueryPersister,
@@ -37,14 +40,6 @@ import {
   stripChunkRecoveryParam,
 } from "@/utils/helperFunctions/chunkLoadRecovery";
 
-// Never persist the inbox: a restored snapshot can predate an archive, and while it is
-// still within staleTime react-query serves it without refetching, so an archived
-// notification comes back on reload until the snapshot ages out (HTPR-4086).
-// Preferences are not persisted either: the query key is global, not per user,
-// so a persisted snapshot survived switchAccount's hard reload and showed the
-// previous account its predecessor's snippets, AI models, notification matrix
-// and saved calendar views for up to five minutes (HTPR-4693). They are one
-// small request on load, so keeping them in memory only costs nothing.
 const REACT_QUERY_PERSIST_BUSTER =
   "startup-budget-v3-view-show-archived";
 const CHUNK_RECOVERY_STABLE_MS = 30 * 1000;
@@ -76,13 +71,17 @@ const createQueryBoundary = (accountId: number | null, snapshot: BoardDocument |
 const boardInitialValues = (snapshot: BoardDocument | null): StateInitialValues | undefined => {
   if (!snapshot) return undefined;
   const display = snapshot.display as BoardDisplay;
-  return [[currentUserAtom, snapshot.data.user], [currentProjectAtom, snapshot.data.projects.updatedProjects[0]],
+  const values: StateInitialValues[number][] = [[currentUserAtom, snapshot.data.user], [currentProjectAtom, snapshot.data.projects.updatedProjects[0]],
     [boardLayoutAtom, snapshot.selection.surface], [boardLayoutPreferenceAtom, display.boardLayout],
     [appShellRailAtom, display.board.railOn], [appShellRailExpandedAtom, !display.railCollapsed], [showQuickTipsAtom, display.quickTips],
     [showEmptyViewTabsAtom, display.board.showEmptyViewTabs], [hiddenViewTabIdsAtom, display.board.hiddenViewTabIds],
     [viewTabsOrderAtom, display.board.viewTabsOrder], [tableVisibleColumnsAtom, display.board.tableColumns],
     [tableColumnWidthsAtom, display.board.tableWidths], [tableTitleWrapAtom, display.board.tableTitleWrap],
-    [openAiChatByDefaultAtom, display.board.openChat], [aiChatAutoOpenSuppressedAtom, display.board.chatSuppressed], [aiChatPinnedAtom, display.board.chatPinned]];
+    [keepAiChatClosedAtom, display.board.keepChatClosed ?? false], [openAiChatByDefaultAtom, display.board.openChat], [aiChatAutoOpenSuppressedAtom, display.board.chatSuppressed], [aiChatPinnedAtom, display.board.chatPinned]];
+  if (display.board.chatWidth !== undefined && display.board.chatSidebarMode !== undefined) {
+    values.push([aiChatSidebarWidthPxAtom, display.board.chatWidth], [isAiChatSidebarModeAtom, display.board.chatSidebarMode]);
+  }
+  return values;
 };
 
 const inboxInitialValues = (snapshot: InboxDocument): StateInitialValues => {
@@ -90,25 +89,28 @@ const inboxInitialValues = (snapshot: InboxDocument): StateInitialValues => {
   return [[currentUserAtom, snapshot.data.user], [globalNotificationFocusAtom, { currIdx: 0, currSplit: snapshot.selection.split ?? 0 }],
     [appShellRailAtom, display.board.railOn], [appShellRailExpandedAtom, !display.railCollapsed],
     [showQuickTipsAtom, snapshot.data.isInboxZero ? false : display.quickTips],
-    [openAiChatByDefaultAtom, display.board.openChat], [aiChatAutoOpenSuppressedAtom, display.board.chatSuppressed], [aiChatPinnedAtom, display.board.chatPinned]];
+    [keepAiChatClosedAtom, display.board.keepChatClosed ?? false], [openAiChatByDefaultAtom, display.board.openChat], [aiChatAutoOpenSuppressedAtom, display.board.chatSuppressed], [aiChatPinnedAtom, display.board.chatPinned]];
 };
 
-/** Public share links: read-only, never the signed-in app shell. */
+const shellInitialValues = (display: BoardDisplay): StateInitialValues => {
+  const values: StateInitialValues[number][] = [[boardLayoutPreferenceAtom, display.boardLayout],
+    [appShellRailAtom, display.board.railOn], [appShellRailExpandedAtom, !display.railCollapsed], [showQuickTipsAtom, display.quickTips],
+    [showEmptyViewTabsAtom, display.board.showEmptyViewTabs], [hiddenViewTabIdsAtom, display.board.hiddenViewTabIds],
+    [viewTabsOrderAtom, display.board.viewTabsOrder], [tableVisibleColumnsAtom, display.board.tableColumns],
+    [tableColumnWidthsAtom, display.board.tableWidths], [tableTitleWrapAtom, display.board.tableTitleWrap],
+    [keepAiChatClosedAtom, display.board.keepChatClosed ?? false], [openAiChatByDefaultAtom, display.board.openChat],
+    [aiChatAutoOpenSuppressedAtom, display.board.chatSuppressed], [aiChatPinnedAtom, display.board.chatPinned]];
+  if (display.board.chatWidth !== undefined && display.board.chatSidebarMode !== undefined) {
+    values.push([aiChatSidebarWidthPxAtom, display.board.chatWidth], [isAiChatSidebarModeAtom, display.board.chatSidebarMode]);
+  }
+  return values;
+};
+
 function isPublicSharePath(pathname: string | null | undefined): boolean {
   if (!pathname) return false;
   return pathname === "/share" || pathname.startsWith("/share/");
 }
 
-/**
- * GlobalProvider mounts the whole signed-in shell (sidebars, modals, teams /
- * favorites / announcements / realtime queries). On a public /share link a
- * signed-in non-member gained nothing from it, but its queries fired mid-
- * hydration. With an RSC request in flight, Next 14's AppRouter hits its
- * conditional `use(state)` (useUnwrapState) and React throws #310, taking the
- * whole page down. Rendering a minimal shell here removes that. HTPR-4089.
- *
- * GlobalProvider exposes no context, so nothing under /share depends on it.
- */
 function PublicShell({ children }: { children: ReactNode }) {
   const mbl = useContext(MobileViewContext);
   return (
@@ -132,23 +134,28 @@ export default function Provider({
   initialIsApple,
   authenticatedUserId,
   firstScreen,
+  shellSeed,
+  flagProvider: FlagProvider = FeatureFlagProvider,
 }: {
   children: ReactNode;
   initialIsMobile: boolean;
   initialIsApple: boolean;
   authenticatedUserId: number | null;
   firstScreen?: BoardDocument | InboxDocument | null;
+  shellSeed?: TicketShellSeed | null;
+  flagProvider?: typeof FeatureFlagProvider;
 }) {
   const pathname = usePathname();
   const publicShare = isPublicSharePath(pathname);
-  // A document seed is adopted only at the existing account boundary's mount,
-  // never on a later RSC navigation over a live edit or cached ticket/back tree.
   const [initialDocument] = useState(() => getBoardDocument(firstScreen ?? null, authenticatedUserId ?? 0) ?? getInboxDocument(firstScreen ?? null, authenticatedUserId ?? 0));
   const snapshot = initialDocument?.scope.accountId === authenticatedUserId ? initialDocument : null;
+  const [initialShell] = useState(() => getTicketShellSeed(shellSeed ?? null, authenticatedUserId ?? 0));
+  const shell = getTicketShellSeed(initialShell, authenticatedUserId ?? 0);
   const initialValues = useMemo(() => {
+    if (!snapshot && shell) return shellInitialValues(shell.display);
     const inbox = getInboxDocument(snapshot, authenticatedUserId ?? 0);
     return inbox ? inboxInitialValues(inbox) : boardInitialValues(getBoardDocument(snapshot, authenticatedUserId ?? 0));
-  }, [snapshot, authenticatedUserId]);
+  }, [snapshot, shell, authenticatedUserId]);
   const queryBoundary = useMemo(
     () => createQueryBoundary(authenticatedUserId, snapshot),
     [authenticatedUserId, snapshot],
@@ -163,16 +170,9 @@ export default function Provider({
     previousQueryBoundary.current = queryBoundary;
   }, [queryBoundary]);
 
-  // Reaching here means the root chain mounted, so clear global-error's
-  // auto-reload budget. Without this a tab that recovered twice would show the
-  // error page on the next unrelated root crash instead of re-hydrating.
   useEffect(() => {
     window.sessionStorage.removeItem("ht-root-reload");
 
-    // Provider mount alone is not proof that every descendant/lazy chunk is
-    // healthy. Preserve the capped attempt budget until the recovered tree has
-    // stayed mounted; an error-boundary unmount cancels this reset and prevents
-    // a persistent missing chunk from creating an infinite navigation loop.
     const stableTimer = window.setTimeout(() => {
       window.sessionStorage.removeItem(CHUNK_RELOAD_STORAGE_KEY);
 
@@ -187,8 +187,6 @@ export default function Provider({
 
   return (
     <FirstScreenSurfaceProvider snapshot={snapshot}>
-      <ThemeListener />
-      {/* <RootErrorBoundary> */}
       <PersistQueryClientProvider
         key={`query-account-${authenticatedUserId ?? "guest"}`}
         client={queryBoundary.client}
@@ -197,28 +195,33 @@ export default function Provider({
           buster: REACT_QUERY_PERSIST_BUSTER,
           maxAge: 1000 * 60 * 30,
           dehydrateOptions: {
-            shouldDehydrateQuery: shouldDehydratePersistedQuery,
+            shouldDehydrateQuery: (query) => shouldDehydratePersistedQuery(
+              query,
+              queryBoundary.client.getQueryData<Record<string, boolean>>(
+                featureFlagsQueryKey(authenticatedUserId ?? 0),
+              )?.[HTPR_7555_PERSIST_SIZE_ONCE_FLAG] === true,
+            ),
           },
         }}
       >
         <DeviceProvider initialIsApple={initialIsApple}>
-          {/* MobileViewProvider wraps UndoProvider: the undo pipeline reads
-              the viewport to anchor the toast left on mobile (HTPR-5564). */}
-          <MobileViewProvider initialIsMobile={initialIsMobile}>
+          <MobileViewProvider initialIsMobile={shell?.display.isMobile ?? initialIsMobile}>
             <StateRoot key={`state-account-${authenticatedUserId ?? "guest"}`} initialValues={initialValues}>
               <UndoProvider>
                 <MobileBlockingProvider>
                   <AuthProvider authenticatedUserId={authenticatedUserId}>
                     <TourProvider>
                       {publicShare ? (
-                        <PublicShell>{children}</PublicShell>
+                        <PublicShell><ThemeListener />{children}</PublicShell>
                       ) : (
-                        <FeatureFlagProvider userId={authenticatedUserId} initialFlags={snapshot?.flags}>
+                        <FlagProvider userId={authenticatedUserId} initialFlags={snapshot?.flags ?? shell?.flags}>
+                          <ThemeListener />
                           <BoardDisplayMirror accountId={authenticatedUserId} />
+                          <MobileViewFlagBridge />
                           <GlobalProvider authenticatedUserId={authenticatedUserId}>
                             {children}
                           </GlobalProvider>
-                        </FeatureFlagProvider>
+                        </FlagProvider>
                       )}
                     </TourProvider>
                   </AuthProvider>
@@ -228,9 +231,6 @@ export default function Provider({
           </MobileViewProvider>
         </DeviceProvider>
       </PersistQueryClientProvider>
-      {/* </RootErrorBoundary> */}
-      {/* <QueryClientProvider client={queryClient}> */}
-      {/* </QueryClientProvider> */}
     </FirstScreenSurfaceProvider>
   );
 }

@@ -1,0 +1,36 @@
+{
+  "note": "Recorded Vercel empty warning response, with synthetic failure rows in the same runtime-event shape. No live realtime failures were observed or generated.",
+  "empty": {
+    "events": [],
+    "pagination": { "hasMore": false }
+  },
+  "page": {
+    "events": [
+      {
+        "timestamp": "2026-10-14T08:28:01.000Z",
+        "environment": "production",
+        "requestPath": "/api/tasks/single",
+        "level": "warn",
+        "message": "[realtime] broadcast failed private-board-123 board.changed Error: connect ETIMEDOUT\n    at trigger (server.js:1:1)",
+        "truncated": false
+      },
+      {
+        "timestamp": "2026-10-14T08:28:02.000Z",
+        "environment": "production",
+        "requestPath": "/api/mcp/tasks/update",
+        "level": "error",
+        "message": "{\"message\":\"[realtime] broadcast failed private-board-456 board.changed Error: connect ETIMEDOUT\"}",
+        "truncated": false
+      },
+      {
+        "timestamp": "2026-10-14T08:28:03.000Z",
+        "environment": "production",
+        "requestPath": "/api/tasks/single",
+        "level": "warn",
+        "message": "Unrelated dependency warning",
+        "truncated": false
+      }
+    ],
+    "pagination": { "hasMore": false }
+  }
+}

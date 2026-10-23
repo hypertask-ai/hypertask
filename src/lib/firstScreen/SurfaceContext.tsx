@@ -7,7 +7,6 @@ import { hasFirstScreenDisplayPreferences, type FirstScreenInitialModel, type Fi
 export type FirstScreenSnapshot = FirstScreenInitialModel<FirstScreenWireValue>;
 const SurfaceContext = createContext<FirstScreenSnapshot | null>(null);
 
-// Steps 3/4 supply this above the existing global owners, not in a state island.
 export function FirstScreenSurfaceProvider({ snapshot, children }: {
   snapshot: FirstScreenSnapshot | null;
   children: ReactNode;
@@ -15,7 +14,6 @@ export function FirstScreenSurfaceProvider({ snapshot, children }: {
   const [now, setNow] = useState(snapshot?.now);
   useEffect(() => {
     if (!snapshot) return;
-    // Keep hydration exact; subsequent real time changes are live, not a replay.
     const timer = setInterval(() => setNow(new Date().toISOString()), 60_000);
     return () => clearInterval(timer);
   }, [snapshot]);

@@ -83,7 +83,7 @@ test("a blocked or missing store degrades to no draft rather than throwing", () 
 test("switching agents saves the outgoing draft before restoring the incoming one", () => {
   const selectAgent = chat.slice(
     chat.indexOf("const selectAgent = useCallback("),
-    chat.indexOf("// Honor ?agent=<slug>"),
+    chat.indexOf("const agentParam = searchParams?."),
   );
   // The outgoing id has to be read before selectedIdRef is reassigned, or the
   // draft is filed under the agent being switched to.
@@ -102,7 +102,7 @@ test("switching agents saves the outgoing draft before restoring the incoming on
   assert.doesNotMatch(selectAgent, /setDraft\(""\)/);
   // The same callback is the reload path (the ?agent= effect calls it), so it
   // must not be re-created on every keystroke by depending on `draft`.
-  assert.match(selectAgent, /\[router, openAgentSession, isMbl, currentUser\.id\]/);
+  assert.match(selectAgent, /\[router, openAgentSession, isMbl, currentUser\.id, embedded\?\.projectId\]/);
 });
 
 test("the mobile details sheet is a native modal dialog, so Escape and focus work", () => {
@@ -146,7 +146,7 @@ test("the draft mirror ref is set synchronously, so two fast switches cannot cro
   // agent's text under another's key.
   const selectAgent = chat.slice(
     chat.indexOf("const selectAgent = useCallback("),
-    chat.indexOf("// Honor ?agent=<slug>"),
+    chat.indexOf("const agentParam = searchParams?."),
   );
   assert.match(selectAgent, /draftRef\.current = restored/);
   const composerChange = chat.slice(
@@ -162,7 +162,7 @@ test("a restored draft does not disable the agent-cycle shortcut", () => {
   // shortcut off for as long as it sits in the composer.
   const selectAgent = chat.slice(
     chat.indexOf("const selectAgent = useCallback("),
-    chat.indexOf("// Honor ?agent=<slug>"),
+    chat.indexOf("const agentParam = searchParams?."),
   );
   assert.match(selectAgent, /restoredDraftRef\.current = restored/);
   assert.match(

@@ -10,24 +10,19 @@ import { useTourContext } from '@/lib/tours/context/TourContext';
 import { X } from 'lucide-react';
 import { AudioButton } from '@/components/RTE/Components/AudioButton';
 import { hasDescriptionContent } from '@/lib/ai/autoDescriptionSuggestion';
-import { useFlag } from '@/hooks/useFlag';
-import { HTPR_6970_PHONE_NEW_TASK_TITLE_FLAG } from '@/lib/flags/keys';
 
 const TaskTitleModal = ({ mobileCompact = false, mobileTitleVisible = true }: { mobileCompact?: boolean; mobileTitleVisible?: boolean }) => {
     const _mbl = useContext(MobileViewContext);
-    const phoneTitleFix = useFlag(HTPR_6970_PHONE_NEW_TASK_TITLE_FLAG) && _mbl;
     const { dynamicElementRef } = useSetStickyHeight()
     const textAreaRef = useRef<HTMLTextAreaElement>(null);
     const isApple = useDeviceContext()
     const { endTour } = useTourContext();
     const { currentFocusedElement, editMode, setEditMode, formValues, handleChange, appendDictationToTitle, dictationCoordinator, setCurrentFocusedElement, focusOn, isRecording, toggleRecording, closeHandler, isGeneratingTitle, titleGenerationError } = useContextCreateTaskModal()
     const hasSavableContent = formValues.title.trim().length > 0 || hasDescriptionContent(formValues.description);
-    // The collapsed phone title mounts hidden, so its height must be measured again on expansion.
-    useAutosizeTextArea(phoneTitleFix ? textAreaRef : textAreaRef.current, formValues.title, undefined, phoneTitleFix ? mobileTitleVisible : undefined);
+    useAutosizeTextArea(_mbl ? textAreaRef : textAreaRef.current, formValues.title, undefined, _mbl ? mobileTitleVisible : undefined);
     const outsideClickHandler = () => {
         if (editMode!=="title") return
         setEditMode(null)
-        // focusOn(null)
     }
     useClickOutside(null, outsideClickHandler, 'title-input-container-create-task-modal');
 
@@ -39,17 +34,14 @@ const TaskTitleModal = ({ mobileCompact = false, mobileTitleVisible = true }: { 
             e.preventDefault();
             setEditMode("Description");
             setCurrentFocusedElement("Description");
-            // document.getElementById("title-input")?.blur()
             }
         if (e.key === "Escape") {
             console.log("🚀 ~ TaskTitleModal ~ e:", e.key)
             setEditMode(null);
             setTimeout(() => {
                 document.getElementById(DIV_ID_CONSTANTS.titleInputModal)?.blur()
-                // setCurrentFocusedElement("Title");
             }, 10);
         }
-        // [cmd/ctrl][j]
         if (e.keyCode === 74 && cmdControl) {
             e.preventDefault()
             endTour()
@@ -59,7 +51,6 @@ const TaskTitleModal = ({ mobileCompact = false, mobileTitleVisible = true }: { 
             return true
         }
 
-        // [Audio button] cmd/ctrl + shift + d
         if (e.shiftKey && cmdControl && e.keyCode === 68) {
             e.preventDefault();
             if (isRecording) return;
@@ -69,7 +60,6 @@ const TaskTitleModal = ({ mobileCompact = false, mobileTitleVisible = true }: { 
             document.getElementById(elementId)?.click();
         }
 
-        // [Audio button with improve] cmd/ctrl + shift + f (for improving)
         if (e.shiftKey && cmdControl && e.keyCode === 70) {
             e.preventDefault();
             if (isRecording) return;
@@ -79,7 +69,6 @@ const TaskTitleModal = ({ mobileCompact = false, mobileTitleVisible = true }: { 
             document.getElementById(elementId)?.click();
         }
 
-        // [Audio button] alt+v
         if (e.altKey && e.keyCode === 86) {
             e.preventDefault();
             if (isRecording) return;
@@ -87,13 +76,11 @@ const TaskTitleModal = ({ mobileCompact = false, mobileTitleVisible = true }: { 
             setCurrentFocusedElement("Description")
             document.getElementById("create-task-modal" + "-" + "audio-button")?.click();
         }
-        // note to self. NEVER FUCKING ADD A SET TIMEOUT HERE AGAIN IT'LL FUCK U UP. hours wasted = 2
     },[editMode, setCurrentFocusedElement, setEditMode])
     useEffect(() => {
         
         document.addEventListener('keydown', handleKeyDown);
 
-        // Remove event listeners when the component unmounts
         return () => {
             document.removeEventListener('keydown', handleKeyDown);
         }
@@ -129,12 +116,9 @@ const TaskTitleModal = ({ mobileCompact = false, mobileTitleVisible = true }: { 
                         id="title"
                         style={{ flex: 1 }}
                     >
-                        {/* {
-                            editMode==="title"? */}
 
                                 <textarea
                                     className={
-                                        // ponytail: focus shown with a bottom rule, not a full input box (Superhuman-style)
                                         `px-0 border-0 border-b-2 rounded-none
                                         ${currentFocusedElement === "Title" ? "border-gray-300 dark:border-gray-600" : "border-transparent"}
                                     `
@@ -154,12 +138,9 @@ const TaskTitleModal = ({ mobileCompact = false, mobileTitleVisible = true }: { 
                                     autoComplete='off'
                                     value={isGeneratingTitle ? "Generating…" : (formValues.title ?? "")}
                                     onFocus={(e) => {
-                                        // Use setTimeout to delay selectionStart adjustment slightly
                                         setTimeout(() => {
                                             e.target.selectionStart = e.target.value.length;
                                         }, 0);
-                                        // setEditMode("title")
-
                                     }}
                                     onChange={(e) => {
                                         handleChange("title", e.target.value);
@@ -186,38 +167,12 @@ const TaskTitleModal = ({ mobileCompact = false, mobileTitleVisible = true }: { 
                                         disabled={isGeneratingTitle}
                                         ariaLabel="Dictate task title"
                                         mobilePresentation="prominent"
-                                        // Canonical exception: openwiki/style-guide.md approves the white buttons for
-                                        // https://app.hypertask.ai/detail/project-15/5995.
                                         mobilePrimaryTone="default"
                                         className="h-11 w-11 shrink-0 justify-center"
                                         wrapperClassName="shrink-0"
                                     />
                                 )}
-                                {/* :
-                                <span
-                                onClick={()=>{
-                                    setEditMode("title")
-                                    setCurrentFocusedElement("Title")
-                                }}
-                                style={{
-                                    resize: "none",
-                                    background: "transparent",
-                                    fontSize: !_mbl ? 24 : 18,
-                                    width: "100%",
-                                    outline: "none" }}
-                                className={
-                                    `p-2 border-thin rounded-sm
-                                    ${currentFocusedElement === "Title" ? "  border-gray-400":"border-transparent"} 
-                                `
-                                }
-                                    >{formValues.title}</span>
-                        } */}
                     </div>
-                    {/* Mobile exit. The sheet is full screen, so there is no
-                        backdrop to tap; without this the only way out was a
-                        reload (HTPR-5518). It sits in the sticky title row,
-                        clear of the AI writer's send button that got the old
-                        bottom-right Back pill removed (HTPR-5147). */}
                     {_mbl && !mobileCompact && (
                         <button
                             type="button"

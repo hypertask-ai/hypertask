@@ -1,3 +1,4 @@
+import { webhookCredentialAllows } from "@/lib/webhooks/credentialScope";
 import prisma from "@/lib/prisma";
 import { isFeatureEnabled } from "@/lib/flags";
 import { AGENT_RUN_FEATURE_FLAG } from "@/lib/agentRuns/model";
@@ -46,7 +47,8 @@ export async function deliverAgentWebhook(
 
   if (
     !delivery.subscription.active ||
-    delivery.subscription.agent.revokedAt != null
+    delivery.subscription.agent.revokedAt != null ||
+    !await webhookCredentialAllows(delivery.subscription.agentId, delivery.payload, delivery.subscription)
   ) {
     await prisma.agentWebhookDelivery.update({
       where: { id: delivery.id },
@@ -56,6 +58,47 @@ export async function deliverAgentWebhook(
   }
 
   const payload = delivery.payload;
+  const content =
+    typeof payload === "object" && payload !== null && !Array.isArray(payload)
+      ? payload
+      : null;
+  const projectId = content?.projectId ?? delivery.subscription.projectId;
+  const taskId = content?.taskId;
+  if (projectId != null || taskId != null) {
+    let authorized = false;
+    if (
+      typeof projectId === "number" &&
+      (delivery.subscription.projectId == null ||
+        delivery.subscription.projectId === projectId)
+    ) {
+      authorized = Boolean(await prisma.project.findFirst({
+        where: {
+          id: projectId,
+          status: { not: "Deleted" },
+          members: { some: { agentId: delivery.subscription.agentId } },
+        },
+        select: { id: true },
+      }));
+      if (authorized && taskId != null) {
+        authorized = typeof taskId === "number" && Boolean(await prisma.task.findFirst({
+          where: {
+            id: taskId,
+            projectId,
+            status: { not: "Deleted" },
+          },
+          select: { id: true },
+        }));
+      }
+    }
+    if (!authorized) {
+      await prisma.agentWebhookDelivery.update({
+        where: { id: delivery.id },
+        data: { status: "cancelled", processingAt: null },
+      });
+      return { status: "skipped" };
+    }
+  }
+
   const carriesRun =
     delivery.event.startsWith("run.") ||
     (typeof payload === "object" &&
@@ -130,7 +173,11 @@ export async function deliverAgentWebhook(
     }),
   ]);
 
-  if (!failedPermanently) {
+  if (failedPermanently) {
+    console.error(
+      `[agent-webhook] delivery failed after ${attemptCount} attempts (${result.statusCode ? `HTTP ${result.statusCode}` : "no response"})`,
+    );
+  } else {
     await queueAgentWebhookDelivery(
       delivery.id,
       Math.floor(nextAttemptAt.getTime() / 1000),
@@ -164,7 +211,6 @@ export async function deliverAgentWebhook(
   };
 }
 
-/** Republish due rows that were stranded by a QStash publish failure. */
 export async function sweepAgentWebhookDeliveries(limit = 100): Promise<number> {
   const now = new Date();
   const staleBefore = new Date(now.getTime() - PROCESSING_LEASE_MS);

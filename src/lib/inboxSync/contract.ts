@@ -94,8 +94,6 @@ const isPersistedInboxNotification = (
   }
 
   if (value.type === "Invited") {
-    // Projectless invitations cannot be validated by the project-access proof
-    // used before hydration, so they remain network-only.
     return false;
   }
 

@@ -1,6 +1,4 @@
 import React, { useEffect, useState } from "react";
-import { useFlag } from "@/hooks/useFlag";
-import { HTPR_6914_SHIFT_C_QUICK_ADD_FLAG, HTPR_6902_N_QUICK_ADD_FLAG } from "@/lib/flags/keys";
 import {
   createTaskFromTableSelection,
   getTableCreateTaskButtonLabelsForSelection,
@@ -27,7 +25,6 @@ export type TableCreateTaskControlProps = {
   selectedIndex: number;
   sections: readonly TableCreateTaskSection[];
   toggleCreateTaskGlobally: ToggleCreateTaskGlobally;
-  quickEntryEnabled?: boolean;
   quickCreateTask?: QuickCreateTask;
 };
 
@@ -42,7 +39,6 @@ export const getTableCreateTaskControlProps = ({
   selectedIndex,
   sections,
   toggleCreateTaskGlobally,
-  quickEntryEnabled,
   quickCreateTask,
 }: TableCreateTaskControlInput): TableCreateTaskControlProps => ({
   hasCurrentProject: Boolean(currentProject),
@@ -51,7 +47,6 @@ export const getTableCreateTaskControlProps = ({
   selectedIndex,
   sections,
   toggleCreateTaskGlobally,
-  quickEntryEnabled,
   quickCreateTask,
 });
 
@@ -62,11 +57,8 @@ export const TableCreateTaskControl = ({
   selectedIndex,
   sections,
   toggleCreateTaskGlobally,
-  quickEntryEnabled,
   quickCreateTask,
 }: TableCreateTaskControlProps) => {
-  const nQuickAddEnabled = useFlag(HTPR_6902_N_QUICK_ADD_FLAG);
-  const shiftCQuickAddEnabled = useFlag(HTPR_6914_SHIFT_C_QUICK_ADD_FLAG);
   const [openTarget, setOpenTarget] = useState<
     { projectId: number; sectionId: number; sectionTitle: string } | null
   >(null);
@@ -78,10 +70,10 @@ export const TableCreateTaskControl = ({
     sections,
   );
   const labels = getTableCreateTaskButtonLabelsForSelection(selectedRow, sections);
-  const quickEntry = Boolean(quickEntryEnabled && quickCreateTask && projectId);
+  const quickEntry = Boolean(quickCreateTask && projectId);
   const activeTarget = openTarget?.projectId === projectId ? openTarget : null;
 
-  useEffect(nQuickAddEnabled ? () => {
+  useEffect(() => {
     if (!quickEntry || !hasCurrentProject || !projectId) return;
     const openQuickEntry = () => {
       const payload = selectedSectionPayload ?? resolveTableCreateTaskSectionPayload(
@@ -92,7 +84,7 @@ export const TableCreateTaskControl = ({
     };
     document.addEventListener("OPEN_TABLE_QUICK_ENTRY", openQuickEntry);
     return () => document.removeEventListener("OPEN_TABLE_QUICK_ENTRY", openQuickEntry);
-  } : () => {}, [nQuickAddEnabled, quickEntry, hasCurrentProject, projectId, selectedSectionPayload, sections]);
+  }, [quickEntry, hasCurrentProject, projectId, selectedSectionPayload, sections]);
 
   const onCreate = () => {
     if (!quickEntry) {
@@ -137,8 +129,8 @@ export const TableCreateTaskControl = ({
     <TableCreateTaskButton
       hasCurrentProject={hasCurrentProject}
       disabled={!selectedSectionPayload}
-      labels={nQuickAddEnabled && quickEntry
-        ? { ...labels, title: labels.title.replace("(C)", shiftCQuickAddEnabled ? "(N / Shift+C)" : "(N)") }
+      labels={quickEntry
+        ? { ...labels, title: labels.title.replace("(C)", "(N / Shift+C)") }
         : labels}
       onCreate={onCreate}
     />

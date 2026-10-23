@@ -1,4 +1,4 @@
-import { updateTaskSchema } from "./updateTaskSchema";
+import { getUpdateTaskSchema } from "./updateTaskSchema";
 import { createTaskUpdater } from "./updateOneTask";
 import { tool } from "ai";
 
@@ -20,7 +20,7 @@ export function createUpdateTaskTool(context: ToolContext) {
     hypertask_update_task: tool({
       description:
         "Update one or many tasks' titles, descriptions, priorities, estimates, due dates, labels, parents, or statuses (Normal/Archive/Deleted), or move them within their own boards. Use task_ids or ticket_numbers to update up to 50 tasks in one call instead of looping. Provide whichever task identifier you know; extra identifiers are tolerated.",
-      inputSchema: updateTaskSchema,
+      inputSchema: getUpdateTaskSchema(context.inlineAgentImagesEnabled),
       execute: withToolErrors(async (rawInput) => {
         sendStatus("hypertask_update_task");
         const input = dropEmptyPadding(rawInput, [
@@ -51,10 +51,8 @@ export function createUpdateTaskTool(context: ToolContext) {
           seenTaskIds.add(taskId);
           return true;
         });
-        // HTPR-4218: wide or destructive writes get shown to the user first.
         const destructive =
           input.status === "Deleted" || input.status === "Archive";
-        // HTPR-5536: a tag change is reversible, so it never confirms.
         const needsConfirmation = updateTasksNeedConfirmation({
           targetCount: targets.length,
           update: input,
@@ -66,6 +64,12 @@ export function createUpdateTaskTool(context: ToolContext) {
           }
           if (input.description !== undefined) {
             operationChanges.push(["description", input.description]);
+          }
+          if (input.image_urls !== undefined) {
+            operationChanges.push(["image_urls", input.image_urls]);
+          }
+          if (input.inline_images !== undefined) {
+            operationChanges.push(["inline_images", input.inline_images]);
           }
           if (input.priority !== undefined) {
             operationChanges.push(["priority", input.priority]);
@@ -149,6 +153,8 @@ export function createUpdateTaskTool(context: ToolContext) {
               success: false,
               confirmation_required: true,
               affected,
+              ...(input.image_urls !== undefined ? { image_urls: input.image_urls } : {}),
+              ...(input.inline_images !== undefined ? { inline_images: input.inline_images } : {}),
               message:
                 `This would change ${targets.length} tasks` +
                 (destructive ? ` (status: ${input.status})` : "") +

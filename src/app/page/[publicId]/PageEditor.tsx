@@ -28,7 +28,6 @@ import { cn } from "@/utils/undoActions/helperFuncs";
 import { HTPR_6872_PAGE_IMAGE_GALLERY_FLAG } from "@/lib/flags/keys";
 import { isContentCarouselImage } from "@/utils/helperFunctions/isContentCarouselImage";
 import { pageRoute } from "@/lib/constants/APIRouteConstants";
-import { HTPR_6861_MOBILE_PAGE_BACK_ROW_FLAG } from "@/lib/flags/keys";
 import { MobileViewContext } from "@/lib/contexts/mobileContext";
 import {
   bindPageReturnEntry,
@@ -47,12 +46,12 @@ type SerializedPage = {
   title: string;
   contentHtml: string;
   version: number;
-  taskId: number;
+  taskId: number | null;
   projectId: number;
   task: {
     projectId: number;
     uniqueIndex: number;
-  };
+  } | null;
 };
 
 type PageEditorProps = {
@@ -68,7 +67,6 @@ const HypertasksCommands = dynamic(() => import("@/components/commands"), {
   ssr: false,
 });
 
-// ProseMirror adds src-less separator images after inline nodes; they are not media.
 const isPageGalleryImage = (image: HTMLImageElement) =>
   Boolean(image.getAttribute("src")) && isContentCarouselImage(image);
 
@@ -91,7 +89,6 @@ const PageEditor = ({ _page, _user }: PageEditorProps) => {
   const railOn = useRecoilValue(appShellRailAtom);
   const showCommands = useRecoilValue(showCommandsAtom);
   const isMobile = useContext(MobileViewContext);
-  const mobilePageBackRowEnabled = useFlag(HTPR_6861_MOBILE_PAGE_BACK_ROW_FLAG);
   const setCurrentPageActions = useSetRecoilState(currentPageActionsAtom);
   const showRail = railOn && !isMobile;
   const versionRef = useRef(page.version);
@@ -143,7 +140,7 @@ const PageEditor = ({ _page, _user }: PageEditorProps) => {
         id: index + 1,
         createdAt: -1,
         fileType: "image/png",
-        taskId: page.taskId,
+        taskId: page.taskId ?? undefined,
         fileSource: image.src,
         fileName: "Image.png",
       })),
@@ -164,7 +161,6 @@ const PageEditor = ({ _page, _user }: PageEditorProps) => {
 
   useEffect(() => {
     if (!galleryEnabled) return;
-    // Canvas frames have opaque origins, so only accept messages from this page's frames.
     const handleMessage = (event: MessageEvent) => {
       const frames = contentRef.current?.querySelectorAll<HTMLIFrameElement>(".ht-html-block iframe");
       const frame = Array.from(frames ?? []).find((item) => item.contentWindow === event.source);
@@ -178,7 +174,10 @@ const PageEditor = ({ _page, _user }: PageEditorProps) => {
     return () => window.removeEventListener("message", handleMessage);
   }, [galleryEnabled, openImageGallery]);
 
-  const taskHref = `/detail/project-${page.task.projectId}/${page.task.uniqueIndex}`;
+  const taskHref = page.task
+    ? `/detail/project-${page.task.projectId}/${page.task.uniqueIndex}`
+    : `/project?id=${page.projectId}`;
+  const backLabel = page.task ? "Back to task" : "Back to board";
 
   useEffect(() => {
     try {
@@ -190,7 +189,6 @@ const PageEditor = ({ _page, _user }: PageEditorProps) => {
         runtime: window,
       });
     } catch {
-      // Direct Page visits still have the canonical task replacement below.
     }
   }, [taskHref]);
 
@@ -334,7 +332,6 @@ const PageEditor = ({ _page, _user }: PageEditorProps) => {
       void returnToTask();
     };
 
-    // Suggestion plugins get first refusal, before ProseMirror's Escape fallback.
     const escapePluginKey = new PluginKey("pageEscapeBlur");
     editor?.registerPlugin(new Plugin({
       key: escapePluginKey,
@@ -346,7 +343,6 @@ const PageEditor = ({ _page, _user }: PageEditorProps) => {
       },
     }));
 
-    // Let editor and document-level layer handlers consume Escape first.
     window.addEventListener("keydown", handleKeyDown);
     return () => {
       editor?.unregisterPlugin(escapePluginKey);
@@ -411,11 +407,11 @@ const PageEditor = ({ _page, _user }: PageEditorProps) => {
   }, [isDeleting, page.publicId, router, taskHref]);
 
   useEffect(() => {
-    if (!mobilePageBackRowEnabled || !isMobile) return;
+    if (!isMobile) return;
 
     setCurrentPageActions({ publicId: page.publicId, version, onDelete: deletePage });
     return () => setCurrentPageActions(null);
-  }, [deletePage, isMobile, mobilePageBackRowEnabled, page.publicId, setCurrentPageActions, version]);
+  }, [deletePage, isMobile, page.publicId, setCurrentPageActions, version]);
 
   const statusText =
     saveStatus === "saving"
@@ -443,19 +439,18 @@ const PageEditor = ({ _page, _user }: PageEditorProps) => {
         <div
           className={`w-full ${isMobile ? "px-0" : "px-3"}`}
         >
-          {mobilePageBackRowEnabled && isMobile ? (
+          {isMobile ? (
             <div className="flex w-full items-center gap-2 px-2 pt-2" aria-live="polite">
               <button
                 type="button"
                 onClick={() => void returnToTask()}
-                // Same control as Settings "Back to app"; 44px phone target.
                 className={cn(
                   MOBILE_TARGET,
                   "min-w-0 flex-1 justify-start gap-2 rounded-sm px-2 text-left text-content font-medium text-text-light-gray transition hover:bg-hover-active hover:text-white-black focus-visible:bg-hover-active focus-visible:text-white-black focus-visible:outline-none",
                 )}
               >
                 <ArrowLeft strokeWidth={1.75} className="h-4 w-4 shrink-0" />
-                <span className="truncate">Back to task</span>
+                <span className="truncate">{backLabel}</span>
               </button>
               <span className="shrink-0 pr-2 text-meta text-text-light-gray">{statusText}</span>
             </div>
@@ -470,7 +465,7 @@ const PageEditor = ({ _page, _user }: PageEditorProps) => {
                 className="inline-flex items-center gap-1 border-0 bg-transparent p-0 transition-colors hover:text-white-black"
               >
                 <ChevronLeft size={14} strokeWidth={1.75} />
-                Back to task
+                {backLabel}
               </button>
               <div className="flex items-center gap-3">
                 <span>{statusText}</span>
@@ -496,7 +491,7 @@ const PageEditor = ({ _page, _user }: PageEditorProps) => {
               onChange={handleTitleChange}
               placeholder="Untitled"
               style={{ border: 0, boxShadow: "none" }}
-              className={`w-full bg-transparent ${mobilePageBackRowEnabled && isMobile ? "px-4 py-0" : "p-0"} font-semibold leading-tight text-white-black outline-none placeholder:text-text-light-gray focus:ring-0 ${
+              className={`w-full bg-transparent ${isMobile ? "px-4 py-0" : "p-0"} font-semibold leading-tight text-white-black outline-none placeholder:text-text-light-gray focus:ring-0 ${
                 isMobile ? "text-[24px]" : "text-[32px]"
               }`}
             />

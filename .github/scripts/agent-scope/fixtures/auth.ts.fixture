@@ -1,0 +1,1 @@
+export async function validateMcpRouteAuth(request: unknown) { return { user: { id: 1 }, agentId: "fixture-agent" }; }

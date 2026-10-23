@@ -1,4 +1,7 @@
-import { recordActivationOccurrence } from "@/lib/telemetry/activationOccurrences";
+import { assertAgentBoardInviteScope } from "@/lib/mcp/agents/delegatedAccess";
+import type { Prisma } from "@prisma/client";
+import { enqueueOutsideSaveAndProcessSoon, processAnalyticsIntentSoon } from "@/lib/telemetry/analyticsIntents";
+import { enqueueInviteSent, enqueueMemberJoined } from "@/lib/telemetry/inviteAnalytics";
 import { NextApiHandler, NextApiRequest, NextApiResponse } from "next";
 import { LogType, Status } from "@prisma/client";
 import { CreateLogInput, IMember, IViewType } from "@/models/model";
@@ -17,7 +20,6 @@ const handler: NextApiHandler = async (
   res: NextApiResponse,
 ) => {
   if (req.method === "POST") {
-    // HTPR-4303: demo guests can't invite people to throwaway boards.
     if (await isGuestRequest(req)) {
       return res.status(403).json({ message: GUEST_FORBIDDEN_MESSAGE });
     }
@@ -63,6 +65,7 @@ export const addMemberController = async (
   userId: number,
   projectId: number,
   emails: string[],
+  actingAgentId?: string | null,
 ) => {
   try {
     const currentProject = await prisma.project.findFirst({
@@ -99,20 +102,17 @@ export const addMemberController = async (
         json: "User already part of board",
       };
 
-    // SEND INVITE TO EACH EMAIL
-    // there are some recalculations, optimize later, works for now, short on time.
     for (const email of emailsToInvite) {
       console.log("Running invite procedure for the following email: ", email);
       if (currentProject?.owner.email === email) return {status: 201, json: "Cannot add owner email"};
 
-      // check if that member is in the TEAM, if he is, just add him straight away, do not send invite.
       const isInTeamAlready = teamMemberEmails.includes(email);
       console.log(
         "Is user already in the team? " + `${isInTeamAlready ? "Yes" : "No"}`,
       );
 
-      if (!isInTeamAlready) await sendInviteToNonMember(userId, projectId, email);
-      else await sendInviteToAlreadyExistingMember(email, currentProject.id);
+      if (!isInTeamAlready) await sendInviteToNonMember(userId, projectId, email, actingAgentId);
+      else await sendInviteToAlreadyExistingMember(email, currentProject.id, userId, actingAgentId);
     }
 
     return {
@@ -120,6 +120,7 @@ export const addMemberController = async (
       json: emailsToInvite,
     };
   } catch (error) {
+    if (actingAgentId) throw error;
     console.log("🚀 ~ addMemberController ~ error:", error)
     prisma.invite.deleteMany({
       where: { projectId },
@@ -135,9 +136,10 @@ async function sendInviteToNonMember(
   userId: number,
   projectId: number,
   email: string,
+  actingAgentId?: string | null,
 ) {
   console.log("User isn't in the team, sending invite to join team");
-  const invite = await prisma.invite.create({
+  const createInvite = (database: Pick<Prisma.TransactionClient, "invite">) => database.invite.create({
     data: {
       userId,
       projectId,
@@ -164,6 +166,12 @@ async function sendInviteToNonMember(
       },
     },
   });
+  const invite = actingAgentId
+    ? await prisma.$transaction(async (tx) => {
+        await assertAgentBoardInviteScope(tx.member, projectId, userId, actingAgentId);
+        return createInvite(tx);
+      }, { isolationLevel: "Serializable" })
+    : await createInvite(prisma);
   let viewSlug: string | undefined;
   const activeView = getViewFromProject(invite.project);
   viewSlug = setViewSlug(activeView);
@@ -194,7 +202,7 @@ async function sendInviteToNonMember(
     title: invite.project.title ?? "",
     link: inviteLink,
   });
-  if (sent) recordActivationOccurrence(userId, "teammate_invited", invite.id, { method: "email" });
+  if (sent) await enqueueOutsideSaveAndProcessSoon(() => enqueueInviteSent(prisma, invite, "email", invite.userId, userId));
 }
 
 export const generateInviteLink = async (
@@ -228,14 +236,12 @@ export const createNotification = async (
   inviteId: string,
   projectId: number,
 ) => {
-  // check if the user exists so we can create notification, if not just return
   const invitedUser = await prisma.user.findFirst({
     where: { email: email },
   });
   console.log("🚀 ~ createNotification ~ invitedUser:", invitedUser);
   if (!invitedUser) return false;
 
-  // ============= create first notification
   const notification = await prisma.notification.create({
     data: {
       type: "Invited",
@@ -247,7 +253,6 @@ export const createNotification = async (
   });
   console.log("🚀 ~ createNotification ~ notification:", notification);
 
-  // ============ create notification_invite
   const userIdBy = await createUserNotificationInvite(fromUserId);
   const userIdTo = await createUserNotificationInvite(invitedUser.id);
 
@@ -294,24 +299,31 @@ const createUserNotificationInvite = async (userId: number) => {
 const sendInviteToAlreadyExistingMember = async (
   email: string,
   projectId: number,
+  inviterUserId: number,
+  actingAgentId?: string | null,
 ) => {
-  let user = await prisma.user.findFirst({ where: { email } });
+  const user = await prisma.user.findFirst({ where: { email } });
   if (user) {
-    const member = await prisma.member.create({
-      data: {
-        userId: user.id,
-        projectId: projectId,
-      },
-      include: {
-        user: true,
-      },
-    });
+    const { member, analyticsKey } = await prisma.$transaction(async (tx) => {
+      await assertAgentBoardInviteScope(tx.member, projectId, inviterUserId, actingAgentId);
+      const member = await tx.member.create({
+        data: {
+          userId: user.id,
+          projectId: projectId,
+        },
+        include: {
+          user: true,
+        },
+      });
+      const analyticsKey = await enqueueMemberJoined(tx, member.id, user.id, projectId, null, inviterUserId);
+      return { member, analyticsKey };
+    }, actingAgentId ? { isolationLevel: "Serializable" } : undefined);
+    processAnalyticsIntentSoon(analyticsKey);
     console.log("Member created: ", member);
   }
 };
 
 const checkTeamMemberEmails = async (teamId: string) => {
-  // first get owner email
   const team = await prisma.team.findFirst({
     where: {
       id: teamId,

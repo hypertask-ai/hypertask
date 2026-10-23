@@ -9,9 +9,9 @@ Use at `/ship`'s fix step for a slow board, inbox or task view. This is the how-
 
 **Flag rule (matches `fix-bug` and `INDEX.md`):** performance work with identical output keeps its existing no-flag exemption. Other bug fixes use a ticket-named bugfix flag default Everyone, except saved-data, security and crash fixes (Valentin, 2026-10-06). A behavior change is a feature: load `ship-feature-behind-flag`, not a disguised flag-free speed fix. Existing Merge Rules row 4 still governs speed rollout: one speed change at a time, never automatically switched on in working hours. No flag does not bypass review, deployment or QA gates.
 
-## Check each measured number
+## Check each measured number (required)
 
-Use this benchmark checklist before reporting a baseline, speedup or regression. Answer from runs, not guesses about code.
+Before reporting any baseline, speedup or regression (ticket, PR body, playbook), load `.claude/skills/principle-explain-the-number/SKILL.md` and `.claude/skills/benchmark-checklist/SKILL.md` and answer all seven questions from runs, not guesses about code. A number without a run count, a range and a named limiter is reported as inconclusive. Measuring and profiling happen through speed-check on live, the approved harness or GitHub, never as test runs on the VPS. The Hypertask specifics below apply on top.
 
 - State the claim and read the measurement script: what is timed, counted or omitted? Confirm the work ran inside the timed region and produced correct results. Count errors, retries and non-success responses; a fast failure is not a speedup.
 - Keep baseline and after conditions the same: production build and settings, versions, data, browser, viewport, network/CPU, cache state and concurrency. Check host load (`uptime`, `nproc`). If noise cannot be removed, alternate baseline and after runs and record it. If live baseline and fixed build conditions differ, say the comparison is inconclusive.
@@ -20,7 +20,11 @@ Use this benchmark checklist before reporting a baseline, speedup or regression.
 - Check physical limits and the share of work changed. Removing a small part cannot explain a larger whole-path gain. Pair microbenchmarks with the real path the user waits on.
 - Report the verdict, unit, sample count, range, baseline vs after and limiter. Use inconclusive when conditions differ, tuning or limiter is unknown, or correct output and completed work were not checked. Link the raw runs privately with secrets removed.
 
-Source: adapted from pstack benchmark-checklist, https://github.com/cursor/plugins/tree/main/pstack.
+Source: pstack benchmark-checklist and principle-explain-the-number by Lauren Tan, MIT, https://github.com/cursor/plugins/tree/main/pstack.
+
+## Build scratch is not evidence
+
+Never build on the VPS. On an approved build host, use `mktemp -d /tmp/ht-qa-build.XXXXXX` for app copies, dependencies, `.next` and `build-candidate`/`build-baseline`/`build-a`/`build-profile` trees, with an EXIT trap to remove it (INT/TERM must exit through that trap). The optional `scripts/premerge-local.sh` already owns this lifecycle. Copy only small sanitized numbers, logs, screenshots and HTML reports to `~/.local/state/vcc-evidence/<TICKET>/`; never copy a build, browser cache or toolchain there. See [QA evidence storage](../verify-qa/reference/evidence-storage.md).
 
 ## Steps
 

@@ -1,13 +1,3 @@
-/**
- * `PATCH /api/mcp/agents/[agentId]`: rename an owned agent, switch it back on,
- * file it away in the register, or change who can see it (PRIVATE/TEAM).
- * Board membership changes use the same owned-agent operation.
- *
- * Launch is the missing opposite of revoke. It lives on the shared `/api/mcp/*`
- * layer, next to the existing DELETE, so the CLI, the MCP server and AI chat
- * inherit it from one place instead of each keeping a copy (CLAUDE.md,
- * HTPR-5418).
- */
 import {
   isVisibilityOnlyBody,
   setOwnedAgentVisibility,
@@ -145,9 +135,6 @@ export async function handlePatchAgentRequest(
   const rateLimited = await checkMcpRateLimit(request)
   if (rateLimited) return rateLimited
 
-  // Same gate the sibling DELETE uses: a human or a write-scoped management
-  // key. An agent credential may only change board membership, and only when
-  // checkAgentBoardDelegation allows it (HTPR-6348).
   const ctx = await validateMcpAuth(request, {
     deferManagementPermissionCheck: true,
   })
@@ -235,10 +222,10 @@ export async function handlePatchAgentRequest(
       if (delegationError) return delegationError
       const result = await updateOwnedAgentBoards(
         prisma as unknown as AgentBoardUpdateDatabase,
-        getAccessibleAgentBoard,
+        (id, userId, db) => getAccessibleAgentBoard(id, userId, ctx.agentId, ctx.teamScope, db),
         ctx.user.id,
         input,
-        ctx.management?.teamId,
+        ctx.teamScope?.teamId ?? ctx.management?.teamId,
         ctx.agentId ?? undefined
       )
       if (ctx.agentId) {
@@ -293,8 +280,6 @@ export async function handlePatchAgentRequest(
         { status: 400 }
       )
     }
-    // Same visibility-only rule as the web route: any other supplied field,
-    // recognized or not, makes the request ambiguous.
     if (!isVisibilityOnlyBody(body)) {
       return NextResponse.json(
         buildFieldError(
@@ -447,16 +432,12 @@ export async function handlePatchAgentRequest(
     currentAgent = renamed.agent
   }
 
-  // At least one operation was validated above, so a row exists unless a
-  // preceding operation returned an error.
   if (!currentAgent) return notFound()
 
   return NextResponse.json({
     success: true,
     agent: describe(currentAgent),
     ...(wantsLaunch ? { already_running: alreadyRunning } : {}),
-    // Revealed once, and only when this call minted it. A native agent has no
-    // credential of its own, so the field is absent for one.
     ...(token ? { token } : {}),
   })
 }

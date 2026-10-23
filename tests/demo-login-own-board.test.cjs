@@ -1,3 +1,4 @@
+const { withStubs } = require('./helpers/stub-map.cjs')
 const test = require('node:test')
 const assert = require('node:assert/strict')
 const fs = require('node:fs')
@@ -12,6 +13,13 @@ const userId = 100
 const demoBoardId = 42
 
 function loadTs(relativePath, aliases) {
+  aliases = withStubs({
+    "@/lib/auth/agentCookieBridgeRoutes": require("./task-route-loader.cjs").load("src/lib/auth/agentCookieBridgeRoutes.ts", {}),
+    "@/lib/telemetry/signupAnalytics": { recordServerCapture: () => {} },
+    "@/lib/auth/agentScope": require("./helpers/agent-board-scope.cjs").enforcedScope,
+    '@/lib/auth/signupAttributionContext': { createSignupContext: async () => null, consumeSignupContext: async () => null, consumeSignupCookie: async () => null, consumeGoogleSignupContext: async () => null, bindSignupCodeContext: async () => {}, takeSignupCodeContext: async () => null },
+  }, aliases)
+
   if (/src\/lib\/flags\/(?:keys|definitions)\.ts$/.test(relativePath)) return require("./helpers/flag-files.cjs").load(relativePath);
   const javascript = ts.transpileModule(fs.readFileSync(path.join(root, relativePath), 'utf8'), {
     compilerOptions: { esModuleInterop: true, module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2020 },
@@ -62,6 +70,7 @@ function makeHarness({ existing = true, membershipOnly = false, flagMode = 'EVER
     assignees: { updateMany: async () => {} },
     $transaction: async (callback) => callback(prisma),
     featureFlag: { findUnique: async ({ where }) => {
+      if (where.key === 'htpr-7549-first-task-pointer') return { mode: 'OFF' }
       calls.flags.push(where.key)
       if (failFlag && where.key === flagKey) throw new Error('test flag read failure')
       return where.key === flagKey && flagMode !== null ? { mode: flagMode } : null
@@ -79,6 +88,7 @@ function makeHarness({ existing = true, membershipOnly = false, flagMode = 'EVER
       verifySession: (token) => token === 'guest-session' ? { id: guestId } : token === 'new-session' ? { id: userId } : null,
       signSession: () => 'new-session', sessionCookieOptions: () => ({}), clearBetterAuthSessionCookies: () => {},
     },
+    '@/lib/auth/sessionRevocation': { isSessionTokenRevoked: async () => false, revokeSessionToken: async () => {} },
     '@/lib/demo/guest': { GUEST_UID_PREFIX: 'guest_' },
     '@/lib/configs/auth.config': { cookies: { theme: 'theme' }, onboarding: { skipOnboarding: true, shouldSkipInteractive: true } },
     '@/lib/constants/constants': { companySizeOptions: ['Just me'], companyRoleOptions: ['Founder'] },
@@ -90,7 +100,8 @@ function makeHarness({ existing = true, membershipOnly = false, flagMode = 'EVER
     '@/lib/themePreferences': { themeCookieSeedValue: () => undefined },
     '@/lib/telemetry/signupAnalytics': { signupAttributionFromHeaders: () => ({}) },
     '@/lib/onboarding/emails/agentNudge': { maybeScheduleAgentNudge: async () => 'flag_off' },
-    '@/lib/telemetry/activationOccurrences': { recordActivationOccurrence: () => {} },
+    '@/lib/telemetry/activationOccurrences': { captureActivationOccurrence: async () => null },
+    '@/lib/telemetry/savedWork': { enqueueBoardCreated: async () => "board-key", processAnalyticsIntentSoon: () => {}, enqueueTaskCreated: async () => "task-key", creationChannelFromHeader: () => 'web', CREATION_CHANNEL_HEADER: 'X-Hypertask-Creation-Channel', CREATION_AGENT_HEADER: 'X-Hypertask-Creation-Agent' },
     '@vercel/functions': { waitUntil: () => {} },
     '@/lib/auth/emailLinkToken': { consumeEmailLinkToken: async () => true },
     '@/lib/onboarding/emails/welcome': { maybeSendWelcomeEmail: async () => 'flag_off' },
@@ -111,17 +122,18 @@ function makeHarness({ existing = true, membershipOnly = false, flagMode = 'EVER
       createAuthEndpoint: (route, options, handler) => handler,
       getSessionFromCtx: async () => ({ user: { id: String(userId) } }),
     },
-    '@/lib/api/task-writes/route': { withTaskWriteFlag: (handler) => handler },
     '@/utils/controllers/projects/getAll': async (id) => ({ status: 200, json: projects.filter((project) => project.ownerId === id) }),
     './utils/edgeHelpers': { isValidUser: (raw) => ({ isValid: !!raw, user: raw ? JSON.parse(raw) : null }) },
     './utils/serverActions': {},
     './utils/helperFunctions/helperFunctions': {},
+    '@/lib/net/contentEncoding': { refusedContentEncoding: () => undefined },
     '@/lib/auth/safeReturnTo': { parseSafeReturnTo: () => null },
     '@/lib/auth/sessionEdge': { verifySessionEdge: async () => ({ id: userId }) },
     '@/lib/auth/cookieIdentity': {},
     '@/lib/routing/detailWithoutTicket': { detailWithoutTicketRedirect: () => null },
     '@/lib/tutorial/keyboardShortcutTutorial': { isKeyboardShortcutTutorialPath: () => false, hasKeyboardShortcutTutorialQuery: () => false },
   }
+  aliases['@/lib/api/task-writes/route'] = loadTs('src/lib/api/task-writes/route.ts', aliases)
   aliases['@/lib/flags/definitions'] = loadTs('src/lib/flags/definitions.ts', aliases)
   aliases['@/lib/flags'] = loadTs('src/lib/flags.ts', aliases)
   aliases['@/lib/onboarding/installCommands'] = loadTs('src/lib/onboarding/installCommands.ts', {})
@@ -141,14 +153,13 @@ async function login(method, options = {}) {
   process.env.JWT_SECRET = 'test-only-not-a-real-credential'
   try {
     if (method.startsWith('verify-')) {
-      const getAll = loadTs('src/pages/api/projects/getAll.ts', h.aliases).default
+      const { POST: getAll } = loadTs('src/lib/api/project-writes/all-read.ts', h.aliases)
       global.fetch = async (url, init) => {
         assert.equal(new URL(url).pathname, '/api/projects/getAll')
-        const response = { status(value) { this.statusCode = value; return this }, json(value) { this.body = value } }
         const cookie = new Headers(init.headers).get('Cookie')
         if (!cookie) h.calls.unauthenticatedBoardRequests++
-        await getAll({ method: 'POST', cookies: cookie ? { ht_session: cookie.split('=')[1] } : {}, body: JSON.parse(init.body) }, response)
-        return new Response(JSON.stringify(response.body), { status: response.statusCode })
+        const result = await getAll({ headers: new Headers(), cookies: cookie ? { ht_session: cookie.split("=")[1] } : {}, json: async () => JSON.parse(init.body) })
+        return new Response(await result.text(), { status: result.status })
       }
       const { POST } = loadTs(`src/app/api/auth/${method}/route.ts`, h.aliases)
       const response = await POST(new NextRequest(`https://app.hypertask.ai/api/auth/${method}`, {

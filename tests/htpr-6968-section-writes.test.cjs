@@ -1,11 +1,25 @@
 const test = require("node:test");
 const assert = require("node:assert/strict");
-const ts = require("typescript");
 const http = require("node:http");
 const { apiResolver } = require("next/dist/server/api-utils/node/api-resolver");
 const { load } = require("./task-route-loader.cjs");
-const { sectionRoutes, sectionLegacySources } = require("./htpr-6923-verify.cjs");
-const sources = sectionLegacySources();
+const { savedViewBoardAccessWhere, matches } = require("./helpers/htpr-7166-fixture.cjs");
+const { pins } = require("./helpers/htpr-6992-pins.cjs");
+const rawPin = pins("a2-section-writes");
+const GROUPS = ["create","update","rename","resetRanks","getAll","getByTaskId","getProjectSections"];
+// Pins group by route so the fixture holds one digest per route.
+const groupOf = key => key.split(/[ :]+/).find(token => GROUPS.includes(token)) ?? key;
+const pin = (key, value) => rawPin(groupOf(key), key, value);
+// Route map: shared module per Pages endpoint.
+const sectionRoutes = {
+  create: { module: "create" },
+  update: { module: "update" },
+  rename: { module: "rename" },
+  resetRanks: { module: "reset-ranks" },
+  getAll: { module: "get-all" },
+  getByTaskId: { module: "get-by-task" },
+  getProjectSections: { module: "get-project-sections" },
+};
 const clean = value => value === undefined ? undefined : JSON.parse(JSON.stringify(value));
 const section = { id: 91, projectId: 15, section_title: "Column", ranking: "A0100", deleted: false, visibility: true, isDone: null };
 const view = { id: 15, project_view: { default_view: { board_columns_view: [section] } } };
@@ -18,18 +32,8 @@ const endpoints = {
   getByTaskId: { body: { taskId: 42 }, result: [section] },
   getProjectSections: { body: { projectId: 15, userId: 6 }, result: [section] },
 };
-function compileOriginal(source, mocks) {
-  const compiled = ts.transpileModule(source, { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022, esModuleInterop: true } }).outputText;
-  const mod = { exports: {} };
-  new Function("require", "module", "exports", compiled)(specifier => {
-    assert.ok(Object.hasOwn(mocks, specifier), `Unexpected original dependency: ${specifier}`);
-    const mock = mocks[specifier];
-    return Object.hasOwn(mock, "default") ? { __esModule: true, ...mock } : mock;
-  }, mod, mod.exports);
-  return mod.exports.default;
-}
-function fixture(name, scenario = {}, mode = false, controllerFactory) {
-  const effects = [], flags = [], loads = [], auth = [];
+function fixture(name, scenario = {}, controllerFactory) {
+  const effects = [], loads = [], auth = [];
   const userId = scenario.userId ?? 985;
   const session = scenario.noAuth ? null : { userId, source: "better-auth" };
   const record = (label, value, fail) => async (...args) => {
@@ -39,18 +43,13 @@ function fixture(name, scenario = {}, mode = false, controllerFactory) {
   };
   const body = Object.hasOwn(scenario, "body") ? scenario.body : endpoints[name].body;
   const mocks = {
+    "@/lib/auth/agentScope": require("./helpers/agent-board-scope.cjs").enforcedScope,
     "@/lib/auth/getSessionUser": { getSessionUser: async headers => {
       auth.push(headers.get("cookie"));
       if (scenario.authThrows) throw new Error("Auth unavailable");
       return session;
     } },
     "@/lib/auth/sessionUserRecord": { loadSessionUserRecord: record("actor", { id: scenario.actorId ?? userId }, scenario.actorThrows) },
-    "@/lib/flags/keys": { HTPR_6923_APP_ROUTER_WRITES_FLAG: "htpr-6923-app-router-writes" },
-    "@/lib/flags": { isFeatureEnabled: async (key, id) => {
-      flags.push([key, id]);
-      if (mode === "outage") throw new Error("Flag unavailable");
-      return mode === true;
-    } },
     "@/lib/realtime/server": { broadcastBoardChange: (...args) => {
       effects.push(["broadcast", ...structuredClone(args)]);
       if (scenario.broadcastThrows) throw new Error("Broadcast unavailable");
@@ -89,7 +88,7 @@ function fixture(name, scenario = {}, mode = false, controllerFactory) {
     if (scenario.loadThrows) throw new Error("Route load unavailable");
     return web;
   } };
-  return { legacy: compileOriginal(sources[name], mocks), current: load(`src/pages/api/section/${name}.ts`, mocks).default, web, effects, flags, loads, auth };
+  return { current: load(`src/pages/api/section/${name}.ts`, mocks).default, web, effects, loads, auth };
 }
 function input(name, scenario = {}) {
   return {
@@ -130,6 +129,17 @@ async function invoke(fx, name, scenario, target) {
     return result;
   });
 }
+// Runs the Pages adapter, pins response plus effects, then checks the shared Web handler agrees.
+async function run(key, name, scenario, controllerFactory, { skipWeb = false } = {}) {
+  const fx = fixture(name, scenario, controllerFactory), expected = await invoke(fx, name, scenario, "current");
+  pin(key, { expected, effects: fx.effects });
+  if (!skipWeb) {
+    const web = fixture(name, scenario, controllerFactory);
+    assert.deepEqual(await invoke(web, name, scenario, "web"), expected, `${key}: web`);
+    assert.deepEqual(web.effects, fx.effects, `${key}: web effects`);
+  }
+  return { fx, expected };
+}
 const cases = [
   ["complete success", {}], ["validation error", { result: { status: 400, json: { message: "Invalid section" } } }],
   ["permission denied", { result: { status: 403, json: { message: "Forbidden" } }, denied: true }],
@@ -145,28 +155,25 @@ for (const name of Object.keys(endpoints)) {
   if (["update", "rename"].includes(name)) extra.push(["deleted 204 body", { result: { status: 204, json: { ...section, deleted: true } } }]);
   if (name === "update") extra.push(["broadcast board fallback", { result: { status: 200, json: {} } }], ["broadcast throws after write", { broadcastThrows: true }]);
   if (name === "create") extra.push(["view load failure after write", { viewThrows: true }], ["broadcast failure after view", { broadcastThrows: true }], ["string ID parsing", { body: { projectId: "15tail", title: "Column", after_section_id: "91tail", ranking: "A0200" } }]);
-  for (const [label, scenario] of [...cases, ...extra]) test(`${name}: ${label} matches original, Off, outage, On and Web`, async () => {
-    const old = fixture(name, scenario), expected = await invoke(old, name, scenario, "legacy");
-    for (const mode of [false, "outage", true, "web"]) {
-      const fx = fixture(name, scenario, mode);
-      assert.deepEqual(await invoke(fx, name, scenario, mode === "web" ? "web" : "current"), expected, `${label}: ${mode}`);
-      assert.deepEqual(fx.effects, old.effects, `${label}: ${mode} effects`);
-      assert.equal(fx.loads.length, mode === true && !scenario.noAuth && !scenario.authThrows ? 1 : 0);
-      if (fx.flags.length) assert.deepEqual(fx.flags, [["htpr-6923-app-router-writes", scenario.userId ?? 985]]);
-    }
+  for (const [label, scenario] of [...cases, ...extra]) test(`${name}: ${label} matches pinned response, effects and Web handler`, async () => {
+    const { fx } = await run(`${name}: ${label}`, name, scenario);
+    assert.equal(fx.loads.length, 1, "listed method always loads the shared route");
   });
   test(`${name}: a real Web Request preserves success`, async () => {
-    const old = fixture(name), fx = fixture(name);
-    assert.deepEqual(await invoke(fx, name, { realWeb: true }, "web"), await invoke(old, name, {}, "legacy"));
-    assert.deepEqual(fx.effects, old.effects);
+    const { fx: current, expected } = await run(`${name}: success`, name, {});
+    const fx = fixture(name);
+    assert.deepEqual(await invoke(fx, name, { realWeb: true }, "web"), expected);
+    assert.deepEqual(fx.effects, current.effects);
   });
-  test(`${name}: unsupported methods bypass preflight`, async () => {
-    const scenario = { method: "PATCH" }, old = fixture(name, scenario), fx = fixture(name, scenario, true);
-    assert.deepEqual(await invoke(fx, name, scenario, "current"), await invoke(old, name, scenario, "legacy"));
-    assert.deepEqual(fx.flags, []); assert.deepEqual(fx.loads, []); assert.deepEqual(fx.auth, []);
+  test(`${name}: unsupported methods answer 405 before any session lookup`, async () => {
+    const scenario = { method: "PATCH" }, fx = fixture(name, scenario);
+    const result = await invoke(fx, name, scenario, "current");
+    assert.equal(result.status, 405);
+    pin(`405 ${name}`, result);
+    assert.deepEqual(fx.loads, []); assert.deepEqual(fx.auth, []); assert.deepEqual(fx.effects, []);
   });
-  test(`${name}: route load failure never retries legacy`, async () => {
-    const fx = fixture(name, { loadThrows: true }, true);
+  test(`${name}: route load failure surfaces without running the operation`, async () => {
+    const fx = fixture(name, { loadThrows: true });
     assert.deepEqual(await invoke(fx, name, {}, "current"), { throws: "Error: Route load unavailable" });
     assert.deepEqual(fx.effects, []); assert.equal(fx.loads.length, 1);
   });
@@ -176,7 +183,7 @@ for (const scenario of [
   {}, { multipleBoards: true }, { missingTask: 43 }, { denied: true }, { operationThrows: true },
   { body: { taskIds: [42, 42, 43], agentId: "owned-agent" } }, { body: { taskIds: [] } },
 ]) test(`resetRanks: batch authorization, duplicates, A0100 +30, concurrent deletion and fan-out ${JSON.stringify(scenario)}`, async () => {
-  const old = fixture("resetRanks", scenario), expected = await invoke(old, "resetRanks", scenario, "legacy");
+  const { fx: old, expected } = await run(`resetRanks batch ${JSON.stringify(scenario)}`, "resetRanks", scenario);
   const ranks = old.effects.filter(([label]) => label === "rank").map(([, args]) => args);
   if (scenario.denied) {
     assert.equal(expected.status, 404); assert.deepEqual(ranks, []);
@@ -189,17 +196,15 @@ for (const scenario of [
   const scope = old.effects.find(([label]) => label === "scope");
   assert.deepEqual(scope[1].where.id.in, [...new Set(scenario.body?.taskIds ?? [42, 43, 44])]);
   assert.deepEqual(old.effects.find(([label]) => label === "access"), ["access", 985, Object.hasOwn(scenario, "body") ? scenario.body.agentId : "owned-agent"]);
-  for (const mode of [false, "outage", true, "web"]) {
-    const fx = fixture("resetRanks", scenario, mode);
-    assert.deepEqual(await invoke(fx, "resetRanks", scenario, mode === "web" ? "web" : "current"), expected);
-    assert.deepEqual(fx.effects, old.effects);
-  }
 });
 
 function serviceController(name, effects, options = {}) {
   const record = (label, value) => async (...args) => { effects.push([label, ...structuredClone(args)]); return value; };
   const tx = {
-    section: { update: async args => { effects.push(["write-section", structuredClone(args)]); return { ...section, ...args.data }; } },
+    section: {
+      create: async args => { effects.push(["write-section", structuredClone(args)]); return { ...section, ...args.data }; },
+      update: async args => { effects.push(["write-section", structuredClone(args)]); return { ...section, ...args.data }; },
+    },
     task: { updateManyAndReturn: record("rename-tasks", [{ id: 42 }]) },
     taskSectionEvent: { createMany: async args => { effects.push(["history", args.data.map(({ timestamp, ...rest }) => rest)]); } },
   };
@@ -215,9 +220,10 @@ function serviceController(name, effects, options = {}) {
   const mocks = {
     "@/lib/prisma": { default: prisma },
     "@/lib/flags": { isFeatureEnabled: async () => false },
-    "@/lib/telemetry/activationOccurrences": { recordAgentTaskCompletion: () => {} },
+    "@/lib/telemetry/activationOccurrences": { enqueueAgentTaskCompletion: async () => null },
+    "@/lib/telemetry/savedWork": { enqueueColumnCreated: async () => "column-key", enqueueColumnRenamed: async () => "rename-key", processAnalyticsIntentSoon: () => {} },
     "@/utils/controllers/notifications/agentFirstTaskEmail": { scheduleAgentFirstTaskEmail: () => assert.fail("human section writes must not schedule agent email") },
-    "@/utils/controllers/projects/getAllIncludes": { getProjectWhere: id => ({ ownerId: id }) },
+    "@/utils/controllers/projects/getAllIncludes": { getProjectWhere: id => ({ ownerId: id }), savedViewBoardAccessWhere },
     "@/utils/generateRank": load("src/utils/generateRank.ts", {}),
     "./viewHelpers": {
       appendSectionToAllViews: record("append-views"), updateSectionInAllViews: record("update-views"), removeSectionFromAllViews: record("remove-views"),
@@ -234,6 +240,7 @@ for (const [name, label, scenario, options] of [
   ["create", "rank between sections", { body: { projectId: 15, title: "Column", after_section_id: 91 } }, {}],
   ["create", "explicit ranking", { body: { projectId: 15, title: "Column", ranking: "A0300" } }, {}],
   ["create", "missing predecessor", { body: { projectId: 15, title: "Column", after_section_id: 999 } }, {}],
+  ["create", "permission denial", {}, { denied: true }],
   ["update", "access and explicit ranking", {}, {}],
   ["update", "permission denial", {}, { denied: true }],
   ["rename", "task history and view refresh", {}, {}],
@@ -241,13 +248,16 @@ for (const [name, label, scenario, options] of [
   ["update", "delete and remove from views", { body: { sectionId: 91, newSection: { deleted: true } } }, {}],
 ]) test(`${name}: real service ${label}`, async () => {
   const factory = effects => serviceController(name, effects, options);
-  const old = fixture(name, scenario, false, factory), expected = await invoke(old, name, scenario, "legacy");
+  const { fx: old, expected } = await run(`service ${name} ${label}`, name, scenario, factory);
   const writes = old.effects.filter(([label]) => label === "write-section");
-  if (name !== "create") {
+  {
     const gate = old.effects.find(([label]) => label === (name === "update" ? "last-or-access" : "board-access"));
-    assert.deepEqual(gate[1].where, name === "update"
-      ? { id: 91, project: { status: "Normal", ownerId: 985 } }
-      : { id: 15, status: "Normal", ownerId: 985 });
+    // HTPR-7166 requires Accepted human membership and allows teamless owners and active owned-agent delegation.
+    assert.deepEqual(gate[1].where, name === "create"
+      ? { id: 15, status: "Normal", ...savedViewBoardAccessWhere(985) }
+      : name === "update"
+        ? { id: 91, project: { status: "Normal", ownerId: 985 } }
+        : { id: 15, status: "Normal", ownerId: 985 });
     assert.ok(!writes.length || old.effects.indexOf(gate) < old.effects.indexOf(writes[0]));
   }
   if (options.denied) { assert.equal(expected.status, 403); assert.deepEqual(writes, []); }
@@ -266,11 +276,6 @@ for (const [name, label, scenario, options] of [
       assert.deepEqual(old.effects.find(([label]) => label === "view"), ["view", 15, 985]);
     }
   }
-  for (const mode of [false, "outage", true, "web"]) {
-    const fx = fixture(name, scenario, mode, factory);
-    assert.deepEqual(await invoke(fx, name, scenario, mode === "web" ? "web" : "current"), expected);
-    assert.deepEqual(fx.effects, old.effects);
-  }
 });
 
 for (const name of ["getAll", "getByTaskId", "getProjectSections"]) test(`${name}: real read controller retains selection and rank order`, async () => {
@@ -283,11 +288,11 @@ for (const name of ["getAll", "getByTaskId", "getProjectSections"]) test(`${name
         section: { findMany: record("read-sections", [section, { ...section, id: 92, ranking: "A0200" }]) },
       } },
       "@/utils/helperFunctions/Views/ViewsHelperFunctions": { getViewFromProject: () => undefined },
-      "@/utils/controllers/projects/getAllIncludes": { projectContentAccessWhere: id => ({ ownerId: id }) },
+      "@/utils/controllers/projects/getAllIncludes": { projectContentAccessWhere: id => ({ ownerId: id }), savedViewBoardAccessWhere },
     };
     return load(`src/utils/controllers/section/${name === "getByTaskId" ? "getByTask" : name}.ts`, mocks).default;
   };
-  const old = fixture(name, {}, false, factory), expected = await invoke(old, name, {}, "legacy");
+  const { fx: old, expected } = await run(`read ${name}`, name, {}, factory);
   assert.equal(expected.status, 200); assert.deepEqual(expected.body.map(row => row.ranking), ["A0100", "A0200"]);
   const select = old.effects.find(([label]) => label === "read-sections");
   assert.deepEqual(select.slice(1), name === "getAll"
@@ -297,21 +302,16 @@ for (const name of ["getAll", "getByTaskId", "getProjectSections"]) test(`${name
     where: { id: 42, project: { ownerId: 985 } }, include: { project: true, user: true },
   });
   if (name === "getProjectSections") assert.deepEqual(old.effects.find(([label]) => label === "read-project")[1].include.project_view.include.user_project_views.where, { userId: 985 });
-  for (const mode of [false, "outage", true, "web"]) {
-    const fx = fixture(name, {}, mode, factory);
-    assert.deepEqual(await invoke(fx, name, {}, mode === "web" ? "web" : "current"), expected); assert.deepEqual(fx.effects, old.effects);
-  }
 });
 
 for (const name of ["getAll", "getByTaskId"]) {
   test(`${name}: HTPR-6982 rejects anonymous reads before body validation on every path`, async () => {
     for (const body of [{}, { userId: 99, taskId: 17 }, null, undefined]) {
       const scenario = { noAuth: true, body };
-      for (const mode of ["legacy", false, "outage", true, "web"]) {
-        const fx = fixture(name, scenario, mode);
-        const target = mode === "legacy" || mode === "web" ? mode : "current";
+      for (const target of ["current", "web"]) {
+        const fx = fixture(name, scenario);
         assert.deepEqual(await invoke(fx, name, scenario, target), { status: 401, body: { message: "Unauthorized" }, headers: {} });
-        assert.deepEqual(fx.effects, []); assert.deepEqual(fx.flags, []); assert.deepEqual(fx.loads, []);
+        assert.deepEqual(fx.effects, []);
       }
     }
   });
@@ -320,10 +320,10 @@ for (const name of ["getAll", "getByTaskId"]) {
     ["no body actor", { body: {} }], ["spoofed actor", { body: { userId: 99, projectId: 17, teamId: 2 } }],
     ["null body", { body: null }],
   ] : [15, 16, 19, 17, 18, 999].map(taskId => [String(taskId), { body: { taskId, userId: 99, teamId: 2 } }])) {
-    test(`${name}: HTPR-6982 real content-access policy ${label} matches legacy, Off, outage, On and Web`, async () => {
+    test(`${name}: HTPR-6982 real content-access policy ${label} matches pinned response and Web handler`, async () => {
       const projects = [
         { id: 15, teamId: 1, ownerId: 985, members: [] },
-        { id: 16, teamId: 1, ownerId: 99, members: [{ userId: 985, agentId: null }] },
+        { id: 16, teamId: 1, ownerId: 99, members: [{ userId: 985, agentId: null, status: "Accepted" }] },
         { id: 17, teamId: 2, ownerId: 99, members: [] },
         { id: 18, teamId: 2, ownerId: 99, members: [{ userId: 985, agentId: "agent-only" }] },
         { id: 19, teamId: null, ownerId: 985, members: [] },
@@ -355,7 +355,7 @@ for (const name of ["getAll", "getByTaskId"]) {
           "@/utils/controllers/notifications/visibleInboxScope": {},
         }).default;
       };
-      const old = fixture(name, scenario, false, factory), expected = await invoke(old, name, scenario, "legacy");
+      const { fx: old, expected } = await run(`policy ${name} ${label}`, name, scenario, factory);
       const allowed = [15, 16, 19];
       if (name === "getByTaskId" && !allowed.includes(scenario.body.taskId)) {
         assert.deepEqual(expected, { status: 404, body: { message: "Task not found" }, headers: {} });
@@ -369,16 +369,11 @@ for (const name of ["getAll", "getByTaskId"]) {
       assert.deepEqual(accessRead[1].where.project, {
         OR: [{ ownerId: 985 }, { members: { some: { userId: 985, agentId: null } } }],
       });
-      for (const mode of [false, "outage", true, "web"]) {
-        const fx = fixture(name, scenario, mode, factory);
-        assert.deepEqual(await invoke(fx, name, scenario, mode === "web" ? "web" : "current"), expected);
-        assert.deepEqual(fx.effects, old.effects);
-      }
     });
   }
 }
 
-for (const name of ["rename", "update"]) test(`${name}: real Pages HTTP strips 204 body identically`, async () => {
+for (const name of ["rename", "update"]) test(`${name}: real Pages HTTP strips the 204 body`, async () => {
   const scenario = { result: { status: 204, json: { ...section, deleted: true } } };
   const request = async (fx, target) => {
     const server = http.createServer((req, res) => apiResolver(req, res, {}, { default: fx[target] }, {}, false));
@@ -388,7 +383,150 @@ for (const name of ["rename", "update"]) test(`${name}: real Pages HTTP strips 2
       return { status: response.status, body: await response.text() };
     } finally { await new Promise(resolve => { server.close(resolve); server.closeAllConnections(); }); }
   };
-  const old = await quiet(() => request(fixture(name, scenario), "legacy"));
-  assert.deepEqual(old, { status: 204, body: "" });
-  for (const mode of [false, "outage", true]) assert.deepEqual(await quiet(() => request(fixture(name, scenario, mode), "current")), old);
+  assert.deepEqual(await quiet(() => request(fixture(name, scenario), "current")), { status: 204, body: "" });
+});
+
+function projectSectionsController(effects, { defaultShape = "populated", activeType } = {}) {
+  const columns = projectId => [
+    { ...section, id: projectId * 10 + 2, projectId, section_title: `Board ${projectId} second`, ranking: "A0200", isDone: true, autoAssignUserId: 99 },
+    { ...section, id: projectId * 10 + 1, projectId, section_title: `Board ${projectId} first`, ranking: "A0100", visibility: false },
+  ];
+  const projectView = projectId => {
+    if (defaultShape === "no project_view") return null;
+    const stored = columns(projectId);
+    const default_view = defaultShape === "no default_view" ? null : {
+      id: `default-${projectId}`, project_view_id: `pv-${projectId}`, visibility: "Public",
+      board_columns_view: defaultShape === "populated" ? stored
+        : defaultShape === "empty" ? [] : defaultShape === "null" ? null : { columns: stored },
+    };
+    const active = { id: `active-${projectId}`, userId: 985, project_view_id: `pv-${projectId}`, visibility: "Private", board_columns_view: [{ ...stored[0], visibility: false }] };
+    return { id: `pv-${projectId}`, default_view_id: default_view?.id, default_view, user_project_views: activeType ? [{ userId: 985, project_view_id: `pv-${projectId}`, [activeType === "Applied" ? "appliedViewId" : "unsavedViewId"]: active.id, [activeType === "Applied" ? "appliedView" : "unsavedView"]: active }] : [] };
+  };
+  const projects = [
+    { id: 15, teamId: 1, ownerId: 985, members: [] },
+    { id: 16, teamId: 1, ownerId: 99, members: [{ userId: 985, agentId: null, status: "Accepted" }] },
+    { id: 17, teamId: 2, ownerId: 99, members: [] },
+    { id: 18, teamId: 2, ownerId: 99, members: [{ userId: 985, agentId: "agent-only" }] },
+    { id: 19, teamId: null, ownerId: 985, members: [] },
+    { id: 20, teamId: 1, ownerId: 99, members: [] },
+  ].map(project => ({ ...project, project_view: projectView(project.id) }));
+  const matchesId = (id, filter) => filter === undefined || id === filter ||
+    (filter && typeof filter === "object" && (filter.in?.includes(id) || (filter.gte !== undefined && id >= filter.gte)));
+  const accessible = (project, where) => matches(project, { OR: where.OR });
+  const getViewFromProject = load("src/lib/firstScreen/boardView.ts", {}).getViewFromProject;
+  return load("src/utils/controllers/section/getProjectSections.ts", {
+    "@/lib/prisma": { default: {
+      project: { findFirst: async query => {
+        effects.push(["read-project", structuredClone(query)]);
+        return projects.find(project => matchesId(project.id, query.where.id) && accessible(project, query.where)) ?? null;
+      } },
+      section: { findMany: async query => {
+        effects.push(["read-sections", structuredClone(query)]);
+        return projects.flatMap(project => [...columns(project.id), { ...section, projectId: project.id, deleted: true }])
+          .filter(row => matchesId(row.projectId, query.where.projectId) && row.deleted === query.where.deleted)
+          .sort((a, b) => a.ranking.localeCompare(b.ranking));
+      } },
+    } },
+    "@/utils/helperFunctions/Views/ViewsHelperFunctions": { getViewFromProject: project => {
+      effects.push(["read-view", project?.id]);
+      return getViewFromProject(project);
+    } },
+    "@/lib/agents/publicAgent": {}, "@/lib/cycles": {}, "@/lib/agents/visibility": {},
+    "@/utils/controllers/notifications/visibleInboxScope": {},
+  }).default;
+}
+
+for (const target of ["current", "web"]) {
+  for (const defaultShape of ["populated", "empty", "null", "malformed", "no default_view", "no project_view"]) {
+    test(`getProjectSections: HTPR-7172 denial foreign ${defaultShape} ${target}`, async () => {
+      const scenario = { body: { projectId: 17, userId: 99 }, realWeb: true };
+      const fx = fixture("getProjectSections", scenario, effects => projectSectionsController(effects, { defaultShape }));
+      const result = await invoke(fx, "getProjectSections", scenario, target);
+      assert.deepEqual(result, { status: 404, body: { message: "Project not found" }, headers: {} });
+      assert.deepEqual(fx.effects.map(([label]) => label), ["read-project"], "denial precedes view selection and Section reads");
+      assert.deepEqual(fx.effects[0][1].where, {
+        id: 17, ...savedViewBoardAccessWhere(985),
+      });
+      assert.deepEqual(fx.effects[0][1].include.project_view.include.user_project_views.where, { userId: 985 });
+      assert.ok(!JSON.stringify(result.body).includes("Board 17"));
+      assert.ok(!JSON.stringify(result.body).includes("172"));
+    });
+  }
+  for (const [label, projectId] of [["missing", 999], ["agent-only member", 18], ["same-team outsider", 20]]) {
+    test(`getProjectSections: HTPR-7172 denial ${label} ${target}`, async () => {
+      const scenario = { body: { projectId, userId: 99 }, realWeb: true };
+      const fx = fixture("getProjectSections", scenario, effects => projectSectionsController(effects));
+      assert.deepEqual(await invoke(fx, "getProjectSections", scenario, target), {
+        status: 404, body: { message: "Project not found" }, headers: {},
+      });
+      assert.deepEqual(fx.effects.map(([label]) => label), ["read-project"]);
+    });
+  }
+  for (const [label, projectId] of [
+    ["in filter", { in: [15, 17] }], ["gte filter", { gte: 1 }], ["array", [15, 17]],
+    ["negative", -1], ["zero", 0], ["non-digit", "15tail"], ["fraction", 1.5],
+    ["unsafe integer", Number.MAX_SAFE_INTEGER + 1], ["unsafe digits", "9007199254740992"],
+    ["empty string", ""], ["whitespace", " 15"], ["signed string", "+15"], ["decimal string", "15.0"],
+    ["exponent string", "1e1"], ["negative string", "-15"], ["zero string", "0"],
+    ["boolean", true], ["null", null], ["missing", undefined],
+  ]) {
+    test(`getProjectSections: HTPR-7172 denial invalid ${label} ${target}`, async () => {
+      const scenario = { body: { projectId, userId: 99 }, realWeb: true };
+      const fx = fixture("getProjectSections", scenario, effects => projectSectionsController(effects, { defaultShape: "empty" }));
+      assert.deepEqual(await invoke(fx, "getProjectSections", scenario, target), {
+        status: 400, body: { message: "Missing Required Credentials" }, headers: {},
+      });
+      assert.deepEqual(fx.effects, [], "invalid ids must never reach Prisma or view selection");
+    });
+  }
+  for (const [label, projectId, id] of [["owner", 15, 15], ["human member", 16, 16], ["teamless guest owner", 19, 19], ["digit string", "15", 15]]) {
+    test(`getProjectSections: HTPR-7172 allowed ${label} preserves payload and stored order ${target}`, async () => {
+      const scenario = { body: { projectId, userId: 99 }, realWeb: true };
+      const fx = fixture("getProjectSections", scenario, effects => projectSectionsController(effects));
+      assert.deepEqual(await invoke(fx, "getProjectSections", scenario, target), {
+        status: 200, body: [
+          { ...section, id: id * 10 + 2, projectId: id, section_title: `Board ${id} second`, ranking: "A0200", isDone: true, autoAssignUserId: 99 },
+          { ...section, id: id * 10 + 1, projectId: id, section_title: `Board ${id} first`, ranking: "A0100", visibility: false },
+        ], headers: {},
+      });
+      assert.deepEqual(fx.effects[0][1].where, {
+        id, ...savedViewBoardAccessWhere(985),
+      });
+      assert.deepEqual(fx.effects.map(([label]) => label), ["read-project", "read-view"]);
+    });
+  }
+  for (const defaultShape of ["empty", "null", "malformed", "no default_view", "no project_view"]) {
+    test(`getProjectSections: HTPR-7172 allowed ${defaultShape} falls back to its own ranked sections ${target}`, async () => {
+      const scenario = { body: { projectId: "15", userId: 99 }, realWeb: true };
+      const fx = fixture("getProjectSections", scenario, effects => projectSectionsController(effects, { defaultShape }));
+      assert.deepEqual(await invoke(fx, "getProjectSections", scenario, target), {
+        status: 200, body: [
+          { ...section, id: 151, projectId: 15, section_title: "Board 15 first", ranking: "A0100", visibility: true },
+          { ...section, id: 152, projectId: 15, section_title: "Board 15 second", ranking: "A0200", isDone: true, autoAssignUserId: 99, visibility: true },
+        ], headers: {},
+      });
+      assert.deepEqual(fx.effects.find(([label]) => label === "read-sections")[1], {
+        where: { projectId: 15, deleted: false }, orderBy: { ranking: "asc" },
+      });
+    });
+  }
+  for (const activeType of ["Applied", "Unsaved"]) {
+    test(`getProjectSections: HTPR-7172 allowed ${activeType} view keeps visibility reconciliation ${target}`, async () => {
+      const scenario = { body: { projectId: 15, userId: 99 }, realWeb: true };
+      const fx = fixture("getProjectSections", scenario, effects => projectSectionsController(effects, { activeType }));
+      const result = await invoke(fx, "getProjectSections", scenario, target);
+      assert.equal(result.status, 200);
+      assert.deepEqual(result.body.map(({ id, visibility }) => ({ id, visibility })), [{ id: 152, visibility: false }, { id: 151, visibility: false }]);
+      assert.ok(!fx.effects.some(([label]) => label === "read-sections"));
+    });
+  }
+}
+
+test("getProjectSections: HTPR-7172 controller fallback is bound to the authorized project even with a raw filter", async () => {
+  const effects = [];
+  const controller = projectSectionsController(effects, { defaultShape: "empty" });
+  const result = await controller({ in: [15, 17] }, 985);
+  assert.equal(result.status, 200);
+  assert.deepEqual(result.json.map(row => row.projectId), [15, 15]);
+  assert.deepEqual(effects.find(([label]) => label === "read-sections")[1].where, { projectId: 15, deleted: false });
 });

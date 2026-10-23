@@ -1,4 +1,3 @@
-// HTPR-4146: reverse of bridgePlugin.ts — mints legacy ht_session/nookies_user cookies after a native Better Auth login, so the 140+ files that still read those cookies directly keep working.
 import { waitUntil } from '@vercel/functions'
 import { maybeSendWelcomeEmail } from '@/lib/onboarding/emails/welcome'
 import { maybeScheduleAgentNudge } from '@/lib/onboarding/emails/agentNudge'
@@ -17,6 +16,7 @@ import {
   sessionCookieOptions,
   signSession,
 } from '@/lib/auth/session'
+import { revokeSessionToken } from '@/lib/auth/sessionRevocation'
 import { slimUserForCookie } from '@/lib/auth/slimUserCookie'
 import { getThemeCookieOptions } from '@/lib/auth/themeCookie'
 import authConfig from '@/lib/configs/auth.config'
@@ -29,7 +29,6 @@ import { companyRoleOptions, companySizeOptions } from '@/lib/constants/constant
 import { HTPR_7030_GOOGLE_SIGNUP_STARTER_BOARD_FLAG, isFeatureEnabled } from '@/lib/flags'
 import type { IUser } from '@/models/model'
 
-// The same Request reaches user.create.after and the new-session hook; no time-window guesses.
 export const newGoogleSignupRequests = new WeakMap<Request, number>()
 
 type LegacyCookieCtx = {
@@ -50,7 +49,7 @@ async function setLegacyCookiesForUser(ctx: LegacyCookieCtx, userId: number) {
     httpOnly: false,
     secure: process.env.NODE_ENV === 'production',
     sameSite: 'lax',
-    maxAge: SESSION_TTL_SECONDS, // same lifetime as the signed session (HTPR-7073)
+    maxAge: SESSION_TTL_SECONDS,
     path: '/',
   })
   ctx.setCookie(
@@ -58,7 +57,6 @@ async function setLegacyCookiesForUser(ctx: LegacyCookieCtx, userId: number) {
     signSession({ id: userData.id, email: userData.email }, SESSION_TTL_SECONDS),
     sessionCookieOptions(SESSION_TTL_SECONDS)
   )
-  // Default only: an existing choice (e.g. the guest flow's amoled) wins.
   const existingTheme = ctx.getCookie?.(authConfig.cookies.theme) ?? undefined
   const themeToSeed = themeCookieSeedValue(existingTheme)
   if (themeToSeed) {
@@ -93,26 +91,7 @@ async function setLegacyCookiesForUser(ctx: LegacyCookieCtx, userId: number) {
     })
   }
 
-  // previousBoard drives the middleware's post-login board restoration. It is
-  // normally maintained client-side as the user switches boards, but a fresh
-  // login (new browser, cleared cookies, first passkey/Google sign-in) has none,
-  // and then / and /project both fall through to the crashing/empty bare
-  // /project. Seed it with the user's own primary board, but ONLY when absent so
-  // we never overwrite their real last board.
-  //
-  // Prefer a board the user OWNS (their primary workspace). An arbitrary
-  // membership board can be an old board owned by someone else and broken on
-  // load (black screen), so owned boards come first; membership-only is the
-  // fallback for users who own nothing.
   if (!ctx.getCookie?.('previousBoard')) {
-    // Prefer the user's most active OWNED board (their primary workspace) — a
-    // user owns their real board even without a Member row. Only seed it if it
-    // has tasks, so an abandoned-onboarding husk (owned, 0 tasks) still routes
-    // to onboarding instead of a crash. Fall back to a membership board for
-    // users who own nothing.
-    // status: 'Normal' — never seed an archived/deleted board. An archived
-    // board has no normal view to render and black-screens on load (this is
-    // exactly how a stale membership on old board 21 crashed the app).
     const owned = await prisma.project.findFirst({
       where: { ownerId: userId, status: 'Normal' },
       orderBy: { tasks: { _count: 'desc' } },
@@ -176,10 +155,6 @@ export function legacyCookiePlugin() {
             })
           }
 
-          // Membership only: the app can only land on boards through Member
-          // rows. Counting ownerId too made aborted-onboarding husk projects
-          // (owned, no membership, e.g. user 985 / project 2069) report
-          // hasProjects=true and routed their owner to a black /project page.
           const hasProjects = Boolean(
             await prisma.project.findFirst({
               where: {
@@ -189,7 +164,6 @@ export function legacyCookiePlugin() {
             })
           )
 
-          // ponytail: skip previousBoard, first page load fetches projects fresh
           return ctx.json({ ok: true, hasProjects })
         }
       ),
@@ -197,11 +171,6 @@ export function legacyCookiePlugin() {
     hooks: {
       after: [
         {
-          // HTPR-4171: any request that CREATED a Better Auth session (Google
-          // callback, magic-link verify, ...) must also carry the legacy
-          // cookies for that user in the same response. Relying on the client
-          // reverse bridge left stale cookies for the PREVIOUS user in place
-          // when switching accounts, so the app rendered the wrong identity.
           matcher: () => true,
           handler: createAuthMiddleware(async (ctx) => {
             const newSession = ctx.context.newSession
@@ -210,10 +179,6 @@ export function legacyCookiePlugin() {
             const userId = Number(newSession.user.id)
             if (!Number.isFinite(userId)) return
 
-            // HTPR-4893: Google and passkey sign-ins land here, and the request
-            // still carries the guest's ht_session when one was signed in from the
-            // demo board. Adopt BEFORE minting the new cookies, so previousBoard is
-            // seeded from a board list that already includes the adopted board.
             if (ctx.path === '/callback/google' && ctx.request && newGoogleSignupRequests.get(ctx.request) === userId) {
               newGoogleSignupRequests.delete(ctx.request)
               try {
@@ -227,7 +192,6 @@ export function legacyCookiePlugin() {
                     'MyBoard',
                     companySizeOptions[0],
                     companyRoleOptions[0],
-                    // Google rollout must not depend on the email signup flag.
                     { keepDemoBoard: true, onlyIfEmpty: true },
                   )
                 }
@@ -253,6 +217,13 @@ export function legacyCookiePlugin() {
                 console.error('[onboarding/welcome] scheduling failed', error)
               }
             }
+          }),
+        },
+        {
+          matcher: (ctx) => ctx.path === '/sign-out' || ctx.path === '/multi-session/set-active',
+          handler: createAuthMiddleware(async (ctx) => {
+            if (ctx.path === '/multi-session/set-active' && !ctx.context.newSession) return
+            await revokeSessionToken(ctx.getCookie?.(SESSION_COOKIE) ?? undefined)
           }),
         },
       ],

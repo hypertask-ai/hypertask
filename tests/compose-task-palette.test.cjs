@@ -17,16 +17,21 @@ const { JSDOM } = require('jsdom');
 const { createJiti } = require('jiti');
 const query = require('@tanstack/react-query');
 const root = path.resolve(__dirname, '..');
-const jiti = createJiti(__filename, { alias: { '@': path.join(root, 'src') }, interopDefault: true, fsCache: true, extensions: ['.js', '.jsx', '.ts', '.tsx', '.json'], jsx: { runtime: 'automatic' } });
+// Own disk cache: other tests write classic-JSX builds of the same files to the shared jiti cache,
+// which fail here with "React is not defined" (YPER4-279).
+const jiti = createJiti(__filename, { alias: { '@': path.join(root, 'src') }, interopDefault: true, fsCache: path.join(require('node:os').tmpdir(), 'jiti-compose-task-palette'), extensions: ['.js', '.jsx', '.ts', '.tsx', '.json'], jsx: { runtime: 'automatic' } });
 const flag = 'htpr-6929-compose-task-writer';
 const newFlag = 'htpr-6937-new-task-window';
 const tooltipFlag = 'htpr-6950-tooltip-top-layer';
+const keepClosedFlag = 'htpr-7530-keep-ai-chat-closed';
+const boardChipFlag = 'htpr-7053-compose-board-chip';
 
 async function withPalette(t, config, check) {
   const dom = new JSDOM('<div id="root"></div>', { url: `https://example.test${config.url ?? '/project?id=7'}` });
   const globals = ['window', 'document', 'navigator', 'HTMLElement', 'localStorage', 'IS_REACT_ACT_ENVIRONMENT', 'File', 'requestAnimationFrame', 'fetch', 'DOMParser']
     .map((key) => [key, Object.getOwnPropertyDescriptor(global, key)]);
-  Object.assign(global, { DOMParser: dom.window.DOMParser, window: dom.window, document: dom.window.document, HTMLElement: dom.window.HTMLElement, localStorage: dom.window.localStorage, File: dom.window.File, IS_REACT_ACT_ENVIRONMENT: true, requestAnimationFrame: (fn) => fn() });
+  const animationFrames = [];
+  Object.assign(global, { DOMParser: dom.window.DOMParser, window: dom.window, document: dom.window.document, HTMLElement: dom.window.HTMLElement, localStorage: dom.window.localStorage, File: dom.window.File, IS_REACT_ACT_ENVIRONMENT: true, requestAnimationFrame: (fn) => config.deferAnimationFrames ? animationFrames.push(fn) : fn() });
   Object.defineProperty(global, 'navigator', { configurable: true, value: dom.window.navigator });
   dom.window.HTMLElement.prototype.attachEvent = () => {};
   dom.window.HTMLElement.prototype.detachEvent = () => {};
@@ -37,20 +42,29 @@ async function withPalette(t, config, check) {
     if (this.tagName === 'TEXTAREA' && focusFailures-- > 0) return;
     return focus.apply(this, args);
   };
+  const focusProxy = { current: null, compose: !config.legacyProxy, pendingEnter: config.pendingEnter };
+  if (config.bufferedText !== undefined) {
+    focusProxy.current = document.createElement('textarea');
+    focusProxy.current.value = config.bufferedText;
+    document.body.appendChild(focusProxy.current);
+    focus.call(focusProxy.current);
+    focusProxy.current.setSelectionRange(2, 5);
+  }
   const cached = new Map(Object.entries(require.cache));
   const stubbed = new Set();
   const stub = (filename, exports) => { stubbed.add(filename); require.cache[filename] = { id: filename, filename, loaded: true, exports }; };
   const source = (file, exports) => stub(path.join(root, file), exports);
-  const flags = { [flag]: config.enabled ?? true, [newFlag]: config.newWindow ?? false, 'htpr-6951-task-writing-progress': config.progress ?? config.newWindow ?? false, [tooltipFlag]: config.topLayer ?? false };
+  const flags = { 'htpr-7547-search-lazy-closed': config.preserveColdCommandInput ?? false, [keepClosedFlag]: config.keepClosedFlag ?? false, [flag]: config.enabled ?? true, [newFlag]: config.newWindow ?? false, 'htpr-6951-task-writing-progress': config.progress ?? config.newWindow ?? false, [tooltipFlag]: config.topLayer ?? false, [boardChipFlag]: config.boardChip ?? false, 'htpr-7317-ctrlj-ticket-questions': config.ticketQuestions ?? false };
   const TaskContext = React.createContext(undefined);
-  const atomNames = ['boardLayoutAtom', 'calendarSettingsAtom', 'currentProjectAtom', 'currentUserAtom', 'frequentlyUsedHTCAton', 'tableTitleWrapAtom', 'showCommandsAtom', 'lastUsedBoardsAtom', 'composeTaskChatIntroAtom', 'showAIChatInterfaceAtom', 'isAiChatSidebarModeAtom', 'aiChatAutoOpenSuppressedAtom', 'aiChatExplicitOpenAtAtom', 'dockedChatScopeAtom', 'showCreateTaskModalAtom', 'showShortcutsAtom', 'showSidebarAtom', 'showBoardManagerAtom', 'inViewObjectAtom', 'uploadingStateCreateTaskModalAtom'];
+  const atomNames = ['keepAiChatClosedAtom', 'boardLayoutAtom', 'calendarSettingsAtom', 'currentProjectAtom', 'currentUserAtom', 'frequentlyUsedHTCAton', 'tableTitleWrapAtom', 'showCommandsAtom', 'lastUsedBoardsAtom', 'composeTaskChatIntroAtom', 'composeTaskSkillFollowupAtom', 'composeTaskQuestionsTaskIdAtom', 'showAIChatInterfaceAtom', 'isAiChatSidebarModeAtom', 'aiChatAutoOpenSuppressedAtom', 'aiChatExplicitOpenAtAtom', 'dockedChatScopeAtom', 'showCreateTaskModalAtom', 'showShortcutsAtom', 'showSidebarAtom', 'showBoardManagerAtom', 'inViewObjectAtom', 'uploadingStateCreateTaskModalAtom'];
   const atoms = Object.fromEntries(atomNames.map((name) => [name, name]));
   const project = { id: 7, title: 'QA Sandbox', uniqueIdentifier: 'QASA' };
   const values = new Map(Object.entries({
+    keepAiChatClosedAtom: config.keepClosed ?? false,
     inViewObjectAtom: config.inView ?? { taskId: null },
-    currentProjectAtom: config.project ?? project, currentUserAtom: { id: 985, uid: 'qa' },
+    currentProjectAtom: config.project === null ? null : config.project ?? project, currentUserAtom: { id: 985, uid: 'qa' },
     boardLayoutAtom: 'board', calendarSettingsAtom: {}, frequentlyUsedHTCAton: {}, lastUsedBoardsAtom: config.recency ?? {},
-    showCommandsAtom: { show: config.open ?? true, mode: 0, paletteTab: config.tab ?? 'search', composeProject: config.destinationProject }, composeTaskChatIntroAtom: null,
+    showCommandsAtom: { show: config.open ?? true, mode: 0, paletteTab: config.tab ?? 'search', composeProject: config.destinationProject }, composeTaskChatIntroAtom: null, composeTaskQuestionsTaskIdAtom: null,
   }));
   const listeners = new Set();
   const set = (atom, next) => { values.set(atom, typeof next === 'function' ? next(values.get(atom)) : next); listeners.forEach((fn) => fn()); };
@@ -60,6 +74,7 @@ async function withPalette(t, config, check) {
   const state = { useRecoilValue: useValue, useRecoilState: (atom) => [useValue(atom), setters.get(atom)], useSetRecoilState: (atom) => setters.get(atom) };
   const requests = [], navigations = [], cacheAdds = [], cacheUpdates = [], viewedTasks = [], loadedBoards = [];
   const queryClient = new query.QueryClient({ defaultOptions: { queries: { retry: false, gcTime: 1_000 } } });
+  if (config.boards) queryClient.setQueryData(['projectsAllMinimal', 985], config.boards);
   let legacyJ = 0, reactRoot;
   const legacy = (e) => { if (e.ctrlKey && e.code === 'KeyJ' && !e.shiftKey) legacyJ++; };
   const resetShowCommands = () => set('showCommandsAtom', { show: false, mode: 0 });
@@ -77,7 +92,7 @@ async function withPalette(t, config, check) {
     source('src/hooks/RecoilRoot/useHypertasksRecoilStates.ts', { default: () => ({ resetShowCommands, toggleShowCommands }) });
     source('src/lib/contexts/TourContext.tsx', { useTourContext: () => ({ endTour() {} }) });
     source('src/components/PageComponents/Interactive-Onboarding/Components/TutorialTip.tsx', { default: () => null });
-    source('src/hooks/MultiPages/useGetAllProjectsMinimal.ts', { useGetAllProjectsMinimal: () => ({ data: [] }) });
+    source('src/hooks/MultiPages/useGetAllProjectsMinimal.ts', { useGetAllProjectsMinimal: () => ({ data: config.boards ?? [] }) });
     source('src/utils/helperFunctions/Views/ViewsHelperFunctions.ts', { getActiveEmptySectionSettingFromProject: () => '', getActiveStalenessFromProject: () => false });
     source('src/styles/linksModal.module.scss', { default: { links_modal: 'links_modal' } });
     if (!config.realTooltip) source('src/components/Common/Tooltip.tsx', { default: ({ text, keyCombination }) => React.createElement('span', { 'data-tooltip': text }, keyCombination.join('+')) });
@@ -137,7 +152,7 @@ async function withPalette(t, config, check) {
       useCommandCenterShortcut(Object.hasOwn(config, 'userId') ? config.userId : 985, config.apple ?? false, dom.window.location.pathname, config.trial ?? false, false, toggleShowCommands);
       return React.createElement(query.QueryClientProvider, { client: queryClient },
         React.createElement(TaskContext.Provider, { value: config.headerTask ? headerState : undefined },
-          shown.show ? React.createElement(React.Suspense, { fallback: React.createElement('div', { 'data-palette-suspended': true }) }, React.createElement(Palette, { isOpen: true })) : null,
+          shown.show ? React.createElement(React.Suspense, { fallback: React.createElement('div', { 'data-palette-suspended': true }) }, React.createElement(Palette, { isOpen: true, focusProxy: config.bufferedText !== undefined ? focusProxy : undefined })) : null,
           React.createElement(Probe)));
     }
     reactRoot = require('react-dom/client').createRoot(document.getElementById('root'));
@@ -170,13 +185,19 @@ async function withPalette(t, config, check) {
         }
       }
       const filename = path.join(directory, 'src/components/Modals/commands/HTC/commands.tsx');
+      delete require.cache[path.join(directory, 'src/components/Modals/commands/HTC/ComposeTaskWriter.tsx')];
       delete require.cache[filename];
       Palette = jiti(filename).default;
       reactRoot = require('react-dom/client').createRoot(document.getElementById('root'));
       await React.act(async () => reactRoot.render(React.createElement(config.strict ? React.StrictMode : React.Fragment, null, React.createElement(Harness))));
       assert.equal(document.getElementById('root').innerHTML, current);
     };
-    await check({ dom, input, type, press, clickTab, finish, fail, rerender, flags, values, set, requests, navigations, cacheAdds, cacheUpdates, queryClient, viewedTasks, loadedBoards, shells, capture, baseline, source, stub, jiti, mountProbe, headerState: () => headerState, legacyJ: () => legacyJ });
+    const flushAnimationFrame = () => React.act(async () => {
+      const callbacks = animationFrames.splice(0);
+      assert.ok(callbacks.length, 'a focus retry must be pending');
+      callbacks.forEach((callback) => callback());
+    });
+    await check({ dom, flushAnimationFrame, focusProxy, input, type, press, clickTab, finish, fail, rerender, flags, values, set, requests, navigations, cacheAdds, cacheUpdates, queryClient, viewedTasks, loadedBoards, shells, capture, baseline, source, stub, jiti, mountProbe, headerState: () => headerState, legacyJ: () => legacyJ });
   } finally {
     document.removeEventListener('keydown', legacy);
     try {
@@ -325,6 +346,7 @@ test('Enter sends the current board and opens its detail with regular task-scope
     await press('Enter', { code: 'Enter' });
     assert.equal(requests.length, 1);
     assert.equal(requests[0].body.project.id, 7);
+    assert.equal(requests[0].body.viewProject, values.get('currentProjectAtom'));
     assert.equal(requests[0].body.userId, 985);
     assert.equal(requests[0].body.text, 'Fix login button spacing');
     assert.match(document.body.textContent, /Writing your ticket…/);
@@ -348,11 +370,25 @@ test('Enter sends the current board and opens its detail with regular task-scope
   });
 });
 
+for (const ticketQuestions of [true, false]) {
+  test(`Ctrl+J records the questions task only when new-ticket questions are enabled: ${ticketQuestions}`, async (t) => {
+    await withPalette(t, { tab: 'compose', ticketQuestions }, async ({ type, press, finish, values }) => {
+      assert.equal(values.get('composeTaskQuestionsTaskIdAtom'), null);
+      await type('Fix login button spacing');
+      await press('Enter', { code: 'Enter' });
+      await finish();
+      assert.equal(values.get('composeTaskQuestionsTaskIdAtom'), ticketQuestions ? 91 : null);
+      assert.equal(values.get('composeTaskChatIntroAtom').taskId, 91);
+    });
+  });
+}
+
 test('non-board page uses previousBoard instead of stale currentProject and reports raw fallback in chat', async (t) => {
   await withPalette(t, { url: '/settings', previousBoard: 'project-8|&|view', tab: 'compose' }, async ({ type, press, requests, finish, navigations, values, loadedBoards }) => {
     await type('Raw note');
     await press('Enter', { code: 'Enter' });
     assert.equal(requests[0].body.project.id, 8);
+    assert.equal(requests[0].body.viewProject, undefined);
     assert.equal(loadedBoards.length, 1);
     await finish(true);
     assert.deepEqual(navigations, ['/detail/project-8/44']);
@@ -462,6 +498,10 @@ test('real task chat hook persists the Compose greeting once, scoped to the crea
       } };
       stub(require.resolve('@tanstack/react-query'), {
         useQueryClient: () => queryClient,
+        useInfiniteQuery: (options) => {
+          assert.equal(options.enabled, false, "legacy Compose does not request paged history");
+          return {};
+        },
         useQuery: () => ({
           data: React.useSyncExternalStore((fn) => { subscribers.add(fn); return () => subscribers.delete(fn); }, () => data),
           isSuccess: true, isLoading: false, isFetching: false, isError: false,
@@ -603,6 +643,7 @@ test('Ctrl+J fills only the visible new empty task when both flags are on and ne
       const fills = newWindow && title === 'Enter task title here';
       assert.equal(requests[0].body.existingTaskId, fills ? 52 : undefined);
       assert.equal(requests[0].body.project.id, fills ? 7 : 8);
+      assert.equal(requests[0].body.viewProject, undefined);
       await finish();
       assert.equal(cacheAdds.length, fills ? 0 : 1);
       assert.equal(values.get('showAIChatInterfaceAtom'), true);
@@ -714,8 +755,8 @@ test('creation-form New Task handoff preserves board and dismissal, and closes o
       const { armBackDismiss, closeBackDismissBeforeNavigation } = jiti(path.join(root, 'src/lib/mobile/backDismiss.ts'));
       const { isComposePaletteShortcut } = jiti(path.join(root, 'src/lib/constants/commandCenterShortcut.ts'));
       const { CommandMode } = jiti(path.join(root, 'src/models/enums.ts'));
-      const runEffect = new Function('useEffect', 'newTaskWindow', 'isApple', 'pathname', 'projectForContext', 'setCommands', 'CommandMode', 'isComposePaletteShortcut', 'closeHandler', 'isMbl', 'closeBackDismissBeforeNavigation', javascript);
-      function Probe() { runEffect(React.useEffect, newWindow, false, '/project', selected, (value) => set('showCommandsAtom', value), CommandMode, isComposePaletteShortcut, closeHandler, mobile, closeBackDismissBeforeNavigation); return null; }
+      const runEffect = new Function('useEffect', 'newTaskWindow', 'isApple', 'pathname', 'projectForContext', 'setCommands', 'CommandMode', 'isComposePaletteShortcut', 'closeHandler', 'isMbl', 'closeBackDismissBeforeNavigation', 'composeShortcutCapture', javascript);
+      function Probe() { runEffect(React.useEffect, newWindow, false, '/project', selected, (value) => set('showCommandsAtom', value), CommandMode, isComposePaletteShortcut, closeHandler, mobile, closeBackDismissBeforeNavigation, true); return null; }
       await mountProbe(() => React.createElement(Probe));
       await press('j', { ctrlKey: true }, document.body);
       assert.equal(legacyJ(), 0, 'only one shortcut handles the opening');
@@ -775,6 +816,7 @@ test('explicit form destination wins over URL, recency and an empty task detail'
       assert.equal(input().value, 'Create on my selected board');
       await press('Enter');
       assert.equal(requests[0].body.project, destinationProject);
+      assert.equal(requests[0].body.viewProject, undefined);
       assert.equal(requests[0].body.existingTaskId, undefined, 'the creation form must not fill the task behind it');
       await finish();
       assert.deepEqual(navigations, ['/detail/project-8/44']);
@@ -829,6 +871,26 @@ for (const writerFailed of [false, true]) test(`same-task fill updates the mount
     assert.equal(pendingFetch.signal.aborted, true, 'cancel the old snapshot before publishing the saved task');
     await React.act(async () => pendingFetch.resolve({ ok: true, status: 200, json: async () => targetTask }));
     assert.equal(document.querySelector('[data-task-title]').textContent, savedTask.title, 'a stale fetch cannot overwrite the saved title');
+  });
+});
+
+test('same-task fill preserves an assignee selected while the writer response is pending', async (t) => {
+  const targetTask = { id: 52, projectId: 7, sectionId: 12, uniqueIndex: 4, title: 'Enter task title here', assignees: [], description_: { content: '' }, project: { id: 7 } };
+  await withPalette(t, { newWindow: true, tab: 'compose', headerTask: targetTask, targetTask, url: '/detail/project-7/4', inView: { taskId: 52 } }, async ({ type, press, finish, headerState, queryClient, cacheUpdates, cacheAdds, requests }) => {
+    await type('Write this task');
+    await press('Enter');
+    assert.equal(requests.length, 1);
+    assert.equal(requests[0].body.existingTaskId, targetTask.id);
+    const assignees = [{ userId: 985 }];
+    await React.act(async () => headerState().setCurrentTask(current => ({ ...current, assignees })));
+    const savedTask = { ...targetTask, title: 'Written title', description_: { content: '<p>Written body</p>' } };
+    await finish(false, savedTask);
+    const expected = { ...savedTask, assignees };
+    assert.deepEqual(headerState().currentTask, expected);
+    assert.deepEqual(queryClient.getQueryData(['cached-task-detail', 985, 52]), expected);
+    assert.deepEqual(cacheUpdates, [[expected, 52, 7, 12]]);
+    assert.deepEqual(cacheAdds, []);
+    assert.equal(headerState().description, savedTask.description_.content);
   });
 });
 
@@ -1307,4 +1369,349 @@ test('progress steps keep the New Task window height', async (t) => {
     const status = document.querySelector('[role="status"]');
     assert.equal(status.closest('[style]')?.style.minHeight, '184px');
   });
+});
+
+const composeBoards = [
+  { id: 7, title: 'QA Sandbox', uniqueIdentifier: 'QASA' },
+  { id: 8, title: 'Product', uniqueIdentifier: 'PROD' },
+  { id: 9, title: 'Design', uniqueIdentifier: 'DES' },
+];
+const chip = () => document.querySelector('[data-compose-board-chip]');
+const boardList = () => document.querySelector('input[id="input-addTask"]');
+const boardKey = (apple = false) => ({ code: 'KeyB', keyCode: 66, shiftKey: true, ...(apple ? { metaKey: true } : { ctrlKey: true }) });
+
+test('board chip flag off preserves legacy inbox board selection, Tab and shortcuts', async (t) => {
+  await withPalette(t, { boardChip: false, newWindow: true, tab: 'compose', url: '/inbox?split=Board&projectId=8', previousBoard: 'project-7|&|QA Sandbox', inView: { taskId: 42, taskProjectId: 9 } }, async ({ type, press, requests, values, queryClient, loadedBoards }) => {
+    assert.equal(chip(), null);
+    assert.equal(queryClient.getQueryData(['projectsAllMinimal', 985]), undefined, 'flag off must not seed an empty shared board cache');
+    assert.equal(loadedBoards.length, 0, 'flag off must not fetch the new board list');
+    assert.doesNotMatch(document.querySelector('[data-compose-task-writer]').textContent, /CTRL\+SHIFT\+B/);
+    await press('B', boardKey());
+    assert.equal(boardList(), null);
+    await type('Legacy target');
+    await press('Enter', { code: 'Enter' });
+    assert.equal(requests[0].body.project.id, 7);
+    assert.equal(values.get('showCommandsAtom').paletteTab, 'compose');
+  });
+  await withPalette(t, { boardChip: false, newWindow: true, tab: 'compose', url: '/inbox' }, async ({ press, values }) => {
+    await press('Tab', { code: 'Tab' });
+    assert.equal(values.get('showCommandsAtom').paletteTab, 'search');
+  });
+});
+
+test('inbox chip shows the rule target and submission uses exactly the displayed board', async (t) => {
+  for (const [url, inView, previousBoard, expected] of [
+    ['/inbox?split=Board&projectId=8', { taskId: 42, taskProjectId: 9 }, 'project-7', 9],
+    ['/inbox?split=Board&projectId=8', { taskId: null, taskProjectId: 9 }, 'project-7', 8],
+    ['/inbox?split=All', { taskId: null }, 'project-7', 7],
+    ['/inbox?split=Important', { taskId: null }, undefined, 8],
+  ]) {
+    await withPalette(t, { boardChip: true, newWindow: true, tab: 'compose', boards: composeBoards, url, inView, previousBoard, recency: { 7: 1, 8: 2 } }, async ({ type, press, requests }) => {
+      assert.equal(chip().textContent, composeBoards.find((board) => board.id === expected).title);
+      await type('Use this board');
+      await press('Enter', { code: 'Enter' });
+      assert.equal(requests[0].body.project.id, expected);
+    });
+  }
+});
+
+test('mixed-board views show a chip; board and ticket views hide it until choosing a different board', async (t) => {
+  for (const url of ['/my-tasks', '/search', '/all-tasks', '/calendar', '/starred', '/inbox']) {
+    await withPalette(t, { boardChip: true, newWindow: true, tab: 'compose', boards: composeBoards, previousBoard: 'project-7', url }, async () => {
+      assert.equal(chip().textContent, 'QA Sandbox');
+    });
+  }
+  for (const url of ['/project?id=7', '/detail/project-7/42']) {
+    await withPalette(t, { boardChip: true, newWindow: true, tab: 'compose', boards: composeBoards, url, previousBoard: 'project-8', inView: { taskId: 42, taskProjectId: 7 }, targetTask: { id: 42, projectId: 7, uniqueIndex: 42, title: '', description_: { content: '' } } }, async ({ input, type, press, requests }) => {
+      assert.equal(chip(), null);
+      await type('Keep my draft');
+      input().setSelectionRange(3, 7, 'backward');
+      await press('B', boardKey());
+      assert.ok(boardList(), 'shortcut works even while chip is hidden');
+      await press('ArrowDown', { code: 'ArrowDown' });
+      await press('Enter', { code: 'Enter' });
+      await React.act(async () => new Promise((resolve) => setTimeout(resolve, 5)));
+      assert.equal(chip().textContent, 'Product');
+      assert.equal(document.activeElement, input());
+      assert.deepEqual([input().selectionStart, input().selectionEnd, input().selectionDirection], [3, 7, 'backward']);
+      assert.equal(input().value, 'Keep my draft');
+      await press('Enter', { code: 'Enter' });
+      assert.equal(requests[0].body.project.id, 8);
+      assert.equal(requests[0].body.existingTaskId, undefined);
+    });
+  }
+});
+
+test('Tab and Shift+Tab connect textarea and chip, Enter/Space open shared picker, Esc closes only list', async (t) => {
+  for (const mobile of [false, true]) {
+    await withPalette(t, { boardChip: true, newWindow: true, mobile, tab: 'compose', boards: composeBoards, url: '/inbox', previousBoard: 'project-7' }, async ({ input, type, press, values, requests, capture }) => {
+      await type('Caret stays here');
+      capture(`board-chip-${mobile ? 'mobile' : 'desktop'}`);
+      input().setSelectionRange(6, 6);
+      const tab = await press('Tab', { code: 'Tab' });
+      assert.equal(tab.defaultPrevented, true);
+      assert.equal(document.activeElement, chip());
+      assert.equal(values.get('showCommandsAtom').paletteTab, 'compose');
+      await press('Tab', { code: 'Tab', shiftKey: true });
+      assert.equal(document.activeElement, input());
+      assert.equal(input().selectionStart, 6);
+      for (const key of ['Enter', ' ']) {
+        await press('Tab', { code: 'Tab' });
+        await press(key, { code: key === ' ' ? 'Space' : 'Enter' });
+        assert.equal(document.activeElement, boardList());
+        assert.ok(document.getElementById('command-0'), 'real Shift+M Select Board rows are rendered');
+        capture(`board-list-${mobile ? 'mobile' : 'desktop'}`);
+        assert.equal(requests.length, 0);
+        await press('Escape', { code: 'Escape' });
+        assert.equal(boardList(), null);
+        assert.ok(values.get('showCommandsAtom').show);
+        assert.equal(document.activeElement, input());
+        assert.equal(input().selectionStart, 6);
+      }
+      await press('Escape', { code: 'Escape' });
+      assert.equal(values.get('showCommandsAtom').show, false);
+    });
+  }
+});
+
+test('board shortcut matches platform footer, filters list, and restores caret after Enter picks', async (t) => {
+  for (const apple of [false, true]) {
+    await withPalette(t, { boardChip: true, newWindow: true, apple, tab: 'compose', boards: composeBoards, url: '/search', previousBoard: 'project-7' }, async ({ dom, input, type, press, requests }) => {
+      assert.match(document.querySelector('[data-compose-task-writer]').textContent, apple ? /CMD\+SHIFT\+B/ : /CTRL\+SHIFT\+B/);
+      await type('Still writing');
+      input().setSelectionRange(4, 4);
+      await press('B', { ...boardKey(apple), shiftKey: false });
+      assert.equal(boardList(), null, 'browser bookmark shortcut is not stolen');
+      const event = await press('B', boardKey(apple));
+      assert.equal(event.defaultPrevented, true);
+      assert.equal(document.activeElement, boardList());
+      await React.act(async () => {
+        Object.getOwnPropertyDescriptor(dom.window.HTMLInputElement.prototype, 'value').set.call(boardList(), 'Design');
+        boardList().dispatchEvent(new dom.window.Event('input', { bubbles: true }));
+      });
+      assert.equal(document.querySelectorAll('[id^="command-"]').length, 1);
+      await press('Enter', { code: 'Enter' });
+      await React.act(async () => new Promise((resolve) => setTimeout(resolve, 5)));
+      assert.equal(boardList(), null);
+      assert.equal(chip().textContent, 'Design');
+      assert.equal(document.activeElement, input());
+      assert.equal(input().selectionStart, 4);
+      assert.equal(requests.length, 0, 'picker Enter must not send the task');
+      await press('Enter', { code: 'Enter' });
+      assert.equal(requests[0].body.project.id, 9);
+    });
+  }
+});
+
+test('board chip flag off renders exactly clean production Compose on desktop and phone', async (t) => {
+  for (const mobile of [false, true]) {
+    await withPalette(t, { boardChip: false, newWindow: true, mobile, tab: 'compose', url: '/inbox', previousBoard: 'project-7' }, async ({ baseline, loadedBoards }) => {
+      assert.equal(chip(), null);
+      assert.equal(loadedBoards.length, 0);
+      if (process.env.COMPOSE_BASELINE_DIR) await baseline(process.env.COMPOSE_BASELINE_DIR);
+    });
+  }
+});
+
+test('board list bounds arrows to filtered rows, tolerates no matches, and reveals same-board choice', async (t) => {
+  await withPalette(t, { boardChip: true, newWindow: true, tab: 'compose', boards: composeBoards, url: '/project?id=7' }, async ({ dom, input, type, press, requests }) => {
+    await type('Do not send from the board list');
+    input().setSelectionRange(4, 8, 'backward');
+    await press('B', boardKey());
+    const filter = async (value) => React.act(async () => {
+      Object.getOwnPropertyDescriptor(dom.window.HTMLInputElement.prototype, 'value').set.call(boardList(), value);
+      boardList().dispatchEvent(new dom.window.Event('input', { bubbles: true }));
+    });
+    await filter('no matching board');
+    await press('ArrowDown', { code: 'ArrowDown' });
+    await press('Enter', { code: 'Enter' });
+    assert.ok(boardList());
+    assert.equal(requests.length, 0);
+    await filter('Sandbox');
+    await press('ArrowDown', { code: 'ArrowDown' });
+    await press('ArrowUp', { code: 'ArrowUp' });
+    await press('Enter', { code: 'Enter' });
+    assert.equal(boardList(), null);
+    assert.equal(chip().textContent, 'QA Sandbox');
+    assert.equal(document.activeElement, input());
+    assert.deepEqual([input().selectionStart, input().selectionEnd, input().selectionDirection], [4, 8, 'backward']);
+    assert.equal(requests.length, 0);
+  });
+});
+
+test('board chip without a current or remembered board lets the user pick before creating', async (t) => {
+  await withPalette(t, { boardChip: true, newWindow: true, tab: 'compose', boards: composeBoards, project: null, url: '/inbox' }, async ({ type, press, requests }) => {
+    assert.equal(chip().textContent, 'Choose a board');
+    await press('B', boardKey());
+    await press('Enter', { code: 'Enter' });
+    assert.equal(chip().textContent, 'QA Sandbox');
+    await type('Create on the chosen board');
+    await press('Enter', { code: 'Enter' });
+    assert.equal(requests[0].body.project.id, 7);
+  });
+});
+
+for (const keepClosedFlag of [false, true]) {
+  for (const keepClosed of [false, true]) {
+    test(`Ctrl+J creation: keep closed flag=${keepClosedFlag}, preference=${keepClosed}`, async (t) => {
+      await withPalette(t, { open: false, newWindow: true, keepClosedFlag, keepClosed }, async ({ press, type, finish, values, set, navigations, cacheAdds }) => {
+        await React.act(async () => {
+          set('showAIChatInterfaceAtom', false);
+          set('aiChatAutoOpenSuppressedAtom', true);
+        });
+        await press('j', { ctrlKey: true }, document.body);
+        await type('Create a task without forcing the chat open');
+        await press('Enter');
+        await finish();
+        assert.equal(cacheAdds.length, 1, 'task creation still succeeds');
+        assert.deepEqual(navigations, ['/detail/project-7/44']);
+        assert.equal(values.get('showCommandsAtom').show, false, 'creation window closes');
+        const prevented = keepClosedFlag && keepClosed;
+        assert.equal(values.get('showAIChatInterfaceAtom'), !prevented);
+        assert.equal(values.get('aiChatAutoOpenSuppressedAtom'), prevented, 'veto must not clear a previous manual close');
+        assert.equal(Boolean(values.get('aiChatExplicitOpenAtAtom')), !prevented);
+        assert.equal(values.get('keepAiChatClosedAtom'), keepClosed);
+      });
+    });
+  }
+}
+
+test('Ctrl+J uses the latest saved veto if it changes while task creation is pending', async (t) => {
+  await withPalette(t, { open: false, newWindow: true, keepClosedFlag: true }, async ({ press, type, finish, values, set, navigations }) => {
+    await press('j', { ctrlKey: true }, document.body);
+    await type('Create while the preference changes');
+    await press('Enter');
+    await React.act(async () => {
+      set('keepAiChatClosedAtom', true);
+      set('showAIChatInterfaceAtom', false);
+      set('aiChatAutoOpenSuppressedAtom', true);
+    });
+    await finish();
+    assert.deepEqual(navigations, ['/detail/project-7/44']);
+    assert.equal(values.get('showAIChatInterfaceAtom'), false);
+    assert.equal(values.get('aiChatAutoOpenSuppressedAtom'), true);
+  });
+});
+
+test('HTPR-7547 cold Compose receives text and selection from the command focus proxy', async (t) => {
+  for (const mobile of [false, true]) {
+    await withPalette(t, { tab: 'compose', mobile, preserveColdCommandInput: true, bufferedText: 'draft from cold open' }, async ({ input, focusProxy }) => {
+      assert.equal(input().value, 'draft from cold open');
+      assert.equal(document.activeElement, input());
+      assert.equal(input().selectionStart, 2);
+      assert.equal(input().selectionEnd, 5);
+      assert.equal(focusProxy.current.value, '', 'the handoff consumes the buffer');
+    });
+  }
+});
+
+
+test('HTPR-7547 flag off keeps the previous Compose focus behavior', async (t) => {
+  for (const mobile of [false, true]) {
+    await withPalette(t, { tab: 'compose', mobile, preserveColdCommandInput: false, legacyProxy: true, bufferedText: 'unconsumed legacy proxy' }, async ({ input, focusProxy }) => {
+      assert.equal(input().value, '');
+      assert.equal(focusProxy.current.value, 'unconsumed legacy proxy');
+    });
+  }
+});
+
+
+test('HTPR-7547 cold Search Compose handoff preserves drafts with the optimization On, Off or unresolved', async (t) => {
+  for (const preserveColdCommandInput of [true, false, undefined]) {
+    for (const mobile of [false, true]) {
+      const bufferedText = 'first line\nsecond line';
+      await withPalette(t, { tab: 'compose', mobile, preserveColdCommandInput, bufferedText }, async ({ input, focusProxy, requests }) => {
+        assert.equal(input().value, bufferedText);
+        assert.equal(document.activeElement, input());
+        assert.equal(input().selectionStart, 2);
+        assert.equal(input().selectionEnd, 5);
+        assert.equal(focusProxy.current.value, '');
+        assert.equal(requests.length, 0, 'transferring a draft does not submit it');
+      });
+    }
+  }
+});
+
+
+test('HTPR-7547 buffered Compose Enter submits the transferred draft once after state commits', async (t) => {
+  for (const preserveColdCommandInput of [true, false, undefined]) {
+    for (const mobile of [false, true]) {
+      const bufferedText = 'first line\nsecond line';
+      await withPalette(t, { tab: 'compose', mobile, strict: true, preserveColdCommandInput, bufferedText, pendingEnter: bufferedText }, async ({ requests, rerender, focusProxy }) => {
+        assert.equal(requests.length, 1);
+        assert.equal(requests[0].body.text, bufferedText);
+        assert.equal(focusProxy.pendingEnter, undefined);
+        await rerender();
+        assert.equal(requests.length, 1, 'rerenders and StrictMode must not resubmit');
+      });
+    }
+  }
+});
+
+
+test('HTPR-7547 buffered Search Enter selects the matching command once after filtering', async (t) => {
+  for (const mobile of [false, true]) {
+    await withPalette(t, { mobile, bufferedText: 'AI Task Writer', pendingEnter: 'AI Task Writer' }, async ({ values, focusProxy, requests }) => {
+      assert.equal(values.get('showCommandsAtom').paletteTab, 'compose');
+      assert.equal(focusProxy.pendingEnter, undefined);
+      assert.equal(requests.length, 0, 'selecting Compose is not a second Enter in Compose');
+    });
+  }
+});
+
+
+test('HTPR-7547 a mismatched queued Compose Enter is discarded at handoff, not retained for a later edit', async (t) => {
+  for (const mobile of [false, true]) {
+    await withPalette(t, { tab: 'compose', mobile, bufferedText: 'draft2', pendingEnter: 'draft' }, async ({ input, type, requests, focusProxy }) => {
+      assert.equal(input().value, 'draft2');
+      assert.equal(focusProxy.pendingEnter, undefined);
+      assert.equal(requests.length, 0);
+      await type('draft');
+      assert.equal(requests.length, 0, 'editing back to an old Enter snapshot must not submit');
+    });
+  }
+});
+
+
+test('HTPR-7547 a mismatched queued Search Enter is discarded rather than executed after editing', async (t) => {
+  for (const mobile of [false, true]) {
+    await withPalette(t, { mobile, bufferedText: 'AI Task Writer2', pendingEnter: 'AI Task Writer' }, async ({ values, focusProxy }) => {
+      assert.equal(values.get('showCommandsAtom').paletteTab, 'search');
+      assert.equal(focusProxy.pendingEnter, undefined);
+    });
+  }
+});
+
+
+test('HTPR-7547 flag On preserves the opted-in Compose handoff for existing proxy hosts', async (t) => {
+  for (const mobile of [false, true]) {
+    await withPalette(t, { tab: 'compose', mobile, preserveColdCommandInput: true, legacyProxy: true, bufferedText: 'existing host draft' }, async ({ input, focusProxy }) => {
+      assert.equal(input().value, 'existing host draft');
+      assert.equal(focusProxy.current.value, '');
+    });
+  }
+});
+
+
+test('HTPR-7547 queued Compose Enter submits once when mobile focus lands in a later animation frame', async (t) => {
+  for (const strict of [false, true]) {
+    for (const preserveColdCommandInput of [true, false, undefined]) {
+      const bufferedText = 'first line\nsecond line';
+      await withPalette(t, { tab: 'compose', mobile: true, strict, preserveColdCommandInput, bufferedText, pendingEnter: bufferedText, focusFailures: strict ? 2 : 1, deferAnimationFrames: true }, async ({ input, focusProxy, requests, flushAnimationFrame, rerender }) => {
+        assert.equal(input().value, bufferedText, 'text commits before the focus retry');
+        assert.equal(document.activeElement, focusProxy.current);
+        assert.equal(requests.length, 0, 'queued Enter waits for the focus handoff');
+        assert.equal(focusProxy.pendingEnter, bufferedText);
+        let focusLanded = false;
+        input().addEventListener('focus', () => { focusLanded = true; });
+        await flushAnimationFrame();
+        assert.equal(focusLanded, true, 'the retry focuses Compose before submitting');
+        assert.equal(requests.length, 1);
+        assert.equal(requests[0].body.text, bufferedText);
+        assert.equal(focusProxy.pendingEnter, undefined);
+        await rerender();
+        assert.equal(requests.length, 1, 'focus changes and StrictMode cannot resubmit');
+      });
+    }
+  }
 });

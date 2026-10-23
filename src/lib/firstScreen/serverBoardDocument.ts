@@ -3,6 +3,7 @@ import { cache } from "react";
 import { randomUUID } from "node:crypto";
 import { cookies, headers } from "next/headers";
 import { getServerCookieUser } from "@/lib/auth/serverUser";
+import { HTPR_7406_DESKTOP_SERVER_BOARD_FLAG } from "@/lib/flags/keys";
 import { featureFlagsForUser } from "@/lib/flags";
 import getBoardTasks from "@/utils/controllers/projects/getBoardTasks";
 import getFirst from "@/utils/controllers/projects/getFirst";
@@ -18,10 +19,12 @@ export async function readBoardDocument(route: string, displayCookie: string | u
   if (url.pathname !== "/project") return null;
   const user = await getServerCookieUser();
   if (!user || performance.now() > deadline) return null;
-  const display = parseBoardDisplay(displayCookie, user.id);
+  const display = parseBoardDisplay(displayCookie, user.id, { desktopChat: true });
   if (!display) return null;
   const flags = await featureFlagsForUser(user.id);
   if (flags[BOARD_FIRST_SCREEN_FLAG] !== true || performance.now() > deadline) return null;
+  if (!display.isMobile && (display.board.chatPinned || (display.board.openChat && !display.board.chatSuppressed)) &&
+      flags[HTPR_7406_DESKTOP_SERVER_BOARD_FLAG] !== true) return null;
   const cookieStore = await cookies();
   let projectId = Number(url.searchParams.get("id"));
   if (!Number.isSafeInteger(projectId) || projectId <= 0) {
@@ -60,13 +63,9 @@ export async function readBoardDocument(route: string, displayCookie: string | u
   };
 }
 
-// React cache dedupes the root and page in this request only. The timeout
-// includes identity, flag and controller reads; a late result is never adopted.
 export const getServerBoardDocument = cache(async (): Promise<BoardDocument | null> => {
   const requestHeaders = await headers();
   const route = requestHeaders.get(BOARD_DOCUMENT_ROUTE_HEADER);
-  // Existing root providers survive client navigation. Only a new document
-  // may initialize them; an RSC prefetch must not replay a seed into live state.
   if (!route || requestHeaders.get("rsc") === "1") return null;
   const cookieStore = await cookies();
   if (!cookieStore.get(BOARD_DISPLAY_COOKIE)?.value) return null;

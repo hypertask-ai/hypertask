@@ -1,27 +1,28 @@
 const test = require("node:test");
 const assert = require("node:assert/strict");
 const http = require("node:http");
-const crypto = require("node:crypto");
-const ts = require("typescript");
 const { apiResolver } = require("next/dist/server/api-utils/node/api-resolver");
 const { load } = require("./task-route-loader.cjs");
-const { projectViewRoutes } = require("./htpr-6923-verify.cjs");
-
-const legacySource = require("node:fs").readFileSync(require("node:path").join(__dirname, "fixtures/htpr-6968-delete-rename-view.legacy.ts.txt"), "utf8");
-assert.equal(crypto.createHash("sha256").update(legacySource).digest("hex"), projectViewRoutes["delete-rename-view"].hash);
+const { matches, savedViewBoardAccessWhere } = require("./helpers/htpr-7166-fixture.cjs");
+const { pins } = require("./helpers/htpr-6992-pins.cjs");
+const rawPin = pins("a2-view-delete-response");
+// Pins group by route so the fixture holds one digest per route.
+const groupOf = () => "delete-rename-view";
+const pin = (key, value) => rawPin(groupOf(key), key, value);
 const actor = { userId: 985, source: "better-auth" };
 const query = { viewId: "deleted-view", projectId: "7641" };
 
-function fixture({ active = false, unsaved = false, last = false, payloadUndefined = false } = {}, flag = true) {
-  const effects = [], caught = [];
+function fixture({ active = false, unsaved = false, last = false, payloadUndefined = false } = {}) {
+  const effects = [];
   const projectView = { id: "project-view", projectId: 7641, default_view_id: last ? query.viewId : "default-view" };
-  const view = { id: query.viewId, project_view_id: projectView.id, project_view: projectView, title: "Zeta renamed", board_filters: { addedFilters: [] } };
+  const view = { id: query.viewId, project_view_id: projectView.id, project_view: projectView, userId: actor.userId, visibility: "Public", title: "Zeta renamed", board_filters: { addedFilters: [] } };
+  projectView.project = { ownerId: actor.userId, members: [] };
   const defaultView = { ...view, id: "default-view", title: "Default" };
   const userView = { userId: actor.userId, project_view_id: projectView.id, appliedViewId: active ? view.id : null, unsavedViewId: unsaved ? "unsaved-view" : null };
   const views = new Map([[view.id, view], ...(!last ? [[defaultView.id, defaultView]] : []), ...(unsaved ? [["unsaved-view", { ...view, id: "unsaved-view" }]] : [])]);
   const prisma = {
     view: {
-      findUnique: async ({ where }) => { effects.push(["lookup", where.id]); return views.get(where.id) ?? null; },
+      findFirst: async ({ where }) => { effects.push(["lookup", where.id]); const view = views.get(where.id); return view && matches(view, where) ? view : null; },
       delete: async ({ where }) => {
         effects.push(["delete", where.id]);
         const deleted = views.get(where.id);
@@ -35,19 +36,20 @@ function fixture({ active = false, unsaved = false, last = false, payloadUndefin
     },
     view_Last_Used: { deleteMany: async ({ where }) => { effects.push(["last-used", where.viewId]); return { count: 1 }; } },
     user_Project_View: { findUnique: async () => { effects.push(["user-view"]); return userView; } },
-    project_View: { findUnique: async () => {
+    project_View: { findFirst: async () => {
       effects.push(["payload"]);
       if (payloadUndefined) return undefined;
-      return { ...projectView, default_view: views.get(projectView.default_view_id) ?? null, allViews: [...views.values()], user_project_views: [{ ...userView, appliedView: views.get(userView.appliedViewId) ?? null, unsavedView: views.get(userView.unsavedViewId) ?? null }] };
+      const { project, ...container } = projectView;
+      const scalarView = row => row ? Object.fromEntries(Object.entries(row).filter(([key]) => key !== "project_view")) : null;
+      return { ...container, default_view: scalarView(views.get(projectView.default_view_id)), allViews: [...views.values()].map(scalarView), user_project_views: [{ ...userView, appliedView: scalarView(views.get(userView.appliedViewId)), unsavedView: scalarView(views.get(userView.unsavedViewId)) }] };
     } },
     $transaction: async operation => { effects.push(["transaction"]); const result = await operation(prisma); effects.push(["commit"]); return result; },
   };
   class ManagedSmartSplitMutationError extends Error {}
   const mocks = {
     "@/lib/prisma": { default: prisma },
+    "@/utils/controllers/projects/getAllIncludes": { savedViewBoardAccessWhere },
     "@/lib/auth/getSessionUser": { getSessionUser: async () => actor },
-    "@/lib/flags": { isFeatureEnabled: async () => flag },
-    "@/lib/flags/keys": { HTPR_6923_APP_ROUTER_WRITES_FLAG: "htpr-6923-app-router-writes" },
     "@/lib/realtime/server": { broadcastBoardChange: (...args) => effects.push(["broadcast", ...args]) },
     "@/utils/controllers/projects/views/boardFilterWriteLock": {
       ManagedSmartSplitMutationError,
@@ -55,18 +57,8 @@ function fixture({ active = false, unsaved = false, last = false, payloadUndefin
       assertViewIsNotManagedSmartSplit: async (_tx, id, viewId) => effects.push(["guard", id, viewId]),
     },
   };
-  const compiled = ts.transpileModule(legacySource, { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022, esModuleInterop: true } }).outputText;
-  const mod = { exports: {} };
-  new Function("require", "module", "exports", "console", compiled)(specifier => {
-    if (Object.hasOwn(mocks, specifier)) {
-      const mock = mocks[specifier];
-      return Object.hasOwn(mock, "default") ? { __esModule: true, ...mock } : mock;
-    }
-    if (specifier.startsWith("@/")) return load(`src/${specifier.slice(2)}.ts`, mocks);
-    return require(specifier);
-  }, mod, mod.exports, { log: (...args) => caught.push(args) });
   const current = load("src/pages/api/projects/views/delete-rename-view.ts", mocks).default;
-  return { legacy: mod.exports.default, current, effects, views, caught };
+  return { current, effects, views };
 }
 
 async function exchange(fx, target, method = "DELETE") {
@@ -86,40 +78,27 @@ for (const [label, scenario] of [
   ["active view with unsaved cleanup", { active: true, unsaved: true }],
   ["last saved view", { active: true, last: true }],
   ["undefined post-delete payload", { payloadUndefined: true }],
-]) test(`DELETE ${label}: original/Off/On preserve wire response and ordered effects`, async () => {
-  const original = fixture(scenario), expected = await exchange(original, "legacy");
-  assert.equal(expected.status, 200);
-  assert.equal(expected.type, "application/json; charset=utf-8");
-  assert.equal(original.views.has(query.viewId), false);
-  for (const flag of [false, true]) {
-    const current = fixture(scenario, flag);
-    assert.deepEqual(await exchange(current, "current"), expected);
-    assert.deepEqual(current.effects, original.effects);
-    assert.equal(current.views.has(query.viewId), false);
-  }
+]) test(`DELETE ${label}: pins wire response and ordered effects`, async () => {
+  const current = fixture(scenario), wire = await exchange(current, "current");
+  assert.equal(wire.status, 200);
+  assert.equal(wire.type, "application/json; charset=utf-8");
+  assert.equal(current.views.has(query.viewId), false);
+  pin(`DELETE ${label}`, { wire, effects: current.effects });
 });
 
-test("an interrupted successful delete followed by a duplicate returns 404 View does not exist without another write", async () => {
-  const original = fixture(), success = await exchange(original, "legacy");
+test("an interrupted successful delete followed by a duplicate returns 404 opaque not-found without another write", async () => {
+  const current = fixture(), success = await exchange(current, "current");
   assert.equal(success.status, 200);
-  const failed = await exchange(original, "legacy");
+  const failed = await exchange(current, "current");
   assert.equal(failed.status, 404);
-  assert.equal(failed.text, '{"message":"View does not exist"}');
-  assert.equal(original.caught.some(args => args.some(value => value instanceof Error)), false);
-  assert.equal(original.effects.filter(([name]) => name === "delete").length, 1);
-  for (const flag of [false, true]) {
-    const current = fixture({}, flag);
-    assert.deepEqual(await exchange(current, "current"), success);
-    assert.deepEqual(await exchange(current, "current"), failed);
-    assert.deepEqual(current.effects, original.effects);
-  }
+  assert.equal(failed.text, '{"message":"View not found on this board"}');
+  assert.equal(current.effects.filter(([name]) => name === "delete").length, 1);
+  pin("duplicate delete", { success, failed, effects: current.effects });
 });
 
 test("Pages dispatch preserves JSON, empty JSON, empty 204 and text wire responses without json()", async () => {
-  const { withTaskWriteFlag } = load("src/lib/api/task-writes/route.ts", {
+  const { taskWriteHandler } = load("src/lib/api/task-writes/route.ts", {
     "@/lib/auth/getSessionUser": { getSessionUser: async () => actor },
-    "@/lib/flags": { isFeatureEnabled: async () => true },
-    "@/lib/flags/keys": { HTPR_6923_APP_ROUTER_WRITES_FLAG: "htpr-6923-app-router-writes" },
   });
   for (const [label, body, status, type] of [
     ["JSON", { success: true }, 200, "application/json"],
@@ -128,15 +107,16 @@ test("Pages dispatch preserves JSON, empty JSON, empty 204 and text wire respons
     ["no content", undefined, 204, null],
     ["download text", "Forbidden", 403, "text/html; charset=utf-8"],
   ]) {
-    const legacy = (_req, res) => {
+    // Reference: what a hand-written Pages handler sends for the same response.
+    const reference = (_req, res) => {
       res.setHeader("Cache-Control", "no-store");
       return type === "application/json" || body === undefined ? res.status(status).json(body) : res.status(status).send(body);
     };
-    const current = withTaskWriteFlag(legacy, "DELETE", async () => async () => ({
+    const current = taskWriteHandler({ DELETE: async () => async () => ({
       status, headers: new Headers({ ...(type ? { "content-type": type } : {}), "cache-control": "no-store" }),
       text: async () => type === "application/json" ? JSON.stringify(body) ?? "" : body ?? "",
       json: async () => { throw new Error("Dispatch must not parse an empty or non-JSON response with json()"); },
-    }));
-    assert.deepEqual(await exchange({ legacy, current }, "current"), await exchange({ legacy, current }, "legacy"), label);
+    }) });
+    assert.deepEqual(await exchange({ reference, current }, "current"), await exchange({ reference, current }, "reference"), label);
   }
 });

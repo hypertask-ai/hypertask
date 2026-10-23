@@ -17,10 +17,10 @@ jobs:
     runs-on: ubuntu-latest
     env:
       TRUSTED_CLI_PACKAGE: "@hypertask/hypertask_cli"
-      TRUSTED_CLI_VERSION: "2.0.9"
-      TRUSTED_CLI_BINARY_VERSION: "0.2.14"
-      TRUSTED_CLI_BINARY_SHA256: "3b4286ff78d66042b9a564150c548d3a6fc0cdc1e02bbda13128f7a39cab683f"
-      TRUSTED_CLI_NPM_INTEGRITY: "sha512-D0FSkK19GDM0BybtvwBIJqfY1L1e9zGgUVa/8b6+ytm7xup4YoceKr6+dT060xAF0h59N8CVzVazw+4UrEc+Bg=="
+      TRUSTED_CLI_VERSION: "2.0.10"
+      TRUSTED_CLI_BINARY_VERSION: "0.2.15"
+      TRUSTED_CLI_BINARY_SHA256: "685af04562d52683e7d6f8feed58fa807407176940558ba79fbcc7cc5406b2a9"
+      TRUSTED_CLI_NPM_INTEGRITY: "sha512-hRin0KHV/QWCQGAX4oJOZSLt0Y5UKHdw2HnAZZHddzWggD7WExUrOZohTKbFuQq32lIgSQLFWKFaCJ+KtXN+Aw=="
     steps:
       - name: Check out trusted verifier from the base branch
         uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
@@ -38,7 +38,8 @@ jobs:
 
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
-          node-version: 24
+          node-version: ^24.22.1
+          check-latest: true
 
       - name: Verify candidate inventory with the trusted base-branch verifier
         shell: bash

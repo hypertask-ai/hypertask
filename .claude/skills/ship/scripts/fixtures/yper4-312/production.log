@@ -1,0 +1,2 @@
+2026-10-11T20:28:16.7619090Z ✖ Ctrl+J globally opens Compose from every signed-in surface and prevents browser/legacy task creation (322.097189ms)
+2026-10-11T20:28:16.7739271Z ✖ Cmd+J on Apple works; shift, alt, IME and signed-out/public paths do not claim a new shortcut (303.278602ms)

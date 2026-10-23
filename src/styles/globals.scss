@@ -21,6 +21,8 @@
   // Mobile keeps its existing 20px inset. Desktop uses a 4px focus rail plus
   // a 48px control gutter, so tabs, date labels, and sender text share x=52px.
   --inbox-text-left-offset: 20px;
+  // Pinned comment marker, the same in every theme (was a raw left-edge colour).
+  --border-pinned: #ffb980;
 }
 
 @media (min-width: 768px) {
@@ -834,4 +836,52 @@ svg.lucide.fill-current {
 .pills-row:hover .pills-gear,
 .pills-gear:focus-visible {
   opacity: 1;
+}
+
+/* HTPR-7194: paint inside the existing boxes without changing their border
+   widths (including the composer's reserved 4px rail) or content geometry.
+   Share Bootstrap's layer to override its important .rounded utility. */
+@layer bootstrap {
+  html[data-task-box-outlines] [data-task-detail-path] .description-container,
+  html[data-task-box-outlines] [data-task-detail-path] [data-task-comment-box],
+  html[data-task-box-outlines] #comment[data-testid="comment-composer"],
+  html[data-task-box-outlines] [data-task-detail-path] [data-task-properties-rail] {
+    border-color: transparent !important;
+    border-radius: 5px !important;
+    outline: 1px solid var(--border-light-gray-thin) !important;
+    outline-offset: -1px;
+  }
+
+  html.dia[data-task-box-outlines] [data-task-detail-path] .description-container,
+  html.dia[data-task-box-outlines] [data-task-detail-path] [data-task-comment-box],
+  html.dia[data-task-box-outlines] #comment[data-testid="comment-composer"],
+  html.dia[data-task-box-outlines] [data-task-detail-path] [data-task-properties-rail] {
+    border-radius: 10px !important;
+  }
+
+  html[data-task-box-outlines] [data-task-detail-path] .description-container:focus-within,
+  html[data-task-box-outlines] #comment[data-testid="comment-composer"]:focus-within,
+  html[data-task-box-outlines] [data-task-detail-path] [data-task-comment-state="active"] {
+    outline-color: var(--border-active) !important;
+  }
+
+  html[data-task-box-outlines] [data-task-detail-path] [data-task-comment-collapsed]:not([data-task-comment-state="active"]) {
+    outline-color: transparent !important;
+  }
+
+  /* A pinned comment keeps its pin colour, now on the full outline. */
+  html[data-task-box-outlines] [data-task-detail-path] [data-task-comment-state="pinned"] {
+    outline-color: var(--border-pinned) !important;
+  }
+
+  html[data-task-box-outlines] [data-task-detail-path] .description-edit-container,
+  html[data-task-box-outlines] [data-task-detail-path] .comment-edit-container,
+  html[data-task-box-outlines] [data-task-detail-path] .comment-body,
+  html[data-task-box-outlines] [data-task-detail-path] .main-attachment-container,
+  html[data-task-box-outlines] #comment[data-testid="comment-composer"] #comment-input,
+  html[data-task-box-outlines] #comment[data-testid="comment-composer"] .main-attachment-container {
+    border-color: transparent !important;
+    outline: none !important;
+    box-shadow: none !important;
+  }
 }

@@ -21,12 +21,8 @@ const DeleteCommentById = (props:any) => {
           } )
           if (response.status===200){
               setDeleteModal(false)
-              // callback(idToDelete)
               props?.setShowCommentDeleteModal(false)
               props.callback(idToDelete!,"DELETE")
-              // props?.setComments((comments:any) =>
-              //          comments?.filter((comment:any) => String(comment.id) !== String(idToDelete))
-              //       );
               toast("Comment deleted successfully")
               return
           }
@@ -42,7 +38,6 @@ const DeleteCommentById = (props:any) => {
   
     }
     else{
-        // toast("You can't delete this")
         props?.setShowCommentDeleteModal(false)
     }
   };

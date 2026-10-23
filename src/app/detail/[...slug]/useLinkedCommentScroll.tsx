@@ -4,10 +4,6 @@ import { useFlag } from "@/hooks/useFlag";
 import { HTPR_7090_COMMENT_LINK_SCROLL_FLAG } from "@/lib/flags/keys";
 import type { TaskDetailKeyboardContext } from "./TaskDetailKeyboardContext";
 
-// HTPR-7090: on a fresh page load the comments arrive after the one-shot mount
-// scroll in useTaskDetailInitialScroll has already run with an empty list, so it
-// falls back to the composer and never reaches the linked comment. Scroll again
-// once the comments are in, and re-assert while the rows measure in.
 export const LINKED_COMMENT_SCROLL_PASSES_MS = [
   taskDetailConfig.delays.scrollToElement,
   taskDetailConfig.delays.scrollToElement + 700,
@@ -32,8 +28,6 @@ export function useLinkedCommentScroll(context: TaskDetailKeyboardContext) {
     if (Number.isNaN(commentId)) return;
     const generation = initialScrollGenerationRef.current;
     const frames: number[] = [];
-    // The virtualizer aims from estimated row heights, so on a cold load it can
-    // stop just short of the row. Once the row is rendered, centre it for real.
     const centerRenderedComment = () => {
       const element = document.getElementById(`comment-${commentId}-input`);
       if (!element) return;

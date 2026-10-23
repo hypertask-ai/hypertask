@@ -213,7 +213,7 @@ test("description and comment failures leave edit mode open", () => {
   assert.match(save, /response\.status === 200[\s\S]*?Could not update comment\. Your changes are still here/);
   assert.match(save, /if \(saved\) setEditMode\(null\)/);
   assert.match(save, /setEditState\(null\);[\s\S]*?setEditMode\(null\);[\s\S]*?return true/);
-  assert.match(save, /return false;[\s\S]*?\};[\s\S]*?\/\/ ---------------------- CREATE COMMENT/);
+  assert.match(save, /return false;[\s\S]*?\};[\s\S]*?const createComment =/);
 });
 
 test("comment updates authorize against stored ownership and sync attachments atomically", () => {
@@ -227,7 +227,7 @@ test("comment updates authorize against stored ownership and sync attachments at
   assert.match(save, /replaceAttachments: shouldSyncAttachments/);
   assert.match(commentService, /if \(attachments && replaceAttachments\)/);
   assert.match(commentRoute, /replaceAttachments === true && attachments === undefined/);
-  assert.match(commentService, /findFirst\(\{[\s\S]*?where: \{ id: commentId, creatorId: userId, task: \{ project: projectContentAccessWhere\(userId, agentId\) \} \}/);
+  assert.match(commentService, /findFirst\(\{[\s\S]*?where: \{ id: commentId, creatorId: userId, task: \{ project: projectContentAccessWhere\(userId, agentId, teamScope\) \} \}/);
   assert.match(commentService, /if \(!comment\)[\s\S]*?Comment not found or not owned by user/);
   assert.match(commentService, /prisma\.\$transaction\(async \(transaction\)/);
   assert.match(commentService, /attachmentIdsToDelete[\s\S]*?transaction\.attachment\.deleteMany/);

@@ -41,17 +41,12 @@ import { useGlobalUIState } from "../ProviderGlobal/useGlobalUIState";
 import { useSettingsNavigation } from "../Modals/Settings/settingsNavigation";
 import { tooltipConfig } from "@/lib/configs/tooltip.config";
 import { CLASS_NAME_CONSTANTS } from "@/lib/configs/general.config";
-import { useFlag } from "@/hooks/useFlag";
-import { HTPR_6914_SHIFT_C_QUICK_ADD_FLAG, HTPR_6902_N_QUICK_ADD_FLAG, HTPR_6175_QUICK_ENTRY_CARDS_FLAG } from "@/lib/flags/keys";
 
-// Simple utility function for conditional classes
 const cn = (...classes: (string | boolean | undefined)[]) =>
   classes.filter(Boolean).join(" ");
 
 interface CircularActionButtonProps {
-  /** Click handler for the button */
   onClick: () => void;
-  /** Icon to display - can be React component or Image props */
   icon?:
   | React.ReactNode
   | {
@@ -60,51 +55,18 @@ interface CircularActionButtonProps {
     height: number;
     alt?: string;
   };
-  /** Tooltip text */
   tooltipText?: string;
-  /** Keyboard shortcut for tooltip */
   keyCombination?: string[];
-  /** Tooltip position */
   tooltipPosition?: {
     left?: number;
     bottom?: number;
   };
-  /** Additional CSS classes */
   className?: string;
-  /** Whether to use padding for icons vs px for images */
   variant?: "icon" | "image";
-  /** Custom element type */
   as?: "button" | "div";
   children?: React.ReactNode;
 }
 
-/**
- * Reusable Circular Action Button Component
- *
- * A consistent circular button with icon/image, tooltip, and hover effects.
- * Used throughout the bottom settings for various actions.
- *
- * @example
- * ```tsx
- * // With React icon
- * <CircularActionButton
- *   onClick={() => toggleSettings()}
- *   icon={<Settings size={20} className="text-white-black" />}
- *   tooltipText="Settings"
- *   keyCombination={["\\"]}
- *   tooltipPosition={{ left: -54, bottom: 30 }}
- * />
- *
- * // With image
- * <CircularActionButton
- *   onClick={() => toggleCommands()}
- *   icon={{ src: "/logo.png", width: 18, height: 14, alt: "" }}
- *   tooltipText="Commands"
- *   keyCombination={["CTRL", "K"]}
- *   variant="image"
- * />
- * ```
- */
 const CircularActionButton: React.FC<CircularActionButtonProps> = ({
   onClick,
   icon,
@@ -160,14 +122,9 @@ const BottomSettings_QuickTips = ({
 }: {
   announcements: any;
 }) => {
-  const nQuickAddEnabled = useFlag(HTPR_6902_N_QUICK_ADD_FLAG);
-  const shiftCQuickAddEnabled = useFlag(HTPR_6914_SHIFT_C_QUICK_ADD_FLAG);
-  const quickEntryCardsEnabled = useFlag(HTPR_6175_QUICK_ENTRY_CARDS_FLAG);
-  const boardTips = nQuickAddEnabled && quickEntryCardsEnabled
-    ? KanbanTipsConstants.flatMap(tip => tip.hint === "add task"
-      ? [tip, { key: ["N"], hint: "quick add" }]
-      : [tip])
-    : KanbanTipsConstants;
+  const boardTips = KanbanTipsConstants.flatMap(tip => tip.hint === "add task"
+    ? [tip, { key: ["N"], hint: "quick add" }]
+    : [tip]);
   const mbl = useContext(MobileViewContext);
   const pathname = usePathname();
   const { toggleShowCommands } = useHypertasksRecoilStates();
@@ -178,7 +135,6 @@ const BottomSettings_QuickTips = ({
   const { sidebarRightOffsetPx } = useAiChatMainContentLayout();
   const appShellRailOn = useRecoilValue(appShellRailAtom) && !mbl;
 
-  // ------------------------ centralized UI state management
   const {
     toggleAIChatInterface,
     toggleAnnouncements: toggleShowAnnouncements,
@@ -199,8 +155,6 @@ const BottomSettings_QuickTips = ({
   )
     return <></>;
 
-  // Mobile reaches settings through the avatar in MobileTopBar, so the
-  // floating gear would be a second entry to the same place.
   if (mbl) return <></>;
 
   return (
@@ -214,7 +168,6 @@ const BottomSettings_QuickTips = ({
           }}
           className={`h-fit flex flex-col fixed z-[100] w-fit`}
         >
-          {/* =========== announcement =========== */}
           <div
             onClick={toggleShowAnnouncements}
             className={`flex ${isAnnouncementUnread ? "pl-2 py-1 pr-1" : "p-1"
@@ -253,7 +206,6 @@ const BottomSettings_QuickTips = ({
             </CircularActionButton>
           )}
 
-          {/* =========== HTC button ============ */}
           <CircularActionButton
             className={CLASS_NAME_CONSTANTS.BOTTOM_HTC}
             onClick={toggleShowCommands}
@@ -273,7 +225,6 @@ const BottomSettings_QuickTips = ({
             variant="image"
           />
 
-          {/* =========== GearIcon ============ */}
           <CircularActionButton
             onClick={() => openSettings()}
             className="right-sidebar-toggle"
@@ -287,9 +238,7 @@ const BottomSettings_QuickTips = ({
         </div>
       )}
 
-      {!mbl && <QuickTips boardTips={shiftCQuickAddEnabled
-        ? boardTips.map(tip => tip.hint === "quick add" ? { ...tip, key: ["N / Shift+C"] } : tip)
-        : boardTips} />}
+      {!mbl && <QuickTips boardTips={boardTips.map(tip => tip.hint === "quick add" ? { ...tip, key: ["N / Shift+C"] } : tip)} />}
     </>
   );
 };
@@ -323,17 +272,14 @@ const QuickTips = ({ boardTips }: { boardTips: ITips[] }) => {
     setShowQuickTips(false);
   }
 
-  // console.log("🚀 ~ QuickTips ~ pathname:", pathname)
   if (showCommands.show) {
     return (
       <TipsComp tips={HTCTipsConstants} toggleQuickTips={toggleQuickTips} appShellRailOn={appShellRailOn} />
     );
   }
-  // /demo is the anonymous kanban board, so it gets the same board tips.
   if (pathname?.startsWith("/project") || pathname?.startsWith("/demo")) {
     return (
       <TipsComp tips={boardTips} toggleQuickTips={toggleQuickTips} appShellRailOn={appShellRailOn} />
-      // <></>￼Get started
     );
   } else if (pathname?.startsWith("/detail")) {
     return (
@@ -379,14 +325,17 @@ const TipsComp = ({
   const [hasHorizontalScrollbar, setHasHorizontalScrollbar] = useRecoilState(
     isXScrollOnKanbanAtom
   );
+  const bottom = `calc(${appShellRailOn ? 0 : hasHorizontalScrollbar && pathanme?.startsWith("/project") ? 12 : 0}px + var(--notif-banner-h, 0px))`;
   useEffect(() => {
     if (!barRef.current) return;
 
     const bar = barRef.current;
     const updateHeight = () => {
+      const height = bar.getBoundingClientRect().height;
+      document.documentElement.style.setProperty("--quick-tips-h", `${height}px`);
       document.documentElement.style.setProperty(
-        "--quick-tips-h",
-        `${bar.getBoundingClientRect().height}px`
+        "--quick-tips-clearance",
+        height > 0 ? `calc(${height}px + ${bottom} + 8px)` : "20px"
       );
     };
     updateHeight();
@@ -396,8 +345,9 @@ const TipsComp = ({
     return () => {
       observer.disconnect();
       document.documentElement.style.removeProperty("--quick-tips-h");
+      document.documentElement.style.removeProperty("--quick-tips-clearance");
     };
-  }, []);
+  }, [bottom]);
 
   const renderShortcut = (x: string) => {
     if (x.toLowerCase() === "ctrl") {
@@ -410,17 +360,9 @@ const TipsComp = ({
     <div
       ref={barRef}
       style={{
-        bottom: `calc(${
-          appShellRailOn
-            ? 0
-            : hasHorizontalScrollbar && pathanme?.startsWith("/project")
-            ? 12
-            : 0
-        }px + var(--notif-banner-h, 0px))`,
+        bottom,
         position: "fixed",
         zIndex: 299,
-        // Start after the left rail: the strip must never cover the rail's
-        // bottom (gear/settings entry) — the rail no longer pads for it.
         left: appShellRailOn ? "var(--app-shell-rail-w, 48px)" : 0,
         width: appShellRailOn
           ? `calc(${mainContentWidth === "100%" ? "100%" : mainContentWidth} - var(--app-shell-rail-w, 48px))`
@@ -479,9 +421,6 @@ const TipsComp = ({
         ))}
       </div>
 
-      {/* "Learn the keyboard" button hidden until the interactive tutorial is
-          revamped (HTPR-4974). It pointed at /interactive-onboarding/landing;
-          the Ctrl+K "Interactive tutorial" entry still reaches it for testing. */}
 
       <X size={18}
         className="cursor-pointer text-white-black text-subheading font-bold"

@@ -1,8 +1,13 @@
-import { recordAgentTaskCompletion } from "@/lib/telemetry/activationOccurrences";
+import type { AgentTokenTeamScope } from '@/lib/mcp/auth/types';
+import { recordAgentBoardScopeMiss } from "@/lib/auth/agentScope";
+import { processAnalyticsIntentSoon } from "@/lib/telemetry/analyticsIntents";
+import { stripForeignTaskRelations } from "@/lib/tasks/sameBoardRelations";
+import { assertParentTaskOnBoard, ParentTaskNotFoundError } from "@/utils/controllers/tasks/parentTaskAccess";
+import { enqueueAgentTaskCompletion } from "@/lib/telemetry/activationOccurrences";
 import prisma from "@/lib/prisma";
 import { ITaskUpdateDescriptionActivity } from "@/models/ActivityModels.ts";
 import { IUser } from "@/models/model";
-import { Prisma, Status } from "@prisma/client";
+import { Prisma, Status, type Task } from "@prisma/client";
 import createActivity from "../activities/createActivity";
 import {
   createTaskMovedActivityInTransaction,
@@ -23,6 +28,7 @@ import { scheduleAgentFirstTaskEmail } from "../notifications/agentFirstTaskEmai
 import { taskWriteAccessWhere } from "@/utils/controllers/projects/getAllIncludes";
 import {
   AgentMutationLeaseConflictError,
+  TaskTeamScopeError,
   assertAgentAssignmentChangeAllowed,
   cancelAgentMutationLeaseForHumanOverride,
 } from "@/lib/mcp/tasks/agentMutationFence";
@@ -56,23 +62,20 @@ import {
 } from "@/lib/cycleService";
 
 type UpdateTaskSingleOptions = {
+  teamScope?: AgentTokenTeamScope | null;
   allowProjectChange?: boolean;
+  onProjectChangedInTx?: (
+    tx: Prisma.TransactionClient,
+    before: Task,
+    after: Task,
+  ) => Promise<void>;
   skipAutoAssign?: boolean;
-  // HTPR-4885: suppress the recurrence spawn for archives that mean "nobody
-  // touched this" rather than "this is finished" — see sweepAutoArchive.
   skipRecurrence?: boolean;
-  // HTPR-4982: skip the membership check below. Only for server-internal
-  // callers that already established their own trust (cron sweeps, verified
-  // webhooks, maintenance scripts) — never for anything carrying a task id
-  // that came in over the wire.
   trustedCaller?: boolean;
-  // Compare under the mutation fence so a restore cannot replace a newer edit.
   expectedDescription?: string;
   expectedTitle?: string;
   expectedProjectId?: number;
   expectedStatus?: Status;
-  // Every section-ID change creates activity. This only supplies actor detail
-  // and the post-commit notification used by move-specific callers.
   taskMovedActivity?: Pick<
     TaskMovedActivityProps,
     "fromAgent" | "sendNotification"
@@ -137,16 +140,11 @@ export async function updateTaskSingle(
       };
     }
 
-    // HTPR-4982: the gate for every write route. Callers hand us a task id
-    // straight from a request body and none of them checked the caller could
-    // see that board, so any signed-in user could edit any task by id. It
-    // lives here rather than in each route so a new route cannot forget it.
-    // 404 rather than 403: a stranger learns nothing about which ids exist.
-    if (!options.trustedCaller) {
+    if (!options.trustedCaller || options.teamScope != null) {
       const allowed = await prisma.project.findFirst({
         where: {
           id: oldTask.projectId,
-          ...taskWriteAccessWhere(currentUser.id, agentId),
+          ...taskWriteAccessWhere(currentUser.id, agentId, options.teamScope),
         },
         select: { id: true },
       });
@@ -158,10 +156,25 @@ export async function updateTaskSingle(
       }
     }
 
+    recordAgentBoardScopeMiss(oldTask.projectId, "write");
     let taskBeforeWrite = oldTask;
     let sectionChanged = false;
     let sectionIdChanged = false;
     const normalizedTask = normalizeRequestedTaskMutation(newTask);
+    const nestedWriteKeys = [
+      "connect", "connectOrCreate", "create", "createMany", "set",
+      "disconnect", "delete", "deleteMany", "update", "updateMany", "upsert",
+    ];
+    if (Object.values(normalizedTask).some((value) =>
+      value !== null && typeof value === "object" &&
+      (Object.getPrototypeOf(value) === Object.prototype || Object.getPrototypeOf(value) === null) &&
+      nestedWriteKeys.some((key) => Object.prototype.hasOwnProperty.call(value, key))
+    )) {
+      return {
+        status: 400,
+        json: { message: "Nested writes are not allowed" },
+      };
+    }
     if (
       normalizedTask.projectId !== undefined &&
       normalizedTask.projectId !== oldTask.projectId &&
@@ -177,11 +190,6 @@ export async function updateTaskSingle(
       ...oldTask,
       description: oldTask.description_?.content ?? oldTask.description,
     };
-    // Browser callers historically sometimes send a whole task object even
-    // though this endpoint has patch semantics. Preserve only fields that
-    // differed when the request arrived. If an agent writes another field
-    // while this request waits for the fence, the human mutation cannot
-    // restore that stale snapshot value.
     const requestedMutation = isHumanOverride
       ? requestedTaskStateChanges(taskAtRequestTime, normalizedTask)
       : normalizedTask;
@@ -200,20 +208,16 @@ export async function updateTaskSingle(
         },
       },
     } satisfies Prisma.TaskInclude;
-    // Every task update must serialize with autonomous ownership, not only
-    // terminal status changes. Human writes pass no agentId and are rejected
-    // while a managed agent lease is active; the lease-owning agent may
-    // continue its own mutation.
     const {
       task,
       newComment,
       moveActivity,
       boardWebhookDeliveryIds,
       agentWebhookDeliveryIds = [],
+      analyticsKey,
     } = await prisma.$transaction(
       async (tx) => {
         if (options.allowProjectChange && requestedMutation.projectId !== undefined) {
-          // Take board locks before the task fence, matching prefix changes.
           const projectIds = [...new Set([oldTask.projectId, requestedMutation.projectId as number])].sort((a, b) => a - b);
           for (const projectId of projectIds) {
             await tx.$executeRaw`SELECT pg_advisory_xact_lock(9428471::int, ${projectId}::int)`;
@@ -233,12 +237,6 @@ export async function updateTaskSingle(
             requestedMutation.cycleId,
           );
         }
-        // A person's explicit task change always outranks autonomous work.
-        // The browser does not carry an agentId, so moving, editing, restoring,
-        // archiving, or deleting a task must cancel any live agent lease while
-        // holding the same fence. Trusted background callers are not people and
-        // remain fenced. Otherwise the optimistic UI briefly moves the card,
-        // receives a 409, and snaps it back to the old column.
         await assertAgentAssignmentChangeAllowed(
           tx,
           newTask.id,
@@ -246,8 +244,13 @@ export async function updateTaskSingle(
           currentUser.id,
           {
             allowHumanOverride: isHumanOverride,
+            teamScope: options.teamScope,
           },
         );
+        if (options.teamScope != null && requestedMutation.projectId !== undefined && !await tx.project.findFirst({
+          where: { id: requestedMutation.projectId as number, ...taskWriteAccessWhere(currentUser.id, agentId, options.teamScope) },
+          select: { id: true },
+        })) throw new TaskTeamScopeError()
         const currentState = await tx.task.findUnique({
           where: { id: newTask.id },
           include: { description_: { select: { content: true } } },
@@ -295,8 +298,6 @@ export async function updateTaskSingle(
               currentUser.id,
             );
           } else {
-            // A duplicate/no-op request is not an override signal. Keep the
-            // live lease and reject the stale write exactly as an agent race.
             await assertAgentAssignmentChangeAllowed(
               tx,
               newTask.id,
@@ -306,10 +307,6 @@ export async function updateTaskSingle(
           }
         }
 
-        // Build from the state read under the mutation fence, never from the
-        // pre-transaction lookup. A human override may wait behind an agent
-        // write; reusing the earlier snapshot would silently restore fields
-        // the agent changed before releasing the lock.
         const updateData: any = {
           title: currentState.title,
           description: currentState.description,
@@ -326,9 +323,6 @@ export async function updateTaskSingle(
           projectId: currentState.projectId,
           dueDate: currentState.dueDate,
         };
-        // startDate and recurrence are deliberately NOT seeded. Writing every
-        // seeded key could resurrect a recurrence rule that another completion
-        // just claimed. Prisma leaves omitted columns unchanged.
         for (const key in requestedMutation) {
           if (requestedMutation[key] !== undefined) {
             updateData[key] = requestedMutation[key];
@@ -341,6 +335,14 @@ export async function updateTaskSingle(
             new Date(),
           ),
         );
+        const targetProject = updateData.projectId;
+        if (
+          updateData.parentTaskId != null &&
+          (updateData.parentTaskId !== currentState.parentTaskId ||
+            targetProject !== currentState.projectId)
+        ) {
+          await assertParentTaskOnBoard(tx, updateData.parentTaskId, targetProject);
+        }
         const requestedSectionId = requestedMutation.sectionId;
         const requestedSectionName = requestedMutation.section;
         sectionIdChanged =
@@ -358,8 +360,6 @@ export async function updateTaskSingle(
             ) {
               throw new Error("Section does not match sectionId");
             }
-            // sectionId is the nullable identity; Task.section is required
-            // legacy display text, so unassigned tasks store an empty name.
             updateData.section = "";
           } else {
             if (typeof requestedSectionId !== "number") {
@@ -390,8 +390,6 @@ export async function updateTaskSingle(
           updateData.projectId !== currentState.projectId ||
           updateData.uniqueIndex !== currentState.uniqueIndex
         ) {
-          // Read under the mutation fence so concurrent moves preserve the
-          // identity actually replaced, in the same transaction as the move.
           await tx.taskNumberAlias.upsert({
             where: {
               projectId_uniqueIndex: {
@@ -417,6 +415,9 @@ export async function updateTaskSingle(
           data: updateData,
           include: taskInclude,
         });
+        if (currentState.projectId !== updatedTask.projectId) {
+          await options.onProjectChangedInTx?.(tx, currentState, updatedTask);
+        }
         sectionIdChanged = currentState.sectionId !== updatedTask.sectionId;
         sectionChanged =
           sectionIdChanged || currentState.section !== updatedTask.section;
@@ -457,8 +458,6 @@ export async function updateTaskSingle(
         }
         let descriptionActivity;
         if (requestedMutation.description !== undefined) {
-          // Core task fields, the normalized body, draft cleanup, and activity
-          // either all commit under this ownership fence or all roll back.
           const [, , fullUser, actingAgent] = await Promise.all([
             upsertTaskDescription(
               {
@@ -486,8 +485,6 @@ export async function updateTaskSingle(
                 photoURL: true,
               },
             }),
-            // A managed agent edits under its owner's user id, so without the
-            // agent the feed credited the human for an edit they never made.
             agentId
               ? tx.agent.findUnique({
                   where: { id: agentId },
@@ -523,9 +520,6 @@ export async function updateTaskSingle(
             include: taskInclude,
           });
         }
-        // HTPR-4530: board subscribers get task.updated for the fields the
-        // public contract covers. The outbox row commits with the task write,
-        // so a rolled-back update can never emit a phantom change.
         const changes: Record<string, unknown> = {};
         if (currentState.sectionId !== updatedTask.sectionId) {
           const sectionIds = [
@@ -558,11 +552,6 @@ export async function updateTaskSingle(
         if (dueFrom !== dueTo) {
           changes.dueDate = { from: dueFrom, to: dueTo };
         }
-        // This controller writes section, status, and due-date fields only.
-        // Label controllers emit their own task.updated row with the full
-        // before/after label snapshot, so labels cannot be dropped here.
-        // Due dates remain board-only because the agent event contract covers
-        // section, status, and labels.
         const agentChanges: AgentWebhookTaskChanges = {};
         if (changes.section) {
           agentChanges.section = changes.section as AgentWebhookTaskChanges["section"];
@@ -602,6 +591,7 @@ export async function updateTaskSingle(
             )
           : [];
         return {
+          analyticsKey: await enqueueAgentTaskCompletion(tx, currentState, updatedTask, agentId),
           task: updatedTask,
           newComment: descriptionActivity,
           moveActivity,
@@ -614,7 +604,7 @@ export async function updateTaskSingle(
     if (!options.trustedCaller) {
       scheduleAgentFirstTaskEmail(taskBeforeWrite, task, currentUser.id, agentId);
     }
-    recordAgentTaskCompletion(taskBeforeWrite, task, agentId);
+    if (analyticsKey) processAnalyticsIntentSoon(analyticsKey);
     const moveNotification =
       moveActivity && options.taskMovedActivity?.sendNotification
         ? sendTaskMoveNotificationIfNeeded(
@@ -671,9 +661,6 @@ export async function updateTaskSingle(
       }
     }
 
-    // HTPR-4885: completing a recurring task (done column or archive) spawns
-    // its next occurrence. spawnNextRecurrence claims the rule atomically, so
-    // overlapping paths (drag + auto-archive sweep) can't double-spawn.
     if (taskBeforeWrite.recurrence && !options.skipRecurrence) {
       const becameArchived =
         requestedMutation.status === Status.Archive &&
@@ -722,6 +709,13 @@ export async function updateTaskSingle(
       moveActivity,
     };
   } catch (error) {
+    if (error instanceof TaskTeamScopeError) return { status: 404, json: { message: error.message } };
+    if (error instanceof ParentTaskNotFoundError) {
+      return {
+        status: 404,
+        json: { message: "Parent task not found" },
+      };
+    }
     if (error instanceof TaskTargetChangedError) {
       return {
         status: 409,
@@ -770,8 +764,6 @@ export async function updateTaskSingle(
     console.log("🤔 ~ updateTaskSingle ~ error:", error);
     return {
       status: 500,
-      // Never hand the caller the raw error object: `new Error(obj)` in the
-      // MCP layer turned it into "[object Object]". Detail stays in the log.
       json: { message: "Failed to update task" },
     };
   }
@@ -794,7 +786,6 @@ export async function getTaskSingle(taskId: number) {
         },
         estimate: true,
         priority: true,
-        // description_ holds the real body; the `description` scalar is always "" since createTaskCore
         description_: { select: { content: true } },
         subTasks: {
           where: {
@@ -815,7 +806,7 @@ export async function getTaskSingle(taskId: number) {
     });
     return {
       status: 200,
-      json: task,
+      json: task ? stripForeignTaskRelations(task) : task,
     };
   } catch (error) {
     console.log("🤔 ~ getTask ~ error:", error);
@@ -840,8 +831,6 @@ export async function deleteTaskSingle(taskId: number, actingUserId: number) {
     console.log("🤔 ~ deleteTaskSingle ~ error:", error);
     return {
       status: 500,
-      // HTPR-5478: `{ message: error }` serialises to `{"message":{}}`, which
-      // the CLI printed as "[object Object]". Detail stays in the log.
       json: { message: "Failed to delete task" },
     };
   }

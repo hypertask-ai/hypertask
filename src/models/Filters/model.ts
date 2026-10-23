@@ -30,28 +30,19 @@ export interface IFilterCommandRowEl {
     activeFilters: IFilterSettings
 }
 
-// Define the filter structure
 export type TFilter = "Labels" | "Assignees" | "BlockedByPerson" | "UpdatedBy" | "CreatedBy" | "Priority" | "Size" | "Status" | "Inbox" | "Unread" | "UpdatedRange" | "CreatedAt" |"DueDate"|"Starred"|"NoRecentComment"|"StuckInColumn"|"RunningTimer"|"StaleOnBoard"|"NotStale";
 export type TMatchFilters = "ALL"|"ANY";
 export interface IFilterRuntimeContext {
   runningTaskIds?: ReadonlySet<number>;
 }
-// `match` is appended last on purpose: `project` was already the third argument and callers outside
-// applyFilters (the staleness tests) pass it positionally. `runtimeContext` follows the same rule and
-// stays last. It carries live, non-persisted values a condition cannot read off the task itself.
 export type TCondition = (item: ITask, value: any, project?: IProject, match?: TMatchFilters, runtimeContext?: IFilterRuntimeContext) => boolean;
 export interface IFilter {
   type: TFilter;
   searchPayload: any[];
   condition: TCondition
-  /** How this filter's own values combine. Absent = ANY, which is today's behaviour. */
   match?: TMatchFilters;
 };
 
-/** Filters where ONE task can hold several values, so "has all of these" is meaningful.
- *  Priority/Size/CreatedBy are single-valued per task — ALL there would always be empty.
- *  UpdatedBy is excluded too: its agent branch compares the task's single `agentId`, so ALL with
- *  two agents can never match, and the picker offers no way to see why the board went empty. */
 export const MULTI_VALUE_FILTERS: TFilter[] = ["Labels", "Assignees"];
 export const supportsMatchMode = (type: TFilter) => MULTI_VALUE_FILTERS.includes(type);
 
@@ -63,9 +54,6 @@ export interface IFilterSettings{
 
 
 export interface FilterCommandListProps {
-    // groupIndex:number;
-    // commandLists: ICommandList[];
-    // selectedIdx: number;
     handleAction: (commandMode: FilterCommandMode, key: string) => void;
     handleMouseLeave: () => void;
     handleMouseEnter: (index: number, groupIndex:number) => void;

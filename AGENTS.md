@@ -1,6 +1,6 @@
 ## Claude Code and Codex sessions
 
-Start with `/ship`, [CLAUDE.md](CLAUDE.md), and the skill map at [.claude/skills/INDEX.md](.claude/skills/INDEX.md). The wiki at [https://hypertask.app/wiki](https://hypertask.app/wiki) and `openwiki/` are technical references.
+Start with `/ship`, [CLAUDE.md](CLAUDE.md), and the skill map at [.claude/skills/INDEX.md](.claude/skills/INDEX.md).
 
 Valentin's own Claude Code and Codex sessions follow the same workflow:
 
@@ -8,7 +8,7 @@ Valentin's own Claude Code and Codex sessions follow the same workflow:
 - Board content goes only through approved CLI, MCP or app API surfaces. Never use Prisma, SQL, or a database client for ticket content, even for reads.
 - Before coding on a ticket, claim it with `vcc comment add`, then move it to **In Progress** with `vcc task move`.
 - The same session fixes, opens the PR, merges once required checks are green, watches the deploy, verifies live with `.claude/skills/verify-qa/SKILL.md`, and closes the ticket only after verification passes.
-- Read [the CI reference](https://hypertask.app/wiki/deployment) and `docs/ci-policy.yml` before changing workflows, runners, rulesets, previews, or deploy checks.
+- Read [the CI reference](docs/ci.md) and `docs/ci-policy.yml` before changing workflows, runners, rulesets, previews, or deploy checks.
 - Helpers follow the token ladder (Valentin, 2026-10-10): CODEX mode `hax --provider=codex --model=gpt-6.1-sol --effort=high --no-session -p "<task>"`, CLAUDE mode the Agent tool (`sonnet` builds, `haiku` lookups) inside the session. The owning session remains responsible through live verification and close. A helper never writes to a Hypertask board (no claim, comment, move, assign, page, activity); it reports to its runner, and vcc refuses its writes.
 
 ## CLI and MCP repositories
@@ -29,23 +29,11 @@ For model and reasoning-effort selection, use Codex `/intensity` when available.
 
 Sessions must clean up after shipping: after the PR is merged into `production`, production is health-checked, and the worktree is clean and unused, record its absolute path and branch and remove only your own unused worktree and merged branch from another cwd. Never delete your own active cwd, another session's worktree, a dirty worktree, or an open-PR branch.
 
-## OpenWiki
-
-This repository has documentation located in the /openwiki directory.
-
-Start here:
-- [OpenWiki quickstart](openwiki/quickstart.md)
-- [Claude project guide](CLAUDE.md)
-
-OpenWiki includes repository overview, architecture notes, workflows, domain concepts, operations, integrations, testing guidance, and source maps.
-
-When working in this repository, read `CLAUDE.md` and `.claude/skills/INDEX.md` first, then follow the relevant OpenWiki links for architecture, workflow, domain, operation, and testing notes.
-
 ## Hypertask Ticket Access
 
 Hard rule: never read or write Hypertask ticket content directly through Prisma, raw SQL, database clients, or production database access. This includes "read-only" ticket lookups. Tickets, comments, inbox items, and task mutations must go through the product interface or approved CLIs/API surfaces so auth, permissions, activity, notifications, and side effects stay intact.
 
-Use **`hypertask`** for ticket reads and **`vcc`** for all board writes on this VPS (full native Zig CLI; see [openwiki/hypertask-cli.md](openwiki/hypertask-cli.md)):
+Use **`hypertask`** for ticket reads and **`vcc`** for all board writes on this VPS (full native Zig CLI; see the "Ticket comments" section below):
 
 ```bash
 hypertask status
@@ -59,7 +47,6 @@ The CLI binaries currently available on the dev machine are:
 - `hypertask` - native Hypertask CLI (Zig, `hypertask 0.2.0 (zig)`); talks to `/api/mcp/*` and reads `~/.hypertask/config.json`.
 - `vcc` - board-write command for Valentin's Claude Code and Codex sessions, using identity "Valentins Claude Code". Use it for every ticket, comment, assignment and move; the plain `hypertask` CLI is read-only for sessions.
 - `ht` - low-level MCP helper (`ht METHOD /mcp/path [json-body]`).
-- `openwiki` - repo documentation CLI; use headless `openwiki -p "..."` / `openwiki --update -p "..."`.
 - `zsb` - browser automation/debugging CLI for the active remote browser/tab.
 
 A hidden `htz -> hypertask` symlink remains for old scripts. Do not use `htz` in new commands or docs.
@@ -88,7 +75,7 @@ Signal: **Claimed. comment + In Progress = in flight, do not touch.** Abdul self
 
 ## Repository Workflow
 
-Follow the branch/deploy model from `CLAUDE.md` and `openwiki/deployment.md`:
+Follow the branch/deploy model from `CLAUDE.md` and `docs/ci.md`:
 
 - Production is Vercel project `hypertasks-prod`, deployed from the `production` branch to `app.hypertask.ai`.
 - New work branches off `origin/production`; PRs target `production`, never `main`.
@@ -103,7 +90,7 @@ Follow the branch/deploy model from `CLAUDE.md` and `openwiki/deployment.md`:
 
 ## CI contract
 
-Read the [canonical CI contract](https://hypertask.app/wiki/deployment) before changing workflows, runner services, rulesets, required checks, or preview behavior. App CI runs on GitHub-hosted `ubuntu-latest` runners (the repository is public, so hosted minutes are free). Preview verification is opt-in: use the automatic branch preview only when requested or justified by runtime risk. Do not treat it as a merge gate, and do not create extra preview deploys. Do not add a VPN runner or another host implicitly.
+Read the [canonical CI contract](docs/ci.md) before changing workflows, runner services, rulesets, required checks, or preview behavior. App CI runs on GitHub-hosted `ubuntu-latest` runners (the repository is public, so hosted minutes are free). Preview verification is opt-in: use the automatic branch preview only when requested or justified by runtime risk. Do not treat it as a merge gate, and do not create extra preview deploys. Do not add a VPN runner or another host implicitly.
 
 ## Reuse existing UI (enforced)
 
@@ -133,20 +120,24 @@ One AI model per class: a new model version replaces the old one in the same cha
 ## Feature flags for new user-facing behavior
 
 - Every new feature, screen, control, shortcut, API route, or deliberate behavior/design change requires one ticket-specific feature flag.
-- Add one client-safe file in `src/lib/flags/definitions/`, named `<flag-key>.ts`, exporting its key constant and a default definition (including `releaseRisk` with `risk` and `reason` for flags shipped from 2026-10-11). Add nothing to shared keys, definitions, risk maps or test lists. `npm` entry points generate the gitignored `index.generated.ts`; never commit it. Existing imports from `keys.ts`, `definitions.ts` and `flags.ts` stay unchanged. Put new per-flag tests in their own test file. See [the registry reference](openwiki/feature-flags.md).
+- Add one client-safe file in `src/lib/flags/definitions/`, named `<flag-key>.ts`, exporting its key constant and a default definition (including `releaseRisk` with `risk` and `reason` for flags shipped from 2026-10-11). Add nothing to shared keys, definitions, risk maps or test lists. `npm` entry points generate the gitignored `index.generated.ts`; never commit it. Existing imports from `keys.ts`, `definitions.ts` and `flags.ts` stay unchanged. Put new per-flag tests in their own test file. See [the registry reference](docs/feature-flags.md).
 - Name the key after the ticket, for example `htpr-6091-feature-flags`; never reuse a flag for another feature.
-- New feature and improvement flags default to **Owner + QA**, so Valentin and the QA account can judge the change in the real app (HTPR-6192 deleted the old Only-me default; `DEFAULT_FEATURE_FLAG_MODE` in `src/lib/flags.ts` is the source of truth). Developers never release a feature flag to Everyone; Valentin changes the mode at `/admin/flags`.
-- When live QA FAILs on code behind a flag, switch that flag Off on /admin/flags first (seconds, no deploy), then repair. Only Valentin's login can open that page: a runner sends the flag key and the failure to the INFRA MANAGER session with SendMessage at once, and it switches the flag Off. A revert PR is the second step, not the first. (Valentin, 2026-10-03)
-- Any change to code inside a flag that is already on for Everyone, whatever its PR type ([BUGFIX] included), needs one recorded browser click-through of the changed path on a real board before merge, on the preview or locally against the PR build, with the live flag states. Record commit, account and flag state in ~/.local/state/vcc-evidence/<TICKET>/premerge.md.
+- New feature and improvement flags set `defaultMode: "EVERYONE"` in their definition file, so the change is live at once and can still be switched off in seconds (Valentin, 2026-10-20, HTPR-7389: "we set it to live right away for everyone by default unless there is a REAL STRONG reason not to"). Exceptions are `kind: "internal"` and a flag whose `releaseRisk.highRisk` names one of four high-risk kinds: `money`, `access` (login and access), `data-deletion` or `customer-email`. High-risk flags set `defaultMode: "OWNER_AND_QA"` and get an independent model review (Fable in CLAUDE mode, Codex gpt-6.1-sol in CODEX mode) plus one HT Product Lead check before anyone asks Valentin to release them. When unsure whether a ticket is high risk, ask that review model and HT Product Lead. Switching an existing flag still needs his thumbs up (Switching flags in /ship). Existing flags keep their current mode. `defaultFeatureFlagMode` in `src/lib/flags.ts` retains the legacy fallback.
+- Only for Valentin's own explicit request, a new flag may instead use `defaultMode: "OWNER_ONLY"` with `releaseRisk.ownerRequest: { quote: "<his exact request>", ticketUrl: "<ticket link>" }`: the quote must be non-blank and the link must match `^https://app\.hypertask\.ai/detail/project-\d+/\d+$`. This exception permits only Owner only, not Owner + QA or Off, and does not replace required `releaseRisk.highRisk` metadata.
+- When live QA FAILs on code behind a flag, switch that flag Off on /admin/flags first (seconds, no deploy), then repair. Only Valentin's login can open that page: a runner sends the flag key and the failure to the HT Product Lead session with SendMessage at once, and it switches the flag Off. A revert PR is the second step, not the first. (Valentin, 2026-10-03)
+- Test click removed (Valentin 2026-10-21); safety is flags, revert, live QA after release and the YPER4-550 screenshot check.
 - Gate protected behavior on the server. `useFlag` only hides client UI and never replaces API authorization.
-- A real bug fix restores behavior that used to work or was clearly intended. Bug fixes ship behind a ticket-named flag with `kind: "bugfix"`, on for Everyone by default (Valentin, 2026-10-06). Fixes to saved data, security and crashes keep shipping with no flag. Bugfix flags get the same cleanup after 14 days on Everyone. Feature and new-behaviour flags still default Owner + QA; developers never switch a feature flag to Everyone. A `[BUGFIX]` title alone does not make a change a bug fix; reviewers check the diff. The optional registry `kind` is `feature` (default), `bugfix` or `improvement`.
+- A real bug fix restores behavior that used to work or was clearly intended. Bug fixes ship behind a ticket-named flag with `kind: "bugfix"`, on for Everyone by default (Valentin, 2026-10-06). Fixes to saved data, security and crashes keep shipping with no flag. Those three are the only exceptions: legal, privacy, compliance and "urgent" are never reasons to skip a flag, and showing existing UI in new places or to more users is new behavior, not a fix (Valentin, 2026-10-16, YPER4-418, after HTPR-7274 showed the cookie banner to every signed-in user with no flag). Bugfix flags get the same cleanup after 14 days on Everyone. New feature and improvement flags set `defaultMode: "EVERYONE"` in their definition file unless `releaseRisk.highRisk` is set (`money`, `access`, `data-deletion`, `customer-email`) or kind is `internal`; existing flags keep their current mode. A `[BUGFIX]` title alone does not make a change a bug fix; reviewers check the diff. The optional registry `kind` is `feature` (default), `bugfix` or `improvement`.
+- Reused UI needs no wireframe (Valentin, 2026-10-23, YPER4-627: "i think this stuff can go straight to live for everyone i don't want flag pile ups anymore" and "we just need to make sure its FAST REVERTABLE with a flag"). A PR that adds no new component file under `src/components/` passes `ux-signoff` without a wireframe or Question; its ticket flag is still required and `feature-flag-gate` checks it. A PR that adds a new component file still needs his yes on a wireframe naming it. Low-risk flags still on Owner + QA from before 2026-10-20 go to Everyone; high-risk flags keep their review.
+- Anything visible always ships behind a flag, so it can be switched off in seconds. Keep the kind honest (`feature`, `improvement` or `bugfix`) and set `releaseRisk.highRisk` whenever the change touches money, login and access, data deletion or customer emails; never leave it out to get the Everyone default.
+- Call a ticket or a dispatch line a "fix" only when it restores behavior that used to work or was clearly intended. New behavior, even when it reuses an existing component, is a feature or improvement and gets a flag.
 - Infra tickets never get a feature flag (Valentin, 2026-10-03: "we don't need feature flags for infra tickets"): any ticket on the Agents & Infra board (project 4060, `YPER4-*`), and `[INFRA]` work such as agent and MCP plumbing, CI, monitoring and the Agent Kit. They ship live for everyone, and must not appear among the product flags.
 - Performance work with identical output, security fixes, dependency or CI changes, spelling corrections, and tickets carrying the **AI CHAT 💬** label also do not require a flag.
 - Swapping an existing AI model for its newer version from the same provider (same slots, same plan gating, automatic fallback to the previous version) is a dependency update and needs no flag.
 - The merge freeze for a required flag does not apply to tickets carrying the **AI CHAT 💬** label.
 - Reviewers must block feature and non-exempt bugfix pull requests that omit the required flag.
 - The required `feature-flag-gate` check is a mechanical changed-UI check that supplements semantic review. API-only changes stay outside this mechanical check; reviewers still enforce the server-side flag rules above.
-- For this mechanical check only, a valid `[BUGFIX]` or `[INFRA]` title may pass without a flag when the diff adds at most 150 lines to UI files. A verified auto-revert has the same exemption. The title is only a hint to the gate, not proof of a bug fix: the reviewer must decide from the diff whether it restores intended behavior. These results still require owner merge and do not waive the bugfix flag rule: only saved-data, security and crash fixes are bugfix exemptions. Registry defaults are checked even for mechanically exempt titles; only `kind: "bugfix"` may default to Everyone.
+- For this mechanical check only, a valid `[BUGFIX]` or `[INFRA]` title may pass without a flag when the diff adds at most 150 lines to UI files and does not show an existing component in new places or to more users (a render condition or early return removed, or the component rendered more times) without a ticket flag gating it. A verified auto-revert has the same exemption. The title is only a hint to the gate, not proof of a bug fix: the reviewer must decide from the diff whether it restores intended behavior. These results still require owner merge and do not waive the bugfix flag rule: only saved-data, security and crash fixes are bugfix exemptions. Registry defaults are checked even for mechanically exempt titles; a flag with `releaseRisk.highRisk` may not default to Everyone.
 - A valid `[REFACTOR]` title may skip the mechanical flag requirement only when the diff has at most 150 risky new UI lines (JSX or strings, excluding Pick-key union members) after matching normalized additions against removed lines in any file; moved code does not count toward that budget, and owner merge is still required. Valentin decided this on 2026-10-02 in https://app.hypertask.ai/detail/project-15/6506; the title alone is not proof of pure cleanup, and new behavior still needs a flag.
 - After a flag has stayed on **Everyone** for 14 days, create a follow-up ticket to remove the flag and dead branch.
-- The moment a flagged feature is live on production, post a ticket comment that @mentions Valentin (`<span data-type="mention" class="mention" data-id="Valentin Yeo" data-label="name-6">Valentin Yeo</span>`) with the flag key, one line on what it does, and the flag's own link https://app.hypertask.ai/admin/flags#flag-<flag-key>, which is also the first line of every flagged ticket's description (Valentin, 2026-10-10, https://app.hypertask.ai/detail/project-15/7087). Without the mention he never learns the flag exists (Valentin, 2026-09-04, https://app.hypertask.ai/detail/project-15/6131).
+- The moment a flagged feature is live on production, post a ticket comment that @mentions Valentin (`<span data-type="mention" class="mention" data-id="Valentin Yeo" data-label="name-6">Valentin Yeo</span>`) with the flag key, one line on what it does, and the flag's own link https://app.hypertask.ai/admin/flags/<flag-key>, which is also the first line of every flagged ticket's description (Valentin, 2026-10-10, https://app.hypertask.ai/detail/project-15/7087). Without the mention he never learns the flag exists (Valentin, 2026-09-04, https://app.hypertask.ai/detail/project-15/6131).

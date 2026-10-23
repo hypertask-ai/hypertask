@@ -1,3 +1,4 @@
+import { reportMcpOperationCrash } from '@/lib/mcp/operationCrashReport'
 import { wrapMcpRoute, checkMcpRouteRateLimit as checkMcpRateLimit, validateMcpRouteAuth as validateMcpAuth } from '@/lib/mcp/routeWrapper'
 import { NextRequest, NextResponse } from 'next/server'
 
@@ -32,6 +33,10 @@ export async function GET(request: NextRequest) {
         { success: false, error: 'team_id is required' },
         { status: 400 }
       )
+    }
+
+    if (ctx.teamScope != null && teamId !== ctx.teamScope.teamId) {
+      return NextResponse.json({ success: false, error: 'Team not found' }, { status: 404 })
     }
 
     const dbUser = await prisma.user.findUnique({
@@ -96,7 +101,7 @@ export async function GET(request: NextRequest) {
       )
     }
 
-    const agents = await getTeamAgentPresence(team.id)
+    const agents = await getTeamAgentPresence(team.id, { userId: ctx.user.id, agentId: ctx.agentId, teamScope: ctx.teamScope })
     return NextResponse.json({ success: true, agents })
   } catch (error) {
     if (error instanceof TeamAgentPresenceNotFoundError) {
@@ -112,6 +117,7 @@ export async function GET(request: NextRequest) {
     }
 
     console.error('[MCP Agent Presence] GET Error:', error)
+    reportMcpOperationCrash(request, error)
     return NextResponse.json(
       { success: false, error: 'Internal server error' },
       { status: 500 }

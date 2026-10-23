@@ -1,14 +1,5 @@
 import crypto from "crypto";
 
-/**
- *Function for sending Signup event to Meta
- *client info includes ip addresses and stuff
- * @export
- * @param {string} user_email
- * @param {*} clientInfo
- * @return {*}
- *
- */
 export async function sendMetaCAPIEvent(
   user_email: string,
   clientInfo: any,

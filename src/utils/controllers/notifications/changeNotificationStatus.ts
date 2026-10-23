@@ -24,26 +24,6 @@ const changeNotificationStatus = async (userId:number, notification:boolean) => 
       },
     });
 
-    // ----------------- script to change notification status ---------------
-    // const allUsers = await prisma.user.findMany();
-    // console.log("alluser",allUsers);
-    // // Step 2: Loop through all users and create a userSetting for each one
-    // for (const user of allUsers) {
-    //     console.log("alluser",user);
-    //   const createdUserSetting = await prisma.userSetting.create({
-    //     data: {
-    //       userId: user.id,
-    //       notification:false
-    //     },
-    //   });
-    //  console.log("createdUserSetting",createdUserSetting)
-    //   await prisma.user.update({
-    //     where: { id: user.id },
-    //     data: {
-    //       UserSettingId :createdUserSetting.id,
-    //     },
-    //   });
-    // }
       return {
         status: 200,
         res: updateUser,

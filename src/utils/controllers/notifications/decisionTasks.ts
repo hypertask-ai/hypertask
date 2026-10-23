@@ -2,19 +2,14 @@ import { Prisma } from "@prisma/client";
 import prisma from "@/lib/prisma";
 import { isFeatureEnabled } from "@/lib/flags";
 import { HTPR_7092_DECISIONS_FLAG } from "@/lib/flags/keys";
-import { pickDecisionTaskIds, type DecisionMentionComment } from "@/lib/inboxDecisions";
+import { pickDecisionComments, type DecisionMentionComment } from "@/lib/inboxDecisions";
 
-/**
- * HTPR-7092: tasks in this user's inbox that wait on their yes or no. Gated on the
- * server: with the flag off this returns an empty set and the Decisions split never
- * exists. Two queries, whatever the number of rows.
- */
-export async function getDecisionTaskIds(
+export async function getDecisionComments(
   userId: number,
   inboxWhere: Prisma.NotificationWhereInput,
   isEnabled: (key: string, userId: number) => Promise<boolean> = isFeatureEnabled,
-): Promise<Set<number>> {
-  if (!(await isEnabled(HTPR_7092_DECISIONS_FLAG, userId).catch(() => false))) return new Set();
+): Promise<Map<number, DecisionMentionComment>> {
+  if (!(await isEnabled(HTPR_7092_DECISIONS_FLAG, userId).catch(() => false))) return new Map();
 
   const mentions = await prisma.notification.findMany({
     where: {
@@ -33,13 +28,15 @@ export async function getDecisionTaskIds(
     },
     select: {
       taskId: true,
+      commentId: true,
       comment: { select: { text: true, commentText: true, createdAt: true } },
     },
   });
   const candidates: DecisionMentionComment[] = mentions.flatMap((row) =>
-    row.taskId != null && row.comment
+    row.taskId != null && row.commentId != null && row.comment
       ? [{
           taskId: row.taskId,
+          commentId: row.commentId,
           text: row.comment.text,
           commentText: row.comment.commentText,
           createdAt: row.comment.createdAt,
@@ -47,11 +44,11 @@ export async function getDecisionTaskIds(
       : [],
   );
   const taskIds = [...new Set(candidates.map((comment) => comment.taskId))];
-  if (!taskIds.length) return new Set();
+  if (!taskIds.length) return new Map();
 
   const viewerComments = await prisma.comment.findMany({
     where: { creatorId: userId, agentId: null, activity: { equals: Prisma.DbNull }, taskId: { in: taskIds } },
     select: { taskId: true, createdAt: true },
   });
-  return pickDecisionTaskIds(candidates, viewerComments);
+  return pickDecisionComments(candidates, viewerComments);
 }

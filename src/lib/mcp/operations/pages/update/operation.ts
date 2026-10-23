@@ -1,7 +1,11 @@
+import { reportMcpOperationCrash } from '@/lib/mcp/operationCrashReport'
+import { standalonePagesEnabled } from '@/utils/controllers/pages/standalonePagesEnabled'
+import { wrapMcpRoute } from '@/lib/mcp/routeWrapper'
 import { NextRequest, NextResponse } from 'next/server'
 
 import { buildFieldError } from '@/lib/mcp/fieldError'
 import { checkMcpRateLimit, validateMcpAuth } from '@/lib/mcp/auth'
+import { requireRole } from '@/lib/mcp/agents/scopes'
 import { htmlToMarkdown } from '@/utils/controllers/pages/htmlToMarkdown'
 import {
   getPage,
@@ -34,12 +38,17 @@ const CONTENT_TYPES = ['markdown', 'html', 'html_canvas'] as const
 const UPDATE_MODES = ['replace', 'append', 'prepend'] as const
 
 export async function POST(request: NextRequest) {
+  return wrapMcpRoute(async (request: NextRequest) => {
   let identifierField: 'id' | 'page_id' = 'id'
 
   try {
     const ctx = await validateMcpAuth(request)
     if (!ctx) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    }
+    if (ctx.agentId) {
+      const scopeError = await requireRole(ctx, 'write')
+      if (scopeError) return scopeError
     }
 
     const rateLimited = await checkMcpRateLimit(request)
@@ -162,7 +171,7 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    const existingPage = await getPage(identifier)
+    const existingPage = await getPage({ ...identifier, userId: ctx.user.id, standalonePagesEnabled: await standalonePagesEnabled(ctx.user.id), agentId: ctx.agentId, teamScope: ctx.teamScope })
     if (
       !existingPage ||
       !(await canAccessProject(existingPage.projectId, ctx))
@@ -183,7 +192,7 @@ export async function POST(request: NextRequest) {
         ifVersion,
         note: body.note as string | undefined,
         userId: ctx.user.id,
-        agentId: ctx.agentId,
+        agentId: ctx.agentId, teamScope: ctx.teamScope,
       })
 
       return NextResponse.json({
@@ -217,6 +226,9 @@ export async function POST(request: NextRequest) {
     }
 
     console.error('[MCP Update Page] Error:', error)
+    reportMcpOperationCrash(request, error)
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
   }
+
+  })(request)
 }

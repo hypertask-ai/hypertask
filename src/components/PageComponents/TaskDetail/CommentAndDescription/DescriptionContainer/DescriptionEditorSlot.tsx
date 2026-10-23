@@ -1,17 +1,21 @@
 "use client";
 
 import dynamic from "next/dynamic";
-import { useCallback, useEffect, useMemo, useRef, useState, type ComponentType } from "react";
+import { startTransition, useCallback, useEffect, useMemo, useRef, useState, type ComponentType } from "react";
+import { useFlag } from "@/hooks/useFlag";
+import { HTPR_7395_CACHED_STATIC_FIRST_FLAG } from "@/lib/flags/keys";
 import type { TiptapProps } from "@/components/RTE/useTaskDetailEditorState";
 import StaticDescriptionShell, { StaticDescriptionBody, type DescriptionIntentProps } from "./StaticDescriptionShell";
 import { StaticDescriptionPlaceholderContext } from "./StaticDescriptionPlaceholder";
 
 type EditorComponent = ComponentType<TiptapProps>;
 
-const importEditor = () => import("@/components/RTE/TipTapTaskDetail");
+let editorModuleWarm = false;
+const importEditor = () => import("@/components/RTE/TipTapTaskDetail").then((module) => {
+  editorModuleWarm = true;
+  return module;
+});
 
-// Flag off: the editor is still its own chunk, but it renders on the server and
-// mounts with the page like before.
 const EagerEditor = dynamic(importEditor);
 
 let loadedEditor: EditorComponent | null = null;
@@ -21,7 +25,6 @@ export function preloadDescriptionEditor(): Promise<EditorComponent> {
   pendingEditor ??= importEditor().then(
     (module) => (loadedEditor = module.default),
     (error) => {
-      // A failed chunk load must not stick: the next mount or edit intent retries.
       pendingEditor = null;
       throw error;
     },
@@ -29,18 +32,15 @@ export function preloadDescriptionEditor(): Promise<EditorComponent> {
   return pendingEditor;
 }
 
-/**
- * HTPR-7091: with `lazy`, the slot shows the description as static HTML (a copy
- * of the editor's read-only markup) until the editor chunk has loaded, then
- * hands over in place. The choice is made once per mount so an open editor is
- * never swapped.
- */
 export default function DescriptionEditorSlot({
   lazy: lazyRequested,
+  afterPaint: afterPaintRequested = false,
   ...editorProps
-}: TiptapProps & { lazy: boolean }) {
-  const [lazy] = useState(lazyRequested);
-  const [Editor, setEditor] = useState<EditorComponent | null>(() => loadedEditor);
+}: TiptapProps & { lazy: boolean; afterPaint?: boolean }) {
+  const cachedStaticFirst = useFlag(HTPR_7395_CACHED_STATIC_FIRST_FLAG);
+  const [afterPaint] = useState(afterPaintRequested && cachedStaticFirst && !editorModuleWarm);
+  const [lazy] = useState(lazyRequested || afterPaint);
+  const [Editor, setEditor] = useState<EditorComponent | null>(() => afterPaint ? null : loadedEditor);
   const { defaultContent, isMbl } = editorProps;
   const placeholder = useMemo(
     () => <StaticDescriptionBody html={defaultContent ?? ""} isMbl={!!isMbl} />,
@@ -51,12 +51,13 @@ export default function DescriptionEditorSlot({
   const load = useCallback(() => {
     preloadDescriptionEditor().then(
       (component) => {
-        if (liveRef.current) setEditor(() => component);
+        if (!liveRef.current) return;
+        if (afterPaint) startTransition(() => setEditor(() => component));
+        else setEditor(() => component);
       },
-      // Stays static and readable; the next edit intent retries the load.
       () => {},
     );
-  }, []);
+  }, [afterPaint]);
   const intentProps = useMemo<DescriptionIntentProps>(
     () => ({ onPointerDownCapture: load, onFocusCapture: load, onKeyDownCapture: load }),
     [load],
@@ -65,11 +66,17 @@ export default function DescriptionEditorSlot({
   useEffect(() => {
     if (!lazy) return;
     liveRef.current = true;
-    load();
+    let frame: number | undefined;
+    if (afterPaint) {
+      frame = window.requestAnimationFrame(() => {
+        frame = window.requestAnimationFrame(load);
+      });
+    } else load();
     return () => {
       liveRef.current = false;
+      if (frame !== undefined) window.cancelAnimationFrame(frame);
     };
-  }, [lazy, load]);
+  }, [lazy, afterPaint, load]);
 
   if (!lazy) return <EagerEditor {...editorProps} />;
   if (!Editor) {

@@ -184,15 +184,10 @@ const getBoardCommands = (commandOptions: IAllCommands): CommandGroup => ({
       commandMode: CommandMode.SortKanbanBoard,
       keywords: "sort order arrange board kanban tasks priority date size",
     },
-    // Board surfaces only: the action opens the board's Filters modal, and Calendar keeps its
-    // filters in a separate atom, so offering it there would silently edit the last open board.
-    // "Task" is the Kanban context whenever a card is focused, hence both.
     ...(commandOptions.context === "Task" || commandOptions.context === "Kanban"
       ? [
           {
             key: "toggleFilterValueMatch",
-            // Opens Filters, because the palette cannot know which filter you mean when several
-            // are active. Arrow left/right does the flip inside a filter's value picker.
             name: "Filter values: match any or all",
             commandMode: CommandMode.ToggleFilterValueMatch,
             keywords: "filter values match any all labels tags assignees both either",
@@ -431,7 +426,6 @@ const getBoardCommands = (commandOptions: IAllCommands): CommandGroup => ({
     },
     {
       key: "toggleAppShellRail",
-      // The entry names where the toggle takes you, not where you are.
       name: commandOptions.appShellRailOn
         ? "Old Hypertask Design"
         : "New Hypertask Design",
@@ -945,7 +939,7 @@ const settings: CommandGroup = {
       name: "Settings: Open AI chat by default",
       commandMode: CommandMode.Setting,
       payload: "task-page",
-      keywords: "settings open ai chat by default task page",
+      keywords: "settings open ai chat by default keep ai chat closed always task page",
     },
     {
       key: "settingsTaskPageCollapseComments",
@@ -1303,18 +1297,17 @@ const help: CommandGroup = {
   ],
 };
 
-/**
- * Returns the command registry, putting task actions first in task context.
- */
 export const getAllCommands = (
   commandOptions: IAllCommands = { context: "Others" },
-  agentLogNameEnabled = false
+  kanbanSelectAllEnabled = commandOptions.kanbanSelectAllEnabled,
+  roundedEnabled = false,
+  keepAiChatClosedKeywords = "",
 ): CommandGroup[] => {
   const navigate = getNavigateCommands(commandOptions);
   const time = getTimeCommands(commandOptions);
-  const bulk = getBulkTaskCommands(commandOptions);
+  const bulk = getBulkTaskCommands({ ...commandOptions, kanbanSelectAllEnabled });
   const comment = getCommentCommands(commandOptions);
-  const task = getTaskCommands(commandOptions, agentLogNameEnabled);
+  const task = getTaskCommands(commandOptions);
   const board = getBoardCommands(commandOptions);
   const appShell = getAppShellCommands();
   const agentChat = getAgentChatCommands();
@@ -1330,8 +1323,13 @@ export const getAllCommands = (
     teamAndBilling,
     snippets,
     ai,
-    appearance,
-    settings,
+    roundedEnabled ? { ...appearance, commandLists: [
+      ...appearance.commandLists.slice(0, 5),
+      { key: "roundedTheme", name: "Material (follows device)", commandMode: CommandMode.ToggleRoundedTheme, keywords: "rounded round system light dark theme appearance" },
+      ...appearance.commandLists.slice(5),
+    ] } : appearance,
+    { ...settings, commandLists: settings.commandLists.map((command) => command.key === "settingsTaskPageOpenAiChatByDefault"
+      ? { ...command, keywords: keepAiChatClosedKeywords ? command.keywords : "settings open ai chat by default task page" } : command) },
     help,
   ].filter((group) => group.commandLists.length > 0);
 
@@ -1375,9 +1373,6 @@ const BOARD_MENU_COMMAND_TARGETS = [
   key?: string;
 }>;
 
-// On the Table view, table-scoped actions lead the menu instead of the
-// board-only column/section actions (HTPR-3805). Sort/filter apply to both
-// surfaces, so they're shared between this lead group and the board list below.
 const TABLE_LEAD_COMMAND_TARGETS = [
   { commandMode: CommandMode.ConfigureTableColumns },
   { commandMode: CommandMode.SortKanbanBoard, key: "sortBoard" },
@@ -1425,5 +1420,4 @@ export const getBoardMenuCommands = (
   ];
 };
 
-// Kept for legacy imports; callers should use getAllCommands for context-aware rows.
 export const AllCommands: CommandGroup[] = [];

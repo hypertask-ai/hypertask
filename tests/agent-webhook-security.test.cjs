@@ -24,7 +24,8 @@ test("mention and assignment outbox rows share their domain transactions", () =>
   const updates = read("src/utils/controllers/tasks/single.ts");
   const creates = read("src/utils/controllers/tasks/createTaskCore.ts");
   const createRoute = read("src/utils/controllers/tasks/create.ts");
-  const globalCreate = read("src/pages/api/tasks/createGlobally.ts");
+  const globalCreate = read("src/lib/api/task-writes/create-global.ts");
+  const globalCreateEffects = read("src/lib/api/task-writes/create-global-effects.ts");
   const taskEvents = read("src/lib/mcp/webhooks/taskEvents.ts");
   const recovery = read("src/lib/agentWebhooks/taskCreatedRecovery.ts");
   const sweep = read("src/pages/api/queues/sweep.ts");
@@ -96,7 +97,7 @@ test("mention and assignment outbox rows share their domain transactions", () =>
     /markAgentTaskCreatedReady\(task\.id\)[\s\S]*?emitAgentTaskCreatedWebhook/,
   );
   assert.match(
-    globalCreate,
+    globalCreateEffects,
     /markAgentTaskCreatedReady\(task\.id\)[\s\S]*?emitAgentTaskCreatedWebhook/,
   );
   assert.match(
@@ -130,7 +131,7 @@ test("mention and assignment outbox rows share their domain transactions", () =>
   assert.match(outbox, /agentTaskCreatedEmittedAt/);
   assert.match(outbox, /FOR UPDATE/);
   assert.match(outbox, /persistAgentWebhookEvents\(tx,[\s\S]*?agentTaskCreatedEmittedAt/);
-  assert.match(outbox, /Publish only after the transaction commits/);
+  assert.match(outbox, /publishAgentWebhookDeliveries[\s\S]*queueAgentWebhookDelivery\(deliveryId\)\.catch/);
 });
 
 test("agent endpoints require HTTPS and deleted board filters cannot widen", () => {

@@ -1,0 +1,420 @@
+#!/usr/bin/env python3
+"""Find repeated shell routines without persisting transcript content."""
+import argparse
+import ast
+import collections
+import datetime as dt
+import hashlib
+import json
+import math
+import os
+from pathlib import Path
+import re
+import sys
+import time
+
+SECRET = re.compile(r"(?:sk-|gh[pousr]_|xox[baprs]-|AKIA)[A-Za-z0-9_-]+|\beyJ[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+(?:\.[A-Za-z0-9_-]+)?|\b[0-9a-fA-F]{32,}\b|\b[A-Za-z0-9+/=_-]{40,}\b")
+WORDS = re.compile(r'''(?:[^\s;&|()<>"']+|"(?:\\.|[^"\\])*"|'[^']*')+|&&|\|\||[;&|()<>]''')
+SUBCOMMANDS = {
+    'git': 'status diff log show add commit fetch worktree branch rev-parse merge-base ls-files remote list remove',
+    'gh': 'pr checks view list diff status api run workflow repo issue',
+    'npm': 'run test lint ci install exec build',
+    'node': '--test', 'python3': '-m unittest',
+    'hypertask': 'tasks get list search comment status capabilities activity last',
+    'vcc': 'activity last list task tasks get comment add update move assign',
+    'zsb': 'open screenshot click snapshot',
+    'stack-key': '',
+    'systemctl': 'status show list-timers is-active',
+    'curl': '', 'rg': '', 'cat': '', 'sed': '', 'find': '', 'ls': '',
+    'bash': '', 'sh': '', 'mp-eta': '', 'ht': 'GET',
+    'zig': 'build test', 'docker': 'compose ps logs inspect',
+}
+
+
+def secret_like(value):
+    if SECRET.search(value):
+        return True
+    for word in re.findall(r'[A-Za-z0-9+/=_-]{20,}', value):
+        counts = collections.Counter(word)
+        entropy = -sum((n / len(word)) * math.log2(n / len(word)) for n in counts.values())
+        if entropy >= 3.5:
+            return True
+    return False
+
+
+def placeholder(word):
+    if '"' in word or "'" in word:
+        return '<ARG>'
+    if re.match(r'https?://', word):
+        return '<URL>'
+    if re.fullmatch(r'[-+]?\d+(?:\.\d+)?', word):
+        return '<NUM>'
+    if '/' in word or word.startswith(('~', '.')):
+        return '<PATH>'
+    if re.fullmatch(r'[0-9a-fA-F]{8,}|[A-Z]+-\d+|[0-9a-fA-F-]{36}', word):
+        return '<ID>'
+    return '<ARG>'
+
+
+def normalize(command):
+    result = []
+    program = None
+    subcommands = True
+    flag_value = False
+    value_flags = {'-C', '-H', '-o', '-p', '-m', '-F', '-f', '--repo', '--project', '--token', '--password', '--json', '--text', '--output', '--workdir', '--timeout'}
+    for word in WORDS.findall(command):
+        if word in (';', '&&', '||', '|'):
+            if result and result[-1] not in (';', '&&', '||', '|'):
+                result.append(word)
+            program = None
+            subcommands = True
+            flag_value = False
+            continue
+        if flag_value:
+            result.append(placeholder(word))
+            flag_value = False
+            continue
+        if word in ('(', ')', '<', '>'):
+            result.append('<ARG>')
+            continue
+        if program is None:
+            if '=' in word:
+                result.append('<ARG>')
+                continue
+            name = word.rsplit('/', 1)[-1]
+            if re.fullmatch(r'[A-Za-z_][A-Za-z0-9_.-]*', name) and not secret_like(name):
+                program = name
+                result.append(name)
+            else:
+                program = ''
+                result.append('<ARG>')
+        elif re.fullmatch(r'-[A-Za-z].+', word):
+            # Attached short-option values (-phunter2, -sSfL) keep only the first letter.
+            result.append(word[:2] + '<ARG>')
+        elif re.fullmatch(r'--?[A-Za-z][A-Za-z0-9_-]*(?:=.*)?', word) and not secret_like(word.split('=')[0]):
+            flag, sep, value = word.partition('=')
+            result.append(flag + ('=' + placeholder(value) if sep else ''))
+            flag_value = not sep and flag in value_flags
+        elif subcommands and word in SUBCOMMANDS.get(program, '').split():
+            result.append(word)
+        else:
+            result.append(placeholder(word))
+            subcommands = False
+    return ' '.join(token for token in result if not secret_like(token))
+
+
+def timestamp(value):
+    try:
+        if isinstance(value, (int, float)):
+            return float(value)
+        return dt.datetime.fromisoformat(value.replace('Z', '+00:00')).timestamp()
+    except (ValueError, TypeError, AttributeError, OverflowError):
+        return None
+
+
+def command_inputs(payload):
+    name = payload.get('name', '').rsplit('.', 1)[-1]
+    if name == 'parallel':
+        try:
+            args = json.loads(payload.get('arguments', '{}'))
+        except (ValueError, TypeError):
+            return []
+        return [call['parameters'].get('command', '') for call in args.get('tool_uses', [])
+                if call.get('recipient_name', '').rsplit('.', 1)[-1] in ('bash', 'exec_command', 'shell')]
+    if name in ('shell', 'shell_command', 'exec_command', 'bash'):
+        try:
+            args = json.loads(payload.get('arguments', '{}'))
+        except (ValueError, TypeError):
+            return []
+        command = args.get('command', args.get('cmd', ''))
+        return [' '.join(command) if isinstance(command, list) else command]
+    if name == 'exec':
+        # Codex exec is Python-shaped text. Inspect literal AST nodes, never eval.
+        try:
+            tree = ast.parse(payload.get('input', ''))
+        except (SyntaxError, ValueError):
+            return []
+        commands = []
+        for call in ast.walk(tree):
+            if not isinstance(call, ast.Call) or not isinstance(call.func, ast.Attribute):
+                continue
+            if call.func.attr not in ('exec_command', 'shell_command', 'shell'):
+                continue
+            for arg in call.args:
+                if isinstance(arg, ast.Dict):
+                    for key, value in zip(arg.keys, arg.values):
+                        if isinstance(key, ast.Constant) and key.value in ('cmd', 'command'):
+                            if isinstance(value, ast.Constant) and isinstance(value.value, str):
+                                commands.append(value.value)
+        return commands
+    return []
+
+
+def continuation_ids(payload):
+    if payload.get('name', '').rsplit('.', 1)[-1] == 'write_stdin':
+        try:
+            args = json.loads(payload.get('arguments', '{}'))
+            return [args['session_id']] if 'session_id' in args else []
+        except (ValueError, TypeError):
+            return []
+    if payload.get('name') == 'exec':
+        try:
+            tree = ast.parse(payload.get('input', ''))
+        except (SyntaxError, ValueError):
+            return []
+        ids = []
+        for call in ast.walk(tree):
+            if isinstance(call, ast.Call) and isinstance(call.func, ast.Attribute) and call.func.attr == 'write_stdin':
+                for arg in call.args:
+                    if isinstance(arg, ast.Dict):
+                        for key, value in zip(arg.keys, arg.values):
+                            if isinstance(key, ast.Constant) and key.value == 'session_id' and isinstance(value, ast.Constant):
+                                ids.append(value.value)
+        return ids
+    return []
+
+
+def process_ids(output):
+    if isinstance(output, list):
+        return [value for item in output for value in process_ids(item)]
+    if isinstance(output, dict):
+        return ([output['session_id']] if 'session_id' in output else []) + process_ids(output.get('text', ''))
+    if isinstance(output, str):
+        try:
+            decoded = json.loads(output)
+            if isinstance(decoded, (dict, list)):
+                return process_ids(decoded)
+        except ValueError:
+            pass
+        return re.findall(r'Process running with session ID\s+(\d+)', output)
+    return []
+
+
+def failed(output):
+    if isinstance(output, list):
+        return any(failed(item) for item in output)
+    if isinstance(output, dict):
+        return bool(output.get('is_error') or output.get('exit_code') not in (None, 0)) or failed(output.get('text', ''))
+    if not isinstance(output, str):
+        return False
+    try:
+        decoded = json.loads(output)
+        if isinstance(decoded, (dict, list)):
+            return failed(decoded)
+    except ValueError:
+        pass
+    return any(int(code) != 0 for code in re.findall(r'(?:Process exited with code|Exit code:|exit code)\s*(\d+)', output))
+
+
+def read_sessions(home, since, scripts=None):
+    sessions = collections.defaultdict(list)
+    files = list((home / '.claude/projects').glob('*/*.jsonl')) + list((home / '.codex/sessions').glob('**/*.jsonl'))
+    seen = set()
+    malformed = 0
+    for path in files:
+        if path.stat().st_mtime < since:
+            continue
+        session = str(path)
+        pending = {}
+        processes = {}
+        usage_pending = []
+        with path.open(errors='replace') as stream:
+            for line in stream:
+                try:
+                    event = json.loads(line)
+                except ValueError:
+                    malformed += 1
+                    continue
+                if not isinstance(event, dict):
+                    continue
+                when = timestamp(event.get('timestamp'))
+                session = event.get('sessionId') or session
+                payload = event.get('payload', {})
+                if not isinstance(payload, dict):
+                    payload = {}
+                if event.get('type') == 'session_meta':
+                    session = payload.get('id') or session
+                message = event.get('message', {})
+                if not isinstance(message, dict):
+                    message = {}
+                content = message.get('content', [])
+                if not isinstance(content, list):
+                    content = []
+                calls = []
+                for item in content:
+                    if not isinstance(item, dict):
+                        continue
+                    if item.get('type') == 'tool_use' and item.get('name') == 'Bash':
+                        calls.append((item.get('id'), item.get('input', {}).get('command', '')))
+                    elif item.get('type') == 'tool_result':
+                        for step in pending.get(item.get('tool_use_id'), []):
+                            step['error'] |= bool(item.get('is_error')) or failed(item.get('content'))
+                if event.get('type') == 'response_item':
+                    calls.extend((payload.get('call_id'), cmd) for cmd in command_inputs(payload))
+                    continued = [step for process in continuation_ids(payload) for step in processes.get(str(process), [])]
+                    if continued:
+                        pending[payload.get('call_id')] = continued
+                    if payload.get('type') in ('function_call_output', 'custom_tool_call_output'):
+                        related = pending.get(payload.get('call_id'), [])
+                        for step in related:
+                            step['error'] |= failed(payload.get('output'))
+                        for process in process_ids(payload.get('output')):
+                            processes[str(process)] = related
+                added = []
+                for index, (call_id, command) in enumerate(calls):
+                    if not isinstance(command, str) or not command or when is None or when < since:
+                        continue
+                    identity = (session, call_id, index) if call_id else (session, when, index)
+                    if identity in seen:
+                        continue
+                    seen.add(identity)
+                    pattern = normalize(command)
+                    if not pattern:
+                        continue
+                    words = WORDS.findall(command)
+                    program = next((word for word in words if '=' not in word), '').strip('\"\'').rsplit('/', 1)[-1]
+                    step = {'pattern': pattern, 'time': when, 'error': False,
+                            'scripted': program in (scripts or set()),
+                            'fingerprint': hashlib.sha256(command.encode()).digest()}
+                    sessions[session].append(step)
+                    pending.setdefault(call_id, []).append(step)
+                    added.append(step)
+                    usage_pending.append(step)
+                usage = message.get('usage')
+                if isinstance(usage, dict) and added:
+                    tokens = sum(usage.get(k, 0) or 0 for k in ('input_tokens', 'output_tokens', 'cache_creation_input_tokens', 'cache_read_input_tokens'))
+                    for step in added:
+                        step['tokens'] = tokens / len(added)
+                    usage_pending = []
+                if payload.get('type') == 'token_count' or event.get('type') == 'token_usage_record':
+                    usage = (payload.get('info') or {}).get('last_token_usage') or payload.get('usage') or {}
+                    tokens = usage.get('total_tokens')
+                    if isinstance(tokens, (int, float)) and usage_pending:
+                        for step in usage_pending:
+                            step['tokens'] = tokens / len(usage_pending)
+                        usage_pending = []
+    for steps in sessions.values():
+        steps.sort(key=lambda step: step['time'])
+        for left, right in zip(steps, steps[1:]):
+            if left['fingerprint'] == right['fingerprint']:
+                left['error'] = right['error'] = True
+        for step in steps:
+            del step['fingerprint']
+    return sessions, malformed
+
+
+def existing_scripts(repo, home):
+    paths = list((repo / '.claude/skills').glob('*/scripts/*'))
+    paths += list((home / '.local/bin').glob('*'))
+    return {path.name for path in paths if path.is_file()}
+
+
+GENERIC = {'cd', 'cat', 'sed', 'grep', 'rg', 'head', 'tail', 'ls', 'wc', 'echo', 'find', 'sort', 'uniq', 'cut',
+           'tr', 'awk', 'xargs', 'true', 'printf', 'pwd', 'timeout', 'sleep', 'nl', 'diff', 'test', '[', 'stat'}
+SEPARATORS = {'&&', '||', '|', ';', '&', '(', ')'}
+
+
+def programs(pattern):
+    words, found, start = pattern.split(), set(), True
+    for word in words:
+        if word in SEPARATORS:
+            start = True
+        elif start:
+            found.add(word)
+            start = False
+    return found
+
+
+def routine_like(pattern):
+    """A routine needs at least one step beyond plain shell reading (grep, sed, cat and the like)."""
+    return any(program not in GENERIC and not program.startswith('<') for step in pattern for program in programs(step))
+
+
+def covered(step, scripts):
+    """A step is covered when it runs an existing script, or only plain shell reading around one."""
+    return step.get('scripted', False) or programs(step['pattern']) <= scripts | GENERIC
+
+
+def candidates(sessions, scripts):
+    grouped = {}
+    for session, steps in sessions.items():
+        for size in range(2, 7):
+            for start in range(len(steps) - size + 1):
+                occurrence = steps[start:start + size]
+                pattern = tuple(step['pattern'] for step in occurrence)
+                item = grouped.setdefault(pattern, {'sessions': set(), 'occurrences': 0, 'minutes': 0.0, 'errors': 0, 'tokens': None, 'scripted': True})
+                item['scripted'] &= all(covered(step, scripts) for step in occurrence) and any(
+                    step.get('scripted', False) or programs(step['pattern']) & scripts for step in occurrence)
+                item['sessions'].add(session)
+                item['occurrences'] += 1
+                item['minutes'] += max(0, occurrence[-1]['time'] - occurrence[0]['time']) / 60
+                item['errors'] += any(step['error'] for step in occurrence)
+                tokens = [step['tokens'] for step in occurrence if 'tokens' in step]
+                if tokens:
+                    item['tokens'] = (item['tokens'] or 0) + sum(tokens)
+    results = []
+    for pattern, item in grouped.items():
+        if len(item['sessions']) < 3 or not (item['scripted'] or routine_like(pattern)):
+            continue
+        result = {'pattern': list(pattern), 'sessions': len(item['sessions']),
+                  'occurrences': item['occurrences'], 'minutes': round(item['minutes'], 2),
+                  'error_rate': round(item['errors'] / item['occurrences'], 4),
+                  'already_scripted': item['scripted']}
+        if item['tokens'] is not None:
+            result['tokens'] = round(item['tokens'])
+        results.append(result)
+    return sorted(results, key=lambda item: (-item['sessions'], -item['occurrences'], -item['minutes'], -item.get('tokens', 0), -item['error_rate'], item['pattern']))
+
+
+def write_reports(report, directory):
+    machine = json.dumps(report, indent=2) + '\n'
+    lines = ['# Scriptify candidates', '', 'Patterns and counts only. No transcript text or session identifiers.',
+             'Agent activity skipped: no cheap cross-session command read is available.',
+             'Ranking: sessions, occurrences, minutes, available tokens, error rate (descending).',
+             'Usage is apportioned to shell calls; overlapping n-grams are not additive.', '',
+             f"Sessions: {report['sessions']}; commands: {report['commands']}; malformed lines: {report['malformed_lines']}.", '']
+    eligible = [item for item in report['candidates'] if not item['already_scripted']]
+    for index, item in enumerate(eligible[:10], 1):
+        lines += [f"## {index}. {item['sessions']} sessions, {item['occurrences']} occurrences",
+                  f"Minutes: {item['minutes']}; error rate: {item['error_rate']:.1%}" +
+                  (f"; tokens: {item['tokens']}" if 'tokens' in item else ''), '', '```text', *item['pattern'], '```', '']
+    lines += [f"Already scripted candidates excluded: {sum(item['already_scripted'] for item in report['candidates'])}."]
+    markdown = '\n'.join(lines) + '\n'
+    if secret_like(machine) or secret_like(markdown):
+        raise ValueError('secret-looking report refused')
+    directory.mkdir(parents=True, exist_ok=True, mode=0o700)
+    for name, text in [('candidates.json', machine), ('candidates.md', markdown)]:
+        tmp = directory / (name + '.tmp')
+        with tmp.open('w') as stream:
+            os.chmod(tmp, 0o600)
+            stream.write(text)
+        tmp.replace(directory / name)
+    return machine
+
+
+def main():
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument('--days', type=int, default=7)
+    parser.add_argument('--json', action='store_true')
+    parser.add_argument('--repo', type=Path, default=Path(__file__).resolve().parents[4])
+    args = parser.parse_args()
+    if args.days < 1:
+        parser.error('--days must be positive')
+    start = time.monotonic()
+    home = Path.home()
+    scripts = existing_scripts(args.repo, home)
+    sessions, malformed = read_sessions(home, time.time() - args.days * 86400, scripts)
+    report = {'days': args.days, 'sessions': len(sessions), 'commands': sum(map(len, sessions.values())),
+              'malformed_lines': malformed, 'candidates': candidates(sessions, scripts),
+              'runtime_seconds': round(time.monotonic() - start, 3)}
+    directory = home / '.local/state/scriptify' / dt.date.today().isoformat()
+    machine = write_reports(report, directory)
+    print(machine if args.json else f"Scriptify: {len(report['candidates'])} candidates; {report['runtime_seconds']}s; {directory / 'candidates.md'}")
+
+
+if __name__ == '__main__':
+    try:
+        main()
+    except (OSError, ValueError):
+        print('scriptify-scan: scan or redaction failed; no transcript details logged', file=sys.stderr)
+        sys.exit(1)

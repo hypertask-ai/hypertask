@@ -1,3 +1,4 @@
+const { withStubs } = require('./helpers/stub-map.cjs')
 const test = require('node:test')
 const assert = require('node:assert/strict')
 const fs = require('node:fs')
@@ -13,6 +14,10 @@ const demoBoardId = 42
 const connectTaskTitle = 'Connect Hypertask to Claude or ChatGPT'
 
 function loadTs(relativePath, aliases) {
+  aliases = withStubs({
+    '@/lib/auth/signupAttributionContext': { createSignupContext: async () => null, consumeSignupContext: async () => null, consumeSignupCookie: async () => null, consumeGoogleSignupContext: async () => null, bindSignupCodeContext: async () => {}, takeSignupCodeContext: async () => null },
+  }, aliases)
+
   if (/src\/lib\/flags\/(?:keys|definitions)\.ts$/.test(relativePath)) return require("./helpers/flag-files.cjs").load(relativePath);
   const javascript = ts.transpileModule(fs.readFileSync(path.join(root, relativePath), 'utf8'), {
     compilerOptions: {
@@ -84,6 +89,7 @@ function makeHarness({ guestBoard = true, existing = false, memberships = 0, fla
       return callback(prisma)
     },
     featureFlag: { findUnique: async ({ where }) => {
+      if (where.key === 'htpr-7549-first-task-pointer') return { mode: 'OFF' }
       calls.flags.push(where.key)
       return flagMode === null ? null : { mode: flagMode }
     } },
@@ -98,16 +104,19 @@ function makeHarness({ guestBoard = true, existing = false, memberships = 0, fla
       verifySession: (token) => token === 'guest-session' ? { id: guestId } : null,
       signSession: () => 'new-session', sessionCookieOptions: () => ({}), clearBetterAuthSessionCookies: () => {},
     },
+    '@/lib/auth/sessionRevocation': { isSessionTokenRevoked: async () => false, revokeSessionToken: async () => {} },
     '@/lib/demo/guest': { GUEST_UID_PREFIX: 'guest_' },
     '@/lib/configs/auth.config': { onboarding: { skipOnboarding, shouldSkipInteractive: true } },
     '@/lib/constants/constants': { companySizeOptions: ['Just me'], companyRoleOptions: ['Founder'] },
     '@/utils/controllers/users/update_or_create_user': async () => ({ status: 200, res: { user, isNewUser: !existing } }),
+    '@/utils/controllers/users/findUserByEmail': { findUserByEmail: (email) => prisma.user.findFirst({ where: { email } }) },
     '@/utils/controllers/users/autoJoinByEmailDomain': async () => {},
     '@/lib/auth/requestBaseUrl': { getRequestBaseUrl: () => 'https://app.hypertask.ai' },
     '@/lib/auth/slimUserCookie': { slimUserForCookie: (value) => value },
     '@/lib/auth/themeCookie': { seedResponseThemeCookie: () => {} },
     '@/lib/telemetry/signupAnalytics': { signupAttributionFromHeaders: () => ({}) },
-    '@/lib/telemetry/activationOccurrences': { recordActivationOccurrence: () => {} },
+    '@/lib/telemetry/activationOccurrences': { captureActivationOccurrence: async () => null },
+    '@/lib/telemetry/savedWork': { enqueueBoardCreated: async () => "board-key", processAnalyticsIntentSoon: () => {}, enqueueTaskCreated: async () => "task-key", creationChannelFromHeader: () => 'web', CREATION_CHANNEL_HEADER: 'X-Hypertask-Creation-Channel', CREATION_AGENT_HEADER: 'X-Hypertask-Creation-Agent' },
     '@/lib/auth/emailLinkToken': { consumeEmailLinkToken: async () => true },
     '@/lib/auth/emailCodeRateLimit': {
       getEmailCodeClientIp: () => '192.0.2.1', claimEmailCodeAttempt: async () => ({ ipAllowed: true, emailAllowed: true }),

@@ -8,7 +8,6 @@ const load = require("jiti")(__filename, {
 });
 const catalog = load(path.join(root, "src/lib/aiModelOptions.ts"));
 const { buildComposerConfig } = load(path.join(root, "src/app/api/android/ai/composer/config.ts"));
-const { HTPR_7010_HAIKU_5_5_FLAG, LUNA_FREE_PLAN_FLAG } = load(path.join(root, "src/lib/flags/keys.ts"));
 
 function assertUniqueModelClasses(options, isVisible = () => true) {
   const keysByClass = new Map();
@@ -40,48 +39,44 @@ test("every model definition has a non-empty modelClass, including hidden models
   assert.equal(catalog.getAiModelDefinition("kimi-k3").modelClass, "kimi-k3");
 });
 
-for (const haiku55Enabled of [false, true]) {
-  for (const lunaFree of [false, true]) {
-    const state = `${HTPR_7010_HAIKU_5_5_FLAG}=${haiku55Enabled}, ${LUNA_FREE_PLAN_FLAG}=${lunaFree}`;
-    test(`one model per class in every picker with ${state}`, () => {
-      const isVisible = (option) => catalog.isAiModelOptionVisible(option, haiku55Enabled);
-      const visibleOptions = catalog.aiModelOptions.filter(isVisible);
-      // Web pickers can show locked rows. Providers, guest access, caller lists,
-      // and custom endpoint setup only restrict this maximum visible catalog.
-      assertUniqueModelClasses(catalog.aiModelOptions, isVisible);
-      assert.equal(visibleOptions.some((option) => option.modelKey === "claude-haiku-4.5"), !haiku55Enabled);
-      assert.equal(visibleOptions.some((option) => option.modelKey === "claude-haiku-5-5"), haiku55Enabled);
-      const quickIds = haiku55Enabled
-        ? ["claude-haiku-5-5", ...catalog.MOBILE_AI_CHAT_QUICK_MODEL_IDS]
-        : catalog.MOBILE_AI_CHAT_QUICK_MODEL_IDS;
-      assertUniqueModelClasses(visibleOptions.filter((option) => quickIds.includes(option.id)));
+for (const haiku55Enabled of [true]) {
+  const state = `haiku55Enabled=${haiku55Enabled}`;
+  test(`one model per class in every picker with ${state}`, () => {
+    const isVisible = (option) => catalog.isAiModelOptionVisible(option, haiku55Enabled);
+    const visibleOptions = catalog.aiModelOptions.filter(isVisible);
+    // Web pickers can show locked rows. Providers, guest access, caller lists,
+    // and custom endpoint setup only restrict this maximum visible catalog.
+    assertUniqueModelClasses(catalog.aiModelOptions, isVisible);
+    assert.equal(visibleOptions.some((option) => option.modelKey === "claude-haiku-4.5"), !haiku55Enabled);
+    assert.equal(visibleOptions.some((option) => option.modelKey === "claude-haiku-5-5"), haiku55Enabled);
+    const quickIds = haiku55Enabled
+      ? ["claude-haiku-5-5", ...catalog.MOBILE_AI_CHAT_QUICK_MODEL_IDS]
+      : catalog.MOBILE_AI_CHAT_QUICK_MODEL_IDS;
+    assertUniqueModelClasses(visibleOptions.filter((option) => quickIds.includes(option.id)));
 
-      // Luna's flag changes access rather than hiding locked web rows. Android
-      // actually hides plan-locked models, so exercise its real filtering too.
-      for (const storePlanId of ["Free", "Pro", "AI", "BYOK"]) {
-        for (const customEndpointConfigured of [false, true]) {
-          for (const hasByok of [false, true]) {
-            const providersWithByok = new Set(hasByok
-              ? catalog.aiModelDefinitions.map((definition) => definition.provider)
-              : []);
-            const config = buildComposerConfig({
-              settings: {}, storePlanId, customEndpointConfigured,
-              providersWithByok, haiku55Enabled, lunaFree,
-            });
-            const options = config.models.map((model) => {
-              const option = catalog.aiModelOptions.find((candidate) => candidate.id === model.id);
-              assert.ok(option, `Unknown picker model ${model.id}`);
-              return option;
-            });
-            assertUniqueModelClasses(options);
-            if (storePlanId === "Free") {
-              assert.equal(options.some((option) => option.modelKey === "gpt-6-luna"), lunaFree);
-            }
+    for (const storePlanId of ["Free", "Pro", "AI", "BYOK"]) {
+      for (const customEndpointConfigured of [false, true]) {
+        for (const hasByok of [false, true]) {
+          const providersWithByok = new Set(hasByok
+            ? catalog.aiModelDefinitions.map((definition) => definition.provider)
+            : []);
+          const config = buildComposerConfig({
+            settings: {}, storePlanId, customEndpointConfigured,
+            providersWithByok, haiku55Enabled,
+          });
+          const options = config.models.map((model) => {
+            const option = catalog.aiModelOptions.find((candidate) => candidate.id === model.id);
+            assert.ok(option, `Unknown picker model ${model.id}`);
+            return option;
+          });
+          assertUniqueModelClasses(options);
+          if (storePlanId === "Free") {
+            assert.equal(options.some((option) => option.modelKey === "gpt-6-luna"), true);
           }
         }
       }
-    });
-  }
+    }
+  });
 }
 
 test("reasoning and effort variants sharing a modelKey are not separate models", () => {

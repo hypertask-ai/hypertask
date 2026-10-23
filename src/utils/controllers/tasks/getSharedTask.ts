@@ -1,3 +1,4 @@
+import { stripForeignTaskRelations } from "@/lib/tasks/sameBoardRelations";
 import prisma from "@/lib/prisma";
 import {
   PRIVATE_AGENT_DISPLAY_NAME,
@@ -174,6 +175,7 @@ export const getSharedTaskInfo = async (shareId: string) => {
     },
   });
 
+  if (shared?.task) shared.task = stripForeignTaskRelations(shared.task);
   return redactAgentIdentitiesForPublicShare(shared);
 };
 
@@ -236,3 +238,11 @@ export const checkIfBoardMember = async (userId: number, projectId: number) => {
     return 400;
   }
 };
+
+export const isShareLinkLive = (
+  share: { expired: boolean; expiredAt: Date | null; task: { status: string } },
+  now = new Date()
+) =>
+  !share.expired &&
+  !(share.expiredAt && share.expiredAt <= now) &&
+  share.task.status !== "Deleted";

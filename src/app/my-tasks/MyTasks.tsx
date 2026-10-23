@@ -9,7 +9,6 @@ import useClickOutside from "@/hooks/MultiPages/useClickOutside";
 import { useFlag } from "@/hooks/useFlag";
 import {
   HTPR_6938_MY_TASKS_ICON_CONTROLS_FLAG,
-  HTPR_6567_COMMAND_SCOPE_PICKER_FLAG,
   MY_TASKS_FILTER_PARITY_FLAG,
   MY_TASKS_LIVE_UPDATES_FLAG,
   MY_TASKS_PRIORITY_FILTER_FLAG,
@@ -115,15 +114,12 @@ interface IProps {
   sections: ISection[];
   tabs: string[];
   boards: MyTasksBoardMetadata[];
-  /** Boards the session can open, including ones with zero My Tasks rows. */
   accessibleProjectIds?: number[];
-  /** Soonest future snooze among hidden rows; client refreshes when it elapses. */
   nearestSnoozeUntil?: string | null;
   currentUser: IUser;
   initialViews: MyTasksSavedView[];
   initialViewId: number | null;
   viewsEnabled: boolean;
-  /** Server 6455 check so the first paint is already time-grouped. */
   timeGroupEnabled?: boolean;
   scopesEnabled?: boolean;
 }
@@ -176,7 +172,6 @@ const MyTasks = ({
   );
   const activeSplitRef = useRef(activeSplit);
   const setActiveSplit = useCallback((split: number) => {
-    // Count every key press even before React commits the previous selection.
     activeSplitRef.current = split;
     setActiveSplitState(split);
   }, []);
@@ -188,7 +183,7 @@ const MyTasks = ({
     Boolean(myTasksTimeGroupFlag),
   );
   const myTasksTableColumnsEnabled = useFlag(MY_TASKS_TABLE_COLUMNS_FLAG);
-  const myTasksScopesFlag = useFlag(MY_TASKS_SCOPES_FLAG); // HTPR-6457 Involvement UI
+  const myTasksScopesFlag = useFlag(MY_TASKS_SCOPES_FLAG);
   const myTasksSnoozeEnabled = useFlag(MY_TASKS_SNOOZE_FLAG);
   const overdueBadgesEnabled = useFlag(MY_TASKS_OVERDUE_BADGES_FLAG);
   const filterParityEnabled = useFlag(MY_TASKS_FILTER_PARITY_FLAG);
@@ -221,11 +216,8 @@ const MyTasks = ({
   );
   const lastColumnsPickerRequest = useRef(columnsPickerRequest);
 
-  const commandScopePickerEnabled = useFlag(HTPR_6567_COMMAND_SCOPE_PICKER_FLAG);
   const filterEnabled = useFlag(MY_TASKS_PRIORITY_FILTER_FLAG);
   const myTasksBulkSelectionEnabled = useFlag(MY_TASKS_BULK_SELECTION_FLAG);
-  // My Tasks spans every board, so unlike board filters (which persist to a
-  // saved view) this selection lives in state only and resets on reload.
   const [prioritySelection, setPrioritySelection] = useState<
     IPrioritiesConstants[]
   >([]);
@@ -368,7 +360,6 @@ const MyTasks = ({
   );
 
   useEffect(() => {
-    // Only seed from SSR while we have not fetched a scopes selection yet.
     if (liveUpdatesEnabled) return;
     if (lastFetchedScopesKey.current !== null) return;
     setSections(initialSections);
@@ -378,10 +369,8 @@ const MyTasks = ({
   }, [initialAccessibleProjectIds, initialBoards, initialSections, initialTabs, liveUpdatesEnabled]);
 
   useEffect(() => {
-    // Invalidate any in-flight refetch before deciding whether to fetch.
     const token = ++scopesFetchToken.current;
     if (liveUpdatesEnabled) {
-      // Live effect owns reconcile; only stop the legacy scopes-fetch token.
       return;
     }
     if (!myTasksScopesFlag || !scopesEnabled) {
@@ -392,7 +381,6 @@ const MyTasks = ({
       setAccessibleProjectIds(initialAccessibleProjectIds);
       return;
     }
-    // First paint already matches SSR for the active scopes; only refetch on change.
     if (lastFetchedScopesKey.current === null) {
       lastFetchedScopesKey.current = scopesKey;
       return;
@@ -511,7 +499,6 @@ const MyTasks = ({
         }
         setRemoteOverdueCounts(parsed);
       } catch {
-        // Keep the last good counts; the active tab still overlays from sections.
       }
     })();
     return () => {
@@ -532,8 +519,6 @@ const MyTasks = ({
   );
   const dirty = JSON.stringify(viewConfig) !== JSON.stringify(baselineConfig);
 
-  // One gate for both control and behavior: if the flag flips off while a
-  // selection exists, filtering stops too instead of hiding the control.
   const selectedPriorities = filterEnabled ? prioritySelection : [];
   const priorityFilteredSections = useMemo(
     () => filterMyTasksByPriority(sections, selectedPriorities),
@@ -822,7 +807,6 @@ const MyTasks = ({
       (memory.viewId === null || views.some((view) => view.id === memory.viewId));
     const restoreBoard = entryParams.current.board === null && !pickedBoard.current && memory.boardId !== undefined;
     if (restoreView) {
-      // Apply config before board validation sees the restored URL.
       setActiveViewId(memory.viewId ?? null);
       updateViewConfig(parseMyTasksViewConfig(
         views.find((view) => view.id === memory.viewId)?.config ?? DEFAULT_MY_TASKS_VIEW_CONFIG,
@@ -1374,13 +1358,10 @@ const boardTabCounts = useMemo(() => {
         const hasStarredFilter = next.addedFilters.some(
           (filter) => filter.type === "Starred",
         );
-        // Keep flat not-starred across ordinary edits; Clear All uses onClearAllFilters.
-        // Explicit Starred in filterSettings replaces it.
         const keepNotStarred =
           current.filters.starred === false && !hasStarredFilter;
         return {
           ...current,
-          // FilterHTC owns these overlapping fields once parity is in use.
           filters: {
             ...current.filters,
             priorityIds: [],
@@ -1410,11 +1391,13 @@ const boardTabCounts = useMemo(() => {
         dueDate: null,
         createdRange: null,
         updatedRange: null,
-        ...(commandScopePickerEnabled ? { sectionIds: [], showDone: false, showSnoozed: false } : {}),
+        sectionIds: [],
+        showDone: false,
+        showSnoozed: false,
       },
       filterSettings: emptyFilterSettings(),
     }));
-  }, [commandScopePickerEnabled, updateViewConfig]);
+  }, [updateViewConfig]);
 
   const onClearNotStarred = useCallback(() => {
     updateViewConfig((current) => ({
@@ -1448,7 +1431,7 @@ const boardTabCounts = useMemo(() => {
       {filterParityEnabled && kanbanFiltersOpen && (
         <MyTasksKanbanFilterModal
           boards={boards}
-          config={commandScopePickerEnabled ? viewConfig : undefined}
+          config={viewConfig}
           onViewChange={updateViewConfig}
           snoozeEnabled={myTasksSnoozeEnabled}
           settings={viewConfig.filterSettings}

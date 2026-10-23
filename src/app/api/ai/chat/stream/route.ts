@@ -1,3 +1,4 @@
+import { loadSidebarChatRequest } from "@/lib/agents/chatAccess";
 import { loadTurnModel } from "@/lib/ai/chatStream/turnModel";
 import { createChatStream } from "@/lib/ai/chatStream/stream";
 import { NextRequest } from "next/server";
@@ -6,7 +7,7 @@ import { getCronServiceRequestUser } from "@/app/api/ai/_lib/cronServiceAuth";
 import { decodeHeartbeatTurnMessage } from "@/lib/nativeAgent/heartbeatTurnEnvelope";
 import prisma from "@/lib/prisma";
 import { isFeatureEnabled } from "@/lib/flags";
-import { HTPR_7048_CTRLJ_CHAT_LEASE_FLAG } from "@/lib/flags/keys";
+import { HTPR_7048_CTRLJ_CHAT_LEASE_FLAG, HTPR_7316_CHAT_SCOPE_TICKET_FLAG } from "@/lib/flags/keys";
 import { ensureNativeChatTurn, findNativeAssistantReplay } from "@/app/api/ai/chat/stream/ensureNativeChatTurn";
 import { resolveAiUsageTaskId } from "@/app/api/ai/_lib/currentTaskContext";
 
@@ -26,8 +27,6 @@ export const dynamic = "force-dynamic";
 export const maxDuration = 300;
 
 export async function POST(request: NextRequest) {
-  // The platform time budget starts here, so the graceful deadline below must
-  // count from here too, not from when the stream body starts.
   const turnStartedAtMs = Date.now();
   const requestUser =
     (await getAiRequestUser(request)) ??
@@ -48,6 +47,9 @@ export async function POST(request: NextRequest) {
   } catch (error) {
     return createSseErrorResponse(requestErrorMessage(error, "validation"));
   }
+
+  const sidebarAccess = await loadSidebarChatRequest(request, body.session_id ?? "");
+  if (!sidebarAccess.ok) return createSseErrorResponse(sidebarAccess.error, sidebarAccess.status);
 
   const heartbeatExecutionId = request.headers.get(
     "x-hypertask-heartbeat-execution-id"
@@ -90,13 +92,25 @@ export async function POST(request: NextRequest) {
     return createSseErrorResponse("Unauthorized", 401);
   }
 
-  // HTPR-6278: the platform kills this function at maxDuration with no
-  // finally, so the turn ends with nothing persisted, no tool run, no error
-  // report, and a stream lease that blocks the next turn for 30 more seconds.
-  // End the turn gracefully just before that kill instead.
-  // ponytail: phases that ignore the abort signal (a hung tool, a non-stream
-  // DB call) can still run into the platform kill; the upgrade path is
-  // per-phase timeouts at each trust boundary.
+  if (body.default_context?.scope === "ticket") {
+    if (!await isFeatureEnabled(HTPR_7316_CHAT_SCOPE_TICKET_FLAG, dbUser.id)) {
+      delete body.default_context.scope;
+    }
+  }
+  const contextTaskId = await resolveAiUsageTaskId({
+    taskId: body.default_context?.task_id,
+    projectId: body.default_context?.project_id,
+    userId: dbUser.id,
+  });
+  if (body.default_context?.scope === "ticket") {
+    if (contextTaskId === null) {
+      return createSseErrorResponse("Ticket not found or access denied", 403);
+    }
+    body.context_list = [];
+    delete body.default_context.view_id;
+    delete body.default_context.view_name;
+  }
+
   let userMessagePersisted = false;
   if (body.session_id && body.user_message_id) {
     try {
@@ -157,8 +171,6 @@ export async function POST(request: NextRequest) {
     }
   }
 
-  // Best-effort: link the session to the board used for its first message. The
-  // null guard makes the original board sticky if the composer scope changes.
   const contextProjectId = body.default_context?.project_id;
   if (body.session_id && typeof contextProjectId === "number") {
     try {
@@ -175,13 +187,6 @@ export async function POST(request: NextRequest) {
     }
   }
 
-  // Best-effort: link the session to the ticket it was opened on (HTPR-4311). Never
-  // blocks the chat request — a bad task_id just leaves the session unlinked.
-  const contextTaskId = await resolveAiUsageTaskId({
-    taskId: body.default_context?.task_id,
-    projectId: body.default_context?.project_id,
-    userId: dbUser.id,
-  });
   if (body.session_id && contextTaskId !== null) {
     try {
       await prisma.chatSession.updateMany({
@@ -200,12 +205,7 @@ export async function POST(request: NextRequest) {
   if (turnModel instanceof Response) return turnModel;
   const { selected, titleByokApiKey, streamCredential, streamModelOption, gatewayTags, usageProjectId, actingAgent, teamProviderSettings } = turnModel;
 
-  // A retry reuses the assistant UUID for idempotent persistence, while each
-  // network attempt gets its own cancellation identity. The server generates
-  // one for older clients, which can stream safely but cannot issue exact Stop.
   const streamId = body.stream_id ?? randomUUID();
-  // Always guard the agent across flag toggles; flag Off also guards its owner.
-  // The agent identity is resolved from the owned session, never request input.
   const isolateAgentLease = !!actingAgent && await isFeatureEnabled(HTPR_7048_CTRLJ_CHAT_LEASE_FLAG, dbUser.id);
   const streamLease = await acquireAiChatStreamLease(
     dbUser.id,

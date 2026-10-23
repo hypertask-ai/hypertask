@@ -206,7 +206,7 @@ test("Inbox cold commit focuses its existing proxy synchronously and warm commit
   const calls = [];
   const proxy = { value: "old", focus: (options) => { assert.deepEqual(options, { preventScroll: true }); calls.push("focus"); }, blur: () => calls.push("blur") };
   const effect = (show, loaded, active = null) => sourceCallback(
-    inbox, "  useLayoutEffect(() => {\n    // iOS needs", "  useEffect(() => {\n    // Fetch the visible split", "useLayoutEffect",
+    inbox, "useLayoutEffect(() =>", "useEffect(() => {\n    void", "useLayoutEffect",
     { showCommands: { show }, HypertasksCommands: loaded, commandFocusProxy: { current: proxy }, document: { activeElement: active } },
   )();
   effect(true, undefined);

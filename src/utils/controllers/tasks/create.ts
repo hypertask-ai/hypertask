@@ -1,3 +1,5 @@
+import type { AgentTokenTeamScope } from '@/lib/mcp/auth/types';
+import { recordAgentBoardScopeMiss } from "@/lib/auth/agentScope";
 import { NextApiHandler, NextApiRequest, NextApiResponse } from "next"
 import { PrismaClient } from "@prisma/client"
 import upsertTaskDescription from "../description/common-description-create";
@@ -5,7 +7,7 @@ import prisma from "@/lib/prisma";
 import { isFeatureEnabled } from "@/lib/flags";
 import { waitUntil } from "@vercel/functions";
 import { HTPR_7131_INDEX_NEW_TICKETS_FLAG } from "@/lib/flags/definitions/htpr-7131-index-new-tickets";
-import { scheduleClassifyTaskAiLabels } from "@/lib/ai/labelClassifier";
+import { scheduleClassifyNewTaskAiLabels } from "@/lib/ai/labelClassifier";
 import { getNextUniqueTaskIndex } from "./getNextUniqueTaskIndex";
 import { taskWriteAccessWhere } from "@/utils/controllers/projects/getAllIncludes";
 import { autoAssignForSection } from "@/utils/controllers/assignees/autoAssignForSection";
@@ -17,22 +19,10 @@ import {
   persistAgentTaskCreatedPending,
 } from "@/lib/agentWebhooks/outbox";
 
-// Share createGlobally.ts's board lock so both routes serialize ticket-number allocation.
 const TASK_UNIQUE_INDEX_ADVISORY_LOCK_CLASS = 9428471;
 
-/** Subset used by uniqueIndex helpers — works with root client and interactive transaction `tx`. */
 type TaskDb = Pick<PrismaClient, "task">
 
-// HTPR-5928: builds the task.created webhook payload from the row tx.task.create
-// already returned (both branches below `include: { priority: true, ... }`),
-// instead of persistTaskCreatedWebhook re-reading the task and its section.
-//
-// `sectionTitle` is passed in separately rather than read off `row.section`:
-// row.section is Task's denormalized string field, written here from the
-// caller-supplied `body.section` (IProps.section) — not DB truth. Callers pass
-// the title from the Section row they already fetched (`sectionExists`) so a
-// stale/renamed client value can't leak into the webhook payload (HTPR-5928
-// review).
 export function buildWebhookTaskSnapshot(
   row: {
     id: number;
@@ -71,6 +61,7 @@ interface IProps {
     index?:number
     currentUser: { id: number };
     agentId?: string | null;
+    teamScope?: AgentTokenTeamScope | null;
   }
 export const getUniqueTaskCount = async (
     projectId: number,
@@ -79,24 +70,12 @@ export const getUniqueTaskCount = async (
     return (await getNextUniqueTaskIndex(projectId, db)) - 1;
 };
 
-const create = async ({title, description, section, userId, ranking, projectId,sectionId,index,currentUser,agentId}:IProps) => {
+const create = async ({title, description, section, userId, ranking, projectId,sectionId,index,currentUser,agentId,teamScope}:IProps) => {
         try {
-            // if (userId===4){
-            //     await prisma.task.updateMany({
-            //         where:{
-            //             updatedAt:null
-            //         },
-            //         data: {
-            //           updatedAt: new Date(), // Set updatedAt to the current date and time
-            //         },
-            //       });
-            //     console.log("Updated")
-            // }
-            
             const allowedProject = await prisma.project.findFirst({
                 where: {
                     id: projectId,
-                    ...taskWriteAccessWhere(currentUser.id, agentId),
+                    ...taskWriteAccessWhere(currentUser.id, agentId, teamScope),
                 },
                 select: { id: true },
             })
@@ -106,6 +85,7 @@ const create = async ({title, description, section, userId, ranking, projectId,s
                 json:{ message: "Project not found or access denied" }
             })
 
+            recordAgentBoardScopeMiss(allowedProject.id, "write");
             const sectionExists = await prisma.section.findFirst({
                 where:{
                     id:sectionId
@@ -123,7 +103,6 @@ const create = async ({title, description, section, userId, ranking, projectId,s
             
             const currentDate = new Date();
 
-            // return res.status(400).json({ message: "Section Doesn't Exist" });
             let task;
             let boardWebhookDeliveryIds: string[] = [];
             const count  = await prisma.task.count({
@@ -132,7 +111,6 @@ const create = async ({title, description, section, userId, ranking, projectId,s
                     status:"Normal"
                 }
             })
-            // ------------------- BODY 
             const body = {title,
                 description,
                 section,
@@ -150,7 +128,7 @@ const create = async ({title, description, section, userId, ranking, projectId,s
 
                 const created = await createTaskWithBoardWebhookOutbox(prisma, taskCreatedActor, async (tx) => {
                   await tx.$executeRaw`SELECT pg_advisory_xact_lock(${TASK_UNIQUE_INDEX_ADVISORY_LOCK_CLASS}::int, ${projectId}::int)`;
-                  const getProject = await tx.project.findUnique({ where: { id: projectId }, select: { uniqueIdentifier: true } });
+                  const getProject = await tx.project.findUnique({ where: { id: projectId }, select: { uniqueIdentifier: true, firstTaskPointerTaskId: true } });
                   const nextUniqueIndex = await getNextUniqueTaskIndex(projectId, tx);
                   const row = await tx.task.create({
                     data: {
@@ -173,11 +151,9 @@ const create = async ({title, description, section, userId, ranking, projectId,s
                         taskLabels:{include:{label:true}}
                     }
                   })
-                  // Same transaction as the task row, so a subscriber can never
-                  // miss task.created for a task that exists (HTPR-4530).
                   await persistAgentTaskCreatedPending(tx, row.id)
-                  return { taskId: row.id, result: row, webhookTask: buildWebhookTaskSnapshot(row, sectionExists.section_title) }
-                })
+                  return { taskId: row.id, firstTaskPointerTaskId: getProject?.firstTaskPointerTaskId ?? null, result: row, webhookTask: buildWebhookTaskSnapshot(row, sectionExists.section_title) }
+                }, "web")
                 task = created.result
                 boardWebhookDeliveryIds = created.boardWebhookDeliveryIds
                 await prisma.team_Activity.update({
@@ -193,7 +169,7 @@ const create = async ({title, description, section, userId, ranking, projectId,s
             else{
                 const created = await createTaskWithBoardWebhookOutbox(prisma, taskCreatedActor, async (tx) => {
                   await tx.$executeRaw`SELECT pg_advisory_xact_lock(${TASK_UNIQUE_INDEX_ADVISORY_LOCK_CLASS}::int, ${projectId}::int)`;
-                  const getProject = await tx.project.findUnique({ where: { id: projectId }, select: { uniqueIdentifier: true } });
+                  const getProject = await tx.project.findUnique({ where: { id: projectId }, select: { uniqueIdentifier: true, firstTaskPointerTaskId: true } });
                   const nextUniqueIndex = await getNextUniqueTaskIndex(projectId, tx);
                   const row = await tx.task.create({
                     data: {
@@ -208,8 +184,8 @@ const create = async ({title, description, section, userId, ranking, projectId,s
                     }
                   })
                   await persistAgentTaskCreatedPending(tx, row.id)
-                  return { taskId: row.id, result: row, webhookTask: buildWebhookTaskSnapshot(row, sectionExists.section_title) }
-                })
+                  return { taskId: row.id, firstTaskPointerTaskId: getProject?.firstTaskPointerTaskId ?? null, result: row, webhookTask: buildWebhookTaskSnapshot(row, sectionExists.section_title) }
+                }, "web")
                 task = created.result
                 boardWebhookDeliveryIds = created.boardWebhookDeliveryIds
                 await prisma.team_Activity.update({
@@ -224,7 +200,6 @@ const create = async ({title, description, section, userId, ranking, projectId,s
             }
             await publishBoardWebhookDeliveries(boardWebhookDeliveryIds)
             
-            // =============== also now create task description by default
             await Promise.all([
                 upsertTaskDescription({
                     content: "",
@@ -235,19 +210,13 @@ const create = async ({title, description, section, userId, ranking, projectId,s
                 prisma.drafts.create({data:{taskId:task.id,userId:userId, type:"Description", projectId:projectId, saved:false, content:"" }}),
                 prisma.drafts.create({data:{taskId:task.id,userId:userId, type:"Comment", projectId:projectId, saved:false }})
             ])
-            // HTPR-7131: index the new ticket for search. waitUntil keeps the serverless
-            // instance alive without making the create request wait on the embedding call.
             waitUntil((async () => {
                 if (!await isFeatureEnabled(HTPR_7131_INDEX_NEW_TICKETS_FLAG, currentUser.id)) return;
                 const { upsertTaskToTurbopuffer } = await import("@/utils/controllers/turbopuffer/turbopufferHelper");
                 await upsertTaskToTurbopuffer(task.id);
             })().catch((error) => console.error("[task-create] search indexing failed", { taskId: task.id, error })));
-            scheduleClassifyTaskAiLabels(task.id, projectId)
+            scheduleClassifyNewTaskAiLabels(task.id, projectId)
 
-            // The task transaction committed above. Run column auto-assignment
-            // first, then build task.created from the final task state.
-            // A column rule applies to every ticket that lands in the column,
-            // not only to tickets dragged in later (HTPR-5488).
             const autoAssigned = await autoAssignForSection({
                 taskId: task.id,
                 projectId,
@@ -268,17 +237,12 @@ const create = async ({title, description, section, userId, ranking, projectId,s
                         agentId: agentId ?? null,
                     });
                     if (recoveryResult === "recovered") {
-                        // The recovery helper emitted task.created after its
-                        // final assignment and task-state checks.
                     } else if (recoveryResult === "pending") {
-                        // The recovery helper already requeued the marker.
                         console.warn("[task-create] task.created handoff remains pending for the recovery sweep", {
                             taskId: task.id,
                         });
                     }
                 } catch (error) {
-                    // Keep the creation marker pending. Emitting here could
-                    // publish task.created without the final assignees.
                     console.error("[task-create] pending task.created recovery failed", {
                         taskId: task.id,
                         error,
@@ -306,8 +270,6 @@ const create = async ({title, description, section, userId, ranking, projectId,s
                         },
                     });
                 } catch (error) {
-                    // The creation transaction left a pending marker; the minute
-                    // sweep retries this handoff if the request path stops here.
                     console.error("[task-create] agent task.created webhook failed", {
                         taskId: task.id,
                         error,
@@ -330,7 +292,6 @@ const create = async ({title, description, section, userId, ranking, projectId,s
                 status:200,
                 json:task
             })
-            // return res.json(task)
         } catch (error) {
             console.log(error)
             return ({

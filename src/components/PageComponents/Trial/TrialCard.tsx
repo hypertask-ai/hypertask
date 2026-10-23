@@ -1,3 +1,6 @@
+import { TeamStartPlanButton } from "@/components/PageComponents/Kanban/HeaderComponents/StartPlanButton";
+import { useFlag, useFlagReady } from "@/hooks/useFlag";
+import { HTPR_7551_START_PLAN_CHECKOUT_FLAG } from "@/lib/flags/keys";
 import useTrial from "@/hooks/General/useTrial";
 import { ISubscriptionPlan } from "@/lib/subscriptionPlans";
 import { IHasSubscriptionCheck, IPricingSearchParams } from "@/models/model";
@@ -12,12 +15,18 @@ interface IProps {
 }
 
 const TrialCard = ({ teamInfo, manageLink, plan, hasSubscription }: IProps) => {
+  const startPlanEnabled = useFlag(HTPR_7551_START_PLAN_CHECKOUT_FLAG);
+  const flagReady = useFlagReady(HTPR_7551_START_PLAN_CHECKOUT_FLAG);
+
   const { selectedTime, createCheckout, handleDurationChange } = useTrial({
     teamInfo,
     manageLink,
     plan,
     hasSubscription,
   });
+
+  if (!flagReady) return null;
+  if (startPlanEnabled) return <TeamStartPlanButton teamId={teamInfo.teamId} />;
 
   return (
     <>
@@ -46,7 +55,6 @@ const TrialCard = ({ teamInfo, manageLink, plan, hasSubscription }: IProps) => {
               </span>
             )}
         </div>
-        {/* ================ price and period ================ */}
         <div className="flex items-center justify-between my-[9px]">
           <span className="text-display sm:text-display">{plan.types[selectedTime].price}</span>
           <span className="text-content sm:text-subheading text-[#777C85] ">
@@ -68,7 +76,6 @@ const TrialCard = ({ teamInfo, manageLink, plan, hasSubscription }: IProps) => {
           Begin Hypertask Trial
         </div>
 
-        {/*-------------------- SWTICH BETWEEN PLANS -------------------- */}
         {plan.id === "AI" && (
           <div className="flex rounded-full justify bg-[#363A40] mt-[15px] transition-all duration-100 ">
             {plan.types.map((item, index) => (

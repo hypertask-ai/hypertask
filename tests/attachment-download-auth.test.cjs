@@ -49,6 +49,7 @@ function harness({ userId = 985, attachments = [], descriptions = [], comments =
       } },
       page: { findMany: async query => {
         calls.push(["page", query]);
+        assert.equal(query.where.archived, false);
         return accessible(query.where.project) ? pages.filter(row => query.where.OR.some(branch => row.contentHtml.includes(branch.contentHtml.contains))) : [];
       } },
       chatSession: { findFirst: async query => {

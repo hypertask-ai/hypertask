@@ -1,4 +1,4 @@
-import { haiku55ModelEnabled, lunaFreePlanEnabled } from "@/app/api/ai/_lib/planGate";
+import { haiku55ModelEnabled } from "@/app/api/ai/_lib/planGate";
 import type { NextApiHandler, NextApiRequest, NextApiResponse } from "next";
 import {
   AI_FEATURES,
@@ -36,7 +36,7 @@ function effectiveModel(
   settings: unknown,
   customEndpointConfigured: boolean,
   haiku55Enabled = false,
-  context: AiDefaultModelContext & { lunaFree?: boolean } = {},
+  context: AiDefaultModelContext = {},
 ): string | null {
   const enabledSettings = updateAiFeatureToggleSettings(
     settings,
@@ -59,7 +59,7 @@ function effectiveModel(
       feature as UserFacingModelFeature,
       enabledSettings,
       null,
-      { customEndpointConfigured, haiku55Enabled, ...context, ...(haiku55Enabled ? { defaultModelOption: getDefaultAiModelOptionForPlan(context.plan, context.hasByok, context.lunaFree, true, context.haikuDefaultEnabled) } : {}) },
+      { customEndpointConfigured, haiku55Enabled, ...context, ...(haiku55Enabled ? { defaultModelOption: getDefaultAiModelOptionForPlan(context.plan, context.hasByok, true, context.haikuDefaultEnabled, context) } : {}) },
     )?.id ?? null
   );
 }
@@ -69,7 +69,7 @@ function featureRow(
   settings: unknown,
   customEndpointConfigured: boolean,
   haiku55Enabled = false,
-  context: AiDefaultModelContext & { lunaFree?: boolean } = {},
+  context: AiDefaultModelContext = {},
 ) {
   const kind = AI_FEATURES[feature].modelKind;
   const override =
@@ -98,7 +98,6 @@ function featureRow(
       haiku55Enabled,
       context,
     ),
-    // Dictation has no LLM model, but a swappable transcription provider.
     ...(feature === "dictation"
       ? { provider: resolveDictationProvider(settings) }
       : {}),
@@ -109,7 +108,7 @@ function featureModelsResponse(
   settings: unknown,
   customEndpointConfigured: boolean,
   haiku55Enabled = false,
-  context: AiDefaultModelContext & { lunaFree?: boolean } = {},
+  context: AiDefaultModelContext = {},
 ) {
   return Object.fromEntries(
     (Object.keys(AI_FEATURES) as AiFeature[]).map((feature) => [
@@ -152,7 +151,7 @@ const handler: NextApiHandler = async (
     const customEndpointConfigured = Boolean(
       await resolveTeamCustomEndpoint({ trustedTeamId: teamId }),
     );
-    const defaultContext = { ...await getAiDefaultModelContext({ trustedTeamId: teamId, userId: user.id }, haiku55Enabled), lunaFree: await lunaFreePlanEnabled(user.id) };
+    const defaultContext = await getAiDefaultModelContext({ trustedTeamId: teamId, userId: user.id }, haiku55Enabled);
     return res
       .status(200)
       .json(featureModelsResponse(lookup.settings, customEndpointConfigured, haiku55Enabled, defaultContext));
@@ -261,7 +260,7 @@ const handler: NextApiHandler = async (
       return res.status(404).json({ message: "Team not found" });
     }
 
-    const defaultContext = { ...await getAiDefaultModelContext({ trustedTeamId: normalizedTeamId, userId: user.id }, haiku55Enabled), lunaFree: await lunaFreePlanEnabled(user.id) };
+    const defaultContext = await getAiDefaultModelContext({ trustedTeamId: normalizedTeamId, userId: user.id }, haiku55Enabled);
     return res
       .status(200)
       .json(featureModelsResponse(nextSettings, customEndpointConfigured, haiku55Enabled, defaultContext));

@@ -21,10 +21,6 @@ export type GetProjectMembersResult =
   | { members: (ProjectMemberItem | ProjectAgentItem)[]; error: null }
   | { members: null; error: { status: number; message: string } };
 
-/**
- * Fetches project members (owner + human members + board agent members).
- * SECURITY: Returns ONLY users/agents scoped to the specified project.
- */
 export async function getProjectMembers(
   projectId: number,
   excludeUserId: number | undefined,

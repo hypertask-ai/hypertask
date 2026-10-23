@@ -132,7 +132,6 @@ export async function createAgentForUser(
     )
   }
 
-  // Revoked identities are excluded so owners can deliberately reuse their display names.
   const existingAgent = await prisma.agent.findFirst({
     where: {
       userId: user.id,

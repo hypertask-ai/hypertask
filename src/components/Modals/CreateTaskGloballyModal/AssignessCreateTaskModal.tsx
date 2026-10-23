@@ -10,12 +10,6 @@ const AssignessCreateTaskModal = () => {
     
     return (
         <TaskInfoRow>
-            {/* <AssigneesContainer
-                showAssignModal_={showAssignModal}
-                toggleModal={toggleModal}
-                slugs={[]}
-                currentTask={_parsedTask}
-            /> */}
             <></>
         </TaskInfoRow>
     )

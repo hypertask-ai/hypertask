@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # Offline tests for runner-pickup and the runner-inbox-stop hook, using a fake vcc (no network, no GitHub).
 cd "$(dirname "$0")" || exit 1
+LEGACY_NAME="INFRA MANAGER" # Deliberate fallback-name fixture.
 HERE=$PWD; HOOK=$HERE/../../../hooks/runner-inbox-stop.sh; SCRIPT=$HERE/runner-pickup
 fails=0; passes=0
 ok() { echo "ok   $*"; passes=$((passes+1)); }; bad() { echo "FAIL $*"; fails=$((fails+1)); }
@@ -14,7 +15,7 @@ cat > "$T/vcc" <<'EOF'
 #!/usr/bin/env bash
 echo "$SHIP_SESSION_NAME|$*" >> "$FAKE_LOG"
 case "$1 $2" in
-  "task list") [ -z "${FAKE_FAIL:-}" ] || exit 1; cat "$FAKE_TASKS" ;;
+  "task list") [ -z "${FAKE_HANG:-}" ] || sleep 30; [ -z "${FAKE_FAIL:-}" ] || exit 1; cat "$FAKE_TASKS" ;;
   "inbox list") [ -z "${FAKE_INBOX_FAIL:-}" ] || exit 1; [ -n "${FAKE_INBOX:-}" ] && cat "$FAKE_INBOX" || echo '{"success":true,"agent_notifications":[]}' ;;
   "activity add") exit 0 ;;
   *) exit 9 ;;
@@ -54,13 +55,16 @@ eq "claimed ticket dropped" "$(jq -r '[.items[].ticket]|join(",")' "$inbox")" "Y
 # Errors: backoff file, no tight retry, capped growth.
 export FAKE_FAIL=1; : > "$FAKE_LOG"
 "$SCRIPT" run 3 2>/dev/null; rc=$?
-eq "failed read exits non-zero" "$rc" "1"
+eq "first failed read only backs off" "$rc" "0"
 eq "backoff file written" "$(jq -r .fails "$RUNNER_INBOX_DIR/runner-3.backoff.json")" "1"
 "$SCRIPT" run 3 2>/dev/null; rc=$?
 eq "second run inside backoff does not call the board" "$(grep -c '|task list' "$FAKE_LOG")" "1"
-RUNNER_PICKUP_NOW=$(( $(date +%s) + 400 )) "$SCRIPT" run 3 2>/dev/null
+RUNNER_PICKUP_NOW=$(( $(date +%s) + 400 )) "$SCRIPT" run 3 2>/dev/null; rc=$?
 eq "after the delay it retries and the delay doubles" "$(jq -r .fails "$RUNNER_INBOX_DIR/runner-3.backoff.json")" "2"
-for i in 1 2 3 4 5 6 7 8; do RUNNER_PICKUP_NOW=$(( $(date +%s) + 100000 * i )) "$SCRIPT" run 3 2>/dev/null; done
+eq "second failed read in a row only backs off" "$rc" "0"
+RUNNER_PICKUP_NOW=$(( $(date +%s) + 2000 )) "$SCRIPT" run 3 2>/dev/null; rc=$?
+eq "third failed read in a row exits non-zero" "$rc" "1"
+for i in 1 2 3 4 5 6 7; do RUNNER_PICKUP_NOW=$(( $(date +%s) + 100000 * i )) "$SCRIPT" run 3 2>/dev/null; done
 until=$(jq -r .until "$RUNNER_INBOX_DIR/runner-3.backoff.json")
 [ $((until - $(date +%s) - 800000)) -le 3600 ] && ok "backoff delay capped at 3600s" || bad "cap"
 unset FAKE_FAIL
@@ -82,8 +86,14 @@ eq "inbox read failure: tickets file still updated" "$(jq -r '[.items[].ticket]|
 eq "inbox read failure: pending message retried" "$(cat "$FAKE_DELIVERED" 2>/dev/null)" "pending hello"
 [ ! -e "$RUNNER_INBOX_DIR/runner-3.backoff.json" ] && ok "inbox read failure: no backoff" || bad "inbox failure wrote backoff"
 FAKE_FAIL=1 "$SCRIPT" run 3 2>/dev/null; rc=$?
-eq "board read failure still fails the tick" "$rc" "1"
 eq "board read failure still backs off" "$(jq -r .fails "$RUNNER_INBOX_DIR/runner-3.backoff.json")" "1"
+rm -f "$RUNNER_INBOX_DIR"/runner-3.backoff.json
+
+# YPER4-409: a stalled board read is cut off and backs off instead of hanging until systemd kills the unit.
+start=$(date +%s)
+FAKE_HANG=1 RUNNER_PICKUP_CALL_TIMEOUT=1 "$SCRIPT" run 3 2>/dev/null; rc=$?
+[ $(( $(date +%s) - start )) -lt 10 ] && ok "stalled board read is cut off by the call timeout" || bad "stalled board read not cut off"
+eq "stalled board read only backs off" "$rc|$(jq -r .fails "$RUNNER_INBOX_DIR/runner-3.backoff.json")" "0|1"
 rm -f "$RUNNER_INBOX_DIR"/runner-3.backoff.json
 
 # Hook.
@@ -142,7 +152,12 @@ hook 'RUNNER 3' "$pl" post > /dev/full 2>/dev/null
 eq "output write fails: event is not marked, it comes again" "$(undelivered runner-3)" "1"
 eq "and the retry hands it over" "$(hook 'RUNNER 3' "$pl" post | ctx | tail -1)" "1) five"
 ev infra-manager i1 'for the manager'; ev speed-runner s1 'for speed'
-eq "INFRA MANAGER gets its own slot" "$(hook 'INFRA MANAGER' "$pl" post | ctx | tail -1)" "1) for the manager"
+out=$(hook 'HT Product Lead | coordinator' "$pl" post | ctx)
+case "$out" in 'PostToolUse|Board events for HT Product Lead,'*'1) for the manager') ok "renamed session takes the infra-manager board event";; *) bad "renamed session slot: $out";; esac
+ev infra-manager i2 'legacy fallback'
+out=$(hook "$LEGACY_NAME" "$pl" post | ctx)
+case "$out" in 'PostToolUse|Board events for HT Product Lead,'*'1) legacy fallback') ok "fallback name takes the same slot with the new display label";; *) bad "fallback slot: $out";; esac
+eq "both names share the same delivery state" "$(undelivered infra-manager)|$(hook 'HT Product Lead' "$pl" post)" "0|"
 eq "SPEED RUNNER gets its own slot" "$(hook 'SPEED RUNNER | perf' "$pl" prompt | ctx | tail -1)" "1) for speed"
 # Waiter (asyncRewake): wakes with exit 2 only for a new event, once, one per session.
 wait_hook() { echo "$pl" | SHIP_SESSION_NAME="$1" SHIP_SESSION_PID="$2" RUNNER_EVENTS_POLL=0.1 RUNNER_EVENTS_WAIT_MAX="${3:-1}" "$HOOK" wait; }
@@ -228,6 +243,7 @@ case "$(jq -r .reason <<<"$out")" in *'New ticket'*) bad "ticket handed over des
 
 # Install: copies files, merges hooks once, enables the timer through a fake systemctl.
 mkdir -p "$T/bin"; printf '#!/bin/sh\necho "$@" >> "%s/systemctl.log"\n' "$T" > "$T/bin/systemctl"; chmod +x "$T/bin/systemctl"
+export USER_UNIT_CHECK=/usr/bin/true
 export RUNNER_PICKUP_UNIT_DIR=$T/units RUNNER_PICKUP_SETTINGS=$T/settings.json
 for i in 1 2; do PATH="$T/bin:$PATH" "$SCRIPT" install 3 >/dev/null 2>&1; done
 eq "install registers each hook once" "$(jq -r '[(.hooks.Stop|length), (.hooks.UserPromptSubmit|length), (.hooks.PostToolUse|length), (.hooks.SessionStart|length)]|join(",")' "$T/settings.json")" "2,2,1,1"

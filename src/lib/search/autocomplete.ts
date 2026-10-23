@@ -1,8 +1,8 @@
 import { activeSearchValue } from './chips'
-import { operatorMatches, parseSearchQuery, SEARCH_OPERATORS, type Names, type SearchOperator } from './operators'
+import { operatorMatches, parseSearchQuery, SEARCH_OPERATORS, LOGIC_OPERATORS, type Names, type SearchFilterKey, type SearchToken } from './operators'
 
 export type SearchCandidate = { id: number | string; name: string; email?: string }
-export const SEARCH_TIPS: Record<SearchOperator, { example: string; meaning: string }> = {
+export const SEARCH_TIPS: Record<SearchFilterKey | 'exclude', { example: string; meaning: string }> = {
   commenter: { example: 'commenter:@Hicham', meaning: 'Commented by this person' },
   from: { example: 'from:@Kamil', meaning: 'Created by this person' },
   assignee: { example: 'assignee:@Kamil', meaning: 'Assigned to this person' },
@@ -14,6 +14,10 @@ export const SEARCH_TIPS: Record<SearchOperator, { example: string; meaning: str
   after: { example: 'after:2026-09-01', meaning: 'Created after this date (exclusive)' },
   before: { example: 'before:2026-10-01', meaning: 'Created before this date (exclusive)' },
   on: { example: 'on:2026-10-01', meaning: 'Created on this date (UTC)' },
+  priority: { example: 'priority:high', meaning: 'Urgent, high, medium or low priority' },
+  type: { example: 'type:ticket', meaning: 'Tickets or comments' },
+  phrase: { example: '"exact phrase"', meaning: 'Match these words together' },
+  exclude: { example: '-word', meaning: 'Exclude a word or -"exact phrase"' },
 }
 
 export const SEARCH_FILTER_COLOURS = {
@@ -25,54 +29,61 @@ export const SEARCH_FILTER_COLOURS = {
   has: 'bg-search-filter-has border-search-filter-has',
 } as const
 
-export function searchFilterType(operator: SearchOperator): keyof typeof SEARCH_FILTER_COLOURS {
+export function searchFilterType(operator: SearchToken['operator']): keyof typeof SEARCH_FILTER_COLOURS {
   if (operator === 'from' || operator === 'commenter' || operator === 'assignee') return 'people'
   if (operator === 'in' || operator === 'board') return 'board'
   if (operator === 'before' || operator === 'after' || operator === 'on') return 'date'
-  return operator === 'is' ? 'status' : operator
+  if (operator === 'is' || operator === 'priority') return 'status'
+  return operator === 'type' ? 'has' : operator
 }
 
-export function searchFilterColour(operator: SearchOperator) {
+export function searchFilterColour(operator: SearchToken['operator']) {
   return SEARCH_FILTER_COLOURS[searchFilterType(operator)]
 }
 
-export function operatorSuggestions(prefix: string, commenterEnabled = false) {
-  return prefix ? SEARCH_OPERATORS.filter((operator) => operator.startsWith(prefix.toLowerCase()) && (operator !== 'commenter' || commenterEnabled)) : []
+export function operatorSuggestions(prefix: string, commenterEnabled = false, logicEnabled = false) {
+  return prefix ? [...SEARCH_OPERATORS, ...(logicEnabled ? LOGIC_OPERATORS : [])].filter((operator) => operator.startsWith(prefix.toLowerCase()) && (operator !== 'commenter' || commenterEnabled)) : []
 }
 
-export type SearchCompletion = { kind: 'operator' | 'value'; operator: SearchOperator; value: string; start: number; end: number; negated?: boolean }
-export function searchCompletion(text: string, names: Names = {}, commenterEnabled = false): SearchCompletion | null {
+export type SearchCompletion = { kind: 'operator' | 'value'; operator: SearchToken['operator']; value: string; start: number; end: number; negated?: boolean }
+export function searchCompletion(text: string, names: Names = {}, commenterEnabled = false, logicEnabled = false): SearchCompletion | null {
+  const enabledOperators = [...SEARCH_OPERATORS, ...(logicEnabled ? LOGIC_OPERATORS : [])]
   const matches = operatorMatches(text)
   const last = matches.at(-1)
   if (/\s$/.test(text) && (!last || !/^"[^"]*$/.test(text.slice(last.valueStart)))) return null
-  if (last && SEARCH_OPERATORS.includes(last.operator as SearchOperator) && (last.operator !== 'commenter' || commenterEnabled)) {
+  if (last && enabledOperators.includes(last.operator as SearchToken['operator']) && (last.operator !== 'commenter' || commenterEnabled)) {
     const tail = text.slice(last.valueStart)
     if (!/\s/.test(tail) || tail.startsWith('"')) {
-      return { kind: 'value', operator: last.operator as SearchOperator, value: tail.replace(/^[@#"]/, '').replace(/"$/, ''), start: last.start, end: text.length, negated: last.negated }
+      return { kind: 'value', operator: last.operator as SearchToken['operator'], value: tail.replace(/^[@#"]/, '').replace(/"$/, ''), start: last.start, end: text.length, negated: last.negated }
     }
   }
-  const phrases: Record<string, SearchOperator> = { 'created by': 'from', by: 'from', 'assigned to': 'assignee', 'commented by': 'commenter' }
+  const phrases: Record<string, SearchToken['operator']> = { 'created by': 'from', by: 'from', 'assigned to': 'assignee', 'commented by': 'commenter' }
   const natural = text.match(new RegExp(`(?:^|\\s)(-?)(created\\s+by|assigned\\s+to|commented\\s+by|by|${SEARCH_OPERATORS.join('|')})\\s+(\\S+)$`, 'i'))
   if (natural && (text.slice(0, natural.index).match(/(?<!\\)"/g)?.length ?? 0) % 2 === 0) {
     const trigger = natural[2].toLowerCase().replace(/\s+/g, ' ')
-    const operator = phrases[trigger] ?? trigger as SearchOperator
+    const operator = phrases[trigger] ?? trigger as SearchToken['operator']
     if (operator !== 'commenter' || commenterEnabled) {
       return { kind: 'value', operator, value: natural[3].replace(/^[@#"]/, '').replace(/"$/, ''), start: text.length - natural[0].trimStart().length, end: text.length, negated: natural[1] === '-' }
     }
   }
   const active = activeSearchValue(text, names, commenterEnabled)
-  if (active) return { ...active, kind: 'value', operator: active.operator as SearchOperator, end: active.end ?? text.length }
-  // Do not offer operators inside quoted text or a value already being typed.
+  if (active) return { ...active, kind: 'value', operator: active.operator as SearchToken['operator'], end: active.end ?? text.length }
   if ((text.match(/(?<!\\)"/g)?.length ?? 0) % 2) return null
   const prefix = text.match(/(?:^|\s)(-?)([a-z]+)$/i)
-  const operators = operatorSuggestions(prefix?.[2] ?? '', commenterEnabled)
+  const operators = operatorSuggestions(prefix?.[2] ?? '', commenterEnabled, logicEnabled)
   return prefix && operators.length ? { kind: 'operator', operator: operators[0], value: prefix[2], start: text.length - prefix[1].length - prefix[2].length, end: text.length, negated: prefix[1] === '-' } : null
 }
 
-export function localValueSuggestions(operator: SearchOperator, prefix = '', now = new Date()): SearchCandidate[] | null {
+export function localValueSuggestions(operator: SearchToken['operator'], prefix = '', now = new Date()): SearchCandidate[] | null {
   let values: SearchCandidate[]
-  if (operator === 'is' || operator === 'has') {
-    values = (operator === 'is' ? ['open', 'done', 'archived'] : ['attachment', 'comment', 'due', 'due-date']).map((value) => ({ id: value, name: value }))
+  if (operator === 'is' || operator === 'has' || operator === 'priority' || operator === 'type') {
+    const options = {
+      is: ['open', 'done', 'archived'],
+      has: ['attachment', 'comment', 'due', 'due-date'],
+      priority: ['urgent', 'high', 'medium', 'low'],
+      type: ['ticket', 'comment'],
+    }
+    values = options[operator].map((value) => ({ id: value, name: value }))
   } else if (['after', 'before', 'on'].includes(operator)) {
     const day = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()))
     const date = (offset: number) => new Date(day.getTime() + offset * 86400000).toISOString().slice(0, 10)

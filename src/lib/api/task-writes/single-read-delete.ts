@@ -78,7 +78,6 @@ export const DELETE: TaskWriteRoute = async (request, session) => {
   try {
     const ids = request.query ? undefined : new URL(request.url!).searchParams.getAll("id");
     const id = request.query ? request.query.id : ids?.length === 1 ? ids[0] : ids?.length ? ids : undefined;
-    // DELETE historically validates the query before resolving authentication.
     if (!id) return NextResponse.json({ message: "Missing ID" }, { status: 400 });
     return await singleDeleteRoute({ headers: request.headers, json: async () => ({ id }) }, session);
   } catch (error) {

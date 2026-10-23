@@ -4,7 +4,7 @@ import type { PersistedClient } from "@tanstack/react-query-persist-client";
 const NEVER_PERSIST_QUERY_KEYS = [
   "projectsAll",
   "boardTasks",
-  "cached-task-detail", // A reload must use the authorized server route, not a prior navigation seed.
+  "cached-task-detail",
   "projectLabels",
   "chat-sessions",
   "comments",
@@ -20,21 +20,36 @@ export const MAX_PERSISTED_CLIENT_BYTES = 2 * 1024 * 1024;
 const utf8ByteLength = (value: string) =>
   new TextEncoder().encode(value).byteLength;
 
+const querySizeEligibility = new WeakMap<
+  Parameters<typeof defaultShouldDehydrateQuery>[0],
+  { data: unknown; eligible: boolean }
+>();
+
 export const shouldDehydratePersistedQuery = (
-  query: Parameters<typeof defaultShouldDehydrateQuery>[0]
+  query: Parameters<typeof defaultShouldDehydrateQuery>[0],
+  reuseSize = false,
 ) => {
   if (
     !defaultShouldDehydrateQuery(query) ||
-    NEVER_PERSIST_QUERY_KEYS.includes(query.queryKey[0] as string)
+    NEVER_PERSIST_QUERY_KEYS.includes(query.queryKey[0] as string) ||
+    query.queryKey.includes("hydrating")
   ) {
     return false;
   }
 
+  const cached = reuseSize ? querySizeEligibility.get(query) : undefined;
+  if (cached && Object.is(cached.data, query.state.data)) {
+    return cached.eligible;
+  }
+
   try {
-    return (
+    const eligible =
       utf8ByteLength(JSON.stringify(query.state.data)) <=
-      MAX_PERSISTED_QUERY_BYTES
-    );
+      MAX_PERSISTED_QUERY_BYTES;
+    if (reuseSize) {
+      querySizeEligibility.set(query, { data: query.state.data, eligible });
+    }
+    return eligible;
   } catch {
     return false;
   }
@@ -78,8 +93,6 @@ export const limitPersistedClientWithinBudget = (
     }
   };
 
-  // Preserve resumable mutations first, then spend the remaining budget on
-  // the newest successful queries.
   keepWithinBudget(client.clientState.mutations, keptMutations);
   keepWithinBudget(queries, keptQueries);
 

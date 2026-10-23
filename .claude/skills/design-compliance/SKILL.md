@@ -19,7 +19,7 @@ The app repo is `~/projects/hypertask-oss`.
 
 1. **Read the guide.** `docs/design/STYLE-GUIDE.md` in the app repo. It is the
    checkable subset: the scales, the canonical component per job, the reference
-   screens, and the ten-item do-not list. `openwiki/style-guide.md` is canonical
+   screens, and the ten-item do-not list. `.claude/skills/reuse-existing-ui/reference/style-guide.md` is canonical
    for anything it omits, and wins when the two disagree.
 
 2. **Open the reference screens and compare.** Your change has to look like it
@@ -104,5 +104,5 @@ The app repo is `~/projects/hypertask-oss`.
   and posts the findings as a PR comment, so running step 3 locally is the
   cheapest place to find them.
 - The model half of the design review is `claude-review`, which reads the review
-  contract at the end of `openwiki/style-guide.md`. It reviews component reuse,
+  contract at the end of `.claude/skills/reuse-existing-ui/reference/style-guide.md`. It reviews component reuse,
   action hierarchy and new chrome; it does not re-report what the lint catches.

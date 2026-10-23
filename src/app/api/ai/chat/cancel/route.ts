@@ -1,3 +1,4 @@
+import { loadSidebarChatRequest } from "@/lib/agents/chatAccess";
 import { reportError } from "@/lib/errors/reportError";
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
@@ -23,8 +24,10 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ success: false, error: "A valid session_id is required" }, { status: 400 });
   }
 
+  const sidebarAccess = await loadSidebarChatRequest(request, parsed.data.session_id);
+  if (!sidebarAccess.ok) return NextResponse.json({ success: false, error: sidebarAccess.error }, { status: sidebarAccess.status });
+
   try {
-    // Recognize both lease namespaces so Stop still works after a flag toggle.
     const actingAgent = await loadActingAgent(parsed.data.session_id, user.id);
     const cancellationResult = await requestAiChatCancellation(
       user.id,

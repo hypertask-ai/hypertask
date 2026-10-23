@@ -13,8 +13,6 @@ import {
 import { RESET } from "jotai/utils";
 import { useHydrated } from "@/hooks/General/useHydrated";
 
-// A late streamed consumer must still see SSR defaults even if storage or an
-// already-mounted sibling has populated the live store (including selectors).
 const hydrationDefaults = createStore();
 const initialAtomDefaults = new Map<WritableAtom<any, [any], any>, unknown>();
 const seedableAtoms = new WeakMap<JotaiAtom<unknown>, WritableAtom<any, [any], any>>();
@@ -95,7 +93,6 @@ const writePersistedStateToStorage = (state: Record<string, unknown>) => {
 
     window.localStorage.setItem(RECOIL_PERSIST_STORAGE_KEY, JSON.stringify(state));
   } catch {
-    // localStorage can throw in private contexts or when quota is exceeded.
   }
 };
 
@@ -266,7 +263,6 @@ export function useRecoilState<T>(
 }
 
 export function useRecoilValue<T>(recoilAtom: JotaiAtom<T>) {
-  // Child mount effects initialize shared state before parent subscriptions exist.
   const value = useAtomValueRawSync(recoilAtom);
   const hydrated = useHydrated();
   const initialSnapshot = useContext(InitialSnapshotContext);
@@ -295,8 +291,6 @@ export const StateRoot = ({ children, initialValues }: {
   children: ReactNode;
   initialValues?: StateInitialValues;
 }) => {
-  // Mount-only adoption. A later route/account must remount this existing root,
-  // not replay a seed over user input or introduce a nested state island.
   const [initial] = useState(() => {
     if (!initialValues) return null;
     const live = createStore();
@@ -305,7 +299,6 @@ export const StateRoot = ({ children, initialValues }: {
     for (const [atom, value] of initialValues) {
       const base = seedableAtoms.get(atom);
       if (!base) throw new Error("Initial state requires a Hypertask atom");
-      // Seed backing atoms directly so initial rendering never writes storage.
       live.set(base, value);
       snapshot.set(base, value);
     }

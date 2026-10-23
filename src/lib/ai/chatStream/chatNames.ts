@@ -3,12 +3,6 @@ import { isFeatureEnabled } from "@/lib/flags";
 import { HTPR_7052_CHAT_NAMES_FLAG } from "@/lib/flags/keys";
 import { firstMessageChatTitle } from "@/lib/ai/chatNames";
 
-/**
- * HTPR-7052: name a new chat from its first user message, before the reply starts.
- * Returns the guard for the later generated title (see runModelTurn):
- * undefined when the flag is off or this is not a first user turn, null when the chat
- * keeps a title the user chose, else the title just written.
- */
 export async function nameChatFromFirstMessage(input: {
   enabled: boolean;
   sessionId?: string | null;

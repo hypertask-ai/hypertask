@@ -13,6 +13,7 @@ export async function updateTaskDueDate(context: TaskUpdateFieldContext, task: T
         const setDueDateUrl = `${baseUrl}/api/tasks/setDueDate`
         const dueDateResponse = await fetch(setDueDateUrl, {
             method: 'POST',
+            redirect: 'manual',
             ...fetchOpts,
             body: JSON.stringify({
                 taskId: task.id,

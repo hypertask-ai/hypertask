@@ -4,7 +4,7 @@ import { TaskRelations, ICycle } from "@/models/model";
 import { showAIChatInterfaceAtom, isAiChatSidebarModeAtom } from "@/store";
 import DescriptionAndCommentsProvider from "@/lib/contexts/TaskDetail/DescriptionProvider";
 import { useFlag } from "@/hooks/useFlag";
-import { HTPR_6752_INSTANT_TICKET_OPEN_FLAG, HTPR_6899_STABLE_LAYOUT_FLAG } from "@/lib/flags/keys";
+import { HTPR_6899_STABLE_LAYOUT_FLAG, HTPR_7349_TITLE_CLEAR_OF_NAV_FLAG, HTPR_7367_SERVER_DESCRIPTION_FIRST_FLAG } from "@/lib/flags/keys";
 import { SettledComposerSlot } from "@/components/PageComponents/TaskDetail/CommentAndDescription/SettledComposerSlot";
 import { useThreadSettled } from "@/hooks/Task Detail/useThreadSettled";
 import { useTaskContext } from "@/lib/contexts/TaskDetail/TaskProvider";
@@ -13,8 +13,10 @@ import { Suspense } from "react";
 import { ArrowLeft } from "lucide-react";
 
 import { useRecoilState } from "@/lib/state";
+import { tasksPlayListAtom } from "@/store";
+import { inboxPlaylistHoldsTask } from "@/lib/inbox/inboxTasksPlaylist";
+import InboxPlaylistRestorer from "@/lib/inbox/InboxPlaylistRestorer";
 
-// const HypertasksCommands = dynamic(() => import("@/components/commands"), { ssr: false });
 const KeyboardShortcuts = dynamic(
   instrumentedDynamicImport("KeyboardShortcuts", () => import("@/components/sidebars/keyboardShortcuts")),
   { ssr: false }
@@ -72,13 +74,17 @@ import AppShellRail from "@/components/PageComponents/Kanban/HeaderComponents/Ap
 import type { TaskDetailContext } from "./TaskDetailContext";
 export function TaskDetailPanels(context: TaskDetailContext) {
   const { embedded, _slugs, currentTask, setCurrentTask, showCommands, callback, commandContextOptions, showShortucts, scrollElementRef, _mbl, currentItemInTasksPlaylist, navigateToNextTask, searchParams, navigateToPreviousTask, dynamicElementRef, toggleDueDate, showAssignModal, toggleModal, _parsedTask, estimate_, priority_, labelsFromTQ, removeRelationHandler, toggleEstimateModal, toggleLabelModal, toggleMoveModal, toggleMoveToBoardModal, togglePriorityModal, dynamicTopValue, sectionsForProjectTQ, moveTaskToNextColumn, followers, onGoback, appShellRailOn, showTaskDeleteModal, deleteTask, carousalItems, setCarousalItems, showLinksModal, idToDelete, currentId, linksModalToggle, showMoveModal, moveTaskModalCallback, taskUpdateCommentsInCache, showCommentDeleteModal, setShowCommentDeleteModal, comments, setComments, showPriorityModal, showEstimateModal, showMoveTaskToBoard, setShowMoveTaskToBoard, showCreateLabelModal, setShowCreateLabelModal, setShowCommands, showDueDateModal, setDueDateCallback, showSubtaskLinkingModal, toggleSubtaskLinkingModal, callBackHandlerSubtaskLinking, showRemoveSubtaskModal, toggleRemoveSubtaskModal, callBackHandlerRemoveSubtask, showRemindMeModal, toggleRemindMeModal, currentUser } = context;
-
-
-  const instantTicketOpen = useFlag(HTPR_6752_INSTANT_TICKET_OPEN_FLAG);
   const stableLayoutFlag = useFlag(HTPR_6899_STABLE_LAYOUT_FLAG);
-  const { secondaryPanelsReady, cachedLayout } = useTaskContext();
-  // HTPR-7074: the phone composer waits for the thread height to stop growing.
-  const { settled: threadSettled, slotRef: composerSlotRef } = useThreadSettled(!cachedLayout && Boolean(_mbl) && !embedded);
+  const titleClearOfNavFlag = useFlag(HTPR_7349_TITLE_CLEAR_OF_NAV_FLAG);
+  const descriptionFirstFlag = useFlag(HTPR_7367_SERVER_DESCRIPTION_FIRST_FLAG);
+  const { secondaryPanelsReady, cachedLayout, descriptionStart, liveRowsPendingFor } = useTaskContext();
+  const serverRowsShown = liveRowsPendingFor(descriptionFirstFlag || descriptionStart === "server");
+  const { settled: threadSettled, slotRef: composerSlotRef } = useThreadSettled(!cachedLayout && Boolean(_mbl) && !embedded, !serverRowsShown);
+  const [tasksPlayList] = useRecoilState(tasksPlayListAtom);
+  const restoreInboxPlaylist =
+    searchParams?.get(taskDetailConfig.searchParams.inboxFlow) === "true" &&
+    currentUser?.id != null &&
+    !inboxPlaylistHoldsTask(tasksPlayList, currentItemInTasksPlaylist);
   if (!currentTask) return <></>;
 
   const updateWaitingOn = (fields: {
@@ -93,11 +99,12 @@ export function TaskDetailPanels(context: TaskDetailContext) {
 
   const content = (
     <>
-      {/* HTPR-6277: command modals (ShareTaskModal, etc.) are next/dynamic and
-          suspend on first open. Without a local boundary that suspend bubbles
-          into page.tsx's Suspense, the whole task detail swaps to "Loading...",
-          document height collapses, and window scroll jumps to 0. Homepage and
-          TableView already isolate commands the same way. */}
+      {restoreInboxPlaylist && (
+        <InboxPlaylistRestorer
+          userId={currentUser.id}
+          task={currentItemInTasksPlaylist}
+        />
+      )}
       {!embedded && showCommands.show && (
         <Suspense fallback={null}>
           <HypertasksCommands
@@ -142,9 +149,9 @@ export function TaskDetailPanels(context: TaskDetailContext) {
                 <TaskDetailTitleContainer
                   containerRef={dynamicElementRef}
                   toggleDueDate={toggleDueDate}
+                  clearDesktopNavigation={titleClearOfNavFlag && !_mbl && !embedded}
                 />
 
-              {/* --------------------------- COMMENTS + DESCRIPTION CONTAINER ------------------------------ */}
               <div
                 id={taskDetailConfig.elementIds.taskInfoCommentsDescriptionContainer}
                 className={`${_mbl ? "no-scrollbar scrollbar-none" : "mt-0 pl-1 task-detail-horizontal-padding"} `}
@@ -154,8 +161,6 @@ export function TaskDetailPanels(context: TaskDetailContext) {
                   width: "100%",
                 }}
               >
-                {/* Not my proudest moment here but I will have to fix this. Reason why im double propping here is because the Task
-                info column in part of virtualizer when on mobile. So I need to pass on the props inside there. */}
                 <CommentAndDescriptionContainer
                   showAssignModal={showAssignModal}
                   toggleModal={toggleModal}
@@ -209,10 +214,9 @@ export function TaskDetailPanels(context: TaskDetailContext) {
               </TaskDetailMainContainer>
             </MobileTaskDetailSwipe>
           </div>
-          {_mbl && embedded && secondaryPanelsReady !== false && (instantTicketOpen ? <Suspense fallback={null}><NewCommentComponent /></Suspense> : <NewCommentComponent />)}
+          {_mbl && embedded && secondaryPanelsReady !== false && (<Suspense fallback={null}><NewCommentComponent /></Suspense>)}
 
           {
-            // Hide Go Back only for Mobile Devices
             !_mbl && !embedded && (
               <DesktopNavigation
                 onGoback={onGoback}
@@ -227,7 +231,6 @@ export function TaskDetailPanels(context: TaskDetailContext) {
         </DescriptionAndCommentsProvider>
       </>
 
-      {/* ============================================= IMPORT AND USE MODALS HERE ================================= */}
       {showTaskDeleteModal && (
         <ConfirmTaskDelete
           confirmDelete={deleteTask}
@@ -263,7 +266,6 @@ export function TaskDetailPanels(context: TaskDetailContext) {
           onClose={linksModalToggle}
         />
       )}
-      {/* Conditionally render the modal */}
       {showMoveModal && (
         <MoveToColumn
           key={taskDetailConfig.modalKeys.moveToColumn + currentTask?.id}
@@ -389,10 +391,8 @@ const DesktopNavigation = ({
 }) => {
   const [showAiChatInterface] = useRecoilState(showAIChatInterfaceAtom);
   const [isSidebarMode] = useRecoilState(isAiChatSidebarModeAtom);
-  const instantTicketOpen = useFlag(HTPR_6752_INSTANT_TICKET_OPEN_FLAG);
   return (
     <div
-      // className="fixed  flex gap-2  items-center  flex-col xl:flex-row xl:left-10 left-5"
       className={`fixed  flex gap-2  items-center  flex-col left-3 ${
         showAiChatInterface && isSidebarMode ? "" : "xl:flex-row"
       } ${showAiChatInterface && isSidebarMode ? "" : "xl:left-10"}`}
@@ -418,17 +418,17 @@ const DesktopNavigation = ({
         }`}
       >
         <ArrowLeft size={18} strokeWidth={1.75}/>
-        {instantTicketOpen ? <Suspense fallback={null}>
+        <Suspense fallback={null}>
           <Tooltip left={taskDetailConfig.dimensions.tooltip.leftOffset} bottom={taskDetailConfig.dimensions.tooltip.bottomOffset} text="Back" keyCombination={[...taskDetailConfig.keyboard.escapeCombination]} />
-        </Suspense> : <Tooltip left={taskDetailConfig.dimensions.tooltip.leftOffset} bottom={taskDetailConfig.dimensions.tooltip.bottomOffset} text="Back" keyCombination={[...taskDetailConfig.keyboard.escapeCombination]} />}
+        </Suspense>
       </div>
-      {instantTicketOpen ? <Suspense fallback={null}>
+      <Suspense fallback={null}>
         <TaskMovement
           currentItemInTasksPlaylist={currentItemInTasksPlaylist}
           navigateToNextTask={navigateToNextTask}
           navigateToPreviousTask={navigateToPreviousTask}
         />
-      </Suspense> : <TaskMovement currentItemInTasksPlaylist={currentItemInTasksPlaylist} navigateToNextTask={navigateToNextTask} navigateToPreviousTask={navigateToPreviousTask} />}
+      </Suspense>
     </div>
   );
 };

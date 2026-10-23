@@ -1,12 +1,12 @@
-import { HTPR_6929_COMPOSE_TASK_WRITER_FLAG, HTPR_6937_NEW_TASK_WINDOW_FLAG } from "@/lib/flags/keys";
-import { useSetRecoilState } from "@/lib/state";
-import { showCommandsAtom } from "@/store";
+import { HTPR_7393_COMMENT_INLINE_AI_FLAG, HTPR_7337_EDIT_WITH_AI_FLAG, HTPR_6929_COMPOSE_TASK_WRITER_FLAG, HTPR_6937_NEW_TASK_WINDOW_FLAG } from "@/lib/flags/keys";
+import { useRecoilValue, useSetRecoilState } from "@/lib/state";
+import { showAIChatInterfaceAtom, showCommandsAtom } from "@/store";
 import { CommandMode } from "@/models/enums";
 
 import { useFlag } from "@/hooks/useFlag";
-import { HTPR_6752_INSTANT_TICKET_OPEN_FLAG, HTPR_7091_STATIC_DESCRIPTION_FIRST_FLAG } from "@/lib/flags/keys";
+import { HTPR_7091_STATIC_DESCRIPTION_FIRST_FLAG, HTPR_7395_CACHED_STATIC_FIRST_FLAG } from "@/lib/flags/keys";
 import { createPortal } from "react-dom";
-import { useContext } from "react";
+import { useContext, useEffect } from "react";
 import { StaticDescriptionPlaceholderContext } from "../PageComponents/TaskDetail/CommentAndDescription/DescriptionContainer/StaticDescriptionPlaceholder";
 import TiptapProvider from "@/lib/contexts/TaskDetail/TiptapProvider";
 import TiptapBubbleMenu from "./Components/TiptapBubbleMenu";
@@ -31,18 +31,25 @@ type AIGeneratedAttachment = {
 };
 import type { TaskDetailEditorPresentation } from "./taskDetailEditorPresentation";
 export function TaskDetailEditorPanels(context: TaskDetailEditorPresentation) {
-  const { divIds, handleReadOnlyContentClick, isMbl, id, newCommentAttachments, creatorname, trigger, allowEdit, isRecording, saveInFlight, mode, uploadingDescription, toggleHighlightHandler, createdAt, editor, stack, user, isSelected, handleCallback, sendComment, handleFocus, getAttachments, handleKeydown, handleCommentEscape, inInbox, currentTask, handleTaskOptions, handleFileDrop, filesDropped, resetDropFiles, discardDraft, toggleAiTaskWriter, shouldShowInlineDraftAi, setShouldShowAITaskWriter, setAiTriggerData, inViewObject, hasCommentDraft, audioTiptapCallback, toggleRecording, allowPerks, toggleHighlight, shouldShowAiTaskWriter, shouldShowFullAiTaskWriter, getBackgroundContent, handleEscape, handleAISave, handleTitleAndDescriptionReturn, getDefaultMode, taskWriterOpening, editMode, mobileExistingEditOpen, mobileEditViewport, mobileEditHeight, mobileEditSaving, cancelMobileExistingEdit, showSetLinkModal, setShowSetLinkModal, setLinkHandlerCallback, emojiGifPicker, setEmojiGifPicker } = context;
+  const { divIds, handleReadOnlyContentClick, isMbl, id, newCommentAttachments, creatorname, trigger, allowEdit, isRecording, saveInFlight, mode, uploadingDescription, toggleHighlightHandler, createdAt, editor, stack, user, isSelected, handleCallback, sendComment, handleFocus, getAttachments, handleKeydown, handleCommentEscape, inInbox, currentTask, handleTaskOptions, handleFileDrop, filesDropped, resetDropFiles, discardDraft, toggleAiTaskWriter, shouldShowInlineDraftAi, setShouldShowAITaskWriter, setAiTriggerData, inViewObject, hasCommentDraft, audioTiptapCallback, toggleRecording, allowPerks, toggleHighlight, shouldShowAiTaskWriter, shouldShowFullAiTaskWriter, getBackgroundContent, handleEscape, handleAISave, handleTitleAndDescriptionReturn, getDefaultMode, taskWriterOpening, editMode, mobileExistingEditOpen, mobileEditViewport, mobileEditHeight, mobileEditSaving, cancelMobileExistingEdit, chatHandoffOpen, setChatHandoffOpen, showSetLinkModal, setShowSetLinkModal, setLinkHandlerCallback, emojiGifPicker, setEmojiGifPicker } = context;
 
+  const editWithAiEnabled = useFlag(HTPR_7337_EDIT_WITH_AI_FLAG);
+  const commentInlineAi = useFlag(HTPR_7393_COMMENT_INLINE_AI_FLAG);
+  const sidebarEditWithAi = editWithAiEnabled && !(commentInlineAi && (mode === "create-comment" || mode === "read-edit-comments"));
+  const showAiChatInterface = useRecoilValue(showAIChatInterfaceAtom);
+  useEffect(() => {
+    if (!sidebarEditWithAi || !showAiChatInterface || !mobileExistingEditOpen) setChatHandoffOpen(false);
+  }, [sidebarEditWithAi, showAiChatInterface, mobileExistingEditOpen, setChatHandoffOpen]);
   const composeEnabled = useFlag(HTPR_6929_COMPOSE_TASK_WRITER_FLAG);
   const newTaskWindowFlag = useFlag(HTPR_6937_NEW_TASK_WINDOW_FLAG);
   let newTaskWindow = false;
   if (mode === "read-edit-description" && composeEnabled && newTaskWindowFlag) newTaskWindow = true;
   const setCommands = useSetRecoilState(showCommandsAtom);
-  const instantTicketOpen = useFlag(HTPR_6752_INSTANT_TICKET_OPEN_FLAG);
-  const staticFirst = useFlag(HTPR_7091_STATIC_DESCRIPTION_FIRST_FLAG);
+  const legacyStaticFirst = useFlag(HTPR_7091_STATIC_DESCRIPTION_FIRST_FLAG);
+  const cachedStaticFirst = useFlag(HTPR_7395_CACHED_STATIC_FIRST_FLAG);
   const staticPlaceholder = useContext(StaticDescriptionPlaceholderContext);
-  const mainContainer = instantTicketOpen && !editor && mode === "read-edit-description" ? (
-    staticFirst && staticPlaceholder ? staticPlaceholder : <InnerHTMLDescription
+  const mainContainer = !editor && mode === "read-edit-description" ? (
+    (legacyStaticFirst || cachedStaticFirst) && staticPlaceholder ? staticPlaceholder : <InnerHTMLDescription
       id={`${id}-input`}
       descriptionText={context.defaultContent}
       attachmentsFromProps={context.attachments ?? []}
@@ -130,11 +137,8 @@ export function TaskDetailEditorPanels(context: TaskDetailEditorPresentation) {
                 attachments={newCommentAttachments}
                 returnTitleAndDescription={handleTitleAndDescriptionReturn}
                 defaultMode={getDefaultMode()}
-                // additionalContext={getAdditionalContext()}
                 toggleRecording={toggleRecording}
                 isRecording={isRecording}
-                // A fresh opening intentionally requests a fresh draft. The
-                // container guard prevents duplicates within that opening.
                 autoTrigger={taskWriterOpening.autoTrigger}
                 initialPrompt={taskWriterOpening.initialPrompt}
                 currentTask={currentTask}
@@ -147,6 +151,7 @@ export function TaskDetailEditorPanels(context: TaskDetailEditorPresentation) {
             createPortal(
               <div
                 data-mobile-existing-content-editor
+                hidden={sidebarEditWithAi && chatHandoffOpen && showAiChatInterface}
                 className="fixed inset-x-0 z-[1200] bg-modalBackground"
                 style={{
                   bottom: mobileEditViewport?.bottomInset ?? 0,
@@ -168,7 +173,8 @@ export function TaskDetailEditorPanels(context: TaskDetailEditorPresentation) {
           <button
             className="hidden"
             onClick={() => {
-              if (newTaskWindow) setCommands({ show: true, mode: CommandMode.Command, paletteTab: "compose" });
+              if (sidebarEditWithAi) toggleAiTaskWriter();
+              else if (newTaskWindow) setCommands({ show: true, mode: CommandMode.Command, paletteTab: "compose" });
               else setShouldShowAITaskWriter((prev) => !prev);
             }}
             id={divIds.popoverTriggerButtonId}

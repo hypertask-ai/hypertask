@@ -74,7 +74,7 @@ test('task.created reports no priority when the task was created without one', a
 // post-commit path this ordering breaks and the payload silently loses it.
 test('the global create path writes the priority inside the creation transaction', () => {
   const source = fs.readFileSync(
-    path.join(root, 'src/pages/api/tasks/createGlobally.ts'),
+    path.join(root, 'src/lib/api/task-writes/create-global.ts'),
     'utf8'
   )
   const transactionWrapper = source.indexOf(
@@ -99,7 +99,7 @@ test('the global create path writes the priority inside the creation transaction
 // fetched from the database (sectionRow), never from the raw request field.
 test('the global create path builds the webhook section title from a fetched Section row', () => {
   const source = fs.readFileSync(
-    path.join(root, 'src/pages/api/tasks/createGlobally.ts'),
+    path.join(root, 'src/lib/api/task-writes/create-global.ts'),
     'utf8'
   )
   const webhookTaskBlock = source.slice(

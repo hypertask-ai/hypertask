@@ -1,3 +1,4 @@
+import type { AgentTokenTeamScope } from '@/lib/mcp/auth/types';
 import { sendDataNewCommentFCM } from "../FCM";
 import { IAssignees, IFCMReqBody, ITask, IUser } from "@/models/model";
 import prisma from "@/lib/prisma";
@@ -30,10 +31,6 @@ import {
 
 export type AssigneeIntent = "assign" | "unassign" | "toggle";
 
-// Partial unique indexes from the 20260908160000 migration. A losing
-// concurrent insert violates one of these; any other P2002 is a real bug and
-// must propagate. The name can appear in `meta.target` (classic client) or in
-// the driver adapter's original message (driver-adapter client).
 const ASSIGNEE_UNIQUE_INDEXES = [
   "Assignees_taskId_userId_person_key",
   "Assignees_taskId_agentId_key",
@@ -55,6 +52,7 @@ const assigneesAssign = async (
   agentAssignerId?: string,
   options?: {
     intent?: AssigneeIntent;
+    teamScope?: AgentTokenTeamScope | null;
     expectedProjectId?: number;
     expectedSectionId?: number | null;
     allowHumanOverride?: boolean;
@@ -83,8 +81,6 @@ const assigneesAssign = async (
 
     let assigneeUserId = userId;
     if (agentId) {
-      // Removing an agent must always work, even once it is revoked or off the
-      // board — otherwise its chip is stuck on the task with no way to clear it.
       const isRemoval = intent === "unassign";
       const [agent, onBoard] = await Promise.all([
         prisma.agent.findFirst({
@@ -140,10 +136,6 @@ const assigneesAssign = async (
       },
     } as const;
 
-    // Person and agent rows can share the same userId (agent self-assign uses
-    // the owner's user id). Unassign by userId clears human rows plus only
-    // agent rows the caller owns, so board members cannot strip someone else's
-    // agents via a userId unassign (HTPR-6428). Agent-id targeting stays exact.
     let assigneeWhere:
       | { taskId: number; agentId: string }
       | { taskId: number; userId: number; agentId: null }
@@ -198,7 +190,6 @@ const assigneesAssign = async (
       if (validationError) return validationError;
     }
 
-    // ------------------------ get devices of the user the notification will go to
     const devices = await prisma.subscribedDevices.findMany({
       where: {
         userId: assigneeUserId,
@@ -219,9 +210,9 @@ const assigneesAssign = async (
       agentId,
       agentAssignerId,
       expectedProjectId: options?.expectedProjectId,
+      teamScope: options?.teamScope,
       expectedSectionId: options?.expectedSectionId,
       allowHumanOverride,
-      // Archive/Deleted cleanup must adopt a lease without Normal status.
       allowNonNormalLeaseAdoption: intent === "unassign",
     };
 
@@ -253,8 +244,6 @@ const assigneesAssign = async (
           ];
         }
       } else {
-        // Already assigned is an idempotent success. assignmentOutcome below
-        // still tells callers whether this request created a row.
         assignStatus = "Assigned";
       }
     } else if (intent === "unassign") {
@@ -275,8 +264,6 @@ const assigneesAssign = async (
           assignmentOutcome = "already-unassigned";
         }
       } else {
-        // Always take the fenced bulk path so a concurrent owned-agent assign
-        // between the pre-read and the fence cannot survive a success response.
         const removalOutcome = await removeMatchingAssignees({
           ...props,
           assigns: matchingAssignees,
@@ -289,7 +276,6 @@ const assigneesAssign = async (
         }
       }
     } else {
-      // toggle (legacy UI): assign or unassign
       if (!assign) {
         assignStatus = "Assigned";
         const result = await createAssignee({
@@ -329,7 +315,6 @@ const assigneesAssign = async (
       }
     }
 
-    // ============================ Return assignees
     const assignees = await prisma.assignees.findMany({
       where: {
         taskId: taskId,
@@ -344,9 +329,6 @@ const assigneesAssign = async (
       },
     });
     if (assignmentOutcome === "stale-task") {
-      // A race-safe auto-assignment is a rejected write, not a successful
-      // unassignment. Return a conflict so callers cannot mistake the legacy
-      // status field for a completed mutation.
       return {
         status: 409,
         json: {
@@ -390,7 +372,7 @@ interface ICreateAssigneeProps {
   expectedProjectId?: number;
   expectedSectionId?: number | null;
   allowHumanOverride?: boolean;
-  // HTPR-6428: removals may adopt a lease on Archive/Deleted. Assign never.
+  teamScope?: AgentTokenTeamScope | null;
   allowNonNormalLeaseAdoption?: boolean;
 }
 const createAssignee = async ({
@@ -406,6 +388,7 @@ const createAssignee = async ({
   expectedProjectId,
   expectedSectionId,
   allowHumanOverride,
+  teamScope,
 }: ICreateAssigneeProps) => {
   const assigneeIdentity = agentId
     ? { agentId }
@@ -413,20 +396,14 @@ const createAssignee = async ({
   let result;
   try {
     result = await prisma.$transaction(async (tx) => {
-    // Human and agent assignments share the discovery/take fence. Otherwise a
-    // person can be assigned after require_unassigned succeeds but before the
-    // autonomous self-assignment commits.
     await assertAgentAssignmentChangeAllowed(
       tx,
       taskId,
       agentAssignerId,
       currentUser.id,
-      { allowHumanOverride }
+      { allowHumanOverride, teamScope }
     );
 
-    // assigneesAssign reads before entering this transaction. Recheck after
-    // taking the fence so two processes cannot both create the same assignment
-    // and emit duplicate activities or notifications.
     const existingIdentity = agentId
       ? { agentId }
       : { userId, agentId: null };
@@ -529,7 +506,6 @@ const createAssignee = async ({
           },
         })
       : [];
-    // Board-wide subscribers see every assignment, human or agent (HTPR-4530).
     const assignedEvent: WebhookDelivery = {
       event: "task.assigned",
       data: {
@@ -558,9 +534,6 @@ const createAssignee = async ({
   });
   } catch (error) {
     if (isAssigneeUniqueIndexError(error)) {
-      // A concurrent assign won the unique index (HTPR-6279). The transaction
-      // rolled back with no writes of ours; confirm the winner's row exists
-      // before reporting the assignment as already done.
       const winner = await prisma.assignees.findFirst({
         where: { taskId, ...assigneeIdentity },
         select: { id: true },
@@ -584,7 +557,6 @@ const createAssignee = async ({
   if (result.outcome !== "created" || !result.assign) return result;
   const assign = result.assign;
 
-  // ======================= create activity of task assignment
   const activityCommentId = await createAssignedActivity({
     taskId: taskId,
     updatedStatus: "Assigned",
@@ -602,8 +574,6 @@ const createAssignee = async ({
     toAgent: assign.agent,
   });
 
-  // ============================= send notificaiton of assignment
-  // Skip notification only when a user assigns themselves, or when an agent assigns itself.
   const isSelfAssign =
     !agentId && shouldSkipSelfAssign(userId, currentUser.id, agentAssignerId);
   const isAgentSelfAssign = !!agentId && agentId === agentAssignerId;
@@ -644,6 +614,7 @@ const createAssignee = async ({
         notificationBody: task.title,
         devices: devices,
         payload: assign.user,
+        taskId,
         taskTitle: task.title,
         afterAppDomain: afterAppDomain,
       };
@@ -698,8 +669,6 @@ interface IRemoveMatchingAssigneesProps extends ICreateAssigneeProps {
   assigns: IRemoveAssigneeProps["assign"][];
 }
 
-// HTPR-6428: userId unassign can match person + agent rows. Delete them in one
-// transaction so a mid-loop failure cannot leave a half-cleared assignee set.
 const removeMatchingAssignees = async ({
   afterAppDomain,
   devices,
@@ -714,6 +683,7 @@ const removeMatchingAssignees = async ({
   expectedProjectId,
   expectedSectionId,
   allowHumanOverride,
+  teamScope,
   allowNonNormalLeaseAdoption,
 }: IRemoveMatchingAssigneesProps) => {
   const removal = await prisma.$transaction(async (tx) => {
@@ -722,16 +692,13 @@ const removeMatchingAssignees = async ({
       taskId,
       agentAssignerId,
       currentUser.id,
-      { allowHumanOverride, allowNonNormalLeaseAdoption }
+      { allowHumanOverride, allowNonNormalLeaseAdoption, teamScope }
     );
     if (expectedProjectId !== undefined || expectedSectionId !== undefined) {
       const currentTask = await tx.task.findUnique({
         where: { id: taskId },
         select: { projectId: true, sectionId: true, status: true },
       });
-      // Removals may target Archive/Deleted tasks (HTPR-6428). Only the
-      // project/section race check applies here; createAssignee still requires
-      // Normal.
       if (
         !currentTask ||
         (expectedProjectId !== undefined &&
@@ -748,9 +715,6 @@ const removeMatchingAssignees = async ({
       }
     }
 
-    // Re-read after the fence with the same authorization policy as the
-    // outer lookup. Do not reuse the pre-transaction ID list, or a concurrent
-    // owned-agent assign can survive a reported success (HTPR-6428 review).
     const liveAssigns = await tx.assignees.findMany({
       where: {
         taskId,
@@ -868,6 +832,7 @@ const removeMatchingAssignees = async ({
       expectedProjectId,
       expectedSectionId,
       allowHumanOverride,
+      teamScope,
     });
     if (activityCommentId != null) activityCommentIds.push(activityCommentId);
   }
@@ -888,6 +853,7 @@ const removeAssignee = async ({
   expectedProjectId,
   expectedSectionId,
   allowHumanOverride,
+  teamScope,
   allowNonNormalLeaseAdoption,
 }: IRemoveAssigneeProps) => {
   const removal = await prisma.$transaction(async (tx) => {
@@ -896,16 +862,13 @@ const removeAssignee = async ({
       taskId,
       agentAssignerId,
       currentUser.id,
-      { allowHumanOverride, allowNonNormalLeaseAdoption }
+      { allowHumanOverride, allowNonNormalLeaseAdoption, teamScope }
     );
     if (expectedProjectId !== undefined || expectedSectionId !== undefined) {
       const currentTask = await tx.task.findUnique({
         where: { id: taskId },
         select: { projectId: true, sectionId: true, status: true },
       });
-      // Removals may target Archive/Deleted tasks (HTPR-6428). Only the
-      // project/section race check applies here; createAssignee still requires
-      // Normal.
       if (
         !currentTask ||
         (expectedProjectId !== undefined &&
@@ -921,10 +884,6 @@ const removeAssignee = async ({
         };
       }
     }
-    // Re-read after taking the shared fence. If the row observed by the caller
-    // was removed and recreated while this request waited, it is a different
-    // assignment and this stale removal must not delete it. When the original
-    // still exists, remove only the duplicate rows present under this lock.
     const current = await tx.assignees.findMany({
       where: {
         taskId,
@@ -1011,6 +970,7 @@ const removeAssignee = async ({
     expectedProjectId,
     expectedSectionId,
     allowHumanOverride,
+    teamScope,
   });
   return {
     outcome: "removed" as const,
@@ -1031,7 +991,6 @@ const finishRemovingAssignee = async ({
   assigneeIntent,
   skipNotificationCleanup,
 }: IRemoveAssigneeProps) => {
-  // ======================== handle assignment activity
   const activityCommentId = await createAssignedActivity({
     taskId: taskId,
     updatedStatus: "Unassigned",
@@ -1049,7 +1008,6 @@ const finishRemovingAssignee = async ({
     toAgent: assign.agent,
   });
 
-  // ======================== handle assignment notification
   if (!skipNotificationCleanup) {
     await prisma.notification.deleteMany({
       where: {
@@ -1087,6 +1045,7 @@ const finishRemovingAssignee = async ({
       notificationBody: task.title,
       devices: devices,
       payload: { id: assign.id },
+      taskId,
       taskTitle: task.title,
       afterAppDomain: afterAppDomain,
     };
@@ -1113,7 +1072,8 @@ export const clearHumanAssignees = async (
     photoURL?: string | null;
   },
   taskId: number,
-  agentAssignerId?: string
+  agentAssignerId?: string,
+  teamScope?: AgentTokenTeamScope | null,
 ) => {
   try {
     const actor: IUser = {
@@ -1142,7 +1102,7 @@ export const clearHumanAssignees = async (
                 taskId,
                 agentAssignerId,
                 currentUser.id,
-                { allowHumanOverride: !agentAssignerId }
+                { allowHumanOverride: !agentAssignerId, teamScope }
               );
               const current = await tx.assignees.findMany({
                 where: { taskId, agentId: null },
@@ -1179,9 +1139,6 @@ export const clearHumanAssignees = async (
                 });
               }
               await tx.assignees.deleteMany({ where: { taskId, agentId: null } });
-              // A bulk clear is still an unassignment per person, so subscribers
-              // get the same task.assigned/unassigned rows they would get from
-              // removeAssignee, persisted in this transaction (HTPR-4530).
               const boardWebhookDeliveryIds: string[] = [];
               for (const removedUserId of [
                 ...new Set(current.map((assign) => assign.userId)),

@@ -1,3 +1,4 @@
+import { wrapMcpRoute } from '@/lib/mcp/routeWrapper'
 import { NextRequest } from 'next/server';
 import { validateMcpAuth, checkMcpRateLimit } from '@/lib/mcp/auth';
 import { requireRole } from '@/lib/mcp/agents/scopes';
@@ -32,9 +33,7 @@ async function setReaction(
   active: boolean,
   agentId: string | null
 ): Promise<CommentReactionResult> {
-  // HTPR-7122: an agent token reacts as the agent. userId stays the owner, for access only.
   const agent = await reactionAgent(agentId);
-  // HTPR-7095: a newly added reaction and its agent webhook outbox row are written together, then published after commit.
   const webhookInput = {
     commentId: target.commentId,
     reactorUserId: userId,
@@ -43,7 +42,6 @@ async function setReaction(
     emoji,
     added: active,
   };
-  // A failed lookup fails the request before anything is stored, so the client retry keeps the event.
   const preparedWebhook = await prepareCommentReactionWebhook(webhookInput);
   let deliveryIds: string[] = [];
   const result = await prisma.$transaction(async (tx) => {
@@ -64,11 +62,8 @@ async function setReaction(
     return { changed: wasActive !== active, reaction, reactions };
   });
   await publishAgentWebhookDeliveries(deliveryIds).catch((error) => {
-    // The outbox row is stored; the outbox retry delivers it later.
     console.error('[comment-reaction] agent webhook publish failed', error);
   });
-  // HTPR-7122: the response names only agents the caller may see, like the comment reads.
-  // A failed lookup hides every agent instead of failing a committed write.
   return mapReactionWriteResult(result, (agentIds) =>
     loadVisibleReactionAgents(agentIds, userId, target.projectId)
   );
@@ -99,7 +94,6 @@ async function notifyReaction(
           type: 'Reacted',
           projectId: target.projectId,
           fromUserId: userId,
-          // HTPR-7122: the inbox names the agent, never its owner, as the reactor.
           ...(agentId ? { fromAgentId: agentId } : {}),
         }
       );
@@ -113,6 +107,7 @@ async function notifyReaction(
         notificationBody: target.text.replace(/<[^>]+>/g, '').slice(0, 500),
         devices,
         payload: '',
+        taskId: target.taskId,
         taskTitle: '',
         afterAppDomain: `detail/project-${target.projectId}/${target.taskUniqueIndex}#comment-${target.commentId}`,
       });
@@ -126,7 +121,7 @@ async function notifyReaction(
   });
 }
 
-export const POST = createCommentReactionHandler({
+export const POST = wrapMcpRoute(createCommentReactionHandler({
   checkRateLimit: checkMcpRateLimit,
   validateAuth: validateMcpAuth,
   authorizeWrite: async (ctx) => ctx.agentId ? requireRole(ctx, 'write') : null,
@@ -146,7 +141,7 @@ export const POST = createCommentReactionHandler({
     const task = await findTaskByIdentifier(
       ctx.user,
       { task_id: comment.taskId, ticket_number: null, unique_index: null, project_id: null },
-      ctx.agentId
+      ctx.agentId, undefined, ctx.teamScope
     );
     if (!task) return null;
     return {
@@ -162,4 +157,4 @@ export const POST = createCommentReactionHandler({
     setReaction(target, userId, emoji, active, ctx.agentId ?? null),
   afterChange: (target, userId, emoji, active, result, ctx) =>
     notifyReaction(target, userId, emoji, active, result, ctx.agentId ?? null),
-});
+}));

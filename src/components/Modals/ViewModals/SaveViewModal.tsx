@@ -13,9 +13,6 @@ import toast from "react-hot-toast";
 import axios from "axios";
 import { useQueryClient } from "@tanstack/react-query";
 
-import { useFlag } from "@/hooks/useFlag";
-import { HTPR_6930_MY_TASKS_KANBAN_REUSE_FLAG } from "@/lib/flags/keys";
-
 type PersonalOptions = {
     canSaveCurrent: boolean;
     busy: boolean;
@@ -73,9 +70,7 @@ const Screens: TOption[] = [
 ]
 type TScreen = "SaveThisView" | "SaveForTeam" | "SaveForMe"
 const SaveViewModal: React.FC<TProps> = (props) => {
-    const kanbanReuseEnabled = useFlag(HTPR_6930_MY_TASKS_KANBAN_REUSE_FLAG);
     if (props.personal) {
-        if (!kanbanReuseEnabled) return null;
         const personal = props.personal;
         const personalScreens: TOption[] = [
             { index: 0, title: "Save this view", id: "SaveThisView", options: [

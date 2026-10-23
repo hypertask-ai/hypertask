@@ -25,7 +25,6 @@ import type { ArchiveShortcutSource } from "@/lib/notifications/archiveShortcutN
 interface Props {
     markAsDone: (notification: INotification, index: number, mode: TRemoveFromInboxMode) => Promise<boolean | void>,
     openTask: (mode: string, notification?: INotification | null, index?: number) => Promise<void>,
-    // setSelectedInbox: Dispatch<SetStateAction<INotification | null>>,
     handleMouseLeave: () => void,
     handleMouseEnter: (index: number) => void,
     selected: boolean,
@@ -70,10 +69,8 @@ const NotificationRow = (props: Props) => {
 
             <div className="flex flex-grow xs:mt-2 sm:mt-0 gap-2 items-baseline md:items-center md:w-[40%] md:min-w-0 md:overflow-hidden flex-col md:flex-row">
 
-                {/* ============ notification content =========== */}
                 {flipMentionHierarchy && <NotificationContent />}
 
-                {/* ============ title =================  */}
                 {notification.type !== "Invited" && notification.task && <TitleContainer notification={notification} task={notification.task} className={flipMentionHierarchy ? "md:flex-1 md:basis-0 md:min-w-0 truncate" : undefined} hideDueDate={flipMentionHierarchy} />}
 
                 {!flipMentionHierarchy && <NotificationContent />}
@@ -81,8 +78,6 @@ const NotificationRow = (props: Props) => {
                 {notification.type !== "Invited" && notification.task && <TaskMetaChips task={notification.task} showDueDate={flipMentionHierarchy} />}
             </div>
 
-            {/* Keep the same outer flex children: space-x adds a margin to the
-                timestamp if hover controls become its next sibling. */}
             <div className="relative hidden md:block md:min-w-[62px] md:shrink-0">
                 <CreatedAtDesktop hidden={!disableButtons && selected} />
                 {!disableButtons && selected && <div className={`${selectedIds && selectedIds?.length > 0 ? "!invisible" : ""} absolute right-0 top-1/2 z-10 hidden -translate-y-1/2 items-center gap-[10px] bg-active-elementBg pl-3 pr-1 md:flex`}>
@@ -90,7 +85,7 @@ const NotificationRow = (props: Props) => {
                         className="relative group"
                         onClick={(e) => {
                             e.preventDefault();
-                            e.stopPropagation(); // Prevent the click event from propagating to the parent div
+                            e.stopPropagation();
                             eHandler(false, index, e.detail === 0 ? "keyboard" : "mouse");
                         }}
                     >
@@ -102,7 +97,6 @@ const NotificationRow = (props: Props) => {
                         />
                         <ArchiveNotificationIcon color={inboxConfig.bulkSelectionStyling.archive_reminder_icon(isIbxSlctd)} height={18} width={18} show={selected} />
 
-                        {/* <Check size={15} color={notification.type==="Assigned"? (notification.assignee?.task?.status === 'Archive' ? 'green' : '#8E9093'): (notification.comment?.task?.status === 'Archive' ? 'green' : '#8E9093')} strokeWidth={1.75} /> */}
                     </button>
                     <RemindMeInbox color={inboxConfig.bulkSelectionStyling.archive_reminder_icon(isIbxSlctd)} height={18} width={18} show={selected} />
                 </div>}
@@ -115,8 +109,6 @@ const NotificationRow = (props: Props) => {
 const CreatedAtDesktop = ({ hidden = false }: { hidden?: boolean }) => {
     const { notification, isIbxSlctd } = useNotificationContext();
     const snapshot = useFirstScreenSurface(notification.userId);
-    // HTPR-4955: the bracket beside the sender now carries the unread count,
-    // so repeating it as a "· N unread" suffix here is noise.
 
     return (
         <>
@@ -125,7 +117,6 @@ const CreatedAtDesktop = ({ hidden = false }: { hidden?: boolean }) => {
                 className={cn(
                     inboxConfig.bulkSelectionStyling.timestamp(isIbxSlctd),
                     "hidden md:block md:min-w-[57px] md:shrink-0",
-                    // visibility (not display) keeps the space, so nothing reflows
                     hidden && "md:invisible"
                 )}
                 suppressHydrationWarning={!snapshot}
@@ -141,8 +132,6 @@ const CreatedAtDesktop = ({ hidden = false }: { hidden?: boolean }) => {
 const CreatedAtMobile = () => {
     const { notification, isIbxSlctd } = useNotificationContext();
     const snapshot = useFirstScreenSurface(notification.userId);
-    // HTPR-4955: the bracket beside the sender now carries the unread count,
-    // so repeating it as a "· N unread" suffix here is noise.
     return (
         <div
             className={
@@ -167,7 +156,6 @@ function extractMentionSnippet(html: string, userId: string): string | null {
     const parser = new DOMParser();
     const doc = parser.parseFromString(html, 'text/html');
 
-    // Match spans where data-label ends with userId (e.g. "name-123")
     const mentions = Array.from(doc.querySelectorAll('span[data-type="mention"]'));
     const mention = mentions.find(el => {
         const label = el.getAttribute('data-label');
@@ -176,12 +164,10 @@ function extractMentionSnippet(html: string, userId: string): string | null {
 
     if (!mention) return null;
 
-    // Get full sentence or paragraph around the mention
     const parent = mention.closest('p') || mention.parentElement;
     const fullText = parent?.textContent?.trim();
     if (!fullText) return null;
 
-    // Extract preview snippet around the mention text
     const mentionText = mention.textContent ?? '';
     const index = fullText.indexOf(mentionText);
     const snippet = fullText.slice(Math.max(0, index - 40), index + mentionText.length + 40);
@@ -249,7 +235,6 @@ export const NotificationContentBody = ({ projection }: { projection?: typeof Co
                                         : notification.type === "TaskDueDate" ?
                                                 formattedDueDate ?
                                                     `Due date changed to ${formattedDueDate}` : "Due date reset"
-                                                // ? `Click or press ENTER to accept invitation` 
                                                 : notification.type === "TaskReminder"
                                                     ? notification.staleNudgeDays === undefined
                                                         ? "Task Reminder"
@@ -257,9 +242,6 @@ export const NotificationContentBody = ({ projection }: { projection?: typeof Co
                                                     : notification.type === "TaskMovedToInbox"
                                                         ? "Task moved to inbox"
                                                         : notification.type === "TaskOverdue"
-                                                            // HTPR-4378: the due-date chip already renders in the
-                                                            // overdue red, so the phrase repeated the signal on
-                                                            // nearly every row.
                                                             ? ""
                                                             : notification.type === "TaskUpdateDescription"
                                                                 ? "Description updated"
@@ -334,8 +316,6 @@ const NotificationUserName = () => {
                 </span>
             </span>
             {
-                // HTPR-4955: an inbox scans for what is unread, so the bracket
-                // carries the unread count, not the ticket's total comments.
                 notification.type !== "Invited" && notification.unreadCount && notification.unreadCount > 0 ?
 
                     <span className={cn(inboxConfig.bulkSelectionStyling.commentCount(isIbxSlctd), " mx-1 shrink-0")}>
@@ -418,8 +398,7 @@ function stripQuotedContent(root: HTMLElement): void {
 }
 
 function renderCommentPreview(html: string) {
-    const div = document.createElement("div");
-    div.innerHTML = html;
+    const div = new window.DOMParser().parseFromString(html, "text/html").body;
     stripQuotedContent(div);
     return div.textContent?.trim() || convertToPlain(html);
 }
@@ -429,21 +408,15 @@ export function renderCommentMentionSimple(html: string, currentUserId: string |
         const preview = projection.projectCommentPreview(html, currentUserId);
         return preview.mention ? <>{preview.mention.before}<span className="bg-mention-highlight text-mention-highlight" style={{ borderRadius: "4px", padding: "2px 4px" }}>@{preview.mention.name}</span>{preview.mention.after}</> : preview.text;
     }
-    // Extract the inner text (plain) from your HTML.
-    // Assumes structure: <p><span ...mention...>Username</span> Rest of message</p>
-    // We'll use regex to extract.
   
-    const div = document.createElement("div");
-    div.innerHTML = html;
+    const div = new window.DOMParser().parseFromString(html, "text/html").body;
     const fullText = div.textContent || '';
     stripQuotedContent(div);
     const mentionSpan = div.querySelector(`span[data-type="mention"][data-label="name-${currentUserId}"]`);
     let mentionText = '';
     if (mentionSpan) {
         mentionText = mentionSpan.textContent || '';
-        // highlight only the mention, and show the rest of the text normally
         const parentText = mentionSpan.parentElement?.textContent || '';
-        // Split around the mention and render
         const before = parentText.slice(0, parentText.indexOf(mentionText));
         const after = parentText.slice(parentText.indexOf(mentionText) + mentionText.length);
         return (
@@ -456,6 +429,5 @@ export function renderCommentMentionSimple(html: string, currentUserId: string |
             </>
         );
     }
-    // If there is no mention, just return the text
     return div.textContent?.trim() || fullText;
   }

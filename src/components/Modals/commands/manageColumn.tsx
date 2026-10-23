@@ -1,5 +1,5 @@
 import { updateSection as writeSection } from "@/lib/api/typedClient";
-import { HTPR_6979_TYPED_WRITES_FLAG, HTPR_6980_INSTANT_COLUMN_DELETE_FLAG, HTPR_7040_LAST_COLUMN_DELETE_MESSAGE_FLAG, HTPR_7043_NO_EMPTY_BOARD_FLASH_FLAG } from "@/lib/flags/keys";
+import { HTPR_6979_TYPED_WRITES_FLAG, HTPR_7040_LAST_COLUMN_DELETE_MESSAGE_FLAG, HTPR_7043_NO_EMPTY_BOARD_FLASH_FLAG } from "@/lib/flags/keys";
 import { IMember, IProject, IProjectsAll, ISection, IUser } from "@/models/model";
 import type { IAgent } from "@/models/model";
 import { currentProjectAtom, currentUserAtom, showCommandsAtom } from "@/store";
@@ -41,7 +41,6 @@ import {
 } from "@/lib/sectionAutoAssign";
 import SettingsToggle from "@/components/Modals/Settings/SettingsToggle";
 import { useFlag } from "@/hooks/useFlag";
-import { COLUMN_ALL_VIEWS_FLAG } from "@/lib/flags/keys";
 import {
   applyColumnVisibilityToProject,
   countViewsShowingColumn,
@@ -53,7 +52,6 @@ import { MobileViewContext } from "@/lib/contexts/mobileContext";
 const ManageColumns = ({ toggleModal }: { toggleModal: (add: boolean) => void }) => {
   const queryClient = useQueryClient();
   const typedWrites = useFlag(HTPR_6979_TYPED_WRITES_FLAG);
-  const instantColumnDelete = useFlag(HTPR_6980_INSTANT_COLUMN_DELETE_FLAG);
   const lastColumnDeleteMessage = useFlag(HTPR_7040_LAST_COLUMN_DELETE_MESSAGE_FLAG);
   const noEmptyBoardFlash = useFlag(HTPR_7043_NO_EMPTY_BOARD_FLASH_FLAG);
   let typedWrite: typeof writeSection | undefined;
@@ -73,13 +71,9 @@ const ManageColumns = ({ toggleModal }: { toggleModal: (add: boolean) => void })
   const currentUser = useRecoilValue(currentUserAtom);
   const { data: boardMembers } = useGetAllMembersForAssign(
     ["assign", currentProject?.id],
-    // The hook guards on `projectId > 0`, so 0 keeps the query disabled until a
-    // project is loaded.
     currentProject?.id ?? 0,
     { members: [], owner: null }
   );
-  // Same map the Settings board section builds, so an auto-assigned column shows
-  // the person's name rather than their id.
   const membersById = useMemo(() => {
     const boardData = (boardMembers ?? {}) as {
       members?: IMember[];
@@ -122,7 +116,7 @@ const ManageColumns = ({ toggleModal }: { toggleModal: (add: boolean) => void })
           else return { ...section, ...updatedSection };
         } else return section;
       })
-      .filter((section): section is ISection => section !== null); // Type guard
+      .filter((section): section is ISection => section !== null);
 
     return response;
   };
@@ -136,15 +130,11 @@ const ManageColumns = ({ toggleModal }: { toggleModal: (add: boolean) => void })
     queryClient.setQueryData(queryKey, newData);
     if (currentProject && saveAPI) {
       await setBoardColumnsViewAPI(currentProject, newData);
-      // queryClient.refetchQueries({ queryKey: ["projectsAll"] });
     }
   };
 
   const synchronizeBoardSectionOrder = async (reorderedSections: ISection[]) => {
     if (!currentProject) return;
-    // A refetch that started before the ranking write can otherwise resolve
-    // after this patch and restore the old order. Stop both board query families
-    // before replacing their cached snapshots.
     await Promise.all([
       queryClient.cancelQueries({ queryKey: ["projectsAll"], exact: true }),
       queryClient.cancelQueries({ queryKey: ["projectsAllMinimal"] }),
@@ -169,9 +159,7 @@ const ManageColumns = ({ toggleModal }: { toggleModal: (add: boolean) => void })
     );
   };
 
-  // ================= DRAG handler
   const onDragEndHandler = async (result: DropResult) => {
-    // dropped outside the list
     if (!result.destination) return;
     try {
       if (result.source.index === result.destination.index) return;
@@ -181,20 +169,8 @@ const ManageColumns = ({ toggleModal }: { toggleModal: (add: boolean) => void })
           result.source.index,
           result.destination.index
         );
-      // Optimistic UI first. The local reorder must never depend on the
-      // network round trip succeeding. The view write is held back until the
-      // ranking lands, below.
       updateCache(reorderedSections, false);
-      // Persist the new ranking on the Section itself. The board orders by
-      // Section.ranking on load, so saving only the view cache made the move
-      // vanish on every reload (HTPR-3971). The view write follows the ranking
-      // rather than preceding it: saving the view first left the two stores
-      // disagreeing whenever the ranking write failed, and the board, which
-      // reads ranking, snapped the column back (HTPR-5047).
       try {
-        // Only the ranking. Sending the full section would trigger the
-        // service's section_title branch, which bulk-rewrites every task in
-        // the section on each drag.
         typedWrite ? await typedWrite({
           userId: currentUser?.id,
           sectionId: updatedSection.id,
@@ -204,9 +180,6 @@ const ManageColumns = ({ toggleModal }: { toggleModal: (add: boolean) => void })
           sectionId: updatedSection.id,
           newSection: { ranking },
         });
-        // The modal has its own query cache, while the open board renders from
-        // currentProject/projectsAll. Patch all three only after the canonical
-        // ranking save succeeds so the board moves immediately without reload.
         await synchronizeBoardSectionOrder(reorderedSections);
         await updateCache(reorderedSections, true);
       } catch (persistError) {
@@ -218,7 +191,6 @@ const ManageColumns = ({ toggleModal }: { toggleModal: (add: boolean) => void })
     }
   };
 
-  // ================ toggle show empty sections.
   const handleEmptySections = (setting: TBoardEmptySections) => {
     try {
       setUpdating(true);
@@ -237,8 +209,6 @@ const ManageColumns = ({ toggleModal }: { toggleModal: (add: boolean) => void })
     const sectionId = section.id ?? section.sectionId;
     if (typeof sectionId !== "number") return false;
     const columns = project.section ?? project.sections;
-    // The saved view can hide other columns. Only canonical board columns decide
-    // whether this is the last one; rendered items also cover filtered-out cards.
     const matches = (candidate: ISection) =>
       (candidate.id ?? candidate.sectionId) === sectionId;
     if (!columns.some(matches) || columns.some((candidate) => !candidate.deleted && !matches(candidate))) {
@@ -257,10 +227,6 @@ const ManageColumns = ({ toggleModal }: { toggleModal: (add: boolean) => void })
     return true;
   };
 
-  // ================ update section's visibility.
-  // `overrides` exists because the setting rows save on change. A toggle that
-  // calls this straight after setTicketsFinished would still read the previous
-  // state, so the caller passes the new value explicitly.
   const handleSectionUpdateVis = async (
     section: ISection,
     saveMode?: string,
@@ -279,7 +245,6 @@ const ManageColumns = ({ toggleModal }: { toggleModal: (add: boolean) => void })
       setUpdating(true);
       var sendUpdateSection: ISection;
 
-      // BASED ON GIVEN INPUT, SEND REQUEST DATA
       if (saveMode === "DELETE") {
         sendUpdateSection = { ...section, deleted: !section.deleted };
         updatedSections = updateSection(sections, sendUpdateSection, "Delete");
@@ -298,8 +263,6 @@ const ManageColumns = ({ toggleModal }: { toggleModal: (add: boolean) => void })
           currentUser.id,
         ];
         queryClient.setQueryData(queryKey, updatedSections);
-        // if (response.status !== 200) return
-        // return cacheUpdateHandler(response)
         return queryClient.refetchQueries({ queryKey: ["projectsAll"] });
       } else if (saveMode === "RENAME") {
         const nextTitle = overrides?.section_title ?? title;
@@ -359,14 +322,9 @@ const ManageColumns = ({ toggleModal }: { toggleModal: (add: boolean) => void })
         queryClient.setQueryData<IProject[]>(["projectsAllMinimal"], (cached) =>
           cached?.map(updateProject)
         );
-        // Keep the row's own snapshot current. Without this the blur dedupe below
-        // compares against the pre-rename title forever and re-posts on every
-        // blur, and the assign modal keeps showing the old column name.
         setEditSection((prev) =>
           prev && prev.id === section.id ? { ...prev, ...sendUpdateSection } : prev
         );
-        // projectsAll already contains the complete rename patch above. Refetching
-        // it makes the board route drop its active payload while the request runs.
         void queryClient.invalidateQueries({ queryKey: ["projectsAllMinimal"] });
       }
     } catch (error) {
@@ -389,8 +347,6 @@ const ManageColumns = ({ toggleModal }: { toggleModal: (add: boolean) => void })
     }
   };
 
-  // ============ show/hide this column in every saved view (HTPR-5937)
-  const columnAllViewsEnabled = useFlag(COLUMN_ALL_VIEWS_FLAG);
   const viewCounts = useMemo(() => {
     const sectionId = editSection?.id ?? editSection?.sectionId;
     return currentProject && sectionId
@@ -412,10 +368,6 @@ const ManageColumns = ({ toggleModal }: { toggleModal: (add: boolean) => void })
       );
       return;
     }
-    // Refetching the board query remounts this tree and closes the editor, so
-    // every cached copy is patched in place instead. A board request that
-    // started before this save would otherwise resolve afterwards and restore
-    // the old visibility, so those requests are stopped first.
     await Promise.all([
       queryClient.cancelQueries({ queryKey: ["projectsAll"], exact: true }),
       queryClient.cancelQueries({ queryKey: ["projectsAllMinimal"] }),
@@ -438,8 +390,6 @@ const ManageColumns = ({ toggleModal }: { toggleModal: (add: boolean) => void })
       { queryKey: ["projectsAllMinimal"] },
       (cached) => cached?.map(patch)
     );
-    // The list behind this editor reads its own cache, so its checkbox would
-    // otherwise keep the pre-action state.
     updateCache(
       updateSection(
         sections,
@@ -457,8 +407,6 @@ const ManageColumns = ({ toggleModal }: { toggleModal: (add: boolean) => void })
 
   const onSubmit = () => {
     if (title.length === 0) return;
-    // Queued for the same reason as the row saves: Enter can land while a blur
-    // save is still running.
     void queueSave(() => handleSectionUpdateVis(editSection!, "RENAME"));
     setEditMode((prev) => !prev);
   };
@@ -468,13 +416,11 @@ const ManageColumns = ({ toggleModal }: { toggleModal: (add: boolean) => void })
     setEditSection(section);
   };
 
-  // GO BACK HANDLER
   const goBack = () => {
     setEditMode((prevState) => !prevState);
     setEditSection(null);
   };
 
-  // OPEN EDIT COLUMN VIEW
   const openEditView = (section: ISection) => {
     toggleEdit(section);
     setTitle(section.section_title);
@@ -483,9 +429,6 @@ const ManageColumns = ({ toggleModal }: { toggleModal: (add: boolean) => void })
     );
   };
 
-  // Desktop rows save as they change. Mobile keeps the original explicit Save
-  // action for the name field. Setting rows can still fire together, so queue
-  // them rather than letting the `updating` guard drop the second request.
   const savesRef = useRef<Promise<unknown>>(Promise.resolve());
   const queueSave = (run: () => Promise<unknown>) => {
     savesRef.current = savesRef.current.then(run, run);
@@ -537,8 +480,6 @@ const ManageColumns = ({ toggleModal }: { toggleModal: (add: boolean) => void })
     autoAssignUserId: number | null,
     autoAssignAgentId: string | null,
   ) => {
-    // A board request that started before this save could otherwise overwrite
-    // the patched value when it resolves. Stop those requests first.
     await Promise.all([
       queryClient.cancelQueries({ queryKey: ["projectsAll"], exact: true }),
       queryClient.cancelQueries({ queryKey: ["projectsAllMinimal"] }),
@@ -586,8 +527,6 @@ const ManageColumns = ({ toggleModal }: { toggleModal: (add: boolean) => void })
         autoAssignUserId,
         null,
       );
-      // Refetching the active board remounts the command tree and closes this
-      // editor. Patch its caches instead so the save is visible immediately.
       await updateProjectAutoAssignCaches(
         projectId,
         sectionId,
@@ -641,9 +580,8 @@ const ManageColumns = ({ toggleModal }: { toggleModal: (add: boolean) => void })
     ? agentsById.get(editSection.autoAssignAgentId)?.displayName || "Agent"
     : autoAssignName;
 
-  // CONFIRM DELETE
   const confirmDelete = async () => {
-    if (instantColumnDelete && editSection && currentProject) {
+    if (editSection && currentProject) {
       const projectId = currentProject.id;
       const queryKey = [
         globalConstants.GetAllManageColumnsPrefixKey,
@@ -652,13 +590,10 @@ const ManageColumns = ({ toggleModal }: { toggleModal: (add: boolean) => void })
       ];
       const matches = (section: ISection) =>
         (section.id ?? section.sectionId) === editSection.id;
-      // A stale cache variant may contain only this column even on a larger board.
       const removeSection = (list?: ISection[]) =>
         noEmptyBoardFlash && list?.every(matches)
           ? list
           : list?.filter((section) => !matches(section));
-      // Put back only the deleted column, at its old place, so edits saved
-      // meanwhile survive a failed delete.
       const restoreSection = (list?: ISection[], original?: ISection[]) => {
         const index = original?.findIndex(matches) ?? -1;
         if (!list || !original || index < 0 || list.some(matches)) return list;
@@ -680,15 +615,11 @@ const ManageColumns = ({ toggleModal }: { toggleModal: (add: boolean) => void })
           : project;
       setEditMode(false);
       setDeleteModal(false);
-      // Removal runs inside the save queue, after any pending rename, so it
-      // patches the latest data and no earlier save can bring the column back.
       await queueSave(async () => {
         if (noEmptyBoardFlash) {
           const latestProject = queryClient.getQueryData<IProjectsAll>(["projectsAll"])
             ?.updatedProjects.find((project) => project.id === projectId) ?? currentProject;
           if (refuseLastColumnDelete(editSection, latestProject)) return;
-          // Even if local cards are stale or filtered out, a server refusal must
-          // not require restoring an empty board. Wait if any list would empty.
           if ([latestProject.section, latestProject.sections, latestProject.filteredSections, sections].some(
             (list) => list?.some(matches) && !list.some((section: ISection) => !matches(section))
           )) {
@@ -749,9 +680,6 @@ const ManageColumns = ({ toggleModal }: { toggleModal: (add: boolean) => void })
       });
       return;
     }
-    // Queued and awaited: firing this while a row save is still in flight used to
-    // hit the `updating` guard, drop the delete, and still close the dialog and
-    // return to the list as though the column had gone.
     await queueSave(() => handleSectionUpdateVis(editSection!, "DELETE"));
     setEditMode((prev) => !prev);
     setDeleteModal(false);
@@ -779,8 +707,6 @@ const ManageColumns = ({ toggleModal }: { toggleModal: (add: boolean) => void })
     setShowEmpty(setting === "Show" ? true : false);
   }, []);
 
-  // Reactstrap does not keep a parent modal stable when a child modal closes.
-  // Replace the column editor with the picker, then restore it after selection.
   const assignSectionId = editSection?.id;
   if (assignOpen && currentProject && editSection && assignSectionId) {
     const assignProjectId = currentProject.id;
@@ -936,8 +862,6 @@ const ManageColumns = ({ toggleModal }: { toggleModal: (add: boolean) => void })
           </>
         ) : (
           <>
-            {/* One row per setting, matching the Settings board rows in
-                BoardGeneralSection: label left, control right, hairline between. */}
             <div className="flex min-h-[40px] items-center justify-between gap-4 border-b border-light-black-border-1 px-4 py-2">
               <label
                 htmlFor="edit-column-name"
@@ -971,34 +895,32 @@ const ManageColumns = ({ toggleModal }: { toggleModal: (add: boolean) => void })
               />
             </div>
 
-            {columnAllViewsEnabled && (
-              <div className="flex min-h-[40px] items-center justify-between gap-4 border-b border-light-black-border-1 px-4 py-2">
-                <div className="min-w-0">
-                  <span className="text-dense font-semibold text-white-black">
-                    Views
-                  </span>
-                  <p className="text-dense font-medium text-text-light-gray">
-                    {describeViewsShowingColumn(viewCounts)}
-                  </p>
-                </div>
-                <div className="flex shrink-0 items-center gap-2">
-                  <button
-                    type="button"
-                    className="border-0 bg-transparent p-0 text-dense text-white-black transition hover:opacity-70"
-                    onClick={() => void queueSave(() => setVisibilityInAllViews(true))}
-                  >
-                    Show in all views
-                  </button>
-                  <button
-                    type="button"
-                    className="border-0 bg-transparent p-0 text-dense text-text-light-gray transition hover:text-white-black"
-                    onClick={() => void queueSave(() => setVisibilityInAllViews(false))}
-                  >
-                    Hide in all views
-                  </button>
-                </div>
+            <div className="flex min-h-[40px] items-center justify-between gap-4 border-b border-light-black-border-1 px-4 py-2">
+              <div className="min-w-0">
+                <span className="text-dense font-semibold text-white-black">
+                  Views
+                </span>
+                <p className="text-dense font-medium text-text-light-gray">
+                  {describeViewsShowingColumn(viewCounts)}
+                </p>
               </div>
-            )}
+              <div className="flex shrink-0 items-center gap-2">
+                <button
+                  type="button"
+                  className="border-0 bg-transparent p-0 text-dense text-white-black transition hover:opacity-70"
+                  onClick={() => void queueSave(() => setVisibilityInAllViews(true))}
+                >
+                  Show in all views
+                </button>
+                <button
+                  type="button"
+                  className="border-0 bg-transparent p-0 text-dense text-text-light-gray transition hover:text-white-black"
+                  onClick={() => void queueSave(() => setVisibilityInAllViews(false))}
+                >
+                  Hide in all views
+                </button>
+              </div>
+            </div>
 
             <button
               type="button"
@@ -1046,7 +968,6 @@ const ManageColumns = ({ toggleModal }: { toggleModal: (add: boolean) => void })
               </ModalFooter>
             )}
 
-            {/* --------------- DELETE CONFIRM MODAL ------------------- */}
             {deleteModal && (
               <ConfirmDialog
                 id="delete-column-confirm"

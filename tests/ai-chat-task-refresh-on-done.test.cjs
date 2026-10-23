@@ -90,7 +90,9 @@ for (const enabled of [false, true]) {
     let sendContext;
     const flag = "htpr-7049-reload-after-image-chat";
     const { useAiChat } = load("src/hooks/MultiPages/AIChat/useAiChat.ts", {
-      react: { useState: () => [0, () => {}] },
+      react: { useState: () => [0, () => {}], useEffect: () => {} },
+      "@/lib/state": { useRecoilState: () => [null, () => {}] },
+      "@/store": {},
       "@/hooks/useFlag": { useFlag: (key) => key === flag && enabled },
       "@/lib/flags/keys": { HTPR_7049_RELOAD_AFTER_IMAGE_CHAT_FLAG: flag },
       "./useAiChatState": { useAiChatState: () => ({}) },

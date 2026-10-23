@@ -63,11 +63,12 @@ test("follower links use the created task board snapshot", () => {
 });
 
 test("the create route persists the request description atomically", () => {
-  const source = read("src/pages/api/tasks/createGlobally.ts");
+  const source = read("src/lib/api/task-writes/create-global.ts");
 
+  assert.match(source, /const storedDescription = agentId && typeof description === "string"\s*\? await inlineAgentImagesForUser\(description, userId,[^\n]+ : description;/);
   assert.match(
     source,
-    /description_:\s*\{\s*create:\s*\{\s*content: description \?\? ""/,
+    /description_:\s*\{\s*create:\s*\{\s*content: storedDescription \?\? ""/,
   );
 });
 
@@ -103,7 +104,7 @@ test("discard during title generation cancels the pending save", () => {
 test("discard checks the latest create-task fields before React renders", () => {
   const hook = read("src/hooks/MultiPages/Tasks/useCreateTaskModalStates.ts");
   const guardStart = hook.indexOf("const hasUnsavedChanges");
-  const guardEnd = hook.indexOf("// Any draft written", guardStart);
+  const guardEnd = hook.indexOf("useEffect(() => {\n    purgeLegacyCreateTaskDrafts", guardStart);
   assert.notEqual(guardStart, -1, "the discard guard must exist");
   assert.notEqual(guardEnd, -1, "the discard guard boundary must exist");
   const guard = hook.slice(guardStart, guardEnd);
@@ -115,7 +116,7 @@ test("discard checks the latest create-task fields before React renders", () => 
   );
   assert.match(
     guard,
-    /const areFormValuesEqualToDefault =\s*currentFormValues\.assignees\.length/,
+    /const openingDefaults = openingViewDefaultsRef\.current;\s*return !\(\s*currentFormValues\.assignees\.length === openingDefaults\.assignees\.length/,
   );
   assert.doesNotMatch(
     guard,

@@ -1,8 +1,5 @@
-// HTPR-7092: which inbox tasks wait on the viewer's yes or no. Pure, so the server
-// query and the tests share one rule.
+import { inboxConfig } from "@/lib/configs/inbox.config";
 
-// Plain text per paragraph or line. Block ends become newlines; remaining tags are
-// removed until none are left.
 const toLines = (html: string) => {
   let text = html.replace(/<\/(p|div|li|h[1-6]|blockquote)>|<br\s*\/?>/gi, "\n");
   let previous;
@@ -19,34 +16,44 @@ const toLines = (html: string) => {
 
 const QUESTION_PREFIX = /^question:/i;
 
-/** True when any paragraph or line opens with a bold or plain "Question:". */
 export const isQuestionComment = (text: string | null | undefined) =>
   toLines(text ?? "").some((line) => QUESTION_PREFIX.test(line));
 
 export type DecisionMentionComment = {
   taskId: number;
+  commentId: number;
   text: string | null;
   commentText: string | null;
   createdAt: Date;
 };
 
-/**
- * A task is a decision for the viewer when a Question comment that mentions them
- * has no later comment by the viewer on the same task.
- */
-export const pickDecisionTaskIds = (
+export const pickDecisionComments = (
   mentionComments: readonly DecisionMentionComment[],
   viewerComments: readonly { taskId: number; createdAt: Date }[],
-): Set<number> => {
+): Map<number, DecisionMentionComment> => {
   const lastReply = new Map<number, number>();
   for (const comment of viewerComments) {
     lastReply.set(comment.taskId, Math.max(lastReply.get(comment.taskId) ?? 0, comment.createdAt.getTime()));
   }
-  const ids = new Set<number>();
+  const decisions = new Map<number, DecisionMentionComment>();
   for (const comment of mentionComments) {
     if (!isQuestionComment(comment.text) && !isQuestionComment(comment.commentText)) continue;
     if ((lastReply.get(comment.taskId) ?? 0) > comment.createdAt.getTime()) continue;
-    ids.add(comment.taskId);
+    const previous = decisions.get(comment.taskId);
+    if (
+      !previous || comment.createdAt > previous.createdAt ||
+      (comment.createdAt.getTime() === previous.createdAt.getTime() && comment.commentId > previous.commentId)
+    ) {
+      decisions.set(comment.taskId, comment);
+    }
   }
-  return ids;
+  return decisions;
 };
+
+export const withDecisionCommentAnchor = (
+  href: string,
+  commentId: number | undefined,
+  enabled: boolean,
+): string => enabled && commentId
+  ? `${href.split("#")[0]}${inboxConfig.urls.commentHash(commentId)}`
+  : href;

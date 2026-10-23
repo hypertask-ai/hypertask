@@ -108,7 +108,6 @@ export async function resolveSlackActor(
     HTPR_6817_SLACK_APP_FLAG,
     disconnectedUserId ?? user?.id ?? install.installedByUserId,
   );
-  // The link is gone after disconnect, so the marker owns the rollout identity.
   if (disconnectedUserId && slackAppEnabled) return null;
   if (user && !(await isSlackInstallTeamMember(install.id, user.id))) {
     await prisma.slackUserLink.deleteMany({

@@ -1,5 +1,7 @@
 "use client"
 
+import { useFlag } from "@/hooks/useFlag";
+import { HTPR_7510_FAVORITES_MENU_CONTRAST_FLAG } from "@/lib/flags/keys";
 import { useGetAllTeamsMinimal } from "@/hooks/MultiPages/useGetAllTeamsMinimal";
 import { ITeam } from "@/models/model";
 import { currentUserAtom } from "@/store";
@@ -14,27 +16,27 @@ import { useDeviceContext } from "@/lib/contexts/deviceContext";
 import { ModalContainerCustom, ModalHeaderComp } from "@/components/Common/CommonModalComponents";
 interface IProps {
 
-    onClose: any; // Change 'any' to the specific function type if possible
-
+    onClose: any;
   }
 
   
   const ManageFavorites = ({onClose}:IProps) => {
+    const favoritesMenuContrast = useFlag(HTPR_7510_FAVORITES_MENU_CONTRAST_FLAG);
+    let favoritesMenuBorder = "border-black";
+    if (favoritesMenuContrast) {
+        favoritesMenuBorder = "border-text-light-gray";
+    }
     const isApple = useDeviceContext()
       
     const queryClient = useQueryClient();   
     useEffect(()=>{},[])
-    // dummmy data
     const [currentUser,_] = useRecoilState(currentUserAtom);
 
-    // =================== react query
     const {data:favoritesTQ}  = useGetAllFavorites(currentUser.UserSettingId)
     const {data:allTeamsTQ} = useGetAllTeamsMinimal(currentUser.id)
 
-    // =================== refs
     const dropdownRef = useRef<HTMLUListElement>(null)
 
-    // =================== state handlers
 
     const [favorites, setFavorites] = useState(favoritesTQ??[])
     const [modal, setModal] = useState<boolean>(true);
@@ -42,10 +44,8 @@ interface IProps {
     const [selectedIndex, setSelectedIndex] = useState<number|null>(null)
     const [dropdownOpen, setDropdownOpen] = useState(false);
 
-    // ---------------------- MODAL CLOSE HANDLER -----------------
     const toggle = () => {
         setModal(false)
-        // setAssignKeyword("")
         onClose()
       };
 
@@ -68,12 +68,9 @@ interface IProps {
         
     }
 
-    // ======================= update favorites.
     const setNewFavorite = async(projectId:number|null, projectTitle?:string,index?:number)=>{
-        // close dropdown
         setDropdownOpen(false)
         setSelectedIndex(null)
-        // if projectId exists, means we have to add or edit te favorite 
         if (projectId){
             const existingIndex = favorites?.findIndex((fav: { index: number }) => fav.index === index);
                 
@@ -84,12 +81,9 @@ interface IProps {
                 }
                 console.log("🚀 ~ file: index.tsx:95 ~ setFavorites ~ body:", body)
                 if (existingIndex !== -1) {
-                  // ============== If the item already exists, update it
-                  // -------------- POST API
                   await axios.put("/api/favorites/addEditFavorites",body) 
                   
                 } else {
-                    // If the item doesn't exist, add it
                   await axios.post("/api/favorites/addEditFavorites",body)
                     
                 }
@@ -101,7 +95,6 @@ interface IProps {
     
     }
 
-    // ========================== CLOSE Button
     const closeBtn = (
         <X size={18} strokeWidth={1.75} className="close cursor-pointer text-display transition-all " onClick={toggle} />
     );  
@@ -110,7 +103,6 @@ interface IProps {
         console.log("🚀 ~ file: index.tsx:77 ~ handleClickOutside ~ event.target:", event.target)
     
         if (dropdownRef.current && !dropdownRef.current.contains(event.target)) {
-            // Clicked outside the dropdown, close it
             const isInsideDropdown = event.target.closest('.dropdown');    
             console.log("🚀 ~ file: index.tsx:122 ~ handleClickOutside ~ isInsideDropdown:", isInsideDropdown)
             if (!isInsideDropdown) {
@@ -120,26 +112,19 @@ interface IProps {
         }
     };
     
-    // ========================== USE EFFECTS
 
-    // ------- on teams update 
     useEffect(()=>{
-        // handleSideBarTeams()
         setTeams(allTeamsTQ)
       },[allTeamsTQ])
   
-    // ------- on favorites update
     useEffect(()=>{
         setFavorites(favoritesTQ)
       },[favoritesTQ])
  
 
       useEffect(() => {
-    
-        // Attach the event listener
         document.addEventListener("mousedown", handleClickOutside);
     
-        // Clean up the event listener on component unmount
         return () => {
           document.removeEventListener('mousedown', handleClickOutside);
         };
@@ -163,20 +148,17 @@ interface IProps {
                       {Array.from({ length: 10 }, (_, index) => (
                         <>
                         
-                        {/* // Each iteration corresponds to an index from 0 to 9 */}
                             <div className="mx-1.5 flex h-[36px] items-center justify-between rounded-sm px-3 text-dense">
 
-                                {/* =================== CTRL + INDEX ============== */}
                                 <KeyElement
                                     ctrlCmd={!isApple?"ALT":"CTRL"}
                                     index={index}
                                     />
 
-                                {/* ==================== SELECT DROPDOWN ================= */}
                                 <div 
                                     
                                     id="dropdownSelectors"
-                                    className="dropdown border-[1px] border-black items-center relative flex rounded cursor-pointer">
+                                    className={`dropdown border-[1px] ${favoritesMenuBorder} items-center relative flex rounded cursor-pointer`}>
                                     <span
                                         onClick={()=>toggleDropdown(index === 9 ? 0 : index + 1)}
                                         className="min-w-[210px] py-1 px-2 text-start">
@@ -187,7 +169,7 @@ interface IProps {
                                     </span>
                                     <div 
                                         onClick={()=>toggleDropdown(index === 9 ? 0 : index + 1)}
-                                        className="border-l-[1px]  px-2 py-[2px] h-full grid place-items-center border-black">
+                                        className={`border-l-[1px]  px-2 py-[2px] h-full grid place-items-center ${favoritesMenuBorder}`}>
                                         <svg className="dropdown" width="15" height="8" viewBox="0 0 15 8" fill="none" xmlns="http://www.w3.org/2000/svg">
                                             <path d="M7.5 8L0 0H15L7.5 8Z" fill="currentColor"/>
                                         </svg>
@@ -199,6 +181,7 @@ interface IProps {
                                             setNewFavorite={setNewFavorite}
                                             indexKey={index === 9 ? 0 : index + 1}
                                             teams={teams}
+                                            favoritesMenuContrast={favoritesMenuContrast}
                                             dropdownRef={dropdownRef}
                                             />
                                     }
@@ -220,11 +203,13 @@ interface IProps {
 const TeamsDropDown = (
     {
         dropdownRef,
+        favoritesMenuContrast,
         teams,
         indexKey,
         setNewFavorite
     }:{
         dropdownRef:any,
+        favoritesMenuContrast:boolean,
         setNewFavorite: (projectId: any, projectTitle?: string, index?: number) => Promise<void>,
         indexKey:number,
         teams:ITeam[]})=>{
@@ -245,26 +230,58 @@ const TeamsDropDown = (
            } 
             
 
-            useEffect(()=>{
-                    dropdownRef.current?.scrollIntoView({behavior:"smooth",block:"center",inline:"start"})
-                
-            },[])
+            const [placement, setPlacement] = useState({ opensUp: false, maxHeight: 364 });
 
-// ============================================== frontend code 
+            useEffect(()=>{
+                if (!favoritesMenuContrast) {
+                    dropdownRef.current?.scrollIntoView({behavior:"smooth",block:"center",inline:"start"})
+                    return;
+                }
+
+                const updateMaxHeight = () => {
+                    const dropdown: HTMLUListElement | null = dropdownRef.current;
+                    if (!dropdown) return;
+
+                    const anchor = dropdown.parentElement;
+                    if (!anchor) return;
+
+                    let top = 0;
+                    let bottom = window.innerHeight;
+                    for (let parent = anchor.parentElement; parent; parent = parent.parentElement) {
+                        if (/auto|scroll|hidden|clip|overlay/.test(window.getComputedStyle(parent).overflowY)) {
+                            const clip = parent.getBoundingClientRect();
+                            top = Math.max(top, clip.top);
+                            bottom = Math.min(bottom, clip.bottom);
+                        }
+                    }
+                    const anchorRect = anchor.getBoundingClientRect();
+                    const spaceBelow = bottom - anchorRect.bottom - 8;
+                    const spaceAbove = anchorRect.top - top - 8;
+                    const opensUp = spaceBelow < 160 && spaceAbove > spaceBelow;
+                    setPlacement({ opensUp, maxHeight: Math.max(0, Math.min(364, opensUp ? spaceAbove : spaceBelow)) });
+                };
+
+                updateMaxHeight();
+                window.addEventListener("resize", updateMaxHeight);
+                return () => window.removeEventListener("resize", updateMaxHeight);
+            },[dropdownRef, favoritesMenuContrast])
+
     return (
         <ul
             ref={dropdownRef}
             id={"listContainer"}
             style={{
-                top: '100%',
-                bottom: 'auto' }} 
-            className="dropdown-menu absolute flex max-h-[364px] w-[244px] cursor-auto flex-col overflow-y-scroll rounded-sm bg-modalBackground shadow-customshadow-2 p-4">
+                top: favoritesMenuContrast && placement.opensUp ? 'auto' : '100%',
+                bottom: favoritesMenuContrast && placement.opensUp ? '100%' : 'auto',
+                maxHeight: favoritesMenuContrast ? placement.maxHeight : undefined }}
+            className={`dropdown-menu absolute flex max-h-[364px] w-[244px] cursor-auto flex-col overflow-y-scroll rounded-sm bg-modalBackground shadow-customshadow-2 p-4${favoritesMenuContrast ? " text-white-black" : ""}`}>
                 <li
                     onClick={reset}
-                    className="cursor-pointer font-medium pb-[1px] mb-[8px] ">
+                    className={`cursor-pointer font-medium pb-[1px] mb-[8px] ${favoritesMenuContrast ? "text-white-black hover:bg-hover-active" : ""}`}>
                     Do Nothing
                 </li>
             <TeamsRow
+                favoritesMenuContrast={favoritesMenuContrast}
                 indexKey={indexKey}
                 teams={teams}
                 setNewFavorite={setNewFavorite}
@@ -304,11 +321,13 @@ const KeyElement = (
 }
 const TeamsRow = (
     {
+        favoritesMenuContrast,
         teams,
         indexKey,
         setNewFavorite
     }:
     {
+        favoritesMenuContrast:boolean,
         teams:ITeam[],
         indexKey:number,
         setNewFavorite: (projectId: any, projectTitle?: string, index?: number) => Promise<void>
@@ -328,7 +347,7 @@ const TeamsRow = (
                                 <>
                                     <li 
                                         onClick={()=>setNewFavorite(project.id,project.title, indexKey)} 
-                                        className="flex h-[36px] cursor-pointer items-center rounded-sm px-3 text-dense font-medium hover:bg-hover-active">
+                                        className={`flex h-[36px] cursor-pointer items-center rounded-sm px-3 text-dense font-medium hover:bg-hover-active${favoritesMenuContrast ? " text-white-black" : ""}`}>
                                         {project.title}
                                     </li>
                                 </>

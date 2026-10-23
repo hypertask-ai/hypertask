@@ -11,12 +11,13 @@ const registry = load(path.join(root, 'src/lib/ai/prompts/registry.ts'));
 const { SharedAiAllowanceExceededError, sharedAiAllowanceErrorMessage, modelCostUsd } = load(path.join(root, 'src/app/api/ai/_lib/sharedAllowance.ts'));
 const { isHaiku55Model, isHaiku45Model, resolveHaikuModelId } = load(path.join(root, 'src/lib/aiModelOptions.ts'));
 
-function harness({ rejectTelemetry = false, rejectPricing = false, observationSink } = {}) {
+function harness({ rejectTelemetry = false, rejectPricing = false, observationSink, teamSnapshot = null } = {}) {
   const rows = [], captures = [], errors = [], pending = [], allowances = [];
   const usage = { inputTokens: { total: 100 }, outputTokens: { total: 20 } };
   const result = { content: [{ type: 'text', text: 'private reply' }], usage, finishReason: { unified: 'stop', raw: 'end_turn' } };
   const factory = (provider) => (modelId) => ({ specificationVersion: 'v4', provider, modelId, supportedUrls: {}, doGenerate: async () => result });
   const stubs = {
+    '@/lib/net/fetchWithoutBrotli': { fetchWithoutBrotli: async () => { throw new Error('Unexpected network request'); } },
     '@vercel/functions': { waitUntil: (promise) => pending.push(promise) },
     './aiUsage': { logAiUsage: async (row) => { rows.push(row); if (rejectTelemetry) throw new Error('database unavailable'); } },
     '@/lib/ai/prompts/registry': registry,
@@ -28,13 +29,14 @@ function harness({ rejectTelemetry = false, rejectPricing = false, observationSi
     ai: { ...require('ai'), createGateway: () => factory('gateway') },
     '@/app/api/ai/_lib/sharedAllowance': {
       sharedAiAllowanceErrorMessage,
+      teamAllowanceSnapshot: async () => teamSnapshot,
       modelCostUsd,
       gatewayCatalogModelSlug: (id) => id,
       createSharedAllowanceMiddleware: (args) => { allowances.push(args); return { specificationVersion: 'v4' }; },
       modelPricing: async () => { if (rejectPricing) throw new Error('unknown price'); return { inputUsdPerToken: 0.000003, outputUsdPerToken: 0.000015 }; },
     },
     '@/lib/aiModelOptions': { getAiModelDefinition: () => undefined, isHaiku55Model, isHaiku45Model, resolveHaikuModelId },
-    '@/lib/flags/keys': { HTPR_7010_HAIKU_5_5_FLAG: 'htpr-7010-haiku-5-5' },
+    '@/lib/flags/keys': {},
     '@/lib/aiProviders': { getAiProviderInfo: () => ({ openAiCompatibleBaseUrl: 'https://example.test/v1' }) },
     '@/lib/aiAllowancePolicy': { FREE_TEAM_AI_ALLOWANCE_USD: 1, PAID_TEAM_AI_ALLOWANCE_USD: 5 },
     '@/lib/aiUsageClassification': { isSystemAiFeature: (feature) => feature === 'summary', INCLUDED_WITH_HYPERTASK_GATEWAY_TAG: 'system' },
@@ -79,6 +81,29 @@ test('all provider branches and gateway resolver are obligatorily traced without
   assert.equal(h.rows[5].userId, null);
   assert.equal(h.rows[5].model, 'anthropic/claude-opus-5.5');
   assert.ok(!JSON.stringify([h.rows, h.captures, h.errors]).includes('private'));
+});
+
+test('generation tracing includes the team allowance snapshot or null when unavailable', async () => {
+  for (const teamSnapshot of [{ allowanceUsd: 40, usedUsd: 12.5 }, null]) {
+    const h = harness({ teamSnapshot });
+    const middleware = h.api.createUsageTracingMiddleware({ teamId: 'team_1' }, 'claude-sonnet-5.5', 40);
+    assert.equal(await middleware.wrapGenerate({ params, doGenerate: async () => h.result }), h.result);
+    await h.flush();
+    assert.equal(h.captures.length, 1);
+    assert.equal(h.captures[0].teamId, 'team_1');
+    assert.equal(h.captures[0].teamAllowanceUsd, teamSnapshot?.allowanceUsd ?? null);
+    assert.equal(h.captures[0].teamAllowanceUsedUsd, teamSnapshot?.usedUsd ?? null);
+  }
+});
+
+test('calls on a team\'s own key carry the team id but no allowance', async () => {
+  const h = harness({ teamSnapshot: { allowanceUsd: 40, usedUsd: 12.5 } });
+  const middleware = h.api.createUsageTracingMiddleware({ teamId: 'team_1' }, 'claude-sonnet-5.5');
+  assert.equal(await middleware.wrapGenerate({ params, doGenerate: async () => h.result }), h.result);
+  await h.flush();
+  assert.equal(h.captures[0].teamId, 'team_1');
+  assert.equal(h.captures[0].teamAllowanceUsd, null);
+  assert.equal(h.captures[0].teamAllowanceUsedUsd, null);
 });
 
 test('failures, successful retries and unknown costs each produce a metadata-only attempt', async () => {

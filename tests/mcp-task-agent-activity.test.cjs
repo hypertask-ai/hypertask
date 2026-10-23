@@ -18,6 +18,7 @@ stub('src/lib/mcp/auth.ts', {
 class TaskIdentifierAmbiguityError extends Error {}
 stub('src/lib/mcp/tasks/resolveTask.ts', {
   TaskIdentifierAmbiguityError,
+  taskIdentifierErrorResponse: () => null,
   findTaskByIdentifier: async (...args) => { calls.push(args); return task },
 })
 stub('src/lib/prisma.ts', {
@@ -35,7 +36,7 @@ const { GET } = createJiti(__filename, {
 
 function reset() {
   calls.length = 0
-  ctx = { user: { id: 6 }, agentId: 'caller-agent' }
+  ctx = { user: { id: 6 }, agentId: 'caller-agent', teamScope: null }
   task = { id: 42, projectId: 15 }
   rows = []
   rateLimited = null
@@ -48,7 +49,7 @@ function read(id = '42', query = '') {
 }
 function row(n) {
   return {
-    runId: `run-${n}`, type: 'THOUGHT', text: `Progress ${n}`,
+    id: `activity-${n}`, runId: `run-${n}`, type: 'THOUGHT', text: `Progress ${n}`,
     createdAt: new Date('2026-10-01T10:00:00Z'),
     run: { agentId: `agent-${n}`, agent: { displayName: `Agent ${n}` } },
   }
@@ -63,7 +64,7 @@ test('unauthenticated, rate-limited and inaccessible requests never read activit
   assert.equal(calls.length, 0)
   reset(); task = null
   assert.equal((await read()).status, 404)
-  assert.deepEqual(calls, [[ctx.user, { task_id: 42 }, 'caller-agent']])
+  assert.deepEqual(calls, [[ctx.user, { task_id: 42 }, 'caller-agent', undefined, null]])
 })
 
 test('agent read uses task permission helper, not caller run ownership; returns all requested fields', async () => {
@@ -71,16 +72,16 @@ test('agent read uses task permission helper, not caller run ownership; returns 
   const response = await read()
   assert.equal(response.status, 200)
   assert.equal(response.headers.get('Cache-Control'), 'private, no-store')
-  assert.deepEqual(calls[0], [ctx.user, { task_id: 42 }, 'caller-agent'])
+  assert.deepEqual(calls[0], [ctx.user, { task_id: 42 }, 'caller-agent', undefined, null])
   assert.deepEqual(calls[1], {
     where: { run: { taskId: 42 } }, orderBy: [{ createdAt: 'desc' }, { id: 'desc' }], take: 20,
     select: {
-      runId: true, type: true, text: true, createdAt: true,
+      id: true, runId: true, type: true, text: true, createdAt: true,
       run: { select: { agentId: true, agent: { select: { displayName: true } } } },
     },
   })
   assert.deepEqual((await response.json()).activities, [1, 2].map((n) => ({
-    agentId: `agent-${n}`, agentName: `Agent ${n}`, runId: `run-${n}`,
+    id: `activity-${n}`, agentId: `agent-${n}`, agentName: `Agent ${n}`, runId: `run-${n}`,
     type: 'thought', text: `Progress ${n}`, createdAt: '2026-10-01T10:00:00.000Z',
   })))
 })
@@ -88,13 +89,13 @@ test('agent read uses task permission helper, not caller run ownership; returns 
 test('user tokens use the same task permission helper and empty history succeeds', async () => {
   reset(); ctx.agentId = null
   assert.deepEqual(await (await read()).json(), { success: true, activities: [] })
-  assert.deepEqual(calls[0], [ctx.user, { task_id: 42 }, null])
+  assert.deepEqual(calls[0], [ctx.user, { task_id: 42 }, null, undefined, null])
 })
 
 test('ticket identifiers resolve with task access; limits default to 20 and cap at 100', async () => {
   reset(); rows = Array.from({ length: 110 }, (_, n) => row(n))
   assert.equal((await (await read('htpr-42')).json()).activities.length, 20)
-  assert.deepEqual(calls[0], [ctx.user, { ticket_number: 'HTPR-42' }, 'caller-agent'])
+  assert.deepEqual(calls[0], [ctx.user, { ticket_number: 'HTPR-42' }, 'caller-agent', undefined, null])
   assert.equal((await (await read('42', '?limit=200')).json()).activities.length, 100)
   assert.equal((await (await read('42', '?limit=1')).json()).activities.length, 1)
 })
@@ -102,7 +103,7 @@ test('ticket identifiers resolve with task access; limits default to 20 and cap 
 test('optional claimant filter keeps task access and reads only that agent across its runs', async () => {
   reset()
   assert.equal((await read('42', '?agent_id=claiming-agent&limit=1')).status, 200)
-  assert.deepEqual(calls[0], [ctx.user, { task_id: 42 }, 'caller-agent'])
+  assert.deepEqual(calls[0], [ctx.user, { task_id: 42 }, 'caller-agent', undefined, null])
   assert.deepEqual(calls[1].where, { run: { taskId: 42, agentId: 'claiming-agent' } })
   reset()
   assert.equal((await read('42', '?agent_id=')).status, 400)

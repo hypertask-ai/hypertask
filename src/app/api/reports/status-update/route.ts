@@ -1,3 +1,5 @@
+import { downloadWithoutBrotli } from "@/lib/net/downloadWithoutBrotli";
+import { withAgentScopeRequest } from "@/lib/auth/agentScope";
 import { resolveAiModel as resolveLegacyAiModel } from "@/app/api/ai/_lib/modelProvider";
 import { getAiDefaultModelContext, resolveAutomaticAiModel } from "@/app/api/ai/_lib/byokKeys";
 import { configureAiModelUsage } from "@/app/api/ai/_lib/modelProvider";
@@ -26,16 +28,12 @@ import {
   aiUsageProviderForCredential,
 } from "@/app/api/ai/_lib/modelProvider";
 import { escapeHtml } from "@/utils/helperFunctions/escapeHtml";
-import { generateObject } from "ai";
+import { generateText, Output } from "ai";
 import { z } from "zod";
 import { NextRequest, NextResponse } from "next/server";
 
 export const maxDuration = 120;
 
-// HTPR-4888: an AI-written board status update, stored as a normal Report so
-// it reuses the existing /report surface, sandboxing and permissions. Asana
-// ships "Smart Status"; ours reads the same board data the velocity report
-// does, so the numbers in the prose are computed, not hallucinated.
 
 const STATUS_SLUG = "status-update";
 
@@ -74,6 +72,10 @@ ${section("Risks and blockers", update.risks)}
 }
 
 export async function POST(request: NextRequest) {
+  return withAgentScopeRequest(request, () => generateStatusUpdate(request));
+}
+
+async function generateStatusUpdate(request: NextRequest) {
   const session = await getSessionUser(request.headers);
   if (!session) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
@@ -89,7 +91,7 @@ export async function POST(request: NextRequest) {
   }
 
   const project = await prisma.project.findFirst({
-    where: { id: projectId, ...getProjectWhere(session.userId) },
+    where: { id: projectId, ...getProjectWhere(session.userId), AND: [getProjectWhere(session.userId, session.agentId, session.teamScope)] },
     select: {
       id: true,
       title: true,
@@ -134,6 +136,7 @@ export async function POST(request: NextRequest) {
     prisma.task.findMany({
       where: {
         projectId,
+        project: getProjectWhere(session.userId, session.agentId, session.teamScope),
         deletedAt: null,
         status: { not: "Deleted" },
         OR: [
@@ -162,6 +165,7 @@ export async function POST(request: NextRequest) {
     prisma.task.findMany({
       where: {
         projectId,
+        project: getProjectWhere(session.userId, session.agentId, session.teamScope),
         deletedAt: null,
         status: { not: "Deleted" },
         sectionChangedAt: { gte: windowStart },
@@ -214,7 +218,6 @@ export async function POST(request: NextRequest) {
   );
 
   const doneTitles = doneColumnTitles(project.section, isDoneByName);
-  // Titles are user-written; strip anything that would close the data fence.
   const fenceSafe = (value: string) => value.replace(/[<>]/g, " ").slice(0, 200);
   const movementLines = recentlyMoved
     .map(
@@ -241,9 +244,10 @@ export async function POST(request: NextRequest) {
       provider: haikuByok ? aiUsageProviderForCredential(haikuByok.provider, haikuByok.credential) : systemModel.provider,
       feature: "summary",
     });
-    const result = await generateObject({
+    const result = await generateText({
+      experimental_download: downloadWithoutBrotli,
       model,
-      schema: statusSchema,
+      output: Output.object({ schema: statusSchema }),
       maxRetries: 2,
       maxOutputTokens: 900,
       providerOptions: providerOptionsForAiModel(model, "status-update", {
@@ -271,18 +275,13 @@ Write the status update:
 - risks: tickets sitting still, piling up, or otherwise worth attention.`,
     });
 
-    const bodyHtml = renderStatusHtml(result.object, {
+    const bodyHtml = renderStatusHtml(result.output, {
       boardTitle,
       generatedAt: now,
       verdict,
     });
     const title = `Status update — ${now.toISOString().slice(0, 10)}`;
 
-    // One living status report per board: update in place so the URL is
-    // stable. Only "it isn't there yet" falls through to create — swallowing
-    // every error here would turn a real validation failure into a confusing
-    // slug-taken 500. Two concurrent runs can still both miss, so the create
-    // retries as an update if the other one won the race.
     const existing = await getReport({
       userId: session.userId,
       projectId,
@@ -294,7 +293,7 @@ Write the status update:
       projectId,
       slug: STATUS_SLUG,
       title,
-      description: result.object.headline,
+      description: result.output.headline,
       bodyHtml,
     };
 
@@ -312,7 +311,7 @@ Write the status update:
     return NextResponse.json({
       success: true,
       url: getReportUrl(projectId, STATUS_SLUG),
-      headline: result.object.headline,
+      headline: result.output.headline,
     });
   } catch (error) {
     console.log("🚀 ~ status-update ~ error:", error);

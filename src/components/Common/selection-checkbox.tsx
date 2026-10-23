@@ -1,4 +1,3 @@
-// components/SelectionCheckbox.tsx
 
 import { cn } from '@/utils/undoActions/helperFuncs';
 import { FC, type MouseEvent } from 'react';
@@ -10,7 +9,7 @@ interface SelectionCheckboxProps {
   className?: string;
   size?: number;
   alwaysVisible?: boolean;
-  groupName?: string; // NEW — to customize group context
+  groupName?: string;
   checkmarkColorClass?: string;
   borderColorClass?: string;
 }

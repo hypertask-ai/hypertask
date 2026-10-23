@@ -43,6 +43,39 @@ test('mocked LLM calls validate every top-ten schema for both surfaces', () => {
   assert.throws(() => validateCall({ id: 'bad', name: 'unknown', arguments: {} }, catalogs.chat), /Unknown tool/);
 });
 
+test('isolated MCP metadata includes the shared Decisions guidance in the recorded comment contract', () => {
+  const load = require('jiti')(__filename, { fsCache: false });
+  const { DECISIONS_GUIDANCE } = load(path.join(__dirname, '../src/lib/mcp/decisionsGuidance.ts'));
+  assert.ok(mcpTools().hypertask_add_comment_to_task.description.startsWith(DECISIONS_GUIDANCE + ' '));
+});
+
+test('chat create-task eval preserves the exact flag-off schema and validation', () => {
+  const { z } = require('zod');
+  const load = require('jiti')(__filename, { fsCache: false });
+  const { createTaskItemSchema } = load(path.join(__dirname, '../src/lib/ai/tools/schemas.ts'));
+  const expected = createTaskItemSchema.partial().extend({
+    tasks: z.array(createTaskItemSchema).max(50).optional().describe('Tasks to create in one call. Prefer this over repeated tool calls.'),
+    confirmed: z.boolean().optional().describe('Set true ONLY after the user has explicitly approved creating 4 or more tasks in their own message. Never set it to confirm your own proposal.'),
+  });
+  const tools = chatTools();
+  const { schema, description } = tools.hypertask_create_task;
+  assert.deepEqual(z.toJSONSchema(schema), z.toJSONSchema(expected));
+  assert.equal(description, 'Create one or many tasks, up to 50 per call. For multiple tasks, pass tasks with each task\'s project_id and fields in one call instead of looping. Returns created tasks and per-task failures.');
+  const valid = { project_id: 15, title: 'Fixture', description: 'Body', priority: 'High' };
+  const validate = (input) => validateCall({ id: 'create', name: 'hypertask_create_task', arguments: input }, tools);
+  validate(valid);
+  validate({ tasks: [valid], confirmed: true });
+  for (const invalid of [
+    { ...valid, brief: 'Writer-only input' },
+    { ...valid, title: '' },
+    { ...valid, project_id: -1 },
+    { ...valid, priority: 'Critical' },
+    { tasks: [{ project_id: 15, brief: 'Missing legacy title' }] },
+    { tasks: [{ ...valid, title: '' }] },
+    { tasks: Array.from({ length: 51 }, () => valid) },
+  ]) assert.throws(() => validate(invalid));
+});
+
 test('missing fixtures, nonterminating models and invalid thresholds fail closed', async () => {
   await assert.rejects(evaluate({ golden, fixtures: {} }), /Missing recorded turn/);
   const stale = structuredClone(require('./fixtures/ai/recorded-contract.json'));
@@ -107,7 +140,7 @@ test('CI is path scoped, hosted and explicitly offline without credentials', () 
   const workflow = fs.readFileSync(path.join(__dirname, '../.github/workflows/ai-evals.yml'), 'utf8');
   for (const directory of ['src/app/api/ai/**', 'src/lib/mcp-server/config/**', 'src/lib/mcp-server/validations/**', 'src/lib/ai/**']) assert.ok(workflow.includes(directory));
   assert.match(workflow, /runs-on: ubuntu-latest/);
-  assert.match(workflow, /node-version: 24/);
+  assert.match(workflow, /node-version: \^24\.\d+\.\d+/);
   assert.match(workflow, /npm ci --ignore-scripts[\s\S]*?run: npx prisma generate[\s\S]*?run: node --test/);
   assert.match(workflow, /AI_EVAL_LIVE: "0"/);
   assert.match(workflow, /AI_EVAL_WRONG_TOOL_THRESHOLD: "0"/);

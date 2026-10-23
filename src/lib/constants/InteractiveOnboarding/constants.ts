@@ -260,28 +260,6 @@ export const getBoards = (currentUser: any) => {
           ],
           showBottomButton: false,
         },
-        // {
-        //   title: "Review",
-        //   tasks: [
-        //     {
-        //       identifier: "CTBA-9",
-        //       title: "404 Page 🎯 Redesign Project",
-        //     },
-        //     {
-        //       identifier: "CTBA-5",
-        //       title: "Content Loading ⌛ Performance Audit",
-        //     },
-        //     {
-        //       identifier: "CTBA-3",
-        //       title: "Mobile Navigation 📱 Redesign",
-        //     },
-        //     {
-        //       identifier: "CTBA-10",
-        //       title: "Image Gallery 🖼️ Compression System",
-        //     },
-        //   ],
-        //   showBottomButton: false,
-        // },
       ],
       taskPages: [
         {
@@ -407,17 +385,17 @@ export const sceneStates = {
 };
 
 export const multipleKeys = {
-  9: { pressed: false }, // [tab]
-  13: { pressed: false }, // [enter]
-  66: { pressed: false }, // [b]
-  68: { pressed: false }, // [d]
-  72: { pressed: false }, // [h]
-  73: { pressed: false }, // [i]
-  74: { pressed: false }, // [j]
-  75: { pressed: false }, // [k]
-  76: { pressed: false }, // [l]
-  77: { pressed: false }, // [m]
-  190: { pressed: false }, // [.]
+  9: { pressed: false },
+  13: { pressed: false },
+  66: { pressed: false },
+  68: { pressed: false },
+  72: { pressed: false },
+  73: { pressed: false },
+  74: { pressed: false },
+  75: { pressed: false },
+  76: { pressed: false },
+  77: { pressed: false },
+  190: { pressed: false },
 };
 
 export const priorities = [

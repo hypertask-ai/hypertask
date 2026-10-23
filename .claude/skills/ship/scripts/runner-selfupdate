@@ -1,0 +1,215 @@
+#!/usr/bin/env bash
+# runner-selfupdate: refresh installed runner code from production, or install its five-minute timer.
+set -euo pipefail
+LIVE=${RUNNER_SELFUPDATE_LIVE:-$HOME/projects/ht-skills-live}
+LIB=${RUNNER_SELFUPDATE_LIB:-$HOME/.local/lib/hypertask/runner-pickup}
+DISPATCH=${RUNNER_SELFUPDATE_DISPATCH:-$HOME/.claude/skills/runners/scripts/runner-dispatch}
+UNITS=${RUNNER_PICKUP_UNIT_DIR:-$HOME/.config/systemd/user}
+STATE=${RUNNER_SELFUPDATE_STATE:-$HOME/.local/state/runner-selfupdate}
+SYSTEMCTL=${RUNNER_SELFUPDATE_SYSTEMCTL:-systemctl}
+GIT=${RUNNER_SELFUPDATE_GIT:-git}
+SYNC_RETRY_DELAY=${RUNNER_SELFUPDATE_RETRY_DELAY:-5}
+HERE=$(cd "$(dirname "$(readlink -f "$0")")" && pwd)
+sha=unknown
+backup=
+restarted=0
+deploying=0
+backup_ready=0
+log() { printf 'runner-selfupdate: %s\n' "$*" >&2; }
+
+alert() {
+  local reason=$1 text=$2 deliver=$LIB/runner-deliver id rc=0 status="old version still running"
+  id=runner-selfupdate-$reason-${sha:0:12}
+  [ "$reason" != rollback ] || status="recovery failed"
+  log "$text ($sha); $status"
+  [ ! -e "$STATE/$id" ] || return 0
+  [ -x "$deliver" ] || deliver=$LIVE/.claude/skills/ship/scripts/runner-deliver
+  printf '%s\n' "$text ($sha); $status" |
+    RUNNER_DELIVER_ID=$id "$deliver" ht-product-lead >/dev/null || rc=$?
+  # Exit 3 means queued for the next live session, not a failed alert.
+  if [ "$rc" = 0 ] || [ "$rc" = 3 ]; then touch "$STATE/$id"; fi
+}
+
+sync_live() {
+  if ! "$GIT" -C "$LIVE" fetch -q origin production; then
+    sync_failure='fetch|Could not fetch the merged runner update'; return 1
+  fi
+  sha=$("$GIT" -C "$LIVE" rev-parse origin/production) || { sync_failure='checkout|Could not identify production'; return 1; }
+  if ! "$GIT" -C "$LIVE" checkout -q --detach origin/production ||
+    [ "$("$GIT" -C "$LIVE" rev-parse HEAD)" != "$sha" ]; then
+    sync_failure='checkout|Runner checkout is not the merged production version'; return 1
+  fi
+}
+
+install_timer() {
+  local repo
+  repo=$(cd "$HERE/../../.." && pwd)
+  mkdir -p "$UNITS" "$LIB"
+  install -m 0755 "$HERE/runner-selfupdate" "$HERE/user-unit-check" "$LIB/"
+  install -m 0644 "$repo/systemd/runner-selfupdate.service" "$repo/systemd/runner-selfupdate.timer" "$UNITS/"
+  "${USER_UNIT_CHECK:-$LIB/user-unit-check}" "$UNITS/runner-selfupdate.service" "$UNITS/runner-selfupdate.timer"
+  "$SYSTEMCTL" --user daemon-reload
+  "$SYSTEMCTL" --user enable --now runner-selfupdate.timer
+}
+
+run() {
+  local scripts source changed=0 webhook_changed=0 enabled n dirty i
+  local shell_files=(runner-pickup runner-deliver runner-chat-reply ship-identity runner-selfupdate user-unit-check)
+  local unit_files=(runner-pickup@.service runner-pickup@.timer runner-webhook.service runner-selfupdate.service runner-selfupdate.timer)
+  local sources=() targets=()
+  mkdir -p "$STATE"
+  exec 9>"$STATE/update.lock"
+  flock -n 9 || return 0
+  sha=$("$GIT" -C "$LIVE" rev-parse HEAD 2>/dev/null) || sha=unknown
+  local sync_failure
+  if ! sync_live; then
+    log "${sync_failure#*|}; retrying in ${SYNC_RETRY_DELAY}s"
+    sleep "$SYNC_RETRY_DELAY"
+    sync_live || { alert "${sync_failure%%|*}" "${sync_failure#*|}"; return 1; }
+  fi
+  # A detached production HEAD can still carry local edits that must not be installed.
+  dirty=$("$GIT" -C "$LIVE" status --porcelain -- .claude/skills/ship/scripts .claude/hooks/runner-inbox-stop.sh .claude/systemd) || {
+    alert checkout 'Could not verify the production runner sources'; return 1;
+  }
+  if [ -n "$dirty" ]; then alert checkout 'Runner sources have unmerged local changes'; return 1; fi
+  scripts=$LIVE/.claude/skills/ship/scripts
+  for source in "${shell_files[@]}" runner-webhook; do
+    sources+=("$scripts/$source"); targets+=("$LIB/$source")
+  done
+  sources+=("$scripts/runner-dispatch"); targets+=("$DISPATCH")
+  sources+=("$LIVE/.claude/hooks/runner-inbox-stop.sh"); targets+=("$LIB/runner-inbox-stop.sh")
+  for source in "${unit_files[@]}"; do
+    sources+=("$LIVE/.claude/systemd/$source"); targets+=("$UNITS/$source")
+  done
+  sources+=("$LIVE/.claude/systemd/agent-events-port.conf"); targets+=("$UNITS/agent-events.service.d/port.conf")
+  for i in "${!sources[@]}"; do
+    cmp -s "${sources[$i]}" "${targets[$i]}" || changed=1
+  done
+  [ "$changed" = 1 ] || return 0
+  cmp -s "$scripts/runner-webhook" "$LIB/runner-webhook" &&
+    cmp -s "$LIVE/.claude/systemd/runner-webhook.service" "$UNITS/runner-webhook.service" || webhook_changed=1
+  for source in "${shell_files[@]}"; do
+    if ! bash -n "$scripts/$source"; then alert syntax 'Runner update contains invalid shell code'; return 1; fi
+  done
+  if ! bash -n "$LIVE/.claude/hooks/runner-inbox-stop.sh" ||
+    ! python3 - "$scripts/runner-webhook" "$scripts/runner-dispatch" <<'PY'
+import pathlib, sys
+for source in sys.argv[1:]:
+    path = pathlib.Path(source)
+    compile(path.read_bytes(), str(path), 'exec')
+PY
+  then alert syntax 'Runner update contains invalid hook or Python code'; return 1; fi
+  if ! enabled=$("$SYSTEMCTL" --user list-units 'runner-pickup@*.timer' --all --plain --no-legend --no-pager); then
+    alert runners 'Could not list runner timers'; return 1
+  fi
+  n=$(awk '$1 ~ /^runner-pickup@[1-9][0-9]*\.timer$/ && $3 == "active" {sub(/^runner-pickup@/, "", $1); sub(/\.timer$/, "", $1); print $1}' <<<"$enabled" | sort -n | head -1)
+  [ -n "$n" ] || return 0
+  trap interrupted TERM INT HUP
+  deploying=1
+  if ! backup=$(mktemp -d); then alert backup 'Could not create a backup of the running version'; return 1; fi
+  trap 'rm -rf "$backup"' EXIT
+  if ! backup_files; then alert backup 'Could not back up the running version'; return 1; fi
+  backup_ready=1
+  if ! install_files "$n"; then recover install 'Runner installation failed'; return 1; fi
+  if [ "$webhook_changed" = 1 ]; then
+    restarted=1
+    if ! "$SYSTEMCTL" --user restart runner-webhook.service ||
+      ! "$SYSTEMCTL" --user is-active --quiet runner-webhook.service; then
+      recover webhook 'Updated webhook did not start'; return 1
+    fi
+  fi
+  deploying=0
+  log "installed production $sha"
+}
+
+backup_files() {
+  local i
+  if [ -e "$LIB" ]; then cp -a "$LIB" "$backup/lib" || return 1; fi
+  if [ -e "$DISPATCH" ]; then cp -a "$DISPATCH" "$backup/runner-dispatch" || return 1; fi
+  mkdir -p "$backup/units" || return 1
+  for i in "${!targets[@]}"; do
+    [[ ${targets[$i]} == "$UNITS/"* ]] || continue
+    if [ -e "${targets[$i]}" ]; then cp -a "${targets[$i]}" "$backup/units/$i" || return 1; fi
+  done
+}
+
+install_files() (
+  # runner-pickup has literal systemctl calls and a fixed lib path. Redirect both without changing that installer.
+  systemctl() { command "$RUNNER_SELFUPDATE_SYSTEMCTL" "$@"; }
+  install() {
+    local args=("$@") last=$(( $# - 1 ))
+    if [ "${args[$last]%/}" = "$HOME/.local/lib/hypertask/runner-pickup" ]; then
+      mkdir -p "$RUNNER_SELFUPDATE_LIB" || exit 1
+      args[last]=$RUNNER_SELFUPDATE_LIB/
+    fi
+    command install "${args[@]}" || exit 1
+  }
+  export -f systemctl install
+  export RUNNER_SELFUPDATE_SYSTEMCTL=$SYSTEMCTL RUNNER_SELFUPDATE_LIB=$LIB RUNNER_PICKUP_UNIT_DIR=$UNITS
+  "$scripts/runner-pickup" install "$1" >/dev/null || exit 1
+  "$scripts/runner-pickup" install-webhook >/dev/null || exit 1
+  install -m 0755 "$scripts/runner-selfupdate" "$LIB/"
+  install -D -m 0755 "$scripts/runner-dispatch" "$DISPATCH"
+  install -m 0644 "$LIVE/.claude/systemd/runner-selfupdate.service" "$LIVE/.claude/systemd/runner-selfupdate.timer" "$UNITS/"
+  "${USER_UNIT_CHECK:-$LIB/user-unit-check}" "$UNITS/runner-selfupdate.service" "$UNITS/runner-selfupdate.timer" || exit 1
+  systemctl --user daemon-reload
+)
+
+rollback() {
+  local i failed=0 restore
+  restore=$(mktemp -d "$LIB.rollback.XXXXXX") || return 1
+  if [ -e "$backup/lib" ]; then cp -a "$backup/lib" "$restore/lib" || return 1; fi
+  if [ -e "$LIB" ]; then mv "$LIB" "$restore/current" || return 1; fi
+  if [ -e "$backup/lib" ] && ! mv "$restore/lib" "$LIB"; then
+    if [ -e "$restore/current" ]; then mv "$restore/current" "$LIB" || return 1; fi
+    return 1
+  fi
+  rm -rf "$restore" || return 1
+  for i in "${!targets[@]}"; do
+    [[ ${targets[$i]} == "$UNITS/"* ]] || continue
+    if [ -e "$backup/units/$i" ]; then
+      cp -a "$backup/units/$i" "${targets[$i]}" || failed=1
+    else
+      rm -f "${targets[$i]}" || failed=1
+    fi
+  done
+  if [ -e "$backup/runner-dispatch" ]; then
+    cp -a "$backup/runner-dispatch" "$DISPATCH" || failed=1
+  else
+    rm -f "$DISPATCH" || failed=1
+  fi
+  "$SYSTEMCTL" --user daemon-reload || failed=1
+  if [ "$restarted" = 1 ]; then
+    "$SYSTEMCTL" --user restart runner-webhook.service &&
+      "$SYSTEMCTL" --user is-active --quiet runner-webhook.service || failed=1
+  fi
+  [ "$failed" = 0 ]
+}
+
+recover() {
+  deploying=0
+  trap '' TERM INT HUP
+  if rollback; then
+    alert "$1" "$2"
+  else
+    trap - EXIT
+    alert rollback "Runner update could not be rolled back; backup kept at $backup"
+  fi
+}
+
+interrupted() {
+  if [ "$deploying" = 1 ]; then
+    if [ "$backup_ready" = 1 ]; then
+      recover interrupted 'Runner update interrupted'
+    else
+      alert interrupted 'Runner update interrupted before installation'
+    fi
+  fi
+  exit 1
+}
+
+case "${1:-}" in
+  run) run ;;
+  install) install_timer ;;
+  *) echo 'usage: runner-selfupdate run | install' >&2; exit 2 ;;
+esac

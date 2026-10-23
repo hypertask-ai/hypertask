@@ -1,16 +1,21 @@
+import { requireAgentWriteRole } from '@/lib/mcp/agents/readRoleGuard'
+import { wrapMcpRoute } from '@/lib/mcp/routeWrapper'
 import { pauseTimer, TimeTrackingDisabledError } from "@/lib/timeTracking";
 import { NextRequest, NextResponse } from "next/server";
 import { resolveMcpTimeTask } from "@/lib/mcp/operations/time/helpers";
 
 export async function POST(request: NextRequest) {
+  return wrapMcpRoute(async (request: NextRequest) => {
   const resolved = await resolveMcpTimeTask(request);
   if (resolved.response) return resolved.response;
+  const roleRefusal = await requireAgentWriteRole(resolved.ctx);
+  if (roleRefusal) return roleRefusal;
 
   try {
     const entry = await pauseTimer(
       resolved.ctx.user.id,
       resolved.task.id,
-      resolved.ctx.agentId
+      resolved.ctx.agentId, resolved.ctx.teamScope
     );
     if (!entry) {
       return NextResponse.json(
@@ -28,4 +33,6 @@ export async function POST(request: NextRequest) {
     }
     throw error;
   }
+
+  })(request)
 }

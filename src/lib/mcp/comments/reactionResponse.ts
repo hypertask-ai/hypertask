@@ -8,24 +8,23 @@ export interface McpCommentReactionUser {
   displayName?: string
 }
 
-/** HTPR-7122: the agent that made a reaction, when the caller may see it. */
 export interface McpCommentReactionAgent {
   id?: string
   displayName: string
 }
 
 export interface McpCommentReaction {
+  createdAt: string
   id: string
   emoji: string
-  /** The person, or for an agent reaction the agent's owner (whose token it used). */
   userId: number
   user?: McpCommentReactionUser
-  /** HTPR-7122: true when an agent made it. It is then never the owner's own reaction or approval. */
   isAgent?: true
   agent?: McpCommentReactionAgent
 }
 
 interface McpCommentReactionRecord {
+  createdAt: Date
   id: string
   emoji: string
   userId: number
@@ -40,6 +39,7 @@ export const commentReactionInclude = {
   },
   select: {
     id: true,
+    createdAt: true,
     emoji: true,
     userId: true,
     agentId: true,
@@ -53,7 +53,6 @@ export const commentReactionInclude = {
   }
 }
 
-/** Agent ids the caller may see by name, mapped to their current display name. */
 export type VisibleReactionAgents = ReadonlyMap<string, string>
 
 export const PRIVATE_REACTION_AGENT = 'Private agent'
@@ -63,10 +62,10 @@ export function mapMcpCommentReaction(
   visibleAgents: VisibleReactionAgents = new Map()
 ): McpCommentReaction {
   if (reaction.agentId) {
-    // Never attach the owner's user object: an agent reaction must not read as the owner's.
     const visibleName = visibleAgents.get(reaction.agentId)
     return {
       id: reaction.id,
+      createdAt: reaction.createdAt.toISOString(),
       emoji: reaction.emoji,
       userId: reaction.userId,
       isAgent: true,
@@ -78,6 +77,7 @@ export function mapMcpCommentReaction(
   const displayName = reaction.user?.displayName
   return {
     id: reaction.id,
+    createdAt: reaction.createdAt.toISOString(),
     emoji: reaction.emoji,
     userId: reaction.userId,
     ...(reaction.user
@@ -93,11 +93,6 @@ export function mapMcpCommentReaction(
   }
 }
 
-/**
- * A reaction write's rows as the caller may see them. The write is already
- * committed, so a failed agent lookup only hides every agent as "Private agent";
- * it never fails the request.
- */
 export async function mapReactionWriteResult<
   T extends { reaction: McpCommentReactionRecord | null; reactions: McpCommentReactionRecord[] }
 >(
@@ -117,7 +112,6 @@ export async function mapReactionWriteResult<
   }
 }
 
-/** The distinct agent ids behind agent reactions in these comments. */
 export function reactionAgentIds(
   comments: ReadonlyArray<{ reactions?: ReadonlyArray<{ agentId?: string | null }> }>
 ): string[] {

@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect } from "react";
+import { AgentChatPane } from "./AgentChatPane";
 import { AgentChatView } from "./AgentChatView";
 import type { IProp } from "./agentChatTypes";
 import { useAgentChatComposer } from "./useAgentChatComposer";
@@ -20,13 +21,14 @@ const AgentChatClient = (props: IProp) => {
   const agentChatSession = useAgentChatSession({ ...agentChatState });
   const agentChatFeed = useAgentChatFeed({ ...agentChatState, ...agentChatSession });
   const { awaiting } = agentChatState;
-  // Drain a queued follow-up once the ball is actually back in our court.
-  // Runs after render, so it always sees the awaiting value this render
-  // computed -- unlike draining synchronously inside loadMessages, which ran
-  // before awaitingRef had been updated and left the queue stuck.
   useEffect(() => {
-    if (!awaiting) drainQueuedMessageRef.current();
-  }, [awaiting]);
+    if (!props.embedded?.active) return;
+    if (!agentChatSession.sessionName) agentChatSession.selectAgent(props.embedded.agent);
+    else void agentChatSession.loadMessages(agentChatSession.sessionName);
+  }, [props.embedded?.agent.id, props.embedded?.active, props.embedded?.requestId]);
+  useEffect(() => {
+    if (!awaiting && (!props.embedded || props.embedded.active)) drainQueuedMessageRef.current();
+  }, [awaiting, props.embedded?.active]);
 
   useAgentChatStream({ ...agentChatState, ...agentChatSession, ...agentChatRoster });
   const agentChatNavigation = useAgentChatNavigation({ ...agentChatState });
@@ -48,6 +50,21 @@ const AgentChatClient = (props: IProp) => {
     ...agentChatFeed,
   });
   const agentChatDetailsSheet = useAgentChatDetailsSheet({ ...agentChatState, ...agentChatNavigation });
+
+  if (props.embedded) return (
+    <AgentChatPane
+      {...agentChatState}
+      {...agentChatRoster}
+      {...agentChatSession}
+      {...agentChatFeed}
+      {...agentChatNavigation}
+      {...agentChatSend}
+      {...agentChatComposer}
+      {...agentLifecycle}
+      embedded
+      active={props.embedded.active}
+    />
+  );
 
   return (
     <AgentChatView

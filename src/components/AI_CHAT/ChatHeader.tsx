@@ -1,3 +1,5 @@
+import { AgentSidebarChatCommands } from "./AgentSidebarChatCommands";
+import type { SidebarChatContext } from "@/app/agents/chat/agentChatTypes";
 import { useAiChatContext } from "@/lib/contexts/Multipages/AI_Agent/AI_Agent_Chat_Context";
 import {
   Check,
@@ -16,13 +18,15 @@ import {
   Trash2,
   X,
 } from "lucide-react";
-import { usePathname, useRouter } from "next/navigation";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useFlag } from "@/hooks/useFlag";
-import { HTPR_6752_INSTANT_TICKET_OPEN_FLAG } from "@/lib/flags/keys";
+import { HTPR_6971_CHAT_HISTORY_PAGING_FLAG } from "@/lib/flags/keys";
 import Tooltip from "../Common/Tooltip";
 import { format } from "date-fns";
-import { useContext, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
 import { MobileViewContext } from "@/lib/contexts/mobileContext";
+import { MOBILE_TARGET } from "@/lib/configs/general.config";
+import { cn } from "@/utils/undoActions/helperFuncs";
 import { useDeviceContext } from "@/lib/contexts/deviceContext";
 import { aiTaskWriterConfig } from "@/lib/configs/aiTaskWriter.config";
 import { buildFullScreenChatPath } from "@/lib/aiChatDisplayMode";
@@ -37,20 +41,22 @@ import {
   showAIChatInterfaceAtom,
 } from "@/store";
 
+type HistorySession = Pick<IChatSession, "id" | "title" | "updatedAt" | "createdAt" | "agentId">;
+
 const MS_PER_DAY = 24 * 60 * 60 * 1000;
 
-function getSessionUpdatedTime(session: IChatSession): number {
+function getSessionUpdatedTime(session: HistorySession): number {
   const t = new Date(session.updatedAt).getTime();
   return Number.isNaN(t) ? 0 : t;
 }
 
-function partitionSessionsByRecency(sessions: IChatSession[]): {
-  previous7Days: IChatSession[];
-  older: IChatSession[];
+function partitionSessionsByRecency(sessions: HistorySession[]): {
+  previous7Days: HistorySession[];
+  older: HistorySession[];
 } {
   const cutoff = Date.now() - 7 * MS_PER_DAY;
-  const previous7Days: IChatSession[] = [];
-  const older: IChatSession[] = [];
+  const previous7Days: HistorySession[] = [];
+  const older: HistorySession[] = [];
   for (const s of sessions) {
     (getSessionUpdatedTime(s) >= cutoff ? previous7Days : older).push(s);
   }
@@ -62,7 +68,7 @@ function ChatSessionRow({
   isActive,
   onSelect,
 }: {
-  chat: IChatSession;
+  chat: HistorySession;
   isActive: boolean;
   onSelect: () => void;
 }) {
@@ -89,17 +95,32 @@ function ChatSessionRow({
   );
 }
 
-export const ChatHeader = () => {
+export const ChatHeader = ({ sidebarChats }: { sidebarChats?: SidebarChatContext } = {}) => {
+  const [conversationsOpen, setConversationsOpen] = useState(false);
+  const titleRef = useRef<HTMLButtonElement>(null);
+  const closeConversations = useCallback(() => setConversationsOpen(false), []);
+  const aiSessionActionsAvailable = !sidebarChats || sidebarChats.target.kind === "ai";
+  const sidebarTitle = sidebarChats?.target.kind === "ai" ? "AI chat" : sidebarChats?.target.agent.displayName;
+  useEffect(() => { setConversationsOpen(false); }, [sidebarChats?.projectId]);
+  const searchParams = useSearchParams();
+  const openFromLink = searchParams?.get("agentSidebar");
+  useEffect(() => {
+    if (!sidebarChats) return;
+    const open = () => setConversationsOpen(true);
+    if (openFromLink && !searchParams?.get("sidebarAgent")) open();
+    window.addEventListener("ht-agent-sidebar-open", open);
+    return () => window.removeEventListener("ht-agent-sidebar-open", open);
+  }, [!!sidebarChats, openFromLink]);
   const router = useRouter();
   const pathname = usePathname();
-  const instantTicketOpen = useFlag(HTPR_6752_INSTANT_TICKET_OPEN_FLAG);
-  const quietTicketOpen = instantTicketOpen && pathname?.startsWith("/detail/");
+  const sessionPagingEnabled = useFlag(HTPR_6971_CHAT_HISTORY_PAGING_FLAG);
+  const quietTicketOpen = pathname?.startsWith("/detail/");
   const {
     togglePopover,
     minimizeChat,
     toggleSidebarMode,
     isSidebarMode,
-    sessions,
+    sessions, historySessions, hasMoreSessions, isLoadingMoreSessions, pagingError, loadMoreSessions, refreshHistorySessions,
     currentSession,
     isSessionPending,
     startNewSession,
@@ -123,15 +144,27 @@ export const ChatHeader = () => {
   );
   const dropdownRef = useRef<HTMLDivElement>(null);
   const overflowRef = useRef<HTMLDivElement>(null);
+  const historyEndRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (sessionPagingEnabled && isDropdownOpen) {
+      void refreshHistorySessions();
+    }
+  }, [sessionPagingEnabled, isDropdownOpen, refreshHistorySessions]);
+  useEffect(() => {
+    if (!sessionPagingEnabled || !isDropdownOpen || !hasMoreSessions || isLoadingMoreSessions || pagingError || !historyEndRef.current) return;
+    const observer = new IntersectionObserver((entries) => {
+      if (entries.some((entry) => entry.isIntersecting)) void loadMoreSessions();
+    }, { root: historyEndRef.current.parentElement });
+    observer.observe(historyEndRef.current);
+    return () => observer.disconnect();
+  }, [sessionPagingEnabled, isDropdownOpen, hasMoreSessions, isLoadingMoreSessions, pagingError, loadMoreSessions]);
 
+  const filterAgentSessions = Boolean(sidebarChats);
   const { previous7Days, older } = useMemo(
-    () => partitionSessionsByRecency(sessions ?? []),
-    [sessions]
+    () => partitionSessionsByRecency(((sessionPagingEnabled ? historySessions : sessions) ?? []).filter((session) => !filterAgentSessions || !session.agentId)),
+    [sessions, historySessions, sessionPagingEnabled, filterAgentSessions]
   );
 
-  // currentSession is the one canonical resolved session (title, messages,
-  // and now delete/highlight all read it) so none of them can disagree about
-  // which chat is on screen (HTPR-6100).
   const resolvedSessionId = currentSession?.id;
 
   useEffect(() => {
@@ -148,18 +181,12 @@ export const ChatHeader = () => {
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, []);
 
-  // HTPR-6360: Escape must close the open header menu before TaskDetail's
-  // Escape handler navigates back to the board (same capture pattern as
-  // ModelSelectorDropdown).
   useEffect(() => {
     if (!isDropdownOpen && !isOverflowOpen) return;
 
     const closeOnEscape = (event: KeyboardEvent) => {
       if (event.key !== "Escape") return;
       event.preventDefault();
-      // stopImmediatePropagation: other document keydown listeners (TaskDetail
-      // Escape -> back) share this same node, so stopPropagation alone is not
-      // enough to keep navigation from firing.
       event.stopImmediatePropagation();
       setIsDropdownOpen(false);
       setIsOverflowOpen(false);
@@ -174,12 +201,12 @@ export const ChatHeader = () => {
     isStartingNewSessionRef.current = true;
     setIsStartingNewSession(true);
     try {
+      sidebarChats?.onSelect({ kind: "ai" });
       await startNewSession();
       setTimeout(() => {
         try {
           editor?.view.dom.focus();
         } catch {
-          // The editor may have unmounted while the request completed.
         }
       }, 0);
     } catch {
@@ -195,20 +222,32 @@ export const ChatHeader = () => {
       <div
         id="ai-chat-session-history"
         className={`absolute mt-2 max-h-[min(60svh,15rem)] w-64 max-w-[calc(100vw-1rem)] overflow-y-auto rounded-md bg-modalBackground shadow-lg scrollbar-none z-[1200] ${alignmentClass}`}
+        onScroll={(event) => {
+          const menu = event.currentTarget;
+          if (sessionPagingEnabled && hasMoreSessions && !isLoadingMoreSessions && menu.scrollTop + menu.clientHeight >= menu.scrollHeight - 40) {
+            void loadMoreSessions();
+          }
+        }}
       >
+        {sessionPagingEnabled && pagingError && (
+          <p role="alert" className="px-3 py-2 text-content">
+            Couldn’t load older chats. Scroll to try again.
+          </p>
+        )}
         {previous7Days.length > 0 && (
           <div className="pt-1">
             <div className="px-3 pb-1 pt-1 text-micro font-medium text-icon-dark-gray">
               Previous 7 days
             </div>
             <ul className="pb-1">
-              {previous7Days.map((chat: IChatSession) => (
+              {previous7Days.map((chat: HistorySession) => (
                 <ChatSessionRow
                   key={chat.id}
                   chat={chat}
                   isActive={chat.id === resolvedSessionId}
                   onSelect={() => {
                     setIsDropdownOpen(false);
+                    sidebarChats?.onSelect({ kind: "ai" });
                     selectSession(chat.id);
                   }}
                 />
@@ -225,13 +264,14 @@ export const ChatHeader = () => {
               Older
             </div>
             <ul>
-              {older.map((chat: IChatSession) => (
+              {older.map((chat: HistorySession) => (
                 <ChatSessionRow
                   key={chat.id}
                   chat={chat}
                   isActive={chat.id === resolvedSessionId}
                   onSelect={() => {
                     setIsDropdownOpen(false);
+                    sidebarChats?.onSelect({ kind: "ai" });
                     selectSession(chat.id);
                   }}
                 />
@@ -239,8 +279,20 @@ export const ChatHeader = () => {
             </ul>
           </div>
         )}
+        {sessionPagingEnabled && hasMoreSessions && <div ref={historyEndRef} className="h-1" aria-hidden />}
       </div>
     ) : null;
+
+  const historyButton = (
+    <button type="button" onMouseDown={sidebarChats ? (event) => event.stopPropagation() : undefined}
+      onClick={() => { if (sidebarChats) { closeConversations(); setIsOverflowOpen(false); } setIsDropdownOpen((open) => !open); }}
+      aria-label="Chat history" aria-controls="ai-chat-session-history" aria-expanded={isDropdownOpen}
+      className={isMbl
+        ? "flex h-11 w-11 touch-manipulation items-center justify-center rounded-full text-icon-dark-gray hover:bg-hover-active hover:text-white-black"
+        : "text-icon-dark-gray hover:text-white-black"}>
+      <History size={isMbl ? 20 : 16} strokeWidth={1.75} />
+    </button>
+  );
 
   if (isMbl) {
     return (
@@ -257,13 +309,24 @@ export const ChatHeader = () => {
           <ChevronDown size={22} strokeWidth={1.75} />
         </button>
         <div className="min-w-0 flex-1">
+          {sidebarChats ? (
+            <div className="relative">
+              <button ref={titleRef} type="button" aria-label="Switch conversation" aria-expanded={conversationsOpen}
+                aria-controls="agent-sidebar-conversations" onClick={() => { setIsDropdownOpen(false); setConversationsOpen((open) => !open); }}
+                className={cn(MOBILE_TARGET, "max-w-full gap-1 truncate px-2 text-modalSmall font-semibold leading-5")}>
+                <span className="truncate">{sidebarTitle}</span><ChevronDown size={18} aria-hidden />
+              </button>
+              {conversationsOpen && <AgentSidebarChatCommands context={sidebarChats} anchorRef={titleRef} onClose={closeConversations} />}
+            </div>
+          ) : (
           <div
             className="truncate px-2 text-modalSmall font-semibold leading-5"
             title={currentSession?.title ?? undefined}
           >
             {currentSession?.title ?? "AI Chat"}
           </div>
-          <div
+          )}
+          {(!sidebarChats || sidebarChats.target.kind === "ai") && <div
             data-ai-chat-mobile-model-label
             className="flex min-h-6 items-center gap-1 px-2 text-dense text-text-light-gray"
           >
@@ -271,19 +334,10 @@ export const ChatHeader = () => {
               {getMobileAiChatModelLabel(currentAiOption)}
             </span>
             <ChevronDown size={14} strokeWidth={1.75} aria-hidden />
-          </div>
+          </div>}
         </div>
         <div className="relative shrink-0" ref={dropdownRef}>
-          <button
-            type="button"
-            onClick={() => setIsDropdownOpen((open) => !open)}
-            aria-label="Chat history"
-            aria-controls="ai-chat-session-history"
-            aria-expanded={isDropdownOpen}
-            className="flex h-11 w-11 touch-manipulation items-center justify-center rounded-full text-icon-dark-gray hover:bg-hover-active hover:text-white-black"
-          >
-            <History size={20} strokeWidth={1.75} />
-          </button>
+          {historyButton}
           {renderSessionMenu("right-0")}
         </div>
         <button
@@ -301,25 +355,26 @@ export const ChatHeader = () => {
 
   return (
     <div
-      // Sidebar mode sits beside the board's title row, which is pt-4 over a
-      // 32px row (centre 32px from the top). py-2 in a 48px box centred at 24px,
-      // so the titles were 8px out of line: pt-4/pb-0 puts the centre at 32px.
       className={`z-10 text-content font-bold px-2 gap-4 flex items-center justify-between border-gray-700 text-white-black ${
         isSidebarMode ? "h-[48px] pt-4 pb-0" : "py-2"
       }`}
     >
-      {/* min-w-0 is what actually lets the title truncate: a flex child refuses to shrink
-          below its content width without it, so a long session title wrapped to three
-          lines and spilled out of the fixed 48px header onto the messages (HTPR-4720). */}
       <div className="relative min-w-0 flex-1" ref={dropdownRef}>
         <button
           type="button"
-          title={currentSession?.title ?? undefined}
-          onClick={() => setIsDropdownOpen((prev) => !prev)}
+          ref={titleRef}
+          title={sidebarTitle ?? currentSession?.title ?? undefined}
+          aria-label={sidebarChats ? "Switch conversation" : undefined}
+          aria-expanded={sidebarChats ? conversationsOpen : isDropdownOpen}
+          aria-controls={sidebarChats ? "agent-sidebar-conversations" : "ai-chat-session-history"}
+          onClick={() => {
+            if (sidebarChats) { setIsDropdownOpen(false); setConversationsOpen((open) => !open); }
+            else setIsDropdownOpen((prev) => !prev);
+          }}
           className="flex min-w-0 max-w-full items-center gap-1 hover:bg-active-modal-element transition-colors rounded px-1 py-0.5"
         >
           <span className="min-w-0 truncate font-medium">
-            {currentSession?.title ?? (isSessionPending && !quietTicketOpen ? "Loading..." : "AI Chat")}
+            {sidebarTitle ?? currentSession?.title ?? (isSessionPending && !quietTicketOpen ? "Loading..." : "AI Chat")}
           </span>
           <span
             style={{
@@ -335,18 +390,19 @@ export const ChatHeader = () => {
             <ChevronDown
               size={18}
               className={`text-icon-dark-gray transition-transform ${
-                isDropdownOpen ? "rotate-180" : ""
+                (sidebarChats ? conversationsOpen : isDropdownOpen) ? "rotate-180" : ""
               }`}
               strokeWidth={1.75}
             />
           </span>
         </button>
 
+        {sidebarChats && conversationsOpen && <AgentSidebarChatCommands context={sidebarChats} anchorRef={titleRef} onClose={closeConversations} />}
         {renderSessionMenu("left-0")}
       </div>
 
-      {/* right side */}
       <div className="flex shrink-0 items-center space-x-2">
+        {sidebarChats && historyButton}
         <button
           onClick={handleStartNewSession}
           disabled={isStartingNewSession}
@@ -397,7 +453,7 @@ export const ChatHeader = () => {
                 )}
                 <span>{aiChatPinned ? "Unpin AI chat" : "Pin AI chat open"}</span>
               </button>
-              {!isMbl && (
+              {!isMbl && aiSessionActionsAvailable && (
                 <button
                   type="button"
                   role="menuitem"
@@ -429,7 +485,7 @@ export const ChatHeader = () => {
                   </span>
                 </button>
               )}
-              {!isMbl && (
+              {!isMbl && aiSessionActionsAvailable && (
                 <button
                   type="button"
                   role="menuitem"
@@ -447,7 +503,7 @@ export const ChatHeader = () => {
                   <span>Open full screen</span>
                 </button>
               )}
-              <button
+              {aiSessionActionsAvailable && <button
                 type="button"
                 role="menuitem"
                 className="flex w-full items-center gap-2 px-3 py-2 text-left text-content text-white-black hover:bg-active-modal-element transition-colors"
@@ -463,8 +519,8 @@ export const ChatHeader = () => {
                       .rename_chat_button.text
                   }
                 </span>
-              </button>
-              <button
+              </button>}
+              {aiSessionActionsAvailable && <button
                 type="button"
                 role="menuitem"
                 className="flex w-full items-center gap-2 px-3 py-2 text-left text-content text-white-black hover:bg-active-modal-element transition-colors"
@@ -488,9 +544,9 @@ export const ChatHeader = () => {
                       .delete_chat_button.text
                   }
                 </span>
-              </button>
+              </button>}
 
-              {currentSession && (
+              {currentSession && aiSessionActionsAvailable && (
                 <>
                   <div className="mx-2 h-px bg-gray-600/60" role="separator" />
                   <div className="px-3 py-2 text-micro text-icon-dark-gray">
@@ -506,14 +562,12 @@ export const ChatHeader = () => {
           onClick={() =>
             !isSidebarMode && !isMbl ? minimizeChat() : togglePopover()
           }
-          aria-label={isMbl ? "Close AI chat" : undefined}
+          aria-label={isMbl || sidebarChats ? "Close AI chat" : undefined}
           className="text-icon-dark-gray hover:text-white-black relative group"
         >
           {isSidebarMode && !isMbl ? (
             <ChevronRight size={16} strokeWidth={1.75} />
           ) : isMbl ? (
-            // On mobile this fully closes the chat, so show a close affordance —
-            // a minus reads as "minimize" and left the exit ambiguous.
             <X size={18} strokeWidth={1.75} />
           ) : (
             <Minus size={16} strokeWidth={1.75} />

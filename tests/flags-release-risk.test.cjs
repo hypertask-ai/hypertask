@@ -5,7 +5,7 @@ const { createJiti } = require("jiti");
 
 const root = path.resolve(__dirname, "..");
 for (const [relative, exports] of [
-  ["src/lib/prisma.ts", { __esModule: true, default: { featureFlag: { findMany: async () => [] } } }],
+  ["src/lib/prisma.ts", { __esModule: true, default: { featureFlag: { findMany: async () => [] }, featureFlagChange: { findMany: async () => [] } } }],
   ["src/lib/auth/getSessionUser.ts", { getSessionUser: async () => null }],
 ]) {
   const filename = path.join(root, relative);
@@ -42,4 +42,13 @@ test("release-risk metadata uses declared keys, the three labels and plain one-l
     assert.ok(entry.reason.trim().length > 0, key);
     assert.doesNotMatch(entry.reason, /[\r\n\u2014]/, key);
   }
+});
+
+test("high-risk categories expose the fixed values and human labels", () => {
+  const { HIGH_RISK_CATEGORIES, HIGH_RISK_LABELS } = jiti(path.join(root, "src/lib/flags/releaseRisk.ts"));
+  assert.deepEqual(HIGH_RISK_CATEGORIES, ["money", "access", "data-deletion", "customer-email"]);
+  assert.deepEqual(HIGH_RISK_LABELS, {
+    money: "Money", access: "Login and access", "data-deletion": "Data deletion", "customer-email": "Customer emails",
+  });
+  assert.deepEqual(Object.keys(HIGH_RISK_LABELS), HIGH_RISK_CATEGORIES);
 });

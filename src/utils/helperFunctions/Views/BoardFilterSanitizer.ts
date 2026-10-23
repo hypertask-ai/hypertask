@@ -76,10 +76,6 @@ function sanitizeFilterEntry(entry: unknown): unknown {
   return changed ? sanitized : entry;
 }
 
-/**
- * Reduces persisted board filters to the fields used by filter matching and UI rendering.
- * Clean inputs retain their original reference.
- */
 export function sanitizeBoardFilters<T>(boardFilters: T): T {
   if (!isRecord(boardFilters)) return boardFilters;
 
@@ -122,22 +118,51 @@ export function sanitizeViewBoardFilters<T>(view: T): T {
     : { ...view, board_filters: boardFilters }) as T;
 }
 
-export function sanitizeProjectViewBoardFilters<T>(projectView: T): T {
+export function projectVisibleViewRelations<T>(projectView: T, userId: number | undefined, publicOnly = false): T {
   if (!isRecord(projectView)) return projectView;
+  const visible = (view: unknown, draft = false) => isRecord(view) &&
+    typeof projectView.id === "string" && view.project_view_id === projectView.id &&
+    (draft
+      ? !publicOnly && userId !== undefined && view.userId === userId
+      : view.visibility === "Public" || (!publicOnly && userId !== undefined && view.userId === userId));
+  const defaultView = visible(projectView.default_view) ? projectView.default_view : null;
+  const rows = projectView.user_project_views;
+  return {
+    ...projectView,
+    default_view: defaultView,
+    ...("default_view_id" in projectView && !defaultView ? { default_view_id: null } : {}),
+    ...(Array.isArray(rows) ? { user_project_views: rows.map(row => {
+      if (!isRecord(row)) return row;
+      const appliedView = visible(row.appliedView) ? row.appliedView : null;
+      const unsavedView = visible(row.unsavedView, true) ? row.unsavedView : null;
+      return {
+        ...row, appliedView,
+        ...("unsavedView" in row ? { unsavedView } : {}),
+        ...("appliedViewId" in row && !appliedView ? { appliedViewId: null } : {}),
+        ...("unsavedViewId" in row && !unsavedView ? { unsavedViewId: null } : {}),
+      };
+    }) } : {}),
+  } as T;
+}
+
+export function sanitizeProjectViewBoardFilters<T>(projectView: T, userId?: number, publicOnly = false): T {
+  if (!isRecord(projectView)) return projectView;
+  const visibleProjectView = userId !== undefined || publicOnly
+    ? projectVisibleViewRelations(projectView, userId, publicOnly) : projectView;
 
   let changed = false;
-  const sanitized: Record<string, unknown> = { ...projectView };
+  const sanitized: Record<string, unknown> = { ...visibleProjectView };
 
   for (const key of ["default_view"] as const) {
-    const view = sanitizeViewBoardFilters(projectView[key]);
-    if (view !== projectView[key]) {
+    const view = sanitizeViewBoardFilters(visibleProjectView[key]);
+    if (view !== visibleProjectView[key]) {
       sanitized[key] = view;
       changed = true;
     }
   }
 
   for (const key of ["allViews", "user_project_views"] as const) {
-    const rows = projectView[key];
+    const rows = visibleProjectView[key];
     if (!Array.isArray(rows)) continue;
 
     const sanitizedRows = rows.map((row) => {
@@ -158,13 +183,13 @@ export function sanitizeProjectViewBoardFilters<T>(projectView: T): T {
     }
   }
 
-  return (changed ? sanitized : projectView) as T;
+  return (changed ? sanitized : visibleProjectView) as T;
 }
 
-export function sanitizeProjectBoardFilters<T>(project: T): T {
+export function sanitizeProjectBoardFilters<T>(project: T, userId?: number, publicOnly = false): T {
   if (!isRecord(project) || !("project_view" in project)) return project;
 
-  const projectView = sanitizeProjectViewBoardFilters(project.project_view);
+  const projectView = sanitizeProjectViewBoardFilters(project.project_view, userId, publicOnly);
   return (projectView === project.project_view
     ? project
     : { ...project, project_view: projectView }) as T;

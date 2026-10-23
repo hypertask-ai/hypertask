@@ -175,12 +175,12 @@ test("MCP createTask signs the internal hop with the authenticated agentId", () 
   const source = read("src/lib/mcp/tasks/services.ts");
   assert.match(
     source,
-    /signSession\(\{\s*id: user\.id,\s*email: user\.email,\s*\.\.\.\(agentId \? \{ agentId \} : \{\}\),\s*\}\)/,
+    /signSession\(\{\s*id: user\.id,\s*email: user\.email,\s*\.\.\.\(agentId \? \{ agentId \} : \{\}\),\s*teamScope: data\.teamScope,\s*agentTokenGeneration: data\.agentTokenGeneration,\s*\}\)/,
   );
 });
 
 test("createGlobally resolves acting agent from the signed session claim", () => {
-  const source = read("src/pages/api/tasks/createGlobally.ts");
+  const source = read("src/lib/api/task-writes/create-global.ts");
   assert.match(source, /resolveActingAgent\(/);
   assert.match(source, /sessionAgentId: signedSession\?\.agentId/);
   assert.match(source, /bodyAgentId: requestedAgentId/);

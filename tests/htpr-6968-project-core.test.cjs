@@ -4,9 +4,30 @@ const ts = require("typescript");
 const http = require("node:http");
 const { apiResolver } = require("next/dist/server/api-utils/node/api-resolver");
 const { load } = require("./task-route-loader.cjs");
-const { projectCoreRoutes, projectCoreLegacySources } = require("./htpr-6923-verify.cjs");
+const { pins } = require("./helpers/htpr-6992-pins.cjs");
+const rawPin = pins("a2-project-core");
+const GROUPS = ["create","update","archive","delete","leave","removeMember","setMemberRole","boardTasks","getAll","getAllMinimal","getFirst","getArchived","getFavorites","lastActivity"];
+// Pins group by route so the fixture holds one digest per route.
+const groupOf = key => key.split(/[ :]+/).find(token => GROUPS.includes(token)) ?? (key.startsWith('leave') ? 'leave' : key);
+const pin = (key, value) => rawPin(groupOf(key), key, value);
 const clean = value => value === undefined ? undefined : JSON.parse(JSON.stringify(value));
-const sources = projectCoreLegacySources();
+// Route map: shared module and method per Pages endpoint; "signed" ones verify the cookie-signed session.
+const projectCoreRoutes = {
+  create: { module: "create", method: "POST", signed: false },
+  update: { module: "update", method: "POST", signed: false },
+  archive: { module: "archive", method: "POST", signed: false },
+  delete: { module: "delete", method: "POST", signed: false },
+  leave: { module: "leave", method: "POST", signed: false },
+  removeMember: { module: "remove-member", method: "POST", signed: true },
+  setMemberRole: { module: "set-member-role", method: "POST", signed: false },
+  boardTasks: { module: "board-read", method: "POST", signed: false },
+  getAll: { module: "all-read", method: "POST", signed: true },
+  getAllMinimal: { module: "minimal-read", method: "GET", signed: true },
+  getFirst: { module: "first-read", method: "GET", signed: true },
+  getArchived: { module: "archived-read", method: "GET", signed: false },
+  getFavorites: { module: "favorites-read", method: "GET", signed: false },
+  lastActivity: { module: "last-activity-read", method: "GET", signed: false },
+};
 const endpoints = {
   create: { controller: "create", body: { title: "Board", teamId: "team", googleAccountId: "calendar", ticketPrefix: "TEST", userId: 6 } },
   update: { controller: "update", body: { projectId: 15, title: " Board ", sorting_mode: "Manual", uniqueIdentifier: "TEST", userId: 6 } },
@@ -23,18 +44,8 @@ const endpoints = {
   getFirst: { controller: "getFirst" },
   lastActivity: { controller: "lastActivity" },
 };
-function compileOriginal(source, mocks) {
-  const compiled = ts.transpileModule(source, { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022, esModuleInterop: true } }).outputText;
-  const mod = { exports: {} };
-  new Function("require", "module", "exports", compiled)(specifier => {
-    assert.ok(Object.hasOwn(mocks, specifier), `Unexpected original dependency: ${specifier}`);
-    const mock = mocks[specifier];
-    return Object.hasOwn(mock, "default") ? { __esModule: true, ...mock } : mock;
-  }, mod, mod.exports);
-  return mod.exports.default;
-}
-function fixture(name, scenario = {}, mode = false, controllerFactory) {
-  const effects = [], flags = [], loads = [], auth = [];
+function fixture(name, scenario = {}, controllerFactory) {
+  const effects = [], loads = [], auth = [];
   const userId = scenario.userId ?? 985;
   const session = scenario.noAuth ? null : { userId, source: scenario.source ?? "better-auth" };
   const signed = scenario.noAuth || scenario.unsigned ? null : { id: scenario.signedUserId ?? userId };
@@ -45,7 +56,7 @@ function fixture(name, scenario = {}, mode = false, controllerFactory) {
     return value;
   };
   const mocks = {
-    "@/lib/telemetry/activationOccurrences": { recordActivationOccurrence: () => {} },
+    "@/lib/telemetry/activationOccurrences": { captureActivationOccurrence: async () => null },
     "@/lib/auth/getSessionUser": { getSessionUser: async headers => {
       auth.push(headers.get("cookie"));
       if (scenario.authThrows) throw new Error("Auth unavailable");
@@ -56,12 +67,6 @@ function fixture(name, scenario = {}, mode = false, controllerFactory) {
       return token === "synthetic-signed" ? signed : null;
     } },
     "@/lib/auth/sessionUserRecord": { loadSessionUserRecord: record("actor", actor, scenario.actorThrows) },
-    "@/lib/flags/keys": { HTPR_6923_APP_ROUTER_WRITES_FLAG: "htpr-6923-app-router-writes" },
-    "@/lib/flags": { isFeatureEnabled: async (key, id) => {
-      flags.push([key, id]);
-      if (mode === "outage") throw new Error("Flag unavailable");
-      return mode === true;
-    } },
   };
   const controller = `@/utils/controllers/projects/${endpoints[name].controller}`;
   mocks[controller] = { default: controllerFactory ? controllerFactory(effects) : record("controller", scenario.result ?? { status: 200, json: { id: 15, tasks: [{ id: 42, description: "Complete body" }], owner: actor, members: [{ userId: 42, role: "Member" }] } }, scenario.operationThrows) };
@@ -72,7 +77,7 @@ function fixture(name, scenario = {}, mode = false, controllerFactory) {
     if (scenario.loadThrows) throw new Error("Route load unavailable");
     return web;
   } };
-  return { legacy: compileOriginal(sources[name], mocks), current: load(`src/pages/api/projects/${name}.ts`, mocks).default, web, effects, flags, loads, auth };
+  return { current: load(`src/pages/api/projects/${name}.ts`, mocks).default, web, effects, loads, auth };
 }
 function input(name, scenario = {}) {
   return {
@@ -116,6 +121,18 @@ async function invoke(fx, name, scenario, target) {
     return result;
   });
 }
+// Runs the Pages adapter, pins its response plus effects, then checks the shared Web handler agrees.
+async function check(key, name, scenario, controllerFactory, { skipWeb = false } = {}) {
+  const fx = fixture(name, scenario, controllerFactory);
+  const result = await invoke(fx, name, scenario, "current");
+  pin(key, { result, effects: fx.effects });
+  if (!skipWeb) {
+    const web = fixture(name, scenario, controllerFactory);
+    assert.deepEqual(await invoke(web, name, scenario, "web"), result, `${key}: web`);
+    assert.deepEqual(web.effects, fx.effects, `${key}: web effects`);
+  }
+  return { result, fx };
+}
 const cases = [
   ["complete success", {}], ["controller validation", { result: { status: 400, json: { message: "Missing required information" } } }],
   ["permission denial", { result: { status: 403, json: { message: "No access to this board" } } }],
@@ -139,25 +156,20 @@ for (const name of Object.keys(endpoints)) {
     ["singleton/empty Pages array preserved", { query: { mode: [] }, webQuery: true }],
     ["unknown mode unchanged", { query: { mode: "unknown" } }],
   );
-  for (const [label, scenario] of [...cases, ...extra]) test(`${name}: ${label} matches original, Off, outage, On and Web`, async () => {
-    const old = fixture(name, scenario), expected = await invoke(old, name, scenario, "legacy");
-    for (const mode of [false, "outage", true, "web"]) {
-      // Direct signed-cookie handlers intentionally don't consult Better Auth.
-      if (mode === "web" && scenario.authThrows && projectCoreRoutes[name].signed) continue;
-      const fx = fixture(name, scenario, mode);
-      assert.deepEqual(await invoke(fx, name, scenario, mode === "web" ? "web" : "current"), expected, `${label}: ${mode}`);
-      assert.deepEqual(fx.effects, old.effects, `${label}: ${mode} effects`);
-      assert.equal(fx.loads.length, mode === true && !scenario.noAuth && !scenario.authThrows ? 1 : 0);
-      if (fx.flags.length) assert.deepEqual(fx.flags, [["htpr-6923-app-router-writes", scenario.userId ?? 985]]);
-    }
+  for (const [label, scenario] of [...cases, ...extra]) test(`${name}: ${label} matches pinned response, effects and Web handler`, async () => {
+    // Direct signed-cookie handlers intentionally don't consult Better Auth.
+    const { fx } = await check(`${name}: ${label}`, name, scenario, undefined, { skipWeb: scenario.authThrows && projectCoreRoutes[name].signed });
+    assert.equal(fx.loads.length, 1, "listed method always loads the shared route");
   });
-  test(`${name}: unsupported methods bypass preflight`, async () => {
-    const scenario = { method: "PATCH" }, old = fixture(name, scenario), current = fixture(name, scenario, true);
-    assert.deepEqual(await invoke(current, name, scenario, "current"), await invoke(old, name, scenario, "legacy"));
-    assert.deepEqual(current.flags, []); assert.deepEqual(current.loads, []); assert.deepEqual(current.auth, []);
+  test(`${name}: unsupported methods answer 405 before any session lookup`, async () => {
+    const scenario = { method: "PATCH" }, current = fixture(name, scenario);
+    const result = await invoke(current, name, scenario, "current");
+    const key = ["archive", "delete", "leave"].includes(name) ? "error" : "message";
+    assert.deepEqual(result, { status: 405, body: { [key]: "Method not allowed" }, headers: {} });
+    assert.deepEqual(current.loads, []); assert.deepEqual(current.auth, []); assert.deepEqual(current.effects, []);
   });
-  test(`${name}: load failure never retries legacy`, async () => {
-    const scenario = { loadThrows: true }, fx = fixture(name, scenario, true);
+  test(`${name}: load failure surfaces without running the operation`, async () => {
+    const scenario = { loadThrows: true }, fx = fixture(name, scenario);
     assert.deepEqual(await invoke(fx, name, scenario, "current"), { throws: "Error: Route load unavailable" });
     assert.deepEqual(fx.effects, []); assert.equal(fx.loads.length, 1);
   });
@@ -207,7 +219,7 @@ function policyController(name, role, effects, options = {}) {
     task: { updateMany: record("write-tasks", { count: 2 }), findMany: record("tasks", [{ id: 42, title: "Task" }]) },
   };
   const mocks = {
-    "@/lib/telemetry/activationOccurrences": { recordActivationOccurrence: () => {} },
+    "@/lib/telemetry/activationOccurrences": { captureActivationOccurrence: async () => null },
     "@/lib/prisma": { default: prisma }, "@/lib/subscription": { stripe: {} },
     "./getFirst": { default: record("first-board", { status: 200, json: { id: 16 } }) },
     "./getAllIncludes": { ...access, getProjectIncludeWithoutTasks: () => ({}), getProjectViewInclude: () => ({}), getBoardTaskInclude: () => ({}) },
@@ -226,28 +238,18 @@ for (const name of ["archive", "delete", "removeMember", "setMemberRole", "updat
   for (const role of ["Owner", "Admin", "Member", "Non-member"]) test(`${name}: real controller preserves ${role} policy and effects`, async () => {
     const scenario = name === "update" ? { body: { projectId: 15, title: " Board " } } : {};
     const factory = effects => policyController(name, role, effects);
-    const old = fixture(name, scenario, false, factory), expected = await invoke(old, name, scenario, "legacy");
+    const { result, fx } = await check(`policy ${name} ${role}`, name, scenario, factory);
     const allowed = name === "setMemberRole" ? role === "Owner" : ["update", "boardTasks"].includes(name) ? role !== "Non-member" : ["Owner", "Admin"].includes(role);
-    assert.equal(expected.status, allowed ? 200 : ["update", "boardTasks"].includes(name) ? 403 : 401);
-    assert.equal(old.effects.some(([label]) => label.startsWith("write-")), allowed && name !== "boardTasks");
-    if (name === "boardTasks") assert.equal(old.effects.some(([label]) => label === "tasks"), allowed);
-    for (const mode of [false, "outage", true, "web"]) {
-      const fx = fixture(name, scenario, mode, factory);
-      assert.deepEqual(await invoke(fx, name, scenario, mode === "web" ? "web" : "current"), expected);
-      assert.deepEqual(fx.effects, old.effects);
-    }
+    assert.equal(result.status, allowed ? 200 : ["update", "boardTasks"].includes(name) ? 403 : 401);
+    assert.equal(fx.effects.some(([label]) => label.startsWith("write-")), allowed && name !== "boardTasks");
+    if (name === "boardTasks") assert.equal(fx.effects.some(([label]) => label === "tasks"), allowed);
   });
 }
 for (const noMember of [false, true]) test(`leave: real controller retains self-removal and missing-member error (${noMember})`, async () => {
   const factory = effects => policyController("leave", "Member", effects, { noMember });
-  const old = fixture("leave", {}, false, factory), expected = await invoke(old, "leave", {}, "legacy");
-  assert.equal(expected.status, noMember ? 400 : 200);
-  assert.deepEqual(old.effects.find(([label]) => label === "member")[1].where, { userId: 985, projectId: 15, agentId: null });
-  for (const mode of [false, "outage", true, "web"]) {
-    const fx = fixture("leave", {}, mode, factory);
-    assert.deepEqual(await invoke(fx, "leave", {}, mode === "web" ? "web" : "current"), expected);
-    assert.deepEqual(fx.effects, old.effects);
-  }
+  const { result, fx } = await check(`leave policy ${noMember}`, "leave", {}, factory);
+  assert.equal(result.status, noMember ? 400 : 200);
+  assert.deepEqual(fx.effects.find(([label]) => label === "member")[1].where, { userId: 985, projectId: 15, agentId: null });
 });
 
 function createController(effects, quota = false) {
@@ -255,9 +257,11 @@ function createController(effects, quota = false) {
   const record = (label, value) => async (...args) => { effects.push([label, ...structuredClone(args)]); return value; };
   const tx = { $executeRaw: record("lock", undefined), project: { findFirst: record("prefix-clash", null), create: record("write-board", board) } };
   const mocks = {
-    "@/lib/telemetry/activationOccurrences": { recordActivationOccurrence: () => {} },
+    "@/lib/telemetry/activationOccurrences": { captureActivationOccurrence: async () => null },
+    "@/lib/telemetry/savedWork": { enqueueBoardCreated: async () => "board_created:15", processAnalyticsIntentSoon: () => {} },
     "@/lib/prisma": { default: {
       user: { findUnique: record("user", { id: 985 }) },
+      team: { findFirst: record("team", { googleAccountId: "calendar" }) },
       $transaction: async fn => fn(tx), project: { update: record("write-name", board) },
       project_View: { upsert: record("default-view", { default_view_id: "default" }) },
     } },
@@ -284,24 +288,19 @@ for (const [name, label, scenario, status, factory] of [
   ["setMemberRole", "cannot change own role", { body: { projectId: 15, targetUserId: 985, role: "Admin" } }, 400],
   ["removeMember", "cannot remove owner", { body: { projectId: 15, userId: 985 } }, 400],
   ["boardTasks", "invalid id", { body: { projectId: "invalid" } }, 400],
-]) test(`${name}: real controller ${label} matches every path`, async () => {
+]) test(`${name}: real controller ${label} matches pinned response`, async () => {
   const controllerFactory = factory ?? (effects => policyController(name, "Owner", effects));
-  const old = fixture(name, scenario, false, controllerFactory), expected = await invoke(old, name, scenario, "legacy");
-  assert.equal(expected.status, status);
-  if (status !== 200) assert.equal(old.effects.some(([label]) => label.startsWith("write-")), false);
-  for (const mode of [false, "outage", true, "web"]) {
-    const fx = fixture(name, scenario, mode, controllerFactory);
-    assert.deepEqual(await invoke(fx, name, scenario, mode === "web" ? "web" : "current"), expected);
-    assert.deepEqual(fx.effects, old.effects);
-  }
+  const { result, fx } = await check(`controller ${name} ${label}`, name, scenario, controllerFactory);
+  assert.equal(result.status, status);
+  if (status !== 200) assert.equal(fx.effects.some(([label]) => label.startsWith("write-")), false);
 });
 
 for (const name of Object.keys(endpoints).filter(name => projectCoreRoutes[name].method === "POST")) test(`${name}: direct Web handler accepts a real JSON Request`, async () => quiet(async () => {
-  const old = fixture(name), expected = await invoke(old, name, {}, "legacy"), fx = fixture(name);
+  const expected = await invoke(fixture(name), name, {}, "current"), fx = fixture(name);
   const request = new Request(`https://example.invalid/api/projects/${name}`, { method: "POST", headers: input(name).headers, body: JSON.stringify(endpoints[name].body) });
   const response = await fx.web(request);
   assert.deepEqual({ status: response.status, body: await response.json(), headers: {} }, expected);
-  assert.deepEqual(fx.effects, old.effects);
+  pin(`real request ${name}`, { result: expected, effects: fx.effects });
 }));
 
 async function httpInvoke(handler, name) {
@@ -325,10 +324,7 @@ async function httpInvoke(handler, name) {
   } finally { await new Promise(resolve => server.close(resolve)); }
 }
 for (const name of Object.keys(endpoints)) test(`${name}: actual Pages resolver preserves HTTP bytes and headers`, async () => quiet(async () => {
-  const old = fixture(name), expected = await httpInvoke(old.legacy, name);
-  for (const mode of [false, "outage", true]) {
-    const fx = fixture(name, {}, mode);
-    assert.deepEqual(await httpInvoke(fx.current, name), expected);
-    assert.deepEqual(fx.effects, old.effects);
-  }
+  const fx = fixture(name);
+  const actual = await httpInvoke(fx.current, name);
+  pin(`http ${name}`, { status: actual.status, text: actual.text, headers: { ...actual.headers, date: undefined }, effects: fx.effects });
 }));

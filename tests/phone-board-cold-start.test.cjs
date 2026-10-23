@@ -9,7 +9,6 @@ const { renderToStaticMarkup } = require("react-dom/server");
 
 const root = path.resolve(__dirname, "..");
 const read = file => fs.readFileSync(path.join(root, file), "utf8");
-const flag = "htpr-7016-phone-board-cold-start";
 const assets = ["e4af272ccee01ff0", "5611c55482296524", "4b9bb515ce6d026f"].map(hash => `/_next/static/media/${hash}-s.woff2`);
 const plex = "/_next/static/media/26d4368bf94c0ec4-s.woff2";
 
@@ -19,6 +18,7 @@ function loadLayout(board, inbox = null) {
     "next/headers": { cookies: async () => ({ get: name => name === "theme" ? { value: "porcelain" } : undefined }) },
     "@/lib/firstScreen/serverBoardDocument": { getServerBoardDocument: async () => board },
     "@/lib/firstScreen/serverInboxDocument": { getServerInboxDocument: async () => inbox },
+    "@/lib/firstScreen/serverTicketShell": { getServerTicketShell: async () => null },
     "@/utils/serverActions": { isMobileDevice: async () => ({ isMobile: true, isApple: false }) },
     "@/lib/auth/session": { SESSION_COOKIE: "ht_session", verifySession: () => null },
     "@/lib/configs/auth.config": { default: { cookies: { theme: "theme", defaultTheme: "porcelain" } } },
@@ -26,8 +26,9 @@ function loadLayout(board, inbox = null) {
     "@/lib/fonts/inter": { inter: font, INTER_LATIN_FONT_HREF: assets[0] },
     "@/lib/fonts/newsreader": { newsreader: font, NEWSREADER_LATIN_FONT_HREFS: assets.slice(1) },
     "@/lib/fonts/ibmPlexSans": { ibmPlexSans: font, IBM_PLEX_SANS_LATIN_FONT_HREF: plex },
-    "@/lib/flags/keys": { HTPR_7016_PHONE_BOARD_COLD_START_FLAG: flag },
-    "@/lib/themePreferences": { normalizeThemePreference: x => x, resolveInitialThemeColor: () => "#fff", resolveThemePreference: () => "porcelain" },
+    "@/lib/flags/keys": { HTPR_7278_MEMORY_ONLY_TRACKING_FLAG: "htpr-7278-memory-only-tracking", HTPR_7627_TICKET_FIRST_SCREEN_FLAG: "htpr-7627-ticket-first-screen" },
+    "@/lib/flags": { isFeatureEnabled: async () => false },
+    "@/lib/themePreferences": { normalizeThemePreference: x => x, resolveInitialThemeColor: () => "#fff", resolveThemePreference: () => "porcelain", resolvedThemeDomMetadata: { porcelain: { classes: ["light", "porcelain"], themeColor: "#ffffff" } } },
     "@/lib/themeBootScript": { buildThemeBootScript: () => "" },
     "@/lib/appShellBootstrap/client": { buildEarlyAppShellBootstrapScript: () => "" },
     "@/utils/Providers": { default: ({ children }) => children },
@@ -43,18 +44,16 @@ function loadLayout(board, inbox = null) {
   return exports.default;
 }
 
-const document = (enabled, mobile = true, theme = "porcelain", route = "/project") => ({
-  scope: { route, accountId: 985 }, display: { isMobile: mobile, theme }, flags: { values: { [flag]: enabled, "htpr-6934-server-first-screen": true } },
+const document = (mobile = true, theme = "porcelain", route = "/project") => ({
+  scope: { route, accountId: 985 }, display: { isMobile: mobile, theme }, flags: { values: { "htpr-6934-server-first-screen": true } },
 });
 
 for (const theme of ["porcelain", "graphite", "amoled", "dia"]) {
-  test(`only an enabled seeded phone board defers unused fonts in ${theme}`, async () => {
+  test(`only a seeded phone board defers unused fonts in ${theme}`, async () => {
     for (const [board, inbox, deferred] of [
-      [document(true, true, theme), null, theme !== "dia"],
-      [document(false, true, theme), null, false],
-      [document(undefined, true, theme), null, false],
-      [document(true, false, theme), null, false],
-      [null, document(true, true, theme, "/inbox"), false],
+      [document(true, theme), null, theme !== "dia"],
+      [document(false, theme), null, false],
+      [null, document(true, theme, "/inbox"), false],
       [null, null, false],
     ]) {
       const html = renderToStaticMarkup(await loadLayout(board, inbox)({ children: React.createElement("a", { href: "/detail/project-15/1" }, "Real card") }));

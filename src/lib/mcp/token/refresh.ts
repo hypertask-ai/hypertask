@@ -15,6 +15,7 @@ import {
   validateMcpAuth,
   verifyMcpJwtToken,
 } from '@/lib/mcp/auth'
+import { isOAuthAccessTokenPayload } from '@/lib/mcp/oauthTokenContract'
 import prisma from '@/lib/prisma'
 import createLog from '@/utils/controllers/logs/createLog'
 
@@ -30,7 +31,6 @@ type TokenRefreshDependencies = {
   createAuditLog: typeof createLog
 }
 
-// Keep this rollout boundary immutable so configuration cannot widen legacy-token eligibility.
 export const LEGACY_REFRESH_ISSUED_BEFORE_SECONDS =
   Date.parse('2026-09-02T00:00:00.000Z') / 1000
 
@@ -56,7 +56,6 @@ export async function handleMcpTokenRefresh(
     : undefined
   const ctx = await dependencies.validateAuth(request)
   if (!ctx) {
-    // Agent state is disclosed only after signature verification, so forged IDs cannot probe agent records.
     const decoded = oldToken ? dependencies.verifyToken(oldToken) : null
     const agentId = decoded?.agentId
     if (typeof agentId === 'string' && agentId.length > 0) {
@@ -104,6 +103,13 @@ export async function handleMcpTokenRefresh(
     )
   }
 
+  if (isOAuthAccessTokenPayload(oldDecoded)) {
+    return createUnauthorizedResponse(
+      'OAuth access tokens must use OAuth token refresh.',
+      'invalid_token'
+    )
+  }
+
   const oldJti = oldDecoded.jti || oldDecoded.jwtid
   let revocationJti: string
   if (typeof oldJti === 'string' && oldJti.length > 0) {
@@ -130,9 +136,6 @@ export async function handleMcpTokenRefresh(
     revocationJti = legacyTokenRevocationJti(oldToken)
   }
 
-  // Mint before claiming the old credential. A signing failure leaves the
-  // current token usable, while the unique claim permits only one concurrent
-  // request to receive a replacement.
   const token = dependencies.createToken(user.id, user.email, '30d')
   const decoded = jwt.decode(token) as jwt.JwtPayload | null
   if (!decoded?.exp) {
@@ -151,7 +154,6 @@ export async function handleMcpTokenRefresh(
     )
   }
 
-  // Logging must not strand the caller after the one-time claim succeeds.
   try {
     await dependencies.createAuditLog({
       log: 'mcp_token_refresh',

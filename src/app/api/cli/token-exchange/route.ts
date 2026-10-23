@@ -1,9 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getRedis } from '@/lib/redis';
 import { createMcpToken } from '@/lib/mcp/auth';
-import createLog from '@/utils/controllers/logs/createLog';
+import prisma from "@/lib/prisma";
+import createLog from "@/utils/controllers/logs/createLog";
+import { enqueueOutsideSaveAndProcessSoon } from "@/lib/telemetry/analyticsIntents";
 import { LogType, Status } from '@prisma/client';
-import { recordAgentConnection } from "@/lib/telemetry/activationOccurrences";
+import { enqueueAgentConnection } from "@/lib/telemetry/activationOccurrences";
 
 export const runtime = 'nodejs';
 
@@ -11,7 +13,6 @@ const RATE_KEY_PREFIX = 'cli_rl:te:';
 const RATE_MAX_PER_WINDOW = 30;
 const RATE_WINDOW_SEC = 60;
 
-/** Atomic get + delete in one server round trip (avoids double-spend on concurrent requests). */
 const ATOMIC_CONSUME_CLI_CODE = `
 local v = redis.call('GET', KEYS[1])
 if not v then return false end
@@ -57,7 +58,6 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Code is required' }, { status: 400 });
     }
     
-    // 1. Atomically read and remove the one-time code (no reuse, no TOCTOU race)
     const redis = await getRedis();
     const redisKey = `cli_auth:${code}`;
     const rawPayload = (await redis.eval(
@@ -70,28 +70,23 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Invalid or expired code' }, { status: 401 });
     }
 
-    // 2. Parse payload
     const payload = JSON.parse(rawPayload);
     
     if (!payload.userId || !payload.email) {
       return NextResponse.json({ error: 'Invalid payload in code' }, { status: 500 });
     }
     
-    // 4. Generate the actual JWT token for the user
-    // We use createMcpToken to generate a 30-day valid MCP token
     const token = createMcpToken(payload.userId, payload.email, '30d');
 
     const connectedAt = new Date();
-    // counts real CLI onboards; first row per user = onboard, later rows = 30-day renewals.
     await createLog({
       log: 'cli_token_exchange',
       type: LogType.Signup,
       status: Status.Normal,
       LoggedById: payload.userId,
     });
-    recordAgentConnection(payload.userId, token, "cli", request.headers.get("user-agent"), connectedAt);
+    await enqueueOutsideSaveAndProcessSoon(() => enqueueAgentConnection(prisma, payload.userId, token, "cli", request.headers.get("user-agent"), connectedAt));
 
-    // 5. Return it to the CLI
     return NextResponse.json({ token });
   } catch (error) {
     console.error('Error exchanging CLI token:', error);

@@ -1,3 +1,4 @@
+import { downloadWithoutBrotli } from "@/lib/net/downloadWithoutBrotli";
 import { resolveAiModel as resolveLegacyAiModel } from "@/app/api/ai/_lib/modelProvider";
 import { defaultModelKeyFor } from "@/lib/aiModelOptions";
 import { getAiDefaultModelContext, resolveAutomaticAiModel } from "@/app/api/ai/_lib/byokKeys";
@@ -39,7 +40,6 @@ export async function generateConversationTitle(
   }
   try {
     const defaultContext = typeof getAiDefaultModelContext === "function" ? await getAiDefaultModelContext({ trustedTeamId: tags?.teamId, projectId: usageContext?.projectId ?? tags?.projectId, userId: usageContext?.userId ?? tags?.userId }) : { haiku55Enabled: false, byok: undefined };
-    // HTPR-7075: a team that disabled Anthropic keeps the plain fallback title.
     if ("anthropicDisabled" in defaultContext && defaultContext.anthropicDisabled) return fallback;
     const useHaiku = defaultModelKeyFor(defaultContext, "gpt-6-luna") === "claude-haiku-5-5";
     const provider = useHaiku ? defaultContext.byok?.provider === "openrouter" ? "openrouter" : "claude" : "openai";
@@ -58,6 +58,7 @@ export async function generateConversationTitle(
       feature: "chat",
     });
     const result = await generateText({
+      experimental_download: downloadWithoutBrotli,
       model,
       instructions:
         renderPrompt("title-instructions-1"),

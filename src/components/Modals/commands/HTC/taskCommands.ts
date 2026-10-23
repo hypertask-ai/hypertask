@@ -281,14 +281,12 @@ export const getCommentCommands = (commandOptions?: IAllCommands): CommandGroup 
 };
 
 
-export const getTaskCommands = (commandOptions?: IAllCommands, agentLogNameEnabled = false): CommandGroup => {
+export const getTaskCommands = (commandOptions?: IAllCommands): CommandGroup => {
   const taskProps = commandOptions?.taskOptions;
   const browsableTaskCommands = commandOptions?.context === "Task"
     ? baseTaskCommands.filter((command) =>
         (["addSubTask", "viewSubTask"].includes(command.key) ||
           (command.key === "openAiTaskWriter" && !taskProps?.isKanban) ||
-          // Summarize ticket only works on the detail page (the AI chat sends
-          // default_context.task_id there); hide it on a Kanban-focused task.
           (command.key === "summarizeTicket" && !taskProps?.isKanban) ||
           (command.key === "remindMe" && taskProps?.isMyTasks))
       )
@@ -460,7 +458,7 @@ export const getTaskCommands = (commandOptions?: IAllCommands, agentLogNameEnabl
           getTaskCommand("duplicateTaskToBoard"),
           {
             key: "toggleHistory",
-            name: `${taskProps?.showHistory ? "Hide" : "Show"} ${agentLogNameEnabled ? "agent log" : "history"}`,
+            name: `${taskProps?.showHistory ? "Hide" : "Show"} agent log`,
             commandMode: CommandMode.ToggleHistory,
             keyboard: ["CTRL", "SHIFT", "H"],
             keywords:

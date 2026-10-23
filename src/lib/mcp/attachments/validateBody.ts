@@ -141,12 +141,9 @@ export interface ParsedAttachmentsBody {
   project_id?: number;
   comment_id?: number;
   files: ValidatedFileSpec[];
+  inline_images?: boolean;
 }
 
-/**
- * Parse and validate JSON body for POST /api/mcp/tasks/attachments.
- * Throws Error with status 400 on failure.
- */
 export function parseAndValidateAttachmentsBody(body: unknown): ParsedAttachmentsBody {
   if (body === null || typeof body !== 'object') {
     reject('Request body must be a JSON object');
@@ -159,9 +156,12 @@ export function parseAndValidateAttachmentsBody(body: unknown): ParsedAttachment
     'project_id',
     'comment_id',
     'files',
+    'inline_images',
   ]);
   const unknownBodyField = Object.keys(o).find((key) => !allowedBodyFields.has(key));
   if (unknownBodyField) reject(`Unknown request field: ${unknownBodyField}`);
+
+  if (o.inline_images !== undefined && typeof o.inline_images !== "boolean") reject("inline_images must be a boolean");
 
   const hasTaskId = o.task_id !== undefined && o.task_id !== null;
   const hasTicket =
@@ -301,5 +301,5 @@ export function parseAndValidateAttachmentsBody(body: unknown): ParsedAttachment
 
   assertNoDuplicateValidatedFiles(files);
 
-  return { task_id, ticket_number, unique_index, project_id, comment_id, files };
+  return { task_id, ticket_number, unique_index, project_id, comment_id, files, ...(o.inline_images === undefined ? {} : { inline_images: o.inline_images as boolean }) };
 }

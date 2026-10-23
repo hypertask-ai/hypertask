@@ -59,8 +59,6 @@ const SnippetsList = forwardRef<SnippetsListRef, SuggestionProps>(
     if (!items.length) return null;
 
     return (
-      // Same shell as the slash-command menu: shadow only, never a border, and
-      // literal hex for the dark background (the popup is portaled to <body>).
       <div className="rounded-md shadow-xl dark:bg-[#333B47] bg-[#ffffff] flex flex-col p-2 gap-2 min-w-[280px] max-w-[420px]">
         <ul className="max-h-72 no-scrollbar scrollbar-none overflow-y-auto gap-1">
           {items.map((item, index) => (

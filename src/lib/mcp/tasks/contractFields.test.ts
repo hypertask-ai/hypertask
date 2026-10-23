@@ -1,5 +1,3 @@
-// Assert-based demo because this repository has no Vitest setup.
-// Run after installing dependencies: npx tsx src/lib/mcp/tasks/contractFields.test.ts
 import assert from 'node:assert/strict'
 import { NextRequest } from 'next/server'
 import {
@@ -141,6 +139,7 @@ async function demo() {
     }
   )
   const ctx = {
+    teamScope: null,
     user: { id: 6, email: 'valentin@example.com' },
     agentId: null,
   }

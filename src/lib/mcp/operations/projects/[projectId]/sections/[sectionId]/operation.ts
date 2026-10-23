@@ -1,5 +1,7 @@
+import { reportMcpOperationCrash } from '@/lib/mcp/operationCrashReport'
 import { wrapMcpRoute, validateMcpRouteAuth as validateMcpAuth, checkMcpRouteRateLimit as checkMcpRateLimit } from '@/lib/mcp/routeWrapper'
 import { NextRequest, NextResponse } from 'next/server'
+import { requireRole } from '@/lib/mcp/agents/scopes'
 
 import prisma from '@/lib/prisma'
 import { updateSection, deleteSection } from '@/lib/mcp/sections/services'
@@ -16,19 +18,6 @@ export interface SectionListItem {
   taskCount: number
 }
 
-/**
- * PATCH /api/mcp/projects/:projectId/sections/:sectionId
- *
- * Update a section (rename, move, done state, and/or auto-assignee).
- *
- * Body:
- * - title: string (optional) - New section title
- * - move_after_section_id: number (optional) - Move section to appear after this ID
- * - is_done: boolean | null (optional) - Tickets here are finished. null clears the
- *   explicit flag and falls back to the column-name guess.
- * - auto_assign: number | string | null (optional) - User ID, agent ID, or null to clear.
- * - At least one must be provided
- */
 export async function PATCH(
   request: NextRequest,
   props: { params: Promise<{ projectId: string; sectionId: string }> }
@@ -49,6 +38,10 @@ export async function PATCH(
         },
         { status: 401 }
       )
+    }
+    if (ctx.agentId) {
+      const roleError = await requireRole(ctx, 'write')
+      if (roleError) return roleError
     }
     const user = ctx.user;
     const projectId = parseInt(params.projectId)
@@ -104,8 +97,6 @@ export async function PATCH(
         ? parseInt(String(body.move_after_section_id))
         : undefined
 
-    // null is meaningful here (clear the flag, fall back to the name guess), so
-    // presence is what counts, not truthiness.
     const isDoneProvided = typeof body === 'object' && body !== null && 'is_done' in body
     const isDone = isDoneProvided ? body.is_done ?? null : undefined
     const autoAssignProvided =
@@ -187,7 +178,7 @@ export async function PATCH(
       moveAfterSectionId,
       isDone,
       autoAssign
-    }, ctx.agentId)
+    }, ctx.agentId, ctx.teamScope)
 
     if (!result.success) {
       const payload: Record<string, unknown> = { success: false, error: result.error }
@@ -216,6 +207,7 @@ export async function PATCH(
     )
   } catch (error) {
     console.error('Error updating section:', error)
+    reportMcpOperationCrash(request, error)
     return NextResponse.json(
       {
         success: false,
@@ -229,11 +221,6 @@ export async function PATCH(
   })(request)
 }
 
-/**
- * DELETE /api/mcp/projects/:projectId/sections/:sectionId
- *
- * Delete a section. Tasks in the section are moved to the first section.
- */
 export async function DELETE(
   request: NextRequest,
   props: { params: Promise<{ projectId: string; sectionId: string }> }
@@ -254,6 +241,10 @@ export async function DELETE(
         },
         { status: 401 }
       )
+    }
+    if (ctx.agentId) {
+      const roleError = await requireRole(ctx, 'write')
+      if (roleError) return roleError
     }
     const user = ctx.user;
     const projectId = parseInt(params.projectId)
@@ -287,7 +278,7 @@ export async function DELETE(
       projectId,
       sectionId,
       userId: user.id
-    }, ctx.agentId)
+    }, ctx.agentId, ctx.teamScope)
 
     if (!result.success) {
       const payload: Record<string, unknown> = { success: false, error: result.error }
@@ -303,6 +294,7 @@ export async function DELETE(
     )
   } catch (error) {
     console.error('Error deleting section:', error)
+    reportMcpOperationCrash(request, error)
     return NextResponse.json(
       {
         success: false,

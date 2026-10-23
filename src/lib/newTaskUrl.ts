@@ -33,12 +33,6 @@ const positiveInteger = (value: string | undefined): number | undefined => {
   return Number.isSafeInteger(parsed) && parsed > 0 ? parsed : undefined;
 };
 
-/**
- * Parse bookmark targets such as `/new?board=15&column=Bugs`.
- *
- * `id` remains supported because the composer already generates `/new?id=...`
- * links when a user switches boards from the full-screen composer.
- */
 export const parseNewTaskUrlTarget = (
   searchParams: NewTaskSearchParams,
 ): NewTaskUrlTarget => {

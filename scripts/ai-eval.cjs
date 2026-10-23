@@ -23,6 +23,7 @@ const toolFiles = {
 function chatTools() {
   const scope = {
     z,
+    context: { inlineAgentImagesEnabled: false },
     ...load(path.join(root, 'src/lib/ai/chatStream/request.ts')),
     ...load(path.join(root, 'src/lib/ai/tools/constants.ts')),
     ...load(path.join(root, 'src/lib/ai/tools/schemas.ts')),
@@ -32,6 +33,22 @@ function chatTools() {
   return Object.fromEntries(Object.entries(toolFiles).map(([name, file]) => {
     const filename = path.join(root, `src/lib/ai/tools/${file}.ts`);
     const source = ts.createSourceFile(filename, fs.readFileSync(filename, 'utf8'), ts.ScriptTarget.Latest, true);
+    if (name === 'hypertask_create_task') {
+      const factory = source.statements.find((node) => ts.isFunctionDeclaration(node) && node.name?.text === 'createCreateTaskTool');
+      assert.ok(factory, 'Missing create-task factory');
+      const code = ts.transpileModule(factory.getText(source), {
+        compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 },
+      }).outputText;
+      const tools = vm.runInNewContext(`${code}\ncreateCreateTaskTool({ chatTaskWriterEnabled: false });`, {
+        ...scope,
+        exports: {},
+        tool: (definition) => definition,
+        withToolErrors: () => () => { throw new Error('Eval tools cannot execute'); },
+      }, { timeout: 1000 });
+      const { inputSchema: schema, description } = tools[name];
+      assert.ok(schema && description, `Missing chat schema: ${name}`);
+      return [name, { schema, description }];
+    }
     let schema;
     let description;
     const visit = (node) => {
@@ -68,7 +85,10 @@ function mcpTools() {
   // Load metadata only, not its report-service import or any production database code.
   const filename = path.join(root, 'src/lib/mcp-server/config/tool-metadata.ts');
   const source = ts.createSourceFile(filename, fs.readFileSync(filename, 'utf8'), ts.ScriptTarget.Latest, true);
-  const scope = load(path.join(root, 'src/lib/mcp-server/config/mcp-standards.ts'));
+  const scope = {
+    ...load(path.join(root, 'src/lib/mcp-server/config/mcp-standards.ts')),
+    ...load(path.join(root, 'src/lib/mcp/decisionsGuidance.ts')),
+  };
   const metadata = {};
   const visit = (node) => {
     if (ts.isPropertyAssignment(node) && Object.hasOwn(schemas, node.name.getText(source))) {

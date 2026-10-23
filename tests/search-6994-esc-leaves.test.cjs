@@ -5,10 +5,7 @@ const React = require('react')
 const { JSDOM } = require('jsdom')
 const { createJiti } = require('jiti')
 const root = path.resolve(__dirname, '..')
-const escFlag = 'htpr-6879-search-esc-back'
 const leavesFlag = 'htpr-6994-search-esc-leaves'
-const layoutFlag = 'htpr-6865-search-layout'
-const prerequisites = ['htpr-6369-search-operators', 'htpr-6370-search-chips', 'htpr-6688-search-autocomplete']
 
 async function withSearch(t, config, check) {
   const dom = new JSDOM('<div id="root"></div>', { url: 'https://example.test/search' })
@@ -23,7 +20,7 @@ async function withSearch(t, config, check) {
   const stub = (filename, exports) => { require.cache[filename] = { id: filename, filename, loaded: true, exports } }
   const source = (file, exports) => stub(path.join(root, file), exports)
   if (config.storedHistory !== undefined) sessionStorage.setItem('htpr-6879-search-history', config.storedHistory)
-  const flags = Object.fromEntries([...prerequisites, layoutFlag, escFlag, leavesFlag].map((key) => [key, true]))
+  const flags = { [leavesFlag]: true }
   Object.assign(flags, config.flags)
   const requests = []
   const lookups = []
@@ -49,7 +46,7 @@ async function withSearch(t, config, check) {
   try {
     source('src/utils/index.ts', { taskBaseUri: '/detail/' })
     source('src/utils/undoActions/helperFuncs.ts', { cn: (...values) => require('tailwind-merge').twMerge(require('clsx').clsx(values)) })
-    source('src/hooks/useFlag.tsx', { useFlag: (key) => flags[key] ?? false })
+    source('src/hooks/useFlag.tsx', { useFlagLoaded: () => true, useFlagReady: () => true, useFlag: (key) => flags[key] ?? false })
     source('src/lib/contexts/deviceContext.tsx', { useDeviceContext: () => false })
     const allProjects = [{ id: 7, title: 'Product Board' }]
     source('src/hooks/MultiPages/useGetAllProjectsMinimal.ts', { useGetAllProjectsMinimal: () => ({ data: allProjects }) })
@@ -129,8 +126,8 @@ test('6994 on: Escape from the empty box with tips leaves once without changing 
   })
 })
 
-test('6994 on, 6879 off: one Escape immediately after landing in the empty box leaves', async (t) => {
-  await withSearch(t, { flags: { [escFlag]: false }, history: ['recent search'] }, async ({ input, state, press, navigations, requests, options }) => {
+test('6994 on: one Escape immediately after landing in the empty box leaves', async (t) => {
+  await withSearch(t, { history: ['recent search'] }, async ({ input, state, press, navigations, requests, options }) => {
     assert.equal(document.activeElement, input())
     assert.equal(input().value, '')
     assert.equal(state().inputValue, '')
@@ -199,7 +196,7 @@ test('6994 on: Escape after submitting a search leaves instead of restoring the 
   })
 })
 
-test('6994 off: Escape still restores the previous submitted search with 6879 and never leaves', async (t) => {
+test('6994 off: Escape restores the previous submitted search and never leaves', async (t) => {
   await withSearch(t, { query: 'first', flags: { [leavesFlag]: false } }, async ({ input, state, type, press, complete, render, navigations, requests }) => {
     await complete()
     await type('second')

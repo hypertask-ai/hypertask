@@ -1,13 +1,15 @@
+import { wrapMcpRoute } from '@/lib/mcp/routeWrapper'
 import { taskSummary, TimeTrackingDisabledError } from "@/lib/timeTracking";
 import { NextRequest, NextResponse } from "next/server";
 import { resolveMcpTimeTask } from "@/lib/mcp/operations/time/helpers";
 
 export async function POST(request: NextRequest) {
+  return wrapMcpRoute(async (request: NextRequest) => {
   const resolved = await resolveMcpTimeTask(request);
   if (resolved.response) return resolved.response;
 
   try {
-    const summary = await taskSummary(resolved.ctx.user.id, resolved.task.id);
+    const summary = await taskSummary(resolved.ctx.user.id, resolved.task.id, resolved.ctx.agentId, resolved.ctx.teamScope);
     return NextResponse.json({ success: true, summary });
   } catch (error) {
     if (error instanceof TimeTrackingDisabledError) {
@@ -18,4 +20,6 @@ export async function POST(request: NextRequest) {
     }
     throw error;
   }
+
+  })(request)
 }

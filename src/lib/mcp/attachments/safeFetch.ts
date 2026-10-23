@@ -1,6 +1,7 @@
 import dns from 'node:dns/promises';
 import net, { type LookupFunction } from 'node:net';
 import { Agent } from 'undici';
+import { fetchWithoutBrotli } from '@/lib/net/fetchWithoutBrotli';
 import {
   MCP_ATTACHMENT_FETCH_TIMEOUT_MS,
   MCP_ATTACHMENT_MAX_BYTES,
@@ -32,7 +33,6 @@ function ipv4ToNumber(ip: string): number | null {
   return n >>> 0;
 }
 
-/** True if IPv4 is RFC1918, loopback, link-local, CGNAT, or reserved. */
 function isPrivateOrReservedIPv4(ip: string): boolean {
   const n = ipv4ToNumber(ip);
   if (n === null) return true;
@@ -105,10 +105,7 @@ function isPrivateOrReservedIPv6(ip: string): boolean {
   const segments = parseIPv6Segments(x);
   if (!segments) return true;
 
-  // Only global-unicast 2000::/3 is eligible. This rejects unspecified,
-  // loopback, link-local, ULA, site-local, multicast, and transition ranges.
   if ((segments[0] & 0xe000) !== 0x2000) return true;
-  // Documentation, benchmarking, ORCHID, Teredo, and 6to4 are not origins.
   if (segments[0] === 0x2002) return true;
   if (
     segments[0] === 0x2001 &&
@@ -158,13 +155,13 @@ interface PinnedAddress {
 
 async function resolvePublicAddress(
   hostname: string,
-  signal: AbortSignal
+  signal: AbortSignal,
+  allow: Set<string> = parseHostAllowlist()
 ): Promise<PinnedAddress> {
   const normalizedHostname =
     hostname.startsWith('[') && hostname.endsWith(']')
       ? hostname.slice(1, -1)
       : hostname;
-  const allow = parseHostAllowlist();
   const h = normalizedHostname.toLowerCase();
   if (allow.size > 0 && !allow.has(h)) {
     throw new McpAttachmentFetchError(`Host is not in MCP_ATTACHMENT_FETCH_HOST_ALLOWLIST: ${normalizedHostname}`);
@@ -211,6 +208,21 @@ async function resolvePublicAddress(
   };
 }
 
+function pinnedDispatcher(pinned: PinnedAddress): Agent {
+  const lookup: LookupFunction = (_hostname, options, callback) => {
+    if (options.all) {
+      callback(null, [pinned]);
+    } else {
+      callback(null, pinned.address, pinned.family);
+    }
+  };
+  return new Agent({ connect: { lookup } });
+}
+
+export async function publicAddressDispatcher(url: URL, signal: AbortSignal): Promise<Agent> {
+  return pinnedDispatcher(await resolvePublicAddress(url.hostname, signal, new Set()));
+}
+
 export class McpAttachmentFetchError extends Error {
   constructor(message: string) {
     super(message);
@@ -253,7 +265,7 @@ export async function readBodyWithCap(
   return Buffer.concat(chunks);
 }
 
-function assertHttpUrlString(urlString: string): URL {
+export function assertHttpUrlString(urlString: string): URL {
   let u: URL;
   try {
     u = new URL(urlString);
@@ -269,9 +281,6 @@ function assertHttpUrlString(urlString: string): URL {
   return u;
 }
 
-/**
- * Fetch remote bytes with SSRF protections, size cap, and redirect limit.
- */
 export async function safeFetchAttachmentUrl(
   urlString: string,
   externalSignal?: AbortSignal
@@ -297,16 +306,9 @@ export async function safeFetchAttachmentUrl(
     while (hops <= MCP_ATTACHMENT_MAX_REDIRECTS) {
       const u = assertHttpUrlString(current);
       const pinned = await resolvePublicAddress(u.hostname, controller.signal);
-      const lookup: LookupFunction = (_hostname, options, callback) => {
-        if (options.all) {
-          callback(null, [pinned]);
-        } else {
-          callback(null, pinned.address, pinned.family);
-        }
-      };
-      const dispatcher = new Agent({ connect: { lookup } });
+      const dispatcher = pinnedDispatcher(pinned);
       try {
-        const res = await fetch(u.toString(), {
+        const res = await fetchWithoutBrotli(u.toString(), {
           method: 'GET',
           redirect: 'manual',
           signal: controller.signal,
@@ -315,7 +317,7 @@ export async function safeFetchAttachmentUrl(
             Accept: '*/*',
             'User-Agent': 'Hypertasks-MCP-AttachmentFetch/1.0',
           },
-        } as RequestInit & { dispatcher: Agent });
+        });
         if (res.status >= 300 && res.status < 400) {
           const loc = res.headers.get('location');
           await res.body?.cancel();

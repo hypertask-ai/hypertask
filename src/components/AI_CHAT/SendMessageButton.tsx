@@ -4,7 +4,6 @@ import { Send } from "lucide-react";
 import { SendArrow } from "../Common/SendArrow";
 import { type ComponentProps } from "react";
 
-/** Shared send control used by AI chat and Agent Chat (HTPR-6476). */
 export function SendMessageButton({
   disabled,
   isByokBlocked = false,

@@ -73,7 +73,6 @@ export default async function Page(
   }
 
   const firstScreen = await getServerBoardDocument();
-  // RSC adds a bootstrap sibling. Keep the adopted board's client owner intact.
   if (firstScreen) {
     return <LandingPage key="board" slugs={String(firstScreen.data.projectId)} user={firstScreen.data.user} authenticated />;
   }
@@ -91,11 +90,9 @@ export default async function Page(
   let previousBoardString = cookieStore.get("previousBoard");
   let slugs = searchParams?.id;
 
-  // Resolve valid slug BEFORE rendering - no redirects!
   if (!slugs || slugs === "undefined" || slugs === "null" || slugs === "") {
     console.log("❌ Invalid or missing project ID in URL, resolving valid slug...");
     
-    // Try to use previousBoard cookie as fallback
     if (previousBoardString?.value) {
       try {
         const [projectId, view] = previousBoardString.value.split('|&|');
@@ -109,40 +106,18 @@ export default async function Page(
       }
     }
     
-    // Last fallback: get first project
     if (!slugs || slugs === "undefined" || slugs === "null" || slugs === "") {
       const response: any = await getFirst(userObj.id);
       console.log("🚀 ~ getFirst ~ response:", response);
       if (response?.json?.id) {
-        // Deliberately NO redirect here, despite the URL still lacking ?id=.
-        // getFirst() is awaited, so by this point the response has usually begun
-        // streaming, and Next cannot answer with a 307 once that happens — it
-        // serialises the redirect into the flight payload as an *error*
-        // (`"digest":"NEXT_REDIRECT;replace;/project?id=N;307;"`) and some
-        // clients render Next's "This page couldn't load" instead of the board
-        // (HTPR-4847). Same failure mode as /timers, see the redirects() note in
-        // next.config.js (HTPR-4753 / HTPR-4071).
-        //
-        // Redirecting was redundant anyway: the resolved slug is passed straight
-        // to <LandingPage slugs={slugs}> below, and LandingPage already rewrites
-        // the URL to ?id=<slug> client-side whenever it is missing or stale. So
-        // dropping it renders the board on the first pass instead of rendering,
-        // throwing it away, and rendering again — one less full server round-trip
-        // on every id-less visit to the app's most-used route.
         slugs = response.json.id.toString();
       } else {
-        // ponytail: user has no boards at all. redirect("/") used to bounce back here
-        // via middleware and loop until the client hard-reset the session (HTPR-4828).
-        // HTPR-4839: out of trial is now the free tier, so everyone lands here.
         return <NoBoardsEmptyState user={userObj} />;
       }
     }
   }
 
-  // Now we always have a valid slug - start timing and continue
-  console.time("board");
 
-  // Ultra-fast validation - only check if user has access to this project
   const titleRequest = resolveBoardRouteTitleRequest(
     searchParams,
     previousBoardString?.value,
@@ -154,16 +129,10 @@ export default async function Page(
   );
 
   if (!projectValidation.success || !projectValidation.project) {
-    // Deliberately NO redirect after the validation await: Next may already be
-    // streaming and turn it into a client error. Render the same UI inline
-    // instead (HTPR-4856; same failure mode as HTPR-4847 above).
     return <Unauthorized />;
   }
 
-  // View handling and full project loading is now deferred to client-side
-  console.timeEnd("board");
 
-  // Always render with valid slug - no redirects means no hook issues!
   const accountId = Number(userObj.id);
   const projectId = Number(slugs);
   const signedSession = verifySession(

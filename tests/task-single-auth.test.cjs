@@ -2,8 +2,7 @@ const test = require("node:test");
 const assert = require("node:assert/strict");
 const fs = require("node:fs");
 const path = require("node:path");
-const Module = require("node:module");
-const ts = require("typescript");
+const { load } = require("./task-route-loader.cjs");
 
 // GET and DELETE on /api/tasks/single are only reachable behind this handler's own
 // checks: the edge middleware passes cookieless requests straight through, and the
@@ -11,19 +10,6 @@ const ts = require("typescript");
 // so this exercises the handler rather than asserting on its source.
 
 const root = path.resolve(__dirname, "..");
-const source = fs.readFileSync(
-  path.join(root, "src/pages/api/tasks/single.ts"),
-  "utf8",
-);
-
-const javascript = ts.transpileModule(source, {
-  compilerOptions: {
-    esModuleInterop: true,
-    module: ts.ModuleKind.CommonJS,
-    target: ts.ScriptTarget.ES2020,
-  },
-}).outputText;
-
 const MEMBER_PROJECT = 15;
 const FOREIGN_PROJECT = 99;
 const TASK_ON_MEMBER_BOARD = 1;
@@ -41,31 +27,12 @@ function loadHandler(session = null, { taskBroadcastGate } = {}) {
   const updated = [];
   const broadcasts = [];
   const stubs = {
-    "@/lib/api/task-writes/route": { withTaskWriteFlag: (handler) => handler },
+    "@/lib/auth/agentScope": require("./helpers/agent-board-scope.cjs").enforcedScope,
     "@/lib/auth/getSessionUser": {
       getSessionUser: async () => session,
     },
     "@/models/model": {},
-    "@/utils/controllers/projects/getAllIncludes": {
-      taskWriteAccessWhere: (userId, agentId) => ({
-        OR: [
-          { ownerId: userId },
-          { members: { some: { userId, agentId: null } } },
-          ...(agentId
-            ? [
-                {
-                  members: {
-                    some: {
-                      agentId,
-                      agent: { userId, revokedAt: null },
-                    },
-                  },
-                },
-              ]
-            : []),
-        ],
-      }),
-    },
+    "@/utils/controllers/projects/getAllIncludes": require("./helpers/agent-board-scope.cjs").access,
     "@/lib/prisma": {
       __esModule: true,
       default: {
@@ -85,8 +52,6 @@ function loadHandler(session = null, { taskBroadcastGate } = {}) {
               : null,
         },
         project: {
-          // Mirrors taskWriteAccessWhere: supplying an agent adds its owned,
-          // active membership without removing the human's own access.
           findFirst: async ({ where }) => {
             const hasMemberAccess = where.OR?.some(
               (branch) =>
@@ -155,20 +120,8 @@ function loadHandler(session = null, { taskBroadcastGate } = {}) {
     },
   };
 
-  const originalLoad = Module._load;
-  Module._load = (request, parent, isMain) =>
-    stubs[request] ?? originalLoad(request, parent, isMain);
-  try {
-    const mod = { exports: {} };
-    new Function("module", "exports", "require", javascript)(
-      mod,
-      mod.exports,
-      (request) => stubs[request] ?? require(request),
-    );
-    return { handler: mod.exports.default, deleted, updated, broadcasts };
-  } finally {
-    Module._load = originalLoad;
-  }
+  const handler = load("src/pages/api/tasks/single.ts", stubs).default;
+  return { handler, deleted, updated, broadcasts };
 }
 
 function call(handler, { method, taskId, body }) {
@@ -181,6 +134,7 @@ function call(handler, { method, taskId, body }) {
   let status = 0;
   let payload;
   const res = {
+    setHeader() {},
     status(code) {
       status = code;
       return res;
@@ -390,8 +344,8 @@ test("PUT refuses a revoked agent context without persistence or realtime", asyn
   assert.deepEqual(broadcasts, []);
 });
 
-test("PUT still lets an agent this session owns write to its own board", async () => {
-  const { handler, updated } = loadHandler({ userId: MEMBER_USER_ID });
+test("PUT still lets an authenticated agent this session owns write to its own board", async () => {
+  const { handler, updated } = loadHandler({ userId: MEMBER_USER_ID, agentId: OWNED_AGENT });
   const { status } = await call(handler, {
     method: "PUT",
     taskId: TASK_ON_MEMBER_BOARD,

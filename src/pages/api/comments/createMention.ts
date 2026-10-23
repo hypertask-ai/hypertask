@@ -1,3 +1,4 @@
+import { withAgentScopeRequest, prepareAgentScope, recordAgentBoardScopeMiss } from "@/lib/auth/agentScope";
 
 import prisma from "@/lib/prisma";
 import checkReminderAndCreateNotification from "@/utils/controllers/notifications/creation-service/check-reminder_create-notification";
@@ -17,7 +18,6 @@ const handler: NextApiHandler = async (req: NextApiRequest, res: NextApiResponse
             return res.status(405).json({ message: "Method not allowed" });
         }
 
-        // HTPR-4667: derive the mention actor from the signed session.
         const session = await getSessionUser(
             new Headers(req.headers as Record<string, string>)
         );
@@ -27,6 +27,7 @@ const handler: NextApiHandler = async (req: NextApiRequest, res: NextApiResponse
 
         const { projectId, taskId, userId, commentId, fromAgentId } = req.body
         const mentionedBy = session.userId;
+        await prepareAgentScope(mentionedBy, fromAgentId);
         if (!projectId || !taskId || !userId) {
             return res.status(400).json({
                 message: "Missing required information!"
@@ -54,6 +55,7 @@ const handler: NextApiHandler = async (req: NextApiRequest, res: NextApiResponse
             }
         });
         if (!task) return res.status(404).json({ message: "Task not found" });
+        recordAgentBoardScopeMiss(task.projectId, "write");
         let commentExists: { creatorId: number | null; agentId: string | null } | null = null;
         if (commentId) {
             commentExists = await prisma.comment.findFirst({
@@ -64,10 +66,6 @@ const handler: NextApiHandler = async (req: NextApiRequest, res: NextApiResponse
                 return res.status(403).json({ message: "Forbidden" });
             }
         }
-        // Agents are scoped by their own board membership, like getProjectWhere()
-        // on the MCP path — their owning user need not be a member too. But
-        // fromAgentId comes from the body, so it only counts for an agent this
-        // session owns; otherwise a borrowed UUID would be a way back in.
         const callerHasProjectAccess = fromAgentId
             ? task?.project.members.some(
                 member => member.agentId === fromAgentId && member.agent?.userId === mentionedBy
@@ -89,7 +87,6 @@ const handler: NextApiHandler = async (req: NextApiRequest, res: NextApiResponse
             return res.status(403).json({ message: "Forbidden" });
         }
 
-        // first check if its a description mention or a comment mention, if commentId is present its obviously a comment mention
 
         const notificationCreated = await checkReminderAndCreateNotification(
             userId,
@@ -106,12 +103,9 @@ const handler: NextApiHandler = async (req: NextApiRequest, res: NextApiResponse
             }
         );
 
-        // Send push notification for mention if notification was created
         if (notificationCreated && commentId) {
             try {
-                // Get task and comment information
                 const [comment, mentionedUser, recipientUser] = await Promise.all([
-                    // Keep the push preview scoped to the validated task/comment pair.
                     prisma.comment.findFirst({
                         where: { id: commentId, taskId },
                         include: {
@@ -131,7 +125,6 @@ const handler: NextApiHandler = async (req: NextApiRequest, res: NextApiResponse
                 ]);
 
                 if (task && comment && mentionedUser) {
-                    // Get mentioned user's devices
                     const devices = await prisma.subscribedDevices.findMany({
                         where: {
                             userId: userId,
@@ -144,8 +137,6 @@ const handler: NextApiHandler = async (req: NextApiRequest, res: NextApiResponse
                     if (shouldSend && devices.length > 0) {
                         const link = `detail/project-${projectId}/${task.uniqueIndex}?commentId=comment-${commentId}`;
                         const preview = mentionPlainPreview(comment.text, 140);
-                        // displayName is nullable, and "null mentioned you" is
-                        // now the headline rather than a buried body line.
                         const actor = mentionedUser.displayName?.trim() || "Someone";
                         const recip = recipientUser?.displayName?.trim();
                         const notificationTitle = recip
@@ -153,11 +144,9 @@ const handler: NextApiHandler = async (req: NextApiRequest, res: NextApiResponse
                             : `You were directly mentioned by ${actor}`;
                         const notificationBody = preview ? `${preview}\n${task.title}` : task.title;
                         
-                        // Create preference map for this user
                         const preferenceMap = new Map<number, boolean>();
                         preferenceMap.set(userId, shouldSend);
                         
-                        // Prepare data field for mention notification
                         const mentionData = {
                             type: "mention",
                             comment: JSON.stringify({
@@ -172,13 +161,13 @@ const handler: NextApiHandler = async (req: NextApiRequest, res: NextApiResponse
                             click_action: `${process.env.NEXT_PUBLIC_BASEURL}/${link}`,
                         };
                         
-                        // Send push notification using reusable function
                         await sendDataNewCommentFCM({
                             notificationBody,
                             notificationTitle,
                             type: "mention",
                             devices: devices,
                             payload: {},
+                            taskId,
                             taskTitle: task.title,
                             afterAppDomain: link,
                             data: mentionData,
@@ -191,7 +180,6 @@ const handler: NextApiHandler = async (req: NextApiRequest, res: NextApiResponse
                 }
             } catch (error) {
                 console.log("🚀 ~ Error in mention push notification flow:", error);
-                // Don't fail the request if push notification fails
             }
         }
 
@@ -207,4 +195,4 @@ const handler: NextApiHandler = async (req: NextApiRequest, res: NextApiResponse
     }
 }
 
-export default handler
+export default ((req, res) => withAgentScopeRequest(req, () => handler(req, res))) satisfies NextApiHandler;

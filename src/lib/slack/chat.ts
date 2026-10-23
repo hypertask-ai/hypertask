@@ -1,7 +1,8 @@
+import { downloadWithoutBrotli } from "@/lib/net/downloadWithoutBrotli";
 import { resolveAiModel as resolveLegacyAiModel } from "@/app/api/ai/_lib/modelProvider";
 import { getAiDefaultModelContext, resolveAutomaticAiModel } from "@/app/api/ai/_lib/byokKeys";
 import { configureAiModelUsage } from "@/app/api/ai/_lib/modelProvider";
-import { generateObject } from "ai";
+import { generateText, Output } from "ai";
 import { z } from "zod";
 
 import { getTeamGatewayApiKey } from "@/app/api/ai/_lib/byokKeys";
@@ -189,9 +190,10 @@ async function parseSlackIntent(
     provider: haikuByok ? aiUsageProviderForCredential(haikuByok.provider, haikuByok.credential) : systemModel.provider,
     feature: "chat",
   });
-  const result = await generateObject({
+  const result = await generateText({
+    experimental_download: downloadWithoutBrotli,
     model,
-    schema: slackIntentSchema,
+    output: Output.object({ schema: slackIntentSchema }),
     maxRetries: 2,
     maxOutputTokens: 600,
     providerOptions: providerOptionsForAiModel(model, "chat", {
@@ -204,8 +206,8 @@ async function parseSlackIntent(
       : `Untrusted Slack message:\n${message}`,
   });
 
-  return result.object.action
-    ? { action: result.object.action, params: result.object.params } as SlackAction
+  return result.output.action
+    ? { action: result.output.action, params: result.output.params } as SlackAction
     : null;
 }
 

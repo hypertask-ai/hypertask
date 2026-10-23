@@ -1,4 +1,6 @@
-import { recordAuthenticatedConnection } from "@/lib/telemetry/activationOccurrences";
+import { prepareAgentScope } from "@/lib/auth/agentScope";
+import { enqueueOutsideSaveAndProcessSoon } from "@/lib/telemetry/analyticsIntents";
+import { enqueueAuthenticatedConnection } from "@/lib/telemetry/activationOccurrences";
 import { NextRequest } from 'next/server';
 import prisma from '@/lib/prisma';
 import jwt from 'jsonwebtoken';
@@ -19,26 +21,13 @@ export function extractBearerToken(authHeader: string | null): string | null {
   return authHeader?.match(/^Bearer\s+(.+)$/i)?.[1] ?? null
 }
 
-/**
- * Unified authentication for MCP routes
- * Supports both JWT tokens and API keys
- * 
- * JWT Tokens (Recommended):
- * - Stateless, no database lookup needed (faster)
- * - Contains user info in token
- * - Can be longer-lived (30 days) for MCP use case
- * - Already have infrastructure set up
- * 
- * API Keys (Alternative):
- * - Database-backed, can track usage
- * - Can be scoped to permissions
- * - Can have multiple keys per user
- * - Better for service-to-service communication
- * 
- * @param request NextRequest object
- * @returns User + optional agentId, or null if invalid
- */
-export async function validateMcpAuth(
+export async function validateMcpAuth(request: NextRequest, options: ValidateMcpAuthOptions = {}): Promise<McpAuthContext | null> {
+  const ctx = await readMcpAuth(request, options);
+  if (ctx) await prepareAgentScope(ctx.user.id, ctx.agentId);
+  return ctx;
+}
+
+async function readMcpAuth(
   request: NextRequest,
   options: ValidateMcpAuthOptions = {}
 ): Promise<McpAuthContext | null> {
@@ -73,16 +62,17 @@ export async function validateMcpAuth(
     }
 
     console.log('[MCP Auth] Management API key validated for user:', managementCtx.user.id)
-    recordAuthenticatedConnection(request, managementCtx.user.id, token)
+    await enqueueOutsideSaveAndProcessSoon(() => enqueueAuthenticatedConnection(prisma, request, managementCtx.user.id, token, undefined, `management_key:${managementCtx.management!.keyId}`))
     logMcpCliUsage(request, token, managementCtx)
     return managementCtx
   }
 
   if (token.startsWith('htk_')) {
-    const ctx = await validateApiKey(token)
-    if (ctx) {
+    const validated = await validateApiKey(token)
+    if (validated) {
+      const { context: ctx, keyId } = validated
       console.log('[MCP Auth] API key validated for user:', ctx.user.id)
-      recordAuthenticatedConnection(request, ctx.user.id, token)
+      await enqueueOutsideSaveAndProcessSoon(() => enqueueAuthenticatedConnection(prisma, request, ctx.user.id, token, undefined, `api_key:${keyId}`))
       logMcpCliUsage(request, token, ctx)
       return ctx
     }
@@ -96,7 +86,7 @@ export async function validateMcpAuth(
   if (ctx) {
     const log = options.boundedLogging ? boundedMcpAuthLog : console.log
     log('[MCP Auth] JWT validated for user:', ctx.user.id, 'agentId:', ctx.agentId ?? '(none)')
-    recordAuthenticatedConnection(request, ctx.user.id, token, connectedAt)
+    await enqueueOutsideSaveAndProcessSoon(() => enqueueAuthenticatedConnection(prisma, request, ctx.user.id, token, connectedAt, ctx.agentId ? `agent:${ctx.agentId}` : undefined))
     logMcpCliUsage(request, token, ctx, options.boundedLogging ? boundedMcpAuthLog : undefined)
     return ctx
   }
@@ -106,7 +96,7 @@ export async function validateMcpAuth(
   return null
 }
 
-async function validateApiKey(token: string): Promise<McpAuthContext | null> {
+async function validateApiKey(token: string): Promise<{ context: McpAuthContext; keyId: string } | null> {
   try {
     const keyHash = hashApiKey(token)
     const apiKey = await prisma.apiKey.findFirst({
@@ -149,12 +139,16 @@ async function validateApiKey(token: string): Promise<McpAuthContext | null> {
     }
 
     return {
-      user: {
-        id: apiKey.user.id,
-        email: apiKey.user.email,
-        displayName: apiKey.user.displayName ?? undefined,
+      keyId: String(apiKey.id),
+      context: {
+        user: {
+          id: apiKey.user.id,
+          email: apiKey.user.email,
+          displayName: apiKey.user.displayName ?? undefined,
+        },
+        agentId: null,
+        teamScope: null,
       },
-      agentId: null,
     }
   } catch {
     console.log('[MCP Auth] API key lookup failed')
@@ -162,10 +156,6 @@ async function validateApiKey(token: string): Promise<McpAuthContext | null> {
   }
 }
 
-/**
- * Authentication for account-management MCP routes. A regular MCP JWT can
- * bootstrap the first key; subsequent calls may use an htmk_ management key.
- */
 export type ManagementAction = 'read' | 'write' | 'usage:read'
 
 export async function validateManagementAuth(
@@ -204,14 +194,8 @@ export async function validateManagementAuth(
     return managementCtx
   }
 
-  // Usage reports are intentionally management-key-only. Do not let a regular
-  // MCP JWT reach the generic JWT branch when this action is requested.
   if (requiredAction === 'usage:read') return null
 
-  // Management endpoints accept only real MCP tokens (aud mcp-api). The same
-  // JWT_SECRET signs calendar-feed/email-link tokens, and validateJwtToken
-  // keeps a legacy no-audience fallback for old MCP clients - without this
-  // gate any same-secret JWT could mint a persistent management key.
   const unverified = jwt.decode(token) as jwt.JwtPayload | null
   const aud = unverified?.aud
   const audiences = Array.isArray(aud) ? aud : aud ? [aud] : []
@@ -222,8 +206,6 @@ export async function validateManagementAuth(
 
   const ctx = getMcpOperationContext(request)?.auth ?? await validateJwtToken(token)
   if (!ctx) return null
-  // Agent-bound JWTs are data credentials for bots; letting one mint or
-  // revoke keys would escalate a leaked bot token to account admin.
   if (ctx.agentId) {
     console.log('[MCP Auth] Agent tokens cannot access management endpoints')
     return null
@@ -232,10 +214,6 @@ export async function validateManagementAuth(
   return ctx
 }
 
-/**
- * Usage is an account-owner management-key surface, not a general MCP data
- * surface. Keep regular MCP JWTs, data keys, and browser sessions out.
- */
 export async function validateUsageReadAuth(
   request: NextRequest
 ): Promise<McpAuthContext | null> {
@@ -253,14 +231,11 @@ export async function validateManagementOrSessionAuth(
   const managementCtx = await validateManagementAuth(request, requiredAction)
   if (managementCtx) return managementCtx
 
-  // A presented credential is the selected principal. Do not silently upgrade
-  // an invalid, under-scoped, data-key, or agent credential through an ambient
-  // browser session. Session auth is a fallback only when no bearer was sent.
   if (request.headers.has('Authorization')) return null
 
   const { getSessionUser } = await import('@/lib/auth/getSessionUser')
   const session = await getSessionUser(request.headers)
-  if (!session) return null
+  if (!session || session.agentId) return null
 
   const user = await prisma.user.findUnique({
     where: { id: session.userId },
@@ -279,6 +254,7 @@ export async function validateManagementOrSessionAuth(
       displayName: user.displayName ?? undefined,
     },
     agentId: null,
+    teamScope: null,
   }
 }
 
@@ -358,6 +334,7 @@ export async function validateManagementApiKey(token: string): Promise<McpAuthCo
         displayName: user.displayName ?? undefined,
       },
       agentId: null,
+      teamScope: teamId && teamAccessBinding ? { teamId, accessBinding: teamAccessBinding } : null,
       management: {
         keyId: String(result.key.id),
         permissions: parseManagementPermissions(result.key.permissions),

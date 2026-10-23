@@ -1,3 +1,4 @@
+const { withStubs } = require("./helpers/stub-map.cjs")
 /**
  * HTPR-6376: soft-delete handler must resolve the actor from the signed
  * session claim, same as (un)archive. Omitting body.agentId must not bypass
@@ -37,6 +38,7 @@ function compile(relativePath) {
 }
 
 function execute(javascript, stubs) {
+  stubs = withStubs({ "@/lib/auth/agentScope": require("./helpers/agent-board-scope.cjs").enforcedScope }, stubs);
   const originalLoad = Module._load;
   Module._load = (request, parent, isMain) =>
     stubs[request] ?? originalLoad(request, parent, isMain);
@@ -105,6 +107,7 @@ function loadDeleteHandler({ sectionId = ACTIVE_SECTION_ID } = {}) {
       update: async () => ({}),
       findUniqueOrThrow: async () => ({
         id: TASK_ID,
+        projectId: 15,
         subTasks: [],
         parentTask: null,
       }),
@@ -123,6 +126,7 @@ function loadDeleteHandler({ sectionId = ACTIVE_SECTION_ID } = {}) {
   };
 
   const stubs = {
+    "@/lib/tasks/sameBoardRelations": loadTs("src/lib/tasks/sameBoardRelations.ts"),
     "date-fns": { subMinutes: (date) => date },
     sugar: {
       Date: {

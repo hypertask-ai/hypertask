@@ -1,3 +1,5 @@
+import type { AgentTokenTeamScope } from "@/lib/mcp/auth/types";
+import { notificationBoardAccessWhere } from "./boardAccess";
 import { createHash } from "node:crypto";
 
 import { NotificationType, Prisma } from "@prisma/client";
@@ -92,13 +94,13 @@ export const parseInboxZeroRules = (value: unknown): InboxZeroRules | null => {
   };
 };
 
-/** All raw rows behind the visible, de-duplicated All-tab Inbox items. */
-export const loadActiveInboxZeroNotifications = (
+export const loadActiveInboxZeroNotifications = ( // trufflehog:ignore
   userId: number,
-  db: InboxZeroDb = prisma
+  db: InboxZeroDb = prisma,
+  principal?: { userId: number; agentId?: string | null; teamScope?: AgentTokenTeamScope | null },
 ) =>
   db.notification.findMany({
-    where: visibleUserInboxWhere(userId),
+    where: { AND: [visibleUserInboxWhere(userId), notificationBoardAccessWhere(principal?.userId ?? userId, principal?.agentId, principal?.teamScope)] },
     orderBy: [{ createdAt: "desc" }, { id: "desc" }],
     select: inboxZeroNotificationSelect,
   });
@@ -162,8 +164,6 @@ const visibleInboxItemKey = (notification: InboxZeroNotification): string => {
   if (notification.notification_inviteId !== null) {
     return `invite:${notification.notification_inviteId}`;
   }
-  // The All-tab query de-duplicates on (taskId, notification_inviteId), so all
-  // task-less, invite-less rows share one visible representative.
   return "standalone";
 };
 

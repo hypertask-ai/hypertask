@@ -1,3 +1,4 @@
+const { withStubs } = require('./helpers/stub-map.cjs')
 const test = require('node:test')
 const assert = require('node:assert/strict')
 const fs = require('node:fs')
@@ -11,6 +12,7 @@ const context = jiti(path.join(root, 'src/lib/mcp/operationContext.ts'))
 const permissions = jiti(path.join(root, 'src/lib/mcp/managementPermissions.ts'))
 const denied = () => { throw new Error('Unexpected credential or database lookup') }
 function load(file, stubs) {
+  stubs = withStubs({ "@/lib/auth/agentScope": require("./helpers/agent-board-scope.cjs").enforcedScope }, stubs)
   const loadedModule = { exports: {} }
   const source = ts.transpileModule(fs.readFileSync(path.join(root, file), 'utf8'), { compilerOptions: { esModuleInterop: true, module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2020 } }).outputText
   new Function('module', 'exports', 'require', source)(loadedModule, loadedModule.exports, (name) => {
@@ -21,7 +23,8 @@ function load(file, stubs) {
 }
 let publicAuthCalls = 0
 const session = load('src/lib/mcp/auth/session.ts', {
-    '@/lib/telemetry/activationOccurrences': { recordAuthenticatedConnection: () => {} },
+    '@/lib/telemetry/analyticsIntents': { enqueueAnalyticsIntent: async () => "intent-key", processAnalyticsIntentSoon: () => {}, enqueueOutsideSaveAndProcessSoon: async (enqueue) => { await enqueue() } },
+    '@/lib/telemetry/activationOccurrences': { enqueueAuthenticatedConnection: async () => null },
   'next/server': { NextRequest }, '@/lib/prisma': {}, jsonwebtoken: jwt,
   '@/lib/apiKeys': {}, '@/lib/auth/betterAuth': { auth: { api: { verifyApiKey: denied } } },
   '@/lib/auth/getSessionUser': { getSessionUser: denied },
@@ -82,6 +85,8 @@ test('unbound REST requests still perform their existing authentication pass', a
 let increments = 0
 const rate = load('src/lib/mcp/auth/rateLimit.ts', {
   'next/server': require('next/server'), crypto: require('node:crypto'),
+  '@/lib/flags/keys': { HTPR_7133_MCP_RATELIMIT_FAST_FLAG: 'htpr-7133-mcp-ratelimit-fast' },
+  '@/lib/flags': { featureFlagCandidateUserIds: async () => [] },
   '@/lib/redis': { getRedis: async () => ({ incr: async () => ++increments, expire: async () => {} }) },
   '@/lib/mcp/rateLimitDecision': jiti(path.join(root, 'src/lib/mcp/rateLimitDecision.ts')),
   './session': session, '../operationContext': context,

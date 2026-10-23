@@ -9,7 +9,7 @@ import { sanitizeForJson } from "@/lib/ai/tools/helpers";
 import type { ToolContext } from "./context";
 
 export function createFindRelatedTasksTool(context: ToolContext) {
-  const { sendStatus, user } = context;
+  const { sendStatus, user, actingAgentId, teamScope } = context;
   return {
     hypertask_find_related_tasks: tool({
       description:
@@ -26,7 +26,7 @@ export function createFindRelatedTasksTool(context: ToolContext) {
         sendStatus("hypertask_find_related_tasks");
         const response = await handleRelatedTasksGet(
           new NextRequest("http://localhost/api/mcp/tasks/related"),
-          { user, agentId: null },
+          { user, agentId: actingAgentId, teamScope },
           { taskId: input.task_id, limit: input.limit }
         );
         const payload = (await response.json()) as Record<string, unknown>;

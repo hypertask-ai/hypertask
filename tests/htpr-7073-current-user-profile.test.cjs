@@ -65,6 +65,15 @@ test('invalid profile cookie falls back to the session user', async () => {
   assert.equal(result.user.displayName, 'Real');
 });
 
+test('agent identity comes from the signed session for matching, missing and mismatched profiles', async () => {
+  for (const cookie of [undefined, { ...goodCookie, agentId: 'forged-agent' }, { ...goodCookie, id: 7 }]) {
+    const { result } = await run({ cookie, session: { userId: 985, agentId: 'agent-1' } });
+    assert.equal(result.userId, 985);
+    assert.equal(result.agentId, 'agent-1');
+    assert.equal(result.user.id, 985);
+  }
+});
+
 test('no session returns null without a flag lookup or query', async () => {
   const { result, flags, queries } = await run({ session: null });
   assert.equal(result, null);

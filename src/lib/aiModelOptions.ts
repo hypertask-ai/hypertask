@@ -159,7 +159,7 @@ export const aiModelDefinitions: TAiModelDefinition[] = [
   },
   {
     key: "kimi-k2.5",
-    modelClass: "kimi-k2.5-free", // Valentin, 2026-10-08: keep K2.5 next to K3 because it was on the free plan.
+    modelClass: "kimi-k2.5-free",
     label: "Kimi K2.5",
     provider: "moonshot",
     priceTier: 1,
@@ -520,11 +520,6 @@ export const aiModelOptions: TAiModelOption[] = [
   },
 ];
 
-// Luna Standard is the product default for paid plans, and for Free plans once
-// the htpr-6722-latest-models flag is on for the user (LUNA_FREE_PLAN_FLAG).
-// The universal fallback must be included on every plan, so it is the cheapest
-// tier-1 model: callers without trusted billing context can never select a
-// locked model implicitly.
 export const preferredAiModelOption =
   aiModelOptions.find((option) => option.id === "gpt-6-luna") ??
   aiModelOptions[0];
@@ -545,13 +540,21 @@ export const LUNA_FREE_MODEL_KEY: TAiModelKey = "gpt-6-luna";
 export type AiDefaultModelContext = {
   haiku55Enabled?: boolean;
   haikuDefaultEnabled?: boolean;
-  // HTPR-7075: background jobs run on Claude 5.5 only (Haiku 5.5 by default).
   backgroundClaudeEnabled?: boolean;
   plan?: StorePlanKind | null;
   hasByok?: boolean;
+  openaiOnlyDefaultEnabled?: boolean;
+  hasDirectOpenAiKey?: boolean;
+  hasClaudeRoute?: boolean;
 };
 
-export function defaultModelKeyFor({ haiku55Enabled, haikuDefaultEnabled, backgroundClaudeEnabled, plan, hasByok }: AiDefaultModelContext, productionDefault: TAiModelKey = "gpt-6-luna"): TAiModelKey {
+export function isOpenAiOnlyPaidTeam({ openaiOnlyDefaultEnabled, plan, hasClaudeRoute, hasDirectOpenAiKey }: AiDefaultModelContext): boolean {
+  return Boolean(openaiOnlyDefaultEnabled && (plan === "Pro" || plan === "AI") && hasClaudeRoute === false && hasDirectOpenAiKey);
+}
+
+export function defaultModelKeyFor(context: AiDefaultModelContext, productionDefault: TAiModelKey = "gpt-6-luna"): TAiModelKey {
+  const { haiku55Enabled, haikuDefaultEnabled, backgroundClaudeEnabled, plan, hasByok } = context;
+  if (isOpenAiOnlyPaidTeam(context)) return "gpt-6-luna";
   return backgroundClaudeEnabled || haikuDefaultEnabled || (haiku55Enabled && ((hasByok && plan !== "Free") || plan === "Pro" || plan === "AI" || plan === "BYOK"))
     ? "claude-haiku-5-5"
     : productionDefault;
@@ -561,26 +564,22 @@ export function hasHaikuByokProvider(providers: ReadonlySet<string>): boolean {
   return ["claude", "anthropic", "gateway", "openrouter"].some((provider) => providers.has(provider));
 }
 
-// `lunaFree` is the per-user htpr-6722-latest-models flag: with it on, Luna
-// counts as an included (tier 1) model on Free plans and is their default.
 export function getDefaultAiModelOptionForPlan(
   storePlanId: StorePlanKind | null | undefined,
   hasEligibleByokCredential = false,
-  lunaFree = false,
   haiku55Enabled = false,
   haikuDefaultEnabled = false,
+  context: AiDefaultModelContext = {},
 ): TAiModelOption {
   const productionDefault = storePlanId === "Pro" ||
     storePlanId === "AI" ||
     (storePlanId === "BYOK" && hasEligibleByokCredential) ||
-    (storePlanId === "Free" && lunaFree)
+    storePlanId === "Free"
     ? preferredAiModelOption
     : defaultAiModelOption;
-  return getAiModelOptionById(defaultModelKeyFor({ haiku55Enabled, haikuDefaultEnabled, plan: storePlanId, hasByok: hasEligibleByokCredential }, productionDefault.modelKey))!;
+  return getAiModelOptionById(defaultModelKeyFor({ ...context, haiku55Enabled, haikuDefaultEnabled, plan: storePlanId, hasByok: hasEligibleByokCredential }, productionDefault.modelKey))!;
 }
 
-// Model picker resolution: an explicit saved choice (or team/board default)
-// always wins; only when none exists does the plan default apply.
 export function resolveAiModelOption(
   savedOptionIds: readonly (string | null | undefined)[],
   planDefault: TAiModelOption,
@@ -593,22 +592,15 @@ export function resolveAiModelOption(
   return planDefault;
 }
 
-// A saved choice of Luna (for example a saved GPT 5.4 Mini, which aliases to
-// Luna) is not usable on Free plans while the flag is off, or on BYOK plans
-// without an eligible customer key. Those requests drop to the plan default.
 export function isLunaBlockedForPlan(
   modelOption: TAiModelOption | undefined,
   storePlanId: StorePlanKind | null | undefined,
-  lunaFree: boolean,
   hasEligibleByokCredential: boolean,
 ): boolean {
   if (modelOption?.modelKey !== LUNA_FREE_MODEL_KEY) return false;
-  if (storePlanId === "Free") return !lunaFree;
   return storePlanId === "BYOK" && !hasEligibleByokCredential;
 }
 
-// Retired option ids map to their replacement so a persisted choice upgrades in
-// place instead of silently falling back to the default. HTPR-4534.
 const RETIRED_OPTION_ID_ALIASES: Record<string, TAiModelOptionId> = {
   "gpt-5.6-luna": "gpt-6-luna",
   "gpt-5.6-luna-light": "gpt-6-luna-light",
@@ -642,9 +634,6 @@ const RETIRED_OPTION_ID_ALIASES: Record<string, TAiModelOptionId> = {
   "grok-4.5": "gpt-6-luna",
 };
 
-// HTPR-7075: a saved pick of any Claude version older than 5.5 resolves to the
-// 5.5 model of the same class when Claude 5.5 mode is on. Read-time only; the
-// saved value is never rewritten. Thinking variants keep their reasoning mode.
 const LEGACY_CLAUDE_OPTION_ID = /^claude-(haiku|sonnet|opus)-(?!5[.-]5(?:$|-))/;
 
 export function upgradeLegacyClaudeOptionId(id: string): string {
@@ -692,9 +681,9 @@ export function getMobileAiChatModelLabel(
 
 export function isPremiumAiModelDefinition(
   model: TAiModelDefinition | undefined,
-  lunaFree = false,
+  freePlan = false,
 ): boolean {
-  if (lunaFree && model?.key === LUNA_FREE_MODEL_KEY) return false;
+  if (freePlan && model?.key === LUNA_FREE_MODEL_KEY) return false;
   return Boolean(model && ((model.priceTier ?? 1) > 1 || model.premium));
 }
 
@@ -702,19 +691,15 @@ export function isPremiumAiModelKey(modelKey: TAiModelKey): boolean {
   return isPremiumAiModelDefinition(getAiModelDefinition(modelKey));
 }
 
-// The arrays above are in DISPLAY order, so "first available" is whatever we
-// happen to show first -- since Opus leads the Anthropic group that would
-// auto-select a premium, plan-gated model for teams who never asked for it.
-// Every automatic pick goes through here instead: prefer non-premium, and only
-// fall back to a premium option when nothing else is available.
 export function pickAutoAiModelOption<T extends TAiModelOption>(
   candidates: readonly T[],
   haiku55Enabled = false,
   context: AiDefaultModelContext = {},
 ): T | undefined {
-  if (defaultModelKeyFor({ ...context, haiku55Enabled }) === "claude-haiku-5-5") {
-    const haiku = candidates.find((candidate) => candidate.modelKey === "claude-haiku-5-5");
-    if (haiku) return haiku;
+  const defaultModelKey = defaultModelKeyFor({ ...context, haiku55Enabled });
+  if (defaultModelKey === "claude-haiku-5-5" || isOpenAiOnlyPaidTeam(context)) {
+    const preferred = candidates.find((candidate) => candidate.modelKey === defaultModelKey);
+    if (preferred) return preferred;
   }
   return (
     candidates.find(
@@ -723,10 +708,6 @@ export function pickAutoAiModelOption<T extends TAiModelOption>(
   );
 }
 
-// Replacing a model the team can no longer use (provider disabled) must not
-// cost the user more than the model they picked: a tier-1 choice should not
-// silently become tier-3. Prefer candidates at the same price tier or cheaper,
-// and only widen the search when that leaves nothing (HTPR-4688).
 export function pickReplacementAiModelOption<T extends TAiModelOption>(
   currentModelKey: TAiModelKey,
   candidates: readonly T[],

@@ -1,7 +1,7 @@
 'use client'
 
 import { useFlag } from "@/hooks/useFlag"
-import { HTPR_6938_MY_TASKS_ICON_CONTROLS_FLAG, HTPR_6930_MY_TASKS_KANBAN_REUSE_FLAG } from "@/lib/flags/keys"
+import { HTPR_6938_MY_TASKS_ICON_CONTROLS_FLAG } from "@/lib/flags/keys"
 import Tooltip from "@/components/Common/Tooltip"
 import { MobileViewContext } from "@/lib/contexts/mobileContext"
 import { useRecoilState, useSetRecoilState } from "@/lib/state"
@@ -30,7 +30,6 @@ const ShellViewControls = ({ project }: { project: IProject }) => {
   const hasActiveFilters =
     getActiveFiltersFromProject(project).addedFilters.length > 0
   const hasActiveSort = getActiveSortingModeFromProject(project) !== "Manual"
-  // Tie-break levels are invisible until the popover is open, so surface the total on the icon.
   const sortLevels = getActiveSortingStackFromProject(project).length + 1
 
   if (isMbl) return null
@@ -121,14 +120,13 @@ export const ViewControlButton = ({
   className?: string
 }) => {
   const iconControlsEnabled = useFlag(HTPR_6938_MY_TASKS_ICON_CONTROLS_FLAG)
-  const kanbanReuseEnabled = useFlag(HTPR_6930_MY_TASKS_KANBAN_REUSE_FLAG)
   return (
   <button
     type="button"
     aria-label={label}
-    aria-expanded={kanbanReuseEnabled || iconControlsEnabled ? expanded : undefined}
+    aria-expanded={expanded}
     onClick={onClick}
-    className={`group relative flex size-8 items-center justify-center transition-colors ${active ? (iconControlsEnabled ? "text-view-control-active hover:text-view-control-active-hover" : kanbanReuseEnabled ? "text-shadcn-primary hover:text-white-black" : "text-[#6FB6FF] hover:text-[#A3D0FF]") : "text-text-light-gray hover:text-white-black"} ${kanbanReuseEnabled || iconControlsEnabled ? className : ""}`}
+    className={`group relative flex size-8 items-center justify-center transition-colors ${active ? (iconControlsEnabled ? "text-view-control-active hover:text-view-control-active-hover" : "text-shadcn-primary hover:text-white-black") : "text-text-light-gray hover:text-white-black"} ${className}`}
   >
     {children}
     <Tooltip

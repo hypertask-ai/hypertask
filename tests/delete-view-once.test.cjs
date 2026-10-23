@@ -6,9 +6,9 @@ const React = require("react");
 const { JSDOM } = require("jsdom");
 const ts = require("typescript");
 const { load } = require("./task-route-loader.cjs");
+const { savedViewBoardAccessWhere, matches } = require("./helpers/htpr-7166-fixture.cjs");
 
 const root = path.resolve(__dirname, "..");
-const flag = "htpr-6985-delete-view-once";
 
 function component(file, mocks, source = fs.readFileSync(path.join(root, file), "utf8")) {
   const compiled = ts.transpileModule(source, {
@@ -24,7 +24,7 @@ function component(file, mocks, source = fs.readFileSync(path.join(root, file), 
   return mod.exports.default;
 }
 
-async function clickDelete(enabled, status = 200, repeated = false, baseline = false) {
+async function clickDelete(status = 200, repeated = false, baseline = false) {
   const dom = new JSDOM("<!doctype html><div id='root'></div>", { url: "https://example.test/project?id=15" });
   const globals = new Map();
   let reactRoot;
@@ -48,8 +48,8 @@ async function clickDelete(enabled, status = 200, repeated = false, baseline = f
     const mocks = {
       "@/store": atoms,
       "@/lib/state": { useRecoilState: atom => React.useState(values[atom]), useRecoilValue: atom => values[atom], useSetRecoilState: () => () => {} },
-      "@/hooks/useFlag": { useFlag: key => key === flag && enabled },
-      "@/lib/flags/keys": { HTPR_6985_DELETE_VIEW_ONCE_FLAG: flag },
+      "@/hooks/useFlag": { useFlag: () => false },
+      "@/lib/flags/keys": { HTPR_7097_DELETED_VIEW_LEAVES_TABS_FLAG: "htpr-7097-deleted-view-leaves-tabs" },
       "@tanstack/react-query": { useQueryClient: () => queryClient },
       "@/lib/boardSync/reconcileActiveBoardQuery": { reconcileActiveBoardQuery: async (client) => { await client.invalidateQueries(); await client.refetchQueries({ queryKey: ["projectsAll"] }); } },
       "next/navigation": { useRouter: () => ({ refresh() {}, replace() {} }) },
@@ -86,7 +86,7 @@ async function clickDelete(enabled, status = 200, repeated = false, baseline = f
     const file = "src/components/Modals/ViewModals/ManageViewsModals.tsx";
     let source = fs.readFileSync(path.join(root, file), "utf8");
     if (baseline) {
-      const guard = "if (deleteViewOnce && deleteInFlightRef.current) return false";
+      const guard = "if (deleteInFlightRef.current) return false";
       assert.ok(source.includes(guard), "the negative control removes the synchronous guard");
       source = source.replace(guard, "");
     }
@@ -115,42 +115,33 @@ async function clickDelete(enabled, status = 200, repeated = false, baseline = f
   }
 }
 
-test("client flag on: one confirmation click sends one DELETE", async () => {
-  const result = await clickDelete(true);
+test("client: one confirmation click sends one DELETE", async () => {
+  const result = await clickDelete();
   assert.equal(result.count, 1);
   assert.deepEqual(result.calls, ["/api/projects/views/delete-rename-view?viewId=saved&projectId=15"]);
   assert.deepEqual(result.errors, []);
 });
 
-test("client flag off: one confirmation click retains legacy behavior", async () => {
-  const result = await clickDelete(false);
+test("client: simultaneous click and Enter send one DELETE", async () => {
+  const result = await clickDelete(200, true);
   assert.equal(result.count, 1);
 });
 
-for (const enabled of [true, false]) {
-  test(`client flag ${enabled ? "on" : "off"}: simultaneous click and Enter ${enabled ? "send one DELETE" : "retain two legacy DELETEs"}`, async () => {
-    const result = await clickDelete(enabled, 200, true);
-    assert.equal(result.count, enabled ? 1 : 2);
-  });
-}
-
-for (const enabled of [true, false]) {
-  test(`client flag ${enabled ? "on" : "off"}: already-deleted 404 ${enabled ? "closes without an error toast" : "retains the legacy error toast"}`, async () => {
-    const result = await clickDelete(enabled, 404);
-    assert.equal(result.count, 1);
-    assert.deepEqual(result.errors, enabled ? [] : ["Error deleting view"]);
-    assert.equal(result.closed, enabled);
-  });
-}
+test("client: already-deleted 404 closes without an error toast", async () => {
+  const result = await clickDelete(404);
+  assert.equal(result.count, 1);
+  assert.deepEqual(result.errors, []);
+  assert.equal(result.closed, true);
+});
 
 test("regression control: removing the synchronous guard restores duplicate DELETEs", async () => {
-  const result = await clickDelete(true, 200, true, true);
+  const result = await clickDelete(200, true, true);
   assert.equal(result.count, 2);
   assert.throws(() => assert.equal(result.count, 1), { code: "ERR_ASSERTION" });
 });
 
-test("client server failure still shows an error toast with the flag on", async () => {
-  const result = await clickDelete(true, 500);
+test("client server failure still shows an error toast", async () => {
+  const result = await clickDelete(500);
   assert.equal(result.count, 1);
   assert.deepEqual(result.errors, ["Error deleting view"]);
 });
@@ -162,14 +153,16 @@ function server(appRoute, scenario = {}) {
   class ManagedSmartSplitMutationError extends Error { constructor() { super("Managed smart split"); this.status = 409; } }
   const prisma = {
     view: {
-      findUnique: async () => {
+      findFirst: async ({ where }) => {
         if (scenario.failure) throw new Error("Unavailable");
-        return exists ? { id: "saved", project_view: { id: "pv", projectId: 15 } } : null;
+        const view = { id: "saved", visibility: "Public", project_view_id: "pv", project_view: { id: "pv", projectId: 15, project: { ownerId: 6, members: [] } } };
+        return exists && matches(view, where) ? view : null;
       },
       delete: async () => {
         if (scenario.race) throw Object.assign(new Error("Record already deleted"), { code: "P2025" });
         effects.push("delete");
         exists = false;
+        return { id: "saved" };
       },
     },
     user_Project_View: { findUnique: async () => null },
@@ -178,6 +171,7 @@ function server(appRoute, scenario = {}) {
   prisma.$transaction = async callback => callback(prisma);
   const mocks = {
     "@/lib/prisma": { default: prisma },
+    "@/utils/controllers/projects/getAllIncludes": { savedViewBoardAccessWhere },
     "@/lib/auth/getSessionUser": { getSessionUser: async () => scenario.noAuth ? null : { userId: 6 } },
     "@/lib/flags": { isFeatureEnabled: async () => appRoute },
     "@/lib/realtime/server": { broadcastBoardChange: () => effects.push("broadcast") },
@@ -210,13 +204,13 @@ for (const appRoute of [false, true]) {
   const mode = appRoute ? "App" : "Pages";
   test(`server ${mode}: missing view returns 404 without writes`, async () => {
     const fixture = server(appRoute, { missing: true });
-    assert.deepEqual(await fixture.invoke(), { status: 404, body: { message: "View does not exist" } });
+    assert.deepEqual(await fixture.invoke(), { status: 404, body: { message: "View not found on this board" } });
     assert.deepEqual(fixture.effects, []);
   });
   test(`server ${mode}: successful delete returns the board, repeated delete returns 404`, async () => {
     const fixture = server(appRoute);
     assert.deepEqual(await fixture.invoke(), { status: 200, body: fixture.payload });
-    assert.deepEqual(await fixture.invoke(), { status: 404, body: { message: "View does not exist" } });
+    assert.deepEqual(await fixture.invoke(), { status: 404, body: { message: "View not found on this board" } });
     assert.deepEqual(fixture.effects, ["delete", "broadcast"]);
   });
   test(`server ${mode}: concurrent deletion returns 404 not 500`, async () => {

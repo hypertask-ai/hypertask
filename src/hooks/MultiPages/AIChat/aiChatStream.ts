@@ -19,15 +19,12 @@ export async function consumeAiChatStream(context: Context) {
   } = context;
 
 
-      // Process the streaming response
       const reader = response.body.getReader();
       const decoder = new TextDecoder("utf-8");
       let done = false;
       let aiContent = "";
       let buffer = "";
       let currentEventType = "";
-      // HTPR-6284: set by the "agent" frame that precedes a routed @mention
-      // reply. Scoped to this send, so it cannot leak into another message.
       let replyAuthorAgent: { id: string; name: string } | null = null;
       let streamErrorHandled = false;
       let sawDone = false;
@@ -36,12 +33,9 @@ export async function consumeAiChatStream(context: Context) {
         const { value, done: doneReading } = await reader.read();
         done = doneReading;
         if (value) {
-          // Decode the chunk and add to buffer
           buffer += decoder.decode(value, { stream: true });
 
-          // Process complete lines from the buffer
           const lines = buffer.split("\n");
-          // Keep the last potentially incomplete line in the buffer
           buffer = lines.pop() || "";
 
           for (const line of lines) {
@@ -49,14 +43,12 @@ export async function consumeAiChatStream(context: Context) {
             if (!trimmedLine) continue;
 
             try {
-              // Check if it's an SSE event line
               if (trimmedLine.startsWith("event:")) {
                 currentEventType = trimmedLine.slice(6).trim();
                 console.log("🔥 Event type set to:", currentEventType);
                 continue;
               }
 
-              // Check if it's a data line
               if (trimmedLine.startsWith("data:")) {
                 const jsonData = trimmedLine.slice(5).trim();
                 if (!jsonData) {
@@ -72,7 +64,6 @@ export async function consumeAiChatStream(context: Context) {
                 );
                 const parsed = JSON.parse(jsonData);
 
-                // Handle the message based on the event type instead of parsed.type
                 switch (currentEventType) {
                   case "status":
                     console.log(`🔥 Received status: ${parsed.content}`);
@@ -82,8 +73,6 @@ export async function consumeAiChatStream(context: Context) {
                     console.log(`🔥 Received thinking: ${parsed.content}`);
                     break;
                   case "agent":
-                    // HTPR-6284: the reply about to stream comes from this
-                    // fleet agent, not the assistant.
                     if (
                       typeof parsed.agentId === "string" &&
                       typeof parsed.agentName === "string"
@@ -97,7 +86,6 @@ export async function consumeAiChatStream(context: Context) {
                   case "content":
                     setAgentStatus(undefined);
                     aiContent += parsed.content;
-                    // console.log(`🔥 aiContent after: "${aiContent}"`);
 
                     const initialAssistantMessage: IChatMessage = {
                       id: assistantMessageId,
@@ -155,13 +143,6 @@ export async function consumeAiChatStream(context: Context) {
                     setAgentStatus(undefined);
                     sawDone = true;
                     console.log("🔥 Stream complete:", parsed);
-                    // HTPR-6095: chat-driven inbox changes (archive/unarchive)
-                    // only reach this tab via the Pusher broadcast, which
-                    // competes with token-by-token render work while the reply
-                    // streams in, so the badge can lag well after the turn
-                    // ends. Self-correct here with the same query key the
-                    // realtime handler uses; "active" keeps it to mounted
-                    // queries only.
                     void queryClient
                       .refetchQueries({ queryKey: INBOX_QUERY_KEY, type: "active" })
                       .catch((error) =>
@@ -200,8 +181,6 @@ export async function consumeAiChatStream(context: Context) {
                         createdAt: new Date(),
                         sessionId: session.id,
                         isDelivered: true,
-                        // Keep the routed @mention attribution through the
-                        // final replacement (HTPR-6284).
                         ...(replyAuthorAgent
                           ? {
                               authorAgent: {
@@ -218,7 +197,6 @@ export async function consumeAiChatStream(context: Context) {
                         true
                       );
                       if (streamTaskId != null) {
-                        // Reuse the open task's draft-safe refresh even if its websocket event was missed.
                         if (reloadTaskAfterChat) {
                           window.dispatchEvent(new CustomEvent(TASK_EVENT, { detail: { taskId: streamTaskId } }));
                         }
@@ -256,10 +234,6 @@ export async function consumeAiChatStream(context: Context) {
         }
       }
 
-      // HTPR-6278: a stream that ends without a done frame is a failed turn.
-      // Without this the thread looks wedged with no explanation. Partial
-      // content stays visible; the notice appends below it under a temporary
-      // id so it can never compete with a durably persisted reply.
       if (!sawDone && !streamErrorHandled) {
         const partial = aiContent.trim().length > 0;
         setAgentStatus(undefined);

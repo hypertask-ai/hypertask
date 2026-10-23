@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { createSignupContext, bindSignupCodeContext } from '@/lib/auth/signupAttributionContext'
 import jwt from 'jsonwebtoken'
 import crypto from 'crypto'
 import { VerificationCodeService } from '@/lib/services/verificationCodeService'
@@ -9,10 +10,10 @@ import prisma from '@/lib/prisma'
 import {
   HTPR_7032_EMAIL_EXPIRY_COPY_FLAG,
   HTPR_7032_FIRST_TIME_EMAIL_FLAG,
+  HTPR_7269_SIGNUP_IDENTITY_LINK_FLAG,
   isFeatureEnabled,
 } from '@/lib/flags'
 
-// --------- Config & Helpers ---------
 const JWT_ISSUER = process.env.JWT_ISSUER || 'hypertask'
 const JWT_AUDIENCE = process.env.JWT_AUDIENCE || 'email-link'
 const LINK_EXPIRY_MINUTES = 15
@@ -20,7 +21,6 @@ const CODE_EXPIRY_MINUTES = 30
 
 type EmailVariant = { correctExpiry: boolean, firstTime: boolean }
 
-// Resend configuration
 const RESEND_API_KEY = process.env.RESEND_API_KEY
 const EMAIL_FROM = process.env.EMAIL_FROM || 'noreply@hypertask.ai'
 
@@ -120,9 +120,9 @@ async function sendEmailWithResend(to: string, link: string, code: string, varia
   console.log('✅ Email sent via Resend with both link and code')
 }
 
-function createEmailLoginToken(email: string) {
+function createEmailLoginToken(email: string, signupContextId: string | null) {
   const jti = crypto.randomUUID()
-  const payload = { sub: email }
+  const payload = { sub: email, ...(signupContextId ? { signupContextId } : {}) }
   const token = jwt.sign(payload, getJwtSecret(), {
     expiresIn: LINK_EXPIRY_MINUTES * 60,
     issuer: JWT_ISSUER,
@@ -133,11 +133,9 @@ function createEmailLoginToken(email: string) {
 }
 
 function generateVerificationCode(): string {
-  // Use the service's secure code generation
   return VerificationCodeService.generateCode()
 }
 
-// Build URL with UTM parameters
 function buildSignInLinkWithUTM(
   baseUrl: string,
   token: string,
@@ -148,7 +146,6 @@ function buildSignInLinkWithUTM(
   const url = new URL(baseUrl);
   url.searchParams.set('token', token);
 
-  // Only campaign attribution belongs in an emailed URL, never request metadata.
   for (const key of ['utm_source', 'utm_medium', 'utm_campaign']) {
     const value = utmData[key];
     if (typeof value === 'string' && value) {
@@ -156,11 +153,7 @@ function buildSignInLinkWithUTM(
     }
   }
   
-  //!!!!VERY IMPORTANT YOU SHOULD READ THIS 
-  // There is a key-val pair that is "key": 'randomtokenajsdkahbsdkasd".
-  // So make sure to use some other name than key for the other params if youre thinking about using "key". 
 
-  // Add invite parameters to the URL
   for (const key of ['project', 'key', 'projectId'] as const) {
     const value = inviteData[key];
     if (typeof value === 'string' && value) {
@@ -173,10 +166,9 @@ function buildSignInLinkWithUTM(
   return url.toString();
 }
 
-// --------- Route Handler ---------
 export async function POST(request: NextRequest) {
   try {
-    const { email, utmData, inviteData, returnTo: rawReturnTo } = await request.json()
+    const { email, utmData, inviteData, returnTo: rawReturnTo, signupContext } = await request.json()
 
     if (!email || typeof email !== 'string') {
       return NextResponse.json(
@@ -188,7 +180,6 @@ export async function POST(request: NextRequest) {
     const normalizedEmail = email.trim().toLowerCase()
     console.log('📧 Generating email link and code for:', normalizedEmail)
 
-    // Check rate limiting first
     const rateLimitCheck = VerificationCodeService.isRateLimited(normalizedEmail)
     if (rateLimitCheck.limited) {
       return NextResponse.json(
@@ -201,17 +192,17 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    const token = createEmailLoginToken(normalizedEmail)
+    const signupIdentityLinkEnabled = await isFeatureEnabled(HTPR_7269_SIGNUP_IDENTITY_LINK_FLAG, 0)
+    const signupContextId = signupIdentityLinkEnabled ? await createSignupContext(signupContext, 1800, request.headers.get("cookie")) : null
+    const token = createEmailLoginToken(normalizedEmail, signupContextId)
     const verificationCode = generateVerificationCode()
     
-    // Use UTM data from request body (or empty object if not provided)
     const utmParams = utmData && typeof utmData === 'object' ? utmData : {}
     
     const safeReturnTo = parseSafeReturnTo(
       typeof rawReturnTo === 'string' ? rawReturnTo : null
     )
 
-    // Build sign-in link with UTM parameters
     const baseSignInUrl = `${getRequestBaseUrl(request)}/login`
     const signInLink = buildSignInLinkWithUTM(
       baseSignInUrl,
@@ -221,14 +212,13 @@ export async function POST(request: NextRequest) {
       safeReturnTo
     )
     
-    // Store the verification code for later verification
     await VerificationCodeService.storeCode(verificationCode, normalizedEmail, CODE_EXPIRY_MINUTES)
+    if (signupContextId) await bindSignupCodeContext(normalizedEmail, verificationCode, signupContextId)
 
     const existingUser = await prisma.user.findFirst({
       where: { email: normalizedEmail },
       select: { id: true },
     })
-    // Flags require account IDs. ID 0 has no Owner + QA eligibility, even if the sender is signed in.
     const recipientId = existingUser?.id ?? 0
     const correctExpiry = await isFeatureEnabled(HTPR_7032_EMAIL_EXPIRY_COPY_FLAG, recipientId)
     const firstTime = !existingUser && await isFeatureEnabled(HTPR_7032_FIRST_TIME_EMAIL_FLAG, recipientId)
@@ -242,7 +232,6 @@ export async function POST(request: NextRequest) {
   } catch (error) {
     console.error('❌ Error generating email link:', error)
     
-    // Handle specific error types
     if (error instanceof Error) {
       if (error.message.includes('Please wait')) {
         return NextResponse.json(

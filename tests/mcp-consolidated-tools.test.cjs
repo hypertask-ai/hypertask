@@ -84,12 +84,24 @@ function spyTools() {
 }
 
 test('catalog flag off preserves the entire current deferred list exactly', async () => {
-  const selected = selectMcpTools(legacy, false, { managementPermissions: { management: ['read'] } })
-  assert.equal(selected, legacy)
+  const deferred = selectMcpTools(legacy, false)
+  assert.ok(toolNamed(deferred, 'hypertask_list_features'))
+  assert.ok((await rpc(deferred, 'tools/list')).result.tools.some(({ name }) => name === 'hypertask_list_features'))
+  assert.equal(definitions.find(({ name }) => name === 'hypertask_user_context').actions.features.tool, 'hypertask_list_features')
+  const originalLegacy = legacy.filter((tool) => !['hypertask_report_feedback', 'hypertask_list_features'].includes(tool.name))
+  const selected = selectMcpTools(originalLegacy, false, { managementPermissions: { management: ['read'] } })
+  assert.equal(selected, originalLegacy)
   const listed = (await rpc(selected, 'tools/list')).result.tools
   const baseline = JSON.parse(fs.readFileSync(path.join(__dirname, 'fixtures/mcp-6804/legacy-catalog.json')))
   assert.deepEqual(listed, baseline)
-  assert.deepEqual(baseline.filter((tool) => !['hypertask_search_tools', 'hypertask_describe_tool'].includes(tool.name)).map((tool) => tool.name), legacy.map((tool) => tool.name))
+  assert.deepEqual(baseline.filter((tool) => !['hypertask_search_tools', 'hypertask_describe_tool'].includes(tool.name)).map((tool) => tool.name), originalLegacy.map((tool) => tool.name))
+})
+
+test('user_context features dispatches to the deferred feature tool', async () => {
+  const { calls, tools } = spyTools()
+  const result = await rpc(tools, 'tools/call', { name: 'hypertask_user_context', arguments: { action: 'features' } })
+  assert.notEqual(result.result.isError, true)
+  assert.equal(calls.at(-1).name, 'hypertask_list_features')
 })
 
 test('catalog flag on advertises 15 to 25 consolidated tools, with no duplicate names', async () => {
@@ -112,11 +124,11 @@ test('server flag defaults to Owner + QA and evaluates the authenticated user', 
     authUserId = id
     assert.equal(await flags.isFeatureEnabled(flags.HTPR_6804_MCP_TOOLS_FLAG, id), enabled)
     const listed = (await (await mcpHandler(request('tools/list'))).json()).result.tools
-    assert.equal(listed.length, enabled ? definitions.length : legacy.length + 2)
+    assert.equal(listed.length, enabled ? definitions.length : legacy.length + 1)
   }
   mode = 'OFF'
   authUserId = 6
-  assert.equal((await (await mcpHandler(request('tools/list'))).json()).result.tools.length, legacy.length + 2)
+  assert.equal((await (await mcpHandler(request('tools/list'))).json()).result.tools.length, legacy.length + 1)
   const disabledCall = await (await mcpHandler(request('tools/call', { name: 'hypertask_tasks', arguments: { action: 'create', input: { project_id: 15, title: 'Not executed' } } }))).json()
   assert.equal(disabledCall.error.code, -32602)
   mode = null
@@ -125,8 +137,8 @@ test('server flag defaults to Owner + QA and evaluates the authenticated user', 
 
 test('scope filtering advertises only callable actions for management, agent and team credentials', async () => {
   for (const [permissions, expected] of [
-    [{ management: ['read'] }, { hypertask_user_context: ['connections'], hypertask_agents: ['list'] }],
-    [{ management: ['write'] }, { hypertask_agents: ['create', 'revoke', 'archive', 'delete'], hypertask_tokens: ['mint', 'revoke'] }],
+    [{ management: ['read'] }, { hypertask_report_feedback: ['report'], hypertask_user_context: ['connections'], hypertask_agents: ['list'] }],
+    [{ management: ['write'] }, { hypertask_report_feedback: ['report'], hypertask_agents: ['create', 'revoke', 'archive', 'delete'], hypertask_tokens: ['mint', 'revoke'] }],
   ]) {
     const tools = selectMcpTools(legacy, true, { managementPermissions: permissions })
     const listed = (await rpc(tools, 'tools/list')).result.tools
@@ -139,7 +151,7 @@ test('scope filtering advertises only callable actions for management, agent and
   assert.equal(agent.some((tool) => tool.name === 'hypertask_tokens'), false)
   assert.deepEqual(toolNamed(agent, 'hypertask_agents').parameters.shape.action.options, ['presence'])
   const scoped = visible(selectMcpTools(legacy, true, { teamScoped: true, managementPermissions: { management: ['read', 'write'] } }))
-  assert.deepEqual(scoped.map((tool) => tool.name), ['hypertask_agents'])
+  assert.deepEqual(scoped.map((tool) => tool.name), ['hypertask_report_feedback', 'hypertask_agents'])
 })
 
 test('legacy dispatch keeps every existing name callable and forwards credentials and invocation identity', async () => {
@@ -586,4 +598,30 @@ test('inventory documentation covers every legacy tool and explains missing usag
   assert.match(doc, /6505/)
   assert.match(doc, /6506/)
   assert.match(doc, /Owner \+ QA/)
+})
+
+test('legacy and consolidated comment catalogs explain hidden logs and human-facing kinds', async () => {
+  for (const consolidated of [false, true]) {
+    const selected = selectMcpTools(legacy, consolidated)
+    const catalog = (await rpc(selected, 'tools/list')).result.tools
+    const name = consolidated ? 'hypertask_comments' : 'hypertask_add_comment_to_task'
+    let tool = toolNamed(catalog, name)
+    if (!consolidated) {
+      assert.match(tool.description, /hidden agent log/)
+      assert.match(tool.description, /kind question\|qa\|done for people/)
+      const described = await rpc(selected, 'tools/call', { name: 'hypertask_describe_tool', arguments: { name } })
+      tool = JSON.parse(described.result.content[0].text)
+    }
+    assert.ok(tool, name)
+    const schema = consolidated
+      ? tool.inputSchema.oneOf.find((variant) => variant.properties.action.const === 'add').properties.input
+      : tool.inputSchema
+    for (const text of [tool.description, schema.properties.kind.description]) {
+      assert.match(text, /Without a kind, a reply target or an @mention of a person/)
+      assert.match(text, /hidden ticket agent log, which people do not see/)
+      assert.match(text, /question for a decision by a person/)
+      assert.match(text, /qa for a QA verdict/)
+      assert.match(text, /done for the closing summary/)
+    }
+  }
 })

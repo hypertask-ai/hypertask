@@ -107,6 +107,7 @@ function reservations(state) {
     isAiChatSidebarModeAtom: "isAiChatSidebarMode", aiChatSidebarWidthPxAtom: "aiChatSidebarWidthPx",
   };
   const { usePageLoadReservations } = load("src/hooks/General/usePageLoadReservations.ts", {
+    "@/hooks/General/useKeepAiChatClosed": { useKeepAiChatClosed: () => ({ keepAiChatClosed: state.keepAiChatClosed ?? false, ready: true }) },
     "@/lib/state": { useRecoilValue: (atom) => state[atom] },
     "@/store": atoms,
     "@/lib/configs/style.config": { AI_CHAT_SIDEBAR_MIN_PX: 340 },
@@ -144,11 +145,24 @@ function renderWorkspace({ pathname, mobile = false, topBar = false, dock = fals
 
 const documentFor = (element) => new JSDOM(renderToString(element)).window.document;
 
+test("mobile bottom bar shows on boards and hides on ticket pages", () => {
+  const state = {
+    mbl: true, authenticatedUserId: 985, currentUserId: 985,
+    commentComposerOpen: false, agentChatHidesMobileShell: false,
+  };
+  for (const [pathname, shown] of [["/project/15", true], ["/calendar", true], ["/page/cmur49hls000005qktwd6geui", false]]) {
+    const { showMobileTabBar, showMobileBottomInset, showMobileBottomNav } = reservations({ ...state, pathname });
+    assert.equal(showMobileTabBar, true, pathname);
+    assert.equal(showMobileBottomInset, shown, pathname);
+    assert.equal(showMobileBottomNav, shown, pathname);
+  }
+});
+
 test("mobile shell space exists before the authenticated profile finishes loading", () => {
   for (const pathname of ["/project", "/inbox", "/detail/project-7049/31", "/login", "/share/task/1"]) {
     const dependencies = {
       mbl: true, authenticatedUserId: 985, currentUserId: undefined, pathname,
-      mobilePageHideDockFlag: false, commentComposerOpen: false, agentChatHidesMobileShell: false,
+      commentComposerOpen: false, agentChatHidesMobileShell: false,
     };
     const render = () => {
       const { showMobileTabBar: topBar, showMobileBottomInset: dock } = reservations(dependencies);
@@ -192,7 +206,7 @@ test("task auto-open reserves the lazy desktop sidebar width without affecting c
     const slot = pending.querySelector("[data-ai-chat-slot]");
     assert.ok(slot, "the slot must exist even before the lazy runtime or panels load");
     assert.equal(slot.style.width, `${Math.max(width, 340)}px`);
-    assert.equal(slot.className, "shrink-0");
+    assert.equal(slot.className, "shrink-0 max-md:fixed max-md:right-0 max-md:top-0 max-md:z-[51]");
     const readySlot = ready.querySelector("[data-ai-chat-slot]");
     assert.equal(slot.style.width, readySlot.style.width);
     assert.equal(slot.className, readySlot.className);
@@ -269,12 +283,13 @@ test("autosizing still accepts a nullable DOM element and preserves Task Writer 
   assert.equal(writer.style.height, "24px");
 });
 
-test("the task title passes its stable ref to autosizing on the first render", () => {
-  const task = { id: 42, title: "Cached title" };
-  let sizingRef;
+function renderTaskTitle(task, { descriptionStart, onSizing = noop } = {}) {
   const Title = load("src/components/PageComponents/TaskDetail/TopRow/TaskTitle.tsx", {
+    "@/hooks/useFlag": { useFlag: () => false },
+    "@/lib/flags/keys": { HTPR_7367_SERVER_DESCRIPTION_FIRST_FLAG: "htpr-7367-server-description-first" },
+    "@/models/enums": { CommandMode: {} },
     react: React,
-    "@/lib/contexts/TaskDetail/TaskProvider": { useTaskContext: () => ({ parsedTask: JSON.stringify(task), currentTask: task }) },
+    "@/lib/contexts/TaskDetail/TaskProvider": { useTaskContext: () => ({ parsedTask: JSON.stringify(task), currentTask: task, descriptionStart }) },
     "@/lib/contexts/mobileContext": { MobileViewContext: React.createContext(false) },
     "@/store": {},
     "@/lib/state": { useRecoilState: () => [null, noop], useRecoilValue: () => false },
@@ -284,7 +299,7 @@ test("the task title passes its stable ref to autosizing on the first render", (
     "@/hooks/MultiPages/Route/useHypertasksNavigate": { default: () => ({ navigate: noop }) },
     "@/hooks/MultiPages/useClickOutside": { default: noop },
     "@/components/Modals/Common Modals/ConfirmActionModal": { default: noop },
-    "@/hooks/General/useAutosizeTextarea": { default: (ref) => { sizingRef = ref; } },
+    "@/hooks/General/useAutosizeTextarea": { default: onSizing },
     "@/lib/contexts/deviceContext": { useDeviceContext: () => false },
     "@/hooks/General/useDebounce": { default: noop },
     "@/components/Common/Tooltip": { default: noop },
@@ -292,16 +307,32 @@ test("the task title passes its stable ref to autosizing on the first render", (
     "@/hooks/MultiPages/useUpdateTaskInBoards": { default: () => ({ updateTaskInCache: noop }) },
     "./RunningTimerIndicator": { default: noop },
   });
-  const html = renderToString(React.createElement(Title));
+  return renderToString(React.createElement(Title));
+}
+
+test("the task title passes its stable ref to autosizing on the first render", () => {
+  const task = { id: 42, title: "Cached title" };
+  let sizingRef;
+  const html = renderTaskTitle(task, { onSizing: (ref) => { sizingRef = ref; } });
   assert.ok(sizingRef && "current" in sizingRef, "the initial null DOM node cannot size the title");
   assert.match(html, /Cached title/);
   assert.equal(new JSDOM(html).window.document.querySelector("textarea").rows, 1);
+});
+
+test("a server-rendered description gets a title already at its autosized height, so hydration does not push it down", () => {
+  const task = { id: 42, title: "Cached title" };
+  const style = (descriptionStart) => new JSDOM(renderTaskTitle(task, { descriptionStart })).window.document.querySelector("textarea").style;
+  assert.equal(style("server").minHeight, "37px", "the autosize hook never sizes the title below 37px");
+  assert.match(style("server").cssText, /field-sizing:\s*content/, "multi-line titles wrap to their full height before the hook runs");
+  assert.equal(style("live").minHeight, "", "flag off keeps today's one-row title until hydration");
+  assert.equal(style(undefined).minHeight, "");
 });
 
 test("an unset priority stays null while its background query loads, keeping the No Priority row height", () => {
   const metaHook = load("src/lib/useTaskDetailMetaField.ts", {
     "@tanstack/react-query": { useQuery: (options) => ({ data: options.initialData }), useQueryClient: () => ({}) },
     "@/hooks/General/useAuth": { useAuth: () => ({ authenticatedUserId: null }) },
+    "@/hooks/General/useHydrated": { useHydrated: () => true },
     "@/hooks/useFlag": { useFlag: () => false, useFlagReady: () => true, useFlagLoaded: () => true },
     "@/lib/flags/keys": {},
     "@/lib/taskDetailReads": {},
@@ -354,14 +385,20 @@ test("a disabled board's empty Time row is absent before and after its summary l
   assert.equal(timer.props.timeTrackingEnabled, false, "use the board setting already present in the task snapshot");
 });
 
-function editorPanels(flag) {
+function editorPanels(cachedStaticFirst = false) {
   return load("src/components/RTE/TaskDetailEditorPanels.tsx", {
-    useFlag: (key) => key === "instant" && flag,
-    HTPR_6752_INSTANT_TICKET_OPEN_FLAG: "instant",
+    useFlag: (key) => key === "cached-static-first" && cachedStaticFirst,
+
     HTPR_7091_STATIC_DESCRIPTION_FIRST_FLAG: "static-first",
+    HTPR_7395_CACHED_STATIC_FIRST_FLAG: "cached-static-first",
     HTPR_6929_COMPOSE_TASK_WRITER_FLAG: "compose",
+    HTPR_7337_EDIT_WITH_AI_FLAG: "edit-with-ai",
+    HTPR_7393_COMMENT_INLINE_AI_FLAG: "comment-inline-ai",
     HTPR_6937_NEW_TASK_WINDOW_FLAG: "new-task",
     useSetRecoilState: () => noop,
+    useRecoilValue: () => false,
+    showAIChatInterfaceAtom: "chat-open",
+    useEffect: React.useEffect,
     showCommandsAtom: "commands",
     createPortal: noop,
     useContext: React.useContext,
@@ -378,8 +415,8 @@ function editorPanels(flag) {
 }
 
 test("with instant open, the description reserves its real content before the editor exists", () => {
-  for (const flag of [true]) {
-    const Panels = editorPanels(flag);
+  for (const cachedStaticFirst of [false, true]) {
+    const Panels = editorPanels(cachedStaticFirst);
     const context = {
       divIds: {}, currentTask: { id: 42 }, inViewObject: {},
       mode: "read-edit-description", id: "description", defaultContent: "Long cached description",
@@ -401,18 +438,22 @@ function threadRender({ hydrated, mobile = false, measured = false, comments = f
     MobileViewContext: React.createContext(mobile),
     useDescriptionAndCommentsContext: () => ({ comments: [{ text: "Existing comment" }], stacked: [] }),
     useFlag: () => true,
-    HTPR_6752_INSTANT_TICKET_OPEN_FLAG: "instant",
+
     HTPR_6899_STABLE_LAYOUT_FLAG: "stable",
     HTPR_7074_TICKET_PAGE_CLS_FLAG: "cls",
+    HTPR_7367_SERVER_DESCRIPTION_FIRST_FLAG: "server-description",
     useThreadSettled: () => ({ settled: true, slotRef: () => {} }),
     SettledComposerSlot: ({ children }) => children,
     useTaskContext: () => ({
+      liveRowsPendingFor: () => false, showLiveRows: noop,
       currentTask: { id: 42 }, secondaryPanelsReady: true,
       virtualizer: { getVirtualItems: () => items, getTotalSize: () => measured ? (comments ? 800 : 711) : 200, measureElement: noop },
       virtualizeIndexes: { taskInfoVirtualIndex: -1, descriptionVirtualIndex: 0, descriptionBottomVirtualIndex: 1, commentsStartVirtualIndex: 2, numberOfComments: comments ? 1 : 0 },
       visibleFeedItems: [{ kind: "comment", commentIndex: 0 }],
     }),
     useHydrated: () => hydrated,
+    useEffect: React.useEffect,
+    ServerRenderedDescription: () => React.createElement("article", { "data-server-description": true }, "Server description"),
     BaseCommentAndDescriptionContainer: ({ children }) => React.createElement("main", null, children),
     RichTextPersonHovercards: noop,
     Description: () => React.createElement("article", { style: { height: 711 }, "data-description": true }, "Cached description"),

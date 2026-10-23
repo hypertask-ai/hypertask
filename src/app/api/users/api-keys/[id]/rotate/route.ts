@@ -9,14 +9,6 @@ import {
 
 export const runtime = 'nodejs'
 
-/**
- * POST /api/users/api-keys/:id/rotate
- *
- * Issues a fresh secret under the same name and invalidates the old one in the
- * same transaction, so a leaked key stops working the moment its replacement
- * exists. Pass `expiresInDays` to set the replacement's lifetime; omit it to
- * carry over the remaining lifetime of the key being rotated.
- */
 export async function POST(
   request: NextRequest,
   props: { params: Promise<{ id: string }> }
@@ -35,7 +27,6 @@ export async function POST(
     try {
       body = (await request.json()) ?? {}
     } catch {
-      // An empty body is valid: it means "keep the current expiry".
       body = {}
     }
 
@@ -75,8 +66,6 @@ export async function POST(
     const sourceExpired =
       existing.expiresAt !== null && existing.expiresAt.getTime() <= now.getTime()
 
-    // Carrying over an already-past expiry would mint a replacement that cannot
-    // authenticate, so an expired key can only be rotated with a fresh lifetime.
     if (sourceExpired && !hasExpiryChoice) {
       return NextResponse.json(
         {

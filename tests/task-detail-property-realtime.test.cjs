@@ -7,6 +7,7 @@ const os = require("node:os");
 const path = require("node:path");
 const Module = require("node:module");
 const test = require("node:test");
+const { load } = require("./task-route-loader.cjs");
 const ts = require("typescript");
 
 const root = path.resolve(__dirname, "..");
@@ -48,6 +49,7 @@ function loadHandler(relativePath, stubs) {
 function makeResponse() {
   let statusCode = 0;
   const res = {
+    setHeader() {},
     status(code) {
       statusCode = code;
       return res;
@@ -66,7 +68,6 @@ const realtimeStubs = (broadcasts) => ({
 });
 
 const sessionStub = {
-  "@/lib/api/task-writes/route": { withTaskWriteFlag: (handler) => handler },
   "@/lib/auth/getSessionUser": {
     getSessionUser: async () => ({ userId: USER_ID, source: "legacy", needsBridge: true }),
   },
@@ -91,7 +92,7 @@ test("setDueDate broadcasts task:changed to open detail views", async () => {
     },
     "@/utils/controllers/notifications/creation-service/createAndSendNotificationTaskMove":
       { __esModule: true, default: async () => undefined },
-    "../queues/duedateQueue": {
+    "@/pages/api/queues/duedateQueue": {
       cancelDueDateJob: async () => undefined,
       scheduleDueDateJob: async () => undefined,
     },
@@ -106,7 +107,7 @@ test("setDueDate broadcasts task:changed to open detail views", async () => {
     "@/lib/realtime/server": { __esModule: true, ...realtimeStubs(broadcasts) },
     ...sessionStub,
   };
-  const handler = loadHandler("src/pages/api/tasks/setDueDate.ts", stubs);
+  const handler = load("src/pages/api/tasks/setDueDate.ts", stubs).default;
   const res = makeResponse();
   await handler(
     { method: "POST", body: { taskId: TASK_ID, dueDate: new Date() }, headers: requestHeaders },
@@ -137,7 +138,7 @@ test("setStartDate broadcasts task:changed to open detail views", async () => {
     "@/lib/realtime/server": { __esModule: true, ...realtimeStubs(broadcasts) },
     ...sessionStub,
   };
-  const handler = loadHandler("src/pages/api/tasks/setStartDate.ts", stubs);
+  const handler = load("src/pages/api/tasks/setStartDate.ts", stubs).default;
   const res = makeResponse();
   await handler(
     { method: "POST", body: { taskId: TASK_ID, startDate: new Date() }, headers: requestHeaders },
@@ -187,6 +188,10 @@ test("assignLabel broadcasts task:changed to open detail views", async () => {
       publishAgentWebhookDeliveries: async () => undefined,
     },
     "@/lib/realtime/server": { __esModule: true, ...realtimeStubs(broadcasts) },
+    "@/lib/mcp/tasks/services": {
+      __esModule: true,
+      validateProjectMemberIds: async () => ({ invalidIds: [], error: null }),
+    },
     ...sessionStub,
   };
   const handler = loadHandler("src/pages/api/labels/assignLabel.ts", stubs);

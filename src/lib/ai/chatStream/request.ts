@@ -35,10 +35,9 @@ export const defaultContextSchema = z
   .object({
     project_id: z.coerce.number().int().positive().optional(),
     task_id: z.coerce.number().int().positive().optional(),
+    scope: z.literal("ticket").optional(),
     view_id: z.string().optional().nullable(),
     view_name: z.string().optional().nullable(),
-    // Which screen the user is on. Board surfaces carry a project_id; My Tasks,
-    // the inbox and the calendar span every board and carry none.
     surface: z.string().optional().nullable(),
     surface_path: z.string().optional().nullable(),
   })

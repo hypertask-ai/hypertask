@@ -1,7 +1,3 @@
-/**
- * HTPR-7098: Slack thread summaries that wait in a half-price gateway batch instead of running
- * inline. The cron prepares one entry per thread here; the collector applies the result later.
- */
 import { gatewayFundingSourceForApiKey } from "@/app/api/ai/_lib/modelProvider";
 import { gatewayCatalogModelSlug } from "@/app/api/ai/_lib/sharedAllowance";
 import {
@@ -31,9 +27,7 @@ export type SlackBatchEntry = {
 };
 
 export type PreparedSlackSummary =
-  /** Nothing to summarize (no text, or summaries are off for the team): mark the thread done. */
   | { type: "empty" }
-  /** Team's own key or no usable gateway key: run the instant path with the source already loaded. */
   | { type: "instant"; source: SlackThreadSource }
   | { type: "batch"; entry: SlackBatchEntry };
 
@@ -74,7 +68,6 @@ export async function prepareSlackSummaryForBatch(
   };
 }
 
-/** One batch per team and model. Returns the ids of threads that were queued, and those that failed to queue. */
 export async function submitSlackSummaryBatches(entries: SlackBatchEntry[]) {
   const queued: string[] = [];
   const failed: string[] = [];
@@ -98,8 +91,6 @@ export async function submitSlackSummaryBatches(entries: SlackBatchEntry[]) {
             }),
           ),
           items: Object.fromEntries(chunk.map((entry) => [entry.threadId, entry.item])),
-          // Only threads nobody else holds go into the batch, claimed in the same transaction that
-          // creates the row, so the collector never sees the row before its threads are marked.
           claim: async (tx, batchId) => {
             await tx.slackWatchedThread.updateMany({
               where: { id: { in: chunk.map((entry) => entry.threadId) }, summaryBatchId: null },

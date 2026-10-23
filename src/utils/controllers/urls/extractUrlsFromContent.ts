@@ -1,3 +1,7 @@
+import type { BoardKnowledgePrincipal } from "@/lib/rag/retrieveBoardKnowledge";
+import prisma from "@/lib/prisma";
+import { lockTaskTeamScope, TaskTeamScopeError } from "@/lib/mcp/tasks/agentMutationFence";
+import { taskWriteAccessWhere } from "@/utils/controllers/projects/getAllIncludes";
 import { parse, HTMLElement } from 'node-html-parser';
 import { IUrl } from '@/models/model';
 import addIntoTask from '@/utils/controllers/urls/addIntoTask';
@@ -29,7 +33,6 @@ function getEmbedTitle(url: string): string {
       title = `YouTube Video: ${videoId}`;
     }
   } catch {
-    // keep default title
   }
 
   return title;
@@ -45,9 +48,6 @@ function filenameFromUrl(url: string): string {
   }
 }
 
-/**
- * Deduplicates URL records by urlString (first occurrence wins).
- */
 export function mergeUrls(...lists: IUrl[][]): IUrl[] {
   const seen = new Set<string>();
   const merged: IUrl[] = [];
@@ -63,9 +63,6 @@ export function mergeUrls(...lists: IUrl[][]): IUrl[] {
   return merged;
 }
 
-/**
- * Converts MCP `images[]` S3 URLs into attachment IUrl records.
- */
 export function buildMcpImageUrls(images: string[], taskId: number): IUrl[] {
   return images.map((imageUrl: string) => {
     let fileType = 'image/jpeg';
@@ -88,7 +85,6 @@ export function buildMcpImageUrls(images: string[], taskId: number): IUrl[] {
       fileType = mimeTypeMap[extension] || 'image/jpeg';
       fileName = `image-${Date.now()}.${extension}`;
     } catch {
-      // use defaults
     }
 
     return {
@@ -101,10 +97,6 @@ export function buildMcpImageUrls(images: string[], taskId: number): IUrl[] {
   });
 }
 
-/**
- * Extracts URLs from comment/description HTML or plain text.
- * Mirrors client-side processHtml URL collection (without mention side effects).
- */
 export function extractUrlsFromContent(text: string, taskId: number): IUrl[] {
   const uniqueUrls: IUrl[] = [];
   const urlsArray: string[] = [];
@@ -174,25 +166,42 @@ export async function persistUrlsForComment(
   taskId: number,
   commentId: number,
   method: 'POST' | 'PUT',
-  extraUrls: IUrl[] = []
+  extraUrls: IUrl[] = [],
+  principal?: BoardKnowledgePrincipal,
 ): Promise<void> {
   const extracted = extractUrlsFromContent(text, taskId);
   const urlsToAdd = mergeUrls(extracted, extraUrls);
 
   if (urlsToAdd.length === 0) return;
 
+  if (principal?.teamScope != null) {
+    await prisma.$transaction(async (tx) => {
+      await lockTaskTeamScope(tx, taskId, principal.userId, principal.agentId, principal.teamScope);
+      if (!await tx.comment.findFirst({ where: { id: commentId, taskId, task: { project: taskWriteAccessWhere(principal.userId, principal.agentId, principal.teamScope) } }, select: { id: true } })) throw new TaskTeamScopeError();
+      await addIntoTask(urlsToAdd.map((url) => ({ ...url, TaskId: taskId })), commentId, method, tx);
+    });
+    return;
+  }
   await addIntoTask(urlsToAdd, commentId, method);
 }
 
 export async function persistUrlsForDescription(
   text: string,
   taskId: number,
-  extraUrls: IUrl[] = []
+  extraUrls: IUrl[] = [],
+  principal?: BoardKnowledgePrincipal,
 ): Promise<void> {
   const extracted = extractUrlsFromContent(text, taskId);
   const urlsToAdd = mergeUrls(extracted, extraUrls);
 
   if (urlsToAdd.length === 0) return;
 
+  if (principal?.teamScope != null) {
+    await prisma.$transaction(async (tx) => {
+      await lockTaskTeamScope(tx, taskId, principal.userId, principal.agentId, principal.teamScope);
+      await addIntoTaskDesc(urlsToAdd.map((url) => ({ ...url, TaskId: taskId })), taskId, 'PUT', tx);
+    });
+    return;
+  }
   await addIntoTaskDesc(urlsToAdd, taskId, 'PUT');
 }

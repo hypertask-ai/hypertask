@@ -5,6 +5,8 @@ Front door on 127.0.0.1:$RUNNER_WEBHOOK_PORT (default 8793, where the hooks.hype
 not POST /webhook/runner-<n> is proxied verbatim to 127.0.0.1:$RUNNER_WEBHOOK_FALLBACK_PORT (default 8795, the legacy
 agent-events receiver), 502 when it is down. POST /webhook/runner-<n> is handled here. The signing secret for runner n is the
 file $RUNNER_WEBHOOK_SECRETS/runner-<n> (mode 600); it is never logged. Delivery goes through runner-deliver.
+The HT Product Lead route is /webhook/ht-product-lead, with /webhook/infra-manager kept as an alias.
+Both use the infra-manager signing config and state files.
 Handled events: comment.created, comment.mention, task.assigned, chat.message, comment.reaction. Events caused by an agent are ignored.
 """
 import fcntl, hashlib, hmac, html, http.client, json, os, re, subprocess, sys, threading, time
@@ -27,11 +29,13 @@ LOCK = threading.Lock()
 EVENTS = {"comment.created", "comment.mention", "task.assigned", "chat.message", "comment.reaction"}
 OWNER_USER_ID = os.environ.get("RUNNER_WEBHOOK_OWNER_USER_ID", "6")  # Valentin Yeo, the only person who gives runners instructions
 THUMBS_UP = ("\U0001F44D", "\U0001F44D\U0001F3FB", "\U0001F44D\U0001F3FC", "\U0001F44D\U0001F3FD", "\U0001F44D\U0001F3FE", "\U0001F44D\U0001F3FF")
-SLUGS = {"infra-manager": "INFRA MANAGER", "speed-runner": "SPEED RUNNER"}
-ROUTE = re.compile(r"^/webhook/(runner-[1-9][0-9]*|" + "|".join(SLUGS) + ")$")
+SLUGS = {"infra-manager": "HT Product Lead", "speed-runner": "SPEED RUNNER"}
+ALIASES = {"ht-product-lead": "infra-manager"}
+ROUTE = re.compile(r"^/webhook/(runner-[1-9][0-9]*|" + "|".join((*SLUGS, *ALIASES)) + ")$")
 # Every receivable target, built from constants: path segment -> (runner number or slug, file name stem).
 TARGETS = {f"runner-{i}": (str(i), f"runner-{i}") for i in range(1, 51)}
 TARGETS.update({s: (s, s) for s in SLUGS})
+TARGETS.update({alias: (slot, slot) for alias, slot in ALIASES.items()})
 
 
 def label(t):

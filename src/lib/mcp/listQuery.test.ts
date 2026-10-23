@@ -1,4 +1,3 @@
-// Run: npx tsx src/lib/mcp/listQuery.test.ts
 import assert from 'node:assert/strict'
 import {
   applyCollectionQuery,

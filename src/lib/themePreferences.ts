@@ -4,10 +4,11 @@ export const themeOptions = [
   { title: "Dark · Graphite", value: "graphite" },
   { title: "OLED black · AMOLED", value: "amoled" },
   { title: "Paper · Dia", value: "dia" },
+  { title: "Material (follows device)", value: "rounded" },
 ] as const;
 
 export type ThemePreference = (typeof themeOptions)[number]["value"];
-export type ResolvedTheme = Exclude<ThemePreference, "system">;
+export type ResolvedTheme = Exclude<ThemePreference, "system" | "rounded"> | "rounded-light" | "rounded-dark";
 export type SystemColorScheme = "light" | "dark";
 
 export const resolvedThemeDomMetadata: Record<
@@ -18,6 +19,8 @@ export const resolvedThemeDomMetadata: Record<
   graphite: { classes: ["dark", "graphite"], themeColor: "#232326" },
   amoled: { classes: ["dark", "amoled"], themeColor: "#000000" },
   dia: { classes: ["light", "dia"], themeColor: "#f6f4ef" },
+  "rounded-light": { classes: ["light", "rounded", "rounded-light"], themeColor: "#fcfcfc" },
+  "rounded-dark": { classes: ["dark", "rounded", "rounded-dark"], themeColor: "#000000" },
 };
 
 export const DEFAULT_THEME_PREFERENCE: ThemePreference = "system";
@@ -26,11 +29,11 @@ const themePreferences = new Set<ThemePreference>(
   themeOptions.map(({ value }) => value),
 );
 
-// The retired light/dark cookie values remain valid inputs so existing users
-// keep their saved preference after the palette labels change.
 export const normalizeThemePreference = (
   theme?: string,
+  roundedEnabled = false,
 ): ThemePreference | undefined => {
+  if (theme === "rounded" && !roundedEnabled) return "system";
   const normalized =
     theme === "dark" ? "graphite" : theme === "light" ? "porcelain" : theme;
 
@@ -56,11 +59,13 @@ export const resolveThemePreference = (
     return systemColorScheme === "dark" ? "amoled" : "porcelain";
   }
 
+  if (theme === "rounded") {
+    return systemColorScheme === "dark" ? "rounded-dark" : "rounded-light";
+  }
+
   return theme;
 };
 
-// Installed PWAs keep the initial document color for their native title bar.
-// Prefer dark until the pre-paint script can resolve an unpinned system theme.
 export const resolveInitialThemeColor = (
   theme: ThemePreference | undefined,
 ): string =>

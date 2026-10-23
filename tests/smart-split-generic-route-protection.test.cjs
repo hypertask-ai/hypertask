@@ -1,6 +1,7 @@
 const test = require("node:test");
 const assert = require("node:assert/strict");
 const path = require("node:path");
+const { matches } = require("./helpers/htpr-7166-fixture.cjs");
 
 const root = path.resolve(__dirname, "..");
 let loadId = 0;
@@ -14,7 +15,8 @@ const pairedLabel = {
 const pairedView = {
   id: "paired",
   project_view_id: "project-view-15",
-  project_view: { id: "project-view-15", projectId: 15 },
+  visibility: "Public",
+  project_view: { id: "project-view-15", projectId: 15, project: { ownerId: 6, members: [] } },
   board_filters: {
     matchFilters: "ALL",
     addedFilters: [
@@ -53,6 +55,7 @@ const stubModule = (relativePath, exports) => {
 
 const loadRoute = (relativePath, stubs) => {
   delete require.cache[path.join(root, relativePath)];
+  delete require.cache[path.join(root, "src/lib/api/project-writes/views/delete-rename-view.ts")];
   delete require.cache[path.join(
     root,
     "src/utils/controllers/projects/views/boardFilterWriteLock.ts",
@@ -60,7 +63,6 @@ const loadRoute = (relativePath, stubs) => {
   for (const [stubPath, exports] of Object.entries(stubs)) {
     stubModule(stubPath, exports);
   }
-  stubModule("src/lib/api/task-writes/route.ts", { withTaskWriteFlag: (handler) => handler });
 
   const jiti = require("jiti")(
     path.join(root, `tests/smart-split-generic-route-${++loadId}.cjs`),
@@ -81,6 +83,7 @@ const response = () => {
       result.statusCode = code;
       return this;
     },
+    setHeader() {},
     json(body) {
       result.body = body;
       return this;
@@ -162,6 +165,7 @@ const viewHandler = (writes, label, view) => loadRoute(
         $transaction: async function (operation) { return operation(this); },
         label: { findMany: async () => [label] },
         view: {
+          findFirst: async ({ where }) => matches(view, where) ? view : null,
           findUnique: async () => view,
           findMany: async () => [view],
           update: async () => { writes.viewUpdate += 1; },

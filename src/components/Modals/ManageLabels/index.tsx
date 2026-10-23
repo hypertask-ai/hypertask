@@ -15,15 +15,11 @@ import ConfirmModal from "../Common Modals/ConfirmActionModal";
 import { ModalContainerCustom, ModalHeaderComp } from "@/components/Common/CommonModalComponents";
 import TaskLabelComponent from "../CreateLabel/TaskLabelComponent";
 type Props = {
-    // updateColumn: (arg:any) => void,
     onClose :()=>void
-// 
 }
 
 const ManageLabels = ({onClose}: Props) => {
   const queryClient = useQueryClient();   
-// 
-    // const {updateColumn, launchProps} = props
     const [currentProject, _] = useRecoilState(currentProjectAtom)
     const [currentUser] = useRecoilState(currentUserAtom)
     const [modal] = useState<boolean>(true);
@@ -73,7 +69,6 @@ const ManageLabels = ({onClose}: Props) => {
       setSelectedLabel(undefined)
     }
 
-    // Filter labels based on search term
     const filteredLabels = labels.filter((label: ILabel) =>
       label.value.toLowerCase().includes(searchTerm.toLowerCase())
     ) || [];
@@ -154,21 +149,17 @@ const ManageLabels = ({onClose}: Props) => {
             !editMode?
 
             <ModalContainerCustom
-              // onKeyDown={handleKeyDown} 
               isOpen={modal}  
               fade={false}
-              // toggle={handleToggle}
               toggle={onClose}
               onOpened={() => searchInputRef.current?.focus()}
               show={true}
-              // onOpened={()=>getCurrentProjectSections()}  
               autoFocus={false}
               id="manage-tags-modal"
               className="paletteModalSizing sm:min-w-[560px] sm:top-[24%] max-h-[400px]">
               <ModalHeaderComp header="Manage Tags" />
               <ModalBody className="bg-modalBackground px-4 text-dense">
                 
-                {/* Search Bar */}
                 <div className="relative bg-transparent mb-2 ">
                   <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
                     <Search strokeWidth={1.75} className="h-4 w-4 text-gray-400" />

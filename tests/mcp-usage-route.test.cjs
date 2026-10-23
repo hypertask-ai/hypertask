@@ -69,7 +69,7 @@ function loadRoute({
   const originalCache = new Map(Object.entries(require.cache));
   stubbedModules.forEach(clearModule);
   stubModule("src/lib/telemetry/activationOccurrences.ts", {
-    recordAuthenticatedConnection: () => {},
+    enqueueAuthenticatedConnection: async () => null,
   });
 
   if (authBoundary) {

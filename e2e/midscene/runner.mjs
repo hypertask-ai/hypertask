@@ -98,13 +98,15 @@ async function runStep(page, agent, step, fixture) {
       return createFixtureTask(page, fixture);
     case 'saveTask': {
       const saved = page.waitForResponse((res) => {
-        if (new URL(res.url()).pathname !== '/api/tasks/create' || res.request().method() !== 'POST') return false;
+        // Quick add posts to createGlobally when the open view has filters (HTPR-6993).
+        if (!['/api/tasks/create', '/api/tasks/createGlobally'].includes(new URL(res.url()).pathname) || res.request().method() !== 'POST') return false;
         const body = JSON.parse(res.request().postData() || '{}');
         return body.title === step.value && (!fixture || body.projectId === fixture.project.id);
       }, { timeout: 30_000 });
       const [response] = await Promise.all([saved, page.locator('button::-p-text(Create task)').click()]);
       if (!response.ok()) throw new Error(`Task save failed: HTTP ${response.status()}`);
-      const task = await response.json();
+      const body = await response.json();
+      const task = body?.newTask ?? body;
       if (!task?.id || task.title !== step.value) throw new Error('Task save returned no matching task');
       return;
     }

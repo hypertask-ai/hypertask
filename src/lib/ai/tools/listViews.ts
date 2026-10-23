@@ -1,3 +1,4 @@
+import { projectVisibleViewRelations } from "@/utils/helperFunctions/Views/BoardFilterSanitizer";
 import { tool } from "ai";
 import { z } from "zod";
 import prisma from "@/lib/prisma";
@@ -30,6 +31,8 @@ export function createListViewsTool(context: ToolContext) {
 
         const viewSelect = {
           id: true,
+          userId: true,
+          project_view_id: true,
           title: true,
           slug: true,
           visibility: true,
@@ -163,6 +166,7 @@ export function createListViewsTool(context: ToolContext) {
         const allProjectViews = await prisma.project_View.findMany({
           where: { projectId: { in: projectIds } },
           select: {
+            id: true,
             default_view_id: true,
             default_view: { select: viewSelect },
             user_project_views: {
@@ -174,7 +178,8 @@ export function createListViewsTool(context: ToolContext) {
           },
         });
 
-        const allResolved = allProjectViews.flatMap((projectView) => {
+        const allResolved = allProjectViews.flatMap((raw) => {
+          const projectView = projectVisibleViewRelations(raw, user.id);
           const appliedView =
             projectView.user_project_views[0]?.appliedView ?? null;
           const defaultView = projectView.default_view;

@@ -47,7 +47,6 @@ export const includeSavedContentComment = (
     },
   };
 
-  // Now TypeScript won't complain when adding a property
   if (comment) {
     baseInclude.include.comments = {
       select: {
@@ -78,3 +77,9 @@ export const fetchProjectIds = async (userId: number) => {
 
   return idArray;
 };
+
+export const commentOnSavedTask = <
+  T extends { taskId: number; comment: { taskId: number } | null },
+>(
+  saved: T[],
+) => saved.filter((item) => item.comment?.taskId === item.taskId);

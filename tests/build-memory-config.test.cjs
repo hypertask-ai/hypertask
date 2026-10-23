@@ -44,12 +44,12 @@ for (const smoke of [false, true]) {
       assert.equal(wrapped, posthog);
       assert.equal(config.experimental.webpackBuildWorker, true);
       assert.equal(config.experimental.webpackMemoryOptimizations, true);
-      assert.equal(config.experimental.cpus, 2);
+      assert.equal(config.experimental.cpus, 1);
       assert.equal(config.experimental.parallelServerBuildTraces, smoke);
       assert.equal(config.experimental.parallelServerCompiles, undefined);
       assert.equal(config.productionBrowserSourceMaps, true);
       assert.equal(config.outputFileTracingExcludes, undefined);
-      assert.deepEqual(config.serverExternalPackages, ["isomorphic-dompurify", "jsdom"]);
+      assert.deepEqual(config.serverExternalPackages, ["isomorphic-dompurify", "jsdom", "pusher", "aws-sdk"]);
     });
   }
 }

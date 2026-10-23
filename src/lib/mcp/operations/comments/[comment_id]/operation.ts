@@ -1,8 +1,14 @@
+import { requireAgentWriteRole } from "@/lib/mcp/agents/readRoleGuard";
+import { inlineAgentImagesForUser } from "@/lib/media/inlineAgentImages.server";
+import { agentScopeEnforced, recordAgentBoardScopeMiss } from "@/lib/auth/agentScope";
+import { reportMcpOperationCrash } from '@/lib/mcp/operationCrashReport'
+import { userCanAccessTask } from "@/utils/controllers/tasks/assertTaskAccess"
 import { wrapMcpRoute, validateMcpRouteAuth as validateMcpAuth, checkMcpRouteRateLimit as checkMcpRateLimit } from '@/lib/mcp/routeWrapper'
 import { NextRequest, NextResponse } from 'next/server'
 
 import type { McpAgentSummary } from '@/lib/mcp/agents'
 import { mapVisibleMcpAgent, mcpVisibleAgentSelect } from '@/lib/mcp/agents'
+import { loadVisibleReactionAgents } from '@/lib/mcp/comments/visibleReactionAgents'
 import { resolvePublicAgentDisplayName } from '@/lib/agents/publicAgent'
 import {
   HTPR_6516_AGENT_ATTRIBUTION_FLAG,
@@ -29,6 +35,7 @@ export interface McpMentionInput {
 
 export interface UpdateCommentRequest {
   text: string
+  inline_images?: boolean
   content_type?: 'html' | 'markdown'
   mentions?: McpMentionInput[]
 }
@@ -39,17 +46,14 @@ export interface UpdateCommentResponse {
     id: number
     text: string
     createdAt: string
+    editedAt: string | null
+    editedBy: { userId: number; agentId: string | null; isAgent?: true } | null
     creatorId?: number
     agent?: McpAgentSummary
     agent_display_name?: string
   }
 }
 
-/**
- * PATCH /api/mcp/comments/:comment_id
- *
- * Updates a comment. User must be the comment creator.
- */
 export async function PATCH(request: NextRequest, props: { params: Promise<{ comment_id: string }> }) {
   return wrapMcpRoute(async (request: NextRequest) => {
   const params = await props.params;
@@ -67,6 +71,8 @@ export async function PATCH(request: NextRequest, props: { params: Promise<{ com
         { status: 401 }
       )
     }
+    const roleRefusal = await requireAgentWriteRole(ctx)
+    if (roleRefusal) return roleRefusal
     const user = ctx.user;
     const commentId = parseInt(params.comment_id)
     if (isNaN(commentId) || commentId <= 0) {
@@ -94,6 +100,9 @@ export async function PATCH(request: NextRequest, props: { params: Promise<{ com
       )
     }
 
+    if (body.inline_images !== undefined && typeof body.inline_images !== "boolean") {
+      return NextResponse.json({ success: false, error: "inline_images must be a boolean" }, { status: 400 });
+    }
     const { text, content_type, mentions } = body
 
     if (!text || typeof text !== 'string' || text.trim().length === 0) {
@@ -159,7 +168,6 @@ export async function PATCH(request: NextRequest, props: { params: Promise<{ com
       }
     }
 
-    // Find comment with task and project for access check
     const comment = await prisma.comment.findUnique({
       where: { id: commentId },
       include: {
@@ -188,13 +196,13 @@ export async function PATCH(request: NextRequest, props: { params: Promise<{ com
       )
     }
 
-    // Check project access
     const project = comment.task.project
     const hasAccess =
-      project.ownerId === user.id ||
-      project.members.some((m) => m.userId === user.id)
+      ctx.agentId && agentScopeEnforced()
+        ? await userCanAccessTask(user.id, comment.task.id, ctx.agentId, ctx.teamScope)
+        : project.ownerId === user.id || project.members.some((m) => m.userId === user.id)
 
-    if (!hasAccess) {
+    if (!hasAccess || (ctx.teamScope != null && !await userCanAccessTask(user.id, comment.task.id, ctx.agentId, ctx.teamScope))) {
       return NextResponse.json(
         {
           success: false,
@@ -204,8 +212,8 @@ export async function PATCH(request: NextRequest, props: { params: Promise<{ com
         { status: 403 }
       )
     }
+    recordAgentBoardScopeMiss(comment.task.projectId, "write");
 
-    // Only the creator can edit
     if (comment.creatorId !== user.id) {
       return NextResponse.json(
         {
@@ -245,7 +253,6 @@ export async function PATCH(request: NextRequest, props: { params: Promise<{ com
       }
     }
 
-    // Sanitize and process mentions (MCP-specific: plain text @mentions to HTML)
     let sanitizedText = formatRichTextInput(
       text.trim().replace(/\r\n/g, '\n').replace(/\r/g, '\n'),
       content_type
@@ -253,7 +260,7 @@ export async function PATCH(request: NextRequest, props: { params: Promise<{ com
     if (mentions && mentions.length > 0) {
       sanitizedText = convertPlainTextMentionsToHtml(sanitizedText, mentions)
     }
-    sanitizedText = sanitizeRichHtml(sanitizedText)
+    sanitizedText = await inlineAgentImagesForUser(sanitizeRichHtml(sanitizedText), user.id, { inlineImages: body.inline_images })
     sanitizedText = normalizeBlockHtml(sanitizedText)
 
     const textMentionIds = extractTipTapContent(sanitizedText).mentions.map((id) => parseInt(id, 10))
@@ -289,14 +296,16 @@ export async function PATCH(request: NextRequest, props: { params: Promise<{ com
       commentId,
       text: sanitizedText,
       userId: user.id,
-      agentId: ctx.agentId,
+      agentId: ctx.agentId, teamScope: ctx.teamScope,
     })
 
     await persistUrlsForComment(
       sanitizedText,
       comment.task.id,
       commentId,
-      'PUT'
+      'PUT',
+      [],
+      { userId: user.id, agentId: ctx.agentId, teamScope: ctx.teamScope }
     )
 
     const commentWithAgent = await prisma.comment.findUnique({
@@ -321,12 +330,25 @@ export async function PATCH(request: NextRequest, props: { params: Promise<{ com
       user.id
     )
 
+    const editorAgents = await loadVisibleReactionAgents(
+      updatedComment.editedByAgentId ? [updatedComment.editedByAgentId] : [],
+      user.id,
+      comment.task.projectId
+    )
     const response: UpdateCommentResponse = {
       success: true,
       comment: {
         id: updatedComment.id,
         text: updatedComment.text,
         createdAt: updatedComment.createdAt.toISOString(),
+        editedAt: updatedComment.editedAt?.toISOString() ?? null,
+        editedBy: updatedComment.editedByUserId != null
+          ? {
+              userId: updatedComment.editedByUserId,
+              agentId: updatedComment.editedByAgentId && editorAgents.has(updatedComment.editedByAgentId) ? updatedComment.editedByAgentId : null,
+              ...(updatedComment.editedByAgentId ? { isAgent: true as const } : {})
+            }
+          : null,
         creatorId: updatedComment.creatorId ?? undefined,
         ...(agent ? { agent } : {}),
         ...(hasAgentAttribution
@@ -350,6 +372,7 @@ export async function PATCH(request: NextRequest, props: { params: Promise<{ com
     return NextResponse.json(response)
   } catch (error) {
     console.error('[MCP PATCH Comment] Error:', error)
+    reportMcpOperationCrash(request, error)
     return NextResponse.json(
       {
         success: false,
@@ -363,11 +386,6 @@ export async function PATCH(request: NextRequest, props: { params: Promise<{ com
   })(request)
 }
 
-/**
- * DELETE /api/mcp/comments/:comment_id
- *
- * Deletes a comment. User must have access to the task's project.
- */
 export async function DELETE(request: NextRequest, props: { params: Promise<{ comment_id: string }> }) {
   return wrapMcpRoute(async (request: NextRequest) => {
   const params = await props.params;
@@ -385,6 +403,8 @@ export async function DELETE(request: NextRequest, props: { params: Promise<{ co
         { status: 401 }
       )
     }
+    const roleRefusal = await requireAgentWriteRole(ctx)
+    if (roleRefusal) return roleRefusal
     const user = ctx.user;
     const commentId = parseInt(params.comment_id)
     if (isNaN(commentId) || commentId <= 0) {
@@ -426,13 +446,13 @@ export async function DELETE(request: NextRequest, props: { params: Promise<{ co
       )
     }
 
-    // Check project access
     const project = comment.task.project
     const hasAccess =
-      project.ownerId === user.id ||
-      project.members.some((m) => m.userId === user.id)
+      ctx.agentId && agentScopeEnforced()
+        ? await userCanAccessTask(user.id, comment.task.id, ctx.agentId, ctx.teamScope)
+        : project.ownerId === user.id || project.members.some((m) => m.userId === user.id)
 
-    if (!hasAccess) {
+    if (!hasAccess || (ctx.teamScope != null && !await userCanAccessTask(user.id, comment.task.id, ctx.agentId, ctx.teamScope))) {
       return NextResponse.json(
         {
           success: false,
@@ -442,8 +462,8 @@ export async function DELETE(request: NextRequest, props: { params: Promise<{ co
         { status: 403 }
       )
     }
+    recordAgentBoardScopeMiss(comment.task.projectId, "write");
 
-    // Only the creator (or HyperAI) can delete
     const hyperAiId = parseInt(
       process.env.NEXT_PUBLIC_HYPERAI_ID || '332',
       10
@@ -462,28 +482,8 @@ export async function DELETE(request: NextRequest, props: { params: Promise<{ co
       )
     }
 
-    // Only the creator (or HyperAI) can delete
-    // const hyperAiId = parseInt(
-    //   process.env.NEXT_PUBLIC_HYPERAI_ID || '332',
-    //   10
-    // )
-    // const canDelete =
-    //   comment.creatorId === user.id || comment.creatorId === hyperAiId
-
-    // if (!canDelete) {
-    //   return NextResponse.json(
-    //     {
-    //       success: false,
-    //       error: 'Permission denied',
-    //       message: 'You can only delete your own comments'
-    //     },
-    //     { status: 403 }
-    //   )
-    // }
-
     await deleteCommentService({
       commentId,
-      // userId: user.id
     })
 
     void broadcastTaskComment(comment.task.id, { originUserId: user.id })
@@ -497,6 +497,7 @@ export async function DELETE(request: NextRequest, props: { params: Promise<{ co
     )
   } catch (error) {
     console.error('[MCP DELETE Comment] Error:', error)
+    reportMcpOperationCrash(request, error)
     return NextResponse.json(
       {
         success: false,

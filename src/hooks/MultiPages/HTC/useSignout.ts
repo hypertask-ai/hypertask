@@ -31,29 +31,16 @@ export const useSignout = (_appHandler?: any) => {
       }
     }
 
-    // Release this browser's push token FIRST, while the session still exists:
-    // the route now requires one, and revoking the session or clearing cookies
-    // beforehand would leave the token registered and this browser receiving
-    // the departing account's notifications (HTPR-4865).
-    // IndexedDB deletion is the mandatory local precondition above; this remains
-    // the first operation in the authenticated cleanup sequence.
     if (fcmToken) {
       try {
         await axios.delete(`/api/users/addDevice?fcmToken=${fcmToken}`);
       } catch {
-        // Notification-device cleanup must not strand an already-signed-out
-        // user in the app instead of taking them to /login.
       }
     }
 
-    // A legacy-only session may not have a Better Auth session to revoke.
-    // Full logout is best-effort: no failed cleanup step may prevent the
-    // remaining cookies from being cleared or the browser reaching /login.
-    // That best-effort sequence begins only after local deletion is confirmed.
     try {
       await signOutAllAccounts();
     } catch {
-      // Continue with local and server-side cookie cleanup.
     }
 
     try {

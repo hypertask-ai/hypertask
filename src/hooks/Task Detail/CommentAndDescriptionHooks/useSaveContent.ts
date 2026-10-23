@@ -1,7 +1,6 @@
 import { hasHaikuByokProviderFlags } from "@/lib/byokSelectedProviderGate";
 import { useFlag } from "@/hooks/useFlag";
-import { HTPR_7010_HAIKU_5_5_FLAG, LUNA_FREE_PLAN_FLAG } from "@/lib/flags/keys";
-import { useHaikuDefaultFlag } from "@/hooks/useHaikuDefaultFlag";
+import { useAiDefaultModelContext, useHaikuDefaultFlag } from "@/hooks/useHaikuDefaultFlag";
 import { useTaskContext } from "@/lib/contexts/TaskDetail/TaskProvider";
 import { measuredSizeNumber, measuredSizeString } from "@/lib/attachments/measuredSize";
 import {
@@ -89,11 +88,11 @@ export default function useSaveContent() {
   const currentBoardBilling = useCurrentBoardBilling();
   const { data: userPreferences } = useGetUserPreferences();
   const haikuDefaultEnabled = useHaikuDefaultFlag();
-  const haiku55Enabled = useFlag(HTPR_7010_HAIKU_5_5_FLAG) || haikuDefaultEnabled;
-  const lunaFree = useFlag(LUNA_FREE_PLAN_FLAG) || haikuDefaultEnabled;
+  const haiku55Enabled = true;
   const defaultBilling = currentBoardBilling;
+  const defaultContext = useAiDefaultModelContext(defaultBilling?.teamId);
   const defaultModelOption = haikuDefaultEnabled || haiku55Enabled
-    ? getDefaultAiModelOptionForPlan(defaultBilling?.storePlanId, hasHaikuByokProviderFlags(defaultBilling?.byokProviderFlags), lunaFree, true, haikuDefaultEnabled)
+    ? getDefaultAiModelOptionForPlan(defaultBilling?.storePlanId, hasHaikuByokProviderFlags(defaultBilling?.byokProviderFlags), true, haikuDefaultEnabled, defaultContext)
     : defaultAiModelOption;
   const improveWritingOptionIds = getAiModelPreferenceIds(
     userPreferences.aiModelPreferences,
@@ -118,7 +117,6 @@ export default function useSaveContent() {
     });
   };
 
-  //  --------------------- HTML PARSE TO DETECT IMAGES TO UPLOAD TO AWS + SEPARATE LINKS TO SAVE THEM AGAINST COMMENT AND TASK IN DB
   function processHtml(
     htmlString: string,
     callback?: React.Dispatch<React.SetStateAction<number>>
@@ -139,7 +137,6 @@ export default function useSaveContent() {
         let hyperMention: THyperMention = undefined;
         let imageMention: TImageMention = undefined;
 
-        // Helper function to add URL if not already present
         const addUrlIfUnique = (url: string, title: string) => {
           if (url && !urlsArray.includes(url)) {
             uniqueAnchorUrls.push({
@@ -151,7 +148,6 @@ export default function useSaveContent() {
           }
         };
 
-        // Convert project span tags to anchor tags
         const spanProjectElements = doc.querySelectorAll(
           'span[data-label^="project"]'
         );
@@ -178,7 +174,6 @@ export default function useSaveContent() {
           }
         });
 
-        // Convert task span tags to anchor tags
         const spanElements = doc.querySelectorAll('span[data-label="task"]');
         spanElements.forEach((spanElement) => {
           try {
@@ -208,7 +203,6 @@ export default function useSaveContent() {
           }
         });
 
-        // Process user mentions
         const userSpans = doc.querySelectorAll('[data-label^="name"]');
         let hyperMentionProcessed = false;
 
@@ -277,7 +271,6 @@ export default function useSaveContent() {
           }
         });
 
-        // Process agent mentions
         const agentSpans = doc.querySelectorAll('[data-label^="agent"]');
         const seenAgentIds = new Set<string>();
         agentSpans.forEach((agentSpan) => {
@@ -294,7 +287,6 @@ export default function useSaveContent() {
           }
         });
 
-        // Convert blob URL to base64
         const blobToBase64 = async (url: string): Promise<string> => {
           try {
             const response = await fetch(url);
@@ -314,7 +306,6 @@ export default function useSaveContent() {
           }
         };
 
-        // Process and convert images
         const convertImages = async (): Promise<void> => {
           for (const imgTag of imgTags) {
             try {
@@ -350,7 +341,6 @@ export default function useSaveContent() {
           }
         };
 
-        // Process embed URLs
         const processEmbedUrls = (): void => {
           embedTags.forEach((embed) => {
             try {
@@ -393,10 +383,8 @@ export default function useSaveContent() {
           });
         };
 
-        // Process all elements
         convertImages()
           .then(() => {
-            // Process anchor tags
             anchorTags.forEach((anchor) => {
               try {
                 const url = anchor.getAttribute("href");
@@ -409,7 +397,6 @@ export default function useSaveContent() {
               }
             });
 
-            // Process embed URLs
             processEmbedUrls();
 
             const returnHtml: modifiedHtml = {
@@ -464,7 +451,6 @@ export default function useSaveContent() {
       setEditMode(null);
     }
   };
-  // ---------------------- SAVE DESCRIPTION -------------------
   const handleSubmit = async (
     unprocessedHTML: string,
     result: modifiedHtml | null,
@@ -483,7 +469,6 @@ export default function useSaveContent() {
     scrollVirtualize("description");
     if (result) {
       try {
-        // const result: any = await processHtml(content);
         const newTask = {
           description: result.html,
           id: currentTask?.id,
@@ -496,9 +481,7 @@ export default function useSaveContent() {
           taskId: currentTask?.id,
         };
         const response = await updateTask(newTask, payload, "SaveDescription");
-        // console.log(data);
 
-        //remove duplicates
         const uniquePostFollowerBody = result.PostFollowerBody.filter(
           (x: any, index: number, self: any[]) =>
             index === self.findIndex((y: any) => y.userId === x.userId)
@@ -564,7 +547,7 @@ export default function useSaveContent() {
             ...comments,
             {
               ...newComment,
-              text: "", // Consider providing a meaningful text or removing this field if not needed
+              text: "",
               taskId: currentTask?.id,
               activity: {
                 type: "TaskDescriptionUpdate",
@@ -625,7 +608,6 @@ export default function useSaveContent() {
     return saved;
   };
 
-  // ---------------------- SAVE COMMENTS -------------------
   const updateCommentHandler = async (
     content: string | undefined,
     id: string,
@@ -644,7 +626,6 @@ export default function useSaveContent() {
           scrollVirtualize("comment", parseInt(currentIndex));
         }
         const result = await processHtml(content);
-        // console.log("🚀 ~ file: TaskDetailComp.tsx:1616 ~ updateCommentHandler ~ result:", result)
         const comment = comments.find((comment) => comment.id === id);
         if (!comment) {
           toast.error("This comment no longer exists. Refresh the task and try again.");
@@ -753,7 +734,7 @@ export default function useSaveContent() {
               if (comment.id === data.id) {
                 return data;
               }
-              return comment; // Keep other comments unchanged
+              return comment;
             });
             return updatedComments;
           });
@@ -761,7 +742,7 @@ export default function useSaveContent() {
           setEditMode(null);
           return true;
         } else {
-          console.error("Error updating comment:", data.error); // You might want to handle the error in a better way
+          console.error("Error updating comment:", data.error);
           toast.error("Could not update comment. Your changes are still here.");
         }
       } catch (error) {
@@ -772,7 +753,6 @@ export default function useSaveContent() {
     return false;
   };
 
-  // ---------------------- CREATE COMMENT -------------------
   const createComment = async (
     result: any,
     content: string,
@@ -780,16 +760,9 @@ export default function useSaveContent() {
     attachments: any[],
     uploadingCommentId: number,
     rawAttachmentsForHyper?: File[],
-    // The task this comment was composed against, captured when the user hit
-    // send. currentTask is only a fallback: by the time this runs the user may
-    // already be looking at a different task (HTPR-3175).
     composedForTaskId?: number,
     composedForOwnerId?: number,
-    // Same capture for the board: HyperAI validates taskId+projectId together,
-    // so a live currentProject after navigation 404s the mention (HTPR-6405).
     composedForProjectId?: number,
-    // Model/provider/BYOK from send time so mid-upload navigation cannot mix
-    // board A target with board B AI settings (HTPR-6405 OCR).
     composedModelSource?: string,
     composedModelOptionId?: string,
     composedByokProviderFlags?: ITeamByokApiKey[],
@@ -829,8 +802,6 @@ export default function useSaveContent() {
           ownerId: mentionOwnerId,
         }));
       } catch (err: any) {
-        // HTPR-3803: a logged-off user gets a 401 here. Send them to login
-        // instead of stranding them on the task page with only a toast.
         if (err?.response?.status === 401) {
           toast.error("Please log in to comment");
           window.location.href = "/login";
@@ -882,7 +853,6 @@ export default function useSaveContent() {
           modelKey: result.imageMention.modelKey,
         });
 
-      // ===================== add attachments and urls ===========
       const { AttachmentObjectsToPush, AttachmentUrls } =
         await uploadAttachmentsComments(attachments, data.id);
 
@@ -933,20 +903,10 @@ export default function useSaveContent() {
         if (!_mbl) {
           toast("Comment added successfully!");
         }
-        // Mobile: no "sent" toast. Sending a comment isn't revertible and the
-        // now-empty composer is confirmation enough — a toast here only got in
-        // the way. Reserve toasts for revertible actions (the undo pill).
-        // Per Valentin, 2026-07-24.
 
-        // Comment and mention emails are handled server-side in createCommentService
-        // so every transport sends them exactly once.
         let urlsToAdd = [...result.urls, ...AttachmentUrls];
 
         if (urlsToAdd.length > 0) {
-          // Must await: createComment resolves into a ~100ms setTimeout -> navigateToNextTask
-          // in UploadingCommentContainer. A fire-and-forget fetch races that navigation/unmount,
-          // so the attachment row never lands and the comment reloads empty (HTPR-3794).
-          // The edit path (updateComment) already awaits this same call.
           await fetch(`/api/urls/addIntoTask`, {
             method: "POST",
             headers: { "Content-Type": "application/json" },
@@ -965,7 +925,7 @@ export default function useSaveContent() {
   const addRelationsHandler = async (relations: any) => {
     const response = await addRelations(relations);
     if (response) {
-      // @ts-ignore
+      // @ts-expect-error Spreading a nullable task produces optional required ITask fields.
       setCurrentTask((prev) => {
         return {
           ...prev,
@@ -981,18 +941,10 @@ export default function useSaveContent() {
   const uploadAttachmentsDescription = async (
     attachments: any[] | undefined
   ) => {
-    // =========================== handle incoming attachments + already uploaded attachments
-    // missing source means it needs to be uploaded first *WE ARE CHANGING THAT NOW
-    // NEW:
-    //   1: We will append source from the deepest component, send it back in callbacl.
-    //   2: In the parent uploading component, we will then send back the entire array,
-    //   3: an item without a non-negative persisted id is a new attachment.
-
     var AttachmentUrls: IUrl[] = [];
     var AttachmentObjectsToPush: IAttachment[] = [];
 
     if (attachments) {
-      // Reloaded attachments can omit createdAt/taskId; keep the id-based groups disjoint.
       const attachmentsToUpload = attachments.filter(
         (item) => !(item.id > -1)
       );
@@ -1001,11 +953,6 @@ export default function useSaveContent() {
       );
 
       if (previousAttachments || attachmentsToUpload) {
-        // const uploadedAttachments: string[] = await uploadDocumentsToS3(
-        //   attachmentsToUpload,
-        //   currentTask?.id!
-        // );
-
         const timenow = Date.now();
         attachmentsToUpload.forEach((attch, index) => {
           if (attch) {
@@ -1063,15 +1010,7 @@ export default function useSaveContent() {
     var AttachmentUrls: IUrl[] = [];
     var AttachmentObjectsToPush: IAttachment[] = [];
 
-    // NEW:
-    //   1: We will append source from the deepest component, send it back in callbacl.
-    //   2: In the parent uploading component, we will then send back the entire array,
-    //   3: instead of reading URL, we'll read .source because that means the file is uploaded and ready to add.
 
-    // const urlStrings: string[] = await uploadDocumentsToS3(
-    //   newCommentAttachments,
-    //   currentTask?.id!
-    // );
     newCommentAttachments.forEach((newAtt, index) => {
       const timenow = Date.now();
 
@@ -1098,7 +1037,6 @@ export default function useSaveContent() {
     return { AttachmentUrls, AttachmentObjectsToPush };
   };
 
-  // API HANDLER, based on save type, redirect to correct api functions
   const redirectAPI = async ({
     content,
     text,
@@ -1121,10 +1059,7 @@ export default function useSaveContent() {
     );
     const totalAttachments = imgTags.length + attachments.length;
 
-    // console.log("🚀 ~ useSaveContent ~ attachments:", attachments)
     if (mode === "create-comment") {
-      // =========== first get the documents and upload them from inside that component thingy.
-      // Initialize navigation parameters
       let navigateToNextParams: NavigateToNextTaskParams = {
         archiveNotification: inbox,
         shouldNavigate: movetonext,
@@ -1143,10 +1078,6 @@ export default function useSaveContent() {
           attachments: attachments,
           totalAttachments,
           navigateToNextParams,
-          // Captured here, at send time. The upload finishes inside another
-          // component that re-reads currentTask, so a comment posted while
-          // attachments were still uploading landed on whatever task the user
-          // had navigated to by then (HTPR-3175).
           taskId: currentTask?.id,
           ownerId: currentTask?.userId,
           projectId: currentProject?.id,

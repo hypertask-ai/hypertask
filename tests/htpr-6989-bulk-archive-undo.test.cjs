@@ -6,8 +6,6 @@ const ts = require("typescript");
 const { load } = require("./task-route-loader.cjs");
 
 const root = path.resolve(__dirname, "..");
-const bugfixKey = "htpr-6989-bulk-archive-undo";
-const routerKey = "htpr-6923-app-router-writes";
 const originalRevision = "008e6325caf9a521a2f8d1dd9fb642a0b74b6f3d";
 const bulkPage = "src/pages/api/notifications/(un)archiveBulk.ts";
 const bulkWeb = "src/lib/api/notification-writes/archive-bulk.ts";
@@ -30,13 +28,13 @@ function compileOriginal(file, mocks) {
   return mod.exports;
 }
 
-function fixture(api, flagOn, original = false) {
+function fixture(api, original = false) {
   const rows = [101, 102, 103].map((id, index) => ({
     id, taskId: 201 + index, userId: 985, agentId: null, fromUserId: 7,
     type: "TaskMovedToInbox", status: "Normal", archivedAt: null,
   }));
   rows.push({ ...rows[0], id: 104, userId: 7 }, { ...rows[1], id: 105, status: "Deleted" });
-  const writes = [], flags = [], broadcasts = [];
+  const writes = [], broadcasts = [];
   const matches = (row, where) => Object.entries(where).every(([key, value]) => {
     if (value && typeof value === "object" && !(value instanceof Date)) {
       if (Object.hasOwn(value, "in")) return value.in.includes(row[key]);
@@ -64,15 +62,6 @@ function fixture(api, flagOn, original = false) {
   const mocks = {
     "@/lib/prisma": { default: db },
     "@/lib/auth/getSessionUser": { getSessionUser: async () => ({ userId: 985 }) },
-    "@/lib/flags": {
-      HTPR_6989_BULK_ARCHIVE_UNDO_FLAG: bugfixKey,
-      isFeatureEnabled: async (key, userId) => {
-        flags.push([key, userId]);
-        assert.equal(userId, 985, "flag must use the signed user");
-        assert.ok([bugfixKey, routerKey].includes(key), `unexpected flag ${key}`);
-        return key === bugfixKey ? flagOn : api === "compat";
-      },
-    },
     "@/lib/realtime/server": {
       socketIdFromHeader: () => "123.456",
       broadcastInboxChange: async (...args) => broadcasts.push(args),
@@ -80,7 +69,8 @@ function fixture(api, flagOn, original = false) {
   };
   const web = original ? compileOriginal(bulkWeb, mocks).POST : load(bulkWeb, mocks).POST;
   mocks["@/lib/api/notification-writes/archive-bulk"] = { POST: web };
-  const page = original ? compileOriginal(bulkPage, mocks).default : load(bulkPage, mocks).default;
+  // The unfixed variant swaps only the shared Web handler, which holds the bug; the Pages adapter is always current.
+  const page = load(bulkPage, mocks).default;
   const markPage = load("src/pages/api/notifications/markAsDone.ts", mocks).default;
   const markWeb = load("src/lib/api/notification-writes/mark-done.ts", mocks).GET;
   const undo = load("src/utils/undoActions/helperFuncs.ts", {
@@ -119,11 +109,11 @@ function fixture(api, flagOn, original = false) {
     };
     try { return await undo(data); } finally { global.fetch = saved; }
   }
-  return { rows, writes, flags, broadcasts, inboxIds, invoke, clientUndo };
+  return { rows, writes, broadcasts, inboxIds, invoke, clientUndo };
 }
 
-async function bulkRoundTrip(api, flagOn, original = false) {
-  const fx = fixture(api, flagOn, original);
+async function bulkRoundTrip(api, original = false) {
+  const fx = fixture(api, original);
   const notificationIds = fx.rows.slice(0, 3).map(({ id, taskId }) => ({ notificationId: id, taskId, userId: 7 }));
   assert.deepEqual(fx.inboxIds(), [101, 102, 103]);
   const archived = await fx.invoke({ notificationIds, status: "Archive" });
@@ -142,35 +132,30 @@ async function bulkRoundTrip(api, flagOn, original = false) {
   assert.equal(fx.broadcasts.length, 2);
   assert.deepEqual(fx.broadcasts[1], [985, { originUserId: 985 }, "123.456"]);
   // A fresh read of persisted rows, rather than an optimistic cache, models reload.
-  assert.deepEqual(fx.inboxIds(), flagOn ? [101, 102, 103] : [], `${api}: bulk undo must restore the persisted inbox`);
-  if (!original) assert.equal(fx.flags.filter(([key]) => key === bugfixKey).length, 1, "only undo reads the fix flag");
-  if (flagOn) assert.ok(fx.rows.slice(0, 3).every(row => row.archivedAt === null));
-  else assert.ok(fx.rows.slice(0, 3).every(row => row.archivedAt instanceof Date));
+  assert.deepEqual(fx.inboxIds(), [101, 102, 103], `${api}: bulk undo must restore the persisted inbox`);
+  assert.ok(fx.rows.slice(0, 3).every(row => row.archivedAt === null));
 }
 
-test("bulk undo restores all three persisted inbox items with the bugfix on, preserves Off and single undo on both API paths", async () => {
+test("bulk undo restores all three persisted inbox items and preserves single undo on both API paths", async () => {
   const savedLog = console.log;
   console.log = () => {};
   try {
-    for (const api of ["pages", "compat", "web"]) {
+    for (const api of ["pages", "web"]) {
       if (proveUnfixed) {
-        await assert.rejects(() => bulkRoundTrip(api, true, true), error =>
+        await assert.rejects(() => bulkRoundTrip(api, true), error =>
           error.code === "ERR_ASSERTION" && error.message.includes("bulk undo must restore the persisted inbox") &&
           JSON.stringify(error.actual) === "[]" && JSON.stringify(error.expected) === "[101,102,103]",
         );
         continue;
       }
-      for (const flagOn of [true, false]) {
-        await bulkRoundTrip(api, flagOn);
-        const fx = fixture(api, flagOn);
-        assert.equal((await fx.invoke({}, true)).status, 200);
-        assert.deepEqual(fx.inboxIds(), [102, 103]);
-        await fx.clientUndo({ notification: { id: "101", taskId: 201, type: "TaskMovedToInbox" }, currentUser: { id: 985 } });
-        assert.deepEqual(fx.inboxIds(), [101, 102, 103], `${api}: single undo must keep working`);
-        assert.equal(fx.rows[0].archivedAt, null);
-        assert.ok(!fx.flags.some(([key]) => key === bugfixKey), "single undo does not use the bulk fix");
-      }
-      const fx = fixture(api, true);
+      await bulkRoundTrip(api);
+      const single = fixture(api);
+      assert.equal((await single.invoke({}, true)).status, 200);
+      assert.deepEqual(single.inboxIds(), [102, 103]);
+      await single.clientUndo({ notification: { id: "101", taskId: 201, type: "TaskMovedToInbox" }, currentUser: { id: 985 } });
+      assert.deepEqual(single.inboxIds(), [101, 102, 103], `${api}: single undo must keep working`);
+      assert.equal(single.rows[0].archivedAt, null);
+      const fx = fixture(api);
       assert.equal((await fx.invoke({ notificationIds: [{ notificationId: 104 }], status: "Normal" })).status, 403);
       assert.deepEqual(fx.writes, [], "foreign notification rejects before writing");
       const missing = await fx.invoke({ notificationIds: [{ notificationId: 999 }], status: "Normal" });

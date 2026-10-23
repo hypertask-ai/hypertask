@@ -1,8 +1,9 @@
+import { requireAgentWriteRole } from '@/lib/mcp/agents/readRoleGuard'
 import { wrapMcpRoute, checkMcpRouteRateLimit as checkMcpRateLimit, validateMcpRouteAuth as validateMcpAuth } from '@/lib/mcp/routeWrapper'
 import { NextRequest, NextResponse } from 'next/server'
 
 import prisma from '@/lib/prisma'
-import { findTaskByIdentifier } from '@/lib/mcp/tasks/resolveTask'
+import { findTaskByIdentifier, taskIdentifierErrorResponse } from '@/lib/mcp/tasks/resolveTask'
 import { parseEvidenceInput } from '@/lib/mcp/tasks/evidence'
 
 function unauthorized() {
@@ -22,11 +23,6 @@ const idFor = (v: unknown): number | null =>
 const ticketFor = (v: unknown): string | null =>
   typeof v === 'string' && v.trim() !== '' ? v.trim() : null
 
-/**
- * POST /api/mcp/tasks/evidence
- * Attach typed proof-of-work (test run, screenshot, deploy link, diff) to a task.
- * Body: { task_id | ticket_number, project_id?, type?, title?, url?, summary? }.
- */
 export async function POST(request: NextRequest) {
   return wrapMcpRoute(async (request: NextRequest) => {
   try {
@@ -34,6 +30,8 @@ export async function POST(request: NextRequest) {
     if (rateLimited) return rateLimited
     const ctx = await validateMcpAuth(request)
     if (!ctx) return unauthorized()
+    const roleRefusal = await requireAgentWriteRole(ctx)
+    if (roleRefusal) return roleRefusal
 
     let body: Record<string, unknown>
     try {
@@ -59,7 +57,7 @@ export async function POST(request: NextRequest) {
     const task = await findTaskByIdentifier(
       ctx.user,
       { task_id: taskId, ticket_number: ticketNumber, project_id: projectId },
-      ctx.agentId
+      ctx.agentId, undefined, ctx.teamScope
     )
     if (!task) {
       return NextResponse.json(
@@ -85,6 +83,8 @@ export async function POST(request: NextRequest) {
 
     return NextResponse.json({ success: true, evidence }, { status: 201 })
   } catch (error) {
+    const identifierResponse = taskIdentifierErrorResponse(error)
+    if (identifierResponse) return identifierResponse
     console.error('[MCP Task Evidence] POST Error:', error)
     return NextResponse.json({ success: false, error: 'Internal server error' }, { status: 500 })
   }
@@ -92,10 +92,6 @@ export async function POST(request: NextRequest) {
   })(request)
 }
 
-/**
- * GET /api/mcp/tasks/evidence?task_id|ticket_number&project_id
- * List the evidence attached to a task, newest first.
- */
 export async function GET(request: NextRequest) {
   return wrapMcpRoute(async (request: NextRequest) => {
   try {
@@ -115,7 +111,7 @@ export async function GET(request: NextRequest) {
     const task = await findTaskByIdentifier(
       ctx.user,
       { task_id: taskId, ticket_number: ticketNumber, project_id: projectId },
-      ctx.agentId
+      ctx.agentId, undefined, ctx.teamScope
     )
     if (!task) {
       return NextResponse.json(
@@ -134,6 +130,8 @@ export async function GET(request: NextRequest) {
 
     return NextResponse.json({ success: true, taskId: task.id, evidence })
   } catch (error) {
+    const identifierResponse = taskIdentifierErrorResponse(error)
+    if (identifierResponse) return identifierResponse
     console.error('[MCP Task Evidence] GET Error:', error)
     return NextResponse.json({ success: false, error: 'Internal server error' }, { status: 500 })
   }

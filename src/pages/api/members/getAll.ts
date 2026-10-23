@@ -13,7 +13,7 @@ const handler: NextApiHandler = async (
   }
 
   try {
-    const { projectId, teamMembers, teamId } = req.query;
+    const { projectId, teamMembers } = req.query;
     const parsedProjectId = Number(projectId);
     if (!Number.isInteger(parsedProjectId) || parsedProjectId < 1) {
       return res.status(200).json([]);
@@ -29,7 +29,7 @@ const handler: NextApiHandler = async (
         status: "Normal",
         ...getProjectWhere(userId),
       },
-      select: { id: true },
+      select: { id: true, teamId: true },
     });
     if (!board) return res.status(404).json({ message: "Board not found" });
 
@@ -37,7 +37,7 @@ const handler: NextApiHandler = async (
       String(parsedProjectId),
       { id: userId },
       teamMembers,
-      teamId,
+      board.teamId ?? undefined,
     );
     return res.status(response.status).json(response.json);
   } catch (error) {

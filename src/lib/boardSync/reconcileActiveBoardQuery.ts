@@ -21,9 +21,6 @@ export const isBoardTasksQueryForProject = (
 ): boolean =>
   queryKey[0] === "boardTasks" && queryKey[2] === projectId;
 
-// `projectsAll` hydrates its active board from the five-minute `boardTasks`
-// side cache. Expire that snapshot first, or an otherwise-correct refetch can
-// republish stale tasks after a realtime event.
 export async function reconcileActiveBoardQuery(
   queryClient: BoardQueryClient,
   projectId: number,
@@ -35,11 +32,6 @@ export async function reconcileActiveBoardQuery(
   await queryClient.refetchQueries({ queryKey: ["projectsAll"] });
 }
 
-// HTPR-6166: a change on one board used to refetch every project the account can
-// reach before the open board could repaint. Fetch only this board's tasks and
-// patch its own cache entry instead. Reconnect keeps the full reconcile above:
-// re-establishing the session is also when access to every board is re-proved
-// and board metadata (renames, new shares) refreshes.
 export async function reconcileActiveBoardTasks(
   queryClient: BoardQueryClient,
   projectId: number,
@@ -49,8 +41,6 @@ export async function reconcileActiveBoardTasks(
   let payload;
   try {
     const queryKey = BOARD_TASKS_KEY(projectId, userId);
-    // A live change must not join a prefetch that started before the event.
-    // fetchQuery shares that in-flight promise, so cancel it first (HTPR-5690).
     await queryClient.cancelQueries({ queryKey, exact: true }, { revert: false });
     payload = await queryClient.fetchQuery({
       queryKey,
@@ -60,18 +50,12 @@ export async function reconcileActiveBoardTasks(
   } catch (error) {
     const status = (error as { response?: { status?: number } } | null)
       ?.response?.status;
-    // An outage must not turn every background poll into a board loading flash.
-    // Access failures still refresh the account list to remove revoked boards.
     if (options?.background && status !== 401 && status !== 403 && status !== 404) {
       return;
     }
-    // Access loss and fetch failures fall back to the account-wide path so a
-    // revoked board cannot stay painted from the old cache.
     await reconcileActiveBoardQuery(queryClient, projectId);
     return;
   }
-  // Re-read the live cache at commit time. An account switch or a missing
-  // project during the request must not write a foreign payload.
   if (!patchProjectIntoCache(queryClient, projectId, payload, userId)) {
     await reconcileActiveBoardQuery(queryClient, projectId);
   }

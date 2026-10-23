@@ -98,7 +98,7 @@ test("progressive placeholders preserve navigation and focus identity", () => {
   assert.match(placeholder, /onReveal\(task\.id, true\)/);
   assert.match(placeholder, /onOpen\(task\)/);
   assert.match(section, /setTasksPlayList\(tasksPlayList\)/);
-  assert.match(section, /navigateToTask\(task\.projectId, task\.uniqueIndex, "push", undefined, includeCachedTask \? task : undefined\)/);
+  assert.match(section, /navigateToTask\(task\.projectId, task\.uniqueIndex, "push", undefined, task\)/);
   assert.match(section, /pendingFocusTaskId/);
   assert.match(section, /new MutationObserver/);
   assert.doesNotMatch(section, /attempts < 10/);
@@ -111,7 +111,7 @@ test("drag capture mounts every card before dimensions are collected", () => {
   assert.match(placeholder, /provided\.draggableProps/);
   assert.match(task, /dragProvided \? \(/);
   assert.match(homepage, /onBeforeCapture={handleBeforeCapture}/);
-  assert.match(homepage, /wraps this responder in ReactDOM\.flushSync/);
+  assert.match(fs.readFileSync(require.resolve("@hello-pangea/dnd"), "utf8"), /ReactDOM\.flushSync\(onBeforeCapureCallback\)/);
   assert.match(homepage, /draggableId\.startsWith\("task-"\)/);
   assert.match(homepage, /setRenderAllTasks\(true\)/);
   assert.match(homepage, /setRenderAllTasks\(false\)/);

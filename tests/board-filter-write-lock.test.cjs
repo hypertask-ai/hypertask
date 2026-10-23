@@ -100,7 +100,7 @@ test("native view creation uses the validating board-filter write helper", () =>
     "utf8",
   );
   const createView = source.slice(source.indexOf("export async function createView"), source.indexOf("export type UpdateViewInput"));
-  assert.match(createView, /withBoardFilterWriteLock\(projectId, board_filters/);
+  assert.match(createView, /prisma\.\$transaction\(async \(tx\) => \{[\s\S]*await acquireBoardFilterWriteLock\(tx, projectId\);\s*await validateBoardFilterLabelReferences\(tx, projectId, board_filters\);\s*const view = await tx\.view\.create\(/);
 });
 
 test("a writer waiting behind deletion rejects a missing label before writing", async () => {
@@ -161,27 +161,27 @@ test("every concurrent existing-board filter writer participates in the lock pro
   const source = (relativePath) => fs.readFileSync(path.join(root, relativePath), "utf8");
 
   assert.equal(
-    (source("src/pages/api/projects/views/create-view.ts").match(/withBoardFilterWriteLock\(/g) ?? []).length,
+    (source("src/lib/api/project-writes/views/create-view.ts").match(/withBoardFilterWriteLock\(/g) ?? []).length,
     2,
   );
   assert.equal(
-    (source("src/pages/api/projects/views/update-view.ts").match(/withBoardFilterWriteLock\(/g) ?? []).length,
+    (source("src/lib/api/project-writes/views/update-view.ts").match(/withBoardFilterWriteLock\(/g) ?? []).length,
     1,
   );
   assert.equal(
-    (source("src/pages/api/projects/views/unsaved-view.ts").match(/withBoardFilterWriteLock\(/g) ?? []).length,
+    (source("src/lib/api/project-writes/views/unsaved-view.ts").match(/withBoardFilterWriteLock\(/g) ?? []).length,
     2,
   );
   assert.equal(
-    (source("src/lib/mcp/views/services.ts").match(/withBoardFilterWriteLock\(/g) ?? []).length,
+    (source("src/lib/mcp/views/services.ts").match(/acquireBoardFilterWriteLock\(/g) ?? []).length,
+    3,
+  );
+  assert.equal(
+    (source("src/lib/api/project-writes/views/create-view.ts").match(/assertViewIsNotManagedSmartSplit\(/g) ?? []).length,
     1,
   );
   assert.equal(
-    (source("src/pages/api/projects/views/create-view.ts").match(/assertViewIsNotManagedSmartSplit\(/g) ?? []).length,
-    1,
-  );
-  assert.equal(
-    (source("src/pages/api/projects/views/update-view.ts").match(/assertViewIsNotManagedSmartSplit\(/g) ?? []).length,
+    (source("src/lib/api/project-writes/views/update-view.ts").match(/assertViewIsNotManagedSmartSplit\(/g) ?? []).length,
     1,
   );
   assert.equal(
@@ -189,7 +189,7 @@ test("every concurrent existing-board filter writer participates in the lock pro
     2,
   );
   assert.equal(
-    (source("src/pages/api/projects/views/smart-split.ts").match(/acquireBoardFilterWriteLock\(tx, projectId\)/g) ?? []).length,
+    (source("src/lib/api/project-writes/views/smart-split.ts").match(/acquireBoardFilterWriteLock\(tx, projectId\)/g) ?? []).length,
     3,
   );
   assert.equal(
@@ -201,7 +201,7 @@ test("every concurrent existing-board filter writer participates in the lock pro
     1,
   );
   assert.equal(
-    (source("src/pages/api/projects/views/delete-rename-view.ts").match(/assertViewIsNotManagedSmartSplit\(/g) ?? []).length,
-    2,
+    (source("src/lib/api/project-writes/views/delete-rename-view.ts").match(/assertViewIsNotManagedSmartSplit\(/g) ?? []).length,
+    1,
   );
 });

@@ -1,3 +1,5 @@
+import { withAgentScopeRequest } from "@/lib/auth/agentScope";
+import { getSessionUser } from "@/lib/auth/getSessionUser";
 import { loadCurrentUser } from "@/lib/auth/currentUser";
 import { HTPR_6924_REST_COMPAT_FLAG, isFeatureEnabled } from "@/lib/flags";
 import prisma from "@/lib/prisma";
@@ -27,13 +29,17 @@ async function getCurrentUserFromCookies(): Promise<CookieUser | null> {
 }
 
 export async function GET(request: NextRequest) {
+  return withAgentScopeRequest(request, () => getVelocityReport(request));
+}
+
+async function getVelocityReport(request: NextRequest) {
+  const session = await getSessionUser(request.headers).catch(() => null);
   const currentUser = await loadCurrentUser(request.headers, true).catch(() => null);
   let restCompat = false;
   if (currentUser) {
     try {
       restCompat = await isFeatureEnabled(HTPR_6924_REST_COMPAT_FLAG, currentUser.userId);
     } catch {
-      // Flag lookup failure preserves the legacy entry path.
     }
   }
   const cookieUser = restCompat && currentUser
@@ -43,6 +49,9 @@ export async function GET(request: NextRequest) {
   if (!Number.isInteger(userId) || userId <= 0) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
+
+  const actingUserId = session?.agentId ? session.userId : userId;
+  const actingAgentId = session?.agentId;
 
   const projectId = Number(request.nextUrl.searchParams.get("projectId"));
   if (!Number.isInteger(projectId) || projectId <= 0) {
@@ -60,6 +69,7 @@ export async function GET(request: NextRequest) {
       where: {
         id: projectId,
         ...getProjectWhere(userId),
+        AND: [getProjectWhere(actingUserId, actingAgentId)],
       },
       select: {
         staleWarnDays: true,
@@ -92,11 +102,11 @@ export async function GET(request: NextRequest) {
     const now = new Date();
     const { priorStart, windowStart } = velocityWindow(now, range);
 
-    // Scans every non-deleted open board task; fine on demand, but use groupBy on a hot path.
     const [tasks, comments] = await Promise.all([
       prisma.task.findMany({
         where: {
           projectId,
+          project: getProjectWhere(actingUserId, actingAgentId),
           deletedAt: null,
           status: { not: "Deleted" },
           OR: [
@@ -121,8 +131,6 @@ export async function GET(request: NextRequest) {
       prisma.comment.groupBy({
         by: ["creatorId"],
         where: {
-          // Bounded at both ends: a comment written between capturing `now` and
-          // this query would push _max past `now` and void the whole group.
           createdAt: { gte: windowStart, lte: now },
           task: { projectId },
         },

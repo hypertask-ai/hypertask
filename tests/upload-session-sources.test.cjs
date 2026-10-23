@@ -22,7 +22,6 @@ const root = path.resolve(__dirname, "..");
 const jiti = require("jiti")(__filename, {
   interopDefault: true,
   alias: {
-    "@/lib/api/task-writes/route": path.join(root, "tests/task-write-legacy-stub.cjs"),
     "@": path.join(root, "src"),
   },
 });
@@ -48,11 +47,10 @@ const javascript = ts.transpileModule(source, {
 
 const UPLOADED_URL = "https://files.hypertask.app/tasks/attachments/x_t.txt";
 
-function loadRoute(sessionUser = null, { flagEnabled = true } = {}) {
+function loadRoute(sessionUser = null) {
   const uploaded = [];
   const seenHeaders = [];
   const stubs = {
-    "@/lib/api/task-writes/route": { withTaskWriteFlag: (handler) => handler },
     "@/lib/auth/getSessionUser": {
       getSessionUser: async (headers) => {
         seenHeaders.push(headers);
@@ -60,7 +58,9 @@ function loadRoute(sessionUser = null, { flagEnabled = true } = {}) {
       },
     },
     "@/lib/flags": {
-      isFeatureEnabled: async () => flagEnabled,
+      isFeatureEnabled: async () => {
+        throw new Error("background task uploads no longer read a feature flag");
+      },
     },
     "@/lib/storage/uploadTaskAttachmentToS3": {
       parseHypertasksAttachmentKeyFromUrl: () =>
@@ -108,6 +108,7 @@ function responseRecorder() {
       this.body = body;
       return this;
     },
+    setHeader() {},
   };
 }
 
@@ -178,30 +179,8 @@ test("upload rejects a request with neither session source", async () => {
   assert.equal(uploaded.length, 0);
 });
 
-test("background task upload receipts are gated before bytes reach storage", async () => {
-  const { route, uploaded } = loadRoute(
-    { userId: 6, source: "better-auth" },
-    { flagEnabled: false },
-  );
-  const res = responseRecorder();
-
-  await route.default(
-    uploadRequest({
-      cookies: {},
-      purpose: "task-attachment-link",
-    }),
-    res,
-  );
-
-  assert.equal(res.statusCode, 403);
-  assert.equal(uploaded.length, 0);
-});
-
-test("enabled buffered uploads return a receipt with the actual uploaded size", async () => {
-  const { route, uploaded } = loadRoute(
-    { userId: 6, source: "better-auth" },
-    { flagEnabled: true },
-  );
+test("buffered uploads return a receipt with the actual uploaded size", async () => {
+  const { route, uploaded } = loadRoute({ userId: 6, source: "better-auth" });
   const res = responseRecorder();
 
   await route.default(
@@ -228,11 +207,7 @@ test("enabled buffered uploads return a receipt with the actual uploaded size", 
 
 let finalizeLoadId = 0;
 
-function loadFinalizeRoute({
-  flagEnabled = true,
-  flagError = false,
-  linked = false,
-} = {}) {
+function loadFinalizeRoute({ linked = false } = {}) {
   const deleted = [];
   const linkCalls = [];
   const receipt = {
@@ -249,7 +224,7 @@ function loadFinalizeRoute({
     },
   };
   const stubs = {
-    "@/lib/api/task-writes/route": { withTaskWriteFlag: (handler) => handler },
+    "@/lib/auth/getSessionUser": { getSessionUser: async () => null },
     "@/lib/auth/session": {
       SESSION_COOKIE: "ht_session",
       verifySession: () => ({ id: 6 }),
@@ -293,8 +268,7 @@ function loadFinalizeRoute({
     },
     "@/lib/flags": {
       isFeatureEnabled: async () => {
-        if (flagError) throw new Error("flag unavailable");
-        return flagEnabled;
+        throw new Error("attachment linking no longer reads a feature flag");
       },
     },
   };
@@ -311,15 +285,17 @@ function loadFinalizeRoute({
   Module._load = (request, parent, isMain) =>
     stubs[request] ?? originalLoad(request, parent, isMain);
   try {
-    delete require.cache[
-      path.join(root, "src/pages/api/tasks/uploadFinalize.ts")
-    ];
+    for (const file of [
+      "src/pages/api/tasks/uploadFinalize.ts",
+      "src/lib/api/task-writes/upload-finalize.ts",
+    ]) {
+      delete require.cache[path.join(root, file)];
+    }
     const load = require("jiti")(
       path.join(root, `tests/upload-finalize-${++finalizeLoadId}.cjs`),
       {
         interopDefault: true,
         alias: {
-          "@/lib/api/task-writes/route": path.join(root, "tests/task-write-legacy-stub.cjs"),
           "@": path.join(root, "src"),
         },
         cache: false,
@@ -343,29 +319,28 @@ function finalizeRequest(action) {
   };
 }
 
-test("final attachment linking is blocked when its feature flag is off", async () => {
-  const { route, linkCalls } = loadFinalizeRoute({ flagEnabled: false });
+test("final attachment linking links a valid receipt without reading a feature flag", async () => {
+  const { route, linkCalls } = loadFinalizeRoute();
   const res = responseRecorder();
 
   await route.default(finalizeRequest("link-task-attachment"), res);
 
-  assert.equal(res.statusCode, 403);
-  assert.equal(linkCalls.length, 0);
+  assert.equal(res.statusCode, 200);
+  assert.deepEqual(res.body, { success: true, attachment: { id: 1 } });
+  assert.equal(linkCalls.length, 1);
+  assert.equal(linkCalls[0][0], 99);
 });
 
-test("final attachment linking returns JSON when flag evaluation fails", async () => {
-  const { route, linkCalls } = loadFinalizeRoute({ flagError: true });
+test("final attachment linking still refuses an invalid receipt", async () => {
+  const { route, linkCalls } = loadFinalizeRoute();
   const res = responseRecorder();
-  const originalError = console.error;
-  console.error = () => undefined;
-  try {
-    await route.default(finalizeRequest("link-task-attachment"), res);
-  } finally {
-    console.error = originalError;
-  }
 
-  assert.equal(res.statusCode, 500);
-  assert.deepEqual(res.body, { error: "Could not link attachment" });
+  await route.default(
+    { ...finalizeRequest("link-task-attachment"), body: { action: "link-task-attachment", receipt: "forged", taskId: 99 } },
+    res,
+  );
+
+  assert.equal(res.statusCode, 400);
   assert.equal(linkCalls.length, 0);
 });
 

@@ -1,19 +1,12 @@
-/**
- * @fileoverview
- * Hypertask Auth Config
- * Centralized configuration for authentication flows, onboarding, and branding.
- * Used by useAuth.tsx and related authentication logic.
- */
 
 import { DEFAULT_THEME_PREFERENCE } from "@/lib/themePreferences";
 
 const authConfig = {
-  // Branding and UI
   branding: {
     appName: "Hypertask",
-    logoUrl: "/assets/logo.svg", // Update with actual asset path
-    primaryColor: "bg-[#6C47FF]", // Hypertask purple
-    accentColor: "bg-[#F6F3FF]", // Hypertask light purple
+    logoUrl: "/assets/logo.svg",
+    primaryColor: "bg-[#6C47FF]",
+    accentColor: "bg-[#F6F3FF]",
     button: {
       google: {
         bg: "bg-white",
@@ -29,7 +22,6 @@ const authConfig = {
     },
   },
 
-  // Auth providers
   providers: {
     google: {
       enabled: true,
@@ -41,7 +33,6 @@ const authConfig = {
     },
   },
 
-  // Email link authentication
   emailLink: {
     sendLinkApi: "/api/auth/send-email-link",
     verifyTokenApi: "/api/auth/verify-email-token",
@@ -52,28 +43,18 @@ const authConfig = {
     troubleshootingUrl: "https://help.hypertask.ai/help/troubleshooting-email-login-magic-link",
   },
 
-  // Onboarding
   onboarding: {
     skipOnboardingParam: "skipOnboarding",
     shouldSkipInteractiveParam: "shouldSkipInteractive",
     defaultTeamTitle: "MyTeam",
     defaultBoardTitle: "MyBoard",
-    defaultCompanyRoleIdx: 0, // index in companyRoleOptions
-    defaultCompanySizeIdx: 0, // index in companySizeOptions
-    // Signup goes straight to the board (Valentin, 2026-08-02): new users are
-    // created onboarded, no /onboarding wizard, no interactive tutorial. A
-    // boardless landing renders NoBoardsEmptyState (one-click workspace), so the
-    // HTPR-4066 black-board problem this used to guard against is gone. Flip
-    // both back to false to restore the wizard.
+    defaultCompanyRoleIdx: 0,
+    defaultCompanySizeIdx: 0,
     shouldSkipInteractive: true,
     skipOnboarding: true,
   },
 
-  // Redirection
   redirect: {
-    // Route post-login through "/" so the middleware restores the user's last
-    // board from the previousBoard cookie (-> /project?id=N). Targeting bare
-    // "/project" bypassed that and dumped users on the first/welcome board.
     afterLogin: "/",
     afterOnboarding: "/onboarding",
     getProjectUrl: (projectId: number, view?: string) =>
@@ -86,7 +67,6 @@ const authConfig = {
       `/detail/project-${projectId}/${uniqueIndex}`,
   },
 
-  // Cookie settings
   cookies: {
     user: "nookies_user",
     previousBoard: "previousBoard",
@@ -94,7 +74,7 @@ const authConfig = {
     funnel: "funnel",
     funnelTutorialCompleted: "funnel_tutorial_completed",
     isFunnelUser: "is_funnel_user",
-    maxAge: 60 * 60 * 24 * 7, // 1 week in seconds
+    maxAge: 60 * 60 * 24 * 7,
     defaultTheme: DEFAULT_THEME_PREFERENCE,
     options: {
       path: "/",
@@ -103,13 +83,11 @@ const authConfig = {
     },
   },
 
-  // A/B Test variants
   abTest: {
     skipInteractiveTutorial: "skip-interactive-tutorial",
-    urlParam: "variant", // URL parameter to read variant from
+    urlParam: "variant",
   },
 
-  // Error messages
   errors: {
     invalidEmail: "Please enter a valid email address",
     emailRequired: "Email is required",

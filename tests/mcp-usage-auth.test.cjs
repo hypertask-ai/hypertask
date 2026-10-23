@@ -55,8 +55,8 @@ let teamGrant = {
 let storedTeamBinding = "member:membership-a";
 let disabledTeamKeys = 0;
 stubModule('src/lib/telemetry/activationOccurrences.ts', {
-  recordAgentConnection: () => {},
-  recordAuthenticatedConnection: () => {},
+  enqueueAgentConnection: async () => null,
+  enqueueAuthenticatedConnection: async () => null,
 })
 
 stubModule("src/lib/prisma.ts", {

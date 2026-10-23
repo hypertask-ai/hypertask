@@ -1,8 +1,3 @@
-/**
- * The fleet ask bridge: one place that knows AGENT_FLEET_ASK_URL's request and
- * response contract. The hypertask_ask_agent tool and the HTPR-6284 routed
- * @mention turn both go through this, so validation cannot drift between them.
- */
 
 export type FleetAskResult =
   | { success: true; answer: string }
@@ -10,10 +5,6 @@ export type FleetAskResult =
 
 export const FLEET_ASK_TIMEOUT_MS = 45_000;
 
-// Answers are rendered in the chat as model output would be; the cap only
-// stops a runaway runtime reply from pinning the stream. ponytail: the bridge
-// has no pagination — if agents start returning long reports, stream chunks
-// instead of one string.
 export const FLEET_ASK_MAX_ANSWER_LENGTH = 20_000;
 
 export async function askFleetAgent(input: {
@@ -33,13 +24,10 @@ export async function askFleetAgent(input: {
   }
 
   const controller = new AbortController();
-  // A signal that was already aborted never fires its listener, so check it
-  // before the request instead of after.
   if (input.abortSignal?.aborted) {
     return { success: false, error: "aborted" };
   }
   const timeout = setTimeout(() => controller.abort(), FLEET_ASK_TIMEOUT_MS);
-  // Stop in the chat must also stop the bridge wait, not just abandon it.
   const forwardAbort = () => controller.abort();
   input.abortSignal?.addEventListener("abort", forwardAbort);
   try {

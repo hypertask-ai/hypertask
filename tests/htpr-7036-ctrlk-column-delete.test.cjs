@@ -85,16 +85,13 @@ function fixture({ enabled = true, last = false, empty = false, denied = false, 
     "@/lib/flags": { isFeatureEnabled: async (...args) => { flags.push(args); return enabled; } },
     "@/utils/controllers/projects/getAllIncludes": { getProjectWhere: (userId) => ({ ownerId: userId }) },
     "@/utils/controllers/notifications/agentFirstTaskEmail": { scheduleAgentFirstTaskEmailBatch: () => assert.fail("No agent email for human deletion") },
+    "@/lib/telemetry/savedWork": { enqueueColumnCreated: async () => "column-key", enqueueColumnRenamed: async () => "rename-key", processAnalyticsIntentSoon: () => {} },
     "./viewHelpers": {
       removeSectionFromAllViews: async (...args) => effects.push(["remove-views", ...args]),
       updateSectionInAllViews: async (...args) => effects.push(["update-views", ...args]),
     },
     "@/lib/auth/getSessionUser": { getSessionUser: async () => noAuth ? null : { userId: 985 } },
     "@/lib/realtime/server": { broadcastBoardChange: (...args) => broadcasts.push(args) },
-    "@/lib/api/task-writes/route": {
-      withTaskWriteFlag: (handler) => handler,
-      taskWriteRoute: ({ operation }) => async (req) => operation(await req.json(), { userId: 985 }),
-    },
   };
   const controller = load("src/utils/controllers/section/update.ts", mocks).default;
   mocks["@/utils/controllers/section/update"] = { default: controller };

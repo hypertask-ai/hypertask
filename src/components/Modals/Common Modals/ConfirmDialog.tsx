@@ -59,8 +59,6 @@ const ConfirmDialog = ({
 
       if (!isEscape && !isConfirm) return;
 
-      // While this modal is up it owns ESC and its confirm shortcut: keep them
-      // away from the handlers underneath it (the AI writer, the editors).
       event.preventDefault();
       event.stopImmediatePropagation();
 
@@ -72,9 +70,6 @@ const ConfirmDialog = ({
   );
 
   useEffect(() => {
-    // Capture phase, deliberately: the keypress that opened this modal is still
-    // propagating up when we mount, and it has already passed document capture,
-    // so it cannot reach this listener and dismiss the modal it just opened.
     document.addEventListener("keydown", handleKeyDown, true);
     return () => {
       document.removeEventListener("keydown", handleKeyDown, true);
@@ -92,8 +87,6 @@ const ConfirmDialog = ({
       isOpen={true}
       id={id}
       toggle={closeHandler}
-      // ESC is handled above; reactstrap's own handler would also see the
-      // still-propagating keypress that opened this modal and close it.
       keyboard={false}
       className={`sm:min-w-[560px] sm:top-[24%] ${className ?? ""}`}
       contentClassName="rounded-[5px] overflow-hidden"

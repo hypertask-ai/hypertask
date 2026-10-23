@@ -37,10 +37,6 @@ function isTeamMembershipConflict(error: unknown): boolean {
   return fields.includes("userId") && fields.includes("teamId");
 }
 
-/**
- * Create exactly one human membership for a user/team pair. The database unique
- * constraint is the arbiter when two join requests pass their preflight together.
- */
 export async function ensureTeamMembership(
   input: { googleAccountId: string; teamId: string; userId: number },
   store: TeamMembershipStore = prisma.member_Team as unknown as TeamMembershipStore,

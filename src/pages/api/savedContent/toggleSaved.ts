@@ -1,7 +1,10 @@
+import { withAgentScopeRequest } from "@/lib/auth/agentScope";
 import { NextApiHandler, NextApiRequest, NextApiResponse } from "next";
 import { includeSavedContentComment } from "@/utils/controllers/savedContent/helper";
 import { withTaskStarWriteLock } from "@/lib/taskCardActions/writeLocks";
 import { getSessionUser } from "@/lib/auth/getSessionUser";
+import prisma from "@/lib/prisma";
+import { projectContentAccessWhere } from "@/utils/controllers/projects/getAllIncludes";
 
 const handler: NextApiHandler = async (
   req: NextApiRequest,
@@ -15,24 +18,55 @@ const handler: NextApiHandler = async (
       return res.status(401).json({ message: "Unauthorized" });
     }
     const userId = session.userId;
-    const { taskId, commentId, type, projectId, alwaysRemove } = req.body;
-    if (!taskId || !projectId) {
+    const { type, alwaysRemove } = req.body;
+    const requestedTaskId = Number(req.body.taskId);
+    const commentId =
+      req.body.commentId == null || req.body.commentId === ""
+        ? null
+        : Number(req.body.commentId);
+    if (
+      !Number.isSafeInteger(requestedTaskId) ||
+      requestedTaskId <= 0 ||
+      (commentId !== null &&
+        (!Number.isSafeInteger(commentId) || commentId <= 0)) ||
+      (type !== "Private" && type !== "Public") ||
+      (type === "Public" && commentId === null)
+    ) {
       return res.status(400).json({ message: "Missing required information" });
     }
 
-    const isPrivateTaskStar = type === "Private" && !commentId;
+    const task = await prisma.task.findFirst({
+      where: {
+        id: requestedTaskId,
+        project: projectContentAccessWhere(userId, session.agentId, session.teamScope),
+        AND: [{ project: projectContentAccessWhere(userId) }],
+      },
+      select: { id: true, projectId: true },
+    });
+    const comment =
+      task && commentId !== null
+        ? await prisma.comment.findFirst({
+            where: {
+              id: commentId,
+              taskId: task.id,
+              task: { project: projectContentAccessWhere(userId, session.agentId, session.teamScope) },
+            },
+            select: { id: true },
+          })
+        : null;
+    if (!task || (commentId !== null && !comment)) {
+      return res.status(404).json({ message: "Not found" });
+    }
+    const taskId = task.id;
+    const projectId = task.projectId;
+
+    const isPrivateTaskStar = type === "Private" && commentId === null;
     const whereClause = {
       ...(isPrivateTaskStar ? {} : { projectId }),
       taskId,
       type,
-      ...(type === "Private"
-        ? {
-            userId: userId,
-            commentId: commentId ? parseInt(commentId as string) : null,
-          }
-        : {
-            commentId: parseInt(commentId as string),
-          }),
+      commentId,
+      ...(type === "Private" ? { userId } : {}),
     };
 
     const result = await withTaskStarWriteLock(taskId, async (tx) => {
@@ -49,17 +83,11 @@ const handler: NextApiHandler = async (
           userId: userId,
           taskId,
           projectId,
-          commentId:
-            type === "Private" && !commentId
-              ? null
-              : parseInt(commentId as string),
+          commentId,
           type,
         },
         include: {
-          task: includeSavedContentComment(
-            userId,
-            !!!(type === "Private" && !commentId)
-          ),
+          task: includeSavedContentComment(userId, !isPrivateTaskStar),
           comment: {
             include: {
               creator: true,
@@ -78,4 +106,4 @@ const handler: NextApiHandler = async (
   }
 };
 
-export default handler;
+export default ((req, res) => withAgentScopeRequest(req, () => handler(req, res))) satisfies NextApiHandler;

@@ -11,7 +11,8 @@ import { hasTeamMembershipAccess } from "@/utils/controllers/teams/hasTeamMember
 import type { AgentScopes } from "@/lib/mcp/agents/scopes";
 import { boardAgentVisibilityWhere } from "@/lib/agents/visibility";
 import { getSessionUser } from "@/lib/auth/getSessionUser";
-import { isFeatureEnabled, HTPR_6512_SEED_TEAM_AGENT_FLAG } from "@/lib/flags";
+import { isFeatureEnabled, isOwnerOrQaUserId } from "@/lib/flags";
+import { HTPR_7509_AGENT_ROLE_SCREEN_FLAG, HTPR_7574_OWNED_UNATTACHED_AGENTS_FLAG } from "@/lib/flags/keys";
 import {
   ensureDefaultTeamAgent,
   lockTeamAgentSeed,
@@ -47,14 +48,28 @@ export async function GET(request: NextRequest) {
     );
   }
 
-  if (await isFeatureEnabled(HTPR_6512_SEED_TEAM_AGENT_FLAG, currentUserId)) {
+  if (await isOwnerOrQaUserId(currentUserId)) {
     await ensureDefaultTeamAgent(currentUserId, teamId, prisma);
   }
 
+  const includeOwnedUnattached = await isFeatureEnabled(
+    HTPR_7574_OWNED_UNATTACHED_AGENTS_FLAG,
+    currentUserId,
+  );
+  const teamMember = { members: { some: { project: { teamId } } } };
+  const ownedUnattached = {
+    userId: currentUserId,
+    members: { none: {} },
+    revokedAt: null,
+    archivedAt: null,
+  };
+
   const agents = await prisma.agent.findMany({
     where: {
-      members: { some: { project: { teamId } } },
-      ...boardAgentVisibilityWhere(currentUserId),
+      AND: [
+        boardAgentVisibilityWhere(currentUserId),
+        includeOwnedUnattached ? { OR: [teamMember, ownedUnattached] } : teamMember,
+      ],
     },
     orderBy: { createdAt: "desc" },
     select: {
@@ -72,8 +87,6 @@ export async function GET(request: NextRequest) {
       prompt: true,
       modelOptionId: true,
       heartbeatAt: true,
-      // Which provider account this agent spends on (HTPR-5389). Only the
-      // masked tail ever leaves this route, and only to the agent's owner.
       byokApiKeys: {
         where: { enabled: true },
         orderBy: { provider: "asc" },
@@ -92,12 +105,12 @@ export async function GET(request: NextRequest) {
 
   const scopedAgents = agents.filter(
     (agent) =>
+      (includeOwnedUnattached && agent.userId === currentUserId && agent.members.length === 0) ||
       getAgentTeamId(
         agent.members.map(({ project: memberProject }) => memberProject.teamId),
       ) === teamId,
   );
 
-  //Attaching the agents with the mcp client they are connected to
   const agentIds = scopedAgents.map((a) => a.id);
   const lastPostedByAgentId = new Map<string, string>();
   const lastOAuthByAgentId = new Map<
@@ -139,9 +152,16 @@ export async function GET(request: NextRequest) {
     }
   }
 
+  const agentRolesEnabled = await isFeatureEnabled(
+    HTPR_7509_AGENT_ROLE_SCREEN_FLAG,
+    currentUserId,
+  );
   const agentsWithOAuth = scopedAgents.map(
     ({ members, permissions, mcpTokenJti, mcpTokenExpiresAt, byokApiKeys, ...a }) => ({
       ...a,
+      ...(agentRolesEnabled
+        ? { role: (permissions as AgentScopes | null)?.role ?? "write" }
+        : {}),
       providerKey:
         a.userId === currentUserId ? maskAgentProviderKey(byokApiKeys) : null,
       postsToImportant:
@@ -157,8 +177,6 @@ export async function GET(request: NextRequest) {
       heartbeatAt: a.heartbeatAt ? a.heartbeatAt.toISOString() : null,
       lastPostedAt: lastPostedByAgentId.get(a.id) ?? null,
       lastOAuthMcpClient: lastOAuthByAgentId.get(a.id) ?? null,
-      // `name` is the slug ("project-15"); `title` is what the board is called
-      // everywhere in the UI. Same `title ?? name` fallback the rest of the app uses.
       boards: Array.from(
         new Map(
           members
@@ -180,10 +198,6 @@ export async function GET(request: NextRequest) {
   return NextResponse.json({ success: true, agents: agentsWithOAuth });
 }
 
-/**
- * POST /api/agents — create an agent
- * Body: { displayName: string, photoURL?: string, projectId: number }
- */
 export async function POST(request: NextRequest) {
   const user = await getCurrentUser(request);
   if (!user?.id) {
@@ -294,8 +308,6 @@ export async function POST(request: NextRequest) {
       },
     });
 
-    // Native agents run on the in-app AI loop under the user's own session;
-    // they have no external MCP client to authenticate, so no token.
     const mcpToken =
       runtimeType === "NATIVE"
         ? null

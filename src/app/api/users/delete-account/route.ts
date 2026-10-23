@@ -1,4 +1,6 @@
 import { NextResponse } from "next/server";
+import { parseCookies } from "better-auth/cookies";
+import { revokeSessionToken } from "@/lib/auth/sessionRevocation";
 
 import { getServerCookieUser } from "@/lib/auth/serverUser";
 import {
@@ -10,9 +12,7 @@ import { resetUserAccount } from "@/utils/controllers/users/resetUserAccount";
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
 
-// HTPR-4854: self-serve account wipe. The user can only ever delete their own
-// account, so the target id comes from the session cookie and never the body.
-export async function POST() {
+export async function POST(request: Request) {
   const user = await getServerCookieUser();
   if (!user) {
     return NextResponse.json({ message: "Unauthorized" }, { status: 401 });
@@ -22,6 +22,8 @@ export async function POST() {
   if (result.status !== 200) {
     return NextResponse.json(result.json, { status: result.status });
   }
+
+  await revokeSessionToken(parseCookies(request.headers.get("cookie") ?? "").get(SESSION_COOKIE));
 
   const response = NextResponse.json({ success: true });
   const secure = process.env.NODE_ENV === "production";

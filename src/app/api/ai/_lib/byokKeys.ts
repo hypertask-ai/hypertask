@@ -1,5 +1,6 @@
 import { wrapLanguageModel, type LanguageModel } from "ai";
 import prisma from "@/lib/prisma";
+import { HTPR_7634_OPENAI_ONLY_DEFAULT_FLAG } from "@/lib/flags/definitions/htpr-7634-openai-only-default";
 import { decryptByokSecret } from "@/lib/crypto/byokCipher";
 import { getProjectWhere } from "@/utils/controllers/projects/getAllIncludes";
 import {
@@ -45,16 +46,11 @@ export type ByokProviderFlag = {
 
 export type ByokLookupContext = {
   teamId?: unknown;
-  /** Server-derived team identity. Never populate this from request input. */
   trustedTeamId?: unknown;
   projectId?: number | null;
   userId?: number | null;
-  /**
-   * The native agent running this turn. When that agent carries its own
-   * provider key, the call is billed to its provider account instead of the
-   * team's shared key (HTPR-5389). Server-derived only, never request input.
-   */
   agentId?: string | null;
+  teamScope?: import("@/lib/mcp/auth/types").AgentTokenTeamScope | null;
 };
 
 function normalizeTeamId(value: unknown): string | null {
@@ -80,12 +76,15 @@ async function resolveLookupTeamId(lookup?: ByokLookupContext) {
       where: {
         id: projectId,
         status: "Normal",
-        ...getProjectWhere(userId),
+        ...getProjectWhere(userId, lookup?.agentId, lookup?.teamScope),
       },
       select: { teamId: true },
     });
     teamId = project?.teamId ?? null;
-    if (!teamId) return undefined;
+    if (!teamId) {
+      if (lookup?.teamScope != null) throw new Error("Project not found or access denied");
+      return undefined;
+    }
   } else if (lookup?.trustedTeamId != null) {
     teamId = normalizeTeamId(lookup.trustedTeamId);
   } else {
@@ -105,6 +104,7 @@ async function resolveLookupTeamId(lookup?: ByokLookupContext) {
     teamId = accessibleTeam?.id ?? null;
   }
 
+  if (lookup?.teamScope != null && teamId !== lookup.teamScope.teamId) throw new Error("Project not found or access denied");
   return teamId;
 }
 
@@ -147,11 +147,6 @@ async function resolveTeamByokSecret(
   return undefined;
 }
 
-/**
- * The acting agent's own provider key, when it has one for this provider.
- * Returns undefined when the agent has no key, so every caller falls back to
- * the team key exactly as before.
- */
 async function resolveAgentByokSecret(
   provider: TByokProviderKey,
   lookup?: ByokLookupContext
@@ -263,8 +258,6 @@ export async function getByokApiKeyForProvider(
     resolveWithoutFlag?: boolean;
   }
 ) {
-  // An agent carrying its own key spends on that provider account, so it wins
-  // over both request flags and the team key (HTPR-5389).
   if (lookup?.agentId && provider !== "custom") {
     const agentKey = await resolveAgentByokApiKey(provider, lookup);
     if (agentKey && (await isByokProviderAllowedForLookup(provider, lookup))) {
@@ -312,13 +305,10 @@ export async function getTeamGatewayApiKeyForProvider(
   const plan = await resolveLookupPlan(lookup);
   if (!plan) return undefined;
 
-  // A customer-supplied gateway key takes precedence over the team's funded key.
   if (plan !== "Free") {
     const gatewayKey = await resolveTeamByokApiKey("gateway", lookup);
     if (isVercelAiGatewayKey(gatewayKey)) return gatewayKey;
 
-    // Legacy provider slots may contain a customer vck_. Exact known platform
-    // values are removed by managed-key provisioning; any remainder is BYOK.
     const providerGatewayKey = await resolveTeamByokApiKey(provider, lookup);
     if (isVercelAiGatewayKey(providerGatewayKey)) return providerGatewayKey;
   }
@@ -345,15 +335,12 @@ export async function getTeamGatewayFunding(
   const plan = await resolveLookupPlan(lookup);
   if (!plan) return undefined;
 
-  // A customer-supplied gateway key takes precedence over the team's funded key.
   if (plan !== "Free") {
     const gatewayKey = await resolveTeamByokApiKey("gateway", lookup);
     if (isVercelAiGatewayKey(gatewayKey)) {
       return { apiKey: gatewayKey, source: "customer" };
     }
 
-    // Legacy provider slots may contain customer gateway credentials. Check
-    // both before funded keys so background/system routes honor BYOK too.
     const openAiGatewayKey = await resolveTeamByokApiKey("openai", lookup);
     if (isVercelAiGatewayKey(openAiGatewayKey)) {
       return { apiKey: openAiGatewayKey, source: "customer" };
@@ -424,8 +411,6 @@ export async function getByokOrTeamGatewayApiKey(
 
   if (provider === "openrouter" || provider === "custom") return undefined;
 
-  // A customer vck_ supplied through legacy provider flags also wins over the
-  // funded team allowance. OpenRouter remains direct-key-only above.
   if (isVercelAiGatewayKey(byokApiKey)) return byokApiKey;
 
   return getTeamGatewayApiKey(lookup);
@@ -459,7 +444,6 @@ export async function getByokOrTeamGatewayApiKeyForModelOption(
   return getTeamGatewayApiKey(lookup);
 }
 
-// HTPR-7075: Claude 5.5 mode never overrides a team that turned Anthropic off.
 async function isAnthropicDisabledForLookup(lookup: ByokLookupContext) {
   const teamId = await resolveLookupTeamId(lookup);
   if (!teamId) return false;
@@ -467,11 +451,26 @@ async function isAnthropicDisabledForLookup(lookup: ByokLookupContext) {
   return !resolveTeamProviderEnabled(team?.aiProviderSettings, "anthropic");
 }
 
+async function byokRouteUsable(provider: "claude" | "gateway" | "openrouter", lookup: ByokLookupContext) {
+  if (provider !== "openrouter") return true;
+  const teamId = await resolveLookupTeamId(lookup);
+  const team = teamId ? await prisma.team.findUnique({ where: { id: teamId }, select: { aiProviderSettings: true } }) : null;
+  return resolveTeamProviderEnabled(team?.aiProviderSettings, "openrouter");
+}
+
 export async function getAiDefaultModelContext(lookup: ByokLookupContext, haiku55Enabled?: boolean, plan?: AiDefaultModelContext["plan"]) {
   const haikuDefaultEnabled = await haikuDefaultModelEnabled(lookup.userId);
   const backgroundClaudeEnabled = await backgroundClaudeModelEnabled?.(lookup.userId) ?? false;
   const enabled = haikuDefaultEnabled || (haiku55Enabled ?? (await haiku55ModelEnabled?.(lookup.userId) ?? false));
   const storePlanId = plan ?? (enabled ? await storePlanIdForProject(lookup.projectId, normalizeTeamId(lookup.trustedTeamId ?? lookup.teamId)) : "Free");
+  let openaiOnlyDefaultEnabled = false;
+  try {
+    const { isFeatureEnabled } = await import("@/lib/flags");
+    openaiOnlyDefaultEnabled = await isFeatureEnabled(HTPR_7634_OPENAI_ONLY_DEFAULT_FLAG, lookup.userId ?? 0);
+  } catch {
+  }
+  let hasDirectOpenAiKey = false;
+  let hasClaudeRoute = false;
   let byok: { provider: "claude" | "gateway" | "openrouter"; credential: string } | undefined;
   if (enabled && storePlanId && storePlanId !== "Free") {
     for (const provider of ["claude", "gateway", "openrouter"] as const) {
@@ -482,8 +481,15 @@ export async function getAiDefaultModelContext(lookup: ByokLookupContext, haiku5
       }
     }
   }
+  if (openaiOnlyDefaultEnabled && storePlanId && storePlanId !== "Free") {
+    const openaiKey = await getByokApiKeyForProvider("openai", undefined, lookup, { resolveWithoutFlag: true });
+    hasDirectOpenAiKey = Boolean(openaiKey && !isVercelAiGatewayKey(openaiKey));
+    hasClaudeRoute = (byok !== undefined && await byokRouteUsable(byok.provider, lookup)) ||
+      isVercelAiGatewayKey(openaiKey) ||
+      isVercelAiGatewayKey(await resolveTeamByokSecret(MANAGED_TEAM_GATEWAY_PROVIDER, lookup));
+  }
   const anthropicDisabled = backgroundClaudeEnabled && await isAnthropicDisabledForLookup(lookup);
-  return { haiku55Enabled: enabled, haikuDefaultEnabled, backgroundClaudeEnabled, anthropicDisabled, plan: storePlanId, hasByok: Boolean(byok), byok };
+  return { haiku55Enabled: enabled, haikuDefaultEnabled, backgroundClaudeEnabled, anthropicDisabled, plan: storePlanId, hasByok: Boolean(byok), byok, openaiOnlyDefaultEnabled, hasDirectOpenAiKey, hasClaudeRoute };
 }
 
 export function resolveAutomaticAiModel(
@@ -506,7 +512,6 @@ export function resolveAutomaticAiModel(
           const sameModelRetry = !params.abortSignal?.aborted && Boolean(await backgroundClaudeModelEnabled?.(context.lookup.userId));
           if (params.abortSignal?.aborted || !previousModelForFailedStream(modelId, error, false, false, true, sameModelRetry)) throw error;
           if (sameModelRetry) {
-            // HTPR-7075: retry the same Claude 5.5 model once, then fail visibly.
             console.warn(`[ai-model-fallback] ${modelId} retry on the same model`);
             try {
               return await doGenerate();

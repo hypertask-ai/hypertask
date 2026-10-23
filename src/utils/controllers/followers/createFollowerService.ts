@@ -66,12 +66,10 @@ export async function createFollowerService(params: {
       });
     };
 
-    // Task owner should never be in followers
     if (!agentId && task.userId === userId) {
       return { status: 201, body: "Task owner cannot be added as follower." };
     }
 
-    //If Agent was the task owner
     if (agentId && task.agentId === agentId) {
       await notifyAgentMention();
       return { status: 201, body: "Task owner cannot be added as follower." };
@@ -90,7 +88,6 @@ export async function createFollowerService(params: {
       return { status: 201, body: "User/Agent exists as an assignee." };
     }
 
-    //If user is validated, their agent will automatically get validated as well.
     const boardAccess = await checkIfBoardMember(userId, task.projectId);
 
     if (boardAccess === 201) {
@@ -103,7 +100,6 @@ export async function createFollowerService(params: {
       return { status: 404, body: { message: "Board not found." } };
     }
 
-    // Prevent duplicate followers
     const existingFollower = await prisma.follower.findFirst({
       where: {
         userId,
@@ -129,7 +125,6 @@ export async function createFollowerService(params: {
       },
     });
 
-    // =================== create notification
     const devices = await prisma.subscribedDevices.findMany({
       where: {
         userId: userId,
@@ -159,7 +154,6 @@ export async function createFollowerService(params: {
 
     await notifyAgentMention();
 
-    //This will always go to human user if they were mentioned :)
     if (notification && !agentId) {
       const body: IFCMReqBody = {
         type: "addFollower",
@@ -167,6 +161,7 @@ export async function createFollowerService(params: {
         notificationBody: newFollower.task.title,
         devices: devices,
         payload: newFollower,
+        taskId,
         taskTitle: newFollower.task.title,
         afterAppDomain: `detail/project-${newFollower.task.projectId}/${newFollower.task.uniqueIndex}`,
       };

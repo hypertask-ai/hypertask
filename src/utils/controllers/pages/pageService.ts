@@ -1,7 +1,8 @@
+import type { AgentTokenTeamScope } from '@/lib/mcp/auth/types';
 import { Prisma } from '@prisma/client'
 
 import prisma from '@/lib/prisma'
-import { taskAccessWhere } from '@/utils/controllers/tasks/assertTaskAccess'
+import { getProjectWhere } from '@/utils/controllers/projects/getAllIncludes'
 import {
   convertToPlain,
   deletePageFromTurbopuffer,
@@ -33,8 +34,6 @@ export function renderPageContent({
   content: string
   contentType: PageContentType
 }): { html: string; text: string } {
-  // Canvas: wrap the raw agent HTML into one opaque block (rendered only inside
-  // the sandboxed iframe) and index its stripped text for RAG/search.
   if (contentType === 'html_canvas') {
     return {
       html: sanitizeRichHtml(wrapHtmlCanvas(content)),
@@ -118,50 +117,67 @@ function queuePageDelete(pageId: number) {
 
 export async function createPage({
   taskId,
+  projectId,
   title,
   content,
   contentType,
   parentPageId,
   userId,
   agentId,
+  teamScope,
 }: {
-  taskId: number
+  taskId?: number
+  projectId?: number
   title?: string
   content: string
   contentType: PageContentType
   parentPageId?: number | null
   userId: number
   agentId?: string | null
+  teamScope?: AgentTokenTeamScope | null
 }) {
   const rendered = renderPageContent({ content, contentType })
 
   const page = await prisma.$transaction(async (tx) => {
-    const task = await tx.task.findUnique({
-      where: { id: taskId },
+    if (taskId !== undefined) {
+      await tx.$queryRaw`SELECT id FROM "Task" WHERE id = ${taskId} FOR UPDATE`
+    }
+    const task = taskId === undefined ? null : await tx.task.findFirst({
+      where: { id: taskId, project: { status: 'Normal', ...getProjectWhere(userId, agentId, teamScope) } },
       select: { id: true, projectId: true },
     })
-    if (!task) throw new Error(`Task with ID ${taskId} not found`)
+    if (taskId !== undefined && !task) throw new Error(`Task with ID ${taskId} not found`)
+    const owningProjectId = task?.projectId ?? projectId
+    if (owningProjectId === undefined) throw new Error('Page requires a board')
+    if (teamScope != null && !await tx.project.findFirst({
+      where: { id: owningProjectId, ...getProjectWhere(userId, agentId, teamScope) }, select: { id: true },
+    })) throw new Error('Page board not found or access denied')
 
     if (parentPageId != null) {
       const parentPage = await tx.page.findFirst({
-        where: { id: parentPageId, taskId },
+        where: {
+          id: parentPageId,
+          projectId: owningProjectId,
+          ...(taskId === undefined ? {} : { OR: [{ taskId }, { links: { some: { taskId } } }] }),
+        },
         select: { id: true },
       })
       if (!parentPage) {
-        throw new Error(`Parent page with ID ${parentPageId} not found in task ${taskId}`)
+        throw new Error(`Parent page with ID ${parentPageId} not found in board ${owningProjectId}`)
       }
     }
 
-    // No snapshot on create: the Page row itself is version 1 (the current
-    // state). DocVersion only records *past* versions, written on each mutation.
     return tx.page.create({
       data: {
         ...(title === undefined ? {} : { title }),
         contentHtml: rendered.html,
         contentText: rendered.text,
-        taskId,
+        taskId: taskId ?? null,
+        ...(taskId === undefined ? {} : {
+          links: { create: { taskId, createdById: userId, agentId: agentId ?? null } },
+        }),
         parentPageId: parentPageId ?? null,
-        projectId: task.projectId,
+        projectId: owningProjectId,
         createdById: userId,
         agentId: agentId ?? null,
       },
@@ -176,43 +192,63 @@ type GetPageArgs =
   | { publicId: string; id?: never }
   | { id: number; publicId?: never }
 
-export async function getPage(args: GetPageArgs & { userId?: number }) {
+const pageTaskSelect = {
+  id: true,
+  ticketNumber: true,
+  title: true,
+  projectId: true,
+  uniqueIndex: true,
+} as const
+
+export async function getPage(args: GetPageArgs & { userId?: number; agentId?: string | null; teamScope?: AgentTokenTeamScope | null; standalonePagesEnabled?: boolean }) {
   const where = 'id' in args
     ? { id: args.id }
     : { publicId: args.publicId }
+  const taskWhere: Prisma.TaskWhereInput = {
+    status: { not: 'Deleted' },
+    project: {
+      status: 'Normal',
+      ...(args.userId === undefined ? {} : getProjectWhere(args.userId, args.agentId, args.teamScope)),
+    },
+  }
 
-  return prisma.page.findUnique({
+  const page = await prisma.page.findUnique({
     relationLoadStrategy: 'join',
     where: {
       ...where,
+      ...(args.standalonePagesEnabled === false ? { taskId: { not: null } } : {}),
       ...(args.userId === undefined ? {} : {
-        task: taskAccessWhere(args.userId, undefined, {
-          agentId: null,
-          projectStatus: 'Normal',
-        }),
+        project: { status: 'Normal', ...getProjectWhere(args.userId, args.agentId, args.teamScope) },
       }),
     },
     include: {
-      // HTPR-6509: the page viewer links back to the task and MCP pages/get
-      // echoes these five fields; nothing reads the rest of the task row.
-      task: {
-        select: {
-          id: true,
-          ticketNumber: true,
-          title: true,
-          projectId: true,
-          uniqueIndex: true,
-        },
+      task: { where: taskWhere, select: pageTaskSelect },
+      links: {
+        where: { removedAt: null, task: taskWhere },
+        select: { task: { select: pageTaskSelect } },
+        orderBy: [{ createdAt: 'asc' }, { id: 'asc' }],
       },
+      _count: { select: { links: true } },
       subPages: {
-        select: {
-          id: true,
-          title: true,
-          publicId: true,
-        },
+        where: { archived: false, ...(args.standalonePagesEnabled === false ? { taskId: { not: null } } : {}) },
+        select: { id: true, title: true, publicId: true, projectId: true },
       },
     },
   })
+  if (!page) return null
+  const { links, subPages, _count, ...visiblePage } = page
+  const followsOrigin = args.standalonePagesEnabled === false || _count.links === 0
+  const linkedTasks = followsOrigin
+    ? (page.task ? [page.task] : [])
+    : links.map(({ task }) => task)
+  return {
+    ...visiblePage,
+    task: linkedTasks[0] ?? null,
+    taskId: page.task?.id ?? null,
+    linkedTasks,
+    subPages: subPages.filter((child) => child.projectId === page.projectId)
+      .map(({ projectId: _projectId, ...child }) => child),
+  }
 }
 
 export async function updatePage({
@@ -225,6 +261,7 @@ export async function updatePage({
   note,
   userId,
   agentId,
+  teamScope,
 }: {
   id: number
   title?: string
@@ -235,13 +272,15 @@ export async function updatePage({
   note?: string | null
   userId: number
   agentId?: string | null
+  teamScope?: AgentTokenTeamScope | null
 }) {
   if (title === undefined && content === undefined) {
     throw new Error('Page update requires title or content')
   }
 
   const page = await prisma.$transaction(async (tx) => {
-    const current = await tx.page.findUnique({ where: { id } })
+    if (teamScope != null) await tx.$queryRaw`SELECT id FROM "Page" WHERE id = ${id} FOR UPDATE`
+    const current = await tx.page.findUnique({ where: { id, ...(teamScope == null ? {} : { project: getProjectWhere(userId, agentId, teamScope) }) } })
     if (!current) throw new Error(`Page with ID ${id} not found`)
 
     if (ifVersion !== undefined && ifVersion !== current.version) {
@@ -256,7 +295,6 @@ export async function updatePage({
       : mergePageContent({
           currentHtml: current.contentHtml,
           content,
-          // Canvas type is encoded in contentHtml; ordinary pages have no stored type.
           contentType: contentType ?? (
             decodeHtmlCanvas(current.contentHtml) !== null ? 'html_canvas' : 'markdown'
           ),
@@ -265,9 +303,6 @@ export async function updatePage({
 
     await createPageSnapshot(tx, current, { userId, agentId, note })
 
-    // Optimistic lock: guard the write on the version we read. If a concurrent
-    // writer bumped it between our read and here, count === 0 -> conflict, so
-    // two racing updates can never silently clobber each other's content.
     const result = await tx.page.updateMany({
       where: { id, version: current.version },
       data: {
@@ -302,41 +337,90 @@ export async function updatePage({
 export async function listPages({
   taskId,
   projectId,
+  userId,
+  agentId,
+  teamScope,
+  standalonePagesEnabled = true,
+  archived = false,
+  query,
 }: {
   taskId?: number
   projectId?: number
+  userId?: number
+  agentId?: string | null
+  teamScope?: AgentTokenTeamScope | null
+  standalonePagesEnabled?: boolean
+  archived?: boolean
+  query?: string
 }) {
-  return prisma.page.findMany({
+  const taskWhere: Prisma.TaskWhereInput = {
+    status: { not: 'Deleted' },
+    project: {
+      status: 'Normal',
+      ...(userId === undefined ? {} : getProjectWhere(userId, agentId, teamScope)),
+    },
+  }
+  const pages = await prisma.page.findMany({
     where: {
-      archived: false,
-      ...(taskId === undefined ? {} : { taskId }),
+      archived,
+      ...(standalonePagesEnabled
+        ? (taskId === undefined ? {} : { OR: [{ links: { some: { taskId, removedAt: null } } }, { taskId, links: { none: {} } }] })
+        : { taskId: taskId ?? { not: null } }),
       ...(projectId === undefined ? {} : { projectId }),
+      project: { status: 'Normal', ...(userId === undefined ? {} : getProjectWhere(userId, agentId, teamScope)) },
+      ...(query?.trim() ? { AND: [{ OR: [
+        { title: { contains: query.trim(), mode: 'insensitive' } },
+        { contentText: { contains: query.trim(), mode: 'insensitive' } },
+      ] }] } : {}),
     },
     select: {
       id: true,
       publicId: true,
       title: true,
       parentPageId: true,
+      parentPage: { select: { projectId: true } },
+      projectId: true,
+      project: { select: { id: true, title: true } },
       updatedAt: true,
+      task: { where: taskWhere, select: pageTaskSelect },
+      links: {
+        where: { removedAt: null, task: taskWhere },
+        select: { task: { select: pageTaskSelect } },
+        orderBy: [{ createdAt: 'asc' }, { id: 'asc' }],
+      },
     },
     orderBy: { updatedAt: 'desc' },
+  })
+  return pages.map(({ links, task, parentPage, ...page }) => {
+    const linkedTasks = standalonePagesEnabled ? links.map(({ task }) => task) : (task ? [task] : [])
+    return { ...page, parentPageId: parentPage?.projectId === page.projectId ? page.parentPageId : null, linkedTasks }
   })
 }
 
 export async function searchPages({
   query,
   projectIds,
+  userId,
+  agentId,
+  teamScope,
+  standalonePagesEnabled = true,
 }: {
   query: string
   projectIds: number[]
+  userId?: number
+  agentId?: string | null
+  teamScope?: AgentTokenTeamScope | null
+  standalonePagesEnabled?: boolean
 }) {
   const normalizedQuery = query.trim()
   if (!normalizedQuery || projectIds.length === 0) return []
 
-  return prisma.page.findMany({
+  const pages = await prisma.page.findMany({
     where: {
       archived: false,
+      ...(standalonePagesEnabled ? {} : { taskId: { not: null } }),
       projectId: { in: projectIds },
+      project: { status: 'Normal', ...(userId === undefined ? {} : getProjectWhere(userId, agentId, teamScope)) },
       OR: [
         { title: { contains: normalizedQuery, mode: 'insensitive' } },
         { contentText: { contains: normalizedQuery, mode: 'insensitive' } },
@@ -347,25 +431,41 @@ export async function searchPages({
       publicId: true,
       title: true,
       contentText: true,
-      taskId: true,
       projectId: true,
+      task: {
+        where: {
+          status: { not: 'Deleted' },
+          project: { status: 'Normal', ...(userId === undefined
+            ? { id: { in: projectIds } }
+            : getProjectWhere(userId, agentId, teamScope)) },
+        },
+        select: { id: true },
+      },
       parentPageId: true,
       updatedAt: true,
     },
     orderBy: { updatedAt: 'desc' },
   })
+  return pages.map(({ task, ...page }) => ({ ...page, taskId: task?.id ?? null }))
 }
 
-export async function listPageVersions({ pageId }: { pageId: number }) {
-  return prisma.docVersion.findMany({
-    where: {
-      entityType: 'page',
-      entityId: pageId,
-    },
-    orderBy: [
-      { version: 'desc' },
-      { createdAt: 'desc' },
-    ],
+export async function listPageVersions({ pageId, userId, agentId, teamScope }: {
+  pageId: number
+  userId?: number
+  agentId?: string | null
+  teamScope?: AgentTokenTeamScope | null
+}) {
+  const readVersions = (tx: Pick<Prisma.TransactionClient, 'docVersion'>) => tx.docVersion.findMany({
+    where: { entityType: 'page', entityId: pageId },
+    orderBy: [{ version: 'desc' }, { createdAt: 'desc' }],
+  })
+  if (teamScope == null) return readVersions(prisma)
+  return prisma.$transaction(async tx => {
+    await tx.$queryRaw`SELECT id FROM "Page" WHERE id = ${pageId} FOR UPDATE`
+    if (userId === undefined || !await tx.page.findUnique({
+      where: { id: pageId, project: getProjectWhere(userId, agentId, teamScope) }, select: { id: true },
+    })) throw new Error('Page not found or access denied')
+    return readVersions(tx)
   })
 }
 
@@ -374,15 +474,18 @@ export async function restorePageVersion({
   versionId,
   userId,
   agentId,
+  teamScope,
 }: {
   pageId: number
   versionId: number
   userId: number
   agentId?: string | null
+  teamScope?: AgentTokenTeamScope | null
 }) {
   const page = await prisma.$transaction(async (tx) => {
+    if (teamScope != null) await tx.$queryRaw`SELECT id FROM "Page" WHERE id = ${pageId} FOR UPDATE`
     const [current, version] = await Promise.all([
-      tx.page.findUnique({ where: { id: pageId } }),
+      tx.page.findUnique({ where: { id: pageId, ...(teamScope == null ? {} : { project: getProjectWhere(userId, agentId, teamScope) }) } }),
       tx.docVersion.findFirst({
         where: {
           id: versionId,
@@ -423,13 +526,16 @@ export async function archivePage({
   id,
   userId,
   agentId,
+  teamScope,
 }: {
   id: number
   userId: number
   agentId?: string | null
+  teamScope?: AgentTokenTeamScope | null
 }) {
   const page = await prisma.$transaction(async (tx) => {
-    const current = await tx.page.findUnique({ where: { id } })
+    if (teamScope != null) await tx.$queryRaw`SELECT id FROM "Page" WHERE id = ${id} FOR UPDATE`
+    const current = await tx.page.findUnique({ where: { id, ...(teamScope == null ? {} : { project: getProjectWhere(userId, agentId, teamScope) }) } })
     if (!current) throw new Error(`Page with ID ${id} not found`)
     if (current.archived) return current
 

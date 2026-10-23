@@ -1,9 +1,3 @@
-/**
- * Resolve HyperAI mention targeting from values captured at send time.
- * Live currentTask/currentProject must not win after mid-upload navigation.
- * When a composed task id is present, the whole composed snapshot is used;
- * otherwise the whole current snapshot is used. Fields are never mixed.
- */
 export function resolveHyperMentionComposition(input: {
   composedForTaskId?: number;
   composedForOwnerId?: number | string;

@@ -1,3 +1,4 @@
+import { requireAgentWriteRole } from '@/lib/mcp/agents/readRoleGuard'
 import { wrapMcpRoute, checkMcpRouteRateLimit as checkMcpRateLimit, validateMcpRouteAuth as validateMcpAuth } from '@/lib/mcp/routeWrapper'
 import { NextRequest, NextResponse } from 'next/server'
 
@@ -5,12 +6,6 @@ import prisma from '@/lib/prisma'
 import { getProjectWhere } from '@/utils/controllers/projects/getAllIncludes'
 import { deliverWebhook } from '@/lib/mcp/webhooks/delivery'
 
-/**
- * POST /api/mcp/webhooks/{id}/test
- * Send a signed test ping to a subscription's URL and report whether the
- * receiver answered 2xx. Access-scoped by board. Awaits delivery (unlike the
- * fire-and-forget event emit) so the caller gets an immediate result.
- */
 export async function POST(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
@@ -26,6 +21,8 @@ export async function POST(
         { status: 401 }
       )
     }
+    const roleRefusal = await requireAgentWriteRole(ctx)
+    if (roleRefusal) return roleRefusal
 
     const { id } = await params
     if (!id) {
@@ -33,7 +30,7 @@ export async function POST(
     }
 
     const sub = await prisma.webhookSubscription.findFirst({
-      where: { id, project: getProjectWhere(ctx.user.id, ctx.agentId) },
+      where: { id, project: getProjectWhere(ctx.user.id, ctx.agentId, ctx.teamScope) },
       select: { id: true, url: true, secret: true, projectId: true, active: true },
     })
     if (!sub) {

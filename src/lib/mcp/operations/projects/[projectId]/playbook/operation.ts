@@ -1,3 +1,5 @@
+import { requireAgentWriteRole } from '@/lib/mcp/agents/readRoleGuard'
+import { reportMcpOperationCrash } from '@/lib/mcp/operationCrashReport'
 import { wrapMcpRoute, checkMcpRouteRateLimit as checkMcpRateLimit, validateMcpRouteAuth as validateMcpAuth } from '@/lib/mcp/routeWrapper'
 import { NextRequest, NextResponse } from 'next/server'
 import type { Prisma } from '@prisma/client'
@@ -18,10 +20,6 @@ function parseProjectId(raw: string): number | null {
   return Number.isSafeInteger(id) && id > 0 ? id : null
 }
 
-/**
- * GET /api/mcp/projects/:projectId/playbook
- * Returns the board's playbook (working rules + definition-of-done), or null.
- */
 export async function GET(
   request: NextRequest,
   props: { params: Promise<{ projectId: string }> }
@@ -40,7 +38,7 @@ export async function GET(
     }
 
     const project = await prisma.project.findFirst({
-      where: { id: projectId, status: 'Normal', ...getProjectWhere(ctx.user.id, ctx.agentId) },
+      where: { id: projectId, status: 'Normal', ...getProjectWhere(ctx.user.id, ctx.agentId, ctx.teamScope) },
       select: { id: true, playbook: true },
     })
     if (!project) {
@@ -57,17 +55,13 @@ export async function GET(
     })
   } catch (error) {
     console.error('[MCP Board Playbook] GET Error:', error)
+    reportMcpOperationCrash(request, error)
     return NextResponse.json({ success: false, error: 'Internal server error' }, { status: 500 })
   }
 
   })(request)
 }
 
-/**
- * PUT /api/mcp/projects/:projectId/playbook
- * Sets the board's playbook. Any board member/owner (agent included) may set it.
- * Body: { definition_of_done?: string[], working_rules?: string, notes?: string }.
- */
 export async function PUT(
   request: NextRequest,
   props: { params: Promise<{ projectId: string }> }
@@ -79,6 +73,8 @@ export async function PUT(
     if (rateLimited) return rateLimited
     const ctx = await validateMcpAuth(request)
     if (!ctx) return unauthorized()
+    const roleRefusal = await requireAgentWriteRole(ctx)
+    if (roleRefusal) return roleRefusal
 
     const projectId = parseProjectId(rawId)
     if (projectId === null) {
@@ -100,10 +96,8 @@ export async function PUT(
       )
     }
 
-    // Scope the write to a project the caller can access - updateMany with the
-    // access filter means a non-member's request updates 0 rows (treated as 404).
     const result = await prisma.project.updateMany({
-      where: { id: projectId, status: 'Normal', ...getProjectWhere(ctx.user.id, ctx.agentId) },
+      where: { id: projectId, status: 'Normal', ...getProjectWhere(ctx.user.id, ctx.agentId, ctx.teamScope) },
       data: { playbook: parsed.value as Prisma.InputJsonValue },
     })
     if (result.count === 0) {
@@ -116,6 +110,7 @@ export async function PUT(
     return NextResponse.json({ success: true, projectId, playbook: parsed.value })
   } catch (error) {
     console.error('[MCP Board Playbook] PUT Error:', error)
+    reportMcpOperationCrash(request, error)
     return NextResponse.json({ success: false, error: 'Internal server error' }, { status: 500 })
   }
 

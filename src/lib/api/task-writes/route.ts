@@ -1,20 +1,18 @@
+import { withAgentScopeRequest, prepareAgentScope } from "@/lib/auth/agentScope";
 import type { NextApiHandler, NextApiRequest } from "next";
 import { NextResponse } from "next/server";
 import type { z } from "zod";
 import { getSessionUser, type SessionUser } from "@/lib/auth/getSessionUser";
-import { isFeatureEnabled } from "@/lib/flags";
-import { HTPR_6923_APP_ROUTER_WRITES_FLAG } from "@/lib/flags/keys";
+import { parseCookies } from "better-auth/cookies";
+import { SESSION_COOKIE, verifySession } from "@/lib/auth/session";
 
-// Pages has already parsed JSON. This narrow Web-request interface avoids a
-// second parse/serialization and also accepts a real App Router Request.
 export type TaskWriteRequest = Pick<Request, "headers" | "json"> & {
   cookies?: Partial<Record<string, string>>;
-  // Preserve Pages header arrays for acting-tab socket exclusion.
   rawHeaders?: NextApiRequest["headers"];
   query?: NextApiRequest["query"];
   url?: string;
+  method?: string;
 };
-// Pages view writes retain historical 101 errors, which Web Response rejects.
 export type TaskWriteResponse = Pick<NextResponse, "status" | "headers" | "text" | "json">;
 export type TaskWriteRoute = (
   request: TaskWriteRequest,
@@ -25,12 +23,13 @@ export function taskWriteRoute<Body, Actor = SessionUser>(options: {
   schema: z.ZodType<Body>;
   validationMessage: string;
   validateBeforeAuth?: boolean;
-  // Some legacy handlers catch null-body destructuring with nonstandard JSON.
   allowNullBody?: boolean;
+  allowMissingBodyAgentId?: boolean;
   prepare?: (session: SessionUser) => Promise<Actor>;
   operation: (body: Body, actor: Actor, request: TaskWriteRequest) => Promise<TaskWriteResponse | undefined>;
 }): TaskWriteRoute {
-  return async (request, authenticatedSession) => {
+  return (request, authenticatedSession) => withAgentScopeRequest(request, async () => {
+    if (authenticatedSession) await prepareAgentScope(authenticatedSession.userId, authenticatedSession.agentId);
     let session = authenticatedSession;
     let actor!: Actor;
     if (!options.validateBeforeAuth) {
@@ -43,7 +42,6 @@ export function taskWriteRoute<Body, Actor = SessionUser>(options: {
     let body: Body;
     try {
       const raw = await request.json();
-      // Legacy destructuring of null/undefined throws before required-field checks.
       if (raw == null && !options.allowNullBody) throw new Error("Missing body");
       const parsed = options.schema.safeParse(raw);
       if (!parsed.success) {
@@ -67,42 +65,48 @@ export function taskWriteRoute<Body, Actor = SessionUser>(options: {
         return NextResponse.json({ message: "Internal server error" }, { status: 500 });
       }
     }
+    const bodyAgentId = (body as { agentId?: unknown } | null)?.agentId;
+    if (session?.agentId && (!options.allowMissingBodyAgentId || session.teamScope != null || bodyAgentId != null)) {
+      if (bodyAgentId !== session.agentId) {
+        return NextResponse.json({ message: "Agent id must match authenticated session" }, { status: 403 });
+      }
+    }
+    if (session && typeof bodyAgentId === "string") await prepareAgentScope(session.userId, bodyAgentId);
     return options.operation(body, actor, request);
-  };
+  });
 }
 
-export function withTaskWriteFlag(
-  legacy: NextApiHandler,
-  method: string,
-  loadRoute: () => Promise<TaskWriteRoute>,
+export async function legacyTaskWriteSession(request: TaskWriteRequest, allowSessionFallback = false): Promise<SessionUser | null> {
+  const token = request.cookies ? request.cookies[SESSION_COOKIE] : parseCookies(request.headers.get("cookie") ?? "").get(SESSION_COOKIE);
+  const signed = verifySession(token);
+  if (!signed) return allowSessionFallback ? getSessionUser(request.headers) : null;
+  if (signed.agentId) {
+    return getSessionUser(new Headers({ Cookie: `${SESSION_COOKIE}=${token}` }));
+  }
+  return { userId: signed.id, teamScope: null, source: "legacy", needsBridge: true };
+}
+
+type TaskWriteRouteLoader = () => Promise<TaskWriteRoute>;
+
+export function taskWriteHandler(
+  routes: Partial<Record<string, TaskWriteRouteLoader>>,
+  options: { fallback?: NextApiHandler; methodNotAllowed?: unknown } = {},
 ): NextApiHandler {
   return async (req, res) => {
-    if (req.method !== method) return legacy(req, res);
-    let session: SessionUser | null = null;
-    let enabled = false;
-    let headers: Headers | undefined;
-    try {
-      headers = new Headers(req.headers as Record<string, string>);
-      session = await getSessionUser(headers);
-      enabled = !!session && await isFeatureEnabled(
-        HTPR_6923_APP_ROUTER_WRITES_FLAG,
-        session.userId,
-      );
-    } catch {
-      // A flag/auth lookup outage must not enable the new write path.
+    const loadRoute = routes[req.method ?? ""] ?? routes["*"];
+    if (!loadRoute) {
+      if (options.fallback) return options.fallback(req, res);
+      return res.status(405).json(options.methodNotAllowed ?? { message: "Method not allowed" });
     }
-    if (!enabled || !session || !headers) return legacy(req, res);
+    const headers = new Headers(req.headers as Record<string, string>);
+    const session = (await getSessionUser(headers).catch(() => null)) ?? undefined;
     const route = await loadRoute();
-    // Never retry legacy after dispatch: the operation may already have written.
-    const response = await route({ headers, rawHeaders: req.headers, cookies: req.cookies, query: req.query, json: async () => req.body }, session);
-    // Creation historically leaves unresolved sections/ranks without a response.
+    const response = await route({ headers, url: req.url, method: req.method, rawHeaders: req.headers, cookies: req.cookies, query: req.query, json: async () => req.body }, session);
     if (!response) return;
     response.headers.forEach((value, name) => {
       if (name !== "content-type") res.setHeader(name, value);
     });
-    // Relation failures historically send an empty 200, not JSON null.
     const text = await response.text();
-    // Download errors use Pages' text send contract, not a JSON string.
     if (text && !response.headers.get("content-type")?.includes("application/json")) {
       return res.status(response.status).send(text);
     }

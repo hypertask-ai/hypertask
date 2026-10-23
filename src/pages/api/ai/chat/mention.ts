@@ -1,3 +1,4 @@
+import { withAgentScopeRequest } from "@/lib/auth/agentScope";
 import { projectContentAccessWhere } from "@/utils/controllers/projects/getAllIncludes";
 import { reportError } from "@/lib/errors/reportError";
 import { NextApiHandler, NextApiRequest, NextApiResponse } from "next";
@@ -17,16 +18,16 @@ const handler: NextApiHandler = async (
     try {
       const query = req.query;
       const { param, projectId } = query;
-      const userId = (
-        await getSessionUser(new Headers(req.headers as Record<string, string>))
-      )?.userId;
+      const session = await getSessionUser(new Headers(req.headers as Record<string, string>));
+      const userId = session?.userId;
+      const actingAgentId = session?.agentId;
       if (!userId) return res.status(401).json({ message: "Unauthorized" });
       if (!param)
         return res
           .status(400)
           .json({ message: httpStatusConfig.statusCodes[400].userMessage });
 
-      const projectIds = await fetchidlist(userId);
+      const projectIds = await fetchidlist(userId, actingAgentId);
       if (projectIds.length === 0) {
         return res
           .status(400)
@@ -38,6 +39,7 @@ const handler: NextApiHandler = async (
             in: projectIds,
           },
           status: "Normal",
+          AND: [projectContentAccessWhere(userId, actingAgentId)],
         },
         select: {
           owner: true,
@@ -95,6 +97,7 @@ const handler: NextApiHandler = async (
             id: {
               in: projectIds,
             },
+            AND: [projectContentAccessWhere(userId, actingAgentId)],
           },
         });
 
@@ -104,6 +107,7 @@ const handler: NextApiHandler = async (
             projectId: {
               in: projectIds,
             },
+            project: projectContentAccessWhere(userId, actingAgentId),
             deletedAt: null,
             updatedAt: {
               not: null,
@@ -116,10 +120,10 @@ const handler: NextApiHandler = async (
 
         const updatedtask = task?.map((item: any) => ({
           id: item?.id,
-          name: item?.title, // Change the property name here
+          name: item?.title,
           type: "task",
           index: item.uniqueIndex,
-          project_id: item?.projectId, // Keep other properties unchanged
+          project_id: item?.projectId,
           ticketNumber: item?.ticketNumber,
           status: item?.status,
         }));
@@ -170,6 +174,7 @@ const handler: NextApiHandler = async (
             id: {
               in: projectIds,
             },
+            AND: [projectContentAccessWhere(userId, actingAgentId)],
             OR: [
               {
                 uniqueIdentifier: {
@@ -244,12 +249,15 @@ const handler: NextApiHandler = async (
   }
 };
 
-const fetchidlist = async (id: number) => {
+const fetchidlist = async (userId: number, actingAgentId?: string) => {
   try {
-    if (id) {
+    if (userId) {
       const projectid = await prisma.project.findMany({
         where: {
-          ...projectContentAccessWhere(id),
+          AND: [
+            projectContentAccessWhere(userId),
+            projectContentAccessWhere(userId, actingAgentId),
+          ],
         },
         select: {
           id: true,
@@ -280,4 +288,4 @@ function getQueryWords(cleanedQuery: string) {
   return cleanedQuery.split(/\s+/).filter((word) => word.length > 0);
 }
 
-export default handler;
+export default ((req, res) => withAgentScopeRequest(req, () => handler(req, res))) satisfies NextApiHandler;

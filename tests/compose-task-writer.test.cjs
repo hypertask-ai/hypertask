@@ -3,6 +3,7 @@ const assert = require('node:assert/strict');
 const path = require('node:path');
 const { createJiti } = require('jiti');
 const { JSDOM } = require('jsdom');
+const { loadSharedRoute } = require('./helpers/groupb-route.cjs');
 const root = path.resolve(__dirname, '..');
 const flag = 'htpr-6929-compose-task-writer';
 
@@ -288,11 +289,31 @@ test('shared server writer gates compose before accessing a board; legacy writer
   }
 });
 
+// Loads the shared create handler (the code behind /api/tasks/createGlobally POST)
+// with strict stubs; only the packages it needs at runtime come from node_modules.
+function loadCreateGlobal(stubs) {
+  stubs['@/lib/media/inlineAgentImages.server'] = { inlineAgentImagesForUser: async (html) => html };
+  stubs["@/lib/auth/agentScope"] = require("./helpers/agent-board-scope.cjs").enforcedScope;
+  stubs['@/utils/controllers/tasks/parentTaskAccess'] = createJiti(__filename)(path.join(root, 'src/utils/controllers/tasks/parentTaskAccess.ts'));
+  const real = new Set(['next/server', 'zod', 'better-auth/cookies']);
+  const code = require('typescript').transpileModule(require('node:fs').readFileSync(path.join(root, 'src/lib/api/task-writes/create-global.ts'), 'utf8'), {
+    compilerOptions: { esModuleInterop: true, module: require('typescript').ModuleKind.CommonJS },
+  }).outputText;
+  const mod = { exports: {} };
+  new Function('module', 'exports', 'require', code)(mod, mod.exports, (request) => {
+    if (real.has(request)) return require(request);
+    assert.ok(request in stubs, `Unexpected dependency: ${request}`);
+    return stubs[request];
+  });
+  return mod.exports;
+}
+
 test('actual create endpoint rejects disabled Compose before database work and preserves legacy/auth checks', async () => {
   let enabled = false, session = { userId: 985 }, flagReads = 0, userReads = 0, boardReads = 0;
+  const sharedRoute = loadSharedRoute(async () => session);
   const stubs = {
-    '@/lib/api/task-writes/route': { withTaskWriteFlag: (handler) => handler },
-    '@/lib/api/task-writes/create-global-effects': {},
+    './route': sharedRoute,
+    './create-global-effects': {},
     '@/lib/ai/taskWriterDueDate': {},
     '@/lib/flags/keys': {},
     '@/lib/ai/composeTaskTarget': createJiti(__filename)(path.join(root, 'src/lib/ai/composeTaskTarget.ts')),
@@ -303,26 +324,20 @@ test('actual create endpoint rejects disabled Compose before database work and p
       user: { findUnique: async () => { userReads++; return { id: 985 }; } },
       project: { findFirst: async () => { boardReads++; return null; } },
     } },
-    '@/lib/auth/getSessionUser': { getSessionUser: async () => session },
     '@/lib/auth/session': { SESSION_COOKIE: 'session', verifySession: () => null },
     '@/lib/auth/resolveActingAgent': { resolveActingAgent: () => ({ ok: true, agentId: null }) },
     '@/utils/controllers/projects/getAllIncludes': { taskWriteAccessWhere: () => ({}) },
     '@prisma/client': {}, '@/utils/generateRank': {}, '@vercel/functions': {},
     '@/utils/controllers/tasks/getNextUniqueTaskIndex': {}, '@/lib/mcp/webhooks/taskEvents': {},
     '@/lib/mcp/webhooks/outbox': {}, '@/lib/agentWebhooks/outbox': {},
+    '@/lib/telemetry/savedWork': { enqueueBoardCreated: async () => "board-key", processAnalyticsIntentSoon: () => {}, enqueueTaskCreated: async () => "task-key", creationChannelFromHeader: () => 'web', CREATION_CHANNEL_HEADER: 'X-Hypertask-Creation-Channel', CREATION_AGENT_HEADER: 'X-Hypertask-Creation-Agent' },
     '@/utils/controllers/activities/createAssignedActivity': {},
   };
-  const code = require('typescript').transpileModule(require('node:fs').readFileSync(path.join(root, 'src/pages/api/tasks/createGlobally.ts'), 'utf8'), {
-    compilerOptions: { esModuleInterop: true, module: require('typescript').ModuleKind.CommonJS },
-  }).outputText;
-  const mod = { exports: {} };
-  new Function('module', 'exports', 'require', code)(mod, mod.exports, (request) => {
-    assert.ok(request in stubs, `Unexpected dependency: ${request}`);
-    return stubs[request];
-  });
+  const created = loadCreateGlobal(stubs);
+  const handler = sharedRoute.taskWriteHandler({ POST: async () => created.POST });
   const post = async (body) => {
-    const res = { status(code) { this.code = code; return this; }, json(body) { this.body = body; return this; } };
-    await mod.exports.default({ method: 'POST', headers: {}, cookies: {}, body: { title: 'Test note', projectId: 7, userId: 985, ...body } }, res);
+    const res = { status(code) { this.code = code; return this; }, json(body) { this.body = body; return this; }, setHeader() {} };
+    await handler({ method: 'POST', headers: {}, cookies: {}, body: { title: 'Test note', projectId: 7, userId: 985, ...body } }, res);
     return res;
   };
   let result = await post({ requestKind: 'compose-task' });
@@ -368,14 +383,15 @@ test('standalone dictation improvement never prefixes undefined and disabled mic
   const improve = new Function('editor', 'defaultContent', 'response', 'canDeliver', 'callbackHandler', `return async () => { const htmlContent = ${htmlContent}; const textContent = ${textContent}; ${improveBlock} };`)(null, 'Typed note', { json: async () => ({ response_html: '<p>Spoken note</p>' }) }, () => true, (...args) => delivered.push(args));
   await improve();
   assert.deepEqual(delivered, [['<p>Spoken note</p>', true]]);
-  for (const disabled of [false, true]) {
+  for (const [disabled, active] of [[false, true], [true, true], [false, false]]) {
     const stops = [];
     const javascript = ts.transpileModule(`const handler = ${keyHandler};`, { compilerOptions: { target: ts.ScriptTarget.ES2020 } }).outputText;
-    const handler = new Function('disabled', 'recordingRef', 'stopRecording', `${javascript}; return handler;`)(disabled, { current: true }, (send) => stops.push(send));
+    const handler = new Function('disabled', 'recordingRef', 'activeRef', 'stopRecording', `${javascript}; return handler;`)(disabled, { current: true }, { current: active }, (send) => stops.push(send));
     let prevented = false;
     handler({ key: 'Enter', keyCode: 13, preventDefault: () => { prevented = true; } });
-    assert.deepEqual(stops, disabled ? [] : [true]);
-    assert.equal(prevented, !disabled);
+    const handled = active && !disabled;
+    assert.deepEqual(stops, handled ? [true] : []);
+    assert.equal(prevented, handled);
   }
 });
 
@@ -418,9 +434,10 @@ test('save existing target enforces both flags, edit permissions, board match an
   const { isEmptyComposeTarget } = createJiti(__filename)(path.join(root, 'src/lib/ai/composeTaskTarget.ts'));
   let compose = true, newWindow = false, authorized = true, target = null;
   const taskReads = [], updates = [], broadcasts = [], flags = [];
+  const sharedRoute = loadSharedRoute(async () => ({ userId: 985 }));
   const stubs = {
-    '@/lib/api/task-writes/route': { withTaskWriteFlag: (handler) => handler },
-    '@/lib/api/task-writes/create-global-effects': {},
+    './route': sharedRoute,
+    './create-global-effects': {},
     '@/lib/ai/taskWriterDueDate': {},
     '@/lib/flags/keys': {},
     '@/lib/ai/composeTaskTarget': { isEmptyComposeTarget },
@@ -431,7 +448,6 @@ test('save existing target enforces both flags, edit permissions, board match an
       project: { findFirst: async () => authorized ? { id: 7 } : null },
       task: { findFirst: async (query) => { taskReads.push(query); return target; } },
     } },
-    '@/lib/auth/getSessionUser': { getSessionUser: async () => ({ userId: 985 }) },
     '@/lib/auth/session': { SESSION_COOKIE: 'session', verifySession: () => null },
     '@/lib/auth/resolveActingAgent': { resolveActingAgent: () => ({ ok: true, agentId: null }) },
     '@/utils/controllers/projects/getAllIncludes': { taskWriteAccessWhere: (userId, agentId) => ({ canWrite: { userId, agentId } }) },
@@ -440,18 +456,13 @@ test('save existing target enforces both flags, edit permissions, board match an
     '@prisma/client': {}, '@/utils/generateRank': {}, '@vercel/functions': {},
     '@/utils/controllers/tasks/getNextUniqueTaskIndex': {}, '@/lib/mcp/webhooks/taskEvents': {},
     '@/lib/mcp/webhooks/outbox': {}, '@/lib/agentWebhooks/outbox': {}, '@/utils/controllers/activities/createAssignedActivity': {},
+    '@/lib/telemetry/savedWork': { enqueueBoardCreated: async () => "board-key", processAnalyticsIntentSoon: () => {}, enqueueTaskCreated: async () => "task-key", creationChannelFromHeader: () => 'web', CREATION_CHANNEL_HEADER: 'X-Hypertask-Creation-Channel', CREATION_AGENT_HEADER: 'X-Hypertask-Creation-Agent' },
   };
-  const code = require('typescript').transpileModule(require('node:fs').readFileSync(path.join(root, 'src/pages/api/tasks/createGlobally.ts'), 'utf8'), {
-    compilerOptions: { esModuleInterop: true, module: require('typescript').ModuleKind.CommonJS },
-  }).outputText;
-  const mod = { exports: {} };
-  new Function('module', 'exports', 'require', code)(mod, mod.exports, (request) => {
-    assert.ok(request in stubs, `Unexpected dependency: ${request}`);
-    return stubs[request];
-  });
+  const created = loadCreateGlobal(stubs);
+  const handler = sharedRoute.taskWriteHandler({ POST: async () => created.POST });
   const post = async (extra = {}) => {
-    const res = { status(code) { this.code = code; return this; }, json(body) { this.body = body; return this; } };
-    await mod.exports.default({ method: 'POST', headers: {}, cookies: {}, body: {
+    const res = { status(code) { this.code = code; return this; }, json(body) { this.body = body; return this; }, setHeader() {} };
+    await handler({ method: 'POST', headers: {}, cookies: {}, body: {
       title: 'Written title', description: '<p>Written body</p>', projectId: 7, userId: 985, requestKind: 'compose-task', existingTaskId: 52, ...extra,
     } }, res);
     return res;
@@ -478,7 +489,7 @@ test('save existing target enforces both flags, edit permissions, board match an
   assert.equal(result.body.newTask.id, 52);
   assert.deepEqual(updates[0][0], { id: 52, title: 'Written title', description: '<p>Written body</p>' });
   assert.equal(updates[0][1].id, 985);
-  assert.deepEqual(updates[0][3], { expectedTitle: target.title, expectedDescription: '', expectedProjectId: 7, expectedStatus: 'Normal' });
+  assert.deepEqual(updates[0][3], { teamScope: undefined, expectedTitle: target.title, expectedDescription: '', expectedProjectId: 7, expectedStatus: 'Normal' });
   assert.equal(broadcasts.length, 2);
 });
 

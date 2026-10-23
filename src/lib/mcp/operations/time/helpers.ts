@@ -1,14 +1,9 @@
 import { validateMcpAuth, checkMcpRateLimit } from "@/lib/mcp/auth";
-import { findTaskByStringIdentifier } from "@/lib/mcp/tasks/resolveTask";
+import { findTaskByStringIdentifier, taskIdentifierErrorResponse } from "@/lib/mcp/tasks/resolveTask";
 import prisma from "@/lib/prisma";
 import { getProjectWhere } from "@/utils/controllers/projects/getAllIncludes";
 import { NextRequest, NextResponse } from "next/server";
 
-/**
- * Rate limit, authenticate, read the JSON body. Entry-scoped routes (update,
- * delete) address a TimeEntry by id rather than a task, so they stop here;
- * resolveMcpTimeTask continues on to resolve the task.
- */
 export async function authenticateMcpTime(request: NextRequest) {
   const rateLimited = await checkMcpRateLimit(request);
   if (rateLimited) {
@@ -30,7 +25,6 @@ export async function authenticateMcpTime(request: NextRequest) {
   return { ctx, body, response: null };
 }
 
-/** Reads a positive integer TimeEntry id from the request body. */
 export function readEntryId(body: any) {
   const raw = body?.entry_id;
   const entryId = typeof raw === "string" ? Number(raw) : raw;
@@ -67,7 +61,14 @@ export async function resolveMcpTimeTask(
     };
   }
 
-  const task = await findTaskByStringIdentifier(ctx.user, body.task, ctx.agentId);
+  let task;
+  try {
+    task = await findTaskByStringIdentifier(ctx.user, body.task, ctx.agentId, ctx.teamScope);
+  } catch (error) {
+    const response = taskIdentifierErrorResponse(error);
+    if (response) return { ctx, task: null, body, response };
+    throw error;
+  }
   const activeProject = task
     ? await prisma.project.findFirst({
         where: {
@@ -75,7 +76,7 @@ export async function resolveMcpTimeTask(
           status: options.allowArchived
             ? { in: ["Normal", "Archive"] }
             : "Normal",
-          ...getProjectWhere(ctx.user.id, ctx.agentId),
+          ...getProjectWhere(ctx.user.id, ctx.agentId, ctx.teamScope),
         },
         select: { id: true },
       })

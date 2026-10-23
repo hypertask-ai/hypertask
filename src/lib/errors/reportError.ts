@@ -24,9 +24,6 @@ export type ErrorReport = {
   fingerprintKey?: string;
 };
 
-// A daily cron that fails daily used to refile every night: a 24h window expired
-// minutes before the next run, so every occurrence looked like the first. The
-// window has to outlast the slowest recurring producer, not match it (HTPR-5571).
 const DEDUPE_SECONDS = 7 * 24 * 60 * 60;
 const HOUR_SECONDS = 60 * 60;
 const ERROR_LABEL = "auto-error";
@@ -99,8 +96,6 @@ async function getBoardTarget(projectId: number, userId: number) {
   if (!projectUniqueIdentifier)
     throw new Error("Error board identifier is missing");
 
-  // Tags every auto-filed ticket so the board can filter to just these (saved view "Auto errors").
-  // Missing label is not fatal: the ticket still gets created, just untagged.
   const label = await prisma.label.findFirst({
     where: { projectId, value: ERROR_LABEL },
     select: { id: true },
@@ -151,10 +146,6 @@ async function reportErrorTicket(report: ErrorReport) {
     );
 
     if (minimumOccurrences > 1) {
-      // Deliberately NOT DEDUPE_SECONDS: that is how long a filed ticket stays
-      // quiet, not how long occurrences may accumulate toward the threshold.
-      // Passing the widened window here would make threshold-gated errors fire on
-      // a week of stragglers instead of a day's burst.
       const thresholdClaim = await claimThresholdErrorTicket(
         redis,
         fingerprint,
@@ -211,6 +202,7 @@ async function reportErrorTicket(report: ErrorReport) {
 
     const { labelIds, ...boardTarget } = target;
     await createTask({
+      creationChannel: "api",
       ...boardTarget,
       title: ticketTitle(report),
       description: ticketDescription(report, firstSeen),
@@ -226,10 +218,10 @@ async function reportErrorTicket(report: ErrorReport) {
 }
 
 export async function reportError(report: ErrorReport) {
-  // Both reporters absorb their own failures. Starting them together keeps a
-  // slow analytics request from delaying the durable error-ticket path.
-  await Promise.all([
-    capturePostHogException(report),
-    reportErrorTicket(report),
-  ]);
+  const captured = await capturePostHogException(report);
+  if (captured) {
+    trace("posthog-captured");
+    return;
+  }
+  await reportErrorTicket(report);
 }

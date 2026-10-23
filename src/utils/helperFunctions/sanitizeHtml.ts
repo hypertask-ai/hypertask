@@ -1,11 +1,7 @@
-import DOMPurify from "isomorphic-dompurify";
+import { isAllowedIframeUrl } from "./allowedIframeSources";
 
-// HTPR-4004: AI-streamed responses are HTML injected via dangerouslySetInnerHTML.
-// The model can echo user-controlled task/comment text, so an attacker who plants
-// `<img onerror=...>` in a task title gets stored XSS in every viewer's browser.
-// Sanitize before rendering, but keep the attributes the AI chat relies on:
-// task-mention <span>s (projectid/uniqueindex/data-* read by MessageItem's click
-// handler) and <a href> links. DOMPurify strips on* handlers and javascript: URIs.
+type Purifier = typeof import("isomorphic-dompurify").default;
+
 const MENTION_ATTRS = [
   "data-type",
   "data-label",
@@ -15,7 +11,36 @@ const MENTION_ATTRS = [
   "target",
 ];
 
+let purifier: Purifier | undefined;
+
+function purifierLoadedOnFirstSanitize(): Purifier {
+  purifier ??= require("isomorphic-dompurify") as Purifier;
+  return purifier;
+}
+
 export function sanitizeAiHtml(html: string): string {
   if (!html) return "";
-  return DOMPurify.sanitize(html, { ADD_ATTR: MENTION_ATTRS });
+  return purifierLoadedOnFirstSanitize().sanitize(html, { ADD_ATTR: MENTION_ATTRS });
+}
+
+export function sanitizeDescriptionHtml(html: string): string {
+  if (!html) return "";
+  const purifier = purifierLoadedOnFirstSanitize();
+  const removeUnsafeIframe = (node: Node) => {
+    if (node.nodeName.toLowerCase() !== "iframe") return;
+    const iframe = node as HTMLIFrameElement;
+    if (iframe.hasAttribute("srcdoc") || !isAllowedIframeUrl(iframe.getAttribute("src") ?? "")) {
+      iframe.remove();
+    }
+  };
+  purifier.addHook("uponSanitizeElement", removeUnsafeIframe);
+  try {
+    return purifier.sanitize(html, {
+      ADD_TAGS: ["iframe"],
+      ADD_ATTR: [...MENTION_ATTRS, "allowfullscreen", "frameborder", "width", "height", "title", "allow"],
+      FORBID_ATTR: ["srcdoc"],
+    });
+  } finally {
+    purifier.removeHook("uponSanitizeElement", removeUnsafeIframe);
+  }
 }

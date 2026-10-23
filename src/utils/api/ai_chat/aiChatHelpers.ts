@@ -1,11 +1,9 @@
+import { sidebarChatHeaders } from "@/lib/agents/chatViewerState";
 import globalConstants from "@/lib/constants";
 import { IChatMessage, IChatSession } from "@/models/model";
 import axiosClient, { ApiResponse, isCancel } from "@/utils/axiosClient";
 import { AxiosRequestConfig, InternalAxiosRequestConfig } from "axios";
 
-/**
- * Payload structure for sending a message to the AI chat.
- */
 type TAISendMessage = {
   message: string;
   session_id: string;
@@ -20,6 +18,45 @@ export type TAllChatSessionsResponse = {
   sessions: IChatSession[];
 };
 
+export type ChatSessionSummary = Pick<IChatSession,
+  "id" | "createdAt" | "updatedAt" | "userId" | "taskId" | "projectId" | "title"
+> & { agentId: string | null; teamId: string | null; hasMessages: boolean };
+export type TPagedChatSessionsResponse = {
+  success: boolean;
+  sessions: ChatSessionSummary[];
+  nextCursor: string | null;
+};
+export type TChatSessionsWireResponse = TAllChatSessionsResponse | TPagedChatSessionsResponse;
+export type ChatSessionScope = { taskId?: number; projectId?: number };
+export const isPagedChatSessions = (body: TChatSessionsWireResponse): body is TPagedChatSessionsResponse =>
+  "nextCursor" in body;
+
+export function mergeSessionHistory<T extends { id: string; updatedAt: Date }>(newer: T[], older: T[]): T[] {
+  const byId = new Map(older.map((session) => [session.id, session]));
+  for (const session of newer) {
+    const previous = byId.get(session.id);
+    if (!previous || new Date(session.updatedAt).getTime() >= new Date(previous.updatedAt).getTime()) {
+      byId.set(session.id, session);
+    }
+  }
+  return [...byId.values()].sort((a, b) =>
+    new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime() || b.id.localeCompare(a.id)
+  );
+}
+
+export function mergeSessionTranscript(incoming: IChatSession, local?: IChatSession, pendingMessageIds: ReadonlySet<string> = new Set()): IChatSession {
+  if (!local) return incoming;
+  const messages = new Map(incoming.messages.map((message) => [message.id, message]));
+  for (const message of local.messages) {
+    if (pendingMessageIds.has(message.id)) messages.set(message.id, message);
+  }
+  const localOrder = new Map(local.messages.map((message, index) => [message.id, index]));
+  return { ...incoming, messages: [...messages.values()].sort((a, b) =>
+    new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime() ||
+    (localOrder.has(a.id) && localOrder.has(b.id) ? localOrder.get(a.id)! - localOrder.get(b.id)! : 0)
+  ) };
+}
+
 type TCreateChatSessionNextResponse = {
   success: boolean;
   session: IChatSession;
@@ -29,17 +66,10 @@ type TUpdateChatSessionResponse = {
   success: boolean;
   session: IChatSession;
 };
-// Store reference to active message sending requests
 const activeMessageRequests = new Map<string, AxiosRequestConfig>();
 
-/**
- * Generate a unique key for a message sending request
- */
 const getMessageKey = (sessionId: string) => `message-${sessionId}`;
 
-/**
- * AI Chat API service for handling chat session-related endpoints.
- */
 export const AI_Chat_API = {
   addMessage: async (
     sessionId: string,
@@ -48,21 +78,30 @@ export const AI_Chat_API = {
     return axiosClient.post<
       { message: IChatMessage },
       { sessionId: string; message: IChatMessage }
-    >(globalConstants.addMessageToSessionRoute, { sessionId, message });
+    >(globalConstants.addMessageToSessionRoute, { sessionId, message }, { headers: sidebarChatHeaders(sessionId) });
   },
 
-  /**
-   * Lists all AI chat sessions for the current user (Next.js route, cookie auth).
-   */
   getAllSessions: async (): Promise<ApiResponse<TAllChatSessionsResponse>> => {
     return axiosClient.get<TAllChatSessionsResponse>(
       globalConstants.getAllAiChatSessionsRoute
     );
   },
 
-  /**
-   * Creates a new AI chat session via the Next.js route (cookie auth).
-   */
+  getSessionPage: async (options: ChatSessionScope & { cursor?: string; limit?: number; emptyOnly?: boolean } = {}, signal?: AbortSignal): Promise<ApiResponse<TChatSessionsWireResponse>> =>
+    axiosClient.get<TChatSessionsWireResponse>(globalConstants.getAllAiChatSessionsRoute, {
+      params: { compat: "htpr-6924", limit: 30, ...options }, signal,
+    }),
+
+  getSessionTranscript: async (sessionId: string, signal?: AbortSignal, sidebarProjectId?: number): Promise<IChatSession | null> => {
+    const response = await axiosClient.get<{ success: boolean; session: IChatSession } | TAllChatSessionsResponse>(
+      globalConstants.getAllAiChatSessionsRoute,
+      { params: { compat: "htpr-6924", sessionId }, signal, headers: sidebarProjectId ? { "x-hypertask-sidebar-project": String(sidebarProjectId) } : sidebarChatHeaders(sessionId) }
+    );
+    if ("session" in response.data) return response.data.session;
+    const legacy = await AI_Chat_API.getAllSessions();
+    return legacy.data.sessions.find((session) => session.id === sessionId) ?? null;
+  },
+
   createSessionNext: async (taskId?: number, projectId?: number): Promise<
     ApiResponse<TCreateChatSessionNextResponse>
   > => {
@@ -75,9 +114,6 @@ export const AI_Chat_API = {
     });
   },
 
-  /**
-   * Updates a chat session (e.g. title) via the Next.js route (cookie auth).
-   */
   updateSession: async (
     sessionId: string,
     title: string
@@ -88,10 +124,6 @@ export const AI_Chat_API = {
     >(globalConstants.updateAiChatSessionRoute, { sessionId, title });
   },
 
-  /**
-   * Deletes one chat session (`delete` query param = session id). The server
-   * ensures at least one session remains per user.
-   */
   deleteSession: async (
     sessionId: string
   ): Promise<ApiResponse<{ message: string }>> => {
@@ -101,48 +133,24 @@ export const AI_Chat_API = {
     );
   },
 
-  /**
-   * Sends a message to the AI chat.
-   * Stores the config for potential cancellation.
-   *
-   * @param payload - Message details including session ID, project, and AI model.
-   * @param     message: string;
-   * @param     session_id: string;
-   * @param     projectId: number;
-   * @param     teamId: string;
-   * @param     model: string;
-   * @param     provider: string;
-   * @returns A promise resolving to the response from the AI.
-   */
   sendMessage: async (payload: TAISendMessage): Promise<ApiResponse<any>> => {
-    // First, cancel any existing request for this session
     AI_Chat_API.cancelOngoingMessageRequest(payload.session_id);
 
     const config: AxiosRequestConfig = {
-      // Optional: add additional config settings here if needed
-      // timeout: 60000, // longer timeout for AI responses
     };
 
-    // Store the config for future cancellation
     const response = await axiosClient.post<any, TAISendMessage>(
       globalConstants.sendAiChatMessageRoute,
       payload,
       config
     );
 
-    // Store request config for potential cancellation
     const requestKey = getMessageKey(payload.session_id);
     activeMessageRequests.set(requestKey, response.config);
 
     return response;
   },
 
-  /**
-   * Cancels an ongoing message sending request for a specific session
-   *
-   * @param sessionId - The session ID to cancel the ongoing request for
-   * @returns Boolean indicating if a request was found and canceled
-   */
   cancelOngoingMessageRequest: (sessionId: string): boolean => {
     const requestKey = getMessageKey(sessionId);
     const config = activeMessageRequests.get(requestKey);
@@ -160,11 +168,6 @@ export const AI_Chat_API = {
     return false;
   },
 
-  /**
-   * Cancels all ongoing message requests
-   *
-   * @returns Number of requests that were canceled
-   */
   cancelAllMessageRequests: (): number => {
     let cancelCount = 0;
 
@@ -181,15 +184,11 @@ export const AI_Chat_API = {
     return cancelCount;
   },
 
-  /**
-   * Cancels all ongoing requests that match the chat API route pattern
-   */
   cancelAllChatRequests: () => {
     return axiosClient.cancelRequestsMatching(/\/chat|\/ai/);
   },
 };
 
-// Export a helper function to check if an error is a cancellation error
 export const isMessageCanceled = (error: any): boolean => {
   return isCancel(error);
 };

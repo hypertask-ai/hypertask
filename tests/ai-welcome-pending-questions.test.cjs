@@ -8,10 +8,12 @@ const { JSDOM } = require("jsdom");
 const { QueryClient, QueryClientProvider } = require("@tanstack/react-query");
 const ts = require("typescript");
 
-const atoms = { currentProjectAtom: "project", inViewObjectAtom: "task", taskDetailNonEssentialReadyAtom: "ready" };
+const atoms = { composeTaskQuestionsTaskIdAtom: "questionsTaskId", currentProjectAtom: "project", inViewObjectAtom: "task", taskDetailNonEssentialReadyAtom: "ready" };
 let dataReady = true;
 const sent = [];
 const mocks = {
+  "@/hooks/useFlag": { useFlag: () => false },
+  "@/lib/flags/keys": {},
   "@/lib/contexts/Multipages/AI_Agent/AI_Agent_Chat_Context": { useAiChatContext: () => ({ isDetailPage: true, handleSendMessage: (message) => sent.push(message) }) },
   "next/navigation": { usePathname: () => "/detail/project-6859/43" },
   "@/lib/state": { useRecoilValue: (atom) => atom === "task" ? { taskId: 43, taskTicketNumber: "QASA-43" } : atom === "ready" ? dataReady : null },

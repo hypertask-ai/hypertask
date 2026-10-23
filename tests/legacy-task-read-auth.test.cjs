@@ -36,7 +36,6 @@ function harness(userId = 42) {
       } },
     } },
     "@/lib/auth/getSessionUser": { getSessionUser: async () => { calls.push(["session"]); return userId === null ? null : { userId }; } },
-    "@/lib/api/task-writes/route": { withTaskWriteFlag: handler => handler },
     "@/utils/controllers/tasks/getTask": {},
     "@/utils/controllers/tasks/getOrphanTasks": { default: async (...args) => { calls.push(["content", args]); return { status: 200, json: [] }; } },
     "@/utils/controllers/urls/fetchUrls": { default: async (...args) => { calls.push(["content", args]); return { status: 200, json: [] }; } },
@@ -51,7 +50,7 @@ function harness(userId = 42) {
   };
   async function request(route, body) {
     const handler = load(`src/pages/api/${route}.ts`, mocks).default;
-    const res = { status(code) { this.statusCode = code; return this; }, json(value) { this.body = value; return this; } };
+    const res = { setHeader() {}, status(code) { this.statusCode = code; return this; }, json(value) { this.body = value; return this; } };
     const method = ["drafts/getDrafts", "tasks/getTaskMinimal", "ai/generateComments"].includes(route) ? "POST" : "GET";
     await handler({ method, query: body, body, headers: {} }, res);
     return res;
@@ -82,7 +81,8 @@ for (const route of ["priority/getByTask", "estimate/getByTask", "labels/getByTa
       const h = harness(null);
       const res = await h[mode](route, { taskId: 17, id: 17, projectId: 17, currentTaskId: 17, userId: 99 });
       assert.equal(res.statusCode, 401);
-      assert.deepEqual(h.calls.map(([kind]) => kind), ["session"]);
+      // The adapter and the shared route may each look the caller up; neither may read content.
+      assert.ok(h.calls.length > 0 && h.calls.every(([kind]) => kind === "session"));
     });
   }
 }

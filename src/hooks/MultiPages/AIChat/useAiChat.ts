@@ -1,7 +1,7 @@
 
 export { type AiChatProcessedAttachment } from "./aiChatShared";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useAiChatState } from "./useAiChatState";
 import { useAiChatSessions } from "./useAiChatSessions";
 import { createAiChatKeyboard } from "./aiChatKeyboard";
@@ -9,49 +9,23 @@ import { useAiChatAttachments } from "./useAiChatAttachments";
 import { createAiChatSend } from "./aiChatSend";
 import { useAiChatPresentation } from "./useAiChatPresentation";
 import { useFlag } from "@/hooks/useFlag";
-import { HTPR_6936_ASK_AI_FULLSCREEN_FLAG, HTPR_7049_RELOAD_AFTER_IMAGE_CHAT_FLAG, HTPR_7099_CHAT_CONNECTION_LOST_FLAG } from "@/lib/flags/keys";
+import { HTPR_7518_AGENT_SIDEBAR_CHATS_FLAG, HTPR_7337_EDIT_WITH_AI_FLAG, HTPR_6936_ASK_AI_FULLSCREEN_FLAG, HTPR_7049_RELOAD_AFTER_IMAGE_CHAT_FLAG, HTPR_7099_CHAT_CONNECTION_LOST_FLAG, HTPR_6971_CHAT_HISTORY_PAGING_FLAG, HTPR_7316_CHAT_SCOPE_TICKET_FLAG } from "@/lib/flags/keys";
 
-// Type-only: a value import would pull tiptap back into every page's initial
-// chunk and undo the dynamic mount below (HTPR-4508).
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
+import { useRecoilState } from "@/lib/state";
+import { aiChatEditTaskIdAtom } from "@/store";
 
 export function useAiChat() {
-  // Failed preparation can finish without changing isTyping; wake the search handoff too.
+  const agentSidebarChatsFlag = useFlag(HTPR_7518_AGENT_SIDEBAR_CHATS_FLAG);
+  let agentSidebarChatsEnabled = false;
+  if (agentSidebarChatsFlag) agentSidebarChatsEnabled = true;
+  const editWithAiEnabled = useFlag(HTPR_7337_EDIT_WITH_AI_FLAG);
+  const [editTaskId, setEditTaskId] = useRecoilState(aiChatEditTaskIdAtom);
   const [sendSettledVersion, setSendSettledVersion] = useState(0);
   const askAiFullscreenEnabled = useFlag(HTPR_6936_ASK_AI_FULLSCREEN_FLAG);
   const reloadTaskAfterChat = useFlag(HTPR_7049_RELOAD_AFTER_IMAGE_CHAT_FLAG);
   const connectionRetry = useFlag(HTPR_7099_CHAT_CONNECTION_LOST_FLAG);
+  const pagingRequested = useFlag(HTPR_6971_CHAT_HISTORY_PAGING_FLAG);
+  const ticketScopeEnabled = useFlag(HTPR_7316_CHAT_SCOPE_TICKET_FLAG);
   const {
   lastWorkspaceFocusRef, queryClient, currentUser, currentProject,
   showAiChatInterface, setShowAIChat, setAiChatAutoOpenSuppressed, setAiChatExplicitOpenAt, aiChatExplicitOpenAt,
@@ -65,25 +39,35 @@ export function useAiChat() {
   setCurrentStreamingSession, isRecording, setIsRecording, displayAiOptions, contextList,
   setContextList, agentStatus, setAgentStatus, showRenameChatModal, setShowRenameChatModal,
   messageListRef, hasAttemptedRestoreRef, previousProjectIdRef, toggleCreateTaskGlobally, token,
-  dockedProjectId, scopedProjectId, boardScopeIsExplicit, editor, editorEnabled,
+  dockedProjectId, scopedProjectId, boardScopeIsExplicit, ticketScopeSelected, editor, editorEnabled,
   editorMountProps, taskId, shouldLoadChatHistory, createSession, activeSession,
-  currentSession, showWelcomeScreen, isSessionPending, sessions, selectSessionInHistory,
+  currentSession, showWelcomeScreen, isSessionPending, sessions, historySessions, hasMoreSessions, isLoadingMoreSessions, pagingError, loadMoreSessions, refreshHistorySessions, resolveHistorySession, getDisplayedSession, sessionPagingEnabled, selectSessionInHistory,
   chatHistoryReady, addMessageToSessionQuery, updateLastMessageInSessionCache, appendMessageToSessionCache, updateSessionTitle,
   deleteSessionInHistory, sessionsRef, chatHistoryReadyRef, sessionSetupRef, resolvedBoardSessionRef,
   sessionIntentGenerationRef, sessionContextKey, clearMessageQueue,
   } = useAiChatState();
-  const {
-  selectSession, startNewSession, deleteSession, fileUpload, handleSendMessageRef,
-  removeQueuedMessage, drainQueuedMessage, billing, isApple, isByokBlocked,
-  isDemo, chatRoute, ensureSessionForCurrentBoard,
-  } = useAiChatSessions({
-    sessionIntentGenerationRef, sessionSetupRef, resolvedBoardSessionRef, clearMessageQueue, selectSessionInHistory,
+  useEffect(editWithAiEnabled ? () => {
+    if (editTaskId === null) return;
+    if (!showAiChatInterface || taskId !== editTaskId || currentSession?.messages?.some((message) => message.role === "human")) {
+      setEditTaskId(null);
+    }
+  } : () => {
+    if (editTaskId !== null) setEditTaskId(null);
+  }, [editWithAiEnabled, editTaskId, showAiChatInterface, taskId, currentSession?.messages, setEditTaskId]);
+
+  const sessionContext = {
+    agentSidebarChatsEnabled, sessionIntentGenerationRef, sessionSetupRef, resolvedBoardSessionRef, clearMessageQueue, selectSessionInHistory,
     createSession, isFullScreenChat, setDockedChatScope, currentProject, previousProjectIdRef,
     deleteSessionInHistory, messageQueueRef, setQueuedMessages, sendInFlightRef, modelBilling,
     currentAiOption, pathname, currentUser, taskId, sessionsRef,
     dockedChatScope, sessionContextKey, chatHistoryReadyRef, aiChatBoardSessionMap, setAiChatBoardSessionMap,
-    setRecentChatBoardIds, shouldLoadChatHistory,
-  });
+    setRecentChatBoardIds, shouldLoadChatHistory, resolveHistorySession, getDisplayedSession, sessionPagingEnabled,
+  };
+  const {
+  selectSession, startNewSession, deleteSession, fileUpload, handleSendMessageRef,
+  removeQueuedMessage, drainQueuedMessage, billing, isApple, isByokBlocked,
+  isDemo, chatRoute, ensureSessionForCurrentBoard,
+  } = useAiChatSessions(pagingRequested ? sessionContext : { ...sessionContext, sessionPagingEnabled: false });
   const {
   handleCancelStream, audioTiptapCallback, toggleRecording, processAttachments, buildGuestBoard,
   waitForChatSession,
@@ -92,13 +76,17 @@ export function useAiChat() {
     setIsTyping, setAgentStatus, chatRoute, token, editor,
     setIsRecording, addMessageToSessionQuery, scopedProjectId, ensureSessionForCurrentBoard,
   });
+  let sendTicketScope = false;
+  if (ticketScopeEnabled) sendTicketScope = ticketScopeSelected;
   const {
   handleSendMessage,
   } = createAiChatSend({
+    sessionPagingEnabled: pagingRequested && sessionPagingEnabled, getDisplayedSession,
     isByokBlocked, isTyping, editor, fileUpload, messageQueueRef,
     setQueuedMessages, sendInFlightRef, surface, inViewObject, waitForChatSession,
     currentProject, buildGuestBoard, processAttachments, setIsTyping, addMessageToSessionQuery,
     scopedProjectId, isFullScreenChat, taskId, dockedProjectId, setAiChatBoardSessionMap,
+    ticketScopeSelected: sendTicketScope,
     modelTeamId, contextList, currentAiOption, spansAllBoards, boardScopeIsExplicit,
     pathname, currentUser, billing, isDemo, streamingSessionRef,
     streamingAssistantMessageRef, setCurrentStreamingSession, streamingRequestRef, chatRoute, token,
@@ -138,7 +126,7 @@ export function useAiChat() {
     queuedMessages,
     removeQueuedMessage,
     isByokBlocked,
-    sessions,
+    sessions, historySessions, hasMoreSessions, isLoadingMoreSessions, pagingError, loadMoreSessions, refreshHistorySessions, sessionPagingEnabled,
     activeSession,
     currentSession,
     showWelcomeScreen,

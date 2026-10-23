@@ -20,20 +20,16 @@ const commentsGetCountByTask= async (taskId:string | string[], userId: number) =
           });
       
               
-            // console.log("🚀 ~ file: getByTask.ts:26 ~ commentsGetByTask ~ comments:", comments)
             return({
                     status:200,
                     json:{taskId:taskId, commentCount: commentCounts}
                 })
-            // res.status(200).json(comments);
-            // console.log(comments);
         } catch (error) {
             console.log(error);
             return({
                     status:500,
                     json:{ message: "Internal server error" }
                 })
-            // res.status(500).json({ message: "Internal server error" });
         }
 
 };

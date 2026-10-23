@@ -23,16 +23,14 @@ export default function ResetTrialTab({ searchTerm, onSearchChange, adminPasswor
     const [trialResetMessage, setTrialResetMessage] = useState("")
     const [debouncedSearchTerm, setDebouncedSearchTerm] = useState("")
 
-    // Debounce search term
     useEffect(() => {
         const timer = setTimeout(() => {
             setDebouncedSearchTerm(searchTerm)
-        }, 300) // 300ms debounce
+        }, 300)
 
         return () => clearTimeout(timer)
     }, [searchTerm])
 
-    // Fetch users on demand based on search term
     const fetchUsers = async () => {
         if (!debouncedSearchTerm || debouncedSearchTerm.trim().length < 2) {
             return []
@@ -101,7 +99,6 @@ export default function ResetTrialTab({ searchTerm, onSearchChange, adminPasswor
 
     return (
         <div className="space-y-6">
-            {/* Success/Error Messages */}
             {trialResetState === "success" && <StatusMessage type="success" message={trialResetMessage} />}
             {trialResetState === "error" && <StatusMessage type="error" message={trialResetMessage} />}
 
@@ -116,7 +113,6 @@ export default function ResetTrialTab({ searchTerm, onSearchChange, adminPasswor
                     </p>
                 </div>
                 <div className="p-6 space-y-4">
-                    {/* Search Input */}
                     <div className="space-y-4">
                         <UserSearch
                             searchTerm={searchTerm}
@@ -137,7 +133,6 @@ export default function ResetTrialTab({ searchTerm, onSearchChange, adminPasswor
                        
                     </div>
 
-                    {/* Selected User Preview */}
                     {selectedTrialUser && (
                         <div className="p-4 bg-blue-50 border border-blue-200 rounded-lg">
                             <div className="flex items-center gap-2 mb-2">
@@ -163,7 +158,6 @@ export default function ResetTrialTab({ searchTerm, onSearchChange, adminPasswor
                         </div>
                     )}
 
-                    {/* Info Box */}
                     <div className="p-4 bg-blue-50 border border-blue-200 rounded-lg">
                         <p className="text-content font-medium text-blue-900 mb-2">What will happen:</p>
                         <ul className="text-content text-blue-800 space-y-1">
@@ -173,7 +167,6 @@ export default function ResetTrialTab({ searchTerm, onSearchChange, adminPasswor
                         </ul>
                     </div>
 
-                    {/* Action Button */}
                     <div className="pt-4">
                         <button
                             onClick={handleTrialReset}

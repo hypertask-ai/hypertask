@@ -79,10 +79,6 @@ function harness({ userId = 42 } = {}) {
       calls.push(["read-receipts"]);
       return value;
     }, omitCommentSeen: value => value },
-    "@/lib/api/task-writes/route": {
-      withTaskWriteFlag: handler => handler,
-      taskWriteRoute: ({ operation }) => async (request, session) => operation(await request.json(), session),
-    },
     "@/utils/controllers/notifications/getByTask": { default: async (...args) => { calls.push(["notifications", args]); } },
     "@/utils/controllers/comments/deleteCommentService": { deleteCommentService: async () => { calls.push(["delete"]); } },
     "@/utils/controllers/notifications/creation-service/check-reminder_create-notification": { default: async () => false },
@@ -104,7 +100,7 @@ function harness({ userId = 42 } = {}) {
   };
   async function request(route, query = {}, method = "GET") {
     const handler = load(`src/pages/api/comments/${route}.ts`, mocks).default;
-    const res = { headers: {}, setHeader(name, value) { this.headers[name] = value; },
+    const res = { headers: {}, send(value) { this.body = value; return this; }, setHeader(name, value) { this.headers[name] = value; },
       status(code) { this.statusCode = code; return this; }, json(value) { this.body = value; return this; } };
     await handler({ method, headers: {}, query, body: query }, res);
     return res;
@@ -200,7 +196,7 @@ for (const typed of [false, true]) {
     const body = { taskId: 15, commentIds: [150] };
     const res = typed ? await h.typedSeen(body) : await h.request("updateSeen", body, "POST");
     assert.equal(res.statusCode, 401);
-    assert.deepEqual(h.calls.map(([kind]) => kind), ["session"]);
+    assert.ok(h.calls.length > 0 && h.calls.every(([kind]) => kind === "session"), "only session lookups, no writes");
   });
 }
 

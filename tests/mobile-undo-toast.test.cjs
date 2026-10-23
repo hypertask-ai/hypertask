@@ -1,8 +1,3 @@
-// HTPR-5564: the approved wireframe moves the mobile undo pill to the LEFT so
-// it stops covering the task actions on the right, and gives mobile the same
-// Dismiss X the desktop toast already has. Dismissing the prompt still must
-// not shorten what can still be undone. HTPR-5872 then halves the mobile
-// window: toast and action window drop to 7.5s together, desktop stays 15s.
 const test = require("node:test");
 const assert = require("node:assert/strict");
 const fs = require("node:fs");
@@ -13,70 +8,40 @@ const read = (file) => fs.readFileSync(path.join(root, file), "utf8");
 
 const undoToastSource = read("src/components/undoToast/index.tsx");
 
-test("the mobile pill gains the desktop Dismiss action next to its label", () => {
-  const start = undoToastSource.indexOf("if (isMbl)");
-  const end = undoToastSource.indexOf("\n  }\n\n  return (", start);
-  assert.ok(start !== -1 && end !== -1 && end > start,
-    "the component keeps distinct mobile and desktop branches");
-  const mobileBranch = undoToastSource.slice(start, end);
-
-  assert.ok(mobileBranch.includes('aria-label="Dismiss"'),
-    "mobile pill renders a Dismiss X");
-  assert.match(
-    mobileBranch,
-    /onClick=\{\(\) => toast\.dismiss\(t\.id\)\}[\s\S]*?>\s*X\s*<\/button>/,
-    "Dismiss really dismisses the toast",
-  );
-  assert.match(mobileBranch, /aria-label="Undo"/,
-    "Undo is still a real button");
+test("the compact mobile toast keeps Undo and scoped Dismiss actions", () => {
+  assert.match(undoToastSource, /aria-label="Dismiss"/);
+  assert.match(undoToastSource, /onClick=\{\(\) => toast\.dismiss\(t\.id, SINGLE_UNDO_TOASTER_ID\)\}/);
+  assert.match(undoToastSource, /<X size=\{14\} \/>/);
+  assert.match(undoToastSource, /aria-label="Undo"/);
+  assert.match(undoToastSource, /onClick=\{\(\) => onUndo\(t\.id\)\}/);
+  assert.equal((undoToastSource.match(/isMbl \? MOBILE_TARGET : ""/g) ?? []).length, 2);
 });
 
-test("the mobile pill uses a compact visual footprint", () => {
-  const start = undoToastSource.indexOf("if (isMbl)");
-  const end = undoToastSource.indexOf("\n  }\n\n  return (", start);
-  const mobileBranch = undoToastSource.slice(start, end);
-
-  assert.match(mobileBranch, /max-w-\[110px\]/);
-  assert.match(mobileBranch, /\bgap-1\b/);
-  assert.match(mobileBranch, /\bpx-2\b/);
-  assert.match(mobileBranch, /\bpy-1\b/);
-  assert.match(mobileBranch, /absolute -right-3 -top-3/,
-    "the 44px Dismiss target stays out of the pill layout");
-  assert.doesNotMatch(mobileBranch, /max-w-\[150px\]|px-3\.5|py-2\.5/);
+test("the compact toast keeps its shared visual footprint", () => {
+  assert.match(undoToastSource, /min-h-10 max-w-full items-center gap-2/);
+  assert.match(undoToastSource, /rounded-\[5px\] border-l-\[3px\]/);
+  assert.match(undoToastSource, /bg-modalBackground px-3 text-content font-normal text-white-black shadow-md/);
+  assert.match(undoToastSource, /transition: "opacity 200ms ease-in-out"/);
 });
 
-test("the mobile pill anchors left of the task actions", () => {
-  // Exit animation slides toward the new left anchor.
-  assert.match(undoToastSource, /translateX\(-16px\)/);
-  // The left anchor comes from this toast's own per-toast position...
-  assert.match(
-    undoToastSource,
-    /position: isMobile \? "top-left" : "bottom-left"/,
-  );
-  // ...so ordinary mobile toasts keep their right anchor: the shared
-  // container stays free of a hard left override.
+test("the mobile undo toast anchors left above the dock without moving other toasts", () => {
+  assert.match(undoToastSource, /position="bottom-left"/);
+  assert.match(undoToastSource, /left: appShellRailOn \? APP_SHELL_RAIL_OFFSET : 16/);
+  assert.match(undoToastSource, /bottom: mobile \? "calc\(72px \+ env\(safe-area-inset-bottom\)\)" : 16/);
   const globals = read("src/styles/globals.scss");
-  const container = globals.slice(
-    globals.indexOf(".toastContainerMobile {"),
-    globals.indexOf(".toastP"),
-  );
-  assert.doesNotMatch(container, /\bleft:/,
-    ".toastContainerMobile must not force every mobile toast to the left");
+  const container = globals.slice(globals.indexOf(".toastContainerMobile {"), globals.indexOf(".toastP"));
+  assert.doesNotMatch(container, /\bleft:/);
 });
 
-test("toast and undo window stay in lockstep on every viewport", () => {
-  assert.equal(undoToastSource.includes("UNDO_TOAST_DURATION_MS = UNDO_ACTION_WINDOW_MS"), true);
-  assert.equal(undoToastSource.includes("MOBILE_UNDO_TOAST_DURATION_MS = MOBILE_UNDO_ACTION_WINDOW_MS"), true);
-  assert.equal(undoToastSource.includes("UNDO_ACTION_WINDOW_MS = 15_000"), true);
-  assert.equal(undoToastSource.includes("MOBILE_UNDO_ACTION_WINDOW_MS = 7_500"), true);
-  assert.match(
-    undoToastSource,
-    /duration: isMobile\s*\?\s*MOBILE_UNDO_TOAST_DURATION_MS\s*:\s*UNDO_TOAST_DURATION_MS/,
-  );
+test("the five-second toast keeps the longer desktop and mobile undo windows", () => {
+  assert.match(undoToastSource, /UNDO_ACTION_WINDOW_MS = 15_000/);
+  assert.match(undoToastSource, /MOBILE_UNDO_ACTION_WINDOW_MS = 7_500/);
+  assert.match(undoToastSource, /duration: 5000/);
+  assert.match(undoToastSource, /removeDelay: 200/);
 });
 
-// The viewport flag is part of the signature now; every caller passes it.
-test("every UndoToaster call site passes the viewport flag", () => {
+// The existing viewport argument remains accepted by every caller.
+test("every UndoToaster call site keeps its compatible viewport argument", () => {
   const callers = [
     "src/hooks/General/useUndo.tsx",
     "src/components/RTE/Components/ImproveButton.tsx",

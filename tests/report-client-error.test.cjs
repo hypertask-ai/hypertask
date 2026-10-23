@@ -258,8 +258,65 @@ test("client error reporting ignores only bare Android-shell transport failures"
     message: "network error",
     stack: "TypeError: network error",
   });
-  assert.equal(beacons.length, 2, "the same desktop network error remains actionable");
+  assert.equal(beacons.length, 1, "a bare desktop network error is also transport noise");
+
+  reportClientError({
+    source: "global-error",
+    message: "network error",
+    stack: "TypeError: network error\n    at loadTask (https://app.hypertask.ai/app.js:1:2)",
+  });
+  assert.equal(beacons.length, 2, "a network error with an application frame remains actionable");
 });
+
+for (const source of ["global-error", "unhandledrejection"]) {
+  for (const stack of [undefined, "", "Error: network error", "TypeError: network error\n"]) {
+    test(`HTPR-7570 filters only bare ${source} transport noise (${JSON.stringify(stack)})`, async () => {
+      const beacons = [];
+      const report = loadReportClientError({
+        Blob,
+        navigator: {
+          webdriver: false,
+          userAgent: "Mozilla/5.0 Chrome/151.0",
+          sendBeacon(_url, body) { beacons.push(body); return true; },
+        },
+        window: { location: { href: "https://app.hypertask.ai/detail/project-7049/1" } },
+      });
+      for (let i = 0; i < 4; i++) report({ source, message: "network error", stack });
+      assert.equal(beacons.length, 0);
+      report({ source: "RootErrorBoundary", message: "Cannot read properties of undefined", stack: "TypeError: Cannot read properties of undefined\n    at TaskDetail (https://app.hypertask.ai/app.js:1:2)" });
+      assert.equal(beacons.length, 1, "noise does not consume the real-crash report budget");
+      const body = JSON.parse(await beacons[0].text());
+      assert.equal(body.extra.origin, "RootErrorBoundary");
+      assert.match(body.stack, /TaskDetail/);
+    });
+  }
+}
+
+for (const evidence of [
+  { stack: "Error: network error\n    at loadTask (https://app.hypertask.ai/app.js:1:2)" },
+  { stack: "loadTask@https://app.hypertask.ai/app.js:1:2" },
+  { componentStack: "\n    at TaskDetail" },
+  { digest: "task-render-failed" },
+  { source: "RootErrorBoundary" },
+  { source: "window.onerror" },
+  { message: "network error while saving task" },
+  { stack: "TypeError: Failed to fetch" },
+]) {
+  test(`HTPR-7570 still reports actionable network errors ${JSON.stringify(evidence)}`, () => {
+    const beacons = [];
+    const report = loadReportClientError({
+      Blob,
+      navigator: {
+        webdriver: false,
+        userAgent: "Mozilla/5.0 Chrome/151.0",
+        sendBeacon(_url, body) { beacons.push(body); return true; },
+      },
+      window: { location: { href: "https://app.hypertask.ai/detail/project-7049/1" } },
+    });
+    report({ source: "global-error", message: "network error", ...evidence });
+    assert.equal(beacons.length, 1);
+  });
+}
 
 test("client error reporting filters expected browser noise and records the browser", async () => {
   const beacons = [];
@@ -327,4 +384,42 @@ test("client error reporting filters expected browser noise and records the brow
     "children:main:added=font"
   );
   assert.equal(diagnosticBody.extra.origin, "hydration-recoverable");
+});
+
+test("client error reporting drops chunk timeouts that fire before the 120s chunk timer can elapse", () => {
+  const beacons = [];
+  let pageTimeMs = 3_500;
+  const reportClientError = loadReportClientError({
+    Blob,
+    performance: { now: () => pageTimeMs },
+    navigator: {
+      webdriver: false,
+      userAgent:
+        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/148.0.0.0 Safari/537.36",
+      sendBeacon(url, body) {
+        beacons.push({ url, body });
+        return true;
+      },
+    },
+    window: { location: { href: "https://app.hypertask.ai/login?__ht_chunk_reload=2-1792184614404" } },
+  });
+  const chunkTimeout = {
+    source: "global-error",
+    message:
+      "Loading chunk 94716 failed.\n(timeout: https://app.hypertask.ai/_next/static/chunks/94716-d95174ec2fd0f42f.js)",
+  };
+
+  reportClientError(chunkTimeout);
+  assert.equal(beacons.length, 0, "a 120s timeout 3.5s into the page means accelerated bot timers");
+
+  reportClientError({
+    source: "global-error",
+    message:
+      "Loading chunk 94716 failed.\n(error: https://app.hypertask.ai/_next/static/chunks/94716-d95174ec2fd0f42f.js)",
+  });
+  assert.equal(beacons.length, 1, "an early chunk network error still reports");
+
+  pageTimeMs = 121_000;
+  reportClientError(chunkTimeout);
+  assert.equal(beacons.length, 2, "a real stalled download after 120s still reports");
 });

@@ -13,12 +13,6 @@ interface MobileBlockingOverlayProps {
   onDismiss: () => void;
 }
 
-/**
- * Mobile Blocking Overlay
- * 
- * Displays after mobile signup to guide users to desktop experience
- * where they can access the AI Task Writer and interactive tutorial.
- */
 export const MobileBlockingOverlay: React.FC<MobileBlockingOverlayProps> = ({
   userEmail,
   onDismiss,
@@ -48,7 +42,6 @@ export const MobileBlockingOverlay: React.FC<MobileBlockingOverlayProps> = ({
 
   const handleDismiss = () => {
     onDismiss();
-    // Redirect to the stored URL or default to home
     const redirectUrl = sessionStorage.getItem('postSignupRedirect') || '/';
     sessionStorage.removeItem('postSignupRedirect');
     router.push(redirectUrl);
@@ -74,7 +67,6 @@ export const MobileBlockingOverlay: React.FC<MobileBlockingOverlayProps> = ({
           "relative"
         )}
       >
-        {/* Logo */}
         <div className="mb-6">
           <Image
             src={logo}
@@ -85,7 +77,6 @@ export const MobileBlockingOverlay: React.FC<MobileBlockingOverlayProps> = ({
           />
         </div>
 
-        {/* Headline */}
         <h1
           className={cn(
             "text-heading sm:text-display font-bold",
@@ -96,7 +87,6 @@ export const MobileBlockingOverlay: React.FC<MobileBlockingOverlayProps> = ({
           Your AI Assistant is Waiting on Desktop
         </h1>
 
-        {/* Body */}
         <div className="text-gray-300 text-emphasis sm:text-subheading mb-8 space-y-4">
           <p className="leading-relaxed">
             You&apos;ve unlocked your account. Now, switch to desktop to
@@ -130,7 +120,6 @@ export const MobileBlockingOverlay: React.FC<MobileBlockingOverlayProps> = ({
           </ul>
         </div>
 
-        {/* Primary CTA */}
         {!emailSent ? (
           <button
             onClick={handleSendDesktopLink}
@@ -168,7 +157,6 @@ export const MobileBlockingOverlay: React.FC<MobileBlockingOverlayProps> = ({
           </div>
         )}
 
-        {/* Subtle Secondary CTA */}
         <button
           onClick={handleDismiss}
           className={cn(
@@ -181,7 +169,6 @@ export const MobileBlockingOverlay: React.FC<MobileBlockingOverlayProps> = ({
           Continue with limited mobile version
         </button>
 
-        {/* Additional context */}
         <p className="text-meta text-gray-500 mt-6">
           Mobile access is limited to viewing and basic task management.
         </p>

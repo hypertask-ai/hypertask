@@ -1,4 +1,4 @@
-/* eslint-disable jsx-a11y/no-static-element-interactions */
+
 
 import React, { useMemo } from "react";
 import { NodeViewWrapper, NodeViewContent } from "@tiptap/react";
@@ -17,7 +17,6 @@ export const DBlockNodeView: React.FC<NodeViewProps> = ({
   }, [node.content]);
 
   const createNodeAfter = () => {
-    // v3: getPos() can return undefined when the node is no longer in the doc
     const currentPos = getPos();
     if (currentPos === undefined) return;
     const pos = currentPos + node.nodeSize;

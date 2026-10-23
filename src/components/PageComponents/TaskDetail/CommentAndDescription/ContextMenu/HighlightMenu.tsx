@@ -18,7 +18,7 @@ import { useGetSelectionDetails, getPopoverCoordinates, setClipboard } from ".";
 
 import { MenuArgs, SetMenuOpen, TargetSelector } from "./types";
 import { useFlag } from "@/hooks/useFlag";
-import { HTPR_6752_INSTANT_TICKET_OPEN_FLAG, HTPR_6899_STABLE_LAYOUT_FLAG } from "@/lib/flags/keys";
+import { HTPR_6899_STABLE_LAYOUT_FLAG } from "@/lib/flags/keys";
 
 const ARROW_WIDTH = 10;
 const ARROW_HEIGHT = 5;
@@ -51,13 +51,12 @@ type MainArgs = {
 function HighlightMenu({
   target,
   menu,
-  offset = 2, // This offset now determines the gap between the menu and the top of the highlight
+  offset = 2,
   styles,
   allowedPlacements,
   zIndex = 999999999,
   ...props
 }: MainArgs) {
-  const instantTicketOpen = useFlag(HTPR_6752_INSTANT_TICKET_OPEN_FLAG);
   const stableLayout = useFlag(HTPR_6899_STABLE_LAYOUT_FLAG);
   const selection = useGetSelectionDetails(target);
   const [menuOpen, setMenuOpen] = useState<SetMenuOpen>(null);
@@ -72,12 +71,8 @@ function HighlightMenu({
   const { refs, floatingStyles, context } = useFloating({
     open: !!menuOpen,
     strategy: "fixed",
-    placement: "top", // Keep "top" so the arrow points down from the menu
+    placement: "top",
     middleware: [
-      // This middlewareOffset value determines how far the floating element is placed from the reference.
-      // A positive offset for "top" placement moves it *away* from the reference (i.e., further up).
-      // A negative offset would move it *closer* to the reference (i.e., further down, possibly overlapping).
-      // We are primarily controlling 'top' via getFloatingStylesOverride, but this still impacts arrow positioning relative to the menu.
       middlewareOffset(offset + ARROW_HEIGHT + borderWidth),
       middlewareArrow({
         element: arrowRef,
@@ -129,10 +124,9 @@ function HighlightMenu({
   const menuContent = menuOpen && selection && (
     <FloatingFocusManager context={context} modal={false} initialFocus={-1}>
       <div
-        // Contact hovercards can disable body pointer events while this portal is open.
         className="Popover"
         ref={refs.setFloating}
-        style={stableLayout && instantTicketOpen ? { ...getFloatingStylesOverride(), pointerEvents: "auto" } : getFloatingStylesOverride()}
+        style={stableLayout ? { ...getFloatingStylesOverride(), pointerEvents: "auto" } : getFloatingStylesOverride()}
         aria-labelledby={headingId}
         {...getFloatingProps()}
         onMouseDown={(e) => {

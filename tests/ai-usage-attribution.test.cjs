@@ -26,7 +26,7 @@ test("AiUsage stores indexed historical task and agent attribution", () => {
 test("ticket-scoped AI entry points pass their task attribution", () => {
   const expected = [
     ["src/app/api/ai/task-writer/route.ts", /taskId: usageTaskId/],
-    ["src/app/api/mcp/ai/task-writer/route.ts", /taskId: usageTaskId/],
+    ["src/app/api/ai/_lib/taskWriterDraft.ts", /taskId: usageTaskId/],
     ["src/app/api/ai/task-questions/route.ts", /taskId: task\.id/],
     ["src/app/api/ai/hyper-mentioned/route.ts", /taskId: usageTaskId/],
     ["src/app/api/ai/_lib/commentSummaries.ts", /taskId: comment\.task\.id/],
@@ -42,7 +42,11 @@ test("ticket-scoped AI entry points pass their task attribution", () => {
 test("agent attribution survives MCP calls and summary debounce/retry", () => {
   assert.match(
     read("src/app/api/mcp/ai/task-writer/route.ts"),
-    /agentId: ctx\.agentId/,
+    /generateTaskWriterDraft\(body, userId, ctx\.agentId, undefined, ctx\.teamScope\)/,
+  );
+  assert.match(
+    read("src/app/api/ai/_lib/taskWriterDraft.ts"),
+    /agentId: agentId/,
   );
   assert.match(
     read("src/app/api/mcp/ai/improve/route.ts"),
@@ -92,7 +96,7 @@ test("caller-supplied task attribution is project- and access-scoped", () => {
   assert.match(context, /projectId: Number\(args\.projectId\)/);
   assert.match(
     context,
-    /project: projectContentAccessWhere\(args\.userId, args\.agentId\)/,
+    /project: projectContentAccessWhere\(args\.userId, args\.agentId, args\.teamScope\)/,
   );
   assert.match(taskWriter, /resolveAiUsageTaskId\(\{/);
   assert.match(mcpImprove, /Task not found in this project/);

@@ -1,3 +1,4 @@
+import type { getFeatureCatalog } from '@/lib/mcp/featureCatalog';
 import type { IApiClient } from '../../types/index';
 import { generateCorrelationId } from '../../utils/correlation';
 import { logger } from '../../utils/logger';
@@ -13,8 +14,18 @@ export interface HelloResponse {
     id: number;
     name: string;
     title: string;
+    boardUrl: string;
     taskUrlTemplate: string;
   }>;
+  urlFormats: {
+    ticket: string;
+    comment: string;
+    board: string;
+    boardView: string;
+    inboxSplit: string;
+    page: string;
+    rules: string;
+  };
   boardsTotal: number;
   boardsTruncated: boolean;
   capabilities: Record<string, string>;
@@ -25,13 +36,22 @@ export interface HelloResponse {
     instructions: string | null;
   }>;
   conventionsTruncated: boolean;
+  agent?: { id: string; displayName: string } | null;
+  startBoard?: { id: number; title: string; boardUrl: string } | null;
+  nextSteps?: Array<{
+    step: string;
+    command: string;
+    tool: string;
+    arguments: Record<string, unknown>;
+  }>;
 }
 
-/**
- * Service for fetching the self-orienting welcome map for a new MCP client.
- */
 export class HelloService {
   constructor(private readonly apiClient: IApiClient) {}
+
+  async listFeatures(): Promise<{ success: boolean; scope: string; features: Awaited<ReturnType<typeof getFeatureCatalog>> }> {
+    return this.apiClient.makeRequest('/mcp/features', { method: 'GET' }, generateCorrelationId());
+  }
 
   async getHello(): Promise<HelloResponse> {
     const correlationId = generateCorrelationId();
@@ -67,9 +87,8 @@ export class HelloService {
 
       return response;
     } catch (error) {
-      logger.error('Failed to fetch hello context', {
+      logger.failure('Failed to fetch hello context', error, {
         correlationId,
-        error: error instanceof Error ? error.message : String(error),
       });
       throw error;
     }

@@ -9,6 +9,9 @@ import { parseGithubPullRequestUrl } from "@/lib/pullRequests/githubPullRequests
 import type { UpdateTaskBody } from './types';
 
 export async function validateTaskUpdateFields(requestBody: UpdateTaskBody, dryRun: boolean) {
+    if (requestBody.inline_images !== undefined && typeof requestBody.inline_images !== "boolean") {
+        return NextResponse.json(buildFieldError("invalid_field", "inline_images", "inline_images must be a boolean"), { status: 400 });
+    }
     if (requestBody.content_type !== undefined && requestBody.content_type !== 'html' && requestBody.content_type !== 'markdown') {
         return NextResponse.json(
             {
@@ -52,7 +55,6 @@ export async function validateTaskUpdateFields(requestBody: UpdateTaskBody, dryR
         assigneeUserIds = parsed.ids;
     }
     
-    // Validate that at least one field to update is provided
     const hasLabels = requestBody.labels !== undefined && Array.isArray(requestBody.labels);
     const hasLabelMutation =
         Array.isArray(requestBody.add_labels) || Array.isArray(requestBody.remove_labels);
@@ -181,7 +183,6 @@ export async function validateTaskUpdateFields(requestBody: UpdateTaskBody, dryR
         )
     }
 
-    // Validate labels if provided
     if (hasLabels) {
         const invalidLabel = requestBody.labels!.find(
             (l: unknown) => typeof l !== 'string' && typeof l !== 'number'

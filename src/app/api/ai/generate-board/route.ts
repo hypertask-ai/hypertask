@@ -1,7 +1,8 @@
+import { downloadWithoutBrotli } from "@/lib/net/downloadWithoutBrotli";
 import { reportError } from "@/lib/errors/reportError";
 import { renderPrompt } from "@/lib/ai/prompts/registry";
 import { NextRequest, NextResponse } from "next/server";
-import { generateObject } from "ai";
+import { generateText, Output } from "ai";
 import { z } from "zod";
 
 import prisma from "@/lib/prisma";
@@ -55,7 +56,6 @@ const generatedBoardSchema = z.object({
           .array(
             z.object({
               title: z.string().min(1).max(160),
-              // OpenAI strict structured outputs require every property to be required
               description: z.string().max(1000),
               priority: z.enum(priorityValues),
             })
@@ -226,9 +226,10 @@ async function generateBoardManifest({
   const selected = await selectOnboardingBoardModel(team, user.id);
   const priorityList = priorityValues.join(", ");
 
-  const { object } = await generateObject({
+  const { output } = await generateText({
+    experimental_download: downloadWithoutBrotli,
     model: selected.model,
-    schema: generatedBoardSchema,
+    output: Output.object({ schema: generatedBoardSchema }),
     maxRetries: 1,
     providerOptions: selected.providerOptions,
     abortSignal,
@@ -238,7 +239,7 @@ async function generateBoardManifest({
     prompt: renderPrompt("generate-board-prompt-2", (team.title || "Untitled team"), (prompt), (priorityList)),
   });
 
-  return toBoardManifest(object);
+  return toBoardManifest(output);
 }
 
 async function createSampleBoard({
@@ -314,8 +315,6 @@ export async function POST(request: NextRequest) {
   }
 
   const produceBoard = async () => {
-    // HTPR-4894: checked before both creation branches. The AI path's catch
-    // falls back to createSampleBoard, which does not enforce this cap itself.
     if (await isBoardLimitReached(user.id)) {
       throw new BoardGenerationRequestError(403, FREE_BOARD_LIMIT_MESSAGE);
     }
@@ -354,6 +353,7 @@ export async function POST(request: NextRequest) {
         userId: user.id,
         userEmail: user.email || "",
         userDisplayName: user.displayName,
+        creation: { method: "agent", channel: "agent" },
       });
 
       return {

@@ -11,6 +11,8 @@ import { useMcpToken } from "@/components/Modals/McpToken/hooks/useMcpToken";
 import { FileItem } from "@/components/Common/AttachmentsUpload/FileUploadHandler";
 import { useAiChatModelPreference } from "./useAiChatModelPreference";
 import { useQueryClient } from "@tanstack/react-query";
+import { useFlag } from "@/hooks/useFlag";
+import { HTPR_7316_CHAT_SCOPE_TICKET_FLAG } from "@/lib/flags/keys";
 import { aiOptionsWithoutOpenRouter } from "./aiChatShared";
 
 export function useAiChatState() {
@@ -44,10 +46,17 @@ export function useAiChatState() {
   const pathname = usePathname();
   const isDetailPage = pathname?.startsWith("/detail") ?? false;
   const isFullScreenChat = pathname?.startsWith("/chat") ?? false;
+  const ticketScopeEnabled = useFlag(HTPR_7316_CHAT_SCOPE_TICKET_FLAG);
+  const ticketScopeSelected =
+    ticketScopeEnabled && !isFullScreenChat && isDetailPage &&
+    !!inViewObject?.taskId && dockedChatScope === "ticket";
 
-  // Remember where keyboard work was happening outside the docked chat. This
-  // lets Control+Q return to the exact board, inbox, or other workspace control
-  // instead of merely focusing the workspace wrapper (HTPR-5204).
+  useEffect(() => {
+    if (dockedChatScope === "ticket" && !ticketScopeSelected) {
+      setDockedChatScope(null);
+    }
+  }, [dockedChatScope, ticketScopeSelected, setDockedChatScope]);
+
   useEffect(() => {
     const rememberWorkspaceFocus = (event: FocusEvent) => {
       const target = event.target;
@@ -62,9 +71,6 @@ export function useAiChatState() {
     document.addEventListener("focusin", rememberWorkspaceFocus);
     return () => document.removeEventListener("focusin", rememberWorkspaceFocus);
   }, []);
-  // HTPR-5036: the chat had no idea which screen it was on, so on cross-board
-  // surfaces (My Tasks, inbox, calendar) it saw an empty context and answered
-  // "no active board or view" instead of using the user's own workload.
   const surface = !pathname
     ? "unknown"
     : pathname.startsWith("/my-tasks")
@@ -85,7 +91,6 @@ export function useAiChatState() {
   const [chatMounted, setChatMounted] = useState<boolean>(false);
   const [minimized, setMinimized] = useState(false);
   const [isTyping, setIsTyping] = useState(false);
-  // FIFO follow-ups typed while a turn is streaming (HTPR-5695).
   const [queuedMessages, setQueuedMessages] = useState<
     { id: string; content: string; html: string; files: FileItem[] }[]
   >([]);
@@ -96,15 +101,9 @@ export function useAiChatState() {
     useState<boolean>(false);
   const { currentAiOption, setAiOption, modelTeamId, modelBilling } =
     useAiChatModelPreference();
-  // Mirrors currentStreamingSession, but set synchronously at the moment a stream starts.
-  // State only reaches the unmount/unload handlers after a commit, so a tab closed in the
-  // instant between "fetch sent" and "React committed" would leave the stream running.
   const streamingSessionRef = useRef<string | null>(null);
   const streamingAssistantMessageRef = useRef<string | null>(null);
   const streamingRequestRef = useRef<string | null>(null);
-  // Set synchronously before any send-path await. isTyping updates on the next
-  // render, so it cannot by itself stop two callers that enter in one tick or a
-  // deferred summarize racing a manual send.
   const sendInFlightRef = useRef(false);
   const [currentStreamingSession, setCurrentStreamingSession] = useState<
     string | null
@@ -121,7 +120,7 @@ export function useAiChatState() {
   const { toggleCreateTaskGlobally } = useHypertasksRecoilStates();
   const { token } = useMcpToken();
   const dockedProjectId =
-    dockedChatScope === null
+    dockedChatScope === null || dockedChatScope === "ticket"
       ? currentProject?.id
       : dockedChatScope === "all"
         ? undefined
@@ -130,29 +129,12 @@ export function useAiChatState() {
   const scopedProjectId = isFullScreenChat
     ? fullScreenProjectId
     : dockedProjectId;
-  // A board the user picked in the scope selector, as opposed to the one the
-  // page happens to be showing. Only the latter is dropped on all-board pages.
   const boardScopeIsExplicit = isFullScreenChat
     ? fullScreenChatScope != null
-    : dockedChatScope !== null && dockedChatScope !== "all";
-  // ponytail: the editor is no longer built here. ChatProvider wraps every
-  // route, so calling useTiptapForAI() inline pulled the whole tiptap stack
-  // (~250 KB) into the initial chunk of every page, closed chat or not. It now
-  // lives in <AiChatEditorMount>, which ChatProvider loads dynamically once the
-  // chat has been opened, and hands the instance back through setEditor
-  // (HTPR-4508). Every `editor?.` call below already tolerated null: useEditor
-  // runs with immediatelyRender:false, so editor was null on first render anyway.
+    : typeof dockedChatScope === "number";
   const [editor, setEditor] = useState<Editor | null>(null);
-  // Seeded true on /chat so the dedicated chat page starts the chunk fetch on
-  // its first render rather than an effect later, which showed an empty strip
-  // where the composer belongs.
   const [editorEnabled, setEditorEnabled] = useState(isFullScreenChat);
 
-  /**
-   *Function for handling tiptap mentions
-   *Mentions are then added to context w.r.t type
-   * @param {*} mentionData
-   */
   function contextCallback(mentionData: any) {
     if (mentionData.type === "task") {
       setContextList((prev) => {
@@ -181,9 +163,6 @@ export function useAiChatState() {
     } else if (mentionData.type === "name") {
     }
   }
-  // contextCallback is a plain (re-created every render) function declaration;
-  // route it through a ref so the mount's props stay stable and the editor is
-  // never torn down and rebuilt, which would drop the user's draft.
   const contextCallbackRef = useRef(contextCallback);
   contextCallbackRef.current = contextCallback;
   const stableContextCallback = useCallback(
@@ -198,10 +177,6 @@ export function useAiChatState() {
     }),
     [stableContextCallback, scopedProjectId]
   );
-  // Latches on: once the chat has been opened the editor stays mounted, so
-  // closing and reopening keeps the draft rather than paying for a rebuild.
-  // /chat is the dedicated full-screen chat, where the composer must be live on
-  // arrival rather than waiting for the docked panel's open flag.
   useEffect(() => {
     if (showAiChatInterface || isFullScreenChat) setEditorEnabled(true);
   }, [showAiChatInterface, isFullScreenChat]);
@@ -216,7 +191,7 @@ export function useAiChatState() {
     currentSession,
     showWelcomeScreen,
     isSessionPending,
-    sessions,
+    sessions, historySessions, hasMoreSessions, isLoadingMoreSessions, pagingError, loadMoreSessions, refreshHistorySessions, resolveHistorySession, getDisplayedSession, sessionPagingEnabled,
     selectSession: selectSessionInHistory,
     isSuccess: chatHistoryReady,
     addMessageToSessionQuery,
@@ -245,11 +220,9 @@ export function useAiChatState() {
     scopedProjectId ?? "all",
     currentProject?.id ?? "no-board",
     currentUser?.id ?? "anonymous",
-    // Navigating to a different ticket must bump the generation too, so an
-    // in-flight ensureSessionForCurrentBoard() poll for the old ticket can't
-    // land a send into a conversation the user has since navigated away
-    // from (HTPR-6100).
     taskId ?? "no-task",
+    ...(ticketScopeSelected ? ["ticket-scope"] : []),
+    ...(sessionPagingEnabled ? ["htpr-6971-chat-history-paging"] : []),
   ].join(":");
   const setupContextRef = useRef(sessionContextKey);
   if (setupContextRef.current !== sessionContextKey) {
@@ -258,8 +231,6 @@ export function useAiChatState() {
     sessionSetupRef.current = null;
     resolvedBoardSessionRef.current = null;
     previousProjectIdRef.current = undefined;
-    // Drop queued follow-ups when board/scope/surface changes so they cannot
-    // auto-send into a different session (HTPR-5695 review).
     messageQueueRef.current = [];
   }
 
@@ -284,9 +255,9 @@ export function useAiChatState() {
   setCurrentStreamingSession, isRecording, setIsRecording, displayAiOptions, contextList,
   setContextList, agentStatus, setAgentStatus, showRenameChatModal, setShowRenameChatModal,
   messageListRef, hasAttemptedRestoreRef, previousProjectIdRef, toggleCreateTaskGlobally, token,
-  dockedProjectId, scopedProjectId, boardScopeIsExplicit, editor, editorEnabled,
+  dockedProjectId, scopedProjectId, boardScopeIsExplicit, ticketScopeSelected, editor, editorEnabled,
   editorMountProps, taskId, shouldLoadChatHistory, createSession, activeSession,
-  currentSession, showWelcomeScreen, isSessionPending, sessions, selectSessionInHistory,
+  currentSession, showWelcomeScreen, isSessionPending, sessions, historySessions, hasMoreSessions, isLoadingMoreSessions, pagingError, loadMoreSessions, refreshHistorySessions, resolveHistorySession, getDisplayedSession, sessionPagingEnabled, selectSessionInHistory,
   chatHistoryReady, addMessageToSessionQuery, updateLastMessageInSessionCache, appendMessageToSessionCache, updateSessionTitle,
   deleteSessionInHistory, sessionsRef, chatHistoryReadyRef, sessionSetupRef, resolvedBoardSessionRef,
   sessionIntentGenerationRef, sessionContextKey, clearMessageQueue,

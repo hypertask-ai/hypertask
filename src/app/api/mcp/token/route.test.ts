@@ -1,4 +1,3 @@
-// Run with: npx tsx src/app/api/mcp/token/route.test.ts
 import assert from 'node:assert/strict'
 import { createRequire } from 'node:module'
 import { mock } from 'node:test'
@@ -10,6 +9,10 @@ async function demo() {
   process.env.JWT_SECRET = 'page-token-test-jwt-secret-at-least-32-characters'
   process.env.JWT_ISSUER = 'hypertask-page-token-test'
   process.env.SESSION_SECRET = 'page-token-test-session-secret-at-least-32-characters'
+
+  const globals = globalThis as typeof globalThis & { redis?: unknown }
+  const originalRedis = globals.redis
+  globals.redis = { get: async () => null }
 
   const require = createRequire(import.meta.url)
   const nextHeaders = require('next/headers')
@@ -72,7 +75,6 @@ async function demo() {
     cookieValues.nookies_user = JSON.stringify(user)
     cookieValues[SESSION_COOKIE] = signSession(user)
 
-    // The other context's old token has no per-token revocation row or cookie here.
     const oldToken = createMcpToken(user.id, user.email)
     assert.ok(await validateMcpAuth(bearerRequest(oldToken)))
     mock.timers.tick(100)
@@ -98,6 +100,8 @@ async function demo() {
     assert.equal(minted.cookies.get('mcp_token')?.value, newToken)
     console.log('Page-token revoke-all regression passed')
   } finally {
+    if (originalRedis === undefined) delete globals.redis
+    else globals.redis = originalRedis
     mock.timers.reset()
     nextHeaders.cookies = originalCookies
     prismaMock.user.findUnique = originals.findUnique

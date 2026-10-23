@@ -4,14 +4,21 @@ import { cookies } from "next/headers"
 import { taskWriterRoute } from "@/lib/constants/APIRouteConstants"
 import { getInviteFromProjectId } from "@/utils/api/invite/generatePublicInviteController"
 import prisma from "../prisma"
-import { IAttachment } from "@/models/model"
+import { actionUserIdOrNull } from "./actionUser"
+import { teamAiSettingsViewerWhere } from "@/utils/controllers/teams/getTeamAiSettingsForViewer"
+import { getProjectWhere } from "@/utils/controllers/projects/getAllIncludes"
+import {
+  uploadAttachmentToAICustomInstruction as uploadAttachment,
+  type TUploadToAICustomInstruction,
+  type TReturnAIRAGUpload,
+} from "./uploadAttachmentToAICustomInstruction"
 
 
 export const getTeamById = async (teamId: string) => {
-  const team = await prisma.team.findUnique({
-    where: {
-      id: teamId
-    },
+  const viewer = await actionUserIdOrNull()
+  if (viewer === null) return null
+  const team = await prisma.team.findFirst({
+    where: teamAiSettingsViewerWhere(viewer, undefined, teamId),
     include: {
       team_activity: true
     }
@@ -19,21 +26,19 @@ export const getTeamById = async (teamId: string) => {
   return team
 }
 export const getTeamInviteUrl = async (userId: number, teamId: string | undefined) => {
-  // HTPR-7094: onboarding without ?id= has no team; Prisma throws on an undefined id instead of returning null.
+  const viewer = await actionUserIdOrNull(userId)
+  if (viewer === null) return null
+  userId = viewer
   if (!teamId) return "Error"
 
   const team = await prisma.team.findUnique({ where: { id: teamId } })
   if (!team) return "Error"
-  console.log("🚀 ~ getTeamInviteUrl ~ team:", team)
 
   const projectFirst = await prisma.project.findFirst({
     where: {
-      // teamId:team?.id,
-      // ownerId:userId,
       status: "Normal",
       teamId: team.id,
 
-      // make sure we're at least member or owner of that board in the team
       OR: [
         {
           ownerId: userId,
@@ -51,15 +56,16 @@ export const getTeamInviteUrl = async (userId: number, teamId: string | undefine
 
     orderBy: { createdAt: "asc" }
   })
-  console.log("🚀 ~ getFIrstTeam ~ projectFirst:", projectFirst)
   if (!projectFirst) return "Error"
   const inviteURL = await getInviteFromProjectId(projectFirst.id, userId)
-  console.log("🚀 ~ getTeamInviteUrl ~ inviteURL:", inviteURL)
   return { inviteURL: inviteURL, projectFirst }
 }
 
 
 export const updateUserSettingOnboarding = async (userId: number, state: boolean) => {
+  const viewer = await actionUserIdOrNull(userId)
+  if (viewer === null) return null
+  userId = viewer
   const userSetting = await prisma.userSetting.update({
     where: {
       userId
@@ -69,11 +75,13 @@ export const updateUserSettingOnboarding = async (userId: number, state: boolean
       onboardingTutorialStatus: true
     }
   })
-  console.log("🚀 ~ updateUserSettingOnboarding ~ userSetting:", userSetting)
   return userSetting
 }
 
 export const updateUserSettingTutorial = async (userId: number, state: boolean) => {
+  const viewer = await actionUserIdOrNull(userId)
+  if (viewer === null) return null
+  userId = viewer
   const userSetting = await prisma.userSetting.update({
     where: {
       userId
@@ -83,11 +91,13 @@ export const updateUserSettingTutorial = async (userId: number, state: boolean) 
       onboardingTourStatus: state
     }
   })
-  console.log("🚀 ~ updateUserSettingTutorial ~ userSetting:", userSetting)
   return userSetting
 }
 
 export const updateUserSettingTrial = async (userId: number, state: boolean) => {
+  const viewer = await actionUserIdOrNull(userId)
+  if (viewer === null) return null
+  userId = viewer
   const userSetting = await prisma.userSetting.update({
     where: {
       userId
@@ -96,7 +106,6 @@ export const updateUserSettingTrial = async (userId: number, state: boolean) => 
       trialStatus: state
     }
   })
-  console.log("🚀 ~ updateUserSettingTutorial ~ userSetting:", userSetting)
   return userSetting
 }
 
@@ -104,6 +113,9 @@ export const updateUserSettingTrial = async (userId: number, state: boolean) => 
 
 
 export const checkIfUserIsNew = async (userId: number) => {
+  const viewer = await actionUserIdOrNull(userId)
+  if (viewer === null) return null
+  userId = viewer
   const teamsOwned = await prisma.team.count({
     where: {
       googleAccount: {
@@ -117,12 +129,11 @@ export const checkIfUserIsNew = async (userId: number) => {
     }
   })
 
-  // meaning the user isnt a member or owns any team.
   return teamsOwned === 0 && membersInTeam === 0
 }
 
-// utils/taskWriter.js
 export async function taskWriterFetch(prompt: string) {
+  if (await actionUserIdOrNull() === null) return null
   const isNativeTaskWriter = taskWriterRoute.startsWith("/")
   const baseUrl =
     process.env.NEXT_PUBLIC_BASEURL ||
@@ -145,7 +156,6 @@ export async function taskWriterFetch(prompt: string) {
     }),
   });
 
-  // Handle the response
   if (!response.ok) {
     throw new Error(`Error: ${response.statusText}`);
   }
@@ -153,45 +163,15 @@ export async function taskWriterFetch(prompt: string) {
   else return response
 }
 
+const uploadRefused: TReturnAIRAGUpload = { status: 403, text: "forbidden", data: null }
 
-
-
-type TUploadToAICustomInstruction = {
-  AI_Custom_Instructions_id: number;
-  S3URL: string;
-  type: string;
-  name: string;
-  fileSize:number
-
-}
-type TReturnAIRAGUpload = {
-  status:number;
-  text:string;
-  data:IAttachment | unknown
-}
 export const uploadAttachmentToAICustomInstruction = async (props: TUploadToAICustomInstruction): Promise<TReturnAIRAGUpload> => {
-  const { AI_Custom_Instructions_id, S3URL, type, name, fileSize } = props
-  try {
-    const attachment_ = await prisma.attachment.create({
-      data: {
-        fileType: type ?? "",
-        fileSource: S3URL,
-        fileName: name ?? "",
-        fileSize: String(fileSize),
-        AI_Custom_Instructions_id,
-      }
-    });
-    return {
-      status:200,
-      data:attachment_,
-      text:'success',
-    }
-  } catch (error) {
-    console.log("🚀 ~ uploadAttachmentToAICustomInstruction ~ error:", error)
-    return {
-      status:500,
-      data:error,
-      text:'error'
-    }
-  }
+  const viewer = await actionUserIdOrNull()
+  if (viewer === null) return uploadRefused
+  const instruction = await prisma.aI_Custom_Instructions.findFirst({
+    where: { id: props.AI_Custom_Instructions_id, project: getProjectWhere(viewer) },
+    select: { id: true },
+  })
+  if (!instruction) return uploadRefused
+  return uploadAttachment(props)
 }

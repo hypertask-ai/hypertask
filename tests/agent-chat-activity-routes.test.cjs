@@ -71,7 +71,6 @@ stub("src/lib/flags.ts", {
     // The history route also reads the ticket-confirmation flag; only the
     // activity flag is under test here.
     if (key === "htpr-6006-chat-confirm-ticket") return false;
-    if (key === "htpr-6553-agent-chat-polling") return false;
     // Shared-chat rollout is evaluated against the agent owner before history
     // loads. Keep it on here so this suite stays about activity rows.
     if (key === "htpr-6002-shared-agent-chat") return true;
@@ -89,6 +88,7 @@ stub("src/lib/mcp/auth.ts", {
   checkMcpRateLimit: async () => null,
   validateMcpAuth: async () => ({
     agentId: "agent-1",
+    teamScope: null,
     user: { id: 6, displayName: "Agent" },
   }),
 });
@@ -211,7 +211,7 @@ test("MCP adds at most ten activity facts only for an explicit activity question
     createdAt: "2026-09-04T12:00:50.000Z",
   });
   assert.deepEqual(activityCalls, [
-    { agentId: "agent-1", sessionId: "session-1", userId: 6 },
+    { agentId: "agent-1", sessionId: "session-1", userId: 6, teamScope: null },
   ]);
 });
 
@@ -233,8 +233,8 @@ test("ordinary MCP transcript reads preserve all normal messages without activit
 
 test("activity rows keep refreshing without a pending reply, and uncached", () => {
   const polling = chatClientSource.slice(
-    chatClientSource.indexOf("// Activity rows arrive without a chat reply"),
-    chatClientSource.indexOf("// Poll delivery availability"),
+    chatClientSource.lastIndexOf("useEffect(() => {", chatClientSource.indexOf("if (!session || !activityRowsEnabled) return;")),
+    chatClientSource.lastIndexOf("useEffect(() => {", chatClientSource.indexOf("if (!session || awaiting || activityRowsEnabled) return;")),
   );
 
   // 5s keeps the ticket's "within 10 seconds" promise with one request in hand.
@@ -256,12 +256,12 @@ test("activity rows keep refreshing without a pending reply, and uncached", () =
 
 test("polling delivery status refreshes while an idle chat stays open", () => {
   const polling = chatClientSource.slice(
-    chatClientSource.indexOf("// Poll delivery availability"),
-    chatClientSource.indexOf("// Realtime nudge"),
+    chatClientSource.lastIndexOf("useEffect(() => {", chatClientSource.indexOf("if (!session || awaiting || activityRowsEnabled) return;")),
+    chatClientSource.lastIndexOf("useEffect(() => {", chatClientSource.indexOf("let cancelled = false;\n    let unsubscribe")),
   );
 
   assert.match(chatClientSource, /const CHAT_AVAILABILITY_POLL_MS = 30_000/);
-  assert.match(polling, /pollingChatEnabled/);
+  assert.match(polling, /if \(!session \|\| awaiting \|\| activityRowsEnabled\) return;/);
   assert.match(polling, /setInterval\([\s\S]*?CHAT_AVAILABILITY_POLL_MS/);
   assert.match(polling, /document\.visibilityState !== "visible"/);
 });

@@ -19,6 +19,7 @@ const RENAMED_PARAMETERS: Record<string, string> = {
 }
 
 function canCall(action: Action, caller: ToolCaller): boolean {
+  if (action.permission === 'feedback') return true
   if (caller.agentRole === 'read' && !action.read_only) return false
   const permissions = caller.managementPermissions
   if (caller.teamScoped && ['hypertask_mint_token', 'hypertask_revoke_token', 'hypertask_list_connections'].includes(action.tool)) return false
@@ -72,6 +73,7 @@ export function selectMcpTools(
   enabled: boolean,
   caller: ToolCaller = {},
   v2 = false,
+  flatSchema = false,
 ): readonly PortableTool[] {
   if (!enabled) {
     if (!v2) return legacyTools
@@ -103,14 +105,14 @@ export function selectMcpTools(
     return tool.execute(input, token, invocation)
   }
   const catalog: PortableTool[] = definitions.flatMap((definition) => {
-    const actions = Object.fromEntries(Object.entries(definition.actions).filter(([, action]) => canCall(action, caller)))
+    const actions = Object.fromEntries(Object.entries(definition.actions).filter(([, action]) => byName.has(action.tool) && canCall(action, caller)))
     const names = Object.keys(actions)
     if (!names.length) return []
     const sameNameLegacy = byName.get(definition.name)
     const legacyShape = sameNameLegacy ? Object.fromEntries(Object.entries(sameNameLegacy.parameters.shape).filter(([key]) => key !== 'action').map(([key, schema]) => [key, z.optional(schema as z.ZodType)])) : {}
     const parameters = z.object({
       ...legacyShape,
-      action: z.enum(names as [string, ...string[]]).describe('Operation to perform on this resource.'),
+      action: (definition.name === 'hypertask_report_feedback' ? z.enum(names as [string, ...string[]]).default('report') : z.enum(names as [string, ...string[]])).describe('Operation to perform on this resource.'),
       input: z.record(z.string(), z.unknown()).default({}).describe('Action-specific fields documented in the corresponding input schema.'),
       response_format: z.enum(['concise', 'detailed']).default('concise').describe('Concise summarizes reads; detailed includes full fields. Writes always retain their receipts.'),
       limit: z.number().int().min(1).max(50).default(20).describe('Maximum rows per read collection; default 20, maximum 50.'),
@@ -118,12 +120,23 @@ export function selectMcpTools(
     }).strict()
     const baseSchema = z.toJSONSchema(parameters, { target: 'draft-7', io: 'input' }) as Record<string, unknown>
     delete baseSchema.$schema
-    // Cached timer clients may still send flat fields; only advertise the new nested form.
     if (sameNameLegacy) {
       const properties = baseSchema.properties as Record<string, unknown>
       for (const key of Object.keys(legacyShape)) delete properties[key]
     }
-    const schema = {
+    const properties = baseSchema.properties as Record<string, Record<string, unknown>>
+    const schema = flatSchema ? {
+      ...baseSchema,
+      required: ['action'],
+      properties: {
+        ...properties,
+        input: {
+          type: 'object',
+          description: `${properties.input.description} Fields depend on action; use the variant whose title is the action.`,
+          anyOf: names.map((name) => ({ title: name, ...inputSchema(byName.get(actions[name].tool)!, actions[name]) })),
+        },
+      },
+    } : {
       ...baseSchema,
       oneOf: names.map((name) => {
         const input = inputSchema(byName.get(actions[name].tool)!, actions[name])
@@ -157,19 +170,16 @@ export function selectMcpTools(
         let endpointCap: number | undefined
         try {
           if (action.read_only && supportsLimit) {
-            // Validate the caller's limit before replacing it with the endpoint fetch budget.
             const requestedLimit = input.limit === undefined ? args.limit : Number(z.object({ limit: tool.parameters.shape.limit }).parse({ limit: input.limit }).limit)
             const limitSchema = z.toJSONSchema(tool.parameters.shape.limit, { unrepresentable: 'any', io: 'input' }) as { maximum?: number }
             const maximum = limitSchema.maximum ?? 50
             readLimit = Math.min(requestedLimit, args.limit, maximum)
-            // Local windows need a prefix and lookahead; cursor endpoints must not skip an overfetched row.
             const prefix = supportsOffset || cursorPaginated ? 0 : offset
             const lookahead = !supportsOffset && !supportsCursor ? 1 : 0
             input.limit = Math.min(readLimit + prefix + lookahead, maximum)
             if (lookahead) endpointCap = maximum
           }
           if (action.read_only && supportsOffset) input.offset = offset
-          // Validate the selected branch before any REST call; the old implementation retains its refinements.
           const validated = tool.parameters.parse(input)
           const text = await dispatch(action, validated, token, invocation)
           return formatToolResponse(text, args.response_format, action.read_only, readLimit, offset, supportsOffset || cursorPaginated, endpointCap)
@@ -182,8 +192,6 @@ export function selectMcpTools(
       },
     }]
   })
-  // Hidden aliases keep cached tool definitions callable across a flag change.
-  // Preserve their argument and response shapes, including invocation idempotency.
   for (const tool of legacyTools) {
     if (catalog.some((entry) => entry.name === tool.name)) continue
     const actions = definitions.flatMap((definition) => Object.values(definition.actions)).filter((action) => action.tool === tool.name)

@@ -1,19 +1,18 @@
+import { requireAgentWriteRole } from '@/lib/mcp/agents/readRoleGuard'
+import { reportMcpOperationCrash } from '@/lib/mcp/operationCrashReport'
 import { wrapMcpRoute, validateMcpRouteAuth as validateMcpAuth, checkMcpRouteRateLimit as checkMcpRateLimit, readMcpRouteJsonBody as readJsonBody } from '@/lib/mcp/routeWrapper'
 import { NextRequest, NextResponse } from 'next/server'
 
 import prisma from '@/lib/prisma'
 import { SortingMode, SortingOrder, SubtaskSetting, EmptySections, ViewVisibility } from '@prisma/client'
-import { getProjectWhere } from '@/utils/controllers/projects/getAllIncludes'
+import { savedViewBoardAccessWhere } from '@/utils/controllers/projects/getAllIncludes'
 import { createView, type CreateViewInput } from '@/lib/mcp/views/services'
 import { validateProjectAccess } from '@/lib/mcp/tasks/services'
 import { getViewUrl } from '@/utils/controllers/projects/views/viewsHelperAPIfunctions'
 import { isSubtaskSetting } from '@/models/Views/model'
-import { sanitizeBoardFilters } from '@/utils/helperFunctions/Views/BoardFilterSanitizer'
+import { sanitizeBoardFilters, projectVisibleViewRelations } from '@/utils/helperFunctions/Views/BoardFilterSanitizer'
 
 
-// The create-view payload as it arrives over the wire. Everything past
-// project_id/title is validated by createView, so it stays at the input type
-// rather than being re-declared here.
 type CreateViewRequestBody = Partial<
   Pick<
     CreateViewInput,
@@ -76,23 +75,6 @@ export interface CreateViewResponse {
   view: Awaited<ReturnType<typeof createView>>
 }
 
-/**
- * GET /api/mcp/view
- *
- * - No params: per project, returns the view the user applied or the board's default view.
- * - projectId provided: returns all views (public + user's private) for that project.
- *
- * Query Parameters:
- * - projectId: If set, fetch all views for this project (public + user's private)
- * - visibility: Filter by visibility ('Public' | 'Private')
- * - limit: Maximum number of results (default: 50, max: 100)
- * - offset: Number of results to skip (default: 0)
- * - sort_by: Field to sort by ('title' | 'createdAt' | 'lastUsedAt')
- * - sort_order: Sort order ('asc' | 'desc', default: 'desc')
- * - include_settings: Include each view's filters, sorting, columns, and applied marker
- *
- * Authentication: Bearer token (JWT or API key) in Authorization header
- */
 export async function GET(request: NextRequest) {
   return wrapMcpRoute(async (request: NextRequest) => {
   try {
@@ -109,7 +91,11 @@ export async function GET(request: NextRequest) {
 
     const user = ctx.user
     const searchParams = request.nextUrl.searchParams
-    const projectId = searchParams.get('projectId') ? parseInt(searchParams.get('projectId')!) : undefined
+    const rawProjectId = searchParams.get('projectId')
+    const projectId = rawProjectId === null ? undefined : Number(rawProjectId)
+    if (projectId !== undefined && (!/^\d+$/.test(rawProjectId!) || !Number.isSafeInteger(projectId) || projectId <= 0)) {
+      return NextResponse.json({ success: false, error: 'Invalid projectId' }, { status: 400 })
+    }
     const visibility = searchParams.get('visibility') as ViewVisibility | null || undefined
     const limit = Math.min(parseInt(searchParams.get('limit') || '50'), 100)
     const offset = Math.max(parseInt(searchParams.get('offset') || '0'), 0)
@@ -124,6 +110,8 @@ export async function GET(request: NextRequest) {
 
     const viewSelect = {
       id: true,
+      userId: true,
+      project_view_id: true,
       title: true,
       slug: true,
       visibility: true,
@@ -147,10 +135,14 @@ export async function GET(request: NextRequest) {
     let viewList: ListViewItem[]
     let total: number
 
-    if (projectId) {
-      // Return all views (public + user's own private) for the given project
+    if (projectId !== undefined) {
+      const board = await prisma.project.findFirst({
+        where: { id: projectId, ...savedViewBoardAccessWhere(user.id, ctx.agentId, ctx.teamScope) },
+        select: { id: true },
+      })
+      if (!board) return NextResponse.json({ success: false, error: 'Project not found' }, { status: 404 })
       const viewWhere: any = {
-        project_view: { projectId },
+        project_view: { projectId, project: savedViewBoardAccessWhere(user.id, ctx.agentId, ctx.teamScope) },
         OR: [
           { visibility: 'Public' },
           { visibility: 'Private', userId: user.id },
@@ -189,9 +181,8 @@ export async function GET(request: NextRequest) {
         return toViewItem(v, v.project_view, includeSettings, appliedViewId)
       })
     } else {
-      // Per project: return the view the user applied, or fall back to the board's default view
       const userProjects = await prisma.project.findMany({
-        where: { status: 'Normal', ...getProjectWhere(user.id, ctx.agentId) },
+        where: { status: 'Normal', ...savedViewBoardAccessWhere(user.id, ctx.agentId, ctx.teamScope) },
         select: { id: true },
       })
       const projectIds = userProjects.map(p => p.id)
@@ -205,6 +196,7 @@ export async function GET(request: NextRequest) {
       const allProjectViews = await prisma.project_View.findMany({
         where: { projectId: { in: projectIds } },
         select: {
+          id: true,
           default_view_id: true,
           default_view: { select: viewSelect },
           user_project_views: {
@@ -216,7 +208,8 @@ export async function GET(request: NextRequest) {
         },
       })
 
-      const allResolved = allProjectViews.flatMap(pv => {
+      const allResolved = allProjectViews.flatMap(raw => {
+        const pv = projectVisibleViewRelations(raw, user.id)
         const appliedView = pv.user_project_views[0]?.appliedView ?? null
         const defaultView = pv.default_view
 
@@ -247,6 +240,7 @@ export async function GET(request: NextRequest) {
     } satisfies ListViewsResponse)
   } catch (error) {
     console.error('Error listing views:', error)
+    reportMcpOperationCrash(request, error)
     return NextResponse.json(
       { success: false, error: 'Internal server error' },
       { status: 500 }
@@ -256,15 +250,6 @@ export async function GET(request: NextRequest) {
   })(request)
 }
 
-/**
- * POST /api/mcp/view - create a saved board view.
- *
- * Body: { project_id, title, visibility?, filters?: { label_names?, assignee_ids?, match? },
- *         sorting_mode?, sorting_order?, sorting_stack?, board_filters?, visible_section_ids?,
- *         subtask_setting?, board_empty_sections?, set_as_default? }
- *
- * Was a stub that returned `{ success: true }` and created nothing (HTPR-4218).
- */
 export async function POST(request: NextRequest) {
   return wrapMcpRoute(async (request: NextRequest) => {
   try {
@@ -278,6 +263,8 @@ export async function POST(request: NextRequest) {
         { status: 401 }
       )
     }
+    const roleRefusal = await requireAgentWriteRole(ctx)
+    if (roleRefusal) return roleRefusal
 
     const user = ctx.user
     const parsedBody = await readJsonBody<CreateViewRequestBody>(request)
@@ -316,7 +303,7 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    const access = await validateProjectAccess(projectId, user.id, ctx.agentId)
+    const access = await validateProjectAccess(projectId, user.id, ctx.agentId, ctx.teamScope)
     if (access.error) {
       return NextResponse.json(
         { success: false, error: access.error.message },
@@ -325,6 +312,7 @@ export async function POST(request: NextRequest) {
     }
 
     const view = await createView({
+      agentId: ctx.agentId, teamScope: ctx.teamScope,
       projectId,
       userId: user.id,
       title,

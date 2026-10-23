@@ -3,10 +3,6 @@ import { lazy, useLayoutEffect, useState } from "react";
 import { TBoardSortingViewMode } from "@/models/Views/model";
 import { type BoardReadinessTraceScope, getBoardReadinessTraceScope, prepareBoardReadinessTrace } from "@/lib/analytics/boardReadinessPhases";
 
-
-
-// React.lazy calls import() only when the conditional branch actually renders.
-// next/dynamic preloads client boundaries from this route even while closed.
 export const TrialModal = lazy(
   () => import("@/components/Modals/TrialPlan/TrialModal"),
 );

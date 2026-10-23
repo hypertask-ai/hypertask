@@ -1,17 +1,3 @@
-/**
- * HTPR-6320: PostHog AI observability for the in-app AI Chat.
- *
- * Every generation is sent to PostHog as an `$ai_generation` event with the
- * user, model, token counts, latency and any error. No prompt or reply text is
- * ever sent.
- *
- * The event is emitted directly with the installed posthog-node client rather
- * than through `@posthog/ai`: that package's Vercel model wrapper only supports
- * AI SDK v5/v6 models and this app runs v7, and installing it pulls a
- * postinstall that downloads a binary, which fails the repo's network-isolated
- * app-smoke job. The `$ai_*` property names below are the ones PostHog's LLM
- * observability reads.
- */
 import { PostHog } from "posthog-node";
 
 import { redactErrorText } from "@/lib/telemetry/errorSanitization";
@@ -27,10 +13,6 @@ function deploymentEnvironment() {
   return process.env.VERCEL_ENV || process.env.NODE_ENV || "unknown";
 }
 
-// ponytail: this mirrors the error-tracking module's client instead of sharing
-// it, because that file sits under the repo's 14-day no-delete guard and a
-// second flushAt-1 client costs nothing. Fold them together once that guard
-// has expired.
 export function postHogIngestionHost() {
   return process.env.POSTHOG_SERVER_HOST || "https://eu.i.posthog.com";
 }
@@ -50,12 +32,6 @@ function postHogClient() {
   return client;
 }
 
-/**
- * The SDK serialises a provider error into `$ai_error` verbatim, and some
- * providers echo request content back in that message. The ticket allows error
- * text only through the app's existing redaction rules, so every capture goes
- * through this before it reaches PostHog.
- */
 export function redactAiCaptureProperties(
   properties: Record<string, unknown>,
 ): Record<string, unknown> {
@@ -74,9 +50,11 @@ export type AiChatTurnRecord = {
   promptId?: string;
   promptVersion?: string;
   projectId?: number | null;
+  teamId?: string | null;
+  teamAllowanceUsd?: number | null;
+  teamAllowanceUsedUsd?: number | null;
   taskId?: number | null;
   agentId?: string | null;
-  /** The resolved model id and provider, as billed and logged by logAiUsage. */
   model: string;
   provider: string;
   traceId: string;
@@ -84,15 +62,9 @@ export type AiChatTurnRecord = {
   latencyMs: number;
   inputTokens?: number;
   outputTokens?: number;
-  /** Only ever sent as a redacted `$ai_error` line, never as chat content. */
   error?: unknown;
 };
 
-/**
- * Builds the `$ai_generation` event for one turn: the properties PostHog LLM
- * observability reads, plus the distinct id it attributes the turn to. No
- * input or output body is ever included.
- */
 export function buildAiChatTurnCapture(
   turn: AiChatTurnRecord,
   environment: string,
@@ -112,6 +84,9 @@ export function buildAiChatTurnCapture(
     ht_prompt_version: turn.promptVersion ?? null,
     ht_user_id: turn.userId,
     ht_project_id: turn.projectId ?? null,
+    ht_team_id: turn.teamId ?? null,
+    ht_team_ai_allowance_usd: turn.teamAllowanceUsd ?? null,
+    ht_team_ai_used_usd: turn.teamAllowanceUsedUsd ?? null,
     ht_task_id: turn.taskId ?? null,
     ht_agent_id: turn.agentId ?? null,
     ht_outcome: turn.outcome,
@@ -122,7 +97,6 @@ export function buildAiChatTurnCapture(
     properties.$ai_is_error = true;
     properties.$ai_error = stringifyAiError(turn.error);
   } else if (turn.outcome === "cancelled") {
-    // A cancelled turn is neither a success nor a server failure.
     httpStatus = 0;
   }
   properties.$ai_http_status = httpStatus;
@@ -141,7 +115,6 @@ function stringifyAiError(error: unknown) {
   return JSON.stringify({ message: String(error) });
 }
 
-/** Sends one `$ai_generation` event to PostHog. Never throws. */
 async function captureAiChatTurn(
   turn: AiChatTurnRecord,
   environment: string,
@@ -159,7 +132,6 @@ async function captureAiChatTurn(
   }
 }
 
-/** Records one finished AI Chat turn without affecting the chat response. */
 export async function recordAiChatTurn(turn: AiChatTurnRecord): Promise<void> {
   const environment = deploymentEnvironment();
   if (environment === "production" || environment === "preview") {

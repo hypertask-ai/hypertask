@@ -1,4 +1,3 @@
-// useDivDimensions.js
 import { useEffect, useState } from 'react';
 
 const useDivDimensions = (divId:string) => {
@@ -19,7 +18,6 @@ const useDivDimensions = (divId:string) => {
             observer.observe(div, { childList: true, subtree: true });
             window.addEventListener('resize', updateDimensions);
 
-            // Initial call
             updateDimensions();
 
             return () => {

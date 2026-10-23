@@ -58,7 +58,6 @@ const TagsRow = ({ task }: { task: IBoardTask }) => {
     task.duedate ||
     (task.labels && task.labels?.length > 0) ? (
     <div className={`basis-full flex gap-1 flex-wrap`}>
-      {/* ============ priorty and labels section  ==============*/}
       {task.duedate ? (
         <>
           <DueDateLabel
@@ -73,7 +72,6 @@ const TagsRow = ({ task }: { task: IBoardTask }) => {
         <></>
       )}
       {task.priority ? (
-        // {/* ---------- priority label */}
         <>
           <PriorityLabelComponent
             stopPropogation={true}
@@ -87,7 +85,6 @@ const TagsRow = ({ task }: { task: IBoardTask }) => {
         <></>
       )}
       {task.size ? (
-        // {/* ---------- Estimate label */}
         <>
           <EstimateLabelComponent
             flexBasis={false}
@@ -100,7 +97,6 @@ const TagsRow = ({ task }: { task: IBoardTask }) => {
         <></>
       )}
 
-      {/* ===================== task labels ================= */}
       {task.labels?.map((taskLabel, index) => (
         <>
           {taskLabel && (
@@ -116,7 +112,6 @@ const TagsRow = ({ task }: { task: IBoardTask }) => {
         </>
       ))}
 
-      {/* ===================== sub task count ================= */}
     </div>
   ) : (
     <></>
@@ -136,18 +131,6 @@ const TopRow = ({ task }: { task: IBoardTask }) => {
             {task.identifier}
           </p>
         </span>
-        {/* commentCount && commentCount > 0? (
-                <div className='bg-inherit border-[0px]  h-labelComponent 
-                  text-emphasis
-                  border-border-labelComponent rounded-sm flex gap-1 items-center px-[4px] py-[1px]'>
-                  <CgComment className='text-label-component'/>
-                  <span className='text-label-component text-meta'>
-                    {commentCount}
-                  </span>
-                </div>
-              ) : (
-                <></>
-              ) */}
 
         {task.assignee && task.assignee.length > 0 && (
           <div className="flex items-center ">

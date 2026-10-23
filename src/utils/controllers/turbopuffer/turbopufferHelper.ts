@@ -16,7 +16,9 @@ export const EMBEDDING_MODEL = "openai/text-embedding-3-small";
 const EMBEDDINGS_ENDPOINT = "https://ai-gateway.vercel.sh/v1/embeddings";
 export const EMBEDDING_DIM = 1536;
 
-const EMBEDDING_BATCH_SIZE = 256;
+export const EMBEDDING_MAX_INPUT_CHARS = 4000;
+const EMBEDDING_EMPTY_INPUT = "(empty)";
+const EMBEDDING_BATCH_SIZE = 64;
 const EMBEDDING_MAX_RETRIES = 5;
 const CUSTOM_INSTRUCTION_CHUNK_SIZE = 1800;
 const CUSTOM_INSTRUCTION_CHUNK_OVERLAP = 200;
@@ -61,16 +63,9 @@ export const turbopufferCommentInclude = {
 } satisfies Prisma.CommentInclude;
 
 export const turbopufferPageInclude = {
-  task: {
+  project: {
     select: {
-      id: true,
-      ticketNumber: true,
       title: true,
-      project: {
-        select: {
-          title: true,
-        },
-      },
     },
   },
 } satisfies Prisma.PageInclude;
@@ -124,11 +119,8 @@ export type TurbopufferPageRow = {
   id: string;
   title: string;
   contentText: string;
-  taskId: string;
   projectId: number;
   projectTitle: string;
-  taskTicketNumber: string;
-  taskTitle: string;
   updatedAt: string;
   searchText: string;
 };
@@ -183,11 +175,8 @@ export const commentNamespaceSchema = {
 export const pageNamespaceSchema = {
   title: { type: "string", full_text_search: true },
   contentText: { type: "string", full_text_search: true },
-  taskId: { type: "string", filterable: true },
   projectId: { type: "int", filterable: true },
   projectTitle: { type: "string" },
-  taskTicketNumber: { type: "string" },
-  taskTitle: { type: "string" },
   updatedAt: { type: "string" },
   searchText: { type: "string", full_text_search: true },
 };
@@ -249,10 +238,6 @@ type SearchTasksParams = {
   status?: SearchStatus | null;
   projectId?: number | null;
   topK?: number;
-  // Skip the embedding call and run keyword-only (BM25). The embedding is a
-  // ~700ms network round-trip, so latency-sensitive typeaheads (the search box,
-  // @mentions) pass this to stay instant for exact title-style lookups. Hybrid
-  // vector search stays on for latency-tolerant callers (MCP/AI).
   keywordOnly?: boolean;
 };
 
@@ -359,11 +344,8 @@ export function buildTurbopufferPageRow(
     id: page.id.toString(),
     title,
     contentText,
-    taskId: page.taskId.toString(),
     projectId: page.projectId,
-    projectTitle: stringify(page.task.project?.title),
-    taskTicketNumber: stringify(page.task.ticketNumber),
-    taskTitle: stringify(page.task.title),
+    projectTitle: stringify(page.project?.title),
     updatedAt: toIsoString(page.updatedAt),
     searchText: buildSearchText(title, contentText),
   };
@@ -409,20 +391,24 @@ export async function embedTexts(texts: string[]): Promise<number[][]> {
     throw new Error("TURBOPUFFER_EMBEDDINGS_API_KEY is not set");
   }
 
+  const inputs = texts.map(toEmbeddingInput);
   const embeddings: number[][] = [];
 
-  for (let i = 0; i < texts.length; i += EMBEDDING_BATCH_SIZE) {
-    const batch = texts.slice(i, i + EMBEDDING_BATCH_SIZE);
+  for (let i = 0; i < inputs.length; i += EMBEDDING_BATCH_SIZE) {
+    const batch = inputs.slice(i, i + EMBEDDING_BATCH_SIZE);
     embeddings.push(...(await embedBatchWithRetry(batch, apiKey)));
   }
 
   return embeddings;
 }
 
-// Embed a single batch, retrying transient failures (rate limits, server
-// errors, network blips) with exponential backoff. A whole failed batch was
-// crashing the backfill because the caller would then upsert vector-less rows
-// into a cosine namespace, which Turbopuffer rejects.
+export function toEmbeddingInput(text: string): string {
+  return (
+    normalizeWhitespace(text).slice(0, EMBEDDING_MAX_INPUT_CHARS) ||
+    EMBEDDING_EMPTY_INPUT
+  );
+}
+
 async function embedBatchWithRetry(
   batch: string[],
   apiKey: string
@@ -461,7 +447,6 @@ async function embedBatchWithRetry(
       const error = new Error(
         `OpenAI embeddings request failed (${response.status}): ${responseText}`
       );
-      // Retry rate limits and server errors; fail fast on other client errors.
       if (response.status === 429 || response.status >= 500) {
         lastError = error;
         continue;
@@ -533,9 +518,6 @@ export async function upsertTaskRowsToTurbopuffer(
     "turbopuffer task upsert"
   );
 
-  // The namespace is cosine (vector-required); a vector-less write is rejected.
-  // If embeddings are unavailable, skip rather than crash — the row can be
-  // reindexed later. Backfill logs surface any gap.
   if (!hasVectors) {
     console.error(
       `turbopuffer task upsert skipped: embeddings unavailable for ${rows.length} row(s)`
@@ -595,9 +577,6 @@ export async function upsertCommentRowsToTurbopuffer(
     "turbopuffer comment upsert"
   );
 
-  // The namespace is cosine (vector-required); a vector-less write is rejected.
-  // If embeddings are unavailable, skip rather than crash — the row can be
-  // reindexed later. Backfill logs surface any gap.
   if (!hasVectors) {
     console.error(
       `turbopuffer comment upsert skipped: embeddings unavailable for ${rows.length} row(s)`
@@ -656,7 +635,6 @@ export async function upsertPageRowsToTurbopuffer(
   } as any);
 }
 
-// Runs every time a task is archived/unarchived or task metadata changes.
 export async function upsertAllCommentsToTurbopuffer(taskId: number) {
   try {
     const allComments = await prisma.comment.findMany({
@@ -675,7 +653,6 @@ export async function upsertAllCommentsToTurbopuffer(taskId: number) {
   }
 }
 
-// Runs every time a task is permanently deleted.
 export async function deleteManyCommentsInTurbopuffer(taskId: number) {
   try {
     const allComments = await prisma.comment.findMany({
@@ -823,10 +800,6 @@ export async function searchTasks({
         turbopuffer
           .namespace(turbopufferNamespaces.task.name)
           .query({
-            // include_attributes must live INSIDE each sub-query: with RRF
-            // multi-query, a top-level include_attributes is ignored and the
-            // fused rows come back with only ids, so every attribute is
-            // undefined and the results get filtered out downstream.
             queries: [
               {
                 rank_by: ["vector", "ANN", queryVector],
@@ -896,7 +869,6 @@ export async function searchComments({
       const response = await turbopuffer
         .namespace(turbopufferNamespaces.comment.name)
         .query({
-          // include_attributes must live INSIDE each sub-query (see searchTasks).
           queries: [
             {
               rank_by: ["vector", "ANN", queryVector],
@@ -1087,11 +1059,8 @@ export async function ensureTurbopufferSchema() {
         id: "__schema__",
         title: "",
         contentText: "",
-        taskId: "-1",
         projectId: -1,
         projectTitle: "",
-        taskTicketNumber: "",
-        taskTitle: "",
         updatedAt: "",
         searchText: "",
       }
@@ -1121,9 +1090,6 @@ async function ensureNamespaceSchema(
   schemaRow: Record<string, unknown> & { id: string }
 ) {
   const ns = turbopuffer.namespace(namespace);
-  // Seed a real vector so the namespace is created with the cosine metric that
-  // live upserts use. Without a vector + distance_metric the namespace defaults
-  // to euclidean, and later cosine writes fail with a metric mismatch.
   const seedVector = new Array(EMBEDDING_DIM).fill(0);
   seedVector[0] = 1;
   await ns.write({
@@ -1457,6 +1423,5 @@ export function convertToPlain(htmlString: string = "") {
 }
 
 export function searchPreviewText(htmlString: string = "") {
-  // Keep the index encoded; decode once on reads, after stripping source tags.
   return new TextNode(convertToPlain(htmlString)).text;
 }

@@ -4,14 +4,16 @@ import { AI_Tiptap_Container } from "@/components/AI_CHAT/AI_Tiptap_Container";
 import { MessageList } from "@/components/AI_CHAT/MessageList";
 import { WelcomeScreen } from "@/components/AI_CHAT/WelcomeScreen";
 import { useGetAllTeamsMinimal } from "@/hooks/MultiPages/useGetAllTeamsMinimal";
-import { useAiChatContext } from "@/lib/contexts/Multipages/AI_Agent/AI_Agent_Chat_Context";
+import { useFlag } from "@/hooks/useFlag";
+import { HTPR_6971_CHAT_HISTORY_PAGING_FLAG } from "@/lib/flags/keys";
+import { useAiChatContext, type ChatContextType } from "@/lib/contexts/Multipages/AI_Agent/AI_Agent_Chat_Context";
 import {
   buildFullScreenChatPath,
   FULL_SCREEN_CHAT_RETURN_PARAM,
   resolveFullScreenChatReturnPath,
 } from "@/lib/aiChatDisplayMode";
 import { useRecoilState, useRecoilValue } from "@/lib/state";
-import { IChatSession, IProject, ITeam } from "@/models/model";
+import { IProject, ITeam } from "@/models/model";
 import {
   aiChatExplicitOpenAtAtom,
   aiChatPinnedSessionIdsAtom,
@@ -47,9 +49,11 @@ function clampFullScreenChatRailWidth(width: number) {
   );
 }
 
+type HistorySession = ChatContextType["historySessions"][number];
+
 type SessionGroup = {
   title: "Today" | "Previous 7 days" | "Older";
-  sessions: IChatSession[];
+  sessions: HistorySession[];
 };
 
 type FullScreenChatScope = number | null;
@@ -62,7 +66,7 @@ function projectLabel(project: IProject) {
   return project.title ?? project.name;
 }
 
-function groupSessions(sessions: IChatSession[]): SessionGroup[] {
+function groupSessions(sessions: HistorySession[]): SessionGroup[] {
   const now = new Date();
   const startOfToday = new Date(
     now.getFullYear(),
@@ -173,7 +177,7 @@ function FullScreenChatBoardSelector({
   scope,
   onScopeChange,
 }: {
-  sessions: IChatSession[];
+  sessions: HistorySession[];
   scope: FullScreenChatScope;
   onScopeChange: (scope: FullScreenChatScope) => void;
 }) {
@@ -197,7 +201,7 @@ function FullScreenChatBoardSelector({
     sessions.forEach((session) => {
       if (
         session.projectId == null ||
-        (session.messages?.length ?? 0) === 0
+        !("hasMessages" in session ? session.hasMessages : (session.messages?.length ?? 0) > 0)
       ) {
         return;
       }
@@ -322,6 +326,8 @@ function ChatRailFilterRow({
 }
 
 export default function Chat({ initialSessionId }: ChatProps) {
+  const pagingRequested = useFlag(HTPR_6971_CHAT_HISTORY_PAGING_FLAG);
+  const historyEndRef = useRef<HTMLDivElement>(null);
   const router = useRouter();
   const searchParams = useSearchParams();
   const returnPath = resolveFullScreenChatReturnPath(
@@ -349,6 +355,13 @@ export default function Chat({ initialSessionId }: ChatProps) {
     deleteSession,
     selectSession,
     sessions,
+    historySessions,
+    sessionPagingEnabled,
+    hasMoreSessions,
+    isLoadingMoreSessions,
+    pagingError,
+    loadMoreSessions,
+    refreshHistorySessions,
     startNewSession,
     setChatMounted,
     setShowAIChat,
@@ -356,6 +369,21 @@ export default function Chat({ initialSessionId }: ChatProps) {
     editor,
   } = useAiChatContext();
   const [, setAiChatExplicitOpenAt] = useRecoilState(aiChatExplicitOpenAtAtom);
+  const paged = pagingRequested && sessionPagingEnabled;
+  const railSessions = pagingRequested && sessionPagingEnabled ? historySessions : sessions;
+
+  useEffect(() => {
+    if (paged) void refreshHistorySessions();
+  }, [paged, refreshHistorySessions]);
+
+  useEffect(() => {
+    if (!paged || !hasMoreSessions || isLoadingMoreSessions || pagingError || !historyEndRef.current) return;
+    const observer = new IntersectionObserver((entries) => {
+      if (entries.some((entry) => entry.isIntersecting)) void loadMoreSessions();
+    }, { root: historyEndRef.current.parentElement });
+    observer.observe(historyEndRef.current);
+    return () => observer.disconnect();
+  }, [paged, hasMoreSessions, isLoadingMoreSessions, pagingError, loadMoreSessions]);
 
   useEffect(() => {
     if (
@@ -395,8 +423,8 @@ export default function Chat({ initialSessionId }: ChatProps) {
 
   const { pinnedSessions, sessionGroups } = useMemo(() => {
     const query = searchQuery.trim().toLowerCase();
-    const visibleSessions = sessions
-      .filter((session) => (session.messages?.length ?? 0) > 0)
+    const visibleSessions = railSessions
+      .filter((session) => "hasMessages" in session ? session.hasMessages : (session.messages?.length ?? 0) > 0)
       .filter((session) =>
         fullScreenChatScope === null
           ? true
@@ -420,7 +448,7 @@ export default function Chat({ initialSessionId }: ChatProps) {
   }, [
     aiChatPinnedSessionIds,
     searchQuery,
-    sessions,
+    railSessions,
     fullScreenChatScope,
   ]);
   const displayedSessionGroups = [
@@ -435,9 +463,7 @@ export default function Chat({ initialSessionId }: ChatProps) {
       sessions.map((session) => session.id)
     );
     void startNewSession();
-    // Cursor into the fresh composer; DOM focus, not the Tiptap command,
-    // which can silently no-op (HTPR-4565).
-    setTimeout(() => { try { editor?.view.dom.focus(); } catch { /* view unmounted */ } }, 0);
+    setTimeout(() => { try { editor?.view.dom.focus(); } catch {} }, 0);
   };
 
   const handleTogglePinnedSession = (
@@ -496,7 +522,7 @@ export default function Chat({ initialSessionId }: ChatProps) {
 
         <div className="px-3 pb-3">
           <FullScreenChatBoardSelector
-            sessions={sessions}
+            sessions={railSessions}
             scope={fullScreenChatScope}
             onScopeChange={setFullScreenChatScope}
           />
@@ -520,7 +546,20 @@ export default function Chat({ initialSessionId }: ChatProps) {
           </div>
         </div>
 
-        <div className="min-h-0 flex-1 overflow-y-auto px-2 pb-3 scrollbar-thin hover:scrollbar-thumb-gray-500 scrollbar-thumb-gray-500 scrollbar-track-kanban-column-scrollbar dark:scrollbar-thumb-[#4F5766]">
+        <div
+          className="min-h-0 flex-1 overflow-y-auto px-2 pb-3 scrollbar-thin hover:scrollbar-thumb-gray-500 scrollbar-thumb-gray-500 scrollbar-track-kanban-column-scrollbar dark:scrollbar-thumb-[#4F5766]"
+          onScroll={(event) => {
+            const rail = event.currentTarget;
+            if (paged && hasMoreSessions && !isLoadingMoreSessions && rail.scrollTop + rail.clientHeight >= rail.scrollHeight - 40) {
+              void loadMoreSessions();
+            }
+          }}
+        >
+          {pagingRequested && sessionPagingEnabled && pagingError && (
+            <p role="alert" className="px-3 py-2 text-meta text-icon-dark-gray">
+              Couldn’t load older chats. Scroll to try again.
+            </p>
+          )}
           {displayedSessionGroups.length === 0 ? (
             <p className="px-3 py-2 text-meta text-icon-dark-gray">
               {searchQuery ? "No chats found" : "No previous chats"}
@@ -598,6 +637,7 @@ export default function Chat({ initialSessionId }: ChatProps) {
               </section>
             ))
           )}
+          {pagingRequested && sessionPagingEnabled && hasMoreSessions && <div ref={historyEndRef} className="h-1" aria-hidden />}
         </div>
         <FullScreenChatRailResizeHandle />
       </aside>

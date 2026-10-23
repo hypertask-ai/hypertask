@@ -19,7 +19,6 @@ async function handler(req: NextApiRequest, res: NextApiResponse) {
       "🤔 api/queues/FAST/generateCommentSummaryQueue ~ error:",
       error
     );
-    // Return 200 so QStash does not retry an error we have already handled/logged.
     return res.status(200).json({ ok: false });
   }
 }

@@ -23,7 +23,7 @@ test("the description body no longer imports the editor statically", () => {
   assert.doesNotMatch(body, /from "@\/components\/RTE\/TipTapTaskDetail"/);
   assert.match(body, /DescriptionEditorSlot/);
   assert.match(body, /const staticFirstFlag = useFlag\(HTPR_7091_STATIC_DESCRIPTION_FIRST_FLAG\);/);
-  assert.match(body, /lazy=\{staticFirstFlag \? instantTicketOpen && !isEditing && \(appSavedStatic/);
+  assert.match(body, /lazy=\{staticFirstFlag \? !isEditing && \(appSavedStatic/);
 });
 
 test("the slot loads the editor with import() in both flag states", () => {
@@ -139,6 +139,8 @@ const shell = load("StaticDescriptionShell.tsx", shellMocks);
 test("lazy slot renders the static description first, in the editor's wrapper", () => {
   const slot = load("DescriptionEditorSlot.tsx", {
     "next/dynamic": { __esModule: true, default: () => () => null },
+    "@/hooks/useFlag": { useFlag: () => false },
+    "@/lib/flags/keys": { HTPR_7395_CACHED_STATIC_FIRST_FLAG: "htpr-7395-cached-static-first" },
     "./StaticDescriptionShell": shell,
     "./StaticDescriptionPlaceholder": load("StaticDescriptionPlaceholder.ts", {}),
   });
@@ -175,7 +177,7 @@ test("the static copy sets the rules the editor adds for its root", () => {
 
 test("the editor panels show the static placeholder only when one is provided", () => {
   const panels = fs.readFileSync(path.join(root, "src/components/RTE/TaskDetailEditorPanels.tsx"), "utf8");
-  assert.match(panels, /staticFirst && staticPlaceholder \? staticPlaceholder : <InnerHTMLDescription/);
+  assert.match(panels, /\(legacyStaticFirst \|\| cachedStaticFirst\) && staticPlaceholder \? staticPlaceholder : <InnerHTMLDescription/);
 });
 
 // HTPR-7110: descriptions saved through the app carry a bare document wrapper.

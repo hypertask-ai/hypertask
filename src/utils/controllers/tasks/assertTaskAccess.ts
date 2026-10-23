@@ -1,3 +1,5 @@
+import type { AgentTokenTeamScope } from '@/lib/mcp/auth/types';
+import { agentScopeEnforced, recordAgentBoardScopeMiss } from "@/lib/auth/agentScope";
 import type { Prisma, Status } from "@prisma/client";
 import prisma from "@/lib/prisma";
 import { getProjectWhere, taskWriteAccessWhere } from "@/utils/controllers/projects/getAllIncludes";
@@ -7,14 +9,15 @@ export function taskAccessWhere(
   taskId: number | undefined,
   options: {
     agentId?: string | null;
+    teamScope?: AgentTokenTeamScope | null;
     projectStatus?: Status;
     taskStatus?: Status;
     scope?: "team" | "content";
   } = {},
 ): Prisma.TaskWhereInput {
   const projectAccess = options.scope === "content"
-    ? taskWriteAccessWhere(userId, options.agentId)
-    : getProjectWhere(userId, options.agentId);
+    ? taskWriteAccessWhere(userId, options.agentId, options.teamScope)
+    : getProjectWhere(userId, options.agentId, options.teamScope);
   return {
     ...(taskId === undefined ? {} : { id: taskId }),
     ...(options.taskStatus ? { status: options.taskStatus } : {}),
@@ -25,24 +28,21 @@ export function taskAccessWhere(
   };
 }
 
-// updateTaskSingle does no membership check of its own. It looks the task up
-// by id and writes. Routes that take a caller-supplied taskId therefore have to
-// gate access themselves; this is that gate.
 export async function userCanAccessTask(
   userId: number,
   taskId: number,
   agentId?: string | null,
+  teamScope?: AgentTokenTeamScope | null,
 ): Promise<boolean> {
   if (!Number.isInteger(taskId) || taskId <= 0) return false;
   const task = await prisma.task.findFirst({
-    where: taskAccessWhere(userId, taskId, { agentId }),
-    select: { id: true },
+    where: taskAccessWhere(userId, taskId, { agentId, teamScope }),
+    select: { id: true, ...(agentId && !agentScopeEnforced() ? { projectId: true } : {}) },
   });
+  if (task) recordAgentBoardScopeMiss(task.projectId);
   return Boolean(task);
 }
 
-// Same owner/member check as task writes, so a legacy teamless board still
-// counts. userCanAccessTask stays on getProjectWhere for team-scoped callers.
 export async function userCanAccessTaskContent(
   userId: number,
   taskId: number,

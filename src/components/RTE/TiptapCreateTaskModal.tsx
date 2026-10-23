@@ -1,4 +1,4 @@
-import { HTPR_6929_COMPOSE_TASK_WRITER_FLAG, HTPR_6937_NEW_TASK_WINDOW_FLAG } from "@/lib/flags/keys";
+import { HTPR_6929_COMPOSE_TASK_WRITER_FLAG, HTPR_6937_NEW_TASK_WINDOW_FLAG, HTPR_7544_CTRLJ_SIDEBAR_ON_NEW_TASK_FLAG } from "@/lib/flags/keys";
 import { useRecoilValue, useSetRecoilState } from "@/lib/state";
 import { showCommandsAtom } from "@/store";
 import { CommandMode } from "@/models/enums";
@@ -83,9 +83,6 @@ const attachmentButtonId = "create-task-modal-attachmentUpload";
 const TiptapCreateTaskModal = () => {
   const isMbl = useContext(MobileViewContext);
   const isApple = useDeviceContext();
-  const backgroundTaskUploadsEnabled = useFlag(
-    "htpr-5993-optimistic-task-uploads",
-  );
   const descriptionFirstEnabled = useFlag(
     HTPR_6556_MOBILE_DESCRIPTION_FIRST_FLAG,
   );
@@ -142,7 +139,6 @@ const TiptapCreateTaskModal = () => {
     failed: boolean;
     seen: boolean;
   }>());
-  // Register before file preparation or the lazy preview can yield to Save.
   const onFilesSelected = (files: File[], preparation?: Promise<FileItem[]>) => {
     if (attachmentComposerEpoch !== attachmentComposerEpochRef.current) return;
     files.forEach((file) => {
@@ -163,7 +159,6 @@ const TiptapCreateTaskModal = () => {
         const name = files[index].name;
         const pending = pendingAttachmentUploadsRef.current.get(name);
         if (!pending || name === file.name) return;
-        // Image preparation can rename the file when it converts to WebP.
         pendingAttachmentUploadsRef.current.delete(name);
         pendingAttachmentUploadsRef.current.set(file.name, pending);
       });
@@ -186,6 +181,9 @@ const TiptapCreateTaskModal = () => {
   const { continueTourInModal, isTourActive, endTour } = useTourContext();
   const composeEnabled = useFlag(HTPR_6929_COMPOSE_TASK_WRITER_FLAG);
   const newTaskWindowFlag = useFlag(HTPR_6937_NEW_TASK_WINDOW_FLAG);
+  const ctrlJSidebarOnNewTask = useFlag(HTPR_7544_CTRLJ_SIDEBAR_ON_NEW_TASK_FLAG);
+  let composeShortcutCapture = true;
+  if (ctrlJSidebarOnNewTask) composeShortcutCapture = false;
   let newTaskWindow = false;
   if (composeEnabled && newTaskWindowFlag) newTaskWindow = true;
   const setCommands = useSetRecoilState(showCommandsAtom);
@@ -202,10 +200,6 @@ const TiptapCreateTaskModal = () => {
   );
   const [_currentProject, __] = useRecoilState(currentProjectAtom);
   const [createTaskModal] = useRecoilState(showCreateTaskModalAtom);
-  // The seeded prompt belongs to one opening. Keep it stable while the writer
-  // is mounted, then clear it when the writer closes.
-  // A guest's first-ever opening gets the demo prompt (HTPR-4937) and marks
-  // the intro as seen, so every later opening behaves normally.
   const isPlainOpening =
     !createTaskModal.duplicate &&
     !createTaskModal.column_payload?.createTaskFromComment &&
@@ -262,7 +256,6 @@ const TiptapCreateTaskModal = () => {
       try {
         window.localStorage.setItem(GUEST_WRITER_SEEN_KEY, "true");
       } catch {
-        // Storage blocked: the intro may repeat, nothing else breaks.
       }
     }
   }, [enableAutoTitleGeneration, shouldShowAiTaskWriter]);
@@ -278,10 +271,9 @@ const TiptapCreateTaskModal = () => {
       event.stopImmediatePropagation();
       setCommands({ show: true, mode: CommandMode.Command, paletteTab: "compose", composeProject: projectForContext, composeOnCreated: closeComposedTaskForm });
     };
-    // Keep the form's selected board before the global shortcut reads the URL.
-    window.addEventListener("keydown", openNewTask, true);
-    return () => window.removeEventListener("keydown", openNewTask, true);
-  }, [newTaskWindow, isApple, pathname, projectForContext, setCommands, closeComposedTaskForm]);
+    window.addEventListener("keydown", openNewTask, composeShortcutCapture);
+    return () => window.removeEventListener("keydown", openNewTask, composeShortcutCapture);
+  }, [newTaskWindow, composeShortcutCapture, isApple, pathname, projectForContext, setCommands, closeComposedTaskForm]);
   const { data: projectLabels } = useGetAllProjectLabels(
     projectId ?? undefined,
   );
@@ -358,8 +350,6 @@ const TiptapCreateTaskModal = () => {
     addImage(e.dataTransfer);
   };
   const handleFocus = (forceFocus?: boolean) => {
-    // console.log("focusing now")
-    // console.log("🚀 ~ handleFocus ~ editor?.isFocused:", editor?.isFocused)
     if (editor?.isFocused || (shouldShowAiTaskWriter && !forceFocus))
       return false;
     editor?.commands.focus("end");
@@ -371,10 +361,8 @@ const TiptapCreateTaskModal = () => {
     scheduleTitleGeneration(description);
     editor?.commands.setMeta("projectId", 2);
   };
-  // ==================== get attachments from the componetn =============
   const getAttachments = async (files: File[]) => {
     if (attachmentComposerEpoch !== attachmentComposerEpochRef.current) return;
-    // A deliberately removed preview must not leave Save waiting forever.
     const names = new Set(files.map((file) => file.name));
     pendingAttachmentUploadsRef.current.forEach((pending, name) => {
       if (names.has(name)) pending.seen = true;
@@ -409,15 +397,9 @@ const TiptapCreateTaskModal = () => {
 
   const resetDropFiles = () => setFilesDropped([]);
 
-  // whenever attachments are ALL uploaded, this function runs.
-  // it runs as the FINAL call, not on each upload
   const callbackAttachments = async (attachmentsReturned: { id: number; file: { name: string; size: number; type: string; source: string } }[]) => {
     if (attachmentComposerEpoch !== attachmentComposerEpochRef.current) return;
     console.log("🚀 ~ callbackAttachments ~ attachmentsReturned:", attachmentsReturned)
-    // get all the urls back
-    // console.log("🚀 ~ callbackAttachments ~ attachmentsReturned:", attachmentsReturned)
-    // this is confirmation that attachments are uploaded.
-    // setTotalChecks(prev=>prev+1)
     createTaskAttachmentsRef.current = attachmentsReturned;
     attachmentsReturned.forEach(({ file }) => {
       if (!file.source) return;
@@ -436,15 +418,12 @@ const TiptapCreateTaskModal = () => {
 
   useEffect(
     () => () => {
-      if (backgroundTaskUploadsEnabled) {
-        discardUnboundCreateTaskUploads(createTaskAttachmentsRef.current);
-      }
+      discardUnboundCreateTaskUploads(createTaskAttachmentsRef.current);
     },
-    [backgroundTaskUploadsEnabled],
+    [],
   );
 
   const resetComposerAfterCreate = () => {
-    // Clear the uploader's gallery history and invalidate callbacks from this draft.
     attachmentComposerEpochRef.current += 1;
     setAttachmentComposerEpoch(attachmentComposerEpochRef.current);
     resetFormValues();
@@ -478,18 +457,12 @@ const TiptapCreateTaskModal = () => {
       );
   }, [editor]);
 
-  // useEffect(() => {
-  //   if (editMode==="Description") handleFocus()
-  //   else editor?.commands.blur()
-  // }, [editMode])
   const CtrlEnterHandler = async (
     param?: TSendBackButtonParam,
     formValuesOverride?: IForm,
   ) => {
     console.log("🚀 ~ CtrlEnterHandler ~ canSave:", canSave);
     if (isRecording) return;
-    // Without a save mode none of the branches below run, so bail out before
-    // starting title generation or flipping the upload flag.
     if (!param) return;
     if (uploadInProgress) return toast("Please wait for the task to upload");
     if (createSubmissionRef.current) return;
@@ -528,9 +501,7 @@ const TiptapCreateTaskModal = () => {
       ...formValuesOverride,
       attachments: attachmentsAtSave,
     };
-    const backgroundUploadCount = backgroundTaskUploadsEnabled
-      ? createTaskUploadCount(attachmentsAtSave ?? [])
-      : 0;
+    const backgroundUploadCount = createTaskUploadCount(attachmentsAtSave ?? []);
     if (backgroundUploadCount) {
       reserveCreateTaskUploads(attachmentsAtSave ?? []);
     }
@@ -539,9 +510,6 @@ const TiptapCreateTaskModal = () => {
       ? `Task saved. ${backgroundUploadCount} ${uploadingFileNoun} uploading`
       : "Successfully created the task";
 
-    // TipTap owns the freshest editor document. React state can still contain
-    // the previous render when someone types and immediately saves, so every
-    // save mode snapshots the editor instead of risking an empty description.
     let descriptionAtSave =
       formValuesOverride?.description ?? editor?.getHTML() ?? formValues.description;
     let titleAtSave = formValuesOverride?.title ?? getCurrentTitle();
@@ -554,8 +522,6 @@ const TiptapCreateTaskModal = () => {
       titleGenerationForSaveRef.current = true;
       setUploadInProgress(true);
       try {
-        // More writing invalidates the current request. Keep taking the latest
-        // editor snapshot until one title matches what will actually be saved.
         while (shouldGenerateTitleForSave(titleAtSave, descriptionAtSave)) {
           const generatedTitle =
             await generateTitleFromDescription(descriptionAtSave);
@@ -605,9 +571,6 @@ const TiptapCreateTaskModal = () => {
         traceScope = getTaskCreatePerformanceTraceScope();
         const taskUrl = await createTask;
         if (taskUrl) {
-          // Next keeps the /new route in its client history. Clear the mounted
-          // composer before leaving so Back restores a fresh creator rather than
-          // the values that were just saved.
           resetComposerAfterCreate();
           setUploadInProgress(false);
           if (isMbl && pathname !== "/new") {
@@ -650,9 +613,6 @@ const TiptapCreateTaskModal = () => {
           resetComposerAfterCreate();
           setUploadInProgress(false);
           releaseSubmission();
-          // Creation has finished, so both the modal and /new can close without
-          // a discard prompt. Passing false here would ask whether to discard a
-          // task that has already been saved.
           closeHandler(true);
           completeTaskCreatePerformanceTraceAfterElementRemoved(
             "modal_closed",
@@ -706,7 +666,6 @@ const TiptapCreateTaskModal = () => {
       setCommands({ show: true, mode: CommandMode.Command, paletteTab: "compose", composeProject: formValues.currentProject ?? _currentProject ?? undefined, composeOnCreated: closeComposedTaskForm });
       return;
     }
-    // editor?.chain().focus().toggleHighlight({ color: "#b89bdd" });
     editor?.chain().selectAll().setHighlight({ color: "#F0D8FF" }).run();
     document.getElementById(divIds.popoverContainer)?.scrollIntoView({
       behavior: "smooth",
@@ -733,15 +692,11 @@ const TiptapCreateTaskModal = () => {
       responseProjectId: number | undefined,
     ) => {
       const currentProjectId = projectForContext?.id;
-      // The provider's request scope identifies the board used by the model.
-      // Never apply a response after the user has switched boards.
       if (
         !currentProjectId ||
         responseProjectId === undefined ||
         responseProjectId !== currentProjectId
       ) {
-        // Do not leave the user behind in a writer whose response belongs to a
-        // board they just left. The response is discarded by the caller.
         showClassicForm();
         return true;
       }
@@ -848,16 +803,15 @@ const TiptapCreateTaskModal = () => {
       }
     : undefined;
 
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+
   const handleKeyDown = (e: any) => {
     var cmdControl = (isApple && e.metaKey) || (!isApple && e.ctrlKey);
     if (showAssignModal || isRecording || (newTaskWindow && showCommands.show)) return;
     if (cmdControl && e.key === "Enter") {
-      // When AI Task Writer is visible and focused, let it handle Ctrl+Enter to send the prompt
       if (shouldShowAiTaskWriter) {
         const aiWriterEl = document.getElementById(divIds.popoverId);
         if (aiWriterEl?.contains(document.activeElement)) {
-          return; // Don't Save – AI Task Writer will send the prompt
+          return;
         }
       }
       if (!e.altKey && !e.shiftKey) CtrlEnterHandler("Save");
@@ -875,7 +829,6 @@ const TiptapCreateTaskModal = () => {
         return;
       }
     }
-    // // [ctrl] + [j]
     if (cmdControl && e.keyCode === KeyCodes.J) {
       if (newTaskWindow) return;
       e.preventDefault();
@@ -887,12 +840,10 @@ const TiptapCreateTaskModal = () => {
       editor?.chain().focus().toggleHighlight({ color: "#b89bdd" });
       toggleAiTaskWriterVisibility();
     }
-    // [Attachments] cmd/cntrl + shift + [1]
     if (e.shiftKey && cmdControl && e.keyCode === KeyCodes.ONE) {
       e.preventDefault();
       editor?.chain().focus().toggleHeading({ level: 1 }).run();
     }
-    // [Attachments] cmd/cntrl + shift + [2]
     if (e.shiftKey && cmdControl && e.keyCode === KeyCodes.TWO) {
       e.preventDefault();
       editor?.chain().focus().toggleHeading({ level: 2 }).run();
@@ -922,7 +873,6 @@ const TiptapCreateTaskModal = () => {
           .run();
       }
     }
-    // [Attachments] cmd/cntrl + shift + a
     if (e.shiftKey && cmdControl && e.keyCode === KeyCodes.A) {
       e.preventDefault();
       document.getElementById(attachmentButtonId)?.click();
@@ -930,7 +880,6 @@ const TiptapCreateTaskModal = () => {
       setCurrentFocusedElement("Description");
     }
 
-    // [Audio button] cmd/ctrl + shift + d
     if (e.shiftKey && cmdControl && e.keyCode === KeyCodes.D) {
       e.preventDefault();
       if (isRecording) return;
@@ -938,7 +887,6 @@ const TiptapCreateTaskModal = () => {
       document.getElementById(elementId)?.click();
     }
 
-    // [Audio button with improve] cmd/ctrl + shift + f
     if (e.shiftKey && cmdControl && e.keyCode === KeyCodes.F) {
       e.preventDefault();
       if (isRecording) return;
@@ -946,14 +894,12 @@ const TiptapCreateTaskModal = () => {
       document.getElementById(elementId)?.click();
     }
 
-    // [Audio button] alt+v
     if (e.altKey && e.keyCode === KeyCodes.V) {
       e.preventDefault();
       if (isRecording) return;
       document.getElementById("create-task-modal-audio-button")?.click();
     }
 
-    //edit title [f2]
     if (e.keyCode === KeyCodes.F2) {
       e.preventDefault();
       setEditMode("title");
@@ -972,9 +918,6 @@ const TiptapCreateTaskModal = () => {
     } else if (editMode === "Description-ai") {
       setShouldShowAITaskWriter(true);
       editor?.chain().toggleHighlight({ color: "#b89bdd" });
-      // setTimeout(() => {
-      //   handleFocus();
-      // }, 100);
     }
   }, [shouldShowAiTaskWriter, editMode, editor]);
   useEffect(() => {
@@ -995,10 +938,8 @@ const TiptapCreateTaskModal = () => {
       targetDiv: HTMLElement,
       popover: HTMLElement
     ) => {
-      // Get the current height of the popover
       const popoverHeight = popover.offsetHeight;
       console.log("Size ===> new min height", popoverHeight + 30);
-      // Set the min-height of the target div to be popover height + 30px
       targetDiv.style.minHeight = `${popoverHeight + 30}px`;
     };
 
@@ -1033,7 +974,6 @@ const TiptapCreateTaskModal = () => {
     <>
       {
         <div
-          // onKeyDown={handleKeyDown}
           id={divIds.wrapperId}
           className={`${styles.hellow} relative`}
           onFocus={() => handleFocus()}
@@ -1058,8 +998,6 @@ const TiptapCreateTaskModal = () => {
                 id={divIds.popoverId}
                 backgroundContent={taskWriterDescription}
                 defaultMode="AiTaskWriter"
-                // Existing ticket content drafts immediately. The guest intro
-                // and prompts from explicit flows keep their existing behavior.
                 autoTrigger={taskWriterOpening.autoTrigger}
                 initialPrompt={taskWriterOpening.initialPrompt}
                 projectLabels={projectLabels}
@@ -1150,7 +1088,6 @@ const TiptapCreateTaskModal = () => {
                   )}
                   <EditorContent
                     id="create-task-tiptap-description"
-                    // onFocus={handleFocus}
                     onDrop={onDropHandler}
                     className={cn(
                       "max-h-[60svh] scrollbar-none max-w-full cursor-text pt-2 overflow-y-auto overflow-x-hidden",
@@ -1184,7 +1121,7 @@ const TiptapCreateTaskModal = () => {
               dictationCoordinator={dictationCoordinator}
               toggleAiTaskWriter={toggleAiTaskWriter}
               isAiTaskWriterOpen={shouldShowAiTaskWriter}
-              backgroundTaskUploads={backgroundTaskUploadsEnabled}
+              backgroundTaskUploads
             />
           </FileDragOverlay>
         </div>

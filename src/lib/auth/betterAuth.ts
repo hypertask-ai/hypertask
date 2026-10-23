@@ -1,21 +1,25 @@
-import { betterAuth } from 'better-auth'
+import { enqueueOutsideSaveAndProcessSoon } from "@/lib/telemetry/analyticsIntents";
+import { betterAuth, type BetterAuthOptions } from 'better-auth'
 import { prismaAdapter } from 'better-auth/adapters/prisma'
 import { emailOTP, magicLink, multiSession } from 'better-auth/plugins'
 import { apiKey } from '@better-auth/api-key'
 import { dash } from '@better-auth/infra'
 import { passkey } from '@better-auth/passkey'
+import { createAuthMiddleware, getOAuthState } from 'better-auth/api'
+import { consumeGoogleSignupContext, consumeSignupCookie } from '@/lib/auth/signupAttributionContext'
+import { recordSignupIdentityLink } from '@/lib/telemetry/signupIdentityLink'
 import { randomUUID } from 'crypto'
 
+import { preflightOAuthTokenKey } from '@/lib/auth/oauthTokenCipher'
+import { withOAuthTokenStorage } from '@/lib/auth/oauthTokenStorage'
 import { bridgeSessionPlugin } from '@/lib/auth/bridgePlugin'
 import authConfig from '@/lib/configs/auth.config'
 import { legacyCookiePlugin, newGoogleSignupRequests } from '@/lib/auth/legacyCookiePlugin'
 import { sendEmail } from '@/lib/email/sendEmail'
 import { MANAGEMENT_KEY_PERMISSIONS } from '@/lib/mcp/managementPermissions'
 import prisma from '@/lib/prisma'
-import {
-  recordUserSignedUp,
-  signupAttributionFromHeaders,
-} from '@/lib/telemetry/signupAnalytics'
+import { signupAttributionFromHeaders } from '@/lib/telemetry/signupAnalytics'
+import { enqueueSignupCompleted } from '@/lib/telemetry/signupCompleted'
 import { provisionNewUser } from '@/utils/controllers/users/provisionNewUser'
 
 const EMAIL_FROM = process.env.EMAIL_FROM || 'noreply@hypertask.ai'
@@ -24,7 +28,6 @@ const managementApiKeyPlugin = apiKey({
   defaultPrefix: 'htmk_',
   enableSessionForAPIKeys: false,
   requireName: true,
-  // MCP routes already enforce the shared per-token Redis rate limit.
   rateLimit: {
     enabled: false,
   },
@@ -41,11 +44,6 @@ const managementApiKeyPlugin = apiKey({
   },
 })
 
-// This configuration only creates user-owned keys. Marking the polymorphic
-// plugin field as a user reference lets Better Auth convert our serial User.id
-// to/from its string API representation and matches the Prisma cascade relation.
-// This mutates undocumented plugin internals, so @better-auth/api-key is pinned
-// to an exact version in package.json — re-verify this shape on every bump.
 Object.assign(managementApiKeyPlugin.schema.apikey.fields.referenceId, {
   references: {
     model: 'User',
@@ -133,21 +131,21 @@ async function sendOTPEmail(email: string, otp: string) {
   })
 }
 
+const TOKEN_FREE_SIGNUP_PATHS = ['/sign-in/magic-link', '/magic-link/', '/sign-in/email-otp', '/email-otp/']
+
+export function isTokenFreeSignupPath(path: string | undefined) {
+  return Boolean(path && TOKEN_FREE_SIGNUP_PATHS.some(prefix => path.startsWith(prefix)))
+}
+
 export const auth = betterAuth({
   appName: 'Hypertask',
-  database: prismaAdapter(prisma, {
+  database: (options: BetterAuthOptions) => withOAuthTokenStorage(prismaAdapter(prisma, {
     provider: 'postgresql',
-  }),
+    debugLogs: false,
+  })(options), options),
   secret: process.env.BETTER_AUTH_SECRET,
   baseURL: process.env.BETTER_AUTH_URL ?? 'https://app.hypertask.ai',
-  // Vercel preview deployments serve from *.vercel.app while BETTER_AUTH_URL
-  // stays app.hypertask.ai, so the origin check 403s every POST there. Trust
-  // the deployment's own host on previews only; production stays strict.
-  // demo.hypertask.ai is the isolated-cookie host for the anonymous demo
-  // (HTPR-4303); its guest bridge-session POSTs must not be origin-rejected.
-  // Cookies are host-only, so this host still cannot touch an app.hypertask.ai
-  // session. app.hypertask.ai/staging listed explicitly so the array never
-  // narrows the origins production already trusts.
+  onAPIError: { errorURL: '/login' },
   trustedOrigins:
     process.env.VERCEL_ENV === 'preview' && process.env.VERCEL_URL
       ? [
@@ -178,9 +176,6 @@ export const auth = betterAuth({
       image: 'photoURL',
       createdAt: 'joinedAt',
     },
-    // uid is a legacy NOT NULL column filled by the create.before hook below;
-    // without this declaration the adapter strips unknown fields and the
-    // insert fails with "Argument uid is missing".
     additionalFields: {
       uid: {
         type: 'string',
@@ -191,19 +186,12 @@ export const auth = betterAuth({
   },
   session: {
     modelName: 'BetterAuthSession',
-    // 30-day rolling login. Default is 7 days, which had users re-authenticating
-    // roughly weekly. expiresIn sets the lifetime; updateAge refreshes the token
-    // on each day of use so active users effectively stay logged in.
     expiresIn: 60 * 60 * 24 * 30,
     updateAge: 60 * 60 * 24,
   },
   account: {
     modelName: 'BetterAuthAccount',
-    // emailVerified was backfilled 2026-07-11 (HTPR-4159): 860/995 users, the
-    // rest are instant-signups who never proved email ownership. The default
-    // requireLocalEmailVerified gate now correctly blocks linking a Google
-    // account onto an unverified local account (pre-registration takeover);
-    // those users fall back to the legacy Google flow unchanged.
+    encryptOAuthTokens: false,
     accountLinking: {
       trustedProviders: ['google'],
     },
@@ -214,12 +202,15 @@ export const auth = betterAuth({
   databaseHooks: {
     user: {
       create: {
-        before: async (user) => ({
-          data: {
-            ...user,
-            uid: `ba_${randomUUID()}`,
-          },
-        }),
+        before: async (user, context) => {
+          if (!isTokenFreeSignupPath(context?.path)) preflightOAuthTokenKey()
+          return {
+            data: {
+              ...user,
+              uid: `ba_${randomUUID()}`,
+            },
+          }
+        },
         after: async (user, context) => {
           try {
             const userId = Number(user.id)
@@ -227,14 +218,10 @@ export const auth = betterAuth({
               throw new Error(`Invalid Better Auth user id: ${user.id}`)
             }
 
-            recordUserSignedUp({
-              isNewUser: true,
-              userId,
-              ...signupAttributionFromHeaders(
-                context?.request?.headers,
-                context?.path === '/callback/google' ? 'google' : 'email',
-              ),
-            })
+            const decision = await recordSignupIdentityLink(userId, true, context?.path === '/callback/google'
+              ? await consumeGoogleSignupContext(await getOAuthState().catch(() => null))
+              : await consumeSignupCookie(context, { method: 'magic_link', email: user.email }),
+            context?.request?.headers.get('cookie'))
 
             await provisionNewUser({
               userId,
@@ -242,15 +229,21 @@ export const auth = betterAuth({
               displayName: user.name,
               photoURL: user.image,
               stripeCustomerNameEmail: user.email,
-              // HTPR-5639: honour the one config both signup paths share.
-              // Hardcoding false sent every Google / passkey / magic-link
-              // signup through the /onboarding wizard while email-code signups
-              // went straight to the board.
               shouldSkipInteractive: authConfig.onboarding.shouldSkipInteractive,
               skipOnboarding: authConfig.onboarding.skipOnboarding,
               isVerified: true,
               createGoogleAccount: context?.path === '/callback/google',
             })
+
+            await enqueueOutsideSaveAndProcessSoon(() => enqueueSignupCompleted(prisma, {
+              decision,
+              cookieHeader: context?.request?.headers.get('cookie') ?? null,
+              userId,
+              ...signupAttributionFromHeaders(
+                context?.request?.headers,
+                context?.path === '/callback/google' ? 'google' : 'email',
+              ),
+            }))
             if (context?.path === '/callback/google' && context.request) {
               newGoogleSignupRequests.set(context.request, userId)
             }
@@ -266,26 +259,28 @@ export const auth = betterAuth({
       },
     },
   },
+  hooks: {
+    after: createAuthMiddleware(async (context) => {
+      if (!context.context.newSession) return
+      if (context.path === '/callback/google') await consumeGoogleSignupContext(await getOAuthState().catch(() => null))
+      await consumeSignupCookie(context)
+    }),
+  },
   advanced: {
     database: {
       generateId: 'serial',
     },
-    // Vercel terminates TLS ahead of us; the client IP arrives in these
-    // headers. Without this, rate limiting counts everyone as one IP.
     ipAddress: {
       ipAddressHeaders: ['x-forwarded-for', 'x-real-ip'],
     },
   },
-  // HTPR-4146: apiKey defaults to process.env.BETTER_AUTH_API_KEY.
   plugins: [
     dash(),
     managementApiKeyPlugin,
     bridgeSessionPlugin(),
     multiSession(),
-    // ponytail: Passkeys are origin-bound, so Vercel previews cannot register or use them; production only.
     passkey({
       rpName: 'Hypertask',
-      // rpID defaults to baseURL host (app.hypertask.ai); origin pinned for defense.
       origin: process.env.BETTER_AUTH_URL ?? 'https://app.hypertask.ai',
       schema: { passkey: { modelName: 'Passkey' } },
     }),
@@ -293,7 +288,6 @@ export const auth = betterAuth({
       sendMagicLink: async ({ email, url }) => {
         await sendMagicLinkEmail(email, url)
       },
-      // A DB leak must not expose clickable login links (dashboard insight).
       storeToken: 'hashed',
     }),
     emailOTP({
@@ -304,7 +298,6 @@ export const auth = betterAuth({
       },
       disableSignUp: true,
       otpLength: 6,
-      // Same rationale as storeToken above.
       storeOTP: 'hashed',
     }),
     legacyCookiePlugin(),

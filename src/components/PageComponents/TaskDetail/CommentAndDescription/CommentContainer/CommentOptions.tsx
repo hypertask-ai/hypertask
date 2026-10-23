@@ -6,7 +6,10 @@ import { useContext, useMemo, useState } from "react";
 import { MobileViewContext } from "@/lib/contexts/mobileContext";
 import TimeTooltip from "@/components/Common/TimeTooltip";
 import { useDescriptionAndCommentsContext } from "@/lib/contexts/TaskDetail/DescriptionProvider";
-const EmojiOptionsComp = dynamic(() => import("./EmojiOptionsComp"));
+import EmojiOptionsInOnePass from "./EmojiOptionsComp";
+import { useFlag } from "@/hooks/useFlag";
+import { HTPR_7611_COMMENT_PARTS_ONE_PASS_FLAG } from "@/lib/flags/keys";
+const EmojiOptionsLoadedLater = dynamic(() => import("./EmojiOptionsComp"));
 import Tooltip from "@/components/Common/Tooltip";
 import { cn } from "@/utils/undoActions/helperFuncs";
 import ReplyToComment from "./CommentOptions/ReplyToComment";
@@ -22,6 +25,7 @@ export const CommentOptions = ({
 }: {
   isCurrentUserCreator: boolean;
 }) => {
+  const EmojiOptionsComp = useFlag(HTPR_7611_COMMENT_PARTS_ONE_PASS_FLAG) ? EmojiOptionsInOnePass : EmojiOptionsLoadedLater;
   const [isHovered, setIsHovered] = useState(false);
   const [isThumbsHovered, setIsThumbsHovered] = useState(false);
   const isApple = useDeviceContext();
@@ -71,7 +75,6 @@ export const CommentOptions = ({
           emojiTrigger={emojiTrigger}
         />
 
-        {/* Fast Like button — appears on hover, hidden once user has liked */}
         {!hasLiked && (
           <div
             className={cn(
@@ -138,7 +141,6 @@ export const CommentOptions = ({
   );
 };
 
-// ======================= CREATED AT CARD
 export const CreatedAtCard = ({
   createdAt,
   stacked,
@@ -148,12 +150,12 @@ export const CreatedAtCard = ({
 }) => {
   const _mbl = useContext(MobileViewContext);
   const date = new Date(createdAt);
-  const [isHovered, setIsHovered] = useState(false); // State to track hover
+  const [isHovered, setIsHovered] = useState(false);
 
   return (
     <span
-      onMouseEnter={() => setIsHovered(true)} // Set isHovered to true on mouse enter
-      onMouseLeave={() => setIsHovered(false)} // Set isHovered to false on mouse leave
+      onMouseEnter={() => setIsHovered(true)}
+      onMouseLeave={() => setIsHovered(false)}
       className={`${
         stacked && !_mbl ? "text-content" : "text-meta"
       } whitespace-nowrap text-[#8E9093] relative group`}

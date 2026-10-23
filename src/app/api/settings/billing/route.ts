@@ -23,11 +23,6 @@ const getStripeCustomerEmail = (customer: StripeCustomerResponse) => {
   return customer.email ?? null;
 };
 
-// Billing hangs off Team.stripe_customer_id (not User.stripe_customer_id —
-// that field belongs to a separate, unrelated flow). A project admin may
-// view/edit billing for their project's team; only the team owner may
-// mutate the subscription itself (cancel, payment method — see
-// /api/stripe/billing-portal, left owner-only).
 const hasBillingAccess = hasTeamOwnerOrProjectAdminAccess;
 
 export async function GET(request: Request) {
@@ -104,10 +99,6 @@ export async function GET(request: Request) {
       upcomingInvoice: upcomingInvoice
         ? {
             amountDue: upcomingInvoice.amount_due,
-            // subtotal = full list price before any coupon; discountTotal is
-            // the summed coupon amount. Lets Settings show the account's real
-            // size (e.g. a negotiated flat-rate team) while amountDue stays the
-            // actual charge. Zero discount for normal teams => reads as one price.
             subtotal: upcomingInvoice.subtotal,
             discountTotal: (upcomingInvoice.total_discount_amounts ?? []).reduce(
               (sum, item) => sum + (item.amount ?? 0),
@@ -129,9 +120,6 @@ export async function GET(request: Request) {
   }
 }
 
-// Updates the Stripe customer's email — a plain accounting/invoicing address,
-// not tied to any board member or Hypertask user. Stripe sends invoices and
-// receipts to this address.
 export async function POST(request: Request) {
   const user = await getServerCookieUser();
 

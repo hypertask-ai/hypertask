@@ -1,11 +1,6 @@
-// Shape of a per-board playbook (HTPR-4442). All fields optional; agents fetch
-// this and must satisfy the definition-of-done checklist before finishing work.
 export interface BoardPlaybook {
-  /** Checklist an agent must satisfy before moving a task to a done column. */
   definition_of_done?: string[]
-  /** Free-text working rules for the board (how agents should operate here). */
   working_rules?: string
-  /** Anything else worth telling an agent working this board. */
   notes?: string
 }
 
@@ -17,11 +12,6 @@ export type PlaybookParseResult =
   | { ok: true; value: BoardPlaybook }
   | { ok: false; error: string }
 
-/**
- * Validate and normalize an incoming playbook payload. Rejects the wrong shape
- * and enforces size caps so an agent can't store an unbounded blob. Unknown keys
- * are dropped rather than persisted.
- */
 export function parseBoardPlaybook(input: unknown): PlaybookParseResult {
   if (input === null || typeof input !== 'object' || Array.isArray(input)) {
     return { ok: false, error: 'playbook must be a JSON object' }

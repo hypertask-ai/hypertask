@@ -1,9 +1,11 @@
+const { withStubs } = require("./helpers/stub-map.cjs");
 const assert = require("node:assert/strict");
 const fs = require("node:fs");
 const Module = require("node:module");
 const path = require("node:path");
 const test = require("node:test");
 const ts = require("typescript");
+const { loadSharedRoute } = require("./helpers/groupb-route.cjs");
 
 const root = path.resolve(__dirname, "..");
 
@@ -21,6 +23,8 @@ function compile(relativePath) {
 }
 
 function execute(javascript, stubs) {
+  stubs = withStubs({ "@/lib/media/inlineAgentImages.server": { inlineAgentImagesForUser: async (html) => html } }, stubs);
+  stubs = withStubs({ "@/lib/auth/agentScope": require("./helpers/agent-board-scope.cjs").enforcedScope }, stubs);
   const originalLoad = Module._load;
   Module._load = (request, parent, isMain) =>
     stubs[request] ?? originalLoad(request, parent, isMain);
@@ -44,7 +48,7 @@ function responseHarness() {
   return {
     response: {
       setHeader: (name, value) => {
-        headers[name] = value;
+        headers[name.toLowerCase()] = value;
       },
       status: (nextStatus) => {
         status = nextStatus;
@@ -128,8 +132,11 @@ function loadCreateRoute() {
     team_Activity: { update: async () => undefined },
     drafts: { createMany: async () => undefined },
   };
+  const sharedRoute = loadSharedRoute(async () => ({ userId: 6 }));
   const stubs = {
-    "@/lib/api/task-writes/route": { withTaskWriteFlag: (handler) => handler },
+    "@/utils/controllers/tasks/parentTaskAccess": execute(compile("src/utils/controllers/tasks/parentTaskAccess.ts"), {}),
+    "@/lib/api/task-writes/route": sharedRoute,
+    "./route": sharedRoute,
     "@/lib/ai/composeTaskTarget": execute(compile("src/lib/ai/composeTaskTarget.ts"), {}),
     "@prisma/client": {
       Prisma: { PrismaClientKnownRequestError: class extends Error {} },
@@ -153,6 +160,11 @@ function loadCreateRoute() {
     },
     "@/lib/mcp/webhooks/outbox": {
       publishBoardWebhookDeliveries: async () => undefined,
+    },
+    "@/lib/telemetry/savedWork": {
+      CREATION_CHANNEL_HEADER: "X-Hypertask-Creation-Channel",
+      CREATION_AGENT_HEADER: "X-Hypertask-Creation-Agent",
+      creationChannelFromHeader: () => "web",
     },
     "@/lib/agentWebhooks/outbox": {
       persistAgentRunTriggerWebhooks: async () => [],
@@ -219,7 +231,7 @@ function loadCreateRoute() {
       default: async () => undefined,
     },
     "@/lib/ai/labelClassifier": {
-      classifyTaskAiLabels: async () => undefined,
+      classifyNewTaskAiLabels: async () => undefined,
     },
     "@/lib/realtime/server": {
       broadcastBoardChange: async () => undefined,
@@ -227,8 +239,11 @@ function loadCreateRoute() {
   };
 
   stubs["@/pages/api/queues/FAST/generateSummary"] = stubs["../queues/FAST/generateSummary"];
-  stubs["@/lib/api/task-writes/create-global-effects"] = execute(
+  stubs["./create-global-effects"] = execute(
     compile("src/lib/api/task-writes/create-global-effects.ts"), stubs,
+  );
+  stubs["@/lib/api/task-writes/create-global"] = execute(
+    compile("src/lib/api/task-writes/create-global.ts"), stubs,
   );
 
   return {
@@ -272,11 +287,13 @@ async function createTask(handler, body, response) {
 }
 
 function loadNotificationRoute() {
-  return execute(
-    compile("src/pages/api/notifications/getAll.ts"),
+  const sharedRoute = loadSharedRoute(async () => ({ userId: 6 }));
+  const allRead = execute(
+    compile("src/lib/api/notification-writes/all-read.ts"),
     {
-      "@/lib/api/task-writes/route": { withTaskWriteFlag: handler => handler },
-      "@/utils/controllers/notifications/getAll": {
+      "@/lib/api/task-writes/route": sharedRoute,
+      "./response": execute(compile("src/lib/api/notification-writes/response.ts"), {}),
+      "@/utils/controllers/notifications/getAllWithDecisions": {
         __esModule: true,
         default: async () => ({ status: 200, json: [] }),
       },
@@ -284,7 +301,8 @@ function loadNotificationRoute() {
         getSessionUser: async () => ({ userId: 6 }),
       },
     },
-  ).default;
+  );
+  return sharedRoute.taskWriteHandler({ GET: async () => allRead.GET });
 }
 
 test("latency probe GET routes report handler timing", async () => {
@@ -299,7 +317,7 @@ test("latency probe GET routes report handler timing", async () => {
   );
   assert.equal(createResponse.result().status, 200);
   assert.match(
-    createResponse.result().headers["Server-Timing"],
+    createResponse.result().headers["server-timing"],
     /^total;dur=\d+\.\d$/,
   );
 
@@ -310,7 +328,7 @@ test("latency probe GET routes report handler timing", async () => {
   );
   assert.equal(inboxResponse.result().status, 200);
   assert.match(
-    inboxResponse.result().headers["Server-Timing"],
+    inboxResponse.result().headers["server-timing"],
     /^total;dur=\d+\.\d$/,
   );
 });
@@ -325,7 +343,7 @@ test("plain task creation skips empty relation and URL enrichment", async () => 
   const result = response.result();
   assert.equal(result.status, 200, JSON.stringify(result.body));
   assert.match(
-    result.headers["Server-Timing"],
+    result.headers["server-timing"],
     /^validate;dur=\d+\.\d, task-create;dur=\d+\.\d, enrich;dur=\d+\.\d, total;dur=\d+\.\d$/,
   );
   assert.deepEqual(calls, { relations: 0, urls: 0 });

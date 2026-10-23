@@ -1,35 +1,26 @@
-/**
- * Common task identification schemas
- * 
- * Shared validation logic for identifying tasks across multiple tools.
- * Supports three identification methods:
- * 1. task_id - Direct task ID
- * 2. ticket_number - Human-readable ticket number (e.g., "ENG-101")
- * 3. unique_index + project_id - Efficient lookup by project and task index
- */
 
 import { z } from 'zod';
 import { getConfig } from '../../config/index';
 
 const config = getConfig();
 
-/**
- * Ticket number schema - used across multiple tools
- */
 export const ticketNumberSchema = z
   .string()
   .min(1)
   .max(config.limits.ticketNumberMaxLength)
   .regex(/^[a-zA-Z0-9_-]+$/, 'Ticket number must contain only alphanumeric characters, hyphens, and underscores');
 
-/**
- * Base task identification schema (without validation)
- * Used for FastMCP parameter validation - refine logic checked in execute
- */
+const taskIdSchema = z.coerce.number().int().positive();
+
+export const taskIdOneOrManySchema = z.union([taskIdSchema, z.array(taskIdSchema)]);
+export const ticketNumberOneOrManySchema = z.union([ticketNumberSchema, z.array(ticketNumberSchema)]);
+
+const asArray = (value: unknown) =>
+  value === undefined || Array.isArray(value) ? value : [value];
+
 export function createTaskIdentificationBaseSchema() {
   return z
     .object({
-      // z.coerce: Claude sometimes sends "20706" instead of 20706 (HTPR-3618)
       task_id: z.coerce.number().int().positive().optional(),
       ticket_number: ticketNumberSchema.optional(),
       unique_index: z.coerce.number().int().positive().optional(),
@@ -38,10 +29,6 @@ export function createTaskIdentificationBaseSchema() {
     .strict();
 }
 
-/**
- * Task identification schema for single task (with validation)
- * Requires exactly one identification method
- */
 export function createTaskIdentificationSchema() {
   return createTaskIdentificationBaseSchema()
     .refine(
@@ -83,16 +70,11 @@ export function createTaskIdentificationSchema() {
     );
 }
 
-/**
- * Task identification schema for multiple tasks (arrays)
- * Used by get_tasks tool
- */
 export function createTaskIdentificationArraySchema() {
   return z
     .object({
-      // z.coerce: Claude sometimes stringifies IDs (HTPR-3618)
-      task_id: z.array(z.coerce.number().int().positive()).optional(),
-      ticket_number: z.array(ticketNumberSchema).optional(),
+      task_id: z.preprocess(asArray, z.array(taskIdSchema).optional()),
+      ticket_number: z.preprocess(asArray, z.array(ticketNumberSchema).optional()),
       unique_index: z.coerce.number().int().positive().optional(),
       project_id: z.coerce.number().int().positive().optional(),
     })

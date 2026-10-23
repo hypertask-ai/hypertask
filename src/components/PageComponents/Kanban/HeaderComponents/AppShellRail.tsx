@@ -74,9 +74,7 @@ const RailItem = ({
   <div
     className={
       wide
-        ? // ponytail: the label rides on top of the existing full-width button
-          // (pointer-events-none) so the whole row stays clickable without
-          // editing every item; the !overrides pull the icon back to the left.
+        ?
           "relative flex h-[34px] w-full items-center rounded-[5px] hover:bg-hover-active [&>*]:!justify-start [&>*]:!pl-[10px]"
         : "flex h-[34px] w-[36px] items-center justify-center rounded-[5px] hover:bg-hover-active"
     }
@@ -119,30 +117,13 @@ const AppShellRail = ({
   const prefetchInbox = useCallback(() => {
     void prefetchInboxQuery(queryClient, currentUser.id);
   }, [currentUser.id, queryClient]);
-  // HTPR-4890: every user gets the expanded rail (labels, 130px), collapsible
-  // back to the icon-only 48px rail. Only the signup CTAs stay guest-only.
   const [isGuest, setIsGuest] = useState(false);
   const [expanded, setExpanded] = useRecoilState(appShellRailExpandedAtom);
   const wide = expanded;
-  // Tooltip `left` is measured from the row button, whose left edge sits 6px in
-  // from the rail edge in BOTH states (px-1.5 expanded; the 36px item centred in
-  // 48px collapsed). So clearing the rail entirely = railWidth + gap - 6, with a
-  // 12px gap: 130 + 12 - 6 = 136 expanded, 48 + 12 - 6 = 54 collapsed.
   const tooltipLeft = wide ? 136 : 54;
 
   useEffect(() => setIsGuest(isGuestCookieUser()), []);
 
-  // Page content offsets by var(--app-shell-rail-w, 48px); keep it in sync.
-  // useLayoutEffect (not useEffect) so this commits before the browser's first
-  // paint of this mount — otherwise every page relying on the fallback value
-  // (48px) paints with the wrong padding for a frame, then visibly slides to
-  // the real width once the effect catches up (HTPR-5725).
-  // No unmount cleanup: AppShellRail remounts fresh on every page (it's not in
-  // a persistent layout), and clearing the var on unmount reopened the same
-  // fallback-then-correct gap across a page transition that spans two paints
-  // (e.g. a loading/suspense boundary). Every reader of this var is already
-  // gated behind the same page's own rail-on flag, so a value left over from
-  // the previous page is never read before the next AppShellRail overwrites it.
   useLayoutEffect(() => {
     document.documentElement.removeAttribute("data-rail");
     document.documentElement.style.setProperty(
@@ -162,22 +143,12 @@ const AppShellRail = ({
   const onBoard = pathname?.startsWith("/project");
   const onInbox = pathname?.startsWith("/inbox");
   const onSearch = pathname?.startsWith("/search");
-  // /timers redirects to /time?running=1 in next.config, so the rail never sees
-  // the /timers path. Match the destination instead (HTPR-4774).
   const onTimers = pathname?.startsWith("/time");
   const onAgents = pathname?.startsWith("/agents");
 
   return (
     <>
-    {/* ponytail: below ~540px the rail scrolls instead of clipping its bottom
-        cluster; hover tooltips get clipped there (overflow container), which is
-        the accepted trade for keeping every button reachable (HTPR-4837). */}
     <aside
-      // app-shell-rail: stable className for theme CSS to target (border
-      // color per theme, HTPR-4906). z-[60] is unchanged: the actual bug was
-      // a stray z-100 on the inbox/trash/onboarding scroll containers
-      // (normal-flow wrappers that had no business being z-indexed at all),
-      // removed at the source rather than out-escalated here.
       className={`app-shell-rail fixed left-0 top-0 z-[60] flex h-[100svh] flex-col border-r-[1.3px] border-light-black-border-1 bg-containerBackground py-2 [@media(max-height:540px)]:overflow-y-auto scrollbar-none ${
         wide ? "w-[130px] items-stretch px-1.5" : "w-[48px] items-center"
       }`}
@@ -198,7 +169,6 @@ const AppShellRail = ({
           keyCombination={[RAIL_TOGGLE_KEY]}
         />
       </button>
-      {/* Board switcher sits alone on top: Ctrl+B family, not the 1-9 row below. */}
       <div className={`flex flex-col gap-1 ${wide ? "w-full" : "items-center"}`}>
         <RailItem wide={wide} label="Boards">
           <button
@@ -280,9 +250,6 @@ const AppShellRail = ({
           </button>
         </RailItem>
         <RailItem wide={wide} label="AI Chat">
-          {/* Plain full-width button like the sibling rows: RailItem's expanded
-              label overlay assumes its child fills the row, and AIWriterButton's
-              content-sized span left the "AI Chat" row dead outside the icon. */}
           <button
             tabIndex={-1}
             onClick={toggleAIChatInterface}
@@ -368,7 +335,6 @@ const AppShellRail = ({
             }`}
             aria-label="Latest updates"
           >
-            {/* Something new = brighten the icon (no colored dot; stays a tier below the inbox). */}
             <span className="relative flex h-5 w-5 items-center justify-center">
               <IconoirRocket size={18} strokeWidth={1.5} />
             </span>
@@ -393,9 +359,6 @@ const AppShellRail = ({
           </button>
         </RailItem>
 
-        {/* HTPR-4883: the guest signup CTAs live here, not in the tips bar.
-            The mt-5 gap is what separates them from the nav items above — a
-            divider line would break the no-outlines rule. */}
         {isGuest &&
           (wide ? (
             <div className="mt-5 flex w-full flex-col gap-1">

@@ -1,0 +1,54 @@
+#!/bin/sh
+# Stops a commit when its staged changes contain a key (YPER4-324): gitleaks for anything
+# key-shaped, then trufflehog (any hit blocks: its live check can say "dead" for a working
+# key). A false hit gets `trufflehog:ignore` on its line. Called by the global git hooks and by
+# husky's init.sh; bypass once with git commit --no-verify.
+leaks=$(command -v gitleaks || echo "$HOME/.local/bin/gitleaks")
+truffle=$(command -v trufflehog || echo "$HOME/.local/bin/trufflehog")
+for tool in "$leaks" "$truffle"; do
+  if [ ! -x "$tool" ]; then
+    echo "secret-scan: $(basename "$tool") is not installed, so this commit cannot be checked for keys." >&2
+    echo "secret-scan: install it to ~/.local/bin, or commit with --no-verify if you are sure." >&2
+    exit 1
+  fi
+done
+top=$(git rev-parse --show-toplevel) || exit 1
+set -- git --pre-commit --staged --redact --no-banner --log-level=warn
+# The repo's own rules win; otherwise the base rules installed next to this script.
+if [ -f "$top/.gitleaks.toml" ]; then
+  set -- "$@" "--config=$top/.gitleaks.toml"
+elif [ -f "$(dirname "$0")/gitleaks.toml" ]; then
+  set -- "$@" "--config=$(dirname "$0")/gitleaks.toml"
+fi
+if ! "$leaks" "$@" "$top"; then
+  echo "secret-scan: commit blocked, a staged change looks like a key (value hidden above)." >&2
+  echo "secret-scan: remove it and keep keys in the key safe (stack-key)." >&2
+  exit 1
+fi
+
+# trufflehog reads the staged version of each changed file, copied to a private temp folder.
+# Any failure to list or copy the staged files blocks the commit rather than skip the scan.
+tmp=$(mktemp -d) || exit 1
+trap 'rm -rf "$tmp"' EXIT
+mkdir "$tmp/staged" || exit 1
+if ! git diff --cached --name-only -z --diff-filter=ACMRT > "$tmp/list"; then
+  echo "secret-scan: could not list the staged files; commit blocked." >&2
+  exit 1
+fi
+[ -s "$tmp/list" ] || exit 0
+if ! xargs -0 git checkout-index --prefix="$tmp/staged/" -- < "$tmp/list"; then
+  echo "secret-scan: could not copy the staged files for trufflehog; commit blocked." >&2
+  exit 1
+fi
+"$truffle" filesystem "$tmp/staged" --fail --no-update --json >"$tmp/found" 2>/dev/null
+code=$?
+if [ "$code" = 183 ]; then
+  echo "secret-scan: commit blocked, trufflehog found a key (working or not, it blocks either way):" >&2
+  grep -o '"DetectorName":"[^"]*"' "$tmp/found" | sort -u >&2
+  echo "secret-scan: remove it (roll it if it was ever real), keep keys in the key safe (stack-key)." >&2
+  exit 1
+fi
+if [ "$code" != 0 ]; then
+  echo "secret-scan: trufflehog failed (exit $code); commit blocked. Retry, or --no-verify if you are sure." >&2
+  exit 1
+fi

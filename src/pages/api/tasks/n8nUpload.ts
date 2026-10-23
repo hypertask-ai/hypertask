@@ -26,14 +26,9 @@ export const config = {
   },
 };
 
-// Leave room for multipart headers and boundaries above the decoded batch cap.
 const LEGACY_UPLOAD_MAX_BATCH_REQUEST_BYTES =
   MCP_ATTACHMENT_MAX_BATCH_BYTES + 1024 * 1024;
 
-// Vercel rejects a serverless request body above 4.5 MB before this handler
-// runs, so any larger cap can never take effect and only turns an explainable
-// error into an opaque platform 413 (HTPR-5516). Stay at the platform ceiling
-// and report the same limit the browser enforces.
 export const LEGACY_UPLOAD_MAX_REQUEST_BYTES = Math.min(
   LEGACY_UPLOAD_MAX_BATCH_REQUEST_BYTES,
   UPLOAD_MAX_REQUEST_BYTES
@@ -61,8 +56,6 @@ function parseBoundary(contentType: string): string | null {
     /(?:^|;)\s*boundary=(?:"([^"]+)"|([^;\s]+))/i
   );
   const boundary = match?.[1] ?? match?.[2];
-  // RFC 2046 recommends no more than 70 characters. Bounding it also keeps the
-  // delimiter search predictable for attacker-controlled request headers.
   return boundary && boundary.length <= 70 ? boundary : null;
 }
 
@@ -103,8 +96,6 @@ async function readMultipartBody(req: NextApiRequest): Promise<Buffer> {
   }
 }
 
-// Falls back to the app-wide session resolver, which also honours the rolling
-// Better Auth session (HTPR-5520). Returns null when neither source is valid.
 async function resolveBetterAuthSession(
   req: NextApiRequest
 ): Promise<{ id: number } | null> {
@@ -126,18 +117,6 @@ export default async function handler(
     return res.status(405).json({ error: "Method not allowed" });
   }
 
-  // This endpoint writes directly to public attachment storage. Authenticate
-  // before reading a potentially large body or touching storage.
-  //
-  // Accept BOTH session sources (HTPR-5520). Better Auth sessions roll forward
-  // on each day of use, while ht_session is minted once at login with a fixed
-  // expiry and never refreshed. A user active past that lifetime keeps a valid
-  // Better Auth session but loses ht_session, so a legacy-only check made this
-  // the one route that 401s for an otherwise logged-in user: attachments failed
-  // in comments and descriptions while text-only comments still posted.
-  //
-  // getSessionUser is imported lazily so the legacy path stays free of the
-  // Better Auth and Prisma module graph.
   const session =
     verifySession(req.cookies[SESSION_COOKIE]) ??
     (await resolveBetterAuthSession(req));
@@ -152,12 +131,6 @@ export default async function handler(
       req.headers["x-upload-purpose"] === "task-attachment-link";
     if (req.headers["x-upload-purpose"] !== undefined && !taskLinkRequested) {
       throw new UploadRequestError("Invalid upload purpose", 400);
-    }
-    if (taskLinkRequested) {
-      const { isFeatureEnabled } = await import("@/lib/flags");
-      if (!(await isFeatureEnabled("htpr-5993-optimistic-task-uploads", session.id))) {
-        throw new UploadRequestError("Background task uploads are disabled", 403);
-      }
     }
     const contentType = req.headers["content-type"];
     if (typeof contentType !== "string") {
@@ -219,8 +192,6 @@ export function extractFilesFromMultipart(
   while (searchPos < buffer.length) {
     const index = buffer.indexOf(delimiter, searchPos);
     if (index === -1) break;
-    // A multipart delimiter is either the first bytes or follows CRLF. Do not
-    // split a binary file merely because its bytes contain the boundary text.
     if (
       index === 0 ||
       (index >= 2 && buffer[index - 2] === 0x0d && buffer[index - 1] === 0x0a)
@@ -268,13 +239,9 @@ export function extractFilesFromMultipart(
       contentTypeMatch?.[1].trim() ||
       (extension ? getMimeTypeFromExtension(extension) : null);
     const fileStart = headerEndIndex + headerTerminator.length;
-    // The CRLF immediately before the next boundary belongs to multipart, not
-    // to the uploaded file.
     const fileEnd = Math.max(fileStart, part.length - 2);
     const fileBuffer = part.subarray(fileStart, fileEnd);
 
-    // The browser-facing cap: anything above this cannot reach production
-    // anyway, so report it in the same words the client shows (HTPR-5516).
     if (fileBuffer.length > UPLOAD_MAX_FILE_BYTES) {
       throw new UploadRequestError(
         `File "${fileName}" exceeds the ${formatUploadBytes(UPLOAD_MAX_FILE_BYTES)} limit`,

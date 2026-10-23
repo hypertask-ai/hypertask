@@ -20,7 +20,6 @@ const LegacyTimeTooltip = ({time,bottom, left}:Props) => {
         const tooltipRect = tooltipElement.getBoundingClientRect();
         const viewportWidth = window.innerWidth;
 
-        // Adjust left position if tooltip is going beyond the viewport
         if (tooltipRect.right > viewportWidth) {
           const newLeft = left - (tooltipRect.right - viewportWidth);
           tooltipElement.style.left = `${newLeft}px`;

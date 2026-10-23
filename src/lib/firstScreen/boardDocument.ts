@@ -27,7 +27,6 @@ export function getBoardDocument(snapshot: FirstScreenInitialModel<FirstScreenWi
     ? snapshot as BoardDocument : null;
 }
 
-// A scoped document proves one board, never absence/revocation of other boards.
 export function mergeBoardDocumentProjects(current: IProjectsAll | undefined, incoming: IProjectsAll): IProjectsAll {
   if (!current || current.accountId !== incoming.accountId) return incoming;
   const active = incoming.updatedProjects[0];
@@ -44,8 +43,6 @@ export function projectBoardDocumentUser(user: IUser): IUser {
 }
 
 export function projectBoardDocumentPayload(payload: BoardTasksPayload): BoardTasksPayload {
-  // Start with the API's exact authorized projection, then remove non-display
-  // billing/instruction fields. Never broaden its task, section or view scope.
   const wire = JSON.parse(JSON.stringify(payload)) as BoardTasksPayload;
   const project = wire.project as (IProject & Record<string, any>) | undefined;
   if (project) {

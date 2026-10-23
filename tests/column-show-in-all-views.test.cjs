@@ -189,7 +189,6 @@ const handler = (overrides = {}) => {
   const calls = { lookups: [], writes: [], broadcasts: [] };
   const POST = createColumnViewVisibilityHandler({
     session: async () => ({ userId: 6 }),
-    featureEnabled: async () => true,
     findSection: async (userId, sectionId) => {
       calls.lookups.push([userId, sectionId]);
       return { id: sectionId, projectId: 15, section_title: "QA", ranking: "A1650" };
@@ -207,14 +206,6 @@ test("a signed-out caller cannot switch a column and nothing is looked up", asyn
   const { POST, calls } = handler({ session: async () => null });
   const response = await POST(request({ sectionId: 991, visible: true }));
   assert.equal(response.status, 401);
-  assert.deepEqual(calls.lookups, []);
-  assert.deepEqual(calls.writes, []);
-});
-
-test("the feature flag gates the write on the server, not only in the UI", async () => {
-  const { POST, calls } = handler({ featureEnabled: async () => false });
-  const response = await POST(request({ sectionId: 991, visible: true }));
-  assert.equal(response.status, 403);
   assert.deepEqual(calls.lookups, []);
   assert.deepEqual(calls.writes, []);
 });
@@ -241,21 +232,23 @@ test("visible must be a real boolean, so \"false\" cannot switch a column on", a
   }
 });
 
-test("an allowed caller switches the column and the board is told", async () => {
-  const { POST, calls } = handler();
-  const response = await POST(request({ sectionId: 991, visible: false }));
-  assert.equal(response.status, 200);
-  assert.deepEqual(await response.json(), {
-    success: true,
-    sectionId: 991,
-    visible: false,
-  });
-  assert.deepEqual(calls.lookups, [[6, 991]]);
-  // The acting user is threaded through: the write leaves other people's
-  // unsaved working copies alone but must reach the caller's own.
-  assert.deepEqual(calls.writes, [[991, false, 6]]);
-  assert.deepEqual(calls.broadcasts, [[15, 6]]);
-});
+for (const userId of [6, 7, 8]) {
+  for (const visible of [true, false]) {
+    test(`board member ${userId} can always ${visible ? "show" : "hide"} the column in all views`, async () => {
+      const { POST, calls } = handler({ session: async () => ({ userId }) });
+      const response = await POST(request({ sectionId: 991, visible }));
+      assert.equal(response.status, 200);
+      assert.deepEqual(await response.json(), {
+        success: true,
+        sectionId: 991,
+        visible,
+      });
+      assert.deepEqual(calls.lookups, [[userId, 991]]);
+      assert.deepEqual(calls.writes, [[991, visible, userId]]);
+      assert.deepEqual(calls.broadcasts, [[15, userId]]);
+    });
+  }
+}
 
 test("every board_columns_view write is locked and read inside its transaction", () => {
   const helpers = read("src/utils/controllers/section/viewHelpers.ts");
@@ -307,4 +300,35 @@ test("every board_columns_view write is locked and read inside its transaction",
     /sortByStringParam/,
     "showing or hiding a column must not reorder the stored columns",
   );
+});
+
+test("the column editor always offers both all-view actions", () => {
+  const ts = require("typescript");
+  const React = require("react");
+  const { renderToStaticMarkup } = require("react-dom/server");
+  const source = read("src/components/Modals/commands/manageColumn.tsx");
+  const tree = ts.createSourceFile("manageColumn.tsx", source, ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX);
+  const rows = [];
+  function visit(node) {
+    if (ts.isJsxElement(node) && node.openingElement.tagName.getText(tree) === "div"
+      && ts.isJsxFragment(node.parent) && node.getText(tree).includes("Show in all views")) {
+      rows.push(node);
+    }
+    ts.forEachChild(node, visit);
+  }
+  visit(tree);
+  assert.equal(rows.length, 1, "the actions must be direct children of the edit view, not conditional");
+  const code = ts.transpileModule(`const row = (${rows[0].getText(tree)});`, {
+    compilerOptions: { jsx: ts.JsxEmit.React, target: ts.ScriptTarget.ES2022 },
+  }).outputText;
+  const actions = [];
+  const row = new Function("React", "describeViewsShowingColumn", "viewCounts", "queueSave", "setVisibilityInAllViews", `${code}\nreturn row;`)(
+    React, describeViewsShowingColumn, { visible: 1, total: 3 }, (run) => run(), (visible) => actions.push(visible),
+  );
+  const html = renderToStaticMarkup(row);
+  assert.match(html, /Visible in 1 of 3 views/);
+  assert.match(html, /Show in all views/);
+  assert.match(html, /Hide in all views/);
+  for (const button of row.props.children[1].props.children) button.props.onClick();
+  assert.deepEqual(actions, [true, false]);
 });

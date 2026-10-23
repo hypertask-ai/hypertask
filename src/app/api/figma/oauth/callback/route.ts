@@ -3,7 +3,7 @@ import { NextRequest, NextResponse } from "next/server";
 import {
   clearFigmaOAuthAttemptCookie,
   figmaRedirectUri,
-  getFigmaRequestUser,
+  getFigmaAuthenticatedUser,
   rotateFigmaConnectionVersion,
 } from "@/app/api/figma/_lib";
 import { connectFigmaUser } from "@/lib/figma/connection";
@@ -48,7 +48,7 @@ export async function GET(request: NextRequest) {
   );
   if (!attempt) return fail(request, "invalid_state");
 
-  const principal = await getFigmaRequestUser(request);
+  const principal = await getFigmaAuthenticatedUser(request);
   if (principal.status !== "allowed") {
     return fail(
       request,

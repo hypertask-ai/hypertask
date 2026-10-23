@@ -1,3 +1,5 @@
+import { withAgentScopeRequest } from "@/lib/auth/agentScope";
+import { getSessionUser } from "@/lib/auth/getSessionUser";
 import { readJsonBody } from "@/lib/mcp/readJsonBody";
 import { loadCurrentUser } from "@/lib/auth/currentUser";
 import { HTPR_6924_REST_COMPAT_FLAG, isFeatureEnabled } from "@/lib/flags";
@@ -12,13 +14,11 @@ import {
   upsertCustomFieldValue,
 } from "@/utils/controllers/customFields";
 
-/**
- * POST /api/customFields/value
- * Upserts (or clears) a custom field value on a task.
- * Body: { fieldId, taskId, value }
- * Empty/null value deletes the row.
- */
 export async function POST(request: NextRequest) {
+  return withAgentScopeRequest(request, () => setCustomFieldValue(request));
+}
+
+async function setCustomFieldValue(request: NextRequest) {
   try {
     const cookieStore = await cookies();
     const userCookie = cookieStore.get("nookies_user");
@@ -28,7 +28,6 @@ export async function POST(request: NextRequest) {
       try {
         restCompat = await isFeatureEnabled(HTPR_6924_REST_COMPAT_FLAG, currentUser.userId);
       } catch {
-        // Flag lookup failure preserves the legacy entry path.
       }
     }
     const { isValid, user } = restCompat && currentUser
@@ -39,9 +38,10 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
+    const actingAgentId = (await getSessionUser(request.headers).catch(() => null))?.agentId;
+
     let body: Awaited<ReturnType<typeof request.json>>;
     if (restCompat) {
-      // Capture once: preserve accepted non-objects and the original parse error/fallback.
       let jsonError: unknown;
       const result = await readJsonBody<typeof body>({
         json: async () => {
@@ -70,19 +70,23 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Verify the task belongs to a project the user is a member of
     const task = await prisma.task.findUnique({
-      where: { id: parseInt(taskId) },
+      where: {
+        id: parseInt(taskId),
+        ...(actingAgentId ? { project: getProjectWhere(user.id, actingAgentId) } : {}),
+      },
       select: { projectId: true },
     });
     if (!task) {
       return NextResponse.json({ error: "Task not found" }, { status: 404 });
     }
 
-    // Owner-or-member, same predicate as the MCP twin route (validateProjectAccess) —
-    // a bare Member lookup 403s a board OWNER who has no Member row (HTPR-3805).
     const project = await prisma.project.findFirst({
-      where: { id: task.projectId, ...getProjectWhere(user.id) },
+      where: {
+        id: task.projectId,
+        ...getProjectWhere(user.id),
+        ...(actingAgentId ? { AND: [getProjectWhere(user.id, actingAgentId)] } : {}),
+      },
       select: { id: true },
     });
     if (!project) {

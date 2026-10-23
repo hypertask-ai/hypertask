@@ -1,3 +1,6 @@
+import type { AgentTokenTeamScope } from '@/lib/mcp/auth/types';
+import { inlineAgentImagesForUser } from "@/lib/media/inlineAgentImages.server";
+import { recordAgentBoardScopeMiss } from "@/lib/auth/agentScope";
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import prisma from "@/lib/prisma";
@@ -8,17 +11,18 @@ import { broadcastBoardChange, broadcastTaskChange } from "@/lib/realtime/server
 import { extractTaskReferencesFromCommentText } from "@/utils/controllers/comments/extractTaskReferences";
 import { addRelatedTasks } from "@/utils/controllers/tasks/addRelatedTasks";
 import { taskWriteRoute } from "./route";
+import { resolveActingAgent } from "@/lib/auth/resolveActingAgent";
 
-// Preserve legacy truthiness checks and all unknown task fields, not a new API policy.
 const schema = z.custom<{ newTask: Record<string, any>; agentId?: unknown }>(
   (body) => !!(body as { newTask?: { id?: unknown } } | null)?.newTask?.id,
 );
 
-async function userCanAccessProject(userId: number, projectId: number, agentId: string | null) {
+async function userCanAccessProject(userId: number, projectId: number, agentId: string | null, teamScope?: AgentTokenTeamScope | null) {
   const project = await prisma.project.findFirst({
-    where: { id: projectId, ...taskWriteAccessWhere(userId, agentId) },
+    where: { id: projectId, ...taskWriteAccessWhere(userId, agentId, teamScope) },
     select: { id: true },
   });
+  if (project) recordAgentBoardScopeMiss(project.id, "write");
   return !!project;
 }
 
@@ -28,10 +32,11 @@ export const PUT = taskWriteRoute({
   validateBeforeAuth: true,
   operation: async ({ newTask, agentId }, session) => {
     try {
-      const actingAgentId = typeof agentId === "string" && agentId.length > 0 ? agentId : null;
-      if (agentId != null && !actingAgentId) {
-        return NextResponse.json({ message: "Invalid agent id" }, { status: 400 });
+      const actingAgent = resolveActingAgent({ sessionAgentId: session.agentId, bodyAgentId: agentId });
+      if (!actingAgent.ok) {
+        return NextResponse.json({ message: actingAgent.message }, { status: actingAgent.status });
       }
+      const actingAgentId = actingAgent.agentId;
       const [taskToUpdate, sessionUser, ownedAgent] = await Promise.all([
         prisma.task.findUnique({ where: { id: newTask.id }, select: { projectId: true } }),
         prisma.user.findUnique({
@@ -46,11 +51,11 @@ export const PUT = taskWriteRoute({
       if (actingAgentId && !ownedAgent) {
         return NextResponse.json({ message: "Forbidden" }, { status: 403 });
       }
-      if (taskToUpdate && !(await userCanAccessProject(session.userId, taskToUpdate.projectId, actingAgentId))) {
+      if (taskToUpdate && !(await userCanAccessProject(session.userId, taskToUpdate.projectId, actingAgentId, session.teamScope))) {
         return NextResponse.json({ message: "Forbidden" }, { status: 403 });
       }
       if (taskToUpdate && newTask.projectId != null && newTask.projectId !== taskToUpdate.projectId &&
-          !(await userCanAccessProject(session.userId, newTask.projectId, actingAgentId))) {
+          !(await userCanAccessProject(session.userId, newTask.projectId, actingAgentId, session.teamScope))) {
         return NextResponse.json({ message: "Forbidden" }, { status: 403 });
       }
       const currentUser = {
@@ -59,7 +64,11 @@ export const PUT = taskWriteRoute({
         photoURL: sessionUser?.photoURL ?? undefined,
         email: sessionUser?.email ?? undefined,
       } as IUser;
-      const response = await updateTaskSingle(newTask, currentUser, actingAgentId);
+      if (actingAgentId && typeof newTask.description === "string") {
+        newTask.description = await inlineAgentImagesForUser(newTask.description, session.userId, { inlineImages: newTask.inline_images });
+      }
+      delete newTask.inline_images;
+      const response = await updateTaskSingle(newTask, currentUser, actingAgentId, { teamScope: session.teamScope });
       if (response.status === 200) {
         void broadcastBoardChange((response.json as any)?.projectId ?? newTask?.projectId, {
           originUserId: currentUser?.id,
@@ -79,7 +88,7 @@ export const PUT = taskWriteRoute({
             try {
               const refs = extractTaskReferencesFromCommentText(newTask.description);
               if (refs.length === 0) return;
-              await addRelatedTasks({ relatedTasks: refs, currentTaskId: relatedTaskId }, currentUser.id);
+              await addRelatedTasks({ relatedTasks: refs, currentTaskId: relatedTaskId }, currentUser.id, actingAgentId, session.teamScope);
             } catch (error) {
               console.warn("[tasks/single] description relations failed:", error);
             }

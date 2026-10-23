@@ -1,6 +1,7 @@
+import { findIdParamOutOfRange, idOutOfRangeMessage } from '@/lib/mcp/listParams';
 import { wrapMcpRoute, validateMcpRouteAuth as validateMcpAuth, checkMcpRouteRateLimit as checkMcpRateLimit } from '@/lib/mcp/routeWrapper'
 
-import { findTaskByStringIdentifier } from "@/lib/mcp/tasks/resolveTask";
+import { findTaskByStringIdentifier, taskIdentifierErrorResponse } from "@/lib/mcp/tasks/resolveTask";
 import { listReport } from "@/lib/timeTracking";
 import { NextRequest, NextResponse } from "next/server";
 
@@ -34,13 +35,25 @@ export async function GET(request: NextRequest) {
     userParam === "me" ? ctx.user.id : parsePositiveInteger(userParam ?? null);
   const runningParam = params.get("running")?.trim().toLowerCase();
 
-  // Resolve the task filter the same way the other time endpoints do, so
-  // callers can pass a ticket ID, unique index, or task ID (not just the raw
-  // internal DB id).
+  const outOfRange = findIdParamOutOfRange({ user: filterUserId, board: parsePositiveInteger(params.get("board")) });
+  if (outOfRange) {
+    return NextResponse.json(
+      { success: false, error: idOutOfRangeMessage(outOfRange), code: 'invalid_field' },
+      { status: 400 }
+    );
+  }
+
   const taskParam = params.get("task")?.trim();
   let taskId: number | undefined;
   if (taskParam) {
-    const task = await findTaskByStringIdentifier(ctx.user, taskParam, ctx.agentId);
+    let task;
+    try {
+      task = await findTaskByStringIdentifier(ctx.user, taskParam, ctx.agentId, ctx.teamScope);
+    } catch (error) {
+      const response = taskIdentifierErrorResponse(error);
+      if (response) return response;
+      throw error;
+    }
     if (!task) {
       return NextResponse.json(
         { success: false, error: "Task not found or access denied" },
@@ -51,6 +64,7 @@ export async function GET(request: NextRequest) {
   }
 
   const entries = await listReport(ctx.user.id, {
+    agentId: ctx.agentId, teamScope: ctx.teamScope,
     teamId: params.get("team")?.trim() || undefined,
     boardId: parsePositiveInteger(params.get("board")),
     taskId,

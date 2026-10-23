@@ -13,8 +13,9 @@ const require = createRequire(import.meta.url)
 const ts = require('typescript') as typeof import('typescript')
 const root = process.cwd()
 const token = 'transport-test-token'
-const flags = { stateless: false, deferred: false, catalog: false }
+const flags = { stateless: false, deferred: false, catalog: false, feedback: false, flatSchema: false }
 const echoCalls: unknown[] = []
+const schemaSelections: boolean[] = []
 const echoTool = {
   name: 'echo',
   description: 'Repeat the text',
@@ -25,9 +26,17 @@ const echoTool = {
   },
 }
 
+let feedbackCalls = 0
+const feedbackTool = {
+  name: 'hypertask_report_feedback',
+  description: 'Report a technical failure',
+  parameters: z.object({}),
+  execute: async () => { feedbackCalls++; return JSON.stringify({ success: true }) },
+}
+
 // Exercise the actual route, auth wrapper and transports; only product data,
 // credential validation and flag storage are replaced with local fixtures.
-function loadRoutes() {
+function loadRoutes(feedbackRedis: Redis, background: Promise<unknown>[]) {
   const cache = new Map<string, any>()
   function load(file: string): any {
     if (cache.has(file)) return cache.get(file)
@@ -38,10 +47,14 @@ function loadRoutes() {
     loaded.filename = file
     loaded.paths = (Module as any)._nodeModulePaths(path.dirname(file))
     loaded.require = (request: string) => {
+      if (request === '@/lib/redis') return { getRedis: async () => feedbackRedis }
+      if (request === '@vercel/functions') return { waitUntil: (job: Promise<unknown>) => background.push(job) }
       if (request === '@/lib/telemetry/mcpSseAnalytics') return { recordLegacyMcpRequest: () => {} }
-      if (request === './tools') return { MCP_TOOLS: [echoTool] }
+      if (request === './tools') return { MCP_TOOLS: [echoTool, feedbackTool] }
       if (request === './consolidated-tools') return {
-        selectMcpTools: (tools: typeof echoTool[], enabled: boolean, caller: { managementPermissions?: unknown } = {}) => {
+        selectMcpTools: (tools: typeof echoTool[], enabled: boolean, caller: { managementPermissions?: unknown } = {}, _v2 = false, flatSchema = false) => {
+          assert.equal(flatSchema, flags.flatSchema)
+          schemaSelections.push(flatSchema)
           if (!enabled) return tools
           const permitted = !caller.managementPermissions
           const execute = async (...args: Parameters<typeof echoTool.execute>) => {
@@ -73,7 +86,11 @@ function loadRoutes() {
         HTPR_6531_DEFERRED_MCP_TOOLS_FLAG: 'deferred',
         HTPR_6532_STATELESS_MCP_FLAG: 'stateless',
         HTPR_6804_MCP_TOOLS_FLAG: 'catalog',
-        isFeatureEnabled: async (flag: string) => flags[flag as keyof typeof flags] ?? false,
+        HTPR_7203_MCP_FLAT_SCHEMA_FLAG: 'flatSchema',
+        isFeatureEnabled: async (flag: string, userId: number) => {
+          if (flag === 'flatSchema') assert.ok(userId === 6 || userId === 7)
+          return flag === 'htpr-7195-ai-feedback' ? flags.feedback : flags[flag as keyof typeof flags] ?? false
+        },
       }
       if (request.startsWith('.') || request.startsWith('@/')) {
         const resolved = request.startsWith('@/')
@@ -162,6 +179,8 @@ test('actual routes preserve legacy SSE across instances and support MCP 2 strea
   const previousUrl = process.env.REDIS_URL
   process.env.REDIS_URL = `redis://127.0.0.1:${port}`
   let inspector: Redis | undefined
+  let feedbackRedis: Redis | undefined
+  const background: Promise<unknown>[] = []
   const streams: Array<ReturnType<typeof frames>> = []
   try {
     await new Promise<void>((resolve, reject) => {
@@ -173,8 +192,9 @@ test('actual routes preserve legacy SSE across instances and support MCP 2 strea
       redis.once('error', reject)
       redis.once('exit', (code) => reject(new Error(`Redis exited ${code}`)))
     })
-    const first = loadRoutes()
-    const second = loadRoutes()
+    feedbackRedis = new Redis(process.env.REDIS_URL!)
+    const first = loadRoutes(feedbackRedis, background)
+    const second = loadRoutes(feedbackRedis, background)
     for (const bearer of [null, 'wrong-token']) {
       for (const [route, url, method, body] of [
         [first.sse, '/sse', 'GET', undefined],
@@ -243,6 +263,13 @@ test('actual routes preserve legacy SSE across instances and support MCP 2 strea
         const listed = await rpc(10, 'tools/list')
         assert.deepEqual(listed.result.tools.map((tool: { name: string }) => tool.name), ['consolidated_echo'])
         assert.equal(listed.result.tools[0].outputSchema.type, 'object')
+        for (const flatSchema of [true, false]) {
+          flags.flatSchema = flatSchema
+          const before = schemaSelections.length
+          await rpc(101, 'tools/list')
+          assert.equal(schemaSelections.length, before + 2, 'both the message route and SSE relay resolve the flag')
+          assert.ok(schemaSelections.slice(before).every((selection) => selection === flatSchema))
+        }
         for (const name of ['consolidated_echo', 'echo']) {
           const called = await rpc(11, 'tools/call', { name, arguments: { text: 'flagged works' } })
           assert.equal(called.result.structuredContent.args.text, 'flagged works')
@@ -274,6 +301,37 @@ test('actual routes preserve legacy SSE across instances and support MCP 2 strea
       }
     })
 
+    await t.test('open SSE sessions can enable and disable feedback without reconnecting', async () => {
+      flags.feedback = false
+      const stream = frames(await first.sse.GET(request('/sse')))
+      streams.push(stream)
+      try {
+        const endpoint = await stream.next()
+        const rpc = async (id: number, method: string, params?: unknown) => {
+          const response = await second.message.POST(request(endpoint.data, 'POST', { jsonrpc: '2.0', id, method, params }))
+          assert.equal(response.status, 202)
+          return JSON.parse((await stream.next()).data)
+        }
+        await rpc(20, 'initialize', initialize.params)
+        const names = async (id: number) => (await rpc(id, 'tools/list')).result.tools.map((tool: { name: string }) => tool.name)
+        assert.equal((await names(21)).includes(feedbackTool.name), false)
+        flags.feedback = true
+        assert.equal((await names(22)).includes(feedbackTool.name), true)
+        const before = feedbackCalls
+        const allowed = await rpc(23, 'tools/call', { name: feedbackTool.name, arguments: {} })
+        assert.equal(allowed.result.isError, undefined)
+        assert.equal(feedbackCalls, before + 1)
+        flags.feedback = false
+        assert.equal((await names(24)).includes(feedbackTool.name), false)
+        const denied = await rpc(25, 'tools/call', { name: feedbackTool.name, arguments: {} })
+        assert.ok(denied.error || denied.result.isError)
+        assert.equal(feedbackCalls, before + 1)
+      } finally {
+        flags.feedback = false
+        await stream.reader.cancel()
+      }
+    })
+
     flags.stateless = false
     flags.deferred = false
     for (const body of [initialize, { jsonrpc: '2.0', id: 2, method: 'tools/list' }, {
@@ -300,6 +358,8 @@ test('actual routes preserve legacy SSE across instances and support MCP 2 strea
     await aborted.next()
     controller.abort()
     assert.equal((await aborted.reader.read()).done, true)
+    while (background.length) await Promise.all(background.splice(0))
+    await feedbackRedis.quit()
     inspector = new Redis(process.env.REDIS_URL!)
     const clients = await inspector.client('LIST') as string
     assert.equal(clients.trim().split('\n').length, 1, 'Redis subscribers and publishers must be released')
@@ -311,6 +371,7 @@ test('actual routes preserve legacy SSE across instances and support MCP 2 strea
     else process.env.REDIS_URL = previousUrl
     await Promise.all(streams.map((stream) => stream.reader.cancel().catch(() => {})))
     inspector?.disconnect()
+    feedbackRedis?.disconnect()
     if (redis.pid && redis.exitCode === null && redis.signalCode === null) {
       const stopped = new Promise((resolve) => redis.once('exit', resolve))
       redis.kill('SIGTERM')

@@ -1,3 +1,5 @@
+import { withAgentScopeRequest, prepareAgentScope } from "@/lib/auth/agentScope";
+import { queueRestFailure } from '@/lib/aiFeedback/automatic'
 import { AsyncLocalStorage } from 'node:async_hooks'
 import { randomBytes } from 'node:crypto'
 import jwt from 'jsonwebtoken'
@@ -12,6 +14,8 @@ import type { McpAuthContext, McpAuthFailureSnapshot, McpAuthTimings, ValidateMc
 import { readJsonBody } from '@/lib/mcp/readJsonBody'
 import { getMcpOperationContext } from './operationContext'
 import { withAdoptedAgentMutationLease } from '@/lib/mcp/tasks/agentMutationLeaseAdoption'
+import { createMcpDbTiming, mcpDbTimings, mcpDbTimingHeader } from './dbTiming'
+import { reportUnexplainedMcpServerError } from './operationCrashReport'
 
 const instanceStarted = performance.now()
 const instanceId = randomBytes(4).toString('hex')
@@ -34,7 +38,6 @@ export async function shouldUseMcpRouteWrapper(request: NextRequest): Promise<bo
   }
   if (typeof candidate !== 'number' || !Number.isSafeInteger(candidate) || candidate <= 0) return false
 
-  // Decoding selects scaffolding only. The candidate never authorizes a request.
   const key = `${HTPR_6926_MCP_ROUTE_WRAPPER_FLAG}:${candidate}`
   const cached = flagDecisions.get(key)
   if (cached && cached.expiresAt > Date.now()) return cached.enabled
@@ -63,8 +66,6 @@ type RouteScope = {
 }
 const routeScopes = new AsyncLocalStorage<RouteScope>()
 
-// Server-Timing for the wrapped path only, with no caller data. ratelimit includes
-// auth when the check resolves the caller's tier; handler still excludes flag lookup.
 function serverTimingHeader(timings: RouteScope['timings'], started: number, wrappedStarted: number, finished: number): string {
   const handlerMs = Math.max(0, finished - wrappedStarted - (timings.authMs ?? 0) - (timings.rateMs ?? 0))
   return [
@@ -96,14 +97,32 @@ function scopeFor(request: NextRequest): RouteScope | undefined {
   return scope?.request === request ? scope : undefined
 }
 
-// The continuation retains each route's guards and error envelopes. Lazy steps
-// preserve rate/auth/JSON order, including routes with permission checks before JSON.
 export function wrapMcpRoute<Args extends unknown[], Result>(
   legacy: (request: NextRequest, ...args: Args) => Promise<Result>,
 ): (request: NextRequest, ...args: Args) => Promise<Result> {
-  return async (request, ...args) => {
+  return (request, ...args) => withAgentScopeRequest(request, async () => {
     const started = performance.now()
-    if (getMcpOperationContext(request) || !(await shouldUseMcpRouteWrapper(request))) return legacy(request, ...args)
+    const operationContext = getMcpOperationContext(request)
+    if (operationContext) {
+      await prepareAgentScope(operationContext.auth.user.id, operationContext.auth.agentId)
+      const result = await legacy(request, ...args)
+      if (result instanceof Response) reportUnexplainedMcpServerError(request, result.status)
+      return result
+    }
+    const execute = async (input: NextRequest) => {
+      try {
+        const result = await legacy(input, ...args)
+        if (result instanceof Response) {
+          try { queueRestFailure(request, result.status) } catch {}
+          reportUnexplainedMcpServerError(input, result.status)
+        }
+        return result
+      } catch (error) {
+        try { queueRestFailure(request, 500) } catch {}
+        throw error
+      }
+    }
+    if (!(await shouldUseMcpRouteWrapper(request))) return execute(request)
     const wrappedStarted = performance.now()
     const scope: RouteScope = { originalRequest: request, request, failure: {}, timings: {} }
     const wrappedRequest = new Proxy(request, {
@@ -114,16 +133,16 @@ export function wrapMcpRoute<Args extends unknown[], Result>(
       },
     })
     scope.request = wrappedRequest
-    const result = await routeScopes.run(scope, () => legacy(wrappedRequest, ...args))
+    const dbTiming = createMcpDbTiming()
+    const result = await mcpDbTimings.run(dbTiming, () => routeScopes.run(scope, () => execute(wrappedRequest)))
     try {
       if (result instanceof Response) {
-        result.headers.set('Server-Timing', serverTimingHeader(scope.timings, started, wrappedStarted, performance.now()))
+        result.headers.set('Server-Timing', serverTimingHeader(scope.timings, started, wrappedStarted, performance.now()) + `, ${mcpDbTimingHeader(dbTiming)}`)
       }
     } catch {
-      // Immutable response headers: skip the measurement, never fail the call.
     }
     return result
-  }
+  })
 }
 
 export function validateMcpRouteAuth(request: NextRequest, options: ValidateMcpAuthOptions = {}) {
@@ -156,7 +175,5 @@ export function mcpRouteUnauthorizedResponse(
 
 export const readMcpRouteJsonBody: typeof readJsonBody = (request, errors) => readJsonBody(request, errors)
 
-// Keep adoption at each fenced write, not around an entire multi-write handler.
-// The existing helper owns token-fenced finally cleanup and success preservation.
 export const withMcpRouteMutationLease: typeof withAdoptedAgentMutationLease = (db, actor, run) =>
   withAdoptedAgentMutationLease(db, actor, run)

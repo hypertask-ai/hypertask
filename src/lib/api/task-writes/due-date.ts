@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { taskWriteRoute } from "./route";
+import { resolveActingAgent } from "@/lib/auth/resolveActingAgent";
 import prisma from "@/lib/prisma";
 import createTaskDueDateActivity from "@/utils/controllers/activities/createTaskDueDateActivity";
 import sendNotificationForTask from "@/utils/controllers/notifications/creation-service/createAndSendNotificationTaskMove";
@@ -14,16 +15,21 @@ export const POST = taskWriteRoute({
   schema: z.custom<Record<string, any>>(() => true),
   validationMessage: "Invalid request",
   allowNullBody: true,
-  prepare: (session) => loadSessionUserRecord(session.userId),
-  operation: async (body, userObj) => {
+  prepare: async (session) => ({ user: await loadSessionUserRecord(session.userId), session }),
+  operation: async (body, { user: userObj, session }) => {
     const req = { body };
     try {
-      const { taskId, dueDate, agentId } = req.body;
+      const { taskId, dueDate, agentId: requestedAgentId } = req.body;
+      const actingAgent = resolveActingAgent({ sessionAgentId: session.agentId, bodyAgentId: requestedAgentId });
+      if (!actingAgent.ok) {
+        return NextResponse.json({ message: actingAgent.message }, { status: actingAgent.status });
+      }
+      const agentId = actingAgent.agentId;
+
       if (!taskId) {
         return NextResponse.json({ message: "Missing required field" }, { status: 400 });
       }
 
-      // Only fetch agent if agentId is provided
       const agent = agentId
         ? await prisma.agent.findUnique({
             where: { id: agentId, revokedAt: null },
@@ -31,17 +37,12 @@ export const POST = taskWriteRoute({
           })
         : null;
 
-      // Update task dueDate
       const { status, json: task, oldTask }: any = await updateTaskSingle(
-        // dueDateNotifiedAt reset so a moved due date re-notifies (see invokeDueDate.ts).
         { id: taskId, dueDate: dueDate ?? null, dueDateNotifiedAt: null },
         userObj,
-        agentId ?? null
+        agentId ?? null, { teamScope: session.teamScope }
       );
 
-      // A denied write returns an error payload here, not a task. Falling
-      // through would log an activity and reschedule the due-date job for a
-      // board the caller cannot see (HTPR-4982).
       if (status !== 200) {
         return NextResponse.json(task, { status });
       }
@@ -59,7 +60,6 @@ export const POST = taskWriteRoute({
         );
       }
 
-      // Log activity
       createTaskDueDateActivity({
         taskId,
         userObj,
@@ -68,7 +68,6 @@ export const POST = taskWriteRoute({
         fromAgent: agent,
       });
 
-      // Manage due date queue
       await cancelDueDateJob(taskId, task.projectId);
       if (dueDate) {
         await scheduleDueDateJob(
@@ -79,7 +78,6 @@ export const POST = taskWriteRoute({
 
       if (status === 200) {
         void broadcastBoardChange(task?.projectId, { originUserId: userObj.id });
-        // HTPR-6281: the open task detail view listens only on the task channel.
         void broadcastTaskChange(task?.id ?? Number(taskId), {
           originUserId: userObj.id,
         });

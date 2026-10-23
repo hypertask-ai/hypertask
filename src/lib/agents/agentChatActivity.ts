@@ -1,4 +1,6 @@
 import type { Prisma, PrismaClient } from "@prisma/client";
+import type { AgentTokenTeamScope } from "@/lib/mcp/auth/types";
+import { chatContentScopeWhere } from "./chatContentScope";
 import prisma from "@/lib/prisma";
 import { serializeAgentRunActivity } from "@/lib/agentRuns/model";
 import { getProjectWhere } from "@/utils/controllers/projects/getAllIncludes";
@@ -85,9 +87,6 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return value !== null && typeof value === "object" && !Array.isArray(value);
 }
 
-// The database filter has to be a superset of what the projection accepts, or a
-// milestone is dropped before anything parses it. The projection matches case
-// insensitively, so this must too.
 function prefixedCommentWhere(
   prefixes: string[],
   caseInsensitive = false,
@@ -195,8 +194,6 @@ function authoredCommentText(row: TimelineRow, selectedAgentId: string): string 
     if (/^(?:Model|Switched|Live):(?:\s|$)/.test(text)) return text;
   }
 
-  // QA agents write the verdict freely: "PASS:", "FAIL:", "QA passed on
-  // production:", "QA fail:". Accept every shape, reject "QA is blocked".
   const qa = /^(?:QA[:\s]+)?(pass|fail)(?:ed|s|ing)?\b[:\s]*(.*)$/i.exec(text);
   if (!qa) return null;
   const detail = qa[2].trim();
@@ -263,9 +260,6 @@ function projectTimelineRows(
           }),
         );
       } else {
-        // ponytail: the approve is inferred when no green row sits in this
-        // window, so a very old approval that paged out shows twice. Persist a
-        // per-task last-known PR state if that ever bites.
         if (!approvedPullRequests.has(key)) {
           feed.push(
             timelineEvent(row, {
@@ -306,6 +300,7 @@ export async function listAgentChatActivity(
     sessionId: string;
     userId: number;
     limit?: number;
+    teamScope?: AgentTokenTeamScope | null;
   },
   db: AgentChatActivityDatabase = prisma,
 ): Promise<AgentChatActivity[]> {
@@ -321,9 +316,9 @@ export async function listAgentChatActivity(
       )
     : MAX_AGENT_CHAT_ACTIVITY;
   const visibleTask = {
-    is: { project: getProjectWhere(input.userId) },
+    is: { project: getProjectWhere(input.userId, input.teamScope != null ? input.agentId : null, input.teamScope) },
   } satisfies Prisma.TaskNullableScalarRelationFilter;
-  const projectWhere = getProjectWhere(input.userId);
+  const projectWhere = getProjectWhere(input.userId, input.teamScope != null ? input.agentId : null, input.teamScope);
   const visibleRunWhere = {
     agentId: input.agentId,
     OR: [
@@ -331,14 +326,12 @@ export async function listAgentChatActivity(
         chatSessionId: input.sessionId,
         taskId: null,
         chatSession: {
-          is: { userId: input.userId, agentId: input.agentId },
+          is: { userId: input.userId, agentId: input.agentId, ...await chatContentScopeWhere({ userId: input.userId, agentId: input.agentId, teamScope: input.teamScope }) },
         },
       },
       { task: visibleTask },
     ],
   } satisfies Prisma.AgentRunWhereInput;
-  // ponytail: the app records no deployment, so a "Live" row only exists when an
-  // agent writes a "Live:" comment. Add a durable deploy signal to guarantee it.
   const selectedCommentWhere = prefixedCommentWhere([
     "Model:",
     "Switched:",

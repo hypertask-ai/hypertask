@@ -1,3 +1,5 @@
+import { reportMcpOperationCrash } from "@/lib/mcp/operationCrashReport";
+import { wrapMcpRoute } from '@/lib/mcp/routeWrapper'
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 
@@ -32,6 +34,7 @@ const revokeTokenSchema = z
   });
 
 export async function POST(request: NextRequest) {
+  return wrapMcpRoute(async (request: NextRequest) => {
   const rateLimited = await checkMcpRateLimit(request);
   if (rateLimited) return rateLimited;
 
@@ -61,14 +64,18 @@ export async function POST(request: NextRequest) {
       );
     }
     console.error("[Admin Tokens] Failed to mint token:", error);
+    reportMcpOperationCrash(request, error);
     return NextResponse.json(
       { success: false, error: "Failed to mint token" },
       { status: 500 },
     );
   }
+
+  })(request)
 }
 
 export async function DELETE(request: NextRequest) {
+  return wrapMcpRoute(async (request: NextRequest) => {
   const rateLimited = await checkMcpRateLimit(request);
   if (rateLimited) return rateLimited;
 
@@ -103,9 +110,12 @@ export async function DELETE(request: NextRequest) {
       );
     }
     console.error("[Admin Tokens] Failed to revoke token:", error);
+    reportMcpOperationCrash(request, error);
     return NextResponse.json(
       { success: false, error: "Failed to revoke token" },
       { status: 500 },
     );
   }
+
+  })(request)
 }

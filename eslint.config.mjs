@@ -4,6 +4,7 @@ import tsParser from "@typescript-eslint/parser";
 import nextCoreWebVitals from "eslint-config-next/core-web-vitals";
 import { styleGuideLintConfig } from "./eslint-local-rules/style-guide.mjs";
 import { uiPatternsLintConfig } from "./eslint-local-rules/ui-patterns.mjs";
+import { noCommentsLintConfig } from "./eslint-local-rules/no-comments.mjs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -36,6 +37,7 @@ export default defineConfig([
   // Existing style debt is recorded in eslint-local-rules/style-guide-suppressions.json.
   styleGuideLintConfig,
   uiPatternsLintConfig,
+  noCommentsLintConfig,
   {
     // HTPR-6160: "@/lib/flags" reaches ioredis through getSessionUser, so a browser
     // component importing it breaks the production build with `Can't resolve 'tls'`.
@@ -50,10 +52,14 @@ export default defineConfig([
       "src/app/add-to-slack/page.tsx",
       // HTPR-6921: server component; gates the public Slack support page.
       "src/app/slack/support/page.tsx",
+      // HTPR-7141: server component; resolves the public demo retry flag.
+      "src/app/(tutorial space)/demo/page.tsx",
       // HTPR-6536: server component; gates the public /qa/login page.
       "src/app/qa/login/page.tsx",
       // Server component; gates ticket-number detail URL resolution.
       "src/app/detail/\\[...slug\\]/page.tsx",
+      // HTPR-7278: server root layout; reads the memory-only tracking flag for PostHog.
+      "src/app/layout.tsx",
     ],
     rules: {
       // Types are erased, so a type-only import never reaches the bundle.

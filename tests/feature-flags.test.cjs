@@ -10,16 +10,38 @@ let readError = null;
 let sessionUserId = 6;
 let usersById = new Map();
 let taskRows = [];
+let changes = [];
+let changeQueries = [];
+let auditFails = false;
 const prisma = {
   user: { findUnique: async ({ where }) => usersById.get(where.id) ?? null },
   task: { findMany: async ({ where }) => taskRows.filter(({ uniqueIndex }) => where.uniqueIndex.in.includes(uniqueIndex)) },
+  featureFlagChange: {
+    create: async ({ data }) => {
+      if (auditFails) throw new Error("audit unavailable");
+      const change = { id: changes.length + 1, createdAt: new Date(), reason: null, ...data };
+      changes.push(change);
+      return { ...change, user: usersById.get(data.userId) };
+    },
+    findMany: async (query) => {
+      changeQueries.push(query);
+      const byKey = new Map();
+      for (const change of [...changes].sort((a, b) => b.id - a.id)) {
+        if (query.where.key.in.includes(change.key) && !byKey.has(change.key)) {
+          const { key, oldMode, newMode, agentName, reason, createdAt, userId } = change;
+          byKey.set(key, { key, oldMode, newMode, agentName, reason, createdAt, user: usersById.get(userId) });
+        }
+      }
+      return [...byKey.values()];
+    },
+  },
   featureFlag: {
     findUnique: async () => {
       if (readError) throw readError;
       return row;
     },
     findMany: async () =>
-      listedRows ?? (row ? [{ key: "htpr-6136-figma-connect", ...row }] : []),
+      listedRows ?? (row ? [{ key: "htpr-3533-google-calendar", ...row }] : []),
     upsert: async ({ where, create, update }) => {
       const data = row ? update : create;
       row = { ...(row ?? {}), ...data, key: where.key, updatedAt: new Date() };
@@ -58,6 +80,9 @@ test.beforeEach(() => {
   readError = null;
   sessionUserId = 6;
   taskRows = [];
+  changes = [];
+  changeQueries = [];
+  auditFails = false;
   usersById = new Map([
     [6, { email: "valentin.yeo@gmail.com" }],
     [985, { email: "valentin@hypertask.ai" }],
@@ -316,20 +341,10 @@ test("Haiku default is an Owner + QA feature, including system ID zero only afte
   assert.equal(await flags.isFeatureEnabled(key, 0), false);
 });
 
-test("Haiku 5.5 is an Owner + QA feature and respects OFF", async () => {
-  const flagName = flags.HTPR_7010_HAIKU_5_5_FLAG;
-  assert.equal(flagName, "htpr-7010-haiku-5-5");
-  assert.equal(flags.defaultFeatureFlagMode(flagName), "OWNER_AND_QA");
-  const entry = (await flags.listFeatureFlagModes()).find(entry => entry.key === flagName);
-  assert.equal(entry.kind, "feature");
-  assert.equal(entry.mode, "OWNER_AND_QA");
-  assert.equal(entry.shippedOn, "2026-10-08");
-  assert.equal(await flags.isFeatureEnabled(flagName, 6), true);
-  assert.equal(await flags.isFeatureEnabled(flagName, 985), true);
-  assert.equal(await flags.isFeatureEnabled(flagName, 7), false);
-  row = { mode: "OFF", updatedAt: new Date() };
-  assert.equal(await flags.isFeatureEnabled(flagName, 6), false);
-  assert.equal(await flags.isFeatureEnabled(flagName, 985), false);
+test("Haiku 5.5 is permanent and its flag is gone", async () => {
+  assert.equal(flags.HTPR_7010_HAIKU_5_5_FLAG, undefined);
+  assert.equal(definitions.some(entry => entry.key === "htpr-7010-haiku-5-5"), false);
+  assert.equal((await flags.listFeatureFlagModes()).some(entry => entry.key === "htpr-7010-haiku-5-5"), false);
 });
 
 test("invite email bugfix defaults to Everyone and respects OFF", async () => {
@@ -345,87 +360,54 @@ test("invite email bugfix defaults to Everyone and respects OFF", async () => {
   assert.equal(await flags.isFeatureEnabled(key, 2343), false);
 });
 
-test("phone New Task title fix defaults to Everyone as a bugfix", async () => {
-  const key = flags.HTPR_6970_PHONE_NEW_TASK_TITLE_FLAG;
-  assert.equal(key, "htpr-6970-phone-new-task-title");
-  assert.equal(flags.defaultFeatureFlagMode(key), "EVERYONE");
-  const entry = (await flags.listFeatureFlagModes()).find(entry => entry.key === key);
-  assert.equal(entry.kind, "bugfix");
-  assert.equal(entry.mode, "EVERYONE");
+test("phone New Task title behavior is permanent and its flag is gone", async () => {
+  assert.equal(flags.HTPR_6970_PHONE_NEW_TASK_TITLE_FLAG, undefined);
+  assert.equal(definitions.some(entry => entry.key === "htpr-6970-phone-new-task-title"), false);
+  assert.equal((await flags.listFeatureFlagModes()).some(entry => entry.key === "htpr-6970-phone-new-task-title"), false);
 });
 
-test("quick-add view context defaults to Everyone as a bugfix and respects OFF", async () => {
-  const key = flags.HTPR_6993_QUICK_ADD_VIEW_CONTEXT_FLAG;
-  assert.equal(key, "htpr-6993-quick-add-view-context");
-  assert.equal(flags.defaultFeatureFlagMode(key), "EVERYONE");
-  const entry = (await flags.listFeatureFlagModes()).find(entry => entry.key === key);
-  assert.equal(entry.kind, "bugfix");
-  assert.equal(entry.mode, "EVERYONE");
-  assert.equal(await flags.isFeatureEnabled(key, 7), true);
-  row = { mode: "OFF", updatedAt: new Date() };
-  assert.equal(await flags.isFeatureEnabled(key, 6), false);
-  assert.equal(await flags.isFeatureEnabled(key, 7), false);
+test("quick-add view context is permanent and absent from the registry", () => {
+  assert.equal(flags.FEATURE_FLAG_KEYS.includes("htpr-6993-quick-add-view-context"), false);
+});
+
+test("new-task window view context is no longer registered", async () => {
+  assert.equal(flags.HTPR_6997_NEW_TASK_WINDOW_VIEW_CONTEXT_FLAG, undefined);
+  assert.equal(definitions.some(entry => entry.key === "htpr-6997-new-task-window-view-context"), false);
+  assert.equal((await flags.listFeatureFlagModes()).some(entry => entry.key === "htpr-6997-new-task-window-view-context"), false);
   const snapshot = require("../e2e/smoke/production-flag-modes.json");
-  assert.equal(snapshot.modes[key], "EVERYONE");
+  assert.equal(Object.hasOwn(snapshot.modes, "htpr-6997-new-task-window-view-context"), false);
 });
 
-test("new-task window view context defaults to Everyone as a bugfix and respects OFF", async () => {
-  const key = flags.HTPR_6997_NEW_TASK_WINDOW_VIEW_CONTEXT_FLAG;
-  assert.equal(key, "htpr-6997-new-task-window-view-context");
-  assert.equal(flags.defaultFeatureFlagMode(key), "EVERYONE");
-  const entry = (await flags.listFeatureFlagModes()).find(entry => entry.key === key);
-  assert.equal(entry.kind, "bugfix");
-  assert.equal(entry.mode, "EVERYONE");
-  assert.equal(await flags.isFeatureEnabled(key, 7), true);
-  row = { mode: "OFF", updatedAt: new Date() };
-  assert.equal(await flags.isFeatureEnabled(key, 6), false);
-  assert.equal(await flags.isFeatureEnabled(key, 7), false);
+test("Ctrl+J view context is permanent and its flag is gone", async () => {
+  assert.equal(flags.HTPR_6999_CTRL_J_VIEW_CONTEXT_FLAG, undefined);
+  assert.equal(definitions.some(entry => entry.key === "htpr-6999-ctrl-j-view-context"), false);
+  assert.equal((await flags.listFeatureFlagModes()).some(entry => entry.key === "htpr-6999-ctrl-j-view-context"), false);
   const snapshot = require("../e2e/smoke/production-flag-modes.json");
-  assert.equal(snapshot.modes[key], "EVERYONE");
+  assert.equal(Object.hasOwn(snapshot.modes, "htpr-6999-ctrl-j-view-context"), false);
 });
 
-test("Ctrl+J view context defaults to Everyone as a bugfix and respects OFF", async () => {
-  const key = flags.HTPR_6999_CTRL_J_VIEW_CONTEXT_FLAG;
-  assert.equal(key, "htpr-6999-ctrl-j-view-context");
-  assert.equal(definitions.find((definition) => definition.key === key).kind, "bugfix");
-  assert.equal(flags.defaultFeatureFlagMode(key), "EVERYONE");
-  const entry = (await flags.listFeatureFlagModes()).find(entry => entry.key === key);
-  assert.equal(entry.kind, "bugfix");
-  assert.equal(entry.mode, "EVERYONE");
-  assert.equal(await flags.isFeatureEnabled(key, 7), true);
-  row = { mode: "OFF", updatedAt: new Date() };
-  assert.equal(await flags.isFeatureEnabled(key, 6), false);
-  assert.equal(await flags.isFeatureEnabled(key, 7), false);
+test("Commenter search is permanent and no longer registered", async () => {
+  assert.equal(flags.HTPR_6880_SEARCH_COMMENTER_FLAG, undefined);
+  assert.equal(definitions.some(definition => definition.key === "htpr-6880-search-commenter"), false);
+  assert.equal((await flags.listFeatureFlagModes()).some(entry => entry.key === "htpr-6880-search-commenter"), false);
   const snapshot = require("../e2e/smoke/production-flag-modes.json");
-  assert.equal(snapshot.modes[key], "EVERYONE");
+  assert.equal(Object.hasOwn(snapshot.modes, "htpr-6880-search-commenter"), false);
 });
 
-test("Inbox E first press defaults to Everyone as a bugfix and respects OFF", async () => {
-  const key = flags.HTPR_7002_INBOX_E_FIRST_PRESS_FLAG;
-  assert.equal(key, "htpr-7002-inbox-e-first-press");
-  assert.equal(definitions.find((definition) => definition.key === key).kind, "bugfix");
-  assert.equal(flags.defaultFeatureFlagMode(key), "EVERYONE");
-  const entry = (await flags.listFeatureFlagModes()).find(entry => entry.key === key);
-  assert.equal(entry.kind, "bugfix");
-  assert.equal(entry.mode, "EVERYONE");
-  assert.equal(await flags.isFeatureEnabled(key, 2343), true);
-  row = { mode: "OFF", updatedAt: new Date() };
-  assert.equal(await flags.isFeatureEnabled(key, 6), false);
-  assert.equal(await flags.isFeatureEnabled(key, 2343), false);
+test("Inbox E first press is permanent and no longer registered", async () => {
+  assert.equal(flags.HTPR_7002_INBOX_E_FIRST_PRESS_FLAG, undefined);
+  assert.equal(definitions.some(definition => definition.key === "htpr-7002-inbox-e-first-press"), false);
+  assert.equal((await flags.listFeatureFlagModes()).some(entry => entry.key === "htpr-7002-inbox-e-first-press"), false);
   const snapshot = require("../e2e/smoke/production-flag-modes.json");
-  assert.equal(snapshot.modes[key], "EVERYONE");
+  assert.equal(Object.hasOwn(snapshot.modes, "htpr-7002-inbox-e-first-press"), false);
 });
 
-test("phone board cold-start bugfix defaults to Everyone and respects OFF", async () => {
-  const key = flags.HTPR_7016_PHONE_BOARD_COLD_START_FLAG;
-  assert.equal(key, "htpr-7016-phone-board-cold-start");
-  const entry = (await flags.listFeatureFlagModes()).find(entry => entry.key === key);
-  assert.equal(entry.kind, "bugfix");
-  assert.equal(entry.mode, "EVERYONE");
-  assert.equal(await flags.isFeatureEnabled(key, 2343), true);
-  row = { mode: "OFF", updatedAt: new Date() };
-  assert.equal(await flags.isFeatureEnabled(key, 985), false);
-  assert.equal(await flags.isFeatureEnabled(key, 2343), false);
+test("phone board cold-start is permanent and no longer registered", async () => {
+  assert.equal(Object.hasOwn(flags, "HTPR_7016_PHONE_BOARD_COLD_START_FLAG"), false);
+  assert.equal(definitions.some(entry => entry.key === "htpr-7016-phone-board-cold-start"), false);
+  assert.equal((await flags.listFeatureFlagModes()).some(entry => entry.key === "htpr-7016-phone-board-cold-start"), false);
+  const snapshot = require("../e2e/smoke/production-flag-modes.json");
+  assert.equal(Object.hasOwn(snapshot.modes, "htpr-7016-phone-board-cold-start"), false);
 });
 
 test("demo login own-board bugfix defaults to Everyone and respects OFF", async () => {
@@ -524,11 +506,11 @@ test("owner access requires both the approved id and login identity", async () =
 });
 
 test("QA access requires both the approved id and login identity", async () => {
-  assert.equal(await flags.isFeatureEnabled("htpr-6136-figma-connect", 985), true);
+  assert.equal(await flags.isFeatureEnabled("htpr-3533-google-calendar", 985), true);
   usersById.set(985, { email: "someone@example.com" });
-  assert.equal(await flags.isFeatureEnabled("htpr-6136-figma-connect", 985), false);
+  assert.equal(await flags.isFeatureEnabled("htpr-3533-google-calendar", 985), false);
   usersById.set(7, { email: "valentin@hypertask.ai" });
-  assert.equal(await flags.isFeatureEnabled("htpr-6136-figma-connect", 7), false);
+  assert.equal(await flags.isFeatureEnabled("htpr-3533-google-calendar", 7), false);
 });
 
 test("feature flag modes enforce owner, QA, everyone, and off access", () => {
@@ -564,13 +546,11 @@ test("an explicit defaultMode wins when no row is stored (HTPR-6926 MCP route wr
   assert.equal((await flags.listFeatureFlagModes()).find((row) => row.key === key).mode, "OFF");
 });
 
-test("keep-assignee bugfix defaults to Everyone for plain QA and respects OFF", async () => {
-  const { HTPR_6962_KEEP_ASSIGNEE_FLAG: key } = flags;
-  assert.equal(key, "htpr-6962-keep-assignee");
-  assert.equal((await flags.listFeatureFlagModes()).find(entry => entry.key === key).mode, "EVERYONE");
-  assert.equal(await flags.isFeatureEnabled(key, 2343), true);
-  row = { mode: "OFF", updatedAt: new Date() };
-  assert.equal(await flags.isFeatureEnabled(key, 2343), false);
+test("permanent assignee preservation is absent from the flag registry", async () => {
+  assert.equal("HTPR_6962_KEEP_ASSIGNEE_FLAG" in flags, false);
+  assert.equal(flags.FEATURE_FLAG_KEYS.includes("htpr-6962-keep-assignee"), false);
+  assert.equal(definitions.some(entry => entry.key === "htpr-6962-keep-assignee"), false);
+  assert.equal((await flags.listFeatureFlagModes()).some(entry => entry.key === "htpr-6962-keep-assignee"), false);
 });
 
 test("back-first-open bugfix defaults to Everyone for plain QA and respects OFF", async () => {
@@ -584,82 +564,46 @@ test("back-first-open bugfix defaults to Everyone for plain QA and respects OFF"
   assert.equal(await flags.isFeatureEnabled(key, 2343), false);
 });
 
-test("board-back bugfix defaults to Everyone for plain QA and respects OFF", async () => {
-  const { HTPR_7003_BOARD_BACK_FLAG: key } = flags;
-  assert.equal(key, "htpr-7003-board-back");
-  const entry = (await flags.listFeatureFlagModes()).find(entry => entry.key === key);
-  assert.equal(entry.kind, "bugfix");
-  assert.equal(entry.mode, "EVERYONE");
-  assert.equal(await flags.isFeatureEnabled(key, 2343), true);
-  row = { mode: "OFF", updatedAt: new Date() };
-  assert.equal(await flags.isFeatureEnabled(key, 2343), false);
+test("board-back is no longer registered", async () => {
+  assert.equal(Object.hasOwn(flags, "HTPR_7003_BOARD_BACK_FLAG"), false);
+  assert.equal(flags.FEATURE_FLAG_KEYS.includes("htpr-7003-board-back"), false);
+  assert.equal(definitions.some(entry => entry.key === "htpr-7003-board-back"), false);
+  assert.equal((await flags.listFeatureFlagModes()).some(entry => entry.key === "htpr-7003-board-back"), false);
 });
 
-test("no-loading-flash bugfix defaults to Everyone for plain QA and respects OFF", async () => {
-  const { HTPR_7004_NO_LOADING_FLASH_FLAG: key } = flags;
-  assert.equal(key, "htpr-7004-no-loading-flash");
-  const entry = (await flags.listFeatureFlagModes()).find(entry => entry.key === key);
-  assert.equal(entry.kind, "bugfix");
-  assert.equal(entry.mode, "EVERYONE");
-  assert.equal(await flags.isFeatureEnabled(key, 2343), true);
-  row = { mode: "OFF", updatedAt: new Date() };
-  assert.equal(await flags.isFeatureEnabled(key, 2343), false);
+test("permanent cached refresh behavior is no longer registered as a flag", async () => {
+  assert.equal(flags.HTPR_7004_NO_LOADING_FLASH_FLAG, undefined);
+  assert.equal((await flags.listFeatureFlagModes()).some(entry => entry.key === "htpr-7004-no-loading-flash"), false);
 });
 
-test("phone-first-load-js bugfix defaults to Everyone for plain QA and respects OFF", async () => {
-  const { HTPR_7008_PHONE_FIRST_LOAD_JS_FLAG: key } = flags;
-  assert.equal(key, "htpr-7008-phone-first-load-js");
-  const entry = (await flags.listFeatureFlagModes()).find(entry => entry.key === key);
-  assert.equal(entry.kind, "bugfix");
-  assert.equal(entry.mode, "EVERYONE");
-  assert.equal(await flags.isFeatureEnabled(key, 2343), true);
-  row = { mode: "OFF", updatedAt: new Date() };
-  assert.equal(await flags.isFeatureEnabled(key, 2343), false);
+test("phone-first-load JavaScript behavior no longer has a registry flag", async () => {
+  assert.equal(flags.HTPR_7008_PHONE_FIRST_LOAD_JS_FLAG, undefined);
+  assert.ok(!definitions.some(entry => entry.key === "htpr-7008-phone-first-load-js"));
+  assert.ok(!(await flags.listFeatureFlagModes()).some(entry => entry.key === "htpr-7008-phone-first-load-js"));
 });
 
-test("phone-first-paint bugfix defaults to Everyone for plain QA and respects OFF", async () => {
-  const { HTPR_7008_PHONE_FIRST_PAINT_FLAG: key } = flags;
-  assert.equal(key, "htpr-7008-phone-first-paint");
-  const entry = (await flags.listFeatureFlagModes()).find(entry => entry.key === key);
-  assert.equal(entry.kind, "bugfix");
-  assert.equal(entry.mode, "EVERYONE");
-  assert.equal(await flags.isFeatureEnabled(key, 2343), true);
-  row = { mode: "OFF", updatedAt: new Date() };
-  assert.equal(await flags.isFeatureEnabled(key, 2343), false);
+test("phone first paint no longer has a feature flag", async () => {
+  assert.equal(flags.HTPR_7008_PHONE_FIRST_PAINT_FLAG, undefined);
+  assert.equal(definitions.some(entry => entry.key === "htpr-7008-phone-first-paint"), false);
+  assert.equal((await flags.listFeatureFlagModes()).some(entry => entry.key === "htpr-7008-phone-first-paint"), false);
 });
 
-test("subtask-link bugfix defaults to Everyone for plain QA and respects OFF", async () => {
-  const { HTPR_6972_SUBTASK_LINK_FLAG: key } = flags;
-  assert.equal(key, "htpr-6972-subtask-link");
-  const entry = (await flags.listFeatureFlagModes()).find(entry => entry.key === key);
-  assert.equal(entry.kind, "bugfix");
-  assert.equal(entry.mode, "EVERYONE");
-  assert.equal(await flags.isFeatureEnabled(key, 2343), true);
-  row = { mode: "OFF", updatedAt: new Date() };
-  assert.equal(await flags.isFeatureEnabled(key, 2343), false);
+test("subtask-link is absent from the registry after becoming permanent", async () => {
+  assert.equal(flags.HTPR_6972_SUBTASK_LINK_FLAG, undefined);
+  assert.equal(definitions.some(entry => entry.key === "htpr-6972-subtask-link"), false);
+  assert.equal((await flags.listFeatureFlagModes()).some(entry => entry.key === "htpr-6972-subtask-link"), false);
 });
 
-test("inbox-next-open bugfix defaults to Everyone for plain QA and respects OFF", async () => {
-  const { HTPR_7000_INBOX_NEXT_OPEN_FLAG: key } = flags;
-  assert.equal(key, "htpr-7000-inbox-next-open");
-  const entry = (await flags.listFeatureFlagModes()).find(entry => entry.key === key);
-  assert.equal(entry.kind, "bugfix");
-  assert.equal(entry.mode, "EVERYONE");
-  assert.equal(await flags.isFeatureEnabled(key, 2343), true);
-  row = { mode: "OFF", updatedAt: new Date() };
-  assert.equal(await flags.isFeatureEnabled(key, 2343), false);
+test("inbox next-open no longer has a feature flag", async () => {
+  assert.equal(flags.HTPR_7000_INBOX_NEXT_OPEN_FLAG, undefined);
+  assert.equal(definitions.some(entry => entry.key === "htpr-7000-inbox-next-open"), false);
+  assert.equal((await flags.listFeatureFlagModes()).some(entry => entry.key === "htpr-7000-inbox-next-open"), false);
 });
 
-test("size-label-click bugfix defaults to Everyone and respects OFF", async () => {
-  const { HTPR_6978_SIZE_LABEL_CLICK_FLAG: key } = flags;
-  assert.equal(key, "htpr-6978-size-label-click");
-  const entry = (await flags.listFeatureFlagModes()).find(entry => entry.key === key);
-  assert.equal(entry.kind, "bugfix");
-  assert.equal(entry.mode, "EVERYONE");
-  assert.equal(entry.shippedOn, "2026-10-06");
-  assert.equal(await flags.isFeatureEnabled(key, 2343), true);
-  row = { mode: "OFF", updatedAt: new Date() };
-  assert.equal(await flags.isFeatureEnabled(key, 2343), false);
+test("size label clicks no longer have a feature flag", async () => {
+  assert.equal(flags.HTPR_6978_SIZE_LABEL_CLICK_FLAG, undefined);
+  assert.equal(definitions.some(entry => entry.key === "htpr-6978-size-label-click"), false);
+  assert.equal((await flags.listFeatureFlagModes()).some(entry => entry.key === "htpr-6978-size-label-click"), false);
 });
 
 test("server first-screen flag is registered but unused and scoped flag seeds reuse server evaluation", async () => {
@@ -690,17 +634,6 @@ test("stable layout has its own dated Owner + QA flag and respects OFF", async (
   assert.deepEqual(await Promise.all([6, 985, 7].map(userId => flags.isFeatureEnabled(stable.key, userId))), [true, true, false]);
   row = { mode: "OFF", updatedAt: new Date() };
   assert.deepEqual(await Promise.all([6, 985, 7].map(userId => flags.isFeatureEnabled(stable.key, userId))), [false, false, false]);
-});
-
-test("app router writes key is shared and defaults to Owner + QA without a kind override", async () => {
-  const { HTPR_6923_APP_ROUTER_WRITES_FLAG: key } = jiti(path.join(root, "src/lib/flags/keys.ts"));
-  assert.equal(key, "htpr-6923-app-router-writes");
-  assert.equal(flags.HTPR_6923_APP_ROUTER_WRITES_FLAG, key);
-  const entry = (await flags.listFeatureFlagModes()).find((flag) => flag.key === key);
-  assert.equal(entry.mode, "OWNER_AND_QA");
-  assert.deepEqual(await Promise.all([6, 985, 7].map((userId) => flags.isFeatureEnabled(key, userId))), [true, true, false]);
-  row = { mode: "OFF", updatedAt: new Date() };
-  assert.deepEqual(await Promise.all([6, 985, 7].map((userId) => flags.isFeatureEnabled(key, userId))), [false, false, false]);
 });
 
 test("typed settings API client defaults to Owner + QA and respects OFF", async () => {
@@ -745,21 +678,21 @@ test("search Ask AI fullscreen has its own Owner + QA flag and respects OFF", as
 test("per-user flag responses distinguish QA from normal members", async () => {
   const qaFlags = await flags.featureFlagsForUser(985);
   const normalFlags = await flags.featureFlagsForUser(7);
-  assert.equal(qaFlags["htpr-6136-figma-connect"], true);
-  assert.equal(normalFlags["htpr-6136-figma-connect"], false);
+  assert.equal(qaFlags["htpr-3533-google-calendar"], true);
+  assert.equal(normalFlags["htpr-3533-google-calendar"], false);
 });
 
 test("stored owner-only flags stay unavailable to QA until changed", async () => {
   row = { mode: "OWNER_ONLY", updatedAt: new Date() };
-  assert.equal(await flags.isFeatureEnabled("htpr-6136-figma-connect", 6), true);
-  assert.equal(await flags.isFeatureEnabled("htpr-6136-figma-connect", 985), false);
-  await flags.setFeatureFlagMode("htpr-6136-figma-connect", "OWNER_AND_QA");
-  assert.equal(await flags.isFeatureEnabled("htpr-6136-figma-connect", 985), true);
+  assert.equal(await flags.isFeatureEnabled("htpr-3533-google-calendar", 6), true);
+  assert.equal(await flags.isFeatureEnabled("htpr-3533-google-calendar", 985), false);
+  await flags.setFeatureFlagMode("htpr-3533-google-calendar", "OWNER_AND_QA");
+  assert.equal(await flags.isFeatureEnabled("htpr-3533-google-calendar", 985), true);
 });
 
 test("database failures fail closed instead of becoming the default", async () => {
   readError = new Error("database unavailable");
-  await assert.rejects(flags.isFeatureEnabled("htpr-6136-figma-connect", 6), /database unavailable/);
+  await assert.rejects(flags.isFeatureEnabled("htpr-3533-google-calendar", 6), /database unavailable/);
 });
 
 test("declared flags remain listed with ticket details and can be changed", async () => {
@@ -780,41 +713,41 @@ test("declared flags remain listed with ticket details and can be changed", asyn
     );
   });
 
-  const changed = await flags.setFeatureFlagMode("htpr-6136-figma-connect", "EVERYONE");
+  const changed = await flags.setFeatureFlagMode("htpr-3533-google-calendar", "EVERYONE");
   assert.equal(changed.mode, "EVERYONE");
-  assert.match(changed.description, /Figma/);
-  assert.equal(changed.ticketUrl, "https://app.hypertask.ai/detail/project-15/6136");
-  assert.equal(await flags.isFeatureEnabled("htpr-6136-figma-connect", 7), true);
+  assert.match(changed.description, /Google Calendar/);
+  assert.equal(changed.ticketUrl, "https://app.hypertask.ai/detail/project-15/3533");
+  assert.equal(await flags.isFeatureEnabled("htpr-3533-google-calendar", 7), true);
 });
 
 test("switching to Everyone starts a fresh removal countdown", async () => {
   const before = Date.now();
-  const released = await flags.setFeatureFlagMode("htpr-6136-figma-connect", "EVERYONE");
+  const released = await flags.setFeatureFlagMode("htpr-3533-google-calendar", "EVERYONE");
   // The countdown has to start from the switch, not from whenever the row was last written.
   assert.ok(released.releasedAt.getTime() >= before);
 
   // Re-pressing Everyone must not extend the deadline of a flag already released.
   row.releasedAt = new Date("2026-01-01T00:00:00.000Z");
   row.removalTaskId = 4242;
-  const again = await flags.setFeatureFlagMode("htpr-6136-figma-connect", "EVERYONE");
+  const again = await flags.setFeatureFlagMode("htpr-3533-google-calendar", "EVERYONE");
   assert.equal(again.releasedAt.toISOString(), "2026-01-01T00:00:00.000Z");
   assert.equal(again.removalTaskId, 4242);
 
   // Leaving Everyone and coming back is a new release, so it earns its own countdown and ticket.
-  await flags.setFeatureFlagMode("htpr-6136-figma-connect", "OWNER_ONLY");
-  const rereleased = await flags.setFeatureFlagMode("htpr-6136-figma-connect", "EVERYONE");
+  await flags.setFeatureFlagMode("htpr-3533-google-calendar", "OWNER_ONLY");
+  const rereleased = await flags.setFeatureFlagMode("htpr-3533-google-calendar", "EVERYONE");
   assert.ok(rereleased.releasedAt.getTime() >= before);
   assert.equal(rereleased.removalTaskId, null);
 });
 
 test("Keep pauses removal without moving the release date", async () => {
-  const released = await flags.setFeatureFlagMode("htpr-6136-figma-connect", "EVERYONE");
-  const kept = await flags.setFeatureFlagKeep("htpr-6136-figma-connect", true);
+  const released = await flags.setFeatureFlagMode("htpr-3533-google-calendar", "EVERYONE");
+  const kept = await flags.setFeatureFlagKeep("htpr-3533-google-calendar", true);
   assert.equal(kept.keep, true);
   assert.equal(kept.mode, "EVERYONE");
   assert.equal(kept.releasedAt.toISOString(), released.releasedAt.toISOString());
 
-  const resumed = await flags.setFeatureFlagKeep("htpr-6136-figma-connect", false);
+  const resumed = await flags.setFeatureFlagKeep("htpr-3533-google-calendar", false);
   assert.equal(resumed.keep, false);
   assert.equal(resumed.releasedAt.toISOString(), released.releasedAt.toISOString());
 
@@ -920,11 +853,11 @@ test("the retired mobile Agent Chat viewport flag is hidden, immutable and enabl
   for (const mode of flags.FEATURE_FLAG_MODES) {
     listedRows = [
       { key, mode, updatedAt: new Date() },
-      { key: "htpr-6536-qa-login", mode: "OWNER_AND_QA", updatedAt: null },
+      { key: "htpr-7069-flags-dropdown-filters", mode: "OWNER_AND_QA", updatedAt: null },
     ];
     row = { mode, updatedAt: new Date() };
     const listedKeys = new Set((await flags.listFeatureFlagModes()).map((flag) => flag.key));
-    assert.ok(listedKeys.has("htpr-6536-qa-login"), "positive control remains listed");
+    assert.ok(listedKeys.has("htpr-7069-flags-dropdown-filters"), "positive control remains listed");
     assert.equal(listedKeys.has(key), false);
     for (const userId of [6, 985, 2343]) {
       assert.equal((await flags.featureFlagsForUser(userId))[key], true);
@@ -944,11 +877,11 @@ test("the retired lazy emoji list flag is hidden, immutable and enabled for old 
   for (const mode of flags.FEATURE_FLAG_MODES) {
     listedRows = [
       { key, mode, updatedAt: new Date() },
-      { key: "htpr-6536-qa-login", mode: "OWNER_AND_QA", updatedAt: null },
+      { key: "htpr-7069-flags-dropdown-filters", mode: "OWNER_AND_QA", updatedAt: null },
     ];
     row = { mode, updatedAt: new Date() };
     const listedKeys = new Set((await flags.listFeatureFlagModes()).map((flag) => flag.key));
-    assert.ok(listedKeys.has("htpr-6536-qa-login"), "positive control remains listed");
+    assert.ok(listedKeys.has("htpr-7069-flags-dropdown-filters"), "positive control remains listed");
     assert.equal(listedKeys.has(key), false);
     for (const userId of [6, 985, 2343]) {
       assert.equal((await flags.featureFlagsForUser(userId))[key], true);
@@ -968,11 +901,11 @@ test("the retired comment shortcuts flag is hidden, immutable and enabled for ol
   for (const mode of flags.FEATURE_FLAG_MODES) {
     listedRows = [
       { key, mode, updatedAt: new Date() },
-      { key: "htpr-6536-qa-login", mode: "OWNER_AND_QA", updatedAt: null },
+      { key: "htpr-7069-flags-dropdown-filters", mode: "OWNER_AND_QA", updatedAt: null },
     ];
     row = { mode, updatedAt: new Date() };
     const listedKeys = new Set((await flags.listFeatureFlagModes()).map((flag) => flag.key));
-    assert.ok(listedKeys.has("htpr-6536-qa-login"), "positive control remains listed");
+    assert.ok(listedKeys.has("htpr-7069-flags-dropdown-filters"), "positive control remains listed");
     assert.equal(listedKeys.has(key), false);
     for (const userId of [6, 985, 2343]) {
       assert.equal((await flags.featureFlagsForUser(userId))[key], true);
@@ -988,7 +921,7 @@ test("the retired comment shortcuts flag is hidden, immutable and enabled for ol
 test("ticket titles are only fetched when requested, and cover undeclared stored keys too", async () => {
   listedRows = [{ key: "htpr-1111-aaa", mode: "OFF", updatedAt: null }];
   taskRows = [
-    { uniqueIndex: 6136, title: "Connect Figma" },
+    { uniqueIndex: 3533, title: "Google Calendar" },
     { uniqueIndex: 1111, title: "Some legacy ticket" },
   ];
 
@@ -996,8 +929,8 @@ test("ticket titles are only fetched when requested, and cover undeclared stored
   withoutTitles.forEach(({ ticketTitle }) => assert.equal(ticketTitle, null));
 
   const withTitles = await flags.listFeatureFlagModes({ includeTicketTitles: true });
-  const declared = withTitles.find(({ key }) => key === "htpr-6136-figma-connect");
-  assert.equal(declared.ticketTitle, "Connect Figma");
+  const declared = withTitles.find(({ key }) => key === "htpr-3533-google-calendar");
+  assert.equal(declared.ticketTitle, "Google Calendar");
   const undeclaredStored = withTitles.find(({ key }) => key === "htpr-1111-aaa");
   assert.equal(undeclaredStored.ticketTitle, "Some legacy ticket");
 });
@@ -1032,10 +965,10 @@ const retiredInfraKeys = [
 
 test("the 19 retired infra flags are hidden, immutable and enabled for old tabs", async () => {
   listedRows = retiredInfraKeys.map((key) => ({ key, mode: "OFF", updatedAt: new Date() }));
-  listedRows.push({ key: "htpr-6536-qa-login", mode: "OWNER_AND_QA", updatedAt: null });
+  listedRows.push({ key: "htpr-7069-flags-dropdown-filters", mode: "OWNER_AND_QA", updatedAt: null });
   const listed = await flags.listFeatureFlagModes();
   const listedKeys = new Set(listed.map(({ key }) => key));
-  assert.ok(listedKeys.has("htpr-6536-qa-login"), "positive control remains listed");
+  assert.ok(listedKeys.has("htpr-7069-flags-dropdown-filters"), "positive control remains listed");
   for (const key of retiredInfraKeys) {
     assert.equal(flags.FEATURE_FLAG_KEYS.includes(key), false, key);
     assert.equal(listedKeys.has(key), false, key);
@@ -1052,10 +985,10 @@ test("the retired scoped refetch flag is hidden, immutable and enabled for old t
   const key = "htpr-6166-scoped-board-refetch";
   listedRows = [
     { key, mode: "OFF", updatedAt: new Date() },
-    { key: "htpr-6536-qa-login", mode: "OWNER_AND_QA", updatedAt: null },
+    { key: "htpr-7069-flags-dropdown-filters", mode: "OWNER_AND_QA", updatedAt: null },
   ];
   const listedKeys = new Set((await flags.listFeatureFlagModes()).map(({ key }) => key));
-  assert.ok(listedKeys.has("htpr-6536-qa-login"), "positive control remains listed");
+  assert.ok(listedKeys.has("htpr-7069-flags-dropdown-filters"), "positive control remains listed");
   assert.equal(flags.FEATURE_FLAG_KEYS.includes(key), false);
   assert.equal(listedKeys.has(key), false);
   for (const userId of [985, 42]) {
@@ -1111,14 +1044,14 @@ test("bugfix defaults enable everyone, respect stored Off and list the same runt
   assert.equal(bugfixFlags.defaultFeatureFlagMode(key), "EVERYONE");
   const { localFlagModes } = await import("../scripts/premerge-local-flags.mjs");
   const defaults = Object.fromEntries(bugfixFlags.FEATURE_FLAG_KEYS.map(key => [key, bugfixFlags.defaultFeatureFlagMode(key)]));
-  const seeded = localFlagModes(defaults, { "htpr-6136-figma-connect": false });
+  const seeded = localFlagModes(defaults, { "htpr-3533-google-calendar": false });
   assert.equal(seeded[key], "EVERYONE");
   assert.equal(seeded["htpr-6926-mcp-route-wrapper"], "OFF");
-  assert.equal(seeded["htpr-6136-figma-connect"], "OWNER_AND_QA");
+  assert.equal(seeded["htpr-3533-google-calendar"], "OWNER_AND_QA");
   assert.equal(await bugfixFlags.isFeatureEnabled(key, 2343), true);
   assert.equal(await bugfixFlags.featureFlagCandidateUserIds(key), null);
   assert.equal((await bugfixFlags.listFeatureFlagModes()).find(entry => entry.key === key).mode, "EVERYONE");
-  assert.equal(await bugfixFlags.isFeatureEnabled("htpr-6136-figma-connect", 2343), false);
+  assert.equal(await bugfixFlags.isFeatureEnabled("htpr-3533-google-calendar", 2343), false);
   row = { key, mode: "OFF" };
   assert.equal(await bugfixFlags.isFeatureEnabled(key, 2343), false);
   assert.deepEqual(await bugfixFlags.featureFlagCandidateUserIds(key), []);
@@ -1191,7 +1124,6 @@ test("every registered flag has a valid kind and only registered explicit relate
   assert.equal(await flags.isFeatureEnabled(entry.key, 6), false);
 });
 
-
 test("typed property writes default Owner + QA and respect OFF", async () => {
   const key = flags.HTPR_6975_TYPED_WRITES_FLAG;
   assert.equal(key, "htpr-6975-typed-writes");
@@ -1215,52 +1147,30 @@ test("typed section and notification writes are a feature defaulting Owner + QA"
   assert.deepEqual(await Promise.all([6, 985, 7].map((userId) => flags.isFeatureEnabled(key, userId))), [false, false, false]);
 });
 
-test("saved view deletion is an Everyone-default bugfix and respects OFF", async () => {
-  const key = flags.HTPR_6985_DELETE_VIEW_ONCE_FLAG;
-  assert.equal(key, "htpr-6985-delete-view-once");
-  const entry = (await flags.listFeatureFlagModes()).find((flag) => flag.key === key);
-  assert.equal(entry.kind, "bugfix");
-  assert.equal(entry.mode, "EVERYONE");
-  assert.equal(entry.shippedOn, "2026-10-07");
-  assert.deepEqual(await Promise.all([6, 985, 7].map((userId) => flags.isFeatureEnabled(key, userId))), [true, true, true]);
-  row = { mode: "OFF", updatedAt: new Date() };
-  assert.deepEqual(await Promise.all([6, 985, 7].map((userId) => flags.isFeatureEnabled(key, userId))), [false, false, false]);
+test("saved view deletion no longer has a feature flag", async () => {
+  assert.equal(flags.HTPR_6985_DELETE_VIEW_ONCE_FLAG, undefined);
+  assert.equal(flags.FEATURE_FLAG_KEYS.find((key) => key === "htpr-6985-delete-view-once"), undefined);
+  assert.equal(definitions.find((definition) => definition.key === "htpr-6985-delete-view-once"), undefined);
+  assert.equal((await flags.listFeatureFlagModes()).find((flag) => flag.key === "htpr-6985-delete-view-once"), undefined);
 });
 
-test("bulk inbox archive undo is an Everyone-default bugfix and respects OFF", async () => {
-  const key = flags.HTPR_6989_BULK_ARCHIVE_UNDO_FLAG;
-  assert.equal(key, "htpr-6989-bulk-archive-undo");
-  const entry = (await flags.listFeatureFlagModes()).find((flag) => flag.key === key);
-  assert.equal(entry.kind, "bugfix");
-  assert.equal(entry.mode, "EVERYONE");
-  assert.equal(entry.shippedOn, "2026-10-07");
-  assert.deepEqual(await Promise.all([6, 985, 7].map((userId) => flags.isFeatureEnabled(key, userId))), [true, true, true]);
-  row = { mode: "OFF", updatedAt: new Date() };
-  assert.deepEqual(await Promise.all([6, 985, 7].map((userId) => flags.isFeatureEnabled(key, userId))), [false, false, false]);
+test("bulk inbox archive undo no longer has a feature flag", async () => {
+  assert.equal(flags.HTPR_6989_BULK_ARCHIVE_UNDO_FLAG, undefined);
+  assert.ok(!flags.FEATURE_FLAG_KEYS.includes("htpr-6989-bulk-archive-undo"));
+  assert.ok(!(await flags.listFeatureFlagModes()).some(({ key }) => key === "htpr-6989-bulk-archive-undo"));
 });
 
-test("instant column deletion is an Everyone-default bugfix and respects OFF", async () => {
-  const key = flags.HTPR_6980_INSTANT_COLUMN_DELETE_FLAG;
-  assert.equal(key, "htpr-6980-instant-column-delete");
-  const entry = (await flags.listFeatureFlagModes()).find((flag) => flag.key === key);
-  assert.equal(entry.kind, "bugfix");
-  assert.equal(entry.mode, "EVERYONE");
-  assert.equal(entry.shippedOn, "2026-10-07");
-  assert.deepEqual(await Promise.all([6, 985, 7].map((userId) => flags.isFeatureEnabled(key, userId))), [true, true, true]);
-  row = { mode: "OFF", updatedAt: new Date() };
-  assert.deepEqual(await Promise.all([6, 985, 7].map((userId) => flags.isFeatureEnabled(key, userId))), [false, false, false]);
+test("instant column deletion is permanent and its flag is no longer registered", async () => {
+  assert.equal(flags.HTPR_6980_INSTANT_COLUMN_DELETE_FLAG, undefined);
+  assert.equal(flags.FEATURE_FLAG_KEYS.includes("htpr-6980-instant-column-delete"), false);
+  assert.equal(definitions.some((flag) => flag.key === "htpr-6980-instant-column-delete"), false);
+  assert.equal((await flags.listFeatureFlagModes()).some((flag) => flag.key === "htpr-6980-instant-column-delete"), false);
 });
 
-test("board scroll restoration is an Everyone-default bugfix and respects OFF", async () => {
-  const key = flags.HTPR_6998_BOARD_SCROLL_RESTORE_FLAG;
-  assert.equal(key, "htpr-6998-board-scroll-restore");
-  const entry = (await flags.listFeatureFlagModes()).find((flag) => flag.key === key);
-  assert.equal(entry.kind, "bugfix");
-  assert.equal(entry.mode, "EVERYONE");
-  assert.equal(entry.shippedOn, "2026-10-07");
-  assert.deepEqual(await Promise.all([6, 985, 7].map((userId) => flags.isFeatureEnabled(key, userId))), [true, true, true]);
-  row = { mode: "OFF", updatedAt: new Date() };
-  assert.deepEqual(await Promise.all([6, 985, 7].map((userId) => flags.isFeatureEnabled(key, userId))), [false, false, false]);
+test("board scroll restoration no longer has a feature flag", async () => {
+  assert.equal(flags.HTPR_6998_BOARD_SCROLL_RESTORE_FLAG, undefined);
+  assert.equal(flags.FEATURE_FLAG_KEYS.includes("htpr-6998-board-scroll-restore"), false);
+  assert.equal((await flags.listFeatureFlagModes()).some((flag) => flag.key === "htpr-6998-board-scroll-restore"), false);
 });
 
 test("ticket page CLS fix is an Everyone-default bugfix and respects OFF", async () => {
@@ -1274,27 +1184,17 @@ test("ticket page CLS fix is an Everyone-default bugfix and respects OFF", async
   assert.deepEqual(await Promise.all([6, 985, 7].map((userId) => flags.isFeatureEnabled(key, userId))), [false, false, false]);
 });
 
-test("narrow sidebar width is an Everyone-default bugfix and respects OFF", async () => {
-  const key = flags.HTPR_6990_NARROW_SIDEBAR_WIDTH_FLAG;
-  assert.equal(key, "htpr-6990-narrow-sidebar-width");
-  const entry = (await flags.listFeatureFlagModes()).find((flag) => flag.key === key);
-  assert.equal(entry.kind, "bugfix");
-  assert.equal(entry.mode, "EVERYONE");
-  assert.equal(entry.shippedOn, "2026-10-07");
-  assert.deepEqual(await Promise.all([6, 985, 7].map((userId) => flags.isFeatureEnabled(key, userId))), [true, true, true]);
-  row = { mode: "OFF", updatedAt: new Date() };
-  assert.deepEqual(await Promise.all([6, 985, 7].map((userId) => flags.isFeatureEnabled(key, userId))), [false, false, false]);
+test("narrow sidebar width is permanent and absent from the flag registry", async () => {
+  assert.equal(flags.HTPR_6990_NARROW_SIDEBAR_WIDTH_FLAG, undefined);
+  assert.equal(definitions.some((flag) => flag.key === "htpr-6990-narrow-sidebar-width"), false);
+  assert.equal((await flags.listFeatureFlagModes()).some((flag) => flag.key === "htpr-6990-narrow-sidebar-width"), false);
 });
 
-test("inbox-next-cached bugfix defaults to Everyone for plain QA and respects OFF", async () => {
-  const { HTPR_7001_INBOX_NEXT_CACHED_FLAG: key } = flags;
-  assert.equal(key, "htpr-7001-inbox-next-cached");
-  const entry = (await flags.listFeatureFlagModes()).find(entry => entry.key === key);
-  assert.equal(entry.kind, "bugfix");
-  assert.equal(entry.mode, "EVERYONE");
-  assert.equal(await flags.isFeatureEnabled(key, 2343), true);
-  row = { mode: "OFF", updatedAt: new Date() };
-  assert.equal(await flags.isFeatureEnabled(key, 2343), false);
+test("cached Inbox next navigation is permanent and its flag is no longer registered", async () => {
+  assert.equal(flags.HTPR_7001_INBOX_NEXT_CACHED_FLAG, undefined);
+  assert.equal(flags.FEATURE_FLAG_KEYS.includes("htpr-7001-inbox-next-cached"), false);
+  assert.equal(definitions.some((flag) => flag.key === "htpr-7001-inbox-next-cached"), false);
+  assert.equal((await flags.listFeatureFlagModes()).some((flag) => flag.key === "htpr-7001-inbox-next-cached"), false);
 });
 
 test("Ctrl+J chat lease fix defaults to Everyone as a bugfix and respects OFF", async () => {
@@ -1335,4 +1235,154 @@ test("saved-choice reset is an Owner + QA feature and respects OFF", async () =>
   assert.equal(await flags.isFeatureEnabled(key, 7), false);
   row = { mode: "OFF", updatedAt: new Date() };
   assert.equal(await flags.isFeatureEnabled(key, 6), false);
+});
+
+test("owner userId check requires both the owner id and registered email", async () => {
+  assert.equal(await flags.isFeatureFlagOwnerUserId(6), true);
+  assert.equal(await flags.isFeatureFlagOwnerUserId(7), false);
+  usersById.set(6, { email: "other@example.test" });
+  assert.equal(await flags.isFeatureFlagOwnerUserId(6), false);
+});
+
+test("actor mode changes are audited inside the locked transaction, including an unstored default", async () => {
+  const key = "htpr-3533-google-calendar";
+  const actor = { userId: 6, agentId: "runner-3", agentName: "Runner 3", reason: "https://app.hypertask.ai/detail/project-4060/215", source: "api" };
+  const order = [];
+  const originalLock = prisma.$executeRaw;
+  const originalCreate = prisma.featureFlagChange.create;
+  prisma.$executeRaw = async () => { order.push("lock"); return 0; };
+  prisma.featureFlagChange.create = async (args) => { order.push("audit"); return originalCreate(args); };
+  try {
+    const changed = await flags.setFeatureFlagMode(key, "OWNER_AND_QA", actor);
+    assert.deepEqual(order, ["lock", "audit"]);
+    assert.deepEqual(changes.map(({ id, createdAt, ...data }) => data), [{ key, oldMode: null, newMode: "OWNER_AND_QA", ...actor }]);
+    assert.equal(changed.lastChange.oldMode, null);
+    assert.equal(changed.lastChange.actorName, "Runner 3");
+    await flags.setFeatureFlagMode(key, "OWNER_AND_QA", actor);
+    assert.equal(changes.length, 1);
+    await flags.setFeatureFlagMode(key, "OFF", actor);
+    assert.equal(changes[1].oldMode, "OWNER_AND_QA");
+    assert.equal(changes[1].newMode, "OFF");
+    await flags.setFeatureFlagMode(key, "OWNER_ONLY");
+    assert.equal(changes.length, 2);
+  } finally {
+    prisma.$executeRaw = originalLock;
+    prisma.featureFlagChange.create = originalCreate;
+  }
+});
+
+test("page audits use the user display name and retain the release countdown semantics", async () => {
+  usersById.set(6, { displayName: "Valentin", email: "valentin.yeo@gmail.com" });
+  const actor = { userId: 6, source: "page" };
+  const key = "htpr-3533-google-calendar";
+  const released = await flags.setFeatureFlagMode(key, "EVERYONE", actor);
+  assert.equal(released.lastChange.actorName, "Valentin");
+  row.removalTaskId = 123;
+  const again = await flags.setFeatureFlagMode(key, "EVERYONE", actor);
+  assert.equal(changes.length, 1);
+  assert.equal(again.releasedAt.getTime(), released.releasedAt.getTime());
+  assert.equal(again.removalTaskId, 123);
+  await flags.setFeatureFlagMode(key, "OFF", actor);
+  const rereleased = await flags.setFeatureFlagMode(key, "EVERYONE", actor);
+  assert.equal(rereleased.removalTaskId, null);
+  assert.equal(changes.length, 3);
+});
+
+test("a throwing verifier prevents flag reads, audits and upsert after the advisory lock", async (t) => {
+  row = { mode: "OFF" };
+  const order = [];
+  const failure = new flags.FeatureFlagApprovalError("Approval invalid");
+  t.mock.method(prisma, "$executeRaw", async () => { order.push("lock"); return 0; });
+  const read = t.mock.method(prisma.featureFlag, "findUnique");
+  const audit = t.mock.method(prisma.featureFlagChange, "create");
+  const upsert = t.mock.method(prisma.featureFlag, "upsert");
+  await assert.rejects(flags.setFeatureFlagMode("htpr-3533-google-calendar", "EVERYONE", { userId: 6, source: "api" }, async (tx) => {
+    assert.equal(tx, prisma);
+    order.push("verify");
+    throw failure;
+  }), (error) => error === failure);
+  assert.deepEqual(order, ["lock", "verify"]);
+  assert.equal(read.mock.callCount(), 0);
+  assert.equal(audit.mock.callCount(), 0);
+  assert.equal(upsert.mock.callCount(), 0);
+  assert.equal(row.mode, "OFF");
+});
+
+test("a successful verifier runs before the flag read and upsert", async (t) => {
+  const order = [];
+  const originalRead = prisma.featureFlag.findUnique;
+  const originalUpsert = prisma.featureFlag.upsert;
+  t.mock.method(prisma, "$executeRaw", async () => { order.push("lock"); return 0; });
+  t.mock.method(prisma.featureFlag, "findUnique", async (args) => { order.push("read"); return originalRead(args); });
+  t.mock.method(prisma.featureFlag, "upsert", async (args) => { order.push("upsert"); return originalUpsert(args); });
+  const changed = await flags.setFeatureFlagMode("htpr-3533-google-calendar", "OFF", undefined, async (tx) => {
+    assert.equal(tx, prisma);
+    order.push("verify");
+  });
+  assert.deepEqual(order, ["lock", "verify", "read", "upsert"]);
+  assert.equal(changed.mode, "OFF");
+});
+
+test("audit failure prevents the mode write", async () => {
+  row = { mode: "OFF" };
+  auditFails = true;
+  await assert.rejects(flags.setFeatureFlagMode("htpr-3533-google-calendar", "EVERYONE", { userId: 6, source: "page" }), /audit unavailable/);
+  assert.equal(row.mode, "OFF");
+});
+
+test("listing uses one latest-per-key audit query with agent, display name and email fallback", async () => {
+  const keys = ["htpr-3533-google-calendar", "legacy-second", "legacy-third"];
+  listedRows = keys.map((key) => ({ key, mode: "OFF" }));
+  usersById.set(7, { displayName: "Page owner", email: "page@example.test" });
+  changes = [
+    { id: 4, key: keys[0], oldMode: "EVERYONE", newMode: "OFF", userId: 6, agentName: "Runner 3", reason: "https://app.hypertask.ai/detail/project-4060/215", createdAt: new Date("2026-10-12T14:05:00Z") },
+    { id: 3, key: keys[0], oldMode: null, newMode: "EVERYONE", userId: 6, agentName: "Old runner", reason: null, createdAt: new Date("2026-10-12T14:05:00Z") },
+    { id: 2, key: keys[1], oldMode: null, newMode: "OFF", userId: 7, agentName: null, reason: null, createdAt: new Date() },
+    { id: 1, key: keys[2], oldMode: "OWNER_ONLY", newMode: "OFF", userId: 6, agentName: null, reason: null, createdAt: new Date() },
+  ];
+  const listed = await flags.listFeatureFlagModes({ includeLastChange: true });
+  assert.equal(changeQueries.length, 1);
+  assert.deepEqual(changeQueries[0].distinct, ["key"]);
+  assert.deepEqual(changeQueries[0].orderBy, [{ key: "asc" }, { id: "desc" }]);
+  assert.deepEqual(listed.find(({ key }) => key === keys[0]).lastChange, {
+    oldMode: "EVERYONE", newMode: "OFF", actorName: "Runner 3", reason: changes[0].reason, createdAt: changes[0].createdAt,
+  });
+  assert.equal(listed.find(({ key }) => key === keys[1]).lastChange.actorName, "Page owner");
+  assert.equal(listed.find(({ key }) => key === keys[2]).lastChange.actorName, "valentin.yeo@gmail.com");
+  assert.equal(listed.find(({ key }) => !keys.includes(key)).lastChange, null);
+});
+
+test("listing skips audit queries unless lastChange is explicitly requested", async () => {
+  for (const options of [{}, { includeTicketTitles: true }, { includeLastChange: false }]) {
+    const listed = await flags.listFeatureFlagModes(options);
+    assert.equal(changeQueries.length, 0);
+    assert.equal(listed.some((row) => Object.hasOwn(row, "lastChange")), false);
+  }
+});
+
+test("stored modes override registry defaults for declared and legacy keys in every reader", async () => {
+  for (const key of ["htpr-3533-google-calendar", "legacy-stored"]) {
+    for (const mode of ["OFF", "OWNER_ONLY", "OWNER_AND_QA", "EVERYONE"]) {
+      row = { key, mode };
+      listedRows = [row];
+      assert.equal((await flags.listFeatureFlagModes()).find(entry => entry.key === key).mode, mode);
+      assert.deepEqual(await flags.featureFlagCandidateUserIds(key),
+        mode === "EVERYONE" ? null : mode === "OFF" ? [] : mode === "OWNER_ONLY" ? [6] : [6, 985]);
+      for (const id of [6, 985, 7]) {
+        const expected = flags.featureFlagModeEnabled(mode, id === 6, id === 985);
+        assert.equal(await flags.isFeatureEnabled(key, id), expected, `${key}: ${mode}: ${id}`);
+        assert.equal((await flags.featureFlagsForUser(id))[key], expected, `${key}: ${mode}: ${id}`);
+      }
+    }
+  }
+});
+
+test("search layout is permanent and no longer registered", async () => {
+  const key = ["htpr", "6865", "search", "layout"].join("-");
+  const identifier = ["HTPR", "6865", "SEARCH", "LAYOUT", "FLAG"].join("_");
+  assert.equal(flags[identifier], undefined);
+  assert.equal(definitions.some(definition => definition.key === key), false);
+  assert.equal((await flags.listFeatureFlagModes()).some(entry => entry.key === key), false);
+  const snapshot = require("../e2e/smoke/production-flag-modes.json");
+  assert.equal(Object.hasOwn(snapshot.modes, key), false);
 });

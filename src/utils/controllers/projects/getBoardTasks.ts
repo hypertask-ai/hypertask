@@ -1,5 +1,7 @@
+import { stripForeignTaskRelations } from "@/lib/tasks/sameBoardRelations";
 import prisma from "@/lib/prisma";
-import { HTPR_6752_INSTANT_TICKET_OPEN_FLAG, HTPR_7071_AGENT_STATUS_CHIP_FLAG, isFeatureEnabled } from "@/lib/flags";
+import { isFeatureEnabled } from "@/lib/flags";
+import { HTPR_7071_AGENT_STATUS_CHIP_FLAG } from "@/lib/flags/keys";
 import { teamBillingSnapshotSelect } from "@/lib/ai/teamBillingSnapshotSelect";
 import { attachAgentStatus } from "@/utils/controllers/tasks/attachAgentStatus";
 import {
@@ -18,11 +20,6 @@ import {
   type TaskWithBlockingRelations,
 } from "@/utils/controllers/tasks/attachOpenBlockingTasks";
 
-/**
- * Tasks/views for one board in the BoardTasksPayload client contract. The
- * server projection is intentionally narrower than task detail: hydration
- * restores the full board model from metadata + this payload. See HTPR-3811.
- */
 const getBoardTasks = async (
   project_id: any,
   user_id: any,
@@ -35,14 +32,12 @@ const getBoardTasks = async (
       return { status: 400, json: { message: "projectId and userId are required" } };
     }
 
-    const cachedDescriptionPromise = isFeatureEnabled(HTPR_6752_INSTANT_TICKET_OPEN_FLAG, userId).catch(() => false);
-
-    // Access guard: only owners/members of the board may read its board payload.
     const project = await prisma.project.findFirst({
       where: { id: projectId, status: "Normal", ...getProjectWhere(userId) },
       select: {
         ...projectBootstrapSelect,
         sections: true,
+        seeded: true,
         targetDate: true,
         ...getProjectIncludeWithoutTasks({
           userId,
@@ -67,13 +62,12 @@ const getBoardTasks = async (
       return { status: 403, json: { message: "No access to this board" } };
     }
 
-    const includeCachedDescription = await cachedDescriptionPromise;
     const agentStatusPromise = isFeatureEnabled(HTPR_7071_AGENT_STATUS_CHIP_FLAG, userId).catch(() => false);
     const tasks = await prisma.task.findMany({
       where: { projectId, ...getTaskWhere() },
       omit: taskBoardOmit,
       include: {
-        ...getBoardTaskInclude({ userId, userDbId: userId, currentUserId, includeCachedDescription }),
+        ...getBoardTaskInclude({ userId, userDbId: userId, currentUserId, includeCachedDescription: true }),
         customFieldValues: {
           select: { fieldId: true, value: true, numericValue: true },
         },
@@ -88,7 +82,7 @@ const getBoardTasks = async (
       ? await attachAgentStatus(tasksWithWaitingOnUsers)
       : tasksWithWaitingOnUsers;
 
-    const sanitizedProject = sanitizeProjectBoardFilters(project);
+    const sanitizedProject = sanitizeProjectBoardFilters(project, currentUserId ?? userId);
     const { allViews = [], ...projectView } =
       sanitizedProject.project_view ?? {};
     const projectPayload = sanitizedProject.project_view
@@ -99,7 +93,7 @@ const getBoardTasks = async (
       status: 200,
       json: {
         project: projectPayload,
-        tasks: tasksWithAgentStatus,
+        tasks: tasksWithAgentStatus.map(stripForeignTaskRelations),
         allViews,
       },
     };

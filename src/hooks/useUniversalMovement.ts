@@ -17,6 +17,8 @@ import {
   focusedCardIndexInColumn,
 } from "@/utils/helperFunctions/Kanban/columnFocus";
 import { scrollBoardColumnIntoView } from "@/utils/helperFunctions/Views/scrollBoardColumnIntoView";
+import { useFlag } from "@/hooks/useFlag";
+import { HTPR_7537_FIRST_COLUMN_PADDING_FLAG } from "@/lib/flags/definitions/htpr-7537-first-column-padding";
 import toast from "react-hot-toast";
 import globalAPIHandlers from "@/utils/api/global";
 import generateRanking from "@/utils/generateRank";
@@ -49,6 +51,7 @@ export function useUniversalMovement(props: TProps) {
   const store = useStore();
   const setActiveSection = useSetRecoilState(activeSectionAtom);
   const currentProject = useRecoilValue(currentProjectAtom);
+  const firstColumnPadding = useFlag(HTPR_7537_FIRST_COLUMN_PADDING_FLAG);
   const getActiveSection = () => store.get(activeSectionAtom);
   const getActiveItem = () => store.get(activeItemAtom);
 
@@ -204,7 +207,6 @@ export function useUniversalMovement(props: TProps) {
     if (sorting_mode_current === "UpdatedAt")
       return toast("Cannot move tasks while kanban is in Last Updated mode");
 
-    // Convert sections and filteredSections arrays to Maps for faster lookups
     const sectionsMap: any = new Map(
       sections.map((section) => [section.sectionId, section]),
     );
@@ -237,7 +239,6 @@ export function useUniversalMovement(props: TProps) {
       direction === "up" ? filteredItemIndex - 1 : filteredItemIndex + 1;
     const adjacentItem = filteredSection.items[adjacentItemIndex];
 
-    // Validate sorting mode constraints
     if (
       sorting_mode_current === "Priority" &&
       adjacentItem.priority?.priority_index !== item.priority?.priority_index
@@ -250,7 +251,6 @@ export function useUniversalMovement(props: TProps) {
       return toast("Cannot move tasks while kanban is in Due Date mode");
     }
 
-    // Swap items in sections
     const newSections = sections.map((sec) => {
       if (sec.sectionId === sectionId) {
         const updatedItems = [...sec.items];
@@ -282,7 +282,6 @@ export function useUniversalMovement(props: TProps) {
     const updatedTasks = newSections.flatMap((x) => x.items);
     updateSectionsInProject(newSections, updatedTasks);
 
-    // Scroll to the adjacent item
     const activeElement_ = document.getElementById(`task-${adjacentItem.id}`);
     if (activeElement_) {
       if (direction === "up") {
@@ -292,7 +291,6 @@ export function useUniversalMovement(props: TProps) {
       }
     }
 
-    // Update rankings via API
     const responses = await Promise.all([
       fetch(`/api/tasks/single`, {
         method: "PUT",
@@ -329,9 +327,6 @@ export function useUniversalMovement(props: TProps) {
     if (!currentProject) return;
     const sectionEls = document.getElementById("sectionsContainer")!.children;
     let ItemId: number | null = null;
-    // Columns the board search hides stay in the DOM so drag indices keep
-    // matching the rendered order; step past them so navigation always lands
-    // on a column the user can actually see.
     const step = index < (getActiveSection() ?? 0) ? -1 : 1;
     while (
       index >= 0 &&
@@ -341,8 +336,7 @@ export function useUniversalMovement(props: TProps) {
       index += step;
     }
     if (index >= 0 && index < sectionEls.length) {
-      // @ts-ignore
-      // I dont think this section focus is working right now
+      // @ts-expect-error querySelectorAll returns Element, which does not declare focus.
       sectionEls[index].focus({ preventScroll: props.type === "Kanban" });
       setActiveSection(index);
       const sectionLength = filteredSections[index].items.length;
@@ -379,14 +373,14 @@ export function useUniversalMovement(props: TProps) {
     if (props.type === "Kanban") {
       if (ItemId) refocus(ItemId);
       const sectionId = filteredSections[index]?.sectionId;
-      if (sectionId != null) scrollBoardColumnIntoView(sectionId);
+      if (sectionId != null) {
+        scrollBoardColumnIntoView(sectionId, undefined, firstColumnPadding && index === 0);
+      }
     } else if (ItemId) {
       refocus(ItemId);
       const element = document.getElementById(`task-${ItemId}`);
       element && scrollToCenterIfNear(element, 10);
     } else {
-      // index can land outside the list when every column is hidden by the
-      // board search; scrollToCenterIfNear dereferences its argument.
       const element = sectionEls[index] as HTMLElement | undefined;
       element && scrollToCenterIfNear(element);
     }
@@ -394,19 +388,8 @@ export function useUniversalMovement(props: TProps) {
 
   const focus = {
     up: () => {
-      /**
-       * For Kanban
-       * Works on tasks only.
-       *
-       * For List
-       * Works on tasks only. (skip empty sections and jump focus to next task)
-       *
-       *
-       */
-
       if (props.type === "Kanban" || props.type === "List") {
         const activeElement = document.activeElement;
-        //We need to make sure this tasks-list-${activeSection} is saved in a config somewhere.
         const tasksList = document?.getElementById(
           `tasks-list-${getActiveSection()}`,
         )?.children;
@@ -420,8 +403,6 @@ export function useUniversalMovement(props: TProps) {
               focusKanbanCard(document.getElementById(tasksList[0].id));
             }
           } else if (index === 0) {
-            // Here we need to check if the props.type is List. Because in List view we have sections stacked on top of each other.
-            // And as such we need to jump focus to the next section above it with the bottom most task init.
             if (props.type === "List") focus.left(true);
           } else {
             const activeElement_ = document.getElementById(
@@ -442,14 +423,6 @@ export function useUniversalMovement(props: TProps) {
       }
     },
     down: () => {
-      /**
-       * For Kanban
-       * Works on tasks only.
-       *
-       * For List
-       * Works on tasks only. (skip empty sections and jump focus to next task)
-       */
-
       if (props.type === "Kanban" || props.type === "List") {
         const activeElement = document.activeElement;
 
@@ -465,8 +438,6 @@ export function useUniversalMovement(props: TProps) {
               focusKanbanCard(document.getElementById(tasksList[0].id));
             }
           } else if (index === tasksList.length - 2) {
-            // Here we need to check if the props.type is List. Because in List view we have sections stacked on top of each other.
-            // And as such we need to jump focus to the next section below it with the top most task init.
             if (props.type === "List") focus.right(true);
           } else {
             const activeElement_ = document.getElementById(
@@ -483,14 +454,6 @@ export function useUniversalMovement(props: TProps) {
       }
     },
     left: (forceNavigate: boolean = false) => {
-      /**
-       * For Kanban
-       * Works on tasks and empty sections.
-       *
-       * For List
-       * No need for list view
-       */
-
       if (props.type === "Kanban" || (props.type === "List" && forceNavigate)) {
         const { filteredSections } = props;
         const sectionEls =
@@ -537,14 +500,6 @@ export function useUniversalMovement(props: TProps) {
       }
     },
     right: (forceNavigate: boolean = false) => {
-      /**
-       * For Kanban
-       * Works on tasks and empty sections.
-       *
-       * For List
-       * No need for list view
-       */
-
       if (props.type === "Kanban" || (props.type === "List" && forceNavigate)) {
         const { filteredSections } = props;
         const sectionEls =

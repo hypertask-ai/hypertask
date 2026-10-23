@@ -1,16 +1,20 @@
 "use client";
 
-import { useEffect } from "react";
+import { useEffect, useLayoutEffect } from "react";
 import { useFlag } from "@/hooks/useFlag";
+import { useHydrated } from "@/hooks/General/useHydrated";
 import { useRecoilValue } from "@/lib/state";
 import { fcmAtom, currentUserAtom, boardLayoutPreferenceAtom, appShellRailAtom, appShellRailExpandedAtom, showQuickTipsAtom,
   showEmptyViewTabsAtom, hiddenViewTabIdsAtom, viewTabsOrderAtom, tableVisibleColumnsAtom, tableColumnWidthsAtom,
-  tableTitleWrapAtom, openAiChatByDefaultAtom, aiChatAutoOpenSuppressedAtom, aiChatPinnedAtom } from "@/store";
+  tableTitleWrapAtom, openAiChatByDefaultAtom, keepAiChatClosedAtom, aiChatAutoOpenSuppressedAtom, aiChatPinnedAtom, aiChatSidebarWidthPxAtom, isAiChatSidebarModeAtom } from "@/store";
+import { HTPR_7406_DESKTOP_SERVER_BOARD_FLAG } from "@/lib/flags/keys";
 import { BOARD_FIRST_SCREEN_FLAG } from "./boardDocument";
 import { BOARD_DISPLAY_COOKIE, parseBoardDisplay } from "./boardDisplay";
 
 export default function BoardDisplayMirror({ accountId }: { accountId: number | null }) {
   const enabled = useFlag(BOARD_FIRST_SCREEN_FLAG);
+  const desktopChat = useFlag(HTPR_7406_DESKTOP_SERVER_BOARD_FLAG);
+  const hydrated = useHydrated();
   const user = useRecoilValue(currentUserAtom);
   const fcm = useRecoilValue(fcmAtom);
   const boardLayout = useRecoilValue(boardLayoutPreferenceAtom);
@@ -23,9 +27,17 @@ export default function BoardDisplayMirror({ accountId }: { accountId: number | 
   const tableColumns = useRecoilValue(tableVisibleColumnsAtom);
   const tableWidths = useRecoilValue(tableColumnWidthsAtom);
   const tableTitleWrap = useRecoilValue(tableTitleWrapAtom);
+  const keepChatClosed = useRecoilValue(keepAiChatClosedAtom);
   const openChat = useRecoilValue(openAiChatByDefaultAtom);
   const chatSuppressed = useRecoilValue(aiChatAutoOpenSuppressedAtom);
   const chatPinned = useRecoilValue(aiChatPinnedAtom);
+  const chatWidth = useRecoilValue(aiChatSidebarWidthPxAtom);
+  const chatSidebarMode = useRecoilValue(isAiChatSidebarModeAtom);
+  useLayoutEffect(() => {
+    if (!hydrated) return;
+    document.documentElement.removeAttribute("data-ticket-sidebar");
+    document.documentElement.style.removeProperty("--ticket-sidebar-width");
+  }, [hydrated]);
   useEffect(() => {
     if (!enabled || accountId === null || user?.id !== accountId) return;
     const mirror = () => {
@@ -42,9 +54,9 @@ export default function BoardDisplayMirror({ accountId }: { accountId: number | 
         isMobile: window.innerWidth < 768,
         inbox: { nudgeDismissed,
           pushPermission: fcm.permissionStatus, pushEnabled: fcm.statusToggleFromDB === "true" },
-        board: { railOn, showEmptyViewTabs, hiddenViewTabIds, viewTabsOrder, tableColumns, tableWidths, tableTitleWrap, openChat, chatSuppressed, chatPinned } });
+        board: { railOn, showEmptyViewTabs, hiddenViewTabIds, viewTabsOrder, tableColumns, tableWidths, tableTitleWrap, openChat, keepChatClosed, chatSuppressed, chatPinned, chatWidth, chatSidebarMode } });
       const encoded = encodeURIComponent(value);
-      const valid = encoded.length <= 3800 && parseBoardDisplay(value, accountId);
+      const valid = encoded.length <= 3800 && parseBoardDisplay(value, accountId, { desktopChat });
       document.cookie = `${BOARD_DISPLAY_COOKIE}=${valid ? encoded : ""}; Path=/; Max-Age=${valid ? 604800 : 0}; SameSite=Lax${location.protocol === "https:" ? "; Secure" : ""}`;
     };
     mirror();
@@ -54,7 +66,7 @@ export default function BoardDisplayMirror({ accountId }: { accountId: number | 
     const themes = new MutationObserver(mirror);
     themes.observe(document.documentElement, { attributes: true, attributeFilter: ["data-theme"] });
     return () => { window.removeEventListener("resize", mirror); window.removeEventListener("pagehide", mirror); window.removeEventListener("ht-inbox-display-change", mirror); themes.disconnect(); };
-  }, [enabled, accountId, user?.id, fcm.permissionStatus, fcm.statusToggleFromDB, boardLayout, railOn, railCollapsed, quickTips, showEmptyViewTabs, hiddenViewTabIds,
-    viewTabsOrder, tableColumns, tableWidths, tableTitleWrap, openChat, chatSuppressed, chatPinned]);
+  }, [enabled, desktopChat, accountId, user?.id, fcm.permissionStatus, fcm.statusToggleFromDB, boardLayout, railOn, railCollapsed, quickTips, showEmptyViewTabs, hiddenViewTabIds,
+    viewTabsOrder, tableColumns, tableWidths, tableTitleWrap, openChat, keepChatClosed, chatSuppressed, chatPinned, chatWidth, chatSidebarMode]);
   return null;
 }

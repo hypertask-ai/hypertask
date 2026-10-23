@@ -41,9 +41,6 @@ function schedulePostCreateWork({
   createTaskFromComment?: { task: ITask; commentIndex: number };
   agentId?: string | null;
 }) {
-  // autoAssignForSection coalesces concurrent calls for the same task and
-  // section. The board broadcast stays separate, so it cannot suppress
-  // task.created.
   const autoAssignWork = import("@/utils/controllers/assignees/autoAssignForSection")
     .then(({ autoAssignForSection }) =>
       autoAssignForSection({
@@ -57,8 +54,6 @@ function schedulePostCreateWork({
     .then((autoAssigned) => {
       if (autoAssigned === "ready") return "ready" as const;
 
-      // Retry assignment before either the board broadcast or task.created
-      // emission proceeds. A final retry leaves the durable marker pending.
       return import("@/lib/agentWebhooks/taskCreatedRecovery").then(
         async ({ recoverPendingAgentTaskCreatedWebhook }) => {
           const result = await recoverPendingAgentTaskCreatedWebhook(task.id, {
@@ -83,8 +78,6 @@ function schedulePostCreateWork({
     });
   const agentWebhookWork = autoAssignWork.then(async (autoAssigned) => {
     if (autoAssigned === "pending") {
-      // The creation transaction wrote the marker. Leave it untouched so the
-      // minute sweep at /api/queues/sweep can retry this handoff.
       console.warn(
         "[task-create-global] task.created handoff remains pending for the recovery sweep",
         { taskId: task.id },
@@ -103,8 +96,6 @@ function schedulePostCreateWork({
       taskId: task.id,
       error,
     });
-    // Keep the creation marker pending when emission fails. A direct fallback
-    // could publish task.created without final assignees.
     return import("@/lib/agentWebhooks/outbox").then(
       async ({ ensurePendingAgentTaskCreatedWebhook }) => {
         await ensurePendingAgentTaskCreatedWebhook(task.id);
@@ -145,15 +136,10 @@ function schedulePostCreateWork({
       ({ default: scheduleTaskSummaryGeneration }) =>
         scheduleTaskSummaryGeneration({ taskId: task.id, agentId: agentId ?? null }),
     ),
-    import("@/lib/ai/labelClassifier").then(({ classifyTaskAiLabels }) =>
-      classifyTaskAiLabels(task.id, task.projectId),
+    import("@/lib/ai/labelClassifier").then(({ classifyNewTaskAiLabels }) =>
+      classifyNewTaskAiLabels(task.id, task.projectId),
     ),
-    // A column rule applies to every ticket that lands in the column, not only
-    // to tickets dragged in later (HTPR-5488). The board broadcast waits for it
-    // so other viewers get the task with its auto-assignee already attached.
     autoAssignWork.then(async () => {
-      // autoAssignWork resolves only after its assignment or recovery
-      // transaction commits, so this broadcast reads committed assignees.
       const { broadcastBoardChange } = await import("@/lib/realtime/server");
       await broadcastBoardChange(task.projectId, { originUserId });
     }),
@@ -173,9 +159,6 @@ function schedulePostCreateWork({
     }
   });
 
-  // These operations must finish, but none is required to make the newly
-  // created task usable. Keeping them out of the response path removes search,
-  // AI, queue, and realtime module startup from the user's save latency.
   waitUntil(work);
 }
 
@@ -184,7 +167,7 @@ async function persistAssignee(
   currentUser: IUser,
   taskId: number,
   assignee: NormalizedTaskAssignee,
-  agentAssignerId?: string | null //This is agentAssignerId.
+  agentAssignerId?: string | null
 ) {
   const assign = await tx.assignees.create({
     data: {
@@ -236,7 +219,6 @@ async function createAssigneeActivityAndNotification(
   let commentId: number | undefined = undefined;
   const agentId = assign.agentId ?? undefined;
 
-  // ======================= create activity of task assignment
   if (assign.assigner && assign.assignerId) {
     const activityBody: ITaskAssignedActivity = {
       type: "TaskAssigned",
@@ -261,14 +243,12 @@ async function createAssigneeActivityAndNotification(
     commentId = await createCommentActivity(taskId, activityBody);
   }
 
-  // Send assignment notification
   if (agentId && assign.agentId && assign.agent && !assign.agent.revokedAt) {
-    // User → Agent (or Agent → Agent): agent is the assignee — create directly, no reminder check
     await prisma.notification.create({
       data: {
         assignId: assign.id,
         agentId: assign.agentId,
-        userId: assign.agent.userId, // required non-nullable; set to agent's owner
+        userId: assign.agent.userId,
         taskId,
         projectId,
         type: "Assigned",
@@ -277,7 +257,6 @@ async function createAssigneeActivityAndNotification(
       },
     });
   } else if (!agentId && assign.userId !== currentUser.id) {
-    // User → User (or Agent → User): user is the assignee, skip self-assignment
     const { default: checkReminderAndCreateNotification } = await import(
       "@/utils/controllers/notifications/creation-service/check-reminder_create-notification"
     );
@@ -300,14 +279,11 @@ async function createAssigneeActivityAndNotification(
   return commentId;
 }
 
-// The priority row itself is created inside the task transaction (see above);
-// this only writes the activity entry that follows it.
 async function createPriorityActivity(
   task: any,
   currentUser: IUser,
   priority: any
 ) {
-  // ============= create priority activity element
   const activityBody: ITaskPriorityActivity = {
     type: "TaskPriority",
     data: {
@@ -347,7 +323,6 @@ async function createEstimateAndActivity(
       addedByAgent: true,
     },
   });
-  // ============== create comment in that taskId as activity log.
   const activityBody: ITaskEstimateActivity = {
     type: "TaskEstimate",
     data: {
@@ -376,7 +351,6 @@ async function createCommentActivity(taskId: number, activityBody: any) {
     },
   });
 
-  // Get the current updatedByUserIds for the task
   const task = await prisma.task.findUnique({
     where: { id: taskId },
     select: { updatedByUserIds: true },
@@ -417,7 +391,6 @@ async function createNewTaskFromComment(
       },
     });
 
-    //Create relation between tasks.
     await prisma.taskRelations.create({
       data: {
         sourceTaskId: createTaskFromComment.task.id,

@@ -1,3 +1,4 @@
+const { withStubs } = require("./helpers/stub-map.cjs");
 const test = require("node:test");
 const assert = require("node:assert/strict");
 const fs = require("node:fs");
@@ -15,7 +16,7 @@ const keys = load(path.join(root, "src/lib/flags/keys.ts"));
 const option = catalog.getAiModelOptionById("claude-haiku-5-5");
 
 function moduleWithStubs(relativePath, stubs, extra = "") {
-  stubs = { "@/lib/flags/keys": keys, "@/lib/flags": { isFeatureEnabled: async () => false }, ...stubs };
+  stubs = withStubs({ "@/lib/net/fetchWithoutBrotli": { fetchWithoutBrotli: async () => { throw new Error("Unexpected network request"); } }, "@/lib/net/downloadWithoutBrotli": { downloadWithoutBrotli: undefined }, "@/lib/flags/keys": keys, "@/lib/flags": { isFeatureEnabled: async () => false }, "@/lib/flags/definitions/htpr-7634-openai-only-default": { HTPR_7634_OPENAI_ONLY_DEFAULT_FLAG: "htpr-7634-openai-only-default" } }, stubs);
   const filename = path.join(root, relativePath);
   const code = ts.transpileModule(fs.readFileSync(filename, "utf8"), {
     compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 },
@@ -29,7 +30,7 @@ function moduleWithStubs(relativePath, stubs, extra = "") {
   return loadedModule.exports;
 }
 
-function harness({ enabled = true, flagError = false, userId = 985, input = 100, output = 20, anthropicFactory, unavailableHaiku = false, unavailableStatus = 404, streamFailure = "throw" } = {}) {
+function harness({ flagError = false, userId = 985, input = 100, output = 20, anthropicFactory, unavailableHaiku = false, unavailableStatus = 404, streamFailure = "throw" } = {}) {
   const rows = [], pending = [], calls = [], checks = [];
   const usage = { inputTokens: { total: input }, outputTokens: { total: output } };
   const result = { content: [], usage, finishReason: { unified: "stop" } };
@@ -81,7 +82,7 @@ function harness({ enabled = true, flagError = false, userId = 985, input = 100,
       "@/lib/flags": { isFeatureEnabled: async (key, id) => {
         checks.push([key, id]);
         if (flagError) throw new Error("flag read failed");
-        return key === keys.HTPR_7010_HAIKU_5_5_FLAG && enabled;
+        return false;
       } },
     }),
     "@/lib/aiAllowancePolicy": { FREE_TEAM_AI_ALLOWANCE_USD: 1, PAID_TEAM_AI_ALLOWANCE_USD: 5 },
@@ -111,14 +112,14 @@ test("Haiku 5.5 is adjacent to 4.5, tier 1, adaptive medium, with gateway and di
   assert.equal(option.providerOptions.anthropic.effort, "medium");
 });
 
-test("web, settings and agent pickers use the flag filter; Android hides it while off", () => {
+test("web, settings and agent pickers permanently enable Haiku; Android retains context filtering", () => {
   for (const file of [
     "src/components/Global/ModelSelectorDropdown.tsx",
     "src/components/Modals/Settings/AiFeaturesSection.tsx",
     "src/app/agents/[agentId]/AgentConfigForm.tsx",
   ]) {
     const source = fs.readFileSync(path.join(root, file), "utf8");
-    assert.match(source, /useFlag\(\s*HTPR_7010_HAIKU_5_5_FLAG\s*,?\s*\)/);
+    assert.doesNotMatch(source, /HTPR_7010_HAIKU_5_5_FLAG/);
     assert.match(source, /isAiModelOptionVisible\(option, false\)/);
     const sourceFile = ts.createSourceFile(file, source, ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX);
     let visibilityExpression;
@@ -150,38 +151,22 @@ test("web, settings and agent pickers use the flag filter; Android hides it whil
   const on = composer.buildComposerConfig({ ...input, haiku55Enabled: true });
   assert.equal(off.models.some((entry) => entry.id === option.id), false);
   assert.equal(on.models.some((entry) => entry.id === option.id), true);
-  assert.equal(on.selectedModelId, input.storePlanId === "Free" ? (input.lunaFree ? "gpt-6-luna" : "gemini-3.5-flash-lite") : "claude-haiku-5-5");
+  assert.equal(on.selectedModelId, input.storePlanId === "Free" ? "gpt-6-luna" : "claude-haiku-5-5");
   assert.equal(on.models.some((entry) => entry.id === "claude-haiku-4.5"), false);
   const mentions = fs.readFileSync(path.join(root, "src/utils/controllers/tasks/taskSearchByParam.ts"), "utf8");
   assert.match(mentions, /haiku55Enabled\s*\? model.key !== "claude-haiku-4.5"\s*: model.key !== "claude-haiku-5-5"/);
 });
 
-test("server rejects both inference methods, gateway and direct/raw ids when flag is off", async () => {
-  for (const [provider, id, credential] of [
-    ["claude", option.directModel, "fixture-direct"],
-    ["claude", option.model, "vck_fixture"],
-    ["gateway", `anthropic/${option.model}`, "vck_fixture"],
-    ["openrouter", `anthropic/${option.model}`, "fixture-direct"],
-  ]) {
-    for (const method of ["doGenerate", "doStream"]) {
-      const h = harness({ enabled: false });
-      await assert.rejects(h.makeModel(provider, id, credential)[method](params), /model is unavailable/);
-      assert.equal(h.calls.length, 0);
-      assert.deepEqual(h.checks, [["htpr-7038-haiku-default", 985], ["htpr-7075-background-claude", 985], ["htpr-7010-haiku-5-5", 985]]);
-    }
-  }
-});
-
-test("missing user or failed flag evaluation fails closed, without altering older models", async () => {
-  for (const setup of [{ userId: null }, { flagError: true }]) {
-    const h = harness(setup);
-    await assert.rejects(h.makeModel().doGenerate(params), /model is unavailable/);
-    assert.equal(h.calls.length, 0);
-  }
-  const h = harness({ enabled: false });
-  await h.makeModel("claude", "claude-haiku-4.5").doGenerate(params);
-  assert.equal(h.calls[0].temperature, 0.2);
-  assert.deepEqual(h.checks, [["htpr-7038-haiku-default", 985], ["htpr-7075-background-claude", 985], ["htpr-7010-haiku-5-5", 985]]);
+test("missing user fails closed without altering older models", async () => {
+  const missingUser = harness({ userId: null });
+  await assert.rejects(missingUser.makeModel().doGenerate(params), /model is unavailable/);
+  assert.equal(missingUser.calls.length, 0);
+  await missingUser.makeModel("claude", "claude-haiku-4.5").doGenerate(params);
+  assert.equal(missingUser.calls[0].temperature, 0.2);
+  await missingUser.flush();
+  const h = harness({ flagError: true });
+  await h.makeModel().doGenerate(params);
+  assert.deepEqual(h.checks, [["htpr-7038-haiku-default", 985], ["htpr-7075-background-claude", 985]]);
   await h.flush();
 });
 
@@ -276,7 +261,7 @@ test("real SDK returns structured and short text output rather than exhausting t
   const { createAnthropic } = require("@ai-sdk/anthropic");
   const { z } = require("zod");
   const schema = z.object({ questions: z.array(z.string()) });
-  for (const mode of ["object", "legacy-object", "text"]) {
+  for (const mode of ["object", "text"]) {
     let body;
     const h = harness({ anthropicFactory: (config) => createAnthropic({
       ...config,
@@ -294,14 +279,9 @@ test("real SDK returns structured and short text output rather than exhausting t
       },
     }) });
     const input = { model: h.makeModel(), prompt: "fixture", maxOutputTokens: mode === "text" ? 160 : 500, maxRetries: 0 };
-    if (mode === "legacy-object") {
-      const result = await ai.generateObject({ ...input, schema });
-      assert.deepEqual(result.object.questions, ["What is next?"]);
-    } else {
-      const result = await ai.generateText({ ...input, ...(mode === "object" ? { output: ai.Output.object({ schema }) } : {}) });
-      if (mode === "object") assert.deepEqual(result.output.questions, ["What is next?"]);
-      else assert.equal(result.text, "A short summary");
-    }
+    const result = await ai.generateText({ ...input, ...(mode === "object" ? { output: ai.Output.object({ schema }) } : {}) });
+    if (mode === "object") assert.deepEqual(result.output.questions, ["What is next?"]);
+    else assert.equal(result.text, "A short summary");
     assert.equal(body.thinking.type, "disabled");
     assert.equal(body.output_config.effort, "low");
     assert.equal(body.max_tokens, input.maxOutputTokens);
@@ -330,13 +310,13 @@ test("real OpenRouter SDK sends reasoning disabled for short structured Haiku ca
   await h.flush();
 });
 
-test("flag-off short structured legacy calls preserve their original settings", async () => {
+test("anonymous short structured legacy calls preserve their original settings", async () => {
   for (const [provider, modelId, credential] of [
     ["claude", "claude-haiku-4.5", "fixture-direct"],
     ["gateway", "google/gemini-3.5-flash-lite", "vck_fixture"],
     ["openrouter", "anthropic/claude-haiku-4.5", "fixture-direct"],
   ]) {
-    const h = harness({ enabled: false });
+    const h = harness({ userId: null });
     const input = { ...params, maxOutputTokens: 500, responseFormat: { type: "json" }, providerOptions: { gateway: { tags: ["task-questions"] } } };
     await h.makeModel(provider, modelId, credential).doGenerate(input);
     assert.equal(h.calls[0].providerOptions, input.providerOptions);
@@ -406,11 +386,11 @@ test("plan defaults, automatic replacements, fast ladder and stream fallbacks re
   assert.equal(catalog.defaultAiModelOption.id, "gemini-3.5-flash-lite");
   assert.equal(catalog.preferredAiModelOption.id, "gpt-6-luna");
   for (const plan of ["Free", "Pro", "AI", "BYOK", null]) {
-    const expected = plan === "Pro" || plan === "AI" ? "gpt-6-luna" : "gemini-3.5-flash-lite";
+    const expected = ["Free", "Pro", "AI"].includes(plan) ? "gpt-6-luna" : "gemini-3.5-flash-lite";
     assert.equal(catalog.getDefaultAiModelOptionForPlan(plan).id, expected);
   }
   assert.equal(catalog.getDefaultAiModelOptionForPlan("BYOK", true).id, "gpt-6-luna");
-  assert.equal(catalog.getDefaultAiModelOptionForPlan("Free", false, true).id, "gpt-6-luna");
+  assert.equal(catalog.getDefaultAiModelOptionForPlan("Free", false).id, "gpt-6-luna");
   assert.deepEqual(ladder.SYSTEM_MODEL_LADDERS.fast.map((entry) => entry.model), [
     "google/gemini-3.5-flash-lite", "openai/gpt-6-luna", "anthropic/claude-haiku-4.5",
     "deepseek/deepseek-v4.1-flash", "moonshotai/kimi-k2.5", "alibaba/qwen3.7-plus", "zai/glm-5.3-flash",
@@ -436,8 +416,8 @@ test("server upgrades every saved/raw Haiku 4.5 spelling for generate and stream
     ["openrouter", "anthropic/claude-haiku-4.5", "fixture-direct"],
   ]) {
     for (const method of ["doGenerate", "doStream"]) {
-      for (const enabled of [false, true]) {
-        const h = harness({ enabled });
+      for (const enabled of [true]) {
+        const h = harness();
         const result = await h.makeModel(provider, id, credential)[method](params);
         if (result.stream) for await (const chunk of result.stream) assert.equal(chunk.type, "finish");
         assert.equal(h.calls.length, 1);
@@ -451,8 +431,8 @@ test("server upgrades every saved/raw Haiku 4.5 spelling for generate and stream
   }
 });
 
-test("Haiku 4.5 is untouched without a user or when its flag lookup fails", async () => {
-  for (const setup of [{ userId: null }, { flagError: true }]) {
+test("Haiku 4.5 is untouched without a user", async () => {
+  for (const setup of [{ userId: null }]) {
     const h = harness(setup);
     await h.makeModel("claude", "claude-haiku-4.5").doGenerate(params);
     assert.equal(h.calls[0].requestedModelId, "claude-haiku-4.5");
@@ -462,8 +442,8 @@ test("Haiku 4.5 is untouched without a user or when its flag lookup fails", asyn
 });
 
 test("gateway-only system model requests upgrade using the attached user context", async () => {
-  for (const enabled of [false, true]) {
-    const h = harness({ enabled });
+  for (const enabled of [true]) {
+    const h = harness();
     const model = h.api.resolveGatewayModel("anthropic/claude-haiku-4.5", "vck_fixture");
     h.api.configureAiModelUsage(model, { userId: 985, feature: "summary" });
     await model.doGenerate(params);
@@ -506,9 +486,9 @@ test("chat and editor selection resolve saved personal, team and agent Haiku pic
 });
 
 
-test("custom BYOK endpoints upgrade persisted Haiku model ids only with the flag on", async () => {
-  for (const enabled of [false, true]) {
-    const h = harness({ enabled });
+test("custom BYOK endpoints upgrade persisted Haiku model ids", async () => {
+  for (const enabled of [true]) {
+    const h = harness();
     await h.makeModel("custom", "custom", { apiKey: "fixture", baseUrl: "https://example.test/v1", modelId: "claude-haiku-4-5" }).doGenerate(params);
     assert.equal(catalog.isHaiku55Model(h.calls[0].requestedModelId), enabled);
     await h.flush();
@@ -527,7 +507,7 @@ function editorWithFallback(h, credentialPicks, enabled = true, credential = "fi
     "@/lib/aiProviders": load(path.join(root, "src/lib/aiProviders.ts")),
     "@/lib/aiModelPreferences": load(path.join(root, "src/lib/aiModelPreferences.ts")),
     "@/lib/prisma": { userSetting: { findUnique: async () => null } },
-    "@/app/api/ai/_lib/planGate": { storePlanIdForProject: async () => plan, lunaFreePlanEnabled: async () => true, haikuDefaultModelEnabled: async () => false, haiku55ModelEnabled: async () => enabled, assertModelAllowedForPlan: async () => {} },
+    "@/app/api/ai/_lib/planGate": { storePlanIdForProject: async () => plan, haikuDefaultModelEnabled: async () => false, haiku55ModelEnabled: async () => enabled, assertModelAllowedForPlan: async () => {} },
     "@/app/api/ai/_lib/byokKeys": {
       getAiDefaultModelContext: async () => ({ haiku55Enabled: enabled, plan, hasByok: plan !== "Free" && Boolean(byokProvider), byok: enabled && plan !== "Free" && byokProvider ? { provider: byokProvider, credential } : undefined }),
       getByokOrTeamGatewayApiKeyForModelOption: async (entry) => { credentialPicks.push(entry.id); return entry.id === "gpt-6-luna" ? typeof lunaCredential === "object" ? "fixture-openai" : lunaCredential : credential; },
@@ -598,6 +578,7 @@ function chatWithFallback(h, { enabled = true, settings = {}, provider = "claude
     recordTurnOutcome: () => {},
   };
   const route = moduleWithStubs("src/app/api/ai/chat/stream/route.ts", {
+    "@/lib/agents/chatAccess": { loadSidebarChatRequest: async (request) => { assert.equal(request.headers.get("x-hypertask-sidebar-project"), null); return { ok: true }; } },
     "@/lib/ai/chatStream/turnModel": { loadTurnModel: async () => ({ ...state, teamProviderSettings: settings }) },
     "@/lib/ai/chatStream/stream": { createChatStream: (options) => {
       Object.assign(state, options);
@@ -670,12 +651,12 @@ test("editor fallback respects team provider settings before resolving credentia
 test("legacy raw effective model drives chat and editor fallback for OpenRouter and custom endpoints", async () => {
   for (const provider of ["openrouter", "custom"]) {
     for (const modelId of ["anthropic/claude-haiku-4.5", "claude-haiku-4-5-20251001"]) {
-      for (const enabled of [false, true]) {
+      for (const enabled of [true]) {
         for (const openai of [false, true]) {
           for (const unavailableStatus of [403, 404]) {
             const credential = provider === "custom" ? { apiKey: "fixture", baseUrl: "https://example.test/v1", modelId } : "fixture-direct";
             const settings = { providers: { openai } };
-            const h = harness({ enabled, unavailableHaiku: true, unavailableStatus });
+            const h = harness({ unavailableHaiku: true, unavailableStatus });
             const chat = chatWithFallback(h, { enabled, provider, modelId, credential, settings });
             if (enabled && !openai) await assert.rejects(chat.run(), /model unavailable/);
             else await chat.run();
@@ -683,7 +664,7 @@ test("legacy raw effective model drives chat and editor fallback for OpenRouter 
             assert.equal(chat.credentialPicks.length, enabled && openai ? 1 : 0);
             await h.flush();
             for (const method of ["doGenerate", "doStream"]) {
-              const eh = harness({ enabled, unavailableHaiku: true, unavailableStatus });
+              const eh = harness({ unavailableHaiku: true, unavailableStatus });
               const credentialPicks = [];
               const editor = editorWithFallback(eh, credentialPicks, enabled, credential);
               const selected = await editor.selectTaskWriterModel({ userId: 985, sourceSelected: provider, modelSelected: provider === "custom" ? "custom" : modelId, teamContext: { teamId: "fixture-team", settings } });
@@ -708,7 +689,7 @@ test("editor request plan-aware defaults route paid and eligible BYOK to Haiku a
   for (const enabled of [false, true]) {
     for (const plan of ["Free", "Pro", "AI", "BYOK"]) {
       for (const provider of [null, "claude", "gateway", "openrouter"]) {
-        const h = harness({ enabled });
+        const h = harness();
         const credentialPicks = [];
         const credential = provider === "gateway" ? "vck_fixture" : "fixture-direct";
         const editor = editorWithFallback(h, credentialPicks, enabled, credential, plan, provider);
@@ -814,32 +795,24 @@ test("automatic unavailable-model fallback preserves provider controls, own cred
   }
 });
 
-test("automatic fallback leaves flag-off models unchanged and never retries after cancellation", async () => {
-  for (const enabled of [false, true]) {
-    const h = harness({ enabled, unavailableHaiku: true });
-    const picks = [];
-    const api = automaticKeys(h, picks);
-    const model = api.resolveAutomaticAiModel("claude", enabled ? option.directModel : "claude-haiku-4.5", "fixture-direct", { haiku55Enabled: enabled, lookup: { trustedTeamId: "fixture-team", userId: 985 }, feature: "chat" });
-    h.api.configureAiModelUsage(model, { userId: 985 });
-    if (enabled) {
-      const controller = new AbortController();
-      controller.abort();
-      await assert.rejects(model.doGenerate({ ...params, abortSignal: controller.signal }), /model unavailable/);
-    } else {
-      await model.doGenerate(params);
-      assert.equal(h.calls[0].requestedModelId, "claude-haiku-4.5");
-      assert.equal(h.calls[0].temperature, params.temperature);
-    }
-    assert.equal(picks.length, 0);
-    assert.equal(h.calls.length, 1);
-    await h.flush();
-  }
+test("automatic fallback never retries after cancellation", async () => {
+  const h = harness({ unavailableHaiku: true });
+  const picks = [];
+  const api = automaticKeys(h, picks);
+  const model = api.resolveAutomaticAiModel("claude", option.directModel, "fixture-direct", { haiku55Enabled: true, lookup: { trustedTeamId: "fixture-team", userId: 985 }, feature: "chat" });
+  h.api.configureAiModelUsage(model, { userId: 985 });
+  const controller = new AbortController();
+  controller.abort();
+  await assert.rejects(model.doGenerate({ ...params, abortSignal: controller.signal }), /model unavailable/);
+  assert.equal(picks.length, 0);
+  assert.equal(h.calls.length, 1);
+  await h.flush();
 });
 
 test("board memory automatic fallback learns on Luna when Haiku is unavailable, with flag-off unchanged", async () => {
   const contract = load(path.join(root, "src/app/api/ai/_lib/boardMemoryContract.ts"));
   for (const enabled of [false, true]) {
-    const h = harness({ enabled, unavailableHaiku: true });
+    const h = harness({ unavailableHaiku: true });
     const picks = [];
     const api = automaticKeys(h, picks, { credential: "fixture-openai" });
     const board = moduleWithStubs("src/app/api/ai/_lib/boardMemory.ts", {
@@ -847,7 +820,7 @@ test("board memory automatic fallback learns on Luna when Haiku is unavailable, 
       "@/app/api/ai/_lib/byokKeys": { ...api, getAiDefaultModelContext: async () => ({ haiku55Enabled: enabled, plan: "Pro", hasByok: true, byok: enabled ? { provider: "claude", credential: "fixture-claude" } : undefined }) },
       "@/app/api/ai/_lib/modelProvider": h.api,
       "@/lib/ai/prompts/registry": { renderPrompt: () => "fixture prompt" },
-      ai: { generateObject: async ({ model, providerOptions }) => { await model.doGenerate({ ...params, providerOptions }); return { object: { facts: ["Keep ticket titles concise"] } }; } },
+      ai: { Output: ai.Output, generateText: async ({ model, providerOptions }) => { await model.doGenerate({ ...params, providerOptions }); return { output: { facts: ["Keep ticket titles concise"] } }; } },
       "@/app/api/ai/_lib/customInstructions": { assertProjectAccess: async () => ({ id: 15, teamId: "fixture-team" }), ProjectAccessError: class extends Error {} },
       "@/app/api/ai/_lib/boardMemoryContract": contract,
       "@/app/api/ai/_lib/boardMemoryGuards": {
@@ -875,7 +848,7 @@ test("chat default sites use plan-aware server context and upgrade saved Haiku o
   for (const enabled of [false, true]) {
     for (const plan of ["Free", "Pro", "AI", "BYOK"]) {
       for (const provider of [null, "claude", "gateway", "openrouter"]) {
-        const h = harness({ enabled });
+        const h = harness();
         const credential = provider === "gateway" ? "vck_fixture" : "fixture-direct";
         const selectors = moduleWithStubs("src/lib/ai/chatStream/models.ts", {
           "@/lib/aiModelOptions": catalog, "@/lib/systemModelLadder": ladder,
@@ -891,7 +864,7 @@ test("chat default sites use plan-aware server context and upgrade saved Haiku o
           "@/lib/aiProviders": load(path.join(root, "src/lib/aiProviders.ts")),
           "@/lib/aiModelPreferences": load(path.join(root, "src/lib/aiModelPreferences.ts")),
           "@/app/api/ai/_lib/modelProvider": h.api,
-          "@/app/api/ai/_lib/planGate": { storePlanIdForProject: async () => plan, haikuDefaultModelEnabled: async () => false, haiku55ModelEnabled: async () => enabled, lunaFreePlanEnabled: async () => true, assertModelAllowedForPlan: async () => {} },
+          "@/app/api/ai/_lib/planGate": { storePlanIdForProject: async () => plan, haikuDefaultModelEnabled: async () => false, haiku55ModelEnabled: async () => enabled, assertModelAllowedForPlan: async () => {} },
           "@/app/api/ai/_lib/byokKeys": {
             getAiDefaultModelContext: async () => ({ haiku55Enabled: enabled, plan, hasByok: plan !== "Free" && Boolean(provider), byok: enabled && plan !== "Free" && provider ? { provider, credential } : undefined }),
             getByokOrTeamGatewayApiKeyForModelOption: async () => credential,

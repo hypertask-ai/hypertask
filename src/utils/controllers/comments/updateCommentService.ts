@@ -1,7 +1,4 @@
-/**
- * Shared comment update logic used by both Pages API and MCP route.
- * Single source of truth for: DB update, activity, search index, summary scheduling, mentions.
- */
+import type { AgentTokenTeamScope } from '@/lib/mcp/auth/types'
 import prisma from '@/lib/prisma'
 import { projectContentAccessWhere } from '@/utils/controllers/projects/getAllIncludes'
 import { upsertCommentToTurbopuffer } from '@/utils/controllers/turbopuffer/turbopufferHelper'
@@ -17,6 +14,7 @@ export interface UpdateCommentParams {
   commentId: number
   text: string
   userId: number
+  teamScope?: AgentTokenTeamScope | null
   agentId?: string | null
   attachments?: Array<{
     fileType: string
@@ -24,21 +22,16 @@ export interface UpdateCommentParams {
     fileName: string
     fileSize?: string | null
   }>
-  /** Set only when attachments is a complete snapshot and removals are intentional. */
   replaceAttachments?: boolean
 }
 
-/**
- * Updates a comment and runs all post-update hooks.
- * The authenticated user must own the stored comment.
- */
 export async function updateCommentService(params: UpdateCommentParams) {
-  const { commentId, text: inputText, userId, agentId, attachments, replaceAttachments } = params
+  const { commentId, text: inputText, userId, agentId, teamScope, attachments, replaceAttachments } = params
   const text = normalizeBlockHtml(inputText)
 
   const comment = await prisma.comment.findFirst({
-    where: { id: commentId, creatorId: userId, task: { project: projectContentAccessWhere(userId, agentId) } },
-    select: { id: true, taskId: true, task: { select: { projectId: true } } }
+    where: { id: commentId, creatorId: userId, task: { project: projectContentAccessWhere(userId, agentId, teamScope) } },
+    select: { id: true, taskId: true, text: true, task: { select: { projectId: true } } }
   })
 
   if (!comment) {
@@ -46,7 +39,15 @@ export async function updateCommentService(params: UpdateCommentParams) {
   }
 
   await invalidateHyperAiCommentOrigin(commentId)
+  const textChanged = text !== normalizeBlockHtml(comment.text)
   const updatedComment = await prisma.$transaction(async (transaction) => {
+    if (teamScope != null) {
+      await transaction.$queryRaw`SELECT id FROM "Task" WHERE id = ${comment.taskId} FOR UPDATE`
+      const allowed = await transaction.comment.findFirst({
+        where: { id: commentId, creatorId: userId, task: { project: projectContentAccessWhere(userId, agentId, teamScope) } }, select: { id: true },
+      })
+      if (!allowed) throw new Error('Comment not found or access denied')
+    }
     if (attachments && replaceAttachments) {
       const existingAttachments = await transaction.attachment.findMany({
         where: { commentId },
@@ -118,9 +119,18 @@ export async function updateCommentService(params: UpdateCommentParams) {
       }
     }
 
+    const markEdited = textChanged || (await transaction.comment.updateMany({
+      where: { id: commentId, text: comment.text },
+      data: { summary: null }
+    })).count === 0
+
     return transaction.comment.update({
       where: { id: commentId },
-      data: { text, summary: null },
+      data: {
+        text,
+        summary: null,
+        ...(markEdited ? { editedAt: new Date(), editedByUserId: userId, editedByAgentId: agentId ?? null } : {})
+      },
       include: {
         creator: { select: { id: true, email: true, displayName: true } },
         agent: { select: publicAgentSelect },
@@ -133,11 +143,9 @@ export async function updateCommentService(params: UpdateCommentParams) {
     console.warn('[updateCommentService] comment summary schedule failed:', err)
   )
 
-  // Post-update hooks (same as Pages API)
   upsertCommentToTurbopuffer(commentId)
   scheduleTaskSummaryGeneration({ taskId: comment.taskId, agentId: agentId ?? null })
 
-  // Process mentions for notifications
   await processMentionsFromCommentText({
     text,
     commentId,

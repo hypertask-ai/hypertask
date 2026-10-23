@@ -1,3 +1,4 @@
+const { withStubs } = require("./helpers/stub-map.cjs");
 const test = require("node:test");
 const assert = require("node:assert/strict");
 const fs = require("node:fs");
@@ -7,9 +8,12 @@ const ts = require("typescript");
 const React = require("react");
 const { renderToStaticMarkup } = require("react-dom/server");
 
+const { loadSharedRoute } = require("./helpers/groupb-route.cjs");
+
 const root = path.resolve(__dirname, "..");
 const read = file => fs.readFileSync(path.join(root, file), "utf8");
 function load(file, stubs = {}) {
+  stubs = withStubs({ "@/lib/auth/agentScope": require("./helpers/agent-board-scope.cjs").enforcedScope, "@/lib/mcp/operationCrashReport": { reportMcpOperationCrash: () => {} } }, stubs);
   if (/src\/lib\/flags\/(?:keys|definitions)\.ts$/.test(file)) return require("./helpers/flag-files.cjs").load(file);
   const filename = path.join(root, file);
   const javascript = ts.transpileModule(read(file), {
@@ -19,13 +23,23 @@ function load(file, stubs = {}) {
   mod.filename = filename;
   mod.require = request => {
     if (request === "@/lib/mcp/routeWrapper") return require("./helpers/mcp-route-wrapper.cjs").loadRouteWrapper(stubs);
-    if (request === "@/lib/api/task-writes/route") return { withTaskWriteFlag: (handler) => handler };
-    if (Object.hasOwn(stubs, request)) return stubs[request];
-    if (["@prisma/client", "react", "react/jsx-runtime"].includes(request)) return require(request);
+    if (request === "@/lib/api/task-writes/route") return loadSharedRoute(stubs["@/lib/auth/getSessionUser"]?.getSessionUser);
+    if (request === "@/lib/tasks/sameBoardRelations") return load("src/lib/tasks/sameBoardRelations.ts");
+    if (request in stubs) return stubs[request];
+    if (request === "@/lib/net/contentEncoding") return load("src/lib/net/contentEncoding.ts");
+    if (request === "@/lib/auth/agentCookieBridgeRoutes") return load("src/lib/auth/agentCookieBridgeRoutes.ts");
+    if (request === "@/lib/telemetry/signupAnalytics") return { recordServerCapture: () => {} };
+    if (request === "@/lib/mcp/listParams") return load("src/lib/mcp/listParams.ts", {});
+    if (["@prisma/client", "react", "react/jsx-runtime", "next/server", "zod"].includes(request)) return require(request);
     throw new Error(`Unexpected import ${request} in ${file}`);
   };
   mod._compile(javascript, filename);
   return mod.exports;
+}
+// Pages-style handler: the real task-write adapter around the shared project route.
+function loadPagesRoute(sharedFile, stubs) {
+  const shared = load(sharedFile, stubs);
+  return loadSharedRoute(stubs["@/lib/auth/getSessionUser"].getSessionUser).taskWriteHandler({ POST: async () => shared.POST });
 }
 const jiti = require("jiti")(__filename, { interopDefault: true, alias: { "@": path.join(root, "src") } });
 const { getSequentialLetters } = jiti(path.join(root, "src/utils/helperFunctions/helperFunctions.ts"));
@@ -33,7 +47,6 @@ const prefix = load("src/lib/projectPrefix.ts", {
   "@/utils/helperFunctions/helperFunctions": { getSequentialLetters },
 });
 const flagKey = "htpr-6868-ticket-prefix";
-const subtaskFlagKey = "htpr-6972-subtask-link";
 function matches(row, where) {
   if (!row) return false;
   return Object.entries(where).every(([key, value]) => {
@@ -59,12 +72,13 @@ function writes({ enabled = true, ownerId = 6, boards = [], failSql = false, los
   const updates = [];
   const reindexed = [];
   const scheduled = [];
+  const reads = [];
   let committed = false;
   let transactions = 0;
   const prisma = {
     project: {
       findFirst: async ({ where }) => rows.find(row => matches(row, where)) ?? null,
-      findUnique: async () => board,
+      findUnique: async args => { reads.push(args); return board; },
       update: async ({ where, data }) => {
         assert.ok(matches(board, where));
         events.push("project");
@@ -112,7 +126,7 @@ function writes({ enabled = true, ownerId = 6, boards = [], failSql = false, los
       upsertAllCommentsToTurbopuffer: async id => { assert.ok(committed); reindexed.push(["comments", id]); },
     },
   });
-  return { board, aliases, sql, events, updates, reindexed, scheduled, prisma, controller, transactions: () => transactions, update: value => controller.default(15, "Board", undefined, value, { id: 6 }) };
+  return { board, aliases, sql, events, updates, reindexed, scheduled, reads, prisma, controller, transactions: () => transactions, update: value => controller.default(15, "Board", undefined, value, { id: 6 }) };
 }
 
 for (const input of ["", "A", "ABCDEF", "1AB", "A-B", "A B", "ÉB", "AB_", 42, {}, null]) {
@@ -144,6 +158,11 @@ test("unique prefix permits deleted boards, other teams and the same board", asy
   assert.equal((await f.update("NEW")).status, 200);
   assert.equal((await f.update("NEW")).status, 200);
   assert.equal(f.aliases.length, 1);
+});
+test("prefix change reads only task ids for the search reindex (YPER4-388)", async () => {
+  const f = writes();
+  assert.equal((await f.update("NEW")).status, 200);
+  assert.deepEqual(f.reads.map(args => args.include), [{ tasks: { select: { id: true } } }]);
 });
 test("permission rejection and changed access write nothing", async () => {
   for (const options of [{ ownerId: 9 }, { loseAccess: true }]) {
@@ -198,12 +217,12 @@ test("migration provides cascade, per-board uniqueness and indexed historical pr
 });
 test("update route uses the safe controller with the authenticated caller", async () => {
   const f = writes();
-  const route = load("src/pages/api/projects/update.ts", {
+  const route = loadPagesRoute("src/lib/api/project-writes/update.ts", {
     "@/utils/controllers/projects/update": f.controller,
     "@/lib/auth/getSessionUser": { getSessionUser: async () => ({ userId: 6 }) },
     "@/lib/auth/sessionUserRecord": { loadSessionUserRecord: async id => ({ id }) },
-  }).default;
-  const res = { status(code) { this.code = code; return this; }, json(body) { this.body = body; } };
+  });
+  const res = { status(code) { this.code = code; return this; }, json(body) { this.body = body; }, setHeader() {} };
   await route({ method: "POST", headers: {}, body: { projectId: 15, title: "Board", uniqueIdentifier: "NEW", userId: 99 } }, res);
   assert.equal(res.code, 200);
   assert.equal(f.aliases.length, 1);
@@ -237,7 +256,7 @@ function lookups({ enabled = true, visible = true, live = false, liveAccess = tr
   };
   const base = {
     "@/lib/prisma": { __esModule: true, default: prisma },
-    "@/utils/controllers/projects/getAllIncludes": { projectContentAccessWhere: access.taskWriteAccessWhere, getProjectWhere: (id, actualAgent) => { assert.equal(actualAgent ?? null, agentId); return { ownerId: id }; } },
+    "@/utils/controllers/projects/getAllIncludes": { projectContentAccessWhere: access.taskWriteAccessWhere, intersectProjectTeamScope: (where, scope) => { assert.equal(scope == null, true); return where; }, getProjectWhere: (id, actualAgent) => { assert.equal(actualAgent ?? null, agentId); return { ownerId: id }; } },
   };
   base["@/utils/controllers/projects/findPrefixAliasTasks"] = load("src/utils/controllers/projects/findPrefixAliasTasks.ts", base);
   const resolver = load("src/lib/mcp/tasks/resolveTask.ts", {
@@ -246,11 +265,10 @@ function lookups({ enabled = true, visible = true, live = false, liveAccess = tr
   });
   base["@/lib/mcp/tasks/resolveTask"] = resolver;
   const detail = load("src/utils/controllers/taskDetail/load.ts", {
+    "@/lib/flags/keys": { HTPR_6868_TICKET_PREFIX_FLAG: flagKey },
     ...base, "@vercel/functions": {}, "@/lib/realtime/server": {}, "@/lib/cycles": {}, "@/lib/pullRequests/taskPullRequests": {}, "@/lib/agents/publicAgent": {},
     "@/lib/flags": {
       HTPR_6868_TICKET_PREFIX_FLAG: flagKey,
-      HTPR_6972_SUBTASK_LINK_FLAG: subtaskFlagKey,
-      HTPR_6752_INSTANT_TICKET_OPEN_FLAG: "htpr-6752-instant-ticket-open",
       isFeatureEnabled: async (key, id) => { flagCalls.push([key, id]); return key === flagKey && enabled; },
     },
     "@/lib/agents/visibility": { boardAgentVisibilityWhere: () => ({}), accessibleAgentMembershipWhere: () => ({}) },
@@ -263,6 +281,7 @@ function lookups({ enabled = true, visible = true, live = false, liveAccess = tr
     "@/lib/mcp/agents": {}, "@/lib/agents/visibility": {},
     "@/lib/mcp/tasks/mappers": { taskMcpGetInclude: () => ({}), mapTaskToMcpGetResponse: task => ({ id: task.id, ticketNumber: task.ticketNumber }) },
     "@/lib/mcp/tasks/resolveTask": resolver, "@/lib/mcp/pagination/cursor": {}, "@/lib/flags": {}, "@/lib/mcp/listQuery": {}, "@/lib/mcp/readListQuery": {}, "@/lib/mcp/priorityFilter": {},
+    "@/lib/mcp/listParams": load("src/lib/mcp/listParams.ts", {}),
   });
   return { resolver, detail, prisma, tasks, moveAliases, flagCalls, taskQueries, aliasQueries: () => aliasQueries, get: query => route.GET({ nextUrl: { searchParams: new URLSearchParams(query) } }) };
 }
@@ -331,6 +350,7 @@ function creation({ enabled = true, clash = false, boards = [] } = {}) {
   let created = null;
   const prisma = {
     user: { findUnique: async () => ({ id: 6 }) },
+    team: { findFirst: async () => ({ googleAccountId: "account-1" }) },
     project: {
       findFirst: async ({ where }) => clash ? { id: 99 } : boards.find(board => matches(board, where)) ?? null,
       create: async ({ data }) => { created = { ...data, id: 15 }; return created; },
@@ -341,7 +361,8 @@ function creation({ enabled = true, clash = false, boards = [] } = {}) {
     $transaction: async callback => callback(prisma),
   };
   const controller = load("src/utils/controllers/projects/create.ts", {
-    "@/lib/telemetry/activationOccurrences": { recordActivationOccurrence: () => {} },
+    "@/lib/telemetry/activationOccurrences": { captureActivationOccurrence: async () => null },
+    "@/lib/telemetry/savedWork": { enqueueBoardCreated: async () => "board-key", processAnalyticsIntentSoon: () => {}, enqueueTaskCreated: async () => "task-key", creationChannelFromHeader: () => 'web', CREATION_CHANNEL_HEADER: 'X-Hypertask-Creation-Channel', CREATION_AGENT_HEADER: 'X-Hypertask-Creation-Agent' },
     "@/lib/prisma": { __esModule: true, default: prisma },
     "../logs/createLog": { __esModule: true, default: () => {} },
     "@/lib/projectPrefix": prefix,
@@ -374,11 +395,11 @@ test("create unique prefix rejects legacy lowercase and mixed-case board prefixe
 });
 test("create route cannot spoof an enabled user's identity to bypass the flag", async () => {
   const calls = [];
-  const route = load("src/pages/api/projects/create.ts", {
+  const route = loadPagesRoute("src/lib/api/project-writes/create.ts", {
     "@/utils/controllers/projects/create": { __esModule: true, default: async (...args) => { calls.push(args); return { status: 200, json: {} }; } },
     "@/lib/auth/getSessionUser": { getSessionUser: async () => ({ userId: 2343 }) },
-  }).default;
-  const res = { status() { return this; }, json() {} };
+  });
+  const res = { status() { return this; }, json() {}, setHeader() {} };
   await route({ method: "POST", headers: {}, body: { userId: 6, title: "Board", teamId: "team", googleAccountId: "account", ticketPrefix: "NEW" } }, res);
   assert.deepEqual(calls[0], [2343, "Board", "team", "account", "NEW"]);
 });
@@ -395,7 +416,7 @@ test("move numbering after permanent deletion uses MAX plus one, not count", asy
   assert.doesNotMatch(source, /taskCount|getUniqueTaskCount/);
 });
 test("transaction locks and fresh prefix reads protect concurrent create and move writes", () => {
-  for (const file of ["src/utils/controllers/tasks/create.ts", "src/pages/api/tasks/createGlobally.ts"]) {
+  for (const file of ["src/utils/controllers/tasks/create.ts", "src/lib/api/task-writes/create-global.ts"]) {
     const source = read(file);
     assert.ok(source.indexOf("pg_advisory_xact_lock") < source.indexOf("await tx.project.findUnique"));
     assert.match(source, /await tx.project.findUnique/);
@@ -524,6 +545,8 @@ test("UI create updates the automatic suggestion until edited and submits the ov
   }
 });
 
+const descriptionFirstKey = "htpr-7367-server-description-first";
+const foldCommentsKey = "htpr-7611-comments-fold-from-first-paint";
 function detailPage({ enabled = true, task = { id: 101, projectId: 20, uniqueIndex: 7 }, projectId = 15, userId = 6 } = {}) {
   const calls = [];
   const detail = lookups().detail;
@@ -536,7 +559,7 @@ function detailPage({ enabled = true, task = { id: 101, projectId: 20, uniqueInd
     },
     "@/lib/auth/serverUser": { requireServerCookieUser: async () => ({ id: userId }) },
     "@/utils/controllers/projects/getAllIncludes": { projectContentAccessWhere: () => { throw new Error("Unexpected metadata access lookup"); } },
-    "@/lib/flags": { HTPR_6868_TICKET_PREFIX_FLAG: flagKey, isFeatureEnabled: async (key, id) => { calls.push(["flag", key, id]); return enabled; } },
+    "@/lib/flags": { HTPR_6868_TICKET_PREFIX_FLAG: flagKey, HTPR_7367_SERVER_DESCRIPTION_FIRST_FLAG: descriptionFirstKey, HTPR_7611_COMMENTS_FOLD_FROM_FIRST_PAINT_FLAG: foldCommentsKey, isFeatureEnabled: async (key, id) => { calls.push(["flag", key, id]); return enabled; } },
     "next/navigation": { redirect: url => { throw new Error(`REDIRECT ${url}`); } },
     "@/lib/prisma": {}, "@/lib/contexts/TaskDetail/TaskProvider": {}, "@/lib/contexts/TaskDetail/FollowersProvider": {},
     "@/utils/helperFunctions/TaskDetail": {}, "@/utils/controllers/users/fetch_preferences": { fetchUserPreferenceController: async () => ({}) },
@@ -556,6 +579,7 @@ test("production: prefixed ticket URLs pass the proxy before page flag and acces
     "./utils/helperFunctions/helperFunctions": {},
     "@/lib/auth/safeReturnTo": {},
     "@/lib/auth/sessionEdge": { verifySessionEdge: async () => ({ id: 985 }) },
+    "@/lib/auth/sessionRevocation": { isSessionTokenRevoked: async () => false },
     "@/lib/auth/cookieIdentity": {},
     "@/lib/routing/detailWithoutTicket": load("src/lib/routing/detailWithoutTicket.ts"),
     "@/lib/tutorial/keyboardShortcutTutorial": { isKeyboardShortcutTutorialPath: () => false, hasKeyboardShortcutTutorialQuery: () => false },
@@ -591,7 +615,7 @@ test("production: prefixed ticket URLs pass the proxy before page flag and acces
   for (const enabled of [false, true]) {
     const numeric = detailPage({ enabled, projectId: 7049, userId: 985 });
     assert.equal((await numeric.page("33")).type, "Unauthorized");
-    assert.deepEqual(numeric.calls, []);
+    assert.deepEqual(numeric.calls, [["flag", descriptionFirstKey, 985], ["flag", foldCommentsKey, 985]], "numeric ids never read the prefix flag; only the description-first and comment-fold reads run beside the task fetch");
   }
 });
 
@@ -609,7 +633,7 @@ test("review: detail URLs check the server flag before resolving and redirecting
   for (const enabled of [false, true]) {
     const numeric = detailPage({ enabled });
     assert.equal((await numeric.page("123")).type, "Unauthorized");
-    assert.deepEqual(numeric.calls, []);
+    assert.deepEqual(numeric.calls, [["flag", descriptionFirstKey, 6], ["flag", foldCommentsKey, 6]], "numeric ids never read the prefix flag; only the description-first and comment-fold reads run beside the task fetch");
   }
 });
 
@@ -716,12 +740,12 @@ test("review: prefix-only patch submits no title and preserves a concurrent rena
   assert.deepEqual(posts[0], ["/api/projects/update", { projectId: 15, uniqueIdentifier: "NEW" }]);
   const f = writes();
   f.board.title = "Renamed by another user";
-  const route = load("src/pages/api/projects/update.ts", {
+  const route = loadPagesRoute("src/lib/api/project-writes/update.ts", {
     "@/utils/controllers/projects/update": f.controller,
     "@/lib/auth/getSessionUser": { getSessionUser: async () => ({ userId: 6 }) },
     "@/lib/auth/sessionUserRecord": { loadSessionUserRecord: async id => ({ id }) },
-  }).default;
-  const res = { status(code) { this.code = code; return this; }, json(body) { this.body = body; } };
+  });
+  const res = { status(code) { this.code = code; return this; }, json(body) { this.body = body; }, setHeader() {} };
   await route({ method: "POST", headers: {}, body: posts[0][1] }, res);
   assert.equal(res.code, 200);
   assert.equal(f.board.title, "Renamed by another user");
@@ -792,7 +816,7 @@ test("round 2: shared detail loader gates ticket identifiers but preserves numer
       f.tasks[0].pullRequests = [];
       const task = await f.detail.fetchTaskDetail("project-15", identifier, 6);
       assert.equal(task?.id ?? null, enabled ? 101 : null);
-      assert.deepEqual(f.flagCalls, [[flagKey, 6], ...(enabled ? [[subtaskFlagKey, 6]] : [])]);
+      assert.deepEqual(f.flagCalls, [[flagKey, 6]]);
       if (!enabled) {
         assert.deepEqual(f.taskQueries, []);
         assert.equal(f.aliasQueries(), 0);
@@ -802,7 +826,7 @@ test("round 2: shared detail loader gates ticket identifiers but preserves numer
       const f = lookups({ enabled });
       f.tasks[0].pullRequests = [];
       assert.equal((await f.detail.fetchTaskDetail("project-15", identifier, 6)).id, 101);
-      assert.deepEqual(f.flagCalls, [[subtaskFlagKey, 6]]);
+      assert.deepEqual(f.flagCalls, []);
       assert.equal(f.taskQueries.length, 1);
       assert.equal(f.aliasQueries(), 0);
     }

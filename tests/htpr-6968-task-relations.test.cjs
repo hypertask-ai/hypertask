@@ -1,8 +1,23 @@
 const test = require("node:test");
 const assert = require("node:assert/strict");
-const ts = require("typescript");
 const { load } = require("./task-route-loader.cjs");
-const { slice3Routes, slice3LegacySources } = require("./htpr-6923-verify.cjs");
+// Responses and effects are pinned by digest from the pre-retirement handlers (HTPR-6992).
+const { pins } = require("./helpers/htpr-6992-pins.cjs");
+const pin = pins("a1-relations");
+const slice3Routes = {
+  recoverTask: { module: "recover", method: "POST" },
+  deleteTask: { module: "delete", method: "DELETE" },
+  setDueDate: { module: "due-date", method: "POST" },
+  setStartDate: { module: "start-date", method: "POST" },
+  setRecurrence: { module: "recurrence", method: "POST" },
+  addParent: { module: "add-parent", method: "POST" },
+  removeParent: { module: "remove-parent", method: "POST" },
+  addRelations: { module: "add-relations", method: "POST" },
+  removeRelation: { module: "remove-relation", method: "POST" },
+  "waiting-on": { module: "waiting-on", method: "POST" },
+  reactToDescription: { module: "description-reaction", method: "POST" },
+  linkPullRequest: { module: "link-pull-request", method: "POST" },
+};
 const { isRecurrenceRule, RECURRENCE_RULES } = load("src/lib/recurrence.ts", {});
 const { isTaskRelationType, taskRelationTypes } = load("src/utils/controllers/tasks/addRelatedTasks.ts", {
   "@/lib/prisma": { default: {} },
@@ -30,10 +45,10 @@ const defaults = {
   reactToDescription: { taskId: 42, descriptionId: "desc", unified: "smile", emoji: "😃", names: ["smile"] },
   linkPullRequest: { taskId: 42, url: "https://github.com/example/app/pull/1" },
 };
-function fixture(name, scenario, mode) {
-  const effects = [], flags = [], loads = [];
+function fixture(name, scenario) {
+  const effects = [], loads = [];
   let authCalls = 0;
-  const session = scenario.noAuth ? null : { userId: 985, source: "better-auth" };
+  const session = scenario.noAuth ? null : { userId: 985, source: "better-auth", ...(name === "setDueDate" && scenario.body?.agentId === "owned" ? { agentId: "owned" } : {}) };
   const failure = kind => {
     if (kind === "lease") return new LeaseError("Task lease conflict");
     if (kind === "delete") return new DeleteError("Hard deletion in progress");
@@ -54,6 +69,7 @@ function fixture(name, scenario, mode) {
   const recovery = { TaskHardDeleteInProgressError: DeleteError, updateTaskAndSubtasks: record("restore", task, scenario.writeThrows) };
   const dueQueue = { cancelDueDateJob: record("cancel-due", undefined, scenario.queueThrows && "Queue unavailable"), scheduleDueDateJob: record("schedule-due", undefined, scenario.scheduleThrows && "Queue unavailable") };
   const mocks = {
+    "@/lib/auth/agentScope": require("./helpers/agent-board-scope.cjs").enforcedScope,
     "date-fns": require("date-fns"),
     "@/lib/auth/getSessionUser": { getSessionUser: async () => { authCalls++; if (scenario.authThrows) throw failure("Auth unavailable"); return session; } },
     "@/lib/auth/sessionUserRecord": { loadSessionUserRecord: record("actor", actor, scenario.actorThrows && "Actor unavailable") },
@@ -62,8 +78,6 @@ function fixture(name, scenario, mode) {
       if (scenario.signedThrows) throw failure("Signed session unavailable");
       return scenario.noAuth || scenario.noSigned ? null : { id: scenario.signedUser ?? 985 };
     } },
-    "@/lib/flags/keys": { HTPR_6923_APP_ROUTER_WRITES_FLAG: "htpr-6923-app-router-writes" },
-    "@/lib/flags": { isFeatureEnabled: async (key, userId) => { flags.push([key, userId]); if (mode === "outage") throw failure("Flag unavailable"); return mode === true; } },
     "@/lib/prisma": { default: {
       task: { findFirst: record("task-access", scenario.denied ? null : task, scenario.lookupThrows && "Lookup unavailable"), findUnique: record("task-board", task), update: record("waiting-write", ({ data }) => ({ id: 42, ...data }), scenario.writeThrows) },
       agent: { findFirst: record("owned-agent", scenario.unownedAgent ? null : { id: "owned" }), findUnique: record("agent", { id: "owned", userId: 985 }) },
@@ -99,14 +113,7 @@ function fixture(name, scenario, mode) {
   const { module: operation, method } = slice3Routes[name];
   const web = load(`src/lib/api/task-writes/${operation}.ts`, mocks)[method];
   mocks[`@/lib/api/task-writes/${operation}`] = { get [method]() { loads.push(operation); return web; } };
-  const original = slice3LegacySources()[name];
-  const compiled = ts.transpileModule(original, { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022, esModuleInterop: true } }).outputText;
-  const mod = { exports: {} };
-  new Function("require", "module", "exports", compiled)(specifier => {
-    assert.ok(Object.hasOwn(mocks, specifier), `Unexpected original dependency: ${specifier}`);
-    const mock = mocks[specifier]; return Object.hasOwn(mock, "default") ? { __esModule: true, ...mock } : mock;
-  }, mod, mod.exports);
-  return { legacy: mod.exports.default, current: load(`src/pages/api/tasks/${name}.ts`, mocks).default, web, effects, flags, loads, session, authCalls: () => authCalls };
+  return { current: load(`src/pages/api/tasks/${name}.ts`, mocks).default, web, effects, loads, session, authCalls: () => authCalls };
 }
 async function invoke(fx, name, scenario, target, method = slice3Routes[name].method) {
   const body = Object.hasOwn(scenario, "body") ? scenario.body : defaults[name];
@@ -199,25 +206,23 @@ const scenarios = {
     ["lease conflict", { writeThrows: "lease", expected: error(409, "Task lease conflict") }], ["realtime failure remains success", { realtimeThrows: true }], ["service failure", { writeThrows: "Service unavailable", expected: error(500, "Internal server error") }], ["signed verification throws", { signedThrows: true }],
   ],
 };
-for (const [label, descriptionContent, expectedText, legacyText = expectedText] of [
+for (const [label, descriptionContent, expectedText] of [
   ["normal HTML", '  <p>Hello <strong>world</strong>&nbsp;&amp;</p><br><p>Next</p>\n', '  Hello world&nbsp;&amp;Next\n'],
-  ["nested script tag", '<scr<script>ipt>alert(1)</script>', 'iptalert(1)', 'ipt>alert(1)'],
-  ["multiply nested script tag", '<scr<scr<script>ipt>ipt>alert(1)</script>', 'iptiptalert(1)', 'ipt>ipt>alert(1)'],
-  ["unfinished script tag", '<script', 'script', '<script'],
-  ["stray angle brackets", 'Note <> > <', 'Note   ', 'Note <> > <'],
+  ["nested script tag", '<scr<script>ipt>alert(1)</script>', 'iptalert(1)'],
+  ["multiply nested script tag", '<scr<scr<script>ipt>ipt>alert(1)</script>', 'iptiptalert(1)'],
+  ["unfinished script tag", '<script', 'script'],
+  ["stray angle brackets", 'Note <> > <', 'Note   '],
   ["empty text", '', ''],
 ]) test(`reactToDescription: push text strips completely; ${label}`, async () => {
   const scenario = { descriptionContent };
-  if (label === "normal HTML" || label === "empty text") assert.equal(expectedText, legacyText);
-  else assert.match(legacyText, /[<>]/, "legacy regex is the vulnerable positive control");
-  for (const mode of [false, "outage", true, "web"]) {
-    const fx = fixture("reactToDescription", scenario, mode);
-    assert.deepEqual(await invoke(fx, "reactToDescription", scenario, mode === "web" ? "web" : "current"), { status: 200, body: [{ id: 3 }] });
+  for (const target of ["current", "web"]) {
+    const fx = fixture("reactToDescription", scenario);
+    assert.deepEqual(await invoke(fx, "reactToDescription", scenario, target), { status: 200, body: [{ id: 3 }] });
     const pushes = fx.effects.filter(([effect]) => effect === "push");
     assert.equal(pushes.length, 1);
     const text = pushes[0][1].notificationBody;
-    assert.equal(text, mode === true || mode === "web" ? expectedText : legacyText);
-    if (mode === true || mode === "web") assert.doesNotMatch(text, /[<>]/);
+    assert.equal(text, expectedText);
+    assert.doesNotMatch(text, /[<>]/);
   }
 });
 scenarios.setRecurrence.push(...RECURRENCE_RULES.map(recurrence => [recurrence, { body: { taskId: 42, recurrence } }]));
@@ -226,33 +231,37 @@ for (const name of Object.keys(slice3Routes)) {
   const cases = [...scenarios[name], ["null body", { body: null }], ["undefined body", { body: undefined }], ["unauthenticated", { noAuth: true }], ["unauthenticated invalid body", { noAuth: true, body: {} }]];
   if (name !== "linkPullRequest") cases.push(["auth lookup throws", { authThrows: true }]);
   if (["setDueDate", "setStartDate", "setRecurrence", "addParent", "removeParent", "waiting-on"].includes(name)) cases.push(["actor lookup throws", { actorThrows: true }]);
-  for (const [label, scenario] of cases) test(`${name}: ${label}; original / Off / outage / On / Web`, async () => {
+  for (const [label, scenario] of cases) test(`${name}: ${label}; shared handler matches pinned contract (Pages adapter and Web)`, async () => {
     const log = { log: console.log, warn: console.warn, error: console.error };
     global.Date = FixedDate;
     console.log = console.warn = console.error = () => {};
     try {
-      const original = fixture(name, scenario, false);
-      const expected = await invoke(original, name, scenario, "legacy");
-      if (scenario.expected) assert.deepEqual(expected, scenario.expected, "independent expected status/JSON");
-      for (const mode of [false, "outage", true, "web"]) {
-        const fx = fixture(name, scenario, mode);
-        assert.deepEqual(await invoke(fx, name, scenario, mode === "web" ? "web" : "current"), expected, `${mode}: status/JSON`);
-        assert.deepEqual(fx.effects, original.effects, `${mode}: queries/mutations/activity/queue/realtime/notifications in order`);
-        if (mode !== "web") {
-          assert.deepEqual(fx.flags, scenario.noAuth || scenario.authThrows ? [] : [["htpr-6923-app-router-writes", 985]], "signed preflight identity owns flag decision");
-          assert.equal(fx.loads.length, mode === true && !scenario.noAuth && !scenario.authThrows ? 1 : 0, "Off/outage never load operation; On never retries");
-          if (mode === true && !scenario.noAuth && !scenario.authThrows && name !== "linkPullRequest") assert.equal(fx.authCalls(), 1, "reuse authenticated dispatch session without legacy retry");
+      let expected, expectedEffects;
+      for (const mode of ["current", "web"]) {
+        const fx = fixture(name, scenario);
+        const response = clean(await invoke(fx, name, scenario, mode));
+        if (mode === "current") {
+          expected = response; expectedEffects = fx.effects;
+          if (scenario.expected) assert.deepEqual(expected, clean(scenario.expected), "independent expected status/JSON");
+          pin(name, `${name}: ${label}`, { response: response === undefined ? null : response, effects: fx.effects });
+        } else {
+          assert.deepEqual(response, expected, "Web: status/JSON");
+          assert.deepEqual(fx.effects, expectedEffects, "Web: queries/mutations/activity/queue/realtime/notifications in order");
+        }
+        if (mode === "current") {
+          assert.equal(fx.loads.length, 1, "the shared operation loads once and is never retried");
+          if (!scenario.noAuth && !scenario.authThrows && name !== "linkPullRequest") assert.equal(fx.authCalls(), 1, "reuse authenticated dispatch session");
         }
       }
     } finally { global.Date = RealDate; Object.assign(console, log); }
   });
-  test(`${name}: other methods bypass authentication and flag lookup`, async () => {
+  test(`${name}: other methods answer 405 without authentication`, async () => {
     for (const method of ["GET", "PUT", slice3Routes[name].method === "DELETE" ? "POST" : "DELETE"]) {
-      const old = fixture(name, {}, false), current = fixture(name, {}, true);
-      assert.deepEqual(await invoke(current, name, {}, "current", method), await invoke(old, name, {}, "legacy", method));
+      const current = fixture(name, {});
+      assert.deepEqual(await invoke(current, name, {}, "current", method), { status: 405, body: { message: "Method not allowed" } });
       assert.equal(current.authCalls(), 0);
-      assert.deepEqual(current.flags, []);
       assert.deepEqual(current.loads, []);
+      assert.deepEqual(current.effects, []);
     }
   });
 }

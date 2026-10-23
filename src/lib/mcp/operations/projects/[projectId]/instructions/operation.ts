@@ -1,26 +1,20 @@
+import { requireAgentWriteRole } from "@/lib/mcp/agents/readRoleGuard";
 import { haiku55ModelEnabled } from "@/app/api/ai/_lib/planGate";
 import { wrapMcpRoute, validateMcpRouteAuth as validateMcpAuth, checkMcpRouteRateLimit as checkMcpRateLimit } from '@/lib/mcp/routeWrapper'
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 
 import { createUnauthorizedResponse } from '@/lib/mcp/auth'
-import { assertProjectAccess } from "@/app/api/ai/_lib/customInstructions";
+import { assertProjectAccess, withScopedProjectWrite } from "@/app/api/ai/_lib/customInstructions";
 import { getAiModelOptionById } from "@/lib/aiModelOptions";
 import prisma from "@/lib/prisma";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-// MCP mirror of the web-only custom-instructions API
-// (src/pages/api/ai/project/customInstruction.ts) so the hypertask CLI, `ht`,
-// and MCP tools can read and set a board's AI custom instructions with the MCP
-// bearer token. Params are snake_case to match the other /api/mcp/* routes.
 
 const updateSchema = z.object({
   custom_instruction: z.string(),
-  // An AI model option id (e.g. from /lib/aiModelOptions). When supplied we
-  // resolve it the same way the web route does so model_selected/source_selected
-  // stay valid for the settings dropdown; omitted = leave the existing values.
   model_selected: z.string().optional(),
 });
 
@@ -45,7 +39,7 @@ export async function GET(
   try {
     const { projectId: rawProjectId } = await props.params;
     const projectId = parseProjectId(rawProjectId);
-    await assertProjectAccess(ctx.user.id, projectId);
+    await assertProjectAccess(ctx.user.id, projectId, ctx.agentId, ctx.teamScope);
 
     const instruction = await prisma.aI_Custom_Instructions.findFirst({
       where: { projectId },
@@ -76,19 +70,17 @@ export async function PUT(
   if (rateLimited) return rateLimited;
   const ctx = await validateMcpAuth(request);
   if (!ctx) return createUnauthorizedResponse();
+  const roleRefusal = await requireAgentWriteRole(ctx);
+  if (roleRefusal) return roleRefusal;
 
   try {
     const { projectId: rawProjectId } = await props.params;
     const projectId = parseProjectId(rawProjectId);
-    await assertProjectAccess(ctx.user.id, projectId);
+    await assertProjectAccess(ctx.user.id, projectId, ctx.agentId, ctx.teamScope);
 
     const input = updateSchema.parse(await request.json());
-    // Reject an unknown model id instead of falling back to the default. The
-    // fallback reported success while quietly writing a different model than
-    // the caller named, which an agent has no way to notice.
-    let modelOption;
+    const modelOption = getAiModelOptionById(input.model_selected);
     if (input.model_selected !== undefined) {
-      modelOption = getAiModelOptionById(input.model_selected);
       if (!modelOption) {
         return NextResponse.json(
           {
@@ -101,38 +93,35 @@ export async function PUT(
       }
     }
 
-    // ponytail: findFirst-then-create/update mirrors the shipped web route
-    // (pages/api/ai/project/customInstruction.ts); projectId has no unique
-    // constraint, so two racing first-time PUTs could create two rows. Benign
-    // for this low-concurrency admin write. Upgrade path if it ever matters:
-    // add @@unique([projectId]) + prisma.upsert.
-    const existing = await prisma.aI_Custom_Instructions.findFirst({
-      where: { projectId },
-      select: { id: true },
+    const instruction = await withScopedProjectWrite({ userId: ctx.user.id, agentId: ctx.agentId, teamScope: ctx.teamScope }, projectId, async (db) => {
+      const existing = await db.aI_Custom_Instructions.findFirst({
+        where: { projectId },
+        select: { id: true },
+      });
+
+      const modelData = modelOption
+        ? { model_selected: modelOption.id, source_selected: modelOption.source }
+        : {};
+
+      return existing
+        ? await db.aI_Custom_Instructions.update({
+            where: { id: existing.id, ...(ctx.teamScope != null ? { project: (await import("@/utils/controllers/projects/getAllIncludes")).getProjectWhere(ctx.user.id, ctx.agentId, ctx.teamScope) } : {}) },
+            data: {
+              customInstruction: input.custom_instruction,
+              ...modelData,
+              lastUpdatedAt: new Date(),
+            },
+            include: { attachments: true },
+          })
+        : await db.aI_Custom_Instructions.create({
+            data: {
+              projectId,
+              customInstruction: input.custom_instruction,
+              ...modelData,
+            },
+            include: { attachments: true },
+          });
     });
-
-    const modelData = modelOption
-      ? { model_selected: modelOption.id, source_selected: modelOption.source }
-      : {};
-
-    const instruction = existing
-      ? await prisma.aI_Custom_Instructions.update({
-          where: { id: existing.id },
-          data: {
-            customInstruction: input.custom_instruction,
-            ...modelData,
-            lastUpdatedAt: new Date(),
-          },
-          include: { attachments: true },
-        })
-      : await prisma.aI_Custom_Instructions.create({
-          data: {
-            projectId,
-            customInstruction: input.custom_instruction,
-            ...modelData,
-          },
-          include: { attachments: true },
-        });
 
     return NextResponse.json({ success: true, instruction });
   } catch (error) {

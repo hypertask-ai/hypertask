@@ -1,0 +1,1212 @@
+{
+  "src/pages/api/comments/updateSeen.ts": {
+    "POST": {
+      "status": 401,
+      "body": {
+        "message": "Unauthorized"
+      }
+    },
+    "wrong:PATCH": {
+      "status": 405,
+      "body": {
+        "message": "Method not allowed"
+      }
+    }
+  },
+  "src/pages/api/notifications/(un)archiveBulk.ts": {
+    "POST": {
+      "status": 401,
+      "body": {
+        "message": "Unauthorized"
+      }
+    },
+    "wrong:PATCH": {
+      "status": 405,
+      "body": {
+        "message": "Method not allowed"
+      }
+    }
+  },
+  "src/pages/api/notifications/access.ts": {
+    "GET": {
+      "status": 401,
+      "body": {
+        "message": "Unauthorized"
+      }
+    },
+    "wrong:PATCH": {
+      "status": 405,
+      "body": {
+        "message": "Method not allowed"
+      }
+    }
+  },
+  "src/pages/api/notifications/changePushNotificationStatus.ts": {
+    "POST": {
+      "status": 401,
+      "body": {
+        "message": "Unauthorized"
+      }
+    },
+    "wrong:PATCH": {
+      "status": 405,
+      "body": {
+        "message": "Method not allowed"
+      }
+    }
+  },
+  "src/pages/api/notifications/getAll.ts": {
+    "GET": {
+      "status": 401,
+      "body": {
+        "message": "Unauthorized"
+      }
+    },
+    "wrong:PATCH": {
+      "status": 405,
+      "body": {
+        "message": "Method not allowed"
+      }
+    }
+  },
+  "src/pages/api/notifications/getAllInbox.ts": {
+    "GET": {
+      "status": 401,
+      "body": {
+        "message": "Unauthorized"
+      }
+    },
+    "POST": {
+      "status": 401,
+      "body": {
+        "message": "Unauthorized"
+      }
+    },
+    "PATCH": {
+      "status": 401,
+      "body": {
+        "message": "Unauthorized"
+      }
+    }
+  },
+  "src/pages/api/notifications/getByTask.ts": {
+    "POST": {
+      "status": 401,
+      "body": {
+        "message": "Unauthorized"
+      }
+    },
+    "wrong:PATCH": {
+      "status": 405,
+      "body": {
+        "message": "Method not allowed"
+      }
+    }
+  },
+  "src/pages/api/notifications/getCount.ts": {
+    "GET": {
+      "status": 401,
+      "body": {
+        "message": "Unauthorized"
+      }
+    },
+    "wrong:PATCH": {
+      "status": 405,
+      "body": {
+        "message": "Method not allowed"
+      }
+    }
+  },
+  "src/pages/api/notifications/getPushNotificationStatus.ts": {
+    "GET": {
+      "status": 401,
+      "body": {
+        "message": "Unauthorized"
+      }
+    },
+    "wrong:PATCH": {
+      "status": 405,
+      "body": {
+        "message": "Method not allowed"
+      }
+    }
+  },
+  "src/pages/api/notifications/markAsDone.ts": {
+    "GET": {
+      "status": 401,
+      "body": {
+        "message": "Unauthorized"
+      }
+    },
+    "wrong:PATCH": {
+      "status": 405,
+      "body": {
+        "message": "Method not allowed"
+      }
+    }
+  },
+  "src/pages/api/notifications/markAsUnseen.ts": {
+    "GET": {
+      "status": 401,
+      "body": {
+        "message": "Unauthorized"
+      }
+    },
+    "wrong:PATCH": {
+      "status": 405,
+      "body": {
+        "message": "Method not allowed"
+      }
+    }
+  },
+  "src/pages/api/notifications/matrix.ts": {
+    "GET": {
+      "status": 401,
+      "body": {
+        "message": "Unauthorized"
+      }
+    },
+    "POST": {
+      "status": 401,
+      "body": {
+        "message": "Unauthorized"
+      }
+    },
+    "wrong:PATCH": {
+      "status": 405,
+      "body": {
+        "message": "Method not allowed"
+      }
+    }
+  },
+  "src/pages/api/notifications/moveTaskToInbox.ts": {
+    "POST": {
+      "status": 401,
+      "body": {
+        "message": "Unauthorized"
+      }
+    },
+    "wrong:PATCH": {
+      "status": 405,
+      "body": {
+        "message": "Method not allowed"
+      }
+    }
+  },
+  "src/pages/api/notifications/mute.ts": {
+    "GET": {
+      "status": 401,
+      "body": {
+        "message": "Unauthorized"
+      }
+    },
+    "POST": {
+      "status": 401,
+      "body": {
+        "message": "Unauthorized"
+      }
+    },
+    "wrong:PATCH": {
+      "status": 405,
+      "body": {
+        "message": "Method not allowed"
+      }
+    }
+  },
+  "src/pages/api/notifications/preference.ts": {
+    "POST": {
+      "status": 401,
+      "body": {
+        "message": "Unauthorized"
+      }
+    },
+    "wrong:PATCH": {
+      "status": 405,
+      "body": {
+        "message": "Method not allowed"
+      }
+    }
+  },
+  "src/pages/api/notifications/sendEmailToFollower.ts": {
+    "POST": {
+      "status": 401,
+      "body": {
+        "message": "Unauthorized"
+      }
+    },
+    "wrong:PATCH": {
+      "status": 405,
+      "body": {
+        "message": "Method not allowed"
+      }
+    }
+  },
+  "src/pages/api/notifications/splits.ts": {
+    "GET": {
+      "status": 401,
+      "body": {
+        "message": "Unauthorized"
+      }
+    },
+    "POST": {
+      "status": 401,
+      "body": {
+        "message": "Unauthorized"
+      }
+    },
+    "wrong:PATCH": {
+      "status": 405,
+      "body": {
+        "message": "Method not allowed"
+      }
+    }
+  },
+  "src/pages/api/notifications/unArchiveNotificationById.ts": {
+    "GET": {
+      "status": 401,
+      "body": {
+        "message": "Unauthorized"
+      }
+    },
+    "POST": {
+      "status": 401,
+      "body": {
+        "message": "Unauthorized"
+      }
+    },
+    "PATCH": {
+      "status": 401,
+      "body": {
+        "message": "Unauthorized"
+      }
+    }
+  },
+  "src/pages/api/projects/archive.ts": {
+    "POST": {
+      "status": 401,
+      "body": {
+        "message": "Unauthorized"
+      }
+    },
+    "wrong:PATCH": {
+      "status": 405,
+      "body": {
+        "error": "Method not allowed"
+      }
+    }
+  },
+  "src/pages/api/projects/boardTasks.ts": {
+    "POST": {
+      "status": 401,
+      "body": {
+        "error": "Unauthorized",
+        "code": "SESSION_REQUIRED"
+      }
+    },
+    "wrong:PATCH": {
+      "status": 405,
+      "body": {
+        "message": "Method not allowed"
+      }
+    }
+  },
+  "src/pages/api/projects/create.ts": {
+    "POST": {
+      "status": 401,
+      "body": {
+        "message": "Unauthorized"
+      }
+    },
+    "wrong:PATCH": {
+      "status": 405,
+      "body": {
+        "message": "Method not allowed"
+      }
+    }
+  },
+  "src/pages/api/projects/delete.ts": {
+    "POST": {
+      "status": 401,
+      "body": {
+        "message": "Unauthorized"
+      }
+    },
+    "wrong:PATCH": {
+      "status": 405,
+      "body": {
+        "error": "Method not allowed"
+      }
+    }
+  },
+  "src/pages/api/projects/getAll.ts": {
+    "POST": {
+      "status": 401,
+      "body": {
+        "error": "Unauthorized",
+        "code": "SESSION_REQUIRED"
+      }
+    },
+    "wrong:PATCH": {
+      "status": 405,
+      "body": {
+        "message": "Method not allowed"
+      }
+    }
+  },
+  "src/pages/api/projects/getAllMinimal.ts": {
+    "GET": {
+      "status": 401,
+      "body": {
+        "error": "Unauthorized",
+        "code": "SESSION_REQUIRED"
+      }
+    },
+    "wrong:PATCH": {
+      "status": 405,
+      "body": {
+        "message": "Method not allowed"
+      }
+    }
+  },
+  "src/pages/api/projects/getArchived.ts": {
+    "GET": {
+      "status": 401,
+      "body": {
+        "message": "Unauthorized"
+      }
+    },
+    "wrong:PATCH": {
+      "status": 405,
+      "body": {
+        "message": "Method not allowed"
+      }
+    }
+  },
+  "src/pages/api/projects/getFavorites.ts": {
+    "GET": {
+      "status": 401,
+      "body": {
+        "message": "Unauthorized"
+      }
+    },
+    "wrong:PATCH": {
+      "status": 405,
+      "body": {
+        "message": "Method not allowed"
+      }
+    }
+  },
+  "src/pages/api/projects/getFirst.ts": {
+    "GET": {
+      "status": 401,
+      "body": {
+        "error": "Unauthorized",
+        "code": "SESSION_REQUIRED"
+      }
+    },
+    "wrong:PATCH": {
+      "status": 405,
+      "body": {
+        "message": "Method not allowed"
+      }
+    }
+  },
+  "src/pages/api/projects/lastActivity.ts": {
+    "GET": {
+      "status": 401,
+      "body": {
+        "message": "Unauthorized"
+      }
+    },
+    "wrong:PATCH": {
+      "status": 405,
+      "body": {
+        "message": "Method not allowed"
+      }
+    }
+  },
+  "src/pages/api/projects/leave.ts": {
+    "POST": {
+      "status": 401,
+      "body": {
+        "message": "Unauthorized"
+      }
+    },
+    "wrong:PATCH": {
+      "status": 405,
+      "body": {
+        "error": "Method not allowed"
+      }
+    }
+  },
+  "src/pages/api/projects/removeMember.ts": {
+    "POST": {
+      "status": 401,
+      "body": {
+        "error": "Unauthorized",
+        "code": "SESSION_REQUIRED"
+      }
+    },
+    "wrong:PATCH": {
+      "status": 405,
+      "body": {
+        "message": "Method not allowed"
+      }
+    }
+  },
+  "src/pages/api/projects/setMemberRole.ts": {
+    "POST": {
+      "status": 401,
+      "body": {
+        "message": "Unauthorized"
+      }
+    },
+    "wrong:PATCH": {
+      "status": 405,
+      "body": {
+        "message": "Method not allowed"
+      }
+    }
+  },
+  "src/pages/api/projects/update.ts": {
+    "POST": {
+      "status": 401,
+      "body": {
+        "message": "Unauthorized"
+      }
+    },
+    "wrong:PATCH": {
+      "status": 405,
+      "body": {
+        "message": "Method not allowed"
+      }
+    }
+  },
+  "src/pages/api/projects/views/create-view.ts": {
+    "POST": {
+      "status": 401,
+      "body": {
+        "message": "Unauthorized"
+      }
+    },
+    "wrong:PATCH": {
+      "status": 405,
+      "body": {
+        "message": "Method not allowed"
+      }
+    }
+  },
+  "src/pages/api/projects/views/delete-rename-view.ts": {
+    "POST": {
+      "status": 401,
+      "body": {
+        "message": "Unauthorized"
+      }
+    },
+    "DELETE": {
+      "status": 401,
+      "body": {
+        "message": "Unauthorized"
+      }
+    },
+    "wrong:PATCH": {
+      "status": 405,
+      "body": {
+        "message": "Method not allowed"
+      }
+    }
+  },
+  "src/pages/api/projects/views/reset-order.ts": {
+    "POST": {
+      "status": 401,
+      "body": {
+        "message": "Unauthorized"
+      }
+    },
+    "wrong:PATCH": {
+      "status": 405,
+      "body": {
+        "message": "Method not allowed"
+      }
+    }
+  },
+  "src/pages/api/projects/views/reset-to-default.ts": {
+    "POST": {
+      "status": 401,
+      "body": {
+        "message": "Authentication required"
+      }
+    },
+    "wrong:PATCH": {
+      "status": 405,
+      "body": {
+        "message": "Method not allowed"
+      }
+    }
+  },
+  "src/pages/api/projects/views/set-default-order.ts": {
+    "POST": {
+      "status": 401,
+      "body": {
+        "message": "Unauthorized"
+      }
+    },
+    "wrong:PATCH": {
+      "status": 405,
+      "body": {
+        "message": "Method not allowed"
+      }
+    }
+  },
+  "src/pages/api/projects/views/smart-split.ts": {
+    "POST": {
+      "status": 401,
+      "body": {
+        "message": "Sign in to manage smart splits",
+        "code": "SESSION_REQUIRED"
+      }
+    },
+    "PATCH": {
+      "status": 401,
+      "body": {
+        "message": "Sign in to manage smart splits",
+        "code": "SESSION_REQUIRED"
+      }
+    },
+    "DELETE": {
+      "status": 401,
+      "body": {
+        "message": "Sign in to manage smart splits",
+        "code": "SESSION_REQUIRED"
+      }
+    },
+    "wrong:PUT": {
+      "status": 405,
+      "body": {
+        "message": "Method not allowed"
+      }
+    }
+  },
+  "src/pages/api/projects/views/switch-view.ts": {
+    "POST": {
+      "status": 401,
+      "body": {
+        "message": "Unauthorized"
+      }
+    },
+    "wrong:PATCH": {
+      "status": 405,
+      "body": {
+        "message": "Method not allowed"
+      }
+    }
+  },
+  "src/pages/api/projects/views/unsaved-view.ts": {
+    "POST": {
+      "status": 401,
+      "body": {
+        "message": "Unauthorized"
+      }
+    },
+    "wrong:PATCH": {
+      "status": 405,
+      "body": {
+        "message": "Method not allowed"
+      }
+    }
+  },
+  "src/pages/api/projects/views/update-order.ts": {
+    "POST": {
+      "status": 401,
+      "body": {
+        "message": "Unauthorized"
+      }
+    },
+    "wrong:PATCH": {
+      "status": 405,
+      "body": {
+        "message": "Method not allowed"
+      }
+    }
+  },
+  "src/pages/api/projects/views/update-view.ts": {
+    "POST": {
+      "status": 401,
+      "body": {
+        "message": "Unauthorized"
+      }
+    },
+    "wrong:PATCH": {
+      "status": 405,
+      "body": {
+        "message": "Method not allowed"
+      }
+    }
+  },
+  "src/pages/api/section/create.ts": {
+    "POST": {
+      "status": 401,
+      "body": {
+        "message": "Unauthorized"
+      }
+    },
+    "wrong:PATCH": {
+      "status": 405,
+      "body": {
+        "message": "Method Not Allowed"
+      }
+    }
+  },
+  "src/pages/api/section/getAll.ts": {
+    "POST": {
+      "status": 401,
+      "body": {
+        "message": "Unauthorized"
+      }
+    },
+    "wrong:PATCH": {
+      "status": 405,
+      "body": {
+        "message": "Method not allowed"
+      }
+    }
+  },
+  "src/pages/api/section/getByTaskId.ts": {
+    "POST": {
+      "status": 401,
+      "body": {
+        "message": "Unauthorized"
+      }
+    },
+    "wrong:PATCH": {
+      "status": 405,
+      "body": {
+        "message": "Method not allowed"
+      }
+    }
+  },
+  "src/pages/api/section/getProjectSections.ts": {
+    "POST": {
+      "status": 401,
+      "body": {
+        "message": "Unauthorized"
+      }
+    },
+    "wrong:PATCH": {
+      "status": 405,
+      "body": {
+        "message": "Method not allowed"
+      }
+    }
+  },
+  "src/pages/api/section/rename.ts": {
+    "POST": {
+      "status": 401,
+      "body": {
+        "message": "Unauthorized"
+      }
+    },
+    "wrong:PATCH": {
+      "status": 405,
+      "body": {
+        "message": "Method not allowed"
+      }
+    }
+  },
+  "src/pages/api/section/resetRanks.ts": {
+    "POST": {
+      "status": 401,
+      "body": {
+        "message": "Unauthorized"
+      }
+    },
+    "wrong:PATCH": {
+      "status": 405,
+      "body": {
+        "message": "Method not allowed"
+      }
+    }
+  },
+  "src/pages/api/section/update.ts": {
+    "POST": {
+      "status": 401,
+      "body": {
+        "message": "Unauthorized"
+      }
+    },
+    "wrong:PATCH": {
+      "status": 405,
+      "body": {
+        "message": "Method not allowed"
+      }
+    }
+  },
+  "src/pages/api/tasks/(un)archive.ts": {
+    "POST": {
+      "status": 401,
+      "body": {
+        "message": "Unauthorized"
+      }
+    },
+    "wrong:PATCH": {
+      "status": 405,
+      "body": {
+        "message": "Method not allowed"
+      }
+    }
+  },
+  "src/pages/api/tasks/addParent.ts": {
+    "POST": {
+      "status": 401,
+      "body": {
+        "message": "Unauthorized"
+      }
+    },
+    "wrong:PATCH": {
+      "status": 405,
+      "body": {
+        "message": "Method not allowed"
+      }
+    }
+  },
+  "src/pages/api/tasks/addRelations.ts": {
+    "POST": {
+      "status": 401,
+      "body": {
+        "message": "Unauthorized"
+      }
+    },
+    "wrong:PATCH": {
+      "status": 405,
+      "body": {
+        "message": "Method not allowed"
+      }
+    }
+  },
+  "src/pages/api/tasks/create.ts": {
+    "POST": {
+      "status": 401,
+      "body": {
+        "message": "Unauthorized"
+      }
+    },
+    "wrong:PATCH": {
+      "status": 405,
+      "body": {
+        "message": "Method not allowed"
+      }
+    }
+  },
+  "src/pages/api/tasks/createGlobally.ts": {
+    "POST": {
+      "status": 401,
+      "body": {
+        "message": "Unauthorized"
+      }
+    },
+    "wrong:PATCH": {
+      "status": 405,
+      "body": {
+        "message": "Method not allowed"
+      }
+    }
+  },
+  "src/pages/api/tasks/deleteTask.ts": {
+    "DELETE": {
+      "status": 400,
+      "body": {
+        "message": "Missing required information"
+      }
+    },
+    "wrong:PATCH": {
+      "status": 405,
+      "body": {
+        "message": "Method not allowed"
+      }
+    }
+  },
+  "src/pages/api/tasks/detailMeta.ts": {
+    "GET": {
+      "status": 401,
+      "body": {
+        "message": "Unauthorized"
+      }
+    },
+    "wrong:PATCH": {
+      "status": 405,
+      "body": {
+        "message": "Method not allowed"
+      }
+    }
+  },
+  "src/pages/api/tasks/downloadAttachment.ts": {
+    "GET": {
+      "status": 401,
+      "body": {
+        "message": "Unauthorized"
+      }
+    },
+    "wrong:PATCH": {
+      "status": 405,
+      "body": {
+        "message": "Method not allowed"
+      }
+    }
+  },
+  "src/pages/api/tasks/getAll.ts": {
+    "POST": {
+      "status": 401,
+      "body": {
+        "message": "Unauthorized"
+      }
+    },
+    "wrong:PATCH": {
+      "status": 405,
+      "body": {
+        "message": "Method not allowed"
+      }
+    }
+  },
+  "src/pages/api/tasks/getArchivedTasks.ts": {
+    "GET": {
+      "status": 401,
+      "body": {
+        "message": "Unauthorized"
+      }
+    },
+    "wrong:PATCH": {
+      "status": 405,
+      "body": {
+        "message": "Method not allowed"
+      }
+    }
+  },
+  "src/pages/api/tasks/getArchivedTasksByProject.ts": {
+    "GET": {
+      "status": 401,
+      "body": {
+        "message": "Unauthorized"
+      }
+    },
+    "wrong:PATCH": {
+      "status": 405,
+      "body": {
+        "message": "Method not allowed"
+      }
+    }
+  },
+  "src/pages/api/tasks/getTask.ts": {
+    "GET": {
+      "status": 401,
+      "body": {
+        "message": "Unauthorized"
+      }
+    },
+    "wrong:PATCH": {
+      "status": 405,
+      "body": {
+        "message": "Method not allowed."
+      }
+    }
+  },
+  "src/pages/api/tasks/getTaskMinimal.ts": {
+    "GET": {
+      "status": 401,
+      "body": {
+        "message": "Unauthorized"
+      }
+    },
+    "POST": {
+      "status": 401,
+      "body": {
+        "message": "Unauthorized"
+      }
+    },
+    "PATCH": {
+      "status": 401,
+      "body": {
+        "message": "Unauthorized"
+      }
+    }
+  },
+  "src/pages/api/tasks/getUnscheduled.ts": {
+    "GET": {
+      "status": 401,
+      "body": {
+        "message": "Unauthorized"
+      }
+    },
+    "wrong:PATCH": {
+      "status": 405,
+      "body": {
+        "message": "Method not allowed"
+      }
+    }
+  },
+  "src/pages/api/tasks/linkPullRequest.ts": {
+    "POST": {
+      "status": 401,
+      "body": {
+        "message": "Unauthorized"
+      }
+    },
+    "wrong:PATCH": {
+      "status": 405,
+      "body": {
+        "message": "Method not allowed"
+      }
+    }
+  },
+  "src/pages/api/tasks/markRead.ts": {
+    "POST": {
+      "status": 401,
+      "body": {
+        "message": "Unauthorized"
+      }
+    },
+    "wrong:PATCH": {
+      "status": 405,
+      "body": {
+        "message": "Method not allowed"
+      }
+    }
+  },
+  "src/pages/api/tasks/move-task-to-different-board.ts": {
+    "POST": {
+      "status": 401,
+      "body": {
+        "message": "Unauthorized"
+      }
+    },
+    "wrong:PATCH": {
+      "status": 405,
+      "body": {
+        "message": "Method not allowed"
+      }
+    }
+  },
+  "src/pages/api/tasks/moveTask.ts": {
+    "PUT": {
+      "status": 401,
+      "body": {
+        "message": "Unauthorized"
+      }
+    },
+    "wrong:PATCH": {
+      "status": 405,
+      "body": {
+        "message": "Method not allowed"
+      }
+    }
+  },
+  "src/pages/api/tasks/reactToDescription.ts": {
+    "POST": {
+      "status": 401,
+      "body": {
+        "message": "Unauthorized"
+      }
+    },
+    "wrong:PATCH": {
+      "status": 405,
+      "body": {
+        "message": "Method not allowed"
+      }
+    }
+  },
+  "src/pages/api/tasks/recoverTask.ts": {
+    "POST": {
+      "status": 401,
+      "body": {
+        "message": "Unauthorized"
+      }
+    },
+    "wrong:PATCH": {
+      "status": 405,
+      "body": {
+        "message": "Method not allowed"
+      }
+    }
+  },
+  "src/pages/api/tasks/removeParent.ts": {
+    "POST": {
+      "status": 401,
+      "body": {
+        "message": "Unauthorized"
+      }
+    },
+    "wrong:PATCH": {
+      "status": 405,
+      "body": {
+        "message": "Method not allowed"
+      }
+    }
+  },
+  "src/pages/api/tasks/removeRelation.ts": {
+    "POST": {
+      "status": 401,
+      "body": {
+        "message": "Unauthorized"
+      }
+    },
+    "wrong:PATCH": {
+      "status": 405,
+      "body": {
+        "message": "Method not allowed"
+      }
+    }
+  },
+  "src/pages/api/tasks/searchAll.ts": {
+    "POST": {
+      "status": 401,
+      "body": {
+        "message": "Unauthorized"
+      }
+    },
+    "wrong:PATCH": {
+      "status": 405,
+      "body": {
+        "message": "Method not allowed"
+      }
+    }
+  },
+  "src/pages/api/tasks/searchByParam.ts": {
+    "GET": {
+      "status": 401,
+      "body": {
+        "message": "Unauthorized"
+      }
+    },
+    "wrong:PATCH": {
+      "status": 405,
+      "body": {
+        "message": "Method not allowed."
+      }
+    }
+  },
+  "src/pages/api/tasks/searchOrphans.ts": {
+    "GET": {
+      "status": 401,
+      "body": {
+        "message": "Unauthorized"
+      }
+    },
+    "wrong:PATCH": {
+      "status": 405,
+      "body": {
+        "message": "Method not allowed"
+      }
+    }
+  },
+  "src/pages/api/tasks/setDueDate.ts": {
+    "POST": {
+      "status": 401,
+      "body": {
+        "message": "Unauthorized"
+      }
+    },
+    "wrong:PATCH": {
+      "status": 405,
+      "body": {
+        "message": "Method not allowed"
+      }
+    }
+  },
+  "src/pages/api/tasks/setRecurrence.ts": {
+    "POST": {
+      "status": 401,
+      "body": {
+        "message": "Unauthorized"
+      }
+    },
+    "wrong:PATCH": {
+      "status": 405,
+      "body": {
+        "message": "Method not allowed"
+      }
+    }
+  },
+  "src/pages/api/tasks/setStartDate.ts": {
+    "POST": {
+      "status": 401,
+      "body": {
+        "message": "Unauthorized"
+      }
+    },
+    "wrong:PATCH": {
+      "status": 405,
+      "body": {
+        "message": "Method not allowed"
+      }
+    }
+  },
+  "src/pages/api/tasks/single.ts": {
+    "GET": {
+      "status": 401,
+      "body": {
+        "message": "Unauthorized"
+      }
+    },
+    "DELETE": {
+      "status": 400,
+      "body": {
+        "message": "Missing ID"
+      }
+    },
+    "PUT": {
+      "status": 400,
+      "body": {
+        "message": "Task id is required"
+      }
+    },
+    "wrong:PATCH": {
+      "status": 405,
+      "body": {
+        "message": "Method not allowed"
+      }
+    }
+  },
+  "src/pages/api/tasks/uploadFinalize.ts": {
+    "POST": {
+      "status": 401,
+      "body": {
+        "error": "Unauthorized",
+        "code": "SESSION_REQUIRED"
+      }
+    },
+    "wrong:PATCH": {
+      "status": 405,
+      "body": {
+        "error": "Method not allowed"
+      }
+    }
+  },
+  "src/pages/api/tasks/uploadUrl.ts": {
+    "POST": {
+      "status": 401,
+      "body": {
+        "error": "Unauthorized",
+        "code": "SESSION_REQUIRED"
+      }
+    },
+    "wrong:PATCH": {
+      "status": 405,
+      "body": {
+        "error": "Method not allowed"
+      }
+    }
+  },
+  "src/pages/api/tasks/waiting-on.ts": {
+    "POST": {
+      "status": 401,
+      "body": {
+        "message": "Unauthorized"
+      }
+    },
+    "wrong:PATCH": {
+      "status": 405,
+      "body": {
+        "message": "Method not allowed"
+      }
+    }
+  }
+}

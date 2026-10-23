@@ -11,11 +11,6 @@ function isProjectNameUniqueViolation(error: unknown): boolean {
   return Array.isArray(target) && target.includes('name')
 }
 
-/**
- * Creates a project with a guaranteed-unique `name`: insert under a random
- * provisional name, then rename to `project-${id}` (stable and unique).
- * Retries if the provisional name collides (extremely unlikely).
- */
 export async function createProjectWithStableName(
   data: Omit<Prisma.ProjectUncheckedCreateInput, 'name'>
 ) {

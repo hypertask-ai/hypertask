@@ -52,6 +52,7 @@ function harness(t, enabled = true) {
     },
     "@/hooks/useFlag": { useFlag: () => enabled, useFlagReady: () => ready },
     "@/hooks/General/useAuth": { useAuth: () => ({ authenticatedUserId: userId }) },
+    "@/hooks/General/useHydrated": { useHydrated: () => true },
     "@/utils/api/Task Detail": { fetchCommentsHelper, getAllFollowers: async id => (await axios.get(`/api/tasks/detailMeta?taskId=${id}`)).data.followers, getDraftsHelper: async () => ({}) },
     "@/utils/api/global": { __esModule: true, default: { getPriorityForTask: async () => 1, getEstimateForTask: async () => 1, getAllTaskLabels: async () => [], getSectionsForMoveTask: async () => [] } },
   };
@@ -83,7 +84,6 @@ function localTaskWrites(h) {
     "@/utils/generateRank": { default: noop },
     "next/navigation": { useRouter: () => ({}) },
     "react-hot-toast": { default: noop },
-    "@/components/undoToast": { undoToastSettings: {} },
     "../../utils/helperFunctions/Views/FilterHelperFunctions": {},
     "@/utils/helperFunctions/Views/SubtaskHelperFunction": {},
     "@/utils/helperFunctions/Views/ViewsHelperFunctions": {},
@@ -420,18 +420,15 @@ test("realtime events, same-user multi-tab edits, reconnect and PR subscription 
   assert.equal(current.title, "Task 4");
 });
 
-test("rebased readiness retains production's no-loading-flash guard when dedupe is off", () => {
-  const file = "src/app/detail/[...slug]/useTaskDetailReadiness.tsx";
-  const production = require("node:child_process").execFileSync("git", ["show", `origin/production:${file}`], { cwd: root, encoding: "utf8" });
-  const refreshDecision = source => new Function("flagReady", "dedupe", "noLoadingFlash", "cachedLayout", "window", "_parsedTask",
+test("cached detail mount refresh stays suppressed when dedupe is off", () => {
+  const source = fs.readFileSync(path.join(root, "src/app/detail/[...slug]/useTaskDetailReadiness.tsx"), "utf8");
+  const refreshDecision = new Function("flagReady", "dedupe", "cachedLayout", "window", "_parsedTask",
     `return ${source.match(/getTask\(([^;]+)\);/)[1]}`);
-  const actual = refreshDecision(fs.readFileSync(path.join(root, file), "utf8"));
-  const expected = refreshDecision(production);
-  for (const noLoadingFlash of [false, true]) for (const cachedLayout of [false, true]) for (const cachedTaskId of [undefined, 42, 43]) {
-    const args = [noLoadingFlash, cachedLayout, { history: { state: { cachedTaskDetail: { taskId: cachedTaskId } } } }, { id: 42 }];
-    assert.equal(actual(true, false, ...args), expected(true, false, ...args));
-    assert.equal(actual(true, true, ...args), false);
-    assert.equal(actual(false, false, ...args), false);
+  for (const cachedLayout of [false, true]) for (const cachedTaskId of [undefined, 42, 43]) {
+    const args = [cachedLayout, { history: { state: { cachedTaskDetail: { taskId: cachedTaskId } } } }, { id: 42 }];
+    assert.equal(refreshDecision(true, false, ...args), !cachedLayout && cachedTaskId !== 42);
+    assert.equal(refreshDecision(true, true, ...args), false);
+    assert.equal(refreshDecision(false, false, ...args), false);
   }
 });
 
@@ -523,6 +520,7 @@ test("resolved flag-off metadata options and fetch results match origin/producti
     "@tanstack/react-query": { useQuery: options => options, useQueryClient: () => ({}) },
     "@/hooks/useFlag": { useFlag: () => false, useFlagReady: () => true },
     "@/hooks/General/useAuth": { useAuth: () => ({ authenticatedUserId: 985 }) },
+    "@/hooks/General/useHydrated": { useHydrated: () => true },
     "@/utils/api/global": { __esModule: true, default: { getPriorityForTask: async () => "priority", getEstimateForTask: async () => "estimate", getAllTaskLabels: async () => ["label"] } },
     "@/utils/api/Task Detail": { getAllFollowers: async () => ["follower"] },
   };
@@ -634,6 +632,7 @@ for (const [state, expected] of [[undefined, "false:false"], [false, "true:false
       "@tanstack/react-query": { useQueryClient: () => ({}), useQuery: () => ({ data: typeof state === "boolean" ? { [key]: state } : undefined, isError: state === "failure" }) },
       "@/hooks/General/useHydrated": { useHydrated: () => true },
       "@/lib/realtime/client": {},
+      react: { ...React, useSyncExternalStore: (_subscribe, getSnapshot) => getSnapshot() },
     });
     const View = () => React.createElement("span", null, `${flags.useFlagReady(key)}:${flags.useFlag(key)}`);
     assert.equal(renderToString(React.createElement(flags.FeatureFlagProvider, { userId: 985 }, React.createElement(View))), `<span>${expected}</span>`);

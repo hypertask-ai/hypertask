@@ -10,6 +10,7 @@ const Module = require("node:module");
 const path = require("node:path");
 const test = require("node:test");
 const ts = require("typescript");
+const { loadSharedRoute } = require("./helpers/groupb-route.cjs");
 
 const root = path.resolve(__dirname, "..");
 const MEMBER_USER_ID = 6;
@@ -139,8 +140,15 @@ function loadArchiveHandler({
     userLookups: [],
   };
 
+  const getSessionUser = async (headers) => {
+    const token = cookieValue(headers.get("cookie"), SESSION_COOKIE);
+    const session = verifySession(token);
+    if (!session) return null;
+    return { userId: session.id, source: "legacy", needsBridge: true };
+  };
+  const sharedRoute = loadSharedRoute(getSessionUser);
   const stubs = {
-    "@/lib/api/task-writes/route": { withTaskWriteFlag: (handler) => handler },
+    "./route": sharedRoute,
     "@/lib/prisma": {
       __esModule: true,
       default: {
@@ -166,18 +174,6 @@ function loadArchiveHandler({
         },
       },
     },
-    "@/lib/auth/getSessionUser": {
-      getSessionUser: async (headers) => {
-        const token = cookieValue(headers.get("cookie"), SESSION_COOKIE);
-        const session = verifySession(token);
-        if (!session) return null;
-        return {
-          userId: session.id,
-          source: "legacy",
-          needsBridge: true,
-        };
-      },
-    },
     "@/lib/auth/session": {
       SESSION_COOKIE,
       verifySession,
@@ -197,7 +193,7 @@ function loadArchiveHandler({
       },
     },
     "@/models/model": {},
-    "../queues/duedateQueue": {
+    "@/pages/api/queues/duedateQueue": {
       cancelDueDateJob: async () => {
         sideEffects.cancelDueDate += 1;
       },
@@ -217,7 +213,8 @@ function loadArchiveHandler({
     },
   };
 
-  const handler = execute(compile("src/pages/api/tasks/(un)archive.ts"), stubs).default;
+  const archive = execute(compile("src/lib/api/task-writes/archive.ts"), stubs);
+  const handler = sharedRoute.taskWriteHandler({ POST: async () => archive.POST });
   return { handler, sideEffects };
 }
 
@@ -275,6 +272,7 @@ async function callArchive(handler, {
       payload = bodyJson;
       return this;
     },
+    setHeader() {},
   };
   await handler(req, res);
   return { status: statusCode, payload };
@@ -616,16 +614,16 @@ test("MCP updateTask signs the internal session with ctx.agentId", () => {
   );
   assert.match(
     source,
-    /signSession\(\{\s*id: userObj\.id,\s*email: userObj\.email,\s*\.\.\.\(ctx\.agentId \? \{ agentId: ctx\.agentId \} : \{\}\),?\s*\}\)/,
+    /signSession\(\{\s*id: userObj\.id,\s*email: userObj\.email,\s*\.\.\.\(ctx\.agentId \? \{ agentId: ctx\.agentId \} : \{\}\),\s*teamScope: ctx\.teamScope,\s*agentTokenGeneration: ctx\.agentTokenGeneration,?\s*\}\)/,
   );
 });
 
-test("Done guard documents current-section-only limit", () => {
+test("Done guard checks current task sections only for archive or delete", () => {
   const source = fs.readFileSync(
     path.join(root, "src/lib/mcp/tasks/agentDoneLifecycle.ts"),
     "utf8",
   );
-  assert.match(source, /current section only/i);
-  assert.match(source, /out of Done[\s\S]*archives\/deletes/i);
-  assert.match(source, /not immutable human-final-review/i);
+  assert.match(source, /candidates\.map\(\(task\) => task\.sectionId as number\)/);
+  assert.match(source, /requestedStatus !== 'Archive' && requestedStatus !== 'Deleted'/);
+  assert.match(source, /requestedStatus !== task\.status/);
 });

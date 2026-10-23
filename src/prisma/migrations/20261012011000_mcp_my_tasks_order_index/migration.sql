@@ -1,0 +1,14 @@
+-- The due-date sweep index cannot order updatedAt within a due-date group.
+-- In particular, my-tasks must otherwise scan/sort the whole NULL-date group
+-- before LIMIT, probing Assignees for thousands of tasks it will not return.
+-- Match both ORDER BY keys, including PostgreSQL's default NULLS LAST for ASC
+-- and NULLS FIRST for DESC, without changing the query or response.
+--
+-- Like 20260928180000_search_operator_task_indexes, run outside an explicit
+-- transaction: Prisma's PostgreSQL migrate deploy does not wrap this file.
+-- CONCURRENTLY permits task writes, but scans the whole Task table twice and
+-- adds index storage/write overhead. Large tables need I/O and disk headroom;
+-- the build can wait on old transactions and conflicts with concurrent DDL.
+-- An interrupted build can leave an INVALID index that IF NOT EXISTS skips;
+-- inspect pg_index.indisvalid and drop/rebuild that index before retrying.
+CREATE INDEX CONCURRENTLY IF NOT EXISTS "Task_dueDate_updatedAt_idx" ON "Task"("dueDate", "updatedAt" DESC);

@@ -1,4 +1,5 @@
-import { NextRequest, NextResponse } from "next/server";
+import { NextRequest } from "next/server";
+import { noStore } from "@/lib/flags/http";
 import {
   FEATURE_FLAG_MODES,
   FeatureFlagInputError,
@@ -9,15 +10,10 @@ import {
   type FeatureFlagMode,
 } from "@/lib/flags";
 import { broadcastFeatureFlagsChange } from "@/lib/realtime/server";
+import { getSessionUser } from "@/lib/auth/getSessionUser";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
-
-function noStore(body: unknown, status = 200) {
-  const response = NextResponse.json(body, { status });
-  response.headers.set("Cache-Control", "private, no-store");
-  return response;
-}
 
 function trustedOrigin(request: NextRequest) {
   const origin = request.headers.get("origin");
@@ -36,7 +32,7 @@ export async function GET(request: NextRequest) {
     if (!(await isFeatureFlagOwner(request.headers))) {
       return noStore({ error: "Not found" }, 404);
     }
-    const flags = await listFeatureFlagModes({ includeTicketTitles: true });
+    const flags = await listFeatureFlagModes({ includeTicketTitles: true, includeLastChange: true });
     return noStore({ flags, detailsEnabled: true });
   } catch (error) {
     console.error("[feature-flags] admin read failed", error);
@@ -60,7 +56,6 @@ export async function PATCH(request: NextRequest) {
     if (!body || Array.isArray(body) || typeof body.key !== "string") {
       return noStore({ error: "Invalid feature flag" }, 400);
     }
-    // Exactly one of mode and keep: a body carrying both would hide which change was intended.
     const setsMode = body.mode !== undefined;
     const setsKeep = body.keep !== undefined;
     if (setsMode === setsKeep) return noStore({ error: "Invalid feature flag" }, 400);
@@ -70,8 +65,10 @@ export async function PATCH(request: NextRequest) {
     if (setsKeep && typeof body.keep !== "boolean") {
       return noStore({ error: "Invalid feature flag" }, 400);
     }
+    const session = await getSessionUser(request.headers);
+    if (!session) return noStore({ error: "Not found" }, 404);
     const flag = setsMode
-      ? await setFeatureFlagMode(body.key, body.mode as FeatureFlagMode)
+      ? await setFeatureFlagMode(body.key, body.mode as FeatureFlagMode, { userId: session.userId, source: "page" })
       : await setFeatureFlagKeep(body.key, body.keep as boolean);
     await broadcastFeatureFlagsChange().catch((error) =>
       console.warn("[feature-flags] realtime broadcast failed", error),

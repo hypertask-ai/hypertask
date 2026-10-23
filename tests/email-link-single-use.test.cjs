@@ -1,3 +1,4 @@
+const { withStubs } = require('./helpers/stub-map.cjs')
 const test = require('node:test')
 const assert = require('node:assert/strict')
 const fs = require('node:fs')
@@ -16,6 +17,12 @@ process.env.RESEND_API_KEY = 'email-link-test-key'
 process.env.NEXT_PUBLIC_BETTER_AUTH_EMAIL = '0'
 
 function loadTs(relativePath, aliases = {}) {
+  aliases = withStubs({
+    '@/lib/flags/keys': require('./helpers/flag-files.cjs').load('src/lib/flags/keys.ts'),
+    '@/lib/auth/signupAttributionContext': { createSignupContext: async () => null, consumeSignupContext: async () => null, consumeSignupCookie: async () => null, consumeGoogleSignupContext: async () => null, bindSignupCodeContext: async () => {}, takeSignupCodeContext: async () => null },
+    '@/lib/analytics/signupIdentityClient': { attachSignupContext: async () => {}, getSignupContextInput: async () => ({}) },
+  }, aliases)
+
   const javascript = ts.transpileModule(fs.readFileSync(path.join(root, relativePath), 'utf8'), {
     compilerOptions: {
       esModuleInterop: true,
@@ -78,6 +85,7 @@ function makeHarness(redis = makeRedis()) {
       isFeatureEnabled: async key => key === 'htpr-7032-email-expiry-copy',
     },
     '@/utils/controllers/users/update_or_create_user': updateUser,
+    '@/utils/controllers/users/findUserByEmail': { findUserByEmail: (email) => prisma.user.findFirst({ where: { email } }) },
     '@/lib/configs/auth.config': { onboarding: { shouldSkipInteractive: true, skipOnboarding: true } },
     '@/utils/controllers/users/autoJoinByEmailDomain': { default: async () => {} },
     '@/utils/controllers/users/provisionFirstWorkspace': { provisionFirstWorkspace: async () => {} },
@@ -265,11 +273,16 @@ test('server rendering the link pages does not redeem; the first subsequent POST
         return React.createElement('div', null, step)
       } }
       aliases['@/components/analytics/StoreUTM'] = { default: () => null }
+      aliases['next/headers'] = { cookies: async () => ({ get: () => undefined }) }
+      aliases['@/lib/auth/session'] = { SESSION_COOKIE: 'ht_session', verifySession: () => null }
+      aliases['@/lib/flags'] = { HTPR_7272_PAYMENT_LOGIN_AGENT_EVENTS_FLAG: 'htpr-7272-payment-login-agent-events', featureFlagCandidateUserIds: async () => [], isFeatureEnabled: async () => false }
+      aliases['@/lib/telemetry/activationAnalytics'] = { isActivationEligible: async () => false }
+      aliases['./SignupPageViewed'] = { default: () => null }
       Page = loadTs('src/app/login/page.tsx', aliases).default
     } else {
       Page = loadTs('src/app/verify-email/page.tsx', aliases).default
     }
-    assert.ok(renderToString(React.createElement(Page)).length > 0)
+    assert.ok(renderToString(type === 'login' ? await Page() : React.createElement(Page)).length > 0)
     assert.equal(harness.redis.calls.length, 0)
     assert.equal(harness.calls.updates.length, 0)
     assert.equal(harness.route.GET, undefined, 'the redemption API must remain POST-only')

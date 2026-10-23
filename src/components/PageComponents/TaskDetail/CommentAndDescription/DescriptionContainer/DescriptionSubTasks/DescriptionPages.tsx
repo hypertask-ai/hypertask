@@ -18,8 +18,6 @@ const DescriptionPages = () => {
   const { pages, loading, hasPages, createAndOpenPage } = useTaskPages();
 
   const openPage = (event: MouseEvent<HTMLAnchorElement>, publicId: string) => {
-    // Keep modified clicks as ordinary links. A new tab has no task entry to
-    // return through, so its Page control intentionally uses the safe fallback.
     if (
       event.button !== 0 ||
       event.metaKey ||

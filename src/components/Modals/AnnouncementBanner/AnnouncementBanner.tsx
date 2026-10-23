@@ -54,8 +54,6 @@ const AnnouncementBanner: React.FC<IProps> = ({
 
   const poster = youtubeThumbnailUrl(mediaURL);
 
-  // The poster and the button go to the same place: for a video that is YouTube,
-  // opened in a new tab by handleAnnouncementCtaClick.
   const ctaTarget = articleURL || (poster ? mediaURL : "");
 
   const handleCta = () => {
@@ -67,7 +65,6 @@ const AnnouncementBanner: React.FC<IProps> = ({
   return (
     <aside className="fixed bottom-[56px] left-[12px] right-[12px] z-[100] w-auto rounded-[4px] bg-modalBackground p-[14px] text-white-black shadow-lg sm:left-auto sm:right-[20px] sm:w-[330px]">
       <div className="mb-3 flex items-center justify-between">
-        {/* same unread marker the rocket sidebar uses on a new announcement */}
         <span className="flex items-center gap-2">
           <span className="h-[7px] w-[7px] shrink-0 rounded-full bg-[#51A4F1]" />
           <span className="text-micro uppercase tracking-wider text-text-light-gray">
@@ -80,9 +77,6 @@ const AnnouncementBanner: React.FC<IProps> = ({
       </div>
 
       {mediaURL && (
-        // 16:9, never a fixed height — the poster is a 16:9 frame and anything
-        // else letterboxes it. A video is a poster that opens YouTube in a new
-        // tab; nothing plays inside the card.
         <div className="relative mb-3 aspect-video w-full overflow-hidden rounded-[5px] bg-cardBackground">
           {poster ? (
             <button

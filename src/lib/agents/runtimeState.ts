@@ -30,8 +30,6 @@ export type AgentRuntimeSnapshot = {
   lastProgressAt: string | null;
   cadenceSeconds: number;
   sourceSections: Array<{ boardId: number; section: string }>;
-  // Label-scoped agents only discover unassigned work carrying this label, so
-  // the pool shown on the agent page has to narrow the same way.
   scopeLabel?: string | null;
   processedTickets: Array<{ boardId: number; ticket: string }>;
   queue: AgentRuntimeQueueItem[];
@@ -205,8 +203,6 @@ export async function clearAgentRuntimeSnapshot(
     throw new Error("Agent runtime fence generation must be a safe integer");
   }
 
-  // Delete and fence in one Redis script so a heartbeat that authenticated just
-  // before an agent delete cannot recreate the snapshot after the delete.
   await redis.eval(
     "redis.call('DEL', KEYS[1]); redis.call('SET', KEYS[2], ARGV[1]); return 1;",
     2,

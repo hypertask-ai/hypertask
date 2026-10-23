@@ -1,5 +1,3 @@
-// Assert-based demo because this repository has no Vitest setup.
-// Run after installing dependencies: npx tsx src/utils/controllers/pages/pageService.test.ts
 import assert from 'node:assert/strict'
 
 async function demo() {
@@ -79,7 +77,6 @@ async function demo() {
   const originalTransaction = prismaMock.$transaction
   const originalPageFindFirst = prismaMock.page.findFirst
   prismaMock.$transaction = async (callback: (transaction: typeof tx) => unknown) => callback(tx)
-  // Prevent the fire-and-forget indexer from reaching Prisma or Turbopuffer.
   prismaMock.page.findFirst = async () => null
 
   try {

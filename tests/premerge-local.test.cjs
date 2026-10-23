@@ -8,6 +8,17 @@ const path = require('node:path');
 
 const script = path.resolve(__dirname, '../scripts/premerge-local.sh');
 
+test('premerge uses a 4096 MiB heap with an explicit override (YPER4-318)', () => {
+  const src = readFileSync(script, 'utf8');
+  assert.match(src, /export NODE_OPTIONS="\$\{PREMERGE_NODE_OPTIONS:---max-old-space-size=4096\}"/);
+  const heap = src.split('\n').find(line => line.startsWith('export NODE_OPTIONS='));
+  const override = spawnSync('bash', ['-c', `${heap}\nprintf '%s' "$NODE_OPTIONS"`], {
+    encoding: 'utf8', env: { PATH: process.env.PATH, PREMERGE_NODE_OPTIONS: '--max-old-space-size=2048' },
+  });
+  assert.equal(override.status, 0);
+  assert.equal(override.stdout, '--max-old-space-size=2048');
+});
+
 test('premerge-local rejects unknown arguments and extra arguments before touching Docker', () => {
   for (const args of [['help'], ['--help'], ['UP'], ['up', 'down'], ['down', 'extra'], ['down', '--flag', 'key=OFF'], ['up', '--flag'], ['up', '--flag', 'key=INVALID'], ['up', '--flag', 'key=OFF=EVERYONE']]) {
     const result = spawnSync('bash', [script, ...args], { encoding: 'utf8' });
@@ -26,9 +37,10 @@ test('premerge-local defaults to up, clears inherited secrets and refuses env fi
     copyFileSync(script, candidate);
     writeFileSync(path.join(root, '.env'), 'DATABASE_URL=must-not-be-read\n');
     writeFileSync(path.join(root, 'bin/docker'), `#!/bin/sh
-[ -z "\$DATABASE_URL\$SESSION_SECRET\$VERCEL_TOKEN" ] || exit 19
+[ -z "\$DATABASE_URL\$SESSION_SECRET\$VERCEL_TOKEN\$R2_ENDPOINT\$R2_UPLOAD_SECRET\$S3_UPLOAD_SECRET\$AWS_ACCESS_KEY_ID" ] || exit 19
+[ -z "\$POSTHOG_PERSONAL_API_KEY\$POSTHOG_SERVER_PROJECT_ID\$PREMERGE_NEXT_BUILD" ] || exit 19
 # Only the script's own heap default may reach child tools, never the inherited value (YPER4-302).
-[ "\$NODE_OPTIONS" = "--max-old-space-size=3072" ] || exit 19
+[ "\$NODE_OPTIONS" = "--max-old-space-size=4096" ] || exit 19
 [ "$1" = info ] && exit 0
 exit 20
 `, { mode: 0o755 });
@@ -40,6 +52,13 @@ exit 20
         DATABASE_URL: 'production-must-not-reach-docker',
         SESSION_SECRET: 'must-not-reach-docker',
         VERCEL_TOKEN: 'must-not-reach-docker',
+        R2_ENDPOINT: 'https://must-not-reach-docker.invalid',
+        R2_UPLOAD_SECRET: 'must-not-reach-docker',
+        S3_UPLOAD_SECRET: 'must-not-reach-docker',
+        AWS_ACCESS_KEY_ID: 'must-not-reach-docker',
+        POSTHOG_PERSONAL_API_KEY: 'must-not-reach-docker',
+        POSTHOG_SERVER_PROJECT_ID: 'must-not-reach-docker',
+        PREMERGE_NEXT_BUILD: '1',
         NODE_OPTIONS: '--invalid-inherited-option',
       },
     });
@@ -144,6 +163,57 @@ test('background server closes captured output descriptors, with a retained-stde
   } finally {
     // Backstop: stand-in servers launched from this copy must not outlive the test (YPER4-280: 160 leaked for days).
     spawnSync('pkill', ['-KILL', '-f', root]);
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('MinIO is loopback-only and disposable, with complete R2 config and browser CORS before build (YPER4-207)', () => {
+  const src = readFileSync(script, 'utf8');
+  const helper = readFileSync(path.resolve(__dirname, '../scripts/premerge-local-storage.mjs'), 'utf8');
+  assert.match(src, /docker run -d --name "\$prefix-minio" -p 127\.0\.0\.1::9000 --env-file "\$state\/minio\.env"/);
+  assert.match(src, /--tmpfs \/data:rw,size=128m/);
+  assert.match(src, /bitnamilegacy\/minio:2025\.4\.22-debian-12-r1@sha256:[a-f0-9]{64}/);
+  assert.match(src, /MINIO_API_CORS_ALLOW_ORIGIN=%s\\n' "\$url"/);
+  for (const key of ['R2_ENDPOINT', 'R2_UPLOAD_KEY', 'R2_UPLOAD_SECRET', 'R2_UPLOAD_BUCKET', 'R2_PUBLIC_BASE_URL', 'AWS_EC2_METADATA_DISABLED']) {
+    assert.match(src, new RegExp(`${key}=`));
+  }
+  assert.match(src, /R2_UPLOAD_BUCKET=premerge-attachments/);
+  assert.match(src, /R2_PUBLIC_BASE_URL=%s\/premerge-attachments/);
+  const initAt = src.indexOf('node scripts/premerge-local-storage.mjs');
+  assert.ok(initAt > src.indexOf('source "$state/credentials.env"'));
+  assert.ok(initAt < src.indexOf('npx --no-install next build'));
+  assert.ok(initAt < src.indexOf('next" start'));
+  assert.match(helper, /createBucket\(\{ Bucket: R2_UPLOAD_BUCKET \}\)/);
+  assert.match(helper, /Action: \['s3:GetObject'\]/);
+  assert.match(helper, /Origin: NEXT_PUBLIC_BASEURL/);
+  assert.match(helper, /access-control-allow-origin/);
+});
+
+test('down removes MinIO with anonymous volumes and its private env file (YPER4-207)', () => {
+  const root = mkdtempSync(path.join(os.tmpdir(), 'premerge-local-minio-'));
+  try {
+    mkdirSync(path.join(root, 'scripts'));
+    mkdirSync(path.join(root, 'bin'));
+    const state = path.join(root, 'e2e/smoke/.state/premerge-local');
+    mkdirSync(state, { recursive: true });
+    const candidate = path.join(root, 'scripts/premerge-local.sh');
+    copyFileSync(script, candidate);
+    writeFileSync(path.join(state, 'minio.env'), 'throwaway-local-fixture');
+    writeFileSync(path.join(root, 'bin/docker'), `#!/bin/sh
+[ "$1" = info ] && exit 0
+if [ "$1 $2" = 'container inspect' ]; then
+  case "$3" in *-minio) exit 0 ;; *) exit 1 ;; esac
+fi
+[ "$1 $2 $3" = 'rm -f -v' ] || exit 20
+printf '%s\\n' "$4" > '${root}/removed'
+`, { mode: 0o755 });
+    const result = spawnSync('bash', [candidate, 'down'], {
+      encoding: 'utf8', env: { ...process.env, PATH: `${path.join(root, 'bin')}:${process.env.PATH}` },
+    });
+    assert.equal(result.status, 0);
+    assert.match(readFileSync(path.join(root, 'removed'), 'utf8'), /^ht-premerge-[a-f0-9]{16}-minio\n$/);
+    assert.throws(() => readFileSync(path.join(state, 'minio.env')), { code: 'ENOENT' });
+  } finally {
     rmSync(root, { recursive: true, force: true });
   }
 });

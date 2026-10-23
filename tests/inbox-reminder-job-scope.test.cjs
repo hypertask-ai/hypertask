@@ -23,7 +23,7 @@ test('Inbox reminder jobs are scoped by user and task', () => {
   assert.match(queue, /notifications-for-task-\$\{taskId\}/)
   assert.match(nativeRoute, /cancelLegacyInboxReminderJobIfSafe/)
   assert.match(queue, /invokeDueReminder\(job\)/)
-  assert.match(queue, /stale and legacy task-only jobs are harmless/)
+  assert.match(queue, /return cancelJobById\(`notifications-for-user-\$\{userId\}-task-\$\{taskId\}`/)
   assert.match(invocation, /r\."remindAt" = \$\{expectedRemindAt\}/)
   assert.match(invocation, /r\."updatedAt" IS NOT DISTINCT FROM \$\{expectedUpdatedAt\}/)
   assert.match(invocation, /reminder\.updatedAt instanceof Date/)

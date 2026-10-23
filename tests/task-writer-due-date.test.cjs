@@ -1,3 +1,4 @@
+const { withStubs } = require("./helpers/stub-map.cjs");
 const test = require("node:test");
 const assert = require("node:assert/strict");
 const fs = require("node:fs");
@@ -9,16 +10,20 @@ const root = path.resolve(__dirname, "..");
 const load = createJiti(__filename, { alias: { "@": path.join(root, "src") }, fsCache: false });
 const key = "htpr-7054-ctrlj-due-date";
 const now = new Date("2026-10-10T02:00:00Z");
+test.mock.timers.enable({ apis: ["Date"], now });
 const example = "Review onboarding, due 2026-10-16";
 const html = '<h1 id="ai-generated-task-title">Review onboarding, due 2026-10-16</h1><p>Review onboarding by the deadline.</p><span id="ai-generated-task-due-date" style="display:none">2026-10-16</span>';
 
 function moduleWithStubs(file, stubs) {
+  stubs = withStubs({ "@/lib/net/downloadWithoutBrotli": { downloadWithoutBrotli: undefined }, "@/lib/media/inlineAgentImages.server": { inlineAgentImagesForUser: async (html) => html } }, stubs);
+  stubs = withStubs({ "@/lib/auth/agentScope": require("./helpers/agent-board-scope.cjs").enforcedScope }, stubs);
   const code = ts.transpileModule(fs.readFileSync(path.join(root, file), "utf8"), {
     compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022, esModuleInterop: true },
   }).outputText;
   const mod = { exports: {} };
   new Function("module", "exports", "require", code)(mod, mod.exports, (id) => {
-    if (Object.hasOwn(stubs, id)) return stubs[id];
+    if (id === "@/utils/controllers/tasks/parentTaskAccess") return load(path.join(root, "src/utils/controllers/tasks/parentTaskAccess.ts"));
+    if (id in stubs) return stubs[id];
     if (!id.startsWith("@/") && !id.startsWith(".")) return require(id);
     throw new Error(`Unexpected dependency: ${id}`);
   });
@@ -134,6 +139,10 @@ function writerHarness(enabled, output = html, fail = false) {
     sseFrame: (event, payload) => `event: ${event}\ndata: ${JSON.stringify(payload)}\n\n`,
   };
   const run = moduleWithStubs("src/app/api/ai/_lib/taskWriterRun.ts", {
+    "@/lib/rag/authorizeIndexedRows": { authorizeIndexedRows: async (taskRows, commentRows, principal) => {
+      assert.equal(principal?.teamScope == null, true);
+      return { taskRows, commentRows };
+    } },
     "@/lib/ai/prompts/registry": { renderPrompt: () => "output language rule" },
     "@/lib/ai/taskWriterDueDate": dates, "@/lib/ai/taskWriterTicketType": ticketTypes, "@/lib/flags/keys": keys,
     "@/lib/ai/composeTaskTarget": {},
@@ -199,7 +208,7 @@ test("writer drops an invalid model date and interrupted streams never publish a
   assert.doesNotMatch(interrupted.text, /ai-generated-task-due-date/);
 });
 
-function saveHarness(kind, enabled) {
+function saveHarness(enabled) {
   const writes = [], updates = [], jobs = [];
   const prisma = {
     user: { findUnique: async () => ({ id: 985 }) },
@@ -216,11 +225,6 @@ function saveHarness(kind, enabled) {
   const stubs = {
     "@/lib/ai/prompts/registry": { renderPrompt: () => "output language rule" },
     "@/lib/ai/taskWriterDueDate": dates, "@/lib/ai/taskWriterTicketType": ticketTypes, "@/lib/flags/keys": keys,
-    "@/lib/api/task-writes/route": {
-      withTaskWriteFlag: (handler) => handler,
-      taskWriteRoute: ({ operation }) => async (request, session) => operation(await request.json(), session, request),
-    },
-    "./route": { taskWriteRoute: ({ operation }) => async (request, session) => operation(await request.json(), session, request) },
     "@/lib/api/task-writes/create-global-effects": effects, "./create-global-effects": effects,
     "@/lib/ai/composeTaskTarget": load(path.join(root, "src/lib/ai/composeTaskTarget.ts")),
     "@/lib/flags": { ...keys, isFeatureEnabled: async (flag) => flag === key ? enabled : true },
@@ -230,6 +234,7 @@ function saveHarness(kind, enabled) {
     "@/lib/mcp/webhooks/taskEvents": { createTaskWithBoardWebhookOutbox: async (_prisma, _actor, callback) => ({ ...(await callback(prisma)), boardWebhookDeliveryIds: [] }) },
     "@/lib/mcp/webhooks/outbox": { publishBoardWebhookDeliveries: async () => {} },
     "@/lib/agentWebhooks/outbox": { persistAgentTaskCreatedPending: async () => {} },
+    "@/lib/telemetry/savedWork": { enqueueBoardCreated: async () => "board-key", processAnalyticsIntentSoon: () => {}, enqueueTaskCreated: async () => "task-key", creationChannelFromHeader: () => 'web', CREATION_CHANNEL_HEADER: 'X-Hypertask-Creation-Channel', CREATION_AGENT_HEADER: 'X-Hypertask-Creation-Agent' },
     "@/lib/auth/getSessionUser": { getSessionUser: async () => ({ userId: 985 }) },
     "@/lib/auth/resolveActingAgent": { resolveActingAgent: () => ({ ok: true, agentId: null }) },
     "@/lib/auth/session": { SESSION_COOKIE: "session", verifySession: () => null },
@@ -239,23 +244,19 @@ function saveHarness(kind, enabled) {
     "../queues/duedateQueue": queue, "@/pages/api/queues/duedateQueue": queue,
     "next/server": { NextResponse: { json: Response.json } }, "better-auth/cookies": { parseCookies: () => new Map() },
   };
-  const api = moduleWithStubs(kind === "legacy" ? "src/pages/api/tasks/createGlobally.ts" : "src/lib/api/task-writes/create-global.ts", stubs);
+  stubs["./route"] = moduleWithStubs("src/lib/api/task-writes/route.ts", stubs);
+  const api = moduleWithStubs("src/lib/api/task-writes/create-global.ts", stubs);
   const post = async (extra = {}) => {
     const body = { title: "Review onboarding", description: "<p>Review</p>", projectId: 7, userId: 985, sectionId: 12, requestKind: "compose-task", writerDueDate: "2026-10-16", writerTimeZone: "America/Los_Angeles", ...extra };
-    if (kind === "app") {
-      const response = await api.POST({ json: async () => body, headers: new Headers(), cookies: {} }, { userId: 985 });
-      return { status: response.status, body: await response.json() };
-    }
-    const res = { status(code) { this.code = code; return this; }, json(body) { this.body = body; return this; }, setHeader() {} };
-    await api.default({ method: "POST", body, headers: {}, cookies: {} }, res);
-    return { status: res.code, body: res.body };
+    const response = await api.POST({ json: async () => body, headers: new Headers(), cookies: {} }, { userId: 985 });
+    return { status: response.status, body: await response.json() };
   };
   return { post, writes, updates, jobs };
 }
 
-for (const kind of ["legacy", "app"]) {
-  test(`${kind} normal create saves validated deadline at the picker's local default time and schedules it`, async () => {
-    const h = saveHarness(kind, true);
+{
+  test(`app normal create saves validated deadline at the picker's local default time and schedules it`, async () => {
+    const h = saveHarness(true);
     assert.equal((await h.post()).status, 200);
     assert.equal(h.writes[0].dueDate.toISOString(), "2026-10-16T16:00:00.000Z");
     assert.equal(h.writes[0].dueDateNotifiedAt, null);
@@ -265,8 +266,8 @@ for (const kind of ["legacy", "app"]) {
     assert.equal(h.writes.length, 2);
     assert.equal(h.writes[1].dueDate ?? null, null);
   });
-  test(`${kind} existing empty ticket uses the normal update controller and resets its due-date job`, async () => {
-    const h = saveHarness(kind, true);
+  test(`app existing empty ticket uses the normal update controller and resets its due-date job`, async () => {
+    const h = saveHarness(true);
     assert.equal((await h.post({ existingTaskId: 52 })).status, 200);
     assert.equal(h.updates[0].dueDate.toISOString(), "2026-10-16T16:00:00.000Z");
     assert.equal(h.updates[0].dueDateNotifiedAt, null);
@@ -274,8 +275,8 @@ for (const kind of ["legacy", "app"]) {
     assert.equal(h.jobs[1].schedule[0].taskId, 52);
     assert.equal(h.writes.length, 0);
   });
-  test(`${kind} flag off ignores writer date, preserves ordinary due dates, and never alters an existing deadline`, async () => {
-    const h = saveHarness(kind, false);
+  test(`app flag off ignores writer date, preserves ordinary due dates, and never alters an existing deadline`, async () => {
+    const h = saveHarness(false);
     assert.equal((await h.post()).status, 200);
     assert.equal(h.writes[0].dueDate, undefined);
     assert.equal(h.jobs.length, 0);
@@ -283,7 +284,7 @@ for (const kind of ["legacy", "app"]) {
     assert.equal(h.writes[1].dueDate, "2026-10-20T09:00:00Z");
     assert.equal((await h.post({ existingTaskId: 52 })).status, 200);
     assert.equal(h.updates[0].dueDate, undefined);
-    const manual = saveHarness(kind, true);
+    const manual = saveHarness(true);
     assert.equal((await manual.post({ requestKind: undefined })).status, 200);
     assert.equal(manual.writes[0].dueDate, undefined);
   });

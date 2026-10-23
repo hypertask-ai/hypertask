@@ -34,7 +34,11 @@ test("every existing App Router task route uses the single loader and the shared
     assert.doesNotMatch(source, /request\.json\(/);
     if (source.includes("export async function POST")) assert.match(source, /readJsonBody</);
   }
-  assert.match(read("src/pages/api/tasks/getAll.ts"), /loadCurrentUser\(/);
+  // getAll identity now comes from the shared task-write handler, never inline cookies.
+  const getAll = read("src/lib/api/task-writes/getAll.ts");
+  assert.match(getAll, /getSessionUser\(/);
+  assert.doesNotMatch(getAll, /isValidUser|cookies\(\)|nookies_user/);
+  assert.doesNotMatch(read("src/pages/api/tasks/getAll.ts"), /getSessionUser|isValidUser|cookies\(\)|nookies_user/);
 });
 
 test("there are no same-URL Pages task twins eligible for deletion", () => {
@@ -72,11 +76,14 @@ test("shared current-user loader preserves session-only and legacy-profile preco
   }
   cookie = { value: JSON.stringify({ id: 7, displayName: "User", email: "test@example.invalid", UserSetting: { notificationPreference: "all" } }) };
   assert.deepEqual(await loadCurrentUser(headers, true), { userId: 7, user: { ...JSON.parse(cookie.value), notificationPreference: "all" } });
+  session = { userId: 7, agentId: "agent-1" };
+  assert.deepEqual(await loadCurrentUser(headers), { userId: 7, agentId: "agent-1" });
+  assert.deepEqual(await loadCurrentUser(headers, true), { userId: 7, agentId: "agent-1", user: { ...JSON.parse(cookie.value), notificationPreference: "all" } });
   session = { userId: 8 };
   assert.equal(await loadCurrentUser(headers, true), null);
   session = null;
   assert.equal(await loadCurrentUser(headers, true), null);
-  assert.equal(sessionCalls, 11);
+  assert.equal(sessionCalls, 13);
 });
 
 test("positive-integer helper preserves task path, cycle range, and legacy version-number rules", () => {

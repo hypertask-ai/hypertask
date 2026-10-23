@@ -1,3 +1,5 @@
+import { findIdParamOutOfRange, idOutOfRangeMessage } from '@/lib/mcp/listParams';
+import { taskIdentifierErrorResponse } from '@/lib/mcp/tasks/resolveTask';
 import { NextRequest, NextResponse } from 'next/server';
 
 export type CommentReactionTarget = {
@@ -9,10 +11,9 @@ export type CommentReactionTarget = {
   taskUniqueIndex: number;
 };
 
-// HTPR-7122: isAgent is set when an agent made the reaction; userId is then its owner.
-// agent carries an id and name only when the caller may see that agent.
 type CommentReactionRow = {
   id: string;
+  createdAt: string;
   emoji: string;
   userId: number;
   isAgent?: true;
@@ -88,6 +89,14 @@ export function createCommentReactionHandler<TContext>(
       );
     }
 
+    const outOfRange = findIdParamOutOfRange({ comment_id: commentId });
+    if (outOfRange) {
+      return NextResponse.json(
+        { success: false, error: idOutOfRangeMessage(outOfRange), code: 'invalid_field' },
+        { status: 400 }
+      );
+    }
+
     let body: unknown;
     try {
       body = await request.json();
@@ -108,7 +117,14 @@ export function createCommentReactionHandler<TContext>(
       return NextResponse.json({ success: false, error: 'active must be a boolean.' }, { status: 400 });
     }
 
-    const target = await dependencies.findTarget(context, commentId);
+    let target;
+    try {
+      target = await dependencies.findTarget(context, commentId);
+    } catch (error) {
+      const identifierResponse = taskIdentifierErrorResponse(error);
+      if (identifierResponse) return identifierResponse;
+      throw error;
+    }
     if (!target) {
       return NextResponse.json(
         { success: false, error: 'Comment not found or access denied.' },
@@ -120,8 +136,6 @@ export function createCommentReactionHandler<TContext>(
     try {
       await dependencies.afterChange(target, userId, emoji, active, result, context);
     } catch (error) {
-      // The reaction is already committed. A notification or realtime outage
-      // must not turn a successful, idempotent mutation into a client retry.
       console.error('[comment-reaction] post-commit side effect failed', error);
     }
     return NextResponse.json({ success: true, active, ...result });

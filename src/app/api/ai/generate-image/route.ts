@@ -1,3 +1,4 @@
+import { downloadWithoutBrotli } from "@/lib/net/downloadWithoutBrotli";
 import { reportError } from "@/lib/errors/reportError";
 import { NextRequest, NextResponse } from "next/server";
 import { generateImage, generateText } from "ai";
@@ -84,8 +85,6 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Precedence: explicit request override → user's "Default models" image
-    // preference (team-scoped, then global) → team's system image ladder.
     const preferenceIds = getAiModelPreferenceIds(
       userPreferences.res.aiModelPreferences as
         | TAiModelPreferences
@@ -235,6 +234,7 @@ async function generateWithLanguageModel(
 ) {
   const model = resolveGatewayModel(modelId, gatewayApiKey);
   const result = await generateText({
+    experimental_download: downloadWithoutBrotli,
     model,
     prompt,
     maxRetries: 2,

@@ -41,7 +41,7 @@ ones, so older comments that cite them still point at the same rule.
 | 79 | Previews share the live database. Look only. No destructive testing. | fix-bug |
 | 81 | Trace the entry point through middleware, route, controller, queue, auth, and cache before editing. | fix-bug |
 | 82 | Every new feature, screen, control, shortcut, API route, or deliberate behaviour change needs one flag named `htpr-<ticket>-<slug>`. | ship-feature-behind-flag |
-| 83 | New flags default to Owner + QA. Only Valentin widens one. | ship-feature-behind-flag |
+| 83 | New flags set `defaultMode: "EVERYONE"` unless `releaseRisk.highRisk` is set (`money`, `access`, `data-deletion`, `customer-email`) or kind is `internal`; existing flags keep their current mode (HTPR-7389). Only Valentin widens an existing one. | ship-feature-behind-flag |
 | 84 | Gate protected behaviour on the server. `useFlag` only hides client UI. | ship-feature-behind-flag |
 | 85 | A bug fix gets a ticket-named bugfix flag default Everyone, except saved-data, security and crash fixes; same 14-day cleanup. | fix-bug |
 | 86 | No flag for performance work with the same output, security fixes, dependency or CI changes, spelling fixes, or an AI CHAT ticket. | ship-feature-behind-flag |
@@ -69,7 +69,7 @@ ones, so older comments that cite them still point at the same rule.
 | 113 | Changelog text is user-facing. No private cross-tenant bugs, no test tickets. | update-docs |
 | 114 | Changelog entries are newest first, each linked to its ticket URL. | update-docs |
 | 116 | A user-visible change updates the matching docs page in `hypertask-ai/docs` before or alongside the app pull request. | update-docs, fix-bug, ship-feature-behind-flag |
-| 117 | New behaviour defaults Owner + QA; developers never widen a feature flag. Bugfix flags default Everyone except saved-data/security/crash fixes. Widening an existing flag goes to Valentin Review. | fix-bug, ship-feature-behind-flag |
+| 117 | New behaviour sets `defaultMode: "EVERYONE"` unless `releaseRisk.highRisk` is set or kind is `internal`; existing flags keep their current mode; developers never widen an existing flag. Bugfix flags default Everyone except saved-data/security/crash fixes. Widening an existing flag goes to Valentin Review. | fix-bug, ship-feature-behind-flag |
 | 118 | `verify-qa` checks Owner + QA for features and Everyone for bugfix flags; saved-data/security/crash fixes have no flag. | verify-qa |
 | 119 | UI work reuses an existing component. A new component needs a reason on the ticket and in the pull request summary. | reuse-existing-ui |
 | 120 | After the change works, simplify the diff in a separate commit. Do not change behaviour. | simplify-before-pr |
@@ -90,7 +90,9 @@ compliance. The upkeep test checks the script, not the truth of its reports.
 | Check measured numbers under matching conditions with repeated runs, variance and baseline vs after. | fix-slow-page | Skill text, not enforced |
 | Before coding in valentin-review, judge design reviews from all three named Codex models. Ordinary ai-review must not use interrogate. | interrogate, ship | Skill text, not enforced |
 | Keep code comments only for non-obvious reasons; remove code restatements. | simplify-before-pr | Skill text, not enforced |
-| Weekly map upkeep reports source/live drift read-only, never as Valentin, with no edits or PR. | verify-qa, scripts/map-upkeep | Skill text for agent conduct, not enforced; script installs the timer and saves output |
+| Weekly feature-map upkeep is source-only, files at most one drift ticket a week, never drives the app or acts as Valentin. | maintain-verification-skill, scripts/maintain-verification-weekly, feature-map-check.mjs | Checker enforced by the weekly feature-map-check workflow; timer installs and files the ticket |
+| Deeper names what the change breaks (`breaks if:`) and the proof gate must fail on that harm. | ship, ship-check deeper | `ship-check deeper` requires the `breaks if:` part; gate honesty is skill text |
+| Run each shared cache, global layer or state file with its other users, in CI or app order. | blast-radius | Skill text, not enforced |
 
 ## Logins
 

@@ -74,18 +74,11 @@ useGetAllTeamsMinimal(_currentUser?.id ?? null, undefined, {
 })
 useViewCyclingShortcuts(_currentProject)
 
-// console.log("🚀 ~ file: [...boardURL].tsx:46 ~ currentProject:", projectSections) 
-
-
-
-// ================== fetch Sections on server and pass down the component
-      // ------- on favorites update
   useEffect(()=>{
     setFavorites(favoritesTQ)
   },[favoritesTQ])
 
 
-// ================= update tab title
   useEffect(()=>{
     const builtinView = getBuiltinView(
       getActiveBoardViewId(_currentProject, activeBuiltinViews),
@@ -95,22 +88,13 @@ useViewCyclingShortcuts(_currentProject)
       builtinView?.title ??
       (savedView?.type === "Default" ? undefined : savedView?.view.title);
     document.title = buildBoardDocumentTitle(_currentProject.title, viewTitle)
-    // mixPageTrack({
-    //   team_name: _currentProject.team.title,
-    //   team_id: _currentProject.team.id,
-    //   page: "Kanban"
-    // })
-
   },[_currentProject, activeBuiltinViews])
 
-// Local state already targets the incoming board before descendants reconcile.
-// Keep only the shared atom synchronized before paint for external consumers.
 useLayoutEffect(() => {
   const project = _allProjects?.[_projectIndex] ?? null
   setRecoilCurrentProject((current) => current === project ? current : project)
 }, [_allProjects, _projectIndex, setRecoilCurrentProject])
 
-// ================= detect horizontal scrollbar
 useEffect(() => {
   const checkScrollbar = () => {
     if (kanbanContainerRef.current) {
@@ -137,14 +121,12 @@ useEffect(() => {
   };
 }, [sections, _currentProject]);
 
-// ================= remember board horizontal scroll position across card navigation
 useEffect(() => {
   const projectId = _currentProject?.id;
   if (!projectId) return;
   const key = `board-scroll-${projectId}`;
 
   const save = () => {
-    // don't clobber the stored target while we're re-applying it
     if (restoringScroll.current) return;
     sessionStorage.setItem(key, JSON.stringify({
       c: kanbanContainerRef.current?.scrollLeft ?? 0,
@@ -152,9 +134,6 @@ useEffect(() => {
     }));
   };
 
-  // restore once per project, but only after its columns have rendered.
-  // The board can paint empty for a frame on remount, so re-apply across a
-  // few animation frames until the scroller is wide enough for it to stick.
   if (restoredScrollForProject.current !== projectId && sections?.length) {
     restoredScrollForProject.current = projectId;
     const raw = sessionStorage.getItem(key);
@@ -190,7 +169,6 @@ function handleSideBar(){
   setShowBoardManager((prevState:boolean)=>!prevState);
 }
 
-// HTPR-6072: navigation lets the parent authorize and hydrate the target before publishing it.
 function handleStateChangesOnBoardChange (index:number){
   const target = projects[index]
   if (target) goToProjectShortcut(target.id, true)

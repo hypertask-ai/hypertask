@@ -1,6 +1,8 @@
+import { webhookCredentialAllows } from "@/lib/webhooks/credentialScope";
 import crypto from 'crypto'
 import { Agent, request as undiciRequest } from 'undici'
 import prisma from '@/lib/prisma'
+import { openWebhookSigningKey } from '@/lib/webhooks/signingKeyStore'
 import { signWebhookBody } from './sign'
 import { resolveSafeAddresses } from './ssrfGuard'
 import type { WebhookDelivery } from './events'
@@ -17,11 +19,6 @@ export type SignedWebhookResult = {
   durationMs: number
 }
 
-/**
- * Low-level signed POST shared by board test pings and the durable agent outbox.
- * The caller owns the body and delivery id, which lets retries send the exact
- * same payload with a stable deduplication key.
- */
 export async function postSignedWebhook(input: {
   url: string
   secret: string
@@ -30,6 +27,17 @@ export async function postSignedWebhook(input: {
   body: string
 }): Promise<SignedWebhookResult> {
   const startedAt = Date.now()
+  let secret: string
+  try {
+    secret = openWebhookSigningKey(input.secret)
+  } catch {
+    return {
+      ok: false,
+      statusCode: null,
+      error: 'Webhook signing key is unavailable',
+      durationMs: Date.now() - startedAt,
+    }
+  }
   const safe = await resolveSafeAddresses(input.url)
   if (!safe.ok) {
     return {
@@ -41,7 +49,7 @@ export async function postSignedWebhook(input: {
   }
   const pinned = safe.addresses[0]
   const timestamp = Math.floor(Date.now() / 1000).toString()
-  const signature = signWebhookBody(input.secret, `${timestamp}.${input.body}`)
+  const signature = signWebhookBody(secret, `${timestamp}.${input.body}`)
 
   const agent = new Agent({
     connect: {
@@ -97,24 +105,15 @@ async function recordOutcome(id: string, ok: boolean): Promise<void> {
       data: { lastDeliveryAt: new Date(), lastDeliveryOk: ok },
     })
   } catch {
-    /* observability only — never throw */
   }
 }
 
-/**
- * POST a signed event to one subscription's URL. Never throws — returns whether
- * the receiver answered 2xx — and records the outcome. Single attempt, no retry
- * (best-effort). Security:
- *  - target is re-validated and the socket is PINNED to the validated public IP,
- *    so DNS rebinding between check and connect can't reach an internal host;
- *  - undici does not follow redirects, so a 3xx can't bounce to an internal host;
- *  - body is signed as `timestamp.body` with a per-delivery id, so receivers can
- *    verify authenticity and reject replays.
- */
 export async function deliverWebhook(
   sub: { id: string; url: string; secret: string },
   delivery: WebhookDelivery
 ): Promise<boolean> {
+  const subscription = await prisma.webhookSubscription.findUnique({ where: { id: sub.id } });
+  if (!subscription || !await webhookCredentialAllows(subscription.agentId, delivery, subscription)) return false;
   const deliveryId = crypto.randomUUID()
   const envelope = createWebhookEnvelope(delivery, {
     id: deliveryId,

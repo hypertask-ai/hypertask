@@ -1,16 +1,14 @@
 export const SEARCH_OPERATORS = ['from', 'commenter', 'assignee', 'in', 'board', 'label', 'is', 'before', 'after', 'on', 'has'] as const
 export type SearchOperator = (typeof SEARCH_OPERATORS)[number]
 export type SearchFilter = { value: string; negated: boolean; userIds?: number[] }
-// HTPR-6368: logic-only operators. Kept out of SEARCH_OPERATORS so no suggestion, tip or chip appears for them.
 export const LOGIC_OPERATORS = ['type', 'priority'] as const
 export type LogicOperator = (typeof LOGIC_OPERATORS)[number]
-// 'phrase' holds exact phrases ("a b") and exclusions (-word, -"a b"; negated: true) found in the plain text.
 export type SearchFilterKey = SearchOperator | LogicOperator | 'phrase'
 export type ParsedSearch = { text: string; filters: Partial<Record<SearchFilterKey, SearchFilter[]>> }
 export type NameOperator = 'from' | 'commenter' | 'assignee' | 'in' | 'board' | 'label'
 type Names = Partial<Record<NameOperator, string[]>>
 export type { Names }
-export type SearchToken = { operator: SearchOperator; value: string; negated: boolean; raw: string; start: number; end: number }
+export type SearchToken = { operator: SearchOperator | LogicOperator; value: string; negated: boolean; raw: string; start: number; end: number }
 export const MAX_SEARCH_OPERATOR_CLAUSES = 12
 
 function operatorMatches(raw: string) {
@@ -34,8 +32,6 @@ export function searchOperatorClauseCount(raw: string) {
 
 const TEXT_CLAUSE = /(^|\s)(-?)"([^"]+)"(?=\s|$)|(^|\s)-([\p{L}\p{N}][^\s:"]*)(?=\s|$)/gu
 
-// Pulls "exact phrases" and -word / -"phrase" exclusions out of plain text. Positive phrases stay in the
-// text without quotes so ranking still sees their words; the clause enforces the exact phrase.
 export function extractTextClauses(text: string) {
   const clauses: SearchFilter[] = []
   const rest = text.replace(TEXT_CLAUSE, (_all, lead1?: string, dash?: string, phrase?: string, lead2?: string, word?: string) => {
@@ -102,13 +98,14 @@ export function parseSearchQuery(raw: string, names: Names = {}, commenterEnable
 
 export { operatorMatches }
 
-export function parseSearchTokens(raw: string, names: Names = {}, commenterEnabled = false): SearchToken[] {
-  const parsed = parseSearchQuery(raw, names, commenterEnabled)
-  const used: Partial<Record<SearchOperator, number>> = {}
+export function parseSearchTokens(raw: string, names: Names = {}, commenterEnabled = false, logicEnabled = false): SearchToken[] {
+  const parsed = parseSearchQuery(raw, names, commenterEnabled, logicEnabled)
+  const operators: readonly string[] = [...SEARCH_OPERATORS, ...(logicEnabled ? LOGIC_OPERATORS : [])]
+  const used: Partial<Record<SearchToken['operator'], number>> = {}
   const matches = operatorMatches(raw)
   return matches.flatMap(({ start, valueStart, operator, negated }, index) => {
-    if (!SEARCH_OPERATORS.includes(operator as SearchOperator)) return []
-    const key = operator as SearchOperator
+    if (!operators.includes(operator)) return []
+    const key = operator as SearchToken['operator']
     const rawValue = raw.slice(valueStart, matches[index + 1]?.start ?? raw.length).trim()
     if (!rawValue) return []
     const value = parsed.filters[key]?.[used[key] ?? 0]?.value

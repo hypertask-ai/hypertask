@@ -24,8 +24,6 @@ export async function sendAssignEmail(
       title: taskTitle,
       link: taskLink,
       userId: checkstatus.id,
-      // Unassignment creates no notification row, so a digest would find nothing
-      // to report and silently swallow the email. It stays immediate.
       taskId: status === "unassign" ? undefined : taskId,
       replyTaskId: taskId,
     });

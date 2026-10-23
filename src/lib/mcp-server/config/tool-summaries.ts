@@ -1,11 +1,9 @@
-/**
- * First-line tool blurbs for progressive disclosure.
- * Each line states what the tool returns and stays under 100 characters.
- */
 import { buildToolName } from './mcp-standards'
 
 export const TOOL_SUMMARIES: Record<string, string> = {
+  REPORT_FEEDBACK: 'Returns a feedback receipt; report failures without being asked.',
   HELLO: 'Returns a welcome map.',
+  LIST_FEATURES: 'Returns available product features and destinations.',
   AGENT_PRESENCE: 'Returns live agent status.',
   LIST_AGENTS: 'Returns owned agents.',
   AGENT_WEBHOOK: 'Returns webhook settings.',
@@ -43,7 +41,7 @@ export const TOOL_SUMMARIES: Record<string, string> = {
   SET_CUSTOM_FIELD_VALUE: 'Returns the field value.',
   SECTION_CRUD: 'Returns the column.',
   GET_COMMENTS: 'Returns task comments.',
-  ADD_COMMENT: 'Returns the comment.',
+  ADD_COMMENT: 'Returns comment or hidden agent log; use kind question|qa|done for people; describe for routing.',
   UPDATE_COMMENT: 'Returns the updated comment.',
   DELETE_COMMENT: 'Returns comment deletion.',
   CREATE_PAGE: 'Returns the created page.',

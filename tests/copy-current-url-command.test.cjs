@@ -50,15 +50,12 @@ test("copy current page URL is one global Navigate command", () => {
   assert.doesNotMatch(registrySource, /Copy URL of view|copyCurrentViewId/);
 });
 
-test("the rollout flag gates both visibility and direct execution", () => {
-  assert.match(
-    paletteSource,
-    /useFlag\("htpr-6112-copy-current-url"\)[\s\S]*CommandMode\.CopyViewURL \|\|\s*copyCurrentUrlEnabled/,
-  );
-  assert.match(
-    actionsSource,
-    /useFlag\("htpr-6112-copy-current-url"\)[\s\S]*mode === CommandMode\.CopyViewURL && !copyCurrentUrlEnabled[\s\S]*boardCloseHandler\(\);\s*return;/,
-  );
+test("copy current page URL is always available without a rollout flag", () => {
+  for (const source of [paletteSource, actionsSource]) {
+    assert.doesNotMatch(source, /useFlag\("htpr-6112-copy-current-url"\)|copyCurrentUrlEnabled/);
+  }
+  assert.doesNotMatch(paletteSource, /command\.commandMode !== CommandMode\.CopyViewURL/);
+  assert.match(actionsSource, /case CommandMode\.CopyViewURL:\s*void copyCurrentPageURL\(\);\s*return;/);
 });
 
 test("the command awaits copying the exact browser URL before reporting success", () => {

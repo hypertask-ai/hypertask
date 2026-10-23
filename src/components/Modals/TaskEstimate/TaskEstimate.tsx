@@ -14,8 +14,6 @@ import { KeyCodes } from "@/lib/constants/keyboard-handler";
 import useHandleMouseGlobal from "@/hooks/General/useHandleMouse";
 import { useEstimateModal } from "@/hooks/MultiPages/Tasks/useEstimateModal";
 import EstimateLabelComponent from "./EstimateLabelComponent";
-import { useFlag } from "@/hooks/useFlag";
-import { HTPR_6978_SIZE_LABEL_CLICK_FLAG } from "@/lib/flags/keys";
 
 const TaskEstimateModal = ({
   closeHandler,
@@ -24,7 +22,6 @@ const TaskEstimateModal = ({
   closeHandler: any;
   mode: "Task" | "Filter" | "TaskModalGlobally" | "Filter-Calendar";
 }) => {
-  const sizeLabelClick = useFlag(HTPR_6978_SIZE_LABEL_CLICK_FLAG);
   const [keyword, setKeyword] = useState("");
   const [filteredPriorities, setFilteredPriorities] = useState<
     IEstimateConstants[]
@@ -150,7 +147,7 @@ const TaskEstimateModal = ({
                 )}
                 <EstimateLabelComponent
                   estimate={estimate}
-                  onClick={sizeLabelClick ? () => EnterOnClickHandler(estimate) : undefined}
+                  onClick={() => EnterOnClickHandler(estimate)}
                 />
               </div>
               {checkedEstimates?.includes(estimate.estimate_index) ? (

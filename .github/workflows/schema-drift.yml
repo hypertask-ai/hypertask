@@ -1,0 +1,63 @@
+name: Production Schema Drift
+
+# Monitoring only: never a required PR check and never repairs production.
+on:
+  schedule:
+    - cron: '23 2 * * *'
+  deployment_status:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: production-schema-drift
+  cancel-in-progress: false
+
+jobs:
+  drift:
+    if: >-
+      (github.event_name == 'schedule') ||
+      (github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/production') ||
+      (github.event_name == 'deployment_status' &&
+       github.event.deployment_status.state == 'success' &&
+       github.event.deployment.environment == 'Production')
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: read
+    timeout-minutes: 15
+    services:
+      postgres:
+        image: ghcr.io/hypertask-ai/ci-postgres:16-alpine@sha256:721873c34ceb9f8d8fc265984940dc982404c105f19ad51be9fdc5970a6080ea
+        credentials:
+          username: ${{ github.actor }}
+          password: ${{ github.token }}
+        env:
+          POSTGRES_USER: drift
+          POSTGRES_PASSWORD: drift
+          POSTGRES_DB: shadow
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U drift -d shadow"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    steps:
+      # Never execute deployment-event or dispatch-branch code with this secret.
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          ref: production
+          persist-credentials: false
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: '^24.22.1'
+          check-latest: true
+          cache: npm
+      - run: npm ci --ignore-scripts --prefer-offline
+      - name: Compare production catalogs with committed migrations
+        env:
+          SCHEMA_READER_DATABASE_URL: ${{ secrets.SCHEMA_READER_DATABASE_URL }}
+          SCHEMA_SHADOW_DATABASE_URL: postgresql://drift:drift@127.0.0.1:5432/shadow
+        run: node scripts/schema-drift-check.mjs

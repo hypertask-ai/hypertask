@@ -1,5 +1,10 @@
 import prisma from "@/lib/prisma";
-import { fetchProjectIds, includeSavedContentComment } from "./helper";
+import { projectContentAccessWhere } from "@/utils/controllers/projects/getAllIncludes";
+import {
+  commentOnSavedTask,
+  fetchProjectIds,
+  includeSavedContentComment,
+} from "./helper";
 
 export const getAllPinned = async (userId: number) => {
   try {
@@ -9,6 +14,7 @@ export const getAllPinned = async (userId: number) => {
         userId,
         commentId: { not: null },
         projectId: { in: projectIds },
+        task: { project: projectContentAccessWhere(userId) },
         type: "Public",
       },
       include: {
@@ -31,6 +37,7 @@ export const getAllPinned = async (userId: number) => {
         userId: { not: userId },
         commentId: { not: null },
         projectId: { in: projectIds },
+        task: { project: projectContentAccessWhere(userId) },
         type: "Public",
       },
       include: {
@@ -50,7 +57,10 @@ export const getAllPinned = async (userId: number) => {
 
     return {
       status: 200,
-      json: { personalPins, teamPins },
+      json: {
+        personalPins: commentOnSavedTask(personalPins),
+        teamPins: commentOnSavedTask(teamPins),
+      },
     };
   } catch (error) {
     console.log("🚀 ~ getAllPinned ~ error:", error);

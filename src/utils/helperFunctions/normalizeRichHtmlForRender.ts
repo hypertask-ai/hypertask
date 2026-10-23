@@ -7,11 +7,6 @@ const DOCUMENT_HEAD_OPEN_RE = /<head\b[^>]*>/i;
 const DOCUMENT_WRAPPER_RE = /<\/?(?:html|head|body)\b[^>]*>/gi;
 const DOCTYPE_RE = /<!doctype\b[^>]*>/gi;
 
-/**
- * Rich-text records created by older editors can contain a complete HTML
- * document. Injecting those document tags inside a div makes the browser
- * reparent them before React hydrates, so render only the body fragment.
- */
 export function normalizeRichHtmlForRender(html: string): string {
   if (!html) return html;
 

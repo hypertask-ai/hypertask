@@ -113,7 +113,14 @@ test('deferred tools/list stays far cheaper than the full catalog', () => {
   for (const tool of listed) {
     assert.equal(tool.inputSchema?.type, 'object', `${tool.name} is missing a protocol inputSchema`)
   }
-  assert.ok(tokens < 2100, `deferred list used ${tokens} tokens`)
+  const deferredTokens = (tools: typeof catalog) => estimateTokens({ tools: listToolsDeferred(toolsForConnect(tools, true)) })
+  const withoutFeatures = catalog.filter((tool) => tool.name !== 'hypertask_list_features')
+  const baseline = withoutFeatures.filter((tool) => tool.name !== 'hypertask_report_feedback')
+  const baselineTokens = deferredTokens(baseline)
+  const feedbackTokens = deferredTokens(withoutFeatures) - baselineTokens
+  assert.ok(baselineTokens < 2100, `flag-off deferred list used ${baselineTokens} tokens`)
+  assert.ok(feedbackTokens < 60, `feedback discovery added ${feedbackTokens} tokens`)
+  assert.ok(tokens - baselineTokens - feedbackTokens < 60, `feature discovery added ${tokens - baselineTokens - feedbackTokens} tokens`)
   assert.ok(tokens * 2 < fullTokens, `full list ${fullTokens} should be more than twice deferred ${tokens}`)
 })
 

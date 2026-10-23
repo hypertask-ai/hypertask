@@ -21,6 +21,7 @@ type Props = Pick<
 > &
   Pick<
   ReturnType<typeof useAgentChatState>,
+  | "embedded"
   | "openingFullChat"
   | "setOpeningFullChat"
   | "router"
@@ -71,7 +72,7 @@ type Props = Pick<
 >;
 
 export function useAgentLifecycle({
-  selectedAgent, openingFullChat, setOpeningFullChat, router, setDetailsCollapsed,
+  embedded, selectedAgent, openingFullChat, setOpeningFullChat, router, setDetailsCollapsed,
   clearSelectionState, newAgentName, creatingAgent, setCreatingAgent, setCreateAgentError,
   setNewAgentToken, setShowCreateAgent, setNewAgentName, rosterGenRef, loadAgents, setAgents,
   setRosterError, selectAgent, mentionOpen, showCreateAgent, detailsSheetOpen, draftRef, draft,
@@ -108,7 +109,6 @@ export function useAgentLifecycle({
       try {
         window.localStorage.setItem(DETAILS_COLLAPSED_KEY, prev ? "0" : "1");
       } catch {
-        // Best effort only; the toggle still works for this visit.
       }
       return !prev;
     });
@@ -140,9 +140,6 @@ export function useAgentLifecycle({
         throw new Error(data.error ?? "Could not create agent");
       }
       const createdId = data.agent.id;
-      // Store the token the moment the agent exists, before the roster
-      // refresh below: the endpoint never returns it again, so a refresh
-      // failure must not be able to take it down with it.
       if (data.token) {
         setNewAgentToken(data.token);
       } else {
@@ -159,9 +156,6 @@ export function useAgentLifecycle({
           if (created) selectAgent(created);
         }
       } catch {
-        // The agent was created (and its token, if any, is already shown);
-        // a failed roster refresh just means it won't appear in the list
-        // until the next reload, not that creation itself failed.
       }
     } catch (e) {
       setCreateAgentError(
@@ -172,37 +166,25 @@ export function useAgentLifecycle({
     }
   };
 
-  // Any of the three keyboard shortcuts below would otherwise fire while a
-  // popover, the create-agent modal, or the mobile details sheet is open and
-  // stomp on typing/navigation inside it.
   const overlayOpen = mentionOpen || showCreateAgent || detailsSheetOpen;
 
   useEffect(() => {
     draftRef.current = draft;
-    // Sending empties the composer, which clears the stored draft through the
-    // same write; a failed send puts the text back and re-saves it.
     if (selectedId) writeDraft(currentUser.id, selectedId, draft);
-    // Only once the server copy has been folded in: writing before that would
-    // push this thread's empty composer over a draft typed on another device.
     const activeSessionId = sessionIdRef.current;
     if (activeSessionId && draftHydratedRef.current === activeSessionId) {
-      saveDraftToServer(activeSessionId, draft);
+      saveDraftToServer(activeSessionId, draft, embedded?.projectId);
     }
-  }, [draft, selectedId, currentUser.id]);
+  }, [draft, selectedId, currentUser.id, embedded?.projectId]);
 
   useEffect(() => {
+    if (embedded) return;
     const onKeyDown = (e: globalThis.KeyboardEvent) => {
       if (overlayOpen) return;
       const isCycleKey =
         (e.ctrlKey && e.key === "Tab") ||
-        // Excludes Shift: Alt+Shift+Arrow is the app-wide team-cycle
-        // shortcut (GloablProviders.tsx) and must not also fire this.
         (e.altKey && !e.shiftKey && (e.key === "ArrowDown" || e.key === "ArrowUp"));
       if (isCycleKey) {
-        // A focused control other than the composer (the team filter
-        // <select>, a button, a search input) owns Alt+Arrow for its own
-        // native navigation; only the composer and the page background are
-        // fair game for the roster-cycle shortcut.
         const target = e.target;
         if (
           target instanceof HTMLElement &&
@@ -211,14 +193,6 @@ export function useAgentLifecycle({
         ) {
           return;
         }
-        // Don't fire while the user is mid-edit in the composer: an Alt+Arrow
-        // meant to move the cursor, or a stray Ctrl+Tab, would yank them to
-        // another agent instead. Text merely restored on selection doesn't
-        // count -- drafts now survive the switch, so cycling past a saved one
-        // costs nothing and blocking on it would disable the shortcut for as
-        // long as the draft sits there (HTPR-6005 review). Reads refs (not
-        // `draft` directly) so this effect doesn't need to re-run, and re-add
-        // the window listener, on every keystroke.
         if (
           document.activeElement === composerRef.current &&
           draftRef.current.trim() !== "" &&
@@ -238,7 +212,6 @@ export function useAgentLifecycle({
         cycleAgent(direction);
         return;
       }
-      // Ctrl+O otherwise opens the browser's file picker.
       if (e.ctrlKey && e.key.toLowerCase() === "o") {
         e.preventDefault();
         openLatestReplyLinks();
@@ -248,10 +221,8 @@ export function useAgentLifecycle({
     return () => window.removeEventListener("keydown", onKeyDown);
   }, [overlayOpen, cycleAgent, openLatestReplyLinks]);
 
-  // Ctrl+K palette bridge: the "Agent Chat" command group (AllCommands.ts,
-  // only shown while this page is open) dispatches these instead of trying
-  // to reach into this component's state from the palette's dispatcher.
   useEffect(() => {
+    if (embedded) return;
     const onPaletteCommand = (e: Event) => {
       const detail = (e as CustomEvent<TAgentChatCommand>).detail;
       switch (detail) {
@@ -283,10 +254,8 @@ export function useAgentLifecycle({
       window.removeEventListener(AGENT_CHAT_COMMAND_EVENT, onPaletteCommand);
   }, [cycleAgent, openLatestReplyLinks, stepTeamCycle]);
 
-  // Put the cursor in the composer the moment it becomes usable: on initial
-  // load (deep link or roster click) and again after a message sends, so
-  // typing can continue without reaching for the mouse.
   useEffect(() => {
+    if (embedded) return;
     if (isExternal && session && !composerLocked) composerRef.current?.focus();
     if (isExternal && session && !composerLocked) focusComposer();
   }, [isExternal, session, composerLocked, selectedId]);

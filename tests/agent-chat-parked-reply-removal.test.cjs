@@ -37,7 +37,6 @@ function loadMessageRoute({
   deliveryIds = [],
   heartbeatAt = null,
   activeWebhook = false,
-  pollingEnabled = true,
 } = {}) {
   const writes = [];
   const updates = [];
@@ -107,7 +106,6 @@ function loadMessageRoute({
   stubModule("src/lib/flags.ts", {
     AGENT_CHAT_BRIEF_FLAG: "htpr-6155-chat-agent-brief",
     isFeatureEnabled: async (key) => {
-      if (key === "htpr-6553-agent-chat-polling") return pollingEnabled;
       assert.notEqual(key, "htpr-6322-agent-chat-parked-reply");
       return false;
     },
@@ -306,7 +304,6 @@ test("the runtime's own transcript never carries the parked line", async () => {
 function loadHistoryRoute({
   heartbeatAt = null,
   subscription = { active: false, events: [] },
-  pollingEnabled = true,
   extraRows = [],
 } = {}) {
   const counts = [];
@@ -365,7 +362,6 @@ function loadHistoryRoute({
     SHARED_AGENT_CHAT_FLAG: "htpr-6002-shared-agent-chat",
     isFeatureEnabled: async (key) => {
       if (key === "htpr-6002-shared-agent-chat") return true;
-      if (key === "htpr-6553-agent-chat-polling") return pollingEnabled;
       assert.notEqual(key, "htpr-6322-agent-chat-parked-reply");
       return false;
     },

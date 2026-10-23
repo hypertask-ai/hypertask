@@ -1,9 +1,6 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
-import { parseCookies } from "better-auth/cookies";
-import { getSessionUser } from "@/lib/auth/getSessionUser";
-import { taskWriteRoute, type TaskWriteRoute } from "./route";
-import { SESSION_COOKIE, verifySession } from "@/lib/auth/session";
+import { legacyTaskWriteSession, taskWriteRoute, type TaskWriteRoute } from "./route";
 import {
   DIRECT_UPLOAD_MAX_FILES,
   DIRECT_UPLOAD_URL_TTL_SECONDS,
@@ -27,18 +24,6 @@ import { signUploadGrant } from "@/lib/storage/uploadGrant";
 import { TASK_ATTACHMENT_PREFIX } from "@/lib/storage/uploadTaskAttachmentToS3";
 import { randomUUID } from "node:crypto";
 
-/**
- * Mints short-lived signed PUT URLs so the browser can upload attachments
- * straight to storage (HTPR-5524).
- *
- * Only this small JSON handshake crosses the Vercel function, so the platform's
- * 4.5 MB request-body ceiling no longer caps attachment size. The buffered
- * `/api/tasks/n8nUpload` route stays as the fallback for small files.
- *
- * The client never chooses the object key or the bucket: it sends a name, a
- * size and a type, and the server decides where the bytes land and what
- * Content-Type the signature is bound to.
- */
 
 type RequestedFile = {
   name: unknown;
@@ -51,7 +36,6 @@ export type ParsedRequestFile = {
   name: string;
   size: number;
   type: string | null;
-  /** Set when this entry is the JPEG copy of an earlier entry (HTPR-6264). */
   previewOfIndex?: number;
 };
 
@@ -70,9 +54,6 @@ export function parseRequestedFiles(body: unknown): ParsedRequestFile[] {
   if (!Array.isArray(files) || files.length === 0) {
     throw new UploadUrlRequestError("No files provided", 400);
   }
-  // A HEIC contributes two entries (HTPR-6264), so the hard ceiling on the
-  // array is twice the ceiling on files the user picked. The user-facing count
-  // is checked below, once the preview entries can be told apart.
   if (files.length > DIRECT_UPLOAD_MAX_FILES * 2) {
     throw new UploadUrlRequestError(
       `A maximum of ${DIRECT_UPLOAD_MAX_FILES} files may be uploaded at once`,
@@ -94,10 +75,6 @@ export function parseRequestedFiles(body: unknown): ParsedRequestFile[] {
       throw new UploadUrlRequestError(`Invalid size for "${name}"`, 400);
     }
 
-    // A preview's key is derived from its original's, so the reference has to
-    // point backwards at a real entry that is not itself a preview. Anything
-    // else and the key could not be built, or could be aimed somewhere the
-    // caller was never issued.
     const previewOf = file?.previewOfIndex;
     if (previewOf !== undefined) {
       if (
@@ -133,9 +110,6 @@ export function parseRequestedFiles(body: unknown): ParsedRequestFile[] {
     };
   });
 
-  // At most one preview per original: two entries claiming the same parent
-  // would be signed for the same derived key and the second would overwrite
-  // the first.
   const claimed = new Set<number>();
   for (const file of parsed) {
     if (file.previewOfIndex === undefined) continue;
@@ -164,15 +138,6 @@ export function parseRequestedFiles(body: unknown): ParsedRequestFile[] {
   return parsed;
 }
 
-/**
- * Signs a PUT that is bound to one key, one content type and one exact byte
- * length. Content-length is part of the signature, so storage itself rejects a
- * body of any other size and the declared size stops being a claim we trust.
- *
- * The SDK v2 presigner cannot do this ("ContentLength is not supported in
- * pre-signed URLs"), which is why the v3 presigner is used here.
- * /api/tasks/uploadFinalize still verifies the stored length as a second layer.
- */
 export async function signUpload(
   key: string,
   contentType: string,
@@ -203,18 +168,8 @@ const route = taskWriteRoute({
       if (body?.purpose !== undefined && !taskLinkRequested) {
         throw new UploadUrlRequestError("Invalid upload purpose", 400);
       }
-      if (taskLinkRequested) {
-        const { isFeatureEnabled } = await import("@/lib/flags");
-        if (!(await isFeatureEnabled("htpr-5993-optimistic-task-uploads", session.userId))) {
-          throw new UploadUrlRequestError("Background task uploads are disabled", 403);
-        }
-      }
       const files = parseRequestedFiles(body);
 
-      // Keys first, then signatures, because a preview's key is its original's
-      // with a suffix (HTPR-6264) and so cannot be minted until that one exists.
-      // The client never picks a key here either: it only says which entry a
-      // preview belongs to, and the derivation is the server's.
       const keys: string[] = [];
       const contentTypes: string[] = [];
       files.forEach((file, index) => {
@@ -244,17 +199,12 @@ const route = taskWriteRoute({
         })
       );
 
-      // The grant names exactly these keys for exactly this user, so finalizing
-      // or discarding them is a capability rather than a bucket-wide permission.
       const grant = signUploadGrant(
         {
           userId: session.userId,
           keys: uploads.map((upload) => upload.key),
           ...(taskLinkRequested
             ? {
-                // A preview is storage, not an attachment: it must never become a
-                // row of its own, so it is not offered as a linkable file
-                // (HTPR-6264).
                 taskLinkFiles: uploads
                   .filter((_, index) => files[index].previewOfIndex === undefined)
                   .map((upload) => ({
@@ -280,11 +230,7 @@ const route = taskWriteRoute({
 });
 
 export const POST: TaskWriteRoute = async (request) => {
-  // Preserve uploads' signed-cookie-first auth and their SESSION_REQUIRED body.
-  const signed = verifySession(request.cookies ? request.cookies[SESSION_COOKIE] : parseCookies(request.headers.get("cookie") ?? "").get(SESSION_COOKIE));
-  const session = signed
-    ? { userId: signed.id, source: "legacy" as const, needsBridge: true as const }
-    : await getSessionUser(request.headers);
+  const session = await legacyTaskWriteSession(request, true);
   if (!session) return NextResponse.json({ error: "Unauthorized", code: "SESSION_REQUIRED" }, { status: 401 });
   return route(request, session);
 };

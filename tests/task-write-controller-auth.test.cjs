@@ -1,3 +1,4 @@
+const { withStubs } = require("./helpers/stub-map.cjs");
 const test = require("node:test");
 const assert = require("node:assert/strict");
 const fs = require("node:fs");
@@ -59,6 +60,7 @@ function compile(relativePath) {
 }
 
 function execute(javascript, stubs) {
+  stubs = withStubs({ "@/lib/auth/agentScope": require("./helpers/agent-board-scope.cjs").enforcedScope }, stubs);
   const originalLoad = Module._load;
   Module._load = (request, parent, isMain) =>
     stubs[request] ?? originalLoad(request, parent, isMain);
@@ -101,6 +103,7 @@ function loadUpdateController(
     updateErrorTarget = ["projectId", "uniqueIndex"],
     initialTask = {},
     aliasError = false,
+    parentTasks = [],
     stateAtFence,
   } = {},
 ) {
@@ -131,7 +134,16 @@ function loadUpdateController(
   };
   const aliases = new Map();
   const tx = {
+    page: { findMany: async () => {
+      assert.equal(calls.transactionActive, true);
+      (calls.pageReads ??= []).push(currentTask.id);
+      return [];
+    } },
     $executeRaw: async () => {},
+    $queryRaw: async (strings, parentId, parentProjectId) => {
+      assert.match(strings.join("?"), /SELECT id FROM "Task"[\s\S]*FOR SHARE/);
+      return parentTasks.filter(parent => parent.id === parentId && parent.projectId === parentProjectId && parent.status !== "Deleted").map(({ id }) => ({ id }));
+    },
     project: { findUnique: async ({ where }) => ({ uniqueIdentifier: where.id === MEMBER_PROJECT ? "M" : "S" }) },
     taskNumberAlias: {
       upsert: async (query) => {
@@ -243,7 +255,10 @@ function loadUpdateController(
     return { newComment: { id: 1 }, shouldNotify: moveShouldNotify };
   };
   const stubs = {
-    "@/lib/telemetry/activationOccurrences": { recordActivationOccurrence: () => {}, recordAgentTaskCompletion: () => {} },
+    "@/lib/tasks/sameBoardRelations": execute(compile("src/lib/tasks/sameBoardRelations.ts"), {}),
+    "@/utils/controllers/tasks/parentTaskAccess": execute(compile("src/utils/controllers/tasks/parentTaskAccess.ts"), {}),
+    "@/lib/telemetry/analyticsIntents": { enqueueAnalyticsIntent: async () => "intent-key", processAnalyticsIntentSoon: () => {}, enqueueOutsideSaveAndProcessSoon: async (enqueue) => { await enqueue() } },
+    "@/lib/telemetry/activationOccurrences": { captureActivationOccurrence: async () => null, enqueueAgentTaskCompletion: async () => null },
     "@/lib/prisma": { __esModule: true, default: prisma },
     "@/lib/api/errorMessage": execute(compile("src/lib/api/errorMessage.ts"), {}),
     "@/models/ActivityModels.ts": {},
@@ -284,7 +299,7 @@ function loadUpdateController(
     },
     "@/utils/controllers/projects/getAllIncludes": { taskWriteAccessWhere },
     "@/lib/mcp/tasks/agentMutationFence": {
-      AgentMutationLeaseConflictError: class extends Error {},
+      TaskTeamScopeError: class extends Error {}, AgentMutationLeaseConflictError: class extends Error {},
       assertAgentAssignmentChangeAllowed: acquireTaskFence,
       cancelAgentMutationLeaseForHumanOverride: noop,
     },
@@ -813,6 +828,7 @@ function loadMoveController({
     },
     estimate: { updateMany: async () => undefined },
     priority: { updateMany: async () => undefined },
+    page: { updateMany: async () => undefined },
     savedContent: { updateMany: async () => undefined },
     notification: { deleteMany: async () => undefined },
     drafts: { deleteMany: async () => undefined },
@@ -820,6 +836,17 @@ function loadMoveController({
     assignees: { findMany: async () => [] },
     follower: { findMany: async () => [] },
     taskLabel: { findMany: async () => [] },
+  };
+  const pageTx = { page: { findMany: async () => {
+    assert.equal(calls.transactionActive, true);
+    (calls.pageReads ??= []).push(calls.updatedTask.id);
+    return [];
+  } } };
+  prisma.$transaction = async (callback) => {
+    assert.notEqual(calls.transactionActive, true);
+    calls.transactionActive = true;
+    try { return await callback(pageTx); }
+    finally { calls.transactionActive = false; }
   };
   let remainingIdentityConflicts = identityConflicts;
   const updateTaskSingle = async (task, _user, _agentId, options) => {
@@ -836,15 +863,24 @@ function loadMoveController({
       };
     }
     const projectChanged = task.projectId !== undefined && task.projectId !== currentTask.projectId;
-    return !projectChanged || options?.allowProjectChange
-      ? { status: 200, json: { ...currentTask, ...task } }
-      : { status: 400, json: { message: "Project change denied" } };
+    if (projectChanged && !options?.allowProjectChange) {
+      return { status: 400, json: { message: "Project change denied" } };
+    }
+    const updated = { ...currentTask, ...task };
+    if (projectChanged) {
+      await prisma.$transaction((tx) => options.onProjectChangedInTx(tx, currentTask, updated));
+    }
+    return { status: 200, json: updated };
   };
   let taskCount = 0;
   const stubs = {
-    "@/lib/telemetry/activationOccurrences": { recordActivationOccurrence: () => {}, recordAgentTaskCompletion: () => {} },
+    "@/lib/telemetry/analyticsIntents": { enqueueAnalyticsIntent: async () => "intent-key", processAnalyticsIntentSoon: () => {}, enqueueOutsideSaveAndProcessSoon: async (enqueue) => { await enqueue() } },
+    "@/lib/telemetry/activationOccurrences": { captureActivationOccurrence: async () => null, enqueueAgentTaskCompletion: async () => null },
     "@/lib/prisma": { __esModule: true, default: prisma },
     "@/lib/api/errorMessage": execute(compile("src/lib/api/errorMessage.ts"), {}),
+    "../turbopuffer/turbopufferHelper": {
+      upsertPageToTurbopuffer: async () => { throw new Error("No pages in this fixture to index"); },
+    },
     "@/utils/controllers/getMemberAndOwnerForBoard": async () => [],
     "@/utils/generateRank": () => "rank",
     "./getNextUniqueTaskIndex": {
@@ -892,6 +928,7 @@ function loadMoveController({
 
 test("cross-board moves record aliases for the parent and nested subtasks through the real updater", async () => {
   const aliases = [];
+  const movedTasks = new Map();
   const child = (id, uniqueIndex, subTasks = []) => ({
     id, uniqueIndex, ticketNumber: `HTPR-${uniqueIndex}`, projectId: SOURCE_PROJECT,
     userId: USER_ID, dueDate: null, subTasks,
@@ -902,9 +939,12 @@ test("cross-board moves record aliases for the parent and nested subtasks throug
     agentId: null,
     subTasks: [child(102, 5732, [child(103, 5733)])],
     updateImplementation: async (task, user, agentId, options, initialTask) => {
-      const controller = loadUpdateController(SOURCE_PROJECT, OWNER_PROJECT, { initialTask });
+      const controller = loadUpdateController(SOURCE_PROJECT, OWNER_PROJECT, { initialTask, parentTasks: [...movedTasks.values()] });
       const result = await controller.updateTaskSingle(task, user, agentId, options);
+      assert.equal(result.status, 200);
+      movedTasks.set(task.id, result.json);
       aliases.push(...controller.calls.aliases);
+      assert.deepEqual(controller.calls.pageReads, [task.id], "page sync runs inside each real task transaction");
       return result;
     },
   });
@@ -932,6 +972,8 @@ test("cross-board moves adopt the destination ticket identity", async () => {
   assert.equal(calls.updatedTask.ticketNumber, "T-1");
   assert.equal(calls.updatedTask.cycleId, null);
   assert.equal(calls.allowProjectChange, true);
+  assert.deepEqual(calls.pageReads, [TASK_ID, TASK_ID], "sync pages in the task transaction, then detach split hierarchy");
+  assert.equal(calls.transactionActive, false);
 });
 
 test("cross-board moves retry a conflicting destination identity with a fresh index", async () => {

@@ -38,13 +38,10 @@ function serverFixture() {
     "@/lib/flags": { isFeatureEnabled: async () => true },
     "@/utils/controllers/projects/getAllIncludes": { getProjectWhere: () => ({ ownerId: 985 }) },
     "@/utils/controllers/notifications/agentFirstTaskEmail": {},
+    "@/lib/telemetry/savedWork": { enqueueColumnCreated: async () => "column-key", enqueueColumnRenamed: async () => "rename-key", processAnalyticsIntentSoon: () => {} },
     "./viewHelpers": {},
     "@/lib/auth/getSessionUser": { getSessionUser: async () => ({ userId: 985 }) },
     "@/lib/realtime/server": { broadcastBoardChange: (...args) => effects.push(args) },
-    "@/lib/api/task-writes/route": {
-      withTaskWriteFlag: (handler) => handler,
-      taskWriteRoute: ({ operation }) => async (req) => operation(await req.json(), { userId: 985 }),
-    },
   };
   const service = load("src/utils/controllers/section/sectionService.ts", mocks);
   const controller = load("src/utils/controllers/section/update.ts", mocks).default;
@@ -68,7 +65,7 @@ function serverFixture() {
   return { service, post, section, cards, effects };
 }
 
-function clientFixture({ enabled = true, instant = false, typed = false, response, succeeds = false } = {}) {
+function clientFixture({ enabled = true, typed = false, response, succeeds = false } = {}) {
   const section = { id: 91, section_title: "Todo", deleted: false };
   const cards = [{ id: 42, sectionId: 91 }];
   const project = { id: 15, section: [section], sections: [section], filteredSections: [section], tasks: cards };
@@ -96,7 +93,7 @@ function clientFixture({ enabled = true, instant = false, typed = false, respons
   const bindings = {
     sections: [section], currentProject: project, currentUser: { id: 985 },
     updating: false, title: "Todo", ticketsFinished: false, editSection: section,
-    noEmptyBoardFlash: false, instantColumnDelete: instant, lastColumnDeleteMessage: enabled,
+    noEmptyBoardFlash: false, lastColumnDeleteMessage: enabled,
     typedWrite: typed ? post : undefined,
     axios: { isAxiosError: axios.isAxiosError, post: (url, body) => {
       assert.equal(url, "/api/section/update"); return post(body);
@@ -130,36 +127,34 @@ for (const typed of [false, true]) {
     assert.deepEqual(f.cards, [{ id: 42, sectionId: 91, status: "Normal" }]);
     assert.deepEqual(f.effects, []);
   });
-  for (const instant of [false, true]) {
-    test(`${typed ? "typed" : "legacy"} ${instant ? "optimistic" : "queued"} confirmation shows one toast and restores every cache`, async () => {
-      const f = clientFixture({ typed, instant });
-      await f.confirmDelete();
-      assert.deepEqual(f.toasts, [message]);
-      assert.equal(f.requests.length, 1);
-      assert.deepEqual(f.observedColumns, [instant ? 0 : 1]);
-      for (const field of ["section", "sections", "filteredSections"]) {
-        assert.deepEqual(f.current()[field].map((s) => s.id), [91]);
-        assert.deepEqual(f.cache.get(JSON.stringify(["projectsAll"])).updatedProjects[0][field].map((s) => s.id), [91]);
-        assert.deepEqual(f.cache.get(JSON.stringify(["projectsAllMinimal"]))[0][field].map((s) => s.id), [91]);
-      }
-      assert.deepEqual(f.cache.get(JSON.stringify(f.columnsKey)).map((s) => s.id), [91]);
-      assert.deepEqual(f.current().tasks, f.cards);
-      assert.deepEqual(f.refetches, []);
-    });
-    test(`flag OFF preserves ${instant ? "generic optimistic" : "silent queued"} failure behavior (${typed ? "typed" : "legacy"})`, async () => {
-      const f = clientFixture({ enabled: false, instant, typed });
-      await f.confirmDelete();
-      assert.deepEqual(f.toasts, instant ? ["Column could not be deleted"] : []);
-      assert.equal(f.current().sections.length, 1);
-    });
-    test(`successful delete is unaffected (${typed ? "typed" : "legacy"}, instant ${instant})`, async () => {
-      const f = clientFixture({ succeeds: true, instant, typed });
-      await f.confirmDelete();
-      assert.deepEqual(f.toasts, []);
-      assert.deepEqual(f.cache.get(JSON.stringify(f.columnsKey)), []);
-      assert.deepEqual(f.refetches, [[{ queryKey: ["projectsAll"] }]]);
-    });
-  }
+  test(`${typed ? "typed" : "legacy"} optimistic confirmation shows one toast and restores every cache`, async () => {
+    const f = clientFixture({ typed });
+    await f.confirmDelete();
+    assert.deepEqual(f.toasts, [message]);
+    assert.equal(f.requests.length, 1);
+    assert.deepEqual(f.observedColumns, [0]);
+    for (const field of ["section", "sections", "filteredSections"]) {
+      assert.deepEqual(f.current()[field].map((s) => s.id), [91]);
+      assert.deepEqual(f.cache.get(JSON.stringify(["projectsAll"])).updatedProjects[0][field].map((s) => s.id), [91]);
+      assert.deepEqual(f.cache.get(JSON.stringify(["projectsAllMinimal"]))[0][field].map((s) => s.id), [91]);
+    }
+    assert.deepEqual(f.cache.get(JSON.stringify(f.columnsKey)).map((s) => s.id), [91]);
+    assert.deepEqual(f.current().tasks, f.cards);
+    assert.deepEqual(f.refetches, []);
+  });
+  test(`flag OFF preserves generic optimistic failure behavior (${typed ? "typed" : "legacy"})`, async () => {
+    const f = clientFixture({ enabled: false, typed });
+    await f.confirmDelete();
+    assert.deepEqual(f.toasts, ["Column could not be deleted"]);
+    assert.equal(f.current().sections.length, 1);
+  });
+  test(`successful delete is unaffected (${typed ? "typed" : "legacy"})`, async () => {
+    const f = clientFixture({ succeeds: true, typed });
+    await f.confirmDelete();
+    assert.deepEqual(f.toasts, []);
+    assert.deepEqual(f.cache.get(JSON.stringify(f.columnsKey)), []);
+    assert.deepEqual(f.refetches, [[{ queryKey: ["projectsAll"] }]]);
+  });
 }
 
 for (const response of [
@@ -169,7 +164,7 @@ for (const response of [
   { status: 400, data: { code } },
   undefined,
 ]) test(`unrelated or malformed refusal keeps generic rollback toast: ${JSON.stringify(response)}`, async () => {
-  const f = clientFixture({ instant: true, response: response ?? { status: 400 } });
+  const f = clientFixture({ response: response ?? { status: 400 } });
   await f.confirmDelete();
   assert.deepEqual(f.toasts, ["Column could not be deleted"]);
   assert.equal(f.current().sections.length, 1);

@@ -7,9 +7,6 @@ import { emitProductPerformanceEvent } from "@/lib/analytics/productPerformance"
 
 export type BoardSwitchSurface = "sidebar" | "keyboard_shortcut" | "mobile";
 
-// A switch abandoned longer ago than this (user navigated elsewhere, or the
-// destination board never became the active route) is stale: drop it rather
-// than emit a bogus duration.
 const MAX_INTENT_AGE_MS = 30_000;
 
 type BoardSwitchIntent = {
@@ -24,11 +21,6 @@ declare global {
   }
 }
 
-/**
- * Call from a board switcher's click/keydown handler, before navigating.
- * A later call overwrites any still-pending intent, which silently abandons
- * it: switching board A -> B -> C only ever times C, A and B are dropped.
- */
 export const markBoardSwitchIntent = ({
   surface,
   projectId,
@@ -42,14 +34,6 @@ export const markBoardSwitchIntent = ({
   window.__htBoardSwitchIntent = { surface, projectId, markedAt: performance.now() };
 };
 
-/**
- * Call from the same double-rAF after-paint moment as
- * emitBoardReadinessAfterPaint, with the same completion. Emits
- * app_board_switch_latency only when the board that just became usable is
- * the one a pending, fresh intent targeted — a plain route load, a stale
- * intent, or a completion for a board the user already switched away from
- * all fall through and emit nothing.
- */
 export const resolveBoardSwitchIntent = (
   completion: BoardReadinessCompletion,
 ): void => {

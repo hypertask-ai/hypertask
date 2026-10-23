@@ -27,11 +27,11 @@ const query = (rows, args) => rows.filter((row) => matches(row, args.where))
   }).slice(0, args.take)
 const mocks = new Map([
   ['src/lib/auth/getSessionUser.ts', { getSessionUser: async () => state.session }],
-  ['src/lib/flags.ts', { HTPR_6369_SEARCH_OPERATORS_FLAG: 'htpr-6369-search-operators', HTPR_6370_SEARCH_CHIPS_FLAG: 'htpr-6370-search-chips', HTPR_6688_SEARCH_AUTOCOMPLETE_FLAG: 'htpr-6688-search-autocomplete', HTPR_6865_SEARCH_LAYOUT_FLAG: 'htpr-6865-search-layout', HTPR_6878_SEARCH_LABEL_SCOPE_FLAG: 'htpr-6878-search-label-scope', HTPR_6880_SEARCH_COMMENTER_FLAG: 'htpr-6880-search-commenter', isFeatureEnabled: async () => state.flag }],
+  ['src/lib/auth/agentScope.ts', { withAgentScopeRequest: (_request, run) => run() }],
   ['src/utils/controllers/projects/getAllIncludes.ts', { getProjectWhere: (id) => ({ ownerId: id }) }],
   ['src/lib/prisma.ts', { default: {
     project: { findMany: async ({ where }) => {
-      assert.equal(where.ownerId, 6)
+      assert.deepEqual(where, { status: 'Normal', ownerId: 6, AND: [{ ownerId: 6 }] })
       return [{ id: 7, title: 'Visible' }]
     } },
     label: { findMany: async (args) => {
@@ -39,16 +39,22 @@ const mocks = new Map([
       assert.deepEqual(args.where.projectId.in, [7])
       return query(state.labels, args)
     } },
+    taskLabel: { groupBy: async () => [] },
+    task: { findMany: async (args) => {
+      assert.deepEqual(args, { where: { projectId: { in: [7] }, createdAt: { gte: args.where.createdAt.gte }, project: { ownerId: 6 } }, select: { userId: true }, orderBy: { createdAt: 'desc' }, take: 100 })
+      assert.ok(args.where.createdAt.gte instanceof Date)
+      return []
+    } },
+    assignees: { findMany: async () => [] },
     user: { findMany: async (args) => {
       state.peopleQueries.push(args)
       const scope = args.where.AND?.[0] ?? args.where
       state.peopleScope = scope.OR[0].members?.some.projectId ?? scope.OR[0].tasks.some.projectId.in
-      state.recentScope = scope.OR[0].tasks?.some.createdAt
+      state.recentScope = scope.OR.find((part) => part.tasks)?.tasks.some.createdAt
       return query(state.people, args)
     } },
   } }],
 ])
-mocks.get('src/lib/flags.ts').isFeatureEnabled = async (key) => key !== 'htpr-6370-search-chips' && state.flag
 for (const [file, exports] of mocks) {
   const filename = path.join(root, file)
   require.cache[filename] = { id: filename, filename, loaded: true, exports }
@@ -57,7 +63,7 @@ const jiti = require('jiti')(__filename, { alias: { '@': path.join(root, 'src') 
 const handler = jiti(path.join(root, 'src/pages/api/search/values.ts')).default
 const person = (id, name) => ({ id, displayName: name, email: `${id}@example.com`, members: [{ projectId: 7 }], tasks: [], assignees: [] })
 async function lookup(operator, value, overrides = {}) {
-  state = { session: { userId: 6 }, flag: true, people: [], labels: [], labelQueries: [], peopleQueries: [], ...overrides }
+  state = { session: { userId: 6 }, people: [], labels: [], labelQueries: [], peopleQueries: [], ...overrides }
   const res = { statusCode: 200, body: null, status(code) { this.statusCode = code; return this }, json(body) { this.body = body; return this } }
   await handler({ method: 'GET', headers: {}, query: { operator, value, ...(overrides.noBoard ? {} : { boardId: '7' }) } }, res)
   return { res, state }
@@ -68,20 +74,20 @@ test('lookup filters before capping 100 visible labels and people', async () => 
   const labels = Array.from({ length: 150 }, (_, i) => ({ id: `a-${i}`, value: `Alpha ${i}`, projectId: 7 }))
   labels.push({ id: 'zebra', value: 'Zebra', projectId: 7 })
   const assignee = await lookup('assignee', 'zoe', { people })
-  assert.deepEqual(assignee.res.body.candidates, [{ id: 999, name: 'Zoe' }])
+  assert.deepEqual(assignee.res.body.candidates, [{ id: 999, name: 'Zoe', email: '999@example.com' }])
   assert.equal(assignee.state.peopleScope, 7)
   assert.equal(assignee.state.peopleQueries[0].take, 100)
   assert.equal(assignee.state.peopleQueries[1].take, 99)
   assert.ok(assignee.state.peopleQueries[0].orderBy)
   const label = await lookup('label', 'zebra', { labels })
-  assert.deepEqual(label.res.body.candidates, [{ id: 'zebra', name: 'Zebra' }])
-  assert.equal(label.state.labelQueries[0].take, 100)
+  assert.deepEqual(label.res.body.candidates, [{ id: 'zebra', name: 'Zebra', count: 0, byName: true }])
+  assert.equal(label.state.labelQueries[0].take, undefined)
   assert.ok(label.state.labelQueries[0].orderBy)
   const contains = await lookup('label', 'zebra', { labels: [
     ...labels.slice(0, -1), { id: 'mid-zebra', value: 'Needs Zebra', projectId: 7 },
   ] })
-  assert.deepEqual(contains.res.body.candidates, [{ id: 'mid-zebra', name: 'Needs Zebra' }])
-  assert.equal(contains.state.labelQueries[1].where.AND[0].value.contains, 'zebra')
+  assert.deepEqual(contains.res.body.candidates, [{ id: 'mid-zebra', name: 'Needs Zebra', count: 0, byName: true }])
+  assert.equal(contains.state.labelQueries.length, 1)
 })
 test('empty assignee lookup includes people past the unordered first 100', async () => {
   const people = Array.from({ length: 150 }, (_, i) => person(i + 1, `Zoe ${String(i).padStart(3, '0')}`))
@@ -98,7 +104,6 @@ test('prefixes rank ahead of contains matches and email fallback works', async (
   assert.ok(snapshot.recentScope.gte instanceof Date)
   assert.deepEqual(res.body.candidates.map((item) => item.id), [2, 4, 3])
 })
-test('lookup requires authorization and feature flag', async () => {
+test('lookup requires authorization', async () => {
   assert.equal((await lookup('from', 'a', { session: null })).res.statusCode, 401)
-  assert.equal((await lookup('from', 'a', { flag: false })).res.statusCode, 404)
 })

@@ -12,6 +12,32 @@ export function shouldAdvanceAfterNotificationArchive(
   return inboxFlow === "true";
 }
 
+type InboxMessage = {
+  id: number | string;
+  taskId: number;
+  projectId: number;
+  userId: number;
+  status: string;
+  waitingOnSynthetic?: boolean;
+};
+
+export function inboxMessageForTask<T extends InboxMessage>(
+  inboxMessages: T[] | undefined,
+  task: { id?: number; projectId?: number } | null | undefined,
+  userId: number | null | undefined,
+): T | undefined {
+  return inboxMessages?.find(
+    (message) =>
+      message.taskId === task?.id &&
+      message.projectId === task?.projectId &&
+      message.userId === userId &&
+      message.status === "Normal" &&
+      !message.waitingOnSynthetic &&
+      Number.isSafeInteger(Number(message.id)) &&
+      Number(message.id) > 0,
+  );
+}
+
 export function nextRemainingInboxTask<T extends TaskPlaylistIdentity>(
   playlist: T[],
   currentTask: TaskPlaylistIdentity,
@@ -24,14 +50,6 @@ export function nextRemainingInboxTask<T extends TaskPlaylistIdentity>(
   return currentIndex === -1 ? playlist[0] : playlist[currentIndex + 1];
 }
 
-/**
- * Where the task-detail playlist sends the user after an archive/snooze.
- *
- * "stay" is the case the archived indicator has to cover: the playlist holds
- * other tasks but not this one (opened from search, a stale playlist, a task
- * filtered out of the current view), so nothing navigates and the detail page
- * keeps rendering the task it just archived.
- */
 export function resolveTaskPlaylistNavigation({
   indexOf,
   playlistLength,
@@ -50,10 +68,6 @@ export function resolveTaskPlaylistNavigation({
   const isLast = indexOf === playlistLength - 1;
   const isMissing = indexOf === -1;
 
-  // Inbox cache updates can remove the archived task before this navigation
-  // runs. The remaining playlist is already ordered, so its first different
-  // task is the next valid target. Other entry points keep the stale-playlist
-  // guard, and the final inbox item goes back instead of reopening itself.
   if (isMissing && inboxFlow) return hasNextInboxTask ? "next" : "back";
   if (!isLast && !isMissing) return "next";
   if (isLast || playlistLength === 1) return "back";
@@ -61,12 +75,6 @@ export function resolveTaskPlaylistNavigation({
   return "stay";
 }
 
-/**
- * Archiving normally leaves the task detail, so the icon must not flash the
- * restore state on the way out. When the page stays put there is no navigation
- * to hide behind: apply the archived status locally instead of waiting for a
- * realtime echo or a manual reload (HTPR-5480).
- */
 export function shouldApplyLocalArchivedStatus({
   isUnarchiving,
   navigationOutcome,

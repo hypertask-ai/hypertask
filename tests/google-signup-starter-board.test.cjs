@@ -1,3 +1,4 @@
+const { withStubs } = require('./helpers/stub-map.cjs')
 const test = require('node:test')
 const assert = require('node:assert/strict')
 const fs = require('node:fs')
@@ -13,6 +14,12 @@ const guestId = 900
 const connectTaskTitle = 'Connect Hypertask to Claude or ChatGPT'
 
 function loadTs(relativePath, aliases) {
+  aliases = withStubs({
+    '@/lib/auth/signupAttributionContext': { createSignupContext: async () => null, consumeSignupContext: async () => null, consumeSignupCookie: async () => null, consumeGoogleSignupContext: async () => null, bindSignupCodeContext: async () => {}, takeSignupCodeContext: async () => null },
+    '@/lib/analytics/signupIdentityClient': { attachSignupContext: async () => {}, getSignupContextInput: async () => ({}) },
+    '@/lib/telemetry/signupIdentityLink': { recordSignupIdentityLink: async () => null },
+  }, aliases)
+
   if (/src\/lib\/flags\/(?:keys|definitions)\.ts$/.test(relativePath)) return require("./helpers/flag-files.cjs").load(relativePath);
   const javascript = ts.transpileModule(fs.readFileSync(path.join(root, relativePath), 'utf8'), {
     compilerOptions: { esModuleInterop: true, module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2020, jsx: ts.JsxEmit.ReactJSX },
@@ -64,6 +71,7 @@ function makeHarness({ guestBoard = false, ownedBoard = false, memberships = 0, 
     $transaction: async (callback) => callback(prisma),
     featureFlag: {
       findUnique: async ({ where }) => {
+        if (where.key === 'htpr-7549-first-task-pointer') return { mode: 'OFF' }
         calls.flags.push(where.key)
         if (failFlag) throw new Error('test flag failure')
         return flagMode === null ? null : { mode: flagMode }
@@ -85,6 +93,7 @@ function makeHarness({ guestBoard = false, ownedBoard = false, memberships = 0, 
     '@/lib/auth/slimUserCookie': { slimUserForCookie: (value) => value },
     '@/lib/auth/themeCookie': { getThemeCookieOptions: () => ({}) },
     '@/lib/themePreferences': { themeCookieSeedValue: () => undefined },
+    '@/lib/auth/sessionRevocation': { isSessionTokenRevoked: async () => false, revokeSessionToken: async () => {} },
     '@/lib/demo/guest': { GUEST_UID_PREFIX: 'guest_' },
     '@/lib/configs/auth.config': { cookies: { theme: 'theme' }, onboarding: { skipOnboarding: true, shouldSkipInteractive: true } },
     '@/lib/constants/constants': { companySizeOptions: ['Just me'], companyRoleOptions: ['Founder or leadership team'] },
@@ -107,15 +116,20 @@ function makeHarness({ guestBoard = false, ownedBoard = false, memberships = 0, 
     '@better-auth/api-key': { apiKey: () => ({ schema: { apikey: { fields: { referenceId: {} } } } }) },
     '@better-auth/infra': { dash: pluginStub },
     '@better-auth/passkey': { passkey: pluginStub },
-    'better-auth/api': { createAuthMiddleware: (handler) => handler, createAuthEndpoint: (route, options, handler) => handler },
+    'better-auth/api': { createAuthMiddleware: (handler) => handler, createAuthEndpoint: (route, options, handler) => handler, getOAuthState: async () => null },
+    '@/lib/auth/oauthTokenCipher': { preflightOAuthTokenKey: () => {} },
+    '@/lib/auth/oauthTokenStorage': { withOAuthTokenStorage: (adapter) => adapter },
     '@/lib/auth/bridgePlugin': { bridgeSessionPlugin: pluginStub },
     '@/lib/email/sendEmail': {},
     '@/lib/onboarding/emails/welcome': { maybeSendWelcomeEmail: async () => 'flag_off' },
     '@/lib/onboarding/emails/agentNudge': { maybeScheduleAgentNudge: async () => 'flag_off' },
     '@vercel/functions': { waitUntil: () => {} },
     '@/lib/mcp/managementPermissions': { MANAGEMENT_KEY_PERMISSIONS: {} },
+    '@/lib/telemetry/analyticsIntents': { processAnalyticsIntentSoon: () => {}, enqueueOutsideSaveAndProcessSoon: async (enqueue) => { await enqueue() } },
+    '@/lib/telemetry/signupCompleted': { enqueueSignupCompleted: async () => "signup-key" },
     '@/lib/telemetry/signupAnalytics': { recordUserSignedUp: () => {}, signupAttributionFromHeaders: () => ({}) },
-    '@/lib/telemetry/activationOccurrences': { recordActivationOccurrence: () => {} },
+    '@/lib/telemetry/activationOccurrences': { captureActivationOccurrence: async () => null },
+    '@/lib/telemetry/savedWork': { enqueueBoardCreated: async () => "board-key", processAnalyticsIntentSoon: () => {}, enqueueTaskCreated: async () => "task-key", creationChannelFromHeader: () => 'web', CREATION_CHANNEL_HEADER: 'X-Hypertask-Creation-Channel', CREATION_AGENT_HEADER: 'X-Hypertask-Creation-Agent' },
     '@/utils/controllers/users/provisionNewUser': { provisionNewUser: async () => { calls.events.push('user-provisioned'); return user } },
   }
   aliases['@/lib/flags/definitions'] = loadTs('src/lib/flags/definitions.ts', aliases)
@@ -193,7 +207,7 @@ test('Better Auth SDK carries the same request from database creation hooks into
   const { pathToFileURL } = require('node:url')
   const { getWithHooks } = await import(new URL('./db/with-hooks.mjs', pathToFileURL(require.resolve('better-auth'))))
   const legacy = loadTs('src/lib/auth/legacyCookiePlugin.ts', { ...h.aliases, 'better-auth/api': api })
-  const auth = loadTs('src/lib/auth/betterAuth.ts', { ...h.aliases, '@/lib/auth/legacyCookiePlugin': legacy }).auth
+  const auth = loadTs('src/lib/auth/betterAuth.ts', { ...h.aliases, 'better-auth/api': api, '@/lib/auth/legacyCookiePlugin': legacy }).auth
   const adapter = { create: async ({ data }) => ({ ...data, id: String(userId) }) }
   const hooks = getWithHooks(adapter, { options: auth, hooks: [{ source: 'user', hooks: auth.databaseHooks }] })
   const endpoint = api.createAuthEndpoint('/callback/google', { method: 'GET' }, async (ctx) => {

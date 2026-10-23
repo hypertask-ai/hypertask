@@ -43,6 +43,9 @@ export type CheckoutMode = "Trial" | "Normal";
 export type CheckoutAttemptDesired = {
   cancelUrl: string;
   checkoutMode: CheckoutMode;
+  trialDays?: number;
+  checkoutIntent?: "signup-straight-to-board";
+  ownerUserId?: number;
   customerId: string;
   googleAccountId: string;
   priceId: string;
@@ -51,11 +54,49 @@ export type CheckoutAttemptDesired = {
   teamId: string;
 };
 
+export function effectiveTrialDays(desired: CheckoutAttemptDesired): number {
+  return desired.checkoutMode === "Trial" ? desired.trialDays ?? 14 : 0;
+}
+
+export function desiredMatches(
+  left: CheckoutAttemptDesired,
+  right: CheckoutAttemptDesired,
+): boolean {
+  return (
+    left.cancelUrl === right.cancelUrl &&
+    left.checkoutMode === right.checkoutMode &&
+    effectiveTrialDays(left) === effectiveTrialDays(right) &&
+    left.checkoutIntent === right.checkoutIntent &&
+    left.customerId === right.customerId &&
+    left.googleAccountId === right.googleAccountId &&
+    left.priceId === right.priceId &&
+    left.quantity === right.quantity &&
+    left.returnUrl === right.returnUrl &&
+    left.teamId === right.teamId
+  );
+}
+
+export function billingDesiredMatches(
+  left: CheckoutAttemptDesired,
+  right: CheckoutAttemptDesired,
+): boolean {
+  return (
+    left.checkoutMode === right.checkoutMode &&
+    effectiveTrialDays(left) === effectiveTrialDays(right) &&
+    left.customerId === right.customerId &&
+    left.googleAccountId === right.googleAccountId &&
+    left.priceId === right.priceId &&
+    left.quantity === right.quantity &&
+    left.teamId === right.teamId
+  );
+}
+
 export type CheckoutAttemptState = "prepared" | "in_flight" | "settled";
 
 export type CheckoutAttempt = {
   attemptId: string;
   createdAt: string;
+  submittedAt?: string;
   desired: CheckoutAttemptDesired;
   idempotencyKey: string;
   sessionId?: string;
@@ -104,8 +145,6 @@ function parseAttempt(raw: string | null): CheckoutAttempt | null {
       parsed.state !== "in_flight" &&
       parsed.state !== "settled"
     ) {
-      // Reservations written before explicit states are conservatively
-      // treated as in-flight unless they already persisted a Stripe session.
       parsed.state = parsed.sessionId ? "settled" : "in_flight";
     }
     return parsed as CheckoutAttempt;
@@ -126,6 +165,13 @@ export function createCheckoutAttempt(
     idempotencyKey: `team-checkout:${desired.teamId}:${attemptId}`,
     state: "prepared",
   };
+}
+
+export async function readTeamCheckoutAttempt(
+  teamId: string,
+): Promise<CheckoutAttempt | null> {
+  const redis = await getRedis();
+  return parseAttempt(await redis.get(reservationKey(teamId)));
 }
 
 export async function withTeamCheckoutReservation<T>(
@@ -229,7 +275,6 @@ export async function withTeamCheckoutReservation<T>(
     try {
       await redis.eval(RELEASE_SCRIPT, 1, teamLockKey, token);
     } catch {
-      // The token-bound lease expires on its own.
     }
   }
 }

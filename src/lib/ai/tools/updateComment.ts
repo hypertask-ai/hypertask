@@ -1,4 +1,6 @@
+import { inlineAgentImagesForUser } from "@/lib/media/inlineAgentImages.server";
 import { tool } from "ai";
+import { inlineAgentImageFields } from "./schemas";
 import { z } from "zod";
 import prisma from "@/lib/prisma";
 import { convertPlainTextMentionsToHtml } from "@/utils/controllers/comments/processMentions";
@@ -16,7 +18,7 @@ import { userHasProjectAccess, validateMentionUsers, commentInclude, mapCommentT
 import type { ToolContext } from "./context";
 
 export function createUpdateCommentTool(context: ToolContext) {
-  const { sendStatus, user, actingAgentId } = context;
+  const { sendStatus, user, actingAgentId, body } = context;
   return {
     hypertask_update_comment: tool({
       description:
@@ -24,6 +26,7 @@ export function createUpdateCommentTool(context: ToolContext) {
       inputSchema: z.object({
         comment_id: z.coerce.number().int().positive(),
         text: z.string().min(1).max(5000),
+        ...inlineAgentImageFields(context.inlineAgentImagesEnabled),
         mentions: z
           .array(
             z.object({
@@ -82,7 +85,6 @@ export function createUpdateCommentTool(context: ToolContext) {
           return { success: false, error: mentionError };
         }
 
-        // Mentions first, then convert — see hypertask_add_comment for why.
         let sanitizedText = input.text.trim();
         if (input.mentions?.length) {
           sanitizedText = convertPlainTextMentionsToHtml(
@@ -90,7 +92,7 @@ export function createUpdateCommentTool(context: ToolContext) {
             input.mentions
           );
         }
-        sanitizedText = toStoredHtml(sanitizedText);
+        sanitizedText = await inlineAgentImagesForUser(toStoredHtml(sanitizedText), user.id, { instructions: body?.message, inlineImages: input.inline_images, attachments: [...(input.image_urls?.map((url: string) => ({ url })) ?? []), ...[...(body?.images64 ?? []), ...(body?.attachments ?? [])].flatMap((file) => file.url && (input.image_urls?.includes(file.url) || input.text?.includes(file.url)) ? [{ url: file.url, fileName: file.fileName, mimeType: file.mimeType }] : [])] });
         sanitizedText = await linkifyTicketRefs(
           sanitizedText,
           user.id,
@@ -101,6 +103,7 @@ export function createUpdateCommentTool(context: ToolContext) {
           commentId: input.comment_id,
           text: sanitizedText,
           userId: user.id,
+          agentId: actingAgentId,
         });
 
         await persistUrlsForComment(

@@ -1,7 +1,11 @@
 const test = require("node:test");
 const assert = require("node:assert/strict");
 const { load } = require("./task-route-loader.cjs");
-const { lifecycleLegacySources } = require("./htpr-6923-verify.cjs");
+// Responses and effects are pinned by digest from the pre-retirement handlers (HTPR-6992).
+const { pins } = require("./helpers/htpr-6992-pins.cjs");
+const pin = pins("a1-lifecycle");
+// Assignee narrowing loop of the pre-retirement global creator, whitespace stripped.
+const globalAssigneeLoop = "for(constassigneeofassigneesas(IUser|IAgent)[]){if(isAgentAssignee(assignee)){agentAssigneeIds.push(assignee.id);constagentOwnerId=awaitgetActiveAgentOwnerId(assignee.id);if(agentOwnerId!=null){assigneeUserIds.push(agentOwnerId);normalizedAssignees.push({userId:agentOwnerId,agentId:assignee.id,});}else{hasInvalidAssignee=true;}}elseif(typeofassignee.id===\"number\"){assigneeUserIds.push(assignee.id);normalizedAssignees.push({userId:assignee.id});}else{hasInvalidAssignee=true;}}";
 const ts = require("typescript");
 const paths = { create: "create", global: "createGlobally", archive: "(un)archive" };
 const operations = { create: "create", global: "create-global", archive: "archive" };
@@ -28,11 +32,11 @@ function assertAgentTypeBinding(source) {
     assert.ok(loop, "the assignee narrowing loop is exercised");
     return loop;
   };
-  assert.equal(assigneeLoop(source), assigneeLoop(lifecycleLegacySources().global), "the restored type is used in the same byte-pinned production assignee logic");
+  assert.equal(assigneeLoop(source), globalAssigneeLoop, "the restored type is used in the same byte-pinned production assignee logic");
 }
 
 test("global creators retain the exported agent type binding and production narrowing logic", () => {
-  for (const file of ["src/pages/api/tasks/createGlobally.ts", "src/lib/api/task-writes/create-global.ts"]) {
+  for (const file of ["src/lib/api/task-writes/create-global.ts"]) {
     const source = require("node:fs").readFileSync(file, "utf8");
     assertAgentTypeBinding(source);
     assert.throws(() => assertAgentTypeBinding(source.replace("IAgent, ILabel", "ILabel")), /must import IAgent/, "missing-import positive control");
@@ -48,8 +52,8 @@ const defaults = {
   global: { title: "Created", description: "note", projectId: 15, sectionId: 8, ranking: "rank" },
   archive: { taskId: 42, status: "Archive" },
 };
-function fixture(kind, scenario, mode) {
-  const effects = [], flags = [], background = [];
+function fixture(kind, scenario) {
+  const effects = [], background = [];
   const record = (name, value, failure) => async (...args) => {
     effects.push([name, ...clean(args)]);
     if (failure) throw new Error(failure);
@@ -61,7 +65,15 @@ function fixture(kind, scenario, mode) {
   const db = {
     user: { findUnique: record("user", scenario.noUser ? null : actor) },
     agent: { findFirst: record("agent", scenario.unownedAgent ? null : { id: "owned", userId: 985, displayName: "Agent" }) },
-    project: { findFirst: record("project", scenario.denied ? null : { id: 15 }), findUnique: record("project-index", { uniqueIdentifier: "HTPR" }) },
+    project: {
+      findFirst: record("project", scenario.denied ? null : { id: 15 }),
+      findUnique: async (args) => {
+        // Assert the added enrollment projection separately; keep every old query field byte-pinned.
+        const { firstTaskPointerTaskId, ...select } = args.select;
+        assert.equal(firstTaskPointerTaskId, true);
+        return record("project-index", { uniqueIdentifier: "HTPR", firstTaskPointerTaskId: null })({ ...args, select });
+      },
+    },
     section: { findFirst: record("section", scenario.missingSection ? null : section, scenario.sectionThrows ? "Section unavailable" : null) },
     task: {
       findFirst: record("rank-task", scenario.noRankTask ? null : scenario.emptyTarget ? { ...task, title: "", description_: { content: "" } } : task),
@@ -87,6 +99,7 @@ function fixture(kind, scenario, mode) {
     cancelDueDateJob: record("cancel-due", undefined, scenario.queueThrows ? "Queue unavailable" : null),
   };
   const mocks = {
+    "@/lib/auth/agentScope": require("./helpers/agent-board-scope.cjs").enforcedScope,
     "@prisma/client": { Prisma: { PrismaClientKnownRequestError: KnownError } },
     "@vercel/functions": { waitUntil: (promise) => { effects.push(["waitUntil"]); background.push(promise); } },
     "@/lib/prisma": { default: db },
@@ -96,12 +109,11 @@ function fixture(kind, scenario, mode) {
     "@/lib/auth/session": { SESSION_COOKIE: "ht_session", verifySession: (token) => { effects.push(["signed-session", token]); return token === "agent-token" ? { agentId: "owned" } : null; } },
     "@/lib/auth/resolveActingAgent": { resolveActingAgent: load("src/lib/auth/resolveActingAgent.ts", {}).resolveActingAgent },
     "@/lib/ai/taskWriterDueDate": { taskWriterDueDateForSave: () => { throw new Error("Legacy parity must not resolve writer dates"); } },
-    "@/lib/flags/keys": { HTPR_6923_APP_ROUTER_WRITES_FLAG: "htpr-6923-app-router-writes", HTPR_7054_CTRLJ_DUE_DATE_FLAG: "htpr-7054-ctrlj-due-date" },
+    "@/lib/flags/keys": { HTPR_7054_CTRLJ_DUE_DATE_FLAG: "htpr-7054-ctrlj-due-date" },
     "@/lib/flags": {
       HTPR_6929_COMPOSE_TASK_WRITER_FLAG: "compose", HTPR_6937_NEW_TASK_WINDOW_FLAG: "new-task",
       isFeatureEnabled: async (key, userId) => {
-        if (key !== "htpr-6923-app-router-writes") { effects.push(["product-flag", key, userId]); return !scenario.productOff && !(key === "new-task" && scenario.newWindowOff); }
-        flags.push([key, userId]); if (mode === "outage") throw new Error("Flag unavailable"); return mode === true;
+        effects.push(["product-flag", key, userId]); return !scenario.productOff && !(key === "new-task" && scenario.newWindowOff);
       },
     },
     "@/utils/generateRank": { default: (...args) => { effects.push(["rank", ...clean(args)]); return scenario.noRank ? undefined : "new-rank"; } },
@@ -135,20 +147,12 @@ function fixture(kind, scenario, mode) {
     "@/pages/api/queues/FAST/generateSummary": { default: record("summary", undefined) },
     "../queues/FAST/generateSummary": { default: record("summary", undefined) },
     "@/utils/controllers/turbopuffer/turbopufferHelper": { upsertTaskToTurbopuffer: record("search", undefined), upsertCommentToTurbopuffer: record("comment-search", undefined) },
-    "@/lib/ai/labelClassifier": { classifyTaskAiLabels: record("ai-labels", undefined) },
+    "@/lib/ai/labelClassifier": { classifyNewTaskAiLabels: record("ai-labels", undefined) },
     "@/utils/controllers/assignees/autoAssignForSection": { autoAssignForSection: record("auto-assign", scenario.pendingAssignment ? "pending" : "ready") },
     "@/utils/controllers/tasks/addRelatedTasks": { addRelatedTasks: record("relations", { status: 200, json: [{ id: 9 }] }) },
     "@/utils/controllers/urls/addIntoTaskDesc": { default: record("urls", undefined) },
   };
-  // The oracle executes the reconstructed, independently byte-pinned original.
-  const original = lifecycleLegacySources()[kind];
-  const compiled = ts.transpileModule(original, { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022, esModuleInterop: true } }).outputText;
-  const mod = { exports: {} };
-  new Function("require", "module", "exports", compiled)((name) => {
-    if (!(name in mocks)) throw new Error(`Unexpected original dependency: ${name}`);
-    const mock = mocks[name]; return Object.hasOwn(mock, "default") ? { __esModule: true, ...mock } : mock;
-  }, mod, mod.exports);
-  return { legacy: mod.exports.default, current: load(`src/pages/api/tasks/${paths[kind]}.ts`, mocks).default, web: load(`src/lib/api/task-writes/${operations[kind]}.ts`, mocks).POST, effects, flags, background, session };
+  return { current: load(`src/pages/api/tasks/${paths[kind]}.ts`, mocks).default, web: load(`src/lib/api/task-writes/${operations[kind]}.ts`, mocks).POST, effects, background, session };
 }
 async function invoke(fx, body, target, scenario, method = "POST") {
   const token = scenario.signedAgent ? "agent-token" : "user-token";
@@ -261,65 +265,56 @@ const scenarios = {
   ],
 };
 for (const [kind, cases] of Object.entries(scenarios)) {
-  for (const [name, scenario] of cases) test(`${kind}: legacy / on / off / outage / Web parity: ${name}`, async () => {
+  for (const [name, scenario] of cases) test(`${kind}: shared handler matches pinned contract (Pages adapter and Web): ${name}`, async () => {
     const oldConsole = { log: console.log, warn: console.warn, error: console.error };
     const oldPerformance = global.performance;
     global.Date = FixedDate; console.log = console.warn = console.error = () => {};
     const resetTime = () => { let n = 0; global.performance = { now: () => ++n }; };
     try {
       const body = Object.hasOwn(scenario, "body") ? scenario.body : defaults[kind];
-      const before = fixture(kind, scenario, false); resetTime();
-      const expected = await invoke(before, body, "legacy", scenario);
+      const after = fixture(kind, scenario); resetTime();
+      const expected = await invoke(after, body, "current", scenario);
       if (scenario.expected) assert.deepEqual(expected, scenario.expected);
       if (scenario.noResponse) assert.equal(expected, undefined, "no JSON/status is sent");
-      for (const mode of [true, false, "outage"]) {
-        const after = fixture(kind, scenario, mode); resetTime();
-        assert.deepEqual(await invoke(after, body, "current", scenario), expected);
-        assert.deepEqual(clean(after.effects), clean(before.effects), "queries, mutations, queue, inbox, activity, webhooks and realtime order/arguments");
-        assert.deepEqual(after.flags, scenario.noAuth || scenario.authThrows ? [] : [["htpr-6923-app-router-writes", 985]]);
-      }
-      const web = fixture(kind, scenario, true); resetTime();
+      pin(kind, `${kind}: ${name}`, { response: expected === undefined ? null : expected, effects: clean(after.effects) });
+      const web = fixture(kind, scenario); resetTime();
       assert.deepEqual(await invoke(web, body, "web", scenario), expected);
-      assert.deepEqual(clean(web.effects), clean(before.effects));
+      assert.deepEqual(clean(web.effects), clean(after.effects), "queries, mutations, queue, inbox, activity, webhooks and realtime order/arguments");
       if (kind === "archive" && (scenario.result || scenario.unownedAgent || scenario.noUser)) {
-        assert.ok(!before.effects.some(([name]) => ["cancel-due", "inboxes", "archive-activity", "archive-notification", "board", "detail"].includes(name)));
+        assert.ok(!after.effects.some(([name]) => ["cancel-due", "inboxes", "archive-activity", "archive-notification", "board", "detail"].includes(name)));
       }
-      if (kind === "archive" && body?.status === "Normal") assert.ok(!before.effects.some(([name]) => name === "cancel-due"));
+      if (kind === "archive" && body?.status === "Normal") assert.ok(!after.effects.some(([name]) => name === "cancel-due"));
     } finally { global.Date = RealDate; global.performance = oldPerformance; Object.assign(console, oldConsole); }
   });
 }
-test("non-migrated methods keep legacy responses/headers/no-response and never check migration flag", async () => {
+test("non-migrated methods answer 405 without running the write", async () => {
   for (const kind of Object.keys(paths)) for (const method of ["GET", "PUT", "DELETE", "PATCH"]) {
-    const before = fixture(kind, {}, false), after = fixture(kind, {}, true);
+    // createGlobally keeps its own GET (section and rank defaults); pinned below.
+    if (kind === "global" && method === "GET") continue;
+    const after = fixture(kind, {});
     const oldPerformance = global.performance;
     try {
       global.performance = { now: () => 1 };
-      const original = await invoke(before, {}, "legacy", {}, method);
-      global.performance = { now: () => 1 };
-      assert.deepEqual(await invoke(after, {}, "current", {}, method), original);
-      assert.deepEqual(after.flags, []);
+      assert.deepEqual(await invoke(after, {}, "current", {}, method), { status: 405, body: { message: "Method not allowed" }, headers: {} });
+      assert.deepEqual(clean(after.effects), []);
     } finally { global.performance = oldPerformance; }
   }
 });
-test("byte pins verify independently restored legacy, including relocated helpers", () => {
-  require("node:child_process").execFileSync(process.execPath, ["tests/htpr-6923-verify.cjs", "lifecycle"]);
-});
 
-test("lifecycle dispatch does not load flag-off operations or retry after loading/executing a write", async () => {
-  for (const kind of Object.keys(paths)) for (const mode of [false, true]) {
-    let legacy = 0, loaded = 0;
-    const { withTaskWriteFlag } = load("src/lib/api/task-writes/route.ts", {
-      "@/lib/auth/getSessionUser": { getSessionUser: async () => ({ userId: 985 }) },
-      "@/lib/flags": { isFeatureEnabled: async () => mode },
-      "@/lib/flags/keys": { HTPR_6923_APP_ROUTER_WRITES_FLAG: "htpr-6923-app-router-writes" },
+test("createGlobally GET keeps the pinned section and rank defaults", async () => {
+  const after = fixture("global", {});
+  const oldPerformance = global.performance;
+  try {
+    global.performance = { now: () => 1 };
+    const response = await invoke(after, {}, "current", {}, "GET");
+    assert.deepEqual({ response, effects: clean(after.effects) }, {
+      response: { status: 200, body: { section: "Todo", ranking: "new-rank", sectionId: 8 }, headers: { "server-timing": "total;dur=0.0" } },
+      effects: [
+        ["project", { where: { id: 15, status: "Normal", ownerId: 985, agentId: null, AND: [{ ownerId: 985 }] }, select: { id: true } }],
+        ["section", { where: { id: 8, projectId: 15, visibility: true, deleted: false } }],
+        ["rank-task", { where: { sectionId: 8, projectId: 15, status: "Normal", project: { ownerId: 985 } }, orderBy: { ranking: "asc" } }],
+        ["rank", null, "old-rank"],
+      ],
     });
-    const current = withTaskWriteFlag(async () => { legacy++; }, "POST", async () => {
-      loaded++;
-      return async () => { throw new Error("failed after commit"); };
-    });
-    const result = await invoke({ current, background: [] }, defaults[kind], "current", {});
-    assert.deepEqual(result, mode ? { throws: "Error: failed after commit" } : undefined);
-    assert.equal(legacy, mode ? 0 : 1);
-    assert.equal(loaded, mode ? 1 : 0);
-  }
+  } finally { global.performance = oldPerformance; }
 });

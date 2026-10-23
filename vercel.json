@@ -27,6 +27,18 @@
     {
       "path": "/api/cron/feature-flag-removals",
       "schedule": "23 4 * * *"
+    },
+    {
+      "path": "/api/cron/analytics-outbox",
+      "schedule": "*/5 * * * *"
+    },
+    {
+      "path": "/api/cron/oauth-token-sweep",
+      "schedule": "*/10 * * * *"
+    },
+    {
+      "path": "/api/cron/webhook-signing-key-sweep",
+      "schedule": "*/10 * * * *"
     }
   ]
 }

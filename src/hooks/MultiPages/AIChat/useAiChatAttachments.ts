@@ -1,3 +1,4 @@
+import { sidebarChatHeaders } from "@/lib/agents/chatViewerState";
 import { useCallback } from "react";
 import { IChatSession } from "@/models/model";
 import toast from "react-hot-toast";
@@ -22,9 +23,6 @@ export function useAiChatAttachments(context: Context) {
 
 
   const handleCancelStream = async () => {
-    // The ref, not the state: a stream started microseconds ago has already set the ref
-    // but may not have committed the state yet, and that stream is exactly the one an
-    // unmount needs to cancel.
     const sessionId = streamingSessionRef.current ?? currentStreamingSession;
     if (!sessionId) return;
     const assistantMessageId = streamingAssistantMessageRef.current;
@@ -60,6 +58,7 @@ export function useAiChatAttachments(context: Context) {
           headers: {
             "Content-Type": "application/json",
             ...mcpAuthorizationHeaders(token),
+            ...sidebarChatHeaders(sessionId),
           },
           body: JSON.stringify({
             session_id: sessionId,
@@ -79,7 +78,6 @@ export function useAiChatAttachments(context: Context) {
       }
       console.log("🔥 Cancel response:", result);
 
-      // Reset streaming state
       clearStreamingState();
     } catch (error) {
       console.error("🔥 Error cancelling stream:", error);
@@ -112,11 +110,6 @@ export function useAiChatAttachments(context: Context) {
         const url = img.getAttribute("src") || "";
         if (!url) continue;
         if (url.includes("ai-chat/attachments")) {
-          // The file is already in storage, so send its URL. Fetching it back to base64
-          // threw "Failed to fetch" on every attachment: the host serves no CORS header,
-          // so the browser blocks the read (HTPR-4735). Both the chat route and the
-          // persist route accept a hosted URL, and skipping the inline copy also keeps
-          // the request small.
           const mimeType = getFileTypeFromUrl(url, IMAGE_FALLBACK_MIME);
           const fileName = url.substring(url.lastIndexOf("/") + 1);
           results.push({
@@ -153,10 +146,6 @@ export function useAiChatAttachments(context: Context) {
     []
   );
 
-  // HTPR-4882: a guest's first words on their still-empty board build the board
-  // instead of chatting about nothing. Posts the message into the thread first
-  // so the chat shows what was asked plus the typing indicator while the
-  // generator runs, then hard-navigates so the filled board loads clean.
   const buildGuestBoard = async (purpose: string, session: IChatSession) => {
     editor?.commands.clearContent();
     addMessageToSessionQuery(

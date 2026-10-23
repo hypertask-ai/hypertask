@@ -30,8 +30,6 @@ import type {
   CalendarUserSummary,
 } from "@/lib/calendarSync/contract";
 import { useMyTasksFilterController } from "@/lib/myTasksFilterContext";
-import { useFlag } from "@/hooks/useFlag";
-import { HTPR_6930_MY_TASKS_KANBAN_REUSE_FLAG, HTPR_6567_COMMAND_SCOPE_PICKER_FLAG } from "@/lib/flags/keys";
 
 interface Props {
   toggle: () => void;
@@ -48,15 +46,12 @@ const AllFilterHTC: React.FC<Props> = ({
   allTags,
   extraFilters,
 }) => {
-  const kanbanReuseEnabled = useFlag(HTPR_6930_MY_TASKS_KANBAN_REUSE_FLAG);
-  const commandScopePickerFlag = useFlag(HTPR_6567_COMMAND_SCOPE_PICKER_FLAG);
   const [commandMode, setCommandMode] = useState<FilterCommandMode>(
     FilterCommandMode.ShowAllFilters,
   );
   const currentUser = useRecoilValue(currentUserAtom);
   const setCalendarTaskFilters = useSetRecoilState(calendarTaskFiltersAtom);
   const myTasksFilters = useMyTasksFilterController();
-  // Always called (hook rules). My Tasks / Calendar ignore these write paths.
   const kanbanFilters = useFilters();
 
   const addFilter = async (type: TFilter, value: any) => {
@@ -315,7 +310,7 @@ const AllFilterHTC: React.FC<Props> = ({
   const commandComponents: TFilterCommandComponents = {
     [FilterCommandMode.ShowAllFilters]: (
       <ShowFilterOptions
-        extraFilters={kanbanReuseEnabled || commandScopePickerFlag ? extraFilters : undefined}
+        extraFilters={extraFilters}
         handleAction={handleAction}
         toggleFilterMatchOptions={toggleFilterMatchOptionsHandler}
         view={view}
@@ -323,7 +318,7 @@ const AllFilterHTC: React.FC<Props> = ({
     ),
     [FilterCommandMode.InInbox]: (
       <ShowFilterOptions
-        extraFilters={kanbanReuseEnabled || commandScopePickerFlag ? extraFilters : undefined}
+        extraFilters={extraFilters}
         handleAction={handleAction}
         toggleFilterMatchOptions={toggleFilterMatchOptionsHandler}
         view={view}
@@ -349,7 +344,7 @@ const AllFilterHTC: React.FC<Props> = ({
     ),
     [FilterCommandMode.Unread]: (
       <ShowFilterOptions
-        extraFilters={kanbanReuseEnabled || commandScopePickerFlag ? extraFilters : undefined}
+        extraFilters={extraFilters}
         handleAction={handleAction}
         toggleFilterMatchOptions={toggleFilterMatchOptionsHandler}
         view={view}
@@ -357,7 +352,7 @@ const AllFilterHTC: React.FC<Props> = ({
     ),
     [FilterCommandMode.NoRecentComment]: (
       <ShowFilterOptions
-        extraFilters={kanbanReuseEnabled || commandScopePickerFlag ? extraFilters : undefined}
+        extraFilters={extraFilters}
         handleAction={handleAction}
         toggleFilterMatchOptions={toggleFilterMatchOptionsHandler}
         view={view}
@@ -365,7 +360,7 @@ const AllFilterHTC: React.FC<Props> = ({
     ),
     [FilterCommandMode.StuckInColumn]: (
       <ShowFilterOptions
-        extraFilters={kanbanReuseEnabled || commandScopePickerFlag ? extraFilters : undefined}
+        extraFilters={extraFilters}
         handleAction={handleAction}
         toggleFilterMatchOptions={toggleFilterMatchOptionsHandler}
         view={view}
@@ -373,7 +368,7 @@ const AllFilterHTC: React.FC<Props> = ({
     ),
     [FilterCommandMode.RunningTimer]: (
       <ShowFilterOptions
-        extraFilters={kanbanReuseEnabled || commandScopePickerFlag ? extraFilters : undefined}
+        extraFilters={extraFilters}
         handleAction={handleAction}
         toggleFilterMatchOptions={toggleFilterMatchOptionsHandler}
         view={view}
@@ -381,7 +376,7 @@ const AllFilterHTC: React.FC<Props> = ({
     ),
     [FilterCommandMode.StaleOnBoard]: (
       <ShowFilterOptions
-        extraFilters={kanbanReuseEnabled || commandScopePickerFlag ? extraFilters : undefined}
+        extraFilters={extraFilters}
         handleAction={handleAction}
         toggleFilterMatchOptions={toggleFilterMatchOptionsHandler}
         view={view}
@@ -389,7 +384,7 @@ const AllFilterHTC: React.FC<Props> = ({
     ),
     [FilterCommandMode.NotStale]: (
       <ShowFilterOptions
-        extraFilters={kanbanReuseEnabled || commandScopePickerFlag ? extraFilters : undefined}
+        extraFilters={extraFilters}
         handleAction={handleAction}
         toggleFilterMatchOptions={toggleFilterMatchOptionsHandler}
         view={view}
@@ -408,7 +403,7 @@ const AllFilterHTC: React.FC<Props> = ({
     ),
     [FilterCommandMode.ClearAll]: (
       <ShowFilterOptions
-        extraFilters={kanbanReuseEnabled || commandScopePickerFlag ? extraFilters : undefined}
+        extraFilters={extraFilters}
         handleAction={handleAction}
         toggleFilterMatchOptions={toggleFilterMatchOptionsHandler}
         view={view}
@@ -416,7 +411,7 @@ const AllFilterHTC: React.FC<Props> = ({
     ),
     [FilterCommandMode.ToggleMatchCriterai]: (
       <ShowFilterOptions
-        extraFilters={kanbanReuseEnabled || commandScopePickerFlag ? extraFilters : undefined}
+        extraFilters={extraFilters}
         handleAction={handleAction}
         toggleFilterMatchOptions={toggleFilterMatchOptionsHandler}
         view={view}
@@ -453,7 +448,7 @@ const AllFilterHTC: React.FC<Props> = ({
     ),
     [FilterCommandMode.AssignedToMe]: (
       <ShowFilterOptions
-        extraFilters={kanbanReuseEnabled || commandScopePickerFlag ? extraFilters : undefined}
+        extraFilters={extraFilters}
         handleAction={handleAction}
         toggleFilterMatchOptions={toggleFilterMatchOptionsHandler}
         view={view}
@@ -461,7 +456,7 @@ const AllFilterHTC: React.FC<Props> = ({
     ),
     [FilterCommandMode.Starred]: (
       <ShowFilterOptions
-        extraFilters={kanbanReuseEnabled || commandScopePickerFlag ? extraFilters : undefined}
+        extraFilters={extraFilters}
         handleAction={handleAction}
         toggleFilterMatchOptions={toggleFilterMatchOptionsHandler}
         view={view}

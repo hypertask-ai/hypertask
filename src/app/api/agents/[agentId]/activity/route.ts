@@ -1,3 +1,4 @@
+import { agentScopeEnforced, withAgentScopeRequest } from "@/lib/auth/agentScope";
 import { NextRequest, NextResponse } from "next/server";
 import prisma from "@/lib/prisma";
 import { getProjectWhere } from "@/utils/controllers/projects/getAllIncludes";
@@ -5,18 +6,6 @@ import { getSessionUser } from "@/lib/auth/getSessionUser";
 
 export const runtime = "nodejs";
 
-/**
- * What an agent has actually been doing, newest first.
- *
- * There is no activity table: an agent's work is spread across the rows it
- * wrote (comments, evidence, questions it raised, work sessions) plus the model
- * turns it burned tokens on. This unions those sources rather than adding a
- * write path, so nothing has to be recorded twice and history that already
- * exists shows up immediately.
- *
- * Each source is capped and the merged result is trimmed, so one chatty source
- * cannot crowd the others out of the page.
- */
 
 const DEFAULT_LIMIT = 40;
 const MAX_LIMIT = 100;
@@ -50,9 +39,18 @@ export async function GET(
   request: NextRequest,
   props: { params: Promise<{ agentId: string }> },
 ) {
+  return withAgentScopeRequest(request, () => getAgentActivity(request, props));
+}
+
+async function getAgentActivity(
+  request: NextRequest,
+  props: { params: Promise<{ agentId: string }> },
+) {
   const params = await props.params;
 
-  const userId = (await getSessionUser(request.headers))?.userId;
+  const session = await getSessionUser(request.headers);
+  const userId = session?.userId;
+  const actingAgentId = session?.agentId;
   if (!userId) {
     return NextResponse.json(
       { success: false, error: "Unauthorized" },
@@ -60,8 +58,6 @@ export async function GET(
     );
   }
 
-  // Ownership is re-checked here, not inferred from knowing the id: this
-  // returns what an agent has been doing across every board it touches.
   const agent = await prisma.agent.findFirst({
     where: { id: params.agentId, userId },
     select: { id: true },
@@ -79,14 +75,25 @@ export async function GET(
       ? Math.min(Math.trunc(requested), MAX_LIMIT)
       : DEFAULT_LIMIT;
 
-  // Owning the agent is not the same as still being able to see the board it
-  // worked on. Without this an owner removed from a board would keep reading
-  // that board's task titles and links out of their agent's history.
   const visibleTask = { task: { project: getProjectWhere(userId) } };
+  const visibleUsageProjects =
+    actingAgentId && agentScopeEnforced()
+      ? await prisma.project.findMany({
+          where: {
+            ...getProjectWhere(userId),
+            AND: [getProjectWhere(userId, actingAgentId)],
+          },
+          select: { id: true },
+        })
+      : null;
 
   const [comments, evidence, questions, sessions, usage] = await Promise.all([
     prisma.comment.findMany({
-      where: { agentId: agent.id, ...visibleTask },
+      where: {
+        agentId: agent.id,
+        ...visibleTask,
+        AND: [{ task: { project: getProjectWhere(userId, actingAgentId) } }],
+      },
       orderBy: { createdAt: "desc" },
       take: limit,
       select: {
@@ -97,7 +104,11 @@ export async function GET(
       },
     }),
     prisma.taskEvidence.findMany({
-      where: { agentId: agent.id, ...visibleTask },
+      where: {
+        agentId: agent.id,
+        ...visibleTask,
+        AND: [{ task: { project: getProjectWhere(userId, actingAgentId) } }],
+      },
       orderBy: { createdAt: "desc" },
       take: limit,
       select: {
@@ -109,7 +120,11 @@ export async function GET(
       },
     }),
     prisma.decisionRequest.findMany({
-      where: { agentId: agent.id, ...visibleTask },
+      where: {
+        agentId: agent.id,
+        ...visibleTask,
+        AND: [{ task: { project: getProjectWhere(userId, actingAgentId) } }],
+      },
       orderBy: { createdAt: "desc" },
       take: limit,
       select: {
@@ -121,7 +136,11 @@ export async function GET(
       },
     }),
     prisma.taskSession.findMany({
-      where: { agentId: agent.id, ...visibleTask },
+      where: {
+        agentId: agent.id,
+        ...visibleTask,
+        AND: [{ task: { project: getProjectWhere(userId, actingAgentId) } }],
+      },
       orderBy: { createdAt: "desc" },
       take: limit,
       select: {
@@ -132,7 +151,12 @@ export async function GET(
       },
     }),
     prisma.aiUsage.findMany({
-      where: { agentId: agent.id },
+      where: {
+        agentId: agent.id,
+        ...(visibleUsageProjects
+          ? { projectId: { in: visibleUsageProjects.map((project) => project.id) } }
+          : {}),
+      },
       orderBy: { createdAt: "desc" },
       take: limit,
       select: {

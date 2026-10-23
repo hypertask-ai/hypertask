@@ -4,7 +4,6 @@ import { Metadata } from "next";
 import { Suspense } from "react";
 import Reminders from "./ReminderPageComponent";
 import { redirect } from "next/navigation";
-// import { redirect } from "next/navigation";
 
 export const metadata: Metadata = {
   title: "Reminders"

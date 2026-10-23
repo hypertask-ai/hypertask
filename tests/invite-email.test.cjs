@@ -13,6 +13,9 @@ let existingInvite;
 let sessionCookie;
 let redeemed;
 let inviter;
+let boardMemberIds;
+let cancelled;
+let viewUserIds;
 const board = { id: 42, title: "R&D #1 + Q? 日本語 %26", name: "project-42", owner: { email: "owner@example.test" } };
 
 function stub(relativePath, exports) {
@@ -27,7 +30,7 @@ stub("src/lib/flags.ts", {
     return enabled;
   },
 });
-stub("src/lib/prisma.ts", { default: {
+const prisma = {
   user: { findUnique: async () => inviter, findFirst: async () => null },
   project: {
     findFirst: async () => ({ ...board, members: [], teamId: "team" }),
@@ -40,14 +43,18 @@ stub("src/lib/prisma.ts", { default: {
     update: async () => ({}),
     create: async () => ({ id: "invite&#+?日本語", invitedBy: inviter, project: board }),
   },
-} });
+};
+prisma.$transaction = async (callback) => callback(prisma);
+stub("src/lib/prisma.ts", { default: prisma });
+stub("src/lib/telemetry/analyticsIntents.ts", { processAnalyticsIntentSoon: () => {}, enqueueOutsideSaveAndProcessSoon: async (enqueue) => { await enqueue() } });
 stub("src/utils/controllers/logs/createLog.ts", { default: async () => {} });
-stub("src/utils/controllers/projects/getAll.ts", { getProjectViewInclude: () => ({}) });
+stub("src/utils/controllers/projects/getAll.ts", { getProjectViewInclude: ({ currentUserId }) => { viewUserIds.push(currentUserId); return {}; } });
 stub("src/utils/helperFunctions/Views/ViewsHelperFunctions.ts", { getViewFromProject: () => undefined });
 stub("src/lib/demo/guestGuard.ts", { isGuestRequest: async () => false });
 stub("src/lib/auth/getSessionUser.ts", { getSessionUser: async () => ({ userId: 7 }) });
-stub("src/utils/controllers/getMemberAndOwnerForBoard.ts", { default: async () => [7] });
-stub("src/pages/api/invite/cancelInvite.ts", { cancelInvite: async () => {} });
+stub("src/utils/controllers/getMemberAndOwnerForBoard.ts", { default: async () => boardMemberIds });
+stub("src/pages/api/invite/cancelInvite.ts", { cancelInvite: async (...args) => { cancelled.push(args); } });
+stub("src/lib/telemetry/inviteAnalytics.ts", { enqueueInviteSent: async () => null, enqueueMemberJoined: async () => null });
 stub("src/lib/email/sendEmail.ts", { sendEmail: async (email) => { sent.push(email); return { id: "test-email" }; } });
 stub("src/utils/controllers/notifications/digest.ts", { enqueueDigest: async () => false });
 stub("src/utils/controllers/notifications/projectMute.ts", { isTaskProjectMuted: async () => false });
@@ -95,6 +102,9 @@ test.beforeEach(() => {
   redeemed = undefined;
   inviter = { id: 7, displayName: body.sender, email: body.senderEmail, userPicture: null };
   existingInvite = { id: "invite&#+?日本語", project: board };
+  boardMemberIds = [7];
+  cancelled = [];
+  viewUserIds = [];
 });
 
 test("all invite query values round-trip punctuation, unicode and literal percent escapes", async () => {
@@ -135,7 +145,7 @@ test("send and resend deliver the board title and normalized inviter to the real
   const result = await addMemberController(7, 42, [body.recipient]);
   assert.equal(result.status, 200);
   await resend({ headers: {}, body: { projectId: 42, email: body.recipient, userId: 7 } }, {
-    status: () => ({ json: (value) => assert.fail(JSON.stringify(value)) }),
+    status: (code) => ({ json: (value) => assert.equal(code, 200, JSON.stringify(value)) }),
   });
   assert.equal(sent.length, 2);
   for (const email of sent) {
@@ -152,7 +162,7 @@ test("send and resend use an explicitly saved profile name when the display name
   inviter.userPicture = { nameSet: true, displayName: "Valentin Yeo" };
   await addMemberController(7, 42, [body.recipient]);
   await resend({ headers: {}, body: { projectId: 42, email: body.recipient, userId: 7 } }, {
-    status: () => ({ json: (value) => assert.fail(JSON.stringify(value)) }),
+    status: (code) => ({ json: (value) => assert.equal(code, 200, JSON.stringify(value)) }),
   });
   assert.equal(sent.length, 2);
   for (const email of sent) {
@@ -236,4 +246,24 @@ test("unused legacy sender is absent and the source search detects a positive ca
   }
   scan(path.join(root, "src"));
   assert.equal(fs.existsSync(path.join(root, "src/utils/controllers/invite/sendInviteEmail.js")), false);
+});
+
+test("HTPR-7176: resend refuses a caller outside the board and leaves its invite alone", async () => {
+  boardMemberIds = [99];
+  let response;
+  await resend({ headers: {}, body: { projectId: 42, email: body.recipient, userId: 99 } }, {
+    status: (code) => ({ json: (value) => { response = { code, value }; } }),
+  });
+  assert.deepEqual(response, { code: 403, value: { message: "Forbidden" } });
+  assert.equal(sent.length, 0);
+  assert.equal(cancelled.length, 0);
+});
+
+test("HTPR-7176: resend takes the viewer from the session, not the request body", async () => {
+  await resend({ headers: {}, body: { projectId: "42", email: body.recipient, userId: 99 } }, {
+    status: (code) => ({ json: (value) => assert.equal(code, 200, JSON.stringify(value)) }),
+  });
+  assert.deepEqual(viewUserIds, [7]);
+  assert.equal(cancelled.length, 1);
+  assert.equal(sent.length, 1);
 });

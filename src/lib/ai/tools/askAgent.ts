@@ -27,10 +27,6 @@ export function createAskAgentTool(context: ToolContext) {
             };
           }
 
-          // default_context comes from the client, so the caller's own access
-          // to that board has to be proven before its agents are reachable.
-          // This is the agent-specific check on purpose: assertAccessibleProject
-          // also demands a team, which would lock owners out of legacy boards.
           if (!(await getAccessibleAgentBoard(boardId, user.id))) {
             return {
               success: false,

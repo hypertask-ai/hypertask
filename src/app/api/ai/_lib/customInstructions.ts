@@ -1,3 +1,6 @@
+import { fetchWithoutBrotli } from "@/lib/net/fetchWithoutBrotli";
+import { downloadWithoutBrotli } from "@/lib/net/downloadWithoutBrotli";
+import type { Prisma } from "@prisma/client";
 import { resolveAiModel as resolveLegacyAiModel } from "@/app/api/ai/_lib/modelProvider";
 import { defaultModelKeyFor } from "@/lib/aiModelOptions";
 import { getAiDefaultModelContext, resolveAutomaticAiModel } from "@/app/api/ai/_lib/byokKeys";
@@ -6,6 +9,7 @@ import { configureAiModelUsage } from "@/app/api/ai/_lib/modelProvider";
 import { generateText, type UserContent } from "ai";
 import { parse } from "node-html-parser";
 
+import type { AgentTokenTeamScope } from "@/lib/mcp/auth/types";
 import prisma from "@/lib/prisma";
 import { getProjectWhere } from "@/utils/controllers/projects/getAllIncludes";
 import { getByokOrTeamGatewayApiKeyForProvider } from "@/app/api/ai/_lib/byokKeys";
@@ -49,11 +53,19 @@ export class ProjectAccessError extends Error {
   }
 }
 
-export async function assertProjectAccess(userId: number, projectId: number) {
-  const project = await prisma.project.findFirst({
+export async function loadCustomInstructionText(projectId: number) {
+  const instruction = await prisma.aI_Custom_Instructions.findFirst({
+    where: { projectId },
+    select: { customInstruction: true },
+  });
+  return instruction?.customInstruction ?? "";
+}
+
+export async function assertProjectAccess(userId: number, projectId: number, agentId?: string | null, teamScope?: AgentTokenTeamScope | null, db: Pick<Prisma.TransactionClient, "project"> = prisma) {
+  const project = await db.project.findFirst({
     where: {
       id: projectId,
-      ...getProjectWhere(userId),
+      ...getProjectWhere(userId, agentId, teamScope),
     },
     select: { id: true, teamId: true },
   });
@@ -63,6 +75,19 @@ export async function assertProjectAccess(userId: number, projectId: number) {
   }
 
   return project;
+}
+
+export async function withScopedProjectWrite<T>(
+  principal: import("@/lib/rag/retrieveBoardKnowledge").BoardKnowledgePrincipal,
+  projectId: number,
+  write: (db: Prisma.TransactionClient) => Promise<T>,
+): Promise<T> {
+  if (principal.teamScope == null) return write(prisma);
+  return prisma.$transaction(async (tx) => {
+    await tx.$queryRaw`SELECT id FROM "Project" WHERE id = ${projectId} FOR UPDATE`;
+    await assertProjectAccess(principal.userId, projectId, principal.agentId, principal.teamScope, tx);
+    return write(tx);
+  });
 }
 
 export async function uploadCustomInstructionFiles(args: {
@@ -168,7 +193,9 @@ export async function deleteCustomInstructionFile(args: {
 export async function retrieveCustomInstructionFileContext(args: {
   projectId: number;
   prompt: string;
+  principal?: import("@/lib/rag/retrieveBoardKnowledge").BoardKnowledgePrincipal;
 }) {
+  if (args.principal?.teamScope != null) await assertProjectAccess(args.principal.userId, args.projectId, args.principal.agentId, args.principal.teamScope);
   let boardMemoryEnabled = false;
   try {
     const configRows = await listCustomInstructionFileRows({
@@ -180,8 +207,6 @@ export async function retrieveCustomInstructionFileContext(args: {
       (row) => row.source === BOARD_MEMORY_CONFIG_SOURCE
     );
   } catch {
-    // Memory is optional prompt context. Its status lookup already logs storage
-    // failures, and ordinary custom instructions should remain available.
   }
   const rows = await searchCustomInstructionFiles({
     projectId: args.projectId,
@@ -193,6 +218,7 @@ export async function retrieveCustomInstructionFileContext(args: {
   if (rows.length === 0) return "";
 
   return rows
+    .filter((row) => args.principal?.teamScope == null || row.projectId === args.projectId && row.teamId === args.principal.teamScope.teamId)
     .map(
       (row) => isBoardMemoryFactRow(row)
         ? formatBoardMemoryPromptContext(row.content)
@@ -212,7 +238,7 @@ async function extractCustomInstructionText(
   }
 ) {
   const fileName = getFileNameFromUrl(url);
-  const response = await fetch(url);
+  const response = await fetchWithoutBrotli(url);
   if (!response.ok) {
     throw new Error(`Failed to download ${url}: ${response.status}`);
   }
@@ -276,11 +302,9 @@ async function extractBinaryDocumentTextWithOpenAI(
     { type: "file", mediaType, data: new URL(url) },
   ];
   const loadedContext = typeof getAiDefaultModelContext === "function" ? await getAiDefaultModelContext({ projectId: usageContext?.projectId ?? gatewayTags?.projectId, userId: usageContext?.userId ?? gatewayTags?.userId, trustedTeamId: usageContext?.teamId ?? gatewayTags?.teamId }) : { haiku55Enabled: false, byok: undefined };
-  // HTPR-7075: Haiku 5.5 reads images too, so Claude 5.5 mode covers them.
   const defaultContext = isImage && !("backgroundClaudeEnabled" in loadedContext && loadedContext.backgroundClaudeEnabled)
     ? { haiku55Enabled: false, byok: undefined }
     : loadedContext;
-  // HTPR-7075: a team that disabled Anthropic gets no extraction, not another provider.
   if ("anthropicDisabled" in defaultContext && defaultContext.anthropicDisabled) return "";
   const useHaiku = defaultModelKeyFor(defaultContext, CUSTOM_INSTRUCTION_MODEL) === "claude-haiku-5-5";
   const provider = useHaiku ? defaultContext.byok?.provider === "openrouter" ? "openrouter" : "claude" : "openai";
@@ -312,6 +336,7 @@ async function extractBinaryDocumentTextWithOpenAI(
     feature: "custom-instructions",
   });
   const result = await generateText({
+    experimental_download: downloadWithoutBrotli,
     model,
     messages: [{ role: "user", content }],
     maxRetries: 2,

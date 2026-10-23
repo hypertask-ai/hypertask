@@ -23,15 +23,6 @@ function authorized(request: NextRequest) {
   );
 }
 
-// Server capture only runs on preview and production (see
-// capturePostHogExceptionOnServer), and this repo does not build previews by
-// default, so production is the only place the pipeline can actually be
-// demonstrated. Three independent gates keep that safe: the deployment
-// environment, the Owner-only feature flag, and an explicit admin-only
-// authorization (a real session of the owner user — Manager decision
-// 2026-09-09). The shared token is kept as a fourth gate: a cross-site form
-// POST cannot set a custom header, so it also blocks CSRF on the
-// cookie-authenticated session. Any gate failing makes the route a 404/401.
 const TRIGGERABLE_ENVIRONMENTS = new Set(["preview", "production"]);
 
 export async function POST(request: NextRequest) {
@@ -46,6 +37,19 @@ export async function POST(request: NextRequest) {
   ) {
     return NextResponse.json({ error: "Not found" }, { status: 404 });
   }
+  const canary = request.headers.get("x-posthog-canary");
+  if (canary) {
+    if (process.env.VERCEL_ENV !== "production") {
+      return NextResponse.json({ error: "Not found" }, { status: 404 });
+    }
+    if (!/^yper4-331-[0-9]{1,20}-[0-9]{1,3}$/.test(canary)) {
+      return NextResponse.json({ error: "Invalid canary" }, { status: 400 });
+    }
+    if (!authorized(request)) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+    throw new Error(`PostHog pipeline canary ${canary}`);
+  }
   if (!(await isFeatureFlagOwner(request.headers))) {
     return NextResponse.json({ error: "Not found" }, { status: 404 });
   }
@@ -53,7 +57,5 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  // This string becomes the PostHog issue name and the auto-filed ticket
-  // title, so it is the evidence a human reads. Keep it environment-neutral.
   throw new Error("HTPR-6238 deliberate error tracking verification");
 }

@@ -41,10 +41,10 @@ test("automatic board and task opening do not overwrite the saved mode", () => {
   const board = source("src/app/[...boardURL]/LandingPage.tsx");
   const task = source("src/app/detail/[...slug]/TaskDetailComp.tsx");
   const boardAutoOpen = board.match(
-    /\/\/ Pinning always opens chat[\s\S]*?useEffect\(\(\) => \{[\s\S]*?\n\}\, \[/
+    /useEffect\(\(\) => \{\s*if \(\s*!hydrated \|\|\s*isMblForChat[\s\S]*?\n\}\, \[/
   );
   const taskAutoOpen = task.match(
-    /\/\/ Pinning always opens chat[\s\S]*?useEffect\(\(\) => \{[\s\S]*?\n  \}\, \[/
+    /useEffect\(\(\) => \{\s*if \(\s*!hydrated \|\|\s*_mbl[\s\S]*?\n  \}\, \[/
   );
 
   assert.ok(boardAutoOpen, "board auto-open effect should exist");
@@ -72,12 +72,16 @@ test("mobile chat uses the approved header controls and guarded new-chat action"
   assert.match(mobileBranch[0], /data-ai-chat-mobile-model-label/);
   assert.match(mobileBranch[0], /getMobileAiChatModelLabel\(currentAiOption\)/);
   assert.doesNotMatch(mobileBranch[0], /<AIModelDropDownButton/);
+  const sharedHistoryButton = header.match(/const historyButton = \([\s\S]*?\n  \);/);
+  assert.ok(sharedHistoryButton, "History keeps one shared control");
+  assert.match(mobileBranch[0], /\{historyButton\}/);
+  assert.match(sharedHistoryButton[0], /className=\{isMbl\s*\? "[^"]*h-11 w-11[^"]*"/);
   for (const label of ["Close AI chat", "Chat history", "New chat"]) {
-    const button = mobileBranch[0].match(
+    const button = (label === "Chat history" ? sharedHistoryButton[0] : mobileBranch[0]).match(
       new RegExp(`<button(?:(?!</button>)[\\s\\S])*?aria-label="${label}"(?:(?!</button>)[\\s\\S])*?</button>`)
     );
     assert.ok(button, `${label} button must exist`);
-    assert.match(button[0], /className="[^"]*h-11 w-11[^"]*"/);
+    if (label !== "Chat history") assert.match(button[0], /className="[^"]*h-11 w-11[^"]*"/);
     if (label === "New chat") {
       assert.match(button[0], /onClick=\{handleStartNewSession\}/);
       assert.match(button[0], /disabled=\{isStartingNewSession\}/);
@@ -100,7 +104,9 @@ test("pinning chat does not overwrite the saved mode", () => {
   const commands = source("src/components/commands.tsx");
 
   assert.doesNotMatch(header, /setIsAiChatSidebarMode\(true\)/);
-  assert.doesNotMatch(commands, /setIsSidebarMode\(true\)/);
+  const pinCommand = commands.match(/case CommandMode\.PinAIChatOpen:([\s\S]*?)case CommandMode\.FullScreenAIChat:/);
+  assert.ok(pinCommand, "pinning keeps its own command case");
+  assert.doesNotMatch(pinCommand[1], /setIsSidebarMode\(true\)/);
   assert.match(header, /setAiChatPinned\(nextPinned\)/);
   assert.match(commands, /setAiChatPinned\(!aiChatPinned\)/);
 });

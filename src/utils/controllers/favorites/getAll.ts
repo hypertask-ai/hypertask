@@ -1,6 +1,7 @@
 import type { Prisma } from "@prisma/client";
 import prisma from "@/lib/prisma";
 import { publicAgentSelect } from "@/lib/agents/publicAgent";
+import { getProjectWhere } from "@/utils/controllers/projects/getAllIncludes";
 
 const favoriteUserSelect = {
   id: true,
@@ -9,9 +10,6 @@ const favoriteUserSelect = {
   email: true,
 } satisfies Prisma.UserSelect;
 
-// HTPR-6509: consumers (sidebar, favorites modal, shortcuts) read the board's
-// id, name/title, team, owner and members. Skip heavy columns such as
-// description, sections and playbook on every app-shell load.
 const favoriteProjectSelect = {
   id: true,
   name: true,
@@ -26,7 +24,7 @@ const favoriteProjectSelect = {
 export const getFavoritesForUser = (userId: number) =>
   prisma.favorites.findMany({
     relationLoadStrategy: "join",
-    where: { userSetting: { userId } },
+    where: { userSetting: { userId }, project: getProjectWhere(userId) },
     include: {
       project: {
         select: {

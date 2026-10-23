@@ -18,7 +18,6 @@ export const LaunchHypertaskOnboardingScreen = () => {
     const shareId = params?.get("shareId");
 
     router.refresh();
-    //New funnel doesn't require users to go through interactive tutorial
     if (!isMbl) {
       if (projectId && projectId.length > 0 && projectId !== "undefined") {
         return `/project?id=${projectId}`;
@@ -34,9 +33,12 @@ export const LaunchHypertaskOnboardingScreen = () => {
   };
 
   const getSharedTaskInfoURL = async (shareId: string) => {
-    const res = await axios.post(`${getSharedTaskRoute}?shareId=${shareId}`);
-    if (res.status === 200) {
-      return `/detail/project-${res.data.taskShared.projectId}/${res.data.taskShared.task.uniqueIndex}`;
+    try {
+      const res = await axios.post(`${getSharedTaskRoute}?shareId=${shareId}`);
+      if (res.status === 200) {
+        return `/detail/project-${res.data.taskShared.projectId}/${res.data.taskShared.task.uniqueIndex}`;
+      }
+    } catch {
     }
     return "/";
   };

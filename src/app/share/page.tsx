@@ -9,6 +9,7 @@ import {
   checkIfBoardMember,
   getSharedComments,
   getSharedTaskInfo,
+  isShareLinkLive,
   processSharedComments,
 } from "@/utils/controllers/tasks/getSharedTask";
 import SharedTaskDetailComp from "./SharedTaskDetailComp";
@@ -30,18 +31,18 @@ export async function generateMetadata(props: any): Promise<Metadata> {
         select: {
           ticketNumber: true,
           title: true,
+          status: true,
         },
       },
     },
   });
   const tabTitle =
-    taskInfo?.task.ticketNumber + " " + taskInfo?.task?.title + " - Hypertask";
+    taskInfo && taskInfo.shareType !== "Domain" && isShareLinkLive(taskInfo)
+      ? taskInfo.task.ticketNumber + " " + taskInfo.task.title + " - Hypertask"
+      : "Shared Task - Hypertask";
   return {
     title: tabTitle,
     robots: "noindex, nofollow",
-    // Tell Google/Chrome not to offer page translation. Chrome Translate wraps
-    // translated text in <font> tags before React hydrates, which is a
-    // recurring React #418 hydration failure on public share links (HTPR-4980).
     other: { google: "notranslate" },
   };
 }
@@ -65,14 +66,11 @@ export default async function Page(
   const sharedTask = await getSharedTaskInfo(shareId);
   let user: IUser | undefined;
   task = sharedTask?.task;
-  if (!sharedTask || sharedTask.task.status === "Deleted") {
+  if (!sharedTask || !isShareLinkLive(sharedTask)) {
     redirect("/unauthorized");
   }
 
   if (userObjString) {
-    // cookies().get() returns the raw url-encoded value; decode before parsing.
-    // A malformed cookie must not crash the share page for logged-in users:
-    // fall back to the public (logged-out) view instead.
     try {
       user = JSON.parse(decodeURIComponent(userObjString.value));
     } catch {
@@ -83,27 +81,30 @@ export default async function Page(
   if (user) {
     checkBoardMember = await checkIfBoardMember(user.id, sharedTask.projectId);
     if (checkBoardMember === 200) {
-      //show view/edit option or just redirect to task page.
-      //for now lets redirect to task page
       return redirect(`/detail/project-${task.projectId}/${task.uniqueIndex}`);
     } else if (checkBoardMember === 201) {
-      //show join button instead of login button
     } else {
       redirect("/unauthorized");
     }
   }
 
+  if (sharedTask.shareType === "Domain") {
+    return (
+      <SharedTaskPageFooter
+        shareType={sharedTask.shareType}
+        shareId={sharedTask.id}
+        sharedUserEmail={sharedTask.user.email}
+        checkBoardMember={checkBoardMember}
+        user={user}
+      >
+        <main translate="no" />
+      </SharedTaskPageFooter>
+    );
+  }
+
   if (!Array.isArray(task) && task) {
     comments = await getSharedComments(task?.id?.toString());
     initialMap = processSharedComments(comments.json || []);
-  }
-
-  let shouldBlur: boolean = false;
-  if (sharedTask.shareType === "Domain") {
-    if (user === undefined) shouldBlur = true;
-    else {
-      if (checkBoardMember === 201) shouldBlur = true;
-    }
   }
 
   return (
@@ -115,9 +116,6 @@ export default async function Page(
         checkBoardMember={checkBoardMember}
         user={user}
       >
-        {/* translate="no" keeps Chrome Translate out of the hydrated subtree:
-            it rewrites text nodes into <font> elements pre-hydration and React
-            throws #418 on every visit for that visitor (HTPR-4980). */}
         <main translate="no">
           <Suspense fallback={<>Loading...</>}>
             <TasksProvider
@@ -134,11 +132,7 @@ export default async function Page(
               isShareView
             >
               <FollowersProvider>
-                <div
-                  className={`${
-                    shouldBlur ? "blur-sm pointer-events-none" : ""
-                  }`}
-                >
+                <div>
                   <SharedTaskDetailComp
                     key={`task-detail-page-container-${task.id}`}
                     _slugs={[

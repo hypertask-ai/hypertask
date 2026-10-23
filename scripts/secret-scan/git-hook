@@ -1,0 +1,13 @@
+#!/bin/sh
+# Global git hook (core.hooksPath). Runs the key scan before a commit, then the repo's own hook
+# of the same name, so setting a global hooks path never switches a repo's hooks off.
+name=$(basename "$0")
+here=$(dirname "$0")
+if [ "$name" = pre-commit ]; then
+  "$here/scan-staged" || exit 1
+fi
+own="$(git rev-parse --git-common-dir)/hooks/$name"
+if [ -x "$own" ]; then
+  exec "$own" "$@"
+fi
+exit 0

@@ -1,5 +1,7 @@
+import { reportMcpOperationCrash } from '@/lib/mcp/operationCrashReport'
 import { wrapMcpRoute, validateMcpRouteAuth as validateMcpAuth, checkMcpRouteRateLimit as checkMcpRateLimit } from '@/lib/mcp/routeWrapper'
 import { NextRequest, NextResponse } from 'next/server'
+import { requireRole } from '@/lib/mcp/agents/scopes'
 
 import { getProjectWhere } from '@/utils/controllers/projects/getAllIncludes'
 import prisma from '@/lib/prisma'
@@ -14,9 +16,7 @@ export interface SectionListItem {
   visibility: boolean
   deleted: boolean
   ranking: string
-  /** Tickets here are finished. null means no explicit setting: fall back to the column name. */
   isDone: boolean | null
-  /** Numeric user ID, agent UUID, or null when no auto-assignee is configured. */
   autoAssign: number | string | null
   taskCount: number
 }
@@ -34,17 +34,6 @@ export interface CreateSectionSuccessResponse {
   message?: string
 }
 
-/**
- * POST /api/mcp/projects/:projectId/sections
- *
- * Creates a new section (column) in a project.
- *
- * Body Parameters:
- * - title: string (required) - The section/column name
- * - after_section_id: number (optional) - Place the new section after this section ID
- *
- * Authentication: Bearer token (JWT or API key) in Authorization header
- */
 export async function POST(request: NextRequest, props: { params: Promise<{ projectId: string }> }) {
   return wrapMcpRoute(async (request: NextRequest) => {
   const params = await props.params;
@@ -62,6 +51,10 @@ export async function POST(request: NextRequest, props: { params: Promise<{ proj
         },
         { status: 401 }
       )
+    }
+    if (ctx.agentId) {
+      const roleError = await requireRole(ctx, 'write')
+      if (roleError) return roleError
     }
     const user = ctx.user;
     const projectId = parseInt(params.projectId)
@@ -142,7 +135,7 @@ export async function POST(request: NextRequest, props: { params: Promise<{ proj
         userId: user.id,
         afterSectionId,
       },
-      ctx.agentId
+      ctx.agentId, ctx.teamScope
     )
 
     if (!result.success) {
@@ -186,6 +179,7 @@ export async function POST(request: NextRequest, props: { params: Promise<{ proj
     )
   } catch (error) {
     console.error('Error creating section:', error)
+    reportMcpOperationCrash(request, error)
     return NextResponse.json(
       {
         success: false,
@@ -199,21 +193,10 @@ export async function POST(request: NextRequest, props: { params: Promise<{ proj
   })(request)
 }
 
-/**
- * GET /api/mcp/projects/:projectId/sections
- *
- * Lists all sections for a specific project.
- *
- * Query Parameters:
- * - include_hidden: Include hidden sections (default: false)
- *
- * Authentication: Bearer token (JWT or API key) in Authorization header
- */
 export async function GET(request: NextRequest, props: { params: Promise<{ projectId: string }> }) {
   return wrapMcpRoute(async (request: NextRequest) => {
   const params = await props.params;
   try {
-    // Validate authentication
     const rateLimited = await checkMcpRateLimit(request)
     if (rateLimited) return rateLimited
     const ctx = await validateMcpAuth(request)
@@ -240,12 +223,11 @@ export async function GET(request: NextRequest, props: { params: Promise<{ proje
       )
     }
 
-    // Verify user/agent has access to this active project only
     const project = await prisma.project.findFirst({
       where: {
         id: projectId,
         status: 'Normal',
-        ...getProjectWhere(user.id, ctx.agentId),
+        ...getProjectWhere(user.id, ctx.agentId, ctx.teamScope),
       },
       select: {
         id: true
@@ -262,7 +244,6 @@ export async function GET(request: NextRequest, props: { params: Promise<{ proje
       )
     }
 
-    // Parse query parameters
     const searchParams = request.nextUrl.searchParams
     const includeHidden = searchParams.get('include_hidden') === 'true'
 
@@ -270,18 +251,15 @@ export async function GET(request: NextRequest, props: { params: Promise<{ proje
     if (parsedListQuery.error) return parsedListQuery.error
     const listQuery = parsedListQuery.listQuery
 
-    // Build where clause
     const where: any = {
       projectId,
       deleted: false
     }
 
-    // Filter hidden sections unless include_hidden is true
     if (!includeHidden) {
       where.visibility = true
     }
 
-    // Get sections
     const sections = await prisma.section.findMany({
       where,
       select: {
@@ -300,7 +278,6 @@ export async function GET(request: NextRequest, props: { params: Promise<{ proje
       }
     })
 
-    // Get task counts for each section
     const sectionList: SectionListItem[] = await Promise.all(
       sections.map(async (section) => {
         const taskCount = await prisma.task.count({
@@ -342,6 +319,7 @@ export async function GET(request: NextRequest, props: { params: Promise<{ proje
     return NextResponse.json(response)
   } catch (error) {
     console.error('Error listing sections:', error)
+    reportMcpOperationCrash(request, error)
     return NextResponse.json(
       {
         success: false,

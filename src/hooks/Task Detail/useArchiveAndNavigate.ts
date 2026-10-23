@@ -5,16 +5,17 @@ import useGlobalFocusHandler, { type INotificationsFromTQ } from '../Inbox/useGl
 import { useRecoilState } from '@/lib/state';
 import { currentUserAtom, tasksPlayListAtom } from '@/store';
 import toast from 'react-hot-toast';
-import { undoToastSettings } from "@/components/undoToast";
 import { useQueryClient } from '@tanstack/react-query';
 import { useUndoContext } from '../General/useUndo';
 import { MobileViewContext } from "@/lib/contexts/mobileContext";
 import useHypertasksNavigate from '../MultiPages/Route/useHypertasksNavigate';
 import { useSearchParams } from 'next/navigation';
 import { useFlag } from '@/hooks/useFlag';
-import { HTPR_7002_INBOX_E_FIRST_PRESS_FLAG } from '@/lib/flags/keys';
+import { HTPR_7311_DECISION_COMMENT_LINK_FLAG, HTPR_7659_ARCHIVE_EVERY_SEND_FLAG } from "@/lib/flags/keys";
+import { withDecisionCommentAnchor } from '@/lib/inboxDecisions';
 import { inboxDataQueryKey } from '../Inbox/useGetNotifications';
 import {
+  inboxMessageForTask,
   nextRemainingInboxTask,
   resolveTaskPlaylistNavigation,
   shouldApplyLocalArchivedStatus,
@@ -22,12 +23,12 @@ import {
 } from '@/lib/taskDetailArchiveNavigation';
 
 const useArchiveAndNavigate = () => {
-  const inboxEFirstPress = useFlag(HTPR_7002_INBOX_E_FIRST_PRESS_FLAG);
+  const decisionCommentLinkEnabled = useFlag(HTPR_7311_DECISION_COMMENT_LINK_FLAG);
+  const archiveEverySend = useFlag(HTPR_7659_ARCHIVE_EVERY_SEND_FLAG);
   const queryClient = useQueryClient();
   const { undoAction} = useUndoContext();
   const _mbl = useContext(MobileViewContext);
 
-  // Cached opens keep parsedTask frozen; inbox membership lives in currentTask.
   const {  currentItemInTasksPlaylist, onGoback, setCurrentTask, currentTask} = useTaskContext();
 
   const {removeFromListWithStatus}=UpdateKanban();
@@ -37,13 +38,8 @@ const useArchiveAndNavigate = () => {
   const {navigate} =useHypertasksNavigate()
   const searchParams = useSearchParams()
 
-/**
- * just to set count of notifications to 0
- *
- * @param {boolean} [undo] if given, always set to 1
- */
 const setNotificationCountNull = (undo?:boolean)=> {
-   // @ts-ignore
+   // @ts-expect-error Spreading a nullable task produces optional required ITask fields.
    setCurrentTask((old) => ({
     ...old,
     _count:{
@@ -51,28 +47,29 @@ const setNotificationCountNull = (undo?:boolean)=> {
     }
   }));
 }
-// --------------------------- navigate to next task handler [j]
 const navigateToNextTask = (archiveNotification?:boolean,shouldNavigate?:boolean, remindMe?:boolean, force?:"forceNavigate", inboxFlow?:string|null): TaskArchiveNavigationOutcome=>{
   const indexOf = tasksPlayList?.findIndex(obj =>obj.projectId === currentItemInTasksPlaylist.projectId && obj.uniqueIndex === currentItemInTasksPlaylist.uniqueIndex);
   const activeInboxFlow = inboxFlow ?? searchParams?.get("inboxFlow")
-  // Cached Inbox rows omit membership until the detail fetch finishes.
-  const earlyInboxMembership = inboxEFirstPress && archiveNotification && activeInboxFlow === "true" &&
-    currentTask?._count?.notifications === undefined
+  const earlyInboxMembership = archiveNotification && activeInboxFlow === "true" &&
+    (archiveEverySend || currentTask?._count?.notifications === undefined)
   const inInbox = earlyInboxMembership
-    ? queryClient.getQueryData<INotificationsFromTQ>(inboxDataQueryKey(currentUser.id))?.notifications.find(notification =>
-        notification.taskId === currentTask?.id && notification.projectId === currentTask?.projectId &&
-        notification.userId === currentUser.id && notification.status === "Normal" &&
-        !notification.waitingOnSynthetic && Number.isSafeInteger(Number(notification.id)) && Number(notification.id) > 0)
+    ? inboxMessageForTask(
+        queryClient.getQueryData<INotificationsFromTQ>(inboxDataQueryKey(currentUser.id))?.notifications,
+        currentTask,
+        currentUser.id,
+      ) ?? (archiveEverySend && currentTask?._count?.notifications ? currentTask?.notifications?.[0] : undefined)
     : currentTask?.notifications&&currentTask?.notifications[0]
   const missingInboxTarget = activeInboxFlow && indexOf === -1 && tasksPlayList
     ? nextRemainingInboxTask(tasksPlayList, currentItemInTasksPlaylist)
     : undefined
 
 
-  // =========================== user presses [e] so archive notifications for this task too and update the key. 
   if (archiveNotification && currentTask){
 
-    if (!(earlyInboxMembership ? inInbox : currentTask._count?.notifications)){
+    const stillInInbox = earlyInboxMembership
+      ? inInbox || (archiveEverySend && currentTask._count?.notifications)
+      : currentTask._count?.notifications
+    if (!stillInInbox){
       console.log("🚀 ~ navigateToNextTask ~ currentTask:", currentTask)
       if (force==="forceNavigate") moveIdxDown()
       else{
@@ -82,10 +79,6 @@ const navigateToNextTask = (archiveNotification?:boolean,shouldNavigate?:boolean
       }
     } 
          
-    // Archive whenever the task actually carries an inbox notification, even
-    // when there is no inbox playlist (e.g. the task was opened directly by
-    // URL). Previously this was gated on tasksPlayList, so the "Remove
-    // notification" button silently no-opped on directly-opened tasks.
     if(inInbox){
        undoInboxArchive({notification:inInbox, currentUser:currentUser}, remindMe)
       if(!shouldNavigate) navigate('Refresh')
@@ -94,12 +87,7 @@ const navigateToNextTask = (archiveNotification?:boolean,shouldNavigate?:boolean
   else  moveIdxDown()
 
   if (!shouldNavigate)return "stayed"
-  // ============================ navigate to next task
-  // No playlist at all (task opened directly): any action that requested
-  // navigation must still leave the now-stale task detail.
   const hasPlaylist = !!(currentTask&&currentTask.projectId&&tasksPlayList&&tasksPlayList.length>0)
-  // A snooze must always leave the task page: when the playlist can't place the
-  // current task, fall back to going back (HTPR-4595).
   const playlistTarget = hasPlaylist
     ? resolveTaskPlaylistNavigation({
         indexOf: indexOf!,
@@ -123,15 +111,16 @@ const navigateToNextTask = (archiveNotification?:boolean,shouldNavigate?:boolean
       return "navigated"
     }
     const inboxParam=activeInboxFlow?'?inboxFlow=true':''
-    navigate("Replace",`/detail/project-${nextTask.projectId}/${nextTask.uniqueIndex}${inboxParam}`)
+    navigate("Replace", withDecisionCommentAnchor(
+      `/detail/project-${nextTask.projectId}/${nextTask.uniqueIndex}${inboxParam}`,
+      nextTask.decisionCommentId,
+      decisionCommentLinkEnabled && Boolean(activeInboxFlow),
+    ))
     return "navigated"
   }
-  // The playlist holds other tasks but not this one, so nothing navigates and
-  // the detail page keeps rendering the task that was just archived.
   return "stayed"
 }
 
-// --------------------------- navigate to previous task handler [k]
 const navigateToPreviousTask = useCallback((isUndoClicked:boolean, isUndo:boolean, inboxFlow?: string | null)=>{
 
   if (currentTask&&currentTask.projectId&&tasksPlayList&&tasksPlayList.length>0){
@@ -140,41 +129,27 @@ const navigateToPreviousTask = useCallback((isUndoClicked:boolean, isUndo:boolea
     const taskToGoTo = tasksPlayList[indexToGoTo]
     if (!taskToGoTo) return
     const inboxParam=inboxFlow?'?inboxFlow=true':''
-    const URL = `/detail/project-${taskToGoTo.projectId}/${taskToGoTo.uniqueIndex}${inboxParam}`
+    const URL = withDecisionCommentAnchor(
+      `/detail/project-${taskToGoTo.projectId}/${taskToGoTo.uniqueIndex}${inboxParam}`,
+      taskToGoTo.decisionCommentId,
+      decisionCommentLinkEnabled && Boolean(inboxFlow),
+    )
     navigate("Replace",URL)
 
-    // if undo was clicked. take back to the exact taskk
     if (isUndoClicked) moveIdxUp()
     
 
    
     else if (indexOf <= 0 || isUndo && indexOf===tasksPlayList.length-1 ) {
-      // setSelectedTask(_tasks[_tasks.length - 1])
-      // document.getElementById(`task-${_tasks[_tasks.length - 1].id}`)?.scrollIntoView({ behavior: 'smooth', block: 'center' })
     } else {
-      // navigateAndMoveUp()
       moveIdxUp()
 
     }
-    // function navigateAndMoveUp (){
-    //   moveIdxUp()
-    // }
   }
-},[currentItemInTasksPlaylist.projectId, currentItemInTasksPlaylist.uniqueIndex, currentTask, moveIdxUp, navigate, tasksPlayList])
+},[currentItemInTasksPlaylist.projectId, currentItemInTasksPlaylist.uniqueIndex, currentTask, decisionCommentLinkEnabled, moveIdxUp, navigate, tasksPlayList])
 
-  // ----------------------- [PRESS E] || [CLICK ON MARK AS DONE] (mark as done)
   const markAsDone = async (forceNavigate?:boolean) => {
     if (!currentTask) return;
-    // const response = await fetch(`/api/tasks/single`, {
-    //   method: "PUT",
-    //   headers: { "Content-Type": "application/json" },
-    //   body: JSON.stringify({
-    //     newTask: {
-    //       id: currentTask.id,
-    //       status: currentTask.status === "Archive" ? "Normal" : "Archive",
-    //     },
-    //   }),
-    // });
     const isUnarchiving = currentTask.status === "Archive";
     const hasUndo = await removeFromListWithStatus(
       currentTask.sectionId,
@@ -188,10 +163,6 @@ const navigateToPreviousTask = useCallback((isUndoClicked:boolean, isUndo:boolea
           : `/detail/project-${currentTask.projectId}/${currentTask.uniqueIndex}`,
       },
     )
-    // Archiving immediately leaves this task detail. Keep its active archive
-    // icon visible until navigation instead of optimistically flashing the
-    // restore state. Unarchiving remains on the page, so update that state
-    // after the mutation succeeds.
     if (isUnarchiving) {
       setCurrentTask((old) =>
         old
@@ -205,14 +176,11 @@ const navigateToPreviousTask = useCallback((isUndoClicked:boolean, isUndo:boolea
     }
     const toastMessage = currentTask.status === "Archive" ? "Task was unmarked as done" : "Task was marked as done"
     const toastMessageNavigation = currentTask.status === "Archive" ? "Go to Home Page" : "Go to task archive G then E"
-    if (!undoToastSettings.single || !hasUndo) {
+    if (!hasUndo) {
       toast(toastMessage)
       !_mbl&&toast(toastMessageNavigation)
     }
     const navigationOutcome = navigateToNextTask(true,currentTask.status !== "Archive", false, "forceNavigate")
-    // Archiving usually leaves the page, but when the playlist cannot place this
-    // task nothing navigates. Show the archived state immediately instead of
-    // leaving a stale "not archived" icon until a reload (HTPR-5480).
     if (shouldApplyLocalArchivedStatus({ isUnarchiving, navigationOutcome })) {
       setCurrentTask((old) =>
         old
@@ -223,35 +191,24 @@ const navigateToPreviousTask = useCallback((isUndoClicked:boolean, isUndo:boolea
           : old,
       )
     }
-    // Refresh only when un-archiving (no navigation happens then). When archiving,
-    // navigateToNextTask queues router.replace to the next task and a refresh here
-    // cancels that navigation (HTPR-4234).
     if (currentTask.status === "Archive") await navigate("Refresh")
 
     
  
   };
-    // undoHandler function
     const undoHandler =useCallback(async (data: any, toastId: string) => {
-      // console.log('🚀 ~ undoHandler ~ data:', data);
-      // first, you need to bring the item back to its place.
-      // then, you need to run the API call so there is no render blocking.
       navigateToPreviousTask(true, true)
       setNotificationCountNull(true)
       await undoAction('UNDO_INBOX_ARCHIVE', data);
       queryClient.refetchQueries({ queryKey: ['inbox'] });
       navigate("Refresh")
   
-      toast.dismiss(toastId);  // Dismiss the toast here
+      toast.dismiss(toastId);
     },[navigate, navigateToPreviousTask, queryClient, undoAction,currentItemInTasksPlaylist.uniqueIndex])
     
-    // ================= UNDO ARCHIVE INBOX NOTIFICATION =============== 
     const undoInboxArchive= (dataBeforeDeletion:any, remindMe?:boolean)=> {
-        // Make the necessary API call to delete the todo using Prisma
-        // Store the necessary information for undo
         archiveNotificationGetter(dataBeforeDeletion.notification,"Notification",remindMe?null:undoHandler)
         setNotificationCountNull()
-        // performActionAndStoreUndoData(dataBeforeDeletion,"Undo archive", undoHandler);
       }
   
 

@@ -1,9 +1,10 @@
+import { savedViewBoardAccessWhere } from "../getAllIncludes";
 import prisma from "@/lib/prisma";
 import { sanitizeProjectViewBoardFilters } from "@/utils/helperFunctions/Views/BoardFilterSanitizer";
 
 const getProjectView = async (projectId: number, currentUserId: number) => {
-  const project_view_updated = await prisma.project_View.findUnique({
-    where: { projectId },
+  const project_view_updated = await prisma.project_View.findFirst({
+    where: { projectId, project: savedViewBoardAccessWhere(currentUserId) },
     include: {
       user_project_views: {
         where: {
@@ -70,16 +71,15 @@ const getProjectView = async (projectId: number, currentUserId: number) => {
       },
     },
   });
-  return sanitizeProjectViewBoardFilters(project_view_updated);
+  return sanitizeProjectViewBoardFilters(project_view_updated, currentUserId);
 };
 
 export const getUniqueSlug = async (
     projectViewId: string | undefined,
     viewTitle: string | null
   ): Promise<string | null> => {
-    const baseSlug = slugify(viewTitle); // Generate the base slug first
+    const baseSlug = slugify(viewTitle);
     if(baseSlug === null) return null
-    // Check if the base slug exists
     let suffix = 1;
     let candidateSlug = baseSlug;
   
@@ -91,12 +91,10 @@ export const getUniqueSlug = async (
         },
       });
   
-      // If the candidate slug is unused, return it
       if (!existing) {
         return candidateSlug;
       }
   
-      // Otherwise, increment the suffix and try again
       suffix++;
       candidateSlug = `${baseSlug}-${suffix}`;
     }
@@ -105,12 +103,12 @@ export const getUniqueSlug = async (
 function slugify(str: string | null) {
   if (str === null) return null;
   return str
-    .normalize("NFKD") // Normalize diacritics
-    .replace(/[\u0300-\u036f]/g, "") // Remove diacritic characters
-    .toLowerCase() // Convert to lowercase
-    .replace(/[^a-z0-9]/g, "-") // Replace non-alphanumeric with hyphens
-    .replace(/-+/g, "-") // Collapse multiple hyphens
-    .replace(/^-+|-+$/g, ""); // Trim hyphens from start/end
+    .normalize("NFKD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase()
+    .replace(/[^a-z0-9]/g, "-")
+    .replace(/-+/g, "-")
+    .replace(/^-+|-+$/g, "");
 }
 
 export function getViewUrl(projectId: number, slug: string): string {

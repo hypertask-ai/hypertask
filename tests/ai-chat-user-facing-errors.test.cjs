@@ -28,7 +28,7 @@ function loadErrorFormatters(logs = []) {
   const javascript = ts.transpileModule(routeSource.slice(start, end), {
     compilerOptions: { target: ts.ScriptTarget.ES2020 },
   }).outputText;
-  const logger = { error: (...args) => logs.push(args) };
+  const logger = { error: (...args) => logs.push(args), info: () => {} };
   return new Function(
     "console",
     "z",

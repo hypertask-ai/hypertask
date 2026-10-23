@@ -78,6 +78,7 @@ function loadCreateView({ agents = [], users = [] } = {}) {
         },
       },
   };
+  prismaStub.$transaction = async (operation) => operation(prismaStub);
   stubModule("src/lib/prisma.ts", { default: prismaStub });
   stubModule("src/utils/controllers/projects/views/boardFilterWriteLock.ts", {
     acquireBoardFilterWriteLock: async () => undefined,

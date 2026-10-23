@@ -74,9 +74,6 @@ function harness(viewerId = userId) {
     "@/utils/controllers/projects/findPrefixAliasTasks": {},
     "@/lib/auth/getSessionUser": { getSessionUser: async () => ({ userId: viewerId, source: "better-auth" }) },
     "@/lib/auth/sessionUserRecord": { loadSessionUserRecord: async () => ({ id: viewerId }) },
-    "@/lib/api/task-writes/route": { withTaskWriteFlag: handler => handler,
-      taskWriteRoute: ({ operation, prepare }) => async (request, session = { userId: viewerId }) =>
-        operation(await request.json(), prepare ? await prepare(session) : session) },
     "@/lib/aiModelOptions": { aiModelDefinitions: [], aiImageModelDefinitions: [] },
     "@/utils/controllers/agents/boardMembers": { getBoardAgentMembers: async () => [] },
     "../search/document": { turbopufferFetchMentionTasks: async (_query, ids) => {

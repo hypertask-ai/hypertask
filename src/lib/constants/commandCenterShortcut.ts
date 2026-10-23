@@ -3,8 +3,6 @@ type CommandCenterKeyboardEvent = Pick<
   "altKey" | "code" | "ctrlKey" | "metaKey" | "shiftKey"
 >;
 
-// These surfaces already mount the palette, sometimes with task/board context.
-// The shell owns it everywhere else, including settings and new app routes.
 export const COMMAND_MENU_ROUTE_HOSTS = [
   "/project",
   "/detail",
@@ -48,8 +46,13 @@ const isCommandMenuRoute = (pathname: string | null) =>
     (route) => pathname === route || pathname?.startsWith(`${route}/`),
   );
 
-export const shouldRenderGlobalCommandMenu = (pathname: string | null) =>
+export const shouldRenderGlobalCommandMenu = (
+  pathname: string | null,
+  myTasksSingleCommandCenter = false,
+) =>
   isCommandMenuRoute(pathname) &&
+  !(myTasksSingleCommandCenter &&
+    (pathname === "/my-tasks" || pathname?.startsWith("/my-tasks/"))) &&
   !COMMAND_MENU_ROUTE_HOSTS.some(
     (route) => pathname === route || pathname?.startsWith(`${route}/`),
   );

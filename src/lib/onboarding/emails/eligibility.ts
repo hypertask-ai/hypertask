@@ -6,7 +6,6 @@ export const WELCOME_COHORT_START = "2026-10-09T00:00:00Z";
 export function onboardingIdentitySkipReason(user: Pick<User, "joinedAt" | "uid">) {
   if (user.joinedAt < new Date(WELCOME_COHORT_START)) return "pre_cohort";
   if (isGuestUser(user)) return "guest";
-  // Managed agents have their own table; also exclude non-human UID prefixes.
   if (/^(service|agent|bot)_/i.test(user.uid)) return "service_identity";
   return null;
 }

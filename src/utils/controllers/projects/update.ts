@@ -1,3 +1,4 @@
+import type { AgentTokenTeamScope } from '@/lib/mcp/auth/types';
 import { SortingMode } from "@prisma/client";
 import { waitUntil } from "@vercel/functions";
 import { upsertAllCommentsToTurbopuffer, upsertTaskToTurbopuffer } from "../turbopuffer/turbopufferHelper";
@@ -13,14 +14,14 @@ export async function changeProjectPrefix(
   currentUser: IUser,
   agentId?: string | null,
   settings: { title?: string; sorting_mode?: SortingMode } = {},
+  teamScope?: AgentTokenTeamScope | null,
 ) {
   if (!(await isFeatureEnabled(HTPR_6868_TICKET_PREFIX_FLAG, currentUser.id))) {
     return { status: 403, json: { message: "Ticket prefix changes are not enabled" } };
   }
   const prefix = normalizeProjectPrefix(input);
-  const accessWhere = taskWriteAccessWhere(currentUser.id, agentId);
+  const accessWhere = taskWriteAccessWhere(currentUser.id, agentId, teamScope);
   const project = await prisma.$transaction(async (tx) => {
-    // Share task creation's board lock and serialize team-wide prefix claims.
     await tx.$executeRaw`SELECT pg_advisory_xact_lock(9428471::int, ${projectId}::int)`;
     const board = await tx.project.findFirst({
       where: { id: projectId, status: { not: "Deleted" }, ...accessWhere },
@@ -53,7 +54,7 @@ export async function changeProjectPrefix(
       data: { ...settings, uniqueIdentifier: prefix },
     });
     await tx.$executeRaw`UPDATE "Task" SET "ticketNumber" = ${prefix} || '-' || "uniqueIndex", "updatedAt" = CURRENT_TIMESTAMP WHERE "projectId" = ${projectId}`;
-    return tx.project.findUnique({ where: { id: projectId }, include: { tasks: true } });
+    return tx.project.findUnique({ where: { id: projectId }, include: { tasks: { select: { id: true } } } });
   });
   if (!project) return { status: 403, json: { message: "Not allowed to edit this board" } };
   waitUntil(Promise.all(project.tasks.map(task => Promise.all([
@@ -70,13 +71,14 @@ const updateProject = async (
   uniqueIdentifier: unknown,
   currentUser: IUser,
   agentId?: string | null,
+  teamScope?: AgentTokenTeamScope | null,
 ) => {
   try {
     if (!Number.isSafeInteger(projectId) || projectId <= 0) {
       return { status: 400, json: { message: "projectId must be a positive integer" } };
     }
     if (title === undefined && sorting_mode === undefined && uniqueIdentifier !== undefined) {
-      return await changeProjectPrefix(projectId, uniqueIdentifier, currentUser, agentId);
+      return await changeProjectPrefix(projectId, uniqueIdentifier, currentUser, agentId, {}, teamScope);
     }
     const trimmedTitle = typeof title === "string" ? title.trim() : "";
     if (!trimmedTitle || trimmedTitle.length > 200) {
@@ -87,7 +89,7 @@ const updateProject = async (
       select: { id: true, uniqueIdentifier: true },
     });
     if (!exists) return { status: 404, json: { message: "Board not found" } };
-    const accessWhere = taskWriteAccessWhere(currentUser.id, agentId);
+    const accessWhere = taskWriteAccessWhere(currentUser.id, agentId, teamScope);
     const allowed = await prisma.project.findFirst({
       where: { id: projectId, status: { not: "Deleted" }, ...accessWhere },
       select: { id: true },
@@ -97,12 +99,11 @@ const updateProject = async (
       return await changeProjectPrefix(projectId, uniqueIdentifier, currentUser, agentId, {
         title: trimmedTitle,
         sorting_mode,
-      });
+      }, teamScope);
     }
     const project = await prisma.project.update({
       where: { id: projectId, status: { not: "Deleted" }, AND: accessWhere },
       data: { title: trimmedTitle, sorting_mode },
-      include: { tasks: true },
     });
     return { status: 200, json: project };
   } catch (error) {

@@ -3,7 +3,7 @@
 import { type AgentChatActivity } from "@/lib/agents/chatActivityFeed";
 import { readDraft, writeDraft } from "@/lib/agents/chatDrafts";
 import { markChatRead, saveDraftToServer, } from "@/lib/agents/chatViewerState";
-import { useCallback, useEffect } from "react";
+import { useCallback, useEffect, useRef } from "react";
 import { flushSync } from "react-dom";
 import toast from "react-hot-toast";
 import type { TAgent } from "../AgentsRegister";
@@ -12,9 +12,11 @@ import type { useAgentChatState } from "./useAgentChatState";
 
 type Props = Pick<
   ReturnType<typeof useAgentChatState>,
+  | "embedded"
   | "loadGenRef"
   | "sessionIdRef"
   | "sendingRef"
+  | "setSending"
   | "setMessages"
   | "setActivity"
   | "setAwaiting"
@@ -45,17 +47,20 @@ type Props = Pick<
 >;
 
 export function useAgentChatSession({
-  loadGenRef, sessionIdRef, sendingRef, setMessages, setActivity, setAwaiting, setMessagesError,
+  embedded, loadGenRef, sessionIdRef, sendingRef, setSending, setMessages, setActivity, setAwaiting, setMessagesError,
   setDeliveryMode, setDeliveryNotice, draftHydratedRef, draftRef, setDraft, selectedIdRef,
   currentUser, setSessionLoading, setSession, setSelectedId, setStopping, setReplyTimedOut,
   dismissMention, restoredDraftRef, messageQueueRef, setQueuedMessages, isMbl, composerRef,
   focusComposer, router, searchParams, agents, session,
 }: Props) {
+  const activeRef = useRef(!embedded || embedded.active);
+  activeRef.current = !embedded || embedded.active;
   const loadMessages = useCallback(async (loadSessionId: string) => {
     const generation = ++loadGenRef.current;
     try {
       const res = await fetch(`/api/agent-chat/${loadSessionId}`, {
         cache: "no-store",
+        headers: embedded ? { "x-hypertask-sidebar-project": String(embedded.projectId) } : {},
       });
       const data = (await res.json()) as {
         success?: boolean;
@@ -71,9 +76,6 @@ export function useAgentChatSession({
       if (!res.ok || !data.success || !Array.isArray(data.messages)) {
         throw new Error(data.error ?? "Failed to load messages");
       }
-      // Ignore answers for a chat the user already left, never clobber an
-      // optimistic send that is still in flight, and drop responses a newer
-      // request for the same session has already superseded.
       if (
         sessionIdRef.current !== loadSessionId ||
         sendingRef.current ||
@@ -85,21 +87,13 @@ export function useAgentChatSession({
       setAwaiting(Boolean(data.awaiting));
       setMessagesError(null);
       setDeliveryMode(data.deliveryMode ?? null);
-      // Same signal a failed send sets: no live delivery path means the human
-      // side of the notice must survive a reload.
       setDeliveryNotice(data.chatEnabled === false);
-      // First load of this thread: reconcile the two draft copies. Whatever is
-      // on this device wins, because it is what was typed most recently here,
-      // and it gets pushed up so the next device sees it. An empty device slot
-      // takes the server's copy, which is what makes a draft cross devices.
-      // Viewer rows exist for private owner chats too; only the shared roster
-      // stays behind the flag.
       if (data.viewer && draftHydratedRef.current !== loadSessionId) {
         draftHydratedRef.current = loadSessionId;
         const local = draftRef.current;
         const stored = data.viewer?.draft ?? "";
         if (local.trim() !== "") {
-          if (local !== stored) saveDraftToServer(loadSessionId, local);
+          if (local !== stored) saveDraftToServer(loadSessionId, local, embedded?.projectId);
         } else if (stored !== "") {
           draftRef.current = stored;
           setDraft(stored);
@@ -107,14 +101,9 @@ export function useAgentChatSession({
             writeDraft(currentUser.id, selectedIdRef.current, stored);
         }
       }
-      // Reading the newest page is catching up, so the unread marker moves.
-      if (data.viewer && data.viewer.unreadCount > 0) {
-        markChatRead(loadSessionId);
+      if (activeRef.current && data.viewer && data.viewer.unreadCount > 0) {
+        markChatRead(loadSessionId, embedded?.projectId);
       }
-      // Draining here would read awaitingRef before the render that follows
-      // this setMessages has run, so it'd still see the stale (pre-reply)
-      // value. The effect below (keyed on the derived `awaiting`) is the one
-      // place that's guaranteed to observe the committed state instead.
     } catch (e) {
       if (
         sessionIdRef.current === loadSessionId &&
@@ -125,10 +114,8 @@ export function useAgentChatSession({
         );
       }
     }
-  }, [currentUser.id]);
+  }, [currentUser.id, embedded?.projectId]);
 
-  // Confirm or dismiss a proposed ticket. The server owns the decision; this
-  // just refetches so every tab lands on the state the server committed.
   const handleProposalAction = useCallback<TProposalAction>(
     async (proposalId, action) => {
       const activeSessionId = sessionIdRef.current;
@@ -138,7 +125,7 @@ export function useAgentChatSession({
           `/api/agent-chat/${activeSessionId}/proposals/${proposalId}`,
           {
             method: "POST",
-            headers: { "Content-Type": "application/json" },
+            headers: { "Content-Type": "application/json", ...(embedded ? { "x-hypertask-sidebar-project": String(embedded.projectId) } : {}) },
             body: JSON.stringify({ action }),
           },
         );
@@ -164,12 +151,10 @@ export function useAgentChatSession({
     async (agentId: string) => {
       setSessionLoading(true);
       try {
-        // One ongoing thread per agent: the route upserts, so re-selecting an
-        // agent always lands on the same conversation.
-        const res = await fetch("/api/ai-chat/create-session", {
+        const res = await fetch(embedded ? "/api/agent-sidebar-chats" : "/api/ai-chat/create-session", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ agentId }),
+          body: JSON.stringify({ agentId, ...(embedded ? { projectId: embedded.projectId } : {}) }),
         });
         const data = (await res.json()) as {
           success?: boolean;
@@ -179,7 +164,6 @@ export function useAgentChatSession({
         if (!res.ok || !data.success || !data.session) {
           throw new Error(data.error ?? "Could not open chat");
         }
-        // The user may have switched agents while this was in flight.
         if (selectedIdRef.current !== agentId) return;
         sessionIdRef.current = data.session.id;
         setSession({ id: data.session.id, agentId });
@@ -193,17 +177,19 @@ export function useAgentChatSession({
         if (selectedIdRef.current === agentId) setSessionLoading(false);
       }
     },
-    [],
+    [embedded?.projectId],
   );
 
   const clearSelectionState = () => {
-    // Leaving the chat is not the same as discarding the message: keep it for
-    // when this agent is opened again.
     if (selectedIdRef.current) {
       writeDraft(currentUser.id, selectedIdRef.current, draftRef.current);
     }
     selectedIdRef.current = null;
     sessionIdRef.current = null;
+    if (embedded) {
+      sendingRef.current = false;
+      setSending(false);
+    }
     draftHydratedRef.current = null;
     setSelectedId(null);
     setSession(null);
@@ -222,30 +208,22 @@ export function useAgentChatSession({
 
   const selectAgent = useCallback(
     (agent: TAgent) => {
-      // Read the outgoing agent off the ref before it is overwritten, or the
-      // draft lands under the agent being switched to.
       const leaving = selectedIdRef.current;
       if (leaving && leaving !== agent.id) {
         writeDraft(currentUser.id, leaving, draftRef.current);
       }
       selectedIdRef.current = agent.id;
       sessionIdRef.current = null;
+      if (embedded) {
+        sendingRef.current = false;
+        setSending(false);
+      }
       draftHydratedRef.current = null;
-      // draftRef is normally refreshed by a passive effect, which can lag
-      // behind two switches in the same task (holding Ctrl+Tab). Setting it
-      // here means the next switch always writes the draft it actually left.
       const restored = readDraft(currentUser.id, agent.id);
       draftRef.current = restored;
       restoredDraftRef.current = restored;
-      // A queued follow-up belongs to the chat it was typed in, not whatever
-      // agent gets selected next.
       messageQueueRef.current = [];
-      // flushSync (rather than the normal batched update) commits the chat
-      // pane, composer included, before this handler returns, so the
-      // composerRef.focus() below still runs inside the tap's call stack --
-      // mobile browsers only open the keyboard for a focus() that happens
-      // synchronously in the user gesture (HTPR-6041 follow-up).
-      flushSync(() => {
+      const updateSelection = () => {
         setSelectedId(agent.id);
         setSession(null);
         setSessionLoading(false);
@@ -257,33 +235,27 @@ export function useAgentChatSession({
         setDeliveryNotice(false);
         setDeliveryMode(null);
         setReplyTimedOut(false);
-        // This same path runs for a reload (the ?agent= effect calls it), so
-        // restoring here covers both switching agents and coming back.
         setDraft(restored);
         setQueuedMessages([]);
-      });
+      };
+      if (embedded) updateSelection();
+      else flushSync(updateSelection);
       dismissMention();
       if (isMbl && agent.runtimeType === "EXTERNAL") composerRef.current?.focus();
       if (isMbl && agent.runtimeType === "EXTERNAL") focusComposer();
-      // The selection lives in the URL so a reload keeps the chat open.
-      router.replace(
+      if (!embedded) router.replace(
         `/agents/chat?agent=${encodeURIComponent(agent.slug ?? agent.id)}`,
         { scroll: false },
       );
-      // Native agents are chatted with from the full AI chat surface; only
-      // external ones get an in-pane session.
       if (agent.runtimeType !== "EXTERNAL") return;
       void openAgentSession(agent.id);
     },
-    [router, openAgentSession, isMbl, currentUser.id],
+    [router, openAgentSession, isMbl, currentUser.id, embedded?.projectId],
   );
 
-  // Honor ?agent=<slug> once the roster is in (deep link, reload, palette).
-  // The raw id resolves too: links written server side (a confirmed proposal's
-  // ticket, for one) have no slug to hand.
   const agentParam = searchParams?.get("agent") ?? null;
   useEffect(() => {
-    if (!agents || !agentParam || selectedIdRef.current) return;
+    if (embedded || !agents || !agentParam || selectedIdRef.current) return;
     const match = agents.find(
       (a) => !a.revokedAt && (a.slug ?? a.id) === agentParam,
     ) ?? agents.find((a) => !a.revokedAt && a.id === agentParam);

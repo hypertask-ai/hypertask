@@ -100,10 +100,16 @@ done
 body=""
 status="200"
 headers=""
+exit_code=0
 
 case "$url" in
   https://api.vercel.com/v6/deployments*)
-    body=\$(printf '{"deployments":[{"uid":"deploy-current","state":"READY","meta":{"githubCommitSha":"%s"}},{"uid":"deploy-prev","state":"READY","meta":{"githubCommitSha":"other"}}]}' "\$SHA")
+    exit_code=\${HC_DEPLOYMENTS_EXIT_CODE:-0}
+    if [ -n "\${HC_DEPLOYMENTS_JSON:-}" ]; then
+      body=\$(printf '%s' "\$HC_DEPLOYMENTS_JSON" | sed "s/__SHA__/\$SHA/g")
+    else
+      body=\$(printf '{"deployments":[{"uid":"deploy-current","state":"READY","meta":{"githubCommitSha":"%s"}},{"uid":"deploy-prev","state":"READY","meta":{"githubCommitSha":"other"}}]}' "\$SHA")
+    fi
     ;;
   https://api.vercel.com/v10/projects/*/promote/*)
     printf '%s' "\$url" > "\$RUNNER_TEMP/promoted"
@@ -111,6 +117,12 @@ case "$url" in
     ;;
   https://api.telegram.org/*)
     body='{"ok":true}'
+    ;;
+  https://status.pusher.com/api/v2/status.json)
+    body="\${HC_PUSHER_STATUS_JSON:-}"
+    ;;
+  https://status.pusher.com/api/v2/components.json)
+    body="\${HC_PUSHER_COMPONENTS_JSON:-}"
     ;;
   https://app.hypertask.ai/api/version*)
     # After an alias repair promote, subsequent reads must see the SHA the
@@ -148,7 +160,7 @@ case "$url" in
       # A connection failure (real curl exit 7) leaves the previous -o/-D file
       # untouched, so clear out/hdrs to skip writing and reproduce the stale-body
       # bug faithfully.
-      connfail) status="000"; out=""; hdrs="" ;;
+      connfail) status="000"; out=""; hdrs=""; exit_code=7 ;;
       healthy500) status="500"; body='{"success":true,"probe":{"status":"healthy","rolledBack":true,"lockedTaskId":1,"probeRowId":"p"}}' ;;
     esac
     ;;
@@ -165,6 +177,7 @@ if [ -n "\$want" ]; then
 elif [ -z "\$out" ] || [ "\$out" = "/dev/stdout" ]; then
   printf '%s' "\$body"
 fi
+exit "\$exit_code"
 `;
 
 async function runHealthCheck(hcSequence, extraEnv = {}) {
@@ -185,7 +198,8 @@ async function runHealthCheck(hcSequence, extraEnv = {}) {
   await chmod(join(bin, "git"), 0o755);
 
   try {
-    const result = spawnSync("bash", ["-c", await workflowScript()], {
+    // An unspecified GitHub run-step shell is `bash -e {0}`.
+    const result = spawnSync("bash", ["-e", "-c", await workflowScript()], {
       cwd: process.cwd(),
       encoding: "utf8",
       env: {
@@ -309,6 +323,52 @@ test("a fully healthy run exits clean and never rolls back", async () => {
   assert.match(result.stdout, /Production healthy/);
   assert.equal(promoted, null, "a healthy run must not promote");
 });
+
+// YPER4-306: a failed build plus a retry gives one commit two deployments. Picking one
+// must not kill the pipe under pipefail, and the READY retry wins over the failed build.
+test("two deployments for one commit pick the READY one without a broken pipe", async () => {
+  const failed = (n) => `{"uid":"deploy-oom-${n}","state":"ERROR","meta":{"githubCommitSha":"__SHA__"},"pad":"${"x".repeat(40000)}"}`;
+  const { result, promoted } = await runHealthCheck("ok ok healthy", {
+    HC_DEPLOYMENTS_JSON: `{"deployments":[${failed(1)},${failed(2)},{"uid":"deploy-retry","state":"READY","meta":{"githubCommitSha":"__SHA__"}}]}`,
+  });
+
+  assert.equal(result.status, 0, result.stdout + result.stderr);
+  assert.doesNotMatch(result.stderr, /Broken pipe/);
+  assert.match(result.stdout, /deployment state: READY/);
+  assert.match(result.stdout, /Production healthy/);
+  assert.equal(promoted, null);
+});
+
+// YPER4-307: a commit with no deployment (ignored build step) must be reported as such
+// after the 4-minute window, not polled for 20 minutes and then health-checked.
+test("a commit with no deployment exits clean as an ignored build", async () => {
+  const { result, promoted } = await runHealthCheck("ok ok healthy", {
+    HC_DEPLOYMENTS_JSON: '{"deployments":[{"uid":"deploy-other","state":"READY","meta":{"githubCommitSha":"other"}}]}',
+  });
+
+  assert.equal(result.status, 0, result.stdout + result.stderr);
+  assert.match(result.stdout, /\[12\] deployment state: NOTFOUND/);
+  assert.doesNotMatch(result.stdout, /\[13\] deployment state/);
+  assert.match(result.stdout, /No production deployment for/);
+  assert.doesNotMatch(result.stdout, /Production healthy/);
+  assert.equal(promoted, null);
+});
+
+for (const [name, extraEnv] of [
+  ["a non-JSON deployment response", { HC_DEPLOYMENTS_JSON: "<html>unavailable</html>" }],
+  ["an empty deployment response", { HC_DEPLOYMENTS_JSON: " " }],
+  ["a deployment response without a deployments list", { HC_DEPLOYMENTS_JSON: '{"error":{"code":"forbidden"}}' }],
+  ["a failed deployment request", { HC_DEPLOYMENTS_EXIT_CODE: "7" }],
+]) {
+  test(`${name} reaches the deployment-wait alert without rollback`, async () => {
+    const { result, promoted, outputs } = await runHealthCheck("ok ok healthy", extraEnv);
+    assert.equal(result.status, 1, result.stdout + result.stderr);
+    assert.match(result.stdout, /after 60 checks; not verified/);
+    assert.doesNotMatch(result.stdout, /Production healthy/);
+    assert.equal(outputs.includes("rollback=true"), false);
+    assert.equal(promoted, null);
+  });
+}
 
 test("a stale healthy probe body from an earlier attempt is not healthy", async () => {
   const { result, promoted } = await runHealthCheck(
@@ -473,7 +533,9 @@ headers=""
 
 case "$url" in
   https://app.hypertask.ai/api/version*)
-    if [ -f "$RUNNER_TEMP/promoted" ]; then
+    if [ -n "\${DRIFT_VERSION_BODY:-}" ]; then
+      body="$DRIFT_VERSION_BODY"
+    elif [ -f "$RUNNER_TEMP/promoted" ]; then
       body=$(printf '{"buildId":"%s"}' "$DRIFT_TIP_SHA")
     else
       body=$(printf '{"buildId":"%s"}' "$DRIFT_LIVE_SHA")
@@ -486,6 +548,8 @@ case "$url" in
     ;;
   https://api.vercel.com/v9/projects*)
     body=$(printf '{"id":"prj_stub","targets":{"production":{"id":"deploy-old","meta":{"githubCommitSha":"%s"}}}}' "$DRIFT_LIVE_SHA")
+    if [ -n "\${DRIFT_TARGET_BODY:-}" ]; then body="$DRIFT_TARGET_BODY"; fi
+    if [ "\${DRIFT_TARGET_CONNFAIL:-}" = "1" ]; then exit 7; fi
     ;;
   https://api.vercel.com/v10/projects/*/promote/*)
     printf '%s' "$url" > "$RUNNER_TEMP/promoted"
@@ -571,6 +635,7 @@ async function runDriftCheck({
   healthGate = "success",
   healthConclusion = "success",
   ignoredTipAfterApp = false,
+  extraEnv = {},
 } = {}) {
   const directory = await mkdtemp(join(tmpdir(), "prod-health-drift-"));
   const bin = join(directory, "bin");
@@ -613,7 +678,7 @@ async function runDriftCheck({
   }
 
   try {
-    const result = spawnSync("bash", ["-c", await driftScript()], {
+    const result = spawnSync("bash", ["-e", "-c", await driftScript()], {
       cwd: repo,
       encoding: "utf8",
       env: {
@@ -631,6 +696,7 @@ async function runDriftCheck({
         DRIFT_LIVE_SHA: liveIsTip ? tipSha : liveSha,
         DRIFT_HEALTH_GATE: healthGate,
         DRIFT_HEALTH_CONCLUSION: healthConclusion,
+        ...extraEnv,
       },
     });
     const promoted = await readFile(join(runnerTemp, "promoted"), "utf8").catch(
@@ -652,6 +718,30 @@ test("drift alerts without promotion when /api/version lags a READY production t
   assert.match(result.stdout, /BEHIND the production tip.*Alert only/);
   assert.equal(promoted, null, "drift must not promote even a green READY deploy");
 });
+
+test("drift still reports an older target when /api/version is non-JSON", async () => {
+  const { result, promoted } = await runDriftCheck({
+    extraEnv: { DRIFT_VERSION_BODY: "<html>challenge</html>" },
+  });
+  assert.equal(result.status, 1, result.stdout + result.stderr);
+  assert.match(result.stdout, /falling back to Vercel production target/);
+  assert.match(result.stdout, /BEHIND the production tip.*Alert only/);
+  assert.equal(promoted, null);
+});
+
+for (const [name, extraEnv] of [
+  ["non-JSON", { DRIFT_TARGET_BODY: "<html>unavailable</html>" }],
+  ["unreachable", { DRIFT_TARGET_CONNFAIL: "1" }],
+]) {
+  test(`drift skips an unverifiable version and ${name} target without promotion`, async () => {
+    const { result, promoted } = await runDriftCheck({
+      extraEnv: { DRIFT_VERSION_BODY: "<html>challenge</html>", ...extraEnv },
+    });
+    assert.equal(result.status, 0, result.stdout + result.stderr);
+    assert.match(result.stdout, /No live production SHA.*nothing to compare/);
+    assert.equal(promoted, null);
+  });
+}
 
 test("drift does not promote when /api/version already matches the tip", async () => {
   const { result, promoted } = await runDriftCheck({ liveIsTip: true });
@@ -863,7 +953,7 @@ test("every failed inbox step is reported and leaves production health red", asy
     assert.equal(step.if, "${{ !cancelled() && steps.probe.outcome == 'failure' }}");
     assert.doesNotMatch(step.run, /emergency-rollback|git (?:push|revert)|\/promote\//);
   }
-  const result = spawnSync("bash", ["-c", final.run], { encoding: "utf8" });
+  const result = spawnSync("bash", ["-e", "-c", final.run], { encoding: "utf8" });
   assert.equal(result.status, 1, result.stdout + result.stderr);
   assert.match(result.stdout, /::error::.*inbox routines.*did not pass/);
   const script = await readFile(".github/scripts/core-actions-smoke.mjs", "utf8");
@@ -873,3 +963,37 @@ test("every failed inbox step is reported and leaves production health red", asy
   const green = spawnSync("bash", ["-c", "exit 0"], { encoding: "utf8" });
   assert.notEqual(green.status, result.status);
 });
+
+for (const [name, statusBody, componentsBody, exitStatus, message] of [
+  ["non-JSON status", "<html>unavailable</html>", "", 0, /Could not read Pusher status page; skipping/],
+  ["operational status", '{"status":{"indicator":"none","description":"Operational"}}', "", 0, /Pusher is operational/],
+  ["major status with non-JSON components", '{"status":{"indicator":"major","description":"Outage"}}', "<html>unavailable</html>", 1, /::error::Pusher status is major: Outage \(no Channels component reported as degraded\)/],
+  ["minor status with non-JSON components", '{"status":{"indicator":"minor","description":"Degraded"}}', "<html>unavailable</html>", 0, /::warning::Pusher status is minor/],
+  ["major status with affected Channels", '{"status":{"indicator":"major","description":"Outage"}}', '{"components":[{"name":"Channels","status":"major_outage"}]}', 1, /::error::Pusher status is major: Outage \(Channels: major_outage\)/],
+]) {
+  test(`Pusher handles ${name} under errexit`, async () => {
+    const yaml = require("js-yaml");
+    const workflow = yaml.load(await readFile(".github/workflows/prod-health.yml", "utf8"));
+    const script = workflow.jobs["pusher-status"].steps[0].run;
+    const directory = await mkdtemp(join(tmpdir(), "prod-health-pusher-"));
+    const bin = join(directory, "bin");
+    try {
+      await mkdir(bin);
+      await writeFile(join(bin, "curl"), CURL_STUB);
+      await chmod(join(bin, "curl"), 0o755);
+      const result = spawnSync("bash", ["-e", "-c", script], {
+        encoding: "utf8",
+        env: {
+          ...process.env,
+          PATH: `${bin}:${process.env.PATH}`,
+          HC_PUSHER_STATUS_JSON: statusBody,
+          HC_PUSHER_COMPONENTS_JSON: componentsBody,
+        },
+      });
+      assert.equal(result.status, exitStatus, result.stdout + result.stderr);
+      assert.match(result.stdout, message);
+    } finally {
+      await rm(directory, { recursive: true, force: true });
+    }
+  });
+}

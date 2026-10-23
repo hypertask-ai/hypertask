@@ -14,6 +14,7 @@ const { createJiti } = require("jiti");
 
 const root = path.resolve(__dirname, "..");
 const atoms = {
+  composeTaskQuestionsTaskIdAtom: Symbol("composeTaskQuestionsTaskIdAtom"),
   currentProjectAtom: Symbol("currentProjectAtom"),
   inViewObjectAtom: Symbol("inViewObjectAtom"),
   taskDetailNonEssentialReadyAtom: Symbol("taskDetailNonEssentialReadyAtom"),
@@ -39,6 +40,7 @@ test("AI welcome suggestions hydrate before using browser board data", async () 
     actEnvironment: global.IS_REACT_ACT_ENVIRONMENT,
   };
   const stubbedModules = new Map([
+    [path.join(root, "src/hooks/useFlag.tsx"), { useFlag: () => false }],
     [
       path.join(
         root,

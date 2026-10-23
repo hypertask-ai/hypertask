@@ -1,3 +1,5 @@
+import { reportMcpOperationCrash } from "@/lib/mcp/operationCrashReport";
+import { wrapMcpRoute } from '@/lib/mcp/routeWrapper'
 import { NextRequest, NextResponse } from "next/server";
 
 import {
@@ -11,6 +13,7 @@ export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 export async function GET(request: NextRequest) {
+  return wrapMcpRoute(async (request: NextRequest) => {
   const rateLimited = await checkMcpRateLimit(request);
   if (rateLimited) return rateLimited;
 
@@ -33,9 +36,12 @@ export async function GET(request: NextRequest) {
     });
   } catch (error) {
     console.error("[Admin Connections] Failed to list connections:", error);
+    reportMcpOperationCrash(request, error);
     return NextResponse.json(
       { success: false, error: "Failed to list connections" },
       { status: 500 },
     );
   }
+
+  })(request)
 }

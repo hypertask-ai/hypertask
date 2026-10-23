@@ -1,4 +1,5 @@
-import { recordAgentConnection } from "@/lib/telemetry/activationOccurrences";
+import { processAnalyticsIntentSoon } from "@/lib/telemetry/analyticsIntents";
+import { enqueueAgentConnection } from "@/lib/telemetry/activationOccurrences";
 import { NextRequest, NextResponse } from 'next/server'
 import { createHash, randomBytes, randomUUID } from 'crypto'
 import jwt from 'jsonwebtoken'
@@ -268,8 +269,6 @@ async function exchangeRefreshToken(formData: FormData) {
   }
 
   if (!rotated) {
-    // A concurrent request may have consumed this token after our first read:
-    // treat that as replay and revoke the family, like the sequential path above.
     const current = await prisma.oAuthRefreshToken.findUnique({
       where: { tokenHash: refreshTokenHash(refreshToken) },
       select: { revokedAt: true, replacedByHash: true },
@@ -289,21 +288,8 @@ async function exchangeRefreshToken(formData: FormData) {
   )
 }
 
-/**
- * POST /oauth/token
- * 
- * OAuth 2.1 token endpoint with PKCE validation
- * 
- * Accepts form-urlencoded data:
- * - grant_type: Must be "authorization_code"
- * - code: Authorization code from /oauth/authorize
- * - redirect_uri: Must match the redirect_uri used in authorization
- * - client_id: Must match the client_id used in authorization
- * - code_verifier: PKCE code verifier (used to verify code_challenge)
- */
 export async function POST(request: NextRequest) {
   try {
-    // Parse form-urlencoded body
     const formData = await request.formData()
     const grantType = formData.get('grant_type')
     const code = formData.get('code')
@@ -315,7 +301,6 @@ export async function POST(request: NextRequest) {
       return await exchangeRefreshToken(formData)
     }
 
-    // Validate grant_type
     if (grantType !== 'authorization_code') {
       return NextResponse.json(
         { error: 'unsupported_grant_type', error_description: 'grant_type must be "authorization_code"' },
@@ -323,7 +308,6 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // Validate required parameters
     if (!code || !redirectUri || !clientId || !codeVerifier) {
       return NextResponse.json(
         { error: 'invalid_request', error_description: 'Missing required parameters' },
@@ -331,7 +315,6 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // Look up authorization code in database
     const authCode = await prisma.oAuthAuthorizationCode.findUnique({
       where: { code: code as string },
       include: {
@@ -352,7 +335,6 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // Verify code not expired
     if (authCode.expires_at < new Date()) {
       return NextResponse.json(
         { error: 'invalid_grant', error_description: 'Authorization code has expired' },
@@ -360,7 +342,6 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // Verify code not already used
     if (authCode.used) {
       return NextResponse.json(
         { error: 'invalid_grant', error_description: 'Authorization code has already been used' },
@@ -368,7 +349,6 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // Verify client_id matches and client exists
     if (authCode.client_id !== clientId) {
       return NextResponse.json(
         { error: 'invalid_client', error_description: 'Invalid client_id' },
@@ -376,7 +356,6 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // Verify client still exists in database
     const client = await prisma.oAuthClient.findUnique({
       where: { client_id: clientId }
     })
@@ -388,7 +367,6 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // Verify redirect_uri matches
     if (authCode.redirect_uri !== redirectUri) {
       return NextResponse.json(
         { error: 'invalid_grant', error_description: 'redirect_uri does not match' },
@@ -396,7 +374,6 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // Validate PKCE: verify code_verifier against stored code_challenge
     if (!validatePKCE(codeVerifier as string, authCode.code_challenge)) {
       return NextResponse.json(
         { error: 'invalid_grant', error_description: 'Invalid code_verifier' },
@@ -420,8 +397,6 @@ export async function POST(request: NextRequest) {
           credentialTeamAccessBinding: true,
         },
       })
-      // The lookup above is already scoped to this owner and to a live agent,
-      // so a generation read here can never belong to another owner's agent.
       agentTokenJti = storedAgentTokenGeneration(agent) ?? undefined
       if (
         Boolean(agent?.credentialTeamId) !==
@@ -453,7 +428,6 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    // Do not burn a valid one-time code for a request that cannot mint a token.
     if (!authCode.user.email) {
       return NextResponse.json(
         { error: 'server_error', error_description: 'User data incomplete' },
@@ -475,18 +449,12 @@ export async function POST(request: NextRequest) {
     const accessTokenExpirySeconds = isRefreshCapableMobile
       ? MOBILE_ACCESS_TOKEN_EXPIRY_SECONDS
       : DEFAULT_ACCESS_TOKEN_EXPIRY_SECONDS
-    let session: { accessToken: string; refreshToken?: string } | null = null
+    let session: { accessToken: string; refreshToken?: string; analyticsKey?: string | null } | null = null
 
-    // The conditional write is the one-time consume gate. Token signing stays
-    // in the same transaction so a signing failure rolls the consume back.
-    // Concurrent requests may validate the same unused snapshot, but only one
-    // transaction can consume the code and return a token.
     try {
       for (let attempt = 0; attempt < SERIALIZABLE_ATTEMPTS; attempt += 1) {
         try {
           session = await prisma.$transaction(async (tx) => {
-            // Match deletion's parent-before-children lock order so ownership claims
-            // and one-time code consumption cannot deadlock with client removal.
             await tx.$queryRaw<Array<{ client_id: string }>>`
               SELECT "client_id"
               FROM "OAuthClient"
@@ -564,7 +532,11 @@ export async function POST(request: NextRequest) {
                 agentTokenJti,
                 agentTeamScope
               )
-              if (!isRefreshCapableMobile) return { accessToken }
+              if (!isRefreshCapableMobile) {
+                const analyticsKey = authCode.redirect_uri !== MOBILE_REDIRECT_URI
+                  ? await enqueueAgentConnection(tx, authCode.user.id, accessToken, "mcp", client.client_name) : null
+                return { accessToken, analyticsKey }
+              }
 
               const accessIdentity = accessTokenIdentity(accessToken)
               const refreshToken = createRefreshToken()
@@ -631,9 +603,7 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    if (authCode.redirect_uri !== MOBILE_REDIRECT_URI) {
-      recordAgentConnection(authCode.user.id, session.accessToken, "mcp", client.client_name);
-    }
+    if (session.analyticsKey) processAnalyticsIntentSoon(session.analyticsKey)
     return tokenResponse(
       session.accessToken,
       agentId ? undefined : accessTokenExpirySeconds,

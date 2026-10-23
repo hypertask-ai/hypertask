@@ -6,7 +6,7 @@ const vm = require("node:vm");
 const ts = require("typescript");
 const root = path.resolve(__dirname, "..");
 const read = (file) => fs.readFileSync(path.join(root, file), "utf8");
-const flag = "htpr-7042-neon-work-avoidance", target = "htpr-6136-figma-connect";
+const flag = "htpr-7042-neon-work-avoidance", target = "htpr-3533-google-calendar";
 function load(file, mocks = {}, modules = new Map()) {
   if (modules.has(file)) return modules.get(file).exports;
   const javascript = ts.transpileModule(read(file), { compilerOptions: { esModuleInterop: true, module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2020 } }).outputText;
@@ -151,6 +151,10 @@ function flagHarness() {
   const rows = new Map([[flag, { key: flag, mode: "EVERYONE" }], [target, { key: target, mode: "EVERYONE" }]]);
   const h = { tables: 0, single: 0, users: 0, failRedis: false, rows };
   const db = {
+    featureFlagChange: {
+      findMany: async () => [],
+      create: async ({ data }) => ({ ...data, reason: data.reason ?? null, createdAt: new Date(), user: { email: "valentin.yeo@gmail.com" } }),
+    },
     featureFlag: {
       findUnique: async ({ where }) => { h.single++; return rows.get(where.key) ?? null; },
       findMany: async () => { h.tables++; const copy = [...rows.values()].map((row) => ({ ...row })); if (h.readDelay) await h.readDelay(); return copy; },
@@ -240,7 +244,7 @@ test("flag off uses original single-key reads and Redis errors fall back to DB",
 });
 test("admin mode and Keep writes invalidate before returning, including the optimization flag itself", async () => {
   const h = flagHarness(); await h.read();
-  const admin = load("src/app/api/admin/flags/route.ts", { "@/lib/flags": h.flags, "@/lib/realtime/server": { broadcastFeatureFlagsChange: async () => { assert.equal(await redis.get("flags:raw-modes:7042"), null); } } });
+  const admin = load("src/app/api/admin/flags/route.ts", { "@/lib/flags": h.flags, "@/lib/auth/getSessionUser": { getSessionUser: async () => ({ userId: 6 }) }, "@/lib/realtime/server": { broadcastFeatureFlagsChange: async () => { assert.equal(await redis.get("flags:raw-modes:7042"), null); } } });
   const req = new (require("next/server").NextRequest)("https://app.hypertask.ai/api/admin/flags", { method: "PATCH", headers: { origin: "https://app.hypertask.ai", host: "app.hypertask.ai", "content-type": "application/json" }, body: JSON.stringify({ key: target, mode: "OFF" }) });
   assert.equal((await admin.PATCH(req)).status, 200); assert.equal(await h.read(), false);
   await h.flags.setFeatureFlagKeep(target, true); assert.equal(await redis.get("flags:raw-modes:7042"), null);
@@ -261,7 +265,7 @@ test("Redis down during admin mode and Keep writes returns success and logs inva
     const h = flagHarness(); await h.read();
     h.failRedis = failure === "connection";
     h.redis = { eval: async () => { assert.equal(h.rows.get(target).mode, "OFF"); throw new Error("Redis command failed"); } };
-    const admin = load("src/app/api/admin/flags/route.ts", { "@/lib/flags": h.flags, "@/lib/realtime/server": { broadcastFeatureFlagsChange: async () => {} } });
+    const admin = load("src/app/api/admin/flags/route.ts", { "@/lib/flags": h.flags, "@/lib/auth/getSessionUser": { getSessionUser: async () => ({ userId: 6 }) }, "@/lib/realtime/server": { broadcastFeatureFlagsChange: async () => {} } });
     for (const change of [{ mode: "OFF" }, { keep: true }]) {
       const req = new (require("next/server").NextRequest)("https://app.hypertask.ai/api/admin/flags", { method: "PATCH", headers: { origin: "https://app.hypertask.ai", host: "app.hypertask.ai", "content-type": "application/json" }, body: JSON.stringify({ key: target, ...change }) });
       const response = await admin.PATCH(req); assert.equal(response.status, 200);

@@ -4,23 +4,32 @@ const ts = require("typescript");
 const http = require("node:http");
 const { apiResolver } = require("next/dist/server/api-utils/node/api-resolver");
 const { load } = require("./task-route-loader.cjs");
-const { projectViewRoutes, projectViewLegacySources } = require("./htpr-6923-verify.cjs");
-const sources = projectViewLegacySources();
+const { matches, savedViewBoardAccessWhere } = require("./helpers/htpr-7166-fixture.cjs");
+const { pins } = require("./helpers/htpr-6992-pins.cjs");
+const rawPin = pins("a2-project-views");
+const GROUPS = ["create-view","update-view","delete-rename-view","switch-view","unsaved-view","reset-to-default","update-order","reset-order","set-default-order","smart-split"];
+const SPECIAL = { "smart-split exhaustion": "smart-split", "smart-split success": "smart-split" };
+// Pins group by route so the fixture holds one digest per route.
+const groupOf = key => SPECIAL[key] ?? key.split(/[ :]+/).find(token => GROUPS.includes(token)) ?? key;
+const pin = (key, value) => rawPin(groupOf(key), key, value);
+// Route map: methods served by each Pages endpoint.
+const projectViewRoutes = {
+  "create-view": { methods: ["POST"] },
+  "update-view": { methods: ["POST"] },
+  "delete-rename-view": { methods: ["POST", "DELETE"] },
+  "switch-view": { methods: ["POST"] },
+  "unsaved-view": { methods: ["POST"] },
+  "reset-to-default": { methods: ["POST"] },
+  "update-order": { methods: ["POST"] },
+  "reset-order": { methods: ["POST"] },
+  "set-default-order": { methods: ["POST"] },
+  "smart-split": { methods: ["POST", "PATCH", "DELETE"] },
+};
 const clean = value => value === undefined ? undefined : JSON.parse(JSON.stringify(value));
 const settings = { board_columns_view: [{ id: 2 }, { id: 1 }], board_filters: { addedFilters: [] }, board_sorting_mode: "Manual", board_sorting_order: "Ascending", board_empty_sections: "Show", board_subtask_setting: "Show" };
 const endpoints = Object.entries(projectViewRoutes).flatMap(([name, { methods }]) => methods.map(method => ({ name, method })));
 class MissingBoardFilterLabelError extends Error { constructor() { super("Missing label"); this.status = 409; } }
 class ManagedSmartSplitMutationError extends Error { constructor() { super("Manage this smart split from Manage views"); this.status = 409; } }
-function compileOriginal(source, mocks) {
-  const compiled = ts.transpileModule(source, { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022, esModuleInterop: true } }).outputText;
-  const mod = { exports: {} };
-  new Function("require", "module", "exports", compiled)(specifier => {
-    if (!Object.hasOwn(mocks, specifier)) return require(specifier);
-    const mock = mocks[specifier];
-    return Object.hasOwn(mock, "default") ? { __esModule: true, ...mock } : mock;
-  }, mod, mod.exports);
-  return mod.exports.default;
-}
 function bodyFor(name) {
   if (name === "create-view") return { projectId: 15, viewTitle: " QA view ", visibility: "Public", view_settings: settings };
   if (name === "update-view") return { projectId: 15, viewId: "view", view_settings: settings };
@@ -31,11 +40,12 @@ function bodyFor(name) {
   if (name === "smart-split") return { projectId: 15, viewId: "view", name: "Renamed", prompt: "Changed prompt" };
   return { projectId: "15", viewOrder: ["view", "view", "missing", "builtin-overdue"] };
 }
-function fixture(endpoint, scenario = {}, mode = false) {
-  const { name, method } = endpoint, effects = [], flags = [], loads = [], auth = [];
+function fixture(endpoint, scenario = {}) {
+  const { name, method } = endpoint, effects = [], loads = [], auth = [];
   const userId = scenario.userId ?? 985, signedId = scenario.signedUserId ?? userId;
   const session = scenario.noAuth ? null : { userId, source: "better-auth" };
   const view = { id: "view", userId, title: "QA view", visibility: "Public", slug: "qa-view", project_view_id: "pv", project_view: { id: "pv", projectId: 15, default_view_id: "default", default_view_order: ["view"] }, ...settings };
+  if (["delete-rename-view", "switch-view"].includes(name)) view.project_view.project = { id: 15, ownerId: scenario.denied ? 99 : userId, members: [] };
   const defaultView = { ...view, id: "default", board_columns_view: [{ id: 1 }, { id: 2 }] };
   const projectView = { id: "pv", projectId: 15, default_view_id: "default", default_view: scenario.noDefault ? null : defaultView };
   const userView = { id: "uv", project_view_id: "pv", appliedViewId: "view", appliedView: view, unsavedViewId: scenario.unsaved ? "unsaved" : null, unsavedView: scenario.unsaved ? { ...view, id: "unsaved" } : null };
@@ -60,6 +70,7 @@ function fixture(endpoint, scenario = {}, mode = false) {
           return scenario.missingView ? null : view;
         }
         if (name === "create-view") return scenario.existing ? view : null;
+        if (["delete-rename-view", "switch-view"].includes(name)) return scenario.missingView || !matches(view, args.where) ? null : view;
         return scenario.denied || scenario.missingView ? null : view;
       }),
       findUnique: record("view-read", scenario.missingView ? null : view),
@@ -106,12 +117,10 @@ function fixture(endpoint, scenario = {}, mode = false) {
       if (scenario.signedThrows) throw new Error("Signed session unavailable");
       return token === "synthetic-signed" && !scenario.noAuth && !scenario.unsigned ? { id: signedId } : null;
     } },
-    "@/lib/flags/keys": { HTPR_6923_APP_ROUTER_WRITES_FLAG: "htpr-6923-app-router-writes" },
-    "@/lib/flags": { isFeatureEnabled: async (key, id) => { flags.push([key, id]); if (mode === "outage") throw new Error("Flag unavailable"); return mode === true; } },
     "@/lib/realtime/server": { broadcastBoardChange: (...args) => { effects.push(["broadcast", ...args]); if (scenario.broadcastThrows) throw new Error("Broadcast unavailable"); } },
     "@/lib/ai/labelClassifier": { scheduleBackfillAiLabel: id => { effects.push(["backfill", id]); if (scenario.backfillThrows) throw new Error("Backfill unavailable"); } },
     "node:crypto": { randomUUID: () => "synthetic-split" },
-    "@/utils/controllers/projects/getAllIncludes": { taskWriteAccessWhere: id => ({ ownerId: id }), getProjectWhere: id => ({ ownerId: id }) },
+    "@/utils/controllers/projects/getAllIncludes": { taskWriteAccessWhere: id => ({ ownerId: id }), getProjectWhere: id => ({ ownerId: id }), savedViewBoardAccessWhere },
     "@/utils/controllers/projects/views/viewsHelperAPIfunctions": { default: record("payload", scenario.payloadUndefined ? undefined : scenario.noPayload ? null : { ...projectView, allViews: [view], user_project_views: [userView] }), getUniqueSlug: record("slug", "renamed") },
     "@/utils/controllers/projects/views/boardFilterWriteLock": {
       MissingBoardFilterLabelError, ManagedSmartSplitMutationError,
@@ -119,7 +128,7 @@ function fixture(endpoint, scenario = {}, mode = false) {
       assertViewIsNotManagedSmartSplit: async (...args) => { effects.push(["smart-guard", ...args.slice(1)]); if (scenario.managed) throw new ManagedSmartSplitMutationError(); },
       withBoardFilterWriteLock: async (id, filters, operation) => { effects.push(["filter-lock", id, structuredClone(filters)]); if (scenario.missingLabel) throw new MissingBoardFilterLabelError(); return operation(prisma); },
     },
-    "@/utils/helperFunctions/Views/BoardFilterSanitizer": { sanitizeBoardFilters: value => value, sanitizeViewBoardFilters: value => value },
+    "@/utils/helperFunctions/Views/BoardFilterSanitizer": { sanitizeBoardFilters: value => value, sanitizeViewBoardFilters: value => value, projectVisibleViewRelations: load("src/utils/helperFunctions/Views/BoardFilterSanitizer.ts", {}).projectVisibleViewRelations },
     "@/utils/helperFunctions/helperFunctions": { isDeepEqual: () => !!scenario.equal },
     "@/utils/helperFunctions/Views/EmptySectionsHelperFunction": { defaultEmptySections: "Show" },
     "@/utils/helperFunctions/Views/FilterHelperFunctions": { defaultFilterSettings: {} },
@@ -141,13 +150,13 @@ function fixture(endpoint, scenario = {}, mode = false) {
   if (name === "smart-split") view.board_filters = { addedFilters: [{ type: "Labels", searchPayload: [{ id: "view", value: "QA view" }] }] };
   const web = load(`src/lib/api/project-writes/views/${name}.ts`, mocks)[method];
   mocks[`@/lib/api/project-writes/views/${name}`] = { get [method]() { loads.push(method); if (scenario.loadThrows) throw new Error("Route load unavailable"); return web; } };
-  return { legacy: compileOriginal(sources[name], mocks), current: load(`src/pages/api/projects/views/${name}.ts`, mocks).default, web, effects, flags, loads, auth };
+  return { current: load(`src/pages/api/projects/views/${name}.ts`, mocks).default, web, effects, loads, auth };
 }
 function input(endpoint, scenario) {
   return {
     method: scenario.method ?? endpoint.method,
     body: clean(Object.hasOwn(scenario, "body") ? scenario.body : { ...bodyFor(endpoint.name), userId: 6 }),
-    query: scenario.query ?? { viewId: "view", projectId: "999", userId: "6" },
+    query: scenario.query ?? { viewId: "view", projectId: "15", userId: "6" },
     cookies: Object.hasOwn(scenario, "cookies") ? scenario.cookies : { ht_session: "synthetic-signed", nookies_user: '{"id":6}' },
     headers: { cookie: "ht_session=synthetic-signed; nookies_user=spoofed" },
   };
@@ -177,17 +186,17 @@ async function invoke(fx, endpoint, scenario, target) {
   } catch (error) { return { throws: String(error) }; }
   finally { global.Date = RealDate; Object.assign(console, saved); }
 }
-async function parity(endpoint, scenario) {
-  const old = fixture(endpoint, scenario), expected = await invoke(old, endpoint, scenario, "legacy");
-  for (const mode of [false, "outage", true, "web"]) {
-    if (mode === "web" && scenario.authThrows && endpoint.name.endsWith("order")) continue;
-    const fx = fixture(endpoint, scenario, mode);
-    assert.deepEqual(await invoke(fx, endpoint, scenario, mode === "web" ? "web" : "current"), expected, `${mode} response`);
-    assert.deepEqual(clean(fx.effects), clean(old.effects), `${mode} ordered effects`);
-    assert.equal(fx.loads.length, mode === true && !scenario.noAuth && !scenario.authThrows ? 1 : 0);
-    if (fx.flags.length) assert.deepEqual(fx.flags, [["htpr-6923-app-router-writes", scenario.userId ?? 985]]);
+// Runs the Pages adapter, pins response plus ordered effects, then checks the shared Web handler agrees.
+async function parity(endpoint, scenario, key) {
+  const fx = fixture(endpoint, scenario), expected = await invoke(fx, endpoint, scenario, "current");
+  pin(key, { expected, effects: clean(fx.effects) });
+  assert.equal(fx.loads.length, 1, "listed method always loads the shared route");
+  if (!(scenario.authThrows && endpoint.name.endsWith("order"))) {
+    const web = fixture(endpoint, scenario);
+    assert.deepEqual(await invoke(web, endpoint, scenario, "web"), expected, "web response");
+    assert.deepEqual(clean(web.effects), clean(fx.effects), "web ordered effects");
   }
-  return { expected, effects: old.effects };
+  return { expected, effects: fx.effects };
 }
 const cases = [
   ["success", {}], ["missing fields", { body: {} }], ["null body", { body: null }], ["absent body", { body: undefined }],
@@ -210,42 +219,46 @@ for (const endpoint of endpoints) {
   if (endpoint.name === "reset-to-default") extra.push(["ResetToDefault", { unsaved: true, body: { projectId: 15, mode: "ResetToDefault" } }], ["serialization retry", { conflicts: 2 }], ["serialization exhaustion", { conflicts: 3 }]);
   if (endpoint.name === "delete-rename-view") extra.push(["managed split guard", { managed: true }], ["query arrays unchanged", { query: { viewId: ["view", "other"] } }]);
   if (endpoint.name === "smart-split") extra.push(["duplicate name", { duplicate: true }], ["no default view", { noDefault: true }], ["serialization retry", { conflicts: 2 }], ["serialization exhaustion", { conflicts: 3 }], ["post-commit backfill failure", { backfillThrows: true }], ["empty prompt", { body: { ...bodyFor(endpoint.name), prompt: " " } }]);
-  for (const [label, scenario] of [...cases, ...extra]) test(`${endpoint.name} ${endpoint.method}: ${label} original/Off/outage/On/Web parity`, async () => {
-    const { expected } = await parity(endpoint, scenario);
+  for (const [label, scenario] of [...cases, ...extra]) test(`${endpoint.name} ${endpoint.method}: ${label} matches pinned response, effects and Web handler`, async () => {
+    const { expected } = await parity(endpoint, scenario, `${endpoint.name} ${endpoint.method}: ${label}`);
     if (label === "success") assert.equal(expected.status, endpoint.name === "smart-split" && endpoint.method === "POST" ? 201 : 200);
   });
-  test(`${endpoint.name} ${endpoint.method}: unsupported method stays legacy and bypasses preflight`, async () => {
-    const scenario = { method: "OPTIONS" }, old = fixture(endpoint, scenario), fx = fixture(endpoint, scenario, true);
-    assert.deepEqual(await invoke(fx, endpoint, scenario, "current"), await invoke(old, endpoint, scenario, "legacy"));
-    assert.deepEqual(fx.flags, []); assert.deepEqual(fx.loads, []); assert.deepEqual(fx.auth, old.auth);
+  test(`${endpoint.name} ${endpoint.method}: unsupported method answers 405 before any session lookup`, async () => {
+    const scenario = { method: "OPTIONS" }, fx = fixture(endpoint, scenario);
+    const listed = projectViewRoutes[endpoint.name].methods;
+    const result = await invoke(fx, endpoint, scenario, "current");
+    assert.deepEqual(result, { status: 405, body: { message: "Method not allowed" } });
+    assert.ok(!listed.includes("OPTIONS"));
+    assert.deepEqual(fx.loads, []); assert.deepEqual(fx.auth, []); assert.deepEqual(fx.effects, []);
   });
-  test(`${endpoint.name} ${endpoint.method}: route load failure never retries legacy`, async () => {
-    const fx = fixture(endpoint, { loadThrows: true }, true);
+  test(`${endpoint.name} ${endpoint.method}: route load failure surfaces without running the operation`, async () => {
+    const fx = fixture(endpoint, { loadThrows: true });
     assert.deepEqual(await invoke(fx, endpoint, { loadThrows: true }, "current"), { throws: "Error: Route load unavailable" });
     assert.deepEqual(fx.effects, []); assert.equal(fx.loads.length, 1);
   });
 }
 for (const [name, body, status, message] of [
-  ["switch-view", {}, 101, "Missing required information"], ["delete-rename-view", {}, 101, "Missing required information"],
+  ["switch-view", {}, 400, "Missing required information"], ["delete-rename-view", {}, 400, "Missing required information"],
   ["update-view", {}, 401, "Authentication required"], ["update-view", { projectId: 15, viewId: "view" }, 500, undefined],
   ["create-view", {}, 400, "Missing required information!"], ["unsaved-view", {}, 400, "Missing required information!"],
   ["reset-to-default", {}, 400, "A valid board and reset mode are required"],
 ]) test(`${name}: explicit historical status ${status}`, async () => {
-  const { expected } = await parity({ name, method: "POST" }, { body });
+  const { expected } = await parity({ name, method: "POST" }, { body }, `status ${name} ${status} ${JSON.stringify(body)}`);
   assert.equal(expected.status, status); if (message) assert.equal(expected.body.message, message);
 });
 for (const [name, method, status] of [["create-view", "POST", 403], ["unsaved-view", "POST", 403], ["update-view", "POST", 404], ["reset-to-default", "POST", 403], ["update-order", "POST", 403], ["reset-order", "POST", 403], ["set-default-order", "POST", 403], ["smart-split", "POST", 403], ["smart-split", "PATCH", 403], ["smart-split", "DELETE", 403]]) test(`${name} ${method}: denial stops mutation`, async () => {
-  const { expected, effects } = await parity({ name, method }, { denied: true });
+  const { expected, effects } = await parity({ name, method }, { denied: true }, `denied ${name} ${method}`);
   assert.equal(expected.status, status); assert.ok(!effects.some(([label]) => label.startsWith("write-") || ["backfill", "broadcast"].includes(label)));
 });
-for (const name of ["switch-view", "delete-rename-view"]) test(`${name}: retain historical lack of board permission check rather than tightening this refactor`, async () => {
-  const { expected } = await parity({ name, method: "POST" }, { denied: true });
-  assert.equal(expected.status, 200);
+for (const [name, method] of [["switch-view", "POST"], ["delete-rename-view", "POST"], ["delete-rename-view", "DELETE"]]) test(`${name} ${method}: denied board has no side effects`, async () => {
+  const { expected, effects } = await parity({ name, method }, { denied: true }, `denied legacy ${name} ${method}`);
+  assert.deepEqual(expected, { status: 404, body: { message: "View not found on this board" } });
+  assert.ok(!effects.some(([label]) => label.startsWith("write-") || ["slug", "transaction", "filter-lock", "broadcast"].includes(label)));
 });
 test("smart split retries preserve 409 and success preserves 201/backfill after commit", async () => {
   const endpoint = { name: "smart-split", method: "POST" };
-  assert.equal((await parity(endpoint, { conflicts: 3 })).expected.status, 409);
-  const { expected, effects } = await parity(endpoint, {});
+  assert.equal((await parity(endpoint, { conflicts: 3 }, "smart-split exhaustion")).expected.status, 409);
+  const { expected, effects } = await parity(endpoint, {}, "smart-split success");
   assert.equal(expected.status, 201);
   assert.ok(effects.findIndex(([label]) => label === "backfill") > effects.findIndex(([label]) => label === "committed"));
 });
@@ -259,17 +272,13 @@ test("101 response facade is only used for the unsupported Web status", async ()
 });
 test("actual Pages resolver preserves serialized success, error and unauthorized bytes", async () => {
   for (const [endpoint, scenario] of [[{ name: "create-view", method: "POST" }, {}], [{ name: "update-view", method: "POST" }, { body: {} }], [{ name: "smart-split", method: "POST" }, { noAuth: true }], [{ name: "delete-rename-view", method: "DELETE" }, {}]]) {
-    async function exchange(target, mode) {
-      const fx = fixture(endpoint, scenario, mode), req = input(endpoint, scenario);
-      const saved = console.log; console.log = () => {};
-      const server = http.createServer((request, response) => apiResolver(request, response, req.query, { default: fx[target] }, {}, false));
-      await new Promise(resolve => server.listen(0, "127.0.0.1", resolve));
-      try {
-        const result = await fetch(`http://127.0.0.1:${server.address().port}/api/projects/views/${endpoint.name}`, { method: endpoint.method, headers: { ...req.headers, "content-type": "application/json" }, body: JSON.stringify(req.body) });
-        return { status: result.status, text: await result.text(), type: result.headers.get("content-type") };
-      } finally { server.closeAllConnections(); await new Promise(resolve => server.close(resolve)); console.log = saved; }
-    }
-    const original = await exchange("legacy", false);
-    for (const mode of [false, "outage", true]) assert.deepEqual(await exchange("current", mode), original);
+    const fx = fixture(endpoint, scenario), req = input(endpoint, scenario);
+    const saved = console.log; console.log = () => {};
+    const server = http.createServer((request, response) => apiResolver(request, response, req.query, { default: fx.current }, {}, false));
+    await new Promise(resolve => server.listen(0, "127.0.0.1", resolve));
+    try {
+      const result = await fetch(`http://127.0.0.1:${server.address().port}/api/projects/views/${endpoint.name}`, { method: endpoint.method, headers: { ...req.headers, "content-type": "application/json" }, body: JSON.stringify(req.body) });
+      pin(`http ${endpoint.name} ${endpoint.method}`, { status: result.status, text: await result.text(), type: result.headers.get("content-type") });
+    } finally { server.closeAllConnections(); await new Promise(resolve => server.close(resolve)); console.log = saved; }
   }
 });

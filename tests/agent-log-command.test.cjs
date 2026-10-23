@@ -11,7 +11,6 @@ const jiti = createJiti(__filename, { alias: { "@": path.join(root, "src") } });
 const { getAllCommands } = jiti(path.join(root, "src/components/Modals/commands/HTC/AllCommands.ts"));
 const { getKeyboardShortcuts } = jiti(path.join(root, "src/lib/constants/shortcuts.ts"));
 const { CommandMode } = jiti(path.join(root, "src/models/enums.ts"));
-const { HTPR_6662_AGENT_LOG_NAME_FLAG } = jiti(path.join(root, "src/lib/flags/keys.ts"));
 const palette = "src/components/Modals/commands/HTC/commands.tsx";
 
 function initializer(file, name) {
@@ -33,7 +32,7 @@ function evaluate(text, bindings) {
   return new Function(...Object.keys(bindings), `${js}; return result;`)(...Object.values(bindings));
 }
 
-function gatedValue(file, name, bindings, extraNames = [], flagName = "agentLogNameEnabled") {
+function gatedValue(file, name, bindings, extraNames = [], flagName) {
   const { source, declaration } = initializer(file, name);
   const names = new Set([name, ...extraNames]);
   const statements = declaration.parent.parent.parent.statements.filter((node) =>
@@ -43,11 +42,11 @@ function gatedValue(file, name, bindings, extraNames = [], flagName = "agentLogN
   return evaluate(`(() => { ${statements.map((node) => node.getText(source)).join("\n")} return ${name}; })()`, bindings);
 }
 
-function groups(enabled, showHistory) {
+function groups(showHistory, roundedEnabled = false, isMobile = false, kanbanSelectAllEnabled) {
   const getCommands = gatedValue(palette, "getCommands", {
-    getAllCommands, useCallback: (callback) => callback, agentLogNameEnabled: enabled,
-  }, ["getAgentLogCommands"]);
-  return getCommands({ context: "Task", taskOptions: { showHistory, isKanban: false } });
+    getAllCommands, useCallback: (callback) => callback, roundedEnabled, isMobile, keepAiChatClosedKeywords: "",
+  }, ["getRoundedCommands", "getLegacyCommands"], "roundedEnabled");
+  return getCommands({ context: "Task", kanbanSelectAllEnabled, taskOptions: { showHistory, isKanban: false } });
 }
 
 // Run the real search hook with inert React/state dependencies.
@@ -72,36 +71,47 @@ function searchCommands(commandGroups, query) {
   return result.flatMap((group) => group.commandLists);
 }
 
-for (const enabled of [false, true]) {
-  for (const shown of [false, true]) {
-    test(`flag ${enabled ? "on" : "off"}, log ${shown ? "shown" : "hidden"}: name, aliases and shortcut`, () => {
-      const commandGroups = groups(enabled, shown);
-      const matches = commandGroups.flatMap((group) => group.commandLists).filter((command) => command.key === "toggleHistory");
-      assert.equal(matches.length, 1);
-      const command = matches[0];
-      assert.equal(command.name, `${shown ? "Hide" : "Show"} ${enabled ? "agent log" : "history"}`);
-      assert.equal(command.commandMode, CommandMode.ToggleHistory);
-      assert.deepEqual(command.keyboard, ["CTRL", "SHIFT", "H"]);
-      assert.ok(command.keywords.includes("agent log agent entries"));
-      for (const keyword of ["history", "activity", "log"]) assert.ok(command.keywords.split(" ").includes(keyword));
-      for (const query of ["agent log", "AGENT LOG", "agent entries", "history", "activity", "log"]) {
-        assert.ok(searchCommands(commandGroups, query).some((match) => match.key === command.key), `Missing result for ${query}`);
-      }
-    });
+for (const roundedEnabled of [false, true]) {
+  for (const isMobile of [false, true]) {
+    for (const shown of [false, true]) {
+      test(`rounded ${roundedEnabled}, mobile ${isMobile}, log ${shown ? "shown" : "hidden"}: name, aliases and shortcut`, () => {
+        const commandGroups = groups(shown, roundedEnabled, isMobile);
+        const matches = commandGroups.flatMap((group) => group.commandLists).filter((command) => command.key === "toggleHistory");
+        assert.equal(matches.length, 1);
+        const command = matches[0];
+        assert.equal(command.name, `${shown ? "Hide" : "Show"} agent log`);
+        assert.equal(command.commandMode, CommandMode.ToggleHistory);
+        assert.deepEqual(command.keyboard, ["CTRL", "SHIFT", "H"]);
+        assert.ok(command.keywords.includes("agent log agent entries"));
+        for (const keyword of ["history", "activity", "log"]) assert.ok(command.keywords.split(" ").includes(keyword));
+        for (const query of ["agent log", "AGENT LOG", "agent entries", "history", "activity", "log"]) {
+          assert.ok(searchCommands(commandGroups, query).some((match) => match.key === command.key), `Missing result for ${query}`);
+        }
+      });
+    }
   }
 }
 
-test("the palette calls the flag in its component body and passes it through the memoized registry", () => {
-  assert.equal(HTPR_6662_AGENT_LOG_NAME_FLAG, "htpr-6662-agent-log-name");
-  const hook = initializer(palette, "agentLogNameEnabled");
-  assert.equal(hook.text, "useFlag(HTPR_6662_AGENT_LOG_NAME_FLAG)");
-  const block = hook.declaration.parent.parent.parent;
-  assert.ok(ts.isBlock(block) && ts.isArrowFunction(block.parent));
-  assert.equal(block.parent.parent.name.getText(hook.source), "Commands");
+test("the palette memoizes the registry and keeps selection and theme arguments independent", () => {
   const memo = initializer(palette, "allCommands_");
   assert.match(memo.text, /getCommands\(\{[\s\S]*?\.\.\.contextOptions,/);
   assert.ok(memo.declaration.initializer.arguments[1].elements.some((node) => node.getText(memo.source) === "getCommands"));
-  assert.deepEqual(getAllCommands({ context: "Task" }), getAllCommands({ context: "Task" }, false));
+  for (const roundedEnabled of [false, true]) {
+    for (const isMobile of [false, true]) {
+      for (const kanbanSelectAllEnabled of [false, true]) {
+        const commandGroups = groups(false, roundedEnabled, isMobile, kanbanSelectAllEnabled);
+        const commands = commandGroups.flatMap((group) => group.commandLists);
+        assert.equal(commands.some((command) => command.key === "roundedTheme"), roundedEnabled && !isMobile);
+        assert.deepEqual(commandGroups, getAllCommands(
+          { context: "Task", kanbanSelectAllEnabled, taskOptions: { showHistory: false, isKanban: false } },
+          kanbanSelectAllEnabled,
+          roundedEnabled && !isMobile,
+        ));
+      }
+    }
+  }
+  const command = getAllCommands({ context: "Task" }).flatMap((group) => group.commandLists).find((item) => item.key === "toggleHistory");
+  assert.equal(command.name, "Show agent log");
 });
 
 test("both shortcut-help surfaces advertise only the active Ctrl/Cmd+J action", () => {
@@ -125,28 +135,24 @@ test("both shortcut-help surfaces advertise only the active Ctrl/Cmd+J action", 
   }
 });
 
-test("both shortcut-help surfaces follow the flag and preserve Windows and Apple keys", () => {
+test("both shortcut-help surfaces always name the agent log and preserve Windows and Apple keys", () => {
   for (const [file, dataName] of [
     ["src/components/Modals/Settings/ShortcutsSection.tsx", "shortcutGroups"],
     ["src/components/sidebars/keyboardShortcuts.tsx", "mainData"],
   ]) {
-    assert.equal(initializer(file, "agentLogNameEnabled").text, "useFlag(HTPR_6662_AGENT_LOG_NAME_FLAG)");
-    for (const enabled of [false, true]) {
-      const historyToggleLabel = gatedValue(file, "historyToggleLabel", { agentLogNameEnabled: enabled });
-      assert.equal(historyToggleLabel, enabled ? "Toggle agent log" : "Toggle history events");
-      for (const isApple of [false, true]) {
-        const shortcuts = evaluate(initializer(file, dataName).text, {
-          getKeyboardShortcuts, isApple, appShellRailOn: false,
-          historyToggleLabel,
-          includeComposeTaskShortcut: false, newTaskWindow: false,
-        });
-        const shortcut = shortcuts.flatMap((group) => group.sub).find((item) => item.pressKey.join(" ") === `${isApple ? "CMD" : "CTRL"} SHIFT H`);
-        assert.equal(shortcut.shortTitle, historyToggleLabel);
-      }
+    const historyToggleLabel = evaluate(initializer(file, "historyToggleLabel").text, {});
+    assert.equal(historyToggleLabel, "Toggle agent log");
+    for (const isApple of [false, true]) {
+      const shortcuts = evaluate(initializer(file, dataName).text, {
+        getKeyboardShortcuts, isApple, appShellRailOn: false,
+        historyToggleLabel,
+        includeComposeTaskShortcut: false, newTaskWindow: false,
+      });
+      const shortcut = shortcuts.flatMap((group) => group.sub).find((item) => item.pressKey.join(" ") === `${isApple ? "CMD" : "CTRL"} SHIFT H`);
+      assert.equal(shortcut.shortTitle, "Toggle agent log");
     }
   }
   assert.match(initializer("src/components/sidebars/keyboardShortcuts.tsx", "filteredShortcuts").text, /^mainData\s*\.map/);
-  assert.ok(getKeyboardShortcuts(false).flatMap((group) => group.sub).some((item) => item.shortTitle === "Toggle history events"));
 });
 
 

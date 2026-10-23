@@ -71,6 +71,7 @@ function loadService(storedComment) {
     comment: {
       findFirst: async (args) => {
         calls.lookup.push(args);
+        assert.equal(args.select.text, true);
         return storedComment;
       },
     },
@@ -159,6 +160,7 @@ test("editing an agent comment preserves its creator and agent attribution", asy
   const { updateCommentService, calls } = loadService({
     id: 44,
     taskId: 91,
+    text: "original",
     creatorId: creator.id,
     creator,
     agentId: agent.id,
@@ -179,7 +181,11 @@ test("editing an agent comment preserves its creator and agent attribution", asy
   assert.deepEqual(calls.commentUpdates[0].data, {
     text: "<p>edited by the owner</p>",
     summary: null,
+    editedAt: calls.commentUpdates[0].data.editedAt,
+    editedByUserId: creator.id,
+    editedByAgentId: null,
   });
+  assert.ok(calls.commentUpdates[0].data.editedAt instanceof Date);
   assert.ok(calls.commentUpdates[0].include.agent);
 });
 
@@ -187,6 +193,7 @@ test("an owner updates text and attachments in one transaction", async () => {
   const { updateCommentService, calls } = loadService({
     id: 44,
     taskId: 91,
+    text: "original",
     task: { projectId: 15 },
   });
 
@@ -247,6 +254,7 @@ test("an incomplete attachment list does not delete stored files", async () => {
   const { updateCommentService, calls } = loadService({
     id: 44,
     taskId: 91,
+    text: "original",
     task: { projectId: 15 },
   });
 

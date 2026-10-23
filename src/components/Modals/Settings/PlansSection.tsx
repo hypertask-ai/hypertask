@@ -1,6 +1,8 @@
 "use client";
 
 import axios from "axios";
+import { useFlag, useFlagReady } from "@/hooks/useFlag";
+import { HTPR_7551_START_PLAN_CHECKOUT_FLAG } from "@/lib/flags/keys";
 import { useEffect, useMemo, useState } from "react";
 import toast from "react-hot-toast";
 import { useRouter, useSearchParams } from "next/navigation";
@@ -34,6 +36,9 @@ import { currentUserAtom } from "@/store";
 type BillingIntervalIndex = 0 | 1;
 
 const PlansSection = () => {
+  const startPlanEnabled = useFlag(HTPR_7551_START_PLAN_CHECKOUT_FLAG);
+  const planFlagReady = useFlagReady(HTPR_7551_START_PLAN_CHECKOUT_FLAG);
+  const freePlanDescription = <>{!planFlagReady ? "Checking plan access…" : startPlanEnabled ? "Free plan" : null}</>;
   const router = useRouter();
   const searchParams = useSearchParams();
   const currentUser = useRecoilValue(currentUserAtom);
@@ -68,9 +73,6 @@ const PlansSection = () => {
     }
   }, [searchParams]);
 
-  // Teams created via /api/teams/create have no stripe_customer_id (only the
-  // onboarding path sets one). The old /pricing page provisioned it on load;
-  // without this, checkout has no customer and upgrading is impossible.
   useEffect(() => {
     if (!isOwner || !team?.id || team.stripe_customer_id) return;
     let cancelled = false;
@@ -194,7 +196,9 @@ const PlansSection = () => {
               action={
                 <div className="flex min-w-0 flex-wrap items-center justify-end gap-2">
                   <span className="min-w-0 text-right text-dense font-medium text-text-light-gray">
-                    {selectedType.price} {selectedType.description}
+                    {selectedType.price} {plan.id === "Free"
+                      ? !planFlagReady || startPlanEnabled ? freePlanDescription : selectedType.description
+                      : selectedType.description}
                   </span>
                   {isCurrentTier && (
                     <span className="text-micro font-medium text-text-light-gray">

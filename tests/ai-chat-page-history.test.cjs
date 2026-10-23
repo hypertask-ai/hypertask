@@ -68,7 +68,7 @@ test("hypertask_page_history is registered as a write tool", () => {
 test("page restore and archive enforce project access before mutation", () => {
   const source = fs.readFileSync(ROUTE, "utf8");
   const body = toolBody(source, "hypertask_page_history");
-  const pageLookupAt = body.indexOf("const existingPage = await getPage(identifier)");
+  const pageLookupAt = body.indexOf("const existingPage = await getPage({ ...identifier, userId: user.id, standalonePagesEnabled: await standalonePagesEnabled(user.id), agentId: null })");
   const accessAt = body.indexOf("const access = await validateProjectAccess(");
   const restoreAt = body.indexOf("const page = await restorePageVersion({");
   const archiveAt = body.indexOf("await archivePage({");

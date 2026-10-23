@@ -15,7 +15,7 @@ const mocks = {
   "@/lib/state": { useRecoilValue: () => ({ id: 2343 }) },
   "@/store": { currentUserAtom: {} },
   "@/hooks/useFlag": { useFlag: () => true, useFlagLoaded: () => true },
-  "@/lib/flags/keys": { HTPR_6752_INSTANT_TICKET_OPEN_FLAG: "htpr-6752-instant-ticket-open", HTPR_6972_SUBTASK_LINK_FLAG: "htpr-6972-subtask-link", HTPR_7000_INBOX_NEXT_OPEN_FLAG: "htpr-7000-inbox-next-open" },
+  "@/lib/flags/keys": {},
   "@/components/Common/Tooltip": { __esModule: true, default: () => null },
   "@/lib/contexts/mobileContext": { MobileViewContext: React.createContext(false) },
   "@/utils/undoActions/helperFuncs": { cn: (...parts) => parts.filter(Boolean).join(" ") },
@@ -57,12 +57,12 @@ visit(globalSource);
 assert.ok(shell && mountPolicy, "the actual global chat shell must be exercised");
 const compiledShell = ts.transpileModule(`
 export function Shell({ pathname, children, ChatRuntime }) {
-  const instantTicketOpen = false;
   const isFullScreenChat = pathname.startsWith('/chat');
   const isTaskDetailPage = pathname.startsWith('/detail');
   const shouldMountAgentChatRuntime = false;
   const authenticatedUserId = 2343;
   const chatRuntimeMounted = false;
+  const sidebarRequested = null;
   const showAiChatInterface = false;
   const sidebarWidthPx = 0;
   const shouldMountChatRuntime = ${mountPolicy};
@@ -134,7 +134,7 @@ mocks["@/lib/contexts/Multipages/AI_Agent/AI_Agent_Chat_Context"] = context;
 mocks["@/utils/helperFunctions/TaskDetail"] = { wrapBlockQuote: (text) => `<blockquote>${text}</blockquote>` };
 mocks["@/store"] = { showAIChatInterfaceAtom: "open", aiChatAutoOpenSuppressedAtom: "suppressed", aiChatExplicitOpenAtAtom: "explicit" };
 const writes = [];
-mocks["@/lib/state"] = { useRecoilState: (atom) => [false, (value) => writes.push([atom, value])] };
+mocks["@/lib/state"] = { useRecoilValue: () => null, useSetRecoilState: (atom) => (value) => writes.push([atom, value]), useRecoilState: (atom) => [false, (value) => writes.push([atom, value])] };
 const { useCommentToAiChat } = load("src/hooks/MultiPages/AIChat/useCommentToAiChat.ts");
 mocks["@/lib/configs/taskDetail.config"] = { __esModule: true, default: { elementIds: { commentInput: "comment-input" } } };
 mocks["@/lib/constants/TaskDetail"] = {};

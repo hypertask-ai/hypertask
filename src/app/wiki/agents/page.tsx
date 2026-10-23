@@ -4,7 +4,7 @@ import type { Metadata } from "next";
 
 import { markdownToHtml } from "@/utils/helperFunctions/markdownToHtml";
 
-export const dynamic = "force-static";
+export const dynamic = "force-dynamic";
 
 export const metadata: Metadata = {
   title: "Universal agent onboarding",
@@ -12,7 +12,7 @@ export const metadata: Metadata = {
 };
 
 export default async function AgentsWikiPage() {
-  const sourcePath = path.join(process.cwd(), "openwiki", "agents.md");
+  const sourcePath = path.join(process.cwd(), "src", "app", "wiki", "agents", "agents.md");
   const markdown = await readFile(sourcePath, "utf8");
   const html = markdownToHtml(markdown);
 

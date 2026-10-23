@@ -29,7 +29,7 @@ const routeJavascript = ts.transpileModule(routeSource, {
 }).outputText
 
 function loadCommentsRoute({
-  authContext = { user: { id: 6 }, agentId: null },
+  authContext = { user: { id: 6 }, agentId: null, teamScope: null },
   task = { id: 42, projectId: 15 },
   taskRecord = null,
   taskResolver = null,
@@ -39,6 +39,7 @@ function loadCommentsRoute({
   const allReactions = [
     {
       id: 'reaction-7001',
+      createdAt: new Date('2026-08-21T01:00:00.000Z'),
       emoji: '👍',
       userId: 6,
       isDeleted: false,
@@ -46,6 +47,7 @@ function loadCommentsRoute({
     },
     {
       id: 'deleted-7001',
+      createdAt: new Date('2026-08-21T01:00:00.000Z'),
       emoji: '✅',
       userId: 9,
       isDeleted: true,
@@ -59,6 +61,7 @@ function loadCommentsRoute({
       text: '<p>Approved</p>',
       commentText: '<p>Approved</p>',
       createdAt: new Date('2026-08-21T00:00:00.000Z'),
+      editedAt: null,
       activity: null,
       creatorId: 6,
       creator: {
@@ -77,6 +80,9 @@ function loadCommentsRoute({
       text: '<p>Needs a name</p>',
       commentText: '<p>Needs a name</p>',
       createdAt: new Date('2026-08-20T00:01:00.000Z'),
+      editedAt: new Date('2026-08-21T00:30:00.000Z'),
+      editedByUserId: 9,
+      editedByAgentId: 'agent-editor',
       activity: null,
       creatorId: 9,
       creator: {
@@ -96,6 +102,7 @@ function loadCommentsRoute({
       attachments: [],
       reactions: [{
         id: 'reaction-7002',
+        createdAt: new Date('2026-08-21T01:00:00.000Z'),
         emoji: '👀',
         userId: 9,
         isDeleted: false,
@@ -122,6 +129,7 @@ function loadCommentsRoute({
   ]
   const resolveTask = taskResolver ?? (async () => task)
   const prisma = {
+    agent: { findMany: async () => [] },
     comment: {
       findUnique: async () => commentsFixture[0],
       count: async (query) => {
@@ -169,6 +177,9 @@ function loadCommentsRoute({
   }
   const routeModule = { exports: {} }
   const modules = {
+    '@/utils/controllers/projects/getAllIncludes': {},
+    '@/lib/media/inlineAgentImages.server': { inlineAgentImagesForUser: async (html) => html },
+    '@/lib/mcp/operationCrashReport': { reportMcpOperationCrash: () => {} },
     'next/server': { NextResponse: { json: (body, init = {}) => ({ body, status: init.status ?? 200 }) } },
     '@prisma/client': { Prisma: { DbNull: Symbol('DbNull') } },
     '@/lib/mcp/auth': {
@@ -257,6 +268,7 @@ function loadCommentsRoute({
     '@/lib/mcp/tasks/validators': { CONTENT_TYPE_ALLOWED_VALUES: ['html', 'markdown'] },
     '@/lib/mcp/agents/scopes': { requireRole: async () => null },
     '@/lib/mcp/idempotency/idempotencyStore': {
+      IdempotencyAccessError: class extends Error {},
       IdempotencyInProgressError: class extends Error {}, normalizeIdempotencyKey: () => null,
       withIdempotency: async (_operation, _userId, _key, _body, handler) => handler(),
     },
@@ -280,6 +292,7 @@ function loadCommentsRoute({
     },
   }
   const mockRequire = (request) => {
+    if (request === './agentChatterRouting') return jiti(path.join(root, 'src/lib/mcp/operations/comments/agentChatterRouting.ts'))
     if (request === "@/lib/mcp/routeWrapper") return require("./helpers/mcp-route-wrapper.cjs").loadRouteWrapper(modules)
     if (modules[request]) return modules[request]
     throw new Error(`Unexpected import: ${request}`)
@@ -314,12 +327,14 @@ test('comment reaction mapping keeps the stable user ID when no display name exi
   assert.deepEqual(
     mapMcpCommentReaction({
       id: 'reaction-2',
+      createdAt: new Date('2026-08-21T01:00:00.000Z'),
       emoji: '✅',
       userId: 9,
       user: { id: 9, displayName: null },
     }),
     {
       id: 'reaction-2',
+      createdAt: '2026-08-21T01:00:00.000Z',
       emoji: '✅',
       userId: 9,
       user: { id: 9 },
@@ -338,6 +353,8 @@ test('comment creation links to the current task index after a board move', asyn
   })
 
   assert.equal(response.status, 201)
+  assert.equal(response.body.comment.editedAt, null)
+  assert.equal(response.body.comment.editedBy, null)
   assert.equal(
     response.body.url,
     'https://app.hypertask.ai/detail/project-339/1668'
@@ -355,8 +372,13 @@ test('MCP comments response includes mapped active reactions', async () => {
   assert.equal(response.status, 200)
   assert.equal(response.body.comments.length, 2)
   assert.equal(response.body.total, 2)
+  assert.equal(response.body.comments[0].editedAt, null)
+  assert.equal(response.body.comments[1].editedAt, '2026-08-21T00:30:00.000Z')
+  assert.equal(response.body.comments[0].editedBy, null)
+  assert.deepEqual(response.body.comments[1].editedBy, { userId: 9, agentId: null, isAgent: true })
   assert.deepEqual(response.body.comments[0].reactions, [{
     id: 'reaction-7001',
+    createdAt: '2026-08-21T01:00:00.000Z',
     emoji: '👍',
     userId: 6,
     user: { id: 6, displayName: 'Valentin Yeo' },
@@ -369,6 +391,7 @@ test('MCP comments response includes mapped active reactions', async () => {
   assert.equal(response.body.comments[0].agent_display_name, 'Private agent')
   assert.deepEqual(response.body.comments[1].reactions, [{
     id: 'reaction-7002',
+    createdAt: '2026-08-21T01:00:00.000Z',
     emoji: '👀',
     userId: 9,
   }])
@@ -390,7 +413,7 @@ test('MCP comments response includes mapped active reactions', async () => {
 })
 
 test('MCP comments keeps private agent identity for its owner', async () => {
-  const route = loadCommentsRoute({ authContext: { user: { id: 9 }, agentId: null } })
+  const route = loadCommentsRoute({ authContext: { user: { id: 9 }, agentId: null, teamScope: null } })
   const response = await route.GET({
     nextUrl: { searchParams: new URLSearchParams({ task_id: '42' }) },
   })

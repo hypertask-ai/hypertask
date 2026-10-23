@@ -2,17 +2,13 @@ import { NextApiHandler, NextApiRequest, NextApiResponse } from "next";
 
 import prisma from "@/lib/prisma";
 import { getSessionUser } from "@/lib/auth/getSessionUser";
+import { getProjectWhere } from "@/utils/controllers/projects/getAllIncludes";
 
-// Replaces the entire favorites set for the *authenticated* user in one
-// transaction. The client sends the desired order; slots (= Cmd/Alt shortcut)
-// are assigned server-side by position, so a bad payload can't corrupt them.
 const handler: NextApiHandler = async (req: NextApiRequest, res: NextApiResponse) => {
   if (req.method !== "PUT") {
     return res.status(405).json({ message: "Method not allowed" });
   }
 
-  // Identity comes from the signed session. Never trust a client-supplied
-  // userSettingId (that would let one user rewrite another's).
   const session = await getSessionUser(
     new Headers(req.headers as Record<string, string>)
   );
@@ -40,16 +36,24 @@ const handler: NextApiHandler = async (req: NextApiRequest, res: NextApiResponse
   }
   const userSettingId = setting.id;
 
-  // Assign slots by position (index 1-9, then 0 for the tenth) and dedupe, so
-  // duplicate/invalid client indexes can't collide two boards onto one shortcut.
   const seen = new Set<number>();
   const clean: { projectId: number; index: number }[] = [];
   for (const f of favorites) {
     const pid = Number(f?.projectId);
-    if (!Number.isFinite(pid) || seen.has(pid)) continue;
+    if (!Number.isSafeInteger(pid) || pid <= 0 || seen.has(pid)) continue;
     seen.add(pid);
     const pos = clean.length;
     clean.push({ projectId: pid, index: pos >= 9 ? 0 : pos + 1 });
+  }
+
+  if (clean.length > 0) {
+    const allowed = await prisma.project.findMany({
+      where: { id: { in: clean.map((f) => f.projectId) }, ...getProjectWhere(userId) },
+      select: { id: true },
+    });
+    if (allowed.length !== clean.length) {
+      return res.status(403).json({ message: "Forbidden" });
+    }
   }
 
   try {

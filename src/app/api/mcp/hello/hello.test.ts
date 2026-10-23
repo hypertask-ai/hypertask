@@ -1,5 +1,3 @@
-// Assert-based demo because this repository has no Vitest setup.
-// Run after installing dependencies: npx tsx src/app/api/mcp/hello/hello.test.ts
 import assert from 'node:assert/strict'
 import { NextRequest } from 'next/server'
 
@@ -149,6 +147,7 @@ async function demo() {
     assert.equal(happyBody.boardsTotal, 3)
     assert.equal(happyBody.boardsTruncated, false)
     assert.deepEqual(Object.keys(happyBody.capabilities), [
+      'decisions',
       'tasks',
       'batch',
       'comments',
@@ -159,6 +158,7 @@ async function demo() {
       'escalate',
       'nextTask',
       'webhooks',
+      'features',
     ])
     assert.deepEqual(
       happyBody.conventions.map(

@@ -1,3 +1,6 @@
+import { reportMcpOperationCrash } from '@/lib/mcp/operationCrashReport'
+import { standalonePagesEnabled } from '@/utils/controllers/pages/standalonePagesEnabled'
+import { wrapMcpRoute } from '@/lib/mcp/routeWrapper'
 import { NextRequest, NextResponse } from 'next/server'
 
 import { buildFieldError } from '@/lib/mcp/fieldError'
@@ -13,6 +16,7 @@ import {
 const FORMATS = ['markdown', 'html'] as const
 
 export async function GET(request: NextRequest) {
+  return wrapMcpRoute(async (request: NextRequest) => {
   try {
     const ctx = await validateMcpAuth(request)
     if (!ctx) {
@@ -45,7 +49,7 @@ export async function GET(request: NextRequest) {
       )
     }
 
-    const page = await getPage(identifier)
+    const page = await getPage({ ...identifier, userId: ctx.user.id, standalonePagesEnabled: await standalonePagesEnabled(ctx.user.id), agentId: ctx.agentId, teamScope: ctx.teamScope })
     if (!page || !(await canAccessProject(page.projectId, ctx))) {
       return NextResponse.json(
         buildFieldError('not_found', identifierField, 'Page not found'),
@@ -53,8 +57,6 @@ export async function GET(request: NextRequest) {
       )
     }
 
-    // Canvas pages round-trip as the raw HTML the agent wrote, regardless of the
-    // requested format (markdown of an opaque block would be meaningless).
     const canvas = decodeHtmlCanvas(page.contentHtml)
     const content = canvas != null
       ? canvas
@@ -71,19 +73,24 @@ export async function GET(request: NextRequest) {
         version: page.version,
         content,
         content_type: responseFormat,
-        task: {
+        taskId: page.taskId,
+        task: page.task ? {
           id: page.task.id,
           ticketNumber: page.task.ticketNumber,
           title: page.task.title,
           projectId: page.task.projectId,
           uniqueIndex: page.task.uniqueIndex,
-        },
+        } : null,
+        linkedTasks: page.linkedTasks,
         subPages: page.subPages,
         updatedAt: page.updatedAt,
       },
     })
   } catch (error) {
     console.error('[MCP Get Page] Error:', error)
+    reportMcpOperationCrash(request, error)
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
   }
+
+  })(request)
 }

@@ -1,0 +1,10 @@
+[Unit]
+Description=Find repeated agent routines and script the best candidates
+[Service]
+Type=oneshot
+Environment="PATH=%h/.local/bin:/usr/local/bin:/usr/bin:/bin"
+ExecStart=%h/.local/lib/hypertask/scriptify/scriptify-weekly
+Nice=19
+IOSchedulingClass=idle
+MemoryMax=2G
+TimeoutStartSec=3h

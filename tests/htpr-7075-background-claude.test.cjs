@@ -30,6 +30,7 @@ function read(file) {
 }
 
 function moduleWithStubs(file, stubs) {
+  stubs = { "@/lib/flags/definitions/htpr-7634-openai-only-default": { HTPR_7634_OPENAI_ONLY_DEFAULT_FLAG: "htpr-7634-openai-only-default" }, ...stubs };
   const code = ts.transpileModule(read(file), {
     compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 },
   }).outputText;
@@ -100,7 +101,7 @@ test("every default with no user choice is Haiku 5.5 when the flag is on", () =>
         `${plan} ${hasByok}`,
       );
       assert.equal(
-        catalog.getDefaultAiModelOptionForPlan(plan, hasByok, false, true, true).modelKey,
+        catalog.getDefaultAiModelOptionForPlan(plan, hasByok, true, true).modelKey,
         "claude-haiku-5-5",
       );
     }
@@ -202,9 +203,10 @@ test("the demo board generator uses Haiku 5.5 with the flag on and Luna with it 
       zod: require("zod"),
       ai: {
         createGateway: () => (id) => { seen.push(id); return { id }; },
-        generateObject: async (args) => {
+        Output: require("ai").Output,
+        generateText: async (args) => {
           seen.push(args.providerOptions);
-          return { object: { name: "N", views: [], columns: [{ tasks: [] }, { tasks: [] }, { tasks: [] }] } };
+          return { output: { name: "N", views: [], columns: [{ tasks: [] }, { tasks: [] }, { tasks: [] }] } };
         },
       },
       "@/app/api/ai/_lib/planGate": { backgroundClaudeModelEnabled: async (userId) => { seen.push(["flag", userId]); return enabled; } },

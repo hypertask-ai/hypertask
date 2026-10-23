@@ -65,7 +65,6 @@ stubModule("src/utils/controllers/projects/views/boardFilterWriteLock.ts", {
     operation(prisma),
 });
 
-stubModule("src/lib/api/task-writes/route.ts", { withTaskWriteFlag: (handler) => handler });
 
 const jiti = require("jiti")(path.join(root, "tests/personal-empty-sections-route.test.cjs"), {
   alias: { "@": path.join(root, "src") },
@@ -107,6 +106,7 @@ function response() {
       result.statusCode = code;
       return res;
     },
+    setHeader() {},
     json(body) {
       result.body = body;
       return res;

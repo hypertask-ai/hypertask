@@ -11,8 +11,6 @@ const { createRefactoredModuleRequire } = require("./refactored-module-require.c
 const root = path.resolve(__dirname, "..");
 const sharpPlusFlag = "htpr-7047-sharp-plus-signs";
 const keys = {
-  HTPR_6902_N_QUICK_ADD_FLAG: "htpr-6902-n-quick-add",
-  HTPR_6914_SHIFT_C_QUICK_ADD_FLAG: "htpr-6914-shift-c-quick-add",
   HTPR_7047_SHARP_PLUS_SIGNS_FLAG: sharpPlusFlag,
 };
 
@@ -92,14 +90,14 @@ test("top and bottom clicks retain task position, section and quick-entry behavi
   });
   const reactRoot = createRoot(document.getElementById("root"));
   try {
-    for (const sharp of [false, true]) for (const quick of [false, true]) {
-      const enabled = new Set([...(sharp ? [sharpPlusFlag] : []), ...(quick ? ["htpr-6175-quick-entry-cards"] : [])]);
+    for (const sharp of [false, true]) {
+      const enabled = new Set(sharp ? [sharpPlusFlag] : []);
       const Button = loadButton(enabled);
       for (const position of ["top", "bottom"]) {
         const calls = [];
         await React.act(async () => reactRoot.render(React.createElement(Button, props(position, (...args) => calls.push(args)))));
         await React.act(async () => document.querySelector("svg").parentElement.dispatchEvent(new dom.window.MouseEvent("click", { bubbles: true })));
-        assert.deepEqual(calls, [[position, payload(position), undefined, quick ? true : undefined]]);
+        assert.deepEqual(calls, [[position, payload(position), undefined, true]]);
       }
       await React.act(async () => reactRoot.render(React.createElement(Button, { ...props("bottom"), snapshot: { isDraggingOver: true } })));
       assert.equal(document.querySelector("svg"), null, "bottom button stays hidden while dragging over the column");

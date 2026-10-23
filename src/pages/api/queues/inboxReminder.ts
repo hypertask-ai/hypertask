@@ -1,5 +1,3 @@
-// pages/api/setupReminder.js
-// id:`notifications-for-task-${taskId}`
 
 import {
   cancelInboxReminderJob,
@@ -96,7 +94,6 @@ export default  async function handler(
       })
 
       if(remindTask === false){
-        //Create a notification reminder for the Task
         await checkReminderAndCreateNotification(
           userId,
           projectId,

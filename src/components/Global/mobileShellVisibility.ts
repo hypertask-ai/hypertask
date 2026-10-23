@@ -43,8 +43,6 @@ export const isTicketPagePath = (pathname: string | null) =>
 export const isMobileInboxPath = (pathname: string | null) =>
   pathname === "/inbox" || (pathname?.startsWith("/inbox/") ?? false);
 
-// Inbox supplies its own split dock in the same thumb-zone space. The regular
-// five-tab navigation returns as soon as the user leaves the Inbox route.
 export const shouldShowMobilePrimaryDock = (pathname: string | null) =>
   shouldShowMobileDock(pathname) && !isMobileInboxPath(pathname);
 

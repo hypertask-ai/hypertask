@@ -8,6 +8,7 @@ import { broadcastBoardChange, broadcastTaskChange } from "@/lib/realtime/server
 import { toErrorMessage } from "@/lib/api/errorMessage";
 import { loadSessionUserRecord } from "@/lib/auth/sessionUserRecord";
 import { taskWriteRoute } from "./route";
+import { resolveActingAgent } from "@/lib/auth/resolveActingAgent";
 
 type MoveTaskBody = {
   taskId: number;
@@ -26,9 +27,14 @@ const schema = z.custom<MoveTaskBody>((body) => {
 export const PUT = taskWriteRoute({
   schema,
   validationMessage: "Missing Required Information",
-  prepare: (session) => loadSessionUserRecord(session.userId),
-  operation: async ({ taskId, section_title, sectionId, ranking, projectId, agentId }, userObj) => {
+  prepare: async (session) => ({ user: await loadSessionUserRecord(session.userId), session }),
+  operation: async ({ taskId, section_title, sectionId, ranking, projectId, agentId: requestedAgentId }, { user: userObj, session }) => {
     try {
+      const actingAgent = resolveActingAgent({ sessionAgentId: session.agentId, bodyAgentId: requestedAgentId });
+      if (!actingAgent.ok) {
+        return NextResponse.json({ message: actingAgent.message }, { status: actingAgent.status });
+      }
+      const agentId = actingAgent.agentId;
       const [taskToMove, targetSection] = await Promise.all([
         prisma.task.findUnique({ where: { id: taskId }, select: { projectId: true } }),
         prisma.section.findFirst({ where: { id: sectionId, projectId }, select: { id: true } }),
@@ -54,7 +60,7 @@ export const PUT = taskWriteRoute({
         section: section_title,
         ranking: ranking_,
         updatedAt: new Date(),
-      }, userObj, agentId ?? null, {
+      }, userObj, agentId ?? null, { teamScope: session.teamScope,
         taskMovedActivity: {
           fromAgent: agent,
           sendNotification: () => sendNotificationForTask(

@@ -1,4 +1,6 @@
-import { activeItemAtom, idToDeleteCommentAtom, showCommandsAtom, showShortcutsAtom, inViewObjectAtom, showMentionListAtom, showAIChatInterfaceAtom, openAiChatByDefaultAtom, aiChatAutoOpenSuppressedAtom, aiChatExplicitOpenAtAtom, aiChatPinnedAtom, showCreateTaskModalAtom, appShellRailAtom, tasksPlayListAtom } from "@/store";
+import { useFlag, useFlagReady } from "@/hooks/useFlag";
+import { HTPR_7530_KEEP_AI_CHAT_CLOSED_FLAG } from "@/lib/flags/keys";
+import { activeItemAtom, idToDeleteCommentAtom, showCommandsAtom, showShortcutsAtom, inViewObjectAtom, showMentionListAtom, showAIChatInterfaceAtom, openAiChatByDefaultAtom, keepAiChatClosedAtom, aiChatAutoOpenSuppressedAtom, aiChatExplicitOpenAtAtom, aiChatPinnedAtom, showCreateTaskModalAtom, appShellRailAtom, tasksPlayListAtom } from "@/store";
 
 import { useContext, useEffect, useMemo, useRef, useState } from "react";
 
@@ -18,10 +20,6 @@ import type { useTaskDetailStateValue } from "./useTaskDetailState";
 export function useTaskDetailModals(state: useTaskDetailStateValue) {
   const { embedded, _parsedTask, createContextOptionsForHTC } = state;
 
-  // const {data:draftsFromTQ , isLoading} =useGetDrafts(_parsedTask.id, currentUser.id)
-
-  // console.log("🚀 ~ _currentTask:", currentTask)
-
   const [showEmojiPickerAtComment, setShowEmojiPickerAtCount] = useState<{
     commentId: number;
     show: boolean;
@@ -29,12 +27,10 @@ export function useTaskDetailModals(state: useTaskDetailStateValue) {
 
   const [priority_, setPriority_] = useState(_parsedTask.priority ?? null);
   const [estimate_, setEstimate_] = useState(_parsedTask.estimate ?? null);
-  // ----------------- STATE HANDLERS when focus NOT on task detail main components ( title, description container, comment container, mark as done, new comment container )
   const activeModals: string[] | undefined = [...taskDetailConfig.modals.active];
 
   const tipTapClassName: string = taskDetailConfig.classNames.tipTap;
 
-  // =================== MODAL STATES
   const [showMoveTaskToBoard, setShowMoveTaskToBoard] =
     useState<boolean>(false);
   const [showMoveModal, setShowMoveModal] = useState<boolean>(false);
@@ -65,10 +61,8 @@ export function useTaskDetailModals(state: useTaskDetailStateValue) {
       );
   }, []);
 
-  // To check operating system
   const isApple = useDeviceContext();
 
-  // =================== RECOIL ROOT STATE OBJECTS
   const { resetShowCommands, toggleCreateTaskGlobally } =
     useHypertasksRecoilStates();
   const [showShortucts, setShowShortcuts] = useRecoilState(showShortcutsAtom);
@@ -86,6 +80,12 @@ export function useTaskDetailModals(state: useTaskDetailStateValue) {
   const [inViewObject, setInViewObject] = useRecoilState(inViewObjectAtom);
   const [showAiChatInterface, setShowAiChatInterface] = useRecoilState(showAIChatInterfaceAtom);
   const hydrated = useHydrated();
+  const keepAiChatClosedEnabled = useFlag(HTPR_7530_KEEP_AI_CHAT_CLOSED_FLAG);
+  const keepAiChatClosedReady = useFlagReady(HTPR_7530_KEEP_AI_CHAT_CLOSED_FLAG);
+  const savedKeepAiChatClosed = useRecoilValue(keepAiChatClosedAtom);
+  const chatAutoOpenReady = !savedKeepAiChatClosed || keepAiChatClosedReady;
+  let keepAiChatClosed = false;
+  if (keepAiChatClosedEnabled) keepAiChatClosed = savedKeepAiChatClosed;
   const openAiChatByDefault = useRecoilValue(openAiChatByDefaultAtom);
   const aiChatAutoOpenSuppressed = useRecoilValue(aiChatAutoOpenSuppressedAtom);
   const aiChatPinned = useRecoilValue(aiChatPinnedAtom);
@@ -109,26 +109,26 @@ export function useTaskDetailModals(state: useTaskDetailStateValue) {
   const appShellRailOn =
     useRecoilValue(appShellRailAtom) && !_mbl && !embedded;
 
-  // Pinning always opens chat. Otherwise, the default setting opens it unless
-  // a manual close suppressed auto-open or the task is shown on mobile.
   useEffect(() => {
-    // The state adapter exposes SSR defaults until this consumer has hydrated.
     if (
       !hydrated ||
       _mbl ||
+      !chatAutoOpenReady ||
+      keepAiChatClosed ||
       (!aiChatPinned && (!openAiChatByDefault || aiChatAutoOpenSuppressed))
     ) return;
     setShowAiChatInterface(true);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+
   }, [
     hydrated,
+    chatAutoOpenReady,
+    keepAiChatClosed,
     _parsedTask?.id,
     openAiChatByDefault,
     aiChatAutoOpenSuppressed,
     aiChatPinned,
     _mbl,
   ]);
-  // const dummy = useRef<HTMLElement | null>(null);
   const controller: { [key: number]: { pressed: boolean } } = {
     ...globalConstants.multipleKeys,
   };

@@ -4,6 +4,7 @@ const path = require("node:path");
 const test = require("node:test");
 const ts = require("typescript");
 const { Prisma } = require("@prisma/client");
+const { load } = require("./task-route-loader.cjs");
 
 const root = path.resolve(__dirname, "..");
 const taskId = 101;
@@ -162,8 +163,7 @@ for (const scenario of [
   test(`the route returns ${scenario.status} for ${scenario.name}`, async (t) => {
     t.mock.method(console, "log", () => {});
     const controller = loadController(scenario);
-    const { default: handler } = loadModule("src/pages/api/tasks/markRead.ts", {
-      "@/lib/api/task-writes/route": { withTaskWriteFlag: (handler) => handler },
+    const { default: handler } = load("src/pages/api/tasks/markRead.ts", {
       "@/utils/controllers/tasks/markRead": controller,
       "@/lib/auth/getSessionUser": {
         getSessionUser: async () => scenario.session === null ? null : { userId },
@@ -172,6 +172,7 @@ for (const scenario of [
     let status;
     let body;
     const response = {
+      setHeader() {},
       status(value) { status = value; return response; },
       json(value) { body = value; return response; },
     };

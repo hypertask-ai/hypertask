@@ -1,7 +1,8 @@
+import { downloadWithoutBrotli } from "@/lib/net/downloadWithoutBrotli";
 import { resolveAiModel as resolveLegacyAiModel } from "@/app/api/ai/_lib/modelProvider";
 import { getAiDefaultModelContext, resolveAutomaticAiModel } from "@/app/api/ai/_lib/byokKeys";
 import { configureAiModelUsage } from "@/app/api/ai/_lib/modelProvider";
-import { generateObject } from "ai";
+import { generateText, Output } from "ai";
 
 import { getTeamGatewayApiKey } from "@/app/api/ai/_lib/byokKeys";
 import {
@@ -73,10 +74,6 @@ export type SlackThreadSource = {
   transcript: string;
 };
 
-/**
- * Which model and key a thread summary runs on. HTPR-7098 reads this too, to decide whether the
- * thread can wait in a half-price batch (`haikuByok` set means the team's own key: instant path only).
- */
 export async function resolveSlackSummaryModelInputs(
   context: Pick<SlackThreadSummaryContext, "aiProviderSettings" | "teamId" | "installedByUserId">,
 ) {
@@ -111,9 +108,10 @@ export async function buildSlackThreadSummaryComment(
     provider: haikuByok ? aiUsageProviderForCredential(haikuByok.provider, haikuByok.credential) : systemModel.provider,
     feature: "summary",
   });
-  const result = await generateObject({
+  const result = await generateText({
+    experimental_download: downloadWithoutBrotli,
     model,
-    schema: slackSummarySchema,
+    output: Output.object({ schema: slackSummarySchema }),
     maxRetries: 2,
     maxOutputTokens: 400,
     providerOptions: providerOptionsForAiModel(model, "summary", {
@@ -125,7 +123,7 @@ export async function buildSlackThreadSummaryComment(
     prompt: slackSummaryPrompt(transcript),
   });
 
-  return renderSlackSummaryComment(result.object, participants, permalink);
+  return renderSlackSummaryComment(result.output, participants, permalink);
 }
 
 export async function loadSlackThreadSource(
@@ -225,7 +223,6 @@ function selectRecentTranscriptMessages(
 
   for (let index = messages.length - 1; index >= 0; index -= 1) {
     const message = messages[index];
-    // Reserve room for the timestamp, author name, separators, and newline.
     estimatedCharacters += (message.text?.length ?? 0) + 128;
     firstIncludedIndex = index;
     if (estimatedCharacters >= MAX_SLACK_TRANSCRIPT_CHARACTERS) break;

@@ -1,3 +1,4 @@
+const { withStubs } = require("./helpers/stub-map.cjs");
 const test = require("node:test");
 const assert = require("node:assert/strict");
 const fs = require("node:fs");
@@ -6,13 +7,15 @@ const ts = require("typescript");
 
 const root = path.resolve(__dirname, "..");
 function load(relativePath, stubs) {
+  stubs = withStubs({ "@/lib/auth/agentScope": require("./helpers/agent-board-scope.cjs").enforcedScope }, stubs);
   const javascript = ts.transpileModule(
     fs.readFileSync(path.join(root, relativePath), "utf8"),
     { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2020, esModuleInterop: true } },
   ).outputText;
   const loaded = { exports: {} };
   new Function("module", "exports", "require", javascript)(loaded, loaded.exports, (name) => {
-    assert.ok(Object.hasOwn(stubs, name), `Unexpected dependency: ${name}`);
+    if (name === "@/lib/mcp/routeWrapper") return require("./helpers/mcp-route-wrapper.cjs").loadRouteWrapper(stubs);
+    assert.ok(name in stubs, `Unexpected dependency: ${name}`);
     return stubs[name];
   });
   return loaded.exports;
@@ -59,6 +62,7 @@ function harness({ authenticated = true, limited = false, accessible = true, ena
     },
     "@/utils/controllers/projects/isProjectAdmin": { __esModule: true, default: async () => false },
     "@/lib/flags": {},
+    "@/lib/mcp/agents/readRoleGuard": { requireAgentWriteRole: async () => null },
     "@/lib/mcp/auth": {
       checkMcpRateLimit: async () => limited ? { status: 429 } : null,
       validateMcpAuth: async () => authenticated ? { user: { id: 6 }, agentId: "agent-1" } : null,

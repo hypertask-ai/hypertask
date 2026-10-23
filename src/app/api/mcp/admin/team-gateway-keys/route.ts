@@ -1,3 +1,4 @@
+import { wrapMcpRoute } from '@/lib/mcp/routeWrapper'
 import { createHash } from "node:crypto";
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
@@ -9,15 +10,11 @@ import {
   createUnauthorizedResponse,
   validateManagementOrSessionAuth,
 } from "@/lib/mcp/auth";
+import { isPlatformGatewayAdmin } from "@/lib/auth/platformGatewayAdmin";
 import prisma from "@/lib/prisma";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
-
-const PLATFORM_GATEWAY_ADMIN = {
-  userId: 6,
-  email: "valentin.yeo@gmail.com",
-} as const;
 
 const targetSchema = z
   .object({
@@ -51,13 +48,6 @@ type TeamIdentity = {
   title: string | null;
   ownerEmail: string;
 };
-
-function isPlatformGatewayAdmin(user: { id: number; email: string }) {
-  return (
-    user.id === PLATFORM_GATEWAY_ADMIN.userId &&
-    user.email.trim().toLowerCase() === PLATFORM_GATEWAY_ADMIN.email
-  );
-}
 
 function fingerprint(apiKey: string) {
   return createHash("sha256").update(apiKey).digest("hex").slice(0, 16);
@@ -127,6 +117,7 @@ async function resolveTarget(
 }
 
 export async function GET(request: NextRequest) {
+  return wrapMcpRoute(async (request: NextRequest) => {
   const rateLimited = await checkMcpRateLimit(request);
   if (rateLimited) return rateLimited;
 
@@ -183,9 +174,12 @@ export async function GET(request: NextRequest) {
       };
     }),
   });
+
+  })(request)
 }
 
 export async function POST(request: NextRequest) {
+  return wrapMcpRoute(async (request: NextRequest) => {
   const rateLimited = await checkMcpRateLimit(request);
   if (rateLimited) return rateLimited;
 
@@ -240,8 +234,6 @@ export async function POST(request: NextRequest) {
             );
           }
         } catch {
-          // Preserve unreadable rows. Provisioning must never delete a secret
-          // unless it exactly matches the platform key being migrated.
         }
       }
     }
@@ -309,4 +301,6 @@ export async function POST(request: NextRequest) {
       { status: 400 }
     );
   }
+
+  })(request)
 }

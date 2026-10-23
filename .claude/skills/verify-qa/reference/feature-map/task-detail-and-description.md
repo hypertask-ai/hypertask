@@ -20,6 +20,13 @@ specifically rather than a manual edit.
 - AI-edited descriptions losing structure ([HTPR-6561](https://app.hypertask.ai/detail/project-15/6561)).
 - Mobile Task Writer saving the wrong thing or locking direct save
   ([HTPR-6564](https://app.hypertask.ai/detail/project-15/6564)).
+- The back and up/down buttons covering the first letters of the title when
+  the ticket column is under 640px wide, e.g. a 900-1100px window with the AI
+  panel open as a plain customer
+  ([HTPR-7349](https://app.hypertask.ai/detail/project-15/7349)). Measure, do
+  not eyeball: the buttons' right edge must stay left of the title's left
+  edge at 900, 1024 and 1100px, and the title must not move at 1180px and
+  wider or on a phone.
 
 ## What proof to collect
 
@@ -39,8 +46,7 @@ pass even with the bug present, hiding exactly what broke.
 For desktop composer placement, open a ticket with several comments from both
 Inbox and its board at 1920x1080 and 1440x900. Scroll to the last comment and
 capture it above the Send box, with no overlap or estimated-height gap. Check
-empty and one-comment threads, repeat with `htpr-6899-stable-layout` and
-`htpr-6752-instant-ticket-open` on and off in a disposable local build, and
+empty and one-comment threads, repeat with `htpr-6899-stable-layout` on and off in a disposable local build, and
 confirm the separate fixed mobile composer at 390x844 is unchanged.
 
 ## Cleanup

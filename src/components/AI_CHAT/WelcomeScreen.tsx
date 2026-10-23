@@ -1,17 +1,18 @@
-// components/WelcomeScreen.tsx
 import { useAiChatContext } from "@/lib/contexts/Multipages/AI_Agent/AI_Agent_Chat_Context"
 import { usePathname } from "next/navigation"
 import { useEffect, useMemo, useState } from "react"
 import { useQuery } from "@tanstack/react-query"
 import { useRecoilValue } from "@/lib/state"
 import type { IProject } from "@/models/model"
-import { currentProjectAtom, inViewObjectAtom, taskDetailNonEssentialReadyAtom } from "@/store"
+import { aiChatEditTaskIdAtom, composeTaskQuestionsTaskIdAtom, composeTaskSkillFollowupAtom, currentProjectAtom, inViewObjectAtom, taskDetailNonEssentialReadyAtom } from "@/store"
 import { isGuestCookieUser } from "@/lib/demo/isGuestClient"
 import { isGuestBoardBuild } from "@/lib/demo/guestBoardBuild"
 import { GuestBoardSpotlight } from "./GuestBoardSpotlight"
 import formatDateDifference from "@/utils/generateTime"
 import { Sparkles } from "lucide-react"
 import { taskSummaryActionFor } from "./taskSummaryAction"
+import { useFlag } from "@/hooks/useFlag"
+import { HTPR_7337_EDIT_WITH_AI_FLAG, HTPR_7586_ONE_QUESTIONS_CALL_FLAG, HTPR_7319_SKILL_CHAT_FOLLOWUP_FLAG } from "@/lib/flags/keys"
 import { useHydrated } from "@/hooks/General/useHydrated"
 
 type TaskSessionSummary = {
@@ -20,8 +21,6 @@ type TaskSessionSummary = {
   updatedAt: string;
 };
 
-// Suggestions when the chat is opened on a specific ticket. {ref} is the
-// human-readable id (e.g. "INNE-230"), falling back to "this ticket".
 const TICKET_QUERIES = (ref: string) => [
   `Summarize ${ref}`,
   `Write my next reply on ${ref}`,
@@ -29,6 +28,22 @@ const TICKET_QUERIES = (ref: string) => [
   `What are the next steps for ${ref}?`,
   `Draft a status update for ${ref}`,
   `Suggest sub-tasks for ${ref}`,
+];
+
+const EDIT_QUERIES = [
+  "Rewrite in plain words",
+  "Shorten the title",
+  "Add acceptance criteria",
+  "Split into sub-tasks",
+  "Turn the error log into steps to reproduce",
+];
+
+const EDIT_PROMPTS = (ref: string) => [
+  `Rewrite the description of ${ref} in plain words and update the ticket in place.`,
+  `Shorten the title of ${ref} and update the ticket in place.`,
+  `Add acceptance criteria to the description of ${ref} and update the ticket in place.`,
+  `Split ${ref} into sub-tasks, create them under this ticket, and update its description in place with the breakdown.`,
+  `Turn the error log in ${ref} into steps to reproduce and update the ticket description in place.`,
 ];
 
 const SUGGESTED_QUERIES_POOL = [
@@ -52,8 +67,6 @@ const DEMO_QUERIES = [
   "What looks blocked or at risk?",
 ];
 
-// Shown instead of DEMO_QUERIES while a guest's board is still empty: there is
-// nothing to ask about yet, so the examples describe projects to build.
 const BOARD_BUILD_EXAMPLES = [
   "Launch a marketing campaign",
   "Build a SaaS MVP",
@@ -81,24 +94,31 @@ export const WelcomeScreen = () => {
     useAiChatContext();
   const pathname = usePathname();
   const hydrated = useHydrated();
-  // HTPR-4303: guests live on the real board, not /demo — key off identity.
   const isDemo = (pathname?.startsWith("/demo") ?? false) || isGuestCookieUser();
   const isFullScreenChat = pathname?.startsWith("/chat") ?? false;
   const inViewObject = useRecoilValue(inViewObjectAtom);
   const currentProject = useRecoilValue(currentProjectAtom) as IProject | null;
-  // Board data lives on currentProjectAtom (projectSectionsAtom is never written).
   const sections = currentProject?.sections ?? null;
   const taskId = isDetailPage ? inViewObject?.taskId : undefined;
+  const editWithAiEnabled = useFlag(HTPR_7337_EDIT_WITH_AI_FLAG);
+  const editTaskId = useRecoilValue(aiChatEditTaskIdAtom);
+  let isEditMode = false;
+  if (editWithAiEnabled) isEditMode = Boolean(taskId) && editTaskId === taskId;
   const taskSummaryAction = taskSummaryActionFor(taskId);
   const ticketRef = taskId
     ? inViewObject.taskTicketNumber || "this ticket"
     : null;
-  // Off the task-detail page this atom is always false, so only gate on it
-  // there - a board/inbox-opened chat isn't waiting on anything (HTPR-6047).
   const taskDetailNonEssentialReady = useRecoilValue(
     taskDetailNonEssentialReadyAtom
   );
   const taskDetailDataReady = !isDetailPage || taskDetailNonEssentialReady;
+  const oneQuestionsCallEnabled = useFlag(HTPR_7586_ONE_QUESTIONS_CALL_FLAG);
+  const questionsTaskId = useRecoilValue(composeTaskQuestionsTaskIdAtom);
+  const skillFollowupEnabled = useFlag(HTPR_7319_SKILL_CHAT_FOLLOWUP_FLAG);
+  const pendingFollowupState = useRecoilValue(composeTaskSkillFollowupAtom);
+  let pendingFollowup: typeof pendingFollowupState = null;
+  if (skillFollowupEnabled) pendingFollowup = pendingFollowupState;
+  const hasPendingTicketQuestions = pendingFollowup?.taskId === taskId || oneQuestionsCallEnabled && questionsTaskId === taskId;
   const taskQuestions = useQuery({
     queryKey: ["task-questions", taskId],
     queryFn: async (): Promise<{ questions: string[] }> => {
@@ -115,7 +135,7 @@ export const WelcomeScreen = () => {
     },
     staleTime: 10 * 60 * 1000,
     refetchOnWindowFocus: false,
-    enabled: Boolean(taskId) && taskDetailDataReady,
+    enabled: Boolean(taskId) && taskDetailDataReady && !isEditMode && !hasPendingTicketQuestions,
   });
   const taskSessions = useQuery({
     queryKey: ["task-sessions", taskId],
@@ -139,8 +159,6 @@ export const WelcomeScreen = () => {
   const suggestions = useMemo(() => {
     if (!hydrated) return SUGGESTED_QUERIES_POOL.slice(0, QUERIES_TO_SHOW);
 
-    // ponytail: demo prompts stay fixed so anonymous visitors immediately see
-    // the four read-only project-management jobs this v1 chat can do.
     if (isDemo) return DEMO_QUERIES;
 
     if (ticketRef) {
@@ -155,7 +173,6 @@ export const WelcomeScreen = () => {
       ?.filter((section) => !section.deleted)
       .map((section) => ({
         ...section,
-        // HTPR-6947: a column can arrive before its tasks are loaded.
         items: (section.items ?? []).filter(
           (task) => !task.status || task.status === "Normal"
         ),
@@ -224,9 +241,6 @@ export const WelcomeScreen = () => {
     currentProject?.name,
   ]);
 
-  // HTPR-4882: on a guest's still-empty board this screen IS the board-creation
-  // assistant. Resolved in an effect rather than in render because it reads the
-  // guest cookie and the viewport, which the server pass cannot see.
   const [boardBuild, setBoardBuild] = useState(false);
   useEffect(() => {
     setBoardBuild(isGuestBoardBuild(currentProject));
@@ -234,7 +248,7 @@ export const WelcomeScreen = () => {
 
   if (taskId) {
     const generatedQuestions = taskQuestions.data?.questions?.filter(Boolean) ?? [];
-    const displayedQuestions = generatedQuestions.length
+    const displayedQuestions = isEditMode ? EDIT_QUERIES : generatedQuestions.length
       ? generatedQuestions
       : suggestions;
     const askAll = () => {
@@ -248,7 +262,8 @@ export const WelcomeScreen = () => {
     return (
       <div className="flex flex-grow text-white-black flex-col items-center justify-center h-full px-10 py-4">
         <div className="flex flex-col gap-2 w-full max-w-md">
-          {taskSummaryAction && (
+          {isEditMode && <p className="px-2 text-meta">How do you want to edit this task?</p>}
+          {!isEditMode && taskSummaryAction && (
             <button
               type="button"
               className="flex w-full items-center gap-2 rounded border-thin border-hypertasks-ai-purple/70 bg-hypertasks-ai-purple/10 p-2 text-left text-xs text-white-black hover:bg-hypertasks-ai-purple/20 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-hypertasks-ai-purple"
@@ -263,16 +278,16 @@ export const WelcomeScreen = () => {
               <span>{taskSummaryAction.label}</span>
             </button>
           )}
-          {displayedQuestions.map((suggestion) => (
+          {displayedQuestions.map((suggestion, index) => (
             <button
               key={suggestion}
               className="bg-kanban-active-cardbg hover:bg-hover-active rounded p-2 text-xs text-left w-full"
-              onClick={() => handleSendMessage(suggestion)}
+              onClick={() => handleSendMessage(isEditMode ? EDIT_PROMPTS(ticketRef!)[index] : suggestion)}
             >
               {suggestion}
             </button>
           ))}
-          {generatedQuestions.length > 0 && !taskQuestions.isLoading && (
+          {!isEditMode && generatedQuestions.length > 0 && !taskQuestions.isLoading && (
             <button
               className="self-start px-2 text-[11px] text-text-light-gray hover:text-white-black"
               onClick={askAll}
@@ -280,7 +295,7 @@ export const WelcomeScreen = () => {
               Ask all
             </button>
           )}
-          {taskSessions.data && taskSessions.data.length > 0 && (
+          {!isEditMode && taskSessions.data && taskSessions.data.length > 0 && (
             <div className="mt-3 flex flex-col gap-1">
               <p className="px-2 text-[11px] text-text-light-gray">
                 Previous threads
@@ -306,9 +321,6 @@ export const WelcomeScreen = () => {
     );
   }
 
-  // The examples and anything typed in the composer both run through
-  // handleSendMessage, which builds the board while it is empty, so the guest
-  // has one input rather than two.
   if (boardBuild)
     return (
       <div className="flex flex-grow text-white-black flex-col items-center justify-center h-full px-10 py-4">

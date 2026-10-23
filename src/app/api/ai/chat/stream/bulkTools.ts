@@ -38,7 +38,6 @@ function bulkOperationSubject(subject: BulkOperationSubject) {
   return { key, sortKey: key };
 }
 
-// Models rephrase identifiers between messages; resolved subjects remain stable.
 export function buildBulkOperationKey(
   intent: string,
   subjects: BulkOperationSubject[],
@@ -154,14 +153,12 @@ export function resolveBulkTaskTargets(
       }];
 }
 
-/** Tag-only edits: reversible, and scoped to a single task property. */
 export const LABEL_UPDATE_FIELDS = [
   "labels",
   "add_labels",
   "remove_labels",
 ] as const;
 
-/** Every hypertask_update_task field that changes something a user can see. */
 export const UPDATE_TASK_CHANGE_FIELDS = [
   "title",
   "description",
@@ -174,14 +171,6 @@ export const UPDATE_TASK_CHANGE_FIELDS = [
   ...LABEL_UPDATE_FIELDS,
 ] as const;
 
-/**
- * HTPR-4218 shows a wide or destructive write to the user before it runs.
- *
- * HTPR-5536: retagging is exempt. It is reversible and scoped to one property,
- * so a confirmation is pure friction, and the round-trip itself only completes
- * when the model repeats the byte-identical call, which is why tags often never
- * landed at all. Destructive statuses and wide non-label rewrites still confirm.
- */
 export function updateTasksNeedConfirmation<T extends object>(input: {
   targetCount: number;
   update: T;
@@ -189,8 +178,6 @@ export function updateTasksNeedConfirmation<T extends object>(input: {
   const { targetCount } = input;
   const update = input.update as Record<string, unknown>;
 
-  // Deleting always confirms. Archive is reversible, so a single archive stays
-  // one-shot; only a sweep of them gets shown first.
   if (update.status === "Deleted") return true;
   if (update.status === "Archive" && targetCount >= 2) return true;
 

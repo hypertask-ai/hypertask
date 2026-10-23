@@ -1,0 +1,249 @@
+{
+  "provenance": "Sanitized read-only h1/h2 responses; GitHub jobs and journal recorded read-only 2026-10-14. sources.json holds synthetic edge cases.",
+  "vercel": {
+    "events": [
+      {
+        "timestamp": "2026-10-14T08:25:54.672Z",
+        "requestPath": "/mcp",
+        "message": "{\"timestamp\":\"2026-10-14T08:25:54.671Z\",\"level\":\"error\",\"message\":\"Failed to get tasks\",\"correlationId\":\"1791966354671-97f8afe0\",\"error\":\"[\\n  {\\n    \\\"code\\\": \\\"custom\\\",\\n    \\\"path\\\": [\\n      \\\"task_id\\\",\\n      \\\"ticket_number\\\",\\n      \\\"unique_index\\\"\\n    ],\\n    \\\"message\\\": \\\"Either task_id, ticket_number, or (project_id + unique_index) must be provided\\\"\\n  },\\n  {\\n    \\\"code\\\": \\\"custom\\\",\\n    \\\"path\\\": [\\n      \\\"task_id\\\",\\n      \\\"ticket_number\\\",\\n      \\\"unique_index\\\"\\n    ],\\n    \\\"message\\\": \\\"Cannot provide multiple identification methods. Use either task_id, ticket_number, or (project_id + unique_index), but not multiple.\\\"\\n  }\\n]\"}"
+      }
+    ]
+  },
+  "proxy": {
+    "events": [
+      {
+        "timestamp": "2026-10-14T07:36:39.096Z",
+        "requestPath": "/[redacted]",
+        "requestMethod": "POST",
+        "httpStatus": 500
+      }
+    ]
+  },
+  "github": {
+    "run": {
+      "conclusion": "failure",
+      "createdAt": "2026-10-13T13:42:16Z",
+      "databaseId": 38407129629,
+      "event": "push",
+      "headBranch": "production",
+      "updatedAt": "2026-10-13T14:03:00Z",
+      "workflowName": "CI Tests"
+    },
+    "jobs": [
+      {
+        "name": "browser-smoke",
+        "conclusion": "failure"
+      },
+      {
+        "name": "production-cli-parity",
+        "conclusion": "success"
+      },
+      {
+        "name": "ci-tests",
+        "conclusion": "success"
+      },
+      {
+        "name": "production-test-warning",
+        "conclusion": "skipped"
+      }
+    ]
+  },
+  "journal": [
+    {
+      "__CURSOR": "s=e3a5e4785bb24796a23b6874f2c360b7;i=f9505d;b=e8c8ce56ccf74a3785ae69533b50e566;m=f222b0a2656;t=65db575e6105e;x=3df0943d63be4a1a",
+      "__REALTIME_TIMESTAMP": "1791883808739422",
+      "_SYSTEMD_USER_UNIT": "init.scope",
+      "_SYSTEMD_UNIT": "user@1000.service",
+      "SYSLOG_IDENTIFIER": "systemd",
+      "MESSAGE": "Failed to start hypertask-video-x.service - Publish one Hypertask feature video natively on X."
+    },
+    {
+      "__CURSOR": "s=e3a5e4785bb24796a23b6874f2c360b7;i=f9585a;b=e8c8ce56ccf74a3785ae69533b50e566;m=f2295ef7813;t=65db5e0cb621a;x=6a7fccfda66ffe75",
+      "__REALTIME_TIMESTAMP": "1791885602152986",
+      "_SYSTEMD_USER_UNIT": "init.scope",
+      "_SYSTEMD_UNIT": "user@1000.service",
+      "SYSLOG_IDENTIFIER": "systemd",
+      "MESSAGE": "Failed to start refresh-production-flag-modes.service - Refresh the live switch settings copy used by browser checks."
+    },
+    {
+      "__CURSOR": "s=e3a5e4785bb24796a23b6874f2c360b7;i=f97eb6;b=e8c8ce56ccf74a3785ae69533b50e566;m=f24aea9fbb6;t=65db7f985e5bd;x=858a533710923820",
+      "__REALTIME_TIMESTAMP": "1791894606964157",
+      "_SYSTEMD_USER_UNIT": "init.scope",
+      "_SYSTEMD_UNIT": "user@1000.service",
+      "SYSLOG_IDENTIFIER": "systemd",
+      "MESSAGE": "Failed to start hypertask-video-x.service - Publish one Hypertask feature video natively on X."
+    },
+    {
+      "__CURSOR": "s=e3a5e4785bb24796a23b6874f2c360b7;i=f99094;b=e8c8ce56ccf74a3785ae69533b50e566;m=f25e7bc063e;t=65db93297f046;x=f659557c9e01d086",
+      "__REALTIME_TIMESTAMP": "1791899859415110",
+      "_SYSTEMD_USER_UNIT": "init.scope",
+      "_SYSTEMD_UNIT": "user@1000.service",
+      "SYSLOG_IDENTIFIER": "systemd",
+      "MESSAGE": "Failed to start runner-selfupdate.service - Refresh installed runner code from merged production."
+    },
+    {
+      "__CURSOR": "s=e3a5e4785bb24796a23b6874f2c360b7;i=f9917b;b=e8c8ce56ccf74a3785ae69533b50e566;m=f25f9ad18db;t=65db9448902e2;x=1da7bf5b6b8e0752",
+      "__REALTIME_TIMESTAMP": "1791900160426722",
+      "_SYSTEMD_USER_UNIT": "init.scope",
+      "_SYSTEMD_UNIT": "user@1000.service",
+      "SYSLOG_IDENTIFIER": "systemd",
+      "MESSAGE": "Failed to start runner-selfupdate.service - Refresh installed runner code from merged production."
+    }
+  ],
+  "cloudflare": {
+    "data": {
+      "viewer": {
+        "accounts": [
+          {
+            "current": [
+              {
+                "dimensions": {
+                  "scriptName": "ht-slack"
+                },
+                "sum": {
+                  "errors": 0,
+                  "requests": 281
+                }
+              },
+              {
+                "dimensions": {
+                  "scriptName": "hypertask-support-mailer"
+                },
+                "sum": {
+                  "errors": 0,
+                  "requests": 95
+                }
+              },
+              {
+                "dimensions": {
+                  "scriptName": "hypertask-docs-mcp"
+                },
+                "sum": {
+                  "errors": 0,
+                  "requests": 3
+                }
+              },
+              {
+                "dimensions": {
+                  "scriptName": "ai-chatbot"
+                },
+                "sum": {
+                  "errors": 0,
+                  "requests": 834
+                }
+              },
+              {
+                "dimensions": {
+                  "scriptName": "hypertask-clients"
+                },
+                "sum": {
+                  "errors": 0,
+                  "requests": 942
+                }
+              },
+              {
+                "dimensions": {
+                  "scriptName": "hypertask-api-proxy"
+                },
+                "sum": {
+                  "errors": 0,
+                  "requests": 183771
+                }
+              },
+              {
+                "dimensions": {
+                  "scriptName": "ht-ph-proxy"
+                },
+                "sum": {
+                  "errors": 0,
+                  "requests": 1041
+                }
+              }
+            ],
+            "previous": [
+              {
+                "dimensions": {
+                  "scriptName": "ht-slack"
+                },
+                "sum": {
+                  "errors": 0,
+                  "requests": 42
+                }
+              },
+              {
+                "dimensions": {
+                  "scriptName": "hypertask-support-mailer"
+                },
+                "sum": {
+                  "errors": 0,
+                  "requests": 96
+                }
+              },
+              {
+                "dimensions": {
+                  "scriptName": "ai-chatbot"
+                },
+                "sum": {
+                  "errors": 0,
+                  "requests": 956
+                }
+              },
+              {
+                "dimensions": {
+                  "scriptName": "hypertask-clients"
+                },
+                "sum": {
+                  "errors": 0,
+                  "requests": 855
+                }
+              },
+              {
+                "dimensions": {
+                  "scriptName": "hypertask-api-proxy"
+                },
+                "sum": {
+                  "errors": 0,
+                  "requests": 169370
+                }
+              },
+              {
+                "dimensions": {
+                  "scriptName": "ht-ph-proxy"
+                },
+                "sum": {
+                  "errors": 0,
+                  "requests": 1256
+                }
+              }
+            ]
+          }
+        ]
+      }
+    }
+  },
+  "posthog": {
+    "results": [
+      [
+        "[redacted]",
+        1,
+        "2026-10-13T09:24:07.615000Z",
+        "2026-10-13T09:24:07.615000Z",
+        "production",
+        "server",
+        "[{\"id\":\"[redacted]\",\"mechanism\":{\"exception_id\":0,\"handled\":true,\"synthetic\":false,\"type\":\"generic\"},\"stacktrace\":{\"frames\":[{\"in_app\":true,\"lang\":\"javascript\",\"line\":2,\"mangled_name\":\"Server.r\",\"module\":\"nodejs\",\"raw_id\":\"[redacted]\",\"resolved\":true,\"resolved_name\":\"Server.r\",\"source\":\"../../opt/rust/nodejs.js\",\"suspicious\":false,\"synthetic\":false},{\"in_app\":true,\"lang\":\"javascript\",\"line\":242,\"mangled_name\":\"handler\",\"module\":\"___next_launcher\",\"raw_id\":\"[redacted]\",\"resolved\":true,\"resolved_name\":\"handler\",\"source\":\"___next_launcher.cjs\",\"suspicious\":false,\"synthetic\":false},{\"in_app\":true,\"lang\":\"javascript\",\"line\":1,\"mangled_name\":\"Module.A\",\"module\":\"route\",\"raw_id\":\"[redacted]\",\"resolved\":true,\"resolved_name\":\"Module.A\",\"source\":\".[redacted].js\",\"suspicious\":false,\"synthetic\":false},{\"in_app\":true,\"lang\":\"javascript\",\"line\":1,\"mangled_name\":\"$\",\"module\":\"route\",\"raw_id\":\"[redacted]\",\"resolved\":true,\"resolved_name\":\"$\",\"source\":\".[redacted].js\",\"suspicious\":false,\"synthetic\":false},{\"in_app\":false,\"lang\":\"javascript\",\"line\":1,\"mangled_name\":\"r0.handleResponse\",\"module\":\"next.dist.compiled.next-server:app-route.runtime.prod\",\"raw_id\":\"[redacted]\",\"resolved\":true,\"resolved_name\":\"r0.handleResponse\",\"source\":\"[redacted].runtime.prod.js\",\"suspicious\":false,\"synthetic\":false},{\"in_app\":true,\"lang\":\"javascript\",\"line\":1,\"mangled_name\":\"Z\",\"module\":\"route\",\"raw_id\":\"[redacted]\",\"resolved\":true,\"resolved_name\":\"Z\",\"source\":\".[redacted].js\",\"suspicious\":false,\"synthetic\":false},{\"in_app\":false,\"lang\":\"javascript\",\"line\":5,\"mangled_name\":\"r0.executeRequest\",\"module\":\"next.dist.compiled.next-server:app-route.runtime.prod\",\"raw_id\":\"[redacted]\",\"resolved\":true,\"resolved_name\":\"r0.executeRequest\",\"source\":\"[redacted].runtime.prod.js\",\"suspicious\":false,\"synthetic\":false},{\"in_app\":false,\"lang\":\"javascript\",\"line\":5,\"mangled_name\":\"r0.renderToResponse\",\"module\":\"next.dist.compiled.next-server:app-route.runtime.prod\",\"raw_id\":\"[redacted]\",\"resolved\":true,\"resolved_name\":\"r0.renderToResponse\",\"source\":\"[redacted].runtime.prod.js\",\"suspicious\":false,\"synthetic\":false},{\"in_app\":false,\"lang\":\"javascript\",\"line\":104,\"mangled_name\":\"process.processTicksAndRejections\",\"module\":\"task_queues\",\"raw_id\":\"[redacted]\",\"resolved\":true,\"resolved_name\":\"process.processTicksAndRejections\",\"source\":\"node:internal/process/task_queues\",\"suspicious\":false,\"synthetic\":false},{\"in_app\":true,\"lang\":\"javascript\",\"line\":1,\"mangled_name\":\"j\",\"module\":\"route\",\"raw_id\":\"[redacted]\",\"resolved\":true,\"resolved_name\":\"j\",\"source\":\".[redacted].js\",\"suspicious\":false,\"synthetic\":false}],\"type\":\"resolved\"},\"type\":\"Error\",\"value\":\"PostHog pipeline canary yper4-331-38376016359-1\"}]",
+        "https://app.hypertask.[redacted]"
+      ],
+      [
+        "[redacted]",
+        1,
+        "2026-10-14T07:36:39.685000Z",
+        "2026-10-14T07:36:39.685000Z",
+        "production",
+        "server",
+        "[{\"id\":\"[redacted]\",\"mechanism\":{\"exception_id\":0,\"handled\":true,\"synthetic\":false,\"type\":\"generic\"},\"stacktrace\":{\"frames\":[{\"in_app\":true,\"lang\":\"javascript\",\"line\":2,\"mangled_name\":\"Server.r\",\"module\":\"nodejs\",\"raw_id\":\"[redacted]\",\"resolved\":true,\"resolved_name\":\"Server.r\",\"source\":\"../../opt/rust/nodejs.js\",\"suspicious\":false,\"synthetic\":false},{\"in_app\":true,\"lang\":\"javascript\",\"line\":242,\"mangled_name\":\"handler\",\"module\":\"___next_launcher\",\"raw_id\":\"[redacted]\",\"resolved\":true,\"resolved_name\":\"handler\",\"source\":\"___next_launcher.cjs\",\"suspicious\":false,\"synthetic\":false},{\"in_app\":true,\"lang\":\"javascript\",\"line\":1,\"mangled_name\":\"Module.A\",\"module\":\"route\",\"raw_id\":\"[redacted]\",\"resolved\":true,\"resolved_name\":\"Module.A\",\"source\":\".[redacted].js\",\"suspicious\":false,\"synthetic\":false},{\"in_app\":true,\"lang\":\"javascript\",\"line\":1,\"mangled_name\":\"$\",\"module\":\"route\",\"raw_id\":\"[redacted]\",\"resolved\":true,\"resolved_name\":\"$\",\"source\":\".[redacted].js\",\"suspicious\":false,\"synthetic\":false},{\"in_app\":false,\"lang\":\"javascript\",\"line\":1,\"mangled_name\":\"r0.handleResponse\",\"module\":\"next.dist.compiled.next-server:app-route.runtime.prod\",\"raw_id\":\"[redacted]\",\"resolved\":true,\"resolved_name\":\"r0.handleResponse\",\"source\":\"[redacted].runtime.prod.js\",\"suspicious\":false,\"synthetic\":false},{\"in_app\":true,\"lang\":\"javascript\",\"line\":1,\"mangled_name\":\"Z\",\"module\":\"route\",\"raw_id\":\"[redacted]\",\"resolved\":true,\"resolved_name\":\"Z\",\"source\":\".[redacted].js\",\"suspicious\":false,\"synthetic\":false},{\"in_app\":false,\"lang\":\"javascript\",\"line\":5,\"mangled_name\":\"r0.executeRequest\",\"module\":\"next.dist.compiled.next-server:app-route.runtime.prod\",\"raw_id\":\"[redacted]\",\"resolved\":true,\"resolved_name\":\"r0.executeRequest\",\"source\":\"[redacted].runtime.prod.js\",\"suspicious\":false,\"synthetic\":false},{\"in_app\":false,\"lang\":\"javascript\",\"line\":5,\"mangled_name\":\"r0.renderToResponse\",\"module\":\"next.dist.compiled.next-server:app-route.runtime.prod\",\"raw_id\":\"[redacted]\",\"resolved\":true,\"resolved_name\":\"r0.renderToResponse\",\"source\":\"[redacted].runtime.prod.js\",\"suspicious\":false,\"synthetic\":false},{\"in_app\":false,\"lang\":\"javascript\",\"line\":104,\"mangled_name\":\"process.processTicksAndRejections\",\"module\":\"task_queues\",\"raw_id\":\"[redacted]\",\"resolved\":true,\"resolved_name\":\"process.processTicksAndRejections\",\"source\":\"node:internal/process/task_queues\",\"suspicious\":false,\"synthetic\":false},{\"in_app\":true,\"lang\":\"javascript\",\"line\":1,\"mangled_name\":\"j\",\"module\":\"route\",\"raw_id\":\"[redacted]\",\"resolved\":true,\"resolved_name\":\"j\",\"source\":\".[redacted].js\",\"suspicious\":false,\"synthetic\":false}],\"type\":\"resolved\"},\"type\":\"Error\",\"value\":\"PostHog pipeline canary yper4-331-38529425550-1\"}]",
+        "https://app.hypertask.[redacted]"
+      ]
+    ],
+    "hasMore": false
+  }
+}

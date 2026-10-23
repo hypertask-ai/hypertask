@@ -20,12 +20,6 @@ const getAll = async (
         json: { message: "User id is required" },
       };
     }
-    // Board bootstrap lists compact authorized projects. The parallel boardTasks
-    // request supplies the active board's full metadata, views, and tasks; other
-    // boards hydrate lazily on first open. See HTPR-3811.
-    // HTPR-4478: this fires on every project page load. The user lookup and the
-    // project fetch are independent (userDbId === userId here, since the user is
-    // fetched by that id), so run them concurrently instead of sequentially.
     const projectWhere = {
       status: "Normal" as const,
       ...getProjectWhere(userId),
@@ -64,7 +58,7 @@ const getAll = async (
 
     return {
       status: 200,
-      json: projects.map((project) => sanitizeProjectBoardFilters(project)),
+      json: projects.map((project) => sanitizeProjectBoardFilters(project, currentUserId ?? userId)),
     };
   } catch (error) {
     console.log(error);

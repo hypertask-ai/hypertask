@@ -1,0 +1,75 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+fail() { printf 'ht-flag: %s\n' "$*" >&2; exit 1; }
+usage() { fail 'usage: ht-flag get [KEY] [--dry-run] | ht-flag set KEY MODE --reason URL [--dry-run]; reason must link to a Question comment naming the flag key and target mode, with a thumbs up from Valentin himself within 7 days (#comment-<id>)'; }
+
+dry_run=false
+args=()
+for arg in "$@"; do
+  if [ "$arg" = --dry-run ]; then dry_run=true; else args+=("$arg"); fi
+done
+set -- "${args[@]}"
+[ "$#" -gt 0 ] || usage
+command=$1
+shift
+url="${HT_BASE_URL:-https://app.hypertask.ai}"
+url="${url%/}/api/mcp/flags"
+body=''
+key=''
+case "$command" in
+  get)
+    [ "$#" -le 1 ] || usage
+    method=GET
+    if [ "$#" -eq 1 ]; then key=$1; fi
+    ;;
+  set)
+    [ "$#" -eq 4 ] && [ "$3" = --reason ] || usage
+    method=PATCH
+    key=$1
+    [ -n "$key" ] || usage
+    case "$2" in
+      OFF|off) mode=OFF ;;
+      EVERYONE|everyone) mode=EVERYONE ;;
+      OWNER_AND_QA|owner-qa) mode=OWNER_AND_QA ;;
+      OWNER_ONLY|only-me) mode=OWNER_ONLY ;;
+      *) fail 'invalid mode' ;;
+    esac
+    reason=$4
+    node -e '
+      const value = process.argv[1];
+      if (value.length > 500 || !/^https:\/\/app\.hypertask\.ai\/detail\/project-([1-9]\d{0,8})\/([1-9]\d{0,8})#comment-([1-9]\d{0,8})$/.test(value)) process.exit(1);
+    ' "$reason" || fail 'reason must link to a Question comment naming the flag key and target mode, with a thumbs up from Valentin himself within 7 days (#comment-<id>) (max 500 characters)'
+    body=$(jq -nc --arg key "$key" --arg mode "$mode" --arg reason "$reason" '{key:$key,mode:$mode,reason:$reason}')
+    ;;
+  *) usage ;;
+esac
+if [ -n "$key" ]; then
+  [[ ${#key} -le 100 && $key =~ ^[a-z0-9]+(-[a-z0-9]+)*$ ]] || fail 'invalid feature flag key'
+  if [ "$method" = GET ]; then url+="?key=$key"; fi
+elif [ "$#" -gt 0 ]; then
+  fail 'invalid feature flag key'
+fi
+if [ "$dry_run" = true ]; then
+  jq -nc --arg method "$method" --arg url "$url" --arg body "$body" \
+    '{method:$method,url:$url,body:(if $body == "" then null else ($body | fromjson) end)}'
+  exit 0
+fi
+
+TOKEN_FILE="$HOME/.config/hypertask-agents/credentials/valentins-claude-code-agent-token"
+IDENTITY='Valentins Claude Code'
+if [ -x "$HOME/.agents/skills/ship/scripts/ship-identity" ]; then
+  IFS=$'\t' read -r IDENTITY TOKEN_FILE < <("$HOME/.agents/skills/ship/scripts/ship-identity")
+fi
+[ -r "$TOKEN_FILE" ] || fail 'agent identity credential is unavailable'
+token=$(cat "$TOKEN_FILE")
+[[ $token =~ ^[A-Za-z0-9._-]+$ ]] || fail 'invalid agent identity credential'
+response=$(mktemp)
+trap 'rm -f "$response"' EXIT
+# Feed the credential through stdin so it never appears in curl arguments.
+code=$(printf 'header = "Authorization: Bearer %s"\n' "$token" |
+  curl --config - --silent --show-error --connect-timeout 10 --max-time 30 \
+    --request "$method" --header 'Content-Type: application/json' \
+    --data "$body" --output "$response" --write-out '%{http_code}' "$url") || fail 'request failed'
+jq . "$response" || fail "HTTP $code: invalid JSON response"
+[[ $code == 2?? ]] || fail "HTTP $code"

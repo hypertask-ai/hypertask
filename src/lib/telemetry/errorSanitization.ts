@@ -3,19 +3,12 @@ const HEADER_SECRET =
 const SERIALIZED_HEADER_SECRET =
   /((?:\\+)?(["'])(?:authorization|proxy-authorization|cookie|set-cookie)(?:\\+)?\2\s*[:=]\s*)[^\r\n]+/gi;
 const AUTH_SCHEME_SECRET = /\b(Bearer|Basic)(\s+)["']?[^\s"']+["']?/gi;
-// A PEM private key spans lines; every line after the header has no key
-// marker, so a line-anchored value pattern would leak it (delegated review
-// on HTPR-6238). An unterminated header still eats the rest of the text.
 const PEM_PRIVATE_KEY =
   /-----BEGIN [A-Z ]*PRIVATE KEY-----[\s\S]*?(?:-----END [A-Z ]*PRIVATE KEY-----|$)/g;
 const SERIALIZED_NAMED_SECRET =
   /((["'])(?:api[_-]?key|access[_-]?token|refresh[_-]?token|auth[_-]?token|client[_-]?secret|private[_-]?key|password|secret|session|token)\2\s*[:=]\s*)(?:"(?:\\.|[^"\\])*"?|'(?:\\.|[^'\\])*'?|[^\r\n]+)/gi;
 const ESCAPED_NAMED_SECRET =
   /((?:\\+["'])(?:api[_-]?key|access[_-]?token|refresh[_-]?token|auth[_-]?token|client[_-]?secret|private[_-]?key|password|secret|session|token)(?:\\+["'])\s*[:=]\s*)[^\r\n]+/gi;
-// ponytail: quoted values may span lines so a multiline JSON/YAML secret is
-// fully consumed; the cost is that an unterminated quote over-redacts the
-// rest of the text. Unquoted multiline values (no key marker per line) are
-// not covered — add a format-specific pattern if one shows up in practice.
 const QUOTED_NAMED_SECRET =
   /(["']?(?:api[_-]?key|access[_-]?token|refresh[_-]?token|auth[_-]?token|client[_-]?secret|private[_-]?key|password|secret|session|token)["']?\s*[:=]\s*)(?:"(?:\\.|[^"\\])*"?|'(?:\\.|[^'\\])*'?)/gi;
 const UNQUOTED_NAMED_SECRET =
@@ -28,14 +21,24 @@ const OPAQUE_PATH_SEGMENT =
   /^(?:[A-Za-z0-9_.=-]{24,}|[0-9a-f]{8}-[0-9a-f-]{27,35})$/i;
 
 const ALLOWED_EXTRA_KEYS = new Set([
+  "axiosCode",
   "digest",
   "errorMessage",
   "errorName",
+  "meta_modelName",
+  "meta_table",
+  "meta_column",
+  "meta_target",
+  "meta_constraint",
+  "meta_field_name",
   "method",
   "origin",
   "prismaBatchRequestIndex",
   "prismaClientVersion",
   "prismaCode",
+  "requestMethod",
+  "requestPath",
+  "responseStatus",
   "route",
   "router",
   "stage",
@@ -43,9 +46,6 @@ const ALLOWED_EXTRA_KEYS = new Set([
 
 type Extra = Record<string, string | number | boolean | null>;
 
-// Path segments can carry secrets on their own (reset tokens, signed URLs), so both the
-// dedicated URL field (safeErrorUrl) and any URL spotted inside free text (redactErrorText)
-// redact them the same way instead of passing the pathname through untouched.
 function sanitizePathname(pathname: string): string {
   return pathname
     .split("/")
@@ -108,6 +108,12 @@ export function safeErrorUrl(value?: string) {
   }
 }
 
+function safeExtraValue(key: string, value: Extra[string]) {
+  if (typeof value !== "string") return value;
+  if (key === "requestPath") return sanitizePathname(value).slice(0, 1000);
+  return redactErrorText(value, 1000);
+}
+
 export function safeErrorExtra(extra?: Extra) {
   if (!extra) return {};
   return Object.fromEntries(
@@ -116,7 +122,7 @@ export function safeErrorExtra(extra?: Extra) {
       .slice(0, 12)
       .map(([key, value]) => [
         `ht_${key}`,
-        typeof value === "string" ? redactErrorText(value, 1000) : value,
+        safeExtraValue(key, value),
       ]),
   );
 }

@@ -1,3 +1,5 @@
+import { savedViewBoardAccessWhere } from "../projects/getAllIncludes";
+import { sanitizeProjectBoardFilters } from "@/utils/helperFunctions/Views/BoardFilterSanitizer";
 import prisma from "@/lib/prisma";
 import { ISection } from "@/models/model";
 import { getViewFromProject } from "@/utils/helperFunctions/Views/ViewsHelperFunctions";
@@ -8,11 +10,10 @@ const sectionGetProjectSections = async (
   currentUserId: number
 ) => {
   try {
-    //We are now fetching sections w.r.t the default sections. By comparing active view sections with default, we return
-    //sections for move column modal.
-    const project = await prisma.project.findFirst({
+    const loadedProject = await prisma.project.findFirst({
       where: {
         id: projectId,
+        ...savedViewBoardAccessWhere(currentUserId),
       },
       include: {
         project_view: {
@@ -36,17 +37,17 @@ const sectionGetProjectSections = async (
       },
     });
 
+    if (!loadedProject) return { status: 404, json: { message: "Project not found" } };
+    const project = sanitizeProjectBoardFilters(loadedProject, currentUserId);
     const defaultColumns =
       project?.project_view?.default_view?.board_columns_view;
     const activeView = getViewFromProject(project);
 
-    // Only paid for when the stored default view cannot answer: a board with no
-    // project_view, no default view, or an empty column list.
     const boardSections =
       Array.isArray(defaultColumns) && defaultColumns.length
         ? []
         : ((await prisma.section.findMany({
-            where: { projectId, deleted: false },
+            where: { projectId: project.id, deleted: false },
             orderBy: { ranking: "asc" },
           })) as unknown as ISection[]);
 
@@ -61,9 +62,6 @@ const sectionGetProjectSections = async (
     };
   } catch (error) {
     console.error("Error:", error);
-    // A 200 here made a server-side crash indistinguishable from "this board
-    // has no columns": the client coerces a non-array body to [] and the move
-    // dialog rendered empty with nothing in the console (HTPR-6259).
     return {
       status: 500,
       json: { error: error instanceof Error ? error.message : String(error) },
@@ -71,5 +69,4 @@ const sectionGetProjectSections = async (
   }
 };
 
-// Run the main function
 export default sectionGetProjectSections;

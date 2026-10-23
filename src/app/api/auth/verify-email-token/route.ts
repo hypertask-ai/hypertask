@@ -43,7 +43,6 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // Use shouldSkipInteractive from request, or fall back to config default
     const skipInteractive = shouldSkipInteractive !== undefined 
       ? shouldSkipInteractive 
       : authConfig.onboarding.shouldSkipInteractive
@@ -53,24 +52,22 @@ export async function POST(request: NextRequest) {
 
     let email: string
     let decoded: jwt.JwtPayload
-    let isVerificationToken = false // Track if this is a verification token (from email) vs login token (from instant signup)
+    let isVerificationToken = false
     try {
       const jwtSecret = getJwtSecret()
-      // Try verification audience first (for email verification links)
       try {
         decoded = jwt.verify(token, jwtSecret, {
           issuer: JWT_ISSUER,
           audience: JWT_VERIFICATION_AUDIENCE,
         }) as jwt.JwtPayload
-        isVerificationToken = true // This is a verification token from email
+        isVerificationToken = true
         console.log('✅ Verified as email verification token')
       } catch {
-        // Fall back to email-link audience (for login tokens from instant signup)
         decoded = jwt.verify(token, jwtSecret, {
           issuer: JWT_ISSUER,
           audience: JWT_AUDIENCE,
         }) as jwt.JwtPayload
-        isVerificationToken = false // This is a login token, don't change verification status
+        isVerificationToken = false
         console.log('✅ Verified as login token (from instant signup)')
       }
 
@@ -89,7 +86,6 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // Both emailed token audiences must pass this atomic gate before any user/session side effects.
     if (!await consumeEmailLinkToken(decoded)) {
       return NextResponse.json(
         { success: false, error: 'Invalid or expired token' },
@@ -97,20 +93,13 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // Update user in database (EXACTLY like verify-code route)
-    // For instant signup users, preserve their onboarding settings
-    // Check if user already exists and has specific onboarding settings
     const existingUser = await prisma.user.findFirst({
       where: { email },
       include: { UserSetting: true },
     })
     
-    // If user exists and isVerified is false, they're from instant signup
-    // Preserve their onboarding settings (they should skip onboarding)
     const shouldSkipOnboarding = existingUser?.UserSetting?.onboardingTourStatus ?? authConfig.onboarding.skipOnboarding
     
-    // Only set isVerified to true if this is a verification token (from email)
-    // For login tokens (from instant signup), preserve existing verification status
     const shouldSetVerified = isVerificationToken ? true : (existingUser?.UserSetting?.isVerified ?? true)
     
     const userUpdateResult = await update_or_create_user(
@@ -120,10 +109,12 @@ export async function POST(request: NextRequest) {
         displayName: existingUser?.displayName || email.split('@')[0],
         photoURL: existingUser?.photoURL,
       },
-      skipInteractive, // shouldSkipInteractive from request or config
-      shouldSkipOnboarding, // Preserve existing onboarding status for instant signup users
-      shouldSetVerified, // Only set verified if this is a verification token
+      skipInteractive,
+      shouldSkipOnboarding,
+      shouldSetVerified,
       signupAttributionFromHeaders(request.headers, 'email'),
+      typeof decoded.signupContextId === 'string' ? decoded.signupContextId : null,
+      request.headers.get("cookie"),
     )
 
     if (userUpdateResult.status !== 200) {
@@ -151,29 +142,21 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // Only set isVerified to true if this is a verification token (from email link)
-    // If it's a login token (from instant signup), keep the existing verification status
     if (isVerificationToken && userData.UserSetting) {
       console.log('📧 Email verification token - setting isVerified to true')
       await prisma.userSetting.update({
         where: { id: userData.UserSetting.id },
         data: { isVerified: true },
       })
-      // Keep the Better Auth column in sync, or a user who verifies by link
-      // stays blocked from Google account linking forever (HTPR-4159 gate).
       await prisma.user.update({
         where: { id: userData.id },
         data: { emailVerified: true },
       })
-      // The mailbox is now proven, so pick up any team that allowlisted this domain.
-      // Idempotent, and the only auto-join chance an instant-signup user gets: they
-      // were provisioned unverified, and provisionNewUser does not run again.
       try {
         await autoJoinByEmailDomain(userData.id, userData.email)
       } catch (error) {
         console.error('Auto-join by email domain failed (non-fatal):', error)
       }
-      // Refetch user to get updated isVerified status
       const updatedUser = await prisma.user.findUnique({
         where: { id: userData.id },
         include: { UserSetting: true, userPicture: true },
@@ -194,8 +177,6 @@ export async function POST(request: NextRequest) {
       trialStatus: (userData as any).UserSetting?.trialStatus
     })
 
-    // Auto-provision a team/board for brand-new users so they land on a real
-    // board instead of the empty state, matching instant-signup's behavior.
     let welcomeBoardId: number | undefined
     if (userUpdateResult.res.isNewUser && authConfig.onboarding.skipOnboarding) {
       try {
@@ -203,22 +184,18 @@ export async function POST(request: NextRequest) {
         const onboardingResult = await provisionFirstWorkspace(
           userData as any,
           request.cookies.get(SESSION_COOKIE)?.value,
-          'MyTeam', // Default team title
-          'MyBoard', // Default board title
-          companySizeOptions[0], // Default: "Just me"
-          companyRoleOptions[0] // Default: "Founder or leadership team"
+          'MyTeam',
+          'MyBoard',
+          companySizeOptions[0],
+          companyRoleOptions[0]
         )
         welcomeBoardId = onboardingResult?.Project?.id
         console.log('✅ Onboarding step 1 completed:', onboardingResult)
       } catch (onboardingError) {
         console.error('⚠️ Failed to complete onboarding step 1:', onboardingError)
-        // Don't fail the request - user can still use the app
-        // The onboarding can be completed later if needed
       }
     }
 
-    // Returning users and flag-Off signups still need the original adoption hook.
-    // Flag-On signups adopt before provisioning in provisionFirstWorkspace.
     await adoptGuestBoards(request.cookies.get(SESSION_COOKIE)?.value, userData!.id)
 
     const loginBoard = await resolveLoginBoard(userData!.id, request.cookies.get('previousBoard')?.value)
@@ -227,25 +204,22 @@ export async function POST(request: NextRequest) {
       : loginBoard
     console.log('📋 User projects fetched (email link):', prevBoard)
 
-    // Create response with redirect URL following useAuth.tsx logic
     const response = NextResponse.json({
       success: true,
-      user: userData, // Pass the full user data from database
-      prevBoard: prevBoard, // Pass the project data
-      isNewUser: userUpdateResult.res.isNewUser, // Pass the isNewUser flag
-      redirectUrl: loginBoard === null ? '/onboarding' : getRedirectUrl(userData, prevBoard, false, abTestVariant, undefined, undefined, userUpdateResult.res.isNewUser), // false = not mobile
+      user: userData,
+      prevBoard: prevBoard,
+      isNewUser: userUpdateResult.res.isNewUser,
+      redirectUrl: loginBoard === null ? '/onboarding' : getRedirectUrl(userData, prevBoard, false, abTestVariant, undefined, undefined, userUpdateResult.res.isNewUser),
       message: 'Email link verified and signed in successfully!',
-      abTestVariant: abTestVariant // Pass through for client-side tracking
+      abTestVariant: abTestVariant
     })
 
-    // Set authentication cookies EXACTLY like verify-code route
     try {
-      // Set nookies_user cookie (main auth cookie)
       response.cookies.set('nookies_user', JSON.stringify(slimUserForCookie(userData)), {
         httpOnly: false,
         secure: process.env.NODE_ENV === 'production',
         sameSite: 'lax',
-        maxAge: 600 * 60 * 24 * 7, // 1 week
+        maxAge: 600 * 60 * 24 * 7,
         path: '/'
       })
       response.cookies.set(
@@ -257,13 +231,12 @@ export async function POST(request: NextRequest) {
 
       seedResponseThemeCookie(request, response)
 
-      // Set previous board cookie if we have one (EXACTLY like verify-code route)
       if (prevBoard?.id) {
         response.cookies.set('previousBoard', `project-${prevBoard.id}|&|`, {
           httpOnly: false,
           secure: process.env.NODE_ENV === 'production',
           sameSite: 'lax',
-          maxAge: 600 * 60 * 24 * 7, // 1 week
+          maxAge: 600 * 60 * 24 * 7,
           path: '/'
         })
         console.log('✅ Previous board cookie set (email link):', `project-${prevBoard.id}`)
@@ -271,12 +244,11 @@ export async function POST(request: NextRequest) {
 
       if (loginBoard === null) response.cookies.delete('previousBoard')
 
-      // Track the source for analytics
       response.cookies.set('signup_source', 'email_link', {
         httpOnly: false,
         secure: process.env.NODE_ENV === 'production',
         sameSite: 'lax',
-        maxAge: 60 * 60 * 24 * 7, // 7 days
+        maxAge: 60 * 60 * 24 * 7,
         path: '/'
       })
 
@@ -299,7 +271,6 @@ export async function POST(request: NextRequest) {
   }
 }
 
-// Helper functions from useAuth.tsx (same as verify-code route)
 async function getProjects(userId: number, baseUrl: string): Promise<IProject | undefined> {
   try {
     const response = await fetch(`${baseUrl}/api/projects/getAll`, {
@@ -334,22 +305,18 @@ function getRedirectUrl(
   console.log('👤 getRedirectUrl (email link) - isNewUser:', isNewUser)
   console.log('✅ getRedirectUrl (email link) - isVerified:', isVerified)
 
-  // Shared task URL generation helper
   const getSharedTaskUrl = () =>
     sharedTask
       ? `/detail/project-${sharedTask.projectId}/${sharedTask.task?.uniqueIndex}`
       : ""
 
-  // Project URL with optional view parameter
   const getProjectUrl = () =>
     `/project?id=${prevBoard?.id}${view ? `&view=${view}` : ""}`
 
-  // User has completed all onboarding steps
   if (onboardingTourStatus) {
     return sharedTask ? getSharedTaskUrl() : getProjectUrl()
   }
 
-  // User has not completed onboarding
   return `/onboarding?projectId=${prevBoard?.id}&teamTitle=${
     prevBoard?.team?.title || 'MyTeam'
   }&id=${prevBoard?.team?.id || ''}${sharedTask ? `&shareId=${sharedTask.id}` : ""}`

@@ -39,7 +39,45 @@ if [ -x "$HOME/.agents/skills/ship/scripts/ship-identity" ]; then
 fi
 HT_TOKEN="$(cat "$TOKEN_FILE")"
 export HT_TOKEN
+review_refuse() {
+  printf 'vcc: Valentin Review needs one plain Question comment first: "Question: <strong>yes/no question?</strong>", one line of why, then "Yes:" and "No:" lines. Post it with vcc comment add %s --kind question, then move.%s\n' "$1" "${2:+ ($2)}" >&2
+  exit 5
+}
+review_move() {
+  case "${1:-} ${2:-}" in 'task move'|'tasks move') ;; *) return 0 ;; esac
+  local ticket='' section='' comments newest
+  shift 2
+  while [ "$#" -gt 0 ]; do
+    case "$1" in
+      --section) section=${2:-}; shift; [ "$#" -gt 0 ] || break ;;
+      --section=*) section=${1#--section=} ;;
+      *) if [[ $1 =~ ^[A-Za-z][A-Za-z0-9_-]*-[0-9]+$ ]]; then ticket=$1; fi ;;
+    esac
+    shift
+  done
+  [ -n "$ticket" ] || return 0
+  section=${section#"${section%%[![:space:]]*}"}
+  section=${section%"${section##*[![:space:]]}"}
+  [ "${section,,}" = 'valentin review' ] || return 0
+  comments=$(hypertask comments list "$ticket" --json 2>/dev/null) || review_refuse "$ticket" 'cannot read comments'
+  newest=$(jq -cs '
+    if length == 1 then .[0] else error("expected one comments response") end |
+    if (.comments | type) == "array" and all(.comments[];
+      (.createdAt | type) == "string" and (.createdAt | test("^\\d{4}-\\d\\d-\\d\\dT")) and (.text | type) == "string")
+    then .comments | max_by(.createdAt) else error("invalid comments") end
+  ' <<< "$comments" 2>/dev/null) || review_refuse "$ticket" 'cannot parse comments'
+  jq -e '
+    def visible: gsub("<[^>]*>"; "") | gsub("&nbsp;|&#160;"; " ") | gsub("^\\s+|\\s+$"; "");
+    .text | select(type == "string") |
+    sub("^\\s*(<p\\b[^>]*>\\s*)?<span\\b(?=[^>]*data-type=[\"\u0027]mention[\"\u0027])[^>]*>Valentin Yeo</span>\\s*"; "") |
+    (visible | startswith("Question:")) and
+    (capture("^\\s*(?:<[^>]*>\\s*)*Question:\\s*<strong\\b[^>]*>(?<question>.*?)</strong>"; "s").question | visible | endswith("?")) and
+    ([scan("<p\\b[^>]*>(.*?)</p>"; "s") | .[0] | visible] |
+      any(.[]; startswith("Yes:")) and any(.[]; startswith("No:")))
+  ' <<< "$newest" >/dev/null 2>&1 || review_refuse "$ticket"
+}
 if [ "${1:-}" != activity ]; then
+  review_move "$@"
   exec /usr/bin/env -S hypertask "$@"
 fi
 

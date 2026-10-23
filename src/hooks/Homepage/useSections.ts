@@ -1,5 +1,5 @@
-/* eslint-disable react-hooks/exhaustive-deps */
-import { useCallback, useContext, useEffect, useLayoutEffect, useRef, useMemo, useState } from "react";
+
+import { useCallback, useEffect, useLayoutEffect, useRef, useMemo, useState } from "react";
 
 import axios from "axios";
 import { activeItemAtom, currentProjectAtom } from "@/store";
@@ -9,16 +9,15 @@ import { useStore } from "jotai";
 import { ITask } from "@/models/model";
 import { useRouter } from "next/navigation";
 import useAddDeleteTaskInBoards from "../MultiPages/useAddDeleteTaskInBoards";
-import { MOBILE_AI_TASK_WRITER_FOCUS, TDefaultEditFocus, TSectionPayload } from "@/models/CreateTaskModalModels/model";
+import { TDefaultEditFocus, TSectionPayload } from "@/models/CreateTaskModalModels/model";
 import useHypertasksRecoilStates from "../RecoilRoot/useHypertasksRecoilStates";
 import globalConstants from "@/lib/constants";
 import { useDeviceContext } from "@/lib/contexts/deviceContext";
 import { returnIfModalOrInputActive } from "@/utils/helperFunctions/helperFunctions";
 import { KeyCodes } from "@/lib/constants/keyboard-handler";
 import useHypertasksNavigate from "../MultiPages/Route/useHypertasksNavigate";
-import { MobileViewContext } from "@/lib/contexts/mobileContext";
-import { useFlag } from "@/hooks/useFlag";
-import { HTPR_6914_SHIFT_C_QUICK_ADD_FLAG, HTPR_6902_N_QUICK_ADD_FLAG } from "@/lib/flags/keys";
+import { useFlag, useFlagLoaded } from "@/hooks/useFlag";
+import { HTPR_6929_COMPOSE_TASK_WRITER_FLAG, HTPR_7585_CTRLJ_WAITS_FOR_FLAGS_FLAG } from "@/lib/flags/keys";
 
 type SectionKeydownHandler = (event: KeyboardEvent) => void;
 
@@ -30,12 +29,6 @@ const handleDelegatedSectionKeydown = (event: KeyboardEvent) => {
   if (!activeSectionListenerKey) return;
   sectionKeydownHandlers.get(activeSectionListenerKey)?.(event);
 };
-
-// ============== created this hook to clean the code from the sections.jsx
-// ============== remove useEffects from the main component codes as much as possible.
-// ============== will contain all the classes and functions needed for a section component so don't have to pollute the main component
-
-
 
 const useSections = ({
   items,
@@ -53,6 +46,11 @@ const useSections = ({
   sectionId: number;
 }) => {
   const router = useRouter();
+  const ctrlJWaitsForFlags = useFlag(HTPR_7585_CTRLJ_WAITS_FOR_FLAGS_FLAG);
+  const ctrlJWaitsForFlagsLoaded = useFlagLoaded(HTPR_7585_CTRLJ_WAITS_FOR_FLAGS_FLAG);
+  const composeEnabled = useFlag(HTPR_6929_COMPOSE_TASK_WRITER_FLAG);
+  const composeLoaded = useFlagLoaded(HTPR_6929_COMPOSE_TASK_WRITER_FLAG);
+  const blockLegacyCtrlJ = (ctrlJWaitsForFlags || !ctrlJWaitsForFlagsLoaded) && (!composeLoaded || composeEnabled);
   const store = useStore();
   const { createItem } = useAddDeleteTaskInBoards();
   const { toggleCreateTaskGlobally }= useHypertasksRecoilStates()
@@ -73,18 +71,12 @@ const useSections = ({
       })),
     [items]
   );
-  // const [active, setActive] = useState(false);
   const setActiveItem = useSetRecoilState(activeItemAtom);
-  const [position, setPosition] = useState<"top" | "bottom" | null>(); // top or bottom
+  const [position, setPosition] = useState<"top" | "bottom" | null>();
   const [showAddItem, setShowAddItem] = useState(false);
   const [newTaskDraftTitle, setNewTaskDraftTitle] = useState("");
   const [keyPressed, setKeypressed] = useState<any>({});
   const isApple = useDeviceContext()
-  const isMbl = useContext(MobileViewContext);
-  const aiFirstTaskWriterEnabled = useFlag("htpr-6141-ai-first-task-writer");
-  const quickEntryCardsEnabled = useFlag("htpr-6175-quick-entry-cards");
-  const nQuickAddEnabled = useFlag(HTPR_6902_N_QUICK_ADD_FLAG);
-  const shiftCQuickAddEnabled = useFlag(HTPR_6914_SHIFT_C_QUICK_ADD_FLAG);
   const { navigate } = useHypertasksNavigate();
   const sectionListenerKeyRef = useRef<string | null>(null);
   if (!sectionListenerKeyRef.current) {
@@ -99,38 +91,30 @@ const useSections = ({
     });
   }, []);
 
-  // ======================== create new task at given position
   const createTaskAt = (
     position: "top"|"bottom",
     sectionPayload?: TSectionPayload,
     defaultEditFocus?: TDefaultEditFocus,
     useQuickEntry = false,
   ) => {
-    const editFocus =
-      defaultEditFocus ??
-      (isMbl && aiFirstTaskWriterEnabled ? MOBILE_AI_TASK_WRITER_FOCUS : undefined);
-    // The column plus signs and Alt+C request quick entry. Existing creation
-    // shortcuts keep opening the full editor even while the flag is enabled.
-    if (quickEntryCardsEnabled && useQuickEntry && !editFocus) {
+    if (useQuickEntry && !defaultEditFocus) {
       setShowAddItem(true);
       setPosition(position);
       return;
     }
-    toggleCreateTaskGlobally(sectionPayload, editFocus)
+    toggleCreateTaskGlobally(sectionPayload, defaultEditFocus)
   };
 
-  useEffect(nQuickAddEnabled && quickEntryCardsEnabled ? () => {
+  useEffect(() => {
     const sectionElement = sectionRef.current;
     const openQuickEntry = () => {
-      // N owns inline entry only, never the mobile full-editor fallback.
       setPosition("bottom");
       setShowAddItem(true);
     };
     sectionElement?.addEventListener("OPEN_QUICK_ENTRY", openQuickEntry);
     return () => sectionElement?.removeEventListener("OPEN_QUICK_ENTRY", openQuickEntry);
-  } : () => {}, [nQuickAddEnabled, quickEntryCardsEnabled]);
+  }, []);
 
-  // ======================== user presses [Enter] to CREATE a task, keeping the box open for the next one
   const invokeCreateItem = async (taskTitle: string, createAnother: boolean): Promise<boolean> => {
     const itemToCreate = {
       title: taskTitle,
@@ -163,11 +147,11 @@ const useSections = ({
     isApple,
     index,
     navigate,
-    quickEntryCardsEnabled,
     sectionId,
     title,
     _currentProject,
     createTaskAt,
+    blockLegacyCtrlJ,
   });
   latestRef.current = {
     active,
@@ -175,14 +159,13 @@ const useSections = ({
     isApple,
     index,
     navigate,
-    quickEntryCardsEnabled,
     sectionId,
     title,
     _currentProject,
     createTaskAt,
+    blockLegacyCtrlJ,
   };
 
-  // ======================= HANDLE KEYDOWN FUNCTION =========================
   const handleLegacyKeyDown = useCallback((e: KeyboardEvent) => {
     const {
       active,
@@ -190,11 +173,11 @@ const useSections = ({
       isApple,
       index,
       navigate,
-      quickEntryCardsEnabled,
       sectionId,
       title,
       _currentProject,
       createTaskAt,
+      blockLegacyCtrlJ,
     } = latestRef.current;
 
     if (!active) return;
@@ -209,19 +192,15 @@ const useSections = ({
       e.preventDefault();
     }
 
-    // ---- G/G then C handling ----
     if (e.keyCode === KeyCodes.G) {
       const now = Date.now();
 
-      // Track tap for G or Shift+G
       if (e.shiftKey) {
         if (lastGPress.current && now - lastGPress.current < 500) {
-          // Double Shift+G
           lastGPress.current = null;
 
           const tasksList = document.getElementById(`tasks-list-${index}`)?.children;
           if (tasksList && tasksList.length > 1) {
-            // Go to bottom/penultimate
             const targetIndex = tasksList.length - 2;
             const element = tasksList[targetIndex] as HTMLElement;
             element?.scrollIntoView({ behavior: "smooth", block: "center" });
@@ -233,12 +212,10 @@ const useSections = ({
         }
       } else {
         if (lastgPress.current && now - lastgPress.current < 500) {
-          // Double g
           lastgPress.current = null;
 
           const tasksList = document.getElementById(`tasks-list-${index}`)?.children;
           if (tasksList && tasksList.length > 0) {
-            // Go to top
             const element = tasksList[0] as HTMLElement;
             element?.scrollIntoView({ behavior: "smooth", block: "center" });
             element?.focus();
@@ -249,20 +226,17 @@ const useSections = ({
         }
       }
     }
-    // G then C: Go to Calendar
     else if (
       e.keyCode === KeyCodes.C &&
       ((lastGPress.current && new Date().getTime() - lastGPress.current < 500)
         || (lastgPress.current && new Date().getTime() - lastgPress.current < 500))
     ) {
-      // Reset both G tap trackers
       lastGPress.current = null;
       lastgPress.current = null;
       navigate("Calendar");
       e.preventDefault();
       return;
     }
-    // G then D: Go to Drafts
     else if (
       e.keyCode === KeyCodes.D &&
       ((lastGPress.current && new Date().getTime() - lastGPress.current < 500)
@@ -274,7 +248,6 @@ const useSections = ({
       e.preventDefault();
       return;
     }
-    // G then U: Go to Scheduled
     else if (
       e.keyCode === KeyCodes.U &&
       ((lastGPress.current && new Date().getTime() - lastGPress.current < 500)
@@ -286,7 +259,6 @@ const useSections = ({
       e.preventDefault();
       return;
     }
-    // [ctrl][shift][c] for creating task at top
     else if (
       e.keyCode === KeyCodes.C &&
       document?.activeElement?.tagName !== "INPUT" &&
@@ -306,9 +278,7 @@ const useSections = ({
         return prev;
       });
     }
-    // [alt] + [c] opens fast entry without replacing the existing C shortcuts.
     else if (
-      quickEntryCardsEnabled &&
       e.keyCode === KeyCodes.C &&
       e.altKey && !(e.ctrlKey || e.metaKey) &&
       document?.activeElement?.tagName !== "INPUT" &&
@@ -326,7 +296,6 @@ const useSections = ({
         return prev;
       });
     }
-    // [c] for regular task creation (only if not using G shortcut)
     else if (
       e.keyCode === KeyCodes.C &&
       document?.activeElement?.tagName !== "INPUT" &&
@@ -345,11 +314,6 @@ const useSections = ({
       });
     }
 
-    // cmd/ctrl + [j]: same new task as [C], but opened straight into the AI Task
-    // Writer. HTPR-4903: this branch existed but was commented out, so the key
-    // did nothing on the board while the tutorial and the create-task modal both
-    // teach Ctrl+J as the AI writer key. preventDefault also stops Chrome/Edge
-    // from opening their Downloads panel on top of the modal.
     else if (
       e.keyCode === KeyCodes.J &&
       document?.activeElement?.tagName !== "INPUT" &&
@@ -357,18 +321,20 @@ const useSections = ({
       !e.shiftKey
     ) {
       e.preventDefault();
-      createTaskAt(
-        "top",
-        {
-          sectionId: sectionId,
-          sectionTitle: title,
-          position: "top",
-        },
-        {
-          defaultEditMode: "Description-ai",
-          defaultFocus: "Description",
-        }
-      );
+      if (!blockLegacyCtrlJ) {
+        createTaskAt(
+          "top",
+          {
+            sectionId: sectionId,
+            sectionTitle: title,
+            position: "top",
+          },
+          {
+            defaultEditMode: "Description-ai",
+            defaultFocus: "Description",
+          }
+        );
+      }
       setKeypressed((prev: any) => {
         prev[e.key] = false;
         return prev;
@@ -376,7 +342,6 @@ const useSections = ({
     }
 
 
-    // [shift] + [c] for creating task at bottom
     else if (
       e.keyCode === KeyCodes.C &&
       e.shiftKey && !e.altKey && !(e.ctrlKey || e.metaKey)&&
@@ -398,37 +363,31 @@ const useSections = ({
 
   }, []);
 
-  // Let the board listener own Shift+C without changing the legacy C handler.
   const handleShiftCKeyDown = useCallback((e: KeyboardEvent) => {
     if (e.key.toLowerCase() === "c" && e.shiftKey &&
       !e.ctrlKey && !e.metaKey && !e.altKey) return;
     handleLegacyKeyDown(e);
   }, [handleLegacyKeyDown]);
-  let handleKeyDown = handleLegacyKeyDown;
-  if (shiftCQuickAddEnabled && nQuickAddEnabled && quickEntryCardsEnabled) {
-    handleKeyDown = handleShiftCKeyDown;
-  }
+  const handleKeyDown = handleShiftCKeyDown;
   const handleKeyDownRef = useRef(handleKeyDown);
   handleKeyDownRef.current = handleKeyDown;
 
-  // ==================== check for duplicate rankins and return true/false
   function hasDuplicateRankings(items: ITask[]) {
     const rankingMap = new Map();
 
     for (const task of items) {
       const ranking = task.ranking;
       if (rankingMap.has(ranking)) {
-        return true; // Found a duplicate ranking
+        return true;
       }
 
       rankingMap.set(ranking, true);
     }
 
-    return false; // No duplicate rankings found
+    return false;
   }
 
 
-  // =================== user presses escape or blurs out
   const onCancelCreate = () => {
     setShowAddItem(false);
     setPosition(null);
@@ -439,19 +398,14 @@ const useSections = ({
     else sectionRef.current?.focus();
   };
 
-
-
-  // ========================= thinking if we should move this away to another hook as well, but dont need it
-  // ========================= possibly over-optimization, keeping it simple till the need to scale up comes.
   useLayoutEffect(() => {
     document.getElementById("task-" + store.get(activeItemAtom))?.scrollIntoView({
       behavior: "instant" as ScrollBehavior,
       block: "center",
       inline: "center",
     });
-  // since we only run it on mount
-  // eslint-disable-next-line react-hooks/exhaustive-deps 
-  }, []); // Empty dependency array to ensure the effect runs only once after component mount
+
+  }, []);
 
   useEffect(() => {
     setTimeout(() => {
@@ -462,8 +416,7 @@ const useSections = ({
     }, 0);
 
   
-  // since we only run it on mount
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+
   }, []);
 
 

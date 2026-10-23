@@ -1,3 +1,4 @@
+const { withStubs } = require("./helpers/stub-map.cjs");
 const assert = require("node:assert/strict");
 const fs = require("node:fs");
 const path = require("node:path");
@@ -8,6 +9,7 @@ const root = path.resolve(__dirname, "..");
 const jiti = require("jiti")(__filename, { alias: { "@": path.join(root, "src") } });
 
 function load(file, stubs) {
+  stubs = withStubs({ "@/lib/mcp/operationCrashReport": { reportMcpOperationCrash: () => {} } }, stubs);
   const source = ts.transpileModule(fs.readFileSync(path.join(root, file), "utf8"), {
     compilerOptions: {
       esModuleInterop: true,
@@ -17,6 +19,7 @@ function load(file, stubs) {
   }).outputText;
   const mod = { exports: {} };
   new Function("module", "exports", "require", source)(mod, mod.exports, (request) => {
+    if (request === "@/lib/mcp/routeWrapper") return require("./helpers/mcp-route-wrapper.cjs").loadRouteWrapper(stubs);
     assert.ok(request in stubs, `Unexpected import: ${request}`);
     return stubs[request];
   });
@@ -37,14 +40,14 @@ const incoming = '<style>body { color: blue }</style><h1>New canvas</h1><script>
 function harness(contentHtml, { authorized = true, accessible = true } = {}) {
   let page = {
     id: 1, publicId: "canvas-page", title: "Page", projectId: 15, version: 2,
-    contentHtml, contentText: "Old content", task: { id: 20 }, subPages: [],
+    contentHtml, contentText: "Old content", taskId: 20, task: { id: 20, projectId: 15 }, links: [], subPages: [],
   };
   const snapshots = [];
   const indexed = [];
   const reads = [];
   const tx = {
     page: {
-      findUnique: async (args) => { reads.push(args); return { ...page }; },
+      findUnique: async (args) => { reads.push(args); return { ...page, _count: { links: 0 } }; },
       updateMany: async ({ where, data }) => {
         assert.equal(where.version, page.version);
         page = { ...page, ...data, version: page.version + data.version.increment };
@@ -55,8 +58,11 @@ function harness(contentHtml, { authorized = true, accessible = true } = {}) {
   };
   const service = load("src/utils/controllers/pages/pageService.ts", {
     "@/lib/prisma": { $transaction: async (callback) => callback(tx), page: tx.page },
-    "@/utils/controllers/tasks/assertTaskAccess": require("./task-route-loader.cjs").load(
-      "src/utils/controllers/tasks/assertTaskAccess.ts", { "@/lib/prisma": { default: {} } },
+    "@/utils/controllers/projects/getAllIncludes": require("./task-route-loader.cjs").load(
+      "src/utils/controllers/projects/getAllIncludes.ts", {
+        "@/lib/agents/publicAgent": {}, "@/lib/cycles": {}, "@/lib/agents/visibility": {},
+        "@/utils/controllers/notifications/visibleInboxScope": {},
+      },
     ),
     "@/utils/controllers/turbopuffer/turbopufferHelper": {
       convertToPlain: (html) => require("node-html-parser").parse(html).text,
@@ -73,6 +79,8 @@ function harness(contentHtml, { authorized = true, accessible = true } = {}) {
       validateMcpAuth: async () => authorized ? { user: { id: 99 }, agentId: "test-agent" } : null,
       checkMcpRateLimit: async () => null,
     },
+    "@/lib/mcp/agents/scopes": { requireRole: async () => null },
+    "@/utils/controllers/pages/standalonePagesEnabled": { standalonePagesEnabled: async () => true },
     "@/utils/controllers/pages/pageService": service,
     "@/utils/controllers/pages/htmlCanvas": canvas,
     "@/utils/controllers/pages/htmlToMarkdown": jiti(path.join(root, "src/utils/controllers/pages/htmlToMarkdown.ts")),
@@ -90,17 +98,17 @@ function harness(contentHtml, { authorized = true, accessible = true } = {}) {
   };
 }
 
-test("page access consolidation leaves MCP reads unscoped and filters browser reads only", async () => {
+test("page access filters authenticated reads by owning board and keeps internal identifier lookup", async () => {
   const h = harness(canvas.wrapHtmlCanvas(original));
   await h.service.getPage({ id: 1 });
   assert.deepEqual(h.reads.at(-1).where, { id: 1 });
   await h.service.getPage({ publicId: "canvas-page", userId: 99 });
   assert.deepEqual(h.reads.at(-1).where, {
     publicId: "canvas-page",
-    task: { project: {
+    project: {
       status: "Normal", teamId: { not: null },
       OR: [{ ownerId: 99 }, { members: { some: { userId: 99, agentId: null } } }],
-    } },
+    },
   });
   assert.equal(h.snapshots.length, 0);
   assert.equal(canvas.decodeHtmlCanvas(h.page().contentHtml), original);

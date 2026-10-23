@@ -10,6 +10,7 @@ import type { useAgentChatState } from "./useAgentChatState";
 
 type Props = Pick<
   ReturnType<typeof useAgentChatState>,
+  | "embedded"
   | "rosterGenRef"
   | "setAgents"
   | "setRosterError"
@@ -20,10 +21,11 @@ type Props = Pick<
 >;
 
 export function useAgentChatRoster({
-  rosterGenRef, setAgents, setRosterError, setDetailsCollapsed, setTeamId, setIsNarrow,
+  embedded, rosterGenRef, setAgents, setRosterError, setDetailsCollapsed, setTeamId, setIsNarrow,
   setDetailsSheetOpen,
 }: Props) {
   const loadAgents = useCallback(async () => {
+    if (embedded) return [embedded.agent];
     const res = await fetch("/api/agents/owned");
     const data = (await res.json()) as {
       success?: boolean;
@@ -34,9 +36,8 @@ export function useAgentChatRoster({
       throw new Error(data.error ?? "Failed to load agents");
     }
     return data.agents;
-  }, []);
+  }, [embedded?.agent]);
 
-  // The roster is owner-scoped and small; one fetch per visit is enough.
   useEffect(() => {
     let cancelled = false;
     const myGen = ++rosterGenRef.current;
@@ -59,8 +60,6 @@ export function useAgentChatRoster({
     };
   }, [loadAgents]);
 
-  // Project list backing both the "@" task search and ticket-id link
-  // resolution; same query key as the rest of the app, so it is shared cache.
   const {
     data: mentionProjects = EMPTY_PROJECTS,
     isFetching: mentionProjectsLoading,
@@ -78,24 +77,15 @@ export function useAgentChatRoster({
     [projectIdByPrefix],
   );
 
-  // The collapse choice is remembered per browser; default to open.
   useEffect(() => {
     try {
       setDetailsCollapsed(
         window.localStorage.getItem(DETAILS_COLLAPSED_KEY) === "1",
       );
     } catch {
-      // Private browsing and hardened policies can reject localStorage.
     }
   }, []);
 
-  // Default the team filter to whatever team the user was last working in on
-  // a board (HTPR-6036), not a separately-remembered Agent Chat preference:
-  // switching boards to another team and then opening Agent Chat should show
-  // that team's agents. A manual change below only affects this component's
-  // own state, so it wins for the rest of this visit without being written
-  // back here (the keyboard team-cycle shortcut is the one thing that does
-  // update the shared last-board-team value from this page).
   useEffect(() => {
     setTeamId(getLastBoardTeam());
   }, []);
@@ -104,16 +94,10 @@ export function useAgentChatRoster({
     setTeamId(next);
   };
 
-  // Below 900px the three panes stack: roster list, then chat, and the details
-  // move behind an info button. useLayoutEffect so a reload on a phone does
-  // not paint the desktop three-pane shell for a frame.
   useLayoutEffect(() => {
     const query = window.matchMedia("(max-width: 899px)");
     const onChange = () => {
       setIsNarrow(query.matches);
-      // The details sheet only exists in the narrow layout; widening past the
-      // breakpoint would otherwise unmount it with the flag still set, leaving
-      // it to spring open on the way back.
       if (!query.matches) setDetailsSheetOpen(false);
     };
     onChange();

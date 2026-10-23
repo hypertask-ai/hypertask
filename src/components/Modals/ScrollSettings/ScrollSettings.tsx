@@ -119,7 +119,6 @@ const ScrollSettings: React.FC<IScrollSettings> = ({ toggle }) => {
               isSelected={selectedIndex === index}
             >
               <ScrollOptionTitle option={option} />
-              {/* {must check here if the current value of the scroll is you know, marked} */}
               {currentSetting === option.type && <Check strokeWidth={1.75} size={14} />}
             </ModalRowElementContainer>
           ))}

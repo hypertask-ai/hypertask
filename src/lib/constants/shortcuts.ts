@@ -32,7 +32,6 @@ export const getKeyboardShortcuts = (
   const altOptions = isApple ? "OPT" : "ALT";
   const boardSwitch = isApple ? "CTRL" : "ALT";
 
-  // Helper function to clean pressKey arrays (trim strings, handle comma-separated values, preserve nulls)
   const cleanPressKey = (keys: (string | null)[]): (string | null)[] => {
     return keys
       .flatMap((key) => {
@@ -40,7 +39,6 @@ export const getKeyboardShortcuts = (
           return [null];
         }
         const trimmed = key.trim();
-        // Handle comma-separated values like "J, ⭣" by splitting
         if (trimmed.includes(", ")) {
           return trimmed.split(", ");
         }
@@ -109,7 +107,7 @@ export const getKeyboardShortcuts = (
         { shortTitle: "Cycle focus backward", pressKey: ["SHIFT", "TAB"] },
         { shortTitle: "Switch boards", pressKey: [boardSwitch, "0-9"] },
         { shortTitle: "Switch Kanban boards", pressKey: [cmdControl, "B"] },
-        { shortTitle: "Set due date", pressKey: ["SHIFT", "D"] },
+        { shortTitle: "Set due date", pressKey: ["D"] },
         { shortTitle: "Move task to a different board", pressKey: ["SHIFT", "M"] },
       ],
     },
@@ -122,8 +120,6 @@ export const getKeyboardShortcuts = (
         { shortTitle: "Add task at top", pressKey: [cmdControl, "SHIFT", "C"] },
         { shortTitle: "Add task at bottom", pressKey: ["SHIFT", "C"] },
         { shortTitle: "Open task", pressKey: ["ENTER"] },
-        // [ / ] cycle views on the old shell only; on the rail shell "[" is
-        // the sidebar toggle (HTPR-4890) and views cycle with TAB/Shift+TAB.
         ...(appShellRailOn
           ? []
           : [
@@ -134,15 +130,15 @@ export const getKeyboardShortcuts = (
         { shortTitle: "Move focus to bottom", pressKey: ["GG"] },
         { shortTitle: "Move task down", pressKey: cleanPressKey(["SHIFT", "J, ⭣"]) },
         { shortTitle: "Move task up", pressKey: cleanPressKey(["SHIFT ", "K, ⭡"]) },
-        { shortTitle: "Move task right", pressKey: cleanPressKey(["SHIFT", "L, ⭣"]) },
-        { shortTitle: "Move task left", pressKey: cleanPressKey(["SHIFT ", "H, ⭡"]) },
-        { shortTitle: "Move task to the left", pressKey: cleanPressKey(["SHIFT", "L, →"]) },
+        { shortTitle: "Move task right", pressKey: cleanPressKey(["SHIFT", "L, →"]) },
+        { shortTitle: "Move task left", pressKey: cleanPressKey(["SHIFT ", "H, ←"]) },
+        { shortTitle: "Move task to the left", pressKey: cleanPressKey(["SHIFT", "H, ←"]) },
         { shortTitle: "Sort Kanban board", pressKey: ["SHIFT", "S"] },
         { shortTitle: "Add a sort level (table column)", pressKey: ["SHIFT", "CLICK"] },
         { shortTitle: "Toggle table layout", pressKey: ["SHIFT", "T"] },
         { shortTitle: "Match any / all values (inside a filter's list)", pressKey: ["←", "→"] },
         { shortTitle: "Show task options", pressKey: [cmdControl, "SHIFT", "+"] },
-        { shortTitle: "Move task to the right", pressKey: cleanPressKey(["SHIFT", "H, ←"]) },
+        { shortTitle: "Move task to the right", pressKey: cleanPressKey(["SHIFT", "L, →"]) },
         { shortTitle: "Assign a user", pressKey: ["A"] },
       ],
     },
@@ -167,24 +163,24 @@ export const getKeyboardShortcuts = (
         { shortTitle: "Expand single comment", pressKey: ["O"] },
         { shortTitle: "Expand all comments", pressKey: ["SHIFT", "O"] },
         { shortTitle: historyToggleLabel, pressKey: [cmdControl, "SHIFT", "H"] },
-        { shortTitle: "View all links", pressKey: ["CTRL", "O"] },
-        { shortTitle: "Write Comment", pressKey: ["CTRL", "M"] },
+        { shortTitle: "View all links", pressKey: [cmdControl, "O"] },
+        { shortTitle: "Write Comment", pressKey: [cmdControl, "M"] },
         { shortTitle: "Edit Description", pressKey: ["CTRL", "D"] },
         { shortTitle: "Edit Title", pressKey: ["F2"] },
-        { shortTitle: "Delete comment", pressKey: [cmdControl, "SHIFT", "3"] },
+        { shortTitle: "Delete comment", pressKey: ["CTRL", "SHIFT", "3"] },
         { shortTitle: "Paste as plain text", pressKey: [cmdControl, "SHIFT", "V"] },
         { shortTitle: "View all sub-tasks", pressKey: ["CTRL", "O"] },
         { shortTitle: "Share task", pressKey: [cmdControl, "S"] },
         { shortTitle: "Show task options", pressKey: [cmdControl, "SHIFT", "+"] },
-        { shortTitle: "Private share link (URL only)", pressKey: [cmdControl, "SHIFT", ":"] },
-        { shortTitle: "Private share link (Title + URL)", pressKey: [cmdControl, ":"] },
+        { shortTitle: "Private share link (URL only)", pressKey: [cmdControl, "SHIFT", ";"] },
+        { shortTitle: "Private share link (Title + URL)", pressKey: [cmdControl, ";"] },
         { shortTitle: "Public share link (URL only)", pressKey: [cmdControl, "SHIFT", "."] },
         { shortTitle: "Public share link (Title + URL)", pressKey: [cmdControl, "."] },
         { shortTitle: "Copy task ID", pressKey: [cmdControl, "SHIFT", "I"] },
         { shortTitle: "Copy task title and ID", pressKey: [cmdControl, "I"] },
         { shortTitle: "Star task", pressKey: ["ALT", "S"] },
-        { shortTitle: "Star comment", pressKey: [cmdControl, "SHIFT", "S"] },
-        { shortTitle: "Pin comment", pressKey: [cmdControl, "SHIFT", "P"] },
+        { shortTitle: "Star comment", pressKey: ["CTRL", "SHIFT", "S"] },
+        { shortTitle: "Pin comment", pressKey: ["CTRL", "SHIFT", "P"] },
         { shortTitle: "Follow task", pressKey: ["F"] },
         { shortTitle: "Unfollow task", pressKey: ["ALT", "F"] },
         { shortTitle: "Speech to text", pressKey: [cmdControl, "SHIFT", "D"] },
@@ -212,10 +208,6 @@ export const getKeyboardShortcuts = (
     {
       title: "Agent Chat",
       sub: [
-        // Ctrl+Tab also cycles agents but browsers (and, on Mac, the OS)
-        // reserve it for switching tabs/apps before it ever reaches the
-        // page, so Option/Alt+Arrow is the one advertised here as reliable
-        // on every platform.
         { shortTitle: "Next agent", pressKey: [altOptions, "⭣"] },
         { shortTitle: "Previous agent", pressKey: [altOptions, "⭡"] },
         { shortTitle: "Send message", pressKey: [cmdControl, "ENTER"] },
@@ -254,7 +246,7 @@ export const getKeyboardShortcuts = (
     {
       title: "Inbox",
       sub: [
-        { shortTitle: "Select ALL", pressKey: [cmdControl, "SHIFT", "E"] },
+        { shortTitle: "Select ALL", pressKey: [cmdControl, "SHIFT", "A"] },
         { shortTitle: "Select all from current split", pressKey: [cmdControl, "A"] },
         { shortTitle: "Select message", pressKey: ["X"] },
         { shortTitle: "Bulk Archive", pressKey: ["SHIFT", "E"] },

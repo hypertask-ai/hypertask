@@ -17,7 +17,10 @@ function loadTs(file, stubs) {
   const mod = { exports: {} };
   new Function("module", "exports", "require", source)(
     mod, mod.exports, (request) => {
+      if (request in stubs) return stubs[request];
+      if (request === "@/lib/auth/agentScope") return require("./agent-board-scope.cjs").enforcedScope;
       if (request === "@/lib/mcp/routeWrapper") return require("./mcp-route-wrapper.cjs").loadRouteWrapper(stubs);
+      if (request === "@/lib/mcp/operationCrashReport") return { reportMcpOperationCrash: () => {} };
       assert.ok(request in stubs, `Unexpected import: ${request}`);
       return stubs[request];
     },
@@ -25,7 +28,8 @@ function loadTs(file, stubs) {
   return mod.exports;
 }
 
-const access = loadTs("src/utils/controllers/projects/getAllIncludes.ts", {
+const loadAccess = (scope) => loadTs("src/utils/controllers/projects/getAllIncludes.ts", {
+  "@/lib/auth/agentScope": scope,
   "@prisma/client": {},
   "@/lib/agents/publicAgent": {},
   "@/lib/cycles": {},
@@ -48,11 +52,14 @@ function matches(value, where) {
   });
 }
 
-function harness({ ownerId = 99, ownerAgents = [], members = [], status = "Normal", missing = false, auth = { user: { id: 6 }, agentId: null }, rateLimited = null, loseAccess = false } = {}) {
+function harness({ ownerId = 99, ownerAgents = [], members = [], status = "Normal", missing = false, auth = { user: { id: 6 }, agentId: null }, rateLimited = null, loseAccess = false, agentRole = "write", scopeEnforced = true } = {}) {
   const updates = [];
   const broadcasts = [];
   const board = { id: 15, title: "Old name", name: "project-15", ownerId, owner: { id: ownerId, agents: ownerAgents }, members, status, tasks: [], sorting_mode: "Manual", uniqueIdentifier: "HTPR" };
+  const scope = { ...require("./agent-board-scope.cjs").enforcedScope, agentScopeEnforced: () => scopeEnforced };
+  const access = loadAccess(scope);
   const prisma = {
+    agent: { findUnique: async () => ({ permissions: agentRole ? { role: agentRole } : {} }) },
     project: {
       findFirst: async ({ where }) => !missing && matches(board, where) ? board : null,
       update: async (args) => {
@@ -75,7 +82,14 @@ function harness({ ownerId = 99, ownerAgents = [], members = [], status = "Norma
   }).default;
   const userRecord = { loadSessionUserRecord: async (id) => ({ id }) };
   const realtime = { broadcastBoardChange: async (...args) => { broadcasts.push(args); } };
+  const scopes = loadTs("src/lib/mcp/agents/scopes.ts", {
+    "@/lib/prisma": prisma, "next/server": { NextResponse: Response },
+  });
   const route = loadTs("src/lib/mcp/operations/projects/[projectId]/operation.ts", {
+    "@/lib/auth/agentScope": scope,
+    "@/lib/mcp/agents/scopes": scopes,
+    "@/lib/aiFeedback/automatic": { queueRestFailure: () => {} },
+    "@/lib/mcp/tasks/agentMutationLeaseAdoption": {},
     "next/server": { NextResponse: Response },
     "@/lib/mcp/auth": {
       validateMcpAuth: async () => auth,
@@ -89,7 +103,7 @@ function harness({ ownerId = 99, ownerAgents = [], members = [], status = "Norma
     new Request(`http://localhost/api/mcp/projects/${projectId}`, {
       method: "PATCH",
       body: rawBody ?? JSON.stringify({ title }),
-      headers: { "Content-Type": "application/json" },
+      headers: { "Content-Type": "application/json", Authorization: `Bearer ${require("jsonwebtoken").sign({ userId: auth?.user.id ?? 6 }, "fixture-board-rename-key")}` },
     }),
     { params: Promise.resolve({ projectId }) },
   );
@@ -100,6 +114,7 @@ const humanMember = (role = "Member", overrides = {}) => ({ userId: 6, agentId: 
 const agentMember = (overrides = {}) => ({
   userId: 6,
   agentId: "agent-owned",
+  status: "Accepted",
   role: "Member",
   agent: { userId: 6, revokedAt: null },
   ...overrides,

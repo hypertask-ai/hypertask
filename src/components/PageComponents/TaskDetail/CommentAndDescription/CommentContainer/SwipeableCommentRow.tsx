@@ -5,12 +5,6 @@ import { ReactNode, useEffect, useRef } from "react";
 const LONG_PRESS_MS = 500;
 const MOVE_CANCEL_PX = 10;
 
-/**
- * Mobile comment gesture wrapper.
- *
- * Press and hold to open the comment's Command Center menu. Swipe already
- * moves the whole task, so a comment swipe fights that gesture.
- */
 const SwipeableCommentRow = ({
   children,
   onMore,

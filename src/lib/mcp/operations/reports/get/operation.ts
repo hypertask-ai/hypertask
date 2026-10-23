@@ -1,3 +1,5 @@
+import { reportMcpOperationCrash } from '@/lib/mcp/operationCrashReport'
+import { wrapMcpRoute } from '@/lib/mcp/routeWrapper'
 import { NextRequest, NextResponse } from 'next/server'
 
 import { buildFieldError } from '@/lib/mcp/fieldError'
@@ -10,6 +12,7 @@ import {
 import { parsePositiveInteger } from '@/lib/mcp/operations/pages/helpers'
 
 export async function GET(request: NextRequest) {
+  return wrapMcpRoute(async (request: NextRequest) => {
   try {
     const ctx = await validateMcpAuth(request)
     if (!ctx) {
@@ -50,7 +53,7 @@ export async function GET(request: NextRequest) {
 
     const report = await getReport({
       userId: ctx.user.id,
-      agentId: ctx.agentId,
+      agentId: ctx.agentId, teamScope: ctx.teamScope,
       projectId,
       slug,
     })
@@ -84,6 +87,9 @@ export async function GET(request: NextRequest) {
     }
 
     console.error('[MCP Get Report] Error:', error)
+    reportMcpOperationCrash(request, error)
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
   }
+
+  })(request)
 }

@@ -2,7 +2,6 @@ import type { FeatureFlagDefinition } from "../definitions";
 
 export const HTPR_7098_BATCH_BACKGROUND_AI_FLAG = "htpr-7098-batch-background-ai";
 
-// HTPR-7098 (https://app.hypertask.ai/detail/project-15/7098): half-price background AI.
 export default {
   key: HTPR_7098_BATCH_BACKGROUND_AI_FLAG,
   kind: "feature",

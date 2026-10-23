@@ -51,7 +51,6 @@ export function useAgentProviderKey({
       setEditingProviderKey(false);
       setVisibilityNotice(null);
     } catch {
-      // leave the field open so the pasted key is not lost
     } finally {
       setSavingProviderKey(false);
     }

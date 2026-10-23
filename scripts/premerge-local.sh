@@ -3,7 +3,10 @@ set -euo pipefail
 # Never allow caller tracing to reveal disposable credentials.
 set +x
 
-usage() { echo 'Usage: scripts/premerge-local.sh [up|down|sweep|--install] [--flag key=MODE ...]' >&2; }
+usage() {
+  echo 'Not run on the VPS (Valentin 2026-10-21: no tests).' >&2
+  echo 'Usage: scripts/premerge-local.sh [up|down|sweep|--install] [--flag key=MODE ...]' >&2
+}
 action=up
 if [ "$#" -gt 0 ]; then
   case "$1" in up|down|sweep|--install) action=$1; shift ;; --flag) ;; *) usage; exit 2 ;; esac
@@ -30,9 +33,9 @@ if [ "${PREMERGE_CLEAN_ENV:-}" != "$root" ]; then
   if [ "$action" = up ]; then launcher=(setsid --wait); fi
   exec "${launcher[@]}" env -i PATH="$PATH" HOME="$HOME" XDG_RUNTIME_DIR="${XDG_RUNTIME_DIR:-}" HT_HEAVY_SLOTS="${HT_HEAVY_SLOTS:-}" PREMERGE_NODE_OPTIONS="${PREMERGE_NODE_OPTIONS:-}" CI="${CI:-}" ${GITHUB_ACTIONS+GITHUB_ACTIONS="$GITHUB_ACTIONS"} PREMERGE_CLEAN_ENV="$root" bash "$root/scripts/premerge-local.sh" "$action" "${flag_overrides[@]}"
 fi
-# A 3 GB Node heap keeps next build and next start under the 6 GB watchdog limit (YPER4-302);
-# set PREMERGE_NODE_OPTIONS to override.
-export NODE_OPTIONS="${PREMERGE_NODE_OPTIONS:---max-old-space-size=3072}"
+# A 4 GiB heap completed earlier builds; the build-only watchdog limit is 8 GiB (YPER4-318).
+# Set PREMERGE_NODE_OPTIONS to override.
+export NODE_OPTIONS="${PREMERGE_NODE_OPTIONS:---max-old-space-size=4096}"
 if [ "$action" = sweep ] || [ "$action" = --install ]; then
   exec python3 "$root/scripts/proc-watchdog.py" "$action"
 fi
@@ -74,7 +77,7 @@ stop() {
   done
   local result=0
   if command -v docker >/dev/null && docker info >/dev/null 2>&1; then
-    for service in postgres redis soketi; do
+    for service in postgres redis soketi minio; do
       if docker container inspect "$prefix-$service" >/dev/null 2>&1; then
         docker rm -f -v "$prefix-$service" >/dev/null || result=1
       fi
@@ -83,7 +86,7 @@ stop() {
     echo 'Docker unavailable. Rerun down when Docker returns to remove containers.' >&2
     result=1
   fi
-  rm -f "$state/server.pid" "$state/search.pid" "$state/run.pid" "$state/credentials.env" "$state/postgres.env" "$state/soketi.env" "$state/smoke-state.json" "$state/card-fixture.json" "$state/fixtures.out" "$state/flag-modes.json"
+  rm -f "$state/server.pid" "$state/search.pid" "$state/run.pid" "$state/credentials.env" "$state/postgres.env" "$state/soketi.env" "$state/minio.env" "$state/smoke-state.json" "$state/card-fixture.json" "$state/fixtures.out" "$state/flag-modes.json"
   return "$result"
 }
 if [ "$action" = down ]; then stop; exit $?; fi
@@ -100,7 +103,7 @@ if [ -f "$state/server.pid" ] || [ -f "$state/search.pid" ] || [ -f "$state/cred
   echo 'Environment already exists. Run scripts/premerge-local.sh down first.' >&2
   exit 1
 fi
-for service in postgres redis soketi; do
+for service in postgres redis soketi minio; do
   if docker container inspect "$prefix-$service" >/dev/null 2>&1; then
     echo 'Containers already exist. Run scripts/premerge-local.sh down first.' >&2
     exit 1
@@ -110,6 +113,7 @@ cleanup() {
   local result=$?
   trap - EXIT INT TERM
   stop || { [ "$result" -ne 0 ] || result=1; }
+  if [ -n "${scratch:-}" ]; then rm -rf -- "$scratch"; fi
   if [ "$result" -ne 0 ]; then
     echo "Local setup failed. Private logs: $state" >&4
   fi
@@ -124,9 +128,18 @@ printf '%s %s\n' "$$" "$(sed 's/.*) //' "/proc/$$/stat" | awk '{print $20}')" >"
 # Logs can contain connection strings. Keep them private and never echo them.
 exec 3>&1
 exec >"$state/setup.log" 2>&1
-if [ ! -d node_modules ]; then npm ci --prefer-offline --no-audit --no-fund; fi
-# A hardlinked worktree install skips postinstall, so the gitignored flag index may be missing
-# or stale for this checkout; the seed and the build both import it (YPER4-303).
+source_root=$root
+scratch=$(mktemp -d /tmp/ht-premerge-build.XXXXXX)
+git ls-files -co --exclude-standard -z | while IFS= read -r -d '' file; do
+  if [ -e "$file" ] || [ -L "$file" ]; then printf '%s\0' "$file"; fi
+done | tar --null \
+  --exclude='.git' --exclude='node_modules' --exclude='.next' --exclude='build-*/*' \
+  --exclude='.env*' --exclude='e2e/smoke/.state' -T - -cf - | tar -xf - -C "$scratch"
+BUILD_ID=$(git rev-parse HEAD)
+export BUILD_ID
+root=$scratch
+cd "$root"
+npm ci --prefer-offline --no-audit --no-fund
 npm run -s flags:generate
 npx --no-install prisma generate
 secret() { node -e "console.log(require('node:crypto').randomBytes(32).toString('hex'))"; }
@@ -160,9 +173,22 @@ free_port() { node -e "const s=require('node:net').createServer();s.listen(0,'12
 app_port=$(free_port)
 search_port=$(free_port)
 url="http://127.0.0.1:$app_port"
+printf 'MINIO_ROOT_USER=premerge-local\nMINIO_ROOT_PASSWORD=premerge-local-only\nMINIO_API_CORS_ALLOW_ORIGIN=%s\n' "$url" >"$state/minio.env"
+# Attachment bytes are disposable too; tmpfs and rm -v leave no storage behind.
+docker run -d --name "$prefix-minio" -p 127.0.0.1::9000 --env-file "$state/minio.env" \
+  --tmpfs /data:rw,size=128m --entrypoint /opt/bitnami/minio/bin/minio \
+  bitnamilegacy/minio:2025.4.22-debian-12-r1@sha256:d7cd0e172c4cc0870f4bdc3142018e2a37be9acf04d68f386600daad427e0cab \
+  server /data --address :9000
+storage_url="http://127.0.0.1:$(port minio 9000)"
+for ((attempt=0; attempt<60; attempt++)); do
+  if curl -fsS --max-time 2 -o /dev/null "$storage_url/minio/health/ready"; then break; fi
+  sleep 1
+done
+curl -fsS --max-time 2 -o /dev/null "$storage_url/minio/health/ready"
 {
   printf 'DATABASE_URL=postgresql://browser_smoke:%s@127.0.0.1:%s/hypertask_smoke\n' "$pg_secret" "$pg_port"
   printf 'REDIS_URL=redis://127.0.0.1:%s\n' "$redis_port"
+  printf 'R2_ENDPOINT=%s\nR2_UPLOAD_KEY=premerge-local\nR2_UPLOAD_SECRET=premerge-local-only\nR2_UPLOAD_BUCKET=premerge-attachments\nR2_PUBLIC_BASE_URL=%s/premerge-attachments\nAWS_EC2_METADATA_DISABLED=true\n' "$storage_url" "$storage_url"
   printf 'TURBOPUFFER_BASE_URL=http://127.0.0.1:%s\nTURBOPUFFER_API_KEY=disposable-fixture\n' "$search_port"
   printf 'SESSION_SECRET=%s\nJWT_SECRET=%s\nBETTER_AUTH_SECRET=%s\n' "$(secret)" "$(secret)" "$(secret)"
   printf 'BETTER_AUTH_URL=%s\nQSTASH_CALLBACK_BASE_URL=%s\nQSTASH_AUTO_REGISTER_SWEEP=false\n' "$url" "$url"
@@ -178,6 +204,7 @@ source "$state/credentials.env"
 set +a
 export BROWSER_SMOKE_STATE_FILE="$state/smoke-state.json" GITHUB_OUTPUT="$state/fixtures.out" NEXT_TELEMETRY_DISABLED=1 PREMERGE_LOCAL=1
 export HT_PREMERGE_AI_STUB=1 HT_PREMERGE_QUEUE_STUB=1
+node scripts/premerge-local-storage.mjs
 npx --no-install prisma migrate deploy
 node scripts/seed-browser-smoke.mjs "${flag_overrides[@]}"
 setsid node "$root/scripts/premerge-local-search.mjs" "$state/card-fixture.json" "$search_port" >"$state/search.log" 2>&1 9>&- 3>&- 4>&- < /dev/null &
@@ -189,7 +216,7 @@ for ((attempt=0; attempt<30; attempt++)); do
   sleep 1
 done
 curl -fsS --max-time 2 -o /dev/null "$TURBOPUFFER_BASE_URL/health"
-HT_HEAVY_WAIT_FD=4 bash "$root/scripts/heavy-job.sh" npx --no-install next build --webpack
+PREMERGE_NEXT_BUILD=1 HT_HEAVY_WAIT_FD=4 bash "$root/scripts/heavy-job.sh" --exclusive npx --no-install next build --webpack
 setsid node "$root/node_modules/next/dist/bin/next" start -H 127.0.0.1 -p "$app_port" >"$state/server.log" 2>&1 9>&- 3>&- 4>&- < /dev/null &
 pid=$!
 printf '%s %s\n' "$pid" "$(sed 's/.*) //' "/proc/$pid/stat" | awk '{print $20}')" >"$state/server.pid"
@@ -205,8 +232,9 @@ board_path=$(sed -n 's/^board_path=//p' "$state/fixtures.out")
 account=$(node -e 'const s=require(process.argv[1]);console.log(JSON.parse(decodeURIComponent(s.cookies.find(c=>c.name==="nookies_user").value)).id)' "$BROWSER_SMOKE_STATE_FILE")
 flags=$(node -e 'const {modes}=require(process.argv[1]);console.log(Object.entries(modes).map(([k,v])=>k+"="+v).join(", "))' "$state/flag-modes.json")
 printf 'Build URL: %s\nBoard URL: %s%s\nStorage state: %s\nCommit: %s\nAccount: %s (disposable QA, board owner)\nFlags: %s\nBoard: %s%s\nBuild: %s\n' \
-  "$url" "$url" "$board_path" "$BROWSER_SMOKE_STATE_FILE" "$(git rev-parse HEAD)" "$account" "$flags" "$url" "$board_path" "$url" >&3
+  "$url" "$url" "$board_path" "$BROWSER_SMOKE_STATE_FILE" "$(git -C "${source_root:-.}" rev-parse HEAD)" "$account" "$flags" "$url" "$board_path" "$url" >&3
 
 # Keep the owning run alive so success, interruption and explicit down share cleanup.
+printf 'Test click removed (Valentin 2026-10-21); safety is flags, revert, live QA after release and the YPER4-550 screenshot check.\n' >&3
 printf 'Local QA is ready. Keep this run open; use down when finished.\n' >&3
 wait "$pid"

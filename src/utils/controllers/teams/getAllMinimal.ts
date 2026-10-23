@@ -22,7 +22,6 @@ const getAllTeamsMinimal = async (userId:number) => {
                 })
             }
 
-            // ========================== after confirming that the owner is present, first find the teams he OWNS.
             const owned_teams = await prisma.team.findMany({
                 where:{
                     googleAccountId:owner.accountId??"",
@@ -41,21 +40,6 @@ const getAllTeamsMinimal = async (userId:number) => {
             })
             console.log("🚀 ~ getAllTeamsMinimal ~ participating_teams:", participating_teams)
 
-            // const projectIds = member_project.map((item) => item.projectId)
-
-            // const participating_teams = await prisma.team.findMany({
-            //     where:{
-            //         projects:{
-            //             some:{
-
-            //                 id:{
-            //                     in:projectIds,
-            //                 }
-            //             }
-            //         }
-            //     },
-            // })
-                    
             return ({
                 status:200,
                 json:[...owned_teams, ...participating_teams.map(x=>x.team)]

@@ -5,7 +5,7 @@ const { test } = require('node:test')
 const root = path.resolve(__dirname, '..')
 const jiti = require('jiti')(__filename, { alias: { '@': path.join(root, 'src') }, interopDefault: true })
 const { operatorSuggestions, searchCompletion, localValueSuggestions, searchFilterType, searchFilterColour, SEARCH_FILTER_COLOURS, SEARCH_TIPS, highlightedTitle } = jiti(path.join(root, 'src/lib/search/autocomplete.ts'))
-const { SEARCH_OPERATORS, parseSearchQuery } = jiti(path.join(root, 'src/lib/search/operators.ts'))
+const { SEARCH_OPERATORS, LOGIC_OPERATORS, parseSearchQuery } = jiti(path.join(root, 'src/lib/search/operators.ts'))
 const { splitSearchChips } = jiti(path.join(root, 'src/lib/search/chips.ts'))
 
 test('operator prefixes match only the real parser operators, including aliases and exclusions', () => {
@@ -91,7 +91,7 @@ test('filter palettes and title highlighting use scoped semantic tokens for ever
   const config = jiti(path.join(root, 'tailwind.config.ts')).default
   const { backgroundColor, borderColor } = config.theme.extend
   const { resolvedThemeDomMetadata } = jiti(path.join(root, 'src/lib/themePreferences.ts'))
-  const themes = ['light', 'dark', ...Object.keys(resolvedThemeDomMetadata)]
+  const themes = [...new Set(['light', 'dark', ...Object.keys(resolvedThemeDomMetadata).map((theme) => theme.replace(/-(light|dark)$/, ''))])]
   assert.equal(new Set(Object.values(SEARCH_FILTER_COLOURS)).size, 6)
   assert.equal(searchFilterType('from'), searchFilterType('assignee'))
   assert.equal(searchFilterType('in'), searchFilterType('board'))
@@ -117,13 +117,12 @@ test('filter palettes and title highlighting use scoped semantic tokens for ever
   }
   const component = readFileSync(path.join(root, 'src/app/search/SearchComp.tsx'), 'utf8')
   assert.match(component, /<mark[^>]*className="rounded-\[2px\] bg-search-highlight text-inherit"/)
-  assert.deepEqual(Object.keys(SEARCH_TIPS).sort(), [...SEARCH_OPERATORS].sort())
+  assert.deepEqual(Object.keys(SEARCH_TIPS).sort(), [...SEARCH_OPERATORS, ...LOGIC_OPERATORS, 'phrase', 'exclude'].sort())
 })
 
-test('enabled drafting retains a complete value until acceptance; flag off keeps 6370 behavior', () => {
+test('drafting retains a complete value until acceptance; submitted values become chips', () => {
   for (const query of ['is:open', 'has:comment', 'after:2026-10-01', 'label:"Bug"']) {
     assert.equal(splitSearchChips(query, true, {}, true).text, query)
-    assert.equal(splitSearchChips(query, true).chips.length, 1)
     assert.equal(splitSearchChips(`${query} `, true, {}, true).chips.length, 1)
     assert.equal(splitSearchChips(query, false, {}, true).chips.length, 1)
   }
@@ -131,14 +130,8 @@ test('enabled drafting retains a complete value until acceptance; flag off keeps
     assert.equal(splitSearchChips(query, true, {}, true).chips.length, 0)
     assert.equal(searchCompletion(query).kind, 'value')
   }
-  const flags = (readFileSync(path.join(root, 'src/lib/flags.ts'), 'utf8') + require("./helpers/flag-files.cjs").source())
-  const keys = require("./helpers/flag-files.cjs").source()
   const component = readFileSync(path.join(root, 'src/app/search/SearchComp.tsx'), 'utf8')
-  assert.match(keys, /HTPR_6688_SEARCH_AUTOCOMPLETE_FLAG = "htpr-6688-search-autocomplete"/)
-  assert.match(flags, /key: HTPR_6688_SEARCH_AUTOCOMPLETE_FLAG/)
-  assert.match(flags, /DEFAULT_FEATURE_FLAG_MODE: FeatureFlagMode = "OWNER_AND_QA"/)
-  assert.match(component, /useFlag\(\s*HTPR_6688_SEARCH_AUTOCOMPLETE_FLAG\s*\)/)
-  assert.match(component, /autocompleteFlagEnabled \? \(\s*<SearchChipsInput[\s\S]*?\sautocompleteEnabled\s*\/>/)
+  assert.equal((component.match(/<SearchChipsInput/g) ?? []).length, 1)
 })
 
 test('title highlights are literal, case insensitive and omit filter values without HTML injection', () => {
