@@ -105,3 +105,18 @@ test("every AI generation call passes the Brotli-free download", () => {
     assert.match(lines[Number(lineNumber)] ?? "", /experimental_download: downloadWithoutBrotli,/, call);
   }
 });
+
+test("modules that download user-chosen URLs never call the auto-decoding global fetch", () => {
+  for (const file of [
+    "src/lib/mcp/attachments/safeFetch.ts",
+    "src/lib/net/downloadWithoutBrotli.ts",
+    "src/app/api/ai/_lib/customInstructions.ts",
+    "src/app/api/settings/byok-test/route.ts",
+    "src/lib/mcp/webhooks/delivery.ts",
+  ]) {
+    const source = fs.readFileSync(path.join(root, file), "utf8");
+    assert.doesNotMatch(source, /(?<![\w.])fetch\(/, file);
+  }
+  const modelProvider = fs.readFileSync(path.join(root, "src/app/api/ai/_lib/modelProvider.ts"), "utf8");
+  assert.match(modelProvider, /baseURL: customEndpoint\.baseUrl,\s*fetch: fetchWithoutBrotli,/);
+});
