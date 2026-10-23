@@ -1,5 +1,5 @@
 import { hasHaikuByokProviderFlags } from "@/lib/byokSelectedProviderGate";
-import { useHaikuDefaultFlag } from "@/hooks/useHaikuDefaultFlag";
+import { useAiDefaultModelContext, useHaikuDefaultFlag } from "@/hooks/useHaikuDefaultFlag";
 import { useMcpToken } from "@/components/Modals/McpToken";
 import { mcpAuthorizationHeaders } from "@/lib/mcp/bearerAuth";
 import { useCurrentBoardBilling } from "@/hooks/General/useCurrentBoardBilling";
@@ -49,8 +49,9 @@ export function useHyperMention() {
   const { token } = useMcpToken();
   const currentBoardBilling = useCurrentBoardBilling();
   const defaultBilling = currentBoardBilling;
+  const defaultContext = useAiDefaultModelContext(defaultBilling?.teamId);
   const defaultModelOption = haikuDefaultEnabled || haiku55Enabled
-    ? getDefaultAiModelOptionForPlan(defaultBilling?.storePlanId, hasHaikuByokProviderFlags(defaultBilling?.byokProviderFlags), true, haikuDefaultEnabled)
+    ? getDefaultAiModelOptionForPlan(defaultBilling?.storePlanId, hasHaikuByokProviderFlags(defaultBilling?.byokProviderFlags), true, haikuDefaultEnabled, defaultContext)
     : defaultAiModelOption;
 
   async function postHyperMention(

@@ -1,5 +1,5 @@
 import { hasHaikuByokProviderFlags } from "@/lib/byokSelectedProviderGate";
-import { useHaikuDefaultFlag } from "@/hooks/useHaikuDefaultFlag";
+import { useAiDefaultModelContext, useHaikuDefaultFlag } from "@/hooks/useHaikuDefaultFlag";
 
 import {
   processHtmlForTaskId,
@@ -148,8 +148,9 @@ const useCreateTaskModalGlobalStates = () => {
   const haikuDefaultEnabled = useHaikuDefaultFlag();
   const haiku55Enabled = true;
   const defaultBilling = deriveCurrentBoardBilling(_currentProject);
+  const defaultContext = useAiDefaultModelContext(defaultBilling?.teamId);
   const defaultModelOption = haikuDefaultEnabled || haiku55Enabled
-    ? getDefaultAiModelOptionForPlan(defaultBilling?.storePlanId, hasHaikuByokProviderFlags(defaultBilling?.byokProviderFlags), true, haikuDefaultEnabled)
+    ? getDefaultAiModelOptionForPlan(defaultBilling?.storePlanId, hasHaikuByokProviderFlags(defaultBilling?.byokProviderFlags), true, haikuDefaultEnabled, defaultContext)
     : defaultAiModelOption;
   const improveWritingOptionIds = getAiModelPreferenceIds(
     userPreferences.aiModelPreferences,
@@ -352,8 +353,11 @@ const useCreateTaskModalGlobalStates = () => {
       getAiModelOptionById(titleOptionIds.global, haiku55Enabled) ??
       (haiku55Enabled ? getAiModelOptionById(project.ai_custom_instructions?.[0]?.model_selected, true) : undefined);
     const titleBilling = deriveCurrentBoardBilling(project);
+    const titleDefaultContext = defaultContext && project.teamId === _currentProject?.teamId
+      ? defaultContext
+      : undefined;
     const titleDefaultOption = haiku55Enabled
-      ? getDefaultAiModelOptionForPlan(titleBilling?.storePlanId, hasHaikuByokProviderFlags(titleBilling?.byokProviderFlags), true, haikuDefaultEnabled)
+      ? getDefaultAiModelOptionForPlan(titleBilling?.storePlanId, hasHaikuByokProviderFlags(titleBilling?.byokProviderFlags), true, haikuDefaultEnabled, titleDefaultContext)
       : defaultModelOption;
     const titleModel =
       titleOption?.id ??
@@ -395,7 +399,7 @@ const useCreateTaskModalGlobalStates = () => {
       .trim();
     if (!generatedTitle) throw new Error("No title was generated");
     return generatedTitle.slice(0, 80);
-  }, [haiku55Enabled, haikuDefaultEnabled, defaultModelOption]);
+  }, [haiku55Enabled, haikuDefaultEnabled, defaultModelOption, defaultContext, _currentProject?.teamId]);
 
   const scheduleTitleGeneration = useCallback((description: string) => {
     const plainDescription = descriptionText(description);

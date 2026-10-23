@@ -1,4 +1,5 @@
 import axios from "axios";
+import type { AiDefaultModelContext } from "@/lib/aiModelOptions";
 import { useQuery } from "@tanstack/react-query";
 import {
   AI_PROVIDERS,
@@ -15,6 +16,7 @@ export type TeamAiProviderRow = {
 };
 
 type TeamAiProvidersResponse = {
+  defaultModelContext?: Pick<AiDefaultModelContext, "openaiOnlyDefaultEnabled" | "hasDirectOpenAiKey" | "hasClaudeRoute">;
   gdprSafeMode: boolean;
   providers: TeamAiProviderRow[];
 };
@@ -48,6 +50,7 @@ export function useTeamAiProviders(teamId: string | null | undefined) {
   const providers = query.data?.providers ?? defaultProviders;
 
   return {
+    defaultModelContext: query.data?.defaultModelContext,
     enabledProviders: query.data
       ? providers
           .filter((provider) => provider.enabled)

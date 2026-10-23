@@ -543,9 +543,18 @@ export type AiDefaultModelContext = {
   backgroundClaudeEnabled?: boolean;
   plan?: StorePlanKind | null;
   hasByok?: boolean;
+  openaiOnlyDefaultEnabled?: boolean;
+  hasDirectOpenAiKey?: boolean;
+  hasClaudeRoute?: boolean;
 };
 
-export function defaultModelKeyFor({ haiku55Enabled, haikuDefaultEnabled, backgroundClaudeEnabled, plan, hasByok }: AiDefaultModelContext, productionDefault: TAiModelKey = "gpt-6-luna"): TAiModelKey {
+export function isOpenAiOnlyPaidTeam({ openaiOnlyDefaultEnabled, plan, hasClaudeRoute, hasDirectOpenAiKey }: AiDefaultModelContext): boolean {
+  return Boolean(openaiOnlyDefaultEnabled && (plan === "Pro" || plan === "AI") && hasClaudeRoute === false && hasDirectOpenAiKey);
+}
+
+export function defaultModelKeyFor(context: AiDefaultModelContext, productionDefault: TAiModelKey = "gpt-6-luna"): TAiModelKey {
+  const { haiku55Enabled, haikuDefaultEnabled, backgroundClaudeEnabled, plan, hasByok } = context;
+  if (isOpenAiOnlyPaidTeam(context)) return "gpt-6-luna";
   return backgroundClaudeEnabled || haikuDefaultEnabled || (haiku55Enabled && ((hasByok && plan !== "Free") || plan === "Pro" || plan === "AI" || plan === "BYOK"))
     ? "claude-haiku-5-5"
     : productionDefault;
@@ -560,6 +569,7 @@ export function getDefaultAiModelOptionForPlan(
   hasEligibleByokCredential = false,
   haiku55Enabled = false,
   haikuDefaultEnabled = false,
+  context: AiDefaultModelContext = {},
 ): TAiModelOption {
   const productionDefault = storePlanId === "Pro" ||
     storePlanId === "AI" ||
@@ -567,7 +577,7 @@ export function getDefaultAiModelOptionForPlan(
     storePlanId === "Free"
     ? preferredAiModelOption
     : defaultAiModelOption;
-  return getAiModelOptionById(defaultModelKeyFor({ haiku55Enabled, haikuDefaultEnabled, plan: storePlanId, hasByok: hasEligibleByokCredential }, productionDefault.modelKey))!;
+  return getAiModelOptionById(defaultModelKeyFor({ ...context, haiku55Enabled, haikuDefaultEnabled, plan: storePlanId, hasByok: hasEligibleByokCredential }, productionDefault.modelKey))!;
 }
 
 export function resolveAiModelOption(
@@ -686,9 +696,10 @@ export function pickAutoAiModelOption<T extends TAiModelOption>(
   haiku55Enabled = false,
   context: AiDefaultModelContext = {},
 ): T | undefined {
-  if (defaultModelKeyFor({ ...context, haiku55Enabled }) === "claude-haiku-5-5") {
-    const haiku = candidates.find((candidate) => candidate.modelKey === "claude-haiku-5-5");
-    if (haiku) return haiku;
+  const defaultModelKey = defaultModelKeyFor({ ...context, haiku55Enabled });
+  if (defaultModelKey === "claude-haiku-5-5" || isOpenAiOnlyPaidTeam(context)) {
+    const preferred = candidates.find((candidate) => candidate.modelKey === defaultModelKey);
+    if (preferred) return preferred;
   }
   return (
     candidates.find(
