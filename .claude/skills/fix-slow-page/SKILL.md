@@ -22,6 +22,10 @@ Before reporting any baseline, speedup or regression (ticket, PR body, playbook)
 
 Source: pstack benchmark-checklist and principle-explain-the-number by Lauren Tan, MIT, https://github.com/cursor/plugins/tree/main/pstack.
 
+## Build scratch is not evidence
+
+Never build on the VPS. On an approved build host, use `mktemp -d /tmp/ht-qa-build.XXXXXX` for app copies, dependencies, `.next` and `build-candidate`/`build-baseline`/`build-a`/`build-profile` trees, with an EXIT trap to remove it (INT/TERM must exit through that trap). The optional `scripts/premerge-local.sh` already owns this lifecycle. Copy only small sanitized numbers, logs, screenshots and HTML reports to `~/.local/state/vcc-evidence/<TICKET>/`; never copy a build, browser cache or toolchain there. See [QA evidence storage](../verify-qa/reference/evidence-storage.md).
+
 ## Steps
 
 1. **Reproduce before editing.** Resolve the shared company pack from `$COMPANY_SKILLS_DIR` or `~/projects/company-skills`, read `skills/speed-check/SKILL.md`, then its `measure.md` at this step. Use only the QA-normal saved login (user 2343) and QA Sandbox fixture, never owner/customer credentials. Run at least five cold and five warm samples for the ticket's surface and profile; keep the full before summary, per-run JSON, release/commit, exact command and conditions. The board-to-task path is distinct from direct task load. If the ticket cannot reproduce, say Can't verify and stop rather than inventing a cause.
