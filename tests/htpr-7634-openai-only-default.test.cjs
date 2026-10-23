@@ -246,11 +246,12 @@ function assertCall(h, model, credential) {
   assert.notEqual(h.calls[0].credential, sharedKey);
 }
 
-test("ticket bugfix flag is Everyone with release metadata", () => {
+test("ticket bugfix flag starts Owner + QA as a money-risk flag", () => {
   assert.equal(flag.HTPR_7634_OPENAI_ONLY_DEFAULT_FLAG, "htpr-7634-openai-only-default");
   assert.equal(flag.default.key, flag.HTPR_7634_OPENAI_ONLY_DEFAULT_FLAG);
   assert.equal(flag.default.kind, "bugfix");
-  assert.equal(flag.default.defaultMode, "EVERYONE");
+  assert.equal(flag.default.defaultMode, "OWNER_AND_QA");
+  assert.equal(flag.default.releaseRisk.highRisk, "money");
   assert.equal(flag.default.shippedOn, "2026-10-23");
   assert.ok(flag.default.releaseRisk.reason);
 });
