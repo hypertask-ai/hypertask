@@ -1,5 +1,6 @@
 import type { NextApiRequest, NextApiResponse } from "next";
 import prisma from "@/lib/prisma";
+import { canReadTaskNow } from "@/lib/access/canReadTaskNow";
 import { withQstashSignature } from "@/lib/qstash";
 import { sendEmail } from "@/lib/email/sendEmail";
 import { unsubscribeHeaders } from "@/lib/email/unsubscribe";
@@ -42,6 +43,13 @@ async function handler(req: NextApiRequest, res: NextApiResponse) {
   }
 
   try {
+    if (!(await canReadTaskNow(userId, taskId))) {
+      await clearDigestWindow(userId, taskId);
+      return res
+        .status(200)
+        .json({ ok: true, sent: false, reason: "access revoked" });
+    }
+
     if (await isTaskProjectMuted(userId, taskId)) {
       await clearDigestWindow(userId, taskId);
       return res
