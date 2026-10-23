@@ -60,7 +60,7 @@ for (const mode of ['OFF', 'OWNER_ONLY', 'OWNER_AND_QA', null]) {
   test(`no-op before either subscription model is read unless mode is EVERYONE (${mode ?? 'unset'})`, async () => {
     const h = fixture(mode);
     delete process.env.BYOK_CIPHER_SECRET;
-    assert.deepEqual(await sweepWebhookSigningKeys(h.db), { scanned: 0, encrypted: 0, conflicts: 0, remaining: 0 });
+    assert.deepEqual(await sweepWebhookSigningKeys(h.db), { scanned: 0, encrypted: 0, conflicts: 0, failed: 0, remaining: 0 });
     assert.deepEqual(h.calls, []);
   });
 }
@@ -74,7 +74,7 @@ test('sweep includes active and inactive rows in both models, preserves sealed/r
     { id: '3', secret: stable, active: false },
     { id: '4', secret: 'enc:v2:invalid', active: false },
   );
-  assert.deepEqual(await sweepWebhookSigningKeys(h.db), { scanned: 4, encrypted: 4, conflicts: 0, remaining: 0 });
+  assert.deepEqual(await sweepWebhookSigningKeys(h.db), { scanned: 4, encrypted: 4, conflicts: 0, failed: 0, remaining: 0 });
   for (const rows of Object.values(h.tables)) {
     assert.equal(store.openWebhookSigningKey(rows[0].secret), 'whsec_active');
     assert.equal(store.openWebhookSigningKey(rows[1].secret), 'whsec_inactive');
@@ -84,7 +84,7 @@ test('sweep includes active and inactive rows in both models, preserves sealed/r
   }
   const snapshot = structuredClone(h.tables);
   h.calls.length = 0;
-  assert.deepEqual(await sweepWebhookSigningKeys(h.db), { scanned: 0, encrypted: 0, conflicts: 0, remaining: 0 });
+  assert.deepEqual(await sweepWebhookSigningKeys(h.db), { scanned: 0, encrypted: 0, conflicts: 0, failed: 0, remaining: 0 });
   assert.deepEqual(h.tables, snapshot);
   assert.equal(h.calls.some(call => call.operation === 'updateMany'), false);
 });
@@ -101,7 +101,7 @@ for (const model of ['webhookSubscription', 'agentWebhookSubscription']) {
       assert.equal(store.openWebhookSigningKey(query.data.secret), s1);
       h.tables[model][0].secret = s2;
     });
-    assert.deepEqual(await sweepWebhookSigningKeys(h.db), { scanned: 1, encrypted: 0, conflicts: 1, remaining: 0 });
+    assert.deepEqual(await sweepWebhookSigningKeys(h.db), { scanned: 1, encrypted: 0, conflicts: 1, failed: 0, remaining: 0 });
     assert.equal(h.tables[model][0].secret, s2);
     assert.equal(h.calls.filter(call => call.operation === 'updateMany').length, 1);
     await sweepWebhookSigningKeys(h.db);
@@ -114,13 +114,13 @@ test('each model has a bounded ascending batch and writes stop at the deadline',
   for (const rows of Object.values(h.tables)) {
     for (let i = 204; i >= 0; i--) rows.push({ id: String(i).padStart(3, '0'), secret: 'whsec_batched', active: false });
   }
-  assert.deepEqual(await sweepWebhookSigningKeys(h.db), { scanned: 200, encrypted: 200, conflicts: 0, remaining: 210 });
+  assert.deepEqual(await sweepWebhookSigningKeys(h.db), { scanned: 200, encrypted: 200, conflicts: 0, failed: 0, remaining: 210 });
   for (const model of Object.keys(h.tables)) {
     const writes = h.calls.filter(call => call.model === model && call.operation === 'updateMany');
     assert.deepEqual(writes.map(call => call.query.where.id), Array.from({ length: 100 }, (_, i) => String(i).padStart(3, '0')));
   }
   h.calls.length = 0;
-  assert.deepEqual(await sweepWebhookSigningKeys(h.db, 0), { scanned: 0, encrypted: 0, conflicts: 0, remaining: 210 });
+  assert.deepEqual(await sweepWebhookSigningKeys(h.db, 0), { scanned: 0, encrypted: 0, conflicts: 0, failed: 0, remaining: 210 });
   assert.equal(h.calls.some(call => call.operation === 'updateMany'), false);
 });
 
@@ -133,6 +133,26 @@ test('failed round-trip verification prevents writes and sanitizes the thrown er
   await assert.rejects(sweep.sweepWebhookSigningKeys(h.db), /^Error: webhook_signing_key_sweep_failed$/);
   assert.equal(h.calls.some(call => call.operation === 'updateMany'), false);
   assert.equal(h.tables.webhookSubscription[0].secret, 'whsec_synthetic');
+});
+
+test('HTPR-7630: one row that fails sealing is counted and skipped, every other row in both models is still encrypted', async () => {
+  const h = fixture();
+  h.tables.webhookSubscription.push(
+    { id: '1', secret: 'whsec_poison', active: true },
+    { id: '2', secret: 'whsec_good-board', active: true },
+  );
+  h.tables.agentWebhookSubscription.push({ id: '1', secret: 'whsec_good-agent', active: false });
+  const sweep = load('src/lib/webhooks/signingKeySweep.ts', {
+    './signingKeyStore': {
+      sealWebhookSigningKey: plain => `enc:v1:${plain}`,
+      openWebhookSigningKey: sealed => (sealed === 'enc:v1:whsec_poison' ? 'not-the-original' : sealed.slice('enc:v1:'.length)),
+    },
+  });
+  assert.deepEqual(await sweep.sweepWebhookSigningKeys(h.db), { scanned: 3, encrypted: 2, conflicts: 0, failed: 1, remaining: 1 });
+  assert.equal(h.tables.webhookSubscription[0].secret, 'whsec_poison');
+  assert.equal(h.tables.webhookSubscription[1].secret, 'enc:v1:whsec_good-board');
+  assert.equal(h.tables.agentWebhookSubscription[0].secret, 'enc:v1:whsec_good-agent');
+  assert.equal(h.calls.some(call => call.operation === 'updateMany' && call.query.where.id === '1' && call.model === 'webhookSubscription'), false);
 });
 
 test('missing root refuses plaintext writes without disclosing key material', async () => {
@@ -173,7 +193,7 @@ test('authorized cron returns counts only, and failures return a fixed error wit
   const response = await GET(request(`Bearer ${process.env.CRON_SECRET}`));
   assert.equal(response.status, 200);
   assert.equal(response.headers.get('cache-control'), 'no-store');
-  assert.deepEqual(await response.json(), { scanned: 1, encrypted: 1, conflicts: 0, remaining: 0 });
+  assert.deepEqual(await response.json(), { scanned: 1, encrypted: 1, conflicts: 0, failed: 0, remaining: 0 });
   h.db.featureFlag.findUnique = async () => { throw new Error(h.tables.agentWebhookSubscription[0].secret); };
   const failure = await GET(request(`Bearer ${process.env.CRON_SECRET}`));
   assert.equal(failure.status, 500);
