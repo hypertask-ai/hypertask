@@ -297,6 +297,7 @@ function projectFlagOn(source, symbols) {
       aliases.push(alias);
       return '';
     });
+  if (aliases.length && initial.regexes.length) return null;
   let unwrapped = 0;
   for (const alias of aliases) {
     const scanned = scanFlagSource(projected);

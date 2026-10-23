@@ -542,6 +542,23 @@ test('round 10: files with a regex keep normal sign-off for logical and ternary 
   }
 });
 
+test('round 11: files with a regex keep normal sign-off for call guards and early returns too', async () => {
+  for (const [line, change] of [
+    ['  const ratio = value! / Number(/; if (panelEnabled) foo(); return /.test(text)) / 1;\n', (text) => text.replace('if (panelEnabled) ', '')],
+    ['  const ok = /x/.test(text);\n  if (panelEnabled) foo();\n', (text) => text.replace('if (panelEnabled) ', '')],
+    ['  const ok = /x/.test(text);\n  if (!panelEnabled) return;\n', (text) => text.replace('  if (!panelEnabled) return;\n', '')],
+  ]) {
+    const before = 'import { useFlag } from "@/hooks/useFlag";\n' +
+      'import { HTPR_1_PANEL_FLAG } from "@/lib/flags/keys";\n' +
+      'export function Panel({ value, text, foo }) {\n  const panelEnabled = useFlag(HTPR_1_PANEL_FLAG);\n' + line +
+      '  return <ExistingPanel />;\n}\n';
+    const after = change(before.replace(/^import .*\n/gm, '').replace(/^  const panelEnabled = .*\n/m, ''));
+    const fixture = removalFixture({ before, after });
+    assert.deepEqual((await gate).flagRemovalOnly(fixture.files, fixture.productionModes, fixture.sources), [], line);
+    assert.doesNotMatch((await decision(fixture)).description, /^Flag removal only/, line);
+  }
+});
+
 test('round 4: derived aliases can capture shadowed bindings', async () => {
   for (const binding of [
     'const { other } = data;', 'const [other] = data;', 'let other = data;',
