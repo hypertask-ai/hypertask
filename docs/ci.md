@@ -110,6 +110,25 @@ The non-required `ship-scripts-tests` check in [`.github/workflows/ship-scripts-
 - Installs Python 3 for the standard-library test harnesses and fixtures, `jq` for JSON handling in `ship-check`, and Git for repository-scope detection. Neither offline test path nor its called code needs Node, so the workflow does not install it. No npm or pip packages are needed; Bash and standard Unix utilities come with the hosted runner.
 - Uses a temporary HOME and the harnesses' temporary state and local Git/GitHub/Hypertask fixtures. A fallback `gh` stub fails unexpected calls outside the fixtures. Tests need no network, real tokens, existing VPS state or systemd service; checkout and dependency installation still use network. Checkout does not persist credentials, and the job requests only `contents: read`, so fork PRs need no secrets.
 
+## Feature-map citation check (YPER4-610)
+
+The non-required `feature-map-check` job in
+[feature-map-weekly.yml](../.github/workflows/feature-map-weekly.yml) runs Mondays
+at 03:37 UTC, on manual dispatch and on production PRs changing the maintenance
+skill, feature-map pages or that workflow. It runs only the tiny offline fixture
+test and dependency-free checker with Node 24 on free GitHub-hosted Ubuntu,
+pinned actions, `contents: read`, no installs, secrets or paid AI calls.
+It checks index completeness, repository-path citations and API-route resolution;
+problems fail the job and appear in the step summary. It is not a required check
+and does not alter the ruleset. Existing stale pages are reported, not allowlisted.
+
+The separately installed user timer performs bounded source-only Codex reads and
+files at most one drift ticket per ISO week. It never drives the app. A runner
+ships documentation repairs through `/ship` and executes only the listed live
+recipes with `verify-qa`. See the
+[maintenance skill](../.claude/skills/maintain-verification-skill/SKILL.md) for
+installation, state, load holds, limits and offline tests.
+
 ## Docs-only CI lane (YPER4-548)
 
 On non-draft PRs, the existing `ci-tests` and `browser-smoke` jobs both run and
